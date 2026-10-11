@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"reflect"
 
 	"github.com/gowebpki/jcs"
 
@@ -45,8 +46,9 @@ func ParseHash(s string) (Hash, error) {
 // hashes on its path to the root.
 type Node struct {
 	// Fields are the node's scalar members: strings, bools, numbers (json.Number or
-	// float64) and, for an in/not_in operand, a []any of those. A nil value is absent;
-	// Encode leaves out a struct member at its zero value.
+	// float64) and, for an in/not_in operand, a []any of those. A nil value, typed nils
+	// such as a nil slice included, is absent; Encode leaves out a struct member at its
+	// zero value.
 	Fields map[string]any
 
 	// Children references each singular child node by hash.
@@ -57,6 +59,21 @@ type Node struct {
 
 	// Kind names the struct the node encodes (for example chart_spec or filter_clause).
 	Kind string
+}
+
+// absent reports whether a field value is nil or a typed nil (a nil slice, map, pointer
+// or interface), all of which a store round trip reads back as a missing field.
+func absent(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Map, reflect.Pointer, reflect.Interface:
+		return rv.IsNil()
+	default:
+		return false
+	}
 }
 
 // nodeWire is the JSON shape of a Node, with hashes as hex.
@@ -75,12 +92,13 @@ type nodeWire struct {
 }
 
 // MarshalJSON writes the node as {kind, fields, children, lists} with hashes as hex,
-// omitting nil fields, zero child hashes and empty lists (and a section left empty).
+// omitting nil fields (typed nils included), zero child hashes and empty lists (and a
+// section left empty).
 // Canonical is the hashed form of the same object.
 func (n Node) MarshalJSON() ([]byte, error) {
 	w := nodeWire{Kind: n.Kind}
 	for k, v := range n.Fields {
-		if v == nil {
+		if absent(v) {
 			continue
 		}
 		if w.Fields == nil {

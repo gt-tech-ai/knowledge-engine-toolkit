@@ -336,3 +336,71 @@ func TestDiff_EqualRootsIsEmpty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, changes)
 }
+
+// TestDiff_ZeroSideIsRootChange tests Diff against an absent version.
+//
+// Why this test is important:
+//   - The first save of a chart has no previous root; its history entry must read as one
+//     whole-spec change, not fail looking up the zero hash.
+//
+// What it tests:
+//   - Diff from or to the zero hash returns exactly one Change at the root path carrying
+//     both hashes, without fetching a node.
+func TestDiff_ZeroSideIsRootChange(t *testing.T) {
+	t.Parallel()
+	tree := encodeSpec(t, decodeSpec(t, treeSpecJSON))
+	noFetch := func(chartspec.Hash) (chartspec.Node, bool) {
+		t.Fatal("Diff fetched a node against an absent side")
+		return chartspec.Node{}, false
+	}
+	for _, pair := range [][2]chartspec.Hash{{{}, tree.Root}, {tree.Root, {}}} {
+		changes, err := chartspec.Diff(pair[0], pair[1], noFetch)
+		require.NoError(t, err)
+		assert.Equal(
+			t,
+			[]chartspec.Change{{Path: "", Before: pair[0], After: pair[1]}},
+			changes,
+		)
+	}
+}
+
+// TestEncode_ChecksClauseOperands tests Encode on clause operators and operands that a
+// store round trip could not reproduce.
+//
+// Why this test is important:
+//   - A stored node is re-hashed on every read; a value that encodes one way and decodes
+//     another (a typed nil, an unknown operator) breaks the read or forks the history.
+//
+// What it tests:
+//   - an empty or unknown clause operator is CodeInvalidInput;
+//   - an in clause with a nil []any operand round-trips as an empty array to the same
+//     root, and a node whose field holds a typed nil hashes like the node without it.
+func TestEncode_ChecksClauseOperands(t *testing.T) {
+	t.Parallel()
+	withClause := func(op types.FilterOperator, v any) types.ChartSpec {
+		spec := decodeSpec(t, treeSpecJSON)
+		spec.FilterTree = &types.FilterNode{
+			Clause: &types.FilterNodeClause{Field: "model", Op: op, Value: v},
+		}
+		return spec
+	}
+	for _, op := range []types.FilterOperator{"", "regex"} {
+		_, err := chartspec.Encode(withClause(op, "m-1"))
+		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "op %q: %v", op, err)
+	}
+
+	tree := encodeSpec(t, withClause(types.OpIn, []any(nil)))
+	got, err := chartspec.Decode(tree.Root, lookup(tree))
+	require.NoError(t, err)
+	assert.Equal(t, []any{}, got.FilterTree.Clause.Value)
+	assert.Equal(t, tree.Root, encodeSpec(t, got).Root)
+
+	bare, err := chartspec.Node{Kind: "filter_clause"}.Hash()
+	require.NoError(t, err)
+	typedNil, err := chartspec.Node{
+		Kind:   "filter_clause",
+		Fields: map[string]any{"value": []any(nil)},
+	}.Hash()
+	require.NoError(t, err)
+	assert.Equal(t, bare, typedNil)
+}

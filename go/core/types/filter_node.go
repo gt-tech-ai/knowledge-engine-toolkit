@@ -49,17 +49,6 @@ const (
 	filterOrKey = "$or"
 )
 
-// knownFilterOp reports whether op is an operator the grammar accepts, each written
-// "$" + its value.
-func knownFilterOp(op FilterOperator) bool {
-	switch op {
-	case OpEq, OpNe, OpIn, OpNotIn, OpLike, OpGt, OpGte, OpLt, OpLte:
-		return true
-	default:
-		return false
-	}
-}
-
 // marshalFilter encodes one grammar object, coding a failure (an operand the JSON
 // encoder cannot represent) as CodeInvalidInput.
 func marshalFilter(v any) ([]byte, error) {
@@ -169,7 +158,7 @@ func decodeFilterGroup(key string, raw json.RawMessage, depth int) (FilterNode, 
 // decodeFilterClause decodes a {"<field>": value} operator body for the operator token.
 func decodeFilterClause(token string, raw json.RawMessage) (FilterNode, error) {
 	op := FilterOperator(token[min(1, len(token)):])
-	if token == "" || token[0] != '$' || !knownFilterOp(op) {
+	if token == "" || token[0] != '$' || !op.Known() {
 		return FilterNode{}, apperr.New(apperr.CodeInvalidInput,
 			"filter: unknown operator "+token)
 	}

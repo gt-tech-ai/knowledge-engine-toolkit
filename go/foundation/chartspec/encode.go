@@ -286,13 +286,7 @@ func (e *encoder) filterNode(f types.FilterNode) (Hash, error) {
 			"chartspec: a filter node must set at most one of clause, and, or")
 	}
 	if c := f.Clause; c != nil {
-		n := Node{Kind: kindFilterClause, Fields: map[string]any{}}
-		setField(&n, memberField, c.Field)
-		setField(&n, memberOp, string(c.Op))
-		if c.Value != nil {
-			n.Fields[memberValue] = c.Value
-		}
-		return e.put(n)
+		return e.filterClause(*c)
 	}
 	n := Node{Kind: kindFilterGroup}
 	members := f.And
@@ -312,5 +306,28 @@ func (e *encoder) filterNode(f types.FilterNode) (Hash, error) {
 		hs = append(hs, h)
 	}
 	setList(&n, memberMembers, hs)
+	return e.put(n)
+}
+
+// filterClause encodes one comparison. An unknown operator is CodeInvalidInput, so a
+// stored tree always parses; a nil []any operand is stored as the empty array it means
+// (a matches-nothing in/not_in), since a typed nil would read back as absent.
+func (e *encoder) filterClause(c types.FilterNodeClause) (Hash, error) {
+	if !c.Op.Known() {
+		return Hash{}, apperr.New(
+			apperr.CodeInvalidInput,
+			"chartspec: unknown filter operator "+string(c.Op),
+		)
+	}
+	n := Node{Kind: kindFilterClause, Fields: map[string]any{}}
+	setField(&n, memberField, c.Field)
+	setField(&n, memberOp, string(c.Op))
+	value := c.Value
+	if arr, ok := value.([]any); ok && arr == nil {
+		value = []any{}
+	}
+	if !absent(value) {
+		n.Fields[memberValue] = value
+	}
 	return e.put(n)
 }

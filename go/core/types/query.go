@@ -34,6 +34,17 @@ const (
 	OpLte FilterOperator = "lte"
 )
 
+// Known reports whether op is one of the operators above. Stores trust a parsed filter's
+// operator, so every parser rejects an unknown one, the empty operator included.
+func (op FilterOperator) Known() bool {
+	switch op {
+	case OpEq, OpNe, OpIn, OpNotIn, OpLike, OpGt, OpGte, OpLt, OpLte:
+		return true
+	default:
+		return false
+	}
+}
+
 // Filter is the parsed, validated list-query filter a store applies as a WHERE
 // predicate. It lives here in core/types (not core/interfaces) because CompositeFilter
 // — a core/types value that holds []Filter — would otherwise force core/types to

@@ -36,10 +36,10 @@ func Parse(m *Map, jsonStr string) (types.Filter, error) {
 
 // ParseFilter checks a filter tree against the resource allow-list m and builds the core
 // Filter contract from it. The zero node yields an empty CompositeFilter. A node with
-// other than one arm, an empty $and/$or, nesting past types.MaxFilterDepth, a
-// non-allow-listed field, or a value that does not fit the field's type is a
-// CodeInvalidInput error. The result is a FilterClause for a single comparison and a
-// CompositeFilter for $and/$or.
+// other than one arm, an empty $and/$or, nesting past types.MaxFilterDepth, an empty or
+// unknown operator, a non-allow-listed field, or a value that does not fit the field's
+// type (in/not_in take a []any) is a CodeInvalidInput error. The result is a
+// FilterClause for a single comparison and a CompositeFilter for $and/$or.
 func ParseFilter(m *Map, n types.FilterNode) (types.Filter, error) {
 	if n.Clause == nil && n.And == nil && n.Or == nil {
 		return types.CompositeFilter{}, nil // no filter → IsEmpty
@@ -105,9 +105,15 @@ func parseComposite(
 	return types.CompositeFilter{Or: subs}, nil
 }
 
-// parseClause checks one comparison: the field against the allow-list and the value
-// against the field's type.
+// parseClause checks one comparison: the operator against the known set, the field
+// against the allow-list and the value against the field's type.
 func parseClause(m *Map, c types.FilterNodeClause) (types.Filter, error) {
+	if !c.Op.Known() {
+		return nil, apperr.New(
+			apperr.CodeInvalidInput,
+			"filter: unknown operator "+string(c.Op),
+		)
+	}
 	field, ok := m.Lookup(c.Field)
 	if !ok {
 		return nil, apperr.New(
@@ -122,8 +128,9 @@ func parseClause(m *Map, c types.FilterNodeClause) (types.Filter, error) {
 	return types.FilterClause{Field: field.Name, Operator: c.Op, Value: value}, nil
 }
 
-// decodeValue checks an operator operand: an array of type-compatible elements for
-// in/not_in (an empty array is valid — a matches-nothing clause), otherwise a scalar.
+// decodeValue checks an operator operand: for in/not_in a []any of type-compatible
+// elements (a structured source converts a typed slice first; an empty array is valid,
+// a matches-nothing clause), otherwise a scalar.
 func decodeValue(op types.FilterOperator, v any, ft FieldType) (any, error) {
 	if op != types.OpIn && op != types.OpNotIn {
 		return decodeScalar(v, ft)
@@ -132,7 +139,7 @@ func decodeValue(op types.FilterOperator, v any, ft FieldType) (any, error) {
 	if !ok {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
-			"filter: in/not_in requires an array",
+			"filter: in/not_in requires a []any array",
 		)
 	}
 	out := make([]any, 0, len(arr))

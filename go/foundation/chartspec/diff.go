@@ -17,14 +17,6 @@ import (
 // root and types.MaxFilterDepth nested groups below it.
 const maxTreeDepth = types.MaxFilterDepth + 2
 
-// allKinds lists every node kind, the set Diff accepts at any position.
-func allKinds() []string {
-	return []string{
-		kindSpec, kindShelf, kindFieldRef, kindEncodings,
-		kindTimeRange, kindSort, kindFilterGroup, kindFilterClause,
-	}
-}
-
 // Change is one difference between two versions of a spec.
 type Change struct {
 	// Path locates the change from the root, dotted, with list positions in brackets:
@@ -50,10 +42,15 @@ type differ struct {
 // Diff reports how the spec rooted at b differs from the one rooted at a, descending
 // only where hashes differ: equal roots return no changes without a fetch. Fields,
 // children and lists are walked in name order and list elements by position, so a
-// reordered list reports each moved position. Fetch failures carry Decode's codes.
+// reordered list reports each moved position. A zero side (no previous or no next
+// version) is one root Change carrying both hashes, also without a fetch. Fetch failures
+// carry Decode's codes.
 func Diff(a, b Hash, get NodeGetter) ([]Change, error) {
 	if a == b {
 		return nil, nil
+	}
+	if a.IsZero() || b.IsZero() {
+		return []Change{{Before: a, After: b}}, nil
 	}
 	d := differ{dec: decoder{get: get}}
 	if err := d.node(a, b, "", 0); err != nil {
@@ -78,11 +75,11 @@ func (d *differ) node(a, b Hash, path string, depth int) error {
 			"chartspec: tree nesting exceeds max depth",
 		)
 	}
-	na, err := d.dec.fetch(a, allKinds()...)
+	na, err := d.dec.fetch(a)
 	if err != nil {
 		return err
 	}
-	nb, err := d.dec.fetch(b, allKinds()...)
+	nb, err := d.dec.fetch(b)
 	if err != nil {
 		return err
 	}
@@ -150,9 +147,10 @@ func (d *differ) fields(na, nb Node, a, b Hash, path string) error {
 	return nil
 }
 
-// canonicalValue returns the RFC 8785 form of one field value; nil is absent.
+// canonicalValue returns the RFC 8785 form of one field value; a nil or typed nil is
+// absent.
 func canonicalValue(v any) ([]byte, error) {
-	if v == nil {
+	if absent(v) {
 		return nil, nil
 	}
 	raw, err := json.Marshal(v)

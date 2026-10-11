@@ -113,6 +113,18 @@ func WithLocalDC(dc string) options.Option[Config] {
 	return func(c *Config) { c.Cassandra.LocalDC = dc }
 }
 
+// WithDisableHostDiscovery sets whether the self-managed backend stays on its one
+// IP-literal contact point instead of the addresses the cluster advertises.
+func WithDisableHostDiscovery(disable bool) options.Option[Config] {
+	return func(c *Config) { c.Cassandra.DisableHostDiscovery = disable }
+}
+
+// WithReconnectInterval sets how often the self-managed backend retries hosts it
+// marked down; zero keeps the driver default.
+func WithReconnectInterval(d time.Duration) options.Option[Config] {
+	return func(c *Config) { c.Cassandra.ReconnectInterval = d }
+}
+
 // WithKeyspacesRegion sets the Amazon Keyspaces region.
 func WithKeyspacesRegion(region string) options.Option[Config] {
 	return func(c *Config) { c.Keyspaces.Region = region }

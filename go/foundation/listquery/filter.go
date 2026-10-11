@@ -78,8 +78,8 @@ type Field struct {
 	// Column is the storage column the filter compiles against (defaults to Name).
 	Column string
 	// Ordinal, when non-empty, is the Column's DB values in ascending sort order: sorting
-	// the field orders by this value ordinal (a CASE) instead of lexically. Sort-only
-	// (does not affect filtering).
+	// the field orders by this value ordinal (a CASE) instead of lexically. It changes only
+	// how the field sorts, never filtering, and the field still needs Sortable to be sorted.
 	Ordinal []string
 	// Aggregates are the aggregations an analytics query may apply to a RoleMeasure field.
 	Aggregates []types.Aggregate
@@ -134,7 +134,8 @@ func (f Field) WithJoin(join types.JoinTarget) Field {
 
 // WithOrdinal returns a copy of the field that SORTS by a value ordinal — the Column's DB
 // values in ascending order — instead of lexically; set by the generator from a
-// `(listquery.field).column.sort_ordinal` annotation. Sort-only.
+// `(listquery.field).column.sort_ordinal` annotation. It changes only the sort order and
+// does not make the field sortable: combine it with Sortable.
 func (f Field) WithOrdinal(values []string) Field {
 	f.Ordinal = values
 	return f

@@ -196,8 +196,9 @@ func TestParseFilter_MatchesParse(t *testing.T) {
 // What it tests:
 //   - a whole float64 on an int field parses to an int64, while a fraction or a value
 //     beyond 2^53 is CodeInvalidInput;
-//   - a node with two arms, an empty member node, and nesting past MaxFilterDepth are
-//     CodeInvalidInput, and the zero node is the empty filter.
+//   - a node with two arms, an empty member node, nesting past MaxFilterDepth, and a
+//     clause whose operator is empty or unknown are CodeInvalidInput, and the zero node
+//     is the empty filter.
 func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 	t.Parallel()
 	_, m := loadFilterGolden(t)
@@ -229,12 +230,19 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 	}
 	twoArms := clause(float64(1))
 	twoArms.Or = []types.FilterNode{clause(float64(2))}
+	withOp := func(op types.FilterOperator) types.FilterNode {
+		n := clause(float64(1))
+		n.Clause.Op = op
+		return n
+	}
 	for name, n := range map[string]types.FilterNode{
-		"fraction":     clause(1.5),
-		"beyond 2^53":  clause(float64(1 << 53)),
-		"two arms":     twoArms,
-		"empty member": {And: []types.FilterNode{{}}},
-		"too deep":     deep,
+		"fraction":         clause(1.5),
+		"beyond 2^53":      clause(float64(1 << 53)),
+		"two arms":         twoArms,
+		"empty member":     {And: []types.FilterNode{{}}},
+		"too deep":         deep,
+		"empty operator":   withOp(""),
+		"unknown operator": withOp("regex"),
 	} {
 		_, err := listquery.ParseFilter(m, n)
 		require.Error(t, err, name)

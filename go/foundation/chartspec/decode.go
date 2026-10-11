@@ -27,7 +27,19 @@ func Decode(root Hash, get NodeGetter) (types.ChartSpec, error) {
 	return d.spec(root)
 }
 
-// fetch loads and verifies the node at h, requiring one of kinds.
+// knownKind reports whether k is one of the node kinds Encode writes.
+func knownKind(k string) bool {
+	switch k {
+	case kindSpec, kindShelf, kindFieldRef, kindEncodings,
+		kindTimeRange, kindSort, kindFilterGroup, kindFilterClause:
+		return true
+	default:
+		return false
+	}
+}
+
+// fetch loads and verifies the node at h, requiring one of kinds, or any known kind
+// when kinds is empty.
 func (d decoder) fetch(h Hash, kinds ...string) (Node, error) {
 	n, ok := d.get(h)
 	if !ok {
@@ -44,7 +56,11 @@ func (d decoder) fetch(h Hash, kinds ...string) (Node, error) {
 		return Node{}, apperr.New(apperr.CodeInternal,
 			"chartspec: node "+h.String()+" does not match its content")
 	}
-	if !slices.Contains(kinds, n.Kind) {
+	wanted := slices.Contains(kinds, n.Kind)
+	if len(kinds) == 0 {
+		wanted = knownKind(n.Kind)
+	}
+	if !wanted {
 		return Node{}, apperr.New(apperr.CodeInvalidInput,
 			"chartspec: unexpected node kind "+n.Kind)
 	}

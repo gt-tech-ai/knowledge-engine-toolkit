@@ -18,6 +18,7 @@ import (
 	cassandrabackend "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cassandra/cassandra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cassandra/keyspaces"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
 )
 
 // TestNewFromConfig_UnknownKindIsInvalidInput tests that both the Cassandra session
@@ -124,6 +125,30 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 		&cassandrabackend.Config{Hosts: []string{"c1"}, Consistency: "MOSTLY"},
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}
+
+// TestCassandraOptions_SetSelfManagedSettings tests the options for the self-managed
+// backend's host discovery and reconnect interval.
+//
+// Why this test is important:
+//   - A caller reaching a cluster through a tunnel builds its config from options;
+//     without these two it must reach into the nested struct, unlike every sibling
+//
+// What it tests:
+//   - WithDisableHostDiscovery and WithReconnectInterval set the nested Cassandra
+//     fields and leave the rest of DefaultConfig unchanged.
+func TestCassandraOptions_SetSelfManagedSettings(t *testing.T) {
+	t.Parallel()
+	cfg := cassandra.DefaultConfig()
+	options.ApplyOptions(
+		&cfg,
+		cassandra.WithDisableHostDiscovery(true),
+		cassandra.WithReconnectInterval(3*time.Second),
+	)
+	want := cassandra.DefaultConfig()
+	want.Cassandra.DisableHostDiscovery = true
+	want.Cassandra.ReconnectInterval = 3 * time.Second
+	assert.Equal(t, want, cfg)
 }
 
 // TestKeyspacesConfig_UsesTLSAndSigV4 tests the Amazon Keyspaces cluster settings,
