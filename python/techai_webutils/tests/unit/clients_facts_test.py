@@ -39,6 +39,7 @@ def _fact(i: int = 0) -> Fact:
         org_id="org-1",
         ts=datetime(2026, 10, 9, 12, 34, 56, 789000, tzinfo=UTC),
         dims={
+            "label": "a<b>&c\u2028",
             "provider": "aws.bedrock",
             "model": "nova-lite",
             "step": "generate",
@@ -68,7 +69,8 @@ def test_fact_json_matches_golden() -> None:
 
     **What it tests:**
       - sorted keys, compact separators, integral measures rendered as integers, RFC 3339 UTC
-        timestamp with trailing zeros trimmed (``…56.789Z``), and ``schema`` 1
+        timestamp with trailing zeros trimmed (``…56.789Z``), ``<``, ``>``, ``&`` and
+        U+2028 escaped as Go escapes them, and ``schema`` 1
     """
     assert _fact().to_json() == _GOLDEN.read_bytes()
 

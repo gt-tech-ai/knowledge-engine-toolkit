@@ -19,6 +19,15 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `clients/messaging/sqs.NewAWSClient`: builds the SDK SQS client the publisher and subscriber
+  use (region, endpoint override, static or default-chain credentials) for a caller that
+  sends through the SDK directly. No I/O until the first call.
+- `go/tests/mocks`: generated mocks for `CacheInvalidator`, `Encryptor`, `EventPublisher`,
+  `JobEnqueuer`, `JobScheduler`, `WorkerRegistry`, `Locker`, `CountingPublisher`,
+  `MessageConsumer`, `Repository`, `Source` and `Transaction`, so a consumer imports the
+  engine's mocks instead of regenerating them.
+- `testdata/analytics_fact.golden.json`: a dim holding `<`, `>`, `&` and U+2028 pins that Go
+  and Python escape them identically.
 - `pipelines/pipeline.Then`: composes two pipelines into one, the first's output feeding the
   second. An error from the first is returned unchanged and the second does not run; each
   stage keeps its own decorators. A nil stage panics.

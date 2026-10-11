@@ -22,6 +22,40 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
+// TestNewAWSClient_HonoursEndpointOverride tests the exported SQS client builder.
+//
+// Why this test is important:
+//   - A service that sends straight through the SDK (an outbox relay) needs the same
+//     client the publisher builds; a builder that dropped the endpoint override would
+//     send dev traffic to real AWS, and one that dropped static keys would fail locally.
+//
+// What it tests:
+//   - The client carries the configured region, endpoint override and static
+//     credentials; without an endpoint the base endpoint is unset (the regional default).
+func TestNewAWSClient_HonoursEndpointOverride(t *testing.T) {
+	t.Parallel()
+	client, err := sqs.NewAWSClient(t.Context(), sqs.Config{
+		AWSRegion:       "eu-west-1",
+		Endpoint:        "http://localhost:9324",
+		AccessKeyID:     "local",
+		SecretAccessKey: "local-secret",
+	})
+	require.NoError(t, err)
+	opts := client.Options()
+	require.Equal(t, "eu-west-1", opts.Region)
+	require.Equal(t, "http://localhost:9324", aws.ToString(opts.BaseEndpoint))
+	creds, err := opts.Credentials.Retrieve(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "local", creds.AccessKeyID)
+	require.Equal(t, "local-secret", creds.SecretAccessKey)
+
+	regional, err := sqs.NewAWSClient(t.Context(), sqs.Config{
+		AWSRegion: "eu-west-1", AccessKeyID: "local", SecretAccessKey: "local-secret",
+	})
+	require.NoError(t, err)
+	require.Nil(t, regional.Options().BaseEndpoint)
+}
+
 // TestMessaging_NewFromConfig_AtTierRoot tests that the tier-root config factory
 // builds a publisher from a foundation SQSConfig without a network round-trip.
 //

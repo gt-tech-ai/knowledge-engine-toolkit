@@ -32,6 +32,7 @@ func goldenFact() types.Fact {
 		OrgID: "org-1",
 		TS:    time.Date(2026, 10, 9, 12, 34, 56, 789_000_000, time.UTC),
 		Dims: map[string]string{
+			"label":    "a<b>&c\u2028",
 			"provider": "aws.bedrock",
 			"model":    "nova-lite",
 			"step":     "generate",
@@ -57,7 +58,8 @@ func goldenFact() types.Fact {
 //
 // What it tests:
 //   - json.Marshal(fact) is byte-identical to testdata/analytics_fact.golden.json
-//     (sorted keys, integral measures as integers, UTC RFC 3339 with trimmed fraction)
+//     (sorted keys, integral measures as integers, UTC RFC 3339 with trimmed fraction,
+//     "<", ">", "&" and U+2028 escaped as Python escapes them)
 //   - a non-UTC timestamp still renders in UTC
 //   - unmarshalling the fixture yields the original Fact
 func TestFact_MarshalMatchesGoldenFixture(t *testing.T) {
@@ -94,6 +96,7 @@ func TestFact_MarshalMatchesGoldenFixture(t *testing.T) {
 //   - "<", ">", "&", U+2028 and U+2029 are written as the escapes \u003c, \u003e,
 //     \u0026, \u2028 and \u2029; other non-ASCII stays raw UTF-8; empty
 //     measures render as {}
+//   - json.Marshal and a direct MarshalJSON call write the same bytes
 func TestFact_MarshalEscapesLikePython(t *testing.T) {
 	t.Parallel()
 
@@ -103,11 +106,15 @@ func TestFact_MarshalEscapesLikePython(t *testing.T) {
 		Dims: map[string]string{"team": "a<b>&c\u2028\u2029\u00e9"},
 	}
 
-	got, err := json.Marshal(fact)
+	via, err := json.Marshal(fact)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"cube":"c","dims":{"team":"a\u003cb\u003e\u0026c\u2028\u2029é"},`+
-		`"idempotency_key":"k","measures":{},"org_id":"o","schema":1,"ts":"2026-10-09T00:00:`+
-		`00Z"}`, string(got))
+	want := `{"cube":"c","dims":{"team":"a\u003cb\u003e\u0026c\u2028\u2029é"},` +
+		`"idempotency_key":"k","measures":{},"org_id":"o","schema":1,"ts":"2026-10-09T00:00:` +
+		`00Z"}`
+	assert.Equal(t, want, string(via))
+	direct, err := fact.MarshalJSON()
+	require.NoError(t, err)
+	assert.Equal(t, want, string(direct))
 }
 
 // TestFact_UnmarshalRejectsUnknownSchema tests the wire-version check.

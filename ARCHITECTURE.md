@@ -393,7 +393,9 @@ pipeline.
   in `fixtures/dbtest/*`, suites, an E2E telemetry kit), and `mocks/`. The one white-box exception
   is `go/clients/jobs/river/runtime_internal_test.go`.
 - Unit tests mock only the external boundary, with mocks **generated** by mockgen from
-  `go/tests/mocks/generate.go` (`go generate ./go/tests/mocks/...`).
+  `go/tests/mocks/generate.go` (`go generate ./go/tests/mocks/...`). The package is importable:
+  it mocks every `core/interfaces` port a consumer's unit tests drive, so a consumer imports
+  `go/tests/mocks` instead of regenerating the engine's interfaces.
 - No hand-rolled fakes replace a dependency an integration test exercises; stubs are shipped
   code, not test doubles. Python unit tests use `unittest.mock`, and `tests/integration`
   (`@pytest.mark.integration`) runs against testcontainers.
