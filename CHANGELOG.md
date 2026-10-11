@@ -24,6 +24,13 @@ All notable changes to this project are recorded here. The format follows
 - `foundation/listquery.ParseFilter`: checks a `FilterNode` against a `Map`; `Parse` is now
   built on it. Integers outside ±(2^53−1) are rejected.
 - `testdata/listquery/filters.golden.json`: the shared filter corpus.
+- `foundation/chartspec`: a content-addressed node encoding for `ChartSpec`. `Node` and `Hash`
+  (SHA-256 over `"chartspec/v1\x00"` and the node's RFC 8785 canonical JSON); `Encode` splits a
+  spec into a `Tree` of shared nodes, `Decode` rebuilds it through a `NodeGetter` and verifies
+  each node against its hash, and `Diff` reports the changed paths between two roots as
+  `Change`s. New dependency: `github.com/gowebpki/jcs`.
+- `testdata/chartspec/nodes.golden.json` and `testdata/chartspec/specs.golden.json`: pinned
+  node and root hashes.
 - `clients/cassandra`: `CassandraConfig.DisableHostDiscovery` pins a cluster reached through
   a proxy, tunnel or port mapping to its one IP-literal contact point, translating every
   address the cluster advertises back to it; `ReconnectInterval` sets how often downed

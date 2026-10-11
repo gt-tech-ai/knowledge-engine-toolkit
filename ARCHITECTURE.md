@@ -207,6 +207,15 @@ the reducer merges `Partial`s (sum, count, min, max and a 1%-accurate DDSketch f
 Facts travel as `core/types.Fact`, whose JSON is byte-identical to Python's `core/types/fact.Fact`
 (both suites assert `testdata/analytics_fact.golden.json`).
 
+A spec is versioned as content-addressed nodes. `Encode` splits it into a `Tree` of `Node`s
+(`kind`, scalar `fields`, single `children` and ordered `lists` of child hashes); a node's `Hash`
+is the SHA-256 of `"chartspec/v1\x00"` followed by its RFC 8785 canonical JSON. Equal subtrees
+share one node, so changing one aggregate re-addresses only the nodes on its path to the root.
+`Decode` rebuilds a spec from a root through a caller-supplied `NodeGetter` and re-hashes every
+node it reads (missing → `CodeNotFound`, content not matching its address → `CodeInternal`);
+`Diff` compares two roots and returns the changed paths (`columns.args[0].agg`), descending only
+where hashes differ. `testdata/chartspec/*.golden.json` pins the node and root hashes.
+
 `core/interfaces.AnalyticsStore` (`Aggregate` → a pull-based, page-at-a-time `RowStream`; idempotent
 `Write`; optional `AnalyticsCompactor`) is built by `clients/analytics` (`KindStub` default,
 `KindCassandra`). The Cassandra store sits on `clients/cassandra.Session` — `KindCassandra`
