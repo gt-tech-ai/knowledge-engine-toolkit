@@ -19,6 +19,14 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `workflows/loop`: background work as decorated workflow passes. `Pass` adapts a
+  `func(context.Context) error` into a `Workflow[struct{}, struct{}]`. `NewTicker` runs a pass
+  per `Config.Interval` (back to back when zero; `RunAtStart` adds a startup pass), logs a
+  failed pass and waits `ErrorBackoff`, and returns nil when its context ends. A negative
+  duration is `CodeInvalidInput`. `Group` is an `interfaces.Lifecycle` that runs `Runner`s
+  (`RunnerFunc` adapts a function) together and logs one that stops with an error without
+  stopping the others; `Stop` cancels and waits within its context (`CodeTimeout` /
+  `CodeCanceled`), and a second `Start` is `CodeConflict`.
 - `core/interfaces.Stream[T]`: a pull-based, closable sequence that every large result can
   travel on. `Close` may come from another goroutine and ends a running `Next`.
 - `foundation/stream`: `FromSlice`, `Chunk` (greedy split at a byte budget; an oversized item
