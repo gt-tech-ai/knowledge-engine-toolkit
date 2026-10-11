@@ -6,6 +6,13 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `clients/cassandra`: `CassandraConfig.DisableHostDiscovery` pins a cluster reached through
+  a proxy, tunnel or port mapping to its one IP-literal contact point, translating every
+  address the cluster advertises back to it; `ReconnectInterval` sets how often downed
+  hosts are retried.
+
 ## [0.0.1] - 2026-10-10
 
 ### Added

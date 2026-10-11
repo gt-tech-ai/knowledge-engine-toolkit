@@ -43,6 +43,14 @@ type CassandraConfig struct {
 	Port int
 	// TLS enables TLS with host verification.
 	TLS bool
+	// DisableHostDiscovery keeps the driver on the one configured contact point, which
+	// must be an IP literal, instead of the node addresses the cluster advertises, for
+	// a cluster reached through a proxy, tunnel or port mapping whose advertised
+	// addresses are unreachable.
+	DisableHostDiscovery bool
+	// ReconnectInterval is how often the driver retries hosts it marked down; zero
+	// keeps the driver default.
+	ReconnectInterval time.Duration
 }
 
 // KeyspacesConfig holds the Amazon Keyspaces settings. Credentials come from the
