@@ -43,7 +43,8 @@ func Chunk[T any](items []T, size func(T) int, maxBytes int) ([][]T, error) {
 
 // Collect drains s into a slice and closes it. Once the items' sizes sum past
 // maxBytes it stops reading and returns CodeResourceExhausted; a source error is
-// returned unchanged. s is closed on every path.
+// returned unchanged; a non-positive maxBytes is CodeInvalidInput. s is closed on
+// every path.
 func Collect[T any](
 	ctx context.Context,
 	s interfaces.Stream[T],
@@ -55,6 +56,10 @@ func Collect[T any](
 			items, err = nil, cerr
 		}
 	}()
+	if maxBytes <= 0 {
+		return nil, apperr.New(apperr.CodeInvalidInput,
+			fmt.Sprintf("stream: collect max bytes must be positive, got %d", maxBytes))
+	}
 	used := 0
 	for {
 		item, ok, err := s.Next(ctx)

@@ -122,6 +122,7 @@ func TestChunk_OversizedItemIsResourceExhausted(t *testing.T) {
 //   - Past the budget Collect returns CodeResourceExhausted without reading further and
 //     closes the source.
 //   - A source error is returned as-is and the source is closed.
+//   - A non-positive budget is CodeInvalidInput, and the source is still closed.
 func TestCollect_StopsAtBudgetAndClosesSource(t *testing.T) {
 	t.Parallel()
 	size := func(s string) int { return len(s) }
@@ -136,9 +137,23 @@ func TestCollect_StopsAtBudgetAndClosesSource(t *testing.T) {
 
 	t.Run("over budget", func(t *testing.T) {
 		t.Parallel()
-		src := scriptedStream(t, []string{"aa", "bb", "cc"}, nil)
+		// Exactly three reads are expected: a fourth fails the test as unexpected.
+		src := mocks.NewMockStream[string](gomock.NewController(t))
+		gomock.InOrder(
+			src.EXPECT().Next(gomock.Any()).Return("aa", true, nil),
+			src.EXPECT().Next(gomock.Any()).Return("bb", true, nil),
+			src.EXPECT().Next(gomock.Any()).Return("cc", true, nil),
+		)
+		src.EXPECT().Close().Return(nil).Times(1)
 		_, err := stream.Collect(t.Context(), src, size, 5)
 		require.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
+	})
+
+	t.Run("non-positive budget", func(t *testing.T) {
+		t.Parallel()
+		src := scriptedStream(t, nil, nil)
+		_, err := stream.Collect(t.Context(), src, size, 0)
+		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	})
 
 	t.Run("source error", func(t *testing.T) {

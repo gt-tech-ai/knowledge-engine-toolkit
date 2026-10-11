@@ -9,6 +9,6 @@
 // producer from its consumer: the bounded Kind reads ahead into a buffer capped by
 // item count and bytes, blocking the producer when it is full (backpressure), and the
 // direct Kind passes the stream through unchanged. NewFromConfig selects the Kind, and
-// WithMetrics decorates a Buffer with read-ahead depth gauges and a producer-wait
+// NewMetrics decorates a Buffer with read-ahead depth gauges and a producer-wait
 // histogram.
 package stream

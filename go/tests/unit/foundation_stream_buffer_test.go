@@ -1,7 +1,9 @@
 package unit_test
 
 import (
+	"context"
 	"math"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -154,6 +156,90 @@ func TestBuffer_CloseStopsProducer(t *testing.T) {
 	require.False(t, ok)
 }
 
+// blockingStream returns a mock Stream whose Next blocks until Close is called (it
+// ignores its context, like a source stuck in I/O), then reports the end.
+func blockingStream(t *testing.T) *mocks.MockStream[string] {
+	t.Helper()
+	release := make(chan struct{})
+	var once sync.Once
+	src := mocks.NewMockStream[string](gomock.NewController(t))
+	src.EXPECT().Next(gomock.Any()).DoAndReturn(func(any) (string, bool, error) {
+		<-release
+		return "", false, nil
+	}).AnyTimes()
+	src.EXPECT().Close().DoAndReturn(func() error {
+		once.Do(func() { close(release) })
+		return nil
+	}).AnyTimes()
+	return src
+}
+
+// TestBuffer_CloseUnblocksPendingNext tests abandoning a stream mid-read.
+//
+// Why this test is important:
+//   - A reader's socket can close while its Next waits on a slow source. If Close
+//     could not end that Next, the request goroutine (and with the bounded kind, the
+//     producer) would hang on a source that ignores its context.
+//
+// What it tests:
+//   - For both kinds, a Close from another goroutine makes a Next blocked on the
+//     source return the end of the stream, and no goroutine is left behind.
+func TestBuffer_CloseUnblocksPendingNext(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	for _, kind := range []stream.Kind{stream.KindDirect, stream.KindBounded} {
+		t.Run(kind.String(), func(t *testing.T) {
+			buf, err := stream.NewFromConfig(
+				stream.Config{Kind: kind, MaxItems: 1, MaxBytes: 1}, streamSize)
+			require.NoError(t, err)
+			out := buf.Wrap(t.Context(), blockingStream(t))
+
+			type result struct {
+				err error
+				ok  bool
+			}
+			done := make(chan result, 1)
+			go func() {
+				_, ok, err := out.Next(t.Context())
+				done <- result{ok: ok, err: err}
+			}()
+			require.Never(t, func() bool { return len(done) > 0 },
+				20*time.Millisecond, time.Millisecond)
+
+			require.NoError(t, out.Close())
+			select {
+			case got := <-done:
+				require.NoError(t, got.err)
+				require.False(t, got.ok)
+			case <-time.After(time.Second):
+				t.Fatal("Next stayed blocked after Close")
+			}
+		})
+	}
+}
+
+// TestBuffer_ExpiredDeadlineIsTimeout tests how a bounded read reports its deadline.
+//
+// Why this test is important:
+//   - A transport maps the error code to its status: a read that ran out of time must
+//     surface as a timeout, not as a cancellation the caller asked for.
+//
+// What it tests:
+//   - A bounded Next whose context deadline has passed returns CodeTimeout.
+func TestBuffer_ExpiredDeadlineIsTimeout(t *testing.T) {
+	t.Parallel()
+	buf, err := stream.NewFromConfig(
+		stream.Config{Kind: stream.KindBounded, MaxItems: 1, MaxBytes: 1}, streamSize)
+	require.NoError(t, err)
+	out := buf.Wrap(t.Context(), blockingStream(t))
+	defer func() { require.NoError(t, out.Close()) }()
+
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	_, ok, err := out.Next(ctx)
+	require.False(t, ok)
+	require.Equal(t, apperr.CodeTimeout, apperr.Code(err))
+}
+
 // TestBuffer_MetricsRecordDepthAndBlockedTime tests the buffer metrics decorator.
 //
 // Why this test is important:
@@ -202,7 +288,7 @@ func TestBuffer_MetricsRecordDepthAndBlockedTime(t *testing.T) {
 		streamSize,
 	)
 	require.NoError(t, err)
-	buf := stream.WithMetrics(inner, m, "frames", streamSize)
+	buf := stream.NewMetrics(inner, m, "frames", streamSize)
 	var pulled atomic.Int64
 	out := buf.Wrap(t.Context(), endlessStream(t, &pulled))
 
@@ -220,6 +306,46 @@ func TestBuffer_MetricsRecordDepthAndBlockedTime(t *testing.T) {
 	require.Equal(t, int64(0), bytes.Load())
 }
 
+// TestBuffer_MetricsOverDirectHoldNothing tests the metrics decorator on the default
+// kind.
+//
+// Why this test is important:
+//   - The direct kind is the default, so the decorator is applied over it everywhere a
+//     buffer is unconfigured: its gauges must not drift, or every dashboard would show
+//     a phantom read-ahead.
+//
+// What it tests:
+//   - Over KindDirect each item is counted in and out on the same read, so after the
+//     stream is drained both gauges read zero and every item comes through in order.
+func TestBuffer_MetricsOverDirectHoldNothing(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	m := mocks.NewMockMetrics(ctrl)
+	itemsGauge, bytesGauge := mocks.NewMockGauge(ctrl), mocks.NewMockGauge(ctrl)
+	var items, bytes atomic.Int64
+	m.EXPECT().Gauge("stream_buffer_items", gomock.Any(), "buffer").Return(itemsGauge)
+	m.EXPECT().Gauge("stream_buffer_bytes", gomock.Any(), "buffer").Return(bytesGauge)
+	wait := mocks.NewMockHistogram(ctrl)
+	wait.EXPECT().Observe(gomock.Any(), "pages").AnyTimes()
+	m.EXPECT().Histogram(gomock.Any(), gomock.Any(), gomock.Any(), "buffer").Return(wait)
+	itemsGauge.EXPECT().Set(gomock.Any(), "pages").Do(func(v float64, _ ...string) {
+		items.Store(int64(v))
+	}).AnyTimes()
+	bytesGauge.EXPECT().Set(gomock.Any(), "pages").Do(func(v float64, _ ...string) {
+		bytes.Store(int64(v))
+	}).AnyTimes()
+
+	inner, err := stream.NewFromConfig(stream.Config{}, streamSize)
+	require.NoError(t, err)
+	buf := stream.NewMetrics(inner, m, "pages", streamSize)
+	got, err := stream.Collect(t.Context(),
+		buf.Wrap(t.Context(), stream.FromSlice([]string{"ab", "cd"})), streamSize, 8)
+	require.NoError(t, err)
+	require.Equal(t, []string{"ab", "cd"}, got)
+	require.Equal(t, int64(0), items.Load())
+	require.Equal(t, int64(0), bytes.Load())
+}
+
 // TestBuffer_UnknownKindFailsLoudly tests the buffer factory's validation.
 //
 // Why this test is important:
@@ -229,7 +355,8 @@ func TestBuffer_MetricsRecordDepthAndBlockedTime(t *testing.T) {
 // What it tests:
 //   - ParseKind maps "direct" and "bounded" and rejects anything else with
 //     CodeInvalidInput; NewFromConfig rejects an unknown Kind and a bounded config with
-//     a non-positive bound; the direct kind passes items through unchanged.
+//     a non-positive bound or a nil size func; the direct kind passes items through
+//     unchanged.
 func TestBuffer_UnknownKindFailsLoudly(t *testing.T) {
 	t.Parallel()
 	for s, want := range map[string]stream.Kind{
@@ -251,6 +378,9 @@ func TestBuffer_UnknownKindFailsLoudly(t *testing.T) {
 		_, err := stream.NewFromConfig(cfg, streamSize)
 		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 	}
+	_, err = stream.NewFromConfig[string](
+		stream.Config{Kind: stream.KindBounded, MaxItems: 1, MaxBytes: 1}, nil)
+	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "nil size")
 
 	buf, err := stream.NewFromConfig(stream.Config{}, streamSize)
 	require.NoError(t, err)

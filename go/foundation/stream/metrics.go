@@ -26,12 +26,12 @@ type metricsBuffer[T any] struct {
 	heldItems, heldBytes atomic.Int64
 }
 
-// WithMetrics wraps inner so every stream it buffers reports, under the label name, the
+// NewMetrics wraps inner so every stream it buffers reports, under the label name, the
 // items and bytes read from the source but not yet delivered
 // (stream_buffer_items, stream_buffer_bytes) and the producer's wait between items
 // (stream_buffer_producer_wait_seconds). size reports one item's size in bytes. The
 // metrics are registered here, at construction; apply it at the composition root.
-func WithMetrics[T any](
+func NewMetrics[T any](
 	inner Buffer[T],
 	m interfaces.Metrics,
 	name string,
@@ -45,6 +45,8 @@ func WithMetrics[T any](
 			"Items read from the source but not yet delivered", "buffer"),
 		bytes: m.Gauge("stream_buffer_bytes",
 			"Bytes read from the source but not yet delivered", "buffer"),
+		// The 1 ms floor is deliberate: an unblocked producer hands off in well under the
+		// 5 ms the shared execution buckets start at, and that is the case to tell apart.
 		wait: m.Histogram("stream_buffer_producer_wait_seconds",
 			"Producer wait between handing an item on and pulling the next, in seconds",
 			[]float64{.001, .005, .01, .05, .1, .5, 1, 5, 10}, "buffer"),
@@ -61,7 +63,9 @@ func (b *metricsBuffer[T]) Wrap(
 	return s
 }
 
-// add moves the held totals by items and bytes and reports them.
+// add moves the held totals by items and bytes and reports them. Two streams racing
+// here can leave a gauge one update stale until the next item; a depth gauge tolerates
+// that.
 func (b *metricsBuffer[T]) add(items, bytes int64) {
 	b.items.Set(float64(b.heldItems.Add(items)), b.name)
 	b.bytes.Set(float64(b.heldBytes.Add(bytes)), b.name)

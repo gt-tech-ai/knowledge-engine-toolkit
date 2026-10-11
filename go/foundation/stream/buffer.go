@@ -74,8 +74,9 @@ type Config struct {
 }
 
 // NewFromConfig builds the Buffer cfg selects, without I/O; size reports one item's
-// size in bytes for KindBounded's byte bound. An unknown kind, or KindBounded with a
-// non-positive bound or a nil size, is CodeInvalidInput.
+// size in bytes for KindBounded's byte bound. It runs once per item on the producer's
+// path, so it should be cheap; a negative size counts as zero. An unknown kind, or
+// KindBounded with a non-positive bound or a nil size, is CodeInvalidInput.
 func NewFromConfig[T any](cfg Config, size func(T) int) (Buffer[T], error) {
 	switch cfg.Kind {
 	case KindDirect:
@@ -94,7 +95,9 @@ func NewFromConfig[T any](cfg Config, size func(T) int) (Buffer[T], error) {
 	}
 }
 
-// direct is KindDirect: it reads the source on the consumer's own Next calls.
+// direct is KindDirect: it reads the source on the consumer's own Next calls, so a
+// Close from another goroutine reaches the source while its Next may be running — the
+// Stream contract every source must honour.
 type direct[T any] struct{}
 
 // Wrap implements Buffer.
@@ -112,8 +115,8 @@ type bounded[T any] struct {
 	maxBytes int
 }
 
-// Wrap implements Buffer: it starts the producer goroutine, which Close cancels and
-// waits for before closing src.
+// Wrap implements Buffer: it starts the producer goroutine. Close cancels it, closes
+// src (unblocking a Next that does not watch its context), then waits for it to return.
 func (b bounded[T]) Wrap(
 	ctx context.Context,
 	src interfaces.Stream[T],
@@ -125,12 +128,13 @@ func (b bounded[T]) Wrap(
 		done: make(chan struct{}),
 	}
 	go q.produce(ctx, src, func(item T) int64 {
-		return int64(min(b.size(item), b.maxBytes))
+		return int64(min(max(b.size(item), 0), b.maxBytes))
 	})
 	return newLatched(q.next, func() error {
 		cancel()
+		err := src.Close()
 		<-q.done
-		return src.Close()
+		return err
 	})
 }
 
@@ -225,14 +229,16 @@ func (q *queue[T]) take(e entry[T]) (item T, ok bool, err error) {
 	return e.item, true, nil
 }
 
-// canceled codes a context error ending a stream read.
+// canceled codes a context error ending a stream read: a deadline is CodeTimeout, a
+// cancellation CodeCanceled.
 func canceled(err error) error {
-	return apperr.Wrap(err, apperr.CodeCanceled, "stream: read canceled")
+	return apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled),
+		"stream: read ended by its context")
 }
 
 // latched enforces the Stream contract over a next/close pair: once next reports the
 // end or an error, every later Next repeats it without calling next again; Close runs
-// close once; a Next after Close reports the end.
+// close once; a Next after Close, or one that Close overlaps, reports the end.
 type latched[T any] struct {
 	// next reads the underlying stream.
 	next func(context.Context) (T, bool, error)
@@ -268,6 +274,11 @@ func (l *latched[T]) Next(ctx context.Context) (item T, ok bool, err error) {
 		return zero, false, nil
 	}
 	item, ok, err = l.next(ctx)
+	if l.closed.Load() {
+		// Close ran during next: whatever next saw (often the cancellation Close
+		// caused), the reader abandoned the stream, so report the end.
+		return zero, false, nil
+	}
 	if err != nil || !ok {
 		l.ended, l.err = true, err
 		return zero, false, err

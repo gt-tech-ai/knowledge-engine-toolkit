@@ -9,7 +9,8 @@ import "context"
 // composes over it.
 //
 // A Stream is used by one goroutine at a time; Close may be called from any goroutine
-// to abandon it.
+// to abandon it, including while a Next is running, and must then make that Next
+// return.
 type Stream[T any] interface {
 	// Next returns the next item. ok is false at the clean end of the stream (item is
 	// the zero value and err is nil), and stays false on every later call. A non-nil
