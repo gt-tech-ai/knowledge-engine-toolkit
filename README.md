@@ -17,7 +17,7 @@ layers, swappable components, decorators, error codes — are in
 go.mod                  ONE Go module: github.com/gt-tech-ai/knowledge-engine-toolkit (packages under go/)
 go/
   core/                 Layer 0 — pure interfaces + types (no external deps)
-  foundation/           Layer 1 — config, logger, metrics, tracer, resilience, cache
+  foundation/           Layer 1 — config, logger, metrics, tracer, resilience, cache, stream (bounded backpressured results)
   clients/              Layer 2 — external-system integration (db, cache, messaging, rpc, storage, lock)
   repos/                Layer 3 — data-access base (repository, cursor, decorators)
   services/             Layer 4 — domain-service base
