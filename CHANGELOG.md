@@ -19,6 +19,16 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `core/interfaces.Stream[T]`: a pull-based, closable sequence that every large result can
+  travel on. `Close` may come from another goroutine and ends a running `Next`.
+- `foundation/stream`: `FromSlice`, `Chunk` (greedy split at a byte budget; an oversized item
+  is `CodeResourceExhausted`) and `Collect` (drain under a byte budget, closing the source
+  on every path). `Buffer` decouples producer from consumer, selected by `Kind` + `Config` +
+  `NewFromConfig` (`ParseKind`: `direct`, the default, or `bounded`, which reads ahead on a
+  goroutine bounded by item count and bytes and blocks the producer when full). A context
+  deadline ending a read is `CodeTimeout`; a cancellation is `CodeCanceled`. `NewMetrics`
+  decorates a `Buffer` with the `stream_buffer_items` and `stream_buffer_bytes` gauges and
+  the `stream_buffer_producer_wait_seconds` histogram, labelled `buffer`.
 - `core/types.FilterNode`: the filter tree with a JSON codec for the listquery grammar, and
   `MaxFilterDepth`. `FilterOperator.Known` reports whether an operator is one of the defined
   set.
