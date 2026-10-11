@@ -80,11 +80,20 @@ type API interface {
 	) (*awssqs.ChangeMessageVisibilityOutput, error)
 }
 
-// newSQSClient builds an aws-sdk-go-v2 SQS client from cfg. A non-empty Endpoint
-// overrides the service endpoint (ElasticMQ); non-empty static credentials are
-// used for local dev, otherwise the default AWS credential chain (env, IAM role
-// / IRSA, shared file) applies.
-func newSQSClient(ctx context.Context, cfg Config) (*awssqs.Client, error) {
+// NewAWSClient builds the aws-sdk-go-v2 SQS client the publisher and subscriber use,
+// for a caller that sends through the SDK directly (an outbox relay). A non-empty
+// Endpoint overrides the service endpoint (ElasticMQ); non-empty static credentials
+// are used for local dev, otherwise the default AWS credential chain (env, IAM role /
+// IRSA, shared file) applies. An AccessKeyID without a SecretAccessKey is
+// CodeInvalidInput. Only cfg's region, endpoint and credentials are read; the client
+// does no I/O until its first call.
+func NewAWSClient(ctx context.Context, cfg Config) (*awssqs.Client, error) {
+	if cfg.AccessKeyID != "" && cfg.SecretAccessKey == "" {
+		return nil, apperr.New(
+			apperr.CodeInvalidInput,
+			"sqs: a static access key needs its secret access key",
+		)
+	}
 	loadOpts := []func(*awsconfig.LoadOptions) error{}
 	if cfg.AWSRegion != "" {
 		loadOpts = append(loadOpts, awsconfig.WithRegion(cfg.AWSRegion))
@@ -120,7 +129,7 @@ func resolveAPI(ctx context.Context, cfg Config) (API, error) {
 	if cfg.API != nil {
 		return cfg.API, nil
 	}
-	return newSQSClient(ctx, cfg)
+	return NewAWSClient(ctx, cfg)
 }
 
 // ensureQueue resolves the URL for queueName, creating the queue only if it does

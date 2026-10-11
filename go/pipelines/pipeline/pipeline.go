@@ -3,7 +3,8 @@
 // BasePipeline wraps a stateless transformation function and implements the
 // Pipeline[In, Out] interface from core. It serves as the innermost layer
 // in a decorator chain — decorators (logging, metrics) wrap BasePipeline
-// to add cross-cutting concerns without modifying the transformation logic.
+// to add cross-cutting concerns without modifying the transformation logic. Then
+// composes two pipelines into one staged pipeline, each stage keeping its decorators.
 package pipeline
 
 import (

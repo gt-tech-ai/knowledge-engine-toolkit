@@ -361,6 +361,31 @@ the `RayRuntime` seam (the lazily imported `RealRayRuntime`, wrapped by the `Res
 retry decorator); `PooledExecutor` (a fixed pool of build-once workers) has no kind, so the caller
 builds it directly.
 
+## Background loops
+
+Go `go/workflows/loop` runs a service's background work (outbox relays, cache refreshers,
+stream drainers, retention sweeps) as workflow passes, so each pass gets the same decorator stack
+as a request.
+
+- `Pass(fn)` adapts one iteration, a `func(context.Context) error`, into a
+  `Workflow[struct{}, struct{}]`. The composition root decorates it (recovery outermost).
+- `NewTicker(name, pass, Config, logger)` runs the pass once per `Interval`, plus one at start when
+  `RunAtStart` is set. A zero `Interval` runs passes back to back, for a pass that already blocks
+  on its source. A failed pass is logged at warn and followed by `ErrorBackoff`. A failure caused
+  by the shutdown is not logged, and `Run` returns nil when its context ends.
+- `Group` (an `interfaces.Lifecycle`) starts every `Runner` (a `Ticker`, or any `RunnerFunc`) on
+  its own goroutine. A runner that returns an error is logged at error and the others keep
+  running. `Wait` blocks until all have returned; `Stop` cancels them and waits within its
+  context.
+
+## Staged pipelines
+
+Go `pipeline.Then(first, second)` composes two pipelines into one, feeding first's output to
+second; an error from first stops the chain and is returned unchanged. Build each stage with
+`decorators.NewBuilder` before composing, so every stage records its own span and metrics and a
+slow or failing stage is visible by name. `Then` nests: `Then(a, Then(b, c))` is a three-stage
+pipeline.
+
 ## Testing
 
 - Go tests are black-box under `go/tests`: `unit/` (external `_test` packages), `integration/`
@@ -368,7 +393,9 @@ builds it directly.
   in `fixtures/dbtest/*`, suites, an E2E telemetry kit), and `mocks/`. The one white-box exception
   is `go/clients/jobs/river/runtime_internal_test.go`.
 - Unit tests mock only the external boundary, with mocks **generated** by mockgen from
-  `go/tests/mocks/generate.go` (`go generate ./go/tests/mocks/...`).
+  `go/tests/mocks/generate.go` (`go generate ./go/tests/mocks/...`). The package is importable:
+  it mocks every `core/interfaces` port a consumer's unit tests drive, so a consumer imports
+  `go/tests/mocks` instead of regenerating the engine's interfaces.
 - No hand-rolled fakes replace a dependency an integration test exercises; stubs are shipped
   code, not test doubles. Python unit tests use `unittest.mock`, and `tests/integration`
   (`@pytest.mark.integration`) runs against testcontainers.
