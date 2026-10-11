@@ -43,6 +43,14 @@ type CassandraConfig struct {
 	Port int
 	// TLS enables TLS with host verification.
 	TLS bool
+	// DisableHostDiscovery keeps the driver on the one configured contact point, which
+	// must be an IP literal, instead of the node addresses the cluster advertises, for
+	// a cluster reached through a proxy, tunnel or port mapping whose advertised
+	// addresses are unreachable.
+	DisableHostDiscovery bool
+	// ReconnectInterval is how often the driver retries hosts it marked down; zero
+	// keeps the driver default.
+	ReconnectInterval time.Duration
 }
 
 // KeyspacesConfig holds the Amazon Keyspaces settings. Credentials come from the
@@ -103,6 +111,18 @@ func WithHosts(port int, hosts ...string) options.Option[Config] {
 // WithLocalDC sets the self-managed local datacenter.
 func WithLocalDC(dc string) options.Option[Config] {
 	return func(c *Config) { c.Cassandra.LocalDC = dc }
+}
+
+// WithDisableHostDiscovery sets whether the self-managed backend stays on its one
+// IP-literal contact point instead of the addresses the cluster advertises.
+func WithDisableHostDiscovery(disable bool) options.Option[Config] {
+	return func(c *Config) { c.Cassandra.DisableHostDiscovery = disable }
+}
+
+// WithReconnectInterval sets how often the self-managed backend retries hosts it
+// marked down; zero keeps the driver default.
+func WithReconnectInterval(d time.Duration) options.Option[Config] {
+	return func(c *Config) { c.Cassandra.ReconnectInterval = d }
 }
 
 // WithKeyspacesRegion sets the Amazon Keyspaces region.

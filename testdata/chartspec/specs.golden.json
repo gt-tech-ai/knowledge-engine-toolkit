@@ -1,0 +1,60 @@
+{
+  "cases": [
+    {
+      "name": "every wire member",
+      "spec": {
+        "cube": "genai_calls",
+        "rows": {"op": "cross", "args": [{"field": "team"}, {"field": "model"}]},
+        "columns": {"field": "tokens_in", "agg": "sum"},
+        "detail": [{"field": "workspace"}],
+        "encodings": {"color": {"field": "model"}},
+        "filter": {"$eq": {"team": "t-1"}},
+        "sort": [{"field": "sum(tokens_in)", "desc": true}],
+        "time_range": {"from": "2026-10-01T00:00:00Z", "to": "2026-10-09T00:00:00Z"},
+        "grain": "day",
+        "mark": "bar"
+      },
+      "root": "1e2f05e8adfddb938978d640d040ba6d6a33543ab91bc0121a7003825e2f4be3",
+      "nodes": 10
+    },
+    {
+      "name": "nested filter",
+      "spec": {
+        "cube": "genai_calls",
+        "rows": {"field": "team"},
+        "columns": {"op": "concat", "args": [
+          {"field": "tokens_in", "agg": "sum"}, {"field": "duration_s", "agg": "p95"}]},
+        "filter": {"$and": [{"$eq": {"team": "t-1"}},
+          {"$or": [{"$in": {"model": ["m-1", "m-2"]}}, {"$gte": {"tokens_in": 1.5e3}}]}]},
+        "time_range": {"from": "2026-10-01T00:00:00Z", "to": "2026-10-02T00:00:00Z"},
+        "grain": "hour"
+      },
+      "root": "877e8a20d5674191f72a13f4eaa2bc2709bbfc31043d0ce438cad500b2f2bd94",
+      "nodes": 11
+    },
+    {
+      "name": "minimal",
+      "spec": {
+        "cube": "genai_calls",
+        "columns": {"field": "tokens_in", "agg": "sum"},
+        "time_range": {"from": "2026-10-01T00:00:00Z", "to": "2026-10-02T00:00:00Z"}
+      },
+      "root": "6cf6f7b3ce6c3ae7d74ae39d54e8bb696210e1dfd13dc072778bc916799730f8",
+      "nodes": 3
+    },
+    {
+      "name": "zero-valued filter operands and a repeated leaf",
+      "spec": {
+        "cube": "genai_calls",
+        "rows": {"op": "nest", "args": [{"field": "team"}, {"field": "team"}]},
+        "columns": {"field": "tokens_in", "agg": "count"},
+        "filter": {"$and": [{"$eq": {"cached": false}}, {"$ne": {"team": ""}},
+          {"$eq": {"tokens_in": 0}}]},
+        "time_range": {"from": "2026-10-01T00:00:00Z", "to": "2026-10-02T00:00:00Z"},
+        "grain": "day"
+      },
+      "root": "bcc7133131c08eace6435615426f1eeaa60fe57c3994f7f28de0a5b947ee69f5",
+      "nodes": 9
+    }
+  ]
+}

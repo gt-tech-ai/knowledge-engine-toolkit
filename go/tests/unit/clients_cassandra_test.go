@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"crypto/tls"
+	"net"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	cassandrabackend "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cassandra/cassandra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cassandra/keyspaces"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
 )
 
 // TestNewFromConfig_UnknownKindIsInvalidInput tests that both the Cassandra session
@@ -56,7 +58,10 @@ func TestNewFromConfig_UnknownKindIsInvalidInput(t *testing.T) {
 //   - DefaultConfig: kind cassandra, LOCAL_QUORUM, 5 s timeouts, page size 500,
 //     2 connections, port 9042 (Keyspaces 9142)
 //   - the cassandra backend's cluster carries those values, the hosts and a
-//     token-aware host-selection policy, without dialing
+//     token-aware host-selection policy, without dialing; host discovery stays on
+//   - DisableHostDiscovery on one IP-literal host skips the peer lookup, sets the
+//     reconnect interval, and translates any advertised address to that host and
+//     port; a hostname or several hosts are CodeInvalidInput
 //   - an unknown consistency is CodeInvalidInput
 func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 	t.Parallel()
@@ -90,11 +95,60 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 	assert.Equal(t, 500, cluster.PageSize)
 	assert.NotNil(t, cluster.PoolConfig.HostSelectionPolicy)
 	assert.Nil(t, cluster.Authenticator)
+	assert.False(t, cluster.DisableInitialHostLookup)
+
+	proxied, err := cassandrabackend.New(&cassandrabackend.Config{
+		Hosts:                []string{"127.0.0.1"},
+		Port:                 19042,
+		Consistency:          cfg.Consistency,
+		DisableHostDiscovery: true,
+		ReconnectInterval:    2 * time.Second,
+	})
+	require.NoError(t, err)
+	assert.True(t, proxied.DisableInitialHostLookup)
+	assert.Equal(t, 2*time.Second, proxied.ReconnectInterval)
+	require.NotNil(t, proxied.AddressTranslator)
+	ip, port := proxied.AddressTranslator.Translate(net.ParseIP("172.17.0.4"), 9042)
+	assert.Equal(t, "127.0.0.1", ip.String())
+	assert.Equal(t, 19042, port)
+
+	for _, hosts := range [][]string{{"localhost"}, {"10.0.0.1", "10.0.0.2"}} {
+		_, err = cassandrabackend.New(&cassandrabackend.Config{
+			Hosts:                hosts,
+			Consistency:          cfg.Consistency,
+			DisableHostDiscovery: true,
+		})
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), hosts)
+	}
 
 	_, err = cassandrabackend.New(
 		&cassandrabackend.Config{Hosts: []string{"c1"}, Consistency: "MOSTLY"},
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}
+
+// TestCassandraOptions_SetSelfManagedSettings tests the options for the self-managed
+// backend's host discovery and reconnect interval.
+//
+// Why this test is important:
+//   - A caller reaching a cluster through a tunnel builds its config from options;
+//     without these two it must reach into the nested struct, unlike every sibling
+//
+// What it tests:
+//   - WithDisableHostDiscovery and WithReconnectInterval set the nested Cassandra
+//     fields and leave the rest of DefaultConfig unchanged.
+func TestCassandraOptions_SetSelfManagedSettings(t *testing.T) {
+	t.Parallel()
+	cfg := cassandra.DefaultConfig()
+	options.ApplyOptions(
+		&cfg,
+		cassandra.WithDisableHostDiscovery(true),
+		cassandra.WithReconnectInterval(3*time.Second),
+	)
+	want := cassandra.DefaultConfig()
+	want.Cassandra.DisableHostDiscovery = true
+	want.Cassandra.ReconnectInterval = 3 * time.Second
+	assert.Equal(t, want, cfg)
 }
 
 // TestKeyspacesConfig_UsesTLSAndSigV4 tests the Amazon Keyspaces cluster settings,

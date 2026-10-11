@@ -1,0 +1,154 @@
+{
+  "schema_fields": {
+    "name": "string",
+    "status": "string",
+    "owner_id": "id",
+    "page_count": "int",
+    "score": "float",
+    "active": "bool",
+    "created_at": "time"
+  },
+  "cases": [
+    {
+      "name": "empty filter",
+      "input": "{}",
+      "want": { "filter": {} }
+    },
+    {
+      "name": "eq string",
+      "input": "{\"$eq\":{\"status\":\"indexed\"}}",
+      "want": { "filter": { "field": "status", "op": "eq", "value": "indexed" } }
+    },
+    {
+      "name": "ne id",
+      "input": "{\"$ne\":{\"owner_id\":\"1e965110-1fbf-440d-8ef3-ef64b1ce58ab\"}}",
+      "want": {
+        "filter": { "field": "owner_id", "op": "ne", "value": "1e965110-1fbf-440d-8ef3-ef64b1ce58ab" }
+      }
+    },
+    {
+      "name": "in strings",
+      "input": "{\"$in\":{\"status\":[\"indexed\",\"failed\"]}}",
+      "want": { "filter": { "field": "status", "op": "in", "value": ["indexed", "failed"] } }
+    },
+    {
+      "name": "not_in empty array",
+      "input": "{\"$not_in\":{\"page_count\":[]}}",
+      "want": { "filter": { "field": "page_count", "op": "not_in", "value": [] } }
+    },
+    {
+      "name": "like",
+      "input": "{\"$like\":{\"name\":\"report\"}}",
+      "want": { "filter": { "field": "name", "op": "like", "value": "report" } }
+    },
+    {
+      "name": "gt time",
+      "input": "{\"$gt\":{\"created_at\":\"2026-08-24T12:00:00Z\"}}",
+      "want": { "filter": { "field": "created_at", "op": "gt", "value": "2026-08-24T12:00:00Z" } }
+    },
+    {
+      "name": "gte float",
+      "input": "{\"$gte\":{\"score\":0.75}}",
+      "want": { "filter": { "field": "score", "op": "gte", "value": 0.75 } }
+    },
+    {
+      "name": "lt max safe int",
+      "input": "{\"$lt\":{\"page_count\":9007199254740991}}",
+      "want": { "filter": { "field": "page_count", "op": "lt", "value": 9007199254740991 } }
+    },
+    {
+      "name": "lte min safe int",
+      "input": "{\"$lte\":{\"page_count\":-9007199254740991}}",
+      "want": { "filter": { "field": "page_count", "op": "lte", "value": -9007199254740991 } }
+    },
+    {
+      "name": "eq bool",
+      "input": "{\"$eq\":{\"active\":true}}",
+      "want": { "filter": { "field": "active", "op": "eq", "value": true } }
+    },
+    {
+      "name": "and of or",
+      "input": "{\"$and\":[{\"$eq\":{\"status\":\"indexed\"}},{\"$or\":[{\"$like\":{\"name\":\"a\"}},{\"$gt\":{\"page_count\":3}}]}]}",
+      "want": {
+        "filter": {
+          "and": [
+            { "field": "status", "op": "eq", "value": "indexed" },
+            {
+              "or": [
+                { "field": "name", "op": "like", "value": "a" },
+                { "field": "page_count", "op": "gt", "value": 3 }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "depth 32",
+      "input": "{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$eq\":{\"status\":\"x\"}}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}",
+      "want": {
+        "filter": {"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"and":[{"field":"status","op":"eq","value":"x"}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}
+      }
+    },
+    {
+      "name": "depth 33",
+      "input": "{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$and\":[{\"$eq\":{\"status\":\"x\"}}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}",
+      "want": { "error_code": "INVALID_INPUT" }
+    },
+    {
+      "name": "unknown field",
+      "input": "{\"$eq\":{\"secret\":\"x\"}}",
+      "want": { "error_code": "INVALID_INPUT" }
+    },
+    {
+      "name": "unknown operator",
+      "input": "{\"$regex\":{\"name\":\"x\"}}",
+      "want": { "error_code": "INVALID_INPUT" }
+    },
+    {
+      "name": "string for int",
+      "input": "{\"$eq\":{\"page_count\":\"7\"}}",
+      "want": { "error_code": "INVALID_INPUT" }
+    },
+    {
+      "name": "fraction for int",
+      "input": "{\"$eq\":{\"page_count\":1.5}}",
+      "want": { "error_code": "INVALID_INPUT" }
+    },
+    {
+      "name": "int beyond 2^53",
+      "input": "{\"$eq\":{\"page_count\":9007199254740992}}",
+      "want": { "error_code": "INVALID_INPUT" }
+    },
+    {
+      "name": "mixed in array",
+      "input": "{\"$in\":{\"page_count\":[1,\"two\"]}}",
+      "want": { "error_code": "INVALID_INPUT" }
+    },
+    {
+      "name": "scalar for in",
+      "input": "{\"$in\":{\"status\":\"indexed\"}}",
+      "want": { "error_code": "INVALID_INPUT" }
+    },
+    {
+      "name": "null value",
+      "input": "{\"$eq\":{\"name\":null}}",
+      "want": { "error_code": "INVALID_INPUT" }
+    },
+    {
+      "name": "bad RFC 3339 time",
+      "input": "{\"$gt\":{\"created_at\":\"2026-08-24 12:00\"}}",
+      "want": { "error_code": "INVALID_INPUT" }
+    },
+    {
+      "name": "empty and",
+      "input": "{\"$and\":[]}",
+      "want": { "error_code": "INVALID_INPUT" }
+    },
+    {
+      "name": "two operator keys",
+      "input": "{\"$eq\":{\"name\":\"a\"},\"$ne\":{\"name\":\"b\"}}",
+      "want": { "error_code": "INVALID_INPUT" }
+    }
+  ]
+}

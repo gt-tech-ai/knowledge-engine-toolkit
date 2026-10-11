@@ -212,9 +212,9 @@ type ChartSpec struct {
 	Grain Grain
 	// Mark, when set, overrides the inferred mark of every pane.
 	Mark Mark
-	// FilterJSON is the filter's wire form (the listquery JSON grammar), kept so the
-	// spec re-serializes exactly; chartspec.Parse compiles it into Filter.
-	FilterJSON json.RawMessage
+	// FilterTree is the filter as a structured tree (wire key "filter", the listquery
+	// grammar); chartspec.Parse compiles it into Filter. Nil means no filter.
+	FilterTree *FilterNode
 	// Detail adds group-by fields that are not on a shelf.
 	Detail []FieldRef
 	// Sort orders the result rows.
@@ -245,15 +245,15 @@ type chartSpecWire struct {
 	Grain Grain `json:"grain,omitempty"`
 	// Mark is the explicit mark.
 	Mark Mark `json:"mark,omitempty"`
-	// Filter is the listquery JSON filter.
-	Filter json.RawMessage `json:"filter,omitempty"`
+	// Filter is the filter tree in the listquery grammar.
+	Filter *FilterNode `json:"filter,omitempty"`
 	// Detail adds group-by fields.
 	Detail []FieldRef `json:"detail,omitempty"`
 	// Sort orders the rows.
 	Sort []sortWire `json:"sort,omitempty"`
 }
 
-// MarshalJSON renders the ChartSpec wire form (the filter as its kept FilterJSON).
+// MarshalJSON renders the ChartSpec wire form (the filter tree in the listquery grammar).
 func (s ChartSpec) MarshalJSON() ([]byte, error) {
 	w := chartSpecWire{
 		TimeRange: s.TimeRange,
@@ -263,7 +263,7 @@ func (s ChartSpec) MarshalJSON() ([]byte, error) {
 		Cube:      s.Cube,
 		Grain:     s.Grain,
 		Mark:      s.Mark,
-		Filter:    s.FilterJSON,
+		Filter:    s.FilterTree,
 		Detail:    s.Detail,
 	}
 	for _, o := range s.Sort {
@@ -276,7 +276,7 @@ func (s ChartSpec) MarshalJSON() ([]byte, error) {
 	return out, nil
 }
 
-// UnmarshalJSON decodes the ChartSpec wire form. It keeps the filter as FilterJSON;
+// UnmarshalJSON decodes the ChartSpec wire form. It decodes the filter into FilterTree;
 // chartspec.Parse validates the whole spec and compiles the filter.
 func (s *ChartSpec) UnmarshalJSON(b []byte) error {
 	var w chartSpecWire
@@ -291,7 +291,7 @@ func (s *ChartSpec) UnmarshalJSON(b []byte) error {
 		Cube:       w.Cube,
 		Grain:      w.Grain,
 		Mark:       w.Mark,
-		FilterJSON: w.Filter,
+		FilterTree: w.Filter,
 		Detail:     w.Detail,
 	}
 	for _, o := range w.Sort {

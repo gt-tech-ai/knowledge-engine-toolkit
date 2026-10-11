@@ -178,12 +178,27 @@ previous root (Go `ConversationStartOptions`; Python `foundation/tracer/conversa
 `extract_conversation`, `stamp_conversation`, `conversation_links`). A missing or malformed id or
 index yields an unthreaded trace; a malformed `traceparent` drops only the link.
 
+## Query core (listquery)
+
+List endpoints and charts share one query core in `foundation/listquery`. A `listquery.Schema`
+names a field allow-list (`*listquery.Map`) plus, for a chart cube, its drill hierarchies and
+grains. A filter is a `core/types.FilterNode` tree whose JSON is the operator-first grammar
+(`{"$eq": {"field": v}}`, `{"$and": [...]}`, `{"$or": [...]}`; nine operators, depth ≤
+`types.MaxFilterDepth`). `ParseFilter` checks a tree against the `Map` and returns a
+`types.Filter`; `Parse` decodes the grammar string and calls `ParseFilter`, so a structured
+client and a JSON client get the same filter. `ParseSort` reads `field[:asc|desc]` tokens and
+accepts only fields declared `.Sortable()`; an unknown, unsortable or repeated field or a bad
+direction is `CodeInvalidInput`. `testdata/listquery/filters.golden.json` is the shared corpus
+both decoders are tested against.
+
 ## Analytics (ChartSpec)
 
 `core/types.ChartSpec` is a declarative chart: Rows/Columns shelves of table-algebra expressions
-(`concat`, `cross`, `nest`) over one cube's fields, plus detail, encodings, a listquery filter,
-sort, time range, grain and an optional mark. `foundation/chartspec` is the pure compiler (no I/O):
-`Parse` validates the JSON spec against the cube's `listquery.Map` (a field's `Role` — dimension,
+(`concat`, `cross`, `nest`) over one cube's fields, plus detail, encodings, a listquery filter
+tree (`FilterTree`, wire key `filter`), sort, time range, grain and an optional mark.
+`foundation/chartspec` is the pure compiler (no I/O): `Parse` validates the JSON spec against the
+cube's `listquery.Map` and compiles the filter tree with `listquery.ParseFilter`; `Compile` and
+`Drill` take the cube's `listquery.Schema` (a field's `Role` — dimension,
 measure or time — and the `Aggregates` a measure permits; a sort key must name a placed dimension or
 aggregated measure; depth ≤ 8; every rejection `CodeInvalidInput`), `Normalize` builds the tuple
 table, `Compile` derives one `AggregateQuery` plus the panes and a mark per pane (O×O text, O×Q bar,
@@ -191,6 +206,15 @@ T×Q line, Q×Q point), `Drill` swaps a dimension for its hierarchy child (sort 
 the reducer merges `Partial`s (sum, count, min, max and a 1%-accurate DDSketch for p50/p95/p99).
 Facts travel as `core/types.Fact`, whose JSON is byte-identical to Python's `core/types/fact.Fact`
 (both suites assert `testdata/analytics_fact.golden.json`).
+
+A spec is versioned as content-addressed nodes. `Encode` splits it into a `Tree` of `Node`s
+(`kind`, scalar `fields`, single `children` and ordered `lists` of child hashes); a node's `Hash`
+is the SHA-256 of `"chartspec/v1\x00"` followed by its RFC 8785 canonical JSON. Equal subtrees
+share one node, so changing one aggregate re-addresses only the nodes on its path to the root.
+`Decode` rebuilds a spec from a root through a caller-supplied `NodeGetter` and re-hashes every
+node it reads (missing → `CodeNotFound`, content not matching its address → `CodeInternal`);
+`Diff` compares two roots and returns the changed paths (`columns.args[0].agg`), descending only
+where hashes differ. `testdata/chartspec/*.golden.json` pins the node and root hashes.
 
 `core/interfaces.AnalyticsStore` (`Aggregate` → a pull-based, page-at-a-time `RowStream`; idempotent
 `Write`; optional `AnalyticsCompactor`) is built by `clients/analytics` (`KindStub` default,

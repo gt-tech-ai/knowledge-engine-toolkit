@@ -14,8 +14,8 @@ import (
 
 // chartCube is the genai_calls test cube: its allow-list, the team → workspace
 // hierarchy and the grains it is rolled up at.
-func chartCube() chartspec.CubeSchema {
-	return chartspec.CubeSchema{
+func chartCube() listquery.Schema {
+	return listquery.Schema{
 		Name:        "genai_calls",
 		Fields:      chartCubeMap(),
 		Hierarchies: [][]string{{"team", "workspace"}},
@@ -205,7 +205,7 @@ func TestCompile_RejectsWithCodedInvalidInput(t *testing.T) {
 
 	_, err := chartspec.Compile(
 		types.ChartSpec{Cube: "genai_calls", Rows: leaf("team", "")},
-		chartspec.CubeSchema{Name: "genai_calls"},
+		listquery.Schema{Name: "genai_calls"},
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "nil allow-list")
 }
@@ -249,7 +249,7 @@ func TestDrill_TeamToWorkspace(t *testing.T) {
 	assert.Equal(t, "team", spec.Sort[0].Field, "input sort unchanged")
 	_, err = chartspec.Drill(
 		spec,
-		chartspec.CubeSchema{Hierarchies: chartCube().Hierarchies},
+		listquery.Schema{Hierarchies: chartCube().Hierarchies},
 		"team",
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "nil allow-list")

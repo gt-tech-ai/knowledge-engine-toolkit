@@ -1,7 +1,6 @@
 package chartspec
 
 import (
-	"bytes"
 	"encoding/json"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
@@ -43,7 +42,8 @@ func invalid(msg string) error {
 // aggregates and a dimension or time field none; detail fields must be dimensions;
 // shelves nest at most MaxShelfDepth levels; the grain, mark, time range must be valid; a
 // sort key must name a dimension or aggregated measure the spec places (shelves, detail,
-// encodings); a nil m is rejected; and the filter is compiled with listquery.Parse. Every
+// encodings); a nil m is rejected; and the filter tree is compiled with
+// listquery.ParseFilter. Every
 // rejection is CodeInvalidInput.
 func Parse(b []byte, m *listquery.Map) (types.ChartSpec, error) {
 	var spec types.ChartSpec
@@ -127,21 +127,17 @@ func validateFields(spec *types.ChartSpec, m *listquery.Map) (map[string]bool, e
 	return keys, nil
 }
 
-// compileFilter parses the spec's wire filter with listquery.Parse into Filter and
-// keeps FilterJSON compact, so a parsed spec re-serializes canonically.
+// compileFilter compiles the spec's filter tree with listquery.ParseFilter into
+// Filter — the same core a list endpoint's filter goes through.
 func compileFilter(spec *types.ChartSpec, m *listquery.Map) error {
-	if len(spec.FilterJSON) == 0 {
+	if spec.FilterTree == nil {
 		return nil
 	}
-	filter, err := listquery.Parse(m, string(spec.FilterJSON))
+	filter, err := listquery.ParseFilter(m, *spec.FilterTree)
 	if err != nil {
 		return err
 	}
-	var compact bytes.Buffer
-	if err := json.Compact(&compact, spec.FilterJSON); err != nil {
-		return apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: invalid filter JSON")
-	}
-	spec.Filter, spec.FilterJSON = filter, compact.Bytes()
+	spec.Filter = filter
 	return nil
 }
 

@@ -94,6 +94,9 @@ func clusterFor(
 			PageSize:       cfg.PageSize,
 			NumConns:       cfg.NumConns,
 			TLS:            cfg.Cassandra.TLS,
+
+			DisableHostDiscovery: cfg.Cassandra.DisableHostDiscovery,
+			ReconnectInterval:    cfg.Cassandra.ReconnectInterval,
 		})
 		return cluster, &gocql.SimpleSpeculativeExecution{
 			NumAttempts:  1,

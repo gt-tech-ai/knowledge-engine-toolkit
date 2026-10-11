@@ -1,0 +1,76 @@
+{
+  "cases": [
+    {
+      "name": "field ref with an aggregate",
+      "node": {"kind": "chart_field_ref", "fields": {"field": "tokens_in", "agg": "sum"}},
+      "canonical": "{\"fields\":{\"agg\":\"sum\",\"field\":\"tokens_in\"},\"kind\":\"chart_field_ref\"}",
+      "hash": "785c033659f3a80f866bd12b1e60f4810c22da5217c406b4c23a3357addc51a7"
+    },
+    {
+      "name": "null fields, empty children and an empty list are omitted",
+      "node": {"kind": "chart_shelf", "fields": {"op": "cross", "mark": null}, "children": {}, "lists": {"args": []}},
+      "canonical": "{\"fields\":{\"op\":\"cross\"},\"kind\":\"chart_shelf\"}",
+      "hash": "9bc3a37ff32dec021e149d0d20b4ae332db0e9461627a718cb26f9426d814ab7"
+    },
+    {
+      "name": "children and lists as lowercase hex",
+      "node": {"kind": "chart_spec", "fields": {"cube": "genai_calls"}, "children": {"rows": "00000000000000000000000000000000000000000000000000000000000000AB"}, "lists": {"detail": ["0101010101010101010101010101010101010101010101010101010101010101", "0202020202020202020202020202020202020202020202020202020202020202"]}},
+      "canonical": "{\"children\":{\"rows\":\"00000000000000000000000000000000000000000000000000000000000000ab\"},\"fields\":{\"cube\":\"genai_calls\"},\"kind\":\"chart_spec\",\"lists\":{\"detail\":[\"0101010101010101010101010101010101010101010101010101010101010101\",\"0202020202020202020202020202020202020202020202020202020202020202\"]}}",
+      "hash": "63827f679c492329cfff14e3cdc6bb6fdc4dfd18294b5a966a68f7d154326a3d"
+    },
+    {
+      "name": "RFC 8785 key order (UTF-16 code units) with unicode keys",
+      "node": {"kind": "filter_clause", "fields": {"\u20ac": "Euro Sign", "\r": "Carriage Return", "\ufb33": "Hebrew Letter Dalet With Dagesh", "1": "One", "\ud83d\ude00": "Emoji: Grinning Face", "\u0080": "Control", "\u00f6": "Latin Small Letter O With Diaeresis"}},
+      "canonical": "{\"fields\":{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\u0080\":\"Control\",\"\u00f6\":\"Latin Small Letter O With Diaeresis\",\"\u20ac\":\"Euro Sign\",\"\ud83d\ude00\":\"Emoji: Grinning Face\",\"\ufb33\":\"Hebrew Letter Dalet With Dagesh\"},\"kind\":\"filter_clause\"}",
+      "hash": "cf2d38ec13116ab0e4fdfa4896b34d81a7f9c9f720ed3f07ab27095a428232ad"
+    },
+    {
+      "name": "number 1e21",
+      "node": {"kind": "filter_clause", "fields": {"value": 1E21}},
+      "canonical": "{\"fields\":{\"value\":1e+21},\"kind\":\"filter_clause\"}",
+      "hash": "0a39a9226c6a7c93fb1a19359c7d12652a2abff1840e694fd8f1beb967891d2b"
+    },
+    {
+      "name": "number 1e-7",
+      "node": {"kind": "filter_clause", "fields": {"value": 1e-7}},
+      "canonical": "{\"fields\":{\"value\":1e-7},\"kind\":\"filter_clause\"}",
+      "hash": "067bfef1f5c5ee7da26948df8d598edb5ee0bc1326f28992e4d930b5cba5039b"
+    },
+    {
+      "name": "number 0.000001",
+      "node": {"kind": "filter_clause", "fields": {"value": 0.000001}},
+      "canonical": "{\"fields\":{\"value\":0.000001},\"kind\":\"filter_clause\"}",
+      "hash": "a30a257d36eab76083ff9d4287114d8ee986a72ea123822fe6ca359fcd32da6f"
+    },
+    {
+      "name": "number 5e-324",
+      "node": {"kind": "filter_clause", "fields": {"value": 5e-324}},
+      "canonical": "{\"fields\":{\"value\":5e-324},\"kind\":\"filter_clause\"}",
+      "hash": "5e2c37a9205efb9e7a40dd29b4246e84bc284ba2808ab7a6d70a11e2b42a5131"
+    },
+    {
+      "name": "number 1.7976931348623157e308",
+      "node": {"kind": "filter_clause", "fields": {"value": 1.7976931348623157e308}},
+      "canonical": "{\"fields\":{\"value\":1.7976931348623157e+308},\"kind\":\"filter_clause\"}",
+      "hash": "708cf574fb9b261afcc4a4eae0fbc1ec58f96fdf80ae6caf02cae7b23d6f4112"
+    },
+    {
+      "name": "number -0",
+      "node": {"kind": "filter_clause", "fields": {"value": -0}},
+      "canonical": "{\"fields\":{\"value\":0},\"kind\":\"filter_clause\"}",
+      "hash": "4740446297d61685cb511f308a5abd0193d0e5545ecf24ffdfb733497c44941e"
+    },
+    {
+      "name": "number 9007199254740992",
+      "node": {"kind": "filter_clause", "fields": {"value": 9007199254740992}},
+      "canonical": "{\"fields\":{\"value\":9007199254740992},\"kind\":\"filter_clause\"}",
+      "hash": "84fe6a5cd278a1be7747d9db8bec0f4f9028cfe26edee2f8621201d6322932a1"
+    },
+    {
+      "name": "in operand list",
+      "node": {"kind": "filter_clause", "fields": {"field": "model", "op": "in", "value": ["m-1", 2.50, true]}},
+      "canonical": "{\"fields\":{\"field\":\"model\",\"op\":\"in\",\"value\":[\"m-1\",2.5,true]},\"kind\":\"filter_clause\"}",
+      "hash": "d2accaa22efb7ea0cf5d8c6817e01efc244d8e88b2025eb7297db511b5ca7d2b"
+    }
+  ]
+}

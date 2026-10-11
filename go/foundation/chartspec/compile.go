@@ -8,20 +8,6 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
 )
 
-// CubeSchema is what the compiler knows about one cube: its field allow-list
-// (roles and permitted aggregates), its drill hierarchies and the grains it is
-// rolled up at. It is configuration data (the consumer's cube catalog).
-type CubeSchema struct {
-	// Fields is the cube's allow-list (dimensions, measures, the time field).
-	Fields *listquery.Map
-	// Name is the cube name a spec must address.
-	Name string
-	// Hierarchies are drill paths, each ordered parent → child (e.g. team, workspace, user).
-	Hierarchies [][]string
-	// Grains are the grains the cube is rolled up at; empty accepts every grain.
-	Grains []types.Grain
-}
-
 // PaneKey identifies one pane: the Key-joined row tuple and column tuple
 // ("team,model" / "sum(tokens_in)"); an empty shelf contributes "".
 type PaneKey struct {
@@ -50,8 +36,9 @@ type Plan struct {
 // spec's Mark or the inference O×O→text, O×Q→bar, T×Q→line, Q×Q→point. A cube
 // mismatch, a cube without Fields, an undeclared grain, a count_distinct measure
 // (which additive partials cannot answer) or a sort key the query neither groups
-// by nor computes is CodeInvalidInput.
-func Compile(spec types.ChartSpec, cube CubeSchema) (Plan, error) {
+// by nor computes is CodeInvalidInput. The cube is the listquery.Schema that list
+// endpoints use too.
+func Compile(spec types.ChartSpec, cube listquery.Schema) (Plan, error) {
 	if cube.Fields == nil {
 		return Plan{}, invalid("cube " + cube.Name + " has no field allow-list")
 	}

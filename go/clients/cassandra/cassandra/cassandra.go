@@ -6,6 +6,7 @@ package cassandra
 
 import (
 	"crypto/tls"
+	"net"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -39,6 +40,15 @@ type Config struct {
 	NumConns int
 	// TLS enables TLS with host verification.
 	TLS bool
+	// DisableHostDiscovery keeps the driver on the one configured contact point, which
+	// must be an IP literal, instead of the node addresses the cluster advertises: it
+	// skips the initial peer lookup and translates every address the cluster reports
+	// later to the contact point and Port. It is for a cluster reached through a
+	// proxy, tunnel or port mapping whose advertised addresses are unreachable.
+	DisableHostDiscovery bool
+	// ReconnectInterval is how often the driver retries hosts it marked down; zero
+	// keeps the driver default.
+	ReconnectInterval time.Duration
 }
 
 // New returns the cluster configuration for cfg, without dialing; a zero port or
@@ -72,6 +82,14 @@ func New(cfg *Config) (*gocql.ClusterConfig, error) {
 		cluster.ConnectTimeout = cfg.ConnectTimeout
 	}
 	cluster.PageSize = cfg.PageSize
+	if cfg.DisableHostDiscovery {
+		if err := pinContactPoint(cluster, cfg.Hosts); err != nil {
+			return nil, err
+		}
+	}
+	if cfg.ReconnectInterval > 0 {
+		cluster.ReconnectInterval = cfg.ReconnectInterval
+	}
 	if cfg.NumConns > 0 {
 		cluster.NumConns = cfg.NumConns
 	}
@@ -91,4 +109,28 @@ func New(cfg *Config) (*gocql.ClusterConfig, error) {
 		}
 	}
 	return cluster, nil
+}
+
+// pinContactPoint keeps cluster on its single IP-literal contact point: the initial
+// peer lookup is skipped, and every address a ring refresh or topology event reports
+// is translated back to the contact point, so a node advertising an address the
+// client cannot route to stays reachable. Anything but one IP literal is
+// CodeInvalidInput, since a translated address must be an IP.
+func pinContactPoint(cluster *gocql.ClusterConfig, hosts []string) error {
+	var ip net.IP
+	if len(hosts) == 1 {
+		ip = net.ParseIP(hosts[0])
+	}
+	if ip == nil {
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			"cassandra: host discovery can be disabled only with one IP-literal host",
+		)
+	}
+	port := cluster.Port
+	cluster.DisableInitialHostLookup = true
+	cluster.AddressTranslator = gocql.AddressTranslatorFunc(
+		func(net.IP, int) (net.IP, int) { return ip, port },
+	)
+	return nil
 }
