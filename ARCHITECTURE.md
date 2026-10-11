@@ -378,6 +378,14 @@ as a request.
   running. `Wait` blocks until all have returned; `Stop` cancels them and waits within its
   context.
 
+## Staged pipelines
+
+Go `pipeline.Then(first, second)` composes two pipelines into one, feeding first's output to
+second; an error from first stops the chain and is returned unchanged. Build each stage with
+`decorators.NewBuilder` before composing, so every stage records its own span and metrics and a
+slow or failing stage is visible by name. `Then` nests: `Then(a, Then(b, c))` is a three-stage
+pipeline.
+
 ## Testing
 
 - Go tests are black-box under `go/tests`: `unit/` (external `_test` packages), `integration/`

@@ -19,6 +19,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `pipelines/pipeline.Then`: composes two pipelines into one, the first's output feeding the
+  second. An error from the first is returned unchanged and the second does not run; each
+  stage keeps its own decorators. A nil stage panics.
 - `workflows/loop`: background work as decorated workflow passes. `Pass` adapts a
   `func(context.Context) error` into a `Workflow[struct{}, struct{}]`. `NewTicker` runs a pass
   per `Config.Interval` (back to back when zero; `RunAtStart` adds a startup pass), logs a
