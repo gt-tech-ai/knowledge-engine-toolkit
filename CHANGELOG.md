@@ -6,22 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
-### Changed (breaking)
-
-- `foundation/listquery`: `Set`, `NewSet` and `ParseList` are removed. `ParseSort(m, spec)`
-  sorts against the `Map`: only fields declared with `Field.Sortable()` may be sorted, and an
-  unknown, unsortable or repeated field, an empty token or a bad direction is
-  `CodeInvalidInput` instead of being dropped.
-- `foundation/chartspec`: `CubeSchema` is replaced by `listquery.Schema`; `Compile` and `Drill`
-  take it.
-- `core/types.ChartSpec`: `FilterJSON json.RawMessage` is replaced by `FilterTree *FilterNode`
-  (the wire key stays `filter`).
+## [0.0.4] - 2026-10-11
 
 ### Added
 
 - `clients/messaging/sqs.NewAWSClient`: builds the SDK SQS client the publisher and subscriber
   use (region, endpoint override, static or default-chain credentials) for a caller that
-  sends through the SDK directly. No I/O until the first call.
+  sends through the SDK directly. An access key without its secret is `CodeInvalidInput`.
+  No I/O until the first call.
 - `go/tests/mocks`: generated mocks for `CacheInvalidator`, `Encryptor`, `EventPublisher`,
   `JobEnqueuer`, `JobScheduler`, `WorkerRegistry`, `Locker`, `CountingPublisher`,
   `MessageConsumer`, `Repository`, `Source` and `Transaction`, so a consumer imports the
@@ -36,9 +28,16 @@ All notable changes to this project are recorded here. The format follows
   per `Config.Interval` (back to back when zero; `RunAtStart` adds a startup pass), logs a
   failed pass and waits `ErrorBackoff`, and returns nil when its context ends. A negative
   duration is `CodeInvalidInput`. `Group` is an `interfaces.Lifecycle` that runs `Runner`s
-  (`RunnerFunc` adapts a function) together and logs one that stops with an error without
-  stopping the others; `Stop` cancels and waits within its context (`CodeTimeout` /
+  (`RunnerFunc` adapts a function) together for the lifetime of its `Start` context and logs
+  one that stops with an error without stopping the others; a runner or pass that fails
+  after the shutdown began is logged at debug, or not at all when it returns the context's
+  own error; `Stop` cancels and waits within its context (`CodeTimeout` /
   `CodeCanceled`), and a second `Start` is `CodeConflict`.
+
+## [0.0.3] - 2026-10-11
+
+### Added
+
 - `core/interfaces.Stream[T]`: a pull-based, closable sequence that every large result can
   travel on. `Close` may come from another goroutine and ends a running `Next`.
 - `foundation/stream`: `FromSlice`, `Chunk` (greedy split at a byte budget; an oversized item
@@ -49,6 +48,22 @@ All notable changes to this project are recorded here. The format follows
   deadline ending a read is `CodeTimeout`; a cancellation is `CodeCanceled`. `NewMetrics`
   decorates a `Buffer` with the `stream_buffer_items` and `stream_buffer_bytes` gauges and
   the `stream_buffer_producer_wait_seconds` histogram, labelled `buffer`.
+
+## [0.0.2] - 2026-10-11
+
+### Changed (breaking)
+
+- `foundation/listquery`: `Set`, `NewSet` and `ParseList` are removed. `ParseSort(m, spec)`
+  sorts against the `Map`: only fields declared with `Field.Sortable()` may be sorted, and an
+  unknown, unsortable or repeated field, an empty token or a bad direction is
+  `CodeInvalidInput` instead of being dropped.
+- `foundation/chartspec`: `CubeSchema` is replaced by `listquery.Schema`; `Compile` and `Drill`
+  take it.
+- `core/types.ChartSpec`: `FilterJSON json.RawMessage` is replaced by `FilterTree *FilterNode`
+  (the wire key stays `filter`).
+
+### Added
+
 - `core/types.FilterNode`: the filter tree with a JSON codec for the listquery grammar, and
   `MaxFilterDepth`. `FilterOperator.Known` reports whether an operator is one of the defined
   set.
@@ -80,5 +95,8 @@ All notable changes to this project are recorded here. The format follows
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.3...v0.0.4
+[0.0.3]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.2...v0.0.3
+[0.0.2]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/releases/tag/v0.0.1

@@ -56,6 +56,24 @@ func TestNewAWSClient_HonoursEndpointOverride(t *testing.T) {
 	require.Nil(t, regional.Options().BaseEndpoint)
 }
 
+// TestNewAWSClient_RejectsHalfAStaticCredential tests the static-credential pair check.
+//
+// Why this test is important:
+//   - An access key without its secret signs every request with an empty secret, so the
+//     service boots and then fails each call with an opaque signature error.
+//
+// What it tests:
+//   - An AccessKeyID without a SecretAccessKey is CodeInvalidInput, before any client is
+//     built.
+func TestNewAWSClient_RejectsHalfAStaticCredential(t *testing.T) {
+	t.Parallel()
+	client, err := sqs.NewAWSClient(t.Context(), sqs.Config{
+		AWSRegion: "eu-west-1", AccessKeyID: "local",
+	})
+	require.Nil(t, client)
+	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}
+
 // TestMessaging_NewFromConfig_AtTierRoot tests that the tier-root config factory
 // builds a publisher from a foundation SQSConfig without a network round-trip.
 //

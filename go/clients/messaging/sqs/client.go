@@ -84,9 +84,16 @@ type API interface {
 // for a caller that sends through the SDK directly (an outbox relay). A non-empty
 // Endpoint overrides the service endpoint (ElasticMQ); non-empty static credentials
 // are used for local dev, otherwise the default AWS credential chain (env, IAM role /
-// IRSA, shared file) applies. Only cfg's region, endpoint and credentials are read;
-// the client does no I/O until its first call.
+// IRSA, shared file) applies. An AccessKeyID without a SecretAccessKey is
+// CodeInvalidInput. Only cfg's region, endpoint and credentials are read; the client
+// does no I/O until its first call.
 func NewAWSClient(ctx context.Context, cfg Config) (*awssqs.Client, error) {
+	if cfg.AccessKeyID != "" && cfg.SecretAccessKey == "" {
+		return nil, apperr.New(
+			apperr.CodeInvalidInput,
+			"sqs: a static access key needs its secret access key",
+		)
+	}
 	loadOpts := []func(*awsconfig.LoadOptions) error{}
 	if cfg.AWSRegion != "" {
 		loadOpts = append(loadOpts, awsconfig.WithRegion(cfg.AWSRegion))

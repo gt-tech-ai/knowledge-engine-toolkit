@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -39,7 +40,8 @@ func NewTicker(
 
 // Run executes passes until ctx ends, then returns nil. With a zero Interval passes
 // run back to back; otherwise one runs per Interval, plus one at start when RunAtStart
-// is set. Run satisfies Runner.
+// is set. A pass that outlasts Interval delays the next one rather than queueing the
+// missed ticks, so passes never overlap. Run satisfies Runner.
 func (t *Ticker) Run(ctx context.Context) error {
 	if t.cfg.Interval == 0 {
 		for ctx.Err() == nil {
@@ -63,10 +65,14 @@ func (t *Ticker) Run(ctx context.Context) error {
 }
 
 // once runs one pass. A failure while ctx is live is logged and followed by the
-// configured backoff; a failure caused by the shutdown is not a failure.
+// configured backoff; a failure after the shutdown began is logged at debug only.
 func (t *Ticker) once(ctx context.Context) {
 	_, err := t.pass.Execute(ctx, struct{}{})
-	if err == nil || ctx.Err() != nil {
+	if err == nil {
+		return
+	}
+	if ctx.Err() != nil {
+		logShutdownError(t.logger, "loop pass failed during shutdown", t.name, err)
 		return
 	}
 	t.logger.Warn("loop pass failed", "loop", t.name, "error", err)
@@ -79,4 +85,15 @@ func (t *Ticker) once(ctx context.Context) {
 	case <-ctx.Done():
 	case <-wait.C:
 	}
+}
+
+// logShutdownError logs err, returned by a loop or pass after the shutdown began, at
+// debug. The context's own error is how a loop is expected to end, so it is not logged;
+// any other error may be a real failure racing the shutdown and stays diagnosable.
+func logShutdownError(logger interfaces.Logger, msg, name string, err error) {
+	code := apperr.ContextCode(err, apperr.CodeUnknown)
+	if code == apperr.CodeCanceled || code == apperr.CodeTimeout {
+		return
+	}
+	logger.Debug(msg, "loop", name, "error", err)
 }

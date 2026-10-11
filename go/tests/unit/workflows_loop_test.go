@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 	"go.uber.org/mock/gomock"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
@@ -120,9 +121,10 @@ func TestTicker_FailedPassIsLoggedAndRetried(t *testing.T) {
 //     as soon as one returns; waiting an interval would add lag to every message.
 //
 // What it tests:
-//   - With a zero Interval, passes run one after another until the context ends.
+//   - With a zero Interval, passes run one after another until the context ends, and
+//     no goroutine outlives Run (goleak).
 func TestTicker_BackToBackWhenIntervalIsZero(t *testing.T) {
-	t.Parallel()
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
 	ctx, cancel := context.WithCancel(t.Context())
 	var passes atomic.Int64
 	tk, err := loop.NewTicker("drain", loop.Pass(func(context.Context) error {
@@ -145,22 +147,38 @@ func TestTicker_BackToBackWhenIntervalIsZero(t *testing.T) {
 // What it tests:
 //   - A pass that ends with the context's error after cancellation is not logged, and
 //     Run returns nil.
+//   - A pass that ends with any other error after cancellation is logged at debug only,
+//     so a real failure racing the shutdown stays diagnosable.
+//   - No goroutine outlives Run (goleak).
 func TestTicker_ReturnsNilWhenContextEnds(t *testing.T) {
-	t.Parallel()
-	started := make(chan struct{})
-	tk, err := loop.NewTicker("relay", loop.Pass(func(ctx context.Context) error {
-		close(started)
-		<-ctx.Done()
-		return ctx.Err()
-	}), loop.Config{Interval: time.Hour, RunAtStart: true}, quietLogger(t))
-	require.NoError(t, err)
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	boom := apperr.New(apperr.CodeUnavailable, "flush failed")
+	debugged := mocks.NewMockLogger(gomock.NewController(t))
+	debugged.EXPECT().
+		Debug("loop pass failed during shutdown", "loop", "relay", "error", boom)
+	cases := []struct {
+		logger *mocks.MockLogger
+		result func(ctx context.Context) error
+	}{
+		{quietLogger(t), func(ctx context.Context) error { return ctx.Err() }},
+		{debugged, func(context.Context) error { return boom }},
+	}
+	for _, tc := range cases {
+		started := make(chan struct{})
+		tk, err := loop.NewTicker("relay", loop.Pass(func(ctx context.Context) error {
+			close(started)
+			<-ctx.Done()
+			return tc.result(ctx)
+		}), loop.Config{Interval: time.Hour, RunAtStart: true}, tc.logger)
+		require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan error, 1)
-	go func() { done <- tk.Run(ctx) }()
-	<-started
-	cancel()
-	require.NoError(t, <-done)
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan error, 1)
+		go func() { done <- tk.Run(ctx) }()
+		<-started
+		cancel()
+		require.NoError(t, <-done)
+	}
 }
 
 // TestGroup_RunsEveryRunnerUntilContextEnds tests the loop group's lifecycle.
@@ -230,6 +248,38 @@ func TestGroup_OneFailingRunnerDoesNotStopTheOthers(t *testing.T) {
 
 		cancel()
 		g.Wait()
+	})
+}
+
+// TestGroup_ShutdownIsNotAFailure tests how the group logs runners that end on shutdown.
+//
+// Why this test is important:
+//   - A runner interrupted by the shutdown often returns the context's error; logging it
+//     at error would page on every deploy.
+//
+// What it tests:
+//   - A runner that returns the context's error after cancellation is not logged.
+//   - A runner that returns any other error after cancellation is logged at debug only.
+func TestGroup_ShutdownIsNotAFailure(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		boom := apperr.New(apperr.CodeUnavailable, "ack failed")
+		logger := mocks.NewMockLogger(gomock.NewController(t))
+		logger.EXPECT().
+			Debug("loop stopped during shutdown", "loop", "consumer", "error", boom)
+
+		g := loop.NewGroup(logger)
+		g.Add("drainer", loop.RunnerFunc(func(ctx context.Context) error {
+			<-ctx.Done()
+			return apperr.Wrap(ctx.Err(), apperr.CodeCanceled, "ensure group")
+		}))
+		g.Add("consumer", loop.RunnerFunc(func(ctx context.Context) error {
+			<-ctx.Done()
+			return boom
+		}))
+		require.NoError(t, g.Start(t.Context()))
+		synctest.Wait()
+		require.NoError(t, g.Stop(t.Context()))
 	})
 }
 

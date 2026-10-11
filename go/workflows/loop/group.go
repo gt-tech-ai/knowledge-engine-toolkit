@@ -12,6 +12,10 @@ import (
 var _ interfaces.Lifecycle = (*Group)(nil)
 
 // Runner is one background loop: Run blocks until ctx ends or the loop fails for good.
+//
+// interface-composition exemption — narrow consumer-side port: a single
+// Run(ctx) → error loop contract, not an id-CRUD data-access surface, so it embeds no
+// foundation generic.
 type Runner interface {
 	// Run executes the loop until ctx ends (returning nil) or it cannot continue
 	// (returning the error).
@@ -68,8 +72,11 @@ func (g *Group) Add(name string, r Runner) {
 }
 
 // Start runs every runner on its own goroutine under a context derived from ctx and
-// returns at once. A runner that returns an error is logged at error with its name;
-// the others keep running. A second Start is CodeConflict.
+// returns at once. ctx is the loops' lifetime, not a startup deadline: when it ends,
+// every loop stops as it does on Stop, so pass the service's run context. A runner that
+// returns an error while that context is live is logged at error with its name; the
+// others keep running. One that returns after the shutdown began is logged at debug, or
+// not at all when it returned the context's own error. A second Start is CodeConflict.
 func (g *Group) Start(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -81,8 +88,13 @@ func (g *Group) Start(ctx context.Context) error {
 	var wg sync.WaitGroup
 	for _, nr := range g.runners {
 		wg.Go(func() {
-			if err := nr.runner.Run(runCtx); err != nil {
+			err := nr.runner.Run(runCtx)
+			switch {
+			case err == nil:
+			case runCtx.Err() == nil:
 				g.logger.Error("loop stopped", "loop", nr.name, "error", err)
+			default:
+				logShutdownError(g.logger, "loop stopped during shutdown", nr.name, err)
 			}
 		})
 	}

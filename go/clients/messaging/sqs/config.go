@@ -50,8 +50,8 @@ type Config struct {
 	// shared credentials file).
 	AccessKeyID string
 
-	// SecretAccessKey is the static secret key paired with AccessKeyID. Ignored
-	// when AccessKeyID is empty.
+	// SecretAccessKey is the static secret key paired with AccessKeyID: required
+	// when AccessKeyID is set, ignored when it is empty.
 	SecretAccessKey string
 
 	// NackDelay, when Max is positive, hides a message whose handler failed for a

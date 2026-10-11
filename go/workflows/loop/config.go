@@ -22,7 +22,8 @@ type Config struct {
 	// that already blocks on its source (a stream read with a block timeout).
 	Interval time.Duration
 	// ErrorBackoff is the wait after a failed pass before the loop continues. Zero
-	// continues at once.
+	// continues at once; with a zero Interval that suits only a pass that blocks on its
+	// source, since a failing source would otherwise turn the loop into a hot spin.
 	ErrorBackoff time.Duration
 	// RunAtStart runs one pass as soon as the loop starts instead of after the first
 	// Interval.
