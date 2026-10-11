@@ -6,8 +6,24 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- `foundation/listquery`: `Set`, `NewSet` and `ParseList` are removed. `ParseSort(m, spec)`
+  sorts against the `Map`: only fields declared with `Field.Sortable()` may be sorted, and an
+  unknown, unsortable or repeated field, an empty token or a bad direction is
+  `CodeInvalidInput` instead of being dropped.
+- `foundation/chartspec`: `CubeSchema` is replaced by `listquery.Schema`; `Compile` and `Drill`
+  take it.
+- `core/types.ChartSpec`: `FilterJSON json.RawMessage` is replaced by `FilterTree *FilterNode`
+  (the wire key stays `filter`).
+
 ### Added
 
+- `core/types.FilterNode`: the filter tree with a JSON codec for the listquery grammar, and
+  `MaxFilterDepth`.
+- `foundation/listquery.ParseFilter`: checks a `FilterNode` against a `Map`; `Parse` is now
+  built on it. Integers outside ±(2^53−1) are rejected.
+- `testdata/listquery/filters.golden.json`: the shared filter corpus.
 - `clients/cassandra`: `CassandraConfig.DisableHostDiscovery` pins a cluster reached through
   a proxy, tunnel or port mapping to its one IP-literal contact point, translating every
   address the cluster advertises back to it; `ReconnectInterval` sets how often downed

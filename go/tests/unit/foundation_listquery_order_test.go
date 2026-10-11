@@ -4,41 +4,52 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
 )
 
-// TestParseList_SortGrammar tests the scalar `sort` wire-spec parser (Set.ParseList).
+// sortMap is the allow-list the ParseSort tests share: three sortable fields and one
+// filter-only field.
+func sortMap() *listquery.Map {
+	return listquery.NewMap().Add(
+		listquery.Time("created_at").Sortable(),
+		listquery.String("name").Sortable(),
+		listquery.String("status").Sortable(),
+		listquery.String("secret_note"),
+	)
+}
+
+// TestParseSort_ParsesDirections tests the scalar `sort` wire-spec parser on valid specs.
 //
 // Why this test is important:
-//   - ParseList is the SQL-safety boundary for sorting: it turns an untrusted
-//     comma-separated `field[:dir]` string into allow-listed OrderFields. A bug that let
-//     a non-allow-listed field through, or dropped the deterministic default, would
-//     either enable arbitrary-column ORDER BY or break stable pagination. It must never
-//     error (fail-safe to the default).
+//   - ParseSort turns an untrusted comma-separated `field[:dir]` string into the ORDER BY
+//     a store compiles; a dropped field, a lost direction or a reordered key silently
+//     changes the order a client paginates through.
 //
 // What it tests:
-//   - Empty / all-dropped specs yield an empty result (NO fixed fallback field) — the
-//     deterministic default order is CompileOrder's keyset tiebreaker, so a
-//     joined_at-keyed resource is never forced to ORDER BY a non-existent created_at
-//     column.
-//   - `field:dir` parses (default asc), order is preserved, whitespace tolerated.
-//   - A non-allow-listed field is dropped (not defaulted per-token).
-func TestParseList_SortGrammar(t *testing.T) {
+//   - an empty or blank spec yields nil, so the default order comes from CompileOrder's
+//     keyset tiebreaker;
+//   - `field:dir` parses with asc the default, either case of asc/desc is accepted, field
+//     order is preserved and whitespace around tokens is tolerated.
+func TestParseSort_ParsesDirections(t *testing.T) {
 	t.Parallel()
-	set := listquery.NewSet("created_at", "name", "status")
+	m := sortMap()
 
 	cases := []struct {
 		name string
 		spec string
 		want []types.OrderField
 	}{
-		{"empty → empty (default comes from the keyset tiebreaker)", "", nil},
+		{"empty", "", nil},
+		{"blank", "   ", nil},
 		{"single field default asc", "name", []types.OrderField{{Field: "name"}}},
+		{"explicit asc", "name:asc", []types.OrderField{{Field: "name"}}},
 		{
 			"explicit desc",
-			"created_at:desc",
+			"created_at:DESC",
 			[]types.OrderField{{Field: "created_at", Desc: true}},
 		},
 		{
@@ -46,8 +57,6 @@ func TestParseList_SortGrammar(t *testing.T) {
 			"status,name:desc",
 			[]types.OrderField{{Field: "status"}, {Field: "name", Desc: true}},
 		},
-		{"non-allow-listed dropped", "bogus,name", []types.OrderField{{Field: "name"}}},
-		{"all-dropped → empty", "bogus,nope", nil},
 		{
 			"whitespace tolerated",
 			" name : desc , created_at ",
@@ -57,7 +66,43 @@ func TestParseList_SortGrammar(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, set.ParseList(tc.spec))
+			got, err := listquery.ParseSort(m, tc.spec)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestParseSort_RejectsUnknownUnsortableAndBadDirection tests that ParseSort refuses a
+// spec it cannot honour instead of dropping the offending token.
+//
+// Why this test is important:
+//   - ParseSort is the SQL-safety boundary for sorting. Dropping a bad token silently
+//     returns rows in an order the client did not ask for; rejecting it tells the client
+//     at once, and no non-allow-listed column ever reaches an ORDER BY.
+//
+// What it tests:
+//   - an unknown field, a filter-only (unsortable) field, a bad direction, an extra
+//     colon, an empty token and a repeated field each fail with CodeInvalidInput.
+func TestParseSort_RejectsUnknownUnsortableAndBadDirection(t *testing.T) {
+	t.Parallel()
+	m := sortMap()
+
+	for name, spec := range map[string]string{
+		"unknown field":   "bogus",
+		"unsortable":      "secret_note",
+		"bad direction":   "name:sideways",
+		"extra colon":     "name:asc:desc",
+		"empty token":     "name,,status",
+		"empty field":     ":desc",
+		"duplicate field": "name,status,name:desc",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got, err := listquery.ParseSort(m, spec)
+			require.Error(t, err)
+			assert.Nil(t, got)
+			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 		})
 	}
 }
@@ -146,27 +191,29 @@ func TestKeysetColumns(t *testing.T) {
 	}
 }
 
-// FuzzParseList asserts ParseList never panics and never returns a non-allow-listed
-// field, over arbitrary comma/colon-split input — the property that makes it a safe
-// transport-edge parser.
-func FuzzParseList(f *testing.F) {
-	set := listquery.NewSet("created_at", "name", "status")
-	allowed := map[string]bool{"created_at": true, "name": true, "status": true}
+// FuzzParseSort asserts ParseSort never panics, never returns a field outside the
+// sortable allow-list, and fails only with CodeInvalidInput, over arbitrary
+// comma/colon-split input — the properties that make it a safe transport-edge parser.
+func FuzzParseSort(f *testing.F) {
+	m := sortMap()
+	sortable := map[string]bool{"created_at": true, "name": true, "status": true}
 	for _, seed := range []string{
-		"", "name", "a:desc,b", "created_at:desc,name", ",,,", "x:y:z", " : ",
+		"", "name", "a:desc,b", "created_at:desc,name", ",,,", "x:y:z", " : ", "secret_note",
 	} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, spec string) {
-		got := set.ParseList(spec)
-		// The invariant is safety, not non-emptiness: ParseList may return empty (the default
-		// order then comes from CompileOrder's keyset tiebreaker), but it must NEVER return a
-		// field outside the allow-list.
+		got, err := listquery.ParseSort(m, spec)
+		if err != nil {
+			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+			assert.Nil(t, got)
+			return
+		}
 		for _, of := range got {
 			assert.True(
 				t,
-				allowed[of.Field],
-				"returned field %q must be allow-listed",
+				sortable[of.Field],
+				"returned field %q must be sortable",
 				of.Field,
 			)
 		}

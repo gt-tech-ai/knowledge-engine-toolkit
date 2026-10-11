@@ -156,3 +156,51 @@ func TestChartSpecParse_RejectsWithCodedInvalidInput(t *testing.T) {
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "nil allow-list")
 }
+
+// TestParse_StructuredFilterEqualsGrammarFilter tests that a spec whose filter is built
+// as a FilterNode tree and one whose filter arrives as grammar JSON compile to the same
+// Plan.
+//
+// Why this test is important:
+//   - A list endpoint and a chart share one filter core; a structured client (the
+//     typed filter bar) and a grammar client must not get different queries for the
+//     same predicate
+//
+// What it tests:
+//   - the FilterNode-built spec round-trips through the wire form into the same tree
+//   - both specs parse and compile to deep-equal Plans, filter included
+func TestParse_StructuredFilterEqualsGrammarFilter(t *testing.T) {
+	t.Parallel()
+
+	tree := &types.FilterNode{And: []types.FilterNode{
+		{Clause: &types.FilterNodeClause{Field: "team", Op: types.OpEq, Value: "t-1"}},
+		{Clause: &types.FilterNodeClause{
+			Field: "model", Op: types.OpIn, Value: []any{"m-1", "m-2"},
+		}},
+	}}
+	built := types.ChartSpec{
+		Cube:       "genai_calls",
+		Rows:       leaf("team", types.AggNone),
+		Columns:    leaf("tokens_in", types.AggSum),
+		FilterTree: tree,
+	}
+	builtJSON, err := json.Marshal(built)
+	require.NoError(t, err)
+
+	const grammarJSON = `{"cube":"genai_calls","rows":{"field":"team"},
+	  "columns":{"field":"tokens_in","agg":"sum"},
+	  "filter":{"$and":[{"$eq":{"team":"t-1"}},{"$in":{"model":["m-1","m-2"]}}]}}`
+
+	fromTree, err := chartspec.Parse(builtJSON, chartCubeMap())
+	require.NoError(t, err)
+	fromGrammar, err := chartspec.Parse([]byte(grammarJSON), chartCubeMap())
+	require.NoError(t, err)
+	assert.Equal(t, tree, fromTree.FilterTree)
+
+	treePlan, err := chartspec.Compile(fromTree, chartCube())
+	require.NoError(t, err)
+	grammarPlan, err := chartspec.Compile(fromGrammar, chartCube())
+	require.NoError(t, err)
+	assert.Equal(t, grammarPlan, treePlan)
+	assert.NotNil(t, treePlan.Query.Filter)
+}

@@ -1,13 +1,30 @@
 package listquery
 
+import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+
 // The domain-agnostic list-query schema descriptor types. These hand-written types are
 // the stable contract that the GENERATED per-resource accessors populate — but the
 // generated, business-specific code (`<Resource>Schema()`, `AllSchemas()`, …) lives in
 // the gen/go/listquery tier (package listqueryschema), NOT here, so foundation stays free
 // of resource/domain names. The index-obligation gate, the runtime filter-schema endpoint
-// read these types. FilterMap/order.Set (filter.go/order.go) remain the runtime
-// SQL-safety boundary; ResourceSchema is the richer descriptor carrying the axes those
-// two don't (index_kind, value_source, access_sensitivity).
+// read these types. Map (filter.go, with its Sortable fields gating ParseSort) remains
+// the runtime SQL-safety boundary; ResourceSchema is the richer descriptor carrying the
+// axes Map doesn't (index_kind, value_source, access_sensitivity).
+
+// Schema is the one query schema a list endpoint and a chart query share: a named field
+// allow-list (filterable and sortable fields; for a chart, the roles and permitted
+// aggregates too), plus, for a chart cube, its drill hierarchies and the grains it is
+// rolled up at. It is configuration data (the consumer's catalog).
+type Schema struct {
+	// Fields is the allow-list (dimensions, measures, the time field).
+	Fields *Map
+	// Name is the schema (cube) name a chart spec must address.
+	Name string
+	// Hierarchies are drill paths, each ordered parent → child (e.g. team, workspace, user).
+	Hierarchies [][]string
+	// Grains are the grains the data is rolled up at; empty accepts every grain.
+	Grains []types.Grain
+}
 
 // ResourceSchema is the generated list-query schema for one resource.
 type ResourceSchema struct {

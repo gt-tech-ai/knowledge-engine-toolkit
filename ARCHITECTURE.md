@@ -178,12 +178,27 @@ previous root (Go `ConversationStartOptions`; Python `foundation/tracer/conversa
 `extract_conversation`, `stamp_conversation`, `conversation_links`). A missing or malformed id or
 index yields an unthreaded trace; a malformed `traceparent` drops only the link.
 
+## Query core (listquery)
+
+List endpoints and charts share one query core in `foundation/listquery`. A `listquery.Schema`
+names a field allow-list (`*listquery.Map`) plus, for a chart cube, its drill hierarchies and
+grains. A filter is a `core/types.FilterNode` tree whose JSON is the operator-first grammar
+(`{"$eq": {"field": v}}`, `{"$and": [...]}`, `{"$or": [...]}`; nine operators, depth ≤
+`types.MaxFilterDepth`). `ParseFilter` checks a tree against the `Map` and returns a
+`types.Filter`; `Parse` decodes the grammar string and calls `ParseFilter`, so a structured
+client and a JSON client get the same filter. `ParseSort` reads `field[:asc|desc]` tokens and
+accepts only fields declared `.Sortable()`; an unknown, unsortable or repeated field or a bad
+direction is `CodeInvalidInput`. `testdata/listquery/filters.golden.json` is the shared corpus
+both decoders are tested against.
+
 ## Analytics (ChartSpec)
 
 `core/types.ChartSpec` is a declarative chart: Rows/Columns shelves of table-algebra expressions
-(`concat`, `cross`, `nest`) over one cube's fields, plus detail, encodings, a listquery filter,
-sort, time range, grain and an optional mark. `foundation/chartspec` is the pure compiler (no I/O):
-`Parse` validates the JSON spec against the cube's `listquery.Map` (a field's `Role` — dimension,
+(`concat`, `cross`, `nest`) over one cube's fields, plus detail, encodings, a listquery filter
+tree (`FilterTree`, wire key `filter`), sort, time range, grain and an optional mark.
+`foundation/chartspec` is the pure compiler (no I/O): `Parse` validates the JSON spec against the
+cube's `listquery.Map` and compiles the filter tree with `listquery.ParseFilter`; `Compile` and
+`Drill` take the cube's `listquery.Schema` (a field's `Role` — dimension,
 measure or time — and the `Aggregates` a measure permits; a sort key must name a placed dimension or
 aggregated measure; depth ≤ 8; every rejection `CodeInvalidInput`), `Normalize` builds the tuple
 table, `Compile` derives one `AggregateQuery` plus the panes and a mark per pane (O×O text, O×Q bar,

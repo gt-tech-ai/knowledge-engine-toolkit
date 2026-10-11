@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
 )
 
 // Drill returns a copy of spec with the dimension field replaced, wherever it is
@@ -11,7 +12,11 @@ import (
 // the cube's hierarchy. The input spec is not modified. A cube without Fields, a
 // field in no hierarchy, at a hierarchy's last level, or whose child the cube does
 // not declare is CodeInvalidInput.
-func Drill(spec types.ChartSpec, cube CubeSchema, field string) (types.ChartSpec, error) {
+func Drill(
+	spec types.ChartSpec,
+	cube listquery.Schema,
+	field string,
+) (types.ChartSpec, error) {
 	if cube.Fields == nil {
 		return types.ChartSpec{}, invalid(
 			"cube " + cube.Name + " has no field allow-list",

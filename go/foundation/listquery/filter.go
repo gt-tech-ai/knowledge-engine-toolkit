@@ -87,6 +87,16 @@ type Field struct {
 	Type FieldType
 	// Role is how an analytics query may use the field (dimension by default).
 	Role FieldRole
+	// Orderable reports whether a client may sort by the field (set with Sortable).
+	// Fields are filter-only by default.
+	Orderable bool
+}
+
+// Sortable returns a copy of the field that a client may also sort by — ParseSort
+// accepts only these fields.
+func (f Field) Sortable() Field {
+	f.Orderable = true
+	return f
 }
 
 // AsMeasure returns a copy of the field declared as an analytics measure that
@@ -153,9 +163,9 @@ func Time(name string) Field { return Field{Name: name, Column: name, Type: Fiel
 func ID(name string) Field { return Field{Name: name, Column: name, Type: FieldID} }
 
 // Map is a per-resource allow-list of filterable fields, keyed by DTO Name. Only fields
-// added to the Map may be filtered; a filter on any other field is rejected — the
-// SQL-safety boundary. Build it fluently: NewMap().Add(String("name"), ID("owner_id"),
-// …).
+// added to the Map may be filtered, and only its Sortable fields may be sorted; a filter
+// or sort on any other field is rejected — the SQL-safety boundary. Build it fluently:
+// NewMap().Add(String("name").Sortable(), ID("owner_id"), …).
 type Map struct {
 	// fields is the allow-list of filterable fields, keyed by DTO name.
 	fields map[string]Field
@@ -176,6 +186,12 @@ func (m *Map) Add(fields ...Field) *Map {
 func (m *Map) Lookup(name string) (Field, bool) {
 	f, ok := m.fields[name]
 	return f, ok
+}
+
+// Sortable reports whether name is an allow-listed field a client may sort by.
+func (m *Map) Sortable(name string) bool {
+	f, ok := m.fields[name]
+	return ok && f.Orderable
 }
 
 // Column returns the storage column an allow-listed DTO field maps to, or the field name
