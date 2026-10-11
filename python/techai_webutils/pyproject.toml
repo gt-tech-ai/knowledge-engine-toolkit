@@ -1,0 +1,269 @@
+[project]
+name = "techai-webutils"
+version = "0.0.1"
+#          ^^^^^
+# Wheel names will be generated according to this value. Do not manually modify this value; instead
+# update it according to committed changes by running this command from the root of the repository:
+#
+#   uv run python -m AutoGitSemVer.scripts.UpdatePythonVersion ./pyproject.toml ./src
+
+description = "techai-webutils"
+readme = "README.md"
+authors = [
+    { name = "Tech AI at Georgia Institute of Technology" }
+]
+requires-python = ">= 3.12"
+dependencies = [
+    "aiobotocore>=3.5.0",
+    # aiosmtplib: async SMTP send for the SMTP email backend (clients/email/smtp); lazy-imported by
+    # new_email_from_config only on the SMTP path. Peer of aiobotocore (the SES backend's transport).
+    "aiosmtplib>=3.0.0",
+    "fastapi>=0.136.0",
+    "grpcio>=1.80.0",
+    "grpcio-health-checking>=1.80.0",
+    "grpcio-reflection>=1.80.0",
+    "httpx>=0.28.1",
+    "opentelemetry-api>=1.41.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.41.0",
+    "opentelemetry-sdk>=1.41.0",
+    "prometheus-client>=0.25.0",
+    "pydantic>=2.13.3",
+    "pydantic-settings>=2.14.1",
+    "qdrant-client>=1.12.0",
+    "pyyaml>=6.0.3",
+    "redis>=7.4.0",
+    "structlog>=25.5.0",
+    "tenacity>=9.1.4",
+    "uvicorn>=0.48.0",
+    "protovalidate>=2.0.0,<3",
+]
+classifiers = [
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.optional-dependencies]
+# Distributed execution backend (RayExecutor + RealRayRuntime). Optional and heavy:
+# only a deployable that runs distributed batches installs `techai-webutils[ray]`. The default
+# asyncio path (AsyncioExecutor) never pulls Ray — the RayRuntime protocol and
+# RayExecutor carry no `ray` import; only RealRayRuntime does, imported lazily by
+# `executor_from_config` when `ExecutorConfig.kind` is `ray`.
+#
+# ⚠ Ray requires the driver and the cluster to run the SAME version. Pinned EXACTLY to match the
+# Ray testcontainer in the integration tests (rayproject/ray:2.56.1-py312) — `ray://` rejects a
+# version mismatch, so a consumer's Ray cluster image must match this pin too. Bump this pin and the
+# dev-group `ray` pin below together when upgrading Ray.
+ray = ["ray==2.56.1"]
+
+# Cross-pod single-writer lock backend (PostgresAdvisoryLock). Optional: only a deployable
+# that needs the cross-pod lock installs `techai-webutils[postgres]`. The default in-memory lock
+# never pulls asyncpg — the `postgres` backend impl is imported lazily by `new_lock_from_config`
+# when `LockConfig.kind` is `postgres`.
+postgres = ["asyncpg>=0.30.0"]
+
+# Document-parsing backend (the `isolated` parser: MarkItDown + pymupdf). Optional and heavy: only a
+# parse-running deployable installs `techai-webutils[parsing]`. The
+# `clients/parsing` factory + interface never import these — the `isolated` backend imports them
+# lazily inside its parse methods / the forkserver, so the default import graph never pulls them.
+parsing = ["markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.6", "pymupdf>=1.28.0"]
+
+# Language-detection backend (the `langdetect` MetadataExtractor). Optional: only a
+# deployable that extracts document metadata installs `techai-webutils[langdetect]`. The `clients/metadata`
+# factory never imports it — the `langdetect` backend subpackage is imported lazily by
+# `metadata_extractor_from_config`, so the default import graph never pulls it.
+langdetect = ["langdetect>=1.0.9"]
+
+[project.license]
+text = "MIT"
+
+[project.urls]
+Homepage = "https://github.com/gt-tech-ai/knowledge-engine-toolkit"
+Documentation = "https://github.com/gt-tech-ai/knowledge-engine-toolkit"
+Repository = "https://github.com/gt-tech-ai/knowledge-engine-toolkit"
+
+[build-system]
+requires = ["uv_build>=0.11.15,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "autogitsemver>=0.9.13",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=7.1.0",
+    # Installed in dev/CI so basedpyright can resolve RealRayRuntime's `import ray` and the real-Ray
+    # integration tests (@pytest.mark.integration) can run against a Ray testcontainer; production
+    # consumers pull it via the `ray` extra, not this group. Pinned EXACTLY to the same version as the
+    # `ray` extra so the ray:// driver matches the cluster (see the extra above).
+    "ray==2.56.1",
+    "ruff==0.16.9",
+    "basedpyright==1.40.1",
+    # asyncpg in dev so basedpyright resolves `import asyncpg` in the postgres lock backend and the
+    # real-Postgres integration test can run; production consumers pull it via the `postgres` extra.
+    "asyncpg>=0.30.0",
+    # markitdown + pymupdf in dev so basedpyright resolves the `isolated` parser backend's lazy
+    # imports and its parity tests (real conversion + real subprocess isolation) run; production
+    # consumers pull them via the `parsing` extra.
+    "markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.6",
+    "pymupdf>=1.28.0",
+    # langdetect in dev so basedpyright resolves the `langdetect` metadata backend and its parity
+    # tests run; production consumers pull it via the `langdetect` extra.
+    "langdetect>=1.0.9",
+    "testcontainers[postgres,redis]>=4.14.2",
+    "ty>=0.0.38",
+    # hypothesis drives the property tests (e.g. the token-ledger Decimal cost arithmetic).
+    "hypothesis>=6.168.5",
+    "asyncpg-stubs==0.31.3",
+    "types-aiobotocore-lite[s3,sesv2,sqs]==3.9.0",
+]
+
+[tool.pytest.ini_options]
+# tests/ is put on sys.path by pytest's default prepend import mode (there is no
+# tests/__init__.py). Test doubles are built inline with unittest.mock in each
+# test (spec-bound to the real core interfaces), so no shared test-double package
+# and no pythonpath directive are needed.
+# Hand-written unit coverage is gated at >=90%. The denominator excludes the
+# integration-only external wrappers (gRPC server factory + OTel tracing
+# interceptors, SQS/S3/Redis clients, OTel tracer/observability): they are carved
+# out below (covered by the integration suite, the Python equivalent of Go's
+# unit-only carve-outs); the genuinely unit-testable interceptor logic is tested
+# instead of excluded.
+addopts = "--verbose -vv --capture=no --strict-markers --cov=techai_webutils --cov-report html --cov-report term --cov-report xml:coverage.xml --cov-fail-under=90.0"
+# Registered markers (enforced by --strict-markers, so a typo'd/unregistered marker
+# now errors instead of silently passing). `integration` tests need a Docker daemon
+# (testcontainers) and are deselected from the default unit run via `-m "not integration"`.
+markers = [
+    "integration: real-dependency tests via testcontainers (Docker required); deselected in the unit run",
+    "slow: slow tests, deselected with --fast",
+]
+
+[tool.coverage.run]
+# relative_files + a distinct (non-hidden) data file let an optional combined
+# coverage gate merge this unit dataset with an integration dataset (see
+# .coveragerc.combined). The unit run writes coverage_unit.dat; an integration run
+# can write coverage_integration.dat, and `coverage combine` +
+# `coverage report --rcfile .coveragerc.combined` merges them. No CI job runs that
+# combined gate — it is a local check.
+relative_files = true
+data_file = "coverage_unit.dat"
+
+[tool.coverage.report]
+# Excluded from the UNIT denominator (>=90% gate is over hand-written, unit-testable
+# logic). Each entry is either test infrastructure or a thin external-dependency
+# wrapper whose uncovered lines are the real network/SDK calls — exercised by the
+# integration suite, not unit tests. Mirrors Go's unit-only carve-out set.
+#
+# This omit is at REPORT time (not [run]) so the unit run still MEASURES the
+# wrappers — their partial unit coverage then lands in coverage_unit.dat and can
+# merge into the optional combined gate (.coveragerc.combined), which counts them.
+omit = [
+    "*/clients/transport/grpc/server.py",                        # gRPC server factory (binds/serves) — integration
+    "*/clients/rpc/grpc/interceptors/tracing.py",          # OTel client span wiring — integration/runtime
+    "*/clients/rpc/grpc/interceptors/tracing_server.py",   # OTel server span wiring — integration/runtime
+    "*/clients/messaging/sqs/sqs_publisher.py",        # boto3 SQS send — integration (ElasticMQ)
+    "*/clients/messaging/sqs/sqs_subscriber.py",       # boto3 SQS receive loop — integration (ElasticMQ)
+    "*/foundation/resilience/sqs_dlq.py",              # boto3 SQS DLQ send — integration (ElasticMQ)
+    "*/clients/storage/s3/s3_client.py",               # boto3 S3 client — integration (MinIO)
+    "*/clients/llm/bedrock/*.py",                      # aiobotocore bedrock-runtime wrapper — integration/runtime
+    "*/clients/retrieval/bedrock/*.py",                # aiobotocore bedrock-agent-runtime wrapper — integration/runtime
+    "*/clients/kb_ingestion/bedrock/*.py",                       # aiobotocore bedrock-agent KB ingestion — integration/runtime
+    "*/clients/email/ses/provider.py",                 # aiobotocore SESv2 send — E2E only (staging/prod SES)
+    "*/clients/email/smtp/provider.py",                # aiosmtplib SMTP send — E2E only (dev Mailpit)
+    "*/clients/cache/redis/cache.py",              # aioredis wrapper — integration (Redis)
+    "*/foundation/tracer/tracer.py",                   # OTel tracer SDK init — integration/runtime
+    "*/foundation/observability.py",                   # OTel observability bootstrap — integration/runtime
+    "*/execution/executor/real_ray_runtime.py",        # ray.init + @ray.remote wrapper — integration (real Ray)
+]
+
+[tool.ruff]
+line-length = 90
+
+# preview = true enables ruff's preview rules for BOTH `ruff check` and
+# `ruff format` (it is a top-level key, not scoped to [lint]).
+preview = true
+
+[tool.ruff.lint]
+select = ["ALL"]
+
+ignore = [
+    "missing-type-args", # Missing type annotation for `*args`
+    "missing-type-kwargs", # Missing type annotation for `**kwargs`
+    "blind-except", # Do not catch blind exception: `Exception`
+    "missing-trailing-comma", # Trailing comma missing
+    "missing-copyright-notice", # flake8-copyright: repo does not use file copyright headers
+    "undocumented-magic-method", # Missing docstring in magic method
+    "undocumented-public-init", # Missing docstring in `__init__` method
+    "blank-line-after-function", # No blank lines allowed after function docstring
+    "incorrect-blank-line-before-class", # 1 blank line before class docstring (conflicts with D211; ruff keeps D211)
+    "multi-line-summary-second-line", # Multi-line summary on second line (conflicts with D212; ruff keeps D212)
+    "DOC", # pydoclint family (preview): listed as "Consider", not adopted
+    "line-too-long", # Line too long
+    "line-contains-todo", # Line contains TODO, consider resolving the issue
+    "FURB", # refurb family (preview): listed as "Consider", not adopted
+    "invalid-function-name", # Function name `xxx` should be lowercase
+    "invalid-module-name", # Invalid module name
+    "pytest-fixture-autouse", # flake8-pytest-style (preview, no assigned rule code so it cannot be suppressed per-line via `# noqa`): autouse is a deliberate cross-cutting test pattern here — per-test env isolation and the integration-suite Docker gate — so this opinionated preview rule is deferred like DOC/FURB.
+    "unnecessary-paren-on-raise-exception", # Unnecessary parentheses on raise exception
+    "noqa-comments", # noqa-comments (preview): opinionated/stylistic rule preferring `# ruff: ignore[...]` over `# noqa`; ruff itself sanctions disabling it. We keep the universal, tool-agnostic `# noqa: <CODE>` form.
+    "runtime-cast-value", # Add quotes to type expression in `typing.cast()`
+    "missing-todo-author", # Missing author in TODO
+    "missing-todo-link", # Missing issue link for this TODO
+    "raise-vanilla-class", # Create your own exception
+    "try-consider-else", # Consider moving this statement to an `else` block
+    "f-string", # Use f-string instead of `format` call
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["techai_webutils"]
+
+[tool.ruff.lint.per-file-ignores]
+# The bedrock clients mirror the AWS bedrock-runtime / bedrock-agent-runtime / bedrock-agent APIs, whose
+# keyword params are camelCase (knowledgeBaseId, modelId, retrievalQuery, dataSourceId, …) — N803 does
+# not apply to a wire mirror.
+"src/techai_webutils/clients/llm/bedrock/*.py" = ["invalid-argument-name"]
+"src/techai_webutils/clients/retrieval/bedrock/*.py" = ["invalid-argument-name"]
+"src/techai_webutils/clients/kb_ingestion/bedrock/*.py" = ["invalid-argument-name"]
+# Each entry is a rule wrong-by-design for the whole test tree.
+"**/tests/**" = [
+    "S", # flake8-bandit: bandit is the dedicated security gate and excludes tests; fixtures use fake credentials and intentionally exercise flagged patterns (assert, e2e subprocess, bind-all in local config)
+    "magic-value-comparison", # magic-value comparisons are expected in test assertions
+    "missing-type-function-argument", # test fixtures/params need no redundant annotations (types still resolve under basedpyright)
+    "no-self-use", # pytest groups tests as methods on a class; `self` is required by the collector even when unused
+    "implicit-namespace-package", # test trees are flat implicit-namespace packages (no __init__.py), collected by pytest
+    "import-outside-top-level", # tests import the concrete implementation under test locally to keep each case's deps explicit
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.pylint]
+max-args = 10
+max-branches = 20
+max-returns = 20
+
+# Strict type-checking over src and tests. include is an allowlist, so tests are analyzed
+# only because they are listed here.
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+include = ["src/techai_webutils", "tests"]
+
+# Mock-noise relaxation for the test tree: pytest fixtures and unittest.mock doubles are
+# intentionally untyped, so the reportUnknown* family and the mock attribute-access probes
+# (.assert_called_once / .await_args_list, which resolve on an autospec'd MethodType, not on
+# the Mock) are pure noise there. src/ stays fully strict, and every other strict diagnostic
+# (argument types, optional access, private usage) is still enforced in tests.
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+reportUnknownParameterType = "none"
+reportUnknownLambdaType = "none"
+reportAttributeAccessIssue = "none"
+
+[tool.uv.build-backend]
+module-name = "techai_webutils"

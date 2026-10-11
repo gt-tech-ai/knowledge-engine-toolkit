@@ -1,0 +1,1 @@
+{"cube":"genai_calls","dims":{"model":"nova-lite","provider":"aws.bedrock","step":"generate","team":"t-1"},"idempotency_key":"4bf92f3577b34da6a3ce929d0e0e4736:00f067aa0ba902b7:generate","measures":{"duration_s":1.25,"tokens_in":42,"tokens_out":7},"org_id":"org-1","schema":1,"ts":"2026-10-09T12:34:56.789Z"}

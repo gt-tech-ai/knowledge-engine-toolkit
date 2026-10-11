@@ -1,0 +1,15 @@
+### Bandit security scanner configuration
+### https://bandit.readthedocs.io/
+
+skips:
+  # B101: assert used — acceptable in test code (tests/ excluded below)
+  - B101
+
+exclude_dirs:
+  - tests
+  - .venv
+  - venv
+  - __pycache__
+  - node_modules
+
+confidence: MEDIUM

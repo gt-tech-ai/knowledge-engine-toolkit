@@ -1,0 +1,25 @@
+# gitleaks configuration for knowledge-engine-toolkit.
+#
+# Extends gitleaks' default rules. The allowlist skips build output and vendored
+# dependencies, which are not source, plus named code identifiers that a default
+# rule mistakes for a secret.
+
+title = "knowledge-engine-toolkit gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Build output, vendored dependencies, and code identifiers"
+paths = [
+  '''(^|/)dist/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)\.venv/''',
+]
+regexes = [
+  # go/tests/unit/clients_outbox_test.go assigns `s3Cfg.S3.API, s3Cfg.S3.Bucket = ...`
+  # in one statement; generic-api-key reads the `API,` keyword and takes the next
+  # identifier as the key. It is a struct field selector, not a secret, and the line
+  # is in history, so it is allowlisted by its exact text.
+  '''^s3Cfg\.S3\.Bucket$''',
+]

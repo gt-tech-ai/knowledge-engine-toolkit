@@ -1,0 +1,86 @@
+{
+  "CANCELED": {
+    "grpc": 1,
+    "http": 500,
+    "transient": false,
+    "permanent": false
+  },
+  "CONFLICT": {
+    "grpc": 6,
+    "http": 409,
+    "transient": false,
+    "permanent": true
+  },
+  "FORBIDDEN": {
+    "grpc": 7,
+    "http": 403,
+    "transient": false,
+    "permanent": true
+  },
+  "INGESTION_ERROR": {
+    "grpc": 13,
+    "http": 500,
+    "transient": false,
+    "permanent": false
+  },
+  "INTERNAL": {
+    "grpc": 13,
+    "http": 500,
+    "transient": false,
+    "permanent": false
+  },
+  "INVALID_INPUT": {
+    "grpc": 3,
+    "http": 400,
+    "transient": false,
+    "permanent": true
+  },
+  "NOT_FOUND": {
+    "grpc": 5,
+    "http": 404,
+    "transient": false,
+    "permanent": true
+  },
+  "QUALITY_FAILED": {
+    "grpc": 13,
+    "http": 500,
+    "transient": false,
+    "permanent": false
+  },
+  "RESOURCE_EXHAUSTED": {
+    "grpc": 8,
+    "http": 429,
+    "transient": false,
+    "permanent": false
+  },
+  "TIMEOUT": {
+    "grpc": 4,
+    "http": 504,
+    "transient": true,
+    "permanent": false
+  },
+  "UNAUTHORIZED": {
+    "grpc": 16,
+    "http": 401,
+    "transient": false,
+    "permanent": true
+  },
+  "UNAVAILABLE": {
+    "grpc": 14,
+    "http": 503,
+    "transient": true,
+    "permanent": false
+  },
+  "UNKNOWN": {
+    "grpc": 13,
+    "http": 500,
+    "transient": false,
+    "permanent": false
+  },
+  "UPSTREAM": {
+    "grpc": 14,
+    "http": 502,
+    "transient": false,
+    "permanent": false
+  }
+}

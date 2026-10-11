@@ -1,0 +1,495 @@
+version: "2"
+run:
+  modules-download-mode: readonly
+  # Load the integration-tagged files too, so they are linted and formatted like the rest.
+  build-tags:
+    - integration
+linters:
+  enable:
+    # Existing linters
+    - gocritic
+    - gocyclo
+    - gosec
+    - misspell
+    - unconvert
+    # Bug detection
+    - errcheck
+    - bodyclose
+    - noctx
+    - errorlint
+    - exhaustive
+    - staticcheck
+    - ineffassign
+    - nilerr
+    - nilnil
+    - wrapcheck
+    - reassign
+    - protogetter
+    - musttag
+    # Performance optimization
+    - unparam
+    - unused
+    - prealloc
+    - perfsprint
+    - mirror
+    # Code quality
+    - dupl
+    - funlen
+    - lll
+    - copyloopvar
+    - intrange
+    - containedctx
+    # Observability / logging
+    - spancheck
+    - sloglint
+    # Testing
+    - testifylint
+    # Architecture enforcement
+    - depguard
+    # Error-theory enforcement (ARCHITECTURE.md#error-codes): ban code-less fmt.Errorf
+    # and stdlib errors.New so every error carries an ErrorCode via core/errors
+    # Wrap/New. Configured in settings.forbidigo; it runs on tests too.
+    - forbidigo
+    # Documentation completeness and parameter hygiene: revive's `exported` and
+    # `unused-parameter` rules only (see settings.revive).
+    - revive
+    # --- correctness/quality linter set, enabled at 0 findings ---
+    # Bug detection
+    - durationcheck
+    - sqlclosecheck
+    - rowserrcheck
+    - contextcheck
+    - fatcontext
+    - makezero
+    - wastedassign
+    - gocheckcompilerdirectives
+    # Code quality
+    - whitespace
+    - dogsled
+    - errname
+    - goprintffuncname
+    - nakedret
+    - tagalign
+    - usestdlibvars
+    # Observability / logging
+    - loggercheck
+    - goconst
+    - dupword
+    # Testing
+    - usetesting
+    - thelper
+    - tparallel
+    # Architecture enforcement: no globals/inits (explicit DI), banned modules, and the
+    # import alias the codebase standardises on (apperr for core/errors).
+    - gochecknoglobals
+    - gochecknoinits
+    - gomodguard_v2
+    - importas
+    - nolintlint
+  settings:
+    nolintlint:
+      # A suppression names its linter and says why, so it can be reviewed and later
+      # removed; a bare `//nolint` or an unexplained one is a finding.
+      require-explanation: true
+      require-specific: true
+    importas:
+      # Every import of the coded-errors package uses the apperr alias, and
+      # no-unaliased forbids importing it unaliased, so the codebase reads the same
+      # everywhere (and the same as its consumers).
+      alias:
+        - pkg: github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors
+          alias: apperr
+      no-unaliased: true
+    gomodguard_v2:
+      # Block modules this module must not depend on, each with the sanctioned
+      # replacement.
+      blocked:
+        - module: github.com/golang/protobuf
+          recommendations:
+            - google.golang.org/protobuf
+          reason: "use google.golang.org/protobuf"
+        - module: github.com/pkg/errors
+          reason: "use knowledge-engine-toolkit/go/core/errors (coded errors)"
+        - module: golang.org/x/exp
+          reason: "promoted APIs live in the stdlib or golang.org/x/*"
+        - module: github.com/satori/go.uuid
+          recommendations:
+            - github.com/google/uuid
+          reason: "unmaintained"
+        - module: gopkg.in/yaml.v2
+          recommendations:
+            - go.yaml.in/yaml/v3
+          reason: "use yaml v3 (go.yaml.in/yaml/v3)"
+        - module: github.com/ghodss/yaml
+          recommendations:
+            - sigs.k8s.io/yaml
+          reason: "unmaintained"
+        - module: io/ioutil
+          reason: "deprecated since Go 1.16; use io and os"
+    dogsled:
+      # Fixture constructors return the whole wiring (service, repos, mocks); a test that
+      # needs two of them ignores the rest, up to four.
+      max-blank-identifiers: 4
+    dupword:
+      # Intentional repeats in embedded scripts: a Lua block that closes a nested `if`
+      # inside a `for` ends `end end`.
+      ignore:
+        - "end"
+    nakedret:
+      # Ban naked returns outright (a named result returned bare): any function with
+      # named results must name them in the return statement.
+      max-func-lines: 0
+    tagalign:
+      # Align struct tags in a block for readability; do not reorder their keys
+      # (sort would fight the mapstructure/json ordering the structs already use).
+      align: true
+      sort: false
+    exhaustive:
+      # Closed enums this module owns must list every member (a `default` does not
+      # count). Enums the code only inspects and does not own, gRPC and Connect
+      # status codes and reflect.Kind, are wide, externally owned sets where a
+      # catch-all `default` is the right handling, so they are not checked.
+      ignore-enum-types: ^(google\.golang\.org/grpc/codes\.Code|connectrpc\.com/connect\.Code|reflect\.Kind)$
+    gocritic:
+      # The experimental and opinionated tags on, minus four checks: duplicate-import
+      # alias churn, if-else chains that read better than a switch, octal-literal style,
+      # and the nolint-comment shape that nolintlint already owns.
+      disabled-checks:
+        - dupImport
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+        - experimental
+        - opinionated
+      settings:
+        hugeParam:
+          # slog.Handler implementations must take slog.Record (288 bytes) by
+          # value per the stdlib interface. Set the threshold above that so the
+          # interface-mandated case isn't flagged, while genuinely oversized
+          # value params still are.
+          sizeThreshold: 512
+    goconst:
+      # Flag a repeated string literal (>=3 runes, >=3 occurrences) so it becomes a
+      # named constant.
+      min-len: 3
+      min-occurrences: 3
+    gocyclo:
+      min-complexity: 15
+    revive:
+      # Run ONLY the exported-doc rule and unused-parameter (specifying rules overrides
+      # revive's default set), so this enforces "every exported symbol has a doc comment
+      # starting with its name" and "every parameter is used or named `_`" without
+      # revive's other opinionated checks. disableStutteringCheck scopes the doc rule to
+      # completeness only — its naming-stutter check (e.g. s3.S3API "stutters") is a
+      # separate concern, not this gate's job.
+      rules:
+        - name: exported
+          arguments:
+            - disableStutteringCheck
+        - name: unused-parameter
+    forbidigo:
+      # Every error carries an ErrorCode via core/errors Wrap/New. Code-less
+      # fmt.Errorf and stdlib errors.New are forbidden in production code and in
+      # tests (a test that needs an uncoded error uses apperr.Sentinel).
+      # Specifying `forbid` REPLACES forbidigo's default fmt.Print* patterns, so
+      # only the patterns below are banned — fmt.Println/Printf are untouched.
+      analyze-types: true
+      forbid:
+        - pattern: ^fmt\.Errorf$
+          msg: use core/errors Wrap/New — no code-less fmt.Errorf
+        # Stdlib errors.New carries no ErrorCode. analyze-types scopes this to the
+        # stdlib package, so core/errors New(code, msg) (alias apperr) passes.
+        - pattern: ^errors\.New$
+          pkg: ^errors$
+          msg: use core/errors New — no stdlib errors.New
+    govet:
+      enable:
+        - fieldalignment
+        - nilness
+    gosec:
+      excludes: []
+    dupl:
+      threshold: 150
+    funlen:
+      lines: 120
+      statements: 75
+    lll:
+      line-length: 90
+    spancheck:
+      checks:
+        - end
+        - record-error
+        - set-status
+    sloglint:
+      context: all
+      key-naming-case: snake
+    wrapcheck:
+      # Errors from this module's own packages already carry an ErrorCode (core/errors,
+      # enforced by enforce-core-errors); re-wrapping them at every hop only renames the
+      # code. wrapcheck guards the errors that do not: third-party SDK, stdlib and
+      # interface errors, which must be wrapped with one.
+      ignore-package-globs:
+        - github.com/gt-tech-ai/knowledge-engine-toolkit/*
+      ignore-sig-regexps:
+        # Combinators that run the caller's function and return its error unchanged:
+        # that error is already coded where it was made, so wrapping it here would
+        # re-code it.
+        - \(\*golang\.org/x/sync/singleflight\.Group\)\.Do\(
+        - \(\*golang\.org/x/sync/errgroup\.Group\)\.Wait\(
+        - \(\*github\.com/sony/gobreaker/v2\.CircuitBreaker\[.*\]\)\.Execute\(
+        - github\.com/cenkalti/backoff/v5\.Retry\[
+        # Aggregators of the caller's errors: each member keeps its own code, which a
+        # wrapper around the aggregate would hide.
+        - go\.uber\.org/multierr\.(Combine|Append)\(
+        # A pass-through stream must return io.EOF itself: gRPC callers compare it
+        # with ==, which a wrapped error fails.
+        - \(google\.golang\.org/grpc\.ClientStream\)\.RecvMsg\(
+        # A decorating slog handler forwards to its sink, and slog.Logger discards
+        # whatever Handle returns, so a code on it would reach no one.
+        - \(log/slog\.Handler\)\.Handle\(
+        # A constructor of a gRPC status error, which carries its own code (the gRPC
+        # analogue of errors.New, which wrapcheck ignores by default).
+        - google\.golang\.org/grpc/status\.Error\(
+    depguard:
+      rules:
+        # ── Layer 0: core/ must not import any higher layer ──
+        core-no-upper-layers:
+          files:
+            - "**/go/core/**/*.go"
+          deny:
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation"
+              desc: "core/ must not import foundation/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients"
+              desc: "core/ must not import clients/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos"
+              desc: "core/ must not import repos/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/services"
+              desc: "core/ must not import services/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines"
+              desc: "core/ must not import pipelines/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows"
+              desc: "core/ must not import workflows/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
+              desc: "core/ must not import transport/ (layer violation)"
+
+        # ── Layer 1: foundation/ must not import layers 2+ ──
+        foundation-no-upper-layers:
+          files:
+            - "**/go/foundation/**/*.go"
+          deny:
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients"
+              desc: "foundation/ must not import clients/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos"
+              desc: "foundation/ must not import repos/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/services"
+              desc: "foundation/ must not import services/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines"
+              desc: "foundation/ must not import pipelines/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows"
+              desc: "foundation/ must not import workflows/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
+              desc: "foundation/ must not import transport/ (layer violation)"
+
+        # ── Layer 2: clients/ must not import layers 3+ ──
+        clients-no-upper-layers:
+          files:
+            - "**/go/clients/**/*.go"
+          deny:
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos"
+              desc: "clients/ must not import repos/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/services"
+              desc: "clients/ must not import services/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines"
+              desc: "clients/ must not import pipelines/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows"
+              desc: "clients/ must not import workflows/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
+              desc: "clients/ must not import transport/ (layer violation)"
+
+        # ── Layer 3: repos/ must not import layers 4+ ──
+        repos-no-upper-layers:
+          files:
+            - "**/go/repos/**/*.go"
+          deny:
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/services"
+              desc: "repos/ must not import services/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines"
+              desc: "repos/ must not import pipelines/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows"
+              desc: "repos/ must not import workflows/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
+              desc: "repos/ must not import transport/ (layer violation)"
+
+        # ── Layer 4: services/ must not import layers 5+ ──
+        services-no-upper-layers:
+          files:
+            - "**/go/services/*.go"
+            - "**/go/services/**/*.go"
+          deny:
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines"
+              desc: "services/ must not import pipelines/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows"
+              desc: "services/ must not import workflows/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
+              desc: "services/ must not import transport/ (layer violation)"
+
+        # ── Layer 5: pipelines/ must not import layers 6+ ──
+        pipelines-no-upper-layers:
+          files:
+            - "**/go/pipelines/**/*.go"
+          deny:
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows"
+              desc: "pipelines/ must not import workflows/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
+              desc: "pipelines/ must not import transport/ (layer violation)"
+
+        # ── Layer 6: workflows/ must not import layer 7 ──
+        workflows-no-upper-layers:
+          files:
+            - "**/go/workflows/**/*.go"
+          deny:
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
+              desc: "workflows/ must not import transport/ (layer violation)"
+
+        # ── Enforce core/errors: no stdlib "errors" in production code (core/errors wraps it) ──
+        enforce-core-errors:
+          files:
+            - "**/go/**/*.go"
+            - "!**/go/**/*_test.go"
+            - "!**/go/core/errors/*.go"
+            - "!**/go/core/errors/**/*.go"
+          deny:
+            - pkg: "errors"
+              desc: "use github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors instead of stdlib errors"
+
+        # ── Enforce foundation/logger: no log/slog outside the logger implementation ──
+        enforce-foundation-logger:
+          files:
+            - "**/go/**/*.go"
+            - "!**/go/**/*_test.go"
+            - "!**/go/foundation/logger/*.go"
+            - "!**/go/foundation/logger/**/*.go"
+          deny:
+            - pkg: "log/slog"
+              desc: "use interfaces.Logger (core/interfaces) instead of log/slog directly"
+            - pkg: "log$"
+              desc: "use interfaces.Logger (core/interfaces) instead of stdlib log"
+
+        # ── go/helpers is a leaf utility: must not import other layers ──
+        helpers-is-leaf:
+          files:
+            - "**/go/helpers/*.go"
+            - "**/go/helpers/**/*.go"
+          deny:
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core"
+              desc: "go/helpers/ is a leaf utility; must not import other layers"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation"
+              desc: "go/helpers/ is a leaf utility; must not import other layers"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution"
+              desc: "go/helpers/ is a leaf utility; must not import other layers"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients"
+              desc: "go/helpers/ is a leaf utility; must not import other layers"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos"
+              desc: "go/helpers/ is a leaf utility; must not import other layers"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/services"
+              desc: "go/helpers/ is a leaf utility; must not import other layers"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines"
+              desc: "go/helpers/ is a leaf utility; must not import other layers"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows"
+              desc: "go/helpers/ is a leaf utility; must not import other layers"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
+              desc: "go/helpers/ is a leaf utility; must not import other layers"
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # OSFS is the one adapter from the FS interface onto package os, and its contract
+      # is os's errors verbatim: a caller may test them with os.IsNotExist / os.IsExist,
+      # which do not unwrap, so a wrapped error would read as a different failure.
+      - path: ^go/foundation/fsys/fsys\.go$
+        linters:
+          - wrapcheck
+      # The OpenTelemetry adapter starts a span and hands it to its caller, who ends it
+      # (the interfaces.Tracer contract). spancheck checks End only within the starting
+      # function and cannot follow that ownership transfer.
+      - path: ^go/foundation/tracer/oteltracer/tracer\.go$
+        linters:
+          - spancheck
+      # Sentinel is the one sanctioned uncoded constructor: it exists to wrap stdlib
+      # errors.New for the callers (tests, io.EOF-style markers) that need an error
+      # with no code, so it is the one place that may call it.
+      - path: ^go/core/errors/stdlib\.go$
+        linters:
+          - forbidigo
+        text: no stdlib errors.New
+      # A struct tag is a single string literal that Go cannot wrap, so a field whose
+      # tag pushes it past the column limit has no compliant spelling.
+      - linters:
+          - lll
+        source: '^\s*\w+\s+[\w.*\[\]]+\s+`(\w+:"[^"]*"\s*)+`$'
+      # Test code is linted like production code except for the linters whose findings are
+      # noise there: duplicated table-driven bodies (dupl), length and complexity of a
+      # test that walks a scenario (funlen, gocyclo), unchecked cleanup errors (errcheck),
+      # fixture credentials and file modes (gosec), and a literal repeated as an expected
+      # value (goconst: a test's literal is its expected value; naming it hides the spec
+      # from the assertion).
+      - path: _test\.go
+        linters:
+          - dupl
+          - errcheck
+          - funlen
+          - gocyclo
+          - gosec
+          - goconst
+    paths:
+      - .*\.pb\.go$
+      - .*\.gen\.go$
+      - gen
+      - vendor
+      - node_modules
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gofumpt
+    # gci organises imports into the ordered sections below (custom-order), which
+    # goimports cannot express: stdlib, then third-party, then this module.
+    - gci
+    - golines
+  settings:
+    gofumpt:
+      extra:
+        group-params: true
+    gci:
+      sections:
+        - standard
+        - default
+        - localmodule
+      custom-order: true
+    golines:
+      max-len: 90
+      tab-len: 4
+  exclusions:
+    generated: lax
+    paths:
+      - .*\.pb\.go$
+      - .*\.gen\.go$
+      - gen
+      - vendor
+      - node_modules
+      - third_party$
+      - builtin$
+      - examples$

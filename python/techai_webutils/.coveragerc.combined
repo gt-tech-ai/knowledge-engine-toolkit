@@ -1,0 +1,43 @@
+# Combined (unit + integration) coverage config for an OPTIONAL local coverage gate,
+# the parallel to a Go combined coverage gate. No CI job loads this file: CI gates
+# the unit suite (pyproject.toml, 90%) and runs the integration suite with
+# --cov-fail-under=0.
+#
+# A combined run executes the unit suite then the integration suite
+# under one coverage dataset (--cov-append) and reports against this config.
+#
+# Denominator vs. the UNIT gate (pyproject.toml [tool.coverage.report] omit):
+#   - The redis/sqs/s3 wrappers are NOT omitted here — the integration suite covers
+#     them (the Python analogue of Go code covered only by its integration
+#     suite, then counted in the combined gate).
+#   - The OTel/gRPC-server runtime wiring that NEITHER suite exercises stays
+#     omitted (Go's combined gate likewise excludes unmeasurable app/entrypoint
+#     wiring).
+#
+# This file is loaded only via `--cov-config`/`--rcfile`; coverage.py never
+# auto-discovers it (only `.coveragerc`/setup.cfg/tox.ini/pyproject.toml).
+[run]
+relative_files = true
+# Distinct from the unit run's coverage_unit.dat so the gate can `coverage combine`
+# both datasets without collision.
+data_file = coverage_integration.dat
+
+[report]
+precision = 1
+omit =
+    */clients/transport/grpc/server.py
+    */clients/rpc/grpc/interceptors/tracing.py
+    */clients/rpc/grpc/interceptors/tracing_server.py
+    */clients/email/ses/provider.py
+    */clients/email/smtp/provider.py
+    */foundation/tracer/tracer.py
+    */foundation/observability.py
+    # Real-Ray wrappers: exercisable ONLY against a live Ray cluster (the RAY_INTEGRATION
+    # opt-in test — see tests/integration/test_ray_executor_integration.py). ray is
+    # importable wherever the dev dependency group is installed, but that test is skipped
+    # unless RAY_INTEGRATION is set, so these would count as ~0% in a normal combined run;
+    # omitting them keeps the combined gate meaningful. The unit carve-out (pyproject
+    # [tool.coverage.report]) already omits real_ray_runtime.py.
+    */execution/executor/real_ray_runtime.py
+    */execution/executor/real_ray_pool.py
+    */tests/*

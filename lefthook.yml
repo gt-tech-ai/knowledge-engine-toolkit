@@ -1,0 +1,34 @@
+# lefthook.yml: Git hook configuration. Activate with `lefthook install`.
+# See https://github.com/evilmartians/lefthook
+#
+# Local hooks stay lightweight; the full gates (lint, typecheck, tests, scanners) run in CI.
+#   - commit-msg: conventional-commit format
+#   - pre-commit: staged secret scan (gitleaks) and staged Markdown lint
+
+output:
+  - summary
+  - failure
+
+commit-msg:
+  commands:
+    # Conventional commits: `<type>(<scope>)?!?: <description>`. Merge commits are exempt.
+    conventional:
+      run: |
+        msg="$(head -n 1 {1})"
+        case "$msg" in Merge\ *) exit 0 ;; esac
+        if ! printf '%s\n' "$msg" | grep -Eq '^(feat|fix|refactor|docs|test|chore|perf|ci|style)(\(.+\))?!?: .{1,72}$'; then
+          echo "invalid commit message: $msg"
+          echo "expected: <type>(<scope>)?!?: <description>, type one of feat fix refactor docs test chore perf ci style; description at most 72 characters"
+          exit 1
+        fi
+
+pre-commit:
+  parallel: true
+  commands:
+    # Stop secrets before they are committed; uses the repo .gitleaks.toml allowlist.
+    gitleaks:
+      run: gitleaks git --staged --no-banner --redact
+    # Lint the staged Markdown with .markdownlint-cli2.jsonc.
+    markdownlint:
+      glob: "*.md"
+      run: markdownlint-cli2 {staged_files}

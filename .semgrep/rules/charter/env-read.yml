@@ -1,0 +1,68 @@
+# Env binding. Production code outside the config tier must not read the
+# environment directly: config is bound once (in the config tier) and injected
+# down. The config tier is go/foundation/config and the Python foundation/config
+# package.
+#
+# It is split into one rule per language because a single Opengrep rule may only
+# list `languages` whose patterns are all valid in every listed language.
+rules:
+  - id: env-read-go
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Direct environment read outside the config tier. Bind this value once in the
+      config tier (go/foundation/config) and inject it; do not read
+      os.Getenv/LookupEnv/Environ from a service, client or domain package.
+    metadata:
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: os.Getenv(...)
+      - pattern: os.LookupEnv(...)
+      - pattern: os.Environ()
+    paths:
+      include:
+        - go
+      exclude:
+        # Config tier — the sanctioned home for env binding.
+        - "**/config/**"
+        # Sanctioned env primitive: helpers.OrDefault.
+        - "**/helpers/env.go"
+        # Subprocess env passthrough (os.Environ to inherit the parent env for exec).
+        - "**/foundation/system/runner.go"
+        # Deploy-SHA bootstrap read the logger binds at construction.
+        - "**/foundation/logger/zap/logger.go"
+        # The env secrets backend: resolving a secret from a named environment
+        # variable is the whole contract of that Kind.
+        - "**/clients/secrets/env/env.go"
+        # Tests are never production code.
+        - "**/*_test.go"
+        - "**/tests/**"
+
+  - id: env-read-python
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Direct environment read outside the config tier. Bind this value once in the
+      config tier (foundation/config) and inject it; do not read os.getenv/os.environ
+      from a service, client or domain module.
+    metadata:
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: os.getenv(...)
+      - pattern: os.environ
+    paths:
+      include:
+        - python/techai_webutils/src
+      exclude:
+        # Config tier — the sanctioned home for env binding (covers config/bridge.py
+        # and config/loader.py, the config-substitution readers).
+        - "**/config/**"
+        # Logger bootstrap binds the deploy SHA at construction.
+        - "**/foundation/logger/logger.py"
+        # Tests + vendored trees are never production code.
+        - "**/test_*"
+        - "**/tests/**"
+        - "**/.venv/**"
+        - "**/__pycache__/**"

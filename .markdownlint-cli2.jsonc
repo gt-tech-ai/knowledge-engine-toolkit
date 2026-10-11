@@ -1,0 +1,47 @@
+// markdownlint-cli2 configuration: https://github.com/DavidAnson/markdownlint-cli2
+//
+// Catches the structural issues that break rendering (blanks around headings, lists and
+// fences, one H1, consistent list style) while allowing long lines, wide tables and the
+// common inline-HTML set.
+//
+// Enforcement: the CI `docs` job lints every *.md file and blocks on any finding; the
+// lefthook pre-commit hook lints only the staged *.md files, for speed.
+// Repo-wide check:  markdownlint-cli2 "**/*.md"
+// Auto-fix locally: markdownlint-cli2 --fix "**/*.md"
+{
+  "config": {
+    "default": true,
+
+    // Long prose lines and wide tables are the norm here; line length is not enforced.
+    "MD013": false,
+
+    // Allow the common inline-HTML set instead of blocking it outright.
+    "MD033": {
+      "allowed_elements": [
+        "br", "hr", "details", "summary", "div", "p", "span", "img", "picture",
+        "source", "a", "sub", "sup", "kbd", "table", "thead", "tbody", "tr",
+        "th", "td", "b", "i", "em", "strong", "code", "pre", "h1", "h2", "h3",
+        "h4", "align", "center"
+      ]
+    },
+
+    // A document may open with a badge row or an HTML logo rather than an H1.
+    "MD041": false,
+
+    // Repeated section headings ("Added", "Changed", "Fixed") are fine unless siblings.
+    "MD024": { "siblings_only": true }
+  },
+
+  // Respect .gitignore so virtualenvs, caches and build output are never linted.
+  "gitignore": true,
+
+  // No top-level `globs`: markdownlint-cli2 combines config globs with CLI args, so a
+  // `globs` entry would force a whole-repo scan when the pre-commit hook passes only the
+  // staged files.
+  "ignores": [
+    "**/.venv/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "docs/local/**"
+  ]
+}

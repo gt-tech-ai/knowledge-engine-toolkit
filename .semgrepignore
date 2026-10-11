@@ -1,0 +1,27 @@
+# Paths Opengrep skips. gitignore syntax, read from the scan root. Generated
+# trees are never hand-edited (so a finding there is not actionable), and test
+# code is out of the SAST scope — its "unsafe" patterns are fixtures and helpers,
+# not shipped behavior.
+
+# --- the rule tree itself (config, not scanned source) ---
+.semgrep/
+
+# --- generated code (regenerated from a source; never edited) ---
+gen/
+generated/
+**/*.pb.go
+**/*_pb2*.py
+**/*_pb2.pyi
+**/mocks/
+
+# --- vendored / build / tooling output ---
+node_modules/
+dist/
+.venv/
+
+# --- docs (prose, not code) ---
+docs/
+
+# --- tests (fixtures and helpers, not shipped behavior) ---
+**/tests/**
+*_test.go

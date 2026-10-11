@@ -1,0 +1,13 @@
+[
+  {"name": "email", "input": "user is john@example.com", "want": "user is [REDACTED]"},
+  {"name": "phone dashed", "input": "call 555-123-4567", "want": "call [REDACTED]"},
+  {"name": "phone parenthesized", "input": "call (555) 123-4567", "want": "call [REDACTED]"},
+  {"name": "phone international", "input": "call +1-555-123-4567", "want": "call [REDACTED]"},
+  {"name": "ssn", "input": "ssn: 123-45-6789", "want": "ssn: [REDACTED]"},
+  {"name": "ipv4", "input": "from 192.168.1.100", "want": "from [REDACTED]"},
+  {"name": "bearer jwt", "input": "Bearer eyJhbGciOiJIUzI1NiJ9.abc", "want": "[REDACTED]"},
+  {"name": "token credential", "input": "token=abc123xyz", "want": "[REDACTED]"},
+  {"name": "ws access_token", "input": "GET /api/v1/ws?access_token=header.payload.signature", "want": "GET /api/v1/ws?[REDACTED]"},
+  {"name": "no match", "input": "hello world 42", "want": "hello world 42"},
+  {"name": "combined single pass", "input": "user john@example.com called 555-123-4567 from 192.168.1.1 ok", "want": "user [REDACTED] called [REDACTED] from [REDACTED] ok"}
+]

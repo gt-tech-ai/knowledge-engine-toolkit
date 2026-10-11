@@ -1,0 +1,22 @@
+Vendored Opengrep community rules
+=================================
+
+Source:  https://github.com/opengrep/opengrep-rules
+Commit:  f1d2b562b414783763fd02a6ed2736eaed622efa
+Date:    2025-01-26
+License: LGPL 2.1 (GNU Lesser General Public License, Version 2.1) with the
+         Commons Clause (see LICENSE, copied verbatim). Internal use and
+         redistribution with notices are permitted; selling the rules is not.
+
+Vendored subtrees: the security/ and correctness/ rule directories of go/ and
+python/. Only rule YAML is copied; the per-rule test fixtures (*.go, *.py, ...
+and *.test.yaml) are left behind. Rules listed in sync.sh's DROPPED table are
+then removed, each with a recorded reason (another gate owns the finding class,
+or the rule is a false positive for this codebase).
+
+Regenerate with: .semgrep/sync.sh [<commit-sha>]
+
+Why not semgrep/semgrep-rules: that set ships under the "Semgrep Rules License
+v1.0" — internal business use only, no offering the rules "as a service", and
+copies must keep the notices. opengrep-rules (LGPL 2.1 + Commons Clause) permits
+internal use and redistribution with notices, which fits vendoring here.

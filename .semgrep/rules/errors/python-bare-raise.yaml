@@ -1,0 +1,44 @@
+# Errors carry a code. Python production code raises a techai_webutils.core.errors
+# AppError subclass (InvalidInputError, InternalError, …), never a bare builtin
+# exception, so transient/permanent and the gRPC/HTTP status derive from the
+# ErrorCode and the transport edge can sanitize. Pydantic field/model validators
+# are the one exemption: pydantic contractually requires a ValueError/AssertionError
+# to signal a validation failure, so a raise inside a
+# @field_validator/@model_validator/@validator function is allowed (a semantic
+# exemption, not a path one). Code that callers catch as a builtin raises the dual-base
+# AppValueError / AppTypeError / AppRuntimeError / AppFileNotFoundError.
+rules:
+  - id: python-bare-raise
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Raise a techai_webutils.core.errors AppError subclass (InvalidInputError,
+      InternalError, …) carrying an ErrorCode, not a bare builtin exception.
+      Pydantic validators are exempt — they must raise ValueError.
+    metadata:
+      category: best-practice
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: raise $E(...)
+          - pattern: raise $E
+      - metavariable-regex:
+          metavariable: $E
+          regex: ^(ValueError|RuntimeError|TypeError|KeyError|LookupError|Exception|PermissionError|FileNotFoundError|TimeoutError|AssertionError)$
+      - pattern-not-inside: |
+          @field_validator(...)
+          def $F(...):
+              ...
+      - pattern-not-inside: |
+          @model_validator(...)
+          def $F(...):
+              ...
+      - pattern-not-inside: |
+          @validator(...)
+          def $F(...):
+              ...
+    paths:
+      include:
+        - python/
+      exclude:
+        - "**/tests/**"

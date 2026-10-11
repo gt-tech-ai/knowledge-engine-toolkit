@@ -1,0 +1,6 @@
+# Trivy vulnerability ignore list.
+# Format: CVE ID per line, with optional comment.
+# Only add CVEs that have been reviewed and accepted as low risk.
+
+# Example (uncomment when needed):
+# CVE-2024-XXXXX  # Accepted: no exposure path in our usage of libfoo
