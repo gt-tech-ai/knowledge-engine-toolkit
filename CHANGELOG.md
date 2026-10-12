@@ -29,6 +29,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- Python `new_client_stack_from_config` is generic: it returns the stack typed as the client it
+  was given, so callers no longer `cast` the result.
 - `core/interfaces.AnalyticsStore` embeds `HealthChecker` (breaking for out-of-tree
   implementations): the Cassandra store's `Readiness` runs `SELECT release_version FROM
   system.local` and is `CodeUnavailable` when stopped or unreachable; the stub is always ready;
