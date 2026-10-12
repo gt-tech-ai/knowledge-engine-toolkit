@@ -15,6 +15,9 @@ import (
 type AnalyticsStore interface {
 	// Lifecycle starts and stops the store's connections.
 	Lifecycle
+	// HealthChecker probes the store for Kubernetes: Readiness verifies the backend
+	// answers, so a pod whose store is down leaves the load balancer.
+	HealthChecker
 	// Aggregate opens a stream of the partial rows answering q. q.OrgID scopes the
 	// read and q.ResumeToken, when set, resumes a previous stream after its last
 	// delivered page.

@@ -6,6 +6,13 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `core/interfaces.AnalyticsStore` embeds `HealthChecker` (breaking for out-of-tree
+  implementations): the Cassandra store's `Readiness` runs `SELECT release_version FROM
+  system.local` and is `CodeUnavailable` when stopped or unreachable; the stub is always ready;
+  the decorated store delegates the probes undecorated.
+
 ## [0.0.5] - 2026-10-11
 
 ### Fixed

@@ -27,6 +27,12 @@ func (*Store) Start(context.Context) error { return nil }
 // Stop does nothing.
 func (*Store) Stop(context.Context) error { return nil }
 
+// Liveness is always healthy.
+func (*Store) Liveness(context.Context) error { return nil }
+
+// Readiness is always ready: the stub has no backend to reach.
+func (*Store) Readiness(context.Context) error { return nil }
+
 // Aggregate returns a stream with one empty, final page.
 func (*Store) Aggregate(
 	context.Context,
