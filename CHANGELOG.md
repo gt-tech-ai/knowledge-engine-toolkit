@@ -37,6 +37,10 @@ All notable changes to this project are recorded here. The format follows
   package's earlier release line, which also made those the newest by version; continuing above
   them means no collision and an unpinned install gets this line. The release PR now sets the
   Python version by hand (AutoGitSemVer is removed: the repo's Go `v*` tags reset its count).
+- Releases are cut by merging to `main` (`scripts/release.sh`): the Go module is tagged `vX.Y.Z`
+  from the newest `CHANGELOG.md` section, and the Python package is published and tagged
+  `techai-webutils-vX.Y.Z` from its pyproject version. A tag push no longer triggers a release,
+  and CI's `release-check` fails a PR whose versions would re-release or go backwards.
 - `core/interfaces.AnalyticsStore` embeds `HealthChecker` (breaking for out-of-tree
   implementations): the Cassandra store's `Readiness` runs `SELECT release_version FROM
   system.local` and is `CodeUnavailable` when stopped or unreachable; the stub is always ready;
