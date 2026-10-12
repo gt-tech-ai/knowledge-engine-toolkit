@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-10-12
+
 ### Added
 
 - `workflows/loop.Spec` + `NewGroupFromSpecs`: a service declares its background loops as
@@ -30,7 +32,8 @@ All notable changes to this project are recorded here. The format follows
 ### Changed
 
 - Python `new_client_stack_from_config` is generic: it returns the stack typed as the client it
-  was given, so callers no longer `cast` the result.
+  was given, so callers no longer `cast` the result. `techai-webutils` is not republished with
+  this tag (its version stays 0.0.1), so the change reaches PyPI with the next Python release.
 - `core/interfaces.AnalyticsStore` embeds `HealthChecker` (breaking for out-of-tree
   implementations): the Cassandra store's `Readiness` runs `SELECT release_version FROM
   system.local` and is `CodeUnavailable` when stopped or unreachable; the stub is always ready;
@@ -135,7 +138,8 @@ All notable changes to this project are recorded here. The format follows
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.2...v0.0.3
