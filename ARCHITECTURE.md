@@ -410,5 +410,5 @@ The git tag (SemVer `vX.Y.Z`) is the version of record; Go consumers pin the mod
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which creates the GitHub release (generated
 notes; prerelease for `rc`/`alpha`/`beta` tags) and publishes `techai-webutils` to PyPI only if the
 version in `python/techai_webutils/pyproject.toml` (`uv version --short`) is not already there — a
-Go-only release is a no-op, not a failure. AutoGitSemVer stamps that version when the package
-changes.
+Go-only release is a no-op, not a failure. The release PR bumps that version by hand when the
+package changes, above every version already on PyPI (0.1.0–0.3.3 are an earlier release line).

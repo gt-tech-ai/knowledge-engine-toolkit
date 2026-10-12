@@ -35,8 +35,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      # Publish only a version that is not already on PyPI. The Python version is stamped
-      # into pyproject via AutoGitSemVer when the Python package changes; a release that
+      # Publish only a version that is not already on PyPI. The release PR bumps the Python
+      # version in pyproject by hand when the Python package changes; a release that
       # does not bump it (e.g. a Go-only release in this mixed monorepo) is a no-op here
       # rather than a failure. A version-existence check is used instead of
       # `uv publish --check-url` because wheels are not reproducible: an unchanged version

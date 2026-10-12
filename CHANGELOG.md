@@ -32,8 +32,11 @@ All notable changes to this project are recorded here. The format follows
 ### Changed
 
 - Python `new_client_stack_from_config` is generic: it returns the stack typed as the client it
-  was given, so callers no longer `cast` the result. `techai-webutils` is not republished with
-  this tag (its version stays 0.0.1), so the change reaches PyPI with the next Python release.
+  was given, so callers no longer `cast` the result.
+- `techai-webutils` is published as 0.4.0. PyPI already holds 0.1.0 through 0.3.3 from the
+  package's earlier release line, which also made those the newest by version; continuing above
+  them means no collision and an unpinned install gets this line. The release PR now sets the
+  Python version by hand (AutoGitSemVer is removed: the repo's Go `v*` tags reset its count).
 - `core/interfaces.AnalyticsStore` embeds `HealthChecker` (breaking for out-of-tree
   implementations): the Cassandra store's `Readiness` runs `SELECT release_version FROM
   system.local` and is `CodeUnavailable` when stopped or unreachable; the stub is always ready;
