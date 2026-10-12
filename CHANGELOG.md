@@ -12,6 +12,9 @@ All notable changes to this project are recorded here. The format follows
   data (run, name, op, schedule) and the composition root builds one decorated `Group`.
 - `core/interfaces.KeyedLimiter` and its in-process backend `foundation/resilience/bulkhead/keyed`:
   a non-blocking per-key concurrency cap (one tenant cannot take every slot).
+- `repos/outbox/pgstore`: the production PostgreSQL `OutboxStore` over a product's own outbox
+  table, named by config (table, key, tenant and attribute columns, lease, error cap), plus
+  `DeleteSentBefore` for retention; proven against the `outboxtest` conformance suite.
 - `repos/repository.OpDeps` + `NewOpChain`: a repository's custom-op chain built from one
   bundled value instead of six positional collaborators.
 - `foundation/resilience/pausegate`: a receive gate that closes for a configured pause after an
