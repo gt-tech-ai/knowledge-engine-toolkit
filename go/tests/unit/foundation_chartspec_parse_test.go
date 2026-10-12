@@ -204,3 +204,32 @@ func TestParse_StructuredFilterEqualsGrammarFilter(t *testing.T) {
 	assert.Equal(t, grammarPlan, treePlan)
 	assert.NotNil(t, treePlan.Query.Filter)
 }
+
+// TestChartSpecValidate_MatchesParse tests validating an already-decoded spec.
+//
+// Why this test is important:
+//   - A service mapping a proto spec validates the typed value directly; if Validate
+//     drifted from Parse, a spec refused on one path would be stored on the other.
+//
+// What it tests:
+//   - Validate of the decoded valid spec returns what Parse returns, filter compiled.
+//   - A shelf node carrying both a field and an operator, which JSON cannot express,
+//     is CodeInvalidInput.
+func TestChartSpecValidate_MatchesParse(t *testing.T) {
+	t.Parallel()
+	parsed, err := chartspec.Parse([]byte(validSpecJSON), chartCubeMap())
+	require.NoError(t, err)
+	var decoded types.ChartSpec
+	require.NoError(t, json.Unmarshal([]byte(validSpecJSON), &decoded))
+
+	validated, err := chartspec.Validate(decoded, chartCubeMap())
+	require.NoError(t, err)
+	assert.Equal(t, parsed, validated)
+
+	decoded.Rows = &types.AlgebraExpr{
+		Op:    types.AlgebraCross,
+		Field: &types.FieldRef{Name: "team"},
+	}
+	_, err = chartspec.Validate(decoded, chartCubeMap())
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}

@@ -54,6 +54,14 @@ func Parse(b []byte, m *listquery.Map) (types.ChartSpec, error) {
 			"chartspec: invalid JSON",
 		)
 	}
+	return Validate(spec, m)
+}
+
+// Validate checks an already-decoded spec exactly as Parse checks a JSON one, against
+// the cube's allow-list m, and returns it with its filter tree compiled. A caller that
+// holds a typed spec (mapped from a proto, say) validates it here rather than encoding
+// it to JSON for Parse. Every rejection is CodeInvalidInput.
+func Validate(spec types.ChartSpec, m *listquery.Map) (types.ChartSpec, error) {
 	if err := validate(&spec, m); err != nil {
 		return types.ChartSpec{}, err
 	}
@@ -156,6 +164,9 @@ func validateShelf(
 		return invalid("shelf nesting exceeds max depth")
 	}
 	if e.Field != nil {
+		if e.Op != "" || len(e.Args) > 0 {
+			return invalid("a shelf node is either a field or an operator")
+		}
 		keys[e.Field.Key()] = true
 		return validateRef(*e.Field, m)
 	}

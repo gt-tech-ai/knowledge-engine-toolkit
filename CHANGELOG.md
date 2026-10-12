@@ -12,6 +12,9 @@ All notable changes to this project are recorded here. The format follows
   data (run, name, op, schedule) and the composition root builds one decorated `Group`.
 - `core/interfaces.KeyedLimiter` and its in-process backend `foundation/resilience/bulkhead/keyed`:
   a non-blocking per-key concurrency cap (one tenant cannot take every slot).
+- `foundation/chartspec.Validate`: validate an already-decoded `types.ChartSpec` exactly as
+  `Parse` validates JSON, so a proto-mapped spec needs no JSON round trip. A shelf node with
+  both a field and an operator is now `CodeInvalidInput` on both paths.
 - `repos/outbox/pgstore`: the production PostgreSQL `OutboxStore` over a product's own outbox
   table, named by config (table, key, tenant and attribute columns, lease, error cap), plus
   `DeleteSentBefore` for retention; proven against the `outboxtest` conformance suite.
