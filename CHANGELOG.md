@@ -12,6 +12,9 @@ All notable changes to this project are recorded here. The format follows
   data (run, name, op, schedule) and the composition root builds one decorated `Group`.
 - `core/interfaces.KeyedLimiter` and its in-process backend `foundation/resilience/bulkhead/keyed`:
   a non-blocking per-key concurrency cap (one tenant cannot take every slot).
+- `foundation/config.Section[T]`: unmarshal and validate one typed config section (value- or
+  pointer-receiver `Validate`); `foundation/tracer.NewFromTracing`: a service's tracer from
+  the tracing section, falling back to noop so a missing collector never blocks boot.
 - `foundation/chartspec.Validate`: validate an already-decoded `types.ChartSpec` exactly as
   `Parse` validates JSON, so a proto-mapped spec needs no JSON round trip. A shelf node with
   both a field and an operator is now `CodeInvalidInput` on both paths.
