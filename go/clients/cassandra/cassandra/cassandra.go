@@ -93,9 +93,7 @@ func New(cfg *Config) (*gocql.ClusterConfig, error) {
 	if cfg.NumConns > 0 {
 		cluster.NumConns = cfg.NumConns
 	}
-	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(
-		gocql.DCAwareRoundRobinPolicy(cfg.LocalDC),
-	)
+	cluster.PoolConfig.HostSelectionPolicy = hostPolicy(cfg)
 	if cfg.Username != "" {
 		cluster.Authenticator = gocql.PasswordAuthenticator{
 			Username: cfg.Username,
@@ -109,6 +107,19 @@ func New(cfg *Config) (*gocql.ClusterConfig, error) {
 		}
 	}
 	return cluster, nil
+}
+
+// hostPolicy picks the host-selection policy: token-aware over DC-aware round robin
+// when the driver discovers the ring, plain DC-aware round robin when discovery is off.
+// A pinned cluster has one endpoint, so token awareness routes nothing, and gocql
+// v1.7.0's token-aware policy dereferences a nil host — crashing the process from a
+// driver goroutine — once that endpoint drops out of its ring during an outage.
+func hostPolicy(cfg *Config) gocql.HostSelectionPolicy {
+	local := gocql.DCAwareRoundRobinPolicy(cfg.LocalDC)
+	if cfg.DisableHostDiscovery {
+		return local
+	}
+	return gocql.TokenAwareHostPolicy(local)
 }
 
 // pinContactPoint keeps cluster on its single IP-literal contact point: the initial

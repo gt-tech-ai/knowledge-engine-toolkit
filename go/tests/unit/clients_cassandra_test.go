@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -60,8 +61,10 @@ func TestNewFromConfig_UnknownKindIsInvalidInput(t *testing.T) {
 //   - the cassandra backend's cluster carries those values, the hosts and a
 //     token-aware host-selection policy, without dialing; host discovery stays on
 //   - DisableHostDiscovery on one IP-literal host skips the peer lookup, sets the
-//     reconnect interval, and translates any advertised address to that host and
-//     port; a hostname or several hosts are CodeInvalidInput
+//     reconnect interval, translates any advertised address to that host and port,
+//     and selects hosts DC-aware round robin rather than
+//     token-aware, whose nil-host dereference crashes a pinned cluster's outage; a
+//     hostname or several hosts are CodeInvalidInput
 //   - an unknown consistency is CodeInvalidInput
 func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 	t.Parallel()
@@ -94,6 +97,10 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 	assert.Equal(t, "analytics", cluster.Keyspace)
 	assert.Equal(t, 500, cluster.PageSize)
 	assert.NotNil(t, cluster.PoolConfig.HostSelectionPolicy)
+	// gocql exports neither policy type, so its dynamic type name is the observable.
+	assert.Equal(t, "*gocql.tokenAwareHostPolicy",
+		fmt.Sprintf("%T", cluster.PoolConfig.HostSelectionPolicy),
+		"a discovering cluster routes token-aware")
 	assert.Nil(t, cluster.Authenticator)
 	assert.False(t, cluster.DisableInitialHostLookup)
 
@@ -111,6 +118,9 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 	ip, port := proxied.AddressTranslator.Translate(net.ParseIP("172.17.0.4"), 9042)
 	assert.Equal(t, "127.0.0.1", ip.String())
 	assert.Equal(t, 19042, port)
+	assert.Equal(t, "*gocql.dcAwareRR",
+		fmt.Sprintf("%T", proxied.PoolConfig.HostSelectionPolicy),
+		"a pinned cluster routes DC-aware round robin, not token-aware")
 
 	for _, hosts := range [][]string{{"localhost"}, {"10.0.0.1", "10.0.0.2"}} {
 		_, err = cassandrabackend.New(&cassandrabackend.Config{

@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `clients/cassandra` (self-managed kind): a cluster with `DisableHostDiscovery` selects hosts
+  DC-aware round robin instead of token-aware. With one pinned endpoint token awareness routes
+  nothing, and gocql v1.7.0's token-aware policy dereferenced a nil host once that endpoint
+  left its ring during an outage, crashing the process from a driver goroutine. Discovering
+  clusters keep the token-aware policy.
+
 ## [0.0.4] - 2026-10-11
 
 ### Added
