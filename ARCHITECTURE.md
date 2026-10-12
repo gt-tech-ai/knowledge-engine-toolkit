@@ -406,9 +406,20 @@ pipeline.
 
 ## Versioning and releases
 
-The git tag (SemVer `vX.Y.Z`) is the version of record; Go consumers pin the module by tag.
-Pushing a `v*` tag runs `.github/workflows/release.yml`, which creates the GitHub release (generated
-notes; prerelease for `rc`/`alpha`/`beta` tags) and publishes `techai-webutils` to PyPI only if the
-version in `python/techai_webutils/pyproject.toml` (`uv version --short`) is not already there — a
-Go-only release is a no-op, not a failure. AutoGitSemVer stamps that version when the package
-changes.
+The Go module and the Python package version independently, and a merge to `main` releases both;
+nobody pushes a release tag by hand. `.github/workflows/release.yml` runs `scripts/release.sh
+release` on every push to `main`:
+
+- **Go:** the newest released `## [X.Y.Z]` section of `CHANGELOG.md` is the module version. When
+  `vX.Y.Z` is not tagged yet, the merge commit is tagged `vX.Y.Z` (what Go consumers pin) and its
+  GitHub release is created from that section, marked latest.
+- **Python:** the `version` in `python/techai_webutils/pyproject.toml`. When
+  `techai-webutils-vX.Y.Z` is not tagged yet, the package is built and published to PyPI, then the
+  commit is tagged and released. The publish runs first, so a failed upload tags nothing and the
+  next run retries it.
+
+A release PR adds the `CHANGELOG.md` section and, when the Python package changed, bumps its
+version by hand. CI's `release-check` job (`scripts/release.sh check`) fails a PR that changes the
+package's `src/` or `pyproject.toml` without a bump, or whose Go or Python version is not newer
+than every existing tag (and, for Python, every version on PyPI, where 0.1.0–0.3.3 belong to an
+earlier release line). Merge with a merge commit, not a squash, so a tagged commit stays on `main`.

@@ -6,6 +6,56 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-10-12
+
+### Added
+
+- `workflows/loop.Spec` + `NewGroupFromSpecs`: a service declares its background loops as
+  data (run, name, op, schedule) and the composition root builds one decorated `Group`.
+- `core/interfaces.KeyedLimiter` and its in-process backend `foundation/resilience/bulkhead/keyed`:
+  a non-blocking per-key concurrency cap (one tenant cannot take every slot).
+- `foundation/config.Section[T]`: unmarshal and validate one typed config section (value- or
+  pointer-receiver `Validate`); `foundation/tracer.NewFromTracing`: a service's tracer from
+  the tracing section, falling back to noop so a missing collector never blocks boot.
+- `foundation/chartspec.Validate`: validate an already-decoded `types.ChartSpec` exactly as
+  `Parse` validates JSON, so a proto-mapped spec needs no JSON round trip. A shelf node with
+  both a field and an operator is now `CodeInvalidInput` on both paths.
+- `repos/outbox/pgstore`: the production PostgreSQL `OutboxStore` over a product's own outbox
+  table, named by config (table, key, tenant and attribute columns, lease, error cap), plus
+  `DeleteSentBefore` for retention; proven against the `outboxtest` conformance suite.
+- `repos/repository.OpDeps` + `NewOpChain`: a repository's custom-op chain built from one
+  bundled value instead of six positional collaborators.
+- `foundation/resilience/pausegate`: a receive gate that closes for a configured pause after an
+  outage-coded error (default `CodeUnavailable`), with an optional paused gauge, so a consumer
+  stops pulling messages it cannot process during a downstream outage.
+
+### Changed
+
+- Python `new_client_stack_from_config` is generic: it returns the stack typed as the client it
+  was given, so callers no longer `cast` the result.
+- `techai-webutils` is published as 0.4.0. PyPI already holds 0.1.0 through 0.3.3 from the
+  package's earlier release line, which also made those the newest by version; continuing above
+  them means no collision and an unpinned install gets this line. The release PR now sets the
+  Python version by hand (AutoGitSemVer is removed: the repo's Go `v*` tags reset its count).
+- Releases are cut by merging to `main` (`scripts/release.sh`): the Go module is tagged `vX.Y.Z`
+  from the newest `CHANGELOG.md` section, and the Python package is published and tagged
+  `techai-webutils-vX.Y.Z` from its pyproject version. A tag push no longer triggers a release,
+  and CI's `release-check` fails a PR whose versions would re-release or go backwards.
+- `core/interfaces.AnalyticsStore` embeds `HealthChecker` (breaking for out-of-tree
+  implementations): the Cassandra store's `Readiness` runs `SELECT release_version FROM
+  system.local` and is `CodeUnavailable` when stopped or unreachable; the stub is always ready;
+  the decorated store delegates the probes undecorated.
+
+## [0.0.5] - 2026-10-11
+
+### Fixed
+
+- `clients/cassandra` (self-managed kind): a cluster with `DisableHostDiscovery` selects hosts
+  DC-aware round robin instead of token-aware. With one pinned endpoint token awareness routes
+  nothing, and gocql v1.7.0's token-aware policy dereferenced a nil host once that endpoint
+  left its ring during an outage, crashing the process from a driver goroutine. Discovering
+  clusters keep the token-aware policy.
+
 ## [0.0.4] - 2026-10-11
 
 ### Added
@@ -95,7 +145,9 @@ All notable changes to this project are recorded here. The format follows
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.5...v0.0.6
+[0.0.5]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.1...v0.0.2

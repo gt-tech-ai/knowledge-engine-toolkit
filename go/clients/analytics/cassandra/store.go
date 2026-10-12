@@ -206,6 +206,28 @@ func (s *Store) Stop(context.Context) error {
 	return nil
 }
 
+// readinessQuery is the cheapest statement every Cassandra-compatible endpoint
+// (Cassandra, Keyspaces, ScyllaDB) answers: the coordinator's own system row.
+const readinessQuery = "SELECT release_version FROM system.local"
+
+// Liveness is a self-check with no I/O: the store holds no state that can wedge.
+func (*Store) Liveness(context.Context) error { return nil }
+
+// Readiness runs readinessQuery on the open session under ctx. Before Start (or
+// after Stop) it is CodeUnavailable; a failed query is CodeUnavailable too, so a
+// probe never surfaces a driver error's hosts or credentials as anything else.
+func (s *Store) Readiness(ctx context.Context) error {
+	session, err := s.sess()
+	if err != nil {
+		return err
+	}
+	err = session.Query(readinessQuery).WithContext(ctx).Idempotent(true).Exec()
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeUnavailable, "analytics: store is not ready")
+	}
+	return nil
+}
+
 // sess returns the open session; before Start (or after Stop) it is CodeUnavailable.
 func (s *Store) sess() (cassandra.Session, error) {
 	s.mu.RLock()

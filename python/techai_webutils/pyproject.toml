@@ -1,11 +1,9 @@
 [project]
 name = "techai-webutils"
-version = "0.0.1"
-#          ^^^^^
-# Wheel names will be generated according to this value. Do not manually modify this value; instead
-# update it according to committed changes by running this command from the root of the repository:
-#
-#   uv run python -m AutoGitSemVer.scripts.UpdatePythonVersion ./pyproject.toml ./src
+version = "0.4.0"
+# The published version, bumped by hand in the release PR whenever the package changes. It must
+# be greater than every version already on PyPI: 0.1.0 through 0.3.3 belong to the package's
+# earlier release line, so this line continues from 0.4.0.
 
 description = "techai-webutils"
 readme = "README.md"
@@ -90,7 +88,6 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "autogitsemver>=0.9.13",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.0.0",
     "pytest-cov>=7.1.0",

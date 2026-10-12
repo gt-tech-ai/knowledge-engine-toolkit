@@ -155,6 +155,13 @@ func (s *store) Start(ctx context.Context) error { return s.base.Start(ctx) }
 // Stop stops the base store.
 func (s *store) Stop(ctx context.Context) error { return s.base.Stop(ctx) }
 
+// Liveness probes the base store, undecorated: a probe is not an operation to
+// retry, trace or count.
+func (s *store) Liveness(ctx context.Context) error { return s.base.Liveness(ctx) }
+
+// Readiness probes the base store, undecorated.
+func (s *store) Readiness(ctx context.Context) error { return s.base.Readiness(ctx) }
+
 // Aggregate runs the decorated Aggregate.
 func (s *store) Aggregate(
 	ctx context.Context,

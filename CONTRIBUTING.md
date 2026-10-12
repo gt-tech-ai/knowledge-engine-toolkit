@@ -94,7 +94,9 @@ The tool versions CI pins are in `.github/workflows/ci.yml`.
 
 ## Releases
 
-Versioning follows the git tag as the single source of truth (SemVer). Maintainers
-tag `vX.Y.Z`; the release workflow builds the GitHub release and publishes
-`techai-webutils` to PyPI when its version is new. Record user-visible changes in
-[CHANGELOG.md](CHANGELOG.md).
+Merging to `main` releases; nobody pushes a release tag. To cut a release, open a PR that
+adds a dated `## [X.Y.Z]` section to [CHANGELOG.md](CHANGELOG.md) (the Go module version,
+tagged `vX.Y.Z` on merge) and, if the Python package changed, bumps the `version` in
+`python/techai_webutils/pyproject.toml` (published to PyPI and tagged
+`techai-webutils-vX.Y.Z` on merge). CI's `release-check` job fails a PR whose versions would
+re-release or go backwards. The details are in [ARCHITECTURE.md](ARCHITECTURE.md#versioning-and-releases).

@@ -135,6 +135,18 @@ jobs:
         working-directory: python/techai_webutils
         run: uv run pytest -m integration --cov-fail-under=0
 
+  release-check:
+    name: Release — versions are releasable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Fails when the Python package changed without a version bump, or when either the Go
+      # (CHANGELOG.md) or the Python (pyproject) version would re-release or go backwards.
+      - name: scripts/release.sh check
+        run: scripts/release.sh check
+
   docs:
     name: Docs — markdownlint
     runs-on: ubuntu-latest

@@ -58,6 +58,34 @@ func (mr *MockAnalyticsStoreMockRecorder) Aggregate(ctx, q any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Aggregate", reflect.TypeOf((*MockAnalyticsStore)(nil).Aggregate), ctx, q)
 }
 
+// Liveness mocks base method.
+func (m *MockAnalyticsStore) Liveness(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Liveness", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Liveness indicates an expected call of Liveness.
+func (mr *MockAnalyticsStoreMockRecorder) Liveness(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Liveness", reflect.TypeOf((*MockAnalyticsStore)(nil).Liveness), ctx)
+}
+
+// Readiness mocks base method.
+func (m *MockAnalyticsStore) Readiness(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Readiness", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Readiness indicates an expected call of Readiness.
+func (mr *MockAnalyticsStoreMockRecorder) Readiness(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Readiness", reflect.TypeOf((*MockAnalyticsStore)(nil).Readiness), ctx)
+}
+
 // Start mocks base method.
 func (m *MockAnalyticsStore) Start(ctx context.Context) error {
 	m.ctrl.T.Helper()

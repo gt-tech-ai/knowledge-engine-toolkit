@@ -23,7 +23,7 @@ import functools
 import inspect
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from opentelemetry import trace
 
@@ -441,14 +441,14 @@ class ClientStackConfig:
     """Bounds concurrent in-flight calls; None/0 disables the bulkhead."""
 
 
-def new_client_stack_from_config(
-    wrapped: object,
+def new_client_stack_from_config[T](
+    wrapped: T,
     name: str,
     config: ClientStackConfig,
     *,
     circuit_breaker: CircuitBreakerInterface | None = None,
     metrics: MetricsProvider | None = None,
-) -> object:
+) -> T:
     """Compose the async client resilience stack around ``wrapped``.
 
     Applies, outermost → innermost,
@@ -459,7 +459,8 @@ def new_client_stack_from_config(
     and ``client_operation_duration_seconds{client,method}``, labelled ``client=name``. Without
     ``metrics`` that layer is skipped. The circuit breaker and the metrics provider are injected
     (both are shared across calls); the other layers are built from ``config``. A disabled config
-    returns ``wrapped`` unchanged.
+    returns ``wrapped`` unchanged. The stack is typed as ``wrapped``'s type: every proxy forwards
+    each attribute to the layer it wraps, so callers program to the client they passed in.
     """
     if not config.enabled:
         return wrapped
@@ -478,4 +479,5 @@ def new_client_stack_from_config(
         proxied = BulkheadProxy(
             proxied, SemaphoreBulkhead(config.bulkhead_max_concurrent)
         )
-    return proxied
+    # The one cast for every caller: the proxies are attribute-forwarding stand-ins for T.
+    return cast("T", proxied)

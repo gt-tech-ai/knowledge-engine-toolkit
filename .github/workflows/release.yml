@@ -1,64 +1,41 @@
 name: Release
 
+# A merge to main releases whatever is new; nobody pushes a release tag by hand.
+#   - Go: when CHANGELOG.md's newest "## [X.Y.Z]" section has no "vX.Y.Z" tag, the merge commit is
+#     tagged vX.Y.Z (the Go module version) and its GitHub release is created from that section.
+#   - Python: when python/techai_webutils/pyproject.toml's version has no
+#     "techai-webutils-vX.Y.Z" tag, the package is published to PyPI, then tagged and released.
+# scripts/release.sh holds the logic; CI runs `scripts/release.sh check` on every PR so a merge
+# can never re-release or go backwards. A run with nothing new is a no-op.
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
-jobs:
-  github-release:
-    name: GitHub release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Create release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          prerelease=""
-          case "${{ github.ref_name }}" in *rc*|*alpha*|*beta*) prerelease="--prerelease" ;; esac
-          gh release create "${{ github.ref_name }}" \
-            --repo "${{ github.repository }}" \
-            --title "${{ github.ref_name }}" \
-            --generate-notes $prerelease
+# One release at a time, so two quick merges cannot race on the same tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
-  pypi:
-    name: Publish techai_webutils to PyPI
+jobs:
+  release:
+    name: Tag and publish Go and Python
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: python/techai_webutils
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      # Publish only a version that is not already on PyPI. The Python version is stamped
-      # into pyproject via AutoGitSemVer when the Python package changes; a release that
-      # does not bump it (e.g. a Go-only release in this mixed monorepo) is a no-op here
-      # rather than a failure. A version-existence check is used instead of
-      # `uv publish --check-url` because wheels are not reproducible: an unchanged version
-      # rebuilds to a different hash, which --check-url reports as a mismatch error, not a
-      # skip.
-      - name: Resolve version and check PyPI
-        id: check
+      - name: Configure the tagger
         run: |
-          version="$(uv version --short)"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          if curl -fsS -o /dev/null "https://pypi.org/pypi/techai-webutils/${version}/json"; then
-            echo "techai-webutils ${version} is already on PyPI — skipping publish."
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "techai-webutils ${version} is new — will build and publish."
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Build
-        if: steps.check.outputs.publish == 'true'
-        run: uv build
-      - name: Publish
-        if: steps.check.outputs.publish == 'true'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Release
         env:
+          GH_TOKEN: ${{ github.token }}
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        run: uv publish
+        run: scripts/release.sh release

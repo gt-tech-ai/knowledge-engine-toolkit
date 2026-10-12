@@ -563,3 +563,59 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 		)
 	})
 }
+
+// TestCassandraStore_ReadinessQueriesTheCoordinator tests the store's readiness probe.
+//
+// Why this test is important:
+//   - A service gates its /readyz on the store: a probe that always passes keeps a pod
+//     whose Cassandra is down in the load balancer, and one that leaks the driver error
+//     puts hosts in a probe body.
+//
+// What it tests:
+//   - Readiness runs the system.local query idempotently under the caller's ctx and is
+//     nil when it succeeds; a failed query is CodeUnavailable; after Stop the store
+//     is CodeUnavailable without touching the session.
+func TestCassandraStore_ReadinessQueriesTheCoordinator(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		execErr error
+		name    string
+	}{
+		{name: "ready"},
+		{name: "query fails", execErr: apperr.Sentinel("no hosts available")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			session := mocks.NewMockSession(ctrl)
+			query := mocks.NewMockQuery(ctrl)
+			session.EXPECT().
+				Query("SELECT release_version FROM system.local").
+				Return(query)
+			query.EXPECT().WithContext(gomock.Any()).Return(query)
+			query.EXPECT().Idempotent(true).Return(query)
+			query.EXPECT().Exec().Return(tc.execErr)
+			store := newCassandraStore(t, session)
+
+			err := store.Readiness(t.Context())
+
+			if tc.execErr == nil {
+				require.NoError(t, err)
+				return
+			}
+			assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
+		})
+	}
+
+	t.Run("stopped", func(t *testing.T) {
+		t.Parallel()
+		session := mocks.NewMockSession(gomock.NewController(t))
+		session.EXPECT().Close()
+		store := newCassandraStore(t, session)
+		require.NoError(t, store.Stop(t.Context()))
+
+		err := store.Readiness(t.Context())
+
+		assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
+	})
+}
