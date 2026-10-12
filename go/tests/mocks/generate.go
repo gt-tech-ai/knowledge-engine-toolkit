@@ -5,7 +5,7 @@
 // tests but does not check them for drift, so regenerate and commit them whenever
 // a mocked interface changes; local runs use the committed files.
 //go:generate mockgen -destination=mock_analytics.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces AnalyticsStore,AnalyticsCompactor,RowStream
-//go:generate mockgen -destination=mock_bulkhead.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Bulkhead
+//go:generate mockgen -destination=mock_bulkhead.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Bulkhead,KeyedLimiter
 //go:generate mockgen -destination=mock_cache.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ByteCache
 //go:generate mockgen -destination=mock_cache_invalidator.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CacheInvalidator
 //go:generate mockgen -destination=mock_crypto.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Encryptor

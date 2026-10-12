@@ -578,8 +578,8 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 func TestCassandraStore_ReadinessQueriesTheCoordinator(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name    string
 		execErr error
+		name    string
 	}{
 		{name: "ready"},
 		{name: "query fails", execErr: apperr.Sentinel("no hosts available")},
@@ -589,7 +589,9 @@ func TestCassandraStore_ReadinessQueriesTheCoordinator(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			session := mocks.NewMockSession(ctrl)
 			query := mocks.NewMockQuery(ctrl)
-			session.EXPECT().Query("SELECT release_version FROM system.local").Return(query)
+			session.EXPECT().
+				Query("SELECT release_version FROM system.local").
+				Return(query)
 			query.EXPECT().WithContext(gomock.Any()).Return(query)
 			query.EXPECT().Idempotent(true).Return(query)
 			query.EXPECT().Exec().Return(tc.execErr)
