@@ -12,6 +12,8 @@ All notable changes to this project are recorded here. The format follows
   data (run, name, op, schedule) and the composition root builds one decorated `Group`.
 - `core/interfaces.KeyedLimiter` and its in-process backend `foundation/resilience/bulkhead/keyed`:
   a non-blocking per-key concurrency cap (one tenant cannot take every slot).
+- `repos/repository.OpDeps` + `NewOpChain`: a repository's custom-op chain built from one
+  bundled value instead of six positional collaborators.
 - `foundation/resilience/pausegate`: a receive gate that closes for a configured pause after an
   outage-coded error (default `CodeUnavailable`), with an optional paused gauge, so a consumer
   stops pulling messages it cannot process during a downstream outage.

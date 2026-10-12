@@ -63,3 +63,34 @@ func OpChain(
 	}
 	return decorate.Chain(mws...)
 }
+
+// OpDeps bundles the collaborators a custom-operation chain wraps, so a repository
+// constructor takes one value instead of six positional ones and the composition root
+// builds it once per store. A nil collaborator, or a non-positive Timeout, omits its
+// middleware.
+type OpDeps struct {
+	// Logger, when non-nil, adds the logging middleware.
+	Logger interfaces.Logger
+
+	// Metrics, when non-nil, adds the metrics middleware.
+	Metrics interfaces.Metrics
+
+	// Tracer, when non-nil, adds the tracing middleware.
+	Tracer interfaces.Tracer
+
+	// Retrier, when non-nil, adds the retry middleware.
+	Retrier interfaces.Retrier
+
+	// Breaker, when non-nil, adds the circuit-breaker middleware.
+	Breaker interfaces.CircuitBreaker
+
+	// Timeout bounds one operation; zero or negative skips the timeout middleware.
+	Timeout time.Duration
+}
+
+// NewOpChain builds the custom-operation chain for a repository named name from deps,
+// in OpChain's order (tracing → metrics → logging → timeout → circuit breaker → retry).
+func NewOpChain(name string, deps OpDeps) decorate.OpMiddleware {
+	return OpChain(name, deps.Timeout, deps.Logger, deps.Metrics, deps.Tracer,
+		deps.Retrier, deps.Breaker)
+}
