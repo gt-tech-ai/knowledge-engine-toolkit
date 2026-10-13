@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-10-13
+
 ### Added
 
 - Python parity with the Go repository, service, pipeline and workflow tiers:
@@ -15,10 +17,30 @@ All notable changes to this project are recorded here. The format follows
   queries and domain service operations with the tier's CRUD stack; `DelegatingRepository` and
   `DelegatingCrudService`, so a consumer type inherits decorated CRUD and adds only its custom
   ops; `ServiceBuilder.with_validation`, `with_metrics` and `with_tracing`; `pipelines.then`
-  (Go `pipeline.Then`); and `workflows.tx_workflow` (Go `workflow.NewTxWorkflow`).
+  (Go `BasePipeline.Then`); and `workflows.tx_workflow` (Go `workflow.Base.Tx`).
+- Go embeddable tier bases built on generic methods: `service.Base` and `repository.Base`
+  (`Exec[R]` runs a custom op through the tier's op chain), `pipeline.Base` (`Stage[In, Out]`, a
+  decorated stage with recovery) and `workflow.Base` (`Tx`, `Read`, `Wrap`: the decorated request
+  boundary, with or without a transaction).
+- `pipeline.BasePipeline.Then[C]` (stage composition as a method) and `pipeline.Base.FanOut`
+  (stages run concurrently on one input, results in order, first error cancels the rest).
+- `clients/store.Base[C]` with `store.WithClient` / `store.ClientFrom`: a store's statements run
+  on the transaction's client when a transaction manager bound one to the context.
+- `core/interfaces.ReadListExistStore`, `CRUDNoListStore`, `CRUDNoListRepository` and
+  `InsertOnlyStore` (moved from `repos/repository` and `services/service`), with generated
+  mocks for every role interface and `OpService`.
+- `foundation/config/schema/decoration` (`Config`, `Load`) and `decorate.Observability`,
+  `decorate.Tiers` and `decorate.NewTiers`: observe the request workflow always and each lower
+  tier only when its `decoration.*` switch is on, so a request is logged, metered and traced once.
 
 ### Changed
 
+- Breaking: the standalone tier helpers became methods on the tier bases. `pipeline.Then` →
+  `(*BasePipeline).Then`; `workflow.NewTxWorkflow` → `workflow.Base.Tx`; workflow
+  `decorators.Decorate` → `workflow.Base.Wrap`; `service.OpChain`, `repository.OpChain` and
+  `repository.NewOpChain` → `service.Base` / `repository.Base` and their `Exec`.
+  `repository.ReadListExistStore`, `repository.CRUDNoListStore`, `repository.InsertOnlyStore` and
+  `service.CRUDNoListRepo` moved to `core/interfaces` (the last as `CRUDNoListRepository`).
 - `techai-webutils` is published as 0.5.0 (the Python tier additions above; no Go change).
 
 ## [0.0.6] - 2026-10-12

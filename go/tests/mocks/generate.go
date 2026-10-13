@@ -29,6 +29,7 @@
 //go:generate mockgen -destination=mock_messaging.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces MessagePublisher,CountingPublisher,MessageConsumer,DynamicConsumer,PatternConsumer
 //go:generate mockgen -destination=mock_metrics.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Metrics,Counter,Histogram,Gauge
 //go:generate mockgen -destination=mock_observer.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ExecutionObserver
+//go:generate mockgen -destination=mock_op_service.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces OpService
 //go:generate mockgen -destination=mock_outbox.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces OutboxStore,OutboxSink
 //go:generate mockgen -destination=mock_outbox_s3_api.go -package=mocks -mock_names=API=MockOutboxS3API github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/s3 API
 //go:generate mockgen -destination=mock_outbox_sqs_api.go -package=mocks -mock_names=API=MockOutboxSQSAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/sqs API
@@ -38,6 +39,7 @@
 //go:generate mockgen -destination=mock_reader.go -package=mocks io ReadCloser
 //go:generate mockgen -destination=mock_replaybuffer.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ReplayBuffer
 //go:generate mockgen -destination=mock_repository.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Repository
+//go:generate mockgen -destination=mock_roles.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Reader,Lister,Writer,Updater,Inserter,Deleter,Exister,ReadListExistStore,CRUDNoListStore,CRUDNoListRepository,InsertOnlyStore
 //go:generate mockgen -destination=mock_retrier.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Retrier
 //go:generate mockgen -destination=mock_round_tripper.go -package=mocks net/http RoundTripper
 //go:generate mockgen -destination=mock_s3_api.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3 S3API

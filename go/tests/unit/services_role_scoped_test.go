@@ -11,7 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
 )
 
-// roleScopedCRUDServiceRepo is a mock of the small consumer-side CRUDNoListRepo
+// roleScopedCRUDServiceRepo is a mock of the small core CRUDNoListRepository
 // seam a list-less service delegates to (Get/Create/Update/Delete — services expose
 // no Exists): it records per-method call counts and returns configured
 // values/errors. A boundary mock, not a fake repository.

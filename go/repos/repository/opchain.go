@@ -23,14 +23,14 @@ func repoMetricsSpec() decorate.MetricsSpec {
 	}
 }
 
-// OpChain builds the custom-operation decoration chain for a repository named name,
+// opChain builds the custom-operation decoration chain for a repository named name,
 // reproducing the order the CRUD decorator builder applies to custom ops
 // (behavior-preserving) — outermost → innermost: tracing → metrics → logging → timeout
 // → circuit-breaker → retry. Caching is a passthrough for custom ops, so it is omitted
 // (behavior-identical). Any nil dependency (or a non-positive timeout) omits its
 // middleware, exactly as the builder skips a decorator with a nil dep. Custom repo
 // methods run through this via decorate.Exec[R].
-func OpChain(
+func opChain(
 	name string,
 	timeout time.Duration,
 	logger interfaces.Logger,
@@ -86,11 +86,4 @@ type OpDeps struct {
 
 	// Timeout bounds one operation; zero or negative skips the timeout middleware.
 	Timeout time.Duration
-}
-
-// NewOpChain builds the custom-operation chain for a repository named name from deps,
-// in OpChain's order (tracing → metrics → logging → timeout → circuit breaker → retry).
-func NewOpChain(name string, deps OpDeps) decorate.OpMiddleware {
-	return OpChain(name, deps.Timeout, deps.Logger, deps.Metrics, deps.Tracer,
-		deps.Retrier, deps.Breaker)
 }

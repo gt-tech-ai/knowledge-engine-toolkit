@@ -12,39 +12,26 @@ import (
 // This file provides role-scoped decorated repositories — the counterpart of
 // TxSafeInsertRepository for read-only and list-less resources. Each type embeds
 // only the role interfaces its resource honors and decorates every method through
-// the SAME unified op-decoration seam the custom-op path uses (repository.OpChain +
+// the SAME unified op-decoration seam the custom-op path uses (opChain +
 // decorate.Exec), so the six ordered cross-cutting bodies
 // (ARCHITECTURE.md#decorator-order) live in exactly one place and are never
 // re-implemented per role. Unlike the full-CRUD builder these deliberately omit the
 // read-through caching decorator: caching is a passthrough for the op-decoration
-// chain (see OpChain), so a narrowed repository behaves like a decorated custom op —
+// chain (see opChain), so a narrowed repository behaves like a decorated custom op —
 // the resilience + observability stack, minus the transparent single-entity cache.
 
 // ---------------------------------------------------------------------------
 // Read-only (Reader + Lister + Exister)
 // ---------------------------------------------------------------------------
 
-// ReadListExistStore is the read-only persistence surface a read-only decorated
-// repository wraps: Get + List + Exists, with no write role. It is the store seam
-// for a resource whose writes are owned elsewhere (e.g. a read model another
-// service writes).
-type ReadListExistStore[T any, P any, ID comparable] interface {
-	// Reader contributes Get (read by id).
-	interfaces.Reader[T, ID]
-	// Lister contributes List (paged read).
-	interfaces.Lister[T, P]
-	// Exister contributes Exists (existence check by id).
-	interfaces.Exister[ID]
-}
-
 // ReadListExistRepository is a resilience+observability-decorated read-only
 // repository (Reader + Lister + Exister). Every operation runs through the shared
-// OpChain (tracing → metrics → logging → timeout → circuit-breaker → retry) via
+// opChain (tracing → metrics → logging → timeout → circuit-breaker → retry) via
 // decorate.Exec, so a read-only resource gets the shared stack without embedding
 // (and panicking) the write methods it does not support.
 type ReadListExistRepository[T any, P any, ID comparable] struct {
 	// store is the underlying read-only persistence seam.
-	store ReadListExistStore[T, P, ID]
+	store interfaces.ReadListExistStore[T, P, ID]
 
 	// chain decorates each read op (tracing/metrics/logging/timeout/cb/retry).
 	chain decorate.OpMiddleware
@@ -56,7 +43,7 @@ type ReadListExistRepository[T any, P any, ID comparable] struct {
 // skips the timeout middleware.
 func NewReadListExistRepository[T, P any, ID comparable](
 	name string,
-	store ReadListExistStore[T, P, ID],
+	store interfaces.ReadListExistStore[T, P, ID],
 	timeout time.Duration,
 	logger interfaces.Logger,
 	metrics interfaces.Metrics,
@@ -66,7 +53,7 @@ func NewReadListExistRepository[T, P any, ID comparable](
 ) ReadListExistRepository[T, P, ID] {
 	return ReadListExistRepository[T, P, ID]{
 		store: store,
-		chain: OpChain(name, timeout, logger, metrics, tracer, retrier, cb),
+		chain: opChain(name, timeout, logger, metrics, tracer, retrier, cb),
 	}
 }
 
@@ -106,31 +93,16 @@ func (r ReadListExistRepository[T, P, ID]) Exists(
 // List-less full CRUD (Reader + Writer + Deleter + Exister, no Lister)
 // ---------------------------------------------------------------------------
 
-// CRUDNoListStore is the list-less full-write persistence surface a list-less
-// decorated repository wraps: Get + Create + Update + Delete + Exists, with no
-// List. It is the store seam for a keyed resource with no listable collection
-// (e.g. one addressed only by id or an external id).
-type CRUDNoListStore[T any, ID comparable] interface {
-	// Reader contributes Get (read by id).
-	interfaces.Reader[T, ID]
-	// Writer contributes Create and Update.
-	interfaces.Writer[T, ID]
-	// Deleter contributes Delete (remove by id).
-	interfaces.Deleter[ID]
-	// Exister contributes Exists (existence check by id).
-	interfaces.Exister[ID]
-}
-
 // CRUDNoListRepository is a resilience+observability-decorated repository for a
 // list-less resource (Reader + Writer + Deleter + Exister). Get/Update/Delete/Exists
-// run through the standard OpChain (with retry); Create runs through a retry-free
+// run through the standard opChain (with retry); Create runs through a retry-free
 // chain because a create is not idempotent — blindly retrying a create that
 // actually landed post-commit would insert a duplicate, so, exactly like the
 // full-CRUD retry decorator, Create is never retried. Circuit-breaker + timeout
 // still guard Create; only retry is dropped from its chain.
 type CRUDNoListRepository[T any, ID comparable] struct {
 	// store is the underlying list-less persistence seam.
-	store CRUDNoListStore[T, ID]
+	store interfaces.CRUDNoListStore[T, ID]
 
 	// chain decorates Get/Update/Delete/Exists (includes retry).
 	chain decorate.OpMiddleware
@@ -146,7 +118,7 @@ type CRUDNoListRepository[T any, ID comparable] struct {
 // retrier is applied to reads/update/delete/exists only).
 func NewCRUDNoListRepository[T any, ID comparable](
 	name string,
-	store CRUDNoListStore[T, ID],
+	store interfaces.CRUDNoListStore[T, ID],
 	timeout time.Duration,
 	logger interfaces.Logger,
 	metrics interfaces.Metrics,
@@ -156,8 +128,8 @@ func NewCRUDNoListRepository[T any, ID comparable](
 ) CRUDNoListRepository[T, ID] {
 	return CRUDNoListRepository[T, ID]{
 		store:       store,
-		chain:       OpChain(name, timeout, logger, metrics, tracer, retrier, cb),
-		createChain: OpChain(name, timeout, logger, metrics, tracer, nil, cb),
+		chain:       opChain(name, timeout, logger, metrics, tracer, retrier, cb),
+		createChain: opChain(name, timeout, logger, metrics, tracer, nil, cb),
 	}
 }
 

@@ -23,15 +23,15 @@ func svcMetricsSpec() decorate.MetricsSpec {
 	}
 }
 
-// OpChain builds the custom-operation decoration chain for a service named name,
+// opChain builds the custom-operation decoration chain for a service named name,
 // reproducing the order the CRUD decorator builder applies to custom ops
 // (behavior-preserving) — outermost → innermost: recovery → tracing → metrics → logging
 // → auth → timeout. Recovery is ALWAYS outermost (the builder always adds it; a nil
 // logger still recovers, just without logging). Validation is entity-based and a
 // passthrough for custom ops, so it is omitted. Any nil dependency (nil authFn, or a
 // non-positive timeout) omits its middleware, matching the builder. Custom service
-// methods run through this via decorate.Exec[R].
-func OpChain(
+// methods run through this via Base.Exec.
+func opChain(
 	name string,
 	timeout time.Duration,
 	logger interfaces.Logger,

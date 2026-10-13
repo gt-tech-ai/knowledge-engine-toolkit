@@ -12,13 +12,13 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	workflowscfg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/workflows"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/workflow"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/workflow/decorators"
 )
 
-// TestNewTxWorkflow_RunsPipelineInOneTransaction tests that the transactional
+// TestWorkflowBaseTx_RunsPipelineInOneTransaction tests that the transactional
 // workflow runs its pipeline inside exactly one transaction.
 //
 // Why this test is important:
@@ -28,7 +28,7 @@ import (
 // What it tests:
 //   - WithTransaction is called once, the pipeline sees the transaction's
 //     context (InTx is true) and the input, and the pipeline's output is returned
-func TestNewTxWorkflow_RunsPipelineInOneTransaction(t *testing.T) {
+func TestWorkflowBaseTx_RunsPipelineInOneTransaction(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	txMgr := mocks.NewMockTransactionManager(ctrl)
@@ -49,16 +49,15 @@ func TestNewTxWorkflow_RunsPipelineInOneTransaction(t *testing.T) {
 			return 42, nil
 		})
 
-	out, err := workflow.NewTxWorkflow[string, int](
-		txMgr,
-		pipe,
-	).Execute(context.Background(), "order-7")
+	out, err := fixtures.Workflows(txMgr).
+		Tx("order", interfaces.Pipeline[string, int](pipe)).
+		Execute(context.Background(), "order-7")
 
 	require.NoError(t, err)
 	assert.Equal(t, 42, out)
 }
 
-// TestNewTxWorkflow_PropagatesCodedError tests that the transactional workflow
+// TestWorkflowBaseTx_PropagatesCodedError tests that the transactional workflow
 // returns the coded error of a failed pipeline or a failed commit.
 //
 // Why this test is important:
@@ -70,7 +69,7 @@ func TestNewTxWorkflow_RunsPipelineInOneTransaction(t *testing.T) {
 //   - A pipeline error coded CONFLICT comes back with that code and a zero output
 //   - A commit error coded UNAVAILABLE after a successful pipeline comes back
 //     with that code and a zero output
-func TestNewTxWorkflow_PropagatesCodedError(t *testing.T) {
+func TestWorkflowBaseTx_PropagatesCodedError(t *testing.T) {
 	t.Parallel()
 
 	t.Run("pipeline error", func(t *testing.T) {
@@ -84,10 +83,9 @@ func TestNewTxWorkflow_PropagatesCodedError(t *testing.T) {
 			Execute(gomock.Any(), "dup").
 			Return(7, apperr.New(apperr.CodeConflict, "duplicate"))
 
-		out, err := workflow.NewTxWorkflow[string, int](
-			txMgr,
-			pipe,
-		).Execute(context.Background(), "dup")
+		out, err := fixtures.Workflows(txMgr).
+			Tx("order", interfaces.Pipeline[string, int](pipe)).
+			Execute(context.Background(), "dup")
 
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeConflict, apperr.Code(err))
@@ -108,10 +106,9 @@ func TestNewTxWorkflow_PropagatesCodedError(t *testing.T) {
 			})
 		pipe.EXPECT().Execute(gomock.Any(), "ok").Return(9, nil)
 
-		out, err := workflow.NewTxWorkflow[string, int](
-			txMgr,
-			pipe,
-		).Execute(context.Background(), "ok")
+		out, err := fixtures.Workflows(txMgr).
+			Tx("order", interfaces.Pipeline[string, int](pipe)).
+			Execute(context.Background(), "ok")
 
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
@@ -119,11 +116,11 @@ func TestNewTxWorkflow_PropagatesCodedError(t *testing.T) {
 	})
 }
 
-// TestDecorate_AppliesTimeoutAndRecovery tests that the standard decorate helper
+// TestWorkflowBaseWrap_AppliesTimeoutAndRecovery tests that the workflow decorator stack
 // applies the configured timeout and the panic recovery.
 //
 // Why this test is important:
-//   - Every workflow is wrapped through this one helper; a dropped timeout lets a
+//   - Every workflow is wrapped through this one stack; a dropped timeout lets a
 //     hung dependency hold a request forever, and a dropped recovery lets one
 //     panic crash the serving process
 //
@@ -133,7 +130,7 @@ func TestNewTxWorkflow_PropagatesCodedError(t *testing.T) {
 //   - With cfg.Timeout 0 the workflow's context carries no deadline and its
 //     output passes through unchanged
 //   - A panicking workflow returns an INTERNAL error reading "panic recovered: boom"
-func TestDecorate_AppliesTimeoutAndRecovery(t *testing.T) {
+func TestWorkflowBaseWrap_AppliesTimeoutAndRecovery(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
@@ -141,14 +138,10 @@ func TestDecorate_AppliesTimeoutAndRecovery(t *testing.T) {
 		<-ctx.Done()
 		return "", ctx.Err()
 	})
-	_, err := decorators.Decorate[string, string](
-		slow,
-		"slow.op",
-		fixtures.NopLogger(),
-		nil,
-		nil,
-		workflowscfg.Config{Timeout: 5 * time.Millisecond},
-	).Execute(ctx, "in")
+	bounded := workflow.NewBase(nil, decorate.Observability{Logger: fixtures.NopLogger()},
+		workflowscfg.Config{Timeout: 5 * time.Millisecond})
+	_, err := bounded.Wrap("slow.op", interfaces.Workflow[string, string](slow)).
+		Execute(ctx, "in")
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	plain := workflow.NewBaseWorkflow(
@@ -159,16 +152,16 @@ func TestDecorate_AppliesTimeoutAndRecovery(t *testing.T) {
 			return in + "-done", nil
 		},
 	)
-	out, err := decorators.Decorate[string, string](plain, "plain.op", nil, nil, nil,
-		workflowscfg.DefaultConfig()).Execute(ctx, "in")
+	out, err := fixtures.Workflows(nil).
+		Wrap("plain.op", interfaces.Workflow[string, string](plain)).Execute(ctx, "in")
 	require.NoError(t, err)
 	assert.Equal(t, "in-done", out)
 
 	panicky := workflow.NewBaseWorkflow(func(context.Context, string) (string, error) {
 		panic("boom")
 	})
-	_, err = decorators.Decorate[string, string](panicky, "panic.op", nil, nil, nil,
-		workflowscfg.DefaultConfig()).Execute(ctx, "in")
+	_, err = fixtures.Workflows(nil).
+		Wrap("panic.op", interfaces.Workflow[string, string](panicky)).Execute(ctx, "in")
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	assert.Contains(t, err.Error(), "panic recovered: boom")

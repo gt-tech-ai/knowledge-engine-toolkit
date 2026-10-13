@@ -32,7 +32,7 @@ func (s *recordingInsertStore) Insert(_ context.Context, _ *int) error {
 // Why this test is important:
 //   - The whole reason TxSafeInsertRepository exists (vs a full DecoratedRepository) is
 //     that retry / circuit-breaker / timeout are UNSAFE inside a caller transaction. If a
-//     future edit added a retrier to its OpChain, a transient error would re-issue the
+//     future edit added a retrier to its op chain, a transient error would re-issue the
 //     INSERT inside a poisoned tx — this test is the guard that the chain stays
 //     retry-free.
 //

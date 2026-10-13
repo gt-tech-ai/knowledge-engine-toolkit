@@ -58,8 +58,10 @@ Python imports heavy or optional dependencies lazily in the selected branch, so 
 
 `go/core/interfaces` holds small role interfaces (`Reader`, `Writer`, `Lister`, `Exister`,
 `Lifecycle`, `HealthChecker`, …) that larger contracts (`Repository`, `Service`, `Client`) compose.
-An interface declared **outside** `core` embeds a core interface (`repos/repository.ReadListExistStore`
-embeds `Reader`/`Lister`/`Exister`; `clients/rpc.RPCClient` embeds `interfaces.Client`). Opt-in
+Role compositions live in `core` too (`ReadListExistStore` embeds `Reader`/`Lister`/`Exister`;
+`CRUDNoListStore`, `CRUDNoListRepository`, `InsertOnlyStore`), with generated mocks in
+`go/tests/mocks`. An interface declared **outside** `core` embeds a core interface
+(`clients/rpc.RPCClient` embeds `interfaces.Client`). Opt-in
 capabilities compose rather than widen (`DynamicConsumer` embeds `MessageConsumer`); Python
 Protocols do the same (`StorageClient` composes `ManagedResource`).
 
@@ -97,9 +99,23 @@ collaborator or zero timeout skips its layer (the service builder always adds re
   `foundation/decorator` (Go and Python) exposes `Unwrap` so tests can reach the wrapped unit.
   Its generic `CircuitBreaker(inner, cb, onOpen)` codes only an open-breaker rejection as
   `UNAVAILABLE`; the operation's own error passes through with its code.
-- **Go — workflow helpers.** `decorators.Decorate(wf, op, logger, metrics, tracer, cfg)` is the
-  standard workflow stack (the builder with `cfg.Timeout` from `schema/workflows.Load`), and
-  `workflow.NewTxWorkflow(txMgr, pipe)` runs a command pipeline inside one transaction.
+- **Go — embeddable tier bases.** Each tier's helpers are generic methods on its base, built from
+  the tier's `decorate.Observability` (zero value: unobserved; a zero base runs undecorated):
+  - `service.Base` and `repository.Base` (from `OpDeps`) carry the tier's op chain; a consumer
+    type embeds one and runs each custom op through the promoted `Exec[R](ctx, op, fn)`.
+  - `pipeline.Base.Stage[In, Out](name, fn)` builds a decorated stage (always with recovery) as a
+    `*BasePipeline`, whose `Then[C](next)` composes it with the next stage;
+    `FanOut[In, Out](name, stages...)` runs stages concurrently on one input.
+  - `workflow.Base` builds the request boundary from a `TransactionManager` and
+    `schema/workflows.Config`: `Tx[In, Out](op, pipe)` runs the pipeline in one transaction,
+    `Read[In, Out](op, pipe)` runs it without one, and `Wrap[In, Out](op, wf)` decorates a custom
+    workflow (logging, metrics, tracing, `cfg.Timeout`, recovery).
+  - `clients/store.Base[C]` is a store's client: `Client(ctx)` returns the client a transaction
+    manager bound with `store.WithClient`, else the store's own.
+- **Go — observe once per request.** `decorate.NewTiers(decoration.Config, logger, metrics,
+  tracer)` returns `decorate.Tiers`, one `Observability` per tier: the workflow tier is always
+  observed, and the pipeline, service and repository tiers only when their `decoration.*` switch
+  is on (`schema/decoration.Load`; all off by default). Resilience runs at every tier regardless.
 - **Python — custom ops and tier helpers.** `foundation/decorate.py` is the Python
   `foundation/decorate`: `OpMiddleware`, `chain`, `exec_op`, and one `new_*` middleware per
   concern. `repos.repo_op_chain(name, RepoOpDeps)` and `services.service_op_chain(name,
@@ -108,7 +124,7 @@ collaborator or zero timeout skips its layer (the service builder always adds re
   consumer repository or service subclasses `DelegatingRepository` / `DelegatingCrudService` (the
   Python form of embedding the decorated type) and adds only its custom ops. `ServiceBuilder` adds
   `with_validation`, `with_metrics` and `with_tracing`; `workflows.tx_workflow(tx, pipe)` is
-  `NewTxWorkflow`.
+  Go's `workflow.Base.Tx`.
 - **Python — `__getattr__` proxies** in `clients/decorators/proxy.py` (`LoggingProxy`, `RetryProxy`,
   `CircuitBreakerProxy`, …) apply their concern around each awaited call;
   `new_client_stack_from_config` composes them. `RetryProxy` (async) and `retry_transient_async`
@@ -174,7 +190,7 @@ In the client stack Retry applies only to `Retryable` ops (`RunStream` never ret
 outside the breaker, so each attempt is observed. The gRPC streaming client puts Timeout
 outermost, so one budget bounds the whole retried stream open (not the stream's lifetime); with a
 service token it also adds a unary ServiceAuth interceptor for the connection's unary calls.
-Custom repository ops (`OpChain`) use the Repository order minus Caching. Tests pin the orders
+Custom repository ops (`repository.Base.Exec`) use the Repository order minus Caching. Tests pin the orders
 (`go/tests/unit/clients_wrap_order_test.go` for the client boundary, EventHandler and Job stacks;
 `services_wrap_order_test.go`, `clients_lock_decorators_test.go`, `foundation_decorator_test.go`).
 
@@ -391,11 +407,12 @@ as a request.
 
 ## Staged pipelines
 
-Go `pipeline.Then(first, second)` composes two pipelines into one, feeding first's output to
-second; an error from first stops the chain and is returned unchanged. Build each stage with
-`decorators.NewBuilder` before composing, so every stage records its own span and metrics and a
-slow or failing stage is visible by name. `Then` nests: `Then(a, Then(b, c))` is a three-stage
-pipeline. Python's `pipelines.then(first, second)` is the same for `AsyncPipeline`s built with
+Go `first.Then(second)` (a method on `*BasePipeline`) composes two pipelines into one, feeding
+first's output to second; an error from first stops the chain and is returned unchanged. Build
+each stage with `pipeline.Base.Stage` before composing, so every stage records its own span and
+metrics and a slow or failing stage is visible by name. `Then` chains: `a.Then(b).Then(c)` is a
+three-stage pipeline. `Base.FanOut(name, stages...)` runs stages concurrently on one input and
+returns their outputs in order; the first error cancels the rest. Python's `pipelines.then(first, second)` is the same for `AsyncPipeline`s built with
 `AsyncPipelineBuilder`.
 
 ## Testing

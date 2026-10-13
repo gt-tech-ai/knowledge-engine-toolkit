@@ -7,14 +7,6 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
-// InsertOnlyStore is the minimal insert-only, tx-aware persistence seam the
-// tx-safe repositories wrap — a store whose Insert honors a transaction on the
-// context. It is the append-only write role (embeds interfaces.Inserter[T]).
-type InsertOnlyStore[T any] interface {
-	// Inserter contributes Insert (tx-aware append-only write).
-	interfaces.Inserter[T]
-}
-
 // TxSafeInsertRepository is a tx-safe, observability-decorated
 // (tracing+metrics+logging) pass-through for an insert-only store. It
 // deliberately OMITS retry/circuit-breaker/timeout: its Insert runs inside the
@@ -26,7 +18,7 @@ type InsertOnlyStore[T any] interface {
 // outbox/audit row inside a caller transaction).
 type TxSafeInsertRepository[T any] struct {
 	// store is the underlying tx-aware persistence seam.
-	store InsertOnlyStore[T]
+	store interfaces.InsertOnlyStore[T]
 
 	// chain decorates Insert with tracing+metrics+logging (no
 	// retry/cb/timeout).
@@ -40,14 +32,14 @@ type TxSafeInsertRepository[T any] struct {
 // so the decoration adds no retry/cb/timeout — the tx-safe guarantee.
 func NewTxSafeInsertRepository[T any](
 	name string,
-	store InsertOnlyStore[T],
+	store interfaces.InsertOnlyStore[T],
 	logger interfaces.Logger,
 	metrics interfaces.Metrics,
 	tracer interfaces.Tracer,
 ) TxSafeInsertRepository[T] {
 	return TxSafeInsertRepository[T]{
 		store: store,
-		chain: OpChain(name, 0, logger, metrics, tracer, nil, nil),
+		chain: opChain(name, 0, logger, metrics, tracer, nil, nil),
 	}
 }
 

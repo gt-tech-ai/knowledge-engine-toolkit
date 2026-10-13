@@ -10,8 +10,8 @@ import (
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines/pipeline"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines/pipeline/decorators"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -36,8 +36,7 @@ func TestThen_FeedsFirstOutputToSecond(t *testing.T) {
 		return "n=" + strconv.Itoa(n), nil
 	})
 
-	got, err := pipeline.Then(parse, pipeline.Then(double, format)).
-		Execute(t.Context(), "21")
+	got, err := parse.Then(double.Then(format)).Execute(t.Context(), "21")
 	require.NoError(t, err)
 	require.Equal(t, "n=42", got)
 }
@@ -50,7 +49,7 @@ func TestThen_FeedsFirstOutputToSecond(t *testing.T) {
 //
 // What it tests:
 //   - An error from the first stage is returned unchanged and the second stage never
-//     runs; a nil stage panics at composition time.
+//     runs; a nil next stage panics at composition time.
 func TestThen_FirstErrorSkipsSecond(t *testing.T) {
 	t.Parallel()
 	boom := apperr.New(apperr.CodeInvalidInput, "bad spec")
@@ -59,11 +58,10 @@ func TestThen_FirstErrorSkipsSecond(t *testing.T) {
 	})
 	second := mocks.NewMockPipeline[int, string](gomock.NewController(t))
 
-	_, err := pipeline.Then(first, second).Execute(t.Context(), "x")
+	_, err := first.Then(second).Execute(t.Context(), "x")
 	require.ErrorIs(t, err, boom)
 
-	require.Panics(t, func() { pipeline.Then[string, int, string](nil, second) })
-	require.Panics(t, func() { pipeline.Then[string, int, string](first, nil) })
+	require.Panics(t, func() { first.Then(interfaces.Pipeline[int, string](nil)) })
 }
 
 // TestThen_DecoratedStagesEachRecordTheirOwnSpan tests composition with decorators.
@@ -73,8 +71,8 @@ func TestThen_FirstErrorSkipsSecond(t *testing.T) {
 //     span over the whole chain would hide which stage was slow or failed.
 //
 // What it tests:
-//   - Composing two stages built with decorators.NewBuilder(...).WithTracing starts one
-//     span per stage, named after the stage, in order.
+//   - Composing two stages built by an observed pipeline.Base starts one span per
+//     stage, named after the stage, in order.
 func TestThen_DecoratedStagesEachRecordTheirOwnSpan(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
@@ -92,16 +90,71 @@ func TestThen_DecoratedStagesEachRecordTheirOwnSpan(t *testing.T) {
 		tracer.EXPECT().Start(gomock.Any(), "reduce.Execute").DoAndReturn(start),
 	)
 
-	compile := decorators.NewBuilder(
-		pipeline.NewBasePipeline(func(_ context.Context, s string) (int, error) {
-			return len(s), nil
-		}), "compile").WithTracing(tracer).Build()
-	reduce := decorators.NewBuilder(
-		pipeline.NewBasePipeline(func(_ context.Context, n int) (bool, error) {
-			return n > 2, nil
-		}), "reduce").WithTracing(tracer).Build()
+	stages := pipeline.NewBase(decorate.Observability{Tracer: tracer})
+	compile := stages.Stage("compile", func(_ context.Context, s string) (int, error) {
+		return len(s), nil
+	})
+	reduce := stages.Stage("reduce", func(_ context.Context, n int) (bool, error) {
+		return n > 2, nil
+	})
 
-	got, err := pipeline.Then(compile, reduce).Execute(t.Context(), "spec")
+	got, err := compile.Then(reduce).Execute(t.Context(), "spec")
 	require.NoError(t, err)
 	require.True(t, got)
+}
+
+// TestFanOut_RunsEveryStageOnTheInputAndKeepsOrder tests the concurrent fan-out stage.
+//
+// Why this test is important:
+//   - A fan-out gathers independent reads (one per source) for one request; a result in
+//     the wrong slot would attribute one source's answer to another, and a failure that
+//     did not stop its siblings would keep spending on a request that already failed.
+//
+// What it tests:
+//   - Every stage runs on the same input concurrently (each waits for all to start) and
+//     the results come back in stage order.
+//   - A failing stage's error is returned and cancels the context its siblings run on.
+//   - A fan-out with no stages returns an empty result.
+func TestFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
+	t.Parallel()
+	stages := pipeline.Base{}
+	started := make(chan struct{}, 3)
+	all := make(chan struct{})
+	go func() {
+		for range 3 {
+			<-started
+		}
+		close(all)
+	}()
+	times := func(k int) interfaces.Pipeline[int, int] {
+		return pipeline.NewBasePipeline(func(ctx context.Context, n int) (int, error) {
+			started <- struct{}{}
+			select {
+			case <-all:
+				return n * k, nil
+			case <-ctx.Done():
+				return 0, ctx.Err()
+			}
+		})
+	}
+
+	got, err := stages.FanOut("multiply", times(1), times(2), times(3)).
+		Execute(t.Context(), 7)
+	require.NoError(t, err)
+	require.Equal(t, []int{7, 14, 21}, got)
+
+	boom := apperr.New(apperr.CodeUnavailable, "source down")
+	failing := pipeline.NewBasePipeline(func(context.Context, int) (int, error) {
+		return 0, boom
+	})
+	blocked := pipeline.NewBasePipeline(func(ctx context.Context, _ int) (int, error) {
+		<-ctx.Done()
+		return 0, ctx.Err()
+	})
+	_, err = stages.FanOut("sources", blocked, failing).Execute(t.Context(), 1)
+	require.ErrorIs(t, err, boom)
+
+	none, err := stages.FanOut[int, int]("none").Execute(t.Context(), 1)
+	require.NoError(t, err)
+	require.Empty(t, none)
 }
