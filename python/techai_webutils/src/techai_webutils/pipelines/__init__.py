@@ -9,6 +9,7 @@ core -> foundation -> clients -> repos -> services -> pipelines -> workflows -> 
 """
 
 from techai_webutils.pipelines.base import BaseAsyncPipeline, BasePipeline
+from techai_webutils.pipelines.compose import then
 from techai_webutils.pipelines.decorators import (
     LoggingPipelineDecorator,
     MetricsPipelineDecorator,
@@ -21,4 +22,5 @@ __all__ = [
     "LoggingPipelineDecorator",
     "MetricsPipelineDecorator",
     "PipelineBuilder",
+    "then",
 ]

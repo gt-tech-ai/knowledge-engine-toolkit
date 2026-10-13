@@ -48,3 +48,36 @@ class BaseCrudService[T, P, ID](CrudService[T, P, ID]):
     async def delete(self, entity_id: ID) -> None:
         """Delegate to repository.delete."""
         await self._repo.delete(entity_id)
+
+
+class DelegatingCrudService[T, P, ID](CrudService[T, P, ID]):
+    """Service that serves CRUD from an already-decorated CrudService.
+
+    The Python form of Go's embedded ``DecoratedService``: a consumer service subclasses this
+    with the ``ServiceBuilder`` output, inherits decorated CRUD, and adds only its domain
+    operations (run through ``services.op_chain.service_op_chain``).
+    """
+
+    def __init__(self, crud: CrudService[T, P, ID]) -> None:
+        """Bind the decorated service that serves CRUD."""
+        self._crud = crud
+
+    async def get(self, entity_id: ID) -> T:
+        """Delegate to the decorated service."""
+        return await self._crud.get(entity_id)
+
+    async def list(self, params: P, page: PageRequest) -> Page[T]:
+        """Delegate to the decorated service."""
+        return await self._crud.list(params, page)
+
+    async def create(self, entity: T) -> T:
+        """Delegate to the decorated service."""
+        return await self._crud.create(entity)
+
+    async def update(self, entity_id: ID, entity: T) -> T:
+        """Delegate to the decorated service."""
+        return await self._crud.update(entity_id, entity)
+
+    async def delete(self, entity_id: ID) -> None:
+        """Delegate to the decorated service."""
+        await self._crud.delete(entity_id)

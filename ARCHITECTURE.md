@@ -100,6 +100,15 @@ collaborator or zero timeout skips its layer (the service builder always adds re
 - **Go — workflow helpers.** `decorators.Decorate(wf, op, logger, metrics, tracer, cfg)` is the
   standard workflow stack (the builder with `cfg.Timeout` from `schema/workflows.Load`), and
   `workflow.NewTxWorkflow(txMgr, pipe)` runs a command pipeline inside one transaction.
+- **Python — custom ops and tier helpers.** `foundation/decorate.py` is the Python
+  `foundation/decorate`: `OpMiddleware`, `chain`, `exec_op`, and one `new_*` middleware per
+  concern. `repos.repo_op_chain(name, RepoOpDeps)` and `services.service_op_chain(name,
+  ServiceOpDeps)` assemble them in their builder's order, so a custom query or domain op shares the
+  CRUD path's span names, log messages, metric labels and (service) authorization action. A
+  consumer repository or service subclasses `DelegatingRepository` / `DelegatingCrudService` (the
+  Python form of embedding the decorated type) and adds only its custom ops. `ServiceBuilder` adds
+  `with_validation`, `with_metrics` and `with_tracing`; `workflows.tx_workflow(tx, pipe)` is
+  `NewTxWorkflow`.
 - **Python — `__getattr__` proxies** in `clients/decorators/proxy.py` (`LoggingProxy`, `RetryProxy`,
   `CircuitBreakerProxy`, …) apply their concern around each awaited call;
   `new_client_stack_from_config` composes them. `RetryProxy` (async) and `retry_transient_async`
@@ -158,6 +167,8 @@ Outermost → innermost:
 | Python client | `clients/decorators/proxy.py` | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging (Metrics only with an injected `MetricsProvider`) |
 | Python EventHandler | `clients/decorators/event_stack.py` | Dedup → DeadLetter → Retry → CircuitBreaker → Timeout |
 | Python Job | `clients/decorators/job_stack.py` | LeaderElection → RateLimit → Retry → Timeout |
+| Python repository (CRUD + `repo_op_chain`) | `repos/decorators/builder.py`, `repos/op_chain.py` | Logging → Metrics → Tracing → Timeout → Retry → CircuitBreaker |
+| Python service (CRUD + `service_op_chain`) | `services/decorators/builder.py`, `services/op_chain.py` | Recovery → Validation → Tracing → Metrics → Authorization → Logging → Timeout (Validation is CRUD-only) |
 
 In the client stack Retry applies only to `Retryable` ops (`RunStream` never retries) and sits
 outside the breaker, so each attempt is observed. The gRPC streaming client puts Timeout
@@ -384,7 +395,8 @@ Go `pipeline.Then(first, second)` composes two pipelines into one, feeding first
 second; an error from first stops the chain and is returned unchanged. Build each stage with
 `decorators.NewBuilder` before composing, so every stage records its own span and metrics and a
 slow or failing stage is visible by name. `Then` nests: `Then(a, Then(b, c))` is a three-stage
-pipeline.
+pipeline. Python's `pipelines.then(first, second)` is the same for `AsyncPipeline`s built with
+`AsyncPipelineBuilder`.
 
 ## Testing
 

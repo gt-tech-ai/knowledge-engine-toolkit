@@ -18,11 +18,15 @@ from techai_webutils.core.errors.errors import (
     InternalError,
 )
 from techai_webutils.core.interfaces.crud_service import CrudService
+from techai_webutils.foundation.decorate import chain, exec_op, new_metrics, new_tracing
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from techai_webutils.core.interfaces.logger import Logger
+    from techai_webutils.core.interfaces.metrics import MetricCounter, MetricHistogram
+    from techai_webutils.core.interfaces.tracer import TracerProvider
+    from techai_webutils.foundation.decorate import OpMiddleware
 
 T = TypeVar("T")
 P = TypeVar("P")
@@ -269,6 +273,70 @@ class _RecoveryServiceDecorator[T, P, ID](CrudService[T, P, ID]):
             raise InternalError(str(e), cause=e) from e
 
 
+class _OpChainServiceDecorator[T, P, ID](CrudService[T, P, ID]):
+    """Runs every CRUD op through an op-middleware chain (the custom-op seam, reused for CRUD)."""
+
+    def __init__(self, inner: CrudService[T, P, ID], mw: OpMiddleware) -> None:
+        """Wrap ``inner`` so each operation runs under ``mw``."""
+        self._inner = inner
+        self._mw = mw
+
+    async def get(self, entity_id: ID) -> T:
+        """Run get under the chain."""
+        return await exec_op(self._mw, "get", lambda: self._inner.get(entity_id))
+
+    async def list(self, params: P, page: PageRequest) -> Page[T]:
+        """Run list under the chain."""
+        return await exec_op(self._mw, "list", lambda: self._inner.list(params, page))
+
+    async def create(self, entity: T) -> T:
+        """Run create under the chain."""
+        return await exec_op(self._mw, "create", lambda: self._inner.create(entity))
+
+    async def update(self, entity_id: ID, entity: T) -> T:
+        """Run update under the chain."""
+        return await exec_op(
+            self._mw, "update", lambda: self._inner.update(entity_id, entity)
+        )
+
+    async def delete(self, entity_id: ID) -> None:
+        """Run delete under the chain."""
+        await exec_op(self._mw, "delete", lambda: self._inner.delete(entity_id))
+
+
+class _ValidationServiceDecorator[T, P, ID](CrudService[T, P, ID]):
+    """Runs the business-rule validator on create/update before anything inner."""
+
+    def __init__(
+        self, inner: CrudService[T, P, ID], validate: Callable[[T], None]
+    ) -> None:
+        """Wrap ``inner`` with ``validate``, which raises a coded error on a violation."""
+        self._inner = inner
+        self._validate = validate
+
+    async def get(self, entity_id: ID) -> T:
+        """Delegate; reads are not validated."""
+        return await self._inner.get(entity_id)
+
+    async def list(self, params: P, page: PageRequest) -> Page[T]:
+        """Delegate; reads are not validated."""
+        return await self._inner.list(params, page)
+
+    async def create(self, entity: T) -> T:
+        """Validate the entity, then create it."""
+        self._validate(entity)
+        return await self._inner.create(entity)
+
+    async def update(self, entity_id: ID, entity: T) -> T:
+        """Validate the entity, then update it."""
+        self._validate(entity)
+        return await self._inner.update(entity_id, entity)
+
+    async def delete(self, entity_id: ID) -> None:
+        """Delegate; deletes carry no entity to validate."""
+        await self._inner.delete(entity_id)
+
+
 class ServiceBuilder[T, P, ID]:
     """Builder that composes decorators around a CrudService.
 
@@ -290,6 +358,11 @@ class ServiceBuilder[T, P, ID]:
         self._logger: Logger | None = None
         self._auth_fn: Callable[[str], Awaitable[bool]] | None = None
         self._timeout: float | None = None
+        self._validate: Callable[[T], None] | None = None
+        self._histogram: MetricHistogram | None = None
+        self._executions: MetricCounter | None = None
+        self._errors: MetricCounter | None = None
+        self._tracer: TracerProvider | None = None
 
     def with_logging(self, logger: Logger) -> ServiceBuilder[T, P, ID]:
         """Add a logging decorator."""
@@ -314,12 +387,44 @@ class ServiceBuilder[T, P, ID]:
         self._timeout = seconds
         return self
 
+    def with_validation(self, validate: Callable[[T], None]) -> ServiceBuilder[T, P, ID]:
+        """Add a business-rule validation decorator run before create/update.
+
+        Args:
+            validate: Raises a coded error (``InvalidInputError``) when the entity violates a
+                rule; returning means the entity is valid.
+
+        """
+        self._validate = validate
+        return self
+
+    def with_metrics(
+        self,
+        histogram: MetricHistogram,
+        executions: MetricCounter | None = None,
+        errors: MetricCounter | None = None,
+    ) -> ServiceBuilder[T, P, ID]:
+        """Add a metrics decorator labelled ``service``/``op``.
+
+        Pass the same instruments to ``service_op_chain`` so domain ops share the series.
+        """
+        self._histogram = histogram
+        self._executions = executions
+        self._errors = errors
+        return self
+
+    def with_tracing(self, tracer: TracerProvider) -> ServiceBuilder[T, P, ID]:
+        """Add a tracing decorator: one ``service.<op>`` span per operation."""
+        self._tracer = tracer
+        return self
+
     def build(self) -> CrudService[T, P, ID]:
         """Build the decorated service.
 
-        Chain: base -> timeout -> logging -> authorization -> recovery.
-        Recovery is always applied (outermost) to prevent unhandled exceptions
-        from escaping the service boundary, matching Go's unconditional behavior.
+        Chain: base -> timeout -> logging -> authorization -> metrics -> tracing ->
+        validation -> recovery. Recovery is always applied (outermost) to prevent unhandled
+        exceptions from escaping the service boundary, matching Go's unconditional behavior;
+        validation sits just inside it, as Go's does.
         """
         svc: CrudService[T, P, ID] = self._inner
         if self._timeout is not None:
@@ -328,5 +433,29 @@ class ServiceBuilder[T, P, ID]:
             svc = _LoggingServiceDecorator(svc, self._logger, self._name)
         if self._auth_fn is not None:
             svc = _AuthServiceDecorator(svc, self._auth_fn, self._name)
+        observed: list[OpMiddleware] = []
+        if self._tracer is not None:
+            observed.append(
+                new_tracing(
+                    self._tracer,
+                    self._name,
+                    span_prefix="service",
+                    subject_attr="service",
+                )
+            )
+        if self._histogram is not None:
+            observed.append(
+                new_metrics(
+                    self._name,
+                    self._histogram,
+                    subject_label="service",
+                    executions=self._executions,
+                    errors=self._errors,
+                )
+            )
+        if observed:
+            svc = _OpChainServiceDecorator(svc, chain(*observed))
+        if self._validate is not None:
+            svc = _ValidationServiceDecorator(svc, self._validate)
         # Recovery is always applied — no unhandled exception escapes the service boundary
         return _RecoveryServiceDecorator(svc)
