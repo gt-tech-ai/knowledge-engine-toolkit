@@ -14,6 +14,7 @@ from techai_webutils.workflows.decorators import (
     MetricsWorkflowDecorator,
     WorkflowBuilder,
 )
+from techai_webutils.workflows.tx import tx_workflow
 
 __all__ = [
     "BaseAsyncWorkflow",
@@ -21,4 +22,5 @@ __all__ = [
     "LoggingWorkflowDecorator",
     "MetricsWorkflowDecorator",
     "WorkflowBuilder",
+    "tx_workflow",
 ]

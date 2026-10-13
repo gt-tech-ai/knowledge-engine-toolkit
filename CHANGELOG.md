@@ -6,6 +6,17 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Python parity with the Go repository, service, pipeline and workflow tiers:
+  `foundation/decorate` (`OpMiddleware`, `chain`, `exec_op` and the recovery, tracing, metrics,
+  logging, auth, timeout, retry and circuit-breaker middlewares); `repos.repo_op_chain` +
+  `RepoOpDeps` and `services.service_op_chain` + `ServiceOpDeps`, which decorate custom repository
+  queries and domain service operations with the tier's CRUD stack; `DelegatingRepository` and
+  `DelegatingCrudService`, so a consumer type inherits decorated CRUD and adds only its custom
+  ops; `ServiceBuilder.with_validation`, `with_metrics` and `with_tracing`; `pipelines.then`
+  (Go `pipeline.Then`); and `workflows.tx_workflow` (Go `workflow.NewTxWorkflow`).
+
 ## [0.0.6] - 2026-10-12
 
 ### Added
