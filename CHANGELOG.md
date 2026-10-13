@@ -17,6 +17,10 @@ All notable changes to this project are recorded here. The format follows
   ops; `ServiceBuilder.with_validation`, `with_metrics` and `with_tracing`; `pipelines.then`
   (Go `pipeline.Then`); and `workflows.tx_workflow` (Go `workflow.NewTxWorkflow`).
 
+### Changed
+
+- `techai-webutils` is published as 0.5.0 (the Python tier additions above; no Go change).
+
 ## [0.0.6] - 2026-10-12
 
 ### Added
