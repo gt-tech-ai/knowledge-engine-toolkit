@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cassandra"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
@@ -17,7 +16,7 @@ import (
 // readPlan is everything a bucket reader needs.
 type readPlan struct {
 	// session executes the reads.
-	session cassandra.Session
+	session interfaces.CQLSession
 	// keep is the residual predicate.
 	keep predicate
 	// lo and hi bound the clustering time range [lo, hi).

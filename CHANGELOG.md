@@ -17,31 +17,281 @@ All notable changes to this project are recorded here. The format follows
   queries and domain service operations with the tier's CRUD stack; `DelegatingRepository` and
   `DelegatingCrudService`, so a consumer type inherits decorated CRUD and adds only its custom
   ops; `ServiceBuilder.with_validation`, `with_metrics` and `with_tracing`; `pipelines.then`
-  (Go `BasePipeline.Then`); and `workflows.tx_workflow` (Go `workflow.Base.Tx`).
-- Go embeddable tier bases built on generic methods: `service.Base` and `repository.Base`
-  (`Exec[R]` runs a custom op through the tier's op chain), `pipeline.Base` (`Stage[In, Out]`, a
-  decorated stage with recovery) and `workflow.Base` (`Tx`, `Read`, `Wrap`: the decorated request
-  boundary, with or without a transaction).
-- `pipeline.BasePipeline.Then[C]` (stage composition as a method) and `pipeline.Base.FanOut`
-  (stages run concurrently on one input, results in order, first error cancels the rest).
-- `clients/store.Base[C]` with `store.WithClient` / `store.ClientFrom`: a store's statements run
-  on the transaction's client when a transaction manager bound one to the context.
+  (Go `pipeline.Stage.Then`); and `workflows.tx_workflow` (Go `workflow.Base.Tx`).
+- One shape for the Go request tiers (pipeline, workflow, service, repository), on one engine:
+  `decorate.Tier` (a tier's name and layer order, as data), `decorate.Deps` and
+  `decorate.Subject` (`Exec[R]`), plus role decorators (`decorate.Reader`, `Lister`, `Writer`,
+  `Inserter`, `Deleter`, `Exister`) from which every decorated CRUD shape is composed. Each tier
+  package is one file with a `Tier()` and a `Base` whose helpers are generic methods (Go 1.27):
+  `pipeline.Base` (`Stage`, `FanOut`; `pipeline.Stage.Then`), `workflow.Base` (`Func`, `Wrap`,
+  `Read`, `Tx`), `service.Base` (embeds `Exec`; `CRUD`, `CRUDNoList`, `OpService`) and
+  `repository.Base` (embeds `Exec`; `CRUD`, `ReadListExist`, `CRUDNoList`, `TxSafeInsert`), with
+  `repository.Cached` for the read-through entity cache.
+- The store tier, `go/stores`, between the clients and the repositories. `stores/store`:
+  `Tier()` (Tracing → Metrics → Logging → Timeout, decorated by `decoration.stores`),
+  `Decorate(store, name, deps)`, and `Base[C]` (`NewBase(name, client, deps)`; `Exec` through
+  the tier, `Client(ctx)` the transaction-bound client) with `WithClient` / `ClientFrom`; kinds
+  `KindEnt` / `KindGORM`, selected by `stores.kind`. `repository.DecoratedFromConfig` puts its
+  store behind the store tier.
 - `core/interfaces.ReadListExistStore`, `CRUDNoListStore`, `CRUDNoListRepository` and
-  `InsertOnlyStore` (moved from `repos/repository` and `services/service`), with generated
-  mocks for every role interface and `OpService`.
-- `foundation/config/schema/decoration` (`Config`, `Load`) and `decorate.Observability`,
-  `decorate.Tiers` and `decorate.NewTiers`: observe the request workflow always and each lower
-  tier only when its `decoration.*` switch is on, so a request is logged, metered and traced once.
+  `InsertOnlyStore`, with generated mocks for every role interface and `OpService`;
+  `fixtures.Workflows(tx)` for tests that build workflows.
+- Configurable decoration for every tier. `foundation/config/schema/decoration` (`Config`,
+  `Load`, `DefaultConfig`, `Tier`, `Layers`, `Merge`) gives the clients, workflows, pipelines,
+  services, repositories, stores and jobs tiers each `defaults` plus per-component `overrides`
+  keyed by the component's name; every layer (recovery, tracing, metrics, logging, auth, timeout,
+  retry, circuit breaker, bulkhead) is switched and tuned there, and a partial section changes
+  only what it sets. `decorate.Decorations` (`NewDecorations(cfg, Collaborators)`, `Deps(tier,
+  name)`) and `decorate.Build` turn a component's resolved layers into its `decorate.Deps`
+  (`Deps.SkipRecovery` drops recovery). The default keeps today's behavior: clients, workflows
+  and jobs observed, the pipeline, service, repository and store tiers not; retry and a breaker
+  on repositories; a 30 s timeout, bulkhead and breaker on the `storage`, `outbox.sqs`,
+  `outbox.s3` and `prometheus` clients.
+- The execution substrate in the same shape: `job.Tier()` and `job.Base` (`Func`, `Runnable`,
+  `Wrap`), which decorate every job once; `engine.Pool` (`FanOut` as a generic method);
+  `engine.Step` / `engine.Steps` (`Serial`); and a chainable `*gate.Gate` (`Observe`, `Run`,
+  `RunLocal`).
+- The clients tier in the same shape. `clients/client` holds the client decoration tier
+  (`client.Tier()`: Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging),
+  `client.Base` (`Once`, `Do`, `DoOnce`, `Stream`), `client.NewHandlerBase` (observed, never
+  retried — a message handler) and the kind registry `client.Kinds[C, D, T]` (`New`, `Build`,
+  which takes the family's layers from `Decorations` under the client's `Config.Name`). Every
+  family is a root `<family>.go` (`Kind` constants, a data-only `Config`, a `Deps`, a kinds table,
+  `NewFromConfig(ctx, cfg, deps)`), a `decorated.go` with `Decorate(base, name, deps)` where the
+  family is decorated, and one subpackage per backend. `foundation/decorate` gains the
+  `LayerBulkhead` layer (`decorate.NewBulkhead`, `Deps.Bulkhead`); its timeout codes a deadline
+  overrun `CodeTimeout`.
+- `clients/cache/stub` and `transport/server/stub`, so every family with a meaningful stub boots
+  with no infrastructure (`database` and `rpc` default to `postgres` and `grpc`).
+- `core/interfaces.CQLSession` (`CQLQuery`, `CQLIter`, `CQLBatch`, `CQLBatchKind`): the CQL
+  contract the analytics store runs on, with generated mocks.
+- The controller tier: `transport.Tier()` (tracing as a server span → metrics → logging →
+  recovery → rate limit → bulkhead → auth → timeout), switched and tuned per controller by
+  the new `decoration.controllers` tier; `transport.Base` (`NewBase`, `Handler`) runs a REST or
+  RPC handler through it. `transport.Interceptors` lays the tier out for an RPC framework, and
+  `transport/connect/interceptors.ServerOptions` (with `Edge{Authn, Inner}`) and
+  `transport/grpc/interceptors.ServerOptions` run every Connect and gRPC server RPC through it,
+  their status-aware tracing, metrics and access logs standing in for the tier's own.
+- `decorate.LayerRateLimit` (`NewRateLimit`, `Deps.RateLimiter`; `decoration.rate_limit`) and a
+  shedding bulkhead (`Deps.ShedLoad`; `decoration.bulkhead.shed`, `bulkhead.Shed`): an operation
+  over the rate, or arriving at a full bulkhead, fails `CodeResourceExhausted` at once.
+  `decorate.Tier.Middleware` builds one layer, for protocol adapters.
+- `clients/rpc/wire.MetadataCarrier`, the OTel carrier over gRPC metadata.
+- Python (`techai-webutils` 0.5.1): every tier decorated like Go's, from the same `decoration`
+  config section. `foundation/config/decoration` (`DecorationConfig`, `Tier`, `Layers` and the
+  retry, circuit-breaker, bulkhead and rate-limit tunings; `default_config`, `from_mapping`,
+  `load`) reads the YAML the Go services read, with Go durations parsed by
+  `foundation/config/duration.parse_duration`. `foundation/decorate` (a package now) adds
+  `Layer`, `Tier`, `Subject`, `Deps`, `Observability`, `Decorations`, `Collaborators` and the
+  bulkhead (waiting or shedding) and rate-limit middlewares; `foundation/resilience/retrier`
+  adds `ExponentialRetrier`. Each tier has Go's `tier()` and a base built
+  `from_decorations(name, decorations)`: `clients.client.ClientBase` and `decorate` (a client
+  whose every coroutine method runs through the client tier), `controllers.ControllerBase`,
+  `repos.RepositoryBase`, `services.ServiceBase`, `pipelines.PipelineBase` (`stage`, `fan_out`;
+  `Stage.then`), `workflows.WorkflowBase` (`func`, `wrap`, `read`, `tx`) and
+  `execution.job.JobBase`. `core/interfaces/tracer.SpanKind` sets a span's kind.
+- Python gRPC server and client on the controller and client tiers.
+  `controllers/grpc/interceptors.server_interceptors(name, deps, Edge(authn, inner))` lays the
+  controller tier out as `grpc.aio` interceptors (`controllers.interceptors.lay_out`, the
+  `transport.Interceptors` twin) with gRPC-native `TracingServerInterceptor`,
+  `MetricsServerInterceptor` (`grpc_server_requests_total`, `grpc_server_duration_seconds`) and
+  `LoggingServerInterceptor`; `service_auth` and `ValidatingServerInterceptor` are its edge
+  interceptors. `clients/rpc/grpc/interceptors.client_interceptors` runs each unary call through
+  the client tier and injects the trace context and the service token;
+  `new_rpc_channel_from_config(config, decorations)` installs it, named by the new
+  `RpcConfig.name` and carrying `RpcConfig.service_token`.
+- Python messaging on the client tier, as Go's: `clients.messaging.decorate` runs each publish
+  through the client tier under the new `MessagingConfig.name` (op: the topic), and both
+  backends run every handler call through the handler tier as `<name>.handler`. The publisher's
+  trace context rides SQS message attributes and memory-broker metadata, and the handler
+  continues it (`foundation/tracer.inject` / `continued`). `new_messaging_from_config` and
+  `new_messaging_subscriber_from_config` take `decorations` and a shared memory `broker`.
 
 ### Changed
 
-- Breaking: the standalone tier helpers became methods on the tier bases. `pipeline.Then` →
-  `(*BasePipeline).Then`; `workflow.NewTxWorkflow` → `workflow.Base.Tx`; workflow
-  `decorators.Decorate` → `workflow.Base.Wrap`; `service.OpChain`, `repository.OpChain` and
-  `repository.NewOpChain` → `service.Base` / `repository.Base` and their `Exec`.
-  `repository.ReadListExistStore`, `repository.CRUDNoListStore`, `repository.InsertOnlyStore` and
-  `service.CRUDNoListRepo` moved to `core/interfaces` (the last as `CRUDNoListRepository`).
-- `techai-webutils` is published as 0.5.0 (the Python tier additions above; no Go change).
+- Breaking: server transport moved out of `clients/` into `transport/`: `clients/transport` →
+  `transport/server` (`NewFromConfig`, `Config`, `KindStub`, `KindConnect`) with
+  `transport/server/stub`; the Connect server → `transport/connect`; the Connect server
+  interceptors → `transport/connect/interceptors`; the gRPC server and its tracing, metrics and
+  logging interceptors → `transport/grpc` and `transport/grpc/interceptors`. The Connect client
+  options moved to `clients/rpc/connect/interceptors.ClientOptions`.
+- Breaking: removed the hand-ordered server builders and the interceptors the controller tier
+  replaces — Connect `NewServerBuilder`, `RecoveryInterceptor`, `RateLimitInterceptor`,
+  `BulkheadInterceptor`; gRPC `NewServerBuilder`, `RecoveryServerInterceptor`,
+  `RateLimitServerInterceptor`, `BulkheadServerInterceptor` — and `transport/decorators`
+  (`HandlerBuilder`), replaced by `transport.Base`. A server's observability now wraps its
+  recovery and load shedding, so a rejected or panicking RPC is still traced, counted and logged.
+- Breaking: the JSON:API codec moved to `foundation/jsonapi` — the route table (`Role*`,
+  `RouteEntry` with the new `Resource()`, `ResourceConfig`, `Config.MatchRoute`), the
+  `Transform*` functions and `MemberCode`; `transport/jsonapi` keeps `Middleware` (now taking a
+  `foundation/jsonapi.Config`) and `IsRESTRequest`. The generic converters moved from
+  `transport/rpc` to `foundation/convert` (`EnumMapper`, `NewEnumMapper`, `ParseUUID`,
+  `Int32OrPanic`, `CountToInt32`); `transport/rpc` keeps the Connect error mapping.
+- Breaking: the request tiers' builders, decorator subpackages and pass-through bases are
+  replaced by the tier `Base`s. Removed: `pipeline.BasePipeline` / `NewBasePipeline` /
+  `pipeline.Then`; `workflow.BaseWorkflow` / `NewBaseWorkflow` / `NewTxWorkflow`; the
+  `pipelines/pipeline/decorators`, `workflows/workflow/decorators`, `services/service/decorators`
+  and `repos/repository/decorators` packages; `service.BaseService` / `service.New` /
+  `NewCRUDNoListService` / `OpChain`; `repository.BaseRepository` / `repository.New` /
+  `NewReadListExistRepository` / `NewCRUDNoListRepository` / `NewTxSafeInsertRepository` /
+  `OpChain` / `NewOpChain` / `OpDeps`; the `services` package (`Base`, `Build`); `decorate.MetricsSpec`;
+  `interfaces.DecoratedRepository` / `DecoratedService` (use `Repository` / `Service`).
+  `decorate.NewLogging`, `NewTracing`, `NewMetrics` and `NewRecovery` take `(…, tier, name)`.
+  `repository.DecoratedFromConfig` keeps its signature and returns `interfaces.Repository`.
+- Breaking: every request tier emits `<tier>_operations_total`, `<tier>_errors_total` and
+  `<tier>_operation_duration_seconds` labelled `{<tier>, operation}` (pipelines and workflows
+  emitted `<tier>_executions_total` / `<tier>_execute_duration_seconds` by name only; the
+  repository label was `repo`), and spans carry `<tier>.name` / `<tier>.operation`.
+- Breaking: the execution substrate drops its builders and standalone runners. `job.Adapt` →
+  `job.Base.Runnable`; `job/decorators` → `job.Base` (jobs emit `job_operations_total` /
+  `job_errors_total` / `job_operation_duration_seconds` in place of `execution_job_runs_total` /
+  `execution_job_duration_seconds`, and a job whose results fail is no longer a `failed` outcome);
+  `engine.FanOut(ctx, items, n, fn)` → `engine.Pool(n).FanOut(ctx, items, fn)`;
+  `engine.NewStep` / `StepWarnOnly` / `RunStepsSerial` → `engine.Step{…}` / `engine.Steps.Serial`;
+  `gate.NewGate(…)…Build()` → `gate.New(…)…`, `WithObserver` → `Observe` (nil keeps the
+  current observer), `gate.RunGate(ctx, r, root, g)` → `g.Run(ctx, r, root)` and
+  `gate.RunGateNoRunner(ctx, g)` → `g.RunLocal(ctx)`. Removed as unused: `job.New` / `Builder` /
+  `Job` / `JobConfig` / `Single` and its options, `job.When` / `Conditional`, `job.Tag` /
+  `TaggedJob` / `FilterByLang` / `LangTag`, `engine.WorkUnit`, `engine.RunStepsParallel`,
+  `engine.StepFunc` and `engine.WithObserverCtx` / `ObserverFromCtx`.
+- Breaking: client kinds are strings (`client.Kind`) and every family builds through
+  `NewFromConfig(ctx, cfg, deps)` with its runtime collaborators (observability, SDK clients,
+  shared Redis client, …) in a `Deps`, never in `Config`. Removed: each family's `New(kind,
+  opts...)`, functional options (`With*`), `Kind.String()`, `ParseKind` and `ToOptions`;
+  `messaging.NewPublisher` / `NewSubscriber` / `NewAdapter` (use `messaging.NewFromConfig` /
+  `NewConsumerFromConfig`); `storage.New`; `prometheus.New` / `HTTPDoer` / `DecorateDoer` /
+  `Sample`, now in `clients/prometheus/http`. `messaging.Config` takes the env-bound
+  `infra.SQSConfig` plus `Receive` (nack delay, backoff, long poll); `outbox`, `lock`,
+  `replaybuffer`, `prometheus` and `analytics` take their client-tier tuning as `Client
+  client.Config` (outbox's `Resilience` is renamed). `outbox/sqs.New` and `outbox/s3.New` take
+  the SDK client as an argument instead of `Config.API`. `connector.NewSourceBuilder(cfg, deps)`.
+  `sqs.NewPublisher` and `sqs.NewSubscriber` take a `ctx` (`NewPublisherContext` is removed).
+- Breaking: `clients/cassandra` is renamed `clients/cql`, with string kinds `cassandra` (default)
+  and `keyspaces`; each kind subpackage dials through the gocql adapter in `clients/cql/driver`
+  (`cassandra.Cluster` / `keyspaces.Cluster` build the configuration without dialing).
+  `cql.Session` and friends move to `core/interfaces.CQLSession` etc. `analytics.Config`'s
+  `Cassandra` field is `CQL`, and `analytics.Deps.Dial` replaces `SessionFactory`.
+- Breaking: one decoration engine for the clients tier. Removed: `clients/decorators` (`Stack`),
+  `foundation/decorator`, and the `analytics`, `cache`, `connector`, `jobs`, `lock`,
+  `messaging`, `outbox`, `replaybuffer` and `storage` `decorators` packages. Decorated clients
+  emit `client_operations_total` / `client_errors_total` / `client_operation_duration_seconds`
+  labelled `{client, operation}`, replacing `lock_operation*`, `replaybuffer_operation*`,
+  `messaging_handle_*` (a subscriber's handler is the client `messaging.handler`) and the
+  analytics store's `analytics_executions_total` / `analytics_execute_duration_seconds` /
+  `analytics_errors_total`. `cache` is decorated fail-open (a tier failure reads as a miss) and
+  keeps `cache_hits_total` / `cache_misses_total` labelled `{cache}`;
+  `cache_operation_duration_seconds` is `client_operation_duration_seconds{client="cache"}`.
+- Breaking: decoration comes from config, not hand-passed collaborators. Every client family's
+  `Deps` embeds `decorate.Decorations` (and its `Config` gains `Name`, replacing `Client
+  client.Config`); `client.Config` / `DefaultConfig` / `DepsFromConfig`, `decorate.Tiers` /
+  `NewTiers` and `reswire.NewRetrier` / `NewBreaker` / `NewBulkhead` are removed.
+  `repository.DecoratedFromConfig` takes `Deps{Decorations, Cache, IDOf}`, returns an error, and
+  `Settings` keeps only `CacheTTL` / `CacheVersion`. `river.NewInsertClient` takes the
+  `decorate.Decorations` and runs each insert as the `river.insert` client
+  (`river.InsertClientName`), resolved from `decoration.clients`. The messaging SQS and Redis
+  backends take a ready-built `Handlers client.Base` in place of `Metrics` / `Tracer` /
+  `HandlerTimeout`.
+- Breaking: RPC clients run on the client tier. `clients/interceptorcore` and the per-concern
+  client interceptors are removed — gRPC `ClientBuilder`, `StreamingClientBuilder`,
+  `Retry*`, `CircuitBreaker*`, `Timeout*`, `Metrics*Client*`, `Tracing*Client*`,
+  `Logging*Client*` and `ServiceAuth*ClientInterceptor`; Connect `ClientBuilder`,
+  `RetryInterceptor`, `CircuitBreakerInterceptor`, `TimeoutInterceptor` and
+  `ClientTracingInterceptor`. In their place `interceptors.ClientOptions(base, serviceToken)`
+  (gRPC) and `interceptors.ClientOptions(base)` (Connect) run each call through a
+  `client.Base`, and `rpc.NewFromConfig` installs them (`rpc.Config` gains `Name` and
+  `ServiceToken`; `rpc.Deps` embeds `decorate.Decorations`). RPC client series are
+  `client_*{client, operation="pkg.Service/Method"}`, replacing `grpc_client_*` and
+  `grpc_client_stream_*`; a retried call returns its last error rather than Unavailable
+  "retries exhausted". A gRPC stream's open is never retried.
+- `clients/rpc/wire` (`FromError`, `Code`, `ToGRPC`, `ToConnect`): the RPC-status ↔ domain-code
+  codec; `transport/rpc.FromRPCError` delegates to it. `Unimplemented` now maps to
+  `CodeInvalidInput` (was `CodeUnknown`), so it is never retried.
+- `client.Base.Open`: open a long-lived stream with the client's timeout bounding only the open.
+  The client tier's spans are `SpanKindClient` (`decorate.Tier.SpanKind`; `decorate.NewTracing`
+  takes the kind). `bulkhead.Shed` runs a call only when a slot is free (the server bulkhead
+  interceptors use it).
+- Fixed: the gobreaker circuit breaker's rejection (open, or half-open over quota) is
+  `CodeUnavailable` instead of an uncoded error. The exponential retrier's `MaxRetries` counts
+  retries as documented — it made `MaxRetries` total attempts, one fewer than configured.
+- Breaking: persistence moves to `go/stores`. `repos/repository/compiler/ent` and
+  `repos/repository/entlist` → `stores/ent` (`compiler.Apply` → `ent.Apply`); the
+  `repos/repository/compiler` Kind enum (with its never-implemented mongo / elastic kinds) is
+  removed; `repos/adapters/gorm` → `stores/gorm` (`Kind` is the string `"postgres"`);
+  `repos/errors` → `stores/errors` (`NewDBMapper(kind string)`, `KindPostgres = "postgres"`).
+  Config: `repos.compiler.kind` → `stores.kind`; `repos.timeout` is removed (the decoration
+  config's repositories tier owns it).
+- Breaking: `core/errctx` is merged into `core/errors`: `errctx.WithSink` / `Capture` /
+  `Captured` are `errors.WithSink` / `Capture` / `Captured`.
+- Breaking: the outbox store moves to the store tier. `repos/outbox/pgstore` →
+  `stores/outbox/postgres`; `stores/outbox.NewFromConfig(ctx, cfg, deps)` builds it by kind
+  (`KindStub` default, `KindPostgres` over `Deps.DB`) behind the store tier, named `Config.Name`
+  (default `outbox`). `interfaces.OutboxStore` gains `DeleteSentBefore`. The test-only
+  `outboxtest.SQLStore` reference store is removed; the conformance suites run against the
+  postgres kind.
+- A message handler continues its publisher's trace: `tracer.Inject` / `tracer.Extract`
+  carry the process propagator's context (traceparent, tracestate, baggage) on SQS message
+  attributes and memory-broker metadata, and the SQS subscriber hands a message's string
+  attributes to the handler as `Message.Metadata`. Redis Pub/Sub carries the payload alone, so
+  a trace stops at a Redis channel.
+- Removed the unused jobs client: `clients/jobs` (`NewFromConfig`, `Config`), `core/interfaces`
+  `Job`, `Worker`, `PeriodicJob`, `JobEnqueuer`, `JobScheduler` and `WorkerRegistry`, and the
+  River `Client` / `Config` / `EventPublisher` / periodic jobs / workers;
+  `clients/jobs/river` keeps `InsertClient`, `Migrate` and `Runtime`. Also removed the dead
+  `messaging/sqs.Adapter`.
+- Breaking (Python, 0.5.1): the tier builders, op chains and proxies are replaced by the tier
+  bases. Removed: `foundation.decorator`; `repos` `RepositoryBuilder`, `BaseRepository`,
+  `repo_op_chain`, `RepoOpDeps`; `services` `ServiceBuilder`, `BaseCrudService`,
+  `service_op_chain`, `ServiceOpDeps`, the op-service `build`; `pipelines` `PipelineBuilder`,
+  `AsyncPipelineBuilder`, `BasePipeline`, `BaseAsyncPipeline`, `then`; `workflows`
+  `WorkflowBuilder`, `AsyncWorkflowBuilder`, `BaseWorkflow`, `BaseAsyncWorkflow`, `tx_workflow`;
+  `controllers.decorators.HandlerBuilder`; `execution.job.decorators`; the client proxies
+  (`LoggingProxy`, `RetryProxy`, `CircuitBreakerProxy`, `MetricsProxy`, `HedgeProxy`,
+  `RateLimitProxy`, …) with `new_client_stack_from_config` / `ClientStackConfig`, and the
+  `event_stack` / `job_stack` helpers. The synchronous pipeline and workflow variants are gone.
+  The tier series follow Go's names: `<tier>_operations_total`, `<tier>_errors_total` and
+  `<tier>_operation_duration_seconds`, labelled `{<tier>, operation}` (the client tier drops the
+  former `outcome` / `code` labels).
+- Breaking (Python): the gRPC server moved under the controller tier. `clients.transport.grpc`
+  (`GracefulServer`, `ServerConfig`, `create_server`), `clients.rpc.grpc.errors` and
+  `clients.rpc.grpc.interceptors.auth` → `controllers.grpc`; `ServerInterceptorBuilder` and the
+  client `InterceptorBuilder` with its retry, timeout, circuit-breaker, logging, metrics and
+  tracing interceptors are removed — use `server_interceptors` and `client_interceptors`.
+- `techai-webutils` versions: 0.5.0 carried the Python tier additions above (no Go change); 0.5.1
+  carries the breaking Python changes above.
+- Breaking (Go): `transport/grpc/interceptors.ServerOptions(name, deps, edge)` takes an `Edge`
+  (`Authn` unary and `StreamAuthn` stream interceptors, run just before Auth) and now decorates
+  stream RPCs too (no timeout on a stream); `Tracing`, `Metrics` and `Logging` gain
+  `*StreamServerInterceptor` twins.
+- The controller tier is the edge (`decorate.Tier.Edge`, Go and Python): a REST handler's failure
+  is logged at Warn for a client fault and at Error otherwise, where inner tiers log at Debug.
+- Messaging spans carry their role, Go and Python: a publish is a PRODUCER span
+  (`client.NewProducerBase` / `ClientBase.producer`) and a handler call a CONSUMER span
+  (`client.NewHandlerBase` / `ClientBase.handler`), where both were CLIENT spans.
+- `client.Kinds.AtMostOnce` lists the kinds `Build` never retries; the Redis messaging
+  publisher uses it in place of a special case in `messaging.NewFromConfig`.
+- Python: a decorated client (`clients.client.decorate`) forwards `async with` to the client
+  it wraps; a refused auth layer raises `ForbiddenError("<name>.<op>: not allowed")`.
+- A controller's bulkhead sheds by default once enabled (`decoration.controllers` defaults
+  `bulkhead.shed: true`; the bulkhead itself stays off), Go and Python.
+- Recovery logs a panic with its stack even when the tier's logging layer is off
+  (`decorate.Deps.PanicLogger` / Python `Deps.panic_logger`, set by `Decorations` whenever
+  recovery is on).
+
+### Fixed
+
+- Python: a `null` decoration section (an empty YAML key) decodes as its default instead of
+  `None`.
+- A tier rejection on the Connect and gRPC servers (a denial, a rate limit, a panic) answers
+  only its code's client-safe message (`clients/rpc/wire.SanitizeConnect` / `SanitizeGRPC`;
+  Python `controllers.grpc.safe_status`); the real error is captured for the access log instead
+  of reaching the caller.
+- A gRPC server continues its caller's trace: `TracingServerInterceptor` extracts the W3C
+  trace context the client injected into the incoming metadata instead of starting a new
+  trace per hop.
+- Python: the gRPC client's span was tagged `kind="client"` as an attribute instead of being a
+  CLIENT span, and the client injected neither the trace context nor the service token; both
+  now ride every call. A rate-limited Python gRPC call was answered UNIMPLEMENTED; the
+  controller tier answers RESOURCE_EXHAUSTED.
 
 ## [0.0.6] - 2026-10-12
 

@@ -26,6 +26,9 @@ type OutboxStore interface {
 	Park(ctx context.Context, id uuid.UUID, lastErr string) error
 	// Stats summarizes lane's pending and parked rows.
 	Stats(ctx context.Context, lane string) (types.OutboxStats, error)
+	// DeleteSentBefore purges the delivered rows sent before cutoff (the retention
+	// sweep) and returns how many it removed; pending and parked rows are kept.
+	DeleteSentBefore(ctx context.Context, cutoff time.Time) (int, error)
 }
 
 // OutboxSink delivers claimed outbox records to their destination (a queue, an

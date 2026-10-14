@@ -8,62 +8,47 @@ import (
 )
 
 // defaultBuckets returns the histogram bucket boundaries (seconds) for operation
-// latency — the same set the repo and service metric decorators use.
+// latency.
 func defaultBuckets() []float64 {
 	return []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}
 }
 
-// MetricsSpec names the counters/histogram a metrics middleware registers, so the
-// same middleware serves the repo tier (repository_* / "repo") and the service tier
-// (service_* / "service"). The registry is get-or-create, so a spec matching the
-// tier's CRUD metric decorator shares that decorator's collectors (no double-register).
-type MetricsSpec struct {
-	// OperationsName and OperationsHelp name and describe the operations counter.
-	OperationsName, OperationsHelp string
-	// ErrorsName and ErrorsHelp name and describe the errors counter.
-	ErrorsName, ErrorsHelp string
-	// DurationName and DurationHelp name and describe the duration histogram.
-	DurationName, DurationHelp string
-	// SubjectLabel is the first label key (e.g. "repo" or "service"); "operation" is
-	// always the second.
-	SubjectLabel string
-}
-
-// metricsMW records an operation count + latency, plus an error count on failure.
+// metricsMW records the RED series of a tier: <tier>_operations_total,
+// <tier>_errors_total and <tier>_operation_duration_seconds, labelled by the subject
+// ("<tier>") and the operation.
 type metricsMW struct {
-	// ops counts every operation (labelled by name and operation).
+	// ops counts every operation.
 	ops interfaces.Counter
-	// errs counts failed operations (labelled by name and operation).
+
+	// errs counts failed operations.
 	errs interfaces.Counter
-	// dur observes operation latency in seconds (labelled by name and operation).
+
+	// dur records each operation's duration in seconds.
 	dur interfaces.Histogram
-	// name is the subject label value identifying the repo/service instance.
+
+	// name is the decorated subject.
 	name string
 }
 
-// NewMetrics returns a metrics middleware for name, registering (get-or-create) the
-// counters/histogram named by spec, labelled (SubjectLabel, "operation").
-func NewMetrics(m interfaces.Metrics, name string, spec MetricsSpec) OpMiddleware {
+// NewMetrics returns the metrics middleware for the subject name in tier, creating
+// the tier's instruments on m.
+func NewMetrics(m interfaces.Metrics, tier, name string) OpMiddleware {
 	return metricsMW{
 		name: name,
 		ops: m.Counter(
-			spec.OperationsName,
-			spec.OperationsHelp,
-			spec.SubjectLabel,
-			"operation",
+			tier+"_operations_total", "Total "+tier+" operations", tier, "operation",
 		),
-		errs: m.Counter(spec.ErrorsName, spec.ErrorsHelp, spec.SubjectLabel, "operation"),
+		errs: m.Counter(
+			tier+"_errors_total", "Total "+tier+" operation errors", tier, "operation",
+		),
 		dur: m.Histogram(
-			spec.DurationName,
-			spec.DurationHelp,
-			defaultBuckets(),
-			spec.SubjectLabel,
-			"operation",
+			tier+"_operation_duration_seconds", tier+" operation duration",
+			defaultBuckets(), tier, "operation",
 		),
 	}
 }
 
-// WrapOp records one operation count + latency for op, and an error count on failure.
+// WrapOp runs next and records its count, duration and failure.
 func (m metricsMW) WrapOp(
 	ctx context.Context,
 	op string,

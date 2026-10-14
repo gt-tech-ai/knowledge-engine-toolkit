@@ -6,7 +6,7 @@ import "context"
 // typed result. The result is carried out of the type-erased middleware core (which
 // only sees func(context.Context) error) via a captured variable, so R is arbitrary —
 // a value, a pointer, a slice, a *Page, or struct{} for an error-only operation. This
-// is what removes the (*T,error) shoehorn of the former ExecWithDecoration seam.
+// is what lets an operation of any return type decorate the same way.
 //
 // Contract: Exec returns exactly what fn returns, unmodified, on both the success and
 // error paths — the result is never zeroed when fn returns an error, so a partial

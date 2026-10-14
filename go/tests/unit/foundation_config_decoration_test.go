@@ -1,31 +1,40 @@
 package unit_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/workflow"
 )
 
-// TestLoadDecorationConfig_DefaultsOffAndReadsTheSection tests the decoration-config
+// TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults tests the decoration-config
 // loader.
 //
 // Why this test is important:
-//   - The switches pick which tiers below the request workflow are observed; an absent
-//     section must leave every one off (each request observed once), and a section that
-//     fails to decode must stop boot instead of silently dropping a switch.
+//   - An absent section must keep today's decoration, a partial one must change only
+//     what it names (turning on a client's retry must not drop its timeout), and a
+//     section that fails to decode must stop boot instead of silently dropping a layer.
 //
 // What it tests:
-//   - An absent section yields DefaultConfig() (all off) without unmarshalling.
-//   - A present section yields its values.
+//   - An absent section yields DefaultConfig() without unmarshalling.
+//   - A section that turns on the storage client's retry keeps its default 30 s timeout,
+//     bulkhead and breaker, and leaves every other tier at its default.
 //   - An unmarshal failure is wrapped as INVALID_INPUT.
-func TestLoadDecorationConfig_DefaultsOffAndReadsTheSection(t *testing.T) {
+func TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults(t *testing.T) {
 	t.Parallel()
 
 	t.Run("absent", func(t *testing.T) {
@@ -36,17 +45,19 @@ func TestLoadDecorationConfig_DefaultsOffAndReadsTheSection(t *testing.T) {
 		cfg, err := decoration.Load(loader)
 
 		require.NoError(t, err)
-		assert.Equal(t, decoration.Config{}, cfg)
 		assert.Equal(t, decoration.DefaultConfig(), cfg)
 	})
 
-	t.Run("present", func(t *testing.T) {
+	t.Run("partial", func(t *testing.T) {
 		t.Parallel()
 		loader := mocks.NewMockConfigLoader(gomock.NewController(t))
-		loader.EXPECT().Get("decoration").Return(map[string]any{"services": true})
+		loader.EXPECT().Get("decoration").Return(map[string]any{"clients": nil})
 		loader.EXPECT().UnmarshalKey("decoration", gomock.Any()).DoAndReturn(
 			func(_ string, target any) error {
-				target.(*decoration.Config).Services = true
+				on := true
+				target.(*decoration.Config).Clients.Overrides = map[string]decoration.Layers{
+					"storage": {Retry: decoration.Retry{Enabled: &on}},
+				}
 				return nil
 			},
 		)
@@ -54,61 +65,156 @@ func TestLoadDecorationConfig_DefaultsOffAndReadsTheSection(t *testing.T) {
 		cfg, err := decoration.Load(loader)
 
 		require.NoError(t, err)
-		assert.Equal(t, decoration.Config{Services: true}, cfg)
+		storage := cfg.Clients.For("storage")
+		assert.True(t, decoration.On(storage.Retry.Enabled))
+		assert.True(t, decoration.On(storage.Bulkhead.Enabled))
+		assert.True(t, decoration.On(storage.CircuitBreaker.Enabled))
+		require.NotNil(t, storage.Timeout)
+		assert.Equal(t, 30*time.Second, *storage.Timeout)
+		assert.Equal(t, decoration.DefaultConfig().Services, cfg.Services)
 	})
 
 	t.Run("unmarshal failure", func(t *testing.T) {
 		t.Parallel()
 		loader := mocks.NewMockConfigLoader(gomock.NewController(t))
-		loader.EXPECT().Get("decoration").Return(map[string]any{"services": "maybe"})
+		loader.EXPECT().Get("decoration").Return(map[string]any{"clients": "maybe"})
 		loader.EXPECT().
 			UnmarshalKey("decoration", gomock.Any()).
-			Return(apperr.Sentinel("bad bool"))
+			Return(apperr.Sentinel("bad layers"))
 
 		_, err := decoration.Load(loader)
 
-		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	})
 }
 
-// TestNewTiers_ObservesOncePerRequestUnlessALowerTierIsOn tests how the per-tier
-// observability bundles follow the decoration config.
+// TestDecorations_BuildEachComponentsLayersFromConfig tests decorate.Decorations.
 //
 // Why this test is important:
-//   - A deployed service must log, meter and trace each request once, at its workflow;
-//     a lower tier left on doubles every log line, metric series and span.
-//   - A developer turns the lower tiers on to see where a request spends its time.
+//   - Every decorated component — client, workflow, service, repository — takes its
+//     layers from this one builder; a layer the config turns on must get its
+//     collaborator or primitive, and one it leaves off must not, or a request is
+//     traced at every tier or a client loses its breaker.
 //
 // What it tests:
-//   - The workflow tier always carries the logger, metrics and tracer.
-//   - Each lower tier carries them only when its switch is on, and is empty (so its
-//     decorators are skipped) otherwise.
-func TestNewTiers_ObservesOncePerRequestUnlessALowerTierIsOn(t *testing.T) {
+//   - Under DefaultConfig a client and a workflow are observed, a service is not; the
+//     storage client gets its 30 s timeout, a bulkhead at the default concurrency
+//     limit and a breaker, and no retrier; a
+//     repository gets a retrier and a breaker; every tier keeps recovery.
+//   - A controller has no bulkhead or rate limit by default; turning its bulkhead on
+//     makes it shed (the storage client's waits).
+//   - An override turning a service's tracing and recovery off and its timeout on is
+//     applied to that service only.
+//   - A tier the config does not know, and an invalid bulkhead kind, are
+//     INVALID_INPUT.
+func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
-	full := decorate.Observability{
+	collab := decorate.Collaborators{Observability: decorate.Observability{
 		Logger:  mocks.NewMockLogger(ctrl),
 		Metrics: mocks.NewMockMetrics(ctrl),
 		Tracer:  mocks.NewMockTracer(ctrl),
+	}}
+	defaults := decoration.DefaultConfig()
+	decs := decorate.NewDecorations(&defaults, collab)
+	deps := func(tier decorate.Tier, name string) decorate.Deps {
+		d, err := decs.Deps(tier, name)
+		require.NoError(t, err)
+		return d
 	}
-	none := decorate.Observability{}
 
-	off := decorate.NewTiers(decoration.Config{}, full.Logger, full.Metrics, full.Tracer)
-	assert.Equal(t, decorate.Tiers{Workflow: full}, off)
+	lock := deps(client.Tier(), "lock")
+	assert.Equal(t, collab.Observability, lock.Observability)
+	assert.Nil(t, lock.Breaker)
+	assert.Equal(t, collab.Observability, deps(workflow.Tier(), "ask").Observability)
 
-	on := decorate.NewTiers(
-		decoration.Config{Pipelines: true, Services: true, Repositories: true},
-		full.Logger, full.Metrics, full.Tracer,
+	svc := deps(service.Tier(), "users")
+	assert.Equal(t, decorate.Observability{}, svc.Observability)
+	assert.False(t, svc.SkipRecovery)
+
+	storage := deps(client.Tier(), "storage")
+	assert.Equal(t, 30*time.Second, storage.Timeout)
+	require.NotNil(t, storage.Bulkhead)
+	assertBulkheadLimit(
+		t,
+		storage.Bulkhead,
+		resilience.DefaultBulkheadConfig().MaxConcurrent,
 	)
-	assert.Equal(t, decorate.Tiers{
-		Workflow: full, Pipeline: full, Service: full, Repository: full,
-	}, on)
+	assert.NotNil(t, storage.Breaker)
+	assert.Nil(t, storage.Retrier)
+	assert.False(t, storage.ShedLoad)
+	api := deps(transport.Tier(), "api")
+	assert.Nil(t, api.Bulkhead)
+	assert.Nil(t, api.RateLimiter)
 
-	servicesOnly := decorate.NewTiers(
-		decoration.Config{Services: true}, full.Logger, full.Metrics, full.Tracer,
-	)
-	assert.Equal(t, decorate.Tiers{
-		Workflow: full, Pipeline: none, Service: full, Repository: none,
-	}, servicesOnly)
+	repo := deps(repository.Tier(), "users")
+	assert.NotNil(t, repo.Retrier)
+	assert.NotNil(t, repo.Breaker)
+
+	off, on, timeout := false, true, 2*time.Second
+	cfg := decoration.DefaultConfig()
+	cfg.Services.Overrides = map[string]decoration.Layers{
+		"billing": {Tracing: &off, Recovery: &off, Metrics: &on, Timeout: &timeout},
+	}
+	cfg.Controllers.Overrides = map[string]decoration.Layers{
+		"api": {Bulkhead: decoration.Bulkhead{Enabled: &on}},
+	}
+	tuned := decorate.NewDecorations(&cfg, collab)
+	billing, err := tuned.Deps(service.Tier(), "billing")
+	require.NoError(t, err)
+	assert.Nil(t, billing.Tracer)
+	assert.NotNil(t, billing.Metrics)
+	assert.True(t, billing.SkipRecovery)
+	assert.Equal(t, timeout, billing.Timeout)
+	shedding, err := tuned.Deps(transport.Tier(), "api")
+	require.NoError(t, err)
+	assert.NotNil(t, shedding.Bulkhead)
+	assert.True(t, shedding.ShedLoad)
+	users, err := tuned.Deps(service.Tier(), "users")
+	require.NoError(t, err)
+	assert.Equal(t, svc, users)
+
+	_, err = decs.Deps(decorate.Tier{Name: "gateway"}, "x")
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
+	bad := decoration.DefaultConfig()
+	bad.Clients.Defaults.Bulkhead.Enabled = &on
+	bad.Clients.Defaults.Bulkhead.Kind = "semaphore"
+	_, err = decorate.NewDecorations(&bad, collab).Deps(client.Tier(), "lock")
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}
+
+// TestDecorations_RecoveryLogsAPanicWithLoggingOff tests that recovery keeps its logger
+// when the logging layer is off.
+//
+// Why this test is important:
+//   - Services are not logged by default; a panic there would otherwise be turned into
+//     an internal error with its value and stack thrown away.
+//
+// What it tests:
+//   - Under DefaultConfig a service has no logging layer, yet a panicking op is logged
+//     at Error by the collaborators' logger and returns INTERNAL; with recovery off the
+//     Deps carry no panic logger.
+func TestDecorations_RecoveryLogsAPanicWithLoggingOff(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	logger := mocks.NewMockLogger(ctrl)
+	logger.EXPECT().WithContext(gomock.Any()).Return(logger)
+	logger.EXPECT().Error("service panic recovered", gomock.Any())
+	defaults := decoration.DefaultConfig()
+	collab := decorate.Collaborators{
+		Observability: decorate.Observability{Logger: logger},
+	}
+	deps, err := decorate.NewDecorations(&defaults, collab).Deps(service.Tier(), "users")
+	require.NoError(t, err)
+	require.Nil(t, deps.Logger)
+
+	_, err = service.Tier().Subject("users", deps).Exec(t.Context(), "Provision",
+		func(context.Context) (int, error) { panic("boom") })
+	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
+
+	off := false
+	unrecovered, err := decorate.Build("users", decoration.Layers{Recovery: &off}, collab)
+	require.NoError(t, err)
+	assert.Nil(t, unrecovered.PanicLogger)
 }

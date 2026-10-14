@@ -9,14 +9,9 @@ from __future__ import annotations
 import asyncio
 import json
 from io import StringIO
-from unittest.mock import AsyncMock
 
-import grpc
 import pytest
 
-from techai_webutils.clients.rpc.grpc.interceptors.tracing_server import (
-    TracingServerInterceptor,
-)
 from techai_webutils.foundation.logger.logger import configure_logging
 from techai_webutils.foundation.middleware import http_observability
 from techai_webutils.foundation.observability import parse_sample_rate
@@ -201,107 +196,6 @@ class TestHTTPMetrics:
         _serve("/api/things")
         [entry] = _http_logs(out.getvalue())
         assert entry.get("path") == "/api/things", "normal requests must still be logged"
-
-
-class TestTracingServerInterceptor:
-    """Tests for the tracing server interceptor."""
-
-    @pytest.mark.asyncio
-    async def test_passes_through_client_streaming_handlers(self) -> None:
-        """Test that the tracing interceptor returns client-streaming handlers untouched.
-
-        **Why this test is important:**
-          - The interceptor wraps unary_unary and unary_stream (the shapes our services use;
-            server-streaming ``QueryStream`` is unary_stream). It does NOT know how to wrap the
-            client-streaming shapes (stream_unary / stream_stream), so it must return them
-            unchanged rather than crash or silently break them, while still installing server-wide.
-
-        **What it tests:**
-          - For a stream_stream handler (both unary_unary and unary_stream are None),
-            intercept_service returns the same handler object it was given (identity)
-        """
-        interceptor = TracingServerInterceptor("test-svc")
-
-        class _Details(grpc.HandlerCallDetails):
-            method = "/svc/Method"
-            invocation_metadata = ()
-
-        # A client-streaming handler (unary_unary AND unary_stream are None) is returned as-is.
-        non_unary = grpc.stream_stream_rpc_method_handler(lambda req, _ctx: req)
-        result = await interceptor.intercept_service(
-            AsyncMock(return_value=non_unary), _Details()
-        )
-        assert result is non_unary
-
-    @pytest.mark.asyncio
-    async def test_wraps_server_streaming_handler(self) -> None:
-        """Test that the interceptor wraps a server-streaming handler and preserves its chunks.
-
-        **Why this test is important:**
-          - The reference RPC ``RetrievalService/QueryStream`` is server-streaming (unary_stream).
-            Before this fix the interceptor skipped every non-unary handler, so the whole retrieval
-            query path ran with NO active SERVER span — each inner client span started a new root
-            trace and single-request correlation was impossible. The interceptor must now wrap the
-            stream in one span held open across all yields WITHOUT dropping or reordering chunks.
-
-        **What it tests:**
-          - intercept_service returns a handler whose unary_stream is set (the stream is wrapped),
-            and iterating it yields the original chunks in order.
-        """
-        interceptor = TracingServerInterceptor("test-svc")
-
-        async def behavior(request: object, context: object):  # noqa: ANN202, ARG001
-            await asyncio.sleep(0)
-            for chunk in ("a", "b", "c"):
-                yield chunk
-
-        handler = grpc.unary_stream_rpc_method_handler(behavior)
-
-        class _Details(grpc.HandlerCallDetails):
-            method = "/svc/Stream"
-            invocation_metadata = ()
-
-        wrapped = await interceptor.intercept_service(
-            AsyncMock(return_value=handler), _Details()
-        )
-        assert wrapped is not None
-        assert wrapped.unary_stream is not None
-        assert wrapped.unary_unary is None
-        chunks = [chunk async for chunk in wrapped.unary_stream("req", None)]
-        assert chunks == ["a", "b", "c"]
-
-    @pytest.mark.asyncio
-    async def test_wraps_unary_handler(self) -> None:
-        """Test that the interceptor wraps a unary handler without breaking its behavior.
-
-        **Why this test is important:**
-          - Wrapping is where the SERVER span gets created, so the interceptor must
-            return a still-valid RPC method handler whose unary_unary callable runs the
-            original behavior. A wrapper that lost the response or returned None would
-            break every unary RPC while adding tracing
-
-        **What it tests:**
-          - intercept_service returns a non-None handler whose unary_unary is callable
-            and still yields the original behavior's "ok" result
-        """
-        interceptor = TracingServerInterceptor("test-svc")
-
-        async def behavior(request: object, context: object) -> str:  # noqa: ARG001
-            await asyncio.sleep(0)
-            return "ok"
-
-        handler = grpc.unary_unary_rpc_method_handler(behavior)
-
-        class _Details(grpc.HandlerCallDetails):
-            method = "/svc/Method"
-            invocation_metadata = ()
-
-        wrapped = await interceptor.intercept_service(
-            AsyncMock(return_value=handler), _Details()
-        )
-        assert wrapped is not None
-        assert wrapped.unary_unary is not None
-        assert await wrapped.unary_unary("req", None) == "ok"
 
 
 class TestSampleRate:

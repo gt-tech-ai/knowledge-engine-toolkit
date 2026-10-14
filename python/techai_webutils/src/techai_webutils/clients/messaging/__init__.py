@@ -13,11 +13,13 @@ from techai_webutils.clients.messaging.builder import (
     new_messaging_subscriber_from_config,
 )
 from techai_webutils.clients.messaging.config import SQSConfig
+from techai_webutils.clients.messaging.decorated import decorate
 
 __all__ = [
     "MessagingConfig",
     "MessagingKind",
     "SQSConfig",
+    "decorate",
     "new_messaging_from_config",
     "new_messaging_subscriber_from_config",
 ]

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	codec "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/jsonapi"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/jsonapi"
 )
 
@@ -34,7 +35,7 @@ import (
 func TestTransformSingleResource(t *testing.T) {
 	t.Parallel()
 
-	cfg := jsonapi.ResourceConfig{
+	cfg := codec.ResourceConfig{
 		Type:      "users",
 		SingleKey: "user",
 	}
@@ -51,7 +52,7 @@ func TestTransformSingleResource(t *testing.T) {
 			},
 		}
 
-		result := jsonapi.TransformSingleResource(body, cfg, "/api/v1/demo/users/123")
+		result := codec.TransformSingleResource(body, cfg, "/api/v1/demo/users/123")
 
 		data, ok := result["data"].(map[string]any)
 		require.True(t, ok, "expected data key")
@@ -75,7 +76,7 @@ func TestTransformSingleResource(t *testing.T) {
 
 		body := map[string]any{"user": map[string]any{"id": "123"}}
 
-		result := jsonapi.TransformSingleResource(body, cfg, "/api/v1/demo/users/123")
+		result := codec.TransformSingleResource(body, cfg, "/api/v1/demo/users/123")
 
 		data, ok := result["data"].(map[string]any)
 		require.True(t, ok, "expected data key")
@@ -87,7 +88,7 @@ func TestTransformSingleResource(t *testing.T) {
 	t.Run("missing key wraps as meta", func(t *testing.T) {
 		t.Parallel()
 		body := map[string]any{"other": "value"}
-		result := jsonapi.TransformSingleResource(body, cfg, "/test")
+		result := codec.TransformSingleResource(body, cfg, "/test")
 		meta, ok := result["meta"].(map[string]any)
 		require.True(t, ok, "expected meta key")
 		assert.Equal(t, "value", meta["other"])
@@ -96,7 +97,7 @@ func TestTransformSingleResource(t *testing.T) {
 	t.Run("non-map value falls back", func(t *testing.T) {
 		t.Parallel()
 		body := map[string]any{"user": "not-a-map"}
-		result := jsonapi.TransformSingleResource(body, cfg, "/test")
+		result := codec.TransformSingleResource(body, cfg, "/test")
 		assert.Equal(t, body, result)
 	})
 }
@@ -124,7 +125,7 @@ func TestTransformSingleResource(t *testing.T) {
 func TestTransformCollection(t *testing.T) {
 	t.Parallel()
 
-	cfg := jsonapi.ResourceConfig{
+	cfg := codec.ResourceConfig{
 		Type:          "users",
 		CollectionKey: "users",
 		PaginationKey: "pagination",
@@ -144,7 +145,7 @@ func TestTransformCollection(t *testing.T) {
 			},
 		}
 
-		result := jsonapi.TransformCollection(body, cfg, "/api/v1/demo/users")
+		result := codec.TransformCollection(body, cfg, "/api/v1/demo/users")
 
 		data, ok := result["data"].([]any)
 		require.True(t, ok)
@@ -178,7 +179,7 @@ func TestTransformCollection(t *testing.T) {
 			},
 		}
 
-		result := jsonapi.TransformCollection(body, cfg, "/api/v1/demo/users")
+		result := codec.TransformCollection(body, cfg, "/api/v1/demo/users")
 
 		meta, ok := result["meta"].(map[string]any)
 		require.True(t, ok)
@@ -198,7 +199,7 @@ func TestTransformCollection(t *testing.T) {
 			"users": []any{},
 		}
 
-		result := jsonapi.TransformCollection(body, cfg, "/api/v1/demo/users")
+		result := codec.TransformCollection(body, cfg, "/api/v1/demo/users")
 
 		data, ok := result["data"].([]any)
 		require.True(t, ok)
@@ -217,7 +218,7 @@ func TestTransformCollection(t *testing.T) {
 			"pagination": map[string]any{},
 		}
 
-		result := jsonapi.TransformCollection(body, cfg, "/api/v1/demo/users")
+		result := codec.TransformCollection(body, cfg, "/api/v1/demo/users")
 
 		data, ok := result["data"].([]any)
 		require.True(t, ok)
@@ -256,7 +257,7 @@ func TestTransformError(t *testing.T) {
 		t.Parallel()
 
 		input := []byte(`{"code":"not_found","message":"user not found"}`)
-		result := jsonapi.TransformError(404, input)
+		result := codec.TransformError(404, input)
 
 		var parsed map[string]any
 		require.NoError(t, json.Unmarshal(result, &parsed))
@@ -276,7 +277,7 @@ func TestTransformError(t *testing.T) {
 		t.Parallel()
 
 		input := []byte(`{"code":"invalid_argument","message":"email is required"}`)
-		result := jsonapi.TransformError(400, input)
+		result := codec.TransformError(400, input)
 
 		var parsed map[string]any
 		require.NoError(t, json.Unmarshal(result, &parsed))
@@ -295,7 +296,7 @@ func TestTransformError(t *testing.T) {
 		t.Parallel()
 
 		input := []byte(`{"code":5,"message":"resource not found"}`)
-		result := jsonapi.TransformError(404, input)
+		result := codec.TransformError(404, input)
 
 		var parsed map[string]any
 		require.NoError(t, json.Unmarshal(result, &parsed))
@@ -317,7 +318,7 @@ func TestTransformError(t *testing.T) {
 		t.Parallel()
 
 		input := []byte(`{"code":99,"message":"weird"}`)
-		result := jsonapi.TransformError(500, input)
+		result := codec.TransformError(500, input)
 
 		var parsed map[string]any
 		require.NoError(t, json.Unmarshal(result, &parsed))
@@ -331,7 +332,7 @@ func TestTransformError(t *testing.T) {
 		t.Parallel()
 
 		input := []byte(`not json`)
-		result := jsonapi.TransformError(500, input)
+		result := codec.TransformError(500, input)
 
 		var parsed map[string]any
 		require.NoError(t, json.Unmarshal(result, &parsed))
@@ -345,7 +346,7 @@ func TestTransformError(t *testing.T) {
 	t.Run("empty body", func(t *testing.T) {
 		t.Parallel()
 
-		result := jsonapi.TransformError(503, nil)
+		result := codec.TransformError(503, nil)
 
 		var parsed map[string]any
 		require.NoError(t, json.Unmarshal(result, &parsed))

@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	connectpkg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/transport/connect"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
+	connectpkg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect"
 )
 
 // TestConnectServer_DefaultServerConfig tests that DefaultServerConfig returns

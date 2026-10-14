@@ -4,11 +4,13 @@ Merged home for the per-layer unit fixtures that previously lived in the
 now-collapsed ``tests/<layer>/conftest.py`` files:
 
 - ``isolate_config_env`` / ``mock_redis`` — from the former ``foundation/conftest.py``.
-- ``s3_config`` / ``sqs_config`` / ``mock_service`` — from the former ``clients/conftest.py``.
-- ``metrics_mock`` — the spec'd ``MetricsProvider`` shared by the client-decorator metric tests.
+- ``s3_config`` / ``sqs_config`` — from the former ``clients/conftest.py``.
+- ``metrics_mock`` — the spec'd ``MetricsProvider`` shared by the metric tests.
+- ``observed`` — mocked logger, metrics and tracer behind one ``Observability``, recording the
+  spans, series and log lines a decorated tier emits.
 - ``aws_client`` — the mocked aiobotocore client the S3/SQS clients open.
 
-The seven fixture names are disjoint, so the merge introduces no collisions. The
+The fixture names are disjoint, so the merge introduces no collisions. The
 integration suite keeps its own ``sqs_config`` / ``s3_config`` (real ElasticMQ/MinIO)
 in ``tests/integration/conftest.py``, resolved independently for that directory.
 """
@@ -16,6 +18,8 @@ in ``tests/integration/conftest.py``, resolved independently for that directory.
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -23,11 +27,13 @@ import pytest
 
 from techai_webutils.clients.messaging.config import SQSConfig
 from techai_webutils.clients.storage.config import S3Config
+from techai_webutils.core.interfaces.logger import Logger
 from techai_webutils.core.interfaces.metrics import (
     MetricCounter,
     MetricHistogram,
     MetricsProvider,
 )
+from techai_webutils.core.interfaces.tracer import SpanKind, TracerProvider, TracerSpan
 from techai_webutils.foundation.config.bridge import reset_config
 from techai_webutils.foundation.config.settings import (
     DatabaseSettings,
@@ -38,9 +44,10 @@ from techai_webutils.foundation.config.settings import (
     ServerSettings,
     SQSSettings,
 )
+from techai_webutils.foundation.decorate import Observability
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator, Iterator
 
 _TEST_PREFIX = "MYAPP_"
 """The env-var prefix the config tests export under."""
@@ -143,21 +150,6 @@ def aws_client() -> Iterator[AsyncMock]:
 
 
 @pytest.fixture
-def mock_service() -> MagicMock:
-    """Return a MagicMock service reproducing the canned returns the proxies forward.
-
-    ``get_item(id)`` -> ``{"id": id, "name": "test"}``; ``create_item(name)`` ->
-    ``{"id": "new", "name": name}``; ``failing_method()`` raises ``RuntimeError``, so the
-    proxy tests can assert transparent forwarding, chained composition, and error propagation.
-    """
-    svc = MagicMock()
-    svc.get_item.side_effect = lambda item_id: {"id": item_id, "name": "test"}
-    svc.create_item.side_effect = lambda name: {"id": "new", "name": name}
-    svc.failing_method.side_effect = RuntimeError("intentional failure")
-    return svc
-
-
-@pytest.fixture
 def metrics_mock() -> tuple[MagicMock, dict[str, MagicMock]]:
     """Return a ``MetricsProvider`` mock plus its instruments, recorded by metric name as they are declared.
 
@@ -180,3 +172,44 @@ def metrics_mock() -> tuple[MagicMock, dict[str, MagicMock]]:
     provider.counter.side_effect = _counter
     provider.histogram.side_effect = _histogram
     return provider, instruments
+
+
+@dataclass
+class Observed:
+    """Mocked observability collaborators and what a decorated tier emitted through them."""
+
+    observability: Observability
+    """The logger, metrics and tracer mocks, as a tier's Deps take them."""
+
+    logger: MagicMock
+    """The ``Logger`` mock."""
+
+    instruments: dict[str, MagicMock]
+    """The metric instruments, by series name."""
+
+    spans: list[tuple[str, SpanKind, dict[str, object]]] = field(default_factory=list)
+    """Each span opened: its name, kind and attributes."""
+
+    span_errors: list[BaseException] = field(default_factory=list)
+    """Each error recorded on a span."""
+
+
+@pytest.fixture
+def observed(metrics_mock: tuple[MagicMock, dict[str, MagicMock]]) -> Observed:
+    """Return mocked observability collaborators that record the spans, series and log lines."""
+    provider, instruments = metrics_mock
+    tracer = MagicMock(spec=TracerProvider)
+    logger = MagicMock(spec=Logger)
+    result = Observed(Observability(logger, provider, tracer), logger, instruments)
+
+    @contextmanager
+    def span(
+        name: str, *, kind: SpanKind = SpanKind.INTERNAL, **attributes: object
+    ) -> Generator[TracerSpan]:
+        result.spans.append((name, kind, attributes))
+        handle = MagicMock(spec=TracerSpan)
+        handle.record_error.side_effect = result.span_errors.append
+        yield handle
+
+    tracer.span.side_effect = span
+    return result

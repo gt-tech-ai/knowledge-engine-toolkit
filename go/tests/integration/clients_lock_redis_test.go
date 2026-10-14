@@ -308,11 +308,11 @@ func (s *RedisLockSuite) TestRenew_KeepsHoldAlive() {
 //     contends and whose Hold acquires + manages a key against real Redis.
 func (s *RedisLockSuite) TestNewFromConfig_RedisBackend() {
 	ctx := context.Background()
-	l, err := lock.NewFromConfig(&lock.Config{
+	l, err := lock.NewFromConfig(ctx, lock.Config{
 		Kind:          lock.KindRedis,
 		TTL:           30 * time.Second,
 		RenewInterval: 10 * time.Second,
-	}, s.cache.Client())
+	}, lock.Deps{Redis: s.cache.Client()})
 	s.Require().NoError(err)
 	s.Require().NotNil(l)
 

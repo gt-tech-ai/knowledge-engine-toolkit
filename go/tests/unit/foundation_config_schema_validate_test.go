@@ -135,14 +135,16 @@ func TestResilienceValidate_RemainingBranches(t *testing.T) {
 //
 // Why this test is important:
 //   - The repo/pipeline/domain/store/edge/worker surfaces are tuned per environment;
-//     the guards not hit by the existing tests (a negative cache TTL/version/timeout,
+//     the guards not hit by the existing tests (a negative cache TTL/version, an
+//     unknown store kind,
 //     a non-positive multipart size, a zero bulk count, the pending-cohort bounds,
 //     an enabled-but-zero rate-limit burst, a negative header cap, a
 //     negative worker port/batch, the orphan-grace sweep invariant) each protect a
 //     distinct silently-broken configuration and must fail loudly at load.
 //
 // What it tests:
-//   - repos rejects a negative TTL, version, and timeout; pipelines rejects a
+//   - repos rejects a negative TTL and version; stores rejects an unknown kind and
+//     accepts gorm; pipelines rejects a
 //     non-positive multipart threshold/part size and a negative timeout; services
 //     rejects a zero bulk count; stores rejects a negative max_page_size, a
 //     non-positive/inverted pending-indexing cohort; transport rejects an
@@ -161,13 +163,13 @@ func TestLayerConfigValidate_RemainingBranches(t *testing.T) {
 	badVersion.Caching.Version = -1
 	require.Error(t, badVersion.Validate(), "a negative cache version must be rejected")
 
-	badRepoTimeout := repos.DefaultConfig()
-	badRepoTimeout.Timeout = -1
-	require.Error(
-		t,
-		badRepoTimeout.Validate(),
-		"a negative repo timeout must be rejected",
-	)
+	// stores: an ORM kind no store kind implements.
+	badKind := stores.DefaultConfig()
+	badKind.Kind = "mongo"
+	require.Error(t, badKind.Validate(), "an unknown store kind must be rejected")
+	gormKind := stores.DefaultConfig()
+	gormKind.Kind = "gorm"
+	require.NoError(t, gormKind.Validate(), "gorm is a store kind")
 
 	// pipelines: non-positive multipart sizes and a negative timeout.
 	badThreshold := pipelines.DefaultConfig()

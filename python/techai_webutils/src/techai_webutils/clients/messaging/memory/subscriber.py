@@ -2,7 +2,8 @@
 
 ``InMemorySubscriber`` reads messages from an ``InMemoryBroker`` instead of SQS, so a worker can
 build and unit-test the consume path with no ElasticMQ/SQS. Mirrors Go's ``messaging/memory``.
-Owns no external resource; ``close`` stops the receive loop.
+Owns no external resource; ``close`` stops the receive loop. Each handler call continues the
+publisher's trace and runs through the handler tier.
 """
 
 from __future__ import annotations
@@ -11,11 +12,13 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Self
 
+from techai_webutils.clients.messaging.handling import run_handler
 from techai_webutils.core.interfaces.messaging import MessageConsumer
 
 if TYPE_CHECKING:
     from types import TracebackType
 
+    from techai_webutils.clients.client import ClientBase
     from techai_webutils.clients.messaging.memory.broker import InMemoryBroker
     from techai_webutils.core.interfaces.messaging import MessageHandler
 
@@ -28,9 +31,16 @@ _POLL_TIMEOUT = 0.05
 class InMemorySubscriber(MessageConsumer):
     """A ``MessageConsumer`` that reads from a shared ``InMemoryBroker`` (dev/test)."""
 
-    def __init__(self, broker: InMemoryBroker) -> None:
-        """Consume from ``broker``; a publisher built from the same broker feeds this subscriber."""
+    def __init__(
+        self, broker: InMemoryBroker, handlers: ClientBase | None = None
+    ) -> None:
+        """Consume from ``broker``, running each handler call through ``handlers``.
+
+        A publisher built from the same broker feeds this subscriber. ``handlers`` is the handler
+        tier (``ClientBase.handler``); None runs handlers undecorated.
+        """
         self._broker = broker
+        self._handlers = handlers
         self._closed = asyncio.Event()
 
     async def __aenter__(self) -> Self:
@@ -60,7 +70,7 @@ class InMemorySubscriber(MessageConsumer):
             # Go subscriber (which ignores the handler's error return). The in-memory broker has no
             # redelivery, so this is a stub's best effort, not at-least-once.
             try:
-                await handler(message)
+                await run_handler(self._handlers, topic, handler, message)
             except Exception:
                 # Best-effort stub: log and keep consuming past a bad message (the in-memory broker
                 # has no redelivery), mirroring the Go subscriber's ignore-the-error semantics.

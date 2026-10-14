@@ -5,8 +5,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cassandra"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
 )
@@ -98,7 +98,7 @@ func (s *Store) Compact(
 // clustering order.
 func (s *Store) readPartition(
 	ctx context.Context,
-	session cassandra.Session,
+	session interfaces.CQLSession,
 	cube string,
 	grain types.Grain,
 	org string,
@@ -152,7 +152,7 @@ func (s *Store) readPartition(
 // batch, writing the merged row USING TTL ttlSeconds when it is positive.
 func compactGroup(
 	ctx context.Context,
-	session cassandra.Session,
+	session interfaces.CQLSession,
 	cube string,
 	grain types.Grain,
 	org string,
@@ -177,7 +177,7 @@ func compactGroup(
 		if err != nil {
 			return err
 		}
-		batch := session.Batch(cassandra.LoggedBatch).WithContext(ctx)
+		batch := session.Batch(interfaces.CQLLoggedBatch).WithContext(ctx)
 		batch.Query(
 			upsert,
 			append([]any{org, cube, bucket, g.ts, dimsKey, g.dims, next}, ttlArgs...)...)

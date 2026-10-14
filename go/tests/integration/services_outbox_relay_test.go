@@ -21,12 +21,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 
-	clientdecorators "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/decorators"
 	outboxclient "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/outbox"
+	outboxstore "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox"
+	outboxpg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
 	elasticmqdb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/elasticmq"
 	miniodb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/minio"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/postgres"
@@ -49,8 +50,33 @@ func enqueuedAt() time.Time {
 	return time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 }
 
-// newOutboxStore starts Postgres and returns the migrated reference store.
-func newOutboxStore(t *testing.T) *outboxtest.SQLStore {
+// relaySchema is a product-shaped outbox table whose route column carries the record
+// attribute a routing sink reads.
+const relaySchema = `
+CREATE TABLE relay_outbox (
+	id              uuid        PRIMARY KEY,
+	lane            text        NOT NULL,
+	route           text        NOT NULL DEFAULT '',
+	aggregate_id    text        NOT NULL,
+	tenant          text        NOT NULL DEFAULT '',
+	payload         bytea       NOT NULL,
+	status          text        NOT NULL DEFAULT 'pending',
+	attempts        integer     NOT NULL DEFAULT 0,
+	next_attempt_at timestamptz NOT NULL DEFAULT now(),
+	last_error      text        NOT NULL DEFAULT '',
+	created_at      timestamptz NOT NULL DEFAULT now(),
+	sent_at         timestamptz
+)`
+
+// newOutboxStore starts Postgres, creates the relay's outbox table and returns the
+// postgres-kind store over it, built by the outbox-store factory, with the
+// producer-side insert.
+func newOutboxStore(
+	t *testing.T,
+) (
+	store interfaces.OutboxStore,
+	enqueue func(context.Context, *types.OutboxRecord) error,
+) {
 	t.Helper()
 	ctx := context.Background()
 	pg, err := postgres.NewTestDatabase(ctx)
@@ -59,9 +85,34 @@ func newOutboxStore(t *testing.T) *outboxtest.SQLStore {
 	db, err := pg.OpenDB()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	store := outboxtest.NewSQLStore(db, time.Minute)
-	require.NoError(t, store.Migrate(ctx))
-	return store
+	_, err = db.ExecContext(ctx, relaySchema)
+	require.NoError(t, err)
+	store, err = outboxstore.NewFromConfig(ctx, outboxstore.Config{
+		Kind: outboxstore.KindPostgres,
+		Postgres: outboxpg.Config{
+			Table:            "relay_outbox",
+			TenantColumn:     "tenant",
+			AttributeColumns: map[string]string{types.OutboxRouteAttribute: "route"},
+			Lease:            time.Minute,
+		},
+	}, outboxstore.Deps{DB: db})
+	require.NoError(t, err)
+	enqueue = func(ctx context.Context, rec *types.OutboxRecord) error {
+		created := rec.CreatedAt
+		if created.IsZero() {
+			created = time.Now()
+		}
+		_, err := db.ExecContext(ctx, `INSERT INTO relay_outbox
+			(id, lane, route, aggregate_id, tenant, payload, created_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+			rec.ID, rec.Lane, rec.Attributes[types.OutboxRouteAttribute], rec.Key,
+			rec.Tenant, rec.Payload, created)
+		if err != nil {
+			return apperr.Wrap(err, apperr.CodeInternal, "relay test: enqueue")
+		}
+		return nil
+	}
+	return store, enqueue
 }
 
 // awsConfig is a static-credential AWS config for a local emulator.
@@ -79,7 +130,12 @@ func awsConfig(t *testing.T, key, secret string) aws.Config {
 }
 
 // enqueueN enqueues n records on lane for tenant and returns their ids.
-func enqueueN(t *testing.T, store *outboxtest.SQLStore, lane string, n int) []uuid.UUID {
+func enqueueN(
+	t *testing.T,
+	enqueue func(context.Context, *types.OutboxRecord) error,
+	lane string,
+	n int,
+) []uuid.UUID {
 	t.Helper()
 	ids := make([]uuid.UUID, n)
 	for i := range n {
@@ -88,7 +144,7 @@ func enqueueN(t *testing.T, store *outboxtest.SQLStore, lane string, n int) []uu
 			ID: ids[i], Lane: lane, Tenant: "org-1", Key: strconv.Itoa(i),
 			Payload: []byte(`{"seq":` + strconv.Itoa(i) + `}`), CreatedAt: enqueuedAt(),
 		}
-		require.NoError(t, store.Enqueue(context.Background(), &rec))
+		require.NoError(t, enqueue(context.Background(), &rec))
 	}
 	return ids
 }
@@ -108,22 +164,6 @@ func drain(t *testing.T, relay *outbox.Relay, store interfaces.OutboxStore, lane
 	t.Fatal("relay did not drain the lane")
 }
 
-// TestOutboxStoreConformance_SQLReference runs the OutboxStore conformance suite
-// against the reference database/sql store on a real Postgres.
-//
-// Why this test is important:
-//   - The suite is what every consumer store is held to; it must itself pass
-//     against a real Postgres (SKIP LOCKED, the DB clock), or it proves nothing.
-//
-// What it tests:
-//   - Disjoint concurrent claims, next_attempt_at honoured, sent/parked rows
-//     excluded, and Stats, on the reference store.
-func TestOutboxStoreConformance_SQLReference(t *testing.T) {
-	requireIntegration(t)
-	store := newOutboxStore(t)
-	outboxtest.Run(t, outboxtest.Harness{Store: store, Enqueue: store.Enqueue})
-}
-
 // TestRelay_EndToEnd_PostgresToSQS drains a Postgres outbox into a real SQS
 // (ElasticMQ) queue through the factory-built, decorated sink.
 //
@@ -137,7 +177,7 @@ func TestOutboxStoreConformance_SQLReference(t *testing.T) {
 func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 	requireIntegration(t)
 	ctx := context.Background()
-	store := newOutboxStore(t)
+	store, enqueue := newOutboxStore(t)
 	emq, err := elasticmqdb.NewTestElasticMQ(ctx)
 	require.NoError(t, err, "start elasticmq")
 	t.Cleanup(func() { emq.Close(context.Background()) })
@@ -154,11 +194,11 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 
 	cfg := outboxclient.DefaultConfig()
 	cfg.Kind = outboxclient.KindSQS
-	cfg.SQS.API, cfg.SQS.Queue = api, "outbox-e2e"
-	sink, err := outboxclient.NewFromConfig(cfg, clientdecorators.Deps{})
+	cfg.SQS.Queue = "outbox-e2e"
+	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
-	ids := enqueueN(t, store, "events", 25)
+	ids := enqueueN(t, enqueue, "events", 25)
 	relay := outbox.NewRelay(
 		outbox.DefaultRelayConfig("events"),
 		store,
@@ -206,7 +246,7 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 	requireIntegration(t)
 	ctx := context.Background()
-	store := newOutboxStore(t)
+	store, enqueue := newOutboxStore(t)
 	mio, err := miniodb.NewTestMinIO(ctx)
 	require.NoError(t, err, "start minio")
 	t.Cleanup(func() { mio.Close(context.Background()) })
@@ -239,11 +279,11 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 
 	cfg := outboxclient.DefaultConfig()
 	cfg.Kind = outboxclient.KindS3
-	cfg.S3.API, cfg.S3.Bucket = api, bucket
-	sink, err := outboxclient.NewFromConfig(cfg, clientdecorators.Deps{})
+	cfg.S3.Bucket = bucket
+	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{S3API: api})
 	require.NoError(t, err)
 
-	ids := enqueueN(t, store, "audit", 5)
+	ids := enqueueN(t, enqueue, "audit", 5)
 	relay := outbox.NewRelay(
 		outbox.DefaultRelayConfig("audit"),
 		store,
@@ -311,7 +351,7 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 	requireIntegration(t)
 	ctx := context.Background()
-	store := newOutboxStore(t)
+	store, enqueue := newOutboxStore(t)
 	emq, err := elasticmqdb.NewTestElasticMQ(ctx)
 	require.NoError(t, err, "start elasticmq")
 	t.Cleanup(func() { emq.Close(context.Background()) })
@@ -344,13 +384,13 @@ func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 
 	cfg := outboxclient.DefaultConfig()
 	cfg.Kind = outboxclient.KindSQS
-	cfg.SQS.API, cfg.SQS.Routes = api, routes
-	sink, err := outboxclient.NewFromConfig(cfg, clientdecorators.Deps{})
+	cfg.SQS.Routes = routes
+	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
 	outboxtest.RunRouting(
 		t,
-		outboxtest.Harness{Store: store, Enqueue: store.Enqueue},
+		outboxtest.Harness{Store: store, Enqueue: enqueue},
 		outboxtest.Routing{
 			RunOnce: func(ctx context.Context, lane string) error {
 				return outbox.NewRelay(outbox.DefaultRelayConfig(lane), store, sink, nil, nil, nil).

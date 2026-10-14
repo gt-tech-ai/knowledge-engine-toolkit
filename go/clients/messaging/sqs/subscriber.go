@@ -11,10 +11,11 @@ import (
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/decorators"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/lifecycle"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer"
 )
 
 // Compile-time interface assertion.
@@ -62,8 +63,8 @@ type Subscriber struct {
 	ready func(ctx context.Context) error
 	// logger reports receive/handle errors surfaced by the poll goroutines.
 	logger interfaces.Logger
-	// obs wraps each handler with per-message logging + metrics.
-	obs *decorators.HandlerObservability
+	// handlers runs each handle through the client tier (op = the topic).
+	handlers client.Base
 	// cancels holds the cancel func for each Subscribe's poll goroutine, cancelled by Close.
 	cancels []context.CancelFunc
 	// wg tracks the poll goroutines so Close can wait for in-flight handlers to drain.
@@ -79,16 +80,16 @@ type Subscriber struct {
 }
 
 // NewSubscriber creates an SQS message subscriber. It uses Config.API when set,
-// otherwise builds the real AWS SDK client from cfg. Config.BaseBackoff overrides
-// the initial receive-retry wait and Config.WaitTimeSeconds the long-poll wait (0
-// uses each package default); Config.Ready gates receiving and Config.NackDelay
-// delays a failed message's redelivery. Out-of-range poll settings are a
-// CodeInvalidInput error.
-func NewSubscriber(cfg Config) (*Subscriber, error) {
+// otherwise builds the real AWS SDK client from cfg, loading the AWS config under
+// ctx. Config.BaseBackoff overrides the initial receive-retry wait and
+// Config.WaitTimeSeconds the long-poll wait (0 uses each package default);
+// Config.Ready gates receiving and Config.NackDelay delays a failed message's
+// redelivery. Out-of-range poll settings are a CodeInvalidInput error.
+func NewSubscriber(ctx context.Context, cfg Config) (*Subscriber, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
-	api, err := resolveAPI(context.Background(), cfg)
+	api, err := resolveAPI(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +105,7 @@ func NewSubscriber(cfg Config) (*Subscriber, error) {
 		api:             api,
 		ready:           cfg.Ready,
 		logger:          cfg.Logger,
-		obs:             decorators.NewHandlerObservability(cfg.Logger, cfg.Metrics),
+		handlers:        cfg.Handlers,
 		nackDelay:       cfg.NackDelay,
 		baseBackoff:     baseBackoff,
 		waitTimeSeconds: wait,
@@ -119,11 +120,6 @@ func (s *Subscriber) Subscribe(
 	topic string,
 	handler interfaces.MessageHandler,
 ) error {
-	// Per-message observability (handle logging + metrics) is applied as a composed
-	// handler decorator; the receive loop's own infra resilience + error logging
-	// (queue resolution, receive, ack) stays intrinsic to consume.
-	handler = s.obs.Wrap(handler)
-
 	loopCtx, cancel := context.WithCancel(ctx)
 	s.mu.Lock()
 	s.cancels = append(s.cancels, cancel)
@@ -187,9 +183,10 @@ func (s *Subscriber) consume(
 		}
 
 		out, err := s.api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
-			QueueUrl:            aws.String(queueURL),
-			MaxNumberOfMessages: maxMessagesPerReceive,
-			WaitTimeSeconds:     s.waitTimeSeconds,
+			QueueUrl:              aws.String(queueURL),
+			MaxNumberOfMessages:   maxMessagesPerReceive,
+			WaitTimeSeconds:       s.waitTimeSeconds,
+			MessageAttributeNames: []string{"All"},
 		})
 		if err != nil {
 			if !s.backoffOrDone(ctx, "receive", topic, err, &backoff) {
@@ -248,7 +245,9 @@ func (s *Subscriber) handleBatch(
 // runHandler dispatches one message to the handler on a grace-bounded context
 // decoupled from the loop's cancellation, and reports whether it was handled
 // successfully (and so should be acked). A handler error leaves the message for
-// redelivery (nack); it is logged by the handler observability decorator.
+// redelivery (nack) and is logged. Each handle runs through the client tier as the
+// operation named by its topic, continuing the trace the publisher put in the message's
+// attributes.
 func (s *Subscriber) runHandler(
 	ctx context.Context,
 	topic string,
@@ -258,11 +257,34 @@ func (s *Subscriber) runHandler(
 	hctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), handlerGracePeriod)
 	defer cancel()
 	msg := &interfaces.Message{
-		ID:      aws.ToString(m.MessageId),
-		Topic:   topic,
-		Payload: []byte(aws.ToString(m.Body)),
+		ID:       aws.ToString(m.MessageId),
+		Topic:    topic,
+		Payload:  []byte(aws.ToString(m.Body)),
+		Metadata: stringAttributes(m.MessageAttributes),
 	}
-	return handler(hctx, msg) == nil
+	hctx = tracer.Extract(hctx, msg.Metadata)
+	err := s.handlers.DoOnce(hctx, topic, func(ctx context.Context) error {
+		return handler(ctx, msg)
+	})
+	if err != nil {
+		s.logError("handle", topic, err)
+	}
+	return err == nil
+}
+
+// stringAttributes returns a received message's string attributes (the publisher's
+// trace context among them), or nil when it has none.
+func stringAttributes(attrs map[string]sqstypes.MessageAttributeValue) map[string]string {
+	if len(attrs) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(attrs))
+	for k, v := range attrs {
+		if v.StringValue != nil {
+			out[k] = *v.StringValue
+		}
+	}
+	return out
 }
 
 // delayRedelivery hides a nacked message for a uniformly jittered delay in

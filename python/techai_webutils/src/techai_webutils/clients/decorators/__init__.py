@@ -1,9 +1,8 @@
-"""Proxy decorators for logging, tracing, retry, client RED metrics, and GenAI span enrichment."""
+"""GenAI span enrichment for LLM and retrieval clients (the client tier is ``clients.client``)."""
 
 from techai_webutils.clients.decorators.ai_enricher import (
     GEN_AI_SYSTEM_BY_PROVIDER,
     AiSpanEnricher,
 )
-from techai_webutils.clients.decorators.metrics_proxy import MetricsProxy
 
-__all__ = ["GEN_AI_SYSTEM_BY_PROVIDER", "AiSpanEnricher", "MetricsProxy"]
+__all__ = ["GEN_AI_SYSTEM_BY_PROVIDER", "AiSpanEnricher"]

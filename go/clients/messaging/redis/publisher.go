@@ -22,7 +22,8 @@ var (
 
 // Publisher publishes messages to Redis channels via PUBLISH (fire-and-forget,
 // at-most-once — Redis drops a message that has no live subscriber). It holds the
-// shared go-redis client and opens no connection of its own.
+// shared go-redis client and opens no connection of its own. Pub/Sub carries the payload
+// alone, so a trace does not cross a Redis channel (the SQS and memory kinds carry it).
 type Publisher struct {
 	// NoOp supplies the no-op Start/Stop: PUBLISH is a stateless command on the
 	// shared client, so the publisher owns no lifecycle resource.

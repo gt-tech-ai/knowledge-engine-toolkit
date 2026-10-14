@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	analyticscassandra "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/analytics/cassandra"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cassandra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
@@ -37,7 +37,7 @@ const itCube = "genai_calls"
 
 // AnalyticsCassandraSuite holds a real Cassandra with the cube's tables.
 type AnalyticsCassandraSuite struct {
-	session cassandra.Session
+	session interfaces.CQLSession
 	testsuite.CassandraIntegrationSuite
 }
 
@@ -67,12 +67,11 @@ func (s *AnalyticsCassandraSuite) SetupSuite() {
 		s.Require().NoError(err)
 		s.Require().NoError(s.Cassandra.Exec(ctx, ddl))
 	}
-	session, err := cassandra.New(cassandra.KindCassandra,
-		cassandra.WithHosts(s.CassandraPort, s.CassandraHost),
-		cassandra.WithLocalDC(cassandradb.LocalDC),
-		cassandra.WithKeyspace(itKeyspace),
-		cassandra.WithTimeout(20*time.Second),
-	)
+	cfg := cql.DefaultConfig()
+	cfg.Cassandra.Hosts, cfg.Cassandra.Port = []string{s.CassandraHost}, s.CassandraPort
+	cfg.Cassandra.LocalDC = cassandradb.LocalDC
+	cfg.Keyspace, cfg.Timeout = itKeyspace, 20*time.Second
+	session, err := cql.NewFromConfig(ctx, cfg, cql.Deps{})
 	s.Require().NoError(err)
 	s.session = session
 }
@@ -87,7 +86,7 @@ func (s *AnalyticsCassandraSuite) TearDownSuite() {
 
 // newStore builds a store over the suite session (pageSize 0 = default).
 func (s *AnalyticsCassandraSuite) newStore(
-	session cassandra.Session,
+	session interfaces.CQLSession,
 	pageSize int,
 ) *analyticscassandra.Store {
 	store, err := analyticscassandra.New(session, analyticscassandra.Config{
@@ -384,33 +383,33 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
 // for it: every other statement reaches the real Cassandra, so it is not a test
 // double under the policy.
 type crashingSession struct {
-	cassandra.Session
+	interfaces.CQLSession
 	table   string
 	crashed bool
 }
 
 // Query fails the first matching insert's Exec.
-func (c *crashingSession) Query(stmt string, values ...any) cassandra.Query {
-	q := c.Session.Query(stmt, values...)
+func (c *crashingSession) Query(stmt string, values ...any) interfaces.CQLQuery {
+	q := c.CQLSession.Query(stmt, values...)
 	if !c.crashed && strings.HasPrefix(stmt, "INSERT INTO "+c.table+" ") {
 		c.crashed = true
-		return crashingQuery{Query: q}
+		return crashingQuery{CQLQuery: q}
 	}
 	return q
 }
 
 // crashingQuery wraps the real query of the failed insert and fails Exec without
 // reaching Cassandra; its other methods delegate to the real query.
-type crashingQuery struct{ cassandra.Query }
+type crashingQuery struct{ interfaces.CQLQuery }
 
 // WithContext keeps the crash armed on the context-bound query.
-func (q crashingQuery) WithContext(ctx context.Context) cassandra.Query {
-	return crashingQuery{q.Query.WithContext(ctx)}
+func (q crashingQuery) WithContext(ctx context.Context) interfaces.CQLQuery {
+	return crashingQuery{q.CQLQuery.WithContext(ctx)}
 }
 
 // Idempotent keeps the crash armed on the idempotent query.
-func (q crashingQuery) Idempotent(b bool) cassandra.Query {
-	return crashingQuery{q.Query.Idempotent(b)}
+func (q crashingQuery) Idempotent(b bool) interfaces.CQLQuery {
+	return crashingQuery{q.CQLQuery.Idempotent(b)}
 }
 
 // Exec fails with CodeUnavailable, as a process killed mid-write would.
@@ -433,8 +432,8 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CrashBetweenWritesDoesNotLoseMea
 	f := fact(org, "c-1", time.Date(2026, 10, 9, 14, 0, 0, 0, time.UTC), "t-1", "m", 25)
 	crashing := s.newStore(
 		&crashingSession{
-			Session: s.session,
-			table:   analyticscassandra.TableName(itCube, types.GrainDay),
+			CQLSession: s.session,
+			table:      analyticscassandra.TableName(itCube, types.GrainDay),
 		},
 		0,
 	)

@@ -60,7 +60,7 @@ from techai_webutils.clients.messaging.builder import (
     new_messaging_subscriber_from_config,
 )
 from techai_webutils.clients.messaging.config import SQSConfig
-from techai_webutils.clients.messaging.memory import InMemoryPublisher, InMemorySubscriber
+from techai_webutils.clients.messaging.memory import InMemorySubscriber
 from techai_webutils.clients.retrieval import (
     FilteringRetrievalEngine,
     RetrievalConfig,
@@ -85,6 +85,7 @@ from techai_webutils.clients.vector.builder import (
     new_vector_store_from_config,
 )
 from techai_webutils.clients.vector.stub import StubVectorStore
+from techai_webutils.core.interfaces.messaging import MessagePublisher
 from techai_webutils.execution.executor.asyncio_executor import AsyncioExecutor
 from techai_webutils.execution.executor.factory import (
     ExecutorConfig,
@@ -172,7 +173,9 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
                     kind=MessagingKind.MEMORY,
                 ),
             ),
-            InMemoryPublisher,
+            # The publisher is decorated by the client tier; the patched real constructors prove
+            # no network backend was built.
+            MessagePublisher,
         ),
         (
             new_messaging_subscriber_from_config(

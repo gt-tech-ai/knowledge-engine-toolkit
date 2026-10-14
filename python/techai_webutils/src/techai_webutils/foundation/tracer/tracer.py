@@ -20,7 +20,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.trace import StatusCode
 
-from techai_webutils.core.interfaces.tracer import TracerProvider, TracerSpan
+from techai_webutils.core.interfaces.tracer import SpanKind, TracerProvider, TracerSpan
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -42,10 +42,14 @@ class OTelTracerProvider(TracerProvider):
 
     @contextmanager
     def span(
-        self, name: str, **attributes: str | float | bool
+        self,
+        name: str,
+        *,
+        kind: SpanKind = SpanKind.INTERNAL,
+        **attributes: str | float | bool,
     ) -> Generator[TracerSpan, None, None]:
-        """Start a new trace span as a context manager."""
-        with self._inner.start_as_current_span(name) as otel_span:
+        """Start a new trace span of ``kind`` as a context manager."""
+        with self._inner.start_as_current_span(name, kind=_OTEL_KINDS[kind]) as otel_span:
             wrapped = _OTelSpan(otel_span)
             for key, value in attributes.items():
                 wrapped.set_attribute(key, value)
@@ -54,6 +58,16 @@ class OTelTracerProvider(TracerProvider):
     def shutdown(self) -> None:
         """Shut down the underlying tracer provider and flush pending spans."""
         self._provider.shutdown()
+
+
+_OTEL_KINDS: dict[SpanKind, trace.SpanKind] = {
+    SpanKind.INTERNAL: trace.SpanKind.INTERNAL,
+    SpanKind.SERVER: trace.SpanKind.SERVER,
+    SpanKind.CLIENT: trace.SpanKind.CLIENT,
+    SpanKind.PRODUCER: trace.SpanKind.PRODUCER,
+    SpanKind.CONSUMER: trace.SpanKind.CONSUMER,
+}
+"""Maps each span kind to its OTel kind."""
 
 
 class _OTelSpan(TracerSpan):

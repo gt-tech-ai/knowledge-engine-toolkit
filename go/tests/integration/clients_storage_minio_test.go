@@ -103,7 +103,11 @@ func (s *StorageMinIOSuite) SetupSuite() {
 	cfg := infra.DefaultS3Config()
 	cfg.Endpoint = s.MinIOEndpoint
 	cfg.Bucket = testBucket
-	c, err := storage.NewFromConfig(context.Background(), storage.KindS3, cfg)
+	c, err := storage.NewFromConfig(
+		context.Background(),
+		storage.Config{Kind: storage.KindS3, S3: cfg},
+		storage.Deps{},
+	)
 	s.Require().NoError(err, "build storage client")
 	s.client = c
 }

@@ -1,49 +1,321 @@
-// Package decoration is the config surface that picks which tiers below the request
-// workflow carry the logging, metrics and tracing decorators; decorate.NewTiers turns it
-// into the per-tier observability bundles. The workflow tier is always observed, so each
-// request is logged, metered and traced once; the lower tiers are diagnostics that show
-// where a request spends its time. Resilience (timeouts, retry, circuit breakers,
-// recovery) runs at every tier whatever these say. Default: every lower tier off.
+// Package decoration is the config surface for every decorated component —
+// controllers, clients, workflows, pipelines, services, repositories, stores and jobs.
+// Each tier has default Layers and per-component overrides keyed by the component's
+// name; every layer (recovery, tracing, metrics, logging, auth, timeout, retry, circuit
+// breaker, bulkhead, rate limit) is switched and tuned here, while its order stays the
+// tier's, in code. decorate.Decorations turns a component's resolved Layers into its
+// decorate.Deps.
+//
+// The default observes each request at its edges — its controller and workflow, and
+// every client and job it calls — and leaves the pipeline, service, repository and
+// store tiers unobserved until switched on; resilience runs where today's components
+// run it.
 package decoration
 
 import (
+	"maps"
+	"reflect"
+	"time"
+
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 )
 
 // SectionKey is the config key the decoration section lives under.
 const SectionKey = "decoration"
 
-// Config holds the per-tier observability switches.
-type Config struct {
-	// Pipelines observes each pipeline stage (decoration.pipelines).
-	Pipelines bool `mapstructure:"pipelines"`
+// Layers switches and tunes each decoration layer of one component. A nil switch (or
+// a nil Timeout) inherits; Merge lays one Layers over another. A layer that is on
+// still needs its collaborator (a tracer for tracing, an authorizer for auth), and
+// runs only where the tier orders it.
+type Layers struct {
+	// Recovery turns a panic into an INTERNAL error.
+	Recovery *bool `mapstructure:"recovery"`
 
-	// Services observes each service operation (decoration.services).
-	Services bool `mapstructure:"services"`
+	// Tracing opens a span per operation.
+	Tracing *bool `mapstructure:"tracing"`
 
-	// Repositories observes each repository operation (decoration.repositories).
-	Repositories bool `mapstructure:"repositories"`
+	// Metrics records the tier's operation, error and duration series.
+	Metrics *bool `mapstructure:"metrics"`
+
+	// Logging logs each operation.
+	Logging *bool `mapstructure:"logging"`
+
+	// Auth authorizes each operation as "<name>.<op>".
+	Auth *bool `mapstructure:"auth"`
+
+	// Timeout bounds each operation (each attempt, under retry); zero turns it off.
+	Timeout *time.Duration `mapstructure:"timeout"`
+
+	// Retry retries transient failures with exponential backoff.
+	Retry Retry `mapstructure:"retry"`
+
+	// CircuitBreaker sheds calls while the component keeps failing.
+	CircuitBreaker CircuitBreaker `mapstructure:"circuit_breaker"`
+
+	// RateLimit rejects operations over a token-bucket rate.
+	RateLimit RateLimit `mapstructure:"rate_limit"`
+
+	// Bulkhead bounds the operations in flight.
+	Bulkhead Bulkhead `mapstructure:"bulkhead"`
 }
 
-// DefaultConfig returns the fail-safe default: only the request workflow is observed.
-func DefaultConfig() Config {
-	return Config{}
+// Retry switches and tunes the retry layer.
+type Retry struct {
+	// Enabled turns the layer on.
+	Enabled *bool `mapstructure:"enabled"`
+
+	// RetryConfig tunes the backoff.
+	resilience.RetryConfig `mapstructure:",squash"`
 }
 
-// Load reads the decoration section from loader over DefaultConfig(): an absent section
-// keeps the default, and a section that fails to decode is returned as CodeInvalidInput.
-func Load(loader interfaces.ConfigLoader) (Config, error) {
-	cfg := DefaultConfig()
-	if loader.Get(SectionKey) == nil {
-		return cfg, nil
+// CircuitBreaker switches and tunes the circuit-breaker layer; the breaker is named
+// after the component.
+type CircuitBreaker struct {
+	// Enabled turns the layer on.
+	Enabled *bool `mapstructure:"enabled"`
+
+	// BreakerConfig tunes when the breaker trips and recovers.
+	resilience.BreakerConfig `mapstructure:",squash"`
+}
+
+// Bulkhead switches and tunes the bulkhead layer.
+type Bulkhead struct {
+	// Enabled turns the layer on.
+	Enabled *bool `mapstructure:"enabled"`
+
+	// Shed rejects an operation when the bulkhead is full (CodeResourceExhausted)
+	// instead of waiting for a slot.
+	Shed *bool `mapstructure:"shed"`
+
+	// BulkheadConfig tunes the concurrency limit ("channel" or "adaptive").
+	resilience.BulkheadConfig `mapstructure:",squash"`
+}
+
+// RateLimit switches and tunes the rate-limit layer.
+type RateLimit struct {
+	// Enabled turns the layer on.
+	Enabled *bool `mapstructure:"enabled"`
+
+	// RateLimitConfig tunes the token bucket.
+	resilience.RateLimitConfig `mapstructure:",squash"`
+}
+
+// On reports whether a layer switch is on (nil is off).
+func On(b *bool) bool { return b != nil && *b }
+
+// Merge returns base with every value over sets laid on top: a non-nil switch or
+// timeout and a non-zero tuning value win; anything else keeps base.
+func Merge(base, over Layers) Layers {
+	merged := base
+	mergeValue(reflect.ValueOf(&merged).Elem(), reflect.ValueOf(over))
+	return merged
+}
+
+// mergeValue lays src's set fields over dst, recursing into structs.
+func mergeValue(dst, src reflect.Value) {
+	for i := range src.NumField() {
+		s, d := src.Field(i), dst.Field(i)
+		switch s.Kind() {
+		case reflect.Struct:
+			mergeValue(d, s)
+		case reflect.Pointer:
+			if !s.IsNil() {
+				d.Set(s)
+			}
+		default:
+			if !s.IsZero() {
+				d.Set(s)
+			}
+		}
 	}
-	if err := loader.UnmarshalKey(SectionKey, &cfg); err != nil {
+}
+
+// Tier is one tier's decoration: the Defaults every component gets and the Overrides
+// one named component lays over them.
+type Tier struct {
+	// Overrides maps a component name to the layers it lays over Defaults.
+	Overrides map[string]Layers `mapstructure:"overrides"`
+
+	// Defaults are every component's layers.
+	Defaults Layers `mapstructure:"defaults"`
+}
+
+// For returns the layers of the component named name: Defaults with its override on top.
+func (t Tier) For(name string) Layers {
+	return Merge(t.Defaults, t.Overrides[name])
+}
+
+// overlay lays over on t: its defaults over t's, and each override over t's override
+// of the same name.
+func (t Tier) overlay(over Tier) Tier {
+	out := Tier{Defaults: Merge(t.Defaults, over.Defaults)}
+	if t.Overrides == nil && over.Overrides == nil {
+		return out
+	}
+	out.Overrides = make(map[string]Layers, len(t.Overrides)+len(over.Overrides))
+	maps.Copy(out.Overrides, t.Overrides)
+	for name := range over.Overrides {
+		out.Overrides[name] = Merge(out.Overrides[name], over.Overrides[name])
+	}
+	return out
+}
+
+// Config is the decoration of every tier.
+type Config struct {
+	// Controllers decorates the controller (transport-handler) tier
+	// (decoration.controllers).
+	Controllers Tier `mapstructure:"controllers"`
+
+	// Clients decorates the clients tier (decoration.clients).
+	Clients Tier `mapstructure:"clients"`
+
+	// Workflows decorates the workflow tier (decoration.workflows).
+	Workflows Tier `mapstructure:"workflows"`
+
+	// Pipelines decorates the pipeline tier (decoration.pipelines).
+	Pipelines Tier `mapstructure:"pipelines"`
+
+	// Services decorates the service tier (decoration.services).
+	Services Tier `mapstructure:"services"`
+
+	// Repositories decorates the repository tier (decoration.repositories).
+	Repositories Tier `mapstructure:"repositories"`
+
+	// Stores decorates the store tier (decoration.stores).
+	Stores Tier `mapstructure:"stores"`
+
+	// Jobs decorates the execution-job tier (decoration.jobs).
+	Jobs Tier `mapstructure:"jobs"`
+}
+
+// Tier returns the decoration of the tier named name ("controller", "client",
+// "workflow", "pipeline", "service", "repository", "store", "job"), and whether there
+// is one.
+func (c *Config) Tier(name string) (Tier, bool) {
+	switch name {
+	case "controller":
+		return c.Controllers, true
+	case "client":
+		return c.Clients, true
+	case "workflow":
+		return c.Workflows, true
+	case "pipeline":
+		return c.Pipelines, true
+	case "service":
+		return c.Services, true
+	case "repository":
+		return c.Repositories, true
+	case "store":
+		return c.Stores, true
+	case "job":
+		return c.Jobs, true
+	default:
+		return Tier{}, false
+	}
+}
+
+// Overlay lays over on c, tier by tier (see Tier.overlay).
+func (c *Config) Overlay(over *Config) Config {
+	return Config{
+		Controllers:  c.Controllers.overlay(over.Controllers),
+		Clients:      c.Clients.overlay(over.Clients),
+		Workflows:    c.Workflows.overlay(over.Workflows),
+		Pipelines:    c.Pipelines.overlay(over.Pipelines),
+		Services:     c.Services.overlay(over.Services),
+		Repositories: c.Repositories.overlay(over.Repositories),
+		Stores:       c.Stores.overlay(over.Stores),
+		Jobs:         c.Jobs.overlay(over.Jobs),
+	}
+}
+
+// DefaultConfig returns today's decoration: recovery and auth wherever a tier orders
+// them; every controller, client, workflow and job observed, and the pipeline,
+// service, repository and store tiers not; retry and a circuit breaker at the
+// repository tier; and a 30 s timeout, a bulkhead and a breaker around the storage,
+// outbox and Prometheus clients. Every other resilience layer, the controllers' rate
+// limit and bulkhead included, is off; a controller's bulkhead, once enabled, sheds.
+func DefaultConfig() Config {
+	repos := base(false)
+	repos.Retry.Enabled = ptr(true)
+	repos.CircuitBreaker.Enabled = ptr(true)
+	// A controller's bulkhead, once enabled, sheds: a request queued behind a full
+	// bulkhead holds its connection, so the edge rejects it instead.
+	controllers := base(true)
+	controllers.Bulkhead.Shed = ptr(true)
+	guarded := func() Layers {
+		return Layers{
+			Timeout:        ptr(30 * time.Second),
+			Bulkhead:       Bulkhead{Enabled: ptr(true)},
+			CircuitBreaker: CircuitBreaker{Enabled: ptr(true)},
+		}
+	}
+	return Config{
+		Clients: Tier{Defaults: base(true), Overrides: map[string]Layers{
+			"storage":    guarded(),
+			"outbox.sqs": guarded(),
+			"outbox.s3":  guarded(),
+			"prometheus": guarded(),
+		}},
+		Controllers:  Tier{Defaults: controllers},
+		Workflows:    Tier{Defaults: base(true)},
+		Pipelines:    Tier{Defaults: base(false)},
+		Services:     Tier{Defaults: base(false)},
+		Repositories: Tier{Defaults: repos},
+		Stores:       Tier{Defaults: base(false)},
+		Jobs:         Tier{Defaults: base(true)},
+	}
+}
+
+// base is a tier's default layers: recovery and auth on, observability as observe
+// says, every resilience layer off with its default tuning.
+func base(observe bool) Layers {
+	return Layers{
+		Recovery: ptr(true),
+		Tracing:  ptr(observe),
+		Metrics:  ptr(observe),
+		Logging:  ptr(observe),
+		Auth:     ptr(true),
+		Timeout:  ptr(time.Duration(0)),
+		Retry: Retry{
+			Enabled:     ptr(false),
+			RetryConfig: resilience.DefaultRetryConfig(),
+		},
+		CircuitBreaker: CircuitBreaker{
+			Enabled:       ptr(false),
+			BreakerConfig: resilience.DefaultBreakerConfig(),
+		},
+		Bulkhead: Bulkhead{
+			Enabled:        ptr(false),
+			Shed:           ptr(false),
+			BulkheadConfig: resilience.DefaultBulkheadConfig(),
+		},
+		RateLimit: RateLimit{
+			Enabled:         ptr(false),
+			RateLimitConfig: resilience.DefaultRateLimitConfig(),
+		},
+	}
+}
+
+// ptr returns a fresh pointer to v.
+func ptr[T any](v T) *T { return &v }
+
+// Load reads the decoration section from loader and lays it over DefaultConfig(): an
+// absent section keeps the default, a partial one changes only what it sets, and a
+// section that fails to decode is returned as CodeInvalidInput.
+func Load(loader interfaces.ConfigLoader) (Config, error) {
+	if loader.Get(SectionKey) == nil {
+		return DefaultConfig(), nil
+	}
+	var over Config
+	if err := loader.UnmarshalKey(SectionKey, &over); err != nil {
 		return Config{}, apperr.Wrap(
 			err,
 			apperr.CodeInvalidInput,
 			"load decoration config",
 		)
 	}
-	return cfg, nil
+	def := DefaultConfig()
+	return def.Overlay(&over), nil
 }

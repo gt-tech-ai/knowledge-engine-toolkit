@@ -1,3 +1,5 @@
+// Package grpc dials gRPC client connections: NewClient builds one, and Client manages
+// it as a lifecycle-managed, health-checkable client (interfaces.Client).
 package grpc
 
 import (

@@ -31,7 +31,7 @@ class TestGrpcErrorToAppError:
         """Test that UNAVAILABLE / DEADLINE_EXCEEDED become transient AppErrors.
 
         **Why this test is important:**
-          - RetryProxy only retries a transient ``AppError``; a raw ``AioRpcError`` escapes the retry
+          - The retry layer only retries a transient ``AppError``; a raw ``AioRpcError`` escapes the retry
             loop on the first attempt. The boundary must classify these as transient so every gRPC
             client wrapped with it gets a retryable error.
 

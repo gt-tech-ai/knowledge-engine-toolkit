@@ -1,4 +1,12 @@
-// Package errors provides application error types and codes.
+// Package errors provides application error types and codes, and the request-scoped
+// error sink that keeps a domain error's real cause behind its sanitized transport error.
+//
+// The transport layer maps a domain error to a client-safe error (hiding SQL errors,
+// stack traces, etc.) before returning it to the caller, discarding the real cause. The
+// mapper Captures the real error into the request's sink (WithSink), and the
+// request-logging interceptor reads it back with Captured after the handler returns —
+// one log line per request, with the true cause, without every layer logging its own
+// copy.
 package errors
 
 import (

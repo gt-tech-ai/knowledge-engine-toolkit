@@ -172,7 +172,8 @@ func (r *Retrier) retryOpts() []backoff.RetryOption {
 		backoff.WithMaxElapsedTime(r.cfg.MaxElapsedTime),
 	}
 	if r.cfg.MaxRetries > 0 {
-		opts = append(opts, backoff.WithMaxTries(uint(r.cfg.MaxRetries)))
+		// WithMaxTries counts the first attempt; MaxRetries counts only the retries.
+		opts = append(opts, backoff.WithMaxTries(uint(r.cfg.MaxRetries)+1))
 	}
 	return opts
 }

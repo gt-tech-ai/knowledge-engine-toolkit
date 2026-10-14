@@ -1,221 +1,214 @@
-// Package messaging provides a factory for message publisher and subscriber
-// implementations with multiple backends.
-//
-// Use NewFromConfig() for app wiring (the tier-root factory that builds a
-// publisher straight from the loaded config), or the lower-level NewPublisher(),
-// NewSubscriber(), and NewAdapter() constructors. The factory selects the
-// implementation at runtime based on Kind; backend impls live in the sqs/
-// subpackage.
-//
-// Example:
-//
-//	pub, err := messaging.NewPublisher(messaging.KindSQS, messaging.WithQueueURL(url))
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
+// Package messaging builds the message publisher and consumer from config: the
+// in-process memory broker (the default), SQS, or Redis Pub/Sub. Every publish runs
+// through the client tier (Decorate); the SQS and Redis consumers observe each
+// handle. The concrete backends live in the memory/, sqs/ and redis/ subpackages.
 package messaging
 
 import (
 	"context"
-	"fmt"
+	"time"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/decorators"
+	goredis "github.com/redis/go-redis/v9"
+
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/memory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/redis"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/sqs"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
-
-// Kind specifies which messaging implementation to use.
-type Kind int
 
 const (
-	// KindSQS uses AWS SQS for message publishing and subscription. Suitable for
-	// distributed deployments with AWS infrastructure.
-	KindSQS Kind = iota
+	// KindMemory delivers through an in-process broker (the default).
+	KindMemory client.Kind = "memory"
 
-	// KindMemory uses an in-process broker (dev/test/all-stubs; no external broker).
-	KindMemory
+	// KindSQS publishes to and consumes from SQS queues (one per topic).
+	KindSQS client.Kind = "sqs"
 
-	// KindRedis uses Redis Pub/Sub (fire-and-forget broadcast + dynamic SUBSCRIBE/
-	// PSUBSCRIBE). Its go-redis client is injected via WithRedisClient (shared with
-	// the cache tier), not built from config — the backend for cross-replica fan-out
-	// (e.g. pushing a message to whichever replica holds a client connection).
-	KindRedis
+	// KindRedis broadcasts over Redis Pub/Sub (at-most-once).
+	KindRedis client.Kind = "redis"
+
+	// family names the kinds tables and is the client name of an unnamed publisher.
+	family = "messaging"
 )
 
-// String returns the string representation of Kind.
-func (k Kind) String() string {
-	switch k {
-	case KindSQS:
-		return "sqs"
-	case KindMemory:
-		return "memory"
-	case KindRedis:
-		return "redis"
-	default:
-		return fmt.Sprintf("Kind(%d)", k)
+// Config selects and tunes the messaging backend.
+type Config struct {
+	// Kind selects the backend; empty means KindMemory.
+	Kind client.Kind `yaml:"kind" mapstructure:"kind"`
+
+	// SQS is KindSQS's connection: region, endpoint and credentials (env-bound).
+	SQS infra.SQSConfig `yaml:"sqs" mapstructure:"sqs"`
+
+	// Name labels the client in decoration overrides, metrics, spans and logs; empty
+	// uses the family name ("messaging").
+	Name string `yaml:"name" mapstructure:"name"`
+
+	// Receive tunes the KindSQS consumer's long poll and failed-message backoff.
+	Receive Receive `yaml:"receive" mapstructure:"receive"`
+}
+
+// Receive tunes how a consumer receives (the poll and backoff fields are KindSQS's).
+type Receive struct {
+	// NackDelay, when Max is positive, hides a message whose handler failed for a
+	// jittered delay before redelivery.
+	NackDelay sqs.NackDelay `yaml:"nack_delay" mapstructure:"nack_delay"`
+
+	// BaseBackoff is the initial wait after a failed receive; 0 uses the default.
+	BaseBackoff time.Duration `yaml:"base_backoff" mapstructure:"base_backoff"`
+
+	// WaitTimeSeconds is the long-poll wait per receive, 0 to 20; 0 uses the default.
+	WaitTimeSeconds int32 `yaml:"wait_time_seconds" mapstructure:"wait_time_seconds"`
+}
+
+// Deps carries the messaging runtime collaborators.
+type Deps struct {
+	// Decorations decorates the client from the decoration config (decoration.clients)
+	// and supplies its observability.
+	decorate.Decorations
+
+	// Redis is the shared go-redis client KindRedis requires.
+	Redis *goredis.Client
+
+	// Broker connects a KindMemory publisher and consumer; nil gives each its own.
+	Broker *memory.Broker
+
+	// SQSAPI replaces the SQS SDK client KindSQS builds from Config.SQS.
+	SQSAPI sqs.API
+
+	// Ready gates every SQS receive: while it errors the consumer backs off.
+	Ready func(ctx context.Context) error
+}
+
+// DefaultConfig returns the memory kind in us-east-1.
+func DefaultConfig() Config { return Config{SQS: infra.SQSConfig{Region: "us-east-1"}} }
+
+// name is the client name of cfg's publisher ("messaging" when unnamed); its handlers
+// are "<name>.handler".
+func name(cfg Config) string {
+	if cfg.Name == "" {
+		return family
+	}
+	return cfg.Name
+}
+
+// sqsConfig is the SQS backend's config: cfg's connection and receive tuning, with
+// its runtime collaborators taken from deps and its handler tier handlers.
+func sqsConfig(cfg Config, deps Deps, handlers client.Base) sqs.Config {
+	return sqs.Config{
+		AWSRegion:       cfg.SQS.Region,
+		Endpoint:        cfg.SQS.Endpoint,
+		AccessKeyID:     cfg.SQS.AccessKeyID,
+		SecretAccessKey: cfg.SQS.SecretAccessKey,
+		NackDelay:       cfg.Receive.NackDelay,
+		BaseBackoff:     cfg.Receive.BaseBackoff,
+		WaitTimeSeconds: cfg.Receive.WaitTimeSeconds,
+		Logger:          deps.Observability().Logger,
+		Handlers:        handlers,
+		API:             deps.SQSAPI,
+		Ready:           deps.Ready,
 	}
 }
 
-// ParseKind maps a config kind string ("sqs" | "memory" | "redis") to its Kind,
-// failing loudly on an unknown value. It is the messaging-tier bridge a composition
-// root uses to select a backend from configuration
-// (ARCHITECTURE.md#swappable-components); the backend config (e.g. the injected Redis
-// client) is still supplied separately via options.
-func ParseKind(s string) (Kind, error) {
-	switch s {
-	case "sqs":
-		return KindSQS, nil
-	case "memory":
-		return KindMemory, nil
-	case "redis":
-		return KindRedis, nil
-	default:
-		return 0, apperr.New(
-			apperr.CodeInvalidInput,
-			fmt.Sprintf("unknown messaging kind: %q", s),
-		)
+// redisConfig is the Redis backend's config from deps and its handler tier handlers.
+func redisConfig(deps Deps, handlers client.Base) redis.Config {
+	return redis.Config{
+		Client:   deps.Redis,
+		Logger:   deps.Observability().Logger,
+		Handlers: handlers,
 	}
 }
 
-// NewFromConfig builds a MessagePublisher selected by the tier kind — the SQS backend
-// (KindSQS, configured from cfg), the in-process stub (KindMemory, ignoring cfg), or
-// Redis Pub/Sub (KindRedis, whose shared go-redis client is injected via the
-// WithRedisClient option — NOT from cfg; the SQSConfig arg is inert for Redis) — wrapping
-// the thin core in the messaging decorators. It is the app-wiring entrypoint, sitting at
-// the tier root above the backends exactly like cache/storage NewFromConfig; additional
-// options (logger, metrics, retrier, redis client) may be layered on. The context
-// bounds the SQS backend's AWS config load; the other backends do no I/O at
-// construction.
+// broker is deps.Broker, or a fresh one.
+func broker(deps Deps) *memory.Broker {
+	if deps.Broker != nil {
+		return deps.Broker
+	}
+	return memory.NewBroker()
+}
+
+// publishers is the publisher backend table.
+func publishers() client.Kinds[Config, Deps, interfaces.MessagePublisher] {
+	return client.Kinds[Config, Deps, interfaces.MessagePublisher]{
+		Family:   family,
+		Default:  KindMemory,
+		Decorate: Decorate,
+		// PUBLISH is at-most-once, so a retry could double-broadcast.
+		AtMostOnce: []client.Kind{KindRedis},
+		Backends: map[client.Kind]client.Backend[Config, Deps, interfaces.MessagePublisher]{
+			KindMemory: func(
+				_ context.Context, _ Config, deps Deps,
+			) (interfaces.MessagePublisher, error) {
+				return memory.NewPublisher(broker(deps)), nil
+			},
+			KindSQS: func(
+				ctx context.Context, cfg Config, deps Deps,
+			) (interfaces.MessagePublisher, error) {
+				return sqs.NewPublisher(ctx, sqsConfig(cfg, deps, client.Base{}))
+			},
+			KindRedis: func(
+				_ context.Context, _ Config, deps Deps,
+			) (interfaces.MessagePublisher, error) {
+				return redis.NewPublisher(redisConfig(deps, client.Base{}))
+			},
+		},
+	}
+}
+
+// consumers is the consumer backend table; handlers runs each handler call.
+func consumers(
+	handlers client.Base,
+) client.Kinds[Config, Deps, interfaces.MessageConsumer] {
+	return client.Kinds[Config, Deps, interfaces.MessageConsumer]{
+		Family:  family,
+		Default: KindMemory,
+		Backends: map[client.Kind]client.Backend[Config, Deps, interfaces.MessageConsumer]{
+			KindMemory: func(
+				_ context.Context, _ Config, deps Deps,
+			) (interfaces.MessageConsumer, error) {
+				return memory.NewSubscriber(broker(deps), handlers), nil
+			},
+			KindSQS: func(
+				ctx context.Context, cfg Config, deps Deps,
+			) (interfaces.MessageConsumer, error) {
+				return sqs.NewSubscriber(ctx, sqsConfig(cfg, deps, handlers))
+			},
+			KindRedis: func(
+				_ context.Context, _ Config, deps Deps,
+			) (interfaces.MessageConsumer, error) {
+				return redis.NewSubscriber(redisConfig(deps, handlers))
+			},
+		},
+	}
+}
+
+// NewFromConfig builds the publisher cfg.Kind selects and runs it through the client
+// tier. ctx bounds the SQS kind's AWS config load; the other kinds do no I/O. Redis
+// publishes are never retried: PUBLISH is at-most-once, so a retry could
+// double-broadcast. An unknown kind is CodeInvalidInput.
 func NewFromConfig(
 	ctx context.Context,
-	kind Kind,
-	cfg infra.SQSConfig,
-	opts ...options.Option[Config],
+	cfg Config,
+	deps Deps,
 ) (interfaces.MessagePublisher, error) {
-	base := make([]options.Option[Config], 0, 3+len(opts))
-	base = append(base,
-		WithAWSRegion(cfg.Region),
-		WithEndpoint(cfg.Endpoint),
-		WithStaticCredentials(cfg.AccessKeyID, cfg.SecretAccessKey),
-	)
-	return newPublisher(ctx, kind, append(base, opts...)...)
+	return publishers().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, name(cfg))
 }
 
-// NewPublisher creates a message publisher of the specified kind with optional
-// functional options. Returns an error if the kind is unknown.
-func NewPublisher(
-	kind Kind,
-	opts ...options.Option[Config],
-) (interfaces.MessagePublisher, error) {
-	return newPublisher(context.Background(), kind, opts...)
-}
-
-// newPublisher builds the publisher for kind, constructing the SQS backend's AWS
-// client under ctx.
-func newPublisher(
+// NewConsumerFromConfig builds the consumer cfg.Kind selects; each backend runs every
+// handler call through the handler tier, decorated as the client "<name>.handler"
+// (observed and bounded, never retried or broken). An unknown kind is
+// CodeInvalidInput.
+func NewConsumerFromConfig(
 	ctx context.Context,
-	kind Kind,
-	opts ...options.Option[Config],
-) (interfaces.MessagePublisher, error) {
-	cfg := DefaultConfig()
-	cfg.Kind = kind
-	options.ApplyOptions(&cfg, opts...)
-
-	switch cfg.Kind {
-	case KindSQS:
-		core, err := sqs.NewPublisherContext(ctx, cfg.SQS)
-		if err != nil {
-			return nil, err
-		}
-		// Cross-cutting concerns (logging, metrics, resilience) compose around the
-		// thin SQS core as decorators, opted in by whichever deps were wired.
-		return decorators.WrapPublisher(core, decorators.PublisherDeps{
-			Logger:  cfg.Logger,
-			Metrics: cfg.Metrics,
-			Retrier: cfg.Retrier,
-		}), nil
-
-	case KindMemory:
-		// The in-process publisher ignores the SQS settings; a subscriber built from the
-		// same broker receives its messages (the roundtrip path is exercised via direct
-		// construction).
-		return memory.NewPublisher(memory.NewBroker()), nil
-
-	case KindRedis:
-		core, err := redis.NewPublisher(cfg.Redis)
-		if err != nil {
-			return nil, err
-		}
-		// Same shared resilience/observability stack as the other backends, with the
-		// Retrier intentionally omitted: Redis PUBLISH is fire-and-forget / at-most-once,
-		// so a retry could double-broadcast to already-delivered subscribers.
-		return decorators.WrapPublisher(core, decorators.PublisherDeps{
-			Logger:  cfg.Logger,
-			Metrics: cfg.Metrics,
-		}), nil
-
-	default:
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			fmt.Sprintf("unknown messaging kind: %v", cfg.Kind),
-		)
-	}
-}
-
-// NewSubscriber creates a message subscriber of the specified kind with
-// optional functional options. Returns an error if the kind is unknown.
-func NewSubscriber(
-	kind Kind,
-	opts ...options.Option[Config],
+	cfg Config,
+	deps Deps,
 ) (interfaces.MessageConsumer, error) {
-	cfg := DefaultConfig()
-	cfg.Kind = kind
-	options.ApplyOptions(&cfg, opts...)
-
-	switch cfg.Kind {
-	case KindSQS:
-		return sqs.NewSubscriber(cfg.SQS)
-
-	case KindMemory:
-		return memory.NewSubscriber(memory.NewBroker()), nil
-
-	case KindRedis:
-		return redis.NewSubscriber(cfg.Redis)
-
-	default:
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			fmt.Sprintf("unknown messaging kind: %v", cfg.Kind),
-		)
+	handlerName := name(cfg) + ".handler"
+	handlers, err := deps.Deps(client.Tier(), handlerName)
+	if err != nil {
+		return nil, err
 	}
-}
-
-// NewAdapter creates a messaging adapter of the specified kind with optional
-// functional options. Returns an error if the kind is unknown.
-func NewAdapter(kind Kind, opts ...options.Option[Config]) (*sqs.Adapter, error) {
-	cfg := DefaultConfig()
-	cfg.Kind = kind
-	options.ApplyOptions(&cfg, opts...)
-
-	switch cfg.Kind {
-	case KindSQS:
-		return sqs.NewAdapter(cfg.SQS), nil
-
-	case KindMemory, KindRedis:
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			fmt.Sprintf("messaging kind %v has no adapter (only sqs does)", cfg.Kind),
-		)
-
-	default:
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			fmt.Sprintf("unknown messaging kind: %v", cfg.Kind),
-		)
-	}
+	return consumers(client.NewHandlerBase(handlerName, handlers)).
+		New(ctx, cfg.Kind, cfg, deps)
 }

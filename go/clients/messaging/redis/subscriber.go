@@ -6,7 +6,7 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/decorators"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/lifecycle"
@@ -26,22 +26,19 @@ var (
 // Channels (SUBSCRIBE) and patterns (PSUBSCRIBE) are added and removed at runtime;
 // a single dispatch goroutine reads the shared message stream and routes each
 // message to the registered handler by exact channel, then by matched pattern.
-// Pub/Sub has no ack/nack, so a handler error is logged (via HandlerObservability)
-// and the message is dropped — never requeued. It holds the shared go-redis client
+// Pub/Sub has no ack/nack, so a handler error is logged and the message is
+// dropped — never requeued. It holds the shared go-redis client
 // and opens no connection of its own.
 type Subscriber struct {
 	// NoOp supplies the no-op Start/Stop: the subscription lifecycle is owned by
 	// Subscribe (lazy start) and Close, so the Subscriber opens no shared resource.
 	lifecycle.NoOp
 
-	// logger reports dispatch-loop errors; nil skips logging.
+	// logger reports handler failures; nil skips logging.
 	logger interfaces.Logger
 
 	// client is the shared go-redis client (injected via Config.Client).
 	client *goredis.Client
-
-	// obs wraps each handler with per-message logging + metrics, built once.
-	obs *decorators.HandlerObservability
 
 	// pubsub is the single multiplexed subscription, created lazily on the first
 	// Subscribe/PSubscribe and torn down by Close.
@@ -57,6 +54,9 @@ type Subscriber struct {
 
 	// patterns maps a glob pattern to its wrapped handler.
 	patterns map[string]interfaces.MessageHandler
+
+	// handlers runs each handle through the client tier (op = the channel).
+	handlers client.Base
 
 	// wg tracks the dispatch goroutine so Close drains it.
 	wg sync.WaitGroup
@@ -77,7 +77,7 @@ func NewSubscriber(cfg Config) (*Subscriber, error) {
 	return &Subscriber{
 		client:   cfg.Client,
 		logger:   cfg.Logger,
-		obs:      decorators.NewHandlerObservability(cfg.Logger, cfg.Metrics),
+		handlers: cfg.Handlers,
 		channels: make(map[string]interfaces.MessageHandler),
 		patterns: make(map[string]interfaces.MessageHandler),
 	}, nil
@@ -142,7 +142,7 @@ func (s *Subscriber) PUnsubscribe(ctx context.Context, pattern string) error {
 }
 
 // register lazily starts the subscription (deriving its lifetime context from ctx),
-// records handler under reg[key] (wrapped with observability), and returns the pubsub
+// records handler under reg[key], and returns the pubsub
 // to issue the broker (P)SUBSCRIBE on. It returns a coded error if the subscriber is
 // already closed.
 func (s *Subscriber) register(
@@ -157,7 +157,7 @@ func (s *Subscriber) register(
 		return nil, apperr.New(apperr.CodeUnavailable, "redis subscriber closed")
 	}
 	s.ensureStartedLocked(ctx)
-	reg[key] = s.obs.Wrap(handler)
+	reg[key] = handler
 	return s.pubsub, nil
 }
 
@@ -237,9 +237,9 @@ func (s *Subscriber) ensureStartedLocked(ctx context.Context) {
 
 // dispatch routes each message to its handler — exact channel first, then matched
 // pattern — and returns when the pubsub channel closes (on Close). Handlers receive
-// the subscriber-lifetime ctx (cancelled by Close). A handler error is logged by the
-// HandlerObservability wrapper and dropped (Pub/Sub has no requeue); dispatch itself
-// ignores the returned error.
+// the subscriber-lifetime ctx (cancelled by Close). Each handle runs through the client
+// tier as the operation named by its channel; a handler error is logged and dropped
+// (Pub/Sub has no requeue).
 func (s *Subscriber) dispatch(ctx context.Context, ch <-chan *goredis.Message) {
 	defer s.wg.Done()
 	for msg := range ch {
@@ -252,9 +252,14 @@ func (s *Subscriber) dispatch(ctx context.Context, ch <-chan *goredis.Message) {
 		if !ok {
 			continue
 		}
-		_ = handler(ctx, &interfaces.Message{
-			Topic:   msg.Channel,
-			Payload: []byte(msg.Payload),
+		m := &interfaces.Message{Topic: msg.Channel, Payload: []byte(msg.Payload)}
+		err := s.handlers.DoOnce(ctx, m.Topic, func(ctx context.Context) error {
+			return handler(ctx, m)
 		})
+		if err != nil && s.logger != nil {
+			s.logger.WithContext(ctx).Error(
+				"message handle failed", "topic", m.Topic, "error", err,
+			)
+		}
 	}
 }

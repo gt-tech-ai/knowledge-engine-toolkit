@@ -4,13 +4,16 @@ A spent quota or budget must reach callers as HTTP 429 / gRPC RESOURCE_EXHAUSTED
 retried by the resiliency stack, because a retry inside the window only burns another quota check.
 """
 
-from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
 
-from techai_webutils.clients.decorators.proxy import RetryProxy
 from techai_webutils.core.errors import AppError, ErrorCode, QuotaExceededError
+from techai_webutils.foundation.decorate import exec_op, new_retry
+from techai_webutils.foundation.resilience.retrier import (
+    ExponentialRetrier,
+    ExponentialRetrierConfig,
+)
 
 
 def test_resource_exhausted_maps_429_and_grpc_8() -> None:
@@ -54,23 +57,22 @@ def test_quota_exceeded_error_is_neither_transient_nor_permanent() -> None:
 
 
 @pytest.mark.asyncio
-async def test_retry_proxy_does_not_retry_quota_exceeded() -> None:
-    """Test that ``RetryProxy`` makes exactly one attempt on a quota rejection.
+async def test_retry_layer_does_not_retry_quota_exceeded() -> None:
+    """Test that the retry layer makes exactly one attempt on a quota rejection.
 
     **Why this test is important:**
-      - The retry decorator is the one place transient classification turns into extra calls; a
+      - The retry layer is the one place transient classification turns into extra calls; a
         retried quota error multiplies load on the very budget check that rejected it.
 
     **What it tests:**
-      - the ``QuotaExceededError`` propagates unchanged and the inner method is awaited once
+      - the ``QuotaExceededError`` propagates unchanged and the operation runs once
     """
     raised = QuotaExceededError("spent", org_id="org-1", reason="budget_exhausted")
-    inner = AsyncMock()
-    inner.call.side_effect = raised
-    proxy = cast("AsyncMock", RetryProxy(inner, max_attempts=3))
+    op = AsyncMock(side_effect=raised)
+    retry = new_retry(ExponentialRetrier(ExponentialRetrierConfig(initial_interval=0.0)))
 
     with pytest.raises(QuotaExceededError) as caught:
-        await proxy.call()
+        await exec_op(retry, "Call", op)
 
     assert caught.value is raised
-    assert inner.call.await_count == 1
+    assert op.await_count == 1

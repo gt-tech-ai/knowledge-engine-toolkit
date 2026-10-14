@@ -1,15 +1,10 @@
 """Tests for enhanced BaseController, ErrorResponse, and authorization decorator."""
 
-import asyncio
-
-import pytest
-
 from techai_webutils.controllers.base import (
     BaseController,
     ErrorResponse,
     map_error_to_http_status,
 )
-from techai_webutils.controllers.decorators import HandlerBuilder
 from techai_webutils.core.errors.errors import (
     AppError,
     ConflictError,
@@ -330,57 +325,3 @@ class TestBaseControllerEnhanced:
         assert data["error"] == "gate detail"
         assert data["details"] == "gate detail"
         assert data["code"] == "QUALITY_FAILED"
-
-
-class TestHandlerBuilderAuthorization:
-    """Test suite for HandlerBuilder authorization decorator gating handler execution."""
-
-    @pytest.mark.asyncio
-    async def test_with_authorization_allowed(self) -> None:
-        """Test that authorized requests pass through to the handler.
-
-        **Why this test is important:**
-          - Authorization is the primary security gate for all handler endpoints
-          - Authorized requests must reach the handler without modification
-          - Incorrect pass-through could silently block legitimate API requests
-
-        **What it tests:**
-          - Handler result is returned when authorization passes
-        """
-
-        async def handler(req: str) -> str:
-            await asyncio.sleep(0)
-            return f"ok-{req}"
-
-        async def allow() -> bool:
-            await asyncio.sleep(0)
-            return True
-
-        h = HandlerBuilder(handler, "test").with_authorization(allow).build()
-        result = await h("request")
-        assert result == "ok-request"
-
-    @pytest.mark.asyncio
-    async def test_with_authorization_denied(self) -> None:
-        """Test that unauthorized requests are rejected with ForbiddenError.
-
-        **Why this test is important:**
-          - Unauthorized access must be blocked before reaching handler logic
-          - ForbiddenError maps to HTTP 403, informing clients their credentials lack permission
-          - Failure to deny would be a security vulnerability allowing unauthorized data access
-
-        **What it tests:**
-          - ForbiddenError is raised when authorization check returns False
-        """
-
-        async def handler(_req: str) -> str:
-            await asyncio.sleep(0)
-            return "should not reach"
-
-        async def deny() -> bool:
-            await asyncio.sleep(0)
-            return False
-
-        h = HandlerBuilder(handler, "test").with_authorization(deny).build()
-        with pytest.raises(ForbiddenError):
-            await h("request")

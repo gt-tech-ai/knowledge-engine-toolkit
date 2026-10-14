@@ -30,7 +30,7 @@ import asyncio
 from collections.abc import Callable
 
 from techai_webutils.clients.rpc.grpc.client import ChannelConfig, create_channel
-from techai_webutils.clients.transport.grpc.server import ServerConfig, create_server
+from techai_webutils.controllers.grpc.server import ServerConfig, create_server
 
 
 async def _in_loop(factory: Callable[[], object]) -> object:

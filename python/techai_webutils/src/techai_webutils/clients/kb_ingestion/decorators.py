@@ -2,11 +2,11 @@
 
 The poll half of a start → poll ingestion run, as a decorator (the single-writer half is
 ``clients/lock.SingleWriterRunner``). Both wrap a ``KnowledgeBaseIngestor`` and are themselves
-``KnowledgeBaseIngestor``s, so they compose with the client-proxy stack
-(``LoggingProxy``/``TracingProxy``/``CircuitBreakerProxy``) at the composition root:
+``KnowledgeBaseIngestor``s, so they compose with the client tier (``clients.client.decorate``)
+at the composition root:
 
     RetryingIngestor(bedrock)          # transient AWS errors → exponential backoff + jitter
-      → CircuitBreakerProxy(..., cb)   # trip on sustained failure
+      → decorate(..., "kb_ingestion")  # the client tier: span, metrics, logs, breaker, …
         → PollingIngestor(...)         # start (fresh) + poll_ingestion_job → poll to terminal/deadline
 
 ``PollingIngestor.start_ingestion_job`` returns the FRESH job and ``poll_ingestion_job`` polls a given
@@ -181,9 +181,9 @@ class RetryingIngestor(
     Uses ``retry_transient_async`` (tenacity ``wait_exponential_jitter``) so a transient
     ``AppError`` (TIMEOUT/UNAVAILABLE) is retried with backoff+jitter; permanent errors propagate.
 
-    This is the ONLY transient-retry layer the KB stack should use. Do NOT also wrap the stack in the
-    ``techai_webutils`` ``RetryProxy`` — the two would compose multiplicatively (3x3 attempts) under two
-    different policies. ``RetryProxy`` is immediate-retry (no backoff); this ingestor is the backoff path.
+    This is the ONLY transient-retry layer the KB stack should use. Do NOT also decorate the stack
+    with a client tier whose retry layer is on — the two would compose multiplicatively (3x3
+    attempts) under two different policies.
     """
 
     def __init__(

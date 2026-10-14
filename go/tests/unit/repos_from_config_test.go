@@ -10,8 +10,9 @@ import (
 	"go.uber.org/mock/gomock"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/circuitbreaker"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
@@ -21,6 +22,26 @@ import (
 type reposEnt struct{ ID string }
 
 type reposEntParams struct{}
+
+// repoDecorations returns the default decoration config with the "test" repository's
+// retry tuned to millisecond backoff, observed through no-op collaborators.
+func repoDecorations(timeout time.Duration) decorate.Decorations {
+	cfg := decoration.DefaultConfig()
+	cfg.Repositories.Overrides = map[string]decoration.Layers{"test": {
+		Timeout: &timeout,
+		Retry: decoration.Retry{RetryConfig: resilience.RetryConfig{
+			InitialInterval: time.Millisecond,
+			MaxInterval:     2 * time.Millisecond,
+		}},
+	}}
+	return decorate.NewDecorations(&cfg, decorate.Collaborators{
+		Observability: decorate.Observability{
+			Logger:  fixtures.NopLogger(),
+			Metrics: fixtures.NopMetrics(),
+			Tracer:  fixtures.NopTracer(),
+		},
+	})
+}
 
 // TestDecoratedFromConfig_WiresStackAndDelegates tests that the shared
 // DecoratedFromConfig helper assembles the resilience +
@@ -33,9 +54,10 @@ type reposEntParams struct{}
 //     the fleet would silently lose its resilience.
 //
 // What it tests:
-//   - A Get whose store fails transiently once then succeeds is retried by the
-//     stack and returns the store's entity — proving the helper wires the Retry
-//     decorator and delegates to the base store it wraps.
+//   - Under the default decoration config (retry on at the repository tier), a Get
+//     whose store fails transiently once then succeeds is retried by the stack and
+//     returns the store's entity — proving the helper builds its layers from the
+//     repositories tier and delegates to the base store it wraps.
 func TestDecoratedFromConfig_WiresStackAndDelegates(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
@@ -47,27 +69,10 @@ func TestDecoratedFromConfig_WiresStackAndDelegates(t *testing.T) {
 		store.EXPECT().Get(gomock.Any(), "abc").Return(want, nil),
 	)
 
-	retrier, err := retry.NewFromConfig(retry.Config{
-		Kind:            retry.KindExponential,
-		MaxRetries:      3,
-		InitialInterval: time.Millisecond,
-		MaxInterval:     2 * time.Millisecond,
-		Multiplier:      2.0,
-		MaxElapsedTime:  time.Second,
-	})
+	repo, err := repository.DecoratedFromConfig(store, "test",
+		repository.Settings{},
+		repository.Deps[reposEnt, string]{Decorations: repoDecorations(time.Second)})
 	require.NoError(t, err)
-	cb, err := circuitbreaker.New(circuitbreaker.KindGoBreaker, "test.repo")
-	require.NoError(t, err)
-
-	repo := repository.DecoratedFromConfig(store, "test",
-		repository.Settings{Timeout: time.Second},
-		repository.Deps[reposEnt, string]{
-			Logger:  fixtures.NopLogger(),
-			Metrics: fixtures.NopMetrics(),
-			Tracer:  fixtures.NopTracer(),
-			Retrier: retrier,
-			Breaker: cb,
-		})
 
 	got, err := repo.Get(context.Background(), "abc")
 	require.NoError(
@@ -106,30 +111,15 @@ func TestDecoratedFromConfig_WiresCachingLayer(t *testing.T) {
 	cache.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	store.EXPECT().Get(gomock.Any(), "xyz").Return(want, nil)
 
-	retrier, err := retry.NewFromConfig(retry.Config{
-		Kind:            retry.KindExponential,
-		MaxRetries:      1,
-		InitialInterval: time.Millisecond,
-		MaxInterval:     2 * time.Millisecond,
-		Multiplier:      2.0,
-		MaxElapsedTime:  time.Second,
-	})
-	require.NoError(t, err)
-	cb, err := circuitbreaker.New(circuitbreaker.KindGoBreaker, "test.cache")
-	require.NoError(t, err)
-
-	// Timeout omitted (zero) → no timeout layer; a cache + key func are supplied.
-	repo := repository.DecoratedFromConfig(store, "test",
+	// A zero timeout → no timeout layer; a cache + key func are supplied.
+	repo, err := repository.DecoratedFromConfig(store, "test",
 		repository.Settings{CacheTTL: time.Minute, CacheVersion: 1},
 		repository.Deps[reposEnt, string]{
-			Logger:  fixtures.NopLogger(),
-			Metrics: fixtures.NopMetrics(),
-			Tracer:  fixtures.NopTracer(),
-			Retrier: retrier,
-			Breaker: cb,
-			Cache:   cache,
-			IDOf:    func(e *reposEnt) string { return e.ID },
+			Decorations: repoDecorations(0),
+			Cache:       cache,
+			IDOf:        func(e *reposEnt) string { return e.ID },
 		})
+	require.NoError(t, err)
 
 	got, err := repo.Get(context.Background(), "xyz")
 	require.NoError(t, err)

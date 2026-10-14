@@ -129,20 +129,35 @@ async def test_messaging_memory_handler_error_does_not_stop_the_loop() -> None:
     )
 
 
-def test_messaging_factory_selects_memory() -> None:
-    """The factories return the in-memory publisher/subscriber for ``MessagingKind.MEMORY``.
+@pytest.mark.asyncio
+async def test_messaging_factory_selects_memory() -> None:
+    """The factories build the in-memory backend for ``MessagingKind.MEMORY``.
 
     Why this test is important:
         - The memory backend is opted into by a config kind; if the factory silently returned the
           SQS backend, the configured no-infra behavior would never take effect.
 
     What it tests:
-        - ``new_messaging_from_config``/``new_messaging_subscriber_from_config`` with ``kind=MEMORY``
-          return ``InMemoryPublisher``/``InMemorySubscriber``.
+        - A publisher and subscriber built from the factories over one shared broker deliver a
+          message in-process, and the subscriber is the ``InMemorySubscriber``.
     """
     config = MessagingConfig(
         sqs=SQSConfig(endpoint="", region="us-east-1", queue_url=""),
         kind=MessagingKind.MEMORY,
     )
-    assert isinstance(new_messaging_from_config(config), InMemoryPublisher)
-    assert isinstance(new_messaging_subscriber_from_config(config), InMemorySubscriber)
+    broker = InMemoryBroker()
+    publisher = new_messaging_from_config(config, broker=broker)
+    subscriber = new_messaging_subscriber_from_config(config, broker=broker)
+    assert isinstance(subscriber, InMemorySubscriber)
+    got: list[bytes] = []
+
+    async def handle(message: Message) -> None:
+        await asyncio.sleep(0)
+        got.append(message.payload)
+
+    async with publisher, subscriber:
+        task = asyncio.create_task(subscriber.subscribe("t", handle))
+        await publisher.publish("t", b"hi")
+        await _wait_for(lambda: got == [b"hi"])
+        await subscriber.close()
+        await task

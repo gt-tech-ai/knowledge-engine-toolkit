@@ -56,7 +56,11 @@ func TestStorageClient_NewFromConfig_BuildsRealClient(t *testing.T) {
 	for name, cfg := range map[string]infra.S3Config{"minio": minioCfg, "s3": s3Cfg} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			c, err := storage.NewFromConfig(context.Background(), storage.KindS3, cfg)
+			c, err := storage.NewFromConfig(
+				context.Background(),
+				storage.Config{Kind: storage.KindS3, S3: cfg},
+				storage.Deps{},
+			)
 			require.NoError(t, err)
 			require.NotNil(t, c)
 		})
@@ -76,12 +80,20 @@ func TestStorageClient_NewFromConfig_RejectsInvalidConfig(t *testing.T) {
 
 	badKind := validS3Config()
 	badKind.Kind = "gcs"
-	_, err := storage.NewFromConfig(context.Background(), storage.KindS3, badKind)
+	_, err := storage.NewFromConfig(
+		context.Background(),
+		storage.Config{Kind: storage.KindS3, S3: badKind},
+		storage.Deps{},
+	)
 	require.Error(t, err)
 
 	noBucket := infra.DefaultS3Config()
 	noBucket.Bucket = ""
-	_, err = storage.NewFromConfig(context.Background(), storage.KindS3, noBucket)
+	_, err = storage.NewFromConfig(
+		context.Background(),
+		storage.Config{Kind: storage.KindS3, S3: noBucket},
+		storage.Deps{},
+	)
 	require.Error(t, err)
 }
 
@@ -95,9 +107,10 @@ func newStorageClientWithMock(
 	threshold int64,
 ) interfaces.StorageClient {
 	t.Helper()
-	c, err := storage.New(
+	c, err := storage.NewFromConfig(
 		ctx,
-		storage.Config{API: api, MultipartThreshold: threshold},
+		storage.Config{Kind: storage.KindS3, MultipartThreshold: threshold},
+		storage.Deps{API: api},
 	)
 	require.NoError(t, err)
 	return c
@@ -663,8 +676,8 @@ func TestStorageClient_Presign_BuildsSignedURLs(t *testing.T) {
 	// offline (no network) — the same path the MinIO integration suite exercises live.
 	c, err := storage.NewFromConfig(
 		context.Background(),
-		storage.KindS3,
-		validS3Config(),
+		storage.Config{Kind: storage.KindS3, S3: validS3Config()},
+		storage.Deps{},
 	)
 	require.NoError(t, err)
 
@@ -715,7 +728,11 @@ func TestStorageClient_Presign_UsesPublicEndpoint(t *testing.T) {
 	cfg := validS3Config()
 	cfg.Endpoint = "http://minio:9000"           // in-cluster: server-side ops
 	cfg.PublicEndpoint = "http://localhost:9000" // browser-reachable: presign only
-	c, err := storage.NewFromConfig(context.Background(), storage.KindS3, cfg)
+	c, err := storage.NewFromConfig(
+		context.Background(),
+		storage.Config{Kind: storage.KindS3, S3: cfg},
+		storage.Deps{},
+	)
 	require.NoError(t, err)
 
 	getURL, err := c.PresignURL(
@@ -791,7 +808,11 @@ func TestStorageClient_Presign_EmptyPublicEndpointFallsBack(t *testing.T) {
 	cfg := validS3Config()
 	cfg.Endpoint = "http://minio:9000"
 	cfg.PublicEndpoint = "" // opt-in: empty falls back to Endpoint
-	c, err := storage.NewFromConfig(context.Background(), storage.KindS3, cfg)
+	c, err := storage.NewFromConfig(
+		context.Background(),
+		storage.Config{Kind: storage.KindS3, S3: cfg},
+		storage.Deps{},
+	)
 	require.NoError(t, err)
 
 	putURL, err := c.PresignPutURL(
@@ -834,7 +855,11 @@ func TestStorageClient_PresignPutURL_SignsContentTypeAndHost(t *testing.T) {
 
 	cfg := validS3Config()
 	cfg.Bucket = "b"
-	c, err := storage.NewFromConfig(context.Background(), storage.KindS3, cfg)
+	c, err := storage.NewFromConfig(
+		context.Background(),
+		storage.Config{Kind: storage.KindS3, S3: cfg},
+		storage.Deps{},
+	)
 	require.NoError(t, err)
 
 	for _, ct := range []string{"application/pdf", ""} {
@@ -872,7 +897,11 @@ func TestStorageClient_EnsureBucket(t *testing.T) {
 	const bucket = "documents"
 	newClient := func(t *testing.T, api s3.S3API) interfaces.StorageClient {
 		t.Helper()
-		c, err := storage.New(context.Background(), storage.Config{API: api})
+		c, err := storage.NewFromConfig(
+			context.Background(),
+			storage.Config{Kind: storage.KindS3},
+			storage.Deps{API: api},
+		)
 		require.NoError(t, err)
 		return c
 	}

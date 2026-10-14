@@ -13,11 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/sqs"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -72,29 +70,6 @@ func TestNewAWSClient_RejectsHalfAStaticCredential(t *testing.T) {
 	})
 	require.Nil(t, client)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-}
-
-// TestMessaging_NewFromConfig_AtTierRoot tests that the tier-root config factory
-// builds a publisher from a foundation SQSConfig without a network round-trip.
-//
-// Why this test is important:
-//   - NewFromConfig is the app-wiring entrypoint and now lives at the messaging
-//     tier root (promoted from the sqs/ backend, mirroring the storage factory); a
-//     broken translation of region/endpoint/credentials would fail services at
-//     startup rather than at first publish.
-//
-// What it tests:
-//   - messaging.NewFromConfig (not the backend) resolves a default (ElasticMQ)
-//     SQSConfig to a non-nil MessagePublisher and no error.
-func TestMessaging_NewFromConfig_AtTierRoot(t *testing.T) {
-	t.Parallel()
-	pub, err := messaging.NewFromConfig(
-		context.Background(),
-		messaging.KindSQS,
-		infra.DefaultSQSConfig(),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, pub)
 }
 
 // recv reads one value from ch or fails the test after a bounded wait, so an
@@ -200,7 +175,7 @@ func TestSubscriber_LogsAndRecoversFromQueueResolutionError(t *testing.T) {
 		Return(&awssqs.DeleteMessageBatchOutput{}, nil).AnyTimes()
 	spy := fixtures.NewSpyLogger()
 
-	sub, err := sqs.NewSubscriber(sqs.Config{
+	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{
 		API: api, Logger: spy, BaseBackoff: time.Millisecond,
 	})
 	require.NoError(t, err)
@@ -244,7 +219,7 @@ func TestSubscriber_LogsDeleteFailure(t *testing.T) {
 		Return(nil, apperr.Sentinel("delete failed")).AnyTimes()
 	spy := fixtures.NewSpyLogger()
 
-	sub, err := sqs.NewSubscriber(sqs.Config{
+	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{
 		API: api, Logger: spy, BaseBackoff: time.Millisecond,
 	})
 	require.NoError(t, err)
@@ -277,35 +252,10 @@ func TestPublisher_ReturnsErrorWhenQueueUnresolvable(t *testing.T) {
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("access denied"))
 
-	pub, err := sqs.NewPublisher(sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.Error(t, pub.Publish(context.Background(), "q", []byte("x")))
-}
-
-// TestNewPublisherContext_UsesInjectedAPI tests that the context-aware constructor
-// honours the injected SQS seam exactly like NewPublisher.
-//
-// Why this test is important:
-//   - NewFromConfig builds its SQS core through NewPublisherContext; a constructor that
-//     ignored Config.API would dial real AWS from a unit-wired graph
-//
-// What it tests:
-//   - A publisher built with NewPublisherContext sends through the injected API
-func TestNewPublisherContext_UsesInjectedAPI(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	api := mocks.NewMockAPI(ctrl)
-	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil)
-	api.EXPECT().SendMessage(gomock.Any(), gomock.Any()).
-		Return(&awssqs.SendMessageOutput{}, nil)
-
-	pub, err := sqs.NewPublisherContext(t.Context(), sqs.Config{API: api})
-	require.NoError(t, err)
-
-	require.NoError(t, pub.Publish(t.Context(), "q", []byte("x")))
 }
 
 // TestPublisher_PublishBatch_StopsOnSendError tests that PublishBatch returns the
@@ -327,7 +277,7 @@ func TestPublisher_PublishBatch_StopsOnSendError(t *testing.T) {
 	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("send boom"))
 
-	pub, err := sqs.NewPublisher(sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.Error(t, pub.PublishBatch(
@@ -369,7 +319,7 @@ func TestSubscriber_StopsDuringBackoff(t *testing.T) {
 	).
 		AnyTimes()
 
-	sub, err := sqs.NewSubscriber(sqs.Config{
+	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{
 		API: api, BaseBackoff: 100 * time.Millisecond,
 	})
 	require.NoError(t, err)
@@ -415,7 +365,7 @@ func TestPublisher_ResolvesExistingQueueAndCaches(t *testing.T) {
 	).
 		Times(2)
 
-	pub, err := sqs.NewPublisher(sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.NoError(t, pub.Publish(context.Background(), "the-queue", []byte("p1")))
@@ -456,7 +406,7 @@ func TestPublisher_CreatesQueueWhenMissing(t *testing.T) {
 		},
 	)
 
-	pub, err := sqs.NewPublisher(sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.NoError(t, pub.Publish(context.Background(), "new-queue", []byte("payload")))
@@ -482,7 +432,7 @@ func TestPublisher_PropagatesSendError(t *testing.T) {
 	api.EXPECT().SendMessage(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("sqs unavailable"))
 
-	pub, err := sqs.NewPublisher(sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.Error(t, pub.Publish(context.Background(), "q", []byte("payload")))
@@ -526,7 +476,10 @@ func TestSubscriber_DeliversAndAcks(t *testing.T) {
 	).
 		AnyTimes()
 
-	sub, err := sqs.NewSubscriber(sqs.Config{API: api, BaseBackoff: time.Millisecond})
+	sub, err := sqs.NewSubscriber(
+		t.Context(),
+		sqs.Config{API: api, BaseBackoff: time.Millisecond},
+	)
 	require.NoError(t, err)
 	got := make(chan *interfaces.Message, 1)
 	require.NoError(t, sub.Subscribe(context.Background(), "q",
@@ -569,7 +522,10 @@ func TestSubscriber_HandlerError_DoesNotDelete(t *testing.T) {
 	// Times(0): a nacked message must never be deleted.
 	api.EXPECT().DeleteMessageBatch(gomock.Any(), gomock.Any()).Times(0)
 
-	sub, err := sqs.NewSubscriber(sqs.Config{API: api, BaseBackoff: time.Millisecond})
+	sub, err := sqs.NewSubscriber(
+		t.Context(),
+		sqs.Config{API: api, BaseBackoff: time.Millisecond},
+	)
 	require.NoError(t, err)
 	handled := make(chan struct{}, 1)
 	require.NoError(t, sub.Subscribe(context.Background(), "q",
@@ -604,7 +560,7 @@ func TestSubscriber_ReadyErrorPausesReceive(t *testing.T) {
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).Times(0)
 
 	probes := make(chan struct{}, 8)
-	sub, err := sqs.NewSubscriber(sqs.Config{
+	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{
 		API:         api,
 		BaseBackoff: time.Millisecond,
 		Ready: func(context.Context) error {
@@ -664,7 +620,7 @@ func TestSubscriber_NackDelaysVisibility(t *testing.T) {
 		},
 	).Times(1)
 
-	sub, err := sqs.NewSubscriber(sqs.Config{
+	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{
 		API:         api,
 		BaseBackoff: time.Millisecond,
 		NackDelay:   sqs.NackDelay{Min: 5 * time.Second, Max: 30 * time.Second},
@@ -715,7 +671,7 @@ func TestSubscriber_UsesConfiguredWaitTime(t *testing.T) {
 		},
 	).AnyTimes()
 
-	sub, err := sqs.NewSubscriber(sqs.Config{API: api, WaitTimeSeconds: 20})
+	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{API: api, WaitTimeSeconds: 20})
 	require.NoError(t, err)
 	require.NoError(t, sub.Subscribe(context.Background(), "q",
 		func(context.Context, *interfaces.Message) error { return nil }))
@@ -749,7 +705,7 @@ func TestNewSubscriber_RejectsInvalidPollConfig(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			cfg.API = mocks.NewMockAPI(gomock.NewController(t))
-			_, err := sqs.NewSubscriber(cfg)
+			_, err := sqs.NewSubscriber(t.Context(), cfg)
 			require.Error(t, err)
 			require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 		})
@@ -788,7 +744,10 @@ func TestSubscriber_RetriesAfterReceiveError(t *testing.T) {
 	api.EXPECT().DeleteMessageBatch(gomock.Any(), gomock.Any()).
 		Return(&awssqs.DeleteMessageBatchOutput{}, nil).AnyTimes()
 
-	sub, err := sqs.NewSubscriber(sqs.Config{API: api, BaseBackoff: time.Millisecond})
+	sub, err := sqs.NewSubscriber(
+		t.Context(),
+		sqs.Config{API: api, BaseBackoff: time.Millisecond},
+	)
 	require.NoError(t, err)
 	handled := make(chan struct{}, 1)
 	require.NoError(t, sub.Subscribe(context.Background(), "q",
@@ -829,7 +788,7 @@ func TestPublisher_PublishBatch_SendsEachPayload(t *testing.T) {
 	).
 		Times(1)
 
-	pub, err := sqs.NewPublisher(sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.NoError(t, pub.PublishBatch(
@@ -867,7 +826,7 @@ func TestPublisher_PublishBatch_ChunksInto10s(t *testing.T) {
 	).
 		Times(3)
 
-	pub, err := sqs.NewPublisher(sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
 	payloads := make([][]byte, 25)
@@ -904,7 +863,7 @@ func TestPublisher_PublishBatch_SurfacesFailedEntries(t *testing.T) {
 		}, nil,
 	)
 
-	pub, err := sqs.NewPublisher(sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
 	err = pub.PublishBatch(context.Background(), "q", [][]byte{[]byte("a"), []byte("b")})
@@ -962,7 +921,10 @@ func TestSubscriber_FansOutBatchAndBatchDeletes(t *testing.T) {
 	inFlight.Add(n)
 	release := make(chan struct{})
 
-	sub, err := sqs.NewSubscriber(sqs.Config{API: api, BaseBackoff: time.Millisecond})
+	sub, err := sqs.NewSubscriber(
+		t.Context(),
+		sqs.Config{API: api, BaseBackoff: time.Millisecond},
+	)
 	require.NoError(t, err)
 	require.NoError(t, sub.Subscribe(context.Background(), "q",
 		func(_ context.Context, _ *interfaces.Message) error {
@@ -998,7 +960,7 @@ func TestPublisher_PublishBatch_EmptyIsNoOp(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl) // no expectations: any call fails the test
-	pub, err := sqs.NewPublisher(sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.NoError(t, pub.PublishBatch(context.Background(), "q", nil))
@@ -1020,7 +982,7 @@ func TestPublisher_PublishBatch_QueueResolveError(t *testing.T) {
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("access denied"))
 
-	pub, err := sqs.NewPublisher(sqs.Config{API: api})
+	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
 	require.Error(t, pub.PublishBatch(context.Background(), "q", [][]byte{[]byte("a")}))
@@ -1060,7 +1022,7 @@ func TestSubscriber_LogsBatchDeletePartialFailure(t *testing.T) {
 	).AnyTimes()
 	spy := fixtures.NewSpyLogger()
 
-	sub, err := sqs.NewSubscriber(sqs.Config{
+	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{
 		API: api, Logger: spy, BaseBackoff: time.Millisecond,
 	})
 	require.NoError(t, err)

@@ -30,7 +30,7 @@ func TestNewFromConfig_EnvKindResolves(t *testing.T) {
 	src, err := secrets.NewFromConfig(context.Background(), secrets.Config{
 		Kind:    secrets.KindEnv,
 		EnvVars: map[types.Ref]string{ref: "KE_FACTORY_ENV_TEST"},
-	})
+	}, secrets.Deps{})
 	require.NoError(t, err)
 
 	got, err := src.Get(context.Background(), ref)
@@ -51,6 +51,7 @@ func TestNewFromConfig_FileKindRequiresRunner(t *testing.T) {
 	_, err := secrets.NewFromConfig(
 		context.Background(),
 		secrets.Config{Kind: secrets.KindFile},
+		secrets.Deps{},
 	)
 	require.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }
@@ -67,41 +68,11 @@ func TestNewFromConfig_FileKindBuildsWithRunner(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
 
-	src, err := secrets.NewFromConfig(context.Background(), secrets.Config{
-		Kind:   secrets.KindFile,
-		Runner: runner,
-	})
+	src, err := secrets.NewFromConfig(
+		context.Background(),
+		secrets.Config{Kind: secrets.KindFile},
+		secrets.Deps{Runner: runner},
+	)
 	require.NoError(t, err)
 	require.NotNil(t, src)
-}
-
-// TestNewFromConfig_UnknownKindFailsLoudly tests that an unrecognized Kind is rejected.
-//
-// Why this test is important:
-//   - Fail-loud on an unknown Kind is the factory contract
-//     (ARCHITECTURE.md#swappable-components); a silent nil Source would defer the failure
-//     to a confusing later nil-panic.
-//
-// What it tests:
-//   - NewFromConfig with an out-of-range Kind returns CodeInvalidInput.
-func TestNewFromConfig_UnknownKindFailsLoudly(t *testing.T) {
-	_, err := secrets.NewFromConfig(
-		context.Background(),
-		secrets.Config{Kind: secrets.Kind(99)},
-	)
-	require.True(t, apperr.Is(err, apperr.CodeInvalidInput))
-}
-
-// TestKind_String tests that each Kind renders its stable config string.
-//
-// Why this test is important:
-//   - The Kind strings are the config vocabulary a product manifest selects a backend by;
-//     a drift here silently breaks config-driven selection.
-//
-// What it tests:
-//   - KindEnv/KindFile/KindAWSSM render "env"/"file"/"aws-sm".
-func TestKind_String(t *testing.T) {
-	assert.Equal(t, "env", secrets.KindEnv.String())
-	assert.Equal(t, "file", secrets.KindFile.String())
-	assert.Equal(t, "aws-sm", secrets.KindAWSSM.String())
 }

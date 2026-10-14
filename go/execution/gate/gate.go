@@ -1,5 +1,5 @@
-// Package gate provides Phase, Gate, GateBuilder, and RunGate for composing
-// AnyJobs into ordered phases with stop-on-failure and error aggregation.
+// Package gate composes AnyJobs into a Gate of ordered phases, run with
+// stop-on-failure and error aggregation.
 package gate
 
 import (
@@ -41,8 +41,8 @@ type Phase struct {
 }
 
 // Gate is an ordered sequence of Phases with optional stop-on-failure behaviour.
-// Field order: obs (interface) then name (string) before phases (slice) to keep
-// pointer-scan range at 40 bytes instead of 48.
+// New starts one; Parallel, Serial, StopOnFailure and Observe extend it in place
+// and return it, so a gate is built as one chain and run with Run or RunLocal.
 type Gate struct {
 	// obs receives the gate/phase/step lifecycle events as the gate runs.
 	obs interfaces.ExecutionObserver
@@ -50,86 +50,63 @@ type Gate struct {
 	// name identifies the gate in observer events and the wrapping error.
 	name string
 
-	// phases are the ordered phases executed by RunGate.
+	// phases are the ordered phases Run executes.
 	phases []Phase
 
 	// stopOnFailure, when true, halts the remaining phases after any phase fails.
 	stopOnFailure bool
 }
 
-// GateBuilder assembles a Gate via a fluent API.
-type GateBuilder struct {
-	// obs is the observer applied to the built gate; defaults to NopObserver
-	// when never set via WithObserver.
-	obs interfaces.ExecutionObserver
-
-	// name is the gate name carried into the built Gate.
-	name string
-
-	// phases accumulate as Parallel/Serial are called, preserving call order.
-	phases []Phase
-
-	// stopOnFailure records whether StopOnFailure was requested.
-	stopOnFailure bool
-}
-
-// NewGate returns a GateBuilder for a named gate.
-func NewGate(name string) *GateBuilder { return &GateBuilder{name: name} }
+// New returns an empty gate named name that reports to no observer.
+func New(name string) *Gate { return &Gate{name: name, obs: engine.NopObserver{}} }
 
 // Parallel adds a phase in which all jobs run concurrently.
-func (b *GateBuilder) Parallel(name string, jobs ...interfaces.AnyJob) *GateBuilder {
-	b.phases = append(b.phases, Phase{Name: name, Jobs: jobs, parallel: true})
-	return b
+func (g *Gate) Parallel(name string, jobs ...interfaces.AnyJob) *Gate {
+	g.phases = append(g.phases, Phase{Name: name, Jobs: jobs, parallel: true})
+	return g
 }
 
 // Serial adds a phase in which jobs run one after another.
-func (b *GateBuilder) Serial(name string, jobs ...interfaces.AnyJob) *GateBuilder {
-	b.phases = append(b.phases, Phase{Name: name, Jobs: jobs, parallel: false})
-	return b
+func (g *Gate) Serial(name string, jobs ...interfaces.AnyJob) *Gate {
+	g.phases = append(g.phases, Phase{Name: name, Jobs: jobs, parallel: false})
+	return g
 }
 
-// StopOnFailure configures the gate to skip remaining phases after any failure.
-func (b *GateBuilder) StopOnFailure() *GateBuilder {
-	b.stopOnFailure = true
-	return b
+// StopOnFailure makes the gate skip its remaining phases after any failure.
+func (g *Gate) StopOnFailure() *Gate {
+	g.stopOnFailure = true
+	return g
 }
 
-// WithObserver sets an ExecutionObserver for all phases.
-func (b *GateBuilder) WithObserver(obs interfaces.ExecutionObserver) *GateBuilder {
-	b.obs = obs
-	return b
-}
-
-// Build returns the configured Gate.
-func (b *GateBuilder) Build() *Gate {
-	obs := b.obs
-	if obs == nil {
-		obs = engine.NopObserver{}
+// Observe reports the gate's lifecycle events to obs; a nil obs keeps the current
+// observer, so a caller can pass an optional observer through unchecked.
+func (g *Gate) Observe(obs interfaces.ExecutionObserver) *Gate {
+	if obs != nil {
+		g.obs = obs
 	}
-	return &Gate{name: b.name, phases: b.phases, stopOnFailure: b.stopOnFailure, obs: obs}
+	return g
 }
 
 // Phases returns the ordered phases of the gate for inspection (e.g. in tests).
 func (g *Gate) Phases() []Phase { return g.phases }
 
-// RunGateNoRunner runs a gate whose jobs are all runner-less (Runnable-backed via
-// job.Adapt). It supplies a no-op CommandRunner so no phase ever receives a nil
-// runner; the runner is structurally unused by Runnable-backed jobs. Use it for
-// in-process gates (e.g. DB seeding) that compose Runnables rather than commands.
-func RunGateNoRunner(ctx context.Context, g *Gate) error {
-	return RunGate(ctx, noRunner{}, "", g)
+// RunLocal runs a gate whose jobs are all runner-less (job.Base.Runnable). It
+// supplies a CommandRunner that fails every command, so no phase ever receives a
+// nil runner. Use it for in-process gates (e.g. DB seeding) that compose Runnables
+// rather than commands.
+func (g *Gate) RunLocal(ctx context.Context) error {
+	return g.Run(ctx, noRunner{}, "")
 }
 
-// RunGate executes all phases of g in order.
+// Run executes all phases of g in order against runner under root.
 // Each phase's jobs run in parallel or serially per configuration.
 // Failures are aggregated into a CodeQualityFailed error.
 // When StopOnFailure is set, the first failed phase halts subsequent phases.
 // Returns nil when all phases pass or produce only warnings.
-func RunGate(
+func (g *Gate) Run(
 	ctx context.Context,
 	runner interfaces.CommandRunner,
 	root string,
-	g *Gate,
 ) error {
 	gateStart := time.Now()
 

@@ -21,13 +21,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	clientdecorators "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/decorators"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox"
 	outboxs3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/s3"
 	outboxsqs "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/sqs"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/stub"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -58,69 +60,63 @@ func codesOf(results []error) []apperr.ErrorCode {
 	return out
 }
 
-// TestOutboxSinkFromConfig_DefaultsToStubAndRejectsUnknownKind tests the sink factory.
+// TestOutboxSinkFromConfig_DefaultsToStubAndRejectsIncompleteBackends tests the sink
+// factory.
 //
 // Why this test is important:
 //   - The graph must boot with no queue or bucket, and a misconfigured sink must
 //     fail at the composition root, not drop every outbox row at runtime
 //
 // What it tests:
-//   - DefaultConfig is KindStub ("stub") with the default key template; the
-//     factory builds a *stub.Sink whose Send reports success for every record
-//   - an unknown kind, sqs without an API or queue, and s3 without an API, a
-//     bucket or "{id}" in the key template are each INVALID_INPUT
+//   - DefaultConfig (an empty kind) has the default key template; the factory
+//     builds a *stub.Sink whose Send reports success for every record
+//   - sqs without an API or queue, and s3 without an API, a bucket or "{id}" in
+//     the key template are each INVALID_INPUT
 //   - sqs and s3 with an API build *sqs.Sink and *s3.Sink
-func TestOutboxSinkFromConfig_DefaultsToStubAndRejectsUnknownKind(t *testing.T) {
+func TestOutboxSinkFromConfig_DefaultsToStubAndRejectsIncompleteBackends(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	cfg := outbox.DefaultConfig()
-	assert.Equal(t, outbox.KindStub, cfg.Kind)
-	assert.Equal(t, "stub", cfg.Kind.String())
-	assert.Equal(t, "sqs", outbox.KindSQS.String())
-	assert.Equal(t, "s3", outbox.KindS3.String())
 	assert.Equal(t, "{tenant}/{yyyy}/{mm}/{dd}/{id}", cfg.S3.KeyTemplate)
 
-	sink, err := outbox.NewFromConfig(cfg, clientdecorators.Deps{})
+	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{})
 	require.NoError(t, err)
 	assert.IsType(t, &stub.Sink{}, sink)
 	assert.Equal(t, []error{nil, nil}, sink.Send(context.Background(), sinkRecords(2)))
 
-	broken := map[string]func(*outbox.Config){
-		"unknown":    func(c *outbox.Config) { c.Kind = outbox.Kind(99) },
-		"sqs no api": func(c *outbox.Config) { c.Kind, c.SQS.Queue = outbox.KindSQS, "q" },
-		"sqs no q": func(c *outbox.Config) {
-			c.Kind, c.SQS.API = outbox.KindSQS, mocks.NewMockOutboxSQSAPI(ctrl)
+	apis := outbox.Deps{
+		SQSAPI: mocks.NewMockOutboxSQSAPI(ctrl),
+		S3API:  mocks.NewMockOutboxS3API(ctrl),
+	}
+	broken := map[string]func(*outbox.Config, *outbox.Deps){
+		"sqs no api": func(c *outbox.Config, d *outbox.Deps) {
+			c.Kind, c.SQS.Queue, d.SQSAPI = outbox.KindSQS, "q", nil
 		},
-		"s3 no api": func(c *outbox.Config) { c.Kind, c.S3.Bucket = outbox.KindS3, "b" },
-		"s3 no bkt": func(c *outbox.Config) {
-			c.Kind, c.S3.API = outbox.KindS3, mocks.NewMockOutboxS3API(ctrl)
+		"sqs no q": func(c *outbox.Config, _ *outbox.Deps) { c.Kind = outbox.KindSQS },
+		"s3 no api": func(c *outbox.Config, d *outbox.Deps) {
+			c.Kind, c.S3.Bucket, d.S3API = outbox.KindS3, "b", nil
 		},
-		"s3 no {id}": func(c *outbox.Config) {
-			c.Kind, c.S3.API = outbox.KindS3, mocks.NewMockOutboxS3API(ctrl)
-			c.S3.Bucket, c.S3.KeyTemplate = "b", "{tenant}"
+		"s3 no bkt": func(c *outbox.Config, _ *outbox.Deps) { c.Kind = outbox.KindS3 },
+		"s3 no {id}": func(c *outbox.Config, _ *outbox.Deps) {
+			c.Kind, c.S3.Bucket, c.S3.KeyTemplate = outbox.KindS3, "b", "{tenant}"
 		},
 	}
 	for name, mutate := range broken {
-		c := outbox.DefaultConfig()
-		mutate(&c)
-		_, err := outbox.NewFromConfig(c, clientdecorators.Deps{})
+		c, d := outbox.DefaultConfig(), apis
+		mutate(&c, &d)
+		_, err := outbox.NewFromConfig(t.Context(), c, d)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 	}
 
 	sqsCfg := outbox.DefaultConfig()
-	sqsCfg.Kind, sqsCfg.SQS = outbox.KindSQS, outboxsqs.Config{
-		API:   mocks.NewMockOutboxSQSAPI(ctrl),
-		Queue: "q",
-	}
-	sqsSink, err := outbox.NewFromConfig(sqsCfg, clientdecorators.Deps{})
+	sqsCfg.Kind, sqsCfg.SQS = outbox.KindSQS, outboxsqs.Config{Queue: "q"}
+	sqsSink, err := outbox.NewFromConfig(t.Context(), sqsCfg, apis)
 	require.NoError(t, err)
 	assert.IsType(t, &outboxsqs.Sink{}, sqsSink)
 
 	s3Cfg := outbox.DefaultConfig()
-	s3Cfg.Kind, s3Cfg.S3.API, s3Cfg.S3.Bucket = outbox.KindS3, mocks.NewMockOutboxS3API(
-		ctrl,
-	), "b"
-	s3Sink, err := outbox.NewFromConfig(s3Cfg, clientdecorators.Deps{})
+	s3Cfg.Kind, s3Cfg.S3.Bucket = outbox.KindS3, "b"
+	s3Sink, err := outbox.NewFromConfig(t.Context(), s3Cfg, apis)
 	require.NoError(t, err)
 	assert.IsType(t, &outboxs3.Sink{}, s3Sink)
 }
@@ -192,8 +188,8 @@ func TestSQSSink_MapsPartialBatchFailureToRecords(t *testing.T) {
 	)
 
 	cfg := outbox.DefaultConfig()
-	cfg.Kind, cfg.SQS = outbox.KindSQS, outboxsqs.Config{API: api, Queue: "audit-events"}
-	sink, err := outbox.NewFromConfig(cfg, clientdecorators.Deps{})
+	cfg.Kind, cfg.SQS = outbox.KindSQS, outboxsqs.Config{Queue: "audit-events"}
+	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
 	results := sink.Send(context.Background(), recs)
@@ -305,10 +301,10 @@ func TestSQSSink_RoutesByKeyAndIsolatesFailingQueue(t *testing.T) {
 
 	cfg := outbox.DefaultConfig()
 	cfg.Kind = outbox.KindSQS
-	cfg.SQS = outboxsqs.Config{API: api, Queue: "q-default", Routes: map[string]string{
+	cfg.SQS = outboxsqs.Config{Queue: "q-default", Routes: map[string]string{
 		"standard": "q-standard", "deletion": "q-deletion", "facet": "q-facet",
 	}}
-	sink, err := outbox.NewFromConfig(cfg, clientdecorators.Deps{})
+	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
 	results := sink.Send(context.Background(), recs)
@@ -333,7 +329,7 @@ func TestSQSSink_RoutesByKeyAndIsolatesFailingQueue(t *testing.T) {
 
 	bad := cfg
 	bad.SQS.Routes = map[string]string{"standard": ""}
-	_, err = outbox.NewFromConfig(bad, clientdecorators.Deps{})
+	_, err = outbox.NewFromConfig(t.Context(), bad, outbox.Deps{SQSAPI: api})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -388,11 +384,10 @@ func TestS3Sink_KeysByTemplateAndAppliesKMS(t *testing.T) {
 	cfg := outbox.DefaultConfig()
 	cfg.Kind = outbox.KindS3
 	cfg.S3 = outboxs3.Config{
-		API:         api,
 		Bucket:      "archive",
 		KeyTemplate: "audit/{tenant}/{yyyy}/{mm}/{dd}/{id}.json",
 	}
-	sink, err := outbox.NewFromConfig(cfg, clientdecorators.Deps{})
+	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{S3API: api})
 	require.NoError(t, err)
 
 	results := sink.Send(context.Background(), recs)
@@ -480,12 +475,24 @@ func TestOutboxSinkDecorators_RetryOnlyTransientWithFullBody(t *testing.T) {
 	)
 
 	cfg := outbox.DefaultConfig()
-	cfg.Kind, cfg.S3.API, cfg.S3.Bucket = outbox.KindS3, api, "archive"
-	cfg.Resilience.RetryEnabled = true
-	cfg.Resilience.Retry.MaxRetries = 3
-	cfg.Resilience.Retry.InitialInterval = time.Millisecond
-	cfg.Resilience.Retry.MaxInterval = time.Millisecond
-	sink, err := outbox.NewFromConfig(cfg, clientdecorators.Deps{})
+	cfg.Kind, cfg.S3.Bucket = outbox.KindS3, "archive"
+	on := true
+	decs := decoration.DefaultConfig()
+	decs.Clients.Overrides["outbox.s3"] = decoration.Merge(
+		decs.Clients.Overrides["outbox.s3"],
+		decoration.Layers{Retry: decoration.Retry{
+			Enabled: &on,
+			RetryConfig: resilience.RetryConfig{
+				MaxRetries:      3,
+				InitialInterval: time.Millisecond,
+				MaxInterval:     time.Millisecond,
+			},
+		}},
+	)
+	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{
+		Decorations: decorate.NewDecorations(&decs, decorate.Collaborators{}),
+		S3API:       api,
+	})
 	require.NoError(t, err)
 
 	results := sink.Send(context.Background(), recs)
@@ -545,8 +552,8 @@ func TestSQSSink_FIFOQueueCarriesGroupAndDedupIDs(t *testing.T) {
 		})
 
 	sink, err := outboxsqs.New(outboxsqs.Config{
-		API: api, Queue: "plain", Routes: map[string]string{"ordered": "events.fifo"},
-	})
+		Queue: "plain", Routes: map[string]string{"ordered": "events.fifo"},
+	}, api)
 	require.NoError(t, err)
 
 	assert.Equal(t, []error{nil, nil, nil}, sink.Send(context.Background(), recs))
@@ -591,7 +598,7 @@ func TestSQSSink_OmitsEmptyStringAttributes(t *testing.T) {
 			}, nil
 		})
 
-	sink, err := outboxsqs.New(outboxsqs.Config{API: api, Queue: "q"})
+	sink, err := outboxsqs.New(outboxsqs.Config{Queue: "q"}, api)
 	require.NoError(t, err)
 
 	assert.Equal(t, []error{nil}, sink.Send(context.Background(), recs))
@@ -633,7 +640,8 @@ func TestS3Sink_KeyTemplateSubstitutesRecordKey(t *testing.T) {
 		})
 
 	sink, err := outboxs3.New(
-		outboxs3.Config{API: api, Bucket: "archive", KeyTemplate: "{tenant}/{key}/{id}"},
+		outboxs3.Config{Bucket: "archive", KeyTemplate: "{tenant}/{key}/{id}"},
+		api,
 	)
 	require.NoError(t, err)
 

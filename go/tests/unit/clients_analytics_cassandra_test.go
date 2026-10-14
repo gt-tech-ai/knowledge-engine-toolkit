@@ -37,7 +37,7 @@ func day(
 // rolled up hourly and daily.
 func newCassandraStore(
 	t *testing.T,
-	session *mocks.MockSession,
+	session *mocks.MockCQLSession,
 ) *analyticscassandra.Store {
 	t.Helper()
 	store, err := analyticscassandra.New(session, analyticscassandra.Config{
@@ -56,12 +56,12 @@ func newCassandraStore(
 // single, final page.
 func expectPage(
 	ctrl *gomock.Controller,
-	session *mocks.MockSession,
+	session *mocks.MockCQLSession,
 	bucket, lo, hi time.Time,
 	rows []storedRow,
 ) {
-	query := mocks.NewMockQuery(ctrl)
-	iter := mocks.NewMockIter(ctrl)
+	query := mocks.NewMockCQLQuery(ctrl)
+	iter := mocks.NewMockCQLIter(ctrl)
 	session.EXPECT().
 		Query(gomock.Any(), "org-1", "genai_calls", bucket, lo, hi).
 		Return(query)
@@ -112,7 +112,7 @@ func TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	session := mocks.NewMockSession(ctrl)
+	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
 	from, to := day(time.September, 15), day(time.November, 2)
 	for _, b := range []time.Time{
@@ -176,7 +176,7 @@ func TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	session := mocks.NewMockSession(ctrl)
+	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
 	m := listquery.NewMap().Add(listquery.Time("ts").AsTime(), listquery.String("team"))
 	filter, err := listquery.Parse(
@@ -239,7 +239,7 @@ func TestCassandraStore_WriteUpsertsOnePartialRowPerGrain(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	session := mocks.NewMockSession(ctrl)
+	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
 	at := time.Date(2026, 10, 9, 12, 34, 56, 0, time.UTC)
 	dims := map[string]string{"team": "t-1", "model": "m"}
@@ -251,7 +251,7 @@ func TestCassandraStore_WriteUpsertsOnePartialRowPerGrain(t *testing.T) {
 		},
 		"genai_calls_day": {day(time.October, 1), day(time.October, 9)},
 	} {
-		query := mocks.NewMockQuery(ctrl)
+		query := mocks.NewMockCQLQuery(ctrl)
 		session.EXPECT().
 			Query(
 				fmt.Sprintf(insert, table),
@@ -264,7 +264,7 @@ func TestCassandraStore_WriteUpsertsOnePartialRowPerGrain(t *testing.T) {
 				dims,
 				gomock.Any(),
 			).
-			DoAndReturn(func(_ string, values ...any) *mocks.MockQuery {
+			DoAndReturn(func(_ string, values ...any) *mocks.MockCQLQuery {
 				p, err := chartspec.DecodePartial(
 					values[7].(map[string][]byte)["tokens_in"],
 				)
@@ -305,7 +305,7 @@ func TestCassandraStore_WriteUpsertsOnePartialRowPerGrain(t *testing.T) {
 func TestCassandraStore_RejectsInvalidQueriesAndFacts(t *testing.T) {
 	t.Parallel()
 
-	store := newCassandraStore(t, mocks.NewMockSession(gomock.NewController(t)))
+	store := newCassandraStore(t, mocks.NewMockCQLSession(gomock.NewController(t)))
 	ctx := context.Background()
 	rng := types.TimeRange{From: day(time.October, 1), To: day(time.October, 2)}
 	for name, q := range map[string]types.AggregateQuery{
@@ -346,7 +346,7 @@ func TestCassandraStore_RejectsInvalidQueriesAndFacts(t *testing.T) {
 		},
 	} {
 		_, err := analyticscassandra.New(
-			mocks.NewMockSession(gomock.NewController(t)),
+			mocks.NewMockCQLSession(gomock.NewController(t)),
 			cfg,
 		)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
@@ -368,11 +368,11 @@ func TestCassandraStore_PageErrorIsTerminal(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	session := mocks.NewMockSession(ctrl)
+	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
 	from, to := day(time.September, 15), day(time.October, 15)
-	query := mocks.NewMockQuery(ctrl)
-	iter := mocks.NewMockIter(ctrl)
+	query := mocks.NewMockCQLQuery(ctrl)
+	iter := mocks.NewMockCQLIter(ctrl)
 	session.EXPECT().
 		Query(gomock.Any(), "org-1", "genai_calls", day(time.September, 1), from, to).
 		Return(query)
@@ -419,7 +419,7 @@ func TestCassandraStore_ResumeTokenIsBoundToItsQuery(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	session := mocks.NewMockSession(ctrl)
+	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
 	from, to := day(time.September, 15), day(time.October, 15)
 	for _, b := range []time.Time{day(time.September, 1), day(time.October, 1)} {
@@ -448,7 +448,7 @@ func TestCassandraStore_ResumeTokenIsBoundToItsQuery(t *testing.T) {
 // rolled up hourly (daily buckets) and hourly rows kept for ttl.
 func newTTLStore(
 	t *testing.T,
-	session *mocks.MockSession,
+	session *mocks.MockCQLSession,
 	ttl time.Duration,
 ) *analyticscassandra.Store {
 	t.Helper()
@@ -483,10 +483,10 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 	t.Run("within retention", func(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
-		session := mocks.NewMockSession(ctrl)
-		query := mocks.NewMockQuery(ctrl)
-		iter := mocks.NewMockIter(ctrl)
-		batch := mocks.NewMockBatch(ctrl)
+		session := mocks.NewMockCQLSession(ctrl)
+		query := mocks.NewMockCQLQuery(ctrl)
+		iter := mocks.NewMockCQLIter(ctrl)
+		batch := mocks.NewMockCQLBatch(ctrl)
 		bucket := today.AddDate(0, 0, -2)
 		ts := bucket.Add(9 * time.Hour)
 		dims := map[string]string{"team": "t-1"}
@@ -550,7 +550,7 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 
 	t.Run("past retention", func(t *testing.T) {
 		t.Parallel()
-		session := mocks.NewMockSession(gomock.NewController(t))
+		session := mocks.NewMockCQLSession(gomock.NewController(t))
 		bucket := today.AddDate(0, 0, -12)
 
 		require.NoError(
@@ -587,8 +587,8 @@ func TestCassandraStore_ReadinessQueriesTheCoordinator(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
-			session := mocks.NewMockSession(ctrl)
-			query := mocks.NewMockQuery(ctrl)
+			session := mocks.NewMockCQLSession(ctrl)
+			query := mocks.NewMockCQLQuery(ctrl)
 			session.EXPECT().
 				Query("SELECT release_version FROM system.local").
 				Return(query)
@@ -609,7 +609,7 @@ func TestCassandraStore_ReadinessQueriesTheCoordinator(t *testing.T) {
 
 	t.Run("stopped", func(t *testing.T) {
 		t.Parallel()
-		session := mocks.NewMockSession(gomock.NewController(t))
+		session := mocks.NewMockCQLSession(gomock.NewController(t))
 		session.EXPECT().Close()
 		store := newCassandraStore(t, session)
 		require.NoError(t, store.Stop(t.Context()))

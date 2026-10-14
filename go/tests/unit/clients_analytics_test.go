@@ -10,8 +10,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/analytics"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/analytics/stub"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cassandra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
@@ -28,25 +27,23 @@ import (
 // What it tests:
 //   - DefaultConfig is KindStub with bucket grains minute→hour, hour→day,
 //     day→month, month→month and 8 concurrent buckets
-//   - the store is a *stub.Store: Start/Stop/Write succeed, Aggregate yields one
+//   - an empty config builds the stub: Start/Stop/Write succeed, Aggregate yields one
 //     empty, final page and an empty resume token
 func TestNewFromConfig_DefaultsToStub(t *testing.T) {
 	t.Parallel()
 
 	cfg := analytics.DefaultConfig()
 	assert.Equal(t, analytics.KindStub, cfg.Kind)
-	assert.Equal(t, "stub", cfg.Kind.String())
 	assert.Equal(t, map[types.Grain]types.Grain{
 		types.GrainMinute: types.GrainHour, types.GrainHour: types.GrainDay,
 		types.GrainDay: types.GrainMonth, types.GrainMonth: types.GrainMonth,
 	}, cfg.BucketWidth)
 	assert.Equal(t, 8, cfg.MaxConcurrentBuckets)
 
-	store, err := analytics.New(analytics.KindStub)
-	require.NoError(t, err)
-	assert.IsType(t, &stub.Store{}, store)
-
 	ctx := context.Background()
+	store, err := analytics.NewFromConfig(ctx, analytics.Config{}, analytics.Deps{})
+	require.NoError(t, err)
+
 	require.NoError(t, store.Start(ctx))
 	require.NoError(
 		t,
@@ -67,18 +64,18 @@ func TestNewFromConfig_DefaultsToStub(t *testing.T) {
 }
 
 // TestNewFromConfig_CassandraKindDialsNestedConfigAtStart tests that the
-// cassandra kind dials its session from the nested Cassandra config at Start,
+// cassandra kind dials its session from the nested CQL config at Start,
 // never at construction.
 //
 // Why this test is important:
-//   - Keyspaces-vs-Cassandra connectivity is chosen by the nested Cassandra.Kind;
+//   - Keyspaces-vs-Cassandra connectivity is chosen by the nested CQL.Kind;
 //     the analytics factory must pass that config through untouched
 //   - Construction does no I/O, so a process whose cluster is unreachable still
 //     builds its graph and serves health and readiness
 //
 // What it tests:
 //   - construction does not call the session factory; Start calls it once with
-//     exactly cfg.Cassandra (keyspaces kind, region, keyspace), and a second Start
+//     exactly cfg.CQL (keyspaces kind, region, keyspace), and a second Start
 //     does not dial again; the store is an AnalyticsStore and AnalyticsCompactor
 //   - a Write before Start is CodeUnavailable
 //   - a session factory error is returned by Start, coded
@@ -87,23 +84,20 @@ func TestNewFromConfig_CassandraKindDialsNestedConfigAtStart(t *testing.T) {
 	ctx := context.Background()
 
 	ctrl := gomock.NewController(t)
-	session := mocks.NewMockSession(ctrl)
-	var got []cassandra.Config
-	store, err := analytics.New(
-		analytics.KindCassandra,
-		analytics.WithCassandra(
-			cassandra.KindKeyspaces,
-			cassandra.WithKeyspacesRegion("us-east-1"),
-			cassandra.WithKeyspace("analytics"),
-		),
-		analytics.WithCube("genai_calls", types.GrainHour, types.GrainDay),
-		analytics.WithSessionFactory(
-			func(c *cassandra.Config) (cassandra.Session, error) {
-				got = append(got, *c)
-				return session, nil
-			},
-		),
-	)
+	session := mocks.NewMockCQLSession(ctrl)
+	var got []cql.Config
+	cfg := analytics.DefaultConfig()
+	cfg.Kind = analytics.KindCassandra
+	cfg.CQL.Kind = cql.KindKeyspaces
+	cfg.CQL.Keyspaces.Region = "us-east-1"
+	cfg.CQL.Keyspace = "analytics"
+	cfg.Cubes = map[string][]types.Grain{"genai_calls": {types.GrainHour, types.GrainDay}}
+	store, err := analytics.NewFromConfig(ctx, cfg, analytics.Deps{
+		Dial: func(_ context.Context, c cql.Config) (interfaces.CQLSession, error) {
+			got = append(got, c)
+			return session, nil
+		},
+	})
 	require.NoError(t, err)
 	assert.Empty(t, got, "no dial at construction")
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(store.Write(ctx, []types.Fact{
@@ -113,16 +107,20 @@ func TestNewFromConfig_CassandraKindDialsNestedConfigAtStart(t *testing.T) {
 	require.NoError(t, store.Start(ctx))
 	require.NoError(t, store.Start(ctx))
 	require.Len(t, got, 1)
-	assert.Equal(t, cassandra.KindKeyspaces, got[0].Kind)
+	assert.Equal(t, cql.KindKeyspaces, got[0].Kind)
 	assert.Equal(t, "us-east-1", got[0].Keyspaces.Region)
 	assert.Equal(t, "analytics", got[0].Keyspace)
 	assert.Implements(t, (*interfaces.AnalyticsStore)(nil), store)
 	assert.Implements(t, (*interfaces.AnalyticsCompactor)(nil), store)
 
-	failing, err := analytics.New(analytics.KindCassandra,
-		analytics.WithSessionFactory(func(*cassandra.Config) (cassandra.Session, error) {
-			return nil, apperr.New(apperr.CodeUnavailable, "dial refused")
-		}),
+	failing, err := analytics.NewFromConfig(
+		ctx,
+		analytics.Config{Kind: analytics.KindCassandra},
+		analytics.Deps{
+			Dial: func(context.Context, cql.Config) (interfaces.CQLSession, error) {
+				return nil, apperr.New(apperr.CodeUnavailable, "dial refused")
+			},
+		},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(failing.Start(ctx)))

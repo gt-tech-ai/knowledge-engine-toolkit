@@ -1,3 +1,5 @@
+// Package river is the River job-queue client: the worker Runtime (pool + work loop),
+// the InsertClient that enqueues from outside a worker, and Migrate for River's schema.
 package river
 
 import (

@@ -12,10 +12,11 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/analytics"
 	analyticscassandra "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/analytics/cassandra"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cassandra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -26,7 +27,7 @@ func schemaTables() []string { return []string{"genai_calls_day", "genai_calls_h
 // hour and day tables in keyspace "analytics" at Start, polling every millisecond.
 func newSchemaStore(
 	t *testing.T,
-	session *mocks.MockSession,
+	session *mocks.MockCQLSession,
 	awaitActive bool,
 	timeout time.Duration,
 ) *analyticscassandra.Store {
@@ -49,8 +50,8 @@ func newSchemaStore(
 }
 
 // expectCreate expects the CREATE TABLE IF NOT EXISTS of table to run once.
-func expectCreate(ctrl *gomock.Controller, session *mocks.MockSession, table string) {
-	query := mocks.NewMockQuery(ctrl)
+func expectCreate(ctrl *gomock.Controller, session *mocks.MockCQLSession, table string) {
+	query := mocks.NewMockCQLQuery(ctrl)
 	session.EXPECT().
 		Query(gomock.Cond(func(stmt any) bool {
 			s, _ := stmt.(string)
@@ -68,12 +69,12 @@ func expectCreate(ctrl *gomock.Controller, session *mocks.MockSession, table str
 // (any number of reads when repeat is set), answering status.
 func expectStatus(
 	ctrl *gomock.Controller,
-	session *mocks.MockSession,
+	session *mocks.MockCQLSession,
 	table, status string,
 	repeat bool,
 ) *gomock.Call {
-	query := mocks.NewMockQuery(ctrl)
-	iter := mocks.NewMockIter(ctrl)
+	query := mocks.NewMockCQLQuery(ctrl)
+	iter := mocks.NewMockCQLIter(ctrl)
 	call := session.EXPECT().
 		Query(gomock.Cond(func(stmt any) bool {
 			s, _ := stmt.(string)
@@ -113,7 +114,7 @@ func expectStatus(
 func TestCassandraStore_EnsureSchemaCreatesEveryDeclaredTable(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
-	session := mocks.NewMockSession(ctrl)
+	session := mocks.NewMockCQLSession(ctrl)
 	store := newSchemaStore(t, session, false, 0)
 	for _, table := range schemaTables() {
 		expectCreate(ctrl, session, table)
@@ -136,7 +137,7 @@ func TestCassandraStore_EnsureSchemaCreatesEveryDeclaredTable(t *testing.T) {
 func TestCassandraStore_EnsureSchemaWaitsForKeyspacesActive(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
-	session := mocks.NewMockSession(ctrl)
+	session := mocks.NewMockCQLSession(ctrl)
 	store := newSchemaStore(t, session, true, time.Minute)
 	for _, table := range schemaTables() {
 		expectCreate(ctrl, session, table)
@@ -165,39 +166,39 @@ func TestCassandraStore_EnsureSchemaWaitsForKeyspacesActive(t *testing.T) {
 func TestNewFromConfig_EnsureSchemaAwaitsActiveOnKeyspaces(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	build := func(session *mocks.MockSession, kind cassandra.Kind, ensure bool) error {
-		opts := []options.Option[analytics.Config]{
-			analytics.WithCassandra(kind, cassandra.WithKeyspace("analytics")),
-			analytics.WithCube("genai_calls", types.GrainHour, types.GrainDay),
-			analytics.WithSessionFactory(
-				func(*cassandra.Config) (cassandra.Session, error) {
-					return session, nil
-				},
-			),
+	build := func(session *mocks.MockCQLSession, kind client.Kind, ensure bool) error {
+		cfg := analytics.DefaultConfig()
+		cfg.Kind = analytics.KindCassandra
+		cfg.CQL.Kind = kind
+		cfg.CQL.Keyspace = "analytics"
+		cfg.Cubes = map[string][]types.Grain{
+			"genai_calls": {types.GrainHour, types.GrainDay},
 		}
-		if ensure {
-			opts = append(opts, analytics.WithEnsureSchema())
-		}
-		store, err := analytics.New(analytics.KindCassandra, opts...)
+		cfg.EnsureSchema = ensure
+		store, err := analytics.NewFromConfig(ctx, cfg, analytics.Deps{
+			Dial: func(context.Context, cql.Config) (interfaces.CQLSession, error) {
+				return session, nil
+			},
+		})
 		require.NoError(t, err)
 		return store.Start(ctx)
 	}
 
 	ctrl := gomock.NewController(t)
-	keyspaces := mocks.NewMockSession(ctrl)
+	keyspaces := mocks.NewMockCQLSession(ctrl)
 	for _, table := range schemaTables() {
 		expectCreate(ctrl, keyspaces, table)
 		expectStatus(ctrl, keyspaces, table, "ACTIVE", false)
 	}
-	require.NoError(t, build(keyspaces, cassandra.KindKeyspaces, true))
+	require.NoError(t, build(keyspaces, cql.KindKeyspaces, true))
 
-	plain := mocks.NewMockSession(ctrl)
+	plain := mocks.NewMockCQLSession(ctrl)
 	for _, table := range schemaTables() {
 		expectCreate(ctrl, plain, table)
 	}
-	require.NoError(t, build(plain, cassandra.KindCassandra, true))
+	require.NoError(t, build(plain, cql.KindCassandra, true))
 
-	require.NoError(t, build(mocks.NewMockSession(ctrl), cassandra.KindCassandra, false))
+	require.NoError(t, build(mocks.NewMockCQLSession(ctrl), cql.KindCassandra, false))
 }
 
 // TestCassandraStore_EnsureSchemaTimesOutUnavailable tests that a table that never
@@ -213,7 +214,7 @@ func TestNewFromConfig_EnsureSchemaAwaitsActiveOnKeyspaces(t *testing.T) {
 func TestCassandraStore_EnsureSchemaTimesOutUnavailable(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
-	session := mocks.NewMockSession(ctrl)
+	session := mocks.NewMockCQLSession(ctrl)
 	store := newSchemaStore(t, session, true, 20*time.Millisecond)
 	for _, table := range schemaTables() {
 		expectCreate(ctrl, session, table)

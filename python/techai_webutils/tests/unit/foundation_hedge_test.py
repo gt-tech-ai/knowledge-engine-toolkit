@@ -1,4 +1,4 @@
-"""Tests for the request-hedging primitive + HedgeProxy.
+"""Tests for the request-hedging primitive.
 
 Parity with Go's ``go/tests/unit/foundation_hedge_test.go``: the delay-then-race hedger lets a
 fast backup beat a slow first attempt, the disabled hedger never duplicates the op, and the
@@ -13,7 +13,6 @@ from typing import cast
 
 import pytest
 
-from techai_webutils.clients.decorators.proxy import HedgeProxy
 from techai_webutils.foundation.resilience.hedge import (
     DelayHedger,
     DisabledHedger,
@@ -100,25 +99,6 @@ def test_hedger_from_config_unknown_kind_raises() -> None:
 
     with pytest.raises(ValueError, match="unknown hedger kind"):
         hedger_from_config(bad)
-
-
-@pytest.mark.asyncio
-async def test_hedge_proxy_hedges_async_calls() -> None:
-    """HedgeProxy hedges an async method, so a slow first read is beaten by the backup.
-
-    Why this test is important:
-        - The proxy is how hedging composes into a client stack; it must actually race the call
-          through the injected hedger, not merely forward it.
-
-    What it tests:
-        - A HedgeProxy over a slow-then-fast target, using a delay hedger, returns the backup's
-          fast result.
-    """
-    proxied = HedgeProxy(_SlowThenFast(), DelayHedger(delay_seconds=0.01))
-
-    result = await proxied.read()  # type: ignore[attr-defined]
-
-    assert result == "fast"
 
 
 def test_disabled_is_the_default_kind() -> None:

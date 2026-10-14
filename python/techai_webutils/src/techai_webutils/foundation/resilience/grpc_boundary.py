@@ -3,7 +3,7 @@
 Maps a raw ``grpc.aio.AioRpcError`` raised by a gRPC stub call into a coded ``AppError`` at the client
 boundary, plus the ``wrap_grpc_errors`` decorator that applies it to an async client method. A gRPC
 client wraps its stub calls with it so a transient status surfaces as a transient ``AppError`` the
-composition-root resiliency stack (RetryProxy) can retry — instead of a raw SDK error escaping the
+client tier's retry layer can retry — instead of a raw SDK error escaping the
 retry loop. It lives in foundation (which every client imports downward) so gRPC clients share ONE
 boundary rather than a lateral clients→clients import.
 """
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 # ``RESOURCE_EXHAUSTED`` code, which is neither transient nor permanent. The one exception is an
 # explicit rate-limit pushback (``grpc-retry-pushback-ms`` or ``retry-after`` in the trailers): the
 # server named a delay after which the call will succeed, so the boundary raises a transient
-# ``UNAVAILABLE`` carrying that delay in ``details["retry_after_ms"]``, which ``RetryProxy`` and
+# ``UNAVAILABLE`` carrying that delay in ``details["retry_after_ms"]``, which the retry layer and
 # ``retry_transient_async`` wait out before the next attempt.
 _TRANSIENT_GRPC_CODES = frozenset({
     grpc.StatusCode.UNAVAILABLE,
@@ -68,7 +68,7 @@ def grpc_error_to_app_error(exc: AioRpcError) -> AppError:
     """Map a raw gRPC ``AioRpcError`` to a coded ``AppError`` at the client boundary.
 
     Coded per ARCHITECTURE.md#error-codes: a transient status (UNAVAILABLE / DEADLINE_EXCEEDED) becomes
-    an ``AppError`` with a transient ``ErrorCode`` — so the resiliency stack (RetryProxy, which only
+    an ``AppError`` with a transient ``ErrorCode`` — so the client tier's retry layer (which only
     retries a transient ``AppError``) can absorb a brief endpoint flap. RESOURCE_EXHAUSTED becomes the
     non-retryable ``RESOURCE_EXHAUSTED`` code, unless the trailers carry an explicit retry pushback, in
     which case it is a transient ``UNAVAILABLE`` with ``details["retry_after_ms"]``. Every other status

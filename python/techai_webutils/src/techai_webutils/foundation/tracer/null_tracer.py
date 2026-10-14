@@ -9,7 +9,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, override
 
-from techai_webutils.core.interfaces.tracer import TracerProvider, TracerSpan
+from techai_webutils.core.interfaces.tracer import SpanKind, TracerProvider, TracerSpan
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -23,6 +23,8 @@ class NullTracerProvider(TracerProvider):
     def span(
         self,
         name: str,
+        *,
+        kind: SpanKind = SpanKind.INTERNAL,
         **attributes: str | float | bool,
     ) -> Generator[TracerSpan, None, None]:
         """Yield a no-op span."""

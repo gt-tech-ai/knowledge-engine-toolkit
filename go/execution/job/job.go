@@ -1,281 +1,102 @@
-// Package job provides the Job[T] type: a discoverer-backed, parallelised,
-// optionally-retried unit of work implementing interfaces.AnyJob.
+// Package job builds interfaces.AnyJob values: Base decorates every job it builds
+// with the job tier (recovery, logging, tracing, metrics, timeout) once, so a job
+// is a function plus its name and group, never a hand-written AnyJob type.
 package job
 
 import (
 	"context"
-	"fmt"
-	"path/filepath"
-	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
-// JobConfig holds execution parameters applied to every step in the job.
-type JobConfig struct {
-	// Concurrency is the max number of parallel workers; 0 means runtime.NumCPU.
-	Concurrency int
-
-	// Retry is the max number of retry attempts after a step failure (0 = no retry).
-	Retry int
-
-	// RetryDelay is the pause between retry attempts.
-	RetryDelay time.Duration
-
-	// WarnOnly downgrades Fail results to Warn so the job never blocks a gate.
-	WarnOnly bool
+// Tier is the job decoration tier: recovery outermost, then logging, tracing,
+// metrics, and the per-job timeout. A job runs as the operation "Execute".
+func Tier() decorate.Tier {
+	return decorate.Tier{Name: "job", Order: []decorate.Layer{
+		decorate.LayerRecovery,
+		decorate.LayerLogging,
+		decorate.LayerTracing,
+		decorate.LayerMetrics,
+		decorate.LayerTimeout,
+	}}
 }
 
-// Option configures a JobConfig.
-type Option func(*JobConfig)
+// Run is a job's work: it executes against runner under root and returns the
+// job's step results.
+type Run func(
+	ctx context.Context,
+	runner interfaces.CommandRunner,
+	root string,
+) (types.StepResults, error)
 
-// WithConcurrency sets the maximum number of parallel workers.
-func WithConcurrency(n int) Option { return func(c *JobConfig) { c.Concurrency = n } }
-
-// WithRetry sets the maximum number of retry attempts on step failure.
-func WithRetry(n int) Option { return func(c *JobConfig) { c.Retry = n } }
-
-// WithRetryDelay sets the pause between retry attempts.
-func WithRetryDelay(
-	d time.Duration,
-) Option {
-	return func(c *JobConfig) { c.RetryDelay = d }
+// Base builds decorated jobs from one set of decoration dependencies. The zero
+// value applies recovery only, so Base{} is a working undecorated builder.
+type Base struct {
+	// deps are the job tier's observability and timeout dependencies.
+	deps decorate.Deps
 }
 
-// WithWarnOnly marks the job non-blocking: Fail results are downgraded to Warn.
-func WithWarnOnly() Option { return func(c *JobConfig) { c.WarnOnly = true } }
+// NewBase returns a Base that decorates its jobs with deps.
+func NewBase(deps decorate.Deps) Base { return Base{deps: deps} }
 
-// Job[T] discovers work items of type T, maps each to a WorkUnit, and
-// fans them out in parallel. It implements interfaces.AnyJob.
-// Field order minimises GC pointer-scan range: interfaces, func, strings, value types.
-type Job[T any] struct {
-	// discoverer yields the work items of type T at execution time.
-	discoverer interfaces.Discoverer[T]
-
-	// tool is the optional required tool; when set its binary is checked via
-	// RequireTool and a missing binary turns the whole job into a skip.
-	tool interfaces.ToolSpec
-
-	// mapper converts each discovered item into the WorkUnit that is run.
-	mapper func(root string, item T) engine.WorkUnit
-
-	// name identifies the job (and single-unit steps) in StepResults.
-	name string
-
-	// group categorizes the job for display grouping.
-	group string
-
-	// config holds the concurrency, retry, and warn-only execution parameters.
-	config JobConfig
+// Func builds the job name in group that runs run.
+func (b Base) Func(name, group string, run Run) interfaces.AnyJob {
+	return b.job(types.JobMeta{Name: name, Group: group}, run)
 }
 
-// Compile-time assertion that *Job[string] satisfies interfaces.AnyJob.
-var _ interfaces.AnyJob = (*Job[string])(nil)
-
-// Builder[T] assembles a Job[T] via a fluent API.
-// Field order minimises GC pointer-scan range: interfaces, func, strings, slices.
-type Builder[T any] struct {
-	// discoverer is the item source set via WithDiscoverer.
-	discoverer interfaces.Discoverer[T]
-
-	// tool is the optional required tool set via WithTool.
-	tool interfaces.ToolSpec
-
-	// mapper is the item-to-WorkUnit function set via WithMapper.
-	mapper func(root string, item T) engine.WorkUnit
-
-	// name is the job name carried into the built Job.
-	name string
-
-	// group is the display group carried into the built Job.
-	group string
-
-	// opts accumulate the execution options applied to JobConfig on Build.
-	opts []Option
+// Runnable adapts r — a job that needs no runner or root — into a decorated job
+// carrying r's metadata.
+func (b Base) Runnable(r interfaces.Runnable) interfaces.AnyJob {
+	return b.job(
+		r.Meta(),
+		func(
+			ctx context.Context, _ interfaces.CommandRunner, _ string,
+		) (types.StepResults, error) {
+			return r.Run(ctx)
+		},
+	)
 }
 
-// New returns a Builder[T] for a job with the given name and group.
-func New[T any](name, group string) *Builder[T] {
-	return &Builder[T]{name: name, group: group}
+// Wrap decorates an existing job, keeping its metadata.
+func (b Base) Wrap(j interfaces.AnyJob) interfaces.AnyJob {
+	return b.job(j.Meta(), j.Execute)
 }
 
-// WithTool sets the ToolSpec checked by RequireTool before execution.
-func (b *Builder[T]) WithTool(t interfaces.ToolSpec) *Builder[T] {
-	b.tool = t
-	return b
+// job binds meta and run to the job tier's subject for meta.Name.
+func (b Base) job(meta types.JobMeta, run Run) interfaces.AnyJob {
+	return decorated{meta: meta, run: run, op: Tier().Subject(meta.Name, b.deps)}
 }
 
-// WithDiscoverer sets the Discoverer that yields work items.
-func (b *Builder[T]) WithDiscoverer(d interfaces.Discoverer[T]) *Builder[T] {
-	b.discoverer = d
-	return b
+// decorated is the one AnyJob implementation every Base method returns.
+type decorated struct {
+	// run is the job's work.
+	run Run
+
+	// op runs run through the job tier.
+	op decorate.Subject
+
+	// meta is the job's identity.
+	meta types.JobMeta
 }
 
-// WithMapper sets the function that converts (root, item) into a WorkUnit.
-func (b *Builder[T]) WithMapper(
-	fn func(root string, item T) engine.WorkUnit,
-) *Builder[T] {
-	b.mapper = fn
-	return b
-}
+var _ interfaces.AnyJob = decorated{}
 
-// WithOptions appends execution options.
-func (b *Builder[T]) WithOptions(opts ...Option) *Builder[T] {
-	b.opts = append(b.opts, opts...)
-	return b
-}
+// Meta returns the job's identity.
+func (d decorated) Meta() types.JobMeta { return d.meta }
 
-// Build constructs and returns the Job[T].
-func (b *Builder[T]) Build() interfaces.AnyJob {
-	cfg := JobConfig{}
-	for _, o := range b.opts {
-		o(&cfg)
-	}
-	return &Job[T]{
-		discoverer: b.discoverer,
-		mapper:     b.mapper,
-		name:       b.name,
-		group:      b.group,
-		tool:       b.tool,
-		config:     cfg,
-	}
-}
-
-// Meta implements interfaces.AnyJob.
-func (j *Job[T]) Meta() types.JobMeta {
-	toolName := ""
-	if j.tool != nil {
-		toolName = j.tool.Binary()
-	}
-	return types.JobMeta{Name: j.name, Group: j.group, Tool: toolName}
-}
-
-// Execute implements interfaces.AnyJob.
-// It checks the required tool (skip if missing), discovers items (skip if none),
-// maps each to a WorkUnit, fans them out via FanOut, then optionally downgrades
-// failures to warnings when WarnOnly is set.
-func (j *Job[T]) Execute(
+// Execute runs the job through the job tier as the operation "Execute".
+func (d decorated) Execute(
 	ctx context.Context,
 	runner interfaces.CommandRunner,
 	root string,
 ) (types.StepResults, error) {
-	if j.tool != nil && j.tool.Binary() != "" {
-		if err := runner.RequireTool(j.tool.Binary(), j.tool.InstallHint()); err != nil {
-			// Missing tool is a skip, not a fatal error - the job is optional.
-			return types.StepResults{ //nolint:nilerr // a missing tool is a skip, not an error
-				{Name: j.name, Status: types.StatusSkip, Error: err.Error()},
-			}, nil
-		}
-	}
-
-	items, err := j.discoverer.Discover(ctx, root)
-	if err != nil {
-		return nil, err
-	}
-	if len(items) == 0 {
-		return types.StepResults{{Name: j.name, Status: types.StatusSkip}}, nil
-	}
-
-	units := make([]engine.WorkUnit, len(items))
-	for i, item := range items {
-		units[i] = j.mapper(root, item)
-	}
-
-	results := engine.FanOut(
+	return d.op.Exec(
 		ctx,
-		units,
-		j.config.Concurrency,
-		func(ctx context.Context, wu engine.WorkUnit) types.StepResult {
-			var runErr error
-			if j.config.Retry > 0 {
-				runErr = retryDo(ctx, func() error {
-					return runner.Run(ctx, wu.Dir, wu.Exe, wu.Args...)
-				}, j.config.Retry, j.config.RetryDelay)
-			} else {
-				runErr = runner.Run(ctx, wu.Dir, wu.Exe, wu.Args...)
-			}
-			r := types.StepResult{Name: wu.Name, Status: types.StatusPass}
-			if runErr != nil {
-				r.Status = types.StatusFail
-				r.Error = runErr.Error()
-			}
-			return r
+		"Execute",
+		func(ctx context.Context) (types.StepResults, error) {
+			return d.run(ctx, runner, root)
 		},
-	)
-
-	if j.config.WarnOnly {
-		for i := range results {
-			if results[i].Status == types.StatusFail {
-				results[i].Status = types.StatusWarn
-			}
-		}
-	}
-
-	return results, nil
-}
-
-// Single creates a Job[string] that runs exactly one command.
-// tool.Cmd overrides the executable prefix when set (e.g. ["uv", "run", "ruff"]).
-func Single(
-	name, group string,
-	tool interfaces.ToolSpec,
-	argsFn func(root string) []string,
-	dirFn func(root string) string,
-	opts ...Option,
-) interfaces.AnyJob {
-	disc := interfaces.DiscovererFunc[string](
-		func(_ context.Context, _ string) ([]string, error) {
-			return []string{name}, nil
-		},
-	)
-
-	mapFn := func(root, _ string) engine.WorkUnit {
-		dir := dirFn(root)
-		if !filepath.IsAbs(dir) {
-			dir = filepath.Join(root, dir)
-		}
-		exe, args := tool.Cmd(argsFn(root)...)
-		return engine.WorkUnit{Name: name, Dir: dir, Exe: exe, Args: args}
-	}
-	return New[string](name, group).
-		WithTool(tool).
-		WithDiscoverer(disc).
-		WithMapper(mapFn).
-		WithOptions(opts...).
-		Build()
-}
-
-// retryDo calls fn up to maxRetries additional times after a failure.
-func retryDo(
-	ctx context.Context,
-	fn func() error,
-	maxRetries int,
-	delay time.Duration,
-) error {
-	var last error
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		if attempt > 0 && delay > 0 {
-			select {
-			case <-ctx.Done():
-				return apperr.Wrap(
-					ctx.Err(),
-					apperr.ContextCode(ctx.Err(), apperr.CodeCanceled),
-					"retry wait canceled",
-				)
-			case <-time.After(delay):
-			}
-		}
-		last = fn()
-		if last == nil {
-			return nil
-		}
-	}
-	return apperr.Wrap(
-		last,
-		apperr.CodeInternal,
-		fmt.Sprintf("failed after %d attempt(s)", maxRetries+1),
 	)
 }

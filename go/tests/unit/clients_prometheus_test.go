@@ -14,9 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	clientdecorators "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/decorators"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus"
+	promhttp "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/http"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -33,7 +36,7 @@ func promResponse(status int, body string) *http.Response {
 }
 
 // doClosed sends req through doer, closes any response body, and returns the error.
-func doClosed(doer prometheus.HTTPDoer, req *http.Request) error {
+func doClosed(doer promhttp.HTTPDoer, req *http.Request) error {
 	resp, err := doer.Do(req)
 	if resp != nil {
 		_ = resp.Body.Close()
@@ -119,7 +122,7 @@ func TestClient_QueryParsesVector(t *testing.T) {
 					return promResponse(http.StatusOK, tc.body), nil
 				})
 
-			got, err := prometheus.New("http://prom.test:9090/", doer).
+			got, err := promhttp.New("http://prom.test:9090/", doer).
 				Query(t.Context(), `sum(up)`)
 
 			require.NotNil(t, req)
@@ -158,12 +161,12 @@ func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 		name     string
 		body     string
 		wantCode apperr.ErrorCode
-		want     []prometheus.Sample
+		want     []promhttp.Sample
 	}{
 		{
 			name: "one series",
 			body: strings.Replace(promMatrix, "%s", promSeries("1.5", "2"), 1),
-			want: []prometheus.Sample{
+			want: []promhttp.Sample{
 				{Time: t0, Value: 1.5},
 				{Time: t0.Add(time.Hour), Value: 2},
 			},
@@ -171,7 +174,7 @@ func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 		{
 			name: "no series",
 			body: strings.Replace(promMatrix, "%s", "", 1),
-			want: []prometheus.Sample{},
+			want: []promhttp.Sample{},
 		},
 		{
 			name: "two series",
@@ -201,7 +204,7 @@ func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 					return promResponse(http.StatusOK, tc.body), nil
 				})
 
-			got, err := prometheus.New("http://prom.test:9090/", doer).QueryRange(
+			got, err := promhttp.New("http://prom.test:9090/", doer).QueryRange(
 				t.Context(), `sum(increase(x[1h]))`, t0, t0.Add(time.Hour), time.Hour,
 			)
 
@@ -342,7 +345,7 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 					return promResponse(tc.status, tc.body), nil
 				})
 
-			_, err := prometheus.New("http://prom.test:9090", doer).
+			_, err := promhttp.New("http://prom.test:9090", doer).
 				Query(t.Context(), `up`)
 
 			require.Error(t, err)
@@ -355,7 +358,7 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 		doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
 		doer.EXPECT().Do(gomock.Any()).Times(0)
 
-		_, err := prometheus.New("http://[::1", doer).Query(t.Context(), `up`)
+		_, err := promhttp.New("http://[::1", doer).Query(t.Context(), `up`)
 
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -364,7 +367,7 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 		t.Parallel()
 		doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
 		doer.EXPECT().Do(gomock.Any()).Times(0)
-		c := prometheus.New("http://prom.test:9090", doer)
+		c := promhttp.New("http://prom.test:9090", doer)
 		t0 := time.Unix(1727260000, 0)
 
 		_, err := c.QueryRange(t.Context(), `up`, t0, t0.Add(time.Hour), 0)
@@ -376,36 +379,25 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 	})
 }
 
-// TestNewFromConfig_StubDefaultAndUnknownKind tests the factory: the default config boots
-// the stub with no infrastructure, and a bad selection fails loudly at construction.
+// TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL tests the factory: the
+// default config boots the stub with no infrastructure, and an incomplete http config
+// fails loudly at construction.
 //
 // Why this test is important:
-//   - The graph must boot with zero infrastructure, and a typo in the configured kind
-//     must stop the process at startup rather than silently fall back to a backend.
+//   - The graph must boot with zero infrastructure, and an http kind with nowhere to
+//     send queries must stop the process at startup.
 //
 // What it tests:
 //   - DefaultConfig builds the stub: Query returns 0 and QueryRange an empty series, no
 //     error.
-//   - An unknown kind and the http kind without a base URL are CodeInvalidInput.
+//   - The http kind without a base URL is CodeInvalidInput.
 //   - The http kind with a base URL builds a querier without sending anything.
-//   - ParseKind maps "stub" and "http" to their kinds and rejects anything else.
-func TestNewFromConfig_StubDefaultAndUnknownKind(t *testing.T) {
+func TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL(t *testing.T) {
 	t.Parallel()
-	for s, want := range map[string]prometheus.Kind{
-		"stub": prometheus.KindStub, "http": prometheus.KindHTTP,
-	} {
-		got, err := prometheus.ParseKind(s)
-		require.NoError(t, err)
-		assert.Equal(t, want, got)
-		assert.Equal(t, s, got.String())
-	}
-	_, err := prometheus.ParseKind("victoria")
-	require.Error(t, err)
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-
 	q, err := prometheus.NewFromConfig(
+		t.Context(),
 		prometheus.DefaultConfig(),
-		clientdecorators.Deps{},
+		prometheus.Deps{},
 	)
 	require.NoError(t, err)
 	v, err := q.Query(t.Context(), `up`)
@@ -419,23 +411,17 @@ func TestNewFromConfig_StubDefaultAndUnknownKind(t *testing.T) {
 		time.Minute,
 	)
 	require.NoError(t, err)
-	assert.Equal(t, []prometheus.Sample{}, series)
-
-	unknown := prometheus.DefaultConfig()
-	unknown.Kind = prometheus.Kind(99)
-	_, err = prometheus.NewFromConfig(unknown, clientdecorators.Deps{})
-	require.Error(t, err)
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+	assert.Equal(t, []promhttp.Sample{}, series)
 
 	noURL := prometheus.DefaultConfig()
 	noURL.Kind = prometheus.KindHTTP
-	_, err = prometheus.NewFromConfig(noURL, clientdecorators.Deps{})
+	_, err = prometheus.NewFromConfig(t.Context(), noURL, prometheus.Deps{})
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	withURL := noURL
-	withURL.BaseURL = "http://prom.invalid:9090"
-	q, err = prometheus.NewFromConfig(withURL, clientdecorators.Deps{})
+	withURL.HTTP.BaseURL = "http://prom.invalid:9090"
+	q, err = prometheus.NewFromConfig(t.Context(), withURL, prometheus.Deps{})
 	require.NoError(t, err)
 	assert.NotNil(t, q)
 }
@@ -457,14 +443,17 @@ func TestNewFromConfig_StubDefaultAndUnknownKind(t *testing.T) {
 //     cap is CodeInvalidInput.
 func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 	t.Parallel()
-	cfg := clientdecorators.DefaultConfig()
-	cfg.RetryEnabled = true
-	cfg.Retry.InitialInterval = time.Millisecond
-	cfg.Retry.MaxInterval = time.Millisecond
+	layers := decoration.DefaultConfig().Clients.For("prometheus")
+	on := true
+	layers.Retry.Enabled = &on
+	layers.Retry.InitialInterval = time.Millisecond
+	layers.Retry.MaxInterval = time.Millisecond
 	reg := promclient.NewRegistry()
-	stack, err := clientdecorators.StackFromConfig("prometheus", cfg,
-		clientdecorators.Deps{Metrics: prom.NewFromRegistry(reg)})
+	deps, err := decorate.Build("prometheus", layers, decorate.Collaborators{
+		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
+	})
 	require.NoError(t, err)
+	stack := client.NewBase("prometheus", deps)
 	ctrl := gomock.NewController(t)
 	inner := mocks.NewMockPrometheusHTTPDoer(ctrl)
 	// The transport body is closed by the wrapper before Do returns; the caller still
@@ -489,7 +478,7 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 		"http://prom.test/api/v1/query_range", http.NoBody)
 	require.NoError(t, err)
 
-	resp, err := prometheus.DecorateDoer(inner, stack, 1024).Do(req)
+	resp, err := promhttp.DecorateDoer(inner, stack, 1024).Do(req)
 
 	require.NoError(t, err)
 	body, err := io.ReadAll(resp.Body)
@@ -498,15 +487,10 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 	assert.Equal(t, "payload", string(body))
 	assert.InDelta(t, 3.0, clientOpCounter(t, reg, "prometheus.query_range"), 0)
 
-	bare, err := clientdecorators.StackFromConfig(
-		"prometheus",
-		clientdecorators.Config{},
-		clientdecorators.Deps{},
-	)
-	require.NoError(t, err)
+	bare := client.Base{}
 	failing := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
 	failing.EXPECT().Do(gomock.Any()).Return(nil, apperr.Sentinel("connection refused"))
-	err = doClosed(prometheus.DecorateDoer(failing, bare, 0), req)
+	err = doClosed(promhttp.DecorateDoer(failing, bare, 0), req)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 
@@ -516,7 +500,7 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 		DoAndReturn(func(*http.Request) (*http.Response, error) {
 			return promResponse(http.StatusOK, strings.Repeat("x", 9)), nil
 		})
-	err = doClosed(prometheus.DecorateDoer(large, bare, 8), req)
+	err = doClosed(promhttp.DecorateDoer(large, bare, 8), req)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

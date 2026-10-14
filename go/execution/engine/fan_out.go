@@ -11,7 +11,11 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
-// FanOut runs fn for each item in items with bounded concurrency.
+// Pool bounds a fan-out's concurrency: Pool(n) runs at most n items at once, and a
+// value <= 0 means runtime.NumCPU().
+type Pool int
+
+// FanOut runs fn for each item in items with at most p items in flight.
 //
 // Each invocation is isolated: a panic in fn is recovered and converted to
 // StepResult{Status: Fail, Detail: stack} rather than crashing the process. fn
@@ -21,14 +25,12 @@ import (
 // yet acquired a worker slot; items already running continue until fn returns.
 // All results are collected -- fn always returns nil to the
 // errgroup so no unit can cancel its siblings.
-//
-// numWorkers <= 0 defaults to runtime.NumCPU().
-func FanOut[T any](
+func (p Pool) FanOut[T any](
 	ctx context.Context,
 	items []T,
-	numWorkers int,
 	fn func(ctx context.Context, item T) types.StepResult,
 ) types.StepResults {
+	numWorkers := int(p)
 	if numWorkers <= 0 {
 		numWorkers = runtime.NumCPU()
 	}

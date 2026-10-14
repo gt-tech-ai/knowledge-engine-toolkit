@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/memory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
@@ -56,7 +56,7 @@ func TestMessagingMemory_PublishBatchDelivers(t *testing.T) {
 
 	broker := memory.NewBroker()
 	pub := memory.NewPublisher(broker)
-	sub := memory.NewSubscriber(broker)
+	sub := memory.NewSubscriber(broker, client.Base{})
 	got := make(chan []byte, 3)
 	go func() {
 		_ = sub.Subscribe(context.Background(), "batch",
@@ -92,7 +92,7 @@ func TestMessagingMemory_PublishBatchDelivers(t *testing.T) {
 func TestMessagingMemory_SubscribeStopsOnContextCancel(t *testing.T) {
 	t.Parallel()
 
-	sub := memory.NewSubscriber(memory.NewBroker())
+	sub := memory.NewSubscriber(memory.NewBroker(), client.Base{})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
@@ -107,18 +107,4 @@ func TestMessagingMemory_SubscribeStopsOnContextCancel(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Subscribe did not return after context cancellation")
 	}
-}
-
-// TestMessaging_KindMemory_String tests that the memory messaging Kind stringifies
-// to its config token.
-//
-// Why this test is important:
-//   - The Kind string is what appears in config, logs, and error messages; a wrong
-//     token would misconfigure the backend selection or mislead an operator.
-//
-// What it tests:
-//   - messaging.KindMemory.String() == "memory".
-func TestMessaging_KindMemory_String(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "memory", messaging.KindMemory.String())
 }

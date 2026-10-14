@@ -44,9 +44,6 @@ type API interface {
 
 // Config configures the SQS sink. At least one of Queue and Routes is required.
 type Config struct {
-	// API is the SQS client (e.g. *awssqs.Client); required. It is injected by
-	// the composition root, never read from config.
-	API API `yaml:"-" mapstructure:"-"`
 	// Routes maps a record's route (its types.OutboxRouteAttribute attribute) to
 	// the queue name it is sent to.
 	Routes map[string]string `yaml:"routes" mapstructure:"routes"`
@@ -75,10 +72,11 @@ type Sink struct {
 	mu sync.Mutex
 }
 
-// New builds the sink; a missing API, no queue and no routes, or a route mapped
-// to an empty queue name is CodeInvalidInput.
-func New(cfg Config) (*Sink, error) {
-	if cfg.API == nil || (cfg.Queue == "" && len(cfg.Routes) == 0) {
+// New builds the sink over api, the SDK client the composition root injects; a
+// missing API, no queue and no routes, or a route mapped to an empty queue name is
+// CodeInvalidInput.
+func New(cfg Config, api API) (*Sink, error) {
+	if api == nil || (cfg.Queue == "" && len(cfg.Routes) == 0) {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"outbox sqs sink: api and a queue or routes are required",
@@ -93,7 +91,7 @@ func New(cfg Config) (*Sink, error) {
 		routes[route] = queue
 	}
 	return &Sink{
-		api:    cfg.API,
+		api:    api,
 		queue:  cfg.Queue,
 		routes: routes,
 		urls:   map[string]string{},

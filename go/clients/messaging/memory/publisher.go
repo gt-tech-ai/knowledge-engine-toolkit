@@ -7,6 +7,7 @@ import (
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer"
 )
 
 // Compile-time interface assertion.
@@ -31,10 +32,12 @@ func NewPublisher(broker *Broker) *Publisher {
 // cancelled first.
 func (p *Publisher) Publish(ctx context.Context, topic string, payload []byte) error {
 	msg := &interfaces.Message{
-		ID:      fmt.Sprintf("mem-%d", p.seq.Add(1)),
-		Topic:   topic,
-		Payload: payload,
+		ID:       fmt.Sprintf("mem-%d", p.seq.Add(1)),
+		Topic:    topic,
+		Payload:  payload,
+		Metadata: map[string]string{},
 	}
+	tracer.Inject(ctx, msg.Metadata)
 	select {
 	case p.broker.topic(topic) <- msg:
 		return nil

@@ -1,156 +1,149 @@
-"""Tests for BaseRepository delegating to a Store (mocked via the Store interface)."""
+"""Tests for the repository tier: ``RepositoryBase`` decorates a Store's CRUD (Go ``repos/repository``)."""
 
-from unittest.mock import MagicMock
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from techai_webutils.core.domain_types.types import Page, PageRequest
 from techai_webutils.core.errors.errors import NotFoundError
+from techai_webutils.core.interfaces.retrier import Retrier
 from techai_webutils.core.interfaces.store import Store
-from techai_webutils.repos.repository import BaseRepository
+from techai_webutils.foundation.decorate import Deps, Layer
+from techai_webutils.repos import DelegatingRepository, RepositoryBase, tier
+
+if TYPE_CHECKING:
+    from conftest import Observed
 
 
-class TestBaseRepository:
-    """Test suite for BaseRepository CRUD delegation to the underlying store."""
+def _store() -> MagicMock:
+    """Return a Store mock answering every CRUD call."""
+    store = MagicMock(spec=Store)
+    store.get = AsyncMock(return_value="e1")
+    store.list = AsyncMock(return_value=Page(items=["e1"], total=1))
+    store.create = AsyncMock(side_effect=lambda e: e)
+    store.update = AsyncMock(side_effect=lambda _id, e: e)
+    store.delete = AsyncMock(return_value=None)
+    store.exists = AsyncMock(return_value=True)
+    return store
 
-    @pytest.mark.asyncio
-    async def test_get_delegates_to_store(self) -> None:
-        """Test that get retrieves an entity by ID from the backing store.
 
-        **Why this test is important:**
-          - BaseRepository is the data access foundation for all domain services
-          - Incorrect delegation would silently return wrong data across every service
-          - Get-by-ID is the most frequently called repository operation
+def _retrier() -> MagicMock:
+    """Return a Retrier mock that runs the operation once, counting its calls."""
+    retrier = MagicMock(spec=Retrier)
 
-        **What it tests:**
-          - The store's entity is returned, and get is delegated with the requested ID
-        """
-        store = MagicMock(spec=Store)
-        store.get.return_value = "entity-1"
-        repo: BaseRepository[str, dict[str, object], str] = BaseRepository(store)
+    async def retry(op: object) -> object:
+        return await op()  # type: ignore[operator]
 
-        result = await repo.get("1")
-        assert result == "entity-1"
-        store.get.assert_awaited_once_with("1")
+    retrier.retry = AsyncMock(side_effect=retry)
+    return retrier
 
-    @pytest.mark.asyncio
-    async def test_get_not_found(self) -> None:
-        """Test that getting a nonexistent entity raises NotFoundError.
 
-        **Why this test is important:**
-          - Missing entity lookups must produce a consistent error type across all repositories
-          - NotFoundError is mapped to HTTP 404 in the controller layer
-          - Returning None instead of raising would cause silent failures in service logic
+def test_tier_order_matches_go() -> None:
+    """The repository tier's layers, outermost first, are Go's.
 
-        **What it tests:**
-          - A store that raises NotFoundError propagates through the repository
-        """
-        store = MagicMock(spec=Store)
-        store.get.side_effect = NotFoundError("not found: missing")
-        repo: BaseRepository[str, dict[str, object], str] = BaseRepository(store)
+    Why this test is important:
+      - Each retry attempt must pass the breaker and get a fresh deadline, observed once per call.
 
-        with pytest.raises(NotFoundError):
-            await repo.get("missing")
+    What it tests:
+      - tracing → metrics → logging → timeout → circuit breaker → retry.
+    """
+    assert tier().order == (
+        Layer.TRACING,
+        Layer.METRICS,
+        Layer.LOGGING,
+        Layer.TIMEOUT,
+        Layer.CIRCUIT_BREAKER,
+        Layer.RETRY,
+    )
 
-    @pytest.mark.asyncio
-    async def test_create_delegates_to_store(self) -> None:
-        """Test that create persists a new entity through the store.
 
-        **Why this test is important:**
-          - Entity creation is the entry point for all new data in the system
-          - The repository must faithfully pass through the entity without modification
-          - Incorrect delegation could silently drop or alter persisted data
+@pytest.mark.asyncio
+async def test_crud_runs_each_call_through_the_tier(observed: Observed) -> None:
+    """Every CRUD call reaches the store and is observed under its operation name.
 
-        **What it tests:**
-          - The store's created entity is returned, and create is delegated with the entity
-        """
-        store = MagicMock(spec=Store)
-        store.create.return_value = "new-entity"
-        repo: BaseRepository[str, dict[str, object], str] = BaseRepository(store)
+    Why this test is important:
+      - Repository dashboards break down latency by operation (Go names: Get, List, …).
 
-        result = await repo.create("new-entity")
-        assert result == "new-entity"
-        store.create.assert_awaited_once_with("new-entity")
+    What it tests:
+      - Each call returns the store's answer, and the spans are ``users.<Op>`` in call order.
+    """
+    store = _store()
+    repo = RepositoryBase("users", Deps(observability=observed.observability)).crud(store)
+    page = PageRequest()
 
-    @pytest.mark.asyncio
-    async def test_list_delegates_to_store(self) -> None:
-        """Test that list returns a paginated result from the store.
+    assert await repo.get("1") == "e1"
+    assert (await repo.list(None, page)).items == ["e1"]
+    assert await repo.create("e2") == "e2"
+    assert await repo.update("1", "e3") == "e3"
+    await repo.delete("1")
+    assert await repo.exists("1") is True
 
-        **Why this test is important:**
-          - List operations power all browse/search UIs and must return accurate page metadata
-          - Incorrect total counts break pagination controls in the frontend
-          - The repository must correctly forward filter and page parameters to the store
+    ops = ["Get", "List", "Create", "Update", "Delete", "Exists"]
+    assert [name for name, _, _ in observed.spans] == [f"users.{op}" for op in ops]
 
-        **What it tests:**
-          - Total count and item count from the store's Page pass through unchanged
-        """
-        store = MagicMock(spec=Store)
-        store.list.return_value = Page(
-            items=["a", "b"], total=2, page_size=10, page_number=1
-        )
-        repo: BaseRepository[str, dict[str, object], str] = BaseRepository(store)
 
-        page = await repo.list({}, PageRequest(page_size=10, page_number=1))
-        assert page.total == 2
-        assert len(page.items) == 2
-        store.list.assert_awaited_once()
+@pytest.mark.asyncio
+async def test_create_is_never_retried() -> None:
+    """Create bypasses the retry layer; every other operation goes through it.
 
-    @pytest.mark.asyncio
-    async def test_update_delegates_to_store(self) -> None:
-        """Test that update replaces an existing entity in the store.
+    Why this test is important:
+      - A create whose commit landed before a transient error must not insert twice.
 
-        **Why this test is important:**
-          - Update is the primary mutation path for existing entities
-          - The repository must pass the new value through without alteration
-          - Incorrect delegation could cause silent data corruption
+    What it tests:
+      - With a retrier, Get calls it and Create does not.
+    """
+    retrier = _retrier()
+    repo = RepositoryBase("users", Deps(retrier=retrier)).crud(_store())
 
-        **What it tests:**
-          - The store's updated value is returned, and update is delegated with (id, entity)
-        """
-        store = MagicMock(spec=Store)
-        store.update.return_value = "new"
-        repo: BaseRepository[str, dict[str, object], str] = BaseRepository(store)
+    await repo.get("1")
+    await repo.create("e")
 
-        result = await repo.update("1", "new")
-        assert result == "new"
-        store.update.assert_awaited_once_with("1", "new")
+    assert retrier.retry.await_count == 1
 
-    @pytest.mark.asyncio
-    async def test_delete_delegates_to_store(self) -> None:
-        """Test that delete removes an entity so it no longer exists.
 
-        **Why this test is important:**
-          - Delete must actually remove the entity, not just mark it
-          - Failed deletion would leave orphaned data visible to queries
-          - The exists check confirms the store state was actually modified
+@pytest.mark.asyncio
+async def test_errors_pass_unchanged_and_custom_queries_are_decorated(
+    observed: Observed,
+) -> None:
+    """A store's coded error reaches the caller unchanged; ``exec`` decorates a custom query.
 
-        **What it tests:**
-          - delete is delegated with the requested ID, and a subsequent exists returns False
-        """
-        store = MagicMock(spec=Store)
-        store.exists.return_value = False
-        repo: BaseRepository[str, dict[str, object], str] = BaseRepository(store)
+    Why this test is important:
+      - Services branch on NOT_FOUND; a custom query must be observed like CRUD.
 
-        await repo.delete("1")
-        assert await repo.exists("1") is False
-        store.delete.assert_awaited_once_with("1")
-        store.exists.assert_awaited_once_with("1")
+    What it tests:
+      - ``NotFoundError`` propagates from Get; ``exec("FindByEmail", …)`` returns the query's
+        result in a ``users.FindByEmail`` span; the base reports its name.
+    """
+    store = _store()
+    store.get.side_effect = NotFoundError("user", id="1")
+    base = RepositoryBase("users", Deps(observability=observed.observability))
 
-    @pytest.mark.asyncio
-    async def test_exists_delegates_to_store(self) -> None:
-        """Test that exists correctly reports presence and absence of entities.
+    with pytest.raises(NotFoundError):
+        await base.crud(store).get("1")
+    assert await base.exec("FindByEmail", AsyncMock(return_value="u")) == "u"
+    assert observed.spans[-1][0] == "users.FindByEmail"
+    assert base.name == "users"
 
-        **Why this test is important:**
-          - Exists checks are used for idempotency guards and duplicate detection
-          - False positives would skip necessary creates; false negatives would cause duplicates
-          - Both the True and False paths must be verified for correctness
 
-        **What it tests:**
-          - The store's boolean result passes through for a present and an absent ID
-        """
-        store = MagicMock(spec=Store)
-        store.exists.side_effect = lambda entity_id: entity_id == "1"
-        repo: BaseRepository[str, dict[str, object], str] = BaseRepository(store)
+@pytest.mark.asyncio
+async def test_delegating_repository_serves_crud_from_the_decorated_one() -> None:
+    """A consumer repository inherits decorated CRUD by delegation.
 
-        assert await repo.exists("1") is True
-        assert await repo.exists("2") is False
+    Why this test is important:
+      - A consumer adds only its custom queries; CRUD must still run through the tier.
+
+    What it tests:
+      - Every CRUD call on a ``DelegatingRepository`` reaches the inner repository.
+    """
+    inner = RepositoryBase("users", Deps()).crud(_store())
+    repo = DelegatingRepository(inner)
+
+    assert await repo.get("1") == "e1"
+    assert (await repo.list(None, PageRequest())).total == 1
+    assert await repo.create("e") == "e"
+    assert await repo.update("1", "e") == "e"
+    await repo.delete("1")
+    assert await repo.exists("1") is True

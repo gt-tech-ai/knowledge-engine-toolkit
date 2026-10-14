@@ -1,80 +1,110 @@
-// Package repository provides the BaseRepository implementation with decorator
-// support and keyset pagination for building data access layers.
-//
-// BaseRepository delegates all persistence operations to an interfaces.Store,
-// keeping the repository layer thin and focused on composition. Use the
-// decorators sub-package to wrap repositories with logging, tracing, metrics,
-// and caching via a fluent builder.
+// Package repository is the repository tier: a Base is the embeddable core of a
+// consumer's repository, running its custom queries through the tier's decoration
+// (Tier) with the promoted Exec, and building the decorated CRUD repositories the tier
+// offers over a store. Every repository it builds is a core interface. Cached adds the
+// read-through entity cache beneath them; DecoratedFromConfig assembles both.
 package repository
 
 import (
-	"context"
-
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
-// Ensure BaseRepository implements the core Repository interface.
-var _ interfaces.Repository[any, any, string] = (*BaseRepository[any, any, string])(nil)
-
-// BaseRepository wraps a Store and implements the core Repository interface.
-// It is the standard entry point for building decorated repository stacks.
-type BaseRepository[T any, P any, ID comparable] struct {
-	// store is the underlying persistence implementation.
-	store interfaces.Store[T, P, ID]
-
-	// name is the repository name used as a label in metrics, logs, and spans.
-	name string
+// Tier is the repository tier's decoration: tracing → metrics → logging → timeout →
+// circuit breaker → retry, outermost first. Retry never runs inside a transaction,
+// and a Create never retries (it is not idempotent).
+func Tier() decorate.Tier {
+	return decorate.Tier{Name: "repository", Order: []decorate.Layer{
+		decorate.LayerTracing,
+		decorate.LayerMetrics,
+		decorate.LayerLogging,
+		decorate.LayerTimeout,
+		decorate.LayerCircuitBreaker,
+		decorate.LayerRetry,
+	}}
 }
 
-// New creates a new BaseRepository wrapping the given store.
-func New[T, P any, ID comparable](
+// Base is the embeddable core of a repository named by its Subject: Name and Exec run a
+// custom query through the tier's decoration. The zero Base runs queries undecorated.
+type Base struct {
+	decorate.Subject
+
+	// create runs a non-idempotent write: the decoration without retry.
+	create decorate.Subject
+
+	// insert runs an append inside the caller's transaction: observability only, since
+	// a retry, breaker or timeout would corrupt the transaction (the tier orders no
+	// recovery or auth).
+	insert decorate.Subject
+}
+
+// NewBase builds the Base for the repository named name, decorated with deps.
+func NewBase(name string, deps decorate.Deps) Base {
+	return Base{
+		Subject: Tier().Subject(name, deps),
+		create:  Tier().Subject(name, deps.WithoutRetry()),
+		insert:  Tier().Subject(name, decorate.Deps{Observability: deps.Observability}),
+	}
+}
+
+// CRUD is the decorated repository over store.
+func (b Base) CRUD[T, P any, ID comparable](
 	store interfaces.Store[T, P, ID],
-	name string,
-) *BaseRepository[T, P, ID] {
-	return &BaseRepository[T, P, ID]{store: store, name: name}
+) interfaces.Repository[T, P, ID] {
+	return struct {
+		decorate.Reader[T, ID]
+		decorate.Lister[T, P]
+		decorate.Writer[T, ID]
+		decorate.Deleter[ID]
+		decorate.Exister[ID]
+	}{
+		decorate.NewReader(b.Subject, store),
+		decorate.NewLister(b.Subject, store),
+		decorate.NewWriter(b.create, b.Subject, store, nil),
+		decorate.NewDeleter(b.Subject, store),
+		decorate.NewExister(b.Subject, store),
+	}
 }
 
-// Name returns the repository name (used for metrics/logging labels).
-func (r *BaseRepository[T, P, ID]) Name() string {
-	return r.name
+// ReadListExist is the decorated read-only repository over store, for a resource
+// whose writes are owned elsewhere.
+func (b Base) ReadListExist[T, P any, ID comparable](
+	store interfaces.ReadListExistStore[T, P, ID],
+) interfaces.ReadListExistStore[T, P, ID] {
+	return struct {
+		decorate.Reader[T, ID]
+		decorate.Lister[T, P]
+		decorate.Exister[ID]
+	}{
+		decorate.NewReader(b.Subject, store),
+		decorate.NewLister(b.Subject, store),
+		decorate.NewExister(b.Subject, store),
+	}
 }
 
-// Get retrieves an entity by its identifier. Returns an error if the entity is not found.
-func (r *BaseRepository[T, P, ID]) Get(ctx context.Context, id ID) (*T, error) {
-	return r.store.Get(ctx, id)
+// CRUDNoList is the decorated repository over store for a resource with no listable
+// collection.
+func (b Base) CRUDNoList[T any, ID comparable](
+	store interfaces.CRUDNoListStore[T, ID],
+) interfaces.CRUDNoListStore[T, ID] {
+	return struct {
+		decorate.Reader[T, ID]
+		decorate.Writer[T, ID]
+		decorate.Deleter[ID]
+		decorate.Exister[ID]
+	}{
+		decorate.NewReader(b.Subject, store),
+		decorate.NewWriter(b.create, b.Subject, store, nil),
+		decorate.NewDeleter(b.Subject, store),
+		decorate.NewExister(b.Subject, store),
+	}
 }
 
-// List retrieves a paginated list of entities matching the given filter parameters.
-func (r *BaseRepository[T, P, ID]) List(
-	ctx context.Context,
-	params P,
-	page types.PageRequest,
-) (*types.Page[T], error) {
-	return r.store.List(ctx, params, page)
-}
-
-// Create persists a new entity and returns the created record.
-func (r *BaseRepository[T, P, ID]) Create(ctx context.Context, entity *T) (*T, error) {
-	return r.store.Create(ctx, entity)
-}
-
-// Update modifies an existing entity identified by id and returns the updated
-// record.
-func (r *BaseRepository[T, P, ID]) Update(
-	ctx context.Context,
-	id ID,
-	entity *T,
-) (*T, error) {
-	return r.store.Update(ctx, id, entity)
-}
-
-// Delete removes an entity by its identifier.
-func (r *BaseRepository[T, P, ID]) Delete(ctx context.Context, id ID) error {
-	return r.store.Delete(ctx, id)
-}
-
-// Exists checks whether an entity with the given identifier exists.
-func (r *BaseRepository[T, P, ID]) Exists(ctx context.Context, id ID) (bool, error) {
-	return r.store.Exists(ctx, id)
+// TxSafeInsert is the decorated append-only repository over store, whose Insert runs
+// inside the caller's transaction: it is observed but never retried, broken or timed
+// out, so a transactional-outbox or audit row commits with its transaction.
+func (b Base) TxSafeInsert[T any](
+	store interfaces.InsertOnlyStore[T],
+) interfaces.InsertOnlyStore[T] {
+	return decorate.NewInserter(b.insert, store)
 }

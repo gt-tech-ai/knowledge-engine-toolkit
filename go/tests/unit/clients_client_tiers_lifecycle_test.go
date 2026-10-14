@@ -10,21 +10,20 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/database"
 	dbpostgres "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/database/postgres"
-	riverpkg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/jobs/river"
 	messagingsqs "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/sqs"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc"
 	grpcbackend "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc/grpc"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/transport"
-	connectpkg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/transport/connect"
+	storages3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
+	connectpkg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/server"
 )
 
 // TestDatabaseTier_NewFromConfig tests that the database tier selects the Postgres
-// backend by Kind, rejects an unknown Kind, and that the pool guards operations
+// backend by Kind, and that the pool guards operations
 // until it is started.
 //
 // Why this test is important:
@@ -32,15 +31,14 @@ import (
 //     a pool that answers Ready before Start opens it, breaks every DB caller.
 //
 // What it tests:
-//   - KindPostgres returns a non-nil DatabasePool; an unknown Kind errors.
+//   - KindPostgres returns a non-nil DatabasePool.
 //   - Before Start, DB() is nil and Liveness/Readiness report not-started.
 func TestDatabaseTier_NewFromConfig(t *testing.T) {
 	t.Parallel()
 
-	pool, err := database.NewFromConfig(database.Config{
-		Kind:     database.KindPostgres,
-		Database: &infra.DatabaseConfig{},
-	})
+	pool, err := database.NewFromConfig(t.Context(), database.Config{
+		Kind: database.KindPostgres,
+	}, database.Deps{})
 	require.NoError(t, err)
 	require.NotNil(t, pool)
 	assert.Nil(t, pool.DB(), "pool is not opened until Start")
@@ -51,31 +49,27 @@ func TestDatabaseTier_NewFromConfig(t *testing.T) {
 		pool.Stop(context.Background()),
 		"Stop on an unopened pool is a no-op",
 	)
-
-	_, err = database.NewFromConfig(database.Config{Kind: database.Kind(99)})
-	require.Error(t, err)
-	assert.Equal(t, "postgres", database.KindPostgres.String())
 }
 
 // TestRPCTier_NewFromConfig tests that the RPC tier selects the gRPC backend by
-// Kind, rejects an unknown Kind, and that the returned client's lifecycle behaves.
+// Kind, and that the returned client's lifecycle behaves.
 //
 // Why this test is important:
 //   - The RPC client is dialed on Start (lazily by gRPC); a client that reports
 //     Ready before Start, or never exposes a Conn, cannot build working stubs.
 //
 // What it tests:
-//   - KindGRPC returns a non-nil RPCClient; an unknown Kind errors.
+//   - KindGRPC returns a non-nil RPCClient.
 //   - Before Start: Conn is nil and Liveness/Readiness report not-started.
 //   - After Start: Conn is non-nil, Readiness passes (idle is not a failure state),
 //     and Stop closes cleanly.
 func TestRPCTier_NewFromConfig(t *testing.T) {
 	t.Parallel()
 
-	client, err := rpc.NewFromConfig(rpc.Config{
+	client, err := rpc.NewFromConfig(t.Context(), rpc.Config{
 		Kind: rpc.KindGRPC,
 		GRPC: grpcbackend.ClientConfig{Target: "localhost:1"},
-	})
+	}, rpc.Deps{})
 	require.NoError(t, err)
 	require.NotNil(t, client)
 
@@ -88,14 +82,10 @@ func TestRPCTier_NewFromConfig(t *testing.T) {
 	assert.NoError(t, client.Liveness(context.Background()))
 	assert.NoError(t, client.Readiness(context.Background()))
 	assert.NoError(t, client.Stop(context.Background()))
-
-	_, err = rpc.NewFromConfig(rpc.Config{Kind: rpc.Kind(99)})
-	require.Error(t, err)
-	assert.Equal(t, "grpc", rpc.KindGRPC.String())
 }
 
 // TestTransportTier_NewFromConfig tests that the transport tier selects the Connect
-// backend by Kind, rejects an unknown Kind, and that the server reports not-ready
+// backend by Kind, and that the server reports not-ready
 // until it is started.
 //
 // Why this test is important:
@@ -103,16 +93,15 @@ func TestRPCTier_NewFromConfig(t *testing.T) {
 //     Ready before it is listening would make Kubernetes route traffic to a dead pod.
 //
 // What it tests:
-//   - KindConnect returns a non-nil ServerTransport; an unknown Kind errors.
+//   - KindConnect returns a non-nil ServerTransport.
 //   - Before Start, Readiness reports not-started while Liveness (process up) passes.
 func TestTransportTier_NewFromConfig(t *testing.T) {
 	t.Parallel()
 
-	srv, err := transport.NewFromConfig(transport.Config{
-		Kind:    transport.KindConnect,
-		Logger:  fixtures.NopLogger(),
+	srv, err := server.NewFromConfig(t.Context(), server.Config{
+		Kind:    server.KindConnect,
 		Connect: connectpkg.DefaultServerConfig(0),
-	})
+	}, server.Deps{Logger: fixtures.NopLogger()})
 	require.NoError(t, err)
 	require.NotNil(t, srv)
 	require.NoError(t, srv.Liveness(context.Background()))
@@ -122,10 +111,6 @@ func TestTransportTier_NewFromConfig(t *testing.T) {
 		"not ready until Start binds the listener",
 	)
 	require.NoError(t, srv.Stop(context.Background()), "Stop before Start is a no-op")
-
-	_, err = transport.NewFromConfig(transport.Config{Kind: transport.Kind(99)})
-	require.Error(t, err)
-	assert.Equal(t, "connect", transport.KindConnect.String())
 }
 
 // TestStatelessClients_LifecycleNoOps tests that the stateless SDK-backed clients
@@ -145,12 +130,12 @@ func TestStatelessClients_LifecycleNoOps(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	pub, err := messagingsqs.NewPublisher(
+		t.Context(),
 		messagingsqs.Config{API: mocks.NewMockAPI(ctrl)},
 	)
 	require.NoError(t, err)
 
-	s3Client, err := storage.New(ctx, storage.Config{API: mocks.NewMockS3API(ctrl)})
-	require.NoError(t, err)
+	s3Client := storages3.NewClientFromAPI(mocks.NewMockS3API(ctrl), 0)
 
 	lifecycles := map[string]interfaces.Lifecycle{
 		"sqs-publisher": pub,
@@ -217,22 +202,4 @@ func TestPostgresBackend_StartUnreachable(t *testing.T) {
 		SSLMode:  "disable",
 	})
 	assert.Error(t, c.Start(context.Background()))
-}
-
-// TestRiverEnqueuer_LifecycleNoOps tests that the River enqueuer satisfies the
-// lifecycle contract with safe no-ops (its pool belongs to the Runtime).
-//
-// Why this test is important:
-//   - The enqueuer must register uniformly with a lifecycle.Manager without owning
-//     a connection to open or close.
-//
-// What it tests:
-//   - Start and Stop return nil.
-func TestRiverEnqueuer_LifecycleNoOps(t *testing.T) {
-	t.Parallel()
-
-	client, err := riverpkg.NewClient(riverpkg.Config{})
-	require.NoError(t, err)
-	assert.NoError(t, client.Start(context.Background()))
-	assert.NoError(t, client.Stop(context.Background()))
 }

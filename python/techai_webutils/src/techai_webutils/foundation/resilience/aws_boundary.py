@@ -2,8 +2,7 @@
 
 Maps a raw botocore ``ClientError`` / ``BotoCoreError`` raised by an AWS SDK call into a coded
 ``AppError`` at the client boundary, so a throttle or a transient 5xx surfaces as a transient
-``AppError`` the composition-root resiliency stack (RetryProxy) can retry and the transport edges map
-to UNAVAILABLE — instead of a raw SDK error escaping the retry loop. It lives in foundation (which
+``AppError`` the client tier's retry layer can retry and the transport edges map to UNAVAILABLE — instead of a raw SDK error escaping the retry loop. It lives in foundation (which
 every client imports downward) so the AWS clients share ONE boundary rather than a lateral
 clients→clients import; ``grpc_boundary`` is its gRPC sibling.
 """

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cassandra"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
 // statusCQL reads one table's creation status from the Amazon Keyspaces schema.
@@ -20,7 +20,7 @@ const statusActive = "ACTIVE"
 // ensureSchema creates every declared table, in table-name order, within
 // SchemaTimeout; with AwaitActive it then waits for each one to be ACTIVE. A
 // table still not ACTIVE when the timeout passes is CodeUnavailable.
-func (s *Store) ensureSchema(ctx context.Context, session cassandra.Session) error {
+func (s *Store) ensureSchema(ctx context.Context, session interfaces.CQLSession) error {
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.SchemaTimeout)
 	defer cancel()
 	type table struct{ name, ddl string }
@@ -58,7 +58,7 @@ func (s *Store) ensureSchema(ctx context.Context, session cassandra.Session) err
 // The context ending first is CodeUnavailable.
 func (s *Store) awaitActive(
 	ctx context.Context,
-	session cassandra.Session,
+	session interfaces.CQLSession,
 	table string,
 ) error {
 	timer := time.NewTimer(0)
@@ -86,7 +86,7 @@ func (s *Store) awaitActive(
 // tableStatus reads table's status ("" when the table is not listed yet).
 func (s *Store) tableStatus(
 	ctx context.Context,
-	session cassandra.Session,
+	session interfaces.CQLSession,
 	table string,
 ) (string, error) {
 	iter := session.Query(statusCQL, s.cfg.Keyspace, table).

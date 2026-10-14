@@ -24,8 +24,6 @@ func RunJobGroup(
 	jobs []interfaces.AnyJob,
 	obs interfaces.ExecutionObserver,
 ) (types.StepResults, error) {
-	ctx = WithObserverCtx(ctx, obs)
-
 	var (
 		mu    sync.Mutex // guards `all`
 		obsMu sync.Mutex // serializes every observer call (incl. FanOut's live emits)

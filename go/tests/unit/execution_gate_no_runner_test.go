@@ -13,26 +13,26 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
-// TestRunGateNoRunner_RunsRunnableJobs tests that a gate composed of runner-less
-// Runnables (lifted via job.Adapt) runs to success through RunGateNoRunner without
+// TestGateRunLocal_RunsRunnableJobs tests that a gate composed of runner-less
+// Runnables (lifted via job.Base.Runnable) runs to success through RunLocal without
 // a CommandRunner.
 //
 // Why this test is important:
-//   - Runner-less gates (e.g. DB seeding) compose Runnables; RunGateNoRunner must
+//   - Runner-less gates (e.g. DB seeding) compose Runnables; RunLocal must
 //     execute them without threading a CommandRunner, so no consumer passes a nil
 //     runner into the gate API
 //
 // What it tests:
-//   - A Serial phase of Adapt(Runnable) units runs: RunGateNoRunner returns nil and
+//   - A Serial phase of Base.Runnable units runs: RunLocal returns nil and
 //     every Runnable's Run executed
-func TestRunGateNoRunner_RunsRunnableJobs(t *testing.T) {
+func TestGateRunLocal_RunsRunnableJobs(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 
 	// Each Runnable's Run is expected exactly once — the gomock Times(1)
 	// expectation (verified at ctrl.Finish) replaces the old boolean `ran` flag as
-	// the proof that RunGateNoRunner executed both units.
+	// the proof that RunLocal executed both units.
 	runnableA := mocks.NewMockRunnable(ctrl)
 	runnableA.EXPECT().Meta().Return(types.JobMeta{Name: "a"}).AnyTimes()
 	runnableA.EXPECT().Run(gomock.Any()).
@@ -45,12 +45,12 @@ func TestRunGateNoRunner_RunsRunnableJobs(t *testing.T) {
 		Return(types.StepResults{{Name: "b", Status: types.StatusPass}}, nil).
 		Times(1)
 
-	g := gate.NewGate("Seed").
+	g := gate.New("Seed").
 		Serial(
 			"Phase",
-			job.Adapt(runnableA),
-			job.Adapt(runnableB),
-		).Build()
+			job.Base{}.Runnable(runnableA),
+			job.Base{}.Runnable(runnableB),
+		)
 
-	require.NoError(t, gate.RunGateNoRunner(context.Background(), g))
+	require.NoError(t, g.RunLocal(context.Background()))
 }

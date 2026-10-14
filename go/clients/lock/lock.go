@@ -3,23 +3,20 @@
 // acquire-with-watchdog helper a single-active-operation guard depends on.
 //
 // NewFromConfig chooses a backend from a Kind string — local (in-process, dev
-// / replica=1) or redis (cross-pod, staging/prod) — mirroring the
-// foundation/logger.NewFromConfig and clients/cache factory pattern, and wraps
-// it in a Locker (NewLocker). The redis backend reuses the live go-redis
-// client from the cache (clients/cache/redis.Cache.Client), so no second
-// connection pool is opened.
+// / replica=1; the default) or redis (cross-pod, staging/prod) — and wraps it in a
+// Locker (NewLocker). The redis backend reuses a shared go-redis client (Deps.Redis),
+// so no second connection pool is opened.
 //
 // Hold acquires a key and keeps its lease alive with a background watchdog;
 // the context it returns is cancelled the instant the lease is lost, so a
 // losing pod's in-flight work is stopped rather than left running under a
 // lock it no longer owns. Key naming is the caller's.
 //
-// Cross-cutting concerns are composed by the decorators subpackage
-// (resilience: retry, circuit-breaker, timeout; observability: logging,
-// metrics, tracing), wired by NewFromConfig from the Config collaborators.
+// Every backend operation runs through the client tier (Decorate), wired by
+// NewFromConfig from the Config collaborators.
 //
-// Scope boundary: this package ships both backends, the factory, the decorator
-// stack, and Hold. Wiring them (config + shared redis client +
+// Scope boundary: this package ships both backends, the factory, the client-tier
+// decoration, and Hold. Wiring them (config + shared redis client +
 // observability/resilience deps → Locker) and choosing the call sites and key
 // names belong to the consumer's composition root.
 package lock
@@ -31,86 +28,85 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/lock/decorators"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/lock/local"
 	lockredis "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/lock/redis"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
-
-// Kind selects which DistributedLock backend NewFromConfig builds.
-type Kind int
 
 const (
 	// KindLocal is the in-process backend: correct for a single replica (dev /
-	// replica=1), no external dependency.
-	KindLocal Kind = iota
+	// replica=1), no external dependency. The default.
+	KindLocal client.Kind = "local"
 
 	// KindRedis is the cross-pod backend over a shared Redis client
 	// (staging/prod, multi-replica).
-	KindRedis
+	KindRedis client.Kind = "redis"
 )
 
-// String returns the config token for the kind.
-func (k Kind) String() string {
-	switch k {
-	case KindLocal:
-		return "local"
-	case KindRedis:
-		return "redis"
-	default:
-		return "unknown"
+// Config selects and tunes the lock. TTL is the lease a holder gets on Acquire (and
+// Renew extends); RenewInterval is how often Hold's watchdog renews, at most TTL/3 so a
+// couple of missed renew ticks cannot expire a live lease.
+type Config struct {
+	// Kind selects the backend; empty means KindLocal.
+	Kind client.Kind `yaml:"kind" mapstructure:"kind"`
+
+	// Name labels the client in decoration overrides, metrics, spans and logs; empty
+	// uses the family name ("lock").
+	Name string `yaml:"name" mapstructure:"name"`
+
+	// TTL is the lease duration applied on Acquire and extended by Renew.
+	TTL time.Duration `yaml:"ttl" mapstructure:"ttl"`
+
+	// RenewInterval is the watchdog's renew cadence in Hold.
+	RenewInterval time.Duration `yaml:"renew_interval" mapstructure:"renew_interval"`
+}
+
+// Deps carries the lock's runtime collaborators.
+type Deps struct {
+	// Decorations decorates the client from the decoration config (decoration.clients)
+	// and supplies its observability.
+	decorate.Decorations
+
+	// Redis is the shared go-redis client KindRedis requires.
+	Redis *goredis.Client
+}
+
+// kinds is the lock backend table.
+func kinds() client.Kinds[Config, Deps, interfaces.DistributedLock] {
+	return client.Kinds[Config, Deps, interfaces.DistributedLock]{
+		Family:   "lock",
+		Default:  KindLocal,
+		Decorate: Decorate,
+		Backends: map[client.Kind]client.Backend[Config, Deps, interfaces.DistributedLock]{
+			KindLocal: func(context.Context, Config, Deps) (interfaces.DistributedLock, error) {
+				return local.New(), nil
+			},
+			KindRedis: func(
+				_ context.Context, cfg Config, deps Deps,
+			) (interfaces.DistributedLock, error) {
+				if deps.Redis == nil {
+					return nil, apperr.New(
+						apperr.CodeInvalidInput,
+						"redis lock requires a redis client",
+					)
+				}
+				return lockredis.New(deps.Redis, cfg.TTL), nil
+			},
+		},
 	}
 }
 
-// Config selects and tunes the lock. Kind picks the backend; TTL is the lease
-// duration a holder gets on Acquire (and Renew extends); RenewInterval is how
-// often Hold's watchdog renews. RenewInterval must be ≤ TTL/3 so a couple of
-// missed renew ticks cannot expire a live lease.
-type Config struct {
-	// Logger drives the logging decorator; nil skips it.
-	Logger interfaces.Logger
-
-	// Metrics drives the metrics decorator; nil skips it.
-	Metrics interfaces.Metrics
-
-	// Tracer drives the tracing decorator; nil skips it.
-	Tracer interfaces.Tracer
-
-	// Retrier drives the retry decorator (transient-error retries); nil skips it.
-	Retrier interfaces.Retrier
-
-	// CircuitBreaker drives the circuit-breaker decorator; nil skips it.
-	CircuitBreaker interfaces.CircuitBreaker
-
-	// Name labels the lock in metrics, spans, and logs (default "lock").
-	Name string
-
-	// Kind selects the backend (local | redis).
-	Kind Kind
-
-	// TTL is the lease duration applied on Acquire and extended by Renew.
-	TTL time.Duration
-
-	// RenewInterval is the watchdog's renew cadence in Hold.
-	RenewInterval time.Duration
-
-	// OpTimeout bounds each backend operation via the timeout decorator; zero
-	// skips it.
-	OpTimeout time.Duration
-}
-
-// NewFromConfig builds the configured Locker: it selects a DistributedLock
-// backend by Kind, wraps it in the resilience + observability decorator stack
-// (from the Config collaborators — each optional/nil-safe), and returns a
-// Locker whose Hold renews on RenewInterval over the decorated backend. The
-// client is required only for KindRedis (the shared go-redis client reused
-// from the cache); it is ignored for KindLocal. It fails loudly on an unknown
-// kind, a non-positive TTL or RenewInterval, a RenewInterval that exceeds
-// TTL/3, or a redis kind with no client.
+// NewFromConfig builds the configured Locker: the backend cfg.Kind selects, run
+// through the client tier, with Hold renewing on RenewInterval. A non-positive TTL or
+// RenewInterval, a RenewInterval above TTL/3, an unknown kind, or KindRedis without
+// Deps.Redis is CodeInvalidInput.
 func NewFromConfig(
-	cfg *Config,
-	client *goredis.Client,
+	ctx context.Context,
+	cfg Config,
+	deps Deps,
 ) (interfaces.Locker, error) {
 	if cfg.TTL <= 0 {
 		return nil, apperr.New(apperr.CodeInvalidInput, "lock ttl must be positive")
@@ -127,42 +123,11 @@ func NewFromConfig(
 			"lock renew_interval must be <= ttl/3",
 		)
 	}
-
-	var backend interfaces.DistributedLock
-	switch cfg.Kind {
-	case KindLocal:
-		backend = local.New()
-	case KindRedis:
-		if client == nil {
-			return nil, apperr.New(
-				apperr.CodeInvalidInput,
-				"redis lock requires a redis client",
-			)
-		}
-		backend = lockredis.New(client, cfg.TTL)
-	default:
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			"unknown lock kind: "+cfg.Kind.String(),
-		)
+	lock, err := kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
+	if err != nil {
+		return nil, err
 	}
-
-	name := cfg.Name
-	if name == "" {
-		name = "lock"
-	}
-	// Wrap the backend in the cross-cutting decorator stack (resilience +
-	// observability); each collaborator is nil-safe, so an unconfigured Config
-	// yields the bare backend. Hold then composes over the decorated lock.
-	decorated := decorators.NewBuilder(backend, name).
-		WithRetry(cfg.Retrier).
-		WithCircuitBreaker(cfg.CircuitBreaker).
-		WithTimeout(cfg.OpTimeout).
-		WithLogging(cfg.Logger).
-		WithMetrics(cfg.Metrics).
-		WithTracing(cfg.Tracer).
-		Build()
-	return NewLocker(decorated, cfg.RenewInterval), nil
+	return NewLocker(lock, cfg.RenewInterval), nil
 }
 
 // locker composes a DistributedLock backend with a renewal cadence to provide

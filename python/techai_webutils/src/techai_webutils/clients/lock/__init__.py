@@ -7,7 +7,7 @@ stage/prod) are interchangeable ``DistributedLock`` backends selected by ``new_l
 another backend is a new ``LockKind`` behind the same abstraction.
 
 Cross-cutting concerns (logging, tracing, retry, circuit breaking) are layered onto a backend's
-``acquire``/``release`` by the generic ``clients/decorators`` proxies at the composition root, not
+``acquire``/``release`` by the client tier (``clients.client.decorate``) at the composition root, not
 inside the backends themselves.
 """
 

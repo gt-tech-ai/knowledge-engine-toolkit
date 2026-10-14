@@ -1,4 +1,8 @@
-"""SQS message publisher using aiobotocore."""
+"""SQS message publisher using aiobotocore.
+
+Every message carries the current trace context (traceparent, tracestate, baggage) as string
+message attributes beside ``topic``, so the subscriber continues the publisher's trace.
+"""
 
 from __future__ import annotations
 
@@ -10,13 +14,17 @@ import aiobotocore.session
 
 from techai_webutils.core.errors import AppRuntimeError
 from techai_webutils.core.interfaces.messaging import MessagePublisher
+from techai_webutils.foundation.tracer.propagate import inject
 
 if TYPE_CHECKING:
     from types import TracebackType
 
     from aiobotocore.session import AioSession
     from types_aiobotocore_sqs import SQSClient
-    from types_aiobotocore_sqs.type_defs import SendMessageBatchRequestEntryTypeDef
+    from types_aiobotocore_sqs.type_defs import (
+        MessageAttributeValueTypeDef,
+        SendMessageBatchRequestEntryTypeDef,
+    )
 
     from techai_webutils.clients.messaging.config import SQSConfig
 
@@ -63,9 +71,7 @@ class SQSPublisher(MessagePublisher):
         await self._client.send_message(
             QueueUrl=self._config.queue_url,
             MessageBody=payload.decode("utf-8"),
-            MessageAttributes={
-                "topic": {"DataType": "String", "StringValue": topic},
-            },
+            MessageAttributes=_attributes(topic),
         )
 
     async def publish_batch(self, topic: str, payloads: list[bytes]) -> None:
@@ -77,9 +83,7 @@ class SQSPublisher(MessagePublisher):
             {
                 "Id": str(uuid.uuid4()),
                 "MessageBody": p.decode("utf-8"),
-                "MessageAttributes": {
-                    "topic": {"DataType": "String", "StringValue": topic},
-                },
+                "MessageAttributes": _attributes(topic),
             }
             for p in payloads
         ]
@@ -95,3 +99,11 @@ class SQSPublisher(MessagePublisher):
                 for i in range(0, len(entries), 10)
             )
         )
+
+
+def _attributes(topic: str) -> dict[str, MessageAttributeValueTypeDef]:
+    """Return a message's string attributes: its topic and the current trace context."""
+    carrier: dict[str, str] = {}
+    inject(carrier)
+    carrier["topic"] = topic
+    return {k: {"DataType": "String", "StringValue": v} for k, v in carrier.items()}

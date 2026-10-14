@@ -17,20 +17,21 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	codec "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/jsonapi"
 	jsonapi "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/jsonapi"
 )
 
 // docRoutes is the synthetic /api/v1 route table exercised by the role tests: a
 // documents resource with LIST / GET_ONE / CREATE / UPDATE / DELETE, a resource-
 // shaped POST ACTION (confirm), and a literal action colliding with a {param}.
-func docRoutes() jsonapi.Config {
-	return jsonapi.Config{
+func docRoutes() codec.Config {
+	return codec.Config{
 		BasePath: "/api/v1",
-		Routes: []jsonapi.RouteEntry{
+		Routes: []codec.RouteEntry{
 			{
 				Method:        "GET",
 				PathTemplate:  "/api/v1/documents",
-				Role:          jsonapi.RoleList,
+				Role:          codec.RoleList,
 				ResourceType:  "documents",
 				CollectionKey: "documents",
 				PaginationKey: "pagination",
@@ -38,7 +39,7 @@ func docRoutes() jsonapi.Config {
 			{
 				Method:          "POST",
 				PathTemplate:    "/api/v1/documents",
-				Role:            jsonapi.RoleCreate,
+				Role:            codec.RoleCreate,
 				ResourceType:    "documents",
 				SingleKey:       "document",
 				RequestEnvelope: true,
@@ -46,14 +47,14 @@ func docRoutes() jsonapi.Config {
 			{
 				Method:       "GET",
 				PathTemplate: "/api/v1/documents/{document_id}",
-				Role:         jsonapi.RoleGetOne,
+				Role:         codec.RoleGetOne,
 				ResourceType: "documents",
 				SingleKey:    "document",
 			},
 			{
 				Method:          "PATCH",
 				PathTemplate:    "/api/v1/documents/{document_id}",
-				Role:            jsonapi.RoleUpdate,
+				Role:            codec.RoleUpdate,
 				ResourceType:    "documents",
 				SingleKey:       "document",
 				RequestEnvelope: true,
@@ -61,12 +62,12 @@ func docRoutes() jsonapi.Config {
 			{
 				Method:       "DELETE",
 				PathTemplate: "/api/v1/documents/{document_id}",
-				Role:         jsonapi.RoleDelete,
+				Role:         codec.RoleDelete,
 			},
 			{
 				Method:       "POST",
 				PathTemplate: "/api/v1/documents/{document_id}/confirm",
-				Role:         jsonapi.RoleAction,
+				Role:         codec.RoleAction,
 				ResourceType: "documents",
 				SingleKey:    "document",
 			},
@@ -87,7 +88,7 @@ func jsonHandler(status int, body string) http.Handler {
 // doREST issues a request through the middleware and returns the recorded result.
 func doREST(
 	t *testing.T,
-	cfg jsonapi.Config,
+	cfg codec.Config,
 	inner http.Handler,
 	method, path, body string,
 ) *httptest.ResponseRecorder {
@@ -121,25 +122,25 @@ func TestJSONAPIMatchRoute_MethodPathAndPrecedence(t *testing.T) {
 
 	get, ok := cfg.MatchRoute("GET", "/api/v1/documents")
 	require.True(t, ok)
-	assert.Equal(t, jsonapi.RoleList, get.Role)
+	assert.Equal(t, codec.RoleList, get.Role)
 
 	post, ok := cfg.MatchRoute("POST", "/api/v1/documents")
 	require.True(t, ok)
 	assert.Equal(
 		t,
-		jsonapi.RoleCreate,
+		codec.RoleCreate,
 		post.Role,
 		"same path, different method → different role",
 	)
 
 	one, ok := cfg.MatchRoute("GET", "/api/v1/documents/d1")
 	require.True(t, ok)
-	assert.Equal(t, jsonapi.RoleGetOne, one.Role)
+	assert.Equal(t, codec.RoleGetOne, one.Role)
 
 	// Literal "confirm" beats the {document_id} instance route for the same POST.
 	confirm, ok := cfg.MatchRoute("POST", "/api/v1/documents/d1/confirm")
 	require.True(t, ok)
-	assert.Equal(t, jsonapi.RoleAction, confirm.Role, "literal segment beats {param}")
+	assert.Equal(t, codec.RoleAction, confirm.Role, "literal segment beats {param}")
 
 	_, ok = cfg.MatchRoute("GET", "/api/v1/unknown")
 	assert.False(t, ok, "unknown path does not match")

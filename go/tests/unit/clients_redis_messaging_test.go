@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging"
 	msgredis "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/redis"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -41,34 +40,6 @@ func TestMessagingCapabilityInterfaces_MocksSatisfyContracts(t *testing.T) {
 	require.NotNil(t, pat)
 }
 
-// TestMessaging_ParseKind tests the config-kind string → Kind bridge.
-//
-// Why this test is important:
-//   - ParseKind is how a composition root selects a messaging backend from the
-//     messaging.kind config value; a wrong mapping silently wires the wrong backend,
-//     and a typo must fail loudly rather than default silently.
-//
-// What it tests:
-//   - "sqs"/"memory"/"redis" map to their Kinds; an unknown string errors.
-func TestMessaging_ParseKind(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		in   string
-		want messaging.Kind
-	}{
-		{"sqs", messaging.KindSQS},
-		{"memory", messaging.KindMemory},
-		{"redis", messaging.KindRedis},
-	}
-	for _, c := range cases {
-		got, err := messaging.ParseKind(c.in)
-		require.NoError(t, err, "kind %q", c.in)
-		require.Equal(t, c.want, got, "kind %q", c.in)
-	}
-	_, err := messaging.ParseKind("nope")
-	require.Error(t, err)
-}
-
 // TestRedisMessaging_NilClient_Rejected tests that the Redis backend constructors
 // reject a nil client rather than silently dialing their own connection.
 //
@@ -90,11 +61,4 @@ func TestRedisMessaging_NilClient_Rejected(t *testing.T) {
 
 	_, subErr := msgredis.NewSubscriber(msgredis.Config{})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(subErr))
-
-	// The parent messaging factory also rejects KindRedis with no injected client
-	// (WithRedisClient omitted), rather than dialing or panicking on first publish.
-	_, parentPubErr := messaging.NewPublisher(messaging.KindRedis)
-	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(parentPubErr))
-	_, parentSubErr := messaging.NewSubscriber(messaging.KindRedis)
-	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(parentSubErr))
 }
