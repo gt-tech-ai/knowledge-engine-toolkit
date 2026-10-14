@@ -35,7 +35,7 @@ _STATUS_BY_VALUE = {code.value[0]: code for code in grpc.StatusCode}
 
 
 def client_interceptors(
-    base: ClientBase, service_token: str = ""
+    base: ClientBase, service_token: str | None = None
 ) -> list[grpc.aio.ClientInterceptor]:
     """Return the interceptors that run every call on a channel through ``base``, the client tier.
 
@@ -45,12 +45,13 @@ def client_interceptors(
       lazily, so there is no open to decorate.
 
     Every attempt carries the active W3C trace context (so the server continues this trace) and,
-    when ``service_token`` is set, ``authorization: Bearer <token>``. The ``AioRpcError`` a server
+    when ``service_token`` is non-empty, ``authorization: Bearer <token>``. The ``AioRpcError`` a server
     returns is coded for the tier (``grpc_error_to_app_error``) and handed back to the caller
     unchanged; a failure the tier produced itself (an open breaker, a full bulkhead, a timeout)
     becomes an ``AioRpcError`` of its code.
     """
-    return [_UnaryClient(base, service_token), _StreamClient(service_token)]
+    token = service_token or ""
+    return [_UnaryClient(base, token), _StreamClient(token)]
 
 
 def operation(method: str | bytes) -> str:
