@@ -14,6 +14,8 @@ What they test:
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from techai_webutils.clients.messaging.builder import (
@@ -23,7 +25,6 @@ from techai_webutils.clients.messaging.builder import (
     new_messaging_subscriber_from_config,
 )
 from techai_webutils.clients.messaging.config import SQSConfig
-from techai_webutils.clients.messaging.sqs.sqs_publisher import SQSPublisher
 from techai_webutils.clients.messaging.sqs.sqs_subscriber import SQSSubscriber
 from techai_webutils.clients.rpc.builder import RpcConfig, new_rpc_channel_from_config
 from techai_webutils.clients.storage.builder import (
@@ -50,10 +51,29 @@ def test_storage_factory_rejects_unknown_kind() -> None:
         new_storage_from_config(StorageConfig(s3=_S3, kind="bogus"))  # type: ignore[arg-type]
 
 
-def test_messaging_factory_selects_sqs_publisher_and_subscriber() -> None:
-    """kind=SQS builds the SQS publisher and subscriber backends."""
-    cfg = MessagingConfig(sqs=_SQS, kind=MessagingKind.SQS)
-    assert isinstance(new_messaging_from_config(cfg), SQSPublisher)
+@pytest.mark.asyncio
+async def test_messaging_factory_selects_sqs_publisher_and_subscriber(
+    sqs_config: SQSConfig, aws_client: AsyncMock
+) -> None:
+    """kind=SQS builds a publisher that sends to the configured queue and the SQS subscriber.
+
+    Why this test is important:
+      - The kind is the one config value that picks the broker; selecting SQS must send to SQS,
+        through the client tier, at the configured queue.
+
+    What it tests:
+      - A publish through the factory's publisher reaches SQS ``send_message`` on the config's
+        queue URL with the topic attribute; the subscriber factory builds an ``SQSSubscriber``.
+    """
+    aws_client.send_message = AsyncMock()
+    cfg = MessagingConfig(sqs=sqs_config, kind=MessagingKind.SQS)
+
+    async with new_messaging_from_config(cfg) as publisher:
+        await publisher.publish("orders", b"{}")
+
+    sent = aws_client.send_message.call_args.kwargs
+    assert sent["QueueUrl"] == sqs_config.queue_url
+    assert sent["MessageAttributes"]["topic"]["StringValue"] == "orders"
     assert isinstance(new_messaging_subscriber_from_config(cfg), SQSSubscriber)
 
 

@@ -1,3 +1,6 @@
+// Package outboxtest is the reusable OutboxStore conformance suite (Run) and the
+// routing-sink suite (RunRouting) a consumer runs against its own store and sink over
+// real infrastructure; the engine runs them against the postgres outbox-store kind.
 package outboxtest
 
 import (

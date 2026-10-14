@@ -8,6 +8,7 @@ package redis
 import (
 	goredis "github.com/redis/go-redis/v9"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -23,9 +24,9 @@ type Config struct {
 	// logging.
 	Logger interfaces.Logger
 
-	// Metrics, when set, records per-message handle counters + latency on the
-	// subscriber via the shared handler-observability decorator. Nil skips metrics.
-	Metrics interfaces.Metrics
+	// Handlers runs each handler call through the handler tier
+	// (client.NewHandlerBase); the zero Base runs handlers undecorated.
+	Handlers client.Base
 }
 
 // NewFromConfig builds a Redis Pub/Sub publisher + subscriber over the shared

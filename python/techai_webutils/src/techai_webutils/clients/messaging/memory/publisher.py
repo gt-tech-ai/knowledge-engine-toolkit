@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from techai_webutils.core.interfaces.messaging import Message, MessagePublisher
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
+from techai_webutils.foundation.tracer.propagate import inject
 
 if TYPE_CHECKING:
     from techai_webutils.clients.messaging.memory.broker import InMemoryBroker
@@ -28,10 +29,18 @@ class InMemoryPublisher(NoOpAsyncResource, MessagePublisher):
         self._seq = 0
 
     async def publish(self, topic: str, payload: bytes) -> None:
-        """Enqueue ``payload`` on ``topic`` as a ``Message`` with a monotonic in-memory id."""
+        """Enqueue ``payload`` on ``topic`` as a ``Message`` with a monotonic in-memory id.
+
+        The current trace context rides the message's metadata, so the subscriber's handler
+        continues this trace.
+        """
         self._seq += 1
+        metadata: dict[str, str] = {}
+        inject(metadata)
         await self._broker.queue(topic).put(
-            Message(id=f"mem-{self._seq}", topic=topic, payload=payload),
+            Message(
+                id=f"mem-{self._seq}", topic=topic, payload=payload, metadata=metadata
+            ),
         )
 
     async def publish_batch(self, topic: str, payloads: list[bytes]) -> None:

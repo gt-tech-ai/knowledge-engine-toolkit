@@ -8,27 +8,26 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
-// The BaseRepository provides the full CRUD surface, so it must satisfy every
-// role interface individually — the compile-time proof that the roles' method
-// signatures byte-match the methods the base already implements.
+// A Store (here its generated mock) provides the full CRUD surface, so it must satisfy
+// every role interface individually — the compile-time proof that the roles' method
+// signatures byte-match the composed contract's.
 var (
-	_ interfaces.Reader[any, string] = (*repository.BaseRepository[any, any, string])(nil)
-	_ interfaces.Lister[any, any]    = (*repository.BaseRepository[any, any, string])(nil)
-	_ interfaces.Writer[any, string] = (*repository.BaseRepository[any, any, string])(nil)
-	_ interfaces.Deleter[string]     = (*repository.BaseRepository[any, any, string])(nil)
-	_ interfaces.Exister[string]     = (*repository.BaseRepository[any, any, string])(nil)
+	_ interfaces.Reader[any, string] = (*mocks.MockStore[any, any, string])(nil)
+	_ interfaces.Lister[any, any]    = (*mocks.MockStore[any, any, string])(nil)
+	_ interfaces.Writer[any, string] = (*mocks.MockStore[any, any, string])(nil)
+	_ interfaces.Deleter[string]     = (*mocks.MockStore[any, any, string])(nil)
+	_ interfaces.Exister[string]     = (*mocks.MockStore[any, any, string])(nil)
 )
 
-// The BaseService has no Exists, so it satisfies every role except Exister.
+// A Service has no Exists, so it satisfies every role except Exister.
 var (
-	_ interfaces.Reader[any, string] = (*service.BaseService[any, any, string])(nil)
-	_ interfaces.Lister[any, any]    = (*service.BaseService[any, any, string])(nil)
-	_ interfaces.Writer[any, string] = (*service.BaseService[any, any, string])(nil)
-	_ interfaces.Deleter[string]     = (*service.BaseService[any, any, string])(nil)
+	_ interfaces.Reader[any, string] = (*mocks.MockService[any, any, string])(nil)
+	_ interfaces.Lister[any, any]    = (*mocks.MockService[any, any, string])(nil)
+	_ interfaces.Writer[any, string] = (*mocks.MockService[any, any, string])(nil)
+	_ interfaces.Deleter[string]     = (*mocks.MockService[any, any, string])(nil)
 )
 
 // roleProbeEntity + roleProbeParams are the minimal type args for a probe store
@@ -56,11 +55,8 @@ func (readOnlyProbe) List(
 // A List-only type satisfies Lister (compile-time) — the whole point of the split.
 var _ interfaces.Lister[roleProbeEntity, roleProbeParams] = (*readOnlyProbe)(nil)
 
-// The full-CRUD BaseRepository still satisfies the recomposed Store through the
-// role composition — proof the alias is backward-compatible.
-var _ interfaces.Store[any, any, string] = (*repository.BaseRepository[any, any, string])(
-	nil,
-)
+// A full-CRUD type satisfies the Store composed from the roles.
+var _ interfaces.Store[any, any, string] = (*mocks.MockStore[any, any, string])(nil)
 
 // TestReadOnlyProbeIsListerNotStore tests that a type embedding only the Lister
 // role satisfies interfaces.Lister but NOT the full interfaces.Store.
@@ -99,8 +95,8 @@ func TestReadOnlyProbeIsListerNotStore(t *testing.T) {
 //     every satisfier — the package-level var _ assertions above are the guard.
 //
 // What it tests:
-//   - Each role interface is satisfied by BaseRepository (all five) and
-//     BaseService (all but Exister), verified at compile time by the assertions.
+//   - Each role interface is satisfied by a Store (all five) and a Service (all but
+//     Exister), verified at compile time by the assertions.
 func TestRoleInterfacesExist(t *testing.T) {
 	t.Parallel()
 	// The compile-time var _ assertions above are the assertion; reaching this

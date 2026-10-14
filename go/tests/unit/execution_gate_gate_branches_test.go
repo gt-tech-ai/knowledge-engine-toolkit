@@ -14,13 +14,13 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
-// TestRunGateNoRunner_GuardRunnerRejectsEveryCommandCall tests that the no-op
-// CommandRunner RunGateNoRunner supplies fails loudly on every method rather than
+// TestGateRunLocal_GuardRunnerRejectsEveryCommandCall tests that the no-op
+// CommandRunner RunLocal supplies fails loudly on every method rather than
 // silently succeeding, so a genuine command job mistakenly composed into a
 // runner-less gate surfaces a programming error instead of a false pass.
 //
 // Why this test is important:
-//   - RunGateNoRunner exists for Runnable-backed gates (e.g. DB seeding) that never
+//   - RunLocal exists for Runnable-backed gates (e.g. DB seeding) that never
 //     touch a CommandRunner. If a command job slipped in, a silently-succeeding
 //     runner would report the command as passed without ever running it — the
 //     most dangerous kind of false green. The guard's contract is that every
@@ -28,10 +28,10 @@ import (
 //
 // What it tests:
 //   - Through a probe job that invokes each CommandRunner method with the runner
-//     RunGateNoRunner injected, Run/RunWithEnv/RequireTool return an error naming
+//     RunLocal injected, Run/RunWithEnv/RequireTool return an error naming
 //     the runner-less gate, RunBuffered/RunBufferedWithEnv return a CmdResult with
 //     that error and ExitCode -1, and Exists reports false.
-func TestRunGateNoRunner_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
+func TestGateRunLocal_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 
@@ -44,7 +44,7 @@ func TestRunGateNoRunner_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
 		exists     bool
 	)
 
-	// The probe job receives the runner RunGateNoRunner injects (the guard
+	// The probe job receives the runner RunLocal injects (the guard
 	// noRunner) and exercises every method, capturing each result for assertion
 	// after the gate returns.
 	probe := mocks.NewMockAnyJob(ctrl)
@@ -66,8 +66,8 @@ func TestRunGateNoRunner_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
 	).
 		Times(1)
 
-	g := gate.NewGate("no-runner-guard").Serial("probe", probe).Build()
-	require.NoError(t, gate.RunGateNoRunner(context.Background(), g))
+	g := gate.New("no-runner-guard").Serial("probe", probe)
+	require.NoError(t, g.RunLocal(context.Background()))
 
 	require.Error(t, runErr, "Run must reject on a runner-less gate")
 	assert.Contains(t, runErr.Error(), "runner-less gate")
@@ -82,7 +82,7 @@ func TestRunGateNoRunner_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
 	assert.False(t, exists, "Exists must report false on a runner-less gate")
 }
 
-// TestRunGate_BareFailureWithoutMessageStillFailsGate tests that a Fail result
+// TestGateRun_BareFailureWithoutMessageStillFailsGate tests that a Fail result
 // carrying no error string still fails the gate, producing a phase-level error.
 //
 // Why this test is important:
@@ -95,8 +95,8 @@ func TestRunGateNoRunner_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
 //
 // What it tests:
 //   - A single serial phase whose only result is a message-less StatusFail makes
-//     RunGate return a non-nil error naming that phase.
-func TestRunGate_BareFailureWithoutMessageStillFailsGate(t *testing.T) {
+//     Run return a non-nil error naming that phase.
+func TestGateRun_BareFailureWithoutMessageStillFailsGate(t *testing.T) {
 	t.Parallel()
 
 	// A Fail result with an empty Error string — the phaseFailureError path that
@@ -107,9 +107,9 @@ func TestRunGate_BareFailureWithoutMessageStillFailsGate(t *testing.T) {
 		nil,
 	)
 
-	g := gate.NewGate("bare-gate").Serial("checks", bare).Build()
+	g := gate.New("bare-gate").Serial("checks", bare)
 
-	err := gate.RunGate(context.Background(), gateNopRunner(t), "/", g)
+	err := g.Run(context.Background(), gateNopRunner(t), "/")
 	require.Error(t, err, "a message-less Fail must still fail the gate")
 	assert.Contains(
 		t,

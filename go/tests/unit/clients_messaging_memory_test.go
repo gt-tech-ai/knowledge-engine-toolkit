@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/memory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
@@ -28,7 +28,7 @@ func TestMessagingMemory_PublishReceive(t *testing.T) {
 
 	broker := memory.NewBroker()
 	pub := memory.NewPublisher(broker)
-	sub := memory.NewSubscriber(broker)
+	sub := memory.NewSubscriber(broker, client.Base{})
 	received := make(chan []byte, 1)
 	var handler interfaces.MessageHandler = func(
 		_ context.Context,
@@ -51,7 +51,7 @@ func TestMessagingMemory_PublishReceive(t *testing.T) {
 
 	// Isolation: a subscriber on a DIFFERENT broker sees none of the first broker's
 	// messages.
-	other := memory.NewSubscriber(memory.NewBroker())
+	other := memory.NewSubscriber(memory.NewBroker(), client.Base{})
 	otherRecv := make(chan []byte, 1)
 	go func() {
 		_ = other.Subscribe(
@@ -69,29 +69,4 @@ func TestMessagingMemory_PublishReceive(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 	require.NoError(t, other.Close())
-}
-
-// TestMessaging_KindMemory_Selected tests that the messaging factory selects the
-// in-memory backend for KindMemory (the config-selects-impl contract,
-// ARCHITECTURE.md#swappable-components).
-//
-// Why this test is important:
-//   - The memory backend is opted into by the tier Kind; if NewPublisher/NewSubscriber
-//     ignored KindMemory the configured no-infra behavior would never take effect.
-//
-// What it tests:
-//   - NewPublisher(KindMemory) / NewSubscriber(KindMemory) return the in-memory
-//     implementations.
-func TestMessaging_KindMemory_Selected(t *testing.T) {
-	t.Parallel()
-
-	pub, err := messaging.NewPublisher(messaging.KindMemory)
-	require.NoError(t, err)
-	_, ok := pub.(*memory.Publisher)
-	require.True(t, ok, "KindMemory must select the in-memory publisher")
-
-	sub, err := messaging.NewSubscriber(messaging.KindMemory)
-	require.NoError(t, err)
-	_, ok = sub.(*memory.Subscriber)
-	require.True(t, ok, "KindMemory must select the in-memory subscriber")
 }

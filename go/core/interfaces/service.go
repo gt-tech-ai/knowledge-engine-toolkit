@@ -24,17 +24,6 @@ type Service[T any, P any, ID comparable] interface {
 	Deleter[ID]
 }
 
-// DecoratedService is the fully-decorated surface of a service (the base Service
-// methods wrapped by the decorator stack). It is the type the service decorator
-// builder returns and that concrete services embed. Custom (non-CRUD) methods no
-// longer decorate through a method here — they run through the type-agnostic
-// decorate.OpMiddleware chain via decorate.Exec[R], which lets them return
-// any type without the former (*T,error) shoehorn.
-type DecoratedService[T any, P any, ID comparable] interface {
-	// Service is the base CRUD surface the decorator stack wraps.
-	Service[T, P, ID]
-}
-
 // ServiceHooks provides lifecycle hooks for service operations.
 // Implementations can override specific hooks while using no-op defaults for others.
 type ServiceHooks[T any] interface {

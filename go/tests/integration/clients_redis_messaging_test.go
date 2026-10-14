@@ -391,20 +391,19 @@ func (s *RedisMessagingSuite) TestNewFromConfig_ReusesSharedClient() {
 //     KindRedis + WithRedisClient and gets a decorated publisher and a subscriber.
 //
 // What it tests:
-//   - messaging.NewPublisher(KindRedis, WithRedisClient) + NewSubscriber(KindRedis,
-//     WithRedisClient) round-trip a message.
+//   - messaging.NewFromConfig + NewConsumerFromConfig with KindRedis and the shared
+//     client round-trip a message.
 func (s *RedisMessagingSuite) TestNewPublisher_KindRedis() {
 	client := s.newClient()
-	pub, err := messaging.NewPublisher(
-		messaging.KindRedis,
-		messaging.WithRedisClient(client),
-	)
+	cfg, deps := messaging.Config{
+		Kind: messaging.KindRedis,
+	}, messaging.Deps{
+		Redis: client,
+	}
+	pub, err := messaging.NewFromConfig(context.Background(), cfg, deps)
 	s.Require().NoError(err)
 	s.Require().NotNil(pub)
-	subI, err := messaging.NewSubscriber(
-		messaging.KindRedis,
-		messaging.WithRedisClient(client),
-	)
+	subI, err := messaging.NewConsumerFromConfig(context.Background(), cfg, deps)
 	s.Require().NoError(err)
 	sub, ok := subI.(*msgredis.Subscriber)
 	s.Require().True(ok)

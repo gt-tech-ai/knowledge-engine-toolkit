@@ -1,26 +1,12 @@
-"""Workflows layer - multi-step business process orchestration.
+"""Workflows layer - multi-step orchestration over pipelines and services.
 
-Workflows coordinate stateful operations across services, pipelines, repositories,
-and caches. Unlike pipelines (pure transformations), workflows orchestrate complex
-business processes with conditional logic, error recovery, and cross-cutting concerns.
+``WorkflowBase`` builds decorated workflows (the workflow tier, ``tier``) from a function, a
+workflow, a read pipeline, or a pipeline run inside one transaction.
 
 Workflows implements the seventh tier (ARCHITECTURE.md#layers-and-import-direction):
 core -> foundation -> clients -> repos -> services -> pipelines -> workflows -> controllers
 """
 
-from techai_webutils.workflows.base import BaseAsyncWorkflow, BaseWorkflow
-from techai_webutils.workflows.decorators import (
-    LoggingWorkflowDecorator,
-    MetricsWorkflowDecorator,
-    WorkflowBuilder,
-)
-from techai_webutils.workflows.tx import tx_workflow
+from techai_webutils.workflows.workflow import WorkflowBase, tier
 
-__all__ = [
-    "BaseAsyncWorkflow",
-    "BaseWorkflow",
-    "LoggingWorkflowDecorator",
-    "MetricsWorkflowDecorator",
-    "WorkflowBuilder",
-    "tx_workflow",
-]
+__all__ = ["WorkflowBase", "tier"]

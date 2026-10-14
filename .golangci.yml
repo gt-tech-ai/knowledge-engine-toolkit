@@ -265,6 +265,8 @@ linters:
               desc: "core/ must not import foundation/ (layer violation)"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients"
               desc: "core/ must not import clients/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores"
+              desc: "core/ must not import stores/ (layer violation)"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos"
               desc: "core/ must not import repos/ (layer violation)"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/services"
@@ -283,6 +285,8 @@ linters:
           deny:
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients"
               desc: "foundation/ must not import clients/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores"
+              desc: "foundation/ must not import stores/ (layer violation)"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos"
               desc: "foundation/ must not import repos/ (layer violation)"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/services"
@@ -299,6 +303,8 @@ linters:
           files:
             - "**/go/clients/**/*.go"
           deny:
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores"
+              desc: "clients/ must not import stores/ (layer violation)"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos"
               desc: "clients/ must not import repos/ (layer violation)"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/services"
@@ -309,6 +315,22 @@ linters:
               desc: "clients/ must not import workflows/ (layer violation)"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
               desc: "clients/ must not import transport/ (layer violation)"
+
+        # ── Layer 2.5: stores/ must not import layers 3+ ──
+        stores-no-upper-layers:
+          files:
+            - "**/go/stores/**/*.go"
+          deny:
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos"
+              desc: "stores/ must not import repos/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/services"
+              desc: "stores/ must not import services/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines"
+              desc: "stores/ must not import pipelines/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows"
+              desc: "stores/ must not import workflows/ (layer violation)"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
+              desc: "stores/ must not import transport/ (layer violation)"
 
         # ── Layer 3: repos/ must not import layers 4+ ──
         repos-no-upper-layers:
@@ -392,6 +414,8 @@ linters:
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution"
               desc: "go/helpers/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients"
+              desc: "go/helpers/ is a leaf utility; must not import other layers"
+            - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores"
               desc: "go/helpers/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos"
               desc: "go/helpers/ is a leaf utility; must not import other layers"

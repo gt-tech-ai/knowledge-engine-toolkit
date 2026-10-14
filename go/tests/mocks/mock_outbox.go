@@ -58,6 +58,21 @@ func (mr *MockOutboxStoreMockRecorder) Claim(ctx, lane, limit any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Claim", reflect.TypeOf((*MockOutboxStore)(nil).Claim), ctx, lane, limit)
 }
 
+// DeleteSentBefore mocks base method.
+func (m *MockOutboxStore) DeleteSentBefore(ctx context.Context, cutoff time.Time) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteSentBefore", ctx, cutoff)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteSentBefore indicates an expected call of DeleteSentBefore.
+func (mr *MockOutboxStoreMockRecorder) DeleteSentBefore(ctx, cutoff any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSentBefore", reflect.TypeOf((*MockOutboxStore)(nil).DeleteSentBefore), ctx, cutoff)
+}
+
 // MarkSent mocks base method.
 func (m *MockOutboxStore) MarkSent(ctx context.Context, id uuid.UUID) error {
 	m.ctrl.T.Helper()

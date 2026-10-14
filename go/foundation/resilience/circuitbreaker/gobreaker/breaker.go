@@ -6,6 +6,7 @@ import (
 
 	gb "github.com/sony/gobreaker/v2"
 
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
 )
@@ -89,10 +90,19 @@ func New(cfg Config) *Breaker {
 	return &Breaker{inner: cb}
 }
 
-// Execute runs fn through the circuit breaker.
+// Execute runs fn through the circuit breaker. A call the breaker rejects (open, or
+// half-open with its probe quota spent) is CodeUnavailable; fn's own error is returned
+// unchanged.
 func (b *Breaker) Execute(fn func() error) error {
 	_, err := b.inner.Execute(func() (struct{}, error) {
 		return struct{}{}, fn()
 	})
+	if apperr.StdIs(err, gb.ErrOpenState) || apperr.StdIs(err, gb.ErrTooManyRequests) {
+		return apperr.Wrap(
+			err,
+			apperr.CodeUnavailable,
+			"circuit breaker "+b.inner.Name()+" open",
+		)
+	}
 	return err
 }

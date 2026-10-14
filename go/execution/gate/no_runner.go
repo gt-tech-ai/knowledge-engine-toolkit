@@ -7,8 +7,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
-// noRunner is the CommandRunner supplied by RunGateNoRunner. Runnable-backed jobs
-// (job.Adapt) never invoke it, so every method reports a programming error rather
+// noRunner is the CommandRunner supplied by RunLocal. Runnable-backed jobs
+// (job.Base.Runnable) never invoke it, so every method reports a programming error rather
 // than silently succeeding: it fires only if a genuine command job is composed
 // into a runner-less gate by mistake.
 type noRunner struct{}
@@ -16,8 +16,8 @@ type noRunner struct{}
 // errNoRunner marks a command execution attempted on a runner-less gate.
 var errNoRunner = apperr.New(
 	apperr.CodeInternal,
-	"command executed on a runner-less gate (RunGateNoRunner): "+
-		"compose commands with RunGate instead",
+	"command executed on a runner-less gate (RunLocal): "+
+		"run a command gate with Run instead",
 )
 
 // Run always fails with errNoRunner: a command was executed on a runner-less gate.

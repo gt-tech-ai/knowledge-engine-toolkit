@@ -40,9 +40,6 @@ type API interface {
 
 // Config configures the S3 sink.
 type Config struct {
-	// API is the S3 client (e.g. *awss3.Client); required. It is injected by
-	// the composition root, never read from config.
-	API API `yaml:"-" mapstructure:"-"`
 	// Bucket is the destination bucket; required.
 	Bucket string `yaml:"bucket" mapstructure:"bucket"`
 	// KeyTemplate renders each object key from {tenant}, {key} (the record's
@@ -61,15 +58,15 @@ type Sink struct {
 	template string
 }
 
-// New builds the sink; a missing API or bucket, or a key template without {id},
-// is CodeInvalidInput.
-func New(cfg Config) (*Sink, error) {
+// New builds the sink over api, the SDK client the composition root injects; a
+// missing API or bucket, or a key template without {id}, is CodeInvalidInput.
+func New(cfg Config, api API) (*Sink, error) {
 	tmpl := cfg.KeyTemplate
 	if tmpl == "" {
 		tmpl = DefaultKeyTemplate
 	}
 	switch {
-	case cfg.API == nil || cfg.Bucket == "":
+	case api == nil || cfg.Bucket == "":
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"outbox s3 sink: api and bucket are required",
@@ -80,7 +77,7 @@ func New(cfg Config) (*Sink, error) {
 			"outbox s3 sink: key template must contain {id}",
 		)
 	}
-	return &Sink{api: cfg.API, bucket: cfg.Bucket, template: tmpl}, nil
+	return &Sink{api: api, bucket: cfg.Bucket, template: tmpl}, nil
 }
 
 // Send writes each record as one object and returns one result per record.

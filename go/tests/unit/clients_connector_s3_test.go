@@ -16,7 +16,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	connector "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector"
-	connectordecorators "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/decorators"
 	connectors3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -392,11 +391,10 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		cfg := s3Cfg("iam_role")
 		cfg.ExternalID = ""
-		b := connector.NewSourceBuilder(
-			stubBuilder(mocks.NewMockStorageClient(ctrl), nil),
-			mocks.NewMockAssumeRoleAPIClient(ctrl),
-			connectordecorators.Deps{},
-		)
+		b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
+			BuildS3Client: stubBuilder(mocks.NewMockStorageClient(ctrl), nil),
+			STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
+		})
 		_, err := b.Build(ctx, cfg)
 		require.True(t, apperr.Is(err, apperr.CodeInvalidInput), "%v", err)
 	})
@@ -567,7 +565,7 @@ func TestConnectorSourceBuilder_Build(t *testing.T) {
 
 	t.Run("unknown kind fails loud", func(t *testing.T) {
 		t.Parallel()
-		b := connector.NewSourceBuilder(nil, nil, connectordecorators.Deps{})
+		b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{})
 		_, err := b.Build(ctx, interfaces.SourceConfig{Kind: "bogus"})
 		require.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 	})
@@ -581,11 +579,10 @@ func TestConnectorSourceBuilder_Build(t *testing.T) {
 			sc.EXPECT().ListObjectsPage(gomock.Any(), "b", "docs/", gomock.Any()).
 				Return([]interfaces.StorageObject{{Key: "docs/a"}}, nil)
 
-			b := connector.NewSourceBuilder(
-				stubBuilder(sc, nil),
-				mocks.NewMockAssumeRoleAPIClient(ctrl),
-				connectordecorators.Deps{},
-			)
+			b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
+				BuildS3Client: stubBuilder(sc, nil),
+				STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
+			})
 			src, err := b.Build(ctx, s3Cfg("access_key"))
 			require.NoError(t, err)
 			n, err := src.TestConnection(ctx)

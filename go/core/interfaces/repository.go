@@ -26,17 +26,6 @@ type Repository[T any, P any, ID comparable] interface {
 	Exister[ID]
 }
 
-// DecoratedRepository is the fully-decorated CRUD surface of a repository (the base
-// Repository methods wrapped by the resilience + observability decorator stack). It is
-// the type the decorator builder returns and that concrete repositories embed. Custom
-// (non-CRUD) methods no longer decorate through a method here — they run through the
-// type-agnostic decorate.OpMiddleware chain via decorate.Exec[R], which lets
-// them return any type without the former (*T,error) shoehorn.
-type DecoratedRepository[T any, P any, ID comparable] interface {
-	// Repository is the base CRUD surface the decorator stack wraps.
-	Repository[T, P, ID]
-}
-
 // Transaction represents a database transaction.
 type Transaction interface {
 	// Commit commits the transaction.

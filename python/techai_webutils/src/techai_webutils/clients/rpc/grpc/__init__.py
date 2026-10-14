@@ -1,5 +1,9 @@
-"""gRPC client channel factory + the interceptor toolkit (client + server interceptors).
+"""gRPC client backend: the channel factory and its client-tier interceptors.
 
-The runnable gRPC server runtime moved to ``clients/transport/grpc`` (server-transport tier);
-this package holds the client-side channel and the shared interceptor toolkit both sides build on.
+The gRPC server runtime and its interceptors live in ``controllers.grpc`` (the controller tier).
 """
+
+from techai_webutils.clients.rpc.grpc.client import ChannelConfig, create_channel
+from techai_webutils.clients.rpc.grpc.interceptors import client_interceptors
+
+__all__ = ["ChannelConfig", "client_interceptors", "create_channel"]

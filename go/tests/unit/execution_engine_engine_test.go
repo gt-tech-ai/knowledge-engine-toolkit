@@ -22,7 +22,7 @@ import (
 
 // engineNopRunner returns a CommandRunner mock with no programmed expectations. Every
 // job exercised here ignores the runner — the mock jobs return canned results and
-// the fan-out job fans out through engine.FanOut with its own closure — so any
+// the fan-out job fans out through engine.Pool.FanOut with its own closure — so any
 // runner call would be a real regression, which the bare mock surfaces (unexpected
 // call) rather than silently absorbing.
 func engineNopRunner(t *testing.T) interfaces.CommandRunner {
@@ -54,7 +54,7 @@ func capturingObserver(
 }
 
 // newFanOutJob returns a MockAnyJob named "fanout" whose Execute fans out over items
-// via engine.FanOut; the unit named blockOn waits on release before completing, and
+// via engine.Pool.FanOut; the unit named blockOn waits on release before completing, and
 // extra (if set) is appended after the fan-out (mirrors a service that adds e.g. a
 // coverage step). It reproduces the former hand-rolled fan-out job.
 func newFanOutJob(
@@ -73,15 +73,13 @@ func newFanOutJob(
 			_ interfaces.CommandRunner,
 			_ string,
 		) (types.StepResults, error) {
-			results := engine.FanOut(
-				ctx, items, len(items),
-				func(_ context.Context, item string) types.StepResult {
+			results := engine.Pool(len(items)).
+				FanOut(ctx, items, func(_ context.Context, item string) types.StepResult {
 					if item == blockOn && release != nil {
 						<-release
 					}
 					return types.StepResult{Name: item, Status: types.StatusPass}
-				},
-			)
+				})
 			if extra != nil {
 				results = append(results, *extra)
 			}
@@ -108,24 +106,22 @@ func newFanOutJob(
 //     Pass when one unit returns a failure.
 func TestFanOut_AllUnitsCollected(t *testing.T) {
 	items := []int{0, 1, 2, 3, 4}
-	results := engine.FanOut(
-		context.Background(),
-		items,
-		2,
-		func(_ context.Context, item int) types.StepResult {
-			if item == 2 {
+	results := engine.Pool(2).
+		FanOut(
+			context.Background(), items,
+			func(_ context.Context, item int) types.StepResult {
+				if item == 2 {
+					return types.StepResult{
+						Name:   fmt.Sprintf("item-%d", item),
+						Status: types.StatusFail,
+						Error:  "injected failure",
+					}
+				}
 				return types.StepResult{
 					Name:   fmt.Sprintf("item-%d", item),
-					Status: types.StatusFail,
-					Error:  "injected failure",
+					Status: types.StatusPass,
 				}
-			}
-			return types.StepResult{
-				Name:   fmt.Sprintf("item-%d", item),
-				Status: types.StatusPass,
-			}
-		},
-	)
+			})
 
 	require.Len(t, results, len(items))
 	var failed, passed int
@@ -163,24 +159,22 @@ func TestFanOut_BoundedConcurrency(t *testing.T) {
 	var peak, current int64
 	items := make([]int, numItems)
 
-	engine.FanOut(
-		context.Background(),
-		items,
-		maxWorkers,
-		func(_ context.Context, _ int) types.StepResult {
-			c := atomic.AddInt64(&current, 1)
-			defer atomic.AddInt64(&current, -1)
-			// track peak
-			for {
-				p := atomic.LoadInt64(&peak)
-				if c <= p || atomic.CompareAndSwapInt64(&peak, p, c) {
-					break
+	engine.Pool(maxWorkers).
+		FanOut(
+			context.Background(), items,
+			func(_ context.Context, _ int) types.StepResult {
+				c := atomic.AddInt64(&current, 1)
+				defer atomic.AddInt64(&current, -1)
+				// track peak
+				for {
+					p := atomic.LoadInt64(&peak)
+					if c <= p || atomic.CompareAndSwapInt64(&peak, p, c) {
+						break
+					}
 				}
-			}
-			time.Sleep(5 * time.Millisecond) // hold slot briefly
-			return types.StepResult{Status: types.StatusPass}
-		},
-	)
+				time.Sleep(5 * time.Millisecond) // hold slot briefly
+				return types.StepResult{Status: types.StatusPass}
+			})
 
 	assert.LessOrEqual(
 		t,
@@ -204,17 +198,15 @@ func TestFanOut_BoundedConcurrency(t *testing.T) {
 //     (the captured stack), while sibling units still complete.
 func TestFanOut_PanicConvertsToFail(t *testing.T) {
 	items := []string{"ok", "panic-me", "ok2"}
-	results := engine.FanOut(
-		context.Background(),
-		items,
-		2,
-		func(_ context.Context, item string) types.StepResult {
-			if item == "panic-me" {
-				panic("simulated panic")
-			}
-			return types.StepResult{Name: item, Status: types.StatusPass}
-		},
-	)
+	results := engine.Pool(2).
+		FanOut(
+			context.Background(), items,
+			func(_ context.Context, item string) types.StepResult {
+				if item == "panic-me" {
+					panic("simulated panic")
+				}
+				return types.StepResult{Name: item, Status: types.StatusPass}
+			})
 
 	require.Len(t, results, 3)
 	for _, r := range results {
@@ -251,7 +243,7 @@ func TestFanOut_CtxCancelStopsFeeding(t *testing.T) {
 	results := make(chan types.StepResults, 1)
 	go func() {
 		// numWorkers=1: only one item runs at a time, others queue at semaphore
-		results <- engine.FanOut(ctx, items, 1, func(
+		results <- engine.Pool(1).FanOut(ctx, items, func(
 			_ context.Context,
 			item int,
 		) types.StepResult {
@@ -279,51 +271,6 @@ func TestFanOut_CtxCancelStopsFeeding(t *testing.T) {
 	}
 	// With numWorkers=1, items 1-7 cannot proceed after cancellation.
 	assert.GreaterOrEqual(t, failed, 1, "expected at least 1 cancelled (Fail) result")
-}
-
-// --- ObserverFromCtx tests ---
-
-// TestObserverFromCtx_ReturnsNopWhenAbsent tests that extracting an observer
-// from a context that carries none yields a safe no-op observer.
-//
-// Why this test is important:
-//   - Execution code calls observer hooks unconditionally. If ObserverFromCtx
-//     returned nil when no observer was installed, every uninstrumented run
-//     (tests, ad-hoc calls) would nil-panic on the first hook. The NopObserver
-//     default is what lets the engine run unobserved without guards.
-//
-// What it tests:
-//   - The returned observer accepts OnStepComplete/OnPhaseComplete/
-//     OnGateComplete calls without panicking.
-func TestObserverFromCtx_ReturnsNopWhenAbsent(_ *testing.T) {
-	obs := engine.ObserverFromCtx(context.Background())
-	// NopObserver must not panic on any hook call.
-	obs.OnStepComplete(types.StepResult{})
-	obs.OnPhaseComplete("phase", nil, 0)
-	obs.OnGateComplete("", nil, 0)
-}
-
-// TestWithObserverCtx_RoundTrip tests that an observer stored on a context with
-// WithObserverCtx is the same observer ObserverFromCtx later returns.
-//
-// Why this test is important:
-//   - Observer propagation is context-based: RunJobGroup installs the observer
-//     and downstream code retrieves it. If the round-trip dropped or swapped
-//     the observer, lifecycle events would vanish and the UI/CI summary would
-//     show nothing despite work running.
-//
-// What it tests:
-//   - A step completed through the context-retrieved observer is recorded by
-//     the originally-installed observer with the correct name.
-func TestWithObserverCtx_RoundTrip(t *testing.T) {
-	var steps []types.StepResult
-	rec := capturingObserver(t, func(r types.StepResult) { steps = append(steps, r) })
-
-	ctx := engine.WithObserverCtx(context.Background(), rec)
-	obs := engine.ObserverFromCtx(ctx)
-	obs.OnStepComplete(types.StepResult{Name: "x"})
-	require.Len(t, steps, 1, "unexpected steps: %v", steps)
-	assert.Equal(t, "x", steps[0].Name, "unexpected steps: %v", steps)
 }
 
 // --- RunJobGroup smoke test ---
@@ -570,11 +517,11 @@ func TestRunJobGroup_FanOutPlusExtraStep_NoDoubleFire(t *testing.T) {
 
 // --- engine.Step tests ---
 
-// TestNewStep_PassOnSuccess tests that a Step whose function returns nil yields
+// TestStep_PassOnSuccess tests that a Step whose function returns nil yields
 // a Pass result carrying the step's name and group.
 //
 // Why this test is important:
-//   - NewStep is the simple function-to-result wrapper CLI commands rely on.
+//   - Step is the simple function-to-result wrapper CLI commands rely on.
 //     The name and group are how a result is identified and grouped in the
 //     output; losing them or mis-classifying a success would scramble the
 //     run summary.
@@ -582,15 +529,19 @@ func TestRunJobGroup_FanOutPlusExtraStep_NoDoubleFire(t *testing.T) {
 // What it tests:
 //   - A nil-returning step produces StatusPass with the supplied name "lint"
 //     and group "quality".
-func TestNewStep_PassOnSuccess(t *testing.T) {
-	s := engine.NewStep("lint", "quality", func(_ context.Context) error { return nil })
+func TestStep_PassOnSuccess(t *testing.T) {
+	s := engine.Step{
+		Name:  "lint",
+		Group: "quality",
+		Run:   func(_ context.Context) error { return nil },
+	}
 	result := s.Execute(context.Background())
 	assert.Equal(t, types.StatusPass, result.Status)
 	assert.Equal(t, "lint", result.Name)
 	assert.Equal(t, "quality", result.Group)
 }
 
-// TestNewStep_FailOnError tests that a Step whose function returns an error
+// TestStep_FailOnError tests that a Step whose function returns an error
 // yields a Fail result with a non-empty error message.
 //
 // Why this test is important:
@@ -600,16 +551,20 @@ func TestNewStep_PassOnSuccess(t *testing.T) {
 //
 // What it tests:
 //   - An erroring step produces StatusFail and a non-empty Error string.
-func TestNewStep_FailOnError(t *testing.T) {
-	s := engine.NewStep("typecheck", "quality", func(_ context.Context) error {
-		return apperr.Sentinel("type error")
-	})
+func TestStep_FailOnError(t *testing.T) {
+	s := engine.Step{
+		Name:  "typecheck",
+		Group: "quality",
+		Run: func(_ context.Context) error {
+			return apperr.Sentinel("type error")
+		},
+	}
 	result := s.Execute(context.Background())
 	assert.Equal(t, types.StatusFail, result.Status)
 	assert.NotEmpty(t, result.Error, "expected non-empty error message")
 }
 
-// TestNewStep_WarnOnly_DowngradesFailure tests that the StepWarnOnly option
+// TestStep_WarnOnly_DowngradesFailure tests that WarnOnly
 // turns a failing step's result into a Warn instead of a Fail.
 //
 // Why this test is important:
@@ -621,17 +576,18 @@ func TestNewStep_FailOnError(t *testing.T) {
 // What it tests:
 //   - A warn-only step whose function errors produces StatusWarn, not
 //     StatusFail.
-func TestNewStep_WarnOnly_DowngradesFailure(t *testing.T) {
-	s := engine.NewStep(
-		"shellcheck", "infra",
-		func(_ context.Context) error { return apperr.Sentinel("shell issue") },
-		engine.StepWarnOnly(),
-	)
+func TestStep_WarnOnly_DowngradesFailure(t *testing.T) {
+	s := engine.Step{
+		Name:     "shellcheck",
+		Group:    "infra",
+		Run:      func(_ context.Context) error { return apperr.Sentinel("shell issue") },
+		WarnOnly: true,
+	}
 	result := s.Execute(context.Background())
 	assert.Equal(t, types.StatusWarn, result.Status)
 }
 
-// TestNewStep_WarnOnly_PreservesPass tests that the StepWarnOnly option only
+// TestStep_WarnOnly_PreservesPass tests that WarnOnly only
 // downgrades failures and leaves a passing result a Pass.
 //
 // Why this test is important:
@@ -641,12 +597,13 @@ func TestNewStep_WarnOnly_DowngradesFailure(t *testing.T) {
 //
 // What it tests:
 //   - A warn-only step whose function succeeds still produces StatusPass.
-func TestNewStep_WarnOnly_PreservesPass(t *testing.T) {
-	s := engine.NewStep(
-		"ok-step", "test",
-		func(_ context.Context) error { return nil },
-		engine.StepWarnOnly(),
-	)
+func TestStep_WarnOnly_PreservesPass(t *testing.T) {
+	s := engine.Step{
+		Name:     "ok-step",
+		Group:    "test",
+		Run:      func(_ context.Context) error { return nil },
+		WarnOnly: true,
+	}
 	result := s.Execute(context.Background())
 	assert.Equal(
 		t,
@@ -656,104 +613,34 @@ func TestNewStep_WarnOnly_PreservesPass(t *testing.T) {
 	)
 }
 
-// TestRunStepsParallel_AllPass tests that RunStepsParallel runs every step and
-// returns one result per step.
-//
-// Why this test is important:
-//   - RunStepsParallel is how a command runs independent steps concurrently.
-//     A dropped step or lost result would mean a check silently never ran, the
-//     worst kind of failure because nothing reports it.
-//
-// What it tests:
-//   - Two passing steps yield two results, all StatusPass.
-func TestRunStepsParallel_AllPass(t *testing.T) {
-	s1 := engine.NewStep("a", "g", func(_ context.Context) error { return nil })
-	s2 := engine.NewStep("b", "g", func(_ context.Context) error { return nil })
-	results := engine.RunStepsParallel(context.Background(), s1, s2)
-	require.Len(t, results, 2)
-	for _, r := range results {
-		assert.Equal(
-			t,
-			types.StatusPass,
-			r.Status,
-			"expected all StatusPass, got %v for %s",
-			r.Status,
-			r.Name,
-		)
-	}
-}
-
-// TestRunStepsSerial_RunsInOrder tests that RunStepsSerial executes steps one at a
+// TestStepsSerial_RunsInOrder tests that Steps.Serial executes steps one at a
 // time in input order and returns one result per step.
 //
 // Why this test is important:
-//   - RunStepsSerial is for order-dependent sequences (e.g. a resource prune where
+//   - Steps.Serial is for order-dependent sequences (e.g. a resource prune where
 //     compose-down must precede image removal). If it ran out of order or dropped a
 //     step, the dependent cleanup would act on stale state. This pins the ordering
-//     guarantee that distinguishes it from RunStepsParallel — and, because the steps
-//     append to a shared slice without a lock, that it runs strictly serially.
+//     guarantee — and, because the steps append to a shared slice without a lock,
+//     that it runs strictly serially.
 //
 // What it tests:
 //   - Three steps run strictly in input order (recorded) and yield three StatusPass
 //     results; empty input returns nil.
-func TestRunStepsSerial_RunsInOrder(t *testing.T) {
+func TestStepsSerial_RunsInOrder(t *testing.T) {
 	var order []string
 	mk := func(name string) engine.Step {
-		return engine.NewStep(name, "g", func(_ context.Context) error {
+		return engine.Step{Name: name, Group: "g", Run: func(_ context.Context) error {
 			order = append(order, name) // no lock: serial execution guarantees no race
 			return nil
-		})
+		}}
 	}
 
-	results := engine.RunStepsSerial(context.Background(), mk("a"), mk("b"), mk("c"))
+	results := engine.Steps{mk("a"), mk("b"), mk("c")}.Serial(context.Background())
 	require.Len(t, results, 3)
 	for _, r := range results {
 		assert.Equal(t, types.StatusPass, r.Status)
 	}
 	assert.Equal(t, []string{"a", "b", "c"}, order, "steps must run in input order")
 
-	assert.Nil(t, engine.RunStepsSerial(context.Background()), "empty input returns nil")
-}
-
-// TestRunStepsParallel_Empty tests that RunStepsParallel returns nil when given
-// no steps.
-//
-// Why this test is important:
-//   - The no-steps path must short-circuit cleanly rather than allocate an
-//     empty slice or block on an empty wait group. Callers distinguish "no work"
-//     (nil) from "work that produced empty results", so the nil contract matters.
-//
-// What it tests:
-//   - Calling with zero steps returns a nil result slice.
-func TestRunStepsParallel_Empty(t *testing.T) {
-	results := engine.RunStepsParallel(context.Background())
-	assert.Nil(t, results, "expected nil for empty input")
-}
-
-// TestNewStep_StepNameGroup_ViaWarnOnly tests that the warn-only wrapper still
-// exposes the underlying step's name and group through StepName/StepGroup.
-//
-// Why this test is important:
-//   - The UI reads StepName/StepGroup to label and group a step. The warn-only
-//     decorator wraps the real step, so it must delegate those accessors; if it
-//     returned empty strings, warn-only steps would show up unlabeled and
-//     ungrouped in the output.
-//
-// What it tests:
-//   - A warn-only-wrapped step reports StepName "myname" and StepGroup
-//     "mygroup" — the values passed to NewStep.
-func TestNewStep_StepNameGroup_ViaWarnOnly(t *testing.T) {
-	s := engine.NewStep(
-		"myname", "mygroup",
-		func(_ context.Context) error { return nil },
-		engine.StepWarnOnly(),
-	)
-	type namer interface{ StepName() string }
-	type grouper interface{ StepGroup() string }
-	if n, ok := s.(namer); ok {
-		assert.Equal(t, "myname", n.StepName())
-	}
-	if g, ok := s.(grouper); ok {
-		assert.Equal(t, "mygroup", g.StepGroup())
-	}
+	assert.Nil(t, engine.Steps{}.Serial(context.Background()), "empty input returns nil")
 }

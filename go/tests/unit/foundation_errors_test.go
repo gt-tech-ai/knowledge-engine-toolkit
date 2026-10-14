@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
-	repoerrors "github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/errors"
+	repoerrors "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/errors"
 )
 
 // TestErrorClassification tests that errors are correctly classified as

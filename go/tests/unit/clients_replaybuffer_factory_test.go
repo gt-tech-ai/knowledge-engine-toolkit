@@ -9,8 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	replaybuffer "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/replaybuffer"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/replaybuffer/decorators"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/replaybuffer"
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	pkgmocks "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -29,9 +30,9 @@ import (
 func TestReplayBufferFactory(t *testing.T) {
 	t.Parallel()
 
-	buf, err := replaybuffer.NewFromConfig(&replaybuffer.Config{
+	buf, err := replaybuffer.NewFromConfig(t.Context(), replaybuffer.Config{
 		Kind: replaybuffer.KindMemory, MaxSize: 10, TTL: time.Minute,
-	}, nil)
+	}, replaybuffer.Deps{})
 	require.NoError(t, err)
 	require.NoError(t, buf.Append(context.Background(), "k", "msg-1", []byte("x")))
 	tail, complete, err := buf.ReplayAfter(context.Background(), "k", "msg-1")
@@ -39,19 +40,19 @@ func TestReplayBufferFactory(t *testing.T) {
 	assert.True(t, complete)
 	assert.Empty(t, tail)
 
-	_, err = replaybuffer.NewFromConfig(&replaybuffer.Config{
+	_, err = replaybuffer.NewFromConfig(t.Context(), replaybuffer.Config{
 		Kind: replaybuffer.KindRedis, MaxSize: 10, TTL: time.Minute,
-	}, nil)
+	}, replaybuffer.Deps{})
 	require.Error(t, err, "redis kind without a client must fail loudly")
 
-	_, err = replaybuffer.NewFromConfig(&replaybuffer.Config{
-		Kind: replaybuffer.Kind(99), MaxSize: 10, TTL: time.Minute,
-	}, nil)
+	_, err = replaybuffer.NewFromConfig(t.Context(), replaybuffer.Config{
+		Kind: "bogus", MaxSize: 10, TTL: time.Minute,
+	}, replaybuffer.Deps{})
 	require.Error(t, err, "unknown kind must fail loudly")
 
-	_, err = replaybuffer.NewFromConfig(&replaybuffer.Config{
+	_, err = replaybuffer.NewFromConfig(t.Context(), replaybuffer.Config{
 		Kind: replaybuffer.KindMemory, MaxSize: 0, TTL: time.Minute,
-	}, nil)
+	}, replaybuffer.Deps{})
 	assert.Error(t, err, "non-positive max_size must fail loudly")
 }
 
@@ -66,7 +67,7 @@ func TestReplayBufferFactory(t *testing.T) {
 //
 // What it tests:
 //   - wrapping a backend whose Append blocks until its context is cancelled with a 20ms
-//     timeout, Append returns a deadline error well within a second (not blocking
+//     timeout, Append returns a CodeTimeout error well within a second (not blocking
 //     forever).
 func TestReplayBufferTimeoutDecorator(t *testing.T) {
 	t.Parallel()
@@ -79,9 +80,11 @@ func TestReplayBufferTimeoutDecorator(t *testing.T) {
 			return ctx.Err()
 		})
 
-	buf := decorators.NewBuilder(base, "test").
-		WithTimeout(20 * time.Millisecond).
-		Build()
+	buf := replaybuffer.Decorate(
+		base,
+		"test",
+		decorate.Deps{Timeout: 20 * time.Millisecond},
+	)
 
 	done := make(chan error, 1)
 	go func() { done <- buf.Append(context.Background(), "k", "msg-1", []byte("x")) }()
@@ -89,6 +92,7 @@ func TestReplayBufferTimeoutDecorator(t *testing.T) {
 	select {
 	case err := <-done:
 		require.Error(t, err, "a wedged Append must be cancelled by the timeout")
+		assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
 	case <-time.After(time.Second):
 		t.Fatal("Append was not bounded by the timeout decorator")
 	}

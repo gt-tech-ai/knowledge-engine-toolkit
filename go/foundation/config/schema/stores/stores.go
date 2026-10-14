@@ -1,7 +1,7 @@
-// Package stores is the config surface for the data (stores) layer: the page-size
-// cap, the per-resource default page sizes and the list-query caches, so a deployer
-// can tune pagination without a rebuild. Pure data (mirrors infra/S3Config),
-// converted to the store call args by the consumer's provider.
+// Package stores is the config surface for the data (stores) layer: the ORM the stores
+// are built on (Kind), the page-size cap, the per-resource default page sizes and the
+// list-query caches, so a deployer can tune pagination without a rebuild. Pure data
+// (mirrors infra/S3Config), converted to the store call args by the consumer's provider.
 package stores
 
 import (
@@ -30,8 +30,11 @@ type Cache struct {
 	CountTTL time.Duration `mapstructure:"count_ttl"`
 }
 
-// Config tunes the data-layer pagination knobs.
+// Config selects the stores' ORM and tunes the data-layer pagination knobs.
 type Config struct {
+	// Kind is the ORM the stores are built on: "ent" (the default) or "gorm".
+	Kind string `mapstructure:"kind"`
+
 	// MaxPageSize caps every paginated LIMIT (clamps the page size in listquery.Run); 0 =
 	// uncapped. The cap that closes the unbounded-LIMIT gap on client-supplied page
 	// sizes.
@@ -66,6 +69,7 @@ type Config struct {
 // that bounds a client-supplied LIMIT without affecting any normal request.
 func DefaultConfig() Config {
 	return Config{
+		Kind:            "ent",
 		MaxPageSize:     1000,
 		DefaultPageSize: 20,
 		CountCap:        10000,
@@ -79,8 +83,12 @@ func DefaultConfig() Config {
 	}
 }
 
-// Validate rejects non-positive page sizes and a max below the defaults.
+// Validate rejects an unknown kind, non-positive page sizes and a max below the
+// defaults.
 func (c Config) Validate() error {
+	if c.Kind != "ent" && c.Kind != "gorm" {
+		return apperr.InvalidInput(`stores.kind must be "ent" or "gorm"`)
+	}
 	if c.DefaultPageSize < 1 {
 		return apperr.InvalidInput("stores.default_page_size must be >= 1")
 	}

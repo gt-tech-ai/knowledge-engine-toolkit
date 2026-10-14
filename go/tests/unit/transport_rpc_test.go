@@ -10,7 +10,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errctx"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/rpc"
 )
@@ -134,7 +133,7 @@ func TestToConnectError_AllCodes(t *testing.T) {
 //     the whole point of surfacing the actual error (e.g. a Conflict)
 //
 // What it tests:
-//   - After mapping, errctx.Captured returns the original error for both a
+//   - After mapping, apperr.Captured returns the original error for both a
 //     server (Internal) and a client (Conflict) error
 func TestToConnectError_CapturesRealError(t *testing.T) {
 	t.Parallel()
@@ -150,9 +149,9 @@ func TestToConnectError_CapturesRealError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			ctx := errctx.WithSink(context.Background())
+			ctx := apperr.WithSink(context.Background())
 			_ = rpc.ToConnectError(ctx, tt.appErr)
-			assert.Equal(t, tt.appErr, errctx.Captured(ctx),
+			assert.Equal(t, tt.appErr, apperr.Captured(ctx),
 				"the real error must be captured for the request logger")
 		})
 	}
@@ -278,6 +277,12 @@ func fromRPCCases() []fromRPCCase {
 			name:     "Unimplemented",
 			connect:  connect.CodeUnimplemented,
 			grpc:     codes.Unimplemented,
+			wantCode: apperr.CodeInvalidInput,
+		},
+		{
+			name:     "DataLoss",
+			connect:  connect.CodeDataLoss,
+			grpc:     codes.DataLoss,
 			wantCode: apperr.CodeUnknown,
 		},
 	}
@@ -292,7 +297,8 @@ func fromRPCCases() []fromRPCCase {
 //
 // What it tests:
 //   - Each mapped Connect code yields the inverse of ToConnectError
-//   - Unmapped codes (Unimplemented) fall through to CodeUnknown
+//   - Unimplemented is the caller's error (CodeInvalidInput, never retried); unmapped
+//     codes fall through to CodeUnknown
 func TestFromRPCError_ConnectCodes(t *testing.T) {
 	t.Parallel()
 

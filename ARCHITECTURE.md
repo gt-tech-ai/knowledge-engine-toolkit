@@ -18,14 +18,16 @@ is a config change.
 
 A Go package imports only its own layer or lower ones: `go/core` (interfaces, types, errors,
 events) → `go/foundation` (config, logging, telemetry, resilience,
-decorator mechanisms, lifecycle) → `go/clients` (external systems) → `go/repos` → `go/services` →
+decorator mechanisms, lifecycle) → `go/clients` (external systems) → `go/stores` (persistence
+over an ORM) → `go/repos` → `go/services` →
 `go/pipelines` → `go/workflows` → `go/transport` (REST/RPC edges).
 
 Outside the ladder: `go/execution` (batch fan-out; imports only `core`), `go/helpers` (leaf
 utilities), and `go/tests` (may import anything). No package imports a higher layer. Integration
 families in a tier don't import each other (`clients/connector` is handed a storage builder rather
-than importing `clients/storage`); the shared clients-tier pieces are `clients/decorators` and
-`clients/interceptorcore`. `.golangci.yml` enforces the layer order and the `go/helpers` leaf rule
+than importing `clients/storage`); the shared clients-tier pieces are `clients/client` (the
+client tier and kind registry) and `clients/rpc/wire` (the RPC-status ↔ domain-code codec).
+`.golangci.yml` enforces the layer order and the `go/helpers` leaf rule
 with `depguard`; the `go/execution` and same-tier rules have no lint rule, so review holds them.
 
 Python mirrors the tiers: `core` → `foundation` (+ `execution`) → `clients` → `repos` →
@@ -34,13 +36,18 @@ downward, except one type-checking-only import in `foundation/resilience/sqs_dlq
 
 ## Swappable components
 
-A swappable component is a **`Kind`** (Go `type Kind int` + `iota` + `String()`; Python `StrEnum`),
-a **`Config`** carrying the kind and backend settings, and **a factory** that fails loudly on an
-unknown kind:
+A swappable component is a **`Kind`** (Go: a string `client.Kind` in the clients tier, `type Kind
+int` + `iota` + `String()` in `foundation`; Python `StrEnum`), a **`Config`** carrying the kind and
+backend settings, and **a factory** that fails loudly on an unknown kind:
 
-- Go: `New(kind, opts...)` / `NewFromConfig(cfg)` (`foundation/logger`, `foundation/metrics`, …)
-  or `NewFromConfig(ctx, kind, cfg)` at a client tier root (`clients/storage`,
-  `clients/messaging`); an unknown kind is a `CodeInvalidInput` error.
+- Go clients: each family root is one file — `Kind` constants, a data-only `Config` (mapstructure
+  tags; `Name`, the client's name in the decoration config), a `Deps` with the
+  runtime collaborators (observability, SDK clients, a shared Redis client), a kinds table
+  (`client.Kinds[Config, Deps, T]`) and `NewFromConfig(ctx, cfg, deps)`. `Kinds.New` builds the
+  backend an empty kind defaults to or `CodeInvalidInput` naming the known kinds; `Kinds.Build`
+  also runs it through the client tier (`Decorate` in the family's `decorated.go`).
+- Go foundation: `New(kind, opts...)` / `NewFromConfig(cfg)` (`foundation/logger`,
+  `foundation/metrics`, …); an unknown kind is a `CodeInvalidInput` error.
 - Python: `new_<type>_from_config(config)` (or `<type>_from_config`, e.g. `executor_from_config`);
   an unknown kind raises `ValueError` in the older tiers and a coded `AppError(INVALID_INPUT)` in the
   newer ones (`clients/audit`, `clients/facts`, `clients/token_ledger`).
@@ -50,7 +57,8 @@ unknown kind:
   (`clients/token_ledger/builder.py`, `clients/audit/builder.py`). The kind stays a config value; the KE stays product-free.
 
 One backend per sub-package beside the factory: `clients/storage/{s3,memory}`,
-`clients/lock/{local,redis}`, `foundation/logger/{zap,stdlib}`, `clients/llm/{bedrock,ollama,stub}`.
+`clients/lock/{local,redis}`, `clients/cql/{cassandra,keyspaces}` (sharing the gocql adapter in
+`clients/cql/driver`), `foundation/logger/{zap,stdlib}`, `clients/llm/{bedrock,ollama,stub}`.
 Python imports heavy or optional dependencies lazily in the selected branch, so the `ray`,
 `postgres`, `parsing` and `langdetect` extras load only when chosen (`clients/lock/builder.py`).
 
@@ -58,8 +66,10 @@ Python imports heavy or optional dependencies lazily in the selected branch, so 
 
 `go/core/interfaces` holds small role interfaces (`Reader`, `Writer`, `Lister`, `Exister`,
 `Lifecycle`, `HealthChecker`, …) that larger contracts (`Repository`, `Service`, `Client`) compose.
-An interface declared **outside** `core` embeds a core interface (`repos/repository.ReadListExistStore`
-embeds `Reader`/`Lister`/`Exister`; `clients/rpc.RPCClient` embeds `interfaces.Client`). Opt-in
+Role compositions live in `core` too (`ReadListExistStore` embeds `Reader`/`Lister`/`Exister`;
+`CRUDNoListStore`, `CRUDNoListRepository`, `InsertOnlyStore`), with generated mocks in
+`go/tests/mocks`. An interface declared **outside** `core` embeds a core interface
+(`clients/rpc.RPCClient` embeds `interfaces.Client`). Opt-in
 capabilities compose rather than widen (`DynamicConsumer` embeds `MessageConsumer`); Python
 Protocols do the same (`StorageClient` composes `ManagedResource`).
 
@@ -69,7 +79,7 @@ An out-of-core interface that cannot embed one carries a doc-comment tag saying 
   `grpc.ClientConnInterface`) so the adapter can be driven by a generated mock.
 - `// sealed union` — a closed implementer set standing in for a sum type (`core/types.Filter`).
 - `// interface-composition exemption — <reason>` — a mechanism primitive or narrow consumer-side
-  port, not a data-access surface (`foundation/decorator.Executor`, `execution/engine.Step`, …).
+  port, not a data-access surface (`foundation/decorate.OpMiddleware`, `execution/gate`, …).
 
 Every interface under `go/` outside `core` (tests and mocks aside) embeds a core interface or
 carries a tag. Keep the tags verbatim.
@@ -81,40 +91,80 @@ Collaborators arrive as constructor arguments, `With*` builder calls, or functio
 OTel tracer backend is the one piece that installs process-global state). KE is a library: the
 consumer's `main` is the single composition root that builds config, calls the factories, applies
 decorators, and registers clients with `foundation/lifecycle.Manager` (start in order, stop in
-reverse). Lifecycle-managed clients connect in `Start`, not their constructors (`repos/adapters/gorm`,
+reverse). Lifecycle-managed clients connect in `Start`, not their constructors (`stores/gorm`,
 `clients/database/postgres`). Python backends are `ManagedResource` async context managers; the
 documented exception is logging, which structlog configures once and seams resolve by name.
 
 ## Decorators
 
 Cross-cutting concerns wrap business logic and backends, never live inside them. A nil
-collaborator or zero timeout skips its layer (the service builder always adds recovery).
+collaborator or zero timeout skips its layer; recovery needs none.
 
-- **Go — fluent builders** (`NewBuilder(base, name).WithLogging(l).WithTracing(t).Build()`)
-  returning the wrapped interface. Shared bodies: `foundation/decorator` (Execute-shaped tiers),
-  `foundation/decorate` (`OpMiddleware`, `Chain`, `Exec[R]` for custom repository/service ops), and
-  `clients/decorators` (the client-boundary `Stack`: `Run`, `RunStream`, `StackFromConfig`).
-  `foundation/decorator` (Go and Python) exposes `Unwrap` so tests can reach the wrapped unit.
-  Its generic `CircuitBreaker(inner, cb, onOpen)` codes only an open-breaker rejection as
-  `UNAVAILABLE`; the operation's own error passes through with its code.
-- **Go — workflow helpers.** `decorators.Decorate(wf, op, logger, metrics, tracer, cfg)` is the
-  standard workflow stack (the builder with `cfg.Timeout` from `schema/workflows.Load`), and
-  `workflow.NewTxWorkflow(txMgr, pipe)` runs a command pipeline inside one transaction.
-- **Python — custom ops and tier helpers.** `foundation/decorate.py` is the Python
-  `foundation/decorate`: `OpMiddleware`, `chain`, `exec_op`, and one `new_*` middleware per
-  concern. `repos.repo_op_chain(name, RepoOpDeps)` and `services.service_op_chain(name,
-  ServiceOpDeps)` assemble them in their builder's order, so a custom query or domain op shares the
-  CRUD path's span names, log messages, metric labels and (service) authorization action. A
-  consumer repository or service subclasses `DelegatingRepository` / `DelegatingCrudService` (the
-  Python form of embedding the decorated type) and adds only its custom ops. `ServiceBuilder` adds
-  `with_validation`, `with_metrics` and `with_tracing`; `workflows.tx_workflow(tx, pipe)` is
-  `NewTxWorkflow`.
-- **Python — `__getattr__` proxies** in `clients/decorators/proxy.py` (`LoggingProxy`, `RetryProxy`,
-  `CircuitBreakerProxy`, …) apply their concern around each awaited call;
-  `new_client_stack_from_config` composes them. `RetryProxy` (async) and `retry_transient_async`
-  wait out a server pushback (`details["retry_after_ms"]`, read by `retry_after_s`) before the next
-  attempt, capped by `max_pushback_s` / the retry's max delay. Tier builders reuse
-  `foundation/decorator.py`.
+- **Go — request tiers.** Pipelines, workflows, services and repositories share one shape and one
+  engine. `foundation/decorate` holds every cross-cutting body once (`OpMiddleware`, `Chain`, the
+  recovery, tracing, metrics, logging, auth, timeout, circuit-breaker and retry middlewares). A
+  `decorate.Tier` names a tier and orders its layers as data; `Tier.Subject(name, decorate.Deps)`
+  builds the chain for one subject from its collaborators (a nil one, or a zero timeout, leaves
+  its layer out), and `Subject.Exec[R](ctx, op, fn)` runs an operation of any return type through
+  it. The role decorators (`decorate.Reader`, `Lister`, `Writer`, `Inserter`, `Deleter`,
+  `Exister`) run each method of one core role through a Subject, so every decorated CRUD shape is
+  an embedding of the roles it honors. Each tier package is one file with a `Tier()` and a `Base`:
+  - `pipeline.Base`: `Stage[In, Out](name, fn)` builds a decorated `pipeline.Stage` (a function
+    type that is an `interfaces.Pipeline`), whose `Then[C](next)` composes it with the next
+    stage; `FanOut[In, Out](name, stages...)` runs stages concurrently on one input.
+  - `workflow.Base` (over a `TransactionManager`): `Func[In, Out](op, fn)` decorates a function,
+    `Wrap` a custom workflow, `Read` a pipeline without a transaction and `Tx` a pipeline in one
+    transaction.
+  - `service.Base` embeds the service's Subject (a consumer service embeds the Base and runs each
+    custom op through the promoted `Exec`); `CRUD` and `CRUDNoList` decorate a repository (with an
+    optional entity validator) and `OpService` a single-operation service.
+  - `repository.Base` embeds the repository's Subject the same way; `CRUD`, `ReadListExist`,
+    `CRUDNoList` and `TxSafeInsert` decorate a store. A Create is never retried, and an in-transaction
+    insert runs only its recovery, auth and observability. `Cached` adds the read-through entity
+    cache beneath them, and `DecoratedFromConfig` assembles the stack — the store behind the store
+    tier, the cache, the repository tier — each from its tier of the decoration config.
+  - `go/stores` is the store tier, between the clients and the repositories: `store.Tier()`
+    (Tracing → Metrics → Logging → Timeout; unobserved by default), `store.Decorate` puts any
+    `interfaces.Store` behind it, and `store.Base[C]` is a hand-written store's embeddable core —
+    `Exec` runs a statement through the tier and `Client(ctx)` returns the client a transaction
+    manager bound with `store.WithClient`, else the store's own. The ORM is the store's kind
+    (`stores.kind`: `ent` or `gorm`), one subpackage each: `stores/ent` (the list-query compiler
+    backend, `Apply`, `FoldFilters` / `FoldOrder`) and `stores/gorm` (the lifecycle-managed
+    `*gorm.DB`); `stores/errors` maps a driver's errors to coded ones (`postgres/`).
+
+  Every tier's series are `<tier>_operations_total`, `<tier>_errors_total` and
+  `<tier>_operation_duration_seconds` labelled `{<tier>, operation}`; its spans are
+  `<name>.<op>` with `<tier>.name` / `<tier>.operation`; a pipeline stage or workflow runs as its
+  `Execute` operation. The clients tier uses the same engine: `client.Tier()` and `client.Base`
+  (`Once`, `Do`, `DoOnce`, `Stream` for a result read after the call returns), and each decorated
+  family's `Decorate`; its series are `client_*` labelled `{client, operation}`.
+- **Go — every decorator is configurable.** The `decoration` config section
+  (`schema/decoration.Load`) holds one `Tier` per tier — `controllers`, `clients`, `workflows`,
+  `pipelines`, `services`, `repositories`, `stores`, `jobs` — each with `defaults` and
+  per-component `overrides` keyed by the component's name, switching and tuning every layer
+  (recovery, tracing, metrics, logging, auth, timeout, retry, circuit breaker, rate limit,
+  bulkhead). The order stays the tier's, in code. The composition root builds one `decorate.Decorations` from that config and
+  the `Collaborators` (logger, metrics, tracer, authorizer) and hands it down; a component's
+  `decorate.Deps` is `Decorations.Deps(<tier>.Tier(), name)`, so turning a layer on for one
+  component is a config change. **Observe once per request:** by default clients, workflows and
+  jobs are observed and the pipeline, service, repository and store tiers are not; repositories
+  retry behind a breaker; the `storage`, `outbox.*` and `prometheus` clients carry a 30 s
+  timeout, bulkhead and breaker.
+- **Python — the same tiers, the same config.** `foundation/decorate` mirrors Go's package:
+  `OpMiddleware`, `chain`, `exec_op`, one `new_*` middleware per layer, `Tier` (layers as data,
+  outermost first), `Subject`, `Deps`, and `Decorations`, which builds a component's `Deps` from
+  the same `decoration` section (`foundation/config/decoration`; durations are Go strings such as
+  `"30s"`, read by `foundation/config/duration.parse_duration`). Each tier package has Go's
+  `tier()` and a base with `from_decorations(name, decorations)`: `clients.client.ClientBase`
+  (`exec`, `once`; `decorate(client, name, deps)` runs every coroutine method of a client
+  through the tier), `repos.RepositoryBase` (`crud(store)`, Create never retried),
+  `services.ServiceBase` (`crud(repo, validate)`, `op_service`), `pipelines.PipelineBase`
+  (`stage`, `fan_out`; `Stage.then` chains), `workflows.WorkflowBase` (`func`, `wrap`, `read`,
+  `tx`), `execution.job.JobBase` and `controllers.ControllerBase`. Spans, series, log lines and
+  op names match Go's. A consumer repository or service subclasses `DelegatingRepository` /
+  `DelegatingCrudService` and runs its custom ops through the base's `exec`. The retry layer's
+  `ExponentialRetrier` (and `retry_transient_async`) wait out a server pushback
+  (`details["retry_after_ms"]`, read by `retry_after_s`), capped by the max interval.
 - **Python — GenAI span enrichment.** `clients/decorators/ai_enricher.AiSpanEnricher` wraps an
   `LLMProvider` or `RetrievalEngine` and stamps the span already current (the step's) with
   `gen_ai.system`, `gen_ai.step`, `gen_ai.request.model` (the model asked for),
@@ -131,14 +181,12 @@ collaborator or zero timeout skips its layer (the service builder always adds re
   model call (stamped with the call's start time), whose
   product dimensions come from an injected `fact_dimensions` callable (the KE names no product
   dimension). A stamping or emission failure is logged, never raised.
-- **Python — client RED metrics.** `clients/decorators/metrics_proxy.MetricsProxy` (the client
-  stack's Metrics layer) emits `client_operations_total{client,method,outcome}`,
-  `client_errors_total{client,method,code}` and `client_operation_duration_seconds{client,method}`.
-  A streamed call is measured at open only, not over the stream's lifetime.
-
 Inner logging layers (client stack, repository, service, pipeline, workflow) log failures at Debug
-so the outermost recovery/transport seam logs the Error once; the lock and replay-buffer loggers
-still log at Error.
+so the edge logs the error once: the Controller tier is the edge (`Tier.Edge`), so its logging
+layer logs a failure at Warn for a client fault (HTTP status below 500) and at Error otherwise, and
+the Connect and gRPC servers' access-log interceptors stand in for it. Recovery logs a panic with
+its stack even where the logging layer is off (`Deps.PanicLogger`). The lock and replay-buffer
+loggers still log at Error.
 
 ### Decorator order
 
@@ -146,37 +194,31 @@ Outermost → innermost:
 
 | Stack | Where | Order |
 | --- | --- | --- |
-| Client boundary | `go/clients/decorators` | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging |
-| Job | `go/clients/jobs/decorators` | LeaderElection → RateLimit → Retry → Timeout → Tracing → Metrics → Logging |
-| EventHandler | `go/clients/messaging/decorators` | Dedup → DeadLetter → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging |
-| Lock | `go/clients/lock/decorators` | Tracing → Metrics → Logging → Timeout → CircuitBreaker → Retry |
-| Replay buffer | `go/clients/replaybuffer/decorators` | Tracing → Metrics → Logging → Timeout |
-| Cache | `go/clients/cache/decorators` | Metrics → Timeout → CircuitBreaker |
-| Analytics store | `go/clients/analytics/decorators` | Recovery → Metrics → Tracing → CircuitBreaker → Timeout (the Cassandra session's writes ride the Client boundary stack) |
-| Outbox sink | `go/clients/outbox/decorators` | the Client boundary stack around each SDK call (`SQSAPI`, `S3API`), with SDK faults coded so only throttling/server faults retry |
-| Prometheus query | `go/clients/prometheus` (`DecorateDoer`) | the Client boundary stack around each HTTP GET, op `prometheus.<endpoint>` (retryable; the capped body is read inside the attempt; 429/502/503/504 are coded transient) |
-| Connect server | `go/clients/transport/connect/interceptors` | Recovery → RetryBudget → RateLimit → Bulkhead → Metrics → Tracing → Logging → ServiceAuth → Auth → caller-supplied (`WithInterceptors`: the consumer's principal and tenant-scope interceptors) → Validate |
-| Connect/gRPC client | + `go/clients/rpc/grpc/interceptors` | Metrics → CircuitBreaker → Retry → Timeout → Tracing → Logging (gRPC appends ServiceAuth) |
-| gRPC streaming client | `go/clients/rpc/grpc/interceptors` (`StreamingClientBuilder`) | Timeout → Metrics → CircuitBreaker → Retry → Tracing → Logging → ServiceAuth |
-| gRPC server | `go/clients/rpc/grpc/interceptors` | Recovery → RateLimit → Bulkhead → Metrics → Tracing → Logging |
-| Repository | `go/repos/repository/decorators` | Tracing → Metrics → Logging → Timeout → CircuitBreaker → Retry → Caching |
-| Service | `go/services/service/decorators` | Recovery → Validation → Tracing → Metrics → Logging → Authorization → Timeout |
-| Pipeline, Workflow | `go/{pipelines/pipeline,workflows/workflow}/decorators` | Recovery → Logging → Tracing → Metrics → Timeout |
-| Transport handler | `go/transport/decorators` | Recovery → Logging → Metrics → RateLimit → Timeout |
-| Execution job | `go/execution/job/decorators` | Tracing → Metrics → Logging → Recovery |
-| Python client | `clients/decorators/proxy.py` | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging (Metrics only with an injected `MetricsProvider`) |
-| Python EventHandler | `clients/decorators/event_stack.py` | Dedup → DeadLetter → Retry → CircuitBreaker → Timeout |
-| Python Job | `clients/decorators/job_stack.py` | LeaderElection → RateLimit → Retry → Timeout |
-| Python repository (CRUD + `repo_op_chain`) | `repos/decorators/builder.py`, `repos/op_chain.py` | Logging → Metrics → Tracing → Timeout → Retry → CircuitBreaker |
-| Python service (CRUD + `service_op_chain`) | `services/decorators/builder.py`, `services/op_chain.py` | Recovery → Validation → Tracing → Metrics → Authorization → Logging → Timeout (Validation is CRUD-only) |
+| Client | `go/clients/client` (`Tier`; each family's `Decorate`) | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging — decorated: storage, messaging publish, lock, replay buffer, analytics store, connector source, and the SDK/HTTP seam of the outbox sinks (SDK faults coded so only throttling/server faults retry) and the Prometheus querier (op `prometheus.<endpoint>`; the capped body is read inside the attempt; 429/502/503/504 transient) |
+| Message handler | `go/clients/messaging/{sqs,redis}` | the Client tier as `<name>.handler` (`client.NewHandlerBase`) in CONSUMER spans, each publish in a PRODUCER span (`client.NewProducerBase`; a Redis publish, at-most-once, is never retried — `Kinds.AtMostOnce`): a handler is never retried, broken or bulkheaded — the broker's redelivery is the retry. The publisher's trace context (`tracer.Inject` / `Extract`) rides SQS message attributes and memory-broker metadata, so the handler continues the publisher's trace; Redis Pub/Sub carries the payload alone, so a trace stops at a Redis channel |
+| Controller | `go/transport` (`Tier`; `Base.Handler` for a REST/RPC handler) | Tracing (server span) → Metrics → Logging → Recovery → RateLimit → Bulkhead (sheds when `bulkhead.shed`, the controllers' default) → Auth (`<controller>.<op>`) → Timeout — switched and tuned by `decoration.controllers` |
+| Connect server | `go/transport/connect/interceptors.ServerOptions` | the Controller tier via `transport.Interceptors`, op `pkg.Service/Method`: Connect-native Tracing (continues the caller's trace, sets `traceresponse`), Metrics (`connect_rpc_*`, by status code) and Logging (status-aware access line) stand in for the tier's; `Edge.Authn` (service auth, gateway-header auth, the consumer's principal and tenant-scope interceptors) runs just before Auth; `Edge.Inner` (retry budget, validation) after the tier. A stream gets no timeout; a handler's error is returned verbatim, a tier rejection becomes a `*connect.Error` of its code |
+| gRPC / Connect client | `go/clients/rpc/grpc/interceptors.ClientOptions`, `go/clients/rpc/connect/interceptors.ClientOptions` (installed by `rpc.NewFromConfig`) | the Client tier under the client's name, op `pkg.Service/Method`; per attempt the trace context (and, gRPC, the service token) rides the outgoing metadata. A server status is coded by `clients/rpc/wire` for the tier and returned verbatim; a tier-made failure becomes the status of its code. A gRPC stream's open runs through `client.Base.Open` (never retried; the timeout bounds only the open) |
+| gRPC server | `go/transport/grpc/interceptors.ServerOptions` | the Controller tier as for Connect, op `pkg.Service/Method`, for unary and stream RPCs: gRPC-native Tracing (continues the trace from the incoming metadata), Metrics (`grpc_server_*`) and Logging stand in for the tier's; `Edge.Authn` / `Edge.StreamAuthn` run just before Auth. A stream gets no timeout; a handler's error is returned verbatim, a tier rejection becomes the sanitized status of its code (`wire.SanitizeGRPC`) |
+| Repository | `go/repos/repository` (`Tier`) | Tracing → Metrics → Logging → Timeout → CircuitBreaker → Retry (→ `Cached` beneath) |
+| Store | `go/stores/store` (`Tier`; `Decorate`, `Base`) | Tracing → Metrics → Logging → Timeout |
+| Service | `go/services/service` (`Tier`) | Recovery → Tracing → Metrics → Logging → Authorization → Timeout (a CRUD validator runs inside) |
+| Pipeline, Workflow | `go/{pipelines/pipeline,workflows/workflow}` (`Tier`) | Recovery → Logging → Tracing → Metrics → Timeout |
+| Execution job | `go/execution/job` (`Tier`) | Recovery → Logging → Tracing → Metrics → Timeout |
+| Python tiers | `clients/client.py`, `controllers/handler.py`, `repos/repository.py`, `services/service.py`, `pipelines/pipeline.py`, `workflows/workflow.py`, `execution/job/base.py` (each `tier()`) | the Go order of the same tier, switched and tuned by the same `decoration` section |
+| Python gRPC server | `controllers/grpc/interceptors.server_interceptors` (`controllers.interceptors.lay_out`, the `transport.Interceptors` twin) | the Controller tier, op `pkg.Service/Method`, as `grpc.aio` interceptors: gRPC-native Tracing (continues the caller's trace, sets `traceresponse`), Metrics (`grpc_server_*`) and Logging stand in for the tier's; `Edge.authn` (`service_auth`, `AuthServerInterceptor`) runs just before Auth and `Edge.inner` (`ValidatingServerInterceptor`) last. Every RPC shape runs as one coroutine (a stream written with `context.write`), so the tier wraps a whole stream, which gets no timeout. A handler's own status passes unchanged; a coded error becomes the status of its code |
+| Python gRPC client | `clients/rpc/grpc/interceptors.client_interceptors` (installed by `new_rpc_channel_from_config`) | the Client tier under `RpcConfig.name`, op `pkg.Service/Method`; per attempt the trace context and `RpcConfig.service_token` ride the outgoing metadata. A server status is coded by `grpc_error_to_app_error` for the tier and returned verbatim; a tier-made failure becomes an `AioRpcError` of its code. A server stream only carries the metadata (`grpc.aio` opens it lazily) |
+| Python messaging | `clients/messaging` (`decorate`; `new_messaging_from_config`, `new_messaging_subscriber_from_config`) | as Go: each publish runs through the Client tier under `MessagingConfig.name` as op `<topic>`, each handler call through the handler tier as `<name>.handler` (`ClientBase.handler`; never retried, broken or bulkheaded), in PRODUCER and CONSUMER spans (`ClientBase.producer` / `ClientBase.handler`). The publisher's trace context (`foundation/tracer.inject` / `continued`) rides SQS message attributes and memory-broker metadata, so the handler continues the publisher's trace. A memory publisher and subscriber connect through the `broker` both factories take |
 
-In the client stack Retry applies only to `Retryable` ops (`RunStream` never retries) and sits
-outside the breaker, so each attempt is observed. The gRPC streaming client puts Timeout
-outermost, so one budget bounds the whole retried stream open (not the stream's lifetime); with a
-service token it also adds a unary ServiceAuth interceptor for the connection's unary calls.
-Custom repository ops (`OpChain`) use the Repository order minus Caching. Tests pin the orders
-(`go/tests/unit/clients_wrap_order_test.go` for the client boundary, EventHandler and Job stacks;
-`services_wrap_order_test.go`, `clients_lock_decorators_test.go`, `foundation_decorator_test.go`).
+Each tier is a `decorate.Tier` (its name, span kind and `Order`); `Tier.Chain` lays a component's
+`Deps` out in that order, leaving out a layer whose collaborator is absent. A server's interceptors
+walk the same `Order` through `transport.Interceptors`, standing in a protocol-native interceptor
+for tracing, metrics and logging. In the client tier Retry sits outside the breaker, so each attempt
+is observed; a non-idempotent op runs on `Deps.WithoutRetry`, and `client.Base.Open` (a stream's
+open) is never retried. Custom repository and service ops (`Base.Exec`) run the same chain as their
+tier's CRUD. Tests pin each tier's order in its `<tier>_test.go` (`clients_client_test.go`,
+`transport_controllers_test.go`, …), `foundation_decorate_test.go` proves `Tier.Chain` applies an
+order, and `transport_server_options_test.go` drives the Connect and gRPC servers end to end.
 
 ### Conversation threading
 
@@ -229,8 +271,9 @@ where hashes differ. `testdata/chartspec/*.golden.json` pins the node and root h
 
 `core/interfaces.AnalyticsStore` (`Aggregate` → a pull-based, page-at-a-time `RowStream`; idempotent
 `Write`; optional `AnalyticsCompactor`) is built by `clients/analytics` (`KindStub` default,
-`KindCassandra`). The Cassandra store sits on `clients/cassandra.Session` — `KindCassandra`
-(self-managed, token- and DC-aware) or `KindKeyspaces` (Amazon Keyspaces: TLS + SigV4) — and keeps
+`KindCassandra`). The Cassandra store sits on `core/interfaces.CQLSession`, built by `clients/cql`
+— `cassandra` (self-managed, token- and DC-aware) or `keyspaces` (Amazon Keyspaces: TLS + SigV4) —
+and keeps
 to the CQL both share: one table per cube and grain, partition `((org_id, cube, bucket))`,
 clustering `(ts, dims_key, idempotency_key)`, one partial row per fact (a redelivery overwrites it),
 dimension filters applied in Go (time clauses also narrow the clustering range; `OpLike` is a
@@ -245,8 +288,11 @@ error is terminal, a resume token is bound to the query that issued it, and a co
 the bucket's retention: it expires at bucket end + the grain's TTL (CQL `TTL()` cannot be read off a
 non-frozen map, so the TTL is anchored to the bucket, not to each fact's write).
 
-The transactional outbox is split by tier. `core/interfaces.OutboxStore` (`Claim` leases due rows,
-`MarkSent` / `Retry` / `Park` / `Stats`) is supplied by the consumer over its own table;
+The transactional outbox is split by tier: the contracts in `core`, the sink kinds in `clients`,
+the store kinds in `stores`, the relay in `services`. `core/interfaces.OutboxStore` (`Claim` leases
+due rows, `MarkSent` / `Retry` / `Park` / `Stats`, `DeleteSentBefore` for the retention sweep) is
+built by `stores/outbox` (`KindStub` default — no rows, so a relay boots with no database;
+`KindPostgres`, a product's own table named by config) behind the store tier;
 `core/interfaces.OutboxSink` returns one result per record. `services/outbox.Relay.RunOnce` claims a
 batch, sends it in `SendBatch` chunks under a `Concurrency` bound, and finalizes each row by its own
 outcome: sent, retried at `now + FullJitter(min(Base·2^attempts, Max))`, or parked on its
@@ -258,8 +304,8 @@ an injected SDK client: SQS routes each row by its `route` attribute through a c
 map with per-queue failure isolation (a `.fifo` queue gets group id `Key`, else `Tenant`, else
 `Lane`, and deduplication id `ID`); the sinks keep an SDK error's code (`errors.CodeOr`); S3 writes
 one object per row by key template with a SHA-256 checksum (Object Lock) and optional SSE-KMS.
-`go/tests/fixtures/outboxtest` is the store conformance suite (`Run`, `RunRouting`) plus a test-only
-Postgres reference store.
+`go/tests/fixtures/outboxtest` is the store and routing conformance suites (`Run`, `RunRouting`),
+run against the `postgres` store kind.
 
 `core/interfaces.MetricsQuerier` evaluates PromQL: `Query` returns one instant sample and
 `QueryRange` one series of `core/types.MetricSample`. It is built by `clients/prometheus`
@@ -329,9 +375,10 @@ Go suite regenerates it and the Python suite compares against it.
 
 Most tiers ship an in-process, stub, or no-op backend, so wiring needs no cloud dependency:
 
-- **Go:** analytics `stub`; lock `local`; outbox sink `stub`; messaging, replay buffer, storage `memory`; secrets
-  `env`/`file`; tracer `noop`; metrics no-op when disabled; logger `stdlib`. Jobs' `NewFromConfig`
-  currently returns a no-op River enqueuer.
+- **Go:** analytics `stub`; lock `local`; outbox sink and outbox store `stub`; messaging, replay buffer, storage `memory`; secrets
+  `env`/`file`; cache, prometheus, transport `stub`; tracer `noop`; metrics no-op when disabled;
+  logger `stdlib`. `database` and `rpc` default to `postgres` and `grpc`: their consumers hold the
+  `*sql.DB` or connection itself.
 - **Python:** cache `local`/`null`; email `noop`; audit, embedding, facts, llm, retrieval, kb_ingestion,
   token_ledger, vector `stub`; jobs, lock, messaging, storage `memory`; tracer, metrics `null`;
   executor `asyncio`.
@@ -356,15 +403,18 @@ consumer names, paths, design documents or tracker ids in code, comments, tests 
 
 ## Execution substrate
 
-Go `go/execution` models batch work: discover → map → fan out → aggregate.
+Go `go/execution` models batch work: jobs fan out units, gates run jobs in phases.
 
-- `engine`: `FanOut[T]` runs over items with bounded concurrency (a slot is acquired before each
-  goroutine spawns), recovers panics into `Fail` results, never lets a unit cancel its siblings;
-  `RunJobGroup` runs `AnyJob`s concurrently, streaming `StepResult`s to an `ExecutionObserver`.
-- `job`: `job.New[T](name, group)` builds a `Job[T]` (a `Discoverer[T]` plus a mapper to
-  `WorkUnit`) with concurrency, retry, and warn-only options; `job/decorators` wraps any `AnyJob`.
-- `gate`: `gate.NewGate(name).Parallel(…).Serial(…).StopOnFailure().Build()`; `RunGate` runs phases
-  in order and aggregates failures into a `CodeQualityFailed` error.
+- `engine`: `Pool(n).FanOut` runs over items with at most `n` in flight (a slot is acquired before
+  each goroutine spawns), recovers panics into `Fail` results, never lets a unit cancel its
+  siblings; `RunJobGroup` runs `AnyJob`s concurrently, streaming `StepResult`s to an
+  `ExecutionObserver`; `Steps.Serial` runs plain function `Step`s in order.
+- `job`: `job.Base` builds every `AnyJob` — `Func` (a function of runner and root), `Runnable`
+  (runner-less in-process work) and `Wrap` (an existing job) — and decorates each once with
+  `job.Tier()`.
+- `gate`: `gate.New(name).Parallel(…).Serial(…).StopOnFailure().Observe(obs)`; `Run` runs the
+  phases in order and aggregates failures into a `CodeQualityFailed` error, and `RunLocal` runs a
+  gate of runner-less jobs.
 
 Python `execution` mirrors these (`fan_out`, `run_job_group`, `new_gate`, `run_gate`) and adds the
 `Executor` seam. `executor_from_config` chooses `AsyncioExecutor` (default) or `RayExecutor` over
@@ -391,12 +441,14 @@ as a request.
 
 ## Staged pipelines
 
-Go `pipeline.Then(first, second)` composes two pipelines into one, feeding first's output to
-second; an error from first stops the chain and is returned unchanged. Build each stage with
-`decorators.NewBuilder` before composing, so every stage records its own span and metrics and a
-slow or failing stage is visible by name. `Then` nests: `Then(a, Then(b, c))` is a three-stage
-pipeline. Python's `pipelines.then(first, second)` is the same for `AsyncPipeline`s built with
-`AsyncPipelineBuilder`.
+Go `first.Then(second)` (a method on `pipeline.Stage`) composes two pipelines into one, feeding
+first's output to second; an error from first stops the chain and is returned unchanged. Build
+each stage with `pipeline.Base.Stage` before composing, so every stage records its own span and
+metrics and a slow or failing stage is visible by name. `Then` chains: `a.Then(b).Then(c)` is a
+three-stage pipeline. `Base.FanOut(name, stages...)` runs stages concurrently on one input and
+returns their outputs in order; the first error cancels the rest. Python's
+`PipelineBase.stage(name, fn)` and `Stage.then(next)` are the same, and `PipelineBase.fan_out`
+raises the first failing stage's own error.
 
 ## Testing
 

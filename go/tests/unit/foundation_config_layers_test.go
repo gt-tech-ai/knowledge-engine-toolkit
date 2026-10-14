@@ -18,19 +18,19 @@ import (
 //     silently shift page sizes or cache TTLs the moment a provider wires them in.
 //
 // What it tests:
-//   - The documented default page size (20) and cap (1000), and the cache TTL (5m) +
-//     version (1) + timeout (5s), match the values the code used as consts.
+//   - The default store kind (ent), page size (20) and cap (1000), and the cache TTL
+//     (5m) + version (1), match the values the code used as consts.
 func TestLayerConfigDefaults_MatchConsts(t *testing.T) {
 	t.Parallel()
 
 	s := stores.DefaultConfig()
+	assert.Equal(t, "ent", s.Kind)
 	assert.Equal(t, 20, s.DefaultPageSize)
 	assert.Equal(t, 1000, s.MaxPageSize)
 
 	r := repos.DefaultConfig()
 	assert.Equal(t, 5*time.Minute, r.Caching.TTL)
 	assert.Equal(t, 1, r.Caching.Version)
-	assert.Equal(t, 5*time.Second, r.Timeout)
 }
 
 // TestLayerConfigValidate_RejectsBadValues tests that each layer's Validate()

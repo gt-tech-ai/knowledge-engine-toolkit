@@ -4,8 +4,10 @@ import (
 	"context"
 	"sync"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer"
 )
 
 // Compile-time interface assertion.
@@ -18,14 +20,17 @@ type Subscriber struct {
 	broker *Broker
 	// done is closed by Close to stop the receive loop.
 	done chan struct{}
+	// handlers runs each handler call through the handler tier.
+	handlers client.Base
 	// once ensures done is closed at most once, making Close idempotent.
 	once sync.Once
 }
 
-// NewSubscriber consumes from broker; a Publisher built from the same broker feeds this
+// NewSubscriber consumes from broker, running each handler call through handlers (the
+// zero Base runs them undecorated); a Publisher built from the same broker feeds this
 // subscriber.
-func NewSubscriber(broker *Broker) *Subscriber {
-	return &Subscriber{broker: broker, done: make(chan struct{})}
+func NewSubscriber(broker *Broker, handlers client.Base) *Subscriber {
+	return &Subscriber{broker: broker, handlers: handlers, done: make(chan struct{})}
 }
 
 // Subscribe delivers each message on topic to handler until Close is called or ctx is
@@ -41,7 +46,10 @@ func (s *Subscriber) Subscribe(
 	for {
 		select {
 		case msg := <-ch:
-			_ = handler(ctx, msg)
+			hctx := tracer.Extract(ctx, msg.Metadata)
+			_ = s.handlers.DoOnce(hctx, topic, func(ctx context.Context) error {
+				return handler(ctx, msg)
+			})
 		case <-ctx.Done():
 			return apperr.Wrap(
 				ctx.Err(),

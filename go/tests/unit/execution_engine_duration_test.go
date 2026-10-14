@@ -51,15 +51,13 @@ func sleepingJob(
 //   - Every returned result whose fn did not set Duration comes back with a
 //     positive Duration reflecting the elapsed time of the invocation.
 func TestFanOut_StampsDurationWhenZero(t *testing.T) {
-	results := engine.FanOut(
-		context.Background(),
-		[]int{0, 1},
-		2,
-		func(_ context.Context, _ int) types.StepResult {
-			time.Sleep(2 * time.Millisecond)
-			return types.StepResult{Status: types.StatusPass} // Duration left zero
-		},
-	)
+	results := engine.Pool(2).
+		FanOut(
+			context.Background(), []int{0, 1},
+			func(_ context.Context, _ int) types.StepResult {
+				time.Sleep(2 * time.Millisecond)
+				return types.StepResult{Status: types.StatusPass} // Duration left zero
+			})
 	for i, r := range results {
 		assert.Positive(t, r.Duration, "result %d: expected stamped Duration > 0", i)
 	}
@@ -78,14 +76,12 @@ func TestFanOut_StampsDurationWhenZero(t *testing.T) {
 //     not replaced by FanOut's measured elapsed.
 func TestFanOut_PreservesNonZeroDuration(t *testing.T) {
 	const want = 42 * time.Second
-	results := engine.FanOut(
-		context.Background(),
-		[]int{0},
-		1,
-		func(_ context.Context, _ int) types.StepResult {
-			return types.StepResult{Status: types.StatusPass, Duration: want}
-		},
-	)
+	results := engine.Pool(1).
+		FanOut(
+			context.Background(), []int{0},
+			func(_ context.Context, _ int) types.StepResult {
+				return types.StepResult{Status: types.StatusPass, Duration: want}
+			})
 	assert.Equal(t, want, results[0].Duration)
 }
 

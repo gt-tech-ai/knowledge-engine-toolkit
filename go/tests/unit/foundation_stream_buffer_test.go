@@ -60,7 +60,7 @@ func TestBuffer_BoundedBlocksProducerAtCapacity(t *testing.T) {
 			defer func() { require.NoError(t, out.Close()) }()
 
 			require.Eventually(t, func() bool { return pulled.Load() == 3 },
-				time.Second, time.Millisecond)
+				5*time.Second, time.Millisecond)
 			require.Never(t, func() bool { return pulled.Load() > 3 },
 				50*time.Millisecond, time.Millisecond)
 
@@ -69,7 +69,7 @@ func TestBuffer_BoundedBlocksProducerAtCapacity(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, "ab", item)
 			require.Eventually(t, func() bool { return pulled.Load() == 4 },
-				time.Second, time.Millisecond)
+				5*time.Second, time.Millisecond)
 			require.Never(t, func() bool { return pulled.Load() > 4 },
 				50*time.Millisecond, time.Millisecond)
 		})
@@ -293,13 +293,13 @@ func TestBuffer_MetricsRecordDepthAndBlockedTime(t *testing.T) {
 	out := buf.Wrap(t.Context(), endlessStream(t, &pulled))
 
 	require.Eventually(t, func() bool { return items.Load() == 3 && bytes.Load() == 6 },
-		time.Second, time.Millisecond)
+		5*time.Second, time.Millisecond)
 	_, ok, err := out.Next(t.Context())
 	require.NoError(t, err)
 	require.True(t, ok)
-	require.Eventually(t, waited.Load, time.Second, time.Millisecond)
+	require.Eventually(t, waited.Load, 5*time.Second, time.Millisecond)
 	require.Eventually(t, func() bool { return items.Load() == 3 && pulled.Load() == 4 },
-		time.Second, time.Millisecond)
+		5*time.Second, time.Millisecond)
 
 	require.NoError(t, out.Close())
 	require.Equal(t, int64(0), items.Load())

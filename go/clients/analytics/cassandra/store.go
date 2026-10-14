@@ -1,5 +1,5 @@
 // Package cassandra is the Cassandra-protocol AnalyticsStore (Apache Cassandra or
-// Amazon Keyspaces behind clients/cassandra.Session).
+// Amazon Keyspaces behind clients/interfaces.CQLSession).
 //
 // Model: one table per declared cube and grain (TableName), partition
 // ((org_id, cube, bucket)) with bucket = ts truncated to the grain's bucket width,
@@ -22,7 +22,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cassandra"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
@@ -69,9 +68,9 @@ type Config struct {
 type Store struct {
 	// session is the Cassandra-protocol session (its lifecycle is the store's);
 	// nil until Start when the store dials lazily.
-	session cassandra.Session
+	session interfaces.CQLSession
 	// dial opens the session at Start (nil when New was given a session).
-	dial func() (cassandra.Session, error)
+	dial func(ctx context.Context) (interfaces.CQLSession, error)
 	// cfg is the validated configuration.
 	cfg Config
 	// mu guards session and schemaReady.
@@ -84,7 +83,7 @@ type Store struct {
 // New returns a store over session. A cube name that is not a lower-case
 // identifier, or a declared grain that is unknown or lacks a known bucket width,
 // is CodeInvalidInput.
-func New(session cassandra.Session, cfg Config) (*Store, error) {
+func New(session interfaces.CQLSession, cfg Config) (*Store, error) {
 	s, err := newStore(cfg)
 	if err != nil {
 		return nil, err
@@ -96,7 +95,10 @@ func New(session cassandra.Session, cfg Config) (*Store, error) {
 // NewLazy returns a store that dials its session with dial at Start, so
 // construction does no I/O; an operation before Start is CodeUnavailable. The
 // config is validated as by New.
-func NewLazy(dial func() (cassandra.Session, error), cfg Config) (*Store, error) {
+func NewLazy(
+	dial func(ctx context.Context) (interfaces.CQLSession, error),
+	cfg Config,
+) (*Store, error) {
 	s, err := newStore(cfg)
 	if err != nil {
 		return nil, err
@@ -175,7 +177,7 @@ func (s *Store) Start(ctx context.Context) error {
 	defer s.mu.Unlock()
 	dialed := false
 	if s.session == nil && s.dial != nil {
-		session, err := s.dial()
+		session, err := s.dial(ctx)
 		if err != nil {
 			return err
 		}
@@ -229,7 +231,7 @@ func (s *Store) Readiness(ctx context.Context) error {
 }
 
 // sess returns the open session; before Start (or after Stop) it is CodeUnavailable.
-func (s *Store) sess() (cassandra.Session, error) {
+func (s *Store) sess() (interfaces.CQLSession, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.session == nil {
@@ -307,7 +309,7 @@ func (s *Store) Write(ctx context.Context, facts []types.Fact) error {
 // insert writes one fact's partial row into grain's table.
 func (s *Store) insert(
 	ctx context.Context,
-	session cassandra.Session,
+	session interfaces.CQLSession,
 	fact types.Fact,
 	grain types.Grain,
 	partials map[string][]byte,

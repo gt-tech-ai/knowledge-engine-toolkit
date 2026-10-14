@@ -84,12 +84,11 @@ func TestGate_PhaseOrdering(t *testing.T) {
 	jobA := recordingJob(t, "job-a", passResults("a"), record("a"))
 	jobB := recordingJob(t, "job-b", passResults("b"), record("b"))
 
-	g := gate.NewGate("ordering-gate").
+	g := gate.New("ordering-gate").
 		Serial("phase1", jobA).
-		Serial("phase2", jobB).
-		Build()
+		Serial("phase2", jobB)
 
-	require.NoError(t, gate.RunGate(context.Background(), gateNopRunner(t), "/", g))
+	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), "/"))
 	assert.Equal(t, []string{"a", "b"}, order, "expected order [a, b]")
 }
 
@@ -103,7 +102,7 @@ func TestGate_PhaseOrdering(t *testing.T) {
 //     real first failure under a wall of downstream noise.
 //
 // What it tests:
-//   - When phase1 fails and StopOnFailure is set, RunGate returns an error and
+//   - When phase1 fails and StopOnFailure is set, Run returns an error and
 //     phase2's job is never executed.
 func TestGate_StopOnFailureSkipsLaterPhases(t *testing.T) {
 	var phase2Ran bool
@@ -111,15 +110,14 @@ func TestGate_StopOnFailureSkipsLaterPhases(t *testing.T) {
 	failing := recordingJob(t, "lint", failResults("lint", "bad code"), nil)
 	skipped := recordingJob(t, "test", passResults("test"), func() { phase2Ran = true })
 
-	g := gate.NewGate("preflight").
+	g := gate.New("preflight").
 		Serial("phase1", failing).
 		Serial("phase2", skipped).
-		StopOnFailure().
-		Build()
+		StopOnFailure()
 
 	require.Error(
 		t,
-		gate.RunGate(context.Background(), gateNopRunner(t), "/", g),
+		g.Run(context.Background(), gateNopRunner(t), "/"),
 		"expected error from failed phase",
 	)
 	assert.False(t, phase2Ran, "phase2 should have been skipped after phase1 failure")
@@ -136,17 +134,16 @@ func TestGate_StopOnFailureSkipsLaterPhases(t *testing.T) {
 //     grouped failure block.
 //
 // What it tests:
-//   - With two failing jobs in one parallel phase, RunGate returns a non-nil
+//   - With two failing jobs in one parallel phase, Run returns a non-nil
 //     error whose message contains both jobs' error strings.
 func TestGate_AggregatesFailureErrors(t *testing.T) {
 	jobA := recordingJob(t, "a", failResults("a", "err-alpha"), nil)
 	jobB := recordingJob(t, "b", failResults("b", "err-beta"), nil)
 
-	g := gate.NewGate("quality-gate").
-		Parallel("quality", jobA, jobB).
-		Build()
+	g := gate.New("quality-gate").
+		Parallel("quality", jobA, jobB)
 
-	err := gate.RunGate(context.Background(), gateNopRunner(t), "/", g)
+	err := g.Run(context.Background(), gateNopRunner(t), "/")
 	require.Error(t, err, "expected error for two failed jobs")
 	msg := err.Error()
 	assert.Contains(
@@ -174,16 +171,16 @@ func TestGate_AggregatesFailureErrors(t *testing.T) {
 //     trust in the gate even when nothing is actually wrong.
 //
 // What it tests:
-//   - With two passing jobs in a parallel phase, RunGate returns nil.
+//   - With two passing jobs in a parallel phase, Run returns nil.
 func TestGate_NoErrorWhenAllPass(t *testing.T) {
 	jobA := recordingJob(t, "a", passResults("a"), nil)
 	jobB := recordingJob(t, "b", passResults("b"), nil)
 
-	g := gate.NewGate("quality-gate").Parallel("quality", jobA, jobB).Build()
+	g := gate.New("quality-gate").Parallel("quality", jobA, jobB)
 
 	assert.NoError(
 		t,
-		gate.RunGate(context.Background(), gateNopRunner(t), "/", g),
+		g.Run(context.Background(), gateNopRunner(t), "/"),
 		"expected no error when all steps pass",
 	)
 }
@@ -198,7 +195,7 @@ func TestGate_NoErrorWhenAllPass(t *testing.T) {
 //     blocking and non-blocking signals the gate is built to express.
 //
 // What it tests:
-//   - A phase whose only result is StatusWarn produces a nil error from RunGate.
+//   - A phase whose only result is StatusWarn produces a nil error from Run.
 func TestGate_WarnDoesNotTriggerError(t *testing.T) {
 	j := recordingJob(
 		t, "security",
@@ -206,11 +203,11 @@ func TestGate_WarnDoesNotTriggerError(t *testing.T) {
 		nil,
 	)
 
-	g := gate.NewGate("security-gate").Serial("warnings", j).Build()
+	g := gate.New("security-gate").Serial("warnings", j)
 
 	assert.NoError(
 		t,
-		gate.RunGate(context.Background(), gateNopRunner(t), "/", g),
+		g.Run(context.Background(), gateNopRunner(t), "/"),
 		"Warn results should not produce an error",
 	)
 }
@@ -230,10 +227,9 @@ func TestGate_Phases_ReturnsOrderedPhases(t *testing.T) {
 	jobA := recordingJob(t, "a", passResults("a"), nil)
 	jobB := recordingJob(t, "b", passResults("b"), nil)
 
-	g := gate.NewGate("inspection-gate").
+	g := gate.New("inspection-gate").
 		Parallel("alpha", jobA).
-		Serial("beta", jobB).
-		Build()
+		Serial("beta", jobB)
 
 	phases := g.Phases()
 	require.Len(t, phases, 2)
@@ -246,11 +242,11 @@ func TestGate_Phases_ReturnsOrderedPhases(t *testing.T) {
 //
 // Why this test is important:
 //   - The observer is the only channel through which the CLI/CI renderer learns
-//     what happened; if RunGate silently skipped these callbacks the user would
+//     what happened; if Run silently skipped these callbacks the user would
 //     see no progress lines or summary at all, even on a successful run.
 //
 // What it tests:
-//   - After RunGate, the observer received at least one phase-complete callback
+//   - After Run, the observer received at least one phase-complete callback
 //     and exactly one gate-complete callback carrying the gate's name.
 func TestGate_WithObserver_ReceivesCallbacks(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -265,12 +261,11 @@ func TestGate_WithObserver_ReceivesCallbacks(t *testing.T) {
 	obs.EXPECT().OnGateComplete("observed-gate", gomock.Any(), gomock.Any()).Times(1)
 
 	j := recordingJob(t, "lint", passResults("lint"), nil)
-	g := gate.NewGate("observed-gate").
+	g := gate.New("observed-gate").
 		Serial("check", j).
-		WithObserver(obs).
-		Build()
+		Observe(obs)
 
-	require.NoError(t, gate.RunGate(context.Background(), gateNopRunner(t), "/", g))
+	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), "/"))
 }
 
 // TestGate_FiresStartEvents tests that the gate emits the full lifecycle of
@@ -311,13 +306,12 @@ func TestGate_FiresStartEvents(t *testing.T) {
 	vet := recordingJob(t, "vet", passResults("vet"), nil)
 	build := recordingJob(t, "build", passResults("build"), nil)
 
-	g := gate.NewGate("ci").
+	g := gate.New("ci").
 		Parallel("check", lint, vet).
 		Serial("compile", build).
-		WithObserver(obs).
-		Build()
+		Observe(obs)
 
-	require.NoError(t, gate.RunGate(context.Background(), gateNopRunner(t), "/", g))
+	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), "/"))
 }
 
 // TestGate_EmptyPhase_FiresStartCleanly tests that a phase with no jobs still
@@ -340,10 +334,9 @@ func TestGate_EmptyPhase_FiresStartCleanly(t *testing.T) {
 	obs.EXPECT().OnPhaseComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnGateComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	g := gate.NewGate("empty").
+	g := gate.New("empty").
 		Serial("nothing").
-		WithObserver(obs).
-		Build()
+		Observe(obs)
 
-	require.NoError(t, gate.RunGate(context.Background(), gateNopRunner(t), "/", g))
+	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), "/"))
 }

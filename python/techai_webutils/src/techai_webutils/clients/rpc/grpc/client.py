@@ -8,9 +8,12 @@ max-concurrent-streams. (Channel pooling / idle timeout are not configured here 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import grpc
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 _16MB = 16 * 1024 * 1024
 """Default gRPC max send/receive message size, in bytes (16 MiB)."""
@@ -33,11 +36,13 @@ class ChannelConfig:
 def create_channel(
     target: str | None = None,
     config: ChannelConfig | None = None,
+    interceptors: Sequence[grpc.aio.ClientInterceptor] = (),
 ) -> grpc.aio.Channel:
     """Create a configured async ``grpc.aio`` channel.
 
     ``target`` overrides ``config.target`` when provided; ``config`` defaults to ``ChannelConfig()``.
-    Returns an insecure channel carrying the message-size + concurrent-stream options.
+    Returns an insecure channel carrying the message-size + concurrent-stream options, every call
+    run through ``interceptors`` (first outermost).
     """
     cfg = config or ChannelConfig()
     addr = target or cfg.target
@@ -48,4 +53,6 @@ def create_channel(
         ("grpc.max_concurrent_streams", cfg.max_concurrent_streams),
     ]
 
-    return grpc.aio.insecure_channel(addr, options=options)
+    return grpc.aio.insecure_channel(
+        addr, options=options, interceptors=list(interceptors) or None
+    )

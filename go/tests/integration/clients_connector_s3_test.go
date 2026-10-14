@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	connectorpkg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector"
-	connectordecorators "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/decorators"
 	connectors3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3"
 	storages3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
@@ -93,11 +92,10 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	builder := connectorpkg.NewSourceBuilder(
-		minioS3Client(m.Endpoint()),
-		nil, // no STS: this test uses the access-key strategy
-		connectordecorators.Deps{},
-	)
+	// No STS: this test uses the access-key strategy.
+	builder := connectorpkg.NewSourceBuilder(connectorpkg.Config{}, connectorpkg.Deps{
+		BuildS3Client: minioS3Client(m.Endpoint()),
+	})
 	cfg := interfaces.SourceConfig{
 		Kind:            interfaces.ConnectorKindS3,
 		Bucket:          bucket,

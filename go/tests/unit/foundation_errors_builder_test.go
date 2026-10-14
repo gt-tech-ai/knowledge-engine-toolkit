@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/errors"
 )
 
 // TestErrorsBuilder_KindPostgres tests that the DB error mapper factory
@@ -61,10 +61,15 @@ func TestErrorsBuilder_NilError(t *testing.T) {
 //     producing a nil mapper would cause a panic on the first repository error
 //
 // What it tests:
-//   - NewDBMapper(Kind(999)) returns a non-nil error
+//   - NewDBMapper("bogus") returns an INVALID_INPUT error naming the kind; an empty kind
+//     is the postgres default
 func TestErrorsBuilder_UnknownKindReturnsError(t *testing.T) {
 	t.Parallel()
 
-	_, err := errors.NewDBMapper(errors.Kind(999))
+	_, err := errors.NewDBMapper("bogus")
 	require.Error(t, err, "expected error for unknown kind")
+	assert.Contains(t, err.Error(), `"bogus"`)
+	mapper, err := errors.NewDBMapper("")
+	require.NoError(t, err)
+	assert.NotNil(t, mapper)
 }

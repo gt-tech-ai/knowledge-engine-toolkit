@@ -8,27 +8,6 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
-// observerKey is the private context key under which the ExecutionObserver is
-// stored, so it cannot collide with keys from other packages.
-type observerKey struct{}
-
-// WithObserverCtx returns a derived context carrying obs.
-func WithObserverCtx(
-	ctx context.Context,
-	obs interfaces.ExecutionObserver,
-) context.Context {
-	return context.WithValue(ctx, observerKey{}, obs)
-}
-
-// ObserverFromCtx extracts the ExecutionObserver from ctx.
-// Returns NopObserver when none is present.
-func ObserverFromCtx(ctx context.Context) interfaces.ExecutionObserver {
-	if obs, ok := ctx.Value(observerKey{}).(interfaces.ExecutionObserver); ok {
-		return obs
-	}
-	return NopObserver{}
-}
-
 // stepEmitter delivers per-step observer events live, serialized. FanOut runs
 // units on many goroutines and the observer contract forbids overlapping calls,
 // so every delivery goes through mu (shared across all jobs in a group, so even

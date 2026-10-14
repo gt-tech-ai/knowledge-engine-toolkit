@@ -12,8 +12,10 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
 )
 
 // recorderMW is a test OpMiddleware that appends "<name>:before"/"<name>:after"
@@ -119,18 +121,24 @@ func TestDecorateChain_OutermostFirst(t *testing.T) {
 //     repo/service identification the CRUD spans carry.
 //
 // What it tests:
-//   - a repo-configured tracing MW sets db.repository=<name> and db.operation=<op>.
+//   - a repository-tier tracing MW sets repository.name=<name> and
+//     repository.operation=<op>.
 func TestTracingMW_OpensSpanWithTierAttrs(t *testing.T) {
 	t.Parallel()
 	attrs := map[string]any{}
 	tracer := fixtures.SpyTracer(func(k string, v any) { attrs[k] = v })
-	mw := decorate.NewTracing(tracer, "documents", "db.repository", "db.operation")
+	mw := decorate.NewTracing(
+		tracer,
+		"repository",
+		"documents",
+		interfaces.SpanKindInternal,
+	)
 
 	_, err := decorate.Exec(context.Background(), mw, "UpdateStatus",
 		func(context.Context) (struct{}, error) { return struct{}{}, nil })
 	require.NoError(t, err)
-	assert.Equal(t, "documents", attrs["db.repository"])
-	assert.Equal(t, "UpdateStatus", attrs["db.operation"])
+	assert.Equal(t, "documents", attrs["repository.name"])
+	assert.Equal(t, "UpdateStatus", attrs["repository.operation"])
 }
 
 // TestMetricsMW_RecordsCountAndError tests that the metrics middleware records an
@@ -151,28 +159,22 @@ func TestMetricsMW_RecordsCountAndError(t *testing.T) {
 	errs := mocks.NewMockCounter(ctrl)
 	dur := mocks.NewMockHistogram(ctrl)
 	m.EXPECT().
-		Counter("repository_operations_total", gomock.Any(), "repo", "operation").
+		Counter("repository_operations_total", gomock.Any(), "repository", "operation").
 		Return(ops)
 	m.EXPECT().
-		Counter("repository_errors_total", gomock.Any(), "repo", "operation").
+		Counter("repository_errors_total", gomock.Any(), "repository", "operation").
 		Return(errs)
 	m.EXPECT().
 		Histogram(
 			"repository_operation_duration_seconds",
 			gomock.Any(),
 			gomock.Any(),
-			"repo",
+			"repository",
 			"operation",
 		).
 		Return(dur)
 
-	spec := decorate.MetricsSpec{
-		OperationsName: "repository_operations_total", OperationsHelp: "h",
-		ErrorsName: "repository_errors_total", ErrorsHelp: "h",
-		DurationName: "repository_operation_duration_seconds", DurationHelp: "h",
-		SubjectLabel: "repo",
-	}
-	mw := decorate.NewMetrics(m, "documents", spec)
+	mw := decorate.NewMetrics(m, "repository", "documents")
 
 	ops.EXPECT().Inc("documents", "UpdateStatus").Times(2)
 	dur.EXPECT().Observe(gomock.Any(), "documents", "UpdateStatus").Times(2)
@@ -202,7 +204,7 @@ func TestMetricsMW_RecordsCountAndError(t *testing.T) {
 func TestLoggingMW_LogsOnEntryAndFailure(t *testing.T) {
 	t.Parallel()
 	spy := fixtures.NewSpyLogger()
-	mw := decorate.NewLogging(spy, "documents", "repo", "repository")
+	mw := decorate.NewLogging(spy, "repository", "documents")
 
 	_, err := decorate.Exec(
 		context.Background(),
@@ -332,7 +334,7 @@ func TestCircuitBreakerMW_ShortCircuitsWhenOpen(t *testing.T) {
 func TestRecoveryMW_ConvertsPanic(t *testing.T) {
 	t.Parallel()
 	_, err := decorate.Exec(context.Background(),
-		decorate.NewRecovery(fixtures.NopLogger(), "users"), "Provision",
+		decorate.NewRecovery(fixtures.NopLogger(), "service", "users"), "Provision",
 		func(context.Context) (struct{}, error) { panic("boom") })
 	require.Error(t, err, "a panic must be recovered into an error")
 }
@@ -375,4 +377,126 @@ func TestAuthMW_ShortCircuitsOnDeny(t *testing.T) {
 	)
 	require.NoError(t, err)
 	assert.True(t, ranOK, "an allowed op runs")
+}
+
+// TestTierChain_AppliesTheTiersLayersInOrderAndSkipsMissingOnes tests how a Tier turns
+// its Order and Deps into a chain.
+//
+// Why this test is important:
+//   - Every request tier (pipeline, workflow, service, repository) decorates through
+//     Tier.Chain, so its order is each tier's documented decorator order; a layer run in
+//     the wrong place (a retry outside the breaker, auth after the timeout) changes what
+//     is retried, shed or bounded.
+//
+// What it tests:
+//   - The layers whose collaborators are set run outermost first in Order (tracing →
+//     logging → auth → breaker → retry here), each seeing the next as its inner call.
+//   - A layer with no collaborator is left out, and the zero Subject runs undecorated.
+func TestTierChain_AppliesTheTiersLayersInOrderAndSkipsMissingOnes(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	var calls []string
+	tracer := mocks.NewMockTracer(ctrl)
+	span := mocks.NewMockSpan(ctrl)
+	span.EXPECT().SetAttribute(gomock.Any(), gomock.Any()).AnyTimes()
+	span.EXPECT().End()
+	tracer.EXPECT().Start(gomock.Any(), "orders.Place", gomock.Any()).DoAndReturn(
+		func(
+			ctx context.Context, _ string, _ ...interfaces.SpanOption,
+		) (context.Context, interfaces.Span) {
+			calls = append(calls, "tracing")
+			return ctx, span
+		})
+	logger := mocks.NewMockLogger(ctrl)
+	logger.EXPECT().WithContext(gomock.Any()).Return(logger)
+	logger.EXPECT().Debug("service.Place", gomock.Any()).Do(func(string, ...any) {
+		calls = append(calls, "logging")
+	})
+	breaker := mocks.NewMockCircuitBreaker(ctrl)
+	breaker.EXPECT().Execute(gomock.Any()).DoAndReturn(func(fn func() error) error {
+		calls = append(calls, "breaker")
+		return fn()
+	})
+	retrier := mocks.NewMockRetrier(ctrl)
+	retrier.EXPECT().Retry(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, op func() error) error {
+			calls = append(calls, "retry")
+			return op()
+		})
+	tier := decorate.Tier{Name: "service", Order: []decorate.Layer{
+		decorate.LayerRecovery, decorate.LayerTracing, decorate.LayerMetrics,
+		decorate.LayerLogging, decorate.LayerAuth, decorate.LayerTimeout,
+		decorate.LayerCircuitBreaker, decorate.LayerRetry,
+	}}
+	subject := tier.Subject("orders", decorate.Deps{
+		Observability: decorate.Observability{Tracer: tracer, Logger: logger},
+		Auth: func(_ context.Context, action string) error {
+			calls = append(calls, "auth:"+action)
+			return nil
+		},
+		Retrier: retrier,
+		Breaker: breaker,
+	})
+	assert.Equal(t, "orders", subject.Name())
+
+	got, err := subject.Exec(t.Context(), "Place", func(context.Context) (int, error) {
+		calls = append(calls, "op")
+		return 7, nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 7, got)
+	assert.Equal(
+		t,
+		[]string{
+			"tracing",
+			"logging",
+			"auth:orders.Place",
+			"breaker",
+			"retry",
+			"op",
+		},
+		calls,
+	)
+
+	got, err = decorate.Subject{}.Exec(t.Context(), "Plain",
+		func(context.Context) (int, error) { return 1, nil })
+	require.NoError(t, err)
+	assert.Equal(t, 1, got)
+}
+
+// TestLoggingMW_EdgeTierLogsFailuresAtWarnOrError tests the edge tier's failure log.
+//
+// Why this test is important:
+//   - A REST handler's failure is logged by no one else: if the controller tier logged it
+//     at Debug, like an inner tier, a 500 would leave no trace in a production log.
+//
+// What it tests:
+//   - On the controller tier (Edge) a not-found failure logs at Warn and an internal one
+//     at Error; an inner tier logs the same failure at Debug.
+func TestLoggingMW_EdgeTierLogsFailuresAtWarnOrError(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	logger := mocks.NewMockLogger(ctrl)
+	logger.EXPECT().WithContext(gomock.Any()).Return(logger).AnyTimes()
+	logger.EXPECT().Debug("controller.Get", gomock.Any()).Times(2)
+	logger.EXPECT().Warn("controller.Get failed", gomock.Any())
+	logger.EXPECT().Error("controller.Get failed", gomock.Any())
+	logger.EXPECT().Debug("service.Get", gomock.Any())
+	logger.EXPECT().Debug("service.Get failed", gomock.Any())
+	deps := decorate.Deps{
+		Observability: decorate.Observability{Logger: logger},
+		SkipRecovery:  true,
+	}
+	fail := func(code apperr.ErrorCode) func(context.Context) (int, error) {
+		return func(context.Context) (int, error) { return 0, apperr.New(code, "x") }
+	}
+
+	edge := transport.Tier().Subject("users", deps)
+	_, err := edge.Exec(t.Context(), "Get", fail(apperr.CodeNotFound))
+	require.Error(t, err)
+	_, err = edge.Exec(t.Context(), "Get", fail(apperr.CodeInternal))
+	require.Error(t, err)
+	_, err = service.Tier().Subject("users", deps).
+		Exec(t.Context(), "Get", fail(apperr.CodeInternal))
+	require.Error(t, err)
 }

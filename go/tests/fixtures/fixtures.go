@@ -284,7 +284,7 @@ func StubCircuitBreaker(open bool) *mocks.MockCircuitBreaker {
 	cb := mocks.NewMockCircuitBreaker(newCtrl())
 	cb.EXPECT().Execute(gomock.Any()).DoAndReturn(func(fn func() error) error {
 		if open {
-			return apperr.Sentinel("circuit breaker is open")
+			return apperr.New(apperr.CodeUnavailable, "circuit breaker is open")
 		}
 		return fn()
 	}).AnyTimes()

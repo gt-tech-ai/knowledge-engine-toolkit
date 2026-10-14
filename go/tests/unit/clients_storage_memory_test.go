@@ -11,7 +11,6 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/memory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 )
 
 // TestStorageMemory_RoundTrip tests that the in-memory StorageClient round-trips an
@@ -227,7 +226,11 @@ func TestStorageFactory_KindMemory_Selected(t *testing.T) {
 	ctx := context.Background()
 	// An empty S3Config fails S3 validation; KindMemory must bypass it and build the
 	// memory backend.
-	c, err := storage.NewFromConfig(ctx, storage.KindMemory, infra.S3Config{})
+	c, err := storage.NewFromConfig(
+		ctx,
+		storage.Config{Kind: storage.KindMemory},
+		storage.Deps{},
+	)
 	require.NoError(t, err)
 
 	require.NoError(t, c.Upload(ctx, "b", "k", strings.NewReader("x"), "text/plain"))

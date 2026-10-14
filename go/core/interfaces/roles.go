@@ -72,3 +72,51 @@ type Exister[ID comparable] interface {
 	// Exists checks if an entity with the given ID exists.
 	Exists(ctx context.Context, id ID) (bool, error)
 }
+
+// The compositions below are the role sets a narrowed (role-scoped) resource honors;
+// the role-scoped decorated repositories and services wrap them.
+
+// ReadListExistStore is the read-only persistence surface: Get + List + Exists, with no
+// write role. It is the store seam for a resource whose writes are owned elsewhere (e.g.
+// a read model another service writes).
+type ReadListExistStore[T any, P any, ID comparable] interface {
+	// Reader contributes Get (read by id).
+	Reader[T, ID]
+	// Lister contributes List (paged read).
+	Lister[T, P]
+	// Exister contributes Exists (existence check by id).
+	Exister[ID]
+}
+
+// CRUDNoListStore is the list-less full-write persistence surface: Get + Create +
+// Update + Delete + Exists, with no List. It is the store seam for a keyed resource with
+// no listable collection (e.g. one addressed only by id or an external id).
+type CRUDNoListStore[T any, ID comparable] interface {
+	// Reader contributes Get (read by id).
+	Reader[T, ID]
+	// Writer contributes Create and Update.
+	Writer[T, ID]
+	// Deleter contributes Delete (remove by id).
+	Deleter[ID]
+	// Exister contributes Exists (existence check by id).
+	Exister[ID]
+}
+
+// CRUDNoListRepository is the list-less repository surface a list-less service
+// delegates to: Get + Create + Update + Delete (services expose no Exists). A list-less
+// decorated repository (Reader + Writer + Deleter + Exister) satisfies it.
+type CRUDNoListRepository[T any, ID comparable] interface {
+	// Reader contributes Get (read by id).
+	Reader[T, ID]
+	// Writer contributes Create and Update.
+	Writer[T, ID]
+	// Deleter contributes Delete (remove by id).
+	Deleter[ID]
+}
+
+// InsertOnlyStore is the append-only, tx-aware persistence seam: a store whose Insert
+// honors a transaction on the context.
+type InsertOnlyStore[T any] interface {
+	// Inserter contributes Insert (tx-aware append-only write).
+	Inserter[T]
+}

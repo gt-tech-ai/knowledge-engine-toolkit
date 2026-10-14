@@ -58,7 +58,8 @@ func TestCircuitBreaker_FactoryReturnsInterface(t *testing.T) {
 //
 // What it tests:
 //   - After 3 consecutive failures the breaker transitions to open state
-//   - Subsequent Execute calls fail immediately without invoking the operation
+//   - Subsequent Execute calls fail immediately without invoking the operation, with a
+//     CodeUnavailable error (so an RPC edge reports Unavailable, not Internal)
 func TestCircuitBreaker_OpensAfterConsecutiveFailures(t *testing.T) {
 	t.Parallel()
 
@@ -82,10 +83,14 @@ func TestCircuitBreaker_OpensAfterConsecutiveFailures(t *testing.T) {
 		})
 	}
 
+	ran := false
 	err = cb.Execute(func() error {
+		ran = true
 		return nil
 	})
 	require.Error(t, err, "expected circuit breaker to be open")
+	assert.False(t, ran, "an open breaker rejects without running the operation")
+	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }
 
 // TestCircuitBreaker_DomainErrorsDoNotTrip verifies that permanent domain errors

@@ -2,55 +2,63 @@ package decorate
 
 import (
 	"context"
-	"fmt"
+	"net/http"
 
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
-// loggingMW logs an operation at Debug on entry and Debug on failure (suppressed in
-// staging/prod where level=info). subjectField/msgPrefix are the tier-specific
-// labels: repo ("repo"/"repository") vs service ("service"/"service"). Logs through
-// the context logger so trace ids correlate; the outermost recovery/transport seam
-// owns Error-level logging.
+// loggingMW logs an operation at Debug on entry and on failure (suppressed where the
+// level is info), keyed by the tier: "<tier>.<op>" with "<tier>": name. Inner tiers log
+// failures at Debug so the edge logs the error once: an edge tier's (Tier.Edge) failure
+// is logged at Warn when its code is a client fault (an HTTP status below 500) and at
+// Error otherwise.
 type loggingMW struct {
-	// logger emits the entry/failure logs through the context logger.
+	// logger receives the entries.
 	logger interfaces.Logger
-	// name identifies the repo/service instance; the subjectField value.
+
+	// tier labels the entries ("pipeline", "service", …).
+	tier string
+
+	// name is the decorated subject (a stage, a service, a repository).
 	name string
-	// subjectField is the tier-specific field key (e.g. "repo" or "service").
-	subjectField string
-	// msgPrefix is the tier-specific log-message prefix (e.g. "repository" or "service").
-	msgPrefix string
+
+	// edge raises a failure from Debug to Warn or Error (see Tier.Edge).
+	edge bool
 }
 
-// NewLogging returns a logging middleware for name, tagging entries with subjectField
-// (=name) and messages "<msgPrefix>.<op>".
-func NewLogging(
-	logger interfaces.Logger,
-	name, subjectField, msgPrefix string,
-) OpMiddleware {
-	return loggingMW{
-		logger:       logger,
-		name:         name,
-		subjectField: subjectField,
-		msgPrefix:    msgPrefix,
-	}
+// NewLogging returns the logging middleware for the subject name in tier.
+func NewLogging(logger interfaces.Logger, tier, name string) OpMiddleware {
+	return loggingMW{logger: logger, tier: tier, name: name}
 }
 
-// WrapOp logs the operation on entry and, on failure, at Debug with the error.
+// WrapOp logs op before running next and again if it fails.
 func (m loggingMW) WrapOp(
 	ctx context.Context,
 	op string,
 	next func(context.Context) error,
 ) error {
 	l := m.logger.WithContext(ctx)
-	l.Debug(m.msgPrefix+"."+op, m.subjectField, m.name, "custom_operation", op)
+	l.Debug(m.tier+"."+op, m.tier, m.name, "operation", op)
 	err := next(ctx)
-	if err != nil {
-		l.Debug(
-			fmt.Sprintf("%s.%s failed", m.msgPrefix, op),
-			m.subjectField, m.name, "custom_operation", op, "error", err,
-		)
+	if err == nil {
+		return nil
+	}
+	msg, fields := m.tier+"."+op+" failed", []any{
+		m.tier,
+		m.name,
+		"operation",
+		op,
+		"error",
+		err,
+	}
+	switch {
+	case !m.edge:
+		l.Debug(msg, fields...)
+	case apperr.ToHTTPStatus(apperr.Code(err)) < http.StatusInternalServerError:
+		l.Warn(msg, fields...)
+	default:
+		l.Error(msg, fields...)
 	}
 	return err
 }

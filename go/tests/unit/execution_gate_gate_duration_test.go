@@ -65,12 +65,11 @@ func TestGate_SerialPhaseFiresPhaseCompleteOnceWithElapsed(t *testing.T) {
 		},
 	).AnyTimes()
 
-	g := gate.NewGate("g").
+	g := gate.New("g").
 		Serial("phase", sleepyJob(t, "a"), sleepyJob(t, "b"), sleepyJob(t, "c")).
-		WithObserver(obs).
-		Build()
+		Observe(obs)
 
-	require.NoError(t, gate.RunGate(context.Background(), gateNopRunner(t), "/", g))
+	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), "/"))
 
 	assert.Len(
 		t,

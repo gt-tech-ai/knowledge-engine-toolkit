@@ -1,7 +1,8 @@
 // Package secrets is the credential-source client tier: it selects a secret backend —
 // an environment variable (env/), a git-ignored local file (file/), or AWS Secrets
-// Manager (awssm/) — by Kind and returns the interfaces.Source contract, so switching
-// where a credential is read is a configuration change, not a caller edit. The contract
+// Manager (awssm/) — by Kind (env when empty) and returns the interfaces.Source
+// contract, so switching where a credential is read is a configuration change, not a
+// caller edit. The contract
 // (interfaces.Source plus the opaque types.Secret) lives in core; each backend
 // implements it; this is the factory, mirroring the cache/storage/auth NewFromConfig
 // pattern.
@@ -13,86 +14,94 @@ package secrets
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/secrets/awssm"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/secrets/env"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/secrets/file"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
-
-// Kind selects the credential backend.
-type Kind int
 
 const (
-	// KindEnv reads credentials from environment variables (read-only).
-	KindEnv Kind = iota
+	// KindEnv reads credentials from environment variables (read-only; the default).
+	KindEnv client.Kind = "env"
+
 	// KindFile reads and writes credentials in a git-ignored local file.
-	KindFile
+	KindFile client.Kind = "file"
+
 	// KindAWSSM reads credentials from AWS Secrets Manager (read-only; IaC writes them).
-	KindAWSSM
+	KindAWSSM client.Kind = "aws-sm"
 )
 
-// String returns the string form of Kind.
-func (k Kind) String() string {
-	switch k {
-	case KindEnv:
-		return "env"
-	case KindFile:
-		return "file"
-	case KindAWSSM:
-		return "aws-sm"
-	default:
-		return fmt.Sprintf("Kind(%d)", int(k))
-	}
-}
-
-// Config selects and configures the credential backend. Only the fields for the
-// selected Kind are consulted; each map is the caller-supplied Ref→address policy.
+// Config selects the credential backend and maps each Ref to its address there.
 type Config struct {
+	// Kind selects the backend; empty means KindEnv.
+	Kind client.Kind `yaml:"kind" mapstructure:"kind"`
+
 	// EnvVars maps a Ref to its environment variable name (KindEnv).
-	EnvVars map[types.Ref]string
+	EnvVars map[types.Ref]string `yaml:"env_vars" mapstructure:"env_vars"`
 
 	// Files maps a Ref to its git-ignored file location (KindFile).
-	Files map[types.Ref]file.Location
+	Files map[types.Ref]file.Location `yaml:"files" mapstructure:"files"`
 
 	// Secrets maps a Ref to its Secrets Manager location (KindAWSSM).
-	Secrets map[types.Ref]awssm.Location
+	Secrets map[types.Ref]awssm.Location `yaml:"secrets" mapstructure:"secrets"`
+
+	// Region is the AWS region for the Secrets Manager backend (KindAWSSM).
+	Region string `yaml:"region" mapstructure:"region"`
+
+	// Name labels the client in decoration overrides, metrics, spans and logs; empty
+	// uses the family name ("secrets").
+	Name string `yaml:"name" mapstructure:"name"`
+}
+
+// Deps carries the credential backends' runtime collaborators.
+type Deps struct {
+	// Decorations decorates the client from the decoration config (decoration.clients)
+	// and supplies its observability.
+	decorate.Decorations
 
 	// Runner runs `git check-ignore` for the file backend's write guard (KindFile).
 	Runner interfaces.CommandRunner
-
-	// Region is the AWS region for the Secrets Manager backend (KindAWSSM).
-	Region string
-
-	// Kind selects the backend. The zero value is KindEnv.
-	Kind Kind
 }
 
-// NewFromConfig builds the credential Source selected by cfg.Kind: environment variables
-// (KindEnv), a git-ignored file (KindFile), or AWS Secrets Manager (KindAWSSM). It is
-// the app-wiring entrypoint and fails loudly on an unknown Kind or a Kind whose required
-// dependency (the file backend's CommandRunner) is missing.
-func NewFromConfig(ctx context.Context, cfg Config) (interfaces.Source, error) {
-	switch cfg.Kind {
-	case KindEnv:
-		return env.New(cfg.EnvVars), nil
-	case KindFile:
-		if cfg.Runner == nil {
-			return nil, apperr.New(
-				apperr.CodeInvalidInput,
-				"file credential source requires a CommandRunner for the git-ignore write guard",
-			)
-		}
-		return file.New(cfg.Files, cfg.Runner), nil
-	case KindAWSSM:
-		return awssm.NewClient(ctx, cfg.Region, cfg.Secrets)
-	default:
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			fmt.Sprintf("unknown secrets kind: %v", cfg.Kind),
-		)
+// kinds is the secrets backend table.
+func kinds() client.Kinds[Config, Deps, interfaces.Source] {
+	return client.Kinds[Config, Deps, interfaces.Source]{
+		Family:   "secrets",
+		Default:  KindEnv,
+		Decorate: Decorate,
+		Backends: map[client.Kind]client.Backend[Config, Deps, interfaces.Source]{
+			KindEnv: func(_ context.Context, cfg Config, _ Deps) (interfaces.Source, error) {
+				return env.New(cfg.EnvVars), nil
+			},
+			KindFile: func(_ context.Context, cfg Config, deps Deps) (interfaces.Source, error) {
+				if deps.Runner == nil {
+					return nil, apperr.New(
+						apperr.CodeInvalidInput,
+						"file credential source requires a CommandRunner for the git-ignore write guard",
+					)
+				}
+				return file.New(cfg.Files, deps.Runner), nil
+			},
+			KindAWSSM: func(ctx context.Context, cfg Config, _ Deps) (interfaces.Source, error) {
+				return awssm.NewClient(ctx, cfg.Region, cfg.Secrets)
+			},
+		},
 	}
+}
+
+// NewFromConfig builds the credential source cfg.Kind selects, run through the client
+// tier. ctx bounds the AWS
+// config load of KindAWSSM. An unknown kind, or KindFile without a Runner, is
+// CodeInvalidInput.
+func NewFromConfig(
+	ctx context.Context,
+	cfg Config,
+	deps Deps,
+) (interfaces.Source, error) {
+	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
 }

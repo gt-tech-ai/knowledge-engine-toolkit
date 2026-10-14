@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
@@ -16,10 +17,6 @@ type Config struct {
 	// Logger logs subscriber receive/handle/delete errors (the subscriber runs
 	// in a goroutine, so its errors have nowhere to return). Nil skips logging.
 	Logger interfaces.Logger
-
-	// Metrics, when set, records per-message handle counters + latency on the
-	// subscriber via a handler-observability decorator. Nil skips metrics.
-	Metrics interfaces.Metrics
 
 	// Ready, when set, gates every receive: the subscriber calls it before each
 	// ReceiveMessage and, while it errors, logs, backs off and receives nothing. A
@@ -53,6 +50,10 @@ type Config struct {
 	// SecretAccessKey is the static secret key paired with AccessKeyID: required
 	// when AccessKeyID is set, ignored when it is empty.
 	SecretAccessKey string
+
+	// Handlers runs each handler call through the handler tier
+	// (client.NewHandlerBase); the zero Base runs handlers undecorated.
+	Handlers client.Base
 
 	// NackDelay, when Max is positive, hides a message whose handler failed for a
 	// uniformly jittered delay in [Min, Max] (ChangeMessageVisibility) instead of

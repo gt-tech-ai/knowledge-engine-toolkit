@@ -1,96 +1,117 @@
-// Package cache provides a builder for ByteCache implementations with multiple
-// backends.
-//
-// Use New() or NewFromConfig() to create a cache instance. The builder pattern
-// allows selecting between Redis-backed (or future) implementations at runtime
-// based on configuration.
-//
-// Example:
-//
-//	// Create a Redis cache with custom TTL
-//	c, err := cache.New(cache.KindRedis, cache.WithDefaultTTL(10*time.Minute))
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//	defer c.(io.Closer).Close()
-//
-//	// Create from config
-//	cfg := cache.DefaultConfig()
-//	cfg.Kind = cache.KindRedis
-//	c, err := cache.NewFromConfig(cfg)
+// Package cache builds a ByteCache from config: the always-miss stub (the default) or
+// Redis. The concrete backends live in the stub/ and redis/ subpackages.
 package cache
 
 import (
-	"fmt"
+	"context"
+	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cache/redis"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cache/stub"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
-
-// Kind specifies which cache implementation to use.
-type Kind int
 
 const (
-	// KindRedis uses a Redis-backed cache with singleflight support. Suitable
-	// for distributed deployments with shared cache.
-	KindRedis Kind = iota
+	// KindStub misses every Get and drops every write (the default).
+	KindStub = client.KindStub
+
+	// KindRedis caches in Redis.
+	KindRedis client.Kind = "redis"
 )
 
-// String returns the string representation of Kind.
-func (k Kind) String() string {
-	switch k {
-	case KindRedis:
-		return "redis"
-	default:
-		return fmt.Sprintf("Kind(%d)", k)
+// Config selects and tunes the cache.
+type Config struct {
+	// Kind selects the backend; empty means KindStub.
+	Kind client.Kind `yaml:"kind" mapstructure:"kind"`
+
+	// Name labels the client in decoration overrides, metrics, spans and logs; empty
+	// uses the family name ("cache").
+	Name string `yaml:"name" mapstructure:"name"`
+
+	// Redis configures KindRedis.
+	Redis RedisConfig `yaml:"redis" mapstructure:"redis"`
+
+	// DefaultTTL applies when a caller passes a zero TTL.
+	DefaultTTL time.Duration `yaml:"default_ttl" mapstructure:"default_ttl"`
+
+	// OpTimeout bounds each cache command; zero inherits the caller's deadline.
+	OpTimeout time.Duration `yaml:"op_timeout" mapstructure:"op_timeout"`
+}
+
+// RedisConfig configures the Redis backend.
+type RedisConfig struct {
+	// Addr is the Redis host:port.
+	Addr string `yaml:"addr" mapstructure:"addr"`
+
+	// Password is the Redis auth token.
+	Password string `yaml:"password" mapstructure:"password"`
+
+	// DB is the Redis database number.
+	DB int `yaml:"db" mapstructure:"db"`
+
+	// PoolSize is the connection pool size; zero means 10 * GOMAXPROCS.
+	PoolSize int `yaml:"pool_size" mapstructure:"pool_size"`
+
+	// MinIdleConns keeps this many idle connections warm.
+	MinIdleConns int `yaml:"min_idle_conns" mapstructure:"min_idle_conns"`
+
+	// FailureMode picks how a Redis error is absorbed: 0 bypasses silently, 1 logs.
+	FailureMode int `yaml:"failure_mode" mapstructure:"failure_mode"`
+
+	// TLS encrypts the connection (required by managed Redis with an auth token).
+	TLS bool `yaml:"tls" mapstructure:"tls"`
+}
+
+// Deps carries the cache's runtime collaborators.
+type Deps struct {
+	// Decorations decorates the client from the decoration config (decoration.clients)
+	// and supplies its observability.
+	decorate.Decorations
+}
+
+// DefaultConfig returns the stub kind, a 5-minute default TTL and a 500ms op timeout.
+func DefaultConfig() Config {
+	return Config{DefaultTTL: 5 * time.Minute, OpTimeout: 500 * time.Millisecond}
+}
+
+// kinds is the cache's backend table.
+func kinds() client.Kinds[Config, Deps, interfaces.ByteCache] {
+	return client.Kinds[Config, Deps, interfaces.ByteCache]{
+		Family:   "cache",
+		Default:  KindStub,
+		Decorate: Decorate,
+		Backends: map[client.Kind]client.Backend[Config, Deps, interfaces.ByteCache]{
+			KindStub: func(context.Context, Config, Deps) (interfaces.ByteCache, error) {
+				return stub.New(), nil
+			},
+			KindRedis: func(
+				_ context.Context, cfg Config, deps Deps,
+			) (interfaces.ByteCache, error) {
+				return redis.New(&redis.Config{
+					Addr:         cfg.Redis.Addr,
+					Password:     cfg.Redis.Password,
+					DB:           cfg.Redis.DB,
+					PoolSize:     cfg.Redis.PoolSize,
+					MinIdleConns: cfg.Redis.MinIdleConns,
+					DefaultTTL:   cfg.DefaultTTL,
+					OpTimeout:    cfg.OpTimeout,
+					FailureMode:  redis.FailureMode(cfg.Redis.FailureMode),
+					TLS:          cfg.Redis.TLS,
+					Logger:       deps.Observability().Logger,
+				}), nil
+			},
+		},
 	}
 }
 
-// New creates a ByteCache of the specified kind with optional functional
-// options. Returns an error if the kind is unknown.
-//
-// The returned ByteCache may implement io.Closer. Call type assertion and
-// Close() to clean up resources.
-//
-// Example:
-//
-//	c, err := cache.New(cache.KindRedis, cache.WithDefaultTTL(10*time.Minute))
-//	if err != nil {
-//	    return err
-//	}
-//	defer c.(io.Closer).Close()
-func New(kind Kind, opts ...options.Option[Config]) (interfaces.ByteCache, error) {
-	cfg := DefaultConfig()
-	cfg.Kind = kind
-	options.ApplyOptions(&cfg, opts...)
-	return NewFromConfig(&cfg)
-}
-
-// NewFromConfig creates a ByteCache from a Config struct. Returns an error if
-// the kind is unknown.
-func NewFromConfig(cfg *Config) (interfaces.ByteCache, error) {
-	switch cfg.Kind {
-	case KindRedis:
-		redisCfg := redis.Config{
-			Addr:         cfg.Redis.Addr,
-			Password:     cfg.Redis.Password,
-			DB:           cfg.Redis.DB,
-			PoolSize:     cfg.Redis.PoolSize,
-			MinIdleConns: cfg.Redis.MinIdleConns,
-			DefaultTTL:   cfg.DefaultTTL,
-			OpTimeout:    cfg.OpTimeout,
-			FailureMode:  redis.FailureMode(cfg.Redis.FailureMode),
-			TLS:          cfg.Redis.TLS,
-			Logger:       cfg.Logger,
-		}
-		return redis.New(&redisCfg), nil
-
-	default:
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			fmt.Sprintf("unknown cache kind: %v", cfg.Kind),
-		)
-	}
+// NewFromConfig builds the cache cfg.Kind selects and runs it through the client tier,
+// without I/O. An unknown kind is CodeInvalidInput.
+func NewFromConfig(
+	ctx context.Context,
+	cfg Config,
+	deps Deps,
+) (interfaces.ByteCache, error) {
+	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
 }

@@ -1,3 +1,11 @@
+// Package jsonapi provides HTTP middleware that transforms Vanguard REST responses into
+// [JSON:API](https://jsonapi.org/format/) envelopes with the foundation/jsonapi codec.
+//
+// Only REST requests are transformed (IsRESTRequest); Connect, gRPC, and gRPC-Web pass
+// through unchanged. The middleware sits between the HTTP server and Vanguard,
+// rewriting response bodies into {data, meta, links, errors} and validating/unwrapping
+// the inbound {data:{type,attributes}} request envelope, by the Role of the route the
+// consumer's table (codec.Config) matches.
 package jsonapi
 
 import (
@@ -5,10 +13,12 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 
 	"connectrpc.com/connect"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	codec "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/jsonapi"
 )
 
 // contentTypeJSONAPI is the JSON:API media type set on all transformed
@@ -29,11 +39,11 @@ const maxBodySize = 1 << 20 // 1 MiB
 // matched CREATE/UPDATE route validates + unwraps the inbound
 // {data:{type,attributes}} envelope (400 before the handler on a malformed,
 // absent, or type-mismatched envelope); other roles pass their body through.
-// The response is then transformed by the route's Role — never by guessing
+// The response is then transformed by the route's codec.Role — never by guessing
 // method/path/data-presence.
 func Middleware(
 	inner http.Handler,
-	cfg Config,
+	cfg codec.Config,
 ) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !IsRESTRequest(r) {
@@ -87,7 +97,7 @@ func Middleware(
 		// Error responses (4xx/5xx) — includes a handler-side protovalidate 400.
 		if cw.status >= 400 {
 			status := reclassifyBindingError(cw.status, cw.body.Bytes())
-			transformed := TransformError(status, cw.body.Bytes())
+			transformed := codec.TransformError(status, cw.body.Bytes())
 			w.Header().Set("Content-Type", contentTypeJSONAPI)
 			w.Header().Del("Content-Length")
 			w.WriteHeader(status)
@@ -96,7 +106,7 @@ func Middleware(
 		}
 
 		// DELETE → 204 No Content, regardless of the handler's body.
-		if route.Role == RoleDelete {
+		if route.Role == codec.RoleDelete {
 			w.Header().Set("Content-Type", contentTypeJSONAPI)
 			w.Header().Del("Content-Length")
 			w.WriteHeader(http.StatusNoContent)
@@ -138,28 +148,28 @@ func Middleware(
 	})
 }
 
-// transformByRole builds the JSON:API success envelope for a route's Role. It
+// transformByRole builds the JSON:API success envelope for a route's codec.Role. It
 // returns the transformed document, the HTTP status, and handled=false when it
 // has already written a missing-resource 500 to w (CREATE/GET_ONE/UPDATE whose
 // handler omitted the declared resource key — the guard: a create can no
 // longer silently return meta-only).
 func transformByRole(
 	w http.ResponseWriter,
-	route RouteEntry,
+	route codec.RouteEntry,
 	parsed map[string]any,
 	selfLink string,
 ) (result map[string]any, status int, handled bool) {
-	rc := route.resourceConfig()
+	rc := route.Resource()
 
 	switch route.Role {
-	case RoleAction:
+	case codec.RoleAction:
 		// Action endpoints are meta-only — never a data resource.
-		return TransformMeta(parsed), http.StatusOK, true
+		return codec.TransformMeta(parsed), http.StatusOK, true
 
-	case RoleList:
-		return TransformCollection(parsed, rc, selfLink), http.StatusOK, true
+	case codec.RoleList:
+		return codec.TransformCollection(parsed, rc, selfLink), http.StatusOK, true
 
-	case RoleCreate:
+	case codec.RoleCreate:
 		// A collection-only bulk create wraps as a collection; the common case is
 		// a single created resource → 201 + Location.
 		if rc.SingleKey == "" && rc.CollectionKey != "" {
@@ -167,13 +177,17 @@ func transformByRole(
 				writeMissingResourceError(w, rc.CollectionKey)
 				return nil, 0, false
 			}
-			return TransformCollection(parsed, rc, selfLink), http.StatusCreated, true
+			return codec.TransformCollection(
+				parsed,
+				rc,
+				selfLink,
+			), http.StatusCreated, true
 		}
 		if !hasKey(parsed, rc.SingleKey) {
 			writeMissingResourceError(w, rc.SingleKey)
 			return nil, 0, false
 		}
-		result := TransformSingleResource(parsed, rc, selfLink)
+		result := codec.TransformSingleResource(parsed, rc, selfLink)
 		if data, ok := result["data"].(map[string]any); ok {
 			if id, ok := data["id"].(string); ok && id != "" {
 				w.Header().Set("Location", selfLink+"/"+id)
@@ -182,8 +196,8 @@ func transformByRole(
 		return result, http.StatusCreated, true
 
 	// The single-resource roles are listed so the exhaustive linter sees every declared
-	// Role handled; they and an undeclared role share the single-resource read below.
-	case RoleGetOne, RoleUpdate, RoleDelete:
+	// codec.Role handled; they and an undeclared role share the single-resource read below.
+	case codec.RoleGetOne, codec.RoleUpdate, codec.RoleDelete:
 	default:
 	}
 
@@ -193,7 +207,7 @@ func transformByRole(
 		writeMissingResourceError(w, rc.SingleKey)
 		return nil, 0, false
 	}
-	return TransformSingleResource(parsed, rc, selfLink), http.StatusOK, true
+	return codec.TransformSingleResource(parsed, rc, selfLink), http.StatusOK, true
 }
 
 // hasKey reports whether a non-empty key is present in the parsed response body.
@@ -273,11 +287,11 @@ func reclassifyBindingError(status int, body []byte) int {
 }
 
 // writeRequestError writes a JSON:API 400 error document for a bad inbound
-// request envelope, in the same shape TransformError produces.
+// request envelope, in the same shape codec.TransformError produces.
 func writeRequestError(w http.ResponseWriter, message string) {
 	body, err := json.Marshal(map[string]any{
-		memberCode: "invalid_argument",
-		"message":  message,
+		codec.MemberCode: "invalid_argument",
+		"message":        message,
 	})
 	if err != nil {
 		body = nil
@@ -285,17 +299,17 @@ func writeRequestError(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", contentTypeJSONAPI)
 	w.Header().Del("Content-Length")
 	w.WriteHeader(http.StatusBadRequest)
-	_, _ = w.Write(TransformError(http.StatusBadRequest, body))
+	_, _ = w.Write(codec.TransformError(http.StatusBadRequest, body))
 }
 
 // writeMissingResourceError reports a resource response that omitted its declared
-// resource as a server error, in the same JSON:API error shape TransformError
+// resource as a server error, in the same JSON:API error shape codec.TransformError
 // produces for any other 5xx. The key names the protobuf field that was expected,
 // which is config data rather than caller input.
 func writeMissingResourceError(w http.ResponseWriter, singleKey string) {
 	body, err := json.Marshal(map[string]any{
-		memberCode: "internal",
-		"message":  "response carried no " + singleKey + " resource",
+		codec.MemberCode: "internal",
+		"message":        "response carried no " + singleKey + " resource",
 	})
 	if err != nil {
 		body = nil
@@ -303,7 +317,7 @@ func writeMissingResourceError(w http.ResponseWriter, singleKey string) {
 	w.Header().Set("Content-Type", contentTypeJSONAPI)
 	w.Header().Del("Content-Length")
 	w.WriteHeader(http.StatusInternalServerError)
-	_, _ = w.Write(TransformError(http.StatusInternalServerError, body))
+	_, _ = w.Write(codec.TransformError(http.StatusInternalServerError, body))
 }
 
 // captureWriter intercepts Write and WriteHeader calls from the inner
@@ -340,3 +354,16 @@ func (c *captureWriter) Write(b []byte) (int, error) {
 // Flush is a no-op that prevents the inner handler from flushing the buffered
 // response before the middleware has transformed it.
 func (c *captureWriter) Flush() {} // no-op; prevents premature flush
+
+// IsRESTRequest returns true if the request appears to be a REST request
+// (not Connect, gRPC, or gRPC-Web).
+func IsRESTRequest(r *http.Request) bool {
+	// Connect protocol announces itself with this header.
+	if r.Header.Get("Connect-Protocol-Version") != "" {
+		return false
+	}
+
+	// gRPC and gRPC-Web use application/grpc* content types.
+	ct := r.Header.Get("Content-Type")
+	return !strings.HasPrefix(ct, "application/grpc")
+}

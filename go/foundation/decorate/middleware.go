@@ -3,16 +3,17 @@
 // that wraps ANY named operation with the cross-cutting decorator stack, regardless
 // of the operation's return type.
 //
-// It replaces the entity-typed custom-operation seam (the former
-// DecoratedRepository[T,P,ID].ExecWithDecoration, hard-typed to (*T,error)) so a
-// custom op returning bool / a slice / struct{} decorates without the (*T,error)
-// shoehorn, and the cross-cutting bodies (tracing, metrics, logging, timeout, retry,
-// circuit-breaker, recovery, auth) live in exactly one place instead of being
-// duplicated across the repo and service decorator packages.
+// The cross-cutting bodies (tracing, metrics, logging, recovery, auth, timeout,
+// retry, circuit breaker, bulkhead, rate limit) live in exactly one place, and an
+// operation of any return type (a value, a slice, struct{}) decorates the same way.
 //
 // It sits in the foundation tier and depends only on core (interfaces + errors) +
-// stdlib, so both the repos and services decorator packages can build a Chain from
-// the same middlewares.
+// stdlib. Every tier (controller, client, repository, service, pipeline, workflow,
+// job) decorates through it: a Tier names the tier and orders its layers, Deps
+// carries the collaborators (built from the decoration config by Decorations), a
+// Subject runs one component's operations through the tier's chain, and the role
+// decorators (Reader, Lister, Writer, …) build the decorated CRUD shapes from a
+// Subject.
 package decorate
 
 import "context"

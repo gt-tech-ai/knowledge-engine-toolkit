@@ -1,6 +1,6 @@
 [project]
 name = "techai-webutils"
-version = "0.5.0"
+version = "0.5.1"
 # The published version, bumped by hand in the release PR whenever the package changes. It must
 # be greater than every version already on PyPI: 0.1.0 through 0.3.3 belong to the package's
 # earlier release line, so this line continues from 0.4.0.
@@ -157,9 +157,6 @@ data_file = "coverage_unit.dat"
 # wrappers — their partial unit coverage then lands in coverage_unit.dat and can
 # merge into the optional combined gate (.coveragerc.combined), which counts them.
 omit = [
-    "*/clients/transport/grpc/server.py",                        # gRPC server factory (binds/serves) — integration
-    "*/clients/rpc/grpc/interceptors/tracing.py",          # OTel client span wiring — integration/runtime
-    "*/clients/rpc/grpc/interceptors/tracing_server.py",   # OTel server span wiring — integration/runtime
     "*/clients/messaging/sqs/sqs_publisher.py",        # boto3 SQS send — integration (ElasticMQ)
     "*/clients/messaging/sqs/sqs_subscriber.py",       # boto3 SQS receive loop — integration (ElasticMQ)
     "*/foundation/resilience/sqs_dlq.py",              # boto3 SQS DLQ send — integration (ElasticMQ)

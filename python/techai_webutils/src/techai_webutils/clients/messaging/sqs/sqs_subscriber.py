@@ -1,4 +1,8 @@
-"""SQS message consumer using aiobotocore long-polling."""
+"""SQS message consumer using aiobotocore long-polling.
+
+Each handler call continues the trace the publisher put in the message's attributes and runs
+through the handler tier.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +12,7 @@ from typing import TYPE_CHECKING, Self
 
 import aiobotocore.session
 
+from techai_webutils.clients.messaging.handling import run_handler
 from techai_webutils.core.errors import AppRuntimeError
 from techai_webutils.core.interfaces.messaging import (
     Message,
@@ -22,6 +27,7 @@ if TYPE_CHECKING:
     from types_aiobotocore_sqs import SQSClient
     from types_aiobotocore_sqs.type_defs import MessageTypeDef
 
+    from techai_webutils.clients.client import ClientBase
     from techai_webutils.clients.messaging.config import SQSConfig
 
 logger = logging.getLogger(__name__)
@@ -36,9 +42,14 @@ class SQSSubscriber(MessageConsumer):
             await sub.subscribe("events", handler)
     """
 
-    def __init__(self, config: SQSConfig) -> None:
-        """Store the SQS connection config; the client is created on context entry."""
+    def __init__(self, config: SQSConfig, handlers: ClientBase | None = None) -> None:
+        """Store the SQS connection config; the client is created on context entry.
+
+        ``handlers`` is the handler tier (``ClientBase.handler``) each handler call runs through;
+        None runs handlers undecorated.
+        """
         self._config = config
+        self._handlers = handlers
         self._client: SQSClient | None = None
         self._session: AioSession | None = None
         self._running = False
@@ -113,7 +124,7 @@ class SQSSubscriber(MessageConsumer):
             metadata=self._extract_metadata(raw),
         )
         try:
-            await handler(msg_obj)
+            await run_handler(self._handlers, topic, handler, msg_obj)
             await self._client.delete_message(
                 QueueUrl=self._config.queue_url,
                 ReceiptHandle=receipt_handle,

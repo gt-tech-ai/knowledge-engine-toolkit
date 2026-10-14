@@ -1,6 +1,6 @@
 """``AiSpanEnricher`` — stamps GenAI semantic attributes on the current span (ARCHITECTURE.md#decorator-order).
 
-A ``__getattr__`` proxy in the ``TracingProxy`` style that wraps an ``LLMProvider`` or a
+A ``__getattr__`` proxy that wraps an ``LLMProvider`` or a
 ``RetrievalEngine``. It opens no span of its own: the composition root already runs each step inside a
 span (the step pipeline's), so the enricher stamps that span with what only the client boundary
 knows — the model, the token usage and the finish reason of a generation, or the shape of a
@@ -213,7 +213,7 @@ class AiSpanEnricher:
         )
         self._facts = facts
         self._fact_dimensions = fact_dimensions
-        # Resolved by name like LoggingProxy: structlog is configured once at the process root.
+        # Resolved by name: structlog is configured once at the process root.
         self._logger = get_logger("ai_enricher")
         self._tokens = None
         self._duration = None

@@ -14,6 +14,7 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/lifecycle"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer"
 )
 
 // maxBatchSize is the SQS per-request cap for SendMessageBatch and
@@ -42,16 +43,10 @@ type Publisher struct {
 }
 
 // NewPublisher creates an SQS message publisher. It uses Config.API when set,
-// otherwise builds the real AWS SDK client from cfg (endpoint + credentials). It is
-// NewPublisherContext with a background context.
-func NewPublisher(cfg Config) (*Publisher, error) {
-	return NewPublisherContext(context.Background(), cfg)
-}
-
-// NewPublisherContext creates an SQS message publisher like NewPublisher, loading
+// otherwise builds the real AWS SDK client from cfg (endpoint + credentials), loading
 // the AWS config (credential chain, region) under ctx so a caller's deadline or
 // cancellation bounds client construction.
-func NewPublisherContext(ctx context.Context, cfg Config) (*Publisher, error) {
+func NewPublisher(ctx context.Context, cfg Config) (*Publisher, error) {
 	api, err := resolveAPI(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -67,8 +62,9 @@ func (p *Publisher) Publish(ctx context.Context, topic string, payload []byte) e
 		return err
 	}
 	if _, err := p.api.SendMessage(ctx, &awssqs.SendMessageInput{
-		QueueUrl:    aws.String(url),
-		MessageBody: aws.String(string(payload)),
+		QueueUrl:          aws.String(url),
+		MessageBody:       aws.String(string(payload)),
+		MessageAttributes: traceAttributes(ctx),
 	}); err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "sqs send message")
 	}
@@ -92,6 +88,7 @@ func (p *Publisher) PublishBatch(
 	if err != nil {
 		return err
 	}
+	attrs := traceAttributes(ctx)
 	for start := 0; start < len(payloads); start += maxBatchSize {
 		end := min(start+maxBatchSize, len(payloads))
 		entries := make([]sqstypes.SendMessageBatchRequestEntry, 0, end-start)
@@ -99,8 +96,9 @@ func (p *Publisher) PublishBatch(
 			entries = append(entries, sqstypes.SendMessageBatchRequestEntry{
 				// Id is the per-request entry id (must be unique within the batch);
 				// the payload index serves that role.
-				Id:          aws.String(strconv.Itoa(i)),
-				MessageBody: aws.String(string(payloads[i])),
+				Id:                aws.String(strconv.Itoa(i)),
+				MessageBody:       aws.String(string(payloads[i])),
+				MessageAttributes: attrs,
 			})
 		}
 		out, err := p.api.SendMessageBatch(ctx, &awssqs.SendMessageBatchInput{
@@ -115,6 +113,25 @@ func (p *Publisher) PublishBatch(
 		}
 	}
 	return nil
+}
+
+// traceAttributes returns ctx's propagated trace context as string message attributes
+// (traceparent, tracestate, baggage), so the subscriber continues the publisher's trace;
+// nil when ctx carries none.
+func traceAttributes(ctx context.Context) map[string]sqstypes.MessageAttributeValue {
+	carrier := map[string]string{}
+	tracer.Inject(ctx, carrier)
+	if len(carrier) == 0 {
+		return nil
+	}
+	attrs := make(map[string]sqstypes.MessageAttributeValue, len(carrier))
+	for k, v := range carrier {
+		attrs[k] = sqstypes.MessageAttributeValue{
+			DataType:    aws.String("String"),
+			StringValue: aws.String(v),
+		}
+	}
+	return attrs
 }
 
 // failedEntriesError builds an error summarizing the failed entries of a batch

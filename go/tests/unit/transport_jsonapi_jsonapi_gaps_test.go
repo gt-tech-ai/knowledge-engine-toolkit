@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	codec "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/jsonapi"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/jsonapi"
 )
 
@@ -153,7 +154,7 @@ func TestMiddleware_UnparseableBodyPassthrough(t *testing.T) {
 //     object elements into resource objects.
 func TestTransformCollection_PreservesNonObjectItems(t *testing.T) {
 	t.Parallel()
-	cfg := jsonapi.ResourceConfig{Type: "users", CollectionKey: "users"}
+	cfg := codec.ResourceConfig{Type: "users", CollectionKey: "users"}
 	body := map[string]any{
 		"users": []any{
 			"scalar-item",
@@ -161,7 +162,7 @@ func TestTransformCollection_PreservesNonObjectItems(t *testing.T) {
 		},
 	}
 
-	result := jsonapi.TransformCollection(body, cfg, "/api/v1/demo/users")
+	result := codec.TransformCollection(body, cfg, "/api/v1/demo/users")
 
 	data, ok := result["data"].([]any)
 	require.True(t, ok)

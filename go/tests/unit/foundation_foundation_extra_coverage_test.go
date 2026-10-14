@@ -7,117 +7,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
-	schemares "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/reswire"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
-
-// TestReswire_NewRetrier_ErrorPaths tests that NewRetrier surfaces both a config
-// unmarshal failure and a post-unmarshal validation failure as errors.
-//
-// Why this test is important:
-//   - reswire is the single composition helper every repo/client/interceptor
-//     provider uses to build a retrier from config; if a malformed or out-of-range
-//     resilience.retry overlay were swallowed instead of erroring, the provider
-//     would silently fall back to a half-built retrier at startup. These two error
-//     branches are the guard that a bad overlay fails the composition root loudly.
-//
-// What it tests:
-//   - When the overlay is present but UnmarshalKey fails, NewRetrier returns a
-//     wrapped error; when unmarshalling yields an invalid RetryConfig (negative
-//     max_retries), NewRetrier returns the validation error.
-func TestReswire_NewRetrier_ErrorPaths(t *testing.T) {
-	t.Parallel()
-
-	t.Run("unmarshal error", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		loader := mocks.NewMockConfigLoader(ctrl)
-		loader.EXPECT().Get("resilience.retry").Return(map[string]any{"max_retries": 5})
-		loader.EXPECT().
-			UnmarshalKey("resilience.retry", gomock.Any()).
-			Return(apperr.Sentinel("decode failure"))
-
-		_, err := reswire.NewRetrier(loader)
-		require.Error(t, err, "an unmarshal failure must be surfaced")
-	})
-
-	t.Run("validation error", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		loader := mocks.NewMockConfigLoader(ctrl)
-		loader.EXPECT().Get("resilience.retry").Return(map[string]any{"max_retries": -1})
-		loader.EXPECT().
-			UnmarshalKey("resilience.retry", gomock.Any()).
-			DoAndReturn(func(_ string, target any) error {
-				*target.(*schemares.RetryConfig) = schemares.RetryConfig{
-					MaxRetries: -1,
-					Multiplier: 2,
-				}
-				return nil
-			})
-
-		_, err := reswire.NewRetrier(loader)
-		require.Error(t, err, "an invalid retry config must be rejected")
-	})
-}
-
-// TestReswire_NewBreaker_ErrorPaths tests that NewBreaker surfaces both a config
-// unmarshal failure and a post-unmarshal validation failure as errors.
-//
-// Why this test is important:
-//   - NewBreaker is how every named call-site breaker is built from config; a
-//     malformed or out-of-range resilience.circuit_breaker overlay must fail the
-//     composition root rather than yield a mis-tuned breaker that trips wrongly in
-//     production. These are the two error branches that enforce that.
-//
-// What it tests:
-//   - When the overlay is present but UnmarshalKey fails, NewBreaker returns a
-//     wrapped error; when unmarshalling yields an invalid BreakerConfig
-//     (failure_ratio > 1), NewBreaker returns the validation error.
-func TestReswire_NewBreaker_ErrorPaths(t *testing.T) {
-	t.Parallel()
-
-	t.Run("unmarshal error", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		loader := mocks.NewMockConfigLoader(ctrl)
-		loader.EXPECT().
-			Get("resilience.circuit_breaker").
-			Return(map[string]any{"failure_ratio": 0.5})
-		loader.EXPECT().
-			UnmarshalKey("resilience.circuit_breaker", gomock.Any()).
-			Return(apperr.Sentinel("decode failure"))
-
-		_, err := reswire.NewBreaker(loader, "test.breaker")
-		require.Error(t, err, "an unmarshal failure must be surfaced")
-	})
-
-	t.Run("validation error", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		loader := mocks.NewMockConfigLoader(ctrl)
-		loader.EXPECT().
-			Get("resilience.circuit_breaker").
-			Return(map[string]any{"failure_ratio": 2})
-		loader.EXPECT().
-			UnmarshalKey("resilience.circuit_breaker", gomock.Any()).
-			DoAndReturn(func(_ string, target any) error {
-				*target.(*schemares.BreakerConfig) = schemares.BreakerConfig{
-					FailureRatio: 2,
-				}
-				return nil
-			})
-
-		_, err := reswire.NewBreaker(loader, "test.breaker")
-		require.Error(t, err, "an invalid breaker config must be rejected")
-	})
-}
 
 // TestExponentialRetry_CustomIsRetryable tests that a configured IsRetryable
 // predicate is honored by both Retry and RetryWithResult: a non-retryable error

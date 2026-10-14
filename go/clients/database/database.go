@@ -1,59 +1,54 @@
-// Package database is the database client tier: it selects a SQL connection-pool
-// backend — PostgreSQL today (postgres/) — by Kind and returns the
-// interfaces.DatabasePool contract, so switching database engines is a config
-// change, not a caller edit. The contract lives in core (interfaces.DatabasePool);
-// the backend implements it; this is the factory, mirroring the cache/storage
-// NewFromConfig shape.
+// Package database builds the SQL connection pool from config: PostgreSQL (postgres/)
+// today, behind interfaces.DatabasePool, so switching engines is a config change. It
+// ships no stub: a pool hands its caller a *sql.DB, which nothing zero-I/O can stand in
+// for, so an empty kind selects PostgreSQL.
 package database
 
 import (
-	"fmt"
+	"context"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/database/postgres"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 )
 
-// Kind selects the database backend.
-type Kind int
+// KindPostgres pools connections to PostgreSQL (the default).
+const KindPostgres client.Kind = "postgres"
 
-const (
-	// KindPostgres uses a PostgreSQL connection pool via the pgx stdlib driver
-	// (production and dev).
-	KindPostgres Kind = iota
-)
-
-// String returns the string form of Kind.
-func (k Kind) String() string {
-	switch k {
-	case KindPostgres:
-		return "postgres"
-	default:
-		return fmt.Sprintf("Kind(%d)", k)
-	}
-}
-
-// Config selects and configures the database backend.
+// Config selects and tunes the pool.
 type Config struct {
-	// Database holds the connection settings (DSN, pool sizing) for the backend.
-	Database *infra.DatabaseConfig
+	// Kind selects the backend; empty means KindPostgres.
+	Kind client.Kind `yaml:"kind" mapstructure:"kind"`
 
-	// Kind selects the backend. The zero value is KindPostgres.
-	Kind Kind
+	// Database configures the connection.
+	Database infra.DatabaseConfig `yaml:"database" mapstructure:"database"`
 }
 
-// NewFromConfig builds the database pool selected by cfg.Kind: the PostgreSQL pool
-// (KindPostgres) today. It is the app-wiring entrypoint mirroring the cache/storage
-// NewFromConfig factory; the returned pool is not opened until Start.
-func NewFromConfig(cfg Config) (interfaces.DatabasePool, error) {
-	switch cfg.Kind {
-	case KindPostgres:
-		return postgres.New(cfg.Database), nil
-	default:
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			fmt.Sprintf("unknown database kind: %v", cfg.Kind),
-		)
+// Deps carries the pool's runtime collaborators (none today).
+type Deps struct{}
+
+// kinds is the database backend table.
+func kinds() client.Kinds[Config, Deps, interfaces.DatabasePool] {
+	return client.Kinds[Config, Deps, interfaces.DatabasePool]{
+		Family:  "database",
+		Default: KindPostgres,
+		Backends: map[client.Kind]client.Backend[Config, Deps, interfaces.DatabasePool]{
+			KindPostgres: func(
+				_ context.Context, cfg Config, _ Deps,
+			) (interfaces.DatabasePool, error) {
+				return postgres.New(&cfg.Database), nil
+			},
+		},
 	}
+}
+
+// NewFromConfig builds the pool cfg.Kind selects, without I/O (it connects on Start).
+// An unknown kind is CodeInvalidInput.
+func NewFromConfig(
+	ctx context.Context,
+	cfg Config,
+	deps Deps,
+) (interfaces.DatabasePool, error) {
+	return kinds().New(ctx, cfg.Kind, cfg, deps)
 }
