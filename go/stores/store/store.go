@@ -14,6 +14,7 @@ package store
 import (
 	"context"
 
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
@@ -77,7 +78,8 @@ func ClientFrom[C any](ctx context.Context) (C, bool) {
 
 // Base is the embeddable core of a store named by its Subject over a client of type C
 // (an *ent.Client, a *gorm.DB): Name and Exec run a statement through the store tier,
-// and Client returns the client it runs on. The zero Base runs statements undecorated
+// Write runs a write the same way but only inside a transaction, and Client returns the
+// client it runs on. The zero Base runs statements undecorated
 // on the zero client.
 type Base[C any] struct {
 	// raw is the client used outside a transaction.
@@ -100,4 +102,22 @@ func (b Base[C]) Client(ctx context.Context) C {
 		return c
 	}
 	return b.raw
+}
+
+// Write runs fn as the write op through the store tier, only inside a transaction: on a
+// context with no transaction it fails INTERNAL without running fn, so a write never
+// autocommits outside the workflow that owns it. Reads run through Exec.
+func (b Base[C]) Write[R any](
+	ctx context.Context,
+	op string,
+	fn func(context.Context) (R, error),
+) (R, error) {
+	if !interfaces.InTx(ctx) {
+		var zero R
+		return zero, apperr.New(
+			apperr.CodeInternal,
+			"store "+b.Name()+": "+op+" writes outside a transaction",
+		)
+	}
+	return b.Exec(ctx, op, fn)
 }

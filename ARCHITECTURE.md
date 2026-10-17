@@ -112,11 +112,11 @@ collaborator or zero timeout skips its layer; recovery needs none.
   - `pipeline.Base`: `Stage[In, Out](name, fn)` builds a decorated `pipeline.Stage` (a function
     type that is an `interfaces.Pipeline`), whose `Then[C](next)` composes it with the next
     stage; `FanOut[In, Out](name, stages...)` runs stages concurrently on one input.
-  - `workflow.Base` (over a `TransactionManager`): `Func[In, Out](op, fn)` decorates a function,
-    `Wrap` a custom workflow, `Read` a pipeline without a transaction and `Tx` a pipeline in one
-    transaction; `RunTx(ctx, pipe, in)` runs one local step of a saga (built with `Func` or
-    `Wrap`) in its own transaction, undecorated, so a workflow never holds the
-    `TransactionManager` itself.
+  - `workflow.Base` embeds the workflow's Subject over a `TransactionManager`; it is the only tier
+    that opens a transaction. A consumer workflow embeds the Base and runs each operation as a
+    read (`Exec`, no transaction), a command (`ExecTx`, one transaction) or a saga (`Exec` whose
+    body commits each local step with `InTx`, undecorated). `ExecTx` and `InTx` refuse a context
+    already in a transaction, so a transaction never opens inside another.
   - `service.Base` embeds the service's Subject (a consumer service embeds the Base and runs each
     custom op through the promoted `Exec`); `CRUD` and `CRUDNoList` decorate a repository (with an
     optional entity validator) and `OpService` a single-operation service.
@@ -136,8 +136,8 @@ collaborator or zero timeout skips its layer; recovery needs none.
 
   Every tier's series are `<tier>_operations_total`, `<tier>_errors_total` and
   `<tier>_operation_duration_seconds` labelled `{<tier>, operation}`; its spans are
-  `<name>.<op>` with `<tier>.name` / `<tier>.operation`; a pipeline stage or workflow runs as its
-  `Execute` operation. The clients tier uses the same engine: `client.Tier()` and `client.Base`
+  `<name>.<op>` with `<tier>.name` / `<tier>.operation`; a pipeline stage runs as its `Execute`
+  operation. The clients tier uses the same engine: `client.Tier()` and `client.Base`
   (`Once`, `Do`, `DoOnce`, `Stream` for a result read after the call returns), and each decorated
   family's `Decorate`; its series are `client_*` labelled `{client, operation}`.
 - **Go — every decorator is configurable.** The `decoration` config section
@@ -161,8 +161,8 @@ collaborator or zero timeout skips its layer; recovery needs none.
   (`exec`, `once`; `decorate(client, name, deps)` runs every coroutine method of a client
   through the tier), `repos.RepositoryBase` (`crud(store)`, Create never retried),
   `services.ServiceBase` (`crud(repo, validate)`, `op_service`), `pipelines.PipelineBase`
-  (`stage`, `fan_out`; `Stage.then` chains), `workflows.WorkflowBase` (`func`, `wrap`, `read`,
-  `tx`, `run_tx`), `execution.job.JobBase` and `controllers.ControllerBase`. Spans, series, log lines and
+  (`stage`, `fan_out`; `Stage.then` chains), `workflows.WorkflowBase` (`exec`, `exec_tx`,
+  `in_tx`), `execution.job.JobBase` and `controllers.ControllerBase`. Spans, series, log lines and
   op names match Go's. A consumer repository or service subclasses `DelegatingRepository` /
   `DelegatingCrudService` and runs its custom ops through the base's `exec`. The retry layer's
   `ExponentialRetrier` (and `retry_transient_async`) wait out a server pushback
@@ -434,7 +434,8 @@ stream drainers, retention sweeps) as workflow passes, so each pass gets the sam
 as a request.
 
 - `Pass(fn)` adapts one iteration, a `func(context.Context) error`, into a
-  `Workflow[struct{}, struct{}]`. The composition root decorates it (recovery outermost).
+  `Workflow[struct{}, struct{}]`. The iteration runs through a `workflow.Base`: `ExecTx` for a pass
+  that writes, `Exec` for one that only reads.
 - `NewTicker(name, pass, Config, logger)` runs the pass once per `Interval`, plus one at start when
   `RunAtStart` is set. A zero `Interval` runs passes back to back, for a pass that already blocks
   on its source. A failed pass is logged at warn and followed by `ErrorBackoff`. A failure caused

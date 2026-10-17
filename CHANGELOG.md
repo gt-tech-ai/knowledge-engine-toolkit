@@ -10,12 +10,26 @@ All notable changes to this project are recorded here. The format follows
 
 Python: `techai-webutils` 0.5.3.
 
+### Changed
+
+- Breaking: `workflow.Base` is an embeddable base like every other tier's. A workflow embeds it
+  and runs each operation as a read (`Exec`, no transaction), a command (`ExecTx`, one
+  transaction) or a saga (`Exec` whose body commits each local step with `InTx`, undecorated).
+  `NewBase(name, tx, deps)` takes the workflow's name. `Func`, `Wrap`, `Read` and `Tx` are
+  removed. Python: `WorkflowBase(name, tx, deps)` with `exec`, `exec_tx` and `in_tx`; `func`,
+  `wrap`, `read` and `tx` are removed.
+- Breaking: a workflow's series and spans are labelled by the workflow's name and the operation
+  (`{workflow=<name>, operation=<op>}`, span `<name>.<op>`), in place of
+  `{workflow=<op>, operation=Execute}`.
+- `ExecTx` and `InTx` (Python `exec_tx`, `in_tx`) fail INTERNAL on a context already in a
+  transaction, or with no transaction manager, without running their body.
+
 ### Added
 
-- `workflow.Base.RunTx(ctx, pipe, in)` (Python `WorkflowBase.run_tx(pipe, input)`): run one
-  local step of a saga in its own transaction, undecorated. A saga built with `Func` or `Wrap`
-  commits each local write (and its compensation) through the base, so no workflow holds the
-  `TransactionManager`. `Tx` now runs its pipeline through `RunTx`.
+- `store.Base.Write(ctx, op, fn)`: run a store write through the store tier only inside a
+  transaction; outside one it fails INTERNAL without running `fn`.
+- Python `core.interfaces.repository.in_transaction()` and `marking_transaction()`, the mirror of
+  Go's `interfaces.InTx` and `WithInTx`.
 
 ## [0.0.9] - 2026-10-17
 

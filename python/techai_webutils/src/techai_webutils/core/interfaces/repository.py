@@ -6,11 +6,13 @@ depends on this contract; concrete implementations live in the repos layer.
 
 from __future__ import annotations
 
+import contextvars
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Generator
 
     from techai_webutils.core.domain_types.types import Page, PageRequest
 
@@ -83,3 +85,23 @@ class TransactionManager(ABC):
     async def with_transaction(self, fn: Callable[[], Awaitable[R]]) -> R:
         """Execute fn within a transaction, auto-committing or rolling back."""
         ...
+
+
+_in_transaction: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "techai_webutils_in_transaction", default=False
+)
+
+
+def in_transaction() -> bool:
+    """Report whether the current task runs inside a workflow's transaction (Go ``InTx``)."""
+    return _in_transaction.get()
+
+
+@contextmanager
+def marking_transaction() -> Generator[None]:
+    """Mark the current task as inside a transaction until the block exits (Go ``WithInTx``)."""
+    token = _in_transaction.set(True)
+    try:
+        yield
+    finally:
+        _in_transaction.reset(token)

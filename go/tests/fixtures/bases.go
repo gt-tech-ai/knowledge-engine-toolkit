@@ -8,11 +8,11 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/workflow"
 )
 
-// Workflows returns an undecorated (recovery-only), unbounded workflow.Base whose Tx
-// workflows open their transactions through tx (nil when the test builds no Tx
-// workflow), for tests that build a consumer's request workflows.
+// Workflows returns an undecorated (recovery-only), unbounded workflow.Base named
+// "test" whose commands and saga steps open their transactions through tx (nil when the
+// test runs none), for tests that build a consumer's workflows.
 func Workflows(tx interfaces.TransactionManager) workflow.Base {
-	return workflow.NewBase(tx, decorate.Deps{})
+	return workflow.NewBase("test", tx, decorate.Deps{})
 }
 
 // Pipelines returns an undecorated (recovery-only) pipeline.Base, for tests that build
