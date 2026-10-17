@@ -19,33 +19,25 @@ type ReplayConfig struct {
 	// TTL is how long a connection's buffer lives after its last message — a short
 	// recovery window.
 	TTL time.Duration `mapstructure:"ttl"`
-
-	// OpTimeout bounds each buffer operation so a wedged Redis cannot stall the WebSocket
-	// send path.
-	OpTimeout time.Duration `mapstructure:"op_timeout"`
 }
 
-// DefaultReplayConfig returns a 100-message, 5-minute buffer with a 500ms op timeout,
-// matching the base config. Dev inherits this (memory backend, no Redis client);
+// DefaultReplayConfig returns a 100-message, 5-minute buffer, matching the base
+// config. Dev inherits this (memory backend, no Redis client);
 // staging/prod share the Redis client so the same values drive the redis backend.
 func DefaultReplayConfig() ReplayConfig {
 	return ReplayConfig{
-		MaxSize:   100,
-		TTL:       5 * time.Minute,
-		OpTimeout: 500 * time.Millisecond,
+		MaxSize: 100,
+		TTL:     5 * time.Minute,
 	}
 }
 
-// Validate rejects a non-positive bound or TTL and a negative op timeout.
+// Validate rejects a non-positive bound or TTL.
 func (c ReplayConfig) Validate() error {
 	if c.MaxSize <= 0 {
 		return apperr.InvalidInput("replay.max_size must be positive")
 	}
 	if c.TTL <= 0 {
 		return apperr.InvalidInput("replay.ttl must be positive")
-	}
-	if c.OpTimeout < 0 {
-		return apperr.InvalidInput("replay.op_timeout must be >= 0")
 	}
 	return nil
 }

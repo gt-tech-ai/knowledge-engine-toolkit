@@ -443,11 +443,32 @@ def _decode_tier(raw: object, path: str) -> Tier:
         Tier, {k: v for k, v in _mapping(raw, path).items() if k == "defaults"}, path
     )
     overrides_raw: object = _mapping(raw, path).get("overrides") or {}
-    overrides = {
-        str(name): _decode(Layers, layers, f"{path}.overrides.{name}")
-        for name, layers in _mapping(overrides_raw, f"{path}.overrides").items()
-    }
-    return dataclasses.replace(tier, overrides=overrides)
+    return dataclasses.replace(
+        tier, overrides=_decode_overrides(overrides_raw, f"{path}.overrides", "")
+    )
+
+
+def _decode_overrides(raw: object, path: str, prefix: str) -> dict[str, Layers]:
+    """Decode the overrides beneath ``prefix`` by full name.
+
+    Components are named with dots (``outbox.sqs``); an override may be written as one dotted
+    key or nested by segment, and a segment that sets no layer is no override.
+    """
+    out: dict[str, Layers] = {}
+    for key, value in _mapping(raw, path).items():
+        if prefix and key in _LAYER_KEYS:
+            continue
+        name = f"{prefix}.{key}" if prefix else str(key)
+        layers = _mapping(value, f"{path}.{key}")
+        if any(k in _LAYER_KEYS for k in layers):
+            out[name] = _decode(Layers, layers, f"{path}.{key}")
+        nested = {k: v for k, v in layers.items() if k not in _LAYER_KEYS}
+        out.update(_decode_overrides(nested, f"{path}.{key}", name))
+    return out
+
+
+_LAYER_KEYS = frozenset(f.name for f in dataclasses.fields(Layers))
+"""The config keys of Layers' fields."""
 
 
 def _mapping(raw: object, path: str) -> Mapping[str, object]:

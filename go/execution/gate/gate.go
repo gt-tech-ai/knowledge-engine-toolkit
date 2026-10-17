@@ -90,9 +90,9 @@ func (g *Gate) Observe(obs interfaces.ExecutionObserver) *Gate {
 // Phases returns the ordered phases of the gate for inspection (e.g. in tests).
 func (g *Gate) Phases() []Phase { return g.phases }
 
-// RunLocal runs a gate whose jobs are all runner-less (job.Base.Runnable). It
+// RunLocal runs a gate whose jobs are all runner-less (job.Base.Local). It
 // supplies a CommandRunner that fails every command, so no phase ever receives a
-// nil runner. Use it for in-process gates (e.g. DB seeding) that compose Runnables
+// nil runner. Use it for in-process gates (e.g. DB seeding) that compose Local jobs
 // rather than commands.
 func (g *Gate) RunLocal(ctx context.Context) error {
 	return g.Run(ctx, noRunner{}, "")

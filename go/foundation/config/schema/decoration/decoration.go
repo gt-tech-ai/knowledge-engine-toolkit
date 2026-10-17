@@ -305,7 +305,8 @@ func ptr[T any](v T) *T { return &v }
 // absent section keeps the default, a partial one changes only what it sets, and a
 // section that fails to decode is returned as CodeInvalidInput.
 func Load(loader interfaces.ConfigLoader) (Config, error) {
-	if loader.Get(SectionKey) == nil {
+	section := loader.Get(SectionKey)
+	if section == nil {
 		return DefaultConfig(), nil
 	}
 	var over Config
@@ -315,6 +316,9 @@ func Load(loader interfaces.ConfigLoader) (Config, error) {
 			apperr.CodeInvalidInput,
 			"load decoration config",
 		)
+	}
+	if err := dottedOverrides(loader, section, &over); err != nil {
+		return Config{}, err
 	}
 	def := DefaultConfig()
 	return def.Overlay(&over), nil

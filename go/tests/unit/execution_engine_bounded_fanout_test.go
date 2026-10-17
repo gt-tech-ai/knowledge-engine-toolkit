@@ -22,15 +22,15 @@ import (
 //     spawned a goroutine up front that then blocked on the semaphore, so a
 //     10k-item fan-out held 10k goroutines. Acquiring the slot before spawning
 //     keeps the live goroutine count at O(numWorkers). A probe on
-//     runtime.NumGoroutine is the only way to observe the difference.
+//     runtime.NumGoroutine is the only way to observe the difference. That count is
+//     process-wide, so the test runs serially: parallel tests' goroutines would
+//     otherwise inflate the peak.
 //
 // What it tests:
 //   - Running FanOut over 10k items with 4 workers, the peak extra goroutines
 //     observed from within fn stays far below the item count (a small multiple of
 //     numWorkers), where the pre-fix code would show ~10k.
 func TestFanOut_HoldsAtMostNumWorkersGoroutines(t *testing.T) {
-	t.Parallel()
-
 	const (
 		items   = 10000
 		workers = 4

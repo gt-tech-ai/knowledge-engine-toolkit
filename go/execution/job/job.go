@@ -46,17 +46,18 @@ func (b Base) Func(name, group string, run Run) interfaces.AnyJob {
 	return b.job(types.JobMeta{Name: name, Group: group}, run)
 }
 
-// Runnable adapts r — a job that needs no runner or root — into a decorated job
-// carrying r's metadata.
-func (b Base) Runnable(r interfaces.Runnable) interfaces.AnyJob {
-	return b.job(
-		r.Meta(),
-		func(
-			ctx context.Context, _ interfaces.CommandRunner, _ string,
-		) (types.StepResults, error) {
-			return r.Run(ctx)
-		},
-	)
+// Local builds the job name in group that runs fn, in-process work (a seeder, a
+// sync) that needs no command runner or root; a gate of Local jobs runs with
+// gate.RunLocal.
+func (b Base) Local(
+	name, group string,
+	fn func(context.Context) (types.StepResults, error),
+) interfaces.AnyJob {
+	return b.Func(name, group, func(
+		ctx context.Context, _ interfaces.CommandRunner, _ string,
+	) (types.StepResults, error) {
+		return fn(ctx)
+	})
 }
 
 // Wrap decorates an existing job, keeping its metadata.

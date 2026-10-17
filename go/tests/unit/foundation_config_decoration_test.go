@@ -2,6 +2,8 @@ package unit_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
@@ -86,6 +89,72 @@ func TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults(t *testing.T) {
 
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	})
+}
+
+// TestLoadDecorationConfig_KeepsDottedComponentNames tests decoration.Load over the
+// layered YAML loader.
+//
+// Why this test is important:
+//   - Components are named with dots ("outbox.sqs", "seed.ingress.gateway"), and the
+//     YAML loader splits a dotted key into nested maps; an override under such a name
+//     would otherwise decode as an empty override of its first segment and be dropped
+//     without a word.
+//
+// What it tests:
+//   - An override keyed "seed.ingress.gateway" in base.yaml, re-tuned in the env
+//     overlay, resolves under its full name with both files' settings.
+//   - A dotted engine default ("outbox.sqs") overridden in YAML keeps its other
+//     defaults, and a name that is both a component and a prefix ("outbox" with
+//     "outbox.s3" beneath it) resolves each.
+func TestLoadDecorationConfig_KeepsDottedComponentNames(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	write := func(name, body string) {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600))
+	}
+	write("base.yaml", `decoration:
+  clients:
+    overrides:
+      seed.ingress.gateway:
+        timeout: 7s
+        retry:
+          enabled: true
+      outbox.sqs:
+        timeout: 5s
+      outbox:
+        logging: false
+        s3:
+          timeout: 4s
+`)
+	write("dev.yaml", `decoration:
+  clients:
+    overrides:
+      seed.ingress.gateway:
+        timeout: 9s
+`)
+	loader, err := config.New(
+		config.KindViper,
+		config.WithBaseDir(dir),
+		config.WithEnvironment("dev"),
+	)
+	require.NoError(t, err)
+
+	cfg, err := decoration.Load(loader)
+	require.NoError(t, err)
+
+	gw := cfg.Clients.For("seed.ingress.gateway")
+	require.NotNil(t, gw.Timeout)
+	assert.Equal(t, 9*time.Second, *gw.Timeout)
+	assert.True(t, decoration.On(gw.Retry.Enabled))
+	sqs := cfg.Clients.For("outbox.sqs")
+	require.NotNil(t, sqs.Timeout)
+	assert.Equal(t, 5*time.Second, *sqs.Timeout)
+	assert.True(t, decoration.On(sqs.Bulkhead.Enabled), "keeps the engine default")
+	assert.False(t, decoration.On(cfg.Clients.For("outbox").Logging))
+	s3 := cfg.Clients.For("outbox.s3")
+	require.NotNil(t, s3.Timeout)
+	assert.Equal(t, 4*time.Second, *s3.Timeout)
+	assert.NotContains(t, cfg.Clients.Overrides, "seed")
 }
 
 // TestDecorations_BuildEachComponentsLayersFromConfig tests decorate.Decorations.
@@ -217,4 +286,57 @@ func TestDecorations_RecoveryLogsAPanicWithLoggingOff(t *testing.T) {
 	unrecovered, err := decorate.Build("users", decoration.Layers{Recovery: &off}, collab)
 	require.NoError(t, err)
 	assert.Nil(t, unrecovered.PanicLogger)
+}
+
+// TestLoadDecorations_ReadsTheSectionWithTheCollaborators tests building Decorations
+// straight from a config loader.
+//
+// Why this test is important:
+//   - Every composition root turns the decoration section plus its observability into
+//     Decorations; doing it in one engine call keeps each app's wiring to one provider.
+//
+// What it tests:
+//   - An absent section yields DefaultConfig's layers with the collaborators attached
+//     (a client is observed); a section that turns a client's tracing off is applied;
+//     a section that fails to decode is INVALID_INPUT.
+func TestLoadDecorations_ReadsTheSectionWithTheCollaborators(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	collab := decorate.Collaborators{Observability: decorate.Observability{
+		Logger:  mocks.NewMockLogger(ctrl),
+		Metrics: mocks.NewMockMetrics(ctrl),
+		Tracer:  mocks.NewMockTracer(ctrl),
+	}}
+
+	absent := mocks.NewMockConfigLoader(ctrl)
+	absent.EXPECT().Get(decoration.SectionKey).Return(nil)
+	decs, err := decorate.LoadDecorations(absent, collab)
+	require.NoError(t, err)
+	search, err := decs.Deps(client.Tier(), "search")
+	require.NoError(t, err)
+	assert.Equal(t, collab.Observability, search.Observability)
+
+	quiet := mocks.NewMockConfigLoader(ctrl)
+	quiet.EXPECT().Get(decoration.SectionKey).Return(map[string]any{}).AnyTimes()
+	quiet.EXPECT().UnmarshalKey(decoration.SectionKey, gomock.Any()).DoAndReturn(
+		func(_ string, out any) error {
+			off := false
+			out.(*decoration.Config).Clients.Overrides = map[string]decoration.Layers{
+				"search": {Tracing: &off},
+			}
+			return nil
+		})
+	decs, err = decorate.LoadDecorations(quiet, collab)
+	require.NoError(t, err)
+	search, err = decs.Deps(client.Tier(), "search")
+	require.NoError(t, err)
+	assert.Nil(t, search.Tracer)
+	assert.NotNil(t, search.Logger)
+
+	broken := mocks.NewMockConfigLoader(ctrl)
+	broken.EXPECT().Get(decoration.SectionKey).Return(map[string]any{}).AnyTimes()
+	broken.EXPECT().UnmarshalKey(decoration.SectionKey, gomock.Any()).
+		Return(apperr.Sentinel("bad yaml"))
+	_, err = decorate.LoadDecorations(broken, collab)
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

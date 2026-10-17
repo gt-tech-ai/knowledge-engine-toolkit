@@ -316,6 +316,33 @@ class TestDecorations:
         with pytest.raises(AppValueError, match="no config for tier"):
             decorations.deps(Tier("gateway", ()), "x")
 
+    def test_load_reads_the_section_with_the_collaborators(
+        self, observed: Observed
+    ) -> None:
+        """``Decorations.load`` builds Decorations from a config loader (Go ``LoadDecorations``).
+
+        Why this test is important:
+          - Every composition root turns the decoration section plus its observability into
+            Decorations; one engine call keeps each app's wiring to one provider.
+
+        What it tests:
+          - An absent section yields the defaults with the collaborators attached (a client is
+            traced); a section turning a client's tracing off is applied to that client.
+        """
+        collab = Collaborators(observability=observed.observability)
+        absent = MagicMock()
+        absent.get.return_value = None
+        search = Decorations.load(absent, collab).deps(Tier("client", ()), "search")
+        assert search.observability.tracer is observed.observability.tracer
+
+        quiet = MagicMock()
+        quiet.get.return_value = {
+            "clients": {"overrides": {"search": {"tracing": False}}}
+        }
+        search = Decorations.load(quiet, collab).deps(Tier("client", ()), "search")
+        assert search.observability.tracer is None
+        assert search.observability.logger is observed.observability.logger
+
     @pytest.mark.asyncio
     async def test_recovery_logs_a_panic_with_logging_off(
         self, observed: Observed

@@ -116,6 +116,37 @@ def test_from_mapping_overlays_defaults_and_overrides() -> None:
     assert config.repositories == decoration.default_config().repositories
 
 
+def test_from_mapping_reads_dotted_override_names() -> None:
+    """An override of a dotted component name resolves under its full name.
+
+    Why this test is important:
+      - Components are named with dots (``outbox.sqs``); written nested by segment, an
+        override must not become an empty override of its first segment, as Go's loader
+        reads it.
+
+    What it tests:
+      - A dotted key and the same name nested by segment both resolve, a segment that is
+        itself a component keeps its own override, and a pure segment is no override.
+    """
+    config = decoration.from_mapping({
+        "clients": {
+            "overrides": {
+                "seed.ingress.gateway": {"timeout": "7s"},
+                "outbox": {"logging": False, "s3": {"timeout": "4s"}},
+                "seed": {"ingress": {"auth0": {"retry": {"enabled": True}}}},
+            }
+        }
+    })
+
+    overrides = config.clients.overrides
+    assert overrides["seed.ingress.gateway"].timeout == pytest.approx(7.0)
+    assert overrides["outbox"].logging is False
+    assert overrides["outbox.s3"].timeout == pytest.approx(4.0)
+    assert overrides["seed.ingress.auth0"].retry.enabled is True
+    assert "seed" not in overrides
+    assert config.clients.layers_for("outbox.s3").bulkhead.enabled is True
+
+
 @pytest.mark.parametrize(
     "section",
     [
