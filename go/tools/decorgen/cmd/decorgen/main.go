@@ -3,9 +3,9 @@
 //
 //	//go:generate go run github.com/gt-tech-ai/knowledge-engine-toolkit/go/tools/decorgen/cmd/decorgen -source ../core/interfaces -out decorated_gen.go DocumentStore
 //
-// The generated file's package is the one the directive sits in (GOPACKAGE), and its
-// import path is resolved from the output directory, so the package's own types are
-// written unqualified.
+// The generated file's package name and import path are resolved from the output
+// directory (-package overrides the name), so the package's own types are written
+// unqualified.
 package main
 
 import (
@@ -32,15 +32,18 @@ func run(args []string) error {
 	fs := flag.NewFlagSet("decorgen", flag.ContinueOnError)
 	source := fs.String("source", ".", "package holding the interfaces")
 	out := fs.String("out", "decorated_gen.go", "output file")
-	pkg := fs.String("package", os.Getenv("GOPACKAGE"), "output package name")
+	pkg := fs.String("package", "", "output package name (default: the output directory's)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	dir := filepath.Dir(*out)
+	name, path := outputPackage(filepath.Dir(*out))
+	if *pkg != "" {
+		name = *pkg
+	}
 	src, err := decorgen.Generate(decorgen.Config{
 		Source:      *source,
-		Package:     *pkg,
-		PackagePath: importPath(dir),
+		Package:     name,
+		PackagePath: path,
 		Interfaces:  fs.Args(),
 	})
 	if err != nil {
@@ -49,11 +52,12 @@ func run(args []string) error {
 	return os.WriteFile(*out, src, 0o600)
 }
 
-// importPath resolves the import path of the package in dir, or "" when it has none.
-func importPath(dir string) string {
+// outputPackage resolves the name and import path of the package in dir, or "" for each
+// when it has none.
+func outputPackage(dir string) (name, path string) {
 	pkgs, err := packages.Load(&packages.Config{Mode: packages.NeedName, Dir: dir}, ".")
 	if err != nil || len(pkgs) != 1 {
-		return ""
+		return "", ""
 	}
-	return pkgs[0].PkgPath
+	return pkgs[0].Name, pkgs[0].PkgPath
 }
