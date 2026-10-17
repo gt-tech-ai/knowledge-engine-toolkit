@@ -13,28 +13,25 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/pipelines"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/workers"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/workflows"
 )
 
-// TestPipelinesDefaults_MatchConsts tests the pipeline config's multipart-upload and
-// timeout defaults.
+// TestPipelinesDefaults_MatchConsts tests the pipeline config's multipart-upload
+// defaults.
 //
 // Why this test is important:
 //   - The multipart threshold/part size drive how uploads are chunked; a wrong
 //     default would change upload behavior the moment the provider wires it in.
 //
 // What it tests:
-//   - MultipartThresholdBytes 20 MiB and MultipartPartSizeBytes 16 MiB, no
-//     per-pipeline timeout by default, and the defaults validate.
+//   - MultipartThresholdBytes 20 MiB and MultipartPartSizeBytes 16 MiB, and the
+//     defaults validate.
 func TestPipelinesDefaults_MatchConsts(t *testing.T) {
 	t.Parallel()
 
 	c := pipelines.DefaultConfig()
 	assert.Equal(t, int64(20<<20), c.Upload.MultipartThresholdBytes)
 	assert.Equal(t, int64(16<<20), c.Upload.MultipartPartSizeBytes)
-	assert.Equal(t, time.Duration(0), c.Timeout)
 	require.NoError(t, c.Validate())
-	require.NoError(t, workflows.DefaultConfig().Validate())
 }
 
 // TestMaxMultipartParts_StaysConst tests that maxMultipartParts (S3's 10 000-part

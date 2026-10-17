@@ -91,7 +91,7 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 	require.ErrorIs(t, err, boom)
 }
 
-// TestJobBase_RunnableAndWrapKeepMetaAndRecover tests adapting existing work.
+// TestJobBase_LocalAndWrapKeepMetaAndRecover tests adapting existing work.
 //
 // Why this test is important:
 //   - An in-process unit (a seeder, a sync) runs as a gate job without a runner, and an
@@ -99,20 +99,20 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 //     panic in either must fail the job with a coded error, not crash the process.
 //
 // What it tests:
-//   - Runnable carries the Runnable's metadata and returns its Run results.
+//   - Local carries its name and group and returns its work's results.
 //   - Wrap keeps the inner job's full metadata (tool included).
 //   - A panicking job built by the zero Base returns an INTERNAL error.
-func TestJobBase_RunnableAndWrapKeepMetaAndRecover(t *testing.T) {
+func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	meta := types.JobMeta{Name: "seed", Group: "Seed", Tool: "psql"}
 	results := types.StepResults{{Name: "seed", Status: types.StatusPass}}
 
-	r := mocks.NewMockRunnable(ctrl)
-	r.EXPECT().Meta().Return(meta)
-	r.EXPECT().Run(gomock.Any()).Return(results, nil)
-	seed := job.Base{}.Runnable(r)
-	assert.Equal(t, meta, seed.Meta())
+	seed := job.Base{}.Local(
+		"seed", "Seed",
+		func(context.Context) (types.StepResults, error) { return results, nil },
+	)
+	assert.Equal(t, types.JobMeta{Name: "seed", Group: "Seed"}, seed.Meta())
 	got, err := seed.Execute(t.Context(), nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, results, got)

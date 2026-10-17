@@ -1,8 +1,9 @@
 // Package transport is the config surface for the edge (transport) layer:
-// WebSocket, gRPC, CORS and HTTP tuning plus the rate-limiter toggle. Defaults are
-// permissive (the rate limiter is off; CORS allows all origins), so a service opts
-// into each restriction through its overlays. Pure data (mirrors infra/S3Config);
-// the consumer's providers convert it into the server/middleware wiring.
+// WebSocket, gRPC, CORS and HTTP tuning. Defaults are permissive (CORS allows all
+// origins), so a service opts into each restriction through its overlays; a controller's
+// rate limit is a decoration layer (decoration.controllers), not a key here. Pure data
+// (mirrors infra/S3Config); the consumer's providers convert it into the
+// server/middleware wiring.
 package transport
 
 import (
@@ -76,19 +77,6 @@ type CORSConfig struct {
 	AllowOrigins []string `mapstructure:"allow_origins"`
 }
 
-// RateLimitConfig toggles + tunes the token rate limiter. Enabled defaults false,
-// so activation is opt-in.
-type RateLimitConfig struct {
-	// Rate is the sustained requests per second when enabled.
-	Rate float64 `mapstructure:"rate"`
-
-	// Burst is the maximum request burst when enabled.
-	Burst int `mapstructure:"burst"`
-
-	// Enabled activates the rate limiter (default false).
-	Enabled bool `mapstructure:"enabled"`
-}
-
 // Config is the edge-layer config surface.
 type Config struct {
 	// CORS tunes cross-origin sharing.
@@ -100,15 +88,12 @@ type Config struct {
 	// GRPC tunes the gRPC/Connect keepalive + message size.
 	GRPC GRPCConfig `mapstructure:"grpc"`
 
-	// RateLimit toggles + tunes the token rate limiter.
-	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
-
 	// MaxHeaderBytes caps the HTTP request header size (Go's own default is 1 MiB).
 	MaxHeaderBytes int `mapstructure:"max_header_bytes"`
 }
 
-// DefaultConfig returns permissive defaults — the rate limiter disabled and CORS
-// allowing all origins — with sensible bounds for the WS/HTTP knobs.
+// DefaultConfig returns permissive defaults — CORS allowing all origins — with
+// sensible bounds for the WS/HTTP knobs.
 func DefaultConfig() Config {
 	return Config{
 		WS: WSConfig{
@@ -133,16 +118,11 @@ func DefaultConfig() Config {
 			AllowOrigins: []string{"*"},
 			MaxAge:       "3600",
 		},
-		RateLimit: RateLimitConfig{
-			Enabled: false,
-			Rate:    100,
-			Burst:   10,
-		},
 		MaxHeaderBytes: 1 << 20,
 	}
 }
 
-// Validate rejects negative durations/sizes and an enabled-but-zero rate limit.
+// Validate rejects negative durations/sizes.
 func (c Config) Validate() error {
 	if c.WS.IdleTimeout < 0 || c.WS.WriteDeadline < 0 || c.WS.PingInterval < 0 ||
 		c.WS.PongTimeout < 0 {
@@ -150,12 +130,6 @@ func (c Config) Validate() error {
 	}
 	if c.WS.MaxConnections < 0 || c.WS.MaxConnectionsPerUser < 0 {
 		return apperr.InvalidInput("transport.ws connection limits must be >= 0")
-	}
-	if c.RateLimit.Enabled && c.RateLimit.Rate <= 0 {
-		return apperr.InvalidInput("transport.rate_limit.rate must be > 0 when enabled")
-	}
-	if c.RateLimit.Enabled && c.RateLimit.Burst <= 0 {
-		return apperr.InvalidInput("transport.rate_limit.burst must be > 0 when enabled")
 	}
 	if c.MaxHeaderBytes < 0 {
 		return apperr.InvalidInput("transport.max_header_bytes must be >= 0")

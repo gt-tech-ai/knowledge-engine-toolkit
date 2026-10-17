@@ -50,13 +50,27 @@ func probeServer(
 	return srv.URL
 }
 
-// probeClient is a Connect client of probeProcedure decorated by base.
+// probeClient is a Connect client of probeProcedure decorated by base, whose schema
+// declares the procedure free of side effects (so the tier may replay it).
 func probeClient(
 	url string,
 	base client.Base,
 ) *connect.Client[emptypb.Empty, emptypb.Empty] {
+	return probeClientAt(url, base, connect.IdempotencyNoSideEffects)
+}
+
+// probeClientAt is probeClient with the procedure's declared idempotency level.
+func probeClientAt(
+	url string,
+	base client.Base,
+	level connect.IdempotencyLevel,
+) *connect.Client[emptypb.Empty, emptypb.Empty] {
+	opts := append(
+		interceptors.ClientOptions(base),
+		connect.WithIdempotency(level),
+	)
 	return connect.NewClient[emptypb.Empty, emptypb.Empty](
-		http.DefaultClient, url+probeProcedure, interceptors.ClientOptions(base)...,
+		http.DefaultClient, url+probeProcedure, opts...,
 	)
 }
 
@@ -71,6 +85,8 @@ func probeClient(
 // What it tests:
 //   - Unavailable twice then success: three calls, success, and the server received the
 //     active trace's traceparent.
+//   - Unavailable on a procedure of unknown idempotency (a write that may have landed):
+//     one call, and the caller gets CodeUnavailable — it is never replayed.
 //   - InvalidArgument: one call, and the caller gets CodeInvalidArgument with the
 //     server's message.
 //   - An open breaker: no call, CodeUnavailable.
@@ -89,6 +105,19 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 		require.NoError(t, err)
 		assert.EqualValues(t, 3, calls.Load())
 		assert.Contains(t, tp.Load(), sc.TraceID().String())
+	})
+
+	t.Run("non-idempotent", func(t *testing.T) {
+		var calls atomic.Int32
+		var tp atomic.Value
+		url := probeServer(t, &calls, &tp, down, down)
+		_, err := probeClientAt(
+			url,
+			client.NewBase("probe", fastRetrier(t)),
+			connect.IdempotencyUnknown,
+		).CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
+		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+		assert.EqualValues(t, 1, calls.Load())
 	})
 
 	t.Run("permanent", func(t *testing.T) {

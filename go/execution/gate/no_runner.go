@@ -7,8 +7,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
-// noRunner is the CommandRunner supplied by RunLocal. Runnable-backed jobs
-// (job.Base.Runnable) never invoke it, so every method reports a programming error rather
+// noRunner is the CommandRunner supplied by RunLocal. Local jobs
+// (job.Base.Local) never invoke it, so every method reports a programming error rather
 // than silently succeeding: it fires only if a genuine command job is composed
 // into a runner-less gate by mistake.
 type noRunner struct{}

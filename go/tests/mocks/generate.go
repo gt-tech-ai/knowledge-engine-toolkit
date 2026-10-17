@@ -15,18 +15,23 @@
 //go:generate mockgen -destination=mock_command_runner.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CommandRunner,CmdHook
 //go:generate mockgen -destination=mock_config_loader.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ConfigLoader
 //go:generate mockgen -destination=mock_connector.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ConnectorSource,SourceBuilder
+//go:generate mockgen -destination=mock_decorgen_store.go -package=mocks -mock_names=Store=MockDecorgenStore github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/decorgen Store
 //go:generate mockgen -destination=mock_deadletter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces DeadLetterBackend
 //go:generate mockgen -destination=mock_dedup.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Deduplicator
 //go:generate mockgen -destination=mock_event.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/events Event
 //go:generate mockgen -destination=mock_events.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces EventPublisher
 //go:generate mockgen -destination=mock_exec_job.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces AnyJob
-//go:generate mockgen -destination=mock_execution.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Runnable,ToolSpec
+//go:generate mockgen -destination=mock_execution.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ToolSpec
 //go:generate mockgen -destination=mock_leader.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces LeaderElector
 //go:generate mockgen -destination=mock_lifecycle.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Lifecycle
 //go:generate mockgen -destination=mock_lock.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces DistributedLock,Locker
 //go:generate mockgen -destination=mock_logger.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Logger
 //go:generate mockgen -destination=mock_messaging.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces MessagePublisher,CountingPublisher,MessageConsumer,DynamicConsumer,PatternConsumer
 //go:generate mockgen -destination=mock_metrics.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Metrics,Counter,Histogram,Gauge
+
+// MetricsQuerier — the PromQL query seam a consumer (a steady-state check, the AI-ops
+// console) depends on, mocked in place of a Prometheus server.
+//go:generate mockgen -destination=mock_metrics_querier.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces MetricsQuerier
 //go:generate mockgen -destination=mock_observer.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ExecutionObserver
 //go:generate mockgen -destination=mock_op_service.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces OpService
 //go:generate mockgen -destination=mock_outbox.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces OutboxStore,OutboxSink

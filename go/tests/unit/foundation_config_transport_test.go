@@ -11,23 +11,19 @@ import (
 )
 
 // TestTransportDefaults_Permissive tests that the transport config defaults are
-// permissive until a service opts in: the rate limiter stays disabled and CORS
-// stays open.
+// permissive until a service opts in: CORS stays open.
 //
 // Why this test is important:
-//   - A broad edge-config surface must not restrict anything by default. If the rate
-//     limiter defaulted enabled, or CORS defaulted restrictive, adopting the surface
-//     would silently break every deployment (429s / blocked origins) before any
-//     overlay opted in.
+//   - A broad edge-config surface must not restrict anything by default. If CORS
+//     defaulted restrictive, adopting the surface would silently break every
+//     deployment (blocked origins) before any overlay opted in.
 //
 // What it tests:
-//   - RateLimit.Enabled is false, CORS.AllowOrigins is ["*"], WS.IdleTimeout is 5m,
-//     and the defaults validate.
+//   - CORS.AllowOrigins is ["*"], WS.IdleTimeout is 5m, and the defaults validate.
 func TestTransportDefaults_Permissive(t *testing.T) {
 	t.Parallel()
 
 	c := transport.DefaultConfig()
-	assert.False(t, c.RateLimit.Enabled, "the rate limiter must stay disabled by default")
 	assert.Equal(
 		t,
 		[]string{"*"},
@@ -38,24 +34,17 @@ func TestTransportDefaults_Permissive(t *testing.T) {
 	require.NoError(t, c.Validate(), "the defaults must validate")
 }
 
-// TestTransportValidate_RejectsEnabledZeroRate tests that Validate rejects an
-// enabled rate limiter with a non-positive rate.
+// TestTransportValidate_RejectsNegativeWSTimeout tests that Validate rejects a
+// negative WebSocket timeout.
 //
 // Why this test is important:
-//   - Enabling the limiter with rate 0 would reject every request (a self-inflicted
-//     outage); Validate must catch that fat-finger at config load, not at the
-//     first request.
+//   - A negative idle timeout would close every socket at once; Validate must catch
+//     that fat-finger at config load, not at the first connection.
 //
 // What it tests:
-//   - RateLimit{Enabled: true, Rate: 0} is rejected; a negative WS timeout is
-//     rejected.
-func TestTransportValidate_RejectsEnabledZeroRate(t *testing.T) {
+//   - A negative WS idle timeout is rejected.
+func TestTransportValidate_RejectsNegativeWSTimeout(t *testing.T) {
 	t.Parallel()
-
-	bad := transport.DefaultConfig()
-	bad.RateLimit.Enabled = true
-	bad.RateLimit.Rate = 0
-	require.Error(t, bad.Validate(), "enabled limiter with rate 0 must be rejected")
 
 	badWS := transport.DefaultConfig()
 	badWS.WS.IdleTimeout = -1

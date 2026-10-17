@@ -20,7 +20,7 @@ import (
 // runner-less gate surfaces a programming error instead of a false pass.
 //
 // Why this test is important:
-//   - RunLocal exists for Runnable-backed gates (e.g. DB seeding) that never
+//   - RunLocal exists for Local gates (e.g. DB seeding) that never
 //     touch a CommandRunner. If a command job slipped in, a silently-succeeding
 //     runner would report the command as passed without ever running it — the
 //     most dangerous kind of false green. The guard's contract is that every

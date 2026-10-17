@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from techai_webutils.core.errors import AppValueError
-from techai_webutils.foundation.config.decoration import on
+from techai_webutils.foundation.config.decoration import load, on
 from techai_webutils.foundation.decorate.tier import Deps, Observability
 from techai_webutils.foundation.resilience.bulkhead import (
     BulkheadConfig,
@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
     from techai_webutils.core.interfaces.bulkhead import Bulkhead
     from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
+    from techai_webutils.core.interfaces.config_loader import ConfigLoader
     from techai_webutils.core.interfaces.rate_limiter import RateLimiter
     from techai_webutils.core.interfaces.retrier import Retrier
     from techai_webutils.foundation.config import decoration
@@ -67,6 +68,16 @@ class Decorations:
         """Bind the config (None decorates nothing) and the collaborators."""
         self._config = config
         self._collab = collaborators or Collaborators()
+
+    @classmethod
+    def load(
+        cls, loader: ConfigLoader, collaborators: Collaborators | None = None
+    ) -> Decorations:
+        """Return the Decorations over the ``decoration`` section ``loader`` holds (Go ``LoadDecorations``).
+
+        The section is laid over ``default_config()``; a malformed one raises ``AppValueError``.
+        """
+        return cls(load(loader), collaborators)
 
     @property
     def observability(self) -> Observability:

@@ -6,6 +6,45 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-10-17
+
+Python: `techai-webutils` 0.5.2.
+
+### Added
+
+- `decorate.LoadDecorations(loader, collaborators)` (Python `Decorations.load`): read the
+  decoration section and build the `Decorations` in the one call a composition root makes.
+- A generated `MetricsQuerier` mock.
+- `tools/decorgen` (`go run …/go/tools/decorgen/cmd/decorgen -source <pkg> -out <file>
+  <Interface>…`): generates a `Decorated<Name>` per interface whose context-first,
+  error-last methods run through a `decorate.Subject` (named by the method) and whose other
+  methods pass through — the Go counterpart of Python's runtime `decorate(client, base)`.
+
+### Changed
+
+- Breaking: `job.Base.Local(name, group, fn)` replaces `job.Base.Runnable` and
+  `core/interfaces.Runnable` (and its mock): a runner-less job is a name, a group and a
+  function, with no adapter type to implement.
+- Breaking: a Connect client call is retried only when its schema declares the procedure
+  idempotent (`idempotency_level` `NO_SIDE_EFFECTS` or `IDEMPOTENT`); a procedure of unknown
+  idempotency runs at most once, since its first attempt may have landed.
+
+### Removed
+
+- Breaking: the config fields the decoration tiers replaced — `transport.rate_limit`
+  (`transport.RateLimitConfig`; a controller's rate limit is `decoration.controllers`),
+  `replay.op_timeout` (`infra.ReplayConfig.OpTimeout`; the replay client's timeout is
+  `decoration.clients`), `pipelines.timeout` (`pipelines.Config.Timeout`) and the
+  `schema/workflows` package (`workflows.timeout`); a pipeline's and a workflow's timeout
+  are `decoration.pipelines` and `decoration.workflows`.
+
+### Fixed
+
+- `decoration.Load` keeps a dotted component name (`outbox.sqs`, `seed.ingress.gateway`): the
+  layered YAML loader split such an override key into nested maps, so it decoded as an empty
+  override of its first segment and was dropped. An override may be written as one dotted key
+  or nested by segment.
+
 ## [0.0.7] - 2026-10-13
 
 ### Added
@@ -432,7 +471,9 @@ All notable changes to this project are recorded here. The format follows
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.6...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.8...HEAD
+[0.0.8]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.7...v0.0.8
+[0.0.7]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.3...v0.0.4

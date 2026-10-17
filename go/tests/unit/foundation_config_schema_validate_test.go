@@ -13,7 +13,6 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/stores"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/transport"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/workers"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/workflows"
 )
 
 // TestResilienceExtraDefaults_BudgetAndTimeout tests that the budget and timeout
@@ -138,19 +137,17 @@ func TestResilienceValidate_RemainingBranches(t *testing.T) {
 //     the guards not hit by the existing tests (a negative cache TTL/version, an
 //     unknown store kind,
 //     a non-positive multipart size, a zero bulk count, the pending-cohort bounds,
-//     an enabled-but-zero rate-limit burst, a negative header cap, a
+//     a negative header cap, a
 //     negative worker port/batch, the orphan-grace sweep invariant) each protect a
 //     distinct silently-broken configuration and must fail loudly at load.
 //
 // What it tests:
 //   - repos rejects a negative TTL and version; stores rejects an unknown kind and
-//     accepts gorm; pipelines rejects a
-//     non-positive multipart threshold/part size and a negative timeout; services
-//     rejects a zero bulk count; stores rejects a negative max_page_size, a
-//     non-positive/inverted pending-indexing cohort; transport rejects an
-//     enabled-but-zero burst and a negative max_header_bytes; workflows rejects a
-//     negative timeout; workers rejects a negative port/batch and an orphan_grace
-//     within the multipart presign window.
+//     accepts gorm; pipelines rejects a non-positive multipart threshold/part size;
+//     services rejects a zero bulk count; stores rejects a negative max_page_size, a
+//     non-positive/inverted pending-indexing cohort; transport rejects a negative
+//     max_header_bytes; workers rejects a negative port/batch and an orphan_grace within
+//     the multipart presign window.
 func TestLayerConfigValidate_RemainingBranches(t *testing.T) {
 	t.Parallel()
 
@@ -171,7 +168,7 @@ func TestLayerConfigValidate_RemainingBranches(t *testing.T) {
 	gormKind.Kind = "gorm"
 	require.NoError(t, gormKind.Validate(), "gorm is a store kind")
 
-	// pipelines: non-positive multipart sizes and a negative timeout.
+	// pipelines: non-positive multipart sizes.
 	badThreshold := pipelines.DefaultConfig()
 	badThreshold.Upload.MultipartThresholdBytes = 0
 	require.Error(
@@ -186,14 +183,6 @@ func TestLayerConfigValidate_RemainingBranches(t *testing.T) {
 		t,
 		badPartSize.Validate(),
 		"a zero multipart part size must be rejected",
-	)
-
-	badPipeTimeout := pipelines.DefaultConfig()
-	badPipeTimeout.Timeout = -1
-	require.Error(
-		t,
-		badPipeTimeout.Validate(),
-		"a negative pipeline timeout must be rejected",
 	)
 
 	// stores: the branches the existing test does not cover.
@@ -221,29 +210,10 @@ func TestLayerConfigValidate_RemainingBranches(t *testing.T) {
 	badCountTTL.Cache.CountTTL = -1
 	require.Error(t, badCountTTL.Validate(), "a negative count_ttl must be rejected")
 
-	// transport: the enabled-but-zero burst and the header-cap guard.
-	badBurst := transport.DefaultConfig()
-	badBurst.RateLimit.Enabled = true
-	badBurst.RateLimit.Rate = 100
-	badBurst.RateLimit.Burst = 0
-	require.Error(
-		t,
-		badBurst.Validate(),
-		"an enabled limiter with burst 0 must be rejected",
-	)
-
+	// transport: the header-cap guard.
 	badHeader := transport.DefaultConfig()
 	badHeader.MaxHeaderBytes = -1
 	require.Error(t, badHeader.Validate(), "a negative max_header_bytes must be rejected")
-
-	// workflows: a negative timeout.
-	badWorkflowTimeout := workflows.DefaultConfig()
-	badWorkflowTimeout.Timeout = -1
-	require.Error(
-		t,
-		badWorkflowTimeout.Validate(),
-		"a negative workflow timeout must be rejected",
-	)
 
 	// workers: the generic port/batch guards and the orphan-grace sweep invariant.
 	badPort := workers.Config{Port: -1}

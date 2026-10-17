@@ -25,7 +25,10 @@ type clientInterceptor struct {
 // client through base, the client tier, so it is decorated like every other client —
 // its layers switched and tuned by the clients tier of the decoration config. A unary
 // call runs as the operation named by its procedure ("pkg.Service/Method"), retried
-// when the tier retries, and each attempt carries the active trace context in its
+// when the tier retries and the schema declares the procedure idempotent (an
+// idempotency_level of NO_SIDE_EFFECTS or IDEMPOTENT): a procedure of unknown
+// idempotency is a write whose first attempt may have landed, so it runs at most once.
+// Each attempt carries the active trace context in its
 // headers. A streaming call only carries the trace context: Connect opens a stream
 // without I/O, so there is no open to decorate. The *connect.Error a server returns is
 // coded for the tier (wire.FromError) and handed back unchanged; a failure the tier
@@ -38,7 +41,11 @@ func ClientOptions(base client.Base) []connect.ClientOption {
 func (i clientInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		op := strings.TrimPrefix(req.Spec().Procedure, "/")
-		resp, err := i.base.Exec(
+		run := i.base.Exec[connect.AnyResponse]
+		if req.Spec().IdempotencyLevel == connect.IdempotencyUnknown {
+			run = i.base.Once[connect.AnyResponse]
+		}
+		resp, err := run(
 			ctx,
 			op,
 			func(ctx context.Context) (connect.AnyResponse, error) {

@@ -56,6 +56,20 @@ func NewDecorations(cfg *decoration.Config, c Collaborators) Decorations {
 	return Decorations{cfg: &own, collab: c}
 }
 
+// LoadDecorations reads the decoration section from loader, laid over
+// decoration.DefaultConfig, and returns the Decorations over it and c: the one call a
+// composition root makes. A section that fails to decode is CodeInvalidInput.
+func LoadDecorations(
+	loader interfaces.ConfigLoader,
+	c Collaborators,
+) (Decorations, error) {
+	cfg, err := decoration.Load(loader)
+	if err != nil {
+		return Decorations{}, err
+	}
+	return NewDecorations(&cfg, c), nil
+}
+
 // Observability returns the collaborators' observability, for a component that logs or
 // meters outside its layers (a subscriber's receive loop).
 func (d Decorations) Observability() Observability { return d.collab.Observability }

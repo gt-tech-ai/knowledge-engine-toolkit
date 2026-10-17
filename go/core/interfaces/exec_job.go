@@ -7,8 +7,8 @@ import (
 )
 
 // Named is the identity half of an execution unit: its Meta for display and tool
-// resolution. Both command jobs (AnyJob) and runner-less units (Runnable) compose
-// it, so the gate can label either without knowing how it executes.
+// resolution. AnyJob composes it, so the gate can label a job without knowing how it
+// executes.
 type Named interface {
 	// Meta returns the unit's identity for display and tool resolution.
 	Meta() types.JobMeta
@@ -28,16 +28,4 @@ type AnyJob interface {
 		runner CommandRunner,
 		root string,
 	) (types.StepResults, error)
-}
-
-// Runnable is a runner-less execution unit: in-process work (e.g. DB seeding) that
-// needs neither a CommandRunner nor a filesystem root. Compose it into a gate with
-// the execution adapter (job.Base.Runnable), which lifts it to AnyJob — so callers build
-// typed Runnables instead of passing a nil CommandRunner through the API.
-type Runnable interface {
-	// Named supplies the unit's identity (Meta) for display and tool resolution.
-	Named
-
-	// Run performs the unit's in-process work and returns collected step results.
-	Run(ctx context.Context) (types.StepResults, error)
 }
