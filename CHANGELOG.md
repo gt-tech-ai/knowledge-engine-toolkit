@@ -6,6 +6,47 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-10-17
+
+Python: `techai-webutils` 0.5.3.
+
+### Changed
+
+- Breaking: `workflow.Base` is an embeddable base like every other tier's. A workflow embeds it
+  and runs each operation as a read (`Exec`, no transaction), a command (`ExecTx`, one
+  transaction) or a saga (`Exec` whose body commits each local step with `InTx`, undecorated).
+  `NewBase(name, tx, deps)` takes the workflow's name. `Func`, `Wrap`, `Read` and `Tx` are
+  removed. Python: `WorkflowBase(name, tx, deps)` with `exec`, `exec_tx` and `in_tx`; `func`,
+  `wrap`, `read` and `tx` are removed.
+- Breaking: a workflow's series and spans are labelled by the workflow's name and the operation
+  (`{workflow=<name>, operation=<op>}`, span `<name>.<op>`), in place of
+  `{workflow=<op>, operation=Execute}`.
+- `ExecTx` and `InTx` (Python `exec_tx`, `in_tx`) fail INTERNAL on a context already in a
+  transaction, or with no transaction manager, without running their body.
+- Breaking: the outbox relay moves from `services/outbox` to `workflows/outbox`, since a pass is a
+  saga. `NewRelay(cfg, tx, store, sink, …)` takes the transaction manager its writes commit
+  through: the claim commits in one transaction, delivery runs with none open, and each row's
+  finalize commits in its own. An outcome is counted once its finalize commits.
+- Breaking: the `postgres` outbox store's writes (`Claim`, `MarkSent`, `Retry`, `Park`,
+  `DeleteSentBefore`) run on the `*sql.Tx` bound to the context and fail INTERNAL when none is;
+  `Stats` reads on the bound transaction when there is one. `outboxtest.Harness` takes the `Tx`
+  its writes run in.
+
+### Added
+
+- `store.Base.Write(ctx, op, fn)`: run a store write through the store tier only inside a
+  transaction; outside one it fails INTERNAL without running `fn`.
+- Python `core.interfaces.repository.in_transaction()` and `marking_transaction()`, the mirror of
+  Go's `interfaces.InTx` and `WithInTx`.
+- `workflow.Base.Pass(op, pass)`: run a background loop's pass as one decorated operation with no
+  transaction; its method value is a `loop.Decorator`, in place of `Wrap`. Go only, as
+  `workflows/loop` has no Python mirror.
+- `stores/sqltx`: the `database/sql` transaction manager. It binds the open `*sql.Tx` to the
+  context (`sqltx.Tx(ctx)`), runs after-commit hooks, and fails INTERNAL on a nested
+  transaction.
+- `tests/fixtures.Must(v, err)`: a test's wiring of a `(T, error)` constructor, panicking on the
+  error.
+
 ## [0.0.9] - 2026-10-17
 
 ### Added

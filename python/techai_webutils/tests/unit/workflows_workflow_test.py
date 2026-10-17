@@ -1,4 +1,4 @@
-"""Tests for the workflow tier: ``WorkflowBase`` decorates workflows (Go ``workflows/workflow``)."""
+"""Tests for the workflow tier: ``WorkflowBase`` runs a workflow's operations (Go ``workflows/workflow``)."""
 
 from __future__ import annotations
 
@@ -8,16 +8,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.errors.errors import (
     AppTimeoutError,
     ConflictError,
     InternalError,
 )
-from techai_webutils.core.interfaces.repository import TransactionManager
+from techai_webutils.core.interfaces.repository import TransactionManager, in_transaction
 from techai_webutils.foundation.config import decoration
 from techai_webutils.foundation.decorate import Collaborators, Decorations, Deps, Layer
-from techai_webutils.pipelines import PipelineBase
 from techai_webutils.workflows import WorkflowBase, tier
 
 if TYPE_CHECKING:
@@ -62,130 +60,141 @@ def test_tier_order_matches_go() -> None:
 
 
 @pytest.mark.asyncio
-async def test_func_runs_through_every_layer(observed: Observed) -> None:
-    """A workflow built from a function runs as ``Execute`` under its name.
+async def test_exec_runs_an_operation_through_every_layer(observed: Observed) -> None:
+    """An operation runs under the workflow's name and the operation's own.
 
     Why this test is important:
-      - Each workflow is one span, one metric series and one log line on every dashboard.
+      - Each workflow operation is one span, one metric series and one log line on every
+        dashboard, labelled like every other tier's.
 
     What it tests:
-      - The result is returned; the span is ``<name>.Execute`` with the workflow attributes;
-        the series are the workflow tier's; the entry log line is ``workflow.Execute``.
+      - The result is returned; the span is ``<name>.<op>`` with the workflow attributes;
+        the series are labelled ``workflow=<name>, operation=<op>``; the entry log line is
+        ``workflow.<op>``.
     """
-    base = WorkflowBase(deps=Deps(observability=observed.observability))
-    wf = base.func("ingest", AsyncMock(return_value=2))
+    base = WorkflowBase("ingest", deps=Deps(observability=observed.observability))
 
-    assert await wf.execute(1) == 2
+    assert await base.exec("Run", AsyncMock(return_value=2)) == 2
     [(name, _, attributes)] = observed.spans
-    assert name == "ingest.Execute"
-    assert attributes == {"workflow.name": "ingest", "workflow.operation": "Execute"}
+    assert name == "ingest.Run"
+    assert attributes == {"workflow.name": "ingest", "workflow.operation": "Run"}
     observed.instruments["workflow_operations_total"].inc.assert_called_once_with(
-        1.0, workflow="ingest", operation="Execute"
+        1.0, workflow="ingest", operation="Run"
     )
-    assert observed.logger.debug.call_args.args[0] == "workflow.Execute"
+    assert observed.logger.debug.call_args.args[0] == "workflow.Run"
+    assert base.name == "ingest"
 
 
 @pytest.mark.asyncio
 async def test_recovery_and_timeout() -> None:
-    """An unexpected exception is coded INTERNAL; a slow workflow times out.
+    """An unexpected exception is coded INTERNAL; a slow operation times out.
 
     Why this test is important:
       - A workflow must never leak an uncoded exception, and its budget bounds the work.
 
     What it tests:
-      - A ``RuntimeError`` surfaces as ``InternalError``; a coded error passes unchanged; a
-        workflow slower than the timeout raises ``AppTimeoutError``.
+      - A ``RuntimeError`` surfaces as ``InternalError``; a coded error passes unchanged; an
+        operation slower than the timeout raises ``AppTimeoutError``.
     """
-    base = WorkflowBase(deps=Deps(timeout=0.01))
+    base = WorkflowBase("w", deps=Deps(timeout=0.01))
 
-    async def slow(_: int) -> int:
+    async def slow() -> int:
         await asyncio.sleep(1)
         return 0
 
     with pytest.raises(InternalError):
-        await base.func("w", AsyncMock(side_effect=RuntimeError("boom"))).execute(1)
+        await base.exec("Op", AsyncMock(side_effect=RuntimeError("boom")))
     with pytest.raises(ConflictError):
-        await base.func("w", AsyncMock(side_effect=ConflictError("dup"))).execute(1)
+        await base.exec("Op", AsyncMock(side_effect=ConflictError("dup")))
     with pytest.raises(AppTimeoutError):
-        await base.func("w", slow).execute(1)
+        await base.exec("Op", slow)
 
 
 @pytest.mark.asyncio
-async def test_wrap_and_read_decorate_existing_workflows_and_pipelines(
-    observed: Observed,
-) -> None:
-    """``wrap`` decorates a workflow and ``read`` a read pipeline, each under its name.
+async def test_read_command_and_saga_shapes() -> None:
+    """``exec`` opens no transaction; ``exec_tx`` and ``in_tx`` each open one.
 
     Why this test is important:
-      - A consumer composes workflows from pipelines it already built; each must still be
-        observed as a workflow.
+      - A command's reads and writes must commit or roll back together, and a read must not
+        hold a transaction it does not need.
 
     What it tests:
-      - Both return the inner result and open ``<name>.Execute`` spans.
-    """
-    base = WorkflowBase(deps=Deps(observability=observed.observability))
-    inner = WorkflowBase().func("inner", AsyncMock(return_value="w"))
-    pipe = PipelineBase().stage("p", AsyncMock(return_value="r"))
-
-    assert await base.wrap("outer", inner).execute(None) == "w"
-    assert await base.read("query", pipe).execute(None) == "r"
-    assert [name for name, _, _ in observed.spans] == ["outer.Execute", "query.Execute"]
-
-
-@pytest.mark.asyncio
-async def test_tx_runs_the_pipeline_inside_one_transaction() -> None:
-    """``tx`` runs the pipeline inside one transaction, committed on success.
-
-    Why this test is important:
-      - A command's reads and writes must commit or roll back together.
-
-    What it tests:
-      - The order is begin → pipeline → commit, and the output is returned.
+      - ``exec`` runs outside a transaction; ``exec_tx`` (a command) and ``in_tx`` (a saga
+        step) each run begin → body → commit with ``in_transaction()`` true in the body, and
+        return the body's result.
     """
     events: list[str] = []
+    base = WorkflowBase("w", _tx_manager(events))
 
-    async def step(x: int) -> int:
+    async def body() -> bool:
         await asyncio.sleep(0)
-        events.append("pipeline")
-        return x + 1
+        events.append("body")
+        return in_transaction()
 
-    wf = WorkflowBase(_tx_manager(events)).tx("cmd", PipelineBase().stage("s", step))
+    assert await base.exec("Read", body) is False
+    assert await base.exec_tx("Command", body) is True
 
-    assert await wf.execute(1) == 2
-    assert events == ["begin", "pipeline", "commit"]
+    async def saga() -> bool:
+        return await base.in_tx(body)
+
+    assert await base.exec("Saga", saga) is True
+    assert events == ["body", "begin", "body", "commit", "begin", "body", "commit"]
+    assert in_transaction() is False
 
 
 @pytest.mark.asyncio
-async def test_tx_rolls_back_and_keeps_the_error_code() -> None:
-    """A failing pipeline rolls the transaction back and its coded error reaches the caller.
+async def test_a_failing_body_rolls_back_and_keeps_the_error_code() -> None:
+    """A failing body rolls its transaction back and its coded error reaches the caller.
 
     Why this test is important:
       - A result whose transaction did not commit must never reach the caller.
 
     What it tests:
-      - ``ConflictError`` propagates and the transaction rolled back.
+      - ``ConflictError`` propagates from ``exec_tx`` and ``in_tx`` and each transaction
+        rolled back.
     """
     events: list[str] = []
-    fail = PipelineBase().stage("s", AsyncMock(side_effect=ConflictError("dup")))
+    fail = AsyncMock(side_effect=ConflictError("dup"))
+    base = WorkflowBase("w", _tx_manager(events))
 
     with pytest.raises(ConflictError):
-        await WorkflowBase(_tx_manager(events)).tx("cmd", fail).execute(1)
-    assert events == ["begin", "rollback"]
+        await base.exec_tx("Command", fail)
+    with pytest.raises(ConflictError):
+        await base.in_tx(fail)
+    assert events == ["begin", "rollback"] * 2
 
 
-def test_wiring_bugs_fail_loud() -> None:
-    """A missing function or transaction manager is a coded wiring error.
+@pytest.mark.asyncio
+async def test_a_nested_or_unmanaged_transaction_fails_loud() -> None:
+    """A transaction never opens inside another, nor without a manager.
 
     Why this test is important:
-      - A wiring bug must fail at the composition root, not on the first request.
+      - A nested transaction runs on a second connection and commits on its own, so the
+        outer one's failure leaves the inner write behind.
 
     What it tests:
-      - ``func`` with None and ``tx`` without a transaction manager raise ``AppValueError``.
+      - ``in_tx`` or ``exec_tx`` inside a transaction raises ``InternalError`` without
+        opening a second one; ``exec_tx`` on a base with no manager raises
+        ``InternalError``.
     """
-    with pytest.raises(AppValueError):
-        WorkflowBase().func("w", None)  # type: ignore[arg-type]
-    with pytest.raises(AppValueError, match="transaction manager"):
-        WorkflowBase().tx("w", PipelineBase().stage("s", AsyncMock()))
+    events: list[str] = []
+    base = WorkflowBase("w", _tx_manager(events))
+    never = AsyncMock()
+
+    async def nested_step() -> None:
+        await base.in_tx(never)
+
+    async def nested_command() -> None:
+        await base.exec_tx("Inner", never)
+
+    with pytest.raises(InternalError, match="already open"):
+        await base.in_tx(nested_step)
+    with pytest.raises(InternalError, match="already open"):
+        await base.in_tx(nested_command)
+    with pytest.raises(InternalError, match="transaction manager"):
+        await WorkflowBase("w").exec_tx("Command", never)
+    never.assert_not_called()
+    assert events == ["begin", "rollback"] * 2
 
 
 @pytest.mark.asyncio
@@ -203,17 +212,7 @@ async def test_from_decorations_applies_the_config(observed: Observed) -> None:
     })
     decorations = Decorations(config, Collaborators(observability=observed.observability))
 
-    await (
-        WorkflowBase
-        .from_decorations("quiet", decorations)
-        .func("quiet", AsyncMock())
-        .execute(1)
-    )
-    await (
-        WorkflowBase
-        .from_decorations("loud", decorations)
-        .func("loud", AsyncMock())
-        .execute(1)
-    )
+    await WorkflowBase.from_decorations("quiet", decorations).exec("Run", AsyncMock())
+    await WorkflowBase.from_decorations("loud", decorations).exec("Run", AsyncMock())
 
-    assert [name for name, _, _ in observed.spans] == ["loud.Execute"]
+    assert [name for name, _, _ in observed.spans] == ["loud.Run"]

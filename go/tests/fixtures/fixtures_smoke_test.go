@@ -20,7 +20,8 @@ import (
 // What it tests:
 //   - Each factory's returned generated mock honours its interface contract (no-op
 //     loggers/metrics/tracers, echoing/erroring/panicking pipelines, the retrier's
-//     attempt counting, circuit-breaker gating, and stream Recv sequencing).
+//     attempt counting, circuit-breaker gating, and stream Recv sequencing), and Must
+//     passes a value through and panics on a constructor error.
 func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -80,6 +81,15 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 		t.Fatalf("ErrPipeline: %v", err)
 	}
 	assertPanics(t, func() { _, _ = fixtures.PanicPipeline().Execute(ctx, "x") })
+
+	// Must: the value through, a constructor error as a panic.
+	if got := fixtures.Must(7, nil); got != 7 {
+		t.Errorf("Must = %d, want 7", got)
+	}
+	assertPanics(
+		t,
+		func() { fixtures.Must(0, apperr.New(apperr.CodeInternal, "wiring")) },
+	)
 
 	// Retrier: fails twice then succeeds → 3 attempts.
 	retrier, attempts := fixtures.StubRetrier(2, false)

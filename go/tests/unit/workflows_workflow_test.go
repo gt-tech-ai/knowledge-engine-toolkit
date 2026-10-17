@@ -12,9 +12,9 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines/pipeline"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/loop"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/workflow"
 )
 
@@ -35,43 +35,57 @@ func TestWorkflowTier_Order(t *testing.T) {
 	}}, workflow.Tier())
 }
 
-// TestWorkflowBase_TxReadAndWrapBuildTheRequestBoundary tests the workflow builders.
-//
-// Why this test is important:
-//   - The request workflow owns the transaction: a write wired outside its transaction
-//     leaves half a change behind on failure, and a read wired inside one holds a
-//     transaction it does not need.
-//
-// What it tests:
-//   - Tx opens exactly one transaction and runs the pipeline on its context.
-//   - Read and Wrap open none (the strict transaction mock fails on a second call).
-func TestWorkflowBase_TxReadAndWrapBuildTheRequestBoundary(t *testing.T) {
-	t.Parallel()
+// txManager returns a strict transaction manager mock expecting n WithTransaction
+// calls, each running fn on a context marked in-transaction and returning commitErr
+// after a successful fn.
+func txManager(t *testing.T, n int, commitErr error) *mocks.MockTransactionManager {
+	t.Helper()
 	tx := mocks.NewMockTransactionManager(gomock.NewController(t))
-	tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(
+	tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).Times(n).DoAndReturn(
 		func(ctx context.Context, fn func(context.Context) error) error {
-			return fn(interfaces.WithInTx(ctx))
+			if err := fn(interfaces.WithInTx(ctx)); err != nil {
+				return err
+			}
+			return commitErr
 		})
-	flows := fixtures.Workflows(tx)
-	inTx := pipeline.Stage[int, bool](func(ctx context.Context, _ int) (bool, error) {
-		return interfaces.InTx(ctx), nil
-	})
-
-	got, err := flows.Tx("write", inTx).Execute(t.Context(), 1)
-	require.NoError(t, err)
-	assert.True(t, got, "Tx runs the pipeline on the transaction's context")
-
-	got, err = flows.Read("read", inTx).Execute(t.Context(), 1)
-	require.NoError(t, err)
-	assert.False(t, got, "Read opens no transaction")
-
-	got, err = flows.Wrap("custom", interfaces.Workflow[int, bool](inTx)).
-		Execute(t.Context(), 1)
-	require.NoError(t, err)
-	assert.False(t, got, "Wrap opens no transaction")
+	return tx
 }
 
-// TestWorkflowBaseTx_ReturnsTheCodedErrorAndNoResult tests a failed transaction.
+// inTx reports whether ctx is in a transaction, as a workflow body.
+func inTx(ctx context.Context) (bool, error) { return interfaces.InTx(ctx), nil }
+
+// TestWorkflowBase_ReadCommandAndSagaShapes tests the three workflow shapes.
+//
+// Why this test is important:
+//   - The workflow owns the transaction: a write run outside its transaction leaves half
+//     a change behind on failure, and a read run inside one holds a transaction it does
+//     not need.
+//
+// What it tests:
+//   - Exec (a read) opens no transaction; ExecTx (a command) and InTx (a saga step) each
+//     open exactly one and run fn on its context (the strict mock fails on a third).
+//   - Name is the workflow's.
+func TestWorkflowBase_ReadCommandAndSagaShapes(t *testing.T) {
+	t.Parallel()
+	flows := fixtures.Workflows(txManager(t, 2, nil))
+	assert.Equal(t, "test", flows.Name())
+
+	got, err := flows.Exec(t.Context(), "Read", inTx)
+	require.NoError(t, err)
+	assert.False(t, got, "Exec opens no transaction")
+
+	got, err = flows.ExecTx(t.Context(), "Command", inTx)
+	require.NoError(t, err)
+	assert.True(t, got, "ExecTx runs fn on the transaction's context")
+
+	got, err = flows.Exec(t.Context(), "Saga", func(ctx context.Context) (bool, error) {
+		return flows.InTx(ctx, inTx)
+	})
+	require.NoError(t, err)
+	assert.True(t, got, "InTx runs a saga step on its transaction's context")
+}
+
+// TestWorkflowBase_TransactionErrorsKeepTheirCodeAndNoResult tests a failed transaction.
 //
 // Why this test is important:
 //   - The transport maps the error code to a status; losing it would turn a conflict or
@@ -79,16 +93,17 @@ func TestWorkflowBase_TxReadAndWrapBuildTheRequestBoundary(t *testing.T) {
 //     commit must not reach the caller.
 //
 // What it tests:
-//   - A pipeline error coded CONFLICT, and a commit error coded UNAVAILABLE after a
-//     successful pipeline, each come back with their code and a zero output.
-func TestWorkflowBaseTx_ReturnsTheCodedErrorAndNoResult(t *testing.T) {
+//   - A body error coded CONFLICT, and a commit error coded UNAVAILABLE after a
+//     successful body, each come back from ExecTx and from InTx with their code and a
+//     zero output.
+func TestWorkflowBase_TransactionErrorsKeepTheirCodeAndNoResult(t *testing.T) {
 	t.Parallel()
 	for name, tc := range map[string]struct {
-		pipeErr, commitErr error
+		bodyErr, commitErr error
 		code               apperr.ErrorCode
 	}{
-		"pipeline error": {
-			pipeErr: apperr.New(apperr.CodeConflict, "duplicate"), code: apperr.CodeConflict,
+		"body error": {
+			bodyErr: apperr.New(apperr.CodeConflict, "duplicate"), code: apperr.CodeConflict,
 		},
 		"commit error": {
 			commitErr: apperr.New(apperr.CodeUnavailable, "commit failed"),
@@ -97,55 +112,102 @@ func TestWorkflowBaseTx_ReturnsTheCodedErrorAndNoResult(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			tx := mocks.NewMockTransactionManager(gomock.NewController(t))
-			tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).DoAndReturn(
-				func(ctx context.Context, fn func(context.Context) error) error {
-					if err := fn(ctx); err != nil {
-						return err
-					}
-					return tc.commitErr
-				})
-			pipe := pipeline.Stage[string, int](
-				func(context.Context, string) (int, error) {
-					return 7, tc.pipeErr
-				},
-			)
-
-			out, err := fixtures.Workflows(tx).Tx("order", pipe).Execute(t.Context(), "x")
-			require.Error(t, err)
-			assert.Equal(t, tc.code, apperr.Code(err))
-			assert.Zero(t, out)
+			flows := fixtures.Workflows(txManager(t, 2, tc.commitErr))
+			body := func(context.Context) (int, error) { return 7, tc.bodyErr }
+			for shape, run := range map[string]func() (int, error){
+				"ExecTx": func() (int, error) { return flows.ExecTx(t.Context(), "Order", body) },
+				"InTx":   func() (int, error) { return flows.InTx(t.Context(), body) },
+			} {
+				out, err := run()
+				require.Error(t, err, shape)
+				assert.Equal(t, tc.code, apperr.Code(err), shape)
+				assert.Zero(t, out, shape)
+			}
 		})
 	}
 }
 
-// TestWorkflowBaseFunc_AppliesTimeoutAndRecovery tests a workflow's decoration.
+// TestWorkflowBase_RefusesANestedOrUnmanagedTransaction tests the transaction guards.
+//
+// Why this test is important:
+//   - A transaction opened inside another runs on a second connection and commits on its
+//     own, so a failure of the outer one leaves the inner write behind; a base with no
+//     transaction manager would otherwise panic on the first command.
+//
+// What it tests:
+//   - ExecTx and InTx on a context already in a transaction fail INTERNAL without
+//     calling the transaction manager or the body.
+//   - ExecTx on a base with no transaction manager fails INTERNAL.
+func TestWorkflowBase_RefusesANestedOrUnmanagedTransaction(t *testing.T) {
+	t.Parallel()
+	flows := fixtures.Workflows(txManager(t, 0, nil))
+	nested := interfaces.WithInTx(t.Context())
+	body := func(context.Context) (int, error) {
+		t.Error("the body of a refused transaction must not run")
+		return 0, nil
+	}
+
+	_, err := flows.ExecTx(nested, "Nested", body)
+	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
+	_, err = flows.InTx(nested, body)
+	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
+
+	_, err = fixtures.Workflows(nil).ExecTx(t.Context(), "Unmanaged", body)
+	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
+}
+
+// TestWorkflowBasePass_DecoratesALoopPass tests the loop-pass decorator.
+//
+// Why this test is important:
+//   - A background loop's pass must be observed and recovered like a request; a pass
+//     that panicked undecorated would stop its loop.
+//
+// What it tests:
+//   - Pass, used as a loop.Decorator, runs the pass with no transaction and returns its
+//     error; a panicking pass returns INTERNAL.
+func TestWorkflowBasePass_DecoratesALoopPass(t *testing.T) {
+	t.Parallel()
+	flows := fixtures.Workflows(txManager(t, 0, nil))
+	var decorator loop.Decorator = flows.Pass
+	var sawTx bool
+	pass := decorator("relay-pass", loop.Pass(func(ctx context.Context) error {
+		sawTx = interfaces.InTx(ctx)
+		return apperr.New(apperr.CodeUnavailable, "sink down")
+	}))
+	_, err := pass.Execute(t.Context(), struct{}{})
+	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
+	assert.False(t, sawTx, "a pass runs with no transaction")
+
+	_, err = decorator("boom-pass", loop.Pass(func(context.Context) error {
+		panic("boom")
+	})).Execute(t.Context(), struct{}{})
+	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
+}
+
+// TestWorkflowBase_AppliesTimeoutAndRecovery tests a workflow's decoration.
 //
 // Why this test is important:
 //   - A dropped timeout lets a hung dependency hold a request forever, and a dropped
 //     recovery lets one panic crash the serving process.
 //
 // What it tests:
-//   - With Deps.Timeout a workflow that waits on its context ends with the deadline.
-//   - A panicking workflow returns an INTERNAL error; a nil fn panics at wiring time.
-func TestWorkflowBaseFunc_AppliesTimeoutAndRecovery(t *testing.T) {
+//   - With Deps.Timeout an operation that waits on its context ends with the deadline.
+//   - A panicking operation returns an INTERNAL error.
+func TestWorkflowBase_AppliesTimeoutAndRecovery(t *testing.T) {
 	t.Parallel()
-	bounded := workflow.NewBase(nil, decorate.Deps{
+	bounded := workflow.NewBase("bounded", nil, decorate.Deps{
 		Observability: decorate.Observability{Logger: fixtures.NopLogger()},
 		Timeout:       5 * time.Millisecond,
 	})
-	_, err := bounded.Func("slow", func(ctx context.Context, _ int) (int, error) {
+	_, err := bounded.Exec(t.Context(), "Slow", func(ctx context.Context) (int, error) {
 		<-ctx.Done()
 		return 0, ctx.Err()
-	}).Execute(t.Context(), 1)
+	})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	_, err = fixtures.Workflows(nil).
-		Func("boom", func(context.Context, int) (int, error) {
+		Exec(t.Context(), "Boom", func(context.Context) (int, error) {
 			panic("boom")
-		}).
-		Execute(t.Context(), 1)
+		})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
-
-	assert.Panics(t, func() { fixtures.Workflows(nil).Func[int, int]("nil", nil) })
 }

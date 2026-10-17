@@ -14,8 +14,8 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/outbox"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/outbox"
 )
 
 // relayNow returns the fixed clock every relay test runs at.
@@ -41,6 +41,93 @@ func outboxRecords(n, attempts int) []types.OutboxRecord {
 		}
 	}
 	return recs
+}
+
+// relayTx returns a transaction manager mock that runs every transaction's body on a
+// context marked in-transaction and commits it.
+func relayTx(t *testing.T) *mocks.MockTransactionManager {
+	t.Helper()
+	tx := mocks.NewMockTransactionManager(gomock.NewController(t))
+	tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+		func(ctx context.Context, fn func(context.Context) error) error {
+			return fn(interfaces.WithInTx(ctx))
+		})
+	return tx
+}
+
+// TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction tests the
+// relay's transaction boundaries.
+//
+// Why this test is important:
+//   - A write that autocommits outside a transaction escapes its workflow, and a
+//     remote call made inside one holds row locks for as long as the sink takes
+//   - One row's finalize must never roll back another's
+//
+// What it tests:
+//   - the claim and each of the two finalizes run in their own transaction (three
+//     transactions), while the sink's Send runs on a context with none open
+//   - a finalize whose commit fails is returned coded and counted on no outcome,
+//     while the other row's finalize still commits and is counted sent
+func TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	store := mocks.NewMockOutboxStore(ctrl)
+	sink := mocks.NewMockOutboxSink(ctrl)
+	metrics := mocks.NewMockMetrics(ctrl)
+	counters := map[string]*mocks.MockCounter{}
+	metrics.EXPECT().Counter(gomock.Any(), gomock.Any(), "lane").AnyTimes().DoAndReturn(
+		func(name, _ string, _ ...string) interfaces.Counter {
+			c := mocks.NewMockCounter(ctrl)
+			counters[name] = c
+			return c
+		})
+	gauge := mocks.NewMockGauge(ctrl)
+	gauge.EXPECT().Set(0.0, "audit").Times(2) // depth and lag
+	metrics.EXPECT().Gauge(gomock.Any(), gomock.Any(), "lane").AnyTimes().Return(gauge)
+	recs := outboxRecords(2, 1)
+	commitErr := apperr.New(apperr.CodeUnavailable, "commit lost")
+	tx := mocks.NewMockTransactionManager(ctrl)
+	var txs int
+	tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).Times(3).DoAndReturn(
+		func(ctx context.Context, fn func(context.Context) error) error {
+			txs++
+			if err := fn(interfaces.WithInTx(ctx)); err != nil {
+				return err
+			}
+			if txs == 3 {
+				return commitErr // the second row's finalize fails to commit
+			}
+			return nil
+		})
+	inTx := interfaces.InTx
+
+	store.EXPECT().Claim(gomock.Any(), "audit", 100).DoAndReturn(
+		func(ctx context.Context, _ string, _ int) ([]types.OutboxRecord, error) {
+			require.True(t, inTx(ctx), "the claim commits in a transaction")
+			return recs, nil
+		})
+	sink.EXPECT().Send(gomock.Any(), recs).DoAndReturn(
+		func(ctx context.Context, _ []types.OutboxRecord) []error {
+			require.False(t, inTx(ctx), "delivery runs with no transaction open")
+			return make([]error, len(recs))
+		})
+	for _, r := range recs {
+		store.EXPECT().MarkSent(gomock.Any(), r.ID).DoAndReturn(
+			func(ctx context.Context, _ uuid.UUID) error {
+				require.True(t, inTx(ctx), "each finalize commits in a transaction")
+				return nil
+			})
+	}
+	store.EXPECT().Stats(gomock.Any(), "audit").Return(types.OutboxStats{}, nil)
+
+	relay := outbox.NewRelay(relayConfig(10, 1, 5), tx, store, sink, nil, metrics, nil,
+		fixedClock())
+	counters["outbox_sent_total"].EXPECT().Inc("audit").Times(1)
+
+	err := relay.RunOnce(context.Background())
+	require.Error(t, err)
+	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
+	assert.Equal(t, 3, txs)
 }
 
 // fixedClock returns a relay option pinning the clock to relayNow.
@@ -77,6 +164,7 @@ func TestRelay_MarksSentOnSuccess(t *testing.T) {
 
 	relay := outbox.NewRelay(
 		relayConfig(2, 2, 5),
+		relayTx(t),
 		store,
 		sink,
 		nil,
@@ -119,6 +207,7 @@ func TestRelay_PartialBatchFailureRetriesOnlyFailedRows(t *testing.T) {
 
 	relay := outbox.NewRelay(
 		relayConfig(10, 1, 5),
+		relayTx(t),
 		store,
 		sink,
 		nil,
@@ -191,6 +280,7 @@ func TestRelay_BackoffIsExponentialWithJitterAndCapped(t *testing.T) {
 
 	relay := outbox.NewRelay(
 		relayConfig(10, 1, 10),
+		relayTx(t),
 		store,
 		sink,
 		nil,
@@ -223,6 +313,7 @@ func TestRelay_BackoffIsExponentialWithJitterAndCapped(t *testing.T) {
 
 	defaultJitter := outbox.NewRelay(
 		relayConfig(10, 1, 10),
+		relayTx(t),
 		store,
 		sink,
 		nil,
@@ -263,6 +354,7 @@ func TestRelay_ParksAfterMaxAttempts(t *testing.T) {
 
 	relay := outbox.NewRelay(
 		relayConfig(10, 1, 3),
+		relayTx(t),
 		store,
 		sink,
 		nil,
@@ -334,6 +426,7 @@ func TestRelay_ReportsDepthAndLag(t *testing.T) {
 
 	relay := outbox.NewRelay(
 		relayConfig(10, 1, 2),
+		relayTx(t),
 		store,
 		sink,
 		nil,
@@ -371,6 +464,7 @@ func TestRelay_ClaimErrorIsNotRetried(t *testing.T) {
 
 	relay := outbox.NewRelay(
 		relayConfig(10, 1, 3),
+		relayTx(t),
 		store,
 		sink,
 		nil,
@@ -410,6 +504,7 @@ func TestRelay_FinalizeErrorIsReturnedWithoutStoppingOtherRows(t *testing.T) {
 
 	relay := outbox.NewRelay(
 		relayConfig(10, 1, 3),
+		relayTx(t),
 		store,
 		sink,
 		nil,
@@ -436,7 +531,7 @@ func TestRelay_FinalizeErrorIsReturnedWithoutStoppingOtherRows(t *testing.T) {
 //   - a complete config validates; an empty lane, non-positive BatchSize,
 //     SendBatch, Concurrency, MaxAttempts or BaseBackoff, and MaxBackoff below
 //     BaseBackoff are each INVALID_INPUT
-//   - NewRelay panics on an invalid config
+//   - NewRelay panics on an invalid config and on a nil transaction manager
 func TestRelayConfig_Validate(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, relayConfig(10, 1, 3).Validate())
@@ -465,6 +560,18 @@ func TestRelayConfig_Validate(t *testing.T) {
 	assert.Panics(t, func() {
 		outbox.NewRelay(
 			outbox.RelayConfig{},
+			relayTx(t),
+			mocks.NewMockOutboxStore(ctrl),
+			mocks.NewMockOutboxSink(ctrl),
+			nil,
+			nil,
+			nil,
+		)
+	})
+	assert.Panics(t, func() {
+		outbox.NewRelay(
+			relayConfig(10, 1, 3),
+			nil,
 			mocks.NewMockOutboxStore(ctrl),
 			mocks.NewMockOutboxSink(ctrl),
 			nil,
@@ -511,6 +618,7 @@ func TestRelay_SpansRunsAndLogsStatsFailure(t *testing.T) {
 
 	relay := outbox.NewRelay(
 		relayConfig(10, 1, 3),
+		relayTx(t),
 		store,
 		sink,
 		logger,
@@ -563,6 +671,7 @@ func TestRelay_CancelledRunLeavesFailedRowsLeased(t *testing.T) {
 
 	relay := outbox.NewRelay(
 		relayConfig(10, 1, 1),
+		relayTx(t),
 		store,
 		sink,
 		nil,
@@ -607,7 +716,7 @@ func TestRelay_ParkOnPermanentParksAtFirstPermanentFailure(t *testing.T) {
 
 		require.NoError(
 			t,
-			outbox.NewRelay(cfg, store, sink, nil, nil, nil, fixedClock()).
+			outbox.NewRelay(cfg, relayTx(t), store, sink, nil, nil, nil, fixedClock()).
 				RunOnce(context.Background()),
 		)
 	})
@@ -627,8 +736,20 @@ func TestRelay_ParkOnPermanentParksAtFirstPermanentFailure(t *testing.T) {
 
 		require.NoError(
 			t,
-			outbox.NewRelay(relayConfig(10, 1, 5), store, sink, nil, nil, nil, fixedClock()).
-				RunOnce(context.Background()),
+			outbox.NewRelay(
+				relayConfig(
+					10,
+					1,
+					5,
+				),
+				relayTx(t),
+				store,
+				sink,
+				nil,
+				nil,
+				nil,
+				fixedClock(),
+			).RunOnce(context.Background()),
 		)
 	})
 }

@@ -21,6 +21,9 @@ import (
 type Harness struct {
 	// Store is the OutboxStore under test.
 	Store interfaces.OutboxStore
+	// Tx opens the transaction each of the suite's store writes runs in, as the
+	// relay's do.
+	Tx interfaces.TransactionManager
 	// Enqueue inserts a pending record that is due immediately.
 	Enqueue func(ctx context.Context, rec *types.OutboxRecord) error
 }
@@ -44,6 +47,11 @@ type Harness struct {
 //     parked rows and reports the oldest pending row's creation time.
 func Run(t *testing.T, h Harness) {
 	t.Helper()
+	require.NotNil(
+		t,
+		h.Tx,
+		"outboxtest: Harness.Tx is required: store writes run in a transaction",
+	)
 	t.Run("ConcurrentClaimsAreDisjoint", h.concurrentClaimsAreDisjoint)
 	t.Run("NextAttemptAtIsHonoured", h.nextAttemptAtIsHonoured)
 	t.Run("SentAndParkedAreNotClaimed", h.sentAndParkedAreNotClaimed)
@@ -66,6 +74,25 @@ func seed(t *testing.T, h Harness, lane string, n int, oldest time.Time) []uuid.
 	return ids
 }
 
+// claimLimit is how many rows each of the suite's claims leases at most.
+const claimLimit = 10
+
+// claim leases up to claimLimit due rows of lane in one transaction.
+func (h Harness) claim(ctx context.Context, lane string) ([]types.OutboxRecord, error) {
+	var recs []types.OutboxRecord
+	err := h.write(ctx, func(ctx context.Context) error {
+		var err error
+		recs, err = h.Store.Claim(ctx, lane, claimLimit)
+		return err
+	})
+	return recs, err
+}
+
+// write runs one store write in its own transaction.
+func (h Harness) write(ctx context.Context, fn func(context.Context) error) error {
+	return h.Tx.WithTransaction(ctx, fn)
+}
+
 // newLane returns a lane no other case uses.
 func newLane() string { return "conformance-" + uuid.NewString() }
 
@@ -82,7 +109,7 @@ func (h Harness) concurrentClaimsAreDisjoint(t *testing.T) {
 	)
 	for range 5 {
 		wg.Go(func() {
-			recs, err := h.Store.Claim(ctx, lane, 10)
+			recs, err := h.claim(ctx, lane)
 			mu.Lock()
 			defer mu.Unlock()
 			errs = append(errs, err) // checked after Wait: FailNow is test-goroutine only
@@ -107,19 +134,29 @@ func (h Harness) nextAttemptAtIsHonoured(t *testing.T) {
 	ctx, lane := context.Background(), newLane()
 	ids := seed(t, h, lane, 2, time.Now().Add(-time.Hour))
 
-	first, err := h.Store.Claim(ctx, lane, 10)
+	first, err := h.claim(ctx, lane)
 	require.NoError(t, err)
 	require.Len(t, first, 2)
 	require.Equal(t, 1, first[0].Attempts)
 
-	again, err := h.Store.Claim(ctx, lane, 10)
+	again, err := h.claim(ctx, lane)
 	require.NoError(t, err)
 	require.Empty(t, again, "a claimed row is leased")
 
-	require.NoError(t, h.Store.Retry(ctx, ids[0], time.Now().Add(-time.Minute), "boom"))
-	require.NoError(t, h.Store.Retry(ctx, ids[1], time.Now().Add(time.Hour), "boom"))
+	require.NoError(t, h.write(ctx, func(ctx context.Context) error {
+		return h.Store.Retry(ctx, ids[0], time.Now().Add(-time.Minute), "boom")
+	}))
+	require.NoError(
+		t,
+		h.write(
+			ctx,
+			func(ctx context.Context) error {
+				return h.Store.Retry(ctx, ids[1], time.Now().Add(time.Hour), "boom")
+			},
+		),
+	)
 
-	due, err := h.Store.Claim(ctx, lane, 10)
+	due, err := h.claim(ctx, lane)
 	require.NoError(t, err)
 	require.Len(t, due, 1)
 	require.Equal(t, ids[0], due[0].ID)
@@ -131,10 +168,22 @@ func (h Harness) sentAndParkedAreNotClaimed(t *testing.T) {
 	ctx, lane := context.Background(), newLane()
 	ids := seed(t, h, lane, 3, time.Now().Add(-time.Hour))
 
-	require.NoError(t, h.Store.MarkSent(ctx, ids[0]))
-	require.NoError(t, h.Store.Park(ctx, ids[1], "poison"))
+	require.NoError(
+		t,
+		h.write(
+			ctx,
+			func(ctx context.Context) error { return h.Store.MarkSent(ctx, ids[0]) },
+		),
+	)
+	require.NoError(
+		t,
+		h.write(
+			ctx,
+			func(ctx context.Context) error { return h.Store.Park(ctx, ids[1], "poison") },
+		),
+	)
 
-	recs, err := h.Store.Claim(ctx, lane, 10)
+	recs, err := h.claim(ctx, lane)
 	require.NoError(t, err)
 	require.Len(t, recs, 1)
 	require.Equal(t, ids[2], recs[0].ID)
@@ -158,8 +207,20 @@ func (h Harness) statsCountsPendingAndParked(t *testing.T) {
 		stats.OldestPending,
 	)
 
-	require.NoError(t, h.Store.MarkSent(ctx, ids[0]))
-	require.NoError(t, h.Store.Park(ctx, ids[1], "poison"))
+	require.NoError(
+		t,
+		h.write(
+			ctx,
+			func(ctx context.Context) error { return h.Store.MarkSent(ctx, ids[0]) },
+		),
+	)
+	require.NoError(
+		t,
+		h.write(
+			ctx,
+			func(ctx context.Context) error { return h.Store.Park(ctx, ids[1], "poison") },
+		),
+	)
 
 	stats, err = h.Store.Stats(ctx, lane)
 	require.NoError(t, err)

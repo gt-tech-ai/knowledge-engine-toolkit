@@ -1,6 +1,6 @@
 [project]
 name = "techai-webutils"
-version = "0.5.2"
+version = "0.5.3"
 # The published version, bumped by hand in the release PR whenever the package changes. It must
 # be greater than every version already on PyPI: 0.1.0 through 0.3.3 belong to the package's
 # earlier release line, so this line continues from 0.4.0.

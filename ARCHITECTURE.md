@@ -112,9 +112,11 @@ collaborator or zero timeout skips its layer; recovery needs none.
   - `pipeline.Base`: `Stage[In, Out](name, fn)` builds a decorated `pipeline.Stage` (a function
     type that is an `interfaces.Pipeline`), whose `Then[C](next)` composes it with the next
     stage; `FanOut[In, Out](name, stages...)` runs stages concurrently on one input.
-  - `workflow.Base` (over a `TransactionManager`): `Func[In, Out](op, fn)` decorates a function,
-    `Wrap` a custom workflow, `Read` a pipeline without a transaction and `Tx` a pipeline in one
-    transaction.
+  - `workflow.Base` embeds the workflow's Subject over a `TransactionManager`; it is the only tier
+    that opens a transaction. A consumer workflow embeds the Base and runs each operation as a
+    read (`Exec`, no transaction), a command (`ExecTx`, one transaction) or a saga (`Exec` whose
+    body commits each local step with `InTx`, undecorated). `ExecTx` and `InTx` refuse a context
+    already in a transaction, so a transaction never opens inside another.
   - `service.Base` embeds the service's Subject (a consumer service embeds the Base and runs each
     custom op through the promoted `Exec`); `CRUD` and `CRUDNoList` decorate a repository (with an
     optional entity validator) and `OpService` a single-operation service.
@@ -134,8 +136,8 @@ collaborator or zero timeout skips its layer; recovery needs none.
 
   Every tier's series are `<tier>_operations_total`, `<tier>_errors_total` and
   `<tier>_operation_duration_seconds` labelled `{<tier>, operation}`; its spans are
-  `<name>.<op>` with `<tier>.name` / `<tier>.operation`; a pipeline stage or workflow runs as its
-  `Execute` operation. The clients tier uses the same engine: `client.Tier()` and `client.Base`
+  `<name>.<op>` with `<tier>.name` / `<tier>.operation`; a pipeline stage runs as its `Execute`
+  operation. The clients tier uses the same engine: `client.Tier()` and `client.Base`
   (`Once`, `Do`, `DoOnce`, `Stream` for a result read after the call returns), and each decorated
   family's `Decorate`; its series are `client_*` labelled `{client, operation}`.
 - **Go — every decorator is configurable.** The `decoration` config section
@@ -159,8 +161,8 @@ collaborator or zero timeout skips its layer; recovery needs none.
   (`exec`, `once`; `decorate(client, name, deps)` runs every coroutine method of a client
   through the tier), `repos.RepositoryBase` (`crud(store)`, Create never retried),
   `services.ServiceBase` (`crud(repo, validate)`, `op_service`), `pipelines.PipelineBase`
-  (`stage`, `fan_out`; `Stage.then` chains), `workflows.WorkflowBase` (`func`, `wrap`, `read`,
-  `tx`), `execution.job.JobBase` and `controllers.ControllerBase`. Spans, series, log lines and
+  (`stage`, `fan_out`; `Stage.then` chains), `workflows.WorkflowBase` (`exec`, `exec_tx`,
+  `in_tx`), `execution.job.JobBase` and `controllers.ControllerBase`. Spans, series, log lines and
   op names match Go's. A consumer repository or service subclasses `DelegatingRepository` /
   `DelegatingCrudService` and runs its custom ops through the base's `exec`. The retry layer's
   `ExponentialRetrier` (and `retry_transient_async`) wait out a server pushback
@@ -289,17 +291,20 @@ the bucket's retention: it expires at bucket end + the grain's TTL (CQL `TTL()` 
 non-frozen map, so the TTL is anchored to the bucket, not to each fact's write).
 
 The transactional outbox is split by tier: the contracts in `core`, the sink kinds in `clients`,
-the store kinds in `stores`, the relay in `services`. `core/interfaces.OutboxStore` (`Claim` leases
+the store kinds in `stores`, the relay in `workflows`. `core/interfaces.OutboxStore` (`Claim` leases
 due rows, `MarkSent` / `Retry` / `Park` / `Stats`, `DeleteSentBefore` for the retention sweep) is
 built by `stores/outbox` (`KindStub` default — no rows, so a relay boots with no database;
-`KindPostgres`, a product's own table named by config) behind the store tier, and
+`KindPostgres`, a product's own table named by config, whose writes run only on the `*sql.Tx` that
+`stores/sqltx` — the `database/sql` transaction manager, which refuses a nested transaction —
+bound to the context) behind the store tier, and
 `repos/repository.Base.Outbox` runs it through the repository tier as the
 `core/interfaces.OutboxRepository` the relay takes (`Claim` without retry, since it leases rows
 and counts an attempt; the idempotent finalizers, `Stats` and the sweep with it);
-`core/interfaces.OutboxSink` returns one result per record. `services/outbox.Relay.RunOnce` claims a
-batch, sends it in `SendBatch` chunks under a `Concurrency` bound, and finalizes each row by its own
-outcome: sent, retried at `now + FullJitter(min(Base·2^attempts, Max))`, or parked on its
-`MaxAttempts`th attempt (`outbox_{sent,retried,parked}_total`, `outbox_depth`, `outbox_lag_seconds`
+`core/interfaces.OutboxSink` returns one result per record. `workflows/outbox.Relay.RunOnce` is a
+saga: it claims a batch in one transaction, sends it in `SendBatch` chunks under a `Concurrency`
+bound with no transaction open, and finalizes each row in its own transaction by its own outcome:
+sent, retried at `now + FullJitter(min(Base·2^attempts, Max))`, or parked on its `MaxAttempts`th
+attempt (`outbox_{sent,retried,parked}_total`, `outbox_depth`, `outbox_lag_seconds`
 by lane). With `ParkOnPermanent` a permanent failure parks the row at once; a run cancelled mid-send
 leaves its unfinished rows leased for the next claim. `LoadRelayConfig` reads a lane's `RelayConfig`
 over the defaults. `clients/outbox` builds the sink (`KindStub` default, `KindSQS`, `KindS3`) over
@@ -432,7 +437,9 @@ stream drainers, retention sweeps) as workflow passes, so each pass gets the sam
 as a request.
 
 - `Pass(fn)` adapts one iteration, a `func(context.Context) error`, into a
-  `Workflow[struct{}, struct{}]`. The composition root decorates it (recovery outermost).
+  `Workflow[struct{}, struct{}]`. The composition root decorates it with `workflow.Base.Pass`, a
+  `loop.Decorator`: the pass is one decorated operation with no transaction, and a pass that
+  writes commits each write with `InTx`.
 - `NewTicker(name, pass, Config, logger)` runs the pass once per `Interval`, plus one at start when
   `RunAtStart` is set. A zero `Interval` runs passes back to back, for a pass that already blocks
   on its source. A failed pass is logged at warn and followed by `ErrorBackoff`. A failure caused

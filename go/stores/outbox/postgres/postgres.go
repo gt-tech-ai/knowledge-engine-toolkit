@@ -13,6 +13,11 @@
 // plus the key column (Config.KeyColumn), and optionally a tenant column and any
 // attribute columns. Producers insert pending rows themselves, inside their business
 // transaction; this store only drains them.
+//
+// Every write (Claim, the finalizers, DeleteSentBefore) runs on the *sql.Tx a
+// transaction manager (stores/sqltx) bound to the context, and fails INTERNAL without
+// touching the database when none is bound, so a write never autocommits outside the
+// workflow that owns it. Stats reads on the bound transaction when there is one.
 package postgres
 
 import (
@@ -27,6 +32,7 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/store"
 )
 
 // Compile-time check: a Store is an OutboxStore.
@@ -189,7 +195,11 @@ func (s *Store) Claim(
 	if limit <= 0 {
 		return nil, apperr.InvalidInput("outbox postgres store: claim limit must be > 0")
 	}
-	rows, err := s.db.QueryContext(ctx, s.claimSQL, lane, limit, s.lease.Seconds())
+	tx, err := writeTx(ctx, "claim")
+	if err != nil {
+		return nil, err
+	}
+	rows, err := tx.QueryContext(ctx, s.claimSQL, lane, limit, s.lease.Seconds())
 	if err != nil {
 		return nil, apperr.Wrap(
 			err,
@@ -280,7 +290,11 @@ func (s *Store) Stats(ctx context.Context, lane string) (types.OutboxStats, erro
 		stats  types.OutboxStats
 		oldest sql.NullTime
 	)
-	err := s.db.QueryRowContext(ctx, s.statsSQL, lane).
+	row := s.db.QueryRowContext
+	if tx, ok := store.ClientFrom[*sql.Tx](ctx); ok {
+		row = tx.QueryRowContext
+	}
+	err := row(ctx, s.statsSQL, lane).
 		Scan(&stats.Pending, &stats.Parked, &oldest)
 	if err != nil {
 		return types.OutboxStats{}, apperr.Wrap(
@@ -299,7 +313,11 @@ func (s *Store) Stats(ctx context.Context, lane string) (types.OutboxStats, erro
 // went; parked rows stay for an operator. The claim index covers only pending rows, so
 // a retention sweep calls it to keep sent rows from accumulating.
 func (s *Store) DeleteSentBefore(ctx context.Context, cutoff time.Time) (int, error) {
-	res, err := s.db.ExecContext(ctx, s.purgeSQL, cutoff)
+	tx, err := writeTx(ctx, "delete sent")
+	if err != nil {
+		return 0, err
+	}
+	res, err := tx.ExecContext(ctx, s.purgeSQL, cutoff)
 	if err != nil {
 		return 0, apperr.Wrap(
 			err,
@@ -327,7 +345,11 @@ func (s *Store) exec(
 	query string,
 	args ...any,
 ) error {
-	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
+	tx, err := writeTx(ctx, op)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeUnavailable,
@@ -335,6 +357,20 @@ func (s *Store) exec(
 		)
 	}
 	return nil
+}
+
+// writeTx returns the transaction a write runs on: the *sql.Tx bound to ctx. With none
+// bound the write fails INTERNAL, since running it on the database would autocommit it
+// outside the transaction its workflow opened.
+func writeTx(ctx context.Context, op string) (*sql.Tx, error) {
+	tx, ok := store.ClientFrom[*sql.Tx](ctx)
+	if !ok {
+		return nil, apperr.New(
+			apperr.CodeInternal,
+			"outbox postgres store: "+op+" writes outside a transaction",
+		)
+	}
+	return tx, nil
 }
 
 // truncate keeps lastErr within MaxErrorLen; a rune cut in half is dropped.
