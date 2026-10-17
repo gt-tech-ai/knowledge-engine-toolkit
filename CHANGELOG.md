@@ -6,6 +6,20 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.9] - 2026-10-17
+
+### Added
+
+- `core/interfaces.OutboxRepository` and `repository.Base.Outbox(store)`: the outbox store run
+  through the repository tier. `Claim` runs without retry (it leases rows and counts an
+  attempt); `MarkSent`, `Retry`, `Park`, `Stats` and `DeleteSentBefore` get the full chain.
+
+### Changed
+
+- `outbox.NewRelay` takes an `interfaces.OutboxRepository`. The method set is the
+  `OutboxStore`'s, so existing callers compile; build the argument with
+  `repository.Base.Outbox` to put the relay's store calls behind the repository tier.
+
 ## [0.0.8] - 2026-10-17
 
 Python: `techai-webutils` 0.5.2.
@@ -471,7 +485,8 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.8...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.9...HEAD
+[0.0.9]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.5...v0.0.6

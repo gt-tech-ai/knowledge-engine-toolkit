@@ -31,6 +31,14 @@ type OutboxStore interface {
 	DeleteSentBefore(ctx context.Context, cutoff time.Time) (int, error)
 }
 
+// OutboxRepository is the OutboxStore run through the repository tier, the seam the
+// outbox relay programs to. Build it with repository.Base.Outbox: Claim, which leases
+// rows and counts an attempt, is never retried; the idempotent finalizers, Stats and
+// the retention sweep get the tier's full decoration.
+type OutboxRepository interface {
+	OutboxStore
+}
+
 // OutboxSink delivers claimed outbox records to their destination (a queue, an
 // object store, …).
 type OutboxSink interface {
