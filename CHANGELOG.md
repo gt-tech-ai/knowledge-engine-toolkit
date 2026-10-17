@@ -47,6 +47,12 @@ Python: `techai-webutils` 0.5.3.
 - `tests/fixtures.Must(v, err)`: a test's wiring of a `(T, error)` constructor, panicking on the
   error.
 
+### Fixed
+
+- `stream.NewMetrics`: the depth gauges could stay one item off for as long as the producer was
+  blocked, when the producer's and the consumer's updates raced; each change and its report now
+  happen under one lock.
+
 ## [0.0.9] - 2026-10-17
 
 ### Added
