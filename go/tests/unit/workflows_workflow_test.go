@@ -43,12 +43,13 @@ func TestWorkflowTier_Order(t *testing.T) {
 //     transaction it does not need.
 //
 // What it tests:
-//   - Tx opens exactly one transaction and runs the pipeline on its context.
-//   - Read and Wrap open none (the strict transaction mock fails on a second call).
+//   - Tx, and RunTx (a saga's local step), each open exactly one transaction and run
+//     the pipeline on its context.
+//   - Read and Wrap open none (the strict transaction mock fails on a third call).
 func TestWorkflowBase_TxReadAndWrapBuildTheRequestBoundary(t *testing.T) {
 	t.Parallel()
 	tx := mocks.NewMockTransactionManager(gomock.NewController(t))
-	tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(
+	tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).Times(2).DoAndReturn(
 		func(ctx context.Context, fn func(context.Context) error) error {
 			return fn(interfaces.WithInTx(ctx))
 		})
@@ -60,6 +61,10 @@ func TestWorkflowBase_TxReadAndWrapBuildTheRequestBoundary(t *testing.T) {
 	got, err := flows.Tx("write", inTx).Execute(t.Context(), 1)
 	require.NoError(t, err)
 	assert.True(t, got, "Tx runs the pipeline on the transaction's context")
+
+	got, err = flows.RunTx(t.Context(), inTx, 1)
+	require.NoError(t, err)
+	assert.True(t, got, "RunTx runs the pipeline on the transaction's context")
 
 	got, err = flows.Read("read", inTx).Execute(t.Context(), 1)
 	require.NoError(t, err)
@@ -80,7 +85,8 @@ func TestWorkflowBase_TxReadAndWrapBuildTheRequestBoundary(t *testing.T) {
 //
 // What it tests:
 //   - A pipeline error coded CONFLICT, and a commit error coded UNAVAILABLE after a
-//     successful pipeline, each come back with their code and a zero output.
+//     successful pipeline, each come back from Tx and from RunTx with their code and a
+//     zero output.
 func TestWorkflowBaseTx_ReturnsTheCodedErrorAndNoResult(t *testing.T) {
 	t.Parallel()
 	for name, tc := range map[string]struct {
@@ -98,7 +104,7 @@ func TestWorkflowBaseTx_ReturnsTheCodedErrorAndNoResult(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			tx := mocks.NewMockTransactionManager(gomock.NewController(t))
-			tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).DoAndReturn(
+			tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).Times(2).DoAndReturn(
 				func(ctx context.Context, fn func(context.Context) error) error {
 					if err := fn(ctx); err != nil {
 						return err
@@ -111,10 +117,18 @@ func TestWorkflowBaseTx_ReturnsTheCodedErrorAndNoResult(t *testing.T) {
 				},
 			)
 
-			out, err := fixtures.Workflows(tx).Tx("order", pipe).Execute(t.Context(), "x")
-			require.Error(t, err)
-			assert.Equal(t, tc.code, apperr.Code(err))
-			assert.Zero(t, out)
+			flows := fixtures.Workflows(tx)
+			for run, exec := range map[string]func() (int, error){
+				"Tx": func() (int, error) {
+					return flows.Tx("order", pipe).Execute(t.Context(), "x")
+				},
+				"RunTx": func() (int, error) { return flows.RunTx(t.Context(), pipe, "x") },
+			} {
+				out, err := exec()
+				require.Error(t, err, run)
+				assert.Equal(t, tc.code, apperr.Code(err), run)
+				assert.Zero(t, out, run)
+			}
 		})
 	}
 }

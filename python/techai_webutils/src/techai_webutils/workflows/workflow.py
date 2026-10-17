@@ -2,7 +2,8 @@
 
 ``tier()`` orders the tier's layers; ``WorkflowBase`` builds decorated workflows — one span,
 metric series and log line per workflow — from a function (``func``), a workflow (``wrap``), a
-read pipeline (``read``) or a pipeline run inside one transaction (``tx``).
+read pipeline (``read``) or a pipeline run inside one transaction (``tx``); ``run_tx`` runs a
+saga's local step in one transaction, undecorated.
 """
 
 from __future__ import annotations
@@ -104,12 +105,26 @@ class WorkflowBase:
         pipeline succeeds and rolls back when it raises; the pipeline's error reaches the caller
         unchanged. A base without a transaction manager raises ``AppValueError``.
         """
-        tx = self._tx
-        if tx is None:
-            msg = "workflow: tx needs a transaction manager"
-            raise AppValueError(msg)
+        tx = self._manager()
 
         async def run(input_data: In) -> Out:
             return await tx.with_transaction(lambda: pipe.execute(input_data))
 
         return self.func(op, run)
+
+    async def run_tx[In, Out](self, pipe: AsyncPipeline[In, Out], input_data: In) -> Out:
+        """Run ``pipe`` on ``input_data`` inside one transaction, as ``tx`` does, undecorated.
+
+        It is a local step of a saga already decorated by ``func`` or ``wrap`` that commits a
+        write between remote calls (or compensates one), so the request stays one decorated
+        workflow. A base without a transaction manager raises ``AppValueError``.
+        """
+        tx = self._manager()
+        return await tx.with_transaction(lambda: pipe.execute(input_data))
+
+    def _manager(self) -> TransactionManager:
+        """Return the transaction manager, raising ``AppValueError`` when the base has none."""
+        if self._tx is None:
+            msg = "workflow: tx needs a transaction manager"
+            raise AppValueError(msg)
+        return self._tx

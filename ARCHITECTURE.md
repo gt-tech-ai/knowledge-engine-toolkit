@@ -114,7 +114,9 @@ collaborator or zero timeout skips its layer; recovery needs none.
     stage; `FanOut[In, Out](name, stages...)` runs stages concurrently on one input.
   - `workflow.Base` (over a `TransactionManager`): `Func[In, Out](op, fn)` decorates a function,
     `Wrap` a custom workflow, `Read` a pipeline without a transaction and `Tx` a pipeline in one
-    transaction.
+    transaction; `RunTx(ctx, pipe, in)` runs one local step of a saga (built with `Func` or
+    `Wrap`) in its own transaction, undecorated, so a workflow never holds the
+    `TransactionManager` itself.
   - `service.Base` embeds the service's Subject (a consumer service embeds the Base and runs each
     custom op through the promoted `Exec`); `CRUD` and `CRUDNoList` decorate a repository (with an
     optional entity validator) and `OpService` a single-operation service.
@@ -160,7 +162,7 @@ collaborator or zero timeout skips its layer; recovery needs none.
   through the tier), `repos.RepositoryBase` (`crud(store)`, Create never retried),
   `services.ServiceBase` (`crud(repo, validate)`, `op_service`), `pipelines.PipelineBase`
   (`stage`, `fan_out`; `Stage.then` chains), `workflows.WorkflowBase` (`func`, `wrap`, `read`,
-  `tx`), `execution.job.JobBase` and `controllers.ControllerBase`. Spans, series, log lines and
+  `tx`, `run_tx`), `execution.job.JobBase` and `controllers.ControllerBase`. Spans, series, log lines and
   op names match Go's. A consumer repository or service subclasses `DelegatingRepository` /
   `DelegatingCrudService` and runs its custom ops through the base's `exec`. The retry layer's
   `ExponentialRetrier` (and `retry_transient_async`) wait out a server pushback

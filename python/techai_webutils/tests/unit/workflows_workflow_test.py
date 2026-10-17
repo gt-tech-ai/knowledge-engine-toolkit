@@ -140,7 +140,8 @@ async def test_tx_runs_the_pipeline_inside_one_transaction() -> None:
       - A command's reads and writes must commit or roll back together.
 
     What it tests:
-      - The order is begin → pipeline → commit, and the output is returned.
+      - For ``tx`` and for ``run_tx`` (a saga's local step), the order is begin → pipeline →
+        commit, and the output is returned.
     """
     events: list[str] = []
 
@@ -149,10 +150,12 @@ async def test_tx_runs_the_pipeline_inside_one_transaction() -> None:
         events.append("pipeline")
         return x + 1
 
-    wf = WorkflowBase(_tx_manager(events)).tx("cmd", PipelineBase().stage("s", step))
+    base = WorkflowBase(_tx_manager(events))
+    pipe = PipelineBase().stage("s", step)
 
-    assert await wf.execute(1) == 2
-    assert events == ["begin", "pipeline", "commit"]
+    assert await base.tx("cmd", pipe).execute(1) == 2
+    assert await base.run_tx(pipe, 1) == 2
+    assert events == ["begin", "pipeline", "commit"] * 2
 
 
 @pytest.mark.asyncio
@@ -163,14 +166,18 @@ async def test_tx_rolls_back_and_keeps_the_error_code() -> None:
       - A result whose transaction did not commit must never reach the caller.
 
     What it tests:
-      - ``ConflictError`` propagates and the transaction rolled back.
+      - ``ConflictError`` propagates from ``tx`` and ``run_tx`` and each transaction rolled
+        back.
     """
     events: list[str] = []
     fail = PipelineBase().stage("s", AsyncMock(side_effect=ConflictError("dup")))
+    base = WorkflowBase(_tx_manager(events))
 
     with pytest.raises(ConflictError):
-        await WorkflowBase(_tx_manager(events)).tx("cmd", fail).execute(1)
-    assert events == ["begin", "rollback"]
+        await base.tx("cmd", fail).execute(1)
+    with pytest.raises(ConflictError):
+        await base.run_tx(fail, 1)
+    assert events == ["begin", "rollback"] * 2
 
 
 def test_wiring_bugs_fail_loud() -> None:
@@ -180,12 +187,15 @@ def test_wiring_bugs_fail_loud() -> None:
       - A wiring bug must fail at the composition root, not on the first request.
 
     What it tests:
-      - ``func`` with None and ``tx`` without a transaction manager raise ``AppValueError``.
+      - ``func`` with None, and ``tx`` or ``run_tx`` without a transaction manager, raise
+        ``AppValueError``.
     """
     with pytest.raises(AppValueError):
         WorkflowBase().func("w", None)  # type: ignore[arg-type]
     with pytest.raises(AppValueError, match="transaction manager"):
         WorkflowBase().tx("w", PipelineBase().stage("s", AsyncMock()))
+    with pytest.raises(AppValueError, match="transaction manager"):
+        asyncio.run(WorkflowBase().run_tx(PipelineBase().stage("s", AsyncMock()), 1))
 
 
 @pytest.mark.asyncio

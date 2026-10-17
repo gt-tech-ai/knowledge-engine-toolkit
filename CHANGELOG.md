@@ -6,6 +6,17 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-10-17
+
+Python: `techai-webutils` 0.5.3.
+
+### Added
+
+- `workflow.Base.RunTx(ctx, pipe, in)` (Python `WorkflowBase.run_tx(pipe, input)`): run one
+  local step of a saga in its own transaction, undecorated. A saga built with `Func` or `Wrap`
+  commits each local write (and its compensation) through the base, so no workflow holds the
+  `TransactionManager`. `Tx` now runs its pipeline through `RunTx`.
+
 ## [0.0.9] - 2026-10-17
 
 ### Added

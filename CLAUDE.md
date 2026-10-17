@@ -113,7 +113,7 @@ languages share one engine:
 | --- | --- | --- | --- |
 | Controller | Tracing → Metrics → Logging → Recovery → RateLimit → Bulkhead → Auth → Timeout | `transport.Base` (`Handler`) | `controllers.ControllerBase` (`handler`) |
 | Client | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging | `client.Base` (`Do`, `Once`, `Open`, …) | `clients.client.ClientBase` (`exec`, `once`), `decorate(client, …)` |
-| Workflow | Recovery → Logging → Tracing → Metrics → Timeout | `workflow.Base` (`Func`, `Wrap`, `Read`, `Tx`) | `workflows.WorkflowBase` (`func`, `wrap`, `read`, `tx`) |
+| Workflow | Recovery → Logging → Tracing → Metrics → Timeout | `workflow.Base` (`Func`, `Wrap`, `Read`, `Tx`, `RunTx`) | `workflows.WorkflowBase` (`func`, `wrap`, `read`, `tx`, `run_tx`) |
 | Pipeline | Recovery → Logging → Tracing → Metrics → Timeout | `pipeline.Base` (`Stage`, `FanOut`; `Stage.Then`) | `pipelines.PipelineBase` (`stage`, `fan_out`; `Stage.then`) |
 | Service | Recovery → Tracing → Metrics → Logging → Auth → Timeout | `service.Base` (`CRUD`, `OpService`, `Exec`) | `services.ServiceBase` (`crud`, `op_service`, `exec`) |
 | Repository | Tracing → Metrics → Logging → Timeout → CircuitBreaker → Retry | `repository.Base` (`CRUD`, `Exec`, …) | `repos.RepositoryBase` (`crud`, `exec`) |

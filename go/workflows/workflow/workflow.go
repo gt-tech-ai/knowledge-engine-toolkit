@@ -36,15 +36,15 @@ func (f flow[In, Out]) Execute(ctx context.Context, input In) (Out, error) {
 
 // Base builds a consumer's request workflows over the workflow tier's collaborators.
 type Base struct {
-	// tx opens the transaction a Tx workflow runs in.
+	// tx opens the transaction a Tx workflow or a RunTx step runs in.
 	tx interfaces.TransactionManager
 
 	// deps backs every workflow's decoration.
 	deps decorate.Deps
 }
 
-// NewBase builds the Base over tx (needed only by Tx) whose workflows are decorated
-// with deps.
+// NewBase builds the Base over tx (needed only by Tx and RunTx) whose workflows are
+// decorated with deps.
 func NewBase(tx interfaces.TransactionManager, deps decorate.Deps) Base {
 	return Base{tx: tx, deps: deps}
 }
@@ -92,16 +92,27 @@ func (b Base) Tx[In, Out any](
 	pipe interfaces.Pipeline[In, Out],
 ) interfaces.Workflow[In, Out] {
 	return b.Func(op, func(ctx context.Context, in In) (Out, error) {
-		var out Out
-		err := b.tx.WithTransaction(ctx, func(txCtx context.Context) error {
-			var err error
-			out, err = pipe.Execute(txCtx, in)
-			return err
-		})
-		if err != nil {
-			var zero Out
-			return zero, err
-		}
-		return out, nil
+		return b.RunTx(ctx, pipe, in)
 	})
+}
+
+// RunTx runs pipe with in inside one transaction, as Tx does, but undecorated: it is a
+// local step of a saga already decorated by Func or Wrap, which commits a write between
+// remote calls (or compensates one), so the request stays one decorated workflow.
+func (b Base) RunTx[In, Out any](
+	ctx context.Context,
+	pipe interfaces.Pipeline[In, Out],
+	in In,
+) (Out, error) {
+	var out Out
+	err := b.tx.WithTransaction(ctx, func(txCtx context.Context) error {
+		var err error
+		out, err = pipe.Execute(txCtx, in)
+		return err
+	})
+	if err != nil {
+		var zero Out
+		return zero, err
+	}
+	return out, nil
 }
