@@ -1,9 +1,10 @@
 // Package outbox is the transactional-outbox relay: it leases due rows from an
-// interfaces.OutboxStore, delivers them through an interfaces.OutboxSink in
+// interfaces.OutboxRepository, delivers them through an interfaces.OutboxSink in
 // bounded-concurrency chunks, and finalizes each row by its own outcome — sent,
 // retried with capped exponential backoff and full jitter, or parked once its
 // attempts are exhausted. It reports per-lane outcome counters and the lane's
-// depth and lag. The store and sink are injected (and decorated) by the caller.
+// depth and lag. The repository and sink are injected (and decorated) by the caller:
+// build the repository with repository.Base.Outbox over the store.
 package outbox
 
 import (
@@ -112,8 +113,8 @@ func WithJitter(jitter func(time.Duration) time.Duration) Option {
 // Relay moves outbox rows from a store to a sink. It is safe for concurrent
 // RunOnce calls (the store's claim keeps them disjoint).
 type Relay struct {
-	// store holds the outbox rows.
-	store interfaces.OutboxStore
+	// store is the decorated repository over the outbox rows.
+	store interfaces.OutboxRepository
 	// sink delivers them.
 	sink interfaces.OutboxSink
 	// logger logs non-fatal failures (nil = off).
@@ -138,7 +139,7 @@ type Relay struct {
 // instead.
 func NewRelay(
 	cfg RelayConfig,
-	store interfaces.OutboxStore,
+	store interfaces.OutboxRepository,
 	sink interfaces.OutboxSink,
 	logger interfaces.Logger,
 	metrics interfaces.Metrics,

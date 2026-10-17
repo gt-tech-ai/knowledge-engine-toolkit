@@ -292,7 +292,10 @@ The transactional outbox is split by tier: the contracts in `core`, the sink kin
 the store kinds in `stores`, the relay in `services`. `core/interfaces.OutboxStore` (`Claim` leases
 due rows, `MarkSent` / `Retry` / `Park` / `Stats`, `DeleteSentBefore` for the retention sweep) is
 built by `stores/outbox` (`KindStub` default — no rows, so a relay boots with no database;
-`KindPostgres`, a product's own table named by config) behind the store tier;
+`KindPostgres`, a product's own table named by config) behind the store tier, and
+`repos/repository.Base.Outbox` runs it through the repository tier as the
+`core/interfaces.OutboxRepository` the relay takes (`Claim` without retry, since it leases rows
+and counts an attempt; the idempotent finalizers, `Stats` and the sweep with it);
 `core/interfaces.OutboxSink` returns one result per record. `services/outbox.Relay.RunOnce` claims a
 batch, sends it in `SendBatch` chunks under a `Concurrency` bound, and finalizes each row by its own
 outcome: sent, retried at `now + FullJitter(min(Base·2^attempts, Max))`, or parked on its
