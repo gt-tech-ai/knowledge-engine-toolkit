@@ -15,6 +15,7 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	outboxpg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/sqltx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/postgres"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/outboxtest"
 )
@@ -97,7 +98,9 @@ func pgstoreEnqueue(db *sql.DB) func(context.Context, *types.OutboxRecord) error
 func TestPgstore_PassesTheOutboxConformanceSuite(t *testing.T) {
 	requireIntegration(t)
 	store, db := newPgstore(t)
-	outboxtest.Run(t, outboxtest.Harness{Store: store, Enqueue: pgstoreEnqueue(db)})
+	outboxtest.Run(t, outboxtest.Harness{
+		Store: store, Tx: sqltx.New(db), Enqueue: pgstoreEnqueue(db),
+	})
 }
 
 // TestPgstore_MapsColumnsAndPurgesSentRows tests the configured columns and retention.
@@ -124,24 +127,44 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 		}))
 	}
 
-	recs, err := store.Claim(ctx, "facts", 10)
-	require.NoError(t, err)
+	tx := sqltx.New(db)
+	inTx := func(fn func(context.Context) error) error { return tx.WithTransaction(ctx, fn) }
+	var recs []types.OutboxRecord
+	require.NoError(t, inTx(func(ctx context.Context) error {
+		var err error
+		recs, err = store.Claim(ctx, "facts", 10)
+		return err
+	}))
 	require.Len(t, recs, 2)
 	require.Equal(t, "org-1", recs[0].Tenant)
 	require.Equal(t, key.String(), recs[0].Key)
 	require.Equal(t, map[string]string{"event_type": "fact.v1"}, recs[0].Attributes)
 
-	require.NoError(t, store.MarkSent(ctx, sent))
-	require.NoError(t, store.Park(ctx, parked, strings.Repeat("x", 40)))
+	require.NoError(t, inTx(func(ctx context.Context) error {
+		if err := store.MarkSent(ctx, sent); err != nil {
+			return err
+		}
+		return store.Park(ctx, parked, strings.Repeat("x", 40))
+	}))
 	var lastErr string
 	require.NoError(t, db.QueryRowContext(ctx,
 		`SELECT last_error FROM product_outbox WHERE id = $1`, parked).Scan(&lastErr))
 	require.Len(t, lastErr, 16)
 
-	n, err := store.DeleteSentBefore(ctx, time.Now().Add(-time.Hour))
-	require.NoError(t, err)
-	require.Zero(t, n, "the sent row is newer than the cutoff")
-	n, err = store.DeleteSentBefore(ctx, time.Now().Add(time.Hour))
-	require.NoError(t, err)
-	require.Equal(t, 1, n, "only the sent row is purged; the parked row stays")
+	purge := func(cutoff time.Time) int {
+		var n int
+		require.NoError(t, inTx(func(ctx context.Context) error {
+			var err error
+			n, err = store.DeleteSentBefore(ctx, cutoff)
+			return err
+		}))
+		return n
+	}
+	require.Zero(
+		t,
+		purge(time.Now().Add(-time.Hour)),
+		"the sent row is newer than the cutoff",
+	)
+	require.Equal(t, 1, purge(time.Now().Add(time.Hour)),
+		"only the sent row is purged; the parked row stays")
 }

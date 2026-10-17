@@ -26,3 +26,12 @@ func Pipelines() pipeline.Base {
 func Service(name string) service.Base {
 	return service.NewBase(name, decorate.Deps{})
 }
+
+// Must returns v, panicking when err is non-nil: a test's wiring of a constructor that
+// returns (T, error), such as a workflow built from decorations, fails loudly.
+func Must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}

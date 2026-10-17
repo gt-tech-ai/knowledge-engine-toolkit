@@ -5,6 +5,11 @@
 // attempts are exhausted. It reports per-lane outcome counters and the lane's
 // depth and lag. The repository and sink are injected (and decorated) by the caller:
 // build the repository with repository.Base.Outbox over the store.
+//
+// A pass is a saga, so the relay is a workflow: the claim commits in its own
+// transaction, delivery runs with no transaction open (a remote call never holds one),
+// and each row's finalize commits in its own transaction, all opened through the
+// injected transaction manager.
 package outbox
 
 import (
@@ -18,7 +23,9 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/workflow"
 )
 
 // RelayConfig tunes one relay; one relay drains one lane.
@@ -113,6 +120,8 @@ func WithJitter(jitter func(time.Duration) time.Duration) Option {
 // Relay moves outbox rows from a store to a sink. It is safe for concurrent
 // RunOnce calls (the store's claim keeps them disjoint).
 type Relay struct {
+	// tx opens the claim's and each finalize's transaction.
+	tx workflow.Base
 	// store is the decorated repository over the outbox rows.
 	store interfaces.OutboxRepository
 	// sink delivers them.
@@ -133,12 +142,13 @@ type Relay struct {
 	cfg RelayConfig
 }
 
-// NewRelay builds a relay over store and sink. logger, metrics and tracer may be
-// nil. An invalid cfg or a nil store or sink is a wiring bug and panics; build
-// cfg with LoadRelayConfig (or call cfg.Validate first) to get a coded error
-// instead.
+// NewRelay builds a relay over store and sink whose writes commit through tx.
+// logger, metrics and tracer may be nil. An invalid cfg or a nil tx, store or sink
+// is a wiring bug and panics; build cfg with LoadRelayConfig (or call cfg.Validate
+// first) to get a coded error instead.
 func NewRelay(
 	cfg RelayConfig,
+	tx interfaces.TransactionManager,
 	store interfaces.OutboxRepository,
 	sink interfaces.OutboxSink,
 	logger interfaces.Logger,
@@ -149,15 +159,16 @@ func NewRelay(
 	if err := cfg.Validate(); err != nil {
 		panic(err)
 	}
-	if store == nil || sink == nil {
+	if tx == nil || store == nil || sink == nil {
 		panic(
 			apperr.New(
 				apperr.CodeInvalidInput,
-				"outbox relay: store and sink are required",
+				"outbox relay: tx, store and sink are required",
 			),
 		)
 	}
 	r := &Relay{
+		tx:  workflow.NewBase("outbox relay "+cfg.Lane, tx, decorate.Deps{}),
 		cfg: cfg, store: store, sink: sink, logger: logger, tracer: tracer,
 		now: time.Now, jitter: retry.FullJitter,
 	}
@@ -192,9 +203,11 @@ func NewRelay(
 
 // RunOnce claims one batch, delivers it and finalizes every row, then refreshes
 // the lane gauges. The claim is called exactly once (it is side-effecting, so it
-// is never retried here). A finalize failure does not stop the other rows — the
-// row's lease expires and it is re-claimed — and the first such error is
-// returned. A Stats failure is only logged; with metrics off Stats is skipped.
+// is never retried here) and commits before delivery starts; each finalize
+// commits on its own, so one row's failure never rolls back another's. A finalize
+// failure does not stop the other rows — the row's lease expires and it is
+// re-claimed — and the first such error is returned. A Stats failure is only
+// logged; with metrics off Stats is skipped.
 func (r *Relay) RunOnce(ctx context.Context) error {
 	if r.tracer != nil {
 		var span interfaces.Span
@@ -213,7 +226,9 @@ func (r *Relay) RunOnce(ctx context.Context) error {
 
 // runOnce is RunOnce without the span.
 func (r *Relay) runOnce(ctx context.Context) error {
-	recs, err := r.store.Claim(ctx, r.cfg.Lane, r.cfg.BatchSize)
+	recs, err := r.tx.InTx(ctx, func(ctx context.Context) ([]types.OutboxRecord, error) {
+		return r.store.Claim(ctx, r.cfg.Lane, r.cfg.BatchSize)
+	})
 	if err != nil {
 		return apperr.Wrap(
 			err,
@@ -288,29 +303,18 @@ func interrupted(ctx context.Context, sendErr error) bool {
 			apperr.StdIs(sendErr, context.DeadlineExceeded))
 }
 
-// finalize records one row's outcome: sent, parked on its last attempt (or on
-// its first permanent failure with ParkOnPermanent), or rescheduled with
-// jittered capped exponential backoff.
+// finalize records one row's outcome in its own transaction: sent, parked on its
+// last attempt (or on its first permanent failure with ParkOnPermanent), or
+// rescheduled with jittered capped exponential backoff. The outcome is counted once
+// the transaction commits.
 func (r *Relay) finalize(
 	ctx context.Context,
 	rec *types.OutboxRecord,
 	sendErr error,
 ) error {
-	lane := r.cfg.Lane
-	var err error
-	switch {
-	case sendErr == nil:
-		err = r.store.MarkSent(ctx, rec.ID)
-		inc(r.sent, lane, err)
-	case rec.Attempts >= r.cfg.MaxAttempts ||
-		(r.cfg.ParkOnPermanent && apperr.IsPermanent(sendErr)):
-		err = r.store.Park(ctx, rec.ID, sendErr.Error())
-		inc(r.parked, lane, err)
-	default:
-		next := r.now().Add(r.jitter(r.backoff(rec.Attempts)))
-		err = r.store.Retry(ctx, rec.ID, next, sendErr.Error())
-		inc(r.retried, lane, err)
-	}
+	outcome, err := r.tx.InTx(ctx, func(ctx context.Context) (interfaces.Counter, error) {
+		return r.record(ctx, rec, sendErr)
+	})
 	if err != nil {
 		return apperr.Wrap(
 			err,
@@ -318,7 +322,29 @@ func (r *Relay) finalize(
 			"outbox relay: finalize "+rec.ID.String(),
 		)
 	}
+	if outcome != nil {
+		outcome.Inc(r.cfg.Lane)
+	}
 	return nil
+}
+
+// record writes one row's outcome and returns the counter it is counted on (nil with
+// metrics off).
+func (r *Relay) record(
+	ctx context.Context,
+	rec *types.OutboxRecord,
+	sendErr error,
+) (interfaces.Counter, error) {
+	switch {
+	case sendErr == nil:
+		return r.sent, r.store.MarkSent(ctx, rec.ID)
+	case rec.Attempts >= r.cfg.MaxAttempts ||
+		(r.cfg.ParkOnPermanent && apperr.IsPermanent(sendErr)):
+		return r.parked, r.store.Park(ctx, rec.ID, sendErr.Error())
+	default:
+		next := r.now().Add(r.jitter(r.backoff(rec.Attempts)))
+		return r.retried, r.store.Retry(ctx, rec.ID, next, sendErr.Error())
+	}
 }
 
 // backoff is min(BaseBackoff·2^attempts, MaxBackoff), computed without overflow.
@@ -353,11 +379,4 @@ func (r *Relay) refreshGauges(ctx context.Context) {
 	}
 	r.depth.Set(float64(stats.Pending), r.cfg.Lane)
 	r.lag.Set(lag, r.cfg.Lane)
-}
-
-// inc counts a finalize outcome when it was recorded.
-func inc(c interfaces.Counter, lane string, err error) {
-	if c != nil && err == nil {
-		c.Inc(lane)
-	}
 }

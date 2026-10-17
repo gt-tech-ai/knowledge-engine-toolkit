@@ -14,6 +14,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/loop"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/workflow"
 )
 
@@ -152,6 +153,34 @@ func TestWorkflowBase_RefusesANestedOrUnmanagedTransaction(t *testing.T) {
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
 	_, err = fixtures.Workflows(nil).ExecTx(t.Context(), "Unmanaged", body)
+	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
+}
+
+// TestWorkflowBasePass_DecoratesALoopPass tests the loop-pass decorator.
+//
+// Why this test is important:
+//   - A background loop's pass must be observed and recovered like a request; a pass
+//     that panicked undecorated would stop its loop.
+//
+// What it tests:
+//   - Pass, used as a loop.Decorator, runs the pass with no transaction and returns its
+//     error; a panicking pass returns INTERNAL.
+func TestWorkflowBasePass_DecoratesALoopPass(t *testing.T) {
+	t.Parallel()
+	flows := fixtures.Workflows(txManager(t, 0, nil))
+	var decorator loop.Decorator = flows.Pass
+	var sawTx bool
+	pass := decorator("relay-pass", loop.Pass(func(ctx context.Context) error {
+		sawTx = interfaces.InTx(ctx)
+		return apperr.New(apperr.CodeUnavailable, "sink down")
+	}))
+	_, err := pass.Execute(t.Context(), struct{}{})
+	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
+	assert.False(t, sawTx, "a pass runs with no transaction")
+
+	_, err = decorator("boom-pass", loop.Pass(func(context.Context) error {
+		panic("boom")
+	})).Execute(t.Context(), struct{}{})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }
 

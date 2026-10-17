@@ -89,3 +89,25 @@ func (b Base) InTx[R any](
 	}
 	return out, nil
 }
+
+// Pass runs a background loop's pass as the operation op, with no transaction: a pass
+// that writes commits each write with InTx. Its method value is a loop.Decorator, so
+// every pass is logged, counted, traced and recovered like a request.
+func (b Base) Pass(
+	op string,
+	pass interfaces.Workflow[struct{}, struct{}],
+) interfaces.Workflow[struct{}, struct{}] {
+	return passFlow(func(ctx context.Context) (struct{}, error) {
+		return b.Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
+			return pass.Execute(ctx, struct{}{})
+		})
+	})
+}
+
+// passFlow is a decorated loop pass: a function that is an interfaces.Workflow.
+type passFlow func(ctx context.Context) (struct{}, error)
+
+// Execute runs the pass.
+func (f passFlow) Execute(ctx context.Context, _ struct{}) (struct{}, error) {
+	return f(ctx)
+}
