@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
@@ -69,6 +71,36 @@ func storeOpCounter(t *testing.T, reg *promclient.Registry, op string) float64 {
 		}
 	}
 	return 0
+}
+
+// TestStoreBaseWrite_RunsOnlyInsideATransaction tests the store base's write guard.
+//
+// Why this test is important:
+//   - A store write outside a transaction autocommits on its own: a write that escaped
+//     its workflow would commit half a change and nothing would report it.
+//
+// What it tests:
+//   - Write on a context in a transaction runs fn and returns its result.
+//   - Write on a context with no transaction fails INTERNAL without running fn.
+//   - Exec (a read) runs on either.
+func TestStoreBaseWrite_RunsOnlyInsideATransaction(t *testing.T) {
+	t.Parallel()
+	base := store.NewBase("documents", &storeClient{name: "raw"}, decorate.Deps{})
+	write := func(context.Context) (int, error) { return 1, nil }
+
+	got, err := base.Write(interfaces.WithInTx(t.Context()), "Create", write)
+	require.NoError(t, err)
+	assert.Equal(t, 1, got)
+
+	_, err = base.Write(t.Context(), "Create", func(context.Context) (int, error) {
+		t.Error("a write outside a transaction must not run")
+		return 0, nil
+	})
+	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
+
+	got, err = base.Exec(t.Context(), "Get", write)
+	require.NoError(t, err)
+	assert.Equal(t, 1, got)
 }
 
 // TestStoreTier_DecoratesFromTheStoresTier tests the store decoration tier.

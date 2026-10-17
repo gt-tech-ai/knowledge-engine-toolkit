@@ -2,6 +2,7 @@ package stream
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -22,8 +23,11 @@ type metricsBuffer[T any] struct {
 	wait interfaces.Histogram
 	// name labels this buffer's series.
 	name string
-	// heldItems and heldBytes are the totals the gauges report.
-	heldItems, heldBytes atomic.Int64
+	// mu orders each change to the totals with the gauge update that reports it, so
+	// the gauges always end on the latest totals.
+	mu sync.Mutex
+	// heldItems and heldBytes are the totals the gauges report; guarded by mu.
+	heldItems, heldBytes int64
 }
 
 // NewMetrics wraps inner so every stream it buffers reports, under the label name, the
@@ -63,12 +67,17 @@ func (b *metricsBuffer[T]) Wrap(
 	return s
 }
 
-// add moves the held totals by items and bytes and reports them. Two streams racing
-// here can leave a gauge one update stale until the next item; a depth gauge tolerates
-// that.
+// add moves the held totals by items and bytes and reports them. The change and its
+// report happen under one lock: the producer and the consumer move the totals from
+// different goroutines, and a report overtaken by an older one would leave a gauge
+// stale for as long as the producer stays blocked.
 func (b *metricsBuffer[T]) add(items, bytes int64) {
-	b.items.Set(float64(b.heldItems.Add(items)), b.name)
-	b.bytes.Set(float64(b.heldBytes.Add(bytes)), b.name)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.heldItems += items
+	b.heldBytes += bytes
+	b.items.Set(float64(b.heldItems), b.name)
+	b.bytes.Set(float64(b.heldBytes), b.name)
 }
 
 // meteredStream is one stream a metricsBuffer wraps: the inner buffer's output, counted

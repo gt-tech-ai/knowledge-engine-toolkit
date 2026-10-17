@@ -1,5 +1,5 @@
 // Package outbox builds the durable side of a transactional outbox from config: the
-// store the relay (services/outbox) leases rows from and finalizes them in. Each kind is
+// store the relay (workflows/outbox) leases rows from and finalizes them in. Each kind is
 // a subpackage — stub/ (no rows, the default, so a relay boots with no database) and
 // postgres/ (a product's own outbox table) — and NewFromConfig returns the
 // interfaces.OutboxStore behind the store tier (Decorate), as the decoration config's

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
@@ -44,4 +45,36 @@ func TestPgstoreConfig_RejectsUnsafeNamesAndLeases(t *testing.T) {
 		_, err := outboxpg.New(db, cfg)
 		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "%+v", cfg)
 	}
+}
+
+// TestPgstore_RefusesWritesOutsideATransaction tests the store's write guard.
+//
+// Why this test is important:
+//   - A write run on the bare database autocommits outside the workflow that owns
+//     it, so a relay that lost its transaction would silently stop being atomic.
+//
+// What it tests:
+//   - Claim, MarkSent, Retry, Park and DeleteSentBefore on a context with no bound
+//     transaction each fail INTERNAL before touching the (unreachable) database.
+func TestPgstore_RefusesWritesOutsideATransaction(t *testing.T) {
+	t.Parallel()
+	// sql.Open is lazy: a handle that never connects, so any I/O would fail UNAVAILABLE.
+	db, err := sql.Open("pgx", "postgres://unused")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	store, err := outboxpg.New(db, outboxpg.Config{Table: "t", Lease: time.Minute})
+	require.NoError(t, err)
+	ctx, id := t.Context(), uuid.New()
+
+	_, err = store.Claim(ctx, "lane", 10)
+	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
+	require.Equal(t, apperr.CodeInternal, apperr.Code(store.MarkSent(ctx, id)))
+	require.Equal(
+		t,
+		apperr.CodeInternal,
+		apperr.Code(store.Retry(ctx, id, time.Now(), "e")),
+	)
+	require.Equal(t, apperr.CodeInternal, apperr.Code(store.Park(ctx, id, "e")))
+	_, err = store.DeleteSentBefore(ctx, time.Now())
+	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }

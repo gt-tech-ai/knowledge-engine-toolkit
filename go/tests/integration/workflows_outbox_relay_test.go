@@ -25,13 +25,14 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/outbox"
 	outboxstore "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox"
 	outboxpg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/sqltx"
 	elasticmqdb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/elasticmq"
 	miniodb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/minio"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/postgres"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/outboxtest"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/outbox"
 )
 
 // requireIntegration skips in -short mode, unless INTEGRATION or CI is set (the
@@ -70,12 +71,13 @@ CREATE TABLE relay_outbox (
 
 // newOutboxStore starts Postgres, creates the relay's outbox table and returns the
 // postgres-kind store over it, built by the outbox-store factory, with the
-// producer-side insert.
+// producer-side insert and the transaction manager the relay commits through.
 func newOutboxStore(
 	t *testing.T,
 ) (
 	store interfaces.OutboxStore,
 	enqueue func(context.Context, *types.OutboxRecord) error,
+	tx interfaces.TransactionManager,
 ) {
 	t.Helper()
 	ctx := context.Background()
@@ -112,7 +114,7 @@ func newOutboxStore(
 		}
 		return nil
 	}
-	return store, enqueue
+	return store, enqueue, sqltx.New(db)
 }
 
 // awsConfig is a static-credential AWS config for a local emulator.
@@ -177,7 +179,7 @@ func drain(t *testing.T, relay *outbox.Relay, store interfaces.OutboxStore, lane
 func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 	requireIntegration(t)
 	ctx := context.Background()
-	store, enqueue := newOutboxStore(t)
+	store, enqueue, tx := newOutboxStore(t)
 	emq, err := elasticmqdb.NewTestElasticMQ(ctx)
 	require.NoError(t, err, "start elasticmq")
 	t.Cleanup(func() { emq.Close(context.Background()) })
@@ -201,6 +203,7 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 	ids := enqueueN(t, enqueue, "events", 25)
 	relay := outbox.NewRelay(
 		outbox.DefaultRelayConfig("events"),
+		tx,
 		store,
 		sink,
 		nil,
@@ -246,7 +249,7 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 	requireIntegration(t)
 	ctx := context.Background()
-	store, enqueue := newOutboxStore(t)
+	store, enqueue, tx := newOutboxStore(t)
 	mio, err := miniodb.NewTestMinIO(ctx)
 	require.NoError(t, err, "start minio")
 	t.Cleanup(func() { mio.Close(context.Background()) })
@@ -286,6 +289,7 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 	ids := enqueueN(t, enqueue, "audit", 5)
 	relay := outbox.NewRelay(
 		outbox.DefaultRelayConfig("audit"),
+		tx,
 		store,
 		sink,
 		nil,
@@ -351,7 +355,7 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 	requireIntegration(t)
 	ctx := context.Background()
-	store, enqueue := newOutboxStore(t)
+	store, enqueue, tx := newOutboxStore(t)
 	emq, err := elasticmqdb.NewTestElasticMQ(ctx)
 	require.NoError(t, err, "start elasticmq")
 	t.Cleanup(func() { emq.Close(context.Background()) })
@@ -390,11 +394,13 @@ func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 
 	outboxtest.RunRouting(
 		t,
-		outboxtest.Harness{Store: store, Enqueue: enqueue},
+		outboxtest.Harness{Store: store, Tx: tx, Enqueue: enqueue},
 		outboxtest.Routing{
 			RunOnce: func(ctx context.Context, lane string) error {
-				return outbox.NewRelay(outbox.DefaultRelayConfig(lane), store, sink, nil, nil, nil).
-					RunOnce(ctx)
+				relay := outbox.NewRelay(
+					outbox.DefaultRelayConfig(lane), tx, store, sink, nil, nil, nil,
+				)
+				return relay.RunOnce(ctx)
 			},
 			Healthy: healthy, Broken: "member_removed",
 			Delivered: func(ctx context.Context, route string) ([]string, error) {
