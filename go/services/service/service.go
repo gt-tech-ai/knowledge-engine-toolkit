@@ -25,15 +25,55 @@ func Tier() decorate.Tier {
 }
 
 // Base is the embeddable core of a service named by its Subject: Name and Exec run a
-// custom operation through the tier's decoration. The zero Base runs operations
-// undecorated.
+// custom operation through the tier's decoration, and Op builds its named operations,
+// each under its own decoration name. The zero Base runs operations undecorated.
 type Base struct {
 	decorate.Subject
+
+	// ops resolves each named operation's decoration beneath the service's name.
+	ops decorate.Scope
 }
 
-// NewBase builds the Base for the service named name, decorated with deps.
+// NewBase builds the Base for the service named name, decorated with deps; its named
+// operations share deps.
 func NewBase(name string, deps decorate.Deps) Base {
-	return Base{Subject: Tier().Subject(name, deps)}
+	return Base{
+		Subject: Tier().Subject(name, deps),
+		ops:     decorate.NewScope(Tier(), name, deps),
+	}
+}
+
+// NewBaseFrom builds the Base for the service named name, decorated from decs: the
+// service as the service-tier component name, and each named operation op as
+// name+"."+op. A decoration that fails to resolve is CodeInvalidInput.
+func NewBaseFrom(decs decorate.Decorations, name string) (Base, error) {
+	deps, err := decs.Deps(Tier(), name)
+	if err != nil {
+		return Base{}, err
+	}
+	return Base{Subject: Tier().Subject(name, deps), ops: decs.Scope(Tier(), name)}, nil
+}
+
+// Op is the service's named operation, run through the service tier. An input that
+// implements interfaces.Validatable is validated first, and an invalid one returns its
+// validation error without running fn.
+func Op[In, Out any](
+	b Base,
+	op string,
+	fn func(ctx context.Context, in In) (Out, error),
+) decorate.OpFunc[In, Out] {
+	return decorate.Operation(
+		b.ops.Subject(op),
+		func(ctx context.Context, in In) (Out, error) {
+			if v, ok := any(in).(interfaces.Validatable); ok {
+				if err := v.Validate(); err != nil {
+					var zero Out
+					return zero, err
+				}
+			}
+			return fn(ctx, in)
+		},
+	)
 }
 
 // OpService is the decorated single-operation service whose Run runs run as the

@@ -63,14 +63,14 @@ type Subscriber struct {
 	ready func(ctx context.Context) error
 	// logger reports receive/handle errors surfaced by the poll goroutines.
 	logger interfaces.Logger
-	// handlers runs each handle through the client tier (op = the topic).
-	handlers client.Base
 	// cancels holds the cancel func for each Subscribe's poll goroutine, cancelled by Close.
 	cancels []context.CancelFunc
-	// wg tracks the poll goroutines so Close can wait for in-flight handlers to drain.
-	wg sync.WaitGroup
+	// handlers runs each handle through the client tier (op = the topic).
+	handlers client.Base
 	// nackDelay bounds the jittered visibility delay of a failed message.
 	nackDelay NackDelay
+	// wg tracks the poll goroutines so Close can wait for in-flight handlers to drain.
+	wg sync.WaitGroup
 	// baseBackoff is the initial receive-retry wait for transient errors.
 	baseBackoff time.Duration
 	// mu guards cancels against concurrent Subscribe/Close.

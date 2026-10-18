@@ -46,6 +46,9 @@ type Base struct {
 	// stream opens streams: never retried, its deadline owned by Stream.
 	stream decorate.Subject
 
+	// ops resolves each named call's decoration beneath the client's name.
+	ops decorate.Scope
+
 	// timeout bounds a stream's whole life (open through close).
 	timeout time.Duration
 }
@@ -70,7 +73,51 @@ func newBase(t decorate.Tier, name string, deps decorate.Deps) Base {
 		once:    t.Subject(name, deps.WithoutRetry()),
 		stream:  t.Subject(name, streamDeps),
 		timeout: deps.Timeout,
+		ops:     decorate.NewScope(t, name, deps),
 	}
+}
+
+// NewBaseFrom returns the Base for the client named name, decorated from decs: the
+// client as the client-tier component name, and each named call op as name+"."+op. A
+// decoration that fails to resolve is CodeInvalidInput.
+func NewBaseFrom(decs decorate.Decorations, name string) (Base, error) {
+	deps, err := decs.Deps(Tier(), name)
+	if err != nil {
+		return Base{}, err
+	}
+	b := newBase(Tier(), name, deps)
+	b.ops = decs.Scope(Tier(), name)
+	return b, nil
+}
+
+// Call is the client's named idempotent call: the SDK function fn, shaped as an AWS SDK
+// v2 operation (ctx, input, ...option), runs through the client tier with its retry,
+// breaker, bulkhead and timeout. fn takes no options here; its client was configured
+// when it was built.
+func Call[In, Out, O any](
+	b Base,
+	op string,
+	fn func(ctx context.Context, in In, opts ...O) (Out, error),
+) decorate.OpFunc[In, Out] {
+	return decorate.Operation(
+		b.ops.Subject(op),
+		func(ctx context.Context, in In) (Out, error) {
+			return fn(ctx, in)
+		},
+	)
+}
+
+// CallOnce is Call without the retry layer, for a call that is not idempotent (a send, a
+// create) or that consumes its input.
+func CallOnce[In, Out, O any](
+	b Base,
+	op string,
+	fn func(ctx context.Context, in In, opts ...O) (Out, error),
+) decorate.OpFunc[In, Out] {
+	return decorate.Operation(
+		b.ops.Subject(op, decorate.Deps.WithoutRetry),
+		func(ctx context.Context, in In) (Out, error) { return fn(ctx, in) },
+	)
 }
 
 // withSpanKind is the client tier with spans of kind.

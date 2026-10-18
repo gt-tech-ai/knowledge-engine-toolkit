@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from techai_webutils.core.errors.errors import InternalError
 from techai_webutils.core.interfaces.repository import in_transaction, marking_transaction
-from techai_webutils.foundation.decorate import Deps, Layer, Tier
+from techai_webutils.foundation.decorate import Deps, Layer, Operation, Scope, Tier
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -32,14 +32,18 @@ def tier() -> Tier:
 class WorkflowBase:
     """Runs one workflow's operations through the workflow tier, owning their transactions."""
 
-    __slots__ = ("_subject", "_tx")
+    __slots__ = ("_ops", "_subject", "_tx")
 
     def __init__(
         self, name: str, tx: TransactionManager | None = None, deps: Deps | None = None
     ) -> None:
-        """Bind the workflow ``name``'s subject and the manager its transactions open on."""
+        """Bind the workflow ``name``'s subject and the manager its transactions open on.
+
+        Its named operations share ``deps``.
+        """
         self._subject = tier().subject(name, deps or Deps())
         self._tx = tx
+        self._ops = Scope(tier(), name, deps or Deps())
 
     @classmethod
     def from_decorations(
@@ -48,8 +52,35 @@ class WorkflowBase:
         decorations: Decorations,
         tx: TransactionManager | None = None,
     ) -> WorkflowBase:
-        """Return the base of the workflow ``name``, its layers resolved from the config."""
-        return cls(name, tx, decorations.deps(tier(), name))
+        """Return the base of the workflow ``name``, its layers resolved from the config.
+
+        Each named operation ``op`` resolves as ``<name>.<op>``.
+        """
+        base = cls(name, tx, decorations.deps(tier(), name))
+        base._ops = decorations.scope(tier(), name)
+        return base
+
+    def read[In, Out](
+        self, op: str, fn: Callable[[In], Awaitable[Out]]
+    ) -> Operation[In, Out]:
+        """Return the named read ``op``: ``fn`` runs through the tier with no transaction open."""
+        return Operation(self._ops.subject(op), fn)
+
+    def command[In, Out](
+        self, op: str, fn: Callable[[In], Awaitable[Out]]
+    ) -> Operation[In, Out]:
+        """Return the named command ``op``: ``fn`` runs through the tier in one transaction."""
+
+        async def run(value: In) -> Out:
+            return await self.in_tx(lambda: fn(value))
+
+        return Operation(self._ops.subject(op), run)
+
+    def saga[In, Out](
+        self, op: str, fn: Callable[[In], Awaitable[Out]]
+    ) -> Operation[In, Out]:
+        """Return the named saga ``op``: ``fn`` runs with no transaction and commits each step with ``in_tx``."""
+        return Operation(self._ops.subject(op), fn)
 
     @property
     def name(self) -> str:

@@ -102,9 +102,13 @@ languages share one engine:
   `Decorations.Deps(<tier>.Tier(), name)` in Go, `decorations.deps(tier(), name)` in Python. Each
   tier has `defaults` and per-component `overrides` keyed by dotted name, cascading from each
   prefix to the full name. The **order** stays in code; **which layers run and how they are
-  tuned** is config. A stage, job or gate resolves by its own name (`NewBaseFrom` /
-  `from_decorations`, `Decorate` / `decorate`), and the root calls `Verify(prefixes…)` /
-  `verify(*prefixes)` so an unused override or an unsupported layer fails boot.
+  tuned** is config. A stage, job, gate or operation resolves by its own name (`NewBaseFrom` /
+  `from_decorations`, `Decorate` / `decorate`, and each base's operation builders), and the root
+  calls `Verify(prefixes…)` / `verify(*prefixes)` (or `VerifyExplicit` / `verify_explicit` over a
+  generated file) so an unused override, a missing entry or an unsupported layer fails boot.
+- **Operations, not method interfaces.** A non-CRUD verb is an `Op[In, Out]` built by its tier's
+  base (`store.Query`/`Statement`, `repository.Query`/`Command`, `service.Op`,
+  `workflow.Read`/`Command`/`Saga`, `client.Call`/`CallOnce`) under `<component>.<op>`.
 - **Base per tier.** Each tier package exposes `Tier()` / `tier()` and a base that runs its
   operations through the tier. Build components on the base; never hand-wrap a concern.
 - **Not a layer: hedging.** A hedge races a second attempt against a slow one, so it is only

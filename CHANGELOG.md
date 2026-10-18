@@ -6,6 +6,40 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.12] - 2026-10-17
+
+Python: `techai-webutils` 0.5.5.
+
+### Added
+
+- `interfaces.Op[In, Out]` (Python `core.interfaces.op.Op`): one named operation of a component,
+  with one method, `Execute(ctx, in)`. A component whose verbs are not CRUD exposes them as `Op`
+  values beside its role interfaces; `Pipeline` and `Workflow` have the same method set.
+- Operation builders at every tier, each decorating its operation under its own name
+  `<component>.<op>`, so the config tunes one query, command or call on its own:
+  - store: `store.Query(base, op, fn)` runs on the client a statement on its context runs on;
+    `store.Statement(base, op, fn)` does too, but only inside a transaction (outside one it
+    fails INTERNAL without running).
+  - repository: `repository.Query` (retried) and `repository.Command` (never retried); Python
+    `RepositoryBase.query` / `command`.
+  - service: `service.Op`, which validates an input that implements `interfaces.Validatable`
+    before running; Python `ServiceBase.op` (an input with `validate()`).
+  - workflow: `workflow.Read` and `workflow.Saga` (no transaction) and `workflow.Command` (one
+    transaction); Python `WorkflowBase.read` / `saga` / `command`.
+  - client: `client.Call(base, op, sdkFunc)` adapts an SDK function shaped
+    `func(ctx, in, ...opt) (out, error)` (an AWS SDK v2 operation) into an `Op` under the client
+    tier, and `client.CallOnce` never retries; Python `ClientBase.call` / `call_once`.
+- `NewBaseFrom(decs, name, …)` for the store, repository, service, workflow and client bases
+  (Python `from_decorations` already existed): the base resolves its own decoration and each of
+  its operations by name.
+- `decorate.Scope` (Python `Scope`), `Decorations.Scope(tier, name)`, `decorate.OpFunc` and
+  `decorate.Operation(subject, fn)`: the per-operation resolution the builders share.
+- `Decorations.Components()` (Python `components()`), the inventory of every component resolved,
+  for a generator to write one decoration entry per component; and
+  `Decorations.VerifyExplicit(prefixes...)` (Python `verify_explicit`), which is `Verify` and also
+  fails `INVALID_INPUT` on a resolved component with no override of its own name.
+- `mocks.MockOp[In, Out]`.
+
 ## [0.0.11] - 2026-10-17
 
 Python: `techai-webutils` 0.5.4.
@@ -583,7 +617,8 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.11...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.12...HEAD
+[0.0.12]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.8...v0.0.9

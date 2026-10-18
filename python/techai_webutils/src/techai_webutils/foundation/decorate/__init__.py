@@ -29,6 +29,7 @@ from techai_webutils.foundation.decorate.middleware import (
     new_timeout,
     new_tracing,
 )
+from techai_webutils.foundation.decorate.scope import Operation, Scope
 from techai_webutils.foundation.decorate.tier import (
     Deps,
     Layer,
@@ -46,6 +47,8 @@ __all__ = [
     "Observability",
     "OpMiddleware",
     "OpThunk",
+    "Operation",
+    "Scope",
     "Subject",
     "Tier",
     "build",

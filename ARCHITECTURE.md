@@ -80,7 +80,16 @@ pair whose input is `*T`. `Resource[T, P, ID, C, U]` composes `Reader`, `Lister`
 `Resource`: `store.NewResource` from one statement per role (writes only inside a transaction),
 `repository.Base.Resource`, `service.Base.Resource` (input validators), `pipeline.Base.Resource`
 and `workflow.NewResource` (reads with no transaction, each write one command). A consumer's
-resource is therefore assembled from these, and declares by hand only its domain operations.
+resource is therefore assembled from these.
+
+A verb that is not CRUD is an operation, `Op[In, Out]` (one method, `Execute(ctx, in)`), built
+by its tier's base under its own decoration name `<component>.<op>`: `store.Query` /
+`store.Statement` (the statement only inside a transaction), `repository.Query` /
+`repository.Command` (never retried), `service.Op` (validates a `Validatable` input),
+`workflow.Read` / `workflow.Command` / `workflow.Saga`, and `client.Call` / `client.CallOnce`,
+which turn an SDK function `func(ctx, in, ...opt)` into an operation under the client tier. A
+consumer component exposes its verbs as `Op` fields beside its roles instead of declaring a
+method interface, so each verb is decorated, configured and mocked (`mocks.MockOp`) on its own.
 
 An out-of-core interface that cannot embed one carries a doc-comment tag saying why:
 
@@ -161,12 +170,16 @@ collaborator or zero timeout skips its layer; recovery needs none.
   down; a component's `decorate.Deps` is `Decorations.Deps(<tier>.Tier(), name)`, so turning a
   layer on for one component is a config change. Builders of many components resolve each by
   its own name: `pipeline.NewBaseFrom(decs, prefix)` makes each stage `<prefix>.<stage>`,
-  `job.NewBaseFrom(decs, prefix)` each job `<prefix>.<job>`, and `gate.Decorate(decs)` runs a
-  gate as the gate-tier component of its name. **Fail loudly:** an override that turns on a
+  `job.NewBaseFrom(decs, prefix)` each job `<prefix>.<job>`, `gate.Decorate(decs)` runs a
+  gate as the gate-tier component of its name, and the store, repository, service, workflow and
+  client bases' `NewBaseFrom` resolve each operation they build as `<name>.<op>`
+  (`decorate.Scope`). **Fail loudly:** an override that turns on a
   layer its tier does not run (retry on a workflow) is `INVALID_INPUT`, and once the graph is
   built the root calls `Decorations.Verify(prefixes…)`, which fails `INVALID_INPUT` on every
   override under those prefixes that no component resolved (a misspelled or stale key) and on
-  every resolution `Decorations.Subject` recorded as failed. **Observe once per request:** by default clients, workflows and
+  every resolution `Decorations.Subject` recorded as failed. A deployable whose decoration file is
+  generated from `Decorations.Components()` calls `VerifyExplicit` instead, which also fails on a
+  component with no entry of its own name. **Observe once per request:** by default clients, workflows and
   jobs are observed and the pipeline, service, repository and store tiers are not; repositories
   retry behind a breaker; the `storage`, `outbox.*` and `prometheus` clients carry a 30 s
   timeout, bulkhead and breaker.
