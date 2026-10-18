@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.14] - 2026-10-18
+
 Python: `techai-webutils` 0.6.0. Breaking: every tier base is now built from a contract, and the
 operation-value API of 0.0.12–0.0.13 is removed.
 
@@ -685,7 +687,8 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.13...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.14...HEAD
+[0.0.14]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.10...v0.0.11
