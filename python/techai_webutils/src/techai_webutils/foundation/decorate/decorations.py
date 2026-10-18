@@ -8,12 +8,13 @@ under the component's name.
 from __future__ import annotations
 
 import dataclasses
+import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from techai_webutils.core.errors import AppValueError
-from techai_webutils.foundation.config.decoration import load, on
-from techai_webutils.foundation.decorate.tier import Deps, Observability
+from techai_webutils.foundation.config.decoration import load, on, sections
+from techai_webutils.foundation.decorate.tier import Deps, Layer, Observability
 from techai_webutils.foundation.resilience.bulkhead import (
     BulkheadConfig,
     BulkheadKind,
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.retrier import Retrier
     from techai_webutils.foundation.config import decoration
     from techai_webutils.foundation.decorate.middleware import Authorizer
-    from techai_webutils.foundation.decorate.tier import Tier
+    from techai_webutils.foundation.decorate.tier import Subject, Tier
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +59,7 @@ class Decorations:
     recovery runs.
     """
 
-    __slots__ = ("_collab", "_config")
+    __slots__ = ("_collab", "_config", "_errors", "_lock", "_used")
 
     def __init__(
         self,
@@ -68,6 +69,9 @@ class Decorations:
         """Bind the config (None decorates nothing) and the collaborators."""
         self._config = config
         self._collab = collaborators or Collaborators()
+        self._used: dict[str, set[str]] = {}
+        self._errors: list[AppValueError] = []
+        self._lock = threading.Lock()
 
     @classmethod
     def load(
@@ -85,18 +89,106 @@ class Decorations:
         return self._collab.observability
 
     def deps(self, tier: Tier, name: str) -> Deps:
-        """Return the Deps of the component ``name`` in ``tier``: defaults with its override on top.
+        """Return the Deps of the component ``name`` in ``tier`` (Go ``Decorations.Deps``).
 
-        A tier the config does not know, or a layer whose tuning is invalid, raises
-        ``AppValueError``.
+        The tier's defaults with the overrides of ``name`` and its dotted prefixes on top;
+        ``name`` is recorded as used for ``verify``. A tier the config does not know, an
+        override that turns on a layer ``tier`` does not order, or a layer whose tuning is
+        invalid, raises ``AppValueError``.
         """
+        with self._lock:
+            self._used.setdefault(tier.name, set()).add(name)
         if self._config is None:
             return Deps()
         tc = self._config.tier(tier.name)
         if tc is None:
             msg = f"decoration: no config for tier {tier.name!r}"
             raise AppValueError(msg)
+        _check(tier, name, tc.overriding(name))
         return build(name, tc.layers_for(name), self._collab)
+
+    def subject(self, tier: Tier, name: str) -> Subject:
+        """Return the Subject of the component ``name`` in ``tier``, decorated as ``deps`` resolves it.
+
+        A component built where raising is unwelcome (a stage, a job, a gate) resolves through
+        it: a resolution error is recorded for ``verify`` and the Subject runs with recovery only
+        until boot fails on it.
+        """
+        return tier.subject(name, self.resolve(tier, name))
+
+    def resolve(self, tier: Tier, name: str) -> Deps:
+        """Return ``deps(tier, name)``, recording a resolution error for ``verify`` instead.
+
+        On an error the component gets empty Deps (recovery only) until boot fails on it.
+        """
+        try:
+            return self.deps(tier, name)
+        except AppValueError as exc:
+            with self._lock:
+                self._errors.append(exc)
+            return Deps()
+
+    def verify(self, *prefixes: str) -> None:
+        """Check the decoration of a built graph (Go ``Decorations.Verify``).
+
+        The composition root calls it once every component is built. It raises
+        ``AppValueError`` with every resolution error ``subject`` recorded, and with every
+        override owned by one of ``prefixes`` (named a prefix, or beneath one) that applies to
+        no component resolved — a misspelled or stale key that would otherwise configure
+        nothing. Several deployables share one config, so each judges only its own prefixes.
+        """
+        tiers = sections(self._config) if self._config is not None else []
+        with self._lock:
+            problems = [str(e) for e in self._errors]
+            unused = [
+                f"decoration.{key}.overrides.{name}"
+                for key, tier_name, tier in tiers
+                for name in sorted(tier.overrides)
+                if _owned(name, prefixes)
+                and not _covers(self._used.get(tier_name, set()), name)
+            ]
+        if unused:
+            problems.append("no component uses " + ", ".join(unused))
+        if problems:
+            msg = "decoration: " + "; ".join(problems)
+            raise AppValueError(msg)
+
+
+def _owned(key: str, prefixes: tuple[str, ...]) -> bool:
+    """Report whether ``key`` is one of ``prefixes`` or beneath one."""
+    return any(key == p or key.startswith(p + ".") for p in prefixes)
+
+
+def _covers(used: set[str], key: str) -> bool:
+    """Report whether the override ``key`` applies to a used component: ``key`` or one beneath it."""
+    return any(name == key or name.startswith(key + ".") for name in used)
+
+
+def _check(tier: Tier, name: str, layers: decoration.Layers) -> None:
+    """Raise ``AppValueError`` when ``layers`` turns on a layer ``tier`` does not order.
+
+    Such a layer would be accepted and never run, so the operator would believe a protection is
+    in place that is not.
+    """
+    switched = (
+        ("recovery", Layer.RECOVERY, on(layers.recovery)),
+        ("tracing", Layer.TRACING, on(layers.tracing)),
+        ("metrics", Layer.METRICS, on(layers.metrics)),
+        ("logging", Layer.LOGGING, on(layers.logging)),
+        ("auth", Layer.AUTH, on(layers.auth)),
+        ("timeout", Layer.TIMEOUT, bool(layers.timeout)),
+        ("retry", Layer.RETRY, on(layers.retry.enabled)),
+        ("circuit_breaker", Layer.CIRCUIT_BREAKER, on(layers.circuit_breaker.enabled)),
+        ("bulkhead", Layer.BULKHEAD, on(layers.bulkhead.enabled)),
+        ("rate_limit", Layer.RATE_LIMIT, on(layers.rate_limit.enabled)),
+    )
+    for key, layer, enabled in switched:
+        if enabled and layer not in tier.order:
+            msg = (
+                f"decoration: {tier.name} {name} turns on {key}, "
+                f"which the {tier.name} tier does not run"
+            )
+            raise AppValueError(msg)
 
 
 def build(name: str, layers: decoration.Layers, collab: Collaborators) -> Deps:

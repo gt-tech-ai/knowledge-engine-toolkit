@@ -44,16 +44,20 @@ type Decorations struct {
 
 	// collab backs the layers the config turns on.
 	collab Collaborators
+
+	// reg records every component resolved and every resolution that failed, shared by
+	// the copies of one Decorations; nil (the zero Decorations) records nothing.
+	reg *registry
 }
 
 // NewDecorations returns the Decorations over a copy of cfg and the collaborators c; a
 // nil cfg decorates nothing.
 func NewDecorations(cfg *decoration.Config, c Collaborators) Decorations {
 	if cfg == nil {
-		return Decorations{collab: c}
+		return Decorations{collab: c, reg: newRegistry()}
 	}
 	own := *cfg
-	return Decorations{cfg: &own, collab: c}
+	return Decorations{cfg: &own, collab: c, reg: newRegistry()}
 }
 
 // LoadDecorations reads the decoration section from loader, laid over
@@ -75,9 +79,11 @@ func LoadDecorations(
 func (d Decorations) Observability() Observability { return d.collab.Observability }
 
 // Deps returns the Deps of the component named name in tier: the tier's default layers
-// with the component's override on top. A tier the config does not know, or a layer
-// whose tuning is invalid, is CodeInvalidInput.
+// with the overrides of name and its dotted prefixes on top, and records name as used
+// for Verify. A tier the config does not know, an override that turns on a layer tier
+// does not order, or a layer whose tuning is invalid, is CodeInvalidInput.
 func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
+	d.reg.use(tier.Name, name)
 	cfg := d.cfg
 	if cfg == nil {
 		cfg = &decoration.Config{}
@@ -89,7 +95,23 @@ func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 			fmt.Sprintf("decoration: no config for tier %q", tier.Name),
 		)
 	}
+	if err := tier.check(name, tc.Overriding(name)); err != nil {
+		return Deps{}, err
+	}
 	return Build(name, tc.For(name), d.collab)
+}
+
+// Subject returns the Subject of the component named name in tier, decorated as Deps
+// resolves it. A component built where no error can be returned (a pipeline stage, a
+// job, a gate) resolves through it: a resolution error is recorded for Verify, and the
+// Subject runs with recovery only until boot fails on it.
+func (d Decorations) Subject(tier Tier, name string) Subject {
+	deps, err := d.Deps(tier, name)
+	if err != nil {
+		d.reg.fail(err)
+		return tier.Subject(name, Deps{})
+	}
+	return tier.Subject(name, deps)
 }
 
 // Build returns the Deps of the component named name from its resolved layers: each

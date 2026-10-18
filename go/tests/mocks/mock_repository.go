@@ -42,18 +42,18 @@ func (m *MockRepository[T, P, ID]) EXPECT() *MockRepositoryMockRecorder[T, P, ID
 }
 
 // Create mocks base method.
-func (m *MockRepository[T, P, ID]) Create(ctx context.Context, entity *T) (*T, error) {
+func (m *MockRepository[T, P, ID]) Create(ctx context.Context, in *T) (*T, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", ctx, entity)
+	ret := m.ctrl.Call(m, "Create", ctx, in)
 	ret0, _ := ret[0].(*T)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *MockRepositoryMockRecorder[T, P, ID]) Create(ctx, entity any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder[T, P, ID]) Create(ctx, in any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockRepository[T, P, ID])(nil).Create), ctx, entity)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockRepository[T, P, ID])(nil).Create), ctx, in)
 }
 
 // Delete mocks base method.
@@ -116,16 +116,16 @@ func (mr *MockRepositoryMockRecorder[T, P, ID]) List(ctx, params, page any) *gom
 }
 
 // Update mocks base method.
-func (m *MockRepository[T, P, ID]) Update(ctx context.Context, id ID, entity *T) (*T, error) {
+func (m *MockRepository[T, P, ID]) Update(ctx context.Context, id ID, in *T) (*T, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", ctx, id, entity)
+	ret := m.ctrl.Call(m, "Update", ctx, id, in)
 	ret0, _ := ret[0].(*T)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Update indicates an expected call of Update.
-func (mr *MockRepositoryMockRecorder[T, P, ID]) Update(ctx, id, entity any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder[T, P, ID]) Update(ctx, id, in any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockRepository[T, P, ID])(nil).Update), ctx, id, entity)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockRepository[T, P, ID])(nil).Update), ctx, id, in)
 }

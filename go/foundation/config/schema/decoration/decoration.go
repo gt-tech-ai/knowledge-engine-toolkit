@@ -1,15 +1,16 @@
 // Package decoration is the config surface for every decorated component —
-// controllers, clients, workflows, pipelines, services, repositories, stores and jobs.
-// Each tier has default Layers and per-component overrides keyed by the component's
-// name; every layer (recovery, tracing, metrics, logging, auth, timeout, retry, circuit
-// breaker, bulkhead, rate limit) is switched and tuned here, while its order stays the
-// tier's, in code. decorate.Decorations turns a component's resolved Layers into its
-// decorate.Deps.
+// controllers, clients, workflows, pipelines, services, repositories, stores, jobs and
+// gates. Each tier has default Layers and per-component overrides keyed by the
+// component's dotted name; an override applies to its name and every name beneath it
+// ("api" covers "api.documents.create"), the deepest winning. Every layer (recovery,
+// tracing, metrics, logging, auth, timeout, retry, circuit breaker, bulkhead, rate
+// limit) is switched and tuned here, while its order stays the tier's, in code.
+// decorate.Decorations turns a component's resolved Layers into its decorate.Deps.
 //
 // The default observes each request at its edges — its controller and workflow, and
-// every client and job it calls — and leaves the pipeline, service, repository and
-// store tiers unobserved until switched on; resilience runs where today's components
-// run it.
+// every client, job and gate it calls — and leaves the pipeline, service, repository
+// and store tiers unobserved until switched on; resilience runs where today's
+// components run it.
 package decoration
 
 import (
@@ -142,9 +143,24 @@ type Tier struct {
 	Defaults Layers `mapstructure:"defaults"`
 }
 
-// For returns the layers of the component named name: Defaults with its override on top.
+// For returns the layers of the component named name: Defaults, then the override of
+// each dotted prefix of name from the shortest, then name's own override, each laid on
+// the last. "api.documents.create" gets Defaults, "api", "api.documents", then its own,
+// so one key covers a group and a deeper key one component.
 func (t Tier) For(name string) Layers {
-	return Merge(t.Defaults, t.Overrides[name])
+	return Merge(t.Defaults, t.Overriding(name))
+}
+
+// Overriding returns the layers the overrides lay over Defaults for the component named
+// name: each dotted prefix's override from the shortest, then name's own.
+func (t Tier) Overriding(name string) Layers {
+	var l Layers
+	for i := range len(name) {
+		if name[i] == '.' {
+			l = Merge(l, t.Overrides[name[:i]])
+		}
+	}
+	return Merge(l, t.Overrides[name])
 }
 
 // overlay lays over on t: its defaults over t's, and each override over t's override
@@ -188,32 +204,49 @@ type Config struct {
 
 	// Jobs decorates the execution-job tier (decoration.jobs).
 	Jobs Tier `mapstructure:"jobs"`
+
+	// Gates decorates the execution-gate tier (decoration.gates).
+	Gates Tier `mapstructure:"gates"`
+}
+
+// Section is one tier's decoration under its config key.
+type Section struct {
+	// Key is the tier's config key under decoration ("repositories").
+	Key string
+
+	// Name is the tier's name in code ("repository"), as decorate.Tier names it.
+	Name string
+
+	// Tier is the tier's decoration.
+	Tier Tier
+}
+
+// Sections returns every tier's decoration under its config key, in config order.
+func (c *Config) Sections() []Section {
+	return []Section{
+		{Key: "controllers", Name: "controller", Tier: c.Controllers},
+		{Key: "clients", Name: "client", Tier: c.Clients},
+		{Key: "workflows", Name: "workflow", Tier: c.Workflows},
+		{Key: "pipelines", Name: "pipeline", Tier: c.Pipelines},
+		{Key: "services", Name: "service", Tier: c.Services},
+		{Key: "repositories", Name: "repository", Tier: c.Repositories},
+		{Key: "stores", Name: "store", Tier: c.Stores},
+		{Key: "jobs", Name: "job", Tier: c.Jobs},
+		{Key: "gates", Name: "gate", Tier: c.Gates},
+	}
 }
 
 // Tier returns the decoration of the tier named name ("controller", "client",
-// "workflow", "pipeline", "service", "repository", "store", "job"), and whether there
-// is one.
+// "workflow", "pipeline", "service", "repository", "store", "job", "gate"), and whether
+// there is one.
 func (c *Config) Tier(name string) (Tier, bool) {
-	switch name {
-	case "controller":
-		return c.Controllers, true
-	case "client":
-		return c.Clients, true
-	case "workflow":
-		return c.Workflows, true
-	case "pipeline":
-		return c.Pipelines, true
-	case "service":
-		return c.Services, true
-	case "repository":
-		return c.Repositories, true
-	case "store":
-		return c.Stores, true
-	case "job":
-		return c.Jobs, true
-	default:
-		return Tier{}, false
+	sections := c.Sections()
+	for i := range sections {
+		if sections[i].Name == name {
+			return sections[i].Tier, true
+		}
 	}
+	return Tier{}, false
 }
 
 // Overlay lays over on c, tier by tier (see Tier.overlay).
@@ -227,11 +260,12 @@ func (c *Config) Overlay(over *Config) Config {
 		Repositories: c.Repositories.overlay(over.Repositories),
 		Stores:       c.Stores.overlay(over.Stores),
 		Jobs:         c.Jobs.overlay(over.Jobs),
+		Gates:        c.Gates.overlay(over.Gates),
 	}
 }
 
 // DefaultConfig returns today's decoration: recovery and auth wherever a tier orders
-// them; every controller, client, workflow and job observed, and the pipeline,
+// them; every controller, client, workflow, job and gate observed, and the pipeline,
 // service, repository and store tiers not; retry and a circuit breaker at the
 // repository tier; and a 30 s timeout, a bulkhead and a breaker around the storage,
 // outbox and Prometheus clients. Every other resilience layer, the controllers' rate
@@ -265,6 +299,7 @@ func DefaultConfig() Config {
 		Repositories: Tier{Defaults: repos},
 		Stores:       Tier{Defaults: base(false)},
 		Jobs:         Tier{Defaults: base(true)},
+		Gates:        Tier{Defaults: base(true)},
 	}
 }
 

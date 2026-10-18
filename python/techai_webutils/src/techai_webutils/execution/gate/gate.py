@@ -13,9 +13,22 @@ from typing import TYPE_CHECKING, Protocol, Self, runtime_checkable
 
 from techai_webutils.core.interfaces.execution import BatchResult, NopObserver
 from techai_webutils.execution.engine.run import merge_batches, run_job_group
+from techai_webutils.foundation.decorate import Layer, Subject, Tier
 
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.execution import AnyJob, ExecutionObserver
+    from techai_webutils.foundation.decorate import Decorations
+
+
+def tier() -> Tier:
+    """Return the gate tier, outermost first: recovery, logging, tracing, metrics, timeout.
+
+    It decorates one run of a gate (the ``Run`` operation), mirroring Go ``gate.Tier``.
+    """
+    return Tier(
+        "gate",
+        (Layer.RECOVERY, Layer.LOGGING, Layer.TRACING, Layer.METRICS, Layer.TIMEOUT),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +61,9 @@ class Gate:
     stop_on_failure: bool = False
     """When True, halts the remaining phases after any phase fails."""
 
+    op: Subject | None = None
+    """Runs the whole gate through the gate tier; None runs it undecorated."""
+
 
 class GateBuilder:
     """Fluent assembler for a Gate (mirrors Go ``gate.GateBuilder``)."""
@@ -58,6 +74,7 @@ class GateBuilder:
         self._phases: list[Phase] = []
         self._stop_on_failure: bool = False
         self._observer: ExecutionObserver | None = None
+        self._op: Subject | None = None
 
     def parallel(self, name: str, *jobs: AnyJob) -> Self:
         """Add a phase whose jobs all run concurrently."""
@@ -79,6 +96,11 @@ class GateBuilder:
         self._observer = observer
         return self
 
+    def decorate(self, decorations: Decorations) -> Self:
+        """Run the built gate through the gate tier, decorated as ``decorations`` resolves its name."""
+        self._op = decorations.subject(tier(), self._name)
+        return self
+
     def build(self) -> Gate:
         """Return the configured Gate, defaulting the observer to a NopObserver."""
         observer: ExecutionObserver = (
@@ -89,6 +111,7 @@ class GateBuilder:
             phases=tuple(self._phases),
             observer=observer,
             stop_on_failure=self._stop_on_failure,
+            op=self._op,
         )
 
 
@@ -122,7 +145,16 @@ async def run_gate(gate: Gate) -> BatchResult:
     and the gate lifecycle before the exception propagates — mirroring Go ``RunGate``, which always
     reports completion. An observer can therefore pair ``on_phase_start``/``on_phase_complete`` (and
     the gate pair) for per-phase timing or resource cleanup without leaking on a raised job.
+
+    A gate built with ``decorate`` runs through the gate tier as its ``Run`` operation.
     """
+    if gate.op is not None:
+        return await gate.op.exec("Run", lambda: _run(gate))
+    return await _run(gate)
+
+
+async def _run(gate: Gate) -> BatchResult:
+    """Run ``gate``'s phases; ``run_gate`` decorates it."""
     loop = asyncio.get_running_loop()
     start = loop.time()
     observer = gate.observer

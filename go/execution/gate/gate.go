@@ -11,6 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
 // GateFactory is a typed producer of a *Gate. CLI workflow types that compose
@@ -50,11 +51,27 @@ type Gate struct {
 	// name identifies the gate in observer events and the wrapping error.
 	name string
 
+	// op runs the whole gate through the gate tier; the zero Subject runs it
+	// undecorated.
+	op decorate.Subject
+
 	// phases are the ordered phases Run executes.
 	phases []Phase
 
 	// stopOnFailure, when true, halts the remaining phases after any phase fails.
 	stopOnFailure bool
+}
+
+// Tier is the gate tier's decoration: recovery, then logging, tracing, metrics and a
+// timeout around one run of a gate (the "Run" operation), outermost first.
+func Tier() decorate.Tier {
+	return decorate.Tier{Name: "gate", Order: []decorate.Layer{
+		decorate.LayerRecovery,
+		decorate.LayerLogging,
+		decorate.LayerTracing,
+		decorate.LayerMetrics,
+		decorate.LayerTimeout,
+	}}
 }
 
 // New returns an empty gate named name that reports to no observer.
@@ -87,6 +104,13 @@ func (g *Gate) Observe(obs interfaces.ExecutionObserver) *Gate {
 	return g
 }
 
+// Decorate runs g through the gate tier, decorated as decs resolves the gate-tier
+// component named after g; it returns g.
+func (g *Gate) Decorate(decs decorate.Decorations) *Gate {
+	g.op = decs.Subject(Tier(), g.name)
+	return g
+}
+
 // Phases returns the ordered phases of the gate for inspection (e.g. in tests).
 func (g *Gate) Phases() []Phase { return g.phases }
 
@@ -104,6 +128,18 @@ func (g *Gate) RunLocal(ctx context.Context) error {
 // When StopOnFailure is set, the first failed phase halts subsequent phases.
 // Returns nil when all phases pass or produce only warnings.
 func (g *Gate) Run(
+	ctx context.Context,
+	runner interfaces.CommandRunner,
+	root string,
+) error {
+	_, err := g.op.Exec(ctx, "Run", func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, g.run(ctx, runner, root)
+	})
+	return err
+}
+
+// run executes g's phases; Run decorates it.
+func (g *Gate) run(
 	ctx context.Context,
 	runner interfaces.CommandRunner,
 	root string,
