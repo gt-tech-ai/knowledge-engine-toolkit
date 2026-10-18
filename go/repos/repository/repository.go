@@ -6,6 +6,8 @@
 package repository
 
 import (
+	"context"
+
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
@@ -25,7 +27,8 @@ func Tier() decorate.Tier {
 }
 
 // Base is the embeddable core of a repository named by its Subject: Name and Exec run a
-// custom query through the tier's decoration. The zero Base runs queries undecorated.
+// custom query through the tier's decoration, and Query and Command build its named
+// operations, each under its own decoration name. The zero Base runs queries undecorated.
 type Base struct {
 	decorate.Subject
 
@@ -36,15 +39,53 @@ type Base struct {
 	// a retry, breaker or timeout would corrupt the transaction (the tier orders no
 	// recovery or auth).
 	insert decorate.Subject
+
+	// ops resolves each named operation's decoration beneath the repository's name.
+	ops decorate.Scope
 }
 
-// NewBase builds the Base for the repository named name, decorated with deps.
+// NewBase builds the Base for the repository named name, decorated with deps; its
+// named operations share deps.
 func NewBase(name string, deps decorate.Deps) Base {
 	return Base{
 		Subject: Tier().Subject(name, deps),
+		ops:     decorate.NewScope(Tier(), name, deps),
 		create:  Tier().Subject(name, deps.WithoutRetry()),
 		insert:  Tier().Subject(name, decorate.Deps{Observability: deps.Observability}),
 	}
+}
+
+// NewBaseFrom builds the Base for the repository named name, decorated from decs: the
+// repository as the repository-tier component name, and each named operation op as
+// name+"."+op. A decoration that fails to resolve is CodeInvalidInput.
+func NewBaseFrom(decs decorate.Decorations, name string) (Base, error) {
+	deps, err := decs.Deps(Tier(), name)
+	if err != nil {
+		return Base{}, err
+	}
+	b := NewBase(name, deps)
+	b.ops = decs.Scope(Tier(), name)
+	return b, nil
+}
+
+// Query is the repository's named read op, run through the repository tier with its
+// retry: a read is idempotent.
+func Query[In, Out any](
+	b Base,
+	op string,
+	fn func(ctx context.Context, in In) (Out, error),
+) decorate.OpFunc[In, Out] {
+	return decorate.Operation(b.ops.Subject(op), fn)
+}
+
+// Command is the repository's named write op, run through the repository tier without
+// retry: a write whose first attempt committed must not run twice.
+func Command[In, Out any](
+	b Base,
+	op string,
+	fn func(ctx context.Context, in In) (Out, error),
+) decorate.OpFunc[In, Out] {
+	return decorate.Operation(b.ops.Subject(op, decorate.Deps.WithoutRetry), fn)
 }
 
 // CRUD is the decorated repository over store.

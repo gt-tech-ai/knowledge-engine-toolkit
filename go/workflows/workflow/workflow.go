@@ -34,12 +34,76 @@ type Base struct {
 
 	// Subject runs the workflow's operations through the tier; it supplies Name and Exec.
 	decorate.Subject
+
+	// ops resolves each named operation's decoration beneath the workflow's name.
+	ops decorate.Scope
 }
 
 // NewBase builds the Base for the workflow named name over tx (needed only by ExecTx
-// and InTx), decorated with deps.
+// and InTx), decorated with deps; its named operations share deps.
 func NewBase(name string, tx interfaces.TransactionManager, deps decorate.Deps) Base {
-	return Base{tx: tx, Subject: Tier().Subject(name, deps)}
+	return Base{
+		tx:      tx,
+		ops:     decorate.NewScope(Tier(), name, deps),
+		Subject: Tier().Subject(name, deps),
+	}
+}
+
+// NewBaseFrom builds the Base for the workflow named name over tx, decorated from decs:
+// the workflow as the workflow-tier component name, and each named operation op as
+// name+"."+op. A decoration that fails to resolve is CodeInvalidInput.
+func NewBaseFrom(
+	decs decorate.Decorations,
+	name string,
+	tx interfaces.TransactionManager,
+) (Base, error) {
+	deps, err := decs.Deps(Tier(), name)
+	if err != nil {
+		return Base{}, err
+	}
+	return Base{
+		tx:      tx,
+		ops:     decs.Scope(Tier(), name),
+		Subject: Tier().Subject(name, deps),
+	}, nil
+}
+
+// Read is the workflow's named read op: fn runs through the workflow tier with no
+// transaction open.
+func Read[In, Out any](
+	b Base,
+	op string,
+	fn func(ctx context.Context, in In) (Out, error),
+) decorate.OpFunc[In, Out] {
+	return decorate.Operation(b.ops.Subject(op), fn)
+}
+
+// Command is the workflow's named command op: fn runs through the workflow tier in one
+// transaction, which commits when fn succeeds and rolls back when it fails (ExecTx).
+func Command[In, Out any](
+	b Base,
+	op string,
+	fn func(ctx context.Context, in In) (Out, error),
+) decorate.OpFunc[In, Out] {
+	return decorate.Operation(
+		b.ops.Subject(op),
+		func(ctx context.Context, in In) (Out, error) {
+			return b.InTx(
+				ctx,
+				func(ctx context.Context) (Out, error) { return fn(ctx, in) },
+			)
+		},
+	)
+}
+
+// Saga is the workflow's named saga op: fn runs through the workflow tier with no
+// transaction open, and commits each local step itself with InTx.
+func Saga[In, Out any](
+	b Base,
+	op string,
+	fn func(ctx context.Context, in In) (Out, error),
+) decorate.OpFunc[In, Out] {
+	return decorate.Operation(b.ops.Subject(op), fn)
 }
 
 // ExecTx runs fn as the command op: one decorated operation whose body runs in one

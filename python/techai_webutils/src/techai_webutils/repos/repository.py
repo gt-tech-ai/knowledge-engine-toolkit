@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from techai_webutils.core.interfaces.repository import Repository
-from techai_webutils.foundation.decorate import Layer, Subject, Tier
+from techai_webutils.foundation.decorate import Layer, Operation, Scope, Subject, Tier
 from techai_webutils.foundation.decorate.roles import CrudOps, exists
 
 if TYPE_CHECKING:
@@ -45,17 +45,41 @@ def tier() -> Tier:
 class RepositoryBase:
     """Runs one repository's operations through the repository tier."""
 
-    __slots__ = ("_create", "_subject")
+    __slots__ = ("_create", "_ops", "_subject")
 
     def __init__(self, name: str, deps: Deps) -> None:
-        """Bind the repository ``name``'s subject; Create gets one without retry."""
+        """Bind the repository ``name``'s subject; Create gets one without retry.
+
+        Its named operations share ``deps``.
+        """
         self._subject = tier().subject(name, deps)
         self._create = tier().subject(name, deps.without_retry())
+        self._ops = Scope(tier(), name, deps)
 
     @classmethod
     def from_decorations(cls, name: str, decorations: Decorations) -> RepositoryBase:
-        """Return the base of the repository ``name``, its layers resolved from the config."""
-        return cls(name, decorations.deps(tier(), name))
+        """Return the base of the repository ``name``, its layers resolved from the config.
+
+        Each named operation ``op`` resolves as ``<name>.<op>``.
+        """
+        base = cls(name, decorations.deps(tier(), name))
+        base._ops = decorations.scope(tier(), name)
+        return base
+
+    def query[In, Out](
+        self, op: str, fn: Callable[[In], Awaitable[Out]]
+    ) -> Operation[In, Out]:
+        """Return the named read ``op``, run through the tier with its retry (a read is idempotent)."""
+        return Operation(self._ops.subject(op), fn)
+
+    def command[In, Out](
+        self, op: str, fn: Callable[[In], Awaitable[Out]]
+    ) -> Operation[In, Out]:
+        """Return the named write ``op``, run through the tier without retry.
+
+        A write whose first attempt committed must not run twice.
+        """
+        return Operation(self._ops.subject(op, without_retry=True), fn)
 
     @property
     def name(self) -> str:

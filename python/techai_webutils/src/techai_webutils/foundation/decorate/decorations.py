@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.config.decoration import load, on, sections
+from techai_webutils.foundation.decorate.scope import Scope
 from techai_webutils.foundation.decorate.tier import Deps, Layer, Observability
 from techai_webutils.foundation.resilience.bulkhead import (
     BulkheadConfig,
@@ -127,6 +128,44 @@ class Decorations:
             with self._lock:
                 self._errors.append(exc)
             return Deps()
+
+    def scope(self, tier: Tier, name: str) -> Scope:
+        """Return the Scope of the component ``name`` in ``tier``: each operation resolved by name."""
+        return Scope(tier, name, Deps(), self)
+
+    def components(self) -> list[tuple[str, str]]:
+        """Return every component resolved as (tier name, component name), sorted (Go ``Components``).
+
+        The inventory a generator writes one decoration entry for.
+        """
+        with self._lock:
+            return sorted((t, n) for t, names in self._used.items() for n in names)
+
+    def verify_explicit(self, *prefixes: str) -> None:
+        """Run ``verify``, and also fail on a component with no override of its own name.
+
+        In a deployable whose decoration file is generated with one entry per component, a
+        component without one was added after the file was generated and takes only its tier's
+        defaults (Go ``VerifyExplicit``). Raises ``AppValueError`` naming every one.
+        """
+        problems: list[str] = []
+        try:
+            self.verify(*prefixes)
+        except AppValueError as exc:
+            problems.append(str(exc))
+        tiers = sections(self._config) if self._config is not None else []
+        keys = {tier_name: key for key, tier_name, _ in tiers}
+        overrides = {tier_name: tier.overrides for _, tier_name, tier in tiers}
+        missing = [
+            f"decoration.{keys.get(t, t)}.overrides.{n}"
+            for t, n in self.components()
+            if _owned(n, prefixes) and n not in overrides.get(t, {})
+        ]
+        if missing:
+            problems.append("no entry for " + ", ".join(missing))
+        if problems:
+            msg = "decoration: " + "; ".join(problems)
+            raise AppValueError(msg)
 
     def verify(self, *prefixes: str) -> None:
         """Check the decoration of a built graph (Go ``Decorations.Verify``).

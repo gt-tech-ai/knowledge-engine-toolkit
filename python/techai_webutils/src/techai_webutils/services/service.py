@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from techai_webutils.core.interfaces.crud_service import CrudService
-from techai_webutils.foundation.decorate import Layer, Tier
+from techai_webutils.foundation.decorate import Layer, Operation, Scope, Tier
 from techai_webutils.foundation.decorate.roles import CrudOps
 
 if TYPE_CHECKING:
@@ -45,16 +45,39 @@ def tier() -> Tier:
 class ServiceBase:
     """Runs one service's operations through the service tier."""
 
-    __slots__ = ("_subject",)
+    __slots__ = ("_ops", "_subject")
 
     def __init__(self, name: str, deps: Deps) -> None:
-        """Bind the service ``name``'s subject."""
+        """Bind the service ``name``'s subject; its named operations share ``deps``."""
         self._subject = tier().subject(name, deps)
+        self._ops = Scope(tier(), name, deps)
 
     @classmethod
     def from_decorations(cls, name: str, decorations: Decorations) -> ServiceBase:
-        """Return the base of the service ``name``, its layers resolved from the config."""
-        return cls(name, decorations.deps(tier(), name))
+        """Return the base of the service ``name``, its layers resolved from the config.
+
+        Each named operation ``op`` resolves as ``<name>.<op>``.
+        """
+        base = cls(name, decorations.deps(tier(), name))
+        base._ops = decorations.scope(tier(), name)
+        return base
+
+    def op[In, Out](
+        self, op: str, fn: Callable[[In], Awaitable[Out]]
+    ) -> Operation[In, Out]:
+        """Return the named operation ``op``, run through the tier.
+
+        An input with a ``validate()`` method is validated first; its coded error is raised
+        without running ``fn``.
+        """
+
+        async def run(value: In) -> Out:
+            validate = getattr(value, "validate", None)
+            if callable(validate):
+                validate()
+            return await fn(value)
+
+        return Operation(self._ops.subject(op), run)
 
     @property
     def name(self) -> str:

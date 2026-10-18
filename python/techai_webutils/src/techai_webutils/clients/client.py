@@ -14,7 +14,7 @@ import inspect
 from typing import TYPE_CHECKING, Self, cast
 
 from techai_webutils.core.interfaces.tracer import SpanKind
-from techai_webutils.foundation.decorate import Deps, Layer, Tier
+from techai_webutils.foundation.decorate import Deps, Layer, Operation, Scope, Tier
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterable
@@ -52,20 +52,41 @@ class ClientBase:
     that must not run twice, or whose input is consumed).
     """
 
-    __slots__ = ("_once", "_subject")
+    __slots__ = ("_once", "_ops", "_subject")
 
     def __init__(
         self, name: str, deps: Deps, *, span_kind: SpanKind = SpanKind.CLIENT
     ) -> None:
-        """Bind the client ``name``'s subjects: one retrying, one not, with spans of ``span_kind``."""
+        """Bind the client ``name``'s subjects: one retrying, one not, with spans of ``span_kind``.
+
+        Its named calls share ``deps``.
+        """
         client_tier = dataclasses.replace(tier(), span_kind=span_kind)
         self._subject = client_tier.subject(name, deps)
         self._once = client_tier.subject(name, deps.without_retry())
+        self._ops = Scope(client_tier, name, deps)
 
     @classmethod
     def from_decorations(cls, name: str, decorations: Decorations) -> ClientBase:
-        """Return the base of the client ``name``, its layers resolved from the config."""
-        return cls(name, decorations.deps(tier(), name))
+        """Return the base of the client ``name``, its layers resolved from the config.
+
+        Each named call ``op`` resolves as ``<name>.<op>``.
+        """
+        base = cls(name, decorations.deps(tier(), name))
+        base._ops = decorations.scope(tier(), name)
+        return base
+
+    def call[In, Out](
+        self, op: str, fn: Callable[[In], Awaitable[Out]]
+    ) -> Operation[In, Out]:
+        """Return the named idempotent call ``op``: ``fn`` runs through the tier with its retry."""
+        return Operation(self._ops.subject(op), fn)
+
+    def call_once[In, Out](
+        self, op: str, fn: Callable[[In], Awaitable[Out]]
+    ) -> Operation[In, Out]:
+        """Return the named call ``op`` that never retries (a send, a create, a consumed input)."""
+        return Operation(self._ops.subject(op, without_retry=True), fn)
 
     @classmethod
     def producer(cls, name: str, deps: Deps) -> ClientBase:
