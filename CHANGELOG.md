@@ -6,6 +6,25 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.13] - 2026-10-18
+
+Python: unchanged (`techai-webutils` 0.5.5).
+
+### Added
+
+- `tools/opmockgen` and its `cmd/opmockgen` command: generates the mocks of operation contracts
+  (structs of `interfaces.Op` fields, role interfaces and embedded structs of them). For each
+  named struct it writes a `Mock<Name>` with one gomock mock per field, flattened through the
+  embedded structs, a `NewMock<Name>(ctrl)`, and a `Contract()` that assembles the struct from
+  them. A field whose interface is declared in `core/interfaces` uses the engine's published mock;
+  any other uses the mockgen mock of the same name in the output package. Run it from a
+  `go:generate` directive with `-source <contracts package> -out <file> <Struct>...`.
+
+### Changed
+
+- `tools/decorgen` now shares its import and type rendering with opmockgen through
+  `tools/internal/gofile`; its output is unchanged.
+
 ## [0.0.12] - 2026-10-17
 
 Python: `techai-webutils` 0.5.5.
@@ -617,7 +636,8 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.12...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.13...HEAD
+[0.0.13]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.9...v0.0.10
