@@ -100,8 +100,11 @@ languages share one engine:
 - **Deps from config.** `Decorations` turns the `decoration` config section plus the process
   `Collaborators` (logger, metrics, tracer, authorizer) into a component's `Deps`:
   `Decorations.Deps(<tier>.Tier(), name)` in Go, `decorations.deps(tier(), name)` in Python. Each
-  tier has `defaults` and per-component `overrides` keyed by name. The **order** stays in code;
-  **which layers run and how they are tuned** is config.
+  tier has `defaults` and per-component `overrides` keyed by dotted name, cascading from each
+  prefix to the full name. The **order** stays in code; **which layers run and how they are
+  tuned** is config. A stage, job or gate resolves by its own name (`NewBaseFrom` /
+  `from_decorations`, `Decorate` / `decorate`), and the root calls `Verify(prefixes…)` /
+  `verify(*prefixes)` so an unused override or an unsupported layer fails boot.
 - **Base per tier.** Each tier package exposes `Tier()` / `tier()` and a base that runs its
   operations through the tier. Build components on the base; never hand-wrap a concern.
 - **Not a layer: hedging.** A hedge races a second attempt against a slow one, so it is only

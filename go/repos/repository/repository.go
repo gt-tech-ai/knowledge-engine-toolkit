@@ -66,6 +66,20 @@ func (b Base) CRUD[T, P any, ID comparable](
 	}
 }
 
+// Resource is the decorated repository over store, a resource whose Create takes C and
+// whose Update takes U: every role runs through the repository's decoration, and Create
+// never retries.
+func (b Base) Resource[T, P any, ID comparable, C, U any](
+	store interfaces.Resource[T, P, ID, C, U],
+) interfaces.Resource[T, P, ID, C, U] {
+	return decorate.NewResource[T, P, ID, C, U](
+		decorate.ResourceOps{Create: b.create, Rest: b.Subject},
+		store,
+		nil,
+		nil,
+	)
+}
+
 // ReadListExist is the decorated read-only repository over store, for a resource
 // whose writes are owned elsewhere.
 func (b Base) ReadListExist[T, P any, ID comparable](

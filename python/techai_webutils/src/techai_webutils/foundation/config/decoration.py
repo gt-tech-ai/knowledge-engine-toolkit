@@ -226,9 +226,24 @@ class Tier:
     """Every component's layers."""
 
     def layers_for(self, name: str) -> Layers:
-        """Return the layers of the component named ``name``: the defaults with its override on top."""
-        over = self.overrides.get(name)
-        return self.defaults if over is None else merge(self.defaults, over)
+        """Return the layers of the component named ``name`` (Go ``Tier.For``).
+
+        The defaults, then the override of each dotted prefix of ``name`` from the shortest,
+        then ``name``'s own: ``api.documents.create`` gets the defaults, ``api``,
+        ``api.documents``, then its own, so one key covers a group and a deeper key one
+        component.
+        """
+        return merge(self.defaults, self.overriding(name))
+
+    def overriding(self, name: str) -> Layers:
+        """Return the layers the overrides lay over the defaults for ``name`` (Go ``Overriding``)."""
+        layers = Layers()
+        parts = name.split(".")
+        for i in range(1, len(parts) + 1):
+            over = self.overrides.get(".".join(parts[:i]))
+            if over is not None:
+                layers = merge(layers, over)
+        return layers
 
     def overlay(self, over: Tier) -> Tier:
         """Lay ``over`` on this tier: its defaults over these, each override over the same name's."""
@@ -266,6 +281,9 @@ class DecorationConfig:
     jobs: Tier = field(default_factory=Tier)
     """The execution-job tier (``decoration.jobs``)."""
 
+    gates: Tier = field(default_factory=Tier)
+    """The execution-gate tier (``decoration.gates``)."""
+
     def tier(self, name: str) -> Tier | None:
         """Return the decoration of the tier named ``name`` ("controller", "client", …), or None."""
         attr = _TIER_FIELDS.get(name)
@@ -288,15 +306,21 @@ _TIER_FIELDS: dict[str, str] = {
     "repository": "repositories",
     "store": "stores",
     "job": "jobs",
+    "gate": "gates",
 }
 """Maps each tier name to its DecorationConfig field."""
+
+
+def sections(config: DecorationConfig) -> list[tuple[str, str, Tier]]:
+    """Return every tier's decoration as (config key, tier name, tier), in config order (Go ``Sections``)."""
+    return [(attr, name, getattr(config, attr)) for name, attr in _TIER_FIELDS.items()]
 
 
 def default_config() -> DecorationConfig:
     """Return today's decoration (the same as Go's ``DefaultConfig``).
 
-    Recovery and auth wherever a tier orders them; every controller, client, workflow and job
-    observed, and the pipeline, service, repository and store tiers not; retry and a circuit
+    Recovery and auth wherever a tier orders them; every controller, client, workflow, job and
+    gate observed, and the pipeline, service, repository and store tiers not; retry and a circuit
     breaker at the repository tier; and a 30 s timeout, a bulkhead and a breaker around the
     storage, outbox and Prometheus clients. Every other resilience layer, the controllers' rate
     limit and bulkhead included, is off; a controller's bulkhead, once enabled, sheds.
@@ -335,6 +359,7 @@ def default_config() -> DecorationConfig:
         repositories=Tier(defaults=repos),
         stores=Tier(defaults=_base(observe=False)),
         jobs=Tier(defaults=_base(observe=True)),
+        gates=Tier(defaults=_base(observe=True)),
     )
 
 

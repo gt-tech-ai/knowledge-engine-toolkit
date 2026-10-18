@@ -7,6 +7,7 @@ from techai_webutils.execution.gate.gate import (
     Phase,
     new_gate,
     run_gate,
+    tier,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "Phase",
     "new_gate",
     "run_gate",
+    "tier",
 ]

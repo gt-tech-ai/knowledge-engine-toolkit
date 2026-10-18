@@ -17,7 +17,7 @@ from techai_webutils.foundation.decorate import Deps, Layer, Tier
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from techai_webutils.foundation.decorate import Decorations
+    from techai_webutils.foundation.decorate import Decorations, Subject
 
 
 def tier() -> Tier:
@@ -61,16 +61,48 @@ class Stage[In, Out](AsyncPipeline[In, Out]):
 class PipelineBase:
     """Builds decorated stages: each runs as ``Execute`` through the tier under its name."""
 
-    __slots__ = ("_deps",)
+    __slots__ = ("_decorations", "_deps", "_prefix")
 
     def __init__(self, deps: Deps | None = None) -> None:
-        """Bind the stages' collaborators (none decorates nothing but recovery)."""
+        """Bind the collaborators every stage shares (none decorates nothing but recovery)."""
         self._deps = deps or Deps()
+        self._decorations: Decorations | None = None
+        self._prefix = ""
 
     @classmethod
     def from_decorations(cls, name: str, decorations: Decorations) -> PipelineBase:
-        """Return the base whose stages get the layers the config resolves for ``name``."""
-        return cls(decorations.deps(tier(), name))
+        """Return the base whose stages each take their own layers from ``decorations``.
+
+        A stage named ``stage`` is the pipeline-tier component ``<name>.<stage>`` (Go
+        ``NewBaseFrom``), so the config can tune one stage, or every stage under ``name``.
+        """
+        base = cls()
+        base._decorations = decorations
+        base._prefix = name
+        return base
+
+    def named(self, sub: str) -> PipelineBase:
+        """Return the base whose components sit beneath ``sub`` (Go ``Base.Named``).
+
+        From a base of prefix ``api``, ``named("documents")`` makes a stage ``create`` the component ``api.documents.create``. A base built from
+        shared Deps is returned unchanged.
+        """
+        if self._decorations is None:
+            return self
+        return type(self).from_decorations(
+            f"{self._prefix}.{sub}" if self._prefix else sub, self._decorations
+        )
+
+    def subject(self, name: str) -> Subject:
+        """Return the decorated Subject of the pipeline-tier component ``name`` (Go ``Base.Subject``).
+
+        For a pipeline not built from stage functions to run its operations through the tier as
+        a stage would.
+        """
+        if self._decorations is None:
+            return tier().subject(name, self._deps)
+        key = f"{self._prefix}.{name}" if self._prefix else name
+        return self._decorations.subject(tier(), key)
 
     def stage[In, Out](
         self, name: str, fn: Callable[[In], Awaitable[Out]]
@@ -82,7 +114,7 @@ class PipelineBase:
         if fn is None:  # pyright: ignore[reportUnnecessaryComparison]
             msg = "pipeline: stage fn must not be None"
             raise AppValueError(msg)
-        subject = tier().subject(name, self._deps)
+        subject = self.subject(name)
 
         async def run(input_data: In) -> Out:
             return await subject.exec("Execute", lambda: fn(input_data))

@@ -6,6 +6,57 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-10-17
+
+Python: `techai-webutils` 0.5.4.
+
+### Changed
+
+- Breaking: an override that turns on a layer its tier does not run (retry on a workflow, a
+  breaker on a store) is `INVALID_INPUT` from `Decorations.Deps`, instead of being ignored.
+- Breaking (Python): `PipelineBase.from_decorations(name, …)` and `JobBase.from_decorations(name,
+  …)` take `name` as a prefix: each stage or job resolves `<name>.<stage>` (an override of `name`
+  still covers them all) and is labelled by that full name.
+- Breaking: `interfaces.Updater[T, ID, U]` takes the update input type `U` (`Update(ctx, id, U)`);
+  the old `Updater[T, ID]` is `Updater[T, ID, *T]`. `Writer[T, ID]` is now the composition of
+  `Creator[T, *T]` and `Updater[T, ID, *T]`, with the same method set.
+- `decorate.Writer` is the composition of the new `decorate.Creator` and `decorate.Updater`; its
+  behavior is unchanged.
+
+### Added
+
+- Role interfaces `Creator[T, C]` (`Create(ctx, C)`, an input-generic create) and `Suggester[P]`
+  (`SuggestValues`), and the composition `Resource[T, P, ID, C, U]`: `Get`, `List`, `Create`
+  from `C`, `Update` from `U`, `Delete` and `Exists`.
+- A Base implementation of the roles and of `Resource` at every tier, so a resource is assembled
+  rather than hand-written:
+  - store: `store.Reader`, `Lister`, `Creator`, `Updater`, `Deleter`, `Exister` and
+    `store.Resource`, built by `store.NewResource(base, store.Funcs{…})` from one statement per
+    role, each run on the client its context's statement runs on; writes run through `Write`, so
+    only inside a transaction. A missing statement fails INTERNAL at construction.
+  - repository: `repository.Base.Resource(store)`, every role decorated and `Create` never
+    retried.
+  - service: `service.Base.Resource(repo, service.Validators{Create, Update})`, rejecting an
+    invalid write input before the repository.
+  - pipeline: `pipeline.Base.Resource(name, svc)`, and `pipeline.Unit`, which adapts an
+    error-only step into a stage function.
+  - workflow: `workflow.NewResource(flows, pipes)`, whose reads run with no transaction and whose
+    writes each run as one command.
+- Decorators `decorate.Creator`, `decorate.Updater`, `decorate.Suggester` and `decorate.Resource`
+  (`decorate.NewResource(ops, inner, validateCreate, validateUpdate)`).
+- Per-component decoration, Go and Python:
+  - overrides cascade along a component's dotted name: `api` covers `api.documents.create`, and
+    the deepest override wins (`decoration.Tier.Overriding` / `Tier.overriding`);
+  - a `gates` tier (`decoration.gates`): `gate.Tier()` and `Gate.Decorate(decs)` in Go,
+    `tier()` and `GateBuilder.decorate(decorations)` in Python, run a gate as one decorated
+    `Run` operation;
+  - `pipeline.NewBaseFrom(decs, prefix)` and `job.NewBaseFrom(decs, prefix)` resolve each stage
+    and job by its own name `<prefix>.<name>`, and `Base.Named(sub)` (Python `named`) scopes a
+    set's stages or jobs beneath `sub`;
+  - `Decorations.Subject(tier, name)` and `Decorations.Verify(prefixes...)` (Python `subject`,
+    `resolve`, `verify`): a resolution error is recorded and fails `Verify`, as does an override
+    under the prefixes that no component resolved.
+
 ## [0.0.10] - 2026-10-17
 
 Python: `techai-webutils` 0.5.3.
@@ -532,7 +583,9 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.9...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.11...HEAD
+[0.0.11]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.10...v0.0.11
+[0.0.10]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.6...v0.0.7

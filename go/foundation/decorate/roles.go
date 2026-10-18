@@ -60,21 +60,88 @@ func (l Lister[T, P]) List(
 	})
 }
 
+// Creator decorates interfaces.Creator: Create runs as the "Create" operation, and a
+// non-nil validate rejects an invalid input before it reaches inner.
+type Creator[T, C any] struct {
+	// inner is the decorated role.
+	inner interfaces.Creator[T, C]
+
+	// validate, when non-nil, checks an input before it is written.
+	validate func(C) error
+
+	// op runs the operation.
+	op Subject
+}
+
+// NewCreator decorates inner's Create through op, validating each input with validate
+// when it is non-nil.
+func NewCreator[T, C any](
+	op Subject,
+	inner interfaces.Creator[T, C],
+	validate func(C) error,
+) Creator[T, C] {
+	return Creator[T, C]{op: op, inner: inner, validate: validate}
+}
+
+// Create persists a new entity built from in.
+func (w Creator[T, C]) Create(ctx context.Context, in C) (*T, error) {
+	return w.op.Exec(ctx, "Create", func(ctx context.Context) (*T, error) {
+		if err := check(w.validate, in); err != nil {
+			return nil, err
+		}
+		return w.inner.Create(ctx, in)
+	})
+}
+
+// Updater decorates interfaces.Updater: Update runs as the "Update" operation, and a
+// non-nil validate rejects an invalid input before it reaches inner.
+type Updater[T any, ID comparable, U any] struct {
+	// inner is the decorated role.
+	inner interfaces.Updater[T, ID, U]
+
+	// validate, when non-nil, checks an input before it is written.
+	validate func(U) error
+
+	// op runs the operation.
+	op Subject
+}
+
+// NewUpdater decorates inner's Update through op, validating each input with validate
+// when it is non-nil.
+func NewUpdater[T any, ID comparable, U any](
+	op Subject,
+	inner interfaces.Updater[T, ID, U],
+	validate func(U) error,
+) Updater[T, ID, U] {
+	return Updater[T, ID, U]{op: op, inner: inner, validate: validate}
+}
+
+// Update modifies the entity identified by id with in.
+func (w Updater[T, ID, U]) Update(ctx context.Context, id ID, in U) (*T, error) {
+	return w.op.Exec(ctx, "Update", func(ctx context.Context) (*T, error) {
+		if err := check(w.validate, in); err != nil {
+			return nil, err
+		}
+		return w.inner.Update(ctx, id, in)
+	})
+}
+
+// check runs validate on in when one is set.
+func check[V any](validate func(V) error, in V) error {
+	if validate == nil {
+		return nil
+	}
+	return validate(in)
+}
+
 // Writer decorates interfaces.Writer: Create runs through its own Subject (one without
 // retry, since a create is not idempotent) and Update through the other; a non-nil
 // validate rejects an invalid entity before either reaches inner.
 type Writer[T any, ID comparable] struct {
-	// inner is the decorated role.
-	inner interfaces.Writer[T, ID]
-
-	// validate, when non-nil, checks an entity before it is written.
-	validate func(*T) error
-
-	// create runs Create.
-	create Subject
-
-	// update runs Update.
-	update Subject
+	// Creator contributes the decorated Create.
+	Creator[T, *T]
+	// Updater contributes the decorated Update.
+	Updater[T, ID, *T]
 }
 
 // NewWriter decorates inner's Create through create and Update through update,
@@ -84,35 +151,39 @@ func NewWriter[T any, ID comparable](
 	inner interfaces.Writer[T, ID],
 	validate func(*T) error,
 ) Writer[T, ID] {
-	return Writer[T, ID]{create: create, update: update, inner: inner, validate: validate}
-}
-
-// Create persists a new entity.
-func (w Writer[T, ID]) Create(ctx context.Context, entity *T) (*T, error) {
-	return w.create.Exec(ctx, "Create", func(ctx context.Context) (*T, error) {
-		if err := w.check(entity); err != nil {
-			return nil, err
-		}
-		return w.inner.Create(ctx, entity)
-	})
-}
-
-// Update modifies the entity identified by id.
-func (w Writer[T, ID]) Update(ctx context.Context, id ID, entity *T) (*T, error) {
-	return w.update.Exec(ctx, "Update", func(ctx context.Context) (*T, error) {
-		if err := w.check(entity); err != nil {
-			return nil, err
-		}
-		return w.inner.Update(ctx, id, entity)
-	})
-}
-
-// check runs validate on entity when one is set.
-func (w Writer[T, ID]) check(entity *T) error {
-	if w.validate == nil {
-		return nil
+	return Writer[T, ID]{
+		Creator: NewCreator[T, *T](create, inner, validate),
+		Updater: NewUpdater[T, ID, *T](update, inner, validate),
 	}
-	return w.validate(entity)
+}
+
+// Suggester decorates interfaces.Suggester: SuggestValues runs as the "SuggestValues"
+// operation.
+type Suggester[P any] struct {
+	// inner is the decorated role.
+	inner interfaces.Suggester[P]
+
+	// op runs the operation.
+	op Subject
+}
+
+// NewSuggester decorates inner's SuggestValues through op.
+func NewSuggester[P any](op Subject, inner interfaces.Suggester[P]) Suggester[P] {
+	return Suggester[P]{op: op, inner: inner}
+}
+
+// SuggestValues returns the distinct values params selects.
+func (s Suggester[P]) SuggestValues(
+	ctx context.Context,
+	params P,
+) (*types.Page[string], error) {
+	return s.op.Exec(
+		ctx,
+		"SuggestValues",
+		func(ctx context.Context) (*types.Page[string], error) {
+			return s.inner.SuggestValues(ctx, params)
+		},
+	)
 }
 
 // Inserter decorates interfaces.Inserter: Insert runs as the "Insert" operation.
@@ -178,4 +249,48 @@ func (e Exister[ID]) Exists(ctx context.Context, id ID) (bool, error) {
 	return e.op.Exec(ctx, "Exists", func(ctx context.Context) (bool, error) {
 		return e.inner.Exists(ctx, id)
 	})
+}
+
+// Resource decorates interfaces.Resource, composed of the role decorators.
+type Resource[T, P any, ID comparable, C, U any] struct {
+	// Reader contributes the decorated Get.
+	Reader[T, ID]
+	// Lister contributes the decorated List.
+	Lister[T, P]
+	// Creator contributes the decorated Create.
+	Creator[T, C]
+	// Updater contributes the decorated Update.
+	Updater[T, ID, U]
+	// Deleter contributes the decorated Delete.
+	Deleter[ID]
+	// Exister contributes the decorated Exists.
+	Exister[ID]
+}
+
+// ResourceOps are the Subjects a decorated Resource runs through: Create's, apart since
+// a create is not idempotent and so is never retried, and every other role's.
+type ResourceOps struct {
+	// Create runs Create.
+	Create Subject
+
+	// Rest runs every role but Create.
+	Rest Subject
+}
+
+// NewResource decorates inner's roles through ops, validating a Create input with
+// validateCreate and an Update input with validateUpdate when each is non-nil.
+func NewResource[T, P any, ID comparable, C, U any](
+	ops ResourceOps,
+	inner interfaces.Resource[T, P, ID, C, U],
+	validateCreate func(C) error,
+	validateUpdate func(U) error,
+) Resource[T, P, ID, C, U] {
+	return Resource[T, P, ID, C, U]{
+		Reader:  NewReader(ops.Rest, inner),
+		Lister:  NewLister(ops.Rest, inner),
+		Creator: NewCreator(ops.Create, inner, validateCreate),
+		Updater: NewUpdater(ops.Rest, inner, validateUpdate),
+		Deleter: NewDeleter(ops.Rest, inner),
+		Exister: NewExister(ops.Rest, inner),
+	}
 }

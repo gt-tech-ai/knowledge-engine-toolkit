@@ -38,16 +38,37 @@ def tier() -> Tier:
 class JobBase:
     """Builds decorated jobs: each runs as ``Execute`` through the tier under its name."""
 
-    __slots__ = ("_deps",)
+    __slots__ = ("_decorations", "_deps", "_prefix")
 
     def __init__(self, deps: Deps | None = None) -> None:
-        """Bind the jobs' collaborators (none decorates nothing but recovery)."""
+        """Bind the collaborators every job shares (none decorates nothing but recovery)."""
         self._deps = deps or Deps()
+        self._decorations: Decorations | None = None
+        self._prefix = ""
 
     @classmethod
     def from_decorations(cls, name: str, decorations: Decorations) -> JobBase:
-        """Return the base whose jobs get the layers the config resolves for ``name``."""
-        return cls(decorations.deps(tier(), name))
+        """Return the base whose jobs each take their own layers from ``decorations``.
+
+        A job named ``job`` is the job-tier component ``<name>.<job>`` (Go ``NewBaseFrom``), so
+        the config can tune one job, or every job under ``name``.
+        """
+        base = cls()
+        base._decorations = decorations
+        base._prefix = name
+        return base
+
+    def named(self, sub: str) -> JobBase:
+        """Return the base whose components sit beneath ``sub`` (Go ``Base.Named``).
+
+        From a base of prefix ``events``, ``named("sweep")`` makes a job ``reap`` the component ``events.sweep.reap``. A base built from
+        shared Deps is returned unchanged.
+        """
+        if self._decorations is None:
+            return self
+        return type(self).from_decorations(
+            f"{self._prefix}.{sub}" if self._prefix else sub, self._decorations
+        )
 
     def wrap(self, job: AnyJob) -> AnyJob:
         """Return ``job`` run through the tier."""
@@ -55,11 +76,12 @@ class JobBase:
 
     def func(self, meta: JobMeta, run: Callable[[], Awaitable[BatchResult]]) -> AnyJob:
         """Return the job ``meta`` whose ``run`` runs through the tier."""
+        name, deps = meta.name, self._deps
+        if self._decorations is not None:
+            name = f"{self._prefix}.{meta.name}" if self._prefix else meta.name
+            deps = self._decorations.resolve(tier(), name)
         return _DecoratedJob(
-            meta,
-            run,
-            tier().subject(meta.name, self._deps),
-            recover=not self._deps.skip_recovery,
+            meta, run, tier().subject(name, deps), recover=not deps.skip_recovery
         )
 
 

@@ -31,15 +31,30 @@ type Run func(
 	root string,
 ) (types.StepResults, error)
 
-// Base builds decorated jobs from one set of decoration dependencies. The zero
-// value applies recovery only, so Base{} is a working undecorated builder.
+// Base builds decorated jobs. The zero value applies recovery only, so Base{} is a
+// working undecorated builder.
 type Base struct {
-	// deps are the job tier's observability and timeout dependencies.
+	// decs resolves each job's decoration by its own name; when unset, every job shares
+	// deps.
+	decs *decorate.Decorations
+
+	// prefix qualifies each job's name in the decoration config ("events" makes a job
+	// "sweep" the component "events.sweep").
+	prefix string
+
+	// deps are every job's decoration when decs is unset.
 	deps decorate.Deps
 }
 
-// NewBase returns a Base that decorates its jobs with deps.
+// NewBase returns a Base that decorates all its jobs with deps.
 func NewBase(deps decorate.Deps) Base { return Base{deps: deps} }
+
+// NewBaseFrom returns a Base whose jobs each take their own decoration from decs: a job
+// named name is the job-tier component prefix+"."+name, so the config can tune one job,
+// or every job under prefix.
+func NewBaseFrom(decs decorate.Decorations, prefix string) Base {
+	return Base{decs: &decs, prefix: prefix}
+}
 
 // Func builds the job name in group that runs run.
 func (b Base) Func(name, group string, run Run) interfaces.AnyJob {
@@ -65,9 +80,35 @@ func (b Base) Wrap(j interfaces.AnyJob) interfaces.AnyJob {
 	return b.job(j.Meta(), j.Execute)
 }
 
+// Named returns the Base whose jobs sit beneath sub: from a Base of prefix "events",
+// Named("sweep") makes a job "reap" the component "events.sweep.reap". A Base built by
+// NewBase shares one decoration and is returned unchanged.
+func (b Base) Named(sub string) Base {
+	if b.decs == nil {
+		return b
+	}
+	if b.prefix != "" {
+		sub = b.prefix + "." + sub
+	}
+	b.prefix = sub
+	return b
+}
+
 // job binds meta and run to the job tier's subject for meta.Name.
 func (b Base) job(meta types.JobMeta, run Run) interfaces.AnyJob {
-	return decorated{meta: meta, run: run, op: Tier().Subject(meta.Name, b.deps)}
+	return decorated{meta: meta, run: run, op: b.subject(meta.Name)}
+}
+
+// subject returns the decorated Subject of the job named name.
+func (b Base) subject(name string) decorate.Subject {
+	if b.decs == nil {
+		return Tier().Subject(name, b.deps)
+	}
+	key := name
+	if b.prefix != "" {
+		key = b.prefix + "." + name
+	}
+	return b.decs.Subject(Tier(), key)
 }
 
 // decorated is the one AnyJob implementation every Base method returns.

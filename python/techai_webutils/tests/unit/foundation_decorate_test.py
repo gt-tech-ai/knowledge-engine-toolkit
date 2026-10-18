@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from techai_webutils.clients.client import tier as client_tier
+from techai_webutils.controllers.handler import tier as controller_tier
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.errors.errors import (
     AppError,
@@ -46,6 +48,7 @@ from techai_webutils.foundation.decorate import (
 )
 from techai_webutils.foundation.resilience.bulkhead import BulkheadFullError
 from techai_webutils.foundation.resilience.circuit_breaker import CircuitOpenError
+from techai_webutils.repos.repository import tier as repository_tier
 from techai_webutils.services.service import tier as service_tier
 
 if TYPE_CHECKING:
@@ -302,13 +305,13 @@ class TestDecorations:
             Collaborators(observability=observed.observability),
         )
 
-        repo = decorations.deps(Tier("repository", ()), "users")
+        repo = decorations.deps(repository_tier(), "users")
         assert repo.retrier is not None
         assert repo.breaker is not None
         assert repo.observability.tracer is None
-        client = decorations.deps(Tier("client", ()), "search")
+        client = decorations.deps(client_tier(), "search")
         assert client.observability.tracer is observed.observability.tracer
-        storage = decorations.deps(Tier("client", ()), "storage")
+        storage = decorations.deps(client_tier(), "storage")
         assert storage.timeout == pytest.approx(30.0)
         assert storage.bulkhead is not None
         assert storage.shed_load is False
@@ -332,14 +335,14 @@ class TestDecorations:
         collab = Collaborators(observability=observed.observability)
         absent = MagicMock()
         absent.get.return_value = None
-        search = Decorations.load(absent, collab).deps(Tier("client", ()), "search")
+        search = Decorations.load(absent, collab).deps(client_tier(), "search")
         assert search.observability.tracer is observed.observability.tracer
 
         quiet = MagicMock()
         quiet.get.return_value = {
             "clients": {"overrides": {"search": {"tracing": False}}}
         }
-        search = Decorations.load(quiet, collab).deps(Tier("client", ()), "search")
+        search = Decorations.load(quiet, collab).deps(client_tier(), "search")
         assert search.observability.tracer is None
         assert search.observability.logger is observed.observability.logger
 
@@ -386,8 +389,9 @@ class TestDecorations:
             at the component and layer that carry it.
 
         What it tests:
-          - ``api`` gets a limiter, an adaptive bulkhead and shed load; an unknown bulkhead kind
-            and a negative retry raise ``AppValueError`` naming ``<name>.<layer>``.
+          - ``api`` gets a limiter, an adaptive bulkhead and shed load; an unknown controller
+            bulkhead kind and a negative client retry raise ``AppValueError`` naming
+            ``<name>.<layer>``.
         """
         config = decoration.from_mapping({
             "controllers": {
@@ -397,12 +401,14 @@ class TestDecorations:
                         "bulkhead": {"enabled": True, "shed": True, "kind": "adaptive"},
                     },
                     "odd": {"bulkhead": {"enabled": True, "kind": "lifo"}},
-                    "neg": {"retry": {"enabled": True, "max_retries": -1}},
                 }
-            }
+            },
+            "clients": {
+                "overrides": {"neg": {"retry": {"enabled": True, "max_retries": -1}}}
+            },
         })
         decorations = Decorations(config)
-        controller = Tier("controller", ())
+        controller = controller_tier()
 
         api = decorations.deps(controller, "api")
         assert api.rate_limiter is not None
@@ -411,4 +417,4 @@ class TestDecorations:
         with pytest.raises(AppValueError, match=r"odd\.bulkhead"):
             decorations.deps(controller, "odd")
         with pytest.raises(AppValueError, match=r"neg\.retry"):
-            decorations.deps(controller, "neg")
+            decorations.deps(client_tier(), "neg")

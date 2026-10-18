@@ -63,6 +63,31 @@ func (b Base) CRUD[T, P any, ID comparable](
 	}
 }
 
+// Validators check a Resource's write inputs before they reach the repository; a nil
+// validator accepts every input.
+type Validators[C, U any] struct {
+	// Create checks a Create input.
+	Create func(C) error
+
+	// Update checks an Update input.
+	Update func(U) error
+}
+
+// Resource is the decorated service over repo, a resource whose Create takes C and
+// whose Update takes U: every role runs through the service's decoration, and v rejects
+// an invalid write input before it reaches repo.
+func (b Base) Resource[T, P any, ID comparable, C, U any](
+	repo interfaces.Resource[T, P, ID, C, U],
+	v Validators[C, U],
+) interfaces.Resource[T, P, ID, C, U] {
+	return decorate.NewResource[T, P, ID, C, U](
+		decorate.ResourceOps{Create: b.Subject, Rest: b.Subject},
+		repo,
+		v.Create,
+		v.Update,
+	)
+}
+
 // CRUDNoList is CRUD for a resource with no listable collection.
 func (b Base) CRUDNoList[T any, ID comparable](
 	repo interfaces.CRUDNoListRepository[T, ID],

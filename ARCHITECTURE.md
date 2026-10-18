@@ -73,6 +73,15 @@ Role compositions live in `core` too (`ReadListExistStore` embeds `Reader`/`List
 capabilities compose rather than widen (`DynamicConsumer` embeds `MessageConsumer`); Python
 Protocols do the same (`StorageClient` composes `ManagedResource`).
 
+The data-access roles are input-generic where a write takes a command rather than the entity:
+`Creator[T, C]` creates from `C`, `Updater[T, ID, U]` updates from `U`, and `Writer[T, ID]` is the
+pair whose input is `*T`. `Resource[T, P, ID, C, U]` composes `Reader`, `Lister`, `Creator`,
+`Updater`, `Deleter` and `Exister`. Every tier ships a Base implementation of each role and of
+`Resource`: `store.NewResource` from one statement per role (writes only inside a transaction),
+`repository.Base.Resource`, `service.Base.Resource` (input validators), `pipeline.Base.Resource`
+and `workflow.NewResource` (reads with no transaction, each write one command). A consumer's
+resource is therefore assembled from these, and declares by hand only its domain operations.
+
 An out-of-core interface that cannot embed one carries a doc-comment tag saying why:
 
 - `// SDK seam` — mirrors a third-party SDK surface (AWS S3/SQS/Secrets Manager,
@@ -142,13 +151,22 @@ collaborator or zero timeout skips its layer; recovery needs none.
   family's `Decorate`; its series are `client_*` labelled `{client, operation}`.
 - **Go — every decorator is configurable.** The `decoration` config section
   (`schema/decoration.Load`) holds one `Tier` per tier — `controllers`, `clients`, `workflows`,
-  `pipelines`, `services`, `repositories`, `stores`, `jobs` — each with `defaults` and
-  per-component `overrides` keyed by the component's name, switching and tuning every layer
-  (recovery, tracing, metrics, logging, auth, timeout, retry, circuit breaker, rate limit,
-  bulkhead). The order stays the tier's, in code. The composition root builds one `decorate.Decorations` from that config and
-  the `Collaborators` (logger, metrics, tracer, authorizer) and hands it down; a component's
-  `decorate.Deps` is `Decorations.Deps(<tier>.Tier(), name)`, so turning a layer on for one
-  component is a config change. **Observe once per request:** by default clients, workflows and
+  `pipelines`, `services`, `repositories`, `stores`, `jobs`, `gates` — each with `defaults` and
+  per-component `overrides` keyed by the component's dotted name, switching and tuning every
+  layer (recovery, tracing, metrics, logging, auth, timeout, retry, circuit breaker, rate limit,
+  bulkhead). An override applies to its name and every name beneath it, the deepest winning:
+  `api.documents.create` gets the defaults, then `api`, `api.documents` and its own override.
+  The order stays the tier's, in code. The composition root builds one `decorate.Decorations`
+  from that config and the `Collaborators` (logger, metrics, tracer, authorizer) and hands it
+  down; a component's `decorate.Deps` is `Decorations.Deps(<tier>.Tier(), name)`, so turning a
+  layer on for one component is a config change. Builders of many components resolve each by
+  its own name: `pipeline.NewBaseFrom(decs, prefix)` makes each stage `<prefix>.<stage>`,
+  `job.NewBaseFrom(decs, prefix)` each job `<prefix>.<job>`, and `gate.Decorate(decs)` runs a
+  gate as the gate-tier component of its name. **Fail loudly:** an override that turns on a
+  layer its tier does not run (retry on a workflow) is `INVALID_INPUT`, and once the graph is
+  built the root calls `Decorations.Verify(prefixes…)`, which fails `INVALID_INPUT` on every
+  override under those prefixes that no component resolved (a misspelled or stale key) and on
+  every resolution `Decorations.Subject` recorded as failed. **Observe once per request:** by default clients, workflows and
   jobs are observed and the pipeline, service, repository and store tiers are not; repositories
   retry behind a breaker; the `storage`, `outbox.*` and `prometheus` clients carry a 30 s
   timeout, bulkhead and breaker.
