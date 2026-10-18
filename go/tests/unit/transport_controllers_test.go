@@ -67,7 +67,7 @@ func TestControllerTier_OrdersObservabilityOutermost(t *testing.T) {
 func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 	t.Parallel()
 	var actions []string
-	base := transport.NewBase("users", decorate.Deps{
+	base := fixtures.Must(transport.NewBase[usersController](decorate.Fixed(decorate.Deps{
 		Observability: decorate.Observability{
 			Logger:  fixtures.NopLogger(),
 			Metrics: fixtures.NopMetrics(),
@@ -77,7 +77,7 @@ func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 			actions = append(actions, action)
 			return nil
 		},
-	})
+	}), "users"))
 
 	got, err := base.Handler("get", echo)(t.Context(), "a")
 	require.NoError(t, err)
@@ -114,9 +114,9 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 		return "", nil
 	}
 
-	limited := transport.NewBase("c", decorate.Deps{
+	limited := fixtures.Must(transport.NewBase[opController](decorate.Fixed(decorate.Deps{
 		RateLimiter: fixtures.StubRateLimiter(false),
-	})
+	}), "c"))
 	_, err := limited.Handler("op", handler)(t.Context(), "")
 	assert.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	assert.False(t, ran)
@@ -133,13 +133,18 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 	}()
 	<-held
 	defer close(release)
-	shedding := transport.NewBase("c", decorate.Deps{Bulkhead: bh, ShedLoad: true})
+	shedding := fixtures.Must(
+		transport.NewBase[opController](
+			decorate.Fixed(decorate.Deps{Bulkhead: bh, ShedLoad: true}),
+			"c",
+		),
+	)
 	_, err = shedding.Handler("op", handler)(t.Context(), "")
 	assert.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	assert.False(t, ran)
 
 	panicking := func(context.Context, string) (string, error) { panic("boom") }
-	_, err = transport.NewBase("c", decorate.Deps{}).
+	_, err = fixtures.Must(transport.NewBase[opController](fixtures.Decorations(), "c")).
 		Handler("op", panicking)(
 		t.Context(),
 		"",
@@ -150,7 +155,12 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 		<-ctx.Done()
 		return "", ctx.Err()
 	}
-	bounded := transport.NewBase("c", decorate.Deps{Timeout: 10 * time.Millisecond})
+	bounded := fixtures.Must(
+		transport.NewBase[opController](
+			decorate.Fixed(decorate.Deps{Timeout: 10 * time.Millisecond}),
+			"c",
+		),
+	)
 	_, err = bounded.Handler("op", slow)(t.Context(), "")
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
 }
@@ -190,4 +200,16 @@ func TestDecorations_ControllerTierFromConfig(t *testing.T) {
 	assert.NotNil(t, d.RateLimiter)
 	assert.NotNil(t, d.Bulkhead)
 	assert.True(t, d.ShedLoad)
+}
+
+// usersController is the test controller's contract: one operation, get.
+type usersController interface {
+	// Get handles a get.
+	Get(ctx context.Context, id string) (string, error)
+}
+
+// opController is a one-operation controller contract.
+type opController interface {
+	// Op handles the request.
+	Op(ctx context.Context, in string) (string, error)
 }

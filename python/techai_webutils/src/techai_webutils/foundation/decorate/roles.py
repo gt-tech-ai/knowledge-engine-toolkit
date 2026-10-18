@@ -73,11 +73,11 @@ class CrudOps[T, P, ID]:
 
     async def get(self, entity_id: ID) -> T:
         """Run Get through the subject."""
-        return await self._op.exec("Get", lambda: self._inner.get(entity_id))
+        return await self._op.exec("get", lambda: self._inner.get(entity_id))
 
     async def list(self, params: P, page: PageRequest) -> Page[T]:
         """Run List through the subject."""
-        return await self._op.exec("List", lambda: self._inner.list(params, page))
+        return await self._op.exec("list", lambda: self._inner.list(params, page))
 
     async def create(self, entity: T) -> T:
         """Run Create (validated) through Create's subject."""
@@ -86,7 +86,7 @@ class CrudOps[T, P, ID]:
             self._check(entity)
             return await self._inner.create(entity)
 
-        return await self._create.exec("Create", run)
+        return await self._create.exec("create", run)
 
     async def update(self, entity_id: ID, entity: T) -> T:
         """Run Update (validated) through the subject."""
@@ -95,11 +95,11 @@ class CrudOps[T, P, ID]:
             self._check(entity)
             return await self._inner.update(entity_id, entity)
 
-        return await self._op.exec("Update", run)
+        return await self._op.exec("update", run)
 
     async def delete(self, entity_id: ID) -> None:
         """Run Delete through the subject."""
-        await self._op.exec("Delete", lambda: self._inner.delete(entity_id))
+        await self._op.exec("delete", lambda: self._inner.delete(entity_id))
 
     def _check(self, entity: T) -> None:
         """Validate ``entity`` when a validator is set."""
@@ -109,4 +109,4 @@ class CrudOps[T, P, ID]:
 
 async def exists[ID](op: Subject, inner: ExistsBackend[ID], entity_id: ID) -> bool:
     """Run Exists through ``op``."""
-    return await op.exec("Exists", lambda: inner.exists(entity_id))
+    return await op.exec("exists", lambda: inner.exists(entity_id))

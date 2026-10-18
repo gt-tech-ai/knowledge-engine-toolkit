@@ -16,18 +16,29 @@ import (
 // can invalidate (interfaces.CacheInvalidator), so can the result, through the tier.
 func Decorate(
 	base interfaces.ByteCache,
+	decs decorate.Decorations,
 	name string,
-	deps decorate.Deps,
-) interfaces.ByteCache {
-	d := &decorated{base: base, Base: client.NewBase(name, deps)}
-	if m := deps.Metrics; m != nil {
+	opts ...client.Option,
+) (interfaces.ByteCache, error) {
+	b, err := client.NewBase[cacheOps](decs, name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	d := &decorated{base: base, Base: b}
+	if m := decs.Observability().Metrics; m != nil {
 		d.hits = m.Counter("cache_hits_total", "Total cache hits", "cache")
 		d.misses = m.Counter("cache_misses_total", "Total cache misses", "cache")
 	}
 	if inv, ok := base.(interfaces.CacheInvalidator); ok {
-		return &invalidating{decorated: d, inv: inv}
+		return &invalidating{decorated: d, inv: inv}, nil
 	}
-	return d
+	return d, nil
+}
+
+// cacheOps is the decorated cache's contract: the cache and its invalidation surface.
+type cacheOps interface {
+	interfaces.ByteCache
+	interfaces.CacheInvalidator
 }
 
 // decorated runs a ByteCache's operations through the client tier.
@@ -35,7 +46,7 @@ type decorated struct {
 	// base is the wrapped cache.
 	base interfaces.ByteCache
 
-	// hits and misses count Get outcomes; nil when the tier has no metrics.
+	// hits and misses count Get outcomes; nil without a metrics collaborator.
 	hits, misses interfaces.Counter
 
 	// Base runs each operation through the client tier.
@@ -47,7 +58,7 @@ var _ interfaces.ByteCache = (*decorated)(nil)
 // Get returns the cached value, or a miss when the key is absent or the tier refused.
 func (d *decorated) Get(ctx context.Context, key string) ([]byte, bool) {
 	var hit bool
-	v, err := d.Once(ctx, "get", func(c context.Context) ([]byte, error) {
+	v, err := d.ExecOnce(ctx, "get", func(c context.Context) ([]byte, error) {
 		v, ok := d.base.Get(c, key)
 		hit = ok
 		return v, nil

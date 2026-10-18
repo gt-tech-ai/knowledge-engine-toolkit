@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -20,6 +20,34 @@ from techai_webutils.workflows import WorkflowBase, tier
 
 if TYPE_CHECKING:
     from conftest import Observed
+
+
+class _Flows(Protocol):
+    """The test workflows' contract: one operation per shape tested."""
+
+    async def run(self) -> None:
+        """Run."""
+        ...
+
+    async def op(self) -> None:
+        """Run an operation."""
+        ...
+
+    async def read(self) -> None:
+        """Read."""
+        ...
+
+    async def command(self) -> None:
+        """Run a command."""
+        ...
+
+    async def saga(self) -> None:
+        """Run a saga."""
+        ...
+
+    async def inner(self) -> None:
+        """Run a nested command."""
+        ...
 
 
 def _tx_manager(events: list[str]) -> MagicMock:
@@ -72,16 +100,18 @@ async def test_exec_runs_an_operation_through_every_layer(observed: Observed) ->
         the series are labelled ``workflow=<name>, operation=<op>``; the entry log line is
         ``workflow.<op>``.
     """
-    base = WorkflowBase("ingest", deps=Deps(observability=observed.observability))
-
-    assert await base.exec("Run", AsyncMock(return_value=2)) == 2
-    [(name, _, attributes)] = observed.spans
-    assert name == "ingest.Run"
-    assert attributes == {"workflow.name": "ingest", "workflow.operation": "Run"}
-    observed.instruments["workflow_operations_total"].inc.assert_called_once_with(
-        1.0, workflow="ingest", operation="Run"
+    base = WorkflowBase(
+        _Flows, Decorations.fixed(Deps(observability=observed.observability)), "ingest"
     )
-    assert observed.logger.debug.call_args.args[0] == "workflow.Run"
+
+    assert await base.exec("run", AsyncMock(return_value=2)) == 2
+    [(name, _, attributes)] = observed.spans
+    assert name == "ingest.run"
+    assert attributes == {"workflow.name": "ingest", "workflow.operation": "run"}
+    observed.instruments["workflow_operations_total"].inc.assert_called_once_with(
+        1.0, workflow="ingest", operation="run"
+    )
+    assert observed.logger.debug.call_args.args[0] == "workflow.run"
     assert base.name == "ingest"
 
 
@@ -96,18 +126,18 @@ async def test_recovery_and_timeout() -> None:
       - A ``RuntimeError`` surfaces as ``InternalError``; a coded error passes unchanged; an
         operation slower than the timeout raises ``AppTimeoutError``.
     """
-    base = WorkflowBase("w", deps=Deps(timeout=0.01))
+    base = WorkflowBase(_Flows, Decorations.fixed(Deps(timeout=0.01)), "w")
 
     async def slow() -> int:
         await asyncio.sleep(1)
         return 0
 
     with pytest.raises(InternalError):
-        await base.exec("Op", AsyncMock(side_effect=RuntimeError("boom")))
+        await base.exec("op", AsyncMock(side_effect=RuntimeError("boom")))
     with pytest.raises(ConflictError):
-        await base.exec("Op", AsyncMock(side_effect=ConflictError("dup")))
+        await base.exec("op", AsyncMock(side_effect=ConflictError("dup")))
     with pytest.raises(AppTimeoutError):
-        await base.exec("Op", slow)
+        await base.exec("op", slow)
 
 
 @pytest.mark.asyncio
@@ -124,20 +154,20 @@ async def test_read_command_and_saga_shapes() -> None:
         return the body's result.
     """
     events: list[str] = []
-    base = WorkflowBase("w", _tx_manager(events))
+    base = WorkflowBase(_Flows, Decorations(), "w", _tx_manager(events))
 
     async def body() -> bool:
         await asyncio.sleep(0)
         events.append("body")
         return in_transaction()
 
-    assert await base.exec("Read", body) is False
-    assert await base.exec_tx("Command", body) is True
+    assert await base.exec("read", body) is False
+    assert await base.exec_tx("command", body) is True
 
     async def saga() -> bool:
         return await base.in_tx(body)
 
-    assert await base.exec("Saga", saga) is True
+    assert await base.exec("saga", saga) is True
     assert events == ["body", "begin", "body", "commit", "begin", "body", "commit"]
     assert in_transaction() is False
 
@@ -155,10 +185,10 @@ async def test_a_failing_body_rolls_back_and_keeps_the_error_code() -> None:
     """
     events: list[str] = []
     fail = AsyncMock(side_effect=ConflictError("dup"))
-    base = WorkflowBase("w", _tx_manager(events))
+    base = WorkflowBase(_Flows, Decorations(), "w", _tx_manager(events))
 
     with pytest.raises(ConflictError):
-        await base.exec_tx("Command", fail)
+        await base.exec_tx("command", fail)
     with pytest.raises(ConflictError):
         await base.in_tx(fail)
     assert events == ["begin", "rollback"] * 2
@@ -178,27 +208,27 @@ async def test_a_nested_or_unmanaged_transaction_fails_loud() -> None:
         ``InternalError``.
     """
     events: list[str] = []
-    base = WorkflowBase("w", _tx_manager(events))
+    base = WorkflowBase(_Flows, Decorations(), "w", _tx_manager(events))
     never = AsyncMock()
 
     async def nested_step() -> None:
         await base.in_tx(never)
 
     async def nested_command() -> None:
-        await base.exec_tx("Inner", never)
+        await base.exec_tx("inner", never)
 
     with pytest.raises(InternalError, match="already open"):
         await base.in_tx(nested_step)
     with pytest.raises(InternalError, match="already open"):
         await base.in_tx(nested_command)
     with pytest.raises(InternalError, match="transaction manager"):
-        await WorkflowBase("w").exec_tx("Command", never)
+        await WorkflowBase(_Flows, Decorations(), "w").exec_tx("command", never)
     never.assert_not_called()
     assert events == ["begin", "rollback"] * 2
 
 
 @pytest.mark.asyncio
-async def test_from_decorations_applies_the_config(observed: Observed) -> None:
+async def test_workflow_base_applies_the_config(observed: Observed) -> None:
     """The decoration config's ``workflows`` tier switches a workflow's layers by name.
 
     Why this test is important:
@@ -212,7 +242,7 @@ async def test_from_decorations_applies_the_config(observed: Observed) -> None:
     })
     decorations = Decorations(config, Collaborators(observability=observed.observability))
 
-    await WorkflowBase.from_decorations("quiet", decorations).exec("Run", AsyncMock())
-    await WorkflowBase.from_decorations("loud", decorations).exec("Run", AsyncMock())
+    await WorkflowBase(_Flows, decorations, "quiet").exec("run", AsyncMock())
+    await WorkflowBase(_Flows, decorations, "loud").exec("run", AsyncMock())
 
-    assert [name for name, _, _ in observed.spans] == ["loud.Run"]
+    assert [name for name, _, _ in observed.spans] == ["loud.run"]

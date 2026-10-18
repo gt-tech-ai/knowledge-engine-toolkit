@@ -24,6 +24,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -117,7 +118,7 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 		func(_ context.Context, fn func() error) error { return fn() },
 	).Times(4)
 	reg := promclient.NewRegistry()
-	b := client.NewBase("svc", decorate.Deps{
+	b := wireBase("svc", decorate.Deps{
 		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
 		Retrier:       countingRetrier(ctrl, 3),
 		Bulkhead:      bh,
@@ -147,7 +148,7 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 	assert.Equal(t, 3, calls)
 
 	calls = 0
-	_, err = b.Once(t.Context(), "create", func(context.Context) (int, error) {
+	_, err = b.ExecOnce(t.Context(), "create", func(context.Context) (int, error) {
 		calls++
 		return 0, transient
 	})
@@ -162,7 +163,7 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 	require.ErrorIs(t, err, transient)
 	assert.Equal(t, 1, calls)
 
-	bare, err := client.Base{}.Once(
+	bare, err := client.Base{}.ExecOnce(
 		t.Context(),
 		"x",
 		func(context.Context) (string, error) {
@@ -186,7 +187,7 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 //   - A failed open returns its error with the context already released.
 func TestClientBase_StreamDeadlineOutlivesTheOpen(t *testing.T) {
 	t.Parallel()
-	b := client.NewBase("svc", decorate.Deps{Timeout: time.Minute})
+	b := wireBase("svc", decorate.Deps{Timeout: time.Minute})
 
 	var streamCtx context.Context
 	got, release, err := b.Stream(t.Context(), "download",
@@ -236,7 +237,7 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 	baseLock.EXPECT().Acquire(gomock.Any(), "k").Return("tok", true, nil)
 	baseLock.EXPECT().Renew(gomock.Any(), "k", "tok").Return(true, nil)
 	baseLock.EXPECT().Release(gomock.Any(), "k", "tok").Return(nil)
-	lk := lock.Decorate(baseLock, "lock", deps)
+	lk := fixtures.Must(lock.Decorate(baseLock, decorate.Fixed(deps), "lock"))
 	token, acquired, err := lk.Acquire(ctx, "k")
 	require.NoError(t, err)
 	assert.Equal(t, "tok", token)
@@ -252,7 +253,7 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 	baseBuf.EXPECT().Append(gomock.Any(), "k", "m3", []byte("x")).Return(nil)
 	baseBuf.EXPECT().Prune(gomock.Any(), "k", "m2").Return(nil)
 	baseBuf.EXPECT().Delete(gomock.Any(), "k").Return(nil)
-	buf := replaybuffer.Decorate(baseBuf, "replay", deps)
+	buf := fixtures.Must(replaybuffer.Decorate(baseBuf, decorate.Fixed(deps), "replay"))
 	msgs, complete, err := buf.ReplayAfter(ctx, "k", "m1")
 	require.NoError(t, err)
 	assert.Equal(t, tail, msgs)
@@ -265,7 +266,7 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 	baseSrc := mocks.NewMockConnectorSource(ctrl)
 	baseSrc.EXPECT().ListPage(gomock.Any(), "t1", 10).Return(objects, "t2", nil)
 	baseSrc.EXPECT().TestConnection(gomock.Any()).Return(7, nil)
-	src := connector.Decorate(baseSrc, "connector", deps)
+	src := fixtures.Must(connector.Decorate(baseSrc, decorate.Fixed(deps), "connector"))
 	page, next, err := src.ListPage(ctx, "t1", 10)
 	require.NoError(t, err)
 	assert.Equal(t, objects, page)
@@ -280,7 +281,9 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 	basePub.EXPECT().
 		PublishBatch(gomock.Any(), "topic", [][]byte{[]byte("p")}).
 		Return(nil)
-	pub := messaging.Decorate(basePub, "publisher", deps)
+	pub := fixtures.Must(
+		messaging.Decorate(basePub, decorate.Fixed(deps), "publisher", client.Producer()),
+	)
 	require.ErrorIs(t, pub.Publish(ctx, "topic", []byte("p")), boom)
 	require.NoError(t, pub.PublishBatch(ctx, "topic", [][]byte{[]byte("p")}))
 
@@ -288,11 +291,18 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 	body.EXPECT().Close().Return(nil)
 	baseStorage := mocks.NewMockStorageClient(ctrl)
 	baseStorage.EXPECT().Download(gomock.Any(), "b", "k").Return(body, nil)
-	rc, err := storage.Decorate(baseStorage, "storage", deps).Download(ctx, "b", "k")
+	rc, err := fixtures.Must(storage.Decorate(baseStorage, decorate.Fixed(deps), "storage")).
+		Download(ctx, "b", "k")
 	require.NoError(t, err)
 	require.NoError(t, rc.Close())
 
-	store := analytics.Decorate(mocks.NewMockAnalyticsStore(ctrl), "analytics", deps)
+	store := fixtures.Must(
+		analytics.Decorate(
+			mocks.NewMockAnalyticsStore(ctrl),
+			decorate.Fixed(deps),
+			"analytics",
+		),
+	)
 	err = store.(interfaces.AnalyticsCompactor).Compact(
 		ctx, "cube", types.Grain("hour"), "org", time.Unix(0, 0),
 	)
@@ -349,7 +359,9 @@ func TestClientDecorate_CacheIsFailOpenAndCountsHits(t *testing.T) {
 	base := mocks.NewMockByteCache(ctrl)
 	base.EXPECT().Get(gomock.Any(), "present").Return([]byte("v"), true)
 	base.EXPECT().Get(gomock.Any(), "absent").Return(nil, false)
-	c := cache.Decorate(base, "authz", decorate.Deps{Observability: obs})
+	c := fixtures.Must(
+		cache.Decorate(base, decorate.Fixed(decorate.Deps{Observability: obs}), "authz"),
+	)
 	v, hit := c.Get(ctx, "present")
 	assert.True(t, hit)
 	assert.Equal(t, []byte("v"), v)
@@ -368,9 +380,11 @@ func TestClientDecorate_CacheIsFailOpenAndCountsHits(t *testing.T) {
 	open := mocks.NewMockCircuitBreaker(ctrl)
 	open.EXPECT().Execute(gomock.Any()).
 		Return(apperr.New(apperr.CodeUnavailable, "breaker open")).Times(2)
-	refused := cache.Decorate(mocks.NewMockByteCache(ctrl), "authz", decorate.Deps{
-		Breaker: open,
-	})
+	refused := fixtures.Must(
+		cache.Decorate(mocks.NewMockByteCache(ctrl), decorate.Fixed(decorate.Deps{
+			Breaker: open,
+		}), "authz"),
+	)
 	_, hit = refused.Get(ctx, "present")
 	assert.False(t, hit)
 	refused.Set(ctx, "k", []byte("v"), time.Minute)
@@ -383,7 +397,9 @@ func TestClientDecorate_CacheIsFailOpenAndCountsHits(t *testing.T) {
 		*mocks.MockByteCache
 		*mocks.MockCacheInvalidator
 	}{mocks.NewMockByteCache(ctrl), inv}
-	decorated := cache.Decorate(both, "authz", decorate.Deps{})
+	decorated := fixtures.Must(
+		cache.Decorate(both, decorate.Fixed(decorate.Deps{}), "authz"),
+	)
 	invalidating, ok := decorated.(interfaces.CacheInvalidator)
 	require.True(t, ok)
 	require.ErrorIs(t, invalidating.InvalidatePrefix(ctx, "user:"), boom)
@@ -416,7 +432,13 @@ func TestClientDecorate_SecretsAndHandlersAreObserved(t *testing.T) {
 	base := mocks.NewMockSource(ctrl)
 	base.EXPECT().Get(gomock.Any(), ref).Return(types.NewSecret("s3cr3t"), nil)
 	base.EXPECT().Put(gomock.Any(), ref, gomock.Any()).Return(boom)
-	src := secrets.Decorate(base, "secrets", decorate.Deps{Observability: obs})
+	src := fixtures.Must(
+		secrets.Decorate(
+			base,
+			decorate.Fixed(decorate.Deps{Observability: obs}),
+			"secrets",
+		),
+	)
 	got, err := src.Get(ctx, ref)
 	require.NoError(t, err)
 	assert.Equal(t, "s3cr3t", got.Reveal())
@@ -425,11 +447,11 @@ func TestClientDecorate_SecretsAndHandlersAreObserved(t *testing.T) {
 	assert.InDelta(t, 1.0, clientOpCounter(t, reg, "put"), 0)
 
 	calls := 0
-	handlers := client.NewHandlerBase("messaging.handler", decorate.Deps{
+	handlers := wireBase("messaging.handler", decorate.Deps{
 		Observability: obs,
 		Retrier:       countingRetrier(ctrl, 3),
 		Timeout:       time.Minute,
-	})
+	}, client.Handler())
 	err = handlers.Do(ctx, "orders", func(context.Context) error {
 		calls++
 		return boom
@@ -448,8 +470,8 @@ func TestClientDecorate_SecretsAndHandlersAreObserved(t *testing.T) {
 //     outbound calls.
 //
 // What it tests:
-//   - NewBase opens CLIENT spans, NewProducerBase PRODUCER spans and NewHandlerBase
-//     CONSUMER spans, each named "<name>.<op>".
+//   - A plain base opens CLIENT spans, a client.Producer() base PRODUCER spans
+//     and a client.Handler() base CONSUMER spans, each named "<name>.<op>".
 func TestClientBase_MessagingSpansCarryTheirRole(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
@@ -472,14 +494,14 @@ func TestClientBase_MessagingSpansCarryTheirRole(t *testing.T) {
 	deps := decorate.Deps{Observability: decorate.Observability{Tracer: tracer}}
 	noop := func(context.Context) error { return nil }
 
-	require.NoError(t, client.NewBase("store", deps).Do(t.Context(), "put", noop))
+	require.NoError(t, wireBase("store", deps).Do(t.Context(), "put", noop))
 	require.NoError(
 		t,
-		client.NewProducerBase("bus", deps).Do(t.Context(), "orders", noop),
+		wireBase("bus", deps, client.Producer()).Do(t.Context(), "orders", noop),
 	)
 	require.NoError(
 		t,
-		client.NewHandlerBase("bus.handler", deps).Do(t.Context(), "orders", noop),
+		wireBase("bus.handler", deps, client.Handler()).Do(t.Context(), "orders", noop),
 	)
 	assert.Equal(t, map[string]interfaces.SpanKind{
 		"store.put":          interfaces.SpanKindClient,
@@ -502,7 +524,7 @@ func TestClientBase_MessagingSpansCarryTheirRole(t *testing.T) {
 //   - A failed open returns its own error and its context is canceled.
 func TestClientBase_OpenBoundsOnlyTheOpen(t *testing.T) {
 	t.Parallel()
-	base := client.NewBase("stream", decorate.Deps{Timeout: 20 * time.Millisecond})
+	base := wireBase("stream", decorate.Deps{Timeout: 20 * time.Millisecond})
 	ready := func(ctx context.Context) (context.Context, error) { return ctx, nil }
 
 	t.Run("within the timeout", func(t *testing.T) {
@@ -553,4 +575,10 @@ func TestClientBase_OpenBoundsOnlyTheOpen(t *testing.T) {
 		require.ErrorIs(t, err, boom)
 		assert.Error(t, (<-opened).Err(), "the failed open's context is canceled")
 	})
+}
+
+// wireBase is the client Base named name whose every operation runs on deps, for tests
+// that drive a client's chain with operation names of their own.
+func wireBase(name string, deps decorate.Deps, opts ...client.Option) client.Base {
+	return fixtures.Must(client.NewWireBase(decorate.Fixed(deps), name, opts...))
 }

@@ -16,10 +16,21 @@ import (
 // is not an operation to retry, trace or count.
 func Decorate(
 	base interfaces.AnalyticsStore,
+	decs decorate.Decorations,
 	name string,
-	deps decorate.Deps,
-) interfaces.AnalyticsStore {
-	return &decorated{AnalyticsStore: base, Base: client.NewBase(name, deps)}
+	opts ...client.Option,
+) (interfaces.AnalyticsStore, error) {
+	b, err := client.NewBase[analyticsOps](decs, name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &decorated{AnalyticsStore: base, Base: b}, nil
+}
+
+// analyticsOps is the decorated store's contract: the store and its compactor.
+type analyticsOps interface {
+	interfaces.AnalyticsStore
+	interfaces.AnalyticsCompactor
 }
 
 // decorated runs the store's data operations through the client tier.

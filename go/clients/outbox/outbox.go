@@ -59,18 +59,14 @@ func DefaultConfig() Config {
 	return Config{S3: outboxs3.Config{KeyTemplate: outboxs3.DefaultKeyTemplate}}
 }
 
-// tier builds the client tier for the SDK client kind of the sink cfg names.
-func tier(kind string, cfg Config, deps Deps) (client.Base, error) {
+// tier builds the client tier for the SDK client kind of the sink cfg names, one
+// operation per method of its SDK seam A.
+func tier[A any](kind string, cfg Config, deps Deps) (client.Base, error) {
 	name := cfg.Name
 	if name == "" {
 		name = "outbox"
 	}
-	name += "." + kind
-	d, err := deps.Deps(client.Tier(), name)
-	if err != nil {
-		return client.Base{}, err
-	}
-	return client.NewBase(name, d), nil
+	return client.NewBase[A](deps.Decorations, name+"."+kind)
 }
 
 // kinds is the outbox-sink backend table. Each real backend runs its SDK client
@@ -88,7 +84,7 @@ func kinds() client.Kinds[Config, Deps, interfaces.OutboxSink] {
 			) (interfaces.OutboxSink, error) {
 				api := deps.SQSAPI
 				if api != nil {
-					b, err := tier("sqs", cfg, deps)
+					b, err := tier[outboxsqs.API]("sqs", cfg, deps)
 					if err != nil {
 						return nil, err
 					}
@@ -101,7 +97,7 @@ func kinds() client.Kinds[Config, Deps, interfaces.OutboxSink] {
 			) (interfaces.OutboxSink, error) {
 				api := deps.S3API
 				if api != nil {
-					b, err := tier("s3", cfg, deps)
+					b, err := tier[outboxs3.API]("s3", cfg, deps)
 					if err != nil {
 						return nil, err
 					}

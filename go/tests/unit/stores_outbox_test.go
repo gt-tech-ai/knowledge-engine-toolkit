@@ -51,7 +51,7 @@ func TestOutboxStoreNewFromConfig_StubBootsAndIsDecorated(t *testing.T) {
 	n, err := s.DeleteSentBefore(t.Context(), time.Now())
 	require.NoError(t, err)
 	assert.Zero(t, n)
-	for _, op := range []string{"Claim", "Stats", "DeleteSentBefore"} {
+	for _, op := range []string{"claim", "stats", "delete_sent_before"} {
 		assert.InDelta(t, 1, storeOpCounter(t, reg, op), 0, op)
 	}
 

@@ -52,7 +52,7 @@ type Config struct {
 	SecretAccessKey string
 
 	// Handlers runs each handler call through the handler tier
-	// (client.NewHandlerBase); the zero Base runs handlers undecorated.
+	// (client.NewWireBase with client.Handler); the zero Base runs handlers undecorated.
 	Handlers client.Base
 
 	// NackDelay, when Max is positive, hides a message whose handler failed for a

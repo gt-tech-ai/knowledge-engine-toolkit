@@ -3,18 +3,58 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
+from typing import TYPE_CHECKING, Protocol
+from unittest.mock import AsyncMock, call
 
 import pytest
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.errors.errors import ConflictError, InternalError
-from techai_webutils.foundation.decorate import Deps, Layer
+from techai_webutils.foundation.decorate import Decorations, Deps, Layer
 from techai_webutils.pipelines import PipelineBase, tier
 
 if TYPE_CHECKING:
     from conftest import Observed
+
+
+class _Stages(Protocol):
+    """The test pipeline's contract: one operation per stage tested."""
+
+    async def parse(self, x: int) -> int:
+        """Parse."""
+        ...
+
+    async def enrich(self, x: int) -> int:
+        """Enrich."""
+        ...
+
+    async def a(self, x: int) -> int:
+        """Stage a."""
+        ...
+
+    async def b(self, x: int) -> int:
+        """Stage b."""
+        ...
+
+    async def c(self, x: int) -> int:
+        """Stage c."""
+        ...
+
+    async def both(self, x: int) -> list[int]:
+        """Fan out a and b."""
+        ...
+
+    async def f(self, x: int) -> list[int]:
+        """Fan out x."""
+        ...
+
+    async def x(self, x: int) -> int:
+        """Stage x."""
+        ...
+
+    async def s(self, x: int) -> int:
+        """Stage s."""
+        ...
 
 
 def test_tier_order_matches_go() -> None:
@@ -43,18 +83,21 @@ async def test_then_chains_decorated_stages(observed: Observed) -> None:
       - A pipeline's latency breakdown needs one span per stage.
 
     What it tests:
-      - ``parse.then(enrich)`` returns enrich(parse(x)) and opens ``parse.Execute`` then
-        ``enrich.Execute`` with the pipeline series.
+      - ``parse.then(enrich)`` returns enrich(parse(x)), opens ``p.parse`` then ``p.enrich``,
+        and counts each stage once under the pipeline's series.
     """
-    base = PipelineBase(Deps(observability=observed.observability))
+    base = PipelineBase(
+        _Stages, Decorations.fixed(Deps(observability=observed.observability)), "p"
+    )
     parse = base.stage("parse", AsyncMock(side_effect=lambda x: x + 1))
     enrich = base.stage("enrich", AsyncMock(side_effect=lambda x: x * 10))
 
     assert await parse.then(enrich).execute(1) == 20
-    assert [name for name, _, _ in observed.spans] == ["parse.Execute", "enrich.Execute"]
-    observed.instruments["pipeline_operations_total"].inc.assert_called_once_with(
-        1.0, pipeline="enrich", operation="Execute"
-    )
+    assert [name for name, _, _ in observed.spans] == ["p.parse", "p.enrich"]
+    assert observed.instruments["pipeline_operations_total"].inc.call_args_list == [
+        call(1.0, pipeline="p", operation="parse"),
+        call(1.0, pipeline="p", operation="enrich"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -68,7 +111,7 @@ async def test_a_failing_stage_stops_the_chain() -> None:
       - ``ConflictError`` from the first stage propagates; the second is never awaited; an
         uncoded error is coded INTERNAL by recovery.
     """
-    base = PipelineBase()
+    base = PipelineBase(_Stages, Decorations(), "p")
     later = AsyncMock()
     failing = base.stage("a", AsyncMock(side_effect=ConflictError("dup")))
 
@@ -90,7 +133,7 @@ async def test_fan_out_runs_stages_concurrently_in_order() -> None:
       - Two stages that each wait for the other both finish, and the outputs keep the
         stages' order; a failing stage fails the fan-out with its own coded error.
     """
-    base = PipelineBase()
+    base = PipelineBase(_Stages, Decorations(), "p")
     both = asyncio.Barrier(2)
 
     async def first(x: int) -> str:
@@ -120,7 +163,7 @@ def test_wiring_bugs_fail_loud() -> None:
     What it tests:
       - ``stage`` with None and ``then`` with None raise ``AppValueError``.
     """
-    base = PipelineBase()
+    base = PipelineBase(_Stages, Decorations(), "p")
     with pytest.raises(AppValueError):
         base.stage("s", None)  # type: ignore[arg-type]
     with pytest.raises(AppValueError):

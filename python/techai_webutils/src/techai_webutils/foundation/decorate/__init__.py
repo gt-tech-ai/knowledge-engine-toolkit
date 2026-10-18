@@ -7,9 +7,11 @@ a ``Subject`` built from the component's ``Deps``. ``Decorations`` builds those 
 tuned by config while its order stays the tier's.
 """
 
+from techai_webutils.foundation.decorate.contract import ops_of
 from techai_webutils.foundation.decorate.decorations import (
     Collaborators,
     Decorations,
+    Resolved,
     build,
 )
 from techai_webutils.foundation.decorate.middleware import (
@@ -29,17 +31,19 @@ from techai_webutils.foundation.decorate.middleware import (
     new_timeout,
     new_tracing,
 )
-from techai_webutils.foundation.decorate.scope import Operation, Scope
 from techai_webutils.foundation.decorate.tier import (
+    Chains,
     Deps,
     Layer,
     Observability,
     Subject,
     Tier,
+    View,
 )
 
 __all__ = [
     "Authorizer",
+    "Chains",
     "Collaborators",
     "Decorations",
     "Deps",
@@ -47,10 +51,10 @@ __all__ = [
     "Observability",
     "OpMiddleware",
     "OpThunk",
-    "Operation",
-    "Scope",
+    "Resolved",
     "Subject",
     "Tier",
+    "View",
     "build",
     "chain",
     "exec_op",
@@ -64,4 +68,5 @@ __all__ = [
     "new_retry",
     "new_timeout",
     "new_tracing",
+    "ops_of",
 ]

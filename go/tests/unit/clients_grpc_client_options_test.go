@@ -96,7 +96,7 @@ func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
 			var unary, stream []metadata.MD
 			conn := dialDecorated(
 				t,
-				client.NewBase("probe", fastRetrier(t)),
+				wireBase("probe", fastRetrier(t)),
 				tc.token,
 				func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn,
 					_ grpc.UnaryInvoker, _ ...grpc.CallOption,
@@ -168,7 +168,7 @@ func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 		t.Parallel()
 		calls := 0
 		bad := status.Error(codes.InvalidArgument, "bad query")
-		conn := dialDecorated(t, client.NewBase("probe", fastRetrier(t)), "",
+		conn := dialDecorated(t, wireBase("probe", fastRetrier(t)), "",
 			answers(&calls, bad, bad), noStream)
 		err := conn.Invoke(context.Background(), "/test.Service/Unary", nil, nil)
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -180,7 +180,7 @@ func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 		t.Parallel()
 		calls := 0
 		down := status.Error(codes.Unavailable, "down")
-		conn := dialDecorated(t, client.NewBase("probe", fastRetrier(t)), "",
+		conn := dialDecorated(t, wireBase("probe", fastRetrier(t)), "",
 			answers(&calls, down, down), noStream)
 		require.NoError(
 			t,
@@ -194,10 +194,7 @@ func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 		calls := 0
 		conn := dialDecorated(
 			t,
-			client.NewBase(
-				"probe",
-				decorate.Deps{Breaker: fixtures.StubCircuitBreaker(true)},
-			),
+			wireBase("probe", decorate.Deps{Breaker: fixtures.StubCircuitBreaker(true)}),
 			"",
 			answers(&calls),
 			noStream,

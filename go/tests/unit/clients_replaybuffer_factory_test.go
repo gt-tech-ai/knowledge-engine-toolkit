@@ -12,6 +12,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/replaybuffer"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	pkgmocks "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -80,11 +81,9 @@ func TestReplayBufferTimeoutDecorator(t *testing.T) {
 			return ctx.Err()
 		})
 
-	buf := replaybuffer.Decorate(
-		base,
-		"test",
-		decorate.Deps{Timeout: 20 * time.Millisecond},
-	)
+	buf := fixtures.Must(replaybuffer.Decorate(
+		base, decorate.Fixed(decorate.Deps{Timeout: 20 * time.Millisecond}), "test",
+	))
 
 	done := make(chan error, 1)
 	go func() { done <- buf.Append(context.Background(), "k", "msg-1", []byte("x")) }()

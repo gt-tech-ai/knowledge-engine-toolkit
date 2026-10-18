@@ -13,17 +13,17 @@ from typing import TYPE_CHECKING
 
 from techai_webutils.core.errors.errors import AppError
 from techai_webutils.core.interfaces.execution import (
+    AnyJob,
     BatchResult,
     JobMeta,
     StepResult,
     StepStatus,
 )
-from techai_webutils.foundation.decorate import Deps, Layer, Tier
+from techai_webutils.foundation.decorate import Layer, Tier
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from techai_webutils.core.interfaces.execution import AnyJob
     from techai_webutils.foundation.decorate import Decorations, Subject
 
 
@@ -36,39 +36,22 @@ def tier() -> Tier:
 
 
 class JobBase:
-    """Builds decorated jobs: each runs as ``Execute`` through the tier under its name."""
+    """Builds one decorated job, run as ``execute`` through the tier (Go ``job.Base``).
 
-    __slots__ = ("_decorations", "_deps", "_prefix")
+    Build one job per base, so each job is its own component in the config.
+    """
 
-    def __init__(self, deps: Deps | None = None) -> None:
-        """Bind the collaborators every job shares (none decorates nothing but recovery)."""
-        self._deps = deps or Deps()
-        self._decorations: Decorations | None = None
-        self._prefix = ""
+    __slots__ = ("_recover", "_subject")
 
-    @classmethod
-    def from_decorations(cls, name: str, decorations: Decorations) -> JobBase:
-        """Return the base whose jobs each take their own layers from ``decorations``.
+    def __init__(self, decorations: Decorations, name: str) -> None:
+        """Bind the job ``name``, its operation resolved as ``<name>.execute`` (Go ``NewBase``)."""
+        self._subject = decorations.subject_of(tier(), name, AnyJob)
+        self._recover = not decorations.resolve(tier(), f"{name}.execute").skip_recovery
 
-        A job named ``job`` is the job-tier component ``<name>.<job>`` (Go ``NewBaseFrom``), so
-        the config can tune one job, or every job under ``name``.
-        """
-        base = cls()
-        base._decorations = decorations
-        base._prefix = name
-        return base
-
-    def named(self, sub: str) -> JobBase:
-        """Return the base whose components sit beneath ``sub`` (Go ``Base.Named``).
-
-        From a base of prefix ``events``, ``named("sweep")`` makes a job ``reap`` the component ``events.sweep.reap``. A base built from
-        shared Deps is returned unchanged.
-        """
-        if self._decorations is None:
-            return self
-        return type(self).from_decorations(
-            f"{self._prefix}.{sub}" if self._prefix else sub, self._decorations
-        )
+    @property
+    def name(self) -> str:
+        """The job's name."""
+        return self._subject.name
 
     def wrap(self, job: AnyJob) -> AnyJob:
         """Return ``job`` run through the tier."""
@@ -76,13 +59,7 @@ class JobBase:
 
     def func(self, meta: JobMeta, run: Callable[[], Awaitable[BatchResult]]) -> AnyJob:
         """Return the job ``meta`` whose ``run`` runs through the tier."""
-        name, deps = meta.name, self._deps
-        if self._decorations is not None:
-            name = f"{self._prefix}.{meta.name}" if self._prefix else meta.name
-            deps = self._decorations.resolve(tier(), name)
-        return _DecoratedJob(
-            meta, run, tier().subject(name, deps), recover=not deps.skip_recovery
-        )
+        return _DecoratedJob(meta, run, self._subject, recover=self._recover)
 
 
 class _DecoratedJob:
@@ -111,7 +88,7 @@ class _DecoratedJob:
     async def execute(self) -> BatchResult:
         """Run the job through the tier; with recovery a failed run is one FAIL result."""
         try:
-            return await self._op.exec("Execute", self._run)
+            return await self._op.exec("execute", self._run)
         except AppError as exc:
             if not self._recover:
                 raise

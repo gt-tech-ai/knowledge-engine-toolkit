@@ -13,8 +13,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from techai_webutils.clients.client import ClientBase
-from techai_webutils.clients.client import tier as client_tier
+from techai_webutils.clients.client import ClientBase, handler
 from techai_webutils.clients.messaging.decorated import decorate
 from techai_webutils.clients.messaging.memory import (
     InMemoryBroker,
@@ -67,11 +66,7 @@ def new_messaging_from_config(
     subscriber; None gives the publisher its own. The SQS backend is imported lazily.
     """
     decorations = decorations or Decorations()
-    return decorate(
-        _publisher(config, broker),
-        config.name,
-        decorations.deps(client_tier(), config.name),
-    )
+    return decorate(_publisher(config, broker), decorations, config.name)
 
 
 def new_messaging_subscriber_from_config(
@@ -87,10 +82,7 @@ def new_messaging_subscriber_from_config(
     from ``decorations``. ``broker`` connects a memory subscriber to a memory publisher.
     """
     decorations = decorations or Decorations()
-    handler_name = f"{config.name}.handler"
-    handlers = ClientBase.handler(
-        config.name, decorations.deps(client_tier(), handler_name)
-    )
+    handlers = ClientBase.wire(decorations, f"{config.name}.handler", handler())
     if config.kind is MessagingKind.SQS:
         # Lazy import: skip aiobotocore until selected.
         from techai_webutils.clients.messaging.sqs.sqs_subscriber import SQSSubscriber  # noqa: PLC0415

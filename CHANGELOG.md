@@ -6,6 +6,55 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+Python: `techai-webutils` 0.6.0. Breaking: every tier base is now built from a contract, and the
+operation-value API of 0.0.12–0.0.13 is removed.
+
+### Changed
+
+- Every tier base is built from its contract: `<tier>.NewBase[C](decs, name, …) (Base, error)`
+  (Python `XBase(contract, decorations, name)`). Each method of `C` is one operation, decorated
+  as `<name>.<op>` where `op` is the method name in snake_case (`decorate.OpName`: `FindByKey` →
+  `find_by_key`). Running an op the contract does not declare fails `INTERNAL`. A non-interface
+  contract is an error.
+- Every tier package has the same layout: `<tier>.go` (`Tier()`, `Base`, `NewBase`) and
+  `roles.go` (role compositions as `Base` methods). The same role names recur across tiers:
+  `CRUD`, `CRUDNoList`, `ReadListExist` and `Resource` on store, repository and service;
+  `Outbox` on store and repository (one `decorate.NewOutbox`); `Resource(next)` on pipeline and
+  workflow. `repository.Cached` and `store.Resource`'s funcs moved to `(b Base) Cached` and
+  `(b Base) FromFuncs`.
+- `decorate.Subject` has the same views at every tier: `Once()` (no retry), `Observed()`,
+  `Streaming()` (no retry, no timeout), `Component()` (any op on the component's chain) and
+  `Timeout(op)`, plus `Exec` / `ExecOnce`. An op shares its component's breaker, bulkhead and
+  rate limiter unless its own override enables one.
+- `decorate.NewSubject(tier, name, ops, adjust...)` and `decorate.SubjectOf[C]`; nil ops gives a
+  wire subject for op names that come from the wire. `client.NewWireBase(decs, name, opts...)`
+  with `client.Producer()`, `client.Handler()` and `client.AtMostOnce()` replaces
+  `NewProducerBase` / `NewHandlerBase`; `client.Kinds.Decorate` takes `(base, decs, name,
+  opts...)`.
+- A job has one base: `job.NewBase(decs, name)` with op `execute`; a gate's op is `run`.
+- `decorate.Fixed(deps)` builds `Decorations` with fixed deps for tests;
+  `decorate.Decorations.Inventory()` (Python `inventory()`) lists every resolved component and
+  op with its layers and source config keys.
+- Op labels in spans, metrics and logs are now snake_case contract method names, for example
+  storage `presign_url`, `create_multipart_upload` and `list_objects_page_token`; outbox
+  `get_queue_url`, `send_message_batch` and `put_object`; outbox store `claim`, `stats` and
+  `delete_sent_before`.
+- A zero `Base` is undecorated at every tier (no recovery). Tests build bases with
+  `fixtures.Must(x.NewBase[C](fixtures.Decorations(), "test"))`.
+
+### Removed
+
+- Go: `interfaces.Op` and its mock; `store.Query` / `Statement`, `repository.Query` /
+  `Command`, `service.Op`, `workflow.Read` / `Command` / `Saga`, `client.Call` / `CallOnce`;
+  `decorate.Scope`, `Operation`, `OpFunc`; `store.Decorate`, `outbox.Decorate`,
+  `repository.DecoratedFromConfig`, `repository.Settings` / `Deps`; the `NewBaseFrom`
+  constructors, `client.Once`, `pipeline.Named` / `job.Named` and `pipeline.Subject(name)`;
+  `tools/decorgen`, `tools/opmockgen` and `tools/internal`. `interfaces.OpService` stays.
+- Python: `core.interfaces.op`, `foundation.decorate.scope`, the client `decorate` /
+  `decorate_from_decorations` proxy, every `from_decorations`, `named`, the
+  `query` / `command` / `read` / `saga` / `op` builders, `op_service` / `OpServiceImpl`, and
+  `ClientBase.producer` / `handler` / `once`. `core.interfaces.op_service` stays.
+
 ## [0.0.13] - 2026-10-18
 
 Python: unchanged (`techai-webutils` 0.5.5).

@@ -100,7 +100,7 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 		var calls atomic.Int32
 		var tp atomic.Value
 		url := probeServer(t, &calls, &tp, down, down)
-		_, err := probeClient(url, client.NewBase("probe", fastRetrier(t))).
+		_, err := probeClient(url, wireBase("probe", fastRetrier(t))).
 			CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
 		require.NoError(t, err)
 		assert.EqualValues(t, 3, calls.Load())
@@ -113,7 +113,7 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 		url := probeServer(t, &calls, &tp, down, down)
 		_, err := probeClientAt(
 			url,
-			client.NewBase("probe", fastRetrier(t)),
+			wireBase("probe", fastRetrier(t)),
 			connect.IdempotencyUnknown,
 		).CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
 		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
@@ -125,7 +125,7 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 		var tp atomic.Value
 		bad := connect.NewError(connect.CodeInvalidArgument, apperr.Sentinel("bad query"))
 		url := probeServer(t, &calls, &tp, bad, bad)
-		_, err := probeClient(url, client.NewBase("probe", fastRetrier(t))).
+		_, err := probeClient(url, wireBase("probe", fastRetrier(t))).
 			CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 		assert.Contains(t, err.Error(), "bad query")
@@ -136,7 +136,7 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 		var calls atomic.Int32
 		var tp atomic.Value
 		url := probeServer(t, &calls, &tp)
-		base := client.NewBase(
+		base := wireBase(
 			"probe",
 			decorate.Deps{Breaker: fixtures.StubCircuitBreaker(true)},
 		)

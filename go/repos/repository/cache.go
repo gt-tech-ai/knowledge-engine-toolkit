@@ -35,13 +35,13 @@ func CacheKey(name string, id any) string {
 // Cached returns store with a read-through entity cache: Get reads the cache first and
 // fills it on a miss (concurrent misses for one id share one read), Exists answers a hit
 // from the cache, Create primes it when c.IDOf is set, and Update and Delete evict the
-// entity. List always reads the store. name keys the entries (CacheKey).
-func Cached[T, P any, ID comparable](
+// entity. List always reads the store. The repository's name keys the entries
+// (CacheKey). Compose it under a role: b.CRUD(b.Cached(store, c)).
+func (b Base) Cached[T, P any, ID comparable](
 	store interfaces.Store[T, P, ID],
-	name string,
 	c Cache[T, ID],
 ) interfaces.Store[T, P, ID] {
-	return &cached[T, P, ID]{Store: store, cache: c, name: name}
+	return &cached[T, P, ID]{Store: store, cache: c, name: b.Name()}
 }
 
 // cached is the read-through cache over a store.

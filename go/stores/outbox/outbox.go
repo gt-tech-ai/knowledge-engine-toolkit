@@ -80,11 +80,11 @@ func NewFromConfig(
 	if name == "" {
 		name = "outbox"
 	}
-	layers, err := deps.Deps(store.Tier(), name)
+	b, err := store.NewBase[interfaces.OutboxStore](deps.Decorations, name, deps.DB)
 	if err != nil {
 		return nil, err
 	}
-	return Decorate(s, name, layers), nil
+	return b.Outbox(s), nil
 }
 
 // newPostgres builds the store over cfg.Postgres's table on deps.DB.

@@ -149,7 +149,7 @@ async def run_gate(gate: Gate) -> BatchResult:
     A gate built with ``decorate`` runs through the gate tier as its ``Run`` operation.
     """
     if gate.op is not None:
-        return await gate.op.exec("Run", lambda: _run(gate))
+        return await gate.op.exec("run", lambda: _run(gate))
     return await _run(gate)
 
 

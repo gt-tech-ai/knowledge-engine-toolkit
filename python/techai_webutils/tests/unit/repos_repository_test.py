@@ -2,20 +2,28 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from techai_webutils.core.domain_types.types import Page, PageRequest
 from techai_webutils.core.errors.errors import NotFoundError
+from techai_webutils.core.interfaces.repository import Repository
 from techai_webutils.core.interfaces.retrier import Retrier
 from techai_webutils.core.interfaces.store import Store
-from techai_webutils.foundation.decorate import Deps, Layer
+from techai_webutils.foundation.decorate import Decorations, Deps, Layer
 from techai_webutils.repos import DelegatingRepository, RepositoryBase, tier
 
 if TYPE_CHECKING:
     from conftest import Observed
+
+
+class _Users(Repository[Any, Any, Any]):
+    """The test repository's contract: CRUD plus one custom query."""
+
+    async def find_by_email(self) -> str | None:
+        """Find a user by email."""
 
 
 def _store() -> MagicMock:
@@ -65,13 +73,15 @@ async def test_crud_runs_each_call_through_the_tier(observed: Observed) -> None:
     """Every CRUD call reaches the store and is observed under its operation name.
 
     Why this test is important:
-      - Repository dashboards break down latency by operation (Go names: Get, List, …).
+      - Repository dashboards break down latency by operation (the contract methods: get, list, …).
 
     What it tests:
       - Each call returns the store's answer, and the spans are ``users.<Op>`` in call order.
     """
     store = _store()
-    repo = RepositoryBase("users", Deps(observability=observed.observability)).crud(store)
+    repo = RepositoryBase(
+        _Users, Decorations.fixed(Deps(observability=observed.observability)), "users"
+    ).crud(store)
     page = PageRequest()
 
     assert await repo.get("1") == "e1"
@@ -81,7 +91,7 @@ async def test_crud_runs_each_call_through_the_tier(observed: Observed) -> None:
     await repo.delete("1")
     assert await repo.exists("1") is True
 
-    ops = ["Get", "List", "Create", "Update", "Delete", "Exists"]
+    ops = ["get", "list", "create", "update", "delete", "exists"]
     assert [name for name, _, _ in observed.spans] == [f"users.{op}" for op in ops]
 
 
@@ -96,7 +106,9 @@ async def test_create_is_never_retried() -> None:
       - With a retrier, Get calls it and Create does not.
     """
     retrier = _retrier()
-    repo = RepositoryBase("users", Deps(retrier=retrier)).crud(_store())
+    repo = RepositoryBase(_Users, Decorations.fixed(Deps(retrier=retrier)), "users").crud(
+        _store()
+    )
 
     await repo.get("1")
     await repo.create("e")
@@ -114,17 +126,19 @@ async def test_errors_pass_unchanged_and_custom_queries_are_decorated(
       - Services branch on NOT_FOUND; a custom query must be observed like CRUD.
 
     What it tests:
-      - ``NotFoundError`` propagates from Get; ``exec("FindByEmail", …)`` returns the query's
+      - ``NotFoundError`` propagates from Get; ``exec("find_by_email", …)`` returns the query's
         result in a ``users.FindByEmail`` span; the base reports its name.
     """
     store = _store()
     store.get.side_effect = NotFoundError("user", id="1")
-    base = RepositoryBase("users", Deps(observability=observed.observability))
+    base = RepositoryBase(
+        _Users, Decorations.fixed(Deps(observability=observed.observability)), "users"
+    )
 
     with pytest.raises(NotFoundError):
         await base.crud(store).get("1")
-    assert await base.exec("FindByEmail", AsyncMock(return_value="u")) == "u"
-    assert observed.spans[-1][0] == "users.FindByEmail"
+    assert await base.exec("find_by_email", AsyncMock(return_value="u")) == "u"
+    assert observed.spans[-1][0] == "users.find_by_email"
     assert base.name == "users"
 
 
@@ -138,7 +152,7 @@ async def test_delegating_repository_serves_crud_from_the_decorated_one() -> Non
     What it tests:
       - Every CRUD call on a ``DelegatingRepository`` reaches the inner repository.
     """
-    inner = RepositoryBase("users", Deps()).crud(_store())
+    inner = RepositoryBase(_Users, Decorations.fixed(Deps()), "users").crud(_store())
     repo = DelegatingRepository(inner)
 
     assert await repo.get("1") == "e1"

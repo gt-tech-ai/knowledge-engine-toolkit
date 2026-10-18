@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,12 +15,23 @@ from techai_webutils.core.errors.errors import (
     InternalError,
     InvalidInputError,
 )
+from techai_webutils.core.interfaces.crud_service import CrudService
 from techai_webutils.core.interfaces.repository import Repository
-from techai_webutils.foundation.decorate import Deps, Layer
+from techai_webutils.foundation.decorate import Decorations, Deps, Layer
 from techai_webutils.services import DelegatingCrudService, ServiceBase, tier
 
 if TYPE_CHECKING:
     from conftest import Observed
+
+
+class _Orders(CrudService[Any, Any, Any]):
+    """The test service's contract: CRUD plus two domain operations."""
+
+    async def refund(self) -> None:
+        """Refund an order."""
+
+    async def slow(self) -> None:
+        """Wait past the deadline."""
 
 
 def _repo() -> MagicMock:
@@ -72,9 +83,9 @@ async def test_crud_runs_through_the_tier_and_validates(observed: Observed) -> N
         raises ``InvalidInputError`` from Create and Update without reaching the repository.
     """
     repo = _repo()
-    svc = ServiceBase("orders", Deps(observability=observed.observability)).crud(
-        repo, _reject_blank
-    )
+    svc = ServiceBase(
+        _Orders, Decorations.fixed(Deps(observability=observed.observability)), "orders"
+    ).crud(repo, _reject_blank)
 
     assert await svc.get("1") == "e1"
     assert (await svc.list(None, PageRequest())).total == 1
@@ -88,7 +99,7 @@ async def test_crud_runs_through_the_tier_and_validates(observed: Observed) -> N
 
     assert repo.create.await_count == 1
     assert repo.update.await_count == 1
-    ops = ["Get", "List", "Create", "Update", "Delete", "Create", "Update"]
+    ops = ["get", "list", "create", "update", "delete", "create", "update"]
     assert [name for name, _, _ in observed.spans] == [f"orders.{op}" for op in ops]
 
 
@@ -105,38 +116,35 @@ async def test_auth_authorizes_the_service_action() -> None:
     """
     auth = AsyncMock(return_value=False)
     repo = _repo()
-    svc = ServiceBase("orders", Deps(auth=auth)).crud(repo)
+    svc = ServiceBase(_Orders, Decorations.fixed(Deps(auth=auth)), "orders").crud(repo)
 
     with pytest.raises(ForbiddenError):
         await svc.delete("1")
-    auth.assert_awaited_once_with("orders.Delete")
+    auth.assert_awaited_once_with("orders.delete")
     repo.delete.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_domain_operations_and_op_services() -> None:
-    """``exec`` and ``op_service`` run domain work through the tier.
+async def test_domain_operations() -> None:
+    """``exec`` runs a contract's domain operations through the tier.
 
     Why this test is important:
       - Non-CRUD operations need the same recovery and budget as CRUD.
 
     What it tests:
-      - ``op_service`` runs as ``Run`` and reports its name; an uncoded failure in ``exec``
-        becomes ``InternalError``; a slow operation times out.
+      - The base reports its name; an uncoded failure in ``exec`` becomes ``InternalError``; a
+        slow operation times out.
     """
-    base = ServiceBase("billing", Deps(timeout=0.01))
-    charge = base.op_service(AsyncMock(return_value="charged"))
+    base = ServiceBase(_Orders, Decorations.fixed(Deps(timeout=0.01)), "billing")
 
     async def slow() -> None:
         await asyncio.sleep(1)
 
-    assert await charge.run({"amount": 1}) == "charged"
-    assert charge.name == "billing"
     assert base.name == "billing"
     with pytest.raises(InternalError):
-        await base.exec("Refund", AsyncMock(side_effect=ValueError("x")))
+        await base.exec("refund", AsyncMock(side_effect=ValueError("x")))
     with pytest.raises(AppTimeoutError):
-        await base.exec("Slow", slow)
+        await base.exec("slow", slow)
 
 
 @pytest.mark.asyncio
@@ -149,7 +157,9 @@ async def test_delegating_service_serves_crud_from_the_decorated_one() -> None:
     What it tests:
       - Every CRUD call on a ``DelegatingCrudService`` reaches the inner service.
     """
-    svc = DelegatingCrudService(ServiceBase("orders", Deps()).crud(_repo()))
+    svc = DelegatingCrudService(
+        ServiceBase(_Orders, Decorations.fixed(Deps()), "orders").crud(_repo())
+    )
 
     assert await svc.get("1") == "e1"
     assert (await svc.list(None, PageRequest())).items == ["e1"]

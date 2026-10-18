@@ -15,6 +15,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/store"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -22,6 +23,14 @@ import (
 type storeClient struct {
 	// name tells the raw client from the transaction's.
 	name string
+}
+
+// documentsStore is the test store's contract: CRUD plus one custom query.
+type documentsStore interface {
+	interfaces.Store[reposEnt, reposEntParams, string]
+
+	// CountByWorkspace counts the workspace's documents.
+	CountByWorkspace(ctx context.Context, workspace string) (int, error)
 }
 
 // TestStoreBase_UsesTheTransactionsClientWhenOneIsBound tests the embeddable store
@@ -39,7 +48,9 @@ type storeClient struct {
 func TestStoreBase_UsesTheTransactionsClientWhenOneIsBound(t *testing.T) {
 	t.Parallel()
 	raw, tx := &storeClient{name: "raw"}, &storeClient{name: "tx"}
-	base := store.NewBase("documents", raw, decorate.Deps{})
+	base := fixtures.Must(
+		store.NewBase[documentsStore](fixtures.Decorations(), "documents", raw),
+	)
 
 	assert.Same(t, raw, base.Client(t.Context()))
 
@@ -85,20 +96,22 @@ func storeOpCounter(t *testing.T, reg *promclient.Registry, op string) float64 {
 //   - Exec (a read) runs on either.
 func TestStoreBaseWrite_RunsOnlyInsideATransaction(t *testing.T) {
 	t.Parallel()
-	base := store.NewBase("documents", &storeClient{name: "raw"}, decorate.Deps{})
+	base := fixtures.Must(store.NewBase[documentsStore](
+		fixtures.Decorations(), "documents", &storeClient{name: "raw"},
+	))
 	write := func(context.Context) (int, error) { return 1, nil }
 
-	got, err := base.Write(interfaces.WithInTx(t.Context()), "Create", write)
+	got, err := base.Write(interfaces.WithInTx(t.Context()), "create", write)
 	require.NoError(t, err)
 	assert.Equal(t, 1, got)
 
-	_, err = base.Write(t.Context(), "Create", func(context.Context) (int, error) {
+	_, err = base.Write(t.Context(), "create", func(context.Context) (int, error) {
 		t.Error("a write outside a transaction must not run")
 		return 0, nil
 	})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
-	got, err = base.Exec(t.Context(), "Get", write)
+	got, err = base.Exec(t.Context(), "get", write)
 	require.NoError(t, err)
 	assert.Equal(t, 1, got)
 }
@@ -114,7 +127,7 @@ func TestStoreBaseWrite_RunsOnlyInsideATransaction(t *testing.T) {
 // What it tests:
 //   - The tier is named "store" and orders tracing → metrics → logging → timeout.
 //   - Under the default config a store is unobserved; with the stores tier's metrics
-//     on, a Decorate'd store and a Base's Exec each count their operation once.
+//     on, a Base's CRUD role and its Exec each count their operation once.
 func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, decorate.Tier{Name: "store", Order: []decorate.Layer{
@@ -137,19 +150,23 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 	on := true
 	cfg := decoration.DefaultConfig()
 	cfg.Stores.Defaults.Metrics = &on
-	deps, err := decorate.NewDecorations(&cfg, collab).Deps(store.Tier(), "documents")
+	decs := decorate.NewDecorations(&cfg, collab)
+	base, err := store.NewBase[documentsStore](
+		decs,
+		"documents",
+		&storeClient{name: "raw"},
+	)
 	require.NoError(t, err)
 
 	inner := mocks.NewMockStore[reposEnt, reposEntParams, string](gomock.NewController(t))
 	inner.EXPECT().Get(gomock.Any(), "a").Return(&reposEnt{ID: "a"}, nil)
-	got, err := store.Decorate(inner, "documents", deps).Get(t.Context(), "a")
+	got, err := base.CRUD(inner).Get(t.Context(), "a")
 	require.NoError(t, err)
 	assert.Equal(t, "a", got.ID)
 
-	base := store.NewBase("documents", &storeClient{name: "raw"}, deps)
 	n, err := base.Exec(
 		t.Context(),
-		"CountByWorkspace",
+		"count_by_workspace",
 		func(context.Context) (int, error) {
 			return 3, nil
 		},
@@ -157,6 +174,6 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, n)
 
-	assert.InDelta(t, 1, storeOpCounter(t, reg, "Get"), 0)
-	assert.InDelta(t, 1, storeOpCounter(t, reg, "CountByWorkspace"), 0)
+	assert.InDelta(t, 1, storeOpCounter(t, reg, "get"), 0)
+	assert.InDelta(t, 1, storeOpCounter(t, reg, "count_by_workspace"), 0)
 }

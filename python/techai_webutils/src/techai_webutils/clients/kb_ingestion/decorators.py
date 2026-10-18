@@ -2,7 +2,7 @@
 
 The poll half of a start → poll ingestion run, as a decorator (the single-writer half is
 ``clients/lock.SingleWriterRunner``). Both wrap a ``KnowledgeBaseIngestor`` and are themselves
-``KnowledgeBaseIngestor``s, so they compose with the client tier (``clients.client.decorate``)
+``KnowledgeBaseIngestor``s, so they compose with the client tier (a decorated wrapper over ``clients.client.ClientBase``)
 at the composition root:
 
     RetryingIngestor(bedrock)          # transient AWS errors → exponential backoff + jitter

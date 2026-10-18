@@ -1,18 +1,13 @@
-"""Tests for the client tier: ``ClientBase`` and ``decorate`` (Go ``clients/client``)."""
+"""Tests for the client tier: ``ClientBase`` (Go ``clients/client``)."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from techai_webutils.clients.client import (
-    ClientBase,
-    decorate,
-    decorate_from_decorations,
-    tier,
-)
+from techai_webutils.clients.client import ClientBase, handler, producer, tier
 from techai_webutils.core.errors.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.retrier import Retrier
 from techai_webutils.core.interfaces.tracer import SpanKind
@@ -20,8 +15,6 @@ from techai_webutils.foundation.config import decoration
 from techai_webutils.foundation.decorate import Collaborators, Decorations, Deps, Layer
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
-
     from conftest import Observed
 
 
@@ -41,34 +34,12 @@ def _retrier() -> MagicMock:
     return retrier
 
 
-class _Search:
-    """The client under decoration: an async call, a stream and a sync helper."""
+class _Queue(Protocol):
+    """The client contract under decoration."""
 
-    def __init__(self) -> None:
-        """Start with no calls."""
-        self.calls = 0
-        self.label = "search"
-
-    async def query(self, text: str) -> str:
-        """Fail UNAVAILABLE once, then answer."""
-        self.calls += 1
-        if self.calls == 1:
-            raise AppError(ErrorCode.UNAVAILABLE, "flap")
-        return text.upper()
-
-    async def ingest(self, text: str) -> str:
-        """Fail UNAVAILABLE every time (it must not be retried)."""
-        self.calls += 1
-        raise AppError(ErrorCode.UNAVAILABLE, text)
-
-    async def stream(self, text: str) -> AsyncIterator[str]:
-        """Yield the text's characters."""
-        for ch in text:
-            yield ch
-
-    def size(self) -> int:
-        """Return a constant (a sync method)."""
-        return 3
+    async def send(self, body: str) -> str:
+        """Send one message."""
+        ...
 
 
 def test_tier_order_matches_go() -> None:
@@ -93,126 +64,61 @@ def test_tier_order_matches_go() -> None:
 
 
 @pytest.mark.asyncio
-async def test_decorate_retries_coroutines_and_passes_the_rest_through(
-    observed: Observed,
-) -> None:
-    """Coroutine methods run through the tier; streams and sync methods pass through.
-
-    Why this test is important:
-      - A caller programs to the client it passed in, so the proxy must keep every method
-        working, while every I/O call gets the client tier.
-
-    What it tests:
-      - ``query`` is retried past one flap with a CLIENT span per attempt; ``ingest`` (listed in
-        ``once``) is not retried; the stream, the sync method and attributes pass through.
-    """
-    inner = _Search()
-    deps = Deps(observability=observed.observability, retrier=_retrier())
-    client = decorate(inner, "search", deps, once=("ingest",))
-
-    assert await client.query("hi") == "HI"
-    assert inner.calls == 2
-    assert [(name, kind) for name, kind, _ in observed.spans] == [
-        ("search.query", SpanKind.CLIENT),
-        ("search.query", SpanKind.CLIENT),
-    ]
-    inner.calls = 0
-    with pytest.raises(AppError):
-        await client.ingest("x")
-    assert inner.calls == 1
-    assert [ch async for ch in client.stream("ab")] == ["a", "b"]
-    assert client.size() == 3
-    assert client.label == "search"
-
-
-@pytest.mark.asyncio
-async def test_client_base_exec_once_and_handler(observed: Observed) -> None:
-    """``exec`` retries, ``once`` never does, and a handler base drops the call-side layers.
+async def test_client_base_exec_once_handler_and_producer(observed: Observed) -> None:
+    """``exec`` retries, ``exec_once`` never does, and a handler base drops the call-side layers.
 
     Why this test is important:
       - A message handler is retried by the broker's redelivery; a client retry on top would
         multiply deliveries.
 
     What it tests:
-      - ``exec`` retries a flap; ``once`` raises it; ``handler`` is named ``<name>.handler``
-        and does not retry, while keeping observability in CONSUMER spans; ``producer`` opens
-        PRODUCER spans.
+      - ``exec`` retries a flap; ``exec_once`` raises it; a wire base with ``handler()`` does
+        not retry and observes in CONSUMER spans; ``producer()`` opens PRODUCER spans.
     """
     retrier = _retrier()
-    base = ClientBase(
-        "queue", Deps(observability=observed.observability, retrier=retrier)
+    decorations = Decorations.fixed(
+        Deps(observability=observed.observability, retrier=retrier)
     )
+    base = ClientBase(_Queue, decorations, "queue")
     flaky = AsyncMock(side_effect=[AppError(ErrorCode.UNAVAILABLE, "flap"), "ok"])
 
-    assert await base.exec("Send", flaky) == "ok"
+    assert await base.exec("send", flaky) == "ok"
     with pytest.raises(AppError):
-        await base.once(
-            "Send", AsyncMock(side_effect=AppError(ErrorCode.UNAVAILABLE, "x"))
+        await base.exec_once(
+            "send", AsyncMock(side_effect=AppError(ErrorCode.UNAVAILABLE, "x"))
         )
-    handler = ClientBase.handler(
-        "queue", Deps(observability=observed.observability, retrier=retrier)
-    )
+    handlers = ClientBase.wire(decorations, "queue.handler", handler())
     retrier.retry.reset_mock()
-    assert handler.name == "queue.handler"
-    assert await handler.exec("Handle", AsyncMock(return_value=1)) == 1
+    assert handlers.name == "queue.handler"
+    assert await handlers.exec("orders", AsyncMock(return_value=1)) == 1
     retrier.retry.assert_not_awaited()
-    assert observed.spans[-1][:2] == ("queue.handler.Handle", SpanKind.CONSUMER)
-    producer = ClientBase.producer("bus", Deps(observability=observed.observability))
-    await producer.once("orders", AsyncMock())
+    assert observed.spans[-1][:2] == ("queue.handler.orders", SpanKind.CONSUMER)
+    bus = ClientBase.wire(
+        Decorations.fixed(Deps(observability=observed.observability)), "bus", producer()
+    )
+    await bus.exec_once("orders", AsyncMock())
     assert observed.spans[-1][:2] == ("bus.orders", SpanKind.PRODUCER)
 
 
 @pytest.mark.asyncio
-async def test_decorate_from_decorations_applies_the_clients_tier(
+async def test_client_base_applies_the_clients_tier_per_operation(
     observed: Observed,
 ) -> None:
     """The decoration config's ``clients`` tier switches a client's layers by name.
 
     Why this test is important:
-      - Decorators are configured, not hard-wired.
+      - Decorators are configured, not hard-wired, down to one operation.
 
     What it tests:
       - With tracing off for ``quiet``, its calls open no span while ``loud``'s do.
     """
     config = decoration.from_mapping({
-        "clients": {"overrides": {"quiet": {"tracing": False}}}
+        "clients": {"overrides": {"quiet.send": {"tracing": False}}}
     })
     decorations = Decorations(config, Collaborators(observability=observed.observability))
+    quiet = ClientBase(_Queue, decorations, "quiet")
+    loud = ClientBase(_Queue, decorations, "loud")
 
-    class _Echo:
-        async def echo(self, x: int) -> int:
-            return x
-
-    quiet = decorate_from_decorations(_Echo(), "quiet", decorations)
-    loud = decorate_from_decorations(_Echo(), "loud", decorations)
-
-    assert await quiet.echo(1) == 1
-    assert await loud.echo(2) == 2
-    assert [name for name, _, _ in observed.spans] == ["loud.echo"]
-    assert ClientBase.from_decorations("x", decorations).name == "x"
-
-
-@pytest.mark.asyncio
-async def test_decorate_keeps_the_clients_async_lifecycle() -> None:
-    """``async with`` on a decorated client opens and closes the client and keeps the tier.
-
-    Why this test is important:
-      - ``async with`` looks ``__aenter__`` up on the type, past ``__getattr__``; a proxy that
-        did not forward it would fail, or hand back the undecorated client.
-
-    What it tests:
-      - Entering the decorated client enters the client and yields the proxy, whose calls still
-        run through the tier; leaving it leaves the client with the block's exception info.
-    """
-    inner = MagicMock()
-    inner.__aenter__ = AsyncMock(return_value=inner)
-    inner.__aexit__ = AsyncMock(return_value=None)
-    inner.ping = AsyncMock(return_value="pong")
-    client = decorate(inner, "pinger", Deps())
-
-    async with client as opened:
-        assert opened is client
-        assert await opened.ping() == "pong"
-
-    inner.__aenter__.assert_awaited_once()
-    inner.__aexit__.assert_awaited_once_with(None, None, None)
+    assert await quiet.exec("send", AsyncMock(return_value=1)) == 1
+    assert await loud.exec("send", AsyncMock(return_value=2)) == 2
+    assert [name for name, _, _ in observed.spans] == ["loud.send"]

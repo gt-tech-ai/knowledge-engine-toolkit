@@ -10,8 +10,8 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/store"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // resourceCreate is the create input of the test resource, a command rather than the
@@ -32,7 +32,7 @@ type resourceAPI = interfaces.Resource[
 ]
 
 // resourceStore is the store-tier Resource of the test resource.
-type resourceStore = store.Resource[
+type resourceStore = store.FuncResource[
 	*storeClient, reposEnt, reposEntParams, string, resourceCreate, *reposEnt,
 ]
 
@@ -44,8 +44,9 @@ func newResourceStore(
 	ran map[string]string,
 ) resourceStore {
 	t.Helper()
-	res, err := store.NewResource(
-		store.NewBase("things", raw, decorate.Deps{}),
+	res, err := fixtures.Must(
+		store.NewBase[resourceAPI](fixtures.Decorations(), "things", raw),
+	).FromFuncs(
 		resourceFuncs{
 			Get: func(_ context.Context, c *storeClient, id string) (*reposEnt, error) {
 				ran["Get"] = c.name
@@ -147,11 +148,12 @@ func TestStoreResource_RunsEveryRoleOnTheStatementsClientAndWritesOnlyInATransac
 //     that role is first called in production; the composition root must fail instead.
 //
 // What it tests:
-//   - NewResource with any statement missing fails INTERNAL, naming the role.
+//   - FromFuncs with any statement missing fails INTERNAL, naming the role.
 func TestStoreResource_RefusesAMissingStatement(t *testing.T) {
 	t.Parallel()
-	_, err := store.NewResource(
-		store.NewBase("things", &storeClient{name: "raw"}, decorate.Deps{}),
+	_, err := fixtures.Must(store.NewBase[resourceAPI](
+		fixtures.Decorations(), "things", &storeClient{name: "raw"},
+	)).FromFuncs(
 		resourceFuncs{},
 	)
 	require.Error(t, err)

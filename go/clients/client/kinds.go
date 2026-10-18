@@ -29,8 +29,12 @@ type Kinds[C, D, T any] struct {
 	// Backends maps each Kind to its constructor.
 	Backends map[Kind]Backend[C, D, T]
 
-	// Decorate wraps a backend in the client tier as the client named name.
-	Decorate func(base T, name string, deps decorate.Deps) T
+	// Decorate wraps a backend in the client tier as the client named name, its Base
+	// built from decs with opts (client.NewBase).
+	Decorate func(base T, decs decorate.Decorations, name string, opts ...Option) (T, error)
+
+	// Options shape the family's Base (Producer for a publisher).
+	Options []Option
 
 	// Family names the client family ("cache", "lock", …).
 	Family string
@@ -61,8 +65,8 @@ func (k Kinds[C, D, T]) New(ctx context.Context, kind Kind, cfg C, deps D) (T, e
 }
 
 // Build builds the backend kind names and runs it through the client tier as the client
-// named name (Family when empty), its layers from decs; an AtMostOnce kind gets no
-// retry.
+// named name (Family when empty), one chain per method of T from decs; an AtMostOnce
+// kind gets no retry.
 func (k Kinds[C, D, T]) Build(
 	ctx context.Context,
 	kind Kind,
@@ -79,17 +83,14 @@ func (k Kinds[C, D, T]) Build(
 	if name == "" {
 		name = k.Family
 	}
-	tierDeps, err := decs.Deps(Tier(), name)
-	if err != nil {
-		return zero, err
-	}
 	if kind == "" {
 		kind = k.Default
 	}
+	opts := slices.Clone(k.Options)
 	if slices.Contains(k.AtMostOnce, kind) {
-		tierDeps = tierDeps.WithoutRetry()
+		opts = append(opts, AtMostOnce())
 	}
-	return k.Decorate(base, name, tierDeps), nil
+	return k.Decorate(base, decs, name, opts...)
 }
 
 // known lists the family's kinds, sorted.

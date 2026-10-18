@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import TYPE_CHECKING
 
+from techai_webutils.core.errors import AppRuntimeError
 from techai_webutils.core.interfaces.tracer import SpanKind
 from techai_webutils.foundation.decorate.middleware import (
     chain,
@@ -208,9 +209,56 @@ class Tier:
         mws = (self.middleware(layer, name, deps) for layer in self.order)
         return chain(*(mw for mw in mws if mw is not None))
 
+    def chains(self, name: str, deps: Deps) -> Chains:
+        """Build the chains one operation of the subject ``name`` can run on from ``deps``."""
+        return Chains(
+            full=self.chain(name, deps),
+            once=self.chain(name, deps.without_retry()),
+            observed=self.chain(name, Deps(observability=deps.observability)),
+            streaming=self.chain(name, deps.without_retry().without_timeout()),
+            timeout=deps.timeout,
+        )
+
     def subject(self, name: str, deps: Deps) -> Subject:
-        """Build the Subject that runs the operations of ``name`` through the tier's chain."""
-        return Subject(name, self.chain(name, deps))
+        """Build the Subject that runs any operation of ``name`` through the tier's chains."""
+        return Subject(name, self.chains(name, deps))
+
+
+@dataclass(frozen=True, slots=True)
+class Chains:
+    """One operation's middleware chains (mirrors Go ``decorate.chains``)."""
+
+    full: OpMiddleware
+    """The chain as configured."""
+
+    once: OpMiddleware
+    """``full`` without the retry layer, for a write that must not replay."""
+
+    observed: OpMiddleware
+    """The tracing, metrics and logging layers only, for a statement inside a caller's transaction."""
+
+    streaming: OpMiddleware
+    """``full`` without the retry and timeout layers, for opening a stream whose deadline the
+    caller owns."""
+
+    timeout: float
+    """The operation's configured deadline in seconds (zero: none)."""
+
+
+class View(IntEnum):
+    """Which of an operation's chains a Subject runs it on."""
+
+    FULL = 1
+    """The chain as configured."""
+
+    ONCE = 2
+    """Without the retry layer."""
+
+    OBSERVED = 3
+    """The observability layers only."""
+
+    STREAMING = 4
+    """Without the retry and timeout layers."""
 
 
 def _when[C](
@@ -221,17 +269,28 @@ def _when[C](
 
 
 class Subject:
-    """Runs one subject's operations (a stage, a service, a repository) through its tier's chain.
+    """Runs one component's operations through its tier's chains (mirrors Go ``decorate.Subject``).
 
-    The undecorated Subject (``Subject.plain(name)``) runs operations as they are.
+    Built by ``Decorations.subject_of`` from the component's contract, it holds one set of chains
+    per operation, each resolved from that operation's own config key (``<name>.<op>``), and an
+    operation the contract does not have raises. Built by ``Tier.subject``, one set of chains
+    serves every operation. ``Subject.plain(name)`` runs operations undecorated.
     """
 
-    __slots__ = ("_mw", "_name")
+    __slots__ = ("_all", "_name", "_ops", "_view")
 
-    def __init__(self, name: str, mw: OpMiddleware | None) -> None:
-        """Bind the subject's name and chain (None runs operations undecorated)."""
+    def __init__(
+        self,
+        name: str,
+        chains: Chains | None,
+        ops: dict[str, Chains] | None = None,
+        view: View = View.FULL,
+    ) -> None:
+        """Bind the name, the component's chains (None: undecorated) and each op's chains."""
         self._name = name
-        self._mw = mw
+        self._all = chains
+        self._ops = ops
+        self._view = view
 
     @classmethod
     def plain(cls, name: str) -> Subject:
@@ -240,11 +299,67 @@ class Subject:
 
     @property
     def name(self) -> str:
-        """The subject's label."""
+        """The component's name."""
         return self._name
 
+    def _with(self, view: View, *, ops: bool = True) -> Subject:
+        """Return this Subject on ``view``; ``ops=False`` drops the declared operations."""
+        return Subject(self._name, self._all, self._ops if ops else None, view)
+
+    def once(self) -> Subject:
+        """Return this Subject running every operation without its retry layer."""
+        return self._with(View.ONCE)
+
+    def observed(self) -> Subject:
+        """Return this Subject running every operation with its observability layers only."""
+        return self._with(View.OBSERVED)
+
+    def streaming(self) -> Subject:
+        """Return this Subject running every operation without its retry and timeout layers."""
+        return self._with(View.STREAMING)
+
+    def component(self) -> Subject:
+        """Return this Subject running any operation on the component's own chains.
+
+        For an operation named outside the contract (a loop's pass, named by its loop), which the
+        config tunes with the component.
+        """
+        return self._with(self._view, ops=False)
+
+    def timeout(self, op: str) -> float:
+        """Return the deadline configured for ``op`` in seconds (zero when none or undeclared)."""
+        if self._ops is None:
+            return self._all.timeout if self._all is not None else 0.0
+        chains = self._ops.get(op)
+        return chains.timeout if chains is not None else 0.0
+
+    def _chain(self, op: str) -> OpMiddleware | None:
+        """Return the chain ``op`` runs on; an op the contract lacks raises ``AppRuntimeError``."""
+        chains = self._all
+        if self._ops is not None:
+            chains = self._ops.get(op)
+            if chains is None:
+                msg = f"decorate: {self._name} has no operation {op}"
+                raise AppRuntimeError(msg)
+        if chains is None:
+            return None
+        match self._view:
+            case View.ONCE:
+                return chains.once
+            case View.OBSERVED:
+                return chains.observed
+            case View.STREAMING:
+                return chains.streaming
+            case View.FULL:
+                return chains.full
+
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run ``fn`` as the operation ``op`` through the chain and return its result unchanged."""
-        if self._mw is None:
+        """Run ``fn`` as the operation ``op`` through its chain and return its result unchanged."""
+        mw = self._chain(op)
+        if mw is None:
             return await fn()
-        return await exec_op(self._mw, op, fn)
+        return await exec_op(mw, op, fn)
+
+    async def exec_once[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
+        """Run ``fn`` as the operation ``op`` without its retry layer."""
+        return await self.once().exec(op, fn)

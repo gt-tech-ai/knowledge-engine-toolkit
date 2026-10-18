@@ -25,7 +25,7 @@ type Config struct {
 	Logger interfaces.Logger
 
 	// Handlers runs each handler call through the handler tier
-	// (client.NewHandlerBase); the zero Base runs handlers undecorated.
+	// (client.NewWireBase with client.Handler); the zero Base runs handlers undecorated.
 	Handlers client.Base
 }
 

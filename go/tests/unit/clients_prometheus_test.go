@@ -453,7 +453,7 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
 	})
 	require.NoError(t, err)
-	stack := client.NewBase("prometheus", deps)
+	stack := wireBase("prometheus", deps)
 	ctrl := gomock.NewController(t)
 	inner := mocks.NewMockPrometheusHTTPDoer(ctrl)
 	// The transport body is closed by the wrapper before Do returns; the caller still

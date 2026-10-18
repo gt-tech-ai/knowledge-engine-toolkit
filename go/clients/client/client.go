@@ -1,8 +1,9 @@
 // Package client is the client tier: the one decoration every outbound client (an
 // SDK, a datastore, an HTTP API) runs its operations through. Tier orders the layers;
 // the decoration config (decoration.clients, built by decorate.Decorations) switches and
-// tunes them per client; Base gives a client's decorated wrapper typed, per-operation
-// helpers as generic methods; and Kinds is each family's backend table.
+// tunes them per client and per operation; Base, built from the client's contract, gives
+// its decorated wrapper typed per-operation helpers as generic methods; and Kinds is each
+// family's backend table.
 package client
 
 import (
@@ -33,118 +34,94 @@ func Tier() decorate.Tier {
 	}
 }
 
-// Base runs one client's operations through the client tier. Its embedded Exec runs
-// an idempotent operation (retried when the tier retries); Once, Do and DoOnce cover
-// the rest. The zero Base runs every operation undecorated.
+// Base runs one client's operations through the client tier: each operation is one
+// method of the client's contract, decorated as the client's name plus the method's
+// snake_case name. Its embedded Subject supplies Name, Exec (an idempotent operation,
+// retried when the tier retries) and ExecOnce (one that must never be replayed); Do,
+// DoOnce, Stream and Open cover the rest. The zero Base runs every operation
+// undecorated.
 type Base struct {
-	// Subject runs idempotent operations; it supplies Name and Exec.
+	// Subject runs the client's operations; it supplies Name, Exec and ExecOnce.
 	decorate.Subject
-
-	// once runs operations that must never be replayed.
-	once decorate.Subject
-
-	// stream opens streams: never retried, its deadline owned by Stream.
-	stream decorate.Subject
-
-	// ops resolves each named call's decoration beneath the client's name.
-	ops decorate.Scope
-
-	// timeout bounds a stream's whole life (open through close).
-	timeout time.Duration
 }
 
-// NewBase returns the Base for the client named name over deps.
-func NewBase(name string, deps decorate.Deps) Base {
-	return newBase(Tier(), name, deps)
+// Option shapes how a Base decorates its client.
+type Option func(*options)
+
+// options is a Base's decoration shape.
+type options struct {
+	// adjust edits every operation's Deps (Handler, AtMostOnce).
+	adjust []func(decorate.Deps) decorate.Deps
+
+	// tier is the client tier, its span kind set by Producer or Handler.
+	tier decorate.Tier
 }
 
-// NewProducerBase returns the Base for a message publisher named name over deps: the
-// client tier with producer spans, since each operation sends a message to a broker.
-func NewProducerBase(name string, deps decorate.Deps) Base {
-	return newBase(withSpanKind(interfaces.SpanKindProducer), name, deps)
+// Producer decorates a message publisher: the client tier with producer spans, since
+// each operation sends a message to a broker.
+func Producer() Option {
+	return func(o *options) { o.tier.SpanKind = interfaces.SpanKindProducer }
 }
 
-// newBase builds the Base for the client named name over deps in tier t.
-func newBase(t decorate.Tier, name string, deps decorate.Deps) Base {
-	streamDeps := deps.WithoutRetry()
-	streamDeps.Timeout = 0
-	return Base{
-		Subject: t.Subject(name, deps),
-		once:    t.Subject(name, deps.WithoutRetry()),
-		stream:  t.Subject(name, streamDeps),
-		timeout: deps.Timeout,
-		ops:     decorate.NewScope(t, name, deps),
+// Handler decorates a consumer's message handlers: observed (in consumer spans) and
+// bounded, never retried or broken — the broker's redelivery is the retry, and one
+// poison message must not trip the others.
+func Handler() Option {
+	return func(o *options) {
+		o.tier.SpanKind = interfaces.SpanKindConsumer
+		o.adjust = append(o.adjust, func(d decorate.Deps) decorate.Deps {
+			d = d.WithoutRetry()
+			d.Breaker, d.Bulkhead = nil, nil
+			return d
+		})
 	}
 }
 
-// NewBaseFrom returns the Base for the client named name, decorated from decs: the
-// client as the client-tier component name, and each named call op as name+"."+op. A
-// decoration that fails to resolve is CodeInvalidInput.
-func NewBaseFrom(decs decorate.Decorations, name string) (Base, error) {
-	deps, err := decs.Deps(Tier(), name)
+// AtMostOnce never retries the client's operations, whatever the config says: a retry
+// could repeat a delivery (a Redis PUBLISH).
+func AtMostOnce() Option {
+	return func(o *options) {
+		o.adjust = append(o.adjust, decorate.Deps.WithoutRetry)
+	}
+}
+
+// newOptions applies opts over the plain client tier.
+func newOptions(opts []Option) options {
+	o := options{tier: Tier()}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return o
+}
+
+// NewBase returns the Base for the client named name whose operations are the methods
+// of its contract C, decorated from decs: the client as the client-tier component name,
+// and each operation op as name+"."+op. A C that is not an interface, or a decoration
+// that fails to resolve, is an error.
+func NewBase[C any](
+	decs decorate.Decorations,
+	name string,
+	opts ...Option,
+) (Base, error) {
+	o := newOptions(opts)
+	subject, err := decs.SubjectOf[C](o.tier, name, o.adjust...)
 	if err != nil {
 		return Base{}, err
 	}
-	b := newBase(Tier(), name, deps)
-	b.ops = decs.Scope(Tier(), name)
-	return b, nil
+	return Base{Subject: subject}, nil
 }
 
-// Call is the client's named idempotent call: the SDK function fn, shaped as an AWS SDK
-// v2 operation (ctx, input, ...option), runs through the client tier with its retry,
-// breaker, bulkhead and timeout. fn takes no options here; its client was configured
-// when it was built.
-func Call[In, Out, O any](
-	b Base,
-	op string,
-	fn func(ctx context.Context, in In, opts ...O) (Out, error),
-) decorate.OpFunc[In, Out] {
-	return decorate.Operation(
-		b.ops.Subject(op),
-		func(ctx context.Context, in In) (Out, error) {
-			return fn(ctx, in)
-		},
-	)
-}
-
-// CallOnce is Call without the retry layer, for a call that is not idempotent (a send, a
-// create) or that consumes its input.
-func CallOnce[In, Out, O any](
-	b Base,
-	op string,
-	fn func(ctx context.Context, in In, opts ...O) (Out, error),
-) decorate.OpFunc[In, Out] {
-	return decorate.Operation(
-		b.ops.Subject(op, decorate.Deps.WithoutRetry),
-		func(ctx context.Context, in In) (Out, error) { return fn(ctx, in) },
-	)
-}
-
-// withSpanKind is the client tier with spans of kind.
-func withSpanKind(kind interfaces.SpanKind) decorate.Tier {
-	t := Tier()
-	t.SpanKind = kind
-	return t
-}
-
-// NewHandlerBase returns the Base for a consumer's message handlers, named name, over
-// deps without its retry, breaker and bulkhead: a handler is observed (in consumer
-// spans) and bounded, never retried or broken — the broker's redelivery is the retry,
-// and one poison message must not trip the others.
-func NewHandlerBase(name string, deps decorate.Deps) Base {
-	deps = deps.WithoutRetry()
-	deps.Breaker, deps.Bulkhead = nil, nil
-	return newBase(withSpanKind(interfaces.SpanKindConsumer), name, deps)
-}
-
-// Once runs fn as the operation op without the retry layer: an operation that is not
-// idempotent or consumes its input (an upload body, a create).
-func (b Base) Once[R any](
-	ctx context.Context,
-	op string,
-	fn func(context.Context) (R, error),
-) (R, error) {
-	return b.once.Exec(ctx, op, fn)
+// NewWireBase returns the Base for the client named name whose operations are wire-level
+// names known only per call (an RPC procedure, an HTTP route, a job kind): every
+// operation runs on the client's own chain, labeled by its name, so the config tunes
+// the client as a whole.
+func NewWireBase(decs decorate.Decorations, name string, opts ...Option) (Base, error) {
+	o := newOptions(opts)
+	subject, err := decs.NewSubject(o.tier, name, nil, o.adjust...)
+	if err != nil {
+		return Base{}, err
+	}
+	return Base{Subject: subject}, nil
 }
 
 // Do runs the error-only idempotent operation op.
@@ -159,23 +136,23 @@ func (b Base) DoOnce(
 	op string,
 	fn func(context.Context) error,
 ) error {
-	_, err := b.once.Exec(ctx, op, unit(fn))
+	_, err := b.ExecOnce(ctx, op, unit(fn))
 	return err
 }
 
 // Stream opens a stream as the operation op. The open is decorated (never retried);
-// the client's timeout bounds the stream's whole life, so the returned release must be
-// called when the stream is closed. On error release is already done.
+// the operation's timeout bounds the stream's whole life, so the returned release must
+// be called when the stream is closed. On error release is already done.
 func (b Base) Stream[R any](
 	ctx context.Context,
 	op string,
 	open func(context.Context) (R, error),
 ) (stream R, release func(), err error) {
 	release = func() {}
-	if b.timeout > 0 {
-		ctx, release = context.WithTimeout(ctx, b.timeout)
+	if timeout := b.Timeout(op); timeout > 0 {
+		ctx, release = context.WithTimeout(ctx, timeout)
 	}
-	stream, err = b.stream.Exec(ctx, op, open)
+	stream, err = b.Streaming().Exec(ctx, op, open)
 	if err != nil {
 		release()
 		var zero R
@@ -194,11 +171,12 @@ func (b Base) Open[R any](
 	op string,
 	open func(context.Context) (R, error),
 ) (R, error) {
-	if b.timeout <= 0 {
-		return b.stream.Exec(ctx, op, open)
+	timeout := b.Timeout(op)
+	if timeout <= 0 {
+		return b.Streaming().Exec(ctx, op, open)
 	}
-	return b.stream.Exec(ctx, op, func(ctx context.Context) (R, error) {
-		return openWithin(ctx, b.timeout, op, open)
+	return b.Streaming().Exec(ctx, op, func(ctx context.Context) (R, error) {
+		return openWithin(ctx, timeout, op, open)
 	})
 }
 

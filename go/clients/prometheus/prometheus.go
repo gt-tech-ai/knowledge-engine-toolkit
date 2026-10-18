@@ -91,7 +91,7 @@ func newHTTP(
 	if name == "" {
 		name = "prometheus"
 	}
-	tier, err := deps.Deps(client.Tier(), name)
+	base, err := client.NewWireBase(deps.Decorations, name)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func newHTTP(
 		doer = &nethttp.Client{Timeout: cfg.HTTP.Timeout}
 	}
 	return promhttp.New(cfg.HTTP.BaseURL, promhttp.DecorateDoer(
-		doer, client.NewBase(name, tier), cfg.HTTP.MaxBodyBytes,
+		doer, base, cfg.HTTP.MaxBodyBytes,
 	)), nil
 }
 

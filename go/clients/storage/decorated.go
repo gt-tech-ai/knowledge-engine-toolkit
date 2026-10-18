@@ -14,13 +14,19 @@ import (
 // Decorate runs every operation of base through the client tier as the client named
 // name. The AWS SDK owns wire-level retry, so retry stays off unless deps enables it;
 // operations that consume a body or stream or are not idempotent (Upload, Download,
-// Create/CompleteMultipartUpload) are never replayed.
+// Create/CompleteMultipartUpload) are never replayed. Each operation is one method of
+// interfaces.StorageClient.
 func Decorate(
 	base interfaces.StorageClient,
+	decs decorate.Decorations,
 	name string,
-	deps decorate.Deps,
-) interfaces.StorageClient {
-	return &decorator{base: base, Base: client.NewBase(name, deps)}
+	opts ...client.Option,
+) (interfaces.StorageClient, error) {
+	b, err := client.NewBase[interfaces.StorageClient](decs, name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &decorator{base: base, Base: b}, nil
 }
 
 // decorator runs each StorageClient operation through the client tier.
@@ -128,7 +134,7 @@ func (d *decorator) PresignURL(
 	expirySeconds int,
 	displayFilename string,
 ) (string, error) {
-	return d.Exec(ctx, "presign_get",
+	return d.Exec(ctx, "presign_url",
 		func(c context.Context) (string, error) {
 			return d.base.PresignURL(c, bucket, key, expirySeconds, displayFilename)
 		})
@@ -141,7 +147,7 @@ func (d *decorator) PresignPutURL(
 	expirySeconds int,
 	contentType string,
 ) (string, error) {
-	return d.Exec(ctx, "presign_put",
+	return d.Exec(ctx, "presign_put_url",
 		func(c context.Context) (string, error) {
 			return d.base.PresignPutURL(c, bucket, key, expirySeconds, contentType)
 		})
@@ -153,7 +159,7 @@ func (d *decorator) CreateMultipartUpload(
 	ctx context.Context,
 	bucket, key, contentType string,
 ) (string, error) {
-	return d.Once(ctx, "create_multipart",
+	return d.ExecOnce(ctx, "create_multipart_upload",
 		func(c context.Context) (string, error) {
 			return d.base.CreateMultipartUpload(c, bucket, key, contentType)
 		})
@@ -186,7 +192,7 @@ func (d *decorator) CompleteMultipartUpload(
 	bucket, key, uploadID string,
 	parts []interfaces.CompletedPart,
 ) error {
-	return d.DoOnce(ctx, "complete_multipart", func(c context.Context) error {
+	return d.DoOnce(ctx, "complete_multipart_upload", func(c context.Context) error {
 		return d.base.CompleteMultipartUpload(
 			c,
 			bucket,
@@ -202,7 +208,7 @@ func (d *decorator) AbortMultipartUpload(
 	ctx context.Context,
 	bucket, key, uploadID string,
 ) error {
-	return d.Do(ctx, "abort_multipart", func(c context.Context) error {
+	return d.Do(ctx, "abort_multipart_upload", func(c context.Context) error {
 		return d.base.AbortMultipartUpload(c, bucket, key, uploadID)
 	})
 }
@@ -212,7 +218,7 @@ func (d *decorator) ListMultipartUploads(
 	ctx context.Context,
 	bucket string,
 ) ([]interfaces.MultipartUpload, error) {
-	return d.Exec(ctx, "list_multipart",
+	return d.Exec(ctx, "list_multipart_uploads",
 		func(c context.Context) ([]interfaces.MultipartUpload, error) {
 			return d.base.ListMultipartUploads(c, bucket)
 		})
@@ -223,7 +229,7 @@ func (d *decorator) ListObjects(
 	ctx context.Context,
 	bucket, prefix string,
 ) ([]interfaces.StorageObject, error) {
-	return d.Exec(ctx, "list",
+	return d.Exec(ctx, "list_objects",
 		func(c context.Context) ([]interfaces.StorageObject, error) {
 			return d.base.ListObjects(c, bucket, prefix)
 		})
@@ -235,7 +241,7 @@ func (d *decorator) ListObjectsPage(
 	bucket, prefix string,
 	limit int,
 ) ([]interfaces.StorageObject, error) {
-	return d.Exec(ctx, "list_page",
+	return d.Exec(ctx, "list_objects_page",
 		func(c context.Context) ([]interfaces.StorageObject, error) {
 			return d.base.ListObjectsPage(c, bucket, prefix, limit)
 		})
@@ -256,7 +262,7 @@ func (d *decorator) ListObjectsPageToken(
 	bucket, prefix, continuationToken string,
 	limit int,
 ) ([]interfaces.StorageObject, string, error) {
-	res, err := d.Exec(ctx, "list_page_token",
+	res, err := d.Exec(ctx, "list_objects_page_token",
 		func(c context.Context) (listPageResult, error) {
 			objs, next, listErr := d.base.ListObjectsPageToken(
 				c, bucket, prefix, continuationToken, limit,

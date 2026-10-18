@@ -15,7 +15,6 @@
 //go:generate mockgen -destination=mock_command_runner.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CommandRunner,CmdHook
 //go:generate mockgen -destination=mock_config_loader.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ConfigLoader
 //go:generate mockgen -destination=mock_connector.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ConnectorSource,SourceBuilder
-//go:generate mockgen -destination=mock_decorgen_store.go -package=mocks -mock_names=Store=MockDecorgenStore github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/decorgen Store
 //go:generate mockgen -destination=mock_deadletter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces DeadLetterBackend
 //go:generate mockgen -destination=mock_dedup.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Deduplicator
 //go:generate mockgen -destination=mock_event.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/events Event
@@ -37,7 +36,6 @@
 //go:generate mockgen -destination=mock_outbox.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces OutboxStore,OutboxSink
 //go:generate mockgen -destination=mock_outbox_s3_api.go -package=mocks -mock_names=API=MockOutboxS3API github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/s3 API
 //go:generate mockgen -destination=mock_outbox_sqs_api.go -package=mocks -mock_names=API=MockOutboxSQSAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/sqs API
-//go:generate mockgen -destination=mock_op.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Op
 //go:generate mockgen -destination=mock_pipeline.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Pipeline
 //go:generate mockgen -destination=mock_prometheus_http_doer.go -package=mocks -mock_names=HTTPDoer=MockPrometheusHTTPDoer github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/http HTTPDoer
 //go:generate mockgen -destination=mock_rate_limiter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces RateLimiter

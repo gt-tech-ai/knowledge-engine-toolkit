@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -30,6 +30,26 @@ from techai_webutils.foundation.decorate import (
 
 if TYPE_CHECKING:
     from conftest import Observed
+
+
+class _Search(Protocol):
+    """The test controller's contract: one operation per handler tested."""
+
+    async def query(self, req: str) -> str:
+        """Answer a query."""
+        ...
+
+    async def delete(self) -> None:
+        """Delete."""
+        ...
+
+    async def crash(self) -> None:
+        """Crash."""
+        ...
+
+    async def get(self, req: str) -> str:
+        """Get."""
+        ...
 
 
 def test_tier_order_matches_go() -> None:
@@ -68,18 +88,20 @@ async def test_handler_runs_through_the_tier(observed: Observed) -> None:
         ``ForbiddenError``; a crash is coded ``InternalError`` and still observed.
     """
     deps = Deps(observability=observed.observability)
-    base = ControllerBase("search", deps)
-    query = base.handler("Query", AsyncMock(side_effect=lambda req: f"answer:{req}"))
+    base = ControllerBase(_Search, Decorations.fixed(deps), "search")
+    query = base.handler("query", AsyncMock(side_effect=lambda req: f"answer:{req}"))
 
     assert await query("q") == "answer:q"
-    assert observed.spans[0][:2] == ("search.Query", SpanKind.SERVER)
+    assert observed.spans[0][:2] == ("search.query", SpanKind.SERVER)
     assert base.name == "search"
 
-    denied = ControllerBase("search", Deps(auth=AsyncMock(return_value=False)))
+    denied = ControllerBase(
+        _Search, Decorations.fixed(Deps(auth=AsyncMock(return_value=False))), "search"
+    )
     with pytest.raises(ForbiddenError):
-        await denied.exec("Delete", AsyncMock())
+        await denied.exec("delete", AsyncMock())
     with pytest.raises(InternalError):
-        await base.exec("Crash", AsyncMock(side_effect=RuntimeError("x")))
+        await base.exec("crash", AsyncMock(side_effect=RuntimeError("x")))
     assert len(observed.span_errors) == 1
 
 
@@ -92,22 +114,26 @@ async def test_handler_failures_are_logged_as_the_edge(observed: Observed) -> No
         tier's, a 500 would leave no trace in a production log.
 
     What it tests:
-      - A denial (403) logs ``controller.Delete failed`` at Warning; a crash (500) logs
-        ``controller.Crash failed`` at Error; neither is logged at Debug.
+      - A denial (403) logs ``controller.delete failed`` at Warning; a crash (500) logs
+        ``controller.crash failed`` at Error; neither is logged at Debug.
     """
     auth = AsyncMock(return_value=False)
-    base = ControllerBase("search", Deps(observability=observed.observability, auth=auth))
+    base = ControllerBase(
+        _Search,
+        Decorations.fixed(Deps(observability=observed.observability, auth=auth)),
+        "search",
+    )
 
     with pytest.raises(ForbiddenError):
-        await base.exec("Delete", AsyncMock())
+        await base.exec("delete", AsyncMock())
     auth.return_value = True
     with pytest.raises(InternalError):
-        await base.exec("Crash", AsyncMock(side_effect=RuntimeError("x")))
+        await base.exec("crash", AsyncMock(side_effect=RuntimeError("x")))
 
-    assert observed.logger.warning.call_args.args == ("controller.Delete failed",)
-    assert observed.logger.error.call_args.args == ("controller.Crash failed",)
+    assert observed.logger.warning.call_args.args == ("controller.delete failed",)
+    assert observed.logger.error.call_args.args == ("controller.crash failed",)
     debug = [c.args[0] for c in observed.logger.debug.call_args_list]
-    assert debug == ["controller.Delete", "controller.Crash"]
+    assert debug == ["controller.delete", "controller.crash"]
 
 
 @pytest.mark.asyncio
@@ -124,15 +150,14 @@ async def test_rate_limit_rejects_resource_exhausted() -> None:
     limiter = MagicMock(spec=RateLimiter)
     limiter.allow.return_value = False
     handler = AsyncMock()
-    base = ControllerBase("api", Deps(rate_limiter=limiter))
+    base = ControllerBase(_Search, Decorations.fixed(Deps(rate_limiter=limiter)), "api")
 
     with pytest.raises(AppError) as caught:
-        await base.handler("Get", handler)("req")
+        await base.handler("get", handler)("req")
     assert caught.value.code is ErrorCode.RESOURCE_EXHAUSTED
     handler.assert_not_awaited()
     assert (
-        ControllerBase.from_decorations("api", Decorations(None, Collaborators())).name
-        == "api"
+        ControllerBase(_Search, Decorations(None, Collaborators()), "api").name == "api"
     )
 
 

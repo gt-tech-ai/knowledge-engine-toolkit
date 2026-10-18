@@ -1,7 +1,7 @@
 """Runs one consumed message's handler the way every subscriber backend does.
 
 The handler continues the trace the publisher put in the message's metadata and runs through the
-handler tier (``ClientBase.handler``) as the operation named by the topic: observed and bounded,
+handler tier (``ClientBase.wire`` with ``handler()``) as the operation named by the topic: observed and bounded,
 never retried, since the broker's redelivery is the retry.
 """
 
@@ -27,4 +27,4 @@ async def run_handler(
         if handlers is None:
             await handler(message)
             return
-        await handlers.once(topic, lambda: handler(message))
+        await handlers.exec_once(topic, lambda: handler(message))

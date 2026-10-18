@@ -57,7 +57,10 @@ func cachingRepo(
 	if withKeyFunc {
 		c.IDOf = func(e *te) string { return e.ID }
 	}
-	return repository.Cached(store, "repo", c)
+	b := fixtures.Must(repository.NewBase[interfaces.Repository[te, tp, string]](
+		fixtures.Decorations(), "repo",
+	))
+	return b.Cached(store, c)
 }
 
 // TestCached_Get tests the cache-aside read paths: a hit serves from

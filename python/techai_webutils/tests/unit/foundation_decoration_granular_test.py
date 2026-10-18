@@ -6,6 +6,7 @@ The override cascade, the layer check, ``verify`` and the per-name pipeline, job
 from __future__ import annotations
 
 import dataclasses
+from typing import Protocol
 from unittest.mock import MagicMock
 
 import pytest
@@ -143,6 +144,18 @@ def test_verify_fails_on_an_override_no_component_uses() -> None:
         broken.verify("app")
 
 
+class _Documents(Protocol):
+    """A pipeline contract with two stages, create and delete."""
+
+    async def create(self, value: str) -> str:
+        """Run the create stage."""
+        ...
+
+    async def delete(self, value: str) -> str:
+        """Run the delete stage."""
+        ...
+
+
 @pytest.mark.asyncio
 async def test_configured_bases_resolve_each_stage_job_and_gate_by_its_own_name() -> None:
     """A stage, a job and a gate each take their own decoration under a qualified name.
@@ -152,16 +165,16 @@ async def test_configured_bases_resolve_each_stage_job_and_gate_by_its_own_name(
         job share one decoration, so none can be tuned on its own.
 
     What it tests:
-      - A stage of ``PipelineBase.from_decorations("app").named("documents")`` named ``create`` is
+      - The ``create`` stage of a pipeline built from its contract as ``app.documents`` is
         logged as ``app.documents.create`` when that override turns logging on; its sibling
         ``delete`` is not.
-      - A job of ``JobBase.from_decorations("events")`` resolves ``events.sweep``; a gate
-        built with ``decorate`` resolves its own name in the gate tier; ``verify`` passes.
+      - A job built as ``events.sweep`` runs as its ``execute`` operation; a gate built with
+        ``decorate`` runs as ``run`` under its own name in the gate tier; ``verify`` passes.
     """
     logger = MagicMock()
     logged: list[str] = []
     logger.debug.side_effect = lambda _msg, **fields: logged.extend(  # pyright: ignore[reportUnknownLambdaType]
-        str(v) for k, v in fields.items() if k != "operation"
+        f"{v}.{fields['operation']}" for k, v in fields.items() if k != "operation"
     )
     config = _with(
         decoration.default_config(),
@@ -176,14 +189,14 @@ async def test_configured_bases_resolve_each_stage_job_and_gate_by_its_own_name(
     async def identity(value: str) -> str:  # noqa: RUF029 - a stage is an async function
         return value
 
-    pipes = PipelineBase.from_decorations("app", decorations).named("documents")
+    pipes = PipelineBase(_Documents, decorations, "app.documents")
     assert await pipes.stage("create", identity).execute("x") == "x"
     assert await pipes.stage("delete", identity).execute("x") == "x"
 
     async def sweep() -> BatchResult:  # noqa: RUF029 - a job's run is an async function
         return BatchResult()
 
-    job = JobBase.from_decorations("events", decorations).func(
+    job = JobBase(decorations, "events.sweep").func(
         JobMeta(name="sweep", group="events"), sweep
     )
     gate = new_gate("events.nightly").serial("sweep", job).decorate(decorations).build()
@@ -191,7 +204,7 @@ async def test_configured_bases_resolve_each_stage_job_and_gate_by_its_own_name(
 
     assert "app.documents.create" in logged
     assert "app.documents.delete" not in logged
-    assert "events.sweep" in logged
-    assert "events.nightly" in logged
+    assert "events.sweep.execute" in logged
+    assert "events.nightly.run" in logged
     decorations.verify("app", "events")
     assert gate_tier().name == "gate"

@@ -58,17 +58,26 @@ func Tier() decorate.Tier {
 	}
 }
 
-// Base runs one controller's handlers through the controller tier. Its embedded Exec
-// runs a single operation; Handler decorates a whole HandlerFunc. The zero Base runs
-// handlers undecorated.
+// Base runs one controller's handlers through the controller tier: each operation is one
+// method of the controller's contract (a generated handler interface), decorated as the
+// controller's name plus the method's snake_case name. Its embedded Exec runs a single
+// operation; Handler decorates a whole HandlerFunc. The zero Base runs handlers
+// undecorated.
 type Base struct {
 	// Subject runs the controller's operations; it supplies Name and Exec.
 	decorate.Subject
 }
 
-// NewBase returns the Base for the controller named name over deps.
-func NewBase(name string, deps decorate.Deps) Base {
-	return Base{Subject: Tier().Subject(name, deps)}
+// NewBase returns the Base for the controller named name whose operations are the methods
+// of its contract C, decorated from decs: the controller as the controller-tier component
+// name, and each operation op as name+"."+op. A C that is not an interface, or a
+// decoration that fails to resolve, is an error.
+func NewBase[C any](decs decorate.Decorations, name string) (Base, error) {
+	subject, err := decs.SubjectOf[C](Tier(), name)
+	if err != nil {
+		return Base{}, err
+	}
+	return Base{Subject: subject}, nil
 }
 
 // Handler returns fn run through the tier as the operation op.
