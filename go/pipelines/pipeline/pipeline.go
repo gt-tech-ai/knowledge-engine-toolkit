@@ -1,7 +1,8 @@
-// Package pipeline is the pipeline tier: a Base builds a consumer's decorated
-// pipeline stages from functions, and stages compose with Stage.Then into a staged
-// pipeline or run side by side with Base.FanOut. Every stage is a core
-// interfaces.Pipeline, decorated in the tier's order (Tier).
+// Package pipeline is the pipeline tier: a Base, built from the pipeline's contract, is
+// the embeddable core of a consumer's pipeline, running each operation through the
+// tier's decoration (Tier) with the promoted Exec or as a stage (Base.Stage) that
+// composes with Stage.Then or runs side by side with Base.FanOut. Its role compositions
+// (roles.go) decorate a service's roles. Every stage is a core interfaces.Pipeline.
 package pipeline
 
 import (
@@ -53,87 +54,53 @@ func (s Stage[In, Out]) Then[C any](next interfaces.Pipeline[Out, C]) Stage[In, 
 	}
 }
 
-// Base builds a consumer's decorated stages over the pipeline tier's collaborators.
-// The zero Base builds stages that only recover a panic.
+// Base is the embeddable core of a pipeline named by its Subject: Name and Exec run one
+// of its operations through the pipeline tier, and Stage and FanOut build an operation as
+// a composable stage. Each operation is a method of the pipeline's contract, decorated
+// under its own name. The zero Base runs stages undecorated.
 type Base struct {
-	// decs resolves each stage's decoration by its own name; when unset, every stage
-	// shares deps.
-	decs *decorate.Decorations
-
-	// prefix qualifies each stage's name ("api.documents" makes a stage "create" the
-	// component "api.documents.create").
-	prefix string
-
-	// deps backs every stage's decoration when decs is unset.
-	deps decorate.Deps
+	// Subject runs the pipeline's operations through the tier; it supplies Name and Exec.
+	decorate.Subject
 }
 
-// NewBase builds the Base whose stages are all decorated with deps.
-func NewBase(deps decorate.Deps) Base {
-	return Base{deps: deps}
-}
-
-// NewBaseFrom builds the Base whose stages each take their own decoration from decs:
-// a stage named name is the pipeline-tier component prefix+"."+name, so the config
-// can tune one stage, or every stage under prefix.
-func NewBaseFrom(decs decorate.Decorations, prefix string) Base {
-	return Base{decs: &decs, prefix: prefix}
-}
-
-// Named returns the Base whose stages sit beneath sub: from a Base of prefix "api",
-// Named("documents") makes a stage "create" the component "api.documents.create". A
-// pipeline set's constructor scopes its stages with it, so two sets may each have a stage
-// of one name. A Base built by NewBase shares one decoration and is returned unchanged.
-func (b Base) Named(sub string) Base {
-	if b.decs == nil {
-		return b
+// NewBase builds the Base for the pipeline named name whose operations are the methods of
+// its contract P (an interface), decorated from decs: the pipeline as the pipeline-tier
+// component name, and each operation op as name+"."+op, so the config can tune the
+// pipeline or one of its stages. A contract that is not an interface, or a decoration
+// that fails to resolve, is an error.
+func NewBase[P any](decs decorate.Decorations, name string) (Base, error) {
+	subject, err := decs.SubjectOf[P](Tier(), name)
+	if err != nil {
+		return Base{}, err
 	}
-	if b.prefix != "" {
-		sub = b.prefix + "." + sub
-	}
-	b.prefix = sub
-	return b
+	return Base{Subject: subject}, nil
 }
 
-// Subject returns the decorated Subject of the pipeline-tier component named name (under
-// the Base's prefix), for a pipeline that is not built from stage functions — a stream
-// relay, say — to run its operations through the tier as a stage would.
-func (b Base) Subject(name string) decorate.Subject {
-	if b.decs == nil {
-		return Tier().Subject(name, b.deps)
-	}
-	if b.prefix != "" {
-		name = b.prefix + "." + name
-	}
-	return b.decs.Subject(Tier(), name)
-}
-
-// Stage wraps fn as one decorated stage named name; it runs as name's "Execute"
-// operation. A nil fn panics, as a wiring bug.
+// Stage wraps fn as the decorated operation op, a stage that composes with Then. A nil
+// fn panics, as a wiring bug.
 func (b Base) Stage[In, Out any](
-	name string,
+	op string,
 	fn func(context.Context, In) (Out, error),
 ) Stage[In, Out] {
 	if fn == nil {
 		panic("pipeline: stage fn must not be nil")
 	}
-	subject := b.Subject(name)
 	return func(ctx context.Context, input In) (Out, error) {
-		return subject.Exec(ctx, "Execute", func(ctx context.Context) (Out, error) {
+		return b.Exec(ctx, op, func(ctx context.Context) (Out, error) {
 			return fn(ctx, input)
 		})
 	}
 }
 
-// FanOut is one decorated stage named name that runs every stage on the same input
+// FanOut is the decorated operation op, a stage that runs every stage on the same input
 // concurrently and returns their outputs in stage order. The first error cancels the
 // context the other stages run on and is returned; with no stages it returns an empty
 // result.
 func (b Base) FanOut[In, Out any](
-	name string,
+	op string,
 	stages ...interfaces.Pipeline[In, Out],
 ) Stage[In, []Out] {
-	return b.Stage(name, func(ctx context.Context, input In) ([]Out, error) {
+	return b.Stage(op, func(ctx context.Context, input In) ([]Out, error) {
 		outs := make([]Out, len(stages))
 		g, gctx := errgroup.WithContext(ctx)
 		for i, stage := range stages {
@@ -148,21 +115,6 @@ func (b Base) FanOut[In, Out any](
 		}
 		return outs, nil
 	})
-}
-
-// Resource is the pipeline over svc whose roles each run as one decorated operation of
-// the pipeline named name.
-func (b Base) Resource[T, P any, ID comparable, C, U any](
-	name string,
-	svc interfaces.Resource[T, P, ID, C, U],
-) interfaces.Resource[T, P, ID, C, U] {
-	subject := b.Subject(name)
-	return decorate.NewResource[T, P, ID, C, U](
-		decorate.ResourceOps{Create: subject, Rest: subject},
-		svc,
-		nil,
-		nil,
-	)
 }
 
 // Unit adapts an error-only step to a stage function, whose result is the empty value.

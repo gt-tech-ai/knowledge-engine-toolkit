@@ -134,6 +134,7 @@ func publishers() client.Kinds[Config, Deps, interfaces.MessagePublisher] {
 		Family:   family,
 		Default:  KindMemory,
 		Decorate: Decorate,
+		Options:  []client.Option{client.Producer()},
 		// PUBLISH is at-most-once, so a retry could double-broadcast.
 		AtMostOnce: []client.Kind{KindRedis},
 		Backends: map[client.Kind]client.Backend[Config, Deps, interfaces.MessagePublisher]{
@@ -204,11 +205,11 @@ func NewConsumerFromConfig(
 	cfg Config,
 	deps Deps,
 ) (interfaces.MessageConsumer, error) {
-	handlerName := name(cfg) + ".handler"
-	handlers, err := deps.Deps(client.Tier(), handlerName)
+	handlers, err := client.NewWireBase(
+		deps.Decorations, name(cfg)+".handler", client.Handler(),
+	)
 	if err != nil {
 		return nil, err
 	}
-	return consumers(client.NewHandlerBase(handlerName, handlers)).
-		New(ctx, cfg.Kind, cfg, deps)
+	return consumers(handlers).New(ctx, cfg.Kind, cfg, deps)
 }

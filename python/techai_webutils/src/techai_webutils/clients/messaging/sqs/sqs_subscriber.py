@@ -45,7 +45,7 @@ class SQSSubscriber(MessageConsumer):
     def __init__(self, config: SQSConfig, handlers: ClientBase | None = None) -> None:
         """Store the SQS connection config; the client is created on context entry.
 
-        ``handlers`` is the handler tier (``ClientBase.handler``) each handler call runs through;
+        ``handlers`` is the handler tier (``ClientBase.wire`` with ``handler()``) each handler call runs through;
         None runs handlers undecorated.
         """
         self._config = config

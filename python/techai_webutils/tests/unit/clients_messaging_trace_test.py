@@ -15,7 +15,7 @@ import pytest
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 
-from techai_webutils.clients.client import ClientBase
+from techai_webutils.clients.client import ClientBase, handler
 from techai_webutils.clients.messaging import (
     MessagingConfig,
     MessagingKind,
@@ -173,7 +173,11 @@ async def test_sqs_handler_continues_the_trace_through_the_handler_tier(
             }
         ]
     }
-    handlers = ClientBase.handler("q", Deps(observability=observed.observability))
+    handlers = ClientBase.wire(
+        Decorations.fixed(Deps(observability=observed.observability)),
+        "q.handler",
+        handler(),
+    )
     seen: list[str] = []
 
     async with SQSSubscriber(sqs_config, handlers) as subscriber:
@@ -213,7 +217,7 @@ async def test_decorate_runs_publishes_through_the_tier_and_keeps_the_lifecycle(
     backend.publish_batch = AsyncMock()
 
     async with decorate(
-        backend, "bus", Deps(observability=observed.observability)
+        backend, Decorations.fixed(Deps(observability=observed.observability)), "bus"
     ) as pub:
         await pub.publish("a", b"1")
         await pub.publish_batch("b", [b"2"])

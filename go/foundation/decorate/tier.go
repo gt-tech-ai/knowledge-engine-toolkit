@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -189,35 +190,171 @@ func when(present bool, build func() OpMiddleware) OpMiddleware {
 	return build()
 }
 
-// Subject builds the Subject that runs the operations of the subject named name
-// through the tier's chain over d.
+// Subject builds the Subject that runs every operation of the subject named name through
+// the tier's chain over d: a pipeline stage, a job or a gate, whose one operation is
+// named where it is built.
 func (t Tier) Subject(name string, d Deps) Subject {
-	return Subject{mw: t.Chain(name, d), name: name}
+	return Subject{all: t.chains(name, d), name: name}
 }
 
-// Subject runs one subject's operations (a stage, a service, a repository) through its
-// tier's chain. It is embeddable: a type that embeds it gets Name and Exec.
-// The zero Subject runs operations undecorated.
+// chains builds the chains one operation can run on from d.
+func (t Tier) chains(name string, d Deps) chains {
+	streaming := d.WithoutRetry()
+	streaming.Timeout = 0
+	return chains{
+		full:      t.Chain(name, d),
+		once:      t.Chain(name, d.WithoutRetry()),
+		observed:  t.Chain(name, Deps{Observability: d.Observability}),
+		streaming: t.Chain(name, streaming),
+		timeout:   d.Timeout,
+	}
+}
+
+// chains are one operation's middleware chains: as configured, with the retry layer off
+// (a write that must not replay), and with the observability layers only (a statement
+// inside a caller's transaction, which must not time out, break or retry on its own).
+type chains struct {
+	// full is the chain as configured.
+	full OpMiddleware
+
+	// once is full without the retry layer.
+	once OpMiddleware
+
+	// observed is the tracing, metrics and logging layers only.
+	observed OpMiddleware
+
+	// streaming is full without the retry and timeout layers, for opening a stream whose
+	// deadline the caller owns.
+	streaming OpMiddleware
+
+	// timeout is the operation's configured deadline (zero: none).
+	timeout time.Duration
+}
+
+// pick returns the chain v selects.
+func (c chains) pick(v view) OpMiddleware {
+	switch v {
+	case viewOnce:
+		return c.once
+	case viewObserved:
+		return c.observed
+	case viewStreaming:
+		return c.streaming
+	case viewFull:
+		return c.full
+	}
+	return c.full
+}
+
+// view selects which of an operation's chains a Subject runs it on.
+type view int
+
+const (
+	// viewFull runs an operation on its chain as configured.
+	viewFull view = iota
+
+	// viewOnce runs an operation without the retry layer.
+	viewOnce
+
+	// viewObserved runs an operation with the observability layers only.
+	viewObserved
+
+	// viewStreaming runs an operation without the retry and timeout layers.
+	viewStreaming
+)
+
+// Subject runs one component's operations through its tier's chains. Built by
+// Decorations.NewSubject from the component's contract, it holds one set of chains per
+// operation, each resolved from that operation's own config key ("<name>.<op>"), and an
+// operation the contract does not have fails. Built by Tier.Subject (a pipeline stage, a
+// job, a gate), one set of chains serves every operation. It is embeddable: a type that
+// embeds it gets Name, Exec and ExecOnce. The zero Subject runs operations undecorated.
 type Subject struct {
-	// mw is the subject's chain; nil runs operations undecorated.
-	mw OpMiddleware
+	// ops maps each declared operation to its chains; nil runs every operation on all.
+	ops map[string]chains
 
-	// name is the subject's label.
+	// all are the component's chains, for a Subject with no declared operations.
+	all chains
+
+	// name is the component's dotted name, the label of every chain.
 	name string
+
+	// view selects the chain each operation runs on.
+	view view
 }
 
-// Name returns the subject's label.
+// Name returns the component's name.
 func (s Subject) Name() string { return s.name }
 
-// Exec runs fn as the operation named op through the subject's chain and returns its
-// result unmodified.
+// Once returns s running every operation without its retry layer, for a write whose
+// commit may have landed (a create, a claim).
+func (s Subject) Once() Subject {
+	s.view = viewOnce
+	return s
+}
+
+// Observed returns s running every operation with its observability layers only, for a
+// statement that runs inside a caller's transaction.
+func (s Subject) Observed() Subject {
+	s.view = viewObserved
+	return s
+}
+
+// Component returns s running any operation on the component's own chains, labeled by
+// its name: for an operation named outside the contract (a background loop's pass, named
+// by its loop), which the config tunes with the component.
+func (s Subject) Component() Subject {
+	s.ops = nil
+	return s
+}
+
+// Streaming returns s running every operation without its retry and timeout layers, for
+// opening a stream whose deadline the caller sets from Timeout.
+func (s Subject) Streaming() Subject {
+	s.view = viewStreaming
+	return s
+}
+
+// Timeout returns the deadline configured for the operation op (zero when none, or when
+// s does not declare op).
+func (s Subject) Timeout(op string) time.Duration {
+	if s.ops == nil {
+		return s.all.timeout
+	}
+	return s.ops[op].timeout
+}
+
+// Exec runs fn as the operation op through its chain and returns its result unmodified.
+// On a Subject built from a contract, an op the contract does not have is CodeInternal
+// and fn does not run.
 func (s Subject) Exec[R any](
 	ctx context.Context,
 	op string,
 	fn func(context.Context) (R, error),
 ) (R, error) {
-	if s.mw == nil {
+	c := s.all
+	if s.ops != nil {
+		var ok bool
+		if c, ok = s.ops[op]; !ok {
+			var zero R
+			return zero, apperr.New(
+				apperr.CodeInternal,
+				"decorate: "+s.name+" has no operation "+op,
+			)
+		}
+	}
+	mw := c.pick(s.view)
+	if mw == nil {
 		return fn(ctx)
 	}
-	return Exec(ctx, s.mw, op, fn)
+	return Exec(ctx, mw, op, fn)
+}
+
+// ExecOnce runs fn as the operation op without its retry layer.
+func (s Subject) ExecOnce[R any](
+	ctx context.Context,
+	op string,
+	fn func(context.Context) (R, error),
+) (R, error) {
+	return s.Once().Exec(ctx, op, fn)
 }

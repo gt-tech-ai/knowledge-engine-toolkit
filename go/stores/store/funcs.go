@@ -45,17 +45,14 @@ type Reader[C, T any, ID comparable] struct {
 	base Base[C]
 }
 
-// NewReader builds the Reader running get through base.
-func NewReader[C, T any, ID comparable](
-	base Base[C],
-	get GetFunc[C, T, ID],
-) Reader[C, T, ID] {
-	return Reader[C, T, ID]{base: base, get: get}
+// Reader builds the Reader running get through base.
+func (b Base[C]) Reader[T any, ID comparable](get GetFunc[C, T, ID]) Reader[C, T, ID] {
+	return Reader[C, T, ID]{base: b, get: get}
 }
 
 // Get returns the entity identified by id.
 func (r Reader[C, T, ID]) Get(ctx context.Context, id ID) (*T, error) {
-	return r.base.Exec(ctx, "Get", func(ctx context.Context) (*T, error) {
+	return r.base.Exec(ctx, "get", func(ctx context.Context) (*T, error) {
 		return r.get(ctx, r.base.Client(ctx), id)
 	})
 }
@@ -70,12 +67,9 @@ type Lister[C, T, P any] struct {
 	base Base[C]
 }
 
-// NewLister builds the Lister running list through base.
-func NewLister[C, T, P any](
-	base Base[C],
-	list ListFunc[C, T, P],
-) Lister[C, T, P] {
-	return Lister[C, T, P]{base: base, list: list}
+// Lister builds the Lister running list through base.
+func (b Base[C]) Lister[T, P any](list ListFunc[C, T, P]) Lister[C, T, P] {
+	return Lister[C, T, P]{base: b, list: list}
 }
 
 // List returns the page of entities params and page select.
@@ -84,7 +78,7 @@ func (l Lister[C, T, P]) List(
 	params P,
 	page types.PageRequest,
 ) (*types.Page[T], error) {
-	return l.base.Exec(ctx, "List", func(ctx context.Context) (*types.Page[T], error) {
+	return l.base.Exec(ctx, "list", func(ctx context.Context) (*types.Page[T], error) {
 		return l.list(ctx, l.base.Client(ctx), params, page)
 	})
 }
@@ -99,17 +93,14 @@ type Creator[C, T, In any] struct {
 	base Base[C]
 }
 
-// NewCreator builds the Creator running create through base.
-func NewCreator[C, T, In any](
-	base Base[C],
-	create CreateFunc[C, T, In],
-) Creator[C, T, In] {
-	return Creator[C, T, In]{base: base, create: create}
+// Creator builds the Creator running create through base.
+func (b Base[C]) Creator[T, In any](create CreateFunc[C, T, In]) Creator[C, T, In] {
+	return Creator[C, T, In]{base: b, create: create}
 }
 
 // Create persists a new entity built from in.
 func (w Creator[C, T, In]) Create(ctx context.Context, in In) (*T, error) {
-	return w.base.Write(ctx, "Create", func(ctx context.Context) (*T, error) {
+	return w.base.Write(ctx, "create", func(ctx context.Context) (*T, error) {
 		return w.create(ctx, w.base.Client(ctx), in)
 	})
 }
@@ -124,17 +115,16 @@ type Updater[C, T any, ID comparable, In any] struct {
 	base Base[C]
 }
 
-// NewUpdater builds the Updater running update through base.
-func NewUpdater[C, T any, ID comparable, In any](
-	base Base[C],
+// Updater builds the Updater running update through base.
+func (b Base[C]) Updater[T any, ID comparable, In any](
 	update UpdateFunc[C, T, ID, In],
 ) Updater[C, T, ID, In] {
-	return Updater[C, T, ID, In]{base: base, update: update}
+	return Updater[C, T, ID, In]{base: b, update: update}
 }
 
 // Update modifies the entity identified by id with in.
 func (w Updater[C, T, ID, In]) Update(ctx context.Context, id ID, in In) (*T, error) {
-	return w.base.Write(ctx, "Update", func(ctx context.Context) (*T, error) {
+	return w.base.Write(ctx, "update", func(ctx context.Context) (*T, error) {
 		return w.update(ctx, w.base.Client(ctx), id, in)
 	})
 }
@@ -149,17 +139,14 @@ type Deleter[C any, ID comparable] struct {
 	base Base[C]
 }
 
-// NewDeleter builds the Deleter running del through base.
-func NewDeleter[C any, ID comparable](
-	base Base[C],
-	del DeleteFunc[C, ID],
-) Deleter[C, ID] {
-	return Deleter[C, ID]{base: base, del: del}
+// Deleter builds the Deleter running del through base.
+func (b Base[C]) Deleter[ID comparable](del DeleteFunc[C, ID]) Deleter[C, ID] {
+	return Deleter[C, ID]{base: b, del: del}
 }
 
 // Delete removes the entity identified by id.
 func (w Deleter[C, ID]) Delete(ctx context.Context, id ID) error {
-	_, err := w.base.Write(ctx, "Delete", func(ctx context.Context) (struct{}, error) {
+	_, err := w.base.Write(ctx, "delete", func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, w.del(ctx, w.base.Client(ctx), id)
 	})
 	return err
@@ -175,23 +162,20 @@ type Exister[C any, ID comparable] struct {
 	base Base[C]
 }
 
-// NewExister builds the Exister running exists through base.
-func NewExister[C any, ID comparable](
-	base Base[C],
-	exists ExistsFunc[C, ID],
-) Exister[C, ID] {
-	return Exister[C, ID]{base: base, exists: exists}
+// Exister builds the Exister running exists through base.
+func (b Base[C]) Exister[ID comparable](exists ExistsFunc[C, ID]) Exister[C, ID] {
+	return Exister[C, ID]{base: b, exists: exists}
 }
 
 // Exists reports whether an entity identified by id exists.
 func (r Exister[C, ID]) Exists(ctx context.Context, id ID) (bool, error) {
-	return r.base.Exec(ctx, "Exists", func(ctx context.Context) (bool, error) {
+	return r.base.Exec(ctx, "exists", func(ctx context.Context) (bool, error) {
 		return r.exists(ctx, r.base.Client(ctx), id)
 	})
 }
 
-// Funcs are a Resource's statements, each run on the client its context's statement runs
-// on: Get, List and Exists read, and Create (from CIn), Update (from UIn) and Delete
+// Funcs are a FuncResource's statements, each run on the client its context's statement
+// runs on: Get, List and Exists read, and Create (from CIn), Update (from UIn) and Delete
 // write.
 type Funcs[C, T, P any, ID comparable, CIn, UIn any] struct {
 	// Get reads the entity identified by id.
@@ -213,9 +197,10 @@ type Funcs[C, T, P any, ID comparable, CIn, UIn any] struct {
 	Exists ExistsFunc[C, ID]
 }
 
-// Resource is the store-tier Base of interfaces.Resource, composed of the role Bases:
-// its reads run through the tier and its writes only inside a transaction.
-type Resource[C, T, P any, ID comparable, CIn, UIn any] struct {
+// FuncResource is the store-tier implementation of interfaces.Resource, composed of the
+// function roles: its reads run through the tier and its writes only inside a
+// transaction.
+type FuncResource[C, T, P any, ID comparable, CIn, UIn any] struct {
 	// Reader contributes Get.
 	Reader[C, T, ID]
 	// Lister contributes List.
@@ -230,13 +215,12 @@ type Resource[C, T, P any, ID comparable, CIn, UIn any] struct {
 	Exister[C, ID]
 }
 
-// NewResource builds the Resource running f's statements through base. A missing
+// FromFuncs builds the FuncResource running f's statements through b. A missing
 // statement fails INTERNAL, naming its role, so a partly-built resource fails at the
 // composition root rather than on its first call.
-func NewResource[C, T, P any, ID comparable, CIn, UIn any](
-	base Base[C],
+func (b Base[C]) FromFuncs[T, P any, ID comparable, CIn, UIn any](
 	f Funcs[C, T, P, ID, CIn, UIn],
-) (Resource[C, T, P, ID, CIn, UIn], error) {
+) (FuncResource[C, T, P, ID, CIn, UIn], error) {
 	for _, s := range []struct {
 		role    string
 		missing bool
@@ -249,18 +233,18 @@ func NewResource[C, T, P any, ID comparable, CIn, UIn any](
 		{"Exists", f.Exists == nil},
 	} {
 		if s.missing {
-			return Resource[C, T, P, ID, CIn, UIn]{}, apperr.New(
+			return FuncResource[C, T, P, ID, CIn, UIn]{}, apperr.New(
 				apperr.CodeInternal,
-				"store "+base.Name()+": no "+s.role+" statement",
+				"store "+b.Name()+": no "+s.role+" statement",
 			)
 		}
 	}
-	return Resource[C, T, P, ID, CIn, UIn]{
-		Reader:  NewReader(base, f.Get),
-		Lister:  NewLister(base, f.List),
-		Creator: NewCreator(base, f.Create),
-		Updater: NewUpdater(base, f.Update),
-		Deleter: NewDeleter(base, f.Delete),
-		Exister: NewExister(base, f.Exists),
+	return FuncResource[C, T, P, ID, CIn, UIn]{
+		Reader:  b.Reader(f.Get),
+		Lister:  b.Lister(f.List),
+		Creator: b.Creator(f.Create),
+		Updater: b.Updater(f.Update),
+		Deleter: b.Deleter(f.Delete),
+		Exister: b.Exister(f.Exists),
 	}, nil
 }

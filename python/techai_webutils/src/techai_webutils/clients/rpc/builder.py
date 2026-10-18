@@ -55,9 +55,7 @@ def new_rpc_channel_from_config(
     trace context and ``config.service_token``.
     """
     if config.kind is RpcKind.GRPC:
-        base = ClientBase.from_decorations(
-            config.name or "rpc", decorations or Decorations()
-        )
+        base = ClientBase.wire(decorations or Decorations(), config.name or "rpc")
         return create_channel(
             config=config.channel,
             interceptors=client_interceptors(base, config.service_token),

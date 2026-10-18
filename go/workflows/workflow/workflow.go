@@ -1,8 +1,8 @@
 // Package workflow is the workflow tier: the one boundary observed in every
 // environment and the only tier that opens a transaction. A consumer's workflow embeds a
-// Base and runs each operation in one of three shapes: a read (Exec, no transaction), a
-// command (ExecTx, one transaction) or a saga (Exec whose body commits each local step
-// with InTx).
+// Base built from its contract and runs each contract method in one of three shapes: a
+// read (Exec, no transaction), a command (ExecTx, one transaction) or a saga (Exec whose
+// body commits each local step with InTx).
 package workflow
 
 import (
@@ -25,85 +25,34 @@ func Tier() decorate.Tier {
 	}}
 }
 
-// Base is the embeddable core of a workflow named by its Subject: Name and Exec (a read)
-// are promoted from the Subject, ExecTx runs a command and InTx a saga's local step. The
-// zero Base runs reads undecorated and refuses every transaction.
+// Base is the embeddable core of a workflow named by its Subject: Name and Exec (a read
+// or a saga) are promoted from the Subject, ExecTx runs a command and InTx a saga's local
+// step. Each operation is one method of the workflow's contract, decorated as the
+// component's name plus the method's snake_case name. The zero Base runs reads
+// undecorated and refuses every transaction.
 type Base struct {
 	// tx opens the transaction a command or a saga step runs in.
 	tx interfaces.TransactionManager
 
 	// Subject runs the workflow's operations through the tier; it supplies Name and Exec.
 	decorate.Subject
-
-	// ops resolves each named operation's decoration beneath the workflow's name.
-	ops decorate.Scope
 }
 
-// NewBase builds the Base for the workflow named name over tx (needed only by ExecTx
-// and InTx), decorated with deps; its named operations share deps.
-func NewBase(name string, tx interfaces.TransactionManager, deps decorate.Deps) Base {
-	return Base{
-		tx:      tx,
-		ops:     decorate.NewScope(Tier(), name, deps),
-		Subject: Tier().Subject(name, deps),
-	}
-}
-
-// NewBaseFrom builds the Base for the workflow named name over tx, decorated from decs:
-// the workflow as the workflow-tier component name, and each named operation op as
-// name+"."+op. A decoration that fails to resolve is CodeInvalidInput.
-func NewBaseFrom(
+// NewBase builds the Base for the workflow named name over tx (needed only by ExecTx and
+// InTx), decorated from decs: one chain per method of the contract W, each resolved as
+// the workflow-tier component name+"."+op, so the config can tune the workflow or one of
+// its operations. A W that is not an interface, or a decoration that fails to resolve,
+// is an error.
+func NewBase[W any](
 	decs decorate.Decorations,
 	name string,
 	tx interfaces.TransactionManager,
 ) (Base, error) {
-	deps, err := decs.Deps(Tier(), name)
+	subject, err := decs.SubjectOf[W](Tier(), name)
 	if err != nil {
 		return Base{}, err
 	}
-	return Base{
-		tx:      tx,
-		ops:     decs.Scope(Tier(), name),
-		Subject: Tier().Subject(name, deps),
-	}, nil
-}
-
-// Read is the workflow's named read op: fn runs through the workflow tier with no
-// transaction open.
-func Read[In, Out any](
-	b Base,
-	op string,
-	fn func(ctx context.Context, in In) (Out, error),
-) decorate.OpFunc[In, Out] {
-	return decorate.Operation(b.ops.Subject(op), fn)
-}
-
-// Command is the workflow's named command op: fn runs through the workflow tier in one
-// transaction, which commits when fn succeeds and rolls back when it fails (ExecTx).
-func Command[In, Out any](
-	b Base,
-	op string,
-	fn func(ctx context.Context, in In) (Out, error),
-) decorate.OpFunc[In, Out] {
-	return decorate.Operation(
-		b.ops.Subject(op),
-		func(ctx context.Context, in In) (Out, error) {
-			return b.InTx(
-				ctx,
-				func(ctx context.Context) (Out, error) { return fn(ctx, in) },
-			)
-		},
-	)
-}
-
-// Saga is the workflow's named saga op: fn runs through the workflow tier with no
-// transaction open, and commits each local step itself with InTx.
-func Saga[In, Out any](
-	b Base,
-	op string,
-	fn func(ctx context.Context, in In) (Out, error),
-) decorate.OpFunc[In, Out] {
-	return decorate.Operation(b.ops.Subject(op), fn)
+	return Base{tx: tx, Subject: subject}, nil
 }
 
 // ExecTx runs fn as the command op: one decorated operation whose body runs in one
@@ -154,7 +103,8 @@ func (b Base) InTx[R any](
 	return out, nil
 }
 
-// Pass runs a background loop's pass as the operation op, with no transaction: a pass
+// Pass runs a background loop's pass as the operation op (its loop's name) on the
+// workflow's own decoration, with no transaction: a pass
 // that writes commits each write with InTx. Its method value is a loop.Decorator, so
 // every pass is logged, counted, traced and recovered like a request.
 func (b Base) Pass(
@@ -162,7 +112,7 @@ func (b Base) Pass(
 	pass interfaces.Workflow[struct{}, struct{}],
 ) interfaces.Workflow[struct{}, struct{}] {
 	return passFlow(func(ctx context.Context) (struct{}, error) {
-		return b.Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
+		return b.Component().Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
 			return pass.Execute(ctx, struct{}{})
 		})
 	})

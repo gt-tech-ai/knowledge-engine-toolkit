@@ -76,20 +76,31 @@ Protocols do the same (`StorageClient` composes `ManagedResource`).
 The data-access roles are input-generic where a write takes a command rather than the entity:
 `Creator[T, C]` creates from `C`, `Updater[T, ID, U]` updates from `U`, and `Writer[T, ID]` is the
 pair whose input is `*T`. `Resource[T, P, ID, C, U]` composes `Reader`, `Lister`, `Creator`,
-`Updater`, `Deleter` and `Exister`. Every tier ships a Base implementation of each role and of
-`Resource`: `store.NewResource` from one statement per role (writes only inside a transaction),
-`repository.Base.Resource`, `service.Base.Resource` (input validators), `pipeline.Base.Resource`
-and `workflow.NewResource` (reads with no transaction, each write one command). A consumer's
-resource is therefore assembled from these.
+`Updater`, `Deleter` and `Exister`.
 
-A verb that is not CRUD is an operation, `Op[In, Out]` (one method, `Execute(ctx, in)`), built
-by its tier's base under its own decoration name `<component>.<op>`: `store.Query` /
-`store.Statement` (the statement only inside a transaction), `repository.Query` /
-`repository.Command` (never retried), `service.Op` (validates a `Validatable` input),
-`workflow.Read` / `workflow.Command` / `workflow.Saga`, and `client.Call` / `client.CallOnce`,
-which turn an SDK function `func(ctx, in, ...opt)` into an operation under the client tier. A
-consumer component exposes its verbs as `Op` fields beside its roles instead of declaring a
-method interface, so each verb is decorated, configured and mocked (`mocks.MockOp`) on its own.
+**Every tier builds on one base shape.** Each tier package (`clients/client`, `stores/store`,
+`repos/repository`, `services/service`, `pipelines/pipeline`, `workflows/workflow`,
+`transport`) has `<tier>.go` — `Tier()`, `Base` and `NewBase[C](decs, name, …) (Base, error)` —
+and `roles.go`, its role compositions as `Base` methods. `C` is the component's contract (an
+interface): each of its methods is one operation, decorated as `<name>.<op>` where `op` is the
+method's snake_case name (`FindByKey` → `find_by_key`), so the config tunes the component or one
+operation. A consumer component embeds its tier's `Base`, implements each contract method through
+the promoted `Exec` (and `ExecOnce`, `ExecTx`, `InTx`, `Write`, … where its tier has them) under
+the method's op name, and calls the next tier. Running an op the contract does not declare fails
+`INTERNAL`. The role compositions are the same names at every tier that has them: `CRUD`,
+`CRUDNoList`, `ReadListExist` and `Resource` on the store, repository and service bases;
+`Outbox` on the store and repository; `TxSafeInsert` and `Cached` (the read-through entity cache,
+composed under a role: `b.CRUD(b.Cached(store, cache))`) on the repository; `Resource` on the
+pipeline and workflow (reads with no transaction, each write one command). `store.Base.FromFuncs`
+builds a store's implementation from one statement per role (writes only inside a transaction).
+A job is one `job.Base` per job (`NewBase(decs, name)`, its op `execute`); a gate is decorated as
+the gate-tier component of its name (`Decorate(decs)`, its op `run`). A client whose operations
+are wire-level names known per call (an RPC procedure, an HTTP route, a job kind) uses
+`client.NewWireBase(decs, name, opts…)`, whose ops all run on the client's own chain; a
+workflow's loop pass runs on its workflow's own chain, labeled by its loop (`Pass`). Tests build
+any tier undecorated with `fixtures.Must(x.NewBase[C](fixtures.Decorations(), "test"))`, or over
+chosen collaborators with `decorate.Fixed(deps)`. Python mirrors the shape: `XBase(contract,
+decorations, name)`, `ClientBase.wire(decorations, name, *options)`, `Decorations.fixed(deps)`.
 
 An out-of-core interface that cannot embed one carries a doc-comment tag saying why:
 
@@ -126,38 +137,43 @@ collaborator or zero timeout skips its layer; recovery needs none.
   its layer out), and `Subject.Exec[R](ctx, op, fn)` runs an operation of any return type through
   it. The role decorators (`decorate.Reader`, `Lister`, `Writer`, `Inserter`, `Deleter`,
   `Exister`) run each method of one core role through a Subject, so every decorated CRUD shape is
-  an embedding of the roles it honors. Each tier package is one file with a `Tier()` and a `Base`:
-  - `pipeline.Base`: `Stage[In, Out](name, fn)` builds a decorated `pipeline.Stage` (a function
+  an embedding of the roles it honors. `Decorations.SubjectOf[C](tier, name)` builds a
+  component's Subject from its contract: one set of chains per operation, each resolved from
+  `<name>.<op>`, with views that drop layers for one call — `Once()` (no retry: a write that
+  must not replay), `Observed()` (observability only: a statement inside a caller's
+  transaction), `Streaming()` (no retry or timeout: a stream whose deadline its caller owns)
+  and `Component()` (any op on the component's chain). An operation reuses its component's
+  circuit breaker, bulkhead and rate limiter unless its own override configures that layer, so
+  a limit set on the component bounds its operations together. Per tier:
+  - `pipeline.Base`: `Stage[In, Out](op, fn)` builds a decorated `pipeline.Stage` (a function
     type that is an `interfaces.Pipeline`), whose `Then[C](next)` composes it with the next
-    stage; `FanOut[In, Out](name, stages...)` runs stages concurrently on one input.
+    stage; `FanOut[In, Out](op, stages...)` runs stages concurrently on one input.
   - `workflow.Base` embeds the workflow's Subject over a `TransactionManager`; it is the only tier
     that opens a transaction. A consumer workflow embeds the Base and runs each operation as a
     read (`Exec`, no transaction), a command (`ExecTx`, one transaction) or a saga (`Exec` whose
     body commits each local step with `InTx`, undecorated). `ExecTx` and `InTx` refuse a context
     already in a transaction, so a transaction never opens inside another.
-  - `service.Base` embeds the service's Subject (a consumer service embeds the Base and runs each
-    custom op through the promoted `Exec`); `CRUD` and `CRUDNoList` decorate a repository (with an
-    optional entity validator) and `OpService` a single-operation service.
-  - `repository.Base` embeds the repository's Subject the same way; `CRUD`, `ReadListExist`,
-    `CRUDNoList` and `TxSafeInsert` decorate a store. A Create is never retried, and an in-transaction
-    insert runs only its recovery, auth and observability. `Cached` adds the read-through entity
-    cache beneath them, and `DecoratedFromConfig` assembles the stack — the store behind the store
-    tier, the cache, the repository tier — each from its tier of the decoration config.
+  - `service.Base` embeds the service's Subject; `CRUD` and `CRUDNoList` decorate a repository
+    with an optional entity validator, and `Resource` with input validators.
+  - `repository.Base` embeds the repository's Subject; `ExecOnce` runs a non-idempotent write. A
+    Create is never retried, and an in-transaction insert (`TxSafeInsert`) runs only its
+    observability.
   - `go/stores` is the store tier, between the clients and the repositories: `store.Tier()`
-    (Tracing → Metrics → Logging → Timeout; unobserved by default), `store.Decorate` puts any
-    `interfaces.Store` behind it, and `store.Base[C]` is a hand-written store's embeddable core —
-    `Exec` runs a statement through the tier and `Client(ctx)` returns the client a transaction
-    manager bound with `store.WithClient`, else the store's own. The ORM is the store's kind
-    (`stores.kind`: `ent` or `gorm`), one subpackage each: `stores/ent` (the list-query compiler
-    backend, `Apply`, `FoldFilters` / `FoldOrder`) and `stores/gorm` (the lifecycle-managed
-    `*gorm.DB`); `stores/errors` maps a driver's errors to coded ones (`postgres/`).
+    (Tracing → Metrics → Logging → Timeout; unobserved by default) and `store.Base[C]` — `Exec`
+    runs a statement through the tier, `Write` runs one only inside a transaction, and
+    `Client(ctx)` returns the client a transaction manager bound with `store.WithClient`, else
+    the store's own. The ORM is the store's kind (`stores.kind`: `ent` or `gorm`), one
+    subpackage each: `stores/ent` (the list-query compiler backend, `Apply`, `FoldFilters` /
+    `FoldOrder`) and `stores/gorm` (the lifecycle-managed `*gorm.DB`); `stores/errors` maps a
+    driver's errors to coded ones (`postgres/`).
 
   Every tier's series are `<tier>_operations_total`, `<tier>_errors_total` and
   `<tier>_operation_duration_seconds` labelled `{<tier>, operation}`; its spans are
-  `<name>.<op>` with `<tier>.name` / `<tier>.operation`; a pipeline stage runs as its `Execute`
-  operation. The clients tier uses the same engine: `client.Tier()` and `client.Base`
-  (`Once`, `Do`, `DoOnce`, `Stream` for a result read after the call returns), and each decorated
-  family's `Decorate`; its series are `client_*` labelled `{client, operation}`.
+  `<name>.<op>` with `<tier>.name` / `<tier>.operation`. The clients tier uses the same engine:
+  `client.Tier()` and `client.Base` (`Exec`, `ExecOnce`, `Do`, `DoOnce`, `Stream` and `Open`
+  for a stream, bounded by its op's timeout), with the `Producer()`, `Handler()` and
+  `AtMostOnce()` options, and each decorated family's `Decorate(base, decs, name, opts…)`, which
+  `client.Kinds.Build` calls; its series are `client_*` labelled `{client, operation}`.
 - **Go — every decorator is configurable.** The `decoration` config section
   (`schema/decoration.Load`) holds one `Tier` per tier — `controllers`, `clients`, `workflows`,
   `pipelines`, `services`, `repositories`, `stores`, `jobs`, `gates` — each with `defaults` and
@@ -168,12 +184,10 @@ collaborator or zero timeout skips its layer; recovery needs none.
   The order stays the tier's, in code. The composition root builds one `decorate.Decorations`
   from that config and the `Collaborators` (logger, metrics, tracer, authorizer) and hands it
   down; a component's `decorate.Deps` is `Decorations.Deps(<tier>.Tier(), name)`, so turning a
-  layer on for one component is a config change. Builders of many components resolve each by
-  its own name: `pipeline.NewBaseFrom(decs, prefix)` makes each stage `<prefix>.<stage>`,
-  `job.NewBaseFrom(decs, prefix)` each job `<prefix>.<job>`, `gate.Decorate(decs)` runs a
-  gate as the gate-tier component of its name, and the store, repository, service, workflow and
-  client bases' `NewBaseFrom` resolve each operation they build as `<name>.<op>`
-  (`decorate.Scope`). **Fail loudly:** an override that turns on a
+  layer on for one component is a config change. Every base resolves its component as `<name>`
+  and each contract operation as `<name>.<op>`; `Decorations.Inventory()` lists every name
+  resolved with its layers and the config keys they came from (`Sources`), for a deployable's
+  `--print-decorations`. **Fail loudly:** an override that turns on a
   layer its tier does not run (retry on a workflow) is `INVALID_INPUT`, and once the graph is
   built the root calls `Decorations.Verify(prefixes…)`, which fails `INVALID_INPUT` on every
   override under those prefixes that no component resolved (a misspelled or stale key) and on
@@ -188,14 +202,16 @@ collaborator or zero timeout skips its layer; recovery needs none.
   outermost first), `Subject`, `Deps`, and `Decorations`, which builds a component's `Deps` from
   the same `decoration` section (`foundation/config/decoration`; durations are Go strings such as
   `"30s"`, read by `foundation/config/duration.parse_duration`). Each tier package has Go's
-  `tier()` and a base with `from_decorations(name, decorations)`: `clients.client.ClientBase`
-  (`exec`, `once`; `decorate(client, name, deps)` runs every coroutine method of a client
-  through the tier), `repos.RepositoryBase` (`crud(store)`, Create never retried),
-  `services.ServiceBase` (`crud(repo, validate)`, `op_service`), `pipelines.PipelineBase`
-  (`stage`, `fan_out`; `Stage.then` chains), `workflows.WorkflowBase` (`exec`, `exec_tx`,
-  `in_tx`), `execution.job.JobBase` and `controllers.ControllerBase`. Spans, series, log lines and
-  op names match Go's. A consumer repository or service subclasses `DelegatingRepository` /
-  `DelegatingCrudService` and runs its custom ops through the base's `exec`. The retry layer's
+  `tier()` and a base built from the contract, `XBase(contract, decorations, name)`, whose ops are
+  the contract's public methods: `clients.client.ClientBase` (`exec`, `exec_once`;
+  `ClientBase.wire(decorations, name, *options)` for wire-level ops, with `producer()`,
+  `handler()` and `at_most_once()`), `repos.RepositoryBase` (`exec`, `exec_once`, `crud(store)`,
+  Create never retried), `services.ServiceBase` (`exec`, `crud(repo, validate)`),
+  `pipelines.PipelineBase` (`stage`, `fan_out`; `Stage.then` chains), `workflows.WorkflowBase`
+  (`exec`, `exec_tx`, `in_tx`), `execution.job.JobBase(decorations, name)` and
+  `controllers.ControllerBase`. Spans, series, log lines and op names match Go's. A consumer
+  repository or service subclasses `DelegatingRepository` / `DelegatingCrudService` and runs its
+  custom ops through the base's `exec`. The retry layer's
   `ExponentialRetrier` (and `retry_transient_async`) wait out a server pushback
   (`details["retry_after_ms"]`, read by `retry_after_s`), capped by the max interval.
 - **Python — GenAI span enrichment.** `clients/decorators/ai_enricher.AiSpanEnricher` wraps an
@@ -228,7 +244,7 @@ Outermost → innermost:
 | Stack | Where | Order |
 | --- | --- | --- |
 | Client | `go/clients/client` (`Tier`; each family's `Decorate`) | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging — decorated: storage, messaging publish, lock, replay buffer, analytics store, connector source, and the SDK/HTTP seam of the outbox sinks (SDK faults coded so only throttling/server faults retry) and the Prometheus querier (op `prometheus.<endpoint>`; the capped body is read inside the attempt; 429/502/503/504 transient) |
-| Message handler | `go/clients/messaging/{sqs,redis}` | the Client tier as `<name>.handler` (`client.NewHandlerBase`) in CONSUMER spans, each publish in a PRODUCER span (`client.NewProducerBase`; a Redis publish, at-most-once, is never retried — `Kinds.AtMostOnce`): a handler is never retried, broken or bulkheaded — the broker's redelivery is the retry. The publisher's trace context (`tracer.Inject` / `Extract`) rides SQS message attributes and memory-broker metadata, so the handler continues the publisher's trace; Redis Pub/Sub carries the payload alone, so a trace stops at a Redis channel |
+| Message handler | `go/clients/messaging/{sqs,redis}` | the Client tier as `<name>.handler` (`client.NewWireBase` with `client.Handler()`) in CONSUMER spans, each publish in a PRODUCER span (`client.Producer()`; a Redis publish, at-most-once, is never retried — `Kinds.AtMostOnce`): a handler is never retried, broken or bulkheaded — the broker's redelivery is the retry. The publisher's trace context (`tracer.Inject` / `Extract`) rides SQS message attributes and memory-broker metadata, so the handler continues the publisher's trace; Redis Pub/Sub carries the payload alone, so a trace stops at a Redis channel |
 | Controller | `go/transport` (`Tier`; `Base.Handler` for a REST/RPC handler) | Tracing (server span) → Metrics → Logging → Recovery → RateLimit → Bulkhead (sheds when `bulkhead.shed`, the controllers' default) → Auth (`<controller>.<op>`) → Timeout — switched and tuned by `decoration.controllers` |
 | Connect server | `go/transport/connect/interceptors.ServerOptions` | the Controller tier via `transport.Interceptors`, op `pkg.Service/Method`: Connect-native Tracing (continues the caller's trace, sets `traceresponse`), Metrics (`connect_rpc_*`, by status code) and Logging (status-aware access line) stand in for the tier's; `Edge.Authn` (service auth, gateway-header auth, the consumer's principal and tenant-scope interceptors) runs just before Auth; `Edge.Inner` (retry budget, validation) after the tier. A stream gets no timeout; a handler's error is returned verbatim, a tier rejection becomes a `*connect.Error` of its code |
 | gRPC / Connect client | `go/clients/rpc/grpc/interceptors.ClientOptions`, `go/clients/rpc/connect/interceptors.ClientOptions` (installed by `rpc.NewFromConfig`) | the Client tier under the client's name, op `pkg.Service/Method`; per attempt the trace context (and, gRPC, the service token) rides the outgoing metadata. A server status is coded by `clients/rpc/wire` for the tier and returned verbatim; a tier-made failure becomes the status of its code. A gRPC stream's open runs through `client.Base.Open` (never retried; the timeout bounds only the open) |

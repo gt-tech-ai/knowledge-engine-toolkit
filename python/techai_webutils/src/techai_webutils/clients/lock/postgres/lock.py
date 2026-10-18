@@ -8,7 +8,7 @@ automatically (no TTL). The lock is a two-int ``(classid, objid)`` — the calle
 signed-int32-folded crc32 of the caller's ``key``.
 
 Cross-cutting concerns (logging, tracing, retry, circuit breaking) are layered by the client tier
-(``clients.client.decorate``) at the composition root; this class stays focused on the Postgres
+(a decorated wrapper over ``clients.client.ClientBase``) at the composition root; this class stays focused on the Postgres
 mechanics and its connection lifecycle.
 """
 

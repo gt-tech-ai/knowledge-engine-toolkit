@@ -48,6 +48,19 @@ type Decorations struct {
 	// reg records every component resolved and every resolution that failed, shared by
 	// the copies of one Decorations; nil (the zero Decorations) records nothing.
 	reg *registry
+
+	// fixed, when set, is the Deps every name resolves to (Fixed).
+	fixed *Deps
+}
+
+// Fixed returns the Decorations that resolves every component and operation to d,
+// whatever its name: a test builds a base over chosen collaborators with it.
+func Fixed(d Deps) Decorations {
+	return Decorations{
+		reg:    newRegistry(),
+		fixed:  &d,
+		collab: Collaborators{Observability: d.Observability},
+	}
 }
 
 // NewDecorations returns the Decorations over a copy of cfg and the collaborators c; a
@@ -84,6 +97,9 @@ func (d Decorations) Observability() Observability { return d.collab.Observabili
 // does not order, or a layer whose tuning is invalid, is CodeInvalidInput.
 func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 	d.reg.use(tier.Name, name)
+	if d.fixed != nil {
+		return *d.fixed, nil
+	}
 	cfg := d.cfg
 	if cfg == nil {
 		cfg = &decoration.Config{}
@@ -99,6 +115,55 @@ func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 		return Deps{}, err
 	}
 	return Build(name, tc.For(name), d.collab)
+}
+
+// ownOverride returns the override configured for exactly name in tier: none on the zero
+// or a Fixed Decorations.
+func (d Decorations) ownOverride(tier Tier, name string) decoration.Layers {
+	if d.cfg == nil || d.fixed != nil {
+		return decoration.Layers{}
+	}
+	tc, ok := d.cfg.Tier(tier.Name)
+	if !ok {
+		return decoration.Layers{}
+	}
+	return tc.Overrides[name]
+}
+
+// Resolved is one component or operation Decorations resolved, with the layers it runs
+// and the config keys they came from.
+type Resolved struct {
+	// Tier is the tier's name ("service", "repository", …).
+	Tier string
+
+	// Name is the resolved dotted name: a component ("aiops.budgets") or one of its
+	// operations ("aiops.budgets.create").
+	Name string
+
+	// Sources are the config keys merged into Layers, in order: "defaults", then each
+	// override from the shortest dotted prefix to the name's own.
+	Sources []string
+
+	// Layers are the layers the name resolved to.
+	Layers decoration.Layers
+}
+
+// Inventory returns every component and operation d resolved, ordered by tier then name:
+// what a deployable prints with --print-decorations. The zero and a Fixed Decorations
+// report no layers.
+func (d Decorations) Inventory() []Resolved {
+	comps := d.Components()
+	out := make([]Resolved, 0, len(comps))
+	for _, c := range comps {
+		r := Resolved{Tier: c.Tier, Name: c.Name}
+		if d.cfg != nil && d.fixed == nil {
+			if tc, ok := d.cfg.Tier(c.Tier); ok {
+				r.Layers, r.Sources = tc.For(c.Name), tc.Sources(c.Name)
+			}
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // Subject returns the Subject of the component named name in tier, decorated as Deps

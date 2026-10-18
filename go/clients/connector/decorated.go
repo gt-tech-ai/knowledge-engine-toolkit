@@ -9,13 +9,18 @@ import (
 )
 
 // Decorate runs every operation of base through the client tier as the client named
-// name.
+// name, one operation per method of its contract.
 func Decorate(
 	base interfaces.ConnectorSource,
+	decs decorate.Decorations,
 	name string,
-	deps decorate.Deps,
-) interfaces.ConnectorSource {
-	return &decorated{base: base, Base: client.NewBase(name, deps)}
+	opts ...client.Option,
+) (interfaces.ConnectorSource, error) {
+	b, err := client.NewBase[interfaces.ConnectorSource](decs, name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &decorated{base: base, Base: b}, nil
 }
 
 // decorated runs each ConnectorSource operation through the client tier.

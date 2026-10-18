@@ -167,21 +167,29 @@ func TestDecorationsVerify_FailsOnAnOverrideNoComponentUses(t *testing.T) {
 	require.ErrorContains(t, err, "retry")
 }
 
-// TestConfiguredBases_ResolveEachStageJobAndGateByItsOwnName tests the per-component
-// bases of the pipeline, job and gate tiers.
+// documentsPipeline is a pipeline contract with two stages, create and delete.
+type documentsPipeline interface {
+	// Create runs the create stage.
+	Create(ctx context.Context, in string) (string, error)
+
+	// Delete runs the delete stage.
+	Delete(ctx context.Context, in string) (string, error)
+}
+
+// TestConfiguredBases_ResolveEachStageJobAndGateByItsOwnName tests the bases of the
+// pipeline, job and gate tiers.
 //
 // Why this test is important:
-//   - A pipeline set, a job group or a gate is many components behind one constructor;
-//     resolving them under one shared name makes every stage, job and gate share one
-//     decoration, so none can be tuned on its own.
+//   - A pipeline's stages, a worker's jobs and its gate are separate units of work;
+//     resolving them under one shared name makes them share one decoration, so none can
+//     be tuned on its own.
 //
 // What it tests:
-//   - A stage built from pipeline.NewBaseFrom(decs, "api").Named("documents") is
-//     logged when the "api.documents.create" override turns logging on, and its sibling
-//     stage is not.
-//   - A job built from job.NewBaseFrom(decs, "").Named("events") resolves
-//     "events.<job>", and a gate decorated from decs resolves its own name in the gate
-//     tier.
+//   - A stage of a pipeline built from its contract as "api.documents" is logged when
+//     the "api.documents.create" override turns logging on, and its sibling stage is
+//     not.
+//   - A job built as "events.sweep" runs as its "execute" operation, and a gate
+//     decorated from decs runs as "run" under its own name in the gate tier.
 //   - Each name counts as used for Verify.
 func TestConfiguredBases_ResolveEachStageJobAndGateByItsOwnName(t *testing.T) {
 	t.Parallel()
@@ -198,19 +206,23 @@ func TestConfiguredBases_ResolveEachStageJobAndGateByItsOwnName(t *testing.T) {
 	var logged []string
 	// The logging layer logs each operation at Debug as (tier, name, "operation", op).
 	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ string, kv ...any) { logged = append(logged, kv[1].(string)) }).AnyTimes()
+		func(_ string, kv ...any) {
+			logged = append(logged, kv[1].(string)+"."+kv[3].(string))
+		}).AnyTimes()
 	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{
 		Observability: decorate.Observability{Logger: logger},
 	})
 
-	pipes := pipeline.NewBaseFrom(decs, "api").Named("documents")
+	pipes, err := pipeline.NewBase[documentsPipeline](decs, "api.documents")
+	require.NoError(t, err)
 	identity := func(_ context.Context, in string) (string, error) { return in, nil }
-	_, err := pipes.Stage("create", identity).Execute(t.Context(), "x")
+	_, err = pipes.Stage("create", identity).Execute(t.Context(), "x")
 	require.NoError(t, err)
 	_, err = pipes.Stage("delete", identity).Execute(t.Context(), "x")
 	require.NoError(t, err)
 
-	jobs := job.NewBaseFrom(decs, "").Named("events")
+	jobs, err := job.NewBase(decs, "events.sweep")
+	require.NoError(t, err)
 	sweep := jobs.Local(
 		"sweep",
 		"events",
@@ -223,8 +235,8 @@ func TestConfiguredBases_ResolveEachStageJobAndGateByItsOwnName(t *testing.T) {
 
 	assert.Contains(t, logged, "api.documents.create")
 	assert.NotContains(t, logged, "api.documents.delete")
-	assert.Contains(t, logged, "events.sweep")
-	assert.Contains(t, logged, "events.nightly")
+	assert.Contains(t, logged, "events.sweep.execute")
+	assert.Contains(t, logged, "events.nightly.run")
 	require.NoError(t, decs.Verify("api", "events"))
 	assert.Equal(t, "gate", gate.Tier().Name)
 }

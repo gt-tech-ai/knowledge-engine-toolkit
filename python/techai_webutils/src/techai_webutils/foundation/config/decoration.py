@@ -235,6 +235,20 @@ class Tier:
         """
         return merge(self.defaults, self.overriding(name))
 
+    def sources(self, name: str) -> list[str]:
+        """Return the config keys ``layers_for(name)`` merges, in order (Go ``Tier.Sources``).
+
+        ``defaults`` when the tier has any, then each override of a dotted prefix of ``name``
+        from the shortest, then ``name``'s own.
+        """
+        out = ["defaults"] if self.defaults != Layers() else []
+        parts = name.split(".")
+        for i in range(1, len(parts) + 1):
+            key = ".".join(parts[:i])
+            if key in self.overrides:
+                out.append(f"overrides.{key}")
+        return out
+
     def overriding(self, name: str) -> Layers:
         """Return the layers the overrides lay over the defaults for ``name`` (Go ``Overriding``)."""
         layers = Layers()

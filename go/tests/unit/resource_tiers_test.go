@@ -15,6 +15,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines/pipeline"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/workflow"
 )
@@ -89,9 +90,10 @@ func TestRepositoryBaseResource_DelegatesCommandInputsAndNeverRetriesACreate(
 		gomock.NewController(t),
 	)
 	expectEveryRole(inner, &te{ID: "w1"})
-	repo := repository.NewBase("widgets", decorate.Deps{
+	repo := fixtures.Must(repository.NewBase[widgetsResource](decorate.Fixed(decorate.Deps{
 		Retrier: passThroughRetrier(t, 5),
-	}).Resource(inner)
+	}), "widgets")).
+		Resource(inner)
 	callEveryRole(t, repo)
 }
 
@@ -118,12 +120,16 @@ func TestServiceBaseResource_ValidatesInputsBeforeTheRepository(t *testing.T) {
 		}
 		return nil
 	}
-	svc := service.NewBase("widgets", decorate.Deps{}).Resource(inner, service.Validators[
-		resourceCreate, resourceUpdate,
-	]{
-		Create: func(in resourceCreate) error { return rejectEmpty(in.Name) },
-		Update: func(in resourceUpdate) error { return rejectEmpty(in.Name) },
-	})
+	widgets := fixtures.Must(
+		service.NewBase[widgetsResource](fixtures.Decorations(), "w"),
+	)
+	svc := widgets.
+		Resource(inner, service.Validators[
+			resourceCreate, resourceUpdate,
+		]{
+			Create: func(in resourceCreate) error { return rejectEmpty(in.Name) },
+			Update: func(in resourceUpdate) error { return rejectEmpty(in.Name) },
+		})
 	callEveryRole(t, svc)
 
 	_, err := svc.Create(t.Context(), resourceCreate{})
@@ -147,10 +153,14 @@ func TestPipelineBaseResource_StagesEveryRole(t *testing.T) {
 		gomock.NewController(t),
 	)
 	expectEveryRole(inner, &te{ID: "w1"})
-	callEveryRole(t, pipeline.NewBase(decorate.Deps{}).Resource("widgets", inner))
+	callEveryRole(
+		t,
+		fixtures.Must(pipeline.NewBase[widgetsResource](fixtures.Decorations(), "widgets")).
+			Resource(inner),
+	)
 
 	called := ""
-	stage := pipeline.NewBase(decorate.Deps{}).Stage("touch", pipeline.Unit(
+	stage := pipeline.Base{}.Stage("touch", pipeline.Unit(
 		func(_ context.Context, id string) error {
 			called = id
 			return nil
@@ -215,6 +225,15 @@ func TestWorkflowBaseResource_ReadsWithoutATransactionAndCommitsEachWrite(t *tes
 			return nil
 		})
 
-	flows := workflow.NewBase("widgets", txManager(t, 3, nil), decorate.Deps{})
-	callEveryRole(t, workflow.NewResource(flows, inner))
+	flows := fixtures.Must(
+		workflow.NewBase[widgetsResource](
+			decorate.Fixed(decorate.Deps{}),
+			"widgets",
+			txManager(t, 3, nil),
+		),
+	)
+	callEveryRole(t, flows.Resource(inner))
 }
+
+// widgetsResource is the contract of the widgets resource at every tier.
+type widgetsResource = interfaces.Resource[te, tp, string, resourceCreate, resourceUpdate]

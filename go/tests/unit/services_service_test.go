@@ -10,9 +10,11 @@ import (
 	"go.uber.org/mock/gomock"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -34,6 +36,18 @@ func TestServiceTier_Order(t *testing.T) {
 	}}, service.Tier())
 }
 
+// counterService is the counting service's contract.
+type counterService interface {
+	// Count returns the count.
+	Count(ctx context.Context) (int, error)
+
+	// Slow waits for its deadline.
+	Slow(ctx context.Context) (int, error)
+
+	// Boom panics.
+	Boom(ctx context.Context) (int, error)
+}
+
 // countingService is a consumer service that embeds service.Base and runs its one
 // custom operation through the promoted Exec.
 type countingService struct {
@@ -47,7 +61,7 @@ type countingService struct {
 func (s countingService) Count(ctx context.Context) (int, error) {
 	return s.Exec(
 		ctx,
-		"Count",
+		"count",
 		func(context.Context) (int, error) { return s.count, nil },
 	)
 }
@@ -66,20 +80,25 @@ func (s countingService) Count(ctx context.Context) (int, error) {
 //     error; a zero Base runs the operation undecorated.
 func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 	t.Parallel()
-	base := service.NewBase("counter", decorate.Deps{Timeout: 20 * time.Millisecond})
+	base := fixtures.Must(
+		service.NewBase[counterService](
+			decorate.Fixed(decorate.Deps{Timeout: 20 * time.Millisecond}),
+			"counter",
+		),
+	)
 	assert.Equal(t, "counter", base.Name())
 
 	got, err := countingService{Base: base, count: 3}.Count(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 3, got)
 
-	_, err = base.Exec(t.Context(), "Slow", func(ctx context.Context) (int, error) {
+	_, err = base.Exec(t.Context(), "slow", func(ctx context.Context) (int, error) {
 		<-ctx.Done()
 		return 0, ctx.Err()
 	})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
-	_, err = base.Exec(t.Context(), "Boom", func(context.Context) (int, error) {
+	_, err = base.Exec(t.Context(), "boom", func(context.Context) (int, error) {
 		panic("boom")
 	})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
@@ -115,15 +134,17 @@ func TestServiceBaseCRUD_DelegatesValidatesAndAuthorizes(t *testing.T) {
 	}
 	denied := apperr.New(apperr.CodeForbidden, "denied")
 	var actions []string
-	svc := service.NewBase("widgets", decorate.Deps{
-		Auth: func(_ context.Context, action string) error {
-			actions = append(actions, action)
-			if action == "widgets.Delete" {
-				return denied
-			}
-			return nil
-		},
-	}).CRUD(repo, validate)
+	svc := fixtures.Must(service.NewBase[interfaces.Service[te, tp, string]](
+		decorate.Fixed(decorate.Deps{
+			Auth: func(_ context.Context, action string) error {
+				actions = append(actions, action)
+				if action == "widgets.delete" {
+					return denied
+				}
+				return nil
+			},
+		}), "widgets")).
+		CRUD(repo, validate)
 	w := &te{ID: "w1", Name: "one"}
 	repo.EXPECT().Get(gomock.Any(), "w1").Return(w, nil)
 	repo.EXPECT().
@@ -146,40 +167,17 @@ func TestServiceBaseCRUD_DelegatesValidatesAndAuthorizes(t *testing.T) {
 	require.ErrorIs(t, err, invalid)
 	require.ErrorIs(t, svc.Delete(t.Context(), "w1"), denied)
 	assert.Equal(t, []string{
-		"widgets.Get", "widgets.List", "widgets.Create", "widgets.Update",
-		"widgets.Create", "widgets.Delete",
+		"widgets.get", "widgets.list", "widgets.create", "widgets.update",
+		"widgets.create", "widgets.delete",
 	}, actions)
 
 	keyed := mocks.NewMockCRUDNoListRepository[te, string](ctrl)
 	keyed.EXPECT().Delete(gomock.Any(), "w1").Return(nil)
-	noList := service.NewBase("keyed", decorate.Deps{}).CRUDNoList(keyed, validate)
+	noList := fixtures.Must(service.NewBase[interfaces.CRUDNoListRepository[te, string]](
+		fixtures.Decorations(), "keyed",
+	)).
+		CRUDNoList(keyed, validate)
 	require.NoError(t, noList.Delete(t.Context(), "w1"))
 	_, err = noList.Update(t.Context(), "w1", &te{})
 	require.ErrorIs(t, err, invalid)
-}
-
-// TestServiceBaseOpService_RunsTheOperationDecorated tests the single-operation
-// service.
-//
-// Why this test is important:
-//   - A command-style service (one Run) gets the same decoration as a CRUD one; a panic
-//     in it must come back as an error, not unwind through the caller.
-//
-// What it tests:
-//   - Name is the service's, Run returns the operation's result, and a panicking
-//     operation returns an INTERNAL error.
-func TestServiceBaseOpService_RunsTheOperationDecorated(t *testing.T) {
-	t.Parallel()
-	base := service.NewBase("greet", decorate.Deps{})
-	greet := base.OpService(func(_ context.Context, name string) (string, error) {
-		return "hi " + name, nil
-	})
-	assert.Equal(t, "greet", greet.Name())
-	got, err := greet.Run(t.Context(), "ada")
-	require.NoError(t, err)
-	assert.Equal(t, "hi ada", got)
-
-	_, err = base.OpService(func(context.Context, int) (int, error) { panic("boom") }).
-		Run(t.Context(), 1)
-	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }

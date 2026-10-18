@@ -1,7 +1,8 @@
 """The repository tier (mirrors Go ``repos/repository``).
 
-``tier()`` orders the tier's layers; ``RepositoryBase`` runs one repository's operations through
-it, switched and tuned per repository by the decoration config's ``repositories`` tier.
+``tier()`` orders the tier's layers; ``RepositoryBase``, built from the repository's contract,
+runs its operations through it, switched and tuned per repository and per operation by the
+decoration config's ``repositories`` tier.
 ``RepositoryBase.crud(store)`` decorates a store's CRUD; a custom query runs through
 ``RepositoryBase.exec``.
 """
@@ -11,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from techai_webutils.core.interfaces.repository import Repository
-from techai_webutils.foundation.decorate import Layer, Operation, Scope, Subject, Tier
+from techai_webutils.foundation.decorate import Layer, Subject, Tier
 from techai_webutils.foundation.decorate.roles import CrudOps, exists
 
 if TYPE_CHECKING:
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 
     from techai_webutils.core.domain_types.types import Page, PageRequest
     from techai_webutils.core.interfaces.store import Store
-    from techai_webutils.foundation.decorate import Decorations, Deps
+    from techai_webutils.foundation.decorate import Decorations
 
 
 def tier() -> Tier:
@@ -45,41 +46,11 @@ def tier() -> Tier:
 class RepositoryBase:
     """Runs one repository's operations through the repository tier."""
 
-    __slots__ = ("_create", "_ops", "_subject")
+    __slots__ = ("_subject",)
 
-    def __init__(self, name: str, deps: Deps) -> None:
-        """Bind the repository ``name``'s subject; Create gets one without retry.
-
-        Its named operations share ``deps``.
-        """
-        self._subject = tier().subject(name, deps)
-        self._create = tier().subject(name, deps.without_retry())
-        self._ops = Scope(tier(), name, deps)
-
-    @classmethod
-    def from_decorations(cls, name: str, decorations: Decorations) -> RepositoryBase:
-        """Return the base of the repository ``name``, its layers resolved from the config.
-
-        Each named operation ``op`` resolves as ``<name>.<op>``.
-        """
-        base = cls(name, decorations.deps(tier(), name))
-        base._ops = decorations.scope(tier(), name)
-        return base
-
-    def query[In, Out](
-        self, op: str, fn: Callable[[In], Awaitable[Out]]
-    ) -> Operation[In, Out]:
-        """Return the named read ``op``, run through the tier with its retry (a read is idempotent)."""
-        return Operation(self._ops.subject(op), fn)
-
-    def command[In, Out](
-        self, op: str, fn: Callable[[In], Awaitable[Out]]
-    ) -> Operation[In, Out]:
-        """Return the named write ``op``, run through the tier without retry.
-
-        A write whose first attempt committed must not run twice.
-        """
-        return Operation(self._ops.subject(op, without_retry=True), fn)
+    def __init__(self, contract: type, decorations: Decorations, name: str) -> None:
+        """Bind the repository ``name``: one chain per method of ``contract`` (Go ``NewBase[R]``)."""
+        self._subject = decorations.subject_of(tier(), name, contract)
 
     @property
     def name(self) -> str:
@@ -90,12 +61,16 @@ class RepositoryBase:
         """Run a custom query ``fn`` as the operation ``op`` through the tier."""
         return await self._subject.exec(op, fn)
 
+    async def exec_once[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
+        """Run a non-idempotent write ``fn`` as ``op`` through the tier, without retry."""
+        return await self._subject.exec_once(op, fn)
+
     def crud[T, P, ID](self, store: Store[T, P, ID]) -> Repository[T, P, ID]:
         """Return the repository serving ``store``'s CRUD through the tier.
 
         Create is never retried: a create whose commit landed must not run twice.
         """
-        return _DecoratedRepository(store, self._subject, self._create)
+        return _DecoratedRepository(store, self._subject, self._subject.once())
 
 
 class _DecoratedRepository[T, P, ID](CrudOps[T, P, ID], Repository[T, P, ID]):

@@ -162,36 +162,63 @@ func TestClientFamilies_RejectAnUnknownKind(t *testing.T) {
 //     no config may turn retry back on for them.
 //
 // What it tests:
-//   - With client retry on in config, a kind outside AtMostOnce is decorated with a
-//     retrier; an AtMostOnce kind, named or selected as the Default, is not.
+//   - With client retry on in config, a transient failure on a kind outside AtMostOnce
+//     is retried; on an AtMostOnce kind, named or selected as the Default, it is not.
 func TestKindsBuild_NeverRetriesAnAtMostOnceKind(t *testing.T) {
 	t.Parallel()
-	backend := func(context.Context, struct{}, struct{}) (string, error) { return "", nil }
-	var decorated []decorate.Deps
-	kinds := client.Kinds[struct{}, struct{}, string]{
+	backend := func(context.Context, struct{}, struct{}) (toyClient, error) {
+		return toyBackend{}, nil
+	}
+	var attempts []int
+	kinds := client.Kinds[struct{}, struct{}, toyClient]{
 		Family:     "toy",
 		Default:    "once",
 		AtMostOnce: []client.Kind{"once"},
-		Backends: map[client.Kind]client.Backend[struct{}, struct{}, string]{
+		Backends: map[client.Kind]client.Backend[struct{}, struct{}, toyClient]{
 			"any":  backend,
 			"once": backend,
 		},
-		Decorate: func(base, _ string, deps decorate.Deps) string {
-			decorated = append(decorated, deps)
-			return base
+		Decorate: func(
+			base toyClient, decs decorate.Decorations, name string, opts ...client.Option,
+		) (toyClient, error) {
+			b, err := client.NewBase[toyClient](decs, name, opts...)
+			if err != nil {
+				return nil, err
+			}
+			n := 0
+			_, _ = b.Exec(t.Context(), "ping", func(context.Context) (struct{}, error) {
+				n++
+				return struct{}{}, apperr.New(apperr.CodeUnavailable, "down")
+			})
+			attempts = append(attempts, n)
+			return base, nil
 		},
 	}
 	on := true
 	cfg := decoration.DefaultConfig()
 	cfg.Clients.Defaults.Retry.Enabled = &on
+	cfg.Clients.Defaults.Retry.InitialInterval = time.Millisecond
+	cfg.Clients.Defaults.Retry.MaxInterval = time.Millisecond
 	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
 
 	for _, kind := range []client.Kind{"any", "once", ""} {
 		_, err := kinds.Build(t.Context(), kind, struct{}{}, struct{}{}, decs, "")
 		require.NoError(t, err)
 	}
-	require.Len(t, decorated, 3)
-	assert.NotNil(t, decorated[0].Retrier)
-	assert.Nil(t, decorated[1].Retrier)
-	assert.Nil(t, decorated[2].Retrier)
+	require.Len(t, attempts, 3)
+	assert.Greater(t, attempts[0], 1)
+	assert.Equal(t, 1, attempts[1])
+	assert.Equal(t, 1, attempts[2])
 }
+
+// toyClient is the contract of the toy family's backends.
+type toyClient interface {
+	// Ping probes the backend.
+	Ping(ctx context.Context) error
+}
+
+// toyBackend is a toy backend whose probe always succeeds.
+type toyBackend struct{}
+
+// Ping succeeds.
+func (toyBackend) Ping(context.Context) error { return nil }

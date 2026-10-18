@@ -2,6 +2,9 @@ package decorate
 
 import (
 	"context"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
@@ -11,7 +14,7 @@ import (
 // decorated CRUD shape (full CRUD, read-only, list-less, insert-only) is an embedding of
 // the roles it honors and every method is decorated by the same code.
 
-// Reader decorates interfaces.Reader: Get runs as the "Get" operation.
+// Reader decorates interfaces.Reader: Get runs as the "get" operation.
 type Reader[T any, ID comparable] struct {
 	// inner is the decorated role.
 	inner interfaces.Reader[T, ID]
@@ -30,12 +33,12 @@ func NewReader[T any, ID comparable](
 
 // Get reads one entity by id.
 func (r Reader[T, ID]) Get(ctx context.Context, id ID) (*T, error) {
-	return r.op.Exec(ctx, "Get", func(ctx context.Context) (*T, error) {
+	return r.op.Exec(ctx, "get", func(ctx context.Context) (*T, error) {
 		return r.inner.Get(ctx, id)
 	})
 }
 
-// Lister decorates interfaces.Lister: List runs as the "List" operation.
+// Lister decorates interfaces.Lister: List runs as the "list" operation.
 type Lister[T any, P any] struct {
 	// inner is the decorated role.
 	inner interfaces.Lister[T, P]
@@ -55,12 +58,12 @@ func (l Lister[T, P]) List(
 	params P,
 	page types.PageRequest,
 ) (*types.Page[T], error) {
-	return l.op.Exec(ctx, "List", func(ctx context.Context) (*types.Page[T], error) {
+	return l.op.Exec(ctx, "list", func(ctx context.Context) (*types.Page[T], error) {
 		return l.inner.List(ctx, params, page)
 	})
 }
 
-// Creator decorates interfaces.Creator: Create runs as the "Create" operation, and a
+// Creator decorates interfaces.Creator: Create runs as the "create" operation, and a
 // non-nil validate rejects an invalid input before it reaches inner.
 type Creator[T, C any] struct {
 	// inner is the decorated role.
@@ -85,7 +88,7 @@ func NewCreator[T, C any](
 
 // Create persists a new entity built from in.
 func (w Creator[T, C]) Create(ctx context.Context, in C) (*T, error) {
-	return w.op.Exec(ctx, "Create", func(ctx context.Context) (*T, error) {
+	return w.op.Exec(ctx, "create", func(ctx context.Context) (*T, error) {
 		if err := check(w.validate, in); err != nil {
 			return nil, err
 		}
@@ -93,7 +96,7 @@ func (w Creator[T, C]) Create(ctx context.Context, in C) (*T, error) {
 	})
 }
 
-// Updater decorates interfaces.Updater: Update runs as the "Update" operation, and a
+// Updater decorates interfaces.Updater: Update runs as the "update" operation, and a
 // non-nil validate rejects an invalid input before it reaches inner.
 type Updater[T any, ID comparable, U any] struct {
 	// inner is the decorated role.
@@ -118,7 +121,7 @@ func NewUpdater[T any, ID comparable, U any](
 
 // Update modifies the entity identified by id with in.
 func (w Updater[T, ID, U]) Update(ctx context.Context, id ID, in U) (*T, error) {
-	return w.op.Exec(ctx, "Update", func(ctx context.Context) (*T, error) {
+	return w.op.Exec(ctx, "update", func(ctx context.Context) (*T, error) {
 		if err := check(w.validate, in); err != nil {
 			return nil, err
 		}
@@ -157,7 +160,7 @@ func NewWriter[T any, ID comparable](
 	}
 }
 
-// Suggester decorates interfaces.Suggester: SuggestValues runs as the "SuggestValues"
+// Suggester decorates interfaces.Suggester: SuggestValues runs as the "suggest_values"
 // operation.
 type Suggester[P any] struct {
 	// inner is the decorated role.
@@ -179,14 +182,14 @@ func (s Suggester[P]) SuggestValues(
 ) (*types.Page[string], error) {
 	return s.op.Exec(
 		ctx,
-		"SuggestValues",
+		"suggest_values",
 		func(ctx context.Context) (*types.Page[string], error) {
 			return s.inner.SuggestValues(ctx, params)
 		},
 	)
 }
 
-// Inserter decorates interfaces.Inserter: Insert runs as the "Insert" operation.
+// Inserter decorates interfaces.Inserter: Insert runs as the "insert" operation.
 type Inserter[T any] struct {
 	// inner is the decorated role.
 	inner interfaces.Inserter[T]
@@ -202,13 +205,13 @@ func NewInserter[T any](op Subject, inner interfaces.Inserter[T]) Inserter[T] {
 
 // Insert appends a new entity.
 func (i Inserter[T]) Insert(ctx context.Context, entity *T) error {
-	_, err := i.op.Exec(ctx, "Insert", func(ctx context.Context) (struct{}, error) {
+	_, err := i.op.Exec(ctx, "insert", func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, i.inner.Insert(ctx, entity)
 	})
 	return err
 }
 
-// Deleter decorates interfaces.Deleter: Delete runs as the "Delete" operation.
+// Deleter decorates interfaces.Deleter: Delete runs as the "delete" operation.
 type Deleter[ID comparable] struct {
 	// inner is the decorated role.
 	inner interfaces.Deleter[ID]
@@ -224,13 +227,13 @@ func NewDeleter[ID comparable](op Subject, inner interfaces.Deleter[ID]) Deleter
 
 // Delete removes the entity identified by id.
 func (d Deleter[ID]) Delete(ctx context.Context, id ID) error {
-	_, err := d.op.Exec(ctx, "Delete", func(ctx context.Context) (struct{}, error) {
+	_, err := d.op.Exec(ctx, "delete", func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, d.inner.Delete(ctx, id)
 	})
 	return err
 }
 
-// Exister decorates interfaces.Exister: Exists runs as the "Exists" operation.
+// Exister decorates interfaces.Exister: Exists runs as the "exists" operation.
 type Exister[ID comparable] struct {
 	// inner is the decorated role.
 	inner interfaces.Exister[ID]
@@ -246,7 +249,7 @@ func NewExister[ID comparable](op Subject, inner interfaces.Exister[ID]) Exister
 
 // Exists reports whether the entity identified by id exists.
 func (e Exister[ID]) Exists(ctx context.Context, id ID) (bool, error) {
-	return e.op.Exec(ctx, "Exists", func(ctx context.Context) (bool, error) {
+	return e.op.Exec(ctx, "exists", func(ctx context.Context) (bool, error) {
 		return e.inner.Exists(ctx, id)
 	})
 }
@@ -293,4 +296,99 @@ func NewResource[T, P any, ID comparable, C, U any](
 		Deleter: NewDeleter(ops.Rest, inner),
 		Exister: NewExister(ops.Rest, inner),
 	}
+}
+
+// NewOutbox returns inner with Claim run through claim and every other operation
+// through rest.
+func NewOutbox(claim, rest Subject, inner interfaces.OutboxStore) Outbox {
+	return Outbox{inner: inner, claim: claim, op: rest}
+}
+
+var _ interfaces.OutboxStore = Outbox{}
+
+// Outbox runs each outbox-store operation through a tier: Claim on its own Subject
+// (a repository's runs it without retry, since a claim leases rows and counts an
+// attempt), every other operation on the rest.
+type Outbox struct {
+	// inner is the wrapped store.
+	inner interfaces.OutboxStore
+
+	// claim runs Claim.
+	claim Subject
+
+	// op runs every other operation.
+	op Subject
+}
+
+// Claim leases up to limit due rows of lane; see interfaces.OutboxStore.
+func (r Outbox) Claim(
+	ctx context.Context,
+	lane string,
+	limit int,
+) ([]types.OutboxRecord, error) {
+	return r.claim.Exec(
+		ctx,
+		"claim",
+		func(ctx context.Context) ([]types.OutboxRecord, error) {
+			return r.inner.Claim(ctx, lane, limit)
+		},
+	)
+}
+
+// MarkSent records that row id was delivered.
+func (r Outbox) MarkSent(ctx context.Context, id uuid.UUID) error {
+	return r.do(ctx, "mark_sent", func(ctx context.Context) error {
+		return r.inner.MarkSent(ctx, id)
+	})
+}
+
+// Retry makes row id claimable again at next, recording lastErr.
+func (r Outbox) Retry(
+	ctx context.Context,
+	id uuid.UUID,
+	next time.Time,
+	lastErr string,
+) error {
+	return r.do(ctx, "retry", func(ctx context.Context) error {
+		return r.inner.Retry(ctx, id, next, lastErr)
+	})
+}
+
+// Park takes row id out of rotation, recording lastErr.
+func (r Outbox) Park(ctx context.Context, id uuid.UUID, lastErr string) error {
+	return r.do(ctx, "park", func(ctx context.Context) error {
+		return r.inner.Park(ctx, id, lastErr)
+	})
+}
+
+// Stats summarizes lane's pending and parked rows.
+func (r Outbox) Stats(
+	ctx context.Context,
+	lane string,
+) (types.OutboxStats, error) {
+	return r.op.Exec(ctx, "stats", func(ctx context.Context) (types.OutboxStats, error) {
+		return r.inner.Stats(ctx, lane)
+	})
+}
+
+// DeleteSentBefore purges the rows delivered before cutoff and returns how many.
+func (r Outbox) DeleteSentBefore(
+	ctx context.Context,
+	cutoff time.Time,
+) (int, error) {
+	return r.op.Exec(ctx, "delete_sent_before", func(ctx context.Context) (int, error) {
+		return r.inner.DeleteSentBefore(ctx, cutoff)
+	})
+}
+
+// do runs an error-only operation through the chain.
+func (r Outbox) do(
+	ctx context.Context,
+	op string,
+	fn func(context.Context) error,
+) error {
+	_, err := r.op.Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, fn(ctx)
+	})
+	return err
 }

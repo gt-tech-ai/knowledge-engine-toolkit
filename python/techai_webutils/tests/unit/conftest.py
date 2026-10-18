@@ -153,20 +153,19 @@ def aws_client() -> Iterator[AsyncMock]:
 def metrics_mock() -> tuple[MagicMock, dict[str, MagicMock]]:
     """Return a ``MetricsProvider`` mock plus its instruments, recorded by metric name as they are declared.
 
-    Each ``counter`` / ``histogram`` declaration returns a fresh ``MagicMock(spec=MetricCounter)`` /
-    ``MagicMock(spec=MetricHistogram)`` stored under the metric name.
+    Like a real provider (create or retrieve), the first ``counter`` / ``histogram`` declaration of
+    a name returns a new ``MagicMock(spec=MetricCounter)`` / ``MagicMock(spec=MetricHistogram)``
+    stored under it, and every later declaration of that name returns the same one.
     """
     instruments: dict[str, MagicMock] = {}
 
     def _counter(name: str, _help: str, _labels: list[str] | None = None) -> MagicMock:
-        instruments[name] = MagicMock(spec=MetricCounter)
-        return instruments[name]
+        return instruments.setdefault(name, MagicMock(spec=MetricCounter))
 
     def _histogram(
         name: str, _help: str, _labels: list[str] | None = None, _buckets: object = None
     ) -> MagicMock:
-        instruments[name] = MagicMock(spec=MetricHistogram)
-        return instruments[name]
+        return instruments.setdefault(name, MagicMock(spec=MetricHistogram))
 
     provider = MagicMock(spec=MetricsProvider)
     provider.counter.side_effect = _counter

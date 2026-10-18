@@ -25,7 +25,7 @@ from techai_webutils.clients.rpc.grpc import (
 from techai_webutils.clients.rpc.grpc.interceptors import to_rpc_error
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
-from techai_webutils.foundation.decorate import Deps
+from techai_webutils.foundation.decorate import Decorations, Deps
 from techai_webutils.foundation.resilience.circuit_breaker import CircuitOpenError
 from techai_webutils.foundation.resilience.retrier import (
     ExponentialRetrier,
@@ -110,7 +110,7 @@ def _retrying() -> ClientBase:
     retrier = ExponentialRetrier(
         ExponentialRetrierConfig(initial_interval=0.0, max_interval=0.0)
     )
-    return ClientBase("rpc", Deps(retrier=retrier))
+    return ClientBase.wire(Decorations.fixed(Deps(retrier=retrier)), "rpc")
 
 
 @pytest.mark.asyncio
@@ -175,7 +175,9 @@ async def test_a_tier_rejection_becomes_the_status_of_its_code() -> None:
         return await channel.unary_unary("/test.Svc/Flaky")(b"hi")
 
     with pytest.raises(grpc.aio.AioRpcError) as caught:
-        await _serve(service, run, ClientBase("rpc", Deps(breaker=breaker)))
+        await _serve(
+            service, run, ClientBase.wire(Decorations.fixed(Deps(breaker=breaker)), "rpc")
+        )
 
     assert caught.value.code() == grpc.StatusCode.UNAVAILABLE
     assert service.calls == 0
@@ -202,7 +204,9 @@ async def test_every_call_carries_the_trace_and_the_service_token() -> None:
 
     with tracer.start_as_current_span("caller") as span:
         trace_id = format(span.get_span_context().trace_id, "032x")
-        chunks = await _serve(service, run, ClientBase("rpc", Deps()), token="tok")
+        chunks = await _serve(
+            service, run, ClientBase.wire(Decorations(), "rpc"), token="tok"
+        )
 
     assert chunks == [b"s", b"s"]
     for metadata in service.metadata:

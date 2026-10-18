@@ -9,13 +9,18 @@ import (
 )
 
 // Decorate runs every operation of base through the client tier as the client named
-// name.
+// name, one operation per method of its contract.
 func Decorate(
 	base interfaces.DistributedLock,
+	decs decorate.Decorations,
 	name string,
-	deps decorate.Deps,
-) interfaces.DistributedLock {
-	return &decorated{base: base, Base: client.NewBase(name, deps)}
+	opts ...client.Option,
+) (interfaces.DistributedLock, error) {
+	b, err := client.NewBase[interfaces.DistributedLock](decs, name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &decorated{base: base, Base: b}, nil
 }
 
 // decorated runs each DistributedLock operation through the client tier.

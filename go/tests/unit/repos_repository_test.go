@@ -14,6 +14,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -45,6 +46,21 @@ func passThroughRetrier(t *testing.T, times int) interfaces.Retrier {
 	return r
 }
 
+// widgetsQueries is the contract of the test repository's custom queries.
+type widgetsQueries interface {
+	// CountByOwner counts an owner's widgets.
+	CountByOwner(ctx context.Context) (int, error)
+
+	// Slow waits for its deadline.
+	Slow(ctx context.Context) (int, error)
+}
+
+// widgetsRoles is the contract of the test repository's role shapes.
+type widgetsRoles interface {
+	interfaces.Repository[te, tp, string]
+	interfaces.InsertOnlyStore[te]
+}
+
 // TestRepositoryBase_RunsCustomQueriesThroughTheChain tests the embeddable base.
 //
 // Why this test is important:
@@ -57,15 +73,15 @@ func passThroughRetrier(t *testing.T, times int) interfaces.Retrier {
 //   - A query over the timeout ends with the deadline; a zero Base runs undecorated.
 func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 	t.Parallel()
-	base := repository.NewBase("widgets", decorate.Deps{
+	base := fixtures.Must(repository.NewBase[widgetsQueries](decorate.Fixed(decorate.Deps{
 		Timeout: 20 * time.Millisecond,
 		Retrier: passThroughRetrier(t, 2),
-	})
+	}), "widgets"))
 	assert.Equal(t, "widgets", base.Name())
 
 	got, err := base.Exec(
 		t.Context(),
-		"CountByOwner",
+		"count_by_owner",
 		func(context.Context) (int, error) {
 			return 4, nil
 		},
@@ -73,7 +89,7 @@ func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 4, got)
 
-	_, err = base.Exec(t.Context(), "Slow", func(ctx context.Context) (int, error) {
+	_, err = base.Exec(t.Context(), "slow", func(ctx context.Context) (int, error) {
 		<-ctx.Done()
 		return 0, ctx.Err()
 	})
@@ -105,9 +121,11 @@ func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 func TestRepositoryBaseCRUD_DelegatesAndNeverRetriesACreate(t *testing.T) {
 	t.Parallel()
 	store := mocks.NewMockStore[te, tp, string](gomock.NewController(t))
-	repo := repository.NewBase("widgets", decorate.Deps{
-		Retrier: passThroughRetrier(t, 5),
-	}).CRUD(store)
+	repo := fixtures.Must(repository.NewBase[interfaces.Repository[te, tp, string]](
+		decorate.Fixed(decorate.Deps{
+			Retrier: passThroughRetrier(t, 5),
+		}), "widgets")).
+		CRUD(store)
 	w := &te{ID: "w1", Name: "one"}
 	store.EXPECT().Get(gomock.Any(), "w1").Return(w, nil)
 	store.EXPECT().
@@ -148,10 +166,10 @@ func TestRepositoryBaseCRUD_DelegatesAndNeverRetriesACreate(t *testing.T) {
 func TestRepositoryBase_RoleScopedShapes(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
-	base := repository.NewBase("widgets", decorate.Deps{
+	base := fixtures.Must(repository.NewBase[widgetsRoles](decorate.Fixed(decorate.Deps{
 		Retrier: passThroughRetrier(t, 2),
 		Timeout: time.Minute,
-	})
+	}), "widgets"))
 
 	reads := mocks.NewMockReadListExistStore[te, tp, string](ctrl)
 	reads.EXPECT().Exists(gomock.Any(), "w1").Return(true, nil)

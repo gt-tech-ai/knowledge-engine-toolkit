@@ -12,8 +12,17 @@ import (
 // Decorate runs Get and Put of base through the client tier as the client named name.
 // A Get may be retried (when the tier retries); a Put never is. The secret value never
 // reaches a log or span: only the operation is observed.
-func Decorate(base interfaces.Source, name string, deps decorate.Deps) interfaces.Source {
-	return &decorated{base: base, Base: client.NewBase(name, deps)}
+func Decorate(
+	base interfaces.Source,
+	decs decorate.Decorations,
+	name string,
+	opts ...client.Option,
+) (interfaces.Source, error) {
+	b, err := client.NewBase[interfaces.Source](decs, name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &decorated{base: base, Base: b}, nil
 }
 
 // decorated runs a credential Source's operations through the client tier.

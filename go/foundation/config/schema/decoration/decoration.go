@@ -163,6 +163,27 @@ func (t Tier) Overriding(name string) Layers {
 	return Merge(l, t.Overrides[name])
 }
 
+// Sources returns the config keys For merges for the component named name, in order:
+// "defaults" when the tier has defaults, then "overrides.<key>" for each dotted prefix of
+// name and for name itself that has an override.
+func (t Tier) Sources(name string) []string {
+	var out []string
+	if !reflect.ValueOf(t.Defaults).IsZero() {
+		out = append(out, "defaults")
+	}
+	for i := range len(name) {
+		if name[i] == '.' {
+			if _, ok := t.Overrides[name[:i]]; ok {
+				out = append(out, "overrides."+name[:i])
+			}
+		}
+	}
+	if _, ok := t.Overrides[name]; ok {
+		out = append(out, "overrides."+name)
+	}
+	return out
+}
+
 // overlay lays over on t: its defaults over t's, and each override over t's override
 // of the same name.
 func (t Tier) overlay(over Tier) Tier {

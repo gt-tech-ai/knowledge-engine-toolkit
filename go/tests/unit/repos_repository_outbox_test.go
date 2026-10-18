@@ -11,9 +11,11 @@ import (
 	"go.uber.org/mock/gomock"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -36,10 +38,12 @@ func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockOutboxStore(ctrl)
-	repo := repository.NewBase("outbox", decorate.Deps{
-		Timeout: time.Minute,
-		Retrier: passThroughRetrier(t, 5),
-	}).Outbox(store)
+	repo := fixtures.Must(repository.NewBase[interfaces.OutboxRepository](
+		decorate.Fixed(decorate.Deps{
+			Timeout: time.Minute,
+			Retrier: passThroughRetrier(t, 5),
+		}), "outbox")).
+		Outbox(store)
 
 	bounded := gomock.Cond(func(ctx context.Context) bool {
 		_, ok := ctx.Deadline()

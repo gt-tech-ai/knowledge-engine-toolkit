@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/job"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -46,7 +47,7 @@ func TestJobTier_OrdersRecoveryOutermost(t *testing.T) {
 // What it tests:
 //   - Meta carries the name and group.
 //   - Execute hands run the gate's runner and root and returns run's results and error.
-//   - With the tier observed, one span named "<job>.Execute" covers the run.
+//   - With the tier observed, one span named "<job>.execute" covers the run.
 func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
@@ -58,7 +59,7 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 	span.EXPECT().SetStatus(gomock.Any(), gomock.Any()).AnyTimes()
 	span.EXPECT().End().Times(2)
 	tracer.EXPECT().
-		Start(gomock.Any(), "lint.Execute", gomock.Any()).
+		Start(gomock.Any(), "lint.execute", gomock.Any()).
 		Times(2).
 		DoAndReturn(
 			func(ctx context.Context, _ string, _ ...interfaces.SpanOption) (
@@ -69,9 +70,9 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 		)
 	boom := apperr.New(apperr.CodeQualityFailed, "lint failed")
 	fail := false
-	lint := job.NewBase(decorate.Deps{
+	lint := fixtures.Must(job.NewBase(decorate.Fixed(decorate.Deps{
 		Observability: decorate.Observability{Tracer: tracer},
-	}).Func("lint", "Static", func(
+	}), "lint")).Func("lint", "Static", func(
 		_ context.Context, r interfaces.CommandRunner, root string,
 	) (types.StepResults, error) {
 		assert.Same(t, runner, r)
@@ -101,7 +102,8 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 // What it tests:
 //   - Local carries its name and group and returns its work's results.
 //   - Wrap keeps the inner job's full metadata (tool included).
-//   - A panicking job built by the zero Base returns an INTERNAL error.
+//   - A panicking job built over undecorated Decorations returns an INTERNAL error:
+//     recovery is the tier's outermost layer.
 func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
@@ -124,7 +126,7 @@ func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 			panic("boom")
 		},
 	)
-	wrapped := job.Base{}.Wrap(inner)
+	wrapped := fixtures.Must(job.NewBase(fixtures.Decorations(), "wrapped")).Wrap(inner)
 	assert.Equal(t, meta, wrapped.Meta())
 	_, err = wrapped.Execute(t.Context(), nil, "/repo")
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))

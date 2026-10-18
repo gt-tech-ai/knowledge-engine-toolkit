@@ -117,6 +117,13 @@ func WithJitter(jitter func(time.Duration) time.Duration) Option {
 	return func(r *Relay) { r.jitter = jitter }
 }
 
+// relayContract is the relay's one operation, the contract its undecorated workflow Base
+// is built from: the relay only opens transactions through it.
+type relayContract interface {
+	// RunOnce runs one relay pass.
+	RunOnce(ctx context.Context) error
+}
+
 // Relay moves outbox rows from a store to a sink. It is safe for concurrent
 // RunOnce calls (the store's claim keeps them disjoint).
 type Relay struct {
@@ -167,8 +174,14 @@ func NewRelay(
 			),
 		)
 	}
+	base, err := workflow.NewBase[relayContract](
+		decorate.Fixed(decorate.Deps{}), "outbox relay "+cfg.Lane, tx,
+	)
+	if err != nil {
+		panic(err)
+	}
 	r := &Relay{
-		tx:  workflow.NewBase("outbox relay "+cfg.Lane, tx, decorate.Deps{}),
+		tx:  base,
 		cfg: cfg, store: store, sink: sink, logger: logger, tracer: tracer,
 		now: time.Now, jitter: retry.FullJitter,
 	}

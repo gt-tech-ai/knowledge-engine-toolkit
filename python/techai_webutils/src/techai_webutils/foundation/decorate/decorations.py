@@ -14,8 +14,14 @@ from typing import TYPE_CHECKING
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.config.decoration import load, on, sections
-from techai_webutils.foundation.decorate.scope import Scope
-from techai_webutils.foundation.decorate.tier import Deps, Layer, Observability
+from techai_webutils.foundation.decorate.contract import ops_of
+from techai_webutils.foundation.decorate.tier import (
+    Chains,
+    Deps,
+    Layer,
+    Observability,
+    Subject,
+)
 from techai_webutils.foundation.resilience.bulkhead import (
     BulkheadConfig,
     BulkheadKind,
@@ -39,7 +45,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.retrier import Retrier
     from techai_webutils.foundation.config import decoration
     from techai_webutils.foundation.decorate.middleware import Authorizer
-    from techai_webutils.foundation.decorate.tier import Subject, Tier
+    from techai_webutils.foundation.decorate.tier import Tier
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,7 +66,7 @@ class Decorations:
     recovery runs.
     """
 
-    __slots__ = ("_collab", "_config", "_errors", "_lock", "_used")
+    __slots__ = ("_collab", "_config", "_errors", "_fixed", "_lock", "_used")
 
     def __init__(
         self,
@@ -73,6 +79,17 @@ class Decorations:
         self._used: dict[str, set[str]] = {}
         self._errors: list[AppValueError] = []
         self._lock = threading.Lock()
+        self._fixed: Deps | None = None
+
+    @classmethod
+    def fixed(cls, deps: Deps) -> Decorations:
+        """Return the Decorations that resolves every component and operation to ``deps``.
+
+        A test builds a base of any tier over chosen collaborators with it (Go ``Fixed``).
+        """
+        decs = cls(None, Collaborators(observability=deps.observability))
+        decs._fixed = deps
+        return decs
 
     @classmethod
     def load(
@@ -99,6 +116,8 @@ class Decorations:
         """
         with self._lock:
             self._used.setdefault(tier.name, set()).add(name)
+        if self._fixed is not None:
+            return self._fixed
         if self._config is None:
             return Deps()
         tc = self._config.tier(tier.name)
@@ -129,9 +148,82 @@ class Decorations:
                 self._errors.append(exc)
             return Deps()
 
-    def scope(self, tier: Tier, name: str) -> Scope:
-        """Return the Scope of the component ``name`` in ``tier``: each operation resolved by name."""
-        return Scope(tier, name, Deps(), self)
+    def new_subject(
+        self,
+        tier: Tier,
+        name: str,
+        ops: list[str] | None,
+        adjust: tuple[Callable[[Deps], Deps], ...] = (),
+    ) -> Subject:
+        """Return the Subject of the component ``name`` in ``tier`` whose operations are ``ops``.
+
+        The component resolves as ``name`` and each operation as ``<name>.<op>`` (Go
+        ``NewSubject``). An operation reuses its component's breaker, bulkhead and rate limiter
+        unless its own override configures that layer, so a limit set on the component bounds
+        its operations together. Each ``adjust`` runs on every resolved Deps. ``ops=None`` runs
+        any operation on the component's chains, for wire-level operation names. A resolution
+        error raises ``AppValueError``.
+        """
+        comp = _adjusted(self.deps(tier, name), adjust)
+        if ops is None:
+            return Subject(name, tier.chains(name, comp))
+        per_op: dict[str, Chains] = {}
+        for op in ops:
+            key = f"{name}.{op}"
+            deps = _adjusted(
+                self._share_stateful(tier, key, self.deps(tier, key), comp), adjust
+            )
+            per_op[op] = tier.chains(name, deps)
+        return Subject(name, tier.chains(name, comp), per_op)
+
+    def subject_of(
+        self,
+        tier: Tier,
+        name: str,
+        contract: type,
+        adjust: tuple[Callable[[Deps], Deps], ...] = (),
+    ) -> Subject:
+        """Return the Subject of the component ``name`` whose operations are ``contract``'s methods."""
+        return self.new_subject(tier, name, ops_of(contract), adjust)
+
+    def _share_stateful(self, tier: Tier, key: str, op: Deps, comp: Deps) -> Deps:
+        """Return ``op`` with its component's stateful layers for each its own override leaves unset."""
+        own = self._own_override(tier, key)
+        if own is None or own.circuit_breaker.enabled is None:
+            op = dataclasses.replace(op, breaker=comp.breaker)
+        if own is None or own.bulkhead.enabled is None:
+            op = dataclasses.replace(op, bulkhead=comp.bulkhead, shed_load=comp.shed_load)
+        if own is None or own.rate_limit.enabled is None:
+            op = dataclasses.replace(op, rate_limiter=comp.rate_limiter)
+        return op
+
+    def _own_override(self, tier: Tier, name: str) -> decoration.Layers | None:
+        """Return the override configured for exactly ``name`` in ``tier``, or None."""
+        if self._config is None or self._fixed is not None:
+            return None
+        tc = self._config.tier(tier.name)
+        return None if tc is None else tc.overrides.get(name)
+
+    def inventory(self) -> list[Resolved]:
+        """Return every component and operation resolved, by tier then name (Go ``Inventory``).
+
+        What a deployable prints with ``--print-decorations``. A Decorations with no config, or a
+        fixed one, reports no layers.
+        """
+        out: list[Resolved] = []
+        for tier_name, name in self.components():
+            tc = None
+            if self._config is not None and self._fixed is None:
+                tc = self._config.tier(tier_name)
+            out.append(
+                Resolved(
+                    tier=tier_name,
+                    name=name,
+                    sources=tc.sources(name) if tc is not None else [],
+                    layers=tc.layers_for(name) if tc is not None else None,
+                )
+            )
+        return out
 
     def components(self) -> list[tuple[str, str]]:
         """Return every component resolved as (tier name, component name), sorted (Go ``Components``).
@@ -191,6 +283,30 @@ class Decorations:
         if problems:
             msg = "decoration: " + "; ".join(problems)
             raise AppValueError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class Resolved:
+    """One component or operation a Decorations resolved (Go ``Resolved``)."""
+
+    tier: str
+    """The tier's name ("service", "repository", …)."""
+
+    name: str
+    """The resolved dotted name: a component or one of its operations."""
+
+    sources: list[str]
+    """The config keys merged into ``layers``, in order."""
+
+    layers: decoration.Layers | None
+    """The layers the name resolved to (None without a config)."""
+
+
+def _adjusted(deps: Deps, adjust: tuple[Callable[[Deps], Deps], ...]) -> Deps:
+    """Return ``deps`` after each ``adjust``, in order."""
+    for a in adjust:
+        deps = a(deps)
+    return deps
 
 
 def _owned(key: str, prefixes: tuple[str, ...]) -> bool:

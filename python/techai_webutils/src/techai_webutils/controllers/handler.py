@@ -14,7 +14,7 @@ from techai_webutils.foundation.decorate import Layer, Tier
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from techai_webutils.foundation.decorate import Decorations, Deps
+    from techai_webutils.foundation.decorate import Decorations
 
 type HandlerFunc[Req, Resp] = Callable[[Req], Awaitable[Resp]]
 """A request handler: a typed request in, a typed response out (Go ``transport.HandlerFunc``)."""
@@ -51,14 +51,9 @@ class ControllerBase:
 
     __slots__ = ("_subject",)
 
-    def __init__(self, name: str, deps: Deps) -> None:
-        """Bind the controller ``name``'s subject."""
-        self._subject = tier().subject(name, deps)
-
-    @classmethod
-    def from_decorations(cls, name: str, decorations: Decorations) -> ControllerBase:
-        """Return the base of the controller ``name``, its layers resolved from the config."""
-        return cls(name, decorations.deps(tier(), name))
+    def __init__(self, contract: type, decorations: Decorations, name: str) -> None:
+        """Bind the controller ``name``: one chain per method of ``contract`` (Go ``NewBase[C]``)."""
+        self._subject = decorations.subject_of(tier(), name, contract)
 
     @property
     def name(self) -> str:

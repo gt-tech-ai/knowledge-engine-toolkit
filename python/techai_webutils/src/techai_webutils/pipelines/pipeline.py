@@ -1,8 +1,9 @@
 """The pipeline tier (mirrors Go ``pipelines/pipeline``).
 
-``tier()`` orders the tier's layers; ``PipelineBase.stage`` turns a function into a decorated
-``Stage`` — one span, metric series and log line per stage — and ``Stage.then`` chains stages
-into a pipeline. ``PipelineBase.fan_out`` runs stages concurrently over one input.
+``tier()`` orders the tier's layers; ``PipelineBase``, built from the pipeline's contract, runs
+each operation through it, and ``PipelineBase.stage`` builds one as a decorated ``Stage`` — one
+span, metric series and log line per stage — that ``Stage.then`` chains into a pipeline.
+``PipelineBase.fan_out`` runs stages concurrently over one input.
 """
 
 from __future__ import annotations
@@ -12,12 +13,12 @@ from typing import TYPE_CHECKING, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.pipeline import AsyncPipeline
-from techai_webutils.foundation.decorate import Deps, Layer, Tier
+from techai_webutils.foundation.decorate import Layer, Tier
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from techai_webutils.foundation.decorate import Decorations, Subject
+    from techai_webutils.foundation.decorate import Decorations
 
 
 def tier() -> Tier:
@@ -59,72 +60,48 @@ class Stage[In, Out](AsyncPipeline[In, Out]):
 
 
 class PipelineBase:
-    """Builds decorated stages: each runs as ``Execute`` through the tier under its name."""
+    """Runs one pipeline's operations through the pipeline tier (Go ``pipeline.Base``).
 
-    __slots__ = ("_decorations", "_deps", "_prefix")
+    Each operation is one method of the pipeline's contract, decorated as ``<name>.<method>``;
+    ``stage`` builds an operation as a composable Stage.
+    """
 
-    def __init__(self, deps: Deps | None = None) -> None:
-        """Bind the collaborators every stage shares (none decorates nothing but recovery)."""
-        self._deps = deps or Deps()
-        self._decorations: Decorations | None = None
-        self._prefix = ""
+    __slots__ = ("_subject",)
 
-    @classmethod
-    def from_decorations(cls, name: str, decorations: Decorations) -> PipelineBase:
-        """Return the base whose stages each take their own layers from ``decorations``.
+    def __init__(self, contract: type, decorations: Decorations, name: str) -> None:
+        """Bind the pipeline ``name``: one chain per method of ``contract`` (Go ``NewBase[P]``)."""
+        self._subject = decorations.subject_of(tier(), name, contract)
 
-        A stage named ``stage`` is the pipeline-tier component ``<name>.<stage>`` (Go
-        ``NewBaseFrom``), so the config can tune one stage, or every stage under ``name``.
-        """
-        base = cls()
-        base._decorations = decorations
-        base._prefix = name
-        return base
+    @property
+    def name(self) -> str:
+        """The pipeline's name."""
+        return self._subject.name
 
-    def named(self, sub: str) -> PipelineBase:
-        """Return the base whose components sit beneath ``sub`` (Go ``Base.Named``).
-
-        From a base of prefix ``api``, ``named("documents")`` makes a stage ``create`` the component ``api.documents.create``. A base built from
-        shared Deps is returned unchanged.
-        """
-        if self._decorations is None:
-            return self
-        return type(self).from_decorations(
-            f"{self._prefix}.{sub}" if self._prefix else sub, self._decorations
-        )
-
-    def subject(self, name: str) -> Subject:
-        """Return the decorated Subject of the pipeline-tier component ``name`` (Go ``Base.Subject``).
-
-        For a pipeline not built from stage functions to run its operations through the tier as
-        a stage would.
-        """
-        if self._decorations is None:
-            return tier().subject(name, self._deps)
-        key = f"{self._prefix}.{name}" if self._prefix else name
-        return self._decorations.subject(tier(), key)
+    async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
+        """Run ``fn`` as the operation ``op`` through the tier."""
+        return await self._subject.exec(op, fn)
 
     def stage[In, Out](
-        self, name: str, fn: Callable[[In], Awaitable[Out]]
+        self, op: str, fn: Callable[[In], Awaitable[Out]]
     ) -> Stage[In, Out]:
-        """Return ``fn`` as the stage ``name``, run through the tier.
+        """Return ``fn`` as the decorated operation ``op``, a stage that composes with ``then``.
 
         A None function is a wiring bug and raises ``AppValueError``.
         """
         if fn is None:  # pyright: ignore[reportUnnecessaryComparison]
             msg = "pipeline: stage fn must not be None"
             raise AppValueError(msg)
-        subject = self.subject(name)
+        subject = self._subject
 
         async def run(input_data: In) -> Out:
-            return await subject.exec("Execute", lambda: fn(input_data))
+            return await subject.exec(op, lambda: fn(input_data))
 
         return Stage(run)
 
     def fan_out[In, Out](
-        self, name: str, *stages: AsyncPipeline[In, Out]
+        self, op: str, *stages: AsyncPipeline[In, Out]
     ) -> Stage[In, list[Out]]:
-        """Return the stage ``name`` that runs ``stages`` concurrently over one input.
+        """Return the decorated operation ``op``, a stage that runs ``stages`` concurrently.
 
         The outputs keep the stages' order; the first failure cancels the rest and is raised.
         """
@@ -138,4 +115,4 @@ class PipelineBase:
                 raise group_error.exceptions[0] from None
             return [t.result() for t in tasks]
 
-        return self.stage(name, run)
+        return self.stage(op, run)

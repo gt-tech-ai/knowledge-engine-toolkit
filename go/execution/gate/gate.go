@@ -132,7 +132,7 @@ func (g *Gate) Run(
 	runner interfaces.CommandRunner,
 	root string,
 ) error {
-	_, err := g.op.Exec(ctx, "Run", func(ctx context.Context) (struct{}, error) {
+	_, err := g.op.Exec(ctx, "run", func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, g.run(ctx, runner, root)
 	})
 	return err

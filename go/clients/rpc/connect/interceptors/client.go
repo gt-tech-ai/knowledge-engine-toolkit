@@ -43,7 +43,7 @@ func (i clientInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		op := strings.TrimPrefix(req.Spec().Procedure, "/")
 		run := i.base.Exec[connect.AnyResponse]
 		if req.Spec().IdempotencyLevel == connect.IdempotencyUnknown {
-			run = i.base.Once[connect.AnyResponse]
+			run = i.base.ExecOnce[connect.AnyResponse]
 		}
 		resp, err := run(
 			ctx,

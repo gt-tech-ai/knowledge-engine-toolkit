@@ -11,13 +11,19 @@ import (
 // Decorate runs every publish of base through the client tier as the client named
 // name, each as the operation named by its topic in a producer span. A publish is
 // retried only when deps carries a Retrier: a re-sent message is a duplicate an
-// at-least-once consumer accepts.
+// at-least-once consumer accepts. The topic is the operation, so the config tunes the
+// publisher as a whole; Kinds passes client.Producer in opts for the producer spans.
 func Decorate(
 	base interfaces.MessagePublisher,
+	decs decorate.Decorations,
 	name string,
-	deps decorate.Deps,
-) interfaces.MessagePublisher {
-	return &decorated{base: base, Base: client.NewProducerBase(name, deps)}
+	opts ...client.Option,
+) (interfaces.MessagePublisher, error) {
+	b, err := client.NewWireBase(decs, name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &decorated{base: base, Base: b}, nil
 }
 
 // decorated runs each MessagePublisher operation through the client tier.

@@ -51,7 +51,7 @@ func NewInsertClient(
 	maxConns int32,
 	decs decorate.Decorations,
 ) (*InsertClient, error) {
-	deps, err := decs.Deps(client.Tier(), InsertClientName)
+	ops, err := client.NewWireBase(decs, InsertClientName)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func NewInsertClient(
 	return &InsertClient{
 		pool:   pool,
 		client: rc,
-		ops:    client.NewBase(InsertClientName, deps),
+		ops:    ops,
 	}, nil
 }
 
@@ -100,7 +100,7 @@ func (c *InsertClient) Insert(
 	ctx context.Context,
 	args river.JobArgs,
 ) (skippedAsDuplicate bool, err error) {
-	return c.ops.Once(ctx, args.Kind(), func(ctx context.Context) (bool, error) {
+	return c.ops.ExecOnce(ctx, args.Kind(), func(ctx context.Context) (bool, error) {
 		res, err := c.client.Insert(ctx, args, nil)
 		if err != nil {
 			return false, apperr.Wrap(

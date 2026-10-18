@@ -37,7 +37,7 @@ func (a *sqsAPI) GetQueueUrl(
 ) (*awssqs.GetQueueUrlOutput, error) {
 	return a.Exec(
 		ctx,
-		"sqs.get_queue_url",
+		"get_queue_url",
 		func(cctx context.Context) (*awssqs.GetQueueUrlOutput, error) {
 			out, err := a.inner.GetQueueUrl(cctx, in, optFns...)
 			return out, classify(err)
@@ -53,7 +53,7 @@ func (a *sqsAPI) SendMessageBatch(
 ) (*awssqs.SendMessageBatchOutput, error) {
 	return a.Exec(
 		ctx,
-		"sqs.send_message_batch",
+		"send_message_batch",
 		func(cctx context.Context) (*awssqs.SendMessageBatchOutput, error) {
 			out, err := a.inner.SendMessageBatch(cctx, in, optFns...)
 			return out, classify(err)
@@ -95,9 +95,9 @@ func (a *s3API) PutObject(
 		return out, classify(err)
 	}
 	if rewindable {
-		return a.Exec(ctx, "s3.put_object", put)
+		return a.Exec(ctx, "put_object", put)
 	}
-	return a.Once(ctx, "s3.put_object", put)
+	return a.ExecOnce(ctx, "put_object", put)
 }
 
 // classify codes an SDK error: a throttle or server fault is CodeUnavailable

@@ -102,15 +102,19 @@ languages share one engine:
   `Decorations.Deps(<tier>.Tier(), name)` in Go, `decorations.deps(tier(), name)` in Python. Each
   tier has `defaults` and per-component `overrides` keyed by dotted name, cascading from each
   prefix to the full name. The **order** stays in code; **which layers run and how they are
-  tuned** is config. A stage, job, gate or operation resolves by its own name (`NewBaseFrom` /
-  `from_decorations`, `Decorate` / `decorate`, and each base's operation builders), and the root
-  calls `Verify(prefixes…)` / `verify(*prefixes)` (or `VerifyExplicit` / `verify_explicit` over a
-  generated file) so an unused override, a missing entry or an unsupported layer fails boot.
-- **Operations, not method interfaces.** A non-CRUD verb is an `Op[In, Out]` built by its tier's
-  base (`store.Query`/`Statement`, `repository.Query`/`Command`, `service.Op`,
-  `workflow.Read`/`Command`/`Saga`, `client.Call`/`CallOnce`) under `<component>.<op>`.
-- **Base per tier.** Each tier package exposes `Tier()` / `tier()` and a base that runs its
-  operations through the tier. Build components on the base; never hand-wrap a concern.
+  tuned** is config. Every base resolves its component as `<name>` and each contract operation as
+  `<name>.<op>`, and the root calls `Verify(prefixes…)` / `verify(*prefixes)` (or
+  `VerifyExplicit` / `verify_explicit` over a generated file) so an unused override, a missing
+  entry or an unsupported layer fails boot. `Inventory()` / `inventory()` lists every resolved
+  name with its layers and source keys.
+- **Base per tier, built from the contract.** Each tier package has `<tier>.go` (`Tier()`, `Base`,
+  `NewBase[C](decs, name, …) (Base, error)`) and `roles.go` (the role compositions as methods);
+  Python's is `XBase(contract, decorations, name)`. Each method of the contract `C` is one
+  operation, decorated as `<name>.<snake_case method>`; a component embeds the base, implements
+  each method through `Exec` under that op, and calls the next tier. Running an undeclared op
+  fails `INTERNAL`. Wire-level op names (RPC procedures, topics) use `client.NewWireBase` /
+  `ClientBase.wire`. Tests use `fixtures.Decorations()` or `decorate.Fixed(deps)` /
+  `Decorations.fixed(deps)`. Never hand-wrap a concern.
 - **Not a layer: hedging.** A hedge races a second attempt against a slow one, so it is only
   safe for a read the caller knows is idempotent. It is a primitive the app composes around
   that call (`foundation/resilience/hedge`, `reswire.NewHedge` in Go;
@@ -118,14 +122,14 @@ languages share one engine:
 
 | Tier | Order (outermost first) | Go base | Python base |
 | --- | --- | --- | --- |
-| Controller | Tracing → Metrics → Logging → Recovery → RateLimit → Bulkhead → Auth → Timeout | `transport.Base` (`Handler`) | `controllers.ControllerBase` (`handler`) |
-| Client | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging | `client.Base` (`Do`, `Once`, `Open`, …) | `clients.client.ClientBase` (`exec`, `once`), `decorate(client, …)` |
+| Controller | Tracing → Metrics → Logging → Recovery → RateLimit → Bulkhead → Auth → Timeout | `transport.Base` (`Handler`, `Exec`) | `controllers.ControllerBase` (`handler`, `exec`) |
+| Client | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging | `client.Base` (`Exec`, `ExecOnce`, `Do`, `DoOnce`, `Stream`, `Open`); `NewWireBase` | `clients.client.ClientBase` (`exec`, `exec_once`); `ClientBase.wire` |
 | Workflow | Recovery → Logging → Tracing → Metrics → Timeout | `workflow.Base` (`Exec`, `ExecTx`, `InTx`) | `workflows.WorkflowBase` (`exec`, `exec_tx`, `in_tx`) |
 | Pipeline | Recovery → Logging → Tracing → Metrics → Timeout | `pipeline.Base` (`Stage`, `FanOut`; `Stage.Then`) | `pipelines.PipelineBase` (`stage`, `fan_out`; `Stage.then`) |
-| Service | Recovery → Tracing → Metrics → Logging → Auth → Timeout | `service.Base` (`CRUD`, `OpService`, `Exec`) | `services.ServiceBase` (`crud`, `op_service`, `exec`) |
-| Repository | Tracing → Metrics → Logging → Timeout → CircuitBreaker → Retry | `repository.Base` (`CRUD`, `Exec`, …) | `repos.RepositoryBase` (`crud`, `exec`) |
-| Store (Go only) | Tracing → Metrics → Logging → Timeout | `store.Base`, `store.Decorate` | — |
-| Job | Recovery → Logging → Tracing → Metrics → Timeout | `execution/job` | `execution.job.JobBase` |
+| Service | Recovery → Tracing → Metrics → Logging → Auth → Timeout | `service.Base` (`Exec`, `CRUD`, `CRUDNoList`, `ReadListExist`, `Resource`) | `services.ServiceBase` (`exec`, `crud`) |
+| Repository | Tracing → Metrics → Logging → Timeout → CircuitBreaker → Retry | `repository.Base` (`Exec`, `ExecOnce`, `CRUD`, `CRUDNoList`, `ReadListExist`, `Resource`, `Outbox`, `TxSafeInsert`, `Cached`) | `repos.RepositoryBase` (`exec`, `exec_once`, `crud`) |
+| Store (Go only) | Tracing → Metrics → Logging → Timeout | `store.Base` (`Exec`, `Write`, `Client`, `CRUD`, `CRUDNoList`, `ReadListExist`, `Resource`, `Outbox`, `FromFuncs`) | — |
+| Job | Recovery → Logging → Tracing → Metrics → Timeout | `job.Base` (one per job: `Func`, `Local`, `Wrap`) | `execution.job.JobBase` (`func`, `wrap`) |
 
 Conventions every tier shares, identical in both languages:
 

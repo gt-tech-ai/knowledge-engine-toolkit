@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines/pipeline"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -82,12 +83,14 @@ func TestPipelineStage_ThenComposesAndStopsOnError(t *testing.T) {
 //     and a staged pipeline is only diagnosable if each stage is its own span.
 //
 // What it tests:
-//   - A panicking stage returns an INTERNAL error, even from the zero Base.
+//   - A panicking stage of an undecorated pipeline returns an INTERNAL error: recovery
+//     is the tier's outermost layer.
 //   - With the tier observed, two composed stages start one span each, named
-//     "<stage>.Execute", in order.
+//     "<pipeline>.<stage>", in order.
 func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 	t.Parallel()
-	_, err := pipeline.Base{}.Stage("boom", func(context.Context, int) (int, error) {
+	boom := fixtures.Must(pipeline.NewBase[boomPipeline](fixtures.Decorations(), "boom"))
+	_, err := boom.Stage("boom", func(context.Context, int) (int, error) {
 		panic("boom")
 	}).Execute(t.Context(), 1)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
@@ -104,15 +107,15 @@ func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 	}
 	gomock.InOrder(
 		tracer.EXPECT().
-			Start(gomock.Any(), "compile.Execute", gomock.Any()).
+			Start(gomock.Any(), "spec.compile", gomock.Any()).
 			DoAndReturn(start),
 		tracer.EXPECT().
-			Start(gomock.Any(), "reduce.Execute", gomock.Any()).
+			Start(gomock.Any(), "spec.reduce", gomock.Any()).
 			DoAndReturn(start),
 	)
-	stages := pipeline.NewBase(decorate.Deps{
+	stages := fixtures.Must(pipeline.NewBase[specPipeline](decorate.Fixed(decorate.Deps{
 		Observability: decorate.Observability{Tracer: tracer},
-	})
+	}), "spec"))
 	compile := stages.Stage("compile", func(_ context.Context, s string) (int, error) {
 		return len(s), nil
 	})
@@ -179,4 +182,19 @@ func TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
 	none, err := stages.FanOut[int, int]("none").Execute(t.Context(), 1)
 	require.NoError(t, err)
 	assert.Empty(t, none)
+}
+
+// specPipeline is a two-stage pipeline contract: compile, then reduce.
+type specPipeline interface {
+	// Compile measures the spec.
+	Compile(ctx context.Context, spec string) (int, error)
+
+	// Reduce decides on the measure.
+	Reduce(ctx context.Context, n int) (bool, error)
+}
+
+// boomPipeline is a one-stage pipeline contract whose stage panics.
+type boomPipeline interface {
+	// Boom panics.
+	Boom(ctx context.Context, n int) (int, error)
 }

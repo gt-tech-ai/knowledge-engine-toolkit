@@ -37,7 +37,7 @@ class InMemorySubscriber(MessageConsumer):
         """Consume from ``broker``, running each handler call through ``handlers``.
 
         A publisher built from the same broker feeds this subscriber. ``handlers`` is the handler
-        tier (``ClientBase.handler``); None runs handlers undecorated.
+        tier (``ClientBase.wire`` with ``handler()``); None runs handlers undecorated.
         """
         self._broker = broker
         self._handlers = handlers
