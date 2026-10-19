@@ -1,8 +1,9 @@
 // Package pipeline is the pipeline tier: a Base, built from the pipeline's contract, is
 // the embeddable core of a consumer's pipeline, running each operation through the
 // tier's decoration (Tier) with the promoted Exec or as a stage (Base.Stage) that
-// composes with Stage.Then or runs side by side with Base.FanOut. Its role compositions
-// (roles.go) decorate a service's roles. Every stage is a core interfaces.Pipeline.
+// composes with Stage.Then or runs side by side with Base.FanOut. An Entity (entity.go)
+// is a Base that also serves an entity's roles over its service. Every stage is a core
+// interfaces.Pipeline.
 package pipeline
 
 import (

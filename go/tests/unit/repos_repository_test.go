@@ -11,7 +11,6 @@ import (
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
@@ -53,12 +52,6 @@ type widgetsQueries interface {
 
 	// Slow waits for its deadline.
 	Slow(ctx context.Context) (int, error)
-}
-
-// widgetsRoles is the contract of the test repository's role shapes.
-type widgetsRoles interface {
-	interfaces.Repository[te, tp, string]
-	interfaces.InsertOnlyStore[te]
 }
 
 // TestRepositoryBase_RunsCustomQueriesThroughTheChain tests the embeddable base.
@@ -106,53 +99,8 @@ func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 	assert.Equal(t, 1, got)
 }
 
-// TestRepositoryBaseCRUD_DelegatesAndNeverRetriesACreate tests the decorated CRUD
-// repository.
-//
-// Why this test is important:
-//   - Every entity read and write of a resource runs through it; a dropped call
-//     corrupts every service above it, and a retried create whose first attempt landed
-//     after commit inserts a duplicate.
-//
-// What it tests:
-//   - Get, List, Create, Update, Delete and Exists reach the store and return its
-//     results.
-//   - Every operation but Create goes through the retrier (five calls, not six).
-func TestRepositoryBaseCRUD_DelegatesAndNeverRetriesACreate(t *testing.T) {
-	t.Parallel()
-	store := mocks.NewMockStore[te, tp, string](gomock.NewController(t))
-	repo := fixtures.Must(repository.NewBase[interfaces.Repository[te, tp, string]](
-		decorate.Fixed(decorate.Deps{
-			Retrier: passThroughRetrier(t, 5),
-		}), "widgets")).
-		CRUD(store)
-	w := &te{ID: "w1", Name: "one"}
-	store.EXPECT().Get(gomock.Any(), "w1").Return(w, nil)
-	store.EXPECT().
-		List(gomock.Any(), tp{}, gomock.Any()).
-		Return(&types.Page[te]{Total: 1}, nil)
-	store.EXPECT().Create(gomock.Any(), w).Return(w, nil)
-	store.EXPECT().Update(gomock.Any(), "w1", w).Return(w, nil)
-	store.EXPECT().Delete(gomock.Any(), "w1").Return(nil)
-	store.EXPECT().Exists(gomock.Any(), "w1").Return(true, nil)
-
-	got, err := repo.Get(t.Context(), "w1")
-	require.NoError(t, err)
-	assert.Same(t, w, got)
-	page, err := repo.List(t.Context(), tp{}, types.PageRequest{})
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), page.Total)
-	_, err = repo.Create(t.Context(), w)
-	require.NoError(t, err)
-	_, err = repo.Update(t.Context(), "w1", w)
-	require.NoError(t, err)
-	require.NoError(t, repo.Delete(t.Context(), "w1"))
-	ok, err := repo.Exists(t.Context(), "w1")
-	require.NoError(t, err)
-	assert.True(t, ok)
-}
-
-// TestRepositoryBase_RoleScopedShapes tests the narrowed repositories.
+// TestRepositoryEntity_NarrowContracts tests repositories whose contracts have only some
+// roles.
 //
 // Why this test is important:
 //   - A read model, a keyed resource and an append-only table each expose only the
@@ -160,26 +108,33 @@ func TestRepositoryBaseCRUD_DelegatesAndNeverRetriesACreate(t *testing.T) {
 //     timed out, which would corrupt that transaction.
 //
 // What it tests:
-//   - ReadListExist and CRUDNoList delegate their operations to the store.
-//   - TxSafeInsert's Insert reaches the store without the retrier (the strict mock
-//     allows no call) and returns the store's error.
-func TestRepositoryBase_RoleScopedShapes(t *testing.T) {
+//   - A read-only and a list-less repository build over stores with only their roles and
+//     delegate to them.
+//   - An insert-only repository's Insert reaches the store without the retrier (the
+//     strict mock allows no call) or a deadline, and returns the store's error.
+func TestRepositoryEntity_NarrowContracts(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
-	base := fixtures.Must(repository.NewBase[widgetsRoles](decorate.Fixed(decorate.Deps{
+	decs := decorate.Fixed(decorate.Deps{
 		Retrier: passThroughRetrier(t, 2),
 		Timeout: time.Minute,
-	}), "widgets"))
+	})
 
 	reads := mocks.NewMockReadListExistStore[te, tp, string](ctrl)
 	reads.EXPECT().Exists(gomock.Any(), "w1").Return(true, nil)
-	ok, err := base.ReadListExist(reads).Exists(t.Context(), "w1")
+	ro := fixtures.Must(repository.NewEntity[
+		interfaces.ReadListExistStore[te, tp, string], te, tp, string,
+	](decs, "widgets", reads, nil))
+	ok, err := ro.Exists(t.Context(), "w1")
 	require.NoError(t, err)
 	assert.True(t, ok)
 
 	keyed := mocks.NewMockCRUDNoListStore[te, string](ctrl)
 	keyed.EXPECT().Delete(gomock.Any(), "w1").Return(nil)
-	require.NoError(t, base.CRUDNoList(keyed).Delete(t.Context(), "w1"))
+	kr := fixtures.Must(repository.NewEntity[
+		interfaces.CRUDNoListStore[te, string], te, tp, string,
+	](decs, "widgets", keyed, nil))
+	require.NoError(t, kr.Delete(t.Context(), "w1"))
 
 	appends := mocks.NewMockInsertOnlyStore[te](ctrl)
 	conflict := apperr.New(apperr.CodeConflict, "duplicate")
@@ -189,9 +144,8 @@ func TestRepositoryBase_RoleScopedShapes(t *testing.T) {
 			assert.False(t, bounded, "an in-transaction append is never timed out")
 			return conflict
 		})
-	require.ErrorIs(
-		t,
-		base.TxSafeInsert(appends).Insert(t.Context(), &te{ID: "w1"}),
-		conflict,
-	)
+	ar := fixtures.Must(repository.NewEntity[
+		interfaces.InsertOnlyStore[te], te, tp, string,
+	](decs, "widgets", appends, nil))
+	require.ErrorIs(t, ar.Insert(t.Context(), &te{ID: "w1"}), conflict)
 }

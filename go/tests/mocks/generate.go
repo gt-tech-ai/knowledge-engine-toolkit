@@ -42,7 +42,7 @@
 //go:generate mockgen -destination=mock_reader.go -package=mocks io ReadCloser
 //go:generate mockgen -destination=mock_replaybuffer.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ReplayBuffer
 //go:generate mockgen -destination=mock_repository.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Repository
-//go:generate mockgen -destination=mock_roles.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Reader,Lister,Creator,Updater,Writer,Inserter,Deleter,Exister,Suggester,Resource,ReadListExistStore,CRUDNoListStore,CRUDNoListRepository,InsertOnlyStore
+//go:generate mockgen -destination=mock_roles.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Reader,Lister,Creator,Updater,Writer,Inserter,Upserter,Purger,Deleter,Exister,Suggester,Resource,ReadListExistStore,CRUDNoListStore,CRUDNoListRepository,InsertOnlyStore
 //go:generate mockgen -destination=mock_retrier.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Retrier
 //go:generate mockgen -destination=mock_round_tripper.go -package=mocks net/http RoundTripper
 //go:generate mockgen -destination=mock_s3_api.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3 S3API

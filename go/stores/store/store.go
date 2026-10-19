@@ -8,9 +8,8 @@
 // default, so a request is traced once, at its workflow and clients). Base is the
 // embeddable core of a store, built from its contract: its statements run through the
 // tier on the request transaction's client when a transaction manager bound one with
-// WithClient, else on the store's own. Its role compositions (roles.go) put an existing
-// implementation behind the tier, and its function roles (funcs.go) build one from
-// per-operation functions.
+// WithClient, else on the store's own. An Entity (funcs.go) is a Base that also serves an
+// entity's roles from one statement per role.
 package store
 
 import (

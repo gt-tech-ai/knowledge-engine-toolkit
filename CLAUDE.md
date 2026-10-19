@@ -108,7 +108,8 @@ languages share one engine:
   entry or an unsupported layer fails boot. `Inventory()` / `inventory()` lists every resolved
   name with its layers and source keys.
 - **Base per tier, built from the contract.** Each tier package has `<tier>.go` (`Tier()`, `Base`,
-  `NewBase[C](decs, name, …) (Base, error)`) and `roles.go` (the role compositions as methods);
+  `NewBase[C](decs, name, …) (Base, error)`), and each entity tier an `Entity` base
+  (`entity.go`) that embeds `Base` and serves the entity's roles over the next tier;
   Python's is `XBase(contract, decorations, name)`. Each method of the contract `C` is one
   operation, decorated as `<name>.<snake_case method>`; a component embeds the base, implements
   each method through `Exec` under that op, and calls the next tier. Running an undeclared op
@@ -124,11 +125,11 @@ languages share one engine:
 | --- | --- | --- | --- |
 | Controller | Tracing → Metrics → Logging → Recovery → RateLimit → Bulkhead → Auth → Timeout | `transport.Base` (`Handler`, `Exec`) | `controllers.ControllerBase` (`handler`, `exec`) |
 | Client | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging | `client.Base` (`Exec`, `ExecOnce`, `Do`, `DoOnce`, `Stream`, `Open`); `NewWireBase` | `clients.client.ClientBase` (`exec`, `exec_once`); `ClientBase.wire` |
-| Workflow | Recovery → Logging → Tracing → Metrics → Timeout | `workflow.Base` (`Exec`, `ExecTx`, `InTx`, `CRUD`, `Resource`) | `workflows.WorkflowBase` (`exec`, `exec_tx`, `in_tx`, `crud`) |
-| Pipeline | Recovery → Logging → Tracing → Metrics → Timeout | `pipeline.Base` (`Stage`, `FanOut`, `CRUD`, `Resource`; `Stage.Then`) | `pipelines.PipelineBase` (`stage`, `fan_out`, `crud`; `Stage.then`) |
-| Service | Recovery → Tracing → Metrics → Logging → Auth → Timeout | `service.Base` (`Exec`, `CRUD`, `CRUDNoList`, `ReadListExist`, `Resource`) | `services.ServiceBase` (`exec`, `crud`) |
-| Repository | Tracing → Metrics → Logging → Timeout → CircuitBreaker → Retry | `repository.Base` (`Exec`, `ExecOnce`, `CRUD`, `CRUDNoList`, `ReadListExist`, `Resource`, `Outbox`, `TxSafeInsert`, `Cached`) | `repos.RepositoryBase` (`exec`, `exec_once`, `crud`) |
-| Store (Go only) | Tracing → Metrics → Logging → Timeout | `store.Base` (`Exec`, `Write`, `Client`, `CRUD`, `CRUDNoList`, `ReadListExist`, `Resource`, `Outbox`, `FromFuncs`) | — |
+| Workflow | Recovery → Logging → Tracing → Metrics → Timeout | `workflow.Base` (`Exec`, `ExecTx`, `InTx`); `workflow.Entity` | `workflows.WorkflowBase` (`exec`, `exec_tx`, `in_tx`, `crud`) |
+| Pipeline | Recovery → Logging → Tracing → Metrics → Timeout | `pipeline.Base` (`Stage`, `FanOut`; `Stage.Then`); `pipeline.Entity` | `pipelines.PipelineBase` (`stage`, `fan_out`, `crud`; `Stage.then`) |
+| Service | Recovery → Tracing → Metrics → Logging → Auth → Timeout | `service.Base` (`Exec`); `service.Entity` | `services.ServiceBase` (`exec`, `crud`) |
+| Repository | Tracing → Metrics → Logging → Timeout → CircuitBreaker → Retry | `repository.Base` (`Exec`, `ExecOnce`); `repository.Entity` (with `Cache`); `repos/outbox.New` | `repos.RepositoryBase` (`exec`, `exec_once`, `crud`) |
+| Store (Go only) | Tracing → Metrics → Logging → Timeout | `store.Base` (`Exec`, `Write`, `Client`); `store.Entity` (from `store.Funcs`) | — |
 | Job | Recovery → Logging → Tracing → Metrics → Timeout | `job.Base` (one per job: `Func`, `Local`, `Wrap`) | `execution.job.JobBase` (`func`, `wrap`) |
 
 Conventions every tier shares, identical in both languages:

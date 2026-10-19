@@ -9,10 +9,21 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// OutboxWriter is the producer side of a transactional outbox: a service enqueues the
+// record announcing a change in the transaction that makes the change.
+type OutboxWriter interface {
+	// Enqueue writes rec as a pending row due now, on the transaction bound to ctx; with
+	// none bound it fails INTERNAL, so a row never commits apart from its change. A
+	// zero rec.ID gets a fresh one; a rec.ID already enqueued is left untouched.
+	Enqueue(ctx context.Context, rec types.OutboxRecord) error
+}
+
 // OutboxStore is the durable side of a transactional outbox: the table the
-// application writes rows into within its business transaction, and that the
-// outbox relay leases, finalizes and summarizes.
+// application writes rows into within its business transaction (OutboxWriter), and that
+// the outbox relay leases, finalizes and summarizes.
 type OutboxStore interface {
+	OutboxWriter
+
 	// Claim leases up to limit pending rows of lane whose next attempt is due (on
 	// the database clock) with FOR UPDATE SKIP LOCKED semantics, so concurrent
 	// claimers receive disjoint rows. It counts the attempt (the returned Attempts
@@ -32,7 +43,7 @@ type OutboxStore interface {
 }
 
 // OutboxRepository is the OutboxStore run through the repository tier, the seam the
-// outbox relay programs to. Build it with repository.Base.Outbox: Claim, which leases
+// outbox relay programs to. Build it with repos/outbox.New: Claim, which leases
 // rows and counts an attempt, is never retried; the idempotent finalizers, Stats and
 // the retention sweep get the tier's full decoration.
 type OutboxRepository interface {

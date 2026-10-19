@@ -6,6 +6,34 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.16] - 2026-10-19
+
+Python: unchanged (`techai-webutils` 0.6.1); the entity bases come to Python in a later release.
+Breaking: the role compositions are removed in favor of entity bases.
+
+### Added
+
+- An `Entity` base at every entity tier, typed by the entity and embedding the tier's `Base`:
+  `store.Entity[C, T, P, ID]` (`store.NewEntity`, from `store.Funcs`), `repository.Entity`,
+  `service.Entity`, `pipeline.Entity` and `workflow.Entity` (each `[T, P, ID, N]`, built over the
+  next tier `N`, which `Next()` returns). Each serves exactly the roles its contract names
+  (`Get`, `List`, `Create`, `Update`, `Delete`, `Exists`, `Insert`, `Upsert`, `PurgeBefore`) and
+  fails construction when one has no statement or next-tier method. A component embeds one base
+  and adds only its product operations.
+- `interfaces.Upserter[T]` and `interfaces.Purger` roles; `foundation/decorate.Entity`, `Roles`,
+  `RolesOf`, `RoleKind` and `RoleRunner`, the core the entity bases share.
+- `interfaces.OutboxWriter`: `Enqueue(ctx, types.OutboxRecord)`, the producer side of the outbox,
+  now part of `OutboxStore`. The postgres kind writes the pending row on the bound `*sql.Tx` (an
+  id already enqueued is left untouched); the stub discards it.
+- `repos/outbox.New(decs, name, store)`, the outbox repository.
+
+### Removed
+
+- The role compositions: `CRUD`, `CRUDNoList`, `ReadListExist` and `Resource` on the store,
+  repository, service, pipeline and workflow bases; `store.Base.Outbox`, `FromFuncs`,
+  `FuncResource` and the `b.Reader` … `b.Exister` builders; `repository.Base.Outbox`,
+  `TxSafeInsert` and `Cached` (the cache is `repository.NewEntity`'s `cache` argument).
+
 ## [0.0.15] - 2026-10-18
 
 Python: `techai-webutils` 0.6.1.

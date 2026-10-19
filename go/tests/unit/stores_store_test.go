@@ -7,7 +7,6 @@ import (
 	promclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -16,7 +15,6 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/store"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
 // storeClient stands in for a store's database client (an *ent.Client, a *sql.DB).
@@ -28,6 +26,14 @@ type storeClient struct {
 // documentsStore is the test store's contract: CRUD plus one custom query.
 type documentsStore interface {
 	interfaces.Store[reposEnt, reposEntParams, string]
+
+	// CountByWorkspace counts the workspace's documents.
+	CountByWorkspace(ctx context.Context, workspace string) (int, error)
+}
+
+// documentsReads is a store contract with one role and one custom query.
+type documentsReads interface {
+	interfaces.Reader[reposEnt, string]
 
 	// CountByWorkspace counts the workspace's documents.
 	CountByWorkspace(ctx context.Context, workspace string) (int, error)
@@ -151,20 +157,23 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 	cfg := decoration.DefaultConfig()
 	cfg.Stores.Defaults.Metrics = &on
 	decs := decorate.NewDecorations(&cfg, collab)
-	base, err := store.NewBase[documentsStore](
+	docs, err := store.NewEntity[documentsReads](
 		decs,
 		"documents",
 		&storeClient{name: "raw"},
+		store.Funcs[*storeClient, reposEnt, reposEntParams, string]{
+			Get: func(_ context.Context, _ *storeClient, id string) (*reposEnt, error) {
+				return &reposEnt{ID: id}, nil
+			},
+		},
 	)
 	require.NoError(t, err)
 
-	inner := mocks.NewMockStore[reposEnt, reposEntParams, string](gomock.NewController(t))
-	inner.EXPECT().Get(gomock.Any(), "a").Return(&reposEnt{ID: "a"}, nil)
-	got, err := base.CRUD(inner).Get(t.Context(), "a")
+	got, err := docs.Get(t.Context(), "a")
 	require.NoError(t, err)
 	assert.Equal(t, "a", got.ID)
 
-	n, err := base.Exec(
+	n, err := docs.Exec(
 		t.Context(),
 		"count_by_workspace",
 		func(context.Context) (int, error) {

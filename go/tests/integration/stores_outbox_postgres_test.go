@@ -62,28 +62,83 @@ func newPgstore(t *testing.T) (*outboxpg.Store, *sql.DB) {
 	return store, db
 }
 
-// pgstoreEnqueue inserts rec as a due pending row, with the record's Key as the
-// aggregate id and its event_type attribute in the column.
-func pgstoreEnqueue(db *sql.DB) func(context.Context, *types.OutboxRecord) error {
+// pgstoreEnqueue enqueues rec through the store's own producer side, in a transaction
+// of its own. The table's key column is a uuid, so a key that is not one is replaced by
+// a uuid derived from it; its event_type column is required, so a record without one
+// gets "suite.v1".
+func pgstoreEnqueue(
+	store *outboxpg.Store,
+	db *sql.DB,
+) func(context.Context, *types.OutboxRecord) error {
+	tx := sqltx.New(db)
 	return func(ctx context.Context, rec *types.OutboxRecord) error {
-		key, err := uuid.Parse(rec.Key)
-		if err != nil {
-			key = uuid.NewSHA1(uuid.NameSpaceOID, []byte(rec.Key))
+		if _, err := uuid.Parse(rec.Key); err != nil {
+			rec.Key = uuid.NewSHA1(uuid.NameSpaceOID, []byte(rec.Key)).String()
 		}
-		created := rec.CreatedAt
-		if created.IsZero() {
-			created = time.Now()
+		if rec.Attributes["event_type"] == "" {
+			rec.Attributes = map[string]string{"event_type": "suite.v1"}
 		}
-		_, err = db.ExecContext(ctx, `INSERT INTO product_outbox
-			(id, lane, event_type, aggregate_id, tenant, payload, created_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-			rec.ID, rec.Lane, rec.Attributes["event_type"], key, rec.Tenant, rec.Payload,
-			created)
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "pgstore test: enqueue")
-		}
-		return nil
+		return tx.WithTransaction(ctx, func(ctx context.Context) error {
+			return store.Enqueue(ctx, *rec)
+		})
 	}
+}
+
+// TestPgstore_EnqueuesInTheBoundTransaction tests the store's producer side.
+//
+// Why this test is important:
+//   - A producer's row must commit with the business change it announces: a row written
+//     outside that transaction is delivered for a change that rolled back, and a row
+//     lost with a rollback drops a change that committed.
+//
+// What it tests:
+//   - Enqueue outside a transaction fails INTERNAL and writes nothing.
+//   - A row enqueued in a transaction that rolls back is never claimed.
+//   - A committed row is claimed with its tenant, key, attribute and payload; enqueuing
+//     the same id again is a no-op.
+func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
+	requireIntegration(t)
+	ctx := t.Context()
+	store, db := newPgstore(t)
+	tx := sqltx.New(db)
+	rec := types.OutboxRecord{
+		ID:     uuid.New(),
+		Lane:   "producer",
+		Tenant: "org-1",
+		Key:    uuid.NewString(),
+		Payload: []byte(
+			`{"a":1}`,
+		),
+		Attributes: map[string]string{"event_type": "made.v1"},
+	}
+
+	err := store.Enqueue(ctx, rec)
+	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
+
+	rolledBack := apperr.New(apperr.CodeConflict, "roll back")
+	err = tx.WithTransaction(ctx, func(ctx context.Context) error {
+		require.NoError(t, store.Enqueue(ctx, rec))
+		return rolledBack
+	})
+	require.ErrorIs(t, err, rolledBack)
+
+	for range 2 {
+		require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
+			return store.Enqueue(ctx, rec)
+		}))
+	}
+	var recs []types.OutboxRecord
+	require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
+		var err error
+		recs, err = store.Claim(ctx, "producer", 10)
+		return err
+	}))
+	require.Len(t, recs, 1)
+	require.Equal(t, rec.ID, recs[0].ID)
+	require.Equal(t, "org-1", recs[0].Tenant)
+	require.Equal(t, rec.Key, recs[0].Key)
+	require.Equal(t, "made.v1", recs[0].Attributes["event_type"])
+	require.JSONEq(t, `{"a":1}`, string(recs[0].Payload))
 }
 
 // TestPgstore_PassesTheOutboxConformanceSuite tests the production store against the
@@ -99,7 +154,7 @@ func TestPgstore_PassesTheOutboxConformanceSuite(t *testing.T) {
 	requireIntegration(t)
 	store, db := newPgstore(t)
 	outboxtest.Run(t, outboxtest.Harness{
-		Store: store, Tx: sqltx.New(db), Enqueue: pgstoreEnqueue(db),
+		Store: store, Tx: sqltx.New(db), Enqueue: pgstoreEnqueue(store, db),
 	})
 }
 
@@ -121,7 +176,7 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 	key := uuid.New()
 	sent, parked := uuid.New(), uuid.New()
 	for _, id := range []uuid.UUID{sent, parked} {
-		require.NoError(t, pgstoreEnqueue(db)(ctx, &types.OutboxRecord{
+		require.NoError(t, pgstoreEnqueue(store, db)(ctx, &types.OutboxRecord{
 			ID: id, Lane: "facts", Tenant: "org-1", Key: key.String(),
 			Payload: []byte(`{}`), Attributes: map[string]string{"event_type": "fact.v1"},
 		}))

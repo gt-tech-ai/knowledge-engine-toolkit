@@ -306,9 +306,10 @@ func NewOutbox(claim, rest Subject, inner interfaces.OutboxStore) Outbox {
 
 var _ interfaces.OutboxStore = Outbox{}
 
-// Outbox runs each outbox-store operation through a tier: Claim on its own Subject
-// (a repository's runs it without retry, since a claim leases rows and counts an
-// attempt), every other operation on the rest.
+// Outbox runs each outbox-store operation through a tier: Enqueue and Claim on their own
+// Subject (a repository's runs them without retry: an enqueue runs inside the caller's
+// transaction, and a claim leases rows and counts an attempt), every other operation on
+// the rest.
 type Outbox struct {
 	// inner is the wrapped store.
 	inner interfaces.OutboxStore
@@ -318,6 +319,15 @@ type Outbox struct {
 
 	// op runs every other operation.
 	op Subject
+}
+
+// Enqueue writes rec in the caller's transaction, run like Claim: once, since a retry
+// inside the transaction would follow a failed statement.
+func (r Outbox) Enqueue(ctx context.Context, rec types.OutboxRecord) error {
+	_, err := r.claim.Exec(ctx, "enqueue", func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, r.inner.Enqueue(ctx, rec)
+	})
+	return err
 }
 
 // Claim leases up to limit due rows of lane; see interfaces.OutboxStore.
