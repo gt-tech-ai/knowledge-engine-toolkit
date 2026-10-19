@@ -84,7 +84,7 @@ func NewFromConfig(
 	if err != nil {
 		return nil, err
 	}
-	return b.Outbox(s), nil
+	return decorate.NewOutbox(b.Subject, b.Subject, s), nil
 }
 
 // newPostgres builds the store over cfg.Postgres's table on deps.DB.

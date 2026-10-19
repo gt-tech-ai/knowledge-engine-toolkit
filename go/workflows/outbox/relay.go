@@ -4,7 +4,7 @@
 // retried with capped exponential backoff and full jitter, or parked once its
 // attempts are exhausted. It reports per-lane outcome counters and the lane's
 // depth and lag. The repository and sink are injected (and decorated) by the caller:
-// build the repository with repository.Base.Outbox over the store.
+// build the repository with repos/outbox.New over the store.
 //
 // A pass is a saga, so the relay is a workflow: the claim commits in its own
 // transaction, delivery runs with no transaction open (a remote call never holds one),

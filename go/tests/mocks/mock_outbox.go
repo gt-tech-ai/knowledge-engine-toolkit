@@ -73,6 +73,20 @@ func (mr *MockOutboxStoreMockRecorder) DeleteSentBefore(ctx, cutoff any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSentBefore", reflect.TypeOf((*MockOutboxStore)(nil).DeleteSentBefore), ctx, cutoff)
 }
 
+// Enqueue mocks base method.
+func (m *MockOutboxStore) Enqueue(ctx context.Context, rec types.OutboxRecord) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Enqueue", ctx, rec)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Enqueue indicates an expected call of Enqueue.
+func (mr *MockOutboxStoreMockRecorder) Enqueue(ctx, rec any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Enqueue", reflect.TypeOf((*MockOutboxStore)(nil).Enqueue), ctx, rec)
+}
+
 // MarkSent mocks base method.
 func (m *MockOutboxStore) MarkSent(ctx context.Context, id uuid.UUID) error {
 	m.ctrl.T.Helper()

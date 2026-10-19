@@ -1,7 +1,7 @@
 // Package service is the service tier: a Base, built from the service's contract, is the
 // embeddable core of a consumer's service, running its custom operations through the
-// tier's decoration (Tier) with the promoted Exec. Its role compositions (roles.go)
-// decorate a repository's roles. Every service it builds is a core interface.
+// tier's decoration (Tier) with the promoted Exec. An Entity (entity.go) is a Base that
+// also serves an entity's roles over its repository.
 package service
 
 import (
@@ -22,10 +22,9 @@ func Tier() decorate.Tier {
 }
 
 // Base is the embeddable core of a service named by its Subject: Name and Exec run a
-// domain operation through the tier's decoration, and the role compositions (CRUD,
-// CRUDNoList, ReadListExist, Resource) decorate a repository's roles. Each operation is a
-// method of the service's contract, decorated under its own name. The zero Base runs
-// operations undecorated.
+// domain operation through the tier's decoration. Each operation is a method of the
+// service's contract, decorated under its own name. The zero Base runs operations
+// undecorated.
 type Base struct {
 	decorate.Subject
 }

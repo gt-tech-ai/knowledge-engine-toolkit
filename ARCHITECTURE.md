@@ -80,21 +80,38 @@ pair whose input is `*T`. `Resource[T, P, ID, C, U]` composes `Reader`, `Lister`
 
 **Every tier builds on one base shape.** Each tier package (`clients/client`, `stores/store`,
 `repos/repository`, `services/service`, `pipelines/pipeline`, `workflows/workflow`,
-`transport`) has `<tier>.go` — `Tier()`, `Base` and `NewBase[C](decs, name, …) (Base, error)` —
-and `roles.go`, its role compositions as `Base` methods. `C` is the component's contract (an
+`transport`) has `<tier>.go` — `Tier()`, `Base` and `NewBase[C](decs, name, …) (Base, error)`;
+each entity tier (store, repository, service, pipeline, workflow) also has `entity.go`, its
+`Entity` base. `C` is the component's contract (an
 interface): each of its methods is one operation, decorated as `<name>.<op>` where `op` is the
 method's snake_case name (`FindByKey` → `find_by_key`), so the config tunes the component or one
 operation. A consumer component embeds its tier's `Base`, implements each contract method through
 the promoted `Exec` (and `ExecOnce`, `ExecTx`, `InTx`, `Write`, … where its tier has them) under
 the method's op name, and calls the next tier. Running an op the contract does not declare fails
-`INTERNAL`. The role compositions are the same names at every tier that has them: `CRUD`,
-`CRUDNoList`, `ReadListExist` and `Resource` on the store, repository and service bases;
-`Outbox` on the store and repository; `TxSafeInsert` and `Cached` (the read-through entity cache,
-composed under a role: `b.CRUD(b.Cached(store, cache))`) on the repository; `CRUD` and
-`Resource` on the pipeline and workflow (the workflow's reads run with no transaction, each write
-one command). A consumer component serves its contract's generic roles from a role composition
-and implements only its other methods through `Exec`. `store.Base.FromFuncs`
-builds a store's implementation from one statement per role (writes only inside a transaction).
+`INTERNAL`.
+
+**An entity component embeds one base that serves its roles.** A Go method reaches a type only
+through what the type embeds, and a method with its own type parameter satisfies no interface,
+so a base that does not know the entity's types cannot have `Get(ctx, id ID) (*T, error)`. Each
+entity tier therefore has an `Entity` base typed by the entity, which embeds the tier's `Base`
+and serves the roles whose signatures use only `T`, `P` and `ID`: `Get`, `List`, `Create`,
+`Update`, `Delete`, `Exists`, `Insert`, `Upsert` and `PurgeBefore`.
+
+| Tier | Entity base | Built over |
+| --- | --- | --- |
+| store | `store.Entity[C, T, P, ID]` (`store.NewEntity[S](decs, name, raw, store.Funcs{…})`) | one statement per role, run on the statement's client; reads through `Exec`, writes through `Write` |
+| repository | `repository.Entity[T, P, ID, N]` (`repository.NewEntity[R, T, P, ID](decs, name, next, cache)`) | the store `N`; reads and idempotent writes retried, `Create` never, `Insert` and `Upsert` observed only; a non-nil `*Cache` puts the read-through entity cache beneath the roles |
+| service | `service.Entity[T, P, ID, N]` (`service.NewEntity[S, T, P, ID](decs, name, next, validate)`) | the repository `N`; `validate` checks every `Create`, `Update` and `Upsert` entity |
+| pipeline | `pipeline.Entity[T, P, ID, N]` (`pipeline.NewEntity[C, T, P, ID](decs, name, next)`) | the service `N` |
+| workflow | `workflow.Entity[T, P, ID, N]` (`workflow.NewEntity[W, T, P, ID](decs, name, tx, next)`) | the pipeline `N`; reads with no transaction, every write one command |
+
+The contract decides the roles: the constructor serves exactly the roles its contract names and
+fails `INTERNAL` at construction when one has no statement or the next tier lacks the method; a
+role outside the contract is refused at call time. `Next()` returns the next tier as its contract
+declares it, product verbs included. A component writes its product operations through `Exec`
+and calls `Next()`; an override of a role runs under the same op name and calls `Next()`, never
+the role it shadows. `foundation/decorate.Entity` is the shared core: the tier supplies a
+`RoleRunner` that runs each call by its `RoleKind` (read, create, idempotent write, append).
 A job is one `job.Base` per job (`NewBase(decs, name)`, its op `execute`); a gate is decorated as
 the gate-tier component of its name (`Decorate(decs)`, its op `run`). A client whose operations
 are wire-level names known per call (an RPC procedure, an HTTP route, a job kind) uses
@@ -154,14 +171,13 @@ collaborator or zero timeout skips its layer; recovery needs none.
     that opens a transaction. A consumer workflow embeds the Base and runs each operation as a
     read (`Exec`, no transaction), a command (`ExecTx`, one transaction) or a saga (`Exec` whose
     body commits each local step with `InTx`, undecorated). `ExecTx` and `InTx` refuse a context
-    already in a transaction, so a transaction never opens inside another. `CRUD(pipes)` and
-    `Resource(pipes)` serve a resource's roles: Get, List and Exists as reads, Create, Update and
-    Delete each as one command.
-  - `service.Base` embeds the service's Subject; `CRUD` and `CRUDNoList` decorate a repository
-    with an optional entity validator, and `Resource` with input validators.
-  - `repository.Base` embeds the repository's Subject; `ExecOnce` runs a non-idempotent write. A
-    Create is never retried, and an in-transaction insert (`TxSafeInsert`) runs only its
-    observability.
+    already in a transaction, so a transaction never opens inside another. `workflow.Entity`
+    serves an entity's reads with no transaction and each write as one command.
+  - `service.Base` embeds the service's Subject; `service.Entity` serves an entity's roles over
+    a repository with an optional entity validator.
+  - `repository.Base` embeds the repository's Subject; `ExecOnce` runs a non-idempotent write.
+    In `repository.Entity` a Create is never retried, and an in-transaction `Insert` or
+    `Upsert` runs only its observability.
   - `go/stores` is the store tier, between the clients and the repositories: `store.Tier()`
     (Tracing → Metrics → Logging → Timeout; unobserved by default) and `store.Base[C]` — `Exec`
     runs a statement through the tier, `Write` runs one only inside a transaction, and
@@ -342,13 +358,14 @@ the bucket's retention: it expires at bucket end + the grain's TTL (CQL `TTL()` 
 non-frozen map, so the TTL is anchored to the bucket, not to each fact's write).
 
 The transactional outbox is split by tier: the contracts in `core`, the sink kinds in `clients`,
-the store kinds in `stores`, the relay in `workflows`. `core/interfaces.OutboxStore` (`Claim` leases
-due rows, `MarkSent` / `Retry` / `Park` / `Stats`, `DeleteSentBefore` for the retention sweep) is
+the store kinds in `stores`, the relay in `workflows`. `core/interfaces.OutboxStore` (`Enqueue`, the producer side
+`core/interfaces.OutboxWriter`, writes a pending row on the transaction bound to the context and
+refuses to run without one; `Claim` leases due rows, `MarkSent` / `Retry` / `Park` / `Stats`, `DeleteSentBefore` for the retention sweep) is
 built by `stores/outbox` (`KindStub` default — no rows, so a relay boots with no database;
 `KindPostgres`, a product's own table named by config, whose writes run only on the `*sql.Tx` that
 `stores/sqltx` — the `database/sql` transaction manager, which refuses a nested transaction —
 bound to the context) behind the store tier, and
-`repos/repository.Base.Outbox` runs it through the repository tier as the
+`repos/outbox.New` runs it through the repository tier as the
 `core/interfaces.OutboxRepository` the relay takes (`Claim` without retry, since it leases rows
 and counts an attempt; the idempotent finalizers, `Stats` and the sweep with it);
 `core/interfaces.OutboxSink` returns one result per record. `workflows/outbox.Relay.RunOnce` is a

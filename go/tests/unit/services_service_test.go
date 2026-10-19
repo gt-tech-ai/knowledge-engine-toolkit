@@ -108,7 +108,7 @@ func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 	assert.Equal(t, 5, got)
 }
 
-// TestServiceBaseCRUD_DelegatesValidatesAndAuthorizes tests the decorated CRUD
+// TestServiceEntity_DelegatesValidatesAndAuthorizes tests the decorated CRUD
 // services.
 //
 // Why this test is important:
@@ -120,8 +120,8 @@ func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 //   - Every operation reaches the repository and returns its result.
 //   - An invalid entity is rejected before Create or Update reaches the repository.
 //   - A denied "<service>.<op>" action is returned before the repository is called.
-//   - CRUDNoList serves Get, Create, Update and Delete the same way.
-func TestServiceBaseCRUD_DelegatesValidatesAndAuthorizes(t *testing.T) {
+//   - A list-less contract serves Get, Create, Update and Delete the same way.
+func TestServiceEntity_DelegatesValidatesAndAuthorizes(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	repo := mocks.NewMockRepository[te, tp, string](ctrl)
@@ -134,17 +134,18 @@ func TestServiceBaseCRUD_DelegatesValidatesAndAuthorizes(t *testing.T) {
 	}
 	denied := apperr.New(apperr.CodeForbidden, "denied")
 	var actions []string
-	svc := fixtures.Must(service.NewBase[interfaces.Service[te, tp, string]](
-		decorate.Fixed(decorate.Deps{
-			Auth: func(_ context.Context, action string) error {
-				actions = append(actions, action)
-				if action == "widgets.delete" {
-					return denied
-				}
-				return nil
-			},
-		}), "widgets")).
-		CRUD(repo, validate)
+	svc := fixtures.Must(
+		service.NewEntity[interfaces.Service[te, tp, string], te, tp, string](
+			decorate.Fixed(decorate.Deps{
+				Auth: func(_ context.Context, action string) error {
+					actions = append(actions, action)
+					if action == "widgets.delete" {
+						return denied
+					}
+					return nil
+				},
+			}), "widgets", repo, validate),
+	)
 	w := &te{ID: "w1", Name: "one"}
 	repo.EXPECT().Get(gomock.Any(), "w1").Return(w, nil)
 	repo.EXPECT().
@@ -173,10 +174,9 @@ func TestServiceBaseCRUD_DelegatesValidatesAndAuthorizes(t *testing.T) {
 
 	keyed := mocks.NewMockCRUDNoListRepository[te, string](ctrl)
 	keyed.EXPECT().Delete(gomock.Any(), "w1").Return(nil)
-	noList := fixtures.Must(service.NewBase[interfaces.CRUDNoListRepository[te, string]](
-		fixtures.Decorations(), "keyed",
-	)).
-		CRUDNoList(keyed, validate)
+	noList := fixtures.Must(service.NewEntity[
+		interfaces.CRUDNoListRepository[te, string], te, tp, string,
+	](fixtures.Decorations(), "keyed", keyed, validate))
 	require.NoError(t, noList.Delete(t.Context(), "w1"))
 	_, err = noList.Update(t.Context(), "w1", &te{})
 	require.ErrorIs(t, err, invalid)

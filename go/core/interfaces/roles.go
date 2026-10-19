@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -14,8 +15,9 @@ import (
 //
 // T = entity type, P = query/filter params, ID = identifier type, and C / U = the input a
 // Create / Update takes (*T for an entity-shaped write, a params object for a command).
-// Each tier ships a Base implementation of every role and of their compositions, so a
-// resource is assembled from them and declares by hand only its domain operations.
+// Each entity tier's Entity base serves the roles whose signatures use only T, P and ID
+// (with *T as the write input), so a component embeds it and declares by hand only its
+// product operations.
 
 // Reader retrieves a single entity by its identifier.
 type Reader[T any, ID comparable] interface {
@@ -60,6 +62,19 @@ type Writer[T any, ID comparable] interface {
 type Inserter[T any] interface {
 	// Insert persists a new entity; append-only, so it returns only an error.
 	Insert(ctx context.Context, entity *T) error
+}
+
+// Upserter writes an entity, inserting it or replacing the one with the same key, and
+// reports only success or failure. It runs inside the caller's transaction like Insert.
+type Upserter[T any] interface {
+	// Upsert inserts entity or replaces the stored one with its key.
+	Upsert(ctx context.Context, entity *T) error
+}
+
+// Purger removes the entities older than a cutoff: a retention sweep.
+type Purger interface {
+	// PurgeBefore removes the entities older than cutoff and returns how many it removed.
+	PurgeBefore(ctx context.Context, cutoff time.Time) (int, error)
 }
 
 // Deleter removes an entity by its identifier.

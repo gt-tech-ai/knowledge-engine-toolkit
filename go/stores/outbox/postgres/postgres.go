@@ -125,9 +125,13 @@ type Store struct {
 	retrySQL    string
 	parkSQL     string
 	purgeSQL    string
+	enqueueSQL  string
 	attrKeys    []string
 	maxErrorLen int
 	lease       time.Duration
+
+	// tenantColumn reports whether the table has a tenant column.
+	tenantColumn bool
 }
 
 // New returns the store for cfg over db. An invalid cfg is CodeInvalidInput; a nil db
@@ -143,7 +147,10 @@ func New(db *sql.DB, cfg Config) (*Store, error) {
 	if cfg.TenantColumn != "" {
 		tenant = cfg.TenantColumn
 	}
-	s := &Store{db: db, lease: cfg.Lease, maxErrorLen: cfg.MaxErrorLen}
+	s := &Store{
+		db: db, lease: cfg.Lease, maxErrorLen: cfg.MaxErrorLen,
+		tenantColumn: cfg.TenantColumn != "",
+	}
 	attrCols := ""
 	var attrColsSb137 strings.Builder
 	for key, col := range cfg.AttributeColumns {
@@ -181,7 +188,67 @@ WHERE id = $1 AND status = 'pending'`, t)
 	s.parkSQL = fmt.Sprintf(`UPDATE %s SET status = 'parked', last_error = $2
 WHERE id = $1 AND status = 'pending'`, t)
 	s.purgeSQL = fmt.Sprintf(`DELETE FROM %s WHERE status = 'sent' AND sent_at < $1`, t)
+	s.enqueueSQL = enqueueSQL(cfg, s.attrKeys)
 	return s, nil
+}
+
+// enqueueSQL is the producer's insert: a pending row due now (created now unless the
+// record carries its creation time), its tenant, key and attribute columns bound in that
+// order after id, lane, payload and created_at; an id already present is left as is.
+func enqueueSQL(cfg Config, attrKeys []string) string {
+	cols := []string{"id", "lane", "payload", "created_at", cfg.keyColumn()}
+	if cfg.TenantColumn != "" {
+		cols = append(cols, cfg.TenantColumn)
+	}
+	for _, key := range attrKeys {
+		cols = append(cols, cfg.AttributeColumns[key])
+	}
+	vals := make([]string, len(cols))
+	for i := range cols {
+		vals[i] = fmt.Sprintf("$%d", i+1)
+	}
+	vals[3] = "COALESCE($4, now())"
+	return fmt.Sprintf(`INSERT INTO %s
+	(%s, status, attempts, next_attempt_at, last_error)
+VALUES (%s, 'pending', 0, now(), '')
+ON CONFLICT (id) DO NOTHING`,
+		cfg.Table, strings.Join(cols, ", "), strings.Join(vals, ", "))
+}
+
+// Enqueue writes rec as a pending row due now on the transaction bound to ctx; see
+// interfaces.OutboxWriter. An empty Key, Tenant or attribute is NULL.
+func (s *Store) Enqueue(ctx context.Context, rec types.OutboxRecord) error {
+	tx, err := writeTx(ctx, "enqueue")
+	if err != nil {
+		return err
+	}
+	id := rec.ID
+	if id == uuid.Nil {
+		id = uuid.New()
+	}
+	var created any
+	if !rec.CreatedAt.IsZero() {
+		created = rec.CreatedAt
+	}
+	args := []any{id, rec.Lane, rec.Payload, created, nullable(rec.Key)}
+	if s.tenantColumn {
+		args = append(args, nullable(rec.Tenant))
+	}
+	for _, key := range s.attrKeys {
+		args = append(args, nullable(rec.Attributes[key]))
+	}
+	if _, err := tx.ExecContext(ctx, s.enqueueSQL, args...); err != nil {
+		return apperr.Wrap(err, apperr.CodeUnavailable, "outbox postgres store: enqueue")
+	}
+	return nil
+}
+
+// nullable binds v, or NULL when it is empty.
+func nullable(v string) any {
+	if v == "" {
+		return nil
+	}
+	return v
 }
 
 // Claim leases up to limit due pending rows of lane, oldest first; the returned

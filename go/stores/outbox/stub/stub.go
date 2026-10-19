@@ -1,6 +1,6 @@
 // Package stub is the stub kind of the outbox store (stores/outbox): an outbox with no
-// rows, so a relay graph boots and runs with no database. Claim finds nothing and every
-// finalize is a no-op.
+// rows, so a relay graph boots and runs with no database. Enqueue discards its record,
+// Claim finds nothing and every finalize is a no-op.
 package stub
 
 import (
@@ -21,6 +21,9 @@ var _ interfaces.OutboxStore = Store{}
 
 // New returns the empty outbox store.
 func New() Store { return Store{} }
+
+// Enqueue discards rec.
+func (Store) Enqueue(context.Context, types.OutboxRecord) error { return nil }
 
 // Claim finds no rows.
 func (Store) Claim(context.Context, string, int) ([]types.OutboxRecord, error) {

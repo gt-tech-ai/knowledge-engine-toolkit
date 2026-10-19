@@ -1,8 +1,8 @@
 // Package repository is the repository tier: a Base, built from the repository's
 // contract, is the embeddable core of a consumer's repository, running its custom
-// queries through the tier's decoration (Tier) with the promoted Exec. Its role
-// compositions (roles.go) decorate a store's roles, and Cached puts the read-through
-// entity cache (cache.go) beneath them. Every repository it builds is a core interface.
+// queries through the tier's decoration (Tier) with the promoted Exec. An Entity
+// (entity.go) is a Base that also serves an entity's roles over its store, optionally
+// beneath the read-through entity cache (cache.go).
 package repository
 
 import (
@@ -24,8 +24,8 @@ func Tier() decorate.Tier {
 }
 
 // Base is the embeddable core of a repository named by its Subject: Name and Exec run a
-// query through the tier's decoration, ExecOnce runs a non-idempotent write the same way
-// without retry, and the role compositions (CRUD, Resource, …) decorate a store's roles.
+// query through the tier's decoration, and ExecOnce runs a non-idempotent write the same
+// way without retry.
 // Each operation is a method of the repository's contract, decorated under its own name.
 // The zero Base runs queries undecorated.
 type Base struct {
