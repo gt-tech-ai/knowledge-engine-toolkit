@@ -17,3 +17,21 @@ func (b Base) Resource[T, P any, ID comparable, C, U any](
 		nil,
 	)
 }
+
+// CRUD is the decorated pipeline over svc: each of its five roles runs as one operation
+// of the pipeline, whose contract embeds interfaces.Service.
+func (b Base) CRUD[T, P any, ID comparable](
+	svc interfaces.Service[T, P, ID],
+) interfaces.Service[T, P, ID] {
+	return struct {
+		decorate.Reader[T, ID]
+		decorate.Lister[T, P]
+		decorate.Writer[T, ID]
+		decorate.Deleter[ID]
+	}{
+		decorate.NewReader(b.Subject, svc),
+		decorate.NewLister(b.Subject, svc),
+		decorate.NewWriter(b.Subject, b.Subject, svc, nil),
+		decorate.NewDeleter(b.Subject, svc),
+	}
+}

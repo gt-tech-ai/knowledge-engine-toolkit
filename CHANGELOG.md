@@ -6,6 +6,18 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.15] - 2026-10-18
+
+Python: `techai-webutils` 0.6.1.
+
+### Added
+
+- `pipeline.Base.CRUD(svc)` and `workflow.Base.CRUD(pipes)` (Python `PipelineBase.crud`,
+  `WorkflowBase.crud`): the CRUD role composition at the pipeline and workflow tiers, the same
+  shape as `service.Base.CRUD`, so a CRUD resource's contract embeds `interfaces.Service` from the
+  service tier up. The workflow runs Get and List as reads and Create, Update and Delete each as
+  one command.
+
 ## [0.0.14] - 2026-10-18
 
 Python: `techai-webutils` 0.6.0. Breaking: every tier base is now built from a contract, and the

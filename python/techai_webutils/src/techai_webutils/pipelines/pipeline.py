@@ -3,7 +3,8 @@
 ``tier()`` orders the tier's layers; ``PipelineBase``, built from the pipeline's contract, runs
 each operation through it, and ``PipelineBase.stage`` builds one as a decorated ``Stage`` — one
 span, metric series and log line per stage — that ``Stage.then`` chains into a pipeline.
-``PipelineBase.fan_out`` runs stages concurrently over one input.
+``PipelineBase.fan_out`` runs stages concurrently over one input, and ``PipelineBase.crud``
+runs a CRUD service's five roles as the pipeline's operations.
 """
 
 from __future__ import annotations
@@ -12,13 +13,15 @@ import asyncio
 from typing import TYPE_CHECKING, override
 
 from techai_webutils.core.errors import AppValueError
+from techai_webutils.core.interfaces.crud_service import CrudService
 from techai_webutils.core.interfaces.pipeline import AsyncPipeline
 from techai_webutils.foundation.decorate import Layer, Tier
+from techai_webutils.foundation.decorate.roles import CrudOps
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from techai_webutils.foundation.decorate import Decorations
+    from techai_webutils.foundation.decorate import Decorations, Subject
 
 
 def tier() -> Tier:
@@ -116,3 +119,18 @@ class PipelineBase:
             return [t.result() for t in tasks]
 
         return self.stage(op, run)
+
+    def crud[T, P, ID](self, svc: CrudService[T, P, ID]) -> CrudService[T, P, ID]:
+        """Return the pipeline running each of ``svc``'s five roles as one of its operations.
+
+        The pipeline's contract declares the roles (it subclasses ``CrudService``).
+        """
+        return _CrudPipeline(svc, self._subject)
+
+
+class _CrudPipeline[T, P, ID](CrudOps[T, P, ID], CrudService[T, P, ID]):
+    """A CRUD service's roles run through the pipeline tier."""
+
+    def __init__(self, svc: CrudService[T, P, ID], op: Subject) -> None:
+        """Bind the service and the pipeline's subject."""
+        super().__init__(svc, op)

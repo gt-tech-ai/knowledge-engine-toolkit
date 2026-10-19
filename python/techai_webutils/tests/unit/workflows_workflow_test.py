@@ -8,11 +8,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from techai_webutils.core.domain_types.types import PageRequest
 from techai_webutils.core.errors.errors import (
     AppTimeoutError,
     ConflictError,
     InternalError,
 )
+from techai_webutils.core.interfaces.crud_service import CrudService
 from techai_webutils.core.interfaces.repository import TransactionManager, in_transaction
 from techai_webutils.foundation.config import decoration
 from techai_webutils.foundation.decorate import Collaborators, Decorations, Deps, Layer
@@ -246,3 +248,51 @@ async def test_workflow_base_applies_the_config(observed: Observed) -> None:
     await WorkflowBase(_Flows, decorations, "loud").exec("run", AsyncMock())
 
     assert [name for name, _, _ in observed.spans] == ["loud.run"]
+
+
+@pytest.mark.asyncio
+async def test_crud_reads_without_a_transaction_and_commits_each_write() -> None:
+    """A CRUD workflow reads with no transaction and commits each write (Go ``Base.CRUD``).
+
+    Why this test is important:
+      - The workflow tier is the only one that opens a transaction: a write run outside one
+        would be refused by every store, and a read that opened one would hold a connection
+        for nothing.
+
+    What it tests:
+      - Get and List run with no transaction open; Create, Update and Delete each run in one
+        transaction that commits (three in all).
+    """
+    seen: list[tuple[str, bool]] = []
+
+    def answer(role: str, result: object) -> AsyncMock:
+        def run(*_: object) -> object:
+            seen.append((role, in_transaction()))
+            return result
+
+        return AsyncMock(side_effect=run)
+
+    pipes = MagicMock(spec=CrudService)
+    pipes.get = answer("get", "e1")
+    pipes.list = answer("list", "page")
+    pipes.create = answer("create", "e")
+    pipes.update = answer("update", "e")
+    pipes.delete = answer("delete", None)
+    events: list[str] = []
+    flows = WorkflowBase(
+        CrudService, Decorations.fixed(Deps()), "widgets", _tx_manager(events)
+    ).crud(pipes)
+
+    assert await flows.get("1") == "e1"
+    assert await flows.list(None, PageRequest()) == "page"
+    assert await flows.create("e") == "e"
+    assert await flows.update("1", "e") == "e"
+    await flows.delete("1")
+    assert seen == [
+        ("get", False),
+        ("list", False),
+        ("create", True),
+        ("update", True),
+        ("delete", True),
+    ]
+    assert events == ["begin", "commit"] * 3

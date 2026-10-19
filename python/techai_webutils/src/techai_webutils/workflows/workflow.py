@@ -3,7 +3,8 @@
 ``tier()`` orders the tier's layers. ``WorkflowBase``, built from the workflow's contract, is
 the core of a workflow, the only tier that opens a transaction: it runs each contract method as a
 read (``exec``, no transaction), a command (``exec_tx``, one transaction) or a saga (``exec``
-whose body commits each local step with ``in_tx``).
+whose body commits each local step with ``in_tx``). ``WorkflowBase.crud`` runs a CRUD
+resource's reads as reads and each of its writes as a command.
 """
 
 from __future__ import annotations
@@ -11,12 +12,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from techai_webutils.core.errors.errors import InternalError
+from techai_webutils.core.interfaces.crud_service import CrudService
 from techai_webutils.core.interfaces.repository import in_transaction, marking_transaction
 from techai_webutils.foundation.decorate import Layer, Tier
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from techai_webutils.core.domain_types.types import Page, PageRequest
     from techai_webutils.core.interfaces.repository import TransactionManager
     from techai_webutils.foundation.decorate import Decorations
 
@@ -88,3 +91,41 @@ class WorkflowBase:
                 return await fn()
 
         return await tx.with_transaction(run)
+
+    def crud[T, P, ID](self, pipes: CrudService[T, P, ID]) -> CrudService[T, P, ID]:
+        """Return the CRUD workflow over ``pipes``: Get and List as reads, each write a command.
+
+        The workflow's contract declares the roles (it subclasses ``CrudService``).
+        """
+        return _CrudWorkflow(pipes, self)
+
+
+class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
+    """A CRUD resource's pipelines run through the workflow tier."""
+
+    def __init__(self, pipes: CrudService[T, P, ID], flows: WorkflowBase) -> None:
+        """Bind the resource's pipelines and the workflow base."""
+        self._pipes = pipes
+        self._flows = flows
+
+    async def get(self, entity_id: ID) -> T:
+        """Return the entity identified by ``entity_id``, a read."""
+        return await self._flows.exec("get", lambda: self._pipes.get(entity_id))
+
+    async def list(self, params: P, page: PageRequest) -> Page[T]:
+        """Return the page of entities ``params`` and ``page`` select, a read."""
+        return await self._flows.exec("list", lambda: self._pipes.list(params, page))
+
+    async def create(self, entity: T) -> T:
+        """Persist ``entity``, a command."""
+        return await self._flows.exec_tx("create", lambda: self._pipes.create(entity))
+
+    async def update(self, entity_id: ID, entity: T) -> T:
+        """Replace the entity identified by ``entity_id`` with ``entity``, a command."""
+        return await self._flows.exec_tx(
+            "update", lambda: self._pipes.update(entity_id, entity)
+        )
+
+    async def delete(self, entity_id: ID) -> None:
+        """Remove the entity identified by ``entity_id``, a command."""
+        await self._flows.exec_tx("delete", lambda: self._pipes.delete(entity_id))
