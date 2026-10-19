@@ -124,8 +124,8 @@ languages share one engine:
 | --- | --- | --- | --- |
 | Controller | Tracing → Metrics → Logging → Recovery → RateLimit → Bulkhead → Auth → Timeout | `transport.Base` (`Handler`, `Exec`) | `controllers.ControllerBase` (`handler`, `exec`) |
 | Client | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging | `client.Base` (`Exec`, `ExecOnce`, `Do`, `DoOnce`, `Stream`, `Open`); `NewWireBase` | `clients.client.ClientBase` (`exec`, `exec_once`); `ClientBase.wire` |
-| Workflow | Recovery → Logging → Tracing → Metrics → Timeout | `workflow.Base` (`Exec`, `ExecTx`, `InTx`) | `workflows.WorkflowBase` (`exec`, `exec_tx`, `in_tx`) |
-| Pipeline | Recovery → Logging → Tracing → Metrics → Timeout | `pipeline.Base` (`Stage`, `FanOut`; `Stage.Then`) | `pipelines.PipelineBase` (`stage`, `fan_out`; `Stage.then`) |
+| Workflow | Recovery → Logging → Tracing → Metrics → Timeout | `workflow.Base` (`Exec`, `ExecTx`, `InTx`, `CRUD`, `Resource`) | `workflows.WorkflowBase` (`exec`, `exec_tx`, `in_tx`, `crud`) |
+| Pipeline | Recovery → Logging → Tracing → Metrics → Timeout | `pipeline.Base` (`Stage`, `FanOut`, `CRUD`, `Resource`; `Stage.Then`) | `pipelines.PipelineBase` (`stage`, `fan_out`, `crud`; `Stage.then`) |
 | Service | Recovery → Tracing → Metrics → Logging → Auth → Timeout | `service.Base` (`Exec`, `CRUD`, `CRUDNoList`, `ReadListExist`, `Resource`) | `services.ServiceBase` (`exec`, `crud`) |
 | Repository | Tracing → Metrics → Logging → Timeout → CircuitBreaker → Retry | `repository.Base` (`Exec`, `ExecOnce`, `CRUD`, `CRUDNoList`, `ReadListExist`, `Resource`, `Outbox`, `TxSafeInsert`, `Cached`) | `repos.RepositoryBase` (`exec`, `exec_once`, `crud`) |
 | Store (Go only) | Tracing → Metrics → Logging → Timeout | `store.Base` (`Exec`, `Write`, `Client`, `CRUD`, `CRUDNoList`, `ReadListExist`, `Resource`, `Outbox`, `FromFuncs`) | — |

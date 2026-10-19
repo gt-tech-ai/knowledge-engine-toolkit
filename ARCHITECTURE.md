@@ -90,8 +90,10 @@ the method's op name, and calls the next tier. Running an op the contract does n
 `INTERNAL`. The role compositions are the same names at every tier that has them: `CRUD`,
 `CRUDNoList`, `ReadListExist` and `Resource` on the store, repository and service bases;
 `Outbox` on the store and repository; `TxSafeInsert` and `Cached` (the read-through entity cache,
-composed under a role: `b.CRUD(b.Cached(store, cache))`) on the repository; `Resource` on the
-pipeline and workflow (reads with no transaction, each write one command). `store.Base.FromFuncs`
+composed under a role: `b.CRUD(b.Cached(store, cache))`) on the repository; `CRUD` and
+`Resource` on the pipeline and workflow (the workflow's reads run with no transaction, each write
+one command). A consumer component serves its contract's generic roles from a role composition
+and implements only its other methods through `Exec`. `store.Base.FromFuncs`
 builds a store's implementation from one statement per role (writes only inside a transaction).
 A job is one `job.Base` per job (`NewBase(decs, name)`, its op `execute`); a gate is decorated as
 the gate-tier component of its name (`Decorate(decs)`, its op `run`). A client whose operations
@@ -152,7 +154,9 @@ collaborator or zero timeout skips its layer; recovery needs none.
     that opens a transaction. A consumer workflow embeds the Base and runs each operation as a
     read (`Exec`, no transaction), a command (`ExecTx`, one transaction) or a saga (`Exec` whose
     body commits each local step with `InTx`, undecorated). `ExecTx` and `InTx` refuse a context
-    already in a transaction, so a transaction never opens inside another.
+    already in a transaction, so a transaction never opens inside another. `CRUD(pipes)` and
+    `Resource(pipes)` serve a resource's roles: Get, List and Exists as reads, Create, Update and
+    Delete each as one command.
   - `service.Base` embeds the service's Subject; `CRUD` and `CRUDNoList` decorate a repository
     with an optional entity validator, and `Resource` with input validators.
   - `repository.Base` embeds the repository's Subject; `ExecOnce` runs a non-idempotent write. A

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING, Protocol
-from unittest.mock import AsyncMock, call
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
+from techai_webutils.core.domain_types.types import Page, PageRequest
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.errors.errors import ConflictError, InternalError
+from techai_webutils.core.interfaces.crud_service import CrudService
 from techai_webutils.foundation.decorate import Decorations, Deps, Layer
 from techai_webutils.pipelines import PipelineBase, tier
 
@@ -168,3 +170,40 @@ def test_wiring_bugs_fail_loud() -> None:
         base.stage("s", None)  # type: ignore[arg-type]
     with pytest.raises(AppValueError):
         base.stage("s", AsyncMock()).then(None)  # type: ignore[arg-type]
+
+
+def _service() -> MagicMock:
+    """Return a CrudService mock answering every CRUD call."""
+    svc = MagicMock(spec=CrudService)
+    svc.get = AsyncMock(return_value="e1")
+    svc.list = AsyncMock(return_value=Page(items=["e1"], total=1))
+    svc.create = AsyncMock(side_effect=lambda e: e)
+    svc.update = AsyncMock(side_effect=lambda _id, e: e)
+    svc.delete = AsyncMock(return_value=None)
+    return svc
+
+
+@pytest.mark.asyncio
+async def test_crud_stages_every_role(observed: Observed) -> None:
+    """A CRUD pipeline reaches the service under each role's operation name (Go ``Base.CRUD``).
+
+    Why this test is important:
+      - A CRUD resource's pipeline is assembled from the base over its service; a dropped or
+        misrouted role would break every workflow above it.
+
+    What it tests:
+      - Each of the five roles returns the service's answer in a ``widgets.<op>`` span.
+    """
+    pipe = PipelineBase(
+        CrudService,
+        Decorations.fixed(Deps(observability=observed.observability)),
+        "widgets",
+    ).crud(_service())
+
+    assert await pipe.get("1") == "e1"
+    assert (await pipe.list(None, PageRequest())).total == 1
+    assert await pipe.create("e") == "e"
+    assert await pipe.update("1", "e") == "e"
+    await pipe.delete("1")
+    ops = ["get", "list", "create", "update", "delete"]
+    assert [name for name, _, _ in observed.spans] == [f"widgets.{op}" for op in ops]
