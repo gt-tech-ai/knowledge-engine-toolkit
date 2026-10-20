@@ -132,12 +132,12 @@ func TestTransportCobra_Command(t *testing.T) {
 //
 // Why this test is important:
 //   - A command executed more than once (a shell, a test, a REPL) must not carry one
-//     run's positional arguments into the next, or the second run checks targets the
-//     caller never named.
+//     run's flags or positional arguments into the next, or the second run applies
+//     fixes or checks targets the caller never asked for.
 //
 // What it tests:
-//   - Executing one command with `api x y` and then `web` gives the second run Target
-//     "web" and no Rest.
+//   - Executing one command with `--fix --only a api x y` and then `--only b web` gives
+//     the second run Fix false, Only [b], Target "web" and no Rest.
 func TestTransportCobra_FreshInputPerRun(t *testing.T) {
 	t.Parallel()
 	var got cobraInput
@@ -145,10 +145,12 @@ func TestTransportCobra_FreshInputPerRun(t *testing.T) {
 	require.NoError(t, err)
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
-	for _, args := range [][]string{{"-e", "s", "api", "x", "y"}, {"-e", "s", "web"}} {
+	for _, args := range [][]string{
+		{"-e", "s", "--fix", "--only", "a", "api", "x", "y"},
+		{"-e", "s", "--only", "b", "web"},
+	} {
 		cmd.SetArgs(args)
 		require.NoError(t, cmd.ExecuteContext(t.Context()))
 	}
-	assert.Equal(t, "web", got.Target)
-	assert.Empty(t, got.Rest)
+	assert.Equal(t, cobraInput{Env: "s", Only: []string{"b"}, Target: "web"}, got)
 }

@@ -100,13 +100,16 @@ func (o seededOp[T]) NewInput() any {
 }
 
 // check reports a seed for another input type than the wrapped operation's, which
-// would otherwise never apply.
+// would otherwise never apply, here or in a seeded operation this one wraps.
 func (o seededOp[T]) check() error {
 	in := o.Operation.NewInput()
 	if _, ok := in.(*T); !ok {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"defaults seed %T, but the operation's input is %T", new(T), in,
 		))
+	}
+	if inner, ok := o.Operation.(interface{ check() error }); ok {
+		return inner.check()
 	}
 	return nil
 }

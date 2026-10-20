@@ -11,7 +11,8 @@ type KubectlClient interface {
 	// kind when name is empty.
 	Get(ctx context.Context, ns, kind, name string) ([]byte, error)
 
-	// Apply applies the manifest files in ns (the files' own namespaces when ns is "").
+	// Apply applies the manifest files in ns (the files' own namespaces when ns is "");
+	// no files is CodeInvalidInput.
 	Apply(ctx context.Context, ns string, files ...string) error
 
 	// Rollout waits up to timeout for the named workload's rollout to finish.

@@ -27,7 +27,8 @@ type Supervisor interface {
 		ready Probe[ProcessHandle],
 	) (ProcessHandle, error)
 
-	// Detach starts spec without supervising it, so it outlives the caller.
+	// Detach starts spec without supervising it, so it outlives the caller (on platforms
+	// that support new sessions).
 	Detach(spec types.ProcessSpec) error
 
 	// StopAll stops every process Start started and that is still running, newest

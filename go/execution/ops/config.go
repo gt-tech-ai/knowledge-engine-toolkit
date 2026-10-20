@@ -33,9 +33,9 @@ type Config[E any] struct {
 
 // NewFromConfig builds the registry of the operations cfg.Policy admits. It fails with
 // CodeInvalidInput when the policy or a descriptor is invalid, when descriptors and
-// builders don't pair one-to-one, when a builder is nil, returns no operation or seeds
-// defaults for another input type, or when the policy's allow/deny names an unknown
-// operation. Building does no I/O.
+// builders don't pair one-to-one, when a builder is nil, when an admitted operation's
+// builder returns no operation or seeds defaults for another input type, or when the
+// policy's allow/deny names an unknown operation. Building does no I/O.
 func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
 	if err := cfg.Policy.Validate("policy"); err != nil {
 		return nil, err

@@ -127,7 +127,8 @@ func TestExecutionOpsNewFromConfig_RejectsDuplicateDescriptor(t *testing.T) {
 //     apply.
 //
 // What it tests:
-//   - Each fails NewFromConfig with CodeInvalidInput naming the operation; the seed
+//   - Each, a mistyped seed under a correct one included, fails NewFromConfig with
+//     CodeInvalidInput naming the operation; the seed
 //     mismatch also names the operation's real input type.
 func TestExecutionOpsNewFromConfig_RejectsBrokenBuilders(t *testing.T) {
 	t.Parallel()
@@ -142,6 +143,10 @@ func TestExecutionOpsNewFromConfig_RejectsBrokenBuilders(t *testing.T) {
 			return nil
 		},
 		"seed of another type": ops.WithDefaults(run, func(in *cobraInput) { in.Env = "x" }),
+		"inner seed of another type": ops.WithDefaults(
+			ops.WithDefaults(run, func(*cobraInput) {}),
+			func(*adapterInput) {},
+		),
 	} {
 		_, err := ops.NewFromConfig(ops.Config[opsEnv]{
 			Policy: types.ExposurePolicy{

@@ -6,6 +6,7 @@ package probe
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
@@ -130,8 +131,9 @@ func (s *set[T]) once(
 	}
 }
 
-// safeRun runs p, turning a panic into a failed verdict: probes run on worker goroutines,
-// where a panic would end the process rather than reach the service's recovery.
+// safeRun runs p, turning a panic into a failed verdict whose one finding names the
+// panic and whose detail is the stack: probes run on worker goroutines, where a panic
+// would end the process rather than reach the service's recovery.
 func safeRun[T any](
 	ctx context.Context,
 	p interfaces.Probe[T],
@@ -141,7 +143,11 @@ func safeRun[T any](
 		if r := recover(); r != nil {
 			v = types.Verdict{
 				Status: types.StatusFail,
-				Detail: fmt.Sprintf("probe %s panicked: %v", p.Name(), r),
+				Findings: []types.Finding{{
+					Check:   p.Name(),
+					Message: fmt.Sprintf("probe %s panicked: %v", p.Name(), r),
+				}},
+				Detail: string(debug.Stack()),
 			}
 		}
 	}()

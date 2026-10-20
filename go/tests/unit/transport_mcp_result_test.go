@@ -338,3 +338,27 @@ func TestTransportMcpNew_RejectsInvalidMCPSettings(t *testing.T) {
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	}
 }
+
+// TestTransportMcpServe_PruneFailure tests a run directory that cannot be pruned.
+//
+// Why this test is important:
+//   - An operator reading "transport failed" looks at the client and the pipes; when
+//     the run directory is what failed, the message must say so.
+//
+// What it tests:
+//   - ServeStdio over a run-directory root that is a regular file fails before the
+//     session starts, with an error naming the run directory and not the transport.
+func TestTransportMcpServe_PruneFailure(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join(t.TempDir(), "runs")
+	require.NoError(t, os.WriteFile(root, []byte("x"), 0o600))
+	opts := mcpOpts(t)
+	opts.RunDir = mcp.NewRunDir(root, time.Now)
+	srv, err := mcp.New(stubOpRegistry(t, "stub", `{"type":"object"}`, nil), opts)
+	require.NoError(t, err)
+	out, err := os.CreateTemp(t.TempDir(), "stdout")
+	require.NoError(t, err)
+	err = srv.ServeStdio(t.Context(), io.NopCloser(strings.NewReader("")), out)
+	require.ErrorContains(t, err, "run dir")
+	assert.NotContains(t, err.Error(), "transport")
+}

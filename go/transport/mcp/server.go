@@ -20,8 +20,9 @@ import (
 // Registry is the slice of the operations registry the MCP server adapts: the admitted
 // operations, running one by name, and reserving the working tree for a background run.
 //
-// SDK seam: the consumer-side contract between the MCP transport and
-// execution/ops.Registry, with no core interface to embed.
+// interface-composition exemption — the consumer-side contract between the MCP
+// transport and execution/ops.Registry, with no core interface to embed beyond the run
+// table's Registry.
 type Registry interface {
 	runs.Registry
 	// List returns the operations the front-end's policy admits, sorted by name.
@@ -121,21 +122,30 @@ func (s *Server) Serve(ctx context.Context, t sdkmcp.Transport) error {
 	if err := s.runs.Prune(s.settings.RunRetention); err != nil {
 		return err
 	}
+	return s.session(ctx, t)
+}
+
+// session runs one session over t, then stops every background run it started.
+func (s *Server) session(ctx context.Context, t sdkmcp.Transport) error {
 	err := s.srv.Run(ctx, t)
 	s.table.CancelAll()
 	s.table.Wait()
 	return apperr.Wrap(err, apperr.CodeInternal, "Server.Run")
 }
 
-// ServeStdio serves over newline-delimited JSON on in and out until the client closes
-// in or ctx is cancelled (SIGINT / SIGTERM); either is a clean shutdown and returns
-// nil. Any other transport failure returns CodeInternal.
+// ServeStdio prunes the run directory like Serve, then serves over newline-delimited
+// JSON on in and out until the client closes in or ctx is cancelled (SIGINT / SIGTERM);
+// either is a clean shutdown and returns nil. A failed prune is returned as it is; any
+// other transport failure returns CodeInternal.
 func (s *Server) ServeStdio(
 	ctx context.Context,
 	in io.ReadCloser,
 	out io.WriteCloser,
 ) error {
-	err := s.Serve(ctx, &sdkmcp.IOTransport{Reader: in, Writer: out})
+	if err := s.runs.Prune(s.settings.RunRetention); err != nil {
+		return err
+	}
+	err := s.session(ctx, &sdkmcp.IOTransport{Reader: in, Writer: out})
 	if err == nil || isShutdown(err) {
 		return nil
 	}

@@ -25,7 +25,8 @@ import (
 //   - Every call carries --context when configured; get, apply, rollout status and
 //     current-context build their arguments with the namespace; an apply with no files
 //     is INVALID_INPUT without running kubectl; a failure is UPSTREAM;
-//     the default kind is the stub; an unknown kind is INVALID_INPUT.
+//     the default kind is the stub, which also refuses an apply with no files; an
+//     unknown kind is INVALID_INPUT.
 func TestClientsKubectl_Exec(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -69,6 +70,8 @@ func TestClientsKubectl_Exec(t *testing.T) {
 	cur, err = stub.CurrentContext(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "stub", cur)
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(stub.Apply(ctx, "app")),
+		"the stub keeps the contract")
 	_, err = kubectl.NewFromConfig(ctx, kubectl.Config{Kind: "oc"},
 		kubectl.Deps{Decorations: fixtures.Decorations()})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))

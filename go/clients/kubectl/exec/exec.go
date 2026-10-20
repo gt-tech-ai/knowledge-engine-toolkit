@@ -62,8 +62,8 @@ func (c *Client) Get(ctx context.Context, ns, kind, name string) ([]byte, error)
 	return c.kubectl(ctx, "get", namespaced(ns, append(args, "-o", "json")...)...)
 }
 
-// Apply runs `kubectl apply -f file…`; no files is CodeInvalidInput, since kubectl would
-// refuse it.
+// Apply runs `kubectl apply -f file…`; no files is CodeInvalidInput, as the contract
+// says (kubectl would refuse it too).
 func (c *Client) Apply(ctx context.Context, ns string, files ...string) error {
 	if len(files) == 0 {
 		return apperr.New(apperr.CodeInvalidInput, "kubectl apply: no files")

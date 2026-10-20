@@ -100,7 +100,9 @@ func (s *Supervisor) Start(
 	return h, nil
 }
 
-// Detach starts spec and releases it.
+// Detach starts spec in a new session and releases it. Where sessions are not
+// available (Windows) it starts spec without one, so the process may still end with
+// the caller's console.
 func (s *Supervisor) Detach(spec types.ProcessSpec) error {
 	cmd, err := command(spec)
 	if err != nil {

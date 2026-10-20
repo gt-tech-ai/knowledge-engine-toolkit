@@ -246,8 +246,9 @@ func TestServicesProbe_CancelledAndInvalid(t *testing.T) {
 //     other probe's result.
 //
 // What it tests:
-//   - With and without a per-probe timeout, a panicking probe is a failed step naming
-//     the panic, and the other probes' steps are unaffected.
+//   - With and without a per-probe timeout, a panicking probe is a failed step with one
+//     finding naming the panic and the stack in its detail, and the other probes'
+//     steps are unaffected.
 func TestServicesProbe_PanickingProbe(t *testing.T) {
 	t.Parallel()
 	for _, opts := range []probe.Options{{}, {Timeout: time.Minute}} {
@@ -262,7 +263,10 @@ func TestServicesProbe_PanickingProbe(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, res, 2)
 		assert.Equal(t, types.StatusFail, res[0].Status)
-		assert.Contains(t, res[0].Error, "nil map")
+		assert.Equal(t, "1 finding", res[0].Error)
+		assert.Contains(t, string(res[0].Detail), "probe bad panicked: nil map")
+		assert.Contains(t, string(res[0].Detail), "TestServicesProbe_PanickingProbe",
+			"the stack names where the probe panicked")
 		assert.Equal(t, types.StatusPass, res[1].Status)
 	}
 }

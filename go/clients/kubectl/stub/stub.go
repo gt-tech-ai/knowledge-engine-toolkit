@@ -6,6 +6,7 @@ import (
 	"context"
 	"time"
 
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -20,8 +21,13 @@ func (Client) Get(context.Context, string, string, string) ([]byte, error) {
 	return []byte(`{"items":[]}`), nil
 }
 
-// Apply does nothing.
-func (Client) Apply(context.Context, string, ...string) error { return nil }
+// Apply does nothing; no files is CodeInvalidInput, as the contract says.
+func (Client) Apply(_ context.Context, _ string, files ...string) error {
+	if len(files) == 0 {
+		return apperr.New(apperr.CodeInvalidInput, "kubectl apply: no files")
+	}
+	return nil
+}
 
 // Rollout reports a finished rollout.
 func (Client) Rollout(context.Context, string, string, string, time.Duration) error {
