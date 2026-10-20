@@ -50,6 +50,7 @@
 //go:generate mockgen -destination=mock_secret_source.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Source
 //go:generate mockgen -destination=mock_service.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Service
 //go:generate mockgen -destination=mock_sqs_api.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/sqs API
+//go:generate mockgen -destination=mock_codebase.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Codebase,GoView,YAMLView,CodebaseSource,Renderer
 //go:generate mockgen -destination=mock_storage.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces StorageClient
 //go:generate mockgen -destination=mock_store.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Store
 //go:generate mockgen -destination=mock_stream.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Stream
