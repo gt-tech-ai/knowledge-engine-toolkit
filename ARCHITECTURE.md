@@ -491,6 +491,8 @@ Go `go/execution` models batch work: jobs fan out units, gates run jobs in phase
 - `gate`: `gate.New(name).Parallel(…).Serial(…).StopOnFailure().Observe(obs)`; `Run` runs the
   phases in order and aggregates failures into a `CodeQualityFailed` error, and `RunLocal` runs a
   gate of runner-less jobs.
+- `ops` and `runs`: the operations registry and its background-run table, which front-ends use to
+  run named operations (see [Repository tooling substrate](#repository-tooling-substrate)).
 
 Python `execution` mirrors these (`fan_out`, `run_job_group`, `new_gate`, `run_gate`) and adds the
 `Executor` seam. `executor_from_config` chooses `AsyncioExecutor` (default) or `RayExecutor` over
@@ -527,6 +529,67 @@ three-stage pipeline. `Base.FanOut(name, stages...)` runs stages concurrently on
 returns their outputs in order; the first error cancels the rest. Python's
 `PipelineBase.stage(name, fn)` and `Stage.then(next)` are the same, and `PipelineBase.fan_out`
 raises the first failing stage's own error.
+
+## Repository tooling substrate
+
+Go packages for tools that read and check a codebase (linters, guards, generators, developer
+CLIs), so each one does not re-walk the tree or re-implement a runner.
+
+- **Codebase.** `interfaces.Codebase` is one read of a working tree: `Files(FileSelector)`,
+  `Text`, `Match`, `Changed`, and typed views (`Go()` parses Go files, `YAML()` queries and decodes
+  YAML documents, `Rendered` renders Helm charts). `foundation/codebase` builds it over a
+  `CodebaseSource` with a `Snapshot` that memoizes every read and parse for the run, so N checks
+  over one tree read each file once. `clients/codebase` supplies the source by `Kind`: `git`
+  (tracked plus untracked, ignoring what `.gitignore` excludes), `fs` (a directory, through
+  `os.OpenRoot`), `memory` (a map, for tests). `foundation/yamlq` queries and edits YAML in place.
+- **Probes.** `interfaces.Probe[T]` is one check returning a `types.Verdict` (status, findings,
+  transient). `services/probe.NewSet` runs a set in parallel with a per-probe timeout, retries of
+  transient failures and a strict mode that fails a skip, returning one step per probe in probe
+  order.
+- **Tool runs.** `types.ToolRun` is a data row that drives an external binary: its targets
+  (`services/toolrun/selectors`: files, Go modules, staged files, …), one invocation per target
+  or one over all of them, fix arguments, and the parser that turns its output into a verdict
+  (`services/toolrun/parsers`). `foundation/stepcache` skips a step whose inputs a previous pass
+  already covered.
+- **Reports.** `foundation/report` renders a gate's steps as lines, tables, GitHub Actions
+  annotations or JSON (`report.Composite` fans out).
+- **Generators.** `interfaces.Generator` derives committed files from a codebase;
+  `foundation/gen.Check` diffs a fresh render with what is committed and `Apply` writes it;
+  `foundation/scaffold` plans and applies templated files with a preserve marker;
+  `foundation/impact` maps changed paths to what they affect. Built-in generators:
+  `foundation/pins` (a Renovate config from the detected ecosystems and a consumer `Policy`) and
+  `foundation/schemagen` (JSON Schema reflected from Go types, Kind values extracted from factory
+  source, and a config reference). `foundation/dataset` merge-loads a directory of YAML data
+  files into strictly decoded sections.
+- **Clients.** Typed command-line clients behind interfaces, each `stub|exec`: `clients/git`,
+  `helm` (plus `helm.NewRenderer` for `Codebase.Rendered`), `kubectl`, `docker`, `terraform`;
+  `clients/process` supervises long-lived child processes (process groups, graceful stop).
+  `clients/aws/<family>` (`sts`, `secretsmanager`, `ses`, `bedrock`, `servicequotas`, `iam`,
+  `route53`) wrap one SDK seam each, `stub|sdk`, through `client.Call`; `clients/session`
+  resolves and caches verified credentials. `clients/toolchain` declares developer tools as data
+  (`ToolEntry`), detects them, installs them per platform (pinned downloads verified by SHA-256),
+  and checks that each go-installed CI tool on PATH is the pinned build.
+- **Operations.** `execution/ops` registers typed operations once (descriptor data plus a
+  `Builder`; `ops.Func` reflects the input schema from the input type) and admits them per
+  front-end by an `ExposurePolicy` (safety-class ceiling, lifecycles, allow and deny lists); it
+  runs one at a time, each under recovery → timeout → logging → code mapping.
+  `execution/runs` tracks background runs of long-running operations. Front-ends:
+  `transport/cobra` (a command whose flags come from the input's `flag` and `arg` tags),
+  `transport/mcp` (one MCP tool per admitted operation plus `runs.status|result|cancel|list`)
+  and `transport/cron` (a scheduled job runs one named operation unattended).
+
+Generic methods on concrete types (Go 1.27) carry typed results without a type switch:
+`Snapshot.Memo[T]`, `Pool.FanOut[T]`, `Dataset.Section[T]`. Interfaces stay non-generic in their
+methods.
+
+### Python parity gap
+
+None of the packages above has a Python mirror yet, and `techai-webutils` is unchanged by them:
+`clients/codebase`, `clients/{git,helm,kubectl,docker,terraform,process,session,toolchain}`,
+`clients/aws/*`, `clients/client` (`Output`, `SplitNUL`, `Call`), `foundation/{codebase,yamlq,
+stepcache,report,gen,scaffold,impact,pins,dataset,schemagen}`, `services/{probe,toolrun}`,
+`execution/{ops,runs}` and `transport/{cobra,mcp,cron}`. Go has no op-service tier: an operation
+runs through `execution/ops`. Python keeps `core/interfaces/op_service.py`.
 
 ## Testing
 

@@ -17,14 +17,17 @@ layers, swappable components, decorators, error codes — are in
 go.mod                  ONE Go module: github.com/gt-tech-ai/knowledge-engine-toolkit (packages under go/)
 go/
   core/                 Layer 0 — pure interfaces + types (no external deps)
-  foundation/           Layer 1 — config, logger, metrics, tracer, resilience, cache, stream (bounded backpressured results)
-  clients/              Layer 2 — external-system integration (db, cache, messaging, rpc, storage, lock)
+  foundation/           Layer 1 — config, logger, metrics, tracer, resilience, cache, stream (bounded backpressured results),
+                        codebase snapshot, reports, generators (gen, scaffold, pins, schemagen), dataset
+  clients/              Layer 2 — external-system integration (db, cache, messaging, rpc, storage, lock, codebase,
+                        git/helm/kubectl/docker/terraform, AWS, process, toolchain)
   repos/                Layer 3 — data-access base (repository, cursor, decorators)
-  services/             Layer 4 — domain-service base
+  services/             Layer 4 — domain-service base, probe sets, tool runs
   pipelines/            Layer 5 — stateless transforms
   workflows/            Layer 6 — multi-step orchestration
-  transport/            Layer 7 — HTTP/RPC/JSON:API
-  execution/            batch fan-out substrate (discover → map → fan-out → aggregate)
+  transport/            Layer 7 — HTTP/RPC/JSON:API, MCP, Cobra and cron front-ends
+  execution/            batch fan-out substrate (discover → map → fan-out → aggregate), operations
+                        registry and background runs
   helpers/              small shared utilities
   tests/                black-box tests (unit + integration via testcontainers), fixtures, generated mocks
 python/

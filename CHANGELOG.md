@@ -6,6 +6,48 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.17] - 2026-10-20
+
+Python: unchanged (`techai-webutils` 0.6.1); the repository tooling substrate is Go-only for now
+(ARCHITECTURE.md#python-parity-gap).
+Breaking: `interfaces.OpService` and its mock are removed.
+
+### Added
+
+- A repository tooling substrate (ARCHITECTURE.md#repository-tooling-substrate):
+  - `interfaces.Codebase` with Go, YAML and rendered-chart views over a memoizing
+    `foundation/codebase` snapshot; `clients/codebase` kinds `git`, `fs` and `memory`;
+    `foundation/yamlq` for YAML queries and in-place edits.
+  - `interfaces.Probe[T]` / `ProbeSet[T]` and `services/probe.NewSet` (parallel, per-probe
+    timeout, transient retry, strict mode); `types.Verdict` and `Verdict.Step`.
+  - `types.ToolRun` and `services/toolrun` with target selectors and output parsers;
+    `foundation/stepcache` (`off`, `dir`).
+  - `foundation/report` (line, table, gh-actions, json, quiet, composite).
+  - `interfaces.Generator`, `foundation/gen` (`Check`, `Apply`), `foundation/scaffold`,
+    `foundation/impact`, `foundation/pins` (Renovate config from detected ecosystems and a
+    consumer `Policy`), `foundation/schemagen` (JSON Schema, Kind extraction, config reference
+    generator and audit) and `foundation/dataset` (merge-loaded YAML data, strict sections).
+  - Command-line clients `clients/{git,helm,kubectl,docker,terraform}` (`stub|exec`), with
+    `helm.NewRenderer`; `clients/process` (supervised child processes);
+    `client.Output`, `client.SplitNUL` and `client.Call` / `CallOnce`.
+  - AWS SDK-seam clients `clients/aws/{sts,secretsmanager,ses,bedrock,servicequotas,iam,route53}`
+    (`stub|sdk`) and `clients/session` (verified, cached credentials).
+  - `clients/toolchain`: tool manifests (`ToolEntry`, `ValidateToolEntries`), `Catalog`,
+    `Detector`, `Installer` (per-platform installs, SHA-256-verified downloads, `CheckPins`) and
+    `Registry`; `interfaces.Prompter`.
+  - `execution/ops` (operations registry with exposure policies, `Func`, `WithDefaults`,
+    `Decode`, `InputSchema`), `execution/runs` (background runs), and the front-ends
+    `transport/cobra`, `transport/mcp` and `transport/cron`; `interfaces.Operation` /
+    `Reservation` and `types.OperationDescriptor` / `ExposurePolicy` / `MCPSettings`.
+- Dependencies: `github.com/invopop/jsonschema`, `github.com/modelcontextprotocol/go-sdk` and
+  the AWS SDK `sesv2`, `bedrockruntime`, `servicequotas`, `iam` and `route53` modules;
+  `github.com/pmezard/go-difflib` and `spf13/cobra` (v1.10.2) become direct.
+
+### Removed
+
+- `interfaces.OpService[A, R]` and `mocks.MockOpService`: an operation is registered in
+  `execution/ops` instead. A consumer that still implements the contract declares it locally.
+
 ## [0.0.16] - 2026-10-19
 
 Python: unchanged (`techai-webutils` 0.6.1); the entity bases come to Python in a later release.

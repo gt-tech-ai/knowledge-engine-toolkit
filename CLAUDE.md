@@ -140,7 +140,7 @@ Conventions every tier shares, identical in both languages:
 - Series `<tier>_operations_total`, `<tier>_errors_total`, `<tier>_operation_duration_seconds`,
   labelled `{<tier>, operation}`.
 - Operation names are Go's: `Get`, `List`, `Create`, `Update`, `Delete`, `Exists` for CRUD,
-  `Execute` for a stage, workflow or job, `Run` for an op service.
+  `Execute` for a stage, workflow or job, `Run` for an operation.
 - Inner logging layers log failures at Debug; the controller tier is the edge (`Tier.Edge` /
   `Tier.edge`) and logs a failure once, at Warn for a client fault and at Error otherwise.
   Recovery logs a panic even where the logging layer is off (`Deps.PanicLogger` /
@@ -192,6 +192,19 @@ tier out in the framework's interceptor shape.
   (`DefaultConfig` / `default_config`). Durations are Go strings (`"30s"`) in both
   (`foundation/config/duration.parse_duration`). With no section at all, today's behavior holds.
 
+## Pattern 9: tooling reads one codebase, operations run everywhere
+
+A check, generator or tool run reads the tree through an `interfaces.Codebase`, never `os` or
+`filepath.Walk`: the snapshot memoizes every read and parse for the run, and the `memory` kind
+makes the check testable without a disk. Policy that names a consumer's files, schedules or
+tools is data the consumer passes in (a `pins.Policy`, a `ToolEntry` list, a `DocsConfig`), never
+a literal here. A developer operation is registered once in `execution/ops` and exposed by a
+front-end (`transport/cobra`, `transport/mcp`, `transport/cron`) under an exposure policy.
+
+Generic methods on concrete types are allowed (Go 1.27) where a typed result would otherwise
+need a type switch (`Snapshot.Memo[T]`, `Pool.FanOut[T]`, `Dataset.Section[T]`); interface
+methods stay non-generic, so a contract can still be mocked.
+
 ## Go and Python parity
 
 Python mirrors Go one-to-one where the languages allow it: the same tier names and orders, the
@@ -204,6 +217,9 @@ ARCHITECTURE.md. Known differences are deliberate:
 - Python servers run every RPC shape as one coroutine (a stream is written with `context.write`),
   so the tier wraps the whole stream.
 - Python consumer-supplied kinds use a `backends` mapping where Go uses a kinds table.
+- The repository tooling substrate (codebase, probes, tool runs, generators, the command-line
+  and AWS clients, operations and their front-ends) is Go-only; ARCHITECTURE.md lists the
+  packages. Python keeps `core/interfaces/op_service.py`; Go has no op-service tier.
 
 ## Testing
 
