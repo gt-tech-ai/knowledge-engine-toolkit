@@ -54,6 +54,7 @@
 //go:generate mockgen -destination=mock_probe.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Probe,ProbeSet
 //go:generate mockgen -destination=mock_process.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Supervisor,ProcessHandle
 //go:generate mockgen -destination=mock_prometheus_http_doer.go -package=mocks -mock_names=HTTPDoer=MockPrometheusHTTPDoer github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/http HTTPDoer
+//go:generate mockgen -destination=mock_prompter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Prompter
 //go:generate mockgen -destination=mock_rate_limiter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces RateLimiter
 //go:generate mockgen -destination=mock_reader.go -package=mocks io ReadCloser
 //go:generate mockgen -destination=mock_replaybuffer.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ReplayBuffer
@@ -71,6 +72,7 @@
 //go:generate mockgen -destination=mock_stream.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Stream
 //go:generate mockgen -destination=mock_stream_conn.go -package=mocks connectrpc.com/connect StreamingHandlerConn
 //go:generate mockgen -destination=mock_terraform.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces TerraformClient
+//go:generate mockgen -destination=mock_toolchain.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain Downloader,PathResolver
 //go:generate mockgen -destination=mock_toolrun.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces StepCache,ToolRunner,TargetSelector,Parser
 //go:generate mockgen -destination=mock_tracer.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Tracer,Span
 //go:generate mockgen -destination=mock_workflow.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Workflow

@@ -1,0 +1,78 @@
+# A small tool manifest with one tool of every shape: a prerequisite, the command,
+# go-install, github-release and url install kinds, a CI tool, optional tools and a
+# registry-only tool.
+- name: Go
+  binary: go
+  category: prerequisite
+  required: true
+  min_version: "1.27"
+  version_cmd: [go, version]
+  version_parse: go-version
+  fallback_url: https://go.dev/dl/
+- name: uv
+  binary: uv
+  category: required
+  required: true
+  min_version: "0.5"
+  version_cmd: [uv, --version]
+  fallback_url: https://docs.astral.sh/uv/getting-started/installation/
+  install:
+    darwin: {kind: command, command: brew, args: [install, uv]}
+    linux-apt: {kind: command, command: sh, args: ["-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"]}
+- name: buf
+  binary: buf
+  category: required
+  required: true
+  min_version: "1.47"
+  version_cmd: [buf, --version]
+  install:
+    darwin: {kind: command, command: brew, args: [install, bufbuild/buf/buf]}
+    all: {kind: go-install, package: github.com/bufbuild/buf/cmd/buf@v1.73.0}
+- name: Atlas
+  binary: atlas
+  category: required
+  required: true
+  ci: true
+  version_cmd: [atlas, version]
+  install:
+    all:
+      kind: url
+      url: https://release.ariga.io/atlas
+      version: v1.3.3
+      binary: atlas
+      assets:
+        linux-amd64: {name: atlas-linux-amd64-v1.3.3, sha256: a41ea66b5aaad1e363fd829613a6725c3934378792d0be5591269c041c112b96}
+- name: golangci-lint
+  binary: golangci-lint
+  category: required
+  required: true
+  ci: true
+  version_cmd: [golangci-lint, --version]
+  install:
+    windows:
+      kind: github-release
+      org: golangci
+      repo: golangci-lint
+      tag: v2.14.0
+      version: v2.14.0
+      binary: golangci-lint
+      assets:
+        windows-amd64: {name: golangci-lint-2.14.0-windows-amd64.zip, sha256: b15f903d1649283a2ab6e8d2f0c317eaf1f9f6b3763950e7e8b7e72a43dd724f}
+    all: {kind: go-install, package: github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0}
+- name: pgcli
+  binary: pgcli
+  category: optional
+  description: Enhanced PostgreSQL CLI
+  install:
+    darwin: {kind: command, command: brew, args: [install, pgcli]}
+    all: {kind: command, command: pip, args: [install, pgcli]}
+- name: grpcurl
+  binary: grpcurl
+  category: optional
+  description: gRPC testing CLI
+  install:
+    all: {kind: go-install, package: github.com/fullstorydev/grpcurl/cmd/grpcurl@v1.9.4}
+- name: ruff
+  binary: ruff
+  cmd: [uv, run, ruff]
+  install_hint: pip install ruff
