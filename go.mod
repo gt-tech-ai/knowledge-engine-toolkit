@@ -25,6 +25,7 @@ require (
 	github.com/gowebpki/jcs v1.0.2
 	github.com/grafana/regexp v0.0.0-20250905093917-f7b3be9d1853
 	github.com/jackc/pgx/v5 v5.11.0
+	github.com/pmezard/go-difflib v1.0.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/riverqueue/river v0.47.0
