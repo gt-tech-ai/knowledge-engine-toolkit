@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase/fs"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -103,11 +104,9 @@ func (s *Source) lines(ctx context.Context, args ...string) ([]string, error) {
 		return nil, apperr.Wrap(res.Err, apperr.CodeUnavailable,
 			"git "+strings.Join(args, " ")+": "+strings.TrimSpace(string(res.Stderr)))
 	}
-	var out []string
-	for p := range strings.SplitSeq(string(res.Stdout), "\x00") {
-		if p != "" {
-			out = append(out, filepath.ToSlash(p))
-		}
+	out := client.SplitNUL(res.Stdout)
+	for i, p := range out {
+		out[i] = filepath.ToSlash(p)
 	}
 	return out, nil
 }
