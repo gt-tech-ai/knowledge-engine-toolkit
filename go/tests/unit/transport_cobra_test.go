@@ -130,10 +130,11 @@ func TestTransportCobra_Command(t *testing.T) {
 // TestTransportCobra_FreshInputPerRun tests what each execution of a command decodes.
 //
 // Why this test is important:
-//   - A command executed more than once (a test, a REPL) must not carry one run's
-//     positional arguments into the next; a flag the caller adds to the returned
-//     command (an output format) must keep working on every execution; and two commands
-//     built from one registry must not share a run's input.
+//   - A command executed more than once must not carry one run's positional arguments
+//     into the next (Cobra itself keeps parsed flags, which is why a caller builds one
+//     command per execution); a flag the caller adds to the returned command (an output
+//     format) must keep working; and two commands built from one registry must not share
+//     a run's input.
 //
 // What it tests:
 //   - A reused command given `api x y` and then `web` runs the second with Target "web"

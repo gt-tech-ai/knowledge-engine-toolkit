@@ -55,10 +55,7 @@ func NewProvider[Cred any](
 // first use and serving it from the cache after. A credential that fails verification
 // is CodeUnauthorized and is not cached, so a fixed credential works on the next call.
 func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, error) {
-	p.mu.Lock()
-	cred, ok := p.cache[ref]
-	p.mu.Unlock()
-	if ok {
+	if cred, ok := p.cached(ref); ok {
 		return cred, nil
 	}
 	v, err, _ := p.group.Do(ref.String(), func() (any, error) {
@@ -68,19 +65,24 @@ func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, erro
 		var zero Cred
 		return zero, err
 	}
-	cred, _ = v.(Cred)
+	cred, _ := v.(Cred)
 	return cred, nil
+}
+
+// cached returns ref's verified credential when the cache holds it.
+func (p *Provider[Cred]) cached(ref types.Ref) (Cred, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	cred, ok := p.cache[ref]
+	return cred, ok
 }
 
 // resolve reads, parses and verifies ref's credential, then caches it. It first
 // re-checks the cache: a caller that missed it may start its flight only after an
 // earlier flight for ref has finished and cached the credential.
 func (p *Provider[Cred]) resolve(ctx context.Context, ref types.Ref) (Cred, error) {
-	p.mu.Lock()
-	cached, ok := p.cache[ref]
-	p.mu.Unlock()
-	if ok {
-		return cached, nil
+	if cred, ok := p.cached(ref); ok {
+		return cred, nil
 	}
 	var zero Cred
 	secret, err := p.src.Get(ctx, ref)

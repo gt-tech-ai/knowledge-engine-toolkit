@@ -138,8 +138,12 @@ func TestCodebaseSnapshot_MemoPanickingBuild(t *testing.T) {
 		assert.NotContains(t, err.Error(), "goroutine ", "the message stays one line")
 		var appErr *apperr.AppError
 		require.ErrorAs(t, err, &appErr)
-		assert.Contains(t, appErr.StackTrace(), "TestCodebaseSnapshot_MemoPanickingBuild",
-			"the error's stack names where the build panicked")
+		assert.Contains(
+			t,
+			appErr.StackTrace(),
+			"TestCodebaseSnapshot_MemoPanickingBuild.func1",
+			"the error's stack names the panicking build (boom), not only the caller",
+		)
 	}
 
 	got, err := s.Memo(t.Context(), "k", func(context.Context) (int, error) {

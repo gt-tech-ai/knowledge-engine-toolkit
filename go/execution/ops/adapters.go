@@ -106,7 +106,7 @@ func (o seededOp[T]) check() error {
 	if o.seed == nil {
 		return apperr.New(
 			apperr.CodeInvalidInput,
-			fmt.Sprintf("defaults seed %T is nil", new(T)),
+			fmt.Sprintf("nil defaults seed for %T", new(T)),
 		)
 	}
 	in := o.Operation.NewInput()
