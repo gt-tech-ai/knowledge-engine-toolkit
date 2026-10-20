@@ -65,10 +65,11 @@ func verdict(res interfaces.CmdResult, findings []types.Finding) types.Verdict {
 	return v
 }
 
-// output joins res's stdout and stderr, trimmed; with neither, the error text.
+// output joins res's stdout and stderr, trimmed, in a fresh buffer so res is never
+// written to; with neither, the error text.
 func output(res interfaces.CmdResult) string {
-	out := bytes.TrimSpace(append(append(bytes.TrimSpace(res.Stdout), '\n'),
-		bytes.TrimSpace(res.Stderr)...))
+	out := bytes.TrimSpace(bytes.Join(
+		[][]byte{bytes.TrimSpace(res.Stdout), bytes.TrimSpace(res.Stderr)}, []byte("\n")))
 	if len(out) == 0 && res.Err != nil {
 		return res.Err.Error()
 	}

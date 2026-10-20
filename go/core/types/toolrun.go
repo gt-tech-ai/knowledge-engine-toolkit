@@ -86,9 +86,3 @@ type TargetSpec struct {
 	// SkipHeredoc drops Dockerfiles whose COPY, RUN or ADD instruction uses a heredoc.
 	SkipHeredoc bool `yaml:"skip_heredoc" json:"skip_heredoc,omitempty"`
 }
-
-// IsZero reports whether s selects nothing.
-func (s FileSelector) IsZero() bool {
-	return len(s.Roots) == 0 && len(s.Paths) == 0 && len(s.Globs) == 0 &&
-		len(s.Exts) == 0 && len(s.Exclude) == 0
-}

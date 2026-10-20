@@ -27,10 +27,10 @@ import (
 func mcpOpts(t *testing.T) mcp.Options {
 	t.Helper()
 	return mcp.Options{
-		Name:    "search",
+		Name:    "tools",
 		Version: "test",
 		Settings: types.MCPSettings{
-			TailLines: 40, RunRetention: 20, RunDir: ".devtools/runs",
+			TailLines: 40, RunRetention: 20, RunDir: ".runs",
 		},
 		RunDir: mcp.NewRunDir(t.TempDir(), time.Now),
 	}

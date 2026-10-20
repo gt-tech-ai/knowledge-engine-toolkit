@@ -99,3 +99,23 @@ func TestToolrunParsers_Formats(t *testing.T) {
 	_, err := parsers.NewFromConfig("xml")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+// TestToolrunParsers_LeavesOutputIntact tests that parsing does not write into the
+// command's output.
+//
+// Why this test is important:
+//   - The runner hands the same result to the parser and to whatever logs or caches it;
+//     a parser that joined stdout and stderr in place would overwrite the bytes after
+//     stdout's trimmed end and corrupt the copy everyone else reads.
+//
+// What it tests:
+//   - Parsing a result whose stdout ends in blank lines joins stdout and stderr in the
+//     verdict and leaves the result's stdout byte-for-byte unchanged.
+func TestToolrunParsers_LeavesOutputIntact(t *testing.T) {
+	t.Parallel()
+	stdout := []byte("out\n\n\n\n")
+	res := interfaces.CmdResult{Stdout: stdout, Stderr: []byte("err\n")}
+	v := parseWith(t, "", res)
+	assert.Equal(t, "out\nerr", v.Detail)
+	assert.Equal(t, "out\n\n\n\n", string(stdout))
+}

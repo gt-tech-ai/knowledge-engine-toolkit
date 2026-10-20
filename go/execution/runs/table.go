@@ -20,8 +20,8 @@ import (
 // Registry is the slice of the operations registry the table needs: reserving the
 // working-tree slot for one operation on behalf of a holder (the run id).
 //
-// §2.3 exemption — SDK seam: the consumer-side contract between the run table and
-// execution/ops.Registry, with no core interface to embed.
+// interface-composition exemption — the consumer-side contract between the run table
+// and execution/ops.Registry, with no core interface to embed.
 type Registry interface {
 	// Reserve takes the slot for the operation named name on behalf of holder; a held
 	// slot fails with CodeUnavailable "busy: <holder> is running".

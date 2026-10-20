@@ -108,7 +108,8 @@ func (r *runner) Run(
 	})
 }
 
-// run resolves the run's tool, targets and parser, then executes it.
+// run resolves the run's tool, targets and parser, then executes it. A selector that
+// picks nothing is one skipped step; a run with no selector under each: run runs once.
 func (r *runner) run(
 	ctx context.Context,
 	cb interfaces.Codebase,
@@ -135,14 +136,14 @@ func (r *runner) run(
 		return nil, err
 	}
 	inv := invocation{run: run, spec: spec, parser: parser, fix: fix}
-	if run.Each != types.EachTarget {
-		return types.StepResults{r.invoke(ctx, cb, inv, "", targets)}, nil
-	}
-	if len(targets) == 0 {
+	if len(targets) == 0 && (run.Targets.Kind != "" || run.Each == types.EachTarget) {
 		return types.StepResults{{
 			Name: run.Name, Group: run.Verb, Status: types.StatusSkip,
 			Detail: []byte("no targets"),
 		}}, nil
+	}
+	if run.Each != types.EachTarget {
+		return types.StepResults{r.invoke(ctx, cb, inv, "", targets)}, nil
 	}
 	return engine.Pool(r.deps.Pool).FanOut(ctx, targets,
 		func(ctx context.Context, target string) types.StepResult {

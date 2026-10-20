@@ -44,15 +44,18 @@ func Command(reg *ops.Registry, name string, opts Options) (*spf.Command, error)
 		use = desc.Name
 	}
 	cmd := &spf.Command{Use: use, Short: desc.Summary, SilenceUsage: true}
-	input := op.NewInput()
-	b, err := bind(cmd, input)
+	flags := op.NewInput()
+	b, err := bind(cmd, flags)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
 			fmt.Sprintf("operation %q", name))
 	}
 	cmd.Args = spf.RangeArgs(0, b.maxArgs())
 	cmd.RunE = func(c *spf.Command, args []string) error {
-		if err := b.positional(args); err != nil {
+		input := op.NewInput()
+		dst := reflect.ValueOf(input).Elem()
+		b.setFlags(c, reflect.ValueOf(flags).Elem(), dst)
+		if err := b.positional(dst, args); err != nil {
 			return err
 		}
 		return reg.Run(c.Context(), name, input, opts.Observer)
@@ -60,10 +63,15 @@ func Command(reg *ops.Registry, name string, opts Options) (*spf.Command, error)
 	return cmd, nil
 }
 
-// binding is where a command's positional arguments go.
+// binding is where a command's flags and positional arguments go. The flags parse into
+// one input the command keeps; each run copies the flags set on its command line, and
+// stores its positional arguments, into a fresh input.
 type binding struct {
-	// args are the positional fields by index.
-	args map[int]reflect.Value
+	// args maps each positional index to its field's index in the input struct.
+	args map[int]int
+
+	// flags maps each flag name to its field's index in the input struct.
+	flags map[string]int
 
 	// rest is the index whose []string field takes the remaining arguments; -1 when
 	// none does.
@@ -78,11 +86,21 @@ func (b *binding) maxArgs() int {
 	return len(b.args)
 }
 
-// positional stores args into their fields.
-func (b *binding) positional(args []string) error {
+// setFlags copies into dst each flag field set on c's command line, from the parsed src;
+// an unset flag keeps dst's seeded default.
+func (b *binding) setFlags(c *spf.Command, src, dst reflect.Value) {
+	for name, i := range b.flags {
+		if c.Flags().Changed(name) {
+			dst.Field(i).Set(src.Field(i))
+		}
+	}
+}
+
+// positional stores args into their fields of dst.
+func (b *binding) positional(dst reflect.Value, args []string) error {
 	for i, a := range args {
 		if b.rest >= 0 && i >= b.rest {
-			f := b.args[b.rest]
+			f := dst.Field(b.args[b.rest])
 			f.Set(reflect.Append(f, reflect.ValueOf(a)))
 			continue
 		}
@@ -91,7 +109,7 @@ func (b *binding) positional(args []string) error {
 			return apperr.New(apperr.CodeInvalidInput,
 				fmt.Sprintf("unexpected argument %q", a))
 		}
-		f.SetString(a)
+		dst.Field(f).SetString(a)
 	}
 	return nil
 }
@@ -99,16 +117,18 @@ func (b *binding) positional(args []string) error {
 // bind registers a flag or positional slot for each tagged field of *input.
 func bind(cmd *spf.Command, input any) (*binding, error) {
 	v := reflect.ValueOf(input).Elem()
-	b := &binding{args: map[int]reflect.Value{}, rest: -1}
+	b := &binding{args: map[int]int{}, flags: map[string]int{}, rest: -1}
 	for i := range v.NumField() {
 		sf, fv := v.Type().Field(i), v.Field(i)
 		if tag, ok := sf.Tag.Lookup("flag"); ok {
-			if err := addFlag(cmd, sf, fv, tag); err != nil {
+			name, err := addFlag(cmd, sf, fv, tag)
+			if err != nil {
 				return nil, err
 			}
+			b.flags[name] = i
 		}
 		if tag, ok := sf.Tag.Lookup("arg"); ok {
-			if err := addArg(b, sf, fv, tag); err != nil {
+			if err := addArg(b, sf, fv, i, tag); err != nil {
 				return nil, err
 			}
 		}
@@ -116,16 +136,17 @@ func bind(cmd *spf.Command, input any) (*binding, error) {
 	return b, nil
 }
 
-// addFlag registers the flag a `flag:"name,short,usage"` field declares.
+// addFlag registers the flag a `flag:"name,short,usage"` field declares and returns its
+// name.
 func addFlag(
 	cmd *spf.Command,
 	sf reflect.StructField,
 	fv reflect.Value,
 	tag string,
-) error {
+) (string, error) {
 	parts := strings.SplitN(tag, ",", 3)
 	if len(parts) != 3 || parts[0] == "" || len(parts[1]) > 1 {
-		return apperr.New(apperr.CodeInvalidInput,
+		return "", apperr.New(apperr.CodeInvalidInput,
 			fmt.Sprintf("field %s: flag tag %q is not name,short,usage", sf.Name, tag))
 	}
 	name, short, usage := parts[0], parts[1], parts[2]
@@ -142,18 +163,24 @@ func addFlag(
 	case *[]string:
 		fs.StringSliceVarP(p, name, short, *p, usage)
 	default:
-		return apperr.New(apperr.CodeInvalidInput,
+		return "", apperr.New(apperr.CodeInvalidInput,
 			fmt.Sprintf("field %s: unsupported flag type %s", sf.Name, sf.Type))
 	}
 	if strings.Contains(sf.Tag.Get("jsonschema"), "required") {
-		return apperr.Wrap(cmd.MarkFlagRequired(name), apperr.CodeInternal,
+		return name, apperr.Wrap(cmd.MarkFlagRequired(name), apperr.CodeInternal,
 			"mark flag "+name+" required")
 	}
-	return nil
+	return name, nil
 }
 
-// addArg registers the positional slot an `arg:"n"` field declares.
-func addArg(b *binding, sf reflect.StructField, fv reflect.Value, tag string) error {
+// addArg registers the positional slot an `arg:"n"` field (field index i) declares.
+func addArg(
+	b *binding,
+	sf reflect.StructField,
+	fv reflect.Value,
+	i int,
+	tag string,
+) error {
 	n, err := strconv.Atoi(tag)
 	if err != nil || n < 0 {
 		return apperr.New(apperr.CodeInvalidInput,
@@ -167,6 +194,6 @@ func addArg(b *binding, sf reflect.StructField, fv reflect.Value, tag string) er
 		return apperr.New(apperr.CodeInvalidInput,
 			fmt.Sprintf("field %s: unsupported argument type %s", sf.Name, sf.Type))
 	}
-	b.args[n] = fv
+	b.args[n] = i
 	return nil
 }

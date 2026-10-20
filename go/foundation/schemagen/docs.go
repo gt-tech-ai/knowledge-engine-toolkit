@@ -377,8 +377,12 @@ func (d *docs) Inputs() types.FileSelector {
 	return types.FileSelector{Roots: slices.Compact(roots), IncludeGenerated: true}
 }
 
-// Render builds the reference from cb.
+// Render builds the reference from cb. A Python module, class or enum that is not an
+// identifier is CodeInvalidInput.
 func (d *docs) Render(ctx context.Context, cb interfaces.Codebase) (types.Artifacts, error) {
+	if err := d.cfg.validatePython(); err != nil {
+		return nil, err
+	}
 	goSecs, err := ParseGoSchema(ctx, cb, d.cfg.SchemaDir)
 	if err != nil {
 		return nil, err
@@ -400,13 +404,17 @@ func (d *docs) Render(ctx context.Context, cb interfaces.Codebase) (types.Artifa
 
 // AuditContract returns the documentation violations, sorted: a Go config field with
 // no doc comment and a Python field with no description. A present Python class that
-// cannot be introspected is an error, so a broken environment cannot pass the audit.
+// cannot be introspected is an error, so a broken environment cannot pass the audit; a
+// Python module, class or enum that is not an identifier is CodeInvalidInput.
 func AuditContract(
 	ctx context.Context,
 	cb interfaces.Codebase,
 	cfg DocsConfig,
 	deps DocsDeps,
 ) ([]string, error) {
+	if err := cfg.validatePython(); err != nil {
+		return nil, err
+	}
 	goSecs, err := ParseGoSchema(ctx, cb, cfg.SchemaDir)
 	if err != nil {
 		return nil, err
@@ -429,6 +437,22 @@ func AuditContract(
 	}
 	slices.Sort(violations)
 	return violations, nil
+}
+
+// validatePython rejects a Python settings or Kind reference whose module, class or enum
+// is not an identifier, before any of them is run.
+func (cfg DocsConfig) validatePython() error {
+	for _, ref := range cfg.Python {
+		if err := pythonNames(ref.Module, ref.Class); err != nil {
+			return err
+		}
+	}
+	for _, ref := range cfg.PythonKinds {
+		if err := ref.validate(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // render emits the reference markdown.

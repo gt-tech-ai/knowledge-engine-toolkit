@@ -33,7 +33,8 @@ type Config[E any] struct {
 
 // NewFromConfig builds the registry of the operations cfg.Policy admits. It fails with
 // CodeInvalidInput when the policy or a descriptor is invalid, when descriptors and
-// builders don't pair one-to-one, or when the policy's allow/deny names an unknown
+// builders don't pair one-to-one, when a builder is nil, returns no operation or seeds
+// defaults for another input type, or when the policy's allow/deny names an unknown
 // operation. Building does no I/O.
 func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
 	if err := cfg.Policy.Validate("policy"); err != nil {
@@ -56,7 +57,10 @@ func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
 		if !admits(cfg.Policy, d) {
 			continue
 		}
-		op := cfg.Builders[d.Name](d, cfg.Env)
+		op, err := build(cfg.Builders[d.Name], d, cfg.Env)
+		if err != nil {
+			return nil, err
+		}
 		reg.ops[d.Name] = op
 		reg.chains[d.Name] = decorators(d, cfg.Log)
 		reg.list = append(reg.list, op)
@@ -65,6 +69,28 @@ func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
 		return strings.Compare(a.Descriptor().Name, b.Descriptor().Name)
 	})
 	return reg, nil
+}
+
+// build runs b for d and checks what it built: an operation, whose seeded defaults (if
+// any) fit its input.
+func build[E any](
+	b Builder[E],
+	d types.OperationDescriptor,
+	env E,
+) (interfaces.Operation, error) {
+	op := b(d, env)
+	if op == nil {
+		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+			"operation %q: its builder returned no operation", d.Name,
+		))
+	}
+	if c, ok := op.(interface{ check() error }); ok {
+		if err := c.check(); err != nil {
+			return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
+				fmt.Sprintf("operation %q", d.Name))
+		}
+	}
+	return op, nil
 }
 
 // pairDescriptors validates every descriptor and checks that descriptors and builders
@@ -82,7 +108,7 @@ func pairDescriptors[E any](
 				"operation descriptor %q is declared twice", d.Name,
 			))
 		}
-		if _, ok := builders[d.Name]; !ok {
+		if b, ok := builders[d.Name]; !ok || b == nil {
 			return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 				"operation descriptor %q has no implementation", d.Name,
 			))

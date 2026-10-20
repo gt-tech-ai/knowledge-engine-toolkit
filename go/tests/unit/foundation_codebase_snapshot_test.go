@@ -97,3 +97,45 @@ func TestCodebaseSnapshot_MemoErrors(t *testing.T) {
 	})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }
+
+// TestCodebaseSnapshot_MemoPanickingBuild tests a build that panics.
+//
+// Why this test is important:
+//   - A panicking build that never closed its entry would block every later caller of
+//     the key for the snapshot's life; one that crashed the process would take the whole
+//     run down with it.
+//
+// What it tests:
+//   - The builder's caller and a caller waiting on the same key both get CodeInternal;
+//     the key is not cached, so a later call builds again and gets its value.
+func TestCodebaseSnapshot_MemoPanickingBuild(t *testing.T) {
+	t.Parallel()
+	s := codebase.NewSnapshot("run-3")
+	started, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	boom := func(context.Context) (int, error) {
+		once.Do(func() { close(started) })
+		<-release
+		panic("parser bug")
+	}
+	errs := make(chan error, 2)
+	go func() {
+		_, err := s.Memo(t.Context(), "k", boom)
+		errs <- err
+	}()
+	<-started
+	go func() {
+		_, err := s.Memo(t.Context(), "k", boom)
+		errs <- err
+	}()
+	close(release)
+	for range 2 {
+		assert.Equal(t, apperr.CodeInternal, apperr.Code(<-errs))
+	}
+
+	got, err := s.Memo(t.Context(), "k", func(context.Context) (int, error) {
+		return 3, nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 3, got)
+}

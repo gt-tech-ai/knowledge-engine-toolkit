@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -61,8 +62,12 @@ func (c *Client) Get(ctx context.Context, ns, kind, name string) ([]byte, error)
 	return c.kubectl(ctx, "get", namespaced(ns, append(args, "-o", "json")...)...)
 }
 
-// Apply runs `kubectl apply -f file…`.
+// Apply runs `kubectl apply -f file…`; no files is CodeInvalidInput, since kubectl would
+// refuse it.
 func (c *Client) Apply(ctx context.Context, ns string, files ...string) error {
+	if len(files) == 0 {
+		return apperr.New(apperr.CodeInvalidInput, "kubectl apply: no files")
+	}
 	args := make([]string, 0, 1+2*len(files))
 	args = append(args, "apply")
 	for _, f := range files {

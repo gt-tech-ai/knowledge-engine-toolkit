@@ -7,6 +7,8 @@ import (
 	iofs "io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -57,6 +59,12 @@ func (s *Source) List(ctx context.Context) ([]types.File, error) {
 		return nil, apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeInternal),
 			"walk "+s.root)
 	}
+	// A walk orders by entry name, so "a/x" would precede "a-b/x"; the contract is
+	// sorted by path.
+	slices.SortFunc(
+		out,
+		func(a, b types.File) int { return strings.Compare(a.Path, b.Path) },
+	)
 	return out, nil
 }
 

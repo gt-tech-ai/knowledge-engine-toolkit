@@ -225,3 +225,34 @@ func TestServicesToolrun_Cache(t *testing.T) {
 		assert.Equal(t, types.StatusPass, res[0].Status)
 	}
 }
+
+// TestServicesToolrun_NoTargetsSkips tests a selector that selects nothing.
+//
+// Why this test is important:
+//   - A run over every shell script in a repository with none must not run the linter
+//     with no arguments, which for most tools means "read stdin" or "check the current
+//     directory"; it has nothing to check.
+//
+// What it tests:
+//   - A selector that picks no files is one skipped step with detail "no targets" under
+//     both each: target and each: run, and the tool never runs.
+func TestServicesToolrun_NoTargetsSkips(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	runner := mocks.NewMockCommandRunner(ctrl)
+	runner.EXPECT().Exists("shellcheck").Return(true).AnyTimes()
+	tr := newToolRunner(t, runner, toolOf(ctrl, "shellcheck"), nil)
+	for _, each := range []string{types.EachTarget, types.EachRun} {
+		res, err := tr.Run(t.Context(), memoryCodebase(t, map[string]string{"a.md": ""}),
+			types.ToolRun{
+				Name: "shellcheck", Verb: "lint", Tool: "shellcheck",
+				Args:    []string{"{target}"},
+				Targets: types.TargetSpec{Kind: "files", Glob: "**/*.sh"},
+				Each:    each,
+			}, false)
+		require.NoError(t, err)
+		require.Len(t, res, 1, each)
+		assert.Equal(t, types.StatusSkip, res[0].Status, each)
+		assert.Equal(t, "no targets", string(res[0].Detail), each)
+	}
+}

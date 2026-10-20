@@ -88,8 +88,8 @@ type Installer struct {
 	force bool
 }
 
-// Option configures an Installer at construction (charter §7: dependencies are
-// injected, not detected in a constructor).
+// Option configures an Installer at construction: its dependencies are injected, not
+// detected in a constructor.
 type Option func(*Installer)
 
 // WithArch overrides the host architecture used for the Windows-ARM64

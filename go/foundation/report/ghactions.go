@@ -46,7 +46,7 @@ func (g *ghActions) OnPhaseComplete(name string, _ types.StepResults, _ time.Dur
 			_, _ = fmt.Fprintf(
 				g.w,
 				"::error title=%s::%s\n",
-				escape(r.Name),
+				escapeProperty(r.Name),
 				escape(r.Error),
 			)
 		}
@@ -63,7 +63,13 @@ func (g *ghActions) OnGateComplete(_ string, results types.StepResults, _ time.D
 	_, _ = fmt.Fprintln(g.w, "::notice title=Gate::all steps passed")
 }
 
-// escape encodes the characters a workflow command's value may not carry.
+// escape encodes the characters a workflow command's message may not carry.
 func escape(s string) string {
 	return strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A").Replace(s)
+}
+
+// escapeProperty encodes the characters a workflow command's property value (a title)
+// may not carry: those of a message, plus the `:` and `,` that end a property.
+func escapeProperty(s string) string {
+	return strings.NewReplacer(":", "%3A", ",", "%2C").Replace(escape(s))
 }

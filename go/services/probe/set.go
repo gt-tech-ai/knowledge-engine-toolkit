@@ -103,19 +103,19 @@ func (s *set[T]) step(
 
 // once runs p once under the set's timeout. A probe that has not returned by the
 // deadline is abandoned (its goroutine ends when the probe returns) and fails with
-// TIMEOUT, marked transient.
+// TIMEOUT, marked transient. A probe that panics fails.
 func (s *set[T]) once(
 	ctx context.Context,
 	p interfaces.Probe[T],
 	target T,
 ) types.Verdict {
 	if s.opts.Timeout == 0 {
-		return p.Run(ctx, target)
+		return safeRun(ctx, p, target)
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.opts.Timeout)
 	defer cancel()
 	done := make(chan types.Verdict, 1)
-	go func() { done <- p.Run(ctx, target) }()
+	go func() { done <- safeRun(ctx, p, target) }()
 	select {
 	case v := <-done:
 		return v
@@ -128,4 +128,22 @@ func (s *set[T]) once(
 			Transient: true,
 		}
 	}
+}
+
+// safeRun runs p, turning a panic into a failed verdict: probes run on worker goroutines,
+// where a panic would end the process rather than reach the service's recovery.
+func safeRun[T any](
+	ctx context.Context,
+	p interfaces.Probe[T],
+	target T,
+) (v types.Verdict) {
+	defer func() {
+		if r := recover(); r != nil {
+			v = types.Verdict{
+				Status: types.StatusFail,
+				Detail: fmt.Sprintf("probe %s panicked: %v", p.Name(), r),
+			}
+		}
+	}()
+	return p.Run(ctx, target)
 }

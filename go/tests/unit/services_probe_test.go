@@ -237,3 +237,32 @@ func TestServicesProbe_CancelledAndInvalid(t *testing.T) {
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+// TestServicesProbe_PanickingProbe tests a probe that panics.
+//
+// Why this test is important:
+//   - Probes run on worker goroutines, where a panic is not caught by the service's
+//     recovery decorator; one buggy check would crash the whole run and hide every
+//     other probe's result.
+//
+// What it tests:
+//   - With and without a per-probe timeout, a panicking probe is a failed step naming
+//     the panic, and the other probes' steps are unaffected.
+func TestServicesProbe_PanickingProbe(t *testing.T) {
+	t.Parallel()
+	for _, opts := range []probe.Options{{}, {Timeout: time.Minute}} {
+		ctrl := gomock.NewController(t)
+		bad := mocks.NewMockProbe[string](ctrl)
+		bad.EXPECT().Name().Return("bad").AnyTimes()
+		bad.EXPECT().Run(gomock.Any(), "target").DoAndReturn(
+			func(context.Context, string) types.Verdict { panic("nil map") })
+		res, err := newSet(t, opts, bad,
+			probeOf(ctrl, "ok", types.Verdict{Status: types.StatusPass})).
+			Run(t.Context(), "target")
+		require.NoError(t, err)
+		require.Len(t, res, 2)
+		assert.Equal(t, types.StatusFail, res[0].Status)
+		assert.Contains(t, res[0].Error, "nil map")
+		assert.Equal(t, types.StatusPass, res[1].Status)
+	}
+}

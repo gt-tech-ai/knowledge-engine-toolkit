@@ -130,10 +130,9 @@ func buildInstallMethod(m InstallMethodEntry) types.InstallMethod {
 			Download: buildDownload(m, strings.TrimSuffix(m.URL, "/")),
 		}
 	case InstallKindCommand:
-		return types.InstallMethod{Command: m.Command, Args: m.Args}
-	default: // InstallKindCommand
-		return types.InstallMethod{Command: m.Command, Args: m.Args}
 	}
+	// InstallKindCommand; validation rejects any other kind.
+	return types.InstallMethod{Command: m.Command, Args: m.Args}
 }
 
 // buildDownload projects a download kind's per-platform assets into artifacts

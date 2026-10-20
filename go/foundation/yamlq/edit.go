@@ -20,11 +20,11 @@ func Upsert(src []byte, path string, value any) ([]byte, error) {
 // UpsertAt sets the value at path in document index of src. The path may use only
 // `.key` and `[n]` steps. The edit is spliced into the source text, so every byte the
 // edit does not touch (comments, blank lines, key order, the other documents) is kept:
-// a scalar replacing a single-line scalar rewrites only that token; missing keys are
-// appended as a block after the last line of their block mapping. Any other change (a
-// collection replacing or replacing a node, an append to a flow mapping) re-encodes
-// the file with two-space indentation instead. A missing sequence item is
-// CodeInvalidInput.
+// a scalar replacing a single-line block scalar rewrites only that token; missing keys
+// are appended as a block after the last line of their block mapping. Any other change
+// (a collection replacing or replacing a node, a scalar in a flow collection or one that
+// wraps onto the next line, an append to a flow mapping) re-encodes the file with
+// two-space indentation instead. A missing sequence item is CodeInvalidInput.
 func UpsertAt(src []byte, index int, path string, value any) ([]byte, error) {
 	steps, docs, err := prepare(src, index, path)
 	if err != nil {
@@ -47,7 +47,8 @@ func UpsertAt(src []byte, index int, path string, value any) ([]byte, error) {
 			continue
 		}
 		if next != nil {
-			if out, ok := replaceScalar(lines, next, &node); ok {
+			if out, ok := replaceScalar(lines, cur, next, &node); ok &&
+				holds(out, index, path, &node) {
 				return out, nil
 			}
 			keepComments(&node, next)
@@ -171,10 +172,13 @@ func width(n *yaml.Node) int {
 	return 1
 }
 
-// replaceScalar splices replacement's text over old's when both are single-line
-// scalars on old's own line, returning false when the splice does not apply.
-func replaceScalar(lines []string, old, replacement *yaml.Node) ([]byte, bool) {
+// replaceScalar splices replacement's text over old's when both are scalars, parent is a
+// block collection and only a comment follows old's token on its line, returning false
+// when the splice does not apply. A scalar that wraps onto the next line is caught by
+// the caller's holds check.
+func replaceScalar(lines []string, parent, old, replacement *yaml.Node) ([]byte, bool) {
 	if old.Kind != yaml.ScalarNode || replacement.Kind != yaml.ScalarNode ||
+		parent.Style&yaml.FlowStyle != 0 ||
 		old.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 ||
 		old.Line < 1 || old.Line > len(lines) {
 		return nil, false
@@ -185,6 +189,12 @@ func replaceScalar(lines []string, old, replacement *yaml.Node) ([]byte, bool) {
 		return nil, false
 	}
 	end := start + tokenLen(line[start:])
+	if rest := strings.TrimSpace(
+		line[end:],
+	); rest != "" &&
+		!strings.HasPrefix(rest, "#") {
+		return nil, false
+	}
 	text, err := yaml.Marshal(replacement)
 	if err != nil {
 		return nil, false
@@ -195,6 +205,19 @@ func replaceScalar(lines []string, old, replacement *yaml.Node) ([]byte, bool) {
 	}
 	lines[old.Line-1] = line[:start] + token + line[end:]
 	return joinLines(lines), true
+}
+
+// holds reports whether out parses and its value at path in document index is exactly
+// replacement's: a scalar that wrapped onto the next line leaves its continuation behind,
+// which a splice of its first line alone cannot remove.
+func holds(out []byte, index int, path string, replacement *yaml.Node) bool {
+	docs, err := DecodeAll(out)
+	if err != nil || index >= len(docs) {
+		return false
+	}
+	got, err := Path(docs[index], path)
+	return err == nil && len(got) == 1 && got[0].Node.Kind == yaml.ScalarNode &&
+		got[0].Value == replacement.Value
 }
 
 // tokenLen is the length of the scalar token that starts s: a quoted string through its

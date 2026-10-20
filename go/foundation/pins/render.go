@@ -117,15 +117,15 @@ type CustomManager struct {
 	CustomType string `json:"customType" yaml:"customType"`
 
 	// DatasourceTemplate is the datasource new versions are looked up in.
-	DatasourceTemplate string `json:"datasourceTemplate" yaml:"datasourceTemplate"`
+	DatasourceTemplate string `json:"datasourceTemplate,omitempty" yaml:"datasourceTemplate,omitempty"`
 
 	// ManagerFilePatterns are the files this manager scans, each a regex wrapped in
 	// slashes (a bare entry would be a glob).
-	ManagerFilePatterns []string `json:"managerFilePatterns" yaml:"managerFilePatterns"`
+	ManagerFilePatterns []string `json:"managerFilePatterns,omitempty" yaml:"managerFilePatterns,omitempty"`
 
 	// MatchStrings are the regexes that capture depName and currentValue (and
 	// currentDigest for a digest-pinned image).
-	MatchStrings []string `json:"matchStrings" yaml:"matchStrings"`
+	MatchStrings []string `json:"matchStrings,omitempty" yaml:"matchStrings,omitempty"`
 }
 
 // Gated is a policy entry that applies only when every manager in When is present.

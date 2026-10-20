@@ -11,7 +11,7 @@ import (
 )
 
 // decorators returns the chain every run of the operation d describes passes through,
-// outermost first (charter §6.3): recovery → timeout → logging → code map. Logging sits
+// outermost first: recovery → timeout → logging → code map. Logging sits
 // outside the code map, so a logged failure carries the code the caller gets; it is
 // skipped when log is nil.
 func decorators(

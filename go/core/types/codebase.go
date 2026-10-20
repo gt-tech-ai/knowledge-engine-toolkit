@@ -46,6 +46,13 @@ type FileSelector struct {
 	IncludeGenerated bool `yaml:"include_generated" json:"include_generated,omitempty"`
 }
 
+// IsZero reports whether s sets no field, so it is the default selector (every file
+// except generated Go files) rather than one a caller configured.
+func (s FileSelector) IsZero() bool {
+	return len(s.Roots) == 0 && len(s.Paths) == 0 && len(s.Globs) == 0 &&
+		len(s.Exts) == 0 && len(s.Exclude) == 0 && !s.TrackedOnly && !s.IncludeGenerated
+}
+
 // Text is one file's contents.
 type Text struct {
 	// Path is the repository-relative path the bytes were read from.
@@ -61,11 +68,11 @@ type Text struct {
 // Lines returns the file's lines without their terminators; a trailing newline does not
 // add an empty last line.
 func (t Text) Lines() []string {
-	s := strings.TrimSuffix(string(t.Bytes), "\n")
+	s := strings.TrimSuffix(strings.ReplaceAll(string(t.Bytes), "\r\n", "\n"), "\n")
 	if s == "" {
 		return nil
 	}
-	return strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+	return strings.Split(s, "\n")
 }
 
 // IsBinary reports whether data holds a NUL byte in its first 8 KiB.

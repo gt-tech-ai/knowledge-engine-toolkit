@@ -158,3 +158,65 @@ func TestFoundationReport_MachineKinds(t *testing.T) {
 	_, err = report.NewFromConfig(report.Config{}, types.Streams{Out: &a})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+// TestFoundationReport_GHActionsEscapes tests the escaping of annotation values.
+//
+// Why this test is important:
+//   - GitHub reads `::` as the end of a command's properties and `,` as the start of the
+//     next property, so an unescaped step name cuts its own title short; a raw newline
+//     ends the annotation's message at its first line.
+//
+// What it tests:
+//   - A failing step named `lint:go,x` gets the title `lint%3Ago%2Cx`; its message keeps
+//     `:` and `,` and encodes `%` and the newline.
+func TestFoundationReport_GHActionsEscapes(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	obs, err := report.NewFromConfig(report.Config{Kind: report.KindGHActions},
+		types.Streams{Out: &out, Err: &out})
+	require.NoError(t, err)
+	step := types.StepResult{
+		Name: "lint:go,x", Group: "lint", Status: types.StatusFail,
+		Error: "a.go:3: 100% bad,\nsee above",
+	}
+	obs.OnPhaseStart("lint", []string{step.Name})
+	obs.OnStepComplete(step)
+	obs.OnPhaseComplete("lint", types.StepResults{step}, time.Second)
+	assert.Contains(t, out.String(),
+		"::error title=lint%3Ago%2Cx::a.go:3: 100%25 bad,%0Asee above\n")
+}
+
+// TestFoundationReport_LineVerboseAndChildren tests the line reporter's optional output.
+//
+// Why this test is important:
+//   - Verbose is how a developer sees a passing step's output, and a test step's
+//     per-package children are how they see which package was slow or failed; losing
+//     either hides what the run did.
+//
+// What it tests:
+//   - Verbose prints a passing step's detail indented under its tick; a step with
+//     several children lists each under it with its own status and metric, named
+//     without the parent's prefix, and a test count replaces the bare duration.
+func TestFoundationReport_LineVerboseAndChildren(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	obs, err := report.NewFromConfig(report.Config{Kind: report.KindLine, Verbose: true},
+		types.Streams{Out: &out, Err: &out})
+	require.NoError(t, err)
+	obs.OnStepComplete(types.StepResult{
+		Name: "build", Status: types.StatusPass, Duration: time.Second,
+		Detail: []byte("built 3 binaries\n"),
+	})
+	obs.OnStepComplete(types.StepResult{
+		Name: "test", Status: types.StatusFail, Duration: 2 * time.Second, Tests: 7,
+		Children: types.StepResults{
+			{Name: "test/a", Status: types.StatusPass, Duration: time.Second, Tests: 4},
+			{Name: "test/b", Status: types.StatusFail, Duration: time.Second},
+		},
+	})
+	assert.Equal(t, "  ✓ build  (1s)\n"+
+		"    built 3 binaries\n"+
+		"  ✗ test  7 tests · 2s\n"+
+		"      ✓ a  4 tests · 1s\n"+
+		"      ✗ b  (1s)\n", out.String())
+}

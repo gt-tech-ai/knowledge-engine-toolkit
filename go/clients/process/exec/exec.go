@@ -8,7 +8,6 @@ import (
 	osexec "os/exec"
 	"slices"
 	"sync"
-	"syscall"
 	"time"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
@@ -81,8 +80,7 @@ func (s *Supervisor) Start(
 	if err != nil {
 		return nil, err
 	}
-	// Its own process group, so Stop reaches the children it starts.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	ownGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeUnavailable, "start "+spec.Name)
 	}
@@ -108,7 +106,7 @@ func (s *Supervisor) Detach(spec types.ProcessSpec) error {
 	if err != nil {
 		return err
 	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	ownSession(cmd)
 	if err := cmd.Start(); err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "start "+spec.Name)
 	}
@@ -164,20 +162,20 @@ func (h *handle) Wait() error {
 	return h.err
 }
 
-// Stop sends SIGTERM to the process group, then SIGKILL when ctx ends first, and
-// waits. A process that has already exited stops without error.
+// Stop asks the process group to terminate, kills it when ctx ends first, and waits.
+// A process that has already exited stops without error.
 func (h *handle) Stop(ctx context.Context) error {
 	select {
 	case <-h.done:
 		return nil
 	default:
 	}
-	_ = syscall.Kill(-h.cmd.Process.Pid, syscall.SIGTERM)
+	terminate(h.cmd)
 	select {
 	case <-h.done:
 		return nil
 	case <-ctx.Done():
-		_ = syscall.Kill(-h.cmd.Process.Pid, syscall.SIGKILL)
+		kill(h.cmd)
 		<-h.done
 		return apperr.Wrap(ctx.Err(), apperr.ContextCode(ctx.Err(), apperr.CodeTimeout),
 			"stop "+h.name+": killed")

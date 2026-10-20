@@ -126,3 +126,29 @@ func TestTransportCobra_Command(t *testing.T) {
 	_, err = opscobra.Command(reg, "nope", opscobra.Options{})
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }
+
+// TestTransportCobra_FreshInputPerRun tests that each execution decodes into its own
+// input.
+//
+// Why this test is important:
+//   - A command executed more than once (a shell, a test, a REPL) must not carry one
+//     run's positional arguments into the next, or the second run checks targets the
+//     caller never named.
+//
+// What it tests:
+//   - Executing one command with `api x y` and then `web` gives the second run Target
+//     "web" and no Rest.
+func TestTransportCobra_FreshInputPerRun(t *testing.T) {
+	t.Parallel()
+	var got cobraInput
+	cmd, err := opscobra.Command(cobraRegistry(t, &got), "check", opscobra.Options{})
+	require.NoError(t, err)
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	for _, args := range [][]string{{"-e", "s", "api", "x", "y"}, {"-e", "s", "web"}} {
+		cmd.SetArgs(args)
+		require.NoError(t, cmd.ExecuteContext(t.Context()))
+	}
+	assert.Equal(t, "web", got.Target)
+	assert.Empty(t, got.Rest)
+}

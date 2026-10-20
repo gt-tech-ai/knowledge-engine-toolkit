@@ -35,8 +35,10 @@ design documents or tracker ids anywhere, including comments and tests.
 | `core` → `foundation` → `clients` → `stores` → `repos` → `services` → `pipelines` → `workflows` → `transport` | `core` → `foundation` (+ `execution`) → `clients` → `repos` → `services` → `pipelines` → `workflows` → `controllers` |
 
 - A package imports its own layer or a lower one, never a higher one and never a sibling family
-  in the same tier (hand it a builder instead). `go/execution` imports only `core`; `go/helpers`
-  is a leaf.
+  in the same tier (hand it a builder instead). `go/execution` imports `core` and `foundation`
+  (`execution/ops` decorates runs through `foundation/decorate`); inside it, `gate` builds on
+  `engine`, and `runs` reaches the operations registry only through its own `Registry`
+  interface. `go/helpers` is a leaf.
 - `depguard` in `.golangci.yml` enforces the Go layer order. Review enforces the same-tier rule
   and the Python direction.
 - Generic codecs used by several tiers belong in `foundation` (`foundation/jsonapi`,

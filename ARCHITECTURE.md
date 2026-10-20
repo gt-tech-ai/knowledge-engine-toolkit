@@ -22,8 +22,9 @@ decorator mechanisms, lifecycle) → `go/clients` (external systems) → `go/sto
 over an ORM) → `go/repos` → `go/services` →
 `go/pipelines` → `go/workflows` → `go/transport` (REST/RPC edges).
 
-Outside the ladder: `go/execution` (batch fan-out; imports only `core`), `go/helpers` (leaf
-utilities), and `go/tests` (may import anything). No package imports a higher layer. Integration
+Outside the ladder: `go/execution` (batch fan-out and the operations registry; imports `core`
+and `foundation`), `go/helpers` (leaf utilities), and `go/tests` (may import anything). No
+package imports a higher layer. Integration
 families in a tier don't import each other (`clients/connector` is handed a storage builder rather
 than importing `clients/storage`); the shared clients-tier pieces are `clients/client` (the
 client tier and kind registry) and `clients/rpc/wire` (the RPC-status ↔ domain-code codec).

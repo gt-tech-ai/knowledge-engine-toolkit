@@ -66,12 +66,11 @@ type Server struct {
 
 // New builds a server advertising one tool per operation reg lists — a long-running
 // operation's tool starts a background run, and the runs.* tools that follow those runs
-// are added only when reg lists at least one — after pruning the run directory to the
-// newest Settings.RunRetention runs; the run table likewise remembers only the newest
-// Settings.RunRetention finished runs. It fails with CodeInvalidInput on invalid
-// Settings or a zero RunDir (one not built by NewRunDir), and with CodeInternal when an
-// operation's input schema is not a JSON object schema (which the SDK would otherwise
-// panic on) or the prune fails.
+// are added only when reg lists at least one; the run table remembers only the newest
+// Settings.RunRetention finished runs. It does no I/O. It fails with CodeInvalidInput on
+// invalid Settings or a zero RunDir (one not built by NewRunDir), and with CodeInternal
+// when an operation's input schema is not a JSON object schema (which the SDK would
+// otherwise panic on).
 func New(reg Registry, opts Options) (*Server, error) {
 	if err := opts.Settings.Validate(); err != nil {
 		return nil, err
@@ -81,9 +80,6 @@ func New(reg Registry, opts Options) (*Server, error) {
 			apperr.CodeInvalidInput,
 			"mcp: a run directory is required",
 		)
-	}
-	if err := opts.RunDir.Prune(opts.Settings.RunRetention); err != nil {
-		return nil, err
 	}
 	s := &Server{
 		reg:      reg,
@@ -117,10 +113,14 @@ func New(reg Registry, opts Options) (*Server, error) {
 	return s, nil
 }
 
-// Serve runs the server over t until the client disconnects or ctx is cancelled, then
-// cancels every background run still active and waits for them to stop, so no
-// operation outlives the session.
+// Serve prunes the run directory to the newest Settings.RunRetention runs, then runs the
+// server over t until the client disconnects or ctx is cancelled, then cancels every
+// background run still active and waits for them to stop, so no operation outlives the
+// session. A failed prune is returned before the session starts.
 func (s *Server) Serve(ctx context.Context, t sdkmcp.Transport) error {
+	if err := s.runs.Prune(s.settings.RunRetention); err != nil {
+		return err
+	}
 	err := s.srv.Run(ctx, t)
 	s.table.CancelAll()
 	s.table.Wait()

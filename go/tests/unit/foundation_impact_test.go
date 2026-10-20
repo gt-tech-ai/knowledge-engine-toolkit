@@ -24,14 +24,14 @@ func TestFoundationImpact_Affected(t *testing.T) {
 	t.Parallel()
 	m := impact.Map[string]{
 		Owned: map[string][]string{
-			"staging": {"envs/staging"}, "vertiva": {"envs/vertiva"},
+			"staging": {"envs/staging"}, "partner": {"envs/partner"},
 			"global": {"envs/global"}, "edge": {"envs/staging/edge"},
 		},
 		Shared:       []string{"modules/"},
 		DispatchOnly: []string{"global"},
 	}
-	assert.Equal(t, []string{"vertiva"}, m.Affected([]string{"envs/vertiva/main.tf"}))
-	assert.Equal(t, []string{"edge", "staging", "vertiva"},
+	assert.Equal(t, []string{"partner"}, m.Affected([]string{"envs/partner/main.tf"}))
+	assert.Equal(t, []string{"edge", "partner", "staging"},
 		m.Affected([]string{"modules/vpc/main.tf"}))
 	assert.Equal(
 		t,

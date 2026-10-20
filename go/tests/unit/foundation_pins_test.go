@@ -51,8 +51,14 @@ func pinsPolicy() pins.Policy {
 			Value: pins.PackageRule{MatchDatasources: []string{"golang-version"}},
 		}},
 		CustomManagers: []pins.Gated[pins.CustomManager]{{
-			When:  []pins.Manager{pins.ManagerGomod, pins.ManagerGithubActions},
-			Value: pins.CustomManager{CustomType: "regex", DatasourceTemplate: "go"},
+			When: []pins.Manager{pins.ManagerGomod, pins.ManagerGithubActions},
+			Value: pins.CustomManager{
+				CustomType: "regex", DatasourceTemplate: "go",
+				ManagerFilePatterns: []string{"/(^|/)tools\\.yaml$/"},
+				MatchStrings: []string{
+					"package: (?<depName>\\S+)\\s+version: (?<currentValue>\\S+)",
+				},
+			},
 		}},
 		IgnorePaths: []pins.Gated[string]{{
 			When: []pins.Manager{pins.ManagerHelmv3}, Value: "deploy/**/charts/**",
@@ -174,8 +180,12 @@ const pinsGolden = `{
     {
       "customType": "regex",
       "datasourceTemplate": "go",
-      "managerFilePatterns": null,
-      "matchStrings": null
+      "managerFilePatterns": [
+        "/(^|/)tools\\.yaml$/"
+      ],
+      "matchStrings": [
+        "package: (?<depName>\\S+)\\s+version: (?<currentValue>\\S+)"
+      ]
     }
   ],
   "ignorePaths": [
@@ -198,7 +208,8 @@ const pinsGolden = `{
 //   - Render emits exactly pinsGolden: managers sorted, each manager's default rule,
 //     the gated policy entries whose managers are present (and not the group rule
 //     gated on Compose or the Helm ignore path), the major rule, the pin rule, the
-//     workspace-module rule last; the output is identical across runs.
+//     workspace-module rule last; the output is identical across runs; a custom
+//     manager's unset lists are omitted rather than rendered as null.
 func TestFoundationPins_Render(t *testing.T) {
 	t.Parallel()
 	e := pins.EcosystemSet{
@@ -214,6 +225,12 @@ func TestFoundationPins_Render(t *testing.T) {
 	again, err := pins.Render(e, pinsPolicy())
 	require.NoError(t, err)
 	assert.Equal(t, got, again)
+
+	bare := pinsPolicy()
+	bare.CustomManagers[0].Value = pins.CustomManager{CustomType: "regex"}
+	got, err = pins.Render(e, bare)
+	require.NoError(t, err)
+	assert.NotContains(t, string(got), "null", "an unset list is omitted, not null")
 
 	cfg := pins.Build(pins.EcosystemSet{
 		Managers: []pins.Manager{pins.ManagerDockerCompose, pins.ManagerHelmv3, "bogus"},

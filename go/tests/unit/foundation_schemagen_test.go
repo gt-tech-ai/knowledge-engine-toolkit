@@ -293,3 +293,40 @@ func TestFoundationSchemagen_ConfigDocs(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Broken")
 }
+
+// TestFoundationSchemagen_RejectsPythonNames tests the names spliced into Python.
+//
+// Why this test is important:
+//   - A settings class or Kind is introspected by running `python -c` with its module and
+//     name spliced into the script; a name that is not an identifier would run whatever
+//     it spells, so a typo or a hostile config must fail before anything runs.
+//
+// What it tests:
+//   - Render and AuditContract fail with INVALID_INPUT naming the value when a module,
+//     class or enum is not a (dotted) identifier, and never run Python;
+//     ExtractPythonKinds leaves such a Kind out.
+func TestFoundationSchemagen_RejectsPythonNames(t *testing.T) {
+	t.Parallel()
+	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
+	files := map[string]string{"svc/app/settings.py": "class Settings: ...\n"}
+	deps := schemagen.DocsDeps{Runner: runner, Root: "/repo"}
+	for _, cfg := range []schemagen.DocsConfig{
+		{Python: []schemagen.PythonSettingsRef{
+			{Dir: "svc", Module: "app; import os", Class: "Settings"},
+		}},
+		{Python: []schemagen.PythonSettingsRef{
+			{Dir: "svc", Module: "app.settings", Class: "Settings()"},
+		}},
+		{PythonKinds: []schemagen.PythonKindRef{
+			{Dir: "svc", Module: "app.kinds", Enum: "Mode]; print(1); ["},
+		}},
+	} {
+		_, err := schemagen.NewConfigDocs(cfg, deps).Render(t.Context(),
+			memoryCodebase(t, files))
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), err)
+		_, err = schemagen.AuditContract(t.Context(), memoryCodebase(t, files), cfg, deps)
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), err)
+		assert.Empty(t, schemagen.ExtractPythonKinds(t.Context(), runner,
+			memoryCodebase(t, files), "/repo", cfg.PythonKinds))
+	}
+}

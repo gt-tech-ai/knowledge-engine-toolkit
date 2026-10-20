@@ -50,7 +50,9 @@ func (s *Snapshot) Key() string { return s.key }
 // arrive while it runs wait for it (or for their own ctx), and later callers get the
 // stored value. A build error is stored and returned to every caller, except a context
 // cancellation or deadline, which is returned to its caller only so the next caller
-// builds afresh. A key reused with a different T is CodeInternal.
+// builds afresh. A build that panics is CodeInternal for its caller and the callers
+// waiting on it, and is not stored, so a later caller builds again. A key reused with a
+// different T is CodeInternal.
 func (s *Snapshot) Memo[T any](
 	ctx context.Context,
 	key string,
@@ -64,10 +66,10 @@ func (s *Snapshot) Memo[T any](
 			e = &entry{done: make(chan struct{})}
 			s.entries[key] = e
 			s.mu.Unlock()
-			val, err := build(ctx)
+			val, panicked, err := safeBuild(ctx, key, build)
 			e.val, e.err = val, err
-			if err != nil && ctx.Err() != nil {
-				e.cancelled = true
+			e.cancelled = err != nil && !panicked && ctx.Err() != nil
+			if panicked || e.cancelled {
 				s.mu.Lock()
 				delete(s.entries, key)
 				s.mu.Unlock()
@@ -96,4 +98,24 @@ func (s *Snapshot) Memo[T any](
 		}
 		return v, nil
 	}
+}
+
+// safeBuild runs build, turning a panic into a CodeInternal error and reporting it, so a
+// panicking build still closes its entry.
+func safeBuild[T any](
+	ctx context.Context,
+	key string,
+	build func(context.Context) (T, error),
+) (val T, panicked bool, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			panicked = true
+			err = apperr.New(
+				apperr.CodeInternal,
+				fmt.Sprintf("memo %q: build panicked: %v", key, r),
+			)
+		}
+	}()
+	val, err = build(ctx)
+	return val, false, err
 }

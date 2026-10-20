@@ -9,9 +9,9 @@ import (
 // Operation is one operation every front-end (a CLI, an MCP server, a scheduled job)
 // runs the same way: describe it, decode its input, run it.
 //
-// §2.3 exemption — SDK seam: the contract between the operations registry and the
-// front-end adapters, with no core interface to embed; the registry's decorators and
-// the transports depend on it and tests inject a mock.
+// interface-composition exemption — the contract between the operations registry and
+// the front-end adapters, with no core interface to embed; the registry's decorators
+// and the transports depend on it and tests inject a mock.
 type Operation interface {
 	// Descriptor returns the operation's descriptor.
 	Descriptor() types.OperationDescriptor
@@ -29,8 +29,8 @@ type Operation interface {
 // later (a background run). It is one-shot: Run releases the slot when the operation
 // returns.
 //
-// §2.3 exemption — SDK seam: the contract between the operations registry and the
-// background-run table, with no core interface to embed.
+// interface-composition exemption — the contract between the operations registry and
+// the background-run table, with no core interface to embed.
 type Reservation interface {
 	// Run runs the reserved operation with a decoded input, reporting progress to obs,
 	// then releases the slot; a second call, or a call after Release, fails with

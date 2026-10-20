@@ -23,7 +23,8 @@ import (
 //
 // What it tests:
 //   - Every call carries --context when configured; get, apply, rollout status and
-//     current-context build their arguments with the namespace; a failure is UPSTREAM;
+//     current-context build their arguments with the namespace; an apply with no files
+//     is INVALID_INPUT without running kubectl; a failure is UPSTREAM;
 //     the default kind is the stub; an unknown kind is INVALID_INPUT.
 func TestClientsKubectl_Exec(t *testing.T) {
 	t.Parallel()
@@ -46,6 +47,8 @@ func TestClientsKubectl_Exec(t *testing.T) {
 	r.EXPECT().RunBuffered(gomock.Any(), "", "kubectl", "--context", "kind-dev",
 		"apply", "-f", "a.yaml", "-f", "b.yaml").Return(interfaces.CmdResult{})
 	require.NoError(t, c.Apply(ctx, "", "a.yaml", "b.yaml"))
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(c.Apply(ctx, "app")),
+		"no files runs nothing")
 
 	r.EXPECT().RunBuffered(gomock.Any(), "", "kubectl", "--context", "kind-dev",
 		"-n", "app", "rollout", "status", "deploy/api", "--timeout=2m0s").

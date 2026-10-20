@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -177,11 +178,11 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 	rd := mcp.NewRunDir(root, time.Now)
 	id := rd.NewRunID()
 	logs, err := rd.WriteSteps(id, []types.StepResult{
-		{Name: "apps/go/cli", Detail: []byte("ok\n")},
+		{Name: "cmd/tool/x", Detail: []byte("ok\n")},
 		{Name: "silent"},
-		{Name: "apps_go_cli-2", Detail: []byte("literal\n")},
-		{Name: "apps:go:cli", Detail: []byte("second\n")},
-		{Name: "apps go cli", Detail: []byte("third\n")},
+		{Name: "cmd_tool_x-2", Detail: []byte("literal\n")},
+		{Name: "cmd:tool:x", Detail: []byte("second\n")},
+		{Name: "cmd tool x", Detail: []byte("third\n")},
 	})
 	require.NoError(t, err)
 
@@ -192,7 +193,7 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 	assert.NotContains(t, filepath.Base(path), "/")
 	assert.Equal(
 		t,
-		[]string{"apps_go_cli-2.log", "apps_go_cli-3.log", "apps_go_cli-4.log"},
+		[]string{"cmd_tool_x-2.log", "cmd_tool_x-3.log", "cmd_tool_x-4.log"},
 		[]string{filepath.Base(logs[2]), filepath.Base(logs[3]), filepath.Base(logs[4])},
 	)
 	for i, want := range map[int]string{
@@ -210,16 +211,18 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
 
-// TestTransportMcpOldRuns_PrunedAtStartup tests that starting the MCP server keeps only
-// the newest run_retention run directories.
+// TestTransportMcpOldRuns_PrunedAtStartup tests that serving keeps only the newest
+// run_retention run directories, and that building the server touches none.
 //
 // Why this test is important:
 //   - Every tool call writes a run directory; without a bound the history grows until
-//     it fills the disk.
+//     it fills the disk. Construction does no I/O, so a server built and never served
+//     (a wiring test, a help listing) leaves the history alone.
 //
 // What it tests:
-//   - 25 run directories with increasing run ids and run_retention 20: after New, the
-//     20 newest remain and the 5 oldest are gone
+//   - 25 run directories with increasing run ids and run_retention 20: after New all 25
+//     remain; after a session that ends at once, the 20 newest remain and the 5 oldest
+//     are gone
 func TestTransportMcpOldRuns_PrunedAtStartup(t *testing.T) {
 	t.Parallel()
 
@@ -236,16 +239,29 @@ func TestTransportMcpOldRuns_PrunedAtStartup(t *testing.T) {
 
 	opts := mcpOpts(t)
 	opts.RunDir = rd
-	_, err := mcp.New(stubOpRegistry(t, "stub", `{"type":"object"}`, nil), opts)
+	srv, err := mcp.New(stubOpRegistry(t, "stub", `{"type":"object"}`, nil), opts)
 	require.NoError(t, err)
+	assert.Equal(t, ids, runDirs(t, root))
 
+	out, err := os.CreateTemp(t.TempDir(), "stdout")
+	require.NoError(t, err)
+	require.NoError(
+		t,
+		srv.ServeStdio(t.Context(), io.NopCloser(strings.NewReader("")), out),
+	)
+	assert.Equal(t, ids[5:], runDirs(t, root))
+}
+
+// runDirs lists the entries of root by name.
+func runDirs(t *testing.T, root string) []string {
+	t.Helper()
 	entries, err := os.ReadDir(root)
 	require.NoError(t, err)
 	left := make([]string, 0, len(entries))
 	for _, e := range entries {
 		left = append(left, e.Name())
 	}
-	assert.Equal(t, ids[5:], left)
+	return left
 }
 
 // TestTransportMcpBoundedTool_ReturnsShapedResult tests that a bounded tool call returns

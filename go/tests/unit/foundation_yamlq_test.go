@@ -173,3 +173,56 @@ other: true
 	_, err = yamlq.Upsert([]byte(yamlqEditDoc), "$.customers.*.region", "x")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+// TestYamlq_UpsertFlowAndMultiline tests edits the in-place splice cannot make.
+//
+// Why this test is important:
+//   - A scalar inside a flow collection shares its line with its siblings, and a plain
+//     or quoted scalar may wrap onto the next line; splicing to the end of the line
+//     would corrupt the file or leave the continuation dangling.
+//
+// What it tests:
+//   - Setting a scalar inside a flow mapping and a flow sequence, and replacing a
+//     wrapped plain and a wrapped double-quoted scalar, each returns YAML that parses,
+//     holds the new value at the path and keeps the sibling values.
+func TestYamlq_UpsertFlowAndMultiline(t *testing.T) {
+	t.Parallel()
+	type check struct {
+		want map[string]string
+		src  string
+		path string
+	}
+	for name, c := range map[string]check{
+		"flow mapping": {
+			src:  "region: {primary: us-east-1, rows: [a]}\n",
+			path: "$.region.primary",
+			want: map[string]string{"$.region.primary": "eu-west-1", "$.region.rows[0]": "a"},
+		},
+		"flow sequence": {
+			src:  "rows: [a, b]\n",
+			path: "$.rows[0]",
+			want: map[string]string{"$.rows[0]": "eu-west-1", "$.rows[1]": "b"},
+		},
+		"wrapped plain": {
+			src:  "note: a long\n  wrapped value\nnext: x\n",
+			path: "$.note",
+			want: map[string]string{"$.note": "eu-west-1", "$.next": "x"},
+		},
+		"wrapped double-quoted": {
+			src:  "note: \"a long\n  wrapped value\"\nnext: x\n",
+			path: "$.note",
+			want: map[string]string{"$.note": "eu-west-1", "$.next": "x"},
+		},
+	} {
+		out, err := yamlq.Upsert([]byte(c.src), c.path, "eu-west-1")
+		require.NoError(t, err, name)
+		var doc yaml.Node
+		require.NoError(t, yaml.Unmarshal(out, &doc), name+": %s", out)
+		for path, want := range c.want {
+			got, err := yamlq.Path(&doc, path)
+			require.NoError(t, err, name)
+			require.Len(t, got, 1, name+" "+path)
+			assert.Equal(t, want, got[0].Value, name+" "+path+": %s", out)
+		}
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -167,7 +168,8 @@ func returnedString(s ast.Stmt) (string, bool) {
 
 // ExtractPythonKinds returns one entry per ref by listing the enum's member values in
 // the service's environment. A ref whose service directory is absent, or whose enum
-// cannot be introspected, is left out: the reference is additive.
+// cannot be introspected or whose module or enum is not an identifier, is left out: the
+// reference is additive.
 func ExtractPythonKinds(
 	ctx context.Context,
 	runner interfaces.CommandRunner,
@@ -177,7 +179,7 @@ func ExtractPythonKinds(
 ) []KindEntry {
 	var entries []KindEntry
 	for _, ref := range refs {
-		if !hasDir(ctx, cb, ref.Dir) {
+		if !hasDir(ctx, cb, ref.Dir) || ref.validate() != nil {
 			continue
 		}
 		var values []string
@@ -220,4 +222,36 @@ func runPython(
 		return apperr.Wrap(err, apperr.CodeInternal, "decode python output")
 	}
 	return nil
+}
+
+// validate rejects a module or enum that is not a Python identifier: both are spliced
+// into the script `python -c` runs.
+func (ref PythonKindRef) validate() error {
+	return pythonNames(ref.Module, ref.Enum)
+}
+
+// pythonNames returns CodeInvalidInput unless module is a dotted Python identifier and
+// name a plain one, so neither can carry a statement into a `python -c` script.
+func pythonNames(module, name string) error {
+	for _, part := range append(strings.Split(module, "."), name) {
+		if !pythonIdent(part) {
+			return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+				"python name %q in %q is not an identifier", part, module+"."+name))
+		}
+	}
+	return nil
+}
+
+// pythonIdent reports whether s is a non-empty ASCII Python identifier.
+func pythonIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		letter := r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+		if !letter && (i == 0 || r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
 }

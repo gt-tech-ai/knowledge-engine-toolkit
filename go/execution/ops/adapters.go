@@ -99,6 +99,18 @@ func (o seededOp[T]) NewInput() any {
 	return in
 }
 
+// check reports a seed for another input type than the wrapped operation's, which
+// would otherwise never apply.
+func (o seededOp[T]) check() error {
+	in := o.Operation.NewInput()
+	if _, ok := in.(*T); !ok {
+		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+			"defaults seed %T, but the operation's input is %T", new(T), in,
+		))
+	}
+	return nil
+}
+
 // InputSchema reflects v's json-tagged fields into an inlined, closed object schema
 // with no $schema version (an MCP tool requires a top-level "type": "object"). Input
 // types are static structs, so a marshal failure is a programming error and panics.

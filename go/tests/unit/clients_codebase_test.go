@@ -84,13 +84,15 @@ func TestCodebaseClient_MemoryKindIsTheDefault(t *testing.T) {
 //     needs every file listed and read, and must never descend into a .git directory.
 //
 // What it tests:
-//   - The fs kind lists every file under the root except .git, reads contents, and
+//   - The fs kind lists every file under the root except .git, sorted by path (so
+//     `a-b/q.md` precedes `a/p.md`, unlike a directory walk), reads contents, and
 //     matches patterns over them.
 func TestCodebaseClient_FSKind(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFiles(t, root, map[string]string{
 		"x/y.go": "package y // TODO-9\n", "z.md": "plain\n", ".git/HEAD": "ref\n",
+		"a/p.md": "p\n", "a-b/q.md": "q\n",
 	})
 	r, err := clientcodebase.NewFromConfig(t.Context(),
 		clientcodebase.Config{Kind: clientcodebase.KindFS, Root: root},
@@ -98,7 +100,7 @@ func TestCodebaseClient_FSKind(t *testing.T) {
 	require.NoError(t, err)
 	files, err := r.Files(t.Context(), types.FileSelector{})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"x/y.go", "z.md"}, paths(files))
+	assert.Equal(t, []string{"a-b/q.md", "a/p.md", "x/y.go", "z.md"}, paths(files))
 	hits, err := r.Match(t.Context(), types.FileSelector{},
 		[]*regexp.Regexp{regexp.MustCompile(`TODO-\d`)})
 	require.NoError(t, err)

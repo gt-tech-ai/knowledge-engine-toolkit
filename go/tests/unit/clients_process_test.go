@@ -1,3 +1,5 @@
+//go:build unix
+
 package unit_test
 
 import (

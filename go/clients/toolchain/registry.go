@@ -96,12 +96,12 @@ type Def struct {
 	// InstallHint is shown when the tool is missing from PATH.
 	InstallHint string
 
-	// Prefix is an optional command prefix (e.g. ["uv", cmdRun] for Python tools).
+	// Prefix is an optional command prefix (e.g. ["uv", "run"] for Python tools).
 	Prefix []string
 }
 
-// DefsFromTools projects the manifest's tools section into registry Defs. DB
-// credentials are never included; they always come from the environment.
+// DefsFromTools projects the manifest's tools into registry Defs: each tool's name,
+// binary, install hint and command prefix.
 func DefsFromTools(tools []ToolEntry) []Def {
 	defs := make([]Def, 0, len(tools))
 	for i := range tools {

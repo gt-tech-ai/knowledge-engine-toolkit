@@ -117,11 +117,63 @@ func TestExecutionOpsNewFromConfig_RejectsDuplicateDescriptor(t *testing.T) {
 	assert.Contains(t, err.Error(), `"ro"`)
 }
 
+// TestExecutionOpsNewFromConfig_RejectsBrokenBuilders tests the builders a registry
+// refuses at construction.
+//
+// Why this test is important:
+//   - A nil builder, a builder that returns no operation, or defaults seeded for another
+//     input type are wiring mistakes; found at construction they name the operation,
+//     found at run time they are a nil-pointer panic or defaults that silently never
+//     apply.
+//
+// What it tests:
+//   - Each fails NewFromConfig with CodeInvalidInput naming the operation; the seed
+//     mismatch also names the operation's real input type.
+func TestExecutionOpsNewFromConfig_RejectsBrokenBuilders(t *testing.T) {
+	t.Parallel()
+	run := ops.Func(func(
+		context.Context, *adapterInput, opsEnv, interfaces.ExecutionObserver,
+	) error {
+		return nil
+	})
+	for name, b := range map[string]ops.Builder[opsEnv]{
+		"nil builder": nil,
+		"nil operation": func(types.OperationDescriptor, opsEnv) interfaces.Operation {
+			return nil
+		},
+		"seed of another type": ops.WithDefaults(run, func(in *cobraInput) { in.Env = "x" }),
+	} {
+		_, err := ops.NewFromConfig(ops.Config[opsEnv]{
+			Policy: types.ExposurePolicy{
+				MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
+			},
+			Descriptors: []types.OperationDescriptor{
+				opDesc("op", types.SafetyReadOnly, types.OpLifecycleBounded),
+			},
+			Builders: map[string]ops.Builder[opsEnv]{"op": b},
+		})
+		require.ErrorContains(t, err, `"op"`, name)
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
+	}
+	_, err := ops.NewFromConfig(ops.Config[opsEnv]{
+		Policy: types.ExposurePolicy{
+			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
+		},
+		Descriptors: []types.OperationDescriptor{
+			opDesc("op", types.SafetyReadOnly, types.OpLifecycleBounded),
+		},
+		Builders: map[string]ops.Builder[opsEnv]{
+			"op": ops.WithDefaults(run, func(*cobraInput) {}),
+		},
+	})
+	assert.ErrorContains(t, err, "*unit_test.adapterInput")
+}
+
 // TestExecutionOpsRegistryRun_LogsTheMappedCode tests that the logged failure of a
 // timed-out run carries CodeTimeout.
 //
 // Why this test is important:
-//   - Logging sits outside the code map (charter §6.3), so the log line an operator
+//   - Logging sits outside the code map, so the log line an operator
 //     reads names the same code the caller gets, not the operation's raw error.
 //
 // What it tests:
