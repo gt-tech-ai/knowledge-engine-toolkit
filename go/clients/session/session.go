@@ -72,8 +72,16 @@ func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, erro
 	return cred, nil
 }
 
-// resolve reads, parses and verifies ref's credential, then caches it.
+// resolve reads, parses and verifies ref's credential, then caches it. It first
+// re-checks the cache: a caller that missed it may start its flight only after an
+// earlier flight for ref has finished and cached the credential.
 func (p *Provider[Cred]) resolve(ctx context.Context, ref types.Ref) (Cred, error) {
+	p.mu.Lock()
+	cached, ok := p.cache[ref]
+	p.mu.Unlock()
+	if ok {
+		return cached, nil
+	}
 	var zero Cred
 	secret, err := p.src.Get(ctx, ref)
 	if err != nil {

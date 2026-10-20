@@ -99,9 +99,16 @@ func (o seededOp[T]) NewInput() any {
 	return in
 }
 
-// check reports a seed for another input type than the wrapped operation's, which
-// would otherwise never apply, here or in a seeded operation this one wraps.
+// check reports a nil seed, or a seed for another input type than the wrapped
+// operation's, which would otherwise panic or never apply, here or in a seeded
+// operation this one wraps.
 func (o seededOp[T]) check() error {
+	if o.seed == nil {
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf("defaults seed %T is nil", new(T)),
+		)
+	}
 	in := o.Operation.NewInput()
 	if _, ok := in.(*T); !ok {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(

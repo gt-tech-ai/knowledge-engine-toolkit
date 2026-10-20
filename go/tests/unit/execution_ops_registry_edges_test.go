@@ -121,10 +121,10 @@ func TestExecutionOpsNewFromConfig_RejectsDuplicateDescriptor(t *testing.T) {
 // refuses at construction.
 //
 // Why this test is important:
-//   - A nil builder, a builder that returns no operation, or defaults seeded for another
-//     input type are wiring mistakes; found at construction they name the operation,
-//     found at run time they are a nil-pointer panic or defaults that silently never
-//     apply.
+//   - A nil builder, a builder that returns no operation, a nil seed, or defaults seeded
+//     for another input type are wiring mistakes; found at construction they name the
+//     operation, found at run time they are a nil-pointer panic or defaults that
+//     silently never apply.
 //
 // What it tests:
 //   - Each, a mistyped seed under a correct one included, fails NewFromConfig with
@@ -143,6 +143,7 @@ func TestExecutionOpsNewFromConfig_RejectsBrokenBuilders(t *testing.T) {
 			return nil
 		},
 		"seed of another type": ops.WithDefaults(run, func(in *cobraInput) { in.Env = "x" }),
+		"nil seed":             ops.WithDefaults[adapterInput](run, nil),
 		"inner seed of another type": ops.WithDefaults(
 			ops.WithDefaults(run, func(*cobraInput) {}),
 			func(*adapterInput) {},

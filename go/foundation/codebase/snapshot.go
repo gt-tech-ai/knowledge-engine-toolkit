@@ -3,7 +3,6 @@ package codebase
 import (
 	"context"
 	"fmt"
-	"runtime/debug"
 	"sync"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
@@ -102,7 +101,8 @@ func (s *Snapshot) Memo[T any](
 }
 
 // safeBuild runs build, turning a panic into a CodeInternal error carrying the panic
-// value and the stack, and reporting it, so a panicking build still closes its entry.
+// value (the error records the stack), and reporting it, so a panicking build still
+// closes its entry.
 func safeBuild[T any](
 	ctx context.Context,
 	key string,
@@ -113,7 +113,7 @@ func safeBuild[T any](
 			panicked = true
 			err = apperr.New(
 				apperr.CodeInternal,
-				fmt.Sprintf("memo %q: build panicked: %v\n%s", key, r, debug.Stack()),
+				fmt.Sprintf("memo %q: build panicked: %v", key, r),
 			)
 		}
 	}()

@@ -127,30 +127,39 @@ func TestTransportCobra_Command(t *testing.T) {
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }
 
-// TestTransportCobra_FreshInputPerRun tests that each execution decodes into its own
-// input.
+// TestTransportCobra_FreshInputPerRun tests what each execution of a command decodes.
 //
 // Why this test is important:
-//   - A command executed more than once (a shell, a test, a REPL) must not carry one
-//     run's flags or positional arguments into the next, or the second run applies
-//     fixes or checks targets the caller never asked for.
+//   - A command executed more than once (a test, a REPL) must not carry one run's
+//     positional arguments into the next; a flag the caller adds to the returned
+//     command (an output format) must keep working on every execution; and two commands
+//     built from one registry must not share a run's input.
 //
 // What it tests:
-//   - Executing one command with `--fix --only a api x y` and then `--only b web` gives
-//     the second run Fix false, Only [b], Target "web" and no Rest.
+//   - A reused command given `api x y` and then `web` runs the second with Target "web"
+//     and no Rest; a consumer-added flag parses on both executions; commands built
+//     separately for `--fix --only a` and `--only b` decode exactly their own flags.
 func TestTransportCobra_FreshInputPerRun(t *testing.T) {
 	t.Parallel()
 	var got cobraInput
-	cmd, err := opscobra.Command(cobraRegistry(t, &got), "check", opscobra.Options{})
+	reg := cobraRegistry(t, &got)
+	cmd, err := opscobra.Command(reg, "check", opscobra.Options{})
 	require.NoError(t, err)
+	var jsonOut bool
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print JSON")
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	for _, args := range [][]string{
-		{"-e", "s", "--fix", "--only", "a", "api", "x", "y"},
-		{"-e", "s", "--only", "b", "web"},
+		{"-e", "s", "--json", "api", "x", "y"},
+		{"-e", "s", "--json", "web"},
 	} {
 		cmd.SetArgs(args)
 		require.NoError(t, cmd.ExecuteContext(t.Context()))
 	}
+	assert.True(t, jsonOut)
+	assert.Equal(t, cobraInput{Env: "s", Target: "web"}, got)
+
+	require.NoError(t, execCobra(t, reg, "-e", "s", "--fix", "--only", "a", "api"))
+	require.NoError(t, execCobra(t, reg, "-e", "s", "--only", "b", "web"))
 	assert.Equal(t, cobraInput{Env: "s", Only: []string{"b"}, Target: "web"}, got)
 }

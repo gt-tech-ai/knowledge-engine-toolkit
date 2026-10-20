@@ -31,11 +31,12 @@ type Options struct {
 // tagged `flag:"name,short,usage"` is a flag (bool, string, int, time.Duration or
 // []string; a field also tagged jsonschema:"required" is a required flag), and each
 // field tagged `arg:"n"` takes the n-th positional argument (a []string field takes it
-// and the rest). Every run gets its own input: after a run the command binds new flags
-// to a fresh, default-seeded input, since pflag keeps parsed values (and appends to a
-// slice) across executions. An unknown or excluded operation fails like
-// ops.Registry.Find, and an unsupported field type or a malformed tag is
-// CodeInvalidInput naming the field.
+// and the rest). Each run decodes into a fresh, default-seeded input: the flags Cobra
+// parsed as set on the command line, then that run's positional arguments. Cobra keeps a
+// flag's parsed state (its value and whether it was set) across executions of one
+// command, so build a command per execution, as a CLI does once per process. An unknown
+// or excluded operation fails like ops.Registry.Find, and an unsupported field type or a
+// malformed tag is CodeInvalidInput naming the field.
 func Command(reg *ops.Registry, name string, opts Options) (*spf.Command, error) {
 	op, err := reg.Find(name)
 	if err != nil {
@@ -47,32 +48,34 @@ func Command(reg *ops.Registry, name string, opts Options) (*spf.Command, error)
 		use = desc.Name
 	}
 	cmd := &spf.Command{Use: use, Short: desc.Summary, SilenceUsage: true}
-	input := op.NewInput()
-	b, err := bind(cmd, input)
+	flags := op.NewInput()
+	b, err := bind(cmd, flags)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
 			fmt.Sprintf("operation %q", name))
 	}
 	cmd.Args = spf.RangeArgs(0, b.maxArgs())
 	cmd.RunE = func(c *spf.Command, args []string) error {
-		run := input
-		input = op.NewInput()
-		c.ResetFlags()
-		if _, err := bind(c, input); err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "rebind flags of "+name)
-		}
-		if err := b.positional(reflect.ValueOf(run).Elem(), args); err != nil {
+		input := op.NewInput()
+		dst := reflect.ValueOf(input).Elem()
+		b.setFlags(c, reflect.ValueOf(flags).Elem(), dst)
+		if err := b.positional(dst, args); err != nil {
 			return err
 		}
-		return reg.Run(c.Context(), name, run, opts.Observer)
+		return reg.Run(c.Context(), name, input, opts.Observer)
 	}
 	return cmd, nil
 }
 
-// binding is where a command's positional arguments go.
+// binding is where a command's flags and positional arguments go. Cobra parses the
+// flags into one input the command keeps; each run copies the flags Cobra records as
+// set, and stores its own positional arguments, into a fresh input.
 type binding struct {
 	// args maps each positional index to its field's index in the input struct.
 	args map[int]int
+
+	// flags maps each flag name to its field's index in the input struct.
+	flags map[string]int
 
 	// rest is the index whose []string field takes the remaining arguments; -1 when
 	// none does.
@@ -85,6 +88,16 @@ func (b *binding) maxArgs() int {
 		return int(^uint(0) >> 1)
 	}
 	return len(b.args)
+}
+
+// setFlags copies into dst each flag field Cobra records as set on c (src holds the
+// parsed values); any other flag keeps dst's seeded default.
+func (b *binding) setFlags(c *spf.Command, src, dst reflect.Value) {
+	for name, i := range b.flags {
+		if c.Flags().Changed(name) {
+			dst.Field(i).Set(src.Field(i))
+		}
+	}
 }
 
 // positional stores args into their fields of dst.
@@ -108,13 +121,15 @@ func (b *binding) positional(dst reflect.Value, args []string) error {
 // bind registers a flag or positional slot for each tagged field of *input.
 func bind(cmd *spf.Command, input any) (*binding, error) {
 	v := reflect.ValueOf(input).Elem()
-	b := &binding{args: map[int]int{}, rest: -1}
+	b := &binding{args: map[int]int{}, flags: map[string]int{}, rest: -1}
 	for i := range v.NumField() {
 		sf, fv := v.Type().Field(i), v.Field(i)
 		if tag, ok := sf.Tag.Lookup("flag"); ok {
-			if err := addFlag(cmd, sf, fv, tag); err != nil {
+			name, err := addFlag(cmd, sf, fv, tag)
+			if err != nil {
 				return nil, err
 			}
+			b.flags[name] = i
 		}
 		if tag, ok := sf.Tag.Lookup("arg"); ok {
 			if err := addArg(b, sf, fv, i, tag); err != nil {
@@ -125,16 +140,17 @@ func bind(cmd *spf.Command, input any) (*binding, error) {
 	return b, nil
 }
 
-// addFlag registers the flag a `flag:"name,short,usage"` field declares.
+// addFlag registers the flag a `flag:"name,short,usage"` field declares and returns its
+// name.
 func addFlag(
 	cmd *spf.Command,
 	sf reflect.StructField,
 	fv reflect.Value,
 	tag string,
-) error {
+) (string, error) {
 	parts := strings.SplitN(tag, ",", 3)
 	if len(parts) != 3 || parts[0] == "" || len(parts[1]) > 1 {
-		return apperr.New(apperr.CodeInvalidInput,
+		return "", apperr.New(apperr.CodeInvalidInput,
 			fmt.Sprintf("field %s: flag tag %q is not name,short,usage", sf.Name, tag))
 	}
 	name, short, usage := parts[0], parts[1], parts[2]
@@ -151,14 +167,14 @@ func addFlag(
 	case *[]string:
 		fs.StringSliceVarP(p, name, short, *p, usage)
 	default:
-		return apperr.New(apperr.CodeInvalidInput,
+		return "", apperr.New(apperr.CodeInvalidInput,
 			fmt.Sprintf("field %s: unsupported flag type %s", sf.Name, sf.Type))
 	}
 	if strings.Contains(sf.Tag.Get("jsonschema"), "required") {
-		return apperr.Wrap(cmd.MarkFlagRequired(name), apperr.CodeInternal,
+		return name, apperr.Wrap(cmd.MarkFlagRequired(name), apperr.CodeInternal,
 			"mark flag "+name+" required")
 	}
-	return nil
+	return name, nil
 }
 
 // addArg registers the positional slot an `arg:"n"` field (field index i) declares.

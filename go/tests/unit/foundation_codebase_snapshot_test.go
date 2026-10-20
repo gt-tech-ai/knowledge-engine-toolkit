@@ -107,7 +107,8 @@ func TestCodebaseSnapshot_MemoErrors(t *testing.T) {
 //
 // What it tests:
 //   - The builder's caller and a caller waiting on the same key both get CodeInternal
-//     carrying the panic value and the stack that names the panicking build;
+//     carrying the panic value in its message and, in its recorded stack trace, the
+//     panicking build;
 //     the key is not cached, so a later call builds again and gets its value.
 func TestCodebaseSnapshot_MemoPanickingBuild(t *testing.T) {
 	t.Parallel()
@@ -134,8 +135,11 @@ func TestCodebaseSnapshot_MemoPanickingBuild(t *testing.T) {
 		err := <-errs
 		assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 		assert.Contains(t, err.Error(), "parser bug")
-		assert.Contains(t, err.Error(), "TestCodebaseSnapshot_MemoPanickingBuild",
-			"the stack names where the build panicked")
+		assert.NotContains(t, err.Error(), "goroutine ", "the message stays one line")
+		var appErr *apperr.AppError
+		require.ErrorAs(t, err, &appErr)
+		assert.Contains(t, appErr.StackTrace(), "TestCodebaseSnapshot_MemoPanickingBuild",
+			"the error's stack names where the build panicked")
 	}
 
 	got, err := s.Memo(t.Context(), "k", func(context.Context) (int, error) {

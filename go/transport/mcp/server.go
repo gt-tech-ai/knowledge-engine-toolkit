@@ -119,10 +119,15 @@ func New(reg Registry, opts Options) (*Server, error) {
 // background run still active and waits for them to stop, so no operation outlives the
 // session. A failed prune is returned before the session starts.
 func (s *Server) Serve(ctx context.Context, t sdkmcp.Transport) error {
-	if err := s.runs.Prune(s.settings.RunRetention); err != nil {
+	if err := s.prune(); err != nil {
 		return err
 	}
 	return s.session(ctx, t)
+}
+
+// prune keeps the newest Settings.RunRetention run directories.
+func (s *Server) prune() error {
+	return s.runs.Prune(s.settings.RunRetention)
 }
 
 // session runs one session over t, then stops every background run it started.
@@ -142,7 +147,7 @@ func (s *Server) ServeStdio(
 	in io.ReadCloser,
 	out io.WriteCloser,
 ) error {
-	if err := s.runs.Prune(s.settings.RunRetention); err != nil {
+	if err := s.prune(); err != nil {
 		return err
 	}
 	err := s.session(ctx, &sdkmcp.IOTransport{Reader: in, Writer: out})

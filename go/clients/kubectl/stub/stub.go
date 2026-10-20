@@ -1,5 +1,5 @@
 // Package stub is the KubectlClient with no cluster: reads return empty lists and
-// writes succeed without effect.
+// writes that name files succeed without effect.
 package stub
 
 import (
