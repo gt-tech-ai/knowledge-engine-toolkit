@@ -5,6 +5,13 @@
 // tests but does not check them for drift, so regenerate and commit them whenever
 // a mocked interface changes; local runs use the committed files.
 //go:generate mockgen -destination=mock_analytics.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces AnalyticsStore,AnalyticsCompactor,RowStream
+//go:generate mockgen -destination=mock_aws_bedrock.go -package=mocks -mock_names=API=MockAWSBedrockAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/bedrock API
+//go:generate mockgen -destination=mock_aws_iam.go -package=mocks -mock_names=API=MockAWSIAMAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/iam API
+//go:generate mockgen -destination=mock_aws_route53.go -package=mocks -mock_names=API=MockAWSRoute53API github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/route53 API
+//go:generate mockgen -destination=mock_aws_secretsmanager.go -package=mocks -mock_names=API=MockAWSSecretsManagerAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/secretsmanager API
+//go:generate mockgen -destination=mock_aws_servicequotas.go -package=mocks -mock_names=API=MockAWSServiceQuotasAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/servicequotas API
+//go:generate mockgen -destination=mock_aws_ses.go -package=mocks -mock_names=API=MockAWSSESAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/ses API
+//go:generate mockgen -destination=mock_aws_sts.go -package=mocks -mock_names=API=MockAWSSTSAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/sts API
 //go:generate mockgen -destination=mock_bulkhead.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Bulkhead,KeyedLimiter
 //go:generate mockgen -destination=mock_cache.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ByteCache
 //go:generate mockgen -destination=mock_cache_invalidator.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CacheInvalidator
@@ -45,6 +52,7 @@
 //go:generate mockgen -destination=mock_outbox_sqs_api.go -package=mocks -mock_names=API=MockOutboxSQSAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/sqs API
 //go:generate mockgen -destination=mock_pipeline.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Pipeline
 //go:generate mockgen -destination=mock_probe.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Probe,ProbeSet
+//go:generate mockgen -destination=mock_process.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Supervisor,ProcessHandle
 //go:generate mockgen -destination=mock_prometheus_http_doer.go -package=mocks -mock_names=HTTPDoer=MockPrometheusHTTPDoer github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/http HTTPDoer
 //go:generate mockgen -destination=mock_rate_limiter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces RateLimiter
 //go:generate mockgen -destination=mock_reader.go -package=mocks io ReadCloser
