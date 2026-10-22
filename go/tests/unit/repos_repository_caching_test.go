@@ -314,3 +314,82 @@ func TestCached_ExistsAndList(t *testing.T) {
 		assert.Equal(t, int64(2), page.Total)
 	})
 }
+
+// TestCached_InTransaction tests the entity cache inside a transaction.
+//
+// Why this test is important:
+//   - A transaction's writes are invisible to other readers until it commits and vanish
+//     if it rolls back. A cache filled or primed from inside the transaction would serve
+//     a row that may never commit, and a hit read inside it could predate the
+//     transaction's own writes.
+//   - An eviction that runs only before the commit lets a concurrent reader re-cache the
+//     pre-commit row for the full TTL.
+//
+// What it tests:
+//   - Get and Exists read the store and never touch the cache.
+//   - Create primes the cache only once the transaction commits, and not at all when it
+//     rolls back (no after-commit hooks run).
+//   - Update and Delete evict at once and again after the commit.
+func TestCached_InTransaction(t *testing.T) {
+	t.Parallel()
+	txCtx := func() context.Context {
+		return interfaces.WithAfterCommit(interfaces.WithInTx(context.Background()))
+	}
+	row := &te{ID: "id", Name: "uncommitted"}
+
+	t.Run("get and exists bypass the cache", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		cache := mocks.NewMockByteCache(ctrl) // no expectations → must not be called
+		store := mocks.NewMockStore[te, tp, string](ctrl)
+		store.EXPECT().Get(gomock.Any(), "id").Return(row, nil)
+		store.EXPECT().Exists(gomock.Any(), "id").Return(true, nil)
+		repo := cachingRepo(store, cache, true)
+		ctx := txCtx()
+
+		got, err := repo.Get(ctx, "id")
+		require.NoError(t, err)
+		assert.Equal(t, "uncommitted", got.Name)
+		ok, err := repo.Exists(ctx, "id")
+		require.NoError(t, err)
+		assert.True(t, ok)
+		interfaces.RunAfterCommit(ctx)
+	})
+
+	t.Run("create primes only after commit", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		cache := mocks.NewMockByteCache(ctrl)
+		store := mocks.NewMockStore[te, tp, string](ctrl)
+		store.EXPECT().Create(gomock.Any(), gomock.Any()).Return(row, nil).Times(2)
+		repo := cachingRepo(store, cache, true)
+
+		rolledBack := txCtx()
+		_, err := repo.Create(rolledBack, &te{Name: "uncommitted"})
+		require.NoError(t, err) // no Set: the hooks never run, as on a rollback
+
+		committed := txCtx()
+		_, err = repo.Create(committed, &te{Name: "uncommitted"})
+		require.NoError(t, err)
+		cache.EXPECT().Set(gomock.Any(), "repo:repo:id", gomock.Any(), time.Minute)
+		interfaces.RunAfterCommit(committed)
+	})
+
+	t.Run("update and delete evict again after commit", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		cache := mocks.NewMockByteCache(ctrl)
+		store := mocks.NewMockStore[te, tp, string](ctrl)
+		store.EXPECT().Update(gomock.Any(), "id", gomock.Any()).Return(row, nil)
+		store.EXPECT().Delete(gomock.Any(), "id").Return(nil)
+		repo := cachingRepo(store, cache, true)
+		ctx := txCtx()
+
+		cache.EXPECT().Delete(gomock.Any(), "repo:repo:id").Times(2)
+		_, err := repo.Update(ctx, "id", &te{Name: "uncommitted"})
+		require.NoError(t, err)
+		require.NoError(t, repo.Delete(ctx, "id"))
+		cache.EXPECT().Delete(gomock.Any(), "repo:repo:id").Times(2)
+		interfaces.RunAfterCommit(ctx)
+	})
+}

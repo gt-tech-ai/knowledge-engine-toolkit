@@ -37,6 +37,11 @@ func CacheKey(name string, id any) string {
 // from the cache, Create primes it when c.IDOf is set, and Update and Delete evict the
 // entity. List and the other roles always reach the store. name keys the entries
 // (CacheKey).
+//
+// Inside a transaction (interfaces.InTx) the cache sees only committed rows: Get and
+// Exists read the store, Create primes the cache after the commit
+// (interfaces.RegisterAfterCommit), and Update and Delete evict at once and again after
+// the commit, so a reader that raced the write cannot keep the pre-commit row.
 func cached[T, P any, ID comparable](
 	roles decorate.Roles[T, P, ID],
 	c Cache[T, ID],
@@ -48,6 +53,9 @@ func cached[T, P any, ID comparable](
 	}
 	if exists := roles.Exists; exists != nil {
 		roles.Exists = func(ctx context.Context, id ID) (bool, error) {
+			if interfaces.InTx(ctx) {
+				return exists(ctx, id)
+			}
 			if _, ok := rc.read(ctx, CacheKey(name, id)); ok {
 				return true, nil
 			}
@@ -60,7 +68,7 @@ func cached[T, P any, ID comparable](
 			if err != nil {
 				return nil, err
 			}
-			rc.write(ctx, CacheKey(name, c.IDOf(result)), result)
+			rc.prime(ctx, CacheKey(name, c.IDOf(result)), result)
 			return result, nil
 		}
 	}
@@ -68,7 +76,7 @@ func cached[T, P any, ID comparable](
 		roles.Update = func(ctx context.Context, id ID, entity *T) (*T, error) {
 			result, err := update(ctx, id, entity)
 			if err == nil {
-				c.Store.Delete(ctx, CacheKey(name, id))
+				rc.evict(ctx, CacheKey(name, id))
 			}
 			return result, err
 		}
@@ -77,7 +85,7 @@ func cached[T, P any, ID comparable](
 		roles.Delete = func(ctx context.Context, id ID) error {
 			err := del(ctx, id)
 			if err == nil {
-				c.Store.Delete(ctx, CacheKey(name, id))
+				rc.evict(ctx, CacheKey(name, id))
 			}
 			return err
 		}
@@ -117,12 +125,36 @@ func (c *roleCache[T, ID]) write(ctx context.Context, key string, entity *T) {
 	}
 }
 
+// prime caches a created entity: now outside a transaction, after the commit inside one.
+// It encodes now, so a caller that edits entity afterwards cannot change the entry.
+func (c *roleCache[T, ID]) prime(ctx context.Context, key string, entity *T) {
+	encoded, err := cache.Encode(*entity, c.cache.Version)
+	if err != nil {
+		return
+	}
+	interfaces.RegisterAfterCommit(ctx, func() {
+		c.cache.Store.Set(ctx, key, encoded, c.cache.TTL)
+	})
+}
+
+// evict drops key now and, inside a transaction, again after the commit.
+func (c *roleCache[T, ID]) evict(ctx context.Context, key string) {
+	c.cache.Store.Delete(ctx, key)
+	if interfaces.InTx(ctx) {
+		interfaces.RegisterAfterCommit(ctx, func() { c.cache.Store.Delete(ctx, key) })
+	}
+}
+
 // get reads the entity from the cache, or through get on a miss, returning a copy.
+// Inside a transaction it reads the store and leaves the cache alone.
 func (c *roleCache[T, ID]) get(
 	ctx context.Context,
 	id ID,
 	get func(context.Context, ID) (*T, error),
 ) (*T, error) {
+	if interfaces.InTx(ctx) {
+		return get(ctx, id)
+	}
 	key := CacheKey(c.name, id)
 	if val, ok := c.read(ctx, key); ok {
 		return val, nil
