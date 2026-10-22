@@ -1,73 +1,49 @@
 package report
 
 import (
-	"fmt"
-	"io"
-	"text/tabwriter"
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
-// table prints a result table per phase and for the gate, then the failures.
+// table reports a result table and a TOTAL line per phase, then the gate's final
+// table, its TOTAL line and the failure block.
 type table struct {
-	// w receives the report.
-	w io.Writer
-
-	// verbose shows every step's detail under the gate table.
-	verbose bool
+	// p is the shared printer.
+	p *printer
 }
 
-// OnGateStart does nothing: the table renders per phase.
+// OnGateStart prints nothing.
 func (*table) OnGateStart(string, []string) {}
 
-// OnPhaseStart does nothing.
+// OnPhaseStart prints nothing.
 func (*table) OnPhaseStart(string, []string) {}
 
-// OnStepStart does nothing.
+// OnStepStart prints nothing.
 func (*table) OnStepStart(string, string) {}
 
-// OnStepComplete does nothing: steps are flushed per phase.
+// OnStepComplete prints nothing: steps show in the phase table.
 func (*table) OnStepComplete(types.StepResult) {}
 
-// OnPhaseComplete prints the phase's table and summary.
+// OnPhaseComplete prints the phase's header, table and TOTAL line.
 func (t *table) OnPhaseComplete(
 	name string,
 	results types.StepResults,
 	elapsed time.Duration,
 ) {
-	_, _ = fmt.Fprintf(t.w, "\n%s\n", name)
-	rows(t.w, results)
-	_, _ = fmt.Fprintln(t.w, summary(results, elapsed))
+	t.p.headerf("%s", name)
+	t.p.resultsTable(results)
+	t.p.total(results, elapsed)
 }
 
-// OnGateComplete prints the gate's table, summary and failures.
+// OnGateComplete prints the gate's final header, table, TOTAL line and failure block.
 func (t *table) OnGateComplete(
 	name string,
 	results types.StepResults,
 	elapsed time.Duration,
 ) {
-	_, _ = fmt.Fprintf(t.w, "\n%s - Final Results\n", name)
-	rows(t.w, results)
-	_, _ = fmt.Fprintln(t.w, summary(results, elapsed))
-	if t.verbose {
-		for _, r := range results {
-			if r.Status != types.StatusFail && len(r.Detail) > 0 {
-				_, _ = fmt.Fprintf(t.w, "\n%s %s\n", icon(r.Status), r.Name)
-				indent(t.w, r.Detail)
-			}
-		}
-	}
-	failures(t.w, results)
-}
-
-// rows writes results as an aligned STATUS / STEP / GROUP / TIME / ERROR table.
-func rows(w io.Writer, results types.StepResults) {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "STATUS\tSTEP\tGROUP\tTIME\tERROR")
-	for _, r := range results {
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-			r.Status, r.Name, r.Group, round(r.Duration), r.Error)
-	}
-	_ = tw.Flush()
+	t.p.headerf("%s - Final Results", name)
+	t.p.resultsTable(results)
+	t.p.total(results, elapsed)
+	t.p.failureBlock(results)
 }

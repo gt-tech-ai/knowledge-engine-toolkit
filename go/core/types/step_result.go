@@ -107,3 +107,28 @@ func (rs StepResults) FailedNames() []string {
 	}
 	return names
 }
+
+// NewStep returns the result of the step name: status, and err's text as Error when
+// err is non-nil.
+func NewStep(name string, status StepStatus, err error) StepResult {
+	r := StepResult{Name: name, Status: status}
+	if err != nil {
+		r.Error = err.Error()
+	}
+	return r
+}
+
+// OneStep returns NewStep's result as a one-step StepResults.
+func OneStep(name string, status StepStatus, err error) StepResults {
+	return StepResults{NewStep(name, status, err)}
+}
+
+// CheckStep returns the one-step outcome of a check named name: a failure carrying err
+// when err is non-nil, a pass otherwise. It returns err unchanged, so a check reports
+// its step and keeps the error its caller branches on.
+func CheckStep(name string, err error) (StepResults, error) {
+	if err != nil {
+		return OneStep(name, StatusFail, err), err
+	}
+	return OneStep(name, StatusPass, nil), nil
+}

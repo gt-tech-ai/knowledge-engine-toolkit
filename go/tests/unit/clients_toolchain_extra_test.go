@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
 // ---------------------------------------------------------------------------
@@ -27,7 +28,7 @@ import (
 //   - An empty manifest produces an empty Def slice
 func TestClientsToolchainDefsFromTools_ProjectsTools(t *testing.T) {
 	t.Parallel()
-	defs := toolchain.DefsFromTools([]toolchain.ToolEntry{
+	defs := toolchain.DefsFromTools([]types.ToolEntry{
 		{
 			Name:        "golangci-lint",
 			Binary:      "golangci-lint",

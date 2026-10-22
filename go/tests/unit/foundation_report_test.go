@@ -58,43 +58,58 @@ func reportOf(t *testing.T, cfg report.Config) (out, errOut string) {
 	return o.String(), e.String()
 }
 
-// TestFoundationReport_LineAndTable tests the terminal reporters.
+// TestFoundationReport_LineAndTable tests the terminal reporters NewFromConfig builds.
 //
 // Why this test is important:
-//   - These are what a developer reads after every gate: each step's time, which steps
-//     failed and why, and the totals must be on screen, on the diagnostics stream.
+//   - These are what a developer reads after every gate: which phases failed, which
+//     steps and why, the hint that fixes it, and the totals, on the diagnostics stream.
+//     Interactive must be what turns the per-step ticks on, so CI logs stay one line
+//     per phase.
 //
 // What it tests:
-//   - line ticks each step with its duration, prints the phase status, the failure
-//     with its indented detail and the summary on Err; table prints the phase and
-//     final tables with the failure; neither writes to Out.
+//   - line prints the phase status line, the failure block with the step's actionable
+//     output and its hint, and the summary on Err; Interactive adds the gate header,
+//     the running list and a tick per step; table prints the phase and final tables
+//     with their TOTAL lines; none writes to Out or emits ANSI without Color.
 func TestFoundationReport_LineAndTable(t *testing.T) {
 	t.Parallel()
-	out, errOut := reportOf(t, report.Config{Kind: report.KindLine})
+	hints := []report.Hint{{Group: "lint", Substr: "vet", Text: "Run: go vet ./..."}}
+	failureBlock := "  Failures:\n\n" +
+		"    FAIL vet\n" +
+		"      a.go:3: shadowed\n" +
+		"      Run: go vet ./...\n\n"
+
+	out, errOut := reportOf(t, report.Config{Kind: report.KindLine, Hints: hints})
+	assert.Empty(t, out)
+	assert.Equal(t, "==> lint                FAIL  3s\n"+
+		failureBlock+
+		"\n1 ok, 1 failed  (4s)\n", errOut)
+
+	out, errOut = reportOf(
+		t,
+		report.Config{Kind: report.KindLine, Hints: hints, Interactive: true},
+	)
 	assert.Empty(t, out)
 	assert.Equal(t, "==> preflight\n"+
 		"  running: gofmt, vet\n"+
 		"  ✓ gofmt  (1.5s)\n"+
 		"  ✗ vet  (2s)\n"+
-		"==> lint               FAIL  3s\n"+
-		"\n✗ vet: 1 finding\n"+
-		"    a.go:3: shadowed\n"+
-		"\n1 ok, 1 failed (4s)\n", errOut)
+		"==> lint                FAIL  3s\n"+
+		failureBlock+
+		"\n1 ok, 1 failed  (4s)\n", errOut)
 
 	out, errOut = reportOf(t, report.Config{Kind: report.KindTable})
 	assert.Empty(t, out)
-	assert.Equal(t, "\nlint\n"+
-		"STATUS  STEP   GROUP  TIME  ERROR\n"+
-		"PASS    gofmt  lint   1.5s  \n"+
-		"FAIL    vet    lint   2s    1 finding\n"+
-		"1 ok, 1 failed (3s)\n"+
-		"\npreflight - Final Results\n"+
-		"STATUS  STEP   GROUP  TIME  ERROR\n"+
-		"PASS    gofmt  lint   1.5s  \n"+
-		"FAIL    vet    lint   2s    1 finding\n"+
-		"1 ok, 1 failed (4s)\n"+
-		"\n✗ vet: 1 finding\n"+
-		"    a.go:3: shadowed\n", errOut)
+	assert.Contains(t, errOut, "\n-- lint --\n")
+	assert.Contains(
+		t,
+		errOut,
+		"    vet                          FAIL             2s  1 finding\n",
+	)
+	assert.Contains(t, errOut, "  TOTAL: 1 passed, 1 failed (3s)\n")
+	assert.Contains(t, errOut, "\n-- preflight - Final Results --\n")
+	assert.Contains(t, errOut, "  TOTAL: 1 passed, 1 failed (4s)\n")
+	assert.NotContains(t, errOut, "\x1b[")
 }
 
 // TestFoundationReport_MachineKinds tests the CI and JSON reporters and the rest.
@@ -184,39 +199,4 @@ func TestFoundationReport_GHActionsEscapes(t *testing.T) {
 	obs.OnPhaseComplete("lint", types.StepResults{step}, time.Second)
 	assert.Contains(t, out.String(),
 		"::error title=lint%3Ago%2Cx::a.go:3: 100%25 bad,%0Asee above\n")
-}
-
-// TestFoundationReport_LineVerboseAndChildren tests the line reporter's optional output.
-//
-// Why this test is important:
-//   - Verbose is how a developer sees a passing step's output, and a test step's
-//     per-package children are how they see which package was slow or failed; losing
-//     either hides what the run did.
-//
-// What it tests:
-//   - Verbose prints a passing step's detail indented under its tick; a step with
-//     several children lists each under it with its own status and metric, named
-//     without the parent's prefix, and a test count replaces the bare duration.
-func TestFoundationReport_LineVerboseAndChildren(t *testing.T) {
-	t.Parallel()
-	var out bytes.Buffer
-	obs, err := report.NewFromConfig(report.Config{Kind: report.KindLine, Verbose: true},
-		types.Streams{Out: &out, Err: &out})
-	require.NoError(t, err)
-	obs.OnStepComplete(types.StepResult{
-		Name: "build", Status: types.StatusPass, Duration: time.Second,
-		Detail: []byte("built 3 binaries\n"),
-	})
-	obs.OnStepComplete(types.StepResult{
-		Name: "test", Status: types.StatusFail, Duration: 2 * time.Second, Tests: 7,
-		Children: types.StepResults{
-			{Name: "test/a", Status: types.StatusPass, Duration: time.Second, Tests: 4},
-			{Name: "test/b", Status: types.StatusFail, Duration: time.Second},
-		},
-	})
-	assert.Equal(t, "  ✓ build  (1s)\n"+
-		"    built 3 binaries\n"+
-		"  ✗ test  7 tests · 2s\n"+
-		"      ✓ a  4 tests · 1s\n"+
-		"      ✗ b  (1s)\n", out.String())
 }

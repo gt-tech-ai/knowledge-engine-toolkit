@@ -1,0 +1,55 @@
+
+-- Lint --
+
+
+  STEP                           STATUS     DURATION  ERROR
+  ────────────────────────────── ──────     ────────  ─────
+
+  Lint
+    golangci (Go)                PASS           1.2s  
+    ruff (Python)                FAIL          800ms  ruff found 2 issues
+
+  TOTAL: 1 passed, 1 failed (2s)
+
+
+-- Unit Tests --
+
+
+  STEP                           STATUS     DURATION  ERROR
+  ────────────────────────────── ──────     ────────  ─────
+
+  Unit Tests
+    Go                           PASS             4s  
+    TypeScript                   SKIP             0s  
+    docs                         WARN             0s  2 stale links
+
+  TOTAL: 1 passed, 1 warned, 1 skipped (4s)
+
+
+-- preflight - Final Results --
+
+
+  STEP                           STATUS     DURATION  ERROR
+  ────────────────────────────── ──────     ────────  ─────
+
+  Lint
+    golangci (Go)                PASS           1.2s  
+    ruff (Python)                FAIL          800ms  ruff found 2 issues
+
+  Unit Tests
+    Go                           PASS             4s  
+    TypeScript                   SKIP             0s  
+    docs                         WARN             0s  2 stale links
+
+  TOTAL: 2 passed, 1 failed, 1 warned, 1 skipped (6s)
+
+  Failures:
+
+    FAIL ruff (Python)
+      apps/python/server/x.py:12:5: F401 `os` imported but unused
+      apps/python/server/y.py:3:1: E501 line too long
+      Run: search lint --python --fix  (to auto-fix)
+
+    WARN docs
+      2 stale links
+

@@ -1,0 +1,24 @@
+==> preflight
+  running: golangci (Go), ruff (Python)
+  ✓ golangci (Go)  (1.2s)
+  ✗ ruff (Python)  (800ms)
+==> Lint                FAIL  2s
+  running: Go, TypeScript, docs
+  ✓ Go  42 tests · 4s
+      ✓ apps/go/cli  30 · 3s
+      ✓ pkg/go  12 · 1s
+  - TypeScript  (0s)
+  ! docs  (0s)
+==> Unit Tests          warn  4s
+  Failures:
+
+    FAIL ruff (Python)
+      apps/python/server/x.py:12:5: F401 `os` imported but unused
+      apps/python/server/y.py:3:1: E501 line too long
+      Run: search lint --python --fix  (to auto-fix)
+
+    WARN docs
+      2 stale links
+
+
+2 ok, 1 failed, 1 warned, 1 skipped  (6s)

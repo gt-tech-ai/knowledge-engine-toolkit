@@ -1,4 +1,4 @@
-package toolchain
+package types
 
 import (
 	"fmt"

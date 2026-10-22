@@ -1,0 +1,24 @@
+[36m==>[0m [1mpreflight[22m
+  [90mrunning: golangci (Go), ruff (Python)[0m
+  [32m✓[0m golangci (Go)  [90m(1.2s)[0m
+  [31m✗[0m ruff (Python)  [90m(800ms)[0m
+[36m==>[0m Lint                [31mFAIL[0m  [90m2s[0m
+  [90mrunning: Go, TypeScript, docs[0m
+  [32m✓[0m Go  [90m42 tests · 4s[0m
+      [32m✓[0m apps/go/cli  [90m30 · 3s[0m
+      [32m✓[0m pkg/go  [90m12 · 1s[0m
+  [90m-[0m TypeScript  [90m(0s)[0m
+  [33m![0m docs  [90m(0s)[0m
+[36m==>[0m Unit Tests          [33mwarn[0m  [90m4s[0m
+[1m  Failures:
+[0m
+    [31mFAIL[0m [1mruff (Python)[22m
+      apps/python/server/x.py:12:5: F401 `os` imported but unused
+      apps/python/server/y.py:3:1: E501 line too long
+      [36mRun: search lint --python --fix  (to auto-fix)[0m
+
+    [33mWARN[0m [1mdocs[22m
+      2 stale links
+
+
+[32m2 ok[0m, [31m1 failed[0m, [33m1 warned[0m, [90m1 skipped[0m  [90m(6s)[0m

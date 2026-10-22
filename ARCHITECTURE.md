@@ -553,7 +553,15 @@ CLIs), so each one does not re-walk the tree or re-implement a runner.
   (`services/toolrun/parsers`). `foundation/stepcache` skips a step whose inputs a previous pass
   already covered.
 - **Reports.** `foundation/report` renders a gate's steps as lines, tables, GitHub Actions
-  annotations or JSON (`report.Composite` fans out).
+  annotations or JSON (`report.Composite` fans out). The line reporter prints a status line
+  per phase, a failure block (each failed step's actionable output lines and a configured
+  remediation hint) and a summary; `Interactive` adds a tick per step and `Color` ANSI
+  styling. `report.Console` is a CLI's whole console on one stream: verbosity levels, a
+  leveled `Logger`, a command hook, coded-error formatting with exit codes
+  (`report.ExitCode`), the GitHub step summary, and `Observer()`, which picks the table
+  when verbose, the line reporter with annotations in CI, and the interactive line
+  otherwise. The composition root resolves TTY, color and CI into `ConsoleConfig`; the
+  console reads no environment.
 - **Generators.** `interfaces.Generator` derives committed files from a codebase;
   `foundation/gen.Check` diffs a fresh render with what is committed and `Apply` writes it;
   `foundation/scaffold` plans and applies templated files with a preserve marker;
@@ -568,7 +576,7 @@ CLIs), so each one does not re-walk the tree or re-implement a runner.
   `clients/aws/<family>` (`sts`, `secretsmanager`, `ses`, `bedrock`, `servicequotas`, `iam`,
   `route53`) wrap one SDK seam each, `stub|sdk`, through `client.Call`; `clients/session`
   resolves and caches verified credentials. `clients/toolchain` declares developer tools as data
-  (`ToolEntry`), detects them, installs them per platform (pinned downloads verified by SHA-256),
+  (`types.ToolEntry`), detects them, installs them per platform (pinned downloads verified by SHA-256),
   and checks that each go-installed CI tool on PATH is the pinned build.
 - **Operations.** `execution/ops` registers typed operations once (descriptor data plus a
   `Builder`; `ops.Func` reflects the input schema from the input type) and admits them per

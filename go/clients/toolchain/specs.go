@@ -12,7 +12,7 @@ import (
 // of the manifest's tools section into types.ToolDef values. Registry-only
 // entries (no category) are skipped — they exist solely for RequireTool via
 // DefsFromTools.
-func ProjectLifecycleTools(tools []ToolEntry) ([]types.ToolDef, error) {
+func ProjectLifecycleTools(tools []types.ToolEntry) ([]types.ToolDef, error) {
 	var out []types.ToolDef
 	for i := range tools {
 		entry := tools[i]
@@ -32,8 +32,8 @@ func ProjectLifecycleTools(tools []ToolEntry) ([]types.ToolDef, error) {
 // manifest's tools section, in manifest order. Install ordering matters (e.g.
 // Node before pnpm), so the slice preserves the manifest sequence.
 func ProjectToolsByCategory(
-	tools []ToolEntry,
-	cat ToolCategory,
+	tools []types.ToolEntry,
+	cat types.ToolCategory,
 ) ([]types.ToolDef, error) {
 	var out []types.ToolDef
 	for i := range tools {
@@ -50,10 +50,10 @@ func ProjectToolsByCategory(
 	return out, nil
 }
 
-// projectTool converts a single manifest ToolEntry into a types.ToolDef,
+// projectTool converts a single manifest types.ToolEntry into a types.ToolDef,
 // resolving the declarative version-parse strategy to a parser and each
 // per-platform install method to a concrete command.
-func projectTool(e ToolEntry) (types.ToolDef, error) {
+func projectTool(e types.ToolEntry) (types.ToolDef, error) {
 	def := types.ToolDef{
 		Name:         e.Name,
 		Binary:       e.Binary,
@@ -91,7 +91,7 @@ func projectTool(e ToolEntry) (types.ToolDef, error) {
 // string and "first-version" both yield the default first-digits parser.
 func resolveVersionParse(strategy string) func(string) string {
 	switch strategy {
-	case VersionParseGo:
+	case types.VersionParseGo:
 		return parseGoVersion
 	default:
 		return types.ParseFirstVersion
@@ -113,11 +113,11 @@ func parseGoVersion(s string) string {
 // This is the install *mechanism* the params-only manifest does not encode:
 // go-install expands to `go install`, and the two download kinds become a pinned
 // Download the Installer fetches, verifies, and places itself.
-func buildInstallMethod(m InstallMethodEntry) types.InstallMethod {
+func buildInstallMethod(m types.InstallMethodEntry) types.InstallMethod {
 	switch m.Kind {
-	case InstallKindGoInstall:
+	case types.InstallKindGoInstall:
 		return types.InstallMethod{Command: "go", Args: []string{"install", m.Package}}
-	case InstallKindGitHubRelease:
+	case types.InstallKindGitHubRelease:
 		base := fmt.Sprintf(
 			"https://github.com/%s/%s/releases/download/%s",
 			m.Org,
@@ -125,19 +125,19 @@ func buildInstallMethod(m InstallMethodEntry) types.InstallMethod {
 			m.Tag,
 		)
 		return types.InstallMethod{Download: buildDownload(m, base)}
-	case InstallKindURL:
+	case types.InstallKindURL:
 		return types.InstallMethod{
 			Download: buildDownload(m, strings.TrimSuffix(m.URL, "/")),
 		}
-	case InstallKindCommand:
+	case types.InstallKindCommand:
 	}
-	// InstallKindCommand; validation rejects any other kind.
+	// types.InstallKindCommand; validation rejects any other kind.
 	return types.InstallMethod{Command: m.Command, Args: m.Args}
 }
 
 // buildDownload projects a download kind's per-platform assets into artifacts
 // whose URL is base + "/" + the asset name.
-func buildDownload(m InstallMethodEntry, base string) *types.Download {
+func buildDownload(m types.InstallMethodEntry, base string) *types.Download {
 	artifacts := make(map[string]types.Artifact, len(m.Assets))
 	for platform, a := range m.Assets {
 		artifacts[platform] = types.Artifact{

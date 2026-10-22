@@ -6,6 +6,48 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-10-22
+
+Python: unchanged (`techai-webutils` 0.6.1).
+
+### Added
+
+- `report.Console`: a CLI's console on one stream: `Level` (`LevelQuiet`, `LevelNormal`,
+  `LevelVerbose`, changeable after its reporters exist), a leveled `Logger`, `Debugf`,
+  `Infof`, `Successf`, `Warnf`, `Errorf`,
+  `CommandHook` (echoes each command at the verbose level), `FormatError` (prints
+  `<CODE>: <message>`, the cause when verbose, and returns the exit code) and
+  `Observer()` (table when verbose; line plus GitHub Actions annotations in CI; the
+  interactive line otherwise; the GitHub step summary appended when
+  `ConsoleConfig.StepSummaryPath` is set), and `Groupf` / `EndGroup` (a collapsible log
+  group under GitHub Actions, otherwise a header when verbose). `ConsoleConfig` carries
+  `Color`, `CI`, `GitHubActions`, `StepSummaryPath` and `Hints`; the console reads no
+  environment.
+- `report.ExitCode`: 2 for invalid input, not found and quality failed; 3 for
+  unavailable; 1 otherwise.
+- `report.ActionableLines` and `report.IsNoiseLine`: condense a failed step's output to
+  the lines that explain it (Go test failures, file:line errors, pytest `FAILED`,
+  govulncheck findings, the files a diff touches), dropping runner, test, tool, diff and
+  govulncheck noise.
+- `report.WriteStepSummary`: a gate's verdict as GitHub step-summary markdown.
+- `report.Hint` and `Config.Hints`: remediation hints the failure block prints under a
+  matching failed or warned step; `Config.Interactive` and `Config.Color`.
+- `types.NewStep`, `types.OneStep`, `types.CheckStep`: single-step result builders.
+- `errors.SplitCode`: splits an `AppError`'s `"<CODE>: <rest>"` text.
+
+### Changed
+
+- `report` line and table output: the line reporter prints a status line per phase, a
+  failure block with each step's actionable lines and hint, and `"n ok, … (elapsed)"`;
+  its per-step ticks need `Config.Interactive` (they were always on). The table reporter
+  prints a `STEP / STATUS / DURATION / ERROR` table and a `TOTAL:` line per phase.
+  `Config.Verbose` now selects the verbose level instead of printing every step's detail.
+- The tool manifest's schema moved from `clients/toolchain` to `core/types`, so a
+  foundation-tier manifest can hold it without importing a client. Migration: replace
+  `toolchain.ToolEntry`, `InstallMethodEntry`, `AssetEntry`, `InstallKind` (and its
+  `InstallKind*` values), `ToolCategory` (and `Category*`), `VersionParseFirst`,
+  `VersionParseGo` and `ValidateToolEntries` with the same names in `types`.
+
 ## [0.0.18] - 2026-10-21
 
 Python: unchanged (`techai-webutils` 0.6.1); Python has no repository entity cache yet.

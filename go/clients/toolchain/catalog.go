@@ -24,22 +24,23 @@ type Catalog struct {
 
 // NewCatalog projects the lifecycle tools of the manifest's tools section into a Catalog,
 // split by category and preserving manifest order within each (install ordering matters,
-// e.g. Node before pnpm). A manifest ValidateToolEntries rejects (a duplicate binary, an
-// unknown install kind, an unparseable min_version, …) is a CodeInvalidInput error.
-func NewCatalog(tools []ToolEntry) (*Catalog, error) {
-	if errs := ValidateToolEntries(tools); len(errs) > 0 {
+// e.g. Node before pnpm). A manifest types.ValidateToolEntries rejects (a duplicate
+// binary, an unknown install kind, an unparseable min_version, …) is a
+// CodeInvalidInput error.
+func NewCatalog(tools []types.ToolEntry) (*Catalog, error) {
+	if errs := types.ValidateToolEntries(tools); len(errs) > 0 {
 		return nil, apperr.Wrap(apperr.Join(errs...), apperr.CodeInvalidInput,
 			"invalid tool manifest")
 	}
-	pre, err := ProjectToolsByCategory(tools, CategoryPrerequisite)
+	pre, err := ProjectToolsByCategory(tools, types.CategoryPrerequisite)
 	if err != nil {
 		return nil, err
 	}
-	req, err := ProjectToolsByCategory(tools, CategoryRequired)
+	req, err := ProjectToolsByCategory(tools, types.CategoryRequired)
 	if err != nil {
 		return nil, err
 	}
-	opt, err := ProjectToolsByCategory(tools, CategoryOptional)
+	opt, err := ProjectToolsByCategory(tools, types.CategoryOptional)
 	if err != nil {
 		return nil, err
 	}
