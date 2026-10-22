@@ -6,6 +6,20 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.18] - 2026-10-21
+
+Python: unchanged (`techai-webutils` 0.6.1); Python has no repository entity cache yet.
+
+### Fixed
+
+- `repository.Cache` inside a transaction (`interfaces.InTx`): `Get` and `Exists` read the
+  store and never fill or read the cache (a fill could cache a row that never commits, a
+  hit could predate the transaction's own writes, and the shared miss read could hand an
+  uncommitted row to a reader outside the transaction); `Create` primes the cache only
+  after the commit (`interfaces.RegisterAfterCommit`); `Update` and `Delete` evict at once
+  and again after the commit, so a reader that raced the write cannot re-cache the
+  pre-commit row for the TTL. Outside a transaction nothing changes.
+
 ## [0.0.17] - 2026-10-20
 
 Python: unchanged (`techai-webutils` 0.6.1); the repository tooling substrate is Go-only for now
