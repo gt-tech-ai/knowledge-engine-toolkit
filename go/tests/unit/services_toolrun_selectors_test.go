@@ -1,0 +1,131 @@
+package unit_test
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	clientcodebase "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase"
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/toolrun/selectors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
+)
+
+// memoryCodebase returns the memory-kind codebase over files.
+func memoryCodebase(t *testing.T, files map[string]string) interfaces.Codebase {
+	t.Helper()
+	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
+		clientcodebase.Deps{Decorations: fixtures.Decorations(), Files: files})
+	require.NoError(t, err)
+	return cb
+}
+
+// selectWith runs the selector kind over cb.
+func selectWith(
+	t *testing.T,
+	kind string,
+	deps selectors.Deps,
+	cb interfaces.Codebase,
+	spec types.TargetSpec,
+) []string {
+	t.Helper()
+	sel, err := selectors.NewFromConfig(kind, deps)
+	require.NoError(t, err)
+	got, err := sel.Select(t.Context(), cb, spec)
+	require.NoError(t, err)
+	return got
+}
+
+// TestToolrunSelectors_Kinds tests every target selector kind.
+//
+// Why this test is important:
+//   - The targets decide what a tool runs over: a missed module goes unlinted, and an
+//     extra target (a module with no Go code, a heredoc Dockerfile) fails the run for
+//     a reason unrelated to the code.
+//
+// What it tests:
+//   - files filters by glob and drops heredoc Dockerfiles under SkipHeredoc;
+//     go_modules reads go.work and, under WithPackages, drops a module whose only Go
+//     file belongs to a nested module; python_projects lists pyproject.toml
+//     directories (root included); ts_workspace follows pnpm-workspace.yaml with an
+//     exclusion and yields nothing without one; staged_files asks git with the glob.
+func TestToolrunSelectors_Kinds(t *testing.T) {
+	t.Parallel()
+	cb := memoryCodebase(t, map[string]string{
+		"go.work":  "go 1.27\n\nuse (\n\t./a\n\t./b\n\t./b/inner\n)\n",
+		"a/go.mod": "module a\n", "a/a.go": "package a\n",
+		"b/go.mod": "module b\n", "b/inner/go.mod": "module inner\n",
+		"b/inner/i.go":          "package inner\n",
+		"docker/api/Dockerfile": "FROM x\nRUN echo hi\n",
+		"docker/web/Dockerfile": "FROM x\nRUN <<EOF\necho\nEOF\n",
+		"pyproject.toml":        "[project]\n",
+		"py/svc/pyproject.toml": "[project]\n",
+		"pnpm-workspace.yaml":   "packages:\n  - apps/*\n  - '!apps/old'\n",
+		"apps/web/package.json": "{}",
+		"apps/old/package.json": "{}",
+		"apps/docs/README.md":   "no package\n",
+	})
+	none := selectors.Deps{}
+
+	assert.Equal(
+		t,
+		[]string{"docker/api/Dockerfile", "docker/web/Dockerfile"},
+		selectWith(
+			t,
+			selectors.KindFiles,
+			none,
+			cb,
+			types.TargetSpec{Glob: "docker/*/Dockerfile"},
+		),
+	)
+	assert.Equal(t, []string{"docker/api/Dockerfile"},
+		selectWith(t, selectors.KindFiles, none, cb,
+			types.TargetSpec{Glob: "docker/*/Dockerfile", SkipHeredoc: true}))
+	assert.Equal(t, []string{"a", "b", "b/inner"},
+		selectWith(t, selectors.KindGoModules, none, cb, types.TargetSpec{}))
+	assert.Equal(
+		t,
+		[]string{"a", "b/inner"},
+		selectWith(
+			t,
+			selectors.KindGoModules,
+			none,
+			cb,
+			types.TargetSpec{WithPackages: true},
+		),
+	)
+	assert.Equal(t, []string{".", "py/svc"},
+		selectWith(t, selectors.KindPythonProjects, none, cb, types.TargetSpec{}))
+	assert.Equal(t, []string{"apps/web"},
+		selectWith(t, selectors.KindTSWorkspace, none, cb, types.TargetSpec{}))
+	assert.Empty(t, selectWith(t, selectors.KindTSWorkspace, none,
+		memoryCodebase(t, map[string]string{"a.ts": ""}), types.TargetSpec{}))
+
+	git := mocks.NewMockGitOps(gomock.NewController(t))
+	git.EXPECT().StagedFiles(gomock.Any(), "/repo", []string{"*.go"}).
+		Return([]string{"z.go", "a.go"}, nil)
+	assert.Equal(t, []string{"a.go", "z.go"},
+		selectWith(t, selectors.KindStagedFiles, selectors.Deps{Git: git, Root: "/repo"},
+			cb, types.TargetSpec{Glob: "*.go"}))
+}
+
+// TestToolrunSelectors_Unknown tests the factory's failures.
+//
+// Why this test is important:
+//   - A typo in a manifest row must fail when the row is loaded, not select nothing
+//     and report a clean run.
+//
+// What it tests:
+//   - An unknown kind and staged_files without git operations are INVALID_INPUT.
+func TestToolrunSelectors_Unknown(t *testing.T) {
+	t.Parallel()
+	_, err := selectors.NewFromConfig("go_module", selectors.Deps{})
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+	_, err = selectors.NewFromConfig(selectors.KindStagedFiles, selectors.Deps{})
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}

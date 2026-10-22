@@ -5,9 +5,17 @@
 // tests but does not check them for drift, so regenerate and commit them whenever
 // a mocked interface changes; local runs use the committed files.
 //go:generate mockgen -destination=mock_analytics.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces AnalyticsStore,AnalyticsCompactor,RowStream
+//go:generate mockgen -destination=mock_aws_bedrock.go -package=mocks -mock_names=API=MockAWSBedrockAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/bedrock API
+//go:generate mockgen -destination=mock_aws_iam.go -package=mocks -mock_names=API=MockAWSIAMAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/iam API
+//go:generate mockgen -destination=mock_aws_route53.go -package=mocks -mock_names=API=MockAWSRoute53API github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/route53 API
+//go:generate mockgen -destination=mock_aws_secretsmanager.go -package=mocks -mock_names=API=MockAWSSecretsManagerAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/secretsmanager API
+//go:generate mockgen -destination=mock_aws_servicequotas.go -package=mocks -mock_names=API=MockAWSServiceQuotasAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/servicequotas API
+//go:generate mockgen -destination=mock_aws_ses.go -package=mocks -mock_names=API=MockAWSSESAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/ses API
+//go:generate mockgen -destination=mock_aws_sts.go -package=mocks -mock_names=API=MockAWSSTSAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/sts API
 //go:generate mockgen -destination=mock_bulkhead.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Bulkhead,KeyedLimiter
 //go:generate mockgen -destination=mock_cache.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ByteCache
 //go:generate mockgen -destination=mock_cache_invalidator.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CacheInvalidator
+//go:generate mockgen -destination=mock_codebase.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Codebase,GoView,YAMLView,CodebaseSource,Renderer
 //go:generate mockgen -destination=mock_crypto.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Encryptor
 //go:generate mockgen -destination=mock_cql.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CQLSession,CQLQuery,CQLIter,CQLBatch
 //go:generate mockgen -destination=mock_circuit_breaker.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CircuitBreaker
@@ -17,10 +25,16 @@
 //go:generate mockgen -destination=mock_connector.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ConnectorSource,SourceBuilder
 //go:generate mockgen -destination=mock_deadletter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces DeadLetterBackend
 //go:generate mockgen -destination=mock_dedup.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Deduplicator
+//go:generate mockgen -destination=mock_docker.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces DockerClient
 //go:generate mockgen -destination=mock_event.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/events Event
 //go:generate mockgen -destination=mock_events.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces EventPublisher
 //go:generate mockgen -destination=mock_exec_job.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces AnyJob
 //go:generate mockgen -destination=mock_execution.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ToolSpec
+//go:generate mockgen -destination=mock_generator.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Generator
+//go:generate mockgen -destination=mock_git_client.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces GitClient
+//go:generate mockgen -destination=mock_git_ops.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces GitOps
+//go:generate mockgen -destination=mock_helm.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces HelmClient
+//go:generate mockgen -destination=mock_kubectl.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces KubectlClient
 //go:generate mockgen -destination=mock_leader.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces LeaderElector
 //go:generate mockgen -destination=mock_lifecycle.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Lifecycle
 //go:generate mockgen -destination=mock_lock.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces DistributedLock,Locker
@@ -32,12 +46,15 @@
 // console) depends on, mocked in place of a Prometheus server.
 //go:generate mockgen -destination=mock_metrics_querier.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces MetricsQuerier
 //go:generate mockgen -destination=mock_observer.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ExecutionObserver
-//go:generate mockgen -destination=mock_op_service.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces OpService
+//go:generate mockgen -destination=mock_ops.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Operation,Reservation
 //go:generate mockgen -destination=mock_outbox.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces OutboxStore,OutboxSink
 //go:generate mockgen -destination=mock_outbox_s3_api.go -package=mocks -mock_names=API=MockOutboxS3API github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/s3 API
 //go:generate mockgen -destination=mock_outbox_sqs_api.go -package=mocks -mock_names=API=MockOutboxSQSAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/sqs API
 //go:generate mockgen -destination=mock_pipeline.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Pipeline
+//go:generate mockgen -destination=mock_probe.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Probe,ProbeSet
+//go:generate mockgen -destination=mock_process.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Supervisor,ProcessHandle
 //go:generate mockgen -destination=mock_prometheus_http_doer.go -package=mocks -mock_names=HTTPDoer=MockPrometheusHTTPDoer github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/http HTTPDoer
+//go:generate mockgen -destination=mock_prompter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Prompter
 //go:generate mockgen -destination=mock_rate_limiter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces RateLimiter
 //go:generate mockgen -destination=mock_reader.go -package=mocks io ReadCloser
 //go:generate mockgen -destination=mock_replaybuffer.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ReplayBuffer
@@ -54,6 +71,9 @@
 //go:generate mockgen -destination=mock_store.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Store
 //go:generate mockgen -destination=mock_stream.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Stream
 //go:generate mockgen -destination=mock_stream_conn.go -package=mocks connectrpc.com/connect StreamingHandlerConn
+//go:generate mockgen -destination=mock_terraform.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces TerraformClient
+//go:generate mockgen -destination=mock_toolchain.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain Downloader,PathResolver
+//go:generate mockgen -destination=mock_toolrun.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces StepCache,ToolRunner,TargetSelector,Parser
 //go:generate mockgen -destination=mock_tracer.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Tracer,Span
 //go:generate mockgen -destination=mock_workflow.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Workflow
 //go:generate mockgen -destination=mock_sts_assume_role.go -package=mocks github.com/aws/aws-sdk-go-v2/credentials/stscreds AssumeRoleAPIClient
