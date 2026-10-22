@@ -30,6 +30,12 @@ rules:
         - "**/helpers/env.go"
         # Subprocess env passthrough (os.Environ to inherit the parent env for exec).
         - "**/foundation/system/runner.go"
+        # The process Supervisor passes the parent env through to the processes it starts.
+        - "**/clients/process/exec/exec.go"
+        # The toolchain installer resolves go install's bin dir (GOBIN / GOPATH /
+        # LOCALAPPDATA) and extends PATH so a fresh install is found: the whole contract
+        # of that client.
+        - "**/clients/toolchain/path.go"
         # Deploy-SHA bootstrap read the logger binds at construction.
         - "**/foundation/logger/zap/logger.go"
         # The env secrets backend: resolving a secret from a named environment

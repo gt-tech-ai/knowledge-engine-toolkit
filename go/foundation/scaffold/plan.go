@@ -8,7 +8,8 @@ import (
 	"context"
 	iofs "io/fs"
 	"strings"
-	"text/template"
+	// The templates render source and config files, never HTML, so text/template is correct.
+	"text/template" // nosemgrep: import-text-template
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"

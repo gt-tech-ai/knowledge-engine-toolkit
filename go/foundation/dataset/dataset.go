@@ -39,7 +39,9 @@ func Load(fsys fs.FS, dir string) (*Dataset, error) {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
 			continue
 		}
-		if err := d.add(fsys, path.Join(dir, e.Name())); err != nil {
+		// io/fs paths are always slash-separated, so path (not filepath) is correct here.
+		name := path.Join(dir, e.Name()) // nosemgrep: use-filepath-join
+		if err := d.add(fsys, name); err != nil {
 			return nil, err
 		}
 	}
