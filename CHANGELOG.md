@@ -34,9 +34,52 @@ Python: unchanged (`techai-webutils` 0.6.1).
   matching failed or warned step; `Config.Interactive` and `Config.Color`.
 - `types.NewStep`, `types.OneStep`, `types.CheckStep`: single-step result builders.
 - `errors.SplitCode`: splits an `AppError`'s `"<CODE>: <rest>"` text.
+- `dataset.(*Dataset).Decode`: decodes every section into the matching field of one
+  struct (yaml tag name, else the lower-cased field name), strictly; a key with no field
+  or a field the section's type does not declare is `INVALID_INPUT` naming the file.
+- `clients/prompt`: the confirmation `Prompter` on `client.Kinds`: `deny` (the default,
+  refuses with the `--yes` guidance) and `tty` (asks on injected streams). Built
+  undecorated, since a timeout or retry would cancel or repeat a question.
+- `helm.BuildDeps`: runs `helm dependency build` once per chart per `codebase.Snapshot`,
+  sharing the result with concurrent callers and with the `Renderer`.
+- `infra.S3Config.SSEKMSKeyID` (`S3_SSE_KMS_KEY_ID`): every s3 `PutObject` and multipart
+  create encrypts with that KMS key (`aws:kms`).
+- `session.Expiring` and `session.ExpirySkew`: a cached credential that implements
+  `Expiring` is resolved again once it is within five minutes of expiry.
+
+- `clients/aws/account`: an environment's AWS session verified against the account it
+  must run in, on `client.Kinds` (`stub`, the default, and `sdk`). The `Resolver` loads
+  the ambient chain or the target's shared profile (`forceProfile` forces it), pins the
+  retrieved credentials, asserts the account through the decorated `clients/aws/sts`
+  client and caches the `Session` until it nears expiry; a wrong account is
+  `INVALID_INPUT`, an unusable session `UNAUTHORIZED` naming the target's `LoginHint`.
+  `UpsertProfile` writes an SSO profile into an owner-fenced block of the shared AWS
+  config (refusing a same-named stanza outside it) and `ConfigPath` resolves that file.
+- `secrets.GuardDomain` (refuses a credential whose domain is empty or not the expected
+  one) and `secrets.ProjectEnv` (a secret's fields as sorted `VAR=value` child-env
+  entries, skipping a `NOT_FOUND` field).
+- `services/probe/readiness`: read-only `Probe[readiness.Target]`s that a cloud
+  deployment's prerequisites are in place: `Secrets`, `DNS`, `SES`, `Bedrock`
+  (`Target.NoInvoke` skips its billed call and warns `readiness.Unverified`), `Quotas`,
+  `Registry`, `OIDC` and `Cluster`; `readiness.IsUnverified` reads such a warning.
+- `clients/chaos`: the `FaultInjector` on `client.Kinds` (`stub`, the default, and
+  `chaos-mesh`, which creates and deletes `PodChaos` / `NetworkChaos` resources with
+  kubectl, labeled with `Config.ManagedBy`), plus `types.Fault`, `FaultTarget`,
+  `FaultSpec` and the `FaultPodKill`, `FaultNetworkLatency` and `FaultNetworkLoss`
+  types.
+- `clients/planstore`: the saved-plan `PlanStore` on `client.Kinds` (`local`, the
+  default, and `object`, which keeps each unit's plan in a `StorageClient` behind a
+  SHA-256 manifest and refuses, on `Load`, another owner's manifest, a key outside the
+  set's prefix, a mismatched digest and an expired object), over `types.PlanSet`; and
+  `planstore.FindPlans`.
+- `interfaces.HTTPDoer` and `interfaces.NSResolver`, and the generated mocks
+  `MockHTTPDoer`, `MockNSResolver` and `MockFaultInjector`.
 
 ### Changed
 
+- `helm/exec.(*Client).DependencyBuild` runs under a private repository cache and config,
+  removed on return, so concurrent builds of different charts no longer race on helm's
+  shared per-user index files.
 - `report` line and table output: the line reporter prints a status line per phase, a
   failure block with each step's actionable lines and hint, and `"n ok, … (elapsed)"`;
   its per-step ticks need `Config.Interactive` (they were always on). The table reporter
@@ -47,6 +90,13 @@ Python: unchanged (`techai-webutils` 0.6.1).
   `toolchain.ToolEntry`, `InstallMethodEntry`, `AssetEntry`, `InstallKind` (and its
   `InstallKind*` values), `ToolCategory` (and `Category*`), `VersionParseFirst`,
   `VersionParseGo` and `ValidateToolEntries` with the same names in `types`.
+- `storage/s3.NewClient` and `NewClientFromAPI` take the SSE-KMS key id as a new last
+  argument. Migration: pass `""` for unencrypted writes.
+
+### Fixed
+
+- `dataset`: a folded (`>`) scalar with more-indented lines decodes to the string the file
+  holds; re-encoding a section had re-folded it with an extra blank line.
 
 ## [0.0.18] - 2026-10-21
 

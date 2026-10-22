@@ -159,19 +159,27 @@ type s3Client struct {
 	// own endpoint. See S3Config.PublicEndpoint.
 	presignEndpoint string
 
+	// sseKMSKeyID, when non-empty, is the KMS key every write encrypts with (SSE-KMS).
+	sseKMSKeyID string
+
 	// threshold is the object size (bytes) above which multipart upload is used.
 	threshold int64
 }
 
 // NewClient wraps a concrete aws-sdk-go-v2 S3 client as a StorageClient, building
 // the presign client from it. presignEndpoint (may be empty) is the browser-reachable
-// host baked into presigned URLs instead of the in-cluster endpoint.
-func NewClient(c *s3.Client, presignEndpoint string) interfaces.StorageClient {
+// host baked into presigned URLs instead of the in-cluster endpoint. sseKMSKeyID (may
+// be empty) is the KMS key every write encrypts with.
+func NewClient(
+	c *s3.Client,
+	presignEndpoint, sseKMSKeyID string,
+) interfaces.StorageClient {
 	return &s3Client{
 		api:             c,
 		presign:         s3.NewPresignClient(c),
 		presignEndpoint: presignEndpoint,
 		threshold:       defaultMultipartThreshold,
+		sseKMSKeyID:     sseKMSKeyID,
 	}
 }
 
@@ -195,13 +203,19 @@ func (c *s3Client) presignOpts(expirySeconds int) func(*s3.PresignOptions) {
 // PresignURL/PresignPutURL are not reachable on the mock path — they are unit-tested
 // offline through the real newS3Client path (NewFromConfig) and live against MinIO in
 // the integration suite. A non-positive threshold falls back to the default threshold.
-func NewClientFromAPI(api S3API, threshold int64) interfaces.StorageClient {
+// sseKMSKeyID (may be empty) is the KMS key every write encrypts with.
+func NewClientFromAPI(
+	api S3API,
+	threshold int64,
+	sseKMSKeyID string,
+) interfaces.StorageClient {
 	if threshold <= 0 {
 		threshold = defaultMultipartThreshold
 	}
 	return &s3Client{
-		api:       api,
-		threshold: threshold,
+		api:         api,
+		threshold:   threshold,
+		sseKMSKeyID: sseKMSKeyID,
 	}
 }
 
@@ -261,6 +275,15 @@ func classifyBody(
 	}
 }
 
+// sseKMS returns the server-side-encryption fields of every write: aws:kms and the key
+// id when a key is configured, else the zero values (no encryption requested).
+func (c *s3Client) sseKMS() (mode types.ServerSideEncryption, keyID *string) {
+	if c.sseKMSKeyID == "" {
+		return "", nil
+	}
+	return types.ServerSideEncryptionAwsKms, aws.String(c.sseKMSKeyID)
+}
+
 // putSingle stores a small object in one request.
 func (c *s3Client) putSingle(
 	ctx context.Context,
@@ -268,12 +291,14 @@ func (c *s3Client) putSingle(
 	body io.Reader,
 	contentType string,
 ) error {
-	_, err := c.api.PutObject(ctx, &s3.PutObjectInput{
+	in := &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
 		Key:         aws.String(key),
 		Body:        body,
 		ContentType: aws.String(contentType),
-	})
+	}
+	in.ServerSideEncryption, in.SSEKMSKeyId = c.sseKMS()
+	_, err := c.api.PutObject(ctx, in)
 	if err != nil {
 		return apperr.Wrap(
 			err,
@@ -297,11 +322,13 @@ func (c *s3Client) putMultipart(
 	body io.Reader,
 	contentType string,
 ) error {
-	created, err := c.api.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{
+	createIn := &s3.CreateMultipartUploadInput{
 		Bucket:      aws.String(bucket),
 		Key:         aws.String(key),
 		ContentType: aws.String(contentType),
-	})
+	}
+	createIn.ServerSideEncryption, createIn.SSEKMSKeyId = c.sseKMS()
+	created, err := c.api.CreateMultipartUpload(ctx, createIn)
 	if err != nil {
 		return apperr.Wrap(
 			err,

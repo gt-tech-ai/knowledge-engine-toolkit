@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -34,7 +35,9 @@ const helmManifest = "---\n# Source: api/templates/deploy.yaml\n" +
 // What it tests:
 //   - template passes release, chart, namespace, values files in order and sorted
 //     --set flags in the root; an empty release is the chart's base name; dependency
-//     build and lint run their subcommands; a failure is UPSTREAM.
+//     build runs with a private repository cache and config (so concurrent builds of
+//     different charts never share helm's per-user index files), removed afterwards;
+//     lint runs its subcommand; a failure is UPSTREAM.
 func TestClientsHelm_Exec(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -55,10 +58,19 @@ func TestClientsHelm_Exec(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "kind: X\n", string(out))
 
+	var cacheDir string
 	r.EXPECT().
-		RunBuffered(gomock.Any(), "/repo", "helm", "dependency", "build", "charts/api").
-		Return(interfaces.CmdResult{})
+		RunBuffered(gomock.Any(), "/repo", "helm", "dependency", "build", "charts/api",
+			"--repository-cache", gomock.Any(), "--repository-config", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, _ string, args ...string) interfaces.CmdResult {
+			cacheDir = args[4]
+			assert.DirExists(t, cacheDir, "the private cache exists during the build")
+			assert.Equal(t, filepath.Dir(cacheDir), filepath.Dir(args[6]),
+				"cache and config share one private home")
+			return interfaces.CmdResult{}
+		})
 	require.NoError(t, c.DependencyBuild(ctx, "charts/api"))
+	assert.NoDirExists(t, filepath.Dir(cacheDir), "the private home is removed")
 
 	r.EXPECT().RunBuffered(gomock.Any(), "/repo", "helm", "lint", "charts/api").
 		Return(exitWith(1, "Error: chart metadata is missing"))

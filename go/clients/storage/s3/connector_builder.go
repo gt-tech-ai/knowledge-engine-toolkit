@@ -55,6 +55,6 @@ func NewConnectorClientBuilder(base infra.S3Config) ConnectorClientBuilder {
 				"connector s3: build client",
 			)
 		}
-		return NewClient(client, ""), nil
+		return NewClient(client, "", ""), nil
 	}
 }

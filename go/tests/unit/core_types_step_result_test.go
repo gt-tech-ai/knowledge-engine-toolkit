@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
@@ -32,7 +33,7 @@ func TestStepBuilders(t *testing.T) {
 		types.OneStep("y", types.StatusSkip, nil))
 
 	results, err := types.CheckStep("lint", nil)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, types.StepResults{{Name: "lint", Status: types.StatusPass}}, results)
 
 	results, err = types.CheckStep("lint", boom)

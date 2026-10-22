@@ -40,7 +40,7 @@ func minioS3Client(endpoint string) connectors3.S3ClientBuilder {
 		if err != nil {
 			return nil, err
 		}
-		return storages3.NewClient(client, ""), nil
+		return storages3.NewClient(client, "", ""), nil
 	}
 }
 

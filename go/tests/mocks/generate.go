@@ -15,6 +15,8 @@
 //go:generate mockgen -destination=mock_bulkhead.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Bulkhead,KeyedLimiter
 //go:generate mockgen -destination=mock_cache.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ByteCache
 //go:generate mockgen -destination=mock_cache_invalidator.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CacheInvalidator
+//go:generate mockgen -destination=mock_net.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces HTTPDoer,NSResolver
+//go:generate mockgen -destination=mock_fault_injector.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces FaultInjector
 //go:generate mockgen -destination=mock_codebase.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Codebase,GoView,YAMLView,CodebaseSource,Renderer
 //go:generate mockgen -destination=mock_crypto.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Encryptor
 //go:generate mockgen -destination=mock_cql.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CQLSession,CQLQuery,CQLIter,CQLBatch

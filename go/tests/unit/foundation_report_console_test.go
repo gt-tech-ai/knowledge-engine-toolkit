@@ -313,7 +313,11 @@ func TestConsole_StepSummary(t *testing.T) {
 func TestConsole_Groups(t *testing.T) {
 	t.Parallel()
 
-	gha, out := newTestConsole(t, report.ConsoleConfig{GitHubActions: true}, report.LevelQuiet)
+	gha, out := newTestConsole(
+		t,
+		report.ConsoleConfig{GitHubActions: true},
+		report.LevelQuiet,
+	)
 	gha.Groupf("Unit %s", "Tests")
 	gha.EndGroup()
 	assert.Equal(t, "::group::Unit Tests\n::endgroup::\n", out.String())

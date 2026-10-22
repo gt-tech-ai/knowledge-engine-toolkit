@@ -43,10 +43,7 @@ func (r *renderer) Render(
 	}
 	return r.snap.Memo(ctx, "helm|template|"+string(key),
 		func(ctx context.Context) ([]types.Object, error) {
-			if _, err := r.snap.Memo(ctx, "helm|deps|"+spec.ChartDir,
-				func(ctx context.Context) (struct{}, error) {
-					return struct{}{}, r.helm.DependencyBuild(ctx, spec.ChartDir)
-				}); err != nil {
+			if err := BuildDeps(ctx, r.helm, r.snap, spec.ChartDir); err != nil {
 				return nil, err
 			}
 			out, err := r.helm.Template(ctx, spec)

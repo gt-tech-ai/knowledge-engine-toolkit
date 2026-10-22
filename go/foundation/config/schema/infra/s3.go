@@ -39,6 +39,11 @@ type S3Config struct {
 	// SecretAccessKey is the static secret key for MinIO/dev. Empty for Kind "s3".
 	SecretAccessKey string `mapstructure:"secret_access_key" envalias:"S3_SECRET_ACCESS_KEY"`
 
+	// SSEKMSKeyID, when set, is the KMS key every write encrypts with (SSE-KMS): each
+	// PutObject and multipart create carries ServerSideEncryption aws:kms and this key
+	// id, for a bucket whose policy requires it. Empty leaves writes unchanged.
+	SSEKMSKeyID string `mapstructure:"sse_kms_key_id" envalias:"S3_SSE_KMS_KEY_ID"`
+
 	// ForcePathStyle uses path-style addressing (bucket in the URL path) instead
 	// of virtual-host addressing. Required for MinIO; false for AWS S3.
 	ForcePathStyle bool `mapstructure:"force_path_style" envalias:"S3_FORCE_PATH_STYLE"`

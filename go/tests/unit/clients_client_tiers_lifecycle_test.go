@@ -135,7 +135,7 @@ func TestStatelessClients_LifecycleNoOps(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	s3Client := storages3.NewClientFromAPI(mocks.NewMockS3API(ctrl), 0)
+	s3Client := storages3.NewClientFromAPI(mocks.NewMockS3API(ctrl), 0, "")
 
 	lifecycles := map[string]interfaces.Lifecycle{
 		"sqs-publisher": pub,

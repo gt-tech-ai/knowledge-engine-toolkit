@@ -4,10 +4,13 @@ package exec
 import (
 	"context"
 	"maps"
+	"os"
 	"path"
+	"path/filepath"
 	"slices"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -42,10 +45,25 @@ func (c *Client) Template(ctx context.Context, spec types.RenderSpec) ([]byte, e
 	)
 }
 
-// DependencyBuild runs `helm dependency build <chart>`.
+// DependencyBuild runs `helm dependency build <chart>` under a private repository cache
+// and config, removed on return. helm's default per-user repository cache is one shared
+// tree, so two concurrent builds of different charts race on its index files (one
+// truncates an index while the other reads it, failing with "empty index.yaml file");
+// a private home per call makes each build independent.
 func (c *Client) DependencyBuild(ctx context.Context, chartDir string) error {
-	_, err := client.Output(
-		c.runner.RunBuffered(ctx, c.root, "helm", "dependency", "build", chartDir),
+	home, err := os.MkdirTemp("", "helm-dep-")
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "create a helm home for "+chartDir)
+	}
+	defer func() { _ = os.RemoveAll(home) }()
+	cache := filepath.Join(home, "cache")
+	if err := os.MkdirAll(cache, 0o750); err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "create a helm cache for "+chartDir)
+	}
+	_, err = client.Output(
+		c.runner.RunBuffered(ctx, c.root, "helm", "dependency", "build", chartDir,
+			"--repository-cache", cache,
+			"--repository-config", filepath.Join(home, "repositories.yaml")),
 		"helm dependency build")
 	return err
 }
