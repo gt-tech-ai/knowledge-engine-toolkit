@@ -91,6 +91,13 @@ type RunOptions struct {
 
 	// Strict fails a run whose tool is missing, whatever its Missing says.
 	Strict bool
+
+	// DryRun reports each mutating procedure step's command instead of running it;
+	// read-only steps still run, so their captures feed later conditions.
+	DryRun bool
+
+	// Yes answers every procedure confirmation with yes.
+	Yes bool
 }
 
 // Selection picks tool runs: a run matches when its verb is in Verbs, it carries every

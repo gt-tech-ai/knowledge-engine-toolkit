@@ -107,6 +107,15 @@ Python: unchanged (`techai-webutils` 0.6.1).
   list of findings) and `go` (a product probe); `each` expands a row over a registered
   `Expander`. `interfaces.Guard` is a `Probe[Codebase]` with `Meta`.
 
+- `services/procedure`: procedures from data. A `types.Procedure` (inputs, CEL-derived
+  vars, steps) runs tool steps with `{name}` / `{name...}` / `${expr}` arguments and
+  `capture` (`text`, `lines`, `json`, `exit`), `when` and `each` (CEL), `parallel`,
+  `call`, `confirm` (through the `Prompter`; refusal is `CANCELED`) and registered Go
+  `StepFunc`s; `advisory` failures continue. `interfaces.ProcedureRunner` runs one by
+  name and `suite.Procedures` makes them suite entries. `RunOptions.DryRun` reports each
+  `mutating` step's command without running it; `RunOptions.Yes` answers every
+  confirmation.
+
 ### Changed
 
 - `interfaces.ToolRunner.Run` takes a `types.RunOptions` in place of its `fix bool`.

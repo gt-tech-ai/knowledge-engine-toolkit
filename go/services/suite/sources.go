@@ -125,3 +125,35 @@ func Guards(gs []interfaces.Guard, cb interfaces.Codebase) []Entry {
 	}
 	return out
 }
+
+// KindProcedure marks a procedure entry.
+const KindProcedure = "procedure"
+
+// Procedures returns one entry per procedure, run by eng with input; verb is the command
+// that owns them. A procedure's group is its Group, else its Name.
+func Procedures(
+	eng interfaces.ProcedureRunner,
+	procs []types.Procedure,
+	verb string,
+	input map[string]any,
+) []Entry {
+	out := make([]Entry, 0, len(procs))
+	for i := range procs {
+		p := procs[i]
+		group := p.Group
+		if group == "" {
+			group = p.Name
+		}
+		out = append(out, Entry{
+			Name: p.Name, Verb: verb, Group: group, Kind: KindProcedure,
+			Job: func(env Env) interfaces.AnyJob {
+				return Build(env, verb, p.Name, group, func(
+					ctx context.Context, _ interfaces.CommandRunner, _ string,
+				) (types.StepResults, error) {
+					return eng.Run(ctx, p.Name, input, env.Opts)
+				})
+			},
+		})
+	}
+	return out
+}

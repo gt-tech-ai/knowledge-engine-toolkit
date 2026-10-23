@@ -115,7 +115,12 @@ func TestServicesToolrun_MissingAndUnknownTool(t *testing.T) {
 		types.ToolRun{Name: "ruff", Verb: "lint", Tool: "ruff", Args: []string{"check"}},
 		types.RunOptions{})
 	require.NoError(t, err)
-	assert.Equal(t, types.StatusPass, res[0].Status, "a prefixed tool needs only its prefix")
+	assert.Equal(
+		t,
+		types.StatusPass,
+		res[0].Status,
+		"a prefixed tool needs only its prefix",
+	)
 }
 
 // TestServicesToolrun_EachTargetFansOut tests per-target runs.
