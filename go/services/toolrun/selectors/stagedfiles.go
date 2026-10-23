@@ -17,18 +17,15 @@ type stagedFiles struct {
 	root string
 }
 
-// Select returns the staged files matching spec.Glob (every staged file when empty),
+// Select returns the staged files matching spec.Glob or spec.Globs (every staged file
+// when both are empty),
 // sorted.
 func (s stagedFiles) Select(
 	ctx context.Context,
 	_ interfaces.Codebase,
 	spec types.TargetSpec,
 ) ([]string, error) {
-	var patterns []string
-	if spec.Glob != "" {
-		patterns = []string{spec.Glob}
-	}
-	out, err := s.git.StagedFiles(ctx, s.root, patterns)
+	out, err := s.git.StagedFiles(ctx, s.root, globs(spec))
 	if err != nil {
 		return nil, err
 	}

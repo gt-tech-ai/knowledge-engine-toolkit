@@ -168,3 +168,40 @@ func TestRunnerBuilder_DryRunSkipsExecution(t *testing.T) {
 	require.NoError(t, r.RequireTool("go", ""))
 	assert.NotEmpty(t, logs, "dry-run logs what would execute")
 }
+
+// TestRunnerBuilder_WithEnvAddsEnvToEveryRun tests the env decorator.
+//
+// Why this test is important:
+//   - A gate that must run its commands with extra environment (preflight runs the
+//     tests with CI's env) decorates the runner once instead of threading env through
+//     every call; a call's own env must still win over the decoration's.
+//
+// What it tests:
+//   - Run and RunBuffered become their WithEnv forms carrying the decoration's env.
+//   - RunWithEnv and RunBufferedWithEnv get the decoration's env, then the call's own.
+//   - Exists and RequireTool delegate unchanged.
+func TestRunnerBuilder_WithEnvAddsEnvToEveryRun(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	inner := mocks.NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+	ci := []string{"CI=true"}
+	both := []string{"CI=true", "CI=false"}
+	inner.EXPECT().RunWithEnv(ctx, "d", ci, "go", "test").Return(nil)
+	inner.EXPECT().RunWithEnv(ctx, "d", both, "go", "test").Return(nil)
+	inner.EXPECT().RunBufferedWithEnv(ctx, "d", ci, "go", "vet").
+		Return(system.CmdResult{Stdout: []byte("a")})
+	inner.EXPECT().RunBufferedWithEnv(ctx, "d", both, "go", "vet").
+		Return(system.CmdResult{Stdout: []byte("b")})
+	inner.EXPECT().Exists("go").Return(true)
+	inner.EXPECT().RequireTool("go", "brew install go").Return(nil)
+
+	r := system.NewBuilder(inner).WithEnv("CI=true").Build()
+	require.NoError(t, r.Run(ctx, "d", "go", "test"))
+	require.NoError(t, r.RunWithEnv(ctx, "d", []string{"CI=false"}, "go", "test"))
+	assert.Equal(t, "a", string(r.RunBuffered(ctx, "d", "go", "vet").Stdout))
+	assert.Equal(t, "b", string(
+		r.RunBufferedWithEnv(ctx, "d", []string{"CI=false"}, "go", "vet").Stdout))
+	assert.True(t, r.Exists("go"))
+	require.NoError(t, r.RequireTool("go", "brew install go"))
+}

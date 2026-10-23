@@ -12,7 +12,8 @@ import (
 type LogFunc func(format string, args ...any)
 
 // Builder constructs a decorated CommandRunner using a fluent API.
-// Decorators are applied inside-out: base -> hook -> timeout -> logging -> dry-run.
+// Decorators are applied inside-out: base -> env -> hook -> timeout -> logging ->
+// dry-run.
 type Builder struct {
 	// base is the innermost runner that every decorator ultimately wraps.
 	base CommandRunner
@@ -22,6 +23,10 @@ type Builder struct {
 
 	// logf is the callback used by the logging and dry-run decorators; nil disables logging.
 	logf LogFunc
+
+	// env holds the KEY=VALUE entries added to every command; nil disables the env
+	// decorator.
+	env []string
 
 	// timeout is the per-command deadline; zero disables the timeout decorator.
 	timeout time.Duration
@@ -49,6 +54,14 @@ func (b *Builder) WithTimeout(d time.Duration) *Builder {
 	return b
 }
 
+// WithEnv adds an env decorator that runs every command with env (KEY=VALUE entries)
+// ahead of the call's own extra env, so a call's own entries win: Run and RunBuffered
+// become their WithEnv forms.
+func (b *Builder) WithEnv(env ...string) *Builder {
+	b.env = append(b.env, env...)
+	return b
+}
+
 // WithHook adds a hook decorator that fires CmdHook lifecycle callbacks
 // (OnStart, OnSuccess, OnFailure) around every command execution.
 func (b *Builder) WithHook(hook interfaces.CmdHook) *Builder {
@@ -64,10 +77,13 @@ func (b *Builder) WithDryRun(enabled bool) *Builder {
 }
 
 // Build constructs the decorated CommandRunner. Decorators are applied
-// inside-out: base -> hook -> timeout -> logging -> dry-run.
+// inside-out: base -> env -> hook -> timeout -> logging -> dry-run.
 func (b *Builder) Build() CommandRunner {
 	r := b.base
 
+	if len(b.env) > 0 {
+		r = &envRunner{inner: r, env: b.env}
+	}
 	if b.hook != nil {
 		r = &hookRunner{inner: r, hook: b.hook}
 	}
@@ -82,6 +98,69 @@ func (b *Builder) Build() CommandRunner {
 	}
 
 	return r
+}
+
+// ---------------------------------------------------------------------------
+// envRunner
+// ---------------------------------------------------------------------------
+
+// envRunner decorates a CommandRunner, adding env to every command it runs.
+type envRunner struct {
+	// inner runs the commands.
+	inner CommandRunner
+
+	// env holds the KEY=VALUE entries added to every command.
+	env []string
+}
+
+// with returns env followed by extra, so a command's own entries win.
+func (d *envRunner) with(extra []string) []string {
+	return append(append([]string{}, d.env...), extra...)
+}
+
+// Run runs the command with env added.
+func (d *envRunner) Run(ctx context.Context, dir, name string, args ...string) error {
+	return d.inner.RunWithEnv(ctx, dir, d.with(nil), name, args...)
+}
+
+// RunWithEnv runs the command with env, then extraEnv, added.
+func (d *envRunner) RunWithEnv(
+	ctx context.Context,
+	dir string,
+	extraEnv []string,
+	name string,
+	args ...string,
+) error {
+	return d.inner.RunWithEnv(ctx, dir, d.with(extraEnv), name, args...)
+}
+
+// RunBuffered runs the command with env added and its output captured.
+func (d *envRunner) RunBuffered(
+	ctx context.Context,
+	dir, name string,
+	args ...string,
+) CmdResult {
+	return d.inner.RunBufferedWithEnv(ctx, dir, d.with(nil), name, args...)
+}
+
+// RunBufferedWithEnv runs the command with env, then extraEnv, added and its output
+// captured.
+func (d *envRunner) RunBufferedWithEnv(
+	ctx context.Context,
+	dir string,
+	extraEnv []string,
+	name string,
+	args ...string,
+) CmdResult {
+	return d.inner.RunBufferedWithEnv(ctx, dir, d.with(extraEnv), name, args...)
+}
+
+// Exists delegates to the inner runner.
+func (d *envRunner) Exists(name string) bool { return d.inner.Exists(name) }
+
+// RequireTool delegates to the inner runner.
+func (d *envRunner) RequireTool(name, installHint string) error {
+	return d.inner.RequireTool(name, installHint)
 }
 
 // ---------------------------------------------------------------------------

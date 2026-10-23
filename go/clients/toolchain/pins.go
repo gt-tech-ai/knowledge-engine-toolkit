@@ -137,3 +137,31 @@ func buildInfo(out string) (pkg, version string) {
 	}
 	return pkg, version
 }
+
+// InstalledVersion identifies the build of tool on PATH, for keying cached results by
+// the tool that produced them: a Go binary's main package and module version from its
+// build info (`go version -m`), else the trimmed output of the tool's VersionCmd. It is
+// "" when the binary is not on PATH or neither source answers. It reads the binary,
+// never the catalog's pin, so a reinstall at another version changes it.
+func (i *Installer) InstalledVersion(
+	ctx context.Context,
+	root string,
+	tool *types.ToolDef,
+) string {
+	path, err := i.paths.LookPath(tool.Binary)
+	if err != nil {
+		return ""
+	}
+	res := i.runner.RunBuffered(ctx, root, "go", "version", "-m", path)
+	if pkg, ver := buildInfo(string(res.Stdout)); res.Err == nil && ver != "" {
+		return pkg + "@" + ver
+	}
+	if len(tool.VersionCmd) == 0 {
+		return ""
+	}
+	out := i.runner.RunBuffered(ctx, root, tool.VersionCmd[0], tool.VersionCmd[1:]...)
+	if out.Err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out.Stdout))
+}

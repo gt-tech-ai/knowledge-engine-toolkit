@@ -15,16 +15,13 @@ var heredocRe = regexp.MustCompile(`(?m)^\s*(COPY|RUN|ADD)\b[^\n]*<<`)
 // files is KindFiles.
 type files struct{}
 
-// Select returns the files matching spec.Glob.
+// Select returns the files matching spec.Glob or spec.Globs.
 func (files) Select(
 	ctx context.Context,
 	cb interfaces.Codebase,
 	spec types.TargetSpec,
 ) ([]string, error) {
-	sel := types.FileSelector{IncludeGenerated: true}
-	if spec.Glob != "" {
-		sel.Globs = []string{spec.Glob}
-	}
+	sel := types.FileSelector{IncludeGenerated: true, Globs: globs(spec)}
 	found, err := cb.Files(ctx, sel)
 	if err != nil {
 		return nil, err

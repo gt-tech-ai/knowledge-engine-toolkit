@@ -74,9 +74,31 @@ Python: unchanged (`techai-webutils` 0.6.1).
   `planstore.FindPlans`.
 - `interfaces.HTTPDoer` and `interfaces.NSResolver`, and the generated mocks
   `MockHTTPDoer`, `MockNSResolver` and `MockFaultInjector`.
+- `types.ToolRun.Group` (the step group; empty means the verb) and `ToolRun.Advisory` (a
+  failed invocation is a warning that never fails the run), and a repo-relative `Cwd`
+  (a run's fixed working directory under the root).
+- `types.RunOptions` (`Vars` for `{name}` placeholders in a run's args, `Fix`, `Strict`)
+  and `types.Selection`, with `toolrun.Select`: picks a suite's runs by verb, tags (all
+  of, any of, none of) and name.
+- `types.TargetSpec.Globs`, `Roots` and `Exclude`: extra file globs, and target filters
+  every selector kind applies (keep targets under the roots, drop those matching an
+  exclude glob).
+- `stepcache.IsOff`: reports the off (or nil) cache. The tool runner computes no step
+  key under it, so a cache-off run (CI) hashes no inputs and probes no tool version.
+- The `empty_output` tool-run parser: any output is a failure (a formatter's list of
+  unformatted files).
+- `job.(Base).Check` (a one-step pass/fail job), `job.Warn` (downgrades a job's failed
+  steps to warnings) and `job.Component` (a job's snake_case config component name).
+- `system.(*Builder).WithEnv`: runs every command with extra environment ahead of the
+  call's own.
+- `toolchain.(*Installer).InstalledVersion`: the build of a tool on PATH (a Go binary's
+  package and module version, else its version command's output), for keying cached
+  tool-run results by the tool that produced them.
 
 ### Changed
 
+- `interfaces.ToolRunner.Run` takes a `types.RunOptions` in place of its `fix bool`.
+  Migration: pass `types.RunOptions{Fix: fix}`.
 - `helm/exec.(*Client).DependencyBuild` runs under a private repository cache and config,
   removed on return, so concurrent builds of different charts no longer race on helm's
   shared per-user index files.
@@ -95,6 +117,8 @@ Python: unchanged (`techai-webutils` 0.6.1).
 
 ### Fixed
 
+- The tool runner checks a prefixed tool's prefix (`uv` for `uv run ruff`) for presence,
+  not the tool's own binary, which need not be on PATH.
 - `dataset`: a folded (`>`) scalar with more-indented lines decodes to the string the file
   holds; re-encoding a section had re-folded it with an extra blank line.
 
