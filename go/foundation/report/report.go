@@ -1,15 +1,14 @@
-// Package report builds an ExecutionObserver from config: line (live ticks and a
-// summary), table (a result table per phase), gh-actions (GitHub Actions workflow
-// commands), json (one machine-readable report) or quiet (nothing, the default), and
-// composes several into one.
+// Package report renders a gate's progress and a CLI's console output. NewFromConfig
+// builds one ExecutionObserver from config: line (a status line per phase, the
+// failures and a one-line summary, with an interactive layout that ticks each step),
+// table (a result table per phase), gh-actions (GitHub Actions workflow commands),
+// json (one machine-readable report) or quiet (nothing, the default); Composite fans
+// one run out to several. Console is a CLI's whole console: verbosity levels, a
+// leveled Logger, a command hook, coded-error formatting with exit codes, and the
+// observer a run should use.
 package report
 
 import (
-	"fmt"
-	"io"
-	"strings"
-	"time"
-
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
@@ -22,8 +21,8 @@ const (
 	// KindQuiet reports nothing (the default).
 	KindQuiet Kind = "quiet"
 
-	// KindLine ticks each step on Err as it completes and ends with the failures and a
-	// one-line summary.
+	// KindLine prints a status line per phase on Err and ends with the failures and a
+	// one-line summary; Config.Interactive adds a tick per step.
 	KindLine Kind = "line"
 
 	// KindTable prints a result table per phase and for the gate on Err.
@@ -41,8 +40,33 @@ type Config struct {
 	// Kind selects the reporter; empty means KindQuiet.
 	Kind Kind `yaml:"kind" mapstructure:"kind"`
 
-	// Verbose shows every step's detail, not only failures' (line and table).
+	// Hints are the remediation hints the failure block prints under a matching step
+	// (line and table).
+	Hints []Hint `yaml:"hints" mapstructure:"hints"`
+
+	// Verbose reports at LevelVerbose rather than LevelNormal (line and table).
 	Verbose bool `yaml:"verbose" mapstructure:"verbose"`
+
+	// Interactive turns on the line reporter's interactive layout: the gate and phase
+	// headers, a tick per step and a table of unticked steps. Leave it off in CI.
+	Interactive bool `yaml:"interactive" mapstructure:"interactive"`
+
+	// Color styles line and table output with ANSI color.
+	Color bool `yaml:"color" mapstructure:"color"`
+}
+
+// Hint is one remediation hint: the failure block prints Text under a failed or warned
+// step whose Group equals Group and whose name contains Substr (empty matches any).
+type Hint struct {
+	// Group is the step group the hint applies to.
+	Group string `yaml:"group" mapstructure:"group"`
+
+	// Substr narrows the hint to steps whose name contains it; empty matches every step
+	// in the group.
+	Substr string `yaml:"substr" mapstructure:"substr"`
+
+	// Text is the hint line, typically the command that reproduces or fixes the step.
+	Text string `yaml:"text" mapstructure:"text"`
 }
 
 // NewFromConfig builds the reporter cfg.Kind selects over streams. An unknown kind, or
@@ -54,13 +78,18 @@ func NewFromConfig(
 	if err := streams.Require(); err != nil {
 		return nil, err
 	}
+	level := LevelNormal
+	if cfg.Verbose {
+		level = LevelVerbose
+	}
+	p := newPrinter(streams.Err, level, cfg.Interactive, cfg.Color, cfg.Hints)
 	switch cfg.Kind {
 	case "", KindQuiet:
 		return quiet{}, nil
 	case KindLine:
-		return &line{w: streams.Err, verbose: cfg.Verbose}, nil
+		return newLine(p), nil
 	case KindTable:
-		return &table{w: streams.Err, verbose: cfg.Verbose}, nil
+		return &table{p: p}, nil
 	case KindGHActions:
 		return &ghActions{w: streams.Out}, nil
 	case KindJSON:
@@ -70,67 +99,5 @@ func NewFromConfig(
 			apperr.CodeInvalidInput,
 			"report: unknown kind "+string(cfg.Kind),
 		)
-	}
-}
-
-// icon is a status's glyph.
-func icon(s types.StepStatus) string {
-	switch s {
-	case types.StatusFail:
-		return "✗"
-	case types.StatusWarn:
-		return "!"
-	case types.StatusSkip:
-		return "-"
-	case types.StatusPass:
-		return "✓"
-	default:
-		return "?"
-	}
-}
-
-// round shortens a duration for display.
-func round(d time.Duration) time.Duration { return d.Round(time.Millisecond) }
-
-// summary is the "N ok, M failed, … (elapsed)" line.
-func summary(results types.StepResults, elapsed time.Duration) string {
-	counts := results.CountByStatus()
-	var parts []string
-	for _, c := range []struct {
-		label  string
-		status types.StepStatus
-	}{
-		{"ok", types.StatusPass},
-		{"failed", types.StatusFail},
-		{"warned", types.StatusWarn},
-		{"skipped", types.StatusSkip},
-	} {
-		if n := counts[c.status]; n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", n, c.label))
-		}
-	}
-	if len(parts) == 0 {
-		parts = []string{"no steps"}
-	}
-	return fmt.Sprintf("%s (%s)", strings.Join(parts, ", "), round(elapsed))
-}
-
-// failures writes each failed step's error and indented detail.
-func failures(w io.Writer, results types.StepResults) {
-	for _, r := range results {
-		if r.Status != types.StatusFail {
-			continue
-		}
-		_, _ = fmt.Fprintf(w, "\n%s %s: %s\n", icon(r.Status), r.Name, r.Error)
-		indent(w, r.Detail)
-	}
-}
-
-// indent writes detail's non-empty lines indented by four spaces.
-func indent(w io.Writer, detail []byte) {
-	for l := range strings.SplitSeq(strings.TrimSpace(string(detail)), "\n") {
-		if l != "" {
-			_, _ = fmt.Fprintf(w, "    %s\n", l)
-		}
 	}
 }

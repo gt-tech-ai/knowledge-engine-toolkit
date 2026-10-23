@@ -2,97 +2,169 @@ package report
 
 import (
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
-// line ticks each step as it completes, prints one line per finished phase, and ends
-// with the failures and a summary.
+// phaseLabelWidth pads a phase name so the phase lines' status column aligns.
+const phaseLabelWidth = 18
+
+// line reports a gate one line per phase, then the failure block and a one-line
+// summary. Its interactive layout adds the gate and phase headers, a tick per step
+// (with child steps and test counts) and a table of any step that never ticked.
 type line struct {
-	// w receives the report.
-	w io.Writer
+	// p is the shared printer.
+	p *printer
 
-	// verbose shows every step's detail under its tick.
-	verbose bool
+	// ticked records the steps already printed as ticks, so the gate's closing table
+	// shows only the rest.
+	ticked map[string]bool
 }
 
-// OnGateStart prints the gate's headline.
+// newLine returns a line reporter over p.
+func newLine(p *printer) *line { return &line{p: p, ticked: map[string]bool{}} }
+
+// OnGateStart prints the bold gate header (interactive only).
 func (l *line) OnGateStart(name string, _ []string) {
-	_, _ = fmt.Fprintf(l.w, "==> %s\n", name)
-}
-
-// OnPhaseStart lists what the phase runs.
-func (l *line) OnPhaseStart(_ string, jobs []string) {
-	if len(jobs) > 0 {
-		_, _ = fmt.Fprintf(l.w, "  running: %s\n", strings.Join(jobs, ", "))
+	if l.p.richLine() {
+		_, _ = fmt.Fprintf(
+			l.p.w,
+			"%s %s\n",
+			l.p.pal.info.Sprint("==>"),
+			l.p.pal.bold.Sprint(name),
+		)
 	}
 }
 
-// OnStepStart does nothing: a step is reported when it completes.
+// OnPhaseStart lists the phase's steps (interactive only).
+func (l *line) OnPhaseStart(_ string, jobs []string) {
+	if l.p.richLine() && len(jobs) > 0 {
+		_, _ = fmt.Fprintf(
+			l.p.w,
+			"  %s\n",
+			l.p.pal.muted.Sprint("running: "+strings.Join(jobs, ", ")),
+		)
+	}
+}
+
+// OnStepStart prints nothing: a step shows when it completes.
 func (*line) OnStepStart(string, string) {}
 
-// OnStepComplete ticks the step with its duration (and test count), then its
-// children.
+// OnStepComplete ticks the step and, for a composite step, each child (interactive
+// only).
 func (l *line) OnStepComplete(r types.StepResult) {
-	_, _ = fmt.Fprintf(l.w, "  %s %s  %s\n", icon(r.Status), r.Name, metric(r))
-	if l.verbose {
-		indent(l.w, r.Detail)
+	if !l.p.richLine() {
+		return
 	}
+	l.ticked[r.Name] = true
+	_, _ = fmt.Fprintf(l.p.w, "  %s %s  %s\n", l.icon(r.Status), r.Name, l.metric(r))
 	if len(r.Children) > 1 {
 		for _, c := range r.Children {
 			name := strings.TrimPrefix(c.Name, r.Name+"/")
-			_, _ = fmt.Fprintf(l.w, "      %s %s  %s\n", icon(c.Status), name, metric(c))
+			_, _ = fmt.Fprintf(
+				l.p.w,
+				"      %s %s  %s\n",
+				l.icon(c.Status),
+				name,
+				l.childMetric(c),
+			)
 		}
 	}
 }
 
-// metric is a step's trailer: "(<dur>)", or "N tests · <dur>".
-func metric(r types.StepResult) string {
-	if r.Tests > 0 {
-		return fmt.Sprintf("%d tests · %s", r.Tests, round(r.Duration))
-	}
-	return fmt.Sprintf("(%s)", round(r.Duration))
-}
-
-// OnPhaseComplete prints the phase's aggregate status and elapsed time.
+// OnPhaseComplete prints the phase's aligned status line (normal level and up).
 func (l *line) OnPhaseComplete(
 	name string,
 	results types.StepResults,
 	elapsed time.Duration,
 ) {
+	if !l.p.at(LevelNormal) {
+		return
+	}
 	_, _ = fmt.Fprintf(
-		l.w,
-		"==> %-18s %s  %s\n",
-		name,
-		aggregate(results),
-		round(elapsed),
+		l.p.w, "%s %s  %s  %s\n",
+		l.p.pal.info.Sprint("==>"),
+		padRight(name, phaseLabelWidth),
+		l.aggregate(results),
+		l.p.pal.muted.Sprint(round(elapsed).String()),
 	)
 }
 
-// OnGateComplete prints the failures and the summary.
+// OnGateComplete prints any unticked steps as a table (interactive only), then the
+// failure block and the summary line.
 func (l *line) OnGateComplete(
 	_ string,
 	results types.StepResults,
 	elapsed time.Duration,
 ) {
-	failures(l.w, results)
-	_, _ = fmt.Fprintf(l.w, "\n%s\n", summary(results, elapsed))
+	if l.p.richLine() {
+		var unticked types.StepResults
+		for _, r := range results {
+			if !l.ticked[r.Name] {
+				unticked = append(unticked, r)
+			}
+		}
+		if len(unticked) > 0 {
+			l.p.resultsTable(unticked)
+		}
+	}
+	l.p.failureBlock(results)
+	l.p.lineSummary(results, elapsed)
 }
 
-// aggregate reduces a phase's results to one status token of constant width.
-func aggregate(results types.StepResults) string {
-	counts := results.CountByStatus()
-	switch {
-	case counts[types.StatusFail] > 0:
-		return "FAIL"
-	case counts[types.StatusWarn] > 0:
-		return "warn"
-	case counts[types.StatusPass] > 0:
-		return "ok  "
+// icon is a status's tick glyph.
+func (l *line) icon(s types.StepStatus) string {
+	switch s {
+	case types.StatusFail:
+		return l.p.pal.failure.Sprint("✗")
+	case types.StatusWarn:
+		return l.p.pal.warn.Sprint("!")
+	case types.StatusSkip:
+		return l.p.pal.muted.Sprint("-")
+	case types.StatusPass:
+		return l.p.pal.success.Sprint("✓")
 	default:
-		return "skip"
+		return l.p.pal.success.Sprint("✓")
 	}
+}
+
+// metric is a step's test count and duration, or its duration in parentheses.
+func (l *line) metric(r types.StepResult) string {
+	if r.Tests > 0 {
+		return l.p.pal.muted.Sprintf("%d tests · %s", r.Tests, round(r.Duration))
+	}
+	return l.p.pal.muted.Sprintf("(%s)", round(r.Duration))
+}
+
+// childMetric is a child step's compact metric.
+func (l *line) childMetric(r types.StepResult) string {
+	if r.Tests > 0 {
+		return l.p.pal.muted.Sprintf("%d · %s", r.Tests, round(r.Duration))
+	}
+	return l.p.pal.muted.Sprint(round(r.Duration).String())
+}
+
+// aggregate is a phase's status word: FAIL, warn, ok or skip.
+func (l *line) aggregate(results types.StepResults) string {
+	n := results.CountByStatus()
+	switch {
+	case n[types.StatusFail] > 0:
+		return l.p.pal.failure.Sprint("FAIL")
+	case n[types.StatusWarn] > 0:
+		return l.p.pal.warn.Sprint("warn")
+	case n[types.StatusPass] > 0:
+		return l.p.pal.success.Sprint("ok  ")
+	default:
+		return l.p.pal.muted.Sprint("skip")
+	}
+}
+
+// padRight pads s with spaces to width; a longer s is returned unchanged.
+func padRight(s string, width int) string {
+	if len(s) >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-len(s))
 }

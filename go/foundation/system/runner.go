@@ -15,6 +15,7 @@ import (
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
 // CommandRunner is a type alias for interfaces.CommandRunner.
@@ -119,7 +120,7 @@ func (d *Runner) runBuffered(
 	cmd.Dir = dir
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	cmd.Env = append(os.Environ(), extraEnv...)
+	cmd.Env = types.MergeEnv(os.Environ(), extraEnv)
 	configureProcessGroup(cmd)
 
 	start := time.Now()
@@ -198,7 +199,7 @@ func (d *Runner) runWithEnv(
 	cmd.Dir = dir
 	cmd.Stdout = d.stdoutWriter()
 	cmd.Stderr = d.stderrWriter()
-	cmd.Env = append(os.Environ(), extraEnv...)
+	cmd.Env = types.MergeEnv(os.Environ(), extraEnv)
 	configureProcessGroup(cmd)
 
 	if err := cmd.Run(); err != nil {

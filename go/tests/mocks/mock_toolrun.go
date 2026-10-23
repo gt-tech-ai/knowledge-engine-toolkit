@@ -96,18 +96,18 @@ func (m *MockToolRunner) EXPECT() *MockToolRunnerMockRecorder {
 }
 
 // Run mocks base method.
-func (m *MockToolRunner) Run(ctx context.Context, cb interfaces.Codebase, run types.ToolRun, fix bool) (types.StepResults, error) {
+func (m *MockToolRunner) Run(ctx context.Context, cb interfaces.Codebase, run types.ToolRun, opts types.RunOptions) (types.StepResults, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Run", ctx, cb, run, fix)
+	ret := m.ctrl.Call(m, "Run", ctx, cb, run, opts)
 	ret0, _ := ret[0].(types.StepResults)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Run indicates an expected call of Run.
-func (mr *MockToolRunnerMockRecorder) Run(ctx, cb, run, fix any) *gomock.Call {
+func (mr *MockToolRunnerMockRecorder) Run(ctx, cb, run, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockToolRunner)(nil).Run), ctx, cb, run, fix)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockToolRunner)(nil).Run), ctx, cb, run, opts)
 }
 
 // MockTargetSelector is a mock of TargetSelector interface.

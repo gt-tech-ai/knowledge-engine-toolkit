@@ -64,9 +64,22 @@ func (d *Dataset) add(fsys fs.FS, p string) error {
 				"data key "+`"`+key+`"`+" is defined in both "+prev+" and "+p)
 		}
 		node := doc[key]
+		unfold(&node)
 		d.sections[key], d.files[key] = &node, p
 	}
 	return nil
+}
+
+// unfold restyles every folded scalar under n as literal. A section is re-encoded before
+// it decodes, and yaml.v3 re-folds a folded scalar with more-indented lines into a
+// different string; a literal scalar of the same value encodes back to exactly it.
+func unfold(n *yaml.Node) {
+	if n.Kind == yaml.ScalarNode && n.Style&yaml.FoldedStyle != 0 {
+		n.Style = n.Style&^yaml.FoldedStyle | yaml.LiteralStyle
+	}
+	for _, c := range n.Content {
+		unfold(c)
+	}
 }
 
 // Section decodes the top-level section name into a T, rejecting a field T does not

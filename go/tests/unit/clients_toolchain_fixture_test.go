@@ -9,20 +9,20 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.yaml.in/yaml/v3"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
 // toolEntries decodes testdata/toolchain/tools.yaml, a small manifest with one tool
 // of every shape, and checks it is valid.
-func toolEntries(t *testing.T) []toolchain.ToolEntry {
+func toolEntries(t *testing.T) []types.ToolEntry {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("testdata", "toolchain", "tools.yaml"))
 	require.NoError(t, err)
-	var tools []toolchain.ToolEntry
+	var tools []types.ToolEntry
 	require.NoError(t, yaml.Unmarshal(raw, &tools))
-	require.Empty(t, toolchain.ValidateToolEntries(tools))
+	require.Empty(t, types.ValidateToolEntries(tools))
 	return tools
 }
 

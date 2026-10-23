@@ -129,3 +129,42 @@ func TestToolrunSelectors_Unknown(t *testing.T) {
 	_, err = selectors.NewFromConfig(selectors.KindStagedFiles, selectors.Deps{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+// TestToolrunSelectors_RootsGlobsAndExclude tests the target filters every kind shares.
+//
+// Why this test is important:
+//   - A repository scopes a linter to part of the tree (Python under its source roots,
+//     shell scripts in their test dirs) and drops generated targets; without the
+//     filters a row would lint generated code or miss the scope its old method had.
+//
+// What it tests:
+//   - Globs adds patterns to a files kind's Glob (any of them matches).
+//   - Roots keeps only targets at or under one of the roots.
+//   - Exclude drops targets matching a glob, for every kind.
+func TestToolrunSelectors_RootsGlobsAndExclude(t *testing.T) {
+	t.Parallel()
+	cb := memoryCodebase(t, map[string]string{
+		"go.work":                        "go 1.27\n\nuse (\n\t./pkg\n\t./gen/api\n)\n",
+		"pkg/go.mod":                     "module p\n",
+		"gen/api/go.mod":                 "module g\n",
+		"apps/python/svc/pyproject.toml": "",
+		"apps/python/svc_generated/pyproject.toml": "",
+		"tools/x/pyproject.toml":                   "",
+		"pyproject.toml":                           "",
+		"zarf/docker/tests/a.sh":                   "",
+		"e2e/b.sh":                                 "",
+		"e2e/deep/c.sh":                            "",
+		"scripts/d.sh":                             "",
+	})
+	assert.Equal(t, []string{"pkg"},
+		selectWith(t, "go_modules", selectors.Deps{}, cb,
+			types.TargetSpec{Exclude: []string{"gen/**"}}))
+	assert.Equal(t, []string{"apps/python/svc", "tools/x"},
+		selectWith(t, "python_projects", selectors.Deps{}, cb, types.TargetSpec{
+			Roots: []string{"apps/python", "tools"}, Exclude: []string{"**/*generated"},
+		}))
+	assert.Equal(t, []string{"e2e/b.sh", "zarf/docker/tests/a.sh"},
+		selectWith(t, "files", selectors.Deps{}, cb, types.TargetSpec{
+			Glob: "zarf/docker/tests/*.sh", Globs: []string{"e2e/*.sh"},
+		}))
+}

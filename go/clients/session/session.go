@@ -6,6 +6,7 @@ package session
 import (
 	"context"
 	"sync"
+	"time"
 
 	"golang.org/x/sync/singleflight"
 
@@ -13,6 +14,20 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
+
+// ExpirySkew is how long before its expiry a cached credential stops being served: a
+// credential that expires within it is resolved again, so a call never starts with one
+// that lapses mid-request.
+const ExpirySkew = 5 * time.Minute
+
+// Expiring is a credential that knows when it expires. A Provider resolves a cached
+// Expiring credential again once its ExpiresAt is within ExpirySkew; a zero ExpiresAt
+// never expires. A credential that does not implement it is cached for the Provider's
+// lifetime.
+type Expiring interface {
+	// ExpiresAt reports when the credential stops working; zero means never.
+	ExpiresAt() time.Time
+}
 
 // Provider resolves, verifies and caches credentials of type Cred.
 type Provider[Cred any] struct {
@@ -52,7 +67,8 @@ func NewProvider[Cred any](
 }
 
 // Resolve returns the verified credential ref names, resolving and verifying it on
-// first use and serving it from the cache after. A credential that fails verification
+// first use and serving it from the cache after, until it nears expiry (Expiring). A
+// credential that fails verification
 // is CodeUnauthorized and is not cached, so a fixed credential works on the next call.
 func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, error) {
 	if cred, ok := p.cached(ref); ok {
@@ -69,12 +85,28 @@ func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, erro
 	return cred, nil
 }
 
-// cached returns ref's verified credential when the cache holds it.
+// cached returns ref's verified credential when the cache holds one that is not within
+// ExpirySkew of its expiry.
 func (p *Provider[Cred]) cached(ref types.Ref) (Cred, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	cred, ok := p.cache[ref]
+	if ok && expired(cred) {
+		delete(p.cache, ref)
+		var zero Cred
+		return zero, false
+	}
 	return cred, ok
+}
+
+// expired reports whether cred is Expiring with a non-zero expiry inside ExpirySkew.
+func expired(cred any) bool {
+	e, ok := cred.(Expiring)
+	if !ok {
+		return false
+	}
+	at := e.ExpiresAt()
+	return !at.IsZero() && at.Before(time.Now().Add(ExpirySkew))
 }
 
 // resolve reads, parses and verifies ref's credential, then caches it. It first

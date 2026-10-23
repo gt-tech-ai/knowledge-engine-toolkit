@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
 // TestClientsToolchainCatalog_FromInjectedDefs tests that a registry built from injected
@@ -25,7 +26,7 @@ import (
 func TestClientsToolchainCatalog_FromInjectedDefs(t *testing.T) {
 	t.Parallel()
 
-	reg := toolchain.NewRegistryFromDefs(toolchain.DefsFromTools([]toolchain.ToolEntry{
+	reg := toolchain.NewRegistryFromDefs(toolchain.DefsFromTools([]types.ToolEntry{
 		{Name: "ruff", Binary: "ruff", Cmd: []string{"uv", "run"}},
 	}))
 

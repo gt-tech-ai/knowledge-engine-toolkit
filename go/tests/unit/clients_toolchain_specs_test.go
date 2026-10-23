@@ -138,7 +138,7 @@ func TestClientsToolchainResolveVersionParse_Behavior(t *testing.T) {
 
 // manifestInstall returns the embedded manifest's install method for binary on
 // platform, failing the test when either is missing.
-func manifestInstall(t *testing.T, binary, platform string) toolchain.InstallMethodEntry {
+func manifestInstall(t *testing.T, binary, platform string) types.InstallMethodEntry {
 	t.Helper()
 	for i := range toolEntries(t) {
 		if toolEntries(t)[i].Binary == binary {
@@ -148,5 +148,5 @@ func manifestInstall(t *testing.T, binary, platform string) toolchain.InstallMet
 		}
 	}
 	require.Failf(t, "tool missing", "no %q tool in the manifest", binary)
-	return toolchain.InstallMethodEntry{}
+	return types.InstallMethodEntry{}
 }

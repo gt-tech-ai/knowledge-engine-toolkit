@@ -51,6 +51,41 @@ func TestToolrunParsers_ExitCode(t *testing.T) {
 	assert.Equal(t, types.StatusWarn, v.Status)
 }
 
+// TestToolrunParsers_EmptyOutput tests the parser for tools whose listing is the
+// finding.
+//
+// Why this test is important:
+//   - `git status --porcelain` exits 0 whether or not the tree is clean; only its output
+//     says whether there is something to report, so the exit code alone would pass a
+//     dirty tree.
+//
+// What it tests:
+//   - Exit 0 with no output passes; exit 0 with output fails with the output as detail;
+//     a non-zero exit fails as under exit_code.
+func TestToolrunParsers_EmptyOutput(t *testing.T) {
+	t.Parallel()
+	assert.Equal(
+		t,
+		types.StatusPass,
+		parseWith(
+			t,
+			parsers.KindEmptyOutput,
+			interfaces.CmdResult{Stdout: []byte("\n")},
+		).Status,
+	)
+	v := parseWith(t, parsers.KindEmptyOutput, interfaces.CmdResult{
+		Stdout: []byte(" M a.go\n?? b.go\n"),
+	})
+	assert.Equal(t, types.StatusFail, v.Status)
+	assert.Equal(t, "M a.go\n?? b.go", v.Detail)
+	v = parseWith(t, parsers.KindEmptyOutput, interfaces.CmdResult{
+		ExitCode: 128, Err: apperr.New(apperr.CodeInternal, "exit 128"),
+		Stderr: []byte("not a git repository"),
+	})
+	assert.Equal(t, types.StatusFail, v.Status)
+	assert.Equal(t, "not a git repository", v.Detail)
+}
+
 // TestToolrunParsers_Formats tests the gcc, json_lines and sarif readers.
 //
 // Why this test is important:

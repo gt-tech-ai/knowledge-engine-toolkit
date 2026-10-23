@@ -20,15 +20,16 @@ type StepCache interface {
 // ToolRunner executes tool runs: the presence check, target selection, fan-out, the
 // step cache and the output-to-verdict mapping.
 type ToolRunner interface {
-	// Run executes run over cb, appending its fix arguments when fix is set, and
-	// returns one step per invocation (or one skipped or failed step when the tool is
-	// missing). The error is set only when the run could not start: an unknown tool,
-	// selector or parser, or a selector that failed.
+	// Run executes run over cb under opts (fix arguments, strict presence, placeholder
+	// values) and returns one step per invocation (or one skipped or failed step when the
+	// tool is missing). The error is set only when the run could not start: an unknown
+	// tool, selector or parser, a bad cwd, a placeholder with no value, or a selector
+	// that failed.
 	Run(
 		ctx context.Context,
 		cb Codebase,
 		run types.ToolRun,
-		fix bool,
+		opts types.RunOptions,
 	) (types.StepResults, error)
 }
 

@@ -131,3 +131,82 @@ func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 	_, err = wrapped.Execute(t.Context(), nil, "/repo")
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }
+
+// TestJobBase_CheckReportsOneStep tests a check job.
+//
+// Why this test is important:
+//   - Most CLI jobs are one pass/fail check; Check makes that a one-step job without a
+//     hand-written results table, so the step must carry the job's name and the error.
+//
+// What it tests:
+//   - A nil error is one Pass step named after the job.
+//   - An error is one Fail step carrying the error's message, and no execution error.
+func TestJobBase_CheckReportsOneStep(t *testing.T) {
+	t.Parallel()
+	pass := job.Base{}.Check("fmt", "Go", func(context.Context) error { return nil })
+	got, err := pass.Execute(context.Background(), nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, types.JobMeta{Name: "fmt", Group: "Go"}, pass.Meta())
+	assert.Equal(t, types.StepResults{{Name: "fmt", Status: types.StatusPass}}, got)
+
+	fail := job.Base{}.Check("fmt", "Go", func(context.Context) error {
+		return apperr.New(apperr.CodeInvalidInput, "unformatted")
+	})
+	got, err = fail.Execute(context.Background(), nil, "")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, types.StatusFail, got[0].Status)
+	assert.Contains(t, got[0].Error, "unformatted")
+}
+
+// TestJobWarn_DowngradesFailures tests a warn-only job.
+//
+// Why this test is important:
+//   - An advisory job must never fail its gate, but an execution error (the job could
+//     not run at all) is not a finding and must still reach the gate.
+//
+// What it tests:
+//   - Warn keeps the job's meta and turns each Fail step into Warn, leaving Pass steps.
+//   - An execution error passes through unchanged.
+func TestJobWarn_DowngradesFailures(t *testing.T) {
+	t.Parallel()
+	inner := job.Base{}.Func("doctor", "Setup", func(
+		context.Context, interfaces.CommandRunner, string,
+	) (types.StepResults, error) {
+		return types.StepResults{
+			{Name: "a", Status: types.StatusPass},
+			{Name: "b", Status: types.StatusFail, Error: "missing"},
+		}, nil
+	})
+	w := job.Warn(inner)
+	got, err := w.Execute(context.Background(), nil, "")
+	require.NoError(t, err)
+	assert.Equal(t, inner.Meta(), w.Meta())
+	assert.Equal(t, types.StepResults{
+		{Name: "a", Status: types.StatusPass},
+		{Name: "b", Status: types.StatusWarn, Error: "missing"},
+	}, got)
+
+	boom := apperr.New(apperr.CodeUnavailable, "no runner")
+	broken := job.Warn(job.Base{}.Func("x", "y", func(
+		context.Context, interfaces.CommandRunner, string,
+	) (types.StepResults, error) {
+		return nil, boom
+	}))
+	_, err = broken.Execute(context.Background(), nil, "")
+	assert.ErrorIs(t, err, boom)
+}
+
+// TestJobComponent_SnakeCasesGroupAndName tests the job component name.
+//
+// Why this test is important:
+//   - The component name keys a job's decorations in config; it must be stable and
+//     config-friendly whatever the human-readable name and group look like.
+//
+// What it tests:
+//   - The prefix, then the snake_case group and name, joined with dots.
+func TestJobComponent_SnakeCasesGroupAndName(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "cli.setup.git_hooks", job.Component("cli", "Setup", "git hooks"))
+	assert.Equal(t, "cli.go.fmt_check", job.Component("cli", "Go!", "fmt / check"))
+}

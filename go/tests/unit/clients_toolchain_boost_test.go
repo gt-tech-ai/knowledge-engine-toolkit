@@ -19,7 +19,7 @@ import (
 )
 
 // catalogFromEntries builds a Catalog from raw manifest tool entries.
-func catalogFromEntries(t *testing.T, entries ...toolchain.ToolEntry) *toolchain.Catalog {
+func catalogFromEntries(t *testing.T, entries ...types.ToolEntry) *toolchain.Catalog {
 	t.Helper()
 	cat, err := toolchain.NewCatalog(entries)
 	require.NoError(t, err)
@@ -27,11 +27,11 @@ func catalogFromEntries(t *testing.T, entries ...toolchain.ToolEntry) *toolchain
 }
 
 // goPrereqEntry is a versionless "go" prerequisite reused by the Provision flows.
-func goPrereqEntry() toolchain.ToolEntry {
-	return toolchain.ToolEntry{
+func goPrereqEntry() types.ToolEntry {
+	return types.ToolEntry{
 		Name:     "Go",
 		Binary:   "go",
-		Category: toolchain.CategoryPrerequisite,
+		Category: types.CategoryPrerequisite,
 		Required: true,
 	}
 }
@@ -39,15 +39,15 @@ func goPrereqEntry() toolchain.ToolEntry {
 // wireRequiredEntry is a go-install required tool carrying a manual-install
 // fallback URL, so the fallback-formatting branches of reportSkipped and toolError
 // are exercised.
-func wireRequiredEntry() toolchain.ToolEntry {
-	return toolchain.ToolEntry{
+func wireRequiredEntry() types.ToolEntry {
+	return types.ToolEntry{
 		Name:        "wire",
 		Binary:      "wire",
-		Category:    toolchain.CategoryRequired,
+		Category:    types.CategoryRequired,
 		Required:    true,
 		FallbackURL: "https://example.test/wire",
-		Install: map[string]toolchain.InstallMethodEntry{
-			"all": {Kind: toolchain.InstallKindGoInstall, Package: "x/wire@v1"},
+		Install: map[string]types.InstallMethodEntry{
+			"all": {Kind: types.InstallKindGoInstall, Package: "x/wire@v1"},
 		},
 	}
 }
@@ -67,12 +67,12 @@ func wireRequiredEntry() toolchain.ToolEntry {
 //     makes NewCatalog return an error
 func TestClientsToolchainNewCatalog_ProjectionErrorsPerCategory(t *testing.T) {
 	t.Parallel()
-	for _, cat := range []toolchain.ToolCategory{
-		toolchain.CategoryPrerequisite,
-		toolchain.CategoryRequired,
-		toolchain.CategoryOptional,
+	for _, cat := range []types.ToolCategory{
+		types.CategoryPrerequisite,
+		types.CategoryRequired,
+		types.CategoryOptional,
 	} {
-		_, err := toolchain.NewCatalog([]toolchain.ToolEntry{
+		_, err := toolchain.NewCatalog([]types.ToolEntry{
 			{Name: "Bad", Binary: "bad", Category: cat, MinVersion: "not-a-version"},
 		})
 		require.Errorf(t, err, "category %q", cat)
@@ -96,11 +96,11 @@ func TestClientsToolchainProjectLifecycleTools_HappyAndError(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, defs)
 
-	_, err = toolchain.ProjectLifecycleTools([]toolchain.ToolEntry{
+	_, err = toolchain.ProjectLifecycleTools([]types.ToolEntry{
 		{
 			Name:       "Bad",
 			Binary:     "bad",
-			Category:   toolchain.CategoryRequired,
+			Category:   types.CategoryRequired,
 			MinVersion: "nope",
 		},
 	})
@@ -402,15 +402,15 @@ func TestClientsToolchainProvision_MissingToolNoMethodSkipped(t *testing.T) {
 
 	cat := catalogFromEntries(
 		t,
-		goPrereqEntry(), toolchain.ToolEntry{
+		goPrereqEntry(), types.ToolEntry{
 			Name:     "GCC",
 			Binary:   "gcc",
-			Category: toolchain.CategoryRequired,
+			Category: types.CategoryRequired,
 			Required: true,
-		}, toolchain.ToolEntry{
+		}, types.ToolEntry{
 			Name:     "Present",
 			Binary:   "present",
-			Category: toolchain.CategoryRequired,
+			Category: types.CategoryRequired,
 			Required: true,
 		},
 	)
@@ -547,26 +547,26 @@ func TestClientsToolchainProvision_WindowsPowershellTools(t *testing.T) {
 	)
 
 	cat := catalogFromEntries(
-		t, goPrereqEntry(), toolchain.ToolEntry{
+		t, goPrereqEntry(), types.ToolEntry{
 			Name:     "GCC",
 			Binary:   "gcc",
-			Category: toolchain.CategoryRequired,
+			Category: types.CategoryRequired,
 			Required: true,
-			Install: map[string]toolchain.InstallMethodEntry{
+			Install: map[string]types.InstallMethodEntry{
 				"windows": {
-					Kind:    toolchain.InstallKindCommand,
+					Kind:    types.InstallKindCommand,
 					Command: "powershell",
 					Args:    []string{"-c", "install-gcc"},
 				},
 			},
-		}, toolchain.ToolEntry{
+		}, types.ToolEntry{
 			Name:     "MyTool",
 			Binary:   "mytool",
-			Category: toolchain.CategoryRequired,
+			Category: types.CategoryRequired,
 			Required: true,
-			Install: map[string]toolchain.InstallMethodEntry{
+			Install: map[string]types.InstallMethodEntry{
 				"windows": {
-					Kind:    toolchain.InstallKindCommand,
+					Kind:    types.InstallKindCommand,
 					Command: "powershell",
 					Args:    []string{"-c", "install-mytool"},
 				},

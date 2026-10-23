@@ -1,0 +1,36 @@
+# The local stack's prune: compose down, then the project's images and volumes.
+name: prune
+title: Prune the local stack
+inputs: [project, compose_files, remove_all]
+vars:
+  - name: rmi
+    expr: 'remove_all ? "all" : "local"'
+steps:
+  - name: compose down
+    confirm: Remove every {project} container, image and volume?
+    tool: docker
+    args: [compose, "{compose_files...}", --profile, gateway, --profile, observability,
+      down, --volumes, --remove-orphans, --rmi, "{rmi}"]
+    mutating: true
+  - name: list images
+    tool: docker
+    args: [images, --filter, "reference={project}-*", --format, "{{.ID}}"]
+    capture: {var: images, as: lines}
+  - name: remove images
+    when: size(images) > 0
+    tool: docker
+    args: [rmi, -f, "{images...}"]
+    mutating: true
+  - name: prune dangling
+    tool: docker
+    args: [image, prune, -f]
+    mutating: true
+  - name: list volumes
+    tool: docker
+    args: [volume, ls, -q, --filter, "name={project}"]
+    capture: {var: volumes, as: lines}
+  - name: remove volumes
+    when: size(volumes) > 0
+    tool: docker
+    args: [volume, rm, "${volumes}"]
+    mutating: true

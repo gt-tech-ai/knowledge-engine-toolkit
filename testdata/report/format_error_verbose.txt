@@ -1,0 +1,2 @@
+UPSTREAM: registry unreachable
+  cause: dial tcp: i/o timeout

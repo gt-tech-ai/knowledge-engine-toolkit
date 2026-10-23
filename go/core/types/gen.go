@@ -75,3 +75,38 @@ type FilePlan struct {
 	// Entries are the plan's files.
 	Entries []FileEntry
 }
+
+// Generator row kinds.
+const (
+	// GenRun runs a tool that writes its outputs under the `{out}` directory.
+	GenRun = "run"
+
+	// GenTemplate renders a text/template over a registered data provider.
+	GenTemplate = "template"
+)
+
+// GenRow is a generator as data.
+type GenRow struct {
+	// Run is the tool run of a GenRun row; its arguments name the output directory
+	// `{out}`.
+	Run ToolRun `yaml:"run" json:"run,omitzero"`
+
+	// Inputs select the source files the outputs derive from.
+	Inputs FileSelector `yaml:"inputs" json:"inputs,omitzero"`
+
+	// Name identifies the generator.
+	Name string `yaml:"name" json:"name"`
+
+	// Kind is GenRun or GenTemplate.
+	Kind string `yaml:"kind" json:"kind"`
+
+	// Out is the repository-relative output: the directory `{out}` stands for (GenRun)
+	// or the rendered file (GenTemplate).
+	Out string `yaml:"out" json:"out"`
+
+	// Template is the repository-relative template file of a GenTemplate row.
+	Template string `yaml:"template" json:"template,omitempty"`
+
+	// Data names the registered data provider a GenTemplate row renders over.
+	Data string `yaml:"data" json:"data,omitempty"`
+}

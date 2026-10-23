@@ -1,0 +1,25 @@
+==> Lint                FAIL  2s
+::group::Lint
+  PASS  golangci (Go)
+  FAIL  ruff (Python)
+::endgroup::
+::error title=ruff (Python)::INTERNAL: ruff found 2 issues
+==> Unit Tests          warn  4s
+::group::Unit Tests
+  PASS  Go
+  SKIP  TypeScript
+  WARN  docs
+::endgroup::
+  Failures:
+
+    FAIL ruff (Python)
+      apps/python/server/x.py:12:5: F401 `os` imported but unused
+      apps/python/server/y.py:3:1: E501 line too long
+      Run: search lint --python --fix  (to auto-fix)
+
+    WARN docs
+      2 stale links
+
+
+2 ok, 1 failed, 1 warned, 1 skipped  (6s)
+::error title=Gate::1 step(s) failed

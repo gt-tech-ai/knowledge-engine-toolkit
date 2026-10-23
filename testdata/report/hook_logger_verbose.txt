@@ -1,0 +1,8 @@
+[36m  > go vet ./...
+[0m[32m  ok go vet ./...
+[0m[31m  FAIL ruff check .
+[0m[90mresolved module=cli tools=3
+[0m[36minstalling module=cli
+[0m[33mslow mirror module=cli
+[0m[31minstall failed module=cli tool=ruff
+[0m

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
 // TestClientsToolchainCatalog_ProjectsManifestByCategory verifies the injected spec
@@ -25,27 +26,27 @@ import (
 func TestClientsToolchainCatalog_ProjectsManifestByCategory(t *testing.T) {
 	t.Parallel()
 
-	tools := []toolchain.ToolEntry{
+	tools := []types.ToolEntry{
 		{
-			Name: "Go", Binary: "go", Category: toolchain.CategoryPrerequisite,
+			Name: "Go", Binary: "go", Category: types.CategoryPrerequisite,
 			Required: true, MinVersion: "1.26",
 			VersionCmd: []string{"go", "version"}, VersionParse: "go-version",
 		},
 		{
-			Name: "buf", Binary: "buf", Category: toolchain.CategoryRequired,
+			Name: "buf", Binary: "buf", Category: types.CategoryRequired,
 			Required: true,
-			Install: map[string]toolchain.InstallMethodEntry{
+			Install: map[string]types.InstallMethodEntry{
 				"all": {
-					Kind:    toolchain.InstallKindGoInstall,
+					Kind:    types.InstallKindGoInstall,
 					Package: "github.com/bufbuild/buf/cmd/buf@v1.69.0",
 				},
 			},
 		},
 		{
-			Name: "grpcurl", Binary: "grpcurl", Category: toolchain.CategoryOptional,
-			Install: map[string]toolchain.InstallMethodEntry{
+			Name: "grpcurl", Binary: "grpcurl", Category: types.CategoryOptional,
+			Install: map[string]types.InstallMethodEntry{
 				"darwin": {
-					Kind: toolchain.InstallKindCommand, Command: "brew",
+					Kind: types.InstallKindCommand, Command: "brew",
 					Args: []string{"install", "grpcurl"},
 				},
 			},

@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -26,6 +27,9 @@ import (
 
 // targetPlaceholder in a run's arguments or inputs stands for the target.
 const targetPlaceholder = "{target}"
+
+// placeholder matches a `{name}` in a run's arguments.
+var placeholder = regexp.MustCompile(`\{([a-z][a-z0-9_]*)\}`)
 
 // Config names the runner.
 type Config struct {
@@ -69,6 +73,10 @@ type runner struct {
 
 	// deps are the runner's collaborators.
 	deps Deps
+
+	// keyed is false under the off cache, so a step computes no key: no input hashing
+	// and no tool-version probe for a lookup that never hits.
+	keyed bool
 }
 
 // NewFromConfig returns the ToolRunner decorated from deps as a service. A missing
@@ -78,6 +86,7 @@ func NewFromConfig(cfg Config, deps Deps) (interfaces.ToolRunner, error) {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"toolrun: needs a command runner and a tool resolver")
 	}
+	keyed := !stepcache.IsOff(deps.Cache)
 	if deps.Cache == nil {
 		off, err := stepcache.NewFromConfig(stepcache.Config{})
 		if err != nil {
@@ -93,18 +102,18 @@ func NewFromConfig(cfg Config, deps Deps) (interfaces.ToolRunner, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &runner{Base: base, deps: deps}, nil
+	return &runner{Base: base, deps: deps, keyed: keyed}, nil
 }
 
-// Run executes run over cb.
+// Run executes run over cb under opts.
 func (r *runner) Run(
 	ctx context.Context,
 	cb interfaces.Codebase,
 	run types.ToolRun,
-	fix bool,
+	opts types.RunOptions,
 ) (types.StepResults, error) {
 	return r.Exec(ctx, "run", func(ctx context.Context) (types.StepResults, error) {
-		return r.run(ctx, cb, run, fix)
+		return r.run(ctx, cb, run, opts)
 	})
 }
 
@@ -114,7 +123,7 @@ func (r *runner) run(
 	ctx context.Context,
 	cb interfaces.Codebase,
 	run types.ToolRun,
-	fix bool,
+	opts types.RunOptions,
 ) (types.StepResults, error) {
 	spec, ok := r.deps.Tools(run.Tool)
 	if !ok {
@@ -124,21 +133,27 @@ func (r *runner) run(
 	if err := validate(run); err != nil {
 		return nil, err
 	}
+	run, err := substitute(run, opts.Vars)
+	if err != nil {
+		return nil, err
+	}
 	parser, err := parsers.NewFromConfig(run.Parse)
 	if err != nil {
 		return nil, err
 	}
-	if !r.deps.Runner.Exists(spec.Binary()) {
-		return types.StepResults{missing(run, spec)}, nil
+	// A prefixed tool (`uv run ruff`) runs through its prefix, so the prefix is what
+	// must be installed.
+	if exe, _ := spec.Cmd(); !r.deps.Runner.Exists(exe) {
+		return types.StepResults{missing(run, spec, opts.Strict)}, nil
 	}
 	targets, err := r.targets(ctx, cb, run.Targets)
 	if err != nil {
 		return nil, err
 	}
-	inv := invocation{run: run, spec: spec, parser: parser, fix: fix}
+	inv := &invocation{run: run, spec: spec, parser: parser, fix: opts.Fix}
 	if len(targets) == 0 && (run.Targets.Kind != "" || run.Each == types.EachTarget) {
 		return types.StepResults{{
-			Name: run.Name, Group: run.Verb, Status: types.StatusSkip,
+			Name: run.Name, Group: group(run), Status: types.StatusSkip,
 			Detail: []byte("no targets"),
 		}}, nil
 	}
@@ -151,10 +166,11 @@ func (r *runner) run(
 		}), nil
 }
 
-// validate rejects a run whose Each, Cwd or Missing names no known value.
+// validate rejects a run whose Each or Missing names no known value, or whose Cwd is
+// neither root, target nor a directory inside the codebase root.
 func validate(run types.ToolRun) error {
 	ok := slices.Contains([]string{"", types.EachTarget, types.EachRun}, run.Each) &&
-		slices.Contains([]string{"", types.CwdRoot, types.CwdTarget}, run.Cwd) &&
+		validCwd(run.Cwd) &&
 		slices.Contains(
 			[]string{"", types.MissingSkip, types.MissingFail},
 			run.Missing,
@@ -165,18 +181,67 @@ func validate(run types.ToolRun) error {
 	}
 	return apperr.New(
 		apperr.CodeInvalidInput,
-		"tool run "+run.Name+": bad each, cwd or missing (cwd: target needs each: target)",
+		"tool run "+run.Name+": bad each, cwd or missing "+
+			"(cwd: target needs each: target; a cwd path stays inside the root)",
 	)
 }
 
-// missing is the one step of a run whose tool is not installed.
-func missing(run types.ToolRun, spec interfaces.ToolSpec) types.StepResult {
+// validCwd reports whether cwd is root, target, or a relative path inside the root.
+func validCwd(cwd string) bool {
+	switch cwd {
+	case "", types.CwdRoot, types.CwdTarget:
+		return true
+	}
+	clean := path.Clean(cwd)
+	return !path.IsAbs(clean) && clean != ".." && !strings.HasPrefix(clean, "../")
+}
+
+// substitute replaces each `{name}` in run's arguments and fix arguments with
+// vars[name]; a placeholder with no value is CodeInvalidInput naming the run and the
+// variable. `{target}` is left for the invocation.
+func substitute(run types.ToolRun, vars map[string]string) (types.ToolRun, error) {
+	var missingVar string
+	sub := func(args []string) []string {
+		out := make([]string, len(args))
+		for i, a := range args {
+			out[i] = placeholder.ReplaceAllStringFunc(a, func(m string) string {
+				name := m[1 : len(m)-1]
+				if m == targetPlaceholder {
+					return m
+				}
+				v, ok := vars[name]
+				if !ok && missingVar == "" {
+					missingVar = name
+				}
+				return v
+			})
+		}
+		return out
+	}
+	run.Args, run.FixArgs, run.Env = sub(run.Args), sub(run.FixArgs), sub(run.Env)
+	if missingVar != "" {
+		return run, apperr.New(apperr.CodeInvalidInput,
+			"tool run "+run.Name+": no value for {"+missingVar+"}")
+	}
+	return run, nil
+}
+
+// group is the gate phase run's steps report under.
+func group(run types.ToolRun) string {
+	if run.Group != "" {
+		return run.Group
+	}
+	return run.Verb
+}
+
+// missing is the one step of a run whose tool is not installed; strict fails it.
+func missing(run types.ToolRun, spec interfaces.ToolSpec, strict bool) types.StepResult {
 	status := types.StatusSkip
-	if run.Missing == types.MissingFail {
+	if strict || run.Missing == types.MissingFail {
 		status = types.StatusFail
 	}
 	return types.StepResult{
-		Name: run.Name, Group: run.Verb, Status: status,
+		Name: run.Name, Group: group(run), Status: status,
 		Error: spec.Binary() + " is not installed: " + spec.InstallHint(),
 	}
 }
@@ -219,15 +284,19 @@ type invocation struct {
 func (r *runner) invoke(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	inv invocation,
+	inv *invocation,
 	target string,
 	targets []string,
 ) types.StepResult {
 	run := inv.run
 	name := strings.TrimSpace(run.Name + " " + target)
 	dir, argTargets := r.deps.Root, targets
-	if run.Cwd == types.CwdTarget {
+	switch run.Cwd {
+	case "", types.CwdRoot:
+	case types.CwdTarget:
 		dir, argTargets = r.cwdOf(ctx, cb, target)
+	default:
+		dir = filepath.Join(r.deps.Root, filepath.FromSlash(run.Cwd))
 	}
 	args := expand(run.Args, argTargets)
 	if inv.fix {
@@ -236,25 +305,33 @@ func (r *runner) invoke(
 	key, err := r.key(ctx, cb, run, target, args)
 	if err != nil {
 		return types.StepResult{
-			Name: name, Group: run.Verb, Status: types.StatusFail,
+			Name: name, Group: group(run), Status: types.StatusFail,
 			Error: err.Error(),
 		}
 	}
 	if key != "" {
 		if hit, err := r.deps.Cache.Hit(ctx, key); err == nil && hit {
 			return types.StepResult{
-				Name: name, Group: run.Verb, Status: types.StatusSkip,
+				Name: name, Group: group(run), Status: types.StatusSkip,
 				Detail: []byte("cached"),
 			}
 		}
 	}
 	exe, cmdArgs := inv.spec.Cmd(args...)
-	res := r.deps.Runner.RunBuffered(ctx, dir, exe, cmdArgs...)
+	var res interfaces.CmdResult
+	if len(run.Env) > 0 {
+		res = r.deps.Runner.RunBufferedWithEnv(ctx, dir, run.Env, exe, cmdArgs...)
+	} else {
+		res = r.deps.Runner.RunBuffered(ctx, dir, exe, cmdArgs...)
+	}
 	v := inv.parser.Parse(res)
 	for i := range v.Findings {
 		v.Findings[i].Check = run.Name
 	}
-	step := v.Step(name, run.Verb)
+	if run.Advisory && v.Status == types.StatusFail {
+		v.Status = types.StatusWarn
+	}
+	step := v.Step(name, group(run))
 	step.Duration = res.Duration
 	if key != "" && v.Status == types.StatusPass {
 		if err := r.deps.Cache.Record(ctx, key); err != nil {
@@ -306,7 +383,7 @@ func (r *runner) key(
 	target string,
 	args []string,
 ) (string, error) {
-	if run.Inputs.IsZero() {
+	if !r.keyed || run.Inputs.IsZero() {
 		return "", nil
 	}
 	files, err := cb.Files(ctx, withTarget(run.Inputs, target))

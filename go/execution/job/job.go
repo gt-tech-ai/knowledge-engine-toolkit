@@ -70,6 +70,21 @@ func (b Base) Local(
 	})
 }
 
+// Check builds the job name in group that runs one pass/fail check: one step named
+// name, Pass when run returns nil, otherwise Fail carrying the error's message.
+func (b Base) Check(
+	name, group string,
+	run func(context.Context) error,
+) interfaces.AnyJob {
+	return b.Local(name, group, func(ctx context.Context) (types.StepResults, error) {
+		sr := types.StepResult{Name: name, Status: types.StatusPass}
+		if err := run(ctx); err != nil {
+			sr.Status, sr.Error = types.StatusFail, err.Error()
+		}
+		return types.StepResults{sr}, nil
+	})
+}
+
 // Wrap decorates an existing job, keeping its metadata.
 func (b Base) Wrap(j interfaces.AnyJob) interfaces.AnyJob {
 	return b.job(j.Meta(), j.Execute)

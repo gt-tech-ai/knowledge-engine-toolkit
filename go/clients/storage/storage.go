@@ -73,7 +73,11 @@ func kinds() client.Kinds[Config, Deps, interfaces.StorageClient] {
 // configures (validated first).
 func newS3(ctx context.Context, cfg Config, deps Deps) (interfaces.StorageClient, error) {
 	if deps.API != nil {
-		return s3.NewClientFromAPI(deps.API, cfg.MultipartThreshold), nil
+		return s3.NewClientFromAPI(
+			deps.API,
+			cfg.MultipartThreshold,
+			cfg.S3.SSEKMSKeyID,
+		), nil
 	}
 	if err := cfg.S3.Validate(); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "invalid s3 config")
@@ -82,7 +86,7 @@ func newS3(ctx context.Context, cfg Config, deps Deps) (interfaces.StorageClient
 	if err != nil {
 		return nil, err
 	}
-	return s3.NewClient(awsClient, cfg.S3.PublicEndpoint), nil
+	return s3.NewClient(awsClient, cfg.S3.PublicEndpoint, cfg.S3.SSEKMSKeyID), nil
 }
 
 // NewFromConfig builds the storage client cfg.Kind selects and runs it through the

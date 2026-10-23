@@ -1,7 +1,7 @@
 // Package parsers holds the Parser kinds that turn a tool's output into a verdict:
-// exit_code, gcc, json_lines and sarif. Every kind reads the exit code the same way: a
-// tool that failed or did not start fails the verdict; a tool that exited 0 passes,
-// or warns when its output still reported findings.
+// exit_code, gcc, json_lines, sarif and empty_output. Every kind reads the exit code
+// the same way: a tool that failed or did not start fails the verdict; a tool that
+// exited 0 passes, or warns when its output still reported findings.
 package parsers
 
 import (
@@ -24,6 +24,10 @@ const (
 
 	// KindSARIF reads a SARIF 2.1 log's runs[].results[].
 	KindSARIF = "sarif"
+
+	// KindEmptyOutput fails a clean exit that printed anything: the listing is the
+	// finding (`git status --porcelain`).
+	KindEmptyOutput = "empty_output"
 )
 
 // NewFromConfig returns the parser kind names; an unknown kind is CodeInvalidInput.
@@ -37,6 +41,8 @@ func NewFromConfig(kind string) (interfaces.Parser, error) {
 		return jsonLines{}, nil
 	case KindSARIF:
 		return sarif{}, nil
+	case KindEmptyOutput:
+		return emptyOutput{}, nil
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput, "unknown output parser "+kind)
 	}
@@ -48,6 +54,18 @@ type exitCode struct{}
 // Parse decides by the exit code.
 func (exitCode) Parse(res interfaces.CmdResult) types.Verdict {
 	return verdict(res, nil)
+}
+
+// emptyOutput is KindEmptyOutput.
+type emptyOutput struct{}
+
+// Parse fails a clean exit whose stdout is not blank, with the output as detail.
+func (emptyOutput) Parse(res interfaces.CmdResult) types.Verdict {
+	v := verdict(res, nil)
+	if v.Status == types.StatusPass && len(bytes.TrimSpace(res.Stdout)) > 0 {
+		v.Status = types.StatusFail
+	}
+	return v
 }
 
 // verdict applies the shared exit-code rule to res and the findings parsed from it.

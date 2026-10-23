@@ -19,20 +19,20 @@ import (
 // go-install required tool, for the Provision orchestrator tests.
 func provisionCatalog(t *testing.T) *toolchain.Catalog {
 	t.Helper()
-	cat, err := toolchain.NewCatalog([]toolchain.ToolEntry{
+	cat, err := toolchain.NewCatalog([]types.ToolEntry{
 		{
 			Name:     "Go",
 			Binary:   "go",
-			Category: toolchain.CategoryPrerequisite,
+			Category: types.CategoryPrerequisite,
 			Required: true,
 		},
 		{
 			Name:     "wire",
 			Binary:   "wire",
-			Category: toolchain.CategoryRequired,
+			Category: types.CategoryRequired,
 			Required: true,
-			Install: map[string]toolchain.InstallMethodEntry{
-				"all": {Kind: toolchain.InstallKindGoInstall, Package: "x/wire@v1"},
+			Install: map[string]types.InstallMethodEntry{
+				"all": {Kind: types.InstallKindGoInstall, Package: "x/wire@v1"},
 			},
 		},
 	})
@@ -336,14 +336,14 @@ func TestClientsToolchainInstaller_InstallSet_UnknownName(t *testing.T) {
 // ci when inCI is set, for the `--ci` selection tests.
 func goInstallEntry(
 	binary string,
-	cat toolchain.ToolCategory,
+	cat types.ToolCategory,
 	inCI bool,
-) toolchain.ToolEntry {
-	return toolchain.ToolEntry{
+) types.ToolEntry {
+	return types.ToolEntry{
 		Name: binary, Binary: binary, Category: cat, CI: inCI,
-		Install: map[string]toolchain.InstallMethodEntry{
+		Install: map[string]types.InstallMethodEntry{
 			"all": {
-				Kind:    toolchain.InstallKindGoInstall,
+				Kind:    types.InstallKindGoInstall,
 				Package: "x/" + binary + "@v1.0.0",
 			},
 		},
@@ -372,10 +372,10 @@ func TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet(t *testing.T) {
 	cat := catalogFromEntries(
 		t,
 		goPrereqEntry(),
-		goInstallEntry("req-ci", toolchain.CategoryRequired, true),
-		goInstallEntry("req-local", toolchain.CategoryRequired, false),
-		goInstallEntry("opt-ci", toolchain.CategoryOptional, true),
-		goInstallEntry("opt-local", toolchain.CategoryOptional, false),
+		goInstallEntry("req-ci", types.CategoryRequired, true),
+		goInstallEntry("req-local", types.CategoryRequired, false),
+		goInstallEntry("opt-ci", types.CategoryOptional, true),
+		goInstallEntry("opt-local", types.CategoryOptional, false),
 	)
 
 	ctrl := gomock.NewController(t)

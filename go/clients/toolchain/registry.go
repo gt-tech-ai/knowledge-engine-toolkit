@@ -1,9 +1,8 @@
 // Package toolchain owns a developer tool chain's lifecycle, projected from one list of
-// [ToolEntry] values (a tool manifest the consumer loads and checks with
-// [ValidateToolEntries]). Its files:
+// [types.ToolEntry] values (a tool manifest the consumer loads and checks with
+// [types.ValidateToolEntries]; the manifest's schema lives in core/types so a
+// foundation-tier manifest can hold it). Its files:
 //
-//   - manifest.go — [ToolEntry] and [InstallMethodEntry], the manifest's schema, and
-//     their validation.
 //   - tool.go / registry.go — [Registry], a lookup of lightweight [Tool] values (binary +
 //     optional command prefix) for RequireTool / prefix expansion (e.g. `uv run ruff`).
 //     The composition root builds one from the manifest's tools via [DefsFromTools] +
@@ -32,6 +31,8 @@ package toolchain
 
 import (
 	"sync"
+
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
 // Registry holds [types.Tool] instances keyed by binary name.
@@ -102,7 +103,7 @@ type Def struct {
 
 // DefsFromTools projects the manifest's tools into registry Defs: each tool's name,
 // binary, install hint and command prefix.
-func DefsFromTools(tools []ToolEntry) []Def {
+func DefsFromTools(tools []types.ToolEntry) []Def {
 	defs := make([]Def, 0, len(tools))
 	for i := range tools {
 		t := &tools[i]
