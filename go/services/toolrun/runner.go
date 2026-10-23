@@ -150,7 +150,7 @@ func (r *runner) run(
 	if err != nil {
 		return nil, err
 	}
-	inv := invocation{run: run, spec: spec, parser: parser, fix: opts.Fix}
+	inv := &invocation{run: run, spec: spec, parser: parser, fix: opts.Fix}
 	if len(targets) == 0 && (run.Targets.Kind != "" || run.Each == types.EachTarget) {
 		return types.StepResults{{
 			Name: run.Name, Group: group(run), Status: types.StatusSkip,
@@ -218,7 +218,7 @@ func substitute(run types.ToolRun, vars map[string]string) (types.ToolRun, error
 		}
 		return out
 	}
-	run.Args, run.FixArgs = sub(run.Args), sub(run.FixArgs)
+	run.Args, run.FixArgs, run.Env = sub(run.Args), sub(run.FixArgs), sub(run.Env)
 	if missingVar != "" {
 		return run, apperr.New(apperr.CodeInvalidInput,
 			"tool run "+run.Name+": no value for {"+missingVar+"}")
@@ -284,7 +284,7 @@ type invocation struct {
 func (r *runner) invoke(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	inv invocation,
+	inv *invocation,
 	target string,
 	targets []string,
 ) types.StepResult {
@@ -318,7 +318,12 @@ func (r *runner) invoke(
 		}
 	}
 	exe, cmdArgs := inv.spec.Cmd(args...)
-	res := r.deps.Runner.RunBuffered(ctx, dir, exe, cmdArgs...)
+	var res interfaces.CmdResult
+	if len(run.Env) > 0 {
+		res = r.deps.Runner.RunBufferedWithEnv(ctx, dir, run.Env, exe, cmdArgs...)
+	} else {
+		res = r.deps.Runner.RunBuffered(ctx, dir, exe, cmdArgs...)
+	}
 	v := inv.parser.Parse(res)
 	for i := range v.Findings {
 		v.Findings[i].Check = run.Name

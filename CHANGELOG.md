@@ -123,6 +123,14 @@ Python: unchanged (`techai-webutils` 0.6.1).
 - `ops.MapInput` / `ops.MapSchema`: an operation whose input is a `map[string]any`
   keyed by `types.FlagSpec` fields, its MCP schema derived from the same flag specs.
 
+- `gen.NewFromRow`: generators as data. A `types.GenRow` of kind `run` runs a tool with
+  `{out}` set to a scratch directory and returns every file written there under `Out`;
+  kind `template` renders a repository `text/template` over a registered `gen.DataFunc`
+  (missing keys fail). Both work with `gen.Check` and `gen.Apply`.
+- `types.ToolRun.Env` and `types.MergeEnv`: per-run environment entries (`NAME=value`
+  sets, `-NAME` removes an inherited variable, placeholders expand); the system runner
+  and `clients/process/exec` apply removals.
+
 ### Changed
 
 - `interfaces.ToolRunner.Run` takes a `types.RunOptions` in place of its `fix bool`.

@@ -54,7 +54,7 @@ func command(spec types.ProcessSpec) (*osexec.Cmd, error) {
 	prog, args := spec.Args[0], spec.Args[1:]
 	cmd := osexec.Command(prog, args...) //nolint:noctx // see above
 	cmd.Dir = spec.Dir
-	cmd.Env = append(os.Environ(), spec.Env...)
+	cmd.Env = types.MergeEnv(os.Environ(), spec.Env)
 	cmd.Stdout, cmd.Stderr = orDiscard(spec.Stdout), orDiscard(spec.Stderr)
 	// A child the process leaves behind may hold its output open; stop copying a
 	// moment after the process itself exits.

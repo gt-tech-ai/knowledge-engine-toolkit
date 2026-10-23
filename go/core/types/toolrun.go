@@ -1,5 +1,7 @@
 package types
 
+import "strings"
+
 // Each values: how a tool run maps targets to invocations.
 const (
 	// EachTarget runs the tool once per selected target, fanned out.
@@ -32,11 +34,12 @@ const (
 // ToolRun is one external tool invocation, as data: which tool, with which arguments,
 // over which targets, and how its output becomes a verdict.
 type ToolRun struct {
-	// Name identifies the run; it names the run's steps.
-	Name string `yaml:"name" json:"name"`
+	// Missing is MissingSkip or MissingFail; empty means MissingSkip.
+	Missing string `yaml:"missing" json:"missing,omitempty"`
 
-	// Verb is the command that owns the run (lint, fmt, check).
-	Verb string `yaml:"verb" json:"verb"`
+	// Parse names the parser kind that turns output into a verdict; empty means the
+	// exit code alone decides.
+	Parse string `yaml:"parse" json:"parse,omitempty"`
 
 	// Group is the gate phase the run's steps report under; empty means Verb.
 	Group string `yaml:"group" json:"group,omitempty"`
@@ -52,29 +55,32 @@ type ToolRun struct {
 	// means CwdRoot.
 	Cwd string `yaml:"cwd" json:"cwd,omitempty"`
 
-	// Missing is MissingSkip or MissingFail; empty means MissingSkip.
-	Missing string `yaml:"missing" json:"missing,omitempty"`
+	// Verb is the command that owns the run (lint, fmt, check).
+	Verb string `yaml:"verb" json:"verb"`
 
-	// Parse names the parser kind that turns output into a verdict; empty means the
-	// exit code alone decides.
-	Parse string `yaml:"parse" json:"parse,omitempty"`
-
-	// Targets selects what the tool runs over.
-	Targets TargetSpec `yaml:"targets" json:"targets,omitzero"`
-
-	// Tags are the labels suites select runs by (lint, go, infra).
-	Tags []string `yaml:"tags" json:"tags,omitempty"`
+	// Name identifies the run; it names the run's steps.
+	Name string `yaml:"name" json:"name"`
 
 	// Args are the tool's arguments; `{target}` is replaced by the target (EachTarget)
 	// or expands to every target (EachRun), and any other `{name}` by RunOptions.Vars.
 	Args []string `yaml:"args" json:"args,omitempty"`
 
+	// Tags are the labels suites select runs by (lint, go, infra).
+	Tags []string `yaml:"tags" json:"tags,omitempty"`
+
 	// FixArgs are appended to Args when the run is asked to fix what it finds.
 	FixArgs []string `yaml:"fix_args" json:"fix_args,omitempty"`
+
+	// Env are environment entries for the tool: NAME=value sets, -NAME removes an
+	// inherited variable. Placeholders expand as in Args.
+	Env []string `yaml:"env" json:"env,omitempty"`
 
 	// Inputs selects the files whose content keys the step cache; `{target}` in a root,
 	// path or glob is replaced by the target. Empty inputs mean the run is never cached.
 	Inputs FileSelector `yaml:"inputs" json:"inputs,omitzero"`
+
+	// Targets selects what the tool runs over.
+	Targets TargetSpec `yaml:"targets" json:"targets,omitzero"`
 
 	// Advisory reports a failed invocation as a warning that never fails the run.
 	Advisory bool `yaml:"advisory" json:"advisory,omitempty"`
@@ -148,4 +154,33 @@ type TargetSpec struct {
 
 	// SkipHeredoc drops Dockerfiles whose COPY, RUN or ADD instruction uses a heredoc.
 	SkipHeredoc bool `yaml:"skip_heredoc" json:"skip_heredoc,omitempty"`
+}
+
+// MergeEnv applies extra to base, an environment in os.Environ form: NAME=value sets
+// NAME (replacing an inherited value) and -NAME removes it. Order is kept, with new
+// names appended.
+func MergeEnv(base, extra []string) []string {
+	if len(extra) == 0 {
+		return base
+	}
+	out := make([]string, 0, len(base)+len(extra))
+	drop := map[string]bool{}
+	for _, e := range extra {
+		if name, ok := strings.CutPrefix(e, "-"); ok {
+			drop[name] = true
+		} else if name, _, ok := strings.Cut(e, "="); ok {
+			drop[name] = true
+		}
+	}
+	for _, e := range base {
+		if name, _, _ := strings.Cut(e, "="); !drop[name] {
+			out = append(out, e)
+		}
+	}
+	for _, e := range extra {
+		if !strings.HasPrefix(e, "-") {
+			out = append(out, e)
+		}
+	}
+	return out
 }

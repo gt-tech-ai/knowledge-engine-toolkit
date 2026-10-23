@@ -436,3 +436,29 @@ func TestServicesToolrun_RunOptions(t *testing.T) {
 	require.ErrorContains(t, err, "trivy image")
 	assert.ErrorContains(t, err, "image")
 }
+
+// TestServicesToolrun_Env tests a run's environment entries.
+//
+// Why this test is important:
+//   - a tool that must not inherit a variable (a Python tool under a foreign
+//     VIRTUAL_ENV) or needs one set per run is a row, not Go code.
+//
+// What it tests:
+//   - Env entries expand placeholders and reach the runner's environment call; a run
+//     with no Env keeps the plain call.
+func TestServicesToolrun_Env(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	runner := mocks.NewMockCommandRunner(ctrl)
+	runner.EXPECT().Exists("ruff").Return(true)
+	runner.EXPECT().RunBufferedWithEnv(gomock.Any(), gomock.Any(),
+		[]string{"-VIRTUAL_ENV", "MODE=ci"}, "ruff", "check").
+		Return(interfaces.CmdResult{})
+	tr := newToolRunner(t, runner, toolOf(ctrl, "ruff"), nil)
+	res, err := tr.Run(t.Context(), nil, types.ToolRun{
+		Name: "ruff", Verb: "lint", Tool: "ruff", Args: []string{"check"},
+		Env: []string{"-VIRTUAL_ENV", "MODE={mode}"},
+	}, types.RunOptions{Vars: map[string]string{"mode": "ci"}})
+	require.NoError(t, err)
+	assert.Equal(t, types.StatusPass, res[0].Status)
+}
