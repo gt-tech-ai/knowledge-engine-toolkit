@@ -90,3 +90,38 @@ func Steps(steps map[string]Step) []Entry {
 	slices.SortFunc(out, func(a, b Entry) int { return strings.Compare(a.Name, b.Name) })
 	return out
 }
+
+// KindGuard marks a guard entry.
+const KindGuard = "guard"
+
+// Guards returns one entry per guard, each run over cb as one step: a failing verdict's
+// findings, one per line, are the step's error and its detail the verdict's.
+func Guards(gs []interfaces.Guard, cb interfaces.Codebase) []Entry {
+	out := make([]Entry, 0, len(gs))
+	for _, g := range gs {
+		m := g.Meta()
+		out = append(out, Entry{
+			Name: m.Name, Verb: m.Verb, Group: m.Group, Kind: KindGuard, Tags: m.Tags,
+			Job: func(env Env) interfaces.AnyJob {
+				return Build(env, m.Verb, m.Name, m.Group, func(
+					ctx context.Context, _ interfaces.CommandRunner, _ string,
+				) (types.StepResults, error) {
+					v := g.Run(ctx, cb)
+					step := types.StepResult{
+						Name:   m.Name,
+						Group:  m.Group,
+						Status: v.Status,
+					}
+					if v.Status == types.StatusFail {
+						step.Error = strings.TrimSpace(v.Detail)
+						if step.Error == "" {
+							step.Error = "failed"
+						}
+					}
+					return types.StepResults{step}, nil
+				})
+			},
+		})
+	}
+	return out
+}

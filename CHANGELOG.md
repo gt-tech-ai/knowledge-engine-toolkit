@@ -95,6 +95,18 @@ Python: unchanged (`techai-webutils` 0.6.1).
   package and module version, else its version command's output), for keying cached
   tool-run results by the tool that produced them.
 
+- `services/suite`: a suite gate from data. `types.Suite` (selectors, modifiers, gated
+  flags, phases, opt-in steps) selects entries from a catalog (`Runs` for tool-run rows,
+  `Steps` for registered Go steps, `Guards` for repository guards); `Select`, `Plan` and
+  `Gate` run the selection phase by phase. `types.Selection.Matches` is the shared
+  name/verb/tag match.
+- `services/guard`: repository guards from data. `types.GuardRow` kinds `match` (line
+  patterns, regular or `literal`, with per-file-type comment skipping and `names` for one
+  guard per pattern), `yaml` (a path query with an optional expected value), `expr` (a
+  CEL expression over `files`, `file`, `docs`, `objects` and `vars` returning a bool or a
+  list of findings) and `go` (a product probe); `each` expands a row over a registered
+  `Expander`. `interfaces.Guard` is a `Probe[Codebase]` with `Meta`.
+
 ### Changed
 
 - `interfaces.ToolRunner.Run` takes a `types.RunOptions` in place of its `fix bool`.
