@@ -116,6 +116,13 @@ Python: unchanged (`techai-webutils` 0.6.1).
   `mutating` step's command without running it; `RunOptions.Yes` answers every
   confirmation.
 
+- `transport/cobra.Tree`: a Cobra command tree from data. `types.CommandSpec` (use,
+  help, aliases, hidden, help group, flags incl. persistent and required, positional
+  arguments, subcommands) makes a group print its help and a leaf run its operation; a
+  leaf's flags and arguments become a JSON object decoded into the operation's input.
+- `ops.MapInput` / `ops.MapSchema`: an operation whose input is a `map[string]any`
+  keyed by `types.FlagSpec` fields, its MCP schema derived from the same flag specs.
+
 ### Changed
 
 - `interfaces.ToolRunner.Run` takes a `types.RunOptions` in place of its `fix bool`.
