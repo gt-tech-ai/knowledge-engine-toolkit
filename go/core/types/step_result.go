@@ -43,7 +43,8 @@ type StepResult struct {
 	// Error is the human-readable error message; empty when the step passed.
 	Error string
 
-	// Detail holds captured command output (stdout+stderr) for failure diagnostics.
+	// Detail holds captured command output (stdout+stderr) for failure diagnostics, or
+	// CachedDetail when the step was skipped because its inputs passed before.
 	Detail []byte
 
 	// Children holds sub-results of a composite step — e.g. the per-package
@@ -132,3 +133,7 @@ func CheckStep(name string, err error) (StepResults, error) {
 	}
 	return OneStep(name, StatusPass, nil), nil
 }
+
+// CachedDetail is the detail of a step skipped because a pass on the same inputs was
+// cached: a skip strict mode never fails.
+const CachedDetail = "cached"

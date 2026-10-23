@@ -39,6 +39,13 @@ type Codebase interface {
 	// YAML returns the repository's YAML view.
 	YAML() YAMLView
 
+	// Docs returns every document of every configuration file sel selects, decoded by its
+	// extension: `.yaml`, `.yml` and `.json` as YAML documents; `.tf`, `.hcl` and
+	// `.tfvars` as Terraform's JSON syntax; `.alloy` and `.river` the same way. With no
+	// Exts in sel it keeps the YAML files only. Documents come in path then document
+	// order; a file that does not parse is CodeInvalidInput naming it.
+	Docs(ctx context.Context, sel types.FileSelector) ([]types.Document, error)
+
 	// Rendered returns the objects spec renders. A repository built without a renderer
 	// returns CodeUnavailable.
 	Rendered(ctx context.Context, spec types.RenderSpec) ([]types.Object, error)

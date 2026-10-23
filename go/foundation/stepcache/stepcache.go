@@ -4,12 +4,14 @@
 package stepcache
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
 // Kind selects a StepCache implementation.
@@ -65,4 +67,29 @@ func Key(inputs []byte, toolVersion string, args []string) string {
 		field([]byte(a))
 	}
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// Digest is the SHA-256 of the paths and contents of the files sel selects in cb, in
+// path order: the inputs part of a step's Key.
+func Digest(
+	ctx context.Context,
+	cb interfaces.Codebase,
+	sel types.FileSelector,
+) ([]byte, error) {
+	files, err := cb.Files(ctx, sel)
+	if err != nil {
+		return nil, err
+	}
+	h := sha256.New()
+	for _, f := range files {
+		text, err := cb.Text(ctx, f.Path)
+		if err != nil {
+			return nil, err
+		}
+		h.Write([]byte(f.Path))
+		h.Write([]byte{0})
+		h.Write(text.Bytes)
+		h.Write([]byte{0})
+	}
+	return h.Sum(nil), nil
 }

@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"regexp"
+	"slices"
 
 	"cel.dev/cel-go/cel"
+	celtypes "cel.dev/cel-go/common/types"
 	"cel.dev/cel-go/common/types/ref"
 	"cel.dev/cel-go/ext"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -14,6 +15,7 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
 )
 
 // program is a compiled expr row and the activation variables it references, so a run
@@ -27,17 +29,23 @@ type program struct {
 }
 
 // exprVars are the activation variables an expression may name: files (selected paths),
-// file (path → {path, text, lines}), docs ({path, index, doc} per YAML document),
+// file (path → {path, text, lines}), docs ({path, index, format, doc} per configuration
+// document: YAML, or HCL / Alloy when the selector names their extensions),
 // objects ({kind, name, namespace, source, doc} per rendered object) and vars (the
 // expansion's placeholders).
 func exprVars() []string { return []string{"files", "file", "docs", "objects", "vars"} }
 
-// compile type-checks expr against the guard environment. The expression evaluates to
+// compile type-checks expr against the guard environment: the CEL standard library plus
+// optional types, the strings, lists, sets, encoders, bindings (cel.bind), math and
+// regex extensions, and decode(format, text) — the Codebase.Docs decoders ("yaml", "hcl",
+// "alloy") over a string, for configuration embedded in another file. The expression
+// evaluates to
 // true (pass) or false (fail with the row's message), or to a list of findings: strings,
 // or maps with file, line and message.
 func compile(expr string) (*program, error) {
 	opts := make([]cel.EnvOption, 0, 4+len(exprVars()))
-	opts = append(opts, ext.Strings(), ext.Lists(), ext.Sets(), ext.Encoders())
+	opts = append(opts, ext.Strings(), ext.Lists(), ext.Sets(), ext.Encoders(),
+		cel.OptionalTypes(), ext.Bindings(), ext.Math(), ext.Regex(), decodeFunc())
 	for _, v := range exprVars() {
 		opts = append(opts, cel.Variable(v, cel.DynType))
 	}
@@ -53,9 +61,15 @@ func compile(expr string) (*program, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "expr")
 	}
+	checked, err := cel.AstToCheckedExpr(ast)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "expr references")
+	}
 	uses := map[string]bool{}
-	for _, v := range exprVars() {
-		uses[v] = regexp.MustCompile(`\b` + v + `\b`).MatchString(expr)
+	for _, r := range checked.GetReferenceMap() {
+		if slices.Contains(exprVars(), r.GetName()) {
+			uses[r.GetName()] = true
+		}
 	}
 	return &program{prg: prg, uses: uses}, nil
 }
@@ -77,6 +91,26 @@ func exprCheck(
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "expr")
 	}
 	return results(out, r.Message)
+}
+
+// decodeFunc is the CEL function decode(format, text): text decoded by the named
+// Codebase.Docs decoder, as a dyn value; a parse error fails the expression.
+func decodeFunc() cel.EnvOption {
+	return cel.Function("decode",
+		cel.Overload("decode_string_string", []*cel.Type{cel.StringType, cel.StringType},
+			cel.DynType,
+			cel.BinaryBinding(func(format, text ref.Val) ref.Val {
+				f, ok1 := format.Value().(string)
+				t, ok2 := text.Value().(string)
+				if !ok1 || !ok2 {
+					return celtypes.NewErr("decode: format and text must be strings")
+				}
+				doc, err := codebase.Decode(f, "<embedded>", []byte(t))
+				if err != nil {
+					return celtypes.WrapErr(err)
+				}
+				return celtypes.DefaultTypeAdapter.NativeToValue(doc)
+			})))
 }
 
 // activation reads what p uses.
@@ -138,23 +172,23 @@ func activation(
 	return act, nil, nil
 }
 
-// decodeDocs decodes every YAML document sel selects.
+// decodeDocs decodes every configuration document sel selects (Codebase.Docs: YAML by
+// default; `.tf`, `.hcl`, `.tfvars`, `.alloy`, `.river` and `.json` when exts names
+// them).
 func decodeDocs(
 	ctx context.Context,
 	cb interfaces.Codebase,
 	sel types.FileSelector,
 ) ([]any, error) {
-	docs, err := cb.YAML().Docs(ctx, sel)
+	docs, err := cb.Docs(ctx, sel)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]any, 0, len(docs))
 	for _, d := range docs {
-		var doc any
-		if err := cb.YAML().Decode(ctx, d, &doc); err != nil {
-			return nil, err
-		}
-		out = append(out, map[string]any{keyPath: d.Path, "index": d.Index, "doc": doc})
+		out = append(out, map[string]any{
+			keyPath: d.Path, "index": d.Index, "format": d.Format, "doc": d.Value,
+		})
 	}
 	return out, nil
 }

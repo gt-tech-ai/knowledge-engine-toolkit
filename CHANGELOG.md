@@ -6,6 +6,44 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+Python: unchanged (`techai-webutils` 0.6.1).
+
+### Added
+
+- `services/guard`: the `go` kind — a row runs the Go guard the product registers in
+  `Deps.Go` under its `func` (or its name), with the expanded row and placeholders; a
+  `tool` names the binary it shells and `inputs` the files whose digest, with the tool's
+  version (`Deps.Versions`) and the expansion, caches a pass in `Deps.Cache` — a cached
+  expansion is skipped and reported `cached`, a failure is never cached. A row's
+  expansions run in parallel (`engine.Pool.FanOut`), findings in expansion order, one
+  progress tick per expansion. `Deps.RenderTool` names the renderer's binary, counted
+  among a chart-rendering row's tools. `Guard.Meta().Tools` lists a row's tools.
+- `services/suite`: `Composite` — a gate factory over a `types.Composite`: ordered phases
+  that union suite references (each built by the product's `Suites` func under its own
+  flags, selection and strictness) and named jobs from a `Jobs` map; an empty phase is
+  dropped, an unknown job or a reference without a builder is one failing
+  `INVALID_INPUT` job. `Entry.Tools` / `Step.Tools` and `Tools(suite, catalog, flags)`:
+  the sorted, unique tools a suite's selection shells (a run row's `tool`, a guard's
+  tools, a step's `Tools`) — what provisioning installs for a suite. Under
+  `Opts.Strict`, a guard skipped for any reason but a cached pass fails with the skip's
+  detail (`<tool> is not installed`).
+- `types.Composite`, `types.CompositePhase`, `types.SuiteRef`, `types.GuardRow.Tool`,
+  `types.GuardRow.Inputs`, `types.EntryMeta.Tools`, `types.CachedDetail` (the step
+  detail of a cached skip, shared by the tool runner and the guards).
+- `interfaces.Codebase.Docs`: the selected files decoded as documents
+  (`types.Document{Path, Index, Format, Value}`): YAML and JSON natively, `.tf`/`.hcl`
+  through hcl2json and `.alloy` through grafana/alloy's syntax; `codebase.Decode(format,
+  name, src)` decodes one source, and the `expr` kind's CEL environment gains
+  `decode(format, text)` for a River config embedded in a values file.
+- `services/toolrun/selectors`: the `file_dirs` target kind — the distinct directories
+  of the files a glob selects, one target each (a chart with a tests suite, a kustomize
+  overlay).
+- `foundation/stepcache.Digest(ctx, codebase, selector)`: the content digest of a file
+  selection, the key the tool runner and the cached guards share; `Snapshot.Keys`.
+- `clients/toolchain`: `InstallToolsOptions.DryRun` lists the tools an install would put
+  in place and installs nothing; an archive asset's `member` names the binary's path
+  inside the archive when it is not the binary's name.
+
 ## [0.0.19] - 2026-10-23
 
 Python: unchanged (`techai-webutils` 0.6.1).

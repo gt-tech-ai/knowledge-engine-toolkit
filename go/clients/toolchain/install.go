@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
@@ -399,6 +400,11 @@ func (i *Installer) InstallSet(
 	}
 
 	names := toolNames(toInstall)
+	if opts.DryRun {
+		i.log.Info("Would install "+strconv.Itoa(len(toInstall))+" tool(s)",
+			"tools", strings.Join(names, ", "))
+		return nil
+	}
 	yes, err := i.confirm(
 		ctx,
 		fmt.Sprintf(

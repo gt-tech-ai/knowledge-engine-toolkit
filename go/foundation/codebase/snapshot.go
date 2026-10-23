@@ -3,6 +3,8 @@ package codebase
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
@@ -45,6 +47,15 @@ func NewSnapshot(key string) *Snapshot {
 
 // Key returns the snapshot's identity.
 func (s *Snapshot) Key() string { return s.key }
+
+// Keys returns the memo keys the snapshot holds, sorted: every build that finished with
+// a value or a stored error (a cancelled or panicking build leaves no key). It is the
+// record of what a run computed, so a test can assert a view was built once.
+func (s *Snapshot) Keys() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Sorted(maps.Keys(s.entries))
+}
 
 // Memo returns the value build computes for key, running build once per key: callers that
 // arrive while it runs wait for it (or for their own ctx), and later callers get the

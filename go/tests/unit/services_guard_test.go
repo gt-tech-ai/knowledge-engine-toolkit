@@ -9,6 +9,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	clientcodebase "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase"
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/guard"
@@ -20,9 +21,10 @@ import (
 // guardFiles returns the repository the guard tests run over.
 func guardFiles() map[string]string {
 	return map[string]string{
-		"deploy/a.yaml": "# image: latest\nimage: app:1.2\nreplicas: 2\n",
-		"deploy/b.yaml": "image: app:latest\nreplicas: 1\n",
-		"infra/main.tf": "// TODO\nresource \"x\" {}\n",
+		"deploy/a.yaml":     "# image: latest\nimage: app:1.2\nreplicas: 2\n",
+		"deploy/b.yaml":     "image: app:latest\nreplicas: 1\n",
+		"infra/main.tf":     "// TODO\nresource \"x\" {}\n",
+		"notes/broken.yaml": "a: [\n",
 		"policy/p.yaml": "kind: AuthorizationPolicy\nspec:\n  rules:\n" +
 			"  - from:\n    - source:\n        principals: [kong, api]\n",
 	}
@@ -144,6 +146,9 @@ func TestServicesGuard_YAMLAndEach(t *testing.T) {
 //     over decoded documents instead of Go code, so their result shapes must all work.
 //
 // What it tests:
+//   - cel.bind and the regex extension are available;
+//   - only the variables the expression references are read, so a name inside a
+//     string literal decodes nothing;
 //   - a bool result passes or fails with the row's message; a list of maps becomes
 //     findings with file and line; file text and vars are readable; a CEL error at build
 //     time is CodeInvalidInput.
@@ -171,6 +176,19 @@ func TestServicesGuard_Expr(t *testing.T) {
 			Expr: `files.filter(p, file[p].text.contains("latest") && p.endsWith("b.yaml"))
 				.map(p, {"file": p, "line": 1, "message": "latest"})`,
 		},
+		{
+			Name: "bind", Kind: types.GuardExpr,
+			Files: types.FileSelector{Globs: []string{"deploy/*"}},
+			Expr: `cel.bind(t, file["deploy/a.yaml"].text,
+				regex.extract(t, "image: (app:[0-9.]+)") == optional.of("app:1.2"))`,
+		},
+		{
+			// A variable name inside a string literal is not a reference: the broken
+			// YAML file is never decoded.
+			Name: "literal", Kind: types.GuardExpr,
+			Files: types.FileSelector{Globs: []string{"notes/*"}},
+			Expr:  `files.all(p, p != "docs/objects/file")`,
+		},
 	}, guard.Deps{})
 
 	require.Equal(t, types.StatusFail, vs["two-principals"].Status)
@@ -179,6 +197,8 @@ func TestServicesGuard_Expr(t *testing.T) {
 	require.Equal(t, types.StatusFail, vs["text"].Status)
 	assert.Equal(t, "deploy/b.yaml", vs["text"].Findings[0].File)
 	assert.Equal(t, 1, vs["text"].Findings[0].Line)
+	assert.Equal(t, types.StatusPass, vs["literal"].Status, vs["literal"].Detail)
+	assert.Equal(t, types.StatusPass, vs["bind"].Status, vs["bind"].Detail)
 
 	_, err := guard.NewFromConfig([]types.GuardRow{
 		{Name: "bad", Kind: types.GuardExpr, Expr: "files.("},
@@ -193,18 +213,30 @@ func TestServicesGuard_Expr(t *testing.T) {
 //     typo in a row must fail the build, never silently skip.
 //
 // What it tests:
-//   - a go row runs the registered probe, its detail becoming a finding; an unknown kind,
-//     an unknown expander and an unregistered go row are errors; the guard becomes a
+//   - a go row runs the registered Go guard with its expanded row and placeholders, its
+//     findings deciding the verdict, and func lets a second row share it; an unknown
+//     kind, an unknown expander and an unregistered go row are errors; the guard becomes
 //     suite entry whose step carries the verdict.
 func TestServicesGuard_GoAndValidation(t *testing.T) {
 	t.Parallel()
-	ctrl := gomock.NewController(t)
-	probe := mocks.NewMockProbe[interfaces.Codebase](ctrl)
-	probe.EXPECT().Run(gomock.Any(), gomock.Any()).
-		Return(types.Verdict{Status: types.StatusFail, Detail: "computed"})
+	computed := func(
+		_ context.Context, _ interfaces.Codebase, row *types.GuardRow, vars map[string]string,
+	) ([]types.Finding, error) {
+		return []types.Finding{{Message: row.Message + " " + vars["env"]}}, nil
+	}
+	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
+		return []map[string]string{{"env": "a"}}, nil
+	}
 	gs, err := guard.NewFromConfig([]types.GuardRow{
-		{Name: "computed", Kind: types.GuardGo, Verb: "check", Tags: []string{"k8s"}},
-	}, guard.Deps{Go: map[string]interfaces.Probe[interfaces.Codebase]{"computed": probe}})
+		{
+			Name: "computed", Kind: types.GuardGo, Verb: "check", Tags: []string{"k8s"},
+			Each: "envs", Message: "computed in {env}",
+		},
+		{Name: "shared", Kind: types.GuardGo, Func: "computed", Message: "shared"},
+	}, guard.Deps{
+		Go:        map[string]guard.GoGuard{"computed": computed},
+		Expanders: map[string]guard.Expander{"envs": each},
+	})
 	require.NoError(t, err)
 	assert.Equal(t, types.EntryMeta{
 		Name: "computed", Verb: "check", Group: "check",
@@ -214,7 +246,7 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
 		clientcodebase.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
-	entries := suite.Guards(gs, cb)
+	entries := suite.Guards(gs[:1], cb)
 	require.Len(t, entries, 1)
 	assert.Equal(t, suite.KindGuard, entries[0].Kind)
 	res, err := entries[0].Job(suite.Env{Decs: fixtures.Decorations()}).
@@ -222,7 +254,8 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, res, 1)
 	assert.Equal(t, types.StatusFail, res[0].Status)
-	assert.Equal(t, "computed", res[0].Error)
+	assert.Equal(t, "computed in a a", res[0].Error)
+	assert.Equal(t, "shared ", gs[1].Run(t.Context(), cb).Findings[0].Message)
 
 	for _, r := range []types.GuardRow{
 		{Name: "k", Kind: "regex"},
@@ -234,4 +267,142 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 		_, err := guard.NewFromConfig([]types.GuardRow{r}, guard.Deps{})
 		require.Error(t, err, r.Name)
 	}
+}
+
+// TestServicesGuard_ExprRender tests an expr row over a rendered chart.
+//
+// Why this test is important:
+//   - chart guards assert on rendered objects; a render failure must fail the guard,
+//     never pass it silently.
+//
+// What it tests:
+//   - objects carry the rendered kinds; a failing render fails the row with its error.
+func TestServicesGuard_ExprRender(t *testing.T) {
+	t.Parallel()
+	ok := types.RenderSpec{ChartDir: "chart", Set: map[string]string{"kind": "hpa"}}
+	bad := types.RenderSpec{ChartDir: "chart", Set: map[string]string{"kind": "x"}}
+	r := mocks.NewMockRenderer(gomock.NewController(t))
+	r.EXPECT().Render(gomock.Any(), ok).Return([]types.Object{
+		{
+			Kind: "HorizontalPodAutoscaler",
+			Doc:  map[string]any{"kind": "HorizontalPodAutoscaler"},
+		},
+	}, nil).AnyTimes()
+	r.EXPECT().Render(gomock.Any(), bad).
+		Return(nil, apperr.New(apperr.CodeUpstream, "helm template: unknown autoscaling.kind")).
+		AnyTimes()
+	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
+		clientcodebase.Deps{Decorations: fixtures.Decorations(), Renderer: r})
+	require.NoError(t, err)
+	gs, err := guard.NewFromConfig([]types.GuardRow{
+		{
+			Name: "one-hpa", Kind: types.GuardExpr, Render: ok,
+			Expr: `objects.filter(o, o.kind == 'HorizontalPodAutoscaler').size() == 1`,
+		},
+		{
+			Name:   "render-fails",
+			Kind:   types.GuardExpr,
+			Render: bad,
+			Expr:   `objects.size() == 0`,
+		},
+	}, guard.Deps{})
+	require.NoError(t, err)
+	vs := map[string]types.Verdict{}
+	for _, g := range gs {
+		vs[g.Name()] = g.Run(t.Context(), cb)
+	}
+	assert.Equal(t, types.StatusPass, vs["one-hpa"].Status, vs["one-hpa"].Detail)
+	assert.Equal(t, types.StatusFail, vs["render-fails"].Status)
+	assert.Contains(t, vs["render-fails"].Detail, "unknown autoscaling.kind")
+}
+
+// TestServicesGuard_ExprDecode tests decode(format, text) and the docs activation over
+// non-YAML formats.
+//
+// Why this test is important:
+//   - infrastructure checks read Terraform and Alloy as data, and an Alloy pipeline is
+//     often embedded as a string inside a Helm values file; without decode a row could
+//     only regex that string.
+//
+// What it tests:
+//   - docs over `.tf` files carries the hcl shape (format "hcl", a labelled resource);
+//   - decode('alloy', <values string>) yields the same shape the .alloy decoder gives;
+//   - an unknown format fails the row with its error.
+func TestServicesGuard_ExprDecode(t *testing.T) {
+	t.Parallel()
+	cb := memoryCodebase(t, map[string]string{
+		"tf/main.tf": "resource \"aws_kms_key\" \"cosign\" {\n" +
+			"  key_usage = \"SIGN_VERIFY\"\n}\n",
+		"obs/values.yaml": "alloy:\n  content: |\n    loki.process \"redact\" {\n" +
+			"      forward_to = [loki.write.default.receiver]\n    }\n",
+	})
+	gs, err := guard.NewFromConfig([]types.GuardRow{
+		{
+			Name: "hcl",
+			Kind: types.GuardExpr,
+			Files: types.FileSelector{
+				Paths: []string{"tf/main.tf"},
+				Exts:  []string{".tf"},
+			},
+			Expr: `docs.size() == 1 && docs[0].format == 'hcl' &&
+				docs[0].doc.resource.aws_kms_key.cosign[0].key_usage == 'SIGN_VERIFY'`,
+		},
+		{
+			Name: "embedded", Kind: types.GuardExpr,
+			Files: types.FileSelector{Paths: []string{"obs/values.yaml"}},
+			Expr: `decode('alloy', docs[0].doc.alloy.content)['loki.process']['redact'][0]
+				.forward_to == ['loki.write.default.receiver']`,
+		},
+		{
+			Name: "unknown", Kind: types.GuardExpr,
+			Files: types.FileSelector{Paths: []string{"obs/values.yaml"}},
+			Expr:  `decode('toml', docs[0].doc.alloy.content) != null`,
+		},
+	}, guard.Deps{})
+	require.NoError(t, err)
+	vs := map[string]types.Verdict{}
+	for _, g := range gs {
+		vs[g.Name()] = g.Run(t.Context(), cb)
+	}
+	assert.Equal(t, types.StatusPass, vs["hcl"].Status, vs["hcl"].Detail)
+	assert.Equal(t, types.StatusPass, vs["embedded"].Status, vs["embedded"].Detail)
+	assert.Equal(t, types.StatusFail, vs["unknown"].Status)
+	assert.Contains(t, vs["unknown"].Detail, "unknown format toml")
+}
+
+// TestServicesGuard_GoUnavailableSkips tests that a Go guard reporting CodeUnavailable
+// skips rather than fails.
+//
+// Why this test is important:
+//   - a Go guard that shells out to a tool (terraform, promtool) must behave like a
+//     tool-run row on a machine without the tool: skipped, so the suite stays green
+//     locally and red only where the tool is pinned (CI).
+//
+// What it tests:
+//   - a CodeUnavailable error yields StatusSkip carrying the error text; any other error
+//     still fails.
+func TestServicesGuard_GoUnavailableSkips(t *testing.T) {
+	t.Parallel()
+	cb := memoryCodebase(t, map[string]string{"a.txt": "x"})
+	rows := []types.GuardRow{
+		{Name: "needs a tool", Kind: types.GuardGo},
+		{Name: "broken", Kind: types.GuardGo},
+	}
+	gs, err := guard.NewFromConfig(rows, guard.Deps{Go: map[string]guard.GoGuard{
+		"needs a tool": func(
+			context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,
+		) ([]types.Finding, error) {
+			return nil, apperr.New(apperr.CodeUnavailable, "terraform is not installed")
+		},
+		"broken": func(
+			context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,
+		) ([]types.Finding, error) {
+			return nil, apperr.New(apperr.CodeInternal, "boom")
+		},
+	}})
+	require.NoError(t, err)
+	v := gs[0].Run(t.Context(), cb)
+	assert.Equal(t, types.StatusSkip, v.Status)
+	assert.Contains(t, v.Detail, "terraform is not installed")
+	assert.Equal(t, types.StatusFail, gs[1].Run(t.Context(), cb).Status)
 }

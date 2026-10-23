@@ -196,6 +196,26 @@ type GoFile struct {
 	Path string
 }
 
+// Document is one decoded document of a configuration file, in the one JSON-like shape
+// every format decodes to: maps, lists, strings, numbers, booleans and nil.
+type Document struct {
+	// Value is the decoded document.
+	Value any
+
+	// Path is the repository-relative path.
+	Path string
+
+	// Format is the decoder: "yaml" (YAML and JSON, document by document), "hcl"
+	// (Terraform's JSON syntax: blocks nested by type and labels, each a list of bodies,
+	// literal values typed, every other expression its source text) or "alloy" (the same
+	// shape; block names dotted, the label nested).
+	Format string
+
+	// Index is the document's 0-based position in the file; 0 for a single-document
+	// format.
+	Index int
+}
+
 // YAMLDoc names one document of a YAML file: its path and its 0-based position among
 // the file's documents.
 type YAMLDoc struct {

@@ -27,8 +27,13 @@ func Runs(
 		if group == "" {
 			group = r.Verb
 		}
+		var shells []string
+		if r.Tool != "" {
+			shells = []string{r.Tool}
+		}
 		out = append(out, Entry{
 			Name: r.Name, Verb: r.Verb, Group: group, Kind: KindRun, Tags: r.Tags,
+			Tools: shells,
 			Job: func(env Env) interfaces.AnyJob {
 				return Build(env, r.Verb, r.Name, group, func(
 					ctx context.Context, _ interfaces.CommandRunner, _ string,
@@ -68,6 +73,9 @@ type Step struct {
 
 	// Tags are matched against the suite's selection like a row's.
 	Tags []string
+
+	// Tools are the binaries the step shells, for provisioning.
+	Tools []string
 }
 
 // Steps returns one entry per registered step, keyed <verb>.<step> (lint.helm). A suite
@@ -78,6 +86,7 @@ func Steps(steps map[string]Step) []Entry {
 		verb, _, _ := strings.Cut(name, ".")
 		out = append(out, Entry{
 			Name: name, Verb: verb, Group: st.Group, Kind: KindStep, Tags: st.Tags,
+			Tools: st.Tools,
 			Job: func(env Env) interfaces.AnyJob {
 				return Build(env, verb, name, st.Group, func(
 					ctx context.Context, runner interfaces.CommandRunner, root string,
@@ -95,28 +104,33 @@ func Steps(steps map[string]Step) []Entry {
 const KindGuard = "guard"
 
 // Guards returns one entry per guard, each run over cb as one step: a failing verdict's
-// findings, one per line, are the step's error and its detail the verdict's.
+// findings, one per line, are the step's error and its detail the verdict's. Under
+// strict run options a skipped guard (its tool absent) fails; a cached skip never does.
 func Guards(gs []interfaces.Guard, cb interfaces.Codebase) []Entry {
 	out := make([]Entry, 0, len(gs))
 	for _, g := range gs {
 		m := g.Meta()
 		out = append(out, Entry{
 			Name: m.Name, Verb: m.Verb, Group: m.Group, Kind: KindGuard, Tags: m.Tags,
+			Tools: m.Tools,
 			Job: func(env Env) interfaces.AnyJob {
 				return Build(env, m.Verb, m.Name, m.Group, func(
 					ctx context.Context, _ interfaces.CommandRunner, _ string,
 				) (types.StepResults, error) {
 					v := g.Run(ctx, cb)
+					if env.Opts.Strict && v.Status == types.StatusSkip &&
+						v.Detail != types.CachedDetail {
+						v.Status = types.StatusFail
+					}
 					step := types.StepResult{
 						Name:   m.Name,
 						Group:  m.Group,
 						Status: v.Status,
 					}
-					if v.Status == types.StatusFail {
-						step.Error = strings.TrimSpace(v.Detail)
-						if step.Error == "" {
-							step.Error = "failed"
-						}
+					if v.Status != types.StatusFail {
+						step.Detail = []byte(v.Detail)
+					} else if step.Error = strings.TrimSpace(v.Detail); step.Error == "" {
+						step.Error = "failed"
 					}
 					return types.StepResults{step}, nil
 				})

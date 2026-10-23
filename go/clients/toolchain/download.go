@@ -3,6 +3,7 @@ package toolchain
 import (
 	"archive/tar"
 	"archive/zip"
+	"cmp"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -146,7 +147,8 @@ func (i *Installer) installDownload(
 	if goos == osWindows {
 		binary += ".exe"
 	}
-	if err := placeBinary(archive, artifact.URL, binary, binDir); err != nil {
+	member := cmp.Or(artifact.Member, binary)
+	if err := placeBinary(archive, artifact.URL, member, binary, binDir); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "install "+toolName)
 	}
 	i.log.Info("installed (sha256 verified)",
@@ -196,17 +198,17 @@ func (i *Installer) fetchVerified(
 }
 
 // placeBinary writes the binary held by a verified artifact (the raw file, the
-// decompressed contents of a single-file .gz, or the entry named binary inside a
+// decompressed contents of a single-file .gz, or the entry named member inside a
 // .tar.gz/.tgz/.zip, judged by the URL's suffix) to a temp file in binDir, marks
-// it executable, and renames it into place — so the final path only ever holds a
-// complete binary.
-func placeBinary(artifactPath, url, binary, binDir string) error {
+// it executable, and renames it into place as binary — so the final path only ever
+// holds a complete binary.
+func placeBinary(artifactPath, url, member, binary, binDir string) error {
 	staged, err := os.CreateTemp(binDir, "."+binary+".tmp-*")
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "stage binary in "+binDir)
 	}
 	stagedPath := staged.Name()
-	writeErr := extractBinary(artifactPath, url, binary, staged)
+	writeErr := extractBinary(artifactPath, url, member, staged)
 	closeErr := staged.Close()
 	if err := apperr.Join(writeErr, closeErr); err != nil {
 		_ = os.Remove(stagedPath)
