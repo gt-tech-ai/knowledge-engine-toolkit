@@ -7,7 +7,6 @@ package toolrun
 
 import (
 	"context"
-	"crypto/sha256"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -313,7 +312,7 @@ func (r *runner) invoke(
 		if hit, err := r.deps.Cache.Hit(ctx, key); err == nil && hit {
 			return types.StepResult{
 				Name: name, Group: group(run), Status: types.StatusSkip,
-				Detail: []byte("cached"),
+				Detail: []byte(types.CachedDetail),
 			}
 		}
 	}
@@ -386,26 +385,15 @@ func (r *runner) key(
 	if !r.keyed || run.Inputs.IsZero() {
 		return "", nil
 	}
-	files, err := cb.Files(ctx, withTarget(run.Inputs, target))
+	digest, err := stepcache.Digest(ctx, cb, withTarget(run.Inputs, target))
 	if err != nil {
 		return "", err
-	}
-	h := sha256.New()
-	for _, f := range files {
-		text, err := cb.Text(ctx, f.Path)
-		if err != nil {
-			return "", err
-		}
-		h.Write([]byte(f.Path))
-		h.Write([]byte{0})
-		h.Write(text.Bytes)
-		h.Write([]byte{0})
 	}
 	version := ""
 	if r.deps.Versions != nil {
 		version = r.deps.Versions(run.Tool)
 	}
-	return stepcache.Key(h.Sum(nil), version,
+	return stepcache.Key(digest, version,
 		append([]string{run.Name, target}, args...)), nil
 }
 

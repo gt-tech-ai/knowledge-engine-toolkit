@@ -147,9 +147,9 @@ linters:
     exhaustive:
       # Closed enums this module owns must list every member (a `default` does not
       # count). Enums the code only inspects and does not own, gRPC and Connect
-      # status codes and reflect.Kind, are wide, externally owned sets where a
-      # catch-all `default` is the right handling, so they are not checked.
-      ignore-enum-types: ^(google\.golang\.org/grpc/codes\.Code|connectrpc\.com/connect\.Code|reflect\.Kind)$
+      # status codes, reflect.Kind and the Alloy syntax tokens, are wide, externally owned
+      # sets where a catch-all `default` is the right handling, so they are not checked.
+      ignore-enum-types: ^(google\.golang\.org/grpc/codes\.Code|connectrpc\.com/connect\.Code|reflect\.Kind|github\.com/grafana/alloy/syntax/token\.Token)$
     gocritic:
       # The experimental and opinionated tags on, minus four checks: duplicate-import
       # alias churn, if-else chains that read better than a switch, octal-literal style,

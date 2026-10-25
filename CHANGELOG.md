@@ -6,6 +6,105 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.20] - 2026-10-24
+
+Python: unchanged (`techai-webutils` 0.6.1).
+
+### Added
+
+- `services/procedure`: the `exec` step — `exec: ["{command...}"]` runs a command line the
+  caller supplies (its first element the executable, no toolchain lookup), with the
+  step's cwd, env (a `-NAME` entry removes an inherited variable), missing policy,
+  stream, capture and dry-run handling; an empty command is `CodeInvalidInput`, and a
+  step naming both `tool` and `exec` is refused at compile. This is what lets
+  `search exec -- <cmd>` be a row.
+- `services/procedure`: every procedure sees the platform it runs on as the built-in
+  variables `os` and `arch` (`runtime.GOOS` / `GOARCH`), so a platform-specific row is a
+  `when:` condition (`os == 'windows' && arch == 'arm64'`); an input of the same name
+  overrides them, which is how a test pins a platform.
+- `services/procedure`: `concurrent: true` on an `each` row runs its items concurrently
+  (NumCPU-capped, `engine.Pool.FanOut`) — every item runs even when one fails, the results
+  keep the items' order and the items' variables do not propagate, as in a `parallel`
+  block; `concurrent` without `each` is rejected at compile. Text placeholders accept a
+  path into a map-valued variable — `{item.key}` in a name, cwd, args or env, and
+  `{item.list...}` splats — so a fan-out over records (build targets, modules) is rows.
+- `services/guard`: the `go` kind — a row runs the Go guard the product registers in
+  `Deps.Go` under its `func` (or its name), with the expanded row and placeholders; a
+  `tool` names the binary it shells and `inputs` the files whose digest, with the tool's
+  version (`Deps.Versions`) and the expansion, caches a pass in `Deps.Cache` — a cached
+  expansion is skipped and reported `cached`, a failure is never cached. A row's
+  expansions run in parallel (`engine.Pool.FanOut`), findings in expansion order, one
+  progress tick per expansion. `Deps.RenderTool` names the renderer's binary, counted
+  among a chart-rendering row's tools. `Guard.Meta().Tools` lists a row's tools.
+- `services/suite`: `Composite` — a gate factory over a `types.Composite`: ordered phases
+  that union suite references (each built by the product's `Suites` func under its own
+  flags, selection and strictness) and named jobs from a `Jobs` map; an empty phase is
+  dropped, an unknown job or a reference without a builder is one failing
+  `INVALID_INPUT` job. `Entry.Tools` / `Step.Tools` and `Tools(suite, catalog, flags)`:
+  the sorted, unique tools a suite's selection shells (a run row's `tool`, a guard's
+  tools, a step's `Tools`) — what provisioning installs for a suite. Under
+  `Opts.Strict`, a guard skipped for any reason but a cached pass fails with the skip's
+  detail (`<tool> is not installed`).
+- `types.Composite`, `types.CompositePhase`, `types.SuiteRef`, `types.GuardRow.Tool`,
+  `types.GuardRow.Inputs`, `types.EntryMeta.Tools`, `types.CachedDetail` (the step
+  detail of a cached skip, shared by the tool runner and the guards).
+- `interfaces.Codebase.Docs`: the selected files decoded as documents
+  (`types.Document{Path, Index, Format, Value}`): YAML and JSON natively, `.tf`/`.hcl`
+  through hcl2json and `.alloy` through grafana/alloy's syntax; `codebase.Decode(format,
+  name, src)` decodes one source, and the `expr` kind's CEL environment gains
+  `decode(format, text)` for a River config embedded in a values file.
+- `services/toolrun/selectors`: the `file_dirs` target kind — the distinct directories
+  of the files a glob selects, one target each (a chart with a tests suite, a kustomize
+  overlay).
+- `foundation/stepcache.Digest(ctx, codebase, selector)`: the content digest of a file
+  selection, the key the tool runner and the cached guards share; `Snapshot.Keys`.
+- `clients/toolchain`: `InstallToolsOptions.DryRun` lists the tools an install would put
+  in place and installs nothing; an archive asset's `member` names the binary's path
+  inside the archive when it is not the binary's name.
+- `services/procedure`: `sets` on a Go step names the variables it sets, so later
+  expressions may read them (a step's outputs are declared like captures); a streamed
+  tool step may `capture: {as: exit}` — the output streams, the exit status is captured;
+  an exit capture records the real status (0, the command's, or 1 when it failed
+  without one) and reports a non-zero status as a warning (`exit N`), never a failure,
+  so a verdict step after it decides.
+- `foundation/tfplan`: the saved-plan reader over hashicorp/terraform-json — `ReadUnits`
+  walks a terragrunt `--json-out-dir` for each unit's `tfplan.json` into a `UnitPlan`
+  (its changes, add/change/destroy counts — a replace is one add and one destroy —
+  imports, output changes), `Summary` renders the reviewer's markdown (destroys first,
+  then the unit table), `FailedSummary` names a failed plan.
+- `foundation/ghactions`: `AppendSummary` appends markdown to a job summary file (an
+  empty path is a no-op), `MaskEnv` registers every value of a `VAR=value` block with
+  the runner's log masking (`::add-mask::`, one line per value line), `EscapeData`
+  escapes a workflow-command value.
+- `services/procedure`: a tool step's `env` expands like its `args` (`{name}`,
+  `{name...}`, `${expr}` lists); `ProcStep.Stream` runs the tool with its output
+  streamed to the operator (`RunWithEnv`) instead of buffered, and never captures.
+- `services/procedure`: `Procedure.Finally` — steps that run after the steps whatever
+  their outcome (a failure, an error, a cancellation), on a context detached from the
+  run's cancellation and bounded by `finally_timeout` (`DefaultFinallyTimeout`, 30s),
+  seeing the run's variables plus `failed` and `canceled`; a Finally step's error is its
+  failed row and never stops the next one. `ProcStep.Fail` — an assertion step that
+  runs nothing and fails with its expanded message (under `when`: a refused input as a
+  row). Output a capture cannot decode (`capture json` on a non-JSON body) is the step's
+  failed row, with the output as its detail, instead of an engine error.
+- `services/procedure`: `Vars.Text` / `Bool` / `Strings` / `Int` read a step's variables
+  typed, accepting the JSON-decoded forms a tool call sends and treating a missing or
+  mistyped value as the zero value, so a Go step never hand-writes the type switches.
+
+### Changed
+
+- `services/procedure`: an advisory step's failure is reported as a warning (as the
+  tool runner's `advisory` already did), not a failure that happens not to stop the
+  procedure — a best-effort cleanup or a `pkill` that matched nothing no longer fails
+  the gate.
+- `foundation/schemagen.Reflect`: a recursive type (a step holding steps) reflects by
+  reference — the type once under `$defs`, a `$ref` where it recurs — instead of
+  overflowing the inlining reflector; `AllowExtraProps` walks `$defs` too.
+- `ops.MapInput`: a run receives every declared input — an omitted flag as its default
+  or its type's zero, an omitted argument as `""`, the rest as no items — and a sent
+  value coerced to the flag's type (a JSON number to an int or duration, a JSON list to
+  `[]string`), so a procedure's expressions see the same input from every front-end.
+
 ## [0.0.19] - 2026-10-23
 
 Python: unchanged (`techai-webutils` 0.6.1).

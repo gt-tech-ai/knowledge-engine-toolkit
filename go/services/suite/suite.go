@@ -6,6 +6,7 @@ package suite
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -42,6 +43,9 @@ type Entry struct {
 
 	// Tags are the labels selections match.
 	Tags []string
+
+	// Tools are the binaries the entry shells (a run's tool, a guard's, a step's).
+	Tools []string
 }
 
 // Env is what every entry's job is built against.
@@ -111,6 +115,22 @@ func Select(s types.Suite, catalog []Entry, flags []string) ([]Entry, error) {
 		}
 	}
 	return out, nil
+}
+
+// Tools returns, sorted and unique, the binaries the entries the flags select in s shell:
+// what provisioning installs for the suite to run under those flags.
+func Tools(s types.Suite, catalog []Entry, flags []string) ([]string, error) {
+	selected, err := Select(s, catalog, flags)
+	if err != nil {
+		return nil, err
+	}
+	set := map[string]bool{}
+	for _, e := range selected {
+		for _, t := range e.Tools {
+			set[t] = true
+		}
+	}
+	return slices.Sorted(maps.Keys(set)), nil
 }
 
 // Plan groups entries into the suite's phases, in Phases order, dropping a phase with no

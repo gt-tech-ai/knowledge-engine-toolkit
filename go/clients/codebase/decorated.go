@@ -79,6 +79,16 @@ func (d *decorator) Go() interfaces.GoView { return d.base.Go() }
 // YAML returns the YAML view.
 func (d *decorator) YAML() interfaces.YAMLView { return d.base.YAML() }
 
+// Docs decodes configuration files; a read, so retryable.
+func (d *decorator) Docs(
+	ctx context.Context,
+	sel types.FileSelector,
+) ([]types.Document, error) {
+	return d.Exec(ctx, "docs", func(c context.Context) ([]types.Document, error) {
+		return d.base.Docs(c, sel)
+	})
+}
+
 // Rendered renders a chart; deterministic, so retryable.
 func (d *decorator) Rendered(
 	ctx context.Context,

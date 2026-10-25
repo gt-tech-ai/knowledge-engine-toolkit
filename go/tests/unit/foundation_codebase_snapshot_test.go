@@ -152,3 +152,41 @@ func TestCodebaseSnapshot_MemoPanickingBuild(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, got)
 }
+
+// TestCodebaseSnapshot_KeysListsWhatWasBuilt tests that Keys reports the memoized keys.
+//
+// Why this test is important:
+//   - A run's memo keys are the evidence that a view was computed once and shared: a
+//     product test asserting "each Go file parsed once per mode" reads them, so Keys
+//     must list exactly the stored builds, not the failed or cancelled ones.
+//
+// What it tests:
+//   - A new snapshot has no keys; after two Memo calls Keys returns both, sorted; a
+//     build that failed is listed (its error is stored) and a build cancelled by its
+//     caller's context is not.
+func TestCodebaseSnapshot_KeysListsWhatWasBuilt(t *testing.T) {
+	t.Parallel()
+	s := codebase.NewSnapshot("run-4")
+	assert.Empty(t, s.Keys())
+
+	_, err := s.Memo(t.Context(), "go|parse|1|b.go", func(context.Context) (int, error) {
+		return 1, nil
+	})
+	require.NoError(t, err)
+	_, err = s.Memo(t.Context(), "go|parse|1|a.go", func(context.Context) (int, error) {
+		return 2, nil
+	})
+	require.NoError(t, err)
+	_, err = s.Memo(t.Context(), "text|bad", func(context.Context) (int, error) {
+		return 0, apperr.New(apperr.CodeInternal, "boom")
+	})
+	require.Error(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	_, err = s.Memo(ctx, "text|cancelled", func(ctx context.Context) (int, error) {
+		cancel()
+		return 0, ctx.Err()
+	})
+	require.Error(t, err)
+
+	assert.Equal(t, []string{"go|parse|1|a.go", "go|parse|1|b.go", "text|bad"}, s.Keys())
+}

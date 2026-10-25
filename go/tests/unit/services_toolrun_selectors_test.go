@@ -49,7 +49,8 @@ func selectWith(
 //     a reason unrelated to the code.
 //
 // What it tests:
-//   - files filters by glob and drops heredoc Dockerfiles under SkipHeredoc;
+//   - files filters by glob and drops heredoc Dockerfiles under SkipHeredoc; file_dirs
+//     yields each matched file's directory once;
 //     go_modules reads go.work and, under WithPackages, drops a module whose only Go
 //     file belongs to a nested module; python_projects lists pyproject.toml
 //     directories (root included); ts_workspace follows pnpm-workspace.yaml with an
@@ -60,15 +61,17 @@ func TestToolrunSelectors_Kinds(t *testing.T) {
 		"go.work":  "go 1.27\n\nuse (\n\t./a\n\t./b\n\t./b/inner\n)\n",
 		"a/go.mod": "module a\n", "a/a.go": "package a\n",
 		"b/go.mod": "module b\n", "b/inner/go.mod": "module inner\n",
-		"b/inner/i.go":          "package inner\n",
-		"docker/api/Dockerfile": "FROM x\nRUN echo hi\n",
-		"docker/web/Dockerfile": "FROM x\nRUN <<EOF\necho\nEOF\n",
-		"pyproject.toml":        "[project]\n",
-		"py/svc/pyproject.toml": "[project]\n",
-		"pnpm-workspace.yaml":   "packages:\n  - apps/*\n  - '!apps/old'\n",
-		"apps/web/package.json": "{}",
-		"apps/old/package.json": "{}",
-		"apps/docs/README.md":   "no package\n",
+		"b/inner/i.go":               "package inner\n",
+		"docker/api/Dockerfile":      "FROM x\nRUN echo hi\n",
+		"docker/web/Dockerfile":      "FROM x\nRUN <<EOF\necho\nEOF\n",
+		"pyproject.toml":             "[project]\n",
+		"py/svc/pyproject.toml":      "[project]\n",
+		"pnpm-workspace.yaml":        "packages:\n  - apps/*\n  - '!apps/old'\n",
+		"apps/web/package.json":      "{}",
+		"apps/old/package.json":      "{}",
+		"apps/docs/README.md":        "no package\n",
+		"charts/a/tests/x_test.yaml": "", "charts/a/tests/y_test.yaml": "",
+		"charts/b/tests/z_test.yaml": "",
 	})
 	none := selectors.Deps{}
 
@@ -86,6 +89,9 @@ func TestToolrunSelectors_Kinds(t *testing.T) {
 	assert.Equal(t, []string{"docker/api/Dockerfile"},
 		selectWith(t, selectors.KindFiles, none, cb,
 			types.TargetSpec{Glob: "docker/*/Dockerfile", SkipHeredoc: true}))
+	assert.Equal(t, []string{"charts/a/tests", "charts/b/tests"},
+		selectWith(t, selectors.KindFileDirs, none, cb,
+			types.TargetSpec{Glob: "charts/*/tests/*_test.yaml"}))
 	assert.Equal(t, []string{"a", "b", "b/inner"},
 		selectWith(t, selectors.KindGoModules, none, cb, types.TargetSpec{}))
 	assert.Equal(

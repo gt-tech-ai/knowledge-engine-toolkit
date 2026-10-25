@@ -41,3 +41,19 @@ func (files) Select(
 	}
 	return out, nil
 }
+
+// fileDirs is KindFileDirs.
+type fileDirs struct{}
+
+// Select returns the distinct directories of the files files{} selects for spec.
+func (fileDirs) Select(
+	ctx context.Context,
+	cb interfaces.Codebase,
+	spec types.TargetSpec,
+) ([]string, error) {
+	found, err := files{}.Select(ctx, cb, spec)
+	if err != nil {
+		return nil, err
+	}
+	return dirsOf(found), nil
+}

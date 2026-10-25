@@ -14,12 +14,33 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
-// placeholder matches `{name}` in step text; splat matches an argument that is exactly
-// `{name...}`.
+// placeholder matches `{name}` or a `{name.key}` path in step text; splat matches an
+// argument that is exactly `{name...}` or `{name.key...}`.
 var (
-	placeholder = regexp.MustCompile(`\{([A-Za-z_]\w*)\}`)
-	splat       = regexp.MustCompile(`^\{([A-Za-z_]\w*)\.{3}\}$`)
+	placeholder = regexp.MustCompile(`\{([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\}`)
+	splat       = regexp.MustCompile(`^\{([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.{3}\}$`)
 )
+
+// lookup resolves a placeholder path: the variable named by its first segment, then one
+// map key per further segment (an Each item that is an object, a JSON capture). A
+// missing variable or key, or a segment into a non-map, is not found.
+func lookup(vars Vars, path string) (any, bool) {
+	segs := strings.Split(path, ".")
+	v, ok := vars[segs[0]]
+	if !ok {
+		return nil, false
+	}
+	for _, key := range segs[1:] {
+		m, isMap := v.(map[string]any)
+		if !isMap {
+			return nil, false
+		}
+		if v, ok = m[key]; !ok {
+			return nil, false
+		}
+	}
+	return v, true
+}
 
 // celLibs are the CEL extensions every procedure expression may use.
 func celLibs() cel.EnvOption {
@@ -85,12 +106,13 @@ func (c *compiled) evalList(ctx context.Context, src string, vars Vars) ([]any, 
 	return l, nil
 }
 
-// text expands every `{name}` in s; a variable with no value is CodeInvalidInput.
+// text expands every `{name}` (or `{name.key}` path) in s; a variable or key with no
+// value is CodeInvalidInput.
 func text(s string, vars Vars) (string, error) {
 	var missing string
 	out := placeholder.ReplaceAllStringFunc(s, func(m string) string {
 		name := m[1 : len(m)-1]
-		v, ok := vars[name]
+		v, ok := lookup(vars, name)
 		if !ok {
 			missing = name
 			return m
@@ -106,20 +128,8 @@ func text(s string, vars Vars) (string, error) {
 	return out, nil
 }
 
-// texts expands each of ss.
-func texts(ss []string, vars Vars) ([]string, error) {
-	out := make([]string, 0, len(ss))
-	for _, s := range ss {
-		t, err := text(s, vars)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, t)
-	}
-	return out, nil
-}
-
-// args expands a tool step's arguments: `{name...}` and a list-valued `${expr}` splat.
+// args expands a tool step's arguments: `{name...}` (or a `{name.key...}` path) and a
+// list-valued `${expr}` splat.
 func (c *compiled) args(ctx context.Context, in []string, vars Vars) ([]string, error) {
 	out := make([]string, 0, len(in))
 	for _, a := range in {
@@ -127,7 +137,7 @@ func (c *compiled) args(ctx context.Context, in []string, vars Vars) ([]string, 
 		switch m := splat.FindStringSubmatch(a); {
 		case m != nil:
 			var ok bool
-			if v, ok = vars[m[1]]; !ok {
+			if v, ok = lookup(vars, m[1]); !ok {
 				return nil, apperr.New(
 					apperr.CodeInvalidInput,
 					fmt.Sprintf("no variable %q", m[1]),

@@ -34,6 +34,15 @@ type schemaOuter struct {
 	Wait time.Duration `yaml:"wait"`
 }
 
+// schemaNode is a recursive section: a node holding nodes.
+type schemaNode struct {
+	// Name is the node's name.
+	Name string `yaml:"name"`
+
+	// Children are the nested nodes.
+	Children []schemaNode `yaml:"children"`
+}
+
 // schemaOf reflects schemaOuter under opts and decodes the JSON into a map.
 func schemaOf(t *testing.T, opts schemagen.Options) map[string]any {
 	t.Helper()
@@ -57,7 +66,9 @@ func schemaOf(t *testing.T, opts schemagen.Options) map[string]any {
 //     jsonschema:"required" fields required, a duration as string|integer and the
 //     descriptions from Comments; Root wraps the schema in a one-key document
 //     requiring that key; AllowExtraProps lifts additionalProperties: false at every
-//     depth.
+//     depth, $defs included; a recursive type reflects by reference — the type once
+//     under $defs, a $ref where it recurs — while a tree of plain structs stays
+//     inline.
 func TestFoundationSchemagen_For(t *testing.T) {
 	t.Parallel()
 	pkg := reflect.TypeFor[schemaOuter]().PkgPath()
@@ -82,6 +93,24 @@ func TestFoundationSchemagen_For(t *testing.T) {
 	loose := schemagen.Reflect(schemaOuter{}, schemagen.Options{})
 	schemagen.AllowExtraProps(loose)
 	raw, err := schemagen.Marshal(loose)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), `"additionalProperties": false`)
+	assert.Nil(t, s["$defs"], "a tree of plain structs stays inline")
+
+	raw, err = schemagen.For[[]schemaNode](schemagen.Options{Root: "nodes"})
+	require.NoError(t, err)
+	var tree map[string]any
+	require.NoError(t, json.Unmarshal(raw, &tree))
+	nodes := tree["properties"].(map[string]any)["nodes"].(map[string]any)
+	assert.Equal(t, map[string]any{"$ref": "#/$defs/schemaNode"}, nodes["items"])
+	node := tree["$defs"].(map[string]any)["schemaNode"].(map[string]any)
+	children := node["properties"].(map[string]any)["children"].(map[string]any)
+	assert.Equal(t, map[string]any{"$ref": "#/$defs/schemaNode"}, children["items"])
+	assert.Equal(t, false, node["additionalProperties"])
+
+	looseTree := schemagen.Reflect([]schemaNode{}, schemagen.Options{})
+	schemagen.AllowExtraProps(looseTree)
+	raw, err = schemagen.Marshal(looseTree)
 	require.NoError(t, err)
 	assert.NotContains(t, string(raw), `"additionalProperties": false`)
 }
@@ -166,13 +195,24 @@ func TestFoundationSchemagen_ParseAndKinds(t *testing.T) {
 	secs, err := schemagen.ParseGoSchema(t.Context(), cb, "schema")
 	require.NoError(t, err)
 	require.Len(t, secs, 2)
-	assert.Equal(t, []string{"a.Config", "b.Config"}, []string{secs[0].Title(), secs[1].Title()})
+	assert.Equal(
+		t,
+		[]string{"a.Config", "b.Config"},
+		[]string{secs[0].Title(), secs[1].Title()},
+	)
 	assert.Equal(t, []schemagen.Field{
-		{Name: "Timeout", Type: "int", Key: "timeout", Default: "5",
-			Description: "Timeout bounds a call | in seconds."},
+		{
+			Name: "Timeout", Type: "int", Key: "timeout", Default: "5",
+			Description: "Timeout bounds a call | in seconds.",
+		},
 		{Name: "Name", Type: "string", Key: "name"},
-		{Name: "Tags", Type: "map[string]string", Key: "tags",
-			Default: "map[string]string{\n\t\"a\": \"b\",\n}", Description: "Tags are composite."},
+		{
+			Name:        "Tags",
+			Type:        "map[string]string",
+			Key:         "tags",
+			Default:     "map[string]string{\n\t\"a\": \"b\",\n}",
+			Description: "Tags are composite.",
+		},
 	}, secs[0].Fields)
 	assert.Equal(t, "9", secs[1].Fields[0].Default)
 
@@ -253,9 +293,17 @@ func TestFoundationSchemagen_ConfigDocs(t *testing.T) {
 			{Dir: "svc", Module: "app.settings", Class: "Settings"},
 			{Dir: "gone", Module: "x", Class: "Gone"},
 		},
-		GoKinds: []schemagen.GoKindRef{{Label: "Store", Key: "store.kind", PackageDir: "store"}},
+		GoKinds: []schemagen.GoKindRef{
+			{Label: "Store", Key: "store.kind", PackageDir: "store"},
+		},
 		PythonKinds: []schemagen.PythonKindRef{
-			{Label: "Mode", Key: "mode.kind", Dir: "svc", Module: "app.kinds", Enum: "Mode"},
+			{
+				Label:  "Mode",
+				Key:    "mode.kind",
+				Dir:    "svc",
+				Module: "app.kinds",
+				Enum:   "Mode",
+			},
 		},
 	}
 	deps := schemagen.DocsDeps{Runner: runner, Root: "/repo"}
@@ -280,15 +328,26 @@ func TestFoundationSchemagen_ConfigDocs(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, d.InSync, d.Diff)
 
-	violations, err := schemagen.AuditContract(t.Context(), memoryCodebase(t, files), cfg, deps)
+	violations, err := schemagen.AuditContract(
+		t.Context(),
+		memoryCodebase(t, files),
+		cfg,
+		deps,
+	)
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"Config.Name: missing doc comment",
 		"Settings.mode: missing Field(description=…)",
 	}, violations)
 
-	cfg.Python = append(cfg.Python,
-		schemagen.PythonSettingsRef{Dir: "broken", Module: "app.settings", Class: "Broken"})
+	cfg.Python = append(
+		cfg.Python,
+		schemagen.PythonSettingsRef{
+			Dir:    "broken",
+			Module: "app.settings",
+			Class:  "Broken",
+		},
+	)
 	_, err = schemagen.AuditContract(t.Context(), memoryCodebase(t, files), cfg, deps)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Broken")

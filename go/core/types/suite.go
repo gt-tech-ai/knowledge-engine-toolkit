@@ -55,3 +55,48 @@ func (s Selection) Matches(name, verb string, tags []string) bool {
 	}
 	return true
 }
+
+// Composite is an ordered sequence of phases over suites and named jobs: a command whose
+// levels are unions of suites (a preflight) is one Composite per level, and the order
+// of its phases is the data.
+type Composite struct {
+	// Title is the gate title.
+	Title string `yaml:"title" json:"title"`
+
+	// Phases are the gate's phases, in order.
+	Phases []CompositePhase `yaml:"phases" json:"phases"`
+}
+
+// CompositePhase is one phase of a Composite: the suites it folds in, each under its own
+// flags, then the jobs the product registers by name. A phase that builds no job (a
+// suite selecting nothing, a job the product withholds) is dropped.
+type CompositePhase struct {
+	// Group is the phase name.
+	Group string `yaml:"group" json:"group"`
+
+	// Suites are the suites whose jobs the phase runs.
+	Suites []SuiteRef `yaml:"suites,omitempty" json:"suites,omitempty"`
+
+	// Jobs names the product-registered jobs the phase runs after the suites' jobs.
+	Jobs []string `yaml:"jobs,omitempty" json:"jobs,omitempty"`
+
+	// Serial runs the phase's jobs one at a time, in order.
+	Serial bool `yaml:"serial,omitempty" json:"serial,omitempty"`
+}
+
+// SuiteRef names a suite and how a composite runs it.
+type SuiteRef struct {
+	// Select, when set, replaces the suite's default selection (one guard of the check
+	// suite, say).
+	Select *Selection `yaml:"select,omitempty" json:"select,omitempty"`
+
+	// Name is the suite's name in the product's suites.
+	Name string `yaml:"name" json:"name"`
+
+	// Flags are the suite's selector and modifier flags to set.
+	Flags []string `yaml:"flags,omitempty" json:"flags,omitempty"`
+
+	// Strict fails a run whose tool is absent instead of skipping it, and makes every
+	// finding a failure.
+	Strict bool `yaml:"strict,omitempty" json:"strict,omitempty"`
+}

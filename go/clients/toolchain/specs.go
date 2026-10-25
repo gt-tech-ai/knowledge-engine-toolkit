@@ -143,6 +143,7 @@ func buildDownload(m types.InstallMethodEntry, base string) *types.Download {
 		artifacts[platform] = types.Artifact{
 			URL:    base + "/" + a.Name,
 			SHA256: a.SHA256,
+			Member: a.Member,
 		}
 	}
 	return &types.Download{Artifacts: artifacts, Binary: m.Binary, Version: m.Version}

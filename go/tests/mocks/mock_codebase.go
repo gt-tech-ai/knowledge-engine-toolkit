@@ -58,6 +58,21 @@ func (mr *MockCodebaseMockRecorder) Changed(ctx, base any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Changed", reflect.TypeOf((*MockCodebase)(nil).Changed), ctx, base)
 }
 
+// Docs mocks base method.
+func (m *MockCodebase) Docs(ctx context.Context, sel types.FileSelector) ([]types.Document, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Docs", ctx, sel)
+	ret0, _ := ret[0].([]types.Document)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Docs indicates an expected call of Docs.
+func (mr *MockCodebaseMockRecorder) Docs(ctx, sel any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Docs", reflect.TypeOf((*MockCodebase)(nil).Docs), ctx, sel)
+}
+
 // Files mocks base method.
 func (m *MockCodebase) Files(ctx context.Context, sel types.FileSelector) ([]types.File, error) {
 	m.ctrl.T.Helper()

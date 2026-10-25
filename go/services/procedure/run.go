@@ -5,17 +5,22 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	keengine "github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
 )
 
-// Run runs the procedure named name.
+// Run runs the procedure named name: its vars, its steps in order until one fails, then
+// its Finally steps whatever happened.
 func (e *engine) Run(
 	ctx context.Context,
 	name string,
@@ -30,6 +35,12 @@ func (e *engine) Run(
 	if vars == nil {
 		vars = Vars{}
 	}
+	if _, ok := vars[VarOS]; !ok {
+		vars[VarOS] = runtime.GOOS
+	}
+	if _, ok := vars[VarArch]; !ok {
+		vars[VarArch] = runtime.GOARCH
+	}
 	for _, v := range c.proc.Vars {
 		val, err := c.eval(ctx, v.Expr, vars)
 		if err != nil {
@@ -41,24 +52,71 @@ func (e *engine) Run(
 		}
 		vars[v.Name] = val
 	}
+	out, err := e.steps(ctx, c, vars, opts)
+	if err != nil {
+		err = apperr.Wrap(err, apperr.Code(err), "procedure "+name)
+	}
+	return append(out, e.finally(ctx, c, vars, opts, out.HasFailures() || err != nil)...),
+		err
+}
+
+// steps runs c's steps in order over vars, which they extend, until one fails or
+// errors.
+func (e *engine) steps(
+	ctx context.Context,
+	c *compiled,
+	vars Vars,
+	opts types.RunOptions,
+) (types.StepResults, error) {
 	var out types.StepResults
 	for i := range c.proc.Steps {
 		st := &c.proc.Steps[i]
 		res, set, err := e.step(ctx, c, st, vars, opts)
 		out = append(out, res...)
 		if err != nil {
-			return out, apperr.Wrap(
-				err,
-				apperr.Code(err),
-				"procedure "+name+" step "+st.Name,
-			)
+			return out, apperr.Wrap(err, apperr.Code(err), "step "+st.Name)
 		}
 		maps.Copy(vars, set)
-		if res.HasFailures() && !st.Advisory {
+		if res.HasFailures() {
 			break
 		}
 	}
 	return out, nil
+}
+
+// finally runs c's Finally steps over the run's variables plus its outcome, on a context
+// detached from the run's cancellation and bounded by the procedure's timeout; a step
+// that errors is a failed row, and never stops the steps after it.
+func (e *engine) finally(
+	ctx context.Context,
+	c *compiled,
+	vars Vars,
+	opts types.RunOptions,
+	failed bool,
+) types.StepResults {
+	if len(c.proc.Finally) == 0 {
+		return nil
+	}
+	timeout := c.proc.FinallyTimeout
+	if timeout <= 0 {
+		timeout = DefaultFinallyTimeout
+	}
+	fv := maps.Clone(vars)
+	fv[VarFailed] = failed
+	fv[VarCanceled] = ctx.Err() != nil
+	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	defer cancel()
+	var out types.StepResults
+	for i := range c.proc.Finally {
+		st := &c.proc.Finally[i]
+		res, set, err := e.step(fctx, c, st, fv, opts)
+		if err != nil {
+			res = append(res, c.result(st.Name, types.StatusFail, err.Error()))
+		}
+		out = append(out, res...)
+		maps.Copy(fv, set)
+	}
+	return out
 }
 
 // step runs st under its condition and loop, returning its results and the variables
@@ -86,35 +144,111 @@ func (e *engine) step(
 		if err != nil {
 			return nil, nil, err
 		}
-		return e.once(ctx, c, st, name, vars, opts)
+		res, set, err := e.once(ctx, c, st, name, vars, opts)
+		return advised(st, res), set, err
 	}
 	items, err := c.evalList(ctx, st.Each, vars)
 	if err != nil {
 		return nil, nil, err
 	}
+	if st.Concurrent {
+		return e.eachConcurrent(ctx, c, st, items, vars, opts)
+	}
 	var out types.StepResults
 	set := Vars{}
 	for _, item := range items {
-		iv := maps.Clone(vars)
-		iv[cmp(st.As, "item")] = item
-		name, err := text(st.Name, iv)
+		iv := itemVars(st, vars, item)
+		name, err := itemName(st, iv, item)
 		if err != nil {
 			return out, nil, err
 		}
-		if name == st.Name {
-			name += " " + scalar(item)
-		}
 		res, s, err := e.once(ctx, c, st, name, iv, opts)
-		out = append(out, res...)
+		out = append(out, advised(st, res)...)
 		if err != nil {
 			return out, nil, err
 		}
 		maps.Copy(set, s)
-		if res.HasFailures() && !st.Advisory {
+		if res.HasFailures() {
 			break
 		}
 	}
 	return out, set, nil
+}
+
+// eachConcurrent runs st once per item concurrently (NumCPU-capped): every item runs
+// whatever the others do, the results keep the items' order, and the items' variables do
+// not propagate (as in a parallel block); the first item error ends the step.
+func (e *engine) eachConcurrent(
+	ctx context.Context,
+	c *compiled,
+	st *types.ProcStep,
+	items []any,
+	vars Vars,
+	opts types.RunOptions,
+) (types.StepResults, Vars, error) {
+	type slot struct {
+		// i is the item's index, so each run fills its own slot.
+		i int
+	}
+	res := make([]types.StepResults, len(items))
+	errs := make([]error, len(items))
+	slots := make([]slot, len(items))
+	for i := range items {
+		slots[i] = slot{i: i}
+	}
+	_ = keengine.Pool(0).
+		FanOut(ctx, slots, func(ctx context.Context, s slot) types.StepResult {
+			iv := itemVars(st, vars, items[s.i])
+			name, err := itemName(st, iv, items[s.i])
+			if err != nil {
+				errs[s.i] = err
+				return types.StepResult{Status: types.StatusFail}
+			}
+			res[s.i], _, errs[s.i] = e.once(ctx, c, st, name, iv, opts)
+			return types.StepResult{Status: types.StatusPass}
+		})
+	var out types.StepResults
+	for i := range items {
+		out = append(out, advised(st, res[i])...)
+		if errs[i] != nil {
+			return out, nil, errs[i]
+		}
+	}
+	return out, Vars{}, nil
+}
+
+// itemVars is vars plus item bound under the step's As name.
+func itemVars(st *types.ProcStep, vars Vars, item any) Vars {
+	iv := maps.Clone(vars)
+	iv[cmp(st.As, "item")] = item
+	return iv
+}
+
+// itemName is the step's name for one item: its Name expanded over iv, with the item
+// appended when the Name names no variable.
+func itemName(st *types.ProcStep, iv Vars, item any) (string, error) {
+	name, err := text(st.Name, iv)
+	if err != nil {
+		return "", err
+	}
+	if name == st.Name {
+		name += " " + scalar(item)
+	}
+	return name, nil
+}
+
+// advised downgrades an advisory step's failures to warnings: the step's outcome is
+// reported, and the procedure goes on.
+func advised(st *types.ProcStep, res types.StepResults) types.StepResults {
+	if !st.Advisory {
+		return res
+	}
+	for i := range res {
+		if res[i].Status == types.StatusFail {
+			res[i].Status = types.StatusWarn
+		}
+	}
+	return res
 }
 
 // once runs st one time, after its confirmation.
@@ -130,6 +264,12 @@ func (e *engine) once(
 		return nil, nil, err
 	}
 	switch {
+	case st.Fail != "":
+		msg, err := text(st.Fail, vars)
+		if err != nil {
+			return nil, nil, err
+		}
+		return types.StepResults{c.result(name, types.StatusFail, msg)}, nil, nil
 	case len(st.Parallel) > 0:
 		return e.parallel(ctx, c, st.Parallel, vars, opts)
 	case st.Call != "":
@@ -212,8 +352,10 @@ func (e *engine) parallel(
 	return out, set, nil
 }
 
-// tool runs a tool step: missing tools skip or fail, a dry run reports a mutating
-// command, and the output is captured.
+// tool runs a tool or exec step: a missing executable skips or fails, a dry run reports
+// a mutating command, a streamed command's output reaches the operator, and the output
+// (or, for an exit capture, the status) is captured; output a capture cannot decode
+// fails the step.
 func (e *engine) tool(
 	ctx context.Context,
 	c *compiled,
@@ -222,61 +364,79 @@ func (e *engine) tool(
 	vars Vars,
 	opts types.RunOptions,
 ) (types.StepResults, Vars, error) {
-	spec, _ := e.deps.Tools(st.Tool)
-	args, err := c.args(ctx, st.Args, vars)
+	var spec interfaces.ToolSpec
+	if st.Tool != "" {
+		spec, _ = e.deps.Tools(st.Tool)
+	}
+	inv, err := c.invocation(ctx, st, vars, spec)
 	if err != nil {
 		return nil, nil, err
 	}
-	env, err := texts(st.Env, vars)
-	if err != nil {
-		return nil, nil, err
-	}
-	cwd, err := text(st.Cwd, vars)
-	if err != nil {
-		return nil, nil, err
-	}
-	exe, cmdArgs := spec.Cmd(args...)
-	if !e.deps.Runner.Exists(exe) {
-		if st.Missing == "skip" {
+	if !e.deps.Runner.Exists(inv.exe) {
+		if inv.missing == "skip" {
 			return types.StepResults{
-				c.result(name, types.StatusSkip, exe+" not installed"),
+				c.result(name, types.StatusSkip, inv.exe+" not installed"),
 			}, nil, nil
 		}
-		return types.StepResults{c.result(name, types.StatusFail,
-			exe+" not installed: "+spec.InstallHint())}, nil, nil
+		msg := inv.exe + " not installed"
+		if spec != nil {
+			msg += ": " + spec.InstallHint()
+		}
+		return types.StepResults{c.result(name, types.StatusFail, msg)}, nil, nil
 	}
-	cmd := strings.Join(append([]string{exe}, cmdArgs...), " ")
 	if st.Mutating && opts.DryRun {
+		cmd := strings.Join(append([]string{inv.exe}, inv.args...), " ")
 		return types.StepResults{
 			c.result(name, types.StatusSkip, "dry-run: "+cmd),
 		}, nil, nil
 	}
-	r := e.deps.Runner.RunBufferedWithEnv(
-		ctx,
-		filepath.Join(e.deps.Root, cwd),
-		env,
-		exe,
-		cmdArgs...)
+	dir := filepath.Join(e.deps.Root, inv.cwd)
+	var r interfaces.CmdResult
+	if st.Stream {
+		r.Err = e.deps.Runner.RunWithEnv(ctx, dir, inv.env, inv.exe, inv.args...)
+	} else {
+		r = e.deps.Runner.RunBufferedWithEnv(ctx, dir, inv.env, inv.exe, inv.args...)
+	}
 	if st.Capture != nil && st.Capture.As == types.CaptureExit {
-		code := 0
-		if r.Err != nil {
-			code = 1
+		code := exitStatus(r)
+		done := c.result(name, types.StatusPass, "")
+		if code != 0 {
+			done = c.result(name, types.StatusWarn, "exit "+strconv.Itoa(code))
 		}
-		return types.StepResults{c.result(name, types.StatusPass, "")},
-			Vars{st.Capture.Var: code}, nil
+		return types.StepResults{done}, Vars{st.Capture.Var: code}, nil
 	}
 	if done := c.ran(name, r); done.Status == types.StatusFail || st.Capture == nil {
 		return types.StepResults{done}, nil, nil
 	}
 	v, err := capture(st.Capture.As, r.Stdout)
 	if err != nil {
-		return nil, nil, err
+		// Output the capture cannot read is the tool's failure, reported as its row.
+		f := c.result(name, types.StatusFail, err.Error())
+		f.Detail = r.Stdout
+		return types.StepResults{f}, nil, nil
 	}
 	return types.StepResults{
 		c.result(name, types.StatusPass, ""),
 	}, Vars{
 		st.Capture.Var: v,
 	}, nil
+}
+
+// exitStatus is the status a captured command exited with: 0 when it succeeded, the
+// status it reported (the buffered result's, or the exit error's) when it did not, and
+// 1 when it failed without one.
+func exitStatus(r interfaces.CmdResult) int {
+	if r.Err == nil {
+		return 0
+	}
+	if r.ExitCode > 0 {
+		return r.ExitCode
+	}
+	var exit *exec.ExitError
+	if apperr.As(r.Err, &exit) && exit.ExitCode() > 0 {
+		return exit.ExitCode()
+	}
+	return 1
 }
 
 // ran is the result of a command that ran: a failure carries its output as detail.
@@ -328,4 +488,67 @@ func (c *compiled) grouped(res types.StepResults) types.StepResults {
 		}
 	}
 	return res
+}
+
+// invocation is a tool or exec step's expanded command line: the executable and
+// arguments the tool spec renders (or the exec argv), the extra environment, the working
+// directory relative to the root and the missing-tool policy.
+type invocation struct {
+	// exe is the executable: the tool spec's, or an exec step's first element.
+	exe string
+
+	// cwd is the working directory, relative to the root.
+	cwd string
+
+	// missing is the expanded missing-tool policy ("skip" skips).
+	missing string
+
+	// args are the expanded arguments.
+	args []string
+
+	// env are the expanded NAME=value entries.
+	env []string
+}
+
+// invocation expands st's arguments, environment, working directory and missing policy
+// over vars for spec.
+func (c *compiled) invocation(
+	ctx context.Context,
+	st *types.ProcStep,
+	vars Vars,
+	spec interfaces.ToolSpec,
+) (invocation, error) {
+	args, err := c.args(ctx, st.Args, vars)
+	if err != nil {
+		return invocation{}, err
+	}
+	env, err := c.args(ctx, st.Env, vars)
+	if err != nil {
+		return invocation{}, err
+	}
+	cwd, err := text(st.Cwd, vars)
+	if err != nil {
+		return invocation{}, err
+	}
+	missing, err := text(st.Missing, vars)
+	if err != nil {
+		return invocation{}, err
+	}
+	if len(st.Exec) > 0 {
+		argv, err := c.args(ctx, st.Exec, vars)
+		if err != nil {
+			return invocation{}, err
+		}
+		if len(argv) == 0 || argv[0] == "" {
+			return invocation{}, apperr.New(
+				apperr.CodeInvalidInput,
+				"exec: an empty command",
+			)
+		}
+		return invocation{
+			exe: argv[0], cwd: cwd, missing: missing, args: argv[1:], env: env,
+		}, nil
+	}
+	exe, cmdArgs := spec.Cmd(args...)
+	return invocation{exe: exe, cwd: cwd, missing: missing, args: cmdArgs, env: env}, nil
 }

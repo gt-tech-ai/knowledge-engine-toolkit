@@ -19,6 +19,10 @@ const (
 	// empty), optionally dropping Dockerfiles that use a heredoc.
 	KindFiles = "files"
 
+	// KindFileDirs selects the distinct directories of the files KindFiles would select:
+	// one target per directory, however many of its files match (a chart's tests dir).
+	KindFileDirs = "file_dirs"
+
 	// KindGoModules selects the Go module directories (go.work `use` entries, else every
 	// go.mod's directory), optionally only those owning a Go file.
 	KindGoModules = "go_modules"
@@ -58,6 +62,8 @@ func newKind(kind string, deps Deps) (interfaces.TargetSelector, error) {
 	switch kind {
 	case KindFiles:
 		return files{}, nil
+	case KindFileDirs:
+		return fileDirs{}, nil
 	case KindGoModules:
 		return goModules{}, nil
 	case KindPythonProjects:

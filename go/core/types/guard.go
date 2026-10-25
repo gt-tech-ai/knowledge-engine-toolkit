@@ -50,6 +50,18 @@ type GuardRow struct {
 	// Name identifies the guard; it names the guard's step. `{placeholder}`s expand.
 	Name string `yaml:"name" json:"name"`
 
+	// Func names the Go guard a GuardGo row runs; empty means Name, so one Go guard can
+	// serve several rows.
+	Func string `yaml:"func" json:"func,omitempty"`
+
+	// Tool names the binary a GuardGo row shells, so the tool's version keys its cache.
+	Tool string `yaml:"tool" json:"tool,omitempty"`
+
+	// Inputs selects the files whose content keys a GuardGo row's cached pass: an
+	// expansion whose inputs passed before is skipped and reported cached; a failure is
+	// never cached. `{placeholder}`s expand. Empty inputs never cache.
+	Inputs FileSelector `yaml:"inputs" json:"inputs,omitzero"`
+
 	// Render, when its ChartDir is set, renders a chart whose objects the expression reads.
 	Render RenderSpec `yaml:"render" json:"render,omitzero"`
 
@@ -94,4 +106,7 @@ type EntryMeta struct {
 
 	// Tags are its labels.
 	Tags []string
+
+	// Tools are the binaries the entry shells: what provisioning installs for a suite.
+	Tools []string
 }

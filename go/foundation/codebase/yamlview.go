@@ -29,7 +29,7 @@ func (y *yamlView) Docs(
 	sel types.FileSelector,
 ) ([]types.YAMLDoc, error) {
 	if len(sel.Exts) == 0 {
-		sel.Exts = []string{".yaml", ".yml"}
+		sel.Exts = []string{extYAML, extYML}
 	}
 	files, err := y.parent.Files(ctx, sel)
 	if err != nil {

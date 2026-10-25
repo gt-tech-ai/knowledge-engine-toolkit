@@ -10,6 +10,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"cel.dev/cel-go/cel"
 
@@ -20,6 +21,29 @@ import (
 
 // Vars are a procedure run's variables.
 type Vars map[string]any
+
+// The variables every procedure sees beyond its inputs: the platform it runs on, and,
+// for its Finally steps, the run's outcome.
+const (
+	// VarOS is the operating system the procedure runs on (runtime.GOOS: "linux",
+	// "darwin", "windows"); an input of that name overrides it.
+	VarOS = "os"
+
+	// VarArch is the processor architecture (runtime.GOARCH: "amd64", "arm64"); an
+	// input of that name overrides it.
+	VarArch = "arch"
+
+	// VarFailed is true when a step failed or errored.
+	VarFailed = "failed"
+
+	// VarCanceled is true when the run's context was cancelled.
+	VarCanceled = "canceled"
+)
+
+// DefaultFinallyTimeout bounds a procedure's Finally steps when it sets no
+// FinallyTimeout: long enough for a container teardown, short enough that an
+// interrupted run still exits.
+const DefaultFinallyTimeout = 30 * time.Second
 
 // StepFunc is a registered Go step: it reads the variables and returns its results and
 // the variables it sets.
@@ -81,7 +105,7 @@ type compiled struct {
 // NewFromConfig validates and compiles cfg's procedures. A duplicate name, a step that
 // does not run exactly one thing, an unknown tool, step or called procedure, a bad
 // capture mode or a CEL expression that does not compile is CodeInvalidInput naming the
-// procedure and step. Building does no I/O.
+// procedure and step; the Finally steps are checked the same way. Building does no I/O.
 func NewFromConfig(cfg Config, deps Deps) (interfaces.ProcedureRunner, error) {
 	e := &engine{deps: deps, procs: map[string]*compiled{}}
 	for i := range cfg.Procedures {
@@ -104,13 +128,16 @@ func NewFromConfig(cfg Config, deps Deps) (interfaces.ProcedureRunner, error) {
 }
 
 // compile validates c's steps and compiles its expressions over the variables it can
-// see: its inputs, vars, captures and loop items.
+// see: its inputs, vars, captures, the variables its Go steps declare, loop items, the
+// platform variables and, for the Finally steps, the outcome variables.
 func (e *engine) compile(c *compiled) error {
 	names := slices.Clone(c.proc.Inputs)
 	for _, v := range c.proc.Vars {
 		names = append(names, v.Name)
 	}
 	names = append(names, stepNames(c.proc.Steps)...)
+	names = append(names, stepNames(c.proc.Finally)...)
+	names = append(names, VarOS, VarArch, VarFailed, VarCanceled)
 	opts := make([]cel.EnvOption, 0, len(names)+1)
 	opts = append(opts, celLibs())
 	for _, n := range slices.Compact(slices.Sorted(slices.Values(names))) {
@@ -126,7 +153,10 @@ func (e *engine) compile(c *compiled) error {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "var "+v.Name)
 		}
 	}
-	return e.compileSteps(env, c, c.proc.Steps)
+	if err := e.compileSteps(env, c, c.proc.Steps); err != nil {
+		return err
+	}
+	return e.compileSteps(env, c, c.proc.Finally)
 }
 
 // compileSteps validates steps and compiles their expressions.
@@ -137,7 +167,7 @@ func (e *engine) compileSteps(env *cel.Env, c *compiled, steps []types.ProcStep)
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+st.Name)
 		}
 		exprs := []string{st.When, st.Each}
-		for _, a := range st.Args {
+		for _, a := range slices.Concat(st.Args, st.Exec, st.Env) {
 			if x, ok := exprArg(a); ok {
 				exprs = append(exprs, x)
 			}
@@ -158,7 +188,8 @@ func (e *engine) compileSteps(env *cel.Env, c *compiled, steps []types.ProcStep)
 func (e *engine) validate(st *types.ProcStep) error {
 	kinds := 0
 	for _, set := range []bool{
-		st.Tool != "", st.Step != "", st.Call != "", len(st.Parallel) > 0,
+		st.Tool != "", len(st.Exec) > 0, st.Step != "", st.Call != "", len(st.Parallel) > 0,
+		st.Fail != "",
 	} {
 		if set {
 			kinds++
@@ -167,7 +198,9 @@ func (e *engine) validate(st *types.ProcStep) error {
 	switch {
 	case kinds != 1:
 		return apperr.New(apperr.CodeInvalidInput,
-			"a step runs exactly one of tool, step, call, parallel")
+			"a step runs exactly one of tool, exec, step, call, parallel, fail")
+	case st.Concurrent && st.Each == "":
+		return apperr.New(apperr.CodeInvalidInput, "concurrent needs each")
 	case st.Step != "" && e.deps.Steps[st.Step] == nil:
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"no registered step %q (registered: %s)", st.Step,
@@ -185,13 +218,16 @@ func (e *engine) validate(st *types.ProcStep) error {
 	return validCapture(st)
 }
 
-// validCapture checks that only a tool step captures, in a known mode.
+// validCapture checks that only a tool step captures, in a known mode, and that a
+// streamed step captures only its exit status.
 func validCapture(st *types.ProcStep) error {
 	switch {
 	case st.Capture == nil:
 		return nil
-	case st.Tool == "":
-		return apperr.New(apperr.CodeInvalidInput, "only a tool step captures")
+	case st.Tool == "" && len(st.Exec) == 0:
+		return apperr.New(apperr.CodeInvalidInput, "only a tool or exec step captures")
+	case st.Stream && st.Capture.As != types.CaptureExit:
+		return apperr.New(apperr.CodeInvalidInput, "a stream step captures only exit")
 	case !slices.Contains([]string{
 		"", types.CaptureText, types.CaptureLines,
 		types.CaptureJSON, types.CaptureExit,
@@ -218,7 +254,8 @@ func (c *compiled) program(env *cel.Env, src string) error {
 	return nil
 }
 
-// stepNames returns the variables steps bind: captures and loop items.
+// stepNames returns the variables steps bind: captures, the variables Go steps declare
+// and loop items.
 func stepNames(steps []types.ProcStep) []string {
 	var out []string
 	for i := range steps {
@@ -226,6 +263,7 @@ func stepNames(steps []types.ProcStep) []string {
 		if st.Capture != nil {
 			out = append(out, st.Capture.Var)
 		}
+		out = append(out, st.Sets...)
 		if st.Each != "" {
 			out = append(out, cmp(st.As, "item"))
 		}

@@ -37,6 +37,12 @@ type mapOp[E any] struct {
 
 	// schema is the input's JSON Schema.
 	schema []byte
+
+	// flags shape the input; an omitted flag runs as its default.
+	flags []types.FlagSpec
+
+	// args are the input's arguments; an omitted one runs as "" (the rest as no items).
+	args types.ArgSpec
 }
 
 // MapInput returns the Builder of an operation whose input is a map[string]any keyed by
@@ -50,7 +56,9 @@ func MapInput[E any](
 ) Builder[E] {
 	schema := MapSchema(flags, args)
 	return func(desc types.OperationDescriptor, env E) interfaces.Operation {
-		return &mapOp[E]{desc: desc, env: env, run: run, schema: schema}
+		return &mapOp[E]{
+			desc: desc, env: env, run: run, schema: schema, flags: flags, args: args,
+		}
 	}
 }
 
@@ -79,7 +87,78 @@ func (o *mapOp[E]) Run(
 	for k, v := range *in {
 		cp[k] = v
 	}
+	FillInput(o.flags, o.args, cp)
 	return o.run(ctx, cp, o.env, obs)
+}
+
+// FillInput puts every key the caller omitted into in — a flag's default, else its type's
+// zero; "" for an argument and no items for the rest — and coerces a sent flag to its
+// type (JSON decodes every number as a float64, every list as []any), so a run reads
+// every input the command declares, typed the same whichever front-end sent it. A
+// composite that runs an operation's procedure directly, outside its MapInput operation,
+// fills the same way so the procedure sees every declared input.
+func FillInput(flags []types.FlagSpec, args types.ArgSpec, in map[string]any) {
+	for i := range flags {
+		f := &flags[i]
+		v, ok := in[f.FlagField()]
+		if !ok {
+			in[f.FlagField()] = flagDefault(f)
+			continue
+		}
+		in[f.FlagField()] = coerce(f.Type, v)
+	}
+	for _, n := range args.Names {
+		if _, ok := in[n]; !ok {
+			in[n] = ""
+		}
+	}
+	if args.Rest != "" {
+		if _, ok := in[args.Rest]; !ok {
+			in[args.Rest] = []string{}
+		}
+	}
+}
+
+// coerce converts a JSON-decoded value to the Go type the flag's type binds (int,
+// int64 nanoseconds, []string); any other value is returned as sent.
+func coerce(flagType string, v any) any {
+	switch x := v.(type) {
+	case float64:
+		switch flagType {
+		case types.FlagInt:
+			return int(x)
+		case types.FlagDuration:
+			return int64(x)
+		}
+	case []any:
+		if flagType == types.FlagStrings {
+			out := make([]string, 0, len(x))
+			for _, item := range x {
+				out = append(out, fmt.Sprint(item))
+			}
+			return out
+		}
+	}
+	return v
+}
+
+// flagDefault is f's declared default, else the zero of its type.
+func flagDefault(f *types.FlagSpec) any {
+	if f.Default != nil {
+		return f.Default
+	}
+	switch f.Type {
+	case types.FlagString:
+		return ""
+	case types.FlagInt:
+		return 0
+	case types.FlagStrings:
+		return []string{}
+	case types.FlagDuration:
+		return int64(0)
+	default:
+		return false
+	}
 }
 
 // MapSchema returns the closed object schema of a map input: one property per flag

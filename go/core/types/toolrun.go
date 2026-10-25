@@ -131,7 +131,7 @@ type Selection struct {
 
 // TargetSpec selects a tool run's targets.
 type TargetSpec struct {
-	// Kind names the target selector (files, go_modules, python_projects,
+	// Kind names the target selector (files, file_dirs, go_modules, python_projects,
 	// ts_workspace, staged_files); empty means the run has no targets.
 	Kind string `yaml:"kind" json:"kind,omitempty"`
 

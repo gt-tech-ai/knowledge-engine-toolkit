@@ -69,6 +69,10 @@ type Artifact struct {
 
 	// SHA256 is the lowercase hex SHA-256 the downloaded bytes must match.
 	SHA256 string
+
+	// Member is the archive entry holding the binary, for a release that names it per
+	// platform (helm-unittest's untt-linux-amd64); empty means the binary's own name.
+	Member string
 }
 
 // ToolStatus describes the result of checking a single tool.
@@ -146,6 +150,9 @@ type InstallToolsOptions struct {
 	// CI targets exactly the tools the manifest marks `ci: true` (required and
 	// optional alike); it cannot be combined with Names.
 	CI bool
+
+	// DryRun lists the tools the install would put in place and installs nothing.
+	DryRun bool
 }
 
 // ParseFirstVersion extracts a version-like substring (digits.digits...) from s.

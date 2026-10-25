@@ -124,7 +124,8 @@ func zipOf(t *testing.T, name string, body []byte) []byte {
 //     must land as an executable at the tool's name, whatever the release packs.
 //
 // What it tests:
-//   - For a raw binary, a .tar.gz (binary nested in a directory), and a .zip, the
+//   - For a raw binary, a .tar.gz (binary nested in a directory, or under a
+//     platform-named member the artifact names), and a .zip, the
 //     artifact for the host's os-arch (linux-amd64) is fetched through the
 //     download seam, and the verified binary is placed in the install dir (GOBIN)
 //     with the served content and an executable mode.
@@ -135,22 +136,28 @@ func TestClientsToolchainInstall_VerifiesSHA256BeforePlacingBinary(t *testing.T)
 	cases := []struct {
 		name     string
 		url      string
+		member   string
 		artifact []byte
 	}{
-		{"raw binary", "https://example.test/pinned-linux-amd64", checksumPayload()},
+		{"raw binary", "https://example.test/pinned-linux-amd64", "", checksumPayload()},
 		{
 			"tar.gz archive",
-			"https://example.test/pinned_linux_amd64.tar.gz",
+			"https://example.test/pinned_linux_amd64.tar.gz", "",
 			tarGz(t, "pinned-1.2.3/pinned", checksumPayload()),
 		},
 		{
+			"tar.gz archive with a platform-named member",
+			"https://example.test/pinned_linux_amd64.tgz", "pinned-linux-amd64",
+			tarGz(t, "pinned-linux-amd64", checksumPayload()),
+		},
+		{
 			"zip archive",
-			"https://example.test/pinned_linux_amd64.zip",
+			"https://example.test/pinned_linux_amd64.zip", "",
 			zipOf(t, "pinned", checksumPayload()),
 		},
 		{
 			"gz single file",
-			"https://example.test/pinned-linux-x86_64.gz",
+			"https://example.test/pinned-linux-x86_64.gz", "",
 			gzOf(t, checksumPayload()),
 		},
 	}
@@ -164,7 +171,9 @@ func TestClientsToolchainInstall_VerifiesSHA256BeforePlacingBinary(t *testing.T)
 				Return(io.NopCloser(bytes.NewReader(tc.artifact)), nil)
 
 			tool := downloadTool(map[string]types.Artifact{
-				"linux-amd64": {URL: tc.url, SHA256: sha256Hex(tc.artifact)},
+				"linux-amd64": {
+					URL: tc.url, SHA256: sha256Hex(tc.artifact), Member: tc.member,
+				},
 				"darwin-arm64": {
 					URL:    "https://example.test/other",
 					SHA256: sha256Hex(nil),

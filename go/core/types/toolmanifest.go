@@ -105,6 +105,10 @@ type AssetEntry struct {
 	// SHA256 is the lowercase hex SHA-256 of the asset, taken from the release's
 	// published checksums; the installer refuses any download that differs.
 	SHA256 string `yaml:"sha256"`
+
+	// Member is the archive entry holding the binary, when the release names it per
+	// platform; empty means the tool's binary name.
+	Member string `yaml:"member,omitempty"`
 }
 
 // sha256Hex matches a lowercase hex SHA-256 digest.

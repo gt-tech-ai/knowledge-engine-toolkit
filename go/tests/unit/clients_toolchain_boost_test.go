@@ -471,6 +471,36 @@ func TestClientsToolchainInstallSet_AllAlreadyInstalled(t *testing.T) {
 	))
 }
 
+// TestClientsToolchainInstallSet_DryRun tests the dry-run path of a tool install.
+//
+// Why this test is important:
+//   - `search tools install --for … --dry-run` is how CI's tool list is read off the
+//     CLI; a dry run that installed, or one that reported nothing for a missing tool,
+//     would each mislead the reader.
+//
+// What it tests:
+//   - with the requested tool absent and DryRun set, InstallSet runs no install command,
+//     prompts nothing (the prompter denies) and returns nil.
+func TestClientsToolchainInstallSet_DryRun(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	r := mocks.NewMockCommandRunner(ctrl)
+	r.EXPECT().Exists("pgcli").Return(false)
+
+	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "linux-apt", denyPrompter(t))
+	require.NoError(t, inst.InstallSet(
+		context.Background(),
+		"/root",
+		[]types.ToolDef{{
+			Name: "pgcli", Binary: "pgcli",
+			InstallMethods: map[string]types.InstallMethod{
+				"linux-apt": {Command: "apt-get", Args: []string{"install", "pgcli"}},
+			},
+		}},
+		types.InstallToolsOptions{DryRun: true},
+	))
+}
+
 // TestClientsToolchainProvision_WindowsArm64InstallAddsAmd64Path tests that installing a
 // go tool on windows/arm64 adds the cross-compiled windows_amd64 dir to PATH for
 // verification.
