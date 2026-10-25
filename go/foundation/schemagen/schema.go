@@ -215,10 +215,8 @@ func Comments(
 		pkgPath := importPath
 		if rel := strings.TrimPrefix(path.Dir(f.Path), dir); rel != "" {
 			// An import path is always slash-separated, so path (not filepath) is correct here.
-			pkgPath = path.Join(
-				importPath,
-				strings.TrimPrefix(rel, "/"),
-			) // nosemgrep: use-filepath-join
+			sub := strings.TrimPrefix(rel, "/")
+			pkgPath = path.Join(importPath, sub) // nosemgrep: use-filepath-join
 		}
 		collectStructDocs(file, pkgPath, out)
 	}
