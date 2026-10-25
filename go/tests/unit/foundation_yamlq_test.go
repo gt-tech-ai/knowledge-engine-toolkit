@@ -1,6 +1,7 @@
 package unit_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -225,4 +226,65 @@ func TestYamlq_UpsertFlowAndMultiline(t *testing.T) {
 			assert.Equal(t, want, got[0].Value, name+" "+path+": %s", out)
 		}
 	}
+}
+
+// TestYamlq_Rewrite tests the in-place rewrite of every scalar a query selects.
+//
+// Why this test is important:
+//   - A release pin rewrites each container image reference of a manifest wherever it
+//     sits (a head group, every worker group) without knowing the exact paths, and must
+//     leave the file's comments, indentation and the other images alone; a rewrite that
+//     touched a sibling token or re-encoded the file would churn every pinned manifest.
+//
+// What it tests:
+//   - `$..image` with a function that pins only the matching repository rewrites both
+//     occurrences on their own lines, keeps a quoted token's quotes through the
+//     function's styled replacement, and leaves the other image and the comments.
+//   - A function that declines every scalar returns the source unchanged; a path that
+//     selects nothing returns it unchanged; a malformed path is CodeInvalidInput.
+func TestYamlq_Rewrite(t *testing.T) {
+	t.Parallel()
+	const doc = `spec:
+  head:
+    - name: ray-head
+      image: reg/vertiva/ingestion-ray:latest # pinned by CD
+      resources: {}
+  worker:
+    - name: ray-worker
+      image: "reg/vertiva/ingestion-ray:latest"
+    - name: sidecar
+      image: reg/other:1
+`
+	pin := func(old string) (string, bool) {
+		if !strings.Contains(old, "reg/vertiva/ingestion-ray") {
+			return "", false
+		}
+		return "reg/vertiva/ingestion-ray@sha256:abc", true
+	}
+	out, err := yamlq.Rewrite([]byte(doc), "$..image", pin)
+	require.NoError(t, err)
+	assert.Equal(t, `spec:
+  head:
+    - name: ray-head
+      image: reg/vertiva/ingestion-ray@sha256:abc # pinned by CD
+      resources: {}
+  worker:
+    - name: ray-worker
+      image: "reg/vertiva/ingestion-ray@sha256:abc"
+    - name: sidecar
+      image: reg/other:1
+`, string(out))
+
+	same, err := yamlq.Rewrite([]byte(doc), "$..image", func(string) (string, bool) {
+		return "", false
+	})
+	require.NoError(t, err)
+	assert.Equal(t, doc, string(same))
+
+	same, err = yamlq.Rewrite([]byte(doc), "$.spec.none[*].image", pin)
+	require.NoError(t, err)
+	assert.Equal(t, doc, string(same))
+
+	_, err = yamlq.Rewrite([]byte(doc), "spec.image", pin)
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

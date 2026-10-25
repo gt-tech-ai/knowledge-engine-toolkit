@@ -12,18 +12,44 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
-// docFormats maps a file extension to its document decoder.
-var docFormats = map[string]string{
-	".yaml": "yaml", ".yml": "yaml", ".json": "yaml",
-	".tf": "hcl", ".hcl": "hcl", ".tfvars": "hcl",
-	".alloy": "alloy", ".river": "alloy",
+// The document formats Docs and Decode read, and the extensions a YAML selector keeps by
+// default.
+const (
+	// formatYAML decodes YAML (and JSON, a YAML subset).
+	formatYAML = "yaml"
+
+	// formatHCL decodes HCL as Terraform's JSON syntax.
+	formatHCL = "hcl"
+
+	// formatAlloy decodes an Alloy (River) configuration.
+	formatAlloy = "alloy"
+
+	// extYAML and extYML are the YAML file extensions.
+	extYAML, extYML = ".yaml", ".yml"
+)
+
+// docFormat is the document format of a file extension; "" is none.
+func docFormat(ext string) string {
+	switch ext {
+	case extYAML, extYML, ".json":
+		return formatYAML
+	case ".tf", ".hcl", ".tfvars":
+		return formatHCL
+	case ".alloy", ".river":
+		return formatAlloy
+	default:
+		return ""
+	}
 }
 
 // Docs decodes every configuration file sel selects by its extension; with no Exts in
 // sel it keeps `.yaml` and `.yml` files.
-func (v *view) Docs(ctx context.Context, sel types.FileSelector) ([]types.Document, error) {
+func (v *view) Docs(
+	ctx context.Context,
+	sel types.FileSelector,
+) ([]types.Document, error) {
 	if len(sel.Exts) == 0 {
-		sel.Exts = []string{".yaml", ".yml"}
+		sel.Exts = []string{extYAML, extYML}
 	}
 	files, err := v.Files(ctx, sel)
 	if err != nil {
@@ -31,15 +57,15 @@ func (v *view) Docs(ctx context.Context, sel types.FileSelector) ([]types.Docume
 	}
 	var out []types.Document
 	for _, f := range files {
-		format := docFormats[path.Ext(f.Path)]
+		format := docFormat(path.Ext(f.Path))
 		var docs []any
 		switch format {
-		case "yaml":
+		case formatYAML:
 			docs, err = v.yamlDocs(ctx, f.Path)
-		case "hcl":
-			docs, err = v.oneDoc(ctx, "hcl", f.Path, decodeHCL)
-		case "alloy":
-			docs, err = v.oneDoc(ctx, "alloy", f.Path, decodeAlloy)
+		case formatHCL:
+			docs, err = v.oneDoc(ctx, formatHCL, f.Path, decodeHCL)
+		case formatAlloy:
+			docs, err = v.oneDoc(ctx, formatAlloy, f.Path, decodeAlloy)
 		default:
 			continue
 		}
@@ -47,7 +73,10 @@ func (v *view) Docs(ctx context.Context, sel types.FileSelector) ([]types.Docume
 			return nil, err
 		}
 		for i, d := range docs {
-			out = append(out, types.Document{Value: d, Path: f.Path, Format: format, Index: i})
+			out = append(
+				out,
+				types.Document{Value: d, Path: f.Path, Format: format, Index: i},
+			)
 		}
 	}
 	return out, nil
@@ -62,7 +91,11 @@ func (v *view) yamlDocs(ctx context.Context, p string) ([]any, error) {
 	out := make([]any, 0, len(nodes))
 	for i := range nodes {
 		var doc any
-		if err := v.yamlView.Decode(ctx, types.YAMLDoc{Path: p, Index: i}, &doc); err != nil {
+		if err := v.yamlView.Decode(
+			ctx,
+			types.YAMLDoc{Path: p, Index: i},
+			&doc,
+		); err != nil {
 			return nil, err
 		}
 		out = append(out, doc)
@@ -76,17 +109,21 @@ func (v *view) oneDoc(
 	format, p string,
 	decode func(src []byte, p string) (any, error),
 ) ([]any, error) {
-	doc, err := v.snap.Memo(ctx, "doc|"+format+"|"+p, func(ctx context.Context) (any, error) {
-		text, err := v.Text(ctx, p)
-		if err != nil {
-			return nil, err
-		}
-		doc, err := decode(text.Bytes, p)
-		if err != nil {
-			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
-		}
-		return doc, nil
-	})
+	doc, err := v.snap.Memo(
+		ctx,
+		"doc|"+format+"|"+p,
+		func(ctx context.Context) (any, error) {
+			text, err := v.Text(ctx, p)
+			if err != nil {
+				return nil, err
+			}
+			doc, err := decode(text.Bytes, p)
+			if err != nil {
+				return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
+			}
+			return doc, nil
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -97,15 +134,15 @@ func (v *view) oneDoc(
 // the Document shape: the first YAML document, or the one HCL / Alloy document. It serves
 // configuration embedded in another file (an Alloy config inside a Helm values string).
 // An unknown format or a parse error is CodeInvalidInput.
-func Decode(format string, name string, src []byte) (any, error) {
+func Decode(format, name string, src []byte) (any, error) {
 	var doc any
 	var err error
 	switch format {
-	case "yaml":
+	case formatYAML:
 		err = yaml.Unmarshal(src, &doc)
-	case "hcl":
+	case formatHCL:
 		doc, err = decodeHCL(src, name)
-	case "alloy":
+	case formatAlloy:
 		doc, err = decodeAlloy(src, name)
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput, "decode: unknown format "+format)
@@ -116,16 +153,17 @@ func Decode(format string, name string, src []byte) (any, error) {
 	return doc, nil
 }
 
-// decodeHCL decodes an HCL file as Terraform's JSON syntax, through hcl2json: literal-only
-// expressions are evaluated, every other expression is its `${…}`-wrapped source text.
+// decodeHCL decodes an HCL file as Terraform's JSON syntax, through hcl2json:
+// literal-only expressions are evaluated, every other expression is its `${…}`-wrapped
+// source text.
 func decodeHCL(src []byte, p string) (any, error) {
 	b, err := convert.Bytes(src, p, convert.Options{Simplify: true})
 	if err != nil {
-		return nil, err
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "hcl "+p)
 	}
 	var doc any
 	if err := json.Unmarshal(b, &doc); err != nil {
-		return nil, err
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "hcl json "+p)
 	}
 	return doc, nil
 }

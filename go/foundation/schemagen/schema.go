@@ -72,9 +72,12 @@ func Reflector(opts Options) *jsonschema.Reflector {
 	}
 }
 
-// Reflect returns the schema of value's type under opts.
+// Reflect returns the schema of value's type under opts. A type graph with a cycle (a
+// step holding steps) has no inline form, so it is reflected by reference: each named
+// type once under $defs, a $ref where it recurs.
 func Reflect(value any, opts Options) *jsonschema.Schema {
 	r := Reflector(opts)
+	r.DoNotReference = !recursive(reflect.TypeOf(value), map[reflect.Type]bool{})
 	if opts.Root == "" {
 		return r.ReflectFromType(reflect.TypeOf(value))
 	}
@@ -90,6 +93,28 @@ func Reflect(value any, opts Options) *jsonschema.Schema {
 	return r.ReflectFromType(wrapper)
 }
 
+// recursive reports whether t's type graph reaches a struct already on the path from t
+// — the shape an inlining reflector would expand without end.
+func recursive(t reflect.Type, path map[reflect.Type]bool) bool {
+	switch t.Kind() {
+	case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map:
+		return recursive(t.Elem(), path)
+	case reflect.Struct:
+		if path[t] {
+			return true
+		}
+		path[t] = true
+		defer delete(path, t)
+		for i := range t.NumField() {
+			if recursive(t.Field(i).Type, path) {
+				return true
+			}
+		}
+	default:
+	}
+	return false
+}
+
 // For returns T's schema under opts in its committed form (see Marshal).
 func For[T any](opts Options) ([]byte, error) {
 	var zero T
@@ -97,8 +122,8 @@ func For[T any](opts Options) ([]byte, error) {
 }
 
 // AllowExtraProps lifts additionalProperties: false from s and every schema below it
-// (properties, array items, map values), so a section admits keys its struct does not
-// model while each modeled field keeps its type.
+// (properties, array items, map values, $defs), so a section admits keys its struct
+// does not model while each modeled field keeps its type.
 func AllowExtraProps(s *jsonschema.Schema) {
 	if s == nil {
 		return
@@ -115,6 +140,9 @@ func AllowExtraProps(s *jsonschema.Schema) {
 		}
 	}
 	AllowExtraProps(s.Items)
+	for _, d := range s.Definitions {
+		AllowExtraProps(d)
+	}
 }
 
 // Marshal renders s as two-space-indented JSON with a trailing newline.
@@ -187,7 +215,10 @@ func Comments(
 		pkgPath := importPath
 		if rel := strings.TrimPrefix(path.Dir(f.Path), dir); rel != "" {
 			// An import path is always slash-separated, so path (not filepath) is correct here.
-			pkgPath = path.Join(importPath, strings.TrimPrefix(rel, "/")) // nosemgrep: use-filepath-join
+			pkgPath = path.Join(
+				importPath,
+				strings.TrimPrefix(rel, "/"),
+			) // nosemgrep: use-filepath-join
 		}
 		collectStructDocs(file, pkgPath, out)
 	}

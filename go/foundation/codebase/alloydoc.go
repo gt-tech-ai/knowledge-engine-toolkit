@@ -8,6 +8,8 @@ import (
 	"github.com/grafana/alloy/syntax/parser"
 	"github.com/grafana/alloy/syntax/printer"
 	"github.com/grafana/alloy/syntax/token"
+
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
 // decodeAlloy decodes an Alloy (River) file into the shape decodeHCL produces: a block
@@ -17,7 +19,7 @@ import (
 func decodeAlloy(src []byte, p string) (any, error) {
 	file, err := parser.ParseFile(p, src)
 	if err != nil {
-		return nil, err
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "alloy "+p)
 	}
 	return alloyBody(file.Body), nil
 }
