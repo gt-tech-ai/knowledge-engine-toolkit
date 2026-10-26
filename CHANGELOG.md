@@ -6,6 +6,18 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.21] - 2026-10-26
+
+Python: unchanged (`techai-webutils` 0.6.1).
+
+### Fixed
+
+- `clients/outbox/sqs`: the sink packs each `SendMessageBatch` within SQS's 1 MiB request
+  limit as well as its 10-entry limit. It used to pack by count alone, so ten large records
+  made one oversized request that SQS rejected whole (`BatchRequestTooLong`) on every
+  attempt until all ten parked. A record over SQS's 256 KiB message limit now fails
+  `CodeInvalidInput` without reaching SQS, instead of failing every retry.
+
 ## [0.0.20] - 2026-10-24
 
 Python: unchanged (`techai-webutils` 0.6.1).
