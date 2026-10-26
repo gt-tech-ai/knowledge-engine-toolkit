@@ -13,6 +13,13 @@ type HTTPDoer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+// Dialer opens a network connection, with *net.Dialer's own signature so a dialer
+// satisfies it unchanged.
+type Dialer interface {
+	// DialContext connects to address on network ("tcp") until ctx ends.
+	DialContext(ctx context.Context, network, address string) (net.Conn, error)
+}
+
 // NSResolver looks up a host's name servers, with *net.Resolver's own signature so a
 // resolver satisfies it unchanged.
 type NSResolver interface {

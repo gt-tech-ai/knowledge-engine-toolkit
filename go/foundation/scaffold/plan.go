@@ -1,12 +1,14 @@
-// Package scaffold plans and applies the files a template set generates into a
-// codebase, honoring each file's policy (written once, regenerated, or regenerated
-// above a preserve marker).
+// Package scaffold plans and applies the files a template set (Plan) or the caller's
+// own rendering (PlanFiles) generates into a codebase, honoring each file's policy
+// (written once, regenerated, or regenerated above a preserve marker).
 package scaffold
 
 import (
 	"bytes"
 	"context"
 	iofs "io/fs"
+	"maps"
+	"slices"
 	"strings"
 	// The templates render source and config files, never HTML, so text/template is correct.
 	"text/template" // nosemgrep: import-text-template
@@ -61,6 +63,25 @@ func Plan(
 	})
 	if err != nil {
 		return types.FilePlan{}, apperr.Wrap(err, apperr.Code(err), "scaffold plan")
+	}
+	return plan, nil
+}
+
+// PlanFiles decides each of files' actions against cb under policy, as Plan does for a
+// template set, for content the caller rendered itself. Entries are in path order.
+func PlanFiles(
+	ctx context.Context,
+	cb interfaces.Codebase,
+	files types.Artifacts,
+	policy func(path string) types.FilePolicy,
+) (types.FilePlan, error) {
+	var plan types.FilePlan
+	for _, path := range slices.Sorted(maps.Keys(files)) {
+		entry, err := decide(ctx, cb, path, files[path], policy(path))
+		if err != nil {
+			return types.FilePlan{}, apperr.Wrap(err, apperr.Code(err), "scaffold plan")
+		}
+		plan.Entries = append(plan.Entries, entry)
 	}
 	return plan, nil
 }

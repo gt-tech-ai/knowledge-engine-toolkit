@@ -121,3 +121,70 @@ func TestFoundationScaffold_Conflicts(t *testing.T) {
 		scaffoldPolicy, memoryCodebase(t, nil))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+// TestFoundationScaffold_PlanFiles tests planning content rendered by the caller.
+//
+// Why this test is important:
+//   - A scaffold whose files are rendered by the caller (not a template tree) must get
+//     the same policy decisions as Plan, so a rerun keeps an operator's file and writes
+//     nothing when nothing changed.
+//
+// What it tests:
+//   - Entries come back in path order; a missing file is created; a Once file that
+//     exists is kept with its existing content; a Regenerate file is updated when it
+//     differs and kept when it matches; a Preserve file without a marker conflicts.
+func TestFoundationScaffold_PlanFiles(t *testing.T) {
+	t.Parallel()
+	cb := memoryCodebase(t, map[string]string{
+		"a/hand.yaml": "tuned: true\n",
+		"a/gen.hcl":   "old\n",
+		"a/same.hcl":  "same\n",
+		"a/keep.go":   "no marker\n",
+	})
+	policy := func(path string) types.FilePolicy {
+		switch path {
+		case "a/hand.yaml":
+			return types.PolicyOnce
+		case "a/keep.go":
+			return types.PolicyPreserve
+		default:
+			return types.PolicyRegenerate
+		}
+	}
+	plan, err := scaffold.PlanFiles(t.Context(), cb, types.Artifacts{
+		"a/new.md":    []byte("new\n"),
+		"a/hand.yaml": []byte("tuned: false\n"),
+		"a/gen.hcl":   []byte("new\n"),
+		"a/same.hcl":  []byte("same\n"),
+		"a/keep.go":   []byte("head\n// scaffold:preserve\n"),
+	}, policy)
+	require.NoError(t, err)
+
+	got := map[string]types.FileAction{}
+	paths := make([]string, 0, len(plan.Entries))
+	for _, e := range plan.Entries {
+		got[e.Path] = e.Action
+		paths = append(paths, e.Path)
+		if e.Path == "a/hand.yaml" {
+			assert.Equal(t, "tuned: true\n", string(e.Content))
+		}
+	}
+	assert.Equal(
+		t,
+		[]string{
+			"a/gen.hcl",
+			"a/hand.yaml",
+			"a/keep.go",
+			"a/new.md",
+			"a/same.hcl",
+		},
+		paths,
+	)
+	assert.Equal(t, map[string]types.FileAction{
+		"a/new.md":    types.FileCreate,
+		"a/hand.yaml": types.FileKeep,
+		"a/gen.hcl":   types.FileUpdate,
+		"a/same.hcl":  types.FileKeep,
+		"a/keep.go":   types.FileConflict,
+	}, got)
+}

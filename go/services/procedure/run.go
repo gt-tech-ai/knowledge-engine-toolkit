@@ -17,6 +17,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	keengine "github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
 // Run runs the procedure named name: its vars, its steps in order until one fails, then
@@ -275,6 +276,8 @@ func (e *engine) once(
 	case st.Call != "":
 		res, err := e.Run(ctx, st.Call, vars, opts)
 		return res, nil, err
+	case st.Probe != nil:
+		return types.StepResults{e.probe(ctx, c, st.Probe, name, vars)}, nil, nil
 	case st.Step != "":
 		if st.Mutating && opts.DryRun {
 			return types.StepResults{
@@ -282,7 +285,7 @@ func (e *engine) once(
 				},
 				nil, nil
 		}
-		res, set, err := e.deps.Steps[st.Step](ctx, vars, opts)
+		res, set, err := e.goStep(ctx, c, st, vars, opts)
 		if err != nil && !res.HasFailures() {
 			res = append(res, c.result(name, types.StatusFail, err.Error()))
 		}
@@ -290,6 +293,25 @@ func (e *engine) once(
 	default:
 		return e.tool(ctx, c, st, name, vars, opts)
 	}
+}
+
+// goStep runs st's registered Go step under the recovery decorator, so a panic is the
+// step's coded INTERNAL error (logged with its stack to deps.Log) instead of unwinding
+// the run past its finally steps.
+func (e *engine) goStep(
+	ctx context.Context,
+	c *compiled,
+	st *types.ProcStep,
+	vars Vars,
+	opts types.RunOptions,
+) (res types.StepResults, set Vars, err error) {
+	err = decorate.NewRecovery(e.deps.Log, "procedure", c.proc.Name).WrapOp(ctx, st.Step,
+		func(ctx context.Context) error {
+			var stepErr error
+			res, set, stepErr = e.deps.Steps[st.Step](ctx, vars, opts)
+			return stepErr
+		})
+	return res, set, err
 }
 
 // confirm asks st's question unless the run answers yes or is a dry run.

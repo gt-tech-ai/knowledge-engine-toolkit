@@ -1,6 +1,9 @@
 package procedure
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // Text returns key's string value; a missing or non-string value is "".
 func (v Vars) Text(key string) string {
@@ -41,6 +44,20 @@ func (v Vars) Int(key string) int {
 		return int(val)
 	case float64:
 		return int(val)
+	default:
+		return 0
+	}
+}
+
+// Duration returns key's duration — the time.Duration a CLI flag carries, or the text a
+// tool call sends ("90s"); a missing, other or unparseable value is 0.
+func (v Vars) Duration(key string) time.Duration {
+	switch val := v[key].(type) {
+	case time.Duration:
+		return val
+	case string:
+		d, _ := time.ParseDuration(val)
+		return d
 	default:
 		return 0
 	}

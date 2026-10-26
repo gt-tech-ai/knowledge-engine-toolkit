@@ -6,6 +6,34 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `services/procedure`: the `probe` step — `probe: {http | tcp | exec, status, contains,
+  hint, timeout, delay, max_delay}` is a read-only readiness check retried with doubling
+  waits (500ms → 5s by default) until it passes or its timeout ends; each attempt is
+  bounded at 5s. An HTTP probe passes on `status` (any 2xx when unset) with `contains`
+  in the first 4 KiB of the body, a TCP probe once a connection opens, an exec probe on
+  exit 0 with `contains` in stdout. Exactly one kind must be non-empty once expanded, so
+  one `each` row can probe a list of mixed checks; a failure carries the last attempt's
+  error and the hint. `Deps.HTTP` / `Deps.Dialer` inject the HTTP client and dialer
+  (nil: `http.DefaultClient`, a zero `net.Dialer`).
+- `core/interfaces`: `Dialer` (`*net.Dialer`'s `DialContext`), mocked as `MockDialer`.
+- `foundation/scaffold`: `PlanFiles(ctx, cb, files, policy)` plans content the caller
+  rendered itself (a `types.Artifacts` map) under the same Once / Regenerate / Preserve
+  decisions as `Plan`, in path order, for `Apply`.
+- `services/procedure`: `Vars.Duration(key)` — the `time.Duration` a CLI flag carries or the
+  text a tool call sends (`"90s"`); a missing, other or unparseable value is 0, like the
+  other accessors.
+
+### Changed
+
+- `services/procedure`: a registered Go step that panics fails its row instead of
+  crashing the process — the engine wraps every Go step in `foundation/decorate`
+  recovery, so the panic becomes a failed row named after the step (its message says the
+  panic was recovered, never the panic value), the run stops as on any failed row, and
+  `finally` still runs. `Deps.Log` receives the recovered panic with its stack; nil logs
+  nothing.
+
 ## [0.0.20] - 2026-10-24
 
 Python: unchanged (`techai-webutils` 0.6.1).
