@@ -35,6 +35,18 @@ type CommandRunner interface {
 		args ...string,
 	) CmdResult
 
+	// RunBufferedWithInput executes a command with additional environment variables,
+	// input fed to its stdin, and captured stdout/stderr: a manifest or secret piped to
+	// `kubectl apply -f -` never touches disk.
+	RunBufferedWithInput(
+		ctx context.Context,
+		dir string,
+		extraEnv []string,
+		input []byte,
+		name string,
+		args ...string,
+	) CmdResult
+
 	// Exists checks whether a binary is available on PATH.
 	Exists(name string) bool
 

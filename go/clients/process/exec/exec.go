@@ -24,6 +24,9 @@ const (
 
 	// waitDelay bounds how long output copying outlives the process.
 	waitDelay = time.Second
+
+	// logFileMode is a ProcessSpec.LogFile's mode when the supervisor creates it.
+	logFileMode = 0o600
 )
 
 // Supervisor starts and stops processes.
@@ -41,10 +44,11 @@ var _ interfaces.Supervisor = (*Supervisor)(nil)
 // New returns a Supervisor with no processes.
 func New() *Supervisor { return &Supervisor{} }
 
-// command builds spec's command.
-func command(spec types.ProcessSpec) (*osexec.Cmd, error) {
+// command builds spec's command, and the release of the log file it opened (call it
+// once the command has started: the child holds its own descriptor).
+func command(spec types.ProcessSpec) (*osexec.Cmd, func(), error) {
 	if len(spec.Args) == 0 {
-		return nil, apperr.New(
+		return nil, nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"process "+spec.Name+": no program",
 		)
@@ -55,11 +59,30 @@ func command(spec types.ProcessSpec) (*osexec.Cmd, error) {
 	cmd := osexec.Command(prog, args...) //nolint:noctx // see above
 	cmd.Dir = spec.Dir
 	cmd.Env = types.MergeEnv(os.Environ(), spec.Env)
+	release := func() {}
+	if spec.LogFile != "" {
+		f, err := os.OpenFile(
+			spec.LogFile,
+			os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+			logFileMode,
+		)
+		if err != nil {
+			return nil, nil, apperr.Wrap(err, apperr.CodeUnavailable,
+				"open "+spec.Name+"'s log "+spec.LogFile)
+		}
+		release = func() { _ = f.Close() }
+		if spec.Stdout == nil {
+			spec.Stdout = f
+		}
+		if spec.Stderr == nil {
+			spec.Stderr = f
+		}
+	}
 	cmd.Stdout, cmd.Stderr = orDiscard(spec.Stdout), orDiscard(spec.Stderr)
 	// A child the process leaves behind may hold its output open; stop copying a
 	// moment after the process itself exits.
 	cmd.WaitDelay = waitDelay
-	return cmd, nil
+	return cmd, release, nil
 }
 
 // orDiscard is w, or io.Discard when w is nil.
@@ -76,10 +99,11 @@ func (s *Supervisor) Start(
 	spec types.ProcessSpec,
 	ready interfaces.Probe[interfaces.ProcessHandle],
 ) (interfaces.ProcessHandle, error) {
-	cmd, err := command(spec)
+	cmd, release, err := command(spec)
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 	ownGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeUnavailable, "start "+spec.Name)
@@ -104,10 +128,11 @@ func (s *Supervisor) Start(
 // available (Windows) it starts spec without one, so the process may still end with
 // the caller's console.
 func (s *Supervisor) Detach(spec types.ProcessSpec) error {
-	cmd, err := command(spec)
+	cmd, release, err := command(spec)
 	if err != nil {
 		return err
 	}
+	defer release()
 	ownSession(cmd)
 	if err := cmd.Start(); err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "start "+spec.Name)

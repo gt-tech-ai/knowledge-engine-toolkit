@@ -97,6 +97,24 @@ func (b *BufferingRunner) RunBufferedWithEnv(
 	return result
 }
 
+// RunBufferedWithInput delegates to the inner runner with extra environment
+// variables and captures the output, with input fed to stdin.
+func (b *BufferingRunner) RunBufferedWithInput(
+	ctx context.Context,
+	dir string,
+	extraEnv []string,
+	input []byte,
+	name string,
+	args ...string,
+) CmdResult {
+	result := b.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
+	b.mu.Lock()
+	b.buf.Write(result.Stdout)
+	b.buf.Write(result.Stderr)
+	b.mu.Unlock()
+	return result
+}
+
 // Exists delegates to the inner runner.
 func (b *BufferingRunner) Exists(name string) bool { return b.inner.Exists(name) }
 

@@ -23,6 +23,7 @@
 //go:generate mockgen -destination=mock_circuit_breaker.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CircuitBreaker
 //go:generate mockgen -destination=mock_client_stream.go -package=mocks google.golang.org/grpc ClientStream
 //go:generate mockgen -destination=mock_command_runner.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CommandRunner,CmdHook
+//go:generate mockgen -destination=mock_fs.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces FS
 //go:generate mockgen -destination=mock_config_loader.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ConfigLoader
 //go:generate mockgen -destination=mock_connector.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ConnectorSource,SourceBuilder
 //go:generate mockgen -destination=mock_deadletter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces DeadLetterBackend

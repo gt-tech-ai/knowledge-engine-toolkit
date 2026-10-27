@@ -86,7 +86,7 @@ func (d *Runner) RunBuffered(
 	dir, name string,
 	args ...string,
 ) interfaces.CmdResult {
-	return d.runBuffered(ctx, dir, nil, name, args...)
+	return d.runBuffered(ctx, dir, nil, nil, name, args...)
 }
 
 // RunBufferedWithEnv executes a command with extra environment variables
@@ -98,15 +98,29 @@ func (d *Runner) RunBufferedWithEnv(
 	name string,
 	args ...string,
 ) interfaces.CmdResult {
-	return d.runBuffered(ctx, dir, extraEnv, name, args...)
+	return d.runBuffered(ctx, dir, extraEnv, nil, name, args...)
 }
 
-// runBuffered is the shared implementation for RunBuffered and
-// RunBufferedWithEnv.
+// RunBufferedWithInput executes a command with extra environment variables appended,
+// input fed to its stdin, and stdout/stderr captured into buffers.
+func (d *Runner) RunBufferedWithInput(
+	ctx context.Context,
+	dir string,
+	extraEnv []string,
+	input []byte,
+	name string,
+	args ...string,
+) interfaces.CmdResult {
+	return d.runBuffered(ctx, dir, extraEnv, input, name, args...)
+}
+
+// runBuffered is the shared implementation for RunBuffered, RunBufferedWithEnv and
+// RunBufferedWithInput; a nil input leaves stdin unset.
 func (d *Runner) runBuffered(
 	ctx context.Context,
 	dir string,
 	extraEnv []string,
+	input []byte,
 	name string,
 	args ...string,
 ) interfaces.CmdResult {
@@ -120,6 +134,9 @@ func (d *Runner) runBuffered(
 	cmd.Dir = dir
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	if input != nil {
+		cmd.Stdin = bytes.NewReader(input)
+	}
 	cmd.Env = types.MergeEnv(os.Environ(), extraEnv)
 	configureProcessGroup(cmd)
 

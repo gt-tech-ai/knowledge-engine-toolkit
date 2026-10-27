@@ -16,6 +16,10 @@ All notable changes to this project are recorded here. The format follows
 - `transport/cobra`: `Options.Before(cmd, op, input)` adjusts a leaf's input object and
   returns the operation to run (one a flag selects), and `Options.After(cmd, op, err)`
   runs after every run, failed or not, and returns the command's error.
+- `core/types`: `ProcessSpec.LogFile` appends a process's stdout and stderr (those not
+  given a writer) to a file the supervisor creates 0600, so a detached process's log needs
+  no caller-side file handling.
+- `tests/mocks`: `MockFS`, a generated mock of `interfaces.FS`.
 - `clients/git`: `GitClient.RemoteHasRef(ctx, root, remote, ref)` asks a remote for a branch
   or tag (`git ls-remote --exit-code --heads --tags`); no match is `false`, a remote that
   cannot be asked is `CodeUnavailable`, and the stub reports `false`.
@@ -48,6 +52,11 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- **Breaking for implementers:** `interfaces.CommandRunner` gains
+  `RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)`, a buffered run fed
+  `input` on stdin (a manifest piped to `kubectl apply -f -` never touches disk);
+  `foundation/system`'s runner, every builder decorator, the buffering runner and the
+  gate's no-runner implement it, and `MockCommandRunner` is regenerated.
 - `execution/ops`: `Decode` rejects a map input's key that no flag or argument declares,
   as it already did for a struct input's unknown field (`CodeInvalidInput` naming the
   key); null arguments decode as empty. `transport/mcp` decodes bounded and long-running
