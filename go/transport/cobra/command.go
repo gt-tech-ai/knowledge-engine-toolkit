@@ -35,6 +35,16 @@ type Options struct {
 		*ops.Registry, interfaces.ExecutionObserver, error,
 	)
 
+	// Before, when set, runs before each Tree leaf's operation with the command, the
+	// operation it names and the input object its flags and arguments built: it may change
+	// the input (a value from stdin or the console) and returns the operation to run (op,
+	// or a sibling the input selects, such as a --fix's mutating twin).
+	Before func(c *spf.Command, op string, in map[string]any) (string, error)
+
+	// After, when set, runs after each Tree leaf's run, failed or not, with the operation
+	// that ran and its error; it returns the error the command reports.
+	After func(c *spf.Command, op string, err error) error
+
 	// Use overrides the command's usage line; empty uses the operation's name.
 	Use string
 }

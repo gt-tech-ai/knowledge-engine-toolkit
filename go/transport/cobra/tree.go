@@ -25,7 +25,9 @@ import (
 // unknown operation or a bad flag type is an error naming the command. With
 // opts.Resolve set, reg may be nil: each leaf's flags come from its spec alone, and its
 // operation is found in the registry Resolve returns when it runs, so an unknown one
-// fails that run. Every leaf carries its operation under OperationAnnotation.
+// fails that run. With opts.Before or opts.After set every leaf's flags likewise come
+// from its spec, and the hooks wrap each run. Every leaf carries its operation under
+// OperationAnnotation.
 func Tree(root types.CommandSpec, reg *ops.Registry, opts Options) (*spf.Command, error) {
 	return node(&root, nil, reg, opts)
 }
@@ -88,7 +90,8 @@ func leafOrGroup(
 		}, nil
 	}
 	bare := len(spec.Flags) == 0 && len(spec.Args.Names) == 0 && spec.Args.Rest == ""
-	if bare && opts.Resolve == nil {
+	hooked := opts.Resolve != nil || opts.Before != nil || opts.After != nil
+	if bare && !hooked {
 		return Command(reg, spec.Op, opts)
 	}
 	if opts.Resolve == nil {
@@ -102,29 +105,49 @@ func leafOrGroup(
 		Annotations: map[string]string{OperationAnnotation: spec.Op},
 	}
 	cmd.RunE = func(c *spf.Command, args []string) error {
-		runReg, obs := reg, opts.Observer
-		if opts.Resolve != nil {
-			var err error
-			if runReg, obs, err = opts.Resolve(c.Context(), spec.Op); err != nil {
-				return err
-			}
+		in := values(c.Flags(), scope, spec.Args, args)
+		name := spec.Op
+		var err error
+		if opts.Before != nil {
+			name, err = opts.Before(c, name, in)
 		}
-		op, err := runReg.Find(spec.Op)
-		if err != nil {
-			return err
+		if err == nil {
+			err = run(c, name, in, reg, opts)
 		}
-		raw, err := json.Marshal(values(c.Flags(), scope, spec.Args, args))
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "encode input")
+		if opts.After != nil {
+			return opts.After(c, name, err)
 		}
-		// A human typed these flags, so the op's secret flags are admitted.
-		input, err := ops.DecodeLocal(op, raw)
-		if err != nil {
-			return err
-		}
-		return runReg.Run(c.Context(), spec.Op, input, obs)
+		return err
 	}
 	return cmd, nil
+}
+
+// run decodes in into operation name's input and runs it, in the registry and under the
+// observer opts.Resolve returns for the run (else reg and opts.Observer).
+func run(
+	c *spf.Command, name string, in map[string]any, reg *ops.Registry, opts Options,
+) error {
+	runReg, obs := reg, opts.Observer
+	if opts.Resolve != nil {
+		var err error
+		if runReg, obs, err = opts.Resolve(c.Context(), name); err != nil {
+			return err
+		}
+	}
+	op, err := runReg.Find(name)
+	if err != nil {
+		return err
+	}
+	raw, err := json.Marshal(in)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "encode input")
+	}
+	// A human typed these flags, so the op's secret flags are admitted.
+	input, err := ops.DecodeLocal(op, raw)
+	if err != nil {
+		return err
+	}
+	return runReg.Run(c.Context(), name, input, obs)
 }
 
 // values collects the set or defaulted flags in scope and the positional arguments.

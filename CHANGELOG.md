@@ -13,6 +13,9 @@ All notable changes to this project are recorded here. The format follows
   tree first; `Tree` then takes a nil registry, takes each leaf's flags from its spec, and
   an unknown operation fails the run. Every leaf (and every `Command`) carries its
   operation under `OperationAnnotation` (`"operation"`).
+- `transport/cobra`: `Options.Before(cmd, op, input)` adjusts a leaf's input object and
+  returns the operation to run (one a flag selects), and `Options.After(cmd, op, err)`
+  runs after every run, failed or not, and returns the command's error.
 - `core/types`: `FlagStringArray` (`string_array`), a repeatable string list flag that never
   splits on commas, and `IsListFlag`; map inputs and their schemas treat it as a list.
 - `services/procedure`: the `probe` step — `probe: {http | tcp | exec, status, contains,

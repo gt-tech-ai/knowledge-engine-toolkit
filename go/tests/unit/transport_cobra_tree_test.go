@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 
+	spf "github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
@@ -335,4 +338,78 @@ func TestTransportCobra_TreeStringArrayFlag(t *testing.T) {
 		`{"type":"object","additionalProperties":false,`+
 			`"properties":{"tag":{"type":"array","items":{"type":"string"}}}}`,
 		string(op.InputSchema()))
+}
+
+// TestTransportCobra_TreeRunHooks tests the hooks around a leaf's run.
+//
+// Why this test is important:
+//   - some inputs come from outside the flags (stdin, the console's verbosity), one flag
+//     can select a sibling operation (a --fix that runs the mutating twin), and a CLI
+//     opens and closes a log group around each run whether it fails or not; without the
+//     hooks each of those needs its own hand-built command.
+//
+// What it tests:
+//   - Before sees the leaf's input, adds a key and selects another operation, which runs
+//     with that input; After gets the selected operation and the run's error and its
+//     return is the command's error.
+func TestTransportCobra_TreeRunHooks(t *testing.T) {
+	t.Parallel()
+	flags := []types.FlagSpec{{Name: "fix"}}
+	ran := map[string]map[string]any{}
+	run := func(name string) ops.Builder[opsEnv] {
+		return ops.MapInput(
+			slices.Concat(
+				flags,
+				[]types.FlagSpec{{Name: "extra", Type: types.FlagString}},
+			),
+			types.ArgSpec{},
+			func(
+				_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
+			) error {
+				ran[name] = in
+				return apperr.New(apperr.CodeInternal, "boom")
+			},
+		)
+	}
+	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
+		Policy: types.ExposurePolicy{
+			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
+		},
+		Descriptors: []types.OperationDescriptor{
+			opDesc("lint", types.SafetyReadOnly, types.OpLifecycleBounded),
+			opDesc("lint.fix", types.SafetyMutating, types.OpLifecycleBounded),
+		},
+		Builders: map[string]ops.Builder[opsEnv]{
+			"lint":     run("lint"),
+			"lint.fix": run("lint.fix"),
+		},
+	})
+	require.NoError(t, err)
+	var after []string
+	opts := opscobra.Options{
+		Before: func(_ *spf.Command, op string, in map[string]any) (string, error) {
+			in["extra"] = "x"
+			if in["fix"] == true {
+				return op + ".fix", nil
+			}
+			return op, nil
+		},
+		After: func(_ *spf.Command, op string, err error) error {
+			after = append(after, op)
+			return apperr.Wrap(err, apperr.CodeInternal, "after")
+		},
+	}
+	root, err := opscobra.Tree(types.CommandSpec{
+		Use:      "app",
+		Commands: []types.CommandSpec{{Use: "lint", Op: "lint", Flags: flags}},
+	}, reg, opts)
+	require.NoError(t, err)
+	root.SetArgs([]string{"lint", "--fix"})
+
+	err = root.ExecuteContext(t.Context())
+
+	require.ErrorContains(t, err, "after")
+	assert.NotContains(t, ran, "lint")
+	assert.Equal(t, map[string]any{"fix": true, "extra": "x"}, ran["lint.fix"])
+	assert.Equal(t, []string{"lint.fix"}, after)
 }
