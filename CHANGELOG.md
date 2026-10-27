@@ -56,6 +56,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- `execution/ops`: a map input's duration flag is a `time.Duration` (from JSON nanoseconds,
+  a Go integer or its text, defaults included), so a procedure interpolates `{timeout}`
+  as `2m0s` instead of `120000000000`.
 - `transport/cobra`: a duration flag's spec default is its registered default, so help
   prints it and the flag no longer counts as set when not given.
 

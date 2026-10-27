@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -146,16 +147,17 @@ func FillInput(flags []types.FlagSpec, args types.ArgSpec, in map[string]any) {
 	}
 }
 
-// coerce converts a JSON-decoded value to the Go type the flag's type binds (int,
-// int64 nanoseconds, []string); any other value is returned as sent.
+// coerce converts a JSON-decoded value to the Go type the flag's type binds (int, a
+// time.Duration from nanoseconds or its text, []string); any other value is returned as
+// sent.
 func coerce(flagType string, v any) any {
+	if flagType == types.FlagDuration {
+		return duration(v)
+	}
 	switch x := v.(type) {
 	case float64:
-		switch flagType {
-		case types.FlagInt:
+		if flagType == types.FlagInt {
 			return int(x)
-		case types.FlagDuration:
-			return int64(x)
 		}
 	case []any:
 		if types.IsListFlag(flagType) {
@@ -172,7 +174,7 @@ func coerce(flagType string, v any) any {
 // flagDefault is f's declared default, else the zero of its type.
 func flagDefault(f *types.FlagSpec) any {
 	if f.Default != nil {
-		return f.Default
+		return coerce(f.Type, f.Default)
 	}
 	switch f.Type {
 	case types.FlagString:
@@ -182,10 +184,28 @@ func flagDefault(f *types.FlagSpec) any {
 	case types.FlagStrings, types.FlagStringArray:
 		return []string{}
 	case types.FlagDuration:
-		return int64(0)
+		return time.Duration(0)
 	default:
 		return false
 	}
+}
+
+// duration is v as a time.Duration: a number is nanoseconds, a string its text ("2m");
+// any other value, or unparseable text, is returned as sent.
+func duration(v any) any {
+	switch x := v.(type) {
+	case float64:
+		return time.Duration(x)
+	case int64:
+		return time.Duration(x)
+	case int:
+		return time.Duration(x)
+	case string:
+		if d, err := time.ParseDuration(x); err == nil {
+			return d
+		}
+	}
+	return v
 }
 
 // MapSchema returns the closed object schema of a map input: one property per flag

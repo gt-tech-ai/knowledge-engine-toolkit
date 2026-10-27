@@ -2,7 +2,9 @@ package unit_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +25,8 @@ import (
 // What it tests:
 //   - an omitted flag is its default, else its type's zero (false, "", 0, an empty list,
 //     a zero duration); an omitted argument is "" and an omitted rest is an empty list; a
-//     sent value is kept, a JSON number reaches an int or duration flag as that type and
+//     sent value is kept, a JSON number reaches an int flag as an int and a duration flag
+//     as a time.Duration (so a procedure interpolates it as "1.5s", not nanoseconds), and
 //     a JSON list a strings flag as []string; the schema still names every key.
 func TestExecutionOps_MapInputDefaults(t *testing.T) {
 	t.Parallel()
@@ -44,7 +47,7 @@ func TestExecutionOps_MapInputDefaults(t *testing.T) {
 	require.NoError(t, op.Run(t.Context(), &map[string]any{"seed": 7}, nil))
 	assert.Equal(t, map[string]any{
 		"dry_run": false, "profile": "base", "seed": 7, "only": []string{},
-		"wait": int64(0), "customer": "", "cmd": []string{},
+		"wait": time.Duration(0), "customer": "", "cmd": []string{},
 	}, got)
 	assert.Contains(t, string(op.InputSchema()), `"dry_run"`)
 
@@ -52,7 +55,8 @@ func TestExecutionOps_MapInputDefaults(t *testing.T) {
 		"seed": 7.0, "wait": 1.5e9, "only": []any{"a", "b"}, "profile": "x",
 	}, nil))
 	assert.Equal(t, 7, got["seed"])
-	assert.Equal(t, int64(1500000000), got["wait"])
+	assert.Equal(t, 1500*time.Millisecond, got["wait"])
+	assert.Equal(t, "1.5s", fmt.Sprint(got["wait"]))
 	assert.Equal(t, []string{"a", "b"}, got["only"])
 	assert.Equal(t, "x", got["profile"])
 }
