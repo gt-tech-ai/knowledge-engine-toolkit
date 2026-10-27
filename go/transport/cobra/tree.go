@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	spf "github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -215,9 +216,10 @@ func addSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 	case types.FlagStringArray:
 		fs.StringArrayP(f.Name, f.Short, strs(def), f.Usage)
 	case types.FlagDuration:
-		fs.DurationP(f.Name, f.Short, 0, f.Usage)
+		var d time.Duration
 		if s, ok := def.(string); ok {
-			if err := fs.Set(f.Name, s); err != nil {
+			var err error
+			if d, err = time.ParseDuration(s); err != nil {
 				return apperr.Wrap(
 					err,
 					apperr.CodeInvalidInput,
@@ -225,6 +227,7 @@ func addSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 				)
 			}
 		}
+		fs.DurationP(f.Name, f.Short, d, f.Usage)
 	case "", types.FlagBool:
 		b, _ := def.(bool)
 		fs.BoolP(f.Name, f.Short, b, f.Usage)

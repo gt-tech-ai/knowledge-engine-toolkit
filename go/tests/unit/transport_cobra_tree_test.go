@@ -413,3 +413,27 @@ func TestTransportCobra_TreeRunHooks(t *testing.T) {
 	assert.Equal(t, map[string]any{"fix": true, "extra": "x"}, ran["lint.fix"])
 	assert.Equal(t, []string{"lint.fix"}, after)
 }
+
+// TestTransportCobra_TreeDurationDefault tests a duration flag's declared default.
+//
+// Why this test is important:
+//   - the help prints a flag's default and a run reads it when the flag is not given; a
+//     default applied as if typed would show 0s and count the flag as set.
+//
+// What it tests:
+//   - a `default: 2m` duration flag reports 2m0s as its default and is not changed.
+func TestTransportCobra_TreeDurationDefault(t *testing.T) {
+	t.Parallel()
+	root, err := opscobra.Tree(types.CommandSpec{
+		Use: "app", Commands: []types.CommandSpec{{Use: "grp", Flags: []types.FlagSpec{
+			{Name: "wait", Type: types.FlagDuration, Default: "2m"},
+		}}},
+	}, nil, opscobra.Options{})
+	require.NoError(t, err)
+	grp, _, err := root.Find([]string{"grp"})
+	require.NoError(t, err)
+	f := grp.Flags().Lookup("wait")
+	require.NotNil(t, f)
+	assert.Equal(t, "2m0s", f.DefValue)
+	assert.False(t, f.Changed)
+}

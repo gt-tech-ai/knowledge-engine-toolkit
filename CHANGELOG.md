@@ -54,6 +54,11 @@ All notable changes to this project are recorded here. The format follows
   `finally` still runs. `Deps.Log` receives the recovered panic with its stack; nil logs
   nothing.
 
+### Fixed
+
+- `transport/cobra`: a duration flag's spec default is its registered default, so help
+  prints it and the flag no longer counts as set when not given.
+
 ## [0.0.21] - 2026-10-26
 
 Python: unchanged (`techai-webutils` 0.6.1).
