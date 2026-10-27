@@ -136,18 +136,50 @@ func InputSchema(v any) []byte {
 }
 
 // Decode decodes raw JSON arguments into op's fresh input, rejecting a field the input
-// does not declare; empty raw leaves the input's defaults. A bad argument is
-// CodeInvalidInput naming the operation.
+// does not declare — for a map input, a key its schema does not name, so a secret flag
+// (types.FlagSpec.Secret) is refused too; empty or null raw leaves the input's defaults.
+// A bad argument is CodeInvalidInput naming the operation. It is the decode for a caller
+// that is not a human at the terminal (an MCP tool call, a CronJob's arguments).
 func Decode(op interfaces.Operation, raw []byte) (any, error) {
+	return decode(op, raw, false)
+}
+
+// DecodeLocal is Decode for a front-end where a human typed the arguments (the CLI): it
+// also admits the operation's secret flags.
+func DecodeLocal(op interfaces.Operation, raw []byte) (any, error) {
+	return decode(op, raw, true)
+}
+
+// keyChecker is an input whose keys an operation checks itself (a map input): undeclared
+// returns the first key in that neither its flags (their secret ones only when local)
+// nor its arguments declare, or "" when every key is declared.
+type keyChecker interface {
+	undeclared(in map[string]any, local bool) string
+}
+
+// decode is Decode, admitting a map input's secret flags when local.
+func decode(op interfaces.Operation, raw []byte, local bool) (any, error) {
 	input := op.NewInput()
-	if len(bytes.TrimSpace(raw)) == 0 {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return input, nil
 	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
+	name := op.Descriptor().Name
+	dec := json.NewDecoder(bytes.NewReader(trimmed))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(input); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, fmt.Sprintf(
-			"operation %q: decode arguments", op.Descriptor().Name,
+			"operation %q: decode arguments", name,
+		))
+	}
+	kc, checks := op.(keyChecker)
+	m, isMap := input.(*map[string]any)
+	if !checks || !isMap || m == nil {
+		return input, nil
+	}
+	if key := kc.undeclared(*m, local); key != "" {
+		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+			"operation %q: unknown argument %q", name, key,
 		))
 	}
 	return input, nil

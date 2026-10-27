@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -70,6 +72,31 @@ func (o *mapOp[E]) NewInput() any { return &map[string]any{} }
 
 // InputSchema returns the schema derived from the flags.
 func (o *mapOp[E]) InputSchema() []byte { return o.schema }
+
+// undeclared returns the first key of in, in sorted order, that no argument and no flag
+// declares — a secret flag counting only when local — or "".
+func (o *mapOp[E]) undeclared(in map[string]any, local bool) string {
+	for _, k := range slices.Sorted(maps.Keys(in)) {
+		if !o.declares(k, local) {
+			return k
+		}
+	}
+	return ""
+}
+
+// declares reports whether key names one of the op's arguments, or a flag (a secret one
+// only when local).
+func (o *mapOp[E]) declares(key string, local bool) bool {
+	if key == o.args.Rest && key != "" || slices.Contains(o.args.Names, key) {
+		return true
+	}
+	for i := range o.flags {
+		if o.flags[i].FlagField() == key {
+			return local || !o.flags[i].Secret
+		}
+	}
+	return false
+}
 
 // Run executes the operation; an input that is not a *map[string]any is
 // CodeInvalidInput.
@@ -162,12 +189,16 @@ func flagDefault(f *types.FlagSpec) any {
 }
 
 // MapSchema returns the closed object schema of a map input: one property per flag
-// (by its field) and per argument, required flags required.
+// (by its field) and per argument, required flags required. A secret flag has no
+// property, so a schema-driven caller (an MCP tool) never asks for it.
 func MapSchema(flags []types.FlagSpec, args types.ArgSpec) []byte {
 	props := map[string]any{}
 	var required []string
 	for i := range flags {
 		f := &flags[i]
+		if f.Secret {
+			continue
+		}
 		p := map[string]any{schemaType: jsonType(f.Type)}
 		if f.Type == types.FlagStrings {
 			p["items"] = map[string]any{schemaType: schemaString}

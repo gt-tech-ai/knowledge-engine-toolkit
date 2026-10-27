@@ -170,3 +170,50 @@ func roundTrip(t *testing.T, v map[string]any) map[string]any {
 	require.NoError(t, json.Unmarshal(raw, &out))
 	return out
 }
+
+// TestTransportCobra_TreePassesASecretFlag tests that the CLI still takes a map
+// operation's secret flag.
+//
+// Why this test is important:
+//   - A secret flag is refused over MCP and CronJob arguments (ops.Decode); the terminal
+//     is the one front-end where a human types it, so dropping it there would leave the
+//     operation without its credential.
+//
+// What it tests:
+//   - `kb --client-secret s --client-id a` runs the operation with both keys set.
+func TestTransportCobra_TreePassesASecretFlag(t *testing.T) {
+	t.Parallel()
+	flags := []types.FlagSpec{
+		{Name: "client-id", Type: types.FlagString},
+		{Name: "client-secret", Type: types.FlagString, Secret: true},
+	}
+	var got map[string]any
+	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
+		Policy: types.ExposurePolicy{
+			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
+		},
+		Descriptors: []types.OperationDescriptor{
+			opDesc("kb", types.SafetyCredentialed, types.OpLifecycleBounded),
+		},
+		Builders: map[string]ops.Builder[opsEnv]{
+			"kb": ops.MapInput(flags, types.ArgSpec{},
+				func(
+					_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
+				) error {
+					got = in
+					return nil
+				}),
+		},
+	})
+	require.NoError(t, err)
+	root, err := opscobra.Tree(types.CommandSpec{
+		Use: "app", Commands: []types.CommandSpec{{Use: "kb", Op: "kb", Flags: flags}},
+	}, reg, opscobra.Options{})
+	require.NoError(t, err)
+	root.SetArgs([]string{"kb", "--client-secret", "s", "--client-id", "a"})
+
+	require.NoError(t, root.ExecuteContext(t.Context()))
+
+	assert.Equal(t, "s", got["client_secret"])
+	assert.Equal(t, "a", got["client_id"])
+}

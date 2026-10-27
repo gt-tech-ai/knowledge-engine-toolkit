@@ -98,7 +98,8 @@ func leafOrGroup(
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "encode input")
 		}
-		input, err := ops.Decode(op, raw)
+		// A human typed these flags, so the op's secret flags are admitted.
+		input, err := ops.DecodeLocal(op, raw)
 		if err != nil {
 			return err
 		}

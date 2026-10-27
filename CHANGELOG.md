@@ -25,8 +25,18 @@ All notable changes to this project are recorded here. The format follows
   text a tool call sends (`"90s"`); a missing, other or unparseable value is 0, like the
   other accessors.
 
+- `core/types`: `FlagSpec.Secret` marks a credential flag. `ops.MapSchema` leaves it out
+  of the input schema and `ops.Decode` refuses it, so a schema-driven caller (an MCP tool
+  call, a CronJob's arguments) can neither see nor send it; `ops.DecodeLocal` (used by
+  `transport/cobra`, where a human typed the flags) admits it.
+
 ### Changed
 
+- `execution/ops`: `Decode` rejects a map input's key that no flag or argument declares,
+  as it already did for a struct input's unknown field (`CodeInvalidInput` naming the
+  key); null arguments decode as empty. `transport/mcp` decodes bounded and long-running
+  tool calls through it, so an MCP caller's typo or secret argument fails the call
+  instead of reaching the run.
 - `services/procedure`: a registered Go step that panics fails its row instead of
   crashing the process — the engine wraps every Go step in `foundation/decorate`
   recovery, so the panic becomes a failed row named after the step (its message says the

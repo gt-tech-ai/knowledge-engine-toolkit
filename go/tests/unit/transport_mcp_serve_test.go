@@ -412,3 +412,65 @@ func TestTransportMcpServer_FailsOnTransportError(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }
+
+// TestTransportMcpCallTool_RefusesASecretArgument tests that an MCP caller can neither
+// see nor send a map operation's secret flag.
+//
+// Why this test is important:
+//   - A tool argument is recorded in the agent's transcript and the run log, so a
+//     credential must never travel as one; the operation's CLI form still takes it.
+//
+// What it tests:
+//   - the tool's input schema omits the secret flag; a call sending it is an error
+//     result naming the key and the operation never runs; a call with only the declared
+//     flags runs.
+func TestTransportMcpCallTool_RefusesASecretArgument(t *testing.T) {
+	t.Parallel()
+	ran := 0
+	desc := opDesc("kb", types.SafetyReadOnly, types.OpLifecycleBounded)
+	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
+		Policy: types.ExposurePolicy{
+			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
+		},
+		Descriptors: []types.OperationDescriptor{desc},
+		Builders: map[string]ops.Builder[opsEnv]{"kb": ops.MapInput([]types.FlagSpec{
+			{Name: "client-id", Type: types.FlagString},
+			{Name: "client-secret", Type: types.FlagString, Secret: true},
+		}, types.ArgSpec{}, func(
+			context.Context, map[string]any, opsEnv, interfaces.ExecutionObserver,
+		) error {
+			ran++
+			return nil
+		})},
+	})
+	require.NoError(t, err)
+	srv, err := mcp.New(reg, mcpOpts(t))
+	require.NoError(t, err)
+	cs := connectMCP(t, srv)
+	ctx := context.Background()
+
+	tools, err := cs.ListTools(ctx, nil)
+	require.NoError(t, err)
+	for _, tool := range tools.Tools {
+		if tool.Name == "kb" {
+			blob, merr := json.Marshal(tool.InputSchema)
+			require.NoError(t, merr)
+			assert.NotContains(t, string(blob), "client_secret")
+		}
+	}
+
+	res, err := cs.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name: "kb", Arguments: map[string]any{"client_secret": "s3cr3t"},
+	})
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+	assert.Contains(t, toolText(t, res), "client_secret")
+	assert.Zero(t, ran, "a refused call must not run")
+
+	res, err = cs.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name: "kb", Arguments: map[string]any{"client_id": "a"},
+	})
+	require.NoError(t, err)
+	assert.False(t, res.IsError, toolText(t, res))
+	assert.Equal(t, 1, ran)
+}

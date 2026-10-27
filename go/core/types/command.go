@@ -84,6 +84,11 @@ type FlagSpec struct {
 
 	// Required fails a run that does not set the flag.
 	Required bool `yaml:"required" json:"required,omitempty"`
+
+	// Secret marks a credential: the input schema leaves it out and ops.Decode refuses
+	// it, so a tool-calling front-end (MCP, a CronJob's arguments) never carries it; only
+	// a front-end where a human types it (ops.DecodeLocal, the CLI) passes it in.
+	Secret bool `yaml:"secret" json:"secret,omitempty"`
 }
 
 // ArgSpec is a command's positional arguments.
