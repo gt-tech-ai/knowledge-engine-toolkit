@@ -1,6 +1,6 @@
 // Package sqs is the SQS OutboxSink: it routes each record to a queue, sends
-// each queue's records with SendMessageBatch (at most 10 per request) and maps
-// each entry's result back to its record.
+// each queue's records with SendMessageBatch (at most 10 per request and 1 MiB
+// of messages) and maps each entry's result back to its record.
 package sqs
 
 import (
@@ -19,6 +19,13 @@ import (
 
 // maxBatch is SendMessageBatch's per-request entry limit.
 const maxBatch = 10
+
+// maxBatchBytes is SendMessageBatch's per-request limit on the sum of its
+// messages' sizes.
+const maxBatchBytes = 1 << 20
+
+// maxMessageBytes is SQS's limit on one message's size (body plus attributes).
+const maxMessageBytes = 256 << 10
 
 // fifoSuffix marks a FIFO queue's name.
 const fifoSuffix = ".fifo"
@@ -99,11 +106,12 @@ func New(cfg Config, api API) (*Sink, error) {
 }
 
 // Send groups recs by destination queue and delivers each group independently
-// and concurrently, in batches of at most 10, so a failing queue fails only its
-// own records. It returns one result per record: nil when sent,
-// CodeInvalidInput for a record with an unknown route or one the queue rejected
-// as the sender's fault, CodeUnavailable for a server-side or request-level
-// failure.
+// and concurrently, in batches of at most 10 messages and 1 MiB, so a failing
+// queue fails only its own records. It returns one result per record: nil when
+// sent, CodeInvalidInput for a record with an unknown route, one over SQS's
+// 256 KiB message limit (never sent: no retry could succeed), or one the queue
+// rejected as the sender's fault, CodeUnavailable for a server-side or
+// request-level failure.
 func (s *Sink) Send(ctx context.Context, recs []types.OutboxRecord) []error {
 	results := make([]error, len(recs))
 	groups := map[string][]int{}
@@ -154,8 +162,7 @@ func (s *Sink) sendQueue(
 		}
 		return
 	}
-	for start := 0; start < len(idx); start += maxBatch {
-		part := idx[start:min(start+maxBatch, len(idx))]
+	for _, part := range packBatches(recs, idx, results) {
 		batch := make([]types.OutboxRecord, len(part))
 		for j, i := range part {
 			batch[j] = recs[i]
@@ -166,6 +173,51 @@ func (s *Sink) sendQueue(
 			results[i] = out[j]
 		}
 	}
+}
+
+// packBatches splits the records at idx, in order, into SendMessageBatch-sized
+// runs: at most maxBatch messages and maxBatchBytes of message size each. A
+// record over maxMessageBytes is never sendable, so it gets CodeInvalidInput in
+// results and joins no run.
+func packBatches(
+	recs []types.OutboxRecord,
+	idx []int,
+	results []error,
+) [][]int {
+	var runs [][]int
+	var run []int
+	size := 0
+	for _, i := range idx {
+		n := messageSize(&recs[i])
+		if n > maxMessageBytes {
+			results[i] = apperr.New(
+				apperr.CodeInvalidInput,
+				"outbox sqs sink: message of "+strconv.Itoa(n)+
+					" bytes exceeds the SQS limit of "+strconv.Itoa(maxMessageBytes),
+			)
+			continue
+		}
+		if len(run) == maxBatch || (len(run) > 0 && size+n > maxBatchBytes) {
+			runs = append(runs, run)
+			run, size = nil, 0
+		}
+		run = append(run, i)
+		size += n
+	}
+	if len(run) > 0 {
+		runs = append(runs, run)
+	}
+	return runs
+}
+
+// messageSize is rec's size as SQS counts it against its limits: the body plus
+// each message attribute's name, data type and value.
+func messageSize(rec *types.OutboxRecord) int {
+	n := len(rec.Payload)
+	for name, v := range messageAttributes(rec) {
+		n += len(name) + len(aws.ToString(v.DataType)) + len(aws.ToString(v.StringValue))
+	}
+	return n
 }
 
 // sendBatch sends one batch and writes each entry's outcome into results; fifo

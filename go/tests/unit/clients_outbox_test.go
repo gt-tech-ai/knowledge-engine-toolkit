@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"io"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -567,6 +568,76 @@ func TestSQSSink_FIFOQueueCarriesGroupAndDedupIDs(t *testing.T) {
 	require.Len(t, plain, 1)
 	assert.Nil(t, plain[0].MessageGroupId)
 	assert.Nil(t, plain[0].MessageDeduplicationId)
+}
+
+// TestSQSSink_PacksBatchesWithinSQSByteLimits tests the sink against SQS's size limits.
+//
+// Why this test is important:
+//   - SendMessageBatch rejects a whole request over 1 MiB, so packing ten large
+//     records into one request fails all ten on every attempt and parks them
+//   - a single message over 256 KiB can never be sent, so retrying it only delays
+//     parking it
+//
+// What it tests:
+//   - ten ~200 KiB records go out in several SendMessageBatch requests, each within
+//     1 MiB of message bodies and attributes, and every record is sent once
+//   - a record over 256 KiB fails CodeInvalidInput without reaching SQS, while the
+//     other records in the same Send still go out
+func TestSQSSink_PacksBatchesWithinSQSByteLimits(t *testing.T) {
+	t.Parallel()
+	const (
+		maxRequestBytes = 1 << 20
+		maxMessageBytes = 256 << 10
+	)
+	ctrl := gomock.NewController(t)
+	api := mocks.NewMockOutboxSQSAPI(ctrl)
+	recs := sinkRecords(11)
+	for i := range recs[:10] {
+		recs[i].Payload = []byte(strings.Repeat("a", 200<<10))
+	}
+	recs[10].Payload = []byte(strings.Repeat("b", maxMessageBytes+1))
+	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
+		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("u")}, nil)
+	var requests [][]sqstypes.SendMessageBatchRequestEntry
+	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).AnyTimes().
+		DoAndReturn(func(
+			_ context.Context,
+			in *awssqs.SendMessageBatchInput,
+			_ ...func(*awssqs.Options),
+		) (*awssqs.SendMessageBatchOutput, error) {
+			requests = append(requests, in.Entries)
+			out := &awssqs.SendMessageBatchOutput{}
+			for _, e := range in.Entries {
+				out.Successful = append(
+					out.Successful,
+					sqstypes.SendMessageBatchResultEntry{Id: e.Id},
+				)
+			}
+			return out, nil
+		})
+
+	sink, err := outboxsqs.New(outboxsqs.Config{Queue: "q"}, api)
+	require.NoError(t, err)
+	results := sink.Send(context.Background(), recs)
+
+	want := make([]apperr.ErrorCode, len(recs))
+	want[10] = apperr.CodeInvalidInput
+	assert.Equal(t, want, codesOf(results))
+	require.Greater(t, len(requests), 1)
+	sent := 0
+	for _, entries := range requests {
+		size := 0
+		for _, e := range entries {
+			size += len(aws.ToString(e.MessageBody))
+			for name, v := range e.MessageAttributes {
+				size += len(name) + len(aws.ToString(v.DataType)) +
+					len(aws.ToString(v.StringValue))
+			}
+		}
+		assert.LessOrEqual(t, size, maxRequestBytes)
+		sent += len(entries)
+	}
+	assert.Equal(t, 10, sent, "every sendable record sent exactly once")
 }
 
 // TestSQSSink_OmitsEmptyStringAttributes tests that no empty attribute is sent.
