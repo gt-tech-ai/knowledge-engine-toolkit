@@ -103,6 +103,16 @@ func (d *decorator) RevParse(ctx context.Context, root, ref string) (string, err
 	})
 }
 
+// RemoteHasRef is a read.
+func (d *decorator) RemoteHasRef(
+	ctx context.Context,
+	root, remote, ref string,
+) (bool, error) {
+	return d.Exec(ctx, "remote_has_ref", func(c context.Context) (bool, error) {
+		return d.base.RemoteHasRef(c, root, remote, ref)
+	})
+}
+
 // IsRepo is a read; a decoration failure reports false.
 func (d *decorator) IsRepo(ctx context.Context, root string) bool {
 	ok, err := d.Exec(ctx, "is_repo", func(c context.Context) (bool, error) {

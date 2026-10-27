@@ -97,6 +97,56 @@ func TestClientsGit_Exec(t *testing.T) {
 	require.NoError(t, c.StageFiles(ctx, "/r", nil))
 }
 
+// TestClientsGit_RemoteHasRef tests the remote ref probe over a mocked runner.
+//
+// Why this test is important:
+//   - a release pin is checked against the remote before a deploy syncs it; a missing
+//     ref and a remote that cannot be asked (no credentials, no network) must be told
+//     apart, or an outage reads as a typo'd release and a typo as an outage.
+//
+// What it tests:
+//   - `git ls-remote --exit-code --heads --tags <remote> <ref>` exiting 0 is true; exit 2
+//     (no matching ref) is false with no error; any other failure is CodeUnavailable;
+//     the stub reports false.
+func TestClientsGit_RemoteHasRef(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	r := mocks.NewMockCommandRunner(gomock.NewController(t))
+	c, err := git.NewFromConfig(ctx, git.Config{Kind: git.KindExec},
+		git.Deps{Decorations: fixtures.Decorations(), Runner: r})
+	require.NoError(t, err)
+	probe := func(ref string) *gomock.Call {
+		return r.EXPECT().
+			RunBuffered(gomock.Any(), "/r", "git", "ls-remote", "--exit-code",
+				"--heads", "--tags", "origin", ref)
+	}
+
+	probe("v1").Return(interfaces.CmdResult{Stdout: []byte("abc\trefs/tags/v1\n")})
+	ok, err := c.RemoteHasRef(ctx, "/r", "origin", "v1")
+	require.NoError(t, err)
+	assert.True(t, ok)
+
+	probe("nope").Return(exitWith(2, ""))
+	ok, err = c.RemoteHasRef(ctx, "/r", "origin", "nope")
+	require.NoError(t, err)
+	assert.False(t, ok)
+
+	probe("v2").Return(exitWith(128, "fatal: could not read Username"))
+	ok, err = c.RemoteHasRef(ctx, "/r", "origin", "v2")
+	assert.False(t, ok)
+	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
+
+	stub, err := git.NewFromConfig(
+		ctx,
+		git.Config{},
+		git.Deps{Decorations: fixtures.Decorations()},
+	)
+	require.NoError(t, err)
+	ok, err = stub.RemoteHasRef(ctx, "/r", "origin", "v1")
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
 // TestClientsGit_StubAndFactory tests the default kind and the factory's failures.
 //
 // Why this test is important:

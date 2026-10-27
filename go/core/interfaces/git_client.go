@@ -21,6 +21,10 @@ type GitClient interface {
 	// RevParse resolves ref to a full object name; an unknown ref is CodeNotFound.
 	RevParse(ctx context.Context, root, ref string) (string, error)
 
+	// RemoteHasRef reports whether remote carries a branch or tag named ref; a remote
+	// that cannot be asked (no credentials, no network) is CodeUnavailable.
+	RemoteHasRef(ctx context.Context, root, remote, ref string) (bool, error)
+
 	// IsRepo reports whether root is inside a git working tree.
 	IsRepo(ctx context.Context, root string) bool
 

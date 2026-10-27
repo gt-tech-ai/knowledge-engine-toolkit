@@ -16,6 +16,9 @@ All notable changes to this project are recorded here. The format follows
 - `transport/cobra`: `Options.Before(cmd, op, input)` adjusts a leaf's input object and
   returns the operation to run (one a flag selects), and `Options.After(cmd, op, err)`
   runs after every run, failed or not, and returns the command's error.
+- `clients/git`: `GitClient.RemoteHasRef(ctx, root, remote, ref)` asks a remote for a branch
+  or tag (`git ls-remote --exit-code --heads --tags`); no match is `false`, a remote that
+  cannot be asked is `CodeUnavailable`, and the stub reports `false`.
 - `transport/cobra`: `Options.Run(ctx, reg, op, raw, obs)` runs each leaf's operation in
   place of the new `RunLocal` (the default, which admits secret flags): a scheduled
   front-end passes `transport/cron.Run`, so one tree serves the CLI and its CronJobs.
