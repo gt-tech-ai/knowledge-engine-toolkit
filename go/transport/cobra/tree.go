@@ -1,6 +1,7 @@
 package cobra
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"github.com/spf13/pflag"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
 )
@@ -135,20 +137,32 @@ func run(
 			return err
 		}
 	}
-	op, err := runReg.Find(name)
-	if err != nil {
-		return err
-	}
 	raw, err := json.Marshal(in)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "encode input")
 	}
-	// A human typed these flags, so the op's secret flags are admitted.
+	if opts.Run != nil {
+		return opts.Run(c.Context(), runReg, name, raw, obs)
+	}
+	return RunLocal(c.Context(), runReg, name, raw, obs)
+}
+
+// RunLocal runs the operation named name in reg with raw JSON input a human typed at
+// the terminal, so the operation's secret flags are admitted: a Tree leaf's default
+// run, and the local half of an Options.Run that also schedules.
+func RunLocal(
+	ctx context.Context, reg *ops.Registry, name string, raw []byte,
+	obs interfaces.ExecutionObserver,
+) error {
+	op, err := reg.Find(name)
+	if err != nil {
+		return err
+	}
 	input, err := ops.DecodeLocal(op, raw)
 	if err != nil {
 		return err
 	}
-	return runReg.Run(c.Context(), name, input, obs)
+	return reg.Run(ctx, name, input, obs)
 }
 
 // values collects the set or defaulted flags in scope and the positional arguments.

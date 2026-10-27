@@ -16,6 +16,9 @@ All notable changes to this project are recorded here. The format follows
 - `transport/cobra`: `Options.Before(cmd, op, input)` adjusts a leaf's input object and
   returns the operation to run (one a flag selects), and `Options.After(cmd, op, err)`
   runs after every run, failed or not, and returns the command's error.
+- `transport/cobra`: `Options.Run(ctx, reg, op, raw, obs)` runs each leaf's operation in
+  place of the new `RunLocal` (the default, which admits secret flags): a scheduled
+  front-end passes `transport/cron.Run`, so one tree serves the CLI and its CronJobs.
 - `core/types`: `FlagStringArray` (`string_array`), a repeatable string list flag that never
   splits on commas, and `IsListFlag`; map inputs and their schemas treat it as a list.
 - `services/procedure`: the `probe` step — `probe: {http | tcp | exec, status, contains,

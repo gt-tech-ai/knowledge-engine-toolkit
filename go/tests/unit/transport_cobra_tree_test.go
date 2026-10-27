@@ -437,3 +437,73 @@ func TestTransportCobra_TreeDurationDefault(t *testing.T) {
 	assert.Equal(t, "2m0s", f.DefValue)
 	assert.False(t, f.Changed)
 }
+
+// TestTransportCobra_TreeRunOverride tests the hook that replaces a leaf's local run.
+//
+// Why this test is important:
+//   - a scheduled job runs the same command tree with no human at the terminal, so its
+//     leaf must run the way a cron entrypoint does (no secret flag, no interactive
+//     operation) rather than the CLI's local run, which admits both; without the hook
+//     the scheduled front-end needs a second command tree.
+//
+// What it tests:
+//   - with Run set, the leaf hands it the run's registry, the operation and the input
+//     as JSON, its error is the command's, and the operation's own run never starts;
+//     passing RunLocal as Run runs the operation as the default does.
+func TestTransportCobra_TreeRunOverride(t *testing.T) {
+	t.Parallel()
+	flags := []types.FlagSpec{{Name: "env", Type: types.FlagString}}
+	var ran map[string]any
+	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
+		Policy: types.ExposurePolicy{
+			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
+		},
+		Descriptors: []types.OperationDescriptor{
+			opDesc("drift", types.SafetyReadOnly, types.OpLifecycleBounded),
+		},
+		Builders: map[string]ops.Builder[opsEnv]{
+			"drift": ops.MapInput(flags, types.ArgSpec{}, func(
+				_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
+			) error {
+				ran = in
+				return nil
+			}),
+		},
+	})
+	require.NoError(t, err)
+	spec := types.CommandSpec{
+		Use:      "app",
+		Commands: []types.CommandSpec{{Use: "drift", Op: "drift", Flags: flags}},
+	}
+	tree := func(run func(
+		context.Context, *ops.Registry, string, []byte, interfaces.ExecutionObserver,
+	) error,
+	) error {
+		root, err := opscobra.Tree(spec, reg, opscobra.Options{Run: run})
+		require.NoError(t, err)
+		root.SetArgs([]string{"drift", "--env", "staging"})
+		return root.ExecuteContext(t.Context())
+	}
+
+	var got struct {
+		reg *ops.Registry
+		op  string
+		raw string
+	}
+	err = tree(func(
+		_ context.Context, r *ops.Registry, op string, raw []byte,
+		_ interfaces.ExecutionObserver,
+	) error {
+		got.reg, got.op, got.raw = r, op, string(raw)
+		return apperr.New(apperr.CodeForbidden, "scheduled")
+	})
+
+	require.ErrorContains(t, err, "scheduled")
+	assert.Same(t, reg, got.reg)
+	assert.Equal(t, "drift", got.op)
+	assert.JSONEq(t, `{"env":"staging"}`, got.raw)
+	assert.Nil(t, ran, "the override replaces the operation's run")
+
+	require.NoError(t, tree(opscobra.RunLocal))
+	assert.Equal(t, map[string]any{"env": "staging"}, ran)
+}

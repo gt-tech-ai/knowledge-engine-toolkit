@@ -45,6 +45,15 @@ type Options struct {
 	// that ran and its error; it returns the error the command reports.
 	After func(c *spf.Command, op string, err error) error
 
+	// Run, when set, runs each Tree leaf's operation in place of RunLocal, with the run's
+	// registry, the operation and its input as JSON: a scheduled front-end passes
+	// transport/cron.Run, so the same tree runs a leaf unattended (no secret flag, no
+	// interactive operation).
+	Run func(
+		ctx context.Context, reg *ops.Registry, op string, raw []byte,
+		obs interfaces.ExecutionObserver,
+	) error
+
 	// Use overrides the command's usage line; empty uses the operation's name.
 	Use string
 }
