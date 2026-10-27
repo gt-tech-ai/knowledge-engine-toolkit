@@ -8,6 +8,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `transport/cobra`: `Options.Resolve(ctx, op)` returns the registry and observer one run
+  uses, so a CLI that builds its registry after parsing (in a `PersistentPreRun`) builds the
+  tree first; `Tree` then takes a nil registry, takes each leaf's flags from its spec, and
+  an unknown operation fails the run. Every leaf (and every `Command`) carries its
+  operation under `OperationAnnotation` (`"operation"`).
+- `core/types`: `FlagStringArray` (`string_array`), a repeatable string list flag that never
+  splits on commas, and `IsListFlag`; map inputs and their schemas treat it as a list.
 - `services/procedure`: the `probe` step — `probe: {http | tcp | exec, status, contains,
   hint, timeout, delay, max_delay}` is a read-only readiness check retried with doubling
   waits (500ms → 5s by default) until it passes or its timeout ends; each attempt is

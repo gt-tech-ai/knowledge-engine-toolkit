@@ -158,7 +158,7 @@ func coerce(flagType string, v any) any {
 			return int64(x)
 		}
 	case []any:
-		if flagType == types.FlagStrings {
+		if types.IsListFlag(flagType) {
 			out := make([]string, 0, len(x))
 			for _, item := range x {
 				out = append(out, fmt.Sprint(item))
@@ -179,7 +179,7 @@ func flagDefault(f *types.FlagSpec) any {
 		return ""
 	case types.FlagInt:
 		return 0
-	case types.FlagStrings:
+	case types.FlagStrings, types.FlagStringArray:
 		return []string{}
 	case types.FlagDuration:
 		return int64(0)
@@ -200,7 +200,7 @@ func MapSchema(flags []types.FlagSpec, args types.ArgSpec) []byte {
 			continue
 		}
 		p := map[string]any{schemaType: jsonType(f.Type)}
-		if f.Type == types.FlagStrings {
+		if types.IsListFlag(f.Type) {
 			p["items"] = map[string]any{schemaType: schemaString}
 		}
 		if f.Usage != "" {
@@ -245,7 +245,7 @@ func jsonType(t string) string {
 		return schemaString
 	case types.FlagInt, types.FlagDuration:
 		return "integer"
-	case types.FlagStrings:
+	case types.FlagStrings, types.FlagStringArray:
 		return "array"
 	default:
 		return "boolean"

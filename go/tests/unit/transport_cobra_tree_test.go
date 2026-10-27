@@ -8,10 +8,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	opscobra "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/cobra"
 )
 
@@ -216,4 +218,121 @@ func TestTransportCobra_TreePassesASecretFlag(t *testing.T) {
 
 	assert.Equal(t, "s", got["client_secret"])
 	assert.Equal(t, "a", got["client_id"])
+}
+
+// TestTransportCobra_TreeResolvesPerRun tests a tree whose registry and observer are
+// resolved when a command runs.
+//
+// Why this test is important:
+//   - a CLI that finds its workspace, policy and console in a PersistentPreRun builds its
+//     registry after the tree is parsed; the tree must build without one and take the
+//     registry and observer that run resolves, or every leaf would need per-command Go.
+//
+// What it tests:
+//   - Tree builds with a nil registry; `dev up` resolves once for "dev.up" and the
+//     operation gets that run's observer and its input; each leaf carries the operation
+//     annotation and a group none; a leaf naming an unknown operation fails when it runs.
+func TestTransportCobra_TreeResolvesPerRun(t *testing.T) {
+	t.Parallel()
+	var got treeGot
+	obs := mocks.NewMockExecutionObserver(gomock.NewController(t))
+	flags := []types.FlagSpec{{Name: "env", Type: types.FlagString}}
+	var seen interfaces.ExecutionObserver
+	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
+		Policy: types.ExposurePolicy{
+			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
+		},
+		Descriptors: []types.OperationDescriptor{
+			opDesc("dev.up", types.SafetyMutating, types.OpLifecycleBounded),
+		},
+		Builders: map[string]ops.Builder[opsEnv]{
+			"dev.up": ops.MapInput(flags, types.ArgSpec{}, func(
+				_ context.Context, in map[string]any, _ opsEnv, o interfaces.ExecutionObserver,
+			) error {
+				got.up, seen = in, o
+				return nil
+			}),
+		},
+	})
+	require.NoError(t, err)
+	var resolved []string
+	opts := opscobra.Options{Resolve: func(
+		_ context.Context, op string,
+	) (*ops.Registry, interfaces.ExecutionObserver, error) {
+		resolved = append(resolved, op)
+		return reg, obs, nil
+	}}
+	spec := types.CommandSpec{Use: "app", Commands: []types.CommandSpec{
+		{
+			Use:      "dev",
+			Commands: []types.CommandSpec{{Use: "up", Op: "dev.up", Flags: flags}},
+		},
+		{Use: "gone", Op: "nope"},
+	}}
+
+	root, err := opscobra.Tree(spec, nil, opts)
+	require.NoError(t, err)
+	root.SetArgs([]string{"dev", "up", "--env", "staging"})
+	require.NoError(t, root.ExecuteContext(t.Context()))
+	assert.Equal(t, []string{"dev.up"}, resolved)
+	assert.Equal(t, map[string]any{"env": "staging"}, got.up)
+	assert.Same(t, obs, seen)
+
+	dev, _, err := root.Find([]string{"dev"})
+	require.NoError(t, err)
+	up, _, err := root.Find([]string{"dev", "up"})
+	require.NoError(t, err)
+	assert.Empty(t, dev.Annotations[opscobra.OperationAnnotation])
+	assert.Equal(t, "dev.up", up.Annotations[opscobra.OperationAnnotation])
+
+	root, err = opscobra.Tree(spec, nil, opts)
+	require.NoError(t, err)
+	root.SetArgs([]string{"gone"})
+	require.Error(t, root.ExecuteContext(t.Context()))
+}
+
+// TestTransportCobra_TreeStringArrayFlag tests a repeatable flag that never splits.
+//
+// Why this test is important:
+//   - a value such as a `name:type:help` spec or a unit path may hold a comma; a
+//     comma-splitting list flag would turn one value into two.
+//
+// What it tests:
+//   - `--tag a,b --tag c` reaches the operation as ["a,b", "c"], and the input schema
+//     types the flag as a string array.
+func TestTransportCobra_TreeStringArrayFlag(t *testing.T) {
+	t.Parallel()
+	flags := []types.FlagSpec{{Name: "tag", Type: types.FlagStringArray}}
+	var got map[string]any
+	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
+		Policy: types.ExposurePolicy{
+			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
+		},
+		Descriptors: []types.OperationDescriptor{
+			opDesc("tag", types.SafetyReadOnly, types.OpLifecycleBounded),
+		},
+		Builders: map[string]ops.Builder[opsEnv]{
+			"tag": ops.MapInput(flags, types.ArgSpec{}, func(
+				_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
+			) error {
+				got = in
+				return nil
+			}),
+		},
+	})
+	require.NoError(t, err)
+	root, err := opscobra.Tree(types.CommandSpec{
+		Use: "app", Commands: []types.CommandSpec{{Use: "tag", Op: "tag", Flags: flags}},
+	}, reg, opscobra.Options{})
+	require.NoError(t, err)
+	root.SetArgs([]string{"tag", "--tag", "a,b", "--tag", "c"})
+	require.NoError(t, root.ExecuteContext(t.Context()))
+	assert.Equal(t, []string{"a,b", "c"}, got["tag"])
+
+	op, err := reg.Find("tag")
+	require.NoError(t, err)
+	assert.JSONEq(t,
+		`{"type":"object","additionalProperties":false,`+
+			`"properties":{"tag":{"type":"array","items":{"type":"string"}}}}`,
+		string(op.InputSchema()))
 }

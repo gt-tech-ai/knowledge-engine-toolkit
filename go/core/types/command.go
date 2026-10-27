@@ -16,7 +16,16 @@ const (
 
 	// FlagDuration is a time.Duration flag; its input value is nanoseconds.
 	FlagDuration = "duration"
+
+	// FlagStringArray is a repeatable string list flag whose values are never split on
+	// commas: each occurrence is one item.
+	FlagStringArray = "string_array"
 )
+
+// IsListFlag reports whether a flag of type t takes a list of strings.
+func IsListFlag(t string) bool {
+	return t == FlagStrings || t == FlagStringArray
+}
 
 // CommandSpec is one command of a command-line tree as data: a group (no Op) prints its
 // help, a leaf runs the registered operation Op with its flags and positional arguments
@@ -67,7 +76,8 @@ type FlagSpec struct {
 	// Short is the one-letter shorthand.
 	Short string `yaml:"short" json:"short,omitempty"`
 
-	// Type is FlagBool (the default), FlagString, FlagInt, FlagStrings or FlagDuration.
+	// Type is FlagBool (the default), FlagString, FlagInt, FlagStrings, FlagStringArray
+	// or FlagDuration.
 	Type string `yaml:"type" json:"type,omitempty"`
 
 	// Usage is the help text.
