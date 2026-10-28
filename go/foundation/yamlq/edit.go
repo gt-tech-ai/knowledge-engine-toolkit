@@ -66,6 +66,82 @@ func UpsertAt(src []byte, index int, path string, value any) ([]byte, error) {
 	return nil, invalid(path, "an edit needs at least one step")
 }
 
+// Append adds value as the last item of the sequence at path in the first document of
+// src and returns the edited file.
+func Append(src []byte, path string, value any) ([]byte, error) {
+	return AppendAt(src, 0, path, value)
+}
+
+// AppendAt adds value as the last item of the sequence at path in document index of src.
+// The path may use only `.key` and `[n]` steps and must select a sequence. Into a
+// non-empty block sequence the item is spliced after the last item's last line, at the
+// items' indentation, so every other byte is kept; a flow or empty sequence re-encodes
+// the file with two-space indentation instead.
+func AppendAt(src []byte, index int, path string, value any) ([]byte, error) {
+	steps, docs, err := prepare(src, index, path)
+	if err != nil {
+		return nil, err
+	}
+	seq := root(docs[index])
+	for _, st := range steps {
+		if seq, err = child(deref(seq), st); err != nil {
+			return nil, err
+		}
+		if seq == nil {
+			return nil, invalid(path, "selects nothing")
+		}
+	}
+	seq = deref(seq)
+	if seq.Kind != yaml.SequenceNode {
+		return nil, invalid(path, "does not select a sequence")
+	}
+	var node yaml.Node
+	if err := node.Encode(value); err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "encode the value")
+	}
+	if out, ok := appendItem(splitLines(src), seq, &node); ok {
+		return out, nil
+	}
+	seq.Content = append(seq.Content, &node)
+	return encodeAll(docs)
+}
+
+// appendItem splices item after the last line of block sequence seq, its dash indented
+// like the items', returning false when seq is a flow or empty sequence.
+func appendItem(lines []string, seq, item *yaml.Node) ([]byte, bool) {
+	if seq.Style&yaml.FlowStyle != 0 || len(seq.Content) == 0 {
+		return nil, false
+	}
+	last := seq.Content[len(seq.Content)-1]
+	dash := last.Column - 3
+	if dash < 0 || last.Line < 1 || last.Line > len(lines) ||
+		len(lines[last.Line-1]) < dash+2 ||
+		!strings.HasPrefix(lines[last.Line-1][dash:], "- ") {
+		return nil, false
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	block := &yaml.Node{
+		Kind:    yaml.SequenceNode,
+		Tag:     "!!seq",
+		Content: []*yaml.Node{item},
+	}
+	if enc.Encode(block) != nil || enc.Close() != nil {
+		return nil, false
+	}
+	indent := strings.Repeat(" ", dash)
+	insert := splitLines(buf.Bytes())
+	for i, l := range insert {
+		if l != "" {
+			insert[i] = indent + l
+		}
+	}
+	at := maxLine(last)
+	out := append(append(lines[:at:at], insert...), lines[at:]...)
+	return joinLines(out), true
+}
+
 // Delete removes the node at path from the first document of src.
 func Delete(src []byte, path string) ([]byte, error) {
 	return DeleteAt(src, 0, path)

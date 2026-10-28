@@ -288,3 +288,69 @@ func TestYamlq_Rewrite(t *testing.T) {
 	_, err = yamlq.Rewrite([]byte(doc), "spec.image", pin)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+// TestYamlq_Append tests appending an item to a sequence.
+//
+// Why this test is important:
+//   - A hand-maintained descriptor gains rows from a command; an append that re-encodes
+//     the file drops every comment around the rows the command never touched.
+//
+// What it tests:
+//   - A mapping item is spliced after the block sequence's last item (and its trailing
+//     comment lines' predecessor), at the items' indentation, keeping its field order;
+//     every other byte is unchanged.
+//   - A flow or empty sequence takes the item by re-encoding; the item is still last.
+//   - A path that selects no sequence is INVALID_INPUT.
+func TestYamlq_Append(t *testing.T) {
+	t.Parallel()
+	type row struct {
+		Name    string `yaml:"name"`
+		ID      string `yaml:"account_id"`
+		Enabled bool   `yaml:"enabled"`
+	}
+	src := `deploy:
+  # the rows
+  rows:
+    - name: a
+      # a's note
+      account_id: "1"
+    - name: b
+      account_id: "2" # b
+  # after the rows
+  other: x
+`
+	out, err := yamlq.Append([]byte(src), "$.deploy.rows", row{Name: "c", ID: "0042"})
+	require.NoError(t, err)
+	assert.Equal(t, `deploy:
+  # the rows
+  rows:
+    - name: a
+      # a's note
+      account_id: "1"
+    - name: b
+      account_id: "2" # b
+    - name: c
+      account_id: "0042"
+      enabled: false
+  # after the rows
+  other: x
+`, string(out))
+
+	for name, in := range map[string]string{
+		"flow":  "rows: [{name: a}]\n",
+		"empty": "rows: []\n",
+	} {
+		out, err := yamlq.Append([]byte(in), "$.rows", row{Name: "z"})
+		require.NoError(t, err, name)
+		docs, err := yamlq.DecodeAll(out)
+		require.NoError(t, err, name)
+		got, err := yamlq.Path(docs[0], "$.rows[*].name")
+		require.NoError(t, err, name)
+		assert.Equal(t, "z", got[len(got)-1].Value, name)
+	}
+
+	_, err = yamlq.Append([]byte(src), "$.deploy.other", row{})
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+	_, err = yamlq.Append([]byte(src), "$.deploy.missing", row{})
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}

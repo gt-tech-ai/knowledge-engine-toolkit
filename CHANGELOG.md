@@ -8,6 +8,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `yamlq.Append` / `AppendAt`: add an item to the end of a sequence. Into a non-empty block
+  sequence the item is spliced after the last item, at the items' indentation, so comments
+  and key order elsewhere are kept; a flow or empty sequence re-encodes.
 - `KubectlClient.AuthCanI(ctx, verb, resource)`: `kubectl auth can-i` as a typed call.
   Exit 0 is allowed and exit 1 printing `no` is denied; any other failure (an unreachable
   cluster) is an error, never a denial. The stub denies everything.
