@@ -23,7 +23,9 @@ import (
 //
 // What it tests:
 //   - Every call carries --context when configured; get, apply, rollout status and
-//     current-context build their arguments with the namespace; an apply with no files
+//     current-context build their arguments with the namespace; auth can-i reads exit 0
+//     as allowed and exit 1 with "no" as denied, and any other failure (an unreachable
+//     cluster) is an error, never a denial; an apply with no files
 //     is INVALID_INPUT without running kubectl; a failure is UPSTREAM;
 //     the default kind is the stub, which also refuses an apply with no files; an
 //     unknown kind is INVALID_INPUT.
@@ -64,12 +66,36 @@ func TestClientsKubectl_Exec(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "kind-dev", cur)
 
+	r.EXPECT().RunBuffered(gomock.Any(), "", "kubectl", "--context", "kind-dev",
+		"auth", "can-i", "get", "pods").
+		Return(interfaces.CmdResult{Stdout: []byte("yes\n")})
+	allowed, err := c.AuthCanI(ctx, "get", "pods")
+	require.NoError(t, err)
+	assert.True(t, allowed)
+
+	denied := exitWith(1, "")
+	denied.Stdout = []byte("no\n")
+	r.EXPECT().RunBuffered(gomock.Any(), "", "kubectl", "--context", "kind-dev",
+		"auth", "can-i", "delete", "nodes").Return(denied)
+	allowed, err = c.AuthCanI(ctx, "delete", "nodes")
+	require.NoError(t, err)
+	assert.False(t, allowed)
+
+	r.EXPECT().RunBuffered(gomock.Any(), "", "kubectl", "--context", "kind-dev",
+		"auth", "can-i", "get", "pods").
+		Return(exitWith(1, "Unable to connect to the server: dial tcp: i/o timeout"))
+	_, err = c.AuthCanI(ctx, "get", "pods")
+	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err), "unreachable is not a denial")
+
 	stub, err := kubectl.NewFromConfig(ctx, kubectl.Config{},
 		kubectl.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
 	cur, err = stub.CurrentContext(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "stub", cur)
+	allowed, err = stub.AuthCanI(ctx, "get", "pods")
+	require.NoError(t, err)
+	assert.False(t, allowed, "the stub has no cluster to grant anything")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(stub.Apply(ctx, "app")),
 		"the stub keeps the contract")
 	_, err = kubectl.NewFromConfig(ctx, kubectl.Config{Kind: "oc"},

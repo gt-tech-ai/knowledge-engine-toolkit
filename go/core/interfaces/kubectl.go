@@ -20,4 +20,8 @@ type KubectlClient interface {
 
 	// CurrentContext returns the kubeconfig's current context.
 	CurrentContext(ctx context.Context) (string, error)
+
+	// AuthCanI reports whether the caller may verb resource. A denial is (false, nil);
+	// a cluster that cannot answer is an error, never a denial.
+	AuthCanI(ctx context.Context, verb, resource string) (bool, error)
 }

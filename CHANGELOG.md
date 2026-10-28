@@ -8,6 +8,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `KubectlClient.AuthCanI(ctx, verb, resource)`: `kubectl auth can-i` as a typed call.
+  Exit 0 is allowed and exit 1 printing `no` is denied; any other failure (an unreachable
+  cluster) is an error, never a denial. The stub denies everything.
 - `clients/auth0`: an `Auth0Management` client family. `stub` (the default) reaches no
   tenant and is `CodeUnavailable`; `management` reads a tenant through the Management API
   (a client-credentials token minted once and reused until it nears expiry, the paged
