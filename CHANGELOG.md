@@ -8,6 +8,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `clients/auth0`: an `Auth0Management` client family. `stub` (the default) reaches no
+  tenant and is `CodeUnavailable`; `management` reads a tenant through the Management API
+  (a client-credentials token minted once and reused until it nears expiry, the paged
+  organization ids, an organization's id by name, an unknown name `CodeNotFound`) and its
+  public JWKS (`SigningKey`: the first `sig` key's public key as PEM, with its kid, which
+  needs no credentials). Credentials are `Deps`, never `Config`. `tests/mocks` generates
+  `MockAuth0Management`.
 - `transport/cobra`: `Options.Resolve(ctx, op)` returns the registry and observer one run
   uses, so a CLI that builds its registry after parsing (in a `PersistentPreRun`) builds the
   tree first; `Tree` then takes a nil registry, takes each leaf's flags from its spec, and
