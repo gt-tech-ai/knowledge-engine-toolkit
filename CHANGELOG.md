@@ -6,6 +6,20 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.26] - 2026-10-29
+
+Python: unchanged (`techai-webutils` 0.6.1).
+
+### Added
+
+- Guard rows carry `data:`, structured YAML an `expr` row reads as `data` (the
+  expectations it compares the tree with), so a policy check needs no product config
+  section; rows in one guard file share it through a YAML anchor.
+- Guard rows take `for:`, a CEL expression over `data` and `vars` returning the
+  placeholder maps the row repeats over — one run per map, crossed with `each`'s
+  expansions (evaluated per expansion, its keys added to that expansion's vars). A row
+  iterates the sets its own data lists instead of a product expander listing them again.
+
 ## [0.0.25] - 2026-10-28
 
 Python: unchanged (`techai-webutils` 0.6.1).

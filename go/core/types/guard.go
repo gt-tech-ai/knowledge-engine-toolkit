@@ -50,6 +50,11 @@ type GuardRow struct {
 	// Each names the product expander whose rows expand this one, one guard per row.
 	Each string `yaml:"each" json:"each,omitempty"`
 
+	// For is a CEL expression over data and vars that returns the placeholder maps the
+	// row repeats over: one run per map, crossed with Each's expansions (evaluated over
+	// each expansion's vars, its keys added to them).
+	For string `yaml:"for" json:"for,omitempty"`
+
 	// Message explains a failure and how to fix it; `{placeholder}`s expand.
 	Message string `yaml:"message" json:"message,omitempty"`
 
@@ -77,6 +82,10 @@ type GuardRow struct {
 	// expansion whose inputs passed before is skipped and reported cached; a failure is
 	// never cached. `{placeholder}`s expand. Empty inputs never cache.
 	Inputs FileSelector `yaml:"inputs" json:"inputs,omitzero"`
+
+	// Data is structured data a GuardExpr row's expression reads as `data` (the
+	// expectations it compares the tree with); nil is null.
+	Data any `yaml:"data" json:"data,omitempty"`
 
 	// Render, when its ChartDir is set, renders a chart whose objects the expression reads.
 	Render RenderSpec `yaml:"render" json:"render,omitzero"`
