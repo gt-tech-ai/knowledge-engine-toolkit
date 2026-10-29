@@ -278,6 +278,13 @@ func (e *engine) once(
 		return res, nil, err
 	case st.Probe != nil:
 		return types.StepResults{e.probe(ctx, c, st.Probe, name, vars)}, nil, nil
+	case st.File != nil:
+		if opts.DryRun {
+			return types.StepResults{
+				c.result(name, types.StatusSkip, "dry-run: file "+st.File.Op),
+			}, nil, nil
+		}
+		return types.StepResults{e.file(c, st.File, name, vars)}, nil, nil
 	case st.Step != "":
 		if st.Mutating && opts.DryRun {
 			return types.StepResults{

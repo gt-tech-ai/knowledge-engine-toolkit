@@ -105,11 +105,47 @@ type ProcProbe struct {
 	Exec []string `yaml:"exec" json:"exec,omitempty"`
 }
 
+// The ProcFile operations.
+const (
+	// FileEnsure creates Path as an empty file when it is missing, replacing an empty
+	// directory left in its place (a non-empty one is CodeConflict); an existing file is
+	// left as is.
+	FileEnsure = "ensure"
+
+	// FileCopy copies From to Path when Path is missing; an existing Path is left as is,
+	// and a missing From fails.
+	FileCopy = "copy"
+
+	// FileMkdir creates the directory Path and its parents.
+	FileMkdir = "mkdir"
+
+	// FileRemove removes Path and anything under it; a missing Path passes.
+	FileRemove = "remove"
+)
+
+// ProcFile is a filesystem operation a file step applies under the procedure's root.
+// Path and From expand like a step's Name and must stay inside the root once expanded.
+type ProcFile struct {
+	// Op is FileEnsure, FileCopy, FileMkdir or FileRemove.
+	Op string `yaml:"op" json:"op"`
+
+	// Path is the file or directory the operation applies to, relative to the root.
+	Path string `yaml:"path" json:"path"`
+
+	// From is the file FileCopy copies, relative to the root; only FileCopy reads it.
+	From string `yaml:"from" json:"from,omitempty"`
+
+	// Mode is the octal permission of a created file or directory ("0600"); empty is
+	// 0644 for a file and 0755 for a directory.
+	Mode string `yaml:"mode" json:"mode,omitempty"`
+}
+
 // ProcStep is one procedure step. Exactly one of Tool, Exec, Step, Call, Parallel,
-// Fail and Probe says what it runs. Text fields expand `{name}` from the variables — a
-// `{name.key}` path reads into a map-valued variable, such as an Each item that is an
-// object; an argument that is exactly `{name...}` (or `{name.key...}`) splats a list, and
-// one that is exactly `${expr}` is a CEL expression (a list splats).
+// Fail, Probe and File says what it runs. Text fields expand `{name}` from the
+// variables — a `{name.key}` path reads into a map-valued variable, such as an Each
+// item that is an object; an argument that is exactly `{name...}` (or
+// `{name.key...}`) splats a list, and one that is exactly `${expr}` is a CEL
+// expression (a list splats).
 type ProcStep struct {
 	// Capture stores the step's output in a variable.
 	Capture *Capture `yaml:"capture" json:"capture,omitempty"`
@@ -117,6 +153,10 @@ type ProcStep struct {
 	// Probe is a readiness check retried until it passes or its timeout ends; it is
 	// read-only, so a dry run runs it.
 	Probe *ProcProbe `yaml:"probe" json:"probe,omitempty"`
+
+	// File is a filesystem operation under the root; it changes state, so a dry run
+	// reports it as skipped.
+	File *ProcFile `yaml:"file" json:"file,omitempty"`
 
 	// Name labels the step's result.
 	Name string `yaml:"name" json:"name"`

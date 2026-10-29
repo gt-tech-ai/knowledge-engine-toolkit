@@ -86,7 +86,11 @@ type Deps struct {
 	// Dialer opens a TCP probe's connection; nil is a zero net.Dialer.
 	Dialer interfaces.Dialer
 
-	// Root is the working-tree root a step's Cwd is relative to.
+	// FS applies a file step's operation; nil is the operating system's filesystem.
+	FS interfaces.FS
+
+	// Root is the working-tree root a step's Cwd and a file step's paths are relative
+	// to.
 	Root string
 }
 
@@ -201,15 +205,10 @@ func (e *engine) compileSteps(env *cel.Env, c *compiled, steps []types.ProcStep)
 
 // validate checks that st runs exactly one known thing and captures validly.
 func (e *engine) validate(st *types.ProcStep) error {
+	if err := validShape(st); err != nil {
+		return err
+	}
 	switch {
-	case kinds(st) != 1:
-		return apperr.New(apperr.CodeInvalidInput,
-			"a step runs exactly one of tool, exec, step, call, parallel, fail, probe")
-	case st.Probe != nil && st.Probe.HTTP == "" && st.Probe.TCP == "" &&
-		len(st.Probe.Exec) == 0:
-		return apperr.New(apperr.CodeInvalidInput, "a probe names http, tcp or exec")
-	case st.Concurrent && st.Each == "":
-		return apperr.New(apperr.CodeInvalidInput, "concurrent needs each")
 	case st.Step != "" && e.deps.Steps[st.Step] == nil:
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"no registered step %q (registered: %s)", st.Step,
@@ -227,12 +226,32 @@ func (e *engine) validate(st *types.ProcStep) error {
 	return validCapture(st)
 }
 
+// validShape checks that st runs exactly one thing, that a probe names its kind, that
+// a file step's operation is valid and that only an Each step is concurrent.
+func validShape(st *types.ProcStep) error {
+	switch {
+	case kinds(st) != 1:
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			"a step runs exactly one of tool, exec, step, call, parallel, fail, probe, file",
+		)
+	case st.Probe != nil && st.Probe.HTTP == "" && st.Probe.TCP == "" &&
+		len(st.Probe.Exec) == 0:
+		return apperr.New(apperr.CodeInvalidInput, "a probe names http, tcp or exec")
+	case st.Concurrent && st.Each == "":
+		return apperr.New(apperr.CodeInvalidInput, "concurrent needs each")
+	case st.File != nil:
+		return validFile(st.File)
+	}
+	return nil
+}
+
 // kinds counts what st runs: a valid step runs exactly one thing.
 func kinds(st *types.ProcStep) int {
 	n := 0
 	for _, set := range []bool{
 		st.Tool != "", len(st.Exec) > 0, st.Step != "", st.Call != "", len(st.Parallel) > 0,
-		st.Fail != "", st.Probe != nil,
+		st.Fail != "", st.Probe != nil, st.File != nil,
 	} {
 		if set {
 			n++
