@@ -12,7 +12,8 @@ import (
 )
 
 // matchCheck reports, for every selected file, each Require pattern (only the one at
-// only, when only ≥ 0) no line matches and each line a Forbid pattern matches.
+// only, when only ≥ 0) no line matches and each line a Forbid pattern matches, unless an
+// Allow pattern matches the line too.
 func matchCheck(
 	ctx context.Context,
 	cb interfaces.Codebase,
@@ -27,6 +28,10 @@ func matchCheck(
 		require = require[only : only+1]
 	}
 	forbid, err := patterns(r.Forbid, r.Literal)
+	if err != nil {
+		return nil, err
+	}
+	allow, err := patterns(r.Allow, r.Literal)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +59,7 @@ func matchCheck(
 		}
 		for _, re := range forbid {
 			for _, l := range lines {
-				if re.MatchString(l.text) {
+				if re.MatchString(l.text) && !matchesAny(allow, l.text) {
 					out = append(out, types.Finding{
 						File: f.Path, Line: l.n, Rule: "forbid",
 						Message: "contains " + show(re, r.Literal),
@@ -64,6 +69,14 @@ func matchCheck(
 		}
 	}
 	return out, nil
+}
+
+// matchesAny reports whether one of res matches s.
+func matchesAny(res []*regexp.Regexp, s string) bool {
+	return slices.ContainsFunc(
+		res,
+		func(re *regexp.Regexp) bool { return re.MatchString(s) },
+	)
 }
 
 // line is one active line and its 1-based number.

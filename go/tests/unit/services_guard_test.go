@@ -108,6 +108,45 @@ func TestServicesGuard_Match(t *testing.T) {
 	assert.Equal(t, types.StatusPass, vs["none-ok"].Status)
 }
 
+// TestServicesGuard_MatchAllow tests line exemptions on a match row's forbid patterns.
+//
+// Why this test is important:
+//   - RE2 has no lookahead, so a forbid pattern that must spare a sanctioned literal
+//     needs an allow list; without it the guard either misses leaks or flags the
+//     sanctioned line, and an allow list that comes from data must expand.
+//
+// What it tests:
+//   - a line matching an allow pattern is not a forbid finding, other lines still are;
+//   - an allow pattern expands {placeholders} from an each expansion;
+//   - an allow pattern that does not compile fails the build of the guards.
+func TestServicesGuard_MatchAllow(t *testing.T) {
+	t.Parallel()
+	deploy := types.FileSelector{Globs: []string{"deploy/*.yaml"}}
+	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
+		return []map[string]string{{"pinned": `app:latest`}}, nil
+	}
+	vs := runGuards(t, []types.GuardRow{
+		{
+			Name: "no-app-tags", Kind: types.GuardMatch, Files: deploy,
+			Forbid: []string{`image: app:`}, Allow: []string{`app:1\.2$`},
+		},
+		{
+			Name: "expanded", Kind: types.GuardMatch, Files: deploy, Each: "sanctioned",
+			Forbid: []string{`image: app:`}, Allow: []string{`app:1\.2$`, "{pinned}"},
+		},
+	}, guard.Deps{Expanders: map[string]guard.Expander{"sanctioned": each}})
+
+	require.Equal(t, types.StatusFail, vs["no-app-tags"].Status)
+	require.Len(t, vs["no-app-tags"].Findings, 1)
+	assert.Equal(t, "deploy/b.yaml", vs["no-app-tags"].Findings[0].File)
+	assert.Equal(t, types.StatusPass, vs["expanded"].Status)
+
+	_, err := guard.NewFromConfig([]types.GuardRow{{
+		Name: "bad", Kind: types.GuardMatch, Files: deploy, Allow: []string{"("},
+	}}, guard.Deps{})
+	require.Error(t, err)
+}
+
 // TestServicesGuard_YAMLAndEach tests the yaml kind under an each expansion.
 //
 // Why this test is important:
