@@ -14,6 +14,7 @@ import (
 	"go/token"
 	"path"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -43,8 +44,8 @@ var durationType = reflect.TypeFor[time.Duration]()
 
 // Reflector returns an inlining reflector: Tag names the properties, only fields
 // tagged jsonschema:"required" are required, every struct forbids additional
-// properties, a time.Duration accepts a duration string or an integer, and
-// descriptions come from Comments.
+// properties, a time.Duration accepts a duration string or an integer, descriptions
+// come from Comments, and a definition is named by defName.
 func Reflector(opts Options) *jsonschema.Reflector {
 	tag := opts.Tag
 	if tag == "" {
@@ -54,6 +55,7 @@ func Reflector(opts Options) *jsonschema.Reflector {
 		FieldNameTag:               tag,
 		DoNotReference:             true,
 		RequiredFromJSONSchemaTags: true,
+		Namer:                      defName,
 		Mapper: func(t reflect.Type) *jsonschema.Schema {
 			if t != durationType {
 				return nil
@@ -70,6 +72,22 @@ func Reflector(opts Options) *jsonschema.Reflector {
 			return opts.Comments[key]
 		},
 	}
+}
+
+// defUnsafe matches the characters a definition name may not carry: a generic type's
+// name holds its type arguments' import paths, and a "/" in a $defs key splits the
+// JSON pointer every $ref to it is.
+var defUnsafe = regexp.MustCompile(`[^A-Za-z0-9_.-]`)
+
+// defName names t's definition: its package path and type name, so two types of one
+// name in two packages never share a definition, with every character outside
+// [A-Za-z0-9_.-] replaced by "_", so a $ref to it is a valid JSON pointer.
+func defName(t reflect.Type) string {
+	name := t.Name()
+	if t.PkgPath() != "" {
+		name = t.PkgPath() + "." + name
+	}
+	return defUnsafe.ReplaceAllString(name, "_")
 }
 
 // Reflect returns the schema of value's type under opts. A type graph with a cycle (a

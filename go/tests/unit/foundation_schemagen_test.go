@@ -16,6 +16,8 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/gen"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/schemagen"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/procedure"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/toolrun"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -102,10 +104,12 @@ func TestFoundationSchemagen_For(t *testing.T) {
 	var tree map[string]any
 	require.NoError(t, json.Unmarshal(raw, &tree))
 	nodes := tree["properties"].(map[string]any)["nodes"].(map[string]any)
-	assert.Equal(t, map[string]any{"$ref": "#/$defs/schemaNode"}, nodes["items"])
-	node := tree["$defs"].(map[string]any)["schemaNode"].(map[string]any)
+	// A definition is named by package path and type, "/" and the like mapped to "_".
+	const nodeDef = "github.com_gt-tech-ai_knowledge-engine-toolkit_go_tests_unit_test.schemaNode"
+	assert.Equal(t, map[string]any{"$ref": "#/$defs/" + nodeDef}, nodes["items"])
+	node := tree["$defs"].(map[string]any)[nodeDef].(map[string]any)
 	children := node["properties"].(map[string]any)["children"].(map[string]any)
-	assert.Equal(t, map[string]any{"$ref": "#/$defs/schemaNode"}, children["items"])
+	assert.Equal(t, map[string]any{"$ref": "#/$defs/" + nodeDef}, children["items"])
 	assert.Equal(t, false, node["additionalProperties"])
 
 	looseTree := schemagen.Reflect([]schemaNode{}, schemagen.Options{})
@@ -388,4 +392,92 @@ func TestFoundationSchemagen_RejectsPythonNames(t *testing.T) {
 		assert.Empty(t, schemagen.ExtractPythonKinds(t.Context(), runner,
 			memoryCodebase(t, files), "/repo", cfg.PythonKinds))
 	}
+}
+
+// schemaBox is a generic holder, so a reflected name carries its type argument's
+// import path.
+type schemaBox[T any] struct {
+	// Value is the held value.
+	Value T `yaml:"value"`
+}
+
+// schemaTree is a recursive struct holding a generic type over another package's type:
+// the shape that reflects by reference.
+type schemaTree struct {
+	// Kids are the nested trees.
+	Kids []schemaTree `yaml:"kids"`
+
+	// Box holds a type from another package.
+	Box schemaBox[interfaces.CmdResult] `yaml:"box"`
+
+	// Procedure and ToolRun are two types of one name, Config, from two packages.
+	Procedure procedure.Config `yaml:"procedure"`
+
+	// ToolRun is the other Config.
+	ToolRun toolrun.Config `yaml:"toolrun"`
+}
+
+// TestSchemagen_RecursiveGenericRefsResolve tests the definition names of a schema
+// reflected by reference.
+//
+// Why this test is important:
+//   - A recursive type graph reflects under $defs, and a generic type's name carries its
+//     type argument's import path; a "/" in a definition name is a JSON-pointer separator,
+//     so every $ref to it points nowhere and validators reject the whole schema.
+//   - Two types of one name from two packages must not share a definition, or one
+//     field validates against the other's schema.
+//
+// What it tests:
+//   - Every $ref in the reflected schema of a recursive struct holding a generic type
+//     names a key of $defs, and no $defs key contains "/".
+//   - The two Config fields reference two different definitions.
+func TestSchemagen_RecursiveGenericRefsResolve(t *testing.T) {
+	t.Parallel()
+
+	raw, err := schemagen.Marshal(schemagen.Reflect(schemaTree{}, schemagen.Options{}))
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(raw, &doc))
+	defs, ok := doc["$defs"].(map[string]any)
+	require.True(t, ok, "a recursive type reflects under $defs")
+	for name := range defs {
+		assert.NotContains(t, name, "/", "definition %q", name)
+	}
+	var refs []string
+	var walk func(v any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			if r, ok := x["$ref"].(string); ok {
+				refs = append(refs, r)
+			}
+			for _, c := range x {
+				walk(c)
+			}
+		case []any:
+			for _, c := range x {
+				walk(c)
+			}
+		}
+	}
+	walk(doc)
+	require.NotEmpty(t, refs)
+	for _, r := range refs {
+		_, ok := defs[strings.TrimPrefix(r, "#/$defs/")]
+		assert.True(t, ok, "$ref %q resolves", r)
+	}
+	var tree map[string]any
+	for name, d := range defs {
+		if strings.HasSuffix(name, "schemaTree") {
+			tree, _ = d.(map[string]any)
+		}
+	}
+	require.NotNil(t, tree, "the root type is a definition")
+	props, _ := tree["properties"].(map[string]any)
+	ref := func(field string) string {
+		f, _ := props[field].(map[string]any)
+		r, _ := f["$ref"].(string)
+		return r
+	}
+	assert.NotEqual(t, ref("procedure"), ref("toolrun"), "same-named types share a definition")
 }
