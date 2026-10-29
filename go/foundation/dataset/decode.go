@@ -31,7 +31,7 @@ func (d *Dataset) Decode(out any) error {
 		idx, ok := fields[key]
 		if !ok {
 			return apperr.New(apperr.CodeInvalidInput,
-				"data key "+`"`+key+`"`+" in "+d.files[key]+" has no field")
+				"data key "+`"`+key+`"`+" in "+d.sourceOf(key)+" has no field")
 		}
 		if err := d.decodeInto(key, v.Elem().Field(idx).Addr().Interface()); err != nil {
 			return err
@@ -50,7 +50,7 @@ func (d *Dataset) decodeInto(key string, dst any) error {
 	dec.KnownFields(true)
 	if err := dec.Decode(dst); err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput,
-			"decode section "+key+" from "+d.files[key])
+			"decode section "+key+" from "+d.sourceOf(key))
 	}
 	return nil
 }
