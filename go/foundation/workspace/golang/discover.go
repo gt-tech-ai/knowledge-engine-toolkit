@@ -87,7 +87,7 @@ func StagedModules(
 // back to the root module "."; ok is false when not even the root has one.
 func owningModule(fsys fs.FS, dir string) (string, bool) {
 	for dir != "." && dir != "/" {
-		if isFile(fsys, path.Join(dir, modFile)) {
+		if isFile(fsys, path.Join(dir, modFile)) { // nosemgrep: use-filepath-join
 			return dir, true
 		}
 		dir = path.Dir(dir)

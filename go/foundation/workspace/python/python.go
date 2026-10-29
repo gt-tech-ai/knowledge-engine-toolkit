@@ -54,7 +54,8 @@ func findPyprojectDirs(
 	filter func(string) bool,
 	out *[]string,
 ) error {
-	if _, err := fs.Stat(fsys, path.Join(dir, "pyproject.toml")); err == nil {
+	pyproject := path.Join(dir, "pyproject.toml") // nosemgrep: use-filepath-join
+	if _, err := fs.Stat(fsys, pyproject); err == nil {
 		if filter == nil || filter(dir) {
 			*out = append(*out, dir)
 		}
@@ -70,7 +71,7 @@ func findPyprojectDirs(
 		}
 		if err := findPyprojectDirs(
 			fsys,
-			path.Join(dir, entry.Name()),
+			path.Join(dir, entry.Name()), // nosemgrep: use-filepath-join
 			filter,
 			out,
 		); err != nil {
@@ -85,7 +86,8 @@ func findPyprojectDirs(
 // (shelf/src/shelf → "shelf"), skipping build
 // artifacts; the directory's base name without a src/ layout.
 func ModuleName(fsys fs.FS, pkgDir string) string {
-	entries, err := fs.ReadDir(fsys, path.Join(pkgDir, "src"))
+	src := path.Join(pkgDir, "src") // nosemgrep: use-filepath-join
+	entries, err := fs.ReadDir(fsys, src)
 	if err == nil {
 		for _, e := range entries {
 			name := e.Name()

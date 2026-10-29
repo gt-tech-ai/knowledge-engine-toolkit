@@ -109,7 +109,7 @@ func (g generator) render(ctx context.Context, dir string, d directive) ([]byte,
 		return nil, apperr.Wrap(res.Err, apperr.CodeInternal, fmt.Sprintf(
 			"%s %s: %s",
 			Tool,
-			path.Join(dir, d.dest),
+			path.Join(dir, d.dest), // nosemgrep: use-filepath-join
 			strings.TrimSpace(string(res.Stderr)),
 		))
 	}
