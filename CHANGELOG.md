@@ -6,6 +6,18 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.24] - 2026-10-28
+
+Python: unchanged (`techai-webutils` 0.6.1).
+
+### Added
+
+- Procedure `file` steps: `ensure` (create a missing file empty, replacing an empty
+  directory in its place; a non-empty one fails), `copy` (seed `path` from `from` unless
+  `path` exists), `mkdir` and `remove`, with an optional octal `mode`. Paths expand like
+  a step's name and must stay inside `Deps.Root`; a dry run skips every file step.
+  `Deps.FS` applies them (nil is the OS filesystem).
+
 ## [0.0.23] - 2026-10-28
 
 ### Added
