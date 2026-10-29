@@ -95,6 +95,14 @@ type CodebaseSource interface {
 	Changed(ctx context.Context, base string) (map[string]bool, error)
 }
 
+// IgnoredLister is the optional CodebaseSource capability of listing the files its
+// ignore rules exclude; a Codebase over a source without it lists no ignored files.
+type IgnoredLister interface {
+	// ListIgnored returns the ignored files under scope (repository-relative paths or
+	// directories; empty is the whole tree), sorted, each marked Untracked and Ignored.
+	ListIgnored(ctx context.Context, scope []string) ([]types.File, error)
+}
+
 // Renderer renders a chart to its manifest objects.
 type Renderer interface {
 	// Render renders spec and decodes its documents, in output order.

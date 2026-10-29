@@ -9,7 +9,8 @@ import (
 )
 
 // Matches reports whether sel selects path on its path alone: Roots, Paths, Globs,
-// Exts and Exclude (TrackedOnly and IncludeGenerated need the file, not its path).
+// Exts and Exclude (TrackedOnly, IncludeGenerated and IncludeIgnored need the file,
+// not its path).
 func Matches(sel types.FileSelector, p string) bool {
 	if len(sel.Paths) > 0 && !slices.Contains(sel.Paths, p) {
 		return false
@@ -103,4 +104,33 @@ func under(p, dir string) bool {
 		return true
 	}
 	return p == dir || strings.HasPrefix(p, dir+"/")
+}
+
+// ignoredScope returns where an IncludeIgnored selector looks for ignored files: its
+// Paths, else its Roots, else each glob's literal leading directories. It returns nil
+// (the whole tree) when the selector names none of them or a glob has no literal
+// prefix, since the selector's own filters still apply to whatever is listed.
+func ignoredScope(sel types.FileSelector) []string {
+	switch {
+	case len(sel.Paths) > 0:
+		return slices.Clone(sel.Paths)
+	case len(sel.Roots) > 0:
+		return slices.Clone(sel.Roots)
+	}
+	scope := make([]string, 0, len(sel.Globs))
+	for _, g := range sel.Globs {
+		var lit []string
+		for seg := range strings.SplitSeq(g, "/") {
+			if strings.ContainsAny(seg, "*?[") {
+				break
+			}
+			lit = append(lit, seg)
+		}
+		if len(lit) == 0 {
+			return nil
+		}
+		scope = append(scope, path.Join(lit...))
+	}
+	slices.Sort(scope)
+	return slices.Compact(scope)
 }

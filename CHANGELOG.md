@@ -6,6 +6,21 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.27] - 2026-10-29
+
+Python: unchanged (`techai-webutils` 0.6.1).
+
+### Added
+
+- `FileSelector.IncludeIgnored` (`include_ignored:` on a guard row's `files`) also lists
+  the files the repository's ignore rules exclude, so a guard can judge a gitignored
+  generated tier. The lookup is scoped to the selector's Paths, else its Roots, else its
+  globs' literal directory prefixes, and runs once per scope per run. Listed files carry
+  `File.Ignored`.
+- `interfaces.IgnoredLister`, the optional source capability behind it; the git kind
+  implements it with `git ls-files --others --ignored --exclude-standard`. The memory and
+  fs kinds have no ignore rules and list none.
+
 ## [0.0.26] - 2026-10-29
 
 Python: unchanged (`techai-webutils` 0.6.1).
