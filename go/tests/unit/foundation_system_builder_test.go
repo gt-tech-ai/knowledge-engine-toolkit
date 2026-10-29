@@ -205,3 +205,71 @@ func TestRunnerBuilder_WithEnvAddsEnvToEveryRun(t *testing.T) {
 	assert.True(t, r.Exists("go"))
 	require.NoError(t, r.RequireTool("go", "brew install go"))
 }
+
+// TestRunner_RunBufferedWithInput tests a buffered run fed from stdin.
+//
+// Why this test is important:
+//   - a manifest or a secret handed to `kubectl apply -f -` must travel on the child's
+//     stdin; written to a temp file instead it lingers on disk when a run is killed.
+//
+// What it tests:
+//   - the real runner feeds input to the child's stdin with extraEnv added, and
+//     captures its stdout.
+func TestRunner_RunBufferedWithInput(t *testing.T) {
+	t.Parallel()
+	r := system.NewRunner()
+
+	res := r.RunBufferedWithInput(t.Context(), "", []string{"FOO=a"}, []byte("b\n"),
+		"sh", "-c", `printf %s "$FOO"; cat`)
+
+	require.NoError(t, res.Err)
+	assert.Equal(t, "ab\n", string(res.Stdout))
+}
+
+// TestBuilder_RunBufferedWithInput tests that every runner decorator passes a stdin
+// run through.
+//
+// Why this test is important:
+//   - a decorator that dropped the input, the env it adds, or its own logging and hooks
+//     on the stdin path would make that path behave unlike every other run.
+//
+// What it tests:
+//   - through the env, logging, timeout and hook decorators the base gets the input
+//     and the env the builder adds; the run is logged once and the hook sees it start
+//     and succeed; a dry run never reaches the base; the buffering runner captures the
+//     output.
+func TestBuilder_RunBufferedWithInput(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	base := mocks.NewMockCommandRunner(ctrl)
+	base.EXPECT().
+		RunBufferedWithInput(gomock.Any(), "/d", []string{"E=1", "X=2"}, []byte("in"),
+			"kubectl", "apply", "-f", "-").
+		Return(system.CmdResult{Stdout: []byte("applied\n")}).Times(2)
+	var logs, events []string
+	r := system.NewBuilder(base).
+		WithEnv("E=1").
+		WithLogging(func(format string, args ...any) {
+			logs = append(logs, fmt.Sprintf(format, args...))
+		}).
+		WithTimeout(time.Minute).
+		WithHook(recordHooks(ctrl, &events)).
+		Build()
+
+	res := r.RunBufferedWithInput(t.Context(), "/d", []string{"X=2"}, []byte("in"),
+		"kubectl", "apply", "-f", "-")
+
+	require.NoError(t, res.Err)
+	assert.Equal(t, "applied\n", string(res.Stdout))
+	assert.Len(t, logs, 1)
+	assert.Equal(t, []string{"start:kubectl apply -f -", "ok:kubectl apply -f -"}, events)
+
+	dry := system.NewBuilder(base).WithDryRun(true).Build()
+	assert.Equal(t, system.CmdResult{},
+		dry.RunBufferedWithInput(t.Context(), "/d", nil, []byte("in"), "kubectl"))
+
+	b := system.NewQuietBufferingRunner(system.NewBuilder(base).WithEnv("E=1").Build())
+	_ = b.RunBufferedWithInput(t.Context(), "/d", []string{"X=2"}, []byte("in"),
+		"kubectl", "apply", "-f", "-")
+	assert.Equal(t, "applied\n", string(b.Captured()))
+}

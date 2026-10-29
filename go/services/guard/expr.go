@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"time"
 
 	"cel.dev/cel-go/cel"
 	celtypes "cel.dev/cel-go/common/types"
@@ -30,18 +31,19 @@ type program struct {
 
 // exprVars are the activation variables an expression may name: files (selected paths),
 // file (path → {path, text, lines}), docs ({path, index, format, doc} per configuration
-// document: YAML, or HCL / Alloy when the selector names their extensions),
-// objects ({kind, name, namespace, source, doc} per rendered object) and vars (the
-// expansion's placeholders).
-func exprVars() []string { return []string{"files", "file", "docs", "objects", "vars"} }
+// document: YAML, or HCL / Alloy / TOML when the selector names their extensions),
+// objects ({kind, name, namespace, source, doc} per rendered object), vars (the
+// expansion's placeholders) and now (the run's time, a timestamp).
+func exprVars() []string {
+	return []string{"files", "file", "docs", "objects", "vars", "now"}
+}
 
 // compile type-checks expr against the guard environment: the CEL standard library plus
 // optional types, the strings, lists, sets, encoders, bindings (cel.bind), math and
-// regex extensions, and decode(format, text) — the Codebase.Docs decoders ("yaml", "hcl",
-// "alloy") over a string, for configuration embedded in another file. The expression
-// evaluates to
-// true (pass) or false (fail with the row's message), or to a list of findings: strings,
-// or maps with file, line and message.
+// regex extensions, and decode(format, text) — the Codebase.Docs decoders ("yaml",
+// "hcl", "alloy", "toml") over a string, for configuration embedded in another file.
+// The expression evaluates to true (pass) or false (fail with the row's message), or to
+// a list of findings: strings, or maps with file, line and message.
 func compile(expr string) (*program, error) {
 	opts := make([]cel.EnvOption, 0, 4+len(exprVars()))
 	opts = append(opts, ext.Strings(), ext.Lists(), ext.Sets(), ext.Encoders(),
@@ -74,15 +76,23 @@ func compile(expr string) (*program, error) {
 	return &program{prg: prg, uses: uses}, nil
 }
 
-// exprCheck evaluates p over the files, documents and rendered objects r selects.
+// exprCheck evaluates p over the files, documents and rendered objects r selects, at the
+// time clock reads (nil is time.Now).
 func exprCheck(
 	ctx context.Context,
 	cb interfaces.Codebase,
 	r *types.GuardRow,
 	p *program,
 	vars map[string]string,
+	clock func() time.Time,
 ) ([]types.Finding, error) {
 	act, missing, err := activation(ctx, cb, r, p, vars)
+	if clock == nil {
+		clock = time.Now
+	}
+	if act != nil {
+		act["now"] = clock()
+	}
 	if err != nil || missing != nil {
 		return missing, err
 	}

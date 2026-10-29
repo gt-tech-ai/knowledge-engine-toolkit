@@ -5,6 +5,7 @@
 package cobra
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -18,10 +19,40 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
 )
 
+// OperationAnnotation is the Cobra annotation key under which a Tree leaf names the
+// operation it runs.
+const OperationAnnotation = "operation"
+
 // Options shapes a command.
 type Options struct {
 	// Observer receives the run's progress; nil reports nothing.
 	Observer interfaces.ExecutionObserver
+
+	// Resolve, when set, returns the registry and observer one run of the operation op
+	// uses, from the run's context, in place of Tree's registry and Observer: for a CLI
+	// that builds its registry after parsing (in a PersistentPreRun).
+	Resolve func(ctx context.Context, op string) (
+		*ops.Registry, interfaces.ExecutionObserver, error,
+	)
+
+	// Before, when set, runs before each Tree leaf's operation with the command, the
+	// operation it names and the input object its flags and arguments built: it may change
+	// the input (a value from stdin or the console) and returns the operation to run (op,
+	// or a sibling the input selects, such as a --fix's mutating twin).
+	Before func(c *spf.Command, op string, in map[string]any) (string, error)
+
+	// After, when set, runs after each Tree leaf's run, failed or not, with the operation
+	// that ran and its error; it returns the error the command reports.
+	After func(c *spf.Command, op string, err error) error
+
+	// Run, when set, runs each Tree leaf's operation in place of RunLocal, with the run's
+	// registry, the operation and its input as JSON: a scheduled front-end passes
+	// transport/cron.Run, so the same tree runs a leaf unattended (no secret flag, no
+	// interactive operation).
+	Run func(
+		ctx context.Context, reg *ops.Registry, op string, raw []byte,
+		obs interfaces.ExecutionObserver,
+	) error
 
 	// Use overrides the command's usage line; empty uses the operation's name.
 	Use string
@@ -35,7 +66,8 @@ type Options struct {
 // parsed as set on the command line, then that run's positional arguments. Cobra keeps a
 // flag's parsed state (its value and whether it was set) across executions of one
 // command, so build a command per execution, as a CLI does once per process. An unknown
-// or excluded operation fails like ops.Registry.Find, and an unsupported field type or a
+// or excluded operation fails like ops.Registry.Find, the command carries its operation
+// under OperationAnnotation, and an unsupported field type or a
 // malformed tag is CodeInvalidInput naming the field.
 func Command(reg *ops.Registry, name string, opts Options) (*spf.Command, error) {
 	op, err := reg.Find(name)
@@ -47,7 +79,10 @@ func Command(reg *ops.Registry, name string, opts Options) (*spf.Command, error)
 	if use == "" {
 		use = desc.Name
 	}
-	cmd := &spf.Command{Use: use, Short: desc.Summary, SilenceUsage: true}
+	cmd := &spf.Command{
+		Use: use, Short: desc.Summary, SilenceUsage: true,
+		Annotations: map[string]string{OperationAnnotation: name},
+	}
 	flags := op.NewInput()
 	b, err := bind(cmd, flags)
 	if err != nil {

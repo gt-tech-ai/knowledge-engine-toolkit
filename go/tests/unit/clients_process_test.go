@@ -4,6 +4,9 @@ package unit_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -122,4 +125,45 @@ func TestClientsProcess_DetachAndStub(t *testing.T) {
 
 	_, err = process.NewFromConfig(process.Config{Kind: "systemd"})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}
+
+// TestClientsProcess_LogFile tests a process whose output is appended to a log file.
+//
+// Why this test is important:
+//   - a detached helper (a model server) outlives the command that started it, so its
+//     output can only go to a file; a caller opening that file itself does the I/O the
+//     supervisor exists to own, and an overwrite would lose the previous run's log.
+//
+// What it tests:
+//   - two runs with LogFile set append both outputs, stdout and stderr, to the file,
+//     creating it 0600; a LogFile in a missing directory is CodeUnavailable.
+func TestClientsProcess_LogFile(t *testing.T) {
+	t.Parallel()
+	sup, err := process.NewFromConfig(process.Config{Kind: process.KindExec})
+	require.NoError(t, err)
+	log := filepath.Join(t.TempDir(), "serve.log")
+	run := func(word string) {
+		h, err := sup.Start(t.Context(), types.ProcessSpec{
+			Name: "log", LogFile: log,
+			Args: []string{"/bin/sh", "-c", "echo " + word + "; echo " + word + " >&2"},
+		}, nil)
+		require.NoError(t, err)
+		require.NoError(t, h.Wait())
+	}
+
+	run("one")
+	run("two")
+
+	data, err := os.ReadFile(log)
+	require.NoError(t, err)
+	assert.Equal(t, strings.Repeat("one\n", 2)+strings.Repeat("two\n", 2), string(data))
+	info, err := os.Stat(log)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+
+	err = sup.Detach(types.ProcessSpec{
+		Name: "log", LogFile: filepath.Join(t.TempDir(), "missing", "x.log"),
+		Args: []string{"/bin/sh", "-c", "exit 0"},
+	})
+	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }

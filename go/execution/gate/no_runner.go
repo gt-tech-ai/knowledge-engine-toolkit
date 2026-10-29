@@ -57,6 +57,19 @@ func (noRunner) RunBufferedWithEnv(
 	return interfaces.CmdResult{Err: errNoRunner, ExitCode: -1}
 }
 
+// RunBufferedWithInput always fails, returning a CmdResult carrying errNoRunner and exit
+// code -1.
+func (noRunner) RunBufferedWithInput(
+	context.Context,
+	string,
+	[]string,
+	[]byte,
+	string,
+	...string,
+) interfaces.CmdResult {
+	return interfaces.CmdResult{Err: errNoRunner, ExitCode: -1}
+}
+
 // Exists always reports false: no tools are resolvable on a runner-less gate.
 func (noRunner) Exists(string) bool { return false }
 

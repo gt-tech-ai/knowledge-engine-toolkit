@@ -119,6 +119,21 @@ func (mr *MockGitClientMockRecorder) LsFiles(ctx, root, pathspecs any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LsFiles", reflect.TypeOf((*MockGitClient)(nil).LsFiles), ctx, root, pathspecs)
 }
 
+// RemoteHasRef mocks base method.
+func (m *MockGitClient) RemoteHasRef(ctx context.Context, root, remote, ref string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoteHasRef", ctx, root, remote, ref)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RemoteHasRef indicates an expected call of RemoteHasRef.
+func (mr *MockGitClientMockRecorder) RemoteHasRef(ctx, root, remote, ref any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteHasRef", reflect.TypeOf((*MockGitClient)(nil).RemoteHasRef), ctx, root, remote, ref)
+}
+
 // RevParse mocks base method.
 func (m *MockGitClient) RevParse(ctx context.Context, root, ref string) (string, error) {
 	m.ctrl.T.Helper()

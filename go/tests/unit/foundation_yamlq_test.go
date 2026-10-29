@@ -288,3 +288,146 @@ func TestYamlq_Rewrite(t *testing.T) {
 	_, err = yamlq.Rewrite([]byte(doc), "spec.image", pin)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+// TestYamlq_Append tests appending an item to a sequence.
+//
+// Why this test is important:
+//   - A hand-maintained descriptor gains rows from a command; an append that re-encodes
+//     the file drops every comment around the rows the command never touched.
+//
+// What it tests:
+//   - A mapping item is spliced after the block sequence's last item (and its trailing
+//     comment lines' predecessor), at the items' indentation, keeping its field order;
+//     every other byte is unchanged.
+//   - A flow or empty sequence takes the item by re-encoding; the item is still last.
+//   - A path that selects no sequence is INVALID_INPUT.
+func TestYamlq_Append(t *testing.T) {
+	t.Parallel()
+	type row struct {
+		Name    string `yaml:"name"`
+		ID      string `yaml:"account_id"`
+		Enabled bool   `yaml:"enabled"`
+	}
+	src := `deploy:
+  # the rows
+  rows:
+    - name: a
+      # a's note
+      account_id: "1"
+    - name: b
+      account_id: "2" # b
+  # after the rows
+  other: x
+`
+	out, err := yamlq.Append([]byte(src), "$.deploy.rows", row{Name: "c", ID: "0042"})
+	require.NoError(t, err)
+	assert.Equal(t, `deploy:
+  # the rows
+  rows:
+    - name: a
+      # a's note
+      account_id: "1"
+    - name: b
+      account_id: "2" # b
+    - name: c
+      account_id: "0042"
+      enabled: false
+  # after the rows
+  other: x
+`, string(out))
+
+	for name, in := range map[string]string{
+		"flow":  "rows: [{name: a}]\n",
+		"empty": "rows: []\n",
+	} {
+		out, err := yamlq.Append([]byte(in), "$.rows", row{Name: "z"})
+		require.NoError(t, err, name)
+		docs, err := yamlq.DecodeAll(out)
+		require.NoError(t, err, name)
+		got, err := yamlq.Path(docs[0], "$.rows[*].name")
+		require.NoError(t, err, name)
+		assert.Equal(t, "z", got[len(got)-1].Value, name)
+	}
+
+	_, err = yamlq.Append([]byte(src), "$.deploy.other", row{})
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+	_, err = yamlq.Append([]byte(src), "$.deploy.missing", row{})
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}
+
+// TestYamlq_UpsertUnderNull tests an upsert whose path runs through a null value.
+//
+// Why this test is important:
+//   - A hand-edited file often declares a block it has not filled yet (`section:` or
+//     `section: ~`). Setting a key under it must turn that null into the mapping in
+//     place, keeping the developer's layout and comments, not refuse or re-encode the
+//     whole file.
+//
+// What it tests:
+//   - `key:`, `key: ~ # note` and `key: null` each become a mapping header (the
+//     comment kept) with the new keys two spaces deeper; every other line is unchanged.
+//   - A quoted key falls back to re-encoding and still holds the value.
+func TestYamlq_UpsertUnderNull(t *testing.T) {
+	t.Parallel()
+	q := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Tag:   "!!str",
+		Value: "v",
+		Style: yaml.DoubleQuotedStyle,
+	}
+	cases := map[string]struct{ src, want string }{
+		"empty": {
+			src:  "# top\nother:    4\nshelf:\nlast: 1\n",
+			want: "# top\nother:    4\nshelf:\n  books:\n    title: \"v\"\nlast: 1\n",
+		},
+		"tilde with comment": {
+			src:  "a:\n    shelf: ~ # later\n",
+			want: "a:\n    shelf: # later\n      books:\n        title: \"v\"\n",
+		},
+		"null": {
+			src:  "shelf: null\n",
+			want: "shelf:\n  books:\n    title: \"v\"\n",
+		},
+	}
+	for name, tc := range cases {
+		path := "$.shelf.books.title"
+		if name == "tilde with comment" {
+			path = "$.a.shelf.books.title"
+		}
+		out, err := yamlq.Upsert([]byte(tc.src), path, q)
+		require.NoError(t, err, name)
+		assert.Equal(t, tc.want, string(out), name)
+	}
+
+	out, err := yamlq.Upsert([]byte("\"shelf\": ~\n"), "$.shelf.title", q)
+	require.NoError(t, err)
+	docs, err := yamlq.DecodeAll(out)
+	require.NoError(t, err)
+	got, err := yamlq.Path(docs[0], "$.shelf.title")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "v", got[0].Value)
+}
+
+// TestYamlq_UpsertEmptyDocument tests an upsert into a source that holds no document.
+//
+// Why this test is important:
+//   - A config file starts empty or as only a comment header; the first upsert must
+//     create its keys under that header rather than refuse the file.
+//
+// What it tests:
+//   - An empty source and a comment-only source gain the keys as a block mapping, the
+//     comment kept above them; a sequence step on an empty source is CodeInvalidInput.
+func TestYamlq_UpsertEmptyDocument(t *testing.T) {
+	t.Parallel()
+	out, err := yamlq.Upsert(nil, "$.shelf.title", "v")
+	require.NoError(t, err)
+	assert.Equal(t, "shelf:\n  title: v\n", string(out))
+
+	out, err = yamlq.Upsert([]byte("# shelves\n"), "$.shelf.title", "v")
+	require.NoError(t, err)
+	assert.Equal(t, "# shelves\nshelf:\n  title: v\n", string(out))
+
+	_, err = yamlq.Upsert(nil, "$.shelf[0]", "v")
+	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err)
+}

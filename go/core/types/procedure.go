@@ -67,14 +67,56 @@ type ProcVar struct {
 	Expr string `yaml:"expr" json:"expr"`
 }
 
-// ProcStep is one procedure step. Exactly one of Tool, Exec, Step, Call, Parallel and
-// Fail says what it runs. Text fields expand `{name}` from the variables — a
+// ProcProbe is a readiness check a probe step retries until it passes or its Timeout
+// ends. Exactly one of HTTP, TCP and Exec is non-empty once expanded, so an Each item
+// can choose the kind: a row probing a list of mixed checks leaves the others empty.
+// Every text field expands like a step's Name, and Exec like its Args.
+type ProcProbe struct {
+	// HTTP is a URL to GET; it passes on Status (any 2xx when Status is empty or 0)
+	// with Contains in the first 4 KiB of the body.
+	HTTP string `yaml:"http" json:"http,omitempty"`
+
+	// TCP is a host:port that passes once a connection opens.
+	TCP string `yaml:"tcp" json:"tcp,omitempty"`
+
+	// Status is the HTTP status the probe expects, as decimal text; empty or 0 accepts
+	// any 2xx.
+	Status string `yaml:"status" json:"status,omitempty"`
+
+	// Contains is text an HTTP body or an Exec probe's stdout must contain; empty
+	// checks nothing.
+	Contains string `yaml:"contains" json:"contains,omitempty"`
+
+	// Hint is appended to a failure, saying what to check.
+	Hint string `yaml:"hint" json:"hint,omitempty"`
+
+	// Timeout is the probe's deadline as a Go duration ("120s"); empty makes one
+	// attempt.
+	Timeout string `yaml:"timeout" json:"timeout,omitempty"`
+
+	// Delay is the first retry's wait as a Go duration, doubling each attempt up to
+	// MaxDelay; empty is 500ms.
+	Delay string `yaml:"delay" json:"delay,omitempty"`
+
+	// MaxDelay caps the retry wait as a Go duration; empty is 5s.
+	MaxDelay string `yaml:"max_delay" json:"max_delay,omitempty"`
+
+	// Exec is a command line that passes on exit 0 with Contains in its stdout.
+	Exec []string `yaml:"exec" json:"exec,omitempty"`
+}
+
+// ProcStep is one procedure step. Exactly one of Tool, Exec, Step, Call, Parallel,
+// Fail and Probe says what it runs. Text fields expand `{name}` from the variables — a
 // `{name.key}` path reads into a map-valued variable, such as an Each item that is an
 // object; an argument that is exactly `{name...}` (or `{name.key...}`) splats a list, and
 // one that is exactly `${expr}` is a CEL expression (a list splats).
 type ProcStep struct {
 	// Capture stores the step's output in a variable.
 	Capture *Capture `yaml:"capture" json:"capture,omitempty"`
+
+	// Probe is a readiness check retried until it passes or its timeout ends; it is
+	// read-only, so a dry run runs it.
+	Probe *ProcProbe `yaml:"probe" json:"probe,omitempty"`
 
 	// Name labels the step's result.
 	Name string `yaml:"name" json:"name"`

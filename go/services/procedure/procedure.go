@@ -75,6 +75,17 @@ type Deps struct {
 	// RunOptions.Yes.
 	Prompter interfaces.Prompter
 
+	// Log receives a recovered Go step panic with its stack; nil logs nothing (the
+	// step's failed row still reports it).
+	Log interfaces.Logger
+
+	// HTTP sends an HTTP probe's request; nil is http.DefaultClient (each attempt is
+	// bounded by the probe's context).
+	HTTP interfaces.HTTPDoer
+
+	// Dialer opens a TCP probe's connection; nil is a zero net.Dialer.
+	Dialer interfaces.Dialer
+
 	// Root is the working-tree root a step's Cwd is relative to.
 	Root string
 }
@@ -167,7 +178,11 @@ func (e *engine) compileSteps(env *cel.Env, c *compiled, steps []types.ProcStep)
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+st.Name)
 		}
 		exprs := []string{st.When, st.Each}
-		for _, a := range slices.Concat(st.Args, st.Exec, st.Env) {
+		var probeExec []string
+		if st.Probe != nil {
+			probeExec = st.Probe.Exec
+		}
+		for _, a := range slices.Concat(st.Args, st.Exec, st.Env, probeExec) {
 			if x, ok := exprArg(a); ok {
 				exprs = append(exprs, x)
 			}
@@ -186,19 +201,13 @@ func (e *engine) compileSteps(env *cel.Env, c *compiled, steps []types.ProcStep)
 
 // validate checks that st runs exactly one known thing and captures validly.
 func (e *engine) validate(st *types.ProcStep) error {
-	kinds := 0
-	for _, set := range []bool{
-		st.Tool != "", len(st.Exec) > 0, st.Step != "", st.Call != "", len(st.Parallel) > 0,
-		st.Fail != "",
-	} {
-		if set {
-			kinds++
-		}
-	}
 	switch {
-	case kinds != 1:
+	case kinds(st) != 1:
 		return apperr.New(apperr.CodeInvalidInput,
-			"a step runs exactly one of tool, exec, step, call, parallel, fail")
+			"a step runs exactly one of tool, exec, step, call, parallel, fail, probe")
+	case st.Probe != nil && st.Probe.HTTP == "" && st.Probe.TCP == "" &&
+		len(st.Probe.Exec) == 0:
+		return apperr.New(apperr.CodeInvalidInput, "a probe names http, tcp or exec")
 	case st.Concurrent && st.Each == "":
 		return apperr.New(apperr.CodeInvalidInput, "concurrent needs each")
 	case st.Step != "" && e.deps.Steps[st.Step] == nil:
@@ -216,6 +225,20 @@ func (e *engine) validate(st *types.ProcStep) error {
 		}
 	}
 	return validCapture(st)
+}
+
+// kinds counts what st runs: a valid step runs exactly one thing.
+func kinds(st *types.ProcStep) int {
+	n := 0
+	for _, set := range []bool{
+		st.Tool != "", len(st.Exec) > 0, st.Step != "", st.Call != "", len(st.Parallel) > 0,
+		st.Fail != "", st.Probe != nil,
+	} {
+		if set {
+			n++
+		}
+	}
+	return n
 }
 
 // validCapture checks that only a tool step captures, in a known mode, and that a

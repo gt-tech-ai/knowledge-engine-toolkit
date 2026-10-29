@@ -5,6 +5,7 @@
 // tests but does not check them for drift, so regenerate and commit them whenever
 // a mocked interface changes; local runs use the committed files.
 //go:generate mockgen -destination=mock_analytics.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces AnalyticsStore,AnalyticsCompactor,RowStream
+//go:generate mockgen -destination=mock_auth0.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Auth0Management
 //go:generate mockgen -destination=mock_aws_bedrock.go -package=mocks -mock_names=API=MockAWSBedrockAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/bedrock API
 //go:generate mockgen -destination=mock_aws_iam.go -package=mocks -mock_names=API=MockAWSIAMAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/iam API
 //go:generate mockgen -destination=mock_aws_route53.go -package=mocks -mock_names=API=MockAWSRoute53API github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/route53 API
@@ -15,7 +16,7 @@
 //go:generate mockgen -destination=mock_bulkhead.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Bulkhead,KeyedLimiter
 //go:generate mockgen -destination=mock_cache.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ByteCache
 //go:generate mockgen -destination=mock_cache_invalidator.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CacheInvalidator
-//go:generate mockgen -destination=mock_net.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces HTTPDoer,NSResolver
+//go:generate mockgen -destination=mock_net.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Dialer,HTTPDoer,NSResolver
 //go:generate mockgen -destination=mock_fault_injector.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces FaultInjector
 //go:generate mockgen -destination=mock_codebase.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Codebase,GoView,YAMLView,CodebaseSource,Renderer
 //go:generate mockgen -destination=mock_crypto.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Encryptor
@@ -23,6 +24,7 @@
 //go:generate mockgen -destination=mock_circuit_breaker.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CircuitBreaker
 //go:generate mockgen -destination=mock_client_stream.go -package=mocks google.golang.org/grpc ClientStream
 //go:generate mockgen -destination=mock_command_runner.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CommandRunner,CmdHook
+//go:generate mockgen -destination=mock_fs.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces FS
 //go:generate mockgen -destination=mock_config_loader.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ConfigLoader
 //go:generate mockgen -destination=mock_connector.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ConnectorSource,SourceBuilder
 //go:generate mockgen -destination=mock_deadletter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces DeadLetterBackend

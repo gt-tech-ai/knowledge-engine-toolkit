@@ -34,5 +34,14 @@ func (Client) Rollout(context.Context, string, string, string, time.Duration) er
 	return nil
 }
 
+// AuthCanI denies everything: there is no cluster to grant it.
+func (Client) AuthCanI(
+	context.Context,
+	string,
+	string,
+) (bool, error) {
+	return false, nil
+}
+
 // CurrentContext returns "stub".
 func (Client) CurrentContext(context.Context) (string, error) { return "stub", nil }

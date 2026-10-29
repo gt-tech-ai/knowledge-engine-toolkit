@@ -62,6 +62,13 @@ func (d *decorator) Rollout(
 	})
 }
 
+// AuthCanI asks the cluster about one permission.
+func (d *decorator) AuthCanI(ctx context.Context, verb, resource string) (bool, error) {
+	return d.Exec(ctx, "auth_can_i", func(c context.Context) (bool, error) {
+		return d.base.AuthCanI(c, verb, resource)
+	})
+}
+
 // CurrentContext reads the kubeconfig.
 func (d *decorator) CurrentContext(ctx context.Context) (string, error) {
 	return d.Exec(ctx, "current_context", d.base.CurrentContext)

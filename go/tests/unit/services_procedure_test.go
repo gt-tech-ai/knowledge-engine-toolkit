@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -394,6 +395,52 @@ func TestServicesProcedure_FinallyAndFail(t *testing.T) {
 	assert.Equal(t, "{not json", string(res[0].Detail))
 }
 
+// TestServicesProcedure_StepPanicIsAFailedRow tests that a Go step's panic is recovered.
+//
+// Why this test is important:
+//   - A Go step is the residue a row cannot express (a fault injection, a credential
+//     resolve); a panic in one must not unwind the run past its finally steps — the
+//     cleanup that reverts a fault or removes a temporary file — nor crash the CLI or
+//     the CronJob running it.
+//
+// What it tests:
+//   - A step that panics is a failed row whose error is the coded INTERNAL "panic
+//     recovered" message (no panic detail), the steps after it do not run, the finally
+//     steps still do, and Run returns no error.
+func TestServicesProcedure_StepPanicIsAFailedRow(t *testing.T) {
+	t.Parallel()
+	procs := []types.Procedure{
+		{
+			Name: "p",
+			Steps: []types.ProcStep{
+				{Name: "boom", Step: "boom"},
+				{Name: "after", Tool: "echo", Args: []string{"after"}},
+			},
+			Finally: []types.ProcStep{
+				{Name: "cleanup", Tool: "echo", Args: []string{"cleanup"}},
+			},
+		},
+	}
+	rec := &recorder{}
+	eng := procEngine(t, rec, procs, procedure.Deps{Steps: map[string]procedure.StepFunc{
+		"boom": func(
+			context.Context, procedure.Vars, types.RunOptions,
+		) (types.StepResults, procedure.Vars, error) {
+			panic("step bug")
+		},
+	}})
+
+	res, err := eng.Run(t.Context(), "p", nil, types.RunOptions{})
+
+	require.NoError(t, err)
+	st := statuses(res)
+	assert.Equal(t, types.StatusFail, st["boom"])
+	assert.Contains(t, res[0].Error, "panic recovered")
+	assert.NotContains(t, res[0].Error, "step bug")
+	assert.NotContains(t, st, "after")
+	assert.Equal(t, []string{"echo cleanup"}, rec.calls)
+}
+
 // TestServicesProcedure_SuiteEntry tests procedures as suite entries.
 //
 // Why this test is important:
@@ -527,13 +574,15 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 //     step never panics on the shape its caller happened to send.
 //
 // What it tests:
-//   - Text, Bool, Strings and Int return the typed value, the JSON-decoded forms
-//     ([]any, float64) converted, and the zero value for a missing or mistyped key.
+//   - Text, Bool, Strings, Int and Duration return the typed value, the JSON-decoded
+//     forms ([]any, float64, a duration's text) converted, and the zero value for a
+//     missing, mistyped or unparseable key.
 func TestServicesProcedure_VarsAccessors(t *testing.T) {
 	t.Parallel()
 	vars := procedure.Vars{
 		"env": "staging", "yes": true, "only": []string{"api"}, "units": []any{"a", 2},
 		"code": 3, "exit": int64(4), "n": float64(5), "odd": struct{}{},
+		"wait": 3 * time.Second, "wait_text": "1m30s", "wait_bad": "soon",
 	}
 	assert.Equal(t, "staging", vars.Text("env"))
 	assert.Empty(t, vars.Text("yes"), "a non-string reads as empty")
@@ -547,6 +596,16 @@ func TestServicesProcedure_VarsAccessors(t *testing.T) {
 	assert.Equal(t, 4, vars.Int("exit"))
 	assert.Equal(t, 5, vars.Int("n"))
 	assert.Zero(t, vars.Int("odd"))
+	assert.Equal(t, 3*time.Second, vars.Duration("wait"))
+	assert.Equal(
+		t,
+		90*time.Second,
+		vars.Duration("wait_text"),
+		"a duration's text parses",
+	)
+	assert.Zero(t, vars.Duration("wait_bad"))
+	assert.Zero(t, vars.Duration("env"))
+	assert.Zero(t, vars.Duration("missing"))
 }
 
 // TestServicesProcedure_ConcurrentEachOverObjects tests a concurrent each over object

@@ -58,6 +58,11 @@ func (Client) RevParse(
 	return ref, nil
 }
 
+// RemoteHasRef reports false: the stub has no remote.
+func (Client) RemoteHasRef(context.Context, string, string, string) (bool, error) {
+	return false, nil
+}
+
 // IsRepo reports false.
 func (Client) IsRepo(context.Context, string) bool { return false }
 

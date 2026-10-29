@@ -16,6 +16,11 @@ type ProcessSpec struct {
 	// Dir is the working directory; empty is the caller's.
 	Dir string
 
+	// LogFile, when set, is a file the process's stdout and stderr (those not given a
+	// writer) are appended to, created 0600: a detached process outlives its caller,
+	// so its output can only go to a file.
+	LogFile string
+
 	// Args are the program and its arguments.
 	Args []string
 

@@ -88,6 +88,24 @@ func (c *Client) Rollout(
 	return err
 }
 
+// AuthCanI runs `kubectl auth can-i verb resource`: exit 0 is allowed, exit 1 printing
+// "no" is denied, and any other failure is the coded error client.Output gives it.
+func (c *Client) AuthCanI(ctx context.Context, verb, resource string) (bool, error) {
+	args := []string{"auth", "can-i", verb, resource}
+	if c.kubeContext != "" {
+		args = append([]string{"--context", c.kubeContext}, args...)
+	}
+	res := c.runner.RunBuffered(ctx, "", "kubectl", args...)
+	if res.Err != nil && res.ExitCode == 1 &&
+		strings.TrimSpace(string(res.Stdout)) == "no" {
+		return false, nil
+	}
+	if _, err := client.Output(res, "kubectl auth can-i"); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // CurrentContext runs `kubectl config current-context`.
 func (c *Client) CurrentContext(ctx context.Context) (string, error) {
 	out, err := c.kubectl(ctx, "config current-context", "config", "current-context")

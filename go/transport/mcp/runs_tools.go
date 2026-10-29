@@ -3,12 +3,12 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/runs"
 )
 
@@ -86,15 +86,11 @@ func (s *Server) startHandler(op interfaces.Operation) sdkmcp.ToolHandler {
 		ctx context.Context,
 		req *sdkmcp.CallToolRequest,
 	) (*sdkmcp.CallToolResult, error) {
-		input := op.NewInput()
-		if err := decodeArgs(req.Params.Arguments, input); err != nil {
-			return s.result(
-				nil,
-				nil,
-				apperr.Wrap(err, apperr.CodeInvalidInput, fmt.Sprintf(
-					"operation %q: decode arguments", name,
-				)),
-			)
+		// ops.Decode refuses an argument the input does not declare, a secret flag
+		// included: a credential never travels as a tool argument.
+		input, err := ops.Decode(op, req.Params.Arguments)
+		if err != nil {
+			return s.result(nil, nil, err)
 		}
 		id, err := s.table.Start(ctx, name, input)
 		if err != nil {

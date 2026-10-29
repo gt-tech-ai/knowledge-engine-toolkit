@@ -24,6 +24,9 @@ const (
 	// formatAlloy decodes an Alloy (River) configuration.
 	formatAlloy = "alloy"
 
+	// formatTOML decodes TOML; its dates and times are timestamps.
+	formatTOML = "toml"
+
 	// extYAML and extYML are the YAML file extensions.
 	extYAML, extYML = ".yaml", ".yml"
 )
@@ -37,6 +40,8 @@ func docFormat(ext string) string {
 		return formatHCL
 	case ".alloy", ".river":
 		return formatAlloy
+	case ".toml":
+		return formatTOML
 	default:
 		return ""
 	}
@@ -66,6 +71,8 @@ func (v *view) Docs(
 			docs, err = v.oneDoc(ctx, formatHCL, f.Path, decodeHCL)
 		case formatAlloy:
 			docs, err = v.oneDoc(ctx, formatAlloy, f.Path, decodeAlloy)
+		case formatTOML:
+			docs, err = v.oneDoc(ctx, formatTOML, f.Path, decodeTOML)
 		default:
 			continue
 		}
@@ -144,6 +151,8 @@ func Decode(format, name string, src []byte) (any, error) {
 		doc, err = decodeHCL(src, name)
 	case formatAlloy:
 		doc, err = decodeAlloy(src, name)
+	case formatTOML:
+		doc, err = decodeTOML(src, name)
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput, "decode: unknown format "+format)
 	}

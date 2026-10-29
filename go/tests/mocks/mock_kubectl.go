@@ -60,6 +60,21 @@ func (mr *MockKubectlClientMockRecorder) Apply(ctx, ns any, files ...any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Apply", reflect.TypeOf((*MockKubectlClient)(nil).Apply), varargs...)
 }
 
+// AuthCanI mocks base method.
+func (m *MockKubectlClient) AuthCanI(ctx context.Context, verb, resource string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AuthCanI", ctx, verb, resource)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AuthCanI indicates an expected call of AuthCanI.
+func (mr *MockKubectlClientMockRecorder) AuthCanI(ctx, verb, resource any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthCanI", reflect.TypeOf((*MockKubectlClient)(nil).AuthCanI), ctx, verb, resource)
+}
+
 // CurrentContext mocks base method.
 func (m *MockKubectlClient) CurrentContext(ctx context.Context) (string, error) {
 	m.ctrl.T.Helper()

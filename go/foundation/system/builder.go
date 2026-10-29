@@ -155,6 +155,19 @@ func (d *envRunner) RunBufferedWithEnv(
 	return d.inner.RunBufferedWithEnv(ctx, dir, d.with(extraEnv), name, args...)
 }
 
+// RunBufferedWithInput runs the command with env, then extraEnv, added and its output
+// captured, with input fed to stdin.
+func (d *envRunner) RunBufferedWithInput(
+	ctx context.Context,
+	dir string,
+	extraEnv []string,
+	input []byte,
+	name string,
+	args ...string,
+) CmdResult {
+	return d.inner.RunBufferedWithInput(ctx, dir, d.with(extraEnv), input, name, args...)
+}
+
 // Exists delegates to the inner runner.
 func (d *envRunner) Exists(name string) bool { return d.inner.Exists(name) }
 
@@ -232,6 +245,24 @@ func (d *loggingRunner) RunBufferedWithEnv(
 	return cr
 }
 
+// RunBufferedWithInput delegates to the inner runner with extra environment
+// variables and input fed to stdin, and logs the buffered command's outcome and
+// duration.
+func (d *loggingRunner) RunBufferedWithInput(
+	ctx context.Context,
+	dir string,
+	extraEnv []string,
+	input []byte,
+	name string,
+	args ...string,
+) CmdResult {
+	start := time.Now()
+	cr := d.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
+	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
+		name, strings.Join(args, " "), dir, time.Since(start), cr.Err)
+	return cr
+}
+
 // Exists delegates to the inner runner (read-only check, not logged).
 func (d *loggingRunner) Exists(name string) bool {
 	return d.inner.Exists(name)
@@ -303,6 +334,22 @@ func (d *timeoutRunner) RunBufferedWithEnv(
 	return d.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
 }
 
+// RunBufferedWithInput wraps the context with the configured deadline and delegates
+// the buffered execution to the inner runner with extra environment variables and
+// input fed to stdin.
+func (d *timeoutRunner) RunBufferedWithInput(
+	ctx context.Context,
+	dir string,
+	extraEnv []string,
+	input []byte,
+	name string,
+	args ...string,
+) CmdResult {
+	ctx, cancel := context.WithTimeout(ctx, d.timeout)
+	defer cancel()
+	return d.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
+}
+
 // Exists delegates to the inner runner (read-only check, no timeout applied).
 func (d *timeoutRunner) Exists(name string) bool {
 	return d.inner.Exists(name)
@@ -368,6 +415,20 @@ func (d *dryRunRunner) RunBufferedWithEnv(
 	_ context.Context,
 	_ string,
 	_ []string,
+	name string,
+	args ...string,
+) CmdResult {
+	d.log(name, args...)
+	return CmdResult{}
+}
+
+// RunBufferedWithInput logs the command instead of executing it (the input is never
+// read) and returns a zero CmdResult.
+func (d *dryRunRunner) RunBufferedWithInput(
+	_ context.Context,
+	_ string,
+	_ []string,
+	_ []byte,
 	name string,
 	args ...string,
 ) CmdResult {
@@ -471,6 +532,28 @@ func (h *hookRunner) RunBufferedWithEnv(
 	cs := h.cmdStr(name, args)
 	h.hook.OnStart(cs)
 	cr := h.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
+	if cr.Err != nil {
+		h.hook.OnFailure(cs)
+	} else {
+		h.hook.OnSuccess(cs)
+	}
+	return cr
+}
+
+// RunBufferedWithInput fires OnStart, delegates the buffered execution to the inner
+// runner with extra environment variables, then fires OnSuccess or OnFailure
+// depending on the result, with input fed to stdin.
+func (h *hookRunner) RunBufferedWithInput(
+	ctx context.Context,
+	dir string,
+	extraEnv []string,
+	input []byte,
+	name string,
+	args ...string,
+) CmdResult {
+	cs := h.cmdStr(name, args)
+	h.hook.OnStart(cs)
+	cr := h.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
 	if cr.Err != nil {
 		h.hook.OnFailure(cs)
 	} else {

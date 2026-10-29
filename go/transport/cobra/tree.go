@@ -1,15 +1,18 @@
 package cobra
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	spf "github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
 )
@@ -22,7 +25,12 @@ import (
 // each flag's field and argument name, decoded into the operation's input (a struct by
 // its json tags, or an ops.MapInput map) — a flag counts when set or when its spec has a
 // default. Subcommands are listed under their Group, in first-appearance order. An
-// unknown operation or a bad flag type is an error naming the command.
+// unknown operation or a bad flag type is an error naming the command. With
+// opts.Resolve set, reg may be nil: each leaf's flags come from its spec alone, and its
+// operation is found in the registry Resolve returns when it runs, so an unknown one
+// fails that run. With opts.Before or opts.After set every leaf's flags likewise come
+// from its spec, and the hooks wrap each run. Every leaf carries its operation under
+// OperationAnnotation.
 func Tree(root types.CommandSpec, reg *ops.Registry, opts Options) (*spf.Command, error) {
 	return node(&root, nil, reg, opts)
 }
@@ -84,27 +92,77 @@ func leafOrGroup(
 			RunE: func(c *spf.Command, _ []string) error { return c.Help() },
 		}, nil
 	}
-	if len(spec.Flags) == 0 && len(spec.Args.Names) == 0 && spec.Args.Rest == "" {
+	bare := len(spec.Flags) == 0 && len(spec.Args.Names) == 0 && spec.Args.Rest == ""
+	hooked := opts.Resolve != nil || opts.Before != nil || opts.After != nil
+	if bare && !hooked {
 		return Command(reg, spec.Op, opts)
 	}
-	op, err := reg.Find(spec.Op)
-	if err != nil {
-		return nil, err
+	if opts.Resolve == nil {
+		if _, err := reg.Find(spec.Op); err != nil {
+			return nil, err
+		}
 	}
 	scope := slices.Concat(inherited, spec.Flags)
-	cmd := &spf.Command{Args: argsRule(spec.Args)}
+	cmd := &spf.Command{
+		Args:        argsRule(spec.Args),
+		Annotations: map[string]string{OperationAnnotation: spec.Op},
+	}
 	cmd.RunE = func(c *spf.Command, args []string) error {
-		raw, err := json.Marshal(values(c.Flags(), scope, spec.Args, args))
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "encode input")
+		in := values(c.Flags(), scope, spec.Args, args)
+		name := spec.Op
+		var err error
+		if opts.Before != nil {
+			name, err = opts.Before(c, name, in)
 		}
-		input, err := ops.Decode(op, raw)
-		if err != nil {
-			return err
+		if err == nil {
+			err = run(c, name, in, reg, opts)
 		}
-		return reg.Run(c.Context(), spec.Op, input, opts.Observer)
+		if opts.After != nil {
+			return opts.After(c, name, err)
+		}
+		return err
 	}
 	return cmd, nil
+}
+
+// run decodes in into operation name's input and runs it, in the registry and under the
+// observer opts.Resolve returns for the run (else reg and opts.Observer).
+func run(
+	c *spf.Command, name string, in map[string]any, reg *ops.Registry, opts Options,
+) error {
+	runReg, obs := reg, opts.Observer
+	if opts.Resolve != nil {
+		var err error
+		if runReg, obs, err = opts.Resolve(c.Context(), name); err != nil {
+			return err
+		}
+	}
+	raw, err := json.Marshal(in)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "encode input")
+	}
+	if opts.Run != nil {
+		return opts.Run(c.Context(), runReg, name, raw, obs)
+	}
+	return RunLocal(c.Context(), runReg, name, raw, obs)
+}
+
+// RunLocal runs the operation named name in reg with raw JSON input a human typed at
+// the terminal, so the operation's secret flags are admitted: a Tree leaf's default
+// run, and the local half of an Options.Run that also schedules.
+func RunLocal(
+	ctx context.Context, reg *ops.Registry, name string, raw []byte,
+	obs interfaces.ExecutionObserver,
+) error {
+	op, err := reg.Find(name)
+	if err != nil {
+		return err
+	}
+	input, err := ops.DecodeLocal(op, raw)
+	if err != nil {
+		return err
+	}
+	return reg.Run(ctx, name, input, obs)
 }
 
 // values collects the set or defaulted flags in scope and the positional arguments.
@@ -143,6 +201,8 @@ func flagValue(fs *pflag.FlagSet, f *types.FlagSpec) any {
 		v, _ = fs.GetInt(f.Name)
 	case types.FlagStrings:
 		v, _ = fs.GetStringSlice(f.Name)
+	case types.FlagStringArray:
+		v, _ = fs.GetStringArray(f.Name)
 	case types.FlagDuration:
 		d, _ := fs.GetDuration(f.Name)
 		v = d.Nanoseconds()
@@ -167,10 +227,13 @@ func addSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 		fs.IntP(f.Name, f.Short, n, f.Usage)
 	case types.FlagStrings:
 		fs.StringSliceP(f.Name, f.Short, strs(def), f.Usage)
+	case types.FlagStringArray:
+		fs.StringArrayP(f.Name, f.Short, strs(def), f.Usage)
 	case types.FlagDuration:
-		fs.DurationP(f.Name, f.Short, 0, f.Usage)
+		var d time.Duration
 		if s, ok := def.(string); ok {
-			if err := fs.Set(f.Name, s); err != nil {
+			var err error
+			if d, err = time.ParseDuration(s); err != nil {
 				return apperr.Wrap(
 					err,
 					apperr.CodeInvalidInput,
@@ -178,6 +241,7 @@ func addSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 				)
 			}
 		}
+		fs.DurationP(f.Name, f.Short, d, f.Usage)
 	case "", types.FlagBool:
 		b, _ := def.(bool)
 		fs.BoolP(f.Name, f.Short, b, f.Usage)

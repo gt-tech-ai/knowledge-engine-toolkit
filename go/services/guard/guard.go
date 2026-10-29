@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -54,6 +55,9 @@ type Deps struct {
 
 	// Versions returns a tool's version for the cache key; nil keys every tool at "".
 	Versions func(tool string) string
+
+	// Now is the clock an expr row's `now` reads; nil is time.Now.
+	Now func() time.Time
 
 	// RenderTool names the binary the codebase's renderer shells (helm), listed among
 	// the tools of every row that renders a chart; empty lists none.
@@ -298,7 +302,7 @@ func (g *guard) check(
 	case types.GuardYAML:
 		return yamlCheck(ctx, cb, r)
 	case types.GuardExpr:
-		return exprCheck(ctx, cb, r, g.prg, vars)
+		return exprCheck(ctx, cb, r, g.prg, vars, g.deps.Now)
 	default:
 		return g.deps.Go[goName(r)](ctx, cb, r, vars)
 	}

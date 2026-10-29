@@ -3,6 +3,7 @@ package unit_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -356,7 +357,7 @@ func TestServicesGuard_ExprDecode(t *testing.T) {
 		{
 			Name: "unknown", Kind: types.GuardExpr,
 			Files: types.FileSelector{Paths: []string{"obs/values.yaml"}},
-			Expr:  `decode('toml', docs[0].doc.alloy.content) != null`,
+			Expr:  `decode('ini', docs[0].doc.alloy.content) != null`,
 		},
 	}, guard.Deps{})
 	require.NoError(t, err)
@@ -367,7 +368,79 @@ func TestServicesGuard_ExprDecode(t *testing.T) {
 	assert.Equal(t, types.StatusPass, vs["hcl"].Status, vs["hcl"].Detail)
 	assert.Equal(t, types.StatusPass, vs["embedded"].Status, vs["embedded"].Detail)
 	assert.Equal(t, types.StatusFail, vs["unknown"].Status)
-	assert.Contains(t, vs["unknown"].Detail, "unknown format toml")
+	assert.Contains(t, vs["unknown"].Detail, "unknown format ini")
+}
+
+// TestServicesGuard_ExprTOMLAndNow tests the toml documents and the now timestamp an
+// expression reads.
+//
+// Why this test is important:
+//   - suppression files with an expiry (osv-scanner's TOML ignore list) can only be
+//     checked as data if an expression can decode TOML and compare a date against the
+//     current time; without both, each needs a Go guard.
+//
+// What it tests:
+//   - docs over a `.toml` file carries format "toml" and its datetimes as timestamps;
+//   - now is Deps.Now's time, so an expiry before it fails and one after it passes;
+//   - decode('toml', text) decodes an embedded string, a local date as a timestamp.
+func TestServicesGuard_ExprTOMLAndNow(t *testing.T) {
+	t.Parallel()
+	cb := memoryCodebase(t, map[string]string{
+		"osv.toml": "[[IgnoredVulns]]\nid = \"GHSA-1\"\n" +
+			"ignoreUntil = 2026-06-01T00:00:00Z\n",
+		"cfg.yaml": "embedded: |\n  until = 2026-01-15\n",
+	})
+	rows := []types.GuardRow{
+		{
+			Name: "unexpired",
+			Kind: types.GuardExpr,
+			Files: types.FileSelector{
+				Paths: []string{"osv.toml"},
+				Exts:  []string{".toml"},
+			},
+			Expr: `docs.size() == 1 && docs[0].format == 'toml' &&
+				docs[0].doc.IgnoredVulns.all(e, e.ignoreUntil > now)`,
+		},
+		{
+			Name: "embedded", Kind: types.GuardExpr,
+			Files: types.FileSelector{Paths: []string{"cfg.yaml"}},
+			Expr:  `decode('toml', docs[0].doc.embedded).until < now`,
+		},
+	}
+	run := func(now time.Time) map[string]types.Verdict {
+		gs, err := guard.NewFromConfig(
+			rows,
+			guard.Deps{Now: func() time.Time { return now }},
+		)
+		require.NoError(t, err)
+		vs := map[string]types.Verdict{}
+		for _, g := range gs {
+			vs[g.Name()] = g.Run(t.Context(), cb)
+		}
+		return vs
+	}
+
+	before := run(time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
+	assert.Equal(
+		t,
+		types.StatusPass,
+		before["unexpired"].Status,
+		before["unexpired"].Detail,
+	)
+	assert.Equal(
+		t,
+		types.StatusPass,
+		before["embedded"].Status,
+		before["embedded"].Detail,
+	)
+
+	after := run(time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC))
+	assert.Equal(
+		t,
+		types.StatusFail,
+		after["unexpired"].Status,
+		after["unexpired"].Detail,
+	)
 }
 
 // TestServicesGuard_GoUnavailableSkips tests that a Go guard reporting CodeUnavailable

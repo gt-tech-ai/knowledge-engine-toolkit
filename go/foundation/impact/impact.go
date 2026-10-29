@@ -1,5 +1,6 @@
-// Package impact maps changed paths to the units they affect: a deploy row, a module, a
-// chart.
+// Package impact maps changed paths to what they affect: the units owning them (Map, a
+// deploy row, a module, a chart) and the named pattern classes they touch (Classify, a
+// language or a domain).
 package impact
 
 import (

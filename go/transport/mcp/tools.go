@@ -11,6 +11,7 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/runs"
 )
 
@@ -36,29 +37,25 @@ func toolFor(op interfaces.Operation) (*sdkmcp.Tool, error) {
 }
 
 // handler runs a bounded op for one tools/call: it decodes the arguments into a fresh
-// input (rejecting unknown fields), runs it through the registry under a collecting
-// observer, writes each step's output under a new run directory, and returns the shaped
-// ToolResult as both JSON text and structured content. A failure sets IsError, so the
-// agent reads it instead of receiving a protocol error; a log-write failure is joined
-// onto the run's own error, which keeps its code.
+// input (ops.Decode: rejecting unknown fields and secret flags), runs it through the
+// registry under a collecting observer, writes each step's output under a new run
+// directory, and returns the shaped ToolResult as both JSON text and structured content.
+// A failure sets IsError, so the agent reads it instead of receiving a protocol error; a
+// log-write failure is joined onto the run's own error, which keeps its code.
 func (s *Server) handler(op interfaces.Operation) sdkmcp.ToolHandler {
 	name := op.Descriptor().Name
 	return func(
 		ctx context.Context,
 		req *sdkmcp.CallToolRequest,
 	) (*sdkmcp.CallToolResult, error) {
-		input := op.NewInput()
-		if err := decodeArgs(req.Params.Arguments, input); err != nil {
-			return s.result(
-				nil,
-				nil,
-				apperr.Wrap(err, apperr.CodeInvalidInput, fmt.Sprintf(
-					"operation %q: decode arguments", name,
-				)),
-			)
+		// ops.Decode refuses an argument the input does not declare, a secret flag
+		// included: a credential never travels as a tool argument.
+		input, err := ops.Decode(op, req.Params.Arguments)
+		if err != nil {
+			return s.result(nil, nil, err)
 		}
 		obs := &runs.Collector{}
-		err := s.reg.Run(ctx, name, input, obs)
+		err = s.reg.Run(ctx, name, input, obs)
 		steps := flatten(obs.Steps())
 		logs, werr := s.runs.WriteSteps(s.runs.NewRunID(), steps)
 		return s.result(steps, logs, apperr.Join(err, werr))

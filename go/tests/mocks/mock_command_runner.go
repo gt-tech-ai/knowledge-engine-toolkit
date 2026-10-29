@@ -126,6 +126,25 @@ func (mr *MockCommandRunnerMockRecorder) RunBufferedWithEnv(ctx, dir, extraEnv, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunBufferedWithEnv", reflect.TypeOf((*MockCommandRunner)(nil).RunBufferedWithEnv), varargs...)
 }
 
+// RunBufferedWithInput mocks base method.
+func (m *MockCommandRunner) RunBufferedWithInput(ctx context.Context, dir string, extraEnv []string, input []byte, name string, args ...string) interfaces.CmdResult {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, dir, extraEnv, input, name}
+	for _, a := range args {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RunBufferedWithInput", varargs...)
+	ret0, _ := ret[0].(interfaces.CmdResult)
+	return ret0
+}
+
+// RunBufferedWithInput indicates an expected call of RunBufferedWithInput.
+func (mr *MockCommandRunnerMockRecorder) RunBufferedWithInput(ctx, dir, extraEnv, input, name any, args ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, dir, extraEnv, input, name}, args...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunBufferedWithInput", reflect.TypeOf((*MockCommandRunner)(nil).RunBufferedWithInput), varargs...)
+}
+
 // RunWithEnv mocks base method.
 func (m *MockCommandRunner) RunWithEnv(ctx context.Context, dir string, extraEnv []string, name string, args ...string) error {
 	m.ctrl.T.Helper()

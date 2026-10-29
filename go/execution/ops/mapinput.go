@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
+	"time"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -71,6 +74,31 @@ func (o *mapOp[E]) NewInput() any { return &map[string]any{} }
 // InputSchema returns the schema derived from the flags.
 func (o *mapOp[E]) InputSchema() []byte { return o.schema }
 
+// undeclared returns the first key of in, in sorted order, that no argument and no flag
+// declares — a secret flag counting only when local — or "".
+func (o *mapOp[E]) undeclared(in map[string]any, local bool) string {
+	for _, k := range slices.Sorted(maps.Keys(in)) {
+		if !o.declares(k, local) {
+			return k
+		}
+	}
+	return ""
+}
+
+// declares reports whether key names one of the op's arguments, or a flag (a secret one
+// only when local).
+func (o *mapOp[E]) declares(key string, local bool) bool {
+	if key == o.args.Rest && key != "" || slices.Contains(o.args.Names, key) {
+		return true
+	}
+	for i := range o.flags {
+		if o.flags[i].FlagField() == key {
+			return local || !o.flags[i].Secret
+		}
+	}
+	return false
+}
+
 // Run executes the operation; an input that is not a *map[string]any is
 // CodeInvalidInput.
 func (o *mapOp[E]) Run(
@@ -119,19 +147,20 @@ func FillInput(flags []types.FlagSpec, args types.ArgSpec, in map[string]any) {
 	}
 }
 
-// coerce converts a JSON-decoded value to the Go type the flag's type binds (int,
-// int64 nanoseconds, []string); any other value is returned as sent.
+// coerce converts a JSON-decoded value to the Go type the flag's type binds (int, a
+// time.Duration from nanoseconds or its text, []string); any other value is returned as
+// sent.
 func coerce(flagType string, v any) any {
+	if flagType == types.FlagDuration {
+		return duration(v)
+	}
 	switch x := v.(type) {
 	case float64:
-		switch flagType {
-		case types.FlagInt:
+		if flagType == types.FlagInt {
 			return int(x)
-		case types.FlagDuration:
-			return int64(x)
 		}
 	case []any:
-		if flagType == types.FlagStrings {
+		if types.IsListFlag(flagType) {
 			out := make([]string, 0, len(x))
 			for _, item := range x {
 				out = append(out, fmt.Sprint(item))
@@ -145,31 +174,53 @@ func coerce(flagType string, v any) any {
 // flagDefault is f's declared default, else the zero of its type.
 func flagDefault(f *types.FlagSpec) any {
 	if f.Default != nil {
-		return f.Default
+		return coerce(f.Type, f.Default)
 	}
 	switch f.Type {
 	case types.FlagString:
 		return ""
 	case types.FlagInt:
 		return 0
-	case types.FlagStrings:
+	case types.FlagStrings, types.FlagStringArray:
 		return []string{}
 	case types.FlagDuration:
-		return int64(0)
+		return time.Duration(0)
 	default:
 		return false
 	}
 }
 
+// duration is v as a time.Duration: a number is nanoseconds, a string its text ("2m");
+// any other value, or unparseable text, is returned as sent.
+func duration(v any) any {
+	switch x := v.(type) {
+	case float64:
+		return time.Duration(x)
+	case int64:
+		return time.Duration(x)
+	case int:
+		return time.Duration(x)
+	case string:
+		if d, err := time.ParseDuration(x); err == nil {
+			return d
+		}
+	}
+	return v
+}
+
 // MapSchema returns the closed object schema of a map input: one property per flag
-// (by its field) and per argument, required flags required.
+// (by its field) and per argument, required flags required. A secret flag has no
+// property, so a schema-driven caller (an MCP tool) never asks for it.
 func MapSchema(flags []types.FlagSpec, args types.ArgSpec) []byte {
 	props := map[string]any{}
 	var required []string
 	for i := range flags {
 		f := &flags[i]
+		if f.Secret {
+			continue
+		}
 		p := map[string]any{schemaType: jsonType(f.Type)}
-		if f.Type == types.FlagStrings {
+		if types.IsListFlag(f.Type) {
 			p["items"] = map[string]any{schemaType: schemaString}
 		}
 		if f.Usage != "" {
@@ -214,7 +265,7 @@ func jsonType(t string) string {
 		return schemaString
 	case types.FlagInt, types.FlagDuration:
 		return "integer"
-	case types.FlagStrings:
+	case types.FlagStrings, types.FlagStringArray:
 		return "array"
 	default:
 		return "boolean"

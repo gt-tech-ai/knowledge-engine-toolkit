@@ -6,6 +6,151 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.22] - 2026-10-28
+
+Python: unchanged (`techai-webutils` 0.6.1).
+
+### Added
+
+- Guard `expr` rows read TOML and the time: `Codebase.Docs` decodes `.toml` files (format
+  `toml`, and `decode('toml', text)`), an offset date-time as a timestamp and a local date
+  or date-time as one in UTC; and an expression names `now`, the run's time as a
+  timestamp, from the new `guard.Deps.Now` clock (nil is `time.Now`). An expiry in a
+  suppression file is now a row, not a Go guard.
+- Template generator rows render per element and into a marked region: `GenRow.Each`
+  renders one file per element of the row's list data, with `out` and `template`
+  themselves templates over the element (a Dockerfile per service, each from its
+  language's template); `GenRow.Region` (`begin` / `end` marker text) replaces the lines
+  from the begin marker through the end marker in the existing file at `out` and keeps
+  the rest (a generated rule block inside a hand-kept linter config).
+- Generator rows of kind `edit` (`types.GenEdit`) set values in an existing YAML file:
+  `set` maps `yamlq` paths to value templates over the data (or, with `each`, the
+  element), and each value replaces its token in place through `yamlq.Rewrite`, so
+  comments, quoting and every other line are kept. A path that selects no scalar fails:
+  the file must declare every value the row projects.
+- `foundation/openapi`: the build-time half of the JSON:API runtime. It turns
+  protoc-gen-openapiv2's Swagger 2.0 output into per-service OpenAPI 3 specs with JSON:API
+  envelopes (`Convert`; the Swagger → OpenAPI 3 step is kin-openapi's `openapi2conv`, and
+  each `$ref`'s description and readOnly are kept), builds the operation-keyed route table
+  (`BuildRouteTable`) and writes it as the Go package the JSON:API runtime reads
+  (`WriteRuntimeRouteTable`), and reports every REST RPC it cannot classify
+  (`CheckCompleteness`). The `jsonapi.v1` file, message and method options drive it,
+  read from a buf descriptor set. `Convert` takes the API-key header schemes every
+  operation requires as data.
+- `foundation/protogen`: the file passes a proto generation runs over buf's output. It
+  adds the generated Python package's `__init__.py` files and PEP 561 `py.typed` marker,
+  rewrites its absolute imports to package-relative ones, de-optionalises the TypeScript
+  fields a descriptor marks required, reads a descriptor set, and cleans a generated
+  directory or stashes it and settles it back after a regeneration.
+- `foundation/mockgen`: a `Generator` over the `//go:generate mockgen` directives under a
+  set of directories. It renders each mock into memory through the injected
+  `CommandRunner`, so `gen.Check` compares the on-disk mocks with the render without
+  writing to the tree.
+- `foundation/workspace/golang` and `foundation/workspace/python`: workspace discovery
+  over an `fs.FS` rooted at the repository. `golang` lists the go.work modules
+  (`GoWorkModules`, with a filter), renders a scoped go.work that keeps the root's
+  toolchain, godebug and replace directives with local replace targets made absolute
+  (`ScopedWork`), reads the root module path (`ModulePath`), resolves staged files to
+  their modules (`StagedModules`, with a keep filter), and probes for loadable packages
+  through a per-run `Lister` that memoizes `go list` per directory. go.work and go.mod are
+  parsed by `golang.org/x/mod/modfile`. `python` finds the directories holding a
+  `pyproject.toml` under given roots (`Packages`) and a package's importable module
+  (`ModuleName`).
+- `foundation/imagescan`: a container-image vulnerability gate. `ScanImage` runs a Trivy
+  image scan under a `TrivyPolicy` (scanners, severities, ignore file, ignore-unfixed,
+  report-only) through the injected `CommandRunner`; a missing trivy is a Skip, or a
+  Fail under strict. `GrypeEmergencies` / `CheckGrypeReport` read a grype JSON report
+  and block only on a known-exploited (CISA KEV) vulnerability that has a fix.
+- `impact.Classify` / `impact.SplitPaths`: classify changed paths into named regex
+  classes (`impact.Class`, a language by its file types or a domain by its
+  directories), one verdict per class in order; a pattern that does not compile is
+  `CodeInvalidInput`. `SplitPaths` splits `git diff --name-only -z` output.
+- `yamlq.Upsert` / `UpsertAt` splice two more cases instead of failing: a null on the
+  path (`key:`, `key: ~`, `key: null`) becomes a mapping holding the missing keys, its
+  inline comment kept; a source with no document (empty, or only comments) gains the
+  keys as a block mapping after its lines.
+- `yamlq.Append` / `AppendAt`: add an item to the end of a sequence. Into a non-empty block
+  sequence the item is spliced after the last item, at the items' indentation, so comments
+  and key order elsewhere are kept; a flow or empty sequence re-encodes.
+- `KubectlClient.AuthCanI(ctx, verb, resource)`: `kubectl auth can-i` as a typed call.
+  Exit 0 is allowed and exit 1 printing `no` is denied; any other failure (an unreachable
+  cluster) is an error, never a denial. The stub denies everything.
+- `clients/auth0`: an `Auth0Management` client family. `stub` (the default) reaches no
+  tenant and is `CodeUnavailable`; `management` reads a tenant through the Management API
+  (a client-credentials token minted once and reused until it nears expiry, the paged
+  organization ids, an organization's id by name, an unknown name `CodeNotFound`) and its
+  public JWKS (`SigningKey`: the first `sig` key's public key as PEM, with its kid, which
+  needs no credentials). Credentials are `Deps`, never `Config`. `tests/mocks` generates
+  `MockAuth0Management`.
+- `transport/cobra`: `Options.Resolve(ctx, op)` returns the registry and observer one run
+  uses, so a CLI that builds its registry after parsing (in a `PersistentPreRun`) builds the
+  tree first; `Tree` then takes a nil registry, takes each leaf's flags from its spec, and
+  an unknown operation fails the run. Every leaf (and every `Command`) carries its
+  operation under `OperationAnnotation` (`"operation"`).
+- `transport/cobra`: `Options.Before(cmd, op, input)` adjusts a leaf's input object and
+  returns the operation to run (one a flag selects), and `Options.After(cmd, op, err)`
+  runs after every run, failed or not, and returns the command's error.
+- `core/types`: `ProcessSpec.LogFile` appends a process's stdout and stderr (those not
+  given a writer) to a file the supervisor creates 0600, so a detached process's log needs
+  no caller-side file handling.
+- `tests/mocks`: `MockFS`, a generated mock of `interfaces.FS`.
+- `clients/git`: `GitClient.RemoteHasRef(ctx, root, remote, ref)` asks a remote for a branch
+  or tag (`git ls-remote --exit-code --heads --tags`); no match is `false`, a remote that
+  cannot be asked is `CodeUnavailable`, and the stub reports `false`.
+- `transport/cobra`: `Options.Run(ctx, reg, op, raw, obs)` runs each leaf's operation in
+  place of the new `RunLocal` (the default, which admits secret flags): a scheduled
+  front-end passes `transport/cron.Run`, so one tree serves the CLI and its CronJobs.
+- `core/types`: `FlagStringArray` (`string_array`), a repeatable string list flag that never
+  splits on commas, and `IsListFlag`; map inputs and their schemas treat it as a list.
+- `services/procedure`: the `probe` step — `probe: {http | tcp | exec, status, contains,
+  hint, timeout, delay, max_delay}` is a read-only readiness check retried with doubling
+  waits (500ms → 5s by default) until it passes or its timeout ends; each attempt is
+  bounded at 5s. An HTTP probe passes on `status` (any 2xx when unset) with `contains`
+  in the first 4 KiB of the body, a TCP probe once a connection opens, an exec probe on
+  exit 0 with `contains` in stdout. Exactly one kind must be non-empty once expanded, so
+  one `each` row can probe a list of mixed checks; a failure carries the last attempt's
+  error and the hint. `Deps.HTTP` / `Deps.Dialer` inject the HTTP client and dialer
+  (nil: `http.DefaultClient`, a zero `net.Dialer`).
+- `core/interfaces`: `Dialer` (`*net.Dialer`'s `DialContext`), mocked as `MockDialer`.
+- `foundation/scaffold`: `PlanFiles(ctx, cb, files, policy)` plans content the caller
+  rendered itself (a `types.Artifacts` map) under the same Once / Regenerate / Preserve
+  decisions as `Plan`, in path order, for `Apply`.
+- `services/procedure`: `Vars.Duration(key)` — the `time.Duration` a CLI flag carries or the
+  text a tool call sends (`"90s"`); a missing, other or unparseable value is 0, like the
+  other accessors.
+
+- `core/types`: `FlagSpec.Secret` marks a credential flag. `ops.MapSchema` leaves it out
+  of the input schema and `ops.Decode` refuses it, so a schema-driven caller (an MCP tool
+  call, a CronJob's arguments) can neither see nor send it; `ops.DecodeLocal` (used by
+  `transport/cobra`, where a human typed the flags) admits it.
+
+### Changed
+
+- **Breaking for implementers:** `interfaces.CommandRunner` gains
+  `RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)`, a buffered run fed
+  `input` on stdin (a manifest piped to `kubectl apply -f -` never touches disk);
+  `foundation/system`'s runner, every builder decorator, the buffering runner and the
+  gate's no-runner implement it, and `MockCommandRunner` is regenerated.
+- `execution/ops`: `Decode` rejects a map input's key that no flag or argument declares,
+  as it already did for a struct input's unknown field (`CodeInvalidInput` naming the
+  key); null arguments decode as empty. `transport/mcp` decodes bounded and long-running
+  tool calls through it, so an MCP caller's typo or secret argument fails the call
+  instead of reaching the run.
+- `services/procedure`: a registered Go step that panics fails its row instead of
+  crashing the process — the engine wraps every Go step in `foundation/decorate`
+  recovery, so the panic becomes a failed row named after the step (its message says the
+  panic was recovered, never the panic value), the run stops as on any failed row, and
+  `finally` still runs. `Deps.Log` receives the recovered panic with its stack; nil logs
+  nothing.
+
+### Fixed
+
+- `execution/ops`: a map input's duration flag is a `time.Duration` (from JSON nanoseconds,
+  a Go integer or its text, defaults included), so a procedure interpolates `{timeout}`
+  as `2m0s` instead of `120000000000`.
+- `transport/cobra`: a duration flag's spec default is its registered default, so help
+  prints it and the flag no longer counts as set when not given.
+
 ## [0.0.21] - 2026-10-26
 
 Python: unchanged (`techai-webutils` 0.6.1).
