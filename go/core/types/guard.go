@@ -17,6 +17,10 @@ const (
 	// GuardGo runs the Go guard the product registers under the row's name.
 	GuardGo = "go"
 
+	// GuardTool runs Tool with Args in the root, the objects Render renders on its
+	// stdin as YAML documents; a non-zero exit is one finding carrying its output.
+	GuardTool = "tool"
+
 	// GuardGen renders the generator Gen names and compares its outputs with the
 	// committed files: one finding per missing or out-of-date output.
 	GuardGen = "gen"
@@ -62,8 +66,12 @@ type GuardRow struct {
 	// Gen names the generator a gen row checks; it expands `{placeholders}` like Name.
 	Gen string `yaml:"gen" json:"gen,omitempty"`
 
-	// Tool names the binary a GuardGo row shells, so the tool's version keys its cache.
+	// Tool names the binary a GuardTool row runs, or one a GuardGo row shells, so the
+	// tool's version keys its cache.
 	Tool string `yaml:"tool" json:"tool,omitempty"`
+
+	// Args are a GuardTool row's arguments; `{placeholders}` expand like Name.
+	Args []string `yaml:"args" json:"args,omitempty"`
 
 	// Inputs selects the files whose content keys a GuardGo row's cached pass: an
 	// expansion whose inputs passed before is skipped and reported cached; a failure is

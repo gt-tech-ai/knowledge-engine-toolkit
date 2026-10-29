@@ -49,6 +49,12 @@ type Deps struct {
 	// Go are the product's computed guards, keyed by the name a go row carries.
 	Go map[string]GoGuard
 
+	// Runner runs a tool row's tool; nil fails every tool row when it runs.
+	Runner interfaces.CommandRunner
+
+	// Root is the directory a tool row's tool runs in.
+	Root string
+
 	// Generators returns the generator a gen row names; an error fails the row. Nil
 	// rejects every gen row when building.
 	Generators func(ctx context.Context, name string) (interfaces.Generator, error)
@@ -128,11 +134,8 @@ func validate(r *types.GuardRow, deps Deps) error {
 	case types.GuardExpr:
 		_, err := compile(r.Expr)
 		return err
-	case types.GuardGen:
-		if r.Gen == "" || deps.Generators == nil {
-			return apperr.New(apperr.CodeInvalidInput,
-				"a gen guard needs a gen and a generator lookup")
-		}
+	case types.GuardTool, types.GuardGen:
+		return validateRun(r, deps)
 	case types.GuardGo:
 		if _, ok := deps.Go[goName(r)]; !ok {
 			return apperr.New(apperr.CodeInvalidInput,
@@ -143,6 +146,19 @@ func validate(r *types.GuardRow, deps Deps) error {
 			apperr.CodeInvalidInput,
 			fmt.Sprintf("unknown kind %q", r.Kind),
 		)
+	}
+	return nil
+}
+
+// validateRun checks that a tool row names its tool, and that a gen row names its
+// generator and has a generator lookup to find it.
+func validateRun(r *types.GuardRow, deps Deps) error {
+	switch {
+	case r.Kind == types.GuardTool && r.Tool == "":
+		return apperr.New(apperr.CodeInvalidInput, "a tool guard needs a tool")
+	case r.Kind == types.GuardGen && (r.Gen == "" || deps.Generators == nil):
+		return apperr.New(apperr.CodeInvalidInput,
+			"a gen guard needs a gen and a generator lookup")
 	}
 	return nil
 }
@@ -315,6 +331,8 @@ func (g *guard) check(
 		return exprCheck(ctx, cb, r, g.prg, vars, g.deps.Now)
 	case types.GuardGen:
 		return genCheck(ctx, cb, r, g.deps.Generators)
+	case types.GuardTool:
+		return toolCheck(ctx, cb, r, g.deps.Runner, g.deps.Root)
 	default:
 		return g.deps.Go[goName(r)](ctx, cb, r, vars)
 	}
@@ -397,6 +415,7 @@ func expand(row *types.GuardRow, vars map[string]string) types.GuardRow {
 		rep.Replace(r.Path), rep.Replace(r.Expect)
 	r.Gen = rep.Replace(r.Gen)
 	r.Require, r.Forbid, r.Allow = all(r.Require), all(r.Forbid), all(r.Allow)
+	r.Args = all(r.Args)
 	r.Files.Roots, r.Files.Paths, r.Files.Globs, r.Files.Exclude = all(r.Files.Roots),
 		all(r.Files.Paths), all(r.Files.Globs), all(r.Files.Exclude)
 	r.Inputs.Roots, r.Inputs.Paths = all(r.Inputs.Roots), all(r.Inputs.Paths)
