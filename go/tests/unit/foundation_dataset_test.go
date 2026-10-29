@@ -30,8 +30,9 @@ type datasetTool struct {
 // What it tests:
 //   - Every *.yaml file in the directory (and none outside it) is merged by top-level
 //     key and a section decodes into its type; a missing section is NOT_FOUND; an
-//     unknown field is INVALID_INPUT naming the field; a key in two files is
-//     INVALID_INPUT naming both files; a malformed file is INVALID_INPUT naming it.
+//     unknown field is INVALID_INPUT naming the field; a scalar set in two files is
+//     INVALID_INPUT naming its key path and both files; a malformed file is
+//     INVALID_INPUT naming it.
 func TestFoundationDataset_LoadAndSection(t *testing.T) {
 	t.Parallel()
 	fsys := fstest.MapFS{
@@ -63,7 +64,7 @@ func TestFoundationDataset_LoadAndSection(t *testing.T) {
 	fsys["data/more.yaml"] = &fstest.MapFile{Data: []byte("limits: {max: 4}\n")}
 	_, err = dataset.Load(fsys, "data")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	assert.Contains(t, err.Error(), `"limits"`)
+	assert.Contains(t, err.Error(), `"limits.max"`)
 	assert.Contains(t, err.Error(), "data/more.yaml")
 	assert.Contains(t, err.Error(), "data/paths.yaml")
 
@@ -71,4 +72,94 @@ func TestFoundationDataset_LoadAndSection(t *testing.T) {
 	_, err = dataset.Load(fsys, "data")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "data/more.yaml")
+}
+
+// TestFoundationDataset_MergesAcrossFiles tests that files are slices of one document.
+//
+// Why this test is important:
+//   - A front-end groups its data by topic (one file per verb, a guard's rows beside its
+//     params), so two files must be able to add to the same section: maps merge and
+//     lists concatenate. Only a value set twice is a conflict, and it must name both
+//     files and the key, or the author can't find the clash.
+//
+// What it tests:
+//   - Two files' maps merge key by key, deeply; two files' lists concatenate in file
+//     order.
+//   - A scalar set in two files, a named list item in two files, and a map in one file
+//     against a list in another are each INVALID_INPUT naming the key path and both
+//     files; a named item repeated within one file is not a conflict.
+func TestFoundationDataset_MergesAcrossFiles(t *testing.T) {
+	t.Parallel()
+	fsys := fstest.MapFS{
+		"d/a.yaml": {Data: []byte("check:\n  ratchet: {root: cli}\ntools:\n" +
+			"  - name: buf\n    pin: v1\n")},
+		"d/b.yaml": {Data: []byte("check:\n  ratchet: {hard: x}\n  docs: {on: true}\n" +
+			"tools:\n  - name: helm\n    pin: v3\n  - name: helm\n    pin: v3\n")},
+	}
+	d, err := dataset.Load(fsys, "d")
+	require.NoError(t, err)
+
+	check, err := d.Section[map[string]map[string]any]("check")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]map[string]any{
+		"ratchet": {"root": "cli", "hard": "x"},
+		"docs":    {"on": true},
+	}, check)
+
+	tools, err := d.Section[[]datasetTool]("tools")
+	require.NoError(t, err)
+	assert.Equal(t, []datasetTool{
+		{Name: "buf", Pin: "v1"}, {Name: "helm", Pin: "v3"}, {Name: "helm", Pin: "v3"},
+	}, tools)
+
+	conflicts := map[string]struct{ c, path string }{
+		"scalar":     {"check:\n  ratchet: {root: other}\n", `"check.ratchet.root"`},
+		"named item": {"tools:\n  - name: buf\n    pin: v2\n", `"tools[buf]"`},
+		"kind":       {"check:\n  docs: [on]\n", `"check.docs"`},
+	}
+	for name, tc := range conflicts {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fs := fstest.MapFS{
+				"d/a.yaml": fsys["d/a.yaml"], "d/b.yaml": fsys["d/b.yaml"],
+				"d/c.yaml": {Data: []byte(tc.c)},
+			}
+			_, err := dataset.Load(fs, "d")
+			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+			assert.Contains(t, err.Error(), tc.path)
+			assert.Contains(t, err.Error(), "d/c.yaml")
+			assert.Contains(t, err.Error(), "d/a.yaml")
+		})
+	}
+}
+
+// TestFoundationDataset_LoadTree tests loading a directory tree of data files.
+//
+// Why this test is important:
+//   - Grouped data lives in subdirectories (guards/, platform/), while template and
+//     scaffold trees beside it hold YAML that is not data; reading the tree in a fixed
+//     order keeps list concatenation deterministic, and skipping must keep the
+//     templates out.
+//
+// What it tests:
+//   - Every *.yaml under the root and its subdirectories merges, in lexical path order
+//     (a.yaml, then g/b.yaml, then z.yaml); a skipped subdirectory is not read; a
+//     missing root is NOT_FOUND.
+func TestFoundationDataset_LoadTree(t *testing.T) {
+	t.Parallel()
+	fsys := fstest.MapFS{
+		"cfg/a.yaml":           {Data: []byte("tools:\n  - name: a\n")},
+		"cfg/g/b.yaml":         {Data: []byte("tools:\n  - name: b\n")},
+		"cfg/z.yaml":           {Data: []byte("tools:\n  - name: z\n")},
+		"cfg/templates/t.yaml": {Data: []byte("tools: {{ .Bad }}\n")},
+		"cfg/g/notes.md":       {Data: []byte("tools: []\n")},
+	}
+	d, err := dataset.LoadTree(fsys, "cfg", "templates")
+	require.NoError(t, err)
+	tools, err := d.Section[[]datasetTool]("tools")
+	require.NoError(t, err)
+	assert.Equal(t, []datasetTool{{Name: "a"}, {Name: "b"}, {Name: "z"}}, tools)
+
+	_, err = dataset.LoadTree(fsys, "nope")
+	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }

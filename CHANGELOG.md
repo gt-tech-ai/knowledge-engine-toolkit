@@ -6,6 +6,23 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.28] - 2026-10-29
+
+Python: unchanged (`techai-webutils` 0.6.1).
+
+### Changed
+
+- `foundation/dataset` merges files instead of rejecting a shared top-level key: maps merge
+  key by key and lists concatenate in file order, so a front-end can split one section
+  across files by topic. Only a value set twice is an error, `CodeInvalidInput` naming its
+  key path (`check.ratchet.root`, `tools[buf]` for a list item's `name`) and both files.
+  A section that fails to decode names every file that contributed to it.
+
+### Added
+
+- `dataset.LoadTree(fsys, dir, skip...)` reads every `*.yaml` under `dir`, subdirectories
+  included, in lexical path order; a listed subdirectory (a template tree) is skipped.
+
 ## [0.0.27] - 2026-10-29
 
 Python: unchanged (`techai-webutils` 0.6.1).
