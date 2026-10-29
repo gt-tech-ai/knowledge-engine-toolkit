@@ -384,3 +384,68 @@ func TestLister_HasGoPackagesWithTags(t *testing.T) {
 			HasGoPackagesWithTags(t.Context(), runner, tc.dir, "integration"), tc.name)
 	}
 }
+
+// TestWorkspaceGraph tests the module graph of a go.work workspace.
+//
+// Why this test is important:
+//   - A module diagram or an impact analysis draws its edges from this graph; an edge to
+//     a module outside the workspace, an indirect require drawn as a direct one, or a
+//     half-scaffolded module failing the whole graph would mislead every consumer.
+//
+// What it tests:
+//   - Every go.work module comes back in go.work order (the root module included) with
+//     its module path and the directories of the workspace modules it requires
+//     directly, in go.mod order; a third-party require and an indirect one are not
+//     edges; a module whose go.mod is missing is skipped.
+//   - ParseWorkspaceGraph over the same bytes gives the same graph with no I/O.
+//   - A repository with no go.work is CodeNotFound; a go.work that does not parse is
+//     CodeInvalidInput.
+func TestWorkspaceGraph(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	wsWrite(
+		t,
+		filepath.Join(root, "go.work"),
+		"go 1.24\n\nuse (\n\t.\n\t./libs/core\n\t./services/lend\n\t./services/ghost\n)\n",
+	)
+	wsWrite(t, filepath.Join(root, "go.mod"), "module example.com/shelf\n\ngo 1.24\n")
+	wsWrite(
+		t,
+		filepath.Join(root, "libs", "core", "go.mod"),
+		"module example.com/shelf/libs/core\n\ngo 1.24\n\nrequire github.com/x/y v1.0.0\n",
+	)
+	wsWrite(t, filepath.Join(root, "services", "lend", "go.mod"),
+		"module example.com/shelf/services/lend\n\ngo 1.24\n\nrequire (\n"+
+			"\texample.com/shelf/libs/core v0.0.0\n"+
+			"\texample.com/shelf v0.0.0 // indirect\n"+
+			"\tgithub.com/x/y v1.0.0\n)\n")
+
+	got, err := golang.WorkspaceGraph(os.DirFS(root))
+	require.NoError(t, err)
+	assert.Equal(t, []golang.Module{
+		{Dir: ".", Path: "example.com/shelf"},
+		{Dir: "libs/core", Path: "example.com/shelf/libs/core"},
+		{
+			Dir: "services/lend", Path: "example.com/shelf/services/lend",
+			Requires: []string{"libs/core"},
+		},
+	}, got)
+
+	read := func(rel string) []byte {
+		b, err := os.ReadFile(filepath.Join(root, rel))
+		require.NoError(t, err)
+		return b
+	}
+	parsed, err := golang.ParseWorkspaceGraph(read("go.work"), map[string][]byte{
+		".":             read("go.mod"),
+		"libs/core":     read("libs/core/go.mod"),
+		"services/lend": read("services/lend/go.mod"),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, got, parsed)
+
+	_, err = golang.WorkspaceGraph(os.DirFS(t.TempDir()))
+	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
+	_, err = golang.ParseWorkspaceGraph([]byte("use (\n"), nil)
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}

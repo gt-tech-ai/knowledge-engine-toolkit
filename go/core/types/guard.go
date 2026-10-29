@@ -69,6 +69,11 @@ type GuardRow struct {
 	// Forbid are regular expressions no line of a selected file may match.
 	Forbid []string `yaml:"forbid" json:"forbid,omitempty"`
 
+	// Allow are regular expressions that exempt a line from Forbid: a line matching any
+	// is never a forbid finding (a sanctioned literal a forbid pattern would catch).
+	// `{placeholder}`s expand.
+	Allow []string `yaml:"allow" json:"allow,omitempty"`
+
 	// Tags are the labels suites select guards by.
 	Tags []string `yaml:"tags" json:"tags,omitempty"`
 
@@ -86,7 +91,7 @@ type GuardRow struct {
 	// shell and Dockerfiles; `#` and `//` in Terraform and HCL; `//` in Alloy.
 	SkipComments bool `yaml:"skip_comments" json:"skip_comments,omitempty"`
 
-	// Literal treats Require and Forbid as plain substrings rather than regular
+	// Literal treats Require, Forbid and Allow as plain substrings rather than regular
 	// expressions.
 	Literal bool `yaml:"literal" json:"literal,omitempty"`
 

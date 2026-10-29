@@ -1,9 +1,10 @@
 // Package golang discovers the Go side of a workspace: the go.work modules
-// (GoWorkModules), which of them hold loadable Go packages (FilterModulesWithGoPackages,
-// GoListPackages, HasGoPackagesWithTags — `go list` run through the injected
-// CommandRunner and memoized per directory), scoped go.work files for isolated runs
-// (ScopedWork), the root module path (ModulePath), the modules holding staged files
-// (StagedModules) and whether generated protobuf packages are present
+// (GoWorkModules, WorkUses) and their require graph (WorkspaceGraph,
+// ParseWorkspaceGraph), which of them hold loadable Go packages
+// (FilterModulesWithGoPackages, GoListPackages, HasGoPackagesWithTags — `go list` run
+// through the injected CommandRunner and memoized per directory), scoped go.work files
+// for isolated runs (ScopedWork), the root module path (ModulePath), the modules holding
+// staged files (StagedModules) and whether generated protobuf packages are present
 // (HasGeneratedPackages). It does no I/O of its own: the workspace is read through an
 // fs.FS rooted at the repository, and `go list` runs through the injected
 // CommandRunner. go.work and go.mod are parsed by golang.org/x/mod/modfile.

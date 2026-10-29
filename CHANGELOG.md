@@ -6,6 +6,19 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.23] - 2026-10-28
+
+### Added
+
+- Match guard rows take `allow`: regular expressions (substrings under `literal`) that
+  exempt a line from `forbid`, so a forbid pattern can spare a sanctioned literal RE2's
+  missing lookahead cannot. `allow` expands `{placeholders}` like `forbid`, and a pattern
+  that does not compile fails the guards' build.
+- `foundation/workspace/golang.WorkspaceGraph` (over an `fs.FS`) and the I/O-free
+  `ParseWorkspaceGraph` (over the go.work and go.mod bytes): every go.work module, the
+  root included, with its module path and the workspace modules it requires directly,
+  for module diagrams and impact analysis; `WorkUses` lists a go.work's use directories.
+
 ## [0.0.22] - 2026-10-28
 
 Python: unchanged (`techai-webutils` 0.6.1).

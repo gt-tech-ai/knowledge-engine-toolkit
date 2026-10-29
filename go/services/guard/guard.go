@@ -114,7 +114,8 @@ func validate(r *types.GuardRow, deps Deps) error {
 				"names must pair with require",
 			)
 		}
-		_, err := patterns(append(slices.Clone(r.Require), r.Forbid...), r.Literal)
+		all := append(append(slices.Clone(r.Require), r.Forbid...), r.Allow...)
+		_, err := patterns(all, r.Literal)
 		return err
 	case types.GuardYAML:
 		if r.Path == "" {
@@ -383,7 +384,7 @@ func expand(row *types.GuardRow, vars map[string]string) types.GuardRow {
 	}
 	r.Name, r.Message, r.Path, r.Expect = rep.Replace(r.Name), rep.Replace(r.Message),
 		rep.Replace(r.Path), rep.Replace(r.Expect)
-	r.Require, r.Forbid = all(r.Require), all(r.Forbid)
+	r.Require, r.Forbid, r.Allow = all(r.Require), all(r.Forbid), all(r.Allow)
 	r.Files.Roots, r.Files.Paths, r.Files.Globs, r.Files.Exclude = all(r.Files.Roots),
 		all(r.Files.Paths), all(r.Files.Globs), all(r.Files.Exclude)
 	r.Inputs.Roots, r.Inputs.Paths = all(r.Inputs.Roots), all(r.Inputs.Paths)
