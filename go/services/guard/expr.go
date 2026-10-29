@@ -3,8 +3,11 @@ package guard
 import (
 	"context"
 	"fmt"
+	"maps"
+	"math"
 	"reflect"
 	"slices"
+	"strconv"
 	"time"
 
 	"cel.dev/cel-go/cel"
@@ -132,10 +135,7 @@ func activation(
 	p *program,
 	vars map[string]string,
 ) (map[string]any, []types.Finding, error) {
-	act := map[string]any{
-		"vars": vars, "files": []string{}, "file": map[string]any{},
-		"docs": []any{}, "objects": []any{}, "data": r.Data,
-	}
+	act := baseActivation(vars, r.Data)
 	if p.uses["files"] || p.uses["file"] {
 		fs, missing, err := files(ctx, cb, r)
 		if err != nil || missing != nil {
@@ -249,4 +249,72 @@ func finding(e any) (types.Finding, error) {
 	}
 	return types.Finding{}, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 		"expr finding %T: want a string or a map", e))
+}
+
+// baseActivation is an activation holding vars and data, with the file, document and
+// object variables empty until a row's selection fills them.
+func baseActivation(vars map[string]string, data any) map[string]any {
+	return map[string]any{
+		"vars": vars, "data": data, "files": []string{}, "file": map[string]any{},
+		"docs": []any{}, "objects": []any{},
+	}
+}
+
+// forEach crosses expansions with the placeholder maps g's For returns over each one's
+// vars and the row's data, in order: the map's keys are added to a copy of the expansion.
+// A result that is not a list of maps of scalars is CodeInvalidInput.
+func (g *guard) forEach(
+	ctx context.Context,
+	expansions []map[string]string,
+) ([]map[string]string, error) {
+	var out []map[string]string
+	for _, vars := range expansions {
+		act := baseActivation(vars, g.row.Data)
+		act["now"] = time.Now()
+		val, _, err := g.forPrg.prg.ContextEval(ctx, act)
+		if err != nil {
+			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "for")
+		}
+		pb, err := val.ConvertToNative(reflect.TypeFor[*structpb.Value]())
+		if err != nil {
+			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "for result")
+		}
+		items, ok := pb.(*structpb.Value).AsInterface().([]any)
+		if !ok {
+			return nil, apperr.New(
+				apperr.CodeInvalidInput,
+				"for must return a list of maps",
+			)
+		}
+		for _, item := range items {
+			m, ok := item.(map[string]any)
+			if !ok {
+				return nil, apperr.New(
+					apperr.CodeInvalidInput,
+					"for must return a list of maps",
+				)
+			}
+			row := maps.Clone(vars)
+			if row == nil {
+				row = map[string]string{}
+			}
+			for k, v := range m {
+				row[k] = placeholder(v)
+			}
+			out = append(out, row)
+		}
+	}
+	return out, nil
+}
+
+// placeholder renders a for map's value as placeholder text: a whole number without a
+// fraction, anything else as fmt prints it.
+func placeholder(v any) string {
+	if f, ok := v.(float64); ok && f == math.Trunc(f) {
+		return strconv.FormatInt(int64(f), 10)
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprint(v)
 }

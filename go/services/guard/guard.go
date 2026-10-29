@@ -88,16 +88,19 @@ func NewFromConfig(rows []types.GuardRow, deps Deps) ([]interfaces.Guard, error)
 		if err := validate(&r, deps); err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "guard "+r.Name)
 		}
-		var prg *program
+		var prg, forPrg *program
 		if r.Kind == types.GuardExpr {
 			prg, _ = compile(r.Expr) // validate compiled it
+		}
+		if r.For != "" {
+			forPrg, _ = compile(r.For) // validate compiled it
 		}
 		names := []string{r.Name}
 		if r.Kind == types.GuardMatch && len(r.Names) > 0 {
 			names = r.Names
 		}
 		for j, n := range names {
-			g := &guard{row: r, name: n, deps: deps, prg: prg, only: -1}
+			g := &guard{row: r, name: n, deps: deps, prg: prg, forPrg: forPrg, only: -1}
 			if len(names) > 1 {
 				g.only = j
 			}
@@ -109,6 +112,11 @@ func NewFromConfig(rows []types.GuardRow, deps Deps) ([]interfaces.Guard, error)
 
 // validate checks r's kind and the parts that can fail before a run.
 func validate(r *types.GuardRow, deps Deps) error {
+	if r.For != "" {
+		if _, err := compile(r.For); err != nil {
+			return apperr.Wrap(err, apperr.CodeInvalidInput, "for")
+		}
+	}
 	if r.Each != "" {
 		if _, ok := deps.Expanders[r.Each]; !ok {
 			return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
@@ -172,6 +180,9 @@ type guard struct {
 	// prg is an expr row's compiled expression.
 	prg *program
 
+	// forPrg is the row's compiled For expression; nil when it has none.
+	forPrg *program
+
 	// name is the guard's name before expansion.
 	name string
 
@@ -218,6 +229,13 @@ func (g *guard) Run(ctx context.Context, cb interfaces.Codebase) types.Verdict {
 			return failed(err)
 		}
 		expansions = rows
+	}
+	if g.forPrg != nil {
+		crossed, err := g.forEach(ctx, expansions)
+		if err != nil {
+			return failed(err)
+		}
+		expansions = crossed
 	}
 	type slot struct {
 		err      error

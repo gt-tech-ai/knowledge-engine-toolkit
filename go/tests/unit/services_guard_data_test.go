@@ -64,3 +64,67 @@ func TestServicesGuard_ExprData(t *testing.T) {
 	assert.Equal(t, "policy/p.yaml: api is not admitted\n", set.Detail)
 	assert.Equal(t, types.StatusPass, v["no data"].Status, v["no data"].Detail)
 }
+
+// TestServicesGuard_For tests a row repeated over its data: `for` returns the placeholder
+// maps, crossed with each's expansions.
+//
+// Why this test is important:
+//   - A check per policy set (and per set × overlay) iterates the expectations the row
+//     carries; if the iteration came from a product expander instead, the sets would be
+//     listed twice — in the expander's config and in the row's data.
+//
+// What it tests:
+//   - `for` alone expands one guard run per returned map, its values (strings and
+//     numbers) as placeholders in the name and the expression's vars.
+//   - With each, every expansion is crossed with the maps `for` returns over that
+//     expansion's vars, the map's keys added to (and overriding) the expansion's.
+//   - A `for` that is not a list of maps fails the row; one that does not compile fails
+//     building.
+func TestServicesGuard_For(t *testing.T) {
+	t.Parallel()
+	var rows []types.GuardRow
+	require.NoError(t, yaml.Unmarshal([]byte(`
+- name: "{set} has port {port}"
+  kind: expr
+  data: &sets [{name: open, port: 8080}, {name: closed, port: 9090}]
+  for: "data.map(s, {'set': s.name, 'port': s.port})"
+  expr: "vars.port == '8080' ? [] : ['port ' + vars.port + ' of ' + vars.set]"
+- name: "{env}/{set}"
+  kind: expr
+  each: envs
+  data: *sets
+  for: "data.filter(s, vars.env == 'prod' || s.name == 'open').map(s, {'set': s.name})"
+  expr: "['ran ' + vars.env + '/' + vars.set]"
+- name: bad for
+  kind: expr
+  data: 1
+  for: data
+  expr: "true"
+`), &rows))
+	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
+		return []map[string]string{{"env": "dev"}, {"env": "prod"}}, nil
+	}
+	gs, err := guard.NewFromConfig(rows, guard.Deps{
+		Expanders: map[string]guard.Expander{"envs": each},
+	})
+	require.NoError(t, err)
+	cb := memoryCodebase(t, guardFiles())
+	v := map[string]types.Verdict{}
+	for _, g := range gs {
+		v[g.Name()] = g.Run(t.Context(), cb)
+	}
+
+	assert.Equal(t, "port 9090 of closed\n", v["{set} has port {port}"].Detail)
+	assert.Equal(
+		t,
+		"ran dev/open\nran prod/open\nran prod/closed\n",
+		v["{env}/{set}"].Detail,
+	)
+	assert.Equal(t, types.StatusFail, v["bad for"].Status)
+	assert.Contains(t, v["bad for"].Detail, "for")
+
+	_, err = guard.NewFromConfig([]types.GuardRow{
+		{Name: "x", Kind: types.GuardExpr, Expr: "true", For: "data.("},
+	}, guard.Deps{})
+	require.Error(t, err)
+}

@@ -50,6 +50,11 @@ type GuardRow struct {
 	// Each names the product expander whose rows expand this one, one guard per row.
 	Each string `yaml:"each" json:"each,omitempty"`
 
+	// For is a CEL expression over data and vars that returns the placeholder maps the
+	// row repeats over: one run per map, crossed with Each's expansions (evaluated over
+	// each expansion's vars, its keys added to them).
+	For string `yaml:"for" json:"for,omitempty"`
+
 	// Message explains a failure and how to fix it; `{placeholder}`s expand.
 	Message string `yaml:"message" json:"message,omitempty"`
 
