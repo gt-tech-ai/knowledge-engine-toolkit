@@ -25,8 +25,9 @@ type GuardRow struct {
 
 	// Expr is a GuardExpr row's CEL expression. It sees `files` (the selected files, in
 	// path order, each {path, text, docs}), `file` (the same, keyed by path), `objects`
-	// (the rendered objects' documents) and `vars` (the expansion row). It returns a bool,
-	// a list of failure messages, or a list of {file, line, message} maps.
+	// (the rendered objects' documents), `vars` (the expansion row) and `now` (the run's
+	// time, a timestamp). It returns a bool, a list of failure messages, or a list of
+	// {file, line, message} maps.
 	Expr string `yaml:"expr" json:"expr,omitempty"`
 
 	// Verb is the command that owns the guard (check, test-k8s).

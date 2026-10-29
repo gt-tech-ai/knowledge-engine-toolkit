@@ -4,14 +4,18 @@ import (
 	"bytes"
 	"context"
 	"io/fs"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"text/template"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/yamlq"
 )
 
 // DataFunc provides a template row's data from the codebase.
@@ -41,6 +45,11 @@ func NewFromRow(row types.GenRow, deps Deps) (interfaces.Generator, error) {
 			err = apperr.New(apperr.CodeInvalidInput,
 				"a template generator needs a template and a registered data provider")
 		}
+	case types.GenEdit:
+		if _, ok := deps.Data[row.Data]; !ok || len(row.Set) == 0 {
+			err = apperr.New(apperr.CodeInvalidInput,
+				"an edit generator needs a set and a registered data provider")
+		}
 	default:
 		err = apperr.New(apperr.CodeInvalidInput, "unknown generator kind "+row.Kind)
 	}
@@ -67,7 +76,7 @@ func (g *rowGen) Inputs() types.FileSelector { return g.row.Inputs }
 
 // Render produces the row's outputs.
 func (g *rowGen) Render(ctx context.Context, cb interfaces.Codebase) (types.Artifacts, error) {
-	if g.row.Kind == types.GenTemplate {
+	if g.row.Kind == types.GenTemplate || g.row.Kind == types.GenEdit {
 		return g.template(ctx, cb)
 	}
 	return g.run(ctx, cb)
@@ -115,23 +124,144 @@ func (g *rowGen) run(ctx context.Context, cb interfaces.Codebase) (types.Artifac
 	return out, nil
 }
 
-// template renders the row's template over its data provider into Out.
+// template renders the row over its data provider into Out (a template row's template,
+// or an edit row's values set in the file there), or, under Each, one file per element
+// of the data.
 func (g *rowGen) template(ctx context.Context, cb interfaces.Codebase) (types.Artifacts, error) {
-	src, err := cb.Text(ctx, g.row.Template)
-	if err != nil {
-		return nil, err
-	}
-	tpl, err := template.New(g.row.Template).Option("missingkey=error").Parse(string(src.Bytes))
-	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "template "+g.row.Template)
-	}
 	data, err := g.deps.Data[g.row.Data](ctx, cb)
 	if err != nil {
 		return nil, err
 	}
+	if !g.row.Each {
+		return g.renderOne(ctx, cb, g.row.Template, g.row.Out, data)
+	}
+	list := reflect.ValueOf(data)
+	if list.Kind() != reflect.Slice {
+		return nil, apperr.New(apperr.CodeInvalidInput,
+			"generator "+g.row.Name+": each needs list data")
+	}
+	out := types.Artifacts{}
+	for i := range list.Len() {
+		elem := list.Index(i).Interface()
+		outPath, err := execute("out of "+g.row.Name, g.row.Out, elem)
+		if err != nil {
+			return nil, err
+		}
+		if _, dup := out[string(outPath)]; dup {
+			return nil, apperr.New(apperr.CodeInvalidInput,
+				"generator "+g.row.Name+": two elements render "+string(outPath))
+		}
+		one, err := g.renderOne(ctx, cb, g.row.Template, string(outPath), elem)
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(out, one)
+	}
+	return out, nil
+}
+
+// renderOne renders the row over data into out: an edit row's values set in the file
+// there, or the template file the row's template names (itself a template over data),
+// spliced into the row's region of the existing file when it has one.
+func (g *rowGen) renderOne(
+	ctx context.Context, cb interfaces.Codebase, tmpl, out string, data any,
+) (types.Artifacts, error) {
+	if g.row.Kind == types.GenEdit {
+		return g.edit(ctx, cb, out, data)
+	}
+	tmplPath, err := execute("template of "+g.row.Name, tmpl, data)
+	if err != nil {
+		return nil, err
+	}
+	src, err := cb.Text(ctx, string(tmplPath))
+	if err != nil {
+		return nil, err
+	}
+	rendered, err := execute(string(tmplPath), string(src.Bytes), data)
+	if err != nil {
+		return nil, err
+	}
+	if g.row.Region == (types.GenRegion{}) {
+		return types.Artifacts{out: rendered}, nil
+	}
+	current, err := cb.Text(ctx, out)
+	if err != nil {
+		return nil, err
+	}
+	spliced, err := splice(current.Bytes, rendered, g.row.Region)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "generator "+g.row.Name+" "+out)
+	}
+	return types.Artifacts{out: spliced}, nil
+}
+
+// edit sets each of the row's paths, in path order, in the YAML file at out to its
+// value rendered over data. A path that selects no scalar is CodeInvalidInput: the file
+// must declare every value the row projects.
+func (g *rowGen) edit(
+	ctx context.Context, cb interfaces.Codebase, out string, data any,
+) (types.Artifacts, error) {
+	current, err := cb.Text(ctx, out)
+	if err != nil {
+		return nil, err
+	}
+	src := current.Bytes
+	for _, p := range slices.Sorted(maps.Keys(g.row.Set)) {
+		value, err := execute(g.row.Name+" "+p, g.row.Set[p], data)
+		if err != nil {
+			return nil, err
+		}
+		set := 0
+		src, err = yamlq.Rewrite(src, p, func(string) (string, bool) {
+			set++
+			return string(value), true
+		})
+		if err != nil {
+			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "generator "+g.row.Name+" "+out)
+		}
+		if set == 0 {
+			return nil, apperr.New(apperr.CodeInvalidInput,
+				"generator "+g.row.Name+": "+out+" has no "+p)
+		}
+	}
+	return types.Artifacts{out: src}, nil
+}
+
+// execute renders the text/template src, named name, over data; a missing key is an
+// error rather than "<no value>".
+func execute(name, src string, data any) ([]byte, error) {
+	tpl, err := template.New(name).Option("missingkey=error").Parse(src)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "template "+name)
+	}
 	var buf bytes.Buffer
 	if err := tpl.Execute(&buf, data); err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "template "+g.row.Template)
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "template "+name)
 	}
-	return types.Artifacts{g.row.Out: buf.Bytes()}, nil
+	return buf.Bytes(), nil
+}
+
+// splice replaces, in file, the lines from the one holding r.Begin through the one
+// holding r.End (after it) with block. A missing marker is CodeInvalidInput.
+func splice(file, block []byte, r types.GenRegion) ([]byte, error) {
+	begin := bytes.Index(file, []byte(r.Begin))
+	end := -1
+	if begin >= 0 {
+		end = bytes.Index(file[begin:], []byte(r.End))
+	}
+	if begin < 0 || end < 0 {
+		return nil, apperr.New(apperr.CodeInvalidInput,
+			"no region markers "+r.Begin+" … "+r.End)
+	}
+	start := bytes.LastIndexByte(file[:begin], '\n') + 1
+	stop := begin + end + len(r.End)
+	if nl := bytes.IndexByte(file[stop:], '\n'); nl >= 0 {
+		stop += nl + 1
+	} else {
+		stop = len(file)
+	}
+	out := make([]byte, 0, len(file)-(stop-start)+len(block))
+	out = append(out, file[:start]...)
+	out = append(out, block...)
+	return append(out, file[stop:]...), nil
 }

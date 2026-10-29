@@ -11,6 +11,9 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// mapTag is the YAML mapping tag.
+const mapTag = "!!map"
+
 // Upsert sets the value at path in the first document of src to value, creating
 // missing mapping keys, and returns the edited file.
 func Upsert(src []byte, path string, value any) ([]byte, error) {
@@ -21,49 +24,98 @@ func Upsert(src []byte, path string, value any) ([]byte, error) {
 // `.key` and `[n]` steps. The edit is spliced into the source text, so every byte the
 // edit does not touch (comments, blank lines, key order, the other documents) is kept:
 // a scalar replacing a single-line block scalar rewrites only that token; missing keys
-// are appended as a block after the last line of their block mapping. Any other change
-// (a collection replacing or replacing a node, a scalar in a flow collection or one that
-// wraps onto the next line, an append to a flow mapping) re-encodes the file with
-// two-space indentation instead. A missing sequence item is CodeInvalidInput.
+// are appended as a block after the last line of their block mapping; a null on the
+// path (`key:`, `key: ~`, `key: null`) becomes a mapping holding the missing keys; a
+// source with no document (empty, or only comments) is an empty mapping, the keys
+// appended after its lines. Any other change (a collection replacing or replacing a
+// node, a scalar in a flow collection or one that wraps onto the next line, an append
+// to a flow mapping) re-encodes the file with two-space indentation instead. A missing
+// sequence item is CodeInvalidInput.
 func UpsertAt(src []byte, index int, path string, value any) ([]byte, error) {
-	steps, docs, err := prepare(src, index, path)
-	if err != nil {
-		return nil, err
-	}
 	var node yaml.Node
 	if err := node.Encode(value); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "encode the value")
 	}
-	lines := splitLines(src)
-	cur := root(docs[index])
+	if docs, err := DecodeAll(src); err == nil && len(docs) == 0 && index == 0 {
+		return upsertEmpty(src, path, &node)
+	}
+	steps, docs, err := prepare(src, index, path)
+	if err != nil {
+		return nil, err
+	}
+	e := upsert{lines: splitLines(src), docs: docs, index: index, path: path, node: &node}
+	return e.run(steps)
+}
+
+// upsert is one UpsertAt edit: the source lines, its decoded documents, and the value
+// node to place at path in document index.
+type upsert struct {
+	// node is the value being set.
+	node *yaml.Node
+
+	// path is the edit's path, for the holds check and error messages.
+	path string
+
+	// lines are the source, one entry per line.
+	lines []string
+
+	// docs are the decoded documents; a re-encode writes them back.
+	docs []*yaml.Node
+
+	// index is the document the edit targets.
+	index int
+}
+
+// run walks steps from the document root: a null on the way becomes a mapping, the
+// leaf is replaced (upsertLeaf), and the first missing key starts the keys to create
+// (upsertMissing).
+func (e upsert) run(steps []step) ([]byte, error) {
+	cur := root(e.docs[e.index])
 	for i, st := range steps {
 		cur = deref(cur)
 		next, err := child(cur, st)
 		if err != nil {
 			return nil, err
 		}
-		if next != nil && i < len(steps)-1 {
-			cur = next
-			continue
-		}
-		if next != nil {
-			if out, ok := replaceScalar(lines, cur, next, &node); ok &&
-				holds(out, index, path, &node) {
+		switch {
+		case next == nil:
+			return e.missing(cur, steps[i:])
+		case i == len(steps)-1:
+			return e.leaf(cur, next)
+		case isNull(next):
+			out, ok := spliceUnderNull(e.lines, cur, st, steps[i+1:], e.node)
+			if ok && holds(out, e.index, e.path, e.node) {
 				return out, nil
 			}
-			keepComments(&node, next)
-			*next = node
-			return encodeAll(docs)
+			*next = yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
 		}
-		if out, ok := appendKeys(lines, cur, steps[i:], &node); ok {
-			return out, nil
-		}
-		if err := build(cur, steps[i:], &node); err != nil {
-			return nil, err
-		}
-		return encodeAll(docs)
+		cur = next
 	}
-	return nil, invalid(path, "an edit needs at least one step")
+	return nil, invalid(e.path, "an edit needs at least one step")
+}
+
+// leaf replaces the existing value old under parent: spliced over its token when it can
+// be, else re-encoded with old's comments kept.
+func (e upsert) leaf(parent, old *yaml.Node) ([]byte, error) {
+	if out, ok := replaceScalar(e.lines, parent, old, e.node); ok &&
+		holds(out, e.index, e.path, e.node) {
+		return out, nil
+	}
+	keepComments(e.node, old)
+	*old = *e.node
+	return encodeAll(e.docs)
+}
+
+// missing creates steps' keys under parent, ending in the value: appended as a block
+// when it can be, else re-encoded.
+func (e upsert) missing(parent *yaml.Node, steps []step) ([]byte, error) {
+	if out, ok := appendKeys(e.lines, parent, steps, e.node); ok {
+		return out, nil
+	}
+	if err := build(parent, steps, e.node); err != nil {
+		return nil, err
+	}
+	return encodeAll(e.docs)
 }
 
 // Append adds value as the last item of the sequence at path in the first document of
@@ -334,8 +386,91 @@ func appendKeys(lines []string, parent *yaml.Node, steps []step, value *yaml.Nod
 			return nil, false
 		}
 	}
-	block := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	if err := build(block, steps, value); err != nil {
+	insert, ok := encodeBlock(
+		steps,
+		value,
+		strings.Repeat(" ", parent.Content[0].Column-1),
+	)
+	if !ok {
+		return nil, false
+	}
+	at := maxLine(parent)
+	out := append(append(lines[:at:at], insert...), lines[at:]...)
+	return joinLines(out), true
+}
+
+// upsertEmpty appends path's keys, ending in value, as a block mapping after the lines
+// of src, a source holding no document. A path with a sequence step is CodeInvalidInput.
+func upsertEmpty(src []byte, path string, value *yaml.Node) ([]byte, error) {
+	steps, err := parse(path)
+	if err != nil {
+		return nil, err
+	}
+	insert, ok := encodeBlock(steps, value, "")
+	if !ok || len(steps) == 0 {
+		return nil, invalid(path, "an empty document takes only .key steps")
+	}
+	return joinLines(append(splitLines(src), insert...)), nil
+}
+
+// isNull reports whether n is a YAML null scalar.
+func isNull(n *yaml.Node) bool {
+	return n.Kind == yaml.ScalarNode && n.Tag == "!!null"
+}
+
+// spliceUnderNull turns the block-mapping entry `key: <null>` (st's entry in parent) into
+// a mapping header and splices rest's keys, ending in value, beneath it at two more
+// spaces, keeping the entry's inline comment; it returns false when the entry is not a
+// plain key and a null token on one line.
+func spliceUnderNull(
+	lines []string, parent *yaml.Node, st step, rest []step, value *yaml.Node,
+) ([]byte, bool) {
+	key, _, _ := entryOf(parent, st)
+	if key == nil || parent.Style&yaml.FlowStyle != 0 || key.Style != 0 ||
+		key.Line < 1 || key.Line > len(lines) {
+		return nil, false
+	}
+	header, ok := nullHeader(lines[key.Line-1], key)
+	if !ok {
+		return nil, false
+	}
+	insert, ok := encodeBlock(rest, value, strings.Repeat(" ", key.Column+1))
+	if !ok {
+		return nil, false
+	}
+	out := append(append(append([]string{}, lines[:key.Line-1]...), header), insert...)
+	return joinLines(append(out, lines[key.Line:]...)), true
+}
+
+// nullHeader returns line, the plain key's `key: <null> [# comment]` line, as a mapping
+// header `key: [# comment]`; false when anything but a null token and a comment follows
+// the colon.
+func nullHeader(line string, key *yaml.Node) (string, bool) {
+	end := key.Column - 1 + len(key.Value)
+	if end >= len(line) || line[end] != ':' {
+		return "", false
+	}
+	tail := strings.TrimSpace(line[end+1:])
+	for _, token := range []string{"~", "null", "Null", "NULL"} {
+		if t, ok := strings.CutPrefix(tail, token); ok && (t == "" || t[0] == ' ') {
+			tail = strings.TrimSpace(t)
+			break
+		}
+	}
+	if tail == "" {
+		return line[:end+1], true
+	}
+	if !strings.HasPrefix(tail, "#") {
+		return "", false
+	}
+	return line[:end+1] + " " + tail, true
+}
+
+// encodeBlock renders steps' keys, ending in value, as a two-space block mapping whose
+// lines each start with indent; false when the steps cannot form one.
+func encodeBlock(steps []step, value *yaml.Node, indent string) ([]string, bool) {
+	block := &yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
+	if build(block, steps, value) != nil {
 		return nil, false
 	}
 	var buf bytes.Buffer
@@ -344,16 +479,13 @@ func appendKeys(lines []string, parent *yaml.Node, steps []step, value *yaml.Nod
 	if enc.Encode(block) != nil || enc.Close() != nil {
 		return nil, false
 	}
-	indent := strings.Repeat(" ", parent.Content[0].Column-1)
-	insert := splitLines(buf.Bytes())
-	for i, l := range insert {
+	lines := splitLines(buf.Bytes())
+	for i, l := range lines {
 		if l != "" {
-			insert[i] = indent + l
+			lines[i] = indent + l
 		}
 	}
-	at := maxLine(parent)
-	out := append(append(lines[:at:at], insert...), lines[at:]...)
-	return joinLines(out), true
+	return lines, true
 }
 
 // build adds steps' missing keys under n, ending in value.
@@ -366,7 +498,7 @@ func build(n *yaml.Node, steps []step, value *yaml.Node) error {
 			n.Content = append(n.Content, keyNode(st.key), value)
 			return nil
 		}
-		next := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		next := &yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
 		n.Content = append(n.Content, keyNode(st.key), next)
 		n = next
 	}

@@ -6,8 +6,69 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.22] - 2026-10-28
+
+Python: unchanged (`techai-webutils` 0.6.1).
+
 ### Added
 
+- Guard `expr` rows read TOML and the time: `Codebase.Docs` decodes `.toml` files (format
+  `toml`, and `decode('toml', text)`), an offset date-time as a timestamp and a local date
+  or date-time as one in UTC; and an expression names `now`, the run's time as a
+  timestamp, from the new `guard.Deps.Now` clock (nil is `time.Now`). An expiry in a
+  suppression file is now a row, not a Go guard.
+- Template generator rows render per element and into a marked region: `GenRow.Each`
+  renders one file per element of the row's list data, with `out` and `template`
+  themselves templates over the element (a Dockerfile per service, each from its
+  language's template); `GenRow.Region` (`begin` / `end` marker text) replaces the lines
+  from the begin marker through the end marker in the existing file at `out` and keeps
+  the rest (a generated rule block inside a hand-kept linter config).
+- Generator rows of kind `edit` (`types.GenEdit`) set values in an existing YAML file:
+  `set` maps `yamlq` paths to value templates over the data (or, with `each`, the
+  element), and each value replaces its token in place through `yamlq.Rewrite`, so
+  comments, quoting and every other line are kept. A path that selects no scalar fails:
+  the file must declare every value the row projects.
+- `foundation/openapi`: the build-time half of the JSON:API runtime. It turns
+  protoc-gen-openapiv2's Swagger 2.0 output into per-service OpenAPI 3 specs with JSON:API
+  envelopes (`Convert`; the Swagger → OpenAPI 3 step is kin-openapi's `openapi2conv`, and
+  each `$ref`'s description and readOnly are kept), builds the operation-keyed route table
+  (`BuildRouteTable`) and writes it as the Go package the JSON:API runtime reads
+  (`WriteRuntimeRouteTable`), and reports every REST RPC it cannot classify
+  (`CheckCompleteness`). The `jsonapi.v1` file, message and method options drive it,
+  read from a buf descriptor set. `Convert` takes the API-key header schemes every
+  operation requires as data.
+- `foundation/protogen`: the file passes a proto generation runs over buf's output. It
+  adds the generated Python package's `__init__.py` files and PEP 561 `py.typed` marker,
+  rewrites its absolute imports to package-relative ones, de-optionalises the TypeScript
+  fields a descriptor marks required, reads a descriptor set, and cleans a generated
+  directory or stashes it and settles it back after a regeneration.
+- `foundation/mockgen`: a `Generator` over the `//go:generate mockgen` directives under a
+  set of directories. It renders each mock into memory through the injected
+  `CommandRunner`, so `gen.Check` compares the on-disk mocks with the render without
+  writing to the tree.
+- `foundation/workspace/golang` and `foundation/workspace/python`: workspace discovery
+  over an `fs.FS` rooted at the repository. `golang` lists the go.work modules
+  (`GoWorkModules`, with a filter), renders a scoped go.work that keeps the root's
+  toolchain, godebug and replace directives with local replace targets made absolute
+  (`ScopedWork`), reads the root module path (`ModulePath`), resolves staged files to
+  their modules (`StagedModules`, with a keep filter), and probes for loadable packages
+  through a per-run `Lister` that memoizes `go list` per directory. go.work and go.mod are
+  parsed by `golang.org/x/mod/modfile`. `python` finds the directories holding a
+  `pyproject.toml` under given roots (`Packages`) and a package's importable module
+  (`ModuleName`).
+- `foundation/imagescan`: a container-image vulnerability gate. `ScanImage` runs a Trivy
+  image scan under a `TrivyPolicy` (scanners, severities, ignore file, ignore-unfixed,
+  report-only) through the injected `CommandRunner`; a missing trivy is a Skip, or a
+  Fail under strict. `GrypeEmergencies` / `CheckGrypeReport` read a grype JSON report
+  and block only on a known-exploited (CISA KEV) vulnerability that has a fix.
+- `impact.Classify` / `impact.SplitPaths`: classify changed paths into named regex
+  classes (`impact.Class`, a language by its file types or a domain by its
+  directories), one verdict per class in order; a pattern that does not compile is
+  `CodeInvalidInput`. `SplitPaths` splits `git diff --name-only -z` output.
+- `yamlq.Upsert` / `UpsertAt` splice two more cases instead of failing: a null on the
+  path (`key:`, `key: ~`, `key: null`) becomes a mapping holding the missing keys, its
+  inline comment kept; a source with no document (empty, or only comments) gains the
+  keys as a block mapping after its lines.
 - `yamlq.Append` / `AppendAt`: add an item to the end of a sequence. Into a non-empty block
   sequence the item is spliced after the last item, at the items' indentation, so comments
   and key order elsewhere are kept; a flow or empty sequence re-encodes.

@@ -83,6 +83,10 @@ const (
 
 	// GenTemplate renders a text/template over a registered data provider.
 	GenTemplate = "template"
+
+	// GenEdit sets values in the existing YAML file at Out, each a template over a
+	// registered data provider, keeping every other byte of the file.
+	GenEdit = "edit"
 )
 
 // GenRow is a generator as data.
@@ -101,12 +105,38 @@ type GenRow struct {
 	Kind string `yaml:"kind" json:"kind"`
 
 	// Out is the repository-relative output: the directory `{out}` stands for (GenRun)
-	// or the rendered file (GenTemplate).
+	// or the rendered file (GenTemplate). Under Each it is a template over the element.
 	Out string `yaml:"out" json:"out"`
 
-	// Template is the repository-relative template file of a GenTemplate row.
+	// Template is the repository-relative template file of a GenTemplate row. Under
+	// Each it is a template over the element, so elements can take different files.
 	Template string `yaml:"template" json:"template,omitempty"`
 
-	// Data names the registered data provider a GenTemplate row renders over.
+	// Data names the registered data provider a GenTemplate or GenEdit row renders over.
 	Data string `yaml:"data" json:"data,omitempty"`
+
+	// Set maps a GenEdit row's YAML paths (KE yamlq query paths) to value templates over
+	// the data (or, under Each, the element). Every path must select a scalar the file
+	// already has; the new value replaces that token in place.
+	Set map[string]string `yaml:"set" json:"set,omitempty"`
+
+	// Region, when set, makes a GenTemplate row fill a marked block of the existing
+	// file at Out instead of writing the whole file.
+	Region GenRegion `yaml:"region" json:"region,omitzero"`
+
+	// Each makes a GenTemplate or GenEdit row produce one file per element of its data,
+	// which must be a list; Out, Template and the Set values are rendered over each
+	// element.
+	Each bool `yaml:"each" json:"each,omitempty"`
+}
+
+// GenRegion is the marked block of a file a GenTemplate row fills: the lines from the
+// one holding Begin through the one holding End are replaced by the rendered text,
+// which carries the marker lines itself.
+type GenRegion struct {
+	// Begin is the text of the region's first line.
+	Begin string `yaml:"begin" json:"begin"`
+
+	// End is the text of the region's last line.
+	End string `yaml:"end" json:"end"`
 }
