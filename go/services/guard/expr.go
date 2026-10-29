@@ -33,9 +33,10 @@ type program struct {
 // file (path → {path, text, lines}), docs ({path, index, format, doc} per configuration
 // document: YAML, or HCL / Alloy / TOML when the selector names their extensions),
 // objects ({kind, name, namespace, source, doc} per rendered object), vars (the
-// expansion's placeholders) and now (the run's time, a timestamp).
+// expansion's placeholders), data (the row's Data, null when it has none) and now (the
+// run's time, a timestamp).
 func exprVars() []string {
-	return []string{"files", "file", "docs", "objects", "vars", "now"}
+	return []string{"files", "file", "docs", "objects", "vars", "data", "now"}
 }
 
 // compile type-checks expr against the guard environment: the CEL standard library plus
@@ -133,7 +134,7 @@ func activation(
 ) (map[string]any, []types.Finding, error) {
 	act := map[string]any{
 		"vars": vars, "files": []string{}, "file": map[string]any{},
-		"docs": []any{}, "objects": []any{},
+		"docs": []any{}, "objects": []any{}, "data": r.Data,
 	}
 	if p.uses["files"] || p.uses["file"] {
 		fs, missing, err := files(ctx, cb, r)

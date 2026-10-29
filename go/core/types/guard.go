@@ -78,6 +78,10 @@ type GuardRow struct {
 	// never cached. `{placeholder}`s expand. Empty inputs never cache.
 	Inputs FileSelector `yaml:"inputs" json:"inputs,omitzero"`
 
+	// Data is structured data a GuardExpr row's expression reads as `data` (the
+	// expectations it compares the tree with); nil is null.
+	Data any `yaml:"data" json:"data,omitempty"`
+
 	// Render, when its ChartDir is set, renders a chart whose objects the expression reads.
 	Render RenderSpec `yaml:"render" json:"render,omitzero"`
 
