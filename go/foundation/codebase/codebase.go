@@ -60,6 +60,11 @@ func (v *view) Files(ctx context.Context, sel types.FileSelector) ([]types.File,
 	if err != nil {
 		return nil, err
 	}
+	if sel.IncludeIgnored {
+		if all, err = v.withIgnored(ctx, sel, all); err != nil {
+			return nil, err
+		}
+	}
 	var out []types.File
 	for _, f := range all {
 		if !Matches(sel, f.Path) || (sel.TrackedOnly && f.Untracked) {
@@ -77,6 +82,36 @@ func (v *view) Files(ctx context.Context, sel types.FileSelector) ([]types.File,
 		out = append(out, f)
 	}
 	return out, nil
+}
+
+// withIgnored returns all plus the ignored files under sel's scope, sorted by path; a
+// source that cannot list ignored files adds none.
+func (v *view) withIgnored(
+	ctx context.Context,
+	sel types.FileSelector,
+	all []types.File,
+) ([]types.File, error) {
+	lister, ok := v.src.(interfaces.IgnoredLister)
+	if !ok {
+		return all, nil
+	}
+	scope := ignoredScope(sel)
+	ignored, err := v.snap.Memo(ctx, "ignored|"+strings.Join(scope, "\x00"),
+		func(ctx context.Context) ([]types.File, error) {
+			return lister.ListIgnored(ctx, scope)
+		})
+	if err != nil {
+		return nil, err
+	}
+	out := slices.Concat(all, ignored)
+	slices.SortStableFunc(
+		out,
+		func(a, b types.File) int { return strings.Compare(a.Path, b.Path) },
+	)
+	return slices.CompactFunc(
+		out,
+		func(a, b types.File) bool { return a.Path == b.Path },
+	), nil
 }
 
 // generated reports whether the Go file at p is generated, by name or by header.

@@ -29,8 +29,11 @@ type Source struct {
 	root string
 }
 
-// Compile-time assertion that Source satisfies CodebaseSource.
-var _ interfaces.CodebaseSource = (*Source)(nil)
+// Compile-time assertions that Source satisfies CodebaseSource and IgnoredLister.
+var (
+	_ interfaces.CodebaseSource = (*Source)(nil)
+	_ interfaces.IgnoredLister  = (*Source)(nil)
+)
 
 // New returns a Source for the working tree at root, running git through runner. It
 // does no I/O.
@@ -63,6 +66,25 @@ func (s *Source) List(ctx context.Context) ([]types.File, error) {
 		out,
 		func(a, b types.File) int { return strings.Compare(a.Path, b.Path) },
 	)
+	return out, nil
+}
+
+// ListIgnored returns the untracked files git ignores under scope (the whole tree when
+// scope is empty), sorted.
+func (s *Source) ListIgnored(ctx context.Context, scope []string) ([]types.File, error) {
+	args := []string{"ls-files", "-z", "--others", "--ignored", "--exclude-standard"}
+	if len(scope) > 0 {
+		args = append(append(args, "--"), scope...)
+	}
+	paths, err := s.lines(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	slices.Sort(paths)
+	out := make([]types.File, 0, len(paths))
+	for _, p := range paths {
+		out = append(out, types.File{Path: p, Untracked: true, Ignored: true})
+	}
 	return out, nil
 }
 

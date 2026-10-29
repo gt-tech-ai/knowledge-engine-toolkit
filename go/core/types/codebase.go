@@ -16,6 +16,10 @@ type File struct {
 	// Untracked marks a file that is present on disk but not yet tracked by the
 	// repository's version control (always false for a source without one).
 	Untracked bool
+
+	// Ignored marks an untracked file the repository's ignore rules exclude; only a
+	// selector with IncludeIgnored lists one.
+	Ignored bool
 }
 
 // FileSelector selects a subset of a repository's files. Every non-empty field narrows
@@ -44,13 +48,22 @@ type FileSelector struct {
 	// IncludeGenerated keeps generated Go files (a `Code generated … DO NOT EDIT.`
 	// header, or a generated name such as `*.pb.go`), which are dropped by default.
 	IncludeGenerated bool `yaml:"include_generated" json:"include_generated,omitempty"`
+
+	// IncludeIgnored also lists the files the repository's ignore rules exclude (a
+	// gitignored generated tier), looked up only under the selector's narrowest scope:
+	// its Paths, else its Roots, else its globs' literal directory prefixes. A source
+	// without ignore rules has none.
+	IncludeIgnored bool `yaml:"include_ignored" json:"include_ignored,omitempty"`
 }
 
 // IsZero reports whether s sets no field, so it is the default selector (every file
 // except generated Go files) rather than one a caller configured.
 func (s FileSelector) IsZero() bool {
 	return len(s.Roots) == 0 && len(s.Paths) == 0 && len(s.Globs) == 0 &&
-		len(s.Exts) == 0 && len(s.Exclude) == 0 && !s.TrackedOnly && !s.IncludeGenerated
+		len(
+			s.Exts,
+		) == 0 && len(s.Exclude) == 0 && !s.TrackedOnly && !s.IncludeGenerated &&
+		!s.IncludeIgnored
 }
 
 // Text is one file's contents.
