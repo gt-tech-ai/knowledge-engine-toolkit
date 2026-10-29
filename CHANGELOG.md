@@ -6,6 +6,19 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.29] - 2026-10-29
+
+Python: unchanged (`techai-webutils` 0.6.1).
+
+### Fixed
+
+- `foundation/schemagen` names each `$defs` entry by package path and type, with every
+  character outside `[A-Za-z0-9_.-]` mapped to `_`. A recursive type graph reflects by
+  reference, and two failures followed: a generic type's name carries its type
+  argument's import path, whose `/` split the JSON pointer of every `$ref` to it; and two
+  types of one name from two packages shared one definition, so a field validated
+  against the other type's schema.
+
 ## [0.0.28] - 2026-10-29
 
 Python: unchanged (`techai-webutils` 0.6.1).
