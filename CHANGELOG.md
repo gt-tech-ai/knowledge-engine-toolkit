@@ -6,6 +6,18 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.25] - 2026-10-28
+
+Python: unchanged (`techai-webutils` 0.6.1).
+
+### Added
+
+- Guard rows of kind `gen`: `gen:` names a generator (expanded from `each` like
+  `name`), `Deps.Generators` looks it up, and the row reports one finding per output
+  that is missing or out of date against a fresh render (`foundation/gen.Check`), the
+  state followed by the row's `message`. A row whose `files` select nothing checks
+  nothing, so a drift check is the generator's own check mode, named in data.
+
 ## [0.0.24] - 2026-10-28
 
 Python: unchanged (`techai-webutils` 0.6.1).

@@ -16,6 +16,10 @@ const (
 
 	// GuardGo runs the Go guard the product registers under the row's name.
 	GuardGo = "go"
+
+	// GuardGen renders the generator Gen names and compares its outputs with the
+	// committed files: one finding per missing or out-of-date output.
+	GuardGen = "gen"
 )
 
 // GuardRow is one repository check, as data.
@@ -54,6 +58,9 @@ type GuardRow struct {
 	// Func names the Go guard a GuardGo row runs; empty means Name, so one Go guard can
 	// serve several rows.
 	Func string `yaml:"func" json:"func,omitempty"`
+
+	// Gen names the generator a gen row checks; it expands `{placeholders}` like Name.
+	Gen string `yaml:"gen" json:"gen,omitempty"`
 
 	// Tool names the binary a GuardGo row shells, so the tool's version keys its cache.
 	Tool string `yaml:"tool" json:"tool,omitempty"`
