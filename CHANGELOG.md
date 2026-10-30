@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.30] - 2026-10-30
+
+Python: unchanged (`techai-webutils` 0.6.1).
+
 ### Added
 
 - `foundation/dataset` holds merged data to constraints written as data. `Dataset.Check`
