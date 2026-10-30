@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/stepcache"
 )
 
@@ -78,4 +79,42 @@ func TestFoundationStepcache_Kinds(t *testing.T) {
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	_, err = stepcache.NewFromConfig(stepcache.Config{Kind: stepcache.KindDir})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+}
+
+// TestFoundationStepcache_SaltPartitionsKeys tests that a salted dir cache only answers
+// for keys recorded under the same salt.
+//
+// Why this test is important:
+//   - a key covers a step's inputs and definition, not the code that judges them; a
+//     rebuilt checker (a guard whose logic changed) must not trust the passes its
+//     predecessor recorded, so the caller salts the cache with the checker's build.
+//
+// What it tests:
+//   - a key recorded under salt "a" hits under "a", misses under "b" and unsalted;
+//     BinarySalt is a stable hex SHA-256 of the running executable.
+func TestFoundationStepcache_SaltPartitionsKeys(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	root := t.TempDir()
+	key := stepcache.Key([]byte("a"), "v", nil)
+	open := func(salt string) interfaces.StepCache {
+		c, err := stepcache.NewFromConfig(stepcache.Config{
+			Kind: stepcache.KindDir, Dir: root, Salt: salt,
+		})
+		require.NoError(t, err)
+		return c
+	}
+	require.NoError(t, open("a").Record(ctx, key))
+	for salt, want := range map[string]bool{"a": true, "b": false, "": false} {
+		hit, err := open(salt).Hit(ctx, key)
+		require.NoError(t, err)
+		assert.Equal(t, want, hit, "salt %q", salt)
+	}
+
+	salt, err := stepcache.BinarySalt()
+	require.NoError(t, err)
+	assert.Regexp(t, `^[0-9a-f]{64}$`, salt)
+	again, err := stepcache.BinarySalt()
+	require.NoError(t, err)
+	assert.Equal(t, salt, again)
 }

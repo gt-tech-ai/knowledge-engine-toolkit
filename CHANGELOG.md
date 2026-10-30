@@ -6,6 +6,25 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.32] - 2026-10-30
+
+Python: unchanged (`techai-webutils` 0.6.2).
+
+### Added
+
+- `foundation/stepcache`: `Config.Salt` partitions a dir cache's keys, so a key recorded under
+  one salt never hits under another, and `BinarySalt` hashes the running executable. Salting
+  with the checker's build stops a rebuilt guard trusting the passes its predecessor recorded.
+
+### Fixed
+
+- A Go guard row's cache key covers the expanded row's whole definition, not just its name, and
+  a tool run's key covers the whole run, not just its name and arguments. Editing a row's rule,
+  data, environment or parser no longer replays a pass recorded under the old definition.
+- `foundation/report`: a console serializes its writes. Goroutines sharing one console, such as
+  a procedure's probes logging through the runner, raced on its writer and could interleave
+  half-written lines.
+
 ## [0.0.31] - 2026-10-30
 
 Python: `techai-webutils` 0.6.2.

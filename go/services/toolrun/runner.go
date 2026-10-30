@@ -7,6 +7,7 @@ package toolrun
 
 import (
 	"context"
+	"encoding/json"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -374,7 +375,8 @@ func expand(args, targets []string) []string {
 }
 
 // key is the step's cache key over its inputs' paths and contents, the tool's version,
-// the run's name, the target and the arguments; empty when the run has no inputs.
+// the run's whole definition (so an edited row misses), the target and the expanded
+// arguments; empty when the run has no inputs.
 func (r *runner) key(
 	ctx context.Context,
 	cb interfaces.Codebase,
@@ -393,8 +395,16 @@ func (r *runner) key(
 	if r.deps.Versions != nil {
 		version = r.deps.Versions(run.Tool)
 	}
+	def, err := json.Marshal(run)
+	if err != nil {
+		return "", apperr.Wrap(
+			err,
+			apperr.CodeInvalidInput,
+			"tool run "+run.Name+": cache key",
+		)
+	}
 	return stepcache.Key(digest, version,
-		append([]string{run.Name, target}, args...)), nil
+		append([]string{string(def), target}, args...)), nil
 }
 
 // withTarget returns sel with `{target}` replaced by target in its roots, paths and

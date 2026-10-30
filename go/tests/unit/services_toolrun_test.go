@@ -279,6 +279,49 @@ func TestServicesToolrun_Cache(t *testing.T) {
 	}
 }
 
+// TestServicesToolrun_RunEditMissesCache tests that a run's cache key covers the run's
+// whole definition.
+//
+// Why this test is important:
+//   - a run's environment, parser or advisory flag changes what a pass means as much as
+//     its arguments do; a key over the arguments alone replays the old verdict.
+//
+// What it tests:
+//   - a cached run edited only in its environment runs the tool again, and its own pass
+//     is then cached.
+func TestServicesToolrun_RunEditMissesCache(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	cache, err := stepcache.NewFromConfig(stepcache.Config{
+		Kind: stepcache.KindDir, Dir: t.TempDir(),
+	})
+	require.NoError(t, err)
+	runner := mocks.NewMockCommandRunner(ctrl)
+	runner.EXPECT().Exists("vet").Return(true).AnyTimes()
+	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "vet", gomock.Any()).
+		Return(interfaces.CmdResult{}).Times(1)
+	runner.EXPECT().RunBufferedWithEnv(
+		gomock.Any(), gomock.Any(), gomock.Any(), "vet", gomock.Any(),
+	).Return(interfaces.CmdResult{}).Times(1)
+	tr := newToolRunner(t, runner, toolOf(ctrl, "vet"), cache)
+	run := types.ToolRun{
+		Name: "vet", Verb: "lint", Tool: "vet", Args: []string{"."},
+		Each:   types.EachRun,
+		Inputs: types.FileSelector{Exts: []string{".go"}},
+	}
+	edited := run
+	edited.Env = []string{"GOFLAGS=-tags=e2e"}
+	cb := memoryCodebase(t, lintModules())
+	for i, r := range []types.ToolRun{run, run, edited, edited} {
+		res, err := tr.Run(t.Context(), cb, r, types.RunOptions{})
+		require.NoError(t, err)
+		want := []types.StepStatus{
+			types.StatusPass, types.StatusSkip, types.StatusPass, types.StatusSkip,
+		}[i]
+		assert.Equal(t, want, res[0].Status, "run %d", i)
+	}
+}
+
 // TestServicesToolrun_NoTargetsSkips tests a selector that selects nothing.
 //
 // Why this test is important:

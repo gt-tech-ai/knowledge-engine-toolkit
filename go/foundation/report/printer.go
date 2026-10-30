@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -49,9 +50,32 @@ type printer struct {
 	rich bool
 }
 
-// newPrinter returns a printer over w at level.
+// lockedWriter serializes writes to w, so the goroutines sharing a console (a
+// procedure's probes, a suite's fan-out) never race on it, and each styled block, written
+// in one call, lands whole.
+type lockedWriter struct {
+	// w receives the writes.
+	w io.Writer
+
+	// mu guards w.
+	mu sync.Mutex
+}
+
+// Write writes b to w under the lock.
+func (l *lockedWriter) Write(b []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(b) //nolint:wrapcheck // a pass-through writer
+}
+
+// newPrinter returns a printer over w at level; writes are serialized (lockedWriter).
 func newPrinter(w io.Writer, level Level, rich, color bool, hints []Hint) *printer {
-	p := &printer{w: w, rich: rich, pal: newPalette(color), hints: hints}
+	p := &printer{
+		w:     &lockedWriter{w: w},
+		rich:  rich,
+		pal:   newPalette(color),
+		hints: hints,
+	}
 	p.level.Store(int32(level))
 	return p
 }

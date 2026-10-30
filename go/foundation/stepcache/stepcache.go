@@ -8,6 +8,8 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"io"
+	"os"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -32,6 +34,12 @@ type Config struct {
 
 	// Dir is KindDir's directory, created on the first Record.
 	Dir string `yaml:"dir" mapstructure:"dir"`
+
+	// Salt partitions KindDir's keys: a key recorded under one salt never hits under
+	// another. A key covers a step's inputs and definition, not the code judging them, so
+	// a caller salts with that code's build (BinarySalt) to stop a rebuilt checker
+	// trusting its predecessor's passes. Empty is a salt of its own.
+	Salt string `yaml:"salt" mapstructure:"salt"`
 }
 
 // NewFromConfig builds the cache cfg.Kind selects. An unknown kind, or KindDir with no
@@ -44,7 +52,7 @@ func NewFromConfig(cfg Config) (interfaces.StepCache, error) {
 		if cfg.Dir == "" {
 			return nil, apperr.New(apperr.CodeInvalidInput, "stepcache dir: no directory")
 		}
-		return dir{root: cfg.Dir}, nil
+		return dir{root: cfg.Dir, salt: cfg.Salt}, nil
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"stepcache: unknown kind "+string(cfg.Kind))
@@ -92,4 +100,23 @@ func Digest(
 		h.Write([]byte{0})
 	}
 	return h.Sum(nil), nil
+}
+
+// BinarySalt is the hex SHA-256 of the running executable: the Config.Salt that ties
+// cached passes to the build that judged them.
+func BinarySalt() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: locate executable")
+	}
+	f, err := os.Open(exe)
+	if err != nil {
+		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: open "+exe)
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: read "+exe)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
