@@ -2,9 +2,7 @@ package dataset
 
 import (
 	"bytes"
-	"maps"
 	"reflect"
-	"slices"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -27,7 +25,7 @@ func (d *Dataset) Decode(out any) error {
 		)
 	}
 	fields := fieldsByKey(v.Elem().Type())
-	for _, key := range slices.Sorted(maps.Keys(d.sections)) {
+	for _, key := range d.keys() {
 		idx, ok := fields[key]
 		if !ok {
 			return apperr.New(apperr.CodeInvalidInput,
@@ -42,7 +40,11 @@ func (d *Dataset) Decode(out any) error {
 
 // decodeInto strictly decodes the section key into dst, a pointer to its field.
 func (d *Dataset) decodeInto(key string, dst any) error {
-	raw, err := yaml.Marshal(d.sections[key])
+	node, _, err := d.node(key)
+	if err != nil {
+		return err
+	}
+	raw, err := yaml.Marshal(node)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "re-encode section "+key)
 	}
