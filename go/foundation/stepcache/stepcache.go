@@ -40,10 +40,18 @@ type Config struct {
 	// a caller salts with that code's build (BinarySalt) to stop a rebuilt checker
 	// trusting its predecessor's passes. Empty is a salt of its own.
 	Salt string `yaml:"salt" mapstructure:"salt"`
+
+	// SaltDirs adds the paths and contents of every file under these directories to the
+	// salt (a missing one adds nothing): the configuration a checker reads beyond its
+	// own row.
+	SaltDirs []string `yaml:"salt_dirs" mapstructure:"salt_dirs"`
+
+	// SaltBinary adds the running executable's hash (BinarySalt) to the salt.
+	SaltBinary bool `yaml:"salt_binary" mapstructure:"salt_binary"`
 }
 
 // NewFromConfig builds the cache cfg.Kind selects. An unknown kind, or KindDir with no
-// Dir, is CodeInvalidInput. It does no I/O.
+// Dir, is CodeInvalidInput. It does no I/O: a dir cache derives its salt on first use.
 func NewFromConfig(cfg Config) (interfaces.StepCache, error) {
 	switch cfg.Kind {
 	case "", KindOff:
@@ -52,7 +60,7 @@ func NewFromConfig(cfg Config) (interfaces.StepCache, error) {
 		if cfg.Dir == "" {
 			return nil, apperr.New(apperr.CodeInvalidInput, "stepcache dir: no directory")
 		}
-		return dir{root: cfg.Dir, salt: cfg.Salt}, nil
+		return newDir(cfg), nil
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"stepcache: unknown kind "+string(cfg.Kind))

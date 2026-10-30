@@ -6,6 +6,17 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.33] - 2026-10-30
+
+Python: unchanged (`techai-webutils` 0.6.2).
+
+### Added
+
+- `foundation/stepcache`: `Config.SaltDirs` adds the paths and contents of every file under
+  these directories to a dir cache's salt, and `Config.SaltBinary` adds the running executable's
+  hash. A dir cache derives its salt once, on first `Hit` or `Record`, so building one does no
+  I/O and a command that never consults the cache never pays for the hashing.
+
 ## [0.0.32] - 2026-10-30
 
 Python: unchanged (`techai-webutils` 0.6.2).
