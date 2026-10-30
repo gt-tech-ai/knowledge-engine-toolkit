@@ -22,41 +22,8 @@ import (
 // ErrorCode represents application error codes.
 type ErrorCode string
 
-// Error codes.
+// Aliases of the error codes (codes.go), kept for callers that name them so.
 const (
-	// CodeUnknown is the fallback code for errors that are not AppErrors or carry no code.
-	CodeUnknown ErrorCode = "UNKNOWN"
-	// CodeInternal marks an unexpected server-side failure.
-	CodeInternal ErrorCode = "INTERNAL"
-	// CodeNotFound marks a missing resource.
-	CodeNotFound ErrorCode = "NOT_FOUND"
-	// CodeUnauthorized marks a missing or invalid authentication credential.
-	CodeUnauthorized ErrorCode = "UNAUTHORIZED"
-	// CodeForbidden marks an authenticated caller lacking permission for the action.
-	CodeForbidden ErrorCode = "FORBIDDEN"
-	// CodeInvalidInput marks a malformed or otherwise rejected request payload.
-	CodeInvalidInput ErrorCode = "INVALID_INPUT"
-	// CodeConflict marks a state conflict (e.g. a duplicate or concurrent modification).
-	CodeConflict ErrorCode = "CONFLICT"
-	// CodeTimeout marks an operation that exceeded its deadline.
-	CodeTimeout ErrorCode = "TIMEOUT"
-	// CodeCanceled marks an operation that was canceled by the caller.
-	CodeCanceled ErrorCode = "CANCELED"
-	// CodeUnavailable marks a temporarily unreachable dependency.
-	CodeUnavailable ErrorCode = "UNAVAILABLE"
-	// CodeIngestion marks a failure in the document ingestion pipeline.
-	CodeIngestion ErrorCode = "INGESTION_ERROR"
-	// CodeQualityFailed marks a failed quality gate.
-	CodeQualityFailed ErrorCode = "QUALITY_FAILED"
-	// CodeUpstream marks a failure originating in an upstream dependency.
-	CodeUpstream ErrorCode = "UPSTREAM"
-	// CodeResourceExhausted marks a request rejected because a quota or budget is
-	// spent. It is neither transient (retrying before the window resets only burns
-	// the quota check) nor permanent (the request succeeds once the window resets).
-	CodeResourceExhausted ErrorCode = "RESOURCE_EXHAUSTED"
-
-	// Aliases for compatibility with classify.go
-
 	// ErrUnknown aliases CodeUnknown.
 	ErrUnknown = CodeUnknown
 	// ErrInternal aliases CodeInternal.

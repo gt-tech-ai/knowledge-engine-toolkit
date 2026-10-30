@@ -6,6 +6,37 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.31] - 2026-10-30
+
+Python: `techai-webutils` 0.6.2.
+
+### Added
+
+- `taxonomy/error-codes.yaml` is the one source of the error-code taxonomy: each code's wire
+  value, Go name, doc, HTTP status, gRPC status, retry class, client-safe message, and
+  whether the REST or Python gRPC edge replaces the error's own message.
+  `go generate ./go/core/errors/...` runs `go/tools/errcodes`, a `Generator`, to render it into
+  Go `core/errors/codes.go` and Python `core/errors/codes.py`. `TestErrcodes_*` in the Go unit
+  suite fails when a committed output differs from a fresh render, or the taxonomy is invalid.
+- Go `core/errors`: `Codes()` lists every code in taxonomy order; `GRPCStatus`, `SafeMessage`
+  and `HidesMessage` read a code's gRPC status, client-safe message and REST message policy.
+- Python `core/errors/codes`: `GRPC_STATUS`, `HTTP_STATUS`, `TRANSIENT`, `PERMANENT`,
+  `SAFE_MESSAGE`, `HIDDEN_MESSAGE` and `FIXED_CLIENT_MESSAGE`.
+
+### Changed
+
+- Every per-code fact is read from the rendered taxonomy instead of a hand-written switch or
+  map: Go `IsTransient`, `IsPermanent`, `ToHTTPStatus`, `clients/rpc/wire.Code` and
+  `SafeMessage`, and the REST controller's message policy; Python `AppError`'s properties,
+  `classify_error`, and the REST and gRPC controllers' maps. No code's status, retry class or
+  message changes.
+- Python `ErrorCode` members iterate in taxonomy order, the order of Go's constants.
+
+### Removed
+
+- `go/core/errors/testdata/codes.json` and the Go and Python tests that compared each
+  language's maps against it: both languages now render from one source.
+
 ## [0.0.30] - 2026-10-30
 
 Python: unchanged (`techai-webutils` 0.6.1).

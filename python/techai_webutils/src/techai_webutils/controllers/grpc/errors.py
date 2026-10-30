@@ -1,7 +1,7 @@
 """Domain error to gRPC status code mapper.
 
-Mirrors Go's ``go/transport/rpc/errors.go`` ``ToConnectError()``.
-Maps ``AppError`` codes to gRPC status codes using client-safe messages.
+Maps ``AppError`` codes to gRPC status codes and client-safe messages from the error-code
+taxonomy (``core/errors/codes.py``), the same source as Go's ``clients/rpc/wire``.
 """
 
 from __future__ import annotations
@@ -10,56 +10,37 @@ from typing import TYPE_CHECKING
 
 import grpc
 
+from techai_webutils.core.errors.codes import (
+    FIXED_CLIENT_MESSAGE,
+    GRPC_STATUS,
+    SAFE_MESSAGE,
+)
 from techai_webutils.core.errors.errors import AppError, ErrorCode
 
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.logger import Logger
 
+_STATUS_BY_NUMBER: dict[int, grpc.StatusCode] = {s.value[0]: s for s in grpc.StatusCode}
+"""Every gRPC status code by its number."""
+
 _CODE_MAP: dict[ErrorCode, grpc.StatusCode] = {
-    ErrorCode.NOT_FOUND: grpc.StatusCode.NOT_FOUND,
-    ErrorCode.INVALID_INPUT: grpc.StatusCode.INVALID_ARGUMENT,
-    ErrorCode.CONFLICT: grpc.StatusCode.ALREADY_EXISTS,
-    ErrorCode.UNAUTHORIZED: grpc.StatusCode.UNAUTHENTICATED,
-    ErrorCode.FORBIDDEN: grpc.StatusCode.PERMISSION_DENIED,
-    ErrorCode.TIMEOUT: grpc.StatusCode.DEADLINE_EXCEEDED,
-    ErrorCode.UNAVAILABLE: grpc.StatusCode.UNAVAILABLE,
-    ErrorCode.INTERNAL: grpc.StatusCode.INTERNAL,
-    ErrorCode.CANCELED: grpc.StatusCode.CANCELLED,
-    ErrorCode.UPSTREAM: grpc.StatusCode.UNAVAILABLE,
-    ErrorCode.RESOURCE_EXHAUSTED: grpc.StatusCode.RESOURCE_EXHAUSTED,
+    code: _STATUS_BY_NUMBER[number] for code, number in GRPC_STATUS.items()
 }
 """Maps each domain ``ErrorCode`` to the gRPC status code returned to clients.
 
-UNKNOWN, INGESTION_ERROR and QUALITY_FAILED are not listed; they ride the INTERNAL default in
-``to_grpc_status``, matching Go's ``Sanitize`` default (``connect.CodeInternal``).
+The taxonomy's ``GRPC_STATUS`` (``core/errors/codes.py``), the same source as Go's
+``wire.Code``; a code it does not declare rides the INTERNAL default in ``to_grpc_status``.
 """
 
 _FIXED_CLIENT_MESSAGE: dict[ErrorCode, str] = {
-    ErrorCode.UPSTREAM: "upstream service unavailable",
-    ErrorCode.CANCELED: "request canceled",
-    ErrorCode.RESOURCE_EXHAUSTED: "resource exhausted",
+    code: SAFE_MESSAGE[code] for code in FIXED_CLIENT_MESSAGE
 }
 """Codes whose client-facing message is a fixed string rather than the raw error text.
 
-These mirror the exact fixed messages Go's ``Sanitize`` returns for ``CodeUpstream``,
-``CodeCanceled`` and ``CodeResourceExhausted`` in ``go/transport/rpc/errors.go`` -- the fixed string strips any provider or
-implementation detail that must never reach a client (the raw text is still recorded server-side).
+The taxonomy's ``fixed_client_message`` codes, each answered with its ``SAFE_MESSAGE``: the
+fixed string strips any provider or implementation detail that must never reach a client
+(the raw text is still recorded server-side).
 """
-
-
-_SAFE_MESSAGE: dict[ErrorCode, str] = {
-    ErrorCode.NOT_FOUND: "resource not found",
-    ErrorCode.INVALID_INPUT: "invalid input",
-    ErrorCode.CONFLICT: "resource already exists",
-    ErrorCode.UNAUTHORIZED: "unauthenticated",
-    ErrorCode.FORBIDDEN: "permission denied",
-    ErrorCode.UPSTREAM: "upstream service unavailable",
-    ErrorCode.UNAVAILABLE: "service unavailable",
-    ErrorCode.CANCELED: "request canceled",
-    ErrorCode.TIMEOUT: "deadline exceeded",
-    ErrorCode.RESOURCE_EXHAUSTED: "resource exhausted",
-}
-"""Each code's client-safe message (Go ``clients/rpc/wire.SafeMessage``); any other is internal."""
 
 
 def safe_status(err: AppError) -> tuple[grpc.StatusCode, str]:
@@ -69,7 +50,7 @@ def safe_status(err: AppError) -> tuple[grpc.StatusCode, str]:
     its own text never reaches the caller (Go ``wire.SanitizeGRPC``).
     """
     code = _CODE_MAP.get(err.code, grpc.StatusCode.INTERNAL)
-    return code, _SAFE_MESSAGE.get(err.code, "internal error")
+    return code, SAFE_MESSAGE.get(err.code, "internal error")
 
 
 def to_grpc_status(

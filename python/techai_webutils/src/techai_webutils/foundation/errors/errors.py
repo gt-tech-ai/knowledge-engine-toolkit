@@ -11,15 +11,16 @@ from __future__ import annotations
 
 from typing import Self
 
+from techai_webutils.core.errors.codes import PERMANENT, TRANSIENT
 from techai_webutils.core.errors.errors import AppError, ErrorCode, IngestionError
 
 
 def classify_error(err: BaseException) -> str:
     """Classify an error as transient, permanent, internal, or unknown.
 
-    The transient and permanent sets mirror Go's ``IsTransient`` / ``IsPermanent`` in
-    ``go/core/errors/classify.go``. Go classifies none of the remaining codes, so the
-    server-side-failure codes (INTERNAL and the pipeline/dependency codes) are grouped as
+    The transient and permanent sets are the taxonomy's (``core/errors/codes.py``), the
+    same source as Go's ``IsTransient`` / ``IsPermanent``. Go classifies none of the
+    remaining codes, so the server-side-failure codes (INTERNAL and the pipeline/dependency codes) are grouped as
     "internal" and the rest fall through to "unknown".
 
     Args:
@@ -32,15 +33,9 @@ def classify_error(err: BaseException) -> str:
     if not isinstance(err, AppError):
         return "unknown"
 
-    if err.code in {ErrorCode.TIMEOUT, ErrorCode.UNAVAILABLE}:
+    if err.code in TRANSIENT:
         return "transient"
-    if err.code in {
-        ErrorCode.NOT_FOUND,
-        ErrorCode.INVALID_INPUT,
-        ErrorCode.UNAUTHORIZED,
-        ErrorCode.FORBIDDEN,
-        ErrorCode.CONFLICT,
-    }:
+    if err.code in PERMANENT:
         return "permanent"
     # Server-side failures: the base internal error, the two pipeline-failure codes, and an
     # upstream-dependency failure. UPSTREAM is intentionally NOT transient -- Go's classify.go

@@ -78,33 +78,7 @@ func FromError(err error) error {
 
 // Code maps a domain code to its wire status — the inverse of FromError's table.
 func Code(code apperr.ErrorCode) connect.Code {
-	switch code {
-	case apperr.CodeNotFound:
-		return connect.CodeNotFound
-	case apperr.CodeInvalidInput:
-		return connect.CodeInvalidArgument
-	case apperr.CodeConflict:
-		return connect.CodeAlreadyExists
-	case apperr.CodeUnauthorized:
-		return connect.CodeUnauthenticated
-	case apperr.CodeForbidden:
-		return connect.CodePermissionDenied
-	case apperr.CodeUpstream, apperr.CodeUnavailable:
-		return connect.CodeUnavailable
-	case apperr.CodeCanceled:
-		return connect.CodeCanceled
-	case apperr.CodeTimeout:
-		return connect.CodeDeadlineExceeded
-	case apperr.CodeResourceExhausted:
-		return connect.CodeResourceExhausted
-	case apperr.CodeUnknown,
-		apperr.CodeInternal,
-		apperr.CodeIngestion,
-		apperr.CodeQualityFailed:
-		return connect.CodeInternal
-	default:
-		return connect.CodeInternal
-	}
+	return connect.Code(apperr.GRPCStatus(code))
 }
 
 // grpcStatus is a gRPC status error.
