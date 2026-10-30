@@ -1,90 +1,42 @@
-"""Structured error taxonomy matching the Go error package.
+"""Application errors over the shared error-code taxonomy.
 
-Error codes map to identical gRPC status codes in both Go and Python,
-ensuring consistent error handling across both languages.
+``ErrorCode`` and its gRPC, HTTP and retry facts are rendered from
+``taxonomy/error-codes.yaml`` into ``codes.py``, the same source as Go's
+``go/core/errors/codes.go``, so both languages classify every code alike.
 """
 
-from enum import StrEnum
+from techai_webutils.core.errors.codes import (
+    GRPC_STATUS,
+    HTTP_STATUS,
+    PERMANENT,
+    TRANSIENT,
+    ErrorCode,
+)
 
+__all__ = [
+    "AppError",
+    "AppFileNotFoundError",
+    "AppRuntimeError",
+    "AppTimeoutError",
+    "AppTypeError",
+    "AppValueError",
+    "ConflictError",
+    "ErrorCode",
+    "ForbiddenError",
+    "IngestionError",
+    "InternalError",
+    "InvalidInputError",
+    "NotFoundError",
+    "QuotaExceededError",
+    "UnauthorizedError",
+    "UnavailableError",
+]
 
-class ErrorCode(StrEnum):
-    """Error codes shared between Go and Python services."""
+_GRPC_INTERNAL = 13
+"""gRPC INTERNAL, the status of a code the taxonomy does not declare."""
 
-    NOT_FOUND = "NOT_FOUND"
-    """Requested resource does not exist (HTTP 404 / gRPC NOT_FOUND); terminal, not retryable."""
-    INVALID_INPUT = "INVALID_INPUT"
-    """Request failed validation (HTTP 400 / gRPC INVALID_ARGUMENT); terminal, not retryable."""
-    UNAUTHORIZED = "UNAUTHORIZED"
-    """Authentication missing or token invalid (HTTP 401 / gRPC UNAUTHENTICATED); terminal."""
-    FORBIDDEN = "FORBIDDEN"
-    """Authenticated but lacking permission for the action (HTTP 403 / gRPC PERMISSION_DENIED)."""
-    CONFLICT = "CONFLICT"
-    """Resource already exists or version mismatch (HTTP 409 / gRPC ALREADY_EXISTS); terminal."""
-    INTERNAL = "INTERNAL"
-    """Unexpected server-side failure (HTTP 500 / gRPC INTERNAL); terminal, not retryable."""
-    TIMEOUT = "TIMEOUT"
-    """Operation exceeded its deadline (HTTP 504 / gRPC DEADLINE_EXCEEDED); transient, retryable."""
-    UNAVAILABLE = "UNAVAILABLE"
-    """Dependency temporarily unreachable (HTTP 503 / gRPC UNAVAILABLE); transient, retryable."""
-    UNKNOWN = "UNKNOWN"
-    """Fallback for errors that are not AppErrors or carry no code (HTTP 500 / gRPC INTERNAL; message hidden at both edges)."""
-    CANCELED = "CANCELED"
-    """Operation canceled by the caller (HTTP 500 / gRPC CANCELLED)."""
-    INGESTION_ERROR = "INGESTION_ERROR"
-    """Failure in the document ingestion pipeline (HTTP 500 / gRPC INTERNAL)."""
-    QUALITY_FAILED = "QUALITY_FAILED"
-    """Quality gate failed (HTTP 500 / gRPC INTERNAL)."""
-    UPSTREAM = "UPSTREAM"
-    """Failure originating in an upstream dependency (HTTP 502 / gRPC UNAVAILABLE)."""
-    RESOURCE_EXHAUSTED = "RESOURCE_EXHAUSTED"
-    """A quota or budget is spent (HTTP 429 / gRPC RESOURCE_EXHAUSTED); neither transient nor permanent.
-
-    Retrying inside the quota window only burns another quota check, so it is not transient; the
-    request succeeds once the window resets, so it is not permanent either.
-    """
-
-
-# gRPC status code mapping (mirrors Go's Sanitize in go/transport/rpc/errors.go)
-_GRPC_STATUS_MAP: dict[ErrorCode, int] = {
-    ErrorCode.NOT_FOUND: 5,  # NOT_FOUND
-    ErrorCode.INVALID_INPUT: 3,  # INVALID_ARGUMENT
-    ErrorCode.UNAUTHORIZED: 16,  # UNAUTHENTICATED
-    ErrorCode.FORBIDDEN: 7,  # PERMISSION_DENIED
-    ErrorCode.CONFLICT: 6,  # ALREADY_EXISTS
-    ErrorCode.INTERNAL: 13,  # INTERNAL
-    ErrorCode.TIMEOUT: 4,  # DEADLINE_EXCEEDED
-    ErrorCode.UNAVAILABLE: 14,  # UNAVAILABLE
-    ErrorCode.UNKNOWN: 13,  # INTERNAL (Go Sanitize maps CodeUnknown to CodeInternal via its default)
-    ErrorCode.CANCELED: 1,  # CANCELLED (Go Sanitize)
-    ErrorCode.INGESTION_ERROR: 13,  # INTERNAL (Go Sanitize default)
-    ErrorCode.QUALITY_FAILED: 13,  # INTERNAL (Go Sanitize default)
-    ErrorCode.UPSTREAM: 14,  # UNAVAILABLE (Go Sanitize)
-    ErrorCode.RESOURCE_EXHAUSTED: 8,  # RESOURCE_EXHAUSTED (Go Sanitize)
-}
-"""Maps each ErrorCode to its gRPC status code (mirrors Go's Sanitize in go/transport/rpc/errors.go).
-
-Every ErrorCode is listed explicitly; the ``grpc_status`` fallback below is only a defensive guard
-for a future, unmapped code (it returns INTERNAL, mirroring Go's Sanitize default).
-"""
-
-# HTTP status code mapping (matches Go's ToHTTPStatus)
-_HTTP_STATUS_MAP: dict[ErrorCode, int] = {
-    ErrorCode.NOT_FOUND: 404,
-    ErrorCode.INVALID_INPUT: 400,
-    ErrorCode.UNAUTHORIZED: 401,
-    ErrorCode.FORBIDDEN: 403,
-    ErrorCode.CONFLICT: 409,
-    ErrorCode.INTERNAL: 500,
-    ErrorCode.TIMEOUT: 504,
-    ErrorCode.UNAVAILABLE: 503,
-    ErrorCode.UPSTREAM: 502,  # BadGateway (Go classify.go ToHTTPStatus)
-    ErrorCode.RESOURCE_EXHAUSTED: 429,  # TooManyRequests (Go classify.go ToHTTPStatus)
-}
-"""Maps each ErrorCode to its canonical HTTP status code (matches Go's ToHTTPStatus).
-
-UNKNOWN, CANCELED, INGESTION_ERROR and QUALITY_FAILED ride the 500 default below, matching
-Go's classify.go ToHTTPStatus default (StatusInternalServerError).
-"""
+_HTTP_INTERNAL = 500
+"""HTTP 500, the status of a code the taxonomy does not declare."""
 
 
 class AppError(Exception):
@@ -107,30 +59,22 @@ class AppError(Exception):
     @property
     def grpc_status(self) -> int:
         """The corresponding gRPC status code."""
-        return _GRPC_STATUS_MAP.get(
-            self.code, 13
-        )  # INTERNAL (Go Sanitize default; all codes are mapped)
+        return GRPC_STATUS.get(self.code, _GRPC_INTERNAL)
 
     @property
     def http_status(self) -> int:
         """The corresponding HTTP status code."""
-        return _HTTP_STATUS_MAP.get(self.code, 500)
+        return HTTP_STATUS.get(self.code, _HTTP_INTERNAL)
 
     @property
     def is_transient(self) -> bool:
         """Whether this error may succeed on retry."""
-        return self.code in {ErrorCode.TIMEOUT, ErrorCode.UNAVAILABLE}
+        return self.code in TRANSIENT
 
     @property
     def is_permanent(self) -> bool:
         """Whether this error will not succeed on retry."""
-        return self.code in {
-            ErrorCode.NOT_FOUND,
-            ErrorCode.INVALID_INPUT,
-            ErrorCode.UNAUTHORIZED,
-            ErrorCode.FORBIDDEN,
-            ErrorCode.CONFLICT,
-        }
+        return self.code in PERMANENT
 
     def __repr__(self) -> str:
         """Return an unambiguous representation including the code and message."""

@@ -60,17 +60,8 @@ func (c *BaseController) WriteError(w http.ResponseWriter, err error) {
 	var appErr *apperr.AppError
 	if apperr.As(err, &appErr) {
 		response.Code = string(appErr.Code)
-		// Only expose details for client-facing error codes
-		switch appErr.Code {
-		case apperr.CodeInternal, apperr.CodeUnknown:
-			// Don't leak internal error details
-		case apperr.CodeNotFound, apperr.CodeUnauthorized, apperr.CodeForbidden,
-			apperr.CodeInvalidInput, apperr.CodeConflict, apperr.CodeTimeout,
-			apperr.CodeCanceled, apperr.CodeUnavailable, apperr.CodeIngestion,
-			apperr.CodeQualityFailed, apperr.CodeUpstream, apperr.CodeResourceExhausted:
-			response.Error = appErr.Message
-			response.Details = appErr.Message
-		default:
+		// Expose the message unless the code hides it (taxonomy hide_message).
+		if !apperr.HidesMessage(appErr.Code) {
 			response.Error = appErr.Message
 			response.Details = appErr.Message
 		}

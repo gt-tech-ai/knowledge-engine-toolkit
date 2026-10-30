@@ -430,9 +430,15 @@ documented exception: the logger's deploy-time `GIT_SHA` (mirrored in Python).
 
 ## Error codes
 
-Every error crossing a package boundary carries an `ErrorCode`. Go `go/core/errors` defines the
-codes (`NOT_FOUND`, `INVALID_INPUT`, `UNAUTHORIZED`, `FORBIDDEN`, `CONFLICT`, `TIMEOUT`,
-`UNAVAILABLE`, `UPSTREAM`, `RESOURCE_EXHAUSTED`, `INTERNAL`, …); `New(code, msg)` / `Wrap(err, code, msg)` build an
+Every error crossing a package boundary carries an `ErrorCode`. The codes (`NOT_FOUND`,
+`INVALID_INPUT`, `UNAUTHORIZED`, `FORBIDDEN`, `CONFLICT`, `TIMEOUT`, `UNAVAILABLE`, `UPSTREAM`,
+`RESOURCE_EXHAUSTED`, `INTERNAL`, …) and every fact derived from one — its HTTP status, gRPC
+status, retry class, client-safe message and whether an edge hides its message — have one source,
+`taxonomy/error-codes.yaml`. `go generate ./go/core/errors/...` (`go/tools/errcodes`) renders it
+into Go `go/core/errors/codes.go` (the constants, `Codes()` and the lookup behind `IsTransient`,
+`ToHTTPStatus`, `GRPCStatus`, `SafeMessage` and `HidesMessage`) and Python
+`core/errors/codes.py` (the `ErrorCode` enum and its maps and sets); the Go unit suite fails when
+either committed output differs from a fresh render. `New(code, msg)` / `Wrap(err, code, msg)` build an
 `*AppError` keeping cause and origin stack; `Code(err)` / `Is(err, code)` read it. Production code
 under `go/` has no `fmt.Errorf`; `.golangci.yml` bans it via `forbidigo`.
 
@@ -444,9 +450,9 @@ which maps codes and captures the real cause for the request log). Python raises
 and `http_status` derive from the code, retries retry only transient `AppError`s, and boundary
 helpers translate SDK errors (`foundation/resilience/grpc_boundary.py`,
 `foundation/resilience/aws_boundary.py`). `RESOURCE_EXHAUSTED` (a spent quota, HTTP 429 / gRPC 8) is
-neither transient nor permanent, so no retry layer in either language retries it. The committed
-`go/core/errors/testdata/codes.json` pins every code's `{grpc, http, transient, permanent}` row; the
-Go suite regenerates it and the Python suite compares against it.
+neither transient nor permanent, so no retry layer in either language retries it. Policies that
+are not facts of a code stay hand-written beside their use: the retry policy, the principal
+interceptor's status for an unresolvable caller, and the command-line exit codes.
 
 ## Stub-first backends
 

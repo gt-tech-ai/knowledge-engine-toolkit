@@ -1,0 +1,135 @@
+# The error-code taxonomy: the one source of every ErrorCode and the facts derived from it.
+#
+# `go generate ./go/core/errors/...` renders it (go/tools/errcodes) into
+# go/core/errors/codes.go and python/techai_webutils/src/techai_webutils/core/errors/codes.py;
+# the Go unit suite fails when either committed file differs from a fresh render. Edit this
+# file, never the outputs.
+#
+# Each row:
+#   code                  the wire value, shared by both languages
+#   go                    the Go constant's name
+#   doc                   a noun phrase: what the code means (a sentence of its own in `note`)
+#   http                  the HTTP status an edge returns
+#   grpc                  the gRPC / Connect status name an edge returns
+#   retry                 transient (a retry may succeed), permanent (it never will) or none
+#   safe_message          the fixed client-safe message an RPC edge sends; empty means the
+#                         language's generic internal message
+#   hide_message          the REST edge hides the error's own message
+#   fixed_client_message  the Python gRPC edge replaces the error's own message with
+#                         safe_message (the other non-internal codes send their own message)
+codes:
+  - code: UNKNOWN
+    go: CodeUnknown
+    doc: the fallback for an error that is not an AppError or carries no code
+    http: 500
+    grpc: INTERNAL
+    retry: none
+    hide_message: true
+
+  - code: INTERNAL
+    go: CodeInternal
+    doc: an unexpected server-side failure
+    http: 500
+    grpc: INTERNAL
+    retry: none
+    hide_message: true
+
+  - code: NOT_FOUND
+    go: CodeNotFound
+    doc: a missing resource
+    http: 404
+    grpc: NOT_FOUND
+    retry: permanent
+    safe_message: resource not found
+
+  - code: UNAUTHORIZED
+    go: CodeUnauthorized
+    doc: a missing or invalid authentication credential
+    http: 401
+    grpc: UNAUTHENTICATED
+    retry: permanent
+    safe_message: unauthenticated
+
+  - code: FORBIDDEN
+    go: CodeForbidden
+    doc: an authenticated caller lacking permission for the action
+    http: 403
+    grpc: PERMISSION_DENIED
+    retry: permanent
+    safe_message: permission denied
+
+  - code: INVALID_INPUT
+    go: CodeInvalidInput
+    doc: a malformed or otherwise rejected request payload
+    http: 400
+    grpc: INVALID_ARGUMENT
+    retry: permanent
+    safe_message: invalid input
+
+  - code: CONFLICT
+    go: CodeConflict
+    doc: a state conflict, such as a duplicate or a concurrent modification
+    http: 409
+    grpc: ALREADY_EXISTS
+    retry: permanent
+    safe_message: resource already exists
+
+  - code: TIMEOUT
+    go: CodeTimeout
+    doc: an operation that exceeded its deadline
+    http: 504
+    grpc: DEADLINE_EXCEEDED
+    retry: transient
+    safe_message: deadline exceeded
+
+  - code: CANCELED
+    go: CodeCanceled
+    doc: an operation the caller canceled
+    http: 500
+    grpc: CANCELLED
+    retry: none
+    safe_message: request canceled
+    fixed_client_message: true
+
+  - code: UNAVAILABLE
+    go: CodeUnavailable
+    doc: a temporarily unreachable dependency
+    http: 503
+    grpc: UNAVAILABLE
+    retry: transient
+    safe_message: service unavailable
+
+  - code: INGESTION_ERROR
+    go: CodeIngestion
+    doc: a failure in the document ingestion pipeline
+    http: 500
+    grpc: INTERNAL
+    retry: none
+
+  - code: QUALITY_FAILED
+    go: CodeQualityFailed
+    doc: a failed quality gate
+    http: 500
+    grpc: INTERNAL
+    retry: none
+
+  - code: UPSTREAM
+    go: CodeUpstream
+    doc: a failure originating in an upstream dependency
+    http: 502
+    grpc: UNAVAILABLE
+    retry: none
+    safe_message: upstream service unavailable
+    fixed_client_message: true
+
+  - code: RESOURCE_EXHAUSTED
+    go: CodeResourceExhausted
+    doc: a request rejected because a quota or budget is spent
+    note: >-
+      It is neither transient (retrying before the window resets only burns the quota check)
+      nor permanent (the request succeeds once the window resets).
+    http: 429
+    grpc: RESOURCE_EXHAUSTED
+    retry: none
+    safe_message: resource exhausted
+    fixed_client_message: true

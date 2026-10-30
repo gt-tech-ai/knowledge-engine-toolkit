@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from techai_webutils.core.errors.errors import AppError, ErrorCode
+from techai_webutils.core.errors.codes import HIDDEN_MESSAGE
+from techai_webutils.core.errors.errors import AppError
 
 
 @dataclass
@@ -24,12 +25,12 @@ class ErrorResponse:
 
 
 # Error codes whose messages should not be exposed to clients
-_INTERNAL_CODES = frozenset({ErrorCode.INTERNAL, ErrorCode.UNKNOWN})
+_INTERNAL_CODES = HIDDEN_MESSAGE
 """Error codes whose messages are hidden from clients (only a generic message is returned).
 
-Mirrors Go's ``WriteError`` in ``go/transport/rest/controller.go``, which hides the message for
-``CodeInternal`` and ``CodeUnknown`` only; every other code (INGESTION_ERROR, QUALITY_FAILED,
-UPSTREAM, NOT_FOUND, ...) exposes its message as both ``error`` and ``details``.
+The taxonomy's ``hide_message`` codes, the same set Go's ``WriteError`` hides through
+``apperr.HidesMessage``; every other code exposes its message as both ``error`` and
+``details``.
 """
 
 

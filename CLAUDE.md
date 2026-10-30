@@ -183,8 +183,9 @@ tier out in the framework's interceptor shape.
 - SDK errors are translated to coded errors at the client boundary
   (`foundation/resilience/{grpc,aws}_boundary.py`, `clients/rpc/wire`). Messages are sanitized at
   the transport edge.
-- `go/core/errors/testdata/codes.json` pins each code's gRPC/HTTP/transient row for both
-  languages.
+- `taxonomy/error-codes.yaml` is the one source of every code and its HTTP, gRPC, retry and
+  message facts; `go generate ./go/core/errors/...` renders Go `codes.go` and Python
+  `codes.py`, and the Go unit suite fails on drift. Edit the YAML, never the outputs.
 
 ## Pattern 8: config selects, the composition root injects
 
