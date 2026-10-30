@@ -7,7 +7,8 @@ import (
 	"go/format"
 	"strconv"
 	"strings"
-	"text/template"
+	// The templates render Go and Python source, never HTML, so text/template is correct.
+	"text/template" // nosemgrep: import-text-template
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
