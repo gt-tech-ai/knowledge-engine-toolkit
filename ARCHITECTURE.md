@@ -558,8 +558,9 @@ CLIs), so each one does not re-walk the tree or re-implement a runner.
   or one over all of them, fix arguments, and the parser that turns its output into a verdict
   (`services/toolrun/parsers`). `foundation/stepcache` skips a step whose inputs a previous pass
   already covered. The key covers the inputs, the tool's version and the row's whole definition;
-  a caller salts the cache with the checker's build (`Config.Salt`, `BinarySalt`) so a rebuilt
-  checker misses too.
+  a caller salts the cache with the checker's build and the configuration it reads
+  (`Config.SaltBinary`, `SaltDirs`), derived on first use, so a rebuilt or reconfigured checker
+  misses too.
 - **Reports.** `foundation/report` renders a gate's steps as lines, tables, GitHub Actions
   annotations or JSON (`report.Composite` fans out). The line reporter prints a status line
   per phase, a failure block (each failed step's actionable output lines and a configured

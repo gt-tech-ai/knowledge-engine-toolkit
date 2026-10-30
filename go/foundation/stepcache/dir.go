@@ -3,8 +3,10 @@ package stepcache
 import (
 	"context"
 	"encoding/hex"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
@@ -12,11 +14,56 @@ import (
 // dir records each passed key as an empty marker file named by the key, or by the
 // key's hash under the salt when there is one.
 type dir struct {
+	// salt derives the salt partitioning the keys once, on first use (Config.Salt,
+	// SaltDirs, SaltBinary); empty when none is configured.
+	salt func() (string, error)
+
 	// root holds the marker files.
 	root string
+}
 
-	// salt partitions the keys (Config.Salt).
-	salt string
+// newDir returns the dir cache cfg configures, its salt derived lazily.
+func newDir(cfg Config) dir {
+	return dir{root: cfg.Dir, salt: sync.OnceValues(func() (string, error) {
+		return deriveSalt(cfg)
+	})}
+}
+
+// deriveSalt is cfg's salt: Config.Salt, then the executable's hash under SaltBinary,
+// then each salt dir's file paths and contents in walk order, keyed together; just
+// Config.Salt when nothing else is configured.
+func deriveSalt(cfg Config) (string, error) {
+	if !cfg.SaltBinary && len(cfg.SaltDirs) == 0 {
+		return cfg.Salt, nil
+	}
+	parts := []string{cfg.Salt}
+	if cfg.SaltBinary {
+		bin, err := BinarySalt()
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, bin)
+	}
+	for _, root := range cfg.SaltDirs {
+		err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+			switch {
+			case os.IsNotExist(err) && p == root:
+				return filepath.SkipDir
+			case err != nil || d.IsDir():
+				return err
+			}
+			b, err := os.ReadFile(p) //nolint:gosec // G304: a configured salt dir's file
+			if err != nil {
+				return err //nolint:wrapcheck // wrapped once below
+			}
+			parts = append(parts, filepath.ToSlash(p), string(b))
+			return nil
+		})
+		if err != nil {
+			return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: hash "+root)
+		}
+	}
+	return Key(nil, "", parts), nil
 }
 
 // Hit reports whether key's marker exists.
@@ -64,8 +111,12 @@ func (d dir) path(key string) (string, error) {
 	if b, err := hex.DecodeString(key); err != nil || len(b) != 32 {
 		return "", apperr.New(apperr.CodeInvalidInput, "stepcache: malformed key "+key)
 	}
-	if d.salt != "" {
-		key = Key([]byte(d.salt), "", []string{key})
+	salt, err := d.salt()
+	if err != nil {
+		return "", err
+	}
+	if salt != "" {
+		key = Key([]byte(salt), "", []string{key})
 	}
 	return filepath.Join(d.root, key), nil
 }

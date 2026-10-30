@@ -1,6 +1,7 @@
 package unit_test
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -117,4 +118,44 @@ func TestFoundationStepcache_SaltPartitionsKeys(t *testing.T) {
 	again, err := stepcache.BinarySalt()
 	require.NoError(t, err)
 	assert.Equal(t, salt, again)
+}
+
+// TestFoundationStepcache_SaltDirsAndBinary tests the dir cache's derived salts.
+//
+// Why this test is important:
+//   - a checker reads configuration beyond its own row, so editing a file under a salt
+//     dir must miss every recorded pass; and a command that never consults the cache
+//     must not pay for hashing the binary and those dirs.
+//
+// What it tests:
+//   - a key recorded under salt_binary and a salt dir hits again unchanged and misses
+//     once a file in the dir changes; building the cache over a missing salt dir is no
+//     error until the cache is used.
+func TestFoundationStepcache_SaltDirsAndBinary(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	root, policy := t.TempDir(), t.TempDir()
+	file := filepath.Join(policy, "rules.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("max: 1\n"), 0o600))
+	key := stepcache.Key([]byte("a"), "v", nil)
+	open := func(dirs ...string) interfaces.StepCache {
+		c, err := stepcache.NewFromConfig(stepcache.Config{
+			Kind: stepcache.KindDir, Dir: root, SaltBinary: true, SaltDirs: dirs,
+		})
+		require.NoError(t, err)
+		return c
+	}
+	require.NoError(t, open(policy).Record(ctx, key))
+	hit, err := open(policy).Hit(ctx, key)
+	require.NoError(t, err)
+	assert.True(t, hit, "unchanged salt dirs hit")
+
+	require.NoError(t, os.WriteFile(file, []byte("max: 2\n"), 0o600))
+	hit, err = open(policy).Hit(ctx, key)
+	require.NoError(t, err)
+	assert.False(t, hit, "an edited salt dir misses")
+
+	missing := open(filepath.Join(policy, "absent"))
+	_, err = missing.Hit(ctx, key)
+	require.NoError(t, err, "a missing salt dir hashes empty")
 }
