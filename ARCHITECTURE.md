@@ -569,7 +569,9 @@ CLIs), so each one does not re-walk the tree or re-implement a runner.
   `foundation/pins` (a Renovate config from the detected ecosystems and a consumer `Policy`) and
   `foundation/schemagen` (JSON Schema reflected from Go types, Kind values extracted from factory
   source, and a config reference). `foundation/dataset` merge-loads a directory of YAML data
-  files into strictly decoded sections.
+  files into strictly decoded sections, and holds the merged data to its constraints as
+  data: `Check` evaluates CEL rule rows over the sections, `Validate` a JSON Schema (such as
+  one `schemagen` reflects from the sections' types).
 - **Clients.** Typed command-line clients behind interfaces, each `stub|exec`: `clients/git`,
   `helm` (plus `helm.NewRenderer` for `Codebase.Rendered`), `kubectl`, `docker`, `terraform`;
   `clients/process` supervises long-lived child processes (process groups, graceful stop).

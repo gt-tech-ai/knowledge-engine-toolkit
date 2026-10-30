@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"maps"
 	"path"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -23,6 +24,11 @@ import (
 type Dataset struct {
 	// sections maps a top-level key to its merged YAML node.
 	sections map[string]*yaml.Node
+
+	// goValues maps a top-level key to the Go value FromValue took it from, encoded to a
+	// node only when the section is read, so a check reading two sections of a large
+	// value encodes two.
+	goValues map[string]any
 
 	// files maps a top-level key to the files that contributed to it, in load order.
 	files map[string][]string
@@ -90,9 +96,84 @@ func LoadTree(fsys fs.FS, dir string, skip ...string) (*Dataset, error) {
 func newDataset() *Dataset {
 	return &Dataset{
 		sections: map[string]*yaml.Node{},
+		goValues: map[string]any{},
 		files:    map[string][]string{},
 		origin:   map[string]string{},
 	}
+}
+
+// FromValue builds a dataset from the Go value v, named name in errors: each top-level
+// field of a struct (by its yaml name, as Decode matches them) or key of a string-keyed
+// map is a section. A section is encoded to YAML nodes when it is read, never rendered to
+// text, so data built or edited in code is checked for the cost of the sections a check
+// reads. A struct with an inline field is encoded whole up front. A value that is not a
+// struct or a string-keyed map, or does not encode, is CodeInvalidInput naming it.
+func FromValue(name string, v any) (*Dataset, error) {
+	d := newDataset()
+	rv := reflect.Indirect(reflect.ValueOf(v))
+	switch {
+	case rv.Kind() == reflect.Struct && !hasInline(rv.Type()):
+		for key, i := range fieldsByKey(rv.Type()) {
+			d.goValues[key] = rv.Field(i).Interface()
+		}
+	case rv.Kind() == reflect.Map && rv.Type().Key().Kind() == reflect.String:
+		for _, k := range rv.MapKeys() {
+			d.goValues[k.String()] = rv.MapIndex(k).Interface()
+		}
+	case rv.Kind() == reflect.Struct:
+		var root yaml.Node
+		if err := root.Encode(v); err != nil {
+			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "encode "+name)
+		}
+		for i := 0; i+1 < len(root.Content); i += 2 {
+			d.sections[root.Content[i].Value] = root.Content[i+1]
+		}
+	default:
+		return nil, apperr.New(apperr.CodeInvalidInput,
+			name+" is not a struct or a string-keyed map")
+	}
+	for _, key := range d.keys() {
+		d.files[key] = []string{name}
+	}
+	return d, nil
+}
+
+// hasInline reports whether struct type t has a field tagged ",inline".
+func hasInline(t reflect.Type) bool {
+	for i := range t.NumField() {
+		if _, opts, _ := strings.Cut(t.Field(i).Tag.Get("yaml"), ","); opts == "inline" {
+			return true
+		}
+	}
+	return false
+}
+
+// keys returns every section key of d, sorted.
+func (d *Dataset) keys() []string {
+	out := slices.Collect(maps.Keys(d.sections))
+	for k := range d.goValues {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// node returns the section key's YAML node, encoding a FromValue section (uncached: a
+// Dataset stays read-only once built). A missing key is (nil, false, nil).
+func (d *Dataset) node(key string) (*yaml.Node, bool, error) {
+	if n, ok := d.sections[key]; ok {
+		return n, true, nil
+	}
+	v, ok := d.goValues[key]
+	if !ok {
+		return nil, false, nil
+	}
+	var n yaml.Node
+	if err := n.Encode(v); err != nil {
+		return nil, true, apperr.Wrap(err, apperr.CodeInvalidInput,
+			"encode section "+key+" from "+d.sourceOf(key))
+	}
+	return &n, true, nil
 }
 
 // add merges the top-level keys of the file at p into d.
@@ -235,7 +316,10 @@ func unfold(n *yaml.Node) {
 // CodeInvalidInput naming the section's files.
 func (d *Dataset) Section[T any](name string) (T, error) {
 	var out T
-	node, ok := d.sections[name]
+	node, ok, err := d.node(name)
+	if err != nil {
+		return out, err
+	}
 	if !ok {
 		return out, apperr.New(apperr.CodeNotFound, "no data section "+`"`+name+`"`)
 	}

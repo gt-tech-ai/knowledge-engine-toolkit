@@ -6,6 +6,18 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `foundation/dataset` holds merged data to constraints written as data. `Dataset.Check`
+  evaluates `Rule` rows (a name, a CEL expression, a message) over the sections: each
+  identifier-shaped top-level key is a variable and `data` is every section. A rule passes
+  on `true`, fails with its message on `false`, and fails once per string when it
+  evaluates to a list of strings. Every failing rule is reported in one `CodeInvalidInput`
+  error. `Dataset.Validate` checks the sections against a JSON Schema document and reports
+  each failing instance location. `dataset.FromValue` builds a dataset from a Go value,
+  encoded to YAML nodes without a text round trip, so data built or edited in code is held
+  to the same rules.
+
 ## [0.0.29] - 2026-10-29
 
 Python: unchanged (`techai-webutils` 0.6.1).
