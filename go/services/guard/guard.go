@@ -7,6 +7,7 @@ package guard
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"regexp"
@@ -357,8 +358,8 @@ func (g *guard) check(
 }
 
 // key is a go row's cache key over the expanded inputs' paths and contents, its tool's
-// version, its name and its placeholders; empty when the row is not a cached go row
-// (no inputs, no cache).
+// version, the expanded row's whole definition (so an edited rule misses) and its
+// placeholders; empty when the row is not a cached go row (no inputs, no cache).
 func (g *guard) key(
 	ctx context.Context,
 	cb interfaces.Codebase,
@@ -377,7 +378,15 @@ func (g *guard) key(
 	if g.deps.Versions != nil {
 		version = g.deps.Versions(r.Tool)
 	}
-	args := []string{r.Name}
+	def, err := json.Marshal(r)
+	if err != nil {
+		return "", apperr.Wrap(
+			err,
+			apperr.CodeInvalidInput,
+			"guard "+r.Name+": cache key",
+		)
+	}
+	args := []string{string(def)}
 	for _, k := range slices.Sorted(maps.Keys(vars)) {
 		args = append(args, k+"="+vars[k])
 	}

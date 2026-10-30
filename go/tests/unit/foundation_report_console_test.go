@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -330,4 +332,37 @@ func TestConsole_Groups(t *testing.T) {
 	plain.SetLevel(report.LevelVerbose)
 	plain.Groupf("Unit Tests")
 	assert.Equal(t, "\n-- Unit Tests --\n\n", out.String())
+}
+
+// TestFoundationReport_ConsoleConcurrentWrites tests that a console is safe to write
+// from several goroutines.
+//
+// Why this test is important:
+//   - a procedure's probes and a suite's fan-out log through one console at once; an
+//     unguarded writer races (a data race under -race on a buffer) and interleaves
+//     half-written lines on a terminal.
+//
+// What it tests:
+//   - 50 goroutines each printing 20 lines through one console leave 1,000 whole lines,
+//     with no race reported.
+func TestFoundationReport_ConsoleConcurrentWrites(t *testing.T) {
+	t.Parallel()
+	var out, errOut bytes.Buffer
+	c, err := report.NewConsole(types.Streams{Out: &out, Err: &errOut},
+		report.ConsoleConfig{CI: true})
+	require.NoError(t, err)
+	var wg sync.WaitGroup
+	for range 50 {
+		wg.Go(func() {
+			for range 20 {
+				c.Infof("line %s", "x")
+			}
+		})
+	}
+	wg.Wait()
+	lines := strings.Split(strings.TrimSuffix(errOut.String(), "\n"), "\n")
+	require.Len(t, lines, 1000)
+	for _, l := range lines {
+		assert.Equal(t, "line x", l)
+	}
 }

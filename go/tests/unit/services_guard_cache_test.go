@@ -171,3 +171,34 @@ func TestServicesGuard_ExpansionsRunInParallel(t *testing.T) {
 	})
 	assert.Greater(t, peak.Load(), int32(1), "expansions run concurrently")
 }
+
+// TestServicesGuard_RowEditMissesCache tests that a Go row's cache key covers the row's
+// whole definition.
+//
+// Why this test is important:
+//   - a row's rule lives in configuration beside its inputs, not in them; a key over the
+//     name and inputs alone replays a pass recorded under the old rule after the rule
+//     is edited, so the edit is never checked.
+//
+// What it tests:
+//   - after a cached pass, the same row with different data runs every expansion again,
+//     and the edited row's own pass is then cached.
+func TestServicesGuard_RowEditMissesCache(t *testing.T) {
+	t.Parallel()
+	var runs atomic.Int32
+	deps := cachedGuardDeps(t, &runs, "")
+	row := types.GuardRow{
+		Name: "validate", Verb: "test-infra", Kind: types.GuardGo, Each: "modules",
+		Tool: "terraform", Inputs: types.FileSelector{Roots: []string{"{dir}"}},
+		Data: map[string]any{"strict": false},
+	}
+	edited := row
+	edited.Data = map[string]any{"strict": true}
+	files := guardFiles()
+	for i, r := range []types.GuardRow{row, row, edited, edited} {
+		gs, err := guard.NewFromConfig([]types.GuardRow{r}, deps)
+		require.NoError(t, err)
+		gs[0].Run(t.Context(), memoryCodebase(t, files))
+		assert.Equal(t, []int32{2, 2, 4, 4}[i], runs.Load(), "run %d", i)
+	}
+}
