@@ -6,6 +6,24 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.35] - 2026-10-31
+
+Python: unchanged (`techai-webutils` 0.6.2).
+
+### Added
+
+- `services/guard`: `Programs`, a cache of compiled guard expressions (one CEL environment,
+  each expression's program by its source), safe for concurrent use, and `Deps.Programs` to
+  share it across `NewFromConfig` calls. A caller that builds guards repeatedly (a composite
+  gate's phases, one gate per run) type-checks each expression once per process: building
+  two expr rows drops from ~250 µs to ~0.4 µs.
+
+### Changed
+
+- `services/guard`: `NewFromConfig` compiles each `expr` and `for` expression once (it
+  compiled each twice, in validation and in the build) against one environment per call
+  when `Deps.Programs` is nil.
+
 ## [0.0.34] - 2026-10-30
 
 Python: unchanged (`techai-webutils` 0.6.2).

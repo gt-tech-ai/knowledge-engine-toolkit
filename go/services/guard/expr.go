@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"sync"
 	"time"
 
 	"cel.dev/cel-go/cel"
@@ -42,14 +43,33 @@ func exprVars() []string {
 	return []string{"files", "file", "docs", "objects", "vars", "data", "now"}
 }
 
-// compile type-checks expr against the guard environment: the CEL standard library plus
-// optional types, the strings, lists, sets, encoders, bindings (cel.bind), math and
-// regex extensions, and decode(format, text) — the Codebase.Docs decoders ("yaml",
-// "hcl", "alloy", "toml") over a string, for configuration embedded in another file.
-// The expression evaluates to true (pass) or false (fail with the row's message), or to
-// a list of findings: strings, or maps with file, line and message.
-func compile(expr string) (*program, error) {
-	opts := make([]cel.EnvOption, 0, 4+len(exprVars()))
+// Programs caches compiled guard expressions: one CEL environment, built on first use,
+// and each expression's program, keyed by its source. A caller that builds guards more
+// than once (a composite gate's phases, one gate per run) shares one through
+// Deps.Programs, so each expression type-checks once per process; nil gives every
+// NewFromConfig call its own. Safe for concurrent use: a CEL environment and program are.
+type Programs struct {
+	// env returns the guard environment, built once.
+	env func() (*cel.Env, error)
+
+	// byExpr holds each compiled expression by its source; a failed compile is not kept.
+	byExpr map[string]*program
+
+	// mu guards byExpr.
+	mu sync.Mutex
+}
+
+// NewPrograms returns an empty expression cache.
+func NewPrograms() *Programs {
+	return &Programs{env: sync.OnceValues(newEnv), byExpr: map[string]*program{}}
+}
+
+// newEnv builds the guard environment: the CEL standard library plus optional types, the
+// strings, lists, sets, encoders, bindings (cel.bind), math and regex extensions,
+// decode(format, text) — the Codebase.Docs decoders ("yaml", "hcl", "alloy", "toml")
+// over a string, for configuration embedded in another file — and exprVars as dyn.
+func newEnv() (*cel.Env, error) {
+	opts := make([]cel.EnvOption, 0, 9+len(exprVars()))
 	opts = append(opts, ext.Strings(), ext.Lists(), ext.Sets(), ext.Encoders(),
 		cel.OptionalTypes(), ext.Bindings(), ext.Math(), ext.Regex(), decodeFunc())
 	for _, v := range exprVars() {
@@ -59,6 +79,36 @@ func compile(expr string) (*program, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "cel environment")
 	}
+	return env, nil
+}
+
+// compile returns expr type-checked against the guard environment (newEnv), from the
+// cache when an earlier call compiled it. The expression evaluates to true (pass) or
+// false (fail with the row's message), or to a list of findings: strings, or maps with
+// file, line and message.
+func (ps *Programs) compile(expr string) (*program, error) {
+	ps.mu.Lock()
+	cached, ok := ps.byExpr[expr]
+	ps.mu.Unlock()
+	if ok {
+		return cached, nil
+	}
+	env, err := ps.env()
+	if err != nil {
+		return nil, err
+	}
+	p, err := compileIn(env, expr)
+	if err != nil {
+		return nil, err
+	}
+	ps.mu.Lock()
+	ps.byExpr[expr] = p
+	ps.mu.Unlock()
+	return p, nil
+}
+
+// compileIn type-checks expr in env and records the activation variables it references.
+func compileIn(env *cel.Env, expr string) (*program, error) {
 	ast, iss := env.Compile(expr)
 	if iss.Err() != nil {
 		return nil, apperr.Wrap(iss.Err(), apperr.CodeInvalidInput, "expr")
