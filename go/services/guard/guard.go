@@ -70,6 +70,10 @@ type Deps struct {
 	// Now is the clock an expr row's `now` reads; nil is time.Now.
 	Now func() time.Time
 
+	// Programs caches the rows' compiled CEL expressions across NewFromConfig calls;
+	// nil compiles each expression once per call.
+	Programs *Programs
+
 	// RenderTool names the binary the codebase's renderer shells (helm), listed among
 	// the tools of every row that renders a chart; empty lists none.
 	RenderTool string
@@ -78,8 +82,12 @@ type Deps struct {
 // NewFromConfig validates rows and returns their guards. Expansion runs when a guard
 // runs, so building does no I/O. An unknown kind or expander, a go row with no
 // registered guard, a bad pattern or a CEL expression that does not compile is
-// CodeInvalidInput naming the row.
+// CodeInvalidInput naming the row. Each expression compiles once, through
+// deps.Programs when set.
 func NewFromConfig(rows []types.GuardRow, deps Deps) ([]interfaces.Guard, error) {
+	if deps.Programs == nil {
+		deps.Programs = NewPrograms()
+	}
 	out := make([]interfaces.Guard, 0, len(rows))
 	for i := range rows {
 		r := rows[i]
@@ -91,10 +99,10 @@ func NewFromConfig(rows []types.GuardRow, deps Deps) ([]interfaces.Guard, error)
 		}
 		var prg, forPrg *program
 		if r.Kind == types.GuardExpr {
-			prg, _ = compile(r.Expr) // validate compiled it
+			prg, _ = deps.Programs.compile(r.Expr) // validate compiled (and cached) it
 		}
 		if r.For != "" {
-			forPrg, _ = compile(r.For) // validate compiled it
+			forPrg, _ = deps.Programs.compile(r.For) // validate compiled (and cached) it
 		}
 		names := []string{r.Name}
 		if r.Kind == types.GuardMatch && len(r.Names) > 0 {
@@ -114,7 +122,7 @@ func NewFromConfig(rows []types.GuardRow, deps Deps) ([]interfaces.Guard, error)
 // validate checks r's kind and the parts that can fail before a run.
 func validate(r *types.GuardRow, deps Deps) error {
 	if r.For != "" {
-		if _, err := compile(r.For); err != nil {
+		if _, err := deps.Programs.compile(r.For); err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "for")
 		}
 	}
@@ -141,7 +149,7 @@ func validate(r *types.GuardRow, deps Deps) error {
 			return apperr.New(apperr.CodeInvalidInput, "a yaml guard needs a path")
 		}
 	case types.GuardExpr:
-		_, err := compile(r.Expr)
+		_, err := deps.Programs.compile(r.Expr)
 		return err
 	case types.GuardTool, types.GuardGen:
 		return validateRun(r, deps)
