@@ -25,7 +25,7 @@ go/
   services/             Layer 4 — domain-service base, probe sets, tool runs
   pipelines/            Layer 5 — stateless transforms
   workflows/            Layer 6 — multi-step orchestration
-  transport/            Layer 7 — HTTP/RPC/JSON:API, MCP, Cobra and cron front-ends
+  transport/            Layer 7 — HTTP/RPC/JSON:API, MCP, Cobra and cron front-ends, local doc servers
   execution/            batch fan-out substrate (discover → map → fan-out → aggregate), operations
                         registry and background runs
   helpers/              small shared utilities

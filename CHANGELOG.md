@@ -6,6 +6,22 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.34] - 2026-10-30
+
+Python: unchanged (`techai-webutils` 0.6.2).
+
+### Added
+
+- `transport/docserve`: local documentation servers run until the context ends: Go pkgsite and
+  Python pdoc as supervised processes, and a workspace's OpenAPI specs through an in-process
+  Redoc server (one spec at `/`, several under an index). `Config` names the dirs, spec path,
+  ports and pkgsite install hint; `Deps.Keep` filters the discovered Python packages.
+
+### Changed
+
+- `transport/docs`: `RedocHandler` pins the Redoc bundle to v3.0.1 with a Subresource Integrity
+  hash and `crossorigin`, so a tampered CDN copy does not run.
+
 ## [0.0.33] - 2026-10-30
 
 Python: unchanged (`techai-webutils` 0.6.2).

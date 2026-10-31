@@ -16,7 +16,9 @@ func SpecHandler(spec []byte) http.HandlerFunc {
 	}
 }
 
-// redocHTML is the template of a minimal HTML page that loads Redoc from CDN.
+// redocHTML is the template of a minimal HTML page that loads Redoc from CDN: a pinned
+// bundle version checked by its Subresource Integrity hash, so a changed CDN object never
+// runs.
 const redocHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -27,7 +29,9 @@ const redocHTML = `<!DOCTYPE html>
 </head>
 <body>
   <redoc spec-url="{{.SpecURL}}" hide-hostname></redoc>
-  <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+  <script src="https://cdn.redoc.ly/redoc/v3.0.1/bundles/redoc.standalone.js"
+    integrity="sha384-j07qRKHNNmcwU1/Y1elJc7pDLHXP/QfbQXTtSkbOJ7uYGJikqAzsFVbY2zR9FqOT"
+    crossorigin="anonymous"></script>
 </body>
 </html>
 `
