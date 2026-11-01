@@ -24,6 +24,11 @@ All notable changes to this project are recorded here. The format follows
   `new_safety_check_from_config`. `regex` flags `pii.ssn`, `pii.email` and `pii.phone` with no
   infrastructure; the managed kinds load aiobotocore only when selected and map botocore failures
   through `botocore_error_to_app_error`. An unknown kind or policy raises `AppValueError`.
+- Python `core/interfaces/semantic_cache`: `SemanticCache` (extends `CacheInvalidator`;
+  fail-open `lookup` / `store`), `CacheNamespace` (workspace, embedding model and version, scope;
+  `tag()`) and `CachedAnswer`.
+- Python `clients/semantic_cache`: `SemanticCacheKind` (`stub` default, `redis`),
+  `SemanticCacheConfig` and `semantic_cache_from_config` with injected collaborators.
 
 ## [0.0.35] - 2026-10-31
 

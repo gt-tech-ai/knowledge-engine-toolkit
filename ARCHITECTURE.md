@@ -463,7 +463,7 @@ Most tiers ship an in-process, stub, or no-op backend, so wiring needs no cloud 
   logger `stdlib`. `database` and `rpc` default to `postgres` and `grpc`: their consumers hold the
   `*sql.DB` or connection itself.
 - **Python:** cache `local`/`null`; email, safety `noop`; audit, dataset, embedding, facts, llm, retrieval,
-  kb_ingestion, token_ledger, vector `stub`; jobs, lock, messaging, storage `memory`; tracer, metrics `null`;
+  kb_ingestion, semantic_cache, token_ledger, vector `stub`; jobs, lock, messaging, storage `memory`; tracer, metrics `null`;
   executor `asyncio`.
 
 Go cache (Redis), database (Postgres) and connector (S3) have no stub and are covered by
@@ -622,6 +622,9 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
 - **Safety:** `core/interfaces/safety.py` (`SafetyCheck`, `SafetyResult`, `blocked_error` →
   `FORBIDDEN`) and `clients/safety` (`noop`, `regex`, and the lazily loaded `comprehend` and
   `bedrock_guardrails`, whose aiobotocore client opens on the first scan).
+- **Semantic cache:** `core/interfaces/semantic_cache.py` (`SemanticCache` extends
+  `CacheInvalidator`; `CacheNamespace` partitions by workspace, embedding space and scope) and
+  `clients/semantic_cache` (`stub`; `redis` takes an injected KV cache, embedder and Redis client).
 
 ## Testing
 
