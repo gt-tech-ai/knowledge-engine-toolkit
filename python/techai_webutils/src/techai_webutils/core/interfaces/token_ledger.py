@@ -90,6 +90,11 @@ class UsageRecord:
     """The call's trace id (hex), for correlation and de-duplication."""
 
 
+LEDGER_UNAVAILABLE_REASON = "ledger_unavailable_fail_open"
+"""The ``BudgetDecision.reason`` of a backend that failed open: the ledger couldn't answer, so the
+budget is unknown (an enforcement policy may still fail closed on it)."""
+
+
 @dataclass(frozen=True, slots=True)
 class BudgetDecision:
     """Whether a scope may make another model call, and how much budget is left."""

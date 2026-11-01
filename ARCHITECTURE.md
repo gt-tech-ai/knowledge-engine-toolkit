@@ -238,13 +238,20 @@ collaborator or zero timeout skips its layer; recovery needs none.
 - **Python — token accounting.** `clients/decorators/token_accounting.TokenAccountingProxy` is the
   outermost AI-band decorator over an `LLMProvider`, `ModelGateway` or `EmbeddingProvider`: it reads
   the request's `UsageScope` from an injected `UsageScopeProvider` (no scope → passthrough), asks
-  `TokenLedger.check_budget` before the call (an exhausted budget under `BudgetPolicy.enforcement`
-  `soft` / `hard` raises `QuotaExceededError` before the inner call; `shadow` serves and counts
-  `ai_budget_would_exceed_total`; a ledger error serves), and records one priced `UsageRecord`
+  `TokenLedger.check_budget` before the call and applies `clients/token_ledger/policy.decide`
+  (`shadow` serves and counts `ai_budget_would_exceed_total`; `soft` and `hard` reject an
+  exhausted budget with `QuotaExceededError` before the inner call; a ledger error — raised, or a
+  `LEDGER_UNAVAILABLE_REASON` decision — serves under `soft` and rejects under `hard`, unless
+  `on_ledger_error` overrides), and records one priced `UsageRecord`
   after it (a stream at its terminal `StreamUsage`; a semantic-cache hit, flagged through
   `core/interfaces/semantic_cache.served_from_cache()`, as one zero-token `<step>.cache_hit`).
   Recording never raises. Metrics: `ai_tokens_total{org,workspace,model,type}`,
   `ai_cost_usd_total{org,workspace,model}`.
+- **Python — per-key rate limits.** `core/interfaces/rate_limiter.PerKeyRateLimiter`
+  (`allow_key(key)`, async) has two kinds behind `foundation/resilience/per_key_builder`:
+  `memory` (`InMemoryRateLimiter`, per replica; the default) and `redis`
+  (`RedisPerKeyRateLimiter`: a fixed window, `INCR` + `EXPIRE` in one pipeline, shared by every
+  replica; a Redis error is `UNAVAILABLE` for the caller's policy). `max_per_window` 0 is unlimited.
 - **Python — GenAI span enrichment.** `clients/decorators/ai_enricher.AiSpanEnricher` wraps an
   `LLMProvider` or `RetrievalEngine` and stamps the span already current (the step's) with
   `gen_ai.system`, `gen_ai.step`, `gen_ai.request.model` (the model asked for),

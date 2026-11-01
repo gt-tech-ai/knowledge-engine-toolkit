@@ -77,10 +77,23 @@ All notable changes to this project are recorded here. The format follows
   passes through. `clients/token_ledger.BudgetPolicy` / `Enforcement` (`shadow` default, `soft`,
   `hard`), `core/interfaces/token_ledger.UsageScopeProvider`, and
   `core/interfaces/semantic_cache.served_from_cache()` / `set_served_from_cache()`.
+- Python `clients/token_ledger/policy`: `decide(policy, decision, error) -> Verdict` (the
+  shadow / soft / hard table), `OnLedgerError` (`allow` / `deny`; `None` takes the enforcement's
+  default) and `core/interfaces/token_ledger.LEDGER_UNAVAILABLE_REASON`, so a backend that failed
+  open still fails closed under `hard`.
+- Python `core/interfaces/rate_limiter.PerKeyRateLimiter`,
+  `foundation/resilience/redis_rate_limiter.RedisPerKeyRateLimiter` (fixed window shared by every
+  replica) and `foundation/resilience/per_key_builder` (`PerKeyRateLimiterKind` `memory` /
+  `redis`, `PerKeyRateLimiterConfig`, `per_key_rate_limiter_from_config`).
+- Python `RedisTokenLedger(clock=…)`: the time the budget window is read at (injected for tests).
 
 ### Changed
 
 - Python `ModelGateway.resolve` is async (planning may await a classifier or a remote planner).
+- Python `TokenAccountingProxy` applies `decide`: a ledger error under `hard` enforcement now
+  rejects (fail closed); `soft` and `shadow` still serve.
+- Python `InMemoryRateLimiter` implements `PerKeyRateLimiter` (`allow_key`; `allow(key)` is
+  kept) and treats `max_per_window=0` as unlimited.
 - Python routing seams: `RouteClassifier.classify` returns a `Classification` (route,
   confidence, `degraded`); `CandidateRanker.rank` receives the `PlanInput` (requirements and
   policy); `RouteContext.slo` defaults to `""` (no request objective).

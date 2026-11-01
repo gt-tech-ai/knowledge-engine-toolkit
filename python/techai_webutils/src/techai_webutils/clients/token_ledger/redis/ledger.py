@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, cast
 from techai_webutils.clients.token_ledger.cost import MICRO_DOLLAR
 from techai_webutils.core.errors.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.token_ledger import (
+    LEDGER_UNAVAILABLE_REASON,
     BudgetDecision,
     Period,
     TokenLedger,
@@ -45,6 +46,8 @@ from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 from techai_webutils.foundation.logger.logger import get_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from redis.asyncio import Redis
 
     from techai_webutils.clients.token_ledger.builder import TokenLedgerConfig
@@ -103,8 +106,11 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         config: TokenLedgerConfig,
         *,
         metrics: MetricsProvider | None = None,
+        clock: Callable[[], datetime] = _utcnow,
     ) -> None:
         """Bind the client and config, register the record script and the failure counter.
+
+        ``clock`` returns the current UTC time the budget window is read at (injected for tests).
 
         Raises:
             AppError: ``INVALID_INPUT`` when ``config.window`` is not a ``Period`` value (a plain
@@ -121,6 +127,7 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
             ) from exc
         self._redis = redis
         self._config = config
+        self._clock = clock
         self._script = redis.register_script(RECORD_SCRIPT)
         self._logger = get_logger("token_ledger")
         self._failed: MetricCounter | None = None
@@ -239,7 +246,7 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
     async def check_budget(self, scope: UsageScope) -> BudgetDecision:
         """Compare the window's counters with the scope's limits; fail open on a Redis or parse error."""
-        keys = self._window_keys(scope, _utcnow())
+        keys = self._window_keys(scope, self._clock())
         try:
             replies = await self._read(keys, self._limits_key(scope))
             return self._decide(replies)
@@ -249,7 +256,7 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
             )
             return BudgetDecision(
                 allowed=True,
-                reason="ledger_unavailable_fail_open",
+                reason=LEDGER_UNAVAILABLE_REASON,
                 remaining_tokens=None,
                 remaining_cost_usd=None,
             )
@@ -305,7 +312,7 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
                 f"redis token ledger keeps {self._window} counters; cannot answer {period}",
             )
         try:
-            replies = await self._read(self._window_keys(scope, _utcnow()), None)
+            replies = await self._read(self._window_keys(scope, self._clock()), None)
         except Exception as exc:
             raise AppError(
                 ErrorCode.UNAVAILABLE, "token ledger counters unavailable", cause=exc

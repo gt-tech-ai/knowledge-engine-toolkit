@@ -1,15 +1,29 @@
 """Budget enforcement policy: what the token-accounting decorator does with a ``BudgetDecision``.
 
-``Enforcement.SHADOW`` (the default) serves an over-budget scope and counts it
-(``ai_budget_would_exceed_total``), so a budget can be dual-run before it bites; ``SOFT`` and
-``HARD`` reject an exhausted scope with ``QuotaExceededError`` before the model call. A ledger
-outage always serves (fail-open).
+``decide`` is the whole table:
+
+| enforcement | within budget | exhausted            | ledger error                     |
+|-------------|---------------|----------------------|----------------------------------|
+| ``shadow``  | serve         | serve, would-exceed  | serve                            |
+| ``soft``    | serve         | reject               | serve (fail open)                |
+| ``hard``    | serve         | reject               | reject (fail closed)             |
+
+A ledger error is a raised ``check_budget`` *or* a decision whose reason is
+``LEDGER_UNAVAILABLE_REASON`` (a backend that failed open itself). ``on_ledger_error`` overrides
+the soft/hard default; ``shadow`` never rejects. A rejection is a coded ``QuotaExceededError``
+raised by the caller, before the model call.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+from techai_webutils.core.interfaces.token_ledger import LEDGER_UNAVAILABLE_REASON
+
+if TYPE_CHECKING:
+    from techai_webutils.core.interfaces.token_ledger import BudgetDecision
 
 
 class Enforcement(StrEnum):
@@ -18,9 +32,18 @@ class Enforcement(StrEnum):
     SHADOW = "shadow"
     """Serve and count; never reject (the default)."""
     SOFT = "soft"
-    """Reject an exhausted budget; a ledger outage serves."""
+    """Reject an exhausted budget; a ledger error serves (fail open)."""
     HARD = "hard"
-    """Reject an exhausted budget."""
+    """Reject an exhausted budget; a ledger error rejects (fail closed)."""
+
+
+class OnLedgerError(StrEnum):
+    """What a ledger error does under ``soft`` or ``hard`` enforcement."""
+
+    ALLOW = "allow"
+    """Serve (fail open)."""
+    DENY = "deny"
+    """Reject (fail closed)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,3 +52,50 @@ class BudgetPolicy:
 
     enforcement: Enforcement = Enforcement.SHADOW
     """How an exhausted budget is enforced."""
+    on_ledger_error: OnLedgerError | None = None
+    """What a ledger error does; ``None`` takes the enforcement's default (``hard`` denies,
+    ``soft`` allows)."""
+
+    def ledger_error_action(self) -> OnLedgerError:
+        """Return what a ledger error does under this policy."""
+        if self.enforcement is Enforcement.SHADOW:
+            return OnLedgerError.ALLOW
+        if self.on_ledger_error is not None:
+            return self.on_ledger_error
+        return (
+            OnLedgerError.DENY
+            if self.enforcement is Enforcement.HARD
+            else OnLedgerError.ALLOW
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Verdict:
+    """What to do with one call."""
+
+    serve: bool
+    """Whether the call may proceed."""
+    would_exceed: bool
+    """Whether the budget is exhausted (counted under ``shadow``; the rejection otherwise)."""
+    reason: str
+    """Why: the decision's reason, ``ledger_error_fail_open`` or ``ledger_error_fail_closed``."""
+
+
+def decide(
+    policy: BudgetPolicy, decision: BudgetDecision | None, error: Exception | None
+) -> Verdict:
+    """Return the verdict for a budget check that answered ``decision`` or raised ``error``."""
+    if (
+        error is not None
+        or decision is None
+        or decision.reason == LEDGER_UNAVAILABLE_REASON
+    ):
+        if policy.ledger_error_action() is OnLedgerError.ALLOW:
+            return Verdict(
+                serve=True, would_exceed=False, reason="ledger_error_fail_open"
+            )
+        return Verdict(serve=False, would_exceed=False, reason="ledger_error_fail_closed")
+    if decision.allowed:
+        return Verdict(serve=True, would_exceed=False, reason=decision.reason)
+    serve = policy.enforcement is Enforcement.SHADOW
+    return Verdict(serve=serve, would_exceed=True, reason=decision.reason)

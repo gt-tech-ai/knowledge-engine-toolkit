@@ -240,13 +240,15 @@ async def test_fail_open_ledger_error_still_serves() -> None:
       - The ledger guards spend; its outage must not become a product outage.
 
     **What it tests:**
-      - ``check_budget`` raising → the call is served and its usage still recorded
+      - ``check_budget`` raising under ``soft`` → the call is served and its usage still recorded
       - ``record`` raising → the response is still returned
     """
     inner, ledger = _llm(), _ledger(RuntimeError("redis down"))
     ledger.record = AsyncMock(side_effect=RuntimeError("redis down"))
 
-    response = await _proxy(inner, ledger).complete(_MESSAGES)
+    response = await _proxy(inner, ledger, enforcement=Enforcement.SOFT).complete(
+        _MESSAGES
+    )
 
     assert response.model == "sonnet"
     inner.complete.assert_awaited_once()
@@ -348,3 +350,28 @@ async def test_embedding_calls_record_embed_tokens_and_unpriced_models_record_ze
         Decimal(0),
         "missing",
     )
+
+
+@pytest.mark.asyncio
+async def test_hard_ledger_error_rejects_before_inner() -> None:
+    """Test that hard enforcement fails closed when the ledger can't answer.
+
+    **Why this test is important:**
+      - Under a hard cap a ledger outage must not become free, unlimited spend.
+
+    **What it tests:**
+      - a raising ``check_budget`` under ``HARD`` raises ``QuotaExceededError`` with reason
+        ``ledger_error_fail_closed``; the inner is never called
+      - the same failure under ``SOFT`` serves
+    """
+    inner = _llm()
+
+    with pytest.raises(QuotaExceededError) as caught:
+        await _proxy(inner, _ledger(RuntimeError("down"))).complete(_MESSAGES)
+    inner.complete.assert_not_awaited()
+    await _proxy(
+        inner, _ledger(RuntimeError("down")), enforcement=Enforcement.SOFT
+    ).complete(_MESSAGES)
+
+    assert caught.value.details["reason"] == "ledger_error_fail_closed"
+    inner.complete.assert_awaited_once()

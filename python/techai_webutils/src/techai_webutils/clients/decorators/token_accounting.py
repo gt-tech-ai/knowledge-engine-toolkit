@@ -6,9 +6,9 @@ A transparent ``__getattr__`` proxy over an ``LLMProvider``, a ``ModelGateway`` 
 
 1. reads the request's ``UsageScope`` from the injected ``scope`` callable — ``None`` (a call
    outside any request) passes straight through, unrecorded;
-2. asks ``ledger.check_budget``: an exhausted budget under ``SOFT`` / ``HARD`` enforcement raises
-   ``QuotaExceededError`` **before** the inner call; under ``SHADOW`` it is served and counted
-   (``ai_budget_would_exceed_total``); a ledger error serves (fail-open);
+2. asks ``ledger.check_budget`` and applies ``policy.decide``: a rejection (an exhausted budget
+   under ``soft`` / ``hard``, a ledger error under ``hard``) raises ``QuotaExceededError``
+   **before** the inner call; ``shadow`` serves and counts ``ai_budget_would_exceed_total``;
 3. awaits the inner call, then records one ``UsageRecord`` priced from the injected
    ``PriceTable`` — a stream once its terminal ``StreamUsage`` arrives. An unpriced model records
    ``cost_usd=0`` with ``pricing_version="missing"`` and is counted; a call the semantic cache
@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, cast
 from opentelemetry import trace
 
 from techai_webutils.clients.token_ledger.cost import estimate_cost
-from techai_webutils.clients.token_ledger.policy import BudgetPolicy, Enforcement
+from techai_webutils.clients.token_ledger.policy import BudgetPolicy, decide
 from techai_webutils.core.errors import QuotaExceededError
 from techai_webutils.core.interfaces.embedding import EmbeddingResult
 from techai_webutils.core.interfaces.llm import LLMResponse, StreamUsage
@@ -36,7 +36,10 @@ from techai_webutils.core.interfaces.semantic_cache import (
     served_from_cache,
     set_served_from_cache,
 )
-from techai_webutils.core.interfaces.token_ledger import UsageRecord
+from techai_webutils.core.interfaces.token_ledger import (
+    LEDGER_UNAVAILABLE_REASON,
+    UsageRecord,
+)
 from techai_webutils.foundation.logger.logger import get_logger
 
 if TYPE_CHECKING:
@@ -45,6 +48,7 @@ if TYPE_CHECKING:
     from techai_webutils.clients.token_ledger.cost import PriceTable
     from techai_webutils.core.interfaces.metrics import MetricCounter, MetricsProvider
     from techai_webutils.core.interfaces.token_ledger import (
+        BudgetDecision,
         TokenLedger,
         UsageScope,
         UsageScopeProvider,
@@ -191,31 +195,37 @@ class TokenAccountingProxy:
             counter.inc(value, **labels)
 
     async def _gate(self) -> UsageScope | None:
-        """Return the scope to charge (``None``: unaccounted), rejecting an enforced exhausted budget.
+        """Return the scope to charge (``None``: unaccounted), rejecting what the policy rejects.
 
         Raises:
-            QuotaExceededError: the budget is exhausted and enforcement is not ``SHADOW``.
+            QuotaExceededError: the policy rejects the call (an exhausted budget under ``soft`` /
+                ``hard``, or a ledger error under ``hard``).
 
         """
         scope = self._scope()
         if scope is None:
             return None
         set_served_from_cache(value=False)
+        decision: BudgetDecision | None = None
+        error: Exception | None = None
         try:
             decision = await self._ledger.check_budget(scope)
-        except Exception:
+        except Exception as exc:
             self._logger.warning(
-                "budget check failed open", org_id=scope.org_id, exc_info=True
+                "budget check failed", org_id=scope.org_id, exc_info=True
             )
+            error = exc
+        if error is not None or (
+            decision is not None and decision.reason == LEDGER_UNAVAILABLE_REASON
+        ):
             self._count("ai_budget_check_failed_total")
-            return scope
-        if decision.allowed:
-            return scope
-        if self._policy.enforcement is Enforcement.SHADOW:
-            self._count("ai_budget_would_exceed_total", org=scope.org_id)
+        verdict = decide(self._policy, decision, error)
+        if verdict.serve:
+            if verdict.would_exceed:
+                self._count("ai_budget_would_exceed_total", org=scope.org_id)
             return scope
         msg = f"AI budget exhausted for organization {scope.org_id}"
-        raise QuotaExceededError(msg, org_id=scope.org_id, reason=decision.reason)
+        raise QuotaExceededError(msg, org_id=scope.org_id, reason=verdict.reason)
 
     def _usage(
         self, scope: UsageScope, result: LLMResponse | StreamUsage | list[EmbeddingResult]
