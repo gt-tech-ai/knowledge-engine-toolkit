@@ -3,8 +3,9 @@
 ``SafetyConfig.kind`` selects ``noop`` (pass everything, the default), ``regex`` (deterministic
 PII, no infra), ``comprehend`` or ``bedrock_guardrails`` (managed; aiobotocore is imported only in
 their branch and the client opens on the first scan). ``on_detect`` is the policy applied to a
-detection. An unknown kind or policy, or a guardrail kind with no guardrail id, raises
-``AppValueError`` (a ``ValueError`` coded ``INVALID_INPUT``).
+detection. An unknown kind or policy, a guardrail kind with no guardrail id, or a managed kind
+whose ``timeout_seconds`` is not positive raises ``AppValueError`` (a ``ValueError`` coded
+``INVALID_INPUT``).
 """
 
 from __future__ import annotations

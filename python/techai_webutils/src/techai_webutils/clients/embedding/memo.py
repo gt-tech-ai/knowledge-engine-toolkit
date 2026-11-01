@@ -4,7 +4,8 @@ The router's classifier and the semantic cache both embed the user's query; wrap
 in this memo makes the second consumer a hit. Entries are keyed by the inner model and the text,
 so two embedders over different models never share a vector. The memo lives in a
 ``ContextVar``, so concurrent requests (separate tasks) never share it; the transport edge calls
-``reset_embedding_memo()`` at the start of each request. It is bounded, so a long-lived context can't grow it without limit.
+``reset_embedding_memo()`` at the start of each request. It is bounded, so a long-lived context
+can't grow it without limit.
 """
 
 from __future__ import annotations

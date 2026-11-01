@@ -142,8 +142,9 @@ class SemanticCacheProxy:
             facts: Receives one ``cache_lookups`` fact per lookup; ``None`` publishes nothing.
             fact_dimensions: Returns the product dimensions (must include ``org_id``).
             saving: Returns the US dollars a hit avoided (``0`` without it).
-            on_hit: Awaited before each hit is served (e.g. the audit); a ``FORBIDDEN`` raise
-                refuses the hit, any other failure is swallowed.
+            on_hit: Awaited before each hit is served (e.g. the audit); it may return a
+                replacement answer. Any coded ``AppError`` it raises refuses the hit; an
+                uncoded failure is swallowed and counted.
             similarity_bins: The ascending lower edges a hit's similarity is binned by.
 
         """
