@@ -8,8 +8,10 @@ no workspace uses ``-``):
   the UTC month (``2026-10``) for a monthly ledger and the UTC day (``2026-10-09``) for a daily or
   rolling-30-day one (rolling sums the last 30 daily hashes). Each hash expires at its window's end
   (a daily hash kept for rolling expires 30 days later).
-- **Limits** — a hash ``<prefix>:limits:{org}:{workspace}`` with optional fields ``tokens`` (integer)
-  and ``cost_usd`` (decimal string), written by the durable ledger's owner. A missing field is no limit.
+- **Limits** — a hash ``<prefix>:limits:{org}:{workspace}`` with optional fields ``tokens`` (integer),
+  ``cost_usd`` (decimal string) and ``enforcement`` (``shadow``, ``soft`` or ``hard``: the budget's
+  own level, reported on the decision; missing or unknown is ``None``), written by the durable
+  ledger's owner. A missing cap is no limit.
 - **Usage stream** — ``TokenLedgerConfig.stream``; one entry per record with the fields ``org_id,
   team_id, workspace_id, user_id, model, operation, input_tokens, output_tokens, embed_tokens,
   cost_usd`` (decimal string), ``pricing_version, trace_id, ts`` (RFC 3339 UTC), trimmed with
@@ -36,6 +38,7 @@ from techai_webutils.core.errors.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.token_ledger import (
     LEDGER_UNAVAILABLE_REASON,
     BudgetDecision,
+    Enforcement,
     Period,
     TokenLedger,
     UsageRecord,
@@ -273,12 +276,14 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         limits = {_text(k): _text(v) for k, v in dict(replies[-1]).items()}  # type: ignore[call-overload]
         token_limit = limits.get("tokens")
         cost_limit = limits.get("cost_usd")
+        enforcement = _enforcement(limits.get("enforcement"))
         if token_limit is None and cost_limit is None:
             return BudgetDecision(
                 allowed=True,
                 reason="no_limit",
                 remaining_tokens=None,
                 remaining_cost_usd=None,
+                enforcement=enforcement,
             )
         remaining_tokens = None
         remaining_cost = None
@@ -297,6 +302,7 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
             reason="budget_exhausted" if exhausted else "within_budget",
             remaining_tokens=remaining_tokens,
             remaining_cost_usd=remaining_cost,
+            enforcement=enforcement,
         )
 
     async def usage(self, scope: UsageScope, period: Period) -> UsageSummary:
@@ -326,3 +332,13 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
             embed_tokens=embed_tokens,
             cost_usd=(Decimal(cost_micros) / _MICROS).quantize(Decimal("0.000001")),
         )
+
+
+def _enforcement(raw: str | None) -> Enforcement | None:
+    """Return the budget's stored enforcement, or ``None`` when it is missing or unknown."""
+    if raw is None:
+        return None
+    try:
+        return Enforcement(raw)
+    except ValueError:
+        return None

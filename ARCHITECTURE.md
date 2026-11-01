@@ -242,7 +242,9 @@ collaborator or zero timeout skips its layer; recovery needs none.
   (`shadow` serves and counts `ai_budget_would_exceed_total`; `soft` and `hard` reject an
   exhausted budget with `QuotaExceededError` before the inner call; a ledger error — raised, or a
   `LEDGER_UNAVAILABLE_REASON` decision — serves under `soft` and rejects under `hard`, unless
-  `on_ledger_error` overrides), and records one priced `UsageRecord`
+  `on_ledger_error` overrides; with `BudgetPolicy.per_budget` an exhausted budget is enforced at
+  the level its owner stored, `BudgetDecision.enforcement`, which the Redis ledger reads from the
+  limits hash's `enforcement` field), and records one priced `UsageRecord`
   after it (a stream at its terminal `StreamUsage`; a semantic-cache hit, flagged through
   `core/interfaces/semantic_cache.served_from_cache()`, as one zero-token `<step>.cache_hit`).
   Recording never raises. Metrics: `ai_tokens_total{org,workspace,model,type}`,

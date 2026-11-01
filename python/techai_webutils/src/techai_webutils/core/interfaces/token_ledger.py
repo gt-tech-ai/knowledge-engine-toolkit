@@ -90,6 +90,17 @@ class UsageRecord:
     """The call's trace id (hex), for correlation and de-duplication."""
 
 
+class Enforcement(StrEnum):
+    """How an exhausted budget is enforced."""
+
+    SHADOW = "shadow"
+    """Serve and count; never reject (the default)."""
+    SOFT = "soft"
+    """Reject an exhausted budget; a ledger error serves (fail open)."""
+    HARD = "hard"
+    """Reject an exhausted budget; a ledger error rejects (fail closed)."""
+
+
 LEDGER_UNAVAILABLE_REASON = "ledger_unavailable_fail_open"
 """The ``BudgetDecision.reason`` of a backend that failed open: the ledger couldn't answer, so the
 budget is unknown (an enforcement policy may still fail closed on it)."""
@@ -107,6 +118,9 @@ class BudgetDecision:
     """Tokens left in the window, or ``None`` when no token limit applies."""
     remaining_cost_usd: Decimal | None
     """Dollars left in the window, or ``None`` when no cost limit applies."""
+    enforcement: Enforcement | None = None
+    """The budget's own enforcement as its owner stored it, or ``None`` when the backend does
+    not know it (a ``per_budget`` policy then uses its own)."""
 
 
 @dataclass(frozen=True, slots=True)
