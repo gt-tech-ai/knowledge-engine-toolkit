@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.36] - 2026-10-31
+
+Python: `techai-webutils` 0.7.0.
+
 ### Added
 
 - Python `core/interfaces/{dataset,evaluator,grader}`: the eval contracts — `EvalCase`
