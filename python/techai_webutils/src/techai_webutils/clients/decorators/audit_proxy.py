@@ -400,7 +400,9 @@ class AuditProxy:
             The redacted answer when the output check redacts, else ``None`` (serve as is).
 
         Raises:
-            AppError: ``FORBIDDEN`` when either check blocks (after auditing it ``blocked``).
+            AppError: ``FORBIDDEN`` when either check blocks (after auditing it ``blocked``);
+                under ``enforced``, a failed safety scan or record (the sink's code, else
+                ``INTERNAL``), which the semantic cache treats as a refusal of the hit.
 
         """
         messages = _messages(args, kwargs)
