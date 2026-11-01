@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
@@ -192,4 +193,48 @@ async def test_managed_client_error_is_coded() -> None:
     with pytest.raises(AppError) as caught:
         await check.scan(_TEXT, kind=ScanKind.PROMPT)
 
+    assert caught.value.code is ErrorCode.UNAVAILABLE
+
+
+@pytest.mark.asyncio
+async def test_managed_client_opens_once_and_bounds_each_call() -> None:
+    """Test that concurrent first scans share one client and a hung call fails coded.
+
+    **Why this test is important:**
+      - Two cold-start scans that each open a client leak one per replica; a call with no
+        deadline lets a hung AWS endpoint hold the request forever, past every retry and breaker.
+
+    **What it tests:**
+      - two concurrent first scans open the client once
+      - a call that never returns raises ``AppError(UNAVAILABLE)`` after ``timeout_seconds``
+    """
+    opened = 0
+
+    @asynccontextmanager
+    async def _open(*_args: object, **_kwargs: object) -> AsyncGenerator[Any]:
+        nonlocal opened
+        opened += 1
+        await asyncio.sleep(0)
+        yield client
+
+    async def _hang(**_kwargs: object) -> dict[str, Any]:
+        await asyncio.Event().wait()
+        return {}
+
+    client = MagicMock()
+    client.detect_pii_entities = AsyncMock(return_value={"Entities": []})
+    session = MagicMock()
+    session.create_client = MagicMock(side_effect=_open)
+    check = new_safety_check_from_config(
+        SafetyConfig(kind=SafetyKind.COMPREHEND, timeout_seconds=0.05), session=session
+    )
+
+    await asyncio.gather(
+        check.scan(_TEXT, kind=ScanKind.PROMPT), check.scan(_TEXT, kind=ScanKind.PROMPT)
+    )
+    client.detect_pii_entities = AsyncMock(side_effect=_hang)
+    with pytest.raises(AppError) as caught:
+        await check.scan(_TEXT, kind=ScanKind.PROMPT)
+
+    assert opened == 1
     assert caught.value.code is ErrorCode.UNAVAILABLE

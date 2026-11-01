@@ -269,7 +269,8 @@ async def test_redis_semantic_cache_invalidation() -> None:
       - Evicting one workspace after a document change must not flush every tenant's cache.
 
     **What it tests:**
-      - ``invalidate_prefix("ws-1")`` scans ``sc:p:ws-1*`` and ``sc:d:ws-1*`` and unlinks hits
+      - ``invalidate_prefix("ws-1")`` scans ``sc:p:ws-1:*`` and ``sc:d:ws-1:*`` (never ``ws-10``)
+        and unlinks hits
       - glob characters in the prefix are escaped
       - ``invalidate_all`` drops the index with its documents and unlinks every payload key
       - a failing scan or drop is counted as ``op="invalidate"`` and never raised
@@ -284,8 +285,14 @@ async def test_redis_semantic_cache_invalidation() -> None:
     await harness.cache.invalidate_all()
 
     matches = [call.kwargs["match"] for call in harness.redis.scan_iter.call_args_list]
-    assert matches == ["sc:p:ws-1*", "sc:d:ws-1*", "sc:p:w\\**", "sc:d:w\\**", "sc:p:*"]
-    harness.redis.unlink.assert_any_await("sc:p:ws-1x")
+    assert matches == [
+        "sc:p:ws-1:*",
+        "sc:d:ws-1:*",
+        "sc:p:w\\*:*",
+        "sc:d:w\\*:*",
+        "sc:p:*",
+    ]
+    harness.redis.unlink.assert_any_await("sc:p:ws-1:x")
     harness.search.dropindex.assert_awaited_once_with(delete_documents=True)
     assert isinstance(harness.cache, RedisSemanticCache)
 

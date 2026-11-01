@@ -8,15 +8,17 @@ every other attribute passes through. Per bound call it:
    call's arguments (a ``None`` namespace passes through);
 2. looks the query up inside a ``semantic_cache.lookup`` span (``hit``, ``similarity``);
 3. **hit** — returns the decoded answer without calling the inner (a stream replays the cached
-   text, then a zero-token ``StreamUsage`` with ``finish_reason="cache_hit"``), sets
-   ``served_from_cache()``, counts ``semantic_cache_hits_total`` and the injected ``saving``, and
-   awaits ``on_hit``;
+   text, then a zero-token ``StreamUsage`` with ``finish_reason="cache_hit"``), counts
+   ``semantic_cache_hits_total`` and the injected ``saving``, awaits ``on_hit`` with the answer
+   (an ``LLMResponse`` for a stream) before serving it, then sets ``served_from_cache()``. The
+   hook may return a replacement answer (e.g. redacted) and may refuse the hit by raising a
+   ``FORBIDDEN`` ``AppError`` (a safety block), which propagates;
 4. **miss** — calls the inner and writes the answer through with the TTL (a stream only once it
    was fully consumed without error, so a truncated answer is never cached).
 
-Everything the cache, the hooks or the telemetry raise is logged, counted
-(``semantic_cache_proxy_errors_total{op}``) and swallowed: the proxy can never fail or change the
-answer. ``enabled=False`` or a ``StubSemanticCache`` makes it a passthrough. Each lookup publishes
+Everything else the cache, the hook or the telemetry raise is logged, counted
+(``semantic_cache_proxy_errors_total{op}``) and swallowed: apart from the hook's block or
+replacement, the proxy can never fail or change the answer. ``enabled=False`` or a ``StubSemanticCache`` makes it a passthrough. Each lookup publishes
 one ``cache_lookups`` fact (outcome, similarity bin, model, workspace; lookups, saving).
 """
 
@@ -32,7 +34,8 @@ from typing import TYPE_CHECKING, cast
 from opentelemetry import trace
 
 from techai_webutils.clients.semantic_cache.stub import StubSemanticCache
-from techai_webutils.core.interfaces.llm import StreamUsage
+from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.interfaces.llm import LLMResponse, StreamUsage
 from techai_webutils.core.interfaces.semantic_cache import set_served_from_cache
 from techai_webutils.core.types.fact import Fact
 from techai_webutils.foundation.logger.logger import get_logger
@@ -51,9 +54,11 @@ if TYPE_CHECKING:
     type CallArgs = tuple[tuple[object, ...], dict[str, object]]
     """A bound call's positional and keyword arguments."""
     type HitHook = Callable[
-        [tuple[object, ...], dict[str, object], object, CachedAnswer], Awaitable[None]
+        [tuple[object, ...], dict[str, object], object, CachedAnswer],
+        Awaitable[object | None],
     ]
-    """Awaited after a hit with the call's args, kwargs, the decoded answer and the hit."""
+    """Awaited before a hit is served with the call's args, kwargs, the decoded answer and the
+    hit; returns the answer to serve instead, or ``None`` to serve it as is."""
 
 CACHE_LOOKUPS_CUBE = "cache_lookups"
 """The analytics cube each lookup lands in."""
@@ -135,7 +140,8 @@ class SemanticCacheProxy:
             facts: Receives one ``cache_lookups`` fact per lookup; ``None`` publishes nothing.
             fact_dimensions: Returns the product dimensions (must include ``org_id``).
             saving: Returns the US dollars a hit avoided (``0`` without it).
-            on_hit: Awaited after each hit (e.g. an audit record); its failure is swallowed.
+            on_hit: Awaited before each hit is served (e.g. the audit); a ``FORBIDDEN`` raise
+                refuses the hit, any other failure is swallowed.
             similarity_bins: The ascending lower edges a hit's similarity is binned by.
 
         """
@@ -293,15 +299,28 @@ class SemanticCacheProxy:
             )
         ])
 
-    async def _hit(self, call: CallArgs, answer: object, hit: CachedAnswer) -> None:
-        """Mark the call served from cache and run the hit hook (swallowing its failure)."""
+    async def _hit(self, call: CallArgs, answer: object, hit: CachedAnswer) -> object:
+        """Run the hit hook, mark the call served from cache and return the answer to serve.
+
+        Raises:
+            AppError: ``FORBIDDEN`` when the hook refuses the hit (any other failure is
+                swallowed and the hit served as is).
+
+        """
+        served = answer
+        if self._on_hit is not None:
+            try:
+                replaced = await self._on_hit(call[0], call[1], answer, hit)
+            except AppError as exc:
+                if exc.code is ErrorCode.FORBIDDEN:
+                    raise
+                self._failed("on_hit", exc)
+            except Exception as exc:
+                self._failed("on_hit", exc)
+            else:
+                served = answer if replaced is None else replaced
         set_served_from_cache(value=True)
-        if self._on_hit is None:
-            return
-        try:
-            await self._on_hit(call[0], call[1], answer, hit)
-        except Exception as exc:
-            self._failed("on_hit", exc)
+        return served
 
     async def _store(self, found: _Lookup, payload: Callable[[], bytes]) -> None:
         """Write ``payload()`` through under the call's key; swallow any failure."""
@@ -324,8 +343,7 @@ class SemanticCacheProxy:
                 except Exception as exc:
                     self._failed("decode", exc)
                 else:
-                    await self._hit((args, kwargs), answer, found.hit)
-                    return answer
+                    return await self._hit((args, kwargs), answer, found.hit)
             result = await cast("Callable[..., Awaitable[object]]", attr)(*args, **kwargs)
             if found is not None:
                 await self._store(found, lambda: self._binding.encode(result))
@@ -347,12 +365,23 @@ class SemanticCacheProxy:
             *args: object, **kwargs: object
         ) -> AsyncIterator[str | StreamUsage]:
             found = await self._lookup(args, kwargs)
-            replay = (
-                self._replay(found, keep_usage=keep_usage) if found is not None else None
-            )
-            if replay is not None and found is not None and found.hit is not None:
-                await self._hit((args, kwargs), replay, found.hit)
-                return replay
+            cached = self._decode_text(found)
+            if cached is not None and found is not None and found.hit is not None:
+                text, model = cached
+                served = await self._hit(
+                    (args, kwargs),
+                    LLMResponse(
+                        content=text,
+                        model=model,
+                        input_tokens=0,
+                        output_tokens=0,
+                        finish_reason="cache_hit",
+                    ),
+                    found.hit,
+                )
+                if isinstance(served, LLMResponse):
+                    text = served.content
+                return self._replay(text, model, keep_usage=keep_usage)
             opener = cast(
                 "Callable[..., Awaitable[AsyncIterator[str | StreamUsage]]]", source
             )
@@ -361,18 +390,22 @@ class SemanticCacheProxy:
 
         return stream
 
-    def _replay(
-        self, found: _Lookup, *, keep_usage: bool
-    ) -> AsyncIterator[str | StreamUsage] | None:
-        """Return the hit replayed as a stream, or ``None`` for a miss or an undecodable entry."""
+    def _decode_text(self, found: _Lookup | None) -> tuple[str, str] | None:
+        """Return a hit's cached text and model, or ``None`` for a miss or an undecodable entry."""
         decode_text = self._binding.decode_text
-        if found.hit is None or decode_text is None:
+        if found is None or found.hit is None or decode_text is None:
             return None
         try:
-            text, model = decode_text(found.hit.payload)
+            return decode_text(found.hit.payload)
         except Exception as exc:
             self._failed("decode", exc)
             return None
+
+    @staticmethod
+    def _replay(
+        text: str, model: str, *, keep_usage: bool
+    ) -> AsyncIterator[str | StreamUsage]:
+        """Return ``text`` replayed as a stream, ending in a zero-token usage when kept."""
 
         async def items() -> AsyncIterator[str | StreamUsage]:  # noqa: RUF029 - the stream port is async
             for start in range(0, len(text), _REPLAY_CHUNK_CHARS):

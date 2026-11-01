@@ -14,7 +14,11 @@ A transparent ``__getattr__`` proxy over an ``LLMProvider`` (or gateway). For ``
 
 Streams scan the prompt before opening and audit on exhaustion over the accumulated text; an
 output ``block`` can't retract tokens already sent, so it is recorded ``flagged_after_stream``.
-``audit_cached`` is the semantic cache's ``on_hit`` hook: a hit is audited with ``cache_hit=True``.
+``audit_cached`` is the semantic cache's ``on_hit`` hook, run before a hit is served: both chains
+scan it, it is audited with ``cache_hit=True``, an output ``redact`` returns the redacted answer
+for the cache to serve and a ``block`` raises ``FORBIDDEN`` (the hit is not served). Only a record
+for a call the gateway made carries the route decision's model; a blocked input or a cache hit
+records the model it knows (none, or the cached answer's).
 
 ``AuditEnforcement`` governs failures of the audit itself: ``shadow`` logs and counts
 (``audit_record_failures_total{enforcement}``) and serves; ``enforced`` raises — a coded sink
@@ -214,11 +218,16 @@ class AuditProxy:
         results: tuple[SafetyResult, ...],
         decision: str,
         cache_hit: bool,
+        called: bool = False,
     ) -> AuditRecord:
-        """Return the audit record for one answer under the current request context."""
+        """Return the audit record for one answer under the current request context.
+
+        ``called`` marks a record for a call the gateway made: only then is the route decision
+        (set by that call) the record's model; otherwise a previous step's decision may linger.
+        """
         ctx = self._context()
         flags = tuple(flag for result in results for flag in result.flags)
-        routed = current_route_decision()
+        routed = current_route_decision() if called else None
         return AuditRecord(
             request_id=ctx.request_id,
             trace_id=_trace_id(),
@@ -302,6 +311,7 @@ class AuditProxy:
                     results=(before, after),
                     decision=_decision((before, after)),
                     cache_hit=False,
+                    called=True,
                 )
             )
             if blocked:
@@ -364,6 +374,7 @@ class AuditProxy:
                 results=(before, after),
                 decision=_decision((before, after), block_label="flagged_after_stream"),
                 cache_hit=False,
+                called=True,
             )
         )
 
@@ -373,11 +384,15 @@ class AuditProxy:
         kwargs: dict[str, object],
         answer: object,
         cached: CachedAnswer,  # noqa: ARG002 - the semantic cache's on_hit signature
-    ) -> None:
-        """Audit an answer the semantic cache served (its ``on_hit`` hook): ``cache_hit=True``.
+    ) -> LLMResponse | None:
+        """Scan and audit a hit before the semantic cache serves it (its ``on_hit`` hook).
 
-        Both chains run for their flags; the answer was already served, so a ``block`` is recorded
-        ``flagged_cache_hit`` rather than enforced.
+        Returns:
+            The redacted answer when the output check redacts, else ``None`` (serve as is).
+
+        Raises:
+            AppError: ``FORBIDDEN`` when either check blocks (after auditing it ``blocked``).
+
         """
         messages = _messages(args, kwargs)
         index = _last_user(messages)
@@ -385,14 +400,26 @@ class AuditProxy:
         response = cast("LLMResponse", answer)
         before = await self._scan(self._input, prompt, ScanKind.PROMPT)
         after = await self._scan(self._output, response.content, ScanKind.ANSWER)
+        blocked = next(
+            (r for r in (before, after) if r.decision is SafetyDecision.BLOCK), None
+        )
+        redacted = (
+            after.redacted
+            if after.decision is SafetyDecision.REDACT and after.redacted is not None
+            else None
+        )
+        served = response.content if redacted is None else redacted
         await self._commit(
             self._record(
                 prompt=prompt,
-                answer=response.content,
+                answer="" if blocked is not None else served,
                 model=response.model,
                 tokens=(response.input_tokens, response.output_tokens),
                 results=(before, after),
-                decision=_decision((before, after), block_label="flagged_cache_hit"),
+                decision=_decision((before, after)),
                 cache_hit=True,
             )
         )
+        if blocked is not None:
+            raise blocked_error(blocked)
+        return None if redacted is None else replace(response, content=redacted)

@@ -112,6 +112,32 @@ async def test_chain_surfaces_permanent_error_without_failover() -> None:
 
 
 @pytest.mark.asyncio
+async def test_permanent_error_leaves_the_breaker_closed() -> None:
+    """Test that a request's own permanent failure never opens an endpoint's breaker.
+
+    **Why this test is important:**
+      - A few over-long prompts would otherwise open a healthy endpoint for every tenant and
+        push all traffic to a costlier fallback.
+
+    **What it tests:**
+      - with a failure threshold of 1, an ``INVALID_INPUT`` on ``a`` leaves ``a`` callable:
+        the next call is served by ``a``
+    """
+    a = _ref("a")
+    executor = ChainExecutor(max_attempts=1, failure_threshold=1, recovery_timeout=60)
+    with pytest.raises(AppError):
+        await executor.complete(
+            (a,),
+            lambda _r: _provider("a", AppError(ErrorCode.INVALID_INPUT, "too long")),
+            _call,
+        )
+
+    response, _, _ = await executor.complete((a,), lambda _r: _provider("a"), _call)
+
+    assert response.model == "a"
+
+
+@pytest.mark.asyncio
 async def test_chain_skips_open_breaker_endpoint() -> None:
     """Test that an endpoint whose breaker is open is skipped without a call.
 
@@ -256,7 +282,14 @@ def test_passthrough_and_routed_never_stack_fallback(
     assert config == LlmConfig(kind=LlmKind.BEDROCK, model="m", fallback_model="")
 
 
-_OUTCOMES = st.lists(st.sampled_from(["ok", "transient", "open"]), min_size=1, max_size=5)
+_OUTCOMES = st.lists(
+    st.sampled_from(["ok", "transient", "permanent", "open"]), min_size=1, max_size=5
+)
+_ERRORS: dict[str, Exception] = {
+    "transient": UnavailableError(),
+    "permanent": AppError(ErrorCode.INVALID_INPUT, "bad prompt"),
+}
+"""The error each failing outcome raises."""
 
 
 @given(outcomes=_OUTCOMES, max_attempts=st.integers(1, 5))
@@ -272,7 +305,8 @@ def test_executor_attempt_bound_and_breaker_invariant(
     **What it tests:**
       - at most ``max_attempts`` provider calls are made
       - an open-breaker endpoint is never called
-      - the result is the first healthy endpoint the bound reaches, else ``UNAVAILABLE``
+      - the first non-transient outcome the bound reaches decides: ``ok`` serves, a permanent
+        error surfaces (no failover); with none, ``UNAVAILABLE``
     """
 
     async def scenario() -> None:
@@ -284,17 +318,18 @@ def test_executor_attempt_bound_and_breaker_invariant(
             if outcome == "open":
                 await _trip(executor, ref)
         providers = {
-            ref.key: _provider(
-                ref.model_id, UnavailableError() if o == "transient" else None
-            )
+            ref.key: _provider(ref.model_id, _ERRORS.get(o))
             for ref, o in zip(refs, outcomes, strict=True)
         }
         callable_outcomes = [o for o in outcomes if o != "open"][:max_attempts]
-        expected = next((i for i, o in enumerate(callable_outcomes) if o == "ok"), None)
-        if expected is None:
+        expected = next(
+            (i for i, o in enumerate(callable_outcomes) if o != "transient"), None
+        )
+        if expected is None or callable_outcomes[expected] == "permanent":
             with pytest.raises(AppError) as caught:
                 await executor.complete(refs, lambda r: providers[r.key], _call)
-            assert caught.value.code is ErrorCode.UNAVAILABLE
+            want = ErrorCode.UNAVAILABLE if expected is None else ErrorCode.INVALID_INPUT
+            assert caught.value.code is want
         else:
             response, _, _ = await executor.complete(
                 refs, lambda r: providers[r.key], _call

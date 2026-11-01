@@ -49,6 +49,8 @@ class SafetyConfig:
     """The Bedrock guardrail identifier (required for ``bedrock_guardrails``)."""
     guardrail_version: str = "DRAFT"
     """The Bedrock guardrail version (``DRAFT`` or a published number)."""
+    timeout_seconds: float = 5.0
+    """Per-scan deadline of a managed kind's AWS call (a hung call fails ``UNAVAILABLE``)."""
 
 
 def _on_detect(value: str) -> OnDetect:
@@ -98,13 +100,17 @@ def new_safety_check_from_config(
             ComprehendSafetyCheck,
         )
 
-        client = LazyAwsClient(aws_session, "comprehend", config.region)
+        client = LazyAwsClient(
+            aws_session, "comprehend", config.region, timeout_s=config.timeout_seconds
+        )
         return ComprehendSafetyCheck(client, on_detect)
     from techai_webutils.clients.safety.bedrock_guardrails import (  # noqa: PLC0415
         BedrockGuardrailsSafetyCheck,
     )
 
-    client = LazyAwsClient(aws_session, "bedrock-runtime", config.region)
+    client = LazyAwsClient(
+        aws_session, "bedrock-runtime", config.region, timeout_s=config.timeout_seconds
+    )
     return BedrockGuardrailsSafetyCheck(
         client, config.guardrail_id, config.guardrail_version, on_detect
     )

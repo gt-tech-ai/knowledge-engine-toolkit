@@ -216,11 +216,14 @@ class RedisSemanticCache(SemanticCache):
 
     @override
     async def invalidate_prefix(self, prefix: str) -> None:
-        """Evict every payload and document whose suffix starts with ``prefix`` (a workspace)."""
+        """Evict every payload and document under the ``prefix`` key segment (a workspace).
+
+        The pattern ends at the segment separator, so ``ws-1`` never matches ``ws-10``.
+        """
         escaped = _GLOB.sub(r"\\\1", prefix)
         try:
-            await self._unlink_matching(f"{self._prefix}:p:{escaped}*")
-            await self._unlink_matching(f"{self._prefix}:d:{escaped}*")
+            await self._unlink_matching(f"{self._prefix}:p:{escaped}:*")
+            await self._unlink_matching(f"{self._prefix}:d:{escaped}:*")
         except Exception as exc:
             self._failed("invalidate", exc)
 

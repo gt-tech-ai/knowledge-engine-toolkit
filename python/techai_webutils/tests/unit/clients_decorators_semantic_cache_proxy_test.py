@@ -15,6 +15,7 @@ from techai_webutils.clients.decorators.semantic_cache_proxy import (
     SemanticCacheProxy,
 )
 from techai_webutils.clients.semantic_cache.stub import StubSemanticCache
+from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
 from techai_webutils.core.interfaces.llm import (
     LLMMessage,
@@ -141,7 +142,7 @@ async def test_semantic_cache_proxy_hit_short_circuits_wrapped() -> None:
       - the decoded cached answer is returned; the inner ``complete`` is never awaited
       - ``served_from_cache()`` is set and ``on_hit`` receives the hit
     """
-    inner, on_hit = _inner(), AsyncMock()
+    inner, on_hit = _inner(), AsyncMock(return_value=None)
 
     response = await _proxy(inner, _cache(_HIT), on_hit=on_hit).complete(_MESSAGES)
 
@@ -341,6 +342,64 @@ async def test_stream_hit_replays_cached_text_without_opening_inner() -> None:
     )
     assert "".join(text) == "30 days"
     inner.stream_with_usage.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stream_hit_is_handed_to_on_hit_as_a_response() -> None:
+    """Test that a streamed hit reaches the hit hook as an answer, and serves its replacement.
+
+    **Why this test is important:**
+      - The hook is the audit of a hit; handed the replay iterator it can't read the answer, so
+        streamed hits (the chat path) would go unaudited and unscanned.
+
+    **What it tests:**
+      - ``on_hit`` receives an ``LLMResponse`` with the cached text and model
+      - the answer the hook returns (a redaction) is what the stream replays
+    """
+    inner = _inner()
+    inner.stream_with_usage = AsyncMock()
+    redacted = LLMResponse(
+        content="[redacted]",
+        model="sonnet",
+        input_tokens=0,
+        output_tokens=0,
+        finish_reason="cache_hit",
+    )
+    on_hit = AsyncMock(return_value=redacted)
+
+    stream = await _proxy(inner, _cache(_HIT), on_hit=on_hit).stream(_MESSAGES)
+    text = "".join([item async for item in stream])
+
+    assert on_hit.await_args is not None
+    handed = on_hit.await_args.args[2]
+    assert isinstance(handed, LLMResponse)
+    assert (handed.content, handed.model) == ("30 days", "sonnet")
+    assert text == "[redacted]"
+
+
+@pytest.mark.asyncio
+async def test_hit_hook_block_refuses_the_hit() -> None:
+    """Test that a hook's ``FORBIDDEN`` refuses the hit instead of being swallowed.
+
+    **Why this test is important:**
+      - The audit blocks a cached answer the safety policy now forbids; fail-open swallowing
+        would serve it anyway.
+
+    **What it tests:**
+      - ``complete`` raises the hook's ``FORBIDDEN``; the call is not marked served from cache
+      - any other hook failure is swallowed and the hit served
+    """
+    blocked = AsyncMock(side_effect=AppError(ErrorCode.FORBIDDEN, "blocked"))
+    broken = AsyncMock(side_effect=RuntimeError("sink down"))
+
+    with pytest.raises(AppError) as caught:
+        await _proxy(_inner(), _cache(_HIT), on_hit=blocked).complete(_MESSAGES)
+    refused_served = served_from_cache()
+    response = await _proxy(_inner(), _cache(_HIT), on_hit=broken).complete(_MESSAGES)
+
+    assert caught.value.code is ErrorCode.FORBIDDEN
+    assert not refused_served
+    assert response.content == "30 days"
 
 
 @pytest.mark.asyncio

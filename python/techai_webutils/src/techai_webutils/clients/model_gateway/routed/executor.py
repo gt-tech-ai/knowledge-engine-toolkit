@@ -106,13 +106,18 @@ class ChainExecutor:
             CircuitOpenError: ``ref``'s breaker is open (no call was made).
 
         """
+        permanent: Exception | None = None
         async with self._breaker(ref):
             try:
                 return await call(provider_for(ref))
             except Exception as exc:
-                if not is_transient(exc):
-                    raise _Permanent(exc) from exc
-                raise
+                if is_transient(exc):
+                    raise
+                # A permanent error is the request's fault, not the endpoint's: it leaves
+                # the breaker as a success so it never opens a healthy endpoint.
+                permanent = exc
+        if permanent is not None:
+            raise _Permanent(permanent) from permanent
         # The breaker never suppresses an exception, so this is unreachable.
         raise AppError(ErrorCode.INTERNAL, "circuit breaker suppressed a call's outcome")
 

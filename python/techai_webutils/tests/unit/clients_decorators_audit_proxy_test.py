@@ -24,6 +24,10 @@ from techai_webutils.core.interfaces.llm import (
     StreamUsage,
 )
 from techai_webutils.core.interfaces.metrics import MetricsProvider
+from techai_webutils.core.interfaces.model_gateway import (
+    RouteDecision,
+    set_route_decision,
+)
 from techai_webutils.core.interfaces.safety import (
     SafetyCheck,
     SafetyDecision,
@@ -194,6 +198,74 @@ async def test_cache_hit_is_audited() -> None:
         "allowed",
     )
     inner.complete.assert_not_awaited()
+
+
+_CACHED = LLMResponse(
+    content="cached",
+    model="sonnet",
+    input_tokens=0,
+    output_tokens=0,
+    finish_reason="cache_hit",
+)
+_HIT = CachedAnswer(
+    payload=b"", similarity=0.99, source_query="q", embedding_model="titan"
+)
+
+
+@pytest.mark.asyncio
+async def test_cache_hit_is_blocked_or_redacted_before_it_is_served() -> None:
+    """Test that a hit gets the same safety outcome as a live answer, before it is served.
+
+    **Why this test is important:**
+      - A rule tightened after an answer was cached must still stop (or redact) it; recording
+        the hit as merely flagged would keep serving the answer the policy now forbids.
+
+    **What it tests:**
+      - an output ``block`` audits the hit ``blocked`` with no answer and raises ``FORBIDDEN``
+      - an output ``redact`` audits and returns the redacted answer for the cache to serve
+    """
+    block = SafetyResult(flags=("toxic",), decision=SafetyDecision.BLOCK, redacted=None)
+    redact = SafetyResult(
+        flags=("pii.email",), decision=SafetyDecision.REDACT, redacted="[EMAIL]"
+    )
+    blocked_sink, redacted_sink = _sink(), _sink()
+
+    with pytest.raises(AppError) as caught:
+        await _audit(_inner(), blocked_sink, output_check=_check(block)).audit_cached(
+            (_MESSAGES,), {}, _CACHED, _HIT
+        )
+    served = await _audit(
+        _inner(), redacted_sink, output_check=_check(redact)
+    ).audit_cached((_MESSAGES,), {}, _CACHED, _HIT)
+
+    assert caught.value.code is ErrorCode.FORBIDDEN
+    blocked = _recorded(blocked_sink)
+    assert (blocked.decision, blocked.answer, blocked.cache_hit) == ("blocked", "", True)
+    assert served is not None
+    assert served.content == "[EMAIL]"
+    assert _recorded(redacted_sink).decision == "redacted"
+
+
+@pytest.mark.asyncio
+async def test_record_takes_the_route_model_only_for_a_gateway_call() -> None:
+    """Test that a lingering route decision never names the model of a call that wasn't made.
+
+    **Why this test is important:**
+      - The decision ContextVar holds the previous step's route; stamping it on a cache hit
+        would record a model that never produced the audited answer.
+
+    **What it tests:**
+      - with a decision for ``haiku`` set, a cache hit records the cached answer's model
+      - a live call records the decision's model
+    """
+    set_route_decision(RouteDecision(model_id="anthropic/claude-haiku-4-5"))
+    hit_sink, live_sink = _sink(), _sink()
+
+    await _audit(_inner(), hit_sink).audit_cached((_MESSAGES,), {}, _CACHED, _HIT)
+    await cast("LLMProvider", _audit(_inner(), live_sink)).complete(_MESSAGES)
+
+    assert _recorded(hit_sink).model == "sonnet"
+    assert _recorded(live_sink).model == "anthropic/claude-haiku-4-5"
 
 
 @pytest.mark.asyncio

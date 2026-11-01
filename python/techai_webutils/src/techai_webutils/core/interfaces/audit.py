@@ -68,7 +68,8 @@ class AuditRecord:
     safety_flags: tuple[str, ...]
     """Safety-check findings on the prompt and answer."""
     decision: str
-    """What happened to the answer (``allowed`` | ``blocked`` | ``redacted``)."""
+    """What happened to the answer: ``allowed`` | ``blocked`` | ``redacted`` |
+    ``flagged_after_stream`` (an output block found once the streamed tokens were sent)."""
     cache_hit: bool
     """True when the answer was served from a cache (a cache hit is audited too)."""
     created_at: datetime

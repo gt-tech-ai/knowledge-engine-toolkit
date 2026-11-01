@@ -253,7 +253,9 @@ collaborator or zero timeout skips its layer; recovery needs none.
   redacted answer; `block` → audited, then `FORBIDDEN`), and appends one `AuditRecord` built from
   the injected `AuditContext`, the live trace id and the route decision's model. Streams audit on
   exhaustion (an output block is `flagged_after_stream`); `audit_cached` is the semantic cache's
-  `on_hit` hook (`cache_hit=True`). `AuditEnforcement` `shadow` counts
+  `on_hit` hook, run before a hit is served (`cache_hit=True`; a `block` raises `FORBIDDEN`, a
+  `redact` returns the redacted answer to serve). Only a record for a call the gateway made takes
+  the route decision's model. `AuditEnforcement` `shadow` counts
   `audit_record_failures_total` and serves; `enforced` raises (a coded error keeps its code, else
   `INTERNAL`).
 - **Python — semantic cache proxy.** `clients/decorators/semantic_cache_proxy.SemanticCacheProxy`
@@ -269,7 +271,8 @@ collaborator or zero timeout skips its layer; recovery needs none.
   (`allow_key(key)`, async) has two kinds behind `foundation/resilience/per_key_builder`:
   `memory` (`InMemoryRateLimiter`, per replica; the default) and `redis`
   (`RedisPerKeyRateLimiter`: a fixed window, `INCR` + `EXPIRE` in one pipeline, shared by every
-  replica; a Redis error is `UNAVAILABLE` for the caller's policy). `max_per_window` 0 is unlimited.
+  replica; a Redis error is `UNAVAILABLE` for the caller's policy). Through `allow_key`,
+  `max_per_window` 0 is unlimited; `InMemoryRateLimiter.allow` keeps 0 as "allow nothing".
 - **Python — GenAI span enrichment.** `clients/decorators/ai_enricher.AiSpanEnricher` wraps an
   `LLMProvider` or `RetrievalEngine` and stamps the span already current (the step's) with
   `gen_ai.system`, `gen_ai.step`, `gen_ai.request.model` (the model asked for),

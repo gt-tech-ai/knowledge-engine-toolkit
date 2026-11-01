@@ -26,8 +26,9 @@ Python: `techai-webutils` 0.7.0.
 - Python `clients/safety`: `SafetyKind` (`noop` default, `regex`, `comprehend`,
   `bedrock_guardrails`), `SafetyConfig` with an `on_detect` policy (`flag`/`redact`/`block`) and
   `new_safety_check_from_config`. `regex` flags `pii.ssn`, `pii.email` and `pii.phone` with no
-  infrastructure; the managed kinds load aiobotocore only when selected and map botocore failures
-  through `botocore_error_to_app_error`. An unknown kind or policy raises `AppValueError`.
+  infrastructure; the managed kinds load aiobotocore only when selected, open one client on first
+  use, bound each call by `SafetyConfig.timeout_seconds` (default 5; past it, `UNAVAILABLE`) and map
+  botocore failures through `botocore_error_to_app_error`. An unknown kind or policy raises `AppValueError`.
 - Python `core/interfaces/semantic_cache`: `SemanticCache` (extends `CacheInvalidator`;
   fail-open `lookup` / `store`), `CacheNamespace` (workspace, embedding model and version, scope;
   `tag()`) and `CachedAnswer`.
@@ -92,11 +93,14 @@ Python: `techai-webutils` 0.7.0.
 - Python `RedisTokenLedger(clock=…)`: the time the budget window is read at (injected for tests).
 - Python `clients/decorators.SemanticCacheProxy` + `SemanticCacheBinding`: read-through caching
   of one unary method and, optionally, its stream (replayed on a hit; stored only after full
-  consumption), fail-open, `served_from_cache()` on a hit, an `on_hit` hook, hit / miss / saving
-  metrics, a `semantic_cache.lookup` span and a `cache_lookups` fact per lookup.
+  consumption), fail-open, `served_from_cache()` on a hit, an `on_hit` hook run before a hit is
+  served (it may return a replacement answer, and a `FORBIDDEN` it raises refuses the hit; a
+  streamed hit reaches it as an `LLMResponse`), hit / miss / saving metrics, a `semantic_cache.lookup` span and a `cache_lookups` fact per lookup.
 - Python `clients/decorators.AuditProxy` + `AuditEnforcement` (`shadow`, `enforced`): input and
   output safety chains around a model call, one `AuditRecord` per answer (streams on exhaustion,
-  cache hits through `audit_cached`), and `core/interfaces/audit.AuditContext`.
+  cache hits through `audit_cached`, which blocks or redacts a hit like a live answer; only a
+  record for a call the gateway made takes the route decision's model), and
+  `core/interfaces/audit.AuditContext`.
 - Python `core/types/routing.RoutingPlan` (every field defaulted), `PlanRequest`,
   `PlanRequirements`, `ReasoningLevel`, `ContextStrategy`; `core/interfaces/routing.RouteTransport`;
   `RoutePlannerKind.OVERLORD` (`OverlordPlanner`, `OverlordPlannerConfig`) failing open to
@@ -108,7 +112,11 @@ Python: `techai-webutils` 0.7.0.
 - Python `TokenAccountingProxy` applies `decide`: a ledger error under `hard` enforcement now
   rejects (fail closed); `soft` and `shadow` still serve.
 - Python `InMemoryRateLimiter` implements `PerKeyRateLimiter` (`allow_key`; `allow(key)` is
-  kept) and treats `max_per_window=0` as unlimited.
+  kept). `max_per_window=0` is unlimited through `allow_key`; `allow` keeps its meaning (0 allows
+  nothing). `PerKeyRateLimiter` is its own port, not a `RateLimiter`: it takes a key and the
+  global limiter does not.
+- Python `retry_transient_async` computes its exponential-jitter backoff itself (same schedule),
+  no longer calling tenacity's deprecated `wait_exponential_jitter(initial=…)`.
 - Python routing seams: `RouteClassifier.classify` returns a `Classification` (route,
   confidence, `degraded`); `CandidateRanker.rank` receives the `PlanInput` (requirements and
   policy); `RouteContext.slo` defaults to `""` (no request objective).

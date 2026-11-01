@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -15,13 +16,12 @@ from redis.asyncio import Redis
 
 from techai_webutils.clients.cache.redis import RedisCache
 from techai_webutils.clients.cache.types import FailureMode
-from techai_webutils.clients.embedding.stub import StubEmbeddingProvider
 from techai_webutils.clients.semantic_cache import (
     SemanticCacheConfig,
     SemanticCacheKind,
     semantic_cache_from_config,
 )
-from techai_webutils.core.interfaces.embedding import EmbeddingResult
+from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
 from techai_webutils.core.interfaces.semantic_cache import CacheNamespace
 
 if TYPE_CHECKING:
@@ -44,12 +44,23 @@ _VECTORS = {
 """Hand-placed unit vectors: kittens ≈ cats (cos 0.99), dogs further (cos 0.6), taxes orthogonal."""
 
 
-class _AxisEmbedding(StubEmbeddingProvider):
-    """A deterministic embedder over ``_VECTORS`` so the expected neighbours are known."""
+def _axis_embedding() -> AsyncMock:
+    """Return a mock of the embedding boundary over ``_VECTORS``, so the neighbours are known.
 
-    async def embed(self, text: str) -> EmbeddingResult:
+    Returns:
+        An ``EmbeddingProvider`` mock (model ``axes``, dimension 3).
+
+    """
+
+    async def embed(text: str) -> EmbeddingResult:  # noqa: RUF029 - the port is async
         """Return the hand-placed vector for ``text``."""
         return EmbeddingResult(embedding=_VECTORS[text], model="axes", token_count=0)
+
+    embedding = AsyncMock(spec=EmbeddingProvider)
+    embedding.embed.side_effect = embed
+    embedding.dimension.return_value = 3
+    embedding.model_name.return_value = "axes"
+    return embedding
 
 
 @pytest.fixture(scope="module")
@@ -72,7 +83,7 @@ async def semantic_cache(stack_container: object) -> AsyncIterator[SemanticCache
         yield semantic_cache_from_config(
             SemanticCacheConfig(kind=SemanticCacheKind.REDIS, index_prefix="it"),
             cache=RedisCache(client, FailureMode.ERROR),
-            embedding=_AxisEmbedding("axes", 3),
+            embedding=_axis_embedding(),
             redis=client,
         )
     finally:

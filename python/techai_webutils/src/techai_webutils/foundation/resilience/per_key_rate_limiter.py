@@ -1,7 +1,8 @@
 """Process-local per-key fixed-window rate limiter (a generic send/throttle guard).
 
 A fixed-window counter per key: at most ``max_per_window`` allowances per ``window_seconds`` (default
-one hour); ``0`` is unlimited. Process-local (per replica); the shared limiter is
+one hour). Through the ``PerKeyRateLimiter`` port (``allow_key``) ``0`` is unlimited, like the
+Redis limiter; the original ``allow`` keeps its meaning, so ``0`` there allows nothing. Process-local (per replica); the shared limiter is
 ``redis_rate_limiter.RedisPerKeyRateLimiter`` (``per_key_builder`` selects one by kind). An injected
 ``clock`` (default ``time.monotonic``) keeps the window behaviour unit-testable. Distinct from the
 peer ``TokenBucketRateLimiter``, which is a single global bucket (no per-key keying).
@@ -37,7 +38,9 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
         clock: Callable[[], float] = time.monotonic,
         evict_threshold: int = _EVICT_THRESHOLD,
     ) -> None:
-        """Allow at most ``max_per_window`` (``0``: unlimited) per ``window_seconds`` per key.
+        """Allow at most ``max_per_window`` per ``window_seconds`` per key.
+
+        ``0`` is unlimited through ``allow_key`` and allows nothing through ``allow``.
 
         ``clock`` is the time source.
 
@@ -55,13 +58,16 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
 
     @override
     async def allow_key(self, key: str) -> bool:
-        """Return True and count one allowance if ``key`` is under its window limit, else False."""
+        """Return True and count one allowance if ``key`` is under its limit (``0``: unlimited)."""
+        if self._max == 0:
+            return True
         return await self.allow(key)
 
     async def allow(self, key: str) -> bool:
-        """Return True and count one allowance if ``key`` is under its window limit, else False."""
-        if self._max == 0:
-            return True
+        """Return True and count one allowance if ``key`` is under its window limit, else False.
+
+        ``0`` allows nothing (an operator pauses the guarded action this way).
+        """
         now = self._clock()
         async with self._lock:
             if len(self._counts) >= self._evict_threshold:
