@@ -6,6 +6,22 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.36] - 2026-10-31
+
+Python: unchanged (`techai-webutils` 0.6.2).
+
+### Added
+
+- `foundation/okf`: Open Knowledge Format (OKF) v0.2 support for markdown knowledge bundles.
+  `Parse` splits a file into typed frontmatter (the OKF keys, a bare `verified` mapping read as
+  a one-element list, unknown keys kept in `Extra`), the body, and its links classified as
+  relative, bundle-absolute, anchor or external (code blocks and spans skipped).
+  `RenderFrontmatter` writes frontmatter in a stable key order; `RenderIndex` and
+  `RenderRootIndex` write `index.md` in the OKF §8 format, independent of input order;
+  `Conform` checks a concept's frontmatter, type vocabulary, per-type required keys and the
+  reserved `index.md`/`log.md` names; `ConformLog` checks `log.md` date headings;
+  `Frontmatter.Stale` compares `stale_after` to a clock; `HasKey` tests key presence.
+
 ## [0.0.35] - 2026-10-31
 
 Python: unchanged (`techai-webutils` 0.6.2).
