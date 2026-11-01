@@ -16,6 +16,14 @@ All notable changes to this project are recorded here. The format follows
   raises `AppValueError`. `JsonlDataset` versions by the file's sha256.
 - Python `services/evaluator.ThresholdEvaluator` (a case passes when every grade passed and
   the mean score reaches the threshold) and `clients/grader/stub.StubGrader`.
+- Python `core/interfaces/safety`: `SafetyCheck` (`scan(text, kind=prompt|answer)`), a frozen
+  `SafetyResult` (flags, `allow`/`redact`/`block`, redacted text) and `blocked_error`, a coded
+  `FORBIDDEN` naming the flags.
+- Python `clients/safety`: `SafetyKind` (`noop` default, `regex`, `comprehend`,
+  `bedrock_guardrails`), `SafetyConfig` with an `on_detect` policy (`flag`/`redact`/`block`) and
+  `new_safety_check_from_config`. `regex` flags `pii.ssn`, `pii.email` and `pii.phone` with no
+  infrastructure; the managed kinds load aiobotocore only when selected and map botocore failures
+  through `botocore_error_to_app_error`. An unknown kind or policy raises `AppValueError`.
 
 ## [0.0.35] - 2026-10-31
 

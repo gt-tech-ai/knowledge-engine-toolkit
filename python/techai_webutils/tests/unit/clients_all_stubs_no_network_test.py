@@ -69,6 +69,8 @@ from techai_webutils.clients.retrieval import (
     RetrievalKind,
     new_retrieval_engine_from_config,
 )
+from techai_webutils.clients.safety import SafetyConfig, new_safety_check_from_config
+from techai_webutils.clients.safety.noop import NoopSafetyCheck
 from techai_webutils.clients.storage.builder import (
     StorageConfig,
     StorageKind,
@@ -148,7 +150,7 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
         - With every real backend constructor patched to fail, each tier factory called with its
           stub/memory/noop/null/local/asyncio kind (storage, messaging, embedding, vector, email, llm,
           retrieval, kb_ingestion, lock, cache, jobs, tracer, metrics, executor, facts, token_ledger,
-          audit, dataset) returns the stub
+          audit, dataset, safety) returns the stub
           implementation — i.e. none constructed a real client.
     """
 
@@ -233,6 +235,7 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
         (token_ledger_from_config(TokenLedgerConfig()), StubTokenLedger),
         (new_audit_sink_from_config(AuditSinkConfig()), StubAuditSink),
         (new_dataset_from_config(DatasetConfig()), StubDataset),
+        (new_safety_check_from_config(SafetyConfig()), NoopSafetyCheck),
     ]
 
     for impl, stub_type in built:

@@ -462,7 +462,7 @@ Most tiers ship an in-process, stub, or no-op backend, so wiring needs no cloud 
   `env`/`file`; cache, prometheus, transport `stub`; tracer `noop`; metrics no-op when disabled;
   logger `stdlib`. `database` and `rpc` default to `postgres` and `grpc`: their consumers hold the
   `*sql.DB` or connection itself.
-- **Python:** cache `local`/`null`; email `noop`; audit, dataset, embedding, facts, llm, retrieval,
+- **Python:** cache `local`/`null`; email, safety `noop`; audit, dataset, embedding, facts, llm, retrieval,
   kb_ingestion, token_ledger, vector `stub`; jobs, lock, messaging, storage `memory`; tracer, metrics `null`;
   executor `asyncio`.
 
@@ -619,6 +619,9 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
 - **Evals:** `core/interfaces/{dataset,evaluator,grader}.py`, `clients/dataset`
   (`stub`, `jsonl`, a supplied `aiops`), `clients/grader/stub` and `services/evaluator.py`
   (`ThresholdEvaluator`). Go's `foundation/dataset` (the YAML data loader) is unrelated.
+- **Safety:** `core/interfaces/safety.py` (`SafetyCheck`, `SafetyResult`, `blocked_error` →
+  `FORBIDDEN`) and `clients/safety` (`noop`, `regex`, and the lazily loaded `comprehend` and
+  `bedrock_guardrails`, whose aiobotocore client opens on the first scan).
 
 ## Testing
 
