@@ -30,6 +30,7 @@ if TYPE_CHECKING:
         ModelGateway,
         RouteContextProvider,
     )
+    from techai_webutils.core.interfaces.routing import RoutingPolicyStore
     from techai_webutils.core.interfaces.token_ledger import TokenLedger
 
 
@@ -96,7 +97,7 @@ class GatewayConfig:
     """Whether a tenant may bring its own provider key (reserved; off)."""
 
 
-def new_model_gateway_from_config(
+def new_model_gateway_from_config(  # noqa: PLR0913 - the config plus each injected collaborator
     config: GatewayConfig,
     *,
     provider_factory: Callable[[LlmConfig], LLMProvider] = new_llm_from_config,
@@ -108,6 +109,7 @@ def new_model_gateway_from_config(
     facts: FactPublisher | None = None,
     metrics: MetricsProvider | None = None,
     planner_deps: Mapping[str, object] | None = None,
+    policy_store: RoutingPolicyStore | None = None,
 ) -> ModelGateway:
     """Build the ``ModelGateway`` selected by ``config.kind``.
 
@@ -124,6 +126,8 @@ def new_model_gateway_from_config(
         facts: The fact publisher the ``analytics`` decision sink publishes through (``routed``).
         metrics: Counts routed attempts, decision-sink failures and planner fail-opens (``routed``).
         planner_deps: Collaborators a remote planner kind needs (``overlord``: ``transport``).
+        policy_store: The routing policy store to consult instead of the one
+            ``routed.policy_store`` describes (``routed``; e.g. a refreshing store).
 
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.
@@ -153,6 +157,7 @@ def new_model_gateway_from_config(
             facts=facts,
             metrics=metrics,
             planner_deps=planner_deps,
+            policy_store=policy_store,
         )
     msg = f"unknown model gateway kind: {config.kind!r}"
     raise AppValueError(msg)

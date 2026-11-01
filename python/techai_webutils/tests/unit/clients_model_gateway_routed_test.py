@@ -30,7 +30,8 @@ from techai_webutils.core.interfaces.model_gateway import (
     RouteContext,
     current_route_decision,
 )
-from techai_webutils.core.interfaces.routing import RoutePlanner
+from techai_webutils.core.interfaces.routing import RoutePlanner, RoutingPolicyStore
+from techai_webutils.core.types.routing import RoutingPolicy
 
 _MESSAGES = [LLMMessage(role="user", content="what is the refund window")]
 
@@ -300,3 +301,44 @@ async def test_transient_failure_fails_over_and_records_reason(
     assert decision is not None
     assert (decision.reason, decision.endpoint) == ("failover", "usw2")
     assert [a.outcome for a in decision.attempts] == ["failed", "ok"]
+
+
+@pytest.mark.asyncio
+async def test_injected_policy_store_replaces_the_configured_one(
+    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+) -> None:
+    """Test that a caller-supplied policy store is the one the routed gateway consults.
+
+    **Why this test is important:**
+      - A service that keeps policies in a database hands the gateway a refreshing store;
+        if the gateway kept reading ``config.policy_store`` the stored policies would never
+        apply, while a gateway built without one must still read its configuration.
+
+    **What it tests:**
+      - with an injected store pinning ``generate`` to Haiku, the call is served by Haiku
+        even though the configured store pins nothing
+      - without one, the configured store's pin applies
+    """
+    ctx = RouteContext(tenant_id="org-1", step="generate")
+    store = MagicMock(spec=RoutingPolicyStore)
+    store.policy.return_value = RoutingPolicy(pins={"generate": "anthropic/haiku"})
+    config = GatewayConfig(
+        kind=GatewayKind.ROUTED,
+        routed=RoutedConfig(catalog=catalog_raw, routes=routes_raw),
+    )
+    injected = new_model_gateway_from_config(
+        config,
+        provider_factory=lambda llm: StubLlmProvider(llm.model),
+        context_provider=lambda: ctx,
+        policy_store=store,
+    )
+    configured = _gateway(
+        catalog_raw,
+        routes_raw,
+        ctx,
+        policies={"org-1": {"pins": {"generate": "anthropic/haiku"}}},
+    )
+
+    assert (await injected.complete(_MESSAGES)).model == "haiku-use1"
+    store.policy.assert_called_with("org-1", "")
+    assert (await configured.complete(_MESSAGES)).model == "haiku-use1"

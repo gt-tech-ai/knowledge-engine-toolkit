@@ -6,6 +6,18 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Python `clients/model_gateway/routed.RefreshingPolicyStore`: a `RoutingPolicyStore` that
+  answers from an in-memory snapshot of stored policies, which an injected async loader
+  refreshes every `interval_s` (a workspace entry, then the tenant-wide one, then a fallback
+  store). A failed refresh keeps the last snapshot, logs it and counts
+  `routing_policy_refresh_total{outcome}`; entering the store refreshes once (a failure does not
+  stop startup) and starts the loop, exiting cancels it.
+- Python `new_model_gateway_from_config(..., policy_store=)` and
+  `RoutedGateway.from_config(..., policy_store=)`: a given store replaces the one
+  `routed.policy_store` describes.
+
 ## [0.0.39] - 2026-11-01
 
 Python: unchanged (`techai-webutils` 0.7.1).

@@ -682,7 +682,12 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
   plans) and `core/interfaces/routing.py` (`RouteClassifier`, `CandidateRanker`, `RoutePlanner`,
   `RoutingPolicyStore`, `RouteDecisionSink`). `clients/model_gateway/routed` holds the
   boot-validated catalog (each endpoint's `LlmConfig`, `fallback_model` stripped), the
-  deterministic filter, the `config` policy store and the stage `Kind`s: classifier `stub` /
+  deterministic filter, the `config` policy store, `RefreshingPolicyStore` (a synchronous
+  store over a snapshot an injected async loader refreshes on an interval; workspace, then
+  tenant, then a fallback store; a failed refresh keeps the last snapshot and counts
+  `routing_policy_refresh_total{outcome}`), which a caller passes as `policy_store` to
+  `new_model_gateway_from_config` in place of `routed.policy_store`, and the stage `Kind`s:
+  classifier `stub` /
   `embedding` (exemplars embedded once at the gateway's `__aenter__`; an embedder outage at
   request time degrades to the step's route), ranker `static_order` / `cost_aware` (objective,
   hard caps that drop, quality floor, budget bias from the injected `TokenLedger`), planner
