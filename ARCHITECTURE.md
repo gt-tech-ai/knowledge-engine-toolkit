@@ -462,8 +462,8 @@ Most tiers ship an in-process, stub, or no-op backend, so wiring needs no cloud 
   `env`/`file`; cache, prometheus, transport `stub`; tracer `noop`; metrics no-op when disabled;
   logger `stdlib`. `database` and `rpc` default to `postgres` and `grpc`: their consumers hold the
   `*sql.DB` or connection itself.
-- **Python:** cache `local`/`null`; email `noop`; audit, embedding, facts, llm, retrieval, kb_ingestion,
-  token_ledger, vector `stub`; jobs, lock, messaging, storage `memory`; tracer, metrics `null`;
+- **Python:** cache `local`/`null`; email `noop`; audit, dataset, embedding, facts, llm, retrieval,
+  kb_ingestion, token_ledger, vector `stub`; jobs, lock, messaging, storage `memory`; tracer, metrics `null`;
   executor `asyncio`.
 
 Go cache (Redis), database (Postgres) and connector (S3) have no stub and are covered by
@@ -610,6 +610,15 @@ None of the packages above has a Python mirror yet, and `techai-webutils` is unc
 stepcache,report,gen,scaffold,impact,pins,dataset,schemagen}`, `services/{probe,toolrun}`,
 `execution/{ops,runs}` and `transport/{cobra,mcp,cron}`. Go has no op-service tier: an operation
 runs through `execution/ops`. Python keeps `core/interfaces/op_service.py`.
+
+### Go parity gap
+
+The AI call-path tiers are Python-only: the model call path runs in the Python retrieval
+service, so no Go consumer exists yet. Each is recorded here until a Go consumer needs it:
+
+- **Evals:** `core/interfaces/{dataset,evaluator,grader}.py`, `clients/dataset`
+  (`stub`, `jsonl`, a supplied `aiops`), `clients/grader/stub` and `services/evaluator.py`
+  (`ThresholdEvaluator`). Go's `foundation/dataset` (the YAML data loader) is unrelated.
 
 ## Testing
 

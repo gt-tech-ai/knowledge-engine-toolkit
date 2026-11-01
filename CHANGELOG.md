@@ -6,6 +6,17 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Python `core/interfaces/{dataset,evaluator,grader}`: the eval contracts — `EvalCase`
+  (an empty id is `INVALID_INPUT`), `Dataset` (`cases()`, a content-hash `version()`),
+  `Grader` / `GradeResult`, and `Evaluator` with `EvalOutput`, `EvalResult` and `EvalReport`.
+- Python `clients/dataset`: `DatasetKind` (`stub` default, `jsonl`, `aiops`), `DatasetConfig`
+  and `new_dataset_from_config`. `aiops` comes from the injected `backends`; an unknown kind
+  raises `AppValueError`. `JsonlDataset` versions by the file's sha256.
+- Python `services/evaluator.ThresholdEvaluator` (a case passes when every grade passed and
+  the mean score reaches the threshold) and `clients/grader/stub.StubGrader`.
+
 ## [0.0.35] - 2026-10-31
 
 Python: unchanged (`techai-webutils` 0.6.2).

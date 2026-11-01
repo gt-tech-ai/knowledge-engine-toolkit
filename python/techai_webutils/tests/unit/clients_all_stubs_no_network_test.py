@@ -19,6 +19,8 @@ from techai_webutils.clients.cache.builder import (
 )
 from techai_webutils.clients.cache.local import LocalCache
 from techai_webutils.clients.cache.null import NullCache
+from techai_webutils.clients.dataset import DatasetConfig, new_dataset_from_config
+from techai_webutils.clients.dataset.stub import StubDataset
 from techai_webutils.clients.email.builder import (
     EmailConfig,
     EmailKind,
@@ -130,6 +132,7 @@ _REAL_BACKENDS = [
     "techai_webutils.execution.executor.factory.ray_runtime_from_config",
     "techai_webutils.clients.facts.messaging.MessagingFactPublisher",
     "techai_webutils.clients.token_ledger.redis.RedisTokenLedger",
+    "techai_webutils.clients.dataset.jsonl.JsonlDataset",
 ]
 
 
@@ -145,7 +148,7 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
         - With every real backend constructor patched to fail, each tier factory called with its
           stub/memory/noop/null/local/asyncio kind (storage, messaging, embedding, vector, email, llm,
           retrieval, kb_ingestion, lock, cache, jobs, tracer, metrics, executor, facts, token_ledger,
-          audit) returns the stub
+          audit, dataset) returns the stub
           implementation — i.e. none constructed a real client.
     """
 
@@ -229,6 +232,7 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
         ),
         (token_ledger_from_config(TokenLedgerConfig()), StubTokenLedger),
         (new_audit_sink_from_config(AuditSinkConfig()), StubAuditSink),
+        (new_dataset_from_config(DatasetConfig()), StubDataset),
     ]
 
     for impl, stub_type in built:
