@@ -2,8 +2,8 @@
 
 The client opens on the first scan (never at construction, so building the graph does no I/O),
 once even under concurrent first scans, and is released by ``aclose``. Every call is bounded by
-the injected ``timeout_s``; an expired call fails ``UNAVAILABLE`` (transient). botocore failures cross the boundary as coded ``AppError``s
-through the shared ``botocore_error_to_app_error``.
+the injected ``timeout_s``; an expired call fails ``UNAVAILABLE`` (transient). botocore failures
+cross the boundary as coded ``AppError``s through the shared ``botocore_error_to_app_error``.
 """
 
 from __future__ import annotations

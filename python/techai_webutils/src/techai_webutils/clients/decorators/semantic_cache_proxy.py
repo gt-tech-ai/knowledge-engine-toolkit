@@ -11,15 +11,17 @@ every other attribute passes through. Per bound call it:
    text, then a zero-token ``StreamUsage`` with ``finish_reason="cache_hit"``), counts
    ``semantic_cache_hits_total`` and the injected ``saving``, awaits ``on_hit`` with the answer
    (an ``LLMResponse`` for a stream) before serving it, then sets ``served_from_cache()``. The
-   hook may return a replacement answer (e.g. redacted) and may refuse the hit by raising a
-   ``FORBIDDEN`` ``AppError`` (a safety block), which propagates;
+   hook may return a replacement answer (e.g. redacted; a stream replays only an
+   ``LLMResponse`` replacement) and refuses the hit by raising any coded ``AppError`` (a
+   safety block, or an enforced audit that could not scan or record), which propagates;
 4. **miss** — calls the inner and writes the answer through with the TTL (a stream only once it
    was fully consumed without error, so a truncated answer is never cached).
 
 Everything else the cache, the hook or the telemetry raise is logged, counted
-(``semantic_cache_proxy_errors_total{op}``) and swallowed: apart from the hook's block or
-replacement, the proxy can never fail or change the answer. ``enabled=False`` or a ``StubSemanticCache`` makes it a passthrough. Each lookup publishes
-one ``cache_lookups`` fact (outcome, similarity bin, model, workspace; lookups, saving).
+(``semantic_cache_proxy_errors_total{op}``) and swallowed: apart from the hook's refusal or
+replacement, the proxy can never fail or change the answer. ``enabled=False`` or a
+``StubSemanticCache`` makes it a passthrough. Each lookup publishes one ``cache_lookups``
+fact (outcome, similarity bin, model, workspace; lookups, saving).
 """
 
 from __future__ import annotations
@@ -303,18 +305,17 @@ class SemanticCacheProxy:
         """Run the hit hook, mark the call served from cache and return the answer to serve.
 
         Raises:
-            AppError: ``FORBIDDEN`` when the hook refuses the hit (any other failure is
-                swallowed and the hit served as is).
+            AppError: any coded error from the hook: its verdict on the hit (``FORBIDDEN``
+                for a blocked answer; under enforced audit, the scan or record failure).
+                An uncoded failure is swallowed and the hit served as is.
 
         """
         served = answer
         if self._on_hit is not None:
             try:
                 replaced = await self._on_hit(call[0], call[1], answer, hit)
-            except AppError as exc:
-                if exc.code is ErrorCode.FORBIDDEN:
-                    raise
-                self._failed("on_hit", exc)
+            except AppError:
+                raise
             except Exception as exc:
                 self._failed("on_hit", exc)
             else:
@@ -381,6 +382,15 @@ class SemanticCacheProxy:
                 )
                 if isinstance(served, LLMResponse):
                     text = served.content
+                else:
+                    self._failed(
+                        "on_hit",
+                        AppError(
+                            ErrorCode.INTERNAL,
+                            f"stream hit replacement is {type(served).__name__}, "
+                            "not an LLMResponse",
+                        ),
+                    )
                 return self._replay(text, model, keep_usage=keep_usage)
             opener = cast(
                 "Callable[..., Awaitable[AsyncIterator[str | StreamUsage]]]", source

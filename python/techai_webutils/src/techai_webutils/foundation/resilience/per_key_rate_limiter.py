@@ -1,8 +1,9 @@
 """Process-local per-key fixed-window rate limiter (a generic send/throttle guard).
 
-A fixed-window counter per key: at most ``max_per_window`` allowances per ``window_seconds`` (default
-one hour). Through the ``PerKeyRateLimiter`` port (``allow_key``) ``0`` is unlimited, like the
-Redis limiter; the original ``allow`` keeps its meaning, so ``0`` there allows nothing. Process-local (per replica); the shared limiter is
+A fixed-window counter per key: at most ``max_per_window`` allowances per ``window_seconds``
+(default one hour). Through the ``PerKeyRateLimiter`` port (``allow_key``) ``0`` is unlimited,
+like the Redis limiter; the original ``allow`` keeps its meaning, so ``0`` there allows nothing.
+Process-local (per replica); the shared limiter is
 ``redis_rate_limiter.RedisPerKeyRateLimiter`` (``per_key_builder`` selects one by kind). An injected
 ``clock`` (default ``time.monotonic``) keeps the window behaviour unit-testable. Distinct from the
 peer ``TokenBucketRateLimiter``, which is a single global bucket (no per-key keying).

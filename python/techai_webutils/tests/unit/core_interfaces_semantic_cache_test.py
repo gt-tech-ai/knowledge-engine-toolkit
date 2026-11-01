@@ -6,6 +6,7 @@ import dataclasses
 
 import pytest
 
+from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.cache import CacheInvalidator
 from techai_webutils.core.interfaces.semantic_cache import (
     CachedAnswer,
@@ -43,6 +44,23 @@ def test_cache_namespace_isolation() -> None:
     )
     assert len(base.tag()) == 16
     assert not CacheNamespace("ws-1", "m", "v1").scope
+
+
+def test_cache_namespace_rejects_a_separator_in_the_workspace() -> None:
+    """Test that a workspace id carrying the key separator ``:`` is invalid input.
+
+    **Why this test is important:**
+      - Backends key and evict by ``<workspace>:``; a workspace ``ws:a`` would be evicted with
+        ``ws`` and could collide with another workspace's keys.
+
+    **What it tests:**
+      - ``CacheNamespace("ws:a", …)`` raises a ``ValueError`` coded ``INVALID_INPUT``
+    """
+    with pytest.raises(ValueError, match="workspace_id") as caught:
+        CacheNamespace("ws:a", "m", "v1")
+
+    assert isinstance(caught.value, AppError)
+    assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
 def test_cached_answer_is_frozen_and_cache_composes_invalidator() -> None:

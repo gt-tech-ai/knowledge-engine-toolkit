@@ -253,9 +253,10 @@ collaborator or zero timeout skips its layer; recovery needs none.
   redacted answer; `block` → audited, then `FORBIDDEN`), and appends one `AuditRecord` built from
   the injected `AuditContext`, the live trace id and the route decision's model. Streams audit on
   exhaustion (an output block is `flagged_after_stream`); `audit_cached` is the semantic cache's
-  `on_hit` hook, run before a hit is served (`cache_hit=True`; a `block` raises `FORBIDDEN`, a
-  `redact` returns the redacted answer to serve). Only a record for a call the gateway made takes
-  the route decision's model. `AuditEnforcement` `shadow` counts
+  `on_hit` hook, run before a hit is served (`cache_hit=True`; an input `redact` records the
+  redacted prompt; an output `block` raises `FORBIDDEN`, a `redact` returns the redacted answer to
+  serve). A record takes the route decision's model only when the audited call itself set that
+  decision. `AuditEnforcement` `shadow` counts
   `audit_record_failures_total` and serves; `enforced` raises (a coded error keeps its code, else
   `INTERNAL`).
 - **Python — semantic cache proxy.** `clients/decorators/semantic_cache_proxy.SemanticCacheProxy`
@@ -263,8 +264,9 @@ collaborator or zero timeout skips its layer; recovery needs none.
   optionally a `stream_method`, and how arguments map to a query and a `CacheNamespace`). A hit
   returns the decoded answer (a stream replays the cached text, then a zero-token `StreamUsage`)
   without calling the inner and sets `served_from_cache()`; a miss writes the answer through (a
-  stream only once fully consumed). Every cache, hook or telemetry failure is swallowed and
-  counted; `enabled=False` or a `StubSemanticCache` is a passthrough. Metrics:
+  stream only once fully consumed). A coded `AppError` from the `on_hit` hook refuses the hit and
+  propagates; every other cache, hook or telemetry failure is swallowed and counted;
+  `enabled=False` or a `StubSemanticCache` is a passthrough. Metrics:
   `semantic_cache_{hits,misses}_total{path,workspace}`, `semantic_cache_saving_usd_total`; one
   `cache_lookups` fact per lookup.
 - **Python — per-key rate limits.** `core/interfaces/rate_limiter.PerKeyRateLimiter`

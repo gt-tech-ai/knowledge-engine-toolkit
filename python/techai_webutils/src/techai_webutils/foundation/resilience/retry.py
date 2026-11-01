@@ -14,10 +14,10 @@ from tenacity import (
     retry,
     retry_if_exception,
     stop_after_attempt,
-    wait_exponential_jitter,
 )
 
 from techai_webutils.core.errors.errors import AppError
+from techai_webutils.foundation.resilience.backoff import exponential_jitter_wait
 
 F = TypeVar("F", bound=Callable[..., object])
 
@@ -57,9 +57,7 @@ def retry_transient(
         @retry(
             retry=retry_if_exception(_is_transient),
             stop=stop_after_attempt(max_attempts),
-            wait=wait_exponential_jitter(
-                initial=base_delay, max=max_delay, jitter=base_delay
-            ),
+            wait=exponential_jitter_wait(initial=base_delay, max_delay=max_delay),
             reraise=True,
         )
         @functools.wraps(func)
