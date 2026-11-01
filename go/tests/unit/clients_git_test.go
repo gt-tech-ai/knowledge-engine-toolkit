@@ -180,3 +180,85 @@ func TestClientsGit_StubAndFactory(t *testing.T) {
 		git.Deps{Decorations: fixtures.Decorations()})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+// TestClientsGit_HistoryAndWorktree tests the history, status, search and tree-edit
+// operations over a mocked runner.
+//
+// Why this test is important:
+//   - A step that reads history or edits the tree must reach git through the client, not
+//     a raw runner, so the client tier decorates it; a misread exit code would make a
+//     search with no match a failure or a failed grep look like an empty result.
+//
+// What it tests:
+//   - Log and Status return git's output; LsUntracked parses NUL-delimited untracked,
+//     non-ignored files; Grep lists matching files, exit 1 is none and any other failure
+//     is UPSTREAM; Move runs `git mv --`; Remove runs `git rm -q -f --` and does nothing
+//     with no paths; the stub returns nothing and touches nothing.
+func TestClientsGit_HistoryAndWorktree(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	r := mocks.NewMockCommandRunner(gomock.NewController(t))
+	c, err := git.NewFromConfig(ctx, git.Config{Kind: git.KindExec},
+		git.Deps{Decorations: fixtures.Decorations(), Runner: r})
+	require.NoError(t, err)
+
+	r.EXPECT().RunBuffered(gomock.Any(), "/r", "git", "log", "--format=%H", "--", "a.md").
+		Return(interfaces.CmdResult{Stdout: []byte("abc\n")})
+	out, err := c.Log(ctx, "/r", "--format=%H", "--", "a.md")
+	require.NoError(t, err)
+	assert.Equal(t, "abc\n", string(out))
+
+	r.EXPECT().
+		RunBuffered(gomock.Any(), "/r", "git", "status", "--porcelain", "--", "docs").
+		Return(interfaces.CmdResult{Stdout: []byte(" M docs/a.md\n")})
+	out, err = c.Status(ctx, "/r", []string{"docs"})
+	require.NoError(t, err)
+	assert.Equal(t, " M docs/a.md\n", string(out))
+
+	r.EXPECT().RunBuffered(gomock.Any(), "/r", "git", "ls-files", "-z", "--others",
+		"--exclude-standard", "--", "*.md").
+		Return(interfaces.CmdResult{Stdout: []byte("new.md\x00d/n.md\x00")})
+	files, err := c.LsUntracked(ctx, "/r", []string{"*.md"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"new.md", "d/n.md"}, files)
+
+	grep := func(needle string) *gomock.Call {
+		return r.EXPECT().RunBuffered(gomock.Any(), "/r", "git", "grep", "-l", "-z", "-I",
+			"-F", "-e", needle)
+	}
+	grep("docs/a").Return(interfaces.CmdResult{Stdout: []byte("x.md\x00y.go\x00")})
+	files, err = c.Grep(ctx, "/r", "docs/a")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"x.md", "y.go"}, files)
+	grep("nothing").Return(exitWith(1, ""))
+	files, err = c.Grep(ctx, "/r", "nothing")
+	require.NoError(t, err)
+	assert.Empty(t, files)
+	grep("broken").Return(exitWith(128, "fatal: bad pattern"))
+	_, err = c.Grep(ctx, "/r", "broken")
+	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
+
+	r.EXPECT().RunBuffered(gomock.Any(), "/r", "git", "mv", "--", "a", "b").
+		Return(interfaces.CmdResult{})
+	require.NoError(t, c.Move(ctx, "/r", "a", "b"))
+	r.EXPECT().RunBuffered(gomock.Any(), "/r", "git", "rm", "-q", "-f", "--", "a", "b").
+		Return(interfaces.CmdResult{})
+	require.NoError(t, c.Remove(ctx, "/r", []string{"a", "b"}))
+	require.NoError(t, c.Remove(ctx, "/r", nil))
+
+	stub, err := git.NewFromConfig(ctx, git.Config{},
+		git.Deps{Decorations: fixtures.Decorations()})
+	require.NoError(t, err)
+	for _, read := range []func() (any, error){
+		func() (any, error) { return stub.Log(ctx, "/r") },
+		func() (any, error) { return stub.Status(ctx, "/r", nil) },
+		func() (any, error) { return stub.LsUntracked(ctx, "/r", nil) },
+		func() (any, error) { return stub.Grep(ctx, "/r", "x") },
+	} {
+		got, err := read()
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	}
+	require.NoError(t, stub.Move(ctx, "/r", "a", "b"))
+	require.NoError(t, stub.Remove(ctx, "/r", []string{"a"}))
+}

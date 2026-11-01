@@ -9,7 +9,8 @@ import (
 )
 
 // Decorate runs every GitClient operation of base through the client tier as the client
-// named name. StageFiles writes the index, so it runs once; the rest are reads.
+// named name. StageFiles, Move and Remove write the index and tree, so they run once;
+// the rest are reads.
 func Decorate(
 	base interfaces.GitClient,
 	decs decorate.Decorations,
@@ -125,5 +126,59 @@ func (d *decorator) IsRepo(ctx context.Context, root string) bool {
 func (d *decorator) Tag(ctx context.Context, root string) (string, error) {
 	return d.Exec(ctx, "tag", func(c context.Context) (string, error) {
 		return d.base.Tag(c, root)
+	})
+}
+
+// Log is a read.
+func (d *decorator) Log(
+	ctx context.Context,
+	root string,
+	args ...string,
+) ([]byte, error) {
+	return d.Exec(ctx, "log", func(c context.Context) ([]byte, error) {
+		return d.base.Log(c, root, args...)
+	})
+}
+
+// Status is a read.
+func (d *decorator) Status(
+	ctx context.Context,
+	root string,
+	pathspecs []string,
+) ([]byte, error) {
+	return d.Exec(ctx, "status", func(c context.Context) ([]byte, error) {
+		return d.base.Status(c, root, pathspecs)
+	})
+}
+
+// LsUntracked is a read.
+func (d *decorator) LsUntracked(
+	ctx context.Context,
+	root string,
+	pathspecs []string,
+) ([]string, error) {
+	return d.Exec(ctx, "ls_untracked", func(c context.Context) ([]string, error) {
+		return d.base.LsUntracked(c, root, pathspecs)
+	})
+}
+
+// Grep is a read.
+func (d *decorator) Grep(ctx context.Context, root, needle string) ([]string, error) {
+	return d.Exec(ctx, "grep", func(c context.Context) ([]string, error) {
+		return d.base.Grep(c, root, needle)
+	})
+}
+
+// Move writes the tree and index; it runs once.
+func (d *decorator) Move(ctx context.Context, root, from, to string) error {
+	return d.DoOnce(ctx, "move", func(c context.Context) error {
+		return d.base.Move(c, root, from, to)
+	})
+}
+
+// Remove writes the tree and index; it runs once.
+func (d *decorator) Remove(ctx context.Context, root string, paths []string) error {
+	return d.DoOnce(ctx, "remove", func(c context.Context) error {
+		return d.base.Remove(c, root, paths)
 	})
 }

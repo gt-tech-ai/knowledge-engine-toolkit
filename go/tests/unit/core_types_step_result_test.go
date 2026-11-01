@@ -17,8 +17,9 @@ import (
 //     its error, or turned a failure into a pass, would let a broken gate go green.
 //
 // What it tests:
-//   - NewStep keeps the status and records the error's text (empty for nil); OneStep
-//     wraps it as one result; CheckStep is a pass with a nil error, and a failure that
+//   - NewStep keeps the status and records the error's text (empty for nil); DetailStep
+//     keeps the status and carries its detail text, with no error; OneStep wraps NewStep
+//     as one result; CheckStep is a pass with a nil error, and a failure that
 //     carries and returns the very same error otherwise.
 func TestStepBuilders(t *testing.T) {
 	t.Parallel()
@@ -28,6 +29,9 @@ func TestStepBuilders(t *testing.T) {
 		types.StepResult{Name: "x", Status: types.StatusWarn, Error: boom.Error()},
 		types.NewStep("x", types.StatusWarn, boom))
 	assert.Empty(t, types.NewStep("x", types.StatusPass, nil).Error)
+	assert.Equal(t,
+		types.StepResult{Name: "d", Status: types.StatusWarn, Detail: []byte("a\nb")},
+		types.DetailStep("d", types.StatusWarn, "a\nb"))
 	assert.Equal(t,
 		types.StepResults{{Name: "y", Status: types.StatusSkip}},
 		types.OneStep("y", types.StatusSkip, nil))

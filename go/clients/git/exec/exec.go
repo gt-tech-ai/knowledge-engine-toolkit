@@ -138,6 +138,64 @@ func (c *Client) IsRepo(ctx context.Context, root string) bool {
 	return res.Err == nil && strings.TrimSpace(string(res.Stdout)) == "true"
 }
 
+// Log returns `git log args…`.
+func (c *Client) Log(ctx context.Context, root string, args ...string) ([]byte, error) {
+	return c.git(ctx, root, append([]string{"log"}, args...)...)
+}
+
+// Status returns `git status --porcelain -- pathspecs`.
+func (c *Client) Status(
+	ctx context.Context,
+	root string,
+	pathspecs []string,
+) ([]byte, error) {
+	return c.git(
+		ctx,
+		root,
+		append([]string{"status", "--porcelain", "--"}, pathspecs...)...)
+}
+
+// LsUntracked lists the untracked, non-ignored files matching pathspecs.
+func (c *Client) LsUntracked(
+	ctx context.Context,
+	root string,
+	pathspecs []string,
+) ([]string, error) {
+	out, err := c.git(ctx, root, append([]string{
+		"ls-files", "-z", "--others", "--exclude-standard", "--",
+	}, pathspecs...)...)
+	return client.SplitNUL(out), err
+}
+
+// grepNoMatch is `git grep`'s exit status when nothing matches.
+const grepNoMatch = 1
+
+// Grep runs `git grep -l -z -I -F -e needle`; exit 1 (no match) is none.
+func (c *Client) Grep(ctx context.Context, root, needle string) ([]string, error) {
+	res := c.runner.RunBuffered(ctx, root, "git", "grep", "-l", "-z", "-I", "-F", "-e",
+		needle)
+	if res.Err != nil && res.ExitCode == grepNoMatch {
+		return nil, nil
+	}
+	out, err := client.Output(res, "git grep")
+	return client.SplitNUL(out), err
+}
+
+// Move runs `git mv -- from to`.
+func (c *Client) Move(ctx context.Context, root, from, to string) error {
+	_, err := c.git(ctx, root, "mv", "--", from, to)
+	return err
+}
+
+// Remove runs `git rm -q -f -- paths`; no paths is a no-op.
+func (c *Client) Remove(ctx context.Context, root string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	_, err := c.git(ctx, root, append([]string{"rm", "-q", "-f", "--"}, paths...)...)
+	return err
+}
+
 // Tag returns the tag at HEAD, or "" when HEAD is untagged.
 func (c *Client) Tag(ctx context.Context, root string) (string, error) {
 	res := c.runner.RunBuffered(
