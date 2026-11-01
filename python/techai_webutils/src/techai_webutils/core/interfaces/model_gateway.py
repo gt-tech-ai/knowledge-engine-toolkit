@@ -1,7 +1,7 @@
 """``ModelGateway`` — one home for per-request model selection, failover and cost-aware routing.
 
 A gateway **is** an ``LLMProvider`` (it composes the core contract), so it drops in wherever a
-provider is injected; its one extra method, ``resolve(ctx)``, names the provider that would serve a
+provider is injected; its one extra method, ``await resolve(ctx)``, names the provider that would serve a
 ``RouteContext``. Request context reaches a gateway through an injected ``RouteContextProvider``;
 the toolkit owns no request-scope global.
 
@@ -114,5 +114,8 @@ class ModelGateway(LLMProvider):
     """An ``LLMProvider`` that chooses, per request, which provider serves."""
 
     @abstractmethod
-    def resolve(self, ctx: RouteContext) -> LLMProvider:
-        """Return the provider that would serve ``ctx`` (the first endpoint of its plan)."""
+    async def resolve(self, ctx: RouteContext) -> LLMProvider:
+        """Return the provider that would serve ``ctx`` (the first endpoint of its plan).
+
+        Async because planning may consult a classifier, a ledger or a remote planner.
+        """

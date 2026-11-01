@@ -55,7 +55,8 @@ async def test_passthrough_gateway_is_indistinguishable_from_wrapped_provider() 
         assert entered is gateway
 
 
-def test_passthrough_resolve_ignores_context_returns_inner() -> None:
+@pytest.mark.asyncio
+async def test_passthrough_resolve_ignores_context_returns_inner() -> None:
     """Test that the passthrough gateway resolves every context to its one provider.
 
     **Why this test is important:**
@@ -67,9 +68,11 @@ def test_passthrough_resolve_ignores_context_returns_inner() -> None:
     inner = StubLlmProvider()
     gateway = PassthroughGateway(inner)
 
-    assert gateway.resolve(RouteContext()) is inner
+    assert await gateway.resolve(RouteContext()) is inner
     assert (
-        gateway.resolve(RouteContext(tenant_id="org-1", step="generate", slo="cost"))
+        await gateway.resolve(
+            RouteContext(tenant_id="org-1", step="generate", slo="cost")
+        )
         is inner
     )
 

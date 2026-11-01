@@ -57,7 +57,7 @@ class PassthroughGateway(ModelGateway):
         self._record()
 
     @override
-    def resolve(self, ctx: RouteContext) -> LLMProvider:
+    async def resolve(self, ctx: RouteContext) -> LLMProvider:
         """Return the wrapped provider for any context."""
         return self._inner
 

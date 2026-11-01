@@ -39,9 +39,18 @@ All notable changes to this project are recorded here. The format follows
 - Python `clients/model_gateway`: `GatewayKind` (`passthrough` default, `routed`),
   `GatewayConfig` and `new_model_gateway_from_config(config, provider_factory=…)`.
   `PassthroughGateway` delegates byte-for-byte and records a `passthrough` decision per call.
+- Python `routed` model gateway kind (`RoutedGateway`): a model catalog validated at boot (unknown
+  `LlmKind`, duplicate endpoint, missing `llm`, or an unpriced id is `INVALID_INPUT`), routes, a
+  deterministic filter (capability → data policy → deny → allow; an end user's choice in `user`
+  mode or a pin narrows first and still obeys policy; an empty result is `FORBIDDEN` or
+  `INVALID_INPUT`), the `config` routing-policy store with workspace overrides, and the stage
+  factories `RouteClassifierKind{stub}`, `CandidateRankerKind{static_order}` and
+  `RoutePlannerKind{local}`. With the default stages and no pins it serves each step's model as
+  `passthrough` does. Routing types live in `core/types/routing` and `core/interfaces/routing`.
 
 ### Changed
 
+- Python `ModelGateway.resolve` is async (planning may await a classifier or a remote planner).
 - Python `AiSpanEnricher`: `gen_ai.system` is resolved through a gateway's `wrapped_provider`,
   so wrapping a `ModelGateway` keeps reporting the serving provider's system.
 

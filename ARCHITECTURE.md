@@ -630,8 +630,14 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
 - **Model gateway:** `core/interfaces/model_gateway.py` (`ModelGateway` extends `LLMProvider`
   with `resolve(RouteContext)`; `RouteDecision` in a request-scoped slot read through
   `current_route_decision()`) and `clients/model_gateway` (`passthrough` wraps one provider built
-  by the injected `provider_factory`; `routed` follows). `AiSpanEnricher` keys `gen_ai.system` on a
-  gateway's `wrapped_provider`.
+  by the injected `provider_factory`; `routed` filters, plans and executes over a model catalog).
+  `resolve` is async because planning may consult a classifier or a remote planner.
+  `AiSpanEnricher` keys `gen_ai.system` on a gateway's `wrapped_provider`.
+- **Routing:** `core/types/routing.py` (capabilities, endpoint refs, routes, `RoutingPolicy`,
+  plans) and `core/interfaces/routing.py` (`RouteClassifier`, `CandidateRanker`, `RoutePlanner`,
+  `RoutingPolicyStore`). `clients/model_gateway/routed` holds the boot-validated catalog (each
+  endpoint's `LlmConfig`, `fallback_model` stripped), the deterministic filter, the `config`
+  policy store and the stage `Kind`s: classifier `stub`, ranker `static_order`, planner `local`.
 
 ## Testing
 
