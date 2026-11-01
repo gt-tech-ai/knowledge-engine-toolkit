@@ -235,6 +235,44 @@ collaborator or zero timeout skips its layer; recovery needs none.
   custom ops through the base's `exec`. The retry layer's
   `ExponentialRetrier` (and `retry_transient_async`) wait out a server pushback
   (`details["retry_after_ms"]`, read by `retry_after_s`), capped by the max interval.
+- **Python — token accounting.** `clients/decorators/token_accounting.TokenAccountingProxy` is the
+  outermost AI-band decorator over an `LLMProvider`, `ModelGateway` or `EmbeddingProvider`: it reads
+  the request's `UsageScope` from an injected `UsageScopeProvider` (no scope → passthrough), asks
+  `TokenLedger.check_budget` before the call and applies `clients/token_ledger/policy.decide`
+  (`shadow` serves and counts `ai_budget_would_exceed_total`; `soft` and `hard` reject an
+  exhausted budget with `QuotaExceededError` before the inner call; a ledger error — raised, or a
+  `LEDGER_UNAVAILABLE_REASON` decision — serves under `soft` and rejects under `hard`, unless
+  `on_ledger_error` overrides), and records one priced `UsageRecord`
+  after it (a stream at its terminal `StreamUsage`; a semantic-cache hit, flagged through
+  `core/interfaces/semantic_cache.served_from_cache()`, as one zero-token `<step>.cache_hit`).
+  Recording never raises. Metrics: `ai_tokens_total{org,workspace,model,type}`,
+  `ai_cost_usd_total{org,workspace,model}`.
+- **Python — audit proxy.** `clients/decorators/audit_proxy.AuditProxy` runs the input
+  `SafetyCheck` on the last user message (`block` → audited `blocked`, then `FORBIDDEN` before the
+  model; `redact` → the model gets the redacted text), the call, the output check (`redact` →
+  redacted answer; `block` → audited, then `FORBIDDEN`), and appends one `AuditRecord` built from
+  the injected `AuditContext`, the live trace id and the route decision's model. Streams audit on
+  exhaustion (an output block is `flagged_after_stream`); `audit_cached` is the semantic cache's
+  `on_hit` hook, run before a hit is served (`cache_hit=True`; a `block` raises `FORBIDDEN`, a
+  `redact` returns the redacted answer to serve). Only a record for a call the gateway made takes
+  the route decision's model. `AuditEnforcement` `shadow` counts
+  `audit_record_failures_total` and serves; `enforced` raises (a coded error keeps its code, else
+  `INTERNAL`).
+- **Python — semantic cache proxy.** `clients/decorators/semantic_cache_proxy.SemanticCacheProxy`
+  is a read-through decorator around one bound method (`SemanticCacheBinding`: the unary `method`,
+  optionally a `stream_method`, and how arguments map to a query and a `CacheNamespace`). A hit
+  returns the decoded answer (a stream replays the cached text, then a zero-token `StreamUsage`)
+  without calling the inner and sets `served_from_cache()`; a miss writes the answer through (a
+  stream only once fully consumed). Every cache, hook or telemetry failure is swallowed and
+  counted; `enabled=False` or a `StubSemanticCache` is a passthrough. Metrics:
+  `semantic_cache_{hits,misses}_total{path,workspace}`, `semantic_cache_saving_usd_total`; one
+  `cache_lookups` fact per lookup.
+- **Python — per-key rate limits.** `core/interfaces/rate_limiter.PerKeyRateLimiter`
+  (`allow_key(key)`, async) has two kinds behind `foundation/resilience/per_key_builder`:
+  `memory` (`InMemoryRateLimiter`, per replica; the default) and `redis`
+  (`RedisPerKeyRateLimiter`: a fixed window, `INCR` + `EXPIRE` in one pipeline, shared by every
+  replica; a Redis error is `UNAVAILABLE` for the caller's policy). Through `allow_key`,
+  `max_per_window` 0 is unlimited; `InMemoryRateLimiter.allow` keeps 0 as "allow nothing".
 - **Python — GenAI span enrichment.** `clients/decorators/ai_enricher.AiSpanEnricher` wraps an
   `LLMProvider` or `RetrievalEngine` and stamps the span already current (the step's) with
   `gen_ai.system`, `gen_ai.step`, `gen_ai.request.model` (the model asked for),
@@ -462,8 +500,8 @@ Most tiers ship an in-process, stub, or no-op backend, so wiring needs no cloud 
   `env`/`file`; cache, prometheus, transport `stub`; tracer `noop`; metrics no-op when disabled;
   logger `stdlib`. `database` and `rpc` default to `postgres` and `grpc`: their consumers hold the
   `*sql.DB` or connection itself.
-- **Python:** cache `local`/`null`; email `noop`; audit, embedding, facts, llm, retrieval, kb_ingestion,
-  token_ledger, vector `stub`; jobs, lock, messaging, storage `memory`; tracer, metrics `null`;
+- **Python:** cache `local`/`null`; email, safety `noop`; model_gateway `passthrough`; audit, dataset, embedding, facts, llm, retrieval,
+  kb_ingestion, semantic_cache, token_ledger, vector `stub`; jobs, lock, messaging, storage `memory`; tracer, metrics `null`;
   executor `asyncio`.
 
 Go cache (Redis), database (Postgres) and connector (S3) have no stub and are covered by
@@ -615,6 +653,45 @@ None of the packages above has a Python mirror yet, and `techai-webutils` is unc
 stepcache,report,gen,scaffold,impact,pins,dataset,schemagen}`, `services/{probe,toolrun}`,
 `execution/{ops,runs}` and `transport/{cobra,mcp,cron}`. Go has no op-service tier: an operation
 runs through `execution/ops`. Python keeps `core/interfaces/op_service.py`.
+
+### Go parity gap
+
+The AI call-path tiers are Python-only: the model call path runs in the Python retrieval
+service, so no Go consumer exists yet. Each is recorded here until a Go consumer needs it:
+
+- **Evals:** `core/interfaces/{dataset,evaluator,grader}.py`, `clients/dataset`
+  (`stub`, `jsonl`, a supplied `aiops`), `clients/grader/stub` and `services/evaluator.py`
+  (`ThresholdEvaluator`). Go's `foundation/dataset` (the YAML data loader) is unrelated.
+- **Safety:** `core/interfaces/safety.py` (`SafetyCheck`, `SafetyResult`, `blocked_error` →
+  `FORBIDDEN`) and `clients/safety` (`noop`, `regex`, and the lazily loaded `comprehend` and
+  `bedrock_guardrails`, whose aiobotocore client opens on the first scan).
+- **Semantic cache:** `core/interfaces/semantic_cache.py` (`SemanticCache` extends
+  `CacheInvalidator`; `CacheNamespace` partitions by workspace, embedding space and scope) and
+  `clients/semantic_cache` (`stub`; `redis` stores payloads in the injected KV cache and keys
+  similarity with a RediSearch cosine KNN index on the same Redis, so it needs Redis Stack or
+  RediSearch; keys lead with the workspace so `invalidate_prefix(<workspace>)` evicts one tenant).
+- **Model gateway:** `core/interfaces/model_gateway.py` (`ModelGateway` extends `LLMProvider`
+  with `resolve(RouteContext)`; `RouteDecision` in a request-scoped slot read through
+  `current_route_decision()`) and `clients/model_gateway` (`passthrough` wraps one provider built
+  by the injected `provider_factory`; `routed` filters, plans and executes over a model catalog).
+  `resolve` is async because planning may consult a classifier or a remote planner.
+  `AiSpanEnricher` keys `gen_ai.system` on a gateway's `wrapped_provider`.
+- **Routing:** `core/types/routing.py` (capabilities, endpoint refs, routes, `RoutingPolicy`,
+  plans) and `core/interfaces/routing.py` (`RouteClassifier`, `CandidateRanker`, `RoutePlanner`,
+  `RoutingPolicyStore`, `RouteDecisionSink`). `clients/model_gateway/routed` holds the
+  boot-validated catalog (each endpoint's `LlmConfig`, `fallback_model` stripped), the
+  deterministic filter, the `config` policy store and the stage `Kind`s: classifier `stub` /
+  `embedding` (exemplars embedded once at the gateway's `__aenter__`; an embedder outage at
+  request time degrades to the step's route), ranker `static_order` / `cost_aware` (objective,
+  hard caps that drop, quality floor, budget bias from the injected `TokenLedger`), planner
+  `local` / `overlord` (a remote `RoutingPlan` through the product's injected `RouteTransport`,
+  with the service token, a deadline, one retry on `UNAVAILABLE` and a breaker; a timeout, an
+  error, an open breaker or a plan naming an unoffered model fails open to `local`, counted as
+  `routed_planner_fail_open_total{cause}`), decision sink `noop` / `analytics` (`route_decisions` facts). `ChainExecutor` runs the
+  plan: bounded attempts, an `AsyncCircuitBreaker` per endpoint, failover on transient errors
+  only, streams before their first item only. A `routed.shadow` block plans alongside the live
+  call in bounded background tasks and is never served. `clients/embedding/memo.MemoizedEmbedding`
+  embeds a text once per request, so the classifier and the semantic cache share one call.
 
 ## Testing
 

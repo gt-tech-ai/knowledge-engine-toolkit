@@ -1,16 +1,20 @@
 """Process-local per-key fixed-window rate limiter (a generic send/throttle guard).
 
 A fixed-window counter per key: at most ``max_per_window`` allowances per ``window_seconds`` (default
-one hour). Process-local (per replica) — a shared/distributed limiter is a future enhancement. An
-injected ``clock`` (default ``time.monotonic``) keeps the window behaviour unit-testable. Distinct from
-the peer ``TokenBucketRateLimiter``, which is a single global bucket (no per-key keying).
+one hour). Through the ``PerKeyRateLimiter`` port (``allow_key``) ``0`` is unlimited, like the
+Redis limiter; the original ``allow`` keeps its meaning, so ``0`` there allows nothing. Process-local (per replica); the shared limiter is
+``redis_rate_limiter.RedisPerKeyRateLimiter`` (``per_key_builder`` selects one by kind). An injected
+``clock`` (default ``time.monotonic``) keeps the window behaviour unit-testable. Distinct from the
+peer ``TokenBucketRateLimiter``, which is a single global bucket (no per-key keying).
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
+
+from techai_webutils.core.interfaces.rate_limiter import PerKeyRateLimiter
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -23,7 +27,7 @@ _EVICT_THRESHOLD = 10_000
 """Key-map size past which fully-expired keys are purged to bound worker memory."""
 
 
-class InMemoryRateLimiter:
+class InMemoryRateLimiter(PerKeyRateLimiter):
     """A per-key fixed-window allowance counter (``allow`` returns False once the window is exhausted)."""
 
     def __init__(
@@ -34,7 +38,11 @@ class InMemoryRateLimiter:
         clock: Callable[[], float] = time.monotonic,
         evict_threshold: int = _EVICT_THRESHOLD,
     ) -> None:
-        """Allow at most ``max_per_window`` per ``window_seconds`` per key; ``clock`` is the time source.
+        """Allow at most ``max_per_window`` per ``window_seconds`` per key.
+
+        ``0`` is unlimited through ``allow_key`` and allows nothing through ``allow``.
+
+        ``clock`` is the time source.
 
         ``evict_threshold`` is the map size past which fully-expired keys are purged
         (default bounds a long-running worker's memory; injectable so a test can lower
@@ -48,8 +56,18 @@ class InMemoryRateLimiter:
         self._counts: dict[str, tuple[float, int]] = {}
         self._lock: asyncio.Lock = asyncio.Lock()
 
+    @override
+    async def allow_key(self, key: str) -> bool:
+        """Return True and count one allowance if ``key`` is under its limit (``0``: unlimited)."""
+        if self._max == 0:
+            return True
+        return await self.allow(key)
+
     async def allow(self, key: str) -> bool:
-        """Return True and count one allowance if ``key`` is under its window limit, else False."""
+        """Return True and count one allowance if ``key`` is under its window limit, else False.
+
+        ``0`` allows nothing (an operator pauses the guarded action this way).
+        """
         now = self._clock()
         async with self._lock:
             if len(self._counts) >= self._evict_threshold:

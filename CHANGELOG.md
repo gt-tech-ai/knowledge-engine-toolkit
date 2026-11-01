@@ -6,6 +6,123 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.37] - 2026-11-01
+
+Python: `techai-webutils` 0.7.0.
+
+### Added
+
+- Python `core/interfaces/{dataset,evaluator,grader}`: the eval contracts — `EvalCase`
+  (an empty id is `INVALID_INPUT`), `Dataset` (`cases()`, a content-hash `version()`),
+  `Grader` / `GradeResult`, and `Evaluator` with `EvalOutput`, `EvalResult` and `EvalReport`.
+- Python `clients/dataset`: `DatasetKind` (`stub` default, `jsonl`, `aiops`), `DatasetConfig`
+  and `new_dataset_from_config`. `aiops` comes from the injected `backends`; an unknown kind
+  raises `AppValueError`. `JsonlDataset` versions by the file's sha256.
+- Python `services/evaluator.ThresholdEvaluator` (a case passes when every grade passed and
+  the mean score reaches the threshold) and `clients/grader/stub.StubGrader`.
+- Python `core/interfaces/safety`: `SafetyCheck` (`scan(text, kind=prompt|answer)`), a frozen
+  `SafetyResult` (flags, `allow`/`redact`/`block`, redacted text) and `blocked_error`, a coded
+  `FORBIDDEN` naming the flags.
+- Python `clients/safety`: `SafetyKind` (`noop` default, `regex`, `comprehend`,
+  `bedrock_guardrails`), `SafetyConfig` with an `on_detect` policy (`flag`/`redact`/`block`) and
+  `new_safety_check_from_config`. `regex` flags `pii.ssn`, `pii.email` and `pii.phone` with no
+  infrastructure; the managed kinds load aiobotocore only when selected, open one client on first
+  use, bound each call by `SafetyConfig.timeout_seconds` (default 5; past it, `UNAVAILABLE`) and map
+  botocore failures through `botocore_error_to_app_error`. An unknown kind or policy raises `AppValueError`.
+- Python `core/interfaces/semantic_cache`: `SemanticCache` (extends `CacheInvalidator`;
+  fail-open `lookup` / `store`), `CacheNamespace` (workspace, embedding model and version, scope;
+  `tag()`) and `CachedAnswer`.
+- Python `clients/semantic_cache`: `SemanticCacheKind` (`stub` default, `redis`),
+  `SemanticCacheConfig` and `semantic_cache_from_config` with injected collaborators.
+- Python `clients/semantic_cache/redis.RedisSemanticCache`: an exact-repeat fast path (no
+  embedding), then a namespace-tagged top-1 cosine KNN in RediSearch; an index document whose
+  payload expired is a miss. Backend errors are logged, counted
+  (`semantic_cache_errors_total{op}`) and served as a miss or a no-op.
+- Python `core/interfaces/model_gateway`: `ModelGateway` (an `LLMProvider` with
+  `resolve(RouteContext)`), `RouteContext`, `RouteDecision` / `RouteAttempt` (every field
+  defaulted), `RouteContextProvider`, and `current_route_decision()` / `set_route_decision()`.
+- Python `clients/model_gateway`: `GatewayKind` (`passthrough` default, `routed`),
+  `GatewayConfig` and `new_model_gateway_from_config(config, provider_factory=…)`.
+  `PassthroughGateway` delegates byte-for-byte and records a `passthrough` decision per call.
+- Python `routed` model gateway kind (`RoutedGateway`): a model catalog validated at boot (unknown
+  `LlmKind`, duplicate endpoint, missing `llm`, or an unpriced id is `INVALID_INPUT`), routes, a
+  deterministic filter (capability → data policy → deny → allow; an end user's choice in `user`
+  mode or a pin narrows first and still obeys policy; an empty result is `FORBIDDEN` or
+  `INVALID_INPUT`), the `config` routing-policy store with workspace overrides, and the stage
+  factories `RouteClassifierKind{stub}`, `CandidateRankerKind{static_order}` and
+  `RoutePlannerKind{local}`. With the default stages and no pins it serves each step's model as
+  `passthrough` does. Routing types live in `core/types/routing` and `core/interfaces/routing`.
+- Python `routed` stages: `RouteClassifierKind.EMBEDDING` (top-k mean exemplar cosine against
+  each route's threshold; exemplars embedded once at the gateway's `__aenter__`, which fails with
+  `UNAVAILABLE` if they can't be; a request-time embedder failure degrades to the step's route),
+  `CandidateRankerKind.COST_AWARE` (objective `cost` / `latency` / `quality` / `balanced` from the
+  request's `slo`, the policy's `objective` or `routed.default_slo`; `max_cost_per_request` and
+  `max_latency_ms` drop candidates as `over_cap` and an empty result is `FORBIDDEN`; a
+  `quality_floor` drop unless `degrade_on_budget`; switches to `cost` near the tenant's budget).
+- Python `routed.executor.ChainExecutor`: `max_attempts`, a breaker per endpoint
+  (`breaker_failures`, `breaker_recovery_s`), failover on transient errors only, streams fail over
+  before their first item only, exhaustion is `UNAVAILABLE`;
+  `routed_attempts_total{endpoint,outcome}`.
+- Python `RouteDecisionSink` with `RouteDecisionSinkKind` (`noop` default, `analytics`: one
+  `route_decisions` fact per decision). Every served call finalizes its decision (attempts, the
+  served endpoint, `failover` reason, tokens, estimated and actual cost), stamps a
+  `route.decision` span and hands it to the sink; a sink failure is counted
+  (`route_decision_sink_failures_total`), never raised.
+- Python `routed.shadow`: an alternative classifier / ranker / planner planned in bounded
+  background tasks, emitting `shadow=true` decisions and never calling a model.
+- Python `clients/embedding/memo.MemoizedEmbedding` and `reset_embedding_memo()` (a per-request,
+  bounded embedding memo), and `clients/token_ledger.estimate_cost` (`None` for an unpriced model).
+- Python `new_model_gateway_from_config` takes `embedding`, `ledger`, `prices`, `facts` and
+  `metrics`; `RoutedConfig` gains `default_slo`, `max_attempts`, `breaker_failures`,
+  `breaker_recovery_s`, `sink` and `shadow`.
+- Python `clients/decorators.TokenAccountingProxy`: budget check before each `complete` /
+  `stream` / `stream_with_usage` / `embed` / `embed_batch`, a priced `UsageRecord` after it
+  (`usage_from_llm`), `ai_tokens_total` / `ai_cost_usd_total` /
+  `ai_budget_would_exceed_total` metrics; fail-open on a ledger error; a call with no scope
+  passes through. `clients/token_ledger.BudgetPolicy` / `Enforcement` (`shadow` default, `soft`,
+  `hard`), `core/interfaces/token_ledger.UsageScopeProvider`, and
+  `core/interfaces/semantic_cache.served_from_cache()` / `set_served_from_cache()`.
+- Python `clients/token_ledger/policy`: `decide(policy, decision, error) -> Verdict` (the
+  shadow / soft / hard table), `OnLedgerError` (`allow` / `deny`; `None` takes the enforcement's
+  default) and `core/interfaces/token_ledger.LEDGER_UNAVAILABLE_REASON`, so a backend that failed
+  open still fails closed under `hard`.
+- Python `core/interfaces/rate_limiter.PerKeyRateLimiter`,
+  `foundation/resilience/redis_rate_limiter.RedisPerKeyRateLimiter` (fixed window shared by every
+  replica) and `foundation/resilience/per_key_builder` (`PerKeyRateLimiterKind` `memory` /
+  `redis`, `PerKeyRateLimiterConfig`, `per_key_rate_limiter_from_config`).
+- Python `RedisTokenLedger(clock=…)`: the time the budget window is read at (injected for tests).
+- Python `clients/decorators.SemanticCacheProxy` + `SemanticCacheBinding`: read-through caching
+  of one unary method and, optionally, its stream (replayed on a hit; stored only after full
+  consumption), fail-open, `served_from_cache()` on a hit, an `on_hit` hook run before a hit is
+  served (it may return a replacement answer, and a `FORBIDDEN` it raises refuses the hit; a
+  streamed hit reaches it as an `LLMResponse`), hit / miss / saving metrics, a `semantic_cache.lookup` span and a `cache_lookups` fact per lookup.
+- Python `clients/decorators.AuditProxy` + `AuditEnforcement` (`shadow`, `enforced`): input and
+  output safety chains around a model call, one `AuditRecord` per answer (streams on exhaustion,
+  cache hits through `audit_cached`, which blocks or redacts a hit like a live answer; only a
+  record for a call the gateway made takes the route decision's model), and
+  `core/interfaces/audit.AuditContext`.
+- Python `core/types/routing.RoutingPlan` (every field defaulted), `PlanRequest`,
+  `PlanRequirements`, `ReasoningLevel`, `ContextStrategy`; `core/interfaces/routing.RouteTransport`;
+  `RoutePlannerKind.OVERLORD` (`OverlordPlanner`, `OverlordPlannerConfig`) failing open to
+  `local`; `new_model_gateway_from_config(planner_deps=…)` carries the transport.
+
+### Changed
+
+- Python `ModelGateway.resolve` is async (planning may await a classifier or a remote planner).
+- Python `TokenAccountingProxy` applies `decide`: a ledger error under `hard` enforcement now
+  rejects (fail closed); `soft` and `shadow` still serve.
+- Python `InMemoryRateLimiter` implements `PerKeyRateLimiter` (`allow_key`; `allow(key)` is
+  kept). `max_per_window=0` is unlimited through `allow_key`; `allow` keeps its meaning (0 allows
+  nothing). `PerKeyRateLimiter` is its own port, not a `RateLimiter`: it takes a key and the
+  global limiter does not.
+- Python `retry_transient_async` computes its exponential-jitter backoff itself (same schedule),
+  no longer calling tenacity's deprecated `wait_exponential_jitter(initial=…)`.
+- Python routing seams: `RouteClassifier.classify` returns a `Classification` (route,
+  confidence, `degraded`); `CandidateRanker.rank` receives the `PlanInput` (requirements and
+  policy); `RouteContext.slo` defaults to `""` (no request objective).
+- Python `AiSpanEnricher`: `gen_ai.system` is resolved through a gateway's `wrapped_provider`,
+  so wrapping a `ModelGateway` keeps reporting the serving provider's system.
+
 ## [0.0.36] - 2026-10-31
 
 Python: unchanged (`techai-webutils` 0.6.2).

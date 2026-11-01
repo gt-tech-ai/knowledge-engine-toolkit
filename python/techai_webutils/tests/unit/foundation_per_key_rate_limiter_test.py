@@ -28,6 +28,24 @@ class TestPerKeyRateLimiter:
         assert await limiter.allow("other") is True
 
     @pytest.mark.asyncio
+    async def test_zero_pauses_allow_and_unlimits_allow_key(self) -> None:
+        """Test that a limit of 0 keeps each entry point's meaning.
+
+        **Why this test is important:**
+          - Operators pause a guarded action (e.g. outbound email) by setting its limit to 0
+            through ``allow``; the ``PerKeyRateLimiter`` port reads 0 as unlimited, like the
+            Redis limiter. Mixing them up either floods or silently stops the action.
+
+        **What it tests:**
+          - ``allow`` with a limit of 0 allows nothing
+          - ``allow_key`` with a limit of 0 allows every call
+        """
+        limiter = InMemoryRateLimiter(0)
+
+        assert await limiter.allow("k") is False
+        assert all([await limiter.allow_key("k") for _ in range(5)])
+
+    @pytest.mark.asyncio
     async def test_window_resets_after_elapse(self) -> None:
         """Test that a key's allowance resets once its window elapses.
 

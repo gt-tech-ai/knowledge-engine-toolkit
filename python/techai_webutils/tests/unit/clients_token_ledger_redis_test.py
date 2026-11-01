@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import cast
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from redis.asyncio import Redis
@@ -174,20 +174,19 @@ async def test_check_budget_counter_arithmetic() -> None:
       - the reads are one pipeline over the window key and ``token_ledger:limits:org-1:w-1``
     """
     client, _ = _client()
-    ledger = RedisTokenLedger(client, TokenLedgerConfig(kind=TokenLedgerKind.REDIS))
+    ledger = RedisTokenLedger(
+        client, TokenLedgerConfig(kind=TokenLedgerKind.REDIS), clock=lambda: _NOW
+    )
     pipe = _pipeline(
         client,
         [[b"100", b"20", b"5", b"10800"], {b"tokens": b"1000", b"cost_usd": b"0.05"}],
     )
 
-    with patch(
-        "techai_webutils.clients.token_ledger.redis.ledger._utcnow", return_value=_NOW
-    ):
-        within = await ledger.check_budget(_SCOPE)
-        _pipeline(client, [[b"900", b"100", b"0", b"0"], {b"tokens": b"1000"}])
-        exhausted = await ledger.check_budget(_SCOPE)
-        _pipeline(client, [[None, None, None, None], {}])
-        unlimited = await ledger.check_budget(_SCOPE)
+    within = await ledger.check_budget(_SCOPE)
+    _pipeline(client, [[b"900", b"100", b"0", b"0"], {b"tokens": b"1000"}])
+    exhausted = await ledger.check_budget(_SCOPE)
+    _pipeline(client, [[None, None, None, None], {}])
+    unlimited = await ledger.check_budget(_SCOPE)
 
     assert within == BudgetDecision(
         allowed=True,
@@ -229,7 +228,9 @@ async def test_check_budget_fails_open_on_redis_error() -> None:
     client, _ = _client()
     pipe = _pipeline(client, [])
     pipe.execute.side_effect = RedisConnectionError("down")
-    ledger = RedisTokenLedger(client, TokenLedgerConfig(kind=TokenLedgerKind.REDIS))
+    ledger = RedisTokenLedger(
+        client, TokenLedgerConfig(kind=TokenLedgerKind.REDIS), clock=lambda: _NOW
+    )
 
     decision = await ledger.check_budget(_SCOPE)
 
@@ -255,20 +256,21 @@ async def test_usage_reads_counter_snapshot() -> None:
       - asking a monthly ledger for a daily period raises ``AppError(INVALID_INPUT)``
     """
     client, _ = _client()
-    monthly = RedisTokenLedger(client, TokenLedgerConfig(kind=TokenLedgerKind.REDIS))
+    monthly = RedisTokenLedger(
+        client, TokenLedgerConfig(kind=TokenLedgerKind.REDIS), clock=lambda: _NOW
+    )
     rolling = RedisTokenLedger(
-        client, TokenLedgerConfig(kind=TokenLedgerKind.REDIS, window=Period.ROLLING_30D)
+        client,
+        TokenLedgerConfig(kind=TokenLedgerKind.REDIS, window=Period.ROLLING_30D),
+        clock=lambda: _NOW,
     )
 
-    with patch(
-        "techai_webutils.clients.token_ledger.redis.ledger._utcnow", return_value=_NOW
-    ):
-        _pipeline(client, [[b"100", b"20", b"5", b"10800"]])
-        month = await monthly.usage(_SCOPE, Period.MONTHLY)
-        pipe = _pipeline(client, [[b"1", b"1", b"0", b"1"]] * 30)
-        rolled = await rolling.usage(_SCOPE, Period.ROLLING_30D)
-        with pytest.raises(AppError) as caught:
-            await monthly.usage(_SCOPE, Period.DAILY)
+    _pipeline(client, [[b"100", b"20", b"5", b"10800"]])
+    month = await monthly.usage(_SCOPE, Period.MONTHLY)
+    pipe = _pipeline(client, [[b"1", b"1", b"0", b"1"]] * 30)
+    rolled = await rolling.usage(_SCOPE, Period.ROLLING_30D)
+    with pytest.raises(AppError) as caught:
+        await monthly.usage(_SCOPE, Period.DAILY)
 
     assert month == UsageSummary(
         scope=_SCOPE,
@@ -307,7 +309,9 @@ async def test_check_budget_fails_open_on_malformed_limits() -> None:
     """
     client, _ = _client()
     _pipeline(client, [[b"1", b"1", b"0", b"1"], {b"tokens": b"lots"}])
-    ledger = RedisTokenLedger(client, TokenLedgerConfig(kind=TokenLedgerKind.REDIS))
+    ledger = RedisTokenLedger(
+        client, TokenLedgerConfig(kind=TokenLedgerKind.REDIS), clock=lambda: _NOW
+    )
 
     decision = await ledger.check_budget(_SCOPE)
 
@@ -339,14 +343,12 @@ async def test_record_rounds_cost_half_even_and_accepts_a_string_window() -> Non
         TokenLedgerConfig(
             kind=TokenLedgerKind.REDIS, window=cast("Period", "rolling_30d")
         ),
+        clock=lambda: _NOW,
     )
 
     await rolling.record(replace(_record(), cost_usd=Decimal("0.0000135")))
-    with patch(
-        "techai_webutils.clients.token_ledger.redis.ledger._utcnow", return_value=_NOW
-    ):
-        pipe = _pipeline(client, [[b"0", b"0", b"0", b"0"]] * 30)
-        await rolling.usage(_SCOPE, Period.ROLLING_30D)
+    pipe = _pipeline(client, [[b"0", b"0", b"0", b"0"]] * 30)
+    await rolling.usage(_SCOPE, Period.ROLLING_30D)
     with pytest.raises(AppError) as caught:
         RedisTokenLedger(
             client,

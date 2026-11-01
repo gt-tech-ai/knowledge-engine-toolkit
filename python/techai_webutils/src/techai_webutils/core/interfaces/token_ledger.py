@@ -25,6 +25,7 @@ from techai_webutils.core.errors.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from datetime import datetime
 
 
@@ -58,6 +59,11 @@ class UsageScope:
             raise AppError(ErrorCode.INVALID_INPUT, "usage scope requires an org_id")
 
 
+type UsageScopeProvider = Callable[[], UsageScope | None]
+"""Returns the current request's ``UsageScope``, or ``None`` outside a request (injected; the
+composition root passes a reader of its request context, so the engine holds no request global)."""
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class UsageRecord:
     """One model call's token usage and cost, as recorded against a scope."""
@@ -82,6 +88,11 @@ class UsageRecord:
     """Version of the price table ``cost_usd`` was computed with."""
     trace_id: str = ""
     """The call's trace id (hex), for correlation and de-duplication."""
+
+
+LEDGER_UNAVAILABLE_REASON = "ledger_unavailable_fail_open"
+"""The ``BudgetDecision.reason`` of a backend that failed open: the ledger couldn't answer, so the
+budget is unknown (an enforcement policy may still fail closed on it)."""
 
 
 @dataclass(frozen=True, slots=True)

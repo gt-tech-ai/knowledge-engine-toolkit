@@ -17,6 +17,7 @@ from techai_webutils.clients.decorators.ai_enricher import (
     AiSpanEnricher,
 )
 from techai_webutils.clients.llm.stub import StubLlmProvider
+from techai_webutils.clients.model_gateway.passthrough import PassthroughGateway
 from techai_webutils.core.interfaces.llm import (
     LLMConfig,
     LLMMessage,
@@ -127,6 +128,32 @@ async def test_ai_span_enricher_maps_provider_class_to_gen_ai_system() -> None:
     }
     assert _attributes(span)["gen_ai.system"] == "stub"
     assert enricher.model_name() == "stub-llm"
+
+
+@pytest.mark.asyncio
+async def test_enricher_reports_wrapped_system_through_gateway() -> None:
+    """Test that a gateway reports the system of the provider it wraps.
+
+    **Why this test is important:**
+      - The composition root wraps a ``ModelGateway`` in the enricher; keyed by the gateway's
+        own class, every call would report ``unknown`` and break the per-provider dashboards.
+
+    **What it tests:**
+      - enriching a ``PassthroughGateway`` over a ``StubLlmProvider`` stamps
+        ``gen_ai.system == "stub"``
+    """
+    span = MagicMock()
+    enricher = cast(
+        "LLMProvider",
+        AiSpanEnricher(
+            PassthroughGateway(StubLlmProvider()), step="generate", capture_content=False
+        ),
+    )
+
+    with patch(_SPAN_SOURCE, return_value=span):
+        await enricher.complete(_messages())
+
+    assert _attributes(span)["gen_ai.system"] == "stub"
 
 
 async def _usage_stream(*items: str | StreamUsage) -> AsyncIterator[str | StreamUsage]:

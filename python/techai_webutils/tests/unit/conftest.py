@@ -212,3 +212,82 @@ def observed(metrics_mock: tuple[MagicMock, dict[str, MagicMock]]) -> Observed:
 
     tracer.span.side_effect = span
     return result
+
+
+# --------------------------------------------------------------------------- #
+# Routed model gateway: a three-model catalog, its routes and a policy store.  #
+# --------------------------------------------------------------------------- #
+
+
+def _stub_llm(model: str) -> dict[str, str]:
+    """Return a ``stub`` LLM config fragment naming ``model``."""
+    return {"kind": "stub", "model": model}
+
+
+@pytest.fixture
+def catalog_raw() -> dict[str, object]:
+    """Return a catalog: Sonnet (two regions), Haiku, and a small off-cloud 8k-window model."""
+    return {
+        "anthropic/sonnet": {
+            "capabilities": {
+                "context_tokens": 200_000,
+                "max_output": 8192,
+                "tools": True,
+            },
+            "quality": 0.9,
+            "ttft_ms": 900,
+            "endpoints": [
+                {
+                    "name": "use1",
+                    "llm": _stub_llm("sonnet-use1"),
+                    "region": "us-east-1",
+                    "zero_retention": True,
+                },
+                {
+                    "name": "usw2",
+                    "llm": _stub_llm("sonnet-usw2"),
+                    "region": "us-west-2",
+                    "zero_retention": True,
+                },
+            ],
+        },
+        "anthropic/haiku": {
+            "capabilities": {"context_tokens": 200_000, "max_output": 4096},
+            "quality": 0.7,
+            "ttft_ms": 400,
+            "endpoints": [
+                {
+                    "name": "use1",
+                    "llm": _stub_llm("haiku-use1"),
+                    "region": "us-east-1",
+                    "zero_retention": True,
+                },
+            ],
+        },
+        "meta/small": {
+            "capabilities": {"context_tokens": 8000, "max_output": 2048},
+            "quality": 0.5,
+            "ttft_ms": 200,
+            "endpoints": [
+                {
+                    "name": "local",
+                    "llm": _stub_llm("small-local"),
+                    "region": "us-east-1",
+                    "zero_retention": False,
+                    "leaves_cloud_boundary": True,
+                },
+            ],
+        },
+    }
+
+
+@pytest.fixture
+def routes_raw() -> dict[str, object]:
+    """Return routes named for the steps: generate → Sonnet (then Haiku), rewrite → Haiku."""
+    return {
+        "generate": {
+            "default_model": "anthropic/sonnet",
+            "preferred": ["anthropic/haiku"],
+        },
+        "rewrite": {"default_model": "anthropic/haiku"},
+    }

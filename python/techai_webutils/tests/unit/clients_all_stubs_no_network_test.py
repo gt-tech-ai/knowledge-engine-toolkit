@@ -19,6 +19,8 @@ from techai_webutils.clients.cache.builder import (
 )
 from techai_webutils.clients.cache.local import LocalCache
 from techai_webutils.clients.cache.null import NullCache
+from techai_webutils.clients.dataset import DatasetConfig, new_dataset_from_config
+from techai_webutils.clients.dataset.stub import StubDataset
 from techai_webutils.clients.email.builder import (
     EmailConfig,
     EmailKind,
@@ -61,12 +63,24 @@ from techai_webutils.clients.messaging.builder import (
 )
 from techai_webutils.clients.messaging.config import SQSConfig
 from techai_webutils.clients.messaging.memory import InMemorySubscriber
+from techai_webutils.clients.model_gateway import (
+    GatewayConfig,
+    new_model_gateway_from_config,
+)
+from techai_webutils.clients.model_gateway.passthrough import PassthroughGateway
 from techai_webutils.clients.retrieval import (
     FilteringRetrievalEngine,
     RetrievalConfig,
     RetrievalKind,
     new_retrieval_engine_from_config,
 )
+from techai_webutils.clients.safety import SafetyConfig, new_safety_check_from_config
+from techai_webutils.clients.safety.noop import NoopSafetyCheck
+from techai_webutils.clients.semantic_cache import (
+    SemanticCacheConfig,
+    semantic_cache_from_config,
+)
+from techai_webutils.clients.semantic_cache.stub import StubSemanticCache
 from techai_webutils.clients.storage.builder import (
     StorageConfig,
     StorageKind,
@@ -130,6 +144,7 @@ _REAL_BACKENDS = [
     "techai_webutils.execution.executor.factory.ray_runtime_from_config",
     "techai_webutils.clients.facts.messaging.MessagingFactPublisher",
     "techai_webutils.clients.token_ledger.redis.RedisTokenLedger",
+    "techai_webutils.clients.dataset.jsonl.JsonlDataset",
 ]
 
 
@@ -145,7 +160,7 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
         - With every real backend constructor patched to fail, each tier factory called with its
           stub/memory/noop/null/local/asyncio kind (storage, messaging, embedding, vector, email, llm,
           retrieval, kb_ingestion, lock, cache, jobs, tracer, metrics, executor, facts, token_ledger,
-          audit) returns the stub
+          audit, dataset, safety, semantic_cache, model_gateway) returns the stub
           implementation — i.e. none constructed a real client.
     """
 
@@ -229,6 +244,10 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
         ),
         (token_ledger_from_config(TokenLedgerConfig()), StubTokenLedger),
         (new_audit_sink_from_config(AuditSinkConfig()), StubAuditSink),
+        (new_dataset_from_config(DatasetConfig()), StubDataset),
+        (new_safety_check_from_config(SafetyConfig()), NoopSafetyCheck),
+        (semantic_cache_from_config(SemanticCacheConfig()), StubSemanticCache),
+        (new_model_gateway_from_config(GatewayConfig()), PassthroughGateway),
     ]
 
     for impl, stub_type in built:
