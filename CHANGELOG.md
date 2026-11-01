@@ -6,6 +6,23 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.39] - 2026-11-01
+
+Python: unchanged (`techai-webutils` 0.7.1).
+
+### Added
+
+- `GitClient` (`core/interfaces`): `Log` (`git log` output for the caller's args), `Status`
+  (`git status --porcelain` for pathspecs), `LsUntracked` (untracked files `.gitignore` does not
+  exclude), `Grep` (tracked text files holding a fixed string; no match is none, any other
+  failure `UPSTREAM`), `Move` (`git mv --`) and `Remove` (`git rm -q -f --`; no paths is a
+  no-op). The `exec` backend runs them, the client tier decorates them (`Move` and `Remove` run
+  once, the rest are reads), the stub returns nothing and touches nothing, and the published
+  `MockGitClient` carries them. A step that reads history or edits the tree no longer needs a
+  raw `CommandRunner`.
+- `core/types.DetailStep`: a step result with a status and detail text and no error, for report
+  rows that explain themselves.
+
 ## [0.0.38] - 2026-11-01
 
 Python: `techai-webutils` 0.7.1.

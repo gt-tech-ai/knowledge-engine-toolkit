@@ -30,4 +30,27 @@ type GitClient interface {
 
 	// Tag returns the tag pointing exactly at HEAD, or "" when there is none.
 	Tag(ctx context.Context, root string) (string, error)
+
+	// Log returns `git log` output for args (the caller picks the format and limits).
+	Log(ctx context.Context, root string, args ...string) ([]byte, error)
+
+	// Status returns `git status --porcelain` output for pathspecs (the whole tree when
+	// none): one "XY path" line per changed or untracked file.
+	Status(ctx context.Context, root string, pathspecs []string) ([]byte, error)
+
+	// LsUntracked returns the untracked files matching pathspecs that .gitignore does not
+	// exclude, relative to root.
+	LsUntracked(ctx context.Context, root string, pathspecs []string) ([]string, error)
+
+	// Grep returns the tracked text files containing needle as a fixed string; no match
+	// is none, not an error.
+	Grep(ctx context.Context, root, needle string) ([]string, error)
+
+	// Move renames the path from to the path to, in the working tree and the index
+	// (`git mv`).
+	Move(ctx context.Context, root, from, to string) error
+
+	// Remove deletes paths from the working tree and the index (`git rm -f`); no paths
+	// is a no-op.
+	Remove(ctx context.Context, root string, paths []string) error
 }

@@ -75,6 +75,21 @@ func (mr *MockGitClientMockRecorder) Diff(ctx, root any, args ...any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Diff", reflect.TypeOf((*MockGitClient)(nil).Diff), varargs...)
 }
 
+// Grep mocks base method.
+func (m *MockGitClient) Grep(ctx context.Context, root, needle string) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Grep", ctx, root, needle)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Grep indicates an expected call of Grep.
+func (mr *MockGitClientMockRecorder) Grep(ctx, root, needle any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Grep", reflect.TypeOf((*MockGitClient)(nil).Grep), ctx, root, needle)
+}
+
 // HasPathsChanged mocks base method.
 func (m *MockGitClient) HasPathsChanged(ctx context.Context, root, from, to string, paths []string) (bool, error) {
 	m.ctrl.T.Helper()
@@ -104,6 +119,26 @@ func (mr *MockGitClientMockRecorder) IsRepo(ctx, root any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRepo", reflect.TypeOf((*MockGitClient)(nil).IsRepo), ctx, root)
 }
 
+// Log mocks base method.
+func (m *MockGitClient) Log(ctx context.Context, root string, args ...string) ([]byte, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, root}
+	for _, a := range args {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Log", varargs...)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Log indicates an expected call of Log.
+func (mr *MockGitClientMockRecorder) Log(ctx, root any, args ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, root}, args...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Log", reflect.TypeOf((*MockGitClient)(nil).Log), varargs...)
+}
+
 // LsFiles mocks base method.
 func (m *MockGitClient) LsFiles(ctx context.Context, root string, pathspecs []string) ([]string, error) {
 	m.ctrl.T.Helper()
@@ -119,6 +154,35 @@ func (mr *MockGitClientMockRecorder) LsFiles(ctx, root, pathspecs any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LsFiles", reflect.TypeOf((*MockGitClient)(nil).LsFiles), ctx, root, pathspecs)
 }
 
+// LsUntracked mocks base method.
+func (m *MockGitClient) LsUntracked(ctx context.Context, root string, pathspecs []string) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LsUntracked", ctx, root, pathspecs)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LsUntracked indicates an expected call of LsUntracked.
+func (mr *MockGitClientMockRecorder) LsUntracked(ctx, root, pathspecs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LsUntracked", reflect.TypeOf((*MockGitClient)(nil).LsUntracked), ctx, root, pathspecs)
+}
+
+// Move mocks base method.
+func (m *MockGitClient) Move(ctx context.Context, root, from, to string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Move", ctx, root, from, to)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Move indicates an expected call of Move.
+func (mr *MockGitClientMockRecorder) Move(ctx, root, from, to any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Move", reflect.TypeOf((*MockGitClient)(nil).Move), ctx, root, from, to)
+}
+
 // RemoteHasRef mocks base method.
 func (m *MockGitClient) RemoteHasRef(ctx context.Context, root, remote, ref string) (bool, error) {
 	m.ctrl.T.Helper()
@@ -132,6 +196,20 @@ func (m *MockGitClient) RemoteHasRef(ctx context.Context, root, remote, ref stri
 func (mr *MockGitClientMockRecorder) RemoteHasRef(ctx, root, remote, ref any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteHasRef", reflect.TypeOf((*MockGitClient)(nil).RemoteHasRef), ctx, root, remote, ref)
+}
+
+// Remove mocks base method.
+func (m *MockGitClient) Remove(ctx context.Context, root string, paths []string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Remove", ctx, root, paths)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Remove indicates an expected call of Remove.
+func (mr *MockGitClientMockRecorder) Remove(ctx, root, paths any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockGitClient)(nil).Remove), ctx, root, paths)
 }
 
 // RevParse mocks base method.
@@ -176,6 +254,21 @@ func (m *MockGitClient) StagedFiles(ctx context.Context, root string, patterns [
 func (mr *MockGitClientMockRecorder) StagedFiles(ctx, root, patterns any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StagedFiles", reflect.TypeOf((*MockGitClient)(nil).StagedFiles), ctx, root, patterns)
+}
+
+// Status mocks base method.
+func (m *MockGitClient) Status(ctx context.Context, root string, pathspecs []string) ([]byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Status", ctx, root, pathspecs)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Status indicates an expected call of Status.
+func (mr *MockGitClientMockRecorder) Status(ctx, root, pathspecs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Status", reflect.TypeOf((*MockGitClient)(nil).Status), ctx, root, pathspecs)
 }
 
 // Tag mocks base method.

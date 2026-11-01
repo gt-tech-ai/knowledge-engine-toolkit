@@ -68,3 +68,29 @@ func (Client) IsRepo(context.Context, string) bool { return false }
 
 // Tag returns no tag.
 func (Client) Tag(context.Context, string) (string, error) { return "", nil }
+
+// Log returns nothing.
+func (Client) Log(context.Context, string, ...string) ([]byte, error) { return nil, nil }
+
+// Status returns nothing: the stub tree is clean.
+func (Client) Status(
+	context.Context,
+	string,
+	[]string,
+) ([]byte, error) {
+	return nil, nil
+}
+
+// LsUntracked returns none.
+func (Client) LsUntracked(context.Context, string, []string) ([]string, error) {
+	return nil, nil
+}
+
+// Grep returns none.
+func (Client) Grep(context.Context, string, string) ([]string, error) { return nil, nil }
+
+// Move does nothing.
+func (Client) Move(context.Context, string, string, string) error { return nil }
+
+// Remove does nothing.
+func (Client) Remove(context.Context, string, []string) error { return nil }

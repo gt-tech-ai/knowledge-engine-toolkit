@@ -119,6 +119,12 @@ func NewStep(name string, status StepStatus, err error) StepResult {
 	return r
 }
 
+// DetailStep returns the result of the step name: status, with detail as its detail
+// text and no error (a report row that explains itself rather than failing).
+func DetailStep(name string, status StepStatus, detail string) StepResult {
+	return StepResult{Name: name, Status: status, Detail: []byte(detail)}
+}
+
 // OneStep returns NewStep's result as a one-step StepResults.
 func OneStep(name string, status StepStatus, err error) StepResults {
 	return StepResults{NewStep(name, status, err)}
