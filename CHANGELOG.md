@@ -70,6 +70,13 @@ All notable changes to this project are recorded here. The format follows
 - Python `new_model_gateway_from_config` takes `embedding`, `ledger`, `prices`, `facts` and
   `metrics`; `RoutedConfig` gains `default_slo`, `max_attempts`, `breaker_failures`,
   `breaker_recovery_s`, `sink` and `shadow`.
+- Python `clients/decorators.TokenAccountingProxy`: budget check before each `complete` /
+  `stream` / `stream_with_usage` / `embed` / `embed_batch`, a priced `UsageRecord` after it
+  (`usage_from_llm`), `ai_tokens_total` / `ai_cost_usd_total` /
+  `ai_budget_would_exceed_total` metrics; fail-open on a ledger error; a call with no scope
+  passes through. `clients/token_ledger.BudgetPolicy` / `Enforcement` (`shadow` default, `soft`,
+  `hard`), `core/interfaces/token_ledger.UsageScopeProvider`, and
+  `core/interfaces/semantic_cache.served_from_cache()` / `set_served_from_cache()`.
 
 ### Changed
 

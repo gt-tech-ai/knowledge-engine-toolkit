@@ -235,6 +235,16 @@ collaborator or zero timeout skips its layer; recovery needs none.
   custom ops through the base's `exec`. The retry layer's
   `ExponentialRetrier` (and `retry_transient_async`) wait out a server pushback
   (`details["retry_after_ms"]`, read by `retry_after_s`), capped by the max interval.
+- **Python — token accounting.** `clients/decorators/token_accounting.TokenAccountingProxy` is the
+  outermost AI-band decorator over an `LLMProvider`, `ModelGateway` or `EmbeddingProvider`: it reads
+  the request's `UsageScope` from an injected `UsageScopeProvider` (no scope → passthrough), asks
+  `TokenLedger.check_budget` before the call (an exhausted budget under `BudgetPolicy.enforcement`
+  `soft` / `hard` raises `QuotaExceededError` before the inner call; `shadow` serves and counts
+  `ai_budget_would_exceed_total`; a ledger error serves), and records one priced `UsageRecord`
+  after it (a stream at its terminal `StreamUsage`; a semantic-cache hit, flagged through
+  `core/interfaces/semantic_cache.served_from_cache()`, as one zero-token `<step>.cache_hit`).
+  Recording never raises. Metrics: `ai_tokens_total{org,workspace,model,type}`,
+  `ai_cost_usd_total{org,workspace,model}`.
 - **Python — GenAI span enrichment.** `clients/decorators/ai_enricher.AiSpanEnricher` wraps an
   `LLMProvider` or `RetrievalEngine` and stamps the span already current (the step's) with
   `gen_ai.system`, `gen_ai.step`, `gen_ai.request.model` (the model asked for),

@@ -25,6 +25,7 @@ from techai_webutils.core.errors.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from datetime import datetime
 
 
@@ -56,6 +57,11 @@ class UsageScope:
         """Reject a scope with no organization (``INVALID_INPUT``)."""
         if not self.org_id:
             raise AppError(ErrorCode.INVALID_INPUT, "usage scope requires an org_id")
+
+
+type UsageScopeProvider = Callable[[], UsageScope | None]
+"""Returns the current request's ``UsageScope``, or ``None`` outside a request (injected; the
+composition root passes a reader of its request context, so the engine holds no request global)."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 from abc import abstractmethod
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 from techai_webutils.core.interfaces.cache import CacheInvalidator
@@ -78,3 +79,21 @@ class SemanticCache(CacheInvalidator):
 
         Fail-open: a backend error is a no-op, never an exception.
         """
+
+
+_SERVED_FROM_CACHE: ContextVar[bool] = ContextVar("served_from_cache", default=False)
+"""Whether the current call's answer came from the semantic cache (an output, never an input)."""
+
+
+def served_from_cache() -> bool:
+    """Return whether the current call was answered from the semantic cache.
+
+    The cache decorator sets it per bound call; an outer decorator (token accounting) reads it
+    after the call returns, so a hit is recorded as a zero-token usage rather than billed.
+    """
+    return _SERVED_FROM_CACHE.get()
+
+
+def set_served_from_cache(*, value: bool) -> None:
+    """Mark the current call as answered (``True``) or not (``False``) from the semantic cache."""
+    _SERVED_FROM_CACHE.set(value)
