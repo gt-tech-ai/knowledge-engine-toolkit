@@ -17,8 +17,10 @@ if TYPE_CHECKING:
         Classification,
         Plan,
         PlanInput,
+        PlanRequest,
         RankResult,
         Route,
+        RoutingPlan,
         RoutingPolicy,
     )
 
@@ -70,4 +72,18 @@ class RouteDecisionSink(Protocol):
 
     def record(self, decision: RouteDecision, ctx: RouteContext) -> None:
         """Hand ``decision`` off without blocking; the gateway counts (never raises) a failure."""
+        ...
+
+
+class RouteTransport(Protocol):
+    """Carries a ``PlanRequest`` to a remote planner (the product's gRPC client implements it)."""
+
+    async def route(
+        self,
+        request: PlanRequest,
+        *,
+        timeout_s: float,
+        metadata: Sequence[tuple[str, str]],
+    ) -> RoutingPlan:
+        """Return the remote plan; raise a coded ``AppError`` (``UNAVAILABLE`` when transient)."""
         ...

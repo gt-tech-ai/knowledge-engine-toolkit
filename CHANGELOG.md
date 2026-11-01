@@ -93,6 +93,10 @@ All notable changes to this project are recorded here. The format follows
 - Python `clients/decorators.AuditProxy` + `AuditEnforcement` (`shadow`, `enforced`): input and
   output safety chains around a model call, one `AuditRecord` per answer (streams on exhaustion,
   cache hits through `audit_cached`), and `core/interfaces/audit.AuditContext`.
+- Python `core/types/routing.RoutingPlan` (every field defaulted), `PlanRequest`,
+  `PlanRequirements`, `ReasoningLevel`, `ContextStrategy`; `core/interfaces/routing.RouteTransport`;
+  `RoutePlannerKind.OVERLORD` (`OverlordPlanner`, `OverlordPlannerConfig`) failing open to
+  `local`; `new_model_gateway_from_config(planner_deps=…)` carries the transport.
 
 ### Changed
 

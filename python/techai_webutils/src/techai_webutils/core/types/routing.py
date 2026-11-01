@@ -9,6 +9,7 @@ priors and data-policy facts.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
@@ -190,3 +191,103 @@ class Plan:
     """Why (``planned``, ``classifier_degraded``, ``planner_fail_open``, …)."""
     rejections: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
     """Endpoint key → why the planner's ranker dropped it."""
+
+
+class ReasoningLevel(StrEnum):
+    """How much reasoning a plan asks of the model."""
+
+    LOW = "low"
+    """Answer directly."""
+    MEDIUM = "medium"
+    """The model's default (the plan's default)."""
+    HIGH = "high"
+    """Think it through (extended reasoning where the model supports it)."""
+
+
+class ContextStrategy(StrEnum):
+    """How much retrieved context a plan sends."""
+
+    FULL = "full"
+    """Every retrieved passage (the default)."""
+    TRIMMED = "trimmed"
+    """The most relevant passages only."""
+    MINIMAL = "minimal"
+    """The least context that can answer."""
+
+
+@dataclass(frozen=True, slots=True)
+class PlanRequirements:
+    """What a planner decided the task needs from a model."""
+
+    tools: bool = False
+    """Tool calling."""
+    json: bool = False
+    """Structured (JSON) output."""
+    vision: bool = False
+    """Image input."""
+    long_context: bool = False
+    """A long context window."""
+    reasoning: bool = False
+    """Extended reasoning."""
+
+
+@dataclass(frozen=True, slots=True)
+class RoutingPlan:
+    """A remote planner's answer (mirrors the overlord's ``RoutingPlan``); every field defaulted.
+
+    Model ids are catalog ids (``provider/model``) drawn only from the request's candidates; the
+    gateway re-checks that and maps them onto the offered endpoints.
+    """
+
+    task_class: str = ""
+    """The task class (route) the planner saw."""
+    complexity: str = ""
+    """The planner's complexity estimate."""
+    requirements: PlanRequirements = field(default_factory=PlanRequirements)
+    """What the task needs."""
+    model_id: str = ""
+    """The model to try first."""
+    fallback_model_ids: tuple[str, ...] = ()
+    """The models to fail over to, in order."""
+    reasoning_level: ReasoningLevel = ReasoningLevel.MEDIUM
+    """How much reasoning to ask for."""
+    context_strategy: ContextStrategy = ContextStrategy.FULL
+    """How much context to send."""
+    tools: tuple[str, ...] = ()
+    """The tool names the call may use."""
+    max_cost_usd: Decimal | None = None
+    """A per-call cost ceiling the plan imposes, if any."""
+    max_latency_ms: int | None = None
+    """A latency ceiling the plan imposes, if any."""
+    confidence: float = 0.0
+    """The planner's confidence in the plan."""
+    escalate: bool = False
+    """Whether the plan escalates to a stronger model."""
+    escalation_reason: str = ""
+    """Why it escalated."""
+    stickiness_key: str = ""
+    """Keeps a conversation on one model across turns."""
+    planner_version: str = ""
+    """The planner build that produced the plan."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PlanRequest:
+    """What the gateway sends a remote planner (the transport maps it to the wire)."""
+
+    org_id: str
+    """The verified tenant."""
+    workspace_id: str
+    """The verified workspace."""
+    step: str
+    """The pipeline step (``rewrite``, ``generate``, …)."""
+    query: str
+    """The text to plan for (the last user message)."""
+    candidates: tuple[CatalogEndpointRef, ...]
+    """The endpoints the filter left (capabilities and priors included)."""
+    requirements: RouteRequirements
+    """What the call needs."""
+    policy: RoutingPolicy
+    """The tenant's routing policy."""
+    conversation_id: str = ""
+    """The conversation, for stickiness (empty until conversations are threaded)."""

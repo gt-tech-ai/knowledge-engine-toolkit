@@ -107,6 +107,7 @@ def new_model_gateway_from_config(
     prices: PriceTable | None = None,
     facts: FactPublisher | None = None,
     metrics: MetricsProvider | None = None,
+    planner_deps: Mapping[str, object] | None = None,
 ) -> ModelGateway:
     """Build the ``ModelGateway`` selected by ``config.kind``.
 
@@ -121,7 +122,8 @@ def new_model_gateway_from_config(
         ledger: The token ledger the ``cost_aware`` ranker's budget bias reads (``routed``).
         prices: The price table the ``cost_aware`` ranker and decision costs use (``routed``).
         facts: The fact publisher the ``analytics`` decision sink publishes through (``routed``).
-        metrics: Counts routed attempts and decision-sink failures (``routed``).
+        metrics: Counts routed attempts, decision-sink failures and planner fail-opens (``routed``).
+        planner_deps: Collaborators a remote planner kind needs (``overlord``: ``transport``).
 
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.
@@ -150,6 +152,7 @@ def new_model_gateway_from_config(
             prices=prices,
             facts=facts,
             metrics=metrics,
+            planner_deps=planner_deps,
         )
     msg = f"unknown model gateway kind: {config.kind!r}"
     raise AppValueError(msg)

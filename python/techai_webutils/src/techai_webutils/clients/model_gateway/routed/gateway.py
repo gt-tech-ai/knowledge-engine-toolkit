@@ -208,6 +208,7 @@ class RoutedGateway(ModelGateway):
         prices: PriceTable | None = None,
         facts: FactPublisher | None = None,
         metrics: MetricsProvider | None = None,
+        planner_deps: Mapping[str, object] | None = None,
     ) -> RoutedGateway:
         """Parse and validate ``config`` and build its stages (no provider is built yet).
 
@@ -244,6 +245,8 @@ class RoutedGateway(ModelGateway):
                 classifier=classifier,
                 ranker=ranker,
                 routes=routes,
+                planner_deps=planner_deps,
+                metrics=metrics,
             )
 
         planner = planner_for({})
