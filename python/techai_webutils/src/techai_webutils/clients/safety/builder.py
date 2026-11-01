@@ -3,8 +3,9 @@
 ``SafetyConfig.kind`` selects ``noop`` (pass everything, the default), ``regex`` (deterministic
 PII, no infra), ``comprehend`` or ``bedrock_guardrails`` (managed; aiobotocore is imported only in
 their branch and the client opens on the first scan). ``on_detect`` is the policy applied to a
-detection. An unknown kind or policy, or a guardrail kind with no guardrail id, raises
-``AppValueError`` (a ``ValueError`` coded ``INVALID_INPUT``).
+detection. An unknown kind or policy, a guardrail kind with no guardrail id, or a managed kind
+whose ``timeout_seconds`` is not positive raises ``AppValueError`` (a ``ValueError`` coded
+``INVALID_INPUT``).
 """
 
 from __future__ import annotations
@@ -73,7 +74,8 @@ def new_safety_check_from_config(
             creates one (the dev/test kinds never touch it).
 
     Raises:
-        AppValueError: an unknown kind or policy, or ``bedrock_guardrails`` without an id.
+        AppValueError: an unknown kind or policy, ``bedrock_guardrails`` without an id, or a
+            managed kind whose ``timeout_seconds`` is not positive.
 
     """
     on_detect = _on_detect(config.on_detect)
@@ -86,6 +88,9 @@ def new_safety_check_from_config(
         raise AppValueError(msg)
     if config.kind == SafetyKind.BEDROCK_GUARDRAILS and not config.guardrail_id:
         msg = "bedrock_guardrails safety kind requires a guardrail_id"
+        raise AppValueError(msg)
+    if config.timeout_seconds <= 0:
+        msg = f"managed safety kind needs a positive timeout_seconds, got {config.timeout_seconds}"
         raise AppValueError(msg)
     # Lazy imports: aiobotocore loads only when a managed kind is selected.
     import aiobotocore.session  # type: ignore[import-untyped]  # noqa: PLC0415

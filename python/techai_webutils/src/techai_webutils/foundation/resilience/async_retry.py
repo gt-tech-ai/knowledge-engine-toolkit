@@ -10,7 +10,6 @@ capped at ``max_delay``.
 from __future__ import annotations
 
 import functools
-import random
 from collections.abc import Awaitable, Callable
 from typing import TypeVar, cast
 
@@ -22,6 +21,7 @@ from tenacity import (
 )
 
 from techai_webutils.core.errors.errors import AppError
+from techai_webutils.foundation.resilience.backoff import exponential_jitter_wait
 
 F = TypeVar("F", bound=Callable[..., Awaitable[object]])
 
@@ -73,18 +73,15 @@ def retry_transient_async(
         """Attach the tenacity async retry policy to *func*, preserving its metadata."""
         retry_cond = retry_if_exception(_is_transient)
         stop_cond = stop_after_attempt(max_attempts)
+        backoff = exponential_jitter_wait(initial=base_delay, max_delay=max_delay)
 
         def wait_pol(state: RetryCallState) -> float:
             """Wait the backoff, or the server's pushback when longer (capped at ``max_delay``).
 
             The backoff is ``base_delay * 2**(n-1)`` plus up to ``base_delay`` of jitter, capped at
-            ``max_delay`` (tenacity's exponential-jitter wait, computed here because its
-            ``initial=`` argument is deprecated and ``multiplier=`` is missing before 9.2).
+            ``max_delay`` (the shared ``exponential_jitter_wait``).
             """
-            exponential = base_delay * 2 ** (state.attempt_number - 1)
-            # SystemRandom keeps the weak-PRNG scanners clean without a suppression.
-            jitter = random.SystemRandom().uniform(0, base_delay)
-            delay = max(0.0, min(exponential + jitter, max_delay))
+            delay = backoff(state)
             err = state.outcome.exception() if state.outcome is not None else None
             pushback = retry_after_s(err) if err is not None else None
             return delay if pushback is None else max(delay, min(pushback, max_delay))

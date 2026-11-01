@@ -378,28 +378,71 @@ async def test_stream_hit_is_handed_to_on_hit_as_a_response() -> None:
 
 
 @pytest.mark.asyncio
-async def test_hit_hook_block_refuses_the_hit() -> None:
-    """Test that a hook's ``FORBIDDEN`` refuses the hit instead of being swallowed.
+@pytest.mark.parametrize("code", [ErrorCode.FORBIDDEN, ErrorCode.UNAVAILABLE])
+async def test_hit_hook_coded_error_refuses_the_hit(code: ErrorCode) -> None:
+    """Test that any coded error from the hit hook refuses the hit instead of being swallowed.
 
     **Why this test is important:**
-      - The audit blocks a cached answer the safety policy now forbids; fail-open swallowing
-        would serve it anyway.
+      - The audit blocks a hit the safety policy forbids (``FORBIDDEN``) and, when enforced,
+        refuses one it could not scan or record (``UNAVAILABLE``); swallowing either would
+        serve an answer the live path refuses.
 
     **What it tests:**
-      - ``complete`` raises the hook's ``FORBIDDEN``; the call is not marked served from cache
-      - any other hook failure is swallowed and the hit served
+      - ``complete`` raises the hook's coded error; the call is not marked served from cache
     """
-    blocked = AsyncMock(side_effect=AppError(ErrorCode.FORBIDDEN, "blocked"))
-    broken = AsyncMock(side_effect=RuntimeError("sink down"))
+    refusing = AsyncMock(side_effect=AppError(code, "refused"))
 
     with pytest.raises(AppError) as caught:
-        await _proxy(_inner(), _cache(_HIT), on_hit=blocked).complete(_MESSAGES)
-    refused_served = served_from_cache()
-    response = await _proxy(_inner(), _cache(_HIT), on_hit=broken).complete(_MESSAGES)
+        await _proxy(_inner(), _cache(_HIT), on_hit=refusing).complete(_MESSAGES)
 
-    assert caught.value.code is ErrorCode.FORBIDDEN
-    assert not refused_served
+    assert caught.value.code is code
+    assert not served_from_cache()
+
+
+@pytest.mark.asyncio
+async def test_hit_hook_uncoded_failure_serves_the_hit() -> None:
+    """Test that an uncoded hit-hook failure is swallowed, counted and the hit served.
+
+    **Why this test is important:**
+      - A bug in the hook must not turn every hit into an error; the cache stays fail-open.
+
+    **What it tests:**
+      - ``complete`` returns the cached answer and counts ``op="on_hit"``
+    """
+    metrics, counters = _metrics()
+    broken = AsyncMock(side_effect=RuntimeError("bug"))
+
+    response = await _proxy(
+        _inner(), _cache(_HIT), on_hit=broken, metrics=metrics
+    ).complete(_MESSAGES)
+
     assert response.content == "30 days"
+    counters["semantic_cache_proxy_errors_total"].inc.assert_any_call(1.0, op="on_hit")
+
+
+@pytest.mark.asyncio
+async def test_stream_hit_ignores_a_non_response_replacement() -> None:
+    """Test that a stream hit whose hook returns a non-answer replays the cached text, counted.
+
+    **Why this test is important:**
+      - A replay can only stream text; a replacement it can't read must be visible as a hook
+        failure, not silently dropped.
+
+    **What it tests:**
+      - the cached text is replayed and ``op="on_hit"`` is counted
+    """
+    metrics, counters = _metrics()
+    inner = _inner()
+    inner.stream_with_usage = AsyncMock()
+    odd = AsyncMock(return_value="not a response")
+
+    stream = await _proxy(inner, _cache(_HIT), on_hit=odd, metrics=metrics).stream(
+        _MESSAGES
+    )
+    text = "".join([item async for item in stream])
+
+    assert text == "30 days"
+    counters["semantic_cache_proxy_errors_total"].inc.assert_any_call(1.0, op="on_hit")
 
 
 @pytest.mark.asyncio

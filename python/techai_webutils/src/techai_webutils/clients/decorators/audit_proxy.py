@@ -15,10 +15,11 @@ A transparent ``__getattr__`` proxy over an ``LLMProvider`` (or gateway). For ``
 Streams scan the prompt before opening and audit on exhaustion over the accumulated text; an
 output ``block`` can't retract tokens already sent, so it is recorded ``flagged_after_stream``.
 ``audit_cached`` is the semantic cache's ``on_hit`` hook, run before a hit is served: both chains
-scan it, it is audited with ``cache_hit=True``, an output ``redact`` returns the redacted answer
-for the cache to serve and a ``block`` raises ``FORBIDDEN`` (the hit is not served). Only a record
-for a call the gateway made carries the route decision's model; a blocked input or a cache hit
-records the model it knows (none, or the cached answer's).
+scan it, it is audited with ``cache_hit=True`` (an input ``redact`` records the redacted prompt,
+as a live call does), an output ``redact`` returns the redacted answer for the cache to serve and
+a ``block`` raises ``FORBIDDEN`` (the hit is not served). A record carries the route decision's
+model only when the audited call itself set that decision (a gateway beneath the proxy); a plain
+provider, a blocked input or a cache hit records the model it knows (none, or the answer's).
 
 ``AuditEnforcement`` governs failures of the audit itself: ``shadow`` logs and counts
 (``audit_record_failures_total{enforcement}``) and serves; ``enforced`` raises — a coded sink
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
 
     from techai_webutils.core.interfaces.audit import AuditContext, AuditSink
     from techai_webutils.core.interfaces.metrics import MetricCounter, MetricsProvider
+    from techai_webutils.core.interfaces.model_gateway import RouteDecision
     from techai_webutils.core.interfaces.safety import SafetyCheck
     from techai_webutils.core.interfaces.semantic_cache import CachedAnswer
 
@@ -218,16 +220,16 @@ class AuditProxy:
         results: tuple[SafetyResult, ...],
         decision: str,
         cache_hit: bool,
-        called: bool = False,
+        routed: RouteDecision | None = None,
     ) -> AuditRecord:
         """Return the audit record for one answer under the current request context.
 
-        ``called`` marks a record for a call the gateway made: only then is the route decision
-        (set by that call) the record's model; otherwise a previous step's decision may linger.
+        ``routed`` is the route decision the audited call itself set (``_routed_since``); its
+        model, when set, is the record's model. A decision a previous step left behind is never
+        passed, so it can't name a model that did not produce this answer.
         """
         ctx = self._context()
         flags = tuple(flag for result in results for flag in result.flags)
-        routed = current_route_decision() if called else None
         return AuditRecord(
             request_id=ctx.request_id,
             trace_id=_trace_id(),
@@ -295,6 +297,7 @@ class AuditProxy:
         @functools.wraps(attr)
         async def complete(*args: object, **kwargs: object) -> LLMResponse:
             args, kwargs, prompt, before = await self._guard_input(args, kwargs)
+            prior = current_route_decision()
             response = await cast("Callable[..., Awaitable[LLMResponse]]", attr)(
                 *args, **kwargs
             )
@@ -311,7 +314,7 @@ class AuditProxy:
                     results=(before, after),
                     decision=_decision((before, after)),
                     cache_hit=False,
-                    called=True,
+                    routed=_routed_since(prior),
                 )
             )
             if blocked:
@@ -337,8 +340,9 @@ class AuditProxy:
             opener = cast(
                 "Callable[..., Awaitable[AsyncIterator[str | StreamUsage]]]", source
             )
+            prior = current_route_decision()
             items = await opener(*args, **kwargs)
-            return self._relay(items, prompt, before, keep_usage=keep_usage)
+            return self._relay(items, prompt, before, prior, keep_usage=keep_usage)
 
         return stream
 
@@ -347,10 +351,15 @@ class AuditProxy:
         items: AsyncIterator[str | StreamUsage],
         prompt: str,
         before: SafetyResult,
+        prior: RouteDecision | None,
         *,
         keep_usage: bool,
     ) -> AsyncIterator[str | StreamUsage]:
-        """Re-yield ``items``; once exhausted, scan the joined answer and audit it."""
+        """Re-yield ``items``; once exhausted, scan the joined answer and audit it.
+
+        ``prior`` is the route decision before the stream opened, so only a decision the
+        stream itself set names the record's model.
+        """
         parts: list[str] = []
         usage: StreamUsage | None = None
         async for item in items:
@@ -374,7 +383,7 @@ class AuditProxy:
                 results=(before, after),
                 decision=_decision((before, after), block_label="flagged_after_stream"),
                 cache_hit=False,
-                called=True,
+                routed=_routed_since(prior),
             )
         )
 
@@ -399,6 +408,8 @@ class AuditProxy:
         prompt = messages[index].content if index is not None else ""
         response = cast("LLMResponse", answer)
         before = await self._scan(self._input, prompt, ScanKind.PROMPT)
+        if before.decision is SafetyDecision.REDACT and before.redacted is not None:
+            prompt = before.redacted
         after = await self._scan(self._output, response.content, ScanKind.ANSWER)
         blocked = next(
             (r for r in (before, after) if r.decision is SafetyDecision.BLOCK), None
@@ -423,3 +434,13 @@ class AuditProxy:
         if blocked is not None:
             raise blocked_error(blocked)
         return None if redacted is None else replace(response, content=redacted)
+
+
+def _routed_since(prior: RouteDecision | None) -> RouteDecision | None:
+    """Return the route decision set since ``prior`` was read, or ``None`` when none was.
+
+    A gateway sets a fresh decision per call, so identity tells this call's decision from one a
+    previous step left in the context, whatever decorators sit between the proxy and it.
+    """
+    current = current_route_decision()
+    return current if current is not None and current is not prior else None

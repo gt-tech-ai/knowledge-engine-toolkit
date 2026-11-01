@@ -243,29 +243,65 @@ async def test_cache_hit_is_blocked_or_redacted_before_it_is_served() -> None:
     assert (blocked.decision, blocked.answer, blocked.cache_hit) == ("blocked", "", True)
     assert served is not None
     assert served.content == "[EMAIL]"
-    assert _recorded(redacted_sink).decision == "redacted"
+    assert (
+        _recorded(redacted_sink).decision,
+        _recorded(redacted_sink).answer,
+    ) == ("redacted", "[EMAIL]")
 
 
 @pytest.mark.asyncio
-async def test_record_takes_the_route_model_only_for_a_gateway_call() -> None:
-    """Test that a lingering route decision never names the model of a call that wasn't made.
+async def test_cache_hit_records_the_redacted_prompt() -> None:
+    """Test that a hit whose prompt the input check redacts is recorded redacted.
 
     **Why this test is important:**
-      - The decision ContextVar holds the previous step's route; stamping it on a cache hit
-        would record a model that never produced the audited answer.
+      - The audit record is append-only and sealed; a raw prompt written there (an SSN) can
+        never be scrubbed, and a live call on the same prompt records it redacted.
 
     **What it tests:**
-      - with a decision for ``haiku`` set, a cache hit records the cached answer's model
-      - a live call records the decision's model
+      - with an input ``redact``, the hit's ``AuditRecord.prompt`` is the redacted text
+    """
+    redact = SafetyResult(
+        flags=("pii.ssn",), decision=SafetyDecision.REDACT, redacted="my ssn is [SSN]"
+    )
+    sink = _sink()
+
+    await _audit(_inner(), sink, input_check=_check(redact)).audit_cached(
+        (_MESSAGES,), {}, _CACHED, _HIT
+    )
+
+    assert _recorded(sink).prompt == "my ssn is [SSN]"
+
+
+@pytest.mark.asyncio
+async def test_record_takes_the_route_model_only_when_the_call_routed() -> None:
+    """Test that a route decision names the record's model only if this call set it.
+
+    **Why this test is important:**
+      - The decision ContextVar holds the previous step's route; stamping it on a cache hit,
+        or on a call through a plain provider, records a model that never produced the answer.
+
+    **What it tests:**
+      - with a lingering decision for ``haiku``: a cache hit and a plain provider's call each
+        record their own model (``sonnet``)
+      - a call that sets a decision (a gateway) records the decision's model
     """
     set_route_decision(RouteDecision(model_id="anthropic/claude-haiku-4-5"))
-    hit_sink, live_sink = _sink(), _sink()
+    hit_sink, plain_sink, routed_sink = _sink(), _sink(), _sink()
+
+    async def routed_complete(*_args: object, **_kwargs: object) -> LLMResponse:  # noqa: RUF029 - the LLM port is async
+        set_route_decision(RouteDecision(model_id="anthropic/claude-sonnet-4-6"))
+        return _RESPONSE
+
+    gateway = _inner()
+    gateway.complete = AsyncMock(side_effect=routed_complete)
 
     await _audit(_inner(), hit_sink).audit_cached((_MESSAGES,), {}, _CACHED, _HIT)
-    await cast("LLMProvider", _audit(_inner(), live_sink)).complete(_MESSAGES)
+    await cast("LLMProvider", _audit(_inner(), plain_sink)).complete(_MESSAGES)
+    await cast("LLMProvider", _audit(gateway, routed_sink)).complete(_MESSAGES)
 
     assert _recorded(hit_sink).model == "sonnet"
-    assert _recorded(live_sink).model == "anthropic/claude-haiku-4-5"
+    assert _recorded(plain_sink).model == "sonnet"
+    assert _recorded(routed_sink).model == "anthropic/claude-sonnet-4-6"
 
 
 @pytest.mark.asyncio

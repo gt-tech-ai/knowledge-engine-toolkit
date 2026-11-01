@@ -16,11 +16,11 @@ from tenacity import (
     retry_if_exception,
     stop_after_attempt,
     stop_after_delay,
-    wait_exponential_jitter,
 )
 
 from techai_webutils.core.interfaces.retrier import Retrier
 from techai_webutils.foundation.resilience.async_retry import retry_after_s
+from techai_webutils.foundation.resilience.backoff import exponential_jitter_wait
 from techai_webutils.foundation.resilience.classify import is_transient
 
 if TYPE_CHECKING:
@@ -67,11 +67,10 @@ class ExponentialRetrier(Retrier):
         stop = stop_after_attempt(cfg.max_retries + 1)
         if cfg.max_elapsed_time > 0:
             stop |= stop_after_delay(cfg.max_elapsed_time)
-        backoff = wait_exponential_jitter(
+        backoff = exponential_jitter_wait(
             initial=cfg.initial_interval,
-            max=cfg.max_interval,
+            max_delay=cfg.max_interval,
             exp_base=cfg.multiplier,
-            jitter=cfg.initial_interval,
         )
 
         def wait(state: RetryCallState) -> float:

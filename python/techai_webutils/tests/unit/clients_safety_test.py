@@ -150,13 +150,18 @@ def test_factory_fails_loudly_on_unknown_kind() -> None:
     **What it tests:**
       - an unknown kind and an unknown ``on_detect`` each raise a ``ValueError`` coded
         ``INVALID_INPUT``
-      - ``bedrock_guardrails`` without a guardrail id raises the same
+      - ``bedrock_guardrails`` without a guardrail id, and a managed kind with a non-positive
+        ``timeout_seconds`` (every scan would time out), raise the same
       - ``regex`` builds a ``RegexPiiSafetyCheck``
     """
     bad = (
         SafetyConfig(kind="nope"),
         SafetyConfig(kind=SafetyKind.REGEX, on_detect="shout"),
         SafetyConfig(kind=SafetyKind.BEDROCK_GUARDRAILS),
+        SafetyConfig(kind=SafetyKind.COMPREHEND, timeout_seconds=0),
+        SafetyConfig(
+            kind=SafetyKind.BEDROCK_GUARDRAILS, guardrail_id="gr-1", timeout_seconds=-1
+        ),
     )
     for config in bad:
         with pytest.raises(ValueError, match="safety") as caught:

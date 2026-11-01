@@ -178,7 +178,7 @@ class RetryingIngestor(
 ):
     """Wraps a ``KnowledgeBaseIngestor``, retrying transient AWS errors with exponential backoff.
 
-    Uses ``retry_transient_async`` (tenacity ``wait_exponential_jitter``) so a transient
+    Uses ``retry_transient_async`` (the shared ``exponential_jitter_wait``) so a transient
     ``AppError`` (TIMEOUT/UNAVAILABLE) is retried with backoff+jitter; permanent errors propagate.
 
     This is the ONLY transient-retry layer the KB stack should use. Do NOT also decorate the stack

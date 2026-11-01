@@ -16,6 +16,7 @@ from abc import abstractmethod
 from contextvars import ContextVar
 from dataclasses import dataclass
 
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.cache import CacheInvalidator
 
 _TAG_WIDTH = 16
@@ -27,13 +28,28 @@ class CacheNamespace:
     """The non-query partition a cached answer lives in."""
 
     workspace_id: str
-    """The tenant partition: an answer never crosses workspaces."""
+    """The tenant partition: an answer never crosses workspaces. It is a key segment, so it
+    may not contain the separator ``:``."""
     embedding_model: str
     """The embedder's model id: vectors from different models are not comparable."""
     embedding_version: str
     """The embedding-space version (the model's dimension or a deploy-time revision)."""
     scope: str = ""
     """An optional narrower partition, e.g. the requester's clearance level."""
+
+    def __post_init__(self) -> None:
+        """Reject a workspace id that would span key segments.
+
+        Raises:
+            AppValueError: ``workspace_id`` contains ``:``, so evicting one workspace by its
+                ``<workspace>:`` prefix could take another's keys with it.
+
+        """
+        if ":" in self.workspace_id:
+            msg = (
+                f"cache namespace workspace_id may not contain ':': {self.workspace_id!r}"
+            )
+            raise AppValueError(msg)
 
     def tag(self) -> str:
         """Return the namespace's stable tag: sha256 hex (16 chars) of the four fields."""

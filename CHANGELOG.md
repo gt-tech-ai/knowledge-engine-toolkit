@@ -6,6 +6,28 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.38] - 2026-11-01
+
+Python: `techai-webutils` 0.7.1.
+
+### Fixed
+
+- Python `SemanticCacheProxy`: any coded `AppError` the `on_hit` hook raises now refuses the hit
+  (it was only `FORBIDDEN`), so an enforced `AuditProxy` that cannot scan or record a hit no
+  longer serves it unaudited. A stream hit whose hook returns something other than an
+  `LLMResponse` counts as an `on_hit` failure.
+- Python `AuditProxy.audit_cached` records the redacted prompt when the input check redacts, as
+  a live call does; the raw prompt never reaches the append-only record.
+- Python `AuditProxy` takes the route decision's model only when the audited call itself set
+  the decision, so a plain provider after a gateway step records its own model.
+- Python `foundation/resilience`: `retry_transient`, `retry_transient_async` and
+  `ExponentialRetrier` share the new `backoff.exponential_jitter_wait`, so none calls tenacity's
+  deprecated `wait_exponential_jitter(initial=…)`.
+- Python `new_safety_check_from_config` rejects a managed kind whose `timeout_seconds` is not
+  positive (`AppValueError`); every scan would otherwise time out.
+- Python `CacheNamespace` rejects a `workspace_id` containing `:` (`AppValueError`), the key
+  separator the backends evict by.
+
 ## [0.0.37] - 2026-11-01
 
 Python: `techai-webutils` 0.7.0.
@@ -28,7 +50,8 @@ Python: `techai-webutils` 0.7.0.
   `new_safety_check_from_config`. `regex` flags `pii.ssn`, `pii.email` and `pii.phone` with no
   infrastructure; the managed kinds load aiobotocore only when selected, open one client on first
   use, bound each call by `SafetyConfig.timeout_seconds` (default 5; past it, `UNAVAILABLE`) and map
-  botocore failures through `botocore_error_to_app_error`. An unknown kind or policy raises `AppValueError`.
+  botocore failures through `botocore_error_to_app_error`. An unknown kind or policy raises
+  `AppValueError`.
 - Python `core/interfaces/semantic_cache`: `SemanticCache` (extends `CacheInvalidator`;
   fail-open `lookup` / `store`), `CacheNamespace` (workspace, embedding model and version, scope;
   `tag()`) and `CachedAnswer`.
@@ -95,7 +118,8 @@ Python: `techai-webutils` 0.7.0.
   of one unary method and, optionally, its stream (replayed on a hit; stored only after full
   consumption), fail-open, `served_from_cache()` on a hit, an `on_hit` hook run before a hit is
   served (it may return a replacement answer, and a `FORBIDDEN` it raises refuses the hit; a
-  streamed hit reaches it as an `LLMResponse`), hit / miss / saving metrics, a `semantic_cache.lookup` span and a `cache_lookups` fact per lookup.
+  streamed hit reaches it as an `LLMResponse`), hit / miss / saving metrics, a
+  `semantic_cache.lookup` span and a `cache_lookups` fact per lookup.
 - Python `clients/decorators.AuditProxy` + `AuditEnforcement` (`shadow`, `enforced`): input and
   output safety chains around a model call, one `AuditRecord` per answer (streams on exhaustion,
   cache hits through `audit_cached`, which blocks or redacts a hit like a live answer; only a
