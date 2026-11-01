@@ -82,7 +82,8 @@ def retry_transient_async(
             ``initial=`` argument is deprecated and ``multiplier=`` is missing before 9.2).
             """
             exponential = base_delay * 2 ** (state.attempt_number - 1)
-            jitter = random.uniform(0, base_delay)  # noqa: S311 - backoff jitter, not crypto
+            # SystemRandom keeps the weak-PRNG scanners clean without a suppression.
+            jitter = random.SystemRandom().uniform(0, base_delay)
             delay = max(0.0, min(exponential + jitter, max_delay))
             err = state.outcome.exception() if state.outcome is not None else None
             pushback = retry_after_s(err) if err is not None else None
