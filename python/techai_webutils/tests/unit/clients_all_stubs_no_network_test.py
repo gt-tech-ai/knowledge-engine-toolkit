@@ -63,6 +63,11 @@ from techai_webutils.clients.messaging.builder import (
 )
 from techai_webutils.clients.messaging.config import SQSConfig
 from techai_webutils.clients.messaging.memory import InMemorySubscriber
+from techai_webutils.clients.model_gateway import (
+    GatewayConfig,
+    new_model_gateway_from_config,
+)
+from techai_webutils.clients.model_gateway.passthrough import PassthroughGateway
 from techai_webutils.clients.retrieval import (
     FilteringRetrievalEngine,
     RetrievalConfig,
@@ -155,7 +160,7 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
         - With every real backend constructor patched to fail, each tier factory called with its
           stub/memory/noop/null/local/asyncio kind (storage, messaging, embedding, vector, email, llm,
           retrieval, kb_ingestion, lock, cache, jobs, tracer, metrics, executor, facts, token_ledger,
-          audit, dataset, safety, semantic_cache) returns the stub
+          audit, dataset, safety, semantic_cache, model_gateway) returns the stub
           implementation — i.e. none constructed a real client.
     """
 
@@ -242,6 +247,7 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
         (new_dataset_from_config(DatasetConfig()), StubDataset),
         (new_safety_check_from_config(SafetyConfig()), NoopSafetyCheck),
         (semantic_cache_from_config(SemanticCacheConfig()), StubSemanticCache),
+        (new_model_gateway_from_config(GatewayConfig()), PassthroughGateway),
     ]
 
     for impl, stub_type in built:

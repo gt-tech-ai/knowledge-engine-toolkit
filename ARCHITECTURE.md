@@ -462,7 +462,7 @@ Most tiers ship an in-process, stub, or no-op backend, so wiring needs no cloud 
   `env`/`file`; cache, prometheus, transport `stub`; tracer `noop`; metrics no-op when disabled;
   logger `stdlib`. `database` and `rpc` default to `postgres` and `grpc`: their consumers hold the
   `*sql.DB` or connection itself.
-- **Python:** cache `local`/`null`; email, safety `noop`; audit, dataset, embedding, facts, llm, retrieval,
+- **Python:** cache `local`/`null`; email, safety `noop`; model_gateway `passthrough`; audit, dataset, embedding, facts, llm, retrieval,
   kb_ingestion, semantic_cache, token_ledger, vector `stub`; jobs, lock, messaging, storage `memory`; tracer, metrics `null`;
   executor `asyncio`.
 
@@ -627,6 +627,11 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
   `clients/semantic_cache` (`stub`; `redis` stores payloads in the injected KV cache and keys
   similarity with a RediSearch cosine KNN index on the same Redis, so it needs Redis Stack or
   RediSearch; keys lead with the workspace so `invalidate_prefix(<workspace>)` evicts one tenant).
+- **Model gateway:** `core/interfaces/model_gateway.py` (`ModelGateway` extends `LLMProvider`
+  with `resolve(RouteContext)`; `RouteDecision` in a request-scoped slot read through
+  `current_route_decision()`) and `clients/model_gateway` (`passthrough` wraps one provider built
+  by the injected `provider_factory`; `routed` follows). `AiSpanEnricher` keys `gen_ai.system` on a
+  gateway's `wrapped_provider`.
 
 ## Testing
 

@@ -33,6 +33,17 @@ All notable changes to this project are recorded here. The format follows
   embedding), then a namespace-tagged top-1 cosine KNN in RediSearch; an index document whose
   payload expired is a miss. Backend errors are logged, counted
   (`semantic_cache_errors_total{op}`) and served as a miss or a no-op.
+- Python `core/interfaces/model_gateway`: `ModelGateway` (an `LLMProvider` with
+  `resolve(RouteContext)`), `RouteContext`, `RouteDecision` / `RouteAttempt` (every field
+  defaulted), `RouteContextProvider`, and `current_route_decision()` / `set_route_decision()`.
+- Python `clients/model_gateway`: `GatewayKind` (`passthrough` default, `routed`),
+  `GatewayConfig` and `new_model_gateway_from_config(config, provider_factory=…)`.
+  `PassthroughGateway` delegates byte-for-byte and records a `passthrough` decision per call.
+
+### Changed
+
+- Python `AiSpanEnricher`: `gen_ai.system` is resolved through a gateway's `wrapped_provider`,
+  so wrapping a `ModelGateway` keeps reporting the serving provider's system.
 
 ## [0.0.35] - 2026-10-31
 

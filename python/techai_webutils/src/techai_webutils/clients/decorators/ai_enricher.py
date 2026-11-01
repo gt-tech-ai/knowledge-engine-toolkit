@@ -32,7 +32,8 @@ publishes no fact), measures ``duration_s``/``tokens_in``/``tokens_out``, ``ts``
 (so a long generation lands in the bucket it began in), and the idempotency key
 ``<trace_id>:<span_id>:<step>``.
 
-``gen_ai.system`` is keyed by the wrapped provider's class. A ``FallbackLlmProvider`` reports
+``gen_ai.system`` is keyed by the wrapped provider's class (through a model gateway's
+``wrapped_provider`` when the inner object is a gateway). A ``FallbackLlmProvider`` reports
 ``aws.bedrock`` whichever member served; to attribute a fallback to its own system, wrap each
 member provider in its own enricher instead of the fallback decorator.
 """
@@ -208,8 +209,10 @@ class AiSpanEnricher:
         self._inner = inner
         self._step = step
         self._capture_content = capture_content
+        # A model gateway reports the system of the provider it wraps, not its own class.
+        served = getattr(inner, "wrapped_provider", inner)
         self._system = GEN_AI_SYSTEM_BY_PROVIDER.get(
-            type(inner).__name__, _UNKNOWN_SYSTEM
+            type(served).__name__, _UNKNOWN_SYSTEM
         )
         self._facts = facts
         self._fact_dimensions = fact_dimensions
