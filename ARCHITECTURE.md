@@ -549,6 +549,11 @@ CLIs), so each one does not re-walk the tree or re-implement a runner.
   over one tree read each file once. `clients/codebase` supplies the source by `Kind`: `git`
   (tracked plus untracked, ignoring what `.gitignore` excludes), `fs` (a directory, through
   `os.OpenRoot`), `memory` (a map, for tests). `foundation/yamlq` queries and edits YAML in place.
+- **Knowledge bundles.** `foundation/okf` reads and writes Open Knowledge Format v0.2 markdown:
+  `Parse` splits a file into typed frontmatter, body and classified links; `RenderFrontmatter`,
+  `RenderIndex` and `RenderRootIndex` write frontmatter and `index.md` deterministically; `Conform`
+  and `ConformLog` report a file that breaks the format or a caller's per-type required keys. It is
+  pure (no I/O): a guard or generator walks the `Codebase` and passes each file's bytes.
 - **Probes.** `interfaces.Probe[T]` is one check returning a `types.Verdict` (status, findings,
   transient). `services/probe.NewSet` runs a set in parallel with a per-probe timeout, retries of
   transient failures and a strict mode that fails a skip, returning one step per probe in probe
@@ -606,7 +611,7 @@ methods.
 
 None of the packages above has a Python mirror yet, and `techai-webutils` is unchanged by them:
 `clients/codebase`, `clients/{git,helm,kubectl,docker,terraform,process,session,toolchain}`,
-`clients/aws/*`, `clients/client` (`Output`, `SplitNUL`, `Call`), `foundation/{codebase,yamlq,
+`clients/aws/*`, `clients/client` (`Output`, `SplitNUL`, `Call`), `foundation/{codebase,yamlq,okf,
 stepcache,report,gen,scaffold,impact,pins,dataset,schemagen}`, `services/{probe,toolrun}`,
 `execution/{ops,runs}` and `transport/{cobra,mcp,cron}`. Go has no op-service tier: an operation
 runs through `execution/ops`. Python keeps `core/interfaces/op_service.py`.
