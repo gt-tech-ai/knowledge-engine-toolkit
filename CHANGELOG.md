@@ -29,6 +29,10 @@ All notable changes to this project are recorded here. The format follows
   `tag()`) and `CachedAnswer`.
 - Python `clients/semantic_cache`: `SemanticCacheKind` (`stub` default, `redis`),
   `SemanticCacheConfig` and `semantic_cache_from_config` with injected collaborators.
+- Python `clients/semantic_cache/redis.RedisSemanticCache`: an exact-repeat fast path (no
+  embedding), then a namespace-tagged top-1 cosine KNN in RediSearch; an index document whose
+  payload expired is a miss. Backend errors are logged, counted
+  (`semantic_cache_errors_total{op}`) and served as a miss or a no-op.
 
 ## [0.0.35] - 2026-10-31
 

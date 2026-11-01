@@ -624,7 +624,9 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
   `bedrock_guardrails`, whose aiobotocore client opens on the first scan).
 - **Semantic cache:** `core/interfaces/semantic_cache.py` (`SemanticCache` extends
   `CacheInvalidator`; `CacheNamespace` partitions by workspace, embedding space and scope) and
-  `clients/semantic_cache` (`stub`; `redis` takes an injected KV cache, embedder and Redis client).
+  `clients/semantic_cache` (`stub`; `redis` stores payloads in the injected KV cache and keys
+  similarity with a RediSearch cosine KNN index on the same Redis, so it needs Redis Stack or
+  RediSearch; keys lead with the workspace so `invalidate_prefix(<workspace>)` evicts one tenant).
 
 ## Testing
 

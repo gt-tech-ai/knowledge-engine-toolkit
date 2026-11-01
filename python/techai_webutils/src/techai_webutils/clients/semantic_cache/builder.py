@@ -82,7 +82,8 @@ def semantic_cache_from_config(
             ErrorCode.INVALID_INPUT,
             "redis semantic cache requires cache, embedding and redis",
         )
-    _ = metrics  # consumed by the redis backend
-    raise AppError(
-        ErrorCode.INVALID_INPUT, "redis semantic cache backend is not built yet"
+    from techai_webutils.clients.semantic_cache.redis import (  # noqa: PLC0415
+        RedisSemanticCache,
     )
+
+    return RedisSemanticCache(cache, embedding, redis, config, metrics=metrics)
