@@ -86,6 +86,10 @@ All notable changes to this project are recorded here. The format follows
   replica) and `foundation/resilience/per_key_builder` (`PerKeyRateLimiterKind` `memory` /
   `redis`, `PerKeyRateLimiterConfig`, `per_key_rate_limiter_from_config`).
 - Python `RedisTokenLedger(clock=…)`: the time the budget window is read at (injected for tests).
+- Python `clients/decorators.SemanticCacheProxy` + `SemanticCacheBinding`: read-through caching
+  of one unary method and, optionally, its stream (replayed on a hit; stored only after full
+  consumption), fail-open, `served_from_cache()` on a hit, an `on_hit` hook, hit / miss / saving
+  metrics, a `semantic_cache.lookup` span and a `cache_lookups` fact per lookup.
 
 ### Changed
 

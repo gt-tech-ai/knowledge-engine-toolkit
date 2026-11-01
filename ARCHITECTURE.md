@@ -247,6 +247,15 @@ collaborator or zero timeout skips its layer; recovery needs none.
   `core/interfaces/semantic_cache.served_from_cache()`, as one zero-token `<step>.cache_hit`).
   Recording never raises. Metrics: `ai_tokens_total{org,workspace,model,type}`,
   `ai_cost_usd_total{org,workspace,model}`.
+- **Python — semantic cache proxy.** `clients/decorators/semantic_cache_proxy.SemanticCacheProxy`
+  is a read-through decorator around one bound method (`SemanticCacheBinding`: the unary `method`,
+  optionally a `stream_method`, and how arguments map to a query and a `CacheNamespace`). A hit
+  returns the decoded answer (a stream replays the cached text, then a zero-token `StreamUsage`)
+  without calling the inner and sets `served_from_cache()`; a miss writes the answer through (a
+  stream only once fully consumed). Every cache, hook or telemetry failure is swallowed and
+  counted; `enabled=False` or a `StubSemanticCache` is a passthrough. Metrics:
+  `semantic_cache_{hits,misses}_total{path,workspace}`, `semantic_cache_saving_usd_total`; one
+  `cache_lookups` fact per lookup.
 - **Python — per-key rate limits.** `core/interfaces/rate_limiter.PerKeyRateLimiter`
   (`allow_key(key)`, async) has two kinds behind `foundation/resilience/per_key_builder`:
   `memory` (`InMemoryRateLimiter`, per replica; the default) and `redis`
