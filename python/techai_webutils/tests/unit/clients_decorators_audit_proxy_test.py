@@ -1,0 +1,363 @@
+"""Unit tests for ``AuditProxy``: safety chains around the model call, one audit record per answer."""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, cast
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from techai_webutils.clients.decorators.audit_proxy import AuditEnforcement, AuditProxy
+from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.interfaces.audit import (
+    AuditContext,
+    AuditedSource,
+    AuditRecord,
+    AuditSink,
+)
+from techai_webutils.core.interfaces.llm import (
+    LLMMessage,
+    LLMProvider,
+    LLMResponse,
+    StreamUsage,
+)
+from techai_webutils.core.interfaces.metrics import MetricsProvider
+from techai_webutils.core.interfaces.safety import (
+    SafetyCheck,
+    SafetyDecision,
+    SafetyResult,
+)
+from techai_webutils.core.interfaces.semantic_cache import CachedAnswer
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+_NOW = datetime(2026, 10, 31, 12, tzinfo=UTC)
+_SOURCE = AuditedSource(
+    document_id="d-1",
+    s3_key="org-1/d-1.pdf",
+    trust_level="high",
+    classification="internal",
+    score=0.8,
+    page_number=3,
+)
+_CTX = AuditContext(
+    tenant_id="org-1",
+    workspace_id="ws-1",
+    user_id="u-1",
+    clearance_level="internal",
+    request_id="r-1",
+    sources=(_SOURCE,),
+)
+_MESSAGES = [
+    LLMMessage(role="system", content="ctx"),
+    LLMMessage(role="user", content="my ssn is 123-45-6789"),
+]
+_RESPONSE = LLMResponse(
+    content="the answer",
+    model="sonnet",
+    input_tokens=12,
+    output_tokens=4,
+    finish_reason="stop",
+)
+_CLEAN = SafetyResult(flags=(), decision=SafetyDecision.ALLOW, redacted=None)
+
+
+def _check(*results: SafetyResult) -> MagicMock:
+    """Return a safety check answering ``results`` in turn."""
+    check = MagicMock(spec=SafetyCheck)
+    check.scan = AsyncMock(side_effect=list(results))
+    return check
+
+
+def _sink(error: Exception | None = None) -> MagicMock:
+    """Return an audit sink that records (or raises ``error``)."""
+    sink = MagicMock(spec=AuditSink)
+    sink.record = AsyncMock(side_effect=error)
+    return sink
+
+
+def _inner() -> MagicMock:
+    """Return a provider answering ``_RESPONSE``."""
+    inner = MagicMock(spec=LLMProvider)
+    inner.complete = AsyncMock(return_value=_RESPONSE)
+    return inner
+
+
+def _audit(
+    inner: MagicMock,
+    sink: MagicMock,
+    *,
+    input_check: MagicMock | None = None,
+    output_check: MagicMock | None = None,
+    enforcement: AuditEnforcement = AuditEnforcement.ENFORCED,
+    metrics: MetricsProvider | None = None,
+) -> AuditProxy:
+    """Wrap ``inner`` for the ``generate`` step with a fixed clock and context."""
+    return AuditProxy(
+        inner,
+        sink=sink,
+        input_check=input_check or _check(_CLEAN),
+        output_check=output_check or _check(_CLEAN),
+        enforcement=enforcement,
+        step="generate",
+        record_context=lambda: _CTX,
+        metrics=metrics,
+        clock=lambda: _NOW,
+    )
+
+
+def _recorded(sink: MagicMock) -> AuditRecord:
+    """Return the one record ``sink`` received."""
+    sink.record.assert_awaited_once()
+    return sink.record.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_audit_proxy_captures_provenance_flags_traceid_decision() -> None:
+    """Test that an answered call is recorded with its context, provenance, flags and decision.
+
+    **Why this test is important:**
+      - The record is the SOC 2 evidence for the answer; a missing field is a missing control.
+
+    **What it tests:**
+      - a prompt flagged ``pii.ssn`` and redacted reaches the model redacted
+      - the record carries the context, the sources, tokens, the PII flag, ``redacted`` and
+        ``cache_hit=False``
+    """
+    inner, sink = _inner(), _sink()
+    redacted = SafetyResult(
+        flags=("pii.ssn",), decision=SafetyDecision.REDACT, redacted="my ssn is [SSN]"
+    )
+
+    response = await cast(
+        "LLMProvider", _audit(inner, sink, input_check=_check(redacted))
+    ).complete(_MESSAGES)
+
+    assert response is _RESPONSE
+    sent = inner.complete.await_args.args[0]
+    assert [m.content for m in sent] == ["ctx", "my ssn is [SSN]"]
+    assert _recorded(sink) == AuditRecord(
+        request_id="r-1",
+        trace_id="",
+        tenant_id="org-1",
+        workspace_id="ws-1",
+        user_id="u-1",
+        clearance_level="internal",
+        model="sonnet",
+        provider="unknown",
+        prompt="my ssn is [SSN]",
+        answer="the answer",
+        sources=(_SOURCE,),
+        prompt_tokens=12,
+        completion_tokens=4,
+        pii_flags=("pii.ssn",),
+        safety_flags=(),
+        decision="redacted",
+        cache_hit=False,
+        created_at=_NOW,
+    )
+
+
+@pytest.mark.asyncio
+async def test_cache_hit_is_audited() -> None:
+    """Test that an answer served from the semantic cache is audited as a cache hit.
+
+    **Why this test is important:**
+      - A cache hit is still an answer shown to a user; an unaudited hit is a gap in evidence.
+
+    **What it tests:**
+      - ``audit_cached`` (the cache's ``on_hit`` hook) records ``cache_hit=True`` with the
+        cached answer and zero tokens, without calling the model
+    """
+    inner, sink = _inner(), _sink()
+    cached = LLMResponse(
+        content="cached",
+        model="sonnet",
+        input_tokens=0,
+        output_tokens=0,
+        finish_reason="cache_hit",
+    )
+    hit = CachedAnswer(
+        payload=b"", similarity=0.99, source_query="q", embedding_model="titan"
+    )
+
+    await _audit(inner, sink).audit_cached((_MESSAGES,), {}, cached, hit)
+
+    record = _recorded(sink)
+    assert (record.cache_hit, record.answer, record.prompt_tokens, record.decision) == (
+        True,
+        "cached",
+        0,
+        "allowed",
+    )
+    inner.complete.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_enforced_raises_coded_error_on_sink_failure() -> None:
+    """Test that enforced auditing fails closed with a coded error.
+
+    **Why this test is important:**
+      - Under enforcement an unrecorded answer must not be served.
+
+    **What it tests:**
+      - an uncoded sink failure raises ``INTERNAL``; a coded one keeps its code (``UNAVAILABLE``)
+    """
+    with pytest.raises(AppError) as uncoded:
+        await cast("LLMProvider", _audit(_inner(), _sink(RuntimeError("boom")))).complete(
+            _MESSAGES
+        )
+    with pytest.raises(AppError) as coded:
+        await cast(
+            "LLMProvider",
+            _audit(_inner(), _sink(AppError(ErrorCode.UNAVAILABLE, "aiops down"))),
+        ).complete(_MESSAGES)
+
+    assert uncoded.value.code is ErrorCode.INTERNAL
+    assert coded.value.code is ErrorCode.UNAVAILABLE
+
+
+@pytest.mark.asyncio
+async def test_shadow_swallows_and_logs_sink_failure() -> None:
+    """Test that shadow auditing serves the answer through a sink failure and counts it.
+
+    **Why this test is important:**
+      - Shadow is the rollout stage: the audit store's outage must not reach users.
+
+    **What it tests:**
+      - the response is returned; ``audit_record_failures_total{enforcement="shadow"}`` increments
+    """
+    failures = MagicMock()
+    metrics = MagicMock(spec=MetricsProvider)
+    metrics.counter = MagicMock(return_value=failures)
+
+    response = await cast(
+        "LLMProvider",
+        _audit(
+            _inner(),
+            _sink(RuntimeError("boom")),
+            enforcement=AuditEnforcement.SHADOW,
+            metrics=metrics,
+        ),
+    ).complete(_MESSAGES)
+
+    assert response is _RESPONSE
+    failures.inc.assert_called_once_with(1.0, enforcement="shadow")
+
+
+@pytest.mark.asyncio
+async def test_block_short_circuits_forbidden_and_still_audited() -> None:
+    """Test that a blocked prompt never reaches the model, and a blocked answer is withheld, both audited.
+
+    **Why this test is important:**
+      - A block that skipped the audit would hide exactly the requests auditors look for.
+
+    **What it tests:**
+      - an input ``block`` raises ``FORBIDDEN`` without calling the model; the record says ``blocked``
+      - an output ``block`` raises ``FORBIDDEN`` after the call; its record says ``blocked``
+    """
+    blocked = SafetyResult(
+        flags=("content.violence",), decision=SafetyDecision.BLOCK, redacted=None
+    )
+    inner, sink = _inner(), _sink()
+
+    with pytest.raises(AppError) as before:
+        await cast(
+            "LLMProvider", _audit(inner, sink, input_check=_check(blocked))
+        ).complete(_MESSAGES)
+    inner.complete.assert_not_awaited()
+    first = _recorded(sink)
+    sink.record.reset_mock()
+    with pytest.raises(AppError) as after:
+        await cast(
+            "LLMProvider", _audit(inner, sink, output_check=_check(blocked))
+        ).complete(_MESSAGES)
+
+    assert (before.value.code, after.value.code) == (
+        ErrorCode.FORBIDDEN,
+        ErrorCode.FORBIDDEN,
+    )
+    assert (first.decision, first.safety_flags, first.answer) == (
+        "blocked",
+        ("content.violence",),
+        "",
+    )
+    assert _recorded(sink).decision == "blocked"
+
+
+async def _items(*items: str | StreamUsage) -> AsyncIterator[str | StreamUsage]:
+    """Yield ``items``."""
+    for item in items:
+        await asyncio.sleep(0)
+        yield item
+
+
+@pytest.mark.asyncio
+async def test_stream_is_audited_on_exhaustion() -> None:
+    """Test that a stream is audited once it ends, over the text it produced.
+
+    **Why this test is important:**
+      - Chat streams; an unaudited stream would leave the main path without evidence.
+
+    **What it tests:**
+      - the items pass through; the record has the joined answer and the streamed tokens
+      - an output ``block`` on a stream is recorded ``flagged_after_stream`` (tokens already sent)
+    """
+    usage = StreamUsage(
+        model="sonnet", input_tokens=5, output_tokens=2, finish_reason="stop"
+    )
+    blocked = SafetyResult(
+        flags=("content.hate",), decision=SafetyDecision.BLOCK, redacted=None
+    )
+    inner, sink = _inner(), _sink()
+    inner.stream_with_usage = AsyncMock(
+        side_effect=lambda *_a, **_k: _items("the ", "answer", usage)
+    )
+    proxy = cast("Any", _audit(inner, sink, output_check=_check(blocked)))
+
+    items = [item async for item in await proxy.stream_with_usage(_MESSAGES)]
+
+    record = _recorded(sink)
+    assert items == ["the ", "answer", usage]
+    assert (record.answer, record.prompt_tokens, record.completion_tokens) == (
+        "the answer",
+        5,
+        2,
+    )
+    assert record.decision == "flagged_after_stream"
+
+
+@pytest.mark.asyncio
+async def test_failed_safety_scan_is_flagged_in_shadow_and_raised_when_enforced() -> None:
+    """Test that a safety backend outage follows the audit enforcement mode.
+
+    **Why this test is important:**
+      - A managed scanner (Comprehend, Guardrails) can be down; shadow must keep serving while
+        recording that the scan didn't happen, and enforcement must not serve unscanned.
+
+    **What it tests:**
+      - shadow: the answer is served and the record carries ``safety.check_failed``
+      - enforced: the scanner's coded ``UNAVAILABLE`` reaches the caller before the model call
+    """
+    down = MagicMock(spec=SafetyCheck)
+    down.scan = AsyncMock(side_effect=AppError(ErrorCode.UNAVAILABLE, "comprehend down"))
+    inner, sink = _inner(), _sink()
+
+    served = await cast(
+        "LLMProvider",
+        _audit(inner, sink, input_check=down, enforcement=AuditEnforcement.SHADOW),
+    ).complete(_MESSAGES)
+    flags = _recorded(sink).safety_flags
+    inner.complete.reset_mock()
+    with pytest.raises(AppError) as caught:
+        await cast("LLMProvider", _audit(inner, _sink(), input_check=down)).complete(
+            _MESSAGES
+        )
+
+    assert served is _RESPONSE
+    assert flags == ("safety.check_failed",)
+    assert caught.value.code is ErrorCode.UNAVAILABLE
+    inner.complete.assert_not_awaited()

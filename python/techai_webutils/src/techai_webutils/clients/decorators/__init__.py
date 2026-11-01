@@ -1,9 +1,10 @@
-"""AI-band decorators for LLM and retrieval clients: span enrichment, semantic cache, token accounting."""
+"""AI-band decorators: span enrichment, audit, semantic cache and token accounting."""
 
 from techai_webutils.clients.decorators.ai_enricher import (
     GEN_AI_SYSTEM_BY_PROVIDER,
     AiSpanEnricher,
 )
+from techai_webutils.clients.decorators.audit_proxy import AuditEnforcement, AuditProxy
 from techai_webutils.clients.decorators.semantic_cache_proxy import (
     SemanticCacheBinding,
     SemanticCacheProxy,
@@ -16,6 +17,8 @@ from techai_webutils.clients.decorators.token_accounting import (
 __all__ = [
     "GEN_AI_SYSTEM_BY_PROVIDER",
     "AiSpanEnricher",
+    "AuditEnforcement",
+    "AuditProxy",
     "SemanticCacheBinding",
     "SemanticCacheProxy",
     "TokenAccountingProxy",

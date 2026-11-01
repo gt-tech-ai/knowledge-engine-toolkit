@@ -90,6 +90,9 @@ All notable changes to this project are recorded here. The format follows
   of one unary method and, optionally, its stream (replayed on a hit; stored only after full
   consumption), fail-open, `served_from_cache()` on a hit, an `on_hit` hook, hit / miss / saving
   metrics, a `semantic_cache.lookup` span and a `cache_lookups` fact per lookup.
+- Python `clients/decorators.AuditProxy` + `AuditEnforcement` (`shadow`, `enforced`): input and
+  output safety chains around a model call, one `AuditRecord` per answer (streams on exhaustion,
+  cache hits through `audit_cached`), and `core/interfaces/audit.AuditContext`.
 
 ### Changed
 

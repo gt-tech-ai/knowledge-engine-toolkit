@@ -247,6 +247,15 @@ collaborator or zero timeout skips its layer; recovery needs none.
   `core/interfaces/semantic_cache.served_from_cache()`, as one zero-token `<step>.cache_hit`).
   Recording never raises. Metrics: `ai_tokens_total{org,workspace,model,type}`,
   `ai_cost_usd_total{org,workspace,model}`.
+- **Python — audit proxy.** `clients/decorators/audit_proxy.AuditProxy` runs the input
+  `SafetyCheck` on the last user message (`block` → audited `blocked`, then `FORBIDDEN` before the
+  model; `redact` → the model gets the redacted text), the call, the output check (`redact` →
+  redacted answer; `block` → audited, then `FORBIDDEN`), and appends one `AuditRecord` built from
+  the injected `AuditContext`, the live trace id and the route decision's model. Streams audit on
+  exhaustion (an output block is `flagged_after_stream`); `audit_cached` is the semantic cache's
+  `on_hit` hook (`cache_hit=True`). `AuditEnforcement` `shadow` counts
+  `audit_record_failures_total` and serves; `enforced` raises (a coded error keeps its code, else
+  `INTERNAL`).
 - **Python — semantic cache proxy.** `clients/decorators/semantic_cache_proxy.SemanticCacheProxy`
   is a read-through decorator around one bound method (`SemanticCacheBinding`: the unary `method`,
   optionally a `stream_method`, and how arguments map to a query and a `CacheNamespace`). A hit

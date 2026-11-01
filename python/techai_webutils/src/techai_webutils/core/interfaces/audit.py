@@ -75,6 +75,28 @@ class AuditRecord:
     """When the answer was produced (timezone-aware)."""
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AuditContext:
+    """The request facts an audit record needs that the model call doesn't carry.
+
+    The composition root supplies it per call (an injected callable reading its request context),
+    so the engine holds no request global.
+    """
+
+    tenant_id: str
+    """The organization/tenant."""
+    workspace_id: str
+    """The workspace the request ran in."""
+    user_id: str
+    """The authenticated subject who asked."""
+    clearance_level: str
+    """The requester's clearance."""
+    request_id: str
+    """The request's id (the sink's idempotency key)."""
+    sources: tuple[AuditedSource, ...] = ()
+    """The sources the answer was grounded on (the retrieval results in scope)."""
+
+
 @runtime_checkable
 class AuditSink(Protocol):
     """Appends ``AuditRecord`` values to an audit store."""
