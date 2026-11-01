@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from techai_webutils.core.interfaces.model_gateway import RouteContext
-    from techai_webutils.core.types.routing import CatalogEndpointRef, Route
+    from techai_webutils.core.types.routing import CatalogEndpointRef, PlanInput, Route
 
 
 class StaticOrderRanker:
@@ -21,6 +21,7 @@ class StaticOrderRanker:
         ctx: RouteContext,  # noqa: ARG004 - the static order ignores the request
         route: Route,
         candidates: Sequence[CatalogEndpointRef],
+        route_input: PlanInput,  # noqa: ARG004 - the static order ignores the request
     ) -> RankResult:
         """Return the candidates with the route's models first, the rest in catalog order."""
         preference = list(dict.fromkeys((route.default_model, *route.preferred)))

@@ -5,7 +5,12 @@ from techai_webutils.clients.token_ledger.builder import (
     TokenLedgerKind,
     token_ledger_from_config,
 )
-from techai_webutils.clients.token_ledger.cost import ModelPrice, PriceTable, cost_of
+from techai_webutils.clients.token_ledger.cost import (
+    ModelPrice,
+    PriceTable,
+    cost_of,
+    estimate_cost,
+)
 
 __all__ = [
     "ModelPrice",
@@ -13,5 +18,6 @@ __all__ = [
     "TokenLedgerConfig",
     "TokenLedgerKind",
     "cost_of",
+    "estimate_cost",
     "token_ledger_from_config",
 ]

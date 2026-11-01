@@ -23,6 +23,8 @@ from techai_webutils.clients.model_gateway.routed.catalog import (
 from techai_webutils.clients.model_gateway.routed.policy_store import (
     routing_policy_store_from_config,
 )
+from techai_webutils.core.errors import AppError, ErrorCode, UnavailableError
+from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
 from techai_webutils.core.interfaces.llm import LLMMessage
 from techai_webutils.core.interfaces.model_gateway import (
     RouteContext,
@@ -214,3 +216,87 @@ async def test_route_context_defaults_when_provider_returns_empty_context(
 
     assert response.model == "sonnet-use1"
     assert isinstance(gateway.wrapped_provider, StubLlmProvider)  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_gateway_warms_embedding_classifier_on_enter(
+    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+) -> None:
+    """Test that entering the gateway embeds the route exemplars, and fails the boot if it can't.
+
+    **Why this test is important:**
+      - Embedding exemplars per request would add a batch call to every answer; an embedder
+        that is down at boot must surface then, not as silently degraded routing.
+
+    **What it tests:**
+      - ``async with`` embeds the exemplars once, in one ``embed_batch``
+      - an ``embed_batch`` that raises makes entering the gateway raise ``UNAVAILABLE``
+    """
+    routes = {
+        **routes_raw,
+        "generate": {**routes_raw["generate"], "exemplars": ["summarize"]},
+    }
+    embedding = MagicMock(spec=EmbeddingProvider)
+    embedding.embed_batch = AsyncMock(
+        return_value=[EmbeddingResult(embedding=[1.0, 0.0], model="e", token_count=1)]
+    )
+    broken = MagicMock(spec=EmbeddingProvider)
+    broken.embed_batch = AsyncMock(side_effect=RuntimeError("embedder down"))
+
+    def build(embedder: MagicMock) -> Any:  # noqa: ANN401 - the gateway under test
+        return new_model_gateway_from_config(
+            GatewayConfig(
+                kind=GatewayKind.ROUTED,
+                routed=RoutedConfig(
+                    catalog=catalog_raw, routes=routes, classifier={"kind": "embedding"}
+                ),
+            ),
+            provider_factory=lambda llm: StubLlmProvider(llm.model),
+            embedding=embedder,
+        )
+
+    async with build(embedding):
+        pass
+    with pytest.raises(AppError) as caught:
+        async with build(broken):
+            pass
+
+    embedding.embed_batch.assert_awaited_once_with(["summarize"])
+    assert caught.value.code is ErrorCode.UNAVAILABLE
+
+
+@pytest.mark.asyncio
+async def test_transient_failure_fails_over_and_records_reason(
+    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+) -> None:
+    """Test that a throttled primary fails over and the decision says so.
+
+    **Why this test is important:**
+      - Failover is invisible in the answer; the decision is the only record that the
+        primary region degraded.
+
+    **What it tests:**
+      - Sonnet ``use1`` raising ``UNAVAILABLE`` is served by Sonnet ``usw2``
+      - the decision's reason is ``failover`` with attempts ``failed`` then ``ok``
+    """
+
+    def factory(llm: Any) -> StubLlmProvider:  # noqa: ANN401 - LlmConfig
+        provider = StubLlmProvider(llm.model)
+        if llm.model == "sonnet-use1":
+            provider.complete = AsyncMock(side_effect=UnavailableError("throttled"))  # type: ignore[method-assign]
+        return provider
+
+    gateway = _gateway(
+        catalog_raw,
+        routes_raw,
+        RouteContext(tenant_id="org-1", step="generate"),
+        factory=factory,
+    )
+
+    response = await gateway.complete(_MESSAGES)
+    decision = current_route_decision()
+
+    assert response.model == "sonnet-usw2"
+    assert decision is not None
+    assert (decision.reason, decision.endpoint) == ("failover", "usw2")
+    assert [a.outcome for a in decision.attempts] == ["failed", "ok"]

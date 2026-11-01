@@ -54,16 +54,41 @@ def cost_of(record: UsageRecord, table: PriceTable) -> Decimal:
         AppError: ``INVALID_INPUT`` when ``record.model`` has no price in ``table``.
 
     """
-    price = table.prices.get(record.model)
-    if price is None:
+    cost = estimate_cost(
+        record.model,
+        table,
+        input_tokens=record.input_tokens,
+        output_tokens=record.output_tokens,
+        embed_tokens=record.embed_tokens,
+    )
+    if cost is None:
         raise AppError(
             ErrorCode.INVALID_INPUT,
             f"no price for model {record.model!r}",
             details={"model": record.model, "pricing_version": table.version},
         )
+    return cost
+
+
+def estimate_cost(
+    model: str,
+    table: PriceTable,
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    embed_tokens: int = 0,
+) -> Decimal | None:
+    """Return the cost of the given tokens on ``model`` (micro-dollar, half-even).
+
+    ``None`` when ``model`` has no price: a router estimating a candidate's cost treats an
+    unpriced model as unknown rather than failing.
+    """
+    price = table.prices.get(model)
+    if price is None:
+        return None
     total = (
-        record.input_tokens * price.input_per_1k
-        + record.output_tokens * price.output_per_1k
-        + record.embed_tokens * price.embed_per_1k
+        input_tokens * price.input_per_1k
+        + output_tokens * price.output_per_1k
+        + embed_tokens * price.embed_per_1k
     ) / _PER
     return total.quantize(MICRO_DOLLAR, rounding=ROUND_HALF_EVEN)

@@ -19,7 +19,7 @@ from techai_webutils.clients.model_gateway.routed.ranker import (
 )
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.model_gateway import RouteContext
-from techai_webutils.core.types.routing import PlanInput
+from techai_webutils.core.types.routing import Classification, PlanInput
 
 
 @pytest.mark.asyncio
@@ -41,14 +41,11 @@ async def test_stub_classifier_returns_step_default_route(
     )
     strict = route_classifier_from_config({}, route_names=names, default_route="")
 
-    assert await classifier.classify(RouteContext(step="rewrite"), "q") == (
-        "rewrite",
-        1.0,
-    )
-    assert await classifier.classify(RouteContext(step="summarize"), "q") == (
-        "generate",
-        1.0,
-    )
+    rewrite = await classifier.classify(RouteContext(step="rewrite"), "q")
+    unrouted = await classifier.classify(RouteContext(step="summarize"), "q")
+
+    assert rewrite == Classification(route="rewrite", confidence=1.0)
+    assert unrouted == Classification(route="generate", confidence=1.0)
     with pytest.raises(AppError) as caught:
         await strict.classify(RouteContext(step="summarize"), "q")
     assert caught.value.code is ErrorCode.INVALID_INPUT
@@ -71,7 +68,12 @@ async def test_static_order_follows_route_preference_then_catalog(
     routes = parse_routes(routes_raw, catalog)
     ranker = candidate_ranker_from_config({"kind": "static_order"})
 
-    result = await ranker.rank(RouteContext(), routes["rewrite"], catalog.refs)
+    result = await ranker.rank(
+        RouteContext(),
+        routes["rewrite"],
+        catalog.refs,
+        PlanInput(query="q", candidates=catalog.refs),
+    )
 
     assert [ref.key for ref in result.ordered] == [
         "anthropic/haiku@use1",

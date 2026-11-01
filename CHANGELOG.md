@@ -47,10 +47,36 @@ All notable changes to this project are recorded here. The format follows
   factories `RouteClassifierKind{stub}`, `CandidateRankerKind{static_order}` and
   `RoutePlannerKind{local}`. With the default stages and no pins it serves each step's model as
   `passthrough` does. Routing types live in `core/types/routing` and `core/interfaces/routing`.
+- Python `routed` stages: `RouteClassifierKind.EMBEDDING` (top-k mean exemplar cosine against
+  each route's threshold; exemplars embedded once at the gateway's `__aenter__`, which fails with
+  `UNAVAILABLE` if they can't be; a request-time embedder failure degrades to the step's route),
+  `CandidateRankerKind.COST_AWARE` (objective `cost` / `latency` / `quality` / `balanced` from the
+  request's `slo`, the policy's `objective` or `routed.default_slo`; `max_cost_per_request` and
+  `max_latency_ms` drop candidates as `over_cap` and an empty result is `FORBIDDEN`; a
+  `quality_floor` drop unless `degrade_on_budget`; switches to `cost` near the tenant's budget).
+- Python `routed.executor.ChainExecutor`: `max_attempts`, a breaker per endpoint
+  (`breaker_failures`, `breaker_recovery_s`), failover on transient errors only, streams fail over
+  before their first item only, exhaustion is `UNAVAILABLE`;
+  `routed_attempts_total{endpoint,outcome}`.
+- Python `RouteDecisionSink` with `RouteDecisionSinkKind` (`noop` default, `analytics`: one
+  `route_decisions` fact per decision). Every served call finalizes its decision (attempts, the
+  served endpoint, `failover` reason, tokens, estimated and actual cost), stamps a
+  `route.decision` span and hands it to the sink; a sink failure is counted
+  (`route_decision_sink_failures_total`), never raised.
+- Python `routed.shadow`: an alternative classifier / ranker / planner planned in bounded
+  background tasks, emitting `shadow=true` decisions and never calling a model.
+- Python `clients/embedding/memo.MemoizedEmbedding` and `reset_embedding_memo()` (a per-request,
+  bounded embedding memo), and `clients/token_ledger.estimate_cost` (`None` for an unpriced model).
+- Python `new_model_gateway_from_config` takes `embedding`, `ledger`, `prices`, `facts` and
+  `metrics`; `RoutedConfig` gains `default_slo`, `max_attempts`, `breaker_failures`,
+  `breaker_recovery_s`, `sink` and `shadow`.
 
 ### Changed
 
 - Python `ModelGateway.resolve` is async (planning may await a classifier or a remote planner).
+- Python routing seams: `RouteClassifier.classify` returns a `Classification` (route,
+  confidence, `degraded`); `CandidateRanker.rank` receives the `PlanInput` (requirements and
+  policy); `RouteContext.slo` defaults to `""` (no request objective).
 - Python `AiSpanEnricher`: `gen_ai.system` is resolved through a gateway's `wrapped_provider`,
   so wrapping a `ModelGateway` keeps reporting the serving provider's system.
 

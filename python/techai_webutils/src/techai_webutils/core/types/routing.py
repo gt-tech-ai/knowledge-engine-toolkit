@@ -139,6 +139,18 @@ class RouteRequirements:
 
 
 @dataclass(frozen=True, slots=True)
+class Classification:
+    """A classifier's answer."""
+
+    route: str
+    """The chosen route's name."""
+    confidence: float
+    """The confidence in ``route`` (1.0 for a rule-based choice)."""
+    degraded: bool = False
+    """Whether the classifier fell back to the default route because it failed."""
+
+
+@dataclass(frozen=True, slots=True)
 class RankResult:
     """A ranker's ordering of the filtered candidates."""
 
@@ -158,6 +170,8 @@ class PlanInput:
     """The endpoints left after the filter, in catalog order."""
     requirements: RouteRequirements = field(default_factory=RouteRequirements)
     """What the call needs."""
+    policy: RoutingPolicy = field(default_factory=RoutingPolicy)
+    """The tenant's policy (objective, hard caps, quality-floor rules)."""
 
 
 @dataclass(frozen=True, slots=True)

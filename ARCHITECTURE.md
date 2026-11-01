@@ -635,9 +635,17 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
   `AiSpanEnricher` keys `gen_ai.system` on a gateway's `wrapped_provider`.
 - **Routing:** `core/types/routing.py` (capabilities, endpoint refs, routes, `RoutingPolicy`,
   plans) and `core/interfaces/routing.py` (`RouteClassifier`, `CandidateRanker`, `RoutePlanner`,
-  `RoutingPolicyStore`). `clients/model_gateway/routed` holds the boot-validated catalog (each
-  endpoint's `LlmConfig`, `fallback_model` stripped), the deterministic filter, the `config`
-  policy store and the stage `Kind`s: classifier `stub`, ranker `static_order`, planner `local`.
+  `RoutingPolicyStore`, `RouteDecisionSink`). `clients/model_gateway/routed` holds the
+  boot-validated catalog (each endpoint's `LlmConfig`, `fallback_model` stripped), the
+  deterministic filter, the `config` policy store and the stage `Kind`s: classifier `stub` /
+  `embedding` (exemplars embedded once at the gateway's `__aenter__`; an embedder outage at
+  request time degrades to the step's route), ranker `static_order` / `cost_aware` (objective,
+  hard caps that drop, quality floor, budget bias from the injected `TokenLedger`), planner
+  `local`, decision sink `noop` / `analytics` (`route_decisions` facts). `ChainExecutor` runs the
+  plan: bounded attempts, an `AsyncCircuitBreaker` per endpoint, failover on transient errors
+  only, streams before their first item only. A `routed.shadow` block plans alongside the live
+  call in bounded background tasks and is never served. `clients/embedding/memo.MemoizedEmbedding`
+  embeds a text once per request, so the classifier and the semantic cache share one call.
 
 ## Testing
 

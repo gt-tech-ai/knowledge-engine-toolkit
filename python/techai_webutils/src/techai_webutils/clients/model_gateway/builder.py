@@ -21,11 +21,16 @@ from techai_webutils.core.interfaces.model_gateway import RouteContext
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
+    from techai_webutils.clients.token_ledger.cost import PriceTable
+    from techai_webutils.core.interfaces.embedding import EmbeddingProvider
+    from techai_webutils.core.interfaces.fact_publisher import FactPublisher
     from techai_webutils.core.interfaces.llm import LLMProvider
+    from techai_webutils.core.interfaces.metrics import MetricsProvider
     from techai_webutils.core.interfaces.model_gateway import (
         ModelGateway,
         RouteContextProvider,
     )
+    from techai_webutils.core.interfaces.token_ledger import TokenLedger
 
 
 class GatewayKind(StrEnum):
@@ -60,6 +65,19 @@ class RoutedConfig:
     """The ranker's config (``kind``: ``static_order``)."""
     policy_store: Mapping[str, Any] = field(default_factory=_empty)
     """The policy store's config (``kind``: ``config``; ``policies``, ``workspaces``)."""
+    default_slo: str = "quality"
+    """The ranking objective when neither the request nor the tenant policy names one."""
+    max_attempts: int = 2
+    """Most endpoints one call tries (open-breaker skips don't count)."""
+    breaker_failures: int = 5
+    """Consecutive transient failures that open an endpoint's breaker."""
+    breaker_recovery_s: float = 30.0
+    """Seconds an open breaker waits before letting a trial call through."""
+    sink: Mapping[str, Any] = field(default_factory=_empty)
+    """The route-decision sink's config (``kind``: ``noop`` or ``analytics``)."""
+    shadow: Mapping[str, Any] | None = None
+    """An alternative ``classifier`` / ``ranker`` / ``planner`` planned alongside the live one
+    and never served; ``None`` (the default) runs no shadow."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +102,11 @@ def new_model_gateway_from_config(
     provider_factory: Callable[[LlmConfig], LLMProvider] = new_llm_from_config,
     context_provider: RouteContextProvider = RouteContext,
     priced_ids: frozenset[str] | None = None,
+    embedding: EmbeddingProvider | None = None,
+    ledger: TokenLedger | None = None,
+    prices: PriceTable | None = None,
+    facts: FactPublisher | None = None,
+    metrics: MetricsProvider | None = None,
 ) -> ModelGateway:
     """Build the ``ModelGateway`` selected by ``config.kind``.
 
@@ -93,11 +116,17 @@ def new_model_gateway_from_config(
         context_provider: Returns the current request's ``RouteContext`` (``routed``).
         priced_ids: The model ids the price table prices; ``None`` skips the catalog's price
             check (``routed``).
+        embedding: The embedder the ``embedding`` classifier reads (``routed``; pass the
+            per-request memo).
+        ledger: The token ledger the ``cost_aware`` ranker's budget bias reads (``routed``).
+        prices: The price table the ``cost_aware`` ranker and decision costs use (``routed``).
+        facts: The fact publisher the ``analytics`` decision sink publishes through (``routed``).
+        metrics: Counts routed attempts and decision-sink failures (``routed``).
 
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.
         AppError: ``INVALID_INPUT`` for ``routed`` without a ``routed`` config, or with a
-            defective catalog, route or policy.
+            defective catalog, route or policy, or a stage missing a collaborator it needs.
 
     """
     if config.kind == GatewayKind.PASSTHROUGH:
@@ -116,6 +145,11 @@ def new_model_gateway_from_config(
             provider_factory=provider_factory,
             context_provider=context_provider,
             priced_ids=priced_ids,
+            embedding=embedding,
+            ledger=ledger,
+            prices=prices,
+            facts=facts,
+            metrics=metrics,
         )
     msg = f"unknown model gateway kind: {config.kind!r}"
     raise AppValueError(msg)

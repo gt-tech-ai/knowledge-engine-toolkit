@@ -44,13 +44,13 @@ def test_route_context_and_decision_defaults() -> None:
         decision without reshaping it, and immutability means the audit reads what routing set.
 
     **What it tests:**
-      - ``RouteContext()`` defaults to ``slo="quality"`` and no ``model_preference``
+      - ``RouteContext()`` leaves ``slo`` unset (empty) with no ``model_preference``
       - ``RouteDecision()`` defaults to ``mode="user"``, ``decider="local"``, no attempts, no costs
       - assigning a ``RouteDecision`` field raises ``FrozenInstanceError``
     """
     ctx, decision = RouteContext(), RouteDecision()
 
-    assert (ctx.slo, ctx.model_preference, ctx.tenant_id) == ("quality", None, "")
+    assert (ctx.slo, ctx.model_preference, ctx.tenant_id) == ("", None, "")
     assert (decision.mode, decision.decider, decision.attempts) == ("user", "local", ())
     assert (decision.estimated_cost, decision.actual_cost, decision.shadow) == (
         None,

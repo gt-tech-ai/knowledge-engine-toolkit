@@ -11,9 +11,10 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from techai_webutils.core.interfaces.model_gateway import RouteContext
+    from techai_webutils.core.interfaces.model_gateway import RouteContext, RouteDecision
     from techai_webutils.core.types.routing import (
         CatalogEndpointRef,
+        Classification,
         Plan,
         PlanInput,
         RankResult,
@@ -25,8 +26,8 @@ if TYPE_CHECKING:
 class RouteClassifier(Protocol):
     """Chooses the route (task class) for a request."""
 
-    async def classify(self, ctx: RouteContext, query: str) -> tuple[str, float]:
-        """Return the route name and the confidence in it."""
+    async def classify(self, ctx: RouteContext, query: str) -> Classification:
+        """Return the route and the confidence in it; never raise for a classifier outage."""
         ...
 
 
@@ -34,9 +35,17 @@ class CandidateRanker(Protocol):
     """Orders the filtered candidates for a route."""
 
     async def rank(
-        self, ctx: RouteContext, route: Route, candidates: Sequence[CatalogEndpointRef]
+        self,
+        ctx: RouteContext,
+        route: Route,
+        candidates: Sequence[CatalogEndpointRef],
+        route_input: PlanInput,
     ) -> RankResult:
-        """Return the candidates best first, with any the ranker dropped."""
+        """Return the candidates best first, with any the ranker dropped.
+
+        ``route_input`` carries the request's requirements and the tenant policy (objective,
+        hard caps, quality-floor rules).
+        """
         ...
 
 
@@ -53,4 +62,12 @@ class RoutingPolicyStore(Protocol):
 
     def policy(self, tenant_id: str, workspace_id: str) -> RoutingPolicy:
         """Return the workspace's policy, else the tenant's, else the default policy."""
+        ...
+
+
+class RouteDecisionSink(Protocol):
+    """Receives each finalized ``RouteDecision`` (live and shadow) for analysis."""
+
+    def record(self, decision: RouteDecision, ctx: RouteContext) -> None:
+        """Hand ``decision`` off without blocking; the gateway counts (never raises) a failure."""
         ...

@@ -36,8 +36,9 @@ class RouteContext:
     """The workspace within the tenant (a workspace policy overrides the tenant's)."""
     step: str = ""
     """The pipeline step (``rewrite``, ``generate``, …): each has its own default route."""
-    slo: str = "quality"
-    """The objective the ranker optimises: ``quality``, ``cost``, ``latency`` or ``balanced``."""
+    slo: str = ""
+    """The objective the ranker optimises (``quality``, ``cost``, ``latency``, ``balanced``);
+    empty defers to the tenant policy's objective, then the gateway's default."""
     model_preference: str | None = None
     """The end user's explicit model choice (a catalog id), honoured only within policy."""
 
