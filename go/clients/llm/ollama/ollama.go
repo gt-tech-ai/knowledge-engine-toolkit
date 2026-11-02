@@ -31,18 +31,23 @@ type Client struct {
 
 	// model is the model a request with none uses.
 	model string
+
+	// numCtx is the context window sent as num_ctx; zero sends none.
+	numCtx int
 }
 
 // Compile-time assertion that Client satisfies LLMClient.
 var _ interfaces.LLMClient = (*Client)(nil)
 
 // New returns the client for the server at baseURL (a trailing slash is ignored),
-// sending through doer, with model as the default model.
-func New(doer interfaces.HTTPDoer, baseURL, model string) *Client {
+// sending through doer, with model as the default model and numCtx (zero: the
+// server's default) as the context window.
+func New(doer interfaces.HTTPDoer, baseURL, model string, numCtx int) *Client {
 	return &Client{
-		doer:  doer,
-		url:   strings.TrimRight(baseURL, "/") + "/api/chat",
-		model: model,
+		doer:   doer,
+		url:    strings.TrimRight(baseURL, "/") + "/api/chat",
+		model:  model,
+		numCtx: numCtx,
 	}
 }
 
@@ -153,6 +158,9 @@ func (c *Client) wire(req types.CompletionRequest) chatRequest {
 	opts := map[string]any{"temperature": req.Temperature}
 	if req.MaxOutputTokens > 0 {
 		opts["num_predict"] = req.MaxOutputTokens
+	}
+	if c.numCtx > 0 {
+		opts["num_ctx"] = c.numCtx
 	}
 	return chatRequest{Model: model, Messages: msgs, Options: opts}
 }

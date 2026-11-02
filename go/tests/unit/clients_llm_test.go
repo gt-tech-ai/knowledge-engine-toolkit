@@ -86,8 +86,9 @@ type ollamaChat struct {
 //
 // What it tests:
 //   - One POST to <base>/api/chat, unstreamed, the system prompt first, temperature and
-//     num_predict in options; the reply's text, model and eval counts map to Completion;
-//     an empty request model falls back to Config.Model.
+//     num_predict in options, num_ctx from ollama.context_tokens (Ollama silently
+//     truncates a prompt longer than its context window); the reply's text, model and
+//     eval counts map to Completion; an empty request model falls back to Config.Model.
 func TestLLM_Ollama_MapsRequestAndUsage(t *testing.T) {
 	t.Parallel()
 	doer := mocks.NewMockHTTPDoer(gomock.NewController(t))
@@ -108,7 +109,7 @@ func TestLLM_Ollama_MapsRequestAndUsage(t *testing.T) {
 		})
 	c, err := llm.NewFromConfig(t.Context(), llm.Config{
 		Kind: llm.KindOllama, Model: "m-1",
-		Ollama: llm.OllamaConfig{BaseURL: "http://ollama:11434/"},
+		Ollama: llm.OllamaConfig{BaseURL: "http://ollama:11434/", ContextTokens: 16384},
 	}, llm.Deps{Doer: doer})
 	require.NoError(t, err)
 
@@ -128,6 +129,7 @@ func TestLLM_Ollama_MapsRequestAndUsage(t *testing.T) {
 	assert.Equal(t, "user", sent.Messages[1].Role)
 	assert.InDelta(t, 0.2, sent.Options["temperature"], 1e-9)
 	assert.InDelta(t, 64, sent.Options["num_predict"], 1e-9)
+	assert.InDelta(t, 16384, sent.Options["num_ctx"], 1e-9)
 }
 
 // TestLLM_Ollama_ErrorCodes tests the ollama backend's error coding.

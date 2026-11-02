@@ -12,7 +12,8 @@ All notable changes to this project are recorded here. The format follows
   `ChatMessage` and `Completion` (text, model, input and output token counts).
 - Go `clients/llm`: the LLM client family, `NewFromConfig(ctx, Config, Deps)` over the kinds
   `stub` (the default: a fixed reply, zero usage, no I/O), `ollama` (the chat API at
-  `ollama.base_url`) and `bedrock` (the Converse API through an injected `Deps.Converse`, so
+  `ollama.base_url`; `ollama.context_tokens` sets `num_ctx`, since Ollama silently truncates a
+  prompt longer than its context window) and `bedrock` (the Converse API through an injected `Deps.Converse`, so
   the engine's Bedrock client and its tier carry the call). Run through the client tier as the
   operation `<name>.complete`; a transport failure, a throttle, 429 or 5xx is
   `CodeUnavailable`, a rejected request `CodeInvalidInput`.

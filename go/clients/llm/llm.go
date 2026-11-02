@@ -39,6 +39,11 @@ type OllamaConfig struct {
 	// Timeout bounds one HTTP request when Deps.Doer is nil; zero means no client-level
 	// bound (the client tier's timeout still applies).
 	Timeout time.Duration `yaml:"timeout" mapstructure:"timeout"`
+
+	// ContextTokens is the context window sent as num_ctx; zero leaves the server's
+	// default. Ollama silently drops the start of a prompt longer than the window, so a
+	// caller sending large inputs sets it to the size it caps them at.
+	ContextTokens int `yaml:"context_tokens" mapstructure:"context_tokens"`
 }
 
 // Config selects and configures the LLM client.
@@ -102,7 +107,7 @@ func newOllama(_ context.Context, cfg Config, deps Deps) (interfaces.LLMClient, 
 	if doer == nil {
 		doer = &http.Client{Timeout: cfg.Ollama.Timeout}
 	}
-	return ollama.New(doer, cfg.Ollama.BaseURL, cfg.Model), nil
+	return ollama.New(doer, cfg.Ollama.BaseURL, cfg.Model, cfg.Ollama.ContextTokens), nil
 }
 
 // newBedrock builds the Bedrock backend over Deps.Converse; it needs one.
