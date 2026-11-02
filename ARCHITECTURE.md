@@ -596,6 +596,11 @@ CLIs), so each one does not re-walk the tree or re-implement a runner.
   `RenderIndex` and `RenderRootIndex` write frontmatter and `index.md` deterministically; `Conform`
   and `ConformLog` report a file that breaks the format or a caller's per-type required keys. It is
   pure (no I/O): a guard or generator walks the `Codebase` and passes each file's bytes.
+- **Path theories.** `foundation/paththeory` compiles an ordered rule set (a kind and a whole-path
+  template with `**` and `{token}`s: the built-in name styles and number shapes plus declared
+  patterns or closed lists) and claims each path by the first matching rule. `Classify` returns a
+  tree's claims, its unclaimed paths and its dead rules, so a guard can require every file to have
+  exactly one place and name. A catch-all template is refused. It is pure (no I/O).
 - **Probes.** `interfaces.Probe[T]` is one check returning a `types.Verdict` (status, findings,
   transient). `services/probe.NewSet` runs a set in parallel with a per-probe timeout, retries of
   transient failures and a strict mode that fails a skip, returning one step per probe in probe

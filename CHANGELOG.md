@@ -23,6 +23,11 @@ All notable changes to this project are recorded here. The format follows
   send error coding every AWS or HTTP client family shares.
 - Go test fixtures `tests/fixtures/dbtest/ollama` and `suite.OllamaIntegrationSuite` (Ollama
   0.35.0 with `qwen2.5:0.5b` pulled); mocks `MockLLMClient` and `MockLLMConverseAPI`.
+- Go `foundation/paththeory`: `Compile(tokens, rules)` turns an ordered list of path rules (a kind
+  and a whole-path template with `**` and `{token}`s; built-ins `slug`, `snake`, `pascal`,
+  `camel`, `segment`, `date`, `nnnn`, `nn`, `n`, `any`, plus declared patterns or closed lists)
+  into a `Theory`; `Claim(path)` returns the first matching rule and `Classify(paths)` the claims,
+  the unclaimed paths and the rules that claimed nothing. Catch-all templates are refused.
 - Go `core/types.OutputStep` and `StepResult.Output`: a step whose detail is the operation's
   answer. `transport/mcp`'s tool result returns those details under `output` (step name →
   text), so an MCP caller gets a passing operation's answer, not only its status.
