@@ -26,6 +26,11 @@ type Rule struct {
 	// Generator names the generator that owns files of this kind; empty when they are
 	// hand-written.
 	Generator string `yaml:"generator,omitempty" json:"generator,omitempty"`
+
+	// Forbid makes the rule name a violation: a path it claims first is Forbidden under
+	// its kind, so a misplaced file is reported by name instead of falling to a looser
+	// rule. A forbid rule that matches nothing is not dead.
+	Forbid bool `yaml:"forbid,omitempty" json:"forbid,omitempty"`
 }
 
 // Token is a declared template token: a pattern or a closed list of values, never both.
@@ -181,7 +186,8 @@ func segmentPattern(seg string, pats map[string]string, r Rule) (string, error) 
 	return b.String(), nil
 }
 
-// Claim returns the first rule whose template matches path.
+// Claim returns the first rule whose template matches path; a forbid rule is returned
+// too, so the caller checks Forbid.
 func (t *Theory) Claim(path string) (Rule, bool) {
 	for _, c := range t.rules {
 		if c.re.MatchString(path) {
@@ -205,6 +211,9 @@ type Classification struct {
 	// Claims maps each claimed path to the rule that claims it.
 	Claims map[string]Rule
 
+	// Forbidden maps each path a forbid rule claimed first to that rule.
+	Forbidden map[string]Rule
+
 	// Unclaimed are the paths no rule claims, in input order.
 	Unclaimed []string
 
@@ -221,15 +230,21 @@ func (c Classification) Kinds() map[string]string {
 	return out
 }
 
-// Classify claims every path and reports the unclaimed paths and the dead rules.
+// Classify claims every path and reports the forbidden and unclaimed paths and the dead
+// rules.
 func (t *Theory) Classify(paths []string) Classification {
-	c := Classification{Claims: map[string]Rule{}}
+	c := Classification{Claims: map[string]Rule{}, Forbidden: map[string]Rule{}}
 	used := make([]bool, len(t.rules))
 	for _, p := range paths {
 		claimed := false
 		for i, r := range t.rules {
 			if r.re.MatchString(p) {
-				c.Claims[p], used[i], claimed = r.rule, true, true
+				if r.rule.Forbid {
+					c.Forbidden[p] = r.rule
+				} else {
+					c.Claims[p] = r.rule
+				}
+				used[i], claimed = true, true
 				break
 			}
 		}
@@ -238,7 +253,7 @@ func (t *Theory) Classify(paths []string) Classification {
 		}
 	}
 	for i, r := range t.rules {
-		if !used[i] {
+		if !used[i] && !r.rule.Forbid {
 			c.Dead = append(c.Dead, r.rule)
 		}
 	}

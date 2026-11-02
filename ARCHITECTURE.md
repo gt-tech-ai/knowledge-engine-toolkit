@@ -600,7 +600,8 @@ CLIs), so each one does not re-walk the tree or re-implement a runner.
   template with `**` and `{token}`s: the built-in name styles and number shapes plus declared
   patterns or closed lists) and claims each path by the first matching rule. `Classify` returns a
   tree's claims, its unclaimed paths and its dead rules, so a guard can require every file to have
-  exactly one place and name. A catch-all template is refused. It is pure (no I/O).
+  exactly one place and name; a `forbid` rule names a violation instead of claiming it. A
+  catch-all template is refused. It is pure (no I/O).
 - **Probes.** `interfaces.Probe[T]` is one check returning a `types.Verdict` (status, findings,
   transient). `services/probe.NewSet` runs a set in parallel with a per-probe timeout, retries of
   transient failures and a strict mode that fails a skip, returning one step per probe in probe

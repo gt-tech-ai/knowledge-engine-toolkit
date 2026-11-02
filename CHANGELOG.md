@@ -27,7 +27,8 @@ All notable changes to this project are recorded here. The format follows
   and a whole-path template with `**` and `{token}`s; built-ins `slug`, `snake`, `pascal`,
   `camel`, `segment`, `date`, `nnnn`, `nn`, `n`, `any`, plus declared patterns or closed lists)
   into a `Theory`; `Claim(path)` returns the first matching rule and `Classify(paths)` the claims,
-  the unclaimed paths and the rules that claimed nothing. Catch-all templates are refused.
+  the unclaimed paths and the rules that claimed nothing. A `forbid` rule names a violation (a
+  misplaced file it claims first is `Forbidden` under its kind). Catch-all templates are refused.
 - Go `core/types.OutputStep` and `StepResult.Output`: a step whose detail is the operation's
   answer. `transport/mcp`'s tool result returns those details under `output` (step name →
   text), so an MCP caller gets a passing operation's answer, not only its status.

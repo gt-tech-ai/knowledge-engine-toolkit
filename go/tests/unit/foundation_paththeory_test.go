@@ -171,3 +171,35 @@ func TestPathTheory_ClassifyReportsUnclaimedAndDeadRules(t *testing.T) {
 	require.Len(t, c.Dead, 1)
 	assert.Equal(t, "shadowed", c.Dead[0].Kind)
 }
+
+// TestPathTheory_ForbidRules tests a rule that names a violation.
+//
+// Why this test is important:
+//   - A template cannot say "except": `stores/{snake}.go` also matches a test file, so a
+//     forbid rule above it must claim that path as a named violation, or the looser
+//     rule silently accepts a misplaced file.
+//
+// What it tests:
+//   - A path whose first match is a forbid rule is Forbidden under that rule, neither
+//     claimed nor unclaimed; Claim returns the forbid rule; a forbid rule that matches
+//     nothing is not reported dead.
+func TestPathTheory_ForbidRules(t *testing.T) {
+	t.Parallel()
+	th, err := paththeory.Compile(nil, []paththeory.Rule{
+		{Kind: "test outside tests/", Path: "stores/{snake}_test.go", Forbid: true},
+		{Kind: "never", Path: "never/{snake}.go", Forbid: true},
+		{Kind: "store", Path: "stores/{snake}.go"},
+	})
+	require.NoError(t, err)
+
+	c := th.Classify([]string{"stores/doc_store.go", "stores/doc_store_test.go"})
+
+	assert.Equal(t, map[string]string{"stores/doc_store.go": "store"}, c.Kinds())
+	assert.Empty(t, c.Unclaimed)
+	assert.Empty(t, c.Dead)
+	require.Contains(t, c.Forbidden, "stores/doc_store_test.go")
+	assert.Equal(t, "test outside tests/", c.Forbidden["stores/doc_store_test.go"].Kind)
+	r, ok := th.Claim("stores/doc_store_test.go")
+	require.True(t, ok)
+	assert.True(t, r.Forbid)
+}
