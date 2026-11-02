@@ -642,7 +642,9 @@ CLIs), so each one does not re-walk the tree or re-implement a runner.
   runs one at a time, each under recovery → timeout → logging → code mapping.
   `execution/runs` tracks background runs of long-running operations. Front-ends:
   `transport/cobra` (a command whose flags come from the input's `flag` and `arg` tags),
-  `transport/mcp` (one MCP tool per admitted operation plus `runs.status|result|cancel|list`)
+  `transport/mcp` (one MCP tool per admitted operation plus `runs.status|result|cancel|list`;
+  a result carries each step's status, a failed step's log tail, and the detail of every step
+  built with `types.OutputStep` under `output`, so a passing operation returns its answer)
   and `transport/cron` (a scheduled job runs one named operation unattended).
 
 Generic methods on concrete types (Go 1.27) carry typed results without a type switch:

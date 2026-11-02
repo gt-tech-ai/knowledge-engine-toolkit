@@ -24,8 +24,12 @@ type StepSummary struct {
 }
 
 // ToolResult is what an MCP tool call returns: every step's one-line summary, the
-// output tail of each failed step, and the run's coded error.
+// output tail of each failed step, the whole output of each output step, and the run's
+// coded error.
 type ToolResult struct {
+	// Output maps each output step's (unique) name to its whole detail: the operation's
+	// answer (types.OutputStep), returned even when the step passed.
+	Output map[string]string `json:"output,omitempty"`
 	// FailedTails maps each failed step's (unique) name to the last tail_lines lines of
 	// its captured output (its step error when it captured none); passing steps never
 	// appear.
@@ -38,8 +42,9 @@ type ToolResult struct {
 }
 
 // buildResult shapes a finished run as a ToolResult from its flattened steps: one
-// summary per step with its log path from logs (aligned with steps), the last tailN
-// output lines of each failed step, and err as a coded message.
+// summary per step with its log path from logs (aligned with steps), the whole detail of
+// each output step, the last tailN output lines of each failed step, and err as a coded
+// message.
 func buildResult(
 	steps []types.StepResult,
 	tailN int,
@@ -48,6 +53,12 @@ func buildResult(
 ) ToolResult {
 	res := ToolResult{Steps: summarize(steps, logs)}
 	for _, s := range steps {
+		if s.Output {
+			if res.Output == nil {
+				res.Output = map[string]string{}
+			}
+			res.Output[s.Name] = string(s.Detail)
+		}
 		if s.Status != types.StatusFail {
 			continue
 		}

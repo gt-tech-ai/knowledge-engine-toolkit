@@ -23,8 +23,14 @@ All notable changes to this project are recorded here. The format follows
   send error coding every AWS or HTTP client family shares.
 - Go test fixtures `tests/fixtures/dbtest/ollama` and `suite.OllamaIntegrationSuite` (Ollama
   0.35.0 with `qwen2.5:0.5b` pulled); mocks `MockLLMClient` and `MockLLMConverseAPI`.
+- Go `core/types.OutputStep` and `StepResult.Output`: a step whose detail is the operation's
+  answer. `transport/mcp`'s tool result returns those details under `output` (step name →
+  text), so an MCP caller gets a passing operation's answer, not only its status.
 
 ### Changed
+
+- Go `core/types.StepResult.Tests` is an `int32` (was `int`), so `Output` fits in the existing
+  padding and the struct stays under the 128-byte range-copy limit.
 
 - Go `clients/outbox` and `clients/prometheus/http` code their errors through
   `foundation/awserr` and `foundation/httperr` instead of private copies; behavior is unchanged.
