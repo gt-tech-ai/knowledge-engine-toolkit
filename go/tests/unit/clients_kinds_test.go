@@ -14,6 +14,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/database"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/llm"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/lock"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox"
@@ -72,6 +73,10 @@ func TestClientFamilies_RejectAnUnknownKind(t *testing.T) {
 				database.Config{Kind: bogus},
 				database.Deps{},
 			)
+			return err
+		},
+		"llm": func(ctx context.Context) error {
+			_, err := llm.NewFromConfig(ctx, llm.Config{Kind: bogus}, llm.Deps{})
 			return err
 		},
 		"lock": func(ctx context.Context) error {

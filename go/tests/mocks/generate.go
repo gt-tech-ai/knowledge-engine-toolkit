@@ -41,6 +41,7 @@
 //go:generate mockgen -destination=mock_kubectl.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces KubectlClient
 //go:generate mockgen -destination=mock_leader.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces LeaderElector
 //go:generate mockgen -destination=mock_lifecycle.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Lifecycle
+//go:generate mockgen -destination=mock_llm.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces LLMClient
 //go:generate mockgen -destination=mock_lock.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces DistributedLock,Locker
 //go:generate mockgen -destination=mock_logger.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Logger
 //go:generate mockgen -destination=mock_messaging.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces MessagePublisher,CountingPublisher,MessageConsumer,DynamicConsumer,PatternConsumer

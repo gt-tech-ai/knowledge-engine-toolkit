@@ -217,7 +217,7 @@ collaborator or zero timeout skips its layer; recovery needs none.
   component with no entry of its own name. **Observe once per request:** by default clients, workflows and
   jobs are observed and the pipeline, service, repository and store tiers are not; repositories
   retry behind a breaker; the `storage`, `outbox.*` and `prometheus` clients carry a 30 s
-  timeout, bulkhead and breaker.
+  timeout, bulkhead and breaker, and the `llm` client a 120 s timeout, bulkhead, breaker and retry.
 - **Python — the same tiers, the same config.** `foundation/decorate` mirrors Go's package:
   `OpMiddleware`, `chain`, `exec_op`, one `new_*` middleware per layer, `Tier` (layers as data,
   outermost first), `Subject`, `Deps`, and `Decorations`, which builds a component's `Deps` from
@@ -306,7 +306,7 @@ Outermost → innermost:
 
 | Stack | Where | Order |
 | --- | --- | --- |
-| Client | `go/clients/client` (`Tier`; each family's `Decorate`) | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging — decorated: storage, messaging publish, lock, replay buffer, analytics store, connector source, and the SDK/HTTP seam of the outbox sinks (SDK faults coded so only throttling/server faults retry) and the Prometheus querier (op `prometheus.<endpoint>`; the capped body is read inside the attempt; 429/502/503/504 transient) |
+| Client | `go/clients/client` (`Tier`; each family's `Decorate`) | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging — decorated: storage, messaging publish, lock, replay buffer, analytics store, connector source, the LLM client (op `<name>.complete`), and the SDK/HTTP seam of the outbox sinks (SDK faults coded by `foundation/awserr` so only throttling/server faults retry) and the Prometheus querier (op `prometheus.<endpoint>`; the capped body is read inside the attempt; 429/502/503/504 transient) |
 | Message handler | `go/clients/messaging/{sqs,redis}` | the Client tier as `<name>.handler` (`client.NewWireBase` with `client.Handler()`) in CONSUMER spans, each publish in a PRODUCER span (`client.Producer()`; a Redis publish, at-most-once, is never retried — `Kinds.AtMostOnce`): a handler is never retried, broken or bulkheaded — the broker's redelivery is the retry. The publisher's trace context (`tracer.Inject` / `Extract`) rides SQS message attributes and memory-broker metadata, so the handler continues the publisher's trace; Redis Pub/Sub carries the payload alone, so a trace stops at a Redis channel |
 | Controller | `go/transport` (`Tier`; `Base.Handler` for a REST/RPC handler) | Tracing (server span) → Metrics → Logging → Recovery → RateLimit → Bulkhead (sheds when `bulkhead.shed`, the controllers' default) → Auth (`<controller>.<op>`) → Timeout — switched and tuned by `decoration.controllers` |
 | Connect server | `go/transport/connect/interceptors.ServerOptions` | the Controller tier via `transport.Interceptors`, op `pkg.Service/Method`: Connect-native Tracing (continues the caller's trace, sets `traceresponse`), Metrics (`connect_rpc_*`, by status code) and Logging (status-aware access line) stand in for the tier's; `Edge.Authn` (service auth, gateway-header auth, the consumer's principal and tenant-scope interceptors) runs just before Auth; `Edge.Inner` (retry budget, validation) after the tier. A stream gets no timeout; a handler's error is returned verbatim, a tier rejection becomes a `*connect.Error` of its code |
@@ -501,7 +501,7 @@ interceptor's status for an unresolvable caller, and the command-line exit codes
 Most tiers ship an in-process, stub, or no-op backend, so wiring needs no cloud dependency:
 
 - **Go:** analytics `stub`; lock `local`; outbox sink and outbox store `stub`; messaging, replay buffer, storage `memory`; secrets
-  `env`/`file`; cache, prometheus, transport `stub`; tracer `noop`; metrics no-op when disabled;
+  `env`/`file`; cache, llm, prometheus, transport `stub`; tracer `noop`; metrics no-op when disabled;
   logger `stdlib`. `database` and `rpc` default to `postgres` and `grpc`: their consumers hold the
   `*sql.DB` or connection itself.
 - **Python:** cache `local`/`null`; email, safety `noop`; model_gateway `passthrough`; audit, dataset, embedding, facts, llm, retrieval,

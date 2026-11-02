@@ -19,6 +19,7 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/httperr"
 )
 
 // HTTPDoer is the HTTP boundary the client sends its requests through.
@@ -191,7 +192,7 @@ func (c *Client) get(
 	}
 	resp, err := c.doer.Do(req)
 	if err != nil {
-		return body, transportError(err, "query prometheus")
+		return body, httperr.Transport(err, "query prometheus")
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -208,23 +209,6 @@ func (c *Client) get(
 		)
 	}
 	return body, nil
-}
-
-// transportError codes a failed send. A code the doer already chose survives; otherwise
-// the caller's own deadline is CodeTimeout, its cancellation CodeCanceled, and any other
-// failure CodeUnavailable.
-func transportError(err error, msg string) error {
-	code := apperr.Code(err)
-	switch {
-	case code != apperr.CodeUnknown:
-	case apperr.StdIs(err, context.DeadlineExceeded):
-		code = apperr.CodeTimeout
-	case apperr.StdIs(err, context.Canceled):
-		code = apperr.CodeCanceled
-	default:
-		code = apperr.CodeUnavailable
-	}
-	return apperr.Wrap(err, code, msg)
 }
 
 // isTransientStatus reports whether an HTTP status means the server is throttling or

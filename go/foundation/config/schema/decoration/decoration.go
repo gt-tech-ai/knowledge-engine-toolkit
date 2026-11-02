@@ -288,8 +288,10 @@ func (c *Config) Overlay(over *Config) Config {
 // DefaultConfig returns today's decoration: recovery and auth wherever a tier orders
 // them; every controller, client, workflow, job and gate observed, and the pipeline,
 // service, repository and store tiers not; retry and a circuit breaker at the
-// repository tier; and a 30 s timeout, a bulkhead and a breaker around the storage,
-// outbox and Prometheus clients. Every other resilience layer, the controllers' rate
+// repository tier; a 30 s timeout, a bulkhead and a breaker around the storage,
+// outbox and Prometheus clients; and around the LLM client a 120 s timeout (a
+// generation is slow), a bulkhead, a breaker and retry, which replays only transient
+// codes with backoff and jitter. Every other resilience layer, the controllers' rate
 // limit and bulkhead included, is off; a controller's bulkhead, once enabled, sheds.
 func DefaultConfig() Config {
 	repos := base(false)
@@ -306,12 +308,16 @@ func DefaultConfig() Config {
 			CircuitBreaker: CircuitBreaker{Enabled: ptr(true)},
 		}
 	}
+	llm := guarded()
+	llm.Timeout = ptr(120 * time.Second)
+	llm.Retry = Retry{Enabled: ptr(true), RetryConfig: resilience.DefaultRetryConfig()}
 	return Config{
 		Clients: Tier{Defaults: base(true), Overrides: map[string]Layers{
 			"storage":    guarded(),
 			"outbox.sqs": guarded(),
 			"outbox.s3":  guarded(),
 			"prometheus": guarded(),
+			"llm":        llm,
 		}},
 		Controllers:  Tier{Defaults: controllers},
 		Workflows:    Tier{Defaults: base(true)},

@@ -6,6 +6,28 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Go `core/interfaces.LLMClient` (`Complete`) with `core/types.CompletionRequest`,
+  `ChatMessage` and `Completion` (text, model, input and output token counts).
+- Go `clients/llm`: the LLM client family, `NewFromConfig(ctx, Config, Deps)` over the kinds
+  `stub` (the default: a fixed reply, zero usage, no I/O), `ollama` (the chat API at
+  `ollama.base_url`) and `bedrock` (the Converse API through an injected `Deps.Converse`, so
+  the engine's Bedrock client and its tier carry the call). Run through the client tier as the
+  operation `<name>.complete`; a transport failure, a throttle, 429 or 5xx is
+  `CodeUnavailable`, a rejected request `CodeInvalidInput`.
+- Go default decoration for the `llm` client: a 120 s timeout, a bulkhead, a circuit breaker and
+  retry (transient codes only, backoff with jitter).
+- Go `foundation/awserr.Classify` and `foundation/httperr.Transport`: the AWS SDK and HTTP
+  send error coding every AWS or HTTP client family shares.
+- Go test fixtures `tests/fixtures/dbtest/ollama` and `suite.OllamaIntegrationSuite` (Ollama
+  0.35.0 with `qwen2.5:0.5b` pulled); mocks `MockLLMClient` and `MockLLMConverseAPI`.
+
+### Changed
+
+- Go `clients/outbox` and `clients/prometheus/http` code their errors through
+  `foundation/awserr` and `foundation/httperr` instead of private copies; behavior is unchanged.
+
 ## [0.0.40] - 2026-11-01
 
 Python: `techai-webutils` 0.8.0.
