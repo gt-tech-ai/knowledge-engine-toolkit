@@ -1,11 +1,13 @@
-// Package cache builds a ByteCache from config: the always-miss stub (the default) or
-// Redis. The concrete backends live in the stub/ and redis/ subpackages.
+// Package cache builds a ByteCache from config: the always-miss stub (the default),
+// Redis, or a bounded in-process memory cache. The concrete backends live in the stub/,
+// redis/ and memory/ subpackages.
 package cache
 
 import (
 	"context"
 	"time"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cache/memory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cache/redis"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cache/stub"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
@@ -19,6 +21,9 @@ const (
 
 	// KindRedis caches in Redis.
 	KindRedis client.Kind = "redis"
+
+	// KindMemory caches in-process: bounded, least recently used, per replica.
+	KindMemory client.Kind = "memory"
 )
 
 // Config selects and tunes the cache.
@@ -32,6 +37,9 @@ type Config struct {
 
 	// Redis configures KindRedis.
 	Redis RedisConfig `yaml:"redis" mapstructure:"redis"`
+
+	// Memory configures KindMemory.
+	Memory MemoryConfig `yaml:"memory" mapstructure:"memory"`
 
 	// DefaultTTL applies when a caller passes a zero TTL.
 	DefaultTTL time.Duration `yaml:"default_ttl" mapstructure:"default_ttl"`
@@ -62,6 +70,12 @@ type RedisConfig struct {
 
 	// TLS encrypts the connection (required by managed Redis with an auth token).
 	TLS bool `yaml:"tls" mapstructure:"tls"`
+}
+
+// MemoryConfig configures the in-process memory backend.
+type MemoryConfig struct {
+	// MaxEntries bounds how many values it holds; zero means memory.DefaultMaxEntries.
+	MaxEntries int `yaml:"max_entries" mapstructure:"max_entries"`
 }
 
 // Deps carries the cache's runtime collaborators.
@@ -101,6 +115,11 @@ func kinds() client.Kinds[Config, Deps, interfaces.ByteCache] {
 					TLS:          cfg.Redis.TLS,
 					Logger:       deps.Observability().Logger,
 				}), nil
+			},
+			KindMemory: func(
+				_ context.Context, cfg Config, _ Deps,
+			) (interfaces.ByteCache, error) {
+				return memory.New(cfg.Memory.MaxEntries, cfg.DefaultTTL, time.Now), nil
 			},
 		},
 	}
