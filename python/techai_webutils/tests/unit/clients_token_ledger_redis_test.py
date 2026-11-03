@@ -23,6 +23,7 @@ from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.metrics import MetricCounter, MetricsProvider
 from techai_webutils.core.interfaces.token_ledger import (
     BudgetDecision,
+    Enforcement,
     Period,
     UsageRecord,
     UsageScope,
@@ -361,3 +362,37 @@ async def test_record_rounds_cost_half_even_and_accepts_a_string_window() -> Non
     assert script.await_args.kwargs["args"][5] == 14
     assert len(pipe.hmget.call_args_list) == 30
     assert caught.value.code is ErrorCode.INVALID_INPUT
+
+
+@pytest.mark.asyncio
+async def test_check_budget_reports_the_budget_enforcement() -> None:
+    """Test that the limits hash's ``enforcement`` field reaches the decision.
+
+    **Why this test is important:**
+      - The limits hash is how the budget owner tells the hot path an admin's level; a
+        ``per_budget`` policy enforces whatever this reads, so an unknown value must read as
+        "not known" rather than as some level.
+
+    **What it tests:**
+      - ``enforcement: hard`` → ``Enforcement.HARD`` on an exhausted decision
+      - a missing field → ``None``; an unknown value (``bogus``) → ``None``
+      - a hash holding only ``enforcement`` (no cap) is still ``no_limit``
+    """
+    client, _ = _client()
+    ledger = RedisTokenLedger(
+        client, TokenLedgerConfig(kind=TokenLedgerKind.REDIS), clock=lambda: _NOW
+    )
+
+    async def check(limits: dict[bytes, bytes]) -> BudgetDecision:
+        _pipeline(client, [[b"900", b"100", b"0", b"0"], limits])
+        return await ledger.check_budget(_SCOPE)
+
+    hard = await check({b"tokens": b"1000", b"enforcement": b"hard"})
+    missing = await check({b"tokens": b"1000"})
+    unknown = await check({b"tokens": b"1000", b"enforcement": b"bogus"})
+    uncapped = await check({b"enforcement": b"soft"})
+
+    assert (hard.allowed, hard.enforcement) == (False, Enforcement.HARD)
+    assert missing.enforcement is None
+    assert unknown.enforcement is None
+    assert (uncapped.reason, uncapped.enforcement) == ("no_limit", Enforcement.SOFT)

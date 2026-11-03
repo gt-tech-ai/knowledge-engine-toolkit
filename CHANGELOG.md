@@ -6,6 +6,31 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.40] - 2026-11-01
+
+Python: `techai-webutils` 0.8.0.
+
+### Added
+
+- Python `clients/model_gateway/routed.RefreshingPolicyStore`: a `RoutingPolicyStore` that
+  answers from an in-memory snapshot of stored policies, which an injected async loader
+  refreshes every `interval_s` (a workspace entry, then the tenant-wide one, then a fallback
+  store). A failed refresh keeps the last snapshot, logs it and counts
+  `routing_policy_refresh_total{outcome}`; entering the store refreshes once (a failure does not
+  stop startup) and starts the loop, exiting cancels it.
+- Python `new_model_gateway_from_config(..., policy_store=)` and
+  `RoutedGateway.from_config(..., policy_store=)`: a given store replaces the one
+  `routed.policy_store` describes.
+- Python per-budget enforcement: `BudgetDecision.enforcement` (the budget's own level, `None`
+  when unknown); the Redis ledger reads it from the limits hash's `enforcement` field (missing
+  or unknown is `None`); `BudgetPolicy.per_budget` (default off) makes `decide` enforce an
+  exhausted budget at that level when present. Ledger errors keep the policy's own level.
+
+### Changed
+
+- Python `Enforcement` moved to `core/interfaces/token_ledger` (still importable from
+  `clients/token_ledger/policy`).
+
 ## [0.0.39] - 2026-11-01
 
 Python: unchanged (`techai-webutils` 0.7.1).

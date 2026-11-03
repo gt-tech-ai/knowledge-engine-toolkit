@@ -10,7 +10,9 @@
 
 A ledger error is a raised ``check_budget`` *or* a decision whose reason is
 ``LEDGER_UNAVAILABLE_REASON`` (a backend that failed open itself). ``on_ledger_error`` overrides
-the soft/hard default; ``shadow`` never rejects. A rejection is a coded ``QuotaExceededError``
+the soft/hard default; ``shadow`` never rejects. With ``per_budget`` set, an exhausted budget
+uses the enforcement its owner stored on it (``BudgetDecision.enforcement``) when the decision
+carries one; ledger errors keep the policy's own. A rejection is a coded ``QuotaExceededError``
 raised by the caller, before the model call.
 """
 
@@ -20,21 +22,16 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from techai_webutils.core.interfaces.token_ledger import LEDGER_UNAVAILABLE_REASON
+from techai_webutils.core.interfaces.token_ledger import (
+    LEDGER_UNAVAILABLE_REASON,
+    Enforcement,
+)
 
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.token_ledger import BudgetDecision
 
-
-class Enforcement(StrEnum):
-    """How an exhausted budget is enforced."""
-
-    SHADOW = "shadow"
-    """Serve and count; never reject (the default)."""
-    SOFT = "soft"
-    """Reject an exhausted budget; a ledger error serves (fail open)."""
-    HARD = "hard"
-    """Reject an exhausted budget; a ledger error rejects (fail closed)."""
+__all__ = ["BudgetPolicy", "Enforcement", "OnLedgerError", "Verdict", "decide"]
+"""``Enforcement`` is re-exported from core, so importers of this module keep working."""
 
 
 class OnLedgerError(StrEnum):
@@ -55,6 +52,10 @@ class BudgetPolicy:
     on_ledger_error: OnLedgerError | None = None
     """What a ledger error does; ``None`` takes the enforcement's default (``hard`` denies,
     ``soft`` allows)."""
+    per_budget: bool = False
+    """Whether an exhausted budget is enforced at the level its owner stored on it
+    (``BudgetDecision.enforcement``) instead of ``enforcement``; a decision without a level,
+    and every ledger error, still follow ``enforcement``."""
 
     def ledger_error_action(self) -> OnLedgerError:
         """Return what a ledger error does under this policy."""
@@ -97,5 +98,9 @@ def decide(
         return Verdict(serve=False, would_exceed=False, reason="ledger_error_fail_closed")
     if decision.allowed:
         return Verdict(serve=True, would_exceed=False, reason=decision.reason)
-    serve = policy.enforcement is Enforcement.SHADOW
-    return Verdict(serve=serve, would_exceed=True, reason=decision.reason)
+    level = policy.enforcement
+    if policy.per_budget and decision.enforcement is not None:
+        level = decision.enforcement
+    return Verdict(
+        serve=level is Enforcement.SHADOW, would_exceed=True, reason=decision.reason
+    )

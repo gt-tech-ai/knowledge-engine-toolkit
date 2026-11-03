@@ -19,7 +19,11 @@ from techai_webutils.clients.token_ledger import (
     TokenLedgerKind,
     token_ledger_from_config,
 )
-from techai_webutils.core.interfaces.token_ledger import UsageRecord, UsageScope
+from techai_webutils.core.interfaces.token_ledger import (
+    Enforcement,
+    UsageRecord,
+    UsageScope,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -169,3 +173,37 @@ async def test_stream_is_trimmed_to_maxlen(
 
     length = await redis_client.xlen(stream)
     assert 100 <= length <= 200
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_check_budget_reads_the_stored_enforcement(
+    redis_client: Redis, request: pytest.FixtureRequest
+) -> None:
+    """Test that a limits hash written by the budget owner reports its enforcement.
+
+    **Why this test is important:**
+      - The owner writes ``enforcement`` beside ``tokens`` with a real ``HSET``; the hot path
+        must decode it from a real Redis reply (strings, not bytes, with
+        ``decode_responses``), or ``per_budget`` enforcement never sees an admin's level.
+
+    **What it tests:**
+      - after ``HSET limits tokens 100 enforcement hard`` and 120 recorded tokens,
+        ``check_budget`` is exhausted with ``Enforcement.HARD``
+    """
+    prefix = f"tl-{request.node.name}"
+    ledger = token_ledger_from_config(
+        TokenLedgerConfig(
+            kind=TokenLedgerKind.REDIS, redis_prefix=prefix, stream=f"{prefix}:usage"
+        ),
+        redis=redis_client,
+    )
+    scope = _record(datetime.now(UTC)).scope
+    await redis_client.hset(
+        f"{prefix}:limits:org-1:w-1", mapping={"tokens": "100", "enforcement": "hard"}
+    )
+    await ledger.record(_record(datetime.now(UTC)))
+
+    decision = await ledger.check_budget(scope)
+
+    assert (decision.allowed, decision.enforcement) == (False, Enforcement.HARD)

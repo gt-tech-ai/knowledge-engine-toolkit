@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, cast
@@ -375,3 +376,42 @@ async def test_hard_ledger_error_rejects_before_inner() -> None:
 
     assert caught.value.details["reason"] == "ledger_error_fail_closed"
     inner.complete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_per_budget_enforces_the_budget_level_under_a_shadow_policy() -> None:
+    """Test that a ``soft`` budget refuses only when the policy opts into ``per_budget``.
+
+    **Why this test is important:**
+      - An admin's ``soft`` budget must hold while the deployment stays ``shadow``, but a
+        deployment that has not opted in must keep serving exactly as before.
+
+    **What it tests:**
+      - a ``SHADOW`` policy serves an exhausted budget stored as ``soft``
+      - the same policy with ``per_budget=True`` raises ``QuotaExceededError`` before the
+        inner call and records nothing
+    """
+    soft_spent = dataclasses.replace(_SPENT, enforcement=Enforcement.SOFT)
+
+    def wrap(inner: MagicMock, ledger: MagicMock, *, per_budget: bool) -> LLMProvider:
+        policy = BudgetPolicy(enforcement=Enforcement.SHADOW, per_budget=per_budget)
+        proxy = TokenAccountingProxy(
+            inner,
+            ledger=ledger,
+            scope=lambda: _SCOPE,
+            prices=_PRICES,
+            policy=policy,
+            step="generate",
+            clock=lambda: _NOW,
+        )
+        return cast("LLMProvider", proxy)
+
+    served_inner, served_ledger = _llm(), _ledger(soft_spent)
+    await wrap(served_inner, served_ledger, per_budget=False).complete(_MESSAGES)
+    refused_inner, refused_ledger = _llm(), _ledger(soft_spent)
+    with pytest.raises(QuotaExceededError):
+        await wrap(refused_inner, refused_ledger, per_budget=True).complete(_MESSAGES)
+
+    served_inner.complete.assert_awaited_once()
+    refused_inner.complete.assert_not_awaited()
+    refused_ledger.record.assert_not_awaited()

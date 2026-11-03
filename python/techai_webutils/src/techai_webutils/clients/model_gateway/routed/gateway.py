@@ -196,7 +196,7 @@ class RoutedGateway(ModelGateway):
             self._shadow = ShadowRouter(shadow_planner, _shadow_decision, self._publish)
 
     @classmethod
-    def from_config(
+    def from_config(  # noqa: PLR0913 - the config plus each injected collaborator
         cls,
         config: RoutedConfig,
         *,
@@ -209,8 +209,12 @@ class RoutedGateway(ModelGateway):
         facts: FactPublisher | None = None,
         metrics: MetricsProvider | None = None,
         planner_deps: Mapping[str, object] | None = None,
+        policy_store: RoutingPolicyStore | None = None,
     ) -> RoutedGateway:
         """Parse and validate ``config`` and build its stages (no provider is built yet).
+
+        A given ``policy_store`` (e.g. one refreshed from a database) replaces the store
+        ``config.policy_store`` describes.
 
         Raises:
             AppError: ``INVALID_INPUT`` for a defective catalog, route or policy, or a stage
@@ -255,7 +259,8 @@ class RoutedGateway(ModelGateway):
             catalog=catalog,
             routes=routes,
             default_route=config.default_route,
-            policy_store=routing_policy_store_from_config(config.policy_store),
+            policy_store=policy_store
+            or routing_policy_store_from_config(config.policy_store),
             planner=planner,
             provider_factory=provider_factory,
             context_provider=context_provider,

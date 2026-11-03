@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from decimal import Decimal
 
 import pytest
@@ -17,6 +18,7 @@ from techai_webutils.core.interfaces.token_ledger import (
     LEDGER_UNAVAILABLE_REASON,
     BudgetDecision,
 )
+from techai_webutils.core.interfaces.token_ledger import Enforcement as CoreEnforcement
 
 _ALLOWED = BudgetDecision(
     allowed=True, reason="within_budget", remaining_tokens=None, remaining_cost_usd=None
@@ -149,3 +151,79 @@ def test_hard_fails_closed_on_ledger_error() -> None:
         serve=False, would_exceed=False, reason="ledger_error_fail_closed"
     )
     assert decide(lenient, None, _ERROR).serve
+
+
+def test_enforcement_is_a_core_type_and_decisions_carry_none_by_default() -> None:
+    """Test that ``Enforcement`` lives in core and a decision carries no level by default.
+
+    **Why this test is important:**
+      - A ledger backend reports a budget's own enforcement on its ``BudgetDecision``, so the
+        enum must be importable from core; existing importers of the policy module and every
+        backend that sets no level must keep working.
+
+    **What it tests:**
+      - ``core.interfaces.token_ledger.Enforcement`` is the policy module's ``Enforcement``
+      - a ``BudgetDecision`` built without ``enforcement`` has ``None``
+    """
+    assert CoreEnforcement is Enforcement
+    assert _EXHAUSTED.enforcement is None
+    assert _with(_EXHAUSTED, Enforcement.HARD).enforcement is Enforcement.HARD
+
+
+_LEVELS = (None, Enforcement.SHADOW, Enforcement.SOFT, Enforcement.HARD)
+"""Every budget-level enforcement a decision can carry."""
+
+
+@pytest.mark.parametrize("policy_level", list(Enforcement))
+@pytest.mark.parametrize("budget_level", _LEVELS)
+@pytest.mark.parametrize("per_budget", [False, True])
+def test_per_budget_uses_the_budget_level_for_an_exhausted_budget(
+    policy_level: Enforcement, budget_level: Enforcement | None, *, per_budget: bool
+) -> None:
+    """Test which enforcement decides an exhausted budget with and without ``per_budget``.
+
+    **Why this test is important:**
+      - An admin's ``hard`` budget must refuse calls even when the deployment default is
+        ``shadow``, but only once a deployment opts in; without the flag nothing changes.
+
+    **What it tests:**
+      - exhausted: served exactly when the effective level is ``shadow``, where the effective
+        level is the budget's when ``per_budget`` is set and the budget has one, else the
+        policy's; ``would_exceed`` is always set
+      - within budget: always served, whatever the levels
+    """
+    policy = BudgetPolicy(enforcement=policy_level, per_budget=per_budget)
+    effective = budget_level if per_budget and budget_level is not None else policy_level
+
+    exhausted = decide(policy, _with(_EXHAUSTED, budget_level), None)
+    allowed = decide(policy, _with(_ALLOWED, budget_level), None)
+
+    assert exhausted == Verdict(
+        serve=effective is Enforcement.SHADOW,
+        would_exceed=True,
+        reason="budget_exhausted",
+    )
+    assert allowed.serve
+
+
+def test_per_budget_leaves_ledger_errors_to_the_policy() -> None:
+    """Test that a ledger error follows the policy's own enforcement under ``per_budget``.
+
+    **Why this test is important:**
+      - A failed-open decision carries no trustworthy budget level, so the deployment's
+        fail-open/fail-closed choice must still decide it.
+
+    **What it tests:**
+      - a ``soft`` policy serves a failed-open decision that claims ``hard``
+      - a ``hard`` policy rejects a raised check
+    """
+    soft = BudgetPolicy(enforcement=Enforcement.SOFT, per_budget=True)
+    hard = BudgetPolicy(enforcement=Enforcement.HARD, per_budget=True)
+
+    assert decide(soft, _with(_FAILED_OPEN, Enforcement.HARD), None).serve
+    assert not decide(hard, None, _ERROR).serve
+
+
+def _with(decision: BudgetDecision, level: Enforcement | None) -> BudgetDecision:
+    """Return ``decision`` carrying the budget's own ``level``."""
+    return dataclasses.replace(decision, enforcement=level)

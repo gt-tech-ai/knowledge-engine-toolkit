@@ -242,7 +242,9 @@ collaborator or zero timeout skips its layer; recovery needs none.
   (`shadow` serves and counts `ai_budget_would_exceed_total`; `soft` and `hard` reject an
   exhausted budget with `QuotaExceededError` before the inner call; a ledger error — raised, or a
   `LEDGER_UNAVAILABLE_REASON` decision — serves under `soft` and rejects under `hard`, unless
-  `on_ledger_error` overrides), and records one priced `UsageRecord`
+  `on_ledger_error` overrides; with `BudgetPolicy.per_budget` an exhausted budget is enforced at
+  the level its owner stored, `BudgetDecision.enforcement`, which the Redis ledger reads from the
+  limits hash's `enforcement` field), and records one priced `UsageRecord`
   after it (a stream at its terminal `StreamUsage`; a semantic-cache hit, flagged through
   `core/interfaces/semantic_cache.served_from_cache()`, as one zero-token `<step>.cache_hit`).
   Recording never raises. Metrics: `ai_tokens_total{org,workspace,model,type}`,
@@ -682,7 +684,12 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
   plans) and `core/interfaces/routing.py` (`RouteClassifier`, `CandidateRanker`, `RoutePlanner`,
   `RoutingPolicyStore`, `RouteDecisionSink`). `clients/model_gateway/routed` holds the
   boot-validated catalog (each endpoint's `LlmConfig`, `fallback_model` stripped), the
-  deterministic filter, the `config` policy store and the stage `Kind`s: classifier `stub` /
+  deterministic filter, the `config` policy store, `RefreshingPolicyStore` (a synchronous
+  store over a snapshot an injected async loader refreshes on an interval; workspace, then
+  tenant, then a fallback store; a failed refresh keeps the last snapshot and counts
+  `routing_policy_refresh_total{outcome}`), which a caller passes as `policy_store` to
+  `new_model_gateway_from_config` in place of `routed.policy_store`, and the stage `Kind`s:
+  classifier `stub` /
   `embedding` (exemplars embedded once at the gateway's `__aenter__`; an embedder outage at
   request time degrades to the step's route), ranker `static_order` / `cost_aware` (objective,
   hard caps that drop, quality floor, budget bias from the injected `TokenLedger`), planner
