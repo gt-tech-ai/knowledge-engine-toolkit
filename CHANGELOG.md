@@ -6,6 +6,16 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Python `EmbeddingKind.BEDROCK`: `BedrockEmbeddingProvider` embeds with an Amazon Titan text
+  model (`amazon.titan-embed-text-v2:0`) through bedrock-runtime `InvokeModel`, one call per text,
+  with the configured `dimension` and normalized vectors. `token_count` is Titan's
+  `inputTextTokenCount`. A vector of the wrong length is `INTERNAL`, and botocore failures map
+  through `botocore_error_to_app_error`. The client opens on the first embed and is bounded by
+  `EmbeddingConfig.timeout_seconds`; `EmbeddingConfig.region` names its region. A deployment with
+  no local Ollama can now run the semantic cache.
+
 ## [0.0.40] - 2026-11-01
 
 Python: `techai-webutils` 0.8.0.
