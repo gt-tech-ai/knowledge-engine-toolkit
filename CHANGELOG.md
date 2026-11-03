@@ -8,7 +8,7 @@ All notable changes to this project are recorded here. The format follows
 
 ## [0.0.41] - 2026-11-03
 
-Python: `techai-webutils` 0.9.0.
+Python: `techai-webutils` 0.8.1.
 
 ### Added
 
