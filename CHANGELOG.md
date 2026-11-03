@@ -6,6 +6,43 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.41] - 2026-11-03
+
+Python: `techai-webutils` 0.8.1.
+
+### Added
+
+- Python `EmbeddingKind.BEDROCK`: `BedrockEmbeddingProvider` embeds with an Amazon Titan text
+  model (`amazon.titan-embed-text-v2:0`) through bedrock-runtime `InvokeModel`, one call per text,
+  with the configured `dimension` and normalized vectors. `token_count` is Titan's
+  `inputTextTokenCount`. A vector of the wrong length is `INTERNAL`, and botocore failures map
+  through `botocore_error_to_app_error`. The client opens on the first embed and is bounded by
+  `EmbeddingConfig.timeout_seconds`; `EmbeddingConfig.region` names its region. A deployment with
+  no local Ollama can now run the semantic cache.
+- Python `RouteContext.team_id` and `RouteContext.user_id`: who a call is charged to. The
+  `analytics` route-decision sink adds them to each `route_decisions` fact as the `team` and
+  `user` dims when set.
+
+### Changed
+
+- Python `SemanticCacheProxy` counters carry an `org_id` label (from `fact_dimensions`; empty
+  without one): `semantic_cache_{hits,misses}_total` and `semantic_cache_saving_usd_total` are now
+  labelled `{org_id,path,workspace}`, and the new `semantic_cache_lookups_total` counts every lookup,
+  so a dashboard reads one org's hit rate as hits over lookups. Dashboards that sum the counters are
+  unaffected; a query that matched on the exact label set needs the new label.
+- Python `route_decisions` facts name the workspace in a `workspace` dim (was `workspace_id`),
+  matching the other cubes.
+
+### Fixed
+
+- Python `RedisSemanticCache` runs on Valkey Search (Valkey 9 with the `search` module, as
+  ElastiCache serves it) as well as RediSearch. Before, every lookup on Valkey failed open into a
+  miss: the KNN query sorted on its score alias, which Valkey Search rejects, and redis-py could
+  not parse Valkey's `FT.SEARCH` reply. `invalidate_all` evicted nothing there, because
+  `FT.DROPINDEX … DD` is rejected. The lookup now issues `FT.SEARCH` directly and reads either
+  reply shape; `invalidate_all` drops the index and unlinks the index documents itself. The
+  integration suite runs on `redis/redis-stack-server:7.4.0-v1` and `valkey/valkey-bundle:9.1.4`.
+
 ## [0.0.40] - 2026-11-01
 
 Python: `techai-webutils` 0.8.0.

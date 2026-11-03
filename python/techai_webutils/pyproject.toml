@@ -1,6 +1,6 @@
 [project]
 name = "techai-webutils"
-version = "0.8.0"
+version = "0.8.1"
 # The published version, bumped by hand in the release PR whenever the package changes. It must
 # be greater than every version already on PyPI: 0.1.0 through 0.3.3 belong to the package's
 # earlier release line, so this line continues from 0.4.0.
@@ -164,6 +164,7 @@ omit = [
     "*/clients/llm/bedrock/*.py",                      # aiobotocore bedrock-runtime wrapper — integration/runtime
     "*/clients/retrieval/bedrock/*.py",                # aiobotocore bedrock-agent-runtime wrapper — integration/runtime
     "*/clients/kb_ingestion/bedrock/*.py",                       # aiobotocore bedrock-agent KB ingestion — integration/runtime
+    "*/clients/embedding/bedrock/runtime.py",          # aiobotocore bedrock-runtime client opener — integration/runtime
     "*/clients/email/ses/provider.py",                 # aiobotocore SESv2 send — E2E only (staging/prod SES)
     "*/clients/email/smtp/provider.py",                # aiosmtplib SMTP send — E2E only (dev Mailpit)
     "*/clients/cache/redis/cache.py",              # aioredis wrapper — integration (Redis)
@@ -220,6 +221,7 @@ known-first-party = ["techai_webutils"]
 "src/techai_webutils/clients/llm/bedrock/*.py" = ["invalid-argument-name"]
 "src/techai_webutils/clients/retrieval/bedrock/*.py" = ["invalid-argument-name"]
 "src/techai_webutils/clients/kb_ingestion/bedrock/*.py" = ["invalid-argument-name"]
+"src/techai_webutils/clients/embedding/bedrock/*.py" = ["invalid-argument-name"]
 # Each entry is a rule wrong-by-design for the whole test tree.
 "**/tests/**" = [
     "S", # flake8-bandit: bandit is the dedicated security gate and excludes tests; fixtures use fake credentials and intentionally exercise flagged patterns (assert, e2e subprocess, bind-all in local config)

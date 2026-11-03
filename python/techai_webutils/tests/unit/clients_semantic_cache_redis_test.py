@@ -1,8 +1,8 @@
 """Unit tests for ``RedisSemanticCache`` over a mocked Redis client and KV cache.
 
-The KNN ranking itself needs a real RediSearch server and is proven in the integration suite;
+The KNN ranking itself needs a real search server and is proven in the integration suite;
 these tests pin the backend's decisions: the exact-repeat fast path, the similarity threshold,
-the write layout, namespace scoping and fail-open.
+the write layout, namespace scoping, both ``FT.SEARCH`` reply shapes and fail-open.
 """
 
 from __future__ import annotations
@@ -38,12 +38,15 @@ class _Harness:
     """The mocked collaborators of one cache under test."""
 
     def __init__(self, *, docs: list[SimpleNamespace] | None = None) -> None:
-        """Mock Redis (with an ``ft()`` search handle), the KV cache and metrics."""
+        """Mock Redis (raw ``FT.SEARCH`` plus an ``ft()`` handle), the KV cache and metrics.
+
+        ``FT.SEARCH`` answers in the RESP2 array shape Valkey Search returns.
+        """
+        self.redis = MagicMock(spec=Redis)
+        self.redis.execute_command = AsyncMock(return_value=_array_reply(docs or []))
         self.search = MagicMock()
-        self.search.search = AsyncMock(return_value=SimpleNamespace(docs=docs or []))
         self.search.create_index = AsyncMock()
         self.search.dropindex = AsyncMock()
-        self.redis = MagicMock(spec=Redis)
         self.redis.ft = MagicMock(return_value=self.search)
         self.redis.hset = AsyncMock()
         self.redis.expire = AsyncMock()
@@ -71,6 +74,42 @@ async def _aiter(items: list[str]) -> AsyncGenerator[str]:
     for item in items:
         await asyncio.sleep(0)
         yield item
+
+
+def _array_reply(docs: list[SimpleNamespace]) -> list[object]:
+    """Return ``docs`` as the RESP2 ``FT.SEARCH`` array: ``[total, id, [field, value, …], …]``."""
+    reply: list[object] = [len(docs)]
+    for i, doc in enumerate(docs):
+        reply += [
+            f"sc:d:{i}".encode(),
+            [
+                b"key",
+                doc.key.encode(),
+                b"query",
+                doc.query.encode(),
+                b"dist",
+                doc.dist.encode(),
+            ],
+        ]
+    return reply
+
+
+def _map_reply(docs: list[SimpleNamespace]) -> dict[bytes, object]:
+    """Return ``docs`` as the RESP3 ``FT.SEARCH`` map Redis Stack returns."""
+    return {
+        b"total_results": len(docs),
+        b"results": [
+            {
+                b"id": f"sc:d:{i}".encode(),
+                b"extra_attributes": {
+                    b"key": doc.key.encode(),
+                    b"query": doc.query.encode(),
+                    b"dist": doc.dist.encode(),
+                },
+            }
+            for i, doc in enumerate(docs)
+        ],
+    }
 
 
 def _doc(distance: float) -> SimpleNamespace:
@@ -104,7 +143,7 @@ async def test_redis_semantic_cache_exact_hit_skips_embedding() -> None:
         embedding_model="stub-embed",
     )
     harness.embedding.embed.assert_not_awaited()
-    harness.search.search.assert_not_awaited()
+    harness.redis.execute_command.assert_not_awaited()
     assert harness.kv.get.await_args.args[0].startswith(f"sc:p:ws-1:{_NS.tag()}:")
 
 
@@ -129,6 +168,33 @@ async def test_redis_semantic_cache_knn_hit_above_threshold() -> None:
     assert hit.similarity == pytest.approx(0.97)
     assert hit.source_query == "the cached question"
     assert harness.kv.get.await_args_list[1].args == ("sc:p:ws-1:k:abc",)
+
+
+@pytest.mark.asyncio
+async def test_redis_semantic_cache_reads_the_resp3_map_reply() -> None:
+    """Test that a KNN hit is read from the RESP3 map reply as well as the RESP2 array.
+
+    **Why this test is important:**
+      - Redis Stack answers ``FT.SEARCH`` as a RESP3 map and Valkey Search as the RESP2 array on
+        the same connection; reading only one shape turns every lookup on the other engine into
+        a silent miss.
+
+    **What it tests:**
+      - a map reply with a neighbour at distance 0.03 returns its payload at similarity 0.97
+      - an empty map reply is a miss
+    """
+    harness = _Harness()
+    harness.redis.execute_command = AsyncMock(return_value=_map_reply([_doc(0.03)]))
+    harness.kv.get = AsyncMock(side_effect=[None, b"cached answer"])
+    empty = _Harness()
+    empty.redis.execute_command = AsyncMock(return_value=_map_reply([]))
+
+    hit = await harness.cache.lookup("what's x", _NS, min_similarity=0.95)
+
+    assert hit is not None
+    assert hit.payload == b"cached answer"
+    assert hit.similarity == pytest.approx(0.97)
+    assert await empty.cache.lookup("q", _NS, min_similarity=0.95) is None
 
 
 @pytest.mark.asyncio
@@ -201,7 +267,9 @@ async def test_redis_semantic_cache_lookup_fails_open() -> None:
     kv_down = _Harness()
     kv_down.kv.get = AsyncMock(side_effect=RedisConnectionError("down"))
     search_down = _Harness()
-    search_down.search.search = AsyncMock(side_effect=RedisConnectionError("down"))
+    search_down.redis.execute_command = AsyncMock(
+        side_effect=RedisConnectionError("down")
+    )
     embed_down = _Harness()
     embed_down.embedding.embed = AsyncMock(side_effect=RuntimeError("ollama down"))  # type: ignore[method-assign]
 
@@ -255,7 +323,7 @@ async def test_redis_semantic_cache_namespace_isolation() -> None:
     await harness.cache.lookup("q", _OTHER, min_similarity=0.9)
 
     first, second = (
-        call.args[0].query_string() for call in harness.search.search.await_args_list
+        call.args[2] for call in harness.redis.execute_command.await_args_list
     )
     assert f"@ns:{{{_NS.tag()}}}" in first
     assert f"@ns:{{{_OTHER.tag()}}}" in second
@@ -272,7 +340,8 @@ async def test_redis_semantic_cache_invalidation() -> None:
       - ``invalidate_prefix("ws-1")`` scans ``sc:p:ws-1:*`` and ``sc:d:ws-1:*`` (never ``ws-10``)
         and unlinks hits
       - glob characters in the prefix are escaped
-      - ``invalidate_all`` drops the index with its documents and unlinks every payload key
+      - ``invalidate_all`` drops the index (no ``DD``: Valkey Search rejects it), then unlinks
+        every index document and payload key itself
       - a failing scan or drop is counted as ``op="invalidate"`` and never raised
     """
     harness = _Harness()
@@ -290,10 +359,11 @@ async def test_redis_semantic_cache_invalidation() -> None:
         "sc:d:ws-1:*",
         "sc:p:w\\*:*",
         "sc:d:w\\*:*",
+        "sc:d:*",
         "sc:p:*",
     ]
     harness.redis.unlink.assert_any_await("sc:p:ws-1:x")
-    harness.search.dropindex.assert_awaited_once_with(delete_documents=True)
+    harness.search.dropindex.assert_awaited_once_with(delete_documents=False)
     assert isinstance(harness.cache, RedisSemanticCache)
 
     down = _Harness()

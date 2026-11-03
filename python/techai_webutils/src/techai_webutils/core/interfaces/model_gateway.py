@@ -41,6 +41,10 @@ class RouteContext:
     empty defers to the tenant policy's objective, then the gateway's default."""
     model_preference: str | None = None
     """The end user's explicit model choice (a catalog id), honoured only within policy."""
+    team_id: str = ""
+    """The team the call is charged to (empty when the caller has none); attribution only."""
+    user_id: str = ""
+    """The end user making the call (empty for a system call); attribution only."""
 
 
 @dataclass(frozen=True, slots=True)

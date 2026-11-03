@@ -1,7 +1,7 @@
 """Config-selected ``SemanticCache`` factory (the ``clients/token_ledger/builder.py`` pattern).
 
 ``SemanticCacheConfig.kind`` selects ``stub`` (always miss, the default) or ``redis`` (the injected
-KV ``Cache`` for payloads + the ``EmbeddingProvider`` + a RediSearch KNN index on the app's Redis).
+KV ``Cache`` for payloads + the ``EmbeddingProvider`` + a search-module KNN index on the app's Redis or Valkey).
 Collaborators are injected, never built here. An unknown kind raises ``AppValueError``; ``redis``
 without its collaborators raises ``AppError(INVALID_INPUT)``. The Redis backend is imported lazily.
 """
@@ -30,8 +30,8 @@ class SemanticCacheKind(StrEnum):
     STUB = "stub"
     """Always miss (the default; zero infrastructure)."""
     REDIS = "redis"
-    """KV payloads + a RediSearch cosine KNN index on the same Redis."""
-    # QDRANT reserved: a vector-store-backed index, when a deployment has no RediSearch.
+    """KV payloads + a cosine KNN index on the same server (RediSearch or Valkey Search)."""
+    # QDRANT reserved: a vector-store-backed index, when a deployment has no search module.
 
 
 @dataclass(frozen=True, slots=True)

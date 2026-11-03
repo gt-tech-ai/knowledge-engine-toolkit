@@ -19,7 +19,10 @@ every other attribute passes through. Per bound call it:
 
 Everything else the cache, the hook or the telemetry raise is logged, counted
 (``semantic_cache_proxy_errors_total{op}``) and swallowed: apart from the hook's refusal or
-replacement, the proxy can never fail or change the answer. ``enabled=False`` or a
+replacement, the proxy can never fail or change the answer. Every lookup counts
+``semantic_cache_lookups_total`` plus ``…_hits_total`` (with ``…_saving_usd_total``) or
+``…_misses_total``, each labelled ``org_id`` (from ``fact_dimensions``; empty without one),
+``path`` and ``workspace``, so a hit rate is hits over lookups for one org. ``enabled=False`` or a
 ``StubSemanticCache`` makes it a passthrough. Each lookup publishes one ``cache_lookups``
 fact (outcome, similarity bin, model, workspace; lookups, saving).
 """
@@ -108,6 +111,10 @@ class _Lookup:
     """The hit, or ``None`` for a miss (or a failed lookup)."""
 
 
+_LOOKUP_LABELS = ["org_id", "path", "workspace"]
+"""Labels on every cache lookup counter: the org a dashboard filters by, the path and workspace."""
+
+
 class SemanticCacheProxy:
     """Serves repeat model calls from a semantic cache; fail-open."""
 
@@ -165,19 +172,16 @@ class SemanticCacheProxy:
         if metrics is not None:
             for name, help_text, labels in (
                 (
-                    "semantic_cache_hits_total",
-                    "Semantic cache hits.",
-                    ["path", "workspace"],
+                    "semantic_cache_lookups_total",
+                    "Semantic cache lookups (hits plus misses).",
+                    _LOOKUP_LABELS,
                 ),
-                (
-                    "semantic_cache_misses_total",
-                    "Semantic cache misses.",
-                    ["path", "workspace"],
-                ),
+                ("semantic_cache_hits_total", "Semantic cache hits.", _LOOKUP_LABELS),
+                ("semantic_cache_misses_total", "Semantic cache misses.", _LOOKUP_LABELS),
                 (
                     "semantic_cache_saving_usd_total",
                     "US dollars avoided by hits.",
-                    ["path", "workspace"],
+                    _LOOKUP_LABELS,
                 ),
                 (
                     "semantic_cache_proxy_errors_total",
@@ -244,30 +248,36 @@ class SemanticCacheProxy:
 
     def _report(self, found: _Lookup) -> None:
         """Count the lookup and publish its fact; swallow any failure."""
+        dims: dict[str, str] = {}
+        try:
+            if self._fact_dimensions is not None:
+                dims = dict(self._fact_dimensions())
+        except Exception as exc:
+            self._failed("fact", exc)
         saving = Decimal(0)
         try:
-            saving = self._count_lookup(found)
+            saving = self._count_lookup(found, dims.get("org_id", ""))
         except Exception as exc:
             self._failed("metrics", exc)
         try:
-            self._publish_fact(found, saving)
+            self._publish_fact(found, saving, dims)
         except Exception as exc:
             self._failed("fact", exc)
 
-    def _count_lookup(self, found: _Lookup) -> Decimal:
-        """Count the hit (with its saving) or the miss; return the saving."""
-        path, workspace = self._path, found.namespace.workspace_id
+    def _count_lookup(self, found: _Lookup, org_id: str) -> Decimal:
+        """Count the lookup and its hit (with the saving) or miss under ``org_id``; return the saving."""
+        labels = {
+            "org_id": org_id,
+            "path": self._path,
+            "workspace": found.namespace.workspace_id,
+        }
+        self._count("semantic_cache_lookups_total", 1.0, **labels)
         if found.hit is None:
-            self._count("semantic_cache_misses_total", path=path, workspace=workspace)
+            self._count("semantic_cache_misses_total", 1.0, **labels)
             return Decimal(0)
         saving = self._saving(found.hit) if self._saving is not None else Decimal(0)
-        self._count("semantic_cache_hits_total", path=path, workspace=workspace)
-        self._count(
-            "semantic_cache_saving_usd_total",
-            float(saving),
-            path=path,
-            workspace=workspace,
-        )
+        self._count("semantic_cache_hits_total", 1.0, **labels)
+        self._count("semantic_cache_saving_usd_total", float(saving), **labels)
         return saving
 
     def _bin(self, similarity: float) -> str:
@@ -275,11 +285,13 @@ class SemanticCacheProxy:
         edges = [edge for edge in self._bins if similarity >= edge]
         return f"{max(edges):.2f}" if edges else f"<{self._bins[0]:.2f}"
 
-    def _publish_fact(self, found: _Lookup, saving: Decimal) -> None:
+    def _publish_fact(
+        self, found: _Lookup, saving: Decimal, dims: dict[str, str]
+    ) -> None:
         """Publish the lookup's ``cache_lookups`` fact (no-op without a publisher or an org)."""
         if self._facts is None:
             return
-        dims = dict(self._fact_dimensions()) if self._fact_dimensions is not None else {}
+        dims = dict(dims)
         org_id = dims.pop("org_id", "")
         if not org_id:
             return

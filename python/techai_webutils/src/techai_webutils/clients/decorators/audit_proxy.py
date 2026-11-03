@@ -22,9 +22,9 @@ model only when the audited call itself set that decision (a gateway beneath the
 provider, a blocked input or a cache hit records the model it knows (none, or the answer's).
 
 ``AuditEnforcement`` governs failures of the audit itself: ``shadow`` logs and counts
-(``audit_record_failures_total{enforcement}``) and serves; ``enforced`` raises — a coded sink
-error keeps its code, any other is ``INTERNAL``; a safety scan that fails is ``flagged`` under
-shadow and raised under enforcement. Whether a detection blocks is the safety check's own
+(``audit_record_failures_total{enforcement}``) and serves; ``enforced`` raises — a coded error
+from the sink or a safety check keeps its code, any other is ``INTERNAL``. Under shadow a safety
+scan that fails is recorded ``flagged``. Whether a detection blocks is the safety check's own
 ``on_detect`` policy.
 """
 
@@ -400,7 +400,10 @@ class AuditProxy:
             The redacted answer when the output check redacts, else ``None`` (serve as is).
 
         Raises:
-            AppError: ``FORBIDDEN`` when either check blocks (after auditing it ``blocked``).
+            AppError: ``FORBIDDEN`` when either check blocks (after auditing it ``blocked``);
+                under ``enforced``, a failed safety scan or record (a coded error keeps its
+                code, any other is ``INTERNAL``), which the semantic cache treats as a
+                refusal of the hit.
 
         """
         messages = _messages(args, kwargs)

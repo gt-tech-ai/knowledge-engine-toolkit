@@ -1,8 +1,8 @@
 """Env-aware embedding provider factory (foundation/logger ``NewFromConfig`` pattern).
 
-Selects the embedding backend from ``EmbeddingConfig.kind``: Ollama (local dev) or a deterministic
-in-process stub (``stub``; no infra). A managed knowledge base that embeds server-side (e.g. Bedrock)
-needs no separate provider.
+Selects the embedding backend from ``EmbeddingConfig.kind``: Ollama (local dev), Amazon Titan on
+Bedrock (``bedrock``; e.g. a semantic cache's query embedder on AWS), or a deterministic in-process
+stub (``stub``; no infra). A managed knowledge base that embeds server-side needs no separate provider.
 """
 
 from __future__ import annotations
@@ -22,6 +22,8 @@ class EmbeddingKind(StrEnum):
 
     OLLAMA = "ollama"
     """The local Ollama embedding server (``/api/embed``; dev)."""
+    BEDROCK = "bedrock"
+    """Amazon Titan text embeddings on Bedrock (bedrock-runtime ``InvokeModel``)."""
     STUB = "stub"
     """Deterministic in-process stub (dev/test/all-stubs; no Ollama)."""
 
@@ -31,26 +33,30 @@ class EmbeddingConfig:
     """Embedding provider configuration (the consumer maps its own config section onto it)."""
 
     kind: EmbeddingKind = EmbeddingKind.OLLAMA
-    """Selects the embedding backend (``ollama`` or the in-process ``stub``)."""
+    """Selects the embedding backend (``ollama``, ``bedrock`` or the in-process ``stub``)."""
     host: str = "http://localhost:11434"
-    """Ollama server base URL."""
+    """Ollama server base URL (``ollama`` kind only)."""
     model: str = "nomic-embed-text"
-    """Embedding model name requested from Ollama."""
+    """Embedding model: the Ollama model name, or the Bedrock model id (``amazon.titan-embed-text-v2:0``)."""
     dimension: int = 768
     """Vector dimensionality the ``model`` produces (must match the vector store)."""
     timeout_seconds: float = 300.0
-    """Per-request HTTP timeout for the embedding call. httpx defaults to 5s, but a CPU-only Ollama
+    """Per-request timeout for the embedding call (``ollama``: the httpx timeout; ``bedrock``: the
+    botocore connect and read timeout — set it low for a hot-path query embedder). httpx defaults to 5s, but a CPU-only Ollama
     embed of a full sub-batch takes tens of seconds (and, under the KB's bounded-concurrency fan-out,
     several such calls queue at the server), so the 5s default aborts every real embed with a
     ReadTimeout. This is a safety upper bound, generous because Ollama is the local-dev vector path."""
+    region: str = "us-east-1"
+    """AWS region of the bedrock-runtime endpoint (``bedrock`` kind only)."""
 
 
 def new_embedding_from_config(config: EmbeddingConfig) -> EmbeddingProvider:
-    """Build the ``EmbeddingProvider`` selected by ``config.kind`` (Ollama). Unknown kinds fail loudly.
+    """Build the ``EmbeddingProvider`` selected by ``config.kind``. Unknown kinds fail loudly.
 
-    The ``httpx.AsyncClient`` is created here and lives for the returned provider's lifetime — i.e. the
-    process, since these clients are wired once at startup (a server) or in a short-lived script.
-    There is no separate teardown seam; the OS reclaims the pool on exit.
+    For ``ollama`` the ``httpx.AsyncClient`` is created here and lives for the returned provider's
+    lifetime — i.e. the process, since these clients are wired once at startup (a server) or in a
+    short-lived script; the OS reclaims the pool on exit. For ``bedrock`` the bedrock-runtime client
+    opens lazily on the first embed (no I/O here) and ``aclose`` on the provider releases it.
     """
     if config.kind is EmbeddingKind.OLLAMA:
         import httpx  # noqa: PLC0415
@@ -60,6 +66,19 @@ def new_embedding_from_config(config: EmbeddingConfig) -> EmbeddingProvider:
         client = httpx.AsyncClient(base_url=config.host, timeout=config.timeout_seconds)
         return OllamaEmbeddingProvider(
             client, model=config.model, dimension=config.dimension
+        )
+    if config.kind is EmbeddingKind.BEDROCK:
+        from techai_webutils.clients.embedding.bedrock import (  # noqa: PLC0415
+            BedrockEmbeddingProvider,
+            LazyBedrockRuntime,
+        )
+
+        return BedrockEmbeddingProvider(
+            LazyBedrockRuntime(
+                region=config.region, timeout_seconds=config.timeout_seconds
+            ),
+            model=config.model,
+            dimension=config.dimension,
         )
     if config.kind is EmbeddingKind.STUB:
         # Lazy import (no httpx client to build).
