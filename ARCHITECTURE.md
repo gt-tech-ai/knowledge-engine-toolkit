@@ -269,8 +269,9 @@ collaborator or zero timeout skips its layer; recovery needs none.
   stream only once fully consumed). A coded `AppError` from the `on_hit` hook refuses the hit and
   propagates; every other cache, hook or telemetry failure is swallowed and counted;
   `enabled=False` or a `StubSemanticCache` is a passthrough. Metrics:
-  `semantic_cache_{hits,misses}_total{path,workspace}`, `semantic_cache_saving_usd_total`; one
-  `cache_lookups` fact per lookup.
+  `semantic_cache_{lookups,hits,misses}_total` and `semantic_cache_saving_usd_total`, each
+  labelled `{org_id,path,workspace}` (`org_id` from `fact_dimensions`, empty without it), so a
+  hit rate is hits over lookups per org; one `cache_lookups` fact per lookup.
 - **Python — per-key rate limits.** `core/interfaces/rate_limiter.PerKeyRateLimiter`
   (`allow_key(key)`, async) has two kinds behind `foundation/resilience/per_key_builder`:
   `memory` (`InMemoryRateLimiter`, per replica; the default) and `redis`

@@ -220,31 +220,66 @@ async def test_semantic_cache_proxy_passthrough_for_non_bound_methods() -> None:
 
 @pytest.mark.asyncio
 async def test_semantic_cache_proxy_emits_hit_and_saving_metrics() -> None:
-    """Test that hits, misses and savings are counted per path and workspace.
+    """Test that lookups, hits, misses and savings are counted per org, path and workspace.
 
     **Why this test is important:**
-      - The saving is the number the cache is judged by.
+      - The saving is the number the cache is judged by, and the console's hit rate is hits over
+        lookups, read per org: a counter without ``org_id`` can't be shown to a tenant.
 
     **What it tests:**
-      - a hit increments ``semantic_cache_hits_total`` and adds the ``saving`` to
-        ``semantic_cache_saving_usd_total``; a miss increments ``semantic_cache_misses_total``
+      - a hit increments ``semantic_cache_lookups_total`` and ``semantic_cache_hits_total`` and adds
+        the ``saving`` to ``semantic_cache_saving_usd_total``; a miss increments lookups and
+        ``semantic_cache_misses_total`` — each labelled with the ``org_id`` ``fact_dimensions``
+        returns
+      - every cache counter is registered with the ``org_id``, ``path`` and ``workspace`` labels
+    """
+    metrics, counters = _metrics()
+    org = {"fact_dimensions": lambda: {"org_id": "o1", "team": "t1"}}
+
+    await _proxy(
+        _inner(),
+        _cache(_HIT),
+        metrics=metrics,
+        saving=lambda _hit: Decimal("0.002"),
+        **org,
+    ).complete(_MESSAGES)
+    await _proxy(_inner(), _cache(), metrics=metrics, **org).complete(_MESSAGES)
+
+    labels = {"org_id": "o1", "path": "generation", "workspace": "ws-1"}
+    counters["semantic_cache_hits_total"].inc.assert_called_once_with(1.0, **labels)
+    counters["semantic_cache_saving_usd_total"].inc.assert_called_once_with(
+        0.002, **labels
+    )
+    counters["semantic_cache_misses_total"].inc.assert_called_once_with(1.0, **labels)
+    assert counters["semantic_cache_lookups_total"].inc.call_count == 2
+    counters["semantic_cache_lookups_total"].inc.assert_called_with(1.0, **labels)
+    registered = {call.args[0]: call.args[2] for call in metrics.counter.call_args_list}
+    for name in (
+        "semantic_cache_lookups_total",
+        "semantic_cache_hits_total",
+        "semantic_cache_misses_total",
+        "semantic_cache_saving_usd_total",
+    ):
+        assert registered[name] == ["org_id", "path", "workspace"]
+
+
+@pytest.mark.asyncio
+async def test_semantic_cache_proxy_counts_without_an_org() -> None:
+    """Test that a lookup with no ``fact_dimensions`` is still counted, under an empty ``org_id``.
+
+    **Why this test is important:**
+      - A caller that never wired fact dimensions must not lose its cache metrics.
+
+    **What it tests:**
+      - a miss with no ``fact_dimensions`` increments lookups and misses with ``org_id=""``
     """
     metrics, counters = _metrics()
 
-    await _proxy(
-        _inner(), _cache(_HIT), metrics=metrics, saving=lambda _hit: Decimal("0.002")
-    ).complete(_MESSAGES)
     await _proxy(_inner(), _cache(), metrics=metrics).complete(_MESSAGES)
 
-    counters["semantic_cache_hits_total"].inc.assert_called_once_with(
-        1.0, path="generation", workspace="ws-1"
-    )
-    counters["semantic_cache_saving_usd_total"].inc.assert_called_once_with(
-        0.002, path="generation", workspace="ws-1"
-    )
-    counters["semantic_cache_misses_total"].inc.assert_called_once_with(
-        1.0, path="generation", workspace="ws-1"
-    )
+    labels = {"org_id": "", "path": "generation", "workspace": "ws-1"}
+    counters["semantic_cache_misses_total"].inc.assert_called_once_with(1.0, **labels)
+    counters["semantic_cache_lookups_total"].inc.assert_called_once_with(1.0, **labels)
 
 
 @pytest.mark.asyncio

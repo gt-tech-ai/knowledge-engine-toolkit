@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.41] - 2026-11-03
+
+Python: `techai-webutils` 0.9.0.
+
 ### Added
 
 - Python `EmbeddingKind.BEDROCK`: `BedrockEmbeddingProvider` embeds with an Amazon Titan text
@@ -15,6 +19,19 @@ All notable changes to this project are recorded here. The format follows
   through `botocore_error_to_app_error`. The client opens on the first embed and is bounded by
   `EmbeddingConfig.timeout_seconds`; `EmbeddingConfig.region` names its region. A deployment with
   no local Ollama can now run the semantic cache.
+- Python `RouteContext.team_id` and `RouteContext.user_id`: who a call is charged to. The
+  `analytics` route-decision sink adds them to each `route_decisions` fact as the `team` and
+  `user` dims when set.
+
+### Changed
+
+- Python `SemanticCacheProxy` counters carry an `org_id` label (from `fact_dimensions`; empty
+  without one): `semantic_cache_{hits,misses}_total` and `semantic_cache_saving_usd_total` are now
+  labelled `{org_id,path,workspace}`, and the new `semantic_cache_lookups_total` counts every lookup,
+  so a console reads one org's hit rate as hits over lookups. Dashboards that sum the counters are
+  unaffected; a query that matched on the exact label set needs the new label.
+- Python `route_decisions` facts name the workspace in a `workspace` dim (was `workspace_id`),
+  matching the other cubes.
 
 ### Fixed
 
