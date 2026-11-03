@@ -3,7 +3,9 @@
 //
 // A Budget caps total retry attempts across a request lifecycle, preventing
 // exponential retry amplification in deep call chains. Attach a budget to the
-// context at the entrypoint, and each retrier in the chain consumes from it.
+// context at the entrypoint, and each retrier in the chain consumes one unit per
+// retry — never for an operation's first attempt — so a budget of N allows N
+// retries across the request however many calls it makes.
 //
 //	budget := budget.NewBudget(5)
 //	ctx = budget.WithRetryBudget(ctx, budget)
@@ -43,7 +45,8 @@ func WithRetryBudget(ctx context.Context, b *Budget) context.Context {
 }
 
 // ConsumeRetry decrements the retry budget. Returns true if a retry is allowed.
-// If no budget exists in context, retries are always allowed.
+// If no budget exists in context, retries are always allowed. A retrier calls it
+// before each attempt after the first.
 func ConsumeRetry(ctx context.Context) bool {
 	b, ok := ctx.Value(budgetKey{}).(*Budget)
 	if !ok {

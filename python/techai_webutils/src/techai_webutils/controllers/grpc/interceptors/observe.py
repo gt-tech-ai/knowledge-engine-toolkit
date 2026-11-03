@@ -11,6 +11,7 @@ import time
 from typing import TYPE_CHECKING, cast, override
 
 import grpc
+from opentelemetry import context as otel_context
 from opentelemetry import trace as otel_trace
 from opentelemetry.propagate import extract
 from opentelemetry.trace import SpanKind, Status, StatusCode
@@ -58,7 +59,8 @@ class TracingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc
 
     The span is parented on the W3C trace context in the incoming metadata, named by the full
     method and carries ``rpc.system``, ``rpc.service`` and ``rpc.method``; it is current for the
-    whole call, so every inner span shares the upstream trace.
+    whole call, so every inner span shares the upstream trace. The inbound context is attached
+    for the call too, so the handler reads the caller's W3C baggage.
     """
 
     def __init__(self, scope: str) -> None:
@@ -82,24 +84,30 @@ class TracingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc
 
         def wrap(behavior: Behavior, _streaming: bool) -> Behavior:  # noqa: FBT001
             async def traced(request: object, context: Context) -> object:
-                # A cancelled stream is not an error: only an Exception marks the span (below).
-                with tracer.start_as_current_span(
-                    method,
-                    context=parent,
-                    kind=SpanKind.SERVER,
-                    record_exception=False,
-                    set_status_on_exception=False,
-                ) as span:
-                    span.set_attribute("rpc.system", "grpc")
-                    span.set_attribute("rpc.service", service)
-                    span.set_attribute("rpc.method", name)
-                    _set_trace_response(context)
-                    try:
-                        return await behavior(request, context)
-                    except Exception as exc:
-                        span.record_exception(exc)
-                        span.set_status(Status(StatusCode.ERROR))
-                        raise
+                # Attach the inbound context (baggage included) for the whole call; the span
+                # below parents on it. Detached in finally, so an error leaves no residue.
+                token = otel_context.attach(parent)
+                try:
+                    # A cancelled stream is not an error: only an Exception marks the span.
+                    with tracer.start_as_current_span(
+                        method,
+                        context=parent,
+                        kind=SpanKind.SERVER,
+                        record_exception=False,
+                        set_status_on_exception=False,
+                    ) as span:
+                        span.set_attribute("rpc.system", "grpc")
+                        span.set_attribute("rpc.service", service)
+                        span.set_attribute("rpc.method", name)
+                        _set_trace_response(context)
+                        try:
+                            return await behavior(request, context)
+                        except Exception as exc:
+                            span.record_exception(exc)
+                            span.set_status(Status(StatusCode.ERROR))
+                            raise
+                finally:
+                    otel_context.detach(token)
 
             return traced
 

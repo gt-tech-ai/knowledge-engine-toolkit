@@ -7,11 +7,13 @@ included — and read the RPC's final status, the way the Go gRPC server's inter
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
 import pytest
+from opentelemetry import baggage
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -212,6 +214,55 @@ class TestTracingServerInterceptor:
 
         [span] = exporter.get_finished_spans()
         assert span.status.status_code is StatusCode.ERROR
+
+    @pytest.mark.asyncio
+    async def test_handler_sees_the_callers_baggage(self) -> None:
+        """The inbound context, baggage included, is current while the handler runs.
+
+        Why this test is important:
+          - Callers send request-scoped values as W3C baggage; a handler (and the spans and
+            logs it makes) can only read them if the extracted context is attached, not just
+            used as the server span's parent.
+
+        What it tests:
+          - Inside the handler, ``baggage.get_baggage`` returns the caller's entry.
+          - After the call the entry is gone again, on success and when the handler raises.
+        """
+        tracer, _ = _real_span_tracer()
+        with patch(_TRACER_PATH, return_value=tracer):
+            interceptor = TracingServerInterceptor("test")
+        seen: list[object] = []
+
+        async def handler(_request: object, _context: object) -> str:
+            await asyncio.sleep(0)
+            seen.append(baggage.get_baggage("k"))
+            return "ok"
+
+        async def failing(_request: object, _context: object) -> str:
+            await asyncio.sleep(0)
+            seen.append(baggage.get_baggage("k"))
+            msg = "x"
+            raise RuntimeError(msg)
+
+        for behavior in (handler, failing):
+            details = _details()
+            details.invocation_metadata = [
+                (
+                    "traceparent",
+                    "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+                ),
+                ("baggage", "k=v"),
+            ]
+            wrapped = await interceptor.intercept_service(
+                AsyncMock(return_value=grpc.unary_unary_rpc_method_handler(behavior)),
+                details,
+            )
+            assert wrapped is not None
+            with contextlib.suppress(RuntimeError):
+                await _behavior(wrapped)(object(), _context())
+            assert baggage.get_baggage("k") is None
+
+        assert seen == ["v", "v"]
 
     @pytest.mark.asyncio
     async def test_unknown_method_passes_through(self) -> None:

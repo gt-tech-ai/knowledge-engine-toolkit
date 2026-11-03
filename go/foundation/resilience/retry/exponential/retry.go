@@ -119,13 +119,16 @@ func (r *Retrier) classify() func(error) bool {
 }
 
 // Retry executes the operation with exponential backoff and jitter.
-// It consumes from the context's retry budget (if present) before each attempt.
+// Each attempt after the first consumes one retry from the context's retry budget (if
+// present); the first attempt is free, so a budget of N allows N retries.
 func (r *Retrier) Retry(ctx context.Context, op func() error) error {
 	isRetryable := r.classify()
+	retrying := false
 	_, err := backoff.Retry(ctx, func() (struct{}, error) {
-		if !budget.ConsumeRetry(ctx) {
+		if retrying && !budget.ConsumeRetry(ctx) {
 			return struct{}{}, backoff.Permanent(budget.ErrRetryBudgetExhausted)
 		}
+		retrying = true
 		if e := op(); e != nil {
 			if !isRetryable(e) {
 				return struct{}{}, backoff.Permanent(e)
@@ -146,11 +149,13 @@ func RetryWithResult[T any](
 	op func() (T, error),
 ) (T, error) {
 	isRetryable := r.classify()
+	retrying := false
 	return backoff.Retry(ctx, func() (T, error) {
-		if !budget.ConsumeRetry(ctx) {
+		if retrying && !budget.ConsumeRetry(ctx) {
 			var zero T
 			return zero, backoff.Permanent(budget.ErrRetryBudgetExhausted)
 		}
+		retrying = true
 		v, e := op()
 		if e != nil && !isRetryable(e) {
 			return v, backoff.Permanent(e)
