@@ -223,7 +223,7 @@ async def test_semantic_cache_proxy_emits_hit_and_saving_metrics() -> None:
     """Test that lookups, hits, misses and savings are counted per org, path and workspace.
 
     **Why this test is important:**
-      - The saving is the number the cache is judged by, and the console's hit rate is hits over
+      - The saving is the number the cache is judged by, and a dashboard's hit rate is hits over
         lookups, read per org: a counter without ``org_id`` can't be shown to a tenant.
 
     **What it tests:**

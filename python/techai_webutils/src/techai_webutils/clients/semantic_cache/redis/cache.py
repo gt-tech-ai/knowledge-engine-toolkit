@@ -1,7 +1,7 @@
 """``RedisSemanticCache`` — payloads in the injected KV ``Cache``, similarity in a search index.
 
-The index runs on either search engine: RediSearch (Redis Stack, dev) or Valkey Search (ElastiCache
-for Valkey 9, staging). Where they differ the code uses only what both accept: no ``SORTBY`` on the
+The index runs on either search engine: RediSearch (Redis Stack) or Valkey Search (Valkey 9, e.g.
+ElastiCache for Valkey). Where they differ the code uses only what both accept: no ``SORTBY`` on the
 KNN score, no ``FT.DROPINDEX … DD``, and an ``FT.SEARCH`` reply read in either shape (a RESP3 map
 from RediSearch, the RESP2 array from Valkey Search on the same connection).
 

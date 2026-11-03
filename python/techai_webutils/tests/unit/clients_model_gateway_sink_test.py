@@ -81,7 +81,7 @@ def test_analytics_sink_attributes_the_decision_to_workspace_team_and_user() -> 
     """Test that a ``route_decisions`` fact names the workspace, and the team and user when known.
 
     **Why this test is important:**
-      - Cost per team and per user is read from these facts, and the console filters every cube
+      - Cost per team and per user is read from these facts, and a dashboard filters every cube
         by the same ``workspace`` dim; a fact without them can't be charged to anyone.
 
     **What it tests:**

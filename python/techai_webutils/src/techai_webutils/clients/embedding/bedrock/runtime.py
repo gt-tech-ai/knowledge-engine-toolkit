@@ -1,7 +1,7 @@
 """Lazily opened aiobotocore bedrock-runtime client for the Bedrock embedding provider.
 
 Carved out of unit coverage like the other aiobotocore wrappers: its lines are the real SDK calls,
-exercised against Bedrock in staging.
+exercised against real Bedrock, not by unit tests.
 """
 
 from __future__ import annotations

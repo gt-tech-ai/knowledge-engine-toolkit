@@ -112,7 +112,7 @@ class _Lookup:
 
 
 _LOOKUP_LABELS = ["org_id", "path", "workspace"]
-"""Labels on every cache lookup counter: the org the console filters by, the path and workspace."""
+"""Labels on every cache lookup counter: the org a dashboard filters by, the path and workspace."""
 
 
 class SemanticCacheProxy:

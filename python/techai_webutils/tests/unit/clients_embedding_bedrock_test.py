@@ -65,7 +65,7 @@ class TestBedrockEmbeddingProvider:
         """embed() calls InvokeModel with the Titan v2 body and returns the vector plus its token count.
 
         Why this test is important:
-          - The semantic cache on staging embeds every first-turn query through this call; a wrong body
+          - A semantic cache embeds every query through this call; a wrong body
             (missing ``dimensions`` or ``normalize``) yields vectors the cache index can't compare.
 
         What it tests:
@@ -186,7 +186,7 @@ class TestBedrockEmbeddingKind:
         """The ``bedrock`` kind builds a ``BedrockEmbeddingProvider`` with the configured model.
 
         Why this test is important:
-          - Staging selects the Bedrock embedder by config alone; the factory must honour the kind.
+          - A deployment selects the Bedrock embedder by config alone; the factory must honour the kind.
 
         What it tests:
           - kind=bedrock → a ``BedrockEmbeddingProvider`` reporting the configured model and dimension,

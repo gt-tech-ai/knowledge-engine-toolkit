@@ -1,6 +1,6 @@
 """Embedding provider clients (Go Layer-2 adapters behind ``core.interfaces.embedding``).
 
-Text→vector providers selected by config via ``new_embedding_from_config`` (Ollama for local dev, Bedrock Titan for staging). Package
+Text→vector providers selected by config via ``new_embedding_from_config`` (Ollama for local dev, Bedrock Titan on AWS). Package
 shape: builder at top, each backend its own subpackage.
 """
 

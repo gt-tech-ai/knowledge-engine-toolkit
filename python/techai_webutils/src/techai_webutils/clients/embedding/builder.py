@@ -1,7 +1,7 @@
 """Env-aware embedding provider factory (foundation/logger ``NewFromConfig`` pattern).
 
 Selects the embedding backend from ``EmbeddingConfig.kind``: Ollama (local dev), Amazon Titan on
-Bedrock (``bedrock``; staging, e.g. the semantic cache's query embedder), or a deterministic in-process
+Bedrock (``bedrock``; e.g. a semantic cache's query embedder on AWS), or a deterministic in-process
 stub (``stub``; no infra). A managed knowledge base that embeds server-side needs no separate provider.
 """
 
@@ -23,7 +23,7 @@ class EmbeddingKind(StrEnum):
     OLLAMA = "ollama"
     """The local Ollama embedding server (``/api/embed``; dev)."""
     BEDROCK = "bedrock"
-    """Amazon Titan text embeddings on Bedrock (bedrock-runtime ``InvokeModel``; staging)."""
+    """Amazon Titan text embeddings on Bedrock (bedrock-runtime ``InvokeModel``)."""
     STUB = "stub"
     """Deterministic in-process stub (dev/test/all-stubs; no Ollama)."""
 

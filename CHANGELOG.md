@@ -28,7 +28,7 @@ Python: `techai-webutils` 0.9.0.
 - Python `SemanticCacheProxy` counters carry an `org_id` label (from `fact_dimensions`; empty
   without one): `semantic_cache_{hits,misses}_total` and `semantic_cache_saving_usd_total` are now
   labelled `{org_id,path,workspace}`, and the new `semantic_cache_lookups_total` counts every lookup,
-  so a console reads one org's hit rate as hits over lookups. Dashboards that sum the counters are
+  so a dashboard reads one org's hit rate as hits over lookups. Dashboards that sum the counters are
   unaffected; a query that matched on the exact label set needs the new label.
 - Python `route_decisions` facts name the workspace in a `workspace` dim (was `workspace_id`),
   matching the other cubes.

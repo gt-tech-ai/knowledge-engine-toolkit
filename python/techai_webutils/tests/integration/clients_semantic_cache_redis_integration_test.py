@@ -2,8 +2,8 @@
 
 The unit suite mocks the client; only a real server proves the index schema, the namespace-tag
 filter, KNN ranking by cosine distance, TTL expiry and SCAN-based eviction. Every test runs on both
-engines: Redis Stack (RediSearch, the dev Compose image) and Valkey Bundle (the ``search`` module,
-what ElastiCache for Valkey 9 serves on staging).
+engines: Redis Stack (RediSearch) and Valkey Bundle (the ``search`` module,
+as ElastiCache for Valkey 9 serves it).
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 _IMAGES = ["redis/redis-stack-server:7.4.0-v1", "valkey/valkey-bundle:9.1.4"]
 """The two search-capable engines: Redis Stack ships RediSearch (plain redis:7 does not), and Valkey
-Bundle 9.1 ships the ``search`` module, the Valkey major ElastiCache runs on staging."""
+Bundle 9.1 ships the ``search`` module, the Valkey major ElastiCache for Valkey serves."""
 
 _NS = CacheNamespace("ws-1", "axes", "3")
 _OTHER = CacheNamespace("ws-2", "axes", "3")
