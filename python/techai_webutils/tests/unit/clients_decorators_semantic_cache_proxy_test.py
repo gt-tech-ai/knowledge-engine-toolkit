@@ -6,9 +6,10 @@ import asyncio
 import json
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
+from prometheus_client import CollectorRegistry
 
 from techai_webutils.clients.decorators.semantic_cache_proxy import (
     SemanticCacheBinding,
@@ -30,6 +31,7 @@ from techai_webutils.core.interfaces.semantic_cache import (
     SemanticCache,
     served_from_cache,
 )
+from techai_webutils.foundation.metrics.metrics import PrometheusMetricsProvider
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -129,6 +131,11 @@ def _metrics() -> tuple[MagicMock, dict[str, MagicMock]]:
         side_effect=lambda name, *_a: counters.setdefault(name, MagicMock())
     )
     return metrics, counters
+
+
+def _increments(counter: MagicMock) -> list[Any]:
+    """Return ``counter``'s non-zero ``inc`` calls (dropping the 0 that creates a series)."""
+    return [c for c in counter.inc.call_args_list if c.args[0]]
 
 
 @pytest.mark.asyncio
@@ -246,11 +253,11 @@ async def test_semantic_cache_proxy_emits_hit_and_saving_metrics() -> None:
     await _proxy(_inner(), _cache(), metrics=metrics, **org).complete(_MESSAGES)
 
     labels = {"org_id": "o1", "path": "generation", "workspace": "ws-1"}
-    counters["semantic_cache_hits_total"].inc.assert_called_once_with(1.0, **labels)
-    counters["semantic_cache_saving_usd_total"].inc.assert_called_once_with(
-        0.002, **labels
-    )
-    counters["semantic_cache_misses_total"].inc.assert_called_once_with(1.0, **labels)
+    assert _increments(counters["semantic_cache_hits_total"]) == [call(1.0, **labels)]
+    assert _increments(counters["semantic_cache_saving_usd_total"]) == [
+        call(0.002, **labels)
+    ]
+    assert _increments(counters["semantic_cache_misses_total"]) == [call(1.0, **labels)]
     assert counters["semantic_cache_lookups_total"].inc.call_count == 2
     counters["semantic_cache_lookups_total"].inc.assert_called_with(1.0, **labels)
     registered = {call.args[0]: call.args[2] for call in metrics.counter.call_args_list}
@@ -278,8 +285,48 @@ async def test_semantic_cache_proxy_counts_without_an_org() -> None:
     await _proxy(_inner(), _cache(), metrics=metrics).complete(_MESSAGES)
 
     labels = {"org_id": "", "path": "generation", "workspace": "ws-1"}
-    counters["semantic_cache_misses_total"].inc.assert_called_once_with(1.0, **labels)
+    assert _increments(counters["semantic_cache_misses_total"]) == [call(1.0, **labels)]
     counters["semantic_cache_lookups_total"].inc.assert_called_once_with(1.0, **labels)
+
+
+@pytest.mark.asyncio
+async def test_semantic_cache_proxy_creates_the_hit_series_on_the_first_miss() -> None:
+    """Test that a label set's first miss leaves its hit series in the registry at 0.
+
+    **Why this test is important:**
+      - Prometheus' ``increase()`` measures growth between samples, so a counter series whose
+        first sample is already 1 reads as no change: without a 0 sample the first cache hit of
+        a workspace never reaches a hit-rate panel.
+
+    **What it tests:**
+      - after one miss, ``semantic_cache_hits_total`` and ``semantic_cache_saving_usd_total``
+        exist at 0 for the lookup's ``org_id``/``path``/``workspace``; misses read 1
+      - a later hit through the same proxy raises the hit series to 1
+    """
+    registry = CollectorRegistry()
+    org = {"fact_dimensions": lambda: {"org_id": "o1"}}
+    cache = _cache()
+    proxy = _proxy(_inner(), cache, metrics=PrometheusMetricsProvider(registry), **org)
+    labels = {"org_id": "o1", "path": "generation", "workspace": "ws-1"}
+
+    await proxy.complete(_MESSAGES)
+
+    assert registry.get_sample_value(
+        "semantic_cache_hits_total", labels
+    ) == pytest.approx(0.0)
+    assert registry.get_sample_value(
+        "semantic_cache_saving_usd_total", labels
+    ) == pytest.approx(0.0)
+    assert registry.get_sample_value(
+        "semantic_cache_misses_total", labels
+    ) == pytest.approx(1.0)
+
+    cache.lookup = AsyncMock(return_value=_HIT)
+    await proxy.complete(_MESSAGES)
+
+    assert registry.get_sample_value(
+        "semantic_cache_hits_total", labels
+    ) == pytest.approx(1.0)
 
 
 @pytest.mark.asyncio

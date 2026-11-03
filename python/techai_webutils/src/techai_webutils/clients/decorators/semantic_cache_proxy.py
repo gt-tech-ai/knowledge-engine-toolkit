@@ -22,8 +22,9 @@ Everything else the cache, the hook or the telemetry raise is logged, counted
 replacement, the proxy can never fail or change the answer. Every lookup counts
 ``semantic_cache_lookups_total`` plus ``…_hits_total`` (with ``…_saving_usd_total``) or
 ``…_misses_total``, each labelled ``org_id`` (from ``fact_dimensions``; empty without one),
-``path`` and ``workspace``, so a hit rate is hits over lookups for one org. ``enabled=False`` or a
-``StubSemanticCache`` makes it a passthrough. Each lookup publishes one ``cache_lookups``
+``path`` and ``workspace``, so a hit rate is hits over lookups for one org. The first lookup of a
+label set creates its hit, miss and saving series at 0, so ``increase()`` counts their first
+increment. ``enabled=False`` or a ``StubSemanticCache`` makes it a passthrough. Each lookup publishes one ``cache_lookups``
 fact (outcome, similarity bin, model, workspace; lookups, saving).
 """
 
@@ -169,6 +170,7 @@ class SemanticCacheProxy:
         self._bins = similarity_bins
         self._logger = get_logger("semantic_cache_proxy")
         self._counters: dict[str, MetricCounter] = {}
+        self._seen: set[tuple[str, ...]] = set()
         if metrics is not None:
             for name, help_text, labels in (
                 (
@@ -271,6 +273,7 @@ class SemanticCacheProxy:
             "path": self._path,
             "workspace": found.namespace.workspace_id,
         }
+        self._materialize(labels)
         self._count("semantic_cache_lookups_total", 1.0, **labels)
         if found.hit is None:
             self._count("semantic_cache_misses_total", 1.0, **labels)
@@ -279,6 +282,24 @@ class SemanticCacheProxy:
         self._count("semantic_cache_hits_total", 1.0, **labels)
         self._count("semantic_cache_saving_usd_total", float(saving), **labels)
         return saving
+
+    def _materialize(self, labels: dict[str, str]) -> None:
+        """Create the hit, miss and saving series of a label set at 0 the first time it is seen.
+
+        A Prometheus counter series exists only once it is incremented, so its first sample is
+        already 1 and ``increase()`` reads it as no change. A hit always follows the miss that
+        stored its answer, so creating the hit series at 0 on that miss lets the first hit count.
+        """
+        key = tuple(labels[name] for name in _LOOKUP_LABELS)
+        if key in self._seen:
+            return
+        self._seen.add(key)
+        for name in (
+            "semantic_cache_hits_total",
+            "semantic_cache_misses_total",
+            "semantic_cache_saving_usd_total",
+        ):
+            self._count(name, 0.0, **labels)
 
     def _bin(self, similarity: float) -> str:
         """Return the lower edge of the bin ``similarity`` falls in (``<edge`` below the first)."""

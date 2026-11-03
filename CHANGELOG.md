@@ -6,6 +6,18 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.43] - 2026-11-03
+
+Python: `techai-webutils` 0.8.3. No Go change.
+
+### Fixed
+
+- Python `SemanticCacheProxy` creates the `semantic_cache_hits_total`, `…_misses_total` and
+  `…_saving_usd_total` series of an `org_id`/`path`/`workspace` label set at 0 on its first
+  lookup. Before, each series appeared only on its first increment, already at 1, so
+  Prometheus' `increase()` read it as no change and a workspace's first hit never reached a hit
+  rate. A hit always follows the miss that stored its answer, so the first hit now counts.
+
 ## [0.0.42] - 2026-11-03
 
 Python: `techai-webutils` 0.8.2.
