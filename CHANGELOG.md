@@ -16,6 +16,16 @@ All notable changes to this project are recorded here. The format follows
   `EmbeddingConfig.timeout_seconds`; `EmbeddingConfig.region` names its region. A deployment with
   no local Ollama can now run the semantic cache.
 
+### Fixed
+
+- Python `RedisSemanticCache` runs on Valkey Search (Valkey 9 with the `search` module, as
+  ElastiCache serves it) as well as RediSearch. Before, every lookup on Valkey failed open into a
+  miss: the KNN query sorted on its score alias, which Valkey Search rejects, and redis-py could
+  not parse Valkey's `FT.SEARCH` reply. `invalidate_all` evicted nothing there, because
+  `FT.DROPINDEX … DD` is rejected. The lookup now issues `FT.SEARCH` directly and reads either
+  reply shape; `invalidate_all` drops the index and unlinks the index documents itself. The
+  integration suite runs on `redis/redis-stack-server:7.4.0-v1` and `valkey/valkey-bundle:9.1.4`.
+
 ## [0.0.40] - 2026-11-01
 
 Python: `techai-webutils` 0.8.0.

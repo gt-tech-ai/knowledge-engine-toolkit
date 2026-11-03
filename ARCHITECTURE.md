@@ -672,8 +672,8 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
 - **Semantic cache:** `core/interfaces/semantic_cache.py` (`SemanticCache` extends
   `CacheInvalidator`; `CacheNamespace` partitions by workspace, embedding space and scope) and
   `clients/semantic_cache` (`stub`; `redis` stores payloads in the injected KV cache and keys
-  similarity with a RediSearch cosine KNN index on the same Redis, so it needs Redis Stack or
-  RediSearch; keys lead with the workspace so `invalidate_prefix(<workspace>)` evicts one tenant).
+  similarity with a cosine KNN index on the same server, so it needs a search module: RediSearch
+  (Redis Stack) or Valkey Search (Valkey 9, e.g. ElastiCache); keys lead with the workspace so `invalidate_prefix(<workspace>)` evicts one tenant).
 - **Model gateway:** `core/interfaces/model_gateway.py` (`ModelGateway` extends `LLMProvider`
   with `resolve(RouteContext)`; `RouteDecision` in a request-scoped slot read through
   `current_route_decision()`) and `clients/model_gateway` (`passthrough` wraps one provider built

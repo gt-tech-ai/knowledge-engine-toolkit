@@ -1,4 +1,9 @@
-"""``RedisSemanticCache`` — payloads in the injected KV ``Cache``, similarity in RediSearch.
+"""``RedisSemanticCache`` — payloads in the injected KV ``Cache``, similarity in a search index.
+
+The index runs on either search engine: RediSearch (Redis Stack, dev) or Valkey Search (ElastiCache
+for Valkey 9, staging). Where they differ the code uses only what both accept: no ``SORTBY`` on the
+KNN score, no ``FT.DROPINDEX … DD``, and an ``FT.SEARCH`` reply read in either shape (a RESP3 map
+from RediSearch, the RESP2 array from Valkey Search on the same connection).
 
 Layout (``<p>`` is ``SemanticCacheConfig.index_prefix``; ``<ws>`` the namespace's workspace;
 ``<tag>`` its ``CacheNamespace.tag()``; ``<h>`` the sha256 of the normalized query):
@@ -25,14 +30,13 @@ from typing import TYPE_CHECKING, Any, cast, override
 
 from redis.commands.search.field import TagField, VectorField
 from redis.commands.search.index_definition import IndexDefinition, IndexType
-from redis.commands.search.query import Query
 from redis.exceptions import ResponseError
 
 from techai_webutils.core.interfaces.semantic_cache import CachedAnswer, SemanticCache
 from techai_webutils.foundation.logger.logger import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Awaitable, Callable
 
     from redis.asyncio import Redis
 
@@ -51,8 +55,34 @@ def _text(value: object) -> str:
     return value.decode() if isinstance(value, bytes) else str(value)
 
 
+def _first_document(reply: object) -> dict[str, str] | None:
+    """Return the first ``FT.SEARCH`` document's fields as text, or ``None`` when there is none.
+
+    Reads both reply shapes: the RESP3 map (``{results: [{extra_attributes: {…}}]}``, RediSearch)
+    and the RESP2 array (``[total, id, [field, value, …], …]``, Valkey Search).
+    """
+    if isinstance(reply, dict):
+        results = cast(
+            "list[dict[Any, Any]]", _field(cast("dict[Any, Any]", reply), "results") or []
+        )
+        if not results:
+            return None
+        attributes = cast("dict[Any, Any]", _field(results[0], "extra_attributes") or {})
+        return {_text(k): _text(v) for k, v in attributes.items()}
+    items = cast("list[Any]", reply)
+    if len(items) < 3:  # noqa: PLR2004 - [total, id, fields] is the shortest reply with a hit
+        return None
+    fields = cast("list[Any]", items[2])
+    return {_text(fields[i]): _text(fields[i + 1]) for i in range(0, len(fields) - 1, 2)}
+
+
+def _field(mapping: dict[Any, Any], name: str) -> object:
+    """Return ``mapping[name]`` whether the client decoded keys to ``str`` or left them ``bytes``."""
+    return mapping.get(name, mapping.get(name.encode()))
+
+
 class RedisSemanticCache(SemanticCache):
-    """A semantic cache on the app's Redis: KV payloads plus a RediSearch KNN index."""
+    """A semantic cache on the app's Redis or Valkey: KV payloads plus a search-module KNN index."""
 
     def __init__(
         self,
@@ -90,7 +120,7 @@ class RedisSemanticCache(SemanticCache):
         return f"{namespace.workspace_id}:{namespace.tag()}:{digest}"
 
     def _search(self) -> Any:  # noqa: ANN401 - redis-py's search handle is loosely typed
-        """Return the RediSearch handle for this cache's index."""
+        """Return the search handle for this cache's index (index create and drop)."""
         return self._redis.ft(self._index)
 
     def _failed(self, op: str, exc: Exception) -> None:
@@ -156,28 +186,38 @@ class RedisSemanticCache(SemanticCache):
                 payload=exact, similarity=1.0, source_query=query, embedding_model=model
             )
         await self._ensure_index()
-        knn = (
-            Query(f"(@ns:{{{namespace.tag()}}})=>[KNN 1 @embedding $vec AS dist]")
-            .return_fields("key", "query", "dist")  # pyright: ignore[reportUnknownMemberType]
-            .sort_by("dist")
-            .dialect(2)
+        # Raw FT.SEARCH: redis-py's parser expects the RESP3 map, which Valkey Search never sends.
+        # KNN 1 yields at most one neighbour, so there is no SORTBY (Valkey can't sort on the alias).
+        execute = cast("Callable[..., Awaitable[object]]", self._redis.execute_command)
+        reply = await execute(
+            "FT.SEARCH",
+            self._index,
+            f"(@ns:{{{namespace.tag()}}})=>[KNN 1 @embedding $vec AS dist]",
+            "PARAMS",
+            "2",
+            "vec",
+            await self._vector(query),
+            "RETURN",
+            "3",
+            "key",
+            "query",
+            "dist",
+            "DIALECT",
+            "2",
         )
-        result = await self._search().search(
-            knn, query_params={"vec": await self._vector(query)}
-        )
-        docs = cast("list[Any]", result.docs)
-        if not docs:
+        nearest = _first_document(reply)
+        if nearest is None:
             return None
-        similarity = 1.0 - float(_text(docs[0].dist))
+        similarity = 1.0 - float(nearest["dist"])
         if similarity < min_similarity:
             return None
-        payload = await self._cache.get(_text(docs[0].key))
+        payload = await self._cache.get(nearest["key"])
         if payload is None:
             return None
         return CachedAnswer(
             payload=payload,
             similarity=similarity,
-            source_query=_text(docs[0].query),
+            source_query=nearest["query"],
             embedding_model=model,
         )
 
@@ -229,10 +269,15 @@ class RedisSemanticCache(SemanticCache):
 
     @override
     async def invalidate_all(self) -> None:
-        """Drop the index with its documents and every payload key."""
+        """Drop the index, then every index document and payload key.
+
+        The documents are unlinked here rather than with ``FT.DROPINDEX … DD``, which Valkey Search
+        rejects.
+        """
         try:
-            await self._search().dropindex(delete_documents=True)
+            await self._search().dropindex(delete_documents=False)
             self._index_ready = False
+            await self._unlink_matching(f"{self._prefix}:d:*")
             await self._unlink_matching(f"{self._prefix}:p:*")
         except Exception as exc:
             self._failed("invalidate", exc)
