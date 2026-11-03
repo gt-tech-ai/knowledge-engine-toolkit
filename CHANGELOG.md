@@ -6,6 +6,28 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.42] - 2026-11-03
+
+Python: `techai-webutils` 0.8.2.
+
+### Added
+
+- Go `cache.KindMemory`: an in-process `ByteCache` (`clients/cache/memory`) — bounded, least
+  recently used, each entry expiring at its TTL (`Config.DefaultTTL` for a zero TTL).
+  `Config.Memory.MaxEntries` bounds it (`memory.DefaultMaxEntries`, 10,000, when zero). Each
+  replica holds its own copy, so it suits a value read often that rarely changes, where no
+  shared cache is deployed.
+
+### Fixed
+
+- Go `exponential.Retrier.Retry` and `RetryWithResult` charge the context's retry budget only
+  for the attempts after the first. Before, every first attempt consumed a unit, so a request
+  making more calls than its budget (e.g. `DefaultRetryBudget`, 10) failed with
+  `ErrRetryBudgetExhausted` though no call had failed. A budget of N now allows N retries.
+- Python `TracingServerInterceptor` attaches the inbound context (W3C trace context and
+  baggage) for the whole server call. Before, it only parented the server span on it, so a
+  handler, and the spans and logs it made, could not read the caller's baggage.
+
 ## [0.0.41] - 2026-11-03
 
 Python: `techai-webutils` 0.8.1.
