@@ -17,6 +17,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/circuitbreaker"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/ratelimiter"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -392,6 +393,60 @@ func TestRetryBudget_Remaining(t *testing.T) {
 
 	budget.ConsumeRetry(ctx)
 	assert.Equal(t, int32(2), budget.Remaining(ctx))
+}
+
+// TestRetryBudget_ChargesRetriesNotFirstAttempts tests that a retrier charges the
+// context's retry budget only for the attempts after the first.
+//
+// Why this test is important:
+//   - A request fans out to many decorated calls that share one budget; charging every
+//     first attempt exhausts a budget of N after N calls that never failed, so a
+//     healthy request fails with ErrRetryBudgetExhausted
+//   - A budget of N must mean N retries across the request, as its name says
+//
+// What it tests:
+//   - Calls that succeed first time leave Remaining unchanged (Retry and
+//     RetryWithResult)
+//   - With a budget of 2, an always-transient op runs exactly 3 times (the first
+//     attempt plus 2 retries) before ErrRetryBudgetExhausted
+func TestRetryBudget_ChargesRetriesNotFirstAttempts(t *testing.T) {
+	t.Parallel()
+
+	r := exponential.New(exponential.Config{
+		MaxRetries:      10,
+		InitialInterval: time.Millisecond,
+		MaxInterval:     5 * time.Millisecond,
+		Multiplier:      2.0,
+		MaxElapsedTime:  5 * time.Second,
+	})
+
+	t.Run("first attempts are free", func(t *testing.T) {
+		t.Parallel()
+		ctx := budget.WithRetryBudget(context.Background(), budget.NewBudget(1))
+		for range 3 {
+			require.NoError(t, r.Retry(ctx, func() error { return nil }))
+			v, err := exponential.RetryWithResult(
+				ctx,
+				r,
+				func() (int, error) { return 7, nil },
+			)
+			require.NoError(t, err)
+			assert.Equal(t, 7, v)
+		}
+		assert.Equal(t, int32(1), budget.Remaining(ctx))
+	})
+
+	t.Run("a budget of 2 allows 2 retries", func(t *testing.T) {
+		t.Parallel()
+		ctx := budget.WithRetryBudget(context.Background(), budget.NewBudget(2))
+		var attempts atomic.Int32
+		err := r.Retry(ctx, func() error {
+			attempts.Add(1)
+			return apperr.Sentinel("transient")
+		})
+		require.ErrorIs(t, err, budget.ErrRetryBudgetExhausted)
+		assert.Equal(t, int32(3), attempts.Load())
+	})
 }
 
 // ---------------------------------------------------------------------------
