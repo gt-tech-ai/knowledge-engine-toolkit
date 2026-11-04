@@ -14,9 +14,9 @@ Layout (``<p>`` is ``SemanticCacheConfig.index_prefix``; ``<ws>`` the namespace'
 - **Index** — ``<p>:idx`` over the ``<p>:d:`` prefix: ``ns`` TAG + ``embedding`` HNSW COSINE of the
   embedder's dimension, created lazily (idempotently) on first use.
 
-``lookup`` tries the exact repeat first (no embedding), then the top-1 KNN within the namespace's
-tag; a neighbour counts when ``1 - distance`` reaches ``min_similarity`` and its payload still
-exists. Every backend error is logged, counted (``semantic_cache_errors_total{op}``) and turned
+``exact`` reads the normalized repeat's payload (no embedding); ``nearest`` runs the top-1 KNN
+within the namespace's tag and returns the neighbour with similarity ``1 - distance`` when its
+payload still exists, leaving any threshold to the caller (``lookup`` and the match tiers). Every backend error is logged, counted (``semantic_cache_errors_total{op}``) and turned
 into a miss or a no-op. The workspace leads the key so ``invalidate_prefix(<workspace>)`` evicts
 one tenant.
 """
@@ -48,6 +48,9 @@ if TYPE_CHECKING:
 
 _GLOB = re.compile(r"([*?\[\]\\])")
 """Characters escaped in a ``SCAN MATCH`` pattern built from a caller's prefix."""
+
+_TRAILING_PUNCTUATION = ".?!"
+"""Characters ``strip_trailing_punctuation`` removes from the end of a normalized query."""
 
 
 def _text(value: object) -> str:
@@ -111,8 +114,15 @@ class RedisSemanticCache(SemanticCache):
             )
 
     def _normalize(self, query: str) -> str:
-        """Return ``query`` lower-cased and whitespace-collapsed (when configured)."""
-        return " ".join(query.lower().split()) if self._config.normalize else query
+        """Return ``query`` normalized for keying.
+
+        Lower-cased and whitespace-collapsed when ``normalize`` is on; trailing punctuation
+        removed when ``strip_trailing_punctuation`` is on.
+        """
+        text = " ".join(query.lower().split()) if self._config.normalize else query
+        if self._config.strip_trailing_punctuation:
+            text = text.rstrip(_TRAILING_PUNCTUATION).rstrip()
+        return text
 
     def _suffix(self, query: str, namespace: CacheNamespace) -> str:
         """Return the ``<ws>:<tag>:<h>`` key suffix shared by a payload and its document."""
@@ -163,28 +173,38 @@ class RedisSemanticCache(SemanticCache):
         return struct.pack(f"<{len(values)}f", *values)
 
     @override
-    async def lookup(
-        self, query: str, namespace: CacheNamespace, *, min_similarity: float
-    ) -> CachedAnswer | None:
-        """Return the exact repeat or the closest neighbour above the threshold; fail-open."""
+    async def exact(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
+        """Return the normalized repeat's payload without embedding; fail-open."""
         try:
-            return await self._lookup(query, namespace, min_similarity)
+            payload = await self._cache.get(
+                f"{self._prefix}:p:{self._suffix(query, namespace)}"
+            )
+        except Exception as exc:
+            self._failed("lookup", exc)
+            return None
+        if payload is None:
+            return None
+        return CachedAnswer(
+            payload=payload,
+            similarity=1.0,
+            source_query=query,
+            embedding_model=self._embedding.model_name(),
+        )
+
+    @override
+    async def nearest(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
+        """Return the namespace's closest neighbour with its similarity, unthresholded; fail-open."""
+        try:
+            return await self._nearest(query, namespace)
         except Exception as exc:
             self._failed("lookup", exc)
             return None
 
-    async def _lookup(
-        self, query: str, namespace: CacheNamespace, min_similarity: float
+    async def _nearest(
+        self, query: str, namespace: CacheNamespace
     ) -> CachedAnswer | None:
-        """Run the exact fast path, then the namespace-scoped top-1 KNN."""
+        """Run the namespace-scoped top-1 KNN and read the neighbour's payload."""
         model = self._embedding.model_name()
-        exact = await self._cache.get(
-            f"{self._prefix}:p:{self._suffix(query, namespace)}"
-        )
-        if exact is not None:
-            return CachedAnswer(
-                payload=exact, similarity=1.0, source_query=query, embedding_model=model
-            )
         await self._ensure_index()
         # Raw FT.SEARCH: redis-py's parser expects the RESP3 map, which Valkey Search never sends.
         # KNN 1 yields at most one neighbour, so there is no SORTBY (Valkey can't sort on the alias).
@@ -209,8 +229,6 @@ class RedisSemanticCache(SemanticCache):
         if nearest is None:
             return None
         similarity = 1.0 - float(nearest["dist"])
-        if similarity < min_similarity:
-            return None
         payload = await self._cache.get(nearest["key"])
         if payload is None:
             return None
