@@ -6,6 +6,59 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.45] - 2026-11-04
+
+Python: `techai-webutils` 0.9.1.
+
+### Added
+
+- `execution/executor/ray_runtime.RayUnavailableError` (an `UnavailableError`, so still transient):
+  the Ray cluster connection itself is down. `ResilientRayRuntime` raises it once its connect
+  retries are spent.
+- `PooledExecutor(abort_on=…)`: exception types that abort the whole batch. The first one a worker
+  build or `process` raises stops dispatch and is raised from `run` instead of being isolated into
+  one FAIL per item. The default (empty) keeps today's behavior. A caller running it over the
+  Ray actor pool passes `abort_on=(RayUnavailableError,)`.
+- `ExecutorConfig.ray_worker_setup_hook` and `ray_log_encoding` (and the matching `RealRayRuntime`
+  arguments). The hook is the dotted path of a no-argument callable that Ray runs in every worker
+  process before it runs a task or actor (`worker_process_setup_hook`). It is where a consumer
+  configures logging, since a worker never runs the consumer's entrypoint and otherwise logs plain
+  text. The encoding (`TEXT` or `JSON`) sets Ray's own task and actor log format. Both default to
+  blank, which keeps Ray's defaults.
+
+### Fixed
+
+- A unary gRPC call whose reply cannot be deserialized is retried as a transient `UNAVAILABLE`
+  (naming the method) instead of resolving to `None`. grpc-python only logs "Exception
+  deserializing message!" and hands back `None`, so the caller failed later on `None.<field>`,
+  with no retry and no sign of which RPC broke.
+- A Ray Client driver recovers after the Ray head restarts. The dead session stayed in Ray's
+  client registry, so every later `ray.init("ray://…")` in the process was refused ("already
+  connected to the cluster with allow_multiple=True") until the process restarted.
+  `RealRayRuntime` now clears a registered context that has no live connection before connecting,
+  and re-checks a session it established earlier instead of trusting it. Ray can also keep reporting
+  the dead session as initialized and connected, so `warm_up` proves it live with one round trip to
+  the cluster and replaces it when that fails.
+- A Ray Client connection lost while a batch runs fails the batch, not each item. `RealRayRuntime.submit`
+  raises `RayUnavailableError` (and resets the client) on a gRPC or connection error; a task's own
+  failure (`RayTaskError`) is still the item's. `ResilientRayRuntime` connects once per batch rather
+  than per item, and reconnects after a lost connection.
+- `RayExecutor.run` no longer turns an unreachable cluster into one FAIL per item, which let a
+  queue consumer acknowledge and drop the batch. It connects before the first item, and a
+  `RayUnavailableError` (at that connect or mid-batch) stops dispatch and is raised, so the
+  consumer redrives the batch. An item's own `UnavailableError` (a downstream outage) is still a
+  per-item FAIL.
+- `ResilientRayRuntime`'s connect is single-flight. Concurrent `submit`s share one retry sequence,
+  and callers waiting on a sequence that failed share its error, instead of each item running its
+  own: a batch against a down cluster made items x attempts connects.
+- The Ray actor pool (`real_ray_pool.ray_worker_factory`) connects through the same
+  resilience-decorated runtime as the task path (an injectable `RayRuntime`, by default
+  `ray_runtime_from_config`) instead of its own unretried `ray.init`, so it gets the retry,
+  stale-client recovery and `RayUnavailableError` too.
+- Ray actor-pool actors restart (`max_restarts=3`) and re-run lost calls (`max_task_retries=3`)
+  when their process dies, instead of failing every later item routed to their slot.
+  `PooledWorker.process` must tolerate a re-run of the same item.
+
 ## [0.0.44] - 2026-11-04
 
 Python: `techai-webutils` 0.9.0.

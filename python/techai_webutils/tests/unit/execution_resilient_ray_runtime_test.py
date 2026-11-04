@@ -16,7 +16,7 @@ import pytest
 
 from techai_webutils.core.errors.errors import ErrorCode, UnavailableError
 from techai_webutils.core.interfaces.execution import StepResult
-from techai_webutils.execution.executor.ray_runtime import RayRuntime
+from techai_webutils.execution.executor.ray_runtime import RayRuntime, RayUnavailableError
 from techai_webutils.execution.executor.resilient_ray_runtime import ResilientRayRuntime
 
 
@@ -126,3 +126,65 @@ class TestResilientRayRuntime:
         assert result.name == "item-5"
         inner.warm_up.assert_awaited()
         inner.submit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_concurrent_callers_share_one_exhausted_connect(self) -> None:
+        """Test that concurrent callers against a down cluster share ONE retry sequence and its failure.
+
+        **Why this test is important:**
+          - Every item of a batch calls ``submit`` concurrently; when each ran its own retry sequence, a
+            308-item batch against a down cluster made 308 x 5 connect attempts and took 22 minutes to
+            fail, flooding the log.
+
+        **What it tests:**
+          - Ten concurrent ``warm_up`` calls against an always-failing connect make exactly
+            ``max_attempts`` inner connect attempts in total, and every caller gets a
+            ``RayUnavailableError`` (the batch-wide cluster-down error, still transient).
+        """
+        inner = create_autospec(RayRuntime, instance=True)
+        inner.warm_up.side_effect = RuntimeError("Ray head unreachable")
+        runtime = ResilientRayRuntime(
+            inner, max_attempts=3, base_delay=0.0, max_delay=0.0
+        )
+
+        outcomes = await asyncio.gather(
+            *(runtime.warm_up() for _ in range(10)), return_exceptions=True
+        )
+
+        assert inner.warm_up.await_count == 3
+        assert all(isinstance(o, RayUnavailableError) for o in outcomes)
+        assert all(isinstance(o, UnavailableError) and o.is_transient for o in outcomes)
+
+    @pytest.mark.asyncio
+    async def test_a_batch_connects_once_and_reconnects_after_a_lost_connection(
+        self,
+    ) -> None:
+        """Test that items share one connect, and a lost connection makes the next batch reconnect.
+
+        **Why this test is important:**
+          - The connect proves the session live with a round trip to the cluster; doing that per item
+            doubles a batch's cluster calls, while skipping it after a lost connection hands the next
+            batch the dead session.
+
+        **What it tests:**
+          - Ten concurrent ``submit`` calls on a fresh runtime connect once.
+          - After ``submit`` reports ``RayUnavailableError``, the next ``submit`` connects again.
+        """
+        inner = create_autospec(RayRuntime, instance=True)
+        inner.submit.return_value = StepResult(name="item")
+        runtime = ResilientRayRuntime(inner, **_FAST)
+
+        async def mapper(item: int) -> StepResult:
+            await asyncio.sleep(0)
+            return StepResult(name=str(item))
+
+        await asyncio.gather(*(runtime.submit(mapper, i) for i in range(10)))
+        assert inner.warm_up.await_count == 1
+
+        inner.submit.side_effect = RayUnavailableError("ray cluster connection lost")
+        with pytest.raises(RayUnavailableError):
+            await runtime.submit(mapper, 0)
+        inner.submit.side_effect = None
+        await runtime.submit(mapper, 0)
+
+        assert inner.warm_up.await_count == 2

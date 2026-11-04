@@ -552,7 +552,15 @@ Python `execution` mirrors these (`fan_out`, `run_job_group`, `new_gate`, `run_g
 `Executor` seam. `executor_from_config` chooses `AsyncioExecutor` (default) or `RayExecutor` over
 the `RayRuntime` seam (the lazily imported `RealRayRuntime`, wrapped by the `ResilientRayRuntime`
 retry decorator); `PooledExecutor` (a fixed pool of build-once workers) has no kind, so the caller
-builds it directly.
+builds it directly. An unreachable Ray cluster is batch-wide, not per-item: the decorator's
+single-flight connect raises `RayUnavailableError` once its retries are spent, `RayExecutor` connects
+before the first item and raises it instead of failing every item, and `PooledExecutor` does the same
+for the exception types passed as `abort_on`. A queue consumer therefore redrives the batch rather
+than acknowledging a batch of failures. `RealRayRuntime` recovers a Ray Client session lost to a head
+restart, and the Ray actor pool connects through the same runtime and restarts actors whose process
+died. A Ray worker process never runs the consumer's entrypoint, so the consumer configures it through
+`ExecutorConfig.ray_worker_setup_hook` (a dotted path Ray runs in each worker before its first task)
+and `ray_log_encoding` (Ray's own task and actor log encoding).
 
 ## Background loops
 

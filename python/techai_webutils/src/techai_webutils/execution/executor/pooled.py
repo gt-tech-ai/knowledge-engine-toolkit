@@ -107,12 +107,20 @@ class PooledExecutor[T]:
         pool_size: int,
         observer: ExecutionObserver | None = None,
         name: str = "executor",
+        abort_on: tuple[type[Exception], ...] = (),
     ) -> None:
-        """Bind the worker factory, pool size, and the observer/batch name forwarded to ``fan_out``."""
+        """Bind the worker factory, pool size, the observer/batch name, and the batch-wide error types.
+
+        ``abort_on`` names exceptions that mean the whole pool is unusable (e.g. the Ray cluster is
+        unreachable): the first one raised by a worker build or ``process`` stops dispatch and is raised
+        from ``run`` instead of being isolated into one FAIL per item. Empty (the default) isolates
+        every exception.
+        """
         self._factory = factory
         self._pool_size = max(pool_size, 1)
         self._observer = observer
         self._name = name
+        self._abort_on = abort_on
 
     async def run(self, items: Sequence[T], *, concurrency: int) -> BatchResult:
         """Route each item to a pooled worker (built once per slot), isolating per-item failure.
@@ -120,25 +128,40 @@ class PooledExecutor[T]:
         The pool is sized to ``min(pool_size, len(items))`` so a tiny batch never spawns idle
         workers, and every worker actually built is closed on the way out (even if ``fan_out``
         raises), so no client or actor is leaked.
+
+        Raises:
+            Exception: The first ``abort_on`` exception a worker raised; the remaining items were not
+                dispatched.
+
         """
         size = min(self._pool_size, len(items)) or 1
         slots = [LazyWorker(self._factory) for _ in range(size)]
         cursor = 0
+        aborted: list[Exception] = []
 
         async def dispatch(item: T) -> StepResult:
             nonlocal cursor
+            if aborted:
+                raise aborted[0]
             # Claim a slot round-robin. No await between the read and the increment, so on the
             # single-threaded event loop this is atomic — concurrent dispatches spread evenly. The
             # slot's ``LazyWorker`` builds its worker exactly once even under concurrent first hits.
             slot = cursor % size
             cursor += 1
-            worker = await slots[slot].get()
-            return await worker.process(item)
+            try:
+                worker = await slots[slot].get()
+                return await worker.process(item)
+            except self._abort_on as exc:
+                aborted.append(exc)
+                raise
 
         try:
-            return await fan_out(
+            batch = await fan_out(
                 items, concurrency, dispatch, self._observer, name=self._name
             )
+            if aborted:
+                raise aborted[0]
+            return batch
         finally:
             # Close every built worker independently: gather so one worker's aclose failure (e.g. a Ray
             # actor proxy whose actor already died) can't strand the rest — leaking their actor slots /
