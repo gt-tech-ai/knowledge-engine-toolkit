@@ -19,7 +19,7 @@ from grpc.aio import (
 )
 from opentelemetry.propagate import inject
 
-from techai_webutils.core.errors import AppError
+from techai_webutils.core.errors import AppError, UnavailableError
 from techai_webutils.foundation.resilience.grpc_boundary import grpc_error_to_app_error
 
 if TYPE_CHECKING:
@@ -115,9 +115,15 @@ class _UnaryClient(grpc.aio.UnaryUnaryClientInterceptor):
         async def attempt() -> UnaryUnaryCall[TRequest, TResponse]:
             call = await continuation(outgoing(client_call_details, self._token), request)
             try:
-                await call
+                response = await call
             except AioRpcError as exc:
                 raise grpc_error_to_app_error(exc) from exc
+            if response is None:
+                # grpc-python logs "Exception deserializing message!" and hands back None when
+                # the reply's bytes do not parse; surface that as a transient failure so the tier
+                # retries the call instead of the caller failing on a None response.
+                msg = f"{operation(client_call_details.method)}: response could not be decoded"
+                raise UnavailableError(msg)
             return call
 
         try:

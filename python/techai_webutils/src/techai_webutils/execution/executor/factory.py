@@ -44,6 +44,11 @@ class ExecutorConfig:
     """Ray cluster address; blank ⇒ a local cluster, ``ray://<head-host>:10001`` ⇒ a remote cluster."""
     ray_namespace: str = ""
     """Optional Ray namespace to isolate this workload's actors/tasks (blank ⇒ Ray's default)."""
+    ray_worker_setup_hook: str = ""
+    """Ray-only: dotted path of a no-argument callable run in every Ray worker process before its tasks
+    (Ray's ``worker_process_setup_hook``) — where the consumer configures logging; blank ⇒ none."""
+    ray_log_encoding: str = ""
+    """Ray-only: encoding of Ray's task and actor logs (``TEXT`` or ``JSON``); blank ⇒ Ray's default."""
     actor_pool_size: int = 0
     """Ray-only: number of pooled worker actors that reuse clients per worker.
 
@@ -89,5 +94,7 @@ def ray_runtime_from_config(config: ExecutorConfig) -> RayRuntime:
     inner = RealRayRuntime(
         address=config.ray_address or None,
         namespace=config.ray_namespace or None,
+        worker_setup_hook=config.ray_worker_setup_hook or None,
+        log_encoding=config.ray_log_encoding or None,
     )
     return ResilientRayRuntime(inner)
