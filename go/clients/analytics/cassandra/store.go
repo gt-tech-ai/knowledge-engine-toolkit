@@ -335,7 +335,9 @@ func (s *Store) insert(
 }
 
 // Aggregate opens a page-at-a-time stream over the buckets of q.TimeRange. The
-// table is q.Grain's (the cube's coarsest grain when unset). An undeclared cube or
+// table is q.Grain's (the cube's coarsest grain when unset). The read starts at the
+// start of the grain bucket the range (or a pushed-down ts clause) begins in, so a
+// bucket the window only partly covers is counted whole. An undeclared cube or
 // grain, a missing org, an open-ended time range, or a resume token issued for a
 // different query is CodeInvalidInput; a store not yet started is CodeUnavailable.
 func (s *Store) Aggregate(
@@ -368,6 +370,9 @@ func (s *Store) Aggregate(
 	}
 	width := s.cfg.BucketWidth[grain]
 	lo, hi := pushdown(q.Filter, q.TimeRange.From.UTC(), q.TimeRange.To.UTC())
+	// A row is stamped at its grain bucket's start, so the read starts at the bucket
+	// lo falls in: a window starting mid-bucket counts that bucket rather than losing it.
+	lo = chartspec.Truncate(lo, grain)
 	var buckets []time.Time
 	for b := chartspec.Truncate(lo, width); b.Before(hi); b = chartspec.Next(b, width) {
 		buckets = append(buckets, b)
