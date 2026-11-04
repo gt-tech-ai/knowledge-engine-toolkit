@@ -224,6 +224,50 @@ func TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual(t *testing.T) {
 	assert.Equal(t, day(time.October, 6), rows[0].TS)
 }
 
+// TestCassandraStore_ReadsTheWindowsPartialFirstBucket tests a window that starts
+// inside a bucket.
+//
+// Why this test is important:
+//   - A row is stamped at its bucket's start, so filtering rows on ts >= from drops
+//     the bucket the window starts in: a "last 24h" read of a day table lost the
+//     whole current day, and an hourly trend its first hour.
+//
+// What it tests:
+//   - a day-grain query from Oct 9 02:54 to Oct 10 02:54 reads the Oct 1 partition
+//     over [Oct 9 00:00, Oct 10 02:54) and returns the Oct 9 row
+func TestCassandraStore_ReadsTheWindowsPartialFirstBucket(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	session := mocks.NewMockCQLSession(ctrl)
+	store := newCassandraStore(t, session)
+	from := day(time.October, 9).Add(2*time.Hour + 54*time.Minute)
+	to := from.Add(24 * time.Hour)
+	expectPage(ctrl, session, day(time.October, 1), day(time.October, 9), to,
+		[]storedRow{{
+			ts:       day(time.October, 9),
+			dims:     map[string]string{"team": "t-1"},
+			partials: map[string][]byte{"tokens_in": encoded(t, 3)},
+		}})
+
+	stream, err := store.Aggregate(context.Background(), types.AggregateQuery{
+		Cube:      "genai_calls",
+		OrgID:     "org-1",
+		Grain:     types.GrainDay,
+		GroupBy:   []string{"team"},
+		Measures:  []types.MeasureRef{{Name: "tokens_in", Agg: types.AggSum}},
+		TimeRange: types.TimeRange{From: from, To: to},
+	})
+	require.NoError(t, err)
+	rows, more, err := stream.Next(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, stream.Close())
+
+	assert.False(t, more)
+	require.Len(t, rows, 1)
+	assert.Equal(t, day(time.October, 9), rows[0].TS)
+}
+
 // TestCassandraStore_WriteUpsertsOnePartialRowPerGrain tests the idempotent write
 // path: one INSERT per declared grain, keyed by the fact's idempotency key.
 //

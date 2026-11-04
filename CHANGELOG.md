@@ -6,6 +6,24 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.43] - 2026-11-03
+
+Python: `techai-webutils` 0.8.3.
+
+### Fixed
+
+- Go Cassandra analytics `Store.Aggregate` starts its read at the start of the grain
+  bucket the window (or a pushed-down `ts` clause) begins in. A row is stamped at its
+  bucket's start, so filtering rows on `ts >= from` dropped the bucket a window starts
+  in: a "last 24h" query of a day table lost the whole current day, and an hourly trend
+  its first hour. A bucket the window only partly covers is now counted whole.
+
+- Python `SemanticCacheProxy` creates the `semantic_cache_hits_total`, `…_misses_total` and
+  `…_saving_usd_total` series of an `org_id`/`path`/`workspace` label set at 0 on its first
+  lookup. Before, each series appeared only on its first increment, already at 1, so
+  Prometheus' `increase()` read it as no change and a workspace's first hit never reached a hit
+  rate. A hit always follows the miss that stored its answer, so the first hit now counts.
+
 ## [0.0.42] - 2026-11-03
 
 Python: `techai-webutils` 0.8.2.
