@@ -270,8 +270,12 @@ collaborator or zero timeout skips its layer; recovery needs none.
   propagates; every other cache, hook or telemetry failure is swallowed and counted;
   `enabled=False` or a `StubSemanticCache` is a passthrough. Metrics:
   `semantic_cache_{lookups,hits,misses}_total` and `semantic_cache_saving_usd_total`, each
-  labelled `{org_id,path,workspace}` (`org_id` from `fact_dimensions`, empty without it), so a
-  hit rate is hits over lookups per org; one `cache_lookups` fact per lookup.
+  labelled `{org_id,path,workspace}` (`org_id` from `fact_dimensions`, empty without it; hits
+  add the serving `tier`), so a hit rate is hits over lookups per org; one `cache_lookups` fact
+  per lookup. The read, serve and write steps live in `clients/semantic_cache/reader.
+  SemanticCacheReader`, which the proxy composes and a workflow-level cache drives by hand; an
+  injected `CacheLookup` (`lookup=`) selects the match tiers, else the backend's own `lookup` at
+  `min_similarity` is used.
 - **Python — per-key rate limits.** `core/interfaces/rate_limiter.PerKeyRateLimiter`
   (`allow_key(key)`, async) has two kinds behind `foundation/resilience/per_key_builder`:
   `memory` (`InMemoryRateLimiter`, per replica; the default) and `redis`
@@ -675,6 +679,11 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
   `clients/semantic_cache` (`stub`; `redis` stores payloads in the injected KV cache and keys
   similarity with a cosine KNN index on the same server, so it needs a search module: RediSearch
   (Redis Stack) or Valkey Search (Valkey 9, e.g. ElastiCache); keys lead with the workspace so `invalidate_prefix(<workspace>)` evicts one tenant).
+  A backend exposes two primitives, `exact` (the normalized repeat, no embedding) and `nearest`
+  (the nearest neighbour, no threshold). `clients/semantic_cache/tiers` chains config-selected
+  tiers over them (`exact`, `semantic`, and `verified`, a band confirmed by a `CacheVerifier` from
+  `clients/semantic_cache/verifier`). `clients/semantic_cache/admission` decides which queries
+  are cached at all.
 - **Model gateway:** `core/interfaces/model_gateway.py` (`ModelGateway` extends `LLMProvider`
   with `resolve(RouteContext)`; `RouteDecision` in a request-scoped slot read through
   `current_route_decision()`) and `clients/model_gateway` (`passthrough` wraps one provider built

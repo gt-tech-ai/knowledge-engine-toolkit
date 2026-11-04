@@ -94,3 +94,20 @@ def test_semantic_cache_from_config_redis_requires_collaborators() -> None:
         semantic_cache_from_config(config, cache=MagicMock(spec=Cache))
 
     assert caught.value.code is ErrorCode.INVALID_INPUT
+
+
+@pytest.mark.asyncio
+async def test_stub_semantic_cache_primitives_miss() -> None:
+    """Test that the stub's ``exact`` and ``nearest`` both miss.
+
+    **Why this test is important:**
+      - The stub is the zero-infra default; a tier chain over it must behave as uncached.
+
+    **What it tests:**
+      - ``exact`` and ``nearest`` return ``None``
+    """
+    cache = StubSemanticCache()
+    ns = CacheNamespace("ws-1", "m", "v1")
+
+    assert await cache.exact("q", ns) is None
+    assert await cache.nearest("q", ns) is None

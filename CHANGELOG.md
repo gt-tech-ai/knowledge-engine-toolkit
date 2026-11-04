@@ -6,6 +6,47 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.44] - 2026-11-04
+
+Python: `techai-webutils` 0.9.0.
+
+### Added
+
+- Python semantic cache match tiers. `clients/semantic_cache/tiers.cache_lookup_from_config`
+  builds an ordered `CacheLookup` from `CacheTierConfig` rows (`exact`, `semantic`,
+  `verified`). The first tier that serves wins and stamps `CachedAnswer.tier`. `semantic` and
+  `verified` share one neighbour search per lookup. A per-call `min_similarity` replaces each
+  tier's threshold, so 1.0 means exact repeats only. The `verified` band `[floor, threshold)`
+  serves only what a `CacheVerifier` confirms within `timeout_seconds`. The factory rejects an
+  unknown or duplicate kind, a similarity outside (0, 1], `verified` without a verifier, and a
+  floor at or above its ceiling.
+- `clients/semantic_cache/verifier`: the `stub` verifier (confirms nothing; the default) and
+  `llm` (`LlmCacheVerifier`, which confirms only on a reply starting with "yes"; a failed call
+  confirms nothing), built by `cache_verifier_from_config`.
+- `clients/semantic_cache/admission`: `allow_all` and `rules` (`CacheAdmission.admits(query,
+  extra_phrases)` refuses a query containing a listed phrase as a whole word, case-insensitive),
+  built by `cache_admission_from_config`.
+- `clients/semantic_cache/reader.SemanticCacheReader`: the proxy's read, serve and write steps,
+  callable by hand from a workflow-level cache (`read` → `CacheRead`, `serve`, `write` with a
+  per-call TTL). Telemetry and fail-open behaviour are the same as the proxy's.
+- `SemanticCacheProxy(..., lookup=)` reads through an injected tier chain. Without one it reads
+  `cache.lookup` at `min_similarity`, as before.
+- `SemanticCacheConfig.strip_trailing_punctuation` drops trailing `.?!` before the exact key, so
+  "refund window?" repeats "refund window".
+- The `semantic_cache.lookup` span carries `semantic_cache.tier` on a hit.
+
+### Changed
+
+- **Breaking:** `SemanticCache` gains the abstract primitives `exact(query, namespace)` (the
+  normalized repeat, no embedding) and `nearest(query, namespace)` (the nearest neighbour, no
+  threshold). `lookup` is now concrete: `exact`, then `nearest` at or above `min_similarity`. A
+  custom backend must implement both primitives.
+- `semantic_cache_hits_total` gains the label `tier`, and the first lookup of a label set creates
+  a zero hit series for every tier. Hit-rate queries summing over the counter are unaffected; a
+  query matching the old label set exactly must add `tier` or sum it away.
+- The redis backend's below-threshold miss reads the payload once more (`nearest` returns the
+  neighbour; the threshold is applied by the caller).
+
 ## [0.0.43] - 2026-11-03
 
 Python: `techai-webutils` 0.8.3.

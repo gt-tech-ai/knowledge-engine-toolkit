@@ -47,7 +47,10 @@ class SemanticCacheConfig:
     index_prefix: str = "sc"
     """Key prefix for the payload keys, index documents and the index name."""
     normalize: bool = True
-    """Lower-case and whitespace-collapse queries before the exact-repeat fast path."""
+    """Lower-case and whitespace-collapse queries before keying them (store and ``exact`` agree)."""
+    strip_trailing_punctuation: bool = False
+    """Also drop trailing punctuation (``?``, ``.``, ``!``) when normalizing, so "What is X?" and
+    "what is x" are one exact repeat."""
 
 
 def semantic_cache_from_config(
