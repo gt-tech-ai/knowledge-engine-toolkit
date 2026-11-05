@@ -26,6 +26,7 @@ BUDGET_ROOTS = (
     "clients/storage",
     "execution",
     "core",
+    "foundation/resources",
 )
 """Trees held to the budget, relative to the package. A tree joins when a change first brings it
 to the budget, and never leaves."""

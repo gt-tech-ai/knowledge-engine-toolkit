@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import os
+import threading
 from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from techai_webutils.clients.storage.s3 import s3_client as s3_module
 from techai_webutils.clients.storage.s3.s3_client import S3StorageClient
 from techai_webutils.core.errors import AppRuntimeError
 
 if TYPE_CHECKING:
+    from collections.abc import Buffer
+    from pathlib import Path
+
     from techai_webutils.clients.storage.config import S3Config
 
 
@@ -265,3 +271,48 @@ class TestS3StorageClient:
 
         with pytest.raises(AppRuntimeError, match="Key"):
             await client.list_objects("bucket", "prefix/")
+
+    @pytest.mark.asyncio
+    async def test_download_to_path_writes_through_one_buffered_writer(
+        self,
+        s3_config: S3Config,
+        aws_client: AsyncMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A streamed download lands intact, written by one thread in writes of at least 8 MiB.
+
+        **Why this test is important:**
+          - The large-document lane downloads multi-GB objects; hopping every 1 MiB write onto a
+            different pool thread turns one sequential write into thousands of small writes that
+            contend with the parse executor.
+
+        **What it tests:**
+          - Every chunk the body yields is in the file, in order; every write runs on the same
+            single thread; and every write but the last carries at least ``WRITE_BUFFER_BYTES``.
+        """
+        mib = 1024 * 1024
+        chunks = [bytes([n]) * (3 * mib) for n in range(4)]
+        body = MagicMock()
+        body.read = AsyncMock(side_effect=[*chunks, b""])
+        body.__aenter__ = AsyncMock(return_value=body)
+        body.__aexit__ = AsyncMock(return_value=None)
+        aws_client.get_object = AsyncMock(return_value={"Body": body})
+        writes: list[tuple[int, int]] = []
+        real_write = os.write
+
+        def _recording_write(fd: int, data: Buffer) -> int:
+            written = real_write(fd, data)
+            writes.append((threading.get_ident(), written))
+            return written
+
+        monkeypatch.setattr(os, "write", _recording_write)
+        target = tmp_path / "object.bin"
+        client = await _open(s3_config)
+
+        await client.download_to_path("bucket", "key", str(target))
+
+        assert target.read_bytes() == b"".join(chunks)
+        assert len({thread for thread, _ in writes}) == 1
+        assert all(size >= s3_module.WRITE_BUFFER_BYTES for _, size in writes[:-1])
+        assert 8 * mib <= s3_module.WRITE_BUFFER_BYTES

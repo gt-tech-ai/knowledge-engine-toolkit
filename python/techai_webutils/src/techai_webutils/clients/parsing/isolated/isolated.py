@@ -13,6 +13,12 @@ forkserver is a SEPARATE process that holds those imports, so the async parent s
 Every parse still gets its OWN fresh, killable, memory-capped child — the forkserver only
 changes how cheaply that child is created, not the isolation contract. Platforms without forkserver
 (e.g. Windows) fall back to ``spawn``.
+
+The child writes the parsed document to a scratch file (JSON) and puts nothing on the result
+queue, so a large document's text is not pickled through the pipe on top of the child's own copy.
+The parent's blocking wait and the read-back run on the executor the composition root injects
+(sized to the lane's concurrency); with none injected, the event loop's default pool, as before.
+``cost()`` declares a parse's memory (the per-parse cap) and CPU (one child process).
 """
 
 from __future__ import annotations
@@ -20,19 +26,25 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
+import json
 import multiprocessing as mp
+import os
 import resource
+import tempfile
 import time
 import traceback
+from pathlib import Path
 from queue import Empty
 from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.parsing.isolated.detect import detect_format
 from techai_webutils.clients.parsing.isolated.markitdown_parser import MarkItDownParser
-from techai_webutils.core.domain import ParsedDocument
+from techai_webutils.core.domain import DocumentFormat, Page, ParsedDocument
+from techai_webutils.core.interfaces.parser import ParseCost
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from concurrent.futures import Executor
     from multiprocessing.process import BaseProcess
     from multiprocessing.queues import Queue
 
@@ -192,6 +204,42 @@ def _parse_document_path(path: str, declared: str, filename: str) -> ParsedDocum
     return MarkItDownParser().parse_path(path, declared=declared, filename=filename)
 
 
+def _write_scratch(document: ParsedDocument, path: str) -> None:
+    """Write ``document`` to ``path`` as JSON (the child's half of the scratch hand-back)."""
+    payload = {
+        "markdown_content": document.markdown_content,
+        "document_format": document.document_format.value,
+        "total_pages": document.total_pages,
+        "word_count": document.word_count,
+        "pages": [[page.page_number, page.text] for page in document.pages],
+        "error": document.error,
+    }
+    with Path(path).open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle)
+
+
+def _read_scratch(path: str) -> ParsedDocument:
+    """Read back the document ``_write_scratch`` wrote (the parent's half of the hand-back)."""
+    with Path(path).open(encoding="utf-8") as handle:
+        payload = cast("dict[str, object]", json.load(handle))
+    pages = cast("list[list[object]]", payload["pages"])
+    return ParsedDocument(
+        markdown_content=cast("str", payload["markdown_content"]),
+        document_format=DocumentFormat(cast("str", payload["document_format"])),
+        total_pages=cast("int", payload["total_pages"]),
+        word_count=cast("int", payload["word_count"]),
+        pages=[Page(page_number=cast("int", n), text=cast("str", s)) for n, s in pages],
+        error=cast("str", payload["error"]),
+    )
+
+
+def _parse_to_scratch(
+    parse: Callable[..., ParsedDocument], scratch_path: str, *args: object
+) -> None:
+    """Child entry: run ``parse(*args)`` and write its document to ``scratch_path``, returning nothing."""
+    _write_scratch(parse(*args), scratch_path)
+
+
 class IsolatedParser:
     """Async facade that parses each document in a memory/time-bounded subprocess."""
 
@@ -200,27 +248,65 @@ class IsolatedParser:
         *,
         memory_bytes: int = _DEFAULT_MEMORY_BYTES,
         timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
+        executor: Executor | None = None,
     ) -> None:
-        """Configure the per-parse memory cap and timeout."""
+        """Configure the per-parse memory cap, the timeout, and the executor the parent waits on.
+
+        ``executor`` bounds how many parses run at once; the composition root sizes it to the
+        lane's concurrency. ``None`` uses the event loop's default pool (the behaviour before it).
+        """
         self._memory_bytes = memory_bytes
         self._timeout_seconds = timeout_seconds
+        self._executor = executor
+
+    @property
+    def executor(self) -> Executor | None:
+        """The executor parses wait on (``None``: the event loop's default pool)."""
+        return self._executor
+
+    def cost(self) -> ParseCost:
+        """Return one parse's cost: the per-parse memory cap and one CPU (one child process)."""
+        return ParseCost(memory_bytes=self._memory_bytes, cpu=1.0)
+
+    def _run_to_document(
+        self, parse: Callable[..., ParsedDocument], *args: object
+    ) -> ParsedDocument:
+        """Run ``parse(*args)`` isolated and read its document back from a scratch file (blocking).
+
+        Raises:
+            TimeoutError: The child overran the timeout.
+            IsolationError: The child raised or died without a result.
+
+        """
+        fd, scratch = tempfile.mkstemp(suffix=".parsed.json")
+        os.close(fd)
+        try:
+            run_isolated(
+                _parse_to_scratch,
+                parse,
+                scratch,
+                *args,
+                timeout_seconds=self._timeout_seconds,
+                memory_bytes=self._memory_bytes,
+            )
+            return _read_scratch(scratch)
+        finally:
+            Path(scratch).unlink(missing_ok=True)
+
+    async def _isolated(
+        self, parse: Callable[..., ParsedDocument], *args: object
+    ) -> ParsedDocument:
+        """Run ``_run_to_document`` on the parser's executor."""
+        loop = asyncio.get_running_loop()
+        call = functools.partial(self._run_to_document, parse, *args)
+        return await loop.run_in_executor(self._executor, call)
 
     async def parse(
         self, content: bytes, *, declared: str = "", filename: str = ""
     ) -> ParsedDocument:
         """Parse in a subprocess; a timeout or worker death becomes a failed ParsedDocument."""
-        loop = asyncio.get_running_loop()
-        call = functools.partial(
-            run_isolated,
-            _parse_document,
-            content,
-            declared,
-            filename,
-            timeout_seconds=self._timeout_seconds,
-            memory_bytes=self._memory_bytes,
-        )
         try:
-            return await loop.run_in_executor(None, call)
+            return await self._isolated(_parse_document, content, declared, filename)
         except TimeoutError:
             return self._failed(content, declared, filename, "parse_timeout")
         except IsolationError as exc:
@@ -247,18 +333,8 @@ class IsolatedParser:
         The path (not the bytes) is pickled to the child, so a multi-GB document never crosses the
         process boundary in memory. A timeout or worker death becomes a failed ParsedDocument.
         """
-        loop = asyncio.get_running_loop()
-        call = functools.partial(
-            run_isolated,
-            _parse_document_path,
-            path,
-            declared,
-            filename,
-            timeout_seconds=self._timeout_seconds,
-            memory_bytes=self._memory_bytes,
-        )
         try:
-            return await loop.run_in_executor(None, call)
+            return await self._isolated(_parse_document_path, path, declared, filename)
         except TimeoutError:
             return self._failed_path(declared, filename, "parse_timeout")
         except IsolationError as exc:

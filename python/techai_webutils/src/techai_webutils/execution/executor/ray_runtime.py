@@ -59,3 +59,11 @@ class RayRuntime(Protocol):
         ``RayUnavailableError`` once the retries are spent — the concrete runtime just connects once.
         """
         ...
+
+    async def cluster_cpus(self) -> float:
+        """Return the CPUs the cluster reports right now (``0.0`` when it reports none).
+
+        ``RayExecutor.width`` divides it by a task's declared CPUs to bound a batch's in-flight
+        tasks by the cluster's schedulable slots.
+        """
+        ...

@@ -18,7 +18,10 @@ from techai_webutils.execution.executor.ray_executor import RayExecutor
 
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.execution import ExecutionObserver, Executor
-    from techai_webutils.execution.executor.ray_runtime import RayRuntime
+    from techai_webutils.core.interfaces.metrics import MetricsProvider
+    from techai_webutils.execution.executor.resilient_ray_runtime import (
+        ResilientRayRuntime,
+    )
 
 
 class ExecutorKind(StrEnum):
@@ -52,6 +55,16 @@ class ExecutorConfig:
     ray_task_memory_bytes: int = 0
     """Ray-only: memory Ray reserves for each task or pool actor (its ``memory`` resource), so it places
     work by memory as well as CPU and a worker never runs more than its memory holds; ``0`` ⇒ none."""
+    ray_task_num_cpus: float = 0.0
+    """Ray-only: CPUs each task declares (its ``num_cpus``, e.g. a parser's ``ParseCost.cpu``). Above
+    ``0`` a batch also keeps at most ``floor(cluster CPUs / ray_task_num_cpus)`` tasks in flight;
+    ``0`` ⇒ Ray's default of 1 CPU and the caller's concurrency unchanged."""
+    ray_head_probe_address: str = ""
+    """Ray-only: ``host:port`` of the Ray head that ``ResilientRayRuntime.head_reachable`` probes (e.g.
+    the head service's dashboard port); blank ⇒ the probe refuses, since a guessed host would
+    report the wrong head."""
+    ray_head_probe_timeout_seconds: float = 2.0
+    """Ray-only: ceiling in seconds on one head probe."""
     actor_pool_size: int = 0
     """Ray-only: number of pooled worker actors that reuse clients per worker.
 
@@ -67,8 +80,13 @@ class ExecutorConfig:
 def executor_from_config(
     config: ExecutorConfig,
     observer: ExecutionObserver | None = None,
+    *,
+    metrics: MetricsProvider | None = None,
 ) -> Executor:
-    """Build the Executor selected by ``config.kind`` (asyncio in-process or ray distributed)."""
+    """Build the Executor selected by ``config.kind`` (asyncio in-process or ray distributed).
+
+    ``metrics`` reaches the ray kind's ``ResilientRayRuntime`` (``ray_connect_failures_total``).
+    """
     try:
         kind = ExecutorKind(config.kind)
     except ValueError as exc:
@@ -77,10 +95,17 @@ def executor_from_config(
     if kind is ExecutorKind.ASYNCIO:
         return AsyncioExecutor(observer, name=config.name)
     # kind is ExecutorKind.RAY — build the resilience-decorated Ray runtime (lazy ray import).
-    return RayExecutor(ray_runtime_from_config(config), observer, name=config.name)
+    return RayExecutor(
+        ray_runtime_from_config(config, metrics=metrics),
+        observer,
+        name=config.name,
+        task_num_cpus=config.ray_task_num_cpus,
+    )
 
 
-def ray_runtime_from_config(config: ExecutorConfig) -> RayRuntime:
+def ray_runtime_from_config(
+    config: ExecutorConfig, *, metrics: MetricsProvider | None = None
+) -> ResilientRayRuntime:
     """Build the resilience-decorated ``RealRayRuntime`` for the ray kind (lazy ``ray`` import).
 
     ``ResilientRayRuntime`` wraps ``RealRayRuntime`` so a flaky cold connect is retried with backoff
@@ -100,5 +125,11 @@ def ray_runtime_from_config(config: ExecutorConfig) -> RayRuntime:
         worker_setup_hook=config.ray_worker_setup_hook or None,
         log_encoding=config.ray_log_encoding or None,
         task_memory_bytes=config.ray_task_memory_bytes,
+        task_num_cpus=config.ray_task_num_cpus,
     )
-    return ResilientRayRuntime(inner)
+    return ResilientRayRuntime(
+        inner,
+        metrics=metrics,
+        head_probe_address=config.ray_head_probe_address or None,
+        head_probe_timeout_seconds=config.ray_head_probe_timeout_seconds,
+    )

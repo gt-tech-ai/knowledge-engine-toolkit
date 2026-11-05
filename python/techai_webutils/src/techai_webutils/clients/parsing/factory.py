@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from concurrent.futures import Executor
+
     from techai_webutils.core.interfaces.parser import DocumentParser
 
 # Default per-parse address-space cap (512 MiB) and wall-clock ceiling (60 s) for the isolated backend;
@@ -45,17 +47,23 @@ class ParserConfig:
     """Per-parse wall-clock ceiling (seconds) before the isolated subprocess is killed."""
 
 
-def parser_from_config(config: ParserConfig) -> DocumentParser:
+def parser_from_config(
+    config: ParserConfig, *, executor: Executor | None = None
+) -> DocumentParser:
     """Build the ``DocumentParser`` selected by ``config.kind`` (isolated). Unknown kinds fail loudly.
 
-    The ``isolated`` backend module (and, transitively, the markitdown/pymupdf import graph) is loaded
-    lazily here, so a composition root that never selects it never pays the import.
+    ``executor`` is the pool parses wait on, sized by the composition root to the lane's
+    concurrency; ``None`` keeps the event loop's default pool. The ``isolated`` backend module (and,
+    transitively, the markitdown/pymupdf import graph) is loaded lazily here, so a composition root
+    that never selects it never pays the import.
     """
     if config.kind is ParserKind.ISOLATED:
         from techai_webutils.clients.parsing.isolated import IsolatedParser  # noqa: PLC0415 — lazy backend
 
         return IsolatedParser(
-            memory_bytes=config.memory_bytes, timeout_seconds=config.timeout_seconds
+            memory_bytes=config.memory_bytes,
+            timeout_seconds=config.timeout_seconds,
+            executor=executor,
         )
     msg = f"unknown parser kind: {config.kind!r}"
     raise AppValueError(msg)

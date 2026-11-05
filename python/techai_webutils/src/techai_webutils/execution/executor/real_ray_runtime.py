@@ -123,6 +123,18 @@ def _run_mapper(fn: Callable[..., Awaitable[StepResult]], item: object) -> StepR
     return asyncio.run(_call())
 
 
+class _RemoteTask(Protocol):
+    """The typed view of ``_run_mapper`` as a Ray remote function."""
+
+    def options(self, **options: object) -> _RemoteTask:
+        """Return the task with Ray scheduling options (``memory``, ``num_cpus``) applied."""
+        ...
+
+    def remote(self, *args: object) -> Awaitable[StepResult]:
+        """Schedule the task and return an awaitable of its result."""
+        ...
+
+
 class RealRayRuntime:
     """RayRuntime backed by a real Ray cluster (connects on first ``submit``)."""
 
@@ -134,6 +146,7 @@ class RealRayRuntime:
         worker_setup_hook: str | None = None,
         log_encoding: str | None = None,
         task_memory_bytes: int = 0,
+        task_num_cpus: float = 0.0,
     ) -> None:
         """Store the connect settings; connection is deferred to the first submit/warm_up.
 
@@ -147,6 +160,7 @@ class RealRayRuntime:
                 ``JSON``); ``None`` keeps Ray's default.
             task_memory_bytes: Memory Ray reserves for each task (its ``memory`` resource), so it
                 places tasks by memory as well as CPU; ``0`` reserves none.
+            task_num_cpus: CPUs each task declares (its ``num_cpus``); ``0`` keeps Ray's default of 1.
 
         """
         self._address = address
@@ -160,7 +174,12 @@ class RealRayRuntime:
             self._init_options["logging_config"] = cast(
                 "Callable[..., object]", ray.LoggingConfig
             )(encoding=log_encoding)
-        self._task_memory_bytes = task_memory_bytes
+        self._task_options: dict[str, object] = {}
+        """Ray ``.options`` for every task: the declared memory and CPUs that are set."""
+        if task_memory_bytes > 0:
+            self._task_options["memory"] = task_memory_bytes
+        if task_num_cpus > 0:
+            self._task_options["num_cpus"] = task_num_cpus
         self._started = False
         # The mapper is put into the object store ONCE per session and reused across a batch's items.
         # ``_cached_fn`` holds a STRONG reference so the identity check (``fn is _cached_fn``) can never
@@ -201,6 +220,14 @@ class RealRayRuntime:
         except Exception:
             await self._reset()
             raise
+
+    async def cluster_cpus(self) -> float:
+        """Return the CPUs Ray reports for the cluster (``0.0`` when it reports none)."""
+        await self._ensure_started()
+        resources = await asyncio.to_thread(
+            cast("Callable[[], dict[str, float]]", ray.cluster_resources)
+        )
+        return float(resources.get("CPU", 0.0))
 
     async def _ensure_started(self) -> None:
         """Connect to (or start) the Ray cluster once, idempotently.
@@ -276,17 +303,9 @@ class RealRayRuntime:
             self._mapper_ref = cast("Callable[[object], object]", ray.put)(fn)
             self._cached_fn = fn
             self._mapper_session = session
-        # basedpyright ignores the untyped @ray.remote decorator, so `.remote` is invisible to it (the
-        # dev LSP env, where ray is unresolved); the mapper arg is a ray ObjectRef held as `object`
-        # (opaque), which the resolved `.remote` signature rejects — Ray auto-dereferences it so the
-        # task body still receives the real mapper.
-        task = (
-            _run_mapper.options(memory=self._task_memory_bytes)  # pyright: ignore[reportFunctionMemberAccess, reportUnknownMemberType]
-            if self._task_memory_bytes > 0
-            else _run_mapper
-        )
-        ref = task.remote(  # pyright: ignore[reportFunctionMemberAccess]
-            self._mapper_ref,  # pyright: ignore[reportArgumentType]
-            item,
-        )
-        return await ref
+        # The untyped @ray.remote decorator hides `.options`/`.remote` from the type checker, so the
+        # task is viewed through the `_RemoteTask` protocol. The mapper arg is a ray ObjectRef; Ray
+        # auto-dereferences it, so the task body still receives the real mapper.
+        remote = cast("_RemoteTask", _run_mapper)
+        task = remote.options(**self._task_options) if self._task_options else remote
+        return await task.remote(self._mapper_ref, item)

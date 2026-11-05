@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 from techai_webutils.clients.model_gateway.passthrough import PassthroughGateway
@@ -46,8 +45,12 @@ class GatewayKind(StrEnum):
 
 
 def _empty() -> Mapping[str, Any]:
-    """Return an empty read-only mapping (a stage or store config left at its defaults)."""
-    return MappingProxyType({})
+    """Return an empty mapping (a stage or store config left at its defaults).
+
+    A plain ``dict``, not a ``MappingProxyType``: configs travel to Ray workers by pickle, and a
+    mapping proxy cannot be pickled. The ``Mapping`` annotation keeps it read-only to callers.
+    """
+    return {}
 
 
 @dataclass(frozen=True, slots=True)

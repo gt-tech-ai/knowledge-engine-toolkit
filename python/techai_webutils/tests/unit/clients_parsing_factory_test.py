@@ -30,7 +30,7 @@ def test_factory_selects_isolated_backend() -> None:
         knobs, so a composition root selects it purely by config.
     What it tests:
       - ``parser_from_config`` returns an ``IsolatedParser`` that is a ``DocumentParser``, carrying the
-        configured memory/timeout budgets.
+        configured memory/timeout budgets and no executor of its own unless one is injected.
     """
     config = ParserConfig(memory_bytes=123, timeout_seconds=7.0)
     parser = parser_from_config(config)
@@ -38,7 +38,9 @@ def test_factory_selects_isolated_backend() -> None:
     assert isinstance(parser, DocumentParser)
     with patch("techai_webutils.clients.parsing.isolated.IsolatedParser") as parser_cls:
         parser_from_config(config)
-    parser_cls.assert_called_once_with(memory_bytes=123, timeout_seconds=7.0)
+    parser_cls.assert_called_once_with(
+        memory_bytes=123, timeout_seconds=7.0, executor=None
+    )
 
 
 def test_factory_rejects_unknown_kind() -> None:

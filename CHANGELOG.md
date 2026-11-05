@@ -8,7 +8,37 @@ All notable changes to this project are recorded here. The format follows
 
 Python: `techai-webutils` 0.9.3.
 
+### Added
+
+- Resource probes and lane sizing (`foundation.resources`). `ResourceProbe.limits()` returns
+  `ResourceLimits(cpu, memory_bytes)`. Two kinds are selected by `ResourceProbeConfig.kind`:
+  - `static` (the default) reports configured limits, unbounded unless set;
+  - `cgroup` reads cgroup v2 `cpu.max` and `memory.max`. With `CgroupProbeConfig.required`, an
+    unreadable file raises `UNAVAILABLE` instead of falling back to the host.
+
+  `lane_concurrency(limits, *, per_item_bytes, cap, reserve_bytes)` derives a lane's in-flight
+  limit from them.
+- `ParseCost` and the `CostedParser` capability (`core.interfaces.parser`). `IsolatedParser.cost()`
+  reports its per-parse memory cap and one CPU.
+- `IsolatedParser(executor=…)` and `parser_from_config(config, executor=…)`: parses wait on the
+  injected executor. Without one, the event loop's default pool is used, as before.
+- `ExecutorConfig.ray_task_num_cpus`: each Ray task declares those CPUs. When it is set, a batch
+  keeps at most `floor(cluster CPUs / ray_task_num_cpus)` tasks in flight (`RayExecutor.width`).
+  `RayRuntime.cluster_cpus()` reports the cluster's CPUs.
+- `ResilientRayRuntime.consecutive_connect_failures()`, the `ray_connect_failures_total{reason}`
+  counter (when `executor_from_config` / `ray_runtime_from_config` get `metrics=`), and
+  `head_reachable()`, a TCP probe of `ExecutorConfig.ray_head_probe_address` bounded by
+  `ray_head_probe_timeout_seconds`.
+- A config compatibility test: every `*Config` dataclass pickles, and none gains a required field
+  (Ray ships configs to workers by pickle).
+
 ### Changed
+
+- `IsolatedParser` returns each parsed document through a scratch file instead of the result queue,
+  so a large document's text no longer crosses the pipe as a second copy.
+- `S3StorageClient.download_to_path` writes on one dedicated thread, in writes of at least 8 MiB
+  (`WRITE_BUFFER_BYTES`), instead of one default-pool hop per 1 MiB chunk.
+- `ResilientRayRuntime` builds its retried connect once per runtime, not on every reconnect.
 
 - Python client families no longer import each other, and `uv run lint-imports` (import-linter,
   run in CI) now enforces the layer order and family independence. The moves:
@@ -35,6 +65,8 @@ Python: `techai-webutils` 0.9.3.
 
 ### Fixed
 
+- `RoutedConfig` (model gateway) pickles: its empty defaults were `MappingProxyType`s, which
+  cannot be pickled, so a routed gateway config could not be shipped to a Ray worker.
 - `RealRayRuntime` recovers from a Ray head replacement. It put its mapper into the object store
   once and reused the reference forever, so after a reconnect every task carried a reference from
   the dead session. The new head could not resolve it, each item failed as its own error, no reset

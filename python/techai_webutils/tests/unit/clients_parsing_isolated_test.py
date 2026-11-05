@@ -3,16 +3,19 @@
 import os
 import resource
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pymupdf
 import pytest
 
+from techai_webutils.clients.parsing.isolated import isolated as isolated_module
 from techai_webutils.clients.parsing.isolated.isolated import (
     IsolatedParser,
     IsolationError,
     run_isolated,
 )
+from techai_webutils.clients.parsing.isolated.markitdown_parser import MarkItDownParser
 from techai_webutils.core.domain import DocumentFormat
 
 # Module-level task functions so the spawn start-method can pickle them into the child.
@@ -339,3 +342,52 @@ class TestIsolatedParser:
         assert not result.ok
         assert "parse_isolation_failed" in result.error
         assert "FileNotFoundError" in result.error
+
+
+class TestScratchHandBack:
+    """The parsed document comes back through a scratch file, not the result queue."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("entry", ["parse", "parse_path"])
+    async def test_scratch_result_equals_the_in_process_parse(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, entry: str
+    ) -> None:
+        """A document handed back through the scratch file equals the parse the queue used to carry.
+
+        **Why this test is important:**
+          - A multi-GB document's text crossing the result queue is pickled into the pipe on top of
+            the child's own copy; the scratch file removes that copy, and must lose nothing.
+
+        **What it tests:**
+          - For a PDF (text plus per-page provenance), ``parse`` and ``parse_path`` return a
+            document equal to an in-process ``MarkItDownParser`` parse, while the value the child
+            put on the result queue carries no document.
+        """
+        pdf = _make_pdf("scratch hand-back")
+        source = tmp_path / "doc.pdf"
+        source.write_bytes(pdf)
+        queued: list[object] = []
+        real_run_isolated = isolated_module.run_isolated
+
+        def _recording(
+            fn: Callable[..., object],
+            *args: object,
+            timeout_seconds: float,
+            memory_bytes: int = 0,
+        ) -> object:
+            value = real_run_isolated(
+                fn, *args, timeout_seconds=timeout_seconds, memory_bytes=memory_bytes
+            )
+            queued.append(value)
+            return value
+
+        monkeypatch.setattr(isolated_module, "run_isolated", _recording)
+        parser = IsolatedParser(timeout_seconds=60)
+        if entry == "parse":
+            result = await parser.parse(pdf, filename="doc.pdf")
+        else:
+            result = await parser.parse_path(str(source), filename="doc.pdf")
+
+        assert result == MarkItDownParser().parse(pdf, filename="doc.pdf")
+        assert result.pages
+        assert queued == [None]

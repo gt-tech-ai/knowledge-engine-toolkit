@@ -12,10 +12,35 @@ Imported by full submodule path (``techai_webutils.core.interfaces.parser``), NO
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from techai_webutils.core.domain import ParsedDocument
+
+
+@dataclass(frozen=True, slots=True)
+class ParseCost:
+    """What parsing one document costs the process: peak memory and CPUs."""
+
+    memory_bytes: int
+    """Peak memory one parse may use (the isolated parser's per-parse cap)."""
+    cpu: float
+    """CPUs one parse keeps busy."""
+
+
+@runtime_checkable
+class CostedParser(Protocol):
+    """A parser that declares its per-document cost, so lanes and Ray tasks size from it.
+
+    A capability beside ``DocumentParser`` (a Protocol, so a default method would not reach
+    structural implementers): a consumer checks ``isinstance(parser, CostedParser)`` and falls back
+    to its lane's configured parser memory when a parser does not implement it.
+    """
+
+    def cost(self) -> ParseCost:
+        """Return the cost of parsing one document."""
+        ...
 
 
 @runtime_checkable

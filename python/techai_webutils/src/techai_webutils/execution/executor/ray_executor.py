@@ -10,6 +10,7 @@ runtime does — so importing this module never pulls the optional Ray dependenc
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from techai_webutils.execution.engine.fan_out import fan_out
@@ -35,11 +36,31 @@ class RayExecutor:
         observer: ExecutionObserver | None = None,
         *,
         name: str = "executor",
+        task_num_cpus: float = 0.0,
     ) -> None:
-        """Bind the Ray runtime seam plus the observer/batch name forwarded to ``fan_out``."""
+        """Bind the Ray runtime seam plus the observer/batch name forwarded to ``fan_out``.
+
+        ``task_num_cpus`` is the CPUs each task declares (the runtime schedules tasks with the same
+        value). Above ``0`` it bounds a batch's in-flight tasks by the cluster's slots (``width``);
+        ``0`` (the default) keeps the caller's concurrency as is, so a cluster that autoscales on
+        pending tasks still sees them.
+        """
         self._runtime = runtime
         self._observer = observer
         self._name = name
+        self._task_num_cpus = task_num_cpus
+
+    async def width(self, cap: int) -> int:
+        """Return how many tasks a batch keeps in flight: ``min(cap, floor(cluster CPUs / task CPUs))``.
+
+        Never below 1, so a cluster scaled to zero workers still gets the pending task that makes
+        its autoscaler add one. With no declared task CPU cost the cap is returned without asking
+        the cluster.
+        """
+        if self._task_num_cpus <= 0:
+            return cap
+        cpus = await self._runtime.cluster_cpus()
+        return max(1, min(cap, math.floor(cpus / self._task_num_cpus)))
 
     async def run[T](
         self,
@@ -51,7 +72,8 @@ class RayExecutor:
         """Dispatch each item as a Ray task with bounded concurrency, isolating per-item failure.
 
         ``fan_out``'s semaphore bounds how many ``submit`` coroutines (in-flight Ray tasks) run at
-        once, so the cluster is never flooded; per-item isolation and the exactly-once observer are
+        once — ``width(concurrency)``, read from the cluster each batch — so the cluster is never
+        flooded; per-item isolation and the exactly-once observer are
         inherited unchanged, so a RayTaskError becomes a single FAIL rather than aborting the batch.
 
         An unreachable cluster is NOT a per-item failure: the connection is established before the
@@ -75,9 +97,8 @@ class RayExecutor:
                 unavailable.append(exc)
                 raise
 
-        batch = await fan_out(
-            items, concurrency, dispatch, self._observer, name=self._name
-        )
+        width = await self.width(concurrency)
+        batch = await fan_out(items, width, dispatch, self._observer, name=self._name)
         if unavailable:
             raise unavailable[0]
         return batch

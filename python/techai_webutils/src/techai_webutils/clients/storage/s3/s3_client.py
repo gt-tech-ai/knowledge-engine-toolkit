@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Self
 
 import aiobotocore.session
@@ -13,6 +15,9 @@ from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
 _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 """Read size for streamed downloads, in bytes (1 MiB) — keeps peak RAM O(chunk), not O(file)."""
 
+WRITE_BUFFER_BYTES = 8 * 1024 * 1024
+"""Write buffer for streamed downloads, in bytes (8 MiB): eight 1 MiB reads per write."""
+
 _MULTIPART_COPY_THRESHOLD = 100 * 1024 * 1024
 """Object size, in bytes, above which a server-side copy switches to multipart UploadPartCopy (100 MiB)."""
 
@@ -22,11 +27,24 @@ _COPY_PART_SIZE = 100 * 1024 * 1024
 if TYPE_CHECKING:
     from types import TracebackType
 
+    from aiobotocore.response import StreamingBody
     from aiobotocore.session import AioSession
     from types_aiobotocore_s3 import S3Client
     from types_aiobotocore_s3.type_defs import CompletedPartTypeDef, CopySourceTypeDef
 
     from techai_webutils.clients.storage.config import S3Config
+
+
+def _create_for_write(path: str) -> int:
+    """Open ``path`` for writing (created or truncated, mode 0o644) and return its descriptor."""
+    return os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+
+
+def _write_all(fd: int, data: bytearray) -> None:
+    """Write all of ``data`` to ``fd`` (``os.write`` may write less than it is given)."""
+    view = memoryview(data)
+    while view:
+        view = view[os.write(fd, view) :]
 
 
 def _required(value: str | None, field: str) -> str:
@@ -221,22 +239,43 @@ class S3StorageClient(StorageClient):
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
         resp = await self._client.get_object(Bucket=bucket, Key=key)
-        # Offload the blocking file open/write/close to a thread so the streamed download never
-        # blocks the event loop (writes are sequential — awaited one at a time — so the file
-        # handle is only ever touched by one pool thread at a time).
-        f = await asyncio.to_thread(open, path, "wb")
+        # One dedicated writer thread owns the file for the whole download: the blocking open,
+        # writes and close never touch the event loop or the shared default pool (which the parse
+        # path also waits on). Chunks collect in an 8 MiB buffer, so eight 1 MiB reads become one
+        # write.
+        loop = asyncio.get_running_loop()
+        writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="s3-download")
+        try:
+            fd = await loop.run_in_executor(writer, _create_for_write, path)
+            try:
+                await self._stream_body(resp["Body"], fd, loop, writer)
+            finally:
+                await loop.run_in_executor(writer, os.close, fd)
+        finally:
+            writer.shutdown(wait=False)
+
+    @staticmethod
+    async def _stream_body(
+        body: StreamingBody,
+        fd: int,
+        loop: asyncio.AbstractEventLoop,
+        writer: ThreadPoolExecutor,
+    ) -> None:
+        """Copy ``body`` into ``fd`` through a ``WRITE_BUFFER_BYTES`` buffer, each write on ``writer``."""
         # aiobotocore's StreamingBody is a wrapt.ObjectProxy over aiohttp's ClientResponse. Its
         # ``__aenter__`` returns the *wrapped* ClientResponse (whose read() takes no size arg), so we
         # must read off the StreamingBody proxy itself — it exposes read(amt) (validating content
         # length), the async analogue of botocore's sync read; the proxy has no iter_chunks(). Keep the
         # proxy reference and use ``async with`` only to close the underlying response on the way out.
-        body = resp["Body"]
-        try:
-            async with body:
-                while True:
-                    chunk = await body.read(_DOWNLOAD_CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    await asyncio.to_thread(f.write, chunk)
-        finally:
-            await asyncio.to_thread(f.close)
+        buffer = bytearray()
+        async with body:
+            while True:
+                chunk = await body.read(_DOWNLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                buffer += chunk
+                if len(buffer) >= WRITE_BUFFER_BYTES:
+                    pending, buffer = buffer, bytearray()
+                    await loop.run_in_executor(writer, _write_all, fd, pending)
+        if buffer:
+            await loop.run_in_executor(writer, _write_all, fd, buffer)

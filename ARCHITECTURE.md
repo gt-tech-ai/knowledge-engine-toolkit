@@ -569,7 +569,24 @@ died. A Ray worker process never runs the consumer's entrypoint, so the consumer
 `ExecutorConfig.ray_worker_setup_hook` (a dotted path Ray runs in each worker before its first task)
 and `ray_log_encoding` (Ray's own task and actor log encoding). `ray_task_memory_bytes` reserves Ray's
 `memory` resource for each task and pool actor, so Ray places memory-heavy work by memory as well as
-CPU.
+CPU. `ray_task_num_cpus` declares each task's CPUs; when it is set, `RayExecutor.width` keeps at most
+`floor(cluster CPUs / ray_task_num_cpus)` tasks of a batch in flight (never fewer than one, never more
+than the caller's concurrency). It is unset by default, so a cluster that autoscales on pending tasks
+still sees all of them. `ResilientRayRuntime` reports the connection's health and decides nothing:
+`consecutive_connect_failures()`, the `ray_connect_failures_total{reason}` counter (the gRPC status
+name), and `head_reachable()`, a TCP probe of `ray_head_probe_address` that separates a stuck client
+from a down head.
+
+Lanes size themselves from the process's resources. `core/interfaces/resource_probe` defines
+`ResourceProbe.limits() -> ResourceLimits(cpu, memory_bytes)`, and `foundation/resources` builds
+it. The `static` kind (the default) reports configured limits, unbounded unless set. The `cgroup`
+kind reads cgroup v2 `cpu.max` and `memory.max`, falling back to the host for `max`, and with
+`required` it raises `UNAVAILABLE` instead of falling back. `lane_concurrency(limits, per_item_bytes,
+cap, reserve_bytes)` is `max(1, min(cap, floor(cpu), (memory - reserve) // per_item))`, so a lane on
+the default probe runs at its cap. A parser declares its per-document cost through the
+`CostedParser` capability (`ParseCost(memory_bytes, cpu)`); the isolated parser reports its
+per-parse memory cap and one CPU. It waits on an executor the composition root sizes, and gets each
+parsed document back through a scratch file rather than the result queue.
 
 ## Background loops
 

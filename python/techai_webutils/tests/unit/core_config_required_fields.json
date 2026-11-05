@@ -1,0 +1,68 @@
+{
+  "techai_webutils.clients.audit.builder.AuditSinkConfig": {},
+  "techai_webutils.clients.cache.builder.CacheConfig": {},
+  "techai_webutils.clients.chunking.factory.ChunkerConfig": {},
+  "techai_webutils.clients.dataset.builder.DatasetConfig": {},
+  "techai_webutils.clients.email.builder.EmailConfig": {},
+  "techai_webutils.clients.embedding.builder.EmbeddingConfig": {},
+  "techai_webutils.clients.facts.builder.FactPublisherConfig": {},
+  "techai_webutils.clients.jobs.config.JobConfig": {},
+  "techai_webutils.clients.kb_ingestion.builder.KbConfig": {},
+  "techai_webutils.clients.lock.builder.LockConfig": {},
+  "techai_webutils.clients.messaging.builder.MessagingConfig": {
+    "sqs": {
+      "$config": "techai_webutils.clients.messaging.config.SQSConfig"
+    }
+  },
+  "techai_webutils.clients.messaging.config.SQSConfig": {
+    "endpoint": "http://localhost:9324",
+    "queue_url": "http://localhost:9324/000000000000/queue",
+    "region": "us-east-1"
+  },
+  "techai_webutils.clients.metadata.factory.MetadataConfig": {},
+  "techai_webutils.clients.model_gateway.builder.GatewayConfig": {},
+  "techai_webutils.clients.model_gateway.builder.RoutedConfig": {},
+  "techai_webutils.clients.model_gateway.routed.planner.overlord.OverlordPlannerConfig": {
+    "target": "localhost:50051"
+  },
+  "techai_webutils.clients.parsing.factory.ParserConfig": {},
+  "techai_webutils.clients.retrieval.builder.RetrievalConfig": {},
+  "techai_webutils.clients.rpc.builder.RpcConfig": {},
+  "techai_webutils.clients.rpc.grpc.client.ChannelConfig": {},
+  "techai_webutils.clients.safety.builder.SafetyConfig": {},
+  "techai_webutils.clients.semantic_cache.admission.CacheAdmissionConfig": {},
+  "techai_webutils.clients.semantic_cache.builder.SemanticCacheConfig": {},
+  "techai_webutils.clients.semantic_cache.tiers.CacheTierConfig": {
+    "kind": "exact"
+  },
+  "techai_webutils.clients.semantic_cache.verifier.builder.CacheVerifierConfig": {},
+  "techai_webutils.clients.splitting.factory.SplitterConfig": {},
+  "techai_webutils.clients.storage.builder.StorageConfig": {
+    "s3": {
+      "$config": "techai_webutils.clients.storage.config.S3Config"
+    }
+  },
+  "techai_webutils.clients.storage.config.S3Config": {
+    "bucket": "documents",
+    "endpoint": "http://localhost:9000",
+    "region": "us-east-1"
+  },
+  "techai_webutils.clients.token_ledger.builder.TokenLedgerConfig": {},
+  "techai_webutils.clients.vector.builder.VectorStoreConfig": {},
+  "techai_webutils.clients.vector_kb.builder.KnowledgeBaseConfig": {},
+  "techai_webutils.controllers.grpc.server.ServerConfig": {},
+  "techai_webutils.core.interfaces.llm.LLMConfig": {},
+  "techai_webutils.core.types.llm.LlmConfig": {},
+  "techai_webutils.execution.executor.factory.ExecutorConfig": {},
+  "techai_webutils.foundation.config.decoration.DecorationConfig": {},
+  "techai_webutils.foundation.logger.builder.LoggerConfig": {},
+  "techai_webutils.foundation.metrics.builder.MetricsConfig": {},
+  "techai_webutils.foundation.resilience.bulkhead.BulkheadConfig": {},
+  "techai_webutils.foundation.resilience.hedge.HedgeConfig": {},
+  "techai_webutils.foundation.resilience.per_key_builder.PerKeyRateLimiterConfig": {},
+  "techai_webutils.foundation.resilience.retrier.ExponentialRetrierConfig": {},
+  "techai_webutils.foundation.resources.factory.CgroupProbeConfig": {},
+  "techai_webutils.foundation.resources.factory.ResourceProbeConfig": {},
+  "techai_webutils.foundation.resources.factory.StaticProbeConfig": {},
+  "techai_webutils.foundation.tracer.builder.TracerConfig": {}
+}

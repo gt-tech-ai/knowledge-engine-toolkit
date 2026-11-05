@@ -43,6 +43,7 @@ Resilience Interfaces:
     Retrier: Automatic retry on transient failures.
     Deduplicator: Idempotency for at-least-once delivery.
     LeaderElector: Single-instance execution across replicas.
+    ResourceProbe: The CPU and memory limits a process may use (lane sizing).
     Hedger: Tail-latency reduction by racing a backup attempt.
     AdaptiveThrottler: Client-side SRE load-shedding.
 
@@ -106,6 +107,7 @@ from techai_webutils.core.interfaces.repository import (
     Transaction,
     TransactionManager,
 )
+from techai_webutils.core.interfaces.resource_probe import ResourceLimits, ResourceProbe
 from techai_webutils.core.interfaces.retrier import Retrier
 from techai_webutils.core.interfaces.retrieval import (
     CitationExtractor,
@@ -170,6 +172,8 @@ __all__ = [
     "RateLimiter",
     # Data Access
     "Repository",
+    "ResourceLimits",
+    "ResourceProbe",
     "Retrier",
     "RetrievalEngine",
     "ServiceHooks",
