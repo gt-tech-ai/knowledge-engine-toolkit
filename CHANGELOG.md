@@ -151,6 +151,12 @@ Python: `techai-webutils` 0.9.3.
   (`LanguageIdentifier`, `LanguageGuess`, `UNDETERMINED_GUESS`) and `clients.language`
   (`LanguageIdentifierKind` `langdetect` / `fasttext` / `glotlid`, `LanguageIdentifierConfig`,
   `language_identifier_from_config`); the `fasttext` extra installs `fasttext-predict`.
+- The sentence chunker (Python): `ChunkerKind.sentence` (`SentenceChunker`, `split_blocks`,
+  `Block`, `BlockKind`); `ChunkerConfig.max_tokens` / `overlap_tokens` / `window_chars`;
+  `chunker_from_config(..., splitter=, tokenizer=)`; `StructuredChunk` and `StructuredChunker`
+  (`core.interfaces.chunker`). Chunk context: `core.interfaces.chunk_contextualizer`
+  (`ChunkContextualizer`, `ContextDocument`) and `clients.chunking.context` (`ContextualizerKind`
+  `none` / `header` / `llm`, `ContextualizerConfig`, `contextualizer_from_config`).
 
 ### Changed
 

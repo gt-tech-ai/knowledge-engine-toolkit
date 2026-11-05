@@ -893,6 +893,33 @@ that needs them, never through the NLP service.
     parity set `lid.176` agrees with `langdetect` and is about 100 times faster; it becomes a
     consumer's default only after its own parity and baseline check.
 
+## Sentence chunks and chunk context
+
+`ChunkerKind.sentence` (`clients.chunking.sentence`) builds a `SentenceChunker`, which satisfies
+both `Chunker` (`chunk(text) -> list[str]`) and `StructuredChunker`
+(`chunk_spans(text, *, entities=()) -> list[StructuredChunk]`). `fixed` stays the default.
+
+- **Blocks.** `split_blocks` reads the parser's markdown: ATX headings set `section_path`; fenced
+  code, pipe tables (a `|` row and a separator row) and paragraphs are blocks; a table's caption
+  is the one-line paragraph before it. Blocks tile the text.
+- **Packing.** Consecutive paragraphs under one section, each table and each code block form a
+  run; a heading opens the run after it. Units are sentences (from the injected
+  `SentenceSplitter`, at most `window_chars` per call), table rows after one header unit, or code
+  lines. Each unit is counted once by the injected tokenizer (the embedding model's own) and
+  packed greedily up to `max_tokens`, so chunking is linear in the text; a unit over the budget
+  is cut at whitespace, else mid-word. Paragraph chunks repeat up to `overlap_tokens` of the
+  previous chunk's whole sentences (0 by default). A table piece after the first repeats the
+  header rows, unless they are over half the budget.
+- **`StructuredChunk`** carries the text to embed, the source span `[start, end)` (with overlaps
+  removed, the spans tile the text), `section_path`, `element_type` (`paragraph`, `table`,
+  `code`, `heading`), a table's `caption`, and the input entities wholly inside its span.
+- **Context.** `ChunkContextualizer.contextualize(document, chunks) -> list[str]` returns the text
+  to embed and index per chunk (`clients.chunking.context`): `none` (the default) unchanged;
+  `header` prepends `"{document} > {section} > {subsection}"` and a table's caption,
+  deterministically; `llm` prepends one or two model-written sentences, one call per chunk at
+  temperature 0 (bounded by `max_document_chars`, `max_context_tokens` and `concurrency`), a
+  priced dial a consumer enables only with a budget.
+
 ## Repository tooling substrate
 
 Go packages for tools that read and check a codebase (linters, guards, generators, developer

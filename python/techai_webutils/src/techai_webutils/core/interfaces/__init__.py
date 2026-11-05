@@ -12,6 +12,7 @@ Service Interfaces:
     Workflow: Multi-step business process orchestration (sync and async variants).
     DocumentParser: Parse raw documents into text + metadata chunks.
     ChunkingStrategy: Split documents into retrieval-sized chunks.
+    ChunkContextualizer: Situate each chunk in its document before indexing (ContextDocument).
     EmbeddingProvider: Generate vector embeddings from text (as a query or a document).
     KnowledgeBase: Sync documents and query a vector knowledge base.
     LLMProvider: Generate text completions from a language model.
@@ -94,6 +95,10 @@ from techai_webutils.core.interfaces.checkpoint import (
     StageArtifact,
     StageState,
     StageStateClient,
+)
+from techai_webutils.core.interfaces.chunk_contextualizer import (
+    ChunkContextualizer,
+    ContextDocument,
 )
 from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
 from techai_webutils.core.interfaces.config_loader import ConfigLoader
@@ -197,6 +202,7 @@ __all__ = [
     "CacheInvalidator",
     "CheckpointKey",
     "CheckpointStore",
+    "ChunkContextualizer",
     "ChunkPayload",
     # AI/Retrieval
     "ChunkingStrategy",
@@ -204,6 +210,7 @@ __all__ = [
     "CitationExtractor",
     "Client",
     "ConfigLoader",
+    "ContextDocument",
     "CrudService",
     "Deduplicator",
     "DocumentParser",

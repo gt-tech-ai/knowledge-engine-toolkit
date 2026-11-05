@@ -2,6 +2,7 @@
   "techai_webutils.clients.audit.builder.AuditSinkConfig": {},
   "techai_webutils.clients.cache.builder.CacheConfig": {},
   "techai_webutils.clients.checkpoint.config.CheckpointConfig": {},
+  "techai_webutils.clients.chunking.context.builder.ContextualizerConfig": {},
   "techai_webutils.clients.chunking.factory.ChunkerConfig": {},
   "techai_webutils.clients.dataset.builder.DatasetConfig": {},
   "techai_webutils.clients.email.builder.EmailConfig": {},
