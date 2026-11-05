@@ -29,6 +29,10 @@ Python: `techai-webutils` 0.9.3.
   counter (when `executor_from_config` / `ray_runtime_from_config` get `metrics=`), and
   `head_reachable()`, a TCP probe of `ExecutorConfig.ray_head_probe_address` bounded by
   `ray_head_probe_timeout_seconds`.
+- Go `outbox.RelayConfig.DrainBudget` (`drain_budget`): while a claim returns a full `BatchSize`,
+  `RunOnce` claims again until the budget elapses, the context ends or a pass fails, so a burst
+  drains in one run instead of one batch per tick. Zero, the default, claims once, as before.
+  `outbox_relay_passes{lane}` records the claims per run.
 - A config compatibility test: every `*Config` dataclass pickles, and none gains a required field
   (Ray ships configs to workers by pickle).
 

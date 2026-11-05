@@ -68,6 +68,7 @@ func relayTx(t *testing.T) *mocks.MockTransactionManager {
 //     transactions), while the sink's Send runs on a context with none open
 //   - a finalize whose commit fails is returned coded and counted on no outcome,
 //     while the other row's finalize still commits and is counted sent
+//   - the run observes one pass on outbox_relay_passes{audit}
 func TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
@@ -84,6 +85,11 @@ func TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction(t *test
 	gauge := mocks.NewMockGauge(ctrl)
 	gauge.EXPECT().Set(0.0, "audit").Times(2) // depth and lag
 	metrics.EXPECT().Gauge(gomock.Any(), gomock.Any(), "lane").AnyTimes().Return(gauge)
+	passes := mocks.NewMockHistogram(ctrl)
+	passes.EXPECT().Observe(1.0, "audit")
+	metrics.EXPECT().
+		Histogram("outbox_relay_passes", gomock.Any(), gomock.Any(), "lane").
+		Return(passes)
 	recs := outboxRecords(2, 1)
 	commitErr := apperr.New(apperr.CodeUnavailable, "commit lost")
 	tx := mocks.NewMockTransactionManager(ctrl)
@@ -379,6 +385,7 @@ func TestRelay_ParksAfterMaxAttempts(t *testing.T) {
 //   - one sent, one retried and one parked record increment outbox_sent_total,
 //     outbox_retried_total and outbox_parked_total{audit} once each
 //   - an empty lane (zero OldestPending) reports lag 0
+//   - each run observes one pass on outbox_relay_passes{audit}
 func TestRelay_ReportsDepthAndLag(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
@@ -400,6 +407,11 @@ func TestRelay_ReportsDepthAndLag(t *testing.T) {
 	metrics.EXPECT().Counter("outbox_parked_total", gomock.Any(), "lane").Return(parked)
 	metrics.EXPECT().Gauge("outbox_depth", gomock.Any(), "lane").Return(depth)
 	metrics.EXPECT().Gauge("outbox_lag_seconds", gomock.Any(), "lane").Return(lag)
+	passes := mocks.NewMockHistogram(ctrl)
+	metrics.EXPECT().
+		Histogram("outbox_relay_passes", gomock.Any(), gomock.Any(), "lane").
+		Return(passes)
+	passes.EXPECT().Observe(1.0, "audit").Times(2) // one claim per run, two runs
 
 	ok, retry, park := outboxRecords(1, 1)[0], outboxRecords(1, 1)[0], outboxRecords(1, 2)[0]
 	recs := []types.OutboxRecord{ok, retry, park}
@@ -592,6 +604,7 @@ func TestRelayConfig_Validate(t *testing.T) {
 //     outbox.lane=audit, records the error and sets status Error, then ends it
 //   - a run whose Stats fails returns nil, leaves the gauges untouched and logs
 //     one Warn "outbox relay: stats failed"
+//   - only the run whose claim succeeded observes a pass on outbox_relay_passes
 func TestRelay_SpansRunsAndLogsStatsFailure(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
@@ -608,6 +621,14 @@ func TestRelay_SpansRunsAndLogsStatsFailure(t *testing.T) {
 		Return(mocks.NewMockCounter(ctrl)).
 		Times(3)
 	metrics.EXPECT().Gauge(gomock.Any(), gomock.Any(), "lane").Return(gauge).Times(2)
+	passes := mocks.NewMockHistogram(ctrl)
+	metrics.EXPECT().
+		Histogram("outbox_relay_passes", gomock.Any(), gomock.Any(), "lane").
+		Return(passes)
+	passes.EXPECT().
+		Observe(1.0, "audit").
+		Times(1)
+		// the second run; the first claim failed
 	claimErr := apperr.New(apperr.CodeUnavailable, "db down")
 	tracer.EXPECT().Start(gomock.Any(), "outbox.relay.run").Return(ctx, span).Times(2)
 	span.EXPECT().SetAttribute("outbox.lane", "audit").Times(2)

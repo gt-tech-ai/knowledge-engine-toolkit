@@ -234,6 +234,51 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 	require.Equal(t, types.OutboxStats{}, stats)
 }
 
+// TestRelay_DrainsABacklogInOneRun drains a 1,000-row Postgres backlog with one
+// RunOnce under a drain budget.
+//
+// Why this test is important:
+//   - A burst larger than one batch must not wait one tick per batch; only the real
+//     claim query (lease, SKIP LOCKED, ordering) proves the drain loop sees every row
+//     and stops when a claim comes back short.
+//
+// What it tests:
+//   - with BatchSize 100 and a one-minute DrainBudget, one RunOnce through the
+//     shipped stub sink leaves the lane with 0 pending, while a run without a budget
+//     leaves 900 of another 1,000-row lane pending.
+func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
+	requireIntegration(t)
+	ctx := context.Background()
+	store, enqueue, tx := newOutboxStore(t)
+	sink, err := outboxclient.NewFromConfig(
+		ctx,
+		outboxclient.DefaultConfig(),
+		outboxclient.Deps{},
+	)
+	require.NoError(t, err)
+	enqueueN(t, enqueue, "burst", 1000)
+	enqueueN(t, enqueue, "single", 1000)
+
+	draining := outbox.DefaultRelayConfig("burst")
+	draining.DrainBudget = time.Minute
+	require.NoError(
+		t,
+		outbox.NewRelay(draining, tx, store, sink, nil, nil, nil).RunOnce(ctx),
+	)
+	single := outbox.DefaultRelayConfig("single")
+	require.NoError(
+		t,
+		outbox.NewRelay(single, tx, store, sink, nil, nil, nil).RunOnce(ctx),
+	)
+
+	burst, err := store.Stats(ctx, "burst")
+	require.NoError(t, err)
+	require.Zero(t, burst.Pending)
+	once, err := store.Stats(ctx, "single")
+	require.NoError(t, err)
+	require.Equal(t, 900, once.Pending)
+}
+
 // TestRelay_EndToEnd_PostgresToS3ObjectLock drains a Postgres outbox into an
 // Object Lock bucket (MinIO) through the factory-built, decorated sink.
 //

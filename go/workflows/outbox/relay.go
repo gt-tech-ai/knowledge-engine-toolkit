@@ -2,11 +2,13 @@
 // interfaces.OutboxRepository, delivers them through an interfaces.OutboxSink in
 // bounded-concurrency chunks, and finalizes each row by its own outcome — sent,
 // retried with capped exponential backoff and full jitter, or parked once its
-// attempts are exhausted. It reports per-lane outcome counters and the lane's
-// depth and lag. The repository and sink are injected (and decorated) by the caller:
-// build the repository with repos/outbox.New over the store.
+// attempts are exhausted. With a drain budget a run keeps claiming while claims
+// come back full, so a burst drains in one run instead of one batch per tick. It
+// reports per-lane outcome counters, passes per run, and the lane's depth and lag.
+// The repository and sink are injected (and decorated) by the caller: build the
+// repository with repos/outbox.New over the store.
 //
-// A pass is a saga, so the relay is a workflow: the claim commits in its own
+// Each pass is a saga, so the relay is a workflow: the claim commits in its own
 // transaction, delivery runs with no transaction open (a remote call never holds one),
 // and each row's finalize commits in its own transaction, all opened through the
 // injected transaction manager.
@@ -49,6 +51,10 @@ type RelayConfig struct {
 	// apperr.IsPermanent reports, e.g. a malformed payload the destination
 	// rejects) instead of retrying it until MaxAttempts.
 	ParkOnPermanent bool `yaml:"park_on_permanent" mapstructure:"park_on_permanent"`
+	// DrainBudget bounds how long one RunOnce keeps claiming: while a claim returns a
+	// full BatchSize, the run claims again until the budget has elapsed (the batch in
+	// flight when it runs out still finishes). Zero, the default, claims once per run.
+	DrainBudget time.Duration `yaml:"drain_budget" mapstructure:"drain_budget"`
 }
 
 // DefaultRelayConfig returns a relay config for lane: claim 100 rows, send 10 at
@@ -75,6 +81,11 @@ func (c RelayConfig) Validate() error {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"outbox relay: base_backoff must be positive and max_backoff at least base_backoff",
+		)
+	case c.DrainBudget < 0:
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			"outbox relay: drain_budget must not be negative",
 		)
 	}
 	return nil
@@ -141,6 +152,8 @@ type Relay struct {
 	sent, retried, parked interfaces.Counter
 	// depth and lag report the lane's backlog by lane (nil = metrics off).
 	depth, lag interfaces.Gauge
+	// passes records how many claims each run made, by lane (nil = metrics off).
+	passes interfaces.Histogram
 	// now is the clock.
 	now func() time.Time
 	// jitter randomizes a capped backoff.
@@ -213,14 +226,23 @@ func (r *Relay) registerMetrics(metrics interfaces.Metrics) {
 		"Age of the oldest pending outbox record, in seconds.",
 		"lane",
 	)
+	r.passes = metrics.Histogram(
+		"outbox_relay_passes",
+		"Claims one relay run made before its lane drained or its drain budget ran out.",
+		// One claim (no backlog, or no drain budget) up to a long drain.
+		[]float64{1, 2, 4, 8, 16, 32, 64, 128},
+		"lane",
+	)
 }
 
-// RunOnce claims one batch, delivers it and finalizes every row, then refreshes
-// the lane gauges. The claim is called exactly once (it is side-effecting, so it
-// is never retried here) and commits before delivery starts; each finalize
-// commits on its own, so one row's failure never rolls back another's. A finalize
-// failure does not stop the other rows — the row's lease expires and it is
-// re-claimed — and the first such error is returned. A Stats failure is only
+// RunOnce claims a batch, delivers it and finalizes every row; with a DrainBudget
+// it repeats while claims come back full and the budget lasts. It then records the
+// passes and refreshes the lane gauges. Each claim is called once (it is
+// side-effecting, so it is never retried here) and commits before delivery starts;
+// each finalize commits on its own, so one row's failure never rolls back another's.
+// A finalize failure does not stop the other rows of its batch — the row's lease
+// expires and it is re-claimed — but it ends the drain, and the first such error is
+// returned. A failed claim ends the run with its error. A Stats failure is only
 // logged; with metrics off Stats is skipped.
 func (r *Relay) RunOnce(ctx context.Context) error {
 	if r.tracer != nil {
@@ -240,11 +262,48 @@ func (r *Relay) RunOnce(ctx context.Context) error {
 
 // runOnce is RunOnce without the span.
 func (r *Relay) runOnce(ctx context.Context) error {
+	start := r.now()
+	passes := 0
+	var err error
+	for {
+		var claimed int
+		claimed, err = r.pass(ctx)
+		if claimed < 0 {
+			break // the claim failed; nothing was delivered this pass
+		}
+		passes++
+		if err != nil || !r.drainMore(ctx, start, claimed) {
+			break
+		}
+	}
+	if passes > 0 {
+		if r.passes != nil {
+			r.passes.Observe(float64(passes), r.cfg.Lane)
+		}
+		r.refreshGauges(ctx)
+	}
+	return err
+}
+
+// drainMore reports whether a run whose latest pass claimed that many rows should
+// claim again: a drain budget is set and still lasts, the claim was full, and
+// the run's context is live.
+func (r *Relay) drainMore(ctx context.Context, start time.Time, claimed int) bool {
+	return r.cfg.DrainBudget > 0 &&
+		claimed >= r.cfg.BatchSize &&
+		ctx.Err() == nil &&
+		r.now().Sub(start) < r.cfg.DrainBudget
+}
+
+// pass claims one batch, delivers it and finalizes every row. It returns how many
+// rows it claimed (-1 when the claim failed) and the claim's or first finalize's
+// error.
+func (r *Relay) pass(ctx context.Context) (int, error) {
 	recs, err := r.tx.InTx(ctx, func(ctx context.Context) ([]types.OutboxRecord, error) {
 		return r.store.Claim(ctx, r.cfg.Lane, r.cfg.BatchSize)
 	})
 	if err != nil {
-		return apperr.Wrap(
+		return -1, apperr.Wrap(
 			err,
 			apperr.CodeOr(err, apperr.CodeUnavailable),
 			"outbox relay: claim",
@@ -274,9 +333,7 @@ func (r *Relay) runOnce(ctx context.Context) error {
 		})
 	}
 	_ = g.Wait() // workers report through keep, never through the group.
-
-	r.refreshGauges(ctx)
-	return first
+	return len(recs), first
 }
 
 // deliver sends one chunk and finalizes each of its rows, returning the finalize
