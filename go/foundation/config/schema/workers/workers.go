@@ -15,7 +15,8 @@ import (
 // Config holds the shared worker tunables. DefaultConfig seeds non-zero sweep
 // cadences and TTLs; a worker that runs no sweeps ignores them (or zeroes them).
 // Validate enforces the cross-field invariant against the multipart presign expiry
-// only for the non-zero sweep TTLs.
+// only for the non-zero sweep TTLs, and holds the relay drain budget inside the relay
+// interval.
 type Config struct {
 	// ServiceName is the worker's name for telemetry + structured logging.
 	ServiceName string `mapstructure:"service_name"`
@@ -28,6 +29,12 @@ type Config struct {
 
 	// RelayInterval is how often a poll-and-publish relay runs (0 = no relay).
 	RelayInterval time.Duration `mapstructure:"relay_interval"`
+
+	// RelayDrainBudget bounds how long one relay run keeps claiming full batches before it
+	// yields to the next interval (the outbox RelayConfig.DrainBudget); 0 claims one batch
+	// per run. It must stay below a non-zero RelayInterval, so a run ends before the next
+	// is due.
+	RelayDrainBudget time.Duration `mapstructure:"relay_drain_budget"`
 
 	// CleanupInterval is how often an orphaned-object cleanup sweep runs.
 	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`
@@ -91,6 +98,13 @@ func (c Config) Validate(multipartExpiry time.Duration) error {
 	}
 	if c.BatchSize < 0 || c.FanOutWorkers < 0 {
 		return apperr.InvalidInput("workers.batch_size / fan_out_workers must be >= 0")
+	}
+	if c.RelayDrainBudget < 0 ||
+		(c.RelayInterval > 0 && c.RelayDrainBudget >= c.RelayInterval) {
+		return apperr.InvalidInput(fmt.Sprintf(
+			"workers.relay_drain_budget (%s) must be >= 0 and below relay_interval (%s)",
+			c.RelayDrainBudget, c.RelayInterval,
+		))
 	}
 	if multipartExpiry <= 0 {
 		return nil

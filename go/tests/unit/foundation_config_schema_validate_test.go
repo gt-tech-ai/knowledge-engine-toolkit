@@ -138,7 +138,8 @@ func TestResilienceValidate_RemainingBranches(t *testing.T) {
 //     unknown store kind,
 //     a non-positive multipart size, a zero bulk count, the pending-cohort bounds,
 //     a negative header cap, a
-//     negative worker port/batch, the orphan-grace sweep invariant) each protect a
+//     negative worker port/batch, a relay drain that overruns its interval, the
+//     orphan-grace sweep invariant) each protect a
 //     distinct silently-broken configuration and must fail loudly at load.
 //
 // What it tests:
@@ -146,8 +147,9 @@ func TestResilienceValidate_RemainingBranches(t *testing.T) {
 //     accepts gorm; pipelines rejects a non-positive multipart threshold/part size;
 //     services rejects a zero bulk count; stores rejects a negative max_page_size, a
 //     non-positive/inverted pending-indexing cohort; transport rejects a negative
-//     max_header_bytes; workers rejects a negative port/batch and an orphan_grace within
-//     the multipart presign window.
+//     max_header_bytes; workers rejects a negative port/batch, a negative relay drain
+//     budget or one at or above the relay interval, and an orphan_grace within the
+//     multipart presign window.
 func TestLayerConfigValidate_RemainingBranches(t *testing.T) {
 	t.Parallel()
 
@@ -221,6 +223,17 @@ func TestLayerConfigValidate_RemainingBranches(t *testing.T) {
 
 	badBatch := workers.Config{BatchSize: -1}
 	require.Error(t, badBatch.Validate(0), "a negative batch size must be rejected")
+
+	badDrain := workers.Config{RelayDrainBudget: -time.Second}
+	require.Error(t, badDrain.Validate(0), "a negative drain budget must be rejected")
+
+	interval := 10 * time.Second
+	overrun := workers.Config{RelayInterval: interval, RelayDrainBudget: interval}
+	require.Error(t, overrun.Validate(0),
+		"a drain budget at or above the relay interval must be rejected")
+
+	fits := workers.Config{RelayInterval: interval, RelayDrainBudget: 8 * time.Second}
+	require.NoError(t, fits.Validate(0), "a drain budget inside the interval is valid")
 
 	expiry := 60 * time.Minute
 	badOrphan := workers.Config{

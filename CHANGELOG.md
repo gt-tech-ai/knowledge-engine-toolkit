@@ -10,6 +10,9 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- `workers.Config.RelayDrainBudget` (`relay_drain_budget`): the shared worker tier's bound on one
+  relay run's drain, fed to `outbox.RelayConfig.DrainBudget`; `Validate` rejects a negative budget
+  or one at or above a non-zero `RelayInterval`.
 - Resource probes and lane sizing (`foundation.resources`). `ResourceProbe.limits()` returns
   `ResourceLimits(cpu, memory_bytes)`. Two kinds are selected by `ResourceProbeConfig.kind`:
   - `static` (the default) reports configured limits, unbounded unless set;
