@@ -866,6 +866,33 @@ that produced it, and `degraded`.
   in `DegradingAnnotator`, which returns `Annotation(degraded=True)` per block and counts
   `nlp_degraded_total{task}`; a permanent error is always re-raised.
 
+## Sentences and language, in process
+
+Sentence boundaries and block languages are needed for every block, so both run in the stage
+that needs them, never through the NLP service.
+
+- **`SentenceSplitter.split(text, *, language=None) -> list[TextSpan]`**
+  (`core.interfaces.sentence_splitter`). The spans tile the text: the first starts at 0, each
+  starts where the previous ends, the last ends at `len(text)`; empty text has none.
+  `clients.sentences` has one kind, `sentencizer` (the default): spaCy's rule-based
+  `sentencizer` on a blank pipeline per language (the `nlp` extra; no model, no download). The
+  tokenizer's exceptions keep abbreviations and decimals whole; on one core it splits about
+  270,000 words/s. `SentenceSplitterConfig.default_language` (`en`) applies when `split` names
+  no language. A language without spaCy rules, or whose tokenizer needs a library that is not
+  installed (`ja`, `ko`, `th`, `vi`), uses the multi-language `xx` rules, counted in
+  `sentence_splitter_fallback_total{language}`. A text over `max_chars` (1,000,000) is
+  `INVALID_INPUT`.
+- **`LanguageIdentifier.identify(text) -> LanguageGuess(code, confidence, script)`**
+  (`core.interfaces.language_identifier`). Blank or unidentifiable text is `UNDETERMINED_GUESS`
+  (`und`, 0). `clients.language` kinds:
+  - `langdetect` (the default) is today's backend: the library and seed the document metadata's
+    language uses (ISO 639-1 codes);
+  - `fasttext` runs a `lid.176` model file (ISO 639-1); `glotlid` a GlotLID file (ISO 639-3 code
+    and ISO 15924 script). Both read `model_path` on the first call through `fasttext-predict`
+    (the `fasttext` extra), with the text's whitespace collapsed to one line. On the committed
+    parity set `lid.176` agrees with `langdetect` and is about 100 times faster; it becomes a
+    consumer's default only after its own parity and baseline check.
+
 ## Repository tooling substrate
 
 Go packages for tools that read and check a codebase (linters, guards, generators, developer

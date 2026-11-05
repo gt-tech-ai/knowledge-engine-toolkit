@@ -10,6 +10,7 @@
   "techai_webutils.clients.inflight_claim.builder.InflightClaimConfig": {},
   "techai_webutils.clients.jobs.config.JobConfig": {},
   "techai_webutils.clients.kb_ingestion.builder.KbConfig": {},
+  "techai_webutils.clients.language.builder.LanguageIdentifierConfig": {},
   "techai_webutils.clients.lock.builder.LockConfig": {},
   "techai_webutils.clients.messaging.builder.MessagingConfig": {
     "sqs": {
@@ -43,6 +44,7 @@
     "kind": "exact"
   },
   "techai_webutils.clients.semantic_cache.verifier.builder.CacheVerifierConfig": {},
+  "techai_webutils.clients.sentences.builder.SentenceSplitterConfig": {},
   "techai_webutils.clients.sink.bedrock.config.BedrockSinkConfig": {},
   "techai_webutils.clients.sink.builder.SinkConfig": {},
   "techai_webutils.clients.splitting.factory.SplitterConfig": {},

@@ -19,6 +19,8 @@ Service Interfaces:
     Reranker: Score retrieved passages against the query (RerankClient: its transport).
     FilterExpr: A backend-neutral metadata filter (FilterEq, FilterIn, FilterAnd).
     Annotator: Annotate text blocks with entities and registered tasks (TaskRegistry).
+    SentenceSplitter: Split text into sentence spans that tile it (TextSpan), in process.
+    LanguageIdentifier: Identify a text's language (LanguageGuess), in process.
     QueryRewriter: Transform user queries for better retrieval.
     IntentClassifier: Classify query intent (search, summarize, compare, etc.).
     CitationExtractor: Extract source citations from LLM responses.
@@ -110,6 +112,10 @@ from techai_webutils.core.interfaces.jobs import (
     WorkerRegistry,
 )
 from techai_webutils.core.interfaces.knowledge_base import KnowledgeBase
+from techai_webutils.core.interfaces.language_identifier import (
+    LanguageGuess,
+    LanguageIdentifier,
+)
 from techai_webutils.core.interfaces.leader import LeaderElector
 from techai_webutils.core.interfaces.lifecycle import (
     Client,
@@ -156,6 +162,7 @@ from techai_webutils.core.interfaces.retrieval import (
     QueryRewriter,
     RetrievalEngine,
 )
+from techai_webutils.core.interfaces.sentence_splitter import SentenceSplitter, TextSpan
 from techai_webutils.core.interfaces.service import BaseService
 from techai_webutils.core.interfaces.sink import (
     ChunkPayload,
@@ -217,6 +224,8 @@ __all__ = [
     "KeyedPublisher",
     "KnowledgeBase",
     "LLMProvider",
+    "LanguageGuess",
+    "LanguageIdentifier",
     "LeaderElector",
     "LeaseExtender",
     "Logger",
@@ -244,6 +253,7 @@ __all__ = [
     "ResourceProbe",
     "Retrier",
     "RetrievalEngine",
+    "SentenceSplitter",
     "ServiceHooks",
     "Sink",
     "SinkDocument",
@@ -260,6 +270,7 @@ __all__ = [
     "TaskRegistry",
     "TaskResult",
     "TextBlock",
+    "TextSpan",
     "TracerProvider",
     "TracerSpan",
     "Transaction",

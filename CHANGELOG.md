@@ -144,6 +144,13 @@ Python: `techai-webutils` 0.9.3.
   `clients.nlp` (`AnnotatorKind` `noop` / `spacy` / `gliner` / `grpc`, `AnnotatorConfig`,
   `OnUnavailable`, `annotator_from_config`, `DegradingAnnotator` and its `nlp_degraded_total`
   counter); the `nlp` extra installs spaCy.
+- In-process sentences and language (Python): `core.interfaces.sentence_splitter`
+  (`SentenceSplitter`, `TextSpan`) and `clients.sentences` (`SentenceSplitterKind.sentencizer`,
+  `SentenceSplitterConfig`, `sentence_splitter_from_config`, the
+  `sentence_splitter_fallback_total` counter); `core.interfaces.language_identifier`
+  (`LanguageIdentifier`, `LanguageGuess`, `UNDETERMINED_GUESS`) and `clients.language`
+  (`LanguageIdentifierKind` `langdetect` / `fasttext` / `glotlid`, `LanguageIdentifierConfig`,
+  `language_identifier_from_config`); the `fasttext` extra installs `fasttext-predict`.
 
 ### Changed
 

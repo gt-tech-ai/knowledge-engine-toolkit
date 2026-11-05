@@ -86,6 +86,13 @@ opensearch = ["opensearch-py[async]>=3.2.0"]
 # stack) and injects it, so the engine never imports gliner.
 nlp = ["spacy>=3.8"]
 
+# fastText inference for the `fasttext` and `glotlid` LanguageIdentifier Kinds. Optional: only a
+# deployable that identifies languages with a fastText model installs `techai-webutils[fasttext]`.
+# `fasttext-predict` is the inference-only fastText build: wheels for Linux and macOS on x86_64
+# and arm64 and no NumPy (the `fasttext` 0.9.3 package has no wheels and breaks on NumPy 2). The
+# model file is the deployable's; the engine downloads nothing.
+fasttext = ["fasttext-predict>=0.9.2.4"]
+
 [project.license]
 text = "MIT"
 
@@ -121,6 +128,9 @@ dev = [
     # langdetect in dev so basedpyright resolves the `langdetect` metadata backend and its parity
     # tests run; production consumers pull it via the `langdetect` extra.
     "langdetect>=1.0.9",
+    # fasttext-predict in dev so basedpyright and the unit tests resolve the `fasttext` language
+    # identifier's lazy import; production consumers pull it via the `fasttext` extra.
+    "fasttext-predict>=0.9.2.4",
     # opensearch-py in dev so basedpyright resolves the OpenSearch store's client types and its
     # integration tests run against an OpenSearch testcontainer; production consumers pull it via the
     # `opensearch` extra.
@@ -298,6 +308,7 @@ modules = [
     "techai_webutils.clients.inflight_claim",
     "techai_webutils.clients.jobs",
     "techai_webutils.clients.kb_ingestion",
+    "techai_webutils.clients.language",
     "techai_webutils.clients.llm",
     "techai_webutils.clients.lock",
     "techai_webutils.clients.messaging",
@@ -311,6 +322,7 @@ modules = [
     "techai_webutils.clients.rpc",
     "techai_webutils.clients.safety",
     "techai_webutils.clients.semantic_cache",
+    "techai_webutils.clients.sentences",
     "techai_webutils.clients.sink",
     "techai_webutils.clients.splitting",
     "techai_webutils.clients.start_budget",
