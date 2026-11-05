@@ -21,6 +21,7 @@ from techai_webutils.clients.start_budget import (
     StartBudgetKind,
     start_budget_from_config,
 )
+from techai_webutils.core.errors import InternalError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -107,3 +108,41 @@ async def test_six_pods_five_hold_and_starts_are_paced(
         again = await budgets[6].acquire("kb:late")
         assert again is not None
         assert again.index == held.index
+
+
+@pytest.mark.asyncio
+async def test_a_budget_built_from_a_dsn_paces_through_its_own_pool(
+    pool: asyncpg.Pool, postgres_dsn: str
+) -> None:
+    """Test that a budget given a DSN instead of a pool opens, uses and closes its own pool.
+
+    **Why this test is important:**
+      - A product composition root passes the database's DSN rather than an asyncpg pool, so
+        the pool the pacing needs must be the budget's own, opened on entry and closed on exit.
+
+    **What it tests:**
+      - inside its context, the DSN-built budget grants a slot and stamps the account's row
+      - after its exit, the budget refuses to pace, since its pool is closed
+    """
+    config = StartBudgetConfig(
+        kind=StartBudgetKind.POSTGRES,
+        account="acct-dsn",
+        min_start_interval_seconds=_INTERVAL,
+        acquire_timeout_seconds=3.0,
+        poll_interval_seconds=0.1,
+    )
+    budget = start_budget_from_config(
+        config,
+        dsn=postgres_dsn,
+        new_lock=lambda key: PostgresAdvisoryLock(dsn=postgres_dsn, key=key, namespace=8),
+    )
+    async with budget:
+        slot = await budget.acquire("kb:ds")
+        assert slot is not None
+        stamped = await pool.fetchval(
+            "SELECT last_start_at > 'epoch' FROM bedrock_start_rate WHERE account = $1",
+            "acct-dsn",
+        )
+        assert stamped is True
+    with pytest.raises(InternalError):
+        await budget.acquire("kb:ds")

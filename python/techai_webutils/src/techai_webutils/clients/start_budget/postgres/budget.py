@@ -10,6 +10,10 @@ timestamptz not null)``. After taking a slot, ``acquire`` locks the account's ro
 ``last_start_at + interval`` by the database clock, stamps the row and commits, so starts across
 every pod are at least the interval apart. A waiter blocked on the row lock may overrun
 ``acquire_timeout_seconds`` by up to one interval.
+
+The pacing pool is injected, or opened from a DSN on entry: an owned pool opens no connection
+until a start is paced (``min_size`` 0), and each of its statements is bounded by the longest a
+pacing start can wait on another pod's row lock (the interval plus the acquire timeout).
 """
 
 from __future__ import annotations
@@ -18,14 +22,15 @@ import asyncio
 from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, override
 
+import asyncpg
+
+from techai_webutils.core.errors import InternalError
 from techai_webutils.core.interfaces.start_budget import Slot, StartBudget
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from types import TracebackType
     from typing import Self
-
-    import asyncpg
 
     from techai_webutils.clients.start_budget.config import StartBudgetConfig
     from techai_webutils.core.interfaces.lock import ManagedLock
@@ -44,6 +49,8 @@ _STAMP = (
     "UPDATE bedrock_start_rate SET last_start_at = clock_timestamp() WHERE account = $1"
 )
 """Record a start now."""
+_OWNED_POOL_MAX = 2
+"""Connections an owned pacing pool may open: a pacing start holds one through its wait."""
 
 
 class PostgresStartBudget(StartBudget):
@@ -53,12 +60,15 @@ class PostgresStartBudget(StartBudget):
         self,
         config: StartBudgetConfig,
         *,
-        pool: asyncpg.Pool,
         new_lock: Callable[[str], ManagedLock],
+        pool: asyncpg.Pool | None = None,
+        dsn: str = "",
     ) -> None:
-        """Pace through ``pool`` and take slot ``i`` with ``new_lock("<account>:<i>")``."""
+        """Pace through ``pool`` (or a pool opened on ``dsn`` at entry) and take slot ``i`` with ``new_lock("<account>:<i>")``."""
         self._config = config
         self._pool = pool
+        self._dsn = dsn
+        self._owns_pool = pool is None
         self._new_lock = new_lock
         self._locks: dict[int, ManagedLock] = {}
         self._held: set[int] = set()
@@ -88,7 +98,17 @@ class PostgresStartBudget(StartBudget):
             await self._free(slot.index)
 
     async def __aenter__(self) -> Self:
-        """Enter the async context; lock sessions open on first use."""
+        """Enter the async context, opening the owned pacing pool; lock sessions open on first use."""
+        if self._owns_pool:
+            self._pool = await self._stack.enter_async_context(
+                asyncpg.create_pool(
+                    self._dsn,
+                    min_size=0,
+                    max_size=_OWNED_POOL_MAX,
+                    command_timeout=self._config.min_start_interval_seconds
+                    + self._config.acquire_timeout_seconds,
+                )
+            )
         return self
 
     async def __aexit__(
@@ -97,9 +117,11 @@ class PostgresStartBudget(StartBudget):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Free every held slot and close every lock session."""
+        """Free every held slot and close every lock session (and the owned pacing pool)."""
         self._locks = {}
         self._held.clear()
+        if self._owns_pool:
+            self._pool = None
         stack, self._stack = self._stack, AsyncExitStack()
         await stack.aclose()
 
@@ -136,6 +158,9 @@ class PostgresStartBudget(StartBudget):
         """Wait until a start is allowed and record it; ``False`` if that is past ``deadline``."""
         account = self._config.account
         loop = asyncio.get_running_loop()
+        if self._pool is None:
+            msg = "the postgres start budget paces only inside its async context"
+            raise InternalError(msg)
         async with self._pool.acquire() as conn, conn.transaction():
             await conn.execute(_SEED, account)
             wait = float(

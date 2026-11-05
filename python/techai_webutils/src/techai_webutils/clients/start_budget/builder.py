@@ -23,26 +23,29 @@ def start_budget_from_config(
     *,
     pool: asyncpg.Pool | None = None,
     new_lock: Callable[[str], ManagedLock] | None = None,
+    dsn: str = "",
 ) -> StartBudget:
     """Build the ``StartBudget`` ``config.kind`` selects.
 
-    The ``postgres`` kind needs ``pool`` (for the start-rate row) and ``new_lock``, which returns
-    the cross-pod lock for a slot key; the composition root passes the postgres ``LockConfig`` with
-    that key to ``new_lock_from_config``.
+    The ``postgres`` kind needs the start-rate row's database, as a ``pool`` or a ``dsn`` (the
+    budget then opens and closes its own pool, ``clients.lock.postgres_dsn`` building it from the
+    lock's config), and ``new_lock``, which returns the cross-pod lock for a slot key; the
+    composition root passes the postgres ``LockConfig`` with that key to ``new_lock_from_config``.
 
     Raises:
-        AppValueError: An unknown kind, a missing ``pool`` / ``new_lock`` / ``account``, or a
-            non-positive ``slots`` or timeout, or a negative interval (``INVALID_INPUT``).
+        AppValueError: An unknown kind, a missing ``pool`` and ``dsn``, ``new_lock`` or
+            ``account``, or a non-positive ``slots`` or timeout, or a negative interval
+            (``INVALID_INPUT``).
 
     """
     if config.kind == StartBudgetKind.NOOP:
         return NoopStartBudget()
     if config.kind == StartBudgetKind.POSTGRES:
         _validate(config)
-        if pool is None or new_lock is None:
-            msg = "the postgres start budget needs a pool and a lock factory"
+        if (pool is None and not dsn) or new_lock is None:
+            msg = "the postgres start budget needs a pool or a dsn, and a lock factory"
             raise AppValueError(msg)
-        return PostgresStartBudget(config, pool=pool, new_lock=new_lock)
+        return PostgresStartBudget(config, new_lock=new_lock, pool=pool, dsn=dsn)
     msg = f"unknown start budget kind: {config.kind!r}"
     raise AppValueError(msg)
 

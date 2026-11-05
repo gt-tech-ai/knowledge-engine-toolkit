@@ -448,31 +448,34 @@ class TestLockFromConfig:
         **What it tests:**
           - A postgres LockConfig with ``sslmode=require`` and a password containing ``@`` and ``/``
             produces a connection DSN with ``sslmode=require`` and the encoded password.
+          - The public ``postgres_dsn`` returns that same DSN, so a pool opened beside the lock
+            (the postgres start budget's) connects the same way.
         """
         from techai_webutils.clients.lock import (
             LockConfig,
             LockKind,
             new_lock_from_config,
+            postgres_dsn,
         )
 
+        config = LockConfig(
+            kind=LockKind.POSTGRES,
+            host="db",
+            port=5432,
+            user="app",
+            password="p@ss/word",
+            database="knowledge_engine",
+            sslmode="require",
+            key="kb:ds",
+            namespace=7,
+        )
         conn = _mock_conn()
         with patch("asyncpg.connect", AsyncMock(return_value=conn)) as connect:
-            lock = new_lock_from_config(
-                LockConfig(
-                    kind=LockKind.POSTGRES,
-                    host="db",
-                    port=5432,
-                    user="app",
-                    password="p@ss/word",
-                    database="knowledge_engine",
-                    sslmode="require",
-                    key="kb:ds",
-                    namespace=7,
-                )
-            )
+            lock = new_lock_from_config(config)
             async with lock:
                 await lock.acquire()
 
         dsn = connect.call_args.args[0]
         assert "sslmode=require" in dsn
         assert "p%40ss%2Fword" in dsn
+        assert postgres_dsn(config) == dsn

@@ -10,6 +10,9 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- `clients.lock.postgres_dsn(config)`: the DSN the postgres lock connects with (TLS in
+  `sslmode`, credentials percent-encoded), public so a pool opened beside the lock (the postgres
+  `StartBudget`'s start-rate row) connects the same way.
 - `interfaces.CQLQuery.ApplyCAS() (bool, error)`: runs a lightweight transaction (a statement
   with an `IF` clause) and reports whether it applied, reading the result as a map so a refusal's
   returned columns need no destinations. A Cassandra or Keyspaces store refuses a stale writer
@@ -104,8 +107,10 @@ Python: `techai-webutils` 0.9.3.
   - `StartBudget` and `Slot` (`core.interfaces.start_budget`) and `start_budget_from_config` with
     `StartBudgetConfig.kind` `noop` (the default) or `postgres`: account-wide slots held for the
     life of a job (advisory locks through an injected `new_lock`) and a minimum start interval.
-    The product's migration adds `bedrock_start_rate(account text primary key, last_start_at
-    timestamptz not null)`.
+    The pacing database is an injected `pool`, or a `dsn` the postgres budget opens its own pool
+    on at entry (no connection until a start is paced; statements bounded by the interval plus
+    the acquire timeout) and closes at exit. The product's migration adds
+    `bedrock_start_rate(account text primary key, last_start_at timestamptz not null)`.
   - `KnowledgeBaseIngestor.start_ingestion_job(..., round_id="")`: a non-empty round sends a
     derived `clientToken`, so a retried start is idempotent. Every decorator forwards it.
   - `KnowledgeBaseIngestor.iter_cohort(...)`: a round's documents by S3 URI. Bedrock uses

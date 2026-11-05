@@ -55,11 +55,13 @@ class LockConfig:
     """Postgres ``application_name`` tagging the lock session in ``pg_stat_activity`` (postgres only)."""
 
 
-def _postgres_dsn(config: LockConfig) -> str:
-    """Build a libpq DSN URI for the lock connection.
+def postgres_dsn(config: LockConfig) -> str:
+    """Build a libpq DSN URI for ``config``'s database: the lock's connection, or a pool beside it.
 
     asyncpg has no ``sslmode`` kwarg but parses it from the DSN URI, so TLS travels in the query
-    string; credentials are percent-encoded to survive special characters.
+    string; credentials are percent-encoded to survive special characters. A caller that opens a
+    pool on the lock's database (the postgres ``StartBudget``'s start-rate row) uses it too, so
+    both connect the same way.
     """
     user = quote(config.user, safe="")
     password = quote(config.password, safe="")
@@ -83,7 +85,7 @@ def new_lock_from_config(config: LockConfig) -> ManagedLock:
         from techai_webutils.clients.lock.postgres import PostgresAdvisoryLock  # noqa: PLC0415
 
         return PostgresAdvisoryLock(
-            dsn=_postgres_dsn(config),
+            dsn=postgres_dsn(config),
             key=config.key,
             namespace=config.namespace,
             application_name=config.application_name,
