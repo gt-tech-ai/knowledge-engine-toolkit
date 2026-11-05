@@ -10,6 +10,10 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- `interfaces.CQLQuery.ApplyCAS() (bool, error)`: runs a lightweight transaction (a statement
+  with an `IF` clause) and reports whether it applied, reading the result as a map so a refusal's
+  returned columns need no destinations. A Cassandra or Keyspaces store refuses a stale writer
+  with it. Implementations of `CQLQuery` outside the engine must add the method.
 - `core.domain.parsed_to_json` / `parsed_from_json`: a `ParsedDocument`'s JSON form (text, format,
   pages, error and its typed blocks via `blocks_to_json`), tagged with `PARSED_FORMAT_VERSION`; the
   reader accepts N and N-1 and raises `INVALID_INPUT` on any other version or a malformed payload.

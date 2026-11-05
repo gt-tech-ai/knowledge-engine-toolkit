@@ -104,6 +104,13 @@ func (q *gocqlQuery) Idempotent(idempotent bool) interfaces.CQLQuery {
 // Exec runs the statement.
 func (q *gocqlQuery) Exec() error { return codeError(q.query.Exec(), "cql: exec") }
 
+// ApplyCAS runs the lightweight transaction and reports whether it applied. It reads
+// the result as a map, so the columns a refusal returns need no matching destinations.
+func (q *gocqlQuery) ApplyCAS() (bool, error) {
+	applied, err := q.query.MapScanCAS(map[string]any{})
+	return applied, codeError(err, "cql: conditional write")
+}
+
 // Iter runs the statement and returns its iterator.
 func (q *gocqlQuery) Iter() interfaces.CQLIter { return &gocqlIter{iter: q.query.Iter()} }
 
