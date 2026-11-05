@@ -31,9 +31,15 @@ import asyncio
 from typing import NoReturn
 
 import pytest
+from prometheus_client import CollectorRegistry
 
 from techai_webutils.core.errors.errors import AppTimeoutError, UnavailableError
 from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
+from techai_webutils.foundation.config import decoration
+from techai_webutils.foundation.decorate import Collaborators
+from techai_webutils.foundation.decorate.decorations import build
+from techai_webutils.foundation.decorate.tier import Observability
+from techai_webutils.foundation.metrics.metrics import new_metrics
 from techai_webutils.foundation.resilience.circuit_breaker import (
     CircuitBreaker,
     CircuitOpenError,
@@ -269,3 +275,78 @@ class TestTimeout:
 
         with pytest.raises(AppTimeoutError):
             await with_timeout(slow(), seconds=0.05)
+
+
+_DOWN = UnavailableError("dependency down")
+"""A transient failure, which counts against a decorated breaker."""
+
+
+def _sample(registry: CollectorRegistry, name: str, **labels: str) -> float:
+    """Return a metric sample's value, 0 when the series does not exist."""
+    return registry.get_sample_value(name, labels) or 0.0
+
+
+def _fail_through(breaker: CircuitBreakerInterface) -> None:
+    """Run one call through ``breaker`` that fails transiently."""
+    with breaker:
+        raise _DOWN
+
+
+def _probe_while_trial(breaker: CircuitBreakerInterface) -> None:
+    """Hold the one admitted half-open trial, see a second caller fail fast, then fail the trial."""
+    with breaker:
+        with pytest.raises(CircuitOpenError), breaker:
+            pass
+        raise _DOWN
+
+
+class TestObservedCircuitBreaker:
+    """A decorated breaker exports its state and lets only a bounded number of probes through."""
+
+    def test_breaker_state_is_exported_and_half_open_is_rate_limited(self) -> None:
+        """Test that a decorated breaker's state is exported and half-open admits ``max_requests``.
+
+        Why this test is important:
+          - An open breaker that nobody can see sheds a dependency's calls silently, and a
+            half-open breaker that admits every caller sends a burst of probes at a
+            dependency that is just recovering.
+
+        What it tests:
+          - Tripping the breaker sets ``circuit_breaker_state`` to 2 and counts one
+            transition to ``open``.
+          - Half-open with ``max_requests=1`` admits one trial and fails a second caller
+            fast; the trial's failure reopens the breaker (state 2, a second ``open``).
+        """
+        registry = CollectorRegistry()
+        layers = decoration.Layers(
+            circuit_breaker=decoration.CircuitBreaker(
+                enabled=True, consecutive_failures=1, timeout=0.0, max_requests=1
+            )
+        )
+        collab = Collaborators(observability=Observability(metrics=new_metrics(registry)))
+        breaker = build("nlp", layers, collab).breaker
+        assert breaker is not None
+        assert _sample(registry, "circuit_breaker_state", dependency="nlp") == 0
+
+        with pytest.raises(UnavailableError):
+            _fail_through(breaker)
+        opened = _sample(
+            registry, "circuit_breaker_transitions_total", dependency="nlp", to="open"
+        )
+        assert opened == 1
+
+        with pytest.raises(UnavailableError):
+            _probe_while_trial(breaker)
+
+        assert _sample(registry, "circuit_breaker_state", dependency="nlp") == 2
+        probes = _sample(
+            registry,
+            "circuit_breaker_transitions_total",
+            dependency="nlp",
+            to="half_open",
+        )
+        assert probes == 1
+        reopened = _sample(
+            registry, "circuit_breaker_transitions_total", dependency="nlp", to="open"
+        )
+        assert reopened == 2

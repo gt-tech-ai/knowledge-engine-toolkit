@@ -1,7 +1,9 @@
 """Circuit breaker pattern for fault isolation.
 
 Tracks consecutive failures and opens the circuit when threshold is reached.
-In open state, calls fail fast without executing the wrapped operation.
+In open state, calls fail fast without executing the wrapped operation. Half-open admits at
+most ``half_open_max_calls`` trial calls at once (0: every caller), and each state change is
+reported to ``on_transition``, so a decorator can export the state.
 """
 
 from __future__ import annotations
@@ -51,6 +53,9 @@ class CircuitBreaker(CircuitBreakerInterface):
         failure_threshold: int = 5,
         recovery_timeout: float = 30.0,
         is_failure: Callable[[BaseException], bool] | None = None,
+        *,
+        half_open_max_calls: int = 0,
+        on_transition: Callable[[CircuitState, CircuitState], None] | None = None,
     ) -> None:
         """Initialize the circuit breaker.
 
@@ -64,6 +69,10 @@ class CircuitBreaker(CircuitBreakerInterface):
                 is treated as a success so ordinary business outcomes never trip the
                 breaker (mirrors the Go gobreaker ``IsSuccessful``). Defaults to
                 ``None``, which counts every exception as a failure (unchanged behaviour).
+            half_open_max_calls: The trial calls admitted at once while half-open; a caller
+                past it fails fast as if open. 0 admits every caller (unchanged behaviour).
+            on_transition: Called with ``(from, to)`` on every state change, under the
+                breaker's lock, so it must be quick (a metric update).
 
         """
         self._failure_threshold = failure_threshold
@@ -72,18 +81,32 @@ class CircuitBreaker(CircuitBreakerInterface):
         self._state = CircuitState.CLOSED
         self._failure_count = 0
         self._last_failure_time: float = 0.0
+        self._half_open_max_calls = half_open_max_calls
+        self._on_transition = on_transition
+        self._trials = 0
         self._lock = threading.Lock()
+
+    def _move(self, to: CircuitState) -> None:
+        """Change to ``to`` and report the transition (caller holds the lock)."""
+        if self._state is not to:
+            previous, self._state = self._state, to
+            if self._on_transition is not None:
+                self._on_transition(previous, to)
+
+    def _current(self) -> CircuitState:
+        """Return the state, moving open to half-open once recovery elapsed (caller holds the lock)."""
+        if (
+            self._state == CircuitState.OPEN
+            and time.monotonic() - self._last_failure_time >= self._recovery_timeout
+        ):
+            self._move(CircuitState.HALF_OPEN)
+        return self._state
 
     @property
     def state(self) -> CircuitState:
         """The current circuit state, transitioning to half-open if recovery timeout elapsed."""
         with self._lock:
-            if (
-                self._state == CircuitState.OPEN
-                and time.monotonic() - self._last_failure_time >= self._recovery_timeout
-            ):
-                self._state = CircuitState.HALF_OPEN
-            return self._state
+            return self._current()
 
     @override
     def execute(self, fn: Callable[[], object]) -> object:
@@ -99,13 +122,18 @@ class CircuitBreaker(CircuitBreakerInterface):
     def __enter__(self) -> Self:
         """Enter the circuit breaker context.
 
-        Raises ``CircuitOpenError`` immediately if the circuit is open,
-        preventing the wrapped operation from executing. In closed or
-        half-open state the call is allowed through.
+        Raises ``CircuitOpenError`` immediately if the circuit is open, or half-open with
+        ``half_open_max_calls`` trials already in flight, preventing the wrapped operation
+        from executing. Otherwise the call is allowed through (half-open: as a trial).
         """
-        current_state = self.state
-        if current_state == CircuitState.OPEN:
-            raise CircuitOpenError()
+        with self._lock:
+            current = self._current()
+            if current == CircuitState.OPEN:
+                raise CircuitOpenError()
+            if current == CircuitState.HALF_OPEN and self._half_open_max_calls:
+                if self._trials >= self._half_open_max_calls:
+                    raise CircuitOpenError()
+                self._trials += 1
         return self
 
     @override
@@ -123,6 +151,7 @@ class CircuitBreaker(CircuitBreakerInterface):
         method returns ``None``, as the interface declares).
         """
         with self._lock:
+            self._trials = max(self._trials - 1, 0)
             # A success — OR a non-failure exception (permanent domain error,
             # cancellation) when a classifier is configured — resets the breaker, so
             # ordinary business outcomes never trip it. Mirrors the Go gobreaker
@@ -133,10 +162,13 @@ class CircuitBreaker(CircuitBreakerInterface):
                 and not self._is_failure(exc_val)
             ):
                 self._failure_count = 0
-                self._state = CircuitState.CLOSED
+                self._move(CircuitState.CLOSED)
                 return
 
             self._failure_count += 1
             self._last_failure_time = time.monotonic()
-            if self._failure_count >= self._failure_threshold:
-                self._state = CircuitState.OPEN
+            if (
+                self._failure_count >= self._failure_threshold
+                or self._state == CircuitState.HALF_OPEN
+            ):
+                self._move(CircuitState.OPEN)

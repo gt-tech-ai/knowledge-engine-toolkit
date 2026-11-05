@@ -27,7 +27,10 @@ from techai_webutils.foundation.resilience.bulkhead import (
     BulkheadKind,
     bulkhead_from_config,
 )
-from techai_webutils.foundation.resilience.circuit_breaker import CircuitBreaker
+from techai_webutils.foundation.resilience.circuit_breaker import (
+    CircuitBreaker,
+    CircuitState,
+)
 from techai_webutils.foundation.resilience.classify import is_transient
 from techai_webutils.foundation.resilience.rate_limiter import TokenBucketRateLimiter
 from techai_webutils.foundation.resilience.retrier import (
@@ -41,6 +44,7 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.bulkhead import Bulkhead
     from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
     from techai_webutils.core.interfaces.config_loader import ConfigLoader
+    from techai_webutils.core.interfaces.metrics import MetricsProvider
     from techai_webutils.core.interfaces.rate_limiter import RateLimiter
     from techai_webutils.core.interfaces.retrier import Retrier
     from techai_webutils.foundation.config import decoration
@@ -370,7 +374,7 @@ def build(name: str, layers: decoration.Layers, collab: Collaborators) -> Deps:
             name,
             "circuit_breaker",
             on(layers.circuit_breaker.enabled),
-            lambda: _breaker(layers.circuit_breaker),
+            lambda: _breaker(layers.circuit_breaker, name, obs.metrics),
         ),
         bulkhead=_layer(
             name,
@@ -413,13 +417,56 @@ def _retrier(r: decoration.Retry) -> Retrier:
     )
 
 
-def _breaker(b: decoration.CircuitBreaker) -> CircuitBreakerInterface:
-    """Build the breaker ``b`` tunes; only a transient failure counts against it."""
+_BREAKER_STATE_VALUES = {
+    CircuitState.CLOSED: 0.0,
+    CircuitState.HALF_OPEN: 1.0,
+    CircuitState.OPEN: 2.0,
+}
+"""``circuit_breaker_state``'s value per state."""
+
+
+def _export_transitions(
+    metrics: MetricsProvider, name: str
+) -> Callable[[CircuitState, CircuitState], None]:
+    """Return a transition callback that exports ``name``'s breaker state and counts its moves.
+
+    ``circuit_breaker_state{dependency}`` reads 0 closed, 1 half-open and 2 open, starting at
+    0; ``circuit_breaker_transitions_total{dependency, to}`` counts each state entered.
+    """
+    state = metrics.gauge(
+        "circuit_breaker_state",
+        "A dependency's circuit breaker state (0 closed, 1 half-open, 2 open).",
+        ["dependency"],
+    )
+    moves = metrics.counter(
+        "circuit_breaker_transitions_total",
+        "A dependency's circuit breaker state changes, by the state entered.",
+        ["dependency", "to"],
+    )
+    state.set(0.0, dependency=name)
+
+    def on_transition(_: CircuitState, to: CircuitState) -> None:
+        state.set(_BREAKER_STATE_VALUES[to], dependency=name)
+        moves.inc(dependency=name, to=to.value)
+
+    return on_transition
+
+
+def _breaker(
+    b: decoration.CircuitBreaker, name: str, metrics: MetricsProvider | None
+) -> CircuitBreakerInterface:
+    """Build the breaker ``b`` tunes for ``name``; only a transient failure counts against it.
+
+    With a metrics provider the breaker exports its state (``_export_transitions``);
+    ``max_requests`` bounds the half-open trial calls.
+    """
     b.validate()
     return CircuitBreaker(
         failure_threshold=max(b.consecutive_failures, 1),
         recovery_timeout=b.timeout,
         is_failure=is_transient,
+        half_open_max_calls=b.max_requests,
+        on_transition=None if metrics is None else _export_transitions(metrics, name),
     )
 
 

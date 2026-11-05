@@ -10,6 +10,12 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Python decorated circuit breakers are observable: a component's breaker exports
+  `circuit_breaker_state{dependency}` (0 closed, 1 half-open, 2 open) and counts
+  `circuit_breaker_transitions_total{dependency,to}` whenever a metrics provider is wired.
+  `decoration.CircuitBreaker.max_requests` now applies in Python too: half-open admits that many
+  trial calls at once and fails the rest fast (0, the default, admits every caller, as before).
+  `CircuitBreaker` takes `half_open_max_calls` and `on_transition`.
 - `clients.lock.postgres_dsn(config)`: the DSN the postgres lock connects with (TLS in
   `sslmode`, credentials percent-encoded), public so a pool opened beside the lock (the postgres
   `StartBudget`'s start-rate row) connects the same way.
@@ -202,6 +208,8 @@ Python: `techai-webutils` 0.9.3.
 
 ### Changed
 
+- Python `CircuitBreaker`: a failed half-open trial reopens the breaker at once (it used to
+  count toward the threshold again), as Go's gobreaker does.
 - A parse whose child runs out of memory under its cap now fails with
   `parse_isolation_failed: memory_exceeded` instead of the child's traceback text (the prefix is
   unchanged).

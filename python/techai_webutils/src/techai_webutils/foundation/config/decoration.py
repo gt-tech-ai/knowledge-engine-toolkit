@@ -82,7 +82,7 @@ class CircuitBreaker:
     """The failure ratio that trips the breaker once min_requests are seen (Go only)."""
 
     max_requests: int = 0
-    """The trial calls admitted while half-open (Go only)."""
+    """The trial calls admitted at once while half-open; 0 admits every caller."""
 
     consecutive_failures: int = 0
     """The consecutive failures that trip the breaker."""
@@ -98,6 +98,7 @@ class CircuitBreaker:
         )
         _require(self.interval >= 0, "circuit_breaker.interval must be >= 0")
         _require(self.timeout >= 0, "circuit_breaker.timeout must be >= 0")
+        _require(self.max_requests >= 0, "circuit_breaker.max_requests must be >= 0")
 
 
 @dataclass(frozen=True, slots=True)
