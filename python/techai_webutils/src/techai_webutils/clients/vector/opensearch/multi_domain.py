@@ -95,6 +95,29 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         )
         return sorted((hit for hits in results for hit in hits), key=lambda h: -h.score)
 
+    @property
+    @override
+    def supports_keyword(self) -> bool:
+        """Every domain is an OpenSearch store, so keyword search is available."""
+        return True
+
+    @override
+    async def keyword_search(
+        self,
+        collection: str,
+        query: str,
+        top_k: int = 10,
+        filters: dict[str, str] | None = None,
+    ) -> list[VectorSearchResult]:
+        """BM25-search every domain; return all their hits, best score first."""
+        results = await asyncio.gather(
+            *(
+                store.keyword_search(collection, query, top_k, filters)
+                for store in self._domains.values()
+            )
+        )
+        return sorted((hit for hits in results for hit in hits), key=lambda h: -h.score)
+
     @override
     async def delete(self, collection: str, ids: Sequence[str]) -> None:
         """Delete ``ids`` from every domain."""

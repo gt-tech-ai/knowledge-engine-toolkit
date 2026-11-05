@@ -6,12 +6,19 @@ default; every other filter is enforced by the ``FilteringRetrievalEngine`` deco
 store's top_k. Each hit is mapped into a ``RetrievalResult`` preserving every metadata key, so the
 decorator's policies see them. The engine reads one collection: a per-call ``index_id`` naming
 another index cannot be honoured and is logged as a warning.
+
+When the store also indexes the text for BM25 (``VectorStore.supports_keyword``, e.g. OpenSearch),
+the engine runs the k-NN and the keyword search concurrently and fuses the two rankings
+(``FusionConfig``, reciprocal-rank fusion by default); each result's ``score`` is then the fused
+score. Stores without keyword search (Qdrant, the stub) keep the k-NN path unchanged.
 """
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
+from techai_webutils.clients.retrieval.fusion import FusionConfig, fuse
 from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 from techai_webutils.foundation.logger import get_logger
@@ -39,16 +46,19 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         collection: str,
         *,
         filter_keys: Sequence[str] = (),
+        fusion: FusionConfig | None = None,
     ) -> None:
         """Compose the embedder + store; fail loudly if their vector dimensions disagree.
 
         ``filter_keys`` names the request filters pushed down to the store as payload filters.
+        ``fusion`` fuses the k-NN and keyword rankings when the store supports keyword search.
         """
         require_matching_dimension(embedder, store, collection)
         self._embedder = embedder
         self._store = store
         self._collection = collection
         self._filter_keys = tuple(filter_keys)
+        self._fusion = fusion or FusionConfig()
 
     async def retrieve(
         self,
@@ -71,14 +81,38 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
                 collection=self._collection,
             )
         request = filters or {}
+        pushed = {k: request[k] for k in self._filter_keys if k in request}
         embedding = await self._embedder.embed(query)
-        hits = await self._store.search(
-            self._collection,
-            embedding.embedding,
-            top_k=top_k,
-            filters={k: request[k] for k in self._filter_keys if k in request},
+        dense_search = self._store.search(
+            self._collection, embedding.embedding, top_k=top_k, filters=pushed
         )
-        return [_to_retrieval_result(hit) for hit in hits]
+        if not self._store.supports_keyword:
+            return [_to_retrieval_result(hit) for hit in await dense_search]
+        dense, keyword = await asyncio.gather(
+            dense_search,
+            self._store.keyword_search(self._collection, query, top_k, pushed),
+        )
+        return self._fused(dense, keyword, top_k)
+
+    def _fused(
+        self,
+        dense: list[VectorSearchResult],
+        keyword: list[VectorSearchResult],
+        top_k: int,
+    ) -> list[RetrievalResult]:
+        """Fuse the k-NN and keyword hits by chunk id; each result carries its fused score."""
+        hits = {hit.chunk_id: hit for hit in (*keyword, *dense)}
+        fused = fuse(
+            self._fusion,
+            [(h.chunk_id, h.score) for h in dense],
+            [(h.chunk_id, h.score) for h in keyword],
+        )
+        results: list[RetrievalResult] = []
+        for chunk_id, score in fused[:top_k]:
+            result = _to_retrieval_result(hits[chunk_id])
+            result.score = score
+            results.append(result)
+        return results
 
 
 def _to_retrieval_result(hit: VectorSearchResult) -> RetrievalResult:

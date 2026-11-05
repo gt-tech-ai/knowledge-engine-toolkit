@@ -26,6 +26,8 @@ from typing import TYPE_CHECKING, cast, override
 
 from techai_webutils.clients.vector.opensearch.config import IndexLayout, OpenSearchConfig
 from techai_webutils.clients.vector.opensearch.mapping import (
+    EMBEDDING_FIELD,
+    TEXT_FIELD,
     alias_name,
     bulk_error,
     doc_id,
@@ -151,6 +153,43 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             index=alias,
             body=knn_query(query_embedding, top_k, fields),
             params=self._routed(org),
+        )
+        hits = cast("dict[str, list[dict[str, object]]]", response["hits"])["hits"]
+        return [hit_result(hit) for hit in hits]
+
+    @property
+    @override
+    def supports_keyword(self) -> bool:
+        """OpenSearch indexes the chunk text for BM25 beside the vectors."""
+        return True
+
+    @override
+    async def keyword_search(
+        self,
+        collection: str,
+        query: str,
+        top_k: int = 10,
+        filters: dict[str, str] | None = None,
+    ) -> list[VectorSearchResult]:
+        """BM25 search of the chunk text within one org; ``filters`` match exactly, as in ``search``."""
+        fields = dict(filters or {})
+        org = self._org or require(fields.get(self._config.org_field), "an org filter")
+        fields[self._config.org_field] = org
+        alias = self._alias(collection, org)
+        if not await self._alias_exists(alias):
+            return []
+        body = {
+            "size": top_k,
+            "_source": {"excludes": [EMBEDDING_FIELD]},
+            "query": {
+                "bool": {
+                    "must": [{"match": {TEXT_FIELD: query}}],
+                    "filter": term_filters(fields),
+                }
+            },
+        }
+        response = await self._client.search(
+            index=alias, body=body, params=self._routed(org)
         )
         hits = cast("dict[str, list[dict[str, object]]]", response["hits"])["hits"]
         return [hit_result(hit) for hit in hits]

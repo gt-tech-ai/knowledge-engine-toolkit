@@ -31,6 +31,7 @@
   "techai_webutils.clients.parsing.factory.ParserConfig": {},
   "techai_webutils.clients.prometheus.builder.PrometheusConfig": {},
   "techai_webutils.clients.retrieval.builder.RetrievalConfig": {},
+  "techai_webutils.clients.retrieval.fusion.FusionConfig": {},
   "techai_webutils.clients.rpc.builder.RpcConfig": {},
   "techai_webutils.clients.rpc.grpc.client.ChannelConfig": {},
   "techai_webutils.clients.safety.builder.SafetyConfig": {},

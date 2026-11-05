@@ -1,8 +1,9 @@
-"""Vector store interface for similarity search."""
+"""Vector store interface for similarity search (and, where the store has one, keyword search)."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from techai_webutils.core.errors import InternalError
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
 
 
@@ -59,6 +60,27 @@ class VectorStore(ManagedResource, ABC):
         filters: dict[str, str] | None = None,
     ) -> list[VectorSearchResult]:
         """Search for similar vectors in the specified collection."""
+
+    @property
+    def supports_keyword(self) -> bool:
+        """Whether ``keyword_search`` is available (a BM25 index beside the vectors); ``False`` by default."""
+        return False
+
+    async def keyword_search(
+        self,
+        collection: str,
+        query: str,
+        top_k: int = 10,
+        filters: dict[str, str] | None = None,
+    ) -> list[VectorSearchResult]:
+        """Search the stored text lexically (BM25); only stores with ``supports_keyword`` implement it.
+
+        Raises:
+            InternalError: The store has no keyword index; callers check ``supports_keyword`` first.
+
+        """
+        msg = f"{type(self).__name__} has no keyword search (collection {collection!r}, {top_k} hits, {len(query)} chars, filters {sorted(filters or {})})"
+        raise InternalError(msg)
 
     @abstractmethod
     async def delete(self, collection: str, ids: list[str]) -> None:

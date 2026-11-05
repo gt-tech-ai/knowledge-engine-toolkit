@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from techai_webutils.clients.retrieval.abstain import AbstainerKind
 from techai_webutils.clients.retrieval.builder import (
     RetrievalConfig,
     RetrievalKind,
@@ -32,12 +33,84 @@ def _embedder(dimension: int = 3) -> EmbeddingProvider:
     return embedder
 
 
-def _store(hits: list[VectorSearchResult], dimension: int = 3) -> VectorStore:
-    """Mock VectorStore returning fixed hits with a matching dimension."""
+def _store(
+    hits: list[VectorSearchResult],
+    dimension: int = 3,
+    keyword_hits: list[VectorSearchResult] | None = None,
+) -> VectorStore:
+    """Mock VectorStore returning fixed hits; with ``keyword_hits`` it also has keyword search."""
     store = MagicMock(spec=VectorStore)
     store.dimension = dimension
     store.search = AsyncMock(return_value=hits)
+    store.supports_keyword = keyword_hits is not None
+    store.keyword_search = AsyncMock(return_value=keyword_hits or [])
     return store
+
+
+def _hit_of(chunk_id: str, score: float, **metadata: str) -> VectorSearchResult:
+    """Return a hit on chunk ``chunk_id`` with ``score``."""
+    return VectorSearchResult(
+        document_id=chunk_id.split(":", maxsplit=1)[0],
+        chunk_id=chunk_id,
+        content=f"text {chunk_id}",
+        score=score,
+        metadata=dict(metadata),
+    )
+
+
+@pytest.mark.asyncio
+async def test_hybrid_store_fuses_knn_and_keyword_rankings() -> None:
+    """Test that a store with keyword search gets both searches, fused by RRF.
+
+    **Why this test is important:**
+      - Exact terms (codes, names) are found by BM25 and paraphrases by k-NN; hybrid retrieval
+        must return both, ranked by one fused order.
+
+    **What it tests:**
+      - the k-NN and keyword searches both run with the pushed-down filters
+      - ``a`` (first in both) leads, ``b`` (k-NN only) and ``c`` (keyword only) follow; scores are
+        the RRF values
+    """
+    store = _store(
+        [_hit_of("a:0", 0.9), _hit_of("b:0", 0.8)],
+        keyword_hits=[_hit_of("a:0", 12.0), _hit_of("c:0", 9.0)],
+    )
+    engine = VectorRetrievalEngine(_embedder(), store, "docs", filter_keys=["org_id"])
+
+    results = await engine.retrieve("q", top_k=3, filters={"org_id": "o1", "x": "y"})
+
+    store.keyword_search.assert_awaited_once_with("docs", "q", 3, {"org_id": "o1"})
+    assert [r.document_id for r in results] == ["a", "b", "c"]
+    assert results[0].score == pytest.approx(2 / 61)
+    assert results[1].score == pytest.approx(1 / 62)
+
+
+@pytest.mark.asyncio
+async def test_opensearch_kind_builds_the_hybrid_engine_with_abstention_off() -> None:
+    """Test that the ``opensearch`` kind builds the vector engine and ``abstainer=none`` keeps RRF scores.
+
+    **Why this test is important:**
+      - Fused RRF scores are about 0.03; the default 0.5 floor would drop every passage, so a
+        hybrid deployment selects ``none``.
+
+    **What it tests:**
+      - with ``abstainer=none`` both fused passages survive; with the default they are all dropped
+    """
+    store = _store([_hit_of("a:0", 0.9)], keyword_hits=[_hit_of("b:0", 3.0)])
+    config = RetrievalConfig(kind=RetrievalKind.OPENSEARCH, abstainer=AbstainerKind.NONE)
+
+    kept = await new_retrieval_engine_from_config(
+        config, policies=[], embedder=_embedder(), store=store
+    ).retrieve("q")
+    dropped = await new_retrieval_engine_from_config(
+        RetrievalConfig(kind=RetrievalKind.OPENSEARCH),
+        policies=[],
+        embedder=_embedder(),
+        store=store,
+    ).retrieve("q")
+
+    assert [r.document_id for r in kept] == ["a", "b"]
+    assert dropped == []
 
 
 def _hit() -> VectorSearchResult:

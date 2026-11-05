@@ -15,14 +15,19 @@ pushed down, and logs (at info) a supplied seam the selected kind does not use.
 from __future__ import annotations
 
 import importlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, cast
 
+from techai_webutils.clients.retrieval.abstain import AbstainerKind, abstention_policies
 from techai_webutils.clients.retrieval.filtering import (
     FilteringRetrievalEngine,
     MetadataEquals,
-    MinScore,
+)
+from techai_webutils.clients.retrieval.fusion import FusionConfig
+from techai_webutils.clients.retrieval.ordering import (
+    OrderingRetrievalEngine,
+    PassageOrder,
 )
 from techai_webutils.clients.retrieval.stub import StubRetrievalEngine
 from techai_webutils.clients.retrieval.vector import VectorRetrievalEngine
@@ -54,6 +59,8 @@ class RetrievalKind(StrEnum):
     """The AWS Bedrock Knowledge Base retrieval engine."""
     QDRANT = "qdrant"
     """A Qdrant vector store fed by an Ollama embedder (local vector development)."""
+    OPENSEARCH = "opensearch"
+    """The injected OpenSearch vector store: k-NN and BM25 fused (``fusion``)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +100,13 @@ class RetrievalConfig:
     """Embedding model name requested from Ollama."""
     embedding_dimension: int = 768
     """Vector dimensionality of ``embedding_model`` (must match the Qdrant collection)."""
+    fusion: FusionConfig = field(default_factory=FusionConfig)
+    """How a store with keyword search fuses its k-NN and BM25 rankings (``opensearch``)."""
+    abstainer: AbstainerKind = AbstainerKind.SCORE_THRESHOLD
+    """``score_threshold`` drops passages below ``min_score`` (the default); ``none`` keeps all,
+    e.g. for fused RRF scores, which are not on ``min_score``'s scale."""
+    passage_order: PassageOrder = PassageOrder.RANK
+    """The order passages reach the prompt: best first (default) or best at both ends."""
 
     def __post_init__(self) -> None:
         """Reject a non-numeric ``min_score`` (e.g. ``None``) here rather than on every retrieve."""
@@ -109,13 +123,19 @@ def wrap_retrieval_engine(
     *,
     policies: Sequence[PassagePolicy],
 ) -> RetrievalEngine:
-    """Wrap ``inner`` in the filtering the factory applies: ``MinScore(config.min_score)``, then ``policies``.
+    """Wrap ``inner`` in the factory's filtering and ordering.
 
-    ``new_retrieval_engine_from_config`` wraps every kind it builds with this; a consumer with its own
-    engine (a custom corpus, a test double of the backend) calls it directly so that engine is scoped
-    exactly like the factory's.
+    The filter applies the abstainer (``MinScore(config.min_score)`` by default), then ``policies``;
+    the passages are then put in ``config.passage_order``. ``new_retrieval_engine_from_config``
+    wraps every kind it builds with this; a consumer with its own engine (a custom corpus, a test
+    double of the backend) calls it directly so that engine is scoped exactly like the factory's.
     """
-    return FilteringRetrievalEngine(inner, [MinScore(config.min_score), *policies])
+    filtering = FilteringRetrievalEngine(
+        inner, [*abstention_policies(config.abstainer, config.min_score), *policies]
+    )
+    if config.passage_order == PassageOrder.RANK:
+        return filtering
+    return OrderingRetrievalEngine(filtering, config.passage_order)
 
 
 def new_retrieval_engine_from_config(
@@ -153,7 +173,7 @@ def new_retrieval_engine_from_config(
         inner = StubRetrievalEngine(stub_passages)
     elif config.kind is RetrievalKind.BEDROCK:
         inner = _build_bedrock_engine(config, filter_builder, document_id_resolver)
-    elif config.kind is RetrievalKind.QDRANT:
+    elif config.kind in _VECTOR_KINDS:
         inner = _build_vector_engine(config, store_filter_keys, embedder, store)
     else:
         msg = f"unknown retrieval kind: {config.kind!r}"
@@ -184,13 +204,16 @@ def _build_bedrock_engine(
     )
 
 
+_VECTOR_KINDS = frozenset({RetrievalKind.QDRANT, RetrievalKind.OPENSEARCH})
+"""The kinds built as a vector engine over the injected embedder and store."""
+
 _SEAM_KINDS = {
-    "filter_builder": RetrievalKind.BEDROCK,
-    "document_id_resolver": RetrievalKind.BEDROCK,
-    "store_filter_keys": RetrievalKind.QDRANT,
-    "stub_passages": RetrievalKind.STUB,
+    "filter_builder": frozenset({RetrievalKind.BEDROCK}),
+    "document_id_resolver": frozenset({RetrievalKind.BEDROCK}),
+    "store_filter_keys": _VECTOR_KINDS,
+    "stub_passages": frozenset({RetrievalKind.STUB}),
 }
-"""The one kind each factory seam reaches."""
+"""The kinds each factory seam reaches."""
 
 
 def _warn_about_seams(
@@ -217,7 +240,7 @@ def _warn_about_seams(
     unused = [
         name
         for name, given in supplied.items()
-        if given and _SEAM_KINDS[name] is not kind
+        if given and kind not in _SEAM_KINDS[name]
     ]
     if unused:
         # Info, not warning: a composition root may pass every kind's seams so the kind can be flipped by
@@ -226,7 +249,7 @@ def _warn_about_seams(
             "retrieval seams unused by the selected kind", kind=str(kind), seams=unused
         )
     scope_keys = [p.key for p in policies if isinstance(p, MetadataEquals)]
-    if kind is RetrievalKind.QDRANT:
+    if kind in _VECTOR_KINDS:
         # The vector engine pushes {k: request[k]} for each store filter key, so a scope is pushed down
         # only when its metadata key is one of them.
         scope_keys = [key for key in scope_keys if key not in store_filter_keys]
@@ -256,8 +279,12 @@ def _build_vector_engine(
     if embedder is None or store is None:
         raise AppError(
             ErrorCode.INVALID_INPUT,
-            "the qdrant retrieval kind needs an embedder and a store built by the caller",
+            f"the {config.kind} retrieval kind needs an embedder and a store built by the caller",
         )
     return VectorRetrievalEngine(
-        embedder, store, config.vector_collection, filter_keys=filter_keys
+        embedder,
+        store,
+        config.vector_collection,
+        filter_keys=filter_keys,
+        fusion=config.fusion,
     )

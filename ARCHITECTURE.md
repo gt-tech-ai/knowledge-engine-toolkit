@@ -772,6 +772,18 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   Kinds `stub` (zero, no I/O) and `http` (the Prometheus query API, fail closed, coded errors).
 - **`VectorKnowledgeBase(embed_concurrency=…)`** keeps that many sub-batches in flight (1, the
   default, is one at a time).
+- **Hybrid retrieval.** A store with keyword search (`VectorStore.supports_keyword`; OpenSearch)
+  gets the k-NN and the BM25 search concurrently, fused by `RetrievalConfig.fusion`: `rrf` (the
+  default, `Σ 1/(k + rank)`, `k` 60) or `convex` (min-max or z-score normalized, weighted by
+  `dense_weight`). Each result's `score` is then the fused score. Shards of one index are merged by
+  score (`merge_by_score`), never fused. The `opensearch` `RetrievalKind` builds this engine over
+  the injected store; Qdrant and the stub keep pure k-NN.
+- **Abstention and passage order.** `RetrievalConfig.abstainer` `score_threshold` (the default)
+  drops passages below `min_score` (0.5), reading whatever score the engine returns (a reranker's
+  when reranking is on); `none` keeps every candidate, as fused RRF scores (about 0.03) need.
+  `passage_order: edges` puts the best passages at both ends of the prompt (ranks 1, 3, 5 … 4, 2);
+  the reordering is in the engine's output, so `[n]` and the citations stay aligned.
+  `passage_header(n, passage)` gives the consumer's prompt `[n] <document> · <section> · p. <page>`.
 
 ## Repository tooling substrate
 

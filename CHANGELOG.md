@@ -108,6 +108,16 @@ Python: `techai-webutils` 0.9.3.
   `new_metrics_querier_from_config` with `PrometheusConfig.kind` `stub` (the default) or `http`,
   the Python mirror of Go `clients/prometheus`.
 - `KnowledgeBaseConfig.embed_concurrency` / `VectorKnowledgeBase(embed_concurrency=…)` (default 1).
+- Hybrid retrieval (Python):
+  - `VectorStore.supports_keyword` (default `False`) and `keyword_search`; the OpenSearch stores
+    implement them (BM25 on the chunk text, org-filtered).
+  - `clients.retrieval.fusion`: `reciprocal_rank_fusion`, `fuse` with `FusionConfig` (`rrf` or
+    `convex` with `min_max` / `z_score`), and `merge_by_score` for shards of one index.
+  - `RetrievalKind.opensearch` and `RetrievalConfig.fusion`: the vector engine fuses k-NN and BM25
+    when the store supports keyword search.
+  - `RetrievalConfig.abstainer` (`AbstainerKind`: `score_threshold`, the default and today's
+    `MinScore(min_score)`, or `none`) and `RetrievalConfig.passage_order` (`PassageOrder`: `rank`,
+    the default, or `edges`, via `OrderingRetrievalEngine`), plus `passage_header`.
 
 ### Changed
 
