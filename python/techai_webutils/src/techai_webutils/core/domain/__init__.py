@@ -11,6 +11,7 @@ from techai_webutils.core.domain.document_ir import (
     BlockType,
     DocumentBlock,
     TableCell,
+    Turn,
     blocks_from_json,
     blocks_to_json,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "Page",
     "ParsedDocument",
     "TableCell",
+    "Turn",
     "blocks_from_json",
     "blocks_to_json",
 ]

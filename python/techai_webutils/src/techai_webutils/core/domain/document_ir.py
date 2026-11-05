@@ -3,7 +3,8 @@
 A layout-aware parser (the ``layout`` kind) fills ``ParsedDocument.blocks`` beside
 ``markdown_content``; other parsers leave it empty. The block types follow Docling's document
 model (title, section header, text, list item, table, picture, code, caption, formula) so a
-Docling document maps onto them one to one. Each block keeps its page, the headings it sits under
+Docling document maps onto them one to one; a ``turn`` block is one speaker's turn in an
+interview transcript, written by the transcript source. Each block keeps its page, the headings it sits under
 and its position in reading order; a table keeps its cells, so its rows and header survive.
 
 ``blocks_to_json`` / ``blocks_from_json`` give the JSON form (plain dicts and lists, so orjson or
@@ -44,6 +45,8 @@ class BlockType(StrEnum):
     """A caption not attached to a table or picture."""
     FORMULA = "formula"
     """A formula, as text (LaTeX where the parser produced it)."""
+    TURN = "turn"
+    """One speaker's turn in a transcript; ``turn`` holds who spoke and where."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +65,41 @@ class TableCell:
     """Rows the cell covers."""
     col_span: int = 1
     """Columns the cell covers."""
+
+
+@dataclass(frozen=True, slots=True)
+class Turn:
+    """One speaker's turn in an interview transcript."""
+
+    speaker_role: str
+    """The speaker's role (``interviewer``, ``respondent``, or the source's own term)."""
+    index: int
+    """The turn's position in the transcript (0-based)."""
+    start: int
+    """Offset of the turn's first character in the document's text."""
+    end: int
+    """Offset one past the turn's last character."""
+    speaker_id: str = ""
+    """The speaker's id in the source (empty when unknown)."""
+    question_id: str = ""
+    """The interview-guide question the turn answers or asks (empty when unknown)."""
+    follow_up: bool = False
+    """Whether the turn is a follow-up to the previous question."""
+    start_seconds: float | None = None
+    """When the turn starts in the recording (``None`` when the source has no timestamps)."""
+    end_seconds: float | None = None
+    """When the turn ends in the recording."""
+
+    def __post_init__(self) -> None:
+        """Refuse a negative index or an empty or inverted span.
+
+        Raises:
+            AppValueError: ``index < 0``, ``start < 0`` or ``end <= start`` (``INVALID_INPUT``).
+
+        """
+        if self.index < 0 or self.start < 0 or self.end <= self.start:
+            msg = f"invalid turn {self.index} [{self.start}, {self.end})"
+            raise AppValueError(msg)
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +128,8 @@ class DocumentBlock:
     """A table's or picture's caption."""
     ref: str = ""
     """A picture's reference (its URI or file name); empty for other blocks."""
+    turn: Turn | None = None
+    """A ``turn`` block's speaker and position; ``None`` for other blocks."""
 
     @property
     def element_type(self) -> str:
@@ -117,6 +157,7 @@ def blocks_to_json(blocks: tuple[DocumentBlock, ...]) -> dict[str, object]:
                 "cols": b.cols,
                 "caption": b.caption,
                 "ref": b.ref,
+                "turn": _turn_to_json(b.turn),
             }
             for b in blocks
         ],
@@ -163,4 +204,39 @@ def _block(row: dict[str, object]) -> DocumentBlock:
         cols=cast("int", row.get("cols", 0)),
         caption=cast("str", row.get("caption", "")),
         ref=cast("str", row.get("ref", "")),
+        turn=_turn_from_json(cast("dict[str, object] | None", row.get("turn"))),
+    )
+
+
+def _turn_to_json(turn: Turn | None) -> dict[str, object] | None:
+    """Return ``turn`` as a JSON-ready dict (``None`` stays ``None``)."""
+    if turn is None:
+        return None
+    return {
+        "speaker_role": turn.speaker_role,
+        "index": turn.index,
+        "start": turn.start,
+        "end": turn.end,
+        "speaker_id": turn.speaker_id,
+        "question_id": turn.question_id,
+        "follow_up": turn.follow_up,
+        "start_seconds": turn.start_seconds,
+        "end_seconds": turn.end_seconds,
+    }
+
+
+def _turn_from_json(row: dict[str, object] | None) -> Turn | None:
+    """Build a turn from its JSON dict (``None`` stays ``None``)."""
+    if row is None:
+        return None
+    return Turn(
+        speaker_role=cast("str", row["speaker_role"]),
+        index=cast("int", row["index"]),
+        start=cast("int", row["start"]),
+        end=cast("int", row["end"]),
+        speaker_id=cast("str", row.get("speaker_id", "")),
+        question_id=cast("str", row.get("question_id", "")),
+        follow_up=cast("bool", row.get("follow_up", False)),
+        start_seconds=cast("float | None", row.get("start_seconds")),
+        end_seconds=cast("float | None", row.get("end_seconds")),
     )

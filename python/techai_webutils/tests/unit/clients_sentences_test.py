@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from techai_webutils.clients.sentences import (
+    TRANSCRIPT_JOIN_PATTERNS,
     SentenceSplitterConfig,
     SentenceSplitterKind,
     sentence_splitter_from_config,
@@ -130,3 +131,43 @@ def test_factory_and_span_validation_refuse_bad_values() -> None:
     for start, end in ((-1, 2), (3, 3), (4, 1)):
         with pytest.raises(AppValueError):
             TextSpan(start, end)
+
+
+_TRANSCRIPT = (
+    "Q.\nWhere were you on May 3?\nA.\nAt the office.\n"
+    "THE WITNESS:\nI saw him leave. MR. SMITH: Objection. So said Dr.\nLee."
+)
+
+
+def test_transcript_rules_join_markers_labels_and_honorifics() -> None:
+    """Test that the transcript join rules fix the generic splitter's cuts in a golden transcript.
+
+    **Why this test is important:**
+      - A sentence of just ``MR.`` orphans the speaker from what was said; chunk boundaries
+        and citations land on these spans.
+
+    **What it tests:**
+      - without rules the golden transcript cuts ``MR. `` off ``SMITH: Objection.``; with
+        ``TRANSCRIPT_JOIN_PATTERNS`` the two are one span and every other span is unchanged
+      - both results tile the text; an invalid pattern is refused with ``AppValueError``
+    """
+    plain = sentence_splitter_from_config(SentenceSplitterConfig())
+    ruled = sentence_splitter_from_config(
+        SentenceSplitterConfig(join_patterns=TRANSCRIPT_JOIN_PATTERNS)
+    )
+
+    before = plain.split(_TRANSCRIPT)
+    after = ruled.split(_TRANSCRIPT)
+
+    assert "MR. " in [_TRANSCRIPT[s.start : s.end] for s in before]
+    assert [_TRANSCRIPT[s.start : s.end] for s in after] == [
+        "Q.\nWhere were you on May 3?",
+        "\nA.\nAt the office.",
+        "\nTHE WITNESS:\nI saw him leave. ",
+        "MR. SMITH: Objection. ",
+        "So said Dr.\nLee.",
+    ]
+    assert _tiles(_TRANSCRIPT, before)
+    assert _tiles(_TRANSCRIPT, after)
+    with pytest.raises(AppValueError):
+        sentence_splitter_from_config(SentenceSplitterConfig(join_patterns=("(",)))

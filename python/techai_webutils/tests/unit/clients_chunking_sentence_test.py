@@ -20,6 +20,7 @@ from techai_webutils.clients.sentences import (
     SentenceSplitterConfig,
     sentence_splitter_from_config,
 )
+from techai_webutils.core.domain import Turn
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.annotator import Entity
 from techai_webutils.core.interfaces.chunker import StructuredChunk, StructuredChunker
@@ -288,3 +289,36 @@ def test_factory_refuses_a_sentence_chunker_it_cannot_build() -> None:
             chunker_from_config(config, splitter=_SPLITTER, tokenizer=_words)
     assert ChunkerConfig().kind is ChunkerKind.FIXED
     assert _chunker(64).chunk("One. Two.") == ["One. Two."]
+
+
+def test_chunks_carry_every_turn_their_span_overlaps() -> None:
+    """Test that each chunk carries the transcript turns it overlaps, a long turn in several.
+
+    **Why this test is important:**
+      - Retrieval cites and filters interview chunks by speaker and question; a chunk missing
+        its turn loses who said it.
+
+    **What it tests:**
+      - with turns given out of order, each chunk carries exactly the turns whose span
+        overlaps it, in start order; a turn spanning two chunks is on both
+      - without turns, chunks carry none
+    """
+    text = "Q. Where were you? A. At home all day. I read. I slept. I woke up late."
+    answer = text.index("A.")
+    turns = [
+        Turn("respondent", 1, answer, len(text)),
+        Turn("interviewer", 0, 0, answer),
+    ]
+
+    chunks = _chunker(6).chunk_spans(text, turns=turns)
+
+    assert len(chunks) > 2
+    for chunk in chunks:
+        expected = tuple(
+            t
+            for t in sorted(turns, key=lambda t: t.start)
+            if t.start < chunk.end and chunk.start < t.end
+        )
+        assert chunk.turns == expected
+    assert sum(turns[0] in c.turns for c in chunks) >= 2
+    assert all(c.turns == () for c in _chunker(6).chunk_spans(text))

@@ -164,6 +164,11 @@ Python: `techai-webutils` 0.9.3.
   `ParserConfig.artifacts_path` / `ocr` and `parser_from_config(..., convert=)`; the `layout` extra
   installs Docling. `run_isolated(..., context=)`, `SPAWN_CONTEXT`, `IsolationMemoryError` and
   `isolation_error_tag`.
+- Transcripts, rules and personal data (Python): `BlockType.turn` and `Turn`
+  (`DocumentBlock.turn`); `StructuredChunk.turns` and `chunk_spans(..., turns=)`.
+  `clients.nlp`: `EntityRulerAnnotator` and `RulerPattern`; `PiiAnnotator`, `PII`, `PiiSpan`,
+  `PiiKind`, `PiiMode`, `find_pii` and `apply_pii`. `clients.sentences`: `RuledSplitter`,
+  `TRANSCRIPT_JOIN_PATTERNS` and `SentenceSplitterConfig.join_patterns` (empty by default).
 
 ### Changed
 

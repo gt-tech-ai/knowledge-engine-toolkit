@@ -13,6 +13,7 @@ from techai_webutils.core.domain import (
     DocumentFormat,
     ParsedDocument,
     TableCell,
+    Turn,
     blocks_from_json,
     blocks_to_json,
 )
@@ -34,6 +35,22 @@ _BLOCKS = (
     ),
     DocumentBlock(
         BlockType.IMAGE, "Chart", 3, 3, ("Report",), caption="Chart", ref="img/1.png"
+    ),
+    DocumentBlock(
+        BlockType.TURN,
+        "Q. Why?",
+        4,
+        turn=Turn(
+            "interviewer",
+            0,
+            40,
+            47,
+            speaker_id="s1",
+            question_id="q2",
+            follow_up=True,
+            start_seconds=1.5,
+            end_seconds=3.0,
+        ),
     ),
 )
 
@@ -83,3 +100,17 @@ def test_structure_fields_default_to_empty_so_existing_producers_are_unchanged()
         (0, 1),
     )
     assert _BLOCKS[2].element_type == "table"
+
+
+def test_turn_refuses_a_negative_index_or_an_empty_span() -> None:
+    """Test that a turn with an impossible position is refused.
+
+    **Why this test is important:**
+      - Chunks attach turns by span; an inverted span would attach to nothing or everything.
+
+    **What it tests:**
+      - a negative index, a negative start and an empty span each raise ``AppValueError``
+    """
+    for index, start, end in ((-1, 0, 1), (0, -1, 1), (0, 5, 5)):
+        with pytest.raises(AppValueError):
+            Turn("respondent", index, start, end)

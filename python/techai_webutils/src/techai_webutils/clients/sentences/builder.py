@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, cast
 
+from techai_webutils.clients.sentences.rules import RuledSplitter
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
@@ -36,6 +37,9 @@ class SentenceSplitterConfig:
     """The rules used when ``split`` names no language (an ISO 639-1 code, or ``xx``)."""
     max_chars: int = 1_000_000
     """The longest text one ``split`` accepts (spaCy's own default limit)."""
+    join_patterns: tuple[str, ...] = ()
+    """Regular expressions; a sentence fully matching one is joined onto the next
+    (``TRANSCRIPT_JOIN_PATTERNS`` for transcripts). Empty by default: no rules, no wrapper."""
 
 
 def sentence_splitter_from_config(
@@ -43,9 +47,11 @@ def sentence_splitter_from_config(
 ) -> SentenceSplitter:
     """Build the ``SentenceSplitter`` ``config.kind`` selects; ``metrics`` counts fallbacks.
 
+    A non-empty ``config.join_patterns`` wraps the splitter in a ``RuledSplitter``.
+
     Raises:
-        AppValueError: An unknown kind, an empty default language or a ``max_chars`` below one
-            (``INVALID_INPUT``).
+        AppValueError: An unknown kind, an empty default language, a ``max_chars`` below one
+            or an invalid join pattern (``INVALID_INPUT``).
 
     """
     if config.kind != SentenceSplitterKind.SENTENCIZER:
@@ -58,8 +64,11 @@ def sentence_splitter_from_config(
         "techai_webutils.clients.sentences.sentencizer.splitter"
     )
     splitter = cast("type[SentencizerSplitter]", backend.SentencizerSplitter)
-    return splitter(
+    built: SentenceSplitter = splitter(
         default_language=config.default_language,
         max_chars=config.max_chars,
         metrics=metrics,
     )
+    if config.join_patterns:
+        return RuledSplitter(built, config.join_patterns)
+    return built

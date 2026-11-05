@@ -865,6 +865,17 @@ that produced it, and `degraded`.
   error (`UNAVAILABLE`, `TIMEOUT`) reaches the caller, which retries. `degrade` wraps the annotator
   in `DegradingAnnotator`, which returns `Annotation(degraded=True)` per block and counts
   `nlp_degraded_total{task}`; a permanent error is always re-raised.
+- **Entity ruler.** `EntityRulerAnnotator(inner, patterns)` applies an org's `RulerPattern(label,
+  phrase)`s after `inner`: each phrase matches as whole words, case-insensitively, the longest
+  first, and a statistical entity overlapping a ruler span is dropped. The patterns are the
+  caller's, built per org; with none, or without the `entities` task, `inner`'s output is
+  returned unchanged.
+- **`pii` task.** `PiiAnnotator(inner, registry=)` answers `pii` in process (register
+  `PII` -> `PiiSpan`) and passes the other tasks to `inner`, which is not called when `pii` is the
+  only task. `find_pii` finds formats, not meaning: e-mail addresses, phone numbers (10 to 15
+  digits written with `+` or separators), US SSNs, Luhn-valid card numbers and IPv4 addresses;
+  names and addresses need a model's entities. `apply_pii(text, spans, mode)` redacts
+  (`[EMAIL]`), masks (`*` per character, offsets kept) or keeps the text.
 
 ## Sentences and language, in process
 
@@ -881,7 +892,10 @@ that needs them, never through the NLP service.
   no language. A language without spaCy rules, or whose tokenizer needs a library that is not
   installed (`ja`, `ko`, `th`, `vi`), uses the multi-language `xx` rules, counted in
   `sentence_splitter_fallback_total{language}`. A text over `max_chars` (1,000,000) is
-  `INVALID_INPUT`.
+  `INVALID_INPUT`. `SentenceSplitterConfig.join_patterns` (empty by default) wraps the splitter
+  in `RuledSplitter`, which joins a span whose stripped text fully matches a pattern onto the
+  next one. `TRANSCRIPT_JOIN_PATTERNS` keeps a transcript's `Q.` / `A.` markers, speaker labels
+  (`THE WITNESS:`) and trailing honorifics (`MR.`) with what follows them.
 - **`LanguageIdentifier.identify(text) -> LanguageGuess(code, confidence, script)`**
   (`core.interfaces.language_identifier`). Blank or unidentifiable text is `UNDETERMINED_GUESS`
   (`und`, 0). `clients.language` kinds:
@@ -897,7 +911,8 @@ that needs them, never through the NLP service.
 
 `ChunkerKind.sentence` (`clients.chunking.sentence`) builds a `SentenceChunker`, which satisfies
 both `Chunker` (`chunk(text) -> list[str]`) and `StructuredChunker`
-(`chunk_spans(text, *, entities=()) -> list[StructuredChunk]`). `fixed` stays the default.
+(`chunk_spans(text, *, entities=(), turns=()) -> list[StructuredChunk]`). `fixed` stays the
+default.
 
 - **Blocks.** `split_blocks` reads the parser's markdown: ATX headings set `section_path`; fenced
   code, pipe tables (a `|` row and a separator row) and paragraphs are blocks; a table's caption
@@ -912,7 +927,8 @@ both `Chunker` (`chunk(text) -> list[str]`) and `StructuredChunker`
   header rows, unless they are over half the budget.
 - **`StructuredChunk`** carries the text to embed, the source span `[start, end)` (with overlaps
   removed, the spans tile the text), `section_path`, `element_type` (`paragraph`, `table`,
-  `code`, `heading`), a table's `caption`, and the input entities wholly inside its span.
+  `code`, `heading`), a table's `caption`, the input entities wholly inside its span, and the
+  input transcript `turns` its span overlaps (a long turn is on every chunk it spans).
 - **Context.** `ChunkContextualizer.contextualize(document, chunks) -> list[str]` returns the text
   to embed and index per chunk (`clients.chunking.context`): `none` (the default) unchanged;
   `header` prepends `"{document} > {section} > {subsection}"` and a table's caption,
@@ -924,8 +940,10 @@ both `Chunker` (`chunk(text) -> list[str]`) and `StructuredChunker`
 
 `core.domain.document_ir` is the parse IR: `DocumentBlock`s in reading order, typed by `BlockType`
 (`title`, `heading` with its `level`, `paragraph`, `list_item`, `table`, `image`, `code`,
-`caption`, `formula`, after Docling's document model), each with its page, `section_path` and
-`order`. A table keeps its `TableCell`s (row, column, header flag, spans), size, markdown
+`caption`, `formula`, after Docling's document model, and `turn`), each with its page,
+`section_path` and `order`. A `turn` block carries its `Turn`: the speaker's role and id, its index,
+its span in the text, the interview question it belongs to, whether it is a follow-up, and its
+recording times when the source has them. A table keeps its `TableCell`s (row, column, header flag, spans), size, markdown
 rendering and caption. `ParsedDocument.blocks` holds them (empty unless a layout-aware parser
 ran; `markdown_content` is unchanged). `blocks_to_json` / `blocks_from_json` give the JSON form
 under `FORMAT_VERSION`, read at N and N-1. `ChunkPayload` gains `section_path`, `element_type`

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from techai_webutils.core.domain import Turn
     from techai_webutils.core.interfaces.annotator import Entity
 
 
@@ -52,6 +53,8 @@ class StructuredChunk:
     """A table chunk's caption; empty otherwise."""
     entities: tuple[Entity, ...] = ()
     """The input entities wholly inside ``[start, end)``, in text order."""
+    turns: tuple[Turn, ...] = ()
+    """The input transcript turns the chunk overlaps, in order (their ids and speakers)."""
 
 
 @runtime_checkable
@@ -59,10 +62,15 @@ class StructuredChunker(Chunker, Protocol):
     """A chunker that also reports each chunk's span, section and type."""
 
     def chunk_spans(
-        self, text: str, *, entities: Sequence[Entity] = ()
+        self,
+        text: str,
+        *,
+        entities: Sequence[Entity] = (),
+        turns: Sequence[Turn] = (),
     ) -> list[StructuredChunk]:
         """Return ``text``'s chunks with their spans, sections and types.
 
-        ``entities`` (offsets into ``text``) are attached to the chunks that contain them.
+        ``entities`` (offsets into ``text``) are attached to the chunks that contain them;
+        ``turns`` (offsets into ``text``) to every chunk they overlap.
         """
         ...

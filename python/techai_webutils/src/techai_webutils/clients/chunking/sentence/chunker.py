@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import bisect
 import dataclasses
+import itertools
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -32,6 +33,7 @@ from techai_webutils.core.interfaces.chunker import StructuredChunk
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
+    from techai_webutils.core.domain import Turn
     from techai_webutils.core.interfaces.annotator import Entity
     from techai_webutils.core.interfaces.sentence_splitter import SentenceSplitter
 
@@ -100,11 +102,18 @@ class SentenceChunker:
         return [c.text.strip() for c in self.chunk_spans(text) if c.text.strip()]
 
     def chunk_spans(
-        self, text: str, *, entities: Sequence[Entity] = ()
+        self,
+        text: str,
+        *,
+        entities: Sequence[Entity] = (),
+        turns: Sequence[Turn] = (),
     ) -> list[StructuredChunk]:
-        """Return ``text``'s chunks with spans, sections, types and contained ``entities``."""
+        """Return ``text``'s chunks with their spans, sections, types, entities and turns.
+
+        Each chunk carries the ``entities`` it contains and the ``turns`` it overlaps.
+        """
         chunks = [chunk for run in self._runs(text) for chunk in self._pack(text, run)]
-        return _attach(chunks, entities)
+        return _attach_turns(_attach(chunks, entities), turns)
 
     def _runs(self, text: str) -> list[_Run]:
         """Group ``text``'s blocks into runs, each heading opening the run after it."""
@@ -290,4 +299,27 @@ def _attach(
         last = bisect.bisect_left(starts, chunk.end)
         inside = tuple(e for e in ordered[first:last] if e.end <= chunk.end)
         attached.append(dataclasses.replace(chunk, entities=inside))
+    return attached
+
+
+def _attach_turns(
+    chunks: list[StructuredChunk], turns: Sequence[Turn]
+) -> list[StructuredChunk]:
+    """Give each chunk the turns its span overlaps (a long turn spans several chunks).
+
+    Turns are sorted by start; ``reach[i]`` is the furthest end among the first ``i + 1``, so
+    every turn before the first ``reach`` past a chunk's start ends before the chunk, and the
+    scan per chunk covers only the turns that can overlap it.
+    """
+    if not turns:
+        return chunks
+    ordered = sorted(turns, key=lambda t: (t.start, t.index))
+    starts = [t.start for t in ordered]
+    reach = list(itertools.accumulate((t.end for t in ordered), max))
+    attached: list[StructuredChunk] = []
+    for chunk in chunks:
+        first = bisect.bisect_right(reach, chunk.start)
+        last = bisect.bisect_left(starts, chunk.end)
+        overlapping = tuple(t for t in ordered[first:last] if t.end > chunk.start)
+        attached.append(dataclasses.replace(chunk, turns=overlapping))
     return attached
