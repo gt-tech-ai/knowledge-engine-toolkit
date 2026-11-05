@@ -6,6 +6,20 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+Python: `techai-webutils` 0.9.3.
+
+### Fixed
+
+- `RealRayRuntime` recovers from a Ray head replacement. It put its mapper into the object store
+  once and reused the reference forever, so after a reconnect every task carried a reference from
+  the dead session. The new head could not resolve it, each item failed as its own error, no reset
+  ran again, and every batch failed until the process restarted. The cached reference is now tied
+  to the Ray Client connection that created it, so any reconnect (by this runtime or another in the
+  process) puts the mapper again.
+- The Ray Client teardown after a lost connection disconnects every registered client context.
+  Ray Client keeps reporting `is_connected()` True after its data channel dies, so the teardown,
+  which disconnected only clients reporting a lost connection, left the dead registration in place.
+
 ## [0.0.46] - 2026-11-04
 
 Python: `techai-webutils` 0.9.2.

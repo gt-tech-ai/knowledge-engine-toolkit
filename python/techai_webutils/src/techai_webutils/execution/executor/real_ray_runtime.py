@@ -39,6 +39,10 @@ class _ClientApi(
         """Disconnect every registered client context and empty the registry."""
         ...
 
+    def get_context(self) -> object:
+        """Return the calling thread's client context; its ``client_worker`` is the live connection."""
+        ...
+
 
 class _ClientRegistry(Protocol):  # SDK seam — the untyped ray.util.client module
     """Ray's client-connection registry: the API stub plus the registered-context count."""
@@ -78,11 +82,35 @@ def _clear_stale_client() -> None:
 
 
 def _reset_ray_client() -> None:
-    """Best-effort teardown of a half-open or stale Ray client between connect retries (never raises)."""
+    """Tear down the Ray session, whatever state it reports, so the next connect starts fresh (never raises).
+
+    Ray Client's ``is_connected()`` stays True after its data channel hits an unrecoverable error
+    (a head replacement answers the old client id with NOT_FOUND): only the data channel marks itself
+    shut down, not the client worker. So after the shutdown, every client context still registered
+    is disconnected unconditionally, instead of only the ones that report a lost connection.
+    """
     with contextlib.suppress(Exception):
         if ray.is_initialized():
             cast("Callable[[], None]", ray.shutdown)()
-    _clear_stale_client()
+    with contextlib.suppress(Exception):
+        client = cast("_ClientRegistry", importlib.import_module("ray.util.client"))
+        if client.num_connected_contexts() > 0:
+            client.ray.disconnect()
+
+
+def _session_token() -> object | None:
+    """Return an object that identifies the current Ray Client connection, or None outside client mode.
+
+    Each Ray Client connect builds a new client worker, so its identity changes with every reconnect.
+    An object reference is only valid in the session that created it, so a cached reference is reused
+    only while this token is unchanged. Never raises.
+    """
+    with contextlib.suppress(Exception):
+        client = cast("_ClientRegistry", importlib.import_module("ray.util.client"))
+        return cast(
+            "object | None", getattr(client.ray.get_context(), "client_worker", None)
+        )
+    return None
 
 
 @ray.remote
@@ -134,11 +162,25 @@ class RealRayRuntime:
             )(encoding=log_encoding)
         self._task_memory_bytes = task_memory_bytes
         self._started = False
-        # The mapper is put into the object store ONCE and reused across a batch's items.
+        # The mapper is put into the object store ONCE per session and reused across a batch's items.
         # ``_cached_fn`` holds a STRONG reference so the identity check (``fn is _cached_fn``) can never
         # be fooled by ``id()`` reuse after a GC — a stale ref would run the wrong mapper.
         self._cached_fn: object | None = None
         self._mapper_ref: object | None = None
+        self._mapper_session: object | None = None
+        """The session the cached ``_mapper_ref`` was put in; a reconnect invalidates the ref."""
+
+    def _forget_session(self) -> None:
+        """Drop everything that belongs to the current session: the started flag and the cached mapper."""
+        self._started = False
+        self._cached_fn = None
+        self._mapper_ref = None
+        self._mapper_session = None
+
+    async def _reset(self) -> None:
+        """Tear the Ray session down and forget this runtime's state in it, so the next call reconnects."""
+        self._forget_session()
+        await asyncio.to_thread(_reset_ray_client)
 
     async def warm_up(self) -> None:
         """Eagerly establish the process-global Ray connection so the first batch skips the cold connect.
@@ -157,7 +199,7 @@ class RealRayRuntime:
         try:
             await asyncio.to_thread(cast("Callable[[], object]", ray.cluster_resources))
         except Exception:
-            await asyncio.to_thread(_reset_ray_client)
+            await self._reset()
             raise
 
     async def _ensure_started(self) -> None:
@@ -178,7 +220,7 @@ class RealRayRuntime:
         if ray.is_initialized():
             self._started = True
             return
-        self._started = False
+        self._forget_session()
         await asyncio.to_thread(_clear_stale_client)
         try:
             await asyncio.to_thread(
@@ -192,7 +234,7 @@ class RealRayRuntime:
             # A failed cold connect can leave a half-open client; reset it so the resilience decorator's
             # retry gets a clean slate (otherwise ``ray.is_initialized()`` may report the dead session as
             # connected and short-circuit the next attempt). Retry/backoff itself is the decorator's job.
-            await asyncio.to_thread(_reset_ray_client)
+            await self._reset()
             raise
         self._started = True
 
@@ -216,7 +258,7 @@ class RealRayRuntime:
         except RayTaskError:
             raise
         except (grpc.RpcError, ConnectionError) as exc:
-            await asyncio.to_thread(_reset_ray_client)
+            await self._reset()
             msg = f"ray cluster connection lost: {exc}"
             raise RayUnavailableError(msg) from exc
 
@@ -227,9 +269,13 @@ class RealRayRuntime:
         # Put the mapper into the object store ONCE and pass the shared ObjectRef to every task, instead
         # of re-pickling the (identical) mapper per item. fan_out drives the whole batch with
         # one mapper, so an identity check puts it exactly once; Ray caches the object on each worker.
-        if fn is not self._cached_fn:
+        # The ref is only valid in the session that created it: a reconnect (by this runtime or any
+        # other in the process) changes the session token, so the mapper is put again.
+        session = _session_token()
+        if fn is not self._cached_fn or session is not self._mapper_session:
             self._mapper_ref = cast("Callable[[object], object]", ray.put)(fn)
             self._cached_fn = fn
+            self._mapper_session = session
         # basedpyright ignores the untyped @ray.remote decorator, so `.remote` is invisible to it (the
         # dev LSP env, where ray is unresolved); the mapper arg is a ray ObjectRef held as `object`
         # (opaque), which the resolved `.remote` signature rejects — Ray auto-dereferences it so the

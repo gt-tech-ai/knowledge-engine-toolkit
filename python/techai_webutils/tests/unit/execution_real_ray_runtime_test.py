@@ -265,6 +265,145 @@ class TestRealRayRuntimeDeadSession:
                 await runtime.submit(_mapper, 1)
 
 
+async def _completed(*_: object) -> StepResult:
+    """Stand in for an awaited Ray task that finished."""
+    await asyncio.sleep(0)
+    return StepResult(name="done")
+
+
+def _ray_session_across_a_head_replacement() -> tuple[
+    MagicMock, SimpleNamespace, SimpleNamespace
+]:
+    """Return a mocked ``ray``, client registry and client context that model one Ray Client session.
+
+    Each ``ray.init`` builds a new client worker on the context (Ray builds one per connect), and
+    ``ray.put`` hands out a new reference per call. The registry's API keeps reporting
+    ``is_connected()`` True however the channel fares, as Ray does after a head replacement.
+    """
+    context = SimpleNamespace(client_worker=object())
+    state = {"initialized": True}
+
+    def shutdown() -> None:
+        state["initialized"] = False
+
+    def disconnect() -> None:
+        context.client_worker = None
+
+    def init(**_: object) -> None:
+        state["initialized"] = True
+        context.client_worker = object()
+
+    api = MagicMock()
+    api.is_connected.return_value = True
+    api.get_context.return_value = context
+    api.disconnect.side_effect = disconnect
+    registry = SimpleNamespace(ray=api, num_connected_contexts=lambda: 1)
+
+    ray = MagicMock()
+    ray.is_initialized.side_effect = lambda: state["initialized"]
+    ray.shutdown.side_effect = shutdown
+    ray.init.side_effect = init
+    ray.put.side_effect = [f"ref-{n}" for n in range(1, 10)]
+    return ray, registry, context
+
+
+class TestRealRayRuntimeHeadReplacement:
+    """Tests for the mapper reference and client teardown across a Ray head replacement."""
+
+    @pytest.mark.asyncio
+    async def test_a_reconnect_puts_the_mapper_again_instead_of_reusing_a_dead_reference(
+        self,
+    ) -> None:
+        """Test that after a lost connection the next task carries a mapper put in the new session.
+
+        **Why this test is important:**
+          - After a head replacement the runtime reconnected but kept sending the mapper reference from
+            the dead session. The new head cannot resolve it, so every task failed as an item failure,
+            no reset ever ran again, and ingestion failed every batch until the pod was deleted.
+
+        **What it tests:**
+          - A submit that loses the connection raises ``RayUnavailableError``; the next submit
+            reconnects, puts the mapper again, and schedules the task with the new reference.
+        """
+        ray, registry, _ = _ray_session_across_a_head_replacement()
+        mapper = MagicMock()
+        mapper.remote.side_effect = _completed
+        with (
+            patch(f"{_MODULE}.ray", ray),
+            patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
+            patch(f"{_MODULE}._run_mapper", mapper),
+        ):
+            runtime = RealRayRuntime(address=_ADDRESS)
+            await runtime.submit(_mapper, 1)
+            mapper.remote.side_effect = ConnectionError("data channel closed")
+            with pytest.raises(RayUnavailableError):
+                await runtime.submit(_mapper, 2)
+            mapper.remote.side_effect = _completed
+            await runtime.submit(_mapper, 3)
+
+        assert ray.put.call_count == 2
+        assert mapper.remote.call_args.args[0] == "ref-2"
+
+    @pytest.mark.asyncio
+    async def test_a_lost_connection_disconnects_a_client_that_still_reports_connected(
+        self,
+    ) -> None:
+        """Test that the reset after a lost connection disconnects the client even though it claims to be live.
+
+        **Why this test is important:**
+          - Ray Client keeps ``is_connected()`` True after its data channel dies, so a teardown that
+            disconnected only clients reporting a lost connection left the dead registration in place.
+
+        **What it tests:**
+          - A connection lost during ``submit`` disconnects the registered client context while its
+            API still reports connected.
+        """
+        ray, registry, _ = _ray_session_across_a_head_replacement()
+        mapper = MagicMock()
+        mapper.remote.side_effect = ConnectionError("data channel closed")
+        with (
+            patch(f"{_MODULE}.ray", ray),
+            patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
+            patch(f"{_MODULE}._run_mapper", mapper),
+            pytest.raises(RayUnavailableError),
+        ):
+            await RealRayRuntime(address=_ADDRESS).submit(_mapper, 1)
+
+        registry.ray.disconnect.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    async def test_a_reconnect_by_another_runtime_invalidates_the_cached_mapper(
+        self,
+    ) -> None:
+        """Test that a mapper reference is reused only within the session that created it.
+
+        **Why this test is important:**
+          - Several runtimes share the process's one Ray session; when another one reconnects, this
+            runtime's cached reference belongs to the dead session even though it saw no failure.
+
+        **What it tests:**
+          - With the client connection replaced between two submits, the second submit puts the
+            mapper again; with it unchanged, the mapper is put once.
+        """
+        ray, registry, context = _ray_session_across_a_head_replacement()
+        mapper = MagicMock()
+        mapper.remote.side_effect = _completed
+        with (
+            patch(f"{_MODULE}.ray", ray),
+            patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
+            patch(f"{_MODULE}._run_mapper", mapper),
+        ):
+            runtime = RealRayRuntime(address=_ADDRESS)
+            await runtime.submit(_mapper, 1)
+            await runtime.submit(_mapper, 2)
+            assert ray.put.call_count == 1
+            context.client_worker = object()  # another runtime reconnected
+            await runtime.submit(_mapper, 3)
+
+        assert ray.put.call_count == 2
+        assert mapper.remote.call_args.args[0] == "ref-2"
+
+
 class TestRealRayRuntimeWorkerLogging:
     """Tests for the logging setup a runtime asks Ray to apply on every worker process."""
 
