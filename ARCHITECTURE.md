@@ -426,7 +426,8 @@ leaves its unfinished rows leased for the next claim. `LoadRelayConfig` reads a 
 over the defaults. `clients/outbox` builds the sink (`KindStub` default, `KindSQS`, `KindS3`) over
 an injected SDK client: SQS routes each row by its `route` attribute through a config route → queue
 map with per-queue failure isolation (a `.fifo` queue gets group id `Key`, else `Tenant`, else
-`Lane`, and deduplication id `ID`); the sinks keep an SDK error's code (`errors.CodeOr`); S3 writes
+`Lane`, and deduplication id `ID`; a standard queue named in `FairQueues` is an SQS fair queue and
+gets the same group id with no deduplication id, so one group's backlog does not delay the others); the sinks keep an SDK error's code (`errors.CodeOr`); S3 writes
 one object per row by key template with a SHA-256 checksum (Object Lock) and optional SSE-KMS.
 `go/tests/fixtures/outboxtest` is the store and routing conformance suites (`Run`, `RunRouting`),
 run against the `postgres` store kind.
@@ -560,7 +561,9 @@ than acknowledging a batch of failures. `RealRayRuntime` recovers a Ray Client s
 restart, and the Ray actor pool connects through the same runtime and restarts actors whose process
 died. A Ray worker process never runs the consumer's entrypoint, so the consumer configures it through
 `ExecutorConfig.ray_worker_setup_hook` (a dotted path Ray runs in each worker before its first task)
-and `ray_log_encoding` (Ray's own task and actor log encoding).
+and `ray_log_encoding` (Ray's own task and actor log encoding). `ray_task_memory_bytes` reserves Ray's
+`memory` resource for each task and pool actor, so Ray places memory-heavy work by memory as well as
+CPU.
 
 ## Background loops
 
