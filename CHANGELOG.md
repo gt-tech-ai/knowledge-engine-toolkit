@@ -10,6 +10,12 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- `inflight_claim_from_config(config, *, redis=None, metrics=None)`: with no client, the `redis`
+  kind opens its own on `InflightClaimConfig.host` (with `port`, `password`, `db` and
+  `timeout_seconds` bounding its socket), which the claim's new `aclose()` closes. With a metrics
+  provider, every Redis error the claim absorbs (it still fails open) is counted in
+  `inflight_claim_errors_total{op}`. `InflightClaim.aclose` is abstract: implementations outside
+  the engine must add it.
 - Python decorated circuit breakers are observable: a component's breaker exports
   `circuit_breaker_state{dependency}` (0 closed, 1 half-open, 2 open) and counts
   `circuit_breaker_transitions_total{dependency,to}` whenever a metrics provider is wired.

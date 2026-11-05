@@ -18,3 +18,7 @@ class NoopInflightClaim(InflightClaim):
     @override
     async def release(self, key: str) -> None:
         """Nothing is held, so nothing is released."""
+
+    @override
+    async def aclose(self) -> None:
+        """Nothing is owned, so nothing is closed."""

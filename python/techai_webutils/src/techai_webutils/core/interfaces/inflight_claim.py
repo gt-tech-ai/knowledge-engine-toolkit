@@ -28,3 +28,8 @@ class InflightClaim(ABC):
     async def release(self, key: str) -> None:
         """Release a claim this caller holds; a claim it does not hold is left alone."""
         ...
+
+    @abstractmethod
+    async def aclose(self) -> None:
+        """Close what the claim owns (a client it opened itself)."""
+        ...

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from prometheus_client import CollectorRegistry
 from redis.asyncio import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 
@@ -18,6 +19,7 @@ from techai_webutils.clients.inflight_claim.redis import RedisInflightClaim
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.checkpoint import Stage
 from techai_webutils.core.interfaces.inflight_claim import inflight_key
+from techai_webutils.foundation.metrics.metrics import new_metrics
 
 
 def _client(*, set_result: object = True) -> tuple[MagicMock, AsyncMock]:
@@ -143,16 +145,16 @@ async def test_redis_errors_fail_open() -> None:
 
 
 def test_redis_kind_without_client_and_unknown_kind_raise() -> None:
-    """Test that the factory fails loudly on a missing client or an unknown kind.
+    """Test that the factory fails loudly with neither a client nor a host, or an unknown kind.
 
     **Why this test is important:**
       - A misconfigured kind must stop the app at boot, not silently run without a claim.
 
     **What it tests:**
-      - ``kind=redis`` with no client raises ``AppValueError``
+      - ``kind=redis`` with no client and no host raises ``AppValueError``
       - an unknown kind raises ``AppValueError``
     """
-    with pytest.raises(AppValueError):
+    with pytest.raises(AppValueError, match="client or host"):
         inflight_claim_from_config(InflightClaimConfig(kind=InflightClaimKind.REDIS))
     bogus = MagicMock(spec=InflightClaimConfig)
     bogus.kind = "bogus"
@@ -171,3 +173,37 @@ def test_inflight_key_names_content_and_stage() -> None:
       - ``inflight_key("o", "abc", Stage.PARSE, "fp")`` is ``"o:abc:parse:fp"``
     """
     assert inflight_key("o", "abc", Stage.PARSE, "fp") == "o:abc:parse:fp"
+
+
+@pytest.mark.asyncio
+async def test_inflight_claim_fails_open_on_redis_outage_and_counts_it() -> None:
+    """Test that a claim opening its own client absorbs a Redis outage, counts it and closes it.
+
+    **Why this test is important:**
+      - A cache node outage must never block ingestion, yet an operator has to see that the
+        dedup claim stopped working, and a client the factory opened must not leak.
+
+    **What it tests:**
+      - with no client, the factory opens one on ``config.host``
+      - ``set`` raising grants the claim and counts ``inflight_claim_errors_total{op="claim"}``
+      - ``aclose`` closes the client the factory opened
+    """
+    client, _ = _client()
+    client.set = AsyncMock(side_effect=RedisConnectionError("down"))
+    client.aclose = AsyncMock()
+    registry = CollectorRegistry()
+    with patch(
+        "techai_webutils.clients.inflight_claim.builder.Redis", return_value=client
+    ) as opened:
+        claim = inflight_claim_from_config(
+            InflightClaimConfig(kind=InflightClaimKind.REDIS, host="redis"),
+            metrics=new_metrics(registry),
+        )
+
+    assert await claim.claim("k", 10)
+    errors = registry.get_sample_value("inflight_claim_errors_total", {"op": "claim"})
+    assert errors == 1
+    await claim.aclose()
+
+    assert opened.call_args.kwargs["host"] == "redis"
+    client.aclose.assert_awaited_once()

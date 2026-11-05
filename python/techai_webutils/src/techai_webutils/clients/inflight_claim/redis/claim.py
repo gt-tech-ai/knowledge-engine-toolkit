@@ -4,7 +4,8 @@
 expires with the message lease. ``release`` deletes the key only while it still holds this
 caller's token (one Lua script), so a caller whose claim lapsed never frees a newer holder's.
 A Redis error never stops the work: ``claim`` grants it (the duplicate run is today's behaviour,
-and stages are idempotent) and ``release`` only logs, since the key expires anyway.
+and stages are idempotent) and ``release`` only logs, since the key expires anyway. Each such
+error is counted in ``inflight_claim_errors_total{op}`` when a counter is wired.
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ from techai_webutils.core.interfaces.inflight_claim import InflightClaim
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis
+
+    from techai_webutils.core.interfaces.metrics import MetricCounter
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +35,23 @@ return 0
 class RedisInflightClaim(InflightClaim):
     """Claims keys in Redis, shared by every consumer on the same server."""
 
-    def __init__(self, redis: Redis, prefix: str) -> None:
-        """Claim keys under ``prefix`` on the app's async ``redis`` client."""
+    def __init__(
+        self,
+        redis: Redis,
+        prefix: str,
+        *,
+        errors: MetricCounter | None = None,
+        owned: bool = False,
+    ) -> None:
+        """Claim keys under ``prefix`` on the async ``redis`` client.
+
+        ``errors`` counts each Redis error the claim absorbs, by ``op``; ``owned`` marks a
+        client the factory opened, which ``aclose`` closes.
+        """
         self._redis = redis
         self._prefix = prefix
+        self._errors = errors
+        self._owned = owned
         self._release = redis.register_script(_RELEASE)
         self._tokens: dict[str, str] = {}
 
@@ -51,6 +67,7 @@ class RedisInflightClaim(InflightClaim):
             logger.warning(
                 "in-flight claim of %s failed; running anyway", key, exc_info=True
             )
+            self._count("claim")
             return True
         if won:
             self._tokens[key] = token
@@ -68,6 +85,18 @@ class RedisInflightClaim(InflightClaim):
             logger.warning(
                 "in-flight release of %s failed; it expires", key, exc_info=True
             )
+            self._count("release")
+
+    @override
+    async def aclose(self) -> None:
+        """Close the Redis client when the factory opened it; an injected one is the app's."""
+        if self._owned:
+            await self._redis.aclose()
+
+    def _count(self, op: str) -> None:
+        """Count one absorbed Redis error of ``op``."""
+        if self._errors is not None:
+            self._errors.inc(op=op)
 
     def _name(self, key: str) -> str:
         """Return the Redis key of claim ``key``."""
