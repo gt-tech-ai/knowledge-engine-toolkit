@@ -16,10 +16,18 @@ from techai_webutils.core.domain.document_ir import (
     blocks_to_json,
 )
 from techai_webutils.core.domain.metadata import DocumentMetadata
-from techai_webutils.core.domain.parser import DocumentFormat, Page, ParsedDocument
+from techai_webutils.core.domain.parser import (
+    PARSED_FORMAT_VERSION,
+    DocumentFormat,
+    Page,
+    ParsedDocument,
+    parsed_from_json,
+    parsed_to_json,
+)
 from techai_webutils.core.domain.splitter import ChunkPayload
 
 __all__ = [
+    "PARSED_FORMAT_VERSION",
     "BlockType",
     "ChunkPayload",
     "DocumentBlock",
@@ -31,4 +39,6 @@ __all__ = [
     "Turn",
     "blocks_from_json",
     "blocks_to_json",
+    "parsed_from_json",
+    "parsed_to_json",
 ]

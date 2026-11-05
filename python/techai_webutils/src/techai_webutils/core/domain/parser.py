@@ -5,16 +5,26 @@ These are the shared, dependency-free contracts a ``DocumentParser`` backend pro
 deployable (a document-processing service, a stand-alone parse service) programs against
 the same DTO, exactly like Go's ``go/core`` types. Frozen ``slots`` dataclasses of scalars/lists
 so a boundary DTO is "a queue message waiting to happen" (extraction-ready).
+
+``parsed_to_json`` / ``parsed_from_json`` give a ``ParsedDocument``'s JSON form (the parse stage's
+checkpoint artifact and hand-off), tagged with ``PARSED_FORMAT_VERSION``; a reader accepts its own
+version and the one before (N/N-1).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+
+from techai_webutils.core.domain.document_ir import blocks_from_json, blocks_to_json
+from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
     from techai_webutils.core.domain.document_ir import DocumentBlock
+
+PARSED_FORMAT_VERSION = 1
+"""The version ``parsed_to_json`` writes."""
 
 
 class DocumentFormat(StrEnum):
@@ -100,3 +110,52 @@ class ParsedDocument:
     def ok(self) -> bool:
         """Whether the document parsed without error."""
         return not self.error
+
+
+def parsed_to_json(doc: ParsedDocument) -> dict[str, object]:
+    """Return ``doc`` as a JSON-ready dict tagged with ``PARSED_FORMAT_VERSION``."""
+    return {
+        "format_version": PARSED_FORMAT_VERSION,
+        "markdown_content": doc.markdown_content,
+        "document_format": str(doc.document_format),
+        "total_pages": doc.total_pages,
+        "word_count": doc.word_count,
+        "pages": [[p.page_number, p.text] for p in doc.pages],
+        "error": doc.error,
+        "blocks": blocks_to_json(doc.blocks),
+    }
+
+
+def parsed_from_json(payload: dict[str, object]) -> ParsedDocument:
+    """Read a document written by ``parsed_to_json`` at this version or the one before.
+
+    Raises:
+        AppValueError: A ``format_version`` other than N or N-1, or a field of the wrong
+            type (``INVALID_INPUT``).
+
+    """
+    version = payload.get("format_version")
+    if version not in {PARSED_FORMAT_VERSION, PARSED_FORMAT_VERSION - 1}:
+        msg = f"unsupported parsed-document format_version {version!r}"
+        raise AppValueError(msg)
+    try:
+        pages = cast("list[list[object]]", payload.get("pages", []))
+        return ParsedDocument(
+            markdown_content=str(payload["markdown_content"]),
+            document_format=DocumentFormat(str(payload["document_format"])),
+            total_pages=int(cast("int", payload.get("total_pages", 0))),
+            word_count=int(cast("int", payload.get("word_count", 0))),
+            pages=[Page(int(cast("int", n)), str(text)) for n, text in pages],
+            error=str(payload.get("error", "")),
+            blocks=_blocks(payload.get("blocks")),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        msg = f"malformed parsed document: {exc}"
+        raise AppValueError(msg) from exc
+
+
+def _blocks(raw: object) -> tuple[DocumentBlock, ...]:
+    """Return the blocks of a ``parsed_to_json`` payload; an absent field is no blocks."""
+    if raw is None:
+        return ()
+    return blocks_from_json(cast("dict[str, object]", raw))

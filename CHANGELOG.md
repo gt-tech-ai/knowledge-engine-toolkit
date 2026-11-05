@@ -10,6 +10,10 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- `core.domain.parsed_to_json` / `parsed_from_json`: a `ParsedDocument`'s JSON form (text, format,
+  pages, error and its typed blocks via `blocks_to_json`), tagged with `PARSED_FORMAT_VERSION`; the
+  reader accepts N and N-1 and raises `INVALID_INPUT` on any other version or a malformed payload.
+  It is the parse stage's checkpoint artifact, so a resumed or duplicate document reuses its parse.
 - `foundation.resilience.classify.is_throttled(err)`: whether an error, or one it was raised from,
   is a provider's rate-limit or quota push-back (an AWS throttle code such as S3 `SlowDown`,
   `ServiceQuotaExceededException`, gRPC `RESOURCE_EXHAUSTED`, HTTP 429). The Python metrics layer counts these under a new

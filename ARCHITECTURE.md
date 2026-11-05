@@ -960,8 +960,9 @@ its span in the text, the interview question it belongs to, whether it is a foll
 recording times when the source has them. A table keeps its `TableCell`s (row, column, header flag, spans), size, markdown
 rendering and caption. `ParsedDocument.blocks` holds them (empty unless a layout-aware parser
 ran; `markdown_content` is unchanged). `blocks_to_json` / `blocks_from_json` give the JSON form
-under `FORMAT_VERSION`, read at N and N-1. `ChunkPayload` gains `section_path`, `element_type`
-and `span`, all optional.
+under `FORMAT_VERSION`, read at N and N-1; `parsed_to_json` / `parsed_from_json` do the same for a
+whole `ParsedDocument` under `PARSED_FORMAT_VERSION` (the parse stage's checkpoint artifact).
+`ChunkPayload` gains `section_path`, `element_type` and `span`, all optional.
 
 `ParserKind.layout` (`clients.parsing.layout`, the `layout` extra) converts PDFs with Docling
 inside the same bounded child as `isolated` (`memory_bytes`, `timeout_seconds`); other formats go
