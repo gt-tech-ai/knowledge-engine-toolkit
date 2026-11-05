@@ -1,0 +1,26 @@
+"""Shared checks of the entity-only annotator backends (``noop``, ``spacy``, ``gliner``)."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from techai_webutils.core.errors import AppValueError
+from techai_webutils.core.interfaces.annotator import ENTITIES
+
+if TYPE_CHECKING:
+    from techai_webutils.core.interfaces.annotator import TaskRegistry
+
+
+def require_entities_only(
+    registry: TaskRegistry, tasks: frozenset[str], backend: str
+) -> None:
+    """Raise ``INVALID_INPUT`` for an unregistered task, or one ``backend`` cannot run.
+
+    These backends only find entities; a consumer's own task needs a backend that runs it (the
+    ``grpc`` kind, behind the consumer's NLP service).
+    """
+    registry.require(tasks)
+    other = sorted(tasks - {ENTITIES})
+    if other:
+        msg = f"the {backend} annotator only finds entities; it cannot run {other}"
+        raise AppValueError(msg)

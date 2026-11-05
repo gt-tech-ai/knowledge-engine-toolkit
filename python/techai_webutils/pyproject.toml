@@ -80,6 +80,12 @@ langdetect = ["langdetect>=1.0.9"]
 # client (hosts, SigV4 auth, timeouts) and injects it.
 opensearch = ["opensearch-py[async]>=3.2.0"]
 
+# spaCy for the `spacy` Annotator Kind (entities). Optional: only a deployable that annotates text
+# in process installs `techai-webutils[nlp]`; `clients/nlp` imports spaCy lazily in that backend.
+# The `gliner` Kind has no extra: the composition root loads the GLiNER model (and its torch
+# stack) and injects it, so the engine never imports gliner.
+nlp = ["spacy>=3.8"]
+
 [project.license]
 text = "MIT"
 
@@ -126,6 +132,8 @@ dev = [
     "asyncpg-stubs==0.31.3",
     "types-aiobotocore-lite[s3,sesv2,sqs]==3.9.0",
     "import-linter>=2.15",
+    # The `nlp` extra, so basedpyright resolves the spacy backend and its tests run real spaCy.
+    "spacy>=3.8",
 ]
 
 [tool.pytest.ini_options]
@@ -295,6 +303,7 @@ modules = [
     "techai_webutils.clients.messaging",
     "techai_webutils.clients.metadata",
     "techai_webutils.clients.model_gateway",
+    "techai_webutils.clients.nlp",
     "techai_webutils.clients.parsing",
     "techai_webutils.clients.prometheus",
     "techai_webutils.clients.reranking",

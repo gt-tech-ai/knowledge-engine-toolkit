@@ -28,6 +28,7 @@
   "techai_webutils.clients.model_gateway.routed.planner.overlord.OverlordPlannerConfig": {
     "target": "localhost:50051"
   },
+  "techai_webutils.clients.nlp.builder.AnnotatorConfig": {},
   "techai_webutils.clients.parsing.factory.ParserConfig": {},
   "techai_webutils.clients.prometheus.builder.PrometheusConfig": {},
   "techai_webutils.clients.reranking.builder.RerankerConfig": {},

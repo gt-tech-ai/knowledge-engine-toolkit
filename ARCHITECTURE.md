@@ -837,6 +837,35 @@ Both kinds authenticate through `connector/s3.NewStorage` (access key, or STS As
 the tenant's ExternalID) and classify object-store failures with `ClassifyListError`
 (configuration → `INVALID_INPUT`, transport and throttling → `UNAVAILABLE`).
 
+## Entity annotation
+
+`core.interfaces.annotator` is the NLP seam the enrich stage tags chunks through:
+`Annotator.annotate_batch(blocks, tasks, profile) -> list[Annotation]`, one `Annotation` per
+`TextBlock`. An `Annotation` carries `entities` (`Entity(label, start, end, text, confidence)`,
+character offsets into the block), `task_results` keyed by task name, the `model` and `version`
+that produced it, and `degraded`.
+
+- **Tasks.** `TaskRegistry` maps a task name to its `TaskResult` type. It knows `entities` out of
+  the box; a consumer registers its own (`register("speaker", Speaker)`) at its composition root,
+  with no engine change. An unregistered task is `INVALID_INPUT`; registering a name under another
+  type is `CONFLICT`. There is no global registry.
+- **Kinds** (`clients.nlp`, `AnnotatorKind`, selected by `AnnotatorConfig.kind`):
+  - `noop` (the default) returns empty annotations, so the graph boots with no model;
+  - `spacy` loads the `model` pipeline lazily, in a thread, with only its `ner` component enabled
+    (the `nlp` extra installs spaCy);
+  - `gliner` calls an injected `GlinerModel` with `labels` and `threshold` (the engine carries no
+    GLiNER or torch dependency);
+  - `grpc` calls the consumer's NLP service through an injected `AnnotateClient`; it is the only
+    kind that runs consumer tasks, and the `profile` selects the service's task set.
+
+  `labels` filters the `spacy` kind's entities. `check_annotations` checks every backend's reply
+  against the blocks (one annotation per block, spans inside the text and matching it, each task
+  result of its registered type) and raises `INTERNAL` on a mismatch.
+- **Unavailable backend.** `AnnotatorConfig.on_unavailable` is `wait` by default: a transient
+  error (`UNAVAILABLE`, `TIMEOUT`) reaches the caller, which retries. `degrade` wraps the annotator
+  in `DegradingAnnotator`, which returns `Annotation(degraded=True)` per block and counts
+  `nlp_degraded_total{task}`; a permanent error is always re-raised.
+
 ## Repository tooling substrate
 
 Go packages for tools that read and check a codebase (linters, guards, generators, developer

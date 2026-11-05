@@ -18,6 +18,7 @@ Service Interfaces:
     RetrievalEngine: Orchestrate semantic search with reranking.
     Reranker: Score retrieved passages against the query (RerankClient: its transport).
     FilterExpr: A backend-neutral metadata filter (FilterEq, FilterIn, FilterAnd).
+    Annotator: Annotate text blocks with entities and registered tasks (TaskRegistry).
     QueryRewriter: Transform user queries for better retrieval.
     IntentClassifier: Classify query intent (search, summarize, compare, etc.).
     CitationExtractor: Extract source citations from LLM responses.
@@ -72,6 +73,15 @@ Job Interfaces:
 """
 
 from techai_webutils.core.interfaces.adaptive_throttler import AdaptiveThrottler
+from techai_webutils.core.interfaces.annotator import (
+    AnnotateClient,
+    Annotation,
+    Annotator,
+    Entity,
+    TaskRegistry,
+    TaskResult,
+    TextBlock,
+)
 from techai_webutils.core.interfaces.bulkhead import Bulkhead
 from techai_webutils.core.interfaces.byte_cache import ByteCache
 from techai_webutils.core.interfaces.cache import Cache, CacheInvalidator
@@ -164,6 +174,9 @@ __all__ = [
     "PARTITION_KEY_ATTRIBUTE",
     "AdaptiveThrottler",
     # Service
+    "AnnotateClient",
+    "Annotation",
+    "Annotator",
     "AsyncPipeline",
     "AsyncWorkflow",
     "Backlog",
@@ -188,6 +201,7 @@ __all__ = [
     "Deduplicator",
     "DocumentParser",
     "EmbeddingProvider",
+    "Entity",
     "FilterAnd",
     "FilterEq",
     "FilterExpr",
@@ -243,6 +257,9 @@ __all__ = [
     "StorageClient",
     "StorageObject",
     "Store",
+    "TaskRegistry",
+    "TaskResult",
+    "TextBlock",
     "TracerProvider",
     "TracerSpan",
     "Transaction",

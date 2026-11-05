@@ -139,6 +139,11 @@ Python: `techai-webutils` 0.9.3.
   bucket's objects from its S3 Inventory report (CSV) with the `s3` kind's pages and auth;
   `SourceConfig.InventoryBucket` / `InventoryManifestKey`; `connector/s3.NewStorage` and
   `ClassifyListError` are exported for it.
+- Entity annotation (Python): `core.interfaces.annotator` (`Annotator`, `Annotation`, `Entity`,
+  `TextBlock`, `TaskResult`, `TaskRegistry`, `AnnotateClient`, `check_annotations`) and
+  `clients.nlp` (`AnnotatorKind` `noop` / `spacy` / `gliner` / `grpc`, `AnnotatorConfig`,
+  `OnUnavailable`, `annotator_from_config`, `DegradingAnnotator` and its `nlp_degraded_total`
+  counter); the `nlp` extra installs spaCy.
 
 ### Changed
 
