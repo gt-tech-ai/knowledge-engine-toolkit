@@ -17,6 +17,7 @@ from techai_webutils.clients.retrieval.filtering import (
     MinScore,
 )
 from techai_webutils.clients.retrieval.vector import VectorRetrievalEngine
+from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
 from techai_webutils.core.interfaces.vector_store import VectorSearchResult, VectorStore
 
@@ -165,7 +166,7 @@ class TestQdrantFactoryBranch:
         What it tests:
           - With store_filter_keys=("tenant",) and a request carrying tenant + max_level, the store is
             searched in the configured collection with exactly {"tenant": "t1"}, and the passage survives
-            the MetadataEquals("tenant") policy.
+            the MetadataEquals("tenant") policy, using the injected embedder and store.
         """
         embedder, store = _embedder(dimension=768), _store([_hit()], dimension=768)
         config = RetrievalConfig(
@@ -177,20 +178,44 @@ class TestQdrantFactoryBranch:
             embedding_model="nomic-embed-text",
             embedding_dimension=768,
         )
-        with patch(
-            "techai_webutils.clients.vector.composition.build_embedder_and_store",
-            return_value=(embedder, store),
-        ) as build:
-            engine = new_retrieval_engine_from_config(
-                config, policies=[MetadataEquals("tenant")], store_filter_keys=("tenant",)
-            )
+        engine = new_retrieval_engine_from_config(
+            config,
+            policies=[MetadataEquals("tenant")],
+            store_filter_keys=("tenant",),
+            embedder=embedder,
+            store=store,
+        )
 
         results = await engine.retrieve(
             "q", filters={"tenant": "t1", "max_level": "high"}
         )
 
         assert isinstance(engine, FilteringRetrievalEngine)
-        assert build.call_args.kwargs["collection"] == "documents"
         assert store.search.call_args.args[0] == "documents"
         assert store.search.call_args.kwargs["filters"] == {"tenant": "t1"}
         assert [r.document_id for r in results] == ["doc-1"]
+
+    @pytest.mark.parametrize("missing", ["embedder", "store"])
+    def test_from_config_qdrant_refuses_a_missing_embedder_or_store(
+        self, missing: str
+    ) -> None:
+        """The qdrant factory branch fails loudly when the caller omits the embedder or the store.
+
+        Why this test is important:
+          - The factory no longer builds the pair itself (a client family never imports a sibling), so a
+            composition root that forgets one must fail at startup with a coded error, not on the first
+            query with an attribute error.
+
+        What it tests:
+          - kind=qdrant with only one of embedder/store supplied raises AppError(INVALID_INPUT).
+        """
+        embedder = None if missing == "embedder" else _embedder()
+        store = None if missing == "store" else _store([])
+        with pytest.raises(AppError) as raised:
+            new_retrieval_engine_from_config(
+                RetrievalConfig(kind=RetrievalKind.QDRANT),
+                policies=[],
+                embedder=embedder,
+                store=store,
+            )
+        assert raised.value.code is ErrorCode.INVALID_INPUT

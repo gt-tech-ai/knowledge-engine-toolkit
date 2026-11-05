@@ -15,11 +15,11 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from prometheus_client import CollectorRegistry
 
-from techai_webutils.clients.decorators.semantic_cache_proxy import (
+from techai_webutils.clients.semantic_cache import reader as reader_module
+from techai_webutils.clients.semantic_cache.proxy import (
     SemanticCacheBinding,
     SemanticCacheProxy,
 )
-from techai_webutils.clients.semantic_cache import reader as reader_module
 from techai_webutils.clients.semantic_cache.stub import StubSemanticCache
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
@@ -641,13 +641,13 @@ async def test_accounting_over_cache_records_a_hit_as_zero_tokens() -> None:
     from techai_webutils.clients.decorators.token_accounting import (
         TokenAccountingProxy,
     )
-    from techai_webutils.clients.token_ledger.cost import PriceTable
-    from techai_webutils.clients.token_ledger.policy import BudgetPolicy
     from techai_webutils.core.interfaces.token_ledger import (
         BudgetDecision,
         TokenLedger,
         UsageScope,
     )
+    from techai_webutils.foundation.tokens.cost import PriceTable
+    from techai_webutils.foundation.tokens.policy import BudgetPolicy
 
     ledger = MagicMock(spec=TokenLedger)
     ledger.check_budget = AsyncMock(

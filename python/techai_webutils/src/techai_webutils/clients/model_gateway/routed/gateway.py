@@ -45,7 +45,6 @@ from techai_webutils.clients.model_gateway.routed.shadow import ShadowRouter
 from techai_webutils.clients.model_gateway.routed.sink import (
     route_decision_sink_from_config,
 )
-from techai_webutils.clients.token_ledger.cost import estimate_cost
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.model_gateway import (
     ModelGateway,
@@ -53,14 +52,13 @@ from techai_webutils.core.interfaces.model_gateway import (
     set_route_decision,
 )
 from techai_webutils.core.types.routing import PlanInput, RouteRequirements
+from techai_webutils.foundation.tokens.cost import estimate_cost
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping, Sequence
     from decimal import Decimal
 
-    from techai_webutils.clients.llm.builder import LlmConfig
     from techai_webutils.clients.model_gateway.builder import RoutedConfig
-    from techai_webutils.clients.token_ledger.cost import PriceTable
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
     from techai_webutils.core.interfaces.fact_publisher import FactPublisher
     from techai_webutils.core.interfaces.llm import (
@@ -83,7 +81,9 @@ if TYPE_CHECKING:
         RoutingPolicyStore,
     )
     from techai_webutils.core.interfaces.token_ledger import TokenLedger
+    from techai_webutils.core.types.llm import LlmConfig
     from techai_webutils.core.types.routing import CatalogEndpointRef, Plan, Route
+    from techai_webutils.foundation.tokens.cost import PriceTable
 
 _CHARS_PER_TOKEN = 4
 """The prompt-size estimate's characters per token (a documented approximation)."""

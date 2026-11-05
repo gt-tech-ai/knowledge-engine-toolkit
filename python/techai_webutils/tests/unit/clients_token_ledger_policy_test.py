@@ -7,18 +7,18 @@ from decimal import Decimal
 
 import pytest
 
-from techai_webutils.clients.token_ledger.policy import (
+from techai_webutils.core.interfaces.token_ledger import (
+    LEDGER_UNAVAILABLE_REASON,
+    BudgetDecision,
+)
+from techai_webutils.core.interfaces.token_ledger import Enforcement as CoreEnforcement
+from techai_webutils.foundation.tokens.policy import (
     BudgetPolicy,
     Enforcement,
     OnLedgerError,
     Verdict,
     decide,
 )
-from techai_webutils.core.interfaces.token_ledger import (
-    LEDGER_UNAVAILABLE_REASON,
-    BudgetDecision,
-)
-from techai_webutils.core.interfaces.token_ledger import Enforcement as CoreEnforcement
 
 _ALLOWED = BudgetDecision(
     allowed=True, reason="within_budget", remaining_tokens=None, remaining_cost_usd=None

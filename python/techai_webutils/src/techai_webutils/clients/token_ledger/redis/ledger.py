@@ -33,7 +33,6 @@ from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal
 from typing import TYPE_CHECKING, cast
 
-from techai_webutils.clients.token_ledger.cost import MICRO_DOLLAR
 from techai_webutils.core.errors.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.token_ledger import (
     LEDGER_UNAVAILABLE_REASON,
@@ -47,6 +46,7 @@ from techai_webutils.core.interfaces.token_ledger import (
 )
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 from techai_webutils.foundation.logger.logger import get_logger
+from techai_webutils.foundation.tokens.cost import MICRO_DOLLAR
 
 if TYPE_CHECKING:
     from collections.abc import Callable

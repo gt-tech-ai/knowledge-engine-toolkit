@@ -13,9 +13,9 @@ from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from techai_webutils.clients.token_ledger.cost import PriceTable
     from techai_webutils.core.interfaces.routing import CandidateRanker
     from techai_webutils.core.interfaces.token_ledger import TokenLedger
+    from techai_webutils.foundation.tokens.cost import PriceTable
 
 
 class CandidateRankerKind(StrEnum):

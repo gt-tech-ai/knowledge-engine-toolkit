@@ -12,8 +12,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from techai_webutils.clients.decorators.token_accounting import TokenAccountingProxy
-from techai_webutils.clients.token_ledger.cost import ModelPrice, PriceTable
-from techai_webutils.clients.token_ledger.policy import BudgetPolicy, Enforcement
 from techai_webutils.core.errors import ErrorCode, QuotaExceededError
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
 from techai_webutils.core.interfaces.llm import (
@@ -29,6 +27,8 @@ from techai_webutils.core.interfaces.token_ledger import (
     UsageRecord,
     UsageScope,
 )
+from techai_webutils.foundation.tokens.cost import ModelPrice, PriceTable
+from techai_webutils.foundation.tokens.policy import BudgetPolicy, Enforcement
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

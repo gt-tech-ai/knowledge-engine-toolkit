@@ -14,13 +14,13 @@ from testcontainers.redis import RedisContainer
 
 from techai_webutils.clients.decorators.token_accounting import TokenAccountingProxy
 from techai_webutils.clients.token_ledger import TokenLedgerConfig, TokenLedgerKind
-from techai_webutils.clients.token_ledger.cost import ModelPrice, PriceTable
-from techai_webutils.clients.token_ledger.policy import BudgetPolicy, Enforcement
 from techai_webutils.clients.token_ledger.redis import RedisTokenLedger
 from techai_webutils.core.errors import QuotaExceededError
 from techai_webutils.core.interfaces.llm import LLMMessage, LLMProvider, LLMResponse
 from techai_webutils.core.interfaces.metrics import MetricsProvider
 from techai_webutils.core.interfaces.token_ledger import Period, UsageRecord, UsageScope
+from techai_webutils.foundation.tokens.cost import ModelPrice, PriceTable
+from techai_webutils.foundation.tokens.policy import BudgetPolicy, Enforcement
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable

@@ -158,28 +158,12 @@ func (s *Subscriber) consume(
 		if ctx.Err() != nil {
 			return
 		}
-
-		if queueURL == "" {
-			url, err := ensureQueue(ctx, s.api, topic)
-			if err != nil {
-				if !s.backoffOrDone(ctx, "ensure queue", topic, err, &backoff) {
-					return
-				}
-				continue
-			}
-			queueURL = url
-			backoff = s.baseBackoff
+		ready, ok := s.awaitQueue(ctx, topic, &queueURL, &backoff)
+		if !ok {
+			return
 		}
-
-		// A failing gate pauses receiving: nothing is received, so no message's
-		// receive count rises while the consumer's downstream is unavailable.
-		if s.ready != nil {
-			if err := s.ready(ctx); err != nil {
-				if !s.backoffOrDone(ctx, "ready", topic, err, &backoff) {
-					return
-				}
-				continue
-			}
+		if !ready {
+			continue
 		}
 
 		out, err := s.api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
@@ -198,6 +182,33 @@ func (s *Subscriber) consume(
 
 		s.handleBatch(ctx, topic, queueURL, handler, out.Messages)
 	}
+}
+
+// awaitQueue resolves the topic's queue URL into *queueURL when it is still empty, then
+// checks the ready gate. ready reports whether the loop may receive now; ok is false
+// once ctx is done during a backoff. A failing gate pauses receiving: nothing is
+// received, so no message's receive count rises while the consumer's downstream is
+// unavailable.
+func (s *Subscriber) awaitQueue(
+	ctx context.Context,
+	topic string,
+	queueURL *string,
+	backoff *time.Duration,
+) (ready, ok bool) {
+	if *queueURL == "" {
+		url, err := ensureQueue(ctx, s.api, topic)
+		if err != nil {
+			return false, s.backoffOrDone(ctx, "ensure queue", topic, err, backoff)
+		}
+		*queueURL = url
+		*backoff = s.baseBackoff
+	}
+	if s.ready != nil {
+		if err := s.ready(ctx); err != nil {
+			return false, s.backoffOrDone(ctx, "ready", topic, err, backoff)
+		}
+	}
+	return true, true
 }
 
 // handleBatch fans the messages of one receive batch out to the handler with

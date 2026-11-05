@@ -143,36 +143,17 @@ func New(db *sql.DB, cfg Config) (*Store, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	tenant := "''"
-	if cfg.TenantColumn != "" {
-		tenant = cfg.TenantColumn
-	}
 	s := &Store{
 		db: db, lease: cfg.Lease, maxErrorLen: cfg.MaxErrorLen,
 		tenantColumn: cfg.TenantColumn != "",
 	}
-	attrCols := ""
-	var attrColsSb137 strings.Builder
+	var attrCols strings.Builder
 	for key, col := range cfg.AttributeColumns {
 		s.attrKeys = append(s.attrKeys, key)
-		attrColsSb137.WriteString(", " + col + "::text")
+		attrCols.WriteString(", " + col + "::text")
 	}
-	attrCols += attrColsSb137.String()
 	t := cfg.Table
-	// The claim locks a batch of due rows (SKIP LOCKED keeps concurrent claims
-	// disjoint), counts the attempt and pushes next_attempt_at out by the lease, all on
-	// the database clock, so replica clock skew cannot re-claim a live lease.
-	s.claimSQL = fmt.Sprintf(`
-UPDATE %[1]s SET attempts = attempts + 1,
-	next_attempt_at = now() + make_interval(secs => $3)
-WHERE id IN (
-	SELECT id FROM %[1]s
-	WHERE lane = $1 AND status = 'pending' AND next_attempt_at <= now()
-	ORDER BY created_at, id
-	LIMIT $2
-	FOR UPDATE SKIP LOCKED)
-RETURNING id, lane, %[2]s, %[3]s::text, payload, attempts, created_at%[4]s`,
-		t, tenant, cfg.keyColumn(), attrCols)
+	s.claimSQL = claimSQL(cfg, attrCols.String())
 	s.statsSQL = fmt.Sprintf(`
 SELECT count(*) FILTER (WHERE status = 'pending'),
        count(*) FILTER (WHERE status = 'parked'),
@@ -190,6 +171,28 @@ WHERE id = $1 AND status = 'pending'`, t)
 	s.purgeSQL = fmt.Sprintf(`DELETE FROM %s WHERE status = 'sent' AND sent_at < $1`, t)
 	s.enqueueSQL = enqueueSQL(cfg, s.attrKeys)
 	return s, nil
+}
+
+// claimSQL locks a batch of due rows (SKIP LOCKED keeps concurrent claims disjoint),
+// counts the attempt and pushes next_attempt_at out by the lease, all on the database
+// clock, so replica clock skew cannot re-claim a live lease. attrCols is the
+// ", col::text" list of the attribute columns, in the store's attribute-key order.
+func claimSQL(cfg Config, attrCols string) string {
+	tenant := "''"
+	if cfg.TenantColumn != "" {
+		tenant = cfg.TenantColumn
+	}
+	return fmt.Sprintf(`
+UPDATE %[1]s SET attempts = attempts + 1,
+	next_attempt_at = now() + make_interval(secs => $3)
+WHERE id IN (
+	SELECT id FROM %[1]s
+	WHERE lane = $1 AND status = 'pending' AND next_attempt_at <= now()
+	ORDER BY created_at, id
+	LIMIT $2
+	FOR UPDATE SKIP LOCKED)
+RETURNING id, lane, %[2]s, %[3]s::text, payload, attempts, created_at%[4]s`,
+		cfg.Table, tenant, cfg.keyColumn(), attrCols)
 }
 
 // enqueueSQL is the producer's insert: a pending row due now (created now unless the

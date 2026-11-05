@@ -18,7 +18,6 @@ from techai_webutils.clients.model_gateway import (
 from techai_webutils.clients.model_gateway.routed.sink import (
     route_decision_sink_from_config,
 )
-from techai_webutils.clients.token_ledger.cost import ModelPrice, PriceTable
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
 from techai_webutils.core.interfaces.llm import LLMMessage
@@ -28,6 +27,7 @@ from techai_webutils.core.interfaces.model_gateway import (
     RouteDecision,
     current_route_decision,
 )
+from techai_webutils.foundation.tokens.cost import ModelPrice, PriceTable
 
 _PRICES = PriceTable(
     prices={

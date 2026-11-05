@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from techai_webutils.clients.vector.composition import require_matching_dimension
 from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 from techai_webutils.foundation.logger import get_logger
+from techai_webutils.foundation.vectors import require_matching_dimension
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, override
 
-from techai_webutils.clients.vector.composition import require_matching_dimension
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.knowledge_base import (
     KBDocument,
@@ -21,6 +20,7 @@ from techai_webutils.core.interfaces.knowledge_base import (
 from techai_webutils.core.interfaces.vector_store import VectorEntry
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 from techai_webutils.foundation.logger import get_logger
+from techai_webutils.foundation.vectors import require_matching_dimension
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -51,6 +51,20 @@ _RESERVED_ATTRIBUTE_KEYS = frozenset({
 an attribute with one of these names would overwrite it in the stored payload, so it is refused."""
 
 
+def _validated_attributes(attributes: Mapping[str, str] | None) -> dict[str, str]:
+    """Return a copy of the consumer's chunk attributes, refusing one named like a key the index writes.
+
+    Raises:
+        ValueError: An attribute uses a reserved metadata key.
+
+    """
+    metadata = dict(attributes or {})
+    if reserved := sorted(_RESERVED_ATTRIBUTE_KEYS.intersection(metadata)):
+        msg = f"attributes may not use the reserved metadata keys {reserved}"
+        raise AppValueError(msg)
+    return metadata
+
+
 class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
     """KnowledgeBase over an EmbeddingProvider + VectorStore (embed chunks → upsert; count for status)."""
 
@@ -73,93 +87,123 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
     ) -> None:
         """Embed + upsert one point per chunk, a sub-batch at a time, resuming past indexed sub-batches.
 
-        Each sub-batch is embedded and upserted before the next, so peak memory is O(sub-batch) not
-        O(document) and every completed sub-batch is durable. Before embedding a sub-batch its stable
-        ``{document_id}:{index}`` ids are probed against the store: a sub-batch whose chunks are ALL
-        present with exactly the metadata this call would write is skipped (checkpoint resume), so an
-        at-least-once redrive — or a mid-ingest restart — re-embeds only what is missing instead of
-        redoing the expensive CPU embedding from zero. A sub-batch that is partially present, or stored
-        with other attributes or another name (a reclassified or renamed document), is re-embedded and
-        re-upserted (idempotent), so its stored scope always matches the latest call. ``attributes`` are
-        stamped onto every chunk; ``document_name`` is stamped for citation display, falling back to
-        ``document_id`` when empty.
+        Each sub-batch is embedded and upserted before the next, so peak memory is O(sub-batch) and
+        every completed sub-batch is durable; a sub-batch already stored as this call would write it
+        is skipped (see ``_index_sub_batch``). ``attributes`` are stamped onto every chunk;
+        ``document_name`` is stamped for citation display, falling back to ``document_id``.
 
         Raises:
             ValueError: An attribute is named like a key the index writes itself (``document_id``,
                 ``content``, ``entry_id``, ``document_name``, ``chunk_index``).
 
         """
-        base_metadata = dict(attributes or {})
-        if reserved := sorted(_RESERVED_ATTRIBUTE_KEYS.intersection(base_metadata)):
-            msg = f"attributes may not use the reserved metadata keys {reserved}"
-            raise AppValueError(msg)
+        base_metadata = _validated_attributes(attributes)
         if not chunks:
             return
-        name = document_name or document_id
-        sub_batches = [
-            chunks[i : i + _EMBED_SUB_BATCH]
-            for i in range(0, len(chunks), _EMBED_SUB_BATCH)
-        ]
-        total = len(sub_batches)
-        logger.info(
-            "vector index: start",
-            document_id=document_id,
-            chunks=len(chunks),
-            sub_batches=total,
-        )
-        base = 0
-        skipped = 0
-        for number, batch in enumerate(sub_batches, start=1):
-            ids = [f"{document_id}:{base + offset}" for offset in range(len(batch))]
-            # Prefer the source name so a retrieval citation displays it; fall back to the document_id
-            # when a caller passes no name.
-            metadata = [
-                {
-                    **base_metadata,
-                    "document_name": name,
-                    "chunk_index": str(base + offset),
-                }
-                for offset in range(len(batch))
-            ]
-            stored = await self._store.stored_metadata(self._collection, ids)
-            if all(
-                stored.get(chunk_id) == expected
-                for chunk_id, expected in zip(ids, metadata, strict=True)
-            ):
-                base += len(batch)
-                skipped += 1
-                continue
-            embeddings = await self._embedder.embed_batch(batch)
-            # The positional zip below assumes one embedding per chunk; a provider that returns a short
-            # (or over-long) list would otherwise IndexError mid-loop or silently drop chunks. Fail fast
-            # and loud so a partial embed is a clear error, not a corrupt index.
-            if len(embeddings) != len(batch):
-                msg = f"embedder returned {len(embeddings)} embeddings for {len(batch)} chunks"
-                raise AppValueError(msg)
-            entries = [
-                VectorEntry(
-                    id=ids[offset],
-                    document_id=document_id,
-                    content=batch[offset],
-                    embedding=embeddings[offset].embedding,
-                    metadata=metadata[offset],
-                )
-                for offset in range(len(batch))
-            ]
-            await self._store.upsert(self._collection, entries)
-            base += len(batch)
-            logger.info(
-                "vector index: sub-batch upserted",
-                document_id=document_id,
-                done=number,
-                total=total,
-            )
+        base_metadata["document_name"] = document_name or document_id
+        skipped = await self._index_sub_batches(document_id, chunks, base_metadata)
         logger.info(
             "vector index: done",
             document_id=document_id,
             points=len(chunks),
             skipped=skipped,
         )
+
+    async def _index_sub_batches(
+        self, document_id: str, chunks: list[str], base_metadata: Mapping[str, str]
+    ) -> int:
+        """Index ``chunks`` one sub-batch at a time, logging progress; return how many were skipped."""
+        starts = range(0, len(chunks), _EMBED_SUB_BATCH)
+        logger.info(
+            "vector index: start",
+            document_id=document_id,
+            chunks=len(chunks),
+            sub_batches=len(starts),
+        )
+        skipped = 0
+        for number, base in enumerate(starts, start=1):
+            batch = chunks[base : base + _EMBED_SUB_BATCH]
+            metadata = [
+                {**base_metadata, "chunk_index": str(index)}
+                for index in range(base, base + len(batch))
+            ]
+            if not await self._index_sub_batch(document_id, base, batch, metadata):
+                skipped += 1
+                continue
+            logger.info(
+                "vector index: sub-batch upserted",
+                document_id=document_id,
+                done=number,
+                total=len(starts),
+            )
+        return skipped
+
+    async def _index_sub_batch(
+        self,
+        document_id: str,
+        base: int,
+        batch: list[str],
+        metadata: list[dict[str, str]],
+    ) -> bool:
+        """Embed and upsert one sub-batch starting at chunk ``base``, unless it is already stored as is.
+
+        The stable ``{document_id}:{index}`` ids are probed first: when every chunk is present with
+        exactly ``metadata``, the sub-batch is skipped (checkpoint resume), so an at-least-once redrive
+        or a mid-ingest restart re-embeds only what is missing. A sub-batch partially present, or stored
+        with other attributes or another name (a reclassified or renamed document), is re-embedded and
+        re-upserted (idempotent), so its stored scope always matches the latest call.
+
+        Returns:
+            True when the sub-batch was embedded and upserted; False when every chunk was already
+            stored with exactly ``metadata`` (a resumed redrive skips it).
+
+        Raises:
+            ValueError: The embedder returned a different number of embeddings than chunks.
+
+        """
+        ids = [f"{document_id}:{base + offset}" for offset in range(len(batch))]
+        stored = await self._store.stored_metadata(self._collection, ids)
+        if all(
+            stored.get(chunk_id) == expected
+            for chunk_id, expected in zip(ids, metadata, strict=True)
+        ):
+            return False
+        entries = await self._embed_entries(document_id, ids, batch, metadata)
+        await self._store.upsert(self._collection, entries)
+        return True
+
+    async def _embed_entries(
+        self,
+        document_id: str,
+        ids: list[str],
+        batch: list[str],
+        metadata: list[dict[str, str]],
+    ) -> list[VectorEntry]:
+        """Embed ``batch`` and pair each chunk with its id, embedding and metadata.
+
+        Raises:
+            ValueError: The embedder returned a different number of embeddings than chunks; a short
+                or over-long list would otherwise drop chunks silently or corrupt the index.
+
+        """
+        embeddings = await self._embedder.embed_batch(batch)
+        if len(embeddings) != len(batch):
+            msg = (
+                f"embedder returned {len(embeddings)} embeddings for {len(batch)} chunks"
+            )
+            raise AppValueError(msg)
+        return [
+            VectorEntry(
+                id=chunk_id,
+                document_id=document_id,
+                content=content,
+                embedding=embedding.embedding,
+                metadata=meta,
+            )
+            for chunk_id, content, embedding, meta in zip(
+                ids, batch, embeddings, metadata, strict=True
+            )
+        ]
 
     async def remove_document(self, document_id: str) -> None:
         """Remove every chunk of the document from the store."""

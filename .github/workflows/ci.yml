@@ -35,7 +35,7 @@ jobs:
         run: go tool cover -func=cover.out | tail -1
 
   python:
-    name: Python — ruff · basedpyright · unit
+    name: Python — ruff · basedpyright · import-linter · unit
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -52,6 +52,8 @@ jobs:
         run: uv run ruff format --check .
       - name: basedpyright
         run: uv run basedpyright
+      - name: import-linter (layers + client-family independence)
+        run: uv run lint-imports
       - name: pytest (unit — 90% coverage of the unit surface)
         run: uv run pytest -m "not integration"
 

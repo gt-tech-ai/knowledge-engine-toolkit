@@ -6,8 +6,10 @@ Thanks for your interest in the Tech AI Knowledge Engine.
 
 - **Layered architecture.** Code imports downward only
   (`core → foundation → clients → repos → services → pipelines → workflows → transport`);
-  no lateral imports between same-layer packages. `depguard` enforces the layer order; review
-  catches lateral imports, which no lint rule checks.
+  no lateral imports between same-layer packages. In Go, `depguard` enforces the layer order and
+  review catches lateral imports; in Python, `lint-imports` (import-linter, configured in
+  `python/techai_webutils/pyproject.toml`) enforces both the layer order and the independence of
+  the client families.
 - **Everything swappable is behind an interface, selected by configuration.** A new
   backend is a `Kind` + `Config` + `*_from_config` factory, chosen by a config value
   and injected at a composition root — not a compile-time import.
@@ -66,6 +68,7 @@ Python (from `python/techai_webutils`):
 uv run ruff check .
 uv run ruff format --check .
 uv run basedpyright
+uv run lint-imports                 # layers + client-family independence
 uv run pytest -m "not integration"   # 90% coverage gate
 uv run pytest -m integration --cov-fail-under=0   # needs Docker
 ```

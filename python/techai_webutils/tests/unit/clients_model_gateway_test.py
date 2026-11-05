@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from techai_webutils.clients.llm.builder import LlmConfig
+from techai_webutils.clients.llm.builder import LlmConfig, new_llm_from_config
 from techai_webutils.clients.llm.stub import StubLlmProvider
 from techai_webutils.clients.model_gateway import (
     GatewayConfig,
@@ -111,7 +111,9 @@ def test_new_model_gateway_from_config_unknown_kind_raises() -> None:
       - an unknown kind raises a ``ValueError`` coded ``INVALID_INPUT``
     """
     with pytest.raises(ValueError, match="unknown model gateway kind") as caught:
-        new_model_gateway_from_config(GatewayConfig(kind="magic"))
+        new_model_gateway_from_config(
+            GatewayConfig(kind="magic"), provider_factory=new_llm_from_config
+        )
 
     assert isinstance(caught.value, AppError)
     assert caught.value.code is ErrorCode.INVALID_INPUT

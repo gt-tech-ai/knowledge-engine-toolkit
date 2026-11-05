@@ -115,6 +115,7 @@ dev = [
     "hypothesis>=6.168.5",
     "asyncpg-stubs==0.31.3",
     "types-aiobotocore-lite[s3,sesv2,sqs]==3.9.0",
+    "import-linter>=2.15",
 ]
 
 [tool.pytest.ini_options]
@@ -239,6 +240,60 @@ max-complexity = 15
 max-args = 10
 max-branches = 20
 max-returns = 20
+
+# Layer and family boundaries (`uv run lint-imports`, run in CI). Layers import downward only, and
+# one client family never imports another (a family needing a sibling's object takes it injected).
+# import-linter follows indirect imports too, so a chain through a third module is caught.
+[tool.importlinter]
+root_package = "techai_webutils"
+
+[[tool.importlinter.contracts]]
+name = "Layers import downward only"
+type = "layers"
+containers = ["techai_webutils"]
+layers = [
+    "controllers",
+    "workflows",
+    "pipelines",
+    "services",
+    "repos",
+    "clients",
+    "execution",
+    "foundation",
+    "core",
+]
+
+[[tool.importlinter.contracts]]
+name = "Client families are independent"
+type = "independence"
+modules = [
+    "techai_webutils.clients.audit",
+    "techai_webutils.clients.cache",
+    "techai_webutils.clients.chunking",
+    "techai_webutils.clients.dataset",
+    "techai_webutils.clients.decorators",
+    "techai_webutils.clients.email",
+    "techai_webutils.clients.embedding",
+    "techai_webutils.clients.facts",
+    "techai_webutils.clients.grader",
+    "techai_webutils.clients.jobs",
+    "techai_webutils.clients.kb_ingestion",
+    "techai_webutils.clients.llm",
+    "techai_webutils.clients.lock",
+    "techai_webutils.clients.messaging",
+    "techai_webutils.clients.metadata",
+    "techai_webutils.clients.model_gateway",
+    "techai_webutils.clients.parsing",
+    "techai_webutils.clients.retrieval",
+    "techai_webutils.clients.rpc",
+    "techai_webutils.clients.safety",
+    "techai_webutils.clients.semantic_cache",
+    "techai_webutils.clients.splitting",
+    "techai_webutils.clients.storage",
+    "techai_webutils.clients.token_ledger",
+    "techai_webutils.clients.vector",
+    "techai_webutils.clients.vector_kb",
+]
 
 # Strict type-checking over src and tests. include is an allowlist, so tests are analyzed
 # only because they are listed here.

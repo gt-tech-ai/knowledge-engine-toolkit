@@ -14,6 +14,7 @@ pushed down, and logs (at info) a supplied seam the selected kind does not use.
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, cast
@@ -24,18 +25,22 @@ from techai_webutils.clients.retrieval.filtering import (
     MinScore,
 )
 from techai_webutils.clients.retrieval.stub import StubRetrievalEngine
-from techai_webutils.core.errors import AppTypeError, AppValueError
+from techai_webutils.clients.retrieval.vector import VectorRetrievalEngine
+from techai_webutils.core.errors import AppError, AppTypeError, AppValueError, ErrorCode
 from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from techai_webutils.clients.retrieval.bedrock.engine import (
+        BedrockRetrievalEngine,
         DocumentIdResolver,
         FilterBuilder,
     )
     from techai_webutils.clients.retrieval.filtering import PassagePolicy
+    from techai_webutils.core.interfaces.embedding import EmbeddingProvider
     from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
+    from techai_webutils.core.interfaces.vector_store import VectorStore
 
 logger = get_logger(__name__)
 
@@ -121,6 +126,8 @@ def new_retrieval_engine_from_config(
     document_id_resolver: DocumentIdResolver | None = None,
     store_filter_keys: Sequence[str] = (),
     stub_passages: Sequence[RetrievalResult] = (),
+    embedder: EmbeddingProvider | None = None,
+    store: VectorStore | None = None,
 ) -> RetrievalEngine:
     """Build the retrieval engine selected by ``config.kind``, wrapped by ``wrap_retrieval_engine``.
 
@@ -128,8 +135,10 @@ def new_retrieval_engine_from_config(
     rules (e.g. ``MetadataEquals`` on its tenant key); pass an empty list only when there is no scope
     to enforce. The other seams (code, not config data) reach one kind each: ``filter_builder`` and
     ``document_id_resolver`` the Bedrock engine, ``store_filter_keys`` the vector engine's push-down,
-    ``stub_passages`` the stub's corpus. A ``MetadataEquals`` scope with no push-down seam for the
-    selected kind is logged as a warning; a seam the selected kind ignores is logged at info.
+    ``stub_passages`` the stub's corpus, and ``embedder`` and ``store`` the vector engine (the caller
+    builds them with ``clients.embedding`` and ``clients.vector``; a client family never imports a
+    sibling). A ``MetadataEquals`` scope with no push-down seam for the selected kind is logged as a
+    warning; a seam the selected kind ignores is logged at info.
     """
     _warn_about_seams(
         config.kind,
@@ -143,30 +152,36 @@ def new_retrieval_engine_from_config(
     if config.kind is RetrievalKind.STUB:
         inner = StubRetrievalEngine(stub_passages)
     elif config.kind is RetrievalKind.BEDROCK:
-        # Lazy import: keep aiobotocore off the dev/stub path (loaded only in stage/prod).
-        from techai_webutils.clients.retrieval.bedrock import BedrockRetrievalEngine  # noqa: PLC0415
-
-        inner = BedrockRetrievalEngine(
-            region=config.region,
-            knowledge_base_id=config.knowledge_base_id,
-            endpoint=config.endpoint,
-            search_type=config.search_type,
-            # The reranker model is passed only when the kind selects it, so kind=none disables reranking
-            # regardless of a stray model id.
-            reranking_model=(
-                config.reranking_model
-                if config.reranking_kind == "bedrock_rerank"
-                else ""
-            ),
-            filter_builder=filter_builder,
-            document_id_resolver=document_id_resolver,
-        )
+        inner = _build_bedrock_engine(config, filter_builder, document_id_resolver)
     elif config.kind is RetrievalKind.QDRANT:
-        inner = _build_vector_engine(config, store_filter_keys)
+        inner = _build_vector_engine(config, store_filter_keys, embedder, store)
     else:
         msg = f"unknown retrieval kind: {config.kind!r}"
         raise AppValueError(msg)
     return wrap_retrieval_engine(inner, config, policies=policies)
+
+
+def _build_bedrock_engine(
+    config: RetrievalConfig,
+    filter_builder: FilterBuilder | None,
+    document_id_resolver: DocumentIdResolver | None,
+) -> RetrievalEngine:
+    """Build the Bedrock Knowledge Base engine; aiobotocore is loaded only on this path."""
+    bedrock = importlib.import_module("techai_webutils.clients.retrieval.bedrock")
+    engine = cast("type[BedrockRetrievalEngine]", bedrock.BedrockRetrievalEngine)
+    return engine(
+        region=config.region,
+        knowledge_base_id=config.knowledge_base_id,
+        endpoint=config.endpoint,
+        search_type=config.search_type,
+        # The reranker model is passed only when the kind selects it, so kind=none disables reranking
+        # regardless of a stray model id.
+        reranking_model=(
+            config.reranking_model if config.reranking_kind == "bedrock_rerank" else ""
+        ),
+        filter_builder=filter_builder,
+        document_id_resolver=document_id_resolver,
+    )
 
 
 _SEAM_KINDS = {
@@ -227,24 +242,22 @@ def _warn_about_seams(
 
 
 def _build_vector_engine(
-    config: RetrievalConfig, filter_keys: Sequence[str]
+    config: RetrievalConfig,
+    filter_keys: Sequence[str],
+    embedder: EmbeddingProvider | None,
+    store: VectorStore | None,
 ) -> RetrievalEngine:
-    """Build the local vector-dev engine (Ollama embedder + Qdrant store) from ``config``.
+    """Build the vector engine over the caller's embedder and store; it checks their dimensions agree.
 
-    The embedding dimension is the single source of truth: both the embedder and the store are built
-    with ``config.embedding_dimension``, and ``VectorRetrievalEngine`` asserts they agree. Heavy backends
-    (httpx, qdrant-client) are imported lazily so the stub/bedrock paths never load them.
+    Raises:
+        AppError: ``INVALID_INPUT`` when the embedder or the store is missing.
+
     """
-    from techai_webutils.clients.retrieval.vector import VectorRetrievalEngine  # noqa: PLC0415
-    from techai_webutils.clients.vector.composition import build_embedder_and_store  # noqa: PLC0415
-
-    embedder, store = build_embedder_and_store(
-        embedding_host=config.embedding_host,
-        embedding_model=config.embedding_model,
-        embedding_dimension=config.embedding_dimension,
-        vector_url=config.vector_url,
-        collection=config.vector_collection,
-    )
+    if embedder is None or store is None:
+        raise AppError(
+            ErrorCode.INVALID_INPUT,
+            "the qdrant retrieval kind needs an embedder and a store built by the caller",
+        )
     return VectorRetrievalEngine(
         embedder, store, config.vector_collection, filter_keys=filter_keys
     )

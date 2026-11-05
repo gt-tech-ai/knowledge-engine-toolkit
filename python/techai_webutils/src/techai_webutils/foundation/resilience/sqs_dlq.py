@@ -7,7 +7,7 @@ integration suite against ElasticMQ — mirroring ``clients/messaging/sqs_publis
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Protocol, Self
 
 import aiobotocore.session
 
@@ -21,8 +21,25 @@ if TYPE_CHECKING:
     from types_aiobotocore_sqs import SQSClient
     from types_aiobotocore_sqs.type_defs import MessageAttributeValueTypeDef
 
-    from techai_webutils.clients.messaging.config import SQSConfig
     from techai_webutils.core.interfaces.dlq import DeadLetter
+    from techai_webutils.core.types.aws_client import AwsClientKwargs
+
+
+class SqsQueueTarget(Protocol):
+    """The queue a dead letter goes to: its URL and the SQS client's connection arguments.
+
+    The messaging ``SQSConfig`` satisfies it, so a consumer passes its config unchanged; the
+    foundation tier names only this shape, never the clients tier that defines the config.
+    """
+
+    @property
+    def queue_url(self) -> str:
+        """Full URL of the dead-letter queue."""
+        ...
+
+    def client_kwargs(self) -> AwsClientKwargs:
+        """Keyword arguments for ``aiobotocore``'s ``create_client("sqs", ...)``."""
+        ...
 
 
 class SqsDeadLetterBackend(DeadLetterBackend):
@@ -34,7 +51,7 @@ class SqsDeadLetterBackend(DeadLetterBackend):
             await DeadLetterQueue(backend).send(letter)
     """
 
-    def __init__(self, config: SQSConfig) -> None:
+    def __init__(self, config: SqsQueueTarget) -> None:
         """Store the SQS DLQ connection config; the client is created on context entry."""
         self._config = config
         self._client: SQSClient | None = None

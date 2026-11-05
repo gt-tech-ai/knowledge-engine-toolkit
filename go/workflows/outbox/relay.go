@@ -186,32 +186,33 @@ func NewRelay(
 		now: time.Now, jitter: retry.FullJitter,
 	}
 	if metrics != nil {
-		r.sent = metrics.Counter("outbox_sent_total", "Outbox records delivered.", "lane")
-		r.retried = metrics.Counter(
-			"outbox_retried_total",
-			"Outbox deliveries rescheduled after a failure.",
-			"lane",
-		)
-		r.parked = metrics.Counter(
-			"outbox_parked_total",
-			"Outbox records parked after exhausting their attempts.",
-			"lane",
-		)
-		r.depth = metrics.Gauge(
-			"outbox_depth",
-			"Outbox records pending delivery.",
-			"lane",
-		)
-		r.lag = metrics.Gauge(
-			"outbox_lag_seconds",
-			"Age of the oldest pending outbox record, in seconds.",
-			"lane",
-		)
+		r.registerMetrics(metrics)
 	}
 	for _, opt := range opts {
 		opt(r)
 	}
 	return r
+}
+
+// registerMetrics registers the relay's outcome counters and backlog gauges, by lane.
+func (r *Relay) registerMetrics(metrics interfaces.Metrics) {
+	r.sent = metrics.Counter("outbox_sent_total", "Outbox records delivered.", "lane")
+	r.retried = metrics.Counter(
+		"outbox_retried_total",
+		"Outbox deliveries rescheduled after a failure.",
+		"lane",
+	)
+	r.parked = metrics.Counter(
+		"outbox_parked_total",
+		"Outbox records parked after exhausting their attempts.",
+		"lane",
+	)
+	r.depth = metrics.Gauge("outbox_depth", "Outbox records pending delivery.", "lane")
+	r.lag = metrics.Gauge(
+		"outbox_lag_seconds",
+		"Age of the oldest pending outbox record, in seconds.",
+		"lane",
+	)
 }
 
 // RunOnce claims one batch, delivers it and finalizes every row, then refreshes

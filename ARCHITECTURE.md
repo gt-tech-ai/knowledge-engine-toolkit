@@ -33,7 +33,13 @@ with `depguard`; the `go/execution` and same-tier rules have no lint rule, so re
 
 Python mirrors the tiers: `core` → `foundation` (+ `execution`) → `clients` → `repos` →
 `services` → `pipelines` → `workflows` → `controllers` (the transport edge). Imports point
-downward, except one type-checking-only import in `foundation/resilience/sqs_dlq.py`.
+downward, and no client family imports another: a family that needs a sibling's object takes it
+injected (the qdrant retrieval kind and the vector knowledge base take an embedder and a store;
+the passthrough model gateway takes a `provider_factory`). `uv run lint-imports` enforces both
+rules (import-linter, configured in `python/techai_webutils/pyproject.toml`, run in CI),
+indirect imports included. Pieces several families share live below them: `core/types/llm`
+(`LlmKind`, `LlmConfig`), `foundation/tokens` (token cost and budget policy) and
+`foundation/vectors` (the embedder/store dimension check).
 
 ## Swappable components
 
@@ -238,7 +244,7 @@ collaborator or zero timeout skips its layer; recovery needs none.
 - **Python — token accounting.** `clients/decorators/token_accounting.TokenAccountingProxy` is the
   outermost AI-band decorator over an `LLMProvider`, `ModelGateway` or `EmbeddingProvider`: it reads
   the request's `UsageScope` from an injected `UsageScopeProvider` (no scope → passthrough), asks
-  `TokenLedger.check_budget` before the call and applies `clients/token_ledger/policy.decide`
+  `TokenLedger.check_budget` before the call and applies `foundation/tokens/policy.decide`
   (`shadow` serves and counts `ai_budget_would_exceed_total`; `soft` and `hard` reject an
   exhausted budget with `QuotaExceededError` before the inner call; a ledger error — raised, or a
   `LEDGER_UNAVAILABLE_REASON` decision — serves under `soft` and rejects under `hard`, unless
@@ -261,7 +267,7 @@ collaborator or zero timeout skips its layer; recovery needs none.
   decision. `AuditEnforcement` `shadow` counts
   `audit_record_failures_total` and serves; `enforced` raises (a coded error keeps its code, else
   `INTERNAL`).
-- **Python — semantic cache proxy.** `clients/decorators/semantic_cache_proxy.SemanticCacheProxy`
+- **Python — semantic cache proxy.** `clients/semantic_cache/proxy.SemanticCacheProxy`
   is a read-through decorator around one bound method (`SemanticCacheBinding`: the unary `method`,
   optionally a `stream_method`, and how arguments map to a query and a `CacheNamespace`). A hit
   returns the decoded answer (a stream replays the cached text, then a zero-token `StreamUsage`)
@@ -698,7 +704,7 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
 - **Model gateway:** `core/interfaces/model_gateway.py` (`ModelGateway` extends `LLMProvider`
   with `resolve(RouteContext)`; `RouteDecision` in a request-scoped slot read through
   `current_route_decision()`) and `clients/model_gateway` (`passthrough` wraps one provider built
-  by the injected `provider_factory`; `routed` filters, plans and executes over a model catalog).
+  by the required, injected `provider_factory`, e.g. `clients.llm.new_llm_from_config`; `routed` filters, plans and executes over a model catalog).
   `resolve` is async because planning may consult a classifier or a remote planner.
   `AiSpanEnricher` keys `gen_ai.system` on a gateway's `wrapped_provider`.
 - **Routing:** `core/types/routing.py` (capabilities, endpoint refs, routes, `RoutingPolicy`,

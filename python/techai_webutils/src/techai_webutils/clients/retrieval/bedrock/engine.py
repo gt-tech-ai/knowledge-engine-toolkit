@@ -140,6 +140,31 @@ class BedrockRetrievalEngine(RetrievalEngine):
         hybrid search, and a Cohere rerankingConfiguration when a reranker is configured. A botocore
         failure raises a coded ``AppError`` (throttling / 5xx → transient ``UNAVAILABLE``).
         """
+        kb_id = self._knowledge_base_id(index_id)
+        client = await self._runtime_client()
+        request = filters or {}
+        try:
+            response = await client.retrieve(
+                knowledgeBaseId=kb_id,
+                retrievalQuery={"text": query},
+                retrievalConfiguration={
+                    "vectorSearchConfiguration": self._vector_search_config(
+                        top_k, request
+                    )
+                },
+            )
+        except (ClientError, BotoCoreError) as exc:
+            raise botocore_error_to_app_error(exc, "bedrock retrieve") from exc
+        results = cast("list[dict[str, object]]", response.get("retrievalResults", []))
+        return [_to_result(item, request, self._resolve_document_id) for item in results]
+
+    def _knowledge_base_id(self, index_id: str | None) -> str:
+        """Return the knowledge base to query: the per-call id, else the configured default.
+
+        Raises:
+            InternalError: The per-call id is empty, or there is neither a per-call id nor a default.
+
+        """
         if index_id is not None and not index_id:
             msg = (
                 "empty per-call knowledge base id (pass None to use the engine's default)"
@@ -149,8 +174,12 @@ class BedrockRetrievalEngine(RetrievalEngine):
         if not kb_id:
             msg = "no knowledge base id: no per-call id and the engine has no configured default"
             raise InternalError(msg)
-        client = await self._runtime_client()
-        request = filters or {}
+        return kb_id
+
+    def _vector_search_config(
+        self, top_k: int, request: Mapping[str, str]
+    ) -> dict[str, object]:
+        """Build Retrieve's ``vectorSearchConfiguration``: pool size, filter, search type, reranker."""
         vector_config: dict[str, object] = {"numberOfResults": top_k}
         if (
             self._build_filter is not None
@@ -160,26 +189,14 @@ class BedrockRetrievalEngine(RetrievalEngine):
         if self._search_type == "hybrid":
             vector_config["overrideSearchType"] = "HYBRID"
         if self._reranking_model:
+            model_arn = f"arn:aws:bedrock:{self._region}::foundation-model/{self._reranking_model}"
             vector_config["rerankingConfiguration"] = {
                 "type": "BEDROCK_RERANKING_MODEL",
                 "bedrockRerankingConfiguration": {
-                    "modelConfiguration": {
-                        "modelArn": (
-                            f"arn:aws:bedrock:{self._region}::foundation-model/{self._reranking_model}"
-                        ),
-                    },
+                    "modelConfiguration": {"modelArn": model_arn},
                 },
             }
-        try:
-            response = await client.retrieve(
-                knowledgeBaseId=kb_id,
-                retrievalQuery={"text": query},
-                retrievalConfiguration={"vectorSearchConfiguration": vector_config},
-            )
-        except (ClientError, BotoCoreError) as exc:
-            raise botocore_error_to_app_error(exc, "bedrock retrieve") from exc
-        results = cast("list[dict[str, object]]", response.get("retrievalResults", []))
-        return [_to_result(item, request, self._resolve_document_id) for item in results]
+        return vector_config
 
 
 def _to_float(value: object) -> float:

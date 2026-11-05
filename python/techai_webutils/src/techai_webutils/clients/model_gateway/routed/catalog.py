@@ -13,8 +13,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, Any, cast
 
-from techai_webutils.clients.llm.builder import LlmConfig, LlmKind
 from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.types.llm import LlmConfig, LlmKind
 from techai_webutils.core.types.routing import Capabilities, CatalogEndpointRef, Route
 
 if TYPE_CHECKING:

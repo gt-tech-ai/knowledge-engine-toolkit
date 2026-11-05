@@ -1,9 +1,11 @@
-"""Config-selected ``ModelGateway`` factory, fronting ``new_llm_from_config``.
+"""Config-selected ``ModelGateway`` factory over an injected LLM provider factory.
 
 ``GatewayConfig.kind`` selects ``passthrough`` (the default: one provider built from
 ``config.llm``, delegated unchanged) or ``routed`` (a model catalog, policy filter, planner and
-fallback chain; imported lazily). The provider factory is injected so each endpoint's provider is
-built the way the app builds providers. An unknown kind raises ``AppValueError``.
+fallback chain; imported lazily). The provider factory is injected (the consumer passes
+``clients.llm.new_llm_from_config`` or its own), so this family never imports the LLM family and
+each endpoint's provider is built the way the app builds providers. An unknown kind raises
+``AppValueError``.
 """
 
 from __future__ import annotations
@@ -13,15 +15,14 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
-from techai_webutils.clients.llm.builder import LlmConfig, new_llm_from_config
 from techai_webutils.clients.model_gateway.passthrough import PassthroughGateway
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.model_gateway import RouteContext
+from techai_webutils.core.types.llm import LlmConfig
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    from techai_webutils.clients.token_ledger.cost import PriceTable
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
     from techai_webutils.core.interfaces.fact_publisher import FactPublisher
     from techai_webutils.core.interfaces.llm import LLMProvider
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     )
     from techai_webutils.core.interfaces.routing import RoutingPolicyStore
     from techai_webutils.core.interfaces.token_ledger import TokenLedger
+    from techai_webutils.foundation.tokens.cost import PriceTable
 
 
 class GatewayKind(StrEnum):
@@ -100,7 +102,7 @@ class GatewayConfig:
 def new_model_gateway_from_config(  # noqa: PLR0913 - the config plus each injected collaborator
     config: GatewayConfig,
     *,
-    provider_factory: Callable[[LlmConfig], LLMProvider] = new_llm_from_config,
+    provider_factory: Callable[[LlmConfig], LLMProvider],
     context_provider: RouteContextProvider = RouteContext,
     priced_ids: frozenset[str] | None = None,
     embedding: EmbeddingProvider | None = None,

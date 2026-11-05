@@ -12,6 +12,7 @@ from techai_webutils.clients.vector_kb.builder import (
     new_knowledge_base_from_config,
 )
 from techai_webutils.clients.vector_kb.vector import VectorKnowledgeBase
+from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
 from techai_webutils.core.interfaces.vector_store import VectorStore
 
@@ -346,8 +347,29 @@ class TestKnowledgeBaseFactory:
                 embedding_host="http://ollama:11434",
                 embedding_dimension=768,
             ),
+            embedder=_embedder(dimension=768),
+            store=_store(dimension=768),
         )
         assert isinstance(kb, VectorKnowledgeBase)
+
+    @pytest.mark.parametrize("missing", ["embedder", "store"])
+    def test_vector_kind_refuses_a_missing_embedder_or_store(self, missing: str) -> None:
+        """The vector kind fails loudly when the caller omits the embedder or the store.
+
+        Why this test is important:
+          - The factory no longer builds the pair (a client family never imports a sibling), so a
+            composition root that forgets one must fail at startup with a coded error.
+
+        What it tests:
+          - kind=vector with only one of embedder/store supplied raises AppError(INVALID_INPUT).
+        """
+        embedder = None if missing == "embedder" else _embedder(dimension=768)
+        store = None if missing == "store" else _store(dimension=768)
+        with pytest.raises(AppError) as raised:
+            new_knowledge_base_from_config(
+                KnowledgeBaseConfig(), embedder=embedder, store=store
+            )
+        assert raised.value.code is ErrorCode.INVALID_INPUT
 
     def test_unknown_kind_raises(self) -> None:
         """An unknown knowledge-base kind fails loudly."""

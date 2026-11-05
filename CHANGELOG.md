@@ -8,6 +8,31 @@ All notable changes to this project are recorded here. The format follows
 
 Python: `techai-webutils` 0.9.3.
 
+### Changed
+
+- Python client families no longer import each other, and `uv run lint-imports` (import-linter,
+  run in CI) now enforces the layer order and family independence. The moves:
+  - `clients.retrieval.new_retrieval_engine_from_config` takes `embedder=` and `store=` for the
+    `qdrant` kind, and `clients.vector_kb.new_knowledge_base_from_config` takes them for the
+    `vector` kind; the caller builds them with `clients.embedding` and `clients.vector`. Either
+    factory raises `AppError(INVALID_INPUT)` when one is missing.
+    `clients.vector.composition.build_embedder_and_store` is removed.
+  - `clients.model_gateway.new_model_gateway_from_config` requires `provider_factory`
+    (pass `clients.llm.new_llm_from_config` for the previous behaviour).
+  - `LlmKind` and `LlmConfig` live in `core.types.llm`; `clients.llm.builder` re-exports them.
+  - Token cost and budget policy live in `foundation.tokens.{cost,policy}`;
+    `clients.token_ledger.{cost,policy}` re-export them.
+  - `require_matching_dimension` lives in `foundation.vectors`; `clients.vector.composition`
+    re-exports it.
+  - `SemanticCacheProxy` and `SemanticCacheBinding` moved from
+    `clients.decorators.semantic_cache_proxy` to `clients.semantic_cache.proxy` (exported from
+    `clients.semantic_cache`); `clients.decorators` no longer exports them.
+  - `foundation.resilience.sqs_dlq.SqsDeadLetterBackend` takes any `SqsQueueTarget` (a
+    `queue_url` and `client_kwargs()`); `clients.messaging.SQSConfig` satisfies it unchanged.
+- Size ratchets: a Go and a Python unit test fail when a function in the trees the ingestion
+  work touches exceeds 50 lines, a file 800 lines, or nesting 4 levels. The functions over
+  that limit were split; behaviour is unchanged.
+
 ### Fixed
 
 - `RealRayRuntime` recovers from a Ray head replacement. It put its mapper into the object store

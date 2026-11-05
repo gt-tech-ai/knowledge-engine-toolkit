@@ -9,9 +9,9 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from techai_webutils.clients.token_ledger.cost import ModelPrice, PriceTable, cost_of
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.token_ledger import UsageRecord, UsageScope
+from techai_webutils.foundation.tokens.cost import ModelPrice, PriceTable, cost_of
 
 _TABLE = PriceTable(
     prices={

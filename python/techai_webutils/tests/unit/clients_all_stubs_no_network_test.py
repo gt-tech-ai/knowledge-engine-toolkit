@@ -247,7 +247,12 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
         (new_dataset_from_config(DatasetConfig()), StubDataset),
         (new_safety_check_from_config(SafetyConfig()), NoopSafetyCheck),
         (semantic_cache_from_config(SemanticCacheConfig()), StubSemanticCache),
-        (new_model_gateway_from_config(GatewayConfig()), PassthroughGateway),
+        (
+            new_model_gateway_from_config(
+                GatewayConfig(), provider_factory=new_llm_from_config
+            ),
+            PassthroughGateway,
+        ),
     ]
 
     for impl, stub_type in built:

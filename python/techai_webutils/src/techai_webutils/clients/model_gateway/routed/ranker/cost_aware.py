@@ -21,18 +21,18 @@ from decimal import Decimal
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from techai_webutils.clients.token_ledger.cost import estimate_cost
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.token_ledger import Period, UsageScope
 from techai_webutils.core.types.routing import RankResult
+from techai_webutils.foundation.tokens.cost import estimate_cost
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from techai_webutils.clients.token_ledger.cost import PriceTable
     from techai_webutils.core.interfaces.model_gateway import RouteContext
     from techai_webutils.core.interfaces.token_ledger import TokenLedger
     from techai_webutils.core.types.routing import CatalogEndpointRef, PlanInput, Route
+    from techai_webutils.foundation.tokens.cost import PriceTable
 
 _RANK_TOKEN_FLOOR = 1_000
 """Token count the cost score assumes at least, per direction (caps use the real estimate)."""

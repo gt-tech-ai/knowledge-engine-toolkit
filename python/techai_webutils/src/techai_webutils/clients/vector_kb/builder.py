@@ -1,9 +1,10 @@
 """Knowledge-base factory — Kind + Config + ``new_knowledge_base_from_config``.
 
-Only the local vector backend ships today (Ollama embedder → Qdrant store); a managed Bedrock
+Only the local vector backend ships today (an embedder → a vector store); a managed Bedrock
 Knowledge Base is fed through the separate ``clients/kb_ingestion`` ingestor instead (a different
-contract — start/poll a sync job, not this chunk-indexing ``KnowledgeBase``). Heavy backends are
-imported lazily so selecting a different kind never loads httpx/qdrant-client.
+contract — start/poll a sync job, not this chunk-indexing ``KnowledgeBase``). The embedder and store
+are built by the caller (``clients.embedding`` and ``clients.vector`` from this config's fields) and
+injected, since a client family never imports a sibling family.
 """
 
 from __future__ import annotations
@@ -12,10 +13,13 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from techai_webutils.core.errors import AppValueError
+from techai_webutils.clients.vector_kb.vector import VectorKnowledgeBase
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 
 if TYPE_CHECKING:
+    from techai_webutils.core.interfaces.embedding import EmbeddingProvider
     from techai_webutils.core.interfaces.knowledge_base import KnowledgeBase
+    from techai_webutils.core.interfaces.vector_store import VectorStore
 
 
 class KnowledgeBaseKind(StrEnum):
@@ -43,19 +47,26 @@ class KnowledgeBaseConfig:
     """Vector dimensionality of ``embedding_model`` (must match the Qdrant collection)."""
 
 
-def new_knowledge_base_from_config(config: KnowledgeBaseConfig) -> KnowledgeBase:
-    """Build the ``KnowledgeBase`` selected by ``config.kind`` (heavy backends imported lazily)."""
-    if config.kind is KnowledgeBaseKind.VECTOR:
-        from techai_webutils.clients.vector.composition import build_embedder_and_store  # noqa: PLC0415
-        from techai_webutils.clients.vector_kb.vector import VectorKnowledgeBase  # noqa: PLC0415
+def new_knowledge_base_from_config(
+    config: KnowledgeBaseConfig,
+    *,
+    embedder: EmbeddingProvider | None = None,
+    store: VectorStore | None = None,
+) -> KnowledgeBase:
+    """Build the ``KnowledgeBase`` selected by ``config.kind`` over the injected embedder and store.
 
-        embedder, store = build_embedder_and_store(
-            embedding_host=config.embedding_host,
-            embedding_model=config.embedding_model,
-            embedding_dimension=config.embedding_dimension,
-            vector_url=config.vector_url,
-            collection=config.collection,
-        )
+    Raises:
+        AppError: ``INVALID_INPUT`` when the ``vector`` kind is selected without an embedder and a
+            store.
+        AppValueError: ``INVALID_INPUT`` for an unknown kind.
+
+    """
+    if config.kind is KnowledgeBaseKind.VECTOR:
+        if embedder is None or store is None:
+            raise AppError(
+                ErrorCode.INVALID_INPUT,
+                "the vector knowledge base needs an embedder and a store built by the caller",
+            )
         return VectorKnowledgeBase(embedder, store, config.collection)
     msg = f"unknown knowledge base kind: {config.kind!r}"
     raise AppValueError(msg)

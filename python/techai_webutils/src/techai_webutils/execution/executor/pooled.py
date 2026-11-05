@@ -163,16 +163,21 @@ class PooledExecutor[T]:
                 raise aborted[0]
             return batch
         finally:
-            # Close every built worker independently: gather so one worker's aclose failure (e.g. a Ray
-            # actor proxy whose actor already died) can't strand the rest — leaking their actor slots /
-            # S3 sessions is the exact resource leak this pool exists to bound. Failures are logged, not
-            # raised, so cleanup never masks the fan_out result (or its in-flight exception).
-            outcomes = await asyncio.gather(
-                *(slot.built.aclose() for slot in slots if slot.built is not None),
-                return_exceptions=True,
-            )
-            for outcome in outcomes:
-                if isinstance(outcome, Exception):
-                    logger.warning(
-                        "pooled worker aclose failed: %s", outcome, exc_info=outcome
-                    )
+            await _close_built(slots)
+
+
+async def _close_built[T](slots: Sequence[LazyWorker[T]]) -> None:
+    """Close every worker a slot built, each independently, logging (never raising) a failure.
+
+    Gathered so one worker's ``aclose`` failure (e.g. a Ray actor proxy whose actor already died)
+    can't strand the rest: leaking their actor slots or S3 sessions is the exact resource leak this
+    pool exists to bound. Failures are logged, not raised, so cleanup never masks the fan-out result
+    (or its in-flight exception).
+    """
+    outcomes = await asyncio.gather(
+        *(slot.built.aclose() for slot in slots if slot.built is not None),
+        return_exceptions=True,
+    )
+    for outcome in outcomes:
+        if isinstance(outcome, Exception):
+            logger.warning("pooled worker aclose failed: %s", outcome, exc_info=outcome)

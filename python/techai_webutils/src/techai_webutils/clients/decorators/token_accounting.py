@@ -27,8 +27,6 @@ from typing import TYPE_CHECKING, cast
 
 from opentelemetry import trace
 
-from techai_webutils.clients.token_ledger.cost import estimate_cost
-from techai_webutils.clients.token_ledger.policy import BudgetPolicy, decide
 from techai_webutils.core.errors import QuotaExceededError
 from techai_webutils.core.interfaces.embedding import EmbeddingResult
 from techai_webutils.core.interfaces.llm import LLMResponse, StreamUsage
@@ -41,11 +39,12 @@ from techai_webutils.core.interfaces.token_ledger import (
     UsageRecord,
 )
 from techai_webutils.foundation.logger.logger import get_logger
+from techai_webutils.foundation.tokens.cost import estimate_cost
+from techai_webutils.foundation.tokens.policy import BudgetPolicy, decide
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
 
-    from techai_webutils.clients.token_ledger.cost import PriceTable
     from techai_webutils.core.interfaces.metrics import MetricCounter, MetricsProvider
     from techai_webutils.core.interfaces.token_ledger import (
         BudgetDecision,
@@ -53,6 +52,7 @@ if TYPE_CHECKING:
         UsageScope,
         UsageScopeProvider,
     )
+    from techai_webutils.foundation.tokens.cost import PriceTable
 
 MISSING_PRICING = "missing"
 """The ``pricing_version`` recorded for a model the price table doesn't price."""

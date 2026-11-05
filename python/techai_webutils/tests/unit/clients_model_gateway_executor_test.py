@@ -10,11 +10,11 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from techai_webutils.clients.llm.builder import LlmConfig, LlmKind
 from techai_webutils.clients.model_gateway.routed.catalog import ModelCatalog
 from techai_webutils.clients.model_gateway.routed.executor import ChainExecutor
 from techai_webutils.core.errors import AppError, ErrorCode, UnavailableError
 from techai_webutils.core.interfaces.llm import LLMProvider, LLMResponse, StreamUsage
+from techai_webutils.core.types.llm import LlmConfig, LlmKind
 from techai_webutils.core.types.routing import Capabilities, CatalogEndpointRef
 
 if TYPE_CHECKING:

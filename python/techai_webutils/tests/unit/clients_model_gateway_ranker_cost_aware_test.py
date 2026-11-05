@@ -15,7 +15,6 @@ from techai_webutils.clients.model_gateway.routed.catalog import (
 from techai_webutils.clients.model_gateway.routed.ranker import (
     candidate_ranker_from_config,
 )
-from techai_webutils.clients.token_ledger.cost import ModelPrice, PriceTable
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.model_gateway import RouteContext
 from techai_webutils.core.interfaces.token_ledger import (
@@ -31,6 +30,7 @@ from techai_webutils.core.types.routing import (
     RouteRequirements,
     RoutingPolicy,
 )
+from techai_webutils.foundation.tokens.cost import ModelPrice, PriceTable
 
 _PRICES = PriceTable(
     prices={
