@@ -33,6 +33,11 @@ Python: `techai-webutils` 0.9.3.
   `RunOnce` claims again until the budget elapses, the context ends or a pass fails, so a burst
   drains in one run instead of one batch per tick. Zero, the default, claims once, as before.
   `outbox_relay_passes{lane}` records the claims per run.
+- `SQSConfig.settle_batch` (default `False`): the SQS subscriber deletes a receive batch's handled
+  messages with one `DeleteMessageBatch` call instead of one `DeleteMessage` each. An entry SQS
+  rejects is retried once on its own and then only logged.
+- `SQSConfig.publish_max_in_flight` (default 8): the most `SendMessageBatch` calls `publish_batch`
+  keeps in flight. It replaces an unbounded fan-out.
 - A config compatibility test: every `*Config` dataclass pickles, and none gains a required field
   (Ray ships configs to workers by pickle).
 
@@ -69,6 +74,9 @@ Python: `techai-webutils` 0.9.3.
 
 ### Fixed
 
+- `SQSPublisher.publish_batch` no longer drops the entries `SendMessageBatch` rejects. It ignored the
+  response's `Failed` list, so a partly failed batch lost those messages silently. Rejected entries
+  are now resent once, and entries rejected again raise `UnavailableError`.
 - `RoutedConfig` (model gateway) pickles: its empty defaults were `MappingProxyType`s, which
   cannot be pickled, so a routed gateway config could not be shipped to a Ray worker.
 - `RealRayRuntime` recovers from a Ray head replacement. It put its mapper into the object store

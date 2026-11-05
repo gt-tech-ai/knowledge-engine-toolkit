@@ -129,7 +129,9 @@ async def test_sqs_publisher_sends_the_trace_as_attributes(
         holding the current trace id.
     """
     aws_client.send_message = AsyncMock()
-    aws_client.send_message_batch = AsyncMock()
+    aws_client.send_message_batch = AsyncMock(
+        return_value={"Successful": [], "Failed": []}
+    )
 
     async with SQSPublisher(sqs_config) as publisher:
         with _TRACER.start_as_current_span("producer"):

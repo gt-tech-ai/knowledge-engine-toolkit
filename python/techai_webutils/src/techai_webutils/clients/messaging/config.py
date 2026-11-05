@@ -27,6 +27,11 @@ class SQSConfig:
     """Maximum messages fetched per receive call (SQS caps this at 10)."""
     wait_time_seconds: int = 20
     """Long-poll wait time, in seconds, for each receive call (0 = short poll)."""
+    settle_batch: bool = False
+    """Settle (delete) a receive batch's handled messages with one ``DeleteMessageBatch`` call
+    instead of one ``DeleteMessage`` each. ``False`` keeps the per-message delete."""
+    publish_max_in_flight: int = 8
+    """Most ``SendMessageBatch`` calls ``publish_batch`` keeps in flight at once."""
 
     def client_kwargs(self) -> AwsClientKwargs:
         """Keyword args for ``aiobotocore``'s ``create_client("sqs", ...)``.

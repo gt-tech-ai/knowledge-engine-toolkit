@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING
+from dataclasses import replace
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock
 
 import pytest
 
 from techai_webutils.clients.messaging.sqs.sqs_publisher import SQSPublisher
+from techai_webutils.core.errors import UnavailableError
 
 if TYPE_CHECKING:
     from techai_webutils.clients.messaging.config import SQSConfig
@@ -66,7 +69,9 @@ class TestSQSPublisher:
           - Entries list contains exactly 2 messages
         """
         mock_client = aws_client
-        mock_client.send_message_batch = AsyncMock()
+        mock_client.send_message_batch = AsyncMock(
+            return_value={"Successful": [{"Id": "0"}, {"Id": "1"}], "Failed": []}
+        )
 
         publisher = await _open(sqs_config)
 
@@ -75,6 +80,79 @@ class TestSQSPublisher:
         mock_client.send_message_batch.assert_called_once()
         call_kwargs = mock_client.send_message_batch.call_args[1]
         assert len(call_kwargs["Entries"]) == 2
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("max_in_flight", [8, 3])
+    async def test_publish_batch_bounds_concurrency(
+        self, sqs_config: SQSConfig, aws_client: AsyncMock, max_in_flight: int
+    ) -> None:
+        """``publish_batch`` keeps at most ``publish_max_in_flight`` batch sends in flight.
+
+        **Why this test is important:**
+          - An unbounded fan-out of a large burst opens hundreds of concurrent requests, which
+            exhausts the connection pool and gets throttled.
+
+        **What it tests:**
+          - 100 messages (10 batches of 10) never have more than ``publish_max_in_flight``
+            ``send_message_batch`` calls running at once, and all 100 are sent.
+        """
+        in_flight = 0
+        peak = 0
+        sent = 0
+
+        async def send(**kwargs: object) -> dict[str, object]:
+            nonlocal in_flight, peak, sent
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0.01)
+            in_flight -= 1
+            entries = cast("list[object]", kwargs["Entries"])
+            sent += len(entries)
+            return {"Successful": [], "Failed": []}
+
+        aws_client.send_message_batch.side_effect = send
+        publisher = await _open(replace(sqs_config, publish_max_in_flight=max_in_flight))
+
+        await publisher.publish_batch("events", [b"m"] * 100)
+
+        assert peak == max_in_flight
+        assert sent == 100
+
+    @pytest.mark.asyncio
+    async def test_publish_batch_retries_failed_entries_once_then_raises(
+        self, sqs_config: SQSConfig, aws_client: AsyncMock
+    ) -> None:
+        """Entries a batch send rejects are resent once; entries rejected again raise a coded error.
+
+        **Why this test is important:**
+          - ``SendMessageBatch`` succeeds as a call while failing some entries; ignoring its
+            ``Failed`` list loses those messages without a trace.
+
+        **What it tests:**
+          - A first response failing entry ``1`` is followed by one resend of exactly that entry;
+            when the resend fails it too, ``publish_batch`` raises ``UnavailableError``. A resend
+            that succeeds returns normally.
+        """
+        failed = {
+            "Successful": [{"Id": "0"}],
+            "Failed": [{"Id": "1", "Code": "InternalError"}],
+        }
+        aws_client.send_message_batch.side_effect = [
+            failed,
+            {"Successful": [], "Failed": [{"Id": "1", "Code": "InternalError"}]},
+        ]
+        publisher = await _open(sqs_config)
+
+        with pytest.raises(UnavailableError, match="1 of 2"):
+            await publisher.publish_batch("events", [b"a", b"b"])
+        resend = aws_client.send_message_batch.await_args_list[1].kwargs["Entries"]
+        assert [e["MessageBody"] for e in resend] == ["b"]
+
+        aws_client.send_message_batch.side_effect = [
+            failed,
+            {"Successful": [{"Id": "1"}], "Failed": []},
+        ]
+        await publisher.publish_batch("events", [b"a", b"b"])
 
     @pytest.mark.asyncio
     async def test_publish_raises_when_not_initialized(

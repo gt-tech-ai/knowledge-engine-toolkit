@@ -2,17 +2,19 @@
 
 Every message carries the current trace context (traceparent, tracestate, baggage) as string
 message attributes beside ``topic``, so the subscriber continues the publisher's trace.
+``publish_batch`` sends batches of ten with at most ``SQSConfig.publish_max_in_flight`` calls at
+once, and checks each response's ``Failed`` list: rejected entries are resent once, and entries
+rejected again raise a coded ``UNAVAILABLE`` error rather than being dropped.
 """
 
 from __future__ import annotations
 
 import asyncio
-import uuid
 from typing import TYPE_CHECKING, Self
 
 import aiobotocore.session
 
-from techai_webutils.core.errors import AppRuntimeError
+from techai_webutils.core.errors import AppRuntimeError, UnavailableError
 from techai_webutils.core.interfaces.messaging import MessagePublisher
 from techai_webutils.foundation.tracer.propagate import inject
 
@@ -27,6 +29,10 @@ if TYPE_CHECKING:
     )
 
     from techai_webutils.clients.messaging.config import SQSConfig
+
+
+_SQS_BATCH_LIMIT = 10
+"""Most entries one ``SendMessageBatch`` call accepts."""
 
 
 class SQSPublisher(MessagePublisher):
@@ -75,30 +81,59 @@ class SQSPublisher(MessagePublisher):
         )
 
     async def publish_batch(self, topic: str, payloads: list[bytes]) -> None:
-        """Send multiple messages to the configured SQS queue."""
+        """Send multiple messages to the configured SQS queue, ten per call, bounded in flight.
+
+        Raises:
+            UnavailableError: Some entries were rejected twice; the rest were sent.
+
+        """
         if self._client is None:
             msg = "SQSPublisher not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
         entries: list[SendMessageBatchRequestEntryTypeDef] = [
             {
-                "Id": str(uuid.uuid4()),
+                "Id": str(i),
                 "MessageBody": p.decode("utf-8"),
                 "MessageAttributes": _attributes(topic),
             }
-            for p in payloads
+            for i, p in enumerate(payloads)
         ]
-        # SQS caps a batch at 10 messages; send the chunks concurrently rather than paying a full
-        # round-trip per chunk in sequence — an outbox-relay burst of N>10 messages now
-        # costs one round-trip, not ceil(N/10).
-        await asyncio.gather(
+        # Batches go out concurrently (a burst costs about one round trip, not one per batch), but
+        # at most publish_max_in_flight at once, so a large burst cannot exhaust the connection pool.
+        gate = asyncio.Semaphore(self._config.publish_max_in_flight)
+        rejected = await asyncio.gather(
             *(
-                self._client.send_message_batch(
-                    QueueUrl=self._config.queue_url,
-                    Entries=entries[i : i + 10],
-                )
-                for i in range(0, len(entries), 10)
+                self._send_batch(entries[i : i + _SQS_BATCH_LIMIT], gate)
+                for i in range(0, len(entries), _SQS_BATCH_LIMIT)
             )
         )
+        lost = sum(rejected)
+        if lost:
+            msg = f"SQS rejected {lost} of {len(entries)} messages twice"
+            raise UnavailableError(msg)
+
+    async def _send_batch(
+        self, entries: list[SendMessageBatchRequestEntryTypeDef], gate: asyncio.Semaphore
+    ) -> int:
+        """Send one batch, resend its rejected entries once, and return how many were rejected twice."""
+        async with gate:
+            failed = await self._send(entries)
+            if failed:
+                by_id = {entry["Id"]: entry for entry in entries}
+                failed = await self._send([by_id[entry_id] for entry_id in failed])
+        return len(failed)
+
+    async def _send(
+        self, entries: list[SendMessageBatchRequestEntryTypeDef]
+    ) -> list[str]:
+        """Send ``entries`` in one call and return the ids SQS rejected."""
+        if self._client is None:
+            msg = "SQSPublisher not initialized. Use as async context manager."
+            raise AppRuntimeError(msg)
+        resp = await self._client.send_message_batch(
+            QueueUrl=self._config.queue_url, Entries=entries
+        )
+        return [failed["Id"] for failed in resp.get("Failed", [])]
 
 
 def _attributes(topic: str) -> dict[str, MessageAttributeValueTypeDef]:

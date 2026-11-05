@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
+from dataclasses import replace
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
 import pytest
 
 from techai_webutils.clients.messaging.sqs.sqs_subscriber import SQSSubscriber
+from techai_webutils.core.errors import AppRuntimeError
 
 if TYPE_CHECKING:
     from techai_webutils.clients.messaging.config import SQSConfig
-    from techai_webutils.core.interfaces.messaging import Message
+    from techai_webutils.core.interfaces.messaging import Message, MessageHandler
 
 
 async def _metadata_of(
@@ -167,3 +170,155 @@ class TestSQSSubscriber:
         handler.assert_not_awaited()
         aws_client.delete_message.assert_not_awaited()
         assert aws_client.receive_message.await_count == 2
+
+
+def _raw(n: int) -> dict[str, object]:
+    """Return received SQS message ``n`` with its receipt handle."""
+    return {"MessageId": f"m-{n}", "Body": "{}", "ReceiptHandle": f"r-{n}"}
+
+
+async def _consume(
+    config: SQSConfig,
+    aws_client: AsyncMock,
+    polls: list[list[dict[str, object]]],
+    handler: MessageHandler,
+) -> None:
+    """Run ``subscribe`` over the given receive batches, closing after the last."""
+    batches = iter(polls)
+    async with SQSSubscriber(config) as subscriber:
+
+        async def receive(**_kwargs: object) -> dict[str, object]:
+            batch = next(batches, None)
+            if batch is None:
+                await subscriber.close()
+                return {"Messages": []}
+            return {"Messages": batch}
+
+        aws_client.receive_message.side_effect = receive
+        await subscriber.subscribe("events", handler)
+
+
+class TestSQSSubscriberSettleBatch:
+    """``settle_batch``: settled messages are deleted with ``DeleteMessageBatch``."""
+
+    @pytest.mark.asyncio
+    async def test_settled_messages_are_deleted_in_batches(
+        self, sqs_config: SQSConfig, aws_client: AsyncMock
+    ) -> None:
+        """23 settled messages over three receives are deleted in three batch calls.
+
+        **Why this test is important:**
+          - One ``DeleteMessage`` per message doubles the SQS request count of a busy consumer
+            (one receive per ten messages, then ten deletes); batching cuts the deletes tenfold.
+
+        **What it tests:**
+          - With ``settle_batch=True`` and receives of 10, 10 and 3 messages, every message is
+            handled, ``delete_message_batch`` runs three times with 10, 10 and 3 receipt handles,
+            and ``delete_message`` never runs.
+        """
+        aws_client.delete_message_batch.return_value = {"Successful": [], "Failed": []}
+        polls = [
+            [_raw(n) for n in range(start, end)]
+            for start, end in ((0, 10), (10, 20), (20, 23))
+        ]
+        handler = AsyncMock()
+
+        await _consume(replace(sqs_config, settle_batch=True), aws_client, polls, handler)
+
+        assert handler.await_count == 23
+        sizes = [
+            len(c.kwargs["Entries"])
+            for c in aws_client.delete_message_batch.await_args_list
+        ]
+        assert sizes == [10, 10, 3]
+        handles = {
+            entry["ReceiptHandle"]
+            for c in aws_client.delete_message_batch.await_args_list
+            for entry in c.kwargs["Entries"]
+        }
+        assert handles == {f"r-{n}" for n in range(23)}
+        aws_client.delete_message.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_failed_handler_leaves_its_message_for_redrive(
+        self, sqs_config: SQSConfig, aws_client: AsyncMock
+    ) -> None:
+        """A message whose handler raised is left out of the batch delete.
+
+        **Why this test is important:**
+          - Deleting a message whose handling failed would lose it; it must reappear after its
+            visibility timeout, as on the single-delete path.
+
+        **What it tests:**
+          - Of three messages, the one whose handler raises is not in the batch delete.
+        """
+        aws_client.delete_message_batch.return_value = {"Successful": [], "Failed": []}
+
+        async def handler(message: Message) -> None:
+            await asyncio.sleep(0)
+            if message.id == "m-1":
+                msg = "boom"
+                raise AppRuntimeError(msg)
+
+        await _consume(
+            replace(sqs_config, settle_batch=True),
+            aws_client,
+            [[_raw(0), _raw(1), _raw(2)]],
+            handler,
+        )
+
+        [entries] = [
+            c.kwargs["Entries"] for c in aws_client.delete_message_batch.await_args_list
+        ]
+        assert {e["ReceiptHandle"] for e in entries} == {"r-0", "r-2"}
+
+    @pytest.mark.asyncio
+    async def test_a_failed_entry_is_retried_once_and_never_raised(
+        self, sqs_config: SQSConfig, aws_client: AsyncMock
+    ) -> None:
+        """A batch entry SQS rejects is deleted once on its own; a second failure is only logged.
+
+        **Why this test is important:**
+          - A rejected delete only means the message reappears and is handled again; raising
+            would stop the consumer for a failure that redrive already covers.
+
+        **What it tests:**
+          - With entry ``1`` failed in the batch response, ``delete_message`` runs once for its
+            receipt handle; when that also raises, ``subscribe`` still returns normally.
+        """
+        aws_client.delete_message_batch.return_value = {
+            "Successful": [{"Id": "0"}],
+            "Failed": [
+                {"Id": "1", "Code": "ReceiptHandleIsInvalid", "SenderFault": True}
+            ],
+        }
+        aws_client.delete_message.side_effect = AppRuntimeError("still failing")
+
+        await _consume(
+            replace(sqs_config, settle_batch=True),
+            aws_client,
+            [[_raw(0), _raw(1)]],
+            AsyncMock(),
+        )
+
+        aws_client.delete_message.assert_awaited_once_with(
+            QueueUrl=sqs_config.queue_url, ReceiptHandle="r-1"
+        )
+
+    @pytest.mark.asyncio
+    async def test_without_settle_batch_each_message_is_deleted_alone(
+        self, sqs_config: SQSConfig, aws_client: AsyncMock
+    ) -> None:
+        """The default keeps today's one ``DeleteMessage`` per handled message.
+
+        **Why this test is important:**
+          - Batching is opt-in; a consumer that has not enabled it must see no change.
+
+        **What it tests:**
+          - With the default config, two handled messages are deleted with two
+            ``delete_message`` calls and no ``delete_message_batch``.
+        """
+        await _consume(sqs_config, aws_client, [[_raw(0), _raw(1)]], AsyncMock())
+
+        assert aws_client.delete_message.await_count == 2
+        aws_client.delete_message_batch.assert_not_awaited()

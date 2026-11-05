@@ -8,8 +8,10 @@ SQS-compatible broker, including message-attribute (topic) propagation.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
+import aiobotocore.session
 import pytest
 
 from techai_webutils.clients.messaging.sqs.sqs_publisher import SQSPublisher
@@ -116,3 +118,48 @@ async def test_acked_message_is_not_redelivered(sqs_config: SQSConfig) -> None:
             await asyncio.wait_for(subscriber.subscribe("events", handler), timeout=4)
 
     assert second == []
+
+
+async def _queue_depth(config: SQSConfig) -> tuple[int, int]:
+    """Return the queue's (visible, in-flight) message counts."""
+    session = aiobotocore.session.get_session()
+    async with session.create_client("sqs", **config.client_kwargs()) as client:
+        attrs = await client.get_queue_attributes(
+            QueueUrl=config.queue_url,
+            AttributeNames=[
+                "ApproximateNumberOfMessages",
+                "ApproximateNumberOfMessagesNotVisible",
+            ],
+        )
+    values = attrs.get("Attributes", {})
+    return (
+        int(values.get("ApproximateNumberOfMessages", "0")),
+        int(values.get("ApproximateNumberOfMessagesNotVisible", "0")),
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_batch_settle_deletes_every_received_message(sqs_config: SQSConfig) -> None:
+    """Test that settling with DeleteMessageBatch removes every handled message from the queue.
+
+    **Why this test is important:**
+      - A batch delete that silently missed entries would leave messages in flight, to be
+        redelivered and handled again after their visibility timeout; only a real broker shows
+        whether the receipt handles in a batch call are honoured
+
+    **What it tests:**
+      - 25 messages published with ``publish_batch`` (three batch calls under the in-flight
+        bound) are all received through a ``settle_batch`` subscriber, after which the queue has
+        no visible and no in-flight messages
+    """
+    config = replace(sqs_config, settle_batch=True, publish_max_in_flight=2)
+    async with SQSPublisher(config) as publisher:
+        await publisher.publish_batch(
+            "events", [f'{{"n":{n}}}'.encode() for n in range(25)]
+        )
+
+    received = await _drain(config, "events", want=25)
+
+    assert len(received) == 25
+    assert await _queue_depth(config) == (0, 0)
