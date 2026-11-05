@@ -27,6 +27,10 @@ class Message:
     """Message attributes carried alongside the payload (headers, correlation ids, and similar)."""
     timestamp: int = 0
     """Unix epoch time the message was published (0 when the broker reports none)."""
+    delivery: int = 1
+    """Which delivery of the message this is (1 = first), when the subscriber counts them (SQS:
+    ``ApproximateReceiveCount``, read when ``DeliveryConfig.retry_backoff`` is set; memory: its
+    own redelivery count); 1 otherwise."""
 
 
 MessageHandler = Callable[[Message], Awaitable[None]]

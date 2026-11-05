@@ -184,6 +184,7 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
             topic=topic,
             payload=raw.get("Body", "").encode("utf-8"),
             metadata=self._extract_metadata(raw),
+            delivery=int(raw.get("Attributes", {}).get("ApproximateReceiveCount", "1")),
         )
         self._leases[msg_obj.id] = (queue_url, receipt_handle)
         try:

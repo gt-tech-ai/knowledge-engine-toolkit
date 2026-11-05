@@ -109,6 +109,7 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         delivered = self._deliveries.get(id(message), 0) + 1
         if delivered < limit:
             self._deliveries[id(message)] = delivered
+            message.delivery = delivered + 1
             delay = self._delivery.backoff_seconds(delivered) or 0.0
             asyncio.get_running_loop().call_later(
                 delay, self._broker.queue(topic).put_nowait, message

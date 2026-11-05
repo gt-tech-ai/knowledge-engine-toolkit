@@ -10,6 +10,11 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Python messaging: `Message.delivery` says which delivery of a message a handler is on (1 =
+  first). SQS sets it from `ApproximateReceiveCount` (read when `DeliveryConfig.retry_backoff`
+  is set, as before); the memory Kind from its own redelivery count. `DeliveryConfig.jitter`
+  (default off) draws each retry delay uniformly from `[0, delay]` (full jitter), so messages
+  that failed together are not retried together.
 - `inflight_claim_from_config(config, *, redis=None, metrics=None)`: with no client, the `redis`
   kind opens its own on `InflightClaimConfig.host` (with `port`, `password`, `db` and
   `timeout_seconds` bounding its socket), which the claim's new `aclose()` closes. With a metrics

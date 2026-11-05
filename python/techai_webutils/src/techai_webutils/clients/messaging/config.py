@@ -8,6 +8,7 @@ startup check (or its ``GetQueueAttributes`` call) runs.
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -17,6 +18,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from techai_webutils.core.types.aws_client import AwsClientKwargs
+
+_RNG = random.SystemRandom()
+"""Draws the full-jitter delays (the OS source keeps the weak-PRNG scanners clean)."""
 
 DEFAULT_MAX_PAYLOAD_BYTES = 262_144
 """The largest message body a publisher accepts: 256 KiB, the strictest supported broker (SQS)."""
@@ -35,6 +39,9 @@ class DeliveryConfig:
     dead_letter_topic: str | None = None
     """Where a message lands after ``max_deliveries`` failures (SQS: the redrive target queue's
     name, checked at subscribe time)."""
+    jitter: bool = False
+    """Full jitter on ``retry_backoff``: delivery ``k`` waits a uniform random time up to its
+    delay, so failures that happened together are not all retried together."""
     max_processing_seconds: float | None = None
     """The longest a handler may run. It must be below the message lease (SQS: the queue's
     visibility timeout), or the message would be redelivered while still being handled."""
@@ -72,11 +79,15 @@ class DeliveryConfig:
         )
 
     def backoff_seconds(self, delivery: int) -> float | None:
-        """Return the retry delay after failed delivery ``delivery`` (1-based), or ``None``."""
+        """Return the retry delay after failed delivery ``delivery`` (1-based), or ``None``.
+
+        With ``jitter`` the delay is drawn uniformly from ``[0, delay]`` (full jitter).
+        """
         if self.retry_backoff is None:
             return None
         base, cap = self.retry_backoff
-        return min(cap, base * 2 ** max(delivery - 1, 0))
+        delay = min(cap, base * 2 ** max(delivery - 1, 0))
+        return _RNG.uniform(0.0, delay) if self.jitter else delay
 
 
 @dataclass(frozen=True)

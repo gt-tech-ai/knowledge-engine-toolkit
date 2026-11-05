@@ -106,6 +106,22 @@ class TestDeliveryConfig:
         assert [config.backoff_seconds(k) for k in range(1, 6)] == [1, 2, 4, 8, 10]
         assert DeliveryConfig().backoff_seconds(3) is None
 
+    def test_full_jitter_draws_up_to_the_delay(self) -> None:
+        """With ``jitter`` delivery ``k`` waits a random time in ``[0, delay]``.
+
+        **Why this test is important:**
+          - Messages that failed together (a dependency outage) would otherwise all retry
+            together and knock the recovering dependency over again.
+
+        **What it tests:**
+          - Over 200 draws of delivery 4 under ``(1, 10)`` every wait is in ``[0, 8]`` and they
+            are not all equal.
+        """
+        config = DeliveryConfig(retry_backoff=(1.0, 10.0), jitter=True)
+        draws = [config.backoff_seconds(4) for _ in range(200)]
+        assert all(d is not None and 0.0 <= d <= 8.0 for d in draws)
+        assert len(set(draws)) > 1
+
     @pytest.mark.parametrize(
         "build",
         [
@@ -146,16 +162,22 @@ class TestSQSDelivery:
             time, so a transient failure either retries too slowly or hammers a dependency.
 
         **What it tests:**
-          - With ``retry_backoff=(2, 60)`` a message on its third receive gets
-            ``ChangeMessageVisibility`` of 8 seconds, is not deleted, and the receive asks for
-            ``ApproximateReceiveCount``.
+          - With ``retry_backoff=(2, 60)`` a message on its third receive reaches the handler
+            as delivery 3, gets ``ChangeMessageVisibility`` of 8 seconds, is not deleted, and
+            the receive asks for ``ApproximateReceiveCount``.
         """
         subscriber = SQSSubscriber(
             sqs_config, delivery=DeliveryConfig(retry_backoff=(2.0, 60.0))
         )
+        seen: list[int] = []
 
-        await _consume(subscriber, aws_client, [[_raw(0, receives=3)]], _failing)
+        async def failing(message: Message) -> None:
+            seen.append(message.delivery)
+            await _failing(message)
 
+        await _consume(subscriber, aws_client, [[_raw(0, receives=3)]], failing)
+
+        assert seen == [3]
         aws_client.change_message_visibility.assert_awaited_once_with(
             QueueUrl=sqs_config.queue_url, ReceiptHandle="r-0", VisibilityTimeout=8
         )
@@ -366,7 +388,8 @@ class TestMemoryDelivery:
 
         **What it tests:**
           - With ``max_deliveries=3`` and a 10 ms backoff the handler sees the message three
-            times, then it is on ``events-dlq``; a message that succeeds is handled once.
+            times, as deliveries 1, 2 and 3, then it is on ``events-dlq``; a message that
+            succeeds is handled once.
         """
         broker = InMemoryBroker()
         delivery = DeliveryConfig(
@@ -374,10 +397,12 @@ class TestMemoryDelivery:
         )
         subscriber = InMemorySubscriber(broker, delivery=delivery)
         attempts: list[str] = []
+        deliveries: list[int] = []
 
         async def handler(message: Message) -> None:
             attempts.append(message.id)
             if message.payload == b"bad":
+                deliveries.append(message.delivery)
                 await _failing(message)
 
         publisher = InMemoryPublisher(broker)
@@ -389,6 +414,7 @@ class TestMemoryDelivery:
         await consumer
 
         assert dead.payload == b"bad"
+        assert deliveries == [1, 2, 3]
         assert attempts.count("mem-1") == 3
         assert attempts.count("mem-2") == 1
 
