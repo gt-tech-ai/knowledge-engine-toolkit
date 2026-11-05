@@ -169,6 +169,11 @@ Python: `techai-webutils` 0.9.3.
   `clients.nlp`: `EntityRulerAnnotator` and `RulerPattern`; `PiiAnnotator`, `PII`, `PiiSpan`,
   `PiiKind`, `PiiMode`, `find_pii` and `apply_pii`. `clients.sentences`: `RuledSplitter`,
   `TRANSCRIPT_JOIN_PATTERNS` and `SentenceSplitterConfig.join_patterns` (empty by default).
+- Verified citations (Python): `PassageCitationExtractor(verify=, scorer=, min_confidence=,
+  unsupported=)` with `CitationVerify` `off` (the default, today's output) / `lexical` / `nli`
+  and `UnsupportedCitation` `flag` / `strip`; `keep_markers`; `Citation.marker` and
+  `Citation.supported`; `core.interfaces.citation_scorer` (`CitationScorer`, `ClaimPassage`) and
+  `pipelines.citation_scorers.LexicalCitationScorer`.
 
 ### Changed
 

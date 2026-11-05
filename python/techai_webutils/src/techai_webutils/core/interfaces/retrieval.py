@@ -43,7 +43,8 @@ class Citation:
     page_number: int | None
     """Source page the cited passage appears on (``None`` when not paginated/unknown)."""
     confidence: float
-    """The extractor's confidence that this citation supports the answer (higher is stronger)."""
+    """The extractor's confidence that this citation supports the answer (higher is stronger):
+    the retrieval score when citations are positional, the scorer's support when verified."""
     attributes: dict[str, str] = field(default_factory=dict)
     """Consumer-chosen passage metadata carried with the citation (see ``PassageCitationExtractor``)."""
     chunk_id: str = ""
@@ -52,6 +53,12 @@ class Citation:
     span: tuple[int, int] | None = None
     """Character range ``[start, end)`` of the supporting text within ``chunk``; ``None`` cites the
     whole chunk."""
+    marker: int | None = None
+    """The answer's ``[n]`` marker this citation resolves (``None`` when citations are positional:
+    the n-th citation is marker ``n``)."""
+    supported: bool | None = None
+    """Whether a verifying extractor found the passage supports the answer (``None``: not
+    verified)."""
 
 
 @dataclass(frozen=True, slots=True)

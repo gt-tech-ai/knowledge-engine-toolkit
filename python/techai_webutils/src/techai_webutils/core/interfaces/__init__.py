@@ -25,6 +25,7 @@ Service Interfaces:
     QueryRewriter: Transform user queries for better retrieval.
     IntentClassifier: Classify query intent (search, summarize, compare, etc.).
     CitationExtractor: Extract source citations from LLM responses.
+    CitationScorer: Score how well a cited passage supports its claim (ClaimPassage).
     VectorStore: Low-level vector similarity search operations.
 
 Data Access Interfaces:
@@ -101,6 +102,7 @@ from techai_webutils.core.interfaces.chunk_contextualizer import (
     ContextDocument,
 )
 from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
+from techai_webutils.core.interfaces.citation_scorer import CitationScorer, ClaimPassage
 from techai_webutils.core.interfaces.config_loader import ConfigLoader
 from techai_webutils.core.interfaces.crud_service import CrudService, ServiceHooks
 from techai_webutils.core.interfaces.dedup import Deduplicator
@@ -208,6 +210,8 @@ __all__ = [
     "ChunkingStrategy",
     "CircuitBreakerInterface",
     "CitationExtractor",
+    "CitationScorer",
+    "ClaimPassage",
     "Client",
     "ConfigLoader",
     "ContextDocument",

@@ -814,6 +814,17 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   engine's `filter_builder`) and to OpenSearch (`filter_clauses`). `Citation` gains `chunk_id`
   (the passage's `chunk_id` metadata, which vector passages now carry) and `span` (`None`: the
   whole chunk).
+- **Verified citations.** `PassageCitationExtractor(verify=)` is `off` by default: one citation
+  per passage, in order, with the retrieval score as confidence, as before. `lexical` and `nli`
+  parse the answer's `[n]` / `[1, 3]` markers and return only the cited passages, in marker
+  order, each with its `marker`. Each is scored against the answer sentences that cite it (a
+  marker alone on a line cites the sentence before it) by a `CitationScorer`
+  (`core.interfaces.citation_scorer`): `lexical` is `LexicalCitationScorer`, the share of the
+  claim's content words in the passage, on CPU with no model call; `nli` is the consumer's
+  entailment model, injected as `scorer`. The best score is the `confidence`, never the
+  retrieval score. Under `min_confidence` (0.5) a citation is kept with `supported=False`
+  (`unsupported: flag`, the default) or dropped (`strip`); `keep_markers(answer, keep)` then
+  removes the dropped markers from the answer.
 
 ## Connector sources
 
