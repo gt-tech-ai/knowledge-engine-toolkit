@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from botocore.exceptions import ClientError
 
 from techai_webutils.clients.client import tier as client_tier
 from techai_webutils.controllers.handler import tier as controller_tier
@@ -161,6 +162,49 @@ class TestLayers:
             "service_operation_duration_seconds"
         ].observe.assert_called_once()
         assert observed.logger.debug.call_args.args[0] == "service.Get failed"
+        observed.instruments["service_throttled_total"].inc.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_metrics_counts_a_throttle_apart_from_other_errors(
+        self, observed: Observed
+    ) -> None:
+        """A throttled attempt is counted under ``<tier>_throttled_total`` as well as as an error.
+
+        Why this test is important:
+          - The quota alerts need throttles apart from every other failure; ``<tier>_errors_total``
+            alone cannot tell an S3 ``SlowDown`` from a bad request.
+
+        What it tests:
+          - A ``SlowDown`` from the operation increments both ``clients_errors_total`` and
+            ``clients_throttled_total`` once, under the same ``(clients, operation)`` labels.
+        """
+        obs = observed.observability
+        assert obs.metrics is not None
+        mw = new_metrics(obs.metrics, "clients", "object_store")
+        slow_down = ClientError(
+            {
+                "Error": {"Code": "SlowDown"},
+                "ResponseMetadata": {
+                    "RequestId": "",
+                    "HostId": "",
+                    "HTTPStatusCode": 503,
+                    "HTTPHeaders": {},
+                    "RetryAttempts": 0,
+                },
+            },
+            "PutObject",
+        )
+
+        with pytest.raises(ClientError):
+            await exec_op(mw, "Put", AsyncMock(side_effect=slow_down))
+
+        labels = {"clients": "object_store", "operation": "Put"}
+        observed.instruments["clients_errors_total"].inc.assert_called_once_with(
+            1.0, **labels
+        )
+        observed.instruments["clients_throttled_total"].inc.assert_called_once_with(
+            1.0, **labels
+        )
 
     @pytest.mark.asyncio
     async def test_guards(self) -> None:

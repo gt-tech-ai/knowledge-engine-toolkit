@@ -5,7 +5,7 @@ them, first argument outermost, and ``exec_op`` runs an operation through a chai
 ``new_*`` builds one layer for the subject ``name`` in the tier ``tier``, so every tier labels its
 spans, series and log lines the same way: span ``<name>.<op>`` with ``<tier>.name`` /
 ``<tier>.operation`` attributes, series ``<tier>_operations_total`` / ``<tier>_errors_total`` /
-``<tier>_operation_duration_seconds`` labelled by ``(<tier>, operation)``.
+``<tier>_throttled_total`` / ``<tier>_operation_duration_seconds`` labelled by ``(<tier>, operation)``.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from techai_webutils.core.errors.errors import (
 )
 from techai_webutils.foundation.resilience.bulkhead import BulkheadFullError
 from techai_webutils.foundation.resilience.circuit_breaker import CircuitOpenError
+from techai_webutils.foundation.resilience.classify import is_throttled
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -147,7 +148,13 @@ def new_tracing(
 
 
 class _Metrics:
-    """Counts the op and its failures and observes its duration under ``(<tier>, operation)``."""
+    """Counts the op, its failures and its throttles, and observes its duration under ``(<tier>, operation)``.
+
+    A throttle (``is_throttled``: S3 ``SlowDown``, an AWS throttle code, gRPC
+    ``RESOURCE_EXHAUSTED``, HTTP 429) counts as an error and again under ``<tier>_throttled_total``,
+    so a quota alert reads the provider's push-back apart from every other failure. Below the retry
+    layer each attempt counts.
+    """
 
     def __init__(self, metrics: MetricsProvider, tier: str, name: str) -> None:
         """Create (or retrieve) the tier's instruments."""
@@ -157,6 +164,11 @@ class _Metrics:
         )
         self._errs = metrics.counter(
             f"{tier}_errors_total", f"Total {tier} operation errors", labels
+        )
+        self._throttled = metrics.counter(
+            f"{tier}_throttled_total",
+            f"Total {tier} operations refused by the provider for rate or quota",
+            labels,
         )
         self._dur = metrics.histogram(
             f"{tier}_operation_duration_seconds",
@@ -173,8 +185,10 @@ class _Metrics:
         start = time.monotonic()
         try:
             return await next_()
-        except Exception:
+        except Exception as exc:
             self._errs.inc(1.0, **labels)
+            if is_throttled(exc):
+                self._throttled.inc(1.0, **labels)
             raise
         finally:
             self._ops.inc(1.0, **labels)

@@ -10,6 +10,11 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- `foundation.resilience.classify.is_throttled(err)`: whether an error, or one it was raised from,
+  is a provider's rate-limit or quota push-back (an AWS throttle code such as S3 `SlowDown`,
+  `ServiceQuotaExceededException`, gRPC `RESOURCE_EXHAUSTED`, HTTP 429). The Python metrics layer counts these under a new
+  `<tier>_throttled_total{<tier>, operation}` series as well as `<tier>_errors_total`, so a quota
+  alert reads throttles apart from other failures. The Go layer does not emit it yet.
 - `types.OutboxStats.Stranded`: the pending rows at or above the store's partition count (left
   behind by a lowered `Partitions`), which no relay claims. The Postgres store's `Stats` counts
   them; an unpartitioned store reports 0.

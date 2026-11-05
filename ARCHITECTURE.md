@@ -195,7 +195,10 @@ collaborator or zero timeout skips its layer; recovery needs none.
     driver's errors to coded ones (`postgres/`).
 
   Every tier's series are `<tier>_operations_total`, `<tier>_errors_total` and
-  `<tier>_operation_duration_seconds` labelled `{<tier>, operation}`; its spans are
+  `<tier>_operation_duration_seconds` labelled `{<tier>, operation}`. Python's metrics layer also
+  counts `<tier>_throttled_total`, an error the provider refused for rate or quota
+  (`foundation/resilience/classify.is_throttled`: an AWS throttle code such as S3 `SlowDown`, gRPC
+  `RESOURCE_EXHAUSTED`, HTTP 429, found through the cause chain); the Go layer does not yet. Its spans are
   `<name>.<op>` with `<tier>.name` / `<tier>.operation`. The clients tier uses the same engine:
   `client.Tier()` and `client.Base` (`Exec`, `ExecOnce`, `Do`, `DoOnce`, `Stream` and `Open`
   for a stream, bounded by its op's timeout), with the `Producer()`, `Handler()` and

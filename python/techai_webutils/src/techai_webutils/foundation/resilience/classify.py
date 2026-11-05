@@ -66,7 +66,14 @@ _TRANSIENT_HTTP_STATUS = frozenset({500, 502, 503, 504})
 
 # For the raw-HTTP families (httpx/qdrant) also treat 429 (Too Many Requests) as retriable —
 # it is a rate-limit backpressure signal, not a permanent client error.
-_TRANSIENT_HTTP_RETRY_STATUS = _TRANSIENT_HTTP_STATUS | {429}
+_QUOTA_CODES = frozenset({"ServiceQuotaExceededException"})
+"""AWS error codes of a quota refusal (Bedrock's concurrent ingestion jobs, for one). A throttle
+for ``is_throttled``, but not retried by itself: a resource-count quota does not clear on retry."""
+
+_TOO_MANY_REQUESTS = 429
+"""The HTTP status of a rate-limit refusal."""
+
+_TRANSIENT_HTTP_RETRY_STATUS = _TRANSIENT_HTTP_STATUS | {_TOO_MANY_REQUESTS}
 """Retriable HTTP statuses for raw-HTTP families (httpx/qdrant): the 5xx set plus 429."""
 
 
@@ -143,6 +150,41 @@ def is_transient(err: BaseException) -> bool:
         or _httpx_transient(err)
         or _qdrant_transient(err)
     )
+
+
+def _throttle(err: BaseException) -> bool:
+    """Return True if *err* itself is a rate-limit push-back (not looking at its causes)."""
+    if isinstance(err, ClientError):
+        response = err.response or {}
+        code = response.get("Error", {}).get("Code", "")
+        return code in _THROTTLE_CODES or code in _QUOTA_CODES
+    if isinstance(err, grpc.RpcError):
+        code_fn = getattr(err, "code", None)
+        return callable(code_fn) and code_fn() == grpc.StatusCode.RESOURCE_EXHAUSTED
+    if isinstance(err, httpx.HTTPStatusError):
+        return err.response.status_code == _TOO_MANY_REQUESTS
+    if type(err).__module__.startswith("qdrant_client"):
+        return getattr(err, "status_code", None) == _TOO_MANY_REQUESTS
+    return False
+
+
+def is_throttled(err: BaseException) -> bool:
+    """Return True if *err*, or an error it was raised from, is a provider's rate-limit push-back.
+
+    A throttle is the provider refusing for rate or quota, not failing: an AWS throttle code
+    (S3 ``SlowDown``, ``ThrottlingException``, …) or ``ServiceQuotaExceededException``, gRPC
+    ``RESOURCE_EXHAUSTED`` or an HTTP 429.
+    Clients wrap SDK errors in an ``AppError``, so the explicit cause chain is searched too. The
+    metrics layer counts these apart from other errors, the quota alerts' input.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = err
+    while current is not None and id(current) not in seen:
+        if _throttle(current):
+            return True
+        seen.add(id(current))
+        current = getattr(current, "__cause__", None)
+    return False
 
 
 def is_permanent(err: BaseException) -> bool:

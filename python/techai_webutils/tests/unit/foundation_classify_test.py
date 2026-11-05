@@ -8,8 +8,16 @@ import httpx
 from botocore.exceptions import ClientError, EndpointConnectionError
 from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 
-from techai_webutils.core.errors.errors import InvalidInputError, UnavailableError
-from techai_webutils.foundation.resilience.classify import is_permanent, is_transient
+from techai_webutils.core.errors.errors import (
+    ConflictError,
+    InvalidInputError,
+    UnavailableError,
+)
+from techai_webutils.foundation.resilience.classify import (
+    is_permanent,
+    is_throttled,
+    is_transient,
+)
 
 
 def _http_status_error(status: int) -> httpx.HTTPStatusError:
@@ -171,3 +179,41 @@ class TestClassify:
         """
         assert is_permanent(ValueError("nope")) is True
         assert is_transient(ValueError("nope")) is False
+
+    def test_throttles_are_told_apart_from_other_failures(self) -> None:
+        """Test that a provider's rate-limit push-back classifies as a throttle, and nothing else does.
+
+        **Why this test is important:**
+          - The quota alerts (S3 ``SlowDown``, KMS and Bedrock throttles) read the throttle
+            series. A 5xx or an outage counted as a throttle pages on the wrong cause, and a
+            missed ``SlowDown`` leaves a quota breach silent.
+          - Clients wrap SDK errors in an ``AppError``, so the throttle must be found through
+            the cause chain, not only on the raised error.
+
+        **What it tests:**
+          - AWS throttle codes (``SlowDown`` at 503, ``ThrottlingException`` at 400), a quota
+            refusal (``ServiceQuotaExceededException``, Bedrock's job-concurrency limit), gRPC
+            ``RESOURCE_EXHAUSTED``, an HTTP 429 and an ``AppError`` raised from a ``SlowDown``
+            are throttles.
+          - A 500, gRPC ``UNAVAILABLE``, an HTTP 503, a conflict and a plain exception are not.
+        """
+        wrapped = UnavailableError("object store write failed")
+        wrapped.__cause__ = _client_error("SlowDown", 503)
+        throttles = [
+            _client_error("SlowDown", 503),
+            _client_error("ThrottlingException", 400),
+            _client_error("ServiceQuotaExceededException", 402),
+            _rpc_error(grpc.StatusCode.RESOURCE_EXHAUSTED),
+            _http_status_error(429),
+            wrapped,
+        ]
+        others = [
+            _client_error("InternalError", 500),
+            _rpc_error(grpc.StatusCode.UNAVAILABLE),
+            _http_status_error(503),
+            ConflictError("dup"),
+            ValueError("boom"),
+        ]
+
+        assert [is_throttled(err) for err in throttles] == [True] * len(throttles)
+        assert [is_throttled(err) for err in others] == [False] * len(others)
