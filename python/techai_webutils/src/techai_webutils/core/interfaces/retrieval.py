@@ -1,11 +1,15 @@
 """Retrieval pipeline interfaces."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Mapping, Sequence
 
 
 @dataclass(slots=True)
@@ -42,6 +46,53 @@ class Citation:
     """The extractor's confidence that this citation supports the answer (higher is stronger)."""
     attributes: dict[str, str] = field(default_factory=dict)
     """Consumer-chosen passage metadata carried with the citation (see ``PassageCitationExtractor``)."""
+    chunk_id: str = ""
+    """The cited chunk's id in the search backend (the passage's ``chunk_id`` metadata; ``""`` when
+    the backend reports none), so a citation names its chunk on any backend."""
+    span: tuple[int, int] | None = None
+    """Character range ``[start, end)`` of the supporting text within ``chunk``; ``None`` cites the
+    whole chunk."""
+
+
+@dataclass(frozen=True, slots=True)
+class FilterEq:
+    """A metadata field equals a value."""
+
+    key: str
+    """The metadata field."""
+    value: str
+    """The value it must equal."""
+
+
+@dataclass(frozen=True, slots=True)
+class FilterIn:
+    """A metadata field equals one of several values."""
+
+    key: str
+    """The metadata field."""
+    values: tuple[str, ...]
+    """The values it may equal (at least one)."""
+
+
+@dataclass(frozen=True, slots=True)
+class FilterAnd:
+    """Every clause holds."""
+
+    clauses: tuple[FilterExpr, ...]
+    """The clauses (at least one)."""
+
+
+type FilterExpr = FilterEq | FilterIn | FilterAnd
+"""A backend-neutral metadata filter: ``eq``, ``in`` and ``and``.
+
+Each backend translates it to its own query language (Bedrock ``RetrievalFilter``, an OpenSearch
+``bool`` filter), so a consumer states a scope once and keeps it across a backend change.
+"""
+
+
+def equals_all(fields: Mapping[str, str]) -> FilterExpr:
+    """Return the filter requiring every ``fields`` key to equal its value."""
+    return FilterAnd(tuple(FilterEq(key, value) for key, value in fields.items()))
 
 
 @dataclass

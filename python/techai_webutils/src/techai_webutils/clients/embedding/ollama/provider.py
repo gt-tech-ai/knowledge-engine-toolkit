@@ -8,10 +8,14 @@ process-lived — see ``new_embedding_from_config``).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from techai_webutils.core.errors import AppValueError
-from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
+from techai_webutils.core.interfaces.embedding import (
+    EmbeddingProvider,
+    EmbeddingResult,
+    InputType,
+)
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 
 if TYPE_CHECKING:
@@ -30,12 +34,20 @@ class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         self._model = model
         self._dimension = dimension
 
-    async def embed(self, text: str) -> EmbeddingResult:
+    @override
+    async def embed(
+        self, text: str, *, input_type: InputType = "document"
+    ) -> EmbeddingResult:
         """Embed a single text (a one-element batch)."""
-        return (await self.embed_batch([text]))[0]
+        return (await self.embed_batch([text], input_type=input_type))[0]
 
-    async def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
+    @override
+    async def embed_batch(
+        self, texts: list[str], *, input_type: InputType = "document"
+    ) -> list[EmbeddingResult]:
         """Embed multiple texts in ONE ``/api/embed`` call (Ollama batches the ``input`` list).
+
+        ``input_type`` is applied by the factory's ``PrefixedEmbedding`` decorator, not here.
 
         Raises ``ValueError`` on an unexpected response shape (missing ``embeddings`` key) or a
         dimension mismatch (a vector whose length differs from the configured ``dimension``), so a

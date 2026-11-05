@@ -6,6 +6,11 @@ floor plus the consumer's scope policies, so server-side re-validation applies i
 Unknown kinds fail loudly. Heavy backends are imported lazily, so the stub path never loads the AWS
 SDK or the vector clients.
 
+Reranking is ``reranking_kind``: ``bedrock_rerank`` is Bedrock Retrieve's own reranker (the bedrock
+kind only — any other kind refuses it); ``cross_encoder`` wraps any kind's engine in
+``RerankingRetrievalEngine`` over the caller's ``Reranker`` (``clients.reranking``), before the
+abstainer, so the threshold reads the reranker's scores.
+
 Push-down is explicit: a ``MetadataEquals`` scope reaches the backend only through that kind's seam
 (``filter_builder`` for Bedrock, ``store_filter_keys`` for the vector store); otherwise the backend
 returns the index-wide top_k and the policy post-filters it. The factory warns when a scope is not
@@ -29,6 +34,10 @@ from techai_webutils.clients.retrieval.ordering import (
     OrderingRetrievalEngine,
     PassageOrder,
 )
+from techai_webutils.clients.retrieval.reranking import (
+    RerankingKind,
+    RerankingRetrievalEngine,
+)
 from techai_webutils.clients.retrieval.stub import StubRetrievalEngine
 from techai_webutils.clients.retrieval.vector import VectorRetrievalEngine
 from techai_webutils.core.errors import AppError, AppTypeError, AppValueError, ErrorCode
@@ -44,6 +53,7 @@ if TYPE_CHECKING:
     )
     from techai_webutils.clients.retrieval.filtering import PassagePolicy
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
+    from techai_webutils.core.interfaces.reranker import Reranker
     from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
     from techai_webutils.core.interfaces.vector_store import VectorStore
 
@@ -78,9 +88,11 @@ class RetrievalConfig:
     search_type: str = "semantic"
     """KB search strategy: "semantic" (vector only) | "hybrid" (vector + keyword; the KB's
     OpenSearch storage supports it). "hybrid" sets Retrieve's overrideSearchType."""
-    reranking_kind: str = "none"
-    """Reranker selection: "none" | "bedrock_rerank" (a Cohere Rerank model reorders the
-    candidate pool via Retrieve's rerankingConfiguration)."""
+    reranking_kind: str = RerankingKind.NONE
+    """Reranker selection (``RerankingKind``): "none" | "bedrock_rerank" (a Cohere Rerank model
+    reorders the candidate pool via Retrieve's rerankingConfiguration; the bedrock kind only) |
+    "cross_encoder" (the caller's ``Reranker`` reorders any kind's passages). Another value is
+    refused."""
     reranking_model: str = ""
     """Reranker model id for the bedrock_rerank kind, e.g. "cohere.rerank-v3-5:0" (empty → no reranking)."""
     min_score: float = 0.5
@@ -109,12 +121,21 @@ class RetrievalConfig:
     """The order passages reach the prompt: best first (default) or best at both ends."""
 
     def __post_init__(self) -> None:
-        """Reject a non-numeric ``min_score`` (e.g. ``None``) here rather than on every retrieve."""
+        """Reject a non-numeric ``min_score`` (e.g. ``None``) or an unknown ``reranking_kind`` here.
+
+        Raises:
+            AppTypeError: ``min_score`` is not a number.
+            AppValueError: ``reranking_kind`` is not a ``RerankingKind`` value (``INVALID_INPUT``).
+
+        """
         # Read as ``object``: the annotation says float, but a caller can still pass None.
         min_score = cast("object", self.min_score)
         if isinstance(min_score, bool) or not isinstance(min_score, int | float):
             msg = f"RetrievalConfig.min_score must be a number, got {min_score!r}"
             raise AppTypeError(msg)
+        if self.reranking_kind not in set(RerankingKind):
+            msg = f"unknown reranking kind: {self.reranking_kind!r}"
+            raise AppValueError(msg)
 
 
 def wrap_retrieval_engine(
@@ -122,14 +143,26 @@ def wrap_retrieval_engine(
     config: RetrievalConfig,
     *,
     policies: Sequence[PassagePolicy],
+    reranker: Reranker | None = None,
 ) -> RetrievalEngine:
-    """Wrap ``inner`` in the factory's filtering and ordering.
+    """Wrap ``inner`` in the factory's reranking, filtering and ordering.
 
-    The filter applies the abstainer (``MinScore(config.min_score)`` by default), then ``policies``;
-    the passages are then put in ``config.passage_order``. ``new_retrieval_engine_from_config``
-    wraps every kind it builds with this; a consumer with its own engine (a custom corpus, a test
-    double of the backend) calls it directly so that engine is scoped exactly like the factory's.
+    With ``reranking_kind`` ``cross_encoder``, ``reranker`` first reorders the passages and sets
+    their scores. The filter then applies the abstainer (``MinScore(config.min_score)`` by
+    default), then ``policies``; the passages are then put in ``config.passage_order``.
+    ``new_retrieval_engine_from_config`` wraps every kind it builds with this; a consumer with its
+    own engine (a custom corpus, a test double of the backend) calls it directly so that engine is
+    scoped exactly like the factory's.
+
+    Raises:
+        AppValueError: ``cross_encoder`` without a ``reranker`` (``INVALID_INPUT``).
+
     """
+    if config.reranking_kind == RerankingKind.CROSS_ENCODER:
+        if reranker is None:
+            msg = "the cross_encoder reranking kind needs a reranker built by the caller"
+            raise AppValueError(msg)
+        inner = RerankingRetrievalEngine(inner, reranker)
     filtering = FilteringRetrievalEngine(
         inner, [*abstention_policies(config.abstainer, config.min_score), *policies]
     )
@@ -148,6 +181,7 @@ def new_retrieval_engine_from_config(
     stub_passages: Sequence[RetrievalResult] = (),
     embedder: EmbeddingProvider | None = None,
     store: VectorStore | None = None,
+    reranker: Reranker | None = None,
 ) -> RetrievalEngine:
     """Build the retrieval engine selected by ``config.kind``, wrapped by ``wrap_retrieval_engine``.
 
@@ -157,9 +191,16 @@ def new_retrieval_engine_from_config(
     ``document_id_resolver`` the Bedrock engine, ``store_filter_keys`` the vector engine's push-down,
     ``stub_passages`` the stub's corpus, and ``embedder`` and ``store`` the vector engine (the caller
     builds them with ``clients.embedding`` and ``clients.vector``; a client family never imports a
-    sibling). A ``MetadataEquals`` scope with no push-down seam for the selected kind is logged as a
-    warning; a seam the selected kind ignores is logged at info.
+    sibling). ``reranker`` (``clients.reranking``) reorders any kind's passages when
+    ``reranking_kind`` is ``cross_encoder``. A ``MetadataEquals`` scope with no push-down seam for
+    the selected kind is logged as a warning; a seam the selected kind ignores is logged at info.
+
+    Raises:
+        AppValueError: An unknown kind, ``bedrock_rerank`` on a kind other than ``bedrock``, or
+            ``cross_encoder`` without a reranker (``INVALID_INPUT``).
+
     """
+    _refuse_bedrock_rerank_off_bedrock(config)
     _warn_about_seams(
         config.kind,
         policies,
@@ -178,7 +219,22 @@ def new_retrieval_engine_from_config(
     else:
         msg = f"unknown retrieval kind: {config.kind!r}"
         raise AppValueError(msg)
-    return wrap_retrieval_engine(inner, config, policies=policies)
+    return wrap_retrieval_engine(inner, config, policies=policies, reranker=reranker)
+
+
+def _refuse_bedrock_rerank_off_bedrock(config: RetrievalConfig) -> None:
+    """Refuse ``bedrock_rerank`` on a kind other than ``bedrock``: it reranks inside Bedrock Retrieve.
+
+    Raises:
+        AppValueError: The misplaced reranker (``INVALID_INPUT``).
+
+    """
+    if (
+        config.reranking_kind == RerankingKind.BEDROCK_RERANK
+        and config.kind is not RetrievalKind.BEDROCK
+    ):
+        msg = f"bedrock_rerank reranks inside Bedrock Retrieve; the {config.kind} kind needs cross_encoder"
+        raise AppValueError(msg)
 
 
 def _build_bedrock_engine(

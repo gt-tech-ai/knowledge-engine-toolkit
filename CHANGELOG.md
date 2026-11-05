@@ -118,9 +118,32 @@ Python: `techai-webutils` 0.9.3.
   - `RetrievalConfig.abstainer` (`AbstainerKind`: `score_threshold`, the default and today's
     `MinScore(min_score)`, or `none`) and `RetrievalConfig.passage_order` (`PassageOrder`: `rank`,
     the default, or `edges`, via `OrderingRetrievalEngine`), plus `passage_header`.
+- Off-Bedrock retrieval building blocks (Python):
+  - `EmbeddingKind.openai_compatible` (`OpenAICompatibleEmbeddingProvider`) and
+    `LlmKind.openai_compatible` (`OpenAICompatibleLlmProvider`, streaming with a stall timeout);
+    `EmbeddingConfig.api_key` and `LlmConfig.api_key` / `stall_timeout_seconds`.
+  - `EmbeddingProvider.embed` / `embed_batch` take `input_type` (`InputType`: `query` or
+    `document`, the default); `EmbeddingConfig.query_prefix` / `document_prefix` and
+    `PrefixedEmbedding`.
+  - `core.interfaces.reranker` (`Reranker`, `RerankClient`), `clients.reranking`
+    (`RerankerKind` `noop` / `cross_encoder`, `RerankerConfig`, `reranker_from_config`), and
+    `RerankingKind.cross_encoder` with `RerankingRetrievalEngine`; the retrieval factory and
+    `wrap_retrieval_engine` take `reranker=`.
+  - `FilterExpr` (`FilterEq`, `FilterIn`, `FilterAnd`, `equals_all`), `bedrock_filter`,
+    `expr_filter_builder` and the OpenSearch `filter_clauses`; `Citation.chunk_id` and
+    `Citation.span`.
+  - `foundation.resilience.http_boundary.httpx_error_to_app_error`.
 
 ### Changed
 
+- `EmbeddingProvider` implementations must accept the keyword `input_type`; the vector retrieval
+  engine, the semantic cache and the embedding route classifier now embed as `query` (no change to
+  the vectors unless a prefix is configured). `MemoizedEmbedding` keys on the input type.
+- `RetrievalConfig` refuses an unknown `reranking_kind`, and `bedrock_rerank` on a kind other than
+  `bedrock` (both silently meant no reranking before).
+- Vector retrieval passages carry their chunk id as `chunk_id` metadata when the payload lacks one.
+- `OllamaLlmProvider` maps errors through the shared `httpx_error_to_app_error` (same codes and
+  messages).
 - `QdrantVectorStore` no longer asks the server whether a collection it already ensured exists
   before a lookup or count, and no longer copies each vector on upsert.
 - Bedrock `StartIngestionJob`'s `ServiceQuotaExceededException` and `ThrottlingException` are now

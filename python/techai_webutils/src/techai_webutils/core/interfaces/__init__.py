@@ -12,10 +12,12 @@ Service Interfaces:
     Workflow: Multi-step business process orchestration (sync and async variants).
     DocumentParser: Parse raw documents into text + metadata chunks.
     ChunkingStrategy: Split documents into retrieval-sized chunks.
-    EmbeddingProvider: Generate vector embeddings from text.
+    EmbeddingProvider: Generate vector embeddings from text (as a query or a document).
     KnowledgeBase: Sync documents and query a vector knowledge base.
     LLMProvider: Generate text completions from a language model.
     RetrievalEngine: Orchestrate semantic search with reranking.
+    Reranker: Score retrieved passages against the query (RerankClient: its transport).
+    FilterExpr: A backend-neutral metadata filter (FilterEq, FilterIn, FilterAnd).
     QueryRewriter: Transform user queries for better retrieval.
     IntentClassifier: Classify query intent (search, summarize, compare, etc.).
     CitationExtractor: Extract source citations from LLM responses.
@@ -130,10 +132,15 @@ from techai_webutils.core.interfaces.repository import (
     Transaction,
     TransactionManager,
 )
+from techai_webutils.core.interfaces.reranker import RerankClient, Reranker
 from techai_webutils.core.interfaces.resource_probe import ResourceLimits, ResourceProbe
 from techai_webutils.core.interfaces.retrier import Retrier
 from techai_webutils.core.interfaces.retrieval import (
     CitationExtractor,
+    FilterAnd,
+    FilterEq,
+    FilterExpr,
+    FilterIn,
     IntentClassifier,
     PassagePolicy,
     QueryRewriter,
@@ -181,6 +188,10 @@ __all__ = [
     "Deduplicator",
     "DocumentParser",
     "EmbeddingProvider",
+    "FilterAnd",
+    "FilterEq",
+    "FilterExpr",
+    "FilterIn",
     "HealthChecker",
     "Hedger",
     "InflightClaim",
@@ -213,6 +224,8 @@ __all__ = [
     "RateLimiter",
     # Data Access
     "Repository",
+    "RerankClient",
+    "Reranker",
     "ResourceLimits",
     "ResourceProbe",
     "Retrier",

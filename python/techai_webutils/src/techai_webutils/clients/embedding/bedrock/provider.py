@@ -11,12 +11,16 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import TYPE_CHECKING, Any, Protocol, Self, cast
+from typing import TYPE_CHECKING, Any, Protocol, Self, cast, override
 
 from botocore.exceptions import BotoCoreError, ClientError  # type: ignore[import-untyped]
 
 from techai_webutils.core.errors import AppError, ErrorCode
-from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
+from techai_webutils.core.interfaces.embedding import (
+    EmbeddingProvider,
+    EmbeddingResult,
+    InputType,
+)
 from techai_webutils.foundation.resilience.aws_boundary import botocore_error_to_app_error
 
 if TYPE_CHECKING:
@@ -66,8 +70,13 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         self._dimension = dimension
         self._normalize = normalize
 
-    async def embed(self, text: str) -> EmbeddingResult:
+    @override
+    async def embed(
+        self, text: str, *, input_type: InputType = "document"
+    ) -> EmbeddingResult:
         """Embed one text with a single ``InvokeModel`` call.
+
+        Titan is symmetric: ``input_type`` does not change the request.
 
         Raises a coded ``AppError``: a botocore failure maps through ``botocore_error_to_app_error``
         (throttling / 5xx / connection → ``UNAVAILABLE``, otherwise ``INTERNAL``), and a vector whose
@@ -101,9 +110,14 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
             token_count=int(payload.get("inputTextTokenCount", 0)),
         )
 
-    async def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
+    @override
+    async def embed_batch(
+        self, texts: list[str], *, input_type: InputType = "document"
+    ) -> list[EmbeddingResult]:
         """Embed each text with its own call (Titan v2 has no batch body), concurrently, in input order."""
-        return list(await asyncio.gather(*(self.embed(t) for t in texts)))
+        return list(
+            await asyncio.gather(*(self.embed(t, input_type=input_type) for t in texts))
+        )
 
     def dimension(self) -> int:
         """Return the configured vector size (Titan v2 supports 256, 512 or 1024)."""

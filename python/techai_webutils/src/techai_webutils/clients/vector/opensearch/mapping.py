@@ -12,12 +12,14 @@ import re
 from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.errors import AppValueError, InternalError, UnavailableError
+from techai_webutils.core.interfaces.retrieval import FilterEq, FilterIn, equals_all
 from techai_webutils.core.interfaces.vector_store import VectorSearchResult
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from techai_webutils.core.errors import AppError
+    from techai_webutils.core.interfaces.retrieval import FilterExpr
     from techai_webutils.core.interfaces.vector_store import VectorEntry
 
 ENTITY_PREFIX = "entities."
@@ -147,7 +149,26 @@ def source_metadata(source: Mapping[str, object]) -> dict[str, str]:
 
 def term_filters(fields: Mapping[str, str]) -> list[dict[str, object]]:
     """Return one exact-match ``term`` clause per field."""
-    return [{"term": {key: value}} for key, value in fields.items()]
+    return filter_clauses(equals_all(fields))
+
+
+def filter_clauses(expr: FilterExpr) -> list[dict[str, object]]:
+    """Return ``expr`` as ``bool.filter`` clauses: ``eq`` → ``term``, ``in`` → ``terms``.
+
+    An ``and`` contributes each of its clauses (a ``bool.filter`` list is already a conjunction).
+
+    Raises:
+        AppValueError: An ``in`` with no values (``INVALID_INPUT``).
+
+    """
+    if isinstance(expr, FilterEq):
+        return [{"term": {expr.key: expr.value}}]
+    if isinstance(expr, FilterIn):
+        if not expr.values:
+            msg = f"an in filter on {expr.key!r} needs at least one value"
+            raise AppValueError(msg)
+        return [{"terms": {expr.key: list(expr.values)}}]
+    return [clause for inner in expr.clauses for clause in filter_clauses(inner)]
 
 
 def knn_query(

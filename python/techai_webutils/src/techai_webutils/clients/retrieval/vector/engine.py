@@ -68,7 +68,7 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         filters: dict[str, str] | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
-        """Embed the query, search with the pushed-down filters, and map hits to RetrievalResults.
+        """Embed the query (``input_type="query"``), search with the pushed-down filters, map the hits.
 
         The engine has one collection, so an ``index_id`` other than ``None`` or the collection name
         cannot be routed; it is logged as a warning (a consumer isolating scopes by index must not
@@ -82,7 +82,7 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
             )
         request = filters or {}
         pushed = {k: request[k] for k in self._filter_keys if k in request}
-        embedding = await self._embedder.embed(query)
+        embedding = await self._embedder.embed(query, input_type="query")
         dense_search = self._store.search(
             self._collection, embedding.embedding, top_k=top_k, filters=pushed
         )
@@ -120,7 +120,10 @@ def _to_retrieval_result(hit: VectorSearchResult) -> RetrievalResult:
 
     ``hit.metadata`` is a freshly-built, owned dict (``qdrant/store.py`` builds one per hit) and ``hit``
     is discarded right after this mapping, so the result carries it directly rather than copying it.
+    The hit's chunk id is added as the ``chunk_id`` key when the payload lacks one, so a citation
+    can name its chunk.
     """
+    hit.metadata.setdefault("chunk_id", hit.chunk_id)
     page_raw = hit.metadata.get("page_number", "")
     page_number = int(page_raw) if page_raw.isdigit() else None
     return RetrievalResult(

@@ -784,6 +784,27 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   `passage_order: edges` puts the best passages at both ends of the prompt (ranks 1, 3, 5 … 4, 2);
   the reordering is in the engine's output, so `[n]` and the citations stay aligned.
   `passage_header(n, passage)` gives the consumer's prompt `[n] <document> · <section> · p. <page>`.
+- **Off-Bedrock model Kinds.** `EmbeddingKind.openai_compatible` and `LlmKind.openai_compatible`
+  speak `/v1/embeddings` and `/v1/chat/completions` (vLLM, TEI, LiteLLM, llama.cpp, OpenAI) with
+  an optional bearer `api_key` (never in a repr). A stream that sends nothing for
+  `stall_timeout_seconds` (60) fails with `TIMEOUT`. HTTP failures map through
+  `foundation.resilience.http_boundary.httpx_error_to_app_error` (429/5xx transient).
+- **Query and document embeddings.** `EmbeddingProvider.embed` / `embed_batch` take
+  `input_type` (`query` or `document`, the default). Query-time callers (the vector engine, the
+  semantic cache, the route classifier) pass `query`. `EmbeddingConfig.query_prefix` /
+  `document_prefix` (empty by default, so vectors are unchanged) wrap the provider in
+  `PrefixedEmbedding` for an asymmetric model (nomic `"search_query: "` / `"search_document: "`, E5
+  `"query: "` / `"passage: "`); setting one needs a re-embedded corpus.
+- **Reranking.** `Reranker.rerank(query, passages) -> scores` (`clients.reranking`: `noop`, the
+  default, and `cross_encoder` over an injected `RerankClient`, in `batch_size` batches).
+  `RetrievalConfig.reranking_kind` `cross_encoder` wraps any engine in `RerankingRetrievalEngine`
+  before the abstainer; `bedrock_rerank` stays Bedrock Retrieve's own and is refused on any other
+  kind, as is an unknown value.
+- **Neutral filters and citations.** `FilterExpr` (`FilterEq`, `FilterIn`, `FilterAnd`;
+  `equals_all(map)`) translates to Bedrock (`bedrock_filter`, `expr_filter_builder` for the
+  engine's `filter_builder`) and to OpenSearch (`filter_clauses`). `Citation` gains `chunk_id`
+  (the passage's `chunk_id` metadata, which vector passages now carry) and `span` (`None`: the
+  whole chunk).
 
 ## Repository tooling substrate
 

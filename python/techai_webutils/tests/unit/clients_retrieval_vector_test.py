@@ -140,7 +140,7 @@ class TestVectorRetrievalEngine:
             when pushed down, so pushing every filter would return nothing; only payload keys go down.
 
         What it tests:
-          - embed is called with the query; store.search gets the top_k and exactly {"tenant": ...} for a
+          - embed is called with the query as a query; store.search gets the top_k and exactly {"tenant": ...} for a
             request carrying tenant + max_level with filter_keys=("tenant",).
         """
         embedder, store = _embedder(), _store([_hit()])
@@ -152,7 +152,7 @@ class TestVectorRetrievalEngine:
             "annual revenue", top_k=5, filters={"tenant": "t1", "max_level": "high"}
         )
 
-        embedder.embed.assert_awaited_once_with("annual revenue")
+        embedder.embed.assert_awaited_once_with("annual revenue", input_type="query")
         store.search.assert_awaited_once()
         assert store.search.call_args.kwargs["filters"] == {"tenant": "t1"}
         assert store.search.call_args.kwargs["top_k"] == 5

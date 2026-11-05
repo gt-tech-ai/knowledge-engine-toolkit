@@ -168,8 +168,8 @@ class RedisSemanticCache(SemanticCache):
         self._index_ready = True
 
     async def _vector(self, query: str) -> bytes:
-        """Return ``query``'s embedding packed as little-endian float32."""
-        values = (await self._embedding.embed(query)).embedding
+        """Return ``query``'s embedding (as a query) packed as little-endian float32."""
+        values = (await self._embedding.embed(query, input_type="query")).embedding
         return struct.pack(f"<{len(values)}f", *values)
 
     @override

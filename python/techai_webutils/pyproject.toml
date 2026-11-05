@@ -297,6 +297,7 @@ modules = [
     "techai_webutils.clients.model_gateway",
     "techai_webutils.clients.parsing",
     "techai_webutils.clients.prometheus",
+    "techai_webutils.clients.reranking",
     "techai_webutils.clients.retrieval",
     "techai_webutils.clients.rpc",
     "techai_webutils.clients.safety",

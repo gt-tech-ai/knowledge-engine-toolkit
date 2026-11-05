@@ -9,8 +9,13 @@ dimension. Mirrors the ``ollama`` sibling's shape (``NoOpAsyncResource`` + ``Emb
 from __future__ import annotations
 
 import hashlib
+from typing import override
 
-from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
+from techai_webutils.core.interfaces.embedding import (
+    EmbeddingProvider,
+    EmbeddingResult,
+    InputType,
+)
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 
 
@@ -36,17 +41,23 @@ class StubEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         self._model = model
         self._dimension = dimension
 
-    async def embed(self, text: str) -> EmbeddingResult:
-        """Return a deterministic embedding for a single text."""
+    @override
+    async def embed(
+        self, text: str, *, input_type: InputType = "document"
+    ) -> EmbeddingResult:
+        """Return a deterministic embedding for a single text (``input_type`` does not change it)."""
         return EmbeddingResult(
             embedding=_deterministic_vector(text, self._dimension),
             model=self._model,
             token_count=0,
         )
 
-    async def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
+    @override
+    async def embed_batch(
+        self, texts: list[str], *, input_type: InputType = "document"
+    ) -> list[EmbeddingResult]:
         """Return deterministic embeddings for multiple texts, preserving order."""
-        return [await self.embed(text) for text in texts]
+        return [await self.embed(text, input_type=input_type) for text in texts]
 
     def dimension(self) -> int:
         """Return the configured embedding dimension."""

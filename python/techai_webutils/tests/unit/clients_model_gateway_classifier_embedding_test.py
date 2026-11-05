@@ -40,17 +40,20 @@ _ROUTES = {
 
 
 def _embedding() -> MagicMock:
-    """Return a mocked embedder answering the controlled vectors."""
+    """Return a mocked embedder answering the controlled vectors (queries and exemplars embed as queries)."""
 
     def result(text: str) -> EmbeddingResult:
         return EmbeddingResult(embedding=_VECTORS[text], model="m", token_count=0)
 
-    async def embed(text: str) -> EmbeddingResult:
+    async def embed(text: str, *, input_type: str = "document") -> EmbeddingResult:
+        assert input_type == "query"
         await asyncio.sleep(0)
         return result(text)
 
-    async def embed_batch(texts: list[str]) -> list[EmbeddingResult]:
-        return [await embed(text) for text in texts]
+    async def embed_batch(
+        texts: list[str], *, input_type: str = "document"
+    ) -> list[EmbeddingResult]:
+        return [await embed(text, input_type=input_type) for text in texts]
 
     provider = MagicMock(spec=EmbeddingProvider)
     provider.embed = AsyncMock(side_effect=embed)

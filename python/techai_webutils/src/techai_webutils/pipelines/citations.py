@@ -39,6 +39,8 @@ class PassageCitationExtractor(CitationExtractor):
         the n-th entry here is the passage the answer's ``[n]`` marker cites. Collapsing entries (e.g.
         by document or page) would slide every later index onto the wrong passage and drop the
         citations the answer actually references, so distinct passages stay distinct citations.
+        Each citation names its chunk (the passage's ``chunk_id`` metadata) and cites the whole chunk
+        (``span`` ``None``).
         """
         return [
             Citation(
@@ -52,6 +54,7 @@ class PassageCitationExtractor(CitationExtractor):
                     for k in self._attribute_keys
                     if k in source.metadata
                 },
+                chunk_id=source.metadata.get("chunk_id", ""),
             )
             for source in sources
         ]

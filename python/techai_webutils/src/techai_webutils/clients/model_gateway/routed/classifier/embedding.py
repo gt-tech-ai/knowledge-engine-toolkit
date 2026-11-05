@@ -52,7 +52,7 @@ class EmbeddingRouteClassifier:
         self._exemplars: dict[str, list[list[float]]] | None = None
 
     async def warm(self) -> None:
-        """Embed every exemplar once (one batch).
+        """Embed every exemplar once (one batch), as a query: an exemplar is an example query.
 
         Raises:
             AppError: ``UNAVAILABLE`` when the exemplars can't be embedded (fails the boot).
@@ -60,7 +60,9 @@ class EmbeddingRouteClassifier:
         """
         names = [(name, text) for name, r in self._routes.items() for text in r.exemplars]
         try:
-            vectors = await self._embedding.embed_batch([text for _, text in names])
+            vectors = await self._embedding.embed_batch(
+                [text for _, text in names], input_type="query"
+            )
         except Exception as exc:
             msg = "route exemplars could not be embedded"
             raise AppError(ErrorCode.UNAVAILABLE, msg, cause=exc) from exc
@@ -85,7 +87,7 @@ class EmbeddingRouteClassifier:
         try:
             if self._exemplars is None:
                 await self.warm()
-            vector = (await self._embedding.embed(query)).embedding
+            vector = (await self._embedding.embed(query, input_type="query")).embedding
         except Exception:
             return Classification(route=fallback.route, confidence=0.0, degraded=True)
         scores = self._scores(vector)

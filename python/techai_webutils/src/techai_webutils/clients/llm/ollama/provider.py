@@ -16,12 +16,10 @@ from __future__ import annotations
 
 import json
 from contextlib import AsyncExitStack
-from http import HTTPStatus
 from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.llm import (
     LLMConfig,
     LLMProvider,
@@ -30,10 +28,12 @@ from techai_webutils.core.interfaces.llm import (
     text_only,
 )
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
+from techai_webutils.foundation.resilience.http_boundary import httpx_error_to_app_error
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from techai_webutils.core.errors import AppError
     from techai_webutils.core.interfaces.llm import LLMMessage
 
 
@@ -47,29 +47,12 @@ def _finish_reason(done_reason: str | None) -> str:
 
 
 def _to_app_error(exc: Exception) -> AppError:
-    """Map an Ollama transport/decode failure to a coded ``AppError`` (ARCHITECTURE.md#error-codes).
+    """Map an Ollama transport/decode failure to a coded ``AppError`` (``httpx_error_to_app_error``).
 
-    Raw ``httpx`` / JSON errors must not cross the provider boundary: the resilience decorators (retry,
-    circuit breaker) and the transport status mapping derive their behaviour from the ``ErrorCode``, so
-    an unwrapped ``httpx.HTTPStatusError`` / ``ValueError`` would bypass transient-vs-terminal
-    classification. A timeout → ``TIMEOUT``; an unreachable server or a 5xx/429 → ``UNAVAILABLE``
-    (transient, retryable); a 4xx or a malformed body → ``INTERNAL`` (terminal).
+    A timeout → ``TIMEOUT``; an unreachable server or a 5xx/429 → ``UNAVAILABLE`` (transient,
+    retryable); a 4xx or a malformed body → ``INTERNAL`` (terminal).
     """
-    if isinstance(exc, httpx.TimeoutException):
-        return AppError(ErrorCode.TIMEOUT, f"ollama chat timed out: {exc}", cause=exc)
-    if isinstance(exc, httpx.HTTPStatusError):
-        status = exc.response.status_code
-        transient = (
-            status >= HTTPStatus.INTERNAL_SERVER_ERROR
-            or status == HTTPStatus.TOO_MANY_REQUESTS
-        )
-        code = ErrorCode.UNAVAILABLE if transient else ErrorCode.INTERNAL
-        return AppError(code, f"ollama chat returned HTTP {status}", cause=exc)
-    if isinstance(exc, httpx.RequestError):
-        return AppError(
-            ErrorCode.UNAVAILABLE, f"ollama chat unreachable: {exc}", cause=exc
-        )
-    return AppError(ErrorCode.INTERNAL, f"ollama chat decode error: {exc}", cause=exc)
+    return httpx_error_to_app_error(exc, "ollama chat")
 
 
 async def _ndjson_chunks(response: httpx.Response) -> AsyncIterator[dict[str, Any]]:

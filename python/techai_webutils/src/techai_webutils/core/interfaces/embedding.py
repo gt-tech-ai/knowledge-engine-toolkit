@@ -2,8 +2,16 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Literal
 
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
+
+InputType = Literal["query", "document"]
+"""What a text is embedded as: a search ``query`` or an indexed ``document``.
+
+Asymmetric models (nomic-embed-text, E5) embed each with its own prefix; a symmetric model (Titan)
+ignores it. ``document`` is the default, so an existing caller's embeddings are unchanged.
+"""
 
 
 @dataclass(slots=True)
@@ -22,12 +30,16 @@ class EmbeddingProvider(ManagedResource, ABC):
     """Abstract embedding provider for converting text to vector embeddings."""
 
     @abstractmethod
-    async def embed(self, text: str) -> EmbeddingResult:
-        """Generate an embedding for a single text input."""
+    async def embed(
+        self, text: str, *, input_type: InputType = "document"
+    ) -> EmbeddingResult:
+        """Generate an embedding for a single text input, embedded as ``input_type``."""
 
     @abstractmethod
-    async def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
-        """Generate embeddings for multiple text inputs."""
+    async def embed_batch(
+        self, texts: list[str], *, input_type: InputType = "document"
+    ) -> list[EmbeddingResult]:
+        """Generate embeddings for multiple text inputs, each embedded as ``input_type``."""
 
     @abstractmethod
     def dimension(self) -> int:

@@ -230,7 +230,7 @@ async def test_gateway_warms_embedding_classifier_on_enter(
         that is down at boot must surface then, not as silently degraded routing.
 
     **What it tests:**
-      - ``async with`` embeds the exemplars once, in one ``embed_batch``
+      - ``async with`` embeds the exemplars once, as queries, in one ``embed_batch``
       - an ``embed_batch`` that raises makes entering the gateway raise ``UNAVAILABLE``
     """
     routes = {
@@ -262,7 +262,7 @@ async def test_gateway_warms_embedding_classifier_on_enter(
         async with build(broken):
             pass
 
-    embedding.embed_batch.assert_awaited_once_with(["summarize"])
+    embedding.embed_batch.assert_awaited_once_with(["summarize"], input_type="query")
     assert caught.value.code is ErrorCode.UNAVAILABLE
 
 
