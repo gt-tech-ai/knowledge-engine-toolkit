@@ -42,6 +42,7 @@
     "kind": "exact"
   },
   "techai_webutils.clients.semantic_cache.verifier.builder.CacheVerifierConfig": {},
+  "techai_webutils.clients.sink.bedrock.config.BedrockSinkConfig": {},
   "techai_webutils.clients.sink.builder.SinkConfig": {},
   "techai_webutils.clients.splitting.factory.SplitterConfig": {},
   "techai_webutils.clients.start_budget.config.StartBudgetConfig": {},

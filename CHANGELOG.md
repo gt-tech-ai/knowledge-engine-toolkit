@@ -103,7 +103,9 @@ Python: `techai-webutils` 0.9.3.
   - `MultiDomainVectorStore`: shards routed to domains by `OpenSearchConfig.shard_domains`, reads
     fanned out.
 - `Sink`, `SinkDocument`, `ChunkPayload` and `SinkStore` (`core.interfaces.sink`), and
-  `sink_from_config` with `SinkConfig.kind` `noop` (the default) or `opensearch`.
+  `sink_from_config` with `SinkConfig.kind` `noop` (the default), `opensearch` or
+  `bedrock` (`BedrockSink`, `BedrockSinkConfig`, `BedrockLayout`: chunk files and
+  sidecars for a Bedrock data source; `sink_from_config(storage=…)`).
 - `MetricsQuerier` and `MetricSample` (`core.interfaces.metrics_query`), and
   `new_metrics_querier_from_config` with `PrometheusConfig.kind` `stub` (the default) or `http`,
   the Python mirror of Go `clients/prometheus`.

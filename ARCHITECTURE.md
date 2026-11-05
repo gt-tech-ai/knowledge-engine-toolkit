@@ -768,6 +768,15 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   writes through the injected store: stable ids `<document>:<n>`, the document's metadata,
   `content_hash`, the embedding model, the chunk's structure fields and `entities.<label>` lists.
   Vectors from another model than the index's are a permanent `CONFLICT`.
+  `SinkKind.bedrock` takes no vectors (Bedrock embeds by itself) and writes files plus
+  `.metadata.json` sidecars (`{"metadataAttributes": …}`) into `SinkConfig.bedrock.bucket`
+  through the injected `StorageClient`, under `{prefix}/{org}/{hash2}/{document}/{version}/`
+  (`hash2` from the document id, `version` the content hash's first 16 characters).
+  `layout: chunk_files` (the default) writes one `{n}.txt` per chunk for a `NONE`-chunking data
+  source; `kb_units` packs contiguous chunks up to `max_unit_bytes` (25 MiB) for `FIXED_SIZE`.
+  A write lists the document once, skips present keys (a redelivery writes nothing) and deletes
+  other versions; `delete` removes every object; `update_metadata` rewrites only the sidecars.
+  The caller then starts the data source's ingestion job.
 - **`MetricsQuerier`** mirrors Go's: `query(promql)` and `query_range(promql, start, end, step)`.
   Kinds `stub` (zero, no I/O) and `http` (the Prometheus query API, fail closed, coded errors).
 - **`VectorKnowledgeBase(embed_concurrency=…)`** keeps that many sub-batches in flight (1, the
