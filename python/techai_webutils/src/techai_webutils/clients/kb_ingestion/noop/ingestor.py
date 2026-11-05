@@ -26,8 +26,9 @@ class StubKnowledgeBaseIngestor(NoOpAsyncResource, KnowledgeBaseIngestor):
         self.stopped: list[tuple[str, str, str]] = []
         self._counter = 0
 
+    @override
     async def start_ingestion_job(
-        self, *, knowledge_base_id: str, data_source_id: str
+        self, *, knowledge_base_id: str, data_source_id: str, round_id: str = ""
     ) -> IngestionJob:
         """Record and immediately complete a synthetic ingestion job."""
         self._counter += 1

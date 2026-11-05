@@ -40,6 +40,7 @@
   },
   "techai_webutils.clients.semantic_cache.verifier.builder.CacheVerifierConfig": {},
   "techai_webutils.clients.splitting.factory.SplitterConfig": {},
+  "techai_webutils.clients.start_budget.config.StartBudgetConfig": {},
   "techai_webutils.clients.storage.builder.StorageConfig": {
     "s3": {
       "$config": "techai_webutils.clients.storage.config.S3Config"

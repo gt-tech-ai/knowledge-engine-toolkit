@@ -55,6 +55,7 @@ Infrastructure Interfaces:
     CheckpointStore: Store stage artifacts for resumable ingestion.
     StageStateClient: Record which stage finished with which fingerprint.
     InflightClaim: Run a costly stage of one content once across consumers.
+    StartBudget: Cap and pace an account's knowledge-base ingestion jobs.
     MessageConsumer: Consume messages from a queue.
     StorageClient: Object storage operations.
 
@@ -136,6 +137,7 @@ from techai_webutils.core.interfaces.retrieval import (
     RetrievalEngine,
 )
 from techai_webutils.core.interfaces.service import BaseService
+from techai_webutils.core.interfaces.start_budget import Slot, StartBudget
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
 from techai_webutils.core.interfaces.store import Store
 from techai_webutils.core.interfaces.tracer import TracerProvider, TracerSpan
@@ -204,10 +206,12 @@ __all__ = [
     "Retrier",
     "RetrievalEngine",
     "ServiceHooks",
+    "Slot",
     "Stage",
     "StageArtifact",
     "StageState",
     "StageStateClient",
+    "StartBudget",
     "StorageClient",
     "StorageObject",
     "Store",

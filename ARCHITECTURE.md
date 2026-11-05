@@ -713,6 +713,31 @@ stopped instead of paying for every stage again. Python only; the defaults chang
   only while it still holds the caller's token. A Redis error grants the claim, since a duplicate
   run is today's behaviour and the stages are idempotent.
 
+## Bedrock ingestion limits
+
+- **Start budget.** `StartBudget.acquire(binding) -> Slot | None` and `release(slot)` cap the
+  Bedrock ingestion jobs an account runs at once and pace their starts. A caller holds its slot
+  for the life of the job and releases it when the job is terminal; a caller that reattaches to a
+  running job acquires again. `StartBudgetConfig.kind` selects it: `noop` (the default) grants
+  every acquire at once; `postgres` takes slot `i` as the advisory lock `<account>:<i>` (the
+  injected `new_lock`, the postgres `clients.lock` Kind) and paces starts through one row per
+  account, so every pod shares `slots` (5) and `min_start_interval_seconds` (10 s). A waiter gets
+  `None` after `acquire_timeout_seconds`. The product owns the table:
+
+  ```sql
+  create table bedrock_start_rate (
+      account       text primary key,
+      last_start_at timestamptz not null
+  );
+  ```
+
+- **Bedrock start and cohort.** `start_ingestion_job(..., round_id=…)` sends a `clientToken`
+  derived from the knowledge base, data source and round, so a retried start is idempotent.
+  `ServiceQuotaExceededException` and `ThrottlingException` are `UNAVAILABLE` (transient);
+  `ConflictException` stays `CONFLICT`. `iter_cohort(..., s3_uris=…)` yields a round's documents:
+  Bedrock looks them up with `GetKnowledgeBaseDocuments`, ten per call and five calls per second;
+  any other Kind filters `list_documents`.
+
 ## Repository tooling substrate
 
 Go packages for tools that read and check a codebase (linters, guards, generators, developer

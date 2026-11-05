@@ -32,7 +32,7 @@ from techai_webutils.foundation.lifecycle import DelegatingAsyncResource
 from techai_webutils.foundation.resilience.async_retry import retry_transient_async
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import AsyncIterator, Awaitable, Callable, Collection
 
 _DEFAULT_POLL_INTERVAL_SECONDS = 5.0
 """Seconds between ``get_ingestion_job`` polls (Bedrock ingestion is not push-based)."""
@@ -72,7 +72,7 @@ class PollingIngestor(
         self._clock = clock
 
     async def start_ingestion_job(
-        self, *, knowledge_base_id: str, data_source_id: str
+        self, *, knowledge_base_id: str, data_source_id: str, round_id: str = ""
     ) -> IngestionJob:
         """Start a job and return the FRESH (non-terminal) handle — the poll is a separate step.
 
@@ -84,6 +84,7 @@ class PollingIngestor(
         return await self._inner.start_ingestion_job(
             knowledge_base_id=knowledge_base_id,
             data_source_id=data_source_id,
+            round_id=round_id,
         )
 
     async def poll_ingestion_job(
@@ -133,6 +134,21 @@ class PollingIngestor(
             knowledge_base_id=knowledge_base_id,
             data_source_id=data_source_id,
         )
+
+    async def iter_cohort(
+        self,
+        *,
+        knowledge_base_id: str,
+        data_source_id: str,
+        s3_uris: Collection[str],
+    ) -> AsyncIterator[KnowledgeBaseDocument]:
+        """Delegate the cohort lookup to the wrapped ingestor (no polling involved)."""
+        async for doc in self._inner.iter_cohort(
+            knowledge_base_id=knowledge_base_id,
+            data_source_id=data_source_id,
+            s3_uris=s3_uris,
+        ):
+            yield doc
 
     async def stop_ingestion_job(
         self,
@@ -205,7 +221,7 @@ class RetryingIngestor(
         )
 
     async def start_ingestion_job(
-        self, *, knowledge_base_id: str, data_source_id: str
+        self, *, knowledge_base_id: str, data_source_id: str, round_id: str = ""
     ) -> IngestionJob:
         """Start a job, retrying transient failures with backoff."""
 
@@ -213,6 +229,7 @@ class RetryingIngestor(
             return await self._inner.start_ingestion_job(
                 knowledge_base_id=knowledge_base_id,
                 data_source_id=data_source_id,
+                round_id=round_id,
             )
 
         return await self._retry(_op)()
@@ -250,6 +267,25 @@ class RetryingIngestor(
             )
 
         return await self._retry(_op)()
+
+    async def iter_cohort(
+        self,
+        *,
+        knowledge_base_id: str,
+        data_source_id: str,
+        s3_uris: Collection[str],
+    ) -> AsyncIterator[KnowledgeBaseDocument]:
+        """Delegate the cohort lookup WITHOUT the retry wrapper.
+
+        A partly consumed iterator cannot be replayed safely, so a transient failure surfaces to
+        the caller, which re-runs the lookup for the URIs it has not resolved.
+        """
+        async for doc in self._inner.iter_cohort(
+            knowledge_base_id=knowledge_base_id,
+            data_source_id=data_source_id,
+            s3_uris=s3_uris,
+        ):
+            yield doc
 
     async def stop_ingestion_job(
         self,

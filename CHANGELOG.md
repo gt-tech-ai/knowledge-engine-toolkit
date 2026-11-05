@@ -81,9 +81,23 @@ Python: `techai-webutils` 0.9.3.
     (`SET NX PX`, token-checked release, fails open).
   - A unit test that the `Client families are independent` import contract lists every
     `clients/` package; `checkpoint` and `inflight_claim` are added to it.
+- Bedrock ingestion limits (Python):
+  - `StartBudget` and `Slot` (`core.interfaces.start_budget`) and `start_budget_from_config` with
+    `StartBudgetConfig.kind` `noop` (the default) or `postgres`: account-wide slots held for the
+    life of a job (advisory locks through an injected `new_lock`) and a minimum start interval.
+    The product's migration adds `bedrock_start_rate(account text primary key, last_start_at
+    timestamptz not null)`.
+  - `KnowledgeBaseIngestor.start_ingestion_job(..., round_id="")`: a non-empty round sends a
+    derived `clientToken`, so a retried start is idempotent. Every decorator forwards it.
+  - `KnowledgeBaseIngestor.iter_cohort(...)`: a round's documents by S3 URI. Bedrock uses
+    `GetKnowledgeBaseDocuments` (ten URIs per call, five calls per second; needs the
+    **`bedrock:GetKnowledgeBaseDocuments`** IAM action); the default filters `list_documents`.
+    Both decorators forward it; `RetryingIngestor` does not retry it.
 
 ### Changed
 
+- Bedrock `StartIngestionJob`'s `ServiceQuotaExceededException` and `ThrottlingException` are now
+  `UnavailableError` (transient, retried by `RetryingIngestor`) instead of a raw `ClientError`.
 - `IsolatedParser` returns each parsed document through a scratch file instead of the result queue,
   so a large document's text no longer crosses the pipe as a second copy.
 - `S3StorageClient.download_to_path` writes on one dedicated thread, in writes of at least 8 MiB

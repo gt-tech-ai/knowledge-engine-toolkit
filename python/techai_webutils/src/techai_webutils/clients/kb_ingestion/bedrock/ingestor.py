@@ -7,15 +7,19 @@ pure payload→``IngestionJob`` mapping lives in ``mapping.py`` (unit-tested and
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import AsyncExitStack
-from typing import Any, Protocol, Self, cast
+from typing import TYPE_CHECKING, Any, Protocol, Self, cast
 
 import aiobotocore.session  # type: ignore[import-untyped]
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 
 from techai_webutils.clients.kb_ingestion.mapping import (
+    cohort_batches,
     job_from_payload,
     kb_document_from_payload,
+    start_client_token,
+    start_error,
 )
 from techai_webutils.core.errors import ConflictError
 from techai_webutils.core.interfaces.kb_ingestion import (
@@ -23,6 +27,12 @@ from techai_webutils.core.interfaces.kb_ingestion import (
     KnowledgeBaseDocument,
     KnowledgeBaseIngestor,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Collection
+
+COHORT_REQUEST_INTERVAL_SECONDS = 0.2
+"""The least time between two cohort lookups: at most 5 requests per second."""
 
 
 class _BedrockAgentClient(Protocol):
@@ -37,6 +47,7 @@ class _BedrockAgentClient(Protocol):
         *,
         knowledgeBaseId: str,
         dataSourceId: str,
+        clientToken: str = ...,
     ) -> dict[str, object]:
         """Start an ingestion job; returns a payload carrying ``ingestionJob``."""
         ...
@@ -71,6 +82,16 @@ class _BedrockAgentClient(Protocol):
         """List a data source's documents (one page); returns ``documentDetails`` + ``nextToken``."""
         ...
 
+    async def get_knowledge_base_documents(
+        self,
+        *,
+        knowledgeBaseId: str,
+        dataSourceId: str,
+        documentIdentifiers: list[dict[str, object]],
+    ) -> dict[str, object]:
+        """Look up to ten documents by identifier; returns ``documentDetails``."""
+        ...
+
 
 class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
     """KnowledgeBaseIngestor backed by AWS Bedrock Agent ingestion jobs.
@@ -81,9 +102,19 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
     ``aclose`` on worker shutdown to release the shared client.
     """
 
-    def __init__(self, *, region: str, endpoint: str | None = None) -> None:
-        """Store the AWS region + optional endpoint; the client is opened lazily on first use."""
+    def __init__(
+        self,
+        *,
+        region: str,
+        endpoint: str | None = None,
+        cohort_request_interval_seconds: float = COHORT_REQUEST_INTERVAL_SECONDS,
+    ) -> None:
+        """Store the AWS region + optional endpoint; the client is opened lazily on first use.
+
+        ``cohort_request_interval_seconds`` paces ``iter_cohort``'s lookups (5 per second).
+        """
         self._region = region
+        self._cohort_interval = cohort_request_interval_seconds
         self._endpoint = endpoint
         self._session = aiobotocore.session.get_session()
         # The exit stack that owns the opened client's async context (entered on first use).
@@ -120,7 +151,7 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         await self.aclose()
 
     async def start_ingestion_job(
-        self, *, knowledge_base_id: str, data_source_id: str
+        self, *, knowledge_base_id: str, data_source_id: str, round_id: str = ""
     ) -> IngestionJob:
         """Start a Bedrock ingestion job for the KB data source.
 
@@ -128,18 +159,27 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         STARTING/IN_PROGRESS/STOPPING for this data source (Bedrock serializes ingestion) — is mapped to
         ``core/errors.ConflictError`` so the caller handles it as "a job is already running" (skip this
         round / reattach) rather than a raw SDK error that escapes as an ERROR-level log loop.
-        Other ``ClientError``s propagate unchanged to the retry/breaker stack.
+        ``ServiceQuotaExceededException`` and ``ThrottlingException`` become ``UnavailableError``
+        (transient), so the retry stack backs off. Other ``ClientError``s (``ValidationException``
+        included) propagate unchanged. A non-empty ``round_id`` sends a ``clientToken`` derived from
+        the knowledge base, data source and round, so a retried start is idempotent.
         """
         client = await self._agent_client()
+        kwargs: dict[str, str] = {
+            "knowledgeBaseId": knowledge_base_id,
+            "dataSourceId": data_source_id,
+        }
+        token = start_client_token(knowledge_base_id, data_source_id, round_id)
+        if token is not None:
+            kwargs["clientToken"] = token
         try:
-            resp = await client.start_ingestion_job(
-                knowledgeBaseId=knowledge_base_id,
-                dataSourceId=data_source_id,
-            )
+            resp = await client.start_ingestion_job(**cast("Any", kwargs))
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") == "ConflictException":
-                msg = f"bedrock ingestion job already running for data source {data_source_id}"
-                raise ConflictError(msg) from exc
+            mapped = start_error(
+                str(exc.response.get("Error", {}).get("Code", "")), data_source_id
+            )
+            if mapped is not None:
+                raise mapped from exc
             raise
         return job_from_payload(cast("dict[str, object]", resp["ingestionJob"]))
 
@@ -210,3 +250,29 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
             if not next_token:
                 break
         return docs
+
+    async def iter_cohort(
+        self,
+        *,
+        knowledge_base_id: str,
+        data_source_id: str,
+        s3_uris: Collection[str],
+    ) -> AsyncIterator[KnowledgeBaseDocument]:
+        """Look the cohort's documents up by URI with ``GetKnowledgeBaseDocuments``, ten per call.
+
+        Calls are at least ``cohort_request_interval_seconds`` apart, and the lookup ends once every
+        URI has been asked for, instead of paging the whole data source.
+        """
+        client = await self._agent_client()
+        for n, batch in enumerate(cohort_batches(sorted(set(s3_uris)))):
+            if n:
+                await asyncio.sleep(self._cohort_interval)
+            resp = await client.get_knowledge_base_documents(
+                knowledgeBaseId=knowledge_base_id,
+                dataSourceId=data_source_id,
+                documentIdentifiers=batch,
+            )
+            for detail in cast(
+                "list[dict[str, object]]", resp.get("documentDetails", [])
+            ):
+                yield kb_document_from_payload(detail)

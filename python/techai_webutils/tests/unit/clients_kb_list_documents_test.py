@@ -3,8 +3,10 @@
 Covers the pure payload mapper, the Bedrock impl's pagination (mocked aiobotocore client), the stub's
 empty listing, and — critically — that ``list_documents`` delegates through both the
 ``PollingIngestor`` and ``RetryingIngestor`` decorators so the composed stack still instantiates.
+It also covers ``iter_cohort``: the Bedrock lookup by URI and the listing-filter default.
 """
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -149,3 +151,96 @@ class TestDecoratorDelegation:
         stacked = PollingIngestor(RetryingIngestor(StubKnowledgeBaseIngestor()))
         docs = await stacked.list_documents(knowledge_base_id="kb1", data_source_id="ds1")
         assert docs == []
+
+
+class TestIterCohort:
+    """``iter_cohort`` looks a sync round's documents up by URI through the decorated stack."""
+
+    @pytest.mark.asyncio
+    async def test_bedrock_looks_up_ten_uris_per_call_through_decorators(self) -> None:
+        """Test that the decorated Bedrock ingestor asks for 25 URIs in three calls of at most ten.
+
+        **Why this test is important:**
+          - A round's cohort is a few hundred documents in a data source of millions; looking them up
+            by URI costs a few calls instead of paging the whole data source.
+
+        **What it tests:**
+          - ``PollingIngestor(RetryingIngestor(bedrock)).iter_cohort`` over 25 URIs makes three
+            ``GetKnowledgeBaseDocuments`` calls of 10, 10 and 5 S3 identifiers and yields every
+            returned document; ``list_knowledge_base_documents`` is never called
+        """
+        uris = [f"s3://b/{n:02d}" for n in range(25)]
+        fake_client = AsyncMock()
+
+        def lookup(**kwargs: object) -> dict[str, object]:
+            ids = cast("list[dict[str, dict[str, str]]]", kwargs["documentIdentifiers"])
+            return {
+                "documentDetails": [
+                    {"status": "INDEXED", "identifier": {"s3": {"uri": i["s3"]["uri"]}}}
+                    for i in ids
+                ]
+            }
+
+        fake_client.get_knowledge_base_documents.side_effect = lookup
+        session = MagicMock()
+        session.create_client.return_value.__aenter__.return_value = fake_client
+        with patch("aiobotocore.session.get_session", return_value=session):
+            bedrock = BedrockKnowledgeBaseIngestor(
+                region="us-east-1", cohort_request_interval_seconds=0
+            )
+        stacked = PollingIngestor(RetryingIngestor(bedrock))
+
+        docs = [
+            doc
+            async for doc in stacked.iter_cohort(
+                knowledge_base_id="kb1", data_source_id="ds1", s3_uris=uris
+            )
+        ]
+
+        assert sorted(d.s3_uri for d in docs) == uris
+        calls = fake_client.get_knowledge_base_documents.await_args_list
+        assert [len(c.kwargs["documentIdentifiers"]) for c in calls] == [10, 10, 5]
+        assert calls[0].kwargs["documentIdentifiers"][0] == {
+            "dataSourceType": "S3",
+            "s3": {"uri": "s3://b/00"},
+        }
+        fake_client.list_knowledge_base_documents.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_default_filters_the_full_listing(self) -> None:
+        """Test that a Kind without a lookup yields the cohort's documents from ``list_documents``.
+
+        **Why this test is important:**
+          - Every ``KnowledgeBaseIngestor`` (an app's own decorators included) gets ``iter_cohort``
+            without implementing it, so adding the method breaks no existing Kind.
+
+        **What it tests:**
+          - an ingestor whose listing holds three documents yields only the two cohort URIs; an
+            empty cohort yields nothing without listing
+        """
+        listing = [
+            KnowledgeBaseDocument(s3_uri=u, status="INDEXED")
+            for u in ("s3://b/a", "s3://b/b", "s3://b/c")
+        ]
+        stub = StubKnowledgeBaseIngestor()
+        with patch.object(
+            stub, "list_documents", AsyncMock(return_value=listing)
+        ) as listed:
+            docs = [
+                d
+                async for d in stub.iter_cohort(
+                    knowledge_base_id="kb",
+                    data_source_id="ds",
+                    s3_uris=["s3://b/a", "s3://b/c", "s3://b/z"],
+                )
+            ]
+            none = [
+                d
+                async for d in stub.iter_cohort(
+                    knowledge_base_id="kb", data_source_id="ds", s3_uris=[]
+                )
+            ]
+
+        assert [d.s3_uri for d in docs] == ["s3://b/a", "s3://b/c"]
+        assert none == []
+        listed.assert_awaited_once()

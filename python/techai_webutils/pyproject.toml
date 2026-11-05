@@ -291,6 +291,7 @@ modules = [
     "techai_webutils.clients.safety",
     "techai_webutils.clients.semantic_cache",
     "techai_webutils.clients.splitting",
+    "techai_webutils.clients.start_budget",
     "techai_webutils.clients.storage",
     "techai_webutils.clients.token_ledger",
     "techai_webutils.clients.vector",

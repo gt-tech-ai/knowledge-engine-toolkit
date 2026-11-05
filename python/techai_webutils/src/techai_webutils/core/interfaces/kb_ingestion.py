@@ -10,8 +10,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Collection
 
 
 class IngestionJobState(StrEnum):
@@ -94,9 +98,14 @@ class KnowledgeBaseIngestor(ManagedResource, ABC):
 
     @abstractmethod
     async def start_ingestion_job(
-        self, *, knowledge_base_id: str, data_source_id: str
+        self, *, knowledge_base_id: str, data_source_id: str, round_id: str = ""
     ) -> IngestionJob:
-        """Start (or attach to) an ingestion job for the given KB data source."""
+        """Start (or attach to) an ingestion job for the given KB data source.
+
+        ``round_id`` names the caller's start round; a start retried with the same non-empty
+        round id is idempotent (Bedrock's ``clientToken``), so a retry never launches a second
+        job. Empty (the default) sends no token, as before.
+        """
         ...
 
     @abstractmethod
@@ -119,6 +128,28 @@ class KnowledgeBaseIngestor(ManagedResource, ABC):
     ) -> list[KnowledgeBaseDocument]:
         """List every document in the KB data source with its per-document status (all pages)."""
         ...
+
+    async def iter_cohort(
+        self,
+        *,
+        knowledge_base_id: str,
+        data_source_id: str,
+        s3_uris: Collection[str],
+    ) -> AsyncIterator[KnowledgeBaseDocument]:
+        """Yield the KB documents of ``s3_uris``, the cohort a sync round started.
+
+        This default lists the whole data source once and yields the cohort's documents; a Kind
+        that can look documents up by URI overrides it. A URI the data source does not hold is
+        not yielded.
+        """
+        wanted = set(s3_uris)
+        if not wanted:
+            return
+        for doc in await self.list_documents(
+            knowledge_base_id=knowledge_base_id, data_source_id=data_source_id
+        ):
+            if doc.s3_uri in wanted:
+                yield doc
 
     @abstractmethod
     async def stop_ingestion_job(

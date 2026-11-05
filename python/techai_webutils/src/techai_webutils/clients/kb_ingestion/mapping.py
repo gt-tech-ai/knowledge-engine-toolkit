@@ -7,8 +7,10 @@ Imports no AWS SDK, so it stays on the dev/stub path's import graph without pull
 
 from __future__ import annotations
 
+import hashlib
 from typing import cast
 
+from techai_webutils.core.errors import AppError, ConflictError, UnavailableError
 from techai_webutils.core.interfaces.kb_ingestion import (
     IngestionJob,
     IngestionJobState,
@@ -80,3 +82,56 @@ def _documents_scanned(statistics: object) -> int:
         return 0
     scanned = cast("dict[str, object]", statistics).get("numberOfDocumentsScanned")
     return scanned if isinstance(scanned, int) else 0
+
+
+TRANSIENT_START_ERRORS = frozenset({
+    "ServiceQuotaExceededException",
+    "ThrottlingException",
+})
+"""``StartIngestionJob`` error codes that clear on their own: the account's job quota or start rate."""
+
+
+def start_error(code: str, data_source_id: str) -> AppError | None:
+    """Map a ``StartIngestionJob`` error code to a coded error, or ``None`` to re-raise it unchanged.
+
+    ``ConflictException`` (a job already runs on the data source) is ``CONFLICT``, which callers
+    rely on to reattach. A quota or throttling error is ``UNAVAILABLE``, so the retry stack backs
+    off and the round is retried later. Every other code (``ValidationException`` included) is
+    left as the SDK raised it.
+    """
+    if code == "ConflictException":
+        msg = f"bedrock ingestion job already running for data source {data_source_id}"
+        return ConflictError(msg)
+    if code in TRANSIENT_START_ERRORS:
+        msg = f"bedrock refused to start an ingestion job for data source {data_source_id}: {code}"
+        return UnavailableError(msg)
+    return None
+
+
+def start_client_token(
+    knowledge_base_id: str, data_source_id: str, round_id: str
+) -> str | None:
+    """Return the ``clientToken`` of one start round, or ``None`` when no round is named.
+
+    The token is the SHA-256 hex of the knowledge base, data source and round (64 characters,
+    inside Bedrock's 33-256 alphanumeric bounds), so a retried start of the same round reuses it.
+    """
+    if not round_id:
+        return None
+    seed = f"{knowledge_base_id}:{data_source_id}:{round_id}"
+    return hashlib.sha256(seed.encode()).hexdigest()
+
+
+COHORT_BATCH = 10
+"""The most document identifiers one ``GetKnowledgeBaseDocuments`` call accepts."""
+
+
+def cohort_batches(s3_uris: list[str]) -> list[list[dict[str, object]]]:
+    """Split ``s3_uris`` into ``GetKnowledgeBaseDocuments`` identifier batches of at most ten."""
+    return [
+        [
+            {"dataSourceType": "S3", "s3": {"uri": uri}}
+            for uri in s3_uris[i : i + COHORT_BATCH]
+        ]
+        for i in range(0, len(s3_uris), COHORT_BATCH)
+    ]
