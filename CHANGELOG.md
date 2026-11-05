@@ -10,6 +10,9 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- `types.OutboxStats.Stranded`: the pending rows at or above the store's partition count (left
+  behind by a lowered `Partitions`), which no relay claims. The Postgres store's `Stats` counts
+  them; an unpartitioned store reports 0.
 - `workers.Config.RelayDrainBudget` (`relay_drain_budget`): the shared worker tier's bound on one
   relay run's drain, fed to `outbox.RelayConfig.DrainBudget`; `Validate` rejects a negative budget
   or one at or above a non-zero `RelayInterval`.

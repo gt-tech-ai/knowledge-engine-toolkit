@@ -19,7 +19,8 @@
 // computes it; a product's own INSERT must use the same function) and never recomputed,
 // and Claim leases only its partition's rows, so one relay per partition drains a lane
 // in parallel. Lowering Partitions strands rows in the dropped partitions until they
-// are rewritten, so a reduction needs a migration.
+// are rewritten, so a reduction needs a migration; Stats counts them (Stranded) so a
+// relay host can refuse to start over them.
 //
 // Every write (Claim, the finalizers, DeleteSentBefore) runs on the *sql.Tx a
 // transaction manager (stores/sqltx) bound to the context, and fails INTERNAL without
@@ -190,11 +191,7 @@ func New(db *sql.DB, cfg Config) (*Store, error) {
 	}
 	t := cfg.Table
 	s.claimSQL = claimSQL(cfg, attrCols.String())
-	s.statsSQL = fmt.Sprintf(`
-SELECT count(*) FILTER (WHERE status = 'pending'),
-       count(*) FILTER (WHERE status = 'parked'),
-       min(created_at) FILTER (WHERE status = 'pending')
-FROM %s WHERE lane = $1`, t)
+	s.statsSQL = statsSQL(cfg)
 	s.sentSQL = fmt.Sprintf(
 		`UPDATE %s SET status = 'sent', sent_at = now(), last_error = ''
 WHERE id = $1 AND status = 'pending'`,
@@ -233,6 +230,25 @@ WHERE id IN (
 	FOR UPDATE SKIP LOCKED)
 RETURNING id, lane, %[2]s, %[3]s::text, payload, attempts, created_at%[4]s`,
 		cfg.Table, tenant, cfg.keyColumn(), attrCols, partition)
+}
+
+// statsSQL is the lane summary: pending and parked counts, the oldest pending row's
+// creation time, and the pending rows stranded at or above the partition count (the
+// count is a validated int, so it is safe to interpolate).
+func statsSQL(cfg Config) string {
+	stranded := "0"
+	if cfg.PartitionColumn != "" {
+		stranded = fmt.Sprintf(
+			"count(*) FILTER (WHERE status = 'pending' AND %s >= %d)",
+			cfg.PartitionColumn, cfg.partitions(),
+		)
+	}
+	return fmt.Sprintf(`
+SELECT count(*) FILTER (WHERE status = 'pending'),
+       count(*) FILTER (WHERE status = 'parked'),
+       min(created_at) FILTER (WHERE status = 'pending'),
+       %s
+FROM %s WHERE lane = $1`, stranded, cfg.Table)
 }
 
 // enqueueSQL is the producer's insert: a pending row due now (created now unless the
@@ -413,8 +429,8 @@ func (s *Store) Park(ctx context.Context, id uuid.UUID, lastErr string) error {
 	return s.exec(ctx, "park", id, s.parkSQL, id, s.truncate(lastErr))
 }
 
-// Stats counts lane's pending and parked rows and reports its oldest pending row's
-// creation time, in one aggregate.
+// Stats counts lane's pending, parked and stranded rows and reports its oldest
+// pending row's creation time, in one aggregate.
 func (s *Store) Stats(ctx context.Context, lane string) (types.OutboxStats, error) {
 	var (
 		stats  types.OutboxStats
@@ -425,7 +441,7 @@ func (s *Store) Stats(ctx context.Context, lane string) (types.OutboxStats, erro
 		row = tx.QueryRowContext
 	}
 	err := row(ctx, s.statsSQL, lane).
-		Scan(&stats.Pending, &stats.Parked, &oldest)
+		Scan(&stats.Pending, &stats.Parked, &oldest, &stats.Stranded)
 	if err != nil {
 		return types.OutboxStats{}, apperr.Wrap(
 			err,

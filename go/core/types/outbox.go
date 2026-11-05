@@ -61,4 +61,8 @@ type OutboxStats struct {
 	Pending int
 	// Parked counts rows that exhausted their attempts and await an operator.
 	Parked int
+	// Stranded counts the pending rows whose partition is at or above the store's
+	// partition count (left behind by a lowered count): no relay claims them until
+	// they are rewritten into range. Always 0 for an unpartitioned store.
+	Stranded int
 }

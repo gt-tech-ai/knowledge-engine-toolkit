@@ -529,6 +529,8 @@ FROM partitioned_outbox GROUP BY part`)
 //     (types.OutboxPartition of their keys); running only partition 1's relay
 //     sends exactly partition 1's rows and leaves partition 0 pending; then two
 //     relays running concurrently leave every row sent, each claimed once
+//   - a store over the same table narrowed to one partition reports partition 1's
+//     pending rows as Stranded
 func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 	requireIntegration(t)
 	ctx := context.Background()
@@ -563,6 +565,17 @@ func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 	}))
 	require.Positive(t, want[0])
 	require.Positive(t, want[1])
+	narrowed, err := outboxstore.NewFromConfig(ctx, outboxstore.Config{
+		Kind: outboxstore.KindPostgres,
+		Postgres: outboxpg.Config{
+			Table: "partitioned_outbox", PartitionColumn: "part", Partitions: 1,
+			Lease: time.Minute,
+		},
+	}, outboxstore.Deps{DB: db})
+	require.NoError(t, err)
+	stats, err := narrowed.Stats(ctx, "split")
+	require.NoError(t, err)
+	require.Equal(t, want[1], stats.Stranded, "partition 1 is stranded at one partition")
 	sink, err := outboxclient.NewFromConfig(
 		ctx,
 		outboxclient.DefaultConfig(),
