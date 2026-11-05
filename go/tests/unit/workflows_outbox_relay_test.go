@@ -107,8 +107,8 @@ func TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction(t *test
 		})
 	inTx := interfaces.InTx
 
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).DoAndReturn(
-		func(ctx context.Context, _ string, _ int) ([]types.OutboxRecord, error) {
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).DoAndReturn(
+		func(ctx context.Context, _ string, _, _ int) ([]types.OutboxRecord, error) {
 			require.True(t, inTx(ctx), "the claim commits in a transaction")
 			return recs, nil
 		})
@@ -160,7 +160,7 @@ func TestRelay_MarksSentOnSuccess(t *testing.T) {
 	recs := outboxRecords(5, 1)
 	ctx := context.Background()
 
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(recs, nil).Times(1)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(recs, nil).Times(1)
 	for _, chunk := range [][]types.OutboxRecord{recs[0:2], recs[2:4], recs[4:5]} {
 		sink.EXPECT().Send(gomock.Any(), chunk).Return(make([]error, len(chunk))).Times(1)
 	}
@@ -203,7 +203,7 @@ func TestRelay_PartialBatchFailureRetriesOnlyFailedRows(t *testing.T) {
 	ctx := context.Background()
 	noJitter := outbox.WithJitter(func(d time.Duration) time.Duration { return d })
 
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(recs, nil)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(recs, nil)
 	sink.EXPECT().Send(gomock.Any(), recs).Return([]error{nil, sendErr, nil})
 	store.EXPECT().MarkSent(gomock.Any(), recs[0].ID).Return(nil)
 	store.EXPECT().MarkSent(gomock.Any(), recs[2].ID).Return(nil)
@@ -225,7 +225,7 @@ func TestRelay_PartialBatchFailureRetriesOnlyFailedRows(t *testing.T) {
 	require.NoError(t, relay.RunOnce(ctx))
 
 	short := outboxRecords(2, 1)
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(short, nil)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(short, nil)
 	sink.EXPECT().Send(gomock.Any(), short).Return([]error{nil})
 	for _, r := range short {
 		store.EXPECT().Retry(gomock.Any(), r.ID, relayNow().Add(2*time.Second),
@@ -268,7 +268,7 @@ func TestRelay_BackoffIsExponentialWithJitterAndCapped(t *testing.T) {
 		return d / 2
 	})
 
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(recs, nil)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(recs, nil)
 	sink.EXPECT().
 		Send(gomock.Any(), recs).
 		Return([]error{sendErr, sendErr, sendErr, sendErr})
@@ -308,7 +308,7 @@ func TestRelay_BackoffIsExponentialWithJitterAndCapped(t *testing.T) {
 	)
 
 	one := outboxRecords(1, 3)
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(one, nil)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(one, nil)
 	sink.EXPECT().Send(gomock.Any(), one).Return([]error{sendErr})
 	inWindow := gomock.Cond(func(x time.Time) bool {
 		return !x.Before(relayNow()) && !x.After(relayNow().Add(8*time.Second))
@@ -350,7 +350,7 @@ func TestRelay_ParksAfterMaxAttempts(t *testing.T) {
 	recs := []types.OutboxRecord{exhausted, young}
 	reject := apperr.New(apperr.CodeInvalidInput, "malformed payload")
 
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(recs, nil)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(recs, nil)
 	sink.EXPECT().Send(gomock.Any(), recs).Return([]error{reject, reject})
 	store.EXPECT().Park(gomock.Any(), exhausted.ID, reject.Error()).Return(nil).Times(1)
 	store.EXPECT().
@@ -416,7 +416,7 @@ func TestRelay_ReportsDepthAndLag(t *testing.T) {
 	ok, retry, park := outboxRecords(1, 1)[0], outboxRecords(1, 1)[0], outboxRecords(1, 2)[0]
 	recs := []types.OutboxRecord{ok, retry, park}
 	fail := apperr.New(apperr.CodeUnavailable, "down")
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(recs, nil)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(recs, nil)
 	sink.EXPECT().Send(gomock.Any(), recs).Return([]error{nil, fail, fail})
 	store.EXPECT().MarkSent(gomock.Any(), ok.ID).Return(nil)
 	store.EXPECT().Retry(gomock.Any(), retry.ID, gomock.Any(), fail.Error()).Return(nil)
@@ -448,7 +448,7 @@ func TestRelay_ReportsDepthAndLag(t *testing.T) {
 	)
 	require.NoError(t, relay.RunOnce(ctx))
 
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(nil, nil)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(nil, nil)
 	store.EXPECT().Stats(gomock.Any(), "audit").Return(types.OutboxStats{}, nil)
 	depth.EXPECT().Set(float64(0), "audit")
 	lag.EXPECT().Set(float64(0), "audit")
@@ -471,7 +471,7 @@ func TestRelay_ClaimErrorIsNotRetried(t *testing.T) {
 	store := mocks.NewMockOutboxStore(ctrl)
 	sink := mocks.NewMockOutboxSink(ctrl)
 
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).
 		Return(nil, apperr.New(apperr.CodeUnavailable, "db down")).Times(1)
 
 	relay := outbox.NewRelay(
@@ -507,7 +507,7 @@ func TestRelay_FinalizeErrorIsReturnedWithoutStoppingOtherRows(t *testing.T) {
 	sink := mocks.NewMockOutboxSink(ctrl)
 	recs := outboxRecords(2, 1)
 
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(recs, nil)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(recs, nil)
 	sink.EXPECT().Send(gomock.Any(), recs).Return([]error{nil, nil})
 	store.EXPECT().
 		MarkSent(gomock.Any(), recs[0].ID).
@@ -635,7 +635,7 @@ func TestRelay_SpansRunsAndLogsStatsFailure(t *testing.T) {
 	span.EXPECT().RecordError(gomock.Any()).Times(1)
 	span.EXPECT().SetStatus(interfaces.SpanStatusError, gomock.Any()).Times(1)
 	span.EXPECT().End().Times(2)
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(nil, claimErr)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(nil, claimErr)
 
 	relay := outbox.NewRelay(
 		relayConfig(10, 1, 3),
@@ -649,7 +649,7 @@ func TestRelay_SpansRunsAndLogsStatsFailure(t *testing.T) {
 	)
 	require.Error(t, relay.RunOnce(ctx))
 
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(nil, nil)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(nil, nil)
 	store.EXPECT().Stats(gomock.Any(), "audit").Return(types.OutboxStats{}, claimErr)
 	logger.EXPECT().WithContext(gomock.Any()).Return(logger)
 	logger.EXPECT().
@@ -679,7 +679,7 @@ func TestRelay_CancelledRunLeavesFailedRowsLeased(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(recs, nil)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(recs, nil)
 	sink.EXPECT().Send(gomock.Any(), recs).DoAndReturn(
 		func(context.Context, []types.OutboxRecord) []error {
 			cancel()
@@ -725,7 +725,7 @@ func TestRelay_ParkOnPermanentParksAtFirstPermanentFailure(t *testing.T) {
 		store := mocks.NewMockOutboxStore(ctrl)
 		sink := mocks.NewMockOutboxSink(ctrl)
 		recs := outboxRecords(2, 1)
-		store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(recs, nil)
+		store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(recs, nil)
 		sink.EXPECT().Send(gomock.Any(), recs).Return([]error{reject, outage})
 		store.EXPECT().Park(gomock.Any(), recs[0].ID, reject.Error()).Return(nil).Times(1)
 		store.EXPECT().
@@ -748,7 +748,7 @@ func TestRelay_ParkOnPermanentParksAtFirstPermanentFailure(t *testing.T) {
 		store := mocks.NewMockOutboxStore(ctrl)
 		sink := mocks.NewMockOutboxSink(ctrl)
 		recs := outboxRecords(1, 1)
-		store.EXPECT().Claim(gomock.Any(), "audit", 100).Return(recs, nil)
+		store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(recs, nil)
 		sink.EXPECT().Send(gomock.Any(), recs).Return([]error{reject})
 		store.EXPECT().
 			Retry(gomock.Any(), recs[0].ID, gomock.Any(), reject.Error()).

@@ -49,6 +49,9 @@ Resilience Interfaces:
 
 Infrastructure Interfaces:
     MessagePublisher: Publish messages to a broker.
+    KeyedPublisher: Publish messages under a partition key.
+    LeaseExtender: Extend the lease on a message still being handled.
+    BacklogProbe: Report the work waiting on a topic.
     MessageConsumer: Consume messages from a queue.
     StorageClient: Object storage operations.
 
@@ -89,11 +92,15 @@ from techai_webutils.core.interfaces.lifecycle import (
 from techai_webutils.core.interfaces.llm import LLMProvider
 from techai_webutils.core.interfaces.logger import Logger
 from techai_webutils.core.interfaces.messaging import (
+    PARTITION_KEY_ATTRIBUTE,
+    KeyedPublisher,
+    LeaseExtender,
     Message,
     MessageConsumer,
     MessageHandler,
     MessagePublisher,
 )
+from techai_webutils.core.interfaces.messaging_backlog import Backlog, BacklogProbe
 from techai_webutils.core.interfaces.metrics import (
     MetricCounter,
     MetricGauge,
@@ -124,10 +131,13 @@ from techai_webutils.core.interfaces.vector_store import VectorStore
 from techai_webutils.core.interfaces.workflow import AsyncWorkflow, Workflow
 
 __all__ = [
+    "PARTITION_KEY_ATTRIBUTE",
     "AdaptiveThrottler",
     # Service
     "AsyncPipeline",
     "AsyncWorkflow",
+    "Backlog",
+    "BacklogProbe",
     "BaseService",
     # Resilience
     "Bulkhead",
@@ -152,9 +162,11 @@ __all__ = [
     "Job",
     "JobEnqueuer",
     "JobScheduler",
+    "KeyedPublisher",
     "KnowledgeBase",
     "LLMProvider",
     "LeaderElector",
+    "LeaseExtender",
     "Logger",
     "ManagedResource",
     "Message",

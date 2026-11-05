@@ -26,7 +26,7 @@ func New() Store { return Store{} }
 func (Store) Enqueue(context.Context, types.OutboxRecord) error { return nil }
 
 // Claim finds no rows.
-func (Store) Claim(context.Context, string, int) ([]types.OutboxRecord, error) {
+func (Store) Claim(context.Context, string, int, int) ([]types.OutboxRecord, error) {
 	return nil, nil
 }
 

@@ -82,7 +82,7 @@ func (h Harness) claim(ctx context.Context, lane string) ([]types.OutboxRecord, 
 	var recs []types.OutboxRecord
 	err := h.write(ctx, func(ctx context.Context) error {
 		var err error
-		recs, err = h.Store.Claim(ctx, lane, claimLimit)
+		recs, err = h.Store.Claim(ctx, lane, 0, claimLimit)
 		return err
 	})
 	return recs, err

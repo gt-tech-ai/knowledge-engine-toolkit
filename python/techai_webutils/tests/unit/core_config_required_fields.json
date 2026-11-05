@@ -14,6 +14,7 @@
       "$config": "techai_webutils.clients.messaging.config.SQSConfig"
     }
   },
+  "techai_webutils.clients.messaging.config.DeliveryConfig": {},
   "techai_webutils.clients.messaging.config.SQSConfig": {
     "endpoint": "http://localhost:9324",
     "queue_url": "http://localhost:9324/000000000000/queue",

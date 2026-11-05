@@ -414,7 +414,7 @@ non-frozen map, so the TTL is anchored to the bucket, not to each fact's write).
 The transactional outbox is split by tier: the contracts in `core`, the sink kinds in `clients`,
 the store kinds in `stores`, the relay in `workflows`. `core/interfaces.OutboxStore` (`Enqueue`, the producer side
 `core/interfaces.OutboxWriter`, writes a pending row on the transaction bound to the context and
-refuses to run without one; `Claim` leases due rows, `MarkSent` / `Retry` / `Park` / `Stats`, `DeleteSentBefore` for the retention sweep) is
+refuses to run without one; `Claim` leases a partition's due rows, `MarkSent` / `Retry` / `Park` / `Stats`, `DeleteSentBefore` for the retention sweep) is
 built by `stores/outbox` (`KindStub` default — no rows, so a relay boots with no database;
 `KindPostgres`, a product's own table named by config, whose writes run only on the `*sql.Tx` that
 `stores/sqltx` — the `database/sql` transaction manager, which refuses a nested transaction —
@@ -430,12 +430,17 @@ attempt (`outbox_{sent,retried,parked}_total`, `outbox_depth`, `outbox_lag_secon
 by lane). With `ParkOnPermanent` a permanent failure parks the row at once; a run cancelled mid-send
 leaves its unfinished rows leased for the next claim. With a `DrainBudget` (default 0: one claim per
 run) a run claims again while claims come back full, until the budget elapses, the context ends or a
-pass fails, and `outbox_relay_passes` records the claims per run by lane. `LoadRelayConfig` reads a lane's `RelayConfig`
-over the defaults. `clients/outbox` builds the sink (`KindStub` default, `KindSQS`, `KindS3`) over
+pass fails, and `outbox_relay_passes` records the claims per run by lane. A lane splits into
+`Partitions` (default 1): the postgres store's optional `PartitionColumn` holds
+`core/types.OutboxPartition(key, partitions)` = `fnv32a(key) mod partitions`, written at insert
+and never recomputed, and a relay with `Partition` p claims only partition p, so one relay per
+partition (each with its own leader election) drains a lane in parallel. `LoadRelayConfig` reads
+a lane's `RelayConfig` over the defaults. `clients/outbox` builds the sink (`KindStub` default, `KindSQS`, `KindS3`) over
 an injected SDK client: SQS routes each row by its `route` attribute through a config route → queue
 map with per-queue failure isolation (a `.fifo` queue gets group id `Key`, else `Tenant`, else
 `Lane`, and deduplication id `ID`; a standard queue named in `FairQueues` is an SQS fair queue and
-gets the same group id with no deduplication id, so one group's backlog does not delay the others); the sinks keep an SDK error's code (`errors.CodeOr`); S3 writes
+gets the same group id with no deduplication id, so one group's backlog does not delay the others;
+a non-empty `Key` also rides every message as the `partition_key` attribute); the sinks keep an SDK error's code (`errors.CodeOr`); S3 writes
 one object per row by key template with a SHA-256 checksum (Object Lock) and optional SSE-KMS.
 `go/tests/fixtures/outboxtest` is the store and routing conformance suites (`Run`, `RunRouting`),
 run against the `postgres` store kind.
@@ -619,6 +624,62 @@ three-stage pipeline. `Base.FanOut(name, stages...)` runs stages concurrently on
 returns their outputs in order; the first error cancels the rest. Python's
 `PipelineBase.stage(name, fn)` and `Stage.then(next)` are the same, and `PipelineBase.fan_out`
 raises the first failing stage's own error.
+
+## Messaging capabilities
+
+The messaging contracts are broker-neutral, and each Kind maps them onto its broker.
+
+- **Keyed publishing.** `KeyedPublisher` (Go and Python) adds `PublishKeyed`, `PublishBatchKeyed`
+  and `OrderedPerKey`. The key rides as the `partition_key` attribute (`PartitionKeyAttribute`).
+  The memory Kind keeps per-key order; SQS standard queues carry the key but do not order by it.
+  Redis Pub/Sub carries no attributes and does not implement it. `Decorate` keeps the capability.
+- **Delivery settings.** Python `DeliveryConfig` (`max_deliveries`, `retry_backoff`,
+  `dead_letter_topic`, `max_processing_seconds`) is unset by default.
+  - SQS sets a failed message's visibility from its receive count.
+  - SQS checks the queue's redrive policy and visibility timeout with one `GetQueueAttributes` per
+    subscribed topic, bounded by `SQSConfig.attributes_timeout_seconds`, and only when a setting
+    needs it.
+  - Memory redelivers, then moves the message to the dead-letter topic.
+  - `LeaseExtender.extend` keeps a long handler's message leased; on SQS it is
+    `ChangeMessageVisibility`.
+  - `SQSConfig.topic_queue_urls` maps topics to queues.
+  - `MessagingConfig.max_payload_bytes` (256 KiB) rejects a larger payload with `INVALID_INPUT`
+    before it is sent.
+- **Backlog.** `BacklogProbe.backlog(topic)` returns `Backlog(messages, oldest_age_seconds)`, and
+  `BacklogGauges` publishes it as `messaging_backlog_messages{topic}` and
+  `messaging_oldest_age_seconds{topic}`, the gauges alerts and autoscaling read. SQS reports
+  `ApproximateNumberOfMessages`. It has no age attribute (the age is a CloudWatch metric only), so
+  its age is `None` and that gauge is left unset.
+- **Conformance.** Python's `tests/contract/messaging_conformance.py` is the contract every Kind
+  passes: memory in the unit suite, SQS against ElasticMQ in the integration suite.
+
+### Moving to Kafka
+
+A `kafka` Kind is added beside `sqs` and `memory` and selected by config; no caller changes. It
+must:
+
+- pass the transport conformance suite;
+- implement `KeyedPublisher`, with `OrderedPerKey` true, since a key maps to a partition;
+- commit offsets contiguously while handlers run concurrently: an offset is committed only once
+  every earlier offset in its partition has settled;
+- implement the retry backoff with retry topics, and `dead_letter_topic` as a DLQ topic;
+- report consumer-group lag through `BacklogProbe`;
+- implement `LeaseExtender` by keeping the poll loop inside `max.poll.interval.ms`;
+- run an idempotent producer (`enable.idempotence`), so a producer retry is not a duplicate record.
+
+The outbox relay still delivers at least once: a send that succeeds before its row is marked sent
+is sent again, and consumers absorb that through stage idempotency. A product's outbox table adds
+two columns for partitioned relays:
+
+```sql
+partition_key text not null default ''
+partition     int  not null default 0
+```
+
+The writer sets `partition = fnv32a(partition_key) mod partitions` at insert, using
+`types.OutboxPartition`, and the store never recomputes it. The engine store reads the key from
+`KeyColumn`, so a table may point `KeyColumn` at `partition_key` or keep its existing key column.
+Lowering `partitions` strands rows in the dropped partitions until a migration rewrites them.
 
 ## Repository tooling substrate
 

@@ -130,7 +130,7 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 	var recs []types.OutboxRecord
 	require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
 		var err error
-		recs, err = store.Claim(ctx, "producer", 10)
+		recs, err = store.Claim(ctx, "producer", 0, 10)
 		return err
 	}))
 	require.Len(t, recs, 1)
@@ -187,7 +187,7 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 	var recs []types.OutboxRecord
 	require.NoError(t, inTx(func(ctx context.Context) error {
 		var err error
-		recs, err = store.Claim(ctx, "facts", 10)
+		recs, err = store.Claim(ctx, "facts", 0, 10)
 		return err
 	}))
 	require.Len(t, recs, 2)

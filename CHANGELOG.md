@@ -40,6 +40,34 @@ Python: `techai-webutils` 0.9.3.
   keeps in flight. It replaces an unbounded fan-out.
 - A config compatibility test: every `*Config` dataclass pickles, and none gains a required field
   (Ray ships configs to workers by pickle).
+- `KeyedPublisher` (Go `interfaces`, Python `core.interfaces`): keyed publishes with `OrderedPerKey`.
+  - The memory and SQS publishers implement it, and the decorators keep it.
+  - The key rides as the `partition_key` attribute.
+  - Redis Pub/Sub does not implement it, since it carries no attributes.
+- Python `DeliveryConfig` (`MessagingConfig.delivery`): `max_deliveries`, `retry_backoff`,
+  `dead_letter_topic` and `max_processing_seconds`, all unset by default.
+  - SQS backs off a failed message with `ChangeMessageVisibility`.
+  - When `max_deliveries`, `dead_letter_topic` or `max_processing_seconds` is set, SQS checks the
+    queue's redrive policy and visibility timeout at subscribe time. This needs the
+    **`sqs:GetQueueAttributes`** IAM action. The call's timeout is
+    `SQSConfig.attributes_timeout_seconds` (default 5 s).
+  - The memory Kind redelivers, then dead-letters.
+- `LeaseExtender` (SQS: `ChangeMessageVisibility`), `SQSConfig.topic_queue_urls` (topic → queue URL;
+  an unmapped topic is `INVALID_INPUT`), and `MessagingConfig.max_payload_bytes` (256 KiB, checked
+  before send by both Kinds).
+- `BacklogProbe` / `Backlog` (Go and Python) and Python `BacklogGauges`, which set
+  `messaging_backlog_messages{topic}` and `messaging_oldest_age_seconds{topic}`. Both subscribers
+  implement the probe. SQS needs **`sqs:GetQueueAttributes`** for it and reports no age.
+- The messaging transport conformance suite (`tests/contract/messaging_conformance.py`), run on
+  memory (unit) and SQS (integration).
+- Go outbox partitions:
+  - `types.OutboxPartition(key, partitions)` is `fnv32a(key) mod partitions`.
+  - The postgres store gains `PartitionColumn` and `Partitions`, and `Enqueue` writes the partition.
+  - `RelayConfig` gains `Partitions` and `Partition`; one relay per partition drains a lane in
+    parallel.
+  - The SQS outbox sink sends a record's `Key` as the `partition_key` attribute.
+  - A consumer's table adds `partition_key text not null default ''` and
+    `partition int not null default 0`.
 
 ### Changed
 
@@ -68,6 +96,8 @@ Python: `techai-webutils` 0.9.3.
     `clients.semantic_cache`); `clients.decorators` no longer exports them.
   - `foundation.resilience.sqs_dlq.SqsDeadLetterBackend` takes any `SqsQueueTarget` (a
     `queue_url` and `client_kwargs()`); `clients.messaging.SQSConfig` satisfies it unchanged.
+- **Breaking (Go):** `OutboxStore.Claim(ctx, lane, partition, limit)` takes the partition to claim.
+  Pass 0 for an unpartitioned lane. Mocks and custom stores must add the argument.
 - Size ratchets: a Go and a Python unit test fail when a function in the trees the ingestion
   work touches exceeds 50 lines, a file 800 lines, or nesting 4 levels. The functions over
   that limit were split; behaviour is unchanged.

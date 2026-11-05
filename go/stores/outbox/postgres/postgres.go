@@ -10,9 +10,16 @@
 //	attempts int, next_attempt_at timestamptz, last_error text, created_at timestamptz,
 //	sent_at timestamptz NULL
 //
-// plus the key column (Config.KeyColumn), and optionally a tenant column and any
-// attribute columns. Producers insert pending rows themselves, inside their business
-// transaction; this store only drains them.
+// plus the key column (Config.KeyColumn), and optionally a tenant column, a partition
+// column and any attribute columns. Producers insert pending rows inside their business
+// transaction, through Enqueue or their own INSERT; this store drains them.
+//
+// With Config.PartitionColumn a lane is split into Config.Partitions partitions: a
+// row's partition is types.OutboxPartition(key, partitions), written at insert (Enqueue
+// computes it; a product's own INSERT must use the same function) and never recomputed,
+// and Claim leases only its partition's rows, so one relay per partition drains a lane
+// in parallel. Lowering Partitions strands rows in the dropped partitions until they
+// are rewritten, so a reduction needs a migration.
 //
 // Every write (Claim, the finalizers, DeleteSentBefore) runs on the *sql.Tx a
 // transaction manager (stores/sqltx) bound to the context, and fails INTERNAL without
@@ -55,6 +62,14 @@ type Config struct {
 	// has none and every record's Tenant is "".
 	TenantColumn string `yaml:"tenant_column" mapstructure:"tenant_column"`
 
+	// PartitionColumn is the integer column holding a row's partition; empty means the
+	// table has none and every row is in partition 0.
+	PartitionColumn string `yaml:"partition_column" mapstructure:"partition_column"`
+
+	// Partitions is how many partitions a lane is split into; zero means 1. More than
+	// one needs PartitionColumn.
+	Partitions int `yaml:"partitions" mapstructure:"partitions"`
+
 	// Lease is how long a claimed but unfinalized row is hidden from another claim. It
 	// must outlast a relay pass, yet be short enough that a crashed relay's rows come
 	// back promptly; it must be positive.
@@ -71,6 +86,9 @@ func (c Config) Validate() error {
 	names := []string{c.Table, c.keyColumn()}
 	if c.TenantColumn != "" {
 		names = append(names, c.TenantColumn)
+	}
+	if c.PartitionColumn != "" {
+		names = append(names, c.PartitionColumn)
 	}
 	for _, col := range c.AttributeColumns {
 		names = append(names, col)
@@ -90,7 +108,18 @@ func (c Config) Validate() error {
 			"outbox postgres store: max_error_len must not be negative",
 		)
 	}
+	if c.Partitions < 0 || (c.Partitions > 1 && c.PartitionColumn == "") {
+		return apperr.InvalidInput(
+			"outbox postgres store: partitions must not be negative, " +
+				"and above 1 needs partition_column",
+		)
+	}
 	return nil
+}
+
+// partitions is Partitions with its default of 1.
+func (c Config) partitions() int {
+	return max(c.Partitions, 1)
 }
 
 // isIdentifier reports whether n is a plain lowercase SQL identifier (a letter or
@@ -130,8 +159,14 @@ type Store struct {
 	maxErrorLen int
 	lease       time.Duration
 
+	// partitions is how many partitions a lane is split into (1 without a column).
+	partitions int
+
 	// tenantColumn reports whether the table has a tenant column.
 	tenantColumn bool
+
+	// partitionColumn reports whether the table has a partition column.
+	partitionColumn bool
 }
 
 // New returns the store for cfg over db. An invalid cfg is CodeInvalidInput; a nil db
@@ -145,7 +180,8 @@ func New(db *sql.DB, cfg Config) (*Store, error) {
 	}
 	s := &Store{
 		db: db, lease: cfg.Lease, maxErrorLen: cfg.MaxErrorLen,
-		tenantColumn: cfg.TenantColumn != "",
+		tenantColumn: cfg.TenantColumn != "", partitions: cfg.partitions(),
+		partitionColumn: cfg.PartitionColumn != "",
 	}
 	var attrCols strings.Builder
 	for key, col := range cfg.AttributeColumns {
@@ -182,26 +218,34 @@ func claimSQL(cfg Config, attrCols string) string {
 	if cfg.TenantColumn != "" {
 		tenant = cfg.TenantColumn
 	}
+	partition := ""
+	if cfg.PartitionColumn != "" {
+		partition = " AND " + cfg.PartitionColumn + " = $4"
+	}
 	return fmt.Sprintf(`
 UPDATE %[1]s SET attempts = attempts + 1,
 	next_attempt_at = now() + make_interval(secs => $3)
 WHERE id IN (
 	SELECT id FROM %[1]s
-	WHERE lane = $1 AND status = 'pending' AND next_attempt_at <= now()
+	WHERE lane = $1 AND status = 'pending' AND next_attempt_at <= now()%[5]s
 	ORDER BY created_at, id
 	LIMIT $2
 	FOR UPDATE SKIP LOCKED)
 RETURNING id, lane, %[2]s, %[3]s::text, payload, attempts, created_at%[4]s`,
-		cfg.Table, tenant, cfg.keyColumn(), attrCols)
+		cfg.Table, tenant, cfg.keyColumn(), attrCols, partition)
 }
 
 // enqueueSQL is the producer's insert: a pending row due now (created now unless the
-// record carries its creation time), its tenant, key and attribute columns bound in that
-// order after id, lane, payload and created_at; an id already present is left as is.
+// record carries its creation time), its tenant, partition and attribute columns bound
+// in that order after id, lane, payload, created_at and key; an id already present is
+// left as is.
 func enqueueSQL(cfg Config, attrKeys []string) string {
 	cols := []string{"id", "lane", "payload", "created_at", cfg.keyColumn()}
 	if cfg.TenantColumn != "" {
 		cols = append(cols, cfg.TenantColumn)
+	}
+	if cfg.PartitionColumn != "" {
+		cols = append(cols, cfg.PartitionColumn)
 	}
 	for _, key := range attrKeys {
 		cols = append(cols, cfg.AttributeColumns[key])
@@ -219,7 +263,8 @@ ON CONFLICT (id) DO NOTHING`,
 }
 
 // Enqueue writes rec as a pending row due now on the transaction bound to ctx; see
-// interfaces.OutboxWriter. An empty Key, Tenant or attribute is NULL.
+// interfaces.OutboxWriter. An empty Key, Tenant or attribute is NULL; with a partition
+// column the row's partition is types.OutboxPartition(rec.Key, partitions).
 func (s *Store) Enqueue(ctx context.Context, rec types.OutboxRecord) error {
 	tx, err := writeTx(ctx, "enqueue")
 	if err != nil {
@@ -236,6 +281,9 @@ func (s *Store) Enqueue(ctx context.Context, rec types.OutboxRecord) error {
 	args := []any{id, rec.Lane, rec.Payload, created, nullable(rec.Key)}
 	if s.tenantColumn {
 		args = append(args, nullable(rec.Tenant))
+	}
+	if s.partitionColumn {
+		args = append(args, types.OutboxPartition(rec.Key, s.partitions))
 	}
 	for _, key := range s.attrKeys {
 		args = append(args, nullable(rec.Attributes[key]))
@@ -254,22 +302,34 @@ func nullable(v string) any {
 	return v
 }
 
-// Claim leases up to limit due pending rows of lane, oldest first; the returned
-// Attempts counts this claim. A non-positive limit is CodeInvalidInput, since LIMIT 0
-// would silently claim nothing every pass.
+// Claim leases up to limit due pending rows of lane's partition, oldest first; the
+// returned Attempts counts this claim. A non-positive limit is CodeInvalidInput, since
+// LIMIT 0 would silently claim nothing every pass, and so is a partition outside
+// [0, partitions).
 func (s *Store) Claim(
 	ctx context.Context,
 	lane string,
-	limit int,
+	partition, limit int,
 ) ([]types.OutboxRecord, error) {
 	if limit <= 0 {
 		return nil, apperr.InvalidInput("outbox postgres store: claim limit must be > 0")
+	}
+	if partition < 0 || partition >= s.partitions {
+		return nil, apperr.InvalidInput(fmt.Sprintf(
+			"outbox postgres store: partition %d is outside [0, %d)",
+			partition,
+			s.partitions,
+		))
 	}
 	tx, err := writeTx(ctx, "claim")
 	if err != nil {
 		return nil, err
 	}
-	rows, err := tx.QueryContext(ctx, s.claimSQL, lane, limit, s.lease.Seconds())
+	args := []any{lane, limit, s.lease.Seconds()}
+	if s.partitionColumn {
+		args = append(args, partition)
+	}
+	rows, err := tx.QueryContext(ctx, s.claimSQL, args...)
 	if err != nil {
 		return nil, apperr.Wrap(
 			err,

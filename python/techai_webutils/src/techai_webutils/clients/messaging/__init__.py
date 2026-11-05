@@ -6,16 +6,24 @@ load aiobotocore — that is what the builder's lazy import is for. Import the c
 from ``clients.messaging.sqs.sqs_publisher`` / ``.sqs_subscriber`` when needed.
 """
 
+from techai_webutils.clients.messaging.backlog import BacklogGauges
 from techai_webutils.clients.messaging.builder import (
     MessagingConfig,
     MessagingKind,
     new_messaging_from_config,
     new_messaging_subscriber_from_config,
 )
-from techai_webutils.clients.messaging.config import SQSConfig
+from techai_webutils.clients.messaging.config import (
+    DEFAULT_MAX_PAYLOAD_BYTES,
+    DeliveryConfig,
+    SQSConfig,
+)
 from techai_webutils.clients.messaging.decorated import decorate
 
 __all__ = [
+    "DEFAULT_MAX_PAYLOAD_BYTES",
+    "BacklogGauges",
+    "DeliveryConfig",
     "MessagingConfig",
     "MessagingKind",
     "SQSConfig",

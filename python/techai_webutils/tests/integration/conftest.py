@@ -36,7 +36,7 @@ from techai_webutils.clients.messaging.config import SQSConfig
 from techai_webutils.clients.storage.config import S3Config
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Iterator
+    from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 
 # Container images. ElasticMQ is pinned to a release tag and MinIO by digest; redis:7-alpine (and
 # postgres:16-alpine below) are floating major-version tags, so a new upstream 7.x/16.x image can
@@ -149,8 +149,12 @@ async def redis_cache(redis_container: object) -> AsyncIterator[RedisCache]:
         await client.aclose()
 
 
-async def _create_sqs_queue(endpoint: str, name: str) -> str:
-    """Create a queue and return a queue URL whose host is the mapped endpoint.
+async def _create_sqs_queue(
+    endpoint: str, name: str, attributes: Mapping[str, str] | None = None
+) -> str:
+    """Create a queue (with ``attributes``, e.g. a redrive policy) and return its URL.
+
+    The URL's host is the mapped endpoint.
 
     ElasticMQ echoes its internal node-address host in the returned QueueUrl, which
     does not match the randomly-mapped host port; rewrite the host/port to the test
@@ -164,7 +168,9 @@ async def _create_sqs_queue(endpoint: str, name: str) -> str:
         aws_access_key_id="test",
         aws_secret_access_key="test",
     ) as client:
-        resp = await client.create_queue(QueueName=name)
+        resp = await client.create_queue(
+            QueueName=name, Attributes=dict(attributes or {})
+        )
     endpoint_parts = urlsplit(endpoint)
     queue_parts = urlsplit(resp["QueueUrl"])
     return urlunsplit((
@@ -190,6 +196,22 @@ async def sqs_config(sqs_endpoint: str) -> SQSConfig:
         # Short long-poll so the subscriber loop returns promptly in tests.
         wait_time_seconds=1,
     )
+
+
+@pytest.fixture
+def make_sqs_queue(
+    sqs_endpoint: str,
+) -> Callable[[str, Mapping[str, str] | None], Awaitable[str]]:
+    """Return a coroutine that creates queue ``name`` with ``attributes`` and returns its URL.
+
+    Callers pass unique names; a test needing a dead-letter queue creates it first, then the
+    source queue with a ``RedrivePolicy`` naming it.
+    """
+
+    async def make(name: str, attributes: Mapping[str, str] | None = None) -> str:
+        return await _create_sqs_queue(sqs_endpoint, name, attributes)
+
+    return make
 
 
 @pytest_asyncio.fixture

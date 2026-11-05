@@ -9,11 +9,15 @@ loudly, matching the Go ``NewFromConfig`` contract. Every publish runs through t
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from techai_webutils.clients.client import ClientBase, handler
+from techai_webutils.clients.messaging.config import (
+    DEFAULT_MAX_PAYLOAD_BYTES,
+    DeliveryConfig,
+)
 from techai_webutils.clients.messaging.decorated import decorate
 from techai_webutils.clients.messaging.memory import (
     InMemoryBroker,
@@ -51,6 +55,10 @@ class MessagingConfig:
     name: str = "messaging"
     """The client's name in the decoration config's clients tier (and its metric, span and log
     label); its handlers run as ``<name>.handler``."""
+    delivery: DeliveryConfig = field(default_factory=DeliveryConfig)
+    """Retry, dead-letter and processing-time settings for the subscriber (all unset by default)."""
+    max_payload_bytes: int = DEFAULT_MAX_PAYLOAD_BYTES
+    """The largest payload ``publish*`` accepts; a larger one is ``INVALID_INPUT`` before send."""
 
 
 def new_messaging_from_config(
@@ -87,9 +95,11 @@ def new_messaging_subscriber_from_config(
         # Lazy import: skip aiobotocore until selected.
         from techai_webutils.clients.messaging.sqs.sqs_subscriber import SQSSubscriber  # noqa: PLC0415
 
-        return SQSSubscriber(config.sqs, handlers)
+        return SQSSubscriber(config.sqs, handlers, delivery=config.delivery)
     if config.kind is MessagingKind.MEMORY:
-        return InMemorySubscriber(broker or InMemoryBroker(), handlers)
+        return InMemorySubscriber(
+            broker or InMemoryBroker(), handlers, delivery=config.delivery
+        )
     msg = f"unknown messaging kind: {config.kind!r}"
     raise AppValueError(msg)
 
@@ -102,8 +112,10 @@ def _publisher(
         # Lazy import: skip aiobotocore until selected.
         from techai_webutils.clients.messaging.sqs.sqs_publisher import SQSPublisher  # noqa: PLC0415
 
-        return SQSPublisher(config.sqs)
+        return SQSPublisher(config.sqs, max_payload_bytes=config.max_payload_bytes)
     if config.kind is MessagingKind.MEMORY:
-        return InMemoryPublisher(broker or InMemoryBroker())
+        return InMemoryPublisher(
+            broker or InMemoryBroker(), max_payload_bytes=config.max_payload_bytes
+        )
     msg = f"unknown messaging kind: {config.kind!r}"
     raise AppValueError(msg)

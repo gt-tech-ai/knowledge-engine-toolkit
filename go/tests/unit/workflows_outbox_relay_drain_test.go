@@ -112,7 +112,7 @@ func TestRelay_DrainsUntilAShortClaim(t *testing.T) {
 	for _, batch := range batches {
 		claims = append(
 			claims,
-			store.EXPECT().Claim(gomock.Any(), "audit", 2).Return(batch, nil),
+			store.EXPECT().Claim(gomock.Any(), "audit", 0, 2).Return(batch, nil),
 		)
 		expectSent(store, sink, batch)
 	}
@@ -145,8 +145,8 @@ func TestRelay_DrainStopsWhenTheBudgetElapses(t *testing.T) {
 	clock := func() time.Time { return now }
 	for range 2 {
 		batch := outboxRecords(2, 1)
-		store.EXPECT().Claim(gomock.Any(), "audit", 2).DoAndReturn(
-			func(context.Context, string, int) ([]types.OutboxRecord, error) {
+		store.EXPECT().Claim(gomock.Any(), "audit", 0, 2).DoAndReturn(
+			func(context.Context, string, int, int) ([]types.OutboxRecord, error) {
 				now = now.Add(40 * time.Second)
 				return batch, nil
 			})
@@ -172,7 +172,7 @@ func TestRelay_ZeroBudgetClaimsOnce(t *testing.T) {
 	store := mocks.NewMockOutboxStore(ctrl)
 	sink := mocks.NewMockOutboxSink(ctrl)
 	batch := outboxRecords(2, 1)
-	store.EXPECT().Claim(gomock.Any(), "audit", 2).Return(batch, nil).Times(1)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 2).Return(batch, nil).Times(1)
 	expectSent(store, sink, batch)
 
 	relay := outbox.NewRelay(drainConfig(0), relayTx(t), store, sink, nil, nil, nil,
@@ -196,7 +196,7 @@ func TestRelay_DrainStopsOnTheFirstError(t *testing.T) {
 	store := mocks.NewMockOutboxStore(ctrl)
 	sink := mocks.NewMockOutboxSink(ctrl)
 	batch := outboxRecords(2, 1)
-	store.EXPECT().Claim(gomock.Any(), "audit", 2).Return(batch, nil).Times(1)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 2).Return(batch, nil).Times(1)
 	sink.EXPECT().Send(gomock.Any(), batch).Return(make([]error, 2))
 	store.EXPECT().MarkSent(gomock.Any(), batch[0].ID).Return(nil)
 	store.EXPECT().MarkSent(gomock.Any(), batch[1].ID).
@@ -227,7 +227,7 @@ func TestRelay_DrainStopsWhenTheContextEnds(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	batch := outboxRecords(2, 1)
-	store.EXPECT().Claim(gomock.Any(), "audit", 2).Return(batch, nil).Times(1)
+	store.EXPECT().Claim(gomock.Any(), "audit", 0, 2).Return(batch, nil).Times(1)
 	sink.EXPECT().Send(gomock.Any(), batch).DoAndReturn(
 		func(context.Context, []types.OutboxRecord) []error {
 			cancel()

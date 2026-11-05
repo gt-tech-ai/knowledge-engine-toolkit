@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"database/sql"
 	"io"
 	"os"
 	"sort"
@@ -174,8 +175,9 @@ func drain(t *testing.T, relay *outbox.Relay, store interfaces.OutboxStore, lane
 //     finalize — delivers every row exactly once and empties the lane.
 //
 // What it tests:
-//   - 25 enqueued rows arrive as 25 messages whose bodies are the payloads and
-//     whose outbox_id attributes are the row ids; the lane ends with 0 pending.
+//   - 25 enqueued rows arrive as 25 messages whose bodies are the payloads, whose
+//     outbox_id attributes are the row ids and whose partition_key attributes are
+//     the rows' keys, unchanged; the lane ends with 0 pending.
 func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 	requireIntegration(t)
 	ctx := context.Background()
@@ -212,7 +214,7 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 	)
 	drain(t, relay, store, "events")
 
-	got := map[string]string{}
+	got, keys := map[string]string{}, map[string]string{}
 	for len(got) < len(ids) {
 		out, err := api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
 			QueueUrl: created.QueueUrl, MaxNumberOfMessages: 10, WaitTimeSeconds: 1,
@@ -224,10 +226,14 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 			id := aws.ToString(m.MessageAttributes["outbox_id"].StringValue)
 			require.NotContains(t, got, id, "duplicate delivery")
 			got[id] = aws.ToString(m.Body)
+			keys[id] = aws.ToString(
+				m.MessageAttributes[interfaces.PartitionKeyAttribute].StringValue,
+			)
 		}
 	}
 	for i, id := range ids {
 		require.Equal(t, `{"seq":`+strconv.Itoa(i)+`}`, got[id.String()])
+		require.Equal(t, strconv.Itoa(i), keys[id.String()])
 	}
 	stats, err := store.Stats(ctx, "events")
 	require.NoError(t, err)
@@ -472,4 +478,114 @@ func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 			},
 		},
 	)
+}
+
+// partitionedSchema is a product-shaped outbox table split into partitions by its
+// part column.
+const partitionedSchema = `
+CREATE TABLE partitioned_outbox (
+	id              uuid        PRIMARY KEY,
+	lane            text        NOT NULL,
+	aggregate_id    text        NOT NULL,
+	part            integer     NOT NULL DEFAULT 0,
+	payload         bytea       NOT NULL,
+	status          text        NOT NULL DEFAULT 'pending',
+	attempts        integer     NOT NULL DEFAULT 0,
+	next_attempt_at timestamptz NOT NULL DEFAULT now(),
+	last_error      text        NOT NULL DEFAULT '',
+	created_at      timestamptz NOT NULL DEFAULT now(),
+	sent_at         timestamptz
+)`
+
+// partitionCounts returns, per partition, how many rows are sent and how many of
+// those were claimed more than once.
+func partitionCounts(t *testing.T, db *sql.DB) (sent, reclaimed map[int]int) {
+	t.Helper()
+	rows, err := db.QueryContext(context.Background(), `
+SELECT part, count(*) FILTER (WHERE status = 'sent'),
+       count(*) FILTER (WHERE status = 'sent' AND attempts > 1)
+FROM partitioned_outbox GROUP BY part`)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+	sent, reclaimed = map[int]int{}, map[int]int{}
+	for rows.Next() {
+		var part, s, r int
+		require.NoError(t, rows.Scan(&part, &s, &r))
+		sent[part], reclaimed[part] = s, r
+	}
+	require.NoError(t, rows.Err())
+	return sent, reclaimed
+}
+
+// TestRelay_PartitionsDrainIndependently tests relays over a partitioned lane.
+//
+// Why this test is important:
+//   - One relay per partition is how a lane scales past one relay's throughput;
+//     that holds only if the store writes each row to one partition, each relay
+//     claims only its own, and a stalled partition never holds up another
+//
+// What it tests:
+//   - 200 rows enqueued through the store over two partitions land in both
+//     (types.OutboxPartition of their keys); running only partition 1's relay
+//     sends exactly partition 1's rows and leaves partition 0 pending; then two
+//     relays running concurrently leave every row sent, each claimed once
+func TestRelay_PartitionsDrainIndependently(t *testing.T) {
+	requireIntegration(t)
+	ctx := context.Background()
+	pg, err := postgres.NewTestDatabase(ctx)
+	require.NoError(t, err, "start postgres")
+	t.Cleanup(func() { pg.Close(context.Background()) })
+	db, err := pg.OpenDB()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	_, err = db.ExecContext(ctx, partitionedSchema)
+	require.NoError(t, err)
+	store, err := outboxstore.NewFromConfig(ctx, outboxstore.Config{
+		Kind: outboxstore.KindPostgres,
+		Postgres: outboxpg.Config{
+			Table: "partitioned_outbox", PartitionColumn: "part", Partitions: 2,
+			Lease: time.Minute,
+		},
+	}, outboxstore.Deps{DB: db})
+	require.NoError(t, err)
+	tx := sqltx.New(db)
+	want := map[int]int{}
+	require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
+		for i := range 200 {
+			key := "doc-" + strconv.Itoa(i)
+			want[types.OutboxPartition(key, 2)]++
+			rec := types.OutboxRecord{Lane: "split", Key: key, Payload: []byte(key)}
+			if err := store.Enqueue(ctx, rec); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+	require.Positive(t, want[0])
+	require.Positive(t, want[1])
+	sink, err := outboxclient.NewFromConfig(
+		ctx,
+		outboxclient.DefaultConfig(),
+		outboxclient.Deps{},
+	)
+	require.NoError(t, err)
+	relayFor := func(partition int) *outbox.Relay {
+		cfg := outbox.DefaultRelayConfig("split")
+		cfg.Partitions, cfg.Partition, cfg.DrainBudget = 2, partition, time.Minute
+		return outbox.NewRelay(cfg, tx, store, sink, nil, nil, nil)
+	}
+
+	require.NoError(t, relayFor(1).RunOnce(ctx))
+	sent, _ := partitionCounts(t, db)
+	require.Equal(t, map[int]int{0: 0, 1: want[1]}, sent)
+
+	done := make(chan error, 2)
+	for partition := range 2 {
+		go func() { done <- relayFor(partition).RunOnce(ctx) }()
+	}
+	require.NoError(t, <-done)
+	require.NoError(t, <-done)
+	sent, reclaimed := partitionCounts(t, db)
+	require.Equal(t, want, sent)
+	require.Equal(t, map[int]int{0: 0, 1: 0}, reclaimed)
 }

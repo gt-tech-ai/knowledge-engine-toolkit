@@ -1,14 +1,17 @@
 package unit_test
 
 import (
+	"context"
 	"database/sql"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	outboxpg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
 )
 
@@ -66,7 +69,7 @@ func TestPgstore_RefusesWritesOutsideATransaction(t *testing.T) {
 	require.NoError(t, err)
 	ctx, id := t.Context(), uuid.New()
 
-	_, err = store.Claim(ctx, "lane", 10)
+	_, err = store.Claim(ctx, "lane", 0, 10)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	require.Equal(t, apperr.CodeInternal, apperr.Code(store.MarkSent(ctx, id)))
 	require.Equal(
@@ -77,4 +80,45 @@ func TestPgstore_RefusesWritesOutsideATransaction(t *testing.T) {
 	require.Equal(t, apperr.CodeInternal, apperr.Code(store.Park(ctx, id, "e")))
 	_, err = store.DeleteSentBefore(ctx, time.Now())
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
+}
+
+// TestPgstore_ValidatesPartitions tests the Postgres store's partition settings.
+//
+// Why this test is important:
+//   - Partitions without a column would claim every row from every relay, and a
+//     claim for a partition the store does not have would find nothing forever
+//
+// What it tests:
+//   - more than one partition without partition_column, a bad column name and
+//     negative partitions are CodeInvalidInput at New; with three partitions,
+//     Claim for partition 3 or -1 is CodeInvalidInput before any database call
+func TestPgstore_ValidatesPartitions(t *testing.T) {
+	t.Parallel()
+	db, err := sql.Open("pgx", "postgres://unused")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	base := outboxpg.Config{Table: "t", Lease: time.Minute}
+	for _, cfg := range []outboxpg.Config{
+		{Table: "t", Lease: time.Minute, Partitions: 2},
+		{Table: "t", Lease: time.Minute, PartitionColumn: "Part", Partitions: 2},
+		{Table: "t", Lease: time.Minute, PartitionColumn: "part", Partitions: -1},
+	} {
+		_, err := outboxpg.New(db, cfg)
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "%+v", cfg)
+	}
+
+	base.PartitionColumn, base.Partitions = "part", 3
+	store, err := outboxpg.New(db, base)
+	require.NoError(t, err)
+	ctx := interfaces.WithInTx(context.Background())
+	for _, partition := range []int{3, -1} {
+		_, err := store.Claim(ctx, "lane", partition, 10)
+		assert.Equal(
+			t,
+			apperr.CodeInvalidInput,
+			apperr.Code(err),
+			"partition %d",
+			partition,
+		)
+	}
 }

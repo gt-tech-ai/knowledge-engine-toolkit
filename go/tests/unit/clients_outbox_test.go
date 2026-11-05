@@ -27,6 +27,7 @@ import (
 	outboxsqs "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/sqs"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/stub"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
@@ -786,4 +787,58 @@ func TestS3Sink_KeyTemplateSubstitutesRecordKey(t *testing.T) {
 
 	assert.Equal(t, []error{nil}, sink.Send(context.Background(), recs))
 	assert.Equal(t, "org-1/doc-7/"+recs[0].ID.String(), key)
+}
+
+// TestSQSSink_SendsTheKeyAsPartitionKey tests the sink's partition_key attribute.
+//
+// Why this test is important:
+//   - A consumer groups a document's events by key, and a later move to a
+//     partitioned broker routes by it; the relay must carry the record's key
+//     unchanged, and a record with no key must look exactly as before
+//
+// What it tests:
+//   - a record with Key "doc-7" is sent with a partition_key String attribute of
+//     "doc-7"; a record with no Key gets no partition_key attribute
+func TestSQSSink_SendsTheKeyAsPartitionKey(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	api := mocks.NewMockOutboxSQSAPI(ctrl)
+	recs := sinkRecords(2)
+	recs[0].Key = "doc-7"
+	var sent *awssqs.SendMessageBatchInput
+	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
+		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil)
+	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			in *awssqs.SendMessageBatchInput,
+			_ ...func(*awssqs.Options),
+		) (*awssqs.SendMessageBatchOutput, error) {
+			sent = in
+			return &awssqs.SendMessageBatchOutput{
+				Successful: []sqstypes.SendMessageBatchResultEntry{
+					{Id: aws.String("0")}, {Id: aws.String("1")},
+				},
+			}, nil
+		})
+	cfg := outbox.DefaultConfig()
+	cfg.Kind, cfg.SQS = outbox.KindSQS, outboxsqs.Config{Queue: "events"}
+	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{SQSAPI: api})
+	require.NoError(t, err)
+
+	require.Equal(
+		t,
+		[]apperr.ErrorCode{"", ""},
+		codesOf(sink.Send(context.Background(), recs)),
+	)
+
+	require.NotNil(t, sent)
+	key := sent.Entries[0].MessageAttributes[interfaces.PartitionKeyAttribute]
+	assert.Equal(t, "doc-7", aws.ToString(key.StringValue))
+	assert.Equal(t, "String", aws.ToString(key.DataType))
+	assert.NotContains(
+		t,
+		sent.Entries[1].MessageAttributes,
+		interfaces.PartitionKeyAttribute,
+	)
 }

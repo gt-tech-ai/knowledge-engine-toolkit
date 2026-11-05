@@ -42,7 +42,7 @@ func TestOutboxStoreNewFromConfig_StubBootsAndIsDecorated(t *testing.T) {
 	s, err := outboxstore.NewFromConfig(t.Context(), outboxstore.Config{},
 		outboxstore.Deps{Decorations: decs})
 	require.NoError(t, err)
-	recs, err := s.Claim(t.Context(), "events", 10)
+	recs, err := s.Claim(t.Context(), "events", 0, 10)
 	require.NoError(t, err)
 	assert.Empty(t, recs)
 	stats, err := s.Stats(t.Context(), "events")

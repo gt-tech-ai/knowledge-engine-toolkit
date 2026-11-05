@@ -50,14 +50,14 @@ func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 	id, next, cutoff := uuid.New(), time.Unix(100, 0), time.Unix(50, 0)
 	claimed := []types.OutboxRecord{{ID: id, Lane: "facts"}}
 	conflict := apperr.New(apperr.CodeConflict, "not pending")
-	store.EXPECT().Claim(bounded, "facts", 10).Return(claimed, nil)
+	store.EXPECT().Claim(bounded, "facts", 0, 10).Return(claimed, nil)
 	store.EXPECT().MarkSent(bounded, id).Return(conflict)
 	store.EXPECT().Retry(bounded, id, next, "boom").Return(nil)
 	store.EXPECT().Park(bounded, id, "boom").Return(nil)
 	store.EXPECT().Stats(bounded, "facts").Return(types.OutboxStats{Pending: 3}, nil)
 	store.EXPECT().DeleteSentBefore(bounded, cutoff).Return(7, nil)
 
-	got, err := repo.Claim(t.Context(), "facts", 10)
+	got, err := repo.Claim(t.Context(), "facts", 0, 10)
 	require.NoError(t, err)
 	assert.Equal(t, claimed, got)
 	assert.Equal(t, apperr.CodeConflict, apperr.Code(repo.MarkSent(t.Context(), id)))

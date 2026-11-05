@@ -11,10 +11,12 @@ import (
 )
 
 // Compile-time interface assertion.
-var _ interfaces.MessagePublisher = (*Publisher)(nil)
+var _ interfaces.KeyedPublisher = (*Publisher)(nil)
 
 // Publisher enqueues messages onto a Broker instead of SQS (dev/test; no external
-// broker).
+// broker). A keyed publish carries its key in the message metadata under
+// interfaces.PartitionKeyAttribute; a topic is one FIFO channel delivered serially, so
+// messages are delivered in publish order, per key included.
 type Publisher struct {
 	// broker is the in-process broker messages are enqueued onto.
 	broker *Broker
@@ -31,11 +33,53 @@ func NewPublisher(broker *Broker) *Publisher {
 // Publish enqueues payload on topic as a Message, or returns ctx's error if it is
 // cancelled first.
 func (p *Publisher) Publish(ctx context.Context, topic string, payload []byte) error {
+	return p.enqueue(ctx, topic, map[string]string{}, payload)
+}
+
+// PublishKeyed enqueues payload on topic with key in its metadata.
+func (p *Publisher) PublishKeyed(
+	ctx context.Context,
+	topic, key string,
+	payload []byte,
+) error {
+	return p.enqueue(
+		ctx,
+		topic,
+		map[string]string{interfaces.PartitionKeyAttribute: key},
+		payload,
+	)
+}
+
+// PublishBatchKeyed enqueues each item on topic under its key, in order.
+func (p *Publisher) PublishBatchKeyed(
+	ctx context.Context,
+	topic string,
+	items []interfaces.KeyedPayload,
+) error {
+	for _, item := range items {
+		if err := p.PublishKeyed(ctx, topic, item.Key, item.Payload); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// OrderedPerKey is true: a topic's messages are delivered serially in publish order.
+func (*Publisher) OrderedPerKey() bool { return true }
+
+// enqueue puts payload on topic as a Message with metadata plus ctx's trace context,
+// or returns ctx's error if it is cancelled first.
+func (p *Publisher) enqueue(
+	ctx context.Context,
+	topic string,
+	metadata map[string]string,
+	payload []byte,
+) error {
 	msg := &interfaces.Message{
 		ID:       fmt.Sprintf("mem-%d", p.seq.Add(1)),
 		Topic:    topic,
 		Payload:  payload,
-		Metadata: map[string]string{},
+		Metadata: metadata,
 	}
 	tracer.Inject(ctx, msg.Metadata)
 	select {

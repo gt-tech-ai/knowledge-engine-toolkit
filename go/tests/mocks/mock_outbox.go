@@ -44,18 +44,18 @@ func (m *MockOutboxStore) EXPECT() *MockOutboxStoreMockRecorder {
 }
 
 // Claim mocks base method.
-func (m *MockOutboxStore) Claim(ctx context.Context, lane string, limit int) ([]types.OutboxRecord, error) {
+func (m *MockOutboxStore) Claim(ctx context.Context, lane string, partition, limit int) ([]types.OutboxRecord, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Claim", ctx, lane, limit)
+	ret := m.ctrl.Call(m, "Claim", ctx, lane, partition, limit)
 	ret0, _ := ret[0].([]types.OutboxRecord)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Claim indicates an expected call of Claim.
-func (mr *MockOutboxStoreMockRecorder) Claim(ctx, lane, limit any) *gomock.Call {
+func (mr *MockOutboxStoreMockRecorder) Claim(ctx, lane, partition, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Claim", reflect.TypeOf((*MockOutboxStore)(nil).Claim), ctx, lane, limit)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Claim", reflect.TypeOf((*MockOutboxStore)(nil).Claim), ctx, lane, partition, limit)
 }
 
 // DeleteSentBefore mocks base method.

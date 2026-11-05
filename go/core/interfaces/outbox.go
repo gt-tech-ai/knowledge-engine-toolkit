@@ -24,11 +24,17 @@ type OutboxWriter interface {
 type OutboxStore interface {
 	OutboxWriter
 
-	// Claim leases up to limit pending rows of lane whose next attempt is due (on
-	// the database clock) with FOR UPDATE SKIP LOCKED semantics, so concurrent
-	// claimers receive disjoint rows. It counts the attempt (the returned Attempts
-	// includes it) and is side-effecting, so a caller must not blindly retry it.
-	Claim(ctx context.Context, lane string, limit int) ([]types.OutboxRecord, error)
+	// Claim leases up to limit pending rows of lane's partition whose next attempt is
+	// due (on the database clock) with FOR UPDATE SKIP LOCKED semantics, so
+	// concurrent claimers receive disjoint rows. A store without partitions has only
+	// partition 0; a partition outside the store's range is CodeInvalidInput. It
+	// counts the attempt (the returned Attempts includes it) and is side-effecting,
+	// so a caller must not blindly retry it.
+	Claim(
+		ctx context.Context,
+		lane string,
+		partition, limit int,
+	) ([]types.OutboxRecord, error)
 	// MarkSent records that the row was delivered; it is never claimed again.
 	MarkSent(ctx context.Context, id uuid.UUID) error
 	// Retry makes the row claimable again at next, recording lastErr.

@@ -330,17 +330,18 @@ func (r Outbox) Enqueue(ctx context.Context, rec types.OutboxRecord) error {
 	return err
 }
 
-// Claim leases up to limit due rows of lane; see interfaces.OutboxStore.
+// Claim leases up to limit due rows of lane's partition; see
+// interfaces.OutboxStore.
 func (r Outbox) Claim(
 	ctx context.Context,
 	lane string,
-	limit int,
+	partition, limit int,
 ) ([]types.OutboxRecord, error) {
 	return r.claim.Exec(
 		ctx,
 		"claim",
 		func(ctx context.Context) ([]types.OutboxRecord, error) {
-			return r.inner.Claim(ctx, lane, limit)
+			return r.inner.Claim(ctx, lane, partition, limit)
 		},
 	)
 }

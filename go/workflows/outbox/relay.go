@@ -55,6 +55,13 @@ type RelayConfig struct {
 	// full BatchSize, the run claims again until the budget has elapsed (the batch in
 	// flight when it runs out still finishes). Zero, the default, claims once per run.
 	DrainBudget time.Duration `yaml:"drain_budget" mapstructure:"drain_budget"`
+	// Partitions is how many partitions the lane is split into (the store's
+	// partitions); zero means 1, today's single relay per lane.
+	Partitions int `yaml:"partitions" mapstructure:"partitions"`
+	// Partition is the partition this relay drains, in [0, Partitions). Run one relay
+	// per partition, each with its own leader election, so N relays drain N
+	// partitions in parallel.
+	Partition int `yaml:"partition" mapstructure:"partition"`
 }
 
 // DefaultRelayConfig returns a relay config for lane: claim 100 rows, send 10 at
@@ -86,6 +93,11 @@ func (c RelayConfig) Validate() error {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"outbox relay: drain_budget must not be negative",
+		)
+	case c.Partitions < 0 || c.Partition < 0 || c.Partition >= max(c.Partitions, 1):
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			"outbox relay: partition must be in [0, partitions)",
 		)
 	}
 	return nil
@@ -300,7 +312,7 @@ func (r *Relay) drainMore(ctx context.Context, start time.Time, claimed int) boo
 // error.
 func (r *Relay) pass(ctx context.Context) (int, error) {
 	recs, err := r.tx.InTx(ctx, func(ctx context.Context) ([]types.OutboxRecord, error) {
-		return r.store.Claim(ctx, r.cfg.Lane, r.cfg.BatchSize)
+		return r.store.Claim(ctx, r.cfg.Lane, r.cfg.Partition, r.cfg.BatchSize)
 	})
 	if err != nil {
 		return -1, apperr.Wrap(

@@ -14,6 +14,7 @@ import (
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -357,8 +358,9 @@ func groupID(rec *types.OutboxRecord) string {
 	return rec.Lane
 }
 
-// messageAttributes is rec's outbox_id, tenant and lane String attributes. SQS
-// rejects an attribute with an empty value, so an empty tenant or lane is omitted.
+// messageAttributes is rec's outbox_id, tenant, lane and partition_key (its Key)
+// String attributes. SQS rejects an attribute with an empty value, so an empty
+// tenant, lane or key is omitted.
 func messageAttributes(
 	rec *types.OutboxRecord,
 ) map[string]sqstypes.MessageAttributeValue {
@@ -370,6 +372,9 @@ func messageAttributes(
 	}
 	if rec.Lane != "" {
 		attrs["lane"] = stringAttr(rec.Lane)
+	}
+	if rec.Key != "" {
+		attrs[interfaces.PartitionKeyAttribute] = stringAttr(rec.Key)
 	}
 	return attrs
 }
