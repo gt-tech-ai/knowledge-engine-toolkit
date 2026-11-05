@@ -24,7 +24,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from techai_webutils.clients.parsing.isolated import (
     SPAWN_CONTEXT,
@@ -37,7 +37,6 @@ from techai_webutils.clients.parsing.layout.mapping import parsed_from_docling
 from techai_webutils.core.domain import DocumentFormat, ParsedDocument
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
     from concurrent.futures import Executor
 
     from docling_core.types.doc.document import DoclingDocument
@@ -55,6 +54,18 @@ class LayoutOptions:
     """The first page to convert (1-based)."""
     last_page: int = sys.maxsize
     """The last page to convert (inclusive)."""
+
+
+class LayoutConverter(Protocol):
+    """Converts the PDF at a path to a Docling document (``convert_with_docling``, or a test's).
+
+    A named type, so ``parser_from_config``'s signature stays fully known to a consumer that
+    does not install the ``layout`` extra (and so cannot resolve ``DoclingDocument``).
+    """
+
+    def __call__(self, path: str, options: LayoutOptions, /) -> DoclingDocument:
+        """Convert the PDF at ``path`` under ``options``."""
+        ...
 
 
 def convert_with_docling(path: str, options: LayoutOptions) -> DoclingDocument:
@@ -89,7 +100,7 @@ def _write_scratch_pdf(content: bytes) -> str:
 def _parse_layout(
     path: str,
     options: LayoutOptions,
-    convert: Callable[[str, LayoutOptions], DoclingDocument],
+    convert: LayoutConverter,
 ) -> ParsedDocument:
     """Child entry: convert the PDF and map it to a ``ParsedDocument`` (module-level: picklable)."""
     return parsed_from_docling(convert(path, options))
@@ -109,7 +120,7 @@ class LayoutParser(IsolatedParser):
         executor: Executor | None = None,
         artifacts_path: str = "",
         ocr: bool = True,
-        convert: Callable[[str, LayoutOptions], DoclingDocument] = convert_with_docling,
+        convert: LayoutConverter = convert_with_docling,
     ) -> None:
         """Bound each parse like ``IsolatedParser``; ``convert`` runs in the child (picklable)."""
         super().__init__(

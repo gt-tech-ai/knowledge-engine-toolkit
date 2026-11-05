@@ -161,7 +161,8 @@ Python: `techai-webutils` 0.9.3.
   `TableCell`, `blocks_to_json` / `blocks_from_json`, `FORMAT_VERSION`); `ParsedDocument.blocks`;
   `ChunkPayload.section_path` / `element_type` / `span`. `ParserKind.layout` (`LayoutParser`,
   `LayoutOptions`, `convert_with_docling`, `parsed_from_docling`; `parse_pages`) with
-  `ParserConfig.artifacts_path` / `ocr` and `parser_from_config(..., convert=)`; the `layout` extra
+  `ParserConfig.artifacts_path` / `ocr` and `parser_from_config(..., convert=)` (a `LayoutConverter`,
+  so the signature names no `docling_core` type); the `layout` extra
   installs Docling. `run_isolated(..., context=)`, `SPAWN_CONTEXT`, `IsolationMemoryError` and
   `isolation_error_tag`.
 - Transcripts, rules and personal data (Python): `BlockType.turn` and `Turn`

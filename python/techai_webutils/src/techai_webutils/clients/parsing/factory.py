@@ -18,12 +18,12 @@ from typing import TYPE_CHECKING, cast
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
     from concurrent.futures import Executor
 
-    from docling_core.types.doc.document import DoclingDocument
-
-    from techai_webutils.clients.parsing.layout.parser import LayoutOptions, LayoutParser
+    from techai_webutils.clients.parsing.layout.parser import (
+        LayoutConverter,
+        LayoutParser,
+    )
     from techai_webutils.core.interfaces.parser import DocumentParser
 
 # Default per-parse address-space cap (512 MiB) and wall-clock ceiling (60 s) for the isolated backend;
@@ -64,7 +64,7 @@ def parser_from_config(
     config: ParserConfig,
     *,
     executor: Executor | None = None,
-    convert: Callable[[str, LayoutOptions], DoclingDocument] | None = None,
+    convert: LayoutConverter | None = None,
 ) -> DocumentParser:
     """Build the ``DocumentParser`` selected by ``config.kind``. Unknown kinds fail loudly.
 
@@ -95,7 +95,7 @@ def parser_from_config(
 def _layout(
     config: ParserConfig,
     executor: Executor | None,
-    convert: Callable[[str, LayoutOptions], DoclingDocument] | None,
+    convert: LayoutConverter | None,
 ) -> DocumentParser:
     """Build the ``layout`` parser, refusing it when Docling is missing and nothing is injected."""
     if convert is None and importlib.util.find_spec("docling") is None:
@@ -109,8 +109,5 @@ def _layout(
         executor=executor,
         artifacts_path=config.artifacts_path,
         ocr=config.ocr,
-        convert=convert
-        or cast(
-            "Callable[[str, LayoutOptions], DoclingDocument]", module.convert_with_docling
-        ),
+        convert=convert or cast("LayoutConverter", module.convert_with_docling),
     )
