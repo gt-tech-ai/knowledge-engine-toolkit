@@ -59,6 +59,10 @@ type Config struct {
 	// ".fifo" is a FIFO queue: each message's group id is the record's Key (else
 	// its Tenant, else its Lane) and its deduplication id is the record's ID.
 	Queue string `yaml:"queue" mapstructure:"queue"`
+	// FairQueues names the standard queues that are SQS fair queues: each message
+	// sent to one carries the same group id a FIFO message would (but no
+	// deduplication id), so SQS serves the other groups ahead of one group's backlog.
+	FairQueues []string `yaml:"fair_queues" mapstructure:"fair_queues"`
 }
 
 // Sink delivers outbox records to SQS queues chosen by each record's route.
@@ -73,6 +77,8 @@ type Sink struct {
 	routes map[string]string
 	// urls caches resolved queue URLs by queue name.
 	urls map[string]string
+	// fair holds the queue names that are SQS fair queues.
+	fair map[string]bool
 	// queue is the queue for records without a route ("" = none).
 	queue string
 	// mu guards urls.
@@ -97,10 +103,15 @@ func New(cfg Config, api API) (*Sink, error) {
 		}
 		routes[route] = queue
 	}
+	fair := make(map[string]bool, len(cfg.FairQueues))
+	for _, queue := range cfg.FairQueues {
+		fair[queue] = true
+	}
 	return &Sink{
 		api:    api,
 		queue:  cfg.Queue,
 		routes: routes,
+		fair:   fair,
 		urls:   map[string]string{},
 	}, nil
 }
@@ -168,7 +179,7 @@ func (s *Sink) sendQueue(
 			batch[j] = recs[i]
 		}
 		out := make([]error, len(part))
-		s.sendBatch(ctx, url, strings.HasSuffix(queue, fifoSuffix), batch, out)
+		s.sendBatch(ctx, url, s.delivery(queue), batch, out)
 		for j, i := range part {
 			results[i] = out[j]
 		}
@@ -220,12 +231,27 @@ func messageSize(rec *types.OutboxRecord) int {
 	return n
 }
 
-// sendBatch sends one batch and writes each entry's outcome into results; fifo
+// delivery is how messages to queue are sent: grouped and deduplicated on a FIFO
+// queue, grouped only on a fair queue, neither on any other standard queue.
+type delivery struct {
+	// grouped adds each message's group id.
+	grouped bool
+	// deduplicated adds each message's deduplication id.
+	deduplicated bool
+}
+
+// delivery returns how messages to queue are sent.
+func (s *Sink) delivery(queue string) delivery {
+	fifo := strings.HasSuffix(queue, fifoSuffix)
+	return delivery{grouped: fifo || s.fair[queue], deduplicated: fifo}
+}
+
+// sendBatch sends one batch and writes each entry's outcome into results; how
 // adds each entry's message group and deduplication ids.
 func (s *Sink) sendBatch(
 	ctx context.Context,
 	url string,
-	fifo bool,
+	how delivery,
 	recs []types.OutboxRecord,
 	results []error,
 ) {
@@ -237,8 +263,10 @@ func (s *Sink) sendBatch(
 			MessageBody:       aws.String(string(rec.Payload)),
 			MessageAttributes: messageAttributes(rec),
 		}
-		if fifo {
+		if how.grouped {
 			entries[i].MessageGroupId = aws.String(groupID(rec))
+		}
+		if how.deduplicated {
 			entries[i].MessageDeduplicationId = aws.String(rec.ID.String())
 		}
 	}

@@ -105,6 +105,7 @@ class RealRayRuntime:
         *,
         worker_setup_hook: str | None = None,
         log_encoding: str | None = None,
+        task_memory_bytes: int = 0,
     ) -> None:
         """Store the connect settings; connection is deferred to the first submit/warm_up.
 
@@ -116,6 +117,8 @@ class RealRayRuntime:
                 configures logging, since a worker never runs the consumer's entrypoint. ``None`` runs none.
             log_encoding: Encoding of Ray's own task and actor logs (``ray.LoggingConfig``: ``TEXT`` or
                 ``JSON``); ``None`` keeps Ray's default.
+            task_memory_bytes: Memory Ray reserves for each task (its ``memory`` resource), so it
+                places tasks by memory as well as CPU; ``0`` reserves none.
 
         """
         self._address = address
@@ -129,6 +132,7 @@ class RealRayRuntime:
             self._init_options["logging_config"] = cast(
                 "Callable[..., object]", ray.LoggingConfig
             )(encoding=log_encoding)
+        self._task_memory_bytes = task_memory_bytes
         self._started = False
         # The mapper is put into the object store ONCE and reused across a batch's items.
         # ``_cached_fn`` holds a STRONG reference so the identity check (``fn is _cached_fn``) can never
@@ -230,7 +234,12 @@ class RealRayRuntime:
         # dev LSP env, where ray is unresolved); the mapper arg is a ray ObjectRef held as `object`
         # (opaque), which the resolved `.remote` signature rejects — Ray auto-dereferences it so the
         # task body still receives the real mapper.
-        ref = _run_mapper.remote(  # pyright: ignore[reportFunctionMemberAccess]
+        task = (
+            _run_mapper.options(memory=self._task_memory_bytes)  # pyright: ignore[reportFunctionMemberAccess, reportUnknownMemberType]
+            if self._task_memory_bytes > 0
+            else _run_mapper
+        )
+        ref = task.remote(  # pyright: ignore[reportFunctionMemberAccess]
             self._mapper_ref,  # pyright: ignore[reportArgumentType]
             item,
         )

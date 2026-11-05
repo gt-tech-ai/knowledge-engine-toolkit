@@ -306,3 +306,61 @@ class TestRealRayRuntimeWorkerLogging:
         assert configured["logging_config"] is ray.LoggingConfig.return_value
         assert "runtime_env" not in default
         assert "logging_config" not in default
+
+
+class TestRealRayRuntimeMemory:
+    """Tests for the memory a runtime reserves for each Ray task and actor."""
+
+    @pytest.mark.asyncio
+    async def test_a_task_reserves_the_configured_memory(self) -> None:
+        """Test that each task asks Ray to reserve the configured memory, and none when it is unset.
+
+        **Why this test is important:**
+          - With no memory reserved, Ray packs tasks onto a worker by CPU alone, so two
+            memory-heavy tasks can share a worker and get it killed together.
+
+        **What it tests:**
+          - With ``task_memory_bytes`` set, the task is scheduled through
+            ``.options(memory=…)``; with it unset, straight through ``.remote``.
+        """
+        ray = MagicMock()
+        ray.is_initialized.return_value = True
+        mapper = MagicMock()
+        mapper.options.return_value.remote.side_effect = lambda *_: _mapper(1)
+        mapper.remote.side_effect = lambda *_: _mapper(2)
+        with (
+            patch(f"{_MODULE}.ray", ray),
+            patch(f"{_MODULE}._run_mapper", mapper),
+        ):
+            reserved = await RealRayRuntime(
+                address=_ADDRESS, task_memory_bytes=2 << 30
+            ).submit(_mapper, 1)
+            unreserved = await RealRayRuntime(address=_ADDRESS).submit(_mapper, 2)
+
+        mapper.options.assert_called_once_with(memory=2 << 30)
+        assert (reserved.name, unreserved.name) == ("1", "2")
+
+    @pytest.mark.asyncio
+    async def test_an_actor_reserves_the_configured_memory(self) -> None:
+        """Test that a pool actor asks Ray to reserve the configured memory.
+
+        **Why this test is important:**
+          - A pooled actor runs the same memory-heavy work as a task, for its whole life.
+
+        **What it tests:**
+          - ``ray_worker_factory(..., memory_bytes=…)`` spawns the actor through
+            ``.options(memory=…)``.
+        """
+        ray = MagicMock()
+        ray.is_initialized.return_value = True
+        actor = MagicMock()
+        runtime = MagicMock()
+        runtime.warm_up = MagicMock(side_effect=lambda: asyncio.sleep(0))
+        with patch(f"{_POOL}.ray", ray), patch(f"{_POOL}._WorkerActor", actor):
+            build = ray_worker_factory(
+                _build_worker, runtime=runtime, memory_bytes=2 << 30
+            )
+            await build()
+
+        actor.options.assert_called_once_with(memory=2 << 30)
+        actor.options.return_value.remote.assert_called_once_with(_build_worker)

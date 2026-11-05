@@ -570,6 +570,74 @@ func TestSQSSink_FIFOQueueCarriesGroupAndDedupIDs(t *testing.T) {
 	assert.Nil(t, plain[0].MessageDeduplicationId)
 }
 
+// TestSQSSink_FairQueueCarriesAGroupButNoDedupID tests delivery to an SQS fair queue.
+//
+// Why this test is important:
+//   - A standard queue gives every tenant one shared backlog, so one tenant's burst
+//     delays everyone else's messages. SQS fair queues reorder deliveries by message
+//     group, which needs a MessageGroupId on each message of a standard queue.
+//
+// What it tests:
+//   - an entry for a queue listed in FairQueues carries MessageGroupId = the record's
+//     Key (else its tenant) and no deduplication id, which a standard queue rejects
+//   - an entry for a standard queue not listed carries neither
+func TestSQSSink_FairQueueCarriesAGroupButNoDedupID(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	api := mocks.NewMockOutboxSQSAPI(ctrl)
+	recs := sinkRecords(3)
+	recs[0].Key = "sync-7"
+	recs[0].Attributes = map[string]string{types.OutboxRouteAttribute: "bulk"}
+	recs[1].Attributes = map[string]string{types.OutboxRouteAttribute: "bulk"}
+	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).Times(2).
+		DoAndReturn(func(
+			_ context.Context,
+			in *awssqs.GetQueueUrlInput,
+			_ ...func(*awssqs.Options),
+		) (*awssqs.GetQueueUrlOutput, error) {
+			return &awssqs.GetQueueUrlOutput{
+				QueueUrl: aws.String("u-" + aws.ToString(in.QueueName)),
+			}, nil
+		})
+	sent := map[string][]sqstypes.SendMessageBatchRequestEntry{}
+	var mu sync.Mutex
+	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).Times(2).
+		DoAndReturn(func(
+			_ context.Context,
+			in *awssqs.SendMessageBatchInput,
+			_ ...func(*awssqs.Options),
+		) (*awssqs.SendMessageBatchOutput, error) {
+			out := &awssqs.SendMessageBatchOutput{}
+			mu.Lock()
+			defer mu.Unlock()
+			sent[aws.ToString(in.QueueUrl)] = in.Entries
+			for _, e := range in.Entries {
+				out.Successful = append(
+					out.Successful,
+					sqstypes.SendMessageBatchResultEntry{Id: e.Id},
+				)
+			}
+			return out, nil
+		})
+
+	sink, err := outboxsqs.New(outboxsqs.Config{
+		Queue:      "plain",
+		Routes:     map[string]string{"bulk": "batches"},
+		FairQueues: []string{"batches"},
+	}, api)
+	require.NoError(t, err)
+
+	assert.Equal(t, []error{nil, nil, nil}, sink.Send(context.Background(), recs))
+	fair := sent["u-batches"]
+	require.Len(t, fair, 2)
+	assert.Equal(t, "sync-7", aws.ToString(fair[0].MessageGroupId))
+	assert.Equal(t, "org-1", aws.ToString(fair[1].MessageGroupId))
+	assert.Nil(t, fair[0].MessageDeduplicationId)
+	plain := sent["u-plain"]
+	require.Len(t, plain, 1)
+	assert.Nil(t, plain[0].MessageGroupId)
+}
+
 // TestSQSSink_PacksBatchesWithinSQSByteLimits tests the sink against SQS's size limits.
 //
 // Why this test is important:

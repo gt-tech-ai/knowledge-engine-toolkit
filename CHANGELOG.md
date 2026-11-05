@@ -6,6 +6,24 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.46] - 2026-11-04
+
+Python: `techai-webutils` 0.9.2.
+
+### Added
+
+- Go `clients/outbox/sqs.Config.FairQueues`: the standard queues that are SQS fair queues. Each
+  message sent to one carries the group id a FIFO message would (`Key`, else `Tenant`, else `Lane`)
+  and no deduplication id, so SQS serves other groups ahead of one group's backlog. A queue not
+  listed is sent to as before.
+- `ExecutorConfig.ray_task_memory_bytes` (and `RealRayRuntime(task_memory_bytes=…)`,
+  `ray_worker_factory(memory_bytes=…)`): the memory Ray reserves for each task or pool actor (its
+  `memory` resource). Without it Ray placed tasks by CPU alone, so memory-heavy tasks could share
+  a worker and get it killed together. The default `0` reserves none, as before.
+- `IngestionJob.documents_scanned`: how many source documents a knowledge-base ingestion job has
+  scanned, from Bedrock's `statistics.numberOfDocumentsScanned` (0 when absent). A poll-timeout
+  result keeps the last count, so a caller can tell a slow job from a wedged one.
+
 ## [0.0.45] - 2026-11-04
 
 Python: `techai-webutils` 0.9.1.

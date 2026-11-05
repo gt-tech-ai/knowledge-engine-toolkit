@@ -128,6 +128,7 @@ def ray_worker_factory[T](
     address: str | None = None,
     namespace: str | None = None,
     runtime: RayRuntime | None = None,
+    memory_bytes: int = 0,
 ) -> WorkerFactory[T]:
     """Wrap ``inner`` so each ``PooledExecutor`` slot is a Ray actor (built once, reused per item).
 
@@ -138,7 +139,8 @@ def ray_worker_factory[T](
     ``RayUnavailableError`` (pass ``abort_on=(RayUnavailableError,)`` to ``PooledExecutor`` to abort the
     batch on it). It then spawns one ``_WorkerActor`` per call and returns an ``_ActorProxy`` over it —
     so ``PooledExecutor``'s build-once-per-slot semantics create exactly one actor per pool slot, each
-    of which lazily builds ``inner``'s worker on its own event loop.
+    of which lazily builds ``inner``'s worker on its own event loop. ``memory_bytes`` is the memory Ray
+    reserves for each actor (its ``memory`` resource); ``0`` reserves none.
     """
     connector = runtime or ray_runtime_from_config(
         ExecutorConfig(
@@ -152,8 +154,13 @@ def ray_worker_factory[T](
         await connector.warm_up()
         # `.remote` is the actor constructor injected by the @ray.remote class decorator; its typed
         # signature is erased, so the handle is cast to the typed view — one actor per pool slot.
+        actor_class = (
+            _WorkerActor.options(memory=memory_bytes)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+            if memory_bytes > 0
+            else _WorkerActor
+        )
         spawn = cast(
-            "Callable[[WorkerFactory[T]], _WorkerActorHandle]", _WorkerActor.remote
+            "Callable[[WorkerFactory[T]], _WorkerActorHandle]", actor_class.remote
         )
         return _ActorProxy(spawn(inner))
 
