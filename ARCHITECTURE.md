@@ -527,7 +527,7 @@ Most tiers ship an in-process, stub, or no-op backend, so wiring needs no cloud 
   kb_ingestion, semantic_cache, token_ledger, vector `stub`; jobs, lock, messaging, storage `memory`; tracer, metrics `null`;
   executor `asyncio`.
 
-Go cache (Redis), database (Postgres) and connector (S3) have no stub and are covered by
+Go cache (Redis), database (Postgres) and connector (S3, S3 Inventory) have no stub and are covered by
 testcontainers integration tests. `tests/unit/clients_all_stubs_no_network_test.py` builds each
 Python stub kind with every real backend constructor patched to fail.
 
@@ -805,6 +805,28 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   engine's `filter_builder`) and to OpenSearch (`filter_clauses`). `Citation` gains `chunk_id`
   (the passage's `chunk_id` metadata, which vector passages now carry) and `span` (`None`: the
   whole chunk).
+
+## Connector sources
+
+`interfaces.ConnectorSource` is the read seam a sync crawls a tenant's source with:
+`TestConnection` and the resumable, page-at-a-time `ListPage(token, limit)`. The Go
+`clients/connector` builder picks the backend by `SourceConfig.Kind`:
+
+- **`s3`** (the default an S3 connector keeps) lists the bucket under `Prefix`
+  (`ListObjectsV2`; the token is S3's continuation token).
+- **`s3_inventory`** reads the same objects from the bucket's S3 Inventory report:
+  `InventoryManifestKey` (in `InventoryBucket`, default `Bucket`), then the gzipped CSV data
+  files it lists. A crawl of hundreds of millions of keys costs one GET per data file instead
+  of one LIST per 1,000 keys; the snapshot is as fresh as the latest report. Objects match the
+  `s3` kind's (key URL-decoded, ETag quoted, RFC 3339 time); rows of another bucket, outside
+  `Prefix`, non-current versions and delete markers are skipped. The token is
+  `<data file index>:<rows consumed>`; the source keeps the current data file open between
+  pages and re-downloads it once if that body has died. Only CSV reports are read (ORC and
+  Parquet are `INVALID_INPUT`), and the report must list `Bucket`.
+
+Both kinds authenticate through `connector/s3.NewStorage` (access key, or STS AssumeRole with
+the tenant's ExternalID) and classify object-store failures with `ClassifyListError`
+(configuration → `INVALID_INPUT`, transport and throttling → `UNAVAILABLE`).
 
 ## Repository tooling substrate
 

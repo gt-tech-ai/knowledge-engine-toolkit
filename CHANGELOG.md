@@ -133,6 +133,10 @@ Python: `techai-webutils` 0.9.3.
     `expr_filter_builder` and the OpenSearch `filter_clauses`; `Citation.chunk_id` and
     `Citation.span`.
   - `foundation.resilience.http_boundary.httpx_error_to_app_error`.
+- `ConnectorKindS3Inventory` (`"s3_inventory"`, Go): `clients/connector/s3inventory` reads a
+  bucket's objects from its S3 Inventory report (CSV) with the `s3` kind's pages and auth;
+  `SourceConfig.InventoryBucket` / `InventoryManifestKey`; `connector/s3.NewStorage` and
+  `ClassifyListError` are exported for it.
 
 ### Changed
 

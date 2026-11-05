@@ -34,13 +34,20 @@ type ConnectorSource interface {
 }
 
 // ConnectorKind selects a connector backend (the family discriminator), mirroring the
-// storage tier's Kind pattern. S3 now; gdrive/salesforce/… are added as new kinds — a
-// config change, not an edit to the builder's callers or a sync engine.
+// storage tier's Kind pattern. S3 and S3 Inventory now; gdrive/salesforce/… are new
+// kinds — a config change, not an edit to the builder's callers or a sync engine.
 type ConnectorKind string
 
-// ConnectorKindS3 is the S3-compatible object-store connector (the first — and, for now,
-// only — kind).
+// ConnectorKindS3 is the S3-compatible object-store connector: it lists the bucket
+// (ListObjectsV2). It is the default an S3 connector keeps.
 const ConnectorKindS3 ConnectorKind = "s3"
+
+// ConnectorKindS3Inventory reads the same objects from the bucket's S3 Inventory report
+// (manifest.json, then its CSV data files) instead of listing the bucket, so a crawl of
+// hundreds of millions of keys costs one GET per data file rather than one LIST per
+// 1,000 keys. Its pages and checkpoints are interchangeable with ConnectorKindS3's for
+// the caller; the snapshot is as fresh as the latest report.
+const ConnectorKindS3Inventory ConnectorKind = "s3_inventory"
 
 // SourceConfig is the primitive, domain-free, AWS-free description a SourceBuilder turns
 // into a ConnectorSource. The consumer maps its own connector record + decrypted
@@ -78,6 +85,12 @@ type SourceConfig struct {
 	// SecretAccessKey is the secret for auth_method=access_key (already-decrypted
 	// plaintext; never log it).
 	SecretAccessKey string
+	// InventoryBucket is the bucket holding the S3 Inventory report (s3_inventory kind);
+	// empty means Bucket.
+	InventoryBucket string
+	// InventoryManifestKey is the key of the report's manifest.json (s3_inventory kind),
+	// e.g. "<prefix>/<source-bucket>/<config-id>/<timestamp>/manifest.json".
+	InventoryManifestKey string
 }
 
 // SourceBuilder builds a ConnectorSource from a SourceConfig, failing loudly on an

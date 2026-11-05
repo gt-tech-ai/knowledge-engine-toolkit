@@ -1,4 +1,5 @@
-// Package connector builds ConnectorSources for the connector family: S3 now, a future
+// Package connector builds ConnectorSources for the connector family: S3 (a bucket
+// listing) and S3 Inventory (the bucket's inventory report) now, a future
 // GDrive/Salesforce kind added as a kinds-table entry + sibling package
 // (ARCHITECTURE.md#the-one-idea). Unlike the other client families, a source is built
 // per request, from the tenant's SourceConfig, so NewSourceBuilder returns the
@@ -14,12 +15,16 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	connectors3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3inventory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
 // KindS3 is the S3-compatible object-store connector.
 const KindS3 = client.Kind(interfaces.ConnectorKindS3)
+
+// KindS3Inventory reads an S3 bucket's objects from its S3 Inventory report.
+const KindS3Inventory = client.Kind(interfaces.ConnectorKindS3Inventory)
 
 // Config names the sources the builder decorates.
 type Config struct {
@@ -56,6 +61,13 @@ func kinds() client.Kinds[interfaces.SourceConfig, Deps, interfaces.ConnectorSou
 				deps Deps,
 			) (interfaces.ConnectorSource, error) {
 				return connectors3.NewSource(ctx, cfg, deps.STS, deps.BuildS3Client)
+			},
+			KindS3Inventory: func(
+				ctx context.Context,
+				cfg interfaces.SourceConfig,
+				deps Deps,
+			) (interfaces.ConnectorSource, error) {
+				return s3inventory.NewSource(ctx, cfg, deps.STS, deps.BuildS3Client)
 			},
 		},
 	}

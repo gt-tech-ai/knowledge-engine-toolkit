@@ -59,6 +59,23 @@ func NewSource(
 	stsClient stscreds.AssumeRoleAPIClient,
 	build S3ClientBuilder,
 ) (*Source, error) {
+	client, err := NewStorage(ctx, cfg, stsClient, build)
+	if err != nil {
+		return nil, err
+	}
+	return &Source{storage: client, bucket: cfg.Bucket, prefix: cfg.Prefix}, nil
+}
+
+// NewStorage builds the connector-scoped StorageClient for cfg: it selects the credential
+// strategy (failing loud, CodeInvalidInput, on an auth config that cannot work — see
+// NewSource) and has the injected builder construct a client signing with it. The s3 and
+// s3_inventory sources share it, so both authenticate identically.
+func NewStorage(
+	ctx context.Context,
+	cfg interfaces.SourceConfig,
+	stsClient stscreds.AssumeRoleAPIClient,
+	build S3ClientBuilder,
+) (interfaces.StorageClient, error) {
 	creds, err := credentialsFromConfig(
 		cfg.AuthMethod,
 		cfg.IAMRoleARN,
@@ -74,17 +91,17 @@ func NewSource(
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "connector s3: build client")
 	}
-	return &Source{storage: client, bucket: cfg.Bucket, prefix: cfg.Prefix}, nil
+	return client, nil
 }
 
 // TestConnection lists a bounded page under the connector's bucket/prefix and
 // returns the object count on that page — a reachability + credential probe,
 // not a full inventory (the exhaustive crawl is ListPage). It classifies a
-// failure via classifyListError.
+// failure via ClassifyListError.
 func (s *Source) TestConnection(ctx context.Context) (int, error) {
 	objs, err := s.storage.ListObjectsPage(ctx, s.bucket, s.prefix, testConnectionMaxKeys)
 	if err != nil {
-		return 0, classifyListError(err)
+		return 0, ClassifyListError(err)
 	}
 	return len(objs), nil
 }
@@ -103,18 +120,18 @@ func (s *Source) ListPage(
 		ctx, s.bucket, s.prefix, continuationToken, limit,
 	)
 	if err != nil {
-		return nil, "", classifyListError(err)
+		return nil, "", ClassifyListError(err)
 	}
 	return objs, next, nil
 }
 
-// classifyListError maps a TestConnection/ListPage (ListObjectsPage or
-// ListObjectsPageToken) failure to a coded connector error. A failure that
-// means the connector's config or credentials are wrong (see
+// ClassifyListError maps a connector's object-store failure (a listing, or the
+// s3_inventory source's manifest and data-file reads) to a coded connector error. A
+// failure that means the connector's config or credentials are wrong (see
 // isConfigurationError) → CodeInvalidInput; anything else (a server-fault 5xx,
 // throttling, or a non-API transport/dial/timeout error) is transient →
 // CodeUnavailable.
-func classifyListError(err error) error {
+func ClassifyListError(err error) error {
 	if isConfigurationError(err) {
 		return apperr.Wrap(
 			err,
