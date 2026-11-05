@@ -151,6 +151,28 @@ class TestPollingIngestor:
         assert job.error == "poll_timeout"
 
     @pytest.mark.asyncio
+    async def test_a_poll_timeout_keeps_the_jobs_scan_progress(self) -> None:
+        """Test that the poll-timeout result carries how far the job had scanned.
+
+        **Why this test is important:**
+          - A caller tells a slow but healthy job from a wedged one by whether its scan count
+            moved between polls; a timeout that dropped the count made every long job look
+            stuck.
+
+        **What it tests:**
+          - A job last fetched with 1,200 documents scanned times out with
+            ``documents_scanned == 1200``.
+        """
+        ingestor = _ingestor_mock()
+        ingestor.get_ingestion_job.return_value = IngestionJob(
+            "stuck", IngestionJobState.IN_PROGRESS, documents_scanned=1200
+        )
+        job = await _polling(ingestor, max_poll_seconds=0.0).poll_ingestion_job(
+            knowledge_base_id="kb", data_source_id="ds", job_id="stuck"
+        )
+        assert (job.error, job.documents_scanned) == ("poll_timeout", 1200)
+
+    @pytest.mark.asyncio
     async def test_get_ingestion_job_delegates_to_inner(self) -> None:
         """Test that get_ingestion_job passes straight through to the wrapped ingestor.
 
@@ -397,6 +419,24 @@ class TestJobFromPayload:
         assert job.job_id == "j1"
         assert job.state is IngestionJobState.FAILED
         assert job.error == "bad file; quota"
+
+    def test_maps_the_scan_count(self) -> None:
+        """Test that a payload's scanned-document count maps onto the job, 0 when absent.
+
+        **Why this test is important:**
+          - The scan count is how a caller sees a long job make progress.
+
+        **What it tests:**
+          - ``statistics.numberOfDocumentsScanned`` 42 maps to 42; a payload without
+            statistics maps to 0.
+        """
+        scanned = job_from_payload({
+            "ingestionJobId": "j",
+            "status": "IN_PROGRESS",
+            "statistics": {"numberOfDocumentsScanned": 42},
+        })
+        assert scanned.documents_scanned == 42
+        assert job_from_payload({"ingestionJobId": "j"}).documents_scanned == 0
 
     def test_unknown_or_missing_status_falls_back_to_failed(self) -> None:
         """Test that an unrecognised or absent status maps to FAILED (a safe terminal state).

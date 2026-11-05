@@ -22,7 +22,7 @@ def job_from_payload(job: dict[str, object]) -> IngestionJob:
     ``status`` is coerced to an ``IngestionJobState`` (whose members mirror Bedrock's six statuses
     verbatim); an unknown or missing status falls back to ``FAILED`` (a safe terminal state).
     ``failureReasons`` is flattened into the ``error`` string — see ``_flatten_reasons`` for the shape
-    handling.
+    handling. ``statistics.numberOfDocumentsScanned`` becomes ``documents_scanned`` (0 when absent).
     """
     status = str(job.get("status", IngestionJobState.FAILED.value))
     try:
@@ -33,6 +33,7 @@ def job_from_payload(job: dict[str, object]) -> IngestionJob:
         job_id=str(job["ingestionJobId"]),
         state=state,
         error=_flatten_reasons(job.get("failureReasons")),
+        documents_scanned=_documents_scanned(job.get("statistics")),
     )
 
 
@@ -71,3 +72,11 @@ def _flatten_reasons(reasons: object) -> str:
     if isinstance(reasons, list):
         return "; ".join(str(reason) for reason in cast("list[object]", reasons))
     return str(reasons)
+
+
+def _documents_scanned(statistics: object) -> int:
+    """Return ``numberOfDocumentsScanned`` from a job's ``statistics``, or 0 when it is absent or not a number."""
+    if not isinstance(statistics, dict):
+        return 0
+    scanned = cast("dict[str, object]", statistics).get("numberOfDocumentsScanned")
+    return scanned if isinstance(scanned, int) else 0
