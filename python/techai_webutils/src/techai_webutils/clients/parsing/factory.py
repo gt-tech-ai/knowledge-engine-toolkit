@@ -1,23 +1,29 @@
 """Env-aware document-parser factory (foundation/logger ``NewFromConfig`` pattern).
 
-Selects the parse backend from ``ParserConfig.kind``. Only ``isolated`` (MarkItDown + pymupdf in a
-bounded subprocess) ships today; layout-aware / OCR backends are future
-``Kind``s. Unknown kinds fail loudly, matching the Go ``NewFromConfig`` contract. The heavy
-``markitdown``/``pymupdf`` deps stay lazy — the ``isolated`` backend module is imported only when the
-``isolated`` kind is selected, and it in turn imports the parser libs lazily inside its parse methods.
+Selects the parse backend from ``ParserConfig.kind``: ``isolated`` (the default; MarkItDown +
+pymupdf in a bounded subprocess) or ``layout`` (PDFs through Docling into typed blocks, in the same
+bounded subprocess; other formats through ``isolated``). Unknown kinds fail loudly, matching the Go
+``NewFromConfig`` contract. The heavy deps stay lazy — each backend module is imported only when
+its kind is selected, and the parser libraries load only in the parse child or forkserver.
 """
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from concurrent.futures import Executor
 
+    from docling_core.types.doc.document import DoclingDocument
+
+    from techai_webutils.clients.parsing.layout.parser import LayoutOptions, LayoutParser
     from techai_webutils.core.interfaces.parser import DocumentParser
 
 # Default per-parse address-space cap (512 MiB) and wall-clock ceiling (60 s) for the isolated backend;
@@ -32,7 +38,9 @@ class ParserKind(StrEnum):
     """Which document-parser backend to build."""
 
     ISOLATED = "isolated"
-    """MarkItDown + pymupdf run in a memory/wall-clock-bounded subprocess (the only backend today)."""
+    """MarkItDown + pymupdf run in a memory/wall-clock-bounded subprocess (the default)."""
+    LAYOUT = "layout"
+    """PDFs through Docling into typed blocks (bounded the same way); other formats ``isolated``."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,23 +48,38 @@ class ParserConfig:
     """Document-parser configuration (the consumer maps its own config section onto it)."""
 
     kind: ParserKind = ParserKind.ISOLATED
-    """Selects the parse backend (only ``isolated`` ships today)."""
+    """Selects the parse backend (``isolated`` by default)."""
     memory_bytes: int = _DEFAULT_MEMORY_BYTES
-    """Per-parse address-space (RLIMIT_AS) cap for the isolated subprocess."""
+    """Per-parse address-space (RLIMIT_AS) cap for the parse subprocess (``layout`` needs several
+    GiB: Docling loads its models in the child)."""
     timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS
-    """Per-parse wall-clock ceiling (seconds) before the isolated subprocess is killed."""
+    """Per-parse wall-clock ceiling (seconds) before the parse subprocess is killed."""
+    artifacts_path: str = ""
+    """``layout``: the directory holding Docling's model weights (empty: Docling downloads them)."""
+    ocr: bool = True
+    """``layout``: run OCR on pages and regions with no text layer."""
 
 
 def parser_from_config(
-    config: ParserConfig, *, executor: Executor | None = None
+    config: ParserConfig,
+    *,
+    executor: Executor | None = None,
+    convert: Callable[[str, LayoutOptions], DoclingDocument] | None = None,
 ) -> DocumentParser:
-    """Build the ``DocumentParser`` selected by ``config.kind`` (isolated). Unknown kinds fail loudly.
+    """Build the ``DocumentParser`` selected by ``config.kind``. Unknown kinds fail loudly.
 
     ``executor`` is the pool parses wait on, sized by the composition root to the lane's
-    concurrency; ``None`` keeps the event loop's default pool. The ``isolated`` backend module (and,
-    transitively, the markitdown/pymupdf import graph) is loaded lazily here, so a composition root
-    that never selects it never pays the import.
+    concurrency; ``None`` keeps the event loop's default pool. ``convert`` replaces the ``layout``
+    kind's Docling conversion (a module-level, picklable function). Each backend module (and its
+    import graph) is loaded lazily here, so a composition root never pays for an unselected kind.
+
+    Raises:
+        AppValueError: An unknown kind, or ``layout`` with neither Docling installed (the
+            ``layout`` extra) nor an injected ``convert`` (``INVALID_INPUT``).
+
     """
+    if config.kind is ParserKind.LAYOUT:
+        return _layout(config, executor, convert)
     if config.kind is ParserKind.ISOLATED:
         from techai_webutils.clients.parsing.isolated import IsolatedParser  # noqa: PLC0415 — lazy backend
 
@@ -67,3 +90,27 @@ def parser_from_config(
         )
     msg = f"unknown parser kind: {config.kind!r}"
     raise AppValueError(msg)
+
+
+def _layout(
+    config: ParserConfig,
+    executor: Executor | None,
+    convert: Callable[[str, LayoutOptions], DoclingDocument] | None,
+) -> DocumentParser:
+    """Build the ``layout`` parser, refusing it when Docling is missing and nothing is injected."""
+    if convert is None and importlib.util.find_spec("docling") is None:
+        msg = "the layout parser needs Docling: install techai-webutils[layout]"
+        raise AppValueError(msg)
+    module = importlib.import_module("techai_webutils.clients.parsing.layout.parser")
+    parser = cast("type[LayoutParser]", module.LayoutParser)
+    return parser(
+        memory_bytes=config.memory_bytes,
+        timeout_seconds=config.timeout_seconds,
+        executor=executor,
+        artifacts_path=config.artifacts_path,
+        ocr=config.ocr,
+        convert=convert
+        or cast(
+            "Callable[[str, LayoutOptions], DoclingDocument]", module.convert_with_docling
+        ),
+    )

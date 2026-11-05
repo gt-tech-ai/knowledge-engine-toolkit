@@ -35,16 +35,23 @@ import time
 import traceback
 from pathlib import Path
 from queue import Empty
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from techai_webutils.clients.parsing.isolated.detect import detect_format
 from techai_webutils.clients.parsing.isolated.markitdown_parser import MarkItDownParser
-from techai_webutils.core.domain import DocumentFormat, Page, ParsedDocument
+from techai_webutils.core.domain import (
+    DocumentFormat,
+    Page,
+    ParsedDocument,
+    blocks_from_json,
+    blocks_to_json,
+)
 from techai_webutils.core.interfaces.parser import ParseCost
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from concurrent.futures import Executor
+    from multiprocessing.context import ForkServerContext, SpawnContext
     from multiprocessing.process import BaseProcess
     from multiprocessing.queues import Queue
 
@@ -93,9 +100,28 @@ def _isolated_context():  # noqa: ANN202 — inferred SpawnContext|ForkServerCon
 _MP_CONTEXT = _isolated_context()
 """The multiprocessing context for isolated parses (forkserver where available, else spawn)."""
 
+SPAWN_CONTEXT = mp.get_context("spawn")
+"""A fresh-interpreter context, for parsers whose native libraries are not fork-safe (Docling)."""
+
 
 class IsolationError(Exception):
     """Raised when an isolated task's worker dies (crash / OOM-kill) without a result."""
+
+
+class IsolationMemoryError(IsolationError):
+    """Raised when an isolated task ran out of memory (``MemoryError`` under its address-space cap)."""
+
+
+MEMORY_EXCEEDED = "parse_isolation_failed: memory_exceeded"
+"""The error a parse carries when its child ran out of memory under the cap (keeps the
+``parse_isolation_failed`` prefix consumers already classify)."""
+
+
+def isolation_error_tag(exc: IsolationError) -> str:
+    """Return the ``ParsedDocument.error`` for an isolated parse that failed with ``exc``."""
+    if isinstance(exc, IsolationMemoryError):
+        return MEMORY_EXCEEDED
+    return f"parse_isolation_failed: {exc}"
 
 
 def _apply_memory_limit(memory_bytes: int) -> None:
@@ -116,6 +142,9 @@ def _worker[T](
         _apply_memory_limit(memory_bytes)
     try:
         result_queue.put(("ok", fn(*args)))
+    # Over the address-space cap: report it without allocating a traceback.
+    except MemoryError:
+        result_queue.put(("oom", ""))
     # Return the failure to the parent instead of crashing silently.
     except Exception as exc:
         # Carry the full traceback (not just repr) so an IsolationError in the parent is
@@ -137,13 +166,16 @@ def run_isolated[T](
     *args: object,
     timeout_seconds: float,
     memory_bytes: int = 0,
+    context: SpawnContext | ForkServerContext | None = None,
 ) -> T:
     """Run ``fn(*args)`` in a spawned subprocess, killing it if it exceeds ``timeout_seconds``.
 
-    Raises ``TimeoutError`` if the child overruns (after terminating it), or ``IsolationError``
-    if the child dies without producing a result or the task itself raised.
+    Raises ``TimeoutError`` if the child overruns (after terminating it), ``IsolationMemoryError``
+    if the task ran out of memory, or ``IsolationError`` if the child dies without producing a
+    result or the task itself raised. ``context`` picks how the child starts (default: the
+    preloaded forkserver where available).
     """
-    ctx = _MP_CONTEXT
+    ctx = context or _MP_CONTEXT
     result_queue: Queue[tuple[str, object]] = ctx.Queue()
     proc = ctx.Process(target=_worker, args=(fn, args, memory_bytes, result_queue))
     proc.start()
@@ -160,6 +192,9 @@ def run_isolated[T](
     if proc.is_alive():  # result delivered but the child is lingering — reap it
         _kill(proc)
     status, payload = result
+    if status == "oom":
+        msg = "isolated task ran out of memory"
+        raise IsolationMemoryError(msg)
     if status == "err":
         raise IsolationError(str(payload))
     return cast("T", payload)
@@ -213,6 +248,7 @@ def _write_scratch(document: ParsedDocument, path: str) -> None:
         "word_count": document.word_count,
         "pages": [[page.page_number, page.text] for page in document.pages],
         "error": document.error,
+        "blocks": blocks_to_json(document.blocks),
     }
     with Path(path).open("w", encoding="utf-8") as handle:
         json.dump(payload, handle)
@@ -230,6 +266,7 @@ def _read_scratch(path: str) -> ParsedDocument:
         word_count=cast("int", payload["word_count"]),
         pages=[Page(page_number=cast("int", n), text=cast("str", s)) for n, s in pages],
         error=cast("str", payload["error"]),
+        blocks=blocks_from_json(cast("dict[str, object]", payload["blocks"])),
     )
 
 
@@ -242,6 +279,9 @@ def _parse_to_scratch(
 
 class IsolatedParser:
     """Async facade that parses each document in a memory/time-bounded subprocess."""
+
+    _context: ClassVar[SpawnContext | ForkServerContext] = _MP_CONTEXT
+    """How each parse child starts (a subclass may need ``SPAWN_CONTEXT``)."""
 
     def __init__(
         self,
@@ -288,6 +328,7 @@ class IsolatedParser:
                 *args,
                 timeout_seconds=self._timeout_seconds,
                 memory_bytes=self._memory_bytes,
+                context=self._context,
             )
             return _read_scratch(scratch)
         finally:
@@ -310,9 +351,7 @@ class IsolatedParser:
         except TimeoutError:
             return self._failed(content, declared, filename, "parse_timeout")
         except IsolationError as exc:
-            return self._failed(
-                content, declared, filename, f"parse_isolation_failed: {exc}"
-            )
+            return self._failed(content, declared, filename, isolation_error_tag(exc))
 
     @staticmethod
     def _failed(
@@ -338,7 +377,7 @@ class IsolatedParser:
         except TimeoutError:
             return self._failed_path(declared, filename, "parse_timeout")
         except IsolationError as exc:
-            return self._failed_path(declared, filename, f"parse_isolation_failed: {exc}")
+            return self._failed_path(declared, filename, isolation_error_tag(exc))
 
     @staticmethod
     def _failed_path(declared: str, filename: str, error: str) -> ParsedDocument:

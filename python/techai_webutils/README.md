@@ -43,8 +43,9 @@ storage = new_storage_from_config(config)
 ```
 
 The base install already includes the AWS, gRPC, FastAPI, Qdrant, Redis and OpenTelemetry clients.
-The `ray`, `postgres`, `parsing` and `langdetect` extras are imported only when their backend is
-selected, so a service installs just the extras its configuration uses.
+The `ray`, `postgres`, `parsing`, `langdetect`, `opensearch`, `nlp`, `fasttext` and `layout`
+extras are imported only when their backend is selected, so a service installs just the extras
+its configuration uses. `layout` (Docling and torch) is over 1 GB.
 
 Load layered YAML config (`base.yaml` → `{env}.yaml` → `secrets.yaml`) under an env prefix of
 your own, and give your settings class the same `env_prefix`:

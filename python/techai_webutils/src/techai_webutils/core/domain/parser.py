@@ -11,6 +11,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from techai_webutils.core.domain.document_ir import DocumentBlock
 
 
 class DocumentFormat(StrEnum):
@@ -56,7 +60,8 @@ class ParsedDocument:
     """The result of parsing a document into Markdown-structured text.
 
     ``pages`` is populated only for PDFs (page-level text + boundaries for citation
-    provenance); other formats rely on ``markdown_content`` alone. ``error`` is non-empty
+    provenance); other formats rely on ``markdown_content`` alone. ``blocks`` holds the typed
+    blocks in reading order when a layout-aware parser produced them (empty otherwise). ``error`` is non-empty
     when parsing failed or only partially succeeded (the parser never raises to the caller
     for a bad document — it returns a result carrying the error instead).
     """
@@ -85,6 +90,11 @@ class ParsedDocument:
     # empty on success.
     error: str = ""
     """Short failure tag (e.g. ``unsupported_format``, ``conversion_failed: ...``); empty on success."""
+
+    # blocks are the typed blocks in reading order (the ``layout`` parser only).
+    blocks: tuple[DocumentBlock, ...] = ()
+    """Typed blocks in reading order (``core.domain.document_ir``); empty unless a layout-aware
+    parser produced them."""
 
     @property
     def ok(self) -> bool:

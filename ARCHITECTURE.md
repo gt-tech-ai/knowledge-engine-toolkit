@@ -920,6 +920,35 @@ both `Chunker` (`chunk(text) -> list[str]`) and `StructuredChunker`
   temperature 0 (bounded by `max_document_chars`, `max_context_tokens` and `concurrency`), a
   priced dial a consumer enables only with a budget.
 
+## Structured parse and the layout parser
+
+`core.domain.document_ir` is the parse IR: `DocumentBlock`s in reading order, typed by `BlockType`
+(`title`, `heading` with its `level`, `paragraph`, `list_item`, `table`, `image`, `code`,
+`caption`, `formula`, after Docling's document model), each with its page, `section_path` and
+`order`. A table keeps its `TableCell`s (row, column, header flag, spans), size, markdown
+rendering and caption. `ParsedDocument.blocks` holds them (empty unless a layout-aware parser
+ran; `markdown_content` is unchanged). `blocks_to_json` / `blocks_from_json` give the JSON form
+under `FORMAT_VERSION`, read at N and N-1. `ChunkPayload` gains `section_path`, `element_type`
+and `span`, all optional.
+
+`ParserKind.layout` (`clients.parsing.layout`, the `layout` extra) converts PDFs with Docling
+inside the same bounded child as `isolated` (`memory_bytes`, `timeout_seconds`); other formats go
+through `isolated` unchanged. `parse_pages(path, first_page=, last_page=)` converts one page range,
+so a large PDF can parse in checkpointed parts; each part is one bounded child, so it costs
+`cost()`. The child is spawned, not forked (Docling's torch stack aborts in a forked child on
+macOS; the forkserver does not preload Docling, so a fresh interpreter costs about the same).
+`artifacts_path` points Docling at model weights baked into the image (empty: Docling downloads
+them on first use); `ocr` runs OCR on pages and regions with no text layer. Furniture (page
+headers and footers) is dropped, and a table's or picture's caption travels with it. Measured on
+a three-page PDF (two columns, a ruled table, an image-only page): reading order kept, the table
+as one 4x2 block with its header, the scanned page OCR'd, and a peak child RSS of about 1.7 GiB,
+so `layout` needs a `memory_bytes` of several GiB. `parser_from_config` refuses `layout` when
+Docling is not installed unless a `convert` function is injected.
+
+A child that raises `MemoryError` under its address-space cap now fails its document with
+`parse_isolation_failed: memory_exceeded` (`MEMORY_EXCEEDED`, raised as `IsolationMemoryError`),
+for both kinds.
+
 ## Repository tooling substrate
 
 Go packages for tools that read and check a codebase (linters, guards, generators, developer

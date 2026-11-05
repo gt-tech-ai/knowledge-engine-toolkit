@@ -16,7 +16,9 @@ class ChunkPayload:
 
     ``text`` is the chunk's content; ``page_start``/``page_end`` are the inclusive 1-based
     source page range (``None`` for non-paginated / non-PDF content); ``chunk_index`` is the
-    0-based position within the parent.
+    0-based position within the parent. ``section_path``, ``element_type`` and ``span`` say where
+    the chunk came from when a structure-aware chunker made it (empty / ``None`` otherwise), so
+    a sink can carry them into the vector store's metadata and the sidecar.
     """
 
     # chunk_index is the 0-based position of this chunk within its parent document.
@@ -32,6 +34,14 @@ class ChunkPayload:
     """Inclusive 1-based first source page of this chunk (``None`` if non-paginated)."""
     page_end: int | None
     """Inclusive 1-based last source page of this chunk (``None`` if non-paginated)."""
+
+    # section_path / element_type / span locate the chunk in its document's structure.
+    section_path: tuple[str, ...] = ()
+    """The headings the chunk sits under, outermost first (empty when unknown)."""
+    element_type: str = ""
+    """``paragraph``, ``table``, ``code``, ``heading`` ... (empty when unknown)."""
+    span: tuple[int, int] | None = None
+    """The chunk's ``[start, end)`` character range in the parent's text (``None`` when unknown)."""
 
     @property
     def size_bytes(self) -> int:

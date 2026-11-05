@@ -157,9 +157,20 @@ Python: `techai-webutils` 0.9.3.
   (`core.interfaces.chunker`). Chunk context: `core.interfaces.chunk_contextualizer`
   (`ChunkContextualizer`, `ContextDocument`) and `clients.chunking.context` (`ContextualizerKind`
   `none` / `header` / `llm`, `ContextualizerConfig`, `contextualizer_from_config`).
+- Structured parse (Python): `core.domain.document_ir` (`DocumentBlock`, `BlockType`,
+  `TableCell`, `blocks_to_json` / `blocks_from_json`, `FORMAT_VERSION`); `ParsedDocument.blocks`;
+  `ChunkPayload.section_path` / `element_type` / `span`. `ParserKind.layout` (`LayoutParser`,
+  `LayoutOptions`, `convert_with_docling`, `parsed_from_docling`; `parse_pages`) with
+  `ParserConfig.artifacts_path` / `ocr` and `parser_from_config(..., convert=)`; the `layout` extra
+  installs Docling. `run_isolated(..., context=)`, `SPAWN_CONTEXT`, `IsolationMemoryError` and
+  `isolation_error_tag`.
 
 ### Changed
 
+- A parse whose child runs out of memory under its cap now fails with
+  `parse_isolation_failed: memory_exceeded` instead of the child's traceback text (the prefix is
+  unchanged).
+- CI's unit job syncs every extra except `layout` (`uv sync --all-extras --no-extra layout --dev`).
 - `EmbeddingProvider` implementations must accept the keyword `input_type`; the vector retrieval
   engine, the semantic cache and the embedding route classifier now embed as `query` (no change to
   the vectors unless a prefix is configured). `MemoizedEmbedding` keys on the input type.

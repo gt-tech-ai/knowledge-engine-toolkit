@@ -4,6 +4,7 @@ import os
 import resource
 import time
 from collections.abc import Callable
+from multiprocessing.context import ForkServerContext, SpawnContext
 from pathlib import Path
 
 import pymupdf
@@ -374,9 +375,14 @@ class TestScratchHandBack:
             *args: object,
             timeout_seconds: float,
             memory_bytes: int = 0,
+            context: SpawnContext | ForkServerContext | None = None,
         ) -> object:
             value = real_run_isolated(
-                fn, *args, timeout_seconds=timeout_seconds, memory_bytes=memory_bytes
+                fn,
+                *args,
+                timeout_seconds=timeout_seconds,
+                memory_bytes=memory_bytes,
+                context=context,
             )
             queued.append(value)
             return value
