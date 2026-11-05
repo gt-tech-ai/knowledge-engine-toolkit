@@ -30,15 +30,15 @@ type Config struct {
 	// Kind selects the backend; empty means KindStub.
 	Kind client.Kind `yaml:"kind" mapstructure:"kind"`
 
-	// SQS configures KindSQS; its API comes from Deps.
-	SQS outboxsqs.Config `yaml:"sqs" mapstructure:"sqs"`
-
 	// S3 configures KindS3; its API comes from Deps.
 	S3 outboxs3.Config `yaml:"s3" mapstructure:"s3"`
 
 	// Name prefixes the SDK clients' names ("<name>.sqs", "<name>.s3") in decoration
 	// overrides, metrics, spans and logs; empty uses "outbox".
 	Name string `yaml:"name" mapstructure:"name"`
+
+	// SQS configures KindSQS; its API comes from Deps.
+	SQS outboxsqs.Config `yaml:"sqs" mapstructure:"sqs"`
 }
 
 // Deps carries the sink's runtime collaborators.
