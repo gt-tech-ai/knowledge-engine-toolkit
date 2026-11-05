@@ -6,6 +6,23 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.47] - 2026-11-05
+
+Go only; `techai-webutils` is unchanged at 0.9.2.
+
+### Changed
+
+- Breaking: `services/suite.Step.Run` takes `*StepEnv` instead of `StepEnv`. A `StepEnv` carries
+  the whole suite environment (152 bytes), so a step copied it on every call and a consumer
+  linting with gocritic's `hugeParam` at its default threshold could not satisfy the check, since
+  the signature was fixed here. Migrate each registered step from
+  `func(ctx context.Context, env suite.StepEnv)` to `func(ctx context.Context, env *suite.StepEnv)`;
+  field access is unchanged.
+- `foundation/decorate.Decorations` holds its collaborators by pointer, so the value shrinks from
+  80 to 32 bytes and stays cheap to pass by value through `client.NewBase`, `Kinds.Build` and
+  every `Decorate`. No signature changes; copies still share one registry, and the zero
+  `Decorations` still decorates nothing (its `Observability()` is the zero `Observability`).
+
 ## [0.0.46] - 2026-11-04
 
 Python: `techai-webutils` 0.9.2.
