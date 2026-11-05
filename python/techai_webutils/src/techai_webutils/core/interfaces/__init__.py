@@ -52,6 +52,9 @@ Infrastructure Interfaces:
     KeyedPublisher: Publish messages under a partition key.
     LeaseExtender: Extend the lease on a message still being handled.
     BacklogProbe: Report the work waiting on a topic.
+    CheckpointStore: Store stage artifacts for resumable ingestion.
+    StageStateClient: Record which stage finished with which fingerprint.
+    InflightClaim: Run a costly stage of one content once across consumers.
     MessageConsumer: Consume messages from a queue.
     StorageClient: Object storage operations.
 
@@ -67,6 +70,14 @@ from techai_webutils.core.interfaces.adaptive_throttler import AdaptiveThrottler
 from techai_webutils.core.interfaces.bulkhead import Bulkhead
 from techai_webutils.core.interfaces.byte_cache import ByteCache
 from techai_webutils.core.interfaces.cache import Cache, CacheInvalidator
+from techai_webutils.core.interfaces.checkpoint import (
+    CheckpointKey,
+    CheckpointStore,
+    Stage,
+    StageArtifact,
+    StageState,
+    StageStateClient,
+)
 from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
 from techai_webutils.core.interfaces.config_loader import ConfigLoader
 from techai_webutils.core.interfaces.crud_service import CrudService, ServiceHooks
@@ -74,6 +85,7 @@ from techai_webutils.core.interfaces.dedup import Deduplicator
 from techai_webutils.core.interfaces.document import ChunkingStrategy, DocumentParser
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider
 from techai_webutils.core.interfaces.hedger import Hedger
+from techai_webutils.core.interfaces.inflight_claim import InflightClaim, inflight_key
 from techai_webutils.core.interfaces.jobs import (
     Job,
     JobEnqueuer,
@@ -145,6 +157,8 @@ __all__ = [
     # Foundation
     "Cache",
     "CacheInvalidator",
+    "CheckpointKey",
+    "CheckpointStore",
     # AI/Retrieval
     "ChunkingStrategy",
     "CircuitBreakerInterface",
@@ -157,6 +171,7 @@ __all__ = [
     "EmbeddingProvider",
     "HealthChecker",
     "Hedger",
+    "InflightClaim",
     "IntentClassifier",
     # Jobs
     "Job",
@@ -189,6 +204,10 @@ __all__ = [
     "Retrier",
     "RetrievalEngine",
     "ServiceHooks",
+    "Stage",
+    "StageArtifact",
+    "StageState",
+    "StageStateClient",
     "StorageClient",
     "StorageObject",
     "Store",
@@ -200,4 +219,5 @@ __all__ = [
     "Worker",
     "WorkerRegistry",
     "Workflow",
+    "inflight_key",
 ]

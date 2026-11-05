@@ -681,6 +681,38 @@ The writer sets `partition = fnv32a(partition_key) mod partitions` at insert, us
 `KeyColumn`, so a table may point `KeyColumn` at `partition_key` or keep its existing key column.
 Lowering `partitions` strands rows in the dropped partitions until a migration rewrites them.
 
+## Resumable ingestion
+
+An ingestion pipeline records each finished stage, so a retry or a re-index resumes where it
+stopped instead of paying for every stage again. Python only; the defaults change nothing.
+
+- **Stages and fingerprints.** `Stage` is `parse`, `enrich`, `chunk`, `embed`, `index`.
+  `foundation.checkpoint.fingerprint(stage, versions, upstream)` is the SHA-256 of the stage, the
+  versions that shape its output (parser, model, chunker settings) and the upstream stage's
+  fingerprint, so a version change upstream invalidates every stage after it.
+- **Checkpoint store.** `CheckpointStore` (`get`, `put`, `put_part`, `get_part`, `parts`,
+  `delete`, `purge`) keeps each stage's artifact under `CheckpointKey(org_id, document_id,
+  content_hash, stage, fingerprint)`. `CheckpointConfig.kind` selects it: `noop` (the default)
+  stores nothing, so every stage runs as today; `s3db` writes artifacts to the object store and
+  records each stage through the injected `StageStateClient`.
+  - Artifacts are keyed by content within an org, so two documents with the same bytes share them;
+    a holder marker per document means a delete removes an artifact only when no document still
+    holds it.
+  - A payload over `max_artifact_bytes` (64 MiB) is written as segments, so no object outgrows the
+    cap.
+  - A corrupt envelope reads as a miss, so the stage runs again; one written by a newer release
+    is refused with `CONFLICT`.
+- **Resume planner.** `ResumePlanner.plan(states, current, *, sink)` returns the first stage with
+  no record carrying today's fingerprint, or `None` when the document is indexed. For a sink that
+  embeds by itself (`embedding_sinks`, Bedrock by default) `embed` is skipped. The golden cases in
+  `testdata/resume_planner/` are the contract a port of the planner replays.
+- **In-flight claims.** `InflightClaim` lets one of several concurrent consumers run a costly stage
+  of one content. `inflight_key(org_id, content_hash, stage, fingerprint)` names the work.
+  `InflightClaimConfig.kind` selects it: `noop` (the default) grants every claim; `redis` is
+  `SET NX PX` on a shared key that lapses with the message lease, and its release deletes the key
+  only while it still holds the caller's token. A Redis error grants the claim, since a duplicate
+  run is today's behaviour and the stages are idempotent.
+
 ## Repository tooling substrate
 
 Go packages for tools that read and check a codebase (linters, guards, generators, developer

@@ -93,12 +93,17 @@ def redis_container() -> Iterator[object]:
 def sqs_endpoint() -> Iterator[str]:
     """Start ElasticMQ (SQS-compatible) and yield its mapped HTTP endpoint."""
     from testcontainers.core.container import DockerContainer
-    from testcontainers.core.waiting_utils import wait_for_logs
+    from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
-    container = DockerContainer(_ELASTICMQ_IMAGE).with_exposed_ports(9324)
+    container = (
+        DockerContainer(_ELASTICMQ_IMAGE)
+        .with_exposed_ports(9324)
+        .waiting_for(
+            LogMessageWaitStrategy("Started SQS rest server").with_startup_timeout(90)
+        )
+    )
     container.start()
     try:
-        wait_for_logs(container, "Started SQS rest server", timeout=90)
         host = container.get_container_host_ip()
         port = int(container.get_exposed_port(9324))
         yield f"http://{host}:{port}"
@@ -110,7 +115,7 @@ def sqs_endpoint() -> Iterator[str]:
 def minio_endpoint() -> Iterator[str]:
     """Start MinIO (S3-compatible) and yield its mapped HTTP endpoint."""
     from testcontainers.core.container import DockerContainer
-    from testcontainers.core.waiting_utils import wait_for_logs
+    from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
     container = (
         DockerContainer(_MINIO_IMAGE)
@@ -118,10 +123,10 @@ def minio_endpoint() -> Iterator[str]:
         .with_env("MINIO_ROOT_PASSWORD", _MINIO_PASSWORD)
         .with_exposed_ports(9000)
         .with_command("server /data")
+        .waiting_for(LogMessageWaitStrategy("API:").with_startup_timeout(90))
     )
     container.start()
     try:
-        wait_for_logs(container, "API:", timeout=90)
         host = container.get_container_host_ip()
         port = int(container.get_exposed_port(9000))
         yield f"http://{host}:{port}"
@@ -261,7 +266,7 @@ async def _await_pg_ready(dsn: str) -> None:
 def postgres_dsn() -> Iterator[str]:
     """Start a real Postgres for the module and yield a libpq DSN for it."""
     from testcontainers.core.container import DockerContainer
-    from testcontainers.core.waiting_utils import wait_for_logs
+    from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
     container = (
         DockerContainer(_POSTGRES_IMAGE)
@@ -269,12 +274,14 @@ def postgres_dsn() -> Iterator[str]:
         .with_env("POSTGRES_PASSWORD", "dev_password")
         .with_env("POSTGRES_DB", "knowledge_engine")
         .with_exposed_ports(5432)
+        .waiting_for(
+            LogMessageWaitStrategy(
+                "database system is ready to accept connections"
+            ).with_startup_timeout(60)
+        )
     )
     container.start()
     try:
-        wait_for_logs(
-            container, "database system is ready to accept connections", timeout=60
-        )
         host = container.get_container_host_ip()
         port = int(container.get_exposed_port(5432))
         dsn = f"postgresql://app:dev_password@{host}:{port}/knowledge_engine?sslmode=disable"

@@ -68,6 +68,19 @@ Python: `techai-webutils` 0.9.3.
   - The SQS outbox sink sends a record's `Key` as the `partition_key` attribute.
   - A consumer's table adds `partition_key text not null default ''` and
     `partition int not null default 0`.
+- Resumable ingestion (Python):
+  - `Stage`, `CheckpointKey`, `StageArtifact`, `StageState`, the `CheckpointStore` ABC and the
+    `StageStateClient` protocol (`core.interfaces.checkpoint`).
+  - `foundation.checkpoint.fingerprint` and `ResumePlanner`, with golden cases in
+    `testdata/resume_planner/`.
+  - `checkpoint_store_from_config` with `CheckpointConfig.kind` `noop` (the default) or `s3db`
+    (content-addressed artifacts in the object store, shared by documents with the same bytes;
+    segments over `max_artifact_bytes`, 64 MiB).
+  - `InflightClaim` and `inflight_key` (`core.interfaces.inflight_claim`), and
+    `inflight_claim_from_config` with `InflightClaimConfig.kind` `noop` (the default) or `redis`
+    (`SET NX PX`, token-checked release, fails open).
+  - A unit test that the `Client families are independent` import contract lists every
+    `clients/` package; `checkpoint` and `inflight_claim` are added to it.
 
 ### Changed
 

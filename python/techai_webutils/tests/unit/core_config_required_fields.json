@@ -1,11 +1,13 @@
 {
   "techai_webutils.clients.audit.builder.AuditSinkConfig": {},
   "techai_webutils.clients.cache.builder.CacheConfig": {},
+  "techai_webutils.clients.checkpoint.config.CheckpointConfig": {},
   "techai_webutils.clients.chunking.factory.ChunkerConfig": {},
   "techai_webutils.clients.dataset.builder.DatasetConfig": {},
   "techai_webutils.clients.email.builder.EmailConfig": {},
   "techai_webutils.clients.embedding.builder.EmbeddingConfig": {},
   "techai_webutils.clients.facts.builder.FactPublisherConfig": {},
+  "techai_webutils.clients.inflight_claim.builder.InflightClaimConfig": {},
   "techai_webutils.clients.jobs.config.JobConfig": {},
   "techai_webutils.clients.kb_ingestion.builder.KbConfig": {},
   "techai_webutils.clients.lock.builder.LockConfig": {},

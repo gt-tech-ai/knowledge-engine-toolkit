@@ -269,6 +269,7 @@ type = "independence"
 modules = [
     "techai_webutils.clients.audit",
     "techai_webutils.clients.cache",
+    "techai_webutils.clients.checkpoint",
     "techai_webutils.clients.chunking",
     "techai_webutils.clients.dataset",
     "techai_webutils.clients.decorators",
@@ -276,6 +277,7 @@ modules = [
     "techai_webutils.clients.embedding",
     "techai_webutils.clients.facts",
     "techai_webutils.clients.grader",
+    "techai_webutils.clients.inflight_claim",
     "techai_webutils.clients.jobs",
     "techai_webutils.clients.kb_ingestion",
     "techai_webutils.clients.llm",

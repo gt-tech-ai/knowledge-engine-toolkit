@@ -1,0 +1,48 @@
+{
+  "current": {
+    "chunk": "fp-chunk-v2",
+    "embed": "fp-embed-v2",
+    "enrich": "fp-enrich-v2",
+    "index": "fp-index-v2",
+    "parse": "fp-parse-v2"
+  },
+  "description": "The Bedrock sink embeds by itself, so after chunk comes index.",
+  "expected": "index",
+  "name": "bedrock_after_chunk",
+  "sink": "bedrock",
+  "states": [
+    {
+      "artifact_key": "checkpoints/c0/org-1/c0ffee/parse-fp-parse-v2.json.gz",
+      "attempts": 1,
+      "content_hash": "c0ffee",
+      "document_id": "doc-1",
+      "fingerprint": "fp-parse-v2",
+      "org_id": "org-1",
+      "shard": 0,
+      "stage": "parse",
+      "updated_at": "2026-11-05T00:00:00+00:00"
+    },
+    {
+      "artifact_key": "checkpoints/c0/org-1/c0ffee/enrich-fp-enrich-v2.json.gz",
+      "attempts": 1,
+      "content_hash": "c0ffee",
+      "document_id": "doc-1",
+      "fingerprint": "fp-enrich-v2",
+      "org_id": "org-1",
+      "shard": 0,
+      "stage": "enrich",
+      "updated_at": "2026-11-05T00:00:00+00:00"
+    },
+    {
+      "artifact_key": "checkpoints/c0/org-1/c0ffee/chunk-fp-chunk-v2.json.gz",
+      "attempts": 1,
+      "content_hash": "c0ffee",
+      "document_id": "doc-1",
+      "fingerprint": "fp-chunk-v2",
+      "org_id": "org-1",
+      "shard": 0,
+      "stage": "chunk",
+      "updated_at": "2026-11-05T00:00:00+00:00"
+    }
+  ]
+}
