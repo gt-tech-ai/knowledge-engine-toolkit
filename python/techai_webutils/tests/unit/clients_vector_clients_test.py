@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from qdrant_client import AsyncQdrantClient
@@ -322,6 +322,41 @@ class TestQdrantVectorStore:
     def test_dimension_exposed(self) -> None:
         """The store exposes its collection dimension (single source of truth vs the embedder)."""
         assert QdrantVectorStore(_mock_client(), dimension=768).dimension == 768
+
+    @pytest.mark.asyncio
+    async def test_one_id_hash_per_chunk_and_no_exists_probe_after_ensure(self) -> None:
+        """Test that each chunk's point id is hashed once and an ensured collection is not re-probed.
+
+        Why this test is important:
+          - The indexer probes and upserts every chunk of every document; a second hash per chunk or
+            an exists round-trip per probe is pure overhead on the hot path.
+
+        What it tests:
+          - an upsert of 3 entries, then a lookup of the same 3 ids, hash 3 + 3 point ids
+          - after the upsert ensured the collection, the lookup and a count make no
+            ``collection_exists`` call
+        """
+        client = _mock_client(exists=False)
+        store = QdrantVectorStore(client, dimension=1)
+        entries = [
+            VectorEntry(
+                id=f"d:{i}", document_id="d", content="t", embedding=[1.0], metadata={}
+            )
+            for i in range(3)
+        ]
+        await store.upsert("c", entries)
+        client.collection_exists.reset_mock()
+
+        with patch(
+            "techai_webutils.clients.vector.qdrant.store.uuid.uuid5", wraps=uuid.uuid5
+        ) as hashed:
+            await store.stored_metadata("c", [e.id for e in entries])
+            await store.count_by_document("c", "d")
+
+        assert hashed.call_count == 3
+        client.collection_exists.assert_not_awaited()
+        points = client.upsert.await_args.kwargs["points"]
+        assert [p.vector for p in points] == [[1.0]] * 3
 
 
 class TestVectorStoreFactory:

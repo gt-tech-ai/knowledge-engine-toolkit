@@ -56,6 +56,8 @@ Infrastructure Interfaces:
     StageStateClient: Record which stage finished with which fingerprint.
     InflightClaim: Run a costly stage of one content once across consumers.
     StartBudget: Cap and pace an account's knowledge-base ingestion jobs.
+    Sink: Write, update and delete one document's chunks in the search backend.
+    MetricsQuerier: Evaluate PromQL against a metrics backend.
     MessageConsumer: Consume messages from a queue.
     StorageClient: Object storage operations.
 
@@ -120,6 +122,7 @@ from techai_webutils.core.interfaces.metrics import (
     MetricHistogram,
     MetricsProvider,
 )
+from techai_webutils.core.interfaces.metrics_query import MetricSample, MetricsQuerier
 from techai_webutils.core.interfaces.pipeline import AsyncPipeline, Pipeline
 from techai_webutils.core.interfaces.rate_limiter import RateLimiter
 from techai_webutils.core.interfaces.repository import (
@@ -137,6 +140,12 @@ from techai_webutils.core.interfaces.retrieval import (
     RetrievalEngine,
 )
 from techai_webutils.core.interfaces.service import BaseService
+from techai_webutils.core.interfaces.sink import (
+    ChunkPayload,
+    Sink,
+    SinkDocument,
+    SinkStore,
+)
 from techai_webutils.core.interfaces.start_budget import Slot, StartBudget
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
 from techai_webutils.core.interfaces.store import Store
@@ -161,6 +170,7 @@ __all__ = [
     "CacheInvalidator",
     "CheckpointKey",
     "CheckpointStore",
+    "ChunkPayload",
     # AI/Retrieval
     "ChunkingStrategy",
     "CircuitBreakerInterface",
@@ -193,7 +203,9 @@ __all__ = [
     "MetricCounter",
     "MetricGauge",
     "MetricHistogram",
+    "MetricSample",
     "MetricsProvider",
+    "MetricsQuerier",
     "PassagePolicy",
     "PeriodicJob",
     "Pipeline",
@@ -206,6 +218,9 @@ __all__ = [
     "Retrier",
     "RetrievalEngine",
     "ServiceHooks",
+    "Sink",
+    "SinkDocument",
+    "SinkStore",
     "Slot",
     "Stage",
     "StageArtifact",

@@ -93,9 +93,26 @@ Python: `techai-webutils` 0.9.3.
     `GetKnowledgeBaseDocuments` (ten URIs per call, five calls per second; needs the
     **`bedrock:GetKnowledgeBaseDocuments`** IAM action); the default filters `list_documents`.
     Both decorators forward it; `RetryingIngestor` does not retry it.
+- OpenSearch (Python; the `opensearch` extra, `opensearch-py[async]>=3.2.0`):
+  - The `opensearch` `VectorStoreKind`, `OpenSearchConfig` (`VectorStoreConfig.opensearch`) and
+    `OpenSearchVectorStore`: org-isolated `shared` or `dedicated` layouts, versioned indices behind
+    an alias (`create_index`, `current_index`, `index_model`, `swap_alias`, `set_write_targets`),
+    `on_disk` indices above `disk_mode_threshold_docs`, `update_metadata`, and bulk-ingest mode
+    (`begin_bulk_ingest` / `end_bulk_ingest`). The client is injected
+    (`new_vector_store_from_config(..., opensearch_clients=…)`).
+  - `MultiDomainVectorStore`: shards routed to domains by `OpenSearchConfig.shard_domains`, reads
+    fanned out.
+- `Sink`, `SinkDocument`, `ChunkPayload` and `SinkStore` (`core.interfaces.sink`), and
+  `sink_from_config` with `SinkConfig.kind` `noop` (the default) or `opensearch`.
+- `MetricsQuerier` and `MetricSample` (`core.interfaces.metrics_query`), and
+  `new_metrics_querier_from_config` with `PrometheusConfig.kind` `stub` (the default) or `http`,
+  the Python mirror of Go `clients/prometheus`.
+- `KnowledgeBaseConfig.embed_concurrency` / `VectorKnowledgeBase(embed_concurrency=…)` (default 1).
 
 ### Changed
 
+- `QdrantVectorStore` no longer asks the server whether a collection it already ensured exists
+  before a lookup or count, and no longer copies each vector on upsert.
 - Bedrock `StartIngestionJob`'s `ServiceQuotaExceededException` and `ThrottlingException` are now
   `UnavailableError` (transient, retried by `RetryingIngestor`) instead of a raw `ClientError`.
 - `IsolatedParser` returns each parsed document through a scratch file instead of the result queue,

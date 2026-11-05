@@ -738,6 +738,41 @@ stopped instead of paying for every stage again. Python only; the defaults chang
   Bedrock looks them up with `GetKnowledgeBaseDocuments`, ten per call and five calls per second;
   any other Kind filters `list_documents`.
 
+## OpenSearch store and sinks
+
+Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) change nothing.
+
+- **`opensearch` VectorStore Kind.** k-NN (`knn_vector`, faiss HNSW, cosine) and BM25 (`text`) in
+  one index per collection. The composition root builds the `AsyncOpenSearch` client (hosts,
+  SigV4 auth) and injects it through `new_vector_store_from_config(..., opensearch_clients=…)`;
+  every request carries `OpenSearchConfig.request_timeout_seconds`.
+  - **Tenancy.** `layout: shared` puts a collection's orgs in one index, routed by org;
+    `dedicated` gives each org its own alias and index. The store adds the org filter to every
+    search, count, lookup, update and delete. The org comes from a scoped view (`for_org`), the
+    search filters, or each entry's `org_id`; a call without one is `INVALID_INPUT`. A document's
+    `_id` is `<org>/<entry id>`, so two orgs' equal ids never collide.
+  - **Versioned indices.** Reads go through an alias pointing at `<collection>-<model>-v<version>`,
+    stamped with its model in `_meta` (`index_model`). A re-index writes to both indices
+    (`set_write_targets`, per process), moves the alias atomically (`swap_alias`, the old index
+    kept) and can swap back.
+  - **Disk mode.** `create_index(expected_docs=…)` above `disk_mode_threshold_docs` maps the vector
+    `on_disk` at `disk_compression_level`.
+  - **Bulk ingest.** `begin_bulk_ingest(index)` records refresh and replicas in `_meta` and turns
+    them off; `end_bulk_ingest(index)` restores and verifies them, and is safe after a failed
+    backfill or a second call.
+  - **Several domains.** With more than one injected client, `MultiDomainVectorStore` routes each
+    entry by its `shard` metadata through `shard_domains`; reads, counts and deletes fan out, and a
+    search returns every domain's hits for the caller to fuse. An unmapped shard is `INVALID_INPUT`.
+- **Sink.** `Sink.write(document, chunks, vectors)`, `delete(org_id, document_id)` and
+  `update_metadata(org_id, document_id, fields)` end the ingestion pipeline. `SinkKind.opensearch`
+  writes through the injected store: stable ids `<document>:<n>`, the document's metadata,
+  `content_hash`, the embedding model, the chunk's structure fields and `entities.<label>` lists.
+  Vectors from another model than the index's are a permanent `CONFLICT`.
+- **`MetricsQuerier`** mirrors Go's: `query(promql)` and `query_range(promql, start, end, step)`.
+  Kinds `stub` (zero, no I/O) and `http` (the Prometheus query API, fail closed, coded errors).
+- **`VectorKnowledgeBase(embed_concurrency=…)`** keeps that many sub-batches in flight (1, the
+  default, is one at a time).
+
 ## Repository tooling substrate
 
 Go packages for tools that read and check a codebase (linters, guards, generators, developer

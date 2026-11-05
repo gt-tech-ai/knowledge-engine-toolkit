@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -185,6 +186,62 @@ class TestVectorKnowledgeBase:
             e.id for call in store.upsert.call_args_list for e in call.args[1]
         ]
         assert upserted_ids == [f"doc-1:{i}" for i in range(150)]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("concurrency", "expected_peak"), [(1, 1), (3, 3)])
+    async def test_embed_concurrency_bounds_sub_batches_in_flight(
+        self, concurrency: int, expected_peak: int
+    ) -> None:
+        """Test that at most ``embed_concurrency`` sub-batches are embedded at once.
+
+        Why this test is important:
+          - A hosted embedder serves requests in parallel, so one in flight wastes throughput; an
+            unbounded fan-out would trip its rate limit. The default must stay one at a time.
+
+        What it tests:
+          - 6 sub-batches (576 chunks) through an embedder that yields while embedding: the peak
+            number of concurrent ``embed_batch`` calls is 1 by default and 3 with
+            ``embed_concurrency=3``; every chunk is upserted
+        """
+        in_flight = 0
+        peak = 0
+
+        async def embed(texts: list[str]) -> list[EmbeddingResult]:
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0.01)
+            in_flight -= 1
+            return [
+                EmbeddingResult(embedding=[0.1, 0.2, 0.3], model="m", token_count=0)
+                for _ in texts
+            ]
+
+        embedder, store = _embedder(), _store()
+        embedder.embed_batch = AsyncMock(side_effect=embed)
+        kb = new_knowledge_base_from_config(
+            KnowledgeBaseConfig(embed_concurrency=concurrency),
+            embedder=embedder,
+            store=store,
+        )
+
+        await kb.index_document("doc-1", [f"c{i}" for i in range(576)])
+
+        assert peak == expected_peak
+        assert sum(len(c.args[1]) for c in store.upsert.call_args_list) == 576
+
+    def test_embed_concurrency_below_one_is_refused(self) -> None:
+        """Test that ``embed_concurrency`` below 1 fails at construction.
+
+        Why this test is important:
+          - Zero would deadlock every document; it must fail at boot.
+
+        What it tests:
+          - ``embed_concurrency=0`` raises ``AppError`` with ``INVALID_INPUT``
+        """
+        with pytest.raises(AppError) as info:
+            VectorKnowledgeBase(_embedder(), _store(), "documents", embed_concurrency=0)
+        assert info.value.code is ErrorCode.INVALID_INPUT
 
     @pytest.mark.asyncio
     async def test_index_document_skips_already_indexed_sub_batches(self) -> None:

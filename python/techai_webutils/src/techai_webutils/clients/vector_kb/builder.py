@@ -45,6 +45,8 @@ class KnowledgeBaseConfig:
     """Embedding model name requested from Ollama."""
     embedding_dimension: int = 768
     """Vector dimensionality of ``embedding_model`` (must match the Qdrant collection)."""
+    embed_concurrency: int = 1
+    """Sub-batches embedded and upserted at once (1: one at a time, for a single local embedder)."""
 
 
 def new_knowledge_base_from_config(
@@ -67,6 +69,8 @@ def new_knowledge_base_from_config(
                 ErrorCode.INVALID_INPUT,
                 "the vector knowledge base needs an embedder and a store built by the caller",
             )
-        return VectorKnowledgeBase(embedder, store, config.collection)
+        return VectorKnowledgeBase(
+            embedder, store, config.collection, embed_concurrency=config.embed_concurrency
+        )
     msg = f"unknown knowledge base kind: {config.kind!r}"
     raise AppValueError(msg)

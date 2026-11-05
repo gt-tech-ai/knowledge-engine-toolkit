@@ -9,6 +9,7 @@ end-to-end.
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, override
 
 from techai_webutils.core.errors import AppValueError
@@ -33,10 +34,11 @@ logger = get_logger(__name__)
 # Embed + upsert one document a fixed-size sub-batch at a time, instead of embedding EVERY
 # chunk up front and doing one all-or-nothing upsert — on the CPU-Ollama path that single giant unit
 # exceeds the embed read timeout and the whole (thousands-of-chunk) document is lost and redriven from
-# zero forever. Sub-batches are processed SEQUENTIALLY, not concurrently: this KnowledgeBase is the
-# local Ollama+Qdrant path, and Ollama is a single CPU-bound backend, so concurrent embed calls do not
-# parallelize — they make each HTTP request wait behind the others and blow past its read timeout. One
-# in-flight embed gives each call the whole backend.
+# zero forever. By default sub-batches run SEQUENTIALLY (``embed_concurrency=1``): on the local
+# Ollama+Qdrant path Ollama is a single CPU-bound backend, so concurrent embed calls do not
+# parallelize — they make each HTTP request wait behind the others and blow past its read timeout. A
+# hosted embedder that serves requests in parallel raises ``embed_concurrency`` to keep that many
+# sub-batches in flight; it is a static cap (backing off on throttling is the caller's stage's job).
 _EMBED_SUB_BATCH = 96
 """Number of chunks embedded + upserted per sub-batch, bounding a document's per-unit embed work."""
 
@@ -69,13 +71,30 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
     """KnowledgeBase over an EmbeddingProvider + VectorStore (embed chunks → upsert; count for status)."""
 
     def __init__(
-        self, embedder: EmbeddingProvider, store: VectorStore, collection: str
+        self,
+        embedder: EmbeddingProvider,
+        store: VectorStore,
+        collection: str,
+        *,
+        embed_concurrency: int = 1,
     ) -> None:
-        """Compose the embedder + store; fail loudly if their vector dimensions disagree."""
+        """Compose the embedder + store; fail loudly if their vector dimensions disagree.
+
+        ``embed_concurrency`` is how many sub-batches are embedded and upserted at once (1: one at
+        a time, as before).
+
+        Raises:
+            ValueError: The dimensions disagree, or ``embed_concurrency`` is below 1.
+
+        """
         require_matching_dimension(embedder, store, collection)
+        if embed_concurrency < 1:
+            msg = f"embed_concurrency must be at least 1, got {embed_concurrency}"
+            raise AppValueError(msg)
         self._embedder = embedder
         self._store = store
         self._collection = collection
+        self._embed_concurrency = embed_concurrency
 
     async def index_document(
         self,
@@ -112,7 +131,7 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
     async def _index_sub_batches(
         self, document_id: str, chunks: list[str], base_metadata: Mapping[str, str]
     ) -> int:
-        """Index ``chunks`` one sub-batch at a time, logging progress; return how many were skipped."""
+        """Index ``chunks`` sub-batch by sub-batch, ``embed_concurrency`` at once; return how many were skipped."""
         starts = range(0, len(chunks), _EMBED_SUB_BATCH)
         logger.info(
             "vector index: start",
@@ -120,23 +139,29 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
             chunks=len(chunks),
             sub_batches=len(starts),
         )
-        skipped = 0
-        for number, base in enumerate(starts, start=1):
+        gate = asyncio.Semaphore(self._embed_concurrency)
+
+        async def run(number: int, base: int) -> bool:
             batch = chunks[base : base + _EMBED_SUB_BATCH]
             metadata = [
                 {**base_metadata, "chunk_index": str(index)}
                 for index in range(base, base + len(batch))
             ]
-            if not await self._index_sub_batch(document_id, base, batch, metadata):
-                skipped += 1
-                continue
-            logger.info(
-                "vector index: sub-batch upserted",
-                document_id=document_id,
-                done=number,
-                total=len(starts),
-            )
-        return skipped
+            async with gate:
+                written = await self._index_sub_batch(document_id, base, batch, metadata)
+            if written:
+                logger.info(
+                    "vector index: sub-batch upserted",
+                    document_id=document_id,
+                    done=number,
+                    total=len(starts),
+                )
+            return written
+
+        written = await asyncio.gather(
+            *(run(number, base) for number, base in enumerate(starts, start=1))
+        )
+        return written.count(False)
 
     async def _index_sub_batch(
         self,

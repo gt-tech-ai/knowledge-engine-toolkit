@@ -328,3 +328,60 @@ def ray_cluster(request: pytest.FixtureRequest) -> object:
     yield
     ray.cloudpickle.unregister_pickle_by_value(request.module)
     ray.shutdown()
+
+
+# --------------------------------------------------------------------------- #
+# OpenSearch (k-NN + BM25) via testcontainers, security plugin off. Two         #
+# independent single-node clusters stand in for two domains.                   #
+# --------------------------------------------------------------------------- #
+
+_OPENSEARCH_IMAGE = "opensearchproject/opensearch:2.19.1"
+
+
+def _await_opensearch(url: str) -> None:
+    """Poll ``/_cluster/health`` until the node answers (it logs readiness before HTTP is up)."""
+    import time
+    import urllib.request
+
+    for _ in range(120):
+        try:
+            with urllib.request.urlopen(f"{url}/_cluster/health", timeout=2) as response:
+                if response.status == 200:
+                    return
+        except OSError:
+            time.sleep(1)
+    msg = "opensearch did not become ready in time"
+    raise RuntimeError(msg)
+
+
+def _opensearch() -> Iterator[str]:
+    """Start one single-node OpenSearch and yield its HTTP URL."""
+    from testcontainers.core.container import DockerContainer
+
+    container = (
+        DockerContainer(_OPENSEARCH_IMAGE)
+        .with_env("discovery.type", "single-node")
+        .with_env("DISABLE_SECURITY_PLUGIN", "true")
+        .with_env("DISABLE_INSTALL_DEMO_CONFIG", "true")
+        .with_env("OPENSEARCH_JAVA_OPTS", "-Xms512m -Xmx512m")
+        .with_exposed_ports(9200)
+    )
+    container.start()
+    try:
+        url = f"http://{container.get_container_host_ip()}:{container.get_exposed_port(9200)}"
+        _await_opensearch(url)
+        yield url
+    finally:
+        container.stop()
+
+
+@pytest.fixture(scope="session")
+def opensearch_url() -> Iterator[str]:
+    """Start the first OpenSearch domain for the session and yield its URL."""
+    yield from _opensearch()
+
+
+@pytest.fixture(scope="session")
+def opensearch_url_b() -> Iterator[str]:
+    """Start a second, independent OpenSearch domain for the session and yield its URL."""
+    yield from _opensearch()

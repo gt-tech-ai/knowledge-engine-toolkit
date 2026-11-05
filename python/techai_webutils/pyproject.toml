@@ -74,6 +74,12 @@ parsing = ["markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.6", "pymupdf>=1.28.0"]
 # `metadata_extractor_from_config`, so the default import graph never pulls it.
 langdetect = ["langdetect>=1.0.9"]
 
+# OpenSearch vector store (the `opensearch` VectorStore Kind and the multi-domain store). Optional:
+# only a deployable that indexes or searches OpenSearch installs `techai-webutils[opensearch]`. The
+# store never imports `opensearchpy` at run time: the composition root builds the `AsyncOpenSearch`
+# client (hosts, SigV4 auth, timeouts) and injects it.
+opensearch = ["opensearch-py[async]>=3.2.0"]
+
 [project.license]
 text = "MIT"
 
@@ -109,6 +115,10 @@ dev = [
     # langdetect in dev so basedpyright resolves the `langdetect` metadata backend and its parity
     # tests run; production consumers pull it via the `langdetect` extra.
     "langdetect>=1.0.9",
+    # opensearch-py in dev so basedpyright resolves the OpenSearch store's client types and its
+    # integration tests run against an OpenSearch testcontainer; production consumers pull it via the
+    # `opensearch` extra.
+    "opensearch-py[async]>=3.2.0",
     "testcontainers[postgres,redis]>=4.14.2",
     "ty>=0.0.38",
     # hypothesis drives the property tests (e.g. the token-ledger Decimal cost arithmetic).
@@ -286,10 +296,12 @@ modules = [
     "techai_webutils.clients.metadata",
     "techai_webutils.clients.model_gateway",
     "techai_webutils.clients.parsing",
+    "techai_webutils.clients.prometheus",
     "techai_webutils.clients.retrieval",
     "techai_webutils.clients.rpc",
     "techai_webutils.clients.safety",
     "techai_webutils.clients.semantic_cache",
+    "techai_webutils.clients.sink",
     "techai_webutils.clients.splitting",
     "techai_webutils.clients.start_budget",
     "techai_webutils.clients.storage",

@@ -81,13 +81,19 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
                         raise
             self._ensured.add(collection)
 
+    async def _exists(self, collection: str) -> bool:
+        """Whether ``collection`` exists; one this process ensured is known without a round-trip."""
+        return collection in self._ensured or await self._client.collection_exists(
+            collection
+        )
+
     async def upsert(self, collection: str, entries: Sequence[VectorEntry]) -> None:
         """Ensure the collection, then upsert each entry as a point carrying its metadata payload."""
         await self._ensure_collection(collection)
         points = [
             models.PointStruct(
                 id=_point_id(entry.id),
-                vector=list(entry.embedding),
+                vector=entry.embedding,
                 payload={
                     "entry_id": entry.id,
                     "document_id": entry.document_id,
@@ -137,7 +143,7 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
 
     async def count_by_document(self, collection: str, document_id: str) -> int:
         """Count the points belonging to ``document_id``; 0 when the collection does not exist yet."""
-        if not await self._client.collection_exists(collection):
+        if not await self._exists(collection):
             return 0
         result = await self._client.count(
             collection, count_filter=_document_filter(document_id), exact=True
@@ -155,7 +161,7 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
         sub-batches already upserted with the same metadata on a redrive instead of re-embedding them
         (the expensive CPU step), while a chunk stored with other metadata is rewritten.
         """
-        if not ids or not await self._client.collection_exists(collection):
+        if not ids or not await self._exists(collection):
             return {}
         by_point_id = {_point_id(raw): raw for raw in ids}
         points = await self._client.retrieve(
