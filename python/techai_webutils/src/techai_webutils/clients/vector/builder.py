@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
     from opensearchpy import AsyncOpenSearch
 
+    from techai_webutils.core.interfaces.metrics import MetricsProvider
     from techai_webutils.core.interfaces.vector_store import VectorStore
 
 
@@ -91,13 +92,17 @@ def new_vector_store_from_config(
 
 
 def opensearch_store_from_config(
-    config: VectorStoreConfig, clients: Mapping[str, AsyncOpenSearch] | None
+    config: VectorStoreConfig,
+    clients: Mapping[str, AsyncOpenSearch] | None,
+    *,
+    metrics: MetricsProvider | None = None,
 ) -> OpenSearchVectorStore | MultiDomainVectorStore:
     """Build the single- or multi-domain OpenSearch store over the injected clients.
 
     ``new_vector_store_from_config`` returns it as a ``VectorStore``; a composition root that
     hands the store to the ``opensearch`` sink calls this directly, because both concrete stores
-    are also ``SinkStore``s (index model, alias and metadata-update calls).
+    are also ``SinkStore``s (index model, alias and metadata-update calls). ``metrics`` counts
+    the domains a multi-domain search cuts at ``domain_deadline_seconds``.
 
     Raises:
         AppValueError: No injected client, or a shard mapped to an unknown domain
@@ -119,4 +124,6 @@ def opensearch_store_from_config(
         stores,
         dict(config.opensearch.shard_domains),
         shard_field=config.opensearch.shard_field,
+        deadline_seconds=config.opensearch.domain_deadline_seconds,
+        metrics=metrics,
     )

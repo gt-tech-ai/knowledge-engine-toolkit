@@ -7,6 +7,7 @@ responses and failures are read.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
@@ -34,7 +35,11 @@ from techai_webutils.clients.vector.opensearch.mapping import (
     source_metadata,
 )
 from techai_webutils.core.errors import AppValueError, ErrorCode
-from techai_webutils.core.interfaces.vector_store import VectorEntry
+from techai_webutils.core.interfaces.metrics import MetricsProvider
+from techai_webutils.core.interfaces.vector_store import (
+    VectorEntry,
+    VectorSearchResult,
+)
 from techai_webutils.foundation.resilience.classify import is_throttled
 
 
@@ -436,3 +441,84 @@ async def test_multi_domain_spreads_unsharded_documents_by_id() -> None:
     assert all(len(domains) == 1 for domains in placed.values())
     assert {d for domains in placed.values() for d in domains} == {"a", "b"}
     assert len(placed) == 40
+
+
+@pytest.mark.asyncio
+async def test_keyword_search_returns_no_vectors() -> None:
+    """Test that a BM25 search excludes both vector fields from the hits it reads back.
+
+    **Why this test is important:**
+      - A truncated index keeps the full vector in ``_source``; a keyword search that read it
+        back would ship every hit's full embedding over the wire for nothing.
+
+    **What it tests:**
+      - The keyword request excludes ``embedding`` and ``embedding_full``.
+    """
+    client = _client()
+    client.search = AsyncMock(return_value={"hits": {"hits": []}})
+    store = OpenSearchVectorStore(client, dimension=1)
+
+    await store.keyword_search("docs", "text", 5, {"org_id": "o1"})
+
+    body = client.search.await_args.kwargs["body"]
+    assert body["_source"] == {"excludes": ["embedding", "embedding_full"]}
+
+
+def _hit(chunk: str, score: float) -> VectorSearchResult:
+    """Return one search hit."""
+    return VectorSearchResult(
+        chunk_id=chunk, document_id=chunk, content="t", score=score, metadata={}
+    )
+
+
+def _domain_store(hits: list[VectorSearchResult], delay: float = 0.0) -> MagicMock:
+    """Return a mocked domain store whose searches answer ``hits`` after ``delay`` seconds."""
+
+    async def answer(*_: object) -> list[VectorSearchResult]:
+        await asyncio.sleep(delay)
+        return hits
+
+    store = MagicMock(spec=OpenSearchVectorStore)
+    store.search = AsyncMock(side_effect=answer)
+    store.keyword_search = AsyncMock(side_effect=answer)
+    return store
+
+
+@pytest.mark.asyncio
+async def test_multi_domain_search_merges_by_score_and_cuts_a_slow_domain() -> None:
+    """Test that a cell's domains merge into one top k by score, and a late domain is cut.
+
+    **Why this test is important:**
+      - Shards of one index score on one scale, so their union is ranked by score and cut to
+        the caller's k before fusion; a domain past its share of the latency budget must not
+        hold the whole query, and each cut must be counted so a sick domain shows up.
+
+    **What it tests:**
+      - Two domains answering (0.9, 0.5) and (0.8, 0.7) give the top 3 by score for both the
+        k-NN and the keyword search.
+      - With a 50 ms deadline, a domain answering after 1 s is left out of the hits and
+        counted on ``vector_domain_search_cut_total`` with its domain.
+    """
+    fast = _domain_store([_hit("a0", 0.9), _hit("a1", 0.5)])
+    other = _domain_store([_hit("b0", 0.8), _hit("b1", 0.7)])
+    merged = MultiDomainVectorStore({"a": fast, "b": other}, {0: "a", 1: "b"})
+
+    dense = await merged.search("docs", [1.0], 3, {"org_id": "o1"})
+    keyword = await merged.keyword_search("docs", "q", 3, {"org_id": "o1"})
+
+    assert [h.chunk_id for h in dense] == ["a0", "b0", "b1"]
+    assert [h.chunk_id for h in keyword] == ["a0", "b0", "b1"]
+
+    metrics = MagicMock(spec=MetricsProvider)
+    slow = _domain_store([_hit("b0", 0.8)], delay=1.0)
+    cut = MultiDomainVectorStore(
+        {"a": fast, "b": slow},
+        {0: "a", 1: "b"},
+        deadline_seconds=0.05,
+        metrics=metrics,
+    )
+
+    hits = await cut.search("docs", [1.0], 3, {"org_id": "o1"})
+
+    assert [h.chunk_id for h in hits] == ["a0", "a1"]
+    metrics.counter.return_value.inc.assert_called_once_with(domain="b")

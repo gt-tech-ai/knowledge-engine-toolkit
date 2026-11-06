@@ -35,7 +35,6 @@ from techai_webutils.clients.vector.opensearch.config import (
     VectorMode,
 )
 from techai_webutils.clients.vector.opensearch.mapping import (
-    EMBEDDING_FIELD,
     TEXT_FIELD,
     alias_name,
     bulk_error,
@@ -45,6 +44,7 @@ from techai_webutils.clients.vector.opensearch.mapping import (
     index_body,
     index_name,
     knn_query,
+    no_vectors_source,
     require,
     source_metadata,
     term_filters,
@@ -217,7 +217,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             return []
         body = {
             "size": top_k,
-            "_source": {"excludes": [EMBEDDING_FIELD]},
+            "_source": no_vectors_source(),
             "query": {
                 "bool": {
                     "must": [{"match": {TEXT_FIELD: query}}],

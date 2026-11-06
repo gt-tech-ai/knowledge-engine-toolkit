@@ -120,17 +120,14 @@ def index_body(
     meaning) the searched field holds only that many components, and the full vector is kept in
     ``_source`` only, to rescore the candidates; ``_meta`` records the truncation.
     """
-    vector: dict[str, object] = {
-        "type": "knn_vector",
-        "dimension": truncated_dimension or dimension,
-        "space_type": "cosinesimil",
-    }
-    if on_disk:
-        vector |= {"mode": "on_disk", "compression_level": compression_level}
-    else:
-        vector["method"] = {"name": "hnsw", "engine": "faiss"}
     meta: dict[str, object] = {"model": model, "version": version}
-    vectors: dict[str, object] = {EMBEDDING_FIELD: vector}
+    vectors: dict[str, object] = {
+        EMBEDDING_FIELD: _vector_mapping(
+            truncated_dimension or dimension,
+            on_disk=on_disk,
+            compression_level=compression_level,
+        )
+    }
     if truncated_dimension:
         meta["truncated_dimension"] = truncated_dimension
         vectors[FULL_EMBEDDING_FIELD] = dict(_FULL_VECTOR_MAPPING)
@@ -138,22 +135,39 @@ def index_body(
         "settings": {"index": {"knn": True}},
         "mappings": {
             "_meta": meta,
-            "dynamic_templates": [
-                {
-                    "strings_as_keywords": {
-                        "match_mapping_type": "string",
-                        "mapping": {"type": "keyword"},
-                    }
-                }
-            ],
-            "properties": vectors
-            | {
-                TEXT_FIELD: {"type": "text"},
-                "entry_id": {"type": "keyword"},
-                "document_id": {"type": "keyword"},
-            },
+            "dynamic_templates": [_STRINGS_AS_KEYWORDS],
+            "properties": vectors | _ENTRY_PROPERTIES,
         },
     }
+
+
+_STRINGS_AS_KEYWORDS: dict[str, object] = {
+    "strings_as_keywords": {
+        "match_mapping_type": "string",
+        "mapping": {"type": "keyword"},
+    }
+}
+"""Map every metadata string as an exact-match keyword (the filters are term queries)."""
+_ENTRY_PROPERTIES: dict[str, object] = {
+    TEXT_FIELD: {"type": "text"},
+    "entry_id": {"type": "keyword"},
+    "document_id": {"type": "keyword"},
+}
+"""The entry fields every index maps: the BM25 text and the two ids."""
+
+
+def _vector_mapping(
+    dimension: int, *, on_disk: bool, compression_level: str
+) -> dict[str, object]:
+    """Return the searched vector field: an HNSW graph in memory, or ``on_disk`` compressed."""
+    vector: dict[str, object] = {
+        "type": "knn_vector",
+        "dimension": dimension,
+        "space_type": "cosinesimil",
+    }
+    if on_disk:
+        return vector | {"mode": "on_disk", "compression_level": compression_level}
+    return vector | {"method": {"name": "hnsw", "engine": "faiss"}}
 
 
 def entry_source(
@@ -255,7 +269,7 @@ def knn_query(
     }
     body: dict[str, object] = {
         "size": k,
-        "_source": {"excludes": [EMBEDDING_FIELD, FULL_EMBEDDING_FIELD]},
+        "_source": no_vectors_source(),
         "query": {"knn": {EMBEDDING_FIELD: knn}},
     }
     if not truncated_dimension:
@@ -264,7 +278,18 @@ def knn_query(
         return body
     window = max(k, math.ceil(k * oversample_factor))
     knn["k"] = window
-    body["rescore"] = {
+    body["rescore"] = _full_vector_rescore(vector, window)
+    return body
+
+
+def no_vectors_source() -> dict[str, object]:
+    """Return the ``_source`` filter that leaves both vector fields out of every hit."""
+    return {"excludes": [EMBEDDING_FIELD, FULL_EMBEDDING_FIELD]}
+
+
+def _full_vector_rescore(vector: Sequence[float], window: int) -> dict[str, object]:
+    """Return the rescore that reorders the top ``window`` hits by cosine on the full vector."""
+    return {
         "window_size": window,
         "query": {
             "query_weight": 0.0,
@@ -283,7 +308,6 @@ def knn_query(
             },
         },
     }
-    return body
 
 
 def hit_result(hit: Mapping[str, object]) -> VectorSearchResult:

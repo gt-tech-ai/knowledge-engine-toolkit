@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
@@ -166,3 +167,35 @@ def test_unknown_abstainer_and_order_are_refused() -> None:
         new_retrieval_engine_from_config(
             RetrievalConfig(kind=RetrievalKind.OPENSEARCH), policies=[]
         )
+
+
+@pytest.mark.asyncio
+async def test_top_score_abstainer_abstains_only_when_the_best_passage_is_weak() -> None:
+    """Test that ``top_score`` returns nothing when the best passage is below the threshold.
+
+    **Why this test is important:**
+      - A calibrated threshold answers "is anything here good enough?", not "which passages
+        clear a floor": a fused or reranked pool is kept whole when its best passage is
+        strong, and the LLM call is skipped when it is not, whatever the score scale.
+
+    **What it tests:**
+      - At threshold 0.6: a pool whose best is 0.7 keeps every passage (0.1 included), a pool
+        whose best is 0.5 is empty, and under ``edges`` order the pool is still kept and
+        reordered.
+      - ``top_score`` with a threshold of 0 or less is refused.
+    """
+    config = RetrievalConfig(abstainer=AbstainerKind.TOP_SCORE, abstain_threshold=0.6)
+    strong = _engine([_passage(1, 0.7), _passage(2, 0.1)])
+    weak = _engine([_passage(1, 0.5), _passage(2, 0.4)])
+    edges = replace(config, passage_order=PassageOrder.EDGES)
+    three = _engine([_passage(1, 0.7), _passage(2, 0.3), _passage(3, 0.2)])
+
+    kept = await wrap_retrieval_engine(strong, config, policies=[]).retrieve("q")
+    dropped = await wrap_retrieval_engine(weak, config, policies=[]).retrieve("q")
+    ordered = await wrap_retrieval_engine(three, edges, policies=[]).retrieve("q")
+
+    assert [r.document_id for r in kept] == ["d1", "d2"]
+    assert dropped == []
+    assert [r.document_id for r in ordered] == ["d1", "d3", "d2"]
+    with pytest.raises(AppValueError, match="abstain_threshold"):
+        RetrievalConfig(abstainer=AbstainerKind.TOP_SCORE)

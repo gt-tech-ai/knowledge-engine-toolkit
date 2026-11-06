@@ -771,8 +771,11 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
     on a single- or multi-domain store.
   - **Several domains.** With more than one injected client, `MultiDomainVectorStore` routes each
     entry by its `shard` metadata through `shard_domains`, or, without one, by a stable hash of
-    its document id; reads, counts and deletes fan out, and a search returns every domain's hits
-    for the caller to fuse. An unmapped shard is `INVALID_INPUT`.
+    its document id; reads, counts and deletes fan out, and a search merges every domain's hits
+    by score into the global top k (shards of one index share a scale; fusion runs later, across
+    retrievers). With `OpenSearchConfig.domain_deadline_seconds` set, a domain that has not
+    answered by then is left out and counted on `vector_domain_search_cut_total{domain}` (the
+    builder's `metrics`). An unmapped shard is `INVALID_INPUT`.
   - **Administration.** `snapshots.SnapshotAdmin` registers an S3 or fs repository, ensures a
     Snapshot Management schedule and restores an index under a new name. `tiers.TierAdmin`
     ensures an ISM policy (warm, cold, delete by index age) and attaches it to the indices a
@@ -803,7 +806,10 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   the injected store; Qdrant and the stub keep pure k-NN.
 - **Abstention and passage order.** `RetrievalConfig.abstainer` `score_threshold` (the default)
   drops passages below `min_score` (0.5), reading whatever score the engine returns (a reranker's
-  when reranking is on); `none` keeps every candidate, as fused RRF scores (about 0.03) need.
+  when reranking is on); `top_score` (`TopScoreAbstainer`) keeps the whole pool when its best
+  passage reaches `abstain_threshold` and returns nothing otherwise, so a calibrated bar works on
+  any scale and a weak pool skips the LLM call; `none` keeps every candidate, as fused RRF scores
+  (about 0.03) need.
   `passage_order: edges` puts the best passages at both ends of the prompt (ranks 1, 3, 5 … 4, 2);
   the reordering is in the engine's output, so `[n]` and the citations stay aligned.
   `passage_header(n, passage)` gives the consumer's prompt `[n] <document> · <section> · p. <page>`.

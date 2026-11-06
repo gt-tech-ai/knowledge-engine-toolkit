@@ -10,6 +10,14 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Python retrieval: `AbstainerKind.TOP_SCORE` with `RetrievalConfig.abstain_threshold` (required
+  above 0): the pool is kept whole when its best passage reaches the threshold and dropped
+  otherwise (`clients.retrieval.abstain.TopScoreAbstainer`), so a threshold fitted on fused or
+  reranked scores abstains without a per-passage floor on their scale.
+- Python OpenSearch: `OpenSearchConfig.domain_deadline_seconds` (0, off, by default) bounds each
+  domain's share of a multi-domain search; a late domain is left out and counted on
+  `vector_domain_search_cut_total{domain}` through the new `metrics` argument of
+  `opensearch_store_from_config` / `MultiDomainVectorStore`.
 - Python sink: `clients.sink.decorate(sink, decorations, name)`, which runs a sink's `write`,
   `delete` and `update_metadata` through the client tier (timeout, retry, breaker, metrics), as
   `messaging.decorate` does for a publisher. Every sink call is idempotent, so each may retry.
@@ -281,6 +289,8 @@ Python: `techai-webutils` 0.9.3.
 
 ### Changed
 
+- Python OpenSearch: a multi-domain search returns the global top k of its domains' hits by score
+  (it returned every domain's hits, up to k per domain).
 - Python OpenSearch: `OpenSearchConfig.disk_compression_level` defaults to `16x` (was `32x`). On
   20k 768-d vectors with rescoring, recall@10 was 0.9395 at `32x` and 0.9545 at `16x`. An
   `on_disk` index of very small vectors (4 dimensions) fails to build at `8x` and `16x`.
@@ -352,6 +362,9 @@ Python: `techai-webutils` 0.9.3.
 
 ### Fixed
 
+- Python OpenSearch: `keyword_search` leaves a truncated index's full-precision vector
+  (`embedding_full`) out of `_source`, as the k-NN search already did, so BM25 hits no longer carry
+  the full embedding.
 - Python `RedisCache` in `FailureMode.BYPASS` now absorbs the errors redis-py actually raises.
   It caught only the builtin `ConnectionError` and `OSError`, but redis-py's `ConnectionError`
   and `TimeoutError` subclass `RedisError`, so a Redis outage escaped to the caller instead of

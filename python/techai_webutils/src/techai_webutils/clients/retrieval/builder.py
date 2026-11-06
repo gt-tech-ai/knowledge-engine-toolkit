@@ -24,7 +24,11 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, cast
 
-from techai_webutils.clients.retrieval.abstain import AbstainerKind, abstention_policies
+from techai_webutils.clients.retrieval.abstain import (
+    AbstainerKind,
+    TopScoreAbstainer,
+    abstention_policies,
+)
 from techai_webutils.clients.retrieval.filtering import (
     FilteringRetrievalEngine,
     MetadataEquals,
@@ -115,8 +119,12 @@ class RetrievalConfig:
     fusion: FusionConfig = field(default_factory=FusionConfig)
     """How a store with keyword search fuses its k-NN and BM25 rankings (``opensearch``)."""
     abstainer: AbstainerKind = AbstainerKind.SCORE_THRESHOLD
-    """``score_threshold`` drops passages below ``min_score`` (the default); ``none`` keeps all,
+    """``score_threshold`` drops passages below ``min_score`` (the default); ``top_score`` drops
+    the whole pool when its best passage is below ``abstain_threshold``; ``none`` keeps all,
     e.g. for fused RRF scores, which are not on ``min_score``'s scale."""
+    abstain_threshold: float = 0.0
+    """The ``top_score`` bar, fitted for a target precision on the score the engine returns (the
+    reranker's when reranking is on); required above 0 by ``top_score``, unused otherwise."""
     passage_order: PassageOrder = PassageOrder.RANK
     """The order passages reach the prompt: best first (default) or best at both ends."""
 
@@ -125,7 +133,8 @@ class RetrievalConfig:
 
         Raises:
             AppTypeError: ``min_score`` is not a number.
-            AppValueError: ``reranking_kind`` is not a ``RerankingKind`` value (``INVALID_INPUT``).
+            AppValueError: ``reranking_kind`` is not a ``RerankingKind`` value, or
+                ``top_score`` has no positive ``abstain_threshold`` (``INVALID_INPUT``).
 
         """
         # Read as ``object``: the annotation says float, but a caller can still pass None.
@@ -135,6 +144,9 @@ class RetrievalConfig:
             raise AppTypeError(msg)
         if self.reranking_kind not in set(RerankingKind):
             msg = f"unknown reranking kind: {self.reranking_kind!r}"
+            raise AppValueError(msg)
+        if self.abstainer == AbstainerKind.TOP_SCORE and self.abstain_threshold <= 0:
+            msg = "the top_score abstainer needs a positive abstain_threshold"
             raise AppValueError(msg)
 
 
@@ -149,7 +161,8 @@ def wrap_retrieval_engine(
 
     With ``reranking_kind`` ``cross_encoder``, ``reranker`` first reorders the passages and sets
     their scores. The filter then applies the abstainer (``MinScore(config.min_score)`` by
-    default), then ``policies``; the passages are then put in ``config.passage_order``.
+    default), then ``policies``; ``top_score`` then drops a pool whose best passage is weak;
+    the passages are then put in ``config.passage_order``.
     ``new_retrieval_engine_from_config`` wraps every kind it builds with this; a consumer with its
     own engine (a custom corpus, a test double of the backend) calls it directly so that engine is
     scoped exactly like the factory's.
@@ -163,12 +176,14 @@ def wrap_retrieval_engine(
             msg = "the cross_encoder reranking kind needs a reranker built by the caller"
             raise AppValueError(msg)
         inner = RerankingRetrievalEngine(inner, reranker)
-    filtering = FilteringRetrievalEngine(
+    scoped: RetrievalEngine = FilteringRetrievalEngine(
         inner, [*abstention_policies(config.abstainer, config.min_score), *policies]
     )
+    if config.abstainer == AbstainerKind.TOP_SCORE:
+        scoped = TopScoreAbstainer(scoped, config.abstain_threshold)
     if config.passage_order == PassageOrder.RANK:
-        return filtering
-    return OrderingRetrievalEngine(filtering, config.passage_order)
+        return scoped
+    return OrderingRetrievalEngine(scoped, config.passage_order)
 
 
 def new_retrieval_engine_from_config(
