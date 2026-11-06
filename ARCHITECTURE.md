@@ -272,7 +272,9 @@ collaborator or zero timeout skips its layer; recovery needs none.
   `semantic_cache_{lookups,hits,misses}_total` and `semantic_cache_saving_usd_total`, each
   labelled `{org_id,path,workspace}` (`org_id` from `fact_dimensions`, empty without it; hits
   add the serving `tier`), so a hit rate is hits over lookups per org; one `cache_lookups` fact
-  per lookup. The read, serve and write steps live in `clients/semantic_cache/reader.
+  per lookup. A hit is counted only when it is served: a hit the hook or the caller refuses, or
+  whose entry does not decode, counts as a miss with no saving. The read, serve, refuse and
+  write steps live in `clients/semantic_cache/reader.
   SemanticCacheReader`, which the proxy composes and a workflow-level cache drives by hand; an
   injected `CacheLookup` (`lookup=`) selects the match tiers, else the backend's own `lookup` at
   `min_similarity` is used.

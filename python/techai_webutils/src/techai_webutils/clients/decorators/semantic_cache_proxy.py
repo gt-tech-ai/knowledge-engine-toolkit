@@ -246,6 +246,7 @@ class SemanticCacheProxy:
                     answer = self._binding.decode(found.hit.payload)
                 except Exception as exc:
                     self._reader.failed("decode", exc)
+                    self._reader.refuse(found)
                 else:
                     return await self._hit((args, kwargs), answer, found)
             result = await cast("Callable[..., Awaitable[object]]", attr)(*args, **kwargs)
@@ -312,6 +313,7 @@ class SemanticCacheProxy:
             return decode_text(found.hit.payload)
         except Exception as exc:
             self._reader.failed("decode", exc)
+            self._reader.refuse(found)
             return None
 
     @staticmethod

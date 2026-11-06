@@ -6,6 +6,24 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.48] - 2026-11-06
+
+Python: `techai-webutils` 0.9.3. Go is unchanged.
+
+### Added
+
+- `SemanticCacheReader.refuse(read)`: reports a hit the caller will not serve (its own check
+  failed, or the entry did not decode) as a miss, with no hit and no saving.
+
+### Changed
+
+- `SemanticCacheReader` reports a hit only once its fate is known. `read` reports a miss at
+  once but no longer reports a hit; `serve` reports the hit after the hook accepts it, and a
+  coded refusal from the hook is reported as a miss. Before, a hit refused after the read (a
+  passage above the caller's clearance, a blocked answer) still counted as a hit with a saving,
+  overstating the hit rate and savings. A caller that reads a hit must now end it in `serve` or
+  `refuse`. `SemanticCacheProxy` does so, and counts an undecodable entry as a miss.
+
 ## [0.0.47] - 2026-11-05
 
 Go only; `techai-webutils` is unchanged at 0.9.2.
