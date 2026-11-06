@@ -48,6 +48,7 @@
   "techai_webutils.clients.sentences.builder.SentenceSplitterConfig": {},
   "techai_webutils.clients.sink.bedrock.config.BedrockSinkConfig": {},
   "techai_webutils.clients.sink.builder.SinkConfig": {},
+  "techai_webutils.clients.sink.governor.GovernorConfig": {},
   "techai_webutils.clients.splitting.factory.SplitterConfig": {},
   "techai_webutils.clients.start_budget.config.StartBudgetConfig": {},
   "techai_webutils.clients.storage.builder.StorageConfig": {

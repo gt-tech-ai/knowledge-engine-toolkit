@@ -394,22 +394,28 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             raise AppValueError(msg)
         return org
 
+    def _layout_of(self, org: str | None) -> IndexLayout:
+        """Return ``org``'s layout: the configured one, or ``dedicated`` for a dedicated org."""
+        if org is not None and org in self._config.dedicated_orgs:
+            return IndexLayout.DEDICATED
+        return self._config.layout
+
     def _alias(self, collection: str, org: str | None) -> str:
-        """Return the read alias of ``collection`` for ``org`` under the configured layout."""
-        if self._config.layout is IndexLayout.SHARED:
+        """Return the read alias of ``collection`` for ``org`` under its layout."""
+        if self._layout_of(org) is IndexLayout.SHARED:
             return alias_name(collection, None)
         return alias_name(collection, require(org, "an org (dedicated layout)"))
 
     def _routed(self, org: str) -> dict[str, object]:
-        """Return the request params, routed by org in the shared layout."""
-        if self._config.layout is IndexLayout.SHARED:
+        """Return the request params, routed by org when the org is in the shared index."""
+        if self._layout_of(org) is IndexLayout.SHARED:
             return self._params | {"routing": org}
         return dict(self._params)
 
     def _action(self, index: str, entry_id: str, org: str) -> dict[str, object]:
         """Return a bulk action header for one entry: its org-qualified id, routed by org if shared."""
         action: dict[str, object] = {"_index": index, "_id": doc_id(org, entry_id)}
-        if self._config.layout is IndexLayout.SHARED:
+        if self._layout_of(org) is IndexLayout.SHARED:
             action["routing"] = org
         return action
 

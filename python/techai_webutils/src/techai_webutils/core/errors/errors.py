@@ -150,6 +150,15 @@ class UnavailableError(AppError):
         super().__init__(ErrorCode.UNAVAILABLE, message)
 
 
+class ThrottledError(UnavailableError):
+    """A provider refused for rate or capacity (an HTTP 429 or a rejected bulk item).
+
+    Transient like any ``UNAVAILABLE``, so the resiliency stack retries it with backoff, and
+    ``is_throttled`` recognizes it, so the metrics layer counts it as a throttle (the quota
+    alerts' input). Raise it where the push-back arrives in a response body, not as an SDK error.
+    """
+
+
 class QuotaExceededError(AppError):
     """A quota or budget is spent for an organization (``RESOURCE_EXHAUSTED``).
 

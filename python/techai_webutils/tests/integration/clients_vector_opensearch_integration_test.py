@@ -120,20 +120,31 @@ async def test_round_trip_search_resume_and_delete(client: AsyncOpenSearch) -> N
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("layout", [IndexLayout.SHARED, IndexLayout.DEDICATED])
-async def test_orgs_are_isolated(client: AsyncOpenSearch, layout: IndexLayout) -> None:
+@pytest.mark.parametrize(
+    "config",
+    [
+        replace(_CONFIG, layout=IndexLayout.SHARED),
+        replace(_CONFIG, layout=IndexLayout.DEDICATED),
+        replace(_CONFIG, layout=IndexLayout.SHARED, dedicated_orgs=frozenset({"a"})),
+    ],
+    ids=["shared", "dedicated", "shared-with-a-dedicated-org"],
+)
+async def test_orgs_are_isolated(
+    client: AsyncOpenSearch, config: OpenSearchConfig
+) -> None:
     """Test that two orgs with the same document ids never see each other's entries.
 
     **Why this test is important:**
       - Tenant isolation is a security boundary: one org's chunks must never reach another
-        org's answers, in either index layout.
+        org's answers, in either index layout, nor when a large org has its own index beside
+        the shared one.
 
     **What it tests:**
       - org ``a`` and org ``b`` write the same ids; each org's search, lookup and count see only
         its own; deleting in ``a`` leaves ``b`` intact
     """
     collection = _collection()
-    store = _store(client, replace(_CONFIG, layout=layout))
+    store = _store(client, config)
     await store.upsert(collection, [_entry("d", 0, "a", [1, 0, 0, 0], tag="A")])
     await store.upsert(collection, [_entry("d", 0, "b", [1, 0, 0, 0], tag="B")])
     a, b = store.for_org("a"), store.for_org("b")
@@ -191,8 +202,9 @@ async def test_dual_writes_swap_and_swap_back(client: AsyncOpenSearch) -> None:
 
     **What it tests:**
       - with two write targets, one upsert lands in both indices
-      - after ``swap_alias`` reads come from the new index, stamped ``(m2, 1)``, and the old index
-        still exists; swapping back restores the old index
+      - after ``swap_alias`` reads come from the new index, stamped ``(m2, 1)`` (an index the
+        domain does not hold reads as unstamped), and the old index still exists; swapping back
+        restores the old index
     """
     collection = _collection()
     store = _store(client)
@@ -209,6 +221,7 @@ async def test_dual_writes_swap_and_swap_back(client: AsyncOpenSearch) -> None:
     assert await _count(client, new) == 1
     assert await store.current_index(collection) == new
     assert await store.index_model(new) == ("m2", "1")
+    assert await store.index_model(f"{collection}-gone-v1") == ("", "")
     assert await client.indices.exists(index=old)
     await store.swap_alias(collection, old)
     store.set_write_targets(collection, [])

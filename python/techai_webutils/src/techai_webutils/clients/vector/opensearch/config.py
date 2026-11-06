@@ -21,6 +21,10 @@ class OpenSearchConfig:
 
     layout: IndexLayout = IndexLayout.SHARED
     """Whether a collection's orgs share one index or each get their own."""
+    dedicated_orgs: frozenset[str] = frozenset()
+    """Orgs that get their own alias and index even under the ``shared`` layout (large orgs);
+    every other org stays in the shared, org-routed index. Moving an org in or out of this set
+    is a re-index, not a config flip: its existing chunks stay where they were written."""
     org_field: str = "org_id"
     """The metadata field holding an entry's org; every read, count and delete filters on it."""
     model: str = "default"

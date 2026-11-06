@@ -11,7 +11,12 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, cast
 
-from techai_webutils.core.errors import AppValueError, InternalError, UnavailableError
+from techai_webutils.core.errors import (
+    AppValueError,
+    InternalError,
+    ThrottledError,
+    UnavailableError,
+)
 from techai_webutils.core.interfaces.retrieval import FilterEq, FilterIn, equals_all
 from techai_webutils.core.interfaces.vector_store import VectorSearchResult
 
@@ -36,6 +41,8 @@ _NAME_UNSAFE = re.compile(r"[^a-z0-9_-]+")
 """Characters an index or alias name may not hold (lowercased first)."""
 _TRANSIENT_STATUSES = frozenset({429, 502, 503, 504})
 """Bulk item statuses a retry may fix."""
+_TOO_MANY_REQUESTS = 429
+"""The status of a bulk item the domain rejected for capacity (``es_rejected_execution_exception``)."""
 _FIRST_FAILURE_STATUS = 300
 """Bulk item statuses from here up are failures."""
 _NOT_FOUND = 404
@@ -206,7 +213,9 @@ def bulk_error(response: Mapping[str, object]) -> AppError | None:
     """Return the error of a bulk response with failed items, or ``None`` when every item succeeded.
 
     Any item failing with 429 or 5xx makes the whole call transient (``UNAVAILABLE``, retried);
-    otherwise it is ``INTERNAL``. Bulk writes are idempotent by id, so a retry rewrites the rest.
+    a 429 (the domain rejecting for capacity) is a ``ThrottledError``, so the client tier counts
+    it as a throttle. Otherwise it is ``INTERNAL``. Bulk writes are idempotent by id, so a retry
+    rewrites the rest.
     """
     if not response.get("errors"):
         return None
@@ -223,6 +232,8 @@ def bulk_error(response: Mapping[str, object]) -> AppError | None:
     if not statuses:
         return None
     msg = f"{len(statuses)} bulk items failed: {reasons[0][:300]}"
+    if _TOO_MANY_REQUESTS in statuses:
+        return ThrottledError(msg)
     if any(s in _TRANSIENT_STATUSES for s in statuses):
         return UnavailableError(msg)
     return InternalError(msg)

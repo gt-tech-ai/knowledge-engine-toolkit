@@ -39,10 +39,12 @@ if TYPE_CHECKING:
 class GovernorConfig:
     """The latency budget the governor holds the readers to, and its concurrency bounds."""
 
-    query: str
-    """PromQL returning the readers' current p99 latency, in milliseconds."""
-    max_query_p99_ms: float
-    """The p99 above which the governor halves the sink's concurrency."""
+    query: str = ""
+    """PromQL returning the readers' current p99 latency, in milliseconds; required (the empty
+    default is refused when the governor is built)."""
+    max_query_p99_ms: float = 0.0
+    """The p99 above which the governor halves the sink's concurrency; required (the zero
+    default is refused when the governor is built)."""
     max_concurrency: int = 8
     """The cap the governor starts at and never exceeds."""
     min_concurrency: int = 1

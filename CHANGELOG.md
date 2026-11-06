@@ -32,6 +32,13 @@ Python: `techai-webutils` 0.9.3.
   `sink_write_governor_concurrency` gauge.
 - Python Prometheus: `clients.prometheus.decorate(querier, decorations, name)`, which runs a
   `MetricsQuerier`'s `query` and `query_range` through the client tier.
+- Python OpenSearch: `OpenSearchConfig.dedicated_orgs`, the orgs that get their own alias and
+  index under the `shared` layout (large orgs) while every other org stays in the shared,
+  org-routed index. Moving an org in or out is a re-index, not a config flip.
+- Python errors: `core.errors.ThrottledError`, an `UNAVAILABLE` (so retried) that `is_throttled`
+  recognizes, for a push-back read from a response body. The OpenSearch store's `bulk_error`
+  raises it when any item is rejected with 429, so rejected bulk items count in the client tier's
+  `client_throttled_total`.
 - Go `clients/aws/account`: `Session.Principal`, the verified caller's ARN from the
   `sts:GetCallerIdentity` call the resolver already makes, so a tool can attribute an operator
   action to the identity it verified rather than to an unverified name.

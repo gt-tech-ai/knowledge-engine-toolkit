@@ -34,6 +34,7 @@ from techai_webutils.clients.vector.opensearch.mapping import (
 )
 from techai_webutils.core.errors import AppValueError, ErrorCode
 from techai_webutils.core.interfaces.vector_store import VectorEntry
+from techai_webutils.foundation.resilience.classify import is_throttled
 
 
 def _client(*, alias_exists: bool = True) -> MagicMock:
@@ -124,6 +125,34 @@ async def test_first_write_creates_the_versioned_index_and_alias() -> None:
 
 
 @pytest.mark.asyncio
+async def test_dedicated_org_gets_its_own_index_beside_the_shared_one() -> None:
+    """Test that an org listed in ``dedicated_orgs`` writes to its own alias, unrouted.
+
+    **Why this test is important:**
+      - Small orgs share one org-routed index so a domain is not spent on hundreds of tiny
+        shards; a large org gets its own index so it neither crowds the shared shards nor
+        is limited by them. Mixing the two must never send a shared org's chunks to the
+        dedicated index, or the reverse.
+
+    **What it tests:**
+      - Under the shared layout with ``dedicated_orgs={"big"}``, ``big``'s write goes to the
+        ``docs--big`` alias with no routing, while ``o1``'s goes to ``docs`` routed by ``o1``.
+    """
+    client = _client()
+    store = OpenSearchVectorStore(
+        client, dimension=1, config=OpenSearchConfig(dedicated_orgs=frozenset({"big"}))
+    )
+
+    await store.upsert("docs", [_entry("big")])
+    big = client.bulk.await_args.kwargs["body"][0]["index"]
+    await store.upsert("docs", [_entry("o1")])
+    shared = client.bulk.await_args.kwargs["body"][0]["index"]
+
+    assert big == {"_index": "docs--big", "_id": "big/d:0"}
+    assert shared == {"_index": "docs", "_id": "o1/d:0", "routing": "o1"}
+
+
+@pytest.mark.asyncio
 async def test_scope_and_org_rules() -> None:
     """Test that every call without an org, or with another org than the scope, is refused.
 
@@ -198,21 +227,30 @@ def test_bulk_error_classifies_failed_items() -> None:
     **Why this test is important:**
       - A throttled bulk must be retried; a mapping error must not be retried forever; a delete
         of a document already gone is success.
+      - A rejected bulk (429, ``es_rejected_execution_exception``) is the domain pushing back;
+        it must count as a throttle (``client_throttled_total``), or the bulk-rejection alert
+        never fires.
 
     **What it tests:**
-      - no ``errors`` → ``None``; a 429 item → ``UNAVAILABLE``; a 400 item → ``INTERNAL``; a 404
-        on a delete → ``None``
+      - no ``errors`` → ``None``; a 429 item → ``UNAVAILABLE`` and a throttle; a 503 item →
+        ``UNAVAILABLE`` but no throttle; a 400 item → ``INTERNAL``; a 404 on a delete → ``None``
     """
     throttled = {"errors": True, "items": [{"index": {"status": 429, "error": "busy"}}]}
+    down = {"errors": True, "items": [{"index": {"status": 503, "error": "down"}}]}
     bad = {"errors": True, "items": [{"index": {"status": 400, "error": "mapping"}}]}
     gone = {"errors": True, "items": [{"delete": {"status": 404}}]}
 
     transient = bulk_error(throttled)
+    unavailable = bulk_error(down)
     permanent = bulk_error(bad)
 
     assert bulk_error({"errors": False}) is None
     assert transient is not None
     assert transient.code is ErrorCode.UNAVAILABLE
+    assert is_throttled(transient)
+    assert unavailable is not None
+    assert unavailable.code is ErrorCode.UNAVAILABLE
+    assert not is_throttled(unavailable)
     assert permanent is not None
     assert permanent.code is ErrorCode.INTERNAL
     assert bulk_error(gone) is None

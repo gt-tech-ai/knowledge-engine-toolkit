@@ -22,7 +22,7 @@ from botocore.exceptions import (
     ReadTimeoutError,
 )
 
-from techai_webutils.core.errors.errors import AppError
+from techai_webutils.core.errors.errors import AppError, ThrottledError
 
 # AWS error codes that signal throttling / rate limiting (retriable regardless of HTTP status).
 _THROTTLE_CODES = frozenset(
@@ -154,6 +154,8 @@ def is_transient(err: BaseException) -> bool:
 
 def _throttle(err: BaseException) -> bool:
     """Return True if *err* itself is a rate-limit push-back (not looking at its causes)."""
+    if isinstance(err, ThrottledError):
+        return True
     if isinstance(err, ClientError):
         response = err.response or {}
         code = response.get("Error", {}).get("Code", "")
@@ -173,7 +175,8 @@ def is_throttled(err: BaseException) -> bool:
 
     A throttle is the provider refusing for rate or quota, not failing: an AWS throttle code
     (S3 ``SlowDown``, ``ThrottlingException``, …) or ``ServiceQuotaExceededException``, gRPC
-    ``RESOURCE_EXHAUSTED`` or an HTTP 429.
+    ``RESOURCE_EXHAUSTED``, an HTTP 429, or a ``ThrottledError`` (a push-back read from a response
+    body, such as a rejected bulk item).
     Clients wrap SDK errors in an ``AppError``, so the explicit cause chain is searched too. The
     metrics layer counts these apart from other errors, the quota alerts' input.
     """
