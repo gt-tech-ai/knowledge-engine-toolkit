@@ -307,6 +307,13 @@ Python: `techai-webutils` 0.9.3.
   `clients.distinct_counter` (`DistinctCounterKind` `noop` / `redis`, `DistinctCounterConfig`,
   `distinct_counter_from_config(config, redis=, metrics=)`): a Redis HyperLogLog per key with a TTL,
   zeros (and `distinct_counter_errors_total`) when Redis is down.
+- Embedding decorators (Python): `clients.embedding.coalesce.CoalescingEmbedding(inner,
+  max_batch=, linger_seconds=)` packs concurrent callers' texts (per input type) into shared
+  provider batches, a full batch at once and a partial one after the linger; a failed batch fails
+  each caller in it. `clients.embedding.cached.CachedEmbedding(inner, cache, ttl_seconds=,
+  version=, metrics=)` reuses a vector through a `Cache` keyed by model, version, input type and
+  the text's SHA-256 (float32 values; each distinct miss embedded once; a hit's `token_count` is
+  0), counted in `embedding_cache_requests_total{result}`.
 - The sentence chunker (Python): `ChunkerKind.sentence` (`SentenceChunker`, `split_blocks`,
   `Block`, `BlockKind`); `ChunkerConfig.max_tokens` / `overlap_tokens` / `window_chars`;
   `chunker_from_config(..., splitter=, tokenizer=)`; `StructuredChunk` and `StructuredChunker`
