@@ -24,6 +24,7 @@ from techai_webutils.clients.vector.opensearch import (
     MultiDomainVectorStore,
     OpenSearchConfig,
     OpenSearchVectorStore,
+    VectorMode,
 )
 from techai_webutils.clients.vector.opensearch.bulk import bulk_ingest
 from techai_webutils.core.errors import AppValueError
@@ -245,7 +246,13 @@ async def test_disk_mode_index_is_created_and_searchable(client: AsyncOpenSearch
     memory = _store(client, replace(_CONFIG, disk_mode_threshold_docs=10))
     await memory.upsert(collection, [_entry("d", 0, "o", [1, 0, 0, 0])])
     disk_store = _store(
-        client, replace(_CONFIG, disk_mode_threshold_docs=10, model="disk")
+        client,
+        replace(
+            _CONFIG,
+            disk_mode_threshold_docs=10,
+            model="disk",
+            disk_compression_level="32x",
+        ),
     )
     disk = await disk_store.create_index(collection, expected_docs=100)
     disk_store.set_write_targets(collection, [disk])
@@ -263,6 +270,99 @@ async def test_disk_mode_index_is_created_and_searchable(client: AsyncOpenSearch
     assert vector["mode"] == "on_disk"
     hits = await disk_store.search(collection, [1, 0, 0, 0], 1, {"org_id": "o"})
     assert [h.chunk_id for h in hits] == ["d:0"]
+
+    mode_store = OpenSearchVectorStore(
+        client,
+        dimension=8,
+        config=replace(
+            _CONFIG,
+            vector_mode=VectorMode.ON_DISK,
+            disk_compression_level="16x",
+            oversample_factor=2.0,
+        ),
+    )
+    other = _collection()
+    await mode_store.upsert(other, [_entry("e", 0, "o", _unit((1, 1.0))[:8])])
+    index = await mode_store.current_index(other)
+    assert index is not None
+    assert (await _vector_mapping(client, index))["compression_level"] == "16x"
+    hits = await mode_store.search(other, _unit((1, 1.0))[:8], 1, {"org_id": "o"})
+    assert [h.chunk_id for h in hits] == ["e:0"]
+
+
+async def _vector_mapping(client: AsyncOpenSearch, index: str) -> dict[str, object]:
+    """Return the mapping of ``index``'s searched vector field."""
+    mapping = cast(
+        "dict[str, dict[str, dict[str, dict[str, dict[str, object]]]]]",
+        await client.indices.get_mapping(index=index),
+    )
+    return mapping[index]["mappings"]["properties"]["embedding"]
+
+
+def _unit(*parts: tuple[int, float]) -> list[float]:
+    """Return a 16-component vector with the given ``(position, value)`` parts."""
+    vector = [0.0] * 16
+    for position, value in parts:
+        vector[position] = value
+    return vector
+
+
+@pytest.mark.asyncio
+async def test_truncated_dimension_index_rescored_with_full_vector(
+    client: AsyncOpenSearch,
+) -> None:
+    """Test that a Matryoshka index searches the prefix but ranks by the full vector.
+
+    **Why this test is important:**
+      - Searching a truncated prefix cuts the graph's memory, but the prefix alone misranks
+        chunks whose meaning sits in the later components. The full vector must decide the
+        final order, or truncation silently costs recall.
+
+    **What it tests:**
+      - With ``truncated_dimension`` 8 of 16, the searched field maps 8 components and the
+        full vector is a ``_source``-only float field (no second k-NN graph); ``_meta``
+        records the truncation.
+      - For a query whose prefix ranks the chunks ``a``, ``b``, ``c`` but whose full vector
+        ranks them ``b``, ``c``, ``a`` (``a``'s tail points away), the hits come back
+        ``b``, ``c``, ``a``, and ``b`` scores ``(1 + 0.9) / 2``, the k-NN search's own scale.
+      - Hits carry no vector fields in their metadata.
+    """
+    store = OpenSearchVectorStore(
+        client,
+        dimension=16,
+        config=replace(_CONFIG, truncated_dimension=8, oversample_factor=3.0),
+    )
+    collection = _collection()
+    await store.upsert(
+        collection,
+        [
+            _entry("a", 0, "o", _unit((0, 1.0), (8, -1.0))),
+            _entry("b", 0, "o", _unit((0, 0.8), (1, 0.6), (8, 1.0))),
+            _entry("c", 0, "o", _unit((0, 0.3), (3, 1.0), (8, 0.3))),
+        ],
+    )
+    index = await store.current_index(collection)
+    assert index is not None
+    mapping = cast(
+        "dict[str, dict[str, dict[str, object]]]",
+        await client.indices.get_mapping(index=index),
+    )[index]["mappings"]
+    props = cast("dict[str, dict[str, object]]", mapping["properties"])
+
+    hits = await store.search(collection, _unit((0, 1.0), (8, 1.0)), 3, {"org_id": "o"})
+
+    assert props["embedding"]["dimension"] == 8
+    assert props["embedding_full"] == {
+        "type": "float",
+        "index": False,
+        "doc_values": False,
+    }
+    assert cast("dict[str, object]", mapping["_meta"])["truncated_dimension"] == 8
+    assert [h.chunk_id for h in hits] == ["b:0", "c:0", "a:0"]
+    assert hits[0].score == pytest.approx(0.95, abs=1e-4)
+    assert all(
+        "embedding" not in h.metadata and "embedding_full" not in h.metadata for h in hits
+    )
 
 
 async def _settings(client: AsyncOpenSearch, index: str) -> dict[str, object]:

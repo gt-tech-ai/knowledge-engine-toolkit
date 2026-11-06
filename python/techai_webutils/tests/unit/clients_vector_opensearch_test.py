@@ -30,6 +30,7 @@ from techai_webutils.clients.vector.opensearch.mapping import (
     entry_source,
     index_body,
     index_name,
+    knn_query,
     source_metadata,
 )
 from techai_webutils.core.errors import AppValueError, ErrorCode
@@ -282,6 +283,66 @@ def test_mapping_helpers() -> None:
     assert "method" in memory
     assert source["entities.person"] == ["A", "B"]
     assert source_metadata(source) == entry.metadata
+
+
+def test_knn_query_rescoring_shapes_and_store_refuses_bad_shapes() -> None:
+    """Test the k-NN body for plain, oversampled and truncated searches, and the shape guards.
+
+    **Why this test is important:**
+      - A quantized index's recall depends on its rescoring (about 0.55 without, 0.95 with),
+        and a truncated index ranks by its prefix unless the full vector rescores the
+        candidates; a misbuilt body silently costs recall rather than failing.
+
+    **What it tests:**
+      - No oversample: no ``rescore`` anywhere (the domain default applies).
+      - ``oversample_factor`` 2: the k-NN clause rescores with that factor.
+      - ``truncated_dimension`` 2 of 4 with factor 2.5 and k 4: the clause searches the first
+        two components for ``ceil(4 * 2.5)`` = 10 candidates, and a Painless cosine over the
+        full vector in ``_source`` (given the query and its squared norm, 30) rescores that
+        window; both vectors are left out of hits.
+      - A store refuses a truncation not below its dimension and a negative factor.
+    """
+    plain = knn_query([1.0, 0.0, 0.0, 0.0], 4, {"org_id": "o"})
+    oversampled = knn_query(
+        [1.0, 0.0, 0.0, 0.0], 4, {"org_id": "o"}, oversample_factor=2.0
+    )
+    truncated = knn_query(
+        [1.0, 2.0, 3.0, 4.0],
+        4,
+        {"org_id": "o"},
+        oversample_factor=2.5,
+        truncated_dimension=2,
+    )
+    clause = cast("dict[str, dict[str, dict[str, object]]]", truncated["query"])["knn"][
+        "embedding"
+    ]
+    rescore = cast("dict[str, dict[str, dict[str, object]]]", truncated["rescore"])
+    script = cast(
+        "dict[str, dict[str, dict[str, object]]]",
+        rescore["query"]["rescore_query"]["script_score"],
+    )["script"]
+
+    assert "rescore" not in plain
+    assert (
+        "rescore"
+        not in cast("dict[str, dict[str, dict[str, object]]]", plain["query"])["knn"][
+            "embedding"
+        ]
+    )
+    assert cast("dict[str, dict[str, dict[str, object]]]", oversampled["query"])["knn"][
+        "embedding"
+    ]["rescore"] == {"oversample_factor": 2.0}
+    assert (clause["vector"], clause["k"], "rescore" in clause) == ([1.0, 2.0], 10, False)
+    assert rescore["window_size"] == 10
+    assert script["params"] == {"q": [1.0, 2.0, 3.0, 4.0], "qn": 30.0}
+    assert "params._source.embedding_full" in str(script["source"])
+    assert truncated["_source"] == {"excludes": ["embedding", "embedding_full"]}
+    for config in (
+        OpenSearchConfig(truncated_dimension=4),
+        OpenSearchConfig(oversample_factor=-1.0),
+    ):
+        with pytest.raises(AppValueError):
+            OpenSearchVectorStore(MagicMock(), dimension=4, config=config)
 
 
 def test_builder_and_multi_domain_config_errors() -> None:

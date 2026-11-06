@@ -3,11 +3,14 @@
 A document's fields are the entry's metadata at the top level (strings map to ``keyword`` through a
 dynamic template), plus ``entry_id``, ``document_id``, ``text`` (analyzed, for BM25) and
 ``embedding`` (``knn_vector``). A metadata key ``entities.<label>`` holds ``|``-separated values; it
-is stored as a keyword array so a term query matches one entity, and joined back on read.
+is stored as a keyword array so a term query matches one entity, and joined back on read. A
+truncated (Matryoshka) index searches the vector's leading components in ``embedding`` and keeps
+the full vector in ``embedding_full`` (``_source`` only) to rescore the candidates.
 """
 
 from __future__ import annotations
 
+import math
 import re
 from typing import TYPE_CHECKING, cast
 
@@ -32,10 +35,35 @@ ENTITY_PREFIX = "entities."
 ENTITY_SEPARATOR = "|"
 """Separates an entity list's values in ``VectorEntry.metadata``."""
 EMBEDDING_FIELD = "embedding"
-"""The ``knn_vector`` field."""
+"""The ``knn_vector`` field the approximate search runs on."""
+FULL_EMBEDDING_FIELD = "embedding_full"
+"""The full-dimension vector of a truncated (Matryoshka) index, kept only in ``_source`` and read
+only to rescore the truncated field's candidates."""
+_FULL_VECTOR_MAPPING: dict[str, object] = {
+    "type": "float",
+    "index": False,
+    "doc_values": False,
+}
+"""The full vector's mapping: neither indexed nor in doc values (which would sort the array), so
+it costs disk only. A ``knn_vector`` would not do: OpenSearch 2.19 ignores ``index: false`` on one
+and builds a second graph, which doubles the k-NN memory truncation exists to save."""
+_FULL_COSINE = (
+    "def v = params._source." + FULL_EMBEDDING_FIELD + "; double dot = 0; double dn = 0; "
+    "for (int i = 0; i < params.q.length; ++i) "
+    "{ double x = v[i]; dot += x * params.q[i]; dn += x * x; } "
+    "return (1 + dot / Math.sqrt(dn * params.qn)) / 2;"
+)
+"""Painless: ``(1 + cosine) / 2`` of the stored full vector and the query, the score scale the
+``cosinesimil`` k-NN search itself returns (``params.qn`` is the query's squared norm)."""
 TEXT_FIELD = "text"
 """The analyzed text field BM25 searches."""
-_PROMOTED = frozenset({"entry_id", "document_id", TEXT_FIELD, EMBEDDING_FIELD})
+_PROMOTED = frozenset({
+    "entry_id",
+    "document_id",
+    TEXT_FIELD,
+    EMBEDDING_FIELD,
+    FULL_EMBEDDING_FIELD,
+})
 """Document fields that are entry fields, not metadata."""
 _NAME_UNSAFE = re.compile(r"[^a-z0-9_-]+")
 """Characters an index or alias name may not hold (lowercased first)."""
@@ -82,25 +110,34 @@ def index_body(
     *,
     on_disk: bool,
     compression_level: str,
+    truncated_dimension: int = 0,
 ) -> dict[str, object]:
     """Return the settings and mappings of a new index, stamped with its model in ``_meta``.
 
     In memory the vector is an HNSW graph (faiss, cosine); ``on_disk`` keeps a compressed copy in
-    memory and the full vectors on disk, for indices too large to hold in RAM.
+    memory and the full vectors on disk, for indices too large to hold in RAM. With a
+    ``truncated_dimension`` (a Matryoshka embedder, whose leading components carry most of the
+    meaning) the searched field holds only that many components, and the full vector is kept in
+    ``_source`` only, to rescore the candidates; ``_meta`` records the truncation.
     """
     vector: dict[str, object] = {
         "type": "knn_vector",
-        "dimension": dimension,
+        "dimension": truncated_dimension or dimension,
         "space_type": "cosinesimil",
     }
     if on_disk:
         vector |= {"mode": "on_disk", "compression_level": compression_level}
     else:
         vector["method"] = {"name": "hnsw", "engine": "faiss"}
+    meta: dict[str, object] = {"model": model, "version": version}
+    vectors: dict[str, object] = {EMBEDDING_FIELD: vector}
+    if truncated_dimension:
+        meta["truncated_dimension"] = truncated_dimension
+        vectors[FULL_EMBEDDING_FIELD] = dict(_FULL_VECTOR_MAPPING)
     return {
         "settings": {"index": {"knn": True}},
         "mappings": {
-            "_meta": {"model": model, "version": version},
+            "_meta": meta,
             "dynamic_templates": [
                 {
                     "strings_as_keywords": {
@@ -109,8 +146,8 @@ def index_body(
                     }
                 }
             ],
-            "properties": {
-                EMBEDDING_FIELD: vector,
+            "properties": vectors
+            | {
                 TEXT_FIELD: {"type": "text"},
                 "entry_id": {"type": "keyword"},
                 "document_id": {"type": "keyword"},
@@ -119,11 +156,15 @@ def index_body(
     }
 
 
-def entry_source(entry: VectorEntry, org_field: str, org_id: str) -> dict[str, object]:
+def entry_source(
+    entry: VectorEntry, org_field: str, org_id: str, *, truncated_dimension: int = 0
+) -> dict[str, object]:
     """Return the document stored for ``entry``: its metadata, entity lists split, and its fields.
 
     The org is always stored in ``org_field`` (every read filters on it), so an entry written
-    through a scoped view without it in its metadata reads back with it.
+    through a scoped view without it in its metadata reads back with it. With a
+    ``truncated_dimension`` the searched field gets the vector's leading components and the full
+    vector goes to ``FULL_EMBEDDING_FIELD`` (cosine space, so the prefix needs no renormalizing).
     """
     source: dict[str, object] = {org_field: org_id}
     for key, value in entry.metadata.items():
@@ -131,12 +172,21 @@ def entry_source(entry: VectorEntry, org_field: str, org_id: str) -> dict[str, o
             source[key] = [v for v in value.split(ENTITY_SEPARATOR) if v]
         else:
             source[key] = value
-    return source | {
-        "entry_id": entry.id,
-        "document_id": entry.document_id,
-        TEXT_FIELD: entry.content,
-        EMBEDDING_FIELD: list(entry.embedding),
-    }
+    vectors: dict[str, object] = {EMBEDDING_FIELD: list(entry.embedding)}
+    if truncated_dimension:
+        vectors = {
+            EMBEDDING_FIELD: list(entry.embedding[:truncated_dimension]),
+            FULL_EMBEDDING_FIELD: list(entry.embedding),
+        }
+    return (
+        source
+        | {
+            "entry_id": entry.id,
+            "document_id": entry.document_id,
+            TEXT_FIELD: entry.content,
+        }
+        | vectors
+    )
 
 
 def source_metadata(source: Mapping[str, object]) -> dict[str, str]:
@@ -179,22 +229,61 @@ def filter_clauses(expr: FilterExpr) -> list[dict[str, object]]:
 
 
 def knn_query(
-    vector: Sequence[float], k: int, fields: Mapping[str, str]
+    vector: Sequence[float],
+    k: int,
+    fields: Mapping[str, str],
+    *,
+    oversample_factor: float = 0.0,
+    truncated_dimension: int = 0,
 ) -> dict[str, object]:
-    """Return a k-NN search body restricted to documents matching every field exactly."""
-    return {
+    """Return a k-NN search body restricted to documents matching every field exactly.
+
+    ``oversample_factor`` > 0 sets how many candidates per result the first, approximate pass
+    fetches before they are rescored at full precision; 0 leaves the domain's per-level default
+    (a quantized ``on_disk`` index rescores from its full vectors on disk). Rescoring is never
+    turned off: on a binary-quantized index that drops recall@10 from about 0.95 to about 0.55.
+    With a ``truncated_dimension`` the first pass searches the leading components (still
+    rescored by the domain on an ``on_disk`` index) and fetches ``ceil(k * oversample_factor)``
+    candidates (at least ``k``), which a Painless cosine over the full vector in ``_source``
+    reorders, so the full vector decides the ranking and the score (on the k-NN search's own
+    ``(1 + cosine) / 2`` scale).
+    """
+    knn: dict[str, object] = {
+        "vector": list(vector[:truncated_dimension] if truncated_dimension else vector),
+        "k": k,
+        "filter": {"bool": {"filter": term_filters(fields)}},
+    }
+    body: dict[str, object] = {
         "size": k,
-        "_source": {"excludes": [EMBEDDING_FIELD]},
+        "_source": {"excludes": [EMBEDDING_FIELD, FULL_EMBEDDING_FIELD]},
+        "query": {"knn": {EMBEDDING_FIELD: knn}},
+    }
+    if not truncated_dimension:
+        if oversample_factor > 0:
+            knn["rescore"] = {"oversample_factor": oversample_factor}
+        return body
+    window = max(k, math.ceil(k * oversample_factor))
+    knn["k"] = window
+    body["rescore"] = {
+        "window_size": window,
         "query": {
-            "knn": {
-                EMBEDDING_FIELD: {
-                    "vector": list(vector),
-                    "k": k,
-                    "filter": {"bool": {"filter": term_filters(fields)}},
+            "query_weight": 0.0,
+            "rescore_query_weight": 1.0,
+            "rescore_query": {
+                "script_score": {
+                    "query": {"match_all": {}},
+                    "script": {
+                        "source": _FULL_COSINE,
+                        "params": {
+                            "q": list(vector),
+                            "qn": math.fsum(x * x for x in vector),
+                        },
+                    },
                 }
-            }
+            },
         },
     }
+    return body
 
 
 def hit_result(hit: Mapping[str, object]) -> VectorSearchResult:

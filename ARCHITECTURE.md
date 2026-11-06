@@ -758,14 +758,25 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
     stamped with its model in `_meta` (`index_model`). A re-index writes to both indices
     (`set_write_targets`, per process), moves the alias atomically (`swap_alias`, the old index
     kept) and can swap back.
-  - **Disk mode.** `create_index(expected_docs=…)` above `disk_mode_threshold_docs` maps the vector
-    `on_disk` at `disk_compression_level`.
+  - **Vector shape.** `vector_mode: on_disk`, or `create_index(expected_docs=…)` above
+    `disk_mode_threshold_docs`, maps the vector `on_disk` at `disk_compression_level` (default
+    `16x`). `oversample_factor` sets the k-NN query's rescoring; rescoring is never off, since a
+    binary-quantized index loses about 0.4 recall@10 without it. `truncated_dimension`
+    (Matryoshka) searches the vector's first N components and rescores the candidates by a
+    Painless cosine over the full vector, kept in `_source` only (not a second `knn_vector`,
+    whose graph OpenSearch 2.19 builds even with `index: false`).
   - **Bulk ingest.** `begin_bulk_ingest(index)` records refresh and replicas in `_meta` and turns
     them off; `end_bulk_ingest(index)` restores and verifies them, and is safe after a failed
-    backfill or a second call.
+    backfill or a second call. `bulk.bulk_ingest(store, index)` pairs them around one backfill,
+    on a single- or multi-domain store.
   - **Several domains.** With more than one injected client, `MultiDomainVectorStore` routes each
-    entry by its `shard` metadata through `shard_domains`; reads, counts and deletes fan out, and a
-    search returns every domain's hits for the caller to fuse. An unmapped shard is `INVALID_INPUT`.
+    entry by its `shard` metadata through `shard_domains`, or, without one, by a stable hash of
+    its document id; reads, counts and deletes fan out, and a search returns every domain's hits
+    for the caller to fuse. An unmapped shard is `INVALID_INPUT`.
+  - **Administration.** `snapshots.SnapshotAdmin` registers an S3 or fs repository, ensures a
+    Snapshot Management schedule and restores an index under a new name. `tiers.TierAdmin`
+    ensures an ISM policy (warm, cold, delete by index age) and attaches it to the indices a
+    caller retires, never by name pattern, since a warm index is read-only.
 - **Sink.** `Sink.write(document, chunks, vectors)`, `delete(org_id, document_id)` and
   `update_metadata(org_id, document_id, fields)` end the ingestion pipeline. `SinkKind.opensearch`
   writes through the injected store: stable ids `<document>:<n>`, the document's metadata,

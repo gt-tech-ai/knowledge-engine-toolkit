@@ -281,6 +281,22 @@ Python: `techai-webutils` 0.9.3.
 
 ### Changed
 
+- Python OpenSearch: `OpenSearchConfig.disk_compression_level` defaults to `16x` (was `32x`). On
+  20k 768-d vectors with rescoring, recall@10 was 0.9395 at `32x` and 0.9545 at `16x`. An
+  `on_disk` index of very small vectors (4 dimensions) fails to build at `8x` and `16x`.
+- Python OpenSearch: `OpenSearchConfig.vector_mode` (`VectorMode.IN_MEMORY`, the default, or
+  `ON_DISK`) creates every new index `on_disk` when set; `disk_mode_threshold_docs` still sends
+  a large index to disk under `in_memory`. `oversample_factor` (default 0, the domain's per-level
+  default) sets the k-NN query's `rescore.oversample_factor`. Rescoring is never turned off: on a
+  binary-quantized index it is worth about 0.4 recall@10.
+- Python OpenSearch: `OpenSearchConfig.truncated_dimension` (Matryoshka). New indices search the
+  vector's first N components and keep the full vector in `_source` only (`embedding_full`, a
+  `float` field with no index and no doc values), and a search rescores
+  `ceil(k * oversample_factor)` candidates by a Painless cosine over it, on the k-NN search's own
+  `(1 + cos) / 2` scale. It is not a `knn_vector` with `index: false`: OpenSearch 2.19 ignores
+  that flag and builds a second graph. The store refuses a truncation not below its dimension
+  and a negative oversample factor. `VectorMode` is exported from
+  `clients.vector.opensearch`.
 - Python OpenSearch: `MultiDomainVectorStore` sends an entry that names no shard to the shard a
   stable hash of its document id picks (it used to send it to shard 0), so a caller that assigns
   no shards — the sink assigns none — spreads documents over every domain, and a document's

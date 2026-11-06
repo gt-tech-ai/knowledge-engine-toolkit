@@ -10,9 +10,14 @@ The store adds the org filter to every search, count, lookup, update and delete 
 comes from a scoped view (``for_org``), from the search filters, or from each entry's metadata; a
 call that names no org raises ``INVALID_INPUT``.
 
+A new index is in memory or ``on_disk`` (``vector_mode``, or past ``disk_mode_threshold_docs``),
+at ``disk_compression_level``; searches oversample by ``oversample_factor`` and rescore at full
+precision. A ``truncated_dimension`` searches a Matryoshka prefix and rescores by the full vector.
+
 Re-indexing to a new model writes to both indices (``set_write_targets``), then moves the alias
 (``swap_alias``), keeping the old index to swap back to. ``begin_bulk_ingest`` /
-``end_bulk_ingest`` turn refresh and replicas off for a backfill and restore them.
+``end_bulk_ingest`` turn refresh and replicas off for a backfill and restore them
+(``bulk.bulk_ingest`` pairs them).
 
 The ``AsyncOpenSearch`` client is injected (hosts, SigV4 auth); ``opensearchpy`` is never imported
 at run time here. Every request carries ``request_timeout_seconds``.
@@ -24,7 +29,11 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast, override
 
-from techai_webutils.clients.vector.opensearch.config import IndexLayout, OpenSearchConfig
+from techai_webutils.clients.vector.opensearch.config import (
+    IndexLayout,
+    OpenSearchConfig,
+    VectorMode,
+)
 from techai_webutils.clients.vector.opensearch.mapping import (
     EMBEDDING_FIELD,
     TEXT_FIELD,
@@ -88,10 +97,25 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         org_id: str | None = None,
         state: _State | None = None,
     ) -> None:
-        """Bind the client; ``org_id`` scopes the view (see ``for_org``)."""
+        """Bind the client; ``org_id`` scopes the view (see ``for_org``).
+
+        Raises:
+            AppValueError: ``truncated_dimension`` is not below ``dimension``, or the
+                oversample factor is negative.
+
+        """
         self._client = client
         self._dimension = dimension
         self._config = config or OpenSearchConfig()
+        if not 0 <= self._config.truncated_dimension < dimension:
+            msg = (
+                f"truncated_dimension {self._config.truncated_dimension} must be 0 or below "
+                f"the dimension {dimension}"
+            )
+            raise AppValueError(msg)
+        if self._config.oversample_factor < 0:
+            msg = f"oversample_factor must be >= 0, got {self._config.oversample_factor}"
+            raise AppValueError(msg)
         self._org = org_id
         self._state = state or _State()
         self._params: dict[str, object] = {
@@ -131,7 +155,14 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             for index in targets:
                 for entry in group:
                     body.append({"index": self._action(index, entry.id, org)})
-                    body.append(entry_source(entry, self._config.org_field, org))
+                    body.append(
+                        entry_source(
+                            entry,
+                            self._config.org_field,
+                            org,
+                            truncated_dimension=self._config.truncated_dimension,
+                        )
+                    )
             await self._bulk(body)
 
     @override
@@ -151,7 +182,13 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             return []
         response = await self._client.search(
             index=alias,
-            body=knn_query(query_embedding, top_k, fields),
+            body=knn_query(
+                query_embedding,
+                top_k,
+                fields,
+                oversample_factor=self._config.oversample_factor,
+                truncated_dimension=self._config.truncated_dimension,
+            ),
             params=self._routed(org),
         )
         hits = cast("dict[str, list[dict[str, object]]]", response["hits"])["hits"]
@@ -277,21 +314,25 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     async def create_index(self, collection: str, *, expected_docs: int = 0) -> str:
         """Create the configured model's index for the scoped alias; return its name.
 
-        An index expected to hold more than ``disk_mode_threshold_docs`` documents is ``on_disk``.
-        An index that already exists is kept as it is.
+        The index is ``on_disk`` under the ``on_disk`` vector mode, or when it is expected to hold
+        more than ``disk_mode_threshold_docs`` documents; it searches the truncated vector when
+        ``truncated_dimension`` is set. An index that already exists is kept as it is.
         """
         cfg = self._config
         index = index_name(
             self._alias(collection, self._org), cfg.model, cfg.model_version
         )
         if not await self._client.indices.exists(index=index, params=self._params):
-            on_disk = 0 < cfg.disk_mode_threshold_docs < expected_docs
+            on_disk = cfg.vector_mode is VectorMode.ON_DISK or (
+                0 < cfg.disk_mode_threshold_docs < expected_docs
+            )
             body = index_body(
                 self._dimension,
                 cfg.model,
                 cfg.model_version,
                 on_disk=on_disk,
                 compression_level=cfg.disk_compression_level,
+                truncated_dimension=cfg.truncated_dimension,
             )
             await self._client.indices.create(index=index, body=body, params=self._params)
         return index
