@@ -10,6 +10,10 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Python retrieval: `RetrievalConfig.collapse_duplicates` (off by default) and
+  `collapse_cluster_key`: `wrap_retrieval_engine` collapses in-scope passages with the same text
+  (up to case and whitespace) or the same near-duplicate cluster id into the best-scored one, which
+  lists the others' document ids under `ALSO_IN_KEY` (`clients.retrieval.collapse`).
 - Python retrieval: `AbstainerKind.TOP_SCORE` with `RetrievalConfig.abstain_threshold` (required
   above 0): the pool is kept whole when its best passage reaches the threshold and dropped
   otherwise (`clients.retrieval.abstain.TopScoreAbstainer`), so a threshold fitted on fused or

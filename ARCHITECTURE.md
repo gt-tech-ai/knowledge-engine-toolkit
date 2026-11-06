@@ -813,6 +813,11 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   `passage_order: edges` puts the best passages at both ends of the prompt (ranks 1, 3, 5 … 4, 2);
   the reordering is in the engine's output, so `[n]` and the citations stay aligned.
   `passage_header(n, passage)` gives the consumer's prompt `[n] <document> · <section> · p. <page>`.
+- **Duplicate passages.** With `RetrievalConfig.collapse_duplicates`, passages whose text is equal up
+  to case and whitespace, or that share a `collapse_cluster_key` value (a near-duplicate cluster id),
+  collapse into the best-scored one, whose `also_in` metadata lists the others' document ids
+  (`clients.retrieval.collapse`). It runs after the scope policies, so an out-of-scope copy is never
+  named, and before abstention and ordering. Off by default.
 - **Off-Bedrock model Kinds.** `EmbeddingKind.openai_compatible` and `LlmKind.openai_compatible`
   speak `/v1/embeddings` and `/v1/chat/completions` (vLLM, TEI, LiteLLM, llama.cpp, OpenAI) with
   an optional bearer `api_key` (never in a repr). A stream that sends nothing for

@@ -29,6 +29,7 @@ from techai_webutils.clients.retrieval.abstain import (
     TopScoreAbstainer,
     abstention_policies,
 )
+from techai_webutils.clients.retrieval.collapse import CollapsingRetrievalEngine
 from techai_webutils.clients.retrieval.filtering import (
     FilteringRetrievalEngine,
     MetadataEquals,
@@ -127,6 +128,11 @@ class RetrievalConfig:
     reranker's when reranking is on); required above 0 by ``top_score``, unused otherwise."""
     passage_order: PassageOrder = PassageOrder.RANK
     """The order passages reach the prompt: best first (default) or best at both ends."""
+    collapse_duplicates: bool = False
+    """Collapse passages with the same text (or cluster id) into the best-scored one, which lists
+    the others' document ids under ``also_in`` (``clients.retrieval.collapse``); off keeps all."""
+    collapse_cluster_key: str = ""
+    """The metadata key of a near-duplicate cluster id the collapse also groups by; empty: text."""
 
     def __post_init__(self) -> None:
         """Reject a non-numeric ``min_score`` (e.g. ``None``) or an unknown ``reranking_kind`` here.
@@ -161,8 +167,9 @@ def wrap_retrieval_engine(
 
     With ``reranking_kind`` ``cross_encoder``, ``reranker`` first reorders the passages and sets
     their scores. The filter then applies the abstainer (``MinScore(config.min_score)`` by
-    default), then ``policies``; ``top_score`` then drops a pool whose best passage is weak;
-    the passages are then put in ``config.passage_order``.
+    default), then ``policies``; with ``collapse_duplicates`` the in-scope duplicates then
+    collapse (so an out-of-scope copy is never named); ``top_score`` then drops a pool whose
+    best passage is weak; the passages are then put in ``config.passage_order``.
     ``new_retrieval_engine_from_config`` wraps every kind it builds with this; a consumer with its
     own engine (a custom corpus, a test double of the backend) calls it directly so that engine is
     scoped exactly like the factory's.
@@ -179,6 +186,10 @@ def wrap_retrieval_engine(
     scoped: RetrievalEngine = FilteringRetrievalEngine(
         inner, [*abstention_policies(config.abstainer, config.min_score), *policies]
     )
+    if config.collapse_duplicates:
+        scoped = CollapsingRetrievalEngine(
+            scoped, cluster_key=config.collapse_cluster_key
+        )
     if config.abstainer == AbstainerKind.TOP_SCORE:
         scoped = TopScoreAbstainer(scoped, config.abstain_threshold)
     if config.passage_order == PassageOrder.RANK:

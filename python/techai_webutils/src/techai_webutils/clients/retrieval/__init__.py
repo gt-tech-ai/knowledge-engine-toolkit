@@ -6,7 +6,8 @@ config-selected ``new_retrieval_engine_from_config`` factory, and ``wrap_retriev
 gives a consumer's own engine the factory's filtering and passage order. Hybrid engines fuse
 rankings with ``FusionConfig`` (``reciprocal_rank_fusion``, ``merge_by_score`` for shards);
 ``AbstainerKind`` and ``PassageOrder`` select abstention and prompt order (``passage_header``
-names a passage in the prompt). Apps select an engine via config and
+names a passage in the prompt); ``collapse_duplicates`` keeps one passage per duplicate group,
+naming the rest under ``ALSO_IN_KEY``. Apps select an engine via config and
 depend only on the interface. The Bedrock seam types (``FilterBuilder``, ``DocumentIdResolver``,
 ``metadata_document_id``) are exported by ``clients.retrieval.bedrock``, which loads the AWS SDK.
 """
@@ -18,6 +19,7 @@ from techai_webutils.clients.retrieval.builder import (
     new_retrieval_engine_from_config,
     wrap_retrieval_engine,
 )
+from techai_webutils.clients.retrieval.collapse import ALSO_IN_KEY, collapse_duplicates
 from techai_webutils.clients.retrieval.filtering import (
     FilteringRetrievalEngine,
     MetadataEquals,
@@ -41,6 +43,7 @@ from techai_webutils.clients.retrieval.ordering import (
 from techai_webutils.clients.retrieval.stub import StubRetrievalEngine
 
 __all__ = [
+    "ALSO_IN_KEY",
     "AbstainerKind",
     "FilteringRetrievalEngine",
     "FusionConfig",
@@ -54,6 +57,7 @@ __all__ = [
     "RetrievalConfig",
     "RetrievalKind",
     "StubRetrievalEngine",
+    "collapse_duplicates",
     "fuse",
     "merge_by_score",
     "new_retrieval_engine_from_config",
