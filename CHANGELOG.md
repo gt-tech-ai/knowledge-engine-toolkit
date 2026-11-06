@@ -10,6 +10,11 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Go connector: `SourceConfig.InventoryPrefix`. An `s3_inventory` source with no
+  `InventoryManifestKey` reads the newest complete report (a written `manifest.checksum`) under
+  that configuration folder, and names it in its tokens (`<stamp>/<file>:<row>`), so a crawl
+  resumed after the next daily report still finishes the one it began. No complete report is
+  `NOT_FOUND`.
 - Python sink: `core.interfaces.sink.chunk_id(document_id, n)` (`<document>:<n>`) and
   `CHUNK_ID_KEY`. The vector sink ids entries with it, and the Bedrock `chunk_files` layout stores
   it in each chunk's sidecar, so `PassageCitationExtractor` gives a Bedrock passage the same

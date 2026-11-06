@@ -89,8 +89,14 @@ type SourceConfig struct {
 	// empty means Bucket.
 	InventoryBucket string
 	// InventoryManifestKey is the key of the report's manifest.json (s3_inventory kind),
-	// e.g. "<prefix>/<source-bucket>/<config-id>/<timestamp>/manifest.json".
+	// e.g. "<prefix>/<source-bucket>/<config-id>/<timestamp>/manifest.json". It pins one
+	// report; leave it empty and set InventoryPrefix to read the newest.
 	InventoryManifestKey string
+	// InventoryPrefix is the report's configuration folder (s3_inventory kind),
+	// "<prefix>/<source-bucket>/<config-id>/" with its trailing slash. With no
+	// InventoryManifestKey, the source reads the newest report under it whose
+	// manifest.checksum is written (S3 writes it beside a finished manifest.json).
+	InventoryPrefix string
 }
 
 // SourceBuilder builds a ConnectorSource from a SourceConfig, failing loudly on an

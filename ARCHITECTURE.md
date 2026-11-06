@@ -867,7 +867,10 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   (`ListObjectsV2`; the token is S3's continuation token).
 - **`s3_inventory`** reads the same objects from the bucket's S3 Inventory report:
   `InventoryManifestKey` (in `InventoryBucket`, default `Bucket`), then the gzipped CSV data
-  files it lists. A crawl of hundreds of millions of keys costs one GET per data file instead
+  files it lists. With no manifest key, `InventoryPrefix` names the report's configuration
+  folder and the source reads the newest dated report there whose `manifest.checksum` is
+  written (none yet is `NOT_FOUND`); its tokens then start with that report's folder
+  (`<stamp>/<file>:<row>`), so a resumed crawl finishes the report it began. A crawl of hundreds of millions of keys costs one GET per data file instead
   of one LIST per 1,000 keys; the snapshot is as fresh as the latest report. Objects match the
   `s3` kind's (key URL-decoded, ETag quoted, RFC 3339 time); rows of another bucket, outside
   `Prefix`, non-current versions and delete markers are skipped. The token is

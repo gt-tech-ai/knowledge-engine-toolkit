@@ -2,7 +2,9 @@
 // from its S3 Inventory report (manifest.json, then the gzipped CSV data files it lists)
 // instead of listing the bucket. Pages and their objects match the s3 kind's for the same
 // objects; the continuation token is "<data file index>:<rows consumed>", so a crashed
-// sync resumes inside a data file. It authenticates exactly like the s3 kind (through
+// sync resumes inside a data file. Given the report's folder instead of one manifest, it
+// reads the newest complete report there and prefixes each token with that report's
+// dated folder (report.go). It authenticates exactly like the s3 kind (through
 // connector/s3's NewStorage).
 package s3inventory
 
@@ -43,8 +45,13 @@ type Source struct {
 	prefix string
 	// reportBucket holds the report.
 	reportBucket string
-	// manifestKey is the report's manifest.json key.
+	// manifestKey is the report's manifest.json key (in folder mode, the chosen report's).
 	manifestKey string
+	// folder is the report's configuration folder; empty pins manifestKey (folder mode
+	// is on when it is set).
+	folder string
+	// stamp is the dated report folder read in folder mode, named in every token.
+	stamp string
 	// mu serializes ListPage (a sync crawls one source from one goroutine; this keeps a
 	// concurrent caller from corrupting the open cursor).
 	mu sync.Mutex
@@ -69,17 +76,18 @@ type cursor struct {
 var _ interfaces.ConnectorSource = (*Source)(nil)
 
 // NewSource builds the s3_inventory source for cfg. It fails loud (CodeInvalidInput),
-// before any call, without a manifest key or on an auth config the s3 kind refuses.
+// before any call, with neither a manifest key nor a report folder, or on an auth config
+// the s3 kind refuses.
 func NewSource(
 	ctx context.Context,
 	cfg interfaces.SourceConfig,
 	stsClient stscreds.AssumeRoleAPIClient,
 	build connectors3.S3ClientBuilder,
 ) (*Source, error) {
-	if cfg.InventoryManifestKey == "" {
+	if cfg.InventoryManifestKey == "" && cfg.InventoryPrefix == "" {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
-			"connector s3_inventory: no inventory manifest key",
+			"connector s3_inventory: no inventory manifest key or report folder",
 		)
 	}
 	storage, err := connectors3.NewStorage(ctx, cfg, stsClient, build)
@@ -96,6 +104,7 @@ func NewSource(
 		prefix:       cfg.Prefix,
 		reportBucket: reportBucket,
 		manifestKey:  cfg.InventoryManifestKey,
+		folder:       folderOf(cfg),
 	}, nil
 }
 
@@ -107,8 +116,11 @@ func (s *Source) TestConnection(ctx context.Context) (int, error) {
 }
 
 // ListPage returns up to limit objects after continuationToken ("" = the report's start)
-// and the token to resume from ("" when the report is exhausted). An object-store failure
-// is classified like the s3 kind's; a malformed token or report is CodeInvalidInput.
+// and the token to resume from ("" when the report is exhausted). In folder mode the
+// token names its report ("<stamp>/<file>:<row>"), so a resumed crawl finishes the report
+// it started even after a newer one lands. An object-store failure is classified like the
+// s3 kind's; a malformed token or report is CodeInvalidInput, and a folder with no
+// complete report CodeNotFound.
 func (s *Source) ListPage(
 	ctx context.Context,
 	continuationToken string,
@@ -119,8 +131,15 @@ func (s *Source) ListPage(
 	if limit <= 0 {
 		limit = defaultPageSize
 	}
-	file, row, err := parseToken(continuationToken)
+	stamp, position, err := s.splitToken(continuationToken)
 	if err != nil {
+		return nil, "", err
+	}
+	file, row, err := parseToken(position)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := s.chooseReport(ctx, stamp); err != nil {
 		return nil, "", err
 	}
 	if err := s.loadReport(ctx); err != nil {
@@ -141,7 +160,7 @@ func (s *Source) ListPage(
 	if file >= len(s.report.Files) {
 		return page, "", nil
 	}
-	return page, fmt.Sprintf("%d:%d", file, row), nil
+	return page, s.token(file, row), nil
 }
 
 // readFrom fills *page from the data file at index file, after row rows. A cursor left
