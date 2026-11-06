@@ -43,6 +43,14 @@ Python: `techai-webutils` 0.9.3.
   `restore` (under a new name, no replicas or aliases, never over the source), `wait_restored`,
   `count`, `sample` and `delete_index` are the restore path onto another domain; the managed
   service's own `cs-*` snapshots restore only into the domain that took them.
+- Python OpenSearch: `clients.vector.opensearch.tiers.TierAdmin` (+ `TierPolicy`, `TierMode`,
+  `render_policy`). A `TierPolicy` renders to an ISM policy that moves an index from hot to warm
+  to cold at configured ages, then deletes it at its retention; an empty age skips that tier.
+  `managed` mode uses UltraWarm and cold storage; `self_managed` mode drops replicas, blocks
+  writes, then closes the index. `ensure_policy` writes the policy only when its states changed
+  (with optimistic concurrency). `attach` hands one index to the policy, switching it from any
+  earlier policy, and is safe to repeat. The policy is never matched by index name, because a
+  warm index is read-only, so a caller attaches it only to the indices it retires.
 - Python errors: `core.errors.ThrottledError`, an `UNAVAILABLE` (so retried) that `is_throttled`
   recognizes, for a push-back read from a response body. The OpenSearch store's `bulk_error`
   raises it when any item is rejected with 429, so rejected bulk items count in the client tier's
