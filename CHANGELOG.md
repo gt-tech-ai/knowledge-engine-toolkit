@@ -10,6 +10,9 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Guard `expr` rows can hash: `sha256(text)` returns the lowercase-hex SHA-256 of a
+  string, so a row can hold files copied from another repository (shared golden fixtures)
+  to the digests recorded for their source.
 - Python messaging: `Message.delivery` says which delivery of a message a handler is on (1 =
   first). SQS sets it from `ApproximateReceiveCount` (read when `DeliveryConfig.retry_backoff`
   is set, as before); the memory Kind from its own redelivery count. `DeliveryConfig.jitter`

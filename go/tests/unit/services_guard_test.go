@@ -410,6 +410,40 @@ func TestServicesGuard_ExprDecode(t *testing.T) {
 	assert.Contains(t, vs["unknown"].Detail, "unknown format ini")
 }
 
+// TestServicesGuard_ExprSHA256 tests sha256(text) over a selected file's text.
+//
+// Why this test is important:
+//   - a file copied from another repository (shared golden fixtures, a vendored schema)
+//     must stay byte-identical to its source; recording the source's digests as row data
+//     lets an expression catch a local edit or a stale copy without a Go guard.
+//
+// What it tests:
+//   - sha256 returns the lowercase-hex SHA-256 of a file's text, so a recorded digest
+//     passes and the digest of different bytes fails.
+func TestServicesGuard_ExprSHA256(t *testing.T) {
+	t.Parallel()
+	cb := memoryCodebase(t, map[string]string{"golden/case.json": "abc"})
+	sel := types.FileSelector{Paths: []string{"golden/case.json"}}
+	gs, err := guard.NewFromConfig([]types.GuardRow{
+		{
+			Name: "match", Kind: types.GuardExpr, Files: sel,
+			Expr: `sha256(file['golden/case.json'].text) ==
+				'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`,
+		},
+		{
+			Name: "differs", Kind: types.GuardExpr, Files: sel,
+			Expr: `sha256(file['golden/case.json'].text) == sha256('abd')`,
+		},
+	}, guard.Deps{})
+	require.NoError(t, err)
+	vs := map[string]types.Verdict{}
+	for _, g := range gs {
+		vs[g.Name()] = g.Run(t.Context(), cb)
+	}
+	assert.Equal(t, types.StatusPass, vs["match"].Status, vs["match"].Detail)
+	assert.Equal(t, types.StatusFail, vs["differs"].Status)
+}
+
 // TestServicesGuard_ExprTOMLAndNow tests the toml documents and the now timestamp an
 // expression reads.
 //

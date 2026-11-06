@@ -2,6 +2,8 @@ package guard
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"maps"
 	"math"
@@ -67,11 +69,24 @@ func NewPrograms() *Programs {
 // newEnv builds the guard environment: the CEL standard library plus optional types, the
 // strings, lists, sets, encoders, bindings (cel.bind), math and regex extensions,
 // decode(format, text) — the Codebase.Docs decoders ("yaml", "hcl", "alloy", "toml")
-// over a string, for configuration embedded in another file — and exprVars as dyn.
+// over a string, for configuration embedded in another file — sha256(text), the
+// lowercase-hex digest of a string (a copied file checked against its source's recorded
+// digest), and exprVars as dyn.
 func newEnv() (*cel.Env, error) {
-	opts := make([]cel.EnvOption, 0, 9+len(exprVars()))
-	opts = append(opts, ext.Strings(), ext.Lists(), ext.Sets(), ext.Encoders(),
-		cel.OptionalTypes(), ext.Bindings(), ext.Math(), ext.Regex(), decodeFunc())
+	opts := make([]cel.EnvOption, 0, 10+len(exprVars()))
+	opts = append(
+		opts,
+		ext.Strings(),
+		ext.Lists(),
+		ext.Sets(),
+		ext.Encoders(),
+		cel.OptionalTypes(),
+		ext.Bindings(),
+		ext.Math(),
+		ext.Regex(),
+		decodeFunc(),
+		sha256Func(),
+	)
 	for _, v := range exprVars() {
 		opts = append(opts, cel.Variable(v, cel.DynType))
 	}
@@ -174,6 +189,21 @@ func decodeFunc() cel.EnvOption {
 					return celtypes.WrapErr(err)
 				}
 				return celtypes.DefaultTypeAdapter.NativeToValue(doc)
+			})))
+}
+
+// sha256Func is the CEL function sha256(text): the lowercase-hex SHA-256 of text's
+// UTF-8 bytes.
+func sha256Func() cel.EnvOption {
+	return cel.Function("sha256",
+		cel.Overload("sha256_string", []*cel.Type{cel.StringType}, cel.StringType,
+			cel.UnaryBinding(func(text ref.Val) ref.Val {
+				t, ok := text.Value().(string)
+				if !ok {
+					return celtypes.NewErr("sha256: text must be a string")
+				}
+				sum := sha256.Sum256([]byte(t))
+				return celtypes.String(hex.EncodeToString(sum[:]))
 			})))
 }
 
