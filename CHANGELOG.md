@@ -157,6 +157,9 @@ Python: `techai-webutils` 0.9.3.
   limit from them.
 - `ParseCost` and the `CostedParser` capability (`core.interfaces.parser`). `IsolatedParser.cost()`
   reports its per-parse memory cap and one CPU.
+- The `PagedParser` capability (`core.interfaces.parser`: `page_count`, `parse_pages`), which
+  `LayoutParser` implements (`page_count` runs in the bounded child; 0 for a non-PDF or unreadable
+  file), and `core.domain.join_parsed`, which joins page-range parts into one document.
 - `IsolatedParser(executor=…)` and `parser_from_config(config, executor=…)`: parses wait on the
   injected executor. Without one, the event loop's default pool is used, as before.
 - `ExecutorConfig.ray_task_num_cpus`: each Ray task declares those CPUs. When it is set, a batch

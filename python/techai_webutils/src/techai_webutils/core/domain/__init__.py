@@ -21,6 +21,7 @@ from techai_webutils.core.domain.parser import (
     DocumentFormat,
     Page,
     ParsedDocument,
+    join_parsed,
     parsed_from_json,
     parsed_to_json,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "Turn",
     "blocks_from_json",
     "blocks_to_json",
+    "join_parsed",
     "parsed_from_json",
     "parsed_to_json",
 ]

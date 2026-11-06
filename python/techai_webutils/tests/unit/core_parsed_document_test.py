@@ -15,6 +15,7 @@ from techai_webutils.core.domain import (
     DocumentFormat,
     Page,
     ParsedDocument,
+    join_parsed,
     parsed_from_json,
     parsed_to_json,
 )
@@ -80,3 +81,51 @@ def test_parsed_from_json_refuses_unknown_versions_and_malformed_payloads() -> N
         parsed_from_json({**good, "document_format": "nope"})
     without_blocks = {k: v for k, v in good.items() if k != "blocks"}
     assert parsed_from_json(without_blocks).blocks == ()
+
+
+def _part(first: int, last: int, *, error: str = "") -> ParsedDocument:
+    """Return a PDF part covering pages ``first``..``last``, one block per page."""
+    pages = [Page(n, f"page {n}") for n in range(first, last + 1)]
+    blocks = tuple(
+        DocumentBlock(BlockType.PARAGRAPH, f"page {n}", i, n)
+        for i, n in enumerate(range(first, last + 1))
+    )
+    return ParsedDocument(
+        "\n\n".join(p.text for p in pages),
+        DocumentFormat.PDF,
+        total_pages=len(pages),
+        word_count=2 * len(pages),
+        pages=pages,
+        error=error,
+        blocks=blocks,
+    )
+
+
+def test_join_parsed_reassembles_parts_into_one_document() -> None:
+    """Test that the parts of a PDF parsed in page ranges join into the whole document.
+
+    **Why this test is important:**
+      - A large PDF is parsed in parts so each can be checkpointed; the chunker must then see one
+        document whose blocks are in reading order with unique positions, exactly as if it had
+        been parsed whole, and a failed part must fail the document rather than silently drop
+        pages.
+
+    **What it tests:**
+      - Parts given out of order join in page order: markdown, pages and blocks concatenate,
+        block ``order`` runs 0..n-1, word counts add and ``total_pages`` counts every page.
+      - A part carrying an error makes the joined document carry it.
+      - Joining nothing raises ``AppValueError``.
+    """
+    joined = join_parsed([_part(4, 5), _part(1, 3)])
+
+    assert joined.ok
+    assert joined.document_format is DocumentFormat.PDF
+    assert [p.page_number for p in joined.pages] == [1, 2, 3, 4, 5]
+    assert [(b.order, b.page) for b in joined.blocks] == [(i, i + 1) for i in range(5)]
+    assert joined.markdown_content == "\n\n".join(f"page {n}" for n in range(1, 6))
+    assert (joined.word_count, joined.total_pages) == (10, 5)
+    assert join_parsed([_part(1, 2), _part(3, 3, error="parse_timeout")]).error == (
+        "parse_timeout"
+    )
+    with pytest.raises(AppValueError):
+        join_parsed([])

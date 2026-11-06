@@ -3,7 +3,7 @@
 The shared, dependency-free parse seam every deployable programs against (mirrors Go's
 ``go/core/interfaces``). The config-selected backends in ``techai_webutils.clients.parsing``
 satisfy it; a parser never raises for a bad document — it returns a ``ParsedDocument`` carrying the
-error.
+error. ``CostedParser`` and ``PagedParser`` are optional capabilities a backend may add.
 
 Imported by full submodule path (``techai_webutils.core.interfaces.parser``), NOT re-exported from
 ``core.interfaces`` — the package already exports a legacy, unrelated ``DocumentParser`` (see
@@ -40,6 +40,27 @@ class CostedParser(Protocol):
 
     def cost(self) -> ParseCost:
         """Return the cost of parsing one document."""
+        ...
+
+
+@runtime_checkable
+class PagedParser(Protocol):
+    """A parser that can count a document's pages and parse one page range of it.
+
+    A capability beside ``DocumentParser`` (like ``CostedParser``): a consumer that parses a large
+    PDF in parts, checkpointing each, checks ``isinstance(parser, PagedParser)`` and parses the
+    document whole when a parser does not implement it. ``join_parsed`` (``core.domain``) joins the
+    parts back into one document.
+    """
+
+    async def page_count(self, path: str) -> int:
+        """Return the number of pages of the PDF at ``path``; 0 when it is not a readable PDF."""
+        ...
+
+    async def parse_pages(
+        self, path: str, *, first_page: int, last_page: int, filename: str = ""
+    ) -> ParsedDocument:
+        """Parse pages ``first_page``..``last_page`` (1-based, inclusive) of the PDF at ``path``."""
         ...
 
 

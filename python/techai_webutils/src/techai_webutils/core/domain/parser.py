@@ -8,12 +8,13 @@ so a boundary DTO is "a queue message waiting to happen" (extraction-ready).
 
 ``parsed_to_json`` / ``parsed_from_json`` give a ``ParsedDocument``'s JSON form (the parse stage's
 checkpoint artifact and hand-off), tagged with ``PARSED_FORMAT_VERSION``; a reader accepts its own
-version and the one before (N/N-1).
+version and the one before (N/N-1). ``join_parsed`` joins the parts of a document parsed in page
+ranges (``PagedParser``) back into one.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, cast
 
@@ -21,6 +22,8 @@ from techai_webutils.core.domain.document_ir import blocks_from_json, blocks_to_
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from techai_webutils.core.domain.document_ir import DocumentBlock
 
 PARSED_FORMAT_VERSION = 1
@@ -110,6 +113,52 @@ class ParsedDocument:
     def ok(self) -> bool:
         """Whether the document parsed without error."""
         return not self.error
+
+
+def join_parsed(parts: Sequence[ParsedDocument]) -> ParsedDocument:
+    """Join the page-range parts of one document into the whole, in page order.
+
+    Parts are ordered by their first page; markdown, pages and blocks concatenate, block ``order``
+    is renumbered so it stays unique, and word counts add. The first part's error, if any, fails
+    the joined document (a missing range must not pass as a shorter document).
+
+    Args:
+        parts: The parsed page ranges of one document, in any order.
+
+    Returns:
+        The joined document.
+
+    Raises:
+        AppValueError: ``parts`` is empty.
+
+    """
+    if not parts:
+        msg = "join_parsed needs at least one part"
+        raise AppValueError(msg)
+    ordered = sorted(parts, key=_first_page)
+    pages = [page for part in ordered for page in part.pages]
+    blocks = tuple(
+        replace(block, order=order)
+        for order, block in enumerate(b for part in ordered for b in part.blocks)
+    )
+    return ParsedDocument(
+        markdown_content="\n\n".join(
+            p.markdown_content for p in ordered if p.markdown_content
+        ),
+        document_format=ordered[0].document_format,
+        total_pages=max(len(pages), *(p.total_pages for p in ordered)),
+        word_count=sum(p.word_count for p in ordered),
+        pages=pages,
+        error=next((p.error for p in ordered if p.error), ""),
+        blocks=blocks,
+    )
+
+
+def _first_page(part: ParsedDocument) -> int:
+    """Return a part's first page number (its first page, else its first paged block, else 0)."""
+    if part.pages:
+        return part.pages[0].page_number
+    return next((b.page for b in part.blocks if b.page is not None), 0)
 
 
 def parsed_to_json(doc: ParsedDocument) -> dict[str, object]:

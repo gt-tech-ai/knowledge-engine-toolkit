@@ -1002,7 +1002,10 @@ whole `ParsedDocument` under `PARSED_FORMAT_VERSION` (the parse stage's checkpoi
 inside the same bounded child as `isolated` (`memory_bytes`, `timeout_seconds`); other formats go
 through `isolated` unchanged. `parse_pages(path, first_page=, last_page=)` converts one page range,
 so a large PDF can parse in checkpointed parts; each part is one bounded child, so it costs
-`cost()`. The child is spawned, not forked (Docling's torch stack aborts in a forked child on
+`cost()`. `page_count(path)` opens the PDF with pymupdf in the same bounded child (0 for a non-PDF
+or unreadable file, meaning parse it whole), so the parser is a `PagedParser`
+(`core.interfaces.parser`), and `join_parsed(parts)` (`core.domain`) joins the parts in page order,
+renumbering block `order`; a failed part fails the joined document. The child is spawned, not forked (Docling's torch stack aborts in a forked child on
 macOS; the forkserver does not preload Docling, so a fresh interpreter costs about the same).
 `artifacts_path` points Docling at model weights baked into the image (empty: Docling downloads
 them on first use); `ocr` runs OCR on pages and regions with no text layer. Furniture (page

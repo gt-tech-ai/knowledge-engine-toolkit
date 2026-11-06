@@ -4,7 +4,8 @@ A PDF is converted by Docling inside the same bounded child process as the ``iso
 (the address-space cap and the wall-clock timeout, both from the parser config), and comes back
 as a ``ParsedDocument`` with ``blocks`` and Docling's markdown. Every other format falls back to
 the ``isolated`` parser unchanged. ``parse_pages`` converts one page range, so a consumer can
-parse a large PDF in parts and checkpoint each.
+parse a large PDF in parts and checkpoint each; ``page_count`` (also in the bounded child) says how
+many pages there are, so the parser is a ``PagedParser``.
 
 Docling (the ``layout`` extra) is imported only in the child. Its model weights load from
 ``artifacts_path`` when set (a directory baked into the image, so a parse downloads nothing);
@@ -106,6 +107,17 @@ def _parse_layout(
     return parsed_from_docling(convert(path, options))
 
 
+def _count_pages(path: str) -> ParsedDocument:
+    """Child entry: a document whose ``total_pages`` is the PDF's page count (0 if unreadable)."""
+    pymupdf = importlib.import_module("pymupdf")
+    try:
+        with pymupdf.open(path, filetype="pdf") as doc:
+            count = cast("int", doc.page_count)
+    except (RuntimeError, ValueError):
+        count = 0
+    return ParsedDocument("", DocumentFormat.PDF, total_pages=count)
+
+
 class LayoutParser(IsolatedParser):
     """Parses PDFs with Docling in a bounded child; other formats with the ``isolated`` parser."""
 
@@ -157,6 +169,20 @@ class LayoutParser(IsolatedParser):
             self._options.artifacts_path, self._options.ocr, first_page, last_page
         )
         return await self._layout(path, options, "application/pdf", filename)
+
+    async def page_count(self, path: str) -> int:
+        """Count the pages of the PDF at ``path`` in the bounded child; 0 for a non-PDF or bad file.
+
+        The file is untrusted, so pymupdf opens it in the same bounded child as a parse, not in
+        this process. A count of 0 tells the caller to parse the document whole.
+        """
+        if detect_format("", path, b"") != DocumentFormat.PDF:
+            return 0
+        try:
+            counted = await self._isolated(_count_pages, path)
+        except (TimeoutError, IsolationError):
+            return 0
+        return counted.total_pages
 
     async def _layout(
         self, path: str, options: LayoutOptions, declared: str, filename: str

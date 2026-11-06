@@ -7,6 +7,7 @@ installed in CI; a real Docling run is recorded in the plan's deviations).
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,6 +28,7 @@ from techai_webutils.clients.parsing.layout import (
 )
 from techai_webutils.core.domain import BlockType, DocumentFormat
 from techai_webutils.core.errors import AppValueError
+from techai_webutils.core.interfaces.parser import PagedParser
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -221,3 +223,42 @@ def test_factory_refuses_layout_without_docling() -> None:
     with pytest.raises(AppValueError):
         parser_from_config(ParserConfig(kind=ParserKind.LAYOUT))
     assert ParserConfig().kind is ParserKind.ISOLATED
+
+
+def _write_pdf(path: Path, pages: int) -> None:
+    """Write a blank PDF of ``pages`` pages to ``path`` with pymupdf."""
+    pymupdf = importlib.import_module("pymupdf")
+    doc = pymupdf.open()
+    for _ in range(pages):
+        doc.new_page()
+    doc.save(str(path))
+    doc.close()
+
+
+@pytest.mark.asyncio
+async def test_page_count_reads_the_pdf_in_the_child_and_counts_zero_otherwise(
+    tmp_path: Path,
+) -> None:
+    """Test that the layout parser is a ``PagedParser`` that counts a PDF's pages safely.
+
+    **Why this test is important:**
+      - The parse stage splits a large PDF into page ranges from this count; a wrong count drops
+        or repeats pages, and an unreadable or non-PDF file must fall back to one whole parse
+        rather than fail the document before it is parsed.
+
+    **What it tests:**
+      - ``LayoutParser`` satisfies ``PagedParser``; a 3-page PDF counts 3
+      - a file that is not a readable PDF, and an HTML file, count 0
+    """
+    pdf = tmp_path / "three.pdf"
+    _write_pdf(pdf, 3)
+    junk = tmp_path / "junk.pdf"
+    junk.write_bytes(_PDF)
+    html = tmp_path / "a.html"
+    html.write_bytes(b"<html></html>")
+    parser = _layout(convert_report)
+
+    assert isinstance(parser, PagedParser)
+    assert await parser.page_count(str(pdf)) == 3
+    assert await parser.page_count(str(junk)) == 0
+    assert await parser.page_count(str(html)) == 0
