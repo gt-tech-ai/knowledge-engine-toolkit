@@ -384,6 +384,9 @@ Python: `techai-webutils` 0.9.3.
 
 ### Fixed
 
+- Go connector: an `s3_inventory` report without the `ETag` or `Size` column is refused
+  (`INVALID_INPUT`, naming the column). Without ETags every crawl read as changed and
+  re-ingested the bucket; without sizes the oversized-object cap never fired.
 - Python OpenSearch: `keyword_search` leaves a truncated index's full-precision vector
   (`embedding_full`) out of `_source`, as the k-NN search already did, so BM25 hits no longer carry
   the full embedding.

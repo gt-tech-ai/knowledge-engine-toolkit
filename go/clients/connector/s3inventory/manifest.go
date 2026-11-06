@@ -19,7 +19,7 @@ const maxManifestBytes = 16 << 20
 // formatCSV is the only report format read; ORC and Parquet need a columnar decoder.
 const formatCSV = "CSV"
 
-// The report columns the source reads (fileSchema names). Bucket and Key are required.
+// The report columns the source reads (fileSchema names).
 const (
 	// colBucket is the source bucket of each row.
 	colBucket = "Bucket"
@@ -59,7 +59,9 @@ type dataFile struct {
 type schema map[string]int
 
 // parseManifest decodes and validates a manifest for sourceBucket: CSV only, with the
-// Bucket and Key columns. A malformed or unusable report is CodeInvalidInput.
+// Bucket, Key, ETag and Size columns. Bucket and Key locate each object; without ETag
+// every crawl reads as changed (re-ingesting the bucket), and without Size the
+// oversized-object cap never fires. A malformed or unusable report is CodeInvalidInput.
 func parseManifest(body io.Reader, sourceBucket string) (*manifest, schema, error) {
 	var m manifest
 	if err := json.NewDecoder(io.LimitReader(body, maxManifestBytes)).
@@ -88,17 +90,14 @@ func parseManifest(body io.Reader, sourceBucket string) (*manifest, schema, erro
 	for i, name := range strings.Split(m.FileSchema, ",") {
 		cols[strings.TrimSpace(name)] = i
 	}
-	if _, ok := cols[colBucket]; !ok {
-		return nil, nil, apperr.New(
-			apperr.CodeInvalidInput,
-			"connector s3_inventory: report has no Bucket column",
-		)
-	}
-	if _, ok := cols[colKey]; !ok {
-		return nil, nil, apperr.New(
-			apperr.CodeInvalidInput,
-			"connector s3_inventory: report has no Key column",
-		)
+	for _, name := range [...]string{colBucket, colKey, colETag, colSize} {
+		if _, ok := cols[name]; !ok {
+			return nil, nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+				"connector s3_inventory: report has no %s column; add it to the "+
+					"inventory configuration's optional fields",
+				name,
+			))
+		}
 	}
 	return &m, cols, nil
 }

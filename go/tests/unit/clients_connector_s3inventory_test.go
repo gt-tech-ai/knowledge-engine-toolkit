@@ -224,14 +224,17 @@ func TestS3Inventory_ResumesFromACheckpoint(t *testing.T) {
 // inventory source.
 //
 // Why this test is important:
-//   - A misconfigured report (wrong format, another bucket) or a corrupt checkpoint must
-//     fail as a terminal configuration error the operator can fix, and an unreachable
-//     report bucket as a transient one the sync retries.
+//   - A misconfigured report (wrong format, another bucket, no ETag or Size column) or a
+//     corrupt checkpoint must fail as a terminal configuration error the operator can
+//     fix, and an unreachable report bucket as a transient one the sync retries. Without
+//     ETags every crawl would read as changed; without sizes the oversized-object cap
+//     would never fire.
 //
 // What it tests:
 //   - no manifest key → CodeInvalidInput at build; a Parquet report, a report of another
-//     bucket and a malformed token → CodeInvalidInput; a transport failure reading the
-//     manifest → CodeUnavailable
+//     bucket, a report missing the ETag or the Size column (naming it) and a malformed
+//     token → CodeInvalidInput; a transport failure reading the manifest →
+//     CodeUnavailable
 func TestS3Inventory_RefusesUnusableReportsAndTokens(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -267,6 +270,12 @@ func TestS3Inventory_RefusesUnusableReportsAndTokens(t *testing.T) {
 		nil,
 		apperr.Sentinel("dial tcp: connection refused"),
 	).ListPage(ctx, "", 2)
+	without := func(column string) []byte {
+		return bytes.Replace(newInventoryFixture(t, "CSV").manifest,
+			[]byte(column+", "), nil, 1)
+	}
+	_, _, noETagErr := source(without("ETag"), nil).ListPage(ctx, "", 2)
+	_, _, noSizeErr := source(without("Size"), nil).ListPage(ctx, "", 2)
 
 	require.True(t, apperr.Is(buildErr, apperr.CodeInvalidInput))
 	require.True(t, apperr.Is(parquetErr, apperr.CodeInvalidInput))
@@ -274,6 +283,10 @@ func TestS3Inventory_RefusesUnusableReportsAndTokens(t *testing.T) {
 	require.True(t, apperr.Is(bucketErr, apperr.CodeInvalidInput))
 	require.True(t, apperr.Is(tokenErr, apperr.CodeInvalidInput))
 	require.True(t, apperr.Is(downErr, apperr.CodeUnavailable))
+	require.True(t, apperr.Is(noETagErr, apperr.CodeInvalidInput))
+	require.ErrorContains(t, noETagErr, "ETag")
+	require.True(t, apperr.Is(noSizeErr, apperr.CodeInvalidInput))
+	require.ErrorContains(t, noSizeErr, "Size")
 }
 
 // TestConnectorKind_S3StaysTheDefault tests that adding the inventory kind leaves an S3

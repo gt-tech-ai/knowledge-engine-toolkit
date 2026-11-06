@@ -876,7 +876,9 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   `Prefix`, non-current versions and delete markers are skipped. The token is
   `<data file index>:<rows consumed>`; the source keeps the current data file open between
   pages and re-downloads it once if that body has died. Only CSV reports are read (ORC and
-  Parquet are `INVALID_INPUT`), and the report must list `Bucket`.
+  Parquet are `INVALID_INPUT`), and the report must list `Bucket` and carry the `Bucket`,
+  `Key`, `ETag` and `Size` columns (without ETags every crawl reads as changed; without
+  sizes the oversized-object cap never fires).
 
 Both kinds authenticate through `connector/s3.NewStorage` (access key, or STS AssumeRole with
 the tenant's ExternalID) and classify object-store failures with `ClassifyListError`
