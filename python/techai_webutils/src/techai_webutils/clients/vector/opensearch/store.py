@@ -305,10 +305,16 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         return sorted(cast("dict[str, object]", response))[0]
 
     async def index_model(self, index: str) -> tuple[str, str]:
-        """Return the ``(model, version)`` ``index`` was created for."""
+        """Return the ``(model, version)`` ``index`` was created for; ``("", "")`` if it is absent.
+
+        An index this domain does not hold reads as unstamped rather than an error, so a
+        multi-domain store can ask every domain in one round trip.
+        """
         response = await self._client.indices.get_mapping(
-            index=index, params=self._params
+            index=index, params=self._params | {"ignore_unavailable": "true"}
         )
+        if index not in response:
+            return "", ""
         meta = self._meta(cast("dict[str, object]", response), index)
         return str(meta.get("model", "")), str(meta.get("version", ""))
 

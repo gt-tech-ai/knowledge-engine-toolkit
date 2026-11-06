@@ -85,15 +85,25 @@ def new_vector_store_from_config(
 
         return StubVectorStore(dimension=config.dimension)
     if config.kind is VectorStoreKind.OPENSEARCH:
-        return _opensearch_store(config, opensearch_clients)
+        return opensearch_store_from_config(config, opensearch_clients)
     msg = f"unknown vector store kind: {config.kind!r}"
     raise AppValueError(msg)
 
 
-def _opensearch_store(
+def opensearch_store_from_config(
     config: VectorStoreConfig, clients: Mapping[str, AsyncOpenSearch] | None
-) -> VectorStore:
-    """Build the single- or multi-domain OpenSearch store over the injected clients."""
+) -> OpenSearchVectorStore | MultiDomainVectorStore:
+    """Build the single- or multi-domain OpenSearch store over the injected clients.
+
+    ``new_vector_store_from_config`` returns it as a ``VectorStore``; a composition root that
+    hands the store to the ``opensearch`` sink calls this directly, because both concrete stores
+    are also ``SinkStore``s (index model, alias and metadata-update calls).
+
+    Raises:
+        AppValueError: No injected client, or a shard mapped to an unknown domain
+            (``INVALID_INPUT``).
+
+    """
     if not clients:
         msg = "the opensearch vector store needs at least one injected client"
         raise AppValueError(msg)

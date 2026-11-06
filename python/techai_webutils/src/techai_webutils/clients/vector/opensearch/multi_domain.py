@@ -65,6 +65,48 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         """The vector dimension shared by every domain."""
         return next(iter(self._domains.values())).dimension
 
+    @property
+    def configured_model(self) -> tuple[str, str]:
+        """The ``(model, version)`` every domain stamps on the indices it creates."""
+        return next(iter(self._domains.values())).configured_model
+
+    async def current_index(self, collection: str) -> str | None:
+        """Return the index the scoped alias reads from on the first domain that has one.
+
+        Every domain's alias follows the same model swap, so any domain holding the alias names
+        the live index; ``None`` means no domain has been written yet.
+        """
+        found = await asyncio.gather(
+            *(s.current_index(collection) for s in self._domains.values())
+        )
+        return next((index for index in found if index is not None), None)
+
+    async def index_model(self, index: str) -> tuple[str, str]:
+        """Return the ``(model, version)`` of ``index``, read on a domain that holds it.
+
+        Raises:
+            AppValueError: No domain holds ``index`` (``INVALID_INPUT``).
+
+        """
+        stamps = await asyncio.gather(
+            *(s.index_model(index) for s in self._domains.values())
+        )
+        if stamp := next((s for s in stamps if s != ("", "")), None):
+            return stamp
+        msg = f"no domain holds index {index}"
+        raise AppValueError(msg)
+
+    async def update_metadata(
+        self, collection: str, document_id: str, fields: Mapping[str, str]
+    ) -> None:
+        """Set ``fields`` on ``document_id``'s entries in every domain, without re-embedding."""
+        await asyncio.gather(
+            *(
+                s.update_metadata(collection, document_id, fields)
+                for s in self._domains.values()
+            )
+        )
+
     @override
     async def upsert(self, collection: str, entries: Sequence[VectorEntry]) -> None:
         """Write each entry to its shard's domain."""

@@ -10,6 +10,21 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Python sink: `clients.sink.decorate(sink, decorations, name)`, which runs a sink's `write`,
+  `delete` and `update_metadata` through the client tier (timeout, retry, breaker, metrics), as
+  `messaging.decorate` does for a publisher. Every sink call is idempotent, so each may retry.
+- Python OpenSearch: `clients.vector.opensearch.connection` (`OpenSearchConnection`,
+  `OpenSearchAuth`, `opensearch_clients_from_config`), which builds one `AsyncOpenSearch` client per
+  configured domain with `none` or SigV4 auth over the ambient (IRSA) credentials, a per-request
+  timeout and no client-side retry. It is not re-exported by the package, so only a deployable
+  with the `opensearch` extra imports `opensearchpy`.
+- Python OpenSearch: `clients.vector.builder.opensearch_store_from_config`, the single- or
+  multi-domain store typed as its concrete class, so a composition root can hand it to the
+  `opensearch` sink as a `SinkStore`. `MultiDomainVectorStore` now implements the rest of
+  `SinkStore` (`configured_model`, `current_index`, `index_model`, `update_metadata`), so a cell
+  spread over several domains can back the sink. `OpenSearchVectorStore.index_model` reads an
+  index the domain does not hold as `("", "")` instead of raising, so the multi-domain store asks
+  every domain in one round trip.
 - Go `clients/aws/account`: `Session.Principal`, the verified caller's ARN from the
   `sts:GetCallerIdentity` call the resolver already makes, so a tool can attribute an operator
   action to the identity it verified rather than to an unverified name.
