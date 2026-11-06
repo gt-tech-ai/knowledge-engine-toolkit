@@ -953,7 +953,28 @@ that needs them, never through the NLP service.
     and ISO 15924 script). Both read `model_path` on the first call through `fasttext-predict`
     (the `fasttext` extra), with the text's whitespace collapsed to one line. On the committed
     parity set `lid.176` agrees with `langdetect` and is about 100 times faster; it becomes a
-    consumer's default only after its own parity and baseline check.
+    consumer's default only after its own parity and baseline check;
+  - `lingua` runs Lingua (the `lingua` extra, a ~170 MB wheel CI's all-extras sync leaves out),
+    which stays accurate on a few words.
+
+  Two decorators apply from the config: `short_text_kind` with `short_text_chars` routes shorter
+  text to its own backend (`ShortTextRouter`, e.g. `lingua` for queries and interview answers), and
+  `min_confidence` reports `und`, at the guess's confidence, for a guess below it
+  (`ConfidenceFloor`, outermost).
+- **`NearDuplicateDetector.check(scope, document_id, text, *, ref) -> NearDuplicate | None`**
+  (`core.interfaces.near_duplicate`). It places a document in the cluster of the most similar
+  earlier document of its scope above the threshold, or a new cluster it represents, and records
+  it; a second check of the same document returns the same cluster. `NearDuplicate` carries the
+  cluster id (the representative's document id), the representative's `ref` (an opaque caller
+  value, e.g. its content hash), the similarity and the document's signature.
+  `clients.near_duplicate` kinds: `noop` (the default) detects nothing; `minhash` computes a
+  MinHash signature (`num_perm` hash functions over the text's lowercased word `shingle_size`-grams,
+  at most `max_shingles` of them, the smallest hashes, so near-copies keep the same sample) and
+  looks candidates up in LSH band buckets kept in the injected `Cache` with `ttl_seconds`: one read
+  per band plus one per candidate, never a scan. `lsh_partition` picks the band split whose curve
+  midpoint is the highest not above `threshold`; each candidate is verified on the whole signature
+  (the fraction of agreeing positions, the Jaccard estimate). The cache has no compare-and-set, so
+  two concurrent near-copies may both start a cluster.
 
 ## Sentence chunks and chunk context
 

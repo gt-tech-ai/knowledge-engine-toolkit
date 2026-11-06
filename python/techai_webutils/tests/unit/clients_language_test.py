@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -137,3 +138,52 @@ def test_unloadable_model_and_bad_config_are_refused(tmp_path: Path) -> None:
     for code, confidence in (("", 0.5), ("en", 1.5), ("en", -0.1)):
         with pytest.raises(AppValueError):
             LanguageGuess(code, confidence)
+
+
+def _lingua(code: str, confidence: float) -> MagicMock:
+    """Return a mocked ``lingua`` module whose detector answers ``code`` at ``confidence``."""
+    value = MagicMock()
+    value.language.iso_code_639_1.name = code.upper()
+    value.value = confidence
+    module = MagicMock()
+    detector = module.LanguageDetectorBuilder.from_all_languages.return_value.build
+    detector.return_value.compute_language_confidence_values.return_value = [value]
+    return module
+
+
+def test_short_text_goes_to_lingua_and_a_low_confidence_guess_is_und() -> None:
+    """Test that short text is routed to ``lingua`` and a guess under the floor is ``und``.
+
+    **Why this test is important:**
+      - n-gram profilers guess on a few words; a query or interview answer must reach the
+        backend built for short text, and a weak guess must not be reported as a language.
+
+    **What it tests:**
+      - with ``short_text_kind = lingua`` under 40 characters, ``Bonjour à tous`` is Lingua's
+        ``fr`` at its confidence; a long English sentence is langdetect's ``en``
+      - with ``min_confidence = 0.5``, a 0.3 guess is ``und`` at confidence 0.3
+      - ``short_text_kind`` without ``short_text_chars`` and a ``min_confidence`` outside
+        ``[0, 1]`` raise ``AppValueError``
+    """
+    config = LanguageIdentifierConfig(
+        short_text_kind=LanguageIdentifierKind.LINGUA,
+        short_text_chars=40,
+        min_confidence=0.5,
+    )
+    long_text = "The quarterly report shows revenue grew in every region this year."
+    with patch.dict(sys.modules, {"lingua": _lingua("fr", 0.9)}):
+        identifier = language_identifier_from_config(config)
+        short = identifier.identify("Bonjour à tous")
+        long = identifier.identify(long_text)
+    with patch.dict(sys.modules, {"lingua": _lingua("de", 0.3)}):
+        weak = language_identifier_from_config(config).identify("Hallo")
+
+    assert short == LanguageGuess("fr", 0.9)
+    assert long.code == "en"
+    assert weak == LanguageGuess("und", 0.3)
+    for bad in (
+        LanguageIdentifierConfig(short_text_kind=LanguageIdentifierKind.LINGUA),
+        LanguageIdentifierConfig(min_confidence=1.5),
+    ):
+        with pytest.raises(AppValueError):
+            language_identifier_from_config(bad)

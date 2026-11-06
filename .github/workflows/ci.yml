@@ -47,7 +47,7 @@ jobs:
       # Every extra but `layout` (Docling + torch, over 1 GB): its block mapping is tested against
       # docling-core (dev group) and its conversion through an injected converter.
       - name: Sync
-        run: uv sync --all-extras --no-extra layout --dev
+        run: uv sync --all-extras --no-extra layout --no-extra lingua --dev
       - name: ruff
         run: uv run ruff check .
       - name: ruff format

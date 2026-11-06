@@ -93,6 +93,12 @@ nlp = ["spacy>=3.8"]
 # model file is the deployable's; the engine downloads nothing.
 fasttext = ["fasttext-predict>=0.9.2.4"]
 
+# Lingua for the `lingua` LanguageIdentifier Kind (short text: queries, interview answers).
+# Optional and heavy (a ~170 MB wheel of bundled language models): only a deployable that selects
+# `lingua` installs `techai-webutils[lingua]`, and CI's `--all-extras` sync excludes it
+# (`--no-extra lingua`); the unit tests mock the library at its import.
+lingua = ["lingua-language-detector>=2.2.0"]
+
 # Docling for the `layout` parser Kind (typed blocks, reading order, tables, OCR). Optional and very
 # heavy (torch and model weights, over 1 GB): only a deployable that selects `layout` installs
 # `techai-webutils[layout]`, and CI's `--all-extras` sync excludes it (`--no-extra layout`). The
@@ -324,6 +330,7 @@ modules = [
     "techai_webutils.clients.messaging",
     "techai_webutils.clients.metadata",
     "techai_webutils.clients.model_gateway",
+    "techai_webutils.clients.near_duplicate",
     "techai_webutils.clients.nlp",
     "techai_webutils.clients.parsing",
     "techai_webutils.clients.prometheus",

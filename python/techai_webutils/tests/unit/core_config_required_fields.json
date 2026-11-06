@@ -27,6 +27,7 @@
   "techai_webutils.clients.metadata.factory.MetadataConfig": {},
   "techai_webutils.clients.model_gateway.builder.GatewayConfig": {},
   "techai_webutils.clients.model_gateway.builder.RoutedConfig": {},
+  "techai_webutils.clients.near_duplicate.builder.NearDuplicateConfig": {},
   "techai_webutils.clients.model_gateway.routed.planner.overlord.OverlordPlannerConfig": {
     "target": "localhost:50051"
   },

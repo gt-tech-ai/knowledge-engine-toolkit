@@ -22,6 +22,7 @@ Service Interfaces:
     Annotator: Annotate text blocks with entities and registered tasks (TaskRegistry).
     SentenceSplitter: Split text into sentence spans that tile it (TextSpan), in process.
     LanguageIdentifier: Identify a text's language (LanguageGuess), in process.
+    NearDuplicateDetector: Place a document in its near-duplicate cluster (NearDuplicate).
     QueryRewriter: Transform user queries for better retrieval.
     IntentClassifier: Classify query intent (search, summarize, compare, etc.).
     CitationExtractor: Extract source citations from LLM responses.
@@ -150,6 +151,10 @@ from techai_webutils.core.interfaces.metrics import (
     MetricsProvider,
 )
 from techai_webutils.core.interfaces.metrics_query import MetricSample, MetricsQuerier
+from techai_webutils.core.interfaces.near_duplicate import (
+    NearDuplicate,
+    NearDuplicateDetector,
+)
 from techai_webutils.core.interfaces.pipeline import AsyncPipeline, Pipeline
 from techai_webutils.core.interfaces.rate_limiter import RateLimiter
 from techai_webutils.core.interfaces.repository import (
@@ -253,6 +258,8 @@ __all__ = [
     "MetricSample",
     "MetricsProvider",
     "MetricsQuerier",
+    "NearDuplicate",
+    "NearDuplicateDetector",
     "PassagePolicy",
     "PeriodicJob",
     "Pipeline",

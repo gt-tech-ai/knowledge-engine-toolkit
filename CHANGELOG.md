@@ -293,6 +293,13 @@ Python: `techai-webutils` 0.9.3.
   (`LanguageIdentifier`, `LanguageGuess`, `UNDETERMINED_GUESS`) and `clients.language`
   (`LanguageIdentifierKind` `langdetect` / `fasttext` / `glotlid`, `LanguageIdentifierConfig`,
   `language_identifier_from_config`); the `fasttext` extra installs `fasttext-predict`.
+- `LanguageIdentifierKind.lingua` (the `lingua` extra, left out of CI's all-extras sync), and
+  `LanguageIdentifierConfig.short_text_kind` / `short_text_chars` (`ShortTextRouter`) and
+  `min_confidence` (`ConfidenceFloor`: a guess below it is `und`).
+- Near-duplicate detection (Python): `core.interfaces.near_duplicate` (`NearDuplicateDetector`,
+  `NearDuplicate`) and `clients.near_duplicate` (`NearDuplicateKind` `noop` / `minhash`,
+  `NearDuplicateConfig`, `near_duplicate_detector_from_config(config, cache=)`): MinHash over word
+  shingles with LSH band buckets in a `Cache`, each candidate verified on the whole signature.
 - The sentence chunker (Python): `ChunkerKind.sentence` (`SentenceChunker`, `split_blocks`,
   `Block`, `BlockKind`); `ChunkerConfig.max_tokens` / `overlap_tokens` / `window_chars`;
   `chunker_from_config(..., splitter=, tokenizer=)`; `StructuredChunk` and `StructuredChunker`
