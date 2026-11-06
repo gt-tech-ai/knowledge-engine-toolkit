@@ -153,3 +153,19 @@ class StageStateClient(Protocol):
     async def get_states(self, org_id: str, document_id: str) -> list[StageState]:
         """Return every stage record of the document."""
         ...
+
+
+class StageProgress(Protocol):
+    """Reports that a stage is still working on a document, between its stage records.
+
+    A long stage writes no record until it finishes; its heartbeat, stamped by the owning
+    service's clock on the record of the upstream stage it reads, is what tells a reaper the
+    document is alive rather than stuck.
+    """
+
+    async def heartbeat(self, org_id: str, document_id: str, upstream: Stage) -> None:
+        """Report that the stage reading ``upstream``'s record of the document still works on it.
+
+        A document with no ``upstream`` record records nothing; that is not an error.
+        """
+        ...

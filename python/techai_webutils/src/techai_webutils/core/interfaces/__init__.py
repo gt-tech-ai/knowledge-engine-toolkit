@@ -61,6 +61,7 @@ Infrastructure Interfaces:
     BacklogProbe: Report the work waiting on a topic.
     CheckpointStore: Store stage artifacts for resumable ingestion.
     StageStateClient: Record which stage finished with which fingerprint.
+    StageProgress: Report that a stage still works on a document (its heartbeat).
     InflightClaim: Run a costly stage of one content once across consumers.
     StartBudget: Cap and pace an account's knowledge-base ingestion jobs.
     Sink: Write, update and delete one document's chunks in the search backend.
@@ -94,6 +95,7 @@ from techai_webutils.core.interfaces.checkpoint import (
     CheckpointStore,
     Stage,
     StageArtifact,
+    StageProgress,
     StageState,
     StageStateClient,
 )
@@ -272,6 +274,7 @@ __all__ = [
     "Slot",
     "Stage",
     "StageArtifact",
+    "StageProgress",
     "StageState",
     "StageStateClient",
     "StartBudget",
