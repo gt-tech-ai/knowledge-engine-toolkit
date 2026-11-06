@@ -28,6 +28,12 @@ Python: `techai-webutils` 0.9.3.
   consumer can find scanned pages and garbled text layers. `ocr_pages(path, first_page=,
   last_page=)` converts a page range with Docling's full-page OCR (`LayoutOptions.force_ocr`),
   replacing a garbled text layer.
+- Python eval: a config-selected grader. `grader_from_config(GraderConfig)` builds `stub` (the
+  default) or `parse`, which scores one `ParseAspect` of a parse against an eval case's golden
+  blocks (`expected["blocks"]` and the output's `answer`, both document-IR JSON):
+  `table_structure` (row and column counts, header cells), `cell_text`, `reading_order` (blocks
+  found, discounted by inversions) or `heading_path` (body blocks under the golden headings). An
+  unknown kind or aspect, or a `pass_score` outside [0, 1], is `INVALID_INPUT`.
 - Python sink: resumable vector-sink writes. `VectorStoreSink.write` probes the chunk ids
   (`SinkStore.stored_metadata`) and upserts only the entries not stored with exactly the metadata
   it would write, so a redelivery after a partial write sends the rest only; when the document
