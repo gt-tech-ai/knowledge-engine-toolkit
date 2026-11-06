@@ -21,6 +21,13 @@ Python: `techai-webutils` 0.9.3.
   that configuration folder, and names it in its tokens (`<stamp>/<file>:<row>`), so a crawl
   resumed after the next daily report still finishes the one it began. No complete report is
   `NOT_FOUND`.
+- Python parsing: `TextLayerParser`, a capability beside `PagedParser`, which the `layout` parser
+  implements. `text_layers(path)` reads each PDF page's text layer in the bounded child (pymupdf)
+  and returns `PageText(page, chars, unreadable)`: its non-whitespace characters, and those no
+  reader renders (U+FFFD, control, private-use, surrogate or unassigned code points), so a
+  consumer can find scanned pages and garbled text layers. `ocr_pages(path, first_page=,
+  last_page=)` converts a page range with Docling's full-page OCR (`LayoutOptions.force_ocr`),
+  replacing a garbled text layer.
 - Python sink: resumable vector-sink writes. `VectorStoreSink.write` probes the chunk ids
   (`SinkStore.stored_metadata`) and upserts only the entries not stored with exactly the metadata
   it would write, so a redelivery after a partial write sends the rest only; when the document

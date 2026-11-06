@@ -3,7 +3,8 @@
 The shared, dependency-free parse seam every deployable programs against (mirrors Go's
 ``go/core/interfaces``). The config-selected backends in ``techai_webutils.clients.parsing``
 satisfy it; a parser never raises for a bad document — it returns a ``ParsedDocument`` carrying the
-error. ``CostedParser`` and ``PagedParser`` are optional capabilities a backend may add.
+error. ``CostedParser``, ``PagedParser`` and ``TextLayerParser`` are optional capabilities a
+backend may add.
 
 Imported by full submodule path (``techai_webutils.core.interfaces.parser``), NOT re-exported from
 ``core.interfaces`` — the package already exports a legacy, unrelated ``DocumentParser`` (see
@@ -61,6 +62,44 @@ class PagedParser(Protocol):
         self, path: str, *, first_page: int, last_page: int, filename: str = ""
     ) -> ParsedDocument:
         """Parse pages ``first_page``..``last_page`` (1-based, inclusive) of the PDF at ``path``."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class PageText:
+    """How much readable text one PDF page's text layer holds."""
+
+    page: int
+    """The 1-based page."""
+    chars: int
+    """Non-whitespace characters in the page's text layer (0: no text layer, a scanned page)."""
+    unreadable: int
+    """Of those, characters no reader renders: the replacement character, control, private-use,
+    surrogate or unassigned code points (a broken font encoding produces them)."""
+
+    @property
+    def unreadable_share(self) -> float:
+        """The share of the page's characters that are unreadable (0 for an empty page)."""
+        return self.unreadable / self.chars if self.chars else 0.0
+
+
+@runtime_checkable
+class TextLayerParser(Protocol):
+    """A parser that can read each PDF page's text layer and OCR a page range regardless of it.
+
+    A capability beside ``PagedParser``: a consumer reads ``text_layers`` to find pages with no
+    text (OCR'd anyway by a parser that OCRs) or a garbled one, and parses a range holding a
+    garbled page with ``ocr_pages``, which replaces the text layer with full-page OCR.
+    """
+
+    async def text_layers(self, path: str) -> tuple[PageText, ...]:
+        """Return each page's text-layer counts for the PDF at ``path``; empty when not a readable PDF."""
+        ...
+
+    async def ocr_pages(
+        self, path: str, *, first_page: int, last_page: int, filename: str = ""
+    ) -> ParsedDocument:
+        """Parse pages ``first_page``..``last_page`` with full-page OCR, ignoring the text layer."""
         ...
 
 

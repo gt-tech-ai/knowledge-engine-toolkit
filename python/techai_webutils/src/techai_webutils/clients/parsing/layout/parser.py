@@ -5,7 +5,10 @@ A PDF is converted by Docling inside the same bounded child process as the ``iso
 as a ``ParsedDocument`` with ``blocks`` and Docling's markdown. Every other format falls back to
 the ``isolated`` parser unchanged. ``parse_pages`` converts one page range, so a consumer can
 parse a large PDF in parts and checkpoint each; ``page_count`` (also in the bounded child) says how
-many pages there are, so the parser is a ``PagedParser``.
+many pages there are, so the parser is a ``PagedParser``. It is also a ``TextLayerParser``:
+``text_layers`` reads each page's text layer in the bounded child (pymupdf) and counts its
+characters and the unreadable ones, and ``ocr_pages`` converts a page range with full-page OCR,
+so a consumer can OCR the pages whose text layer is garbled.
 
 Docling (the ``layout`` extra) is imported only in the child. Its model weights load from
 ``artifacts_path`` when set (a directory baked into the image, so a parse downloads nothing);
@@ -23,6 +26,7 @@ import importlib
 import os
 import sys
 import tempfile
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
@@ -35,7 +39,8 @@ from techai_webutils.clients.parsing.isolated import (
     isolation_error_tag,
 )
 from techai_webutils.clients.parsing.layout.mapping import parsed_from_docling
-from techai_webutils.core.domain import DocumentFormat, ParsedDocument
+from techai_webutils.core.domain import DocumentFormat, Page, ParsedDocument
+from techai_webutils.core.interfaces.parser import PageText
 
 if TYPE_CHECKING:
     from concurrent.futures import Executor
@@ -55,6 +60,8 @@ class LayoutOptions:
     """The first page to convert (1-based)."""
     last_page: int = sys.maxsize
     """The last page to convert (inclusive)."""
+    force_ocr: bool = False
+    """OCR every page in full, replacing its text layer (``ocr_pages``)."""
 
 
 class LayoutConverter(Protocol):
@@ -79,6 +86,9 @@ def convert_with_docling(path: str, options: LayoutOptions) -> DoclingDocument:
         do_table_structure=True,
         artifacts_path=options.artifacts_path or None,
     )
+    if options.force_ocr:
+        # The attribute every Docling release accepts (newer ones map it onto OcrMode.FULL_PAGE).
+        pdf_options.ocr_options.force_full_page_ocr = True
     converter = converter_module.DocumentConverter(
         format_options={
             base_models.InputFormat.PDF: converter_module.PdfFormatOption(
@@ -116,6 +126,33 @@ def _count_pages(path: str) -> ParsedDocument:
     except (RuntimeError, ValueError):
         count = 0
     return ParsedDocument("", DocumentFormat.PDF, total_pages=count)
+
+
+def _page_texts(path: str) -> ParsedDocument:
+    """Child entry: a document whose pages hold each page's text layer (none if unreadable)."""
+    pymupdf = importlib.import_module("pymupdf")
+    try:
+        with pymupdf.open(path, filetype="pdf") as doc:
+            pages = [
+                Page(n, cast("str", page.get_text()))
+                for n, page in enumerate(doc, start=1)
+            ]
+    except (RuntimeError, ValueError):
+        pages = []
+    return ParsedDocument("", DocumentFormat.PDF, pages=pages, total_pages=len(pages))
+
+
+_UNREADABLE = frozenset({"Cc", "Co", "Cs", "Cn"})
+"""Unicode categories no reader renders: control, private use, surrogate and unassigned."""
+
+
+def _page_text(page: int, text: str) -> PageText:
+    """Return ``text``'s counts: its non-whitespace characters and the unreadable ones among them."""
+    chars = [c for c in text if not c.isspace()]
+    unreadable = sum(
+        1 for c in chars if c == "\ufffd" or unicodedata.category(c) in _UNREADABLE
+    )
+    return PageText(page=page, chars=len(chars), unreadable=unreadable)
 
 
 class LayoutParser(IsolatedParser):
@@ -169,6 +206,33 @@ class LayoutParser(IsolatedParser):
             self._options.artifacts_path, self._options.ocr, first_page, last_page
         )
         return await self._layout(path, options, "application/pdf", filename)
+
+    async def ocr_pages(
+        self, path: str, *, first_page: int, last_page: int, filename: str = ""
+    ) -> ParsedDocument:
+        """Parse pages ``first_page``..``last_page`` of the PDF at ``path`` with full-page OCR."""
+        options = LayoutOptions(
+            self._options.artifacts_path,
+            ocr=True,
+            first_page=first_page,
+            last_page=last_page,
+            force_ocr=True,
+        )
+        return await self._layout(path, options, "application/pdf", filename)
+
+    async def text_layers(self, path: str) -> tuple[PageText, ...]:
+        """Count each page's text layer of the PDF at ``path`` in the bounded child.
+
+        The file is untrusted, so pymupdf reads it in the same bounded child as a parse. A non-PDF,
+        an unreadable file, or a child that fails returns no pages: the caller parses as usual.
+        """
+        if detect_format("", path, b"") != DocumentFormat.PDF:
+            return ()
+        try:
+            read = await self._isolated(_page_texts, path)
+        except (TimeoutError, IsolationError):
+            return ()
+        return tuple(_page_text(p.page_number, p.text) for p in read.pages)
 
     async def page_count(self, path: str) -> int:
         """Count the pages of the PDF at ``path`` in the bounded child; 0 for a non-PDF or bad file.

@@ -28,7 +28,7 @@ from techai_webutils.clients.parsing.layout import (
 )
 from techai_webutils.core.domain import BlockType, DocumentFormat
 from techai_webutils.core.errors import AppValueError
-from techai_webutils.core.interfaces.parser import PagedParser
+from techai_webutils.core.interfaces.parser import PagedParser, PageText, TextLayerParser
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -89,6 +89,14 @@ def convert_report(path: str, options: LayoutOptions) -> DoclingDocument:
     """Stand in for Docling in the child: a report noting the page range and the file's size."""
     size = Path(path).stat().st_size
     return _report(f"Pages {options.first_page}-{options.last_page} of {size} bytes.")
+
+
+def convert_noting_ocr(path: str, options: LayoutOptions) -> DoclingDocument:
+    """Stand in for Docling in the child: a report noting the page range and whether OCR was forced."""
+    del path
+    return _report(
+        f"Pages {options.first_page}-{options.last_page} force_ocr={options.force_ocr}."
+    )
 
 
 def convert_out_of_memory(path: str, options: LayoutOptions) -> DoclingDocument:
@@ -262,3 +270,77 @@ async def test_page_count_reads_the_pdf_in_the_child_and_counts_zero_otherwise(
     assert await parser.page_count(str(pdf)) == 3
     assert await parser.page_count(str(junk)) == 0
     assert await parser.page_count(str(html)) == 0
+
+
+def _write_text_layers(path: Path) -> None:
+    """Write a 3-page PDF: readable text, no text layer, and a text layer of control bytes."""
+    pymupdf = importlib.import_module("pymupdf")
+    doc = pymupdf.open()
+    doc.new_page().insert_text((72, 72), "Revenue grew in every quarter.")
+    doc.new_page()
+    garbled = doc.new_page()
+    garbled.insert_text((72, 72), "x", fontname="helv")
+    # Six bytes the font's encoding has no character for, then "ab": what a broken font
+    # encoding leaves in a text layer.
+    stream = b"q BT 1 0 0 1 72 770 Tm /helv 11 Tf [<0102030405066162>]TJ ET Q"
+    doc.update_stream(garbled.get_contents()[0], stream)
+    doc.save(str(path))
+    doc.close()
+
+
+@pytest.mark.asyncio
+async def test_text_layers_count_each_page_and_its_unreadable_characters(
+    tmp_path: Path,
+) -> None:
+    """Test that the layout parser reads each page's text layer in the child and counts it.
+
+    **Why this test is important:**
+      - A consumer routes a page to OCR from these counts: a scanned page (no text layer) or one
+        whose text layer is unreadable would otherwise be indexed as nothing or as garbage.
+
+    **What it tests:**
+      - ``LayoutParser`` is a ``TextLayerParser``; a readable page counts its characters with
+        none unreadable, an empty page counts 0, and a control-byte text layer counts 6 of 8
+        unreadable (share 0.75)
+      - an HTML file returns no pages
+    """
+    pdf = tmp_path / "layers.pdf"
+    _write_text_layers(pdf)
+    html = tmp_path / "a.html"
+    html.write_bytes(b"<html></html>")
+    parser = _layout(convert_report)
+
+    layers = await parser.text_layers(str(pdf))
+
+    assert isinstance(parser, TextLayerParser)
+    assert layers == (
+        PageText(page=1, chars=26, unreadable=0),
+        PageText(page=2, chars=0, unreadable=0),
+        PageText(page=3, chars=8, unreadable=6),
+    )
+    assert layers[2].unreadable_share == pytest.approx(0.75)
+    assert layers[1].unreadable_share == pytest.approx(0.0)
+    assert await parser.text_layers(str(html)) == ()
+
+
+@pytest.mark.asyncio
+async def test_ocr_pages_forces_full_page_ocr_on_its_range(tmp_path: Path) -> None:
+    """Test that ``ocr_pages`` converts its page range with OCR forced, and a plain parse does not.
+
+    **Why this test is important:**
+      - Docling OCRs only pages with no text layer; a garbled text layer is kept unless OCR is
+        forced, so the consumer's routing would change nothing.
+
+    **What it tests:**
+      - ``ocr_pages(2, 3)`` hands the child pages 2-3 with ``force_ocr`` set
+      - ``parse_pages`` over the same range leaves it unset
+    """
+    path = tmp_path / "scan.pdf"
+    path.write_bytes(_PDF)
+    parser = _layout(convert_noting_ocr)
+
+    ocr = await parser.ocr_pages(str(path), first_page=2, last_page=3)
+    plain = await parser.parse_pages(str(path), first_page=2, last_page=3)
+
+    assert "Pages 2-3 force_ocr=True." in [b.text for b in ocr.blocks]
+    assert "Pages 2-3 force_ocr=False." in [b.text for b in plain.blocks]
