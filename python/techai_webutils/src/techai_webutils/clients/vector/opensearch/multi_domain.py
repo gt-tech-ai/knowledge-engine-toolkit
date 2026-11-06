@@ -1,8 +1,10 @@
 """``MultiDomainVectorStore``: spread a collection's shards over several OpenSearch domains.
 
-One domain holds a bounded amount of data. Each entry carries its shard in the
-``shard_field`` metadata (absent means shard 0), and ``shard_domains`` maps every shard to a domain;
-writes go to the shard's domain. Reads, counts and deletes fan out to every domain, so a document's
+One domain holds a bounded amount of data. An entry may carry its shard in the ``shard_field``
+metadata; one that does not goes to the shard a stable hash of its document id picks, so a
+document's chunks stay together and documents spread evenly over the domains without the caller
+assigning shards. ``shard_domains`` maps every shard to a domain; writes go to the shard's domain
+(adding a shard moves documents, so it is a re-index, not a config flip). Reads, counts and deletes fan out to every domain, so a document's
 entries are found wherever its shards live, and searches return each domain's hits for the caller
 to fuse (E7's reciprocal-rank fusion). An entry on an unmapped shard raises ``INVALID_INPUT``.
 """
@@ -10,6 +12,7 @@ to fuse (E7's reciprocal-rank fusion). An entry on an unmapped shard raises ``IN
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from typing import TYPE_CHECKING, override
 
 from techai_webutils.core.errors import AppValueError
@@ -200,8 +203,14 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         return merged
 
     def _domain_of(self, entry: VectorEntry) -> str:
-        """Return the domain of ``entry``'s shard."""
-        raw = entry.metadata.get(self._shard_field, "0")
+        """Return the domain of ``entry``'s shard (a hash of its document id when it has none)."""
+        raw = entry.metadata.get(self._shard_field)
+        if raw is None:
+            shards = sorted(self._shard_domains)
+            digest = hashlib.sha256(entry.document_id.encode()).digest()
+            return self._shard_domains[
+                shards[int.from_bytes(digest[:8], "big") % len(shards)]
+            ]
         try:
             shard = int(raw)
         except ValueError:

@@ -331,3 +331,47 @@ async def test_multi_domain_refuses_bad_shards() -> None:
     for shard in ("x", "7"):
         with pytest.raises(AppValueError):
             await multi.upsert("docs", [_entry(shard=shard)])
+
+
+@pytest.mark.asyncio
+async def test_multi_domain_spreads_unsharded_documents_by_id() -> None:
+    """Test that entries naming no shard are spread over the domains by document id.
+
+    **Why this test is important:**
+      - A caller that does not assign shards (the sink writes none) must not pile the whole
+        corpus onto the first domain, and one document's chunks must stay on one domain so a
+        document never straddles domains.
+
+    **What it tests:**
+      - Forty documents without a shard land on both domains, each document's two chunks on
+        the same one, and the same document id picks the same domain on a second write.
+    """
+    clients = {"a": _client(), "b": _client()}
+    multi = MultiDomainVectorStore(
+        {name: OpenSearchVectorStore(c, dimension=1) for name, c in clients.items()},
+        {0: "a", 1: "b"},
+    )
+    entries = [
+        VectorEntry(
+            id=f"d{n}:{k}",
+            document_id=f"d{n}",
+            content="t",
+            embedding=[1.0],
+            metadata={"org_id": "o1"},
+        )
+        for n in range(40)
+        for k in range(2)
+    ]
+
+    await multi.upsert("docs", entries)
+    await multi.upsert("docs", entries[:2])
+
+    placed: dict[str, set[str]] = {}
+    for name, client in clients.items():
+        for call in client.bulk.await_args_list:
+            for op in call.kwargs["body"]:
+                if "document_id" in op:
+                    placed.setdefault(str(op["document_id"]), set()).add(name)
+    assert all(len(domains) == 1 for domains in placed.values())
+    assert {d for domains in placed.values() for d in domains} == {"a", "b"}
+    assert len(placed) == 40

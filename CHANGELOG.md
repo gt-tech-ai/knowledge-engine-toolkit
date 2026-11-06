@@ -267,6 +267,10 @@ Python: `techai-webutils` 0.9.3.
 
 ### Changed
 
+- Python OpenSearch: `MultiDomainVectorStore` sends an entry that names no shard to the shard a
+  stable hash of its document id picks (it used to send it to shard 0), so a caller that assigns
+  no shards — the sink assigns none — spreads documents over every domain, and a document's
+  chunks stay on one domain. An explicit `shard_field` still wins.
 - Python `CircuitBreaker`: a failed half-open trial reopens the breaker at once (it used to
   count toward the threshold again), as Go's gobreaker does.
 - A parse whose child runs out of memory under its cap now fails with
