@@ -10,6 +10,9 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Python `controllers.health`: the HTTP health surface of a gRPC service (`build_health_app`,
+  `start_health_server`): `/healthz` liveness, `/readyz` gated on a drain flag and a dependency
+  probe (503 with the failed names), and `/metrics`, under the aiohttp observability middleware.
 - Python `foundation.dtovalidate`: the DTO leaf rules (`uuid`, `min_max_len`, `max_bytes`,
   `max_items`, `int_range`) a generated Python validator composes, the mirror of Go's
   `foundation/dtovalidate`, with the same `INVALID_INPUT` errors and messages.
