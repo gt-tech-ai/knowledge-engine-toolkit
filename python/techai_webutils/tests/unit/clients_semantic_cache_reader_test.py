@@ -6,6 +6,7 @@ what the reader adds around them: metrics, facts, the hit hook, the served flag 
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -55,18 +56,19 @@ def _reader(
 
 
 @pytest.mark.asyncio
-async def test_read_counts_the_hit_by_tier_and_forwards_the_similarity() -> None:
-    """Test that a read reports the serving tier and passes a per-call threshold through.
+async def test_served_hit_counts_by_tier_and_forwards_the_similarity() -> None:
+    """Test that a served hit reports its tier, and the read passes a per-call threshold through.
 
     **Why this test is important:**
       - The Cache screen and alerts read hits by tier; a per-workspace similarity must reach
         the tiers, or a workspace's 1.0 ("exact only") setting would be ignored.
+      - A hit is counted only once it is served: the read alone reports nothing.
 
     **What it tests:**
       - ``read`` returns the hit in a ``CacheRead`` and awaits the lookup with
-        ``min_similarity=1.0``
-      - ``semantic_cache_hits_total`` increments once with ``tier="exact"``
-      - one ``cache_lookups`` fact is published with outcome ``hit``
+        ``min_similarity=1.0``, publishing no fact yet
+      - after ``serve``, ``semantic_cache_hits_total`` has incremented once with
+        ``tier="exact"`` and one ``cache_lookups`` fact is published with outcome ``hit``
     """
     metrics, counters = _metrics()
     facts = MagicMock(spec=FactPublisher)
@@ -81,6 +83,10 @@ async def test_read_counts_the_hit_by_tier_and_forwards_the_similarity() -> None
 
     assert read == CacheRead(query="q", namespace=_NS, hit=_HIT)
     lookup.lookup.assert_awaited_once_with("q", _NS, min_similarity=1.0)
+    facts.publish.assert_not_called()
+
+    await reader.serve(read, (), {}, "answer")
+
     hits = [
         c for c in counters["semantic_cache_hits_total"].inc.call_args_list if c.args[0]
     ]
@@ -88,6 +94,57 @@ async def test_read_counts_the_hit_by_tier_and_forwards_the_similarity() -> None
     assert hits[0].kwargs["tier"] == "exact"
     (published,) = facts.publish.call_args.args[0]
     assert published.dims["outcome"] == "hit"
+
+
+@pytest.mark.asyncio
+async def test_refused_hit_counts_as_a_miss() -> None:
+    """Test that a hit the caller refuses, or the hook refuses, is reported as a miss.
+
+    **Why this test is important:**
+      - A hit that is not served (a passage above the caller's clearance, an undecodable
+        entry, a blocked answer) is generated afresh and paid for; counting it as a hit with
+        a saving overstates the Cache screen's hit rate and savings.
+
+    **What it tests:**
+      - ``refuse`` counts a miss and no hit, and publishes outcome ``miss`` with no saving
+      - a coded refusal from the hook in ``serve`` is reported the same way and re-raised
+    """
+    for refuse_by_hook in (False, True):
+        metrics, counters = _metrics()
+        facts = MagicMock(spec=FactPublisher)
+        hook = AsyncMock(side_effect=AppError(ErrorCode.FORBIDDEN, "blocked"))
+        reader, _, _ = _reader(
+            _HIT,
+            metrics=metrics,
+            facts=facts,
+            fact_dimensions=lambda: {"org_id": "org-1"},
+            saving=lambda _hit: Decimal("0.5"),
+            on_hit=hook,
+        )
+        read = await reader.read("q", _NS)
+
+        if refuse_by_hook:
+            with pytest.raises(AppError):
+                await reader.serve(read, (), {}, "answer")
+        else:
+            reader.refuse(read)
+
+        hits = [
+            c
+            for c in counters["semantic_cache_hits_total"].inc.call_args_list
+            if c.args[0]
+        ]
+        misses = [
+            c
+            for c in counters["semantic_cache_misses_total"].inc.call_args_list
+            if c.args[0]
+        ]
+        assert (len(hits), len(misses)) == (0, 1)
+        (published,) = facts.publish.call_args.args[0]
+        assert (published.dims["outcome"], published.measures["saving_usd"]) == (
+            "miss",
+            0.0,
+        )
 
 
 @pytest.mark.asyncio
