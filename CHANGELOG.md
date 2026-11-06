@@ -35,6 +35,14 @@ Python: `techai-webutils` 0.9.3.
 - Python OpenSearch: `OpenSearchConfig.dedicated_orgs`, the orgs that get their own alias and
   index under the `shared` layout (large orgs) while every other org stays in the shared,
   org-routed index. Moving an org in or out is a re-index, not a config flip.
+- Python OpenSearch: `clients.vector.opensearch.snapshots.SnapshotAdmin` (+ `SnapshotRepository`,
+  `SnapshotSchedule`, `SnapshotInfo`, `RepositoryKind`). `register` and `ensure_schedule` set up
+  a manual (`s3` or `fs`) snapshot repository and a Snapshot Management policy idempotently, so
+  a composition root may call them at every boot: the policy is created when missing and updated
+  (with optimistic concurrency) only when its schedule, indices or retention changed. `latest`,
+  `restore` (under a new name, no replicas or aliases, never over the source), `wait_restored`,
+  `count`, `sample` and `delete_index` are the restore path onto another domain; the managed
+  service's own `cs-*` snapshots restore only into the domain that took them.
 - Python errors: `core.errors.ThrottledError`, an `UNAVAILABLE` (so retried) that `is_throttled`
   recognizes, for a push-back read from a response body. The OpenSearch store's `bulk_error`
   raises it when any item is rejected with 429, so rejected bulk items count in the client tier's

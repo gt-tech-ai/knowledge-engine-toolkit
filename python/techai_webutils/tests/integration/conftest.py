@@ -332,10 +332,13 @@ def ray_cluster(request: pytest.FixtureRequest) -> object:
 
 # --------------------------------------------------------------------------- #
 # OpenSearch (k-NN + BM25) via testcontainers, security plugin off. Two         #
-# independent single-node clusters stand in for two domains.                   #
+# independent single-node clusters stand in for two domains; each allows fs    #
+# snapshot repositories under _OPENSEARCH_SNAPSHOT_PATH.                        #
 # --------------------------------------------------------------------------- #
 
 _OPENSEARCH_IMAGE = "opensearchproject/opensearch:2.19.1"
+_OPENSEARCH_SNAPSHOT_PATH = "/tmp/snapshots"
+"""The node's ``path.repo``: an ``fs`` snapshot repository must sit under it."""
 
 
 def _await_opensearch(url: str) -> None:
@@ -364,6 +367,7 @@ def _opensearch() -> Iterator[str]:
         .with_env("DISABLE_SECURITY_PLUGIN", "true")
         .with_env("DISABLE_INSTALL_DEMO_CONFIG", "true")
         .with_env("OPENSEARCH_JAVA_OPTS", "-Xms512m -Xmx512m")
+        .with_env("path.repo", _OPENSEARCH_SNAPSHOT_PATH)
         .with_exposed_ports(9200)
     )
     container.start()
@@ -385,3 +389,9 @@ def opensearch_url() -> Iterator[str]:
 def opensearch_url_b() -> Iterator[str]:
     """Start a second, independent OpenSearch domain for the session and yield its URL."""
     yield from _opensearch()
+
+
+@pytest.fixture(scope="session")
+def opensearch_snapshot_path() -> str:
+    """Return the path every OpenSearch container accepts ``fs`` snapshot repositories under."""
+    return _OPENSEARCH_SNAPSHOT_PATH
