@@ -65,6 +65,7 @@
     "region": "us-east-1"
   },
   "techai_webutils.clients.token_ledger.builder.TokenLedgerConfig": {},
+  "techai_webutils.clients.token_source.builder.TokenSourceConfig": {},
   "techai_webutils.clients.tokenizer.builder.TokenCounterConfig": {},
   "techai_webutils.clients.vector.builder.VectorStoreConfig": {},
   "techai_webutils.clients.vector.opensearch.config.OpenSearchConfig": {},

@@ -10,6 +10,14 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Python `clients.token_source`: the `TokenSource` interface (`token()`, a bearer token that is
+  not about to expire) and `new_token_source_from_config` with two kinds: `static` (the default,
+  a configured token, no I/O) and `oauth` (posts the configured grant as a form to a token
+  endpoint, caches the `access_token` for its `expires_in`, and mints a new one within
+  `refresh_margin_seconds` of expiry, one mint shared by concurrent callers). One config covers
+  the client-credentials, password and Auth0 `password-realm` grants; the secrets stay out of
+  its repr. A refused grant is `UNAUTHORIZED`, a throttle or outage `UNAVAILABLE`, a timeout
+  `TIMEOUT`.
 - Python `controllers.health`: the HTTP health surface of a gRPC service (`build_health_app`,
   `start_health_server`): `/healthz` liveness, `/readyz` gated on a drain flag and a dependency
   probe (503 with the failed names), and `/metrics`, under the aiohttp observability middleware.

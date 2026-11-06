@@ -352,6 +352,7 @@ modules = [
     "techai_webutils.clients.start_budget",
     "techai_webutils.clients.storage",
     "techai_webutils.clients.token_ledger",
+    "techai_webutils.clients.token_source",
     "techai_webutils.clients.tokenizer",
     "techai_webutils.clients.vector",
     "techai_webutils.clients.vector_kb",

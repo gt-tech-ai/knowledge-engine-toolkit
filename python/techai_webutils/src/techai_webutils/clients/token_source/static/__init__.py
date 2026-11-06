@@ -1,0 +1,1 @@
+"""The ``static`` token source."""

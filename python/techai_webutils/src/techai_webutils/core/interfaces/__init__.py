@@ -69,6 +69,7 @@ Infrastructure Interfaces:
     StartBudget: Cap and pace an account's knowledge-base ingestion jobs.
     Sink: Write, update and delete one document's chunks in the search backend.
     MetricsQuerier: Evaluate PromQL against a metrics backend.
+    TokenSource: Supply a current bearer token, refreshed before expiry.
     MessageConsumer: Consume messages from a queue.
     StorageClient: Object storage operations.
 
@@ -191,6 +192,7 @@ from techai_webutils.core.interfaces.start_budget import Slot, StartBudget
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
 from techai_webutils.core.interfaces.store import Store
 from techai_webutils.core.interfaces.token_counter import TokenCounter
+from techai_webutils.core.interfaces.token_source import TokenSource
 from techai_webutils.core.interfaces.tracer import TracerProvider, TracerSpan
 from techai_webutils.core.interfaces.vector_store import VectorStore
 from techai_webutils.core.interfaces.workflow import AsyncWorkflow, Workflow
@@ -298,6 +300,7 @@ __all__ = [
     "TextBlock",
     "TextSpan",
     "TokenCounter",
+    "TokenSource",
     "TracerProvider",
     "TracerSpan",
     "Transaction",
