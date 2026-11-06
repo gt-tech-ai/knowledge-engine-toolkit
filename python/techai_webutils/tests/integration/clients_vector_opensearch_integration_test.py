@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 import pytest_asyncio
-from opensearchpy import AsyncOpenSearch
+from opensearchpy import AsyncOpenSearch, NotFoundError
 
 from techai_webutils.clients.vector import (
     VectorStoreConfig,
@@ -25,6 +25,7 @@ from techai_webutils.clients.vector.opensearch import (
     OpenSearchConfig,
     OpenSearchVectorStore,
 )
+from techai_webutils.clients.vector.opensearch.bulk import bulk_ingest
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.vector_store import VectorEntry
 
@@ -273,50 +274,75 @@ async def _settings(client: AsyncOpenSearch, index: str) -> dict[str, object]:
     return response[index]["settings"]["index"]
 
 
-async def _failing_backfill(client: AsyncOpenSearch, index: str) -> None:
-    """Check bulk-ingest settings are in force, then fail like a backfill that died midway."""
-    during = await _settings(client, index)
-    assert (during["refresh_interval"], during["number_of_replicas"]) == ("-1", "0")
+async def _failing_backfill(clients: list[AsyncOpenSearch], index: str) -> None:
+    """Check bulk-ingest settings are in force everywhere, then fail like a dead backfill."""
+    for client in clients:
+        during = await _settings(client, index)
+        assert (during["refresh_interval"], during["number_of_replicas"]) == ("-1", "0")
     msg = "backfill failed"
     raise RuntimeError(msg)
 
 
 @pytest.mark.asyncio
-async def test_bulk_ingest_mode_is_restored_even_after_a_failed_backfill(
-    client: AsyncOpenSearch,
+async def test_bulk_ingest_mode_is_restored_on_every_domain_after_a_failed_backfill(
+    client: AsyncOpenSearch, client_b: AsyncOpenSearch
 ) -> None:
-    """Test that bulk-ingest mode turns refresh and replicas off and ``end`` restores them.
+    """Test that ``bulk_ingest`` turns refresh and replicas off on every domain and restores them.
 
     **Why this test is important:**
-      - A backfill left with refresh off serves stale results forever; ``end`` must restore the
-        settings even when the backfill raised, and be safe to call twice.
+      - A backfill left with refresh off serves stale results forever, and one left with no
+        replicas loses data with its node; the settings must come back on every domain of a
+        cell even when the backfill raised, and a repeat restore must be harmless.
 
     **What it tests:**
-      - after ``begin`` refresh is ``-1`` and replicas ``0``; a backfill raising inside
-        ``try/finally`` still ends with refresh and replicas back to their recorded values;
-        a second ``end`` is a no-op
+      - inside ``bulk_ingest`` over a two-domain store, refresh is ``-1`` and replicas ``0`` on
+        both domains; the backfill's error propagates, and both domains end with refresh and
+        replicas back at their recorded values (``2s`` set beforehand)
+      - a second ``end_bulk_ingest`` is a no-op
+      - when one domain's restore fails (its index is gone), the other domain is still
+        restored and the failure is raised
     """
     collection = _collection()
-    store = _store(client)
-    await store.upsert(collection, [_entry("d", 0, "o", [1, 0, 0, 0])])
+    store = new_vector_store_from_config(
+        VectorStoreConfig(
+            kind=VectorStoreKind.OPENSEARCH,
+            dimension=4,
+            opensearch=replace(_CONFIG, shard_domains=((0, "a"), (1, "b"))),
+        ),
+        opensearch_clients={"a": client, "b": client_b},
+    )
+    assert isinstance(store, MultiDomainVectorStore)
+    await store.upsert(
+        collection,
+        [
+            _entry("d", 0, "o", [1, 0, 0, 0], shard="0"),
+            _entry("d", 1, "o", [1, 0, 0, 0], shard="1"),
+        ],
+    )
     index = await store.current_index(collection)
     assert index is not None
-    await client.indices.put_settings(
-        index=index, body={"index": {"refresh_interval": "2s"}}
-    )
-    before = await _settings(client, index)
+    clients = [client, client_b]
+    for c in clients:
+        await c.indices.put_settings(
+            index=index, body={"index": {"refresh_interval": "2s"}}
+        )
+    before = [await _settings(c, index) for c in clients]
+
+    with pytest.raises(RuntimeError, match="backfill failed"):
+        async with bulk_ingest(store, index):
+            await _failing_backfill(clients, index)
+
+    for c, was in zip(clients, before, strict=True):
+        after = await _settings(c, index)
+        assert after["refresh_interval"] == was["refresh_interval"] == "2s"
+        assert after["number_of_replicas"] == was["number_of_replicas"]
+    await store.end_bulk_ingest(index)
 
     await store.begin_bulk_ingest(index)
-    try:
-        with pytest.raises(RuntimeError):
-            await _failing_backfill(client, index)
-    finally:
+    await client_b.indices.delete(index=index)
+    with pytest.raises(NotFoundError):
         await store.end_bulk_ingest(index)
-
-    after = await _settings(client, index)
-    assert after["refresh_interval"] == before["refresh_interval"] == "2s"
-    assert after["number_of_replicas"] == before["number_of_replicas"]
-    await store.end_bulk_ingest(index)
+    assert (await _settings(client, index))["refresh_interval"] == "2s"
 
 
 @pytest.mark.asyncio

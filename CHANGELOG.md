@@ -51,6 +51,12 @@ Python: `techai-webutils` 0.9.3.
   (with optimistic concurrency). `attach` hands one index to the policy, switching it from any
   earlier policy, and is safe to repeat. The policy is never matched by index name, because a
   warm index is read-only, so a caller attaches it only to the indices it retires.
+- Python OpenSearch: `clients.vector.opensearch.bulk.bulk_ingest(store, index)`, an async context
+  manager that holds an index in bulk-ingest mode (refresh off, no replicas) for one backfill and
+  restores and verifies the recorded settings on every exit, including a failed or cancelled
+  backfill and a partly applied entry. `MultiDomainVectorStore` gains `begin_bulk_ingest` and
+  `end_bulk_ingest`, which fan out to every domain. `end_bulk_ingest` tries every domain before
+  it raises the first failure.
 - Python errors: `core.errors.ThrottledError`, an `UNAVAILABLE` (so retried) that `is_throttled`
   recognizes, for a push-back read from a response body. The OpenSearch store's `bulk_error`
   raises it when any item is rejected with 429, so rejected bulk items count in the client tier's

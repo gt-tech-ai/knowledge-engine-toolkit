@@ -59,7 +59,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         )
 
     def domain(self, name: str) -> OpenSearchVectorStore:
-        """Return one domain's store (for index administration such as bulk-ingest mode)."""
+        """Return one domain's store (for per-domain index administration and checks)."""
         return self._domains[name]
 
     @property
@@ -109,6 +109,26 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
                 for s in self._domains.values()
             )
         )
+
+    async def begin_bulk_ingest(self, index: str) -> None:
+        """Put ``index`` into bulk-ingest mode on every domain (each records its own settings)."""
+        await asyncio.gather(
+            *(s.begin_bulk_ingest(index) for s in self._domains.values())
+        )
+
+    async def end_bulk_ingest(self, index: str) -> None:
+        """Restore ``index``'s recorded settings on every domain, even when one domain fails.
+
+        Raises:
+            Exception: The first domain's failure, once every domain has been tried.
+
+        """
+        results = await asyncio.gather(
+            *(s.end_bulk_ingest(index) for s in self._domains.values()),
+            return_exceptions=True,
+        )
+        if failure := next((r for r in results if isinstance(r, BaseException)), None):
+            raise failure
 
     @override
     async def upsert(self, collection: str, entries: Sequence[VectorEntry]) -> None:
