@@ -10,6 +10,7 @@ The tests cover:
   - Cache hit: returns stored value on get
   - Cache miss: returns None when key does not exist
   - Bypass mode: connection errors return None (graceful degradation)
+  - Bypass mode: redis-py's own ConnectionError/TimeoutError are absorbed on every call
   - Error mode: connection errors propagate to caller
   - Set operation: stores value with TTL via setex
   - Delete operation: removes key from cache
@@ -29,6 +30,7 @@ Run with: pytest tests/python/test_foundation/test_cache.py
 from unittest.mock import AsyncMock
 
 import pytest
+from redis import exceptions as redis_errors
 
 from techai_webutils.clients.cache.redis import FailureMode, RedisCache
 
@@ -91,6 +93,37 @@ class TestRedisCache:
         cache = RedisCache(client=mock_redis, failure_mode=FailureMode.BYPASS)
         result = await cache.get("key")
         assert result is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            redis_errors.ConnectionError("Redis down"),
+            redis_errors.TimeoutError("Timeout reading from socket"),
+        ],
+    )
+    async def test_bypass_mode_absorbs_redis_client_errors(
+        self, mock_redis: AsyncMock, failure: redis_errors.RedisError
+    ) -> None:
+        """Test that bypass mode absorbs the errors the redis-py client actually raises.
+
+        **Why this test is important:**
+          - redis-py raises its own ``ConnectionError`` and ``TimeoutError`` (both
+            ``RedisError``, neither the builtin ``ConnectionError`` nor ``OSError``), so a
+            bypass that catches only the builtins lets a real outage escape to the caller.
+
+        **What it tests:**
+          - get returns None, and set and delete return, when the client raises either
+            redis-py error in bypass mode
+        """
+        mock_redis.get.side_effect = failure
+        mock_redis.setex.side_effect = failure
+        mock_redis.delete.side_effect = failure
+
+        cache = RedisCache(client=mock_redis, failure_mode=FailureMode.BYPASS)
+        assert await cache.get("key") is None
+        await cache.set("key", b"value", ttl_seconds=60)
+        await cache.delete("key")
 
     @pytest.mark.asyncio
     async def test_error_mode_propagates_connection_error(

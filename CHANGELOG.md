@@ -281,6 +281,10 @@ Python: `techai-webutils` 0.9.3.
 
 ### Fixed
 
+- Python `RedisCache` in `FailureMode.BYPASS` now absorbs the errors redis-py actually raises.
+  It caught only the builtin `ConnectionError` and `OSError`, but redis-py's `ConnectionError`
+  and `TimeoutError` subclass `RedisError`, so a Redis outage escaped to the caller instead of
+  reading as a miss. It now catches `RedisError` as well (and still the builtins).
 - `SQSPublisher.publish_batch` no longer drops the entries `SendMessageBatch` rejects. It ignored the
   response's `Failed` list, so a partly failed batch lost those messages silently. Rejected entries
   are now resent once, and entries rejected again raise `UnavailableError`.

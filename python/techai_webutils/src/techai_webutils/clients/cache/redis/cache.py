@@ -1,14 +1,17 @@
 """Redis cache client with configurable failure modes.
 
 Supports two failure modes:
-- BYPASS (default): Connection errors return cache miss (None), not exceptions
-- ERROR: Connection errors propagate as exceptions
+- BYPASS (default): Redis client errors (redis-py's ``RedisError`` and socket errors) return a
+  cache miss (None) on read and are logged on write, not raised
+- ERROR: those errors propagate as exceptions
 """
 
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
+
+from redis.exceptions import RedisError
 
 from techai_webutils.clients.cache.types import FailureMode
 from techai_webutils.core.interfaces.cache import Cache
@@ -17,6 +20,10 @@ if TYPE_CHECKING:
     from redis.asyncio import Redis
 
 logger = logging.getLogger(__name__)
+
+_CLIENT_ERRORS = (RedisError, ConnectionError, OSError)
+"""The failures a Redis call raises: redis-py's own (``RedisError``: its ``ConnectionError``
+and ``TimeoutError`` subclass neither builtin) and the socket-level builtins."""
 
 
 class RedisCache(Cache):
@@ -52,7 +59,7 @@ class RedisCache(Cache):
             if isinstance(result, str):
                 return result.encode()
             return result
-        except (ConnectionError, OSError) as e:
+        except _CLIENT_ERRORS as e:
             if self._failure_mode == FailureMode.ERROR:
                 raise
             logger.warning(
@@ -64,7 +71,7 @@ class RedisCache(Cache):
         """Set a value in cache with TTL."""
         try:
             await self._client.setex(key, ttl_seconds, value)
-        except (ConnectionError, OSError) as e:
+        except _CLIENT_ERRORS as e:
             if self._failure_mode == FailureMode.ERROR:
                 raise
             logger.warning(
@@ -75,7 +82,7 @@ class RedisCache(Cache):
         """Delete a key from cache."""
         try:
             await self._client.delete(key)
-        except (ConnectionError, OSError) as e:
+        except _CLIENT_ERRORS as e:
             if self._failure_mode == FailureMode.ERROR:
                 raise
             logger.warning(
@@ -86,7 +93,7 @@ class RedisCache(Cache):
         """Check if a key exists in Redis."""
         try:
             return bool(await self._client.exists(key))
-        except (ConnectionError, OSError) as e:
+        except _CLIENT_ERRORS as e:
             if self._failure_mode == FailureMode.ERROR:
                 raise
             logger.warning(
