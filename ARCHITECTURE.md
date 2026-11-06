@@ -780,6 +780,12 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
     Snapshot Management schedule and restores an index under a new name. `tiers.TierAdmin`
     ensures an ISM policy (warm, cold, delete by index age) and attaches it to the indices a
     caller retires, never by name pattern, since a warm index is read-only.
+    `index_admin.count_org_documents(clients, index, org)` counts an org's distinct documents in
+    an index across every domain (a paged composite aggregation, so it is exact), and
+    `index_admin.delete_unaliased_index(clients, index)` deletes an index on every domain only
+    when no alias on any domain names it: the checks a per-org reindex runs before its swap and
+    when it prunes the previous index. `MultiDomainVectorStore.create_index` and `swap_alias`
+    create the shadow and swap the org's alias on every domain.
 - **Sink.** `Sink.write(document, chunks, vectors)`, `delete(org_id, document_id)` and
   `update_metadata(org_id, document_id, fields)` end the ingestion pipeline. `SinkKind.opensearch`
   writes through the injected store: stable ids `<document>:<n>`, the document's metadata,

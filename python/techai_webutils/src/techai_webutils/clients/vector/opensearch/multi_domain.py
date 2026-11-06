@@ -112,6 +112,26 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         )
         return next((index for index in found if index is not None), None)
 
+    async def create_index(self, collection: str, *, expected_docs: int = 0) -> str:
+        """Create the configured model's index for the scoped alias on every domain; return it.
+
+        Every domain names it alike (the alias, model and version), so one name addresses the
+        index on all of them.
+        """
+        names = await asyncio.gather(
+            *(
+                s.create_index(collection, expected_docs=expected_docs)
+                for s in self._domains.values()
+            )
+        )
+        return names[0]
+
+    async def swap_alias(self, collection: str, new_index: str) -> None:
+        """Point the scoped alias at ``new_index`` alone on every domain."""
+        await asyncio.gather(
+            *(s.swap_alias(collection, new_index) for s in self._domains.values())
+        )
+
     async def index_model(self, index: str) -> tuple[str, str]:
         """Return the ``(model, version)`` of ``index``, read on a domain that holds it.
 

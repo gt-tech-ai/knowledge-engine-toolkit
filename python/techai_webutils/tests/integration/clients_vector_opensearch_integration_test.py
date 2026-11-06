@@ -27,6 +27,10 @@ from techai_webutils.clients.vector.opensearch import (
     VectorMode,
 )
 from techai_webutils.clients.vector.opensearch.bulk import bulk_ingest
+from techai_webutils.clients.vector.opensearch.index_admin import (
+    count_org_documents,
+    delete_unaliased_index,
+)
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.vector_store import VectorEntry
 
@@ -487,3 +491,72 @@ async def test_two_domains_route_by_shard_and_search_fans_out(
     assert await store.for_org("o1").count_by_document(collection, "d") == 2
     with pytest.raises(AppValueError):
         await store.upsert(collection, [_entry("f", 0, "o1", [1, 0, 0, 0], shard="7")])
+
+
+def _multi(clients: dict[str, AsyncOpenSearch], model: str) -> MultiDomainVectorStore:
+    """Build a dedicated-layout store over two domains (shard 0 on ``a``, 1 on ``b``)."""
+    config = replace(
+        _CONFIG,
+        model=model,
+        layout=IndexLayout.DEDICATED,
+        shard_domains=((0, "a"), (1, "b")),
+    )
+    store = new_vector_store_from_config(
+        VectorStoreConfig(
+            kind=VectorStoreKind.OPENSEARCH, dimension=4, opensearch=config
+        ),
+        opensearch_clients=clients,
+    )
+    assert isinstance(store, MultiDomainVectorStore)
+    return store
+
+
+@pytest.mark.asyncio
+async def test_reindex_admin_counts_documents_and_deletes_only_unaliased_indices(
+    client: AsyncOpenSearch, client_b: AsyncOpenSearch
+) -> None:
+    """Test the index administration a per-org reindex runs across a cell's domains.
+
+    **Why this test is important:**
+      - A reindex swaps an org's alias to its shadow only once the shadow holds as many
+        documents as the source, so the count must be exact and span every domain (a chunk
+        count would differ whenever the new version chunks differently).
+      - Pruning the previous index after its retention must never delete an index an alias
+        still reads; that would empty the org's search.
+
+    **What it tests:**
+      - ``count_org_documents`` counts the org's distinct documents in an index, summed
+        over the domains (each document lives on one), and ignores another org's.
+      - ``create_index`` with a new model makes the shadow on every domain; ``swap_alias``
+        points every domain's org alias at it; ``delete_unaliased_index`` then removes the old index
+        everywhere, and refuses (``AppValueError``) the aliased index, deleting nothing.
+    """
+    collection = _collection()
+    clients = {"a": client, "b": client_b}
+    await _multi(clients, "m1").upsert(
+        collection,
+        [
+            _entry("d", 0, "o1", [1, 0, 0, 0], shard="0"),
+            _entry("d", 1, "o1", [0, 1, 0, 0], shard="0"),
+            _entry("e", 0, "o1", [1, 0, 0, 0], shard="1"),
+            _entry("x", 0, "o2", [1, 0, 0, 0], shard="0"),
+        ],
+    )
+    live_org = _multi(clients, "m1").for_org("o1")
+    live = await live_org.current_index(collection)
+    assert live is not None
+
+    assert await count_org_documents(clients, live, "o1") == 2
+
+    shadow_org = _multi(clients, "m2").for_org("o1")
+    shadow = await shadow_org.create_index(collection)
+    assert shadow != live
+    assert await count_org_documents(clients, shadow, "o1") == 0
+    await shadow_org.swap_alias(collection, shadow)
+    assert await live_org.current_index(collection) == shadow
+    with pytest.raises(AppValueError):
+        await delete_unaliased_index(clients, shadow)
+    assert await client.indices.exists(index=shadow)
+    await delete_unaliased_index(clients, live)
+    for domain in (client, client_b):
+        assert not await domain.indices.exists(index=live)

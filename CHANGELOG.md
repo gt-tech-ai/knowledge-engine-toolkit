@@ -10,6 +10,11 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Python OpenSearch: `index_admin.count_org_documents` (an org's exact distinct-document count
+  in an index, summed over the domains) and `index_admin.delete_unaliased_index` (deletes an index
+  on every domain, refusing one any alias names); `MultiDomainVectorStore.create_index` and
+  `swap_alias` act on every domain. A per-org reindex compares its shadow with these and prunes
+  the previous index.
 - Python retrieval: `RetrievalConfig.collapse_duplicates` (off by default) and
   `collapse_cluster_key`: `wrap_retrieval_engine` collapses in-scope passages with the same text
   (up to case and whitespace) or the same near-duplicate cluster id into the best-scored one, which
