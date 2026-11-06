@@ -8,7 +8,7 @@ All notable changes to this project are recorded here. The format follows
 
 ## [0.0.48] - 2026-11-06
 
-Python: `techai-webutils` 0.9.3. Go is unchanged.
+Python: `techai-webutils` 0.9.3.
 
 ### Added
 
@@ -23,6 +23,11 @@ Python: `techai-webutils` 0.9.3. Go is unchanged.
   passage above the caller's clearance, a blocked answer) still counted as a hit with a saving,
   overstating the hit rate and savings. A caller that reads a hit must now end it in `serve` or
   `refuse`. `SemanticCacheProxy` does so, and counts an undecodable entry as a miss.
+
+### Security
+
+- Go: `github.com/klauspost/compress` 1.19.1 → 1.20.2 for GO-2026-6865 (a panic on two-block
+  frames), reachable through the CQL driver's gocql session.
 
 ## [0.0.47] - 2026-11-05
 
