@@ -25,6 +25,13 @@ Python: `techai-webutils` 0.9.3.
   spread over several domains can back the sink. `OpenSearchVectorStore.index_model` reads an
   index the domain does not hold as `("", "")` instead of raising, so the multi-domain store asks
   every domain in one round trip.
+- Python sink: `clients.sink.SinkWriteGovernor` (+ `GovernorConfig`), a `Sink` decorator that caps
+  concurrent sink calls and adjusts the cap from the readers' p99 (read through a
+  `MetricsQuerier` at most once per `check_seconds`): halved over `max_query_p99_ms`, grown by one
+  under it, held on a failed read (`sink_write_governor_read_failures_total`); the cap is the
+  `sink_write_governor_concurrency` gauge.
+- Python Prometheus: `clients.prometheus.decorate(querier, decorations, name)`, which runs a
+  `MetricsQuerier`'s `query` and `query_range` through the client tier.
 - Go `clients/aws/account`: `Session.Principal`, the verified caller's ARN from the
   `sts:GetCallerIdentity` call the resolver already makes, so a tool can attribute an operator
   action to the identity it verified rather than to an unverified name.
