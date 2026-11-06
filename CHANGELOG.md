@@ -10,6 +10,9 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Go `clients/aws/account`: `Session.Principal`, the verified caller's ARN from the
+  `sts:GetCallerIdentity` call the resolver already makes, so a tool can attribute an operator
+  action to the identity it verified rather than to an unverified name.
 - Python checkpoint: the `StageProgress` port (`heartbeat(org_id, document_id, upstream)`), so a
   long stage reports it is still working on a document between its stage records and a reaper
   does not resume it.

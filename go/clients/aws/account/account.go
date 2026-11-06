@@ -69,6 +69,10 @@ type Session struct {
 
 	// Profile is the shared profile loaded; empty when the ambient chain was used.
 	Profile string
+
+	// Principal is the verified caller's ARN (sts:GetCallerIdentity), which an operator
+	// action is attributed to; an SSO session's is its assumed-role session ARN.
+	Principal string
 }
 
 // ExpiresAt reports when the session's credentials expire; zero means never.
@@ -252,7 +256,7 @@ func (r *sdkResolver) resolve(
 	}
 	return Session{
 		AWS: awscfg, Creds: creds, Account: t.ExpectedAccount,
-		Region: t.Region, Profile: profile,
+		Region: t.Region, Profile: profile, Principal: aws.ToString(out.Arn),
 	}, nil
 }
 

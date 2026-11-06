@@ -60,9 +60,12 @@ func newAccountResolver(
 	return r
 }
 
-// identity returns a GetCallerIdentity output for acct.
+// identity returns a GetCallerIdentity output for acct, its caller an SSO role session.
 func identity(acct string) *sts.GetCallerIdentityOutput {
-	return &sts.GetCallerIdentityOutput{Account: aws.String(acct)}
+	return &sts.GetCallerIdentityOutput{
+		Account: aws.String(acct),
+		Arn:     aws.String("arn:aws:sts::" + acct + ":assumed-role/Operator/jane"),
+	}
 }
 
 // TestAccountResolver_VerifiesTheAccount tests that a session is served only for the
@@ -73,8 +76,9 @@ func identity(acct string) *sts.GetCallerIdentityOutput {
 //     from, the wrong cloud; the resolver is the one place that refuses it.
 //
 // What it tests:
-//   - A matching caller identity yields a Session naming the account, region and the
-//     profile it loaded, with the retrieved credentials pinned.
+//   - A matching caller identity yields a Session naming the account, region, the
+//     profile it loaded and the caller's ARN (the verified principal an operator action
+//     is attributed to), with the retrieved credentials pinned.
 //   - A mismatch is INVALID_INPUT naming both accounts and the env.
 func TestAccountResolver_VerifiesTheAccount(t *testing.T) {
 	t.Parallel()
@@ -91,6 +95,7 @@ func TestAccountResolver_VerifiesTheAccount(t *testing.T) {
 	assert.Equal(t, "111122223333", s.Account)
 	assert.Equal(t, "us-east-1", s.Region)
 	assert.Equal(t, "acme-stg", s.Profile, "no ambient chain: the profile is forced")
+	assert.Equal(t, "arn:aws:sts::111122223333:assumed-role/Operator/jane", s.Principal)
 	assert.Equal(t, "AKIA", s.Creds.AccessKeyID)
 	pinned, err := s.AWS.Credentials.Retrieve(ctx)
 	require.NoError(t, err)
