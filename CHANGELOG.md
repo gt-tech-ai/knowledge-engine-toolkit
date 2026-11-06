@@ -10,6 +10,9 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Python `foundation.dtovalidate`: the DTO leaf rules (`uuid`, `min_max_len`, `max_bytes`,
+  `max_items`, `int_range`) a generated Python validator composes, the mirror of Go's
+  `foundation/dtovalidate`, with the same `INVALID_INPUT` errors and messages.
 - Go connector: `SourceConfig.InventoryPrefix`. An `s3_inventory` source with no
   `InventoryManifestKey` reads the newest complete report (a written `manifest.checksum`) under
   that configuration folder, and names it in its tokens (`<stamp>/<file>:<row>`), so a crawl
