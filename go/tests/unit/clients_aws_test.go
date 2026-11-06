@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockagent"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
@@ -17,6 +18,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/bedrock"
+	awsbedrockagent "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/bedrockagent"
 	awsiam "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/iam"
 	awsroute53 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/route53"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/secretsmanager"
@@ -39,8 +41,9 @@ import (
 //
 // What it tests:
 //   - Each family's empty kind is its stub: STS reports the stub account; reading a
-//     secret or a quota is NOT_FOUND; writing a secret succeeds; SES, Bedrock, IAM and
-//     Route 53 return empty outputs; an unknown kind is INVALID_INPUT.
+//     secret, a quota or a Bedrock data source is NOT_FOUND; writing a secret succeeds;
+//     SES, Bedrock, IAM and Route 53 return empty outputs; an unknown kind is
+//     INVALID_INPUT.
 func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -89,6 +92,14 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 	require.NoError(t, err)
 	_, err = br.Converse(ctx, &bedrockruntime.ConverseInput{})
 	require.NoError(t, err)
+	agent, err := awsbedrockagent.NewFromConfig(
+		ctx,
+		awsbedrockagent.Config{},
+		awsbedrockagent.Deps{Decorations: decs},
+	)
+	require.NoError(t, err)
+	_, err = agent.GetDataSource(ctx, &bedrockagent.GetDataSourceInput{})
+	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 	iamc, err := awsiam.NewFromConfig(
 		ctx,
 		awsiam.Config{},
@@ -119,8 +130,8 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 //
 // What it tests:
 //   - The sdk kind uses an injected API, returns its output unchanged and counts the
-//     call as its snake_case operation; a transient failure of PutSecretValue reaches
-//     the caller after one call.
+//     call as its snake_case operation (a secret describe, a Bedrock data-source read);
+//     a transient failure of PutSecretValue reaches the caller after one call.
 func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -143,6 +154,17 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "s", aws.ToString(out.Name))
 	assert.InDelta(t, 1.0, clientOpCounter(t, reg, "describe_secret"), 0)
+
+	agentAPI := mocks.NewMockAWSBedrockAgentAPI(gomock.NewController(t))
+	agent, err := awsbedrockagent.NewFromConfig(ctx,
+		awsbedrockagent.Config{Kind: awsbedrockagent.KindSDK},
+		awsbedrockagent.Deps{Decorations: decs, API: agentAPI})
+	require.NoError(t, err)
+	agentAPI.EXPECT().GetDataSource(gomock.Any(), gomock.Any()).
+		Return(&bedrockagent.GetDataSourceOutput{}, nil)
+	_, err = agent.GetDataSource(ctx, &bedrockagent.GetDataSourceInput{})
+	require.NoError(t, err)
+	assert.InDelta(t, 1.0, clientOpCounter(t, reg, "get_data_source"), 0)
 
 	api.EXPECT().PutSecretValue(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.New(apperr.CodeUnavailable, "throttled")).Times(1)

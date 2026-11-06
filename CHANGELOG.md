@@ -10,6 +10,10 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Go AWS: `clients/aws/bedrockagent`, the Bedrock knowledge-base control plane (`GetDataSource`,
+  a retried read) as one more `stub|sdk` SDK-seam family; the stub answers NOT_FOUND, so a caller
+  comparing a data source never reads the stub as a match. Mock: `tests/mocks.MockAWSBedrockAgentAPI`.
+  Adds the AWS SDK `bedrockagent` module (v1.68.2, on the pinned SDK core).
 - Python OpenSearch: `index_admin.count_org_documents` (an org's exact distinct-document count
   in an index, summed over the domains) and `index_admin.delete_unaliased_index` (deletes an index
   on every domain, refusing one any alias names); `MultiDomainVectorStore.create_index` and

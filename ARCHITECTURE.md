@@ -1062,8 +1062,8 @@ CLIs), so each one does not re-walk the tree or re-implement a runner.
 - **Clients.** Typed command-line clients behind interfaces, each `stub|exec`: `clients/git`,
   `helm` (plus `helm.NewRenderer` for `Codebase.Rendered`), `kubectl`, `docker`, `terraform`;
   `clients/process` supervises long-lived child processes (process groups, graceful stop).
-  `clients/aws/<family>` (`sts`, `secretsmanager`, `ses`, `bedrock`, `servicequotas`, `iam`,
-  `route53`) wrap one SDK seam each, `stub|sdk`, through `client.Call`; `clients/session`
+  `clients/aws/<family>` (`sts`, `secretsmanager`, `ses`, `bedrock`, `bedrockagent`,
+  `servicequotas`, `iam`, `route53`) wrap one SDK seam each, `stub|sdk`, through `client.Call`; `clients/session`
   resolves and caches verified credentials. `clients/toolchain` declares developer tools as data
   (`types.ToolEntry`), detects them, installs them per platform (pinned downloads verified by SHA-256),
   and checks that each go-installed CI tool on PATH is the pinned build.
