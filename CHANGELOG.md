@@ -10,6 +10,8 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Go `tests/mocks`: `MockKeyedPublisher`, so a product's unit test mocks a keyed publish
+  (`interfaces.KeyedPublisher`) like any other engine interface.
 - Guard `expr` rows can hash: `sha256(text)` returns the lowercase-hex SHA-256 of a
   string, so a row can hold files copied from another repository (shared golden fixtures)
   to the digests recorded for their source.
