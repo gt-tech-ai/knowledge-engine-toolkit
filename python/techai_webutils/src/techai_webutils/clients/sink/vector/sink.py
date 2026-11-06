@@ -1,6 +1,6 @@
 """``VectorStoreSink``: write a document's chunks and vectors through an org-scoped vector store.
 
-Each chunk becomes one entry with the stable id ``<document>:<n>``, so a rewrite of the same
+Each chunk becomes one entry with the stable id ``chunk_id(document, n)`` (``<document>:<n>``), so a rewrite of the same
 document replaces its entries. Every entry stores the document's metadata, its ``content_hash`` and
 embedding model, the chunk's structure fields, and one ``entities.<label>`` list per label.
 
@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, override
 
 from techai_webutils.core.errors import AppValueError, ConflictError
-from techai_webutils.core.interfaces.sink import Sink
+from techai_webutils.core.interfaces.sink import Sink, chunk_id
 from techai_webutils.core.interfaces.vector_store import VectorEntry
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 
@@ -58,7 +58,7 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
         await self._check_model(store, document)
         entries = [
             VectorEntry(
-                id=f"{document.document_id}:{n}",
+                id=chunk_id(document.document_id, n),
                 document_id=document.document_id,
                 content=chunk.text,
                 embedding=list(vector),

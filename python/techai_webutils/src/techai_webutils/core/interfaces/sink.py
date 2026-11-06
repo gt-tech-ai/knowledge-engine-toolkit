@@ -4,6 +4,9 @@ The ingestion pipeline ends by handing one document's chunks to a sink: a search
 vectors (OpenSearch), or a managed knowledge base that embeds by itself (Bedrock, ``vectors`` is
 ``None``). A sink also deletes a document and changes its metadata (clearance, tags) without
 re-embedding it.
+
+Every sink names chunk ``n`` of a document ``chunk_id(document_id, n)``, so a passage cites the
+same chunk whichever backend served it.
 """
 
 from __future__ import annotations
@@ -18,6 +21,16 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from techai_webutils.core.interfaces.vector_store import VectorEntry
+
+
+CHUNK_ID_KEY = "chunk_id"
+"""The metadata key a sink stores a chunk's id under where the backend has no id of its own (the
+Bedrock chunk-file sidecar); the citation extractor reads it back."""
+
+
+def chunk_id(document_id: str, n: int) -> str:
+    """Return the id of chunk ``n`` (0-based, in document order) of ``document_id``: ``<document>:<n>``."""
+    return f"{document_id}:{n}"
 
 
 @dataclass(frozen=True, slots=True)

@@ -18,6 +18,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from techai_webutils.core.errors import AppValueError
+from techai_webutils.core.interfaces.sink import CHUNK_ID_KEY, chunk_id
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -142,6 +143,8 @@ def _chunk_attributes(
 ) -> dict[str, object]:
     """Return chunk ``n``'s attributes: the document's, the chunk's own, and its structure.
 
+    The chunk's id (``chunk_id``, as the vector sink ids it) is stored so a Bedrock passage cites
+    the same chunk an OpenSearch one would; a ``kb_units`` file has none (Bedrock chunks it).
     Entities become string lists (``entities.<label>``), which Bedrock filters with
     ``listContains``.
     """
@@ -149,6 +152,7 @@ def _chunk_attributes(
         **_document_attributes(document, org_field),
         **chunk.metadata,
         "chunk_index": n,
+        CHUNK_ID_KEY: chunk_id(document.document_id, n),
     }
     for key in ("section_path", "element_type", "language"):
         if value := getattr(chunk, key):

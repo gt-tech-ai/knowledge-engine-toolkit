@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from techai_webutils.clients.retrieval.fusion import FusionConfig, fuse
 from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
+from techai_webutils.core.interfaces.sink import CHUNK_ID_KEY
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 from techai_webutils.foundation.logger import get_logger
 from techai_webutils.foundation.vectors import require_matching_dimension
@@ -123,7 +124,7 @@ def _to_retrieval_result(hit: VectorSearchResult) -> RetrievalResult:
     The hit's chunk id is added as the ``chunk_id`` key when the payload lacks one, so a citation
     can name its chunk.
     """
-    hit.metadata.setdefault("chunk_id", hit.chunk_id)
+    hit.metadata.setdefault(CHUNK_ID_KEY, hit.chunk_id)
     page_raw = hit.metadata.get("page_number", "")
     page_number = int(page_raw) if page_raw.isdigit() else None
     return RetrievalResult(

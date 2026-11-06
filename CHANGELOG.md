@@ -10,6 +10,10 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Python sink: `core.interfaces.sink.chunk_id(document_id, n)` (`<document>:<n>`) and
+  `CHUNK_ID_KEY`. The vector sink ids entries with it, and the Bedrock `chunk_files` layout stores
+  it in each chunk's sidecar, so `PassageCitationExtractor` gives a Bedrock passage the same
+  `Citation.chunk_id` an OpenSearch one gets (a `kb_units` file has none: Bedrock chunks it).
 - Go AWS: `clients/aws/bedrockagent`, the Bedrock knowledge-base control plane (`GetDataSource`,
   a retried read) as one more `stub|sdk` SDK-seam family; the stub answers NOT_FOUND, so a caller
   comparing a data source never reads the stub as a match. Mock: `tests/mocks.MockAWSBedrockAgentAPI`.

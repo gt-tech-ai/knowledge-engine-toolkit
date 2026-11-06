@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, override
 from techai_webutils.core.errors import AppValueError, InternalError
 from techai_webutils.core.interfaces.citation_scorer import ClaimPassage
 from techai_webutils.core.interfaces.retrieval import Citation, CitationExtractor
+from techai_webutils.core.interfaces.sink import CHUNK_ID_KEY
 from techai_webutils.pipelines.citation_scorers import LexicalCitationScorer
 
 if TYPE_CHECKING:
@@ -164,7 +165,7 @@ class PassageCitationExtractor(CitationExtractor):
                 for k in self._attribute_keys
                 if k in source.metadata
             },
-            chunk_id=source.metadata.get("chunk_id", ""),
+            chunk_id=source.metadata.get(CHUNK_ID_KEY, ""),
         )
 
 

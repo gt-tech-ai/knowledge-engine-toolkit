@@ -79,7 +79,8 @@ async def test_three_chunks_write_six_objects_and_a_redelivery_writes_none() -> 
       - three chunks → six uploads in ``kb-bucket``: ``{n}.txt`` and ``{n}.txt.metadata.json``
         under ``kb/o1/{hash2}/doc1/{version}/``
       - a sidecar holds the document's and the chunk's attributes, the org, the chunk index
-        (a number) and the entities as a string list
+        (a number), the chunk id (``doc1:0``, the id the vector sink gives the same chunk, so a
+        citation names its chunk on either backend) and the entities as a string list
       - with all six keys listed, a second write uploads and deletes nothing
     """
     storage = _storage()
@@ -103,6 +104,7 @@ async def test_three_chunks_write_six_objects_and_a_redelivery_writes_none() -> 
         "document_id": "doc1",
         "content_hash": "c" * 64,
         "chunk_index": 0,
+        "chunk_id": "doc1:0",
         "section_path": "Intro",
         "entities.ORG": ["Acme", "Initech"],
     }
