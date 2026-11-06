@@ -9,11 +9,13 @@ from __future__ import annotations
 import uuid
 from dataclasses import replace
 from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
 from opensearchpy import AsyncOpenSearch, NotFoundError
 
+from techai_webutils.clients.sink.vector.sink import VectorStoreSink
 from techai_webutils.clients.vector import (
     VectorStoreConfig,
     VectorStoreKind,
@@ -32,6 +34,7 @@ from techai_webutils.clients.vector.opensearch.index_admin import (
     delete_unaliased_index,
 )
 from techai_webutils.core.errors import AppValueError
+from techai_webutils.core.interfaces.sink import ChunkPayload, SinkDocument
 from techai_webutils.core.interfaces.vector_store import VectorEntry
 
 if TYPE_CHECKING:
@@ -123,6 +126,38 @@ async def test_round_trip_search_resume_and_delete(client: AsyncOpenSearch) -> N
     assert await scoped.count_by_document(collection, "d1") == 2
     await scoped.delete_by_document(collection, "d1")
     assert await scoped.count_by_document(collection, "d1") == 0
+
+
+@pytest.mark.asyncio
+async def test_sink_redelivery_writes_nothing_and_a_shorter_version_drops_its_tail(
+    client: AsyncOpenSearch,
+) -> None:
+    """Test the vector sink's resume and stale-chunk cleanup against real OpenSearch.
+
+    **Why this test is important:**
+      - The resume skip compares what OpenSearch hands back with what the sink would write;
+        if the two differ the skip never fires, and a redelivery rewrites every chunk.
+      - A shorter new version must not leave the old version's last chunks searchable.
+
+    **What it tests:**
+      - a second identical write sends no bulk request
+      - a one-chunk version of the three-chunk document leaves exactly one entry, ``d1:0``
+    """
+    collection = _collection()
+    store = _store(client)
+    sink = VectorStoreSink(store, collection)
+    document = SinkDocument("o1", "d1", "h1", "m1", "1", {"classification": "internal"})
+    chunks = [ChunkPayload(f"text {n}", section_path="Intro") for n in range(3)]
+    vectors = [[1.0, 0, 0, 0], [0, 1.0, 0, 0], [0, 0, 1.0, 0]]
+    await sink.write(document, chunks, vectors)
+    with patch.object(client, "bulk", AsyncMock(wraps=client.bulk)) as bulk:
+        await sink.write(document, chunks, vectors)
+    bulk.assert_not_awaited()
+    await sink.write(replace(document, content_hash="h2"), chunks[:1], vectors[:1])
+
+    scoped = store.for_org("o1")
+    assert await scoped.count_by_document(collection, "d1") == 1
+    assert list(await scoped.stored_metadata(collection, ["d1:0", "d1:1"])) == ["d1:0"]
 
 
 @pytest.mark.asyncio

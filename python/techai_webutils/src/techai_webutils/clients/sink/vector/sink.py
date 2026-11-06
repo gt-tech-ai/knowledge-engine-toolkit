@@ -1,8 +1,15 @@
 """``VectorStoreSink``: write a document's chunks and vectors through an org-scoped vector store.
 
-Each chunk becomes one entry with the stable id ``chunk_id(document, n)`` (``<document>:<n>``), so a rewrite of the same
+Each chunk becomes one entry with the stable id ``chunk_id(document, n)`` (``<document>:<n>``, ``n``
+the chunk's ``ordinal`` when set, else its position in the write), so a rewrite of the same
 document replaces its entries. Every entry stores the document's metadata, its ``content_hash`` and
 embedding model, the chunk's structure fields, and one ``entities.<label>`` list per label.
+
+A write resumes: an entry already stored, where writes go, with exactly the metadata it would be
+written with is not written again, so a redelivery after a partial write sends only the rest.
+The metadata is the only comparison, so a caller puts whatever determines a chunk's text (the
+pipeline's fingerprint) in the document metadata. When the document holds entries the write does
+not (a previous version with more chunks), they are deleted after the write.
 
 Before writing, the sink checks the vectors were made by the model the index was built for: a
 mismatch raises ``CONFLICT`` (permanent), even at equal dimensions, since mixing two models'
@@ -49,7 +56,13 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
         chunks: Sequence[ChunkPayload],
         vectors: Sequence[Sequence[float]] | None,
     ) -> None:
-        """Check the vectors match the chunks and the index's model, then upsert one entry per chunk."""
+        """Check the vectors and the model, upsert the entries not stored as is, drop the rest.
+
+        Raises:
+            AppValueError: The vectors do not pair one-to-one with the chunks.
+            ConflictError: The vectors come from another model than the index's.
+
+        """
         if vectors is None or len(vectors) != len(chunks):
             count = "no" if vectors is None else len(vectors)
             msg = f"{count} vectors for {len(chunks)} chunks of {document.document_id}"
@@ -57,17 +70,19 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
         store = self._store.for_org(document.org_id)
         await self._check_model(store, document)
         entries = [
-            VectorEntry(
-                id=chunk_id(document.document_id, n),
-                document_id=document.document_id,
-                content=chunk.text,
-                embedding=list(vector),
-                metadata=self._metadata(document, chunk, n),
+            self._entry(
+                document, chunk, n if chunk.ordinal is None else chunk.ordinal, vector
             )
             for n, (chunk, vector) in enumerate(zip(chunks, vectors, strict=True))
         ]
-        if entries:
-            await store.upsert(self._collection, entries)
+        ids = [entry.id for entry in entries]
+        stored = await store.stored_metadata(self._collection, ids)
+        held = await store.count_by_document(self._collection, document.document_id)
+        missing = [e for e in entries if stored.get(e.id) != e.metadata]
+        if missing:
+            await store.upsert(self._collection, missing)
+        if held > len(stored):
+            await store.delete_by_document(self._collection, document.document_id, ids)
 
     @override
     async def delete(self, org_id: str, document_id: str) -> None:
@@ -100,6 +115,22 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
                 f"but the index is built for {expected}"
             )
             raise ConflictError(msg)
+
+    def _entry(
+        self,
+        document: SinkDocument,
+        chunk: ChunkPayload,
+        n: int,
+        vector: Sequence[float],
+    ) -> VectorEntry:
+        """Return chunk ``n``'s entry: its stable id, text, vector and stored metadata."""
+        return VectorEntry(
+            id=chunk_id(document.document_id, n),
+            document_id=document.document_id,
+            content=chunk.text,
+            embedding=list(vector),
+            metadata=self._metadata(document, chunk, n),
+        )
 
     def _metadata(
         self, document: SinkDocument, chunk: ChunkPayload, n: int

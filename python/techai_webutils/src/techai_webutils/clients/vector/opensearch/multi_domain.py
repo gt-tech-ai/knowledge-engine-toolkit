@@ -259,11 +259,13 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         await asyncio.gather(*(s.delete(collection, ids) for s in self._domains.values()))
 
     @override
-    async def delete_by_document(self, collection: str, document_id: str) -> None:
-        """Delete ``document_id``'s entries from every domain."""
+    async def delete_by_document(
+        self, collection: str, document_id: str, keep: Sequence[str] = ()
+    ) -> None:
+        """Delete ``document_id``'s entries, except the ids in ``keep``, from every domain."""
         await asyncio.gather(
             *(
-                s.delete_by_document(collection, document_id)
+                s.delete_by_document(collection, document_id, keep)
                 for s in self._domains.values()
             )
         )

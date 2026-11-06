@@ -16,9 +16,7 @@ def _inner(model: str = "m") -> MagicMock:
     """Return a mocked provider whose vector for a text is ``[len(text), 0.5]``."""
     inner = MagicMock(spec=EmbeddingProvider)
 
-    def batch(
-        texts: list[str], *, input_type: str = "document"
-    ) -> list[EmbeddingResult]:
+    def batch(texts: list[str], *, input_type: str = "document") -> list[EmbeddingResult]:
         del input_type
         return [EmbeddingResult([float(len(t)), 0.5], model, 7) for t in texts]
 

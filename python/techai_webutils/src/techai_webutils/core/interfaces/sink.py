@@ -69,6 +69,10 @@ class ChunkPayload:
     """Entity label → the entities of that label found in the chunk."""
     metadata: Mapping[str, str] = field(default_factory=dict[str, str])
     """Further fields stored on this chunk only."""
+    ordinal: int | None = None
+    """The chunk's position in the document (its id is ``chunk_id(document, ordinal)``); None
+    means its position in the write. A caller writing a subset of a document's chunks (those it
+    embedded) sets it, so every chunk keeps the id it has in the whole document."""
 
 
 class Sink(ManagedResource, ABC):
@@ -113,8 +117,20 @@ class SinkStore(Protocol):
         """Write entries by id."""
         ...
 
-    async def delete_by_document(self, collection: str, document_id: str) -> None:
-        """Delete a document's entries."""
+    async def delete_by_document(
+        self, collection: str, document_id: str, keep: Sequence[str] = ()
+    ) -> None:
+        """Delete a document's entries, except the ids in ``keep``."""
+        ...
+
+    async def stored_metadata(
+        self, collection: str, ids: Sequence[str]
+    ) -> dict[str, dict[str, str]]:
+        """Return ``{id: stored metadata}`` for the ``ids`` stored where writes go."""
+        ...
+
+    async def count_by_document(self, collection: str, document_id: str) -> int:
+        """Return how many entries the document has."""
         ...
 
     async def update_metadata(

@@ -38,6 +38,8 @@ def _store(
     scoped.upsert = AsyncMock()
     scoped.delete_by_document = AsyncMock()
     scoped.update_metadata = AsyncMock()
+    scoped.stored_metadata = AsyncMock(return_value={})
+    scoped.count_by_document = AsyncMock(return_value=0)
     store = MagicMock(spec=OpenSearchVectorStore)
     store.for_org = MagicMock(return_value=scoped)
     return store, scoped
@@ -144,6 +146,80 @@ async def test_write_refuses_vectors_from_another_model(
     assert info.value.code is ErrorCode.CONFLICT
     assert info.value.is_permanent
     scoped.upsert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_redelivered_write_sends_only_chunks_not_stored_as_is() -> None:
+    """Test that a resumed write skips the chunks already stored with the same metadata.
+
+    **Why this test is important:**
+      - A redelivery after a partial write re-sends the whole document unless the stored chunks
+        are skipped; a chunk stored under another version or model must still be rewritten.
+
+    **What it tests:**
+      - with ``d1:0`` stored exactly as it would be written and ``d1:1`` stored with another
+        ``content_hash``, only ``d1:1`` is upserted; nothing is deleted
+    """
+    store, scoped = _store()
+    sink = _sink(store)
+    await sink.write(
+        _DOC, [ChunkPayload(text="a"), ChunkPayload(text="b")], [[1.0], [2.0]]
+    )
+    written = scoped.upsert.await_args.args[1]
+    stale = written[1].metadata | {"content_hash": "old"}
+    scoped.stored_metadata.return_value = {"d1:0": written[0].metadata, "d1:1": stale}
+    scoped.count_by_document.return_value = 2
+    scoped.upsert.reset_mock()
+
+    await sink.write(
+        _DOC, [ChunkPayload(text="a"), ChunkPayload(text="b")], [[1.0], [2.0]]
+    )
+
+    assert [e.id for e in scoped.upsert.await_args.args[1]] == ["d1:1"]
+    scoped.stored_metadata.assert_awaited_with("docs", ["d1:0", "d1:1"])
+    scoped.delete_by_document.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_write_of_a_shorter_version_deletes_the_extra_chunks() -> None:
+    """Test that a document holding more chunks than the write loses the extras.
+
+    **Why this test is important:**
+      - A re-uploaded document with fewer chunks would otherwise keep the old version's tail
+        searchable, citing text the document no longer has.
+
+    **What it tests:**
+      - the store holds 3 entries of which the write's one id is stored; the write deletes the
+        document's entries except ``d1:0``
+    """
+    store, scoped = _store()
+    scoped.stored_metadata.return_value = {"d1:0": {"content_hash": "old"}}
+    scoped.count_by_document.return_value = 3
+
+    await _sink(store).write(_DOC, [ChunkPayload(text="a")], [[1.0]])
+
+    scoped.delete_by_document.assert_awaited_once_with("docs", "d1", ["d1:0"])
+
+
+@pytest.mark.asyncio
+async def test_chunk_ordinal_sets_its_id() -> None:
+    """Test that a chunk's ordinal, when set, is its id and ``chunk_index``.
+
+    **Why this test is important:**
+      - A caller writes only the chunks it embedded; numbering them by position would shift
+        every later chunk's id and break citations against the whole document.
+
+    **What it tests:**
+      - chunks with ordinals 0 and 2 are written as ``d1:0`` and ``d1:2``, ``chunk_index`` "2"
+    """
+    store, scoped = _store()
+    chunks = [ChunkPayload(text="a", ordinal=0), ChunkPayload(text="c", ordinal=2)]
+
+    await _sink(store).write(_DOC, chunks, [[1.0], [2.0]])
+
+    entries = scoped.upsert.await_args.args[1]
+    assert [e.id for e in entries] == ["d1:0", "d1:2"]
+    assert entries[1].metadata["chunk_index"] == "2"
 
 
 @pytest.mark.asyncio

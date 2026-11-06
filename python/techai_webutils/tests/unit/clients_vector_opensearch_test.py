@@ -227,6 +227,67 @@ async def test_stored_metadata_reads_back_own_org_only() -> None:
     assert found == {"a": {"org_id": "o1", "entities.org": "X|Y"}}
 
 
+@pytest.mark.asyncio
+async def test_stored_metadata_under_write_targets_needs_every_target() -> None:
+    """Test that with a re-index's write targets an id counts only when every target holds it.
+
+    **Why this test is important:**
+      - A resumed sink write skips what is stored; read from the live alias alone, it would skip
+        chunks the shadow index lacks, and the re-index would cut over to an incomplete index.
+
+    **What it tests:**
+      - each target is read; ``a`` (in both, same metadata) counts, ``b`` (live only) and ``c``
+        (different metadata in the shadow) do not
+    """
+    client = _client()
+
+    def docs(index: str, **_: object) -> dict[str, object]:
+        shadow = index == "shadow"
+        rows = [
+            {"found": True, "_source": {"entry_id": "a", "org_id": "o1", "h": "1"}},
+            {"found": not shadow, "_source": {"entry_id": "b", "org_id": "o1"}},
+            {
+                "found": True,
+                "_source": {"entry_id": "c", "org_id": "o1", "h": "2" if shadow else "1"},
+            },
+        ]
+        return {"docs": rows}
+
+    client.mget.side_effect = docs
+    store = OpenSearchVectorStore(client, dimension=1).for_org("o1")
+    store.set_write_targets("docs", ["live", "shadow"])
+
+    found = await store.stored_metadata("docs", ["a", "b", "c"])
+
+    assert [c.kwargs["index"] for c in client.mget.await_args_list] == ["live", "shadow"]
+    assert found == {"a": {"org_id": "o1", "h": "1"}}
+
+
+@pytest.mark.asyncio
+async def test_delete_by_document_keeps_the_written_ids() -> None:
+    """Test that the stale-entry delete matches the document in its org minus the kept ids.
+
+    **Why this test is important:**
+      - A new version with fewer chunks must not leave the old version's extra chunks
+        searchable; deleting the kept ids too would empty the document.
+
+    **What it tests:**
+      - one ``delete_by_query`` on the alias, filtered by org and document, with ``must_not``
+        the org-qualified kept ids
+    """
+    client = _client()
+    client.delete_by_query = AsyncMock(return_value={})
+    store = OpenSearchVectorStore(client, dimension=1).for_org("o1")
+
+    await store.delete_by_document("docs", "d", ["d:0", "d:1"])
+
+    kwargs = client.delete_by_query.await_args.kwargs
+    clause = kwargs["body"]["query"]["bool"]
+    assert {"term": {"document_id": "d"}} in clause["filter"]
+    assert {"term": {"org_id": "o1"}} in clause["filter"]
+    assert clause["must_not"] == [{"ids": {"values": ["o1/d:0", "o1/d:1"]}}]
+
+
 def test_bulk_error_classifies_failed_items() -> None:
     """Test that bulk responses map to no error, a transient error, or a permanent one.
 

@@ -115,6 +115,24 @@ async def test_three_chunks_write_six_objects_and_a_redelivery_writes_none() -> 
 
 
 @pytest.mark.asyncio
+async def test_chunk_file_cites_the_chunk_ordinal() -> None:
+    """Test that a chunk file's chunk id and index come from the chunk's ordinal when set.
+
+    **Why this test is important:**
+      - The vector sink ids a chunk by its ordinal; a Bedrock citation must name the same chunk.
+
+    **What it tests:**
+      - a chunk with ordinal 5, written first, has ``chunk_index`` 5 and ``chunk_id`` ``doc1:5``
+    """
+    storage = _storage()
+    await _sink(storage).write(_DOC, [ChunkPayload("alpha", ordinal=5)], None)
+
+    sidecar = _uploads(storage)[f"{_PREFIX}{_VERSION}/0.txt.metadata.json"]
+    attributes = json.loads(sidecar)["metadataAttributes"]
+    assert (attributes["chunk_index"], attributes["chunk_id"]) == (5, "doc1:5")
+
+
+@pytest.mark.asyncio
 async def test_a_new_version_replaces_the_old_files() -> None:
     """Test that a changed document writes its new version and deletes the old one.
 

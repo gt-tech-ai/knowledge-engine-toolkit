@@ -99,7 +99,15 @@ def units(
     """
     if layout == BedrockLayout.CHUNK_FILES:
         return [
-            Unit(chunk.text, _chunk_attributes(document, chunk, n, org_field))
+            Unit(
+                chunk.text,
+                _chunk_attributes(
+                    document,
+                    chunk,
+                    n if chunk.ordinal is None else chunk.ordinal,
+                    org_field,
+                ),
+            )
             for n, chunk in enumerate(chunks)
         ]
     if layout == BedrockLayout.KB_UNITS:
@@ -142,6 +150,8 @@ def _chunk_attributes(
     document: SinkDocument, chunk: ChunkPayload, n: int, org_field: str
 ) -> dict[str, object]:
     """Return chunk ``n``'s attributes: the document's, the chunk's own, and its structure.
+
+    ``n`` is the chunk's ordinal in the document (its position in the write when unset).
 
     The chunk's id (``chunk_id``, as the vector sink ids it) is stored so a Bedrock passage cites
     the same chunk an OpenSearch one would; a ``kb_units`` file has none (Bedrock chunks it).

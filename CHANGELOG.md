@@ -21,6 +21,16 @@ Python: `techai-webutils` 0.9.3.
   that configuration folder, and names it in its tokens (`<stamp>/<file>:<row>`), so a crawl
   resumed after the next daily report still finishes the one it began. No complete report is
   `NOT_FOUND`.
+- Python sink: resumable vector-sink writes. `VectorStoreSink.write` probes the chunk ids
+  (`SinkStore.stored_metadata`) and upserts only the entries not stored with exactly the metadata
+  it would write, so a redelivery after a partial write sends the rest only; when the document
+  holds more entries than the write (`count_by_document`), it deletes the others
+  (`delete_by_document(..., keep=)`), so a shorter new version leaves no old chunks searchable.
+  `ChunkPayload.ordinal` names a chunk's position in the whole document (the vector sink's id and
+  `chunk_index`, the Bedrock `chunk_files` sidecar's `chunk_id`), for a caller writing only the
+  chunks it embedded. Under a re-index's write targets, `OpenSearchVectorStore.stored_metadata`
+  counts an id only when every target holds it with the same metadata, so a resumed write still
+  fills the shadow index.
 - Python sink: `core.interfaces.sink.chunk_id(document_id, n)` (`<document>:<n>`) and
   `CHUNK_ID_KEY`. The vector sink ids entries with it, and the Bedrock `chunk_files` layout stores
   it in each chunk's sidecar, so `PassageCitationExtractor` gives a Bedrock passage the same

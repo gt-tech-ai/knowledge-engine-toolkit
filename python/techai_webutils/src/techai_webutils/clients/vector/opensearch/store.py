@@ -245,16 +245,27 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             await self._bulk(body)
 
     @override
-    async def delete_by_document(self, collection: str, document_id: str) -> None:
-        """Delete every entry of ``document_id`` in the scoped org."""
+    async def delete_by_document(
+        self, collection: str, document_id: str, keep: Sequence[str] = ()
+    ) -> None:
+        """Delete every entry of ``document_id`` in the scoped org, except the ids in ``keep``.
+
+        It runs on every index of the alias and every write target; ``keep`` is how a sink
+        drops a superseded version's extra chunks while keeping the ones it just wrote.
+        """
         org = require(self._org, "an org (use for_org)")
         indices = await self._all_indices(collection, org)
-        if indices:
-            await self._client.delete_by_query(
-                index=",".join(indices),
-                body=self._document_query(org, document_id),
-                params=self._routed(org) | {"conflicts": "proceed", "refresh": "true"},
-            )
+        if not indices:
+            return
+        query = self._document_query(org, document_id)
+        if keep:
+            clause = cast("dict[str, dict[str, object]]", query["query"])["bool"]
+            clause["must_not"] = [{"ids": {"values": [doc_id(org, i) for i in keep]}}]
+        await self._client.delete_by_query(
+            index=",".join(indices),
+            body=query,
+            params=self._routed(org) | {"conflicts": "proceed", "refresh": "true"},
+        )
 
     @override
     async def count_by_document(self, collection: str, document_id: str) -> int:
@@ -274,13 +285,35 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
     async def stored_metadata(
         self, collection: str, ids: Sequence[str]
     ) -> dict[str, dict[str, str]]:
-        """Return ``{id: metadata}`` for the ``ids`` the scoped org already stored."""
+        """Return ``{id: metadata}`` for the ``ids`` the scoped org stored where its writes go.
+
+        With write targets set (a re-index's live and shadow indices) an id counts only when
+        every target holds it with the same metadata, so a resumed write still fills the
+        shadow; otherwise the alias is read.
+        """
         org = require(self._org, "an org (use for_org)")
         alias = self._alias(collection, org)
-        if not ids or not await self._alias_exists(alias):
+        if not ids:
             return {}
+        targets = self._state.write_targets.get(alias)
+        if not targets:
+            if not await self._alias_exists(alias):
+                return {}
+            return await self._stored_in(alias, org, ids)
+        found = [await self._stored_in(index, org, ids) for index in targets]
+        first, rest = found[0], found[1:]
+        return {
+            entry: meta
+            for entry, meta in first.items()
+            if all(other.get(entry) == meta for other in rest)
+        }
+
+    async def _stored_in(
+        self, index: str, org: str, ids: Sequence[str]
+    ) -> dict[str, dict[str, str]]:
+        """Return ``{id: metadata}`` for the ``ids`` of ``org`` that ``index`` holds (a real-time read)."""
         response = await self._client.mget(
-            index=alias,
+            index=index,
             body={"ids": [doc_id(org, i) for i in ids]},
             params=self._routed(org),
         )
