@@ -4785,6 +4785,9 @@ postgres = [
 ray = [
     { name = "ray" },
 ]
+tokenizers = [
+    { name = "tokenizers" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -4842,9 +4845,10 @@ requires-dist = [
     { name = "spacy", marker = "extra == 'nlp'", specifier = ">=3.8" },
     { name = "structlog", specifier = ">=25.5.0" },
     { name = "tenacity", specifier = ">=9.1.4" },
+    { name = "tokenizers", marker = "extra == 'tokenizers'", specifier = ">=0.23.3" },
     { name = "uvicorn", specifier = ">=0.48.0" },
 ]
-provides-extras = ["ray", "postgres", "parsing", "langdetect", "opensearch", "nlp", "fasttext", "lingua", "layout"]
+provides-extras = ["ray", "postgres", "parsing", "langdetect", "opensearch", "nlp", "fasttext", "lingua", "layout", "tokenizers"]
 
 [package.metadata.requires-dev]
 dev = [

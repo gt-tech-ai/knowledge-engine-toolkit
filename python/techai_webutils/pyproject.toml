@@ -106,6 +106,12 @@ lingua = ["lingua-language-detector>=2.2.0"]
 # against `docling-core`, the light schema package in the dev group.
 layout = ["docling>=2.147.0", "docling-core>=2.106.0"]
 
+# Hugging Face `tokenizers` for the `huggingface` TokenCounter Kind (chunk sizes in the embedding
+# model's own tokens). Optional: only a deployable that counts with a model's `tokenizer.json`
+# installs `techai-webutils[tokenizers]`; `clients/tokenizer` imports it lazily in that Kind. The
+# tokenizer file is the deployable's; the engine downloads nothing.
+tokenizers = ["tokenizers>=0.23.3"]
+
 [project.license]
 text = "MIT"
 
@@ -317,6 +323,7 @@ modules = [
     "techai_webutils.clients.chunking",
     "techai_webutils.clients.dataset",
     "techai_webutils.clients.decorators",
+    "techai_webutils.clients.distinct_counter",
     "techai_webutils.clients.email",
     "techai_webutils.clients.embedding",
     "techai_webutils.clients.facts",
@@ -345,6 +352,7 @@ modules = [
     "techai_webutils.clients.start_budget",
     "techai_webutils.clients.storage",
     "techai_webutils.clients.token_ledger",
+    "techai_webutils.clients.tokenizer",
     "techai_webutils.clients.vector",
     "techai_webutils.clients.vector_kb",
 ]

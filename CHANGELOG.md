@@ -300,6 +300,13 @@ Python: `techai-webutils` 0.9.3.
   `NearDuplicate`) and `clients.near_duplicate` (`NearDuplicateKind` `noop` / `minhash`,
   `NearDuplicateConfig`, `near_duplicate_detector_from_config(config, cache=)`): MinHash over word
   shingles with LSH band buckets in a `Cache`, each candidate verified on the whole signature.
+- Token counting (Python): `core.interfaces.token_counter` (`TokenCounter`) and `clients.tokenizer`
+  (`TokenCounterKind` `approx` / `huggingface`, `TokenCounterConfig`, `token_counter_from_config`;
+  the `tokenizers` extra), the embedding model's count the sentence chunker sizes chunks by.
+- Distinct counting (Python): `core.interfaces.distinct_counter` (`DistinctCounter`) and
+  `clients.distinct_counter` (`DistinctCounterKind` `noop` / `redis`, `DistinctCounterConfig`,
+  `distinct_counter_from_config(config, redis=, metrics=)`): a Redis HyperLogLog per key with a TTL,
+  zeros (and `distinct_counter_errors_total`) when Redis is down.
 - The sentence chunker (Python): `ChunkerKind.sentence` (`SentenceChunker`, `split_blocks`,
   `Block`, `BlockKind`); `ChunkerConfig.max_tokens` / `overlap_tokens` / `window_chars`;
   `chunker_from_config(..., splitter=, tokenizer=)`; `StructuredChunk` and `StructuredChunker`

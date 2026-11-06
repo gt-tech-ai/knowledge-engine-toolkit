@@ -23,6 +23,7 @@ Service Interfaces:
     SentenceSplitter: Split text into sentence spans that tile it (TextSpan), in process.
     LanguageIdentifier: Identify a text's language (LanguageGuess), in process.
     NearDuplicateDetector: Place a document in its near-duplicate cluster (NearDuplicate).
+    TokenCounter: Count a text's tokens as an embedding model's tokenizer does, in process.
     QueryRewriter: Transform user queries for better retrieval.
     IntentClassifier: Classify query intent (search, summarize, compare, etc.).
     CitationExtractor: Extract source citations from LLM responses.
@@ -38,6 +39,7 @@ Data Access Interfaces:
 Foundation Interfaces:
     Cache: Async key-value cache (Redis, in-memory, null).
     CacheInvalidator: Cache invalidation (prefix, all).
+    DistinctCounter: Count the distinct members observed per key (advisory).
     ByteCache: Sync raw-byte cache for infrastructure wrappers.
     Logger: Structured, leveled logging.
     MetricsProvider: Counter, histogram, gauge metric recording.
@@ -109,6 +111,7 @@ from techai_webutils.core.interfaces.citation_scorer import CitationScorer, Clai
 from techai_webutils.core.interfaces.config_loader import ConfigLoader
 from techai_webutils.core.interfaces.crud_service import CrudService, ServiceHooks
 from techai_webutils.core.interfaces.dedup import Deduplicator
+from techai_webutils.core.interfaces.distinct_counter import DistinctCounter
 from techai_webutils.core.interfaces.document import ChunkingStrategy, DocumentParser
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider
 from techai_webutils.core.interfaces.hedger import Hedger
@@ -187,6 +190,7 @@ from techai_webutils.core.interfaces.sink import (
 from techai_webutils.core.interfaces.start_budget import Slot, StartBudget
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
 from techai_webutils.core.interfaces.store import Store
+from techai_webutils.core.interfaces.token_counter import TokenCounter
 from techai_webutils.core.interfaces.tracer import TracerProvider, TracerSpan
 from techai_webutils.core.interfaces.vector_store import VectorStore
 from techai_webutils.core.interfaces.workflow import AsyncWorkflow, Workflow
@@ -224,6 +228,7 @@ __all__ = [
     "ContextDocument",
     "CrudService",
     "Deduplicator",
+    "DistinctCounter",
     "DocumentParser",
     "EmbeddingProvider",
     "Entity",
@@ -292,6 +297,7 @@ __all__ = [
     "TaskResult",
     "TextBlock",
     "TextSpan",
+    "TokenCounter",
     "TracerProvider",
     "TracerSpan",
     "Transaction",

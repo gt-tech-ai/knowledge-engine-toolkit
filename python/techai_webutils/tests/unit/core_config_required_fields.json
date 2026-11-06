@@ -5,6 +5,7 @@
   "techai_webutils.clients.chunking.context.builder.ContextualizerConfig": {},
   "techai_webutils.clients.chunking.factory.ChunkerConfig": {},
   "techai_webutils.clients.dataset.builder.DatasetConfig": {},
+  "techai_webutils.clients.distinct_counter.builder.DistinctCounterConfig": {},
   "techai_webutils.clients.email.builder.EmailConfig": {},
   "techai_webutils.clients.embedding.builder.EmbeddingConfig": {},
   "techai_webutils.clients.facts.builder.FactPublisherConfig": {},
@@ -27,10 +28,10 @@
   "techai_webutils.clients.metadata.factory.MetadataConfig": {},
   "techai_webutils.clients.model_gateway.builder.GatewayConfig": {},
   "techai_webutils.clients.model_gateway.builder.RoutedConfig": {},
-  "techai_webutils.clients.near_duplicate.builder.NearDuplicateConfig": {},
   "techai_webutils.clients.model_gateway.routed.planner.overlord.OverlordPlannerConfig": {
     "target": "localhost:50051"
   },
+  "techai_webutils.clients.near_duplicate.builder.NearDuplicateConfig": {},
   "techai_webutils.clients.nlp.builder.AnnotatorConfig": {},
   "techai_webutils.clients.parsing.factory.ParserConfig": {},
   "techai_webutils.clients.prometheus.builder.PrometheusConfig": {},
@@ -63,6 +64,7 @@
     "region": "us-east-1"
   },
   "techai_webutils.clients.token_ledger.builder.TokenLedgerConfig": {},
+  "techai_webutils.clients.tokenizer.builder.TokenCounterConfig": {},
   "techai_webutils.clients.vector.builder.VectorStoreConfig": {},
   "techai_webutils.clients.vector.opensearch.config.OpenSearchConfig": {},
   "techai_webutils.clients.vector_kb.builder.KnowledgeBaseConfig": {},

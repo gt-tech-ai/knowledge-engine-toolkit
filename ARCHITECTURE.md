@@ -975,6 +975,19 @@ that needs them, never through the NLP service.
   midpoint is the highest not above `threshold`; each candidate is verified on the whole signature
   (the fraction of agreeing positions, the Jaccard estimate). The cache has no compare-and-set, so
   two concurrent near-copies may both start a cluster.
+- **`TokenCounter.count(text) -> int`** (`core.interfaces.token_counter`): a text's tokens as an
+  embedding model counts them, in process and subadditive, so the sentence chunker's `tokenizer`
+  can be `counter.count`. `clients.tokenizer` kinds: `approx` (the default, no model file)
+  counts `ceil(len(text) / chars_per_token)`, 4 by default (the `fixed` chunker's 2,048 characters
+  to 512 tokens); `huggingface` (the `tokenizers` extra) loads the model's `tokenizer.json` from
+  `path` and counts its ids without special tokens. The deployable ships the file.
+- **`DistinctCounter.observe(keys, member) -> list[int]`** (`core.interfaces.distinct_counter`):
+  records `member` under each key and returns each key's distinct count, so a redelivery counts
+  once (e.g. the documents of an org that carried a block of text). The counts are advisory: a
+  backend that cannot reach its store returns zeros and never raises. `clients.distinct_counter`
+  kinds: `noop` (the default) counts nothing; `redis` keeps a HyperLogLog per key (`PFADD` +
+  `EXPIRE ttl_seconds` + `PFCOUNT` in one pipeline; about 0.8% error, at most 12 KB a key), on the
+  injected client or one it opens, counting absorbed errors in `distinct_counter_errors_total{op}`.
 
 ## Sentence chunks and chunk context
 
