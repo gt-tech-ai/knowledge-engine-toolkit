@@ -15,6 +15,17 @@ Python: `techai-webutils` 0.9.4. The Go module is unchanged.
 - `PlanRequest.team_id` / `PlanRequest.user_id`: the team and end user a planned call is charged
   to. The `overlord` planner copies them from the `RouteContext`, so a remote planner can
   attribute its routing decisions below the tenant. Both default to empty.
+- `PricedCandidateRanker` (`clients/model_gateway/routed/ranker`): a `CandidateRanker` with
+  `rank_priced(ctx, route, candidates, route_input, prices)`, which costs from the price table
+  passed with the call. `candidate_ranker_from_config` returns one for every kind
+  (`static_order` ignores the table), so a caller whose prices arrive with each request builds
+  one ranker at boot instead of one per request.
+
+### Changed
+
+- `candidate_ranker_from_config` builds a `cost_aware` ranker without a price table; such a
+  ranker ranks only through `rank_priced`, and its `rank` raises `INVALID_INPUT`. A routed
+  gateway whose ranker is `cost_aware` still fails at boot without `prices`.
 
 ## [0.0.48] - 2026-11-06
 

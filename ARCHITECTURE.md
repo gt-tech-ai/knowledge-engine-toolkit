@@ -715,7 +715,9 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
   classifier `stub` /
   `embedding` (exemplars embedded once at the gateway's `__aenter__`; an embedder outage at
   request time degrades to the step's route), ranker `static_order` / `cost_aware` (objective,
-  hard caps that drop, quality floor, budget bias from the injected `TokenLedger`), planner
+  hard caps that drop, quality floor, budget bias from the injected `TokenLedger`; every
+  ranker is a `PricedCandidateRanker`, whose `rank_priced` costs from a table passed per call, so
+  a remote planner whose prices arrive with each request builds one ranker at boot), planner
   `local` / `overlord` (a remote `RoutingPlan` through the product's injected `RouteTransport`;
   the `PlanRequest` carries the context's team and user for attribution; with the service token, a deadline, one retry on `UNAVAILABLE` and a breaker; a timeout, an
   error, an open breaker or a plan naming an unoffered model fails open to `local`, counted as
