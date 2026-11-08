@@ -10,6 +10,14 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Python `clients.vector.opensearch.index_probe`: `probe_index(clients, org_id, current,
+  previous)` checks that an org's new index serves what its previous one did, before a
+  reindex or sink flip is trusted. From seeded samples of the org's chunks it returns an
+  `IndexProbe`: known-answer recall (a chunk's own text finds its document in the new index's
+  top k), overlap (the share of the previous index's top-k documents the new index also
+  returns) and self-recall (a new-index chunk's own vector finds its document). Every domain
+  is searched and the hits merged by score; an org with no chunks scores 1.0 with zero
+  samples. `ProbeSettings` sets the sample size, depth, query length and seed.
 - Python `clients.token_source`: the `TokenSource` interface (`token()`, a bearer token that is
   not about to expire) and `new_token_source_from_config` with two kinds: `static` (the default,
   a configured token, no I/O) and `oauth` (posts the configured grant as a form to a token
