@@ -6,6 +6,16 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.49] - 2026-11-08
+
+Python: `techai-webutils` 0.9.4. The Go module is unchanged.
+
+### Added
+
+- `PlanRequest.team_id` / `PlanRequest.user_id`: the team and end user a planned call is charged
+  to. The `overlord` planner copies them from the `RouteContext`, so a remote planner can
+  attribute its routing decisions below the tenant. Both default to empty.
+
 ## [0.0.48] - 2026-11-06
 
 Python: `techai-webutils` 0.9.3.
