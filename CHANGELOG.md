@@ -10,6 +10,18 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Python `foundation.logger.log_context(**fields)`: a context manager that binds correlation
+  fields (a document's ids, its stage) to every line the structlog Logger kind writes inside the
+  block, by any caller, beside the `trace_id`/`span_id` it already adds; the fields are context
+  variables, so concurrent asyncio tasks keep their own and nothing leaks past the block.
+- Python `foundation.logger.SampledLogger(inner, rate)`: a Logger decorator that keeps
+  `rate` of the `debug` and `info` lines and every `warning`, `error` and `exception` line, so
+  a log volume budget never hides a failure; rate 1.0 is a pass-through and `bind` keeps the
+  rate. A rate outside 0.0-1.0 is `InvalidInputError`.
+- Python `foundation.metrics.render_metrics(accept)`: renders the default registry as
+  OpenMetrics when the scraper's `Accept` asks for it (Prometheus does), else as text.
+  `controllers.health`'s `/metrics` uses it, so the histograms' trace exemplars, dropped by the
+  text format, now reach Prometheus.
 - Python `clients.vector.opensearch.index_probe`: `probe_index(clients, org_id, current,
   previous)` checks that an org's new index serves what its previous one did, before a
   reindex or sink flip is trusted. From seeded samples of the org's chunks it returns an

@@ -8,7 +8,8 @@ so it serves this small aiohttp app on its own port beside the gRPC one:
   (flip it before stopping the gRPC server, so traffic drains away first), 503 with the failed
   dependencies' names while ``readiness_probe()`` returns any (e.g. models still loading), and
   200 otherwise;
-- ``/metrics`` is the default Prometheus registry in the text exposition format.
+- ``/metrics`` is the default Prometheus registry: OpenMetrics, with the histograms' trace
+  exemplars, when the scraper asks for it (Prometheus does), else the text exposition format.
 
 Every request runs through the aiohttp observability middleware under the service's name.
 ``controllers`` does not import this module, so aiohttp (installed with ``aiobotocore``) loads
@@ -21,8 +22,8 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from aiohttp import web
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+from techai_webutils.foundation.metrics.exposition import render_metrics
 from techai_webutils.foundation.middleware.http_observability import (
     aiohttp_observability_middleware,
 )
@@ -71,15 +72,21 @@ class HealthRoutes:
         return web.Response(text="ok")
 
     @staticmethod
-    async def metrics(_request: web.Request) -> web.Response:
+    async def metrics(request: web.Request) -> web.Response:
         """Prometheus metrics, rendered off the event loop.
 
+        Args:
+            request: The scrape; its ``Accept`` header picks the format.
+
         Returns:
-            The default registry in the text exposition format.
+            The default registry in OpenMetrics (with trace exemplars) when the scraper asks
+            for it, else in the text exposition format.
 
         """
-        body = await asyncio.to_thread(generate_latest)
-        return web.Response(body=body, headers={"Content-Type": CONTENT_TYPE_LATEST})
+        body, content_type = await asyncio.to_thread(
+            render_metrics, request.headers.get("Accept", "")
+        )
+        return web.Response(body=body, headers={"Content-Type": content_type})
 
 
 def build_health_app(

@@ -23,7 +23,8 @@ async def test_readyz_follows_the_drain_flag_and_the_dependency_probe() -> None:
     What it tests:
       - ``/readyz`` is 200 when ready, 503 ``{"failed": ["models"]}`` while the probe reports
         ``models``, and 503 ``{"failed": ["draining"]}`` once the drain flag flips; ``/healthz``
-        is 200 throughout; ``/metrics`` serves the Prometheus text format.
+        is 200 throughout; ``/metrics`` serves the Prometheus text format, and OpenMetrics
+        to a scraper whose ``Accept`` asks for it (the format that carries exemplars).
     """
     ready = MagicMock(return_value=True)
     probe = AsyncMock(return_value=[])
@@ -38,6 +39,9 @@ async def test_readyz_follows_the_drain_flag_and_the_dependency_probe() -> None:
         draining_body = await draining.json()
         live = (await client.get("/healthz")).status
         metrics = await client.get("/metrics")
+        openmetrics = await client.get(
+            "/metrics", headers={"Accept": "application/openmetrics-text;version=1.0.0"}
+        )
 
     assert ready_status == 200
     assert (loading.status, loading_body) == (503, {"failed": ["models"]})
@@ -45,6 +49,7 @@ async def test_readyz_follows_the_drain_flag_and_the_dependency_probe() -> None:
     assert live == 200
     assert metrics.status == 200
     assert metrics.headers["Content-Type"].startswith("text/plain")
+    assert openmetrics.headers["Content-Type"].startswith("application/openmetrics-text")
 
 
 @pytest.mark.asyncio
