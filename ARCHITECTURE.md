@@ -1138,7 +1138,8 @@ The AI call-path tiers are Python-only: the model call path runs in the Python r
 service, so no Go consumer exists yet. Each is recorded here until a Go consumer needs it:
 
 - **Evals:** `core/interfaces/{dataset,evaluator,grader}.py`, `clients/dataset`
-  (`stub`, `jsonl`, a supplied `aiops`), `clients/grader/stub` and `services/evaluator.py`
+  (`stub`, `jsonl`, a supplied `aiops`), `clients/grader` (`stub`; `parse`, parse quality
+  against golden blocks; `ranking`, recall@k, nDCG@k and reciprocal rank) and `services/evaluator.py`
   (`ThresholdEvaluator`). Go's `foundation/dataset` (the YAML data loader) is unrelated.
 - **Safety:** `core/interfaces/safety.py` (`SafetyCheck`, `SafetyResult`, `blocked_error` →
   `FORBIDDEN`) and `clients/safety` (`noop`, `regex`, and the lazily loaded `comprehend` and

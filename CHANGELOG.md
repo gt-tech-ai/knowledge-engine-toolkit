@@ -10,6 +10,13 @@ Python: `techai-webutils` 0.9.3.
 
 ### Added
 
+- Python `clients.grader` kind `ranking` (`GraderConfig(kind="ranking", metric, k)`): scores a
+  retrieval ranking against a case's relevance judgments (`expected["relevant"]`, a JSON list of
+  ids) as `recall@k`, `ndcg@k` (binary gain, the ideal ranking `min(k, relevant)` deep) or `rr@k`
+  (its run mean is MRR@k). A repeated id counts at its first rank; a case with no relevant
+  document scores 1 only when nothing is retrieved. An unknown metric, a cutoff below 1 or
+  unreadable judgments is `INVALID_INPUT`. `EvalOutput` gains `retrieved` (the ranked ids, best
+  first; default empty).
 - Python `foundation.logger.log_context(**fields)`: a context manager that binds correlation
   fields (a document's ids, its stage) to every line the structlog Logger kind writes inside the
   block, by any caller, beside the `trace_id`/`span_id` it already adds; the fields are context
