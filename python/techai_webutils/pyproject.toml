@@ -1,6 +1,6 @@
 [project]
 name = "techai-webutils"
-version = "0.9.3"
+version = "0.9.4"
 # The published version, bumped by hand in the release PR whenever the package changes. It must
 # be greater than every version already on PyPI: 0.1.0 through 0.3.3 belong to the package's
 # earlier release line, so this line continues from 0.4.0.
@@ -13,6 +13,9 @@ authors = [
 requires-python = ">= 3.12"
 dependencies = [
     "aiobotocore>=3.5.0",
+    # aiohttp: the health + metrics HTTP app a gRPC server serves beside its port
+    # (controllers/health); also aiobotocore's transport.
+    "aiohttp>=3.14.3",
     # aiosmtplib: async SMTP send for the SMTP email backend (clients/email/smtp); lazy-imported by
     # new_email_from_config only on the SMTP path. Peer of aiobotocore (the SES backend's transport).
     "aiosmtplib>=3.0.0",

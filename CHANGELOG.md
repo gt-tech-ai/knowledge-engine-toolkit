@@ -6,6 +6,52 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.49] - 2026-11-08
+
+Python: `techai-webutils` 0.9.4. The Go module is unchanged.
+
+### Added
+
+- `PlanRequest.team_id` / `PlanRequest.user_id`: the team and end user a planned call is charged
+  to. The `overlord` planner copies them from the `RouteContext`, so a remote planner can
+  attribute its routing decisions below the tenant. Both default to empty.
+- `PricedCandidateRanker` (`clients/model_gateway/routed/ranker`): a `CandidateRanker` with
+  `rank_priced(ctx, route, candidates, route_input, prices)`, which costs from the price table
+  passed with the call. `candidate_ranker_from_config` returns one for every kind
+  (`static_order` ignores the table), so a caller whose prices arrive with each request builds
+  one ranker at boot instead of one per request.
+
+- `clients/model_gateway/routed/settings`: typed, frozen pydantic models of the routed gateway's
+  config. `CatalogModelSetting` (with `CapabilitiesSetting`, `CatalogEndpointSetting` and the
+  all-optional `EndpointLlmSetting`), `RouteSetting` and `RoutedStagesSetting` refuse unknown
+  keys and out-of-range values, so a settings load fails naming the path.
+  `RoutedStagesSetting.routed_config(catalog, routes)` assembles the `RoutedConfig`;
+  `CatalogModelSetting.with_llm_defaults` fills each endpoint's unset `llm` fields from the
+  consumer's LLM defaults, and `served_models` lists the endpoints' provider model ids.
+
+- `controllers/grpc/serve.serve_until_signalled` (with `GrpcServing`): serves a `grpc.aio`
+  server beside the `controllers/health` app (`/healthz`, `/readyz` with an injected dependency
+  probe, `/metrics`; `build_health_app`, `start_health_server`) and, on SIGINT or SIGTERM, flips
+  readiness to 503 before draining the server within its grace.
+- `foundation/config/settings.TelemetrySettings`: the OTLP endpoint and trace sample rate, read
+  under their standard OTel names whatever the settings class's prefix;
+  `foundation/observability.start_observability(service, level=, telemetry=, redact_pii=)`
+  configures logging and the trace export from it.
+- `foundation/config/bridge.export_yaml_sections(loader, sections, env_prefix=)`: exports the
+  structured YAML sections a settings field holds whole (lists, nested maps) as JSON
+  `<PREFIX>_<FIELD>` env defaults; an env var already set wins.
+- `clients/decorators/usage_tap.UsageTapProvider` (`tap_usage(inner, record)`): an `LLMProvider`
+  decorator that hands each call's terminal `StreamUsage` to an injected callback (a stream's
+  once it is exhausted; `stream` re-yields only the text), named by the route decision's catalog
+  id when a gateway served the call.
+- `aiohttp` is a declared dependency (it was already installed through `aiobotocore`).
+
+### Changed
+
+- `candidate_ranker_from_config` builds a `cost_aware` ranker without a price table; such a
+  ranker ranks only through `rank_priced`, and its `rank` raises `INVALID_INPUT`. A routed
+  gateway whose ranker is `cost_aware` still fails at boot without `prices`.
+
 ## [0.0.48] - 2026-11-06
 
 Python: `techai-webutils` 0.9.3.

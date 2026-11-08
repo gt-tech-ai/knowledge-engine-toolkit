@@ -355,3 +355,37 @@ class TestHTTPRequestLogging:
         log = self._last_http_log(out.getvalue())
         assert log.get("status") == 404
         assert log.get("level") == "warning"
+
+
+def test_start_observability_passes_the_telemetry_settings_through() -> None:
+    """Test that the bootstrap gets the endpoint and the parsed sample rate from settings.
+
+    **Why this test is important:**
+      - The endpoint and rate are deployment config; an entrypoint that read them from the
+        environment itself would bypass the config layer.
+
+    **What it tests:**
+      - ``setup_observability`` receives the service name, the upper-cased level, the
+        endpoint, the rate parsed to a float and the redaction flag
+    """
+    from unittest.mock import patch
+
+    from techai_webutils.foundation import observability
+    from techai_webutils.foundation.config.settings import TelemetrySettings
+
+    telemetry = TelemetrySettings.model_validate({
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "collector:4317",
+        "TRACE_SAMPLE_RATE": "0.5",
+    })
+    with patch.object(observability, "setup_observability") as setup:
+        observability.start_observability(
+            "probe", level="debug", telemetry=telemetry, redact_pii=True
+        )
+
+    setup.assert_called_once_with(
+        "probe",
+        level="DEBUG",
+        otlp_endpoint="collector:4317",
+        trace_sample_rate=0.5,
+        redact_pii=True,
+    )

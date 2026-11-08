@@ -1,7 +1,7 @@
 """The ``overlord`` route planner: ask a remote planner, fail open to ``local``.
 
-Each plan sends a ``PlanRequest`` (the verified tenant and workspace, step, query, the filtered
-candidates, the requirements and the policy) through the injected ``RouteTransport`` with the
+Each plan sends a ``PlanRequest`` (the verified tenant and workspace, the team and user the call is
+charged to, step, query, the filtered candidates, the requirements and the policy) through the injected ``RouteTransport`` with the
 caller's service token, under ``timeout_ms``, one retry on ``UNAVAILABLE`` and a circuit breaker.
 The returned ``RoutingPlan``'s model and fallbacks are mapped onto the offered endpoints in order.
 
@@ -161,6 +161,8 @@ class OverlordPlanner:
             candidates=route_input.candidates,
             requirements=route_input.requirements,
             policy=route_input.policy,
+            team_id=ctx.team_id,
+            user_id=ctx.user_id,
         )
         try:
             remote = await self._remote(request)

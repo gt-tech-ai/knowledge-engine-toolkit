@@ -255,3 +255,35 @@ def test_planner_kind_overlord_requires_target(
 
     assert no_target.value.code is ErrorCode.INVALID_INPUT
     assert no_transport.value.code is ErrorCode.INVALID_INPUT
+
+
+@pytest.mark.asyncio
+async def test_overlord_planner_sends_the_team_and_user(
+    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+) -> None:
+    """Test that the plan request carries the routing context's team and user.
+
+    **Why this test is important:**
+      - The remote planner records each routing decision for chargeback and analysis;
+        without the team and user it can attribute a decision only to the tenant.
+
+    **What it tests:**
+      - a context with a team and a user → the transport's ``PlanRequest`` carries both
+      - a context without them → the request's team and user are empty
+    """
+    plan = RoutingPlan(task_class="lookup", model_id="anthropic/haiku")
+    transport = _transport(plan)
+    planner, catalog = _planner(catalog_raw, routes_raw, transport)
+    attributed = RouteContext(
+        tenant_id="org-1",
+        workspace_id="ws-1",
+        step="generate",
+        team_id="team-1",
+        user_id="user-1",
+    )
+
+    _ = await planner.plan(attributed, _input(catalog))
+    _ = await planner.plan(_CTX, _input(catalog))
+
+    sent = [call.args[0] for call in transport.route.await_args_list]
+    assert [(r.team_id, r.user_id) for r in sent] == [("team-1", "user-1"), ("", "")]
