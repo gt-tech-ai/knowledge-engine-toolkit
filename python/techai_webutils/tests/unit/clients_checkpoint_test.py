@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import threading
 from datetime import UTC, datetime
 from typing import cast
 from unittest.mock import AsyncMock, call
@@ -240,6 +241,55 @@ class TestS3DbWrite:
         objects.list_objects.assert_awaited_with("ckpt", f"{_BASE}/part-")
         assert await store.get_part(_KEY, 7) == b"page"
         assert await store.get_part(_KEY, 8) is None
+
+
+class TestS3DbEventLoop:
+    """The s3db store keeps gzip work off the event loop."""
+
+    @pytest.mark.asyncio
+    async def test_gzip_never_runs_on_the_event_loop_thread(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Every compress and decompress of an artifact or part runs on a worker thread.
+
+        **Why this test is important:**
+          - gzip takes hundreds of milliseconds on a multi-megabyte artifact. On the event loop
+            that stalls every other task in the process, including message-lease heartbeats and
+            health checks, so a large document could cost another document its lease.
+
+        **What it tests:**
+          - ``put`` (segments and envelope), ``put_part``, ``get`` (envelope and segments) and
+            ``get_part`` all gzip away from the thread running the loop, and the payloads still
+            round-trip.
+        """
+        loop_thread = threading.get_ident()
+        threads: list[int] = []
+        real_compress, real_decompress = gzip.compress, gzip.decompress
+
+        def compress(data: bytes) -> bytes:
+            threads.append(threading.get_ident())
+            return real_compress(data)
+
+        def decompress(data: bytes) -> bytes:
+            threads.append(threading.get_ident())
+            return real_decompress(data)
+
+        monkeypatch.setattr(gzip, "compress", compress)
+        monkeypatch.setattr(gzip, "decompress", decompress)
+        objects, states = AsyncMock(spec=StorageClient), AsyncMock()
+        _serve(objects, {})
+        store = _store(objects, states, max_bytes=4)
+
+        await store.put(StageArtifact(_KEY, b"0123456789"))
+        await store.put_part(_KEY, 7, b"page")
+        _serve(objects, {c.args[1]: c.args[2] for c in objects.upload.await_args_list})
+        stored = await store.get(_KEY)
+
+        assert stored is not None
+        assert stored.payload == b"0123456789"
+        assert await store.get_part(_KEY, 7) == b"page"
+        assert threads
+        assert loop_thread not in threads
 
 
 class TestS3DbRead:

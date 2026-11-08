@@ -465,6 +465,8 @@ Python: `techai-webutils` 0.9.3.
 
 ### Fixed
 
+- Python `S3DbCheckpointStore` compresses and decompresses artifacts and parts on a worker thread
+  instead of the event loop, so a large artifact no longer stalls other tasks in the process.
 - Go connector: an `s3_inventory` report without the `ETag` or `Size` column is refused
   (`INVALID_INPUT`, naming the column). Without ETags every crawl read as changed and
   re-ingested the bucket; without sizes the oversized-object cap never fired.
