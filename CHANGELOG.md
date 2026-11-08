@@ -29,6 +29,23 @@ Python: `techai-webutils` 0.9.4. The Go module is unchanged.
   `CatalogModelSetting.with_llm_defaults` fills each endpoint's unset `llm` fields from the
   consumer's LLM defaults, and `served_models` lists the endpoints' provider model ids.
 
+- `controllers/grpc/serve.serve_until_signalled` (with `GrpcServing`): serves a `grpc.aio`
+  server beside the `controllers/health` app (`/healthz`, `/readyz` with an injected dependency
+  probe, `/metrics`; `build_health_app`, `start_health_server`) and, on SIGINT or SIGTERM, flips
+  readiness to 503 before draining the server within its grace.
+- `foundation/config/settings.TelemetrySettings`: the OTLP endpoint and trace sample rate, read
+  under their standard OTel names whatever the settings class's prefix;
+  `foundation/observability.start_observability(service, level=, telemetry=, redact_pii=)`
+  configures logging and the trace export from it.
+- `foundation/config/bridge.export_yaml_sections(loader, sections, env_prefix=)`: exports the
+  structured YAML sections a settings field holds whole (lists, nested maps) as JSON
+  `<PREFIX>_<FIELD>` env defaults; an env var already set wins.
+- `clients/decorators/usage_tap.UsageTapProvider` (`tap_usage(inner, record)`): an `LLMProvider`
+  decorator that hands each call's terminal `StreamUsage` to an injected callback (a stream's
+  once it is exhausted; `stream` re-yields only the text), named by the route decision's catalog
+  id when a gateway served the call.
+- `aiohttp` is a declared dependency (it was already installed through `aiobotocore`).
+
 ### Changed
 
 - `candidate_ranker_from_config` builds a `cost_aware` ranker without a price table; such a
