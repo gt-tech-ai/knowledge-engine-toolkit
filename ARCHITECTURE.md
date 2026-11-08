@@ -724,7 +724,10 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
   `routed_planner_fail_open_total{cause}`), decision sink `noop` / `analytics` (`route_decisions` facts). `ChainExecutor` runs the
   plan: bounded attempts, an `AsyncCircuitBreaker` per endpoint, failover on transient errors
   only, streams before their first item only. A `routed.shadow` block plans alongside the live
-  call in bounded background tasks and is never served. `clients/embedding/memo.MemoizedEmbedding`
+  call in bounded background tasks and is never served. `clients/model_gateway/routed/settings` holds typed, frozen pydantic models of the
+  catalog (`CatalogModelSetting`), routes (`RouteSetting`) and stage fields (`RoutedStagesSetting`,
+  whose `routed_config` assembles a `RoutedConfig`), so a consumer's settings load refuses a bad
+  entry naming its path. `clients/embedding/memo.MemoizedEmbedding`
   embeds a text once per request, so the classifier and the semantic cache share one call.
 
 ## Testing

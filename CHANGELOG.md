@@ -21,6 +21,14 @@ Python: `techai-webutils` 0.9.4. The Go module is unchanged.
   (`static_order` ignores the table), so a caller whose prices arrive with each request builds
   one ranker at boot instead of one per request.
 
+- `clients/model_gateway/routed/settings`: typed, frozen pydantic models of the routed gateway's
+  config. `CatalogModelSetting` (with `CapabilitiesSetting`, `CatalogEndpointSetting` and the
+  all-optional `EndpointLlmSetting`), `RouteSetting` and `RoutedStagesSetting` refuse unknown
+  keys and out-of-range values, so a settings load fails naming the path.
+  `RoutedStagesSetting.routed_config(catalog, routes)` assembles the `RoutedConfig`;
+  `CatalogModelSetting.with_llm_defaults` fills each endpoint's unset `llm` fields from the
+  consumer's LLM defaults, and `served_models` lists the endpoints' provider model ids.
+
 ### Changed
 
 - `candidate_ranker_from_config` builds a `cost_aware` ranker without a price table; such a
