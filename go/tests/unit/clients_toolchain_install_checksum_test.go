@@ -208,7 +208,7 @@ func TestClientsToolchainInstall_VerifiesSHA256BeforePlacingBinary(t *testing.T)
 			require.NoError(t, inst.Install(context.Background(), "/root", tool))
 
 			placed := filepath.Join(binDir, "pinned")
-			got, err := os.ReadFile(placed)
+			got, err := os.ReadFile(filepath.Clean(placed))
 			require.NoError(t, err)
 			assert.Equal(t, checksumPayload(), got)
 

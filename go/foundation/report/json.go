@@ -99,8 +99,12 @@ func (j *jsonReport) OnGateComplete(
 		})
 	}
 
-	enc := json.NewEncoder(j.w)
-	enc.SetIndent("", "  ")
+	// The report holds only strings and integers, so marshalling cannot fail; the
+	// writer's own error has nowhere to go from a callback and is dropped.
+	doc, err := json.MarshalIndent(g, "", "  ")
+	if err != nil {
+		return
+	}
 
-	_ = enc.Encode(g)
+	_, _ = j.w.Write(append(doc, '\n'))
 }

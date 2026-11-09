@@ -161,8 +161,7 @@ func (i tierInterceptor) WrapStreamingHandler(
 // produced (or rewrapped) as a sanitized *connect.Error of its code; the real error is
 // captured for the request log (core/errors.Capture).
 func connectError(ctx context.Context, err, handlerErr error) error {
-	if err == nil ||
-		err == handlerErr { //nolint:errorlint // identity: the handler's own error
+	if err == nil || apperr.Identical(err, handlerErr) {
 		return err
 	}
 

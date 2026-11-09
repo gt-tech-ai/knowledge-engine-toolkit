@@ -71,11 +71,14 @@ func expectCreate(ctrl *gomock.Controller, session *mocks.MockCQLSession, table 
 // expectStatus expects one read of table's status from system_schema_mcs.tables
 // (any number of reads when repeat is set), answering status.
 func expectStatus(
+	tb testing.TB,
 	ctrl *gomock.Controller,
 	session *mocks.MockCQLSession,
 	table, status string,
 	repeat bool,
 ) *gomock.Call {
+	tb.Helper()
+
 	query := mocks.NewMockCQLQuery(ctrl)
 	iter := mocks.NewMockCQLIter(ctrl)
 	call := session.EXPECT().
@@ -91,7 +94,7 @@ func expectStatus(
 		query.EXPECT().Idempotent(true).Return(query),
 		query.EXPECT().Iter().Return(iter),
 		iter.EXPECT().Scan(gomock.Any()).DoAndReturn(func(dest ...any) bool {
-			*dest[0].(*string) = status
+			*asType[*string](tb, dest[0]) = status
 
 			return true
 		}),
@@ -155,10 +158,10 @@ func TestCassandraStore_EnsureSchemaWaitsForKeyspacesActive(t *testing.T) {
 	}
 
 	gomock.InOrder(
-		expectStatus(ctrl, session, "genai_calls_day", "CREATING", false),
-		expectStatus(ctrl, session, "genai_calls_day", "ACTIVE", false),
+		expectStatus(t, ctrl, session, "genai_calls_day", "CREATING", false),
+		expectStatus(t, ctrl, session, "genai_calls_day", "ACTIVE", false),
 	)
-	expectStatus(ctrl, session, "genai_calls_hour", "ACTIVE", false)
+	expectStatus(t, ctrl, session, "genai_calls_hour", "ACTIVE", false)
 
 	require.NoError(t, store.Start(context.Background()))
 }
@@ -205,7 +208,7 @@ func TestNewFromConfig_EnsureSchemaAwaitsActiveOnKeyspaces(t *testing.T) {
 
 	for _, table := range schemaTables() {
 		expectCreate(ctrl, keyspaces, table)
-		expectStatus(ctrl, keyspaces, table, "ACTIVE", false)
+		expectStatus(t, ctrl, keyspaces, table, "ACTIVE", false)
 	}
 
 	require.NoError(t, build(keyspaces, cql.KindKeyspaces, true))
@@ -241,7 +244,7 @@ func TestCassandraStore_EnsureSchemaTimesOutUnavailable(t *testing.T) {
 		expectCreate(ctrl, session, table)
 	}
 
-	expectStatus(ctrl, session, "genai_calls_day", "CREATING", true)
+	expectStatus(t, ctrl, session, "genai_calls_day", "CREATING", true)
 
 	err := store.Start(context.Background())
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))

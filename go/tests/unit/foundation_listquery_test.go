@@ -285,7 +285,7 @@ func TestParse_ScalarTypes(t *testing.T) {
 	f, err := listquery.Parse(m, `{"$gt": {"created_at": "2026-08-24T12:00:00Z"}}`)
 	require.NoError(t, err)
 
-	clause := f.(types.FilterClause)
+	clause := asType[types.FilterClause](t, f)
 	assert.Equal(t, types.OpGt, clause.Operator)
 
 	ts, ok := clause.Value.(time.Time)
@@ -300,12 +300,17 @@ func TestParse_ScalarTypes(t *testing.T) {
 	// Float.
 	f, err = listquery.Parse(m, `{"$gte": {"score": 0.75}}`)
 	require.NoError(t, err)
-	assert.InEpsilon(t, 0.75, f.(types.FilterClause).Value.(float64), 1e-9)
+	assert.InEpsilon(
+		t,
+		0.75,
+		asType[float64](t, asType[types.FilterClause](t, f).Value),
+		1e-9,
+	)
 
 	// Bool.
 	f, err = listquery.Parse(m, `{"$eq": {"active": true}}`)
 	require.NoError(t, err)
-	assert.Equal(t, true, f.(types.FilterClause).Value)
+	assert.Equal(t, true, asType[types.FilterClause](t, f).Value)
 
 	// ID (UUID compared as a string).
 	f, err = listquery.Parse(
@@ -313,5 +318,9 @@ func TestParse_ScalarTypes(t *testing.T) {
 		`{"$eq": {"owner_id": "1e965110-1fbf-440d-8ef3-ef64b1ce58ab"}}`,
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "1e965110-1fbf-440d-8ef3-ef64b1ce58ab", f.(types.FilterClause).Value)
+	assert.Equal(
+		t,
+		"1e965110-1fbf-440d-8ef3-ef64b1ce58ab",
+		asType[types.FilterClause](t, f).Value,
+	)
 }

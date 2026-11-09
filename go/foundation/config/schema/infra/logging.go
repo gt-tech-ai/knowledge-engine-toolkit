@@ -55,7 +55,7 @@ func (c LoggingConfig) Validate() error {
 }
 
 // GetKind converts the config kind string to a logger.Kind.
-func (c *LoggingConfig) GetKind() (logger.Kind, error) {
+func (c LoggingConfig) GetKind() (logger.Kind, error) {
 	switch strings.ToLower(c.Kind) {
 	case loggerKindZap:
 		return logger.KindZap, nil

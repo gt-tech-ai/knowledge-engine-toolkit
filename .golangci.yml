@@ -14,6 +14,10 @@ linters:
     - unconvert
     # Bug detection
     - errcheck
+    - errchkjson
+    - err113
+    - forcetypeassert
+    - recvcheck
     - bodyclose
     - noctx
     - errorlint
@@ -86,7 +90,14 @@ linters:
     - gomodguard_v2
     - importas
     - nolintlint
+    # Correctness set: net.JoinHostPort for host:port, canonical HTTP header spelling,
+    # and the Go-version modernisations.
+    - canonicalheader
+    - nosprintfhostport
+    - modernize
   settings:
+    staticcheck:
+      checks: [all]
     nolintlint:
       # A suppression names its linter and says why, so it can be reviewed and later
       # removed; a bare `//nolint` or an unexplained one is a finding.
@@ -436,25 +447,30 @@ linters:
       - legacy
       - std-error-handling
     rules:
-      # OSFS is the one adapter from the FS interface onto package os, and its contract
-      # is os's errors verbatim: a caller may test them with os.IsNotExist / os.IsExist,
-      # which do not unwrap, so a wrapped error would read as a different failure.
-      - path: ^go/foundation/fsys/fsys\.go$
-        linters:
-          - wrapcheck
       # The OpenTelemetry adapter starts a span and hands it to its caller, who ends it
       # (the interfaces.Tracer contract). spancheck checks End only within the starting
       # function and cannot follow that ownership transfer.
       - path: ^go/foundation/tracer/oteltracer/tracer\.go$
         linters:
           - spancheck
-      # Sentinel is the one sanctioned uncoded constructor: it exists to wrap stdlib
-      # errors.New for the callers (tests, io.EOF-style markers) that need an error
-      # with no code, so it is the one place that may call it.
-      - path: ^go/core/errors/stdlib\.go$
+      # These run an arbitrary program the caller names: a process supervisor, a command
+      # runner and a toolchain installer's executable bit. gosec cannot tell a
+      # caller-owned program from an injected one (G204), nor an installed binary from a
+      # secret file (G302), and a fixed name or a 0600 mode would defeat their purpose.
+      - path: ^go/(clients/process/exec/exec|foundation/system/runner)\.go$
         linters:
-          - forbidigo
-        text: no stdlib errors.New
+          - gosec
+        text: G204
+      - path: ^go/clients/toolchain/download\.go$
+        linters:
+          - gosec
+        text: G302
+      # The method names mirror the AWS SDK's SQS client interface, which this decorator
+      # implements: GetQueueUrl cannot be spelled GetQueueURL.
+      - path: ^go/clients/outbox/decorated\.go$
+        linters:
+          - staticcheck
+        text: ST1003
       # A struct tag is a single string literal that Go cannot wrap, so a field whose
       # tag pushes it past the column limit has no compliant spelling.
       - linters:
@@ -462,17 +478,14 @@ linters:
         source: '^\s*\w+\s+[\w.*\[\]]+\s+`(\w+:"[^"]*"\s*)+`$'
       # Test code is linted like production code except for the linters whose findings are
       # noise there: duplicated table-driven bodies (dupl), length and complexity of a
-      # test that walks a scenario (funlen, gocyclo), unchecked cleanup errors (errcheck),
-      # fixture credentials and file modes (gosec), and a literal repeated as an expected
+      # test that walks a scenario (funlen, gocyclo), and a literal repeated as an expected
       # value (goconst: a test's literal is its expected value; naming it hides the spec
       # from the assertion).
       - path: _test\.go
         linters:
           - dupl
-          - errcheck
           - funlen
           - gocyclo
-          - gosec
           - goconst
     paths:
       - .*\.pb\.go$

@@ -1,8 +1,8 @@
 package retry
 
 import (
-	"math"
-	"math/rand/v2"
+	"crypto/rand"
+	"math/big"
 	"time"
 )
 
@@ -33,13 +33,18 @@ func FullJitter(d time.Duration) time.Duration {
 	return time.Duration(upTo(int64(d)))
 }
 
-// upTo draws uniformly from [0, n] for n >= 0; at math.MaxInt64 the bound n+1
-// would overflow, so the full non-negative range is drawn directly.
+// upTo draws uniformly from [0, n] for n >= 0 using the operating system's entropy
+// source, so no weak PRNG sits behind the retry desynchronisation. The bound n+1 is
+// formed as a big integer, so it cannot overflow at math.MaxInt64. If the entropy
+// source fails, the full delay n is used: the wait stays within its bound and the retry
+// loses only its randomisation.
 func upTo(n int64) int64 {
-	if n == math.MaxInt64 {
-		return rand.Int64() //nolint:gosec // backoff desync, not security: a weak PRNG is fine.
+	bound := new(big.Int).Add(big.NewInt(n), big.NewInt(1))
+
+	v, err := rand.Int(rand.Reader, bound)
+	if err != nil {
+		return n
 	}
 
-	//nolint:gosec // backoff desync, not a security decision — a weak PRNG is fine.
-	return rand.Int64N(n + 1)
+	return v.Int64()
 }

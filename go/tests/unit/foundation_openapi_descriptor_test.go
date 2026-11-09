@@ -39,12 +39,12 @@ func TestMergeSwaggerFiles_OrderIndependent(t *testing.T) {
 	require.NoError(t, os.WriteFile(
 		a,
 		[]byte(`{"info":{"title":"a"},"paths":{"/a":{}}}`),
-		0o644,
+		0o600,
 	))
 	require.NoError(t, os.WriteFile(
 		b,
 		[]byte(`{"info":{"title":"b"},"paths":{"/b":{}}}`),
-		0o644,
+		0o600,
 	))
 
 	m1, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{a, b})

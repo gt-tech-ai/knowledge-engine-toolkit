@@ -59,7 +59,7 @@ func ConfigPath(getenv func(string) string) (string, error) {
 // and written atomically. A same-named stanza outside the block is CodeInvalidInput:
 // the AWS CLI would merge it over the managed one.
 func UpsertProfile(path, owner string, p Profile) error {
-	existing, err := os.ReadFile(path)
+	existing, err := os.ReadFile(filepath.Clean(path))
 	if err != nil && !os.IsNotExist(err) {
 		return apperr.Wrap(err, apperr.CodeInternal, "read aws config "+path)
 	}
@@ -223,16 +223,16 @@ func writeFileAtomic(path string, data []byte) error {
 
 	name := tmp.Name()
 
-	defer os.Remove(name)
+	defer func() { _ = os.Remove(name) }()
 
 	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 
 		return apperr.Wrap(err, apperr.CodeInternal, "chmod temp aws config")
 	}
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 
 		return apperr.Wrap(err, apperr.CodeInternal, "write temp aws config")
 	}

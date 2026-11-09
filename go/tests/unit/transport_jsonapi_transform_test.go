@@ -154,7 +154,7 @@ func TestTransformCollection(t *testing.T) {
 		require.True(t, ok)
 		assert.Len(t, data, 2)
 
-		first := data[0].(map[string]any)
+		first := asType[map[string]any](t, data[0])
 		assert.Equal(t, "users", first["type"])
 		assert.Equal(t, "1", first["id"])
 
@@ -271,7 +271,7 @@ func TestTransformError(t *testing.T) {
 		require.True(t, ok)
 		require.Len(t, errors, 1)
 
-		errObj := errors[0].(map[string]any)
+		errObj := asType[map[string]any](t, errors[0])
 		assert.Equal(t, "not_found", errObj["code"])
 		assert.Equal(t, "404", errObj["status"])
 		assert.Equal(t, "user not found", errObj["detail"])
@@ -288,7 +288,7 @@ func TestTransformError(t *testing.T) {
 
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
-		errObj := parsed["errors"].([]any)[0].(map[string]any)
+		errObj := asType[map[string]any](t, asType[[]any](t, parsed["errors"])[0])
 		assert.Equal(t, "invalid_argument", errObj["code"])
 		assert.Equal(t, "400", errObj["status"])
 		assert.Equal(t, "email is required", errObj["detail"])
@@ -308,7 +308,7 @@ func TestTransformError(t *testing.T) {
 
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
-		errObj := parsed["errors"].([]any)[0].(map[string]any)
+		errObj := asType[map[string]any](t, asType[[]any](t, parsed["errors"])[0])
 		assert.Equal(
 			t,
 			"not_found",
@@ -331,7 +331,7 @@ func TestTransformError(t *testing.T) {
 
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
-		errObj := parsed["errors"].([]any)[0].(map[string]any)
+		errObj := asType[map[string]any](t, asType[[]any](t, parsed["errors"])[0])
 		assert.Equal(t, "unknown", errObj["code"])
 		assert.Equal(t, "500", errObj["status"])
 	})
@@ -346,7 +346,7 @@ func TestTransformError(t *testing.T) {
 
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
-		errObj := parsed["errors"].([]any)[0].(map[string]any)
+		errObj := asType[map[string]any](t, asType[[]any](t, parsed["errors"])[0])
 		assert.Equal(t, "unknown", errObj["code"])
 		assert.Equal(t, "500", errObj["status"])
 		assert.NotContains(t, errObj, "detail")
@@ -361,7 +361,7 @@ func TestTransformError(t *testing.T) {
 
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
-		errObj := parsed["errors"].([]any)[0].(map[string]any)
+		errObj := asType[map[string]any](t, asType[[]any](t, parsed["errors"])[0])
 		assert.Equal(t, "unknown", errObj["code"])
 		assert.Equal(t, "503", errObj["status"])
 		assert.NotContains(t, errObj, "detail")

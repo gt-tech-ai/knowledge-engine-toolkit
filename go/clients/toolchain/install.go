@@ -3,6 +3,7 @@ package toolchain
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"runtime"
@@ -634,6 +635,7 @@ func wingetAlreadyInstalledCodes(code uint32) (string, bool) {
 // ClassifyWingetExit reports whether an exit code is a success-like "already
 // installed" condition, with its description.
 func ClassifyWingetExit(exitCode int) (string, bool) {
-	//nolint:gosec // intentional uint32 cast; HRESULT values are unsigned 32-bit
-	return wingetAlreadyInstalledCodes(uint32(exitCode))
+	// An HRESULT is an unsigned 32-bit value that a signed exit code carries as its low
+	// 32 bits, so the mask reinterprets it without a lossy narrowing.
+	return wingetAlreadyInstalledCodes(uint32(int64(exitCode) & math.MaxUint32))
 }

@@ -98,11 +98,16 @@ func TestPythonPackages_Errors(t *testing.T) {
 
 		root := t.TempDir()
 		bad := filepath.Join(root, "libs", "python", "shelf", "sub")
-		require.NoError(t, os.MkdirAll(bad, 0o755))
-		require.NoError(t, os.Chmod(bad, 0o000))
-		t.Cleanup(func() { _ = os.Chmod(bad, 0o755) })
+		require.NoError(t, os.MkdirAll(bad, 0o750))
+		info, err := os.Stat(bad)
+		require.NoError(t, err)
 
-		_, err := python.Packages(os.DirFS(root), pyRoots(), nil)
+		original := info.Mode().Perm()
+
+		require.NoError(t, os.Chmod(bad, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(bad, original) })
+
+		_, err = python.Packages(os.DirFS(root), pyRoots(), nil)
 		require.Error(t, err)
 	})
 }
@@ -124,11 +129,11 @@ func TestPythonModuleName(t *testing.T) {
 	for _, d := range []string{"__pycache__", "shelf.egg-info", "shelf_core"} {
 		require.NoError(
 			t,
-			os.MkdirAll(filepath.Join(root, "libs", "shelf", "src", d), 0o755),
+			os.MkdirAll(filepath.Join(root, "libs", "shelf", "src", d), 0o750),
 		)
 	}
 
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "flat"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "flat"), 0o750))
 
 	assert.Equal(t, "shelf_core", python.ModuleName(os.DirFS(root), "libs/shelf"))
 	assert.Equal(t, "flat", python.ModuleName(os.DirFS(root), "libs/flat"))

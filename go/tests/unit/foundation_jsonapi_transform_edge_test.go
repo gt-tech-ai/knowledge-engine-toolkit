@@ -85,7 +85,7 @@ func TestTransformError_BodyFallbacks(t *testing.T) {
 			require.True(t, ok)
 			require.Len(t, errs, 1)
 
-			e := errs[0].(map[string]any)
+			e := asType[map[string]any](t, errs[0])
 			assert.Equal(t, tt.wantCode, e["code"])
 			assert.Equal(t, tt.wantStatus, e["status"])
 
@@ -145,10 +145,10 @@ func TestTransformResource_Fallbacks(t *testing.T) {
 			"currentOrgId": "o1",
 		}, cfg, "/api/users/1",
 	)
-	assert.Equal(t, "/api/users/1", full["links"].(map[string]any)["self"])
+	assert.Equal(t, "/api/users/1", asType[map[string]any](t, full["links"])["self"])
 	assert.Equal(t, map[string]any{"currentOrgId": "o1"}, full["meta"])
 
-	data := full["data"].(map[string]any)
+	data := asType[map[string]any](t, full["data"])
 	assert.Equal(t, "users", data["type"])
 	assert.Equal(t, "1", data["id"])
 }

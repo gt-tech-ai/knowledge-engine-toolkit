@@ -76,35 +76,50 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 	doc, ok := tf[0].Value.(map[string]any)
 	require.True(t, ok)
 
-	aliases := doc["resource"].(map[string]any)["aws_kms_alias"].(map[string]any)
-	alias := aliases["cosign"].([]any)[0].(map[string]any)
+	aliases := asType[map[string]any](
+		t,
+		asType[map[string]any](t, doc["resource"])["aws_kms_alias"],
+	)
+	alias := asType[map[string]any](t, asType[[]any](t, aliases["cosign"])[0])
 	assert.Equal(t, "alias/cosign", alias["name"])
 	assert.Equal(t, "${aws_kms_key.cosign.key_id}", alias["target_key_id"])
 	assert.InDelta(t, float64(2), alias["count"], 0,
 		"a literal-only expression is evaluated")
 	assert.Equal(t, map[string]any{"Name": "x"}, alias["tags"])
 	assert.Len(t, alias["ingress"], 2, "repeated unlabeled blocks are one list")
-	assert.Equal(t, "us-east-1",
-		doc["variable"].(map[string]any)["region"].([]any)[0].(map[string]any)["default"])
+	region := asType[map[string]any](t, asType[[]any](t,
+		asType[map[string]any](t, doc["variable"])["region"])[0])
+	assert.Equal(
+		t,
+		"us-east-1",
+		region["default"],
+	)
 
 	alloy, err := cb.Docs(ctx, types.FileSelector{Exts: []string{".alloy"}})
 	require.NoError(t, err)
 	require.Len(t, alloy, 1)
 	assert.Equal(t, "alloy", alloy[0].Format)
 
-	adoc := alloy[0].Value.(map[string]any)
-	sources := adoc["loki.source.kubernetes"].(map[string]any)
-	source := sources["pods"].([]any)[0].(map[string]any)
+	adoc := asType[map[string]any](t, alloy[0].Value)
+	sources := asType[map[string]any](t, adoc["loki.source.kubernetes"])
+	source := asType[map[string]any](t, asType[[]any](t, sources["pods"])[0])
 	assert.Equal(t, []any{"loki.process.redact.receiver"}, source["forward_to"],
 		"a reference is its source text")
 
-	proc := adoc["loki.process"].(map[string]any)["redact"].([]any)[0].(map[string]any)
-	stages := proc["stage.replace"].([]any)
+	proc := asType[map[string]any](
+		t,
+		asType[[]any](t, asType[map[string]any](t, adoc["loki.process"])["redact"])[0],
+	)
+	stages := asType[[]any](t, proc["stage.replace"])
 	require.Len(t, stages, 2)
-	assert.Equal(t, `(?i)(bearer )\S+`, stages[0].(map[string]any)["expression"])
-	assert.Equal(t, "${1}REDACTED", stages[0].(map[string]any)["replace"])
-	assert.Equal(t, int64(2), stages[1].(map[string]any)["max"])
-	assert.Equal(t, true, stages[1].(map[string]any)["keep"])
+	assert.Equal(
+		t,
+		`(?i)(bearer )\S+`,
+		asType[map[string]any](t, stages[0])["expression"],
+	)
+	assert.Equal(t, "${1}REDACTED", asType[map[string]any](t, stages[0])["replace"])
+	assert.Equal(t, int64(2), asType[map[string]any](t, stages[1])["max"])
+	assert.Equal(t, true, asType[map[string]any](t, stages[1])["keep"])
 
 	_, err = cb.Docs(
 		ctx,

@@ -67,7 +67,12 @@ func (m *Metrics) Counter(name, help string, labels ...string) interfaces.Counte
 		var are prometheus.AlreadyRegisteredError
 
 		if apperr.As(err, &are) {
-			return &counter{inner: are.ExistingCollector.(*prometheus.CounterVec)}
+			existing, ok := are.ExistingCollector.(*prometheus.CounterVec)
+			if !ok {
+				panic(err)
+			}
+
+			return &counter{inner: existing}
 		}
 
 		panic(err)
@@ -94,7 +99,12 @@ func (m *Metrics) Histogram(
 		var are prometheus.AlreadyRegisteredError
 
 		if apperr.As(err, &are) {
-			return &histogram{inner: are.ExistingCollector.(*prometheus.HistogramVec)}
+			existing, ok := are.ExistingCollector.(*prometheus.HistogramVec)
+			if !ok {
+				panic(err)
+			}
+
+			return &histogram{inner: existing}
 		}
 
 		panic(err)
@@ -116,7 +126,12 @@ func (m *Metrics) Gauge(name, help string, labels ...string) interfaces.Gauge {
 		var are prometheus.AlreadyRegisteredError
 
 		if apperr.As(err, &are) {
-			return &gauge{inner: are.ExistingCollector.(*prometheus.GaugeVec)}
+			existing, ok := are.ExistingCollector.(*prometheus.GaugeVec)
+			if !ok {
+				panic(err)
+			}
+
+			return &gauge{inner: existing}
 		}
 
 		panic(err)

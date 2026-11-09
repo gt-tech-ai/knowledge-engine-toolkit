@@ -23,7 +23,7 @@ func TestFileExists(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file.txt")
 	require.False(t, helpers.FileExists(path), "expected false for non-existent file")
-	require.NoError(t, os.WriteFile(path, []byte("x"), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte("x"), 0o600))
 	require.True(t, helpers.FileExists(path), "expected true for existing file")
 	// directory should not count as a file
 	require.False(t, helpers.FileExists(dir), "expected false for directory path")

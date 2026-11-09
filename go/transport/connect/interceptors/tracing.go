@@ -16,7 +16,7 @@ import (
 // context back to the caller, so a client or E2E test can correlate its
 // request to the spans/metrics/logs it produced. Its value is in traceparent format
 // (`00-<trace-id>-<span-id>-<flags>`).
-const TraceResponseHeader = "traceresponse"
+const TraceResponseHeader = "Traceresponse"
 
 // setTraceResponse stamps the active trace context (traceparent format) onto h under
 // TraceResponseHeader, or does nothing when ctx carries no valid span context — so the

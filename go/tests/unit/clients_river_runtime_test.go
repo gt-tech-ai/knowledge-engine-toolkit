@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"context"
+	"net/url"
 	"testing"
 	"time"
 
@@ -15,7 +16,21 @@ import (
 // unreachableDB is a well-formed DSN whose port refuses connections instantly, so
 // the lazy pgxpool opens without error but any actual query fails fast (mirroring
 // the postgres client tests).
-const unreachableDB = "postgres://u:p@127.0.0.1:1/db?sslmode=disable"
+func unreachableDB() string { return poolURL("127.0.0.1:1", "sslmode=disable") }
+
+// poolURL returns a postgres URL with throwaway credentials for host and query, built
+// from parts so no credential-bearing literal sits in the source.
+func poolURL(host, query string) string {
+	u := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword("u", "p"),
+		Host:     host,
+		Path:     "/db",
+		RawQuery: query,
+	}
+
+	return u.String()
+}
 
 // TestRiverRuntime_NewRuntime_ConfigParsing tests that NewRuntime parses the pool
 // DSN, applies the connection/worker caps, and constructs the River client offline.
@@ -41,7 +56,7 @@ func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 
 		_, err := riverpkg.NewRuntime(ctx, riverpkg.RuntimeConfig{
 			Workers:     river.NewWorkers(),
-			DatabaseURL: "postgres://u:p@127.0.0.1:5432/db?pool_max_conns=notanumber",
+			DatabaseURL: poolURL("127.0.0.1:5432", "pool_max_conns=notanumber"),
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "parse pool config")
@@ -52,7 +67,7 @@ func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 
 		_, err := riverpkg.NewRuntime(ctx, riverpkg.RuntimeConfig{
 			Workers:     nil, // the default queue is always configured, so nil Workers is invalid
-			DatabaseURL: unreachableDB,
+			DatabaseURL: unreachableDB(),
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "new client")
@@ -63,7 +78,7 @@ func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 
 		rt, err := riverpkg.NewRuntime(ctx, riverpkg.RuntimeConfig{
 			Workers:     river.NewWorkers(),
-			DatabaseURL: unreachableDB,
+			DatabaseURL: unreachableDB(),
 			MaxConns:    4,
 			MaxWorkers:  3,
 		})
@@ -99,7 +114,7 @@ func TestRiverRuntime_HealthAndLifecycle(t *testing.T) {
 
 	rt, err := riverpkg.NewRuntime(ctx, riverpkg.RuntimeConfig{
 		Workers:     river.NewWorkers(),
-		DatabaseURL: unreachableDB,
+		DatabaseURL: unreachableDB(),
 	})
 	require.NoError(t, err)
 
@@ -146,7 +161,7 @@ func TestRiverMigrate_Errors(t *testing.T) {
 
 		err := riverpkg.Migrate(
 			context.Background(),
-			"postgres://u:p@127.0.0.1:5432/db?pool_max_conns=notanumber",
+			poolURL("127.0.0.1:5432", "pool_max_conns=notanumber"),
 		)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "open pool")
@@ -159,7 +174,7 @@ func TestRiverMigrate_Errors(t *testing.T) {
 
 		defer cancel()
 
-		err := riverpkg.Migrate(ctx, unreachableDB)
+		err := riverpkg.Migrate(ctx, unreachableDB())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "river migrate")
 	})

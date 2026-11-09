@@ -202,7 +202,7 @@ func TestTransportMcpRunsTools_StatusResultCancelList(t *testing.T) {
 	log := res.Steps[0].Log
 	assert.Equal(t, root, filepath.Dir(filepath.Dir(log)))
 
-	body, err := os.ReadFile(log)
+	body, err := os.ReadFile(filepath.Clean(log))
 	require.NoError(t, err)
 	assert.Equal(t, "one\ntwo\n", string(body))
 

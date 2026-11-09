@@ -310,17 +310,23 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 
 			return nil
 		}
-		joined := listquery.ResolveFilter(resolveNameToTitle, joinOf,
-			types.FilterClause{
-				Field: "name", Operator: types.OpLike, Value: "smith",
-			}).(types.FilterClause)
+		joined := asType[types.FilterClause](
+			t,
+			listquery.ResolveFilter(resolveNameToTitle, joinOf,
+				types.FilterClause{
+					Field: "name", Operator: types.OpLike, Value: "smith",
+				}),
+		)
 		assert.NotNil(t, joined.Join)
 		assert.Equal(t, "users", joined.Join.Table)
 
-		plain := listquery.ResolveFilter(resolveNameToTitle, joinOf,
-			types.FilterClause{
-				Field: "status", Operator: types.OpEq, Value: "indexed",
-			}).(types.FilterClause)
+		plain := asType[types.FilterClause](
+			t,
+			listquery.ResolveFilter(resolveNameToTitle, joinOf,
+				types.FilterClause{
+					Field: "status", Operator: types.OpEq, Value: "indexed",
+				}),
+		)
 		assert.Nil(t, plain.Join)
 		assert.Equal(t, "status", plain.Field)
 	})

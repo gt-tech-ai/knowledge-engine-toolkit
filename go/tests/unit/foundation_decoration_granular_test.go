@@ -227,7 +227,7 @@ func TestConfiguredBases_ResolveEachStageJobAndGateByItsOwnName(t *testing.T) {
 	// The logging layer logs each operation at Debug as (tier, name, "operation", op).
 	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ string, kv ...any) {
-			logged = append(logged, kv[1].(string)+"."+kv[3].(string))
+			logged = append(logged, asType[string](t, kv[1])+"."+asType[string](t, kv[3]))
 		}).AnyTimes()
 
 	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{

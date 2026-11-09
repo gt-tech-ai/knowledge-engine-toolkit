@@ -164,7 +164,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	go func() {
 		err := srv.Serve(ln)
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !apperr.StdIs(err, http.ErrServerClosed) {
 			s.logger.Error("connect server serve error", "error", err)
 		}
 	}()

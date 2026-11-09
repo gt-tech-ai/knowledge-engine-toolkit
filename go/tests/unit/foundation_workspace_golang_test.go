@@ -21,7 +21,7 @@ import (
 // wsWrite writes content to path, creating parent directories.
 func wsWrite(t *testing.T, path, content string) {
 	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 }
 
@@ -204,7 +204,7 @@ func TestHasGeneratedPackages(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen", "pb"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen", "pb"), 0o750))
 	assert.False(t, golang.HasGeneratedPackages(os.DirFS(root), "gen/pb"), "empty dir")
 	assert.False(t, golang.HasGeneratedPackages(os.DirFS(root), "nope"), "missing dir")
 
@@ -344,7 +344,7 @@ func TestLister_FilterModulesWithGoPackages(t *testing.T) {
 
 	root := t.TempDir()
 	for _, mod := range []string{"a", "empty", "notmod", "b"} {
-		require.NoError(t, os.MkdirAll(filepath.Join(root, mod), 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Join(root, mod), 0o750))
 	}
 
 	wsGoMod(t, filepath.Join(root, "broken"))
@@ -462,7 +462,7 @@ func TestWorkspaceGraph(t *testing.T) {
 	}, got)
 
 	read := func(rel string) []byte {
-		b, err := os.ReadFile(filepath.Join(root, rel))
+		b, err := os.ReadFile(filepath.Clean(filepath.Join(root, rel)))
 		require.NoError(t, err)
 
 		return b

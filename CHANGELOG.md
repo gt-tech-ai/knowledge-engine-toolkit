@@ -403,6 +403,16 @@ Python: `techai-webutils` 0.9.5.
 
 ### Changed
 
+- Go **breaking**: `foundation/fsys` `OSFS` returns coded errors (`NOT_FOUND` for a missing path,
+  `INTERNAL` otherwise) wrapping the `os` error, where it returned the `os` error verbatim.
+  `errors.Is(err, fs.ErrNotExist)` and `fs.ErrExist` still match; `os.IsNotExist` and `os.IsExist`,
+  which do not unwrap, no longer do.
+- Go: `core/errors.Sentinel` returns a distinct pointer-typed error per call (identity as with
+  `errors.New`), and `core/errors.Identical(a, b)` compares two errors by identity. The transport
+  interceptors use it to pass a handler's own error through unchanged.
+- Go: `transport/connect/interceptors.TraceResponseHeader` is `Traceresponse`, the canonical
+  spelling of the same HTTP header; `foundation/tfplan.UnitPlan.HasChanges` has a pointer
+  receiver; `foundation/config/schema/infra.LoggingConfig.GetKind` has a value receiver.
 - Python OpenSearch: a multi-domain search returns the global top k of its domains' hits by score
   (it returned every domain's hits, up to k per domain).
 - Python OpenSearch: `OpenSearchConfig.disk_compression_level` defaults to `16x` (was `32x`). On

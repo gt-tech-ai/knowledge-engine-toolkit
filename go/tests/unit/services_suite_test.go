@@ -241,7 +241,7 @@ func TestServicesSuite_Gate(t *testing.T) {
 	}), suite.Steps(map[string]suite.Step{"lint.vet": {
 		Group: "Lint", Tags: []string{"go"},
 		Run: func(_ context.Context, env *suite.StepEnv) (types.StepResults, error) {
-			assert.Same(t, runner, env.Runner.(*mocks.MockCommandRunner))
+			assert.Same(t, runner, asType[*mocks.MockCommandRunner](t, env.Runner))
 			mu.Lock()
 
 			ran = append(ran, "lint.vet@"+env.Root)

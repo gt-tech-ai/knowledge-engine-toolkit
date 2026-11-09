@@ -84,7 +84,15 @@ func (c *compiled) eval(ctx context.Context, src string, vars Vars) (any, error)
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, src)
 	}
 
-	return pb.(*structpb.Value).AsInterface(), nil
+	value, ok := pb.(*structpb.Value)
+	if !ok {
+		return nil, apperr.New(
+			apperr.CodeInternal,
+			"expression result is not a protobuf value",
+		)
+	}
+
+	return value.AsInterface(), nil
 }
 
 // evalBool evaluates a condition.

@@ -5,7 +5,9 @@ package fsys
 import (
 	"io/fs"
 	"os"
+	"path/filepath"
 
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -30,34 +32,67 @@ func DefaultFS() interfaces.FS {
 	return NewOSFS()
 }
 
+// wrap codes a file-system error for the caller: a missing path is CodeNotFound and
+// anything else CodeInternal. The os error stays in the chain, so a caller tests it with
+// errors.Is(err, fs.ErrNotExist) or errors.Is(err, fs.ErrExist); os.IsNotExist, which
+// does not unwrap, no longer matches. A nil err stays nil.
+func wrap(err error, op, name string) error {
+	if err == nil {
+		return nil
+	}
+
+	code := apperr.CodeInternal
+	if apperr.StdIs(err, fs.ErrNotExist) {
+		code = apperr.CodeNotFound
+	}
+
+	return apperr.Wrap(err, code, op+" "+name)
+}
+
 // Stat returns file information, delegating to os.Stat.
-func (f *OSFS) Stat(name string) (fs.FileInfo, error) { return os.Stat(name) }
+func (f *OSFS) Stat(name string) (fs.FileInfo, error) {
+	info, err := os.Stat(name)
+
+	return info, wrap(err, "stat", name)
+}
 
 // MkdirAll creates a directory tree, delegating to os.MkdirAll.
 func (f *OSFS) MkdirAll(
 	path string,
 	perm fs.FileMode,
 ) error {
-	return os.MkdirAll(path, perm)
+	return wrap(os.MkdirAll(path, perm), "create directory", path)
 }
 
 // ReadFile reads an entire file, delegating to os.ReadFile.
-func (f *OSFS) ReadFile(name string) ([]byte, error) { return os.ReadFile(name) }
+func (f *OSFS) ReadFile(
+	name string,
+) ([]byte, error) {
+	data, err := os.ReadFile(filepath.Clean(name))
+
+	return data, wrap(err, "read", name)
+}
 
 // WriteFile writes data to a file, delegating to os.WriteFile.
 func (f *OSFS) WriteFile(name string, data []byte, perm fs.FileMode) error {
-	return os.WriteFile(name, data, perm)
+	return wrap(os.WriteFile(name, data, perm), "write", name)
 }
 
 // RemoveAll removes a path and its children, delegating to os.RemoveAll.
-func (f *OSFS) RemoveAll(path string) error { return os.RemoveAll(path) }
+func (f *OSFS) RemoveAll(path string) error {
+	return wrap(os.RemoveAll(path), "remove", path)
+}
 
 // Rename renames a file or directory, delegating to os.Rename.
 func (f *OSFS) Rename(
 	oldpath, newpath string,
 ) error {
-	return os.Rename(oldpath, newpath)
+	return wrap(os.Rename(oldpath, newpath), "rename", oldpath)
 }
 
 // ReadDir reads a directory's entries, delegating to os.ReadDir.
-func (f *OSFS) ReadDir(name string) ([]fs.DirEntry, error) { return os.ReadDir(name) }
+func (f *OSFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	entries, err := os.ReadDir(name)
+
+	return entries, wrap(err, "read directory", name)
+}

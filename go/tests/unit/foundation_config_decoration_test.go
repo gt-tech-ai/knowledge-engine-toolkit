@@ -61,7 +61,8 @@ func TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults(t *testing.T) {
 			func(_ string, target any) error {
 				on := true
 
-				target.(*decoration.Config).Clients.Overrides = map[string]decoration.Layers{
+				cfg := asType[*decoration.Config](t, target)
+				cfg.Clients.Overrides = map[string]decoration.Layers{
 					"storage": {Retry: decoration.Retry{Enabled: &on}},
 				}
 
@@ -345,7 +346,7 @@ func TestLoadDecorations_ReadsTheSectionWithTheCollaborators(t *testing.T) {
 		func(_ string, out any) error {
 			off := false
 
-			out.(*decoration.Config).Clients.Overrides = map[string]decoration.Layers{
+			asType[*decoration.Config](t, out).Clients.Overrides = map[string]decoration.Layers{
 				"search": {Tracing: &off},
 			}
 

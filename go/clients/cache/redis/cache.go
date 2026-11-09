@@ -334,7 +334,15 @@ func (c *Cache) GetOrLoad(
 		return nil, nil
 	}
 
-	return v.([]byte), nil
+	data, ok := v.([]byte)
+	if !ok {
+		return nil, apperr.New(
+			apperr.CodeInternal,
+			"redis cache: loaded value is not bytes",
+		)
+	}
+
+	return data, nil
 }
 
 // Ping checks the Redis connection. This is an extended method available only

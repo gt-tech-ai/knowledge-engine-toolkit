@@ -332,7 +332,12 @@ func results(v ref.Val, message string) ([]types.Finding, error) {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "expr result")
 	}
 
-	native := pb.(*structpb.Value).AsInterface()
+	value, ok := pb.(*structpb.Value)
+	if !ok {
+		return nil, apperr.New(apperr.CodeInternal, "expr result is not a protobuf value")
+	}
+
+	native := value.AsInterface()
 	switch x := native.(type) {
 	case bool:
 		if x {

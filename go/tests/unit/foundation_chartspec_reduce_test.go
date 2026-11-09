@@ -2,7 +2,6 @@ package unit_test
 
 import (
 	"math"
-	"math/rand"
 	"slices"
 	"testing"
 	"testing/quick"
@@ -13,6 +12,7 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // partialOf merges one single-observation partial per value (the per-fact rows a
@@ -175,16 +175,16 @@ func TestFinalize_ComputesEachAggregate(t *testing.T) {
 func TestSketch_MergePreservesQuantilesWithin1Pct(t *testing.T) {
 	t.Parallel()
 
-	r := rand.New(rand.NewSource(7))
+	r := fixtures.NewSequence(7)
 	for trial := range 50 {
-		n := 50 + r.Intn(2000)
+		n := 50 + r.IntN(2000)
 		values := make([]float64, n)
 
 		for i := range values {
 			values[i] = math.Exp(r.Float64()*14 - 7) // 1e-3 … 1e3, log-spread
 		}
 
-		shards := 1 + r.Intn(8)
+		shards := 1 + r.IntN(8)
 
 		var total chartspec.Partial
 

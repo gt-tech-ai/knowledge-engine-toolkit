@@ -303,7 +303,7 @@ func (s *Server) ServeAPIDocs(ctx context.Context) (*http.Server, error) {
 
 	go func() {
 		err := srv.Serve(ln)
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !apperr.StdIs(err, http.ErrServerClosed) {
 			s.d.Log.Warn("API docs server error", "error", err.Error())
 		}
 	}()
@@ -340,9 +340,7 @@ func (s *Server) readSpecs() ([]spec, error) {
 		}
 
 		p := filepath.Join(dir, e.Name(), filepath.FromSlash(s.cfg.OpenAPISpec))
-		data, err := os.ReadFile(
-			p,
-		)
+		data, err := os.ReadFile(filepath.Clean(p))
 
 		if os.IsNotExist(err) {
 			continue

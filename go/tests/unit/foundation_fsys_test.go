@@ -1,13 +1,14 @@
 package unit_test
 
 import (
-	"os"
+	iofs "io/fs"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/fsys"
 )
 
@@ -23,7 +24,8 @@ import (
 // What it tests:
 //   - WriteFile then ReadFile round-trips bytes; MkdirAll + Stat report a dir;
 //     ReadDir lists entries; Rename moves a file (old path gone, new path present);
-//     RemoveAll deletes a tree.
+//     RemoveAll deletes a tree; a missing path surfaces as a NOT_FOUND-coded error that
+//     still matches fs.ErrNotExist.
 func TestOSFS_RoundTrips(t *testing.T) {
 	t.Parallel()
 
@@ -62,7 +64,12 @@ func TestOSFS_RoundTrips(t *testing.T) {
 	require.NoError(t, fs.RemoveAll(filepath.Join(dir, "a")))
 
 	_, err = fs.Stat(sub)
-	assert.True(t, os.IsNotExist(err), "RemoveAll deletes the tree")
+	assert.True(t, apperr.StdIs(err, iofs.ErrNotExist), "RemoveAll deletes the tree")
+	assert.True(
+		t,
+		apperr.Is(err, apperr.CodeNotFound),
+		"a missing path is coded NOT_FOUND",
+	)
 }
 
 // TestOSFS_Constructors tests that the package constructors return a usable

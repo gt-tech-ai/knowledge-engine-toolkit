@@ -79,7 +79,7 @@ func (st objectStore) Save(ctx context.Context, set types.PlanSet) error {
 
 		unit := filepath.ToSlash(rel)
 
-		data, err := os.ReadFile(f)
+		data, err := os.ReadFile(filepath.Clean(f))
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "read "+f)
 		}
@@ -179,7 +179,7 @@ func (st objectStore) Load(ctx context.Context, set types.PlanSet) error {
 func readManifest(set types.PlanSet) (manifest, error) {
 	path := filepath.Join(set.Dir, set.Manifest)
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return manifest{}, apperr.Wrap(err, apperr.CodeInvalidInput, "read "+path+
 			": Load restores the plans a Save listed there")
@@ -243,7 +243,7 @@ func (st objectStore) fetch(
 		return "", apperr.Wrap(err, apperr.CodeInternal, "create "+filepath.Dir(dest))
 	}
 
-	f, err := os.OpenFile(dest, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(filepath.Clean(dest), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "create "+dest)
 	}

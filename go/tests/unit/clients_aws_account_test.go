@@ -337,7 +337,7 @@ func TestUpsertProfile(t *testing.T) {
 
 	require.NoError(t, account.UpsertProfile(path, "acme", stgProfile()))
 
-	first, err := os.ReadFile(path)
+	first, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 
 	out := string(first)
@@ -348,7 +348,7 @@ func TestUpsertProfile(t *testing.T) {
 
 	require.NoError(t, account.UpsertProfile(path, "acme", stgProfile()))
 
-	again, err := os.ReadFile(path)
+	again, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	assert.Equal(t, out, string(again), "a re-run is byte-identical")
 
@@ -364,7 +364,7 @@ func TestUpsertProfile(t *testing.T) {
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
 	assert.Contains(t, err.Error(), "[sso-session acme]")
 
-	got, err := os.ReadFile(dup)
+	got, err := os.ReadFile(filepath.Clean(dup))
 	require.NoError(t, err)
 	assert.Equal(t, original, string(got), "the file is untouched")
 }

@@ -49,7 +49,7 @@ func loggedNames(
 	logged = &names
 	// The logging layer logs each operation as (tier, name, "operation", op).
 	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ string, kv ...any) { *logged = append(*logged, kv[3].(string)) }).
+		func(_ string, kv ...any) { *logged = append(*logged, asType[string](t, kv[3])) }).
 		AnyTimes()
 	logger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
 

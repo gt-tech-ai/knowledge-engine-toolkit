@@ -45,7 +45,7 @@ func TestRunner_CancelTearsDownProcessGroup(t *testing.T) {
 	var gcPid int
 
 	require.Eventually(t, func() bool {
-		b, err := os.ReadFile(pidFile)
+		b, err := os.ReadFile(filepath.Clean(pidFile))
 		if err != nil {
 			return false
 		}

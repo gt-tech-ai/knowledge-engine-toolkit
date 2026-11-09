@@ -272,7 +272,7 @@ func extractBinary(artifactPath, url, binary string, w io.Writer) error {
 // decompressed stream is the binary itself) into w. It is dispatched only for a
 // plain .gz suffix; .tar.gz/.tgz match the tarball case first.
 func extractFromGz(src string, w io.Writer) error {
-	f, err := os.Open(src)
+	f, err := os.Open(filepath.Clean(src))
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open verified archive")
 	}
@@ -291,7 +291,7 @@ func extractFromGz(src string, w io.Writer) error {
 
 // copyFile copies a raw-binary artifact into w (bounded by maxBinarySize).
 func copyFile(src string, w io.Writer) error {
-	f, err := os.Open(src)
+	f, err := os.Open(filepath.Clean(src))
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open verified artifact")
 	}
@@ -304,7 +304,7 @@ func copyFile(src string, w io.Writer) error {
 // extractFromTarGz copies the regular-file entry whose base name is binary out
 // of a gzip-compressed tarball into w.
 func extractFromTarGz(src, binary string, w io.Writer) error {
-	f, err := os.Open(src)
+	f, err := os.Open(filepath.Clean(src))
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open verified archive")
 	}

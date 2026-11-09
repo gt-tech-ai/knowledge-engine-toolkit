@@ -87,7 +87,7 @@ func TestServicesProcedure_FileOps(t *testing.T) {
 		"conf/new.yaml": "", "conf/kept.yaml": "mine", "conf/dir.yaml": "",
 		"conf/secrets.yaml": "token: x",
 	} {
-		got, readErr := os.ReadFile(filepath.Join(root, rel))
+		got, readErr := os.ReadFile(filepath.Clean(filepath.Join(root, rel)))
 		require.NoError(t, readErr, rel)
 		assert.Equal(t, want, string(got), rel)
 	}
@@ -107,7 +107,7 @@ func TestServicesProcedure_FileOps(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, res.HasFailures(), "%+v", res)
 
-	got, err := os.ReadFile(filepath.Join(root, "conf", "secrets.yaml"))
+	got, err := os.ReadFile(filepath.Clean(filepath.Join(root, "conf", "secrets.yaml")))
 	require.NoError(t, err)
 	assert.Equal(t, "edited", string(got), "copy never overwrites an existing path")
 }

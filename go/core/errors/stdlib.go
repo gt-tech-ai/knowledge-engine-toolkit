@@ -25,7 +25,23 @@ func Join(errs ...error) error { return stderrors.Join(errs...) }
 // Re-export of errors.Unwrap.
 func Unwrap(err error) error { return stderrors.Unwrap(err) }
 
+// sentinelError is the uncoded error Sentinel returns. Each Sentinel call allocates a
+// distinct value, so two sentinels with the same text are different errors, as with the
+// standard library's errors.New.
+type sentinelError struct {
+	// text is the error message.
+	text string
+}
+
+// Error returns the sentinel's message.
+func (e *sentinelError) Error() string { return e.text }
+
 // Sentinel creates a simple sentinel error value with the given message.
 // Use this instead of importing the standard "errors" package for errors.New.
 // For application errors with error codes, use New() instead.
-func Sentinel(text string) error { return stderrors.New(text) }
+func Sentinel(text string) error { return &sentinelError{text: text} }
+
+// Identical reports whether a and b are the same error value, by identity rather than by
+// chain membership (which is what Is checks). A boundary uses it to tell an error it
+// passed through untouched from one it produced or rewrapped.
+func Identical(a, b error) bool { return any(a) == any(b) }

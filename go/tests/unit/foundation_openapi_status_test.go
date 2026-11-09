@@ -139,13 +139,13 @@ func TestOpenAPI_DeleteEmits204NoBody(t *testing.T) {
 	)
 
 	descPath := filepath.Join(t.TempDir(), "d.binpb")
-	require.NoError(t, os.WriteFile(descPath, fds, 0o644))
+	require.NoError(t, os.WriteFile(descPath, fds, 0o600))
 
 	routes, err := openapi.BuildRouteTable(fds, nil)
 	require.NoError(t, err)
 
 	inDir := filepath.Join(t.TempDir(), "in")
-	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o750))
 
 	swagger := `{"swagger":"2.0","info":{"title":"t"},
       "paths":{"/api/v1/things/{thing_id}":{"delete":{"operationId":"DeleteThing",
@@ -153,7 +153,7 @@ func TestOpenAPI_DeleteEmits204NoBody(t *testing.T) {
         "responses":{"200":{"description":"ok","schema":{"type":"object"}}}}}},
       "definitions":{}}`
 	require.NoError(t, os.WriteFile(
-		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o644,
+		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o600,
 	))
 
 	res, err := openapi.Convert(

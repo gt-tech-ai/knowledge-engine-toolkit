@@ -335,7 +335,7 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 		),
 	)
 
-	err = store.(interfaces.AnalyticsCompactor).Compact(
+	err = asType[interfaces.AnalyticsCompactor](t, store).Compact(
 		ctx, "cube", types.Grain("hour"), "org", time.Unix(0, 0),
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))

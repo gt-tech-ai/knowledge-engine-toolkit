@@ -28,7 +28,10 @@ func dottedOverrides(loader interfaces.ConfigLoader, section any, over *Config) 
 		}
 
 		key := SectionKey + "." + name + ".overrides"
-		t := cfg.Field(i).Addr().Interface().(*Tier)
+		t, ok := reflect.TypeAssert[*Tier](cfg.Field(i).Addr())
+		if !ok {
+			return apperr.New(apperr.CodeInternal, "decoration: "+name+" is not a tier")
+		}
 
 		t.Overrides = make(map[string]Layers, len(raw))
 
@@ -43,7 +46,7 @@ func dottedOverrides(loader interfaces.ConfigLoader, section any, over *Config) 
 
 // readOverrides reads every override in m (the overrides beneath prefix, read at key)
 // under its full name, recursing into the segments that nest deeper names.
-func (t *Tier) readOverrides(
+func (t Tier) readOverrides(
 	loader interfaces.ConfigLoader,
 	key, prefix string,
 	m map[string]any,

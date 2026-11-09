@@ -125,10 +125,13 @@ const docSwagger = `{
   }
 }`
 
+// docSchemeName names the API-key security scheme the synthetic swagger declares.
+const docSchemeName = "apiKeyHeader"
+
 // docHeaders is the API-key security scheme runDocConvert declares: one header every
 // operation requires.
 func docHeaders() map[string]string {
-	return map[string]string{"apiKeyHeader": "X-API-Key"}
+	return map[string]string{docSchemeName: "X-API-Key"}
 }
 
 // runDocConvert writes the synthetic descriptor + a swagger file, builds the route
@@ -141,15 +144,15 @@ func runDocConvert(t *testing.T, swagger string) map[string]any {
 		docMessages(s), docMethods(s))
 
 	descPath := filepath.Join(t.TempDir(), "d.binpb")
-	require.NoError(t, os.WriteFile(descPath, fds, 0o644))
+	require.NoError(t, os.WriteFile(descPath, fds, 0o600))
 
 	routes, err := openapi.BuildRouteTable(fds, nil)
 	require.NoError(t, err)
 
 	inDir := filepath.Join(t.TempDir(), "in")
-	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o750))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o644,
+		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o600,
 	))
 
 	res, err := openapi.Convert(
@@ -573,13 +576,13 @@ func TestOpenAPI_ResourceKeyConflictStillErrors(t *testing.T) {
 	)
 
 	descPath := filepath.Join(t.TempDir(), "d.binpb")
-	require.NoError(t, os.WriteFile(descPath, fds, 0o644))
+	require.NoError(t, os.WriteFile(descPath, fds, 0o600))
 
 	inDir := filepath.Join(t.TempDir(), "in")
-	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o750))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(inDir, "test", "v1", "test.swagger.json"),
-		[]byte(`{"swagger":"2.0","info":{"title":"t"},"paths":{}}`), 0o644,
+		[]byte(`{"swagger":"2.0","info":{"title":"t"},"paths":{}}`), 0o600,
 	))
 
 	_, err := openapi.Convert(
@@ -622,7 +625,7 @@ func TestRouteTable_WritesRuntimeTablePerService(t *testing.T) {
 		openapi.WriteRuntimeRouteTable(fsys.NewOSFS(), routes, outDir, runtimeImport),
 	)
 
-	gen, err := os.ReadFile(filepath.Join(outDir, "testsvc", "routes.go"))
+	gen, err := os.ReadFile(filepath.Clean(filepath.Join(outDir, "testsvc", "routes.go")))
 	require.NoError(t, err)
 
 	src := string(gen)
@@ -680,13 +683,13 @@ func TestOpenAPI_ResourcelessGetOneIsMetaOnly(t *testing.T) {
 		methods,
 	)
 	descPath := filepath.Join(t.TempDir(), "d.binpb")
-	require.NoError(t, os.WriteFile(descPath, fds, 0o644))
+	require.NoError(t, os.WriteFile(descPath, fds, 0o600))
 
 	routes, err := openapi.BuildRouteTable(fds, nil)
 	require.NoError(t, err)
 
 	inDir := filepath.Join(t.TempDir(), "in")
-	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o750))
 
 	swagger := `{"swagger":"2.0","info":{"title":"t"},
       "paths":{"/api/v1/notes/{note_id}":{"get":{"operationId":"GetNote",
@@ -695,7 +698,7 @@ func TestOpenAPI_ResourcelessGetOneIsMetaOnly(t *testing.T) {
       "definitions":{"NoteResponse":{"type":"object",
         "properties":{"status":{"type":"string"}}}}}`
 	require.NoError(t, os.WriteFile(
-		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o644,
+		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o600,
 	))
 
 	res, err := openapi.Convert(

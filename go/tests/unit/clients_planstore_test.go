@@ -92,15 +92,17 @@ func TestPlanStore_RoundTrip(t *testing.T) {
 	assert.Contains(t, stored, "plans/stg/42-1/eks/tfplan.tfplan")
 
 	dst := t.TempDir()
-	manifest, err := os.ReadFile(filepath.Join(src, "plan-manifest.json"))
+	manifest, err := os.ReadFile(filepath.Clean(filepath.Join(src, "plan-manifest.json")))
 	require.NoError(t, err)
-	require.NoError(
-		t,
-		os.WriteFile(filepath.Join(dst, "plan-manifest.json"), manifest, 0o600),
-	)
+	root, err := os.OpenRoot(dst)
+	require.NoError(t, err)
+
+	defer func() { require.NoError(t, root.Close()) }()
+
+	require.NoError(t, root.WriteFile("plan-manifest.json", manifest, 0o600))
 	require.NoError(t, ps.Load(t.Context(), planSet(dst)))
 
-	got, err := os.ReadFile(filepath.Join(dst, "vpc", "tfplan.tfplan"))
+	got, err := os.ReadFile(filepath.Clean(filepath.Join(dst, "vpc", "tfplan.tfplan")))
 	require.NoError(t, err)
 	assert.Equal(t, "plan-vpc", string(got))
 

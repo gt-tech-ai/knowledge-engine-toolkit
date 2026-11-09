@@ -61,7 +61,7 @@ type Change struct {
 
 // HasChanges reports whether applying the plan would change anything: a resource or an
 // output.
-func (p UnitPlan) HasChanges() bool { return len(p.Changes) > 0 || p.Outputs }
+func (p *UnitPlan) HasChanges() bool { return len(p.Changes) > 0 || p.Outputs }
 
 // ReadUnits reads every unit's JSONFile under dir, sorted by unit path. A missing dir
 // reads as no units.
@@ -103,7 +103,7 @@ func ReadUnits(dir string) ([]UnitPlan, error) {
 
 // readUnit parses one unit's plan JSON into its counted changes.
 func readUnit(path, unit string) (UnitPlan, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return UnitPlan{}, apperr.Wrap(err, apperr.CodeInternal, "read "+path)
 	}

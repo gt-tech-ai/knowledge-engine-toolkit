@@ -6,6 +6,7 @@ package lifecycle
 
 import (
 	"context"
+	"slices"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -71,13 +72,13 @@ func (m *Manager) Start(ctx context.Context) error {
 func (m *Manager) Stop(ctx context.Context) error {
 	var firstErr error
 
-	for i := len(m.entries) - 1; i >= 0; i-- {
-		err := m.entries[i].client.Stop(ctx)
+	for _, entry := range slices.Backward(m.entries) {
+		err := entry.client.Stop(ctx)
 		if err != nil && firstErr == nil {
 			firstErr = apperr.Wrap(
 				err,
 				apperr.CodeInternal,
-				"stop "+m.entries[i].name,
+				"stop "+entry.name,
 			)
 		}
 	}

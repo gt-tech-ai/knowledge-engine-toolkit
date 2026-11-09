@@ -957,6 +957,6 @@ func TestConfig_ResolveEnvFrom(t *testing.T) {
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 
-	err := os.WriteFile(path, []byte(content), 0o644)
+	err := os.WriteFile(path, []byte(content), 0o600)
 	require.NoErrorf(t, err, "write %s", path)
 }

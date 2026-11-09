@@ -120,7 +120,7 @@ func (s *stepSummary) OnGateComplete(
 	results types.StepResults,
 	elapsed time.Duration,
 ) {
-	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}

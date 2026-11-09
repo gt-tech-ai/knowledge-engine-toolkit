@@ -16,6 +16,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
+// awssmConfigID is the secret id the AWS Secrets Manager source tests map their refs to.
+const awssmConfigID = "app/staging/e2e/config"
+
 // TestAWSSMSource_GetExtractsJSONField tests that the Secrets Manager Source fetches a
 // secret and extracts the configured JSON field as the credential value.
 //
@@ -37,7 +40,7 @@ func TestAWSSMSource_GetExtractsJSONField(t *testing.T) {
 
 	ref := types.Ref{Env: "staging", Class: "e2e", Field: "client_secret"}
 	src := awssm.New(api, map[types.Ref]awssm.Location{
-		ref: {SecretID: "app/staging/e2e/config", Field: "client_secret"},
+		ref: {SecretID: awssmConfigID, Field: "client_secret"},
 	})
 
 	got, err := src.Get(context.Background(), ref)
@@ -68,7 +71,7 @@ func TestAWSSMSource_MissingFieldIsNotFound(t *testing.T) {
 
 	ref := types.Ref{Env: "staging", Class: "e2e", Field: "client_secret"}
 	src := awssm.New(api, map[types.Ref]awssm.Location{
-		ref: {SecretID: "app/staging/e2e/config", Field: "client_secret"},
+		ref: {SecretID: awssmConfigID, Field: "client_secret"},
 	})
 
 	_, err := src.Get(context.Background(), ref)
@@ -94,7 +97,7 @@ func TestAWSSMSource_SDKErrorIsUpstream(t *testing.T) {
 
 	ref := types.Ref{Env: "staging", Class: "e2e", Field: "client_secret"}
 	src := awssm.New(api, map[types.Ref]awssm.Location{
-		ref: {SecretID: "app/staging/e2e/config", Field: "client_secret"},
+		ref: {SecretID: awssmConfigID, Field: "client_secret"},
 	})
 
 	_, err := src.Get(context.Background(), ref)
@@ -116,7 +119,7 @@ func TestAWSSMSource_PutIsUnsupported(t *testing.T) {
 
 	ref := types.Ref{Env: "staging", Class: "e2e", Field: "client_secret"}
 	src := awssm.New(api, map[types.Ref]awssm.Location{
-		ref: {SecretID: "app/staging/e2e/config", Field: "client_secret"},
+		ref: {SecretID: awssmConfigID, Field: "client_secret"},
 	})
 
 	err := src.Put(context.Background(), ref, types.NewSecret("v"))

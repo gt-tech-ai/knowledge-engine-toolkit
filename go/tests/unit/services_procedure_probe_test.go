@@ -92,8 +92,8 @@ func TestServicesProcedure_ProbeKinds(t *testing.T) {
 			"name": name, "http": "", "tcp": "", "exec": []any{},
 			"status": "", "contains": "", "hint": "",
 		}
-		for i := 0; i < len(kv); i += 2 {
-			m[kv[i].(string)] = kv[i+1]
+		for i := 0; i+1 < len(kv); i += 2 {
+			m[asType[string](t, kv[i])] = kv[i+1]
 		}
 
 		return m

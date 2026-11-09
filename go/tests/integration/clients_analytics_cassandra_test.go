@@ -11,7 +11,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	cassandradb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/cassandra"
 	testsuite "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/suite"
 )
@@ -204,33 +204,33 @@ type randFilter struct {
 }
 
 // genFilter builds a random filter over team, model and the day-aligned time.
-func genFilter(r *rand.Rand, days []time.Time) randFilter {
+func genFilter(r *fixtures.Sequence, days []time.Time) randFilter {
 	teams, models := []string{"t-1", "t-2", "t-3"}, []string{"m-a", "m-b"}
 	leaf := func() randFilter {
-		switch r.Intn(4) {
+		switch r.IntN(4) {
 		case 0:
-			t := teams[r.Intn(len(teams))]
+			t := teams[r.IntN(len(teams))]
 
 			return randFilter{
 				json:  fmt.Sprintf(`{"$eq":{"team":%q}}`, t),
 				match: func(f types.Fact) bool { return f.Dims["team"] == t },
 			}
 		case 1:
-			a, b := teams[r.Intn(len(teams))], teams[r.Intn(len(teams))]
+			a, b := teams[r.IntN(len(teams))], teams[r.IntN(len(teams))]
 
 			return randFilter{
 				json:  fmt.Sprintf(`{"$in":{"team":[%q,%q]}}`, a, b),
 				match: func(f types.Fact) bool { return f.Dims["team"] == a || f.Dims["team"] == b },
 			}
 		case 2:
-			m := models[r.Intn(len(models))]
+			m := models[r.IntN(len(models))]
 
 			return randFilter{
 				json:  fmt.Sprintf(`{"$ne":{"model":%q}}`, m),
 				match: func(f types.Fact) bool { return f.Dims["model"] != m },
 			}
 		default:
-			d := days[r.Intn(len(days))]
+			d := days[r.IntN(len(days))]
 
 			return randFilter{
 				json: fmt.Sprintf(`{"$gte":{"ts":%q}}`, d.Format(time.RFC3339)),
@@ -242,7 +242,7 @@ func genFilter(r *rand.Rand, days []time.Time) randFilter {
 	}
 	a, b := leaf(), leaf()
 
-	if r.Intn(2) == 0 {
+	if r.IntN(2) == 0 {
 		return randFilter{
 			json:  `{"$and":[` + a.json + `,` + b.json + `]}`,
 			match: func(f types.Fact) bool { return a.match(f) && b.match(f) },
@@ -268,7 +268,7 @@ func genFilter(r *rand.Rand, days []time.Time) randFilter {
 func (s *AnalyticsCassandraSuite) TestCassandra_PushdownMatchesFullScan() {
 	store := s.newStore(s.session, 7)
 	org := "org-pushdown"
-	r := rand.New(rand.NewSource(42))
+	r := fixtures.NewSequence(42)
 
 	var days []time.Time
 
@@ -282,15 +282,15 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PushdownMatchesFullScan() {
 	facts := make([]types.Fact, 0, 80)
 
 	for i := range 80 {
-		at := days[r.Intn(len(days))].Add(time.Duration(r.Intn(24*60)) * time.Minute)
+		at := days[r.IntN(len(days))].Add(time.Duration(r.IntN(24*60)) * time.Minute)
 
 		facts = append(facts, fact(
 			org,
 			fmt.Sprintf("f-%d", i),
 			at,
-			[]string{"t-1", "t-2", "t-3"}[r.Intn(3)],
-			[]string{"m-a", "m-b"}[r.Intn(2)],
-			float64(1+r.Intn(100)),
+			[]string{"t-1", "t-2", "t-3"}[r.IntN(3)],
+			[]string{"m-a", "m-b"}[r.IntN(2)],
+			float64(1+r.IntN(100)),
 		))
 	}
 

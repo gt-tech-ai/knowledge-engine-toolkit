@@ -52,7 +52,7 @@ func freePort(t *testing.T) string {
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
-	port := ln.Addr().(*net.TCPAddr).Port
+	port := asType[*net.TCPAddr](t, ln.Addr()).Port
 	require.NoError(t, ln.Close())
 
 	return strconv.Itoa(port)
@@ -314,7 +314,7 @@ func TestDocserve_APIDocsFailures(t *testing.T) {
 
 	defer func() { _ = ln.Close() }()
 
-	err = serve(busy, strconv.Itoa(ln.Addr().(*net.TCPAddr).Port))
+	err = serve(busy, strconv.Itoa(asType[*net.TCPAddr](t, ln.Addr()).Port))
 	assert.ErrorContains(t, err, "listen")
 }
 

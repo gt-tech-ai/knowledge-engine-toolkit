@@ -80,7 +80,7 @@ func TestClientsToolchainInstall_DefaultDownloaderFetchesOverHTTP(t *testing.T) 
 
 			require.NoError(t, err)
 
-			got, err := os.ReadFile(filepath.Join(binDir, "pinned"))
+			got, err := os.ReadFile(filepath.Clean(filepath.Join(binDir, "pinned")))
 			require.NoError(t, err)
 			assert.Equal(t, checksumPayload(), got)
 		})

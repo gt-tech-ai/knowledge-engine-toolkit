@@ -162,7 +162,7 @@ func TestFileSource_ReadsExportAndQuotedDotenv(t *testing.T) {
 		Return(nil)
 	require.NoError(t, src.Put(context.Background(), sec, types.NewSecret("rotated")))
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "export CLIENT_SECRET=rotated",
 		"a rotated export-format key keeps its export prefix")

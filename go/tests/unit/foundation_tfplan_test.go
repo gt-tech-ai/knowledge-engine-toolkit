@@ -64,7 +64,7 @@ func writeUnitPlan(t *testing.T, dir, unit string, outputs bool, changes ...plan
 	require.NoError(t, err)
 
 	unitDir := filepath.Join(dir, unit)
-	require.NoError(t, os.MkdirAll(unitDir, 0o755))
+	require.NoError(t, os.MkdirAll(unitDir, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(unitDir, tfplan.JSONFile), data, 0o600))
 }
 
@@ -180,7 +180,7 @@ func TestFoundationTfplan(t *testing.T) {
 	assert.Contains(t, tfplan.Summary("t", none), "No unit has pending changes.")
 
 	broken := filepath.Join(dir, "broken", tfplan.JSONFile)
-	require.NoError(t, os.MkdirAll(filepath.Dir(broken), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(broken), 0o750))
 	require.NoError(t, os.WriteFile(broken, []byte("{"), 0o600))
 
 	_, err = tfplan.ReadUnits(dir)

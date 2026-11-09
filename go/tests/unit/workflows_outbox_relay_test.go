@@ -848,7 +848,7 @@ func TestLoadRelayConfig_OverlaysDefaultsAndRejectsInvalid(t *testing.T) {
 
 	set := func(mut func(*outbox.RelayConfig)) func(string, any) error {
 		return func(_ string, target any) error {
-			mut(target.(*outbox.RelayConfig))
+			mut(asType[*outbox.RelayConfig](t, target))
 
 			return nil
 		}

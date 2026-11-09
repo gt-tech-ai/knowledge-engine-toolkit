@@ -6,7 +6,7 @@ package minio
 
 import (
 	"context"
-	"fmt"
+	"net"
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
@@ -98,7 +98,7 @@ func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
 
 	host, err := container.Host(ctx)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
 
 		return nil, apperr.Wrap(
 			err,
@@ -109,14 +109,14 @@ func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
 
 	port, err := container.MappedPort(ctx, minioAPIPort)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
 
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "failed to get mapped port")
 	}
 
 	return &TestMinIO{
 		container: container,
-		endpoint:  fmt.Sprintf("http://%s:%s", host, port.Port()),
+		endpoint:  "http://" + net.JoinHostPort(host, port.Port()),
 	}, nil
 }
 
@@ -128,6 +128,6 @@ func (m *TestMinIO) Endpoint() string {
 // Close terminates the MinIO container. Safe to call on a nil receiver.
 func (m *TestMinIO) Close(ctx context.Context) {
 	if m != nil && m.container != nil {
-		m.container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on teardown
+		_ = m.container.Terminate(ctx) // best-effort cleanup on teardown
 	}
 }

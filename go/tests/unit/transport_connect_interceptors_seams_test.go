@@ -266,34 +266,38 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 	p, _ = coreprincipal.PrincipalFrom[principal](got)
 	assert.Equal(t, "resolved", p.Tenant, "without a stub, synthetic claims resolve")
 
-	const secret = "pq: host db-7.internal password auth failed"
+	const leakedDetail = "pq: host db-7.internal password auth failed"
 
 	cases := map[string]struct {
 		err  error
 		want connect.Code
 	}{
 		"connect code": {
-			connect.NewError(connect.CodeUnauthenticated, apperr.Sentinel(secret)),
+			connect.NewError(connect.CodeUnauthenticated, apperr.Sentinel(leakedDetail)),
 			connect.CodeUnauthenticated,
 		},
-		"forbidden":     {apperr.Forbidden(secret), connect.CodePermissionDenied},
-		"unauthorized":  {apperr.Unauthorized(secret), connect.CodeUnauthenticated},
-		"not found":     {apperr.NotFound(secret), connect.CodeNotFound},
-		"invalid input": {apperr.InvalidInput(secret), connect.CodeInvalidArgument},
-		"timeout":       {apperr.Timeout(secret), connect.CodeDeadlineExceeded},
-		"unavailable":   {apperr.Unavailable(secret), connect.CodeUnavailable},
+		"forbidden":     {apperr.Forbidden(leakedDetail), connect.CodePermissionDenied},
+		"unauthorized":  {apperr.Unauthorized(leakedDetail), connect.CodeUnauthenticated},
+		"not found":     {apperr.NotFound(leakedDetail), connect.CodeNotFound},
+		"invalid input": {apperr.InvalidInput(leakedDetail), connect.CodeInvalidArgument},
+		"timeout":       {apperr.Timeout(leakedDetail), connect.CodeDeadlineExceeded},
+		"unavailable":   {apperr.Unavailable(leakedDetail), connect.CodeUnavailable},
 		"internal": {
-			apperr.Wrap(apperr.Sentinel(secret), apperr.CodeInternal, "lookup"),
+			apperr.Wrap(apperr.Sentinel(leakedDetail), apperr.CodeInternal, "lookup"),
 			connect.CodeInternal,
 		},
-		"uncoded": {apperr.Sentinel(secret), connect.CodeUnavailable},
+		"uncoded": {apperr.Sentinel(leakedDetail), connect.CodeUnavailable},
 		"wrapped coded": {
-			apperr.Wrap(apperr.Forbidden(secret), apperr.CodeForbidden, "resolve"),
+			apperr.Wrap(apperr.Forbidden(leakedDetail), apperr.CodeForbidden, "resolve"),
 			connect.CodePermissionDenied,
 		},
-		"upstream coded": {apperr.Upstream(secret), connect.CodeUnavailable},
+		"upstream coded": {apperr.Upstream(leakedDetail), connect.CodeUnavailable},
 		"resource exhausted": {
-			apperr.Wrap(apperr.Sentinel(secret), apperr.CodeResourceExhausted, "quota"),
+			apperr.Wrap(
+				apperr.Sentinel(leakedDetail),
+				apperr.CodeResourceExhausted,
+				"quota",
+			),
 			connect.CodeResourceExhausted,
 		},
 	}

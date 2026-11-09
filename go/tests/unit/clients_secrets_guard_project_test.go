@@ -42,6 +42,12 @@ func TestGuardDomain(t *testing.T) {
 	}
 }
 
+// The field names of the management secret that TestProjectEnv projects.
+const (
+	projectFieldSecret = "client_secret"
+	projectFieldPass   = "password"
+)
+
 // TestProjectEnv tests projecting a secret's fields into a child environment.
 //
 // Why this test is important:
@@ -56,11 +62,9 @@ func TestProjectEnv(t *testing.T) {
 	t.Parallel()
 
 	ref := types.Ref{Env: "stg", Class: "mgmt"}
-	fields := map[string]string{
-		"client_secret": "AUTH0_CLIENT_SECRET",
-		"client_id":     "AUTH0_CLIENT_ID",
-		"password":      "E2E_PASSWORD",
-	}
+	fields := map[string]string{"client_id": "AUTH0_CLIENT_ID"}
+	fields[projectFieldSecret] = "AUTH0_CLIENT_SECRET"
+	fields[projectFieldPass] = "E2E_PASSWORD"
 	src := mocks.NewMockSource(gomock.NewController(t))
 	at := func(field string) types.Ref {
 		r := ref
@@ -71,9 +75,9 @@ func TestProjectEnv(t *testing.T) {
 	}
 	src.EXPECT().Get(gomock.Any(), at("client_id")).Return(types.NewSecret("id"), nil)
 	src.EXPECT().
-		Get(gomock.Any(), at("client_secret")).
+		Get(gomock.Any(), at(projectFieldSecret)).
 		Return(types.NewSecret("sec"), nil)
-	src.EXPECT().Get(gomock.Any(), at("password")).
+	src.EXPECT().Get(gomock.Any(), at(projectFieldPass)).
 		Return(types.Secret{}, apperr.New(apperr.CodeNotFound, "no password"))
 
 	got, err := secrets.ProjectEnv(t.Context(), src, ref, fields)

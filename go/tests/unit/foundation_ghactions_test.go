@@ -36,7 +36,7 @@ func TestFoundationGhactions(t *testing.T) {
 	require.NoError(t, ghactions.AppendSummary(path, "### one"))
 	require.NoError(t, ghactions.AppendSummary(path, "### two"))
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	assert.Equal(t, "### one\n### two\n", string(data))
 	require.NoError(t, ghactions.AppendSummary("", "nowhere"))

@@ -57,13 +57,13 @@ func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
 	)
 
 	descPath := filepath.Join(t.TempDir(), "d.binpb")
-	require.NoError(t, os.WriteFile(descPath, fds, 0o644))
+	require.NoError(t, os.WriteFile(descPath, fds, 0o600))
 
 	routes, err := openapi.BuildRouteTable(fds, nil)
 	require.NoError(t, err)
 
 	inDir := filepath.Join(t.TempDir(), "in")
-	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o750))
 
 	// The swagger response schema is a truly empty object (no properties) — exactly
 	// what protoc-gen-openapiv2 emits for an empty response message.
@@ -73,7 +73,7 @@ func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
           "schema":{"$ref":"#/definitions/PauseThingResponse"}}}}}},
       "definitions":{"PauseThingResponse":{"type":"object"}}}`
 	require.NoError(t, os.WriteFile(
-		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o644,
+		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o600,
 	))
 
 	res, err := openapi.Convert(

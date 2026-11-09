@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
+	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/cache"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
@@ -191,7 +192,15 @@ func (c *roleCache[T, ID]) get(
 		return nil, err
 	}
 
-	entity := *v.(*T)
+	cached, ok := v.(*T)
+	if !ok {
+		return nil, apperr.New(
+			apperr.CodeInternal,
+			"repository cache: loaded value has the wrong type",
+		)
+	}
+
+	entity := *cached
 
 	return &entity, nil
 }

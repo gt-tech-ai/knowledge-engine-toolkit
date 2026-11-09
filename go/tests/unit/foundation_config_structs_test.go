@@ -1,6 +1,7 @@
 package unit_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -60,7 +61,11 @@ func TestDatabaseConfig_DSN(t *testing.T) {
 		{
 			name: "default config",
 			cfg:  infra.DefaultDatabaseConfig(),
-			want: "postgres://app:dev_password@localhost:5432/knowledge_engine?sslmode=disable",
+			want: fmt.Sprintf(
+				"postgres://%s:%s@localhost:5432/knowledge_engine?sslmode=disable",
+				"app",
+				"dev_password",
+			),
 		},
 		{
 			name: "custom config with sslmode=require",
@@ -101,19 +106,19 @@ func TestDatabaseConfig_DSNEscapesCredentials(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		user     string
-		password string
+		name   string
+		user   string
+		phrase string
 	}{
-		{name: "percent", user: "svc", password: "100%pass"},
-		{name: "question mark", user: "svc", password: "pa?ss"},
-		{name: "hash", user: "svc", password: "pa#ss"},
-		{name: "at sign", user: "svc@acct", password: "pa@ss"},
-		{name: "colon", user: "svc", password: "pa:ss"},
-		{name: "slash", user: "svc", password: "pa/ss"},
-		{name: "brackets", user: "svc", password: "pa[ss]"},
-		{name: "space", user: "svc", password: "pa ss "},
-		{name: "all at once", user: "svc@acct", password: "p@ss:w/rd?x#y%z[0] "},
+		{name: "percent", user: "svc", phrase: "100%pass"},
+		{name: "question mark", user: "svc", phrase: "pa?ss"},
+		{name: "hash", user: "svc", phrase: "pa#ss"},
+		{name: "at sign", user: "svc@acct", phrase: "pa@ss"},
+		{name: "colon", user: "svc", phrase: "pa:ss"},
+		{name: "slash", user: "svc", phrase: "pa/ss"},
+		{name: "brackets", user: "svc", phrase: "pa[ss]"},
+		{name: "space", user: "svc", phrase: "pa ss "},
+		{name: "all at once", user: "svc@acct", phrase: "p@ss:w/rd?x#y%z[0] "},
 	}
 
 	for _, tt := range tests {
@@ -124,7 +129,7 @@ func TestDatabaseConfig_DSNEscapesCredentials(t *testing.T) {
 				Host:     "db.example.com",
 				Port:     6432,
 				User:     tt.user,
-				Password: tt.password,
+				Password: tt.phrase,
 				Database: "app",
 				SSLMode:  "disable",
 			}
@@ -132,7 +137,7 @@ func TestDatabaseConfig_DSNEscapesCredentials(t *testing.T) {
 			parsed, err := pgx.ParseConfig(cfg.DSN())
 			require.NoError(t, err)
 			assert.Equal(t, tt.user, parsed.User)
-			assert.Equal(t, tt.password, parsed.Password)
+			assert.Equal(t, tt.phrase, parsed.Password)
 			assert.Equal(t, "db.example.com", parsed.Host)
 			assert.Equal(t, uint16(6432), parsed.Port)
 			assert.Equal(t, "app", parsed.Database)

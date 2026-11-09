@@ -3,6 +3,7 @@ package listquery
 import (
 	"bytes"
 	"context"
+	"math"
 	"time"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
@@ -476,8 +477,14 @@ func offsetNextCursor[T, D any](
 		return mintKeysetCursor(r.Keyset, cols, rows[len(rows)-1], r.Sort, r.Filter)
 	}
 
-	//nolint:gosec // G115: a 1-based page number is small and positive, well within int32.
-	return EncodeToken(types.PageToken{OffsetPage: int32(pageNum + 1)})
+	// A 1-based page number stays far inside int32; clamping keeps the conversion exact
+	// rather than wrapping negative should it ever not.
+	next := pageNum + 1
+	if next < 1 || next > math.MaxInt32 {
+		next = math.MaxInt32
+	}
+
+	return EncodeToken(types.PageToken{OffsetPage: int32(next)})
 }
 
 // parseID converts a cursor id string to its bound value via the reader's ParseID (nil →

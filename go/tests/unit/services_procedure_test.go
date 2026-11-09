@@ -231,7 +231,10 @@ func TestServicesProcedure_ControlFlow(t *testing.T) {
 	setter := func(_ context.Context, vars procedure.Vars, _ types.RunOptions,
 	) (types.StepResults, procedure.Vars, error) {
 		return types.StepResults{{Name: "go", Status: types.StatusPass}},
-			procedure.Vars{"tag": vars["env"].(string) + "-1", "policy": "skip"}, nil
+			procedure.Vars{
+				"tag":    asType[string](t, vars["env"]) + "-1",
+				"policy": "skip",
+			}, nil
 	}
 	eng := procEngine(t, rec, []types.Procedure{
 		{Name: "main", Inputs: []string{"env", "svcs"}, Steps: []types.ProcStep{

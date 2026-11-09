@@ -79,7 +79,7 @@ func NewTestRedis(ctx context.Context) (*TestRedis, error) {
 
 	host, err := container.Host(ctx)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
 
 		return nil, apperr.Wrap(
 			err,
@@ -90,7 +90,7 @@ func NewTestRedis(ctx context.Context) (*TestRedis, error) {
 
 	port, err := container.MappedPort(ctx, redisPort)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
 
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "failed to get mapped port")
 	}
@@ -109,6 +109,6 @@ func (r *TestRedis) Addr() string {
 // Close terminates the Redis container. Safe to call on a nil receiver.
 func (r *TestRedis) Close(ctx context.Context) {
 	if r != nil && r.container != nil {
-		r.container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on teardown
+		_ = r.container.Terminate(ctx) // best-effort cleanup on teardown
 	}
 }

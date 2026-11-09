@@ -81,7 +81,7 @@ func NewTestCassandra(ctx context.Context) (*TestCassandra, error) {
 
 	host, err := container.Host(ctx)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
 
 		return nil, apperr.Wrap(
 			err,
@@ -92,14 +92,14 @@ func NewTestCassandra(ctx context.Context) (*TestCassandra, error) {
 
 	mapped, err := container.MappedPort(ctx, cqlPort)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
 
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "failed to get mapped port")
 	}
 
 	port, err := strconv.Atoi(mapped.Port())
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
 
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "invalid mapped port")
 	}
@@ -133,6 +133,6 @@ func (c *TestCassandra) Exec(ctx context.Context, cql string) error {
 // Close terminates the container. Safe to call on a nil receiver.
 func (c *TestCassandra) Close(ctx context.Context) {
 	if c != nil && c.container != nil {
-		c.container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on teardown
+		_ = c.container.Terminate(ctx) // best-effort cleanup on teardown
 	}
 }

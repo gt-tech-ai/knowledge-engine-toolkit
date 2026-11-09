@@ -57,11 +57,14 @@ func newCassandraStore(
 // expectPage expects one paged SELECT of bucket in [lo, hi) and serves rows as a
 // single, final page.
 func expectPage(
+	tb testing.TB,
 	ctrl *gomock.Controller,
 	session *mocks.MockCQLSession,
 	bucket, lo, hi time.Time,
 	rows []storedRow,
 ) {
+	tb.Helper()
+
 	query := mocks.NewMockCQLQuery(ctrl)
 	iter := mocks.NewMockCQLIter(ctrl)
 
@@ -83,9 +86,9 @@ func expectPage(
 				return false
 			}
 
-			*dest[0].(*time.Time) = rows[i].ts
-			*dest[1].(*map[string]string) = rows[i].dims
-			*dest[2].(*map[string][]byte) = rows[i].partials
+			*asType[*time.Time](tb, dest[0]) = rows[i].ts
+			*asType[*map[string]string](tb, dest[1]) = rows[i].dims
+			*asType[*map[string][]byte](tb, dest[2]) = rows[i].partials
 			i++
 
 			return true
@@ -128,7 +131,7 @@ func TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder(t *testing.T) {
 	for _, b := range []time.Time{
 		day(time.September, 1), day(time.October, 1), day(time.November, 1),
 	} {
-		expectPage(ctrl, session, b, from, to, []storedRow{
+		expectPage(t, ctrl, session, b, from, to, []storedRow{
 			{
 				ts:   b.AddDate(0, 0, 1),
 				dims: map[string]string{"team": b.Month().String(), "model": "m"},
@@ -202,6 +205,7 @@ func TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual(t *testing.T) {
 	)
 	require.NoError(t, err)
 	expectPage(
+		t,
 		ctrl,
 		session,
 		day(time.October, 1),
@@ -261,7 +265,7 @@ func TestCassandraStore_ReadsTheWindowsPartialFirstBucket(t *testing.T) {
 	store := newCassandraStore(t, session)
 	from := day(time.October, 9).Add(2*time.Hour + 54*time.Minute)
 	to := from.Add(24 * time.Hour)
-	expectPage(ctrl, session, day(time.October, 1), day(time.October, 9), to,
+	expectPage(t, ctrl, session, day(time.October, 1), day(time.October, 9), to,
 		[]storedRow{{
 			ts:       day(time.October, 9),
 			dims:     map[string]string{"team": "t-1"},
@@ -331,7 +335,7 @@ func TestCassandraStore_WriteUpsertsOnePartialRowPerGrain(t *testing.T) {
 			).
 			DoAndReturn(func(_ string, values ...any) *mocks.MockCQLQuery {
 				p, err := chartspec.DecodePartial(
-					values[7].(map[string][]byte)["tokens_in"],
+					asType[map[string][]byte](t, values[7])["tokens_in"],
 				)
 				require.NoError(t, err)
 				assert.InDelta(t, 42.0, chartspec.Finalize(p, types.AggSum), 0)
@@ -454,7 +458,7 @@ func TestCassandraStore_PageErrorIsTerminal(t *testing.T) {
 	iter.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any()).Return(false)
 	iter.EXPECT().PageState().Return(nil)
 	iter.EXPECT().Close().Return(apperr.New(apperr.CodeUnavailable, "read timed out"))
-	expectPage(ctrl, session, day(time.October, 1), from, to, []storedRow{{
+	expectPage(t, ctrl, session, day(time.October, 1), from, to, []storedRow{{
 		ts: day(time.October, 2), dims: map[string]string{"team": "t-1"},
 		partials: map[string][]byte{"tokens_in": encoded(t, 1)},
 	}})
@@ -495,7 +499,7 @@ func TestCassandraStore_ResumeTokenIsBoundToItsQuery(t *testing.T) {
 	from, to := day(time.September, 15), day(time.October, 15)
 
 	for _, b := range []time.Time{day(time.September, 1), day(time.October, 1)} {
-		expectPage(ctrl, session, b, from, to, nil)
+		expectPage(t, ctrl, session, b, from, to, nil)
 	}
 
 	q := types.AggregateQuery{
@@ -587,11 +591,11 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 				}
 
 				served = true
-				*dest[0].(*time.Time) = ts
-				*dest[1].(*string) = "team=t-1"
-				*dest[2].(*string) = "k-1"
-				*dest[3].(*map[string]string) = dims
-				*dest[4].(*map[string][]byte) = map[string][]byte{
+				*asType[*time.Time](t, dest[0]) = ts
+				*asType[*string](t, dest[1]) = "team=t-1"
+				*asType[*string](t, dest[2]) = "k-1"
+				*asType[*map[string]string](t, dest[3]) = dims
+				*asType[*map[string][]byte](t, dest[4]) = map[string][]byte{
 					"tokens_in": encoded(t, 7),
 				}
 
@@ -611,7 +615,7 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 			"org-1", "genai_calls", bucket, ts, "team=t-1", dims, gomock.Any(), gomock.Any(),
 		).
 			Do(func(_ string, values ...any) {
-				got := values[7].(int)
+				got := asType[int](t, values[7])
 				assert.LessOrEqual(t, got, want)
 				assert.GreaterOrEqual(t, got, want-5)
 			})

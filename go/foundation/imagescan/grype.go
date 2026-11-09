@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
@@ -107,7 +108,7 @@ func GrypeEmergencies(report []byte) ([]Emergency, error) {
 // each one as "<id> <package> <version> (fixed in <version>)". A report that cannot be
 // read fails too, so a grype that wrote nothing never passes the gate.
 func CheckGrypeReport(path string) error {
-	report, err := os.ReadFile(path)
+	report, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeNotFound, "read grype report "+path)
 	}

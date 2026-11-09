@@ -168,7 +168,7 @@ func TestClientsProcess_LogFile(t *testing.T) {
 	run("one")
 	run("two")
 
-	data, err := os.ReadFile(log)
+	data, err := os.ReadFile(filepath.Clean(log))
 	require.NoError(t, err)
 	assert.Equal(t, strings.Repeat("one\n", 2)+strings.Repeat("two\n", 2), string(data))
 

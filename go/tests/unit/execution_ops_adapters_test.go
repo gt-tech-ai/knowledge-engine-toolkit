@@ -82,7 +82,12 @@ func TestExecutionOpsAdapters_FuncDecodeAndDefaults(t *testing.T) {
 
 	require.NoError(t, op.Run(t.Context(), in, nil))
 	assert.Equal(t, adapterInput{Target: "mutated", Fix: true}, got)
-	assert.Equal(t, "a", in.(*adapterInput).Target, "the caller's input is not mutated")
+	assert.Equal(
+		t,
+		"a",
+		asType[*adapterInput](t, in).Target,
+		"the caller's input is not mutated",
+	)
 	assert.Equal(t, "cli", gotEnv.Tag)
 
 	err = op.Run(t.Context(), "nope", nil)

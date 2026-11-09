@@ -43,7 +43,7 @@ func run(ctx context.Context, root string) error {
 	return gen.Apply(ctx, func(p string, data []byte) error {
 		dst := filepath.Join(root, filepath.FromSlash(p))
 		// A committed source file, readable like every other one.
-		err := os.WriteFile(dst, data, 0o644) //nolint:gosec // G306: a source file
+		err := os.WriteFile(dst, data, 0o600)
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "write "+p)
 		}

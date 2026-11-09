@@ -13,6 +13,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"time"
 
 	// PostgreSQL driver registration.
@@ -80,7 +81,7 @@ func NewTestDatabase(ctx context.Context) (*TestDatabase, error) {
 
 	host, err := container.Host(ctx)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
 
 		return nil, apperr.Wrap(
 			err,
@@ -91,13 +92,13 @@ func NewTestDatabase(ctx context.Context) (*TestDatabase, error) {
 
 	port, err := container.MappedPort(ctx, "5432/tcp")
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
 
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "failed to get mapped port")
 	}
 
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		dbUser, dbPassword, host, port.Port(), dbName)
+	dsn := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable",
+		dbUser, dbPassword, net.JoinHostPort(host, port.Port()), dbName)
 
 	return &TestDatabase{
 		container: container,
@@ -124,6 +125,6 @@ func (td *TestDatabase) OpenDB() (*sql.DB, error) {
 // Close terminates the container.
 func (td *TestDatabase) Close(ctx context.Context) {
 	if td.container != nil {
-		td.container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on teardown
+		_ = td.container.Terminate(ctx) // best-effort cleanup on teardown
 	}
 }

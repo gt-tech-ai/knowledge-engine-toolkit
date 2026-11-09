@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"io"
 	"os"
+	"path/filepath"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -126,7 +127,7 @@ func BinarySalt() (string, error) {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: locate executable")
 	}
 
-	f, err := os.Open(exe)
+	f, err := os.Open(filepath.Clean(exe))
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: open "+exe)
 	}

@@ -23,7 +23,9 @@ import (
 func consoleGolden(t *testing.T, name string) string {
 	t.Helper()
 
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "report", name))
+	data, err := os.ReadFile(
+		filepath.Clean(filepath.Join("..", "..", "..", "testdata", "report", name)),
+	)
 	require.NoError(t, err)
 
 	return string(data)
@@ -318,7 +320,7 @@ func TestConsole_StepSummary(t *testing.T) {
 	)
 	replayConsoleRun(c.Observer())
 
-	got, err := os.ReadFile(path)
+	got, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	assert.Equal(t, consoleGolden(t, "step_summary.md"), string(got))
 }

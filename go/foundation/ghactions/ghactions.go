@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
@@ -22,7 +23,11 @@ func AppendSummary(path, markdown string) error {
 		return nil
 	}
 
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, summaryMode)
+	f, err := os.OpenFile(
+		filepath.Clean(path),
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY,
+		summaryMode,
+	)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open the job summary")
 	}

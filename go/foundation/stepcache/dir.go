@@ -48,29 +48,53 @@ func deriveSalt(cfg Config) (string, error) {
 	}
 
 	for _, root := range cfg.SaltDirs {
-		err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-			switch {
-			case os.IsNotExist(err) && p == root:
-				return filepath.SkipDir
-			case err != nil || d.IsDir():
-				return err
-			}
+		var err error
 
-			b, err := os.ReadFile(p) //nolint:gosec // G304: a configured salt dir's file
-			if err != nil {
-				return err //nolint:wrapcheck // wrapped once below
-			}
-
-			parts = append(parts, filepath.ToSlash(p), string(b))
-
-			return nil
-		})
+		parts, err = appendSaltDir(parts, root)
 		if err != nil {
-			return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: hash "+root)
+			return "", err
 		}
 	}
 
 	return Key(nil, "", parts), nil
+}
+
+// appendSaltDir appends each file's path and contents under root, in walk order, to
+// parts. The walk reads through an os.Root, so a symlink inside root cannot lead a read
+// outside it. A root that does not exist contributes nothing.
+func appendSaltDir(parts []string, root string) ([]string, error) {
+	rt, err := os.OpenRoot(root)
+	if os.IsNotExist(err) {
+		return parts, nil
+	}
+
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "stepcache: open "+root)
+	}
+
+	defer func() { _ = rt.Close() }()
+
+	fsys := rt.FS()
+
+	err = fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+
+		b, err := fs.ReadFile(fsys, p)
+		if err != nil {
+			return apperr.Wrap(err, apperr.CodeInternal, "stepcache: read "+p)
+		}
+
+		parts = append(parts, filepath.ToSlash(filepath.Join(root, p)), string(b))
+
+		return nil
+	})
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "stepcache: hash "+root)
+	}
+
+	return parts, nil
 }
 
 // Hit reports whether key's marker exists.
@@ -101,7 +125,7 @@ func (d dir) Record(_ context.Context, key string) error {
 		return apperr.Wrap(err, apperr.CodeInternal, "stepcache: create "+d.root)
 	}
 
-	f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(filepath.Clean(p), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	switch {
 	case err == nil:
 		err := f.Close()

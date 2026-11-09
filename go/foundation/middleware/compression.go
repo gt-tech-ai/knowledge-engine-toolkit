@@ -108,7 +108,11 @@ func (cw *compressWriter) startGzip() {
 	cw.Header().Set("Content-Encoding", "gzip")
 	cw.Header().Del("Content-Length")
 
-	gz := cw.pool.Get().(*gzip.Writer)
+	gz, ok := cw.pool.Get().(*gzip.Writer)
+	if !ok {
+		gz = gzip.NewWriter(cw.ResponseWriter)
+	}
+
 	gz.Reset(cw.ResponseWriter)
 
 	cw.gzWriter = gz
