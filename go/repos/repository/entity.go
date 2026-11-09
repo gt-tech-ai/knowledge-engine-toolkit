@@ -13,13 +13,13 @@ import (
 // repository embeds it and adds its product queries through Exec, calling Next.
 type Entity[T, P any, ID comparable, N any] struct {
 	// Entity serves the roles.
-	decorate.Entity[T, P, ID]
+	*decorate.Entity[T, P, ID]
+
+	// Base runs the repository's operations and supplies Name, Exec and ExecOnce.
+	*Base
 
 	// next is the store.
 	next N
-
-	// Base runs the repository's operations and supplies Name, Exec and ExecOnce.
-	Base
 }
 
 // Next returns the store the repository is built over, as its contract declares it.
@@ -73,5 +73,5 @@ func NewEntity[R, T, P any, ID comparable, N any](
 		return Entity[T, P, ID, N]{}, err
 	}
 
-	return Entity[T, P, ID, N]{Base: b, Entity: e, next: next}, nil
+	return Entity[T, P, ID, N]{Base: &b, Entity: &e, next: next}, nil
 }

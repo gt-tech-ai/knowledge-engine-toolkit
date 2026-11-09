@@ -27,6 +27,8 @@ import (
 //   - After git check-ignore confirms the path is ignored (runner returns nil), Put
 //     persists the value and Get reveals it.
 func TestFileSource_PutThenGetRoundTripsOnIgnoredPath(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
 	// `git check-ignore -q <path>` exits 0 when the path IS ignored → Run returns nil.
@@ -60,6 +62,8 @@ func TestFileSource_PutThenGetRoundTripsOnIgnoredPath(t *testing.T) {
 //   - When git check-ignore reports not-ignored (runner returns an error), Put returns
 //     CodeInvalidInput and no file is created.
 func TestFileSource_PutRefusesNonIgnoredPath(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
 	// Not ignored → check-ignore exits 1 → the CommandRunner returns a non-nil error.
@@ -96,6 +100,8 @@ func TestFileSource_PutRefusesNonIgnoredPath(t *testing.T) {
 //   - Get for a Ref whose key is not present in the file returns CodeNotFound (and Get
 //     never invokes the runner).
 func TestFileSource_GetMissingKeyIsNotFound(t *testing.T) {
+	t.Parallel()
+
 	path := filepath.Join(t.TempDir(), ".secrets.env")
 	require.NoError(t, os.WriteFile(path, []byte("OTHER=x\n"), 0o600))
 
@@ -126,6 +132,8 @@ func TestFileSource_GetMissingKeyIsNotFound(t *testing.T) {
 //     bare value; a plain `KEY=value` line still works; and a Put preserves the `export `
 //     prefix.
 func TestFileSource_ReadsExportAndQuotedDotenv(t *testing.T) {
+	t.Parallel()
+
 	path := filepath.Join(t.TempDir(), ".secrets.env")
 	require.NoError(t, os.WriteFile(path, []byte(
 		"export CLIENT_SECRET=\"the-secret\"\n"+

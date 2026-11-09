@@ -33,7 +33,8 @@ func NewHedge(loader interfaces.ConfigLoader) (interfaces.Hedger, error) {
 		}
 	}
 
-	if err := c.Validate(); err != nil {
+	err := c.Validate()
+	if err != nil {
 		return nil, err
 	}
 

@@ -11,6 +11,7 @@ import (
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
@@ -209,9 +210,11 @@ func TestDecorations_OperationsShareTheirComponentsBreaker(t *testing.T) {
 
 	on := true
 	breaker := decoration.CircuitBreaker{
-		Enabled:             &on,
-		ConsecutiveFailures: 1,
-		Timeout:             time.Hour,
+		Enabled: &on,
+		BreakerConfig: resilience.BreakerConfig{
+			ConsecutiveFailures: 1,
+			Timeout:             time.Hour,
+		},
 	}
 	run := func(t *testing.T, overrides map[string]decoration.Layers) bool {
 		t.Helper()

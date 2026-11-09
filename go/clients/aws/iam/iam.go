@@ -104,16 +104,16 @@ func Decorate(
 		return nil, err
 	}
 
-	return &decorator{base: base, Base: b}, nil
+	return &decorator{base: base, Base: &b}, nil
 }
 
 // decorator runs each call through the client tier.
 type decorator struct {
+	// Base runs each call through the client tier.
+	*client.Base
+
 	// base is the wrapped client.
 	base API
-
-	// Base runs each call through the client tier.
-	client.Base
 }
 
 // Compile-time assertion that decorator satisfies API.
@@ -127,7 +127,7 @@ func (d *decorator) SimulatePrincipalPolicy(
 ) (*iam.SimulatePrincipalPolicyOutput, error) {
 	return client.Call(
 		ctx,
-		d.Base,
+		*d.Base,
 		"simulate_principal_policy",
 		d.base.SimulatePrincipalPolicy,
 		in,

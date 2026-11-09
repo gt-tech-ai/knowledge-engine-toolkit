@@ -113,6 +113,8 @@ func newFanOutJob(
 //   - len(results) equals len(items), with exactly one Fail and the remainder
 //     Pass when one unit returns a failure.
 func TestFanOut_AllUnitsCollected(t *testing.T) {
+	t.Parallel()
+
 	items := []int{0, 1, 2, 3, 4}
 	results := engine.Pool(2).
 		FanOut(
@@ -164,6 +166,8 @@ func TestFanOut_AllUnitsCollected(t *testing.T) {
 //   - Across many items the observed peak number of concurrently-running units
 //     never exceeds maxWorkers.
 func TestFanOut_BoundedConcurrency(t *testing.T) {
+	t.Parallel()
+
 	const (
 		numItems   = 10
 		maxWorkers = 3
@@ -214,6 +218,8 @@ func TestFanOut_BoundedConcurrency(t *testing.T) {
 //   - The panicking item yields a StatusFail result whose Detail is non-empty
 //     (the captured stack), while sibling units still complete.
 func TestFanOut_PanicConvertsToFail(t *testing.T) {
+	t.Parallel()
+
 	items := []string{"ok", "panic-me", "ok2"}
 	results := engine.Pool(2).
 		FanOut(
@@ -255,6 +261,8 @@ func TestFanOut_PanicConvertsToFail(t *testing.T) {
 //   - After cancelling while one unit holds the lone worker slot, the call
 //     returns len(items) results and at least one is a StatusFail (cancelled).
 func TestFanOut_CtxCancelStopsFeeding(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	started := make(chan struct{})
@@ -313,6 +321,8 @@ func TestFanOut_CtxCancelStopsFeeding(t *testing.T) {
 //   - Two jobs (one Pass, one Fail) produce two collected results and exactly
 //     two OnStepComplete callbacks.
 func TestRunJobGroup_CollectsAllResults(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 
 	// One Pass job and one Fail job, each run exactly once by RunJobGroup; Times(1)
@@ -363,6 +373,8 @@ func TestRunJobGroup_CollectsAllResults(t *testing.T) {
 //     name + phase list, phase name, step name), and NopObserver accepts the
 //     same calls without panicking.
 func TestObserverStartEvents(t *testing.T) {
+	t.Parallel()
+
 	var nop interfaces.ExecutionObserver = engine.NopObserver{}
 
 	// Must not panic.
@@ -447,6 +459,8 @@ func TestObserverStartEvents(t *testing.T) {
 //   - The fast unit's OnStepComplete is observed before the slow unit is
 //     released, and after completion each unit's callback fired exactly once.
 func TestRunJobGroup_FanOutEmitsLivePerUnit(t *testing.T) {
+	t.Parallel()
+
 	release := make(chan struct{})
 
 	var (
@@ -523,6 +537,8 @@ func TestRunJobGroup_FanOutEmitsLivePerUnit(t *testing.T) {
 //   - The aggregate result set has all three results, and each of the two
 //     fan-out units and the appended step is delivered exactly once.
 func TestRunJobGroup_FanOutPlusExtraStep_NoDoubleFire(t *testing.T) {
+	t.Parallel()
+
 	extra := types.StepResult{Name: "coverage", Status: types.StatusPass}
 
 	var (
@@ -579,6 +595,8 @@ func TestRunJobGroup_FanOutPlusExtraStep_NoDoubleFire(t *testing.T) {
 //   - A nil-returning step produces StatusPass with the supplied name "lint"
 //     and group "quality".
 func TestStep_PassOnSuccess(t *testing.T) {
+	t.Parallel()
+
 	s := engine.Step{
 		Name:  "lint",
 		Group: "quality",
@@ -601,6 +619,8 @@ func TestStep_PassOnSuccess(t *testing.T) {
 // What it tests:
 //   - An erroring step produces StatusFail and a non-empty Error string.
 func TestStep_FailOnError(t *testing.T) {
+	t.Parallel()
+
 	s := engine.Step{
 		Name:  "typecheck",
 		Group: "quality",
@@ -626,6 +646,8 @@ func TestStep_FailOnError(t *testing.T) {
 //   - A warn-only step whose function errors produces StatusWarn, not
 //     StatusFail.
 func TestStep_WarnOnly_DowngradesFailure(t *testing.T) {
+	t.Parallel()
+
 	s := engine.Step{
 		Name:     "shellcheck",
 		Group:    "infra",
@@ -647,6 +669,8 @@ func TestStep_WarnOnly_DowngradesFailure(t *testing.T) {
 // What it tests:
 //   - A warn-only step whose function succeeds still produces StatusPass.
 func TestStep_WarnOnly_PreservesPass(t *testing.T) {
+	t.Parallel()
+
 	s := engine.Step{
 		Name:     "ok-step",
 		Group:    "test",
@@ -676,6 +700,8 @@ func TestStep_WarnOnly_PreservesPass(t *testing.T) {
 //   - Three steps run strictly in input order (recorded) and yield three StatusPass
 //     results; empty input returns nil.
 func TestStepsSerial_RunsInOrder(t *testing.T) {
+	t.Parallel()
+
 	var order []string
 
 	mk := func(name string) engine.Step {

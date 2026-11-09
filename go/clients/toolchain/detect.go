@@ -57,83 +57,6 @@ func (d *Detector) Check(
 	return d.checkVersion(ctx, root, tool)
 }
 
-// checkVersion runs the tool's version command and classifies the parsed result
-// against its minimum version.
-func (d *Detector) checkVersion(
-	ctx context.Context,
-	root string,
-	tool *types.ToolDef,
-) types.ToolCheckResult {
-	d.log.Debug(
-		"running version command",
-		"tool",
-		tool.Name,
-		"cmd",
-		strings.Join(tool.VersionCmd, " "),
-	)
-
-	result := d.runner.RunBuffered(ctx, root, tool.VersionCmd[0], tool.VersionCmd[1:]...)
-	if result.Err != nil {
-		d.log.Debug("version command failed", "tool", tool.Name, "error", result.Err)
-
-		return types.ToolCheckResult{
-			Tool:   tool,
-			Status: types.StatusToolOutdated,
-			Found:  "unknown",
-			Message: fmt.Sprintf(
-				"%s: found but version check failed: %v",
-				tool.Name,
-				result.Err,
-			),
-		}
-	}
-
-	raw := strings.TrimSpace(string(result.Stdout))
-	d.log.Debug("raw version output", "tool", tool.Name, "output", raw)
-
-	verStr := raw
-	if tool.VersionParse != nil {
-		verStr = tool.VersionParse(raw)
-	}
-
-	ver, err := types.ParseVersion(verStr)
-	if err != nil {
-		d.log.Debug("version parse error", "tool", tool.Name, "error", err)
-
-		return types.ToolCheckResult{
-			Tool:   tool,
-			Status: types.StatusToolOK,
-			Found:  verStr,
-			Message: fmt.Sprintf(
-				"%s: installed (version parse failed: %s)",
-				tool.Name,
-				verStr,
-			),
-		}
-	}
-
-	if !ver.MeetsMinimum(*tool.MinVersion) {
-		return types.ToolCheckResult{
-			Tool:   tool,
-			Status: types.StatusToolOutdated,
-			Found:  ver.String(),
-			Message: fmt.Sprintf(
-				"%s: %s found, need >= %s",
-				tool.Name,
-				ver,
-				tool.MinVersion,
-			),
-		}
-	}
-
-	return types.ToolCheckResult{
-		Tool:    tool,
-		Status:  types.StatusToolOK,
-		Found:   ver.String(),
-		Message: fmt.Sprintf("%s: %s OK (installed)", tool.Name, ver),
-	}
-}
-
 // Scan checks every tool, logs each result at its severity, and returns all
 // results in order.
 func (d *Detector) Scan(
@@ -208,6 +131,83 @@ func (d *Detector) ListOptional(
 		}
 
 		d.log.Info(status, "name", t.Name, "desc", t.Description)
+	}
+}
+
+// checkVersion runs the tool's version command and classifies the parsed result
+// against its minimum version.
+func (d *Detector) checkVersion(
+	ctx context.Context,
+	root string,
+	tool *types.ToolDef,
+) types.ToolCheckResult {
+	d.log.Debug(
+		"running version command",
+		"tool",
+		tool.Name,
+		"cmd",
+		strings.Join(tool.VersionCmd, " "),
+	)
+
+	result := d.runner.RunBuffered(ctx, root, tool.VersionCmd[0], tool.VersionCmd[1:]...)
+	if result.Err != nil {
+		d.log.Debug("version command failed", "tool", tool.Name, "error", result.Err)
+
+		return types.ToolCheckResult{
+			Tool:   tool,
+			Status: types.StatusToolOutdated,
+			Found:  "unknown",
+			Message: fmt.Sprintf(
+				"%s: found but version check failed: %v",
+				tool.Name,
+				result.Err,
+			),
+		}
+	}
+
+	raw := strings.TrimSpace(string(result.Stdout))
+	d.log.Debug("raw version output", "tool", tool.Name, "output", raw)
+
+	verStr := raw
+	if tool.VersionParse != nil {
+		verStr = tool.VersionParse(raw)
+	}
+
+	ver, err := types.ParseVersion(verStr)
+	if err != nil {
+		d.log.Debug("version parse error", "tool", tool.Name, "error", err)
+
+		return types.ToolCheckResult{
+			Tool:   tool,
+			Status: types.StatusToolOK,
+			Found:  verStr,
+			Message: fmt.Sprintf(
+				"%s: installed (version parse failed: %s)",
+				tool.Name,
+				verStr,
+			),
+		}
+	}
+
+	if !ver.MeetsMinimum(*tool.MinVersion) {
+		return types.ToolCheckResult{
+			Tool:   tool,
+			Status: types.StatusToolOutdated,
+			Found:  ver.String(),
+			Message: fmt.Sprintf(
+				"%s: %s found, need >= %s",
+				tool.Name,
+				ver,
+				tool.MinVersion,
+			),
+		}
+	}
+
+	return types.ToolCheckResult{
+		Tool:    tool,
+		Status:  types.StatusToolOK,
+		Found:   ver.String(),
+		Message: fmt.Sprintf("%s: %s OK (installed)", tool.Name, ver),
 	}
 }
 

@@ -25,6 +25,8 @@ import (
 //     whitespace is trimmed; empty and malformed (no "=") entries are skipped; an
 //     empty string yields an empty non-nil map; a non-map target passes through.
 func TestStringToStringMapHookFunc(t *testing.T) {
+	t.Parallel()
+
 	strType := reflect.TypeFor[string]()
 	mapType := reflect.TypeFor[map[string]string]()
 	hook := cfgviper.StringToStringMapHookFunc()
@@ -70,6 +72,8 @@ func TestStringToStringMapHookFunc(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			got, err := hook(tt.from, tt.to, tt.in)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)

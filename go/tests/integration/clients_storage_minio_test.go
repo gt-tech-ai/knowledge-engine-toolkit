@@ -5,7 +5,8 @@
 // decision, and the decorator stack with mocks; this suite targets end-to-end
 // correctness over a real object store, driven by committed fixtures under
 // testdata/.
-package integration
+
+package integration_test
 
 import (
 	"bytes"
@@ -36,9 +37,10 @@ const testBucket = "test-documents"
 
 // StorageMinIOSuite runs the StorageClient against a real MinIO container.
 type StorageMinIOSuite struct {
+	*testsuite.MinIOIntegrationSuite
+
 	// client is the StorageClient under test, pointed at the test container.
 	client interfaces.StorageClient
-	testsuite.MinIOIntegrationSuite
 }
 
 // TestStorageMinIOSuite is the testify entrypoint for the MinIO integration suite.
@@ -49,7 +51,12 @@ type StorageMinIOSuite struct {
 // What it tests:
 //   - Wires StorageMinIOSuite into the runner
 func TestStorageMinIOSuite(t *testing.T) {
-	suite.Run(t, new(StorageMinIOSuite))
+	t.Parallel()
+
+	suite.Run(
+		t,
+		&StorageMinIOSuite{MinIOIntegrationSuite: &testsuite.MinIOIntegrationSuite{}},
+	)
 }
 
 // TestNewTestMinIO_WithImageOverridesTheDefault tests that the MinIO fixture starts
@@ -67,6 +74,8 @@ func TestStorageMinIOSuite(t *testing.T) {
 //   - It needs a Docker daemon: without one both cases would fail or pass for the
 //     wrong reason, so it skips.
 func TestNewTestMinIO_WithImageOverridesTheDefault(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() || (os.Getenv("INTEGRATION") == "" && os.Getenv("CI") == "") {
 		t.Skip("set INTEGRATION=1 or CI=1 to run integration tests")
 	}
@@ -120,48 +129,6 @@ func (s *StorageMinIOSuite) SetupSuite() {
 	s.Require().NoError(err, "build storage client")
 
 	s.client = c
-}
-
-// rawClient builds a path-style S3 client pointed at the test MinIO instance.
-func (s *StorageMinIOSuite) rawClient() *awss3.Client {
-	s.T().Helper()
-
-	awsCfg, err := awsconfig.LoadDefaultConfig(
-		context.Background(),
-		awsconfig.WithRegion("us-east-1"),
-		awsconfig.WithCredentialsProvider(
-			credentials.NewStaticCredentialsProvider(
-				miniodb.RootUser,
-				miniodb.RootPassword,
-				"",
-			),
-		),
-	)
-	s.Require().NoError(err)
-
-	return awss3.NewFromConfig(awsCfg, func(o *awss3.Options) {
-		o.UsePathStyle = true
-		o.BaseEndpoint = aws.String(s.MinIOEndpoint)
-	})
-}
-
-// loadFixture reads the committed sample.md document fixture from testdata/.
-func (s *StorageMinIOSuite) loadFixture() []byte {
-	s.T().Helper()
-
-	data, err := os.ReadFile(filepath.Join("testdata", "sample.md"))
-	s.Require().NoError(err, "read fixture sample.md")
-
-	return data
-}
-
-// largeFixture returns a deterministic payload of at least minBytes by repeating
-// the sample fixture — exercises the multipart path without committing a large
-// binary or relying on randomness.
-func (s *StorageMinIOSuite) largeFixture(minBytes int) []byte {
-	base := s.loadFixture()
-
-	return bytes.Repeat(base, (minBytes/len(base))+1)
 }
 
 // TestUploadDownload_SmallAndMultipart verifies the round-trip for both the
@@ -385,6 +352,48 @@ func (s *StorageMinIOSuite) TestDelete_DeleteBatch_Exists() {
 	objs, err := s.client.ListObjects(ctx, testBucket, "batch/")
 	s.Require().NoError(err)
 	s.Empty(objs)
+}
+
+// rawClient builds a path-style S3 client pointed at the test MinIO instance.
+func (s *StorageMinIOSuite) rawClient() *awss3.Client {
+	s.T().Helper()
+
+	awsCfg, err := awsconfig.LoadDefaultConfig(
+		context.Background(),
+		awsconfig.WithRegion("us-east-1"),
+		awsconfig.WithCredentialsProvider(
+			credentials.NewStaticCredentialsProvider(
+				miniodb.RootUser,
+				miniodb.RootPassword,
+				"",
+			),
+		),
+	)
+	s.Require().NoError(err)
+
+	return awss3.NewFromConfig(awsCfg, func(o *awss3.Options) {
+		o.UsePathStyle = true
+		o.BaseEndpoint = aws.String(s.MinIOEndpoint)
+	})
+}
+
+// loadFixture reads the committed sample.md document fixture from testdata/.
+func (s *StorageMinIOSuite) loadFixture() []byte {
+	s.T().Helper()
+
+	data, err := os.ReadFile(filepath.Join("testdata", "sample.md"))
+	s.Require().NoError(err, "read fixture sample.md")
+
+	return data
+}
+
+// largeFixture returns a deterministic payload of at least minBytes by repeating
+// the sample fixture — exercises the multipart path without committing a large
+// binary or relying on randomness.
+func (s *StorageMinIOSuite) largeFixture(minBytes int) []byte {
+	base := s.loadFixture()
+
+	return bytes.Repeat(base, (minBytes/len(base))+1)
 }
 
 // download is a helper that reads an object fully.

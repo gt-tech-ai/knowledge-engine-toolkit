@@ -223,6 +223,61 @@ func newStream(
 	return s
 }
 
+// Next returns the next page in bucket order. After a read error it returns
+// that error, with no rows and more=false, on every call.
+func (s *stream) Next(ctx context.Context) ([]types.Row, bool, error) {
+	if s.err != nil {
+		return nil, false, s.err
+	}
+
+	for s.cur < len(s.buckets) {
+		select {
+		case p, ok := <-s.chans[s.cur]:
+			if !ok {
+				s.cur++
+				s.fill()
+
+				continue
+			}
+
+			if p.err != nil {
+				s.err = p.err
+
+				return nil, false, s.err
+			}
+
+			s.token = s.position(p)
+
+			return p.rows, len(p.next) > 0 || s.cur+1 < len(s.buckets), nil
+		case <-ctx.Done():
+			return nil, false, apperr.Wrap(
+				ctx.Err(),
+				apperr.CodeCanceled,
+				"analytics: stream read canceled",
+			)
+		}
+	}
+
+	return nil, false, nil
+}
+
+// ResumeToken returns the position after the last delivered page (nil when the
+// stream is exhausted or nothing was delivered).
+func (s *stream) ResumeToken() []byte { return s.token }
+
+// Close stops the readers and waits for them; it is idempotent.
+func (s *stream) Close() error {
+	if s.closed {
+		return nil
+	}
+
+	s.closed = true
+	s.cancel()
+	s.wg.Wait()
+
+	return nil
+}
+
 // fill starts readers until window buckets ahead of cur are in flight.
 func (s *stream) fill() {
 	for s.started < len(s.buckets) && s.started < s.cur+s.window {
@@ -266,44 +321,6 @@ func (s *stream) read(bucket time.Time, state []byte, ch chan<- page) {
 	}
 }
 
-// Next returns the next page in bucket order. After a read error it returns
-// that error, with no rows and more=false, on every call.
-func (s *stream) Next(ctx context.Context) ([]types.Row, bool, error) {
-	if s.err != nil {
-		return nil, false, s.err
-	}
-
-	for s.cur < len(s.buckets) {
-		select {
-		case p, ok := <-s.chans[s.cur]:
-			if !ok {
-				s.cur++
-				s.fill()
-
-				continue
-			}
-
-			if p.err != nil {
-				s.err = p.err
-
-				return nil, false, s.err
-			}
-
-			s.token = s.position(p)
-
-			return p.rows, len(p.next) > 0 || s.cur+1 < len(s.buckets), nil
-		case <-ctx.Done():
-			return nil, false, apperr.Wrap(
-				ctx.Err(),
-				apperr.CodeCanceled,
-				"analytics: stream read canceled",
-			)
-		}
-	}
-
-	return nil, false, nil
-}
-
 // position encodes the token after page p: the same bucket's next page, or the
 // following bucket's start.
 func (s *stream) position(p page) []byte {
@@ -324,21 +341,4 @@ func (s *stream) position(p page) []byte {
 	b, _ := json.Marshal(t)
 
 	return b
-}
-
-// ResumeToken returns the position after the last delivered page (nil when the
-// stream is exhausted or nothing was delivered).
-func (s *stream) ResumeToken() []byte { return s.token }
-
-// Close stops the readers and waits for them; it is idempotent.
-func (s *stream) Close() error {
-	if s.closed {
-		return nil
-	}
-
-	s.closed = true
-	s.cancel()
-	s.wg.Wait()
-
-	return nil
 }

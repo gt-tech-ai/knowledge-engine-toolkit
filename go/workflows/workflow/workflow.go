@@ -31,11 +31,11 @@ func Tier() decorate.Tier {
 // component's name plus the method's snake_case name. The zero Base runs reads
 // undecorated and refuses every transaction.
 type Base struct {
+	// Subject runs the workflow's operations through the tier; it supplies Name and Exec.
+	*decorate.Subject
+
 	// tx opens the transaction a command or a saga step runs in.
 	tx interfaces.TransactionManager
-
-	// Subject runs the workflow's operations through the tier; it supplies Name and Exec.
-	decorate.Subject
 }
 
 // NewBase builds the Base for the workflow named name over tx (needed only by ExecTx and
@@ -53,7 +53,7 @@ func NewBase[W any](
 		return Base{}, err
 	}
 
-	return Base{tx: tx, Subject: subject}, nil
+	return Base{tx: tx, Subject: &subject}, nil
 }
 
 // ExecTx runs fn as the command op: one decorated operation whose body runs in one

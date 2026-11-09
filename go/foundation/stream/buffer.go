@@ -188,7 +188,9 @@ func (q *queue[T]) produce(
 		}
 
 		n := size(item)
-		if err := q.sem.Acquire(ctx, n); err != nil {
+
+		err = q.sem.Acquire(ctx, n)
+		if err != nil {
 			q.exitErr = canceled(err)
 
 			return

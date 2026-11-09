@@ -58,11 +58,11 @@ func Runs(
 
 // StepEnv is what a registered step runs against.
 type StepEnv struct {
-	// Runner runs the step's commands (the gate's runner).
-	Runner interfaces.CommandRunner
-
 	// Env is the suite environment.
 	Env
+
+	// Runner runs the step's commands (the gate's runner).
+	Runner interfaces.CommandRunner
 
 	// Root is the repository root (the gate's root).
 	Root string

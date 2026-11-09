@@ -94,7 +94,8 @@ func (s *Subscriber) Subscribe(
 		return err
 	}
 
-	if err := ps.Subscribe(ctx, topic); err != nil {
+	err = ps.Subscribe(ctx, topic)
+	if err != nil {
 		s.rollback(s.channels, topic)
 
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis subscribe")
@@ -129,7 +130,8 @@ func (s *Subscriber) PSubscribe(
 		return err
 	}
 
-	if err := ps.PSubscribe(ctx, pattern); err != nil {
+	err = ps.PSubscribe(ctx, pattern)
+	if err != nil {
 		s.rollback(s.patterns, pattern)
 
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis psubscribe")
@@ -149,6 +151,48 @@ func (s *Subscriber) PUnsubscribe(ctx context.Context, pattern string) error {
 	err := ps.PUnsubscribe(ctx, pattern)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis punsubscribe")
+	}
+
+	return nil
+}
+
+// Close stops the dispatch loop and tears down the subscription. It is idempotent
+// and nil-safe (Close before any Subscribe is a no-op).
+func (s *Subscriber) Close() error {
+	s.mu.Lock()
+
+	if s.closed {
+		s.mu.Unlock()
+
+		return nil
+	}
+
+	s.closed = true
+
+	ps := s.pubsub
+
+	s.pubsub = nil
+
+	cancel := s.cancel
+	s.mu.Unlock()
+
+	// Signal in-flight handlers that the subscriber is shutting down.
+	if cancel != nil {
+		cancel()
+	}
+
+	if ps == nil {
+		return nil
+	}
+
+	// Closing the pubsub closes the channel returned by Channel(), so the dispatch
+	// goroutine's range loop exits; wait for it to drain.
+	err := ps.Close()
+
+	s.wg.Wait()
+
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeUnavailable, "redis subscriber close")
 	}
 
 	return nil
@@ -198,48 +242,6 @@ func (s *Subscriber) unregister(
 	delete(reg, key)
 
 	return s.pubsub, ok
-}
-
-// Close stops the dispatch loop and tears down the subscription. It is idempotent
-// and nil-safe (Close before any Subscribe is a no-op).
-func (s *Subscriber) Close() error {
-	s.mu.Lock()
-
-	if s.closed {
-		s.mu.Unlock()
-
-		return nil
-	}
-
-	s.closed = true
-
-	ps := s.pubsub
-
-	s.pubsub = nil
-
-	cancel := s.cancel
-	s.mu.Unlock()
-
-	// Signal in-flight handlers that the subscriber is shutting down.
-	if cancel != nil {
-		cancel()
-	}
-
-	if ps == nil {
-		return nil
-	}
-
-	// Closing the pubsub closes the channel returned by Channel(), so the dispatch
-	// goroutine's range loop exits; wait for it to drain.
-	err := ps.Close()
-
-	s.wg.Wait()
-
-	if err != nil {
-		return apperr.Wrap(err, apperr.CodeUnavailable, "redis subscriber close")
-	}
-
-	return nil
 }
 
 // ensureStartedLocked lazily creates the one multiplexed subscription and launches

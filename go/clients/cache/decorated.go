@@ -25,7 +25,7 @@ func Decorate(
 		return nil, err
 	}
 
-	d := &decorated{base: base, Base: b}
+	d := &decorated{base: base, Base: &b}
 	if m := decs.Observability().Metrics; m != nil {
 		d.hits = m.Counter("cache_hits_total", "Total cache hits", "cache")
 		d.misses = m.Counter("cache_misses_total", "Total cache misses", "cache")
@@ -46,14 +46,14 @@ type cacheOps interface {
 
 // decorated runs a ByteCache's operations through the client tier.
 type decorated struct {
+	// Base runs each operation through the client tier.
+	*client.Base
+
 	// base is the wrapped cache.
 	base interfaces.ByteCache
 
 	// hits and misses count Get outcomes; nil without a metrics collaborator.
 	hits, misses interfaces.Counter
-
-	// Base runs each operation through the client tier.
-	client.Base
 }
 
 var _ interfaces.ByteCache = (*decorated)(nil)

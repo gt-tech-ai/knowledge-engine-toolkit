@@ -91,7 +91,8 @@ func (c *Client) Start(ctx context.Context) error {
 		return apperr.Wrap(err, apperr.CodeInternal, "open gorm postgres")
 	}
 
-	if err := ping(ctx, db); err != nil {
+	err = ping(ctx, db)
+	if err != nil {
 		_ = closePool(db)
 
 		return err
@@ -136,7 +137,8 @@ func ping(ctx context.Context, db *gorm.DB) error {
 		return apperr.Wrap(err, apperr.CodeInternal, "gorm sql.DB")
 	}
 
-	if err := sqlDB.PingContext(ctx); err != nil {
+	err = sqlDB.PingContext(ctx)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeUnavailable,
@@ -154,7 +156,8 @@ func closePool(db *gorm.DB) error {
 		return apperr.Wrap(err, apperr.CodeInternal, "gorm sql.DB")
 	}
 
-	if err := sqlDB.Close(); err != nil {
+	err = sqlDB.Close()
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "close gorm postgres pool")
 	}
 

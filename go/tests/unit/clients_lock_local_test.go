@@ -176,7 +176,8 @@ func TestLocalLock_Acquire_ConcurrentSingleWinner(t *testing.T) {
 
 			<-start
 
-			if _, ok, err := l.Acquire(ctx, "hot"); err == nil && ok {
+			_, ok, err := l.Acquire(ctx, "hot")
+			if err == nil && ok {
 				wins.Add(1)
 			}
 		}()

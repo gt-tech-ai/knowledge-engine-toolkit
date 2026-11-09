@@ -84,7 +84,8 @@ func WriteStepSummary(w io.Writer, results types.StepResults, total time.Duratio
 
 // writeSummary writes one formatted piece of the summary, coding a write error.
 func writeSummary(w io.Writer, format string, a ...any) error {
-	if _, err := fmt.Fprintf(w, format, a...); err != nil {
+	_, err := fmt.Fprintf(w, format, a...)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "report: write step summary")
 	}
 

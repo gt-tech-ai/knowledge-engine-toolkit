@@ -32,6 +32,21 @@ import (
 //   - Against a local httptest server: a 200 body whose SHA-256 matches is placed
 //     in the install dir; a 404 fails the install and places nothing.
 func TestClientsToolchainInstall_DefaultDownloaderFetchesOverHTTP(t *testing.T) {
+	if fixtures.InReexec() {
+		runClientsToolchainInstallDefaultDownloaderFetchesOverHTTP(t)
+
+		return
+	}
+
+	t.Parallel()
+	fixtures.ReexecTest(t, "TestClientsToolchainInstall_DefaultDownloaderFetchesOverHTTP")
+}
+
+// runClientsToolchainInstallDefaultDownloaderFetchesOverHTTP is the test's body.
+// It runs in a child process, where setting the environment cannot reach another test.
+func runClientsToolchainInstallDefaultDownloaderFetchesOverHTTP(t *testing.T) {
+	t.Helper()
+
 	srv := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/pinned" {
@@ -43,7 +58,7 @@ func TestClientsToolchainInstall_DefaultDownloaderFetchesOverHTTP(t *testing.T) 
 			_, _ = w.Write(checksumPayload())
 		}),
 	)
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 
 	for name, tc := range map[string]struct {
 		path    string
@@ -99,6 +114,24 @@ func TestClientsToolchainInstall_DefaultDownloaderFetchesOverHTTP(t *testing.T) 
 //   - Platform windows, arch arm64, artifacts only for windows-amd64: the amd64 URL
 //     is fetched, verified, and placed as pinned.exe.
 func TestClientsToolchainInstall_WindowsARM64FallsBackToAMD64Asset(t *testing.T) {
+	if fixtures.InReexec() {
+		runClientsToolchainInstallWindowsARM64FallsBackToAMD64Asset(t)
+
+		return
+	}
+
+	t.Parallel()
+	fixtures.ReexecTest(
+		t,
+		"TestClientsToolchainInstall_WindowsARM64FallsBackToAMD64Asset",
+	)
+}
+
+// runClientsToolchainInstallWindowsARM64FallsBackToAMD64Asset is the test's body.
+// It runs in a child process, where setting the environment cannot reach another test.
+func runClientsToolchainInstallWindowsARM64FallsBackToAMD64Asset(t *testing.T) {
+	t.Helper()
+
 	binDir, _ := isolateInstallDirs(t)
 	ctrl := gomock.NewController(t)
 	dl := mocks.NewMockDownloader(ctrl)

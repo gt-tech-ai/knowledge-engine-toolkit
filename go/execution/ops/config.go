@@ -37,7 +37,8 @@ type Config[E any] struct {
 // builder returns no operation or seeds defaults for another input type, or when the
 // policy's allow/deny names an unknown operation. Building does no I/O.
 func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
-	if err := cfg.Policy.Validate("policy"); err != nil {
+	err := cfg.Policy.Validate("policy")
+	if err != nil {
 		return nil, err
 	}
 
@@ -46,7 +47,8 @@ func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
 		return nil, err
 	}
 
-	if err := checkPolicyNames(cfg.Policy, known); err != nil {
+	err = checkPolicyNames(cfg.Policy, known)
+	if err != nil {
 		return nil, err
 	}
 

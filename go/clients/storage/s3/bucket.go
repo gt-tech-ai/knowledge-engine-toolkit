@@ -18,15 +18,17 @@ import (
 // can guarantee a bucket exists before anything writes to it, rather than
 // surfacing NoSuchBucket only on the first write.
 func (c *s3Client) EnsureBucket(ctx context.Context, bucket string) error {
-	if _, err := c.api.HeadBucket(
+	_, err := c.api.HeadBucket(
 		ctx, &s3.HeadBucketInput{Bucket: aws.String(bucket)},
-	); err == nil {
+	)
+	if err == nil {
 		return nil // already exists and reachable
 	}
 
-	if _, err := c.api.CreateBucket(
+	_, err = c.api.CreateBucket(
 		ctx, &s3.CreateBucketInput{Bucket: aws.String(bucket)},
-	); err != nil {
+	)
+	if err != nil {
 		var (
 			owned  *s3types.BucketAlreadyOwnedByYou
 			exists *s3types.BucketAlreadyExists

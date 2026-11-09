@@ -81,7 +81,8 @@ func DecodeToken(token string) (types.PageToken, error) {
 
 	var w tokenWire
 
-	if err := json.Unmarshal(raw, &w); err != nil {
+	err = json.Unmarshal(raw, &w)
+	if err != nil {
 		return types.PageToken{}, apperr.InvalidInput("malformed page token")
 	}
 

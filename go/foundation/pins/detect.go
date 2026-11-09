@@ -107,7 +107,8 @@ func Detect(ctx context.Context, cb interfaces.Codebase) (EcosystemSet, error) {
 
 	var goModule string
 
-	if text, err := cb.Text(ctx, "go.mod"); err == nil {
+	text, err := cb.Text(ctx, "go.mod")
+	if err == nil {
 		goModule = modulePath(string(text.Bytes))
 	}
 

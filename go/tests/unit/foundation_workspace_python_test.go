@@ -99,6 +99,7 @@ func TestPythonPackages_Errors(t *testing.T) {
 		root := t.TempDir()
 		bad := filepath.Join(root, "libs", "python", "shelf", "sub")
 		require.NoError(t, os.MkdirAll(bad, 0o750))
+
 		info, err := os.Stat(bad)
 		require.NoError(t, err)
 

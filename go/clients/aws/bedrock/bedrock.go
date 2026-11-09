@@ -105,16 +105,16 @@ func Decorate(
 		return nil, err
 	}
 
-	return &decorator{base: base, Base: b}, nil
+	return &decorator{base: base, Base: &b}, nil
 }
 
 // decorator runs each call through the client tier.
 type decorator struct {
+	// Base runs each call through the client tier.
+	*client.Base
+
 	// base is the wrapped client.
 	base API
-
-	// Base runs each call through the client tier.
-	client.Base
 }
 
 // Compile-time assertion that decorator satisfies API.
@@ -126,7 +126,7 @@ func (d *decorator) Converse(
 	in *bedrockruntime.ConverseInput,
 	optFns ...func(*bedrockruntime.Options),
 ) (*bedrockruntime.ConverseOutput, error) {
-	return client.CallOnce(ctx, d.Base, "converse", d.base.Converse, in, optFns...)
+	return client.CallOnce(ctx, *d.Base, "converse", d.base.Converse, in, optFns...)
 }
 
 // Stub is the client that makes no AWS call.

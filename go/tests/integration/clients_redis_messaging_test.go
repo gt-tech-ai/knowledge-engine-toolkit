@@ -7,7 +7,8 @@
 // tested with mocks — the pure-logic tests (ParseKind, nil-client guards, interface
 // mock-satisfaction) live in go/tests/unit/clients_redis_messaging_test.go; this
 // suite targets correctness over a real connection.
-package integration
+
+package integration_test
 
 import (
 	"context"
@@ -39,80 +40,9 @@ type RedisMessagingSuite struct {
 // What it tests:
 //   - Wires RedisMessagingSuite into the testify runner.
 func TestRedisMessagingSuite(t *testing.T) {
+	t.Parallel()
+
 	suite.Run(t, new(RedisMessagingSuite))
-}
-
-// newClient builds a go-redis client against the suite's container (RESP3, no
-// Protocol:2 — this is a real Redis), cleaned up when the test ends.
-func (s *RedisMessagingSuite) newClient() *goredis.Client {
-	c := goredis.NewClient(&goredis.Options{Addr: s.RedisAddr})
-	s.T().Cleanup(func() { _ = c.Close() })
-
-	return c
-}
-
-// waitSubscribed blocks until Redis reports channel has a subscriber, so a
-// publish lands only after the SUBSCRIBE is registered (Pub/Sub drops a message with
-// no live subscriber). Condition-based, not a fixed sleep.
-func (s *RedisMessagingSuite) waitSubscribed(
-	probe *goredis.Client,
-	channel string,
-) {
-	s.T().Helper()
-
-	s.Require().Eventually(func() bool {
-		res, err := probe.PubSubNumSub(context.Background(), channel).Result()
-
-		return err == nil && res[channel] >= 1
-	}, 5*time.Second, 10*time.Millisecond, "subscription for %q not active", channel)
-}
-
-// waitUnsubscribed blocks until Redis reports channel has 0 subscribers.
-func (s *RedisMessagingSuite) waitUnsubscribed(probe *goredis.Client, channel string) {
-	s.T().Helper()
-
-	s.Require().Eventually(func() bool {
-		res, err := probe.PubSubNumSub(context.Background(), channel).Result()
-
-		return err == nil && res[channel] == 0
-	}, 5*time.Second, 10*time.Millisecond, "subscription for %q still active", channel)
-}
-
-// waitPatterns blocks until Redis reports at least n active pattern subscriptions.
-func (s *RedisMessagingSuite) waitPatterns(probe *goredis.Client, n int64) {
-	s.T().Helper()
-
-	s.Require().Eventually(func() bool {
-		got, err := probe.PubSubNumPat(context.Background()).Result()
-
-		return err == nil && got >= n
-	}, 5*time.Second, 10*time.Millisecond, "pattern subscription not active")
-}
-
-// chanHandler forwards each message's payload onto out, so a test can observe async
-// delivery through the subscriber's dispatch loop with a channel + timeout.
-func chanHandler(out chan<- string) coreiface.MessageHandler {
-	return func(_ context.Context, msg *coreiface.Message) error {
-		out <- string(msg.Payload)
-
-		return nil
-	}
-}
-
-// recvChan reads one value from ch or fails after a bounded wait (no fixed sleep).
-func recvChan[T any](t *testing.T, ch <-chan T, what string) T {
-	t.Helper()
-
-	select {
-	case v := <-ch:
-		return v
-	case <-time.After(3 * time.Second):
-		require.Failf(t, "timeout", "timed out waiting for %s", what)
-
-		var zero T
-
-		return zero
-	}
 }
 
 // TestPublisher_PublishesToChannel tests that Publish + PublishBatch + PublishCount
@@ -269,6 +199,32 @@ func (s *RedisMessagingSuite) TestSubscriber_PatternSubscribeReceivesMatching() 
 	case m := <-chP:
 		s.Failf("unexpected delivery", "after PUnsubscribe: %q", m)
 	default:
+	}
+}
+
+// chanHandler forwards each message's payload onto out, so a test can observe async
+// delivery through the subscriber's dispatch loop with a channel + timeout.
+func chanHandler(out chan<- string) coreiface.MessageHandler {
+	return func(_ context.Context, msg *coreiface.Message) error {
+		out <- string(msg.Payload)
+
+		return nil
+	}
+}
+
+// recvChan reads one value from ch or fails after a bounded wait (no fixed sleep).
+func recvChan[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
+
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(3 * time.Second):
+		require.Failf(t, "timeout", "timed out waiting for %s", what)
+
+		var zero T
+
+		return zero
 	}
 }
 
@@ -445,4 +401,51 @@ func (s *RedisMessagingSuite) TestNewPublisher_KindRedis() {
 	s.waitSubscribed(s.newClient(), "kr.chan")
 	s.Require().NoError(pub.Publish(ctx, "kr.chan", []byte("kind-redis")))
 	s.Equal("kind-redis", recvChan(s.T(), got, "KindRedis roundtrip"))
+}
+
+// newClient builds a go-redis client against the suite's container (RESP3, no
+// Protocol:2 — this is a real Redis), cleaned up when the test ends.
+func (s *RedisMessagingSuite) newClient() *goredis.Client {
+	c := goredis.NewClient(&goredis.Options{Addr: s.RedisAddr})
+	s.T().Cleanup(func() { _ = c.Close() })
+
+	return c
+}
+
+// waitSubscribed blocks until Redis reports channel has a subscriber, so a
+// publish lands only after the SUBSCRIBE is registered (Pub/Sub drops a message with
+// no live subscriber). Condition-based, not a fixed sleep.
+func (s *RedisMessagingSuite) waitSubscribed(
+	probe *goredis.Client,
+	channel string,
+) {
+	s.T().Helper()
+
+	s.Require().Eventually(func() bool {
+		res, err := probe.PubSubNumSub(context.Background(), channel).Result()
+
+		return err == nil && res[channel] >= 1
+	}, 5*time.Second, 10*time.Millisecond, "subscription for %q not active", channel)
+}
+
+// waitUnsubscribed blocks until Redis reports channel has 0 subscribers.
+func (s *RedisMessagingSuite) waitUnsubscribed(probe *goredis.Client, channel string) {
+	s.T().Helper()
+
+	s.Require().Eventually(func() bool {
+		res, err := probe.PubSubNumSub(context.Background(), channel).Result()
+
+		return err == nil && res[channel] == 0
+	}, 5*time.Second, 10*time.Millisecond, "subscription for %q still active", channel)
+}
+
+// waitPatterns blocks until Redis reports at least n active pattern subscriptions.
+func (s *RedisMessagingSuite) waitPatterns(probe *goredis.Client, n int64) {
+	s.T().Helper()
+
+	s.Require().Eventually(func() bool {
+		got, err := probe.PubSubNumPat(context.Background()).Result()
+
+		return err == nil && got >= n
+	}, 5*time.Second, 10*time.Millisecond, "pattern subscription not active")
 }

@@ -159,14 +159,15 @@ func methodViolations(
 	var out []Violation
 
 	for _, b := range bindings {
-		if _, err := Classify(Binding{
+		_, err := Classify(Binding{
 			RPC:           rpc,
 			HTTPMethod:    b.verb,
 			PathTemplate:  b.path,
 			SingleKey:     rc.singleKey,
 			CollectionKey: rc.collectionKey,
 			Action:        action,
-		}); err != nil {
+		})
+		if err != nil {
 			if exempt[rpc] {
 				continue // a genuine action/internal RPC — not a violation
 			}

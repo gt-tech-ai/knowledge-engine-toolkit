@@ -95,7 +95,52 @@ linters:
     - canonicalheader
     - nosprintfhostport
     - modernize
+    # Wire-format casing: our own JSON, YAML, mapstructure and TOML are snake_case.
+    - tagliatelle
+    # Layout and test shape: one error-handling form, ordered declarations, embedded
+    # fields first, named interface parameters and parallel, black-box tests.
+    - paralleltest
+    - testpackage
+    - noinlineerr
+    - funcorder
+    - embeddedstructfieldcheck
+    - inamedparam
+    - wsl_v5
+    - godoclint
+    - godox
   settings:
+    tagliatelle:
+      # Our casing is snake_case. A package that mirrors an external format keeps that
+      # format's casing; an override's pkg is relative to the Go module and covers its
+      # subpackages.
+      case:
+        rules:
+          json: snake
+          yaml: snake
+          mapstructure: snake
+          toml: snake
+        overrides:
+          # Renovate's configuration is camelCase JSON and YAML.
+          - pkg: go/foundation/pins
+            rules: {json: camel, yaml: camel}
+          # The AWS S3 Inventory manifest is camelCase JSON.
+          - pkg: go/clients/connector/s3inventory
+            rules: {json: camel}
+          # Prometheus's HTTP API responses are camelCase JSON.
+          - pkg: go/clients/prometheus/http
+            rules: {json: camel}
+          # Chaos Mesh resources are Kubernetes-style camelCase JSON.
+          - pkg: go/clients/chaos
+            rules: {json: camel}
+          # grype's report is camelCase JSON.
+          - pkg: go/foundation/imagescan
+            rules: {json: camel}
+          # SARIF is camelCase JSON.
+          - pkg: go/services/toolrun/parsers
+            rules: {json: camel}
+          # OTLP/JSON telemetry is camelCase.
+          - pkg: go/tests/fixtures/e2ekit
+            rules: {json: camel}
     staticcheck:
       checks: [all]
     nolintlint:
@@ -465,6 +510,12 @@ linters:
         linters:
           - gosec
         text: G302
+      # The fixture that re-runs one test alone in a child of the test binary: the binary
+      # path is os.Executable, never caller input.
+      - path: ^go/tests/fixtures/reexec\.go$
+        linters:
+          - gosec
+        text: G204
       # The method names mirror the AWS SDK's SQS client interface, which this decorator
       # implements: GetQueueUrl cannot be spelled GetQueueURL.
       - path: ^go/clients/outbox/decorated\.go$

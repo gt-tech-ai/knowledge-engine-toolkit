@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -50,6 +50,8 @@ func newSQLTxDB(t *testing.T) *sql.DB {
 //   - a transaction opened on a context already in one fails INTERNAL without
 //     running its body, through both WithTransaction and Begin.
 func TestSQLTx_CommitsRollsBackAndRefusesNesting(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
 
 	db := newSQLTxDB(t)
@@ -60,11 +62,12 @@ func TestSQLTx_CommitsRollsBackAndRefusesNesting(t *testing.T) {
 		require.True(t, ok, "the body runs on a bound transaction")
 		require.True(t, interfaces.InTx(ctx))
 
-		if _, err := tx.ExecContext(
+		_, err := tx.ExecContext(
 			ctx,
 			`INSERT INTO notes (body) VALUES ($1)`,
 			body,
-		); err != nil {
+		)
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "sqltx test: insert")
 		}
 

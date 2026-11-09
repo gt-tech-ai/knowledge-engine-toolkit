@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -62,6 +62,8 @@ func minioS3Client(endpoint string) connectors3.S3ClientBuilder {
 //     returns the number of objects under bucket/prefix; a nonexistent bucket yields
 //     CodeInvalidInput.
 func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	m, err := miniofix.NewTestMinIO(ctx)
 	require.NoError(t, err)

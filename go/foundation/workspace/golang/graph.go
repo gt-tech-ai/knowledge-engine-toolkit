@@ -45,7 +45,9 @@ func WorkspaceGraph(fsys fs.FS) ([]Module, error) {
 	for _, dir := range dirs {
 		// fs.FS paths are slash-separated, so path.Join is the right join here.
 		gomod := path.Join(dir, modFile) // nosemgrep: use-filepath-join
-		if b, err := fs.ReadFile(fsys, gomod); err == nil {
+
+		b, err := fs.ReadFile(fsys, gomod)
+		if err == nil {
 			mods[dir] = b
 		}
 	}

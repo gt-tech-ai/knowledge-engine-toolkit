@@ -110,7 +110,8 @@ func readUnit(path, unit string) (UnitPlan, error) {
 
 	var doc tfjson.Plan
 
-	if err := json.Unmarshal(data, &doc); err != nil {
+	err = json.Unmarshal(data, &doc)
+	if err != nil {
 		return UnitPlan{}, apperr.Wrap(err, apperr.CodeInternal, "parse "+path)
 	}
 

@@ -34,11 +34,13 @@ func Upsert(src []byte, path string, value any) ([]byte, error) {
 func UpsertAt(src []byte, index int, path string, value any) ([]byte, error) {
 	var node yaml.Node
 
-	if err := node.Encode(value); err != nil {
+	err := node.Encode(value)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "encode the value")
 	}
 
-	if docs, err := DecodeAll(src); err == nil && len(docs) == 0 && index == 0 {
+	docs, err := DecodeAll(src)
+	if err == nil && len(docs) == 0 && index == 0 {
 		return upsertEmpty(src, path, &node)
 	}
 
@@ -153,7 +155,8 @@ func AppendAt(src []byte, index int, path string, value any) ([]byte, error) {
 
 	seq := root(docs[index])
 	for _, st := range steps {
-		if seq, err = child(deref(seq), st); err != nil {
+		seq, err = child(deref(seq), st)
+		if err != nil {
 			return nil, err
 		}
 
@@ -169,7 +172,8 @@ func AppendAt(src []byte, index int, path string, value any) ([]byte, error) {
 
 	var node yaml.Node
 
-	if err := node.Encode(value); err != nil {
+	err = node.Encode(value)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "encode the value")
 	}
 
@@ -244,7 +248,8 @@ func DeleteAt(src []byte, index int, path string) ([]byte, error) {
 
 	parent := root(docs[index])
 	for _, st := range steps[:len(steps)-1] {
-		if parent, err = child(deref(parent), st); err != nil || parent == nil {
+		parent, err = child(deref(parent), st)
+		if err != nil || parent == nil {
 			return src, err
 		}
 	}

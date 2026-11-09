@@ -16,11 +16,11 @@ type Entity[T, P any, ID comparable, N any] struct {
 	// Entity serves the roles.
 	decorate.Entity[T, P, ID]
 
-	// next is the pipeline.
-	next N
-
 	// Base runs the workflow's operations and supplies Name, Exec, ExecTx and InTx.
 	Base
+
+	// next is the pipeline.
+	next N
 }
 
 // Next returns the pipeline the workflow is built over, as its contract declares it.

@@ -215,7 +215,8 @@ func duration(v any) any {
 	case int:
 		return time.Duration(x)
 	case string:
-		if d, err := time.ParseDuration(x); err == nil {
+		d, err := time.ParseDuration(x)
+		if err == nil {
 			return d
 		}
 	}

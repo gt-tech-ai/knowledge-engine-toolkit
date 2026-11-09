@@ -232,7 +232,8 @@ func MergeSwaggerFiles(fsys interfaces.FS, files []string) (map[string]any, erro
 
 		var spec map[string]any
 
-		if err := json.Unmarshal(data, &spec); err != nil {
+		err = json.Unmarshal(data, &spec)
+		if err != nil {
 			return nil, apperr.Wrap(
 				err,
 				apperr.CodeInternal,
@@ -295,7 +296,9 @@ func processSpec(
 
 	// Write output.
 	outputDir := filepath.Join(outDir, cfg.service, "docs")
-	if err := fsys.MkdirAll(outputDir, 0o755); err != nil {
+
+	err = fsys.MkdirAll(outputDir, 0o755)
+	if err != nil {
 		return "", apperr.Wrap(
 			err,
 			apperr.CodeInternal,
@@ -312,7 +315,8 @@ func processSpec(
 
 	out = append(out, '\n')
 
-	if err := fsys.WriteFile(outputPath, out, 0o600); err != nil {
+	err = fsys.WriteFile(outputPath, out, 0o600)
+	if err != nil {
 		return "", apperr.Wrap(
 			err,
 			apperr.CodeInternal,

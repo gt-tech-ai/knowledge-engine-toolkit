@@ -98,29 +98,6 @@ func (p *Publisher) PublishBatchKeyed(
 // OrderedPerKey is false: a standard SQS queue does not order messages by key.
 func (*Publisher) OrderedPerKey() bool { return false }
 
-// send sends one message with attrs to the queue named topic.
-func (p *Publisher) send(
-	ctx context.Context,
-	topic string,
-	attrs map[string]sqstypes.MessageAttributeValue,
-	payload []byte,
-) error {
-	url, err := p.queueURL(ctx, topic)
-	if err != nil {
-		return err
-	}
-
-	if _, err := p.api.SendMessage(ctx, &awssqs.SendMessageInput{
-		QueueUrl:          aws.String(url),
-		MessageBody:       aws.String(string(payload)),
-		MessageAttributes: attrs,
-	}); err != nil {
-		return apperr.Wrap(err, apperr.CodeUnavailable, "sqs send message")
-	}
-
-	return nil
-}
-
 // PublishBatch sends payloads to topic using SendMessageBatch, chunked into
 // groups of maxBatchSize (so N payloads issue ceil(N/10) requests, not N). A
 // batch-level transport error, or any per-entry failure the service reports in
@@ -142,6 +119,30 @@ func (p *Publisher) PublishBatch(
 	}
 
 	return p.sendBatch(ctx, topic, entries)
+}
+
+// send sends one message with attrs to the queue named topic.
+func (p *Publisher) send(
+	ctx context.Context,
+	topic string,
+	attrs map[string]sqstypes.MessageAttributeValue,
+	payload []byte,
+) error {
+	url, err := p.queueURL(ctx, topic)
+	if err != nil {
+		return err
+	}
+
+	_, err = p.api.SendMessage(ctx, &awssqs.SendMessageInput{
+		QueueUrl:          aws.String(url),
+		MessageBody:       aws.String(string(payload)),
+		MessageAttributes: attrs,
+	})
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeUnavailable, "sqs send message")
+	}
+
+	return nil
 }
 
 // sendBatch sends entries to the queue named topic in SendMessageBatch calls of

@@ -54,7 +54,8 @@ func Encode[T any](value T, version int) ([]byte, error) {
 func Decode[T any](data []byte, version int) (val T, ok bool, err error) {
 	var env Envelope[T]
 
-	if err := json.Unmarshal(data, &env); err != nil {
+	err = json.Unmarshal(data, &env)
+	if err != nil {
 		var zero T
 
 		return zero, false, apperr.Wrap(err, apperr.CodeInternal, "decode cache envelope")

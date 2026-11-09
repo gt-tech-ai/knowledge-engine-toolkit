@@ -57,7 +57,8 @@ func (d *Dataset) decodeInto(key string, dst any) error {
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	dec.KnownFields(true)
 
-	if err := dec.Decode(dst); err != nil {
+	err = dec.Decode(dst)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput,
 			"decode section "+key+" from "+d.sourceOf(key))
 	}

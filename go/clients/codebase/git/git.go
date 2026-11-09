@@ -57,7 +57,8 @@ func (s *Source) List(ctx context.Context) ([]types.File, error) {
 	out := make([]types.File, 0, len(tracked)+len(untracked))
 	for _, p := range tracked {
 		// A tracked path deleted from the working tree is not a file to read.
-		if _, err := os.Lstat(filepath.Join(s.root, filepath.FromSlash(p))); err == nil {
+		_, err := os.Lstat(filepath.Join(s.root, filepath.FromSlash(p)))
+		if err == nil {
 			out = append(out, types.File{Path: p})
 		}
 	}

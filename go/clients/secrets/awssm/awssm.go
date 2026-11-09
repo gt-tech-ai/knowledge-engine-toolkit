@@ -31,9 +31,9 @@ import (
 type SecretsManagerAPI interface {
 	// GetSecretValue retrieves a secret's value (the SecretString JSON blob).
 	GetSecretValue(
-		context.Context,
-		*secretsmanager.GetSecretValueInput,
-		...func(*secretsmanager.Options),
+		ctx context.Context,
+		in *secretsmanager.GetSecretValueInput,
+		optFns ...func(*secretsmanager.Options),
 	) (*secretsmanager.GetSecretValueOutput, error)
 }
 
@@ -112,7 +112,8 @@ func (s source) Get(ctx context.Context, ref types.Ref) (types.Secret, error) {
 
 	var fields map[string]string
 
-	if err := json.Unmarshal([]byte(*out.SecretString), &fields); err != nil {
+	err = json.Unmarshal([]byte(*out.SecretString), &fields)
+	if err != nil {
 		return types.Secret{}, apperr.Wrap(
 			err,
 			apperr.CodeInternal,

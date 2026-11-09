@@ -100,27 +100,6 @@ func (l *Logger) Error(
 	l.log(slog.LevelError, msg, keysAndValues)
 }
 
-// log records the caller's own program counter (skipping these wrapper frames) so
-// the "caller" field points at the code that logged -- not this file. slog's own
-// output methods would record THIS wrapper as the caller, which is why every line
-// otherwise showed zap/logger.go:NN.
-func (l *Logger) log(level slog.Level, msg string, keysAndValues []any) {
-	ctx := context.Background()
-	if !l.inner.Enabled(ctx, level) {
-		return
-	}
-
-	var pcs [1]uintptr
-
-	// Skip [runtime.Callers, log, the exported Debug/Info/Warn/Error] -> real caller.
-	runtime.Callers(3, pcs[:])
-
-	r := slog.NewRecord(time.Now(), level, msg, pcs[0])
-	r.Add(keysAndValues...)
-
-	_ = l.inner.Handler().Handle(ctx, r)
-}
-
 // With returns a child logger that includes the given key/value pairs on every
 // subsequent record.
 func (l *Logger) With(keysAndValues ...any) interfaces.Logger {
@@ -157,6 +136,27 @@ func (l *Logger) WithContext(ctx context.Context) interfaces.Logger {
 	}
 
 	return &Logger{inner: l.inner.With(fields...)}
+}
+
+// log records the caller's own program counter (skipping these wrapper frames) so
+// the "caller" field points at the code that logged -- not this file. slog's own
+// output methods would record THIS wrapper as the caller, which is why every line
+// otherwise showed zap/logger.go:NN.
+func (l *Logger) log(level slog.Level, msg string, keysAndValues []any) {
+	ctx := context.Background()
+	if !l.inner.Enabled(ctx, level) {
+		return
+	}
+
+	var pcs [1]uintptr
+
+	// Skip [runtime.Callers, log, the exported Debug/Info/Warn/Error] -> real caller.
+	runtime.Callers(3, pcs[:])
+
+	r := slog.NewRecord(time.Now(), level, msg, pcs[0])
+	r.Add(keysAndValues...)
+
+	_ = l.inner.Handler().Handle(ctx, r)
 }
 
 // newSlog creates the underlying *slog.Logger from config.

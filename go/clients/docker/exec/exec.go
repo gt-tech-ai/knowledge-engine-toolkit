@@ -31,18 +31,6 @@ func New(runner interfaces.CommandRunner, root string) *Client {
 	return &Client{runner: runner, root: root}
 }
 
-// docker runs docker args with env and returns stdout or a coded error.
-func (c *Client) docker(
-	ctx context.Context,
-	what string,
-	env []string,
-	args ...string,
-) ([]byte, error) {
-	res := c.runner.RunBufferedWithEnv(ctx, c.root, env, "docker", args...)
-
-	return client.Output(res, "docker "+what)
-}
-
 // Build runs `docker buildx build --load` without provenance or SBOM attestations, so
 // the image loads into the local daemon.
 func (c *Client) Build(ctx context.Context, spec types.BuildSpec) error {
@@ -115,6 +103,18 @@ func (c *Client) ComposeDown(ctx context.Context, spec types.ComposeSpec) error 
 	_, err := c.docker(ctx, "compose down", spec.Env, args...)
 
 	return err
+}
+
+// docker runs docker args with env and returns stdout or a coded error.
+func (c *Client) docker(
+	ctx context.Context,
+	what string,
+	env []string,
+	args ...string,
+) ([]byte, error) {
+	res := c.runner.RunBufferedWithEnv(ctx, c.root, env, "docker", args...)
+
+	return client.Output(res, "docker "+what)
 }
 
 // compose is the `docker compose` prefix selecting spec's project, files and profiles.

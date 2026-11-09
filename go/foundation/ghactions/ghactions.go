@@ -56,11 +56,12 @@ func MaskEnv(w io.Writer, env []string) error {
 				continue
 			}
 
-			if _, err := fmt.Fprintf(
+			_, err := fmt.Fprintf(
 				w,
 				"::add-mask::%s\n",
 				EscapeData(line),
-			); err != nil {
+			)
+			if err != nil {
 				return apperr.Wrap(err, apperr.CodeInternal, "write the mask command")
 			}
 		}

@@ -47,6 +47,8 @@ func jsonResponse(status int, body string) *http.Response {
 //   - A valid W3C traceparent yields its 32-hex trace id; empty/garbage/short input
 //     yields "".
 func TestTraceIDFromHeader(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(
 		t,
 		"0123456789abcdef0123456789abcdef",
@@ -72,6 +74,8 @@ func TestTraceIDFromHeader(t *testing.T) {
 //   - The value matches `00-<32hex>-<16hex>-01` (sampled flag 01); TraceIDFromHeader
 //     recovers the same trace id it returns; two calls produce distinct trace ids.
 func TestForceSampledTraceparent(t *testing.T) {
+	t.Parallel()
+
 	header, traceID, err := e2ekit.ForceSampledTraceparent()
 	require.NoError(t, err)
 
@@ -102,6 +106,8 @@ func TestForceSampledTraceparent(t *testing.T) {
 // What it tests:
 //   - A 200 with N batches returns N, and the request targets /api/traces/{id}.
 func TestTelemetryClient_TraceInTempo(t *testing.T) {
+	t.Parallel()
+
 	var gotURL string
 
 	doer := doerFunc(func(r *http.Request) (*http.Response, error) {
@@ -132,6 +138,8 @@ func TestTelemetryClient_TraceInTempo(t *testing.T) {
 // What it tests:
 //   - A 404 returns (0, nil).
 func TestTelemetryClient_TraceInTempo_NotFound(t *testing.T) {
+	t.Parallel()
+
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusNotFound, ``), nil
 	})
@@ -161,6 +169,8 @@ func TestTelemetryClient_TraceInTempo_NotFound(t *testing.T) {
 //     service returns false; an absent trace (404) returns false without error (so
 //     callers can poll).
 func TestTelemetryClient_TraceSpansService(t *testing.T) {
+	t.Parallel()
+
 	body := `{"batches":[{"resource":{"attributes":[` +
 		`{"key":"service.name","value":{"stringValue":"worker"}}]}}]}`
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
@@ -205,6 +215,8 @@ func TestTelemetryClient_TraceSpansService(t *testing.T) {
 //   - A single-result instant vector returns the numeric sample; the query is URL-encoded
 //     onto /api/v1/query.
 func TestTelemetryClient_MetricValue(t *testing.T) {
+	t.Parallel()
+
 	var gotURL string
 
 	doer := doerFunc(func(r *http.Request) (*http.Response, error) {
@@ -239,6 +251,8 @@ func TestTelemetryClient_MetricValue(t *testing.T) {
 // What it tests:
 //   - An empty result array returns (0, nil).
 func TestTelemetryClient_MetricValue_Empty(t *testing.T) {
+	t.Parallel()
+
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusOK, `{"data":{"result":[]}}`), nil
 	})
@@ -264,6 +278,8 @@ func TestTelemetryClient_MetricValue_Empty(t *testing.T) {
 //   - The query carries the trace-id filter, and the returned line count sums the stream
 //     values.
 func TestTelemetryClient_LogHasTrace(t *testing.T) {
+	t.Parallel()
+
 	var gotQuery string
 
 	doer := doerFunc(func(r *http.Request) (*http.Response, error) {
@@ -298,6 +314,8 @@ func TestTelemetryClient_LogHasTrace(t *testing.T) {
 // What it tests:
 //   - A 400 response returns a non-nil error.
 func TestTelemetryClient_QueryError(t *testing.T) {
+	t.Parallel()
+
 	doer := doerFunc(func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusBadRequest, `bad query`), nil
 	})

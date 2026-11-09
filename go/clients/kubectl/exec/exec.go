@@ -30,20 +30,14 @@ func New(runner interfaces.CommandRunner, kubeContext string) *Client {
 	return &Client{runner: runner, kubeContext: kubeContext}
 }
 
-// kubectl runs kubectl args and returns stdout or a coded error.
-func (c *Client) kubectl(
-	ctx context.Context,
-	what string,
-	args ...string,
-) ([]byte, error) {
-	if c.kubeContext != "" {
-		args = append([]string{"--context", c.kubeContext}, args...)
+// Get runs `kubectl get kind [name] -o json`.
+func (c *Client) Get(ctx context.Context, ns, kind, name string) ([]byte, error) {
+	args := []string{"get", kind}
+	if name != "" {
+		args = append(args, name)
 	}
 
-	return client.Output(
-		c.runner.RunBuffered(ctx, "", "kubectl", args...),
-		"kubectl "+what,
-	)
+	return c.kubectl(ctx, "get", namespaced(ns, append(args, "-o", "json")...)...)
 }
 
 // namespaced prefixes args with -n ns when ns is set.
@@ -53,16 +47,6 @@ func namespaced(ns string, args ...string) []string {
 	}
 
 	return append([]string{"-n", ns}, args...)
-}
-
-// Get runs `kubectl get kind [name] -o json`.
-func (c *Client) Get(ctx context.Context, ns, kind, name string) ([]byte, error) {
-	args := []string{"get", kind}
-	if name != "" {
-		args = append(args, name)
-	}
-
-	return c.kubectl(ctx, "get", namespaced(ns, append(args, "-o", "json")...)...)
 }
 
 // Apply runs `kubectl apply -f file…`; no files is CodeInvalidInput, as the contract
@@ -111,7 +95,8 @@ func (c *Client) AuthCanI(ctx context.Context, verb, resource string) (bool, err
 		return false, nil
 	}
 
-	if _, err := client.Output(res, "kubectl auth can-i"); err != nil {
+	_, err := client.Output(res, "kubectl auth can-i")
+	if err != nil {
 		return false, err
 	}
 
@@ -123,4 +108,20 @@ func (c *Client) CurrentContext(ctx context.Context) (string, error) {
 	out, err := c.kubectl(ctx, "config current-context", "config", "current-context")
 
 	return strings.TrimSpace(string(out)), err
+}
+
+// kubectl runs kubectl args and returns stdout or a coded error.
+func (c *Client) kubectl(
+	ctx context.Context,
+	what string,
+	args ...string,
+) ([]byte, error) {
+	if c.kubeContext != "" {
+		args = append([]string{"--context", c.kubeContext}, args...)
+	}
+
+	return client.Output(
+		c.runner.RunBuffered(ctx, "", "kubectl", args...),
+		"kubectl "+what,
+	)
 }

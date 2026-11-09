@@ -33,7 +33,8 @@ const (
 
 // UUID checks that v is a valid RFC-4122 UUID (reuses google/uuid).
 func UUID(field, v string) error {
-	if _, err := uuid.Parse(v); err != nil {
+	_, err := uuid.Parse(v)
+	if err != nil {
 		return apperr.InvalidInput(field + ": must be a valid UUID")
 	}
 

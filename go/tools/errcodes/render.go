@@ -49,7 +49,8 @@ func (generator) Render(
 		return nil, err
 	}
 
-	if goSrc, err = format.Source(goSrc); err != nil {
+	goSrc, err = format.Source(goSrc)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "format "+GoPath)
 	}
 
@@ -77,7 +78,8 @@ func execute(name string, codes []code) ([]byte, error) {
 
 	var buf bytes.Buffer
 
-	if err := t.Execute(&buf, codes); err != nil {
+	err = t.Execute(&buf, codes)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "render "+name)
 	}
 

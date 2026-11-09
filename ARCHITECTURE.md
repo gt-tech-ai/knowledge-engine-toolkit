@@ -92,7 +92,7 @@ each entity tier (store, repository, service, pipeline, workflow) also has `enti
 `Entity` base. `C` is the component's contract (an
 interface): each of its methods is one operation, decorated as `<name>.<op>` where `op` is the
 method's snake_case name (`FindByKey` → `find_by_key`), so the config tunes the component or one
-operation. A consumer component embeds its tier's `Base`, implements each contract method through
+operation. A consumer component embeds a pointer to its tier's `Base`, implements each contract method through
 the promoted `Exec` (and `ExecOnce`, `ExecTx`, `InTx`, `Write`, … where its tier has them) under
 the method's op name, and calls the next tier. Running an op the contract does not declare fails
 `INTERNAL`.

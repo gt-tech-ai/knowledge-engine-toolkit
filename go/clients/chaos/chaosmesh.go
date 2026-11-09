@@ -169,13 +169,15 @@ func (c *chaosMeshInjector) Inject(ctx context.Context, f types.Fault) error {
 
 	defer func() { _ = os.Remove(file.Name()) }()
 
-	if _, err := file.Write(data); err != nil {
+	_, err = file.Write(data)
+	if err != nil {
 		_ = file.Close()
 
 		return apperr.Wrap(err, apperr.CodeInternal, "write chaos manifest file")
 	}
 
-	if err := file.Close(); err != nil {
+	err = file.Close()
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "close chaos manifest file")
 	}
 

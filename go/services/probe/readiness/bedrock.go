@@ -54,7 +54,8 @@ func (p Bedrock) Run(ctx context.Context, t Target) types.Verdict {
 	}
 
 	for _, id := range ids {
-		if _, err := p.Bedrock.Converse(ctx, converseInput(id)); err != nil {
+		_, err := p.Bedrock.Converse(ctx, converseInput(id))
+		if err != nil {
 			return fail(p.Name(), "model "+id+" not invokable: "+err.Error(), id)
 		}
 	}

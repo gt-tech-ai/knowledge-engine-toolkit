@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -50,6 +50,8 @@ func (w *pingWorker) Work(_ context.Context, _ *river.Job[pingArgs]) error {
 //   - A RunOnStart periodic job is worked after Start; a river_leader row exists
 //     (leader elected); Stop returns without error.
 func TestRiverRuntime_PeriodicJobFiresAndStops(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	db, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err)

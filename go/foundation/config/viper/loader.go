@@ -124,7 +124,9 @@ func (l *Loader) Load() error {
 	// Layer 2: Environment overlay
 	if l.env != "" {
 		envFile := fmt.Sprintf("%s/%s.yaml", l.baseDir, l.env)
-		if _, err := os.Stat(envFile); err == nil {
+
+		_, err := os.Stat(envFile)
+		if err == nil {
 			l.v.SetConfigFile(envFile)
 
 			err := l.v.MergeInConfig()
@@ -140,7 +142,9 @@ func (l *Loader) Load() error {
 
 	// Layer 3: Secrets file
 	secretsFile := l.baseDir + "/secrets.yaml"
-	if _, err := os.Stat(secretsFile); err == nil {
+
+	_, err = os.Stat(secretsFile)
+	if err == nil {
 		l.v.SetConfigFile(secretsFile)
 
 		err := l.v.MergeInConfig()
@@ -236,7 +240,8 @@ func (l *Loader) UnmarshalKey(key string, target any) error {
 		return apperr.Wrap(err, apperr.CodeInternal, "create decoder")
 	}
 
-	if err := decoder.Decode(resolved); err != nil {
+	err = decoder.Decode(resolved)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeOr(err, apperr.CodeInvalidInput),

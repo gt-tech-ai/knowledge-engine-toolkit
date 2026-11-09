@@ -87,7 +87,9 @@ func (s *Sink) Send(ctx context.Context, recs []types.OutboxRecord) []error {
 	results := make([]error, len(recs))
 	for i := range recs {
 		rec := &recs[i]
-		if _, err := s.api.PutObject(ctx, s.input(rec)); err != nil {
+
+		_, err := s.api.PutObject(ctx, s.input(rec))
+		if err != nil {
 			results[i] = apperr.Wrap(
 				err,
 				apperr.CodeOr(err, apperr.CodeUnavailable),

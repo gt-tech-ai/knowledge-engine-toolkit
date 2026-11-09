@@ -48,20 +48,6 @@ func MetricsInterceptor(m interfaces.Metrics) connect.Interceptor {
 	}
 }
 
-// record observes the duration and increments the request counter for one completed RPC
-// (unary or stream). Shared by both wrap paths.
-func (i metricsInterceptor) record(procedure string, start time.Time, err error) {
-	service, method := parseConnectProcedure(procedure)
-	i.requestDuration.Observe(time.Since(start).Seconds(), service, method)
-
-	code := "ok"
-	if err != nil {
-		code = connect.CodeOf(err).String()
-	}
-
-	i.requestsTotal.Inc(service, method, code)
-}
-
 // WrapUnary records metrics for a unary RPC.
 func (i metricsInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
@@ -92,4 +78,18 @@ func (i metricsInterceptor) WrapStreamingHandler(
 
 		return err
 	}
+}
+
+// record observes the duration and increments the request counter for one completed RPC
+// (unary or stream). Shared by both wrap paths.
+func (i metricsInterceptor) record(procedure string, start time.Time, err error) {
+	service, method := parseConnectProcedure(procedure)
+	i.requestDuration.Observe(time.Since(start).Seconds(), service, method)
+
+	code := "ok"
+	if err != nil {
+		code = connect.CodeOf(err).String()
+	}
+
+	i.requestsTotal.Inc(service, method, code)
 }

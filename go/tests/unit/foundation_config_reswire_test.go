@@ -62,6 +62,8 @@ func assertBulkheadLimit(t *testing.T, bh interfaces.Bulkhead, limit int) {
 // What it tests:
 //   - With no overlay, the hedger runs the op exactly once.
 func TestReswire_HedgeDefault_RunsOnce(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "base.yaml"), "database:\n  host: localhost\n")
 
@@ -95,6 +97,8 @@ func TestReswire_HedgeDefault_RunsOnce(t *testing.T) {
 //   - `resilience.hedge: {kind: delay, delay: 1ms}` yields a hedger that fires a backup
 //     when the first attempt is slow (the op is invoked a second time).
 func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "base.yaml"),
 		"resilience:\n  hedge:\n    kind: delay\n    delay: 1ms\n")
@@ -150,6 +154,8 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 //   - With no overlay, the throttler runs every op and never sheds (RejectionProbability
 //     == 0).
 func TestReswire_AdaptiveThrottleDefault_NeverSheds(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "base.yaml"), "database:\n  host: localhost\n")
 
@@ -195,6 +201,8 @@ func TestReswire_AdaptiveThrottleDefault_NeverSheds(t *testing.T) {
 //     proving the config selects the throttler. The SRE rejection probability rises
 //     toward ~1 under sustained failure, so shedding is effectively certain here.)
 func TestReswire_AdaptiveThrottleReadsOverlay_Sheds(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	writeFile(
 		t,

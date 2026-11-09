@@ -117,7 +117,8 @@ func (s *Supervisor) Start(
 
 	ownGroup(cmd)
 
-	if err := cmd.Start(); err != nil {
+	err = cmd.Start()
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeUnavailable, "start "+spec.Name)
 	}
 
@@ -132,7 +133,8 @@ func (s *Supervisor) Start(
 		return h, nil
 	}
 
-	if err := h.awaitReady(ctx, ready); err != nil {
+	err = h.awaitReady(ctx, ready)
+	if err != nil {
 		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), maxBackoff)
 		defer cancel()
 
@@ -156,11 +158,13 @@ func (s *Supervisor) Detach(spec types.ProcessSpec) error {
 
 	ownSession(cmd)
 
-	if err := cmd.Start(); err != nil {
+	err = cmd.Start()
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "start "+spec.Name)
 	}
 
-	if err := cmd.Process.Release(); err != nil {
+	err = cmd.Process.Release()
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "release "+spec.Name)
 	}
 

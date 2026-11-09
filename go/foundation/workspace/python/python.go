@@ -60,7 +60,9 @@ func findPyprojectDirs(
 	out *[]string,
 ) error {
 	pyproject := path.Join(dir, "pyproject.toml") // nosemgrep: use-filepath-join
-	if _, err := fs.Stat(fsys, pyproject); err == nil {
+
+	_, err := fs.Stat(fsys, pyproject)
+	if err == nil {
 		if filter == nil || filter(dir) {
 			*out = append(*out, dir)
 		}

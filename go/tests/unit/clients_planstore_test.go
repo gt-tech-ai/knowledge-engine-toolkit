@@ -94,6 +94,7 @@ func TestPlanStore_RoundTrip(t *testing.T) {
 	dst := t.TempDir()
 	manifest, err := os.ReadFile(filepath.Clean(filepath.Join(src, "plan-manifest.json")))
 	require.NoError(t, err)
+
 	root, err := os.OpenRoot(dst)
 	require.NoError(t, err)
 

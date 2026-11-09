@@ -136,11 +136,12 @@ func (r *runner) run(
 			"tool run "+run.Name+": unknown tool "+run.Tool)
 	}
 
-	if err := validate(run); err != nil {
+	err := validate(run)
+	if err != nil {
 		return nil, err
 	}
 
-	run, err := substitute(run, opts.Vars)
+	run, err = substitute(run, opts.Vars)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +342,8 @@ func (r *runner) invoke(
 	}
 
 	if key != "" {
-		if hit, err := r.deps.Cache.Hit(ctx, key); err == nil && hit {
+		hit, err := r.deps.Cache.Hit(ctx, key)
+		if err == nil && hit {
 			return types.StepResult{
 				Name: name, Group: group(run), Status: types.StatusSkip,
 				Detail: []byte(types.CachedDetail),
@@ -390,7 +392,8 @@ func (r *runner) cwdOf(
 	cb interfaces.Codebase,
 	target string,
 ) (dir string, argTargets []string) {
-	if _, err := cb.Text(ctx, target); err == nil {
+	_, err := cb.Text(ctx, target)
+	if err == nil {
 		return filepath.Join(r.deps.Root, filepath.FromSlash(path.Dir(target))),
 			[]string{path.Base(target)}
 	}

@@ -49,7 +49,8 @@ func NewPartial(value float64) (Partial, error) {
 		)
 	}
 
-	if err := sketch.Add(value); err != nil {
+	err = sketch.Add(value)
+	if err != nil {
 		return Partial{}, apperr.Wrap(
 			err,
 			apperr.CodeInvalidInput,

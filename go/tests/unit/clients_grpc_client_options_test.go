@@ -85,6 +85,8 @@ func dialDecorated(
 //     carries both too.
 //   - With an empty token neither call carries an authorization value.
 func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
+	t.Parallel()
+
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
 	sc := sampledSpanContext()
@@ -98,6 +100,8 @@ func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
 		{name: "empty token", token: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			var unary, stream []metadata.MD
 
 			conn := dialDecorated(

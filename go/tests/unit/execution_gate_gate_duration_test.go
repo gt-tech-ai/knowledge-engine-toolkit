@@ -44,6 +44,8 @@ func sleepyJob(t *testing.T, name string) interfaces.AnyJob {
 //   - That single callback carries all three step results.
 //   - Both the phase elapsed and the gate elapsed are strictly positive.
 func TestGate_SerialPhaseFiresPhaseCompleteOnceWithElapsed(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 
 	var (

@@ -157,29 +157,6 @@ func (s *Server) Serve(ctx context.Context, targets Targets) error {
 	return nil
 }
 
-// shutdown stops api gracefully and waits for every process; a process stopped by the
-// ended context exits non-zero, the expected shutdown, so exits are logged, not returned.
-func (s *Server) shutdown(
-	ctx context.Context, api *http.Server, procs []interfaces.ProcessHandle,
-) {
-	if api != nil {
-		stop, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
-		err := api.Shutdown(stop)
-		if err != nil {
-			s.d.Log.Warn("API docs server shutdown", "error", err.Error())
-		}
-
-		cancel()
-	}
-
-	for _, p := range procs {
-		err := p.Wait()
-		if err != nil {
-			s.d.Log.Debug("doc server exited", "error", err.Error())
-		}
-	}
-}
-
 // ServeGoDocs launches pkgsite on GoPort and returns the running process.
 func (s *Server) ServeGoDocs(ctx context.Context) (interfaces.ProcessHandle, error) {
 	err := s.d.Runner.RequireTool("pkgsite", s.cfg.PkgsiteHint)
@@ -222,23 +199,6 @@ func (s *Server) ServePythonDocs(ctx context.Context) (interfaces.ProcessHandle,
 	}
 
 	return s.start(ctx, "uvx", "Python", s.cfg.PythonPort, args)
-}
-
-// start runs args under the supervisor as name and logs what's URL on port.
-func (s *Server) start(
-	ctx context.Context, name, what, port string, args []string,
-) (interfaces.ProcessHandle, error) {
-	p, err := s.d.Supervisor.Start(ctx, types.ProcessSpec{
-		Name: name, Args: args, Dir: s.cfg.Root,
-		Stdout: s.d.Streams.Out, Stderr: s.d.Streams.Err,
-	}, nil)
-	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInternal, "start "+name)
-	}
-
-	s.d.Log.Info(what+" docs server started", "url", "http://localhost:"+port)
-
-	return p, nil
 }
 
 // ServeAPIDocs starts a Redoc server on APIPort over every <ServerDir>/<service>/
@@ -311,6 +271,47 @@ func (s *Server) ServeAPIDocs(ctx context.Context) (*http.Server, error) {
 	s.d.Log.Info("API docs server started", "url", "http://localhost:"+s.cfg.APIPort)
 
 	return srv, nil
+}
+
+// shutdown stops api gracefully and waits for every process; a process stopped by the
+// ended context exits non-zero, the expected shutdown, so exits are logged, not returned.
+func (s *Server) shutdown(
+	ctx context.Context, api *http.Server, procs []interfaces.ProcessHandle,
+) {
+	if api != nil {
+		stop, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
+
+		err := api.Shutdown(stop)
+		if err != nil {
+			s.d.Log.Warn("API docs server shutdown", "error", err.Error())
+		}
+
+		cancel()
+	}
+
+	for _, p := range procs {
+		err := p.Wait()
+		if err != nil {
+			s.d.Log.Debug("doc server exited", "error", err.Error())
+		}
+	}
+}
+
+// start runs args under the supervisor as name and logs what's URL on port.
+func (s *Server) start(
+	ctx context.Context, name, what, port string, args []string,
+) (interfaces.ProcessHandle, error) {
+	p, err := s.d.Supervisor.Start(ctx, types.ProcessSpec{
+		Name: name, Args: args, Dir: s.cfg.Root,
+		Stdout: s.d.Streams.Out, Stderr: s.d.Streams.Err,
+	}, nil)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "start "+name)
+	}
+
+	s.d.Log.Info(what+" docs server started", "url", "http://localhost:"+port)
+
+	return p, nil
 }
 
 // spec is one service's OpenAPI document.

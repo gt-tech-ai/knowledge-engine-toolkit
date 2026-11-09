@@ -153,7 +153,8 @@ func (s schema) object(
 	}
 
 	if size := s.field(row, colSize); size != "" {
-		if _, err := fmt.Sscan(size, &obj.Size); err != nil {
+		_, err := fmt.Sscan(size, &obj.Size)
+		if err != nil {
 			return interfaces.StorageObject{}, false, apperr.Wrap(
 				err, apperr.CodeInvalidInput, "connector s3_inventory: bad size",
 			)

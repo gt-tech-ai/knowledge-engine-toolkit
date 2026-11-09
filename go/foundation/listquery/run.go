@@ -235,7 +235,8 @@ func offsetPage[T, D any](
 	// inner call, so Run skips the (otherwise recomputed) bounded count and the decorator
 	// injects the cached value.
 	if r.Count && !CountSkipped(ctx) {
-		if total, estimate, err = boundedTotal(ctx, filters, r); err != nil {
+		total, estimate, err = boundedTotal(ctx, filters, r)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -324,13 +325,14 @@ func keysetPage[T, D any](
 
 	next := ""
 	if hasMore && len(rows) > 0 {
-		if next, err = mintKeysetCursor(
+		next, err = mintKeysetCursor(
 			r.Keyset,
 			cols,
 			rows[len(rows)-1],
 			r.Sort,
 			r.Filter,
-		); err != nil {
+		)
+		if err != nil {
 			return nil, err
 		}
 	}

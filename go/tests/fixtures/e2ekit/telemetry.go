@@ -127,11 +127,13 @@ func ForceSampledTraceparent() (header, traceID string, err error) {
 		sid [8]byte
 	)
 
-	if _, err := rand.Read(tid[:]); err != nil {
+	_, err = rand.Read(tid[:])
+	if err != nil {
 		return "", "", apperr.Wrap(err, apperr.CodeInternal, "e2ekit: random trace id")
 	}
 
-	if _, err := rand.Read(sid[:]); err != nil {
+	_, err = rand.Read(sid[:])
+	if err != nil {
 		return "", "", apperr.Wrap(err, apperr.CodeInternal, "e2ekit: random span id")
 	}
 
@@ -218,7 +220,8 @@ func (c *TelemetryClient) MetricValue(
 		} `json:"data"`
 	}
 
-	if err := c.getJSON(ctx, endpoint, &body); err != nil {
+	err := c.getJSON(ctx, endpoint, &body)
+	if err != nil {
 		return 0, err
 	}
 
@@ -230,7 +233,8 @@ func (c *TelemetryClient) MetricValue(
 	// element.
 	var sample string
 
-	if err := json.Unmarshal(body.Data.Result[0].Value[1], &sample); err != nil {
+	err = json.Unmarshal(body.Data.Result[0].Value[1], &sample)
+	if err != nil {
 		return 0, apperr.Wrap(err, apperr.CodeInternal, "parse prometheus sample")
 	}
 
@@ -313,7 +317,8 @@ func (c *TelemetryClient) getJSON(ctx context.Context, endpoint string, out any)
 		return apperr.New(apperr.CodeInternal, "telemetry query failed: "+resp.Status)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	err = json.NewDecoder(resp.Body).Decode(out)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "decode telemetry response")
 	}
 

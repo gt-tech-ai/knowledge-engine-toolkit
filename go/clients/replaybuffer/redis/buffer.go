@@ -63,12 +63,6 @@ var _ interfaces.ReplayBuffer = (*Buffer)(nil)
 // ("msg-N") and never contain it, so a single split recovers both.
 const nul = "\x00"
 
-// listKey returns the Redis key holding key's retained list, under the buffer's prefix.
-func (b *Buffer) listKey(key string) string { return b.cfg.KeyPrefix + key }
-
-// lwKey returns the Redis key holding key's low-water mark, under the buffer's prefix.
-func (b *Buffer) lwKey(key string) string { return b.cfg.KeyPrefix + key + ":lw" }
-
 // Append RPUSHes the entry, trims to MaxSize, and refreshes the TTL — in one pipelined
 // round trip (eviction does not touch the low-water mark, matching the memory backend).
 func (b *Buffer) Append(ctx context.Context, key, msgID string, payload []byte) error {
@@ -78,7 +72,8 @@ func (b *Buffer) Append(ctx context.Context, key, msgID string, payload []byte) 
 	pipe.LTrim(ctx, lk, int64(-b.cfg.MaxSize), -1)
 	pipe.Expire(ctx, lk, b.cfg.TTL)
 
-	if _, err := pipe.Exec(ctx); err != nil {
+	_, err := pipe.Exec(ctx)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "replaybuffer append")
 	}
 
@@ -129,29 +124,6 @@ func (b *Buffer) ReplayAfter(
 	return nil, false, nil // not retained → gap
 }
 
-// pruneScript atomically drops the confirmed prefix up to and including a message id and
-// records it as the low-water mark, in one server-side step. The find-index-then-LTRIM
-// MUST be atomic: an Append on the same key (the write pump) evicts from the front
-// concurrently with a Prune (the read-loop ack handler), so an index computed by a
-// Go-side LRANGE would shift before an index-based LTRIM ran — silently dropping retained
-// frames while the low-water mark still reported the tail as gapless. The memory backend
-// avoids this under its mutex; this Lua script is the Redis equivalent (Redis runs a
-// script with no other command interleaved). It matches an entry by the `msgID\x00`
-// prefix so "msg-7" never matches "msg-70", and keeps everything after it (Lua's 1-based
-// match index equals the 0-based index of the next element, so LTRIM(i, -1) is the
-// gapless tail). New wraps it as the Buffer's pruneScript.
-const pruneLua = `
-local elems = redis.call('LRANGE', KEYS[1], 0, -1)
-local prefix = ARGV[1] .. string.char(0)
-for i = 1, #elems do
-  if string.sub(elems[i], 1, #prefix) == prefix then
-    redis.call('LTRIM', KEYS[1], i, -1)
-    redis.call('SET', KEYS[2], ARGV[1], 'PX', ARGV[2])
-    return 1
-  end
-return 0
-`
-
 // Prune drops entries up to and including upToMsgID and records it as the low-water mark,
 // atomically (see pruneScript). An upToMsgID not in the retained window is a no-op. TTL
 // is passed in ms because a sub-second TTL (used in tests) would round to 0s and be
@@ -178,6 +150,36 @@ func (b *Buffer) Delete(ctx context.Context, key string) error {
 
 	return nil
 }
+
+// pruneScript atomically drops the confirmed prefix up to and including a message id and
+// records it as the low-water mark, in one server-side step. The find-index-then-LTRIM
+// MUST be atomic: an Append on the same key (the write pump) evicts from the front
+// concurrently with a Prune (the read-loop ack handler), so an index computed by a
+// Go-side LRANGE would shift before an index-based LTRIM ran — silently dropping retained
+// frames while the low-water mark still reported the tail as gapless. The memory backend
+// avoids this under its mutex; this Lua script is the Redis equivalent (Redis runs a
+// script with no other command interleaved). It matches an entry by the `msgID\x00`
+// prefix so "msg-7" never matches "msg-70", and keeps everything after it (Lua's 1-based
+// match index equals the 0-based index of the next element, so LTRIM(i, -1) is the
+// gapless tail). New wraps it as the Buffer's pruneScript.
+const pruneLua = `
+local elems = redis.call('LRANGE', KEYS[1], 0, -1)
+local prefix = ARGV[1] .. string.char(0)
+for i = 1, #elems do
+  if string.sub(elems[i], 1, #prefix) == prefix then
+    redis.call('LTRIM', KEYS[1], i, -1)
+    redis.call('SET', KEYS[2], ARGV[1], 'PX', ARGV[2])
+    return 1
+  end
+end
+return 0
+`
+
+// listKey returns the Redis key holding key's retained list, under the buffer's prefix.
+func (b *Buffer) listKey(key string) string { return b.cfg.KeyPrefix + key }
+
+// lwKey returns the Redis key holding key's low-water mark, under the buffer's prefix.
+func (b *Buffer) lwKey(key string) string { return b.cfg.KeyPrefix + key + ":lw" }
 
 // decodeAll splits every list element into its message.
 func decodeAll(elems []string) []interfaces.BufferedMessage {

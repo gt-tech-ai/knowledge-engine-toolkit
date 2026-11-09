@@ -74,6 +74,7 @@ func NewFromConfig(cfg Config) (interfaces.ConfigLoader, error) {
 	switch cfg.Kind {
 	case KindViper:
 		loader := viperloader.New(cfg.Viper)
+
 		err := loader.Load()
 		if err != nil {
 			return nil, err

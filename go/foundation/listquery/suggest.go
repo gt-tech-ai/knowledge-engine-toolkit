@@ -20,7 +20,8 @@ func SuggestPageNumber(token string) int {
 		return 1
 	}
 
-	if n, err := strconv.Atoi(token); err == nil && n > 1 {
+	n, err := strconv.Atoi(token)
+	if err == nil && n > 1 {
 		return n
 	}
 

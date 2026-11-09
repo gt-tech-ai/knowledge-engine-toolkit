@@ -93,48 +93,6 @@ func NewLoggingInterceptor(logger interfaces.Logger) connect.Interceptor {
 	return loggingInterceptor{logger: logger}
 }
 
-// logAccess emits the one access line for a completed RPC (unary or stream). Shared by
-// both wrap paths; ctx must already carry the request error sink (core/errors.WithSink).
-func (i loggingInterceptor) logAccess(
-	ctx context.Context, procedure string, duration time.Duration, err error,
-) {
-	l := i.logger.WithContext(ctx)
-	if err == nil {
-		l.Info("request", "procedure", procedure, "duration", duration, "status", 200)
-
-		return
-	}
-
-	code := connect.CodeUnknown
-
-	var connectErr *connect.Error
-
-	if apperr.As(err, &connectErr) {
-		code = connectErr.Code()
-	}
-
-	// Prefer the real domain error captured by the error mapper over the sanitized client
-	// error, so the log records the true cause (expanded to error_code / error_cause by
-	// the structured logger).
-	logErr := err
-	realErr := apperr.Captured(ctx)
-	if realErr != nil {
-		logErr = realErr
-	}
-
-	fields := []any{
-		"procedure", procedure,
-		"duration", duration,
-		"status", connectCodeToHTTPStatus(code),
-		"error", logErr,
-	}
-	if is4xxConnectCode(code) {
-		l.Warn("request failed", fields...)
-	} else {
-		l.Error("request failed", fields...)
-	}
-}
-
 // WrapUnary emits one access line for a unary RPC.
 func (i loggingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
@@ -167,5 +125,48 @@ func (i loggingInterceptor) WrapStreamingHandler(
 		i.logAccess(ctx, conn.Spec().Procedure, time.Since(start), err)
 
 		return err
+	}
+}
+
+// logAccess emits the one access line for a completed RPC (unary or stream). Shared by
+// both wrap paths; ctx must already carry the request error sink (core/errors.WithSink).
+func (i loggingInterceptor) logAccess(
+	ctx context.Context, procedure string, duration time.Duration, err error,
+) {
+	l := i.logger.WithContext(ctx)
+	if err == nil {
+		l.Info("request", "procedure", procedure, "duration", duration, "status", 200)
+
+		return
+	}
+
+	code := connect.CodeUnknown
+
+	var connectErr *connect.Error
+
+	if apperr.As(err, &connectErr) {
+		code = connectErr.Code()
+	}
+
+	// Prefer the real domain error captured by the error mapper over the sanitized client
+	// error, so the log records the true cause (expanded to error_code / error_cause by
+	// the structured logger).
+	logErr := err
+
+	realErr := apperr.Captured(ctx)
+	if realErr != nil {
+		logErr = realErr
+	}
+
+	fields := []any{
+		"procedure", procedure,
+		"duration", duration,
+		"status", connectCodeToHTTPStatus(code),
+		"error", logErr,
+	}
+	if is4xxConnectCode(code) {
+		l.Warn("request failed", fields...)
+	} else {
+		l.Error("request failed", fields...)
 	}
 }

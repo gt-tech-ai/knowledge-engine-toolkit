@@ -31,6 +31,8 @@ import (
 //     observed from within fn stays far below the item count (a small multiple of
 //     numWorkers), where the pre-fix code would show ~10k.
 func TestFanOut_HoldsAtMostNumWorkersGoroutines(t *testing.T) {
+	t.Parallel()
+
 	const (
 		items   = 10000
 		workers = 4

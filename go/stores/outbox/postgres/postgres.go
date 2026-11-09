@@ -338,7 +338,8 @@ func (s *Store) Enqueue(ctx context.Context, rec types.OutboxRecord) error {
 		args = append(args, nullable(rec.Attributes[key]))
 	}
 
-	if _, err := tx.ExecContext(ctx, s.enqueueSQL, args...); err != nil {
+	_, err = tx.ExecContext(ctx, s.enqueueSQL, args...)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "outbox postgres store: enqueue")
 	}
 
@@ -397,72 +398,6 @@ func (s *Store) Claim(
 	defer func() { _ = rows.Close() }()
 
 	return s.collectClaimed(rows)
-}
-
-// collectClaimed reads every claimed row into a record.
-func (s *Store) collectClaimed(rows *sql.Rows) ([]types.OutboxRecord, error) {
-	var out []types.OutboxRecord
-
-	for rows.Next() {
-		rec, err := s.scanClaimed(rows)
-		if err != nil {
-			return nil, err
-		}
-
-		out = append(out, rec)
-	}
-
-	err := rows.Err()
-	if err != nil {
-		return nil, apperr.Wrap(
-			err,
-			apperr.CodeUnavailable,
-			"outbox postgres store: claim rows",
-		)
-	}
-
-	return out, nil
-}
-
-// scanClaimed reads one claimed row into a record, its attribute columns into
-// Attributes.
-func (s *Store) scanClaimed(rows *sql.Rows) (types.OutboxRecord, error) {
-	var rec types.OutboxRecord
-
-	attrs := make([]sql.NullString, len(s.attrKeys))
-	dest := make([]any, 0, 7+len(attrs))
-
-	dest = append(dest,
-		&rec.ID,
-		&rec.Lane,
-		&rec.Tenant,
-		&rec.Key,
-		&rec.Payload,
-		&rec.Attempts,
-		&rec.CreatedAt,
-	)
-
-	for i := range attrs {
-		dest = append(dest, &attrs[i])
-	}
-
-	err := rows.Scan(dest...)
-	if err != nil {
-		return types.OutboxRecord{}, apperr.Wrap(
-			err,
-			apperr.CodeInternal,
-			"outbox postgres store: scan claim",
-		)
-	}
-
-	if len(attrs) > 0 {
-		rec.Attributes = make(map[string]string, len(attrs))
-		for i, key := range s.attrKeys {
-			rec.Attributes[key] = attrs[i].String
-		}
-	}
-
-	return rec, nil
 }
 
 // MarkSent moves a pending row to sent, stamping sent_at on the database clock and
@@ -549,6 +484,72 @@ func (s *Store) DeleteSentBefore(ctx context.Context, cutoff time.Time) (int, er
 	return int(n), nil
 }
 
+// collectClaimed reads every claimed row into a record.
+func (s *Store) collectClaimed(rows *sql.Rows) ([]types.OutboxRecord, error) {
+	var out []types.OutboxRecord
+
+	for rows.Next() {
+		rec, err := s.scanClaimed(rows)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, rec)
+	}
+
+	err := rows.Err()
+	if err != nil {
+		return nil, apperr.Wrap(
+			err,
+			apperr.CodeUnavailable,
+			"outbox postgres store: claim rows",
+		)
+	}
+
+	return out, nil
+}
+
+// scanClaimed reads one claimed row into a record, its attribute columns into
+// Attributes.
+func (s *Store) scanClaimed(rows *sql.Rows) (types.OutboxRecord, error) {
+	var rec types.OutboxRecord
+
+	attrs := make([]sql.NullString, len(s.attrKeys))
+	dest := make([]any, 0, 7+len(attrs))
+
+	dest = append(dest,
+		&rec.ID,
+		&rec.Lane,
+		&rec.Tenant,
+		&rec.Key,
+		&rec.Payload,
+		&rec.Attempts,
+		&rec.CreatedAt,
+	)
+
+	for i := range attrs {
+		dest = append(dest, &attrs[i])
+	}
+
+	err := rows.Scan(dest...)
+	if err != nil {
+		return types.OutboxRecord{}, apperr.Wrap(
+			err,
+			apperr.CodeInternal,
+			"outbox postgres store: scan claim",
+		)
+	}
+
+	if len(attrs) > 0 {
+		rec.Attributes = make(map[string]string, len(attrs))
+		for i, key := range s.attrKeys {
+			rec.Attributes[key] = attrs[i].String
+		}
+	}
+
+	return rec, nil
+}
+
 // exec runs one guarded single-row update. A row that is no longer pending is left
 // unchanged and is not an error: another relay already finalized it.
 func (s *Store) exec(
@@ -563,7 +564,8 @@ func (s *Store) exec(
 		return err
 	}
 
-	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+	_, err = tx.ExecContext(ctx, query, args...)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeUnavailable,

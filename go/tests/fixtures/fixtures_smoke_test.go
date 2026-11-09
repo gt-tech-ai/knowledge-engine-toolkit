@@ -75,7 +75,9 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	}
 
 	boom := apperr.Sentinel("boom")
-	if _, err := fixtures.StubService(boom, false).Get(ctx, "1"); !errors.Is(err, boom) {
+	_, err := fixtures.StubService(boom, false).Get(ctx, "1")
+
+	if !errors.Is(err, boom) {
 		t.Fatalf("StubService(err).Get: %v, want boom", err)
 	}
 
@@ -86,7 +88,8 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 		t.Fatalf("PassPipeline: %q", got)
 	}
 
-	if _, err := fixtures.ErrPipeline(boom).Execute(ctx, "x"); !errors.Is(err, boom) {
+	_, err = fixtures.ErrPipeline(boom).Execute(ctx, "x")
+	if !errors.Is(err, boom) {
 		t.Fatalf("ErrPipeline: %v", err)
 	}
 
@@ -120,8 +123,9 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	}
 
 	// Circuit breaker: open rejects, closed runs.
-	if err := fixtures.StubCircuitBreaker(true).
-		Execute(func() error { return nil }); err == nil {
+	err = fixtures.StubCircuitBreaker(true).
+		Execute(func() error { return nil })
+	if err == nil {
 		t.Fatal("open circuit breaker should reject")
 	}
 
@@ -153,11 +157,13 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 		t.Fatal("StubClientStream.Context should echo ctx")
 	}
 
-	if err := cs.RecvMsg(nil); !errors.Is(err, boom) {
+	err = cs.RecvMsg(nil)
+	if !errors.Is(err, boom) {
 		t.Fatalf("RecvMsg #1: %v, want boom", err)
 	}
 
-	if err := cs.RecvMsg(nil); !errors.Is(err, io.EOF) {
+	err = cs.RecvMsg(nil)
+	if !errors.Is(err, io.EOF) {
 		t.Fatalf("RecvMsg #2: %v, want EOF", err)
 	}
 

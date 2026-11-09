@@ -143,7 +143,8 @@ func (p *Provider[Cred]) resolve(ctx context.Context, ref types.Ref) (Cred, erro
 		)
 	}
 
-	if err := p.verify(ctx, cred); err != nil {
+	err = p.verify(ctx, cred)
+	if err != nil {
 		return zero, apperr.Wrap(err, apperr.CodeUnauthorized,
 			"credential "+ref.String()+" failed verification")
 	}

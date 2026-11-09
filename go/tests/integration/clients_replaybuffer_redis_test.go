@@ -5,7 +5,8 @@
 // exercise the real RPUSH/LTRIM/EXPIRE/LRANGE list semantics + the companion
 // low-water-mark key that no mock or in-memory substitute can validate (the
 // SQL/driver-behaviour analogue for a list store).
-package integration
+
+package integration_test
 
 import (
 	"context"
@@ -23,8 +24,9 @@ import (
 // ReplayBufferRedisSuite holds a real Redis container and a go-redis client backing the
 // buffer.
 type ReplayBufferRedisSuite struct {
+	*testsuite.RedisIntegrationSuite
+
 	client *goredis.Client
-	testsuite.RedisIntegrationSuite
 }
 
 // TestReplayBufferRedisSuite runs all Redis ReplayBuffer integration tests.
@@ -35,7 +37,14 @@ type ReplayBufferRedisSuite struct {
 // What it tests:
 //   - Suite entrypoint wires ReplayBufferRedisSuite into the testify runner.
 func TestReplayBufferRedisSuite(t *testing.T) {
-	suite.Run(t, new(ReplayBufferRedisSuite))
+	t.Parallel()
+
+	suite.Run(
+		t,
+		&ReplayBufferRedisSuite{
+			RedisIntegrationSuite: &testsuite.RedisIntegrationSuite{},
+		},
+	)
 }
 
 func (s *ReplayBufferRedisSuite) SetupTest() {
@@ -46,22 +55,6 @@ func (s *ReplayBufferRedisSuite) SetupTest() {
 func (s *ReplayBufferRedisSuite) TearDownTest() {
 	if s.client != nil {
 		_ = s.client.Close()
-	}
-}
-
-func (s *ReplayBufferRedisSuite) newBuffer(
-	maxSize int,
-	ttl time.Duration,
-) interfaces.ReplayBuffer {
-	return replayredis.New(s.client, replayredis.Config{MaxSize: maxSize, TTL: ttl})
-}
-
-func (s *ReplayBufferRedisSuite) appendSeq(b interfaces.ReplayBuffer, key string, n int) {
-	for i := 1; i <= n; i++ {
-		id := "msg-" + itoaI(i)
-		s.Require().NoError(
-			b.Append(context.Background(), key, id, []byte("payload-"+id)),
-		)
 	}
 }
 
@@ -213,6 +206,22 @@ func (s *ReplayBufferRedisSuite) TestKeyPrefix() {
 	s.Require().NoError(err)
 	s.True(complete)
 	s.Equal([]string{"msg-9"}, idsI(tail))
+}
+
+func (s *ReplayBufferRedisSuite) newBuffer(
+	maxSize int,
+	ttl time.Duration,
+) interfaces.ReplayBuffer {
+	return replayredis.New(s.client, replayredis.Config{MaxSize: maxSize, TTL: ttl})
+}
+
+func (s *ReplayBufferRedisSuite) appendSeq(b interfaces.ReplayBuffer, key string, n int) {
+	for i := 1; i <= n; i++ {
+		id := "msg-" + itoaI(i)
+		s.Require().NoError(
+			b.Append(context.Background(), key, id, []byte("payload-"+id)),
+		)
+	}
 }
 
 func itoaI(i int) string {

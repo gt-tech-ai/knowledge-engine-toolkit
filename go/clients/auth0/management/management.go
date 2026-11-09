@@ -108,7 +108,8 @@ func (c *Client) OrganizationID(ctx context.Context, name string) (string, error
 
 	endpoint := c.api() + "/organizations/name/" + url.PathEscape(name)
 
-	if err := c.getJSON(ctx, endpoint, token, &org); err != nil {
+	err = c.getJSON(ctx, endpoint, token, &org)
+	if err != nil {
 		return "", err
 	}
 
@@ -193,7 +194,8 @@ func (c *Client) bearer(ctx context.Context) (string, error) {
 		ExpiresIn   int    `json:"expires_in"`
 	}
 
-	if err := c.send(req, &out); err != nil {
+	err = c.send(req, &out)
+	if err != nil {
 		return "", err
 	}
 
@@ -248,7 +250,8 @@ func (c *Client) send(req *http.Request, out any) error {
 			req.URL.Path, resp.StatusCode, strings.TrimSpace(string(snippet))))
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	err = json.NewDecoder(resp.Body).Decode(out)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUpstream, "auth0: decode "+req.URL.Path)
 	}
 

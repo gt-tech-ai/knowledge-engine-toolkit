@@ -305,12 +305,6 @@ func NewResource[T, P any, ID comparable, C, U any](
 	}
 }
 
-// NewOutbox returns inner with Claim run through claim and every other operation
-// through rest.
-func NewOutbox(claim, rest Subject, inner interfaces.OutboxStore) Outbox {
-	return Outbox{inner: inner, claim: claim, op: rest}
-}
-
 var _ interfaces.OutboxStore = Outbox{}
 
 // Outbox runs each outbox-store operation through a tier: Enqueue and Claim on their own
@@ -326,6 +320,12 @@ type Outbox struct {
 
 	// op runs every other operation.
 	op Subject
+}
+
+// NewOutbox returns inner with Claim run through claim and every other operation
+// through rest.
+func NewOutbox(claim, rest Subject, inner interfaces.OutboxStore) Outbox {
+	return Outbox{inner: inner, claim: claim, op: rest}
 }
 
 // Enqueue writes rec in the caller's transaction, run like Claim: once, since a retry

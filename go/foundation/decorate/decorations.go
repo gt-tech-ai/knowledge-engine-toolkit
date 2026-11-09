@@ -97,15 +97,6 @@ func (d Decorations) Observability() Observability {
 	return d.collaborators().Observability
 }
 
-// collaborators returns the collaborators d was built over: none on the zero Decorations.
-func (d Decorations) collaborators() Collaborators {
-	if d.collab == nil {
-		return Collaborators{}
-	}
-
-	return *d.collab
-}
-
 // Deps returns the Deps of the component named name in tier: the tier's default layers
 // with the overrides of name and its dotted prefixes on top, and records name as used
 // for Verify. A tier the config does not know, an override that turns on a layer tier
@@ -136,39 +127,6 @@ func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 	}
 
 	return Build(name, tc.For(name), d.collaborators())
-}
-
-// ownOverride returns the override configured for exactly name in tier: none on the zero
-// or a Fixed Decorations.
-func (d Decorations) ownOverride(tier Tier, name string) decoration.Layers {
-	if d.cfg == nil || d.fixed != nil {
-		return decoration.Layers{}
-	}
-
-	tc, ok := d.cfg.Tier(tier.Name)
-	if !ok {
-		return decoration.Layers{}
-	}
-
-	return tc.Overrides[name]
-}
-
-// Resolved is one component or operation Decorations resolved, with the layers it runs
-// and the config keys they came from.
-type Resolved struct {
-	// Tier is the tier's name ("service", "repository", …).
-	Tier string
-
-	// Name is the resolved dotted name: a component ("aiops.budgets") or one of its
-	// operations ("aiops.budgets.create").
-	Name string
-
-	// Sources are the config keys merged into Layers, in order: "defaults", then each
-	// override from the shortest dotted prefix to the name's own.
-	Sources []string
-
-	// Layers are the layers the name resolved to.
-	Layers decoration.Layers
 }
 
 // Inventory returns every component and operation d resolved, ordered by tier then name:
@@ -207,6 +165,48 @@ func (d Decorations) Subject(tier Tier, name string) Subject {
 	return tier.Subject(name, deps)
 }
 
+// Resolved is one component or operation Decorations resolved, with the layers it runs
+// and the config keys they came from.
+type Resolved struct {
+	// Tier is the tier's name ("service", "repository", …).
+	Tier string
+
+	// Name is the resolved dotted name: a component ("aiops.budgets") or one of its
+	// operations ("aiops.budgets.create").
+	Name string
+
+	// Sources are the config keys merged into Layers, in order: "defaults", then each
+	// override from the shortest dotted prefix to the name's own.
+	Sources []string
+
+	// Layers are the layers the name resolved to.
+	Layers decoration.Layers
+}
+
+// collaborators returns the collaborators d was built over: none on the zero Decorations.
+func (d Decorations) collaborators() Collaborators {
+	if d.collab == nil {
+		return Collaborators{}
+	}
+
+	return *d.collab
+}
+
+// ownOverride returns the override configured for exactly name in tier: none on the zero
+// or a Fixed Decorations.
+func (d Decorations) ownOverride(tier Tier, name string) decoration.Layers {
+	if d.cfg == nil || d.fixed != nil {
+		return decoration.Layers{}
+	}
+
+	tc, ok := d.cfg.Tier(tier.Name)
+	if !ok {
+		return decoration.Layers{}
+	}
+
+	return tc.Overrides[name]
+}
+
 // Build returns the Deps of the component named name from its resolved layers: each
 // layer that is on gets its collaborator from c, or its primitive built from its tuning
 // (the breaker is named name). An invalid tuning is CodeInvalidInput.
@@ -239,19 +239,22 @@ func Build(name string, l decoration.Layers, c Collaborators) (Deps, error) {
 	var err error
 
 	if decoration.On(l.Retry.Enabled) {
-		if deps.Retrier, err = newRetrier(l.Retry); err != nil {
+		deps.Retrier, err = newRetrier(l.Retry)
+		if err != nil {
 			return Deps{}, wrapLayer(err, name, "retry")
 		}
 	}
 
 	if decoration.On(l.CircuitBreaker.Enabled) {
-		if deps.Breaker, err = newBreaker(name, l.CircuitBreaker); err != nil {
+		deps.Breaker, err = newBreaker(name, l.CircuitBreaker)
+		if err != nil {
 			return Deps{}, wrapLayer(err, name, "circuit_breaker")
 		}
 	}
 
 	if decoration.On(l.Bulkhead.Enabled) {
-		if deps.Bulkhead, err = newBulkhead(l.Bulkhead); err != nil {
+		deps.Bulkhead, err = newBulkhead(l.Bulkhead)
+		if err != nil {
 			return Deps{}, wrapLayer(err, name, "bulkhead")
 		}
 
@@ -259,7 +262,8 @@ func Build(name string, l decoration.Layers, c Collaborators) (Deps, error) {
 	}
 
 	if decoration.On(l.RateLimit.Enabled) {
-		if deps.RateLimiter, err = newRateLimiter(l.RateLimit); err != nil {
+		deps.RateLimiter, err = newRateLimiter(l.RateLimit)
+		if err != nil {
 			return Deps{}, wrapLayer(err, name, "rate_limit")
 		}
 	}
@@ -269,18 +273,18 @@ func Build(name string, l decoration.Layers, c Collaborators) (Deps, error) {
 
 // newRetrier builds the exponential-backoff retrier r tunes.
 func newRetrier(r decoration.Retry) (interfaces.Retrier, error) {
-	err := r.Validate()
+	err := r.RetryConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
 
 	return retry.NewFromConfig(retry.Config{
 		Kind:            retry.KindExponential,
-		MaxRetries:      r.MaxRetries,
-		InitialInterval: r.InitialInterval,
-		MaxInterval:     r.MaxInterval,
-		Multiplier:      r.Multiplier,
-		MaxElapsedTime:  r.MaxElapsedTime,
+		MaxRetries:      r.RetryConfig.MaxRetries,
+		InitialInterval: r.RetryConfig.InitialInterval,
+		MaxInterval:     r.RetryConfig.MaxInterval,
+		Multiplier:      r.RetryConfig.Multiplier,
+		MaxElapsedTime:  r.RetryConfig.MaxElapsedTime,
 	})
 }
 
@@ -289,7 +293,7 @@ func newBreaker(
 	name string,
 	b decoration.CircuitBreaker,
 ) (interfaces.CircuitBreaker, error) {
-	err := b.Validate()
+	err := b.BreakerConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
@@ -297,57 +301,57 @@ func newBreaker(
 	return circuitbreaker.NewFromConfig(circuitbreaker.Config{
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                name,
-		MaxRequests:         b.MaxRequests,
-		Interval:            b.Interval,
-		Timeout:             b.Timeout,
-		ConsecutiveFailures: b.ConsecutiveFailures,
-		FailureRatio:        b.FailureRatio,
-		MinRequests:         b.MinRequests,
+		MaxRequests:         b.BreakerConfig.MaxRequests,
+		Interval:            b.BreakerConfig.Interval,
+		Timeout:             b.BreakerConfig.Timeout,
+		ConsecutiveFailures: b.BreakerConfig.ConsecutiveFailures,
+		FailureRatio:        b.BreakerConfig.FailureRatio,
+		MinRequests:         b.BreakerConfig.MinRequests,
 	})
 }
 
 // newBulkhead builds the bulkhead b tunes; its kind is "channel" (or empty) or
 // "adaptive".
 func newBulkhead(b decoration.Bulkhead) (interfaces.Bulkhead, error) {
-	err := b.Validate()
+	err := b.BulkheadConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
 
 	var kind bulkhead.Kind
 
-	switch b.Kind {
+	switch b.BulkheadConfig.Kind {
 	case "", "channel":
 		kind = bulkhead.KindChannel
 	case "adaptive":
 		kind = bulkhead.KindAdaptive
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"unknown bulkhead kind %q (want channel|adaptive)", b.Kind,
+			"unknown bulkhead kind %q (want channel|adaptive)", b.BulkheadConfig.Kind,
 		))
 	}
 
 	return bulkhead.NewFromConfig(bulkhead.Config{
 		Kind:              kind,
-		MaxConcurrent:     b.MaxConcurrent,
-		MinConcurrent:     b.MinConcurrent,
-		InitialConcurrent: b.InitialConcurrent,
-		RTTThreshold:      b.RTTThreshold,
-		BackoffRatio:      b.BackoffRatio,
+		MaxConcurrent:     b.BulkheadConfig.MaxConcurrent,
+		MinConcurrent:     b.BulkheadConfig.MinConcurrent,
+		InitialConcurrent: b.BulkheadConfig.InitialConcurrent,
+		RTTThreshold:      b.BulkheadConfig.RTTThreshold,
+		BackoffRatio:      b.BulkheadConfig.BackoffRatio,
 	})
 }
 
 // newRateLimiter builds the token-bucket limiter r tunes.
 func newRateLimiter(r decoration.RateLimit) (interfaces.RateLimiter, error) {
-	err := r.Validate()
+	err := r.RateLimitConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
 
 	return ratelimiter.New(
 		ratelimiter.KindToken,
-		ratelimiter.WithRate(r.Rate),
-		ratelimiter.WithBurst(r.Burst),
+		ratelimiter.WithRate(r.RateLimitConfig.Rate),
+		ratelimiter.WithBurst(r.RateLimitConfig.Burst),
 	)
 }
 

@@ -115,6 +115,7 @@ func (r *Registry) Parse(data []byte) (Event, error) {
 	}
 
 	event := factory()
+
 	err = json.Unmarshal(data, event)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse event")

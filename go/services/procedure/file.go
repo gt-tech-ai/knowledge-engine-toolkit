@@ -97,6 +97,7 @@ func (e *engine) applyFile(f *types.ProcFile, vars Vars) (string, error) {
 		return copyFile(files, from, path, f.Mode)
 	case types.FileMkdir:
 		perm, _ := mode(f.Mode, defaultDirMode)
+
 		err := files.MkdirAll(path, perm)
 		if err != nil {
 			return "", apperr.Wrap(err, apperr.CodeInternal, "create "+path)
@@ -168,7 +169,8 @@ func ensureFile(files interfaces.FS, path, perm string) (string, error) {
 
 // copyFile copies from to path unless path exists; a missing from is CodeNotFound.
 func copyFile(files interfaces.FS, from, path, perm string) (string, error) {
-	if _, err := files.Stat(path); err == nil {
+	_, err := files.Stat(path)
+	if err == nil {
 		return path + " exists", nil
 	}
 

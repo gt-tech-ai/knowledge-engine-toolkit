@@ -6,7 +6,8 @@
 // (rediscache.Cache.Client()) — the exact seam the caller wires against — so these
 // tests exercise real SET NX PX acquisition and the Lua compare-then-act
 // renew/release that no mock or in-memory substitute can validate.
-package integration
+
+package integration_test
 
 import (
 	"context"
@@ -27,8 +28,9 @@ import (
 // RedisLockSuite holds a real Redis container and a cache client whose
 // underlying go-redis connection backs the lock under test.
 type RedisLockSuite struct {
+	*testsuite.RedisIntegrationSuite
+
 	cache *rediscache.Cache
-	testsuite.RedisIntegrationSuite
 }
 
 // TestRedisLockSuite runs all Redis DistributedLock integration tests.
@@ -39,7 +41,12 @@ type RedisLockSuite struct {
 // What it tests:
 //   - Suite entrypoint wires RedisLockSuite into the testify runner.
 func TestRedisLockSuite(t *testing.T) {
-	suite.Run(t, new(RedisLockSuite))
+	t.Parallel()
+
+	suite.Run(
+		t,
+		&RedisLockSuite{RedisIntegrationSuite: &testsuite.RedisIntegrationSuite{}},
+	)
 }
 
 func (s *RedisLockSuite) SetupTest() {
@@ -54,16 +61,6 @@ func (s *RedisLockSuite) TearDownTest() {
 	if s.cache != nil {
 		_ = s.cache.Close()
 	}
-}
-
-// newLock builds a lock over the reused go-redis client with the given lease TTL.
-func (s *RedisLockSuite) newLock(ttl time.Duration) interfaces.DistributedLock {
-	return lockredis.New(s.cache.Client(), ttl)
-}
-
-// key returns a test-scoped lock key so tests sharing one Redis never collide.
-func (s *RedisLockSuite) key(label string) string {
-	return "test:" + s.T().Name() + ":" + label
 }
 
 // TestAcquire_SingleWinner tests that of two contenders on one key, exactly one
@@ -128,7 +125,8 @@ func (s *RedisLockSuite) TestAcquire_ConcurrentSingleWinner() {
 
 			<-start
 
-			if _, ok, err := lk.Acquire(ctx, k); err == nil && ok {
+			_, ok, err := lk.Acquire(ctx, k)
+			if err == nil && ok {
 				wins.Add(1)
 			}
 		}()
@@ -353,4 +351,14 @@ func (s *RedisLockSuite) TestNewFromConfig_RedisBackend() {
 	s.Require().True(held, "Hold on a free key should acquire")
 	s.Require().NoError(heldCtx.Err(), "held context is live while held")
 	release()
+}
+
+// newLock builds a lock over the reused go-redis client with the given lease TTL.
+func (s *RedisLockSuite) newLock(ttl time.Duration) interfaces.DistributedLock {
+	return lockredis.New(s.cache.Client(), ttl)
+}
+
+// key returns a test-scoped lock key so tests sharing one Redis never collide.
+func (s *RedisLockSuite) key(label string) string {
+	return "test:" + s.T().Name() + ":" + label
 }

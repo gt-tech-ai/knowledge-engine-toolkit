@@ -842,6 +842,8 @@ func TestTracingInterceptor_Error(t *testing.T) {
 //   - A request with traceparent header passes through the interceptor without error
 //   - The interceptor calls otel.GetTextMapPropagator().Extract() (verified by no panic)
 func TestTracingInterceptor_ExtractsTraceContext(t *testing.T) {
+	t.Parallel()
+
 	// NOT parallel: this test mutates the global OTel propagator via
 	// otel.SetTextMapPropagator.
 	prev := otel.GetTextMapPropagator()

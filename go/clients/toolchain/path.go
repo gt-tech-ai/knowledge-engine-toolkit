@@ -65,7 +65,9 @@ func (i *Installer) ensureGoBinInPath() {
 // (the home of mingw-w64 gcc on Windows).
 func (i *Installer) ensureMsys2InPath() {
 	msys2Bin := `C:\msys64\ucrt64\bin`
-	if info, err := os.Stat(msys2Bin); err == nil && info.IsDir() {
+	info, err := os.Stat(msys2Bin)
+
+	if err == nil && info.IsDir() {
 		AddToPathIfMissing(msys2Bin, i.log)
 	}
 }

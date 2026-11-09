@@ -68,7 +68,7 @@ type Retry struct {
 	Enabled *bool `mapstructure:"enabled"`
 
 	// RetryConfig tunes the backoff.
-	resilience.RetryConfig `mapstructure:",squash"`
+	RetryConfig resilience.RetryConfig `mapstructure:"retry_config,squash"`
 }
 
 // CircuitBreaker switches and tunes the circuit-breaker layer; the breaker is named
@@ -78,7 +78,7 @@ type CircuitBreaker struct {
 	Enabled *bool `mapstructure:"enabled"`
 
 	// BreakerConfig tunes when the breaker trips and recovers.
-	resilience.BreakerConfig `mapstructure:",squash"`
+	BreakerConfig resilience.BreakerConfig `mapstructure:"breaker_config,squash"`
 }
 
 // Bulkhead switches and tunes the bulkhead layer.
@@ -91,7 +91,7 @@ type Bulkhead struct {
 	Shed *bool `mapstructure:"shed"`
 
 	// BulkheadConfig tunes the concurrency limit ("channel" or "adaptive").
-	resilience.BulkheadConfig `mapstructure:",squash"`
+	BulkheadConfig resilience.BulkheadConfig `mapstructure:"bulkhead_config,squash"`
 }
 
 // RateLimit switches and tunes the rate-limit layer.
@@ -100,7 +100,7 @@ type RateLimit struct {
 	Enabled *bool `mapstructure:"enabled"`
 
 	// RateLimitConfig tunes the token bucket.
-	resilience.RateLimitConfig `mapstructure:",squash"`
+	RateLimitConfig resilience.RateLimitConfig `mapstructure:"rate_limit_config,squash"`
 }
 
 // On reports whether a layer switch is on (nil is off).

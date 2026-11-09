@@ -38,7 +38,8 @@ func (s *Source) List(ctx context.Context) ([]types.File, error) {
 			return err
 		}
 
-		if err := ctx.Err(); err != nil {
+		err = ctx.Err()
+		if err != nil {
 			return apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled), "walk")
 		}
 

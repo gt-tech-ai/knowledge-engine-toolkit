@@ -5,6 +5,7 @@
 //   - Error: Is with non-AppError, Code extraction, Ingestion constructor
 //   - Zap: ZapFields with stack/details, LogErrors, Errors, detailsObject
 //   - Types: type aliases
+
 package unit_test
 
 import (

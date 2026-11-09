@@ -102,6 +102,14 @@ type Deps struct {
 	ShedLoad bool
 }
 
+// WithoutRetry returns d with no retrier, for an operation that is not idempotent (a
+// create whose commit may have landed).
+func (d Deps) WithoutRetry() Deps {
+	d.Retrier = nil
+
+	return d
+}
+
 // panicLogger is the logger a recovered panic is logged to: PanicLogger, else Logger.
 func (d Deps) panicLogger() interfaces.Logger {
 	if d.PanicLogger != nil {
@@ -109,14 +117,6 @@ func (d Deps) panicLogger() interfaces.Logger {
 	}
 
 	return d.Logger
-}
-
-// WithoutRetry returns d with no retrier, for an operation that is not idempotent (a
-// create whose commit may have landed).
-func (d Deps) WithoutRetry() Deps {
-	d.Retrier = nil
-
-	return d
 }
 
 // Chain builds the tier's middleware chain for the subject named name from d.

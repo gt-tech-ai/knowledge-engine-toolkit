@@ -30,16 +30,16 @@ func DecorateDoer(
 	c client.Base,
 	maxBodyBytes int64,
 ) HTTPDoer {
-	return &decoratedDoer{inner: inner, Base: c, maxBodyBytes: maxBodyBytes}
+	return &decoratedDoer{inner: inner, Base: &c, maxBodyBytes: maxBodyBytes}
 }
 
 // decoratedDoer is the HTTPDoer that sends through the client tier.
 type decoratedDoer struct {
+	// Base runs each request through the client tier.
+	*client.Base
+
 	// inner sends each attempt.
 	inner HTTPDoer
-
-	// Base runs each request through the client tier.
-	client.Base
 
 	// maxBodyBytes caps a buffered response body; zero or less means no cap.
 	maxBodyBytes int64

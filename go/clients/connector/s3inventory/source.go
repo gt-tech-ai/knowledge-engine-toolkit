@@ -181,11 +181,13 @@ func (s *Source) resume(
 		return 0, 0, err
 	}
 
-	if err := s.chooseReport(ctx, stamp); err != nil {
+	err = s.chooseReport(ctx, stamp)
+	if err != nil {
 		return 0, 0, err
 	}
 
-	if err := s.loadReport(ctx); err != nil {
+	err = s.loadReport(ctx)
+	if err != nil {
 		return 0, 0, err
 	}
 
@@ -213,7 +215,8 @@ func (s *Source) readFrom(
 	if err != nil && reused {
 		s.release()
 
-		if cur, err = s.cursorAt(ctx, file, row); err != nil {
+		cur, err = s.cursorAt(ctx, file, row)
+		if err != nil {
 			return nil, err
 		}
 
@@ -353,7 +356,8 @@ func (s *Source) cursorAt(ctx context.Context, file, row int) (*cursor, error) {
 	s.open = cur
 
 	for cur.row < row {
-		if _, err := rows.Read(); err != nil {
+		_, err := rows.Read()
+		if err != nil {
 			s.release()
 
 			return nil, apperr.Wrap(

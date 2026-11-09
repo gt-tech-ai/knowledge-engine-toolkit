@@ -75,7 +75,8 @@ func Validate(spec types.ChartSpec, m *listquery.Map) (types.ChartSpec, error) {
 
 // validate checks a decoded spec against m and compiles its filter in place.
 func validate(spec *types.ChartSpec, m *listquery.Map) error {
-	if err := validateScalars(spec); err != nil {
+	err := validateScalars(spec)
+	if err != nil {
 		return err
 	}
 

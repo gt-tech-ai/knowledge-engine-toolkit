@@ -1,8 +1,3 @@
-// Package middleware provides composable HTTP middleware for Go services.
-//
-// Each middleware follows the func(http.Handler) http.Handler pattern and
-// can be chained using Chain(). Configuration structs expose a Default*Config()
-// constructor with sensible development defaults.
 package middleware
 
 import (

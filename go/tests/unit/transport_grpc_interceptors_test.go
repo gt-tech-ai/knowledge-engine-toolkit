@@ -139,6 +139,8 @@ func TestGRPCTracingServerInterceptor_CreatesSpan(t *testing.T) {
 //   - A traceparent in the incoming metadata becomes the parent of the server span:
 //     the handler's context carries the caller's trace id.
 func TestGRPCTracingServerInterceptor_ContinuesCallerTrace(t *testing.T) {
+	t.Parallel()
+
 	// NOT parallel: this test sets the global OTel propagator.
 	prev := otel.GetTextMapPropagator()
 

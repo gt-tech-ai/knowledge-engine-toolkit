@@ -76,6 +76,7 @@ func (s *set[T]) Run(ctx context.Context, target T) (types.StepResults, error) {
 			func(ctx context.Context, p interfaces.Probe[T]) types.StepResult {
 				return s.step(ctx, p, target)
 			})
+
 		err := ctx.Err()
 		if err != nil {
 			return res, apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled),

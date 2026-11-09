@@ -98,6 +98,8 @@ func probeClientAt(
 //     server's message.
 //   - An open breaker: no call, CodeUnavailable.
 func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
+	t.Parallel()
+
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
 	sc := sampledSpanContext()
@@ -105,6 +107,8 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 	down := connect.NewError(connect.CodeUnavailable, nil)
 
 	t.Run("transient", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			calls atomic.Int32
 			tp    atomic.Value
@@ -119,6 +123,8 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 	})
 
 	t.Run("non-idempotent", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			calls atomic.Int32
 			tp    atomic.Value
@@ -135,6 +141,8 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 	})
 
 	t.Run("permanent", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			calls atomic.Int32
 			tp    atomic.Value
@@ -150,6 +158,8 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 	})
 
 	t.Run("open breaker", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			calls atomic.Int32
 			tp    atomic.Value

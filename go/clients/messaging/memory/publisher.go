@@ -69,6 +69,22 @@ func (p *Publisher) PublishBatchKeyed(
 // OrderedPerKey is true: a topic's messages are delivered serially in publish order.
 func (*Publisher) OrderedPerKey() bool { return true }
 
+// PublishBatch enqueues each payload on topic in order.
+func (p *Publisher) PublishBatch(
+	ctx context.Context,
+	topic string,
+	payloads [][]byte,
+) error {
+	for _, payload := range payloads {
+		err := p.Publish(ctx, topic, payload)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // enqueue puts payload on topic as a Message with metadata plus ctx's trace context,
 // or returns ctx's error if it is cancelled first.
 func (p *Publisher) enqueue(
@@ -95,20 +111,4 @@ func (p *Publisher) enqueue(
 			"publish canceled",
 		)
 	}
-}
-
-// PublishBatch enqueues each payload on topic in order.
-func (p *Publisher) PublishBatch(
-	ctx context.Context,
-	topic string,
-	payloads [][]byte,
-) error {
-	for _, payload := range payloads {
-		err := p.Publish(ctx, topic, payload)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }

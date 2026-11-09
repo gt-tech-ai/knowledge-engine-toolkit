@@ -44,6 +44,8 @@ func TestEnvSource_ResolvesMappedVariable(t *testing.T) {
 //   - Get on an unmapped Ref, and on a Ref mapped to an unset variable, both return
 //     CodeNotFound.
 func TestEnvSource_MissingAndUnmappedAreNotFound(t *testing.T) {
+	t.Parallel()
+
 	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
 
 	unmapped := env.New(map[types.Ref]string{})
@@ -73,6 +75,8 @@ func TestEnvSource_MissingAndUnmappedAreNotFound(t *testing.T) {
 // What it tests:
 //   - Put returns CodeInvalidInput (unsupported) rather than succeeding silently.
 func TestEnvSource_PutIsUnsupported(t *testing.T) {
+	t.Parallel()
+
 	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
 	src := env.New(map[types.Ref]string{ref: "KE_X"})
 

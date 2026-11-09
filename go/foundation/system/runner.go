@@ -115,6 +115,27 @@ func (d *Runner) RunBufferedWithInput(
 	return d.runBuffered(ctx, dir, extraEnv, input, name, args...)
 }
 
+// Exists checks whether a binary is available on PATH.
+func (d *Runner) Exists(name string) bool {
+	_, err := exec.LookPath(name)
+
+	return err == nil
+}
+
+// RequireTool returns an error if the named binary is not on PATH.
+func (d *Runner) RequireTool(name, installHint string) error {
+	if d.Exists(name) {
+		return nil
+	}
+
+	msg := name + " not found on PATH"
+	if installHint != "" {
+		msg = fmt.Sprintf("%s not found on PATH; install: %s", name, installHint)
+	}
+
+	return apperr.NotFound(msg)
+}
+
 // runBuffered is the shared implementation for RunBuffered, RunBufferedWithEnv and
 // RunBufferedWithInput; a nil input leaves stdin unset.
 func (d *Runner) runBuffered(
@@ -167,27 +188,6 @@ func (d *Runner) runBuffered(
 		Err:      err,
 		ExitCode: exitCode,
 	}
-}
-
-// Exists checks whether a binary is available on PATH.
-func (d *Runner) Exists(name string) bool {
-	_, err := exec.LookPath(name)
-
-	return err == nil
-}
-
-// RequireTool returns an error if the named binary is not on PATH.
-func (d *Runner) RequireTool(name, installHint string) error {
-	if d.Exists(name) {
-		return nil
-	}
-
-	msg := name + " not found on PATH"
-	if installHint != "" {
-		msg = fmt.Sprintf("%s not found on PATH; install: %s", name, installHint)
-	}
-
-	return apperr.NotFound(msg)
 }
 
 // stdoutWriter returns the configured stdout, or os.Stdout resolved now — lazily, so

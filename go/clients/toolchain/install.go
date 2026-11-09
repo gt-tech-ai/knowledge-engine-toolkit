@@ -234,147 +234,6 @@ func (i *Installer) Provision(
 	return i.installAndVerify(ctx, root, det, required, toInstall)
 }
 
-// selectInstallable returns the indices of required tools that need installing
-// (missing or outdated, or ANY tool when force is set — the post-Go-bump rebuild)
-// and have an install method applicable to this platform.
-func (i *Installer) selectInstallable(
-	required []types.ToolDef,
-	results []types.ToolCheckResult,
-	force bool,
-) []int {
-	var idxs []int
-
-	for j := range results {
-		needs := force ||
-			results[j].Status == types.StatusToolMissing ||
-			results[j].Status == types.StatusToolOutdated
-		if !needs {
-			continue
-		}
-
-		if _, ok := i.resolveMethod(&required[j]); ok {
-			idxs = append(idxs, j)
-		}
-	}
-
-	return idxs
-}
-
-// confirmRequired asks the Prompter to install the selected required tools
-// (autoYes skips the question) and returns its error, e.g. the --yes guidance when
-// there is no operator to answer.
-func (i *Installer) confirmRequired(
-	ctx context.Context,
-	required []types.ToolDef,
-	idxs []int,
-	autoYes bool,
-) (bool, error) {
-	names := make([]string, len(idxs))
-	for k, idx := range idxs {
-		names[k] = required[idx].Name
-	}
-
-	return i.confirm(
-		ctx,
-		fmt.Sprintf("Install missing tools (%s)?", strings.Join(names, ", ")),
-		autoYes,
-	)
-}
-
-// confirm reports yes without asking when autoYes is set; otherwise it asks the
-// injected Prompter, failing with a coded error when none was injected.
-func (i *Installer) confirm(
-	ctx context.Context,
-	question string,
-	autoYes bool,
-) (bool, error) {
-	if autoYes {
-		return true, nil
-	}
-
-	if i.prompter == nil {
-		return false, apperr.New(
-			apperr.CodeInvalidInput,
-			"no Prompter was injected to confirm the install; pass --yes to install without "+
-				"asking",
-		)
-	}
-
-	return i.prompter.Confirm(ctx, question)
-}
-
-// reportSkipped logs and returns a CodeUnavailable error listing the required
-// tools the user declined to install.
-func reportSkipped(required []types.ToolDef, idxs []int, log interfaces.Logger) error {
-	log.Info("Skipping tool installation")
-	log.Error(fmt.Sprintf("Missing tools (%d):", len(idxs)))
-
-	for _, idx := range idxs {
-		msg := required[idx].Name
-		if required[idx].FallbackURL != "" {
-			msg += "\n    Install: " + required[idx].FallbackURL
-		}
-
-		log.Error("  * " + msg)
-	}
-
-	return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
-		"%d required tool(s) missing from PATH -- install them and retry", len(idxs),
-	))
-}
-
-// installAndVerify installs each selected tool, adds its bin dir to PATH, and
-// re-checks it, returning an error if any tool is still unavailable afterwards.
-func (i *Installer) installAndVerify(
-	ctx context.Context,
-	root string,
-	det *Detector,
-	required []types.ToolDef,
-	idxs []int,
-) error {
-	var failures []string
-
-	for _, idx := range idxs {
-		tool := &required[idx]
-		err := i.Install(ctx, root, tool)
-		if err != nil {
-			return toolError(
-				tool,
-				apperr.Wrap(err, apperr.CodeInternal, "install failed"),
-			)
-		}
-
-		i.addInstallDirToPath(tool)
-
-		if verify := det.Check(ctx, root, tool); verify.Status == types.StatusToolOK {
-			i.log.Info(verify.Message + " (installed)")
-		} else {
-			failures = append(failures, tool.Name)
-			i.log.Error(tool.Name + ": still not available after install")
-		}
-	}
-
-	if len(failures) > 0 {
-		return apperr.Internal(fmt.Sprintf(
-			"%d tool(s) failed to install: %s",
-			len(failures),
-			strings.Join(failures, ", "),
-		))
-	}
-
-	return nil
-}
-
-// toolError wraps a tool failure with its manual-install fallback URL.
-func toolError(tool *types.ToolDef, cause error) error {
-	msg := fmt.Sprintf("required tool %s: %s", tool.Name, cause)
-	if tool.FallbackURL != "" {
-		msg += "\n  Install manually: " + tool.FallbackURL
-	}
-
-	return apperr.Internal(msg)
-}
-
 // InstallTools is the tool-install entry point. It picks the pool the
 // request targets — exactly the ci-marked tools (opts.CI), the named tools from
 // every installable category, or, with neither, the optional tools — and runs
@@ -481,6 +340,148 @@ func (i *Installer) InstallSet(
 	}
 
 	i.log.Info("All tools installed successfully")
+
+	return nil
+}
+
+// selectInstallable returns the indices of required tools that need installing
+// (missing or outdated, or ANY tool when force is set — the post-Go-bump rebuild)
+// and have an install method applicable to this platform.
+func (i *Installer) selectInstallable(
+	required []types.ToolDef,
+	results []types.ToolCheckResult,
+	force bool,
+) []int {
+	var idxs []int
+
+	for j := range results {
+		needs := force ||
+			results[j].Status == types.StatusToolMissing ||
+			results[j].Status == types.StatusToolOutdated
+		if !needs {
+			continue
+		}
+
+		if _, ok := i.resolveMethod(&required[j]); ok {
+			idxs = append(idxs, j)
+		}
+	}
+
+	return idxs
+}
+
+// reportSkipped logs and returns a CodeUnavailable error listing the required
+// tools the user declined to install.
+func reportSkipped(required []types.ToolDef, idxs []int, log interfaces.Logger) error {
+	log.Info("Skipping tool installation")
+	log.Error(fmt.Sprintf("Missing tools (%d):", len(idxs)))
+
+	for _, idx := range idxs {
+		msg := required[idx].Name
+		if required[idx].FallbackURL != "" {
+			msg += "\n    Install: " + required[idx].FallbackURL
+		}
+
+		log.Error("  * " + msg)
+	}
+
+	return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
+		"%d required tool(s) missing from PATH -- install them and retry", len(idxs),
+	))
+}
+
+// confirmRequired asks the Prompter to install the selected required tools
+// (autoYes skips the question) and returns its error, e.g. the --yes guidance when
+// there is no operator to answer.
+func (i *Installer) confirmRequired(
+	ctx context.Context,
+	required []types.ToolDef,
+	idxs []int,
+	autoYes bool,
+) (bool, error) {
+	names := make([]string, len(idxs))
+	for k, idx := range idxs {
+		names[k] = required[idx].Name
+	}
+
+	return i.confirm(
+		ctx,
+		fmt.Sprintf("Install missing tools (%s)?", strings.Join(names, ", ")),
+		autoYes,
+	)
+}
+
+// toolError wraps a tool failure with its manual-install fallback URL.
+func toolError(tool *types.ToolDef, cause error) error {
+	msg := fmt.Sprintf("required tool %s: %s", tool.Name, cause)
+	if tool.FallbackURL != "" {
+		msg += "\n  Install manually: " + tool.FallbackURL
+	}
+
+	return apperr.Internal(msg)
+}
+
+// confirm reports yes without asking when autoYes is set; otherwise it asks the
+// injected Prompter, failing with a coded error when none was injected.
+func (i *Installer) confirm(
+	ctx context.Context,
+	question string,
+	autoYes bool,
+) (bool, error) {
+	if autoYes {
+		return true, nil
+	}
+
+	if i.prompter == nil {
+		return false, apperr.New(
+			apperr.CodeInvalidInput,
+			"no Prompter was injected to confirm the install; pass --yes to install without "+
+				"asking",
+		)
+	}
+
+	return i.prompter.Confirm(ctx, question)
+}
+
+// installAndVerify installs each selected tool, adds its bin dir to PATH, and
+// re-checks it, returning an error if any tool is still unavailable afterwards.
+func (i *Installer) installAndVerify(
+	ctx context.Context,
+	root string,
+	det *Detector,
+	required []types.ToolDef,
+	idxs []int,
+) error {
+	var failures []string
+
+	for _, idx := range idxs {
+		tool := &required[idx]
+
+		err := i.Install(ctx, root, tool)
+		if err != nil {
+			return toolError(
+				tool,
+				apperr.Wrap(err, apperr.CodeInternal, "install failed"),
+			)
+		}
+
+		i.addInstallDirToPath(tool)
+
+		if verify := det.Check(ctx, root, tool); verify.Status == types.StatusToolOK {
+			i.log.Info(verify.Message + " (installed)")
+		} else {
+			failures = append(failures, tool.Name)
+			i.log.Error(tool.Name + ": still not available after install")
+		}
+	}
+
+	if len(failures) > 0 {
+		return apperr.Internal(fmt.Sprintf(
+			"%d tool(s) failed to install: %s",
+			len(failures),
+			strings.Join(failures, ", "),
+		))
+	}
 
 	return nil
 }

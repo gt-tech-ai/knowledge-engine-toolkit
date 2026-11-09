@@ -12,6 +12,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/loop"
 )
@@ -135,7 +136,15 @@ func TestTicker_FailedPassIsLoggedAndRetried(t *testing.T) {
 //   - With a zero Interval, passes run one after another until the context ends, and
 //     no goroutine outlives Run (goleak).
 func TestTicker_BackToBackWhenIntervalIsZero(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestTicker_BackToBackWhenIntervalIsZero")
+
+		return
+	}
+
+	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
 
 	ctx, cancel := context.WithCancel(t.Context())
 
@@ -166,7 +175,15 @@ func TestTicker_BackToBackWhenIntervalIsZero(t *testing.T) {
 //     so a real failure racing the shutdown stays diagnosable.
 //   - No goroutine outlives Run (goleak).
 func TestTicker_ReturnsNilWhenContextEnds(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestTicker_ReturnsNilWhenContextEnds")
+
+		return
+	}
+
+	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
 
 	boom := apperr.New(apperr.CodeUnavailable, "flush failed")
 	debugged := mocks.NewMockLogger(gomock.NewController(t))

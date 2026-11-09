@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -37,6 +37,8 @@ type SQSElasticMQSuite struct {
 // What it tests:
 //   - Wires SQSElasticMQSuite into the runner.
 func TestSQSElasticMQSuite(t *testing.T) {
+	t.Parallel()
+
 	suite.Run(t, new(SQSElasticMQSuite))
 }
 
@@ -52,29 +54,6 @@ func (s *SQSElasticMQSuite) SetupSuite() {
 		QueueName: aws.String(emqTestQueue),
 	})
 	s.Require().NoError(err, "create queue")
-}
-
-// rawClient builds an SQS client pointed at the test ElasticMQ for queue setup +
-// assertions (receive).
-func (s *SQSElasticMQSuite) rawClient() *awssqs.Client {
-	s.T().Helper()
-
-	awsCfg, err := awsconfig.LoadDefaultConfig(
-		context.Background(),
-		awsconfig.WithRegion("us-east-1"),
-		awsconfig.WithCredentialsProvider(
-			credentials.NewStaticCredentialsProvider(
-				elasticmqdb.AccessKey,
-				elasticmqdb.SecretKey,
-				"",
-			),
-		),
-	)
-	s.Require().NoError(err)
-
-	return awssqs.NewFromConfig(awsCfg, func(o *awssqs.Options) {
-		o.BaseEndpoint = aws.String(s.ElasticMQEndpoint)
-	})
 }
 
 // TestPublish_RoundTrip verifies a message published through the real publisher is
@@ -112,4 +91,27 @@ func (s *SQSElasticMQSuite) TestPublish_RoundTrip() {
 	s.Require().NoError(err)
 	s.Require().Len(out.Messages, 1, "published message must be receivable")
 	s.JSONEq(body, aws.ToString(out.Messages[0].Body))
+}
+
+// rawClient builds an SQS client pointed at the test ElasticMQ for queue setup +
+// assertions (receive).
+func (s *SQSElasticMQSuite) rawClient() *awssqs.Client {
+	s.T().Helper()
+
+	awsCfg, err := awsconfig.LoadDefaultConfig(
+		context.Background(),
+		awsconfig.WithRegion("us-east-1"),
+		awsconfig.WithCredentialsProvider(
+			credentials.NewStaticCredentialsProvider(
+				elasticmqdb.AccessKey,
+				elasticmqdb.SecretKey,
+				"",
+			),
+		),
+	)
+	s.Require().NoError(err)
+
+	return awssqs.NewFromConfig(awsCfg, func(o *awssqs.Options) {
+		o.BaseEndpoint = aws.String(s.ElasticMQEndpoint)
+	})
 }

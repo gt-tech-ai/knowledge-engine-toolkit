@@ -113,8 +113,9 @@ languages share one engine:
   `NewBase[C](decs, name, …) (Base, error)`), and each entity tier an `Entity` base
   (`entity.go`) that embeds `Base` and serves the entity's roles over the next tier;
   Python's is `XBase(contract, decorations, name)`. Each method of the contract `C` is one
-  operation, decorated as `<name>.<snake_case method>`; a component embeds the base, implements
-  each method through `Exec` under that op, and calls the next tier. Running an undeclared op
+  operation, decorated as `<name>.<snake_case method>`; a component embeds a pointer to
+  the base (`*client.Base`), which keeps both embedded-first order and optimal field alignment,
+  implements each method through `Exec` under that op, and calls the next tier. Running an undeclared op
   fails `INTERNAL`. Wire-level op names (RPC procedures, topics) use `client.NewWireBase` /
   `ClientBase.wire`. Tests use `fixtures.Decorations()` or `decorate.Fixed(deps)` /
   `Decorations.fixed(deps)`. Never hand-wrap a concern.

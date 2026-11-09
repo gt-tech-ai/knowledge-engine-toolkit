@@ -132,7 +132,8 @@ func NewFromConfig(rows []types.GuardRow, deps Deps) ([]interfaces.Guard, error)
 // validate checks r's kind and the parts that can fail before a run.
 func validate(r *types.GuardRow, deps Deps) error {
 	if r.For != "" {
-		if _, err := deps.Programs.compile(r.For); err != nil {
+		_, err := deps.Programs.compile(r.For)
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "for")
 		}
 	}
@@ -375,7 +376,8 @@ func (g *guard) runOne(
 	}
 
 	if key != "" {
-		if hit, err := g.deps.Cache.Hit(ctx, key); err == nil && hit {
+		hit, err := g.deps.Cache.Hit(ctx, key)
+		if err == nil && hit {
 			return nil, true, nil
 		}
 	}

@@ -405,7 +405,8 @@ func (e *engine) confirm(
 
 	ok := false
 	if e.deps.Prompter != nil {
-		if ok, err = e.deps.Prompter.Confirm(ctx, q); err != nil {
+		ok, err = e.deps.Prompter.Confirm(ctx, q)
+		if err != nil {
 			return err
 		}
 	}

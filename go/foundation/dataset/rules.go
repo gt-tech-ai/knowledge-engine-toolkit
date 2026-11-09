@@ -114,7 +114,8 @@ func (d *Dataset) Validate(schema []byte) error {
 
 	c := jsonschema.NewCompiler()
 
-	if err := c.AddResource(url, doc); err != nil {
+	err = c.AddResource(url, doc)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "load data schema")
 	}
 
@@ -138,7 +139,8 @@ func (d *Dataset) Validate(schema []byte) error {
 		return apperr.Wrap(err, apperr.CodeInternal, "decode data JSON")
 	}
 
-	if err := sch.Validate(inst); err != nil {
+	err = sch.Validate(inst)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "data does not match its schema")
 	}
 
@@ -170,7 +172,8 @@ func (d *Dataset) decoded(need map[string]bool) (map[string]any, error) {
 
 		var v any
 
-		if err := n.Decode(&v); err != nil {
+		err = n.Decode(&v)
+		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
 				"decode section "+key+" from "+d.sourceOf(key))
 		}

@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"bytes"
@@ -142,6 +142,8 @@ func crawl(
 //     three-row-per-file report in a separate bucket: the inventory crawl in pages of two
 //     equals the s3 kind's crawl of docs/
 func TestS3Inventory_ListsAWrittenReportLikeTheBucket(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	m, err := miniofix.NewTestMinIO(ctx)
 	require.NoError(t, err)

@@ -21,16 +21,16 @@ func Decorate(
 		return nil, err
 	}
 
-	return &decorated{base: base, Base: b}, nil
+	return &decorated{base: base, Base: &b}, nil
 }
 
 // decorated runs each DistributedLock operation through the client tier.
 type decorated struct {
+	// Base runs the operations.
+	*client.Base
+
 	// base is the wrapped lock.
 	base interfaces.DistributedLock
-
-	// Base runs the operations.
-	client.Base
 }
 
 var _ interfaces.DistributedLock = (*decorated)(nil)

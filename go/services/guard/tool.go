@@ -36,7 +36,8 @@ func toolCheck(
 			}, nil
 		}
 
-		if input, err = documents(objs); err != nil {
+		input, err = documents(objs)
+		if err != nil {
 			return nil, err
 		}
 	}

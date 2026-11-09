@@ -173,17 +173,6 @@ func New(cfg *Config) *Cache {
 	}
 }
 
-// opCtx returns a context with the per-operation timeout applied. If opTimeout
-// is zero, the parent context is returned unchanged. The caller must call the
-// returned cancel function when the operation completes.
-func (c *Cache) opCtx(parent context.Context) (context.Context, context.CancelFunc) {
-	if c.opTimeout > 0 {
-		return context.WithTimeout(parent, c.opTimeout)
-	}
-
-	return parent, func() {}
-}
-
 // Get retrieves a value from Redis. Returns (value, true) on hit, (nil, false)
 // on miss or error. Errors are absorbed per FailureMode (logged if Error mode,
 // silent if Bypass mode).
@@ -361,4 +350,15 @@ func (c *Cache) Close() error {
 // is an extended method available only on the concrete *Cache type.
 func (c *Cache) Client() *redis.Client {
 	return c.client
+}
+
+// opCtx returns a context with the per-operation timeout applied. If opTimeout
+// is zero, the parent context is returned unchanged. The caller must call the
+// returned cancel function when the operation completes.
+func (c *Cache) opCtx(parent context.Context) (context.Context, context.CancelFunc) {
+	if c.opTimeout > 0 {
+		return context.WithTimeout(parent, c.opTimeout)
+	}
+
+	return parent, func() {}
 }

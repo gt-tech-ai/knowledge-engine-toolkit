@@ -87,8 +87,9 @@ func (st objectStore) Save(ctx context.Context, set types.PlanSet) error {
 		sum := sha256.Sum256(data)
 		key := set.Prefix + set.RunID + "/" + unit + "/" + set.File
 
-		if err := st.storage.Upload(ctx, set.Bucket, key, bytes.NewReader(data),
-			"application/octet-stream"); err != nil {
+		err = st.storage.Upload(ctx, set.Bucket, key, bytes.NewReader(data),
+			"application/octet-stream")
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeUpstream, fmt.Sprintf(
 				"store the saved plan of %s in %s/%s", unit, set.Bucket, key))
 		}
@@ -106,7 +107,9 @@ func (st objectStore) Save(ctx context.Context, set types.PlanSet) error {
 	}
 
 	path := filepath.Join(set.Dir, set.Manifest)
-	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+
+	err = os.WriteFile(path, append(data, '\n'), 0o600)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "write "+path)
 	}
 
@@ -187,7 +190,8 @@ func readManifest(set types.PlanSet) (manifest, error) {
 
 	var m manifest
 
-	if err := json.Unmarshal(data, &m); err != nil {
+	err = json.Unmarshal(data, &m)
+	if err != nil {
 		return manifest{}, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+path)
 	}
 
@@ -239,7 +243,8 @@ func (st objectStore) fetch(
 
 	defer func() { _ = body.Close() }()
 
-	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+	err = os.MkdirAll(filepath.Dir(dest), 0o700)
+	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "create "+filepath.Dir(dest))
 	}
 

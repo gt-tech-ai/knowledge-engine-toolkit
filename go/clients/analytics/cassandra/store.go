@@ -257,29 +257,6 @@ func (s *Store) Readiness(ctx context.Context) error {
 	return nil
 }
 
-// sess returns the open session; before Start (or after Stop) it is CodeUnavailable.
-func (s *Store) sess() (interfaces.CQLSession, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.session == nil {
-		return nil, apperr.New(apperr.CodeUnavailable, "analytics: store is not started")
-	}
-
-	return s.session, nil
-}
-
-// DimsKey renders dims canonically (sorted, URL-escaped key=value pairs): the
-// clustering key that groups rows with identical dimensions.
-func DimsKey(dims map[string]string) string {
-	values := url.Values{}
-	for k, v := range dims {
-		values.Set(k, v)
-	}
-
-	return values.Encode()
-}
-
 // Write upserts one partial row per fact per declared grain of its cube, with
 // bounded concurrency. A fact for an undeclared cube, without an org or with an
 // empty idempotency key (reserved for compacted rows), with a schema version
@@ -347,35 +324,15 @@ func (s *Store) Write(ctx context.Context, facts []types.Fact) error {
 	return g.Wait()
 }
 
-// insert writes one fact's partial row into grain's table.
-func (s *Store) insert(
-	ctx context.Context,
-	session interfaces.CQLSession,
-	fact types.Fact,
-	grain types.Grain,
-	partials map[string][]byte,
-) error {
-	stmt := "INSERT INTO " + TableName(fact.Cube, grain) +
-		" (org_id, cube, bucket, ts, dims_key, idempotency_key, dims, partials)" +
-		" VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-	args := []any{
-		fact.OrgID,
-		fact.Cube,
-		chartspec.Truncate(fact.TS, s.cfg.BucketWidth[grain]),
-		chartspec.Truncate(fact.TS, grain),
-		DimsKey(fact.Dims),
-		fact.IdempotencyKey,
-		fact.Dims,
-		partials,
+// DimsKey renders dims canonically (sorted, URL-escaped key=value pairs): the
+// clustering key that groups rows with identical dimensions.
+func DimsKey(dims map[string]string) string {
+	values := url.Values{}
+	for k, v := range dims {
+		values.Set(k, v)
 	}
 
-	if ttl := s.cfg.TTL[grain]; ttl > 0 {
-		stmt += " USING TTL ?"
-
-		args = append(args, int(ttl/time.Second))
-	}
-
-	return session.Query(stmt, args...).WithContext(ctx).Idempotent(true).Exec()
+	return values.Encode()
 }
 
 // Aggregate opens a page-at-a-time stream over the buckets of q.TimeRange. The
@@ -458,6 +415,49 @@ func (s *Store) Aggregate(
 	}
 
 	return newStream(ctx, plan, buckets, resume, s.cfg.MaxConcurrentBuckets), nil
+}
+
+// sess returns the open session; before Start (or after Stop) it is CodeUnavailable.
+func (s *Store) sess() (interfaces.CQLSession, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.session == nil {
+		return nil, apperr.New(apperr.CodeUnavailable, "analytics: store is not started")
+	}
+
+	return s.session, nil
+}
+
+// insert writes one fact's partial row into grain's table.
+func (s *Store) insert(
+	ctx context.Context,
+	session interfaces.CQLSession,
+	fact types.Fact,
+	grain types.Grain,
+	partials map[string][]byte,
+) error {
+	stmt := "INSERT INTO " + TableName(fact.Cube, grain) +
+		" (org_id, cube, bucket, ts, dims_key, idempotency_key, dims, partials)" +
+		" VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+	args := []any{
+		fact.OrgID,
+		fact.Cube,
+		chartspec.Truncate(fact.TS, s.cfg.BucketWidth[grain]),
+		chartspec.Truncate(fact.TS, grain),
+		DimsKey(fact.Dims),
+		fact.IdempotencyKey,
+		fact.Dims,
+		partials,
+	}
+
+	if ttl := s.cfg.TTL[grain]; ttl > 0 {
+		stmt += " USING TTL ?"
+
+		args = append(args, int(ttl/time.Second))
+	}
+
+	return session.Query(stmt, args...).WithContext(ctx).Idempotent(true).Exec()
 }
 
 // coarsest returns the coarsest of grains (month > day > hour > minute).

@@ -185,7 +185,8 @@ func (c *compiled) args(ctx context.Context, in []string, vars Vars) ([]string, 
 
 			var err error
 
-			if v, err = c.eval(ctx, x, vars); err != nil {
+			v, err = c.eval(ctx, x, vars)
+			if err != nil {
 				return nil, err
 			}
 		}

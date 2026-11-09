@@ -181,7 +181,8 @@ func (e *engine) compile(c *compiled) error {
 		}
 	}
 
-	if err := e.compileSteps(env, c, c.proc.Steps); err != nil {
+	err = e.compileSteps(env, c, c.proc.Steps)
+	if err != nil {
 		return err
 	}
 
@@ -192,6 +193,7 @@ func (e *engine) compile(c *compiled) error {
 func (e *engine) compileSteps(env *cel.Env, c *compiled, steps []types.ProcStep) error {
 	for i := range steps {
 		st := &steps[i]
+
 		err := e.validate(st)
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+st.Name)

@@ -25,7 +25,8 @@ func convertToOAS3(
 
 	var doc2 openapi2.T
 
-	if err := json.Unmarshal(raw, &doc2); err != nil {
+	err = json.Unmarshal(raw, &doc2)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse swagger")
 	}
 
@@ -47,13 +48,15 @@ func convertToOAS3(
 		)
 	}
 
-	if raw, err = json.Marshal(doc3); err != nil {
+	raw, err = json.Marshal(doc3)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "marshal openapi 3")
 	}
 
 	var oas map[string]any
 
-	if err := json.Unmarshal(raw, &oas); err != nil {
+	err = json.Unmarshal(raw, &oas)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "decode openapi 3")
 	}
 

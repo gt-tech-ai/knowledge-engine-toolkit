@@ -362,15 +362,18 @@ func WriteRuntimeRouteTable(
 		}
 
 		dir := filepath.Join(outDir, svc)
-		if err := fsys.MkdirAll(dir, 0o755); err != nil {
+
+		err = fsys.MkdirAll(dir, 0o755)
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "create "+dir)
 		}
 
-		if err := fsys.WriteFile(
+		err = fsys.WriteFile(
 			filepath.Join(dir, "routes.go"),
 			formatted,
 			0o600,
-		); err != nil {
+		)
+		if err != nil {
 			return apperr.Wrap(
 				err,
 				apperr.CodeInternal,

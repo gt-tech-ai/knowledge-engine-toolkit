@@ -100,7 +100,8 @@ func globSegments(pat, segs []string) bool {
 			return false
 		}
 
-		if ok, err := path.Match(pat[0], segs[0]); err != nil || !ok {
+		ok, err := path.Match(pat[0], segs[0])
+		if err != nil || !ok {
 			return false
 		}
 

@@ -137,6 +137,28 @@ func (s *Server) Serve(ctx context.Context, t sdkmcp.Transport) error {
 	return s.session(ctx, t)
 }
 
+// ServeStdio prunes the run directory like Serve, then serves over newline-delimited
+// JSON on in and out until the client closes in or ctx is cancelled (SIGINT / SIGTERM);
+// either is a clean shutdown and returns nil. A failed prune is returned as it is; any
+// other transport failure returns CodeInternal.
+func (s *Server) ServeStdio(
+	ctx context.Context,
+	in io.ReadCloser,
+	out io.WriteCloser,
+) error {
+	err := s.prune()
+	if err != nil {
+		return err
+	}
+
+	err = s.session(ctx, &sdkmcp.IOTransport{Reader: in, Writer: out})
+	if err == nil || isShutdown(err) {
+		return nil
+	}
+
+	return apperr.Wrap(err, apperr.CodeInternal, "mcp server: transport failed")
+}
+
 // prune keeps the newest Settings.RunRetention run directories.
 func (s *Server) prune() error {
 	return s.runs.Prune(s.settings.RunRetention)
@@ -149,27 +171,6 @@ func (s *Server) session(ctx context.Context, t sdkmcp.Transport) error {
 	s.table.Wait()
 
 	return apperr.Wrap(err, apperr.CodeInternal, "Server.Run")
-}
-
-// ServeStdio prunes the run directory like Serve, then serves over newline-delimited
-// JSON on in and out until the client closes in or ctx is cancelled (SIGINT / SIGTERM);
-// either is a clean shutdown and returns nil. A failed prune is returned as it is; any
-// other transport failure returns CodeInternal.
-func (s *Server) ServeStdio(
-	ctx context.Context,
-	in io.ReadCloser,
-	out io.WriteCloser,
-) error {
-	if err := s.prune(); err != nil {
-		return err
-	}
-
-	err := s.session(ctx, &sdkmcp.IOTransport{Reader: in, Writer: out})
-	if err == nil || isShutdown(err) {
-		return nil
-	}
-
-	return apperr.Wrap(err, apperr.CodeInternal, "mcp server: transport failed")
 }
 
 // isShutdown reports whether err is how a session ends normally: the client closing the

@@ -89,7 +89,8 @@ func (p *Publisher) PublishBatch(
 		pipe.Publish(ctx, topic, payload)
 	}
 
-	if _, err := pipe.Exec(ctx); err != nil {
+	_, err := pipe.Exec(ctx)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis publish batch")
 	}
 

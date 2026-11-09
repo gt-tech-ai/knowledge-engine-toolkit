@@ -54,7 +54,9 @@ func New(key []byte) (interfaces.Encryptor, error) {
 // so the nonce travels with the ciphertext for Decrypt.
 func (a *aesGCM) Encrypt(plaintext []byte) ([]byte, error) {
 	nonce := make([]byte, a.gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+
+	_, err := io.ReadFull(rand.Reader, nonce)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "crypto: read nonce")
 	}
 

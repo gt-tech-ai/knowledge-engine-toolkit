@@ -68,13 +68,14 @@ func UpsertProfile(path, owner string, p Profile) error {
 	pre, inner, post := splitManaged(string(existing), begin, end)
 	sessionHeader, profileHeader := "sso-session "+p.SSOSession, "profile "+p.Name
 
-	if err := refuseUnmanaged(
+	err = refuseUnmanaged(
 		path,
 		owner,
 		pre+post,
 		sessionHeader,
 		profileHeader,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
@@ -212,7 +213,9 @@ func renderSections(sections []iniSection) string {
 // leaves a half-written config; the dir is created 0700 and the file 0600.
 func writeFileAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+
+	err := os.MkdirAll(dir, 0o700)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create dir "+dir)
 	}
 
@@ -225,23 +228,27 @@ func writeFileAtomic(path string, data []byte) error {
 
 	defer func() { _ = os.Remove(name) }()
 
-	if err := tmp.Chmod(0o600); err != nil {
+	err = tmp.Chmod(0o600)
+	if err != nil {
 		_ = tmp.Close()
 
 		return apperr.Wrap(err, apperr.CodeInternal, "chmod temp aws config")
 	}
 
-	if _, err := tmp.Write(data); err != nil {
+	_, err = tmp.Write(data)
+	if err != nil {
 		_ = tmp.Close()
 
 		return apperr.Wrap(err, apperr.CodeInternal, "write temp aws config")
 	}
 
-	if err := tmp.Close(); err != nil {
+	err = tmp.Close()
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "close temp aws config")
 	}
 
-	if err := os.Rename(name, path); err != nil {
+	err = os.Rename(name, path)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "rename temp aws config into place")
 	}
 

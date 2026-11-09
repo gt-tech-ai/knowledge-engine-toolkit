@@ -214,7 +214,8 @@ func (c *Client) get(
 		return body, statusError(resp.StatusCode, resp.Body)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	err = json.NewDecoder(resp.Body).Decode(&body)
+	if err != nil {
 		return body, apperr.Wrap(err, apperr.CodeUpstream, "decode prometheus response")
 	}
 
@@ -286,7 +287,8 @@ func statusError(status int, body io.Reader) error {
 func parseSample(pair [2]json.RawMessage) (Sample, error) {
 	var ts float64
 
-	if err := json.Unmarshal(pair[0], &ts); err != nil {
+	err := json.Unmarshal(pair[0], &ts)
+	if err != nil {
 		return Sample{}, apperr.Wrap(
 			err,
 			apperr.CodeUpstream,
@@ -296,7 +298,8 @@ func parseSample(pair [2]json.RawMessage) (Sample, error) {
 
 	var raw string
 
-	if err := json.Unmarshal(pair[1], &raw); err != nil {
+	err = json.Unmarshal(pair[1], &raw)
+	if err != nil {
 		return Sample{}, apperr.Wrap(
 			err,
 			apperr.CodeUpstream,

@@ -108,7 +108,8 @@ func (d RunDir) Prune(keep int) error {
 	var runs []string
 
 	for _, e := range entries {
-		if _, perr := time.Parse(runIDLayout, e.Name()); e.IsDir() && perr == nil {
+		_, perr := time.Parse(runIDLayout, e.Name())
+		if e.IsDir() && perr == nil {
 			runs = append(runs, e.Name())
 		}
 	}

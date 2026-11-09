@@ -21,16 +21,16 @@ func Decorate(
 		return nil, err
 	}
 
-	return &decorated{base: base, Base: b}, nil
+	return &decorated{base: base, Base: &b}, nil
 }
 
 // decorated runs each ConnectorSource operation through the client tier.
 type decorated struct {
+	// Base runs the operations.
+	*client.Base
+
 	// base is the wrapped source.
 	base interfaces.ConnectorSource
-
-	// Base runs the operations.
-	client.Base
 }
 
 var _ interfaces.ConnectorSource = (*decorated)(nil)

@@ -38,9 +38,10 @@ func (p Secrets) Run(ctx context.Context, _ Target) types.Verdict {
 	var missing []string
 
 	for _, name := range p.Names {
-		if _, err := p.SM.DescribeSecret(ctx, &secretsmanager.DescribeSecretInput{
+		_, err := p.SM.DescribeSecret(ctx, &secretsmanager.DescribeSecretInput{
 			SecretId: aws.String(name),
-		}); err != nil {
+		})
+		if err != nil {
 			missing = append(missing, name)
 		}
 	}

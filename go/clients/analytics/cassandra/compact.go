@@ -161,6 +161,7 @@ func (s *Store) readPartition(
 		}
 
 		state = iter.PageState()
+
 		err := iter.Close()
 		if err != nil {
 			return nil, err
@@ -219,7 +220,8 @@ func compactGroup(
 				org, cube, bucket, g.ts, dimsKey, key)
 		}
 
-		if err := session.ExecuteBatch(batch); err != nil {
+		err = session.ExecuteBatch(batch)
+		if err != nil {
 			return err
 		}
 

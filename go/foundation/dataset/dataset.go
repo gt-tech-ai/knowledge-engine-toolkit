@@ -56,6 +56,7 @@ func Load(fsys fs.FS, dir string) (*Dataset, error) {
 
 		// io/fs paths are always slash-separated, so path (not filepath) is correct here.
 		name := path.Join(dir, e.Name()) // nosemgrep: use-filepath-join
+
 		err := d.add(fsys, name)
 		if err != nil {
 			return nil, err
@@ -168,6 +169,38 @@ func hasInline(t reflect.Type) bool {
 	return false
 }
 
+// Section decodes the top-level section name into a T, rejecting a field T does not
+// declare. A missing section is CodeNotFound; a section that does not fit T is
+// CodeInvalidInput naming the section's files.
+func (d *Dataset) Section[T any](name string) (T, error) {
+	var out T
+
+	node, ok, err := d.node(name)
+	if err != nil {
+		return out, err
+	}
+
+	if !ok {
+		return out, apperr.New(apperr.CodeNotFound, "no data section "+`"`+name+`"`)
+	}
+
+	raw, err := yaml.Marshal(node)
+	if err != nil {
+		return out, apperr.Wrap(err, apperr.CodeInternal, "re-encode section "+name)
+	}
+
+	dec := yaml.NewDecoder(bytes.NewReader(raw))
+	dec.KnownFields(true)
+
+	err = dec.Decode(&out)
+	if err != nil {
+		return out, apperr.Wrap(err, apperr.CodeInvalidInput,
+			"decode section "+name+" from "+d.sourceOf(name))
+	}
+
+	return out, nil
+}
+
 // keys returns every section key of d, sorted.
 func (d *Dataset) keys() []string {
 	out := slices.Collect(maps.Keys(d.sections))
@@ -212,7 +245,8 @@ func (d *Dataset) add(fsys fs.FS, p string) error {
 
 	var doc map[string]yaml.Node
 
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
+	err = yaml.Unmarshal(raw, &doc)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
 	}
 
@@ -301,21 +335,6 @@ func (d *Dataset) claim(n *yaml.Node, at, p string) {
 	}
 }
 
-// firstFile returns the file that set the key path at, or else the first file that
-// contributed to its top-level section.
-func (d *Dataset) firstFile(at string) string {
-	if p, ok := d.origin[at]; ok {
-		return p
-	}
-
-	top, _, _ := strings.Cut(at, ".")
-	if files := d.files[top]; len(files) > 0 {
-		return files[0]
-	}
-
-	return "?"
-}
-
 // mappingValue returns the value node of key in the mapping m, or nil.
 func mappingValue(m *yaml.Node, key string) *yaml.Node {
 	for i := 0; i+1 < len(m.Content); i += 2 {
@@ -359,35 +378,19 @@ func unfold(n *yaml.Node) {
 	}
 }
 
-// Section decodes the top-level section name into a T, rejecting a field T does not
-// declare. A missing section is CodeNotFound; a section that does not fit T is
-// CodeInvalidInput naming the section's files.
-func (d *Dataset) Section[T any](name string) (T, error) {
-	var out T
-
-	node, ok, err := d.node(name)
-	if err != nil {
-		return out, err
+// firstFile returns the file that set the key path at, or else the first file that
+// contributed to its top-level section.
+func (d *Dataset) firstFile(at string) string {
+	if p, ok := d.origin[at]; ok {
+		return p
 	}
 
-	if !ok {
-		return out, apperr.New(apperr.CodeNotFound, "no data section "+`"`+name+`"`)
+	top, _, _ := strings.Cut(at, ".")
+	if files := d.files[top]; len(files) > 0 {
+		return files[0]
 	}
 
-	raw, err := yaml.Marshal(node)
-	if err != nil {
-		return out, apperr.Wrap(err, apperr.CodeInternal, "re-encode section "+name)
-	}
-
-	dec := yaml.NewDecoder(bytes.NewReader(raw))
-	dec.KnownFields(true)
-
-	if err := dec.Decode(&out); err != nil {
-		return out, apperr.Wrap(err, apperr.CodeInvalidInput,
-			"decode section "+name+" from "+d.sourceOf(name))
-	}
-
-	return out, nil
+	return "?"
 }
 
 // sourceOf names the files that contributed to the section key, comma-separated.

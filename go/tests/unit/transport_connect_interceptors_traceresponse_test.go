@@ -64,6 +64,8 @@ func anySpan(ctrl *gomock.Controller) *mocks.MockSpan {
 //
 // traceparent of the server span.
 func TestTracingInterceptor_UnarySetsTraceResponseHeader(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	spanCtx, wantTraceParent := validSpanCtx(t)
 
@@ -95,6 +97,8 @@ func TestTracingInterceptor_UnarySetsTraceResponseHeader(t *testing.T) {
 //   - With a tracer that yields no valid span context, the response has no
 //     `traceresponse`.
 func TestTracingInterceptor_UnaryNoHeaderWithoutValidSpan(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 
 	tr := mocks.NewMockTracer(ctrl)
@@ -123,6 +127,8 @@ func TestTracingInterceptor_UnaryNoHeaderWithoutValidSpan(t *testing.T) {
 // What it tests:
 //   - A handler returning (nil, err) surfaces the error with a nil response and no panic.
 func TestTracingInterceptor_UnaryNilResponseNoPanic(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	spanCtx, _ := validSpanCtx(t)
 
@@ -156,6 +162,8 @@ func TestTracingInterceptor_UnaryNilResponseNoPanic(t *testing.T) {
 //   - The `traceresponse` header equals the server span's traceparent and is already
 //     present when the handler executes.
 func TestTracingInterceptor_StreamingSetsTraceResponseBeforeHandler(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	spanCtx, wantTraceParent := validSpanCtx(t)
 

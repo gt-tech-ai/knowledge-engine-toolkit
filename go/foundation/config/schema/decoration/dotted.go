@@ -29,6 +29,7 @@ func dottedOverrides(loader interfaces.ConfigLoader, section any, over *Config) 
 
 		key := SectionKey + "." + name + ".overrides"
 		t, ok := reflect.TypeAssert[*Tier](cfg.Field(i).Addr())
+
 		if !ok {
 			return apperr.New(apperr.CodeInternal, "decoration: "+name+" is not a tier")
 		}

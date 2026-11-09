@@ -194,7 +194,8 @@ func decodeHCL(src []byte, p string) (any, error) {
 
 	var doc any
 
-	if err := json.Unmarshal(b, &doc); err != nil {
+	err = json.Unmarshal(b, &doc)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "hcl json "+p)
 	}
 

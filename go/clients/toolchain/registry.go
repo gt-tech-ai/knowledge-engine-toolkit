@@ -49,6 +49,17 @@ func NewRegistry() *Registry {
 	return &Registry{tools: make(map[string]*Tool)}
 }
 
+// NewRegistryFromDefs builds a Registry holding one [types.Tool] per Def. A
+// later Def with the same binary replaces an earlier one.
+func NewRegistryFromDefs(defs []Def) *Registry {
+	r := NewRegistry()
+	for _, d := range defs {
+		r.Register(NewTool(d.Name, d.Binary, d.InstallHint, d.Prefix))
+	}
+
+	return r
+}
+
 // Register adds a tool to the registry, keyed by binary name.
 func (r *Registry) Register(t *Tool) {
 	r.mu.Lock()
@@ -78,17 +89,6 @@ func (r *Registry) Len() int {
 	defer r.mu.RUnlock()
 
 	return len(r.tools)
-}
-
-// NewRegistryFromDefs builds a Registry holding one [types.Tool] per Def. A
-// later Def with the same binary replaces an earlier one.
-func NewRegistryFromDefs(defs []Def) *Registry {
-	r := NewRegistry()
-	for _, d := range defs {
-		r.Register(NewTool(d.Name, d.Binary, d.InstallHint, d.Prefix))
-	}
-
-	return r
 }
 
 // Def describes a tool for registry construction, consumed by

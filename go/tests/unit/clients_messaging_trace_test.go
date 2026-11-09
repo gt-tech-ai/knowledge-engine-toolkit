@@ -37,6 +37,8 @@ func traceOf(ctx context.Context) oteltrace.TraceID {
 // What it tests:
 //   - A handler's context carries the publisher's trace id.
 func TestMemoryMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
+	t.Parallel()
+
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
 	sc := sampledSpanContext()
@@ -75,6 +77,8 @@ func TestMemoryMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 //   - The subscriber asks for every attribute, hands them to the handler as Metadata,
 //     and runs the handler on a context carrying the publisher's trace id.
 func TestSQSMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
+	t.Parallel()
+
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
 	sc := sampledSpanContext()

@@ -2,7 +2,8 @@
 
 // This file verifies the CQL driver's lightweight transactions against a real single-node
 // Cassandra 5 (testcontainers): Paxos semantics exist only in a real cluster.
-package integration
+
+package integration_test
 
 import (
 	"context"
@@ -22,8 +23,9 @@ const casKeyspace = "cas_it"
 
 // CQLCASSuite holds a real Cassandra with one key-value table.
 type CQLCASSuite struct {
+	*testsuite.CassandraIntegrationSuite
+
 	session interfaces.CQLSession
-	testsuite.CassandraIntegrationSuite
 }
 
 // TestCQLCASSuite runs the lightweight-transaction tests.
@@ -35,7 +37,12 @@ type CQLCASSuite struct {
 // What it tests:
 //   - Suite entrypoint wires CQLCASSuite into the testify runner.
 func TestCQLCASSuite(t *testing.T) {
-	suite.Run(t, new(CQLCASSuite))
+	t.Parallel()
+
+	suite.Run(
+		t,
+		&CQLCASSuite{CassandraIntegrationSuite: &testsuite.CassandraIntegrationSuite{}},
+	)
 }
 
 // SetupSuite creates the keyspace and table and opens the session.

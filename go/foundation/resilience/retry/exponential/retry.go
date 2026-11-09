@@ -110,16 +110,6 @@ func New(cfg Config) *Retrier {
 	return &Retrier{cfg: cfg}
 }
 
-// classify returns the configured retryability predicate, falling back to
-// defaultIsRetryable when none is set.
-func (r *Retrier) classify() func(error) bool {
-	if r.cfg.IsRetryable != nil {
-		return r.cfg.IsRetryable
-	}
-
-	return defaultIsRetryable
-}
-
 // Retry executes the operation with exponential backoff and jitter.
 // Each attempt after the first consumes one retry from the context's retry budget (if
 // present); the first attempt is free, so a budget of N allows N retries.
@@ -146,6 +136,16 @@ func (r *Retrier) Retry(ctx context.Context, op func() error) error {
 	}, r.retryOpts()...)
 
 	return err
+}
+
+// classify returns the configured retryability predicate, falling back to
+// defaultIsRetryable when none is set.
+func (r *Retrier) classify() func(error) bool {
+	if r.cfg.IsRetryable != nil {
+		return r.cfg.IsRetryable
+	}
+
+	return defaultIsRetryable
 }
 
 // RetryWithResult executes an operation that returns a value with exponential backoff.

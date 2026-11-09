@@ -84,7 +84,8 @@ func (y *yamlView) Decode(ctx context.Context, doc types.YAMLDoc, out any) error
 		return err
 	}
 
-	if err := node.Decode(out); err != nil {
+	err = node.Decode(out)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput,
 			fmt.Sprintf("decode %s document %d", doc.Path, doc.Index))
 	}

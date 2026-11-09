@@ -102,7 +102,8 @@ func (d decoder) spec(root Hash) (types.ChartSpec, error) {
 
 	var s types.ChartSpec
 
-	if s.Cube, err = fieldOf[string](n, memberCube); err != nil {
+	s.Cube, err = fieldOf[string](n, memberCube)
+	if err != nil {
 		return types.ChartSpec{}, err
 	}
 
@@ -117,11 +118,14 @@ func (d decoder) spec(root Hash) (types.ChartSpec, error) {
 	}
 
 	s.Grain, s.Mark = types.Grain(grain), types.Mark(mark)
-	if err := d.specChildren(n, &s); err != nil {
+
+	err = d.specChildren(n, &s)
+	if err != nil {
 		return types.ChartSpec{}, err
 	}
 
-	if err := d.specLists(n, &s); err != nil {
+	err = d.specLists(n, &s)
+	if err != nil {
 		return types.ChartSpec{}, err
 	}
 
@@ -137,17 +141,20 @@ func (d decoder) specChildren(n Node, s *types.ChartSpec) error {
 		name string
 	}{{&s.Rows, memberRows}, {&s.Columns, memberColumns}} {
 		if h := n.Children[c.name]; !h.IsZero() {
-			if *c.dst, err = d.shelf(h, 1); err != nil {
+			*c.dst, err = d.shelf(h, 1)
+			if err != nil {
 				return err
 			}
 		}
 	}
 
-	if s.Encodings, err = d.encodings(n.Children[memberEncodings]); err != nil {
+	s.Encodings, err = d.encodings(n.Children[memberEncodings])
+	if err != nil {
 		return err
 	}
 
-	if s.TimeRange, err = d.timeRange(n.Children[memberTimeRange]); err != nil {
+	s.TimeRange, err = d.timeRange(n.Children[memberTimeRange])
+	if err != nil {
 		return err
 	}
 
@@ -286,7 +293,8 @@ func (d decoder) encodings(h Hash) (types.Encodings, error) {
 		{&enc.Label, memberLabel},
 	} {
 		if ch := n.Children[c.name]; !ch.IsZero() {
-			if *c.dst, err = d.fieldRef(ch); err != nil {
+			*c.dst, err = d.fieldRef(ch)
+			if err != nil {
 				return types.Encodings{}, err
 			}
 		}

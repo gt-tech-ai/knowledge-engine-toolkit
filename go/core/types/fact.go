@@ -87,7 +87,8 @@ func (f Fact) MarshalJSON() ([]byte, error) {
 func (f *Fact) UnmarshalJSON(b []byte) error {
 	var w factWire
 
-	if err := json.Unmarshal(b, &w); err != nil {
+	err := json.Unmarshal(b, &w)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "fact: decode")
 	}
 

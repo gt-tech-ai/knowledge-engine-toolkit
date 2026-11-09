@@ -63,22 +63,6 @@ func NewLister(fsys fs.FS, root string) *Lister {
 	}
 }
 
-// isGoModule reports whether dir is a Go module root (contains a go.mod). It
-// disambiguates a `go list` failure: a load error inside a real module means the
-// module's code is broken (keep it so the tool fails loudly), whereas a non-module
-// directory is simply not ours to test (drop it). dir is an absolute path under the
-// Lister's root, read through its fs.FS.
-func (l *Lister) isGoModule(dir string) bool {
-	rel, err := filepath.Rel(l.root, dir)
-	if err != nil || l.fsys == nil {
-		return false
-	}
-
-	_, err = fs.Stat(l.fsys, filepath.ToSlash(filepath.Join(rel, "go.mod")))
-
-	return err == nil
-}
-
 // GoListPackages returns the Go package import paths under dir (`go list
 // ./...`, run through r), memoized per directory for this Lister's lifetime
 // (one run). The workspace is stable within a run, so caching collapses the
@@ -119,6 +103,25 @@ func (l *Lister) GoListPackages(
 	return res.pkgs, res.err
 }
 
+// HasGoPackagesWithTags reports whether the module at dir contains at least
+// one Go package loadable under the given build tags (`go list -tags=<tags>
+// ./...` through r, not memoized — the tagged listing is distinct from the
+// default-constraint memo). Like hasGoPackages, a load failure inside a real
+// module reports it present, so the tagged build fails loudly rather than
+// silently dropping a build break; a non-module dir reports false.
+func (l *Lister) HasGoPackagesWithTags(
+	ctx context.Context,
+	r interfaces.CommandRunner,
+	dir, tags string,
+) bool {
+	pkgs, err := goList(ctx, r, dir, "-tags="+tags)
+	if err != nil {
+		return l.isGoModule(dir)
+	}
+
+	return len(pkgs) > 0
+}
+
 // goList runs `go list [flags] ./...` in dir through r and returns the package
 // import paths (whitespace-split stdout), or a CodeInternal error carrying
 // go's stderr.
@@ -137,47 +140,6 @@ func goList(
 	}
 
 	return strings.Fields(string(res.Stdout)), nil
-}
-
-// hasGoPackages reports whether the module at dir contains at least one Go
-// package loadable under default build constraints. It reads the memoized
-// GoListPackages. A `go list` error inside a real module (has go.mod) means
-// the module's Go code fails to load — a package-name conflict or build error
-// — NOT that it has no packages, so it reports the module PRESENT: the module
-// stays in the discovery set and the downstream tool (go test / vet / lint)
-// runs and fails loudly on the real error; dropping it would let a
-// non-compiling package pass a gate unseen. A non-module dir is not ours to
-// test.
-func (l *Lister) hasGoPackages(
-	ctx context.Context,
-	r interfaces.CommandRunner,
-	dir string,
-) bool {
-	pkgs, err := l.GoListPackages(ctx, r, dir)
-	if err != nil {
-		return l.isGoModule(dir)
-	}
-
-	return len(pkgs) > 0
-}
-
-// HasGoPackagesWithTags reports whether the module at dir contains at least
-// one Go package loadable under the given build tags (`go list -tags=<tags>
-// ./...` through r, not memoized — the tagged listing is distinct from the
-// default-constraint memo). Like hasGoPackages, a load failure inside a real
-// module reports it present, so the tagged build fails loudly rather than
-// silently dropping a build break; a non-module dir reports false.
-func (l *Lister) HasGoPackagesWithTags(
-	ctx context.Context,
-	r interfaces.CommandRunner,
-	dir, tags string,
-) bool {
-	pkgs, err := goList(ctx, r, dir, "-tags="+tags)
-	if err != nil {
-		return l.isGoModule(dir)
-	}
-
-	return len(pkgs) > 0
 }
 
 // FilterModulesWithGoPackages returns the modules (relative to root) that
@@ -222,4 +184,42 @@ func (l *Lister) FilterModulesWithGoPackages(
 	}
 
 	return filtered
+}
+
+// isGoModule reports whether dir is a Go module root (contains a go.mod). It
+// disambiguates a `go list` failure: a load error inside a real module means the
+// module's code is broken (keep it so the tool fails loudly), whereas a non-module
+// directory is simply not ours to test (drop it). dir is an absolute path under the
+// Lister's root, read through its fs.FS.
+func (l *Lister) isGoModule(dir string) bool {
+	rel, err := filepath.Rel(l.root, dir)
+	if err != nil || l.fsys == nil {
+		return false
+	}
+
+	_, err = fs.Stat(l.fsys, filepath.ToSlash(filepath.Join(rel, "go.mod")))
+
+	return err == nil
+}
+
+// hasGoPackages reports whether the module at dir contains at least one Go
+// package loadable under default build constraints. It reads the memoized
+// GoListPackages. A `go list` error inside a real module (has go.mod) means
+// the module's Go code fails to load — a package-name conflict or build error
+// — NOT that it has no packages, so it reports the module PRESENT: the module
+// stays in the discovery set and the downstream tool (go test / vet / lint)
+// runs and fails loudly on the real error; dropping it would let a
+// non-compiling package pass a gate unseen. A non-module dir is not ours to
+// test.
+func (l *Lister) hasGoPackages(
+	ctx context.Context,
+	r interfaces.CommandRunner,
+	dir string,
+) bool {
+	pkgs, err := l.GoListPackages(ctx, r, dir)
+	if err != nil {
+		return l.isGoModule(dir)
+	}
+
+	return len(pkgs) > 0
 }

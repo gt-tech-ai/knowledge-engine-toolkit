@@ -64,7 +64,8 @@ func loadDescriptorTypes(
 ) (*protoregistry.Files, *protoregistry.Types, error) {
 	var fds descriptorpb.FileDescriptorSet
 
-	if err := proto.Unmarshal(fdsBytes, &fds); err != nil {
+	err := proto.Unmarshal(fdsBytes, &fds)
+	if err != nil {
 		return nil, nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
@@ -180,13 +181,14 @@ func readServiceConfigs(
 			return false
 		}
 
-		if err := mergeFileResources(
+		err = mergeFileResources(
 			fd,
 			resExt,
 			types,
 			svc.name,
 			cfg.resources,
-		); err != nil {
+		)
+		if err != nil {
 			walkErr = err
 
 			return false
@@ -250,6 +252,7 @@ func validateResourceKeys(svcName string, resources map[string]resourceConfig) e
 
 	for _, t := range types {
 		rc := resources[t]
+
 		err := claim(rc.singleKey, rc.resourceType)
 		if err != nil {
 			return err
@@ -431,7 +434,9 @@ func extensionMessage(
 	}
 
 	dm := dynamicpb.NewMessage(opts.ProtoReflect().Descriptor())
-	if err := (proto.UnmarshalOptions{Resolver: types}).Unmarshal(raw, dm); err != nil {
+
+	err = (proto.UnmarshalOptions{Resolver: types}).Unmarshal(raw, dm)
+	if err != nil {
 		return nil, false, apperr.Wrap(err, apperr.CodeInternal, "decode options")
 	}
 

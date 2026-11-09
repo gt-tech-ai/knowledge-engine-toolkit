@@ -225,8 +225,8 @@ func TestKindsBuild_NeverRetriesAnAtMostOnceKind(t *testing.T) {
 	cfg := decoration.DefaultConfig()
 
 	cfg.Clients.Defaults.Retry.Enabled = &on
-	cfg.Clients.Defaults.Retry.InitialInterval = time.Millisecond
-	cfg.Clients.Defaults.Retry.MaxInterval = time.Millisecond
+	cfg.Clients.Defaults.Retry.RetryConfig.InitialInterval = time.Millisecond
+	cfg.Clients.Defaults.Retry.RetryConfig.MaxInterval = time.Millisecond
 
 	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
 

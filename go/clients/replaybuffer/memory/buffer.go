@@ -49,23 +49,6 @@ func New(maxSize int, ttl time.Duration) *Buffer {
 // compile-time assertion that *Buffer satisfies the seam.
 var _ interfaces.ReplayBuffer = (*Buffer)(nil)
 
-// live returns key's buffer if it exists and has not expired, else nil (lazily deleting
-// an expired one). Callers hold b.mu.
-func (b *Buffer) live(key string) *keyBuffer {
-	kb, ok := b.keys[key]
-	if !ok {
-		return nil
-	}
-
-	if time.Now().After(kb.expiry) {
-		delete(b.keys, key)
-
-		return nil
-	}
-
-	return kb
-}
-
 // Append records payload under key, evicting the oldest past maxSize and refreshing the
 // TTL.
 func (b *Buffer) Append(_ context.Context, key, msgID string, payload []byte) error {
@@ -156,6 +139,23 @@ func (b *Buffer) Delete(_ context.Context, key string) error {
 	delete(b.keys, key)
 
 	return nil
+}
+
+// live returns key's buffer if it exists and has not expired, else nil (lazily deleting
+// an expired one). Callers hold b.mu.
+func (b *Buffer) live(key string) *keyBuffer {
+	kb, ok := b.keys[key]
+	if !ok {
+		return nil
+	}
+
+	if time.Now().After(kb.expiry) {
+		delete(b.keys, key)
+
+		return nil
+	}
+
+	return kb
 }
 
 // clone copies a message slice so callers never alias the buffer's backing array.

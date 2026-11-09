@@ -297,7 +297,7 @@ func TestTransformError(t *testing.T) {
 	// The live path: Vanguard renders a transcoded Connect/gRPC error as a
 	// google.rpc.Status whose "code" is a NUMBER, so the numeric google.rpc.Code
 	// must map to its canonical snake_case name — not degrade to "unknown" (the
-	// bug this guards: every REST error otherwise lost its machine-readable code).
+	// defect this guards: every REST error otherwise lost its machine-readable code).
 	t.Run("404 with numeric vanguard code maps to name", func(t *testing.T) {
 		t.Parallel()
 

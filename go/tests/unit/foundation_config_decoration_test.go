@@ -62,6 +62,7 @@ func TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults(t *testing.T) {
 				on := true
 
 				cfg := asType[*decoration.Config](t, target)
+
 				cfg.Clients.Overrides = map[string]decoration.Layers{
 					"storage": {Retry: decoration.Retry{Enabled: &on}},
 				}
@@ -267,7 +268,7 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	bad := decoration.DefaultConfig()
 
 	bad.Clients.Defaults.Bulkhead.Enabled = &on
-	bad.Clients.Defaults.Bulkhead.Kind = "semaphore"
+	bad.Clients.Defaults.Bulkhead.BulkheadConfig.Kind = "semaphore"
 	_, err = decorate.NewDecorations(&bad, collab).Deps(client.Tier(), "lock")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

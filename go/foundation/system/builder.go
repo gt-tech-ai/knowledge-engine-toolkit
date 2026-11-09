@@ -122,11 +122,6 @@ type envRunner struct {
 	env []string
 }
 
-// with returns env followed by extra, so a command's own entries win.
-func (d *envRunner) with(extra []string) []string {
-	return append(append([]string{}, d.env...), extra...)
-}
-
 // Run runs the command with env added.
 func (d *envRunner) Run(ctx context.Context, dir, name string, args ...string) error {
 	return d.inner.RunWithEnv(ctx, dir, d.with(nil), name, args...)
@@ -183,6 +178,11 @@ func (d *envRunner) Exists(name string) bool { return d.inner.Exists(name) }
 // RequireTool delegates to the inner runner.
 func (d *envRunner) RequireTool(name, installHint string) error {
 	return d.inner.RequireTool(name, installHint)
+}
+
+// with returns env followed by extra, so a command's own entries win.
+func (d *envRunner) with(extra []string) []string {
+	return append(append([]string{}, d.env...), extra...)
 }
 
 // ---------------------------------------------------------------------------
@@ -393,13 +393,6 @@ type dryRunRunner struct {
 	logf LogFunc
 }
 
-// log emits the "would execute" line for a command when a logger is configured.
-func (d *dryRunRunner) log(name string, args ...string) {
-	if d.logf != nil {
-		d.logf("[dry-run] would execute: %s %s", name, strings.Join(args, " "))
-	}
-}
-
 // Run logs the command instead of executing it and returns nil.
 func (d *dryRunRunner) Run(_ context.Context, _, name string, args ...string) error {
 	d.log(name, args...)
@@ -470,6 +463,13 @@ func (d *dryRunRunner) RequireTool(name, installHint string) error {
 	return d.inner.RequireTool(name, installHint)
 }
 
+// log emits the "would execute" line for a command when a logger is configured.
+func (d *dryRunRunner) log(name string, args ...string) {
+	if d.logf != nil {
+		d.logf("[dry-run] would execute: %s %s", name, strings.Join(args, " "))
+	}
+}
+
 // ---------------------------------------------------------------------------
 // hookRunner
 // ---------------------------------------------------------------------------
@@ -481,15 +481,6 @@ type hookRunner struct {
 
 	// hook receives OnStart, OnSuccess, and OnFailure for each command.
 	hook interfaces.CmdHook
-}
-
-// cmdStr renders a command and its args as a single display string for the hook.
-func (h *hookRunner) cmdStr(name string, args []string) string {
-	if len(args) == 0 {
-		return name
-	}
-
-	return name + " " + strings.Join(args, " ")
 }
 
 // Run fires OnStart, delegates to the inner runner, then fires OnSuccess or
@@ -605,4 +596,13 @@ func (h *hookRunner) RequireTool(
 	n, hint string,
 ) error {
 	return h.inner.RequireTool(n, hint)
+}
+
+// cmdStr renders a command and its args as a single display string for the hook.
+func (h *hookRunner) cmdStr(name string, args []string) string {
+	if len(args) == 0 {
+		return name
+	}
+
+	return name + " " + strings.Join(args, " ")
 }

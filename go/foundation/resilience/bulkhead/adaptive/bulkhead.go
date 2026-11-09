@@ -102,12 +102,14 @@ func New(cfg Config) *Bulkhead {
 // Execute runs fn within the current adaptive limit, blocking until a slot frees or ctx
 // is cancelled, then adjusts the limit from fn's latency and outcome.
 func (b *Bulkhead) Execute(ctx context.Context, fn func() error) error {
-	if err := b.acquire(ctx); err != nil {
+	err := b.acquire(ctx)
+	if err != nil {
 		return err
 	}
 
 	start := time.Now()
-	err := fn()
+
+	err = fn()
 	b.release(time.Since(start), err)
 
 	return err

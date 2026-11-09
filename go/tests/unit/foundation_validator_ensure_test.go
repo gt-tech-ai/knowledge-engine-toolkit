@@ -38,6 +38,8 @@ func (s *stubPtrValidatable) Validate() error { return s.err }
 //     DTO is valid; the returned error carries CodeInvalidInput so it classifies to 400 /
 //     InvalidArgument.
 func TestEnsure_ShortCircuitsOnFirstViolation(t *testing.T) {
+	t.Parallel()
+
 	require.NoError(t, validator.Ensure())                  // no DTOs → nil
 	require.NoError(t, validator.Ensure(stubValidatable{})) // one valid DTO
 	require.NoError(

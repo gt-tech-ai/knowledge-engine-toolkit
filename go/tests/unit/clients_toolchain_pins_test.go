@@ -40,6 +40,8 @@ func pinnedGoTool(name, pkgAtVersion string) types.ToolDef {
 //   - A binary with no Go build info is skipped; a tool not on PATH is skipped.
 //   - A tool without a go-install pin is not checked at all.
 func TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin(t *testing.T) {
+	t.Parallel()
+
 	const path = "/usr/local/bin/gofumpt"
 
 	info := func(pkg, ver string) interfaces.CmdResult {
@@ -128,6 +130,8 @@ func TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin(t *testin
 //   - A binary with no Go build info is keyed by its version command's output.
 //   - A tool with neither, or not on PATH, is "".
 func TestClientsToolchainInstalledVersion_ReadsTheBinaryOnPath(t *testing.T) {
+	t.Parallel()
+
 	const path = "/usr/local/bin/tool"
 
 	notGo := interfaces.CmdResult{Stdout: []byte(path + ": not a Go binary\n")}

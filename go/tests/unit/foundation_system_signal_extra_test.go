@@ -31,6 +31,8 @@ import (
 //     grandchild PID is reaped (signal 0 returns ESRCH), proving the whole group
 //     was torn down rather than just the direct child.
 func TestRunner_CancelTearsDownProcessGroup(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "grandchild.pid")
 	// Child (sh) spawns a long sleep (grandchild), records its PID, then waits.

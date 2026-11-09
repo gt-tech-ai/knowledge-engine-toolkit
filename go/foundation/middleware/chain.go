@@ -1,5 +1,3 @@
-// Package middleware provides stdlib net/http middleware for composing
-// request processing pipelines without external web frameworks.
 package middleware
 
 import (

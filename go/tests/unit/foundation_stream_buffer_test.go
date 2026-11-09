@@ -14,6 +14,7 @@ import (
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/stream"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -144,7 +145,15 @@ func TestBuffer_DeliversItemsBeforeSourceError(t *testing.T) {
 //   - After Close no buffer goroutine remains (goleak), the source is closed, and Next
 //     reports the end of the stream.
 func TestBuffer_CloseStopsProducer(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestBuffer_CloseStopsProducer")
+
+		return
+	}
+
+	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
 
 	var pulled atomic.Int64
 
@@ -213,10 +222,20 @@ func blockingStream(t *testing.T) *mocks.MockStream[string] {
 //   - For both kinds, a Close from another goroutine makes a Next blocked on the
 //     source return the end of the stream, and no goroutine is left behind.
 func TestBuffer_CloseUnblocksPendingNext(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestBuffer_CloseUnblocksPendingNext")
+
+		return
+	}
+
+	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
 
 	for _, kind := range []stream.Kind{stream.KindDirect, stream.KindBounded} {
 		t.Run(kind.String(), func(t *testing.T) {
+			t.Parallel()
+
 			buf, err := stream.NewFromConfig(
 				stream.Config{Kind: kind, MaxItems: 1, MaxBytes: 1}, streamSize)
 			require.NoError(t, err)

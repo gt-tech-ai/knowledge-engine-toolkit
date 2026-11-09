@@ -87,6 +87,7 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 		"a literal-only expression is evaluated")
 	assert.Equal(t, map[string]any{"Name": "x"}, alias["tags"])
 	assert.Len(t, alias["ingress"], 2, "repeated unlabeled blocks are one list")
+
 	region := asType[map[string]any](t, asType[[]any](t,
 		asType[map[string]any](t, doc["variable"])["region"])[0])
 	assert.Equal(

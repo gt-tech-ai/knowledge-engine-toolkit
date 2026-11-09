@@ -13,13 +13,13 @@ import (
 // role it shadows.
 type Entity[T, P any, ID comparable, N any] struct {
 	// Entity serves the roles.
-	decorate.Entity[T, P, ID]
+	*decorate.Entity[T, P, ID]
+
+	// Base runs the service's operations and supplies Name and Exec.
+	*Base
 
 	// next is the repository.
 	next N
-
-	// Base runs the service's operations and supplies Name and Exec.
-	Base
 }
 
 // Next returns the repository the service is built over, as its contract declares it.
@@ -50,7 +50,7 @@ func NewEntity[S, T, P any, ID comparable, N any](
 		return Entity[T, P, ID, N]{}, err
 	}
 
-	return Entity[T, P, ID, N]{Base: b, Entity: e, next: next}, nil
+	return Entity[T, P, ID, N]{Base: &b, Entity: &e, next: next}, nil
 }
 
 // run runs every role call through the service's chain.

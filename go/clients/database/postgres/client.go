@@ -47,7 +47,8 @@ func (c *Client) Start(ctx context.Context) error {
 	db.SetConnMaxLifetime(c.cfg.ConnectionMaxLifetime)
 	db.SetConnMaxIdleTime(c.cfg.ConnMaxIdleTime)
 
-	if err := Ping(ctx, db); err != nil {
+	err = Ping(ctx, db)
+	if err != nil {
 		_ = db.Close()
 
 		return err

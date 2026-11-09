@@ -50,6 +50,8 @@ func remoteSampledParent(t *testing.T) context.Context {
 //     started under a sampled remote parent is itself sampled (observed via the standard
 //     context Start returns).
 func TestTracer_HonorsSampledParent(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	tr, err := tracer.New(
 		ctx,
@@ -89,6 +91,8 @@ func TestTracer_HonorsSampledParent(t *testing.T) {
 //   - Given an effectively-zero sample rate and NO parent, a root span is not sampled
 //     (the ratio still governs roots after the ParentBased wrap).
 func TestTracer_RootSpanKeepsRatio(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	tr, err := tracer.New(
 		ctx,
@@ -123,6 +127,8 @@ func TestTracer_RootSpanKeepsRatio(t *testing.T) {
 //   - A span started from the forced context is sampled (ParentBased honours the seeded
 //     sampled remote parent) and TraceIDFromContext yields its 32-hex id.
 func TestContextWithForcedSample(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	tr, err := tracer.New(
 		ctx,
@@ -166,6 +172,8 @@ func TestContextWithForcedSample(t *testing.T) {
 //   - With rate-0 and rate-1 tracers created in parallel, every rate-0 root span is
 //     non-recording and every rate-1 root span is recording.
 func TestTracer_ConcurrentNewKeepsOwnSampler(t *testing.T) {
+	t.Parallel()
+
 	const pairs = 64
 
 	ctx := t.Context()

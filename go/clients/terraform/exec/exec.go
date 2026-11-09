@@ -25,16 +25,6 @@ var _ interfaces.TerraformClient = (*Client)(nil)
 // New returns the Client. It does no I/O.
 func New(runner interfaces.CommandRunner) *Client { return &Client{runner: runner} }
 
-// terraform runs terraform args in dir.
-func (c *Client) terraform(
-	ctx context.Context,
-	dir string,
-	args ...string,
-) ([]byte, error) {
-	return client.Output(c.runner.RunBuffered(ctx, dir, "terraform", args...),
-		"terraform "+args[0])
-}
-
 // Init runs `terraform init -input=false`.
 func (c *Client) Init(ctx context.Context, dir string) error {
 	_, err := c.terraform(ctx, dir, "init", "-input=false")
@@ -44,7 +34,8 @@ func (c *Client) Init(ctx context.Context, dir string) error {
 
 // Plan runs `terraform plan -input=false -out=out`, then shows the plan.
 func (c *Client) Plan(ctx context.Context, dir, out string) (types.Plan, error) {
-	if _, err := c.terraform(ctx, dir, "plan", "-input=false", "-out="+out); err != nil {
+	_, err := c.terraform(ctx, dir, "plan", "-input=false", "-out="+out)
+	if err != nil {
 		return types.Plan{}, err
 	}
 
@@ -66,6 +57,16 @@ func (c *Client) Show(ctx context.Context, dir, planFile string) (types.Plan, er
 	}
 
 	return Parse(out)
+}
+
+// terraform runs terraform args in dir.
+func (c *Client) terraform(
+	ctx context.Context,
+	dir string,
+	args ...string,
+) ([]byte, error) {
+	return client.Output(c.runner.RunBuffered(ctx, dir, "terraform", args...),
+		"terraform "+args[0])
 }
 
 // showJSON is the part of `terraform show -json` a plan is read from.

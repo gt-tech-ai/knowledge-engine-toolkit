@@ -30,19 +30,21 @@ func New(in io.Reader, out io.Writer) *Prompter {
 // operator behind it, so Confirm returns interfaces.NonInteractiveError. bufio returns
 // io.EOF unwrapped, so it is compared directly.
 func (p *Prompter) Confirm(ctx context.Context, question string) (bool, error) {
-	if err := ctx.Err(); err != nil {
+	err := ctx.Err()
+	if err != nil {
 		return false, apperr.Wrap(err, apperr.CodeCanceled, "confirmation cancelled")
 	}
 
-	if _, err := fmt.Fprintf(p.out, "%s [y/N] ", question); err != nil {
+	_, err = fmt.Fprintf(p.out, "%s [y/N] ", question)
+	if err != nil {
 		return false, apperr.Wrap(err, apperr.CodeInternal, "write confirmation prompt")
 	}
 
 	line, err := p.in.ReadString('\n')
 	switch {
-	case err == io.EOF && line == "":
+	case apperr.StdIs(err, io.EOF) && line == "":
 		return false, interfaces.NonInteractiveError()
-	case err != nil && err != io.EOF:
+	case err != nil && !apperr.StdIs(err, io.EOF):
 		return false, apperr.Wrap(err, apperr.CodeInternal, "read confirmation answer")
 	}
 

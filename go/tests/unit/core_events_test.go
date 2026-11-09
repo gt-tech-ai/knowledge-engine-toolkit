@@ -1,6 +1,7 @@
 // Package unit_test holds the black-box unit tests; this file verifies the go/core/events
 // package: a consumer's event types parse through a Registry, and malformed or
 // unregistered payloads and misregistrations are rejected. No network I/O occurs.
+
 package unit_test
 
 import (

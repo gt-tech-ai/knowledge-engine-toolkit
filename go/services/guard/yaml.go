@@ -14,7 +14,8 @@ func yamlCheck(
 	cb interfaces.Codebase,
 	r *types.GuardRow,
 ) ([]types.Finding, error) {
-	if _, missing, err := files(ctx, cb, r); err != nil || missing != nil {
+	_, missing, err := files(ctx, cb, r)
+	if err != nil || missing != nil {
 		return missing, err
 	}
 

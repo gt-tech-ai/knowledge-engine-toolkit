@@ -61,11 +61,11 @@ func ClientFrom[C any](ctx context.Context) (C, bool) {
 // on. Each operation is a method of the store's contract, decorated under its own name.
 // The zero Base runs statements undecorated on the zero client.
 type Base[C any] struct {
+	// Subject runs the store's operations through the tier; it supplies Name and Exec.
+	*decorate.Subject
+
 	// raw is the client used outside a transaction.
 	raw C
-
-	// Subject runs the store's operations through the tier; it supplies Name and Exec.
-	decorate.Subject
 }
 
 // NewBase builds the Base for the store named name over raw, the client used outside a
@@ -79,7 +79,7 @@ func NewBase[S, C any](decs decorate.Decorations, name string, raw C) (Base[C], 
 		return Base[C]{}, err
 	}
 
-	return Base[C]{raw: raw, Subject: subject}, nil
+	return Base[C]{raw: raw, Subject: &subject}, nil
 }
 
 // Client returns the client a statement on ctx runs on: the transaction-bound one, if

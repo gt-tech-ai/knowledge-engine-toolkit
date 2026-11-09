@@ -271,15 +271,17 @@ func TestConfig_ExtraEnvReplacesSchemaBinding(t *testing.T) {
 	assert.Equal(t, "localhost", db.Host, "the replaced schema alias must not bind")
 }
 
-// squashRoot is a consumer root that embeds a section with ",squash" and uses tag options
-// and an untagged field, the way mapstructure lets a consumer write its structs.
+// squashRoot is a consumer root that flattens a section with ",squash" and uses tag
+// options and an untagged field, the way mapstructure lets a consumer write its structs.
 type squashRoot struct {
 	// Label carries a tag option after the name.
 	Label string `mapstructure:"label,omitempty"`
 	// Skipped is excluded from decoding.
 	Skipped string `mapstructure:"-"`
+
 	// DatabaseConfig is flattened into the root: its keys are host, port, ….
-	infra.DatabaseConfig `mapstructure:",squash"`
+	DatabaseConfig infra.DatabaseConfig `mapstructure:"database_config,squash"`
+
 	// Replicas has no tag, so mapstructure matches it by field name.
 	Replicas int
 }
@@ -318,9 +320,24 @@ func TestConfig_SchemaTagForms_Bind(t *testing.T) {
 	var root squashRoot
 
 	require.NoError(t, cfg.Unmarshal(&root))
-	assert.Equal(t, "db.internal", root.Host, "the squashed DB_HOST alias must bind host")
-	assert.Equal(t, 6543, root.Port, "MYAPP_PORT must bind the squashed port")
-	assert.Equal(t, "app", root.User, "YAML values of the squashed section still decode")
+	assert.Equal(
+		t,
+		"db.internal",
+		root.DatabaseConfig.Host,
+		"the squashed DB_HOST alias must bind host",
+	)
+	assert.Equal(
+		t,
+		6543,
+		root.DatabaseConfig.Port,
+		"MYAPP_PORT must bind the squashed port",
+	)
+	assert.Equal(
+		t,
+		"app",
+		root.DatabaseConfig.User,
+		"YAML values of the squashed section still decode",
+	)
 	assert.Equal(t, "blue", root.Label, "the tag name before the comma names the key")
 	assert.Equal(t, 3, root.Replicas, "an untagged field binds by its field name")
 

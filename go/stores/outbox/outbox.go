@@ -42,12 +42,12 @@ type Config struct {
 
 // Deps carries the outbox store's runtime collaborators.
 type Deps struct {
-	// DB is the database KindPostgres runs on.
-	DB *sql.DB
-
 	// Decorations builds the store's layers from the stores tier of the decoration
 	// config, under Config.Name.
 	decorate.Decorations
+
+	// DB is the database KindPostgres runs on.
+	DB *sql.DB
 }
 
 // kinds is the outbox store backend table.
@@ -87,7 +87,7 @@ func NewFromConfig(
 		return nil, err
 	}
 
-	return decorate.NewOutbox(b.Subject, b.Subject, s), nil
+	return decorate.NewOutbox(*b.Subject, *b.Subject, s), nil
 }
 
 // newPostgres builds the store over cfg.Postgres's table on deps.DB.

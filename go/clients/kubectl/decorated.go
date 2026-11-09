@@ -23,16 +23,16 @@ func Decorate(
 		return nil, err
 	}
 
-	return &decorator{base: base, Base: b}, nil
+	return &decorator{base: base, Base: &b}, nil
 }
 
 // decorator runs each KubectlClient operation through the client tier.
 type decorator struct {
+	// Base runs each operation through the client tier.
+	*client.Base
+
 	// base is the wrapped client.
 	base interfaces.KubectlClient
-
-	// Base runs each operation through the client tier.
-	client.Base
 }
 
 // Compile-time assertion that decorator satisfies KubectlClient.

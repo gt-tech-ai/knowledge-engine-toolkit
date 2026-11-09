@@ -114,7 +114,8 @@ func leafOrGroup(
 	}
 
 	if opts.Resolve == nil {
-		if _, err := reg.Find(spec.Op); err != nil {
+		_, err := reg.Find(spec.Op)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -158,7 +159,8 @@ func run(
 	if opts.Resolve != nil {
 		var err error
 
-		if runReg, obs, err = opts.Resolve(c.Context(), name); err != nil {
+		runReg, obs, err = opts.Resolve(c.Context(), name)
+		if err != nil {
 			return err
 		}
 	}
@@ -276,7 +278,8 @@ func addSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 		if s, ok := def.(string); ok {
 			var err error
 
-			if d, err = time.ParseDuration(s); err != nil {
+			d, err = time.ParseDuration(s)
+			if err != nil {
 				return apperr.Wrap(
 					err,
 					apperr.CodeInvalidInput,

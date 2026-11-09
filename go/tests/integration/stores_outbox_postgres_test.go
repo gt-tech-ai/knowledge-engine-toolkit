@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -78,7 +78,8 @@ func pgstoreEnqueue(
 	tx := sqltx.New(db)
 
 	return func(ctx context.Context, rec *types.OutboxRecord) error {
-		if _, err := uuid.Parse(rec.Key); err != nil {
+		_, err := uuid.Parse(rec.Key)
+		if err != nil {
 			rec.Key = uuid.NewSHA1(uuid.NameSpaceOID, []byte(rec.Key)).String()
 		}
 
@@ -105,6 +106,8 @@ func pgstoreEnqueue(
 //   - A committed row is claimed with its tenant, key, attribute and payload; enqueuing
 //     the same id again is a no-op.
 func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
 
 	ctx := t.Context()
@@ -166,6 +169,8 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 // What it tests:
 //   - The shared OutboxStore conformance suite passes over a product-shaped table.
 func TestPgstore_PassesTheOutboxConformanceSuite(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
 
 	store, db := newPgstore(t)
@@ -186,6 +191,8 @@ func TestPgstore_PassesTheOutboxConformanceSuite(t *testing.T) {
 //     attribute; a long last error is truncated to MaxErrorLen.
 //   - DeleteSentBefore removes only sent rows older than the cutoff.
 func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
 
 	ctx := t.Context()

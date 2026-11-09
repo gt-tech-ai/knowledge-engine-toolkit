@@ -481,8 +481,8 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 	on := true
 
 	layers.Retry.Enabled = &on
-	layers.Retry.InitialInterval = time.Millisecond
-	layers.Retry.MaxInterval = time.Millisecond
+	layers.Retry.RetryConfig.InitialInterval = time.Millisecond
+	layers.Retry.RetryConfig.MaxInterval = time.Millisecond
 
 	reg := promclient.NewRegistry()
 	deps, err := decorate.Build("prometheus", layers, decorate.Collaborators{

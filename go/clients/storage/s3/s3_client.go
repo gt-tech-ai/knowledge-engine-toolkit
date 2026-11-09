@@ -50,94 +50,94 @@ const maxUploadConcurrency = 5
 type S3API interface {
 	// PutObject stores a single object in one request.
 	PutObject(
-		context.Context,
-		*s3.PutObjectInput,
-		...func(*s3.Options),
+		ctx context.Context,
+		in *s3.PutObjectInput,
+		optFns ...func(*s3.Options),
 	) (*s3.PutObjectOutput, error)
 
 	// GetObject retrieves an object's body and metadata.
 	GetObject(
-		context.Context,
-		*s3.GetObjectInput,
-		...func(*s3.Options),
+		ctx context.Context,
+		in *s3.GetObjectInput,
+		optFns ...func(*s3.Options),
 	) (*s3.GetObjectOutput, error)
 
 	// HeadObject retrieves an object's metadata without its body.
 	HeadObject(
-		context.Context,
-		*s3.HeadObjectInput,
-		...func(*s3.Options),
+		ctx context.Context,
+		in *s3.HeadObjectInput,
+		optFns ...func(*s3.Options),
 	) (*s3.HeadObjectOutput, error)
 
 	// DeleteObject removes a single object by key.
 	DeleteObject(
-		context.Context,
-		*s3.DeleteObjectInput,
-		...func(*s3.Options),
+		ctx context.Context,
+		in *s3.DeleteObjectInput,
+		optFns ...func(*s3.Options),
 	) (*s3.DeleteObjectOutput, error)
 
 	// DeleteObjects removes multiple objects in one request.
 	DeleteObjects(
-		context.Context,
-		*s3.DeleteObjectsInput,
-		...func(*s3.Options),
+		ctx context.Context,
+		in *s3.DeleteObjectsInput,
+		optFns ...func(*s3.Options),
 	) (*s3.DeleteObjectsOutput, error)
 
 	// ListObjectsV2 lists a page of objects; used by the paginator.
 	ListObjectsV2(
-		context.Context,
-		*s3.ListObjectsV2Input,
-		...func(*s3.Options),
+		ctx context.Context,
+		in *s3.ListObjectsV2Input,
+		optFns ...func(*s3.Options),
 	) (*s3.ListObjectsV2Output, error)
 
 	// CreateMultipartUpload begins a multipart upload and returns its upload ID.
 	CreateMultipartUpload(
-		context.Context,
-		*s3.CreateMultipartUploadInput,
-		...func(*s3.Options),
+		ctx context.Context,
+		in *s3.CreateMultipartUploadInput,
+		optFns ...func(*s3.Options),
 	) (*s3.CreateMultipartUploadOutput, error)
 
 	// UploadPart uploads one part of an in-progress multipart upload.
 	UploadPart(
-		context.Context,
-		*s3.UploadPartInput,
-		...func(*s3.Options),
+		ctx context.Context,
+		in *s3.UploadPartInput,
+		optFns ...func(*s3.Options),
 	) (*s3.UploadPartOutput, error)
 
 	// CompleteMultipartUpload finalizes a multipart upload from its parts.
 	CompleteMultipartUpload(
-		context.Context,
-		*s3.CompleteMultipartUploadInput,
-		...func(*s3.Options),
+		ctx context.Context,
+		in *s3.CompleteMultipartUploadInput,
+		optFns ...func(*s3.Options),
 	) (*s3.CompleteMultipartUploadOutput, error)
 
 	// AbortMultipartUpload discards an in-progress multipart upload.
 	AbortMultipartUpload(
-		context.Context,
-		*s3.AbortMultipartUploadInput,
-		...func(*s3.Options),
+		ctx context.Context,
+		in *s3.AbortMultipartUploadInput,
+		optFns ...func(*s3.Options),
 	) (*s3.AbortMultipartUploadOutput, error)
 
 	// ListMultipartUploads lists in-progress multipart uploads; used by the
 	// paginator to find abandoned uploads for cleanup.
 	ListMultipartUploads(
-		context.Context,
-		*s3.ListMultipartUploadsInput,
-		...func(*s3.Options),
+		ctx context.Context,
+		in *s3.ListMultipartUploadsInput,
+		optFns ...func(*s3.Options),
 	) (*s3.ListMultipartUploadsOutput, error)
 
 	// HeadBucket probes whether a bucket exists and is reachable.
 	HeadBucket(
-		context.Context,
-		*s3.HeadBucketInput,
-		...func(*s3.Options),
+		ctx context.Context,
+		in *s3.HeadBucketInput,
+		optFns ...func(*s3.Options),
 	) (*s3.HeadBucketOutput, error)
 
 	// CreateBucket creates a bucket.
 	CreateBucket(
-		context.Context,
-		*s3.CreateBucketInput,
-		...func(*s3.Options),
+		ctx context.Context,
+		in *s3.CreateBucketInput,
+		optFns ...func(*s3.Options),
 	) (*s3.CreateBucketOutput, error)
 }
 
@@ -183,43 +183,6 @@ func NewClient(
 	}
 }
 
-// presignOpts builds the PresignOptions mutator shared by every presign call: it sets
-// the URL expiry and, when a browser-reachable presignEndpoint is configured, rewrites
-// the signed URL's host to it (preserving the client's path-style addressing). The
-// SigV4 signature is computed over that host, so the browser PUT/GET validates.
-func (c *s3Client) presignOpts(expirySeconds int) func(*s3.PresignOptions) {
-	return func(o *s3.PresignOptions) {
-		o.Expires = time.Duration(expirySeconds) * time.Second
-		if c.presignEndpoint != "" {
-			o.ClientOptions = append(o.ClientOptions, func(so *s3.Options) {
-				so.BaseEndpoint = aws.String(c.presignEndpoint)
-			})
-		}
-	}
-}
-
-// NewClientFromAPI wraps an injected S3API seam (a generated mock in unit tests)
-// as a StorageClient. presign is nil: presigning needs the concrete *s3.Client, so
-// PresignURL/PresignPutURL are not reachable on the mock path — they are unit-tested
-// offline through the real newS3Client path (NewFromConfig) and live against MinIO in
-// the integration suite. A non-positive threshold falls back to the default threshold.
-// sseKMSKeyID (may be empty) is the KMS key every write encrypts with.
-func NewClientFromAPI(
-	api S3API,
-	threshold int64,
-	sseKMSKeyID string,
-) interfaces.StorageClient {
-	if threshold <= 0 {
-		threshold = defaultMultipartThreshold
-	}
-
-	return &s3Client{
-		api:         api,
-		threshold:   threshold,
-		sseKMSKeyID: sseKMSKeyID,
-	}
-}
-
 // Upload stores an object, transparently choosing single-part PutObject for small
 // bodies and multipart upload for bodies larger than the threshold. The body is
 // peeked (not fully buffered) to make the decision.
@@ -251,6 +214,52 @@ func (c *s3Client) Upload(
 	)
 }
 
+// NewClientFromAPI wraps an injected S3API seam (a generated mock in unit tests)
+// as a StorageClient. presign is nil: presigning needs the concrete *s3.Client, so
+// PresignURL/PresignPutURL are not reachable on the mock path — they are unit-tested
+// offline through the real newS3Client path (NewFromConfig) and live against MinIO in
+// the integration suite. A non-positive threshold falls back to the default threshold.
+// sseKMSKeyID (may be empty) is the KMS key every write encrypts with.
+func NewClientFromAPI(
+	api S3API,
+	threshold int64,
+	sseKMSKeyID string,
+) interfaces.StorageClient {
+	if threshold <= 0 {
+		threshold = defaultMultipartThreshold
+	}
+
+	return &s3Client{
+		api:         api,
+		threshold:   threshold,
+		sseKMSKeyID: sseKMSKeyID,
+	}
+}
+
+// Download streams an object's body. Returns errors.ErrNotFound when absent.
+func (c *s3Client) Download(
+	ctx context.Context,
+	bucket, key string,
+) (io.ReadCloser, error) {
+	out, err := c.api.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		if isNotFound(err) {
+			return nil, apperr.NotFound(fmt.Sprintf("object %s/%s", bucket, key))
+		}
+
+		return nil, apperr.Wrap(
+			err,
+			apperr.CodeInternal,
+			fmt.Sprintf("s3 get %s/%s", bucket, key),
+		)
+	}
+
+	return out.Body, nil
+}
+
 // classifyBody peeks up to threshold+1 bytes to decide single-part vs multipart
 // without buffering the entire body. It returns the bytes read so far, whether the
 // body exceeds the threshold, and any genuine read error.
@@ -278,217 +287,6 @@ func classifyBody(
 		// Copied threshold+1 bytes → body exceeds the threshold → multipart.
 		return buf.Bytes(), true, nil
 	}
-}
-
-// sseKMS returns the server-side-encryption fields of every write: aws:kms and the key
-// id when a key is configured, else the zero values (no encryption requested).
-func (c *s3Client) sseKMS() (mode types.ServerSideEncryption, keyID *string) {
-	if c.sseKMSKeyID == "" {
-		return "", nil
-	}
-
-	return types.ServerSideEncryptionAwsKms, aws.String(c.sseKMSKeyID)
-}
-
-// putSingle stores a small object in one request.
-func (c *s3Client) putSingle(
-	ctx context.Context,
-	bucket, key string,
-	body io.Reader,
-	contentType string,
-) error {
-	in := &s3.PutObjectInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(key),
-		Body:        body,
-		ContentType: aws.String(contentType),
-	}
-
-	in.ServerSideEncryption, in.SSEKMSKeyId = c.sseKMS()
-
-	_, err := c.api.PutObject(ctx, in)
-	if err != nil {
-		return apperr.Wrap(
-			err,
-			apperr.CodeInternal,
-			fmt.Sprintf("s3 put %s/%s", bucket, key),
-		)
-	}
-
-	return nil
-}
-
-// sortParts orders completed parts by ascending part number, which S3 requires;
-// concurrent uploads finish in arbitrary order.
-func sortParts(parts []types.CompletedPart) {
-	slices.SortFunc(parts, func(a, b types.CompletedPart) int {
-		return cmp.Compare(aws.ToInt32(a.PartNumber), aws.ToInt32(b.PartNumber))
-	})
-}
-
-// putMultipart streams a large object as a multipart upload. Parts are read
-// sequentially into their own buffers (an io.Reader cannot be seeked) but their
-// UploadPart calls run concurrently (bounded by maxUploadConcurrency), so a big
-// document's part PUTs overlap instead of blocking one another — the
-// dominant win over the former strictly-serial loop. Any part failure aborts the
-// whole upload so no partial upload lingers. Part size equals the threshold (S3
-// requires every part except the last to be at least 5 MiB).
-func (c *s3Client) putMultipart(
-	ctx context.Context,
-	bucket, key string,
-	body io.Reader,
-	contentType string,
-) error {
-	createIn := &s3.CreateMultipartUploadInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(key),
-		ContentType: aws.String(contentType),
-	}
-
-	createIn.ServerSideEncryption, createIn.SSEKMSKeyId = c.sseKMS()
-
-	created, err := c.api.CreateMultipartUpload(ctx, createIn)
-	if err != nil {
-		return apperr.Wrap(
-			err,
-			apperr.CodeInternal,
-			fmt.Sprintf("s3 create multipart %s/%s", bucket, key),
-		)
-	}
-
-	uploadID := created.UploadId
-
-	// abort discards the in-progress upload on any failure so no incomplete
-	// multipart upload lingers (and accrues storage cost until a lifecycle rule
-	// reaps it). It detaches from ctx's cancellation: when a part fails *because*
-	// the operation ctx was cancelled or timed out, reusing that ctx would make
-	// AbortMultipartUpload a no-op and leave the upload dangling. WithoutCancel
-	// preserves trace/values while dropping the deadline.
-	abort := func() {
-		_, _ = c.api.AbortMultipartUpload(
-			context.WithoutCancel(ctx),
-			&s3.AbortMultipartUploadInput{
-				Bucket: aws.String(bucket), Key: aws.String(key), UploadId: uploadID,
-			},
-		)
-	}
-
-	// Dispatch UploadPart calls concurrently; gctx cancels the in-flight ones as
-	// soon as the first fails. parts is appended under mu (part uploads finish out
-	// of order) and sorted by part number before completion, which S3 requires.
-	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(maxUploadConcurrency)
-
-	var (
-		mu    sync.Mutex
-		parts []types.CompletedPart
-	)
-
-	for partNum := int32(1); ; partNum++ {
-		// Each part gets its own buffer: concurrent UploadPart goroutines must not
-		// share one. g.Go blocks once maxUploadConcurrency uploads are in flight,
-		// so at most that many buffers (plus the one being filled) are live at once.
-		buf := make([]byte, c.threshold)
-		n, rerr := io.ReadFull(body, buf)
-
-		if n > 0 {
-			part, data := partNum, buf[:n]
-
-			g.Go(func() error {
-				out, uerr := c.api.UploadPart(gctx, &s3.UploadPartInput{
-					Bucket:     aws.String(bucket),
-					Key:        aws.String(key),
-					UploadId:   uploadID,
-					PartNumber: aws.Int32(part),
-					Body:       bytes.NewReader(data),
-				})
-				if uerr != nil {
-					return apperr.Wrap(
-						uerr,
-						apperr.CodeInternal,
-						fmt.Sprintf("s3 upload part %d %s/%s", part, bucket, key),
-					)
-				}
-
-				mu.Lock()
-
-				parts = append(
-					parts,
-					types.CompletedPart{ETag: out.ETag, PartNumber: aws.Int32(part)},
-				)
-				mu.Unlock()
-
-				return nil
-			})
-		}
-
-		if apperr.StdIs(rerr, io.EOF) || apperr.StdIs(rerr, io.ErrUnexpectedEOF) {
-			break
-		}
-
-		if rerr != nil {
-			_ = g.Wait()
-
-			abort()
-
-			return apperr.Wrap(
-				rerr,
-				apperr.CodeInternal,
-				fmt.Sprintf("reading multipart body %s/%s", bucket, key),
-			)
-		}
-	}
-
-	werr := g.Wait()
-	if werr != nil {
-		abort()
-
-		return werr
-	}
-
-	sortParts(parts)
-
-	_, err = c.api.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
-		Bucket:          aws.String(bucket),
-		Key:             aws.String(key),
-		UploadId:        uploadID,
-		MultipartUpload: &types.CompletedMultipartUpload{Parts: parts},
-	})
-	if err != nil {
-		abort()
-
-		return apperr.Wrap(
-			err,
-			apperr.CodeInternal,
-			fmt.Sprintf("s3 complete multipart %s/%s", bucket, key),
-		)
-	}
-
-	return nil
-}
-
-// Download streams an object's body. Returns errors.ErrNotFound when absent.
-func (c *s3Client) Download(
-	ctx context.Context,
-	bucket, key string,
-) (io.ReadCloser, error) {
-	out, err := c.api.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		if isNotFound(err) {
-			return nil, apperr.NotFound(fmt.Sprintf("object %s/%s", bucket, key))
-		}
-
-		return nil, apperr.Wrap(
-			err,
-			apperr.CodeInternal,
-			fmt.Sprintf("s3 get %s/%s", bucket, key),
-		)
-	}
-
-	return out.Body, nil
 }
 
 // Delete removes a single object. S3 delete is idempotent (no error if absent).
@@ -532,44 +330,12 @@ func (c *s3Client) DeleteBatch(ctx context.Context, bucket string, keys []string
 	return g.Wait()
 }
 
-// deleteChunk deletes a single ≤1000-key batch via DeleteObjects, surfacing both
-// the request error and any per-object failures reported in the response body.
-func (c *s3Client) deleteChunk(ctx context.Context, bucket string, keys []string) error {
-	objs := make([]types.ObjectIdentifier, len(keys))
-	for i, k := range keys {
-		objs[i] = types.ObjectIdentifier{Key: aws.String(k)}
-	}
-
-	out, err := c.api.DeleteObjects(ctx, &s3.DeleteObjectsInput{
-		Bucket: aws.String(bucket),
-		Delete: &types.Delete{Objects: objs, Quiet: aws.Bool(true)},
+// sortParts orders completed parts by ascending part number, which S3 requires;
+// concurrent uploads finish in arbitrary order.
+func sortParts(parts []types.CompletedPart) {
+	slices.SortFunc(parts, func(a, b types.CompletedPart) int {
+		return cmp.Compare(aws.ToInt32(a.PartNumber), aws.ToInt32(b.PartNumber))
 	})
-	if err != nil {
-		return apperr.Wrap(
-			err,
-			apperr.CodeInternal,
-			fmt.Sprintf("s3 delete batch %s (%d keys)", bucket, len(keys)),
-		)
-	}
-
-	// DeleteObjects reports per-object failures in the response body even when the
-	// HTTP call itself succeeds (Quiet suppresses successes, not errors). Surface
-	// them so a partial batch-delete failure is not silently swallowed.
-	if len(out.Errors) > 0 {
-		first := out.Errors[0]
-
-		return apperr.New(apperr.CodeInternal, fmt.Sprintf(
-			"s3 delete batch %s: %d of %d objects failed (first: key=%s code=%s message=%s)",
-			bucket,
-			len(out.Errors),
-			len(keys),
-			aws.ToString(first.Key),
-			aws.ToString(first.Code),
-			aws.ToString(first.Message),
-		))
-	}
-
-	return nil
 }
 
 // Exists reports whether an object is present.
@@ -655,27 +421,6 @@ func (c *s3Client) PresignURL(
 	}
 
 	return req.URL, nil
-}
-
-// contentDispositionAttachment builds an RFC 6266 Content-Disposition value that
-// forces a download under filename. It emits both a sanitized ASCII `filename=` (the
-// legacy fallback: quotes/backslashes/control characters stripped so the quoted-string
-// stays well-formed) and an RFC 5987 `filename*=UTF-8”…` with the raw name
-// percent-encoded, so non-ASCII names survive in modern browsers.
-func contentDispositionAttachment(filename string) string {
-	ascii := strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f || r == '"' || r == '\\' || r > 0x7f {
-			return '_'
-		}
-
-		return r
-	}, filename)
-
-	return fmt.Sprintf(
-		"attachment; filename=%q; filename*=UTF-8''%s",
-		ascii,
-		url.PathEscape(filename),
-	)
 }
 
 // PresignPutURL returns a presigned PUT URL valid for expirySeconds, pinning
@@ -816,6 +561,27 @@ func (c *s3Client) AbortMultipartUpload(
 	}
 
 	return nil
+}
+
+// contentDispositionAttachment builds an RFC 6266 Content-Disposition value that
+// forces a download under filename. It emits both a sanitized ASCII `filename=` (the
+// legacy fallback: quotes/backslashes/control characters stripped so the quoted-string
+// stays well-formed) and an RFC 5987 `filename*=UTF-8”…` with the raw name
+// percent-encoded, so non-ASCII names survive in modern browsers.
+func contentDispositionAttachment(filename string) string {
+	ascii := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || r == '"' || r == '\\' || r > 0x7f {
+			return '_'
+		}
+
+		return r
+	}, filename)
+
+	return fmt.Sprintf(
+		"attachment; filename=%q; filename*=UTF-8''%s",
+		ascii,
+		url.PathEscape(filename),
+	)
 }
 
 // ListMultipartUploads returns the in-progress multipart uploads in a bucket,
@@ -985,6 +751,240 @@ func (c *s3Client) ListObjectsPageToken(
 	}
 
 	return objs, next, nil
+}
+
+// presignOpts builds the PresignOptions mutator shared by every presign call: it sets
+// the URL expiry and, when a browser-reachable presignEndpoint is configured, rewrites
+// the signed URL's host to it (preserving the client's path-style addressing). The
+// SigV4 signature is computed over that host, so the browser PUT/GET validates.
+func (c *s3Client) presignOpts(expirySeconds int) func(*s3.PresignOptions) {
+	return func(o *s3.PresignOptions) {
+		o.Expires = time.Duration(expirySeconds) * time.Second
+		if c.presignEndpoint != "" {
+			o.ClientOptions = append(o.ClientOptions, func(so *s3.Options) {
+				so.BaseEndpoint = aws.String(c.presignEndpoint)
+			})
+		}
+	}
+}
+
+// sseKMS returns the server-side-encryption fields of every write: aws:kms and the key
+// id when a key is configured, else the zero values (no encryption requested).
+func (c *s3Client) sseKMS() (mode types.ServerSideEncryption, keyID *string) {
+	if c.sseKMSKeyID == "" {
+		return "", nil
+	}
+
+	return types.ServerSideEncryptionAwsKms, aws.String(c.sseKMSKeyID)
+}
+
+// putSingle stores a small object in one request.
+func (c *s3Client) putSingle(
+	ctx context.Context,
+	bucket, key string,
+	body io.Reader,
+	contentType string,
+) error {
+	in := &s3.PutObjectInput{
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(key),
+		Body:        body,
+		ContentType: aws.String(contentType),
+	}
+
+	in.ServerSideEncryption, in.SSEKMSKeyId = c.sseKMS()
+
+	_, err := c.api.PutObject(ctx, in)
+	if err != nil {
+		return apperr.Wrap(
+			err,
+			apperr.CodeInternal,
+			fmt.Sprintf("s3 put %s/%s", bucket, key),
+		)
+	}
+
+	return nil
+}
+
+// putMultipart streams a large object as a multipart upload. Parts are read
+// sequentially into their own buffers (an io.Reader cannot be seeked) but their
+// UploadPart calls run concurrently (bounded by maxUploadConcurrency), so a big
+// document's part PUTs overlap instead of blocking one another — the
+// dominant win over the former strictly-serial loop. Any part failure aborts the
+// whole upload so no partial upload lingers. Part size equals the threshold (S3
+// requires every part except the last to be at least 5 MiB).
+func (c *s3Client) putMultipart(
+	ctx context.Context,
+	bucket, key string,
+	body io.Reader,
+	contentType string,
+) error {
+	createIn := &s3.CreateMultipartUploadInput{
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(key),
+		ContentType: aws.String(contentType),
+	}
+
+	createIn.ServerSideEncryption, createIn.SSEKMSKeyId = c.sseKMS()
+
+	created, err := c.api.CreateMultipartUpload(ctx, createIn)
+	if err != nil {
+		return apperr.Wrap(
+			err,
+			apperr.CodeInternal,
+			fmt.Sprintf("s3 create multipart %s/%s", bucket, key),
+		)
+	}
+
+	uploadID := created.UploadId
+
+	// abort discards the in-progress upload on any failure so no incomplete
+	// multipart upload lingers (and accrues storage cost until a lifecycle rule
+	// reaps it). It detaches from ctx's cancellation: when a part fails *because*
+	// the operation ctx was cancelled or timed out, reusing that ctx would make
+	// AbortMultipartUpload a no-op and leave the upload dangling. WithoutCancel
+	// preserves trace/values while dropping the deadline.
+	abort := func() {
+		_, _ = c.api.AbortMultipartUpload(
+			context.WithoutCancel(ctx),
+			&s3.AbortMultipartUploadInput{
+				Bucket: aws.String(bucket), Key: aws.String(key), UploadId: uploadID,
+			},
+		)
+	}
+
+	// Dispatch UploadPart calls concurrently; gctx cancels the in-flight ones as
+	// soon as the first fails. parts is appended under mu (part uploads finish out
+	// of order) and sorted by part number before completion, which S3 requires.
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxUploadConcurrency)
+
+	var (
+		mu    sync.Mutex
+		parts []types.CompletedPart
+	)
+
+	for partNum := int32(1); ; partNum++ {
+		// Each part gets its own buffer: concurrent UploadPart goroutines must not
+		// share one. g.Go blocks once maxUploadConcurrency uploads are in flight,
+		// so at most that many buffers (plus the one being filled) are live at once.
+		buf := make([]byte, c.threshold)
+		n, rerr := io.ReadFull(body, buf)
+
+		if n > 0 {
+			part, data := partNum, buf[:n]
+
+			g.Go(func() error {
+				out, uerr := c.api.UploadPart(gctx, &s3.UploadPartInput{
+					Bucket:     aws.String(bucket),
+					Key:        aws.String(key),
+					UploadId:   uploadID,
+					PartNumber: aws.Int32(part),
+					Body:       bytes.NewReader(data),
+				})
+				if uerr != nil {
+					return apperr.Wrap(
+						uerr,
+						apperr.CodeInternal,
+						fmt.Sprintf("s3 upload part %d %s/%s", part, bucket, key),
+					)
+				}
+
+				mu.Lock()
+
+				parts = append(
+					parts,
+					types.CompletedPart{ETag: out.ETag, PartNumber: aws.Int32(part)},
+				)
+				mu.Unlock()
+
+				return nil
+			})
+		}
+
+		if apperr.StdIs(rerr, io.EOF) || apperr.StdIs(rerr, io.ErrUnexpectedEOF) {
+			break
+		}
+
+		if rerr != nil {
+			_ = g.Wait()
+
+			abort()
+
+			return apperr.Wrap(
+				rerr,
+				apperr.CodeInternal,
+				fmt.Sprintf("reading multipart body %s/%s", bucket, key),
+			)
+		}
+	}
+
+	werr := g.Wait()
+	if werr != nil {
+		abort()
+
+		return werr
+	}
+
+	sortParts(parts)
+
+	_, err = c.api.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
+		Bucket:          aws.String(bucket),
+		Key:             aws.String(key),
+		UploadId:        uploadID,
+		MultipartUpload: &types.CompletedMultipartUpload{Parts: parts},
+	})
+	if err != nil {
+		abort()
+
+		return apperr.Wrap(
+			err,
+			apperr.CodeInternal,
+			fmt.Sprintf("s3 complete multipart %s/%s", bucket, key),
+		)
+	}
+
+	return nil
+}
+
+// deleteChunk deletes a single ≤1000-key batch via DeleteObjects, surfacing both
+// the request error and any per-object failures reported in the response body.
+func (c *s3Client) deleteChunk(ctx context.Context, bucket string, keys []string) error {
+	objs := make([]types.ObjectIdentifier, len(keys))
+	for i, k := range keys {
+		objs[i] = types.ObjectIdentifier{Key: aws.String(k)}
+	}
+
+	out, err := c.api.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+		Bucket: aws.String(bucket),
+		Delete: &types.Delete{Objects: objs, Quiet: aws.Bool(true)},
+	})
+	if err != nil {
+		return apperr.Wrap(
+			err,
+			apperr.CodeInternal,
+			fmt.Sprintf("s3 delete batch %s (%d keys)", bucket, len(keys)),
+		)
+	}
+
+	// DeleteObjects reports per-object failures in the response body even when the
+	// HTTP call itself succeeds (Quiet suppresses successes, not errors). Surface
+	// them so a partial batch-delete failure is not silently swallowed.
+	if len(out.Errors) > 0 {
+		first := out.Errors[0]
+
+		return apperr.New(apperr.CodeInternal, fmt.Sprintf(
+			"s3 delete batch %s: %d of %d objects failed (first: key=%s code=%s message=%s)",
+			bucket,
+			len(out.Errors),
+			len(keys),
+			aws.ToString(first.Key),
+			aws.ToString(first.Code),
+			aws.ToString(first.Message),
+		))
+	}
+
+	return nil
 }
 
 // isNotFound reports whether err is an S3 "object missing" error, across the two

@@ -100,6 +100,24 @@ func (cw *compressWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+// Close finalizes the response: it flushes and returns the gzip writer to the
+// pool when compression was engaged, or writes the still-buffered (sub-threshold)
+// bytes uncompressed otherwise. It is invoked via defer by the Compression
+// middleware after the handler returns.
+func (cw *compressWriter) Close() {
+	if cw.gzWriter != nil {
+		_ = cw.gzWriter.Close()
+		cw.pool.Put(cw.gzWriter)
+
+		return
+	}
+
+	if len(cw.buf) > 0 {
+		// Below threshold, write uncompressed
+		_, _ = cw.ResponseWriter.Write(cw.buf)
+	}
+}
+
 // startGzip transitions the writer into compressing mode: it sets the
 // Content-Encoding header, drops the now-invalid Content-Length, grabs a pooled
 // gzip writer, and flushes any already-buffered bytes through it.
@@ -121,23 +139,5 @@ func (cw *compressWriter) startGzip() {
 	if len(cw.buf) > 0 {
 		_, _ = cw.gzWriter.Write(cw.buf)
 		cw.buf = nil
-	}
-}
-
-// Close finalizes the response: it flushes and returns the gzip writer to the
-// pool when compression was engaged, or writes the still-buffered (sub-threshold)
-// bytes uncompressed otherwise. It is invoked via defer by the Compression
-// middleware after the handler returns.
-func (cw *compressWriter) Close() {
-	if cw.gzWriter != nil {
-		_ = cw.gzWriter.Close()
-		cw.pool.Put(cw.gzWriter)
-
-		return
-	}
-
-	if len(cw.buf) > 0 {
-		// Below threshold, write uncompressed
-		_, _ = cw.ResponseWriter.Write(cw.buf)
 	}
 }

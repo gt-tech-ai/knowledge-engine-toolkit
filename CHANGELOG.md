@@ -403,6 +403,15 @@ Python: `techai-webutils` 0.9.5.
 
 ### Changed
 
+- Go **breaking**: `decoration.Retry`, `CircuitBreaker`, `Bulkhead` and `RateLimit` hold their
+  tuning in a named field (`RetryConfig`, `BreakerConfig`, `BulkheadConfig`, `RateLimitConfig`), so
+  `r.MaxRetries` is `r.RetryConfig.MaxRetries`. The YAML keys do not change.
+- Go **breaking**: the tier bases and entities embed by pointer (`*client.Base`, `*decorate.Subject`,
+  `*decorate.Entity`, `*Base`); a `go/tests/fixtures/suite` embedder is built with `NewUnitSuite`, or
+  its embedded suite set, before `suite.Run`.
+- Go: `go/tests/fixtures` gains `Sequence`,
+  `ReexecTest` and `InReexec`.
+
 - Go **breaking**: `foundation/fsys` `OSFS` returns coded errors (`NOT_FOUND` for a missing path,
   `INTERNAL` otherwise) wrapping the `os` error, where it returned the `os` error verbatim.
   `errors.Is(err, fs.ErrNotExist)` and `fs.ErrExist` still match; `os.IsNotExist` and `os.IsExist`,
@@ -486,6 +495,7 @@ Python: `techai-webutils` 0.9.5.
 
 ### Fixed
 
+- Go: `clients/replaybuffer/redis` `Prune` works again; its Lua script had lost a closing `end`.
 - Python `S3DbCheckpointStore` compresses and decompresses artifacts and parts on a worker thread
   instead of the event loop, so a large artifact no longer stalls other tasks in the process.
 - Python `MinHashDetector.check` computes the shingles and signature on a worker thread instead

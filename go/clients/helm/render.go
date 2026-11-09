@@ -44,7 +44,8 @@ func (r *renderer) Render(
 
 	return r.snap.Memo(ctx, "helm|template|"+string(key),
 		func(ctx context.Context) ([]types.Object, error) {
-			if err := BuildDeps(ctx, r.helm, r.snap, spec.ChartDir); err != nil {
+			err := BuildDeps(ctx, r.helm, r.snap, spec.ChartDir)
+			if err != nil {
 				return nil, err
 			}
 

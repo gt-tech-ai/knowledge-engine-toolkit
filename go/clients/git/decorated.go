@@ -22,16 +22,16 @@ func Decorate(
 		return nil, err
 	}
 
-	return &decorator{base: base, Base: b}, nil
+	return &decorator{base: base, Base: &b}, nil
 }
 
 // decorator runs each GitClient operation through the client tier.
 type decorator struct {
+	// Base runs each operation through the client tier.
+	*client.Base
+
 	// base is the wrapped client.
 	base interfaces.GitClient
-
-	// Base runs each operation through the client tier.
-	client.Base
 }
 
 // Compile-time assertion that decorator satisfies GitClient.

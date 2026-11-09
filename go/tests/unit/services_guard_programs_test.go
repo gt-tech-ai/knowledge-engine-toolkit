@@ -88,7 +88,8 @@ func BenchmarkNewFromConfig_Programs(b *testing.B) {
 
 	b.Run("fresh", func(b *testing.B) {
 		for b.Loop() {
-			if _, err := guard.NewFromConfig(rows, guard.Deps{}); err != nil {
+			_, err := guard.NewFromConfig(rows, guard.Deps{})
+			if err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -96,10 +97,11 @@ func BenchmarkNewFromConfig_Programs(b *testing.B) {
 	b.Run("shared", func(b *testing.B) {
 		progs := guard.NewPrograms()
 		for b.Loop() {
-			if _, err := guard.NewFromConfig(
+			_, err := guard.NewFromConfig(
 				rows,
 				guard.Deps{Programs: progs},
-			); err != nil {
+			)
+			if err != nil {
 				b.Fatal(err)
 			}
 		}

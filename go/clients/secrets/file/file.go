@@ -97,21 +97,23 @@ func (s source) Put(ctx context.Context, ref types.Ref, value types.Secret) erro
 	// Ensure the parent directory exists (0700 — a secrets dir), so a first write to a
 	// not-yet-created git-ignored store (e.g. .secrets/) succeeds; the check-ignore below
 	// also runs with this directory as its working dir.
-	if err := os.MkdirAll(filepath.Dir(loc.Path), 0o700); err != nil {
+	err := os.MkdirAll(filepath.Dir(loc.Path), 0o700)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "creating credential directory")
 	}
 
 	// `git check-ignore -q <path>` exits 0 when the path IS ignored; the CommandRunner
 	// returns a non-nil error for any non-zero exit (not-ignored, or git unavailable),
 	// so we fail SAFE — refuse the write unless git positively confirms the path ignored.
-	if err := s.runner.Run(
+	err = s.runner.Run(
 		ctx,
 		filepath.Dir(loc.Path),
 		"git",
 		"check-ignore",
 		"-q",
 		loc.Path,
-	); err != nil {
+	)
+	if err != nil {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf(
@@ -127,7 +129,9 @@ func (s source) Put(ctx context.Context, ref types.Ref, value types.Secret) erro
 	}
 
 	updated := upsert(data, loc.Key, value.Reveal())
-	if err := os.WriteFile(loc.Path, updated, credentialFilePerm); err != nil {
+
+	err = os.WriteFile(loc.Path, updated, credentialFilePerm)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "writing credential file")
 	}
 

@@ -43,41 +43,6 @@ func (g *goView) Modules(ctx context.Context) ([]string, error) {
 	return g.parent.snap.Memo(ctx, "go|modules", g.modules)
 }
 
-// modules computes Modules.
-func (g *goView) modules(ctx context.Context) ([]string, error) {
-	work, err := g.parent.Text(ctx, "go.work")
-	switch {
-	case err == nil:
-		wf, perr := modfile.ParseWork("go.work", work.Bytes, nil)
-		if perr != nil {
-			return nil, apperr.Wrap(perr, apperr.CodeInvalidInput, "parse go.work")
-		}
-
-		out := make([]string, 0, len(wf.Use))
-		for _, u := range wf.Use {
-			out = append(out, path.Clean(u.Path))
-		}
-
-		slices.Sort(out)
-
-		return out, nil
-	case !apperr.Is(err, apperr.CodeNotFound):
-		return nil, err
-	}
-
-	mods, err := g.parent.Files(ctx, types.FileSelector{Globs: []string{"**/go.mod"}})
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]string, 0, len(mods))
-	for _, m := range mods {
-		out = append(out, path.Dir(m.Path))
-	}
-
-	return out, nil
-}
-
 // Parse parses the Go files sel selects, concurrently, each once per mode.
 func (g *goView) Parse(
 	ctx context.Context,
@@ -112,8 +77,44 @@ func (g *goView) Parse(
 		})
 	}
 
-	if err := eg.Wait(); err != nil {
+	err = eg.Wait()
+	if err != nil {
 		return nil, err
+	}
+
+	return out, nil
+}
+
+// modules computes Modules.
+func (g *goView) modules(ctx context.Context) ([]string, error) {
+	work, err := g.parent.Text(ctx, "go.work")
+	switch {
+	case err == nil:
+		wf, perr := modfile.ParseWork("go.work", work.Bytes, nil)
+		if perr != nil {
+			return nil, apperr.Wrap(perr, apperr.CodeInvalidInput, "parse go.work")
+		}
+
+		out := make([]string, 0, len(wf.Use))
+		for _, u := range wf.Use {
+			out = append(out, path.Clean(u.Path))
+		}
+
+		slices.Sort(out)
+
+		return out, nil
+	case !apperr.Is(err, apperr.CodeNotFound):
+		return nil, err
+	}
+
+	mods, err := g.parent.Files(ctx, types.FileSelector{Globs: []string{"**/go.mod"}})
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]string, 0, len(mods))
+	for _, m := range mods {
+		out = append(out, path.Dir(m.Path))
 	}
 
 	return out, nil

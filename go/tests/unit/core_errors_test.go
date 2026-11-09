@@ -1,6 +1,7 @@
 // Package core_test verifies the go/core/errors package: AppError construction,
 // error wrapping, code classification, HTTP status mapping, Zap integration, and
 // structured logging. No external dependencies are used -- all tests run in-process.
+
 package unit_test
 
 import (

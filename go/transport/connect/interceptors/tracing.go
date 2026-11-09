@@ -51,41 +51,6 @@ func TracingInterceptor(tracer interfaces.Tracer) connect.Interceptor {
 	return tracingInterceptor{tracer: tracer}
 }
 
-// startServerSpan extracts the incoming trace context, opens a server span for the
-// procedure, and sets the rpc.* + request-id attributes. Shared by the unary and
-// streaming paths. The caller must span.End().
-func (i tracingInterceptor) startServerSpan(
-	ctx context.Context, h http.Header, procedure string,
-) (context.Context, interfaces.Span) {
-	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(h))
-
-	service, method := parseConnectProcedure(procedure)
-
-	ctx, span := i.tracer.Start(
-		ctx, procedure,
-		interfaces.WithSpanKind(interfaces.SpanKindServer),
-	)
-	span.SetAttribute("rpc.system", "connect")
-	span.SetAttribute("rpc.service", service)
-	span.SetAttribute("rpc.method", method)
-
-	if requestID := h.Get("X-Request-ID"); requestID != "" {
-		span.SetAttribute("http.request_id", requestID)
-	}
-
-	return ctx, span
-}
-
-// finishSpan records the terminal status/error on the span. Shared by both paths.
-func finishSpan(span interfaces.Span, err error) {
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(interfaces.SpanStatusError, err.Error())
-	} else {
-		span.SetStatus(interfaces.SpanStatusOK, "")
-	}
-}
-
 // WrapUnary traces a unary RPC.
 func (i tracingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
@@ -102,6 +67,16 @@ func (i tracingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc 
 		}
 
 		return resp, err
+	}
+}
+
+// finishSpan records the terminal status/error on the span. Shared by both paths.
+func finishSpan(span interfaces.Span, err error) {
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(interfaces.SpanStatusError, err.Error())
+	} else {
+		span.SetStatus(interfaces.SpanStatusOK, "")
 	}
 }
 
@@ -130,6 +105,31 @@ func (i tracingInterceptor) WrapStreamingHandler(
 
 		return err
 	}
+}
+
+// startServerSpan extracts the incoming trace context, opens a server span for the
+// procedure, and sets the rpc.* + request-id attributes. Shared by the unary and
+// streaming paths. The caller must span.End().
+func (i tracingInterceptor) startServerSpan(
+	ctx context.Context, h http.Header, procedure string,
+) (context.Context, interfaces.Span) {
+	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(h))
+
+	service, method := parseConnectProcedure(procedure)
+
+	ctx, span := i.tracer.Start(
+		ctx, procedure,
+		interfaces.WithSpanKind(interfaces.SpanKindServer),
+	)
+	span.SetAttribute("rpc.system", "connect")
+	span.SetAttribute("rpc.service", service)
+	span.SetAttribute("rpc.method", method)
+
+	if requestID := h.Get("X-Request-ID"); requestID != "" {
+		span.SetAttribute("http.request_id", requestID)
+	}
+
+	return ctx, span
 }
 
 // parseConnectProcedure extracts service and method from a Connect procedure.

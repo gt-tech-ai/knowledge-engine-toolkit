@@ -21,6 +21,8 @@ import (
 //   - each rule accepts a valid value and rejects the boundary violation, and the string
 //     rules reuse stdlib (uuid/url/filepath) rather than a hand-rolled pattern.
 func TestDtovalidate_LeafRules(t *testing.T) {
+	t.Parallel()
+
 	require.NoError(t, dtovalidate.UUID("id", "11111111-1111-1111-1111-111111111111"))
 	require.Error(t, dtovalidate.UUID("id", "not-a-uuid"))
 

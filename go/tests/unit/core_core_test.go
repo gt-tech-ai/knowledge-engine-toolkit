@@ -7,6 +7,7 @@
 //   - types.Page: HasMore()
 //   - types.Timestamps: SoftDelete(), IsDeleted()
 //   - errors/zap.go: zapFields.MarshalLogObject (the second MarshalLogObject at line 107)
+
 package unit_test
 
 import (

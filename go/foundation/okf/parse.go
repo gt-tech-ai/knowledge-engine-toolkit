@@ -100,6 +100,7 @@ func decodeFrontmatter(path, block string) (Frontmatter, error) {
 
 	for i := 0; i+1 < len(node.Content); i += 2 {
 		key, value := node.Content[i].Value, node.Content[i+1]
+
 		err := decodeKey(&fm, key, value)
 		if err != nil {
 			return Frontmatter{}, apperr.Wrap(

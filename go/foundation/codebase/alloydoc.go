@@ -94,19 +94,23 @@ func alloyExpr(expr ast.Expr) any {
 func alloyLiteral(e *ast.LiteralExpr) any {
 	switch e.Kind {
 	case token.STRING:
-		if s, err := strconv.Unquote(e.Value); err == nil {
+		s, err := strconv.Unquote(e.Value)
+		if err == nil {
 			return s
 		}
 	case token.NUMBER:
-		if n, err := strconv.ParseInt(e.Value, 10, 64); err == nil {
+		n, err := strconv.ParseInt(e.Value, 10, 64)
+		if err == nil {
 			return n
 		}
 
-		if f, err := strconv.ParseFloat(e.Value, 64); err == nil {
+		f, err := strconv.ParseFloat(e.Value, 64)
+		if err == nil {
 			return f
 		}
 	case token.FLOAT:
-		if f, err := strconv.ParseFloat(e.Value, 64); err == nil {
+		f, err := strconv.ParseFloat(e.Value, 64)
+		if err == nil {
 			return f
 		}
 	case token.BOOL:

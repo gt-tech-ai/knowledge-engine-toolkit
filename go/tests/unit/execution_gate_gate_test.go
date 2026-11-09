@@ -75,6 +75,8 @@ func failResults(name, msg string) types.StepResults {
 //   - With two serial phases added in sequence, the job in phase1 runs strictly
 //     before the job in phase2 (observed via recorded execution order).
 func TestGate_PhaseOrdering(t *testing.T) {
+	t.Parallel()
+
 	var (
 		mu    sync.Mutex
 		order []string
@@ -113,6 +115,8 @@ func TestGate_PhaseOrdering(t *testing.T) {
 //   - When phase1 fails and StopOnFailure is set, Run returns an error and
 //     phase2's job is never executed.
 func TestGate_StopOnFailureSkipsLaterPhases(t *testing.T) {
+	t.Parallel()
+
 	var phase2Ran bool
 
 	failing := recordingJob(t, "lint", failResults("lint", "bad code"), nil)
@@ -145,6 +149,8 @@ func TestGate_StopOnFailureSkipsLaterPhases(t *testing.T) {
 //   - With two failing jobs in one parallel phase, Run returns a non-nil
 //     error whose message contains both jobs' error strings.
 func TestGate_AggregatesFailureErrors(t *testing.T) {
+	t.Parallel()
+
 	jobA := recordingJob(t, "a", failResults("a", "err-alpha"), nil)
 	jobB := recordingJob(t, "b", failResults("b", "err-beta"), nil)
 
@@ -182,6 +188,8 @@ func TestGate_AggregatesFailureErrors(t *testing.T) {
 // What it tests:
 //   - With two passing jobs in a parallel phase, Run returns nil.
 func TestGate_NoErrorWhenAllPass(t *testing.T) {
+	t.Parallel()
+
 	jobA := recordingJob(t, "a", passResults("a"), nil)
 	jobB := recordingJob(t, "b", passResults("b"), nil)
 
@@ -206,6 +214,8 @@ func TestGate_NoErrorWhenAllPass(t *testing.T) {
 // What it tests:
 //   - A phase whose only result is StatusWarn produces a nil error from Run.
 func TestGate_WarnDoesNotTriggerError(t *testing.T) {
+	t.Parallel()
+
 	j := recordingJob(
 		t, "security",
 		types.StepResults{{Name: "security", Status: types.StatusWarn}},
@@ -233,6 +243,8 @@ func TestGate_WarnDoesNotTriggerError(t *testing.T) {
 //   - After adding a parallel "alpha" phase then a serial "beta" phase, Phases
 //     returns exactly two phases named "alpha" then "beta" in that order.
 func TestGate_Phases_ReturnsOrderedPhases(t *testing.T) {
+	t.Parallel()
+
 	jobA := recordingJob(t, "a", passResults("a"), nil)
 	jobB := recordingJob(t, "b", passResults("b"), nil)
 
@@ -258,6 +270,8 @@ func TestGate_Phases_ReturnsOrderedPhases(t *testing.T) {
 //   - After Run, the observer received at least one phase-complete callback
 //     and exactly one gate-complete callback carrying the gate's name.
 func TestGate_WithObserver_ReceivesCallbacks(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	obs := mocks.NewMockExecutionObserver(ctrl)
 	// The MinTimes/Times expectations ARE the assertions (verified at ctrl finish):
@@ -295,6 +309,8 @@ func TestGate_WithObserver_ReceivesCallbacks(t *testing.T) {
 //   - The full event sequence is exactly gate-start, phase-start/complete per
 //     phase, gate-complete, in that order (enforced by gomock.InOrder).
 func TestGate_FiresStartEvents(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	obs := mocks.NewMockExecutionObserver(ctrl)
 	// Step start/complete callbacks fire (interleaved, parallel) but are not part
@@ -336,6 +352,8 @@ func TestGate_FiresStartEvents(t *testing.T) {
 //   - A serial phase with zero jobs yields exactly one gate-start and one
 //     phase-start whose job-name list is empty, with no error or panic.
 func TestGate_EmptyPhase_FiresStartCleanly(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	obs := mocks.NewMockExecutionObserver(ctrl)
 	obs.EXPECT().OnGateStart("empty", []string{"nothing"}).Times(1)

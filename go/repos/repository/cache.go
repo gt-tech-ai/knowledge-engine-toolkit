@@ -135,7 +135,8 @@ func (c *roleCache[T, ID]) read(ctx context.Context, key string) (*T, bool) {
 
 // write caches entity under key, best effort.
 func (c *roleCache[T, ID]) write(ctx context.Context, key string, entity *T) {
-	if encoded, err := cache.Encode(*entity, c.cache.Version); err == nil {
+	encoded, err := cache.Encode(*entity, c.cache.Version)
+	if err == nil {
 		c.cache.Store.Set(ctx, key, encoded, c.cache.TTL)
 	}
 }

@@ -106,7 +106,8 @@ func render(name, text string, data any) ([]byte, error) {
 
 	var b bytes.Buffer
 
-	if err := t.Execute(&b, data); err != nil {
+	err = t.Execute(&b, data)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "render template "+name)
 	}
 

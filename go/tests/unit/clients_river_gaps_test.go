@@ -10,6 +10,7 @@ import (
 	riverpkg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/jobs/river"
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
@@ -57,10 +58,10 @@ func TestNewInsertClient_FailsLoudlyBeforeOpeningAPool(t *testing.T) {
 	on := true
 	bad := decoration.DefaultConfig()
 	semaphore := decoration.Bulkhead{
-		Enabled: &on,
-
-		Kind: "semaphore",
+		Enabled:        &on,
+		BulkheadConfig: resilience.BulkheadConfig{Kind: "semaphore"},
 	}
+
 	bad.Clients.Overrides = map[string]decoration.Layers{
 		riverpkg.InsertClientName: {Bulkhead: semaphore},
 	}

@@ -86,7 +86,8 @@ type Subscriber struct {
 // Config.Ready gates receiving and Config.NackDelay delays a failed message's
 // redelivery. Out-of-range poll settings are a CodeInvalidInput error.
 func NewSubscriber(ctx context.Context, cfg Config) (*Subscriber, error) {
-	if err := cfg.validate(); err != nil {
+	err := cfg.validate()
+	if err != nil {
 		return nil, err
 	}
 

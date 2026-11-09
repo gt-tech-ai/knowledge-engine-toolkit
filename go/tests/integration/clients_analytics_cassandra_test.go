@@ -5,7 +5,8 @@
 // in-memory full scan, idempotent redelivery, resumable paging, crash-and-redeliver
 // writes, and bucket compaction. The unit suite mocks the session; every behaviour
 // that needs real CQL semantics runs here.
-package integration
+
+package integration_test
 
 import (
 	"context"
@@ -37,8 +38,9 @@ const itCube = "genai_calls"
 
 // AnalyticsCassandraSuite holds a real Cassandra with the cube's tables.
 type AnalyticsCassandraSuite struct {
+	*testsuite.CassandraIntegrationSuite
+
 	session interfaces.CQLSession
-	testsuite.CassandraIntegrationSuite
 }
 
 // TestAnalyticsCassandraSuite runs the Cassandra analytics store integration tests.
@@ -49,7 +51,14 @@ type AnalyticsCassandraSuite struct {
 // What it tests:
 //   - Suite entrypoint wires AnalyticsCassandraSuite into the testify runner
 func TestAnalyticsCassandraSuite(t *testing.T) {
-	suite.Run(t, new(AnalyticsCassandraSuite))
+	t.Parallel()
+
+	suite.Run(
+		t,
+		&AnalyticsCassandraSuite{
+			CassandraIntegrationSuite: &testsuite.CassandraIntegrationSuite{},
+		},
+	)
 }
 
 // SetupSuite starts the Cassandra container, creates the keyspace and the cube's
@@ -91,81 +100,6 @@ func (s *AnalyticsCassandraSuite) TearDownSuite() {
 	s.CassandraIntegrationSuite.TearDownSuite()
 }
 
-// newStore builds a store over the suite session (pageSize 0 = default).
-func (s *AnalyticsCassandraSuite) newStore(
-	session interfaces.CQLSession,
-	pageSize int,
-) *analyticscassandra.Store {
-	s.T().Helper()
-
-	store, err := analyticscassandra.New(session, analyticscassandra.Config{
-		Cubes: map[string][]types.Grain{itCube: {types.GrainHour, types.GrainDay}},
-		BucketWidth: map[types.Grain]types.Grain{
-			types.GrainHour: types.GrainDay,
-			types.GrainDay:  types.GrainMonth,
-		},
-		PageSize:             pageSize,
-		MaxConcurrentBuckets: 4,
-	})
-	s.Require().NoError(err)
-
-	return store
-}
-
-// fact builds a genai_calls fact for org.
-func fact(org, key string, at time.Time, team, model string, tokens float64) types.Fact {
-	return types.Fact{
-		Cube: itCube, OrgID: org, TS: at, IdempotencyKey: key,
-		Dims:     map[string]string{"team": team, "model": model},
-		Measures: map[string]float64{"tokens_in": tokens},
-	}
-}
-
-// totals drains q's stream and merges every row's tokens_in partial per group
-// (keyed by the group's team value, "" for an ungrouped query).
-func (s *AnalyticsCassandraSuite) totals(
-	store interfaces.AnalyticsStore,
-	q types.AggregateQuery,
-) map[string]chartspec.Partial {
-	s.T().Helper()
-
-	ctx := context.Background()
-	stream, err := store.Aggregate(ctx, q)
-	s.Require().NoError(err)
-
-	defer func() { s.Require().NoError(stream.Close()) }()
-
-	out := map[string]chartspec.Partial{}
-
-	for {
-		rows, more, err := stream.Next(ctx)
-		s.Require().NoError(err)
-
-		for _, r := range rows {
-			p, err := chartspec.DecodePartial(r.Partials["tokens_in"])
-			s.Require().NoError(err)
-
-			acc := out[r.Group["team"]]
-			acc.Merge(p)
-
-			out[r.Group["team"]] = acc
-		}
-
-		if !more {
-			return out
-		}
-	}
-}
-
-// query is the tokens_in-by-team query of org over [from, to) at grain.
-func query(org string, grain types.Grain, from, to time.Time) types.AggregateQuery {
-	return types.AggregateQuery{
-		Cube: itCube, OrgID: org, Grain: grain, GroupBy: []string{"team"},
-		Measures:  []types.MeasureRef{{Name: "tokens_in", Agg: types.AggSum}},
-		TimeRange: types.TimeRange{From: from, To: to},
-	}
-}
-
 // TestCassandra_AggregatesAcrossBucketBoundaries tests that facts in adjacent
 // partition buckets are all read and merge to the exact total.
 //
@@ -197,61 +131,12 @@ func (s *AnalyticsCassandraSuite) TestCassandra_AggregatesAcrossBucketBoundaries
 	s.InDelta(2.0, chartspec.Finalize(got["t-1"], types.AggCount), 0)
 }
 
-// randFilter is one generated filter: its listquery JSON and the same predicate in Go.
-type randFilter struct {
-	match func(f types.Fact) bool
-	json  string
-}
-
-// genFilter builds a random filter over team, model and the day-aligned time.
-func genFilter(r *fixtures.Sequence, days []time.Time) randFilter {
-	teams, models := []string{"t-1", "t-2", "t-3"}, []string{"m-a", "m-b"}
-	leaf := func() randFilter {
-		switch r.IntN(4) {
-		case 0:
-			t := teams[r.IntN(len(teams))]
-
-			return randFilter{
-				json:  fmt.Sprintf(`{"$eq":{"team":%q}}`, t),
-				match: func(f types.Fact) bool { return f.Dims["team"] == t },
-			}
-		case 1:
-			a, b := teams[r.IntN(len(teams))], teams[r.IntN(len(teams))]
-
-			return randFilter{
-				json:  fmt.Sprintf(`{"$in":{"team":[%q,%q]}}`, a, b),
-				match: func(f types.Fact) bool { return f.Dims["team"] == a || f.Dims["team"] == b },
-			}
-		case 2:
-			m := models[r.IntN(len(models))]
-
-			return randFilter{
-				json:  fmt.Sprintf(`{"$ne":{"model":%q}}`, m),
-				match: func(f types.Fact) bool { return f.Dims["model"] != m },
-			}
-		default:
-			d := days[r.IntN(len(days))]
-
-			return randFilter{
-				json: fmt.Sprintf(`{"$gte":{"ts":%q}}`, d.Format(time.RFC3339)),
-				match: func(f types.Fact) bool {
-					return !chartspec.Truncate(f.TS, types.GrainDay).Before(d)
-				},
-			}
-		}
-	}
-	a, b := leaf(), leaf()
-
-	if r.IntN(2) == 0 {
-		return randFilter{
-			json:  `{"$and":[` + a.json + `,` + b.json + `]}`,
-			match: func(f types.Fact) bool { return a.match(f) && b.match(f) },
-		}
-	}
-
-	return randFilter{
-		json:  `{"$or":[` + a.json + `,` + b.json + `]}`,
-		match: func(f types.Fact) bool { return a.match(f) || b.match(f) },
+// fact builds a genai_calls fact for org.
+func fact(org, key string, at time.Time, team, model string, tokens float64) types.Fact {
+	return types.Fact{
+		Cube: itCube, OrgID: org, TS: at, IdempotencyKey: key,
+		Dims:     map[string]string{"team": team, "model": model},
+		Measures: map[string]float64{"tokens_in": tokens},
 	}
 }
 
@@ -327,6 +212,15 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PushdownMatchesFullScan() {
 	}
 }
 
+// query is the tokens_in-by-team query of org over [from, to) at grain.
+func query(org string, grain types.Grain, from, to time.Time) types.AggregateQuery {
+	return types.AggregateQuery{
+		Cube: itCube, OrgID: org, Grain: grain, GroupBy: []string{"team"},
+		Measures:  []types.MeasureRef{{Name: "tokens_in", Agg: types.AggSum}},
+		TimeRange: types.TimeRange{From: from, To: to},
+	}
+}
+
 // TestCassandra_RedeliveredFactIsNoop tests that writing the same fact twice
 // leaves every total unchanged.
 //
@@ -355,6 +249,64 @@ func (s *AnalyticsCassandraSuite) TestCassandra_RedeliveredFactIsNoop() {
 		)
 		s.InDelta(17.0, chartspec.Finalize(got["t-1"], types.AggSum), 0, g)
 		s.InDelta(1.0, chartspec.Finalize(got["t-1"], types.AggCount), 0, g)
+	}
+}
+
+// randFilter is one generated filter: its listquery JSON and the same predicate in Go.
+type randFilter struct {
+	match func(f types.Fact) bool
+	json  string
+}
+
+// genFilter builds a random filter over team, model and the day-aligned time.
+func genFilter(r *fixtures.Sequence, days []time.Time) randFilter {
+	teams, models := []string{"t-1", "t-2", "t-3"}, []string{"m-a", "m-b"}
+	leaf := func() randFilter {
+		switch r.IntN(4) {
+		case 0:
+			t := teams[r.IntN(len(teams))]
+
+			return randFilter{
+				json:  fmt.Sprintf(`{"$eq":{"team":%q}}`, t),
+				match: func(f types.Fact) bool { return f.Dims["team"] == t },
+			}
+		case 1:
+			a, b := teams[r.IntN(len(teams))], teams[r.IntN(len(teams))]
+
+			return randFilter{
+				json:  fmt.Sprintf(`{"$in":{"team":[%q,%q]}}`, a, b),
+				match: func(f types.Fact) bool { return f.Dims["team"] == a || f.Dims["team"] == b },
+			}
+		case 2:
+			m := models[r.IntN(len(models))]
+
+			return randFilter{
+				json:  fmt.Sprintf(`{"$ne":{"model":%q}}`, m),
+				match: func(f types.Fact) bool { return f.Dims["model"] != m },
+			}
+		default:
+			d := days[r.IntN(len(days))]
+
+			return randFilter{
+				json: fmt.Sprintf(`{"$gte":{"ts":%q}}`, d.Format(time.RFC3339)),
+				match: func(f types.Fact) bool {
+					return !chartspec.Truncate(f.TS, types.GrainDay).Before(d)
+				},
+			}
+		}
+	}
+	a, b := leaf(), leaf()
+
+	if r.IntN(2) == 0 {
+		return randFilter{
+			json:  `{"$and":[` + a.json + `,` + b.json + `]}`,
+			match: func(f types.Fact) bool { return a.match(f) && b.match(f) },
+		}
+	}
+
+	return randFilter{
+		json:  `{"$or":[` + a.json + `,` + b.json + `]}`,
+		match: func(f types.Fact) bool { return a.match(f) || b.match(f) },
 	}
 }
 
@@ -425,6 +377,89 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
 	s.Equal(map[string]int{"t-0": 1, "t-1": 1, "t-2": 1, "t-3": 1, "t-4": 1}, seen)
 }
 
+// TestCassandra_CrashBetweenWritesDoesNotLoseMeasures tests that a write that
+// dies after some of a fact's rows landed is repaired exactly by redelivery.
+//
+// Why this test is important:
+//   - A consumer crash after a partial write is redelivered; per-row upserts must
+//     neither lose the missing grain nor double the landed one
+//
+// What it tests:
+//   - with the day-table insert failing, Write returns CodeUnavailable; after the
+//     redelivered Write, hour and day totals are both exactly 25 with count 1
+func (s *AnalyticsCassandraSuite) TestCassandra_CrashBetweenWritesDoesNotLoseMeasures() {
+	org := "org-crash"
+	f := fact(org, "c-1", time.Date(2026, 10, 9, 14, 0, 0, 0, time.UTC), "t-1", "m", 25)
+	crashing := s.newStore(
+		&crashingSession{
+			CQLSession: s.session,
+			table:      analyticscassandra.TableName(itCube, types.GrainDay),
+		},
+		0,
+	)
+
+	err := crashing.Write(context.Background(), []types.Fact{f})
+	s.Equal(apperr.CodeUnavailable, apperr.Code(err))
+
+	store := s.newStore(s.session, 0)
+	s.Require().NoError(store.Write(context.Background(), []types.Fact{f}))
+
+	for _, g := range []types.Grain{types.GrainHour, types.GrainDay} {
+		got := s.totals(
+			store,
+			query(
+				org,
+				g,
+				time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC),
+				time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC),
+			),
+		)
+		s.InDelta(25.0, chartspec.Finalize(got["t-1"], types.AggSum), 0, g)
+		s.InDelta(1.0, chartspec.Finalize(got["t-1"], types.AggCount), 0, g)
+	}
+}
+
+// TestCassandra_CompactionPreservesTotals tests that compacting a closed bucket
+// keeps every answer and collapses each group to one row.
+//
+// Why this test is important:
+//   - Compaction exists to bound storage; it must never change a number a panel shows
+//
+// What it tests:
+//   - before and after Compact, sum, count, min, max and p95 per team are identical
+//   - the 43 per-fact rows of the hourly partition become 2 compacted rows
+func (s *AnalyticsCassandraSuite) TestCassandra_CompactionPreservesTotals() {
+	store := s.newStore(s.session, 0)
+	org := "org-compact"
+	s.writeCompactionFacts(store, org)
+
+	bucket := time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC)
+	q := query(org, types.GrainHour, bucket, bucket.AddDate(0, 0, 1))
+	before := s.totals(store, q)
+	s.Equal(43, s.partitionRows(org, types.GrainHour, bucket))
+
+	s.Require().
+		NoError(store.Compact(context.Background(), itCube, types.GrainHour, org, bucket))
+
+	after := s.totals(store, q)
+	s.Equal(2, s.partitionRows(org, types.GrainHour, bucket))
+
+	for _, team := range []string{"t-1", "t-2"} {
+		for _, agg := range []types.Aggregate{
+			types.AggSum, types.AggCount, types.AggMin, types.AggMax, types.AggP95,
+		} {
+			s.InDelta(
+				chartspec.Finalize(before[team], agg),
+				chartspec.Finalize(after[team], agg),
+				1e-9,
+				"%s %s",
+				team,
+				agg,
+			)
+		}
+	}
+}
+
 // crashingSession passes through to a real session but fails the first insert
 // into one table — a process dying between a fact's per-grain writes. It is a
 // fault-injecting decorator over the real testcontainers session, not a stand-in
@@ -468,45 +503,100 @@ func (crashingQuery) Exec() error {
 	return apperr.New(apperr.CodeUnavailable, "process killed")
 }
 
-// TestCassandra_CrashBetweenWritesDoesNotLoseMeasures tests that a write that
-// dies after some of a fact's rows landed is repaired exactly by redelivery.
+// TestCassandra_CompactionIsIdempotent tests that rerunning compaction, and
+// compacting again after a late fact, keeps the totals exact.
 //
 // Why this test is important:
-//   - A consumer crash after a partial write is redelivered; per-row upserts must
-//     neither lose the missing grain nor double the landed one
+//   - A compaction job can be retried or rerun after a crash; a rerun that merged
+//     the compacted row into itself would double every total
 //
 // What it tests:
-//   - with the day-table insert failing, Write returns CodeUnavailable; after the
-//     redelivered Write, hour and day totals are both exactly 25 with count 1
-func (s *AnalyticsCassandraSuite) TestCassandra_CrashBetweenWritesDoesNotLoseMeasures() {
-	org := "org-crash"
-	f := fact(org, "c-1", time.Date(2026, 10, 9, 14, 0, 0, 0, time.UTC), "t-1", "m", 25)
-	crashing := s.newStore(
-		&crashingSession{
-			CQLSession: s.session,
-			table:      analyticscassandra.TableName(itCube, types.GrainDay),
-		},
-		0,
-	)
-
-	err := crashing.Write(context.Background(), []types.Fact{f})
-	s.Equal(apperr.CodeUnavailable, apperr.Code(err))
-
+//   - two consecutive Compacts give t-1 sum = the exact sum of its 40 values
+//   - a late fact (+100) written into the compacted bucket and compacted again
+//     raises the sum by exactly 100 and the count by 1, and leaves one row per team
+func (s *AnalyticsCassandraSuite) TestCassandra_CompactionIsIdempotent() {
 	store := s.newStore(s.session, 0)
-	s.Require().NoError(store.Write(context.Background(), []types.Fact{f}))
+	org := "org-compact-twice"
+	values := s.writeCompactionFacts(store, org)
+	bucket := time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC)
+	q := query(org, types.GrainHour, bucket, bucket.AddDate(0, 0, 1))
+	want := 0.0
 
-	for _, g := range []types.Grain{types.GrainHour, types.GrainDay} {
-		got := s.totals(
-			store,
-			query(
-				org,
-				g,
-				time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC),
-				time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC),
-			),
-		)
-		s.InDelta(25.0, chartspec.Finalize(got["t-1"], types.AggSum), 0, g)
-		s.InDelta(1.0, chartspec.Finalize(got["t-1"], types.AggCount), 0, g)
+	for _, v := range values["t-1"] {
+		want += v
+	}
+
+	ctx := context.Background()
+	s.Require().NoError(store.Compact(ctx, itCube, types.GrainHour, org, bucket))
+	s.Require().NoError(store.Compact(ctx, itCube, types.GrainHour, org, bucket))
+	s.InDelta(want, chartspec.Finalize(s.totals(store, q)["t-1"], types.AggSum), 0)
+
+	lateAt := time.Date(2025, 3, 4, 9, 5, 0, 0, time.UTC)
+	late := fact(org, "late", lateAt, "t-1", "m", 100)
+	s.Require().NoError(store.Write(ctx, []types.Fact{late}))
+	s.Require().NoError(store.Compact(ctx, itCube, types.GrainHour, org, bucket))
+
+	got := s.totals(store, q)["t-1"]
+	s.InDelta(want+100, chartspec.Finalize(got, types.AggSum), 0)
+	s.InDelta(41.0, chartspec.Finalize(got, types.AggCount), 0)
+	s.Equal(2, s.partitionRows(org, types.GrainHour, bucket))
+	s.False(math.IsNaN(chartspec.Finalize(got, types.AggP95)))
+}
+
+// newStore builds a store over the suite session (pageSize 0 = default).
+func (s *AnalyticsCassandraSuite) newStore(
+	session interfaces.CQLSession,
+	pageSize int,
+) *analyticscassandra.Store {
+	s.T().Helper()
+
+	store, err := analyticscassandra.New(session, analyticscassandra.Config{
+		Cubes: map[string][]types.Grain{itCube: {types.GrainHour, types.GrainDay}},
+		BucketWidth: map[types.Grain]types.Grain{
+			types.GrainHour: types.GrainDay,
+			types.GrainDay:  types.GrainMonth,
+		},
+		PageSize:             pageSize,
+		MaxConcurrentBuckets: 4,
+	})
+	s.Require().NoError(err)
+
+	return store
+}
+
+// totals drains q's stream and merges every row's tokens_in partial per group
+// (keyed by the group's team value, "" for an ungrouped query).
+func (s *AnalyticsCassandraSuite) totals(
+	store interfaces.AnalyticsStore,
+	q types.AggregateQuery,
+) map[string]chartspec.Partial {
+	s.T().Helper()
+
+	ctx := context.Background()
+	stream, err := store.Aggregate(ctx, q)
+	s.Require().NoError(err)
+
+	defer func() { s.Require().NoError(stream.Close()) }()
+
+	out := map[string]chartspec.Partial{}
+
+	for {
+		rows, more, err := stream.Next(ctx)
+		s.Require().NoError(err)
+
+		for _, r := range rows {
+			p, err := chartspec.DecodePartial(r.Partials["tokens_in"])
+			s.Require().NoError(err)
+
+			acc := out[r.Group["team"]]
+			acc.Merge(p)
+
+			out[r.Group["team"]] = acc
+		}
+
+		if !more {
+			return out
+		}
 	}
 }
 
@@ -572,85 +662,4 @@ func (s *AnalyticsCassandraSuite) writeCompactionFacts(
 	s.Require().NoError(store.Write(context.Background(), facts))
 
 	return values
-}
-
-// TestCassandra_CompactionPreservesTotals tests that compacting a closed bucket
-// keeps every answer and collapses each group to one row.
-//
-// Why this test is important:
-//   - Compaction exists to bound storage; it must never change a number a panel shows
-//
-// What it tests:
-//   - before and after Compact, sum, count, min, max and p95 per team are identical
-//   - the 43 per-fact rows of the hourly partition become 2 compacted rows
-func (s *AnalyticsCassandraSuite) TestCassandra_CompactionPreservesTotals() {
-	store := s.newStore(s.session, 0)
-	org := "org-compact"
-	s.writeCompactionFacts(store, org)
-
-	bucket := time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC)
-	q := query(org, types.GrainHour, bucket, bucket.AddDate(0, 0, 1))
-	before := s.totals(store, q)
-	s.Equal(43, s.partitionRows(org, types.GrainHour, bucket))
-
-	s.Require().
-		NoError(store.Compact(context.Background(), itCube, types.GrainHour, org, bucket))
-
-	after := s.totals(store, q)
-	s.Equal(2, s.partitionRows(org, types.GrainHour, bucket))
-
-	for _, team := range []string{"t-1", "t-2"} {
-		for _, agg := range []types.Aggregate{
-			types.AggSum, types.AggCount, types.AggMin, types.AggMax, types.AggP95,
-		} {
-			s.InDelta(
-				chartspec.Finalize(before[team], agg),
-				chartspec.Finalize(after[team], agg),
-				1e-9,
-				"%s %s",
-				team,
-				agg,
-			)
-		}
-	}
-}
-
-// TestCassandra_CompactionIsIdempotent tests that rerunning compaction, and
-// compacting again after a late fact, keeps the totals exact.
-//
-// Why this test is important:
-//   - A compaction job can be retried or rerun after a crash; a rerun that merged
-//     the compacted row into itself would double every total
-//
-// What it tests:
-//   - two consecutive Compacts give t-1 sum = the exact sum of its 40 values
-//   - a late fact (+100) written into the compacted bucket and compacted again
-//     raises the sum by exactly 100 and the count by 1, and leaves one row per team
-func (s *AnalyticsCassandraSuite) TestCassandra_CompactionIsIdempotent() {
-	store := s.newStore(s.session, 0)
-	org := "org-compact-twice"
-	values := s.writeCompactionFacts(store, org)
-	bucket := time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC)
-	q := query(org, types.GrainHour, bucket, bucket.AddDate(0, 0, 1))
-	want := 0.0
-
-	for _, v := range values["t-1"] {
-		want += v
-	}
-
-	ctx := context.Background()
-	s.Require().NoError(store.Compact(ctx, itCube, types.GrainHour, org, bucket))
-	s.Require().NoError(store.Compact(ctx, itCube, types.GrainHour, org, bucket))
-	s.InDelta(want, chartspec.Finalize(s.totals(store, q)["t-1"], types.AggSum), 0)
-
-	lateAt := time.Date(2025, 3, 4, 9, 5, 0, 0, time.UTC)
-	late := fact(org, "late", lateAt, "t-1", "m", 100)
-	s.Require().NoError(store.Write(ctx, []types.Fact{late}))
-	s.Require().NoError(store.Compact(ctx, itCube, types.GrainHour, org, bucket))
-
-	got := s.totals(store, q)["t-1"]
-	s.InDelta(want+100, chartspec.Finalize(got, types.AggSum), 0)
-	s.InDelta(41.0, chartspec.Finalize(got, types.AggCount), 0)
-	s.Equal(2, s.partitionRows(org, types.GrainHour, bucket))
-	s.False(math.IsNaN(chartspec.Finalize(got, types.AggP95)))
 }

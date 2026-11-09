@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -198,6 +198,8 @@ func drain(t *testing.T, relay *outbox.Relay, store interfaces.OutboxStore, lane
 //     outbox_id attributes are the row ids and whose partition_key attributes are
 //     the rows' keys, unchanged; the lane ends with 0 pending.
 func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
 
 	ctx := context.Background()
@@ -279,6 +281,8 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 //     shipped stub sink leaves the lane with 0 pending, while a run without a budget
 //     leaves 900 of another 1,000-row lane pending.
 func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
 
 	ctx := context.Background()
@@ -328,6 +332,8 @@ func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 //     payload, each under the bucket's default COMPLIANCE retention, and the lane
 //     ends with 0 pending.
 func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
 
 	ctx := context.Background()
@@ -449,6 +455,8 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 //     message group id); member_removed rows, whose queue does not exist, stay
 //     pending.
 func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
 
 	ctx := context.Background()
@@ -596,6 +604,8 @@ FROM partitioned_outbox GROUP BY part`)
 //   - a store over the same table narrowed to one partition reports partition 1's
 //     pending rows as Stranded
 func TestRelay_PartitionsDrainIndependently(t *testing.T) {
+	t.Parallel()
+
 	requireIntegration(t)
 
 	ctx := context.Background()

@@ -12,13 +12,13 @@ import (
 // through Exec or Stage, calling Next.
 type Entity[T, P any, ID comparable, N any] struct {
 	// Entity serves the roles.
-	decorate.Entity[T, P, ID]
+	*decorate.Entity[T, P, ID]
+
+	// Base runs the pipeline's operations and supplies Name, Exec, Stage and FanOut.
+	*Base
 
 	// next is the service.
 	next N
-
-	// Base runs the pipeline's operations and supplies Name, Exec, Stage and FanOut.
-	Base
 }
 
 // Next returns the service the pipeline is built over, as its contract declares it.
@@ -42,7 +42,7 @@ func NewEntity[C, T, P any, ID comparable, N any](
 		return Entity[T, P, ID, N]{}, err
 	}
 
-	return Entity[T, P, ID, N]{Base: b, Entity: e, next: next}, nil
+	return Entity[T, P, ID, N]{Base: &b, Entity: &e, next: next}, nil
 }
 
 // run runs every role call through the pipeline's chain.

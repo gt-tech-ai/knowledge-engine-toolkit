@@ -83,7 +83,8 @@ func ReadThrough[T any](
 
 	if c != nil {
 		if data, hit := c.Get(ctx, key); hit {
-			if val, ok, decErr := Decode[T](data, version); decErr == nil && ok {
+			val, ok, decErr := Decode[T](data, version)
+			if decErr == nil && ok {
 				return val, nil
 			}
 		}
@@ -97,7 +98,8 @@ func ReadThrough[T any](
 		}
 
 		if c != nil && (o.cacheable == nil || o.cacheable(result)) {
-			if encoded, encErr := Encode(result, version); encErr == nil {
+			encoded, encErr := Encode(result, version)
+			if encErr == nil {
 				c.Set(detached, key, encoded, ttl)
 			}
 		}

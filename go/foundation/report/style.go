@@ -36,15 +36,6 @@ func (s style) Sprintf(format string, a ...any) string {
 	return s.wrap(fmt.Sprintf(format, a...))
 }
 
-// wrap brackets text with the style's start and inline-end sequences.
-func (s style) wrap(text string) string {
-	if !s.on {
-		return text
-	}
-
-	return "\x1b[" + s.code + "m" + text + "\x1b[" + s.reset + "m"
-}
-
 // Fprintf writes fmt.Sprintf(format, a...) to w as a whole styled block, ended by a
 // full reset (a block may span lines).
 func (s style) Fprintf(w io.Writer, format string, a ...any) {
@@ -54,6 +45,15 @@ func (s style) Fprintf(w io.Writer, format string, a ...any) {
 	}
 
 	_, _ = io.WriteString(w, text)
+}
+
+// wrap brackets text with the style's start and inline-end sequences.
+func (s style) wrap(text string) string {
+	if !s.on {
+		return text
+	}
+
+	return "\x1b[" + s.code + "m" + text + "\x1b[" + s.reset + "m"
 }
 
 // palette is the console's set of styles.

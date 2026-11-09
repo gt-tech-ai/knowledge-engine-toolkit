@@ -55,6 +55,7 @@ func Diff(a, b Hash, get NodeGetter) ([]Change, error) {
 	}
 
 	d := differ{dec: decoder{get: get}}
+
 	err := d.node(a, b, "", 0)
 	if err != nil {
 		return nil, err
@@ -97,7 +98,8 @@ func (d *differ) node(a, b Hash, path string, depth int) error {
 		return nil
 	}
 
-	if err := d.fields(na, nb, a, b, path); err != nil {
+	err = d.fields(na, nb, a, b, path)
+	if err != nil {
 		return err
 	}
 
@@ -117,6 +119,7 @@ func (d *differ) node(a, b Hash, path string, depth int) error {
 		la, lb := na.Lists[name], nb.Lists[name]
 		for i := range max(len(la), len(lb)) {
 			at := join(path, name) + "[" + strconv.Itoa(i) + "]"
+
 			err := d.child(elem(la, i), elem(lb, i), at, depth)
 			if err != nil {
 				return err

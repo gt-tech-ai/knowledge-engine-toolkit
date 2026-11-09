@@ -87,7 +87,8 @@ func InjectConversation(ctx context.Context, c Conversation) context.Context {
 			return ctx
 		}
 
-		if bag, err = bag.SetMember(member); err != nil {
+		bag, err = bag.SetMember(member)
+		if err != nil {
 			return ctx
 		}
 	}

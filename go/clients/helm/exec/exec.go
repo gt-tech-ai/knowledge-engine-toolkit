@@ -61,7 +61,9 @@ func (c *Client) DependencyBuild(ctx context.Context, chartDir string) error {
 	defer func() { _ = os.RemoveAll(home) }()
 
 	cache := filepath.Join(home, "cache")
-	if err := os.MkdirAll(cache, 0o750); err != nil {
+
+	err = os.MkdirAll(cache, 0o750)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create a helm cache for "+chartDir)
 	}
 

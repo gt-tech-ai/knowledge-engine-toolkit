@@ -268,7 +268,8 @@ func (c *compiled) check(
 			"a probe expands to exactly one of http, tcp, exec")
 	}
 
-	if err := probeSchedule(&chk, p, vars); err != nil {
+	err = probeSchedule(&chk, p, vars)
+	if err != nil {
 		return chk, err
 	}
 
@@ -283,7 +284,8 @@ func probeSchedule(chk *check, p *types.ProcProbe, vars Vars) error {
 	}
 
 	if status != "" {
-		if chk.status, err = strconv.Atoi(status); err != nil {
+		chk.status, err = strconv.Atoi(status)
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "probe status "+status)
 		}
 	}
@@ -308,7 +310,8 @@ func probeSchedule(chk *check, p *types.ProcProbe, vars Vars) error {
 			continue
 		}
 
-		if *d.dst, err = time.ParseDuration(v); err != nil {
+		*d.dst, err = time.ParseDuration(v)
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "probe duration "+v)
 		}
 	}

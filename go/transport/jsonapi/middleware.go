@@ -136,7 +136,8 @@ func Middleware(
 
 		var parsed map[string]any
 
-		if err := json.Unmarshal(cw.body.Bytes(), &parsed); err != nil {
+		err := json.Unmarshal(cw.body.Bytes(), &parsed)
+		if err != nil {
 			// Can't parse — pass through unchanged.
 			w.WriteHeader(cw.status)
 
@@ -263,7 +264,8 @@ func unwrapAndValidate(body []byte, resourceType string) (unwrapped []byte, msg 
 
 	var parsed map[string]any
 
-	if err := json.Unmarshal(body, &parsed); err != nil {
+	err := json.Unmarshal(body, &parsed)
+	if err != nil {
 		return nil, "request body is not valid JSON"
 	}
 

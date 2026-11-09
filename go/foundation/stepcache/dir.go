@@ -121,7 +121,8 @@ func (d dir) Record(_ context.Context, key string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(d.root, 0o750); err != nil {
+	err = os.MkdirAll(d.root, 0o750)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "stepcache: create "+d.root)
 	}
 
@@ -144,7 +145,8 @@ func (d dir) Record(_ context.Context, key string) error {
 // path is key's marker path, salted when d has a salt; a key that is not a hex SHA-256
 // is CodeInvalidInput, so a key can never name a path outside root.
 func (d dir) path(key string) (string, error) {
-	if b, err := hex.DecodeString(key); err != nil || len(b) != 32 {
+	b, err := hex.DecodeString(key)
+	if err != nil || len(b) != 32 {
 		return "", apperr.New(apperr.CodeInvalidInput, "stepcache: malformed key "+key)
 	}
 

@@ -5,7 +5,8 @@
 // concrete extensions (GetOrLoad, TTLs, Ping, prefix/full invalidation), and how the
 // cache degrades when its Redis is unreachable. The unit suite covers only
 // construction (TLS wiring, defaults); every behaviour that needs a Redis runs here.
-package integration
+
+package integration_test
 
 import (
 	"context"
@@ -25,8 +26,9 @@ import (
 
 // RedisCacheSuite holds a real Redis container and a fresh Cache client per test.
 type RedisCacheSuite struct {
+	*testsuite.RedisIntegrationSuite
+
 	cache *rediscache.Cache
-	testsuite.RedisIntegrationSuite
 }
 
 // TestRedisCacheSuite runs all Redis cache integration tests.
@@ -37,7 +39,12 @@ type RedisCacheSuite struct {
 // What it tests:
 //   - Suite entrypoint wires RedisCacheSuite into the testify runner
 func TestRedisCacheSuite(t *testing.T) {
-	suite.Run(t, new(RedisCacheSuite))
+	t.Parallel()
+
+	suite.Run(
+		t,
+		&RedisCacheSuite{RedisIntegrationSuite: &testsuite.RedisIntegrationSuite{}},
+	)
 }
 
 func (s *RedisCacheSuite) SetupTest() {
@@ -48,56 +55,6 @@ func (s *RedisCacheSuite) TearDownTest() {
 	if s.cache != nil {
 		_ = s.cache.Close()
 	}
-}
-
-// newCache builds a cache on the suite's Redis (DB 0, 2s op timeout, 5m default TTL),
-// letting mutate adjust the config first.
-func (s *RedisCacheSuite) newCache(mutate func(*rediscache.Config)) *rediscache.Cache {
-	cfg := rediscache.DefaultConfig()
-
-	cfg.Addr = s.RedisAddr
-	cfg.OpTimeout = 2 * time.Second
-
-	if mutate != nil {
-		mutate(&cfg)
-	}
-
-	c := rediscache.New(&cfg)
-
-	s.T().Cleanup(func() { _ = c.Close() })
-
-	return c
-}
-
-// unreachableCache builds a cache whose address refuses connections (a port reserved
-// and released), with mutate adjusting the config first.
-func (s *RedisCacheSuite) unreachableCache(
-	mutate func(*rediscache.Config),
-) *rediscache.Cache {
-	s.T().Helper()
-
-	lis, err := (&net.ListenConfig{}).Listen(s.T().Context(), "tcp", "127.0.0.1:0")
-	s.Require().NoError(err)
-
-	addr := lis.Addr().String()
-	s.Require().NoError(lis.Close())
-
-	cfg := &rediscache.Config{Addr: addr, OpTimeout: time.Second}
-	if mutate != nil {
-		mutate(cfg)
-	}
-
-	c := rediscache.New(cfg)
-
-	s.T().Cleanup(func() { _ = c.Close() })
-
-	return c
-}
-
-// uniqueKey returns a test-scoped cache key to prevent cross-test pollution when
-// tests share a single Redis instance.
-func (s *RedisCacheSuite) uniqueKey(label string) string {
-	return fmt.Sprintf("%s:%s", s.T().Name(), label)
 }
 
 // TestPing tests that Cache.Ping confirms the connection to the Redis server.
@@ -516,4 +473,54 @@ func (s *RedisCacheSuite) TestUnreachable_Lifecycle() {
 	s.Require().Error(lc.Start(ctx), "a refused address fails the Ping")
 	s.Require().Error(lc.Readiness(ctx))
 	s.NoError(lc.Stop(ctx))
+}
+
+// newCache builds a cache on the suite's Redis (DB 0, 2s op timeout, 5m default TTL),
+// letting mutate adjust the config first.
+func (s *RedisCacheSuite) newCache(mutate func(*rediscache.Config)) *rediscache.Cache {
+	cfg := rediscache.DefaultConfig()
+
+	cfg.Addr = s.RedisAddr
+	cfg.OpTimeout = 2 * time.Second
+
+	if mutate != nil {
+		mutate(&cfg)
+	}
+
+	c := rediscache.New(&cfg)
+
+	s.T().Cleanup(func() { _ = c.Close() })
+
+	return c
+}
+
+// unreachableCache builds a cache whose address refuses connections (a port reserved
+// and released), with mutate adjusting the config first.
+func (s *RedisCacheSuite) unreachableCache(
+	mutate func(*rediscache.Config),
+) *rediscache.Cache {
+	s.T().Helper()
+
+	lis, err := (&net.ListenConfig{}).Listen(s.T().Context(), "tcp", "127.0.0.1:0")
+	s.Require().NoError(err)
+
+	addr := lis.Addr().String()
+	s.Require().NoError(lis.Close())
+
+	cfg := &rediscache.Config{Addr: addr, OpTimeout: time.Second}
+	if mutate != nil {
+		mutate(cfg)
+	}
+
+	c := rediscache.New(cfg)
+
+	s.T().Cleanup(func() { _ = c.Close() })
+
+	return c
+}
+
+// uniqueKey returns a test-scoped cache key to prevent cross-test pollution when
+// tests share a single Redis instance.
+func (s *RedisCacheSuite) uniqueKey(label string) string {
+	return fmt.Sprintf("%s:%s", s.T().Name(), label)
 }

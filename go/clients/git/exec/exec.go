@@ -28,13 +28,6 @@ var _ interfaces.GitClient = (*Client)(nil)
 // New returns the Client over runner. It does no I/O.
 func New(runner interfaces.CommandRunner) *Client { return &Client{runner: runner} }
 
-// git runs git args in root and returns stdout or a coded error.
-func (c *Client) git(ctx context.Context, root string, args ...string) ([]byte, error) {
-	res := c.runner.RunBuffered(ctx, root, "git", args...)
-
-	return client.Output(res, "git "+args[0])
-}
-
 // HasPathsChanged runs `git diff --quiet from to -- paths`; exit 1 means changed.
 func (c *Client) HasPathsChanged(
 	ctx context.Context,
@@ -122,9 +115,6 @@ func (c *Client) RevParse(ctx context.Context, root, ref string) (string, error)
 	return strings.TrimSpace(string(res.Stdout)), nil
 }
 
-// noMatchingRefs is `git ls-remote --exit-code`'s exit status when no ref matches.
-const noMatchingRefs = 2
-
 // RemoteHasRef runs `git ls-remote --exit-code --heads --tags remote ref`: exit 0 is a
 // match, exit 2 none, and any other failure a remote that could not be asked.
 func (c *Client) RemoteHasRef(
@@ -143,6 +133,9 @@ func (c *Client) RemoteHasRef(
 			"git ls-remote "+remote+": "+strings.TrimSpace(string(res.Stderr)))
 	}
 }
+
+// noMatchingRefs is `git ls-remote --exit-code`'s exit status when no ref matches.
+const noMatchingRefs = 2
 
 // IsRepo reports whether root is inside a working tree.
 func (c *Client) IsRepo(ctx context.Context, root string) bool {
@@ -181,9 +174,6 @@ func (c *Client) LsUntracked(
 	return client.SplitNUL(out), err
 }
 
-// grepNoMatch is `git grep`'s exit status when nothing matches.
-const grepNoMatch = 1
-
 // Grep runs `git grep -l -z -I -F -e needle`; exit 1 (no match) is none.
 func (c *Client) Grep(ctx context.Context, root, needle string) ([]string, error) {
 	res := c.runner.RunBuffered(ctx, root, "git", "grep", "-l", "-z", "-I", "-F", "-e",
@@ -196,6 +186,9 @@ func (c *Client) Grep(ctx context.Context, root, needle string) ([]string, error
 
 	return client.SplitNUL(out), err
 }
+
+// grepNoMatch is `git grep`'s exit status when nothing matches.
+const grepNoMatch = 1
 
 // Move runs `git mv -- from to`.
 func (c *Client) Move(ctx context.Context, root, from, to string) error {
@@ -233,4 +226,11 @@ func (c *Client) Tag(ctx context.Context, root string) (string, error) {
 	out, err := client.Output(res, "git describe")
 
 	return strings.TrimSpace(string(out)), err
+}
+
+// git runs git args in root and returns stdout or a coded error.
+func (c *Client) git(ctx context.Context, root string, args ...string) ([]byte, error) {
+	res := c.runner.RunBuffered(ctx, root, "git", args...)
+
+	return client.Output(res, "git "+args[0])
 }

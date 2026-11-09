@@ -15,6 +15,7 @@ import (
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/system"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -206,7 +207,7 @@ func TestBufferingRunner(t *testing.T) {
 // captureProcessStdio swaps os.Stdout and os.Stderr for pipes until the returned
 // function is called, which restores them and returns what each pipe received. The
 // originals are also restored in t.Cleanup, so a failing assertion never leaks the swap.
-// Callers must not be parallel: the process stdio is global.
+// The process stdio is global, so callers run through fixtures.ReexecTest.
 func captureProcessStdio(t *testing.T) func() (stdout, stderr string) {
 	t.Helper()
 
@@ -251,7 +252,14 @@ func captureProcessStdio(t *testing.T) func() (stdout, stderr string) {
 //     injected stderr writer, directly and through NewBuilder(...).Build() with every
 //     decorator, and nothing reaches the process's own stdout or stderr.
 func TestRunner_WritesChildOutputToInjectedWriters(t *testing.T) {
-	// Not parallel: swaps the process stdio.
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestRunner_WritesChildOutputToInjectedWriters")
+
+		return
+	}
+
 	ctx := context.Background()
 
 	var out, errOut bytes.Buffer
@@ -296,7 +304,14 @@ func TestRunner_WritesChildOutputToInjectedWriters(t *testing.T) {
 //   - NewRunner() streams a child's stdout to os.Stdout as it is at Run time — so a
 //     runner built before os.Stdout is reassigned still follows it.
 func TestRunner_DefaultsToProcessStdio(t *testing.T) {
-	// Not parallel: swaps the process stdio.
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestRunner_DefaultsToProcessStdio")
+
+		return
+	}
+
 	r := system.NewRunner()
 	stop := captureProcessStdio(t)
 

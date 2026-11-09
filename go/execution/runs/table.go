@@ -134,6 +134,94 @@ func (t *Table) Start(ctx context.Context, name string, input any) (string, erro
 	return id, nil
 }
 
+// Status returns run id's current snapshot (its steps so far while running). An
+// unknown id fails with CodeNotFound.
+func (t *Table) Status(id string) (Snapshot, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	r, ok := t.runs[id]
+	if !ok {
+		return Snapshot{}, notFound(id)
+	}
+
+	return r.snapshot(), nil
+}
+
+// Result returns run id's final snapshot. A run still running fails with
+// CodeConflict; an unknown id with CodeNotFound.
+func (t *Table) Result(id string) (Snapshot, error) {
+	snap, err := t.Status(id)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	if snap.State == StateRunning {
+		return Snapshot{}, apperr.New(apperr.CodeConflict, fmt.Sprintf(
+			"run %q is still running; poll its status", id,
+		))
+	}
+
+	return snap, nil
+}
+
+// outcome maps an operation's return to the state its run ends in.
+func outcome(err error) State {
+	switch {
+	case err == nil:
+		return StateSucceeded
+	case apperr.Code(err) == apperr.CodeCanceled:
+		return StateCancelled
+	default:
+		return StateFailed
+	}
+}
+
+// List returns every run's snapshot in start order.
+func (t *Table) List() []Snapshot {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	out := make([]Snapshot, 0, len(t.order))
+	for _, id := range t.order {
+		out = append(out, t.runs[id].snapshot())
+	}
+
+	return out
+}
+
+// Cancel cancels run id's context; the run ends cancelled once its operation returns.
+// Cancelling a finished run is a no-op; an unknown id fails with CodeNotFound.
+func (t *Table) Cancel(id string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	r, ok := t.runs[id]
+	if !ok {
+		return notFound(id)
+	}
+
+	r.cancel()
+
+	return nil
+}
+
+// CancelAll cancels every run and refuses any later Start: the front-end's shutdown.
+func (t *Table) CancelAll() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.closed = true
+	for _, r := range t.runs {
+		r.cancel()
+	}
+}
+
+// Wait blocks until every started run has ended and recorded its outcome.
+func (t *Table) Wait() {
+	t.wg.Wait()
+}
+
 // exec runs r's reserved operation to completion, then records its outcome: the log
 // paths onDone returns are stored before the run leaves StateRunning, so a finished
 // run's result always carries them, and an onDone error is joined onto the run's own
@@ -200,94 +288,6 @@ func (t *Table) trim() {
 	}
 
 	t.order = kept
-}
-
-// outcome maps an operation's return to the state its run ends in.
-func outcome(err error) State {
-	switch {
-	case err == nil:
-		return StateSucceeded
-	case apperr.Code(err) == apperr.CodeCanceled:
-		return StateCancelled
-	default:
-		return StateFailed
-	}
-}
-
-// Status returns run id's current snapshot (its steps so far while running). An
-// unknown id fails with CodeNotFound.
-func (t *Table) Status(id string) (Snapshot, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	r, ok := t.runs[id]
-	if !ok {
-		return Snapshot{}, notFound(id)
-	}
-
-	return r.snapshot(), nil
-}
-
-// Result returns run id's final snapshot. A run still running fails with
-// CodeConflict; an unknown id with CodeNotFound.
-func (t *Table) Result(id string) (Snapshot, error) {
-	snap, err := t.Status(id)
-	if err != nil {
-		return Snapshot{}, err
-	}
-
-	if snap.State == StateRunning {
-		return Snapshot{}, apperr.New(apperr.CodeConflict, fmt.Sprintf(
-			"run %q is still running; poll its status", id,
-		))
-	}
-
-	return snap, nil
-}
-
-// List returns every run's snapshot in start order.
-func (t *Table) List() []Snapshot {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	out := make([]Snapshot, 0, len(t.order))
-	for _, id := range t.order {
-		out = append(out, t.runs[id].snapshot())
-	}
-
-	return out
-}
-
-// Cancel cancels run id's context; the run ends cancelled once its operation returns.
-// Cancelling a finished run is a no-op; an unknown id fails with CodeNotFound.
-func (t *Table) Cancel(id string) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	r, ok := t.runs[id]
-	if !ok {
-		return notFound(id)
-	}
-
-	r.cancel()
-
-	return nil
-}
-
-// CancelAll cancels every run and refuses any later Start: the front-end's shutdown.
-func (t *Table) CancelAll() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	t.closed = true
-	for _, r := range t.runs {
-		r.cancel()
-	}
-}
-
-// Wait blocks until every started run has ended and recorded its outcome.
-func (t *Table) Wait() {
-	t.wg.Wait()
 }
 
 // notFound is the error for a run id the table never issued.

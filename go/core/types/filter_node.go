@@ -60,24 +60,6 @@ func marshalFilter(v any) ([]byte, error) {
 	return out, nil
 }
 
-// arms counts the arms n sets; a group counts as set when its slice is non-nil.
-func (n FilterNode) arms() int {
-	count := 0
-	if n.Clause != nil {
-		count++
-	}
-
-	if n.And != nil {
-		count++
-	}
-
-	if n.Or != nil {
-		count++
-	}
-
-	return count
-}
-
 // MarshalJSON writes n in the filter grammar. A node with more than one arm set is a
 // CodeInvalidInput error.
 func (n FilterNode) MarshalJSON() ([]byte, error) {
@@ -111,6 +93,24 @@ func (n *FilterNode) UnmarshalJSON(data []byte) error {
 	*n = node
 
 	return nil
+}
+
+// arms counts the arms n sets; a group counts as set when its slice is non-nil.
+func (n FilterNode) arms() int {
+	count := 0
+	if n.Clause != nil {
+		count++
+	}
+
+	if n.And != nil {
+		count++
+	}
+
+	if n.Or != nil {
+		count++
+	}
+
+	return count
 }
 
 // decodeFilterNode decodes one grammar object at the given nesting depth.

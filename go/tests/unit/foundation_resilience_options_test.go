@@ -1,5 +1,6 @@
 // Package foundation_test provides tests for resilience option functions,
 // sub-package DefaultConfig functions, and RetryWithResult.
+
 package unit_test
 
 import (

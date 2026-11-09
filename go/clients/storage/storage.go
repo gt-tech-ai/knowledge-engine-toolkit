@@ -80,7 +80,8 @@ func newS3(ctx context.Context, cfg Config, deps Deps) (interfaces.StorageClient
 		), nil
 	}
 
-	if err := cfg.S3.Validate(); err != nil {
+	err := cfg.S3.Validate()
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "invalid s3 config")
 	}
 

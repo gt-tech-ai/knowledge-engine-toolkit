@@ -31,6 +31,8 @@ const awssmConfigID = "app/staging/e2e/config"
 //   - Get resolves the Ref's secret id, decodes the SecretString JSON, and returns the
 //     mapped field's value.
 func TestAWSSMSource_GetExtractsJSONField(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockSecretsManagerAPI(ctrl)
 	blob := `{"client_id":"cid","client_secret":"csecret"}`
@@ -58,6 +60,8 @@ func TestAWSSMSource_GetExtractsJSONField(t *testing.T) {
 // What it tests:
 //   - Get returns CodeNotFound when the decoded JSON has no such field.
 func TestAWSSMSource_MissingFieldIsNotFound(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockSecretsManagerAPI(ctrl)
 	api.EXPECT().
@@ -89,6 +93,8 @@ func TestAWSSMSource_MissingFieldIsNotFound(t *testing.T) {
 // What it tests:
 //   - Get wraps a GetSecretValue error as CodeUpstream.
 func TestAWSSMSource_SDKErrorIsUpstream(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockSecretsManagerAPI(ctrl)
 	api.EXPECT().
@@ -114,6 +120,8 @@ func TestAWSSMSource_SDKErrorIsUpstream(t *testing.T) {
 // What it tests:
 //   - Put returns CodeInvalidInput (unsupported) without calling the SDK.
 func TestAWSSMSource_PutIsUnsupported(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockSecretsManagerAPI(ctrl) // no SDK call expected.
 

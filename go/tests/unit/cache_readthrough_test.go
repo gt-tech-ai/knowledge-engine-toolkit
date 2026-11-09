@@ -94,9 +94,9 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 				context.Background(), m, &sf, key, ttl, 1,
 				func() (int, error) {
 					loadCount.Add(1)
-					startOnce.Do(
-						func() { close(started) },
-					) // the winner signals it is in-flight
+					// The winner signals it is in-flight.
+					startOnce.Do(func() { close(started) })
+
 					<-release
 
 					return 42, nil

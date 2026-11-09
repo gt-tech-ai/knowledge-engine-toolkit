@@ -139,7 +139,8 @@ func (i *Installer) installDownload(
 		)
 	}
 
-	if err := os.MkdirAll(binDir, 0o750); err != nil {
+	err := os.MkdirAll(binDir, 0o750)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create install dir "+binDir)
 	}
 
@@ -158,7 +159,9 @@ func (i *Installer) installDownload(
 	}
 
 	member := cmp.Or(artifact.Member, binary)
-	if err := placeBinary(archive, artifact.URL, member, binary, binDir); err != nil {
+
+	err = placeBinary(archive, artifact.URL, member, binary, binDir)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "install "+toolName)
 	}
 
@@ -200,7 +203,9 @@ func (i *Installer) fetchVerified(
 	}
 
 	closeErr := tmp.Close()
-	if err := apperr.Join(copyErr, closeErr); err != nil {
+
+	err = apperr.Join(copyErr, closeErr)
+	if err != nil {
 		_ = os.Remove(tmp.Name())
 
 		return "", apperr.Wrap(err, apperr.CodeUnavailable, "read "+artifact.URL)
@@ -232,19 +237,22 @@ func placeBinary(artifactPath, url, member, binary, binDir string) error {
 	writeErr := extractBinary(artifactPath, url, member, staged)
 	closeErr := staged.Close()
 
-	if err := apperr.Join(writeErr, closeErr); err != nil {
+	err = apperr.Join(writeErr, closeErr)
+	if err != nil {
 		_ = os.Remove(stagedPath)
 
 		return err
 	}
 
-	if err := os.Chmod(stagedPath, 0o755); err != nil {
+	err = os.Chmod(stagedPath, 0o755)
+	if err != nil {
 		_ = os.Remove(stagedPath)
 
 		return apperr.Wrap(err, apperr.CodeInternal, "mark binary executable")
 	}
 
-	if err := os.Rename(stagedPath, filepath.Join(binDir, binary)); err != nil {
+	err = os.Rename(stagedPath, filepath.Join(binDir, binary))
+	if err != nil {
 		_ = os.Remove(stagedPath)
 
 		return apperr.Wrap(err, apperr.CodeInternal, "place binary "+binary)

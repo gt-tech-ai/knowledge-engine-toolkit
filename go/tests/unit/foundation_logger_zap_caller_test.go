@@ -12,6 +12,7 @@ import (
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	zaplogger "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/logger/zap"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // zapCaptureStdout runs fn with os.Stdout redirected to a pipe and returns what
@@ -70,6 +71,14 @@ func zapLastJSONLine(t *testing.T, s string) map[string]any {
 //   - An Info call's caller field excludes zap/logger.go and points at the
 //     calling code (this test file).
 func TestZapLogger_CallerIsCallSite(t *testing.T) {
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestZapLogger_CallerIsCallSite")
+
+		return
+	}
+
 	out := zapCaptureStdout(t, func() {
 		zaplogger.New(zaplogger.Config{Level: "info", Format: "json", RedactPII: false}).
 			Info("hello")
@@ -97,6 +106,14 @@ func TestZapLogger_CallerIsCallSite(t *testing.T) {
 //   - The error object's stack and the top-level stacktrace are rooted at the
 //     caller (this test file), not the logging call site (logger/zap/logger.go).
 func TestZapLogger_AppErrorSurfacesCauseAndStack(t *testing.T) {
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestZapLogger_AppErrorSurfacesCauseAndStack")
+
+		return
+	}
+
 	out := zapCaptureStdout(t, func() {
 		underlying := apperr.Sentinel(
 			`ERROR: column "deleted_at" does not exist (SQLSTATE 42703)`,
@@ -144,6 +161,14 @@ func TestZapLogger_AppErrorSurfacesCauseAndStack(t *testing.T) {
 // What it tests:
 //   - A Warn call produces a record with level="warn" and the given message.
 func TestZapLogger_LevelAndMessage(t *testing.T) {
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestZapLogger_LevelAndMessage")
+
+		return
+	}
+
 	out := zapCaptureStdout(t, func() {
 		zaplogger.New(zaplogger.Config{Level: "info", Format: "json", RedactPII: false}).
 			Warn("careful")

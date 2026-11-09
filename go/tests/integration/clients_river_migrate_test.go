@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -26,6 +26,8 @@ import (
 // What it tests:
 //   - river.Migrate(ctx, dsn) creates the river_job and river_leader tables.
 func TestRiverMigrate_CreatesRiverSchema(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	db, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err, "start test database")

@@ -126,6 +126,7 @@ func parse(src []byte) ([]code, error) {
 
 	for i := range tx.Codes {
 		c := &tx.Codes[i]
+
 		err := validate(c, seen)
 		if err != nil {
 			return nil, err

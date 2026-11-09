@@ -150,6 +150,24 @@ func zipOf(t *testing.T, name string, body []byte) []byte {
 //     is empty (the downloaded artifact is removed), and no command is run (the strict
 //     runner mock has no expectations).
 func TestClientsToolchainInstall_VerifiesSHA256BeforePlacingBinary(t *testing.T) {
+	if fixtures.InReexec() {
+		runClientsToolchainInstallVerifiesSHA256BeforePlacingBinary(t)
+
+		return
+	}
+
+	t.Parallel()
+	fixtures.ReexecTest(
+		t,
+		"TestClientsToolchainInstall_VerifiesSHA256BeforePlacingBinary",
+	)
+}
+
+// runClientsToolchainInstallVerifiesSHA256BeforePlacingBinary is the test's body.
+// It runs in a child process, where setting the environment cannot reach another test.
+func runClientsToolchainInstallVerifiesSHA256BeforePlacingBinary(t *testing.T) {
+	t.Helper()
+
 	cases := []struct {
 		name     string
 		url      string
@@ -238,6 +256,24 @@ func TestClientsToolchainInstall_VerifiesSHA256BeforePlacingBinary(t *testing.T)
 //     missing "pinned" entry, and both the install dir and the temp dir are empty.
 //   - A failing Fetch fails the install and leaves the install dir empty.
 func TestClientsToolchainInstall_LeavesNothingWhenTheArtifactIsUnusable(t *testing.T) {
+	if fixtures.InReexec() {
+		runClientsToolchainInstallLeavesNothingWhenTheArtifactIsUnusable(t)
+
+		return
+	}
+
+	t.Parallel()
+	fixtures.ReexecTest(
+		t,
+		"TestClientsToolchainInstall_LeavesNothingWhenTheArtifactIsUnusable",
+	)
+}
+
+// runClientsToolchainInstallLeavesNothingWhenTheArtifactIsUnusable is the test's body.
+// It runs in a child process, where setting the environment cannot reach another test.
+func runClientsToolchainInstallLeavesNothingWhenTheArtifactIsUnusable(t *testing.T) {
+	t.Helper()
+
 	url := "https://example.test/pinned_linux_amd64.tar.gz"
 	install := func(t *testing.T, dl *mocks.MockDownloader, sha string) error {
 		t.Helper()
@@ -305,6 +341,24 @@ func TestClientsToolchainInstall_LeavesNothingWhenTheArtifactIsUnusable(t *testi
 //     error naming the mismatch, and both the install dir and the temp dir are
 //     empty afterwards.
 func TestClientsToolchainInstall_FailsAndLeavesNothingOnChecksumMismatch(t *testing.T) {
+	if fixtures.InReexec() {
+		runClientsToolchainInstallFailsAndLeavesNothingOnChecksumMismatch(t)
+
+		return
+	}
+
+	t.Parallel()
+	fixtures.ReexecTest(
+		t,
+		"TestClientsToolchainInstall_FailsAndLeavesNothingOnChecksumMismatch",
+	)
+}
+
+// runClientsToolchainInstallFailsAndLeavesNothingOnChecksumMismatch is the test's body.
+// It runs in a child process, where setting the environment cannot reach another test.
+func runClientsToolchainInstallFailsAndLeavesNothingOnChecksumMismatch(t *testing.T) {
+	t.Helper()
+
 	binDir, tmpDir := isolateInstallDirs(t)
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
@@ -345,6 +399,21 @@ func TestClientsToolchainInstall_FailsAndLeavesNothingOnChecksumMismatch(t *test
 //     SHA-256, Install returns an error naming the platform, never calls the
 //     download seam (strict mock), and leaves the install dir empty.
 func TestClientsToolchainInstall_FailsWhenPlatformChecksumMissing(t *testing.T) {
+	if fixtures.InReexec() {
+		runClientsToolchainInstallFailsWhenPlatformChecksumMissing(t)
+
+		return
+	}
+
+	t.Parallel()
+	fixtures.ReexecTest(t, "TestClientsToolchainInstall_FailsWhenPlatformChecksumMissing")
+}
+
+// runClientsToolchainInstallFailsWhenPlatformChecksumMissing is the test's body.
+// It runs in a child process, where setting the environment cannot reach another test.
+func runClientsToolchainInstallFailsWhenPlatformChecksumMissing(t *testing.T) {
+	t.Helper()
+
 	cases := map[string]map[string]types.Artifact{
 		"no artifact for the platform": {
 			"darwin-arm64": {URL: "https://example.test/darwin", SHA256: sha256Hex(nil)},

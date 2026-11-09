@@ -75,11 +75,13 @@ func ContextWithForcedSample(ctx context.Context) context.Context {
 		sid oteltrace.SpanID
 	)
 
-	if _, err := rand.Read(tid[:]); err != nil {
+	_, err := rand.Read(tid[:])
+	if err != nil {
 		return ctx
 	}
 
-	if _, err := rand.Read(sid[:]); err != nil {
+	_, err = rand.Read(sid[:])
+	if err != nil {
 		return ctx
 	}
 

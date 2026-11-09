@@ -20,15 +20,16 @@ import (
 // lookup is a read, and a re-sent batch only risks a duplicate the outbox's
 // at-least-once contract already allows.
 func decorateSQS(inner outboxsqs.API, c client.Base) outboxsqs.API {
-	return &sqsAPI{inner: inner, Base: c}
+	return &sqsAPI{inner: inner, Base: &c}
 }
 
 // sqsAPI is the decorated SQS seam.
 type sqsAPI struct {
+	// Base runs the calls through the client tier.
+	*client.Base
+
 	// inner is the wrapped client.
 	inner outboxsqs.API
-	// Base runs the calls through the client tier.
-	client.Base
 }
 
 // GetQueueUrl resolves the queue URL through the client tier.
@@ -67,15 +68,16 @@ func (a *sqsAPI) SendMessageBatch(
 // is retried only when its body can be rewound, and it is rewound before every
 // attempt so a retry writes the whole payload.
 func decorateS3(inner outboxs3.API, c client.Base) outboxs3.API {
-	return &s3API{inner: inner, Base: c}
+	return &s3API{inner: inner, Base: &c}
 }
 
 // s3API is the decorated S3 seam.
 type s3API struct {
+	// Base runs the calls through the client tier.
+	*client.Base
+
 	// inner is the wrapped client.
 	inner outboxs3.API
-	// Base runs the calls through the client tier.
-	client.Base
 }
 
 // PutObject writes one object through the client tier.
@@ -85,7 +87,8 @@ func (a *s3API) PutObject(
 	seeker, rewindable := in.Body.(io.Seeker)
 	put := func(ctx context.Context) (*awss3.PutObjectOutput, error) {
 		if rewindable {
-			if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			_, err := seeker.Seek(0, io.SeekStart)
+			if err != nil {
 				return nil, apperr.Wrap(
 					err,
 					apperr.CodeInternal,

@@ -3,6 +3,7 @@
 // AppError, the wrapped-cause branches of the Zap marshallers, and the
 // transaction-context and span-kind option helpers in core/interfaces. Every
 // test is black-box (external package) and asserts observable behaviour only.
+
 package unit_test
 
 import (

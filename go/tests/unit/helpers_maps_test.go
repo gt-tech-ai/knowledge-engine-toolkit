@@ -20,6 +20,8 @@ import (
 // What it tests:
 //   - present map → that map; missing key → nil; string value → nil; nil map → nil.
 func TestGetMap(t *testing.T) {
+	t.Parallel()
+
 	nested := map[string]any{"a": 1}
 	m := map[string]any{"obj": nested, "str": "x"}
 
@@ -39,6 +41,8 @@ func TestGetMap(t *testing.T) {
 // What it tests:
 //   - present slice → that slice; missing key → nil; map value → nil; nil map → nil.
 func TestGetSlice(t *testing.T) {
+	t.Parallel()
+
 	items := []any{"x", "y"}
 	m := map[string]any{"list": items, "obj": map[string]any{}}
 
@@ -65,6 +69,8 @@ func TestGetSlice(t *testing.T) {
 // What it tests:
 //   - present string → that string; missing key → ""; int value → ""; nil map → "".
 func TestGetString(t *testing.T) {
+	t.Parallel()
+
 	m := map[string]any{"name": "user", "count": 3}
 
 	require.Equal(
@@ -93,6 +99,8 @@ func TestGetString(t *testing.T) {
 // What it tests:
 //   - map value → that map; string value → nil; nil value → nil.
 func TestAsMap(t *testing.T) {
+	t.Parallel()
+
 	inner := map[string]any{"k": "v"}
 
 	require.Equal(t, inner, helpers.AsMap(any(inner)), "map value returns the map")

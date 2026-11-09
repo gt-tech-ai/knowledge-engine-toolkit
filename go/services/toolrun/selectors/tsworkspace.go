@@ -39,7 +39,8 @@ func (tsWorkspace) Select(
 		Packages []string `yaml:"packages"`
 	}
 
-	if err := yaml.Unmarshal(text.Bytes, &ws); err != nil {
+	err = yaml.Unmarshal(text.Bytes, &ws)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+workspaceFile)
 	}
 

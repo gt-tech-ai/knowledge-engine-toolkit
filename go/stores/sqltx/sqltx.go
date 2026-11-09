@@ -68,11 +68,14 @@ func (m *Manager) WithTransaction(
 	defer func() { _ = tx.Rollback() }()
 
 	txCtx := interfaces.WithAfterCommit(interfaces.WithInTx(store.WithClient(ctx, tx)))
-	if err := fn(txCtx); err != nil {
+
+	err = fn(txCtx)
+	if err != nil {
 		return err
 	}
 
-	if err := tx.Commit(); err != nil {
+	err = tx.Commit()
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeOr(err, apperr.CodeUnavailable),

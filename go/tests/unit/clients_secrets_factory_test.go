@@ -49,6 +49,8 @@ func TestNewFromConfig_EnvKindResolves(t *testing.T) {
 // What it tests:
 //   - NewFromConfig(KindFile) with no Runner returns CodeInvalidInput.
 func TestNewFromConfig_FileKindRequiresRunner(t *testing.T) {
+	t.Parallel()
+
 	_, err := secrets.NewFromConfig(
 		context.Background(),
 		secrets.Config{Kind: secrets.KindFile},
@@ -66,6 +68,8 @@ func TestNewFromConfig_FileKindRequiresRunner(t *testing.T) {
 // What it tests:
 //   - NewFromConfig(KindFile) with a Runner returns a non-nil Source and no error.
 func TestNewFromConfig_FileKindBuildsWithRunner(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
 

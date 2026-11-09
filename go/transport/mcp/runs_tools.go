@@ -134,7 +134,8 @@ func (s *Server) addRunsTools() {
 		})
 	s.addRunTool("runs.cancel", "Cancel a background run (a no-op once it has ended)",
 		func(id string) (*sdkmcp.CallToolResult, error) {
-			if err := s.table.Cancel(id); err != nil {
+			err := s.table.Cancel(id)
+			if err != nil {
 				return replyErr(err)
 			}
 

@@ -20,6 +20,8 @@ import (
 // What it tests:
 //   - Missing path → false, after writing the file → true, directory path → false.
 func TestFileExists(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file.txt")
 	require.False(t, helpers.FileExists(path), "expected false for non-existent file")
@@ -39,6 +41,8 @@ func TestFileExists(t *testing.T) {
 // What it tests:
 //   - An existing temp dir → true; a non-existent child path → false.
 func TestDirExists(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	require.True(t, helpers.DirExists(dir), "expected true for existing dir")
 	require.False(
@@ -73,6 +77,8 @@ func TestOrDefault(t *testing.T) {
 // What it tests:
 //   - A slice with repeats reduces to the count of distinct elements.
 func TestUnique(t *testing.T) {
+	t.Parallel()
+
 	got := helpers.Unique([]string{"a", "b", "a", "c", "b"})
 	require.Len(t, got, 3)
 }
@@ -87,6 +93,8 @@ func TestUnique(t *testing.T) {
 // What it tests:
 //   - Three paths sharing two parent dirs collapse to two unique directories.
 func TestUniqueDirs(t *testing.T) {
+	t.Parallel()
+
 	got := helpers.UniqueDirs([]string{"/a/b/c.go", "/a/b/d.go", "/x/y.go"})
 	require.Len(t, got, 2)
 }
@@ -103,6 +111,8 @@ func TestUniqueDirs(t *testing.T) {
 //   - An over-length string is cut to the limit; a shorter string and the empty
 //     string pass through unchanged.
 func TestTruncate(t *testing.T) {
+	t.Parallel()
+
 	require.Equal(t, "hello", helpers.Truncate("hello world", 5))
 	require.Equal(t, "hi", helpers.Truncate("hi", 10))
 	require.Empty(t, helpers.Truncate("", 5))
@@ -119,6 +129,8 @@ func TestTruncate(t *testing.T) {
 // What it tests:
 //   - Digit strings → true; empty, alphabetic, mixed, and signed inputs → false.
 func TestIsAllDigits(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		in   string
 		want bool
@@ -145,6 +157,8 @@ func TestIsAllDigits(t *testing.T) {
 // What it tests:
 //   - Lower/upper hex and digits → true; empty and non-hex letters → false.
 func TestIsHex(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		in   string
 		want bool
@@ -171,6 +185,8 @@ func TestIsHex(t *testing.T) {
 //   - A canonical UUID → true; wrong length, misplaced separators, and non-hex
 //     bytes → false.
 func TestIsUUID(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		in   string
 		want bool

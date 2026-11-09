@@ -26,7 +26,7 @@ func Decorate(
 		return nil, err
 	}
 
-	d := &decorated{base: base, Base: b}
+	d := &decorated{base: base, Base: &b}
 	if keyed, ok := base.(interfaces.KeyedPublisher); ok {
 		return &decoratedKeyed{decorated: d, keyed: keyed}, nil
 	}
@@ -36,11 +36,11 @@ func Decorate(
 
 // decorated runs each MessagePublisher operation through the client tier.
 type decorated struct {
+	// Base runs the operations.
+	*client.Base
+
 	// base is the wrapped publisher.
 	base interfaces.MessagePublisher
-
-	// Base runs the operations.
-	client.Base
 }
 
 var _ interfaces.MessagePublisher = (*decorated)(nil)

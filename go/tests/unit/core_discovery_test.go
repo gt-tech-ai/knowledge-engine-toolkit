@@ -25,7 +25,11 @@ import (
 //   - an error returned by the wrapped function is propagated so errors.Is
 //     still matches the original sentinel
 func TestDiscovererFunc_Discover(t *testing.T) {
+	t.Parallel()
+
 	t.Run("delegates to the wrapped function", func(t *testing.T) {
+		t.Parallel()
+
 		want := []string{"a", "b"}
 		f := interfaces.DiscovererFunc[string](
 			func(_ context.Context, root string) ([]string, error) {
@@ -41,6 +45,8 @@ func TestDiscovererFunc_Discover(t *testing.T) {
 	})
 
 	t.Run("propagates errors from the wrapped function", func(t *testing.T) {
+		t.Parallel()
+
 		sentinel := apperr.Sentinel("discover failed")
 		f := interfaces.DiscovererFunc[string](
 			func(_ context.Context, _ string) ([]string, error) {

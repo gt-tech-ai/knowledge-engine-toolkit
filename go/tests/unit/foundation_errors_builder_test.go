@@ -1,6 +1,7 @@
 // Package foundation_test verifies foundation-layer infrastructure helpers:
 // DB error mappers, cache decorators, options application, and middleware
 // chains. All external I/O is mocked; no real databases or networks are used.
+
 package unit_test
 
 import (
