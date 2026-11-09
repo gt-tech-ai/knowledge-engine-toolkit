@@ -30,9 +30,11 @@ type ErrorResponse struct {
 // MapErrorToHTTPStatus maps AppError to HTTP status codes.
 func MapErrorToHTTPStatus(err error) int {
 	var appErr *apperr.AppError
+
 	if apperr.As(err, &appErr) {
 		return apperr.ToHTTPStatus(appErr.Code)
 	}
+
 	return http.StatusInternalServerError
 }
 
@@ -42,11 +44,15 @@ func (c *BaseController) WriteJSON(w http.ResponseWriter, status int, data inter
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
+
 		_, _ = w.Write([]byte(`{"error":"internal server error"}`))
+
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
+
 	_, _ = w.Write(body)
 }
 
@@ -58,6 +64,7 @@ func (c *BaseController) WriteError(w http.ResponseWriter, err error) {
 	}
 
 	var appErr *apperr.AppError
+
 	if apperr.As(err, &appErr) {
 		response.Code = string(appErr.Code)
 		// Expose the message unless the code hides it (taxonomy hide_message).

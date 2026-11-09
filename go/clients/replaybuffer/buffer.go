@@ -79,6 +79,7 @@ func kinds() client.Kinds[Config, Deps, interfaces.ReplayBuffer] {
 						"replay redis kind requires a redis client",
 					)
 				}
+
 				return bufredis.New(deps.Redis, bufredis.Config{
 					MaxSize:   cfg.MaxSize,
 					TTL:       cfg.TTL,
@@ -103,8 +104,10 @@ func NewFromConfig(
 			"replay max_size must be positive",
 		)
 	}
+
 	if cfg.TTL <= 0 {
 		return nil, apperr.New(apperr.CodeInvalidInput, "replay ttl must be positive")
 	}
+
 	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
 }

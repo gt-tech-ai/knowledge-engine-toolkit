@@ -18,30 +18,37 @@ func Apply(
 	dryRun bool,
 ) error {
 	var conflicts []string
+
 	for _, e := range plan.Entries {
 		if e.Action == types.FileConflict {
 			conflicts = append(conflicts, e.Path+": "+e.Reason)
 		}
 	}
+
 	if len(conflicts) > 0 {
 		return apperr.New(
 			apperr.CodeConflict,
 			"scaffold conflicts: "+strings.Join(conflicts, "; "),
 		)
 	}
+
 	if dryRun {
 		return nil
 	}
+
 	for _, e := range plan.Entries {
 		if e.Action != types.FileCreate && e.Action != types.FileUpdate {
 			continue
 		}
+
 		if err := ctx.Err(); err != nil {
 			return apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled), "apply")
 		}
+
 		if err := write(e.Path, e.Content); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }

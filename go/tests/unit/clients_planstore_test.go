@@ -32,10 +32,12 @@ func planSet(dir string) types.PlanSet {
 // newObjectStore builds the object-store plan store over storage.
 func newObjectStore(t *testing.T, storage interfaces.StorageClient) interfaces.PlanStore {
 	t.Helper()
+
 	ps, err := planstore.NewFromConfig(t.Context(),
 		planstore.Config{Kind: planstore.KindObject},
 		planstore.Deps{Decorations: fixtures.Decorations(), Storage: storage})
 	require.NoError(t, err)
+
 	return ps
 }
 
@@ -61,6 +63,7 @@ func writePlan(t *testing.T, dir, unit, body string) {
 //     bytes with 0o600 files under 0o700 directories.
 func TestPlanStore_RoundTrip(t *testing.T) {
 	t.Parallel()
+
 	src := t.TempDir()
 	writePlan(t, src, "vpc", "plan-vpc")
 	writePlan(t, src, "eks", "plan-eks")
@@ -71,7 +74,9 @@ func TestPlanStore_RoundTrip(t *testing.T) {
 		Upload(gomock.Any(), "state", gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, key string, body io.Reader, _ string) error {
 			b, err := io.ReadAll(body)
+
 			stored[key] = b
+
 			return apperr.Wrap(err, apperr.CodeInternal, "read the upload body")
 		}).
 		Times(2)
@@ -79,6 +84,7 @@ func TestPlanStore_RoundTrip(t *testing.T) {
 		DoAndReturn(func(_ context.Context, _, key string) (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(stored[key])), nil
 		}).Times(2)
+
 	ps := newObjectStore(t, storage)
 
 	require.NoError(t, ps.Save(t.Context(), planSet(src)))
@@ -93,12 +99,15 @@ func TestPlanStore_RoundTrip(t *testing.T) {
 		os.WriteFile(filepath.Join(dst, "plan-manifest.json"), manifest, 0o600),
 	)
 	require.NoError(t, ps.Load(t.Context(), planSet(dst)))
+
 	got, err := os.ReadFile(filepath.Join(dst, "vpc", "tfplan.tfplan"))
 	require.NoError(t, err)
 	assert.Equal(t, "plan-vpc", string(got))
+
 	info, err := os.Stat(filepath.Join(dst, "vpc", "tfplan.tfplan"))
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+
 	dirInfo, err := os.Stat(filepath.Join(dst, "vpc"))
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o700), dirInfo.Mode().Perm())
@@ -107,18 +116,22 @@ func TestPlanStore_RoundTrip(t *testing.T) {
 // manifestFor writes a manifest for owner listing unit → key, sha256 into dir.
 func manifestFor(t *testing.T, dir, owner string, units ...[3]string) {
 	t.Helper()
+
 	type unit struct {
 		Unit   string `json:"unit"`
 		Key    string `json:"key"`
 		SHA256 string `json:"sha256"`
 	}
+
 	m := struct {
 		Owner string `json:"owner"`
 		Units []unit `json:"units"`
 	}{Owner: owner}
+
 	for _, u := range units {
 		m.Units = append(m.Units, unit{Unit: u[0], Key: u[1], SHA256: u[2]})
 	}
+
 	data, err := json.Marshal(m)
 	require.NoError(t, err)
 	require.NoError(
@@ -141,29 +154,37 @@ func manifestFor(t *testing.T, dir, owner string, units ...[3]string) {
 //     and a key outside the prefix are INVALID_INPUT with no download.
 func TestPlanStore_LoadRefusesUntrustedPlans(t *testing.T) {
 	t.Parallel()
+
 	key := "plans/stg/42-1/vpc/tfplan.tfplan"
 
 	t.Run("sha mismatch", func(t *testing.T) {
 		t.Parallel()
+
 		dir := t.TempDir()
 		manifestFor(t, dir, "stg", [3]string{"vpc", key, "00"})
+
 		storage := mocks.NewMockStorageClient(gomock.NewController(t))
 		storage.EXPECT().Download(gomock.Any(), "state", key).
 			Return(io.NopCloser(bytes.NewReader([]byte("swapped"))), nil)
+
 		err := newObjectStore(t, storage).Load(t.Context(), planSet(dir))
 		assert.True(t, apperr.Is(err, apperr.CodeConflict), "got %v", err)
 		assert.Contains(t, err.Error(), "vpc")
+
 		_, statErr := os.Stat(filepath.Join(dir, "vpc", "tfplan.tfplan"))
 		assert.ErrorIs(t, statErr, os.ErrNotExist)
 	})
 
 	t.Run("expired", func(t *testing.T) {
 		t.Parallel()
+
 		dir := t.TempDir()
 		manifestFor(t, dir, "stg", [3]string{"vpc", key, "00"})
+
 		storage := mocks.NewMockStorageClient(gomock.NewController(t))
 		storage.EXPECT().Download(gomock.Any(), "state", key).
 			Return(nil, apperr.NotFound("object state/"+key))
+
 		err := newObjectStore(t, storage).Load(t.Context(), planSet(dir))
 		assert.True(t, apperr.Is(err, apperr.CodeNotFound), "got %v", err)
 		assert.Contains(t, err.Error(), key)
@@ -175,12 +196,16 @@ func TestPlanStore_LoadRefusesUntrustedPlans(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			dir := t.TempDir()
 			owner := "stg"
+
 			if name == "another owner" {
 				owner = "prod"
 			}
+
 			manifestFor(t, dir, owner, units)
+
 			storage := mocks.NewMockStorageClient(gomock.NewController(t))
 			err := newObjectStore(t, storage).Load(t.Context(), planSet(dir))
 			assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
@@ -199,13 +224,16 @@ func TestPlanStore_LoadRefusesUntrustedPlans(t *testing.T) {
 //     kind with no storage client and an unknown kind are INVALID_INPUT.
 func TestPlanStore_Kinds(t *testing.T) {
 	t.Parallel()
+
 	local, err := planstore.NewFromConfig(t.Context(), planstore.Config{},
 		planstore.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
+
 	dir := t.TempDir()
 	writePlan(t, dir, "vpc", "plan")
 	require.NoError(t, local.Save(t.Context(), planSet(dir)))
 	require.NoError(t, local.Load(t.Context(), planSet(dir)))
+
 	_, statErr := os.Stat(filepath.Join(dir, "plan-manifest.json"))
 	require.ErrorIs(t, statErr, os.ErrNotExist, "local writes no manifest")
 

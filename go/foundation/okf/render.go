@@ -20,6 +20,7 @@ func RenderFrontmatter(fm Frontmatter) []byte {
 	add := func(key string, value *yaml.Node) {
 		node.Content = append(node.Content, scalar(key), value)
 	}
+
 	for _, kv := range []struct{ key, value string }{
 		{keyOKFVersion, fm.OKFVersion},
 		{"type", fm.Type},
@@ -31,13 +32,16 @@ func RenderFrontmatter(fm Frontmatter) []byte {
 			add(kv.key, scalar(kv.value))
 		}
 	}
+
 	if len(fm.Tags) > 0 {
 		tags := &yaml.Node{Kind: yaml.SequenceNode, Style: yaml.FlowStyle}
 		for _, t := range fm.Tags {
 			tags.Content = append(tags.Content, scalar(t))
 		}
+
 		add("tags", tags)
 	}
+
 	for _, kv := range []struct{ key, value string }{
 		{"status", fm.Status}, {"stale_after", fm.StaleAfter},
 	} {
@@ -45,9 +49,11 @@ func RenderFrontmatter(fm Frontmatter) []byte {
 			add(kv.key, scalar(kv.value))
 		}
 	}
+
 	if fm.Generated != nil {
 		add("generated", attribution(*fm.Generated))
 	}
+
 	switch len(fm.Verified) {
 	case 0:
 	case 1:
@@ -57,28 +63,39 @@ func RenderFrontmatter(fm Frontmatter) []byte {
 		for _, a := range fm.Verified {
 			list.Content = append(list.Content, attribution(a))
 		}
+
 		add("verified", list)
 	}
+
 	keys := make([]string, 0, len(fm.Extra))
 	for k := range fm.Extra {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
+
 	for _, k := range keys {
 		var value yaml.Node
+
 		if err := value.Encode(fm.Extra[k]); err == nil {
 			add(k, &value)
 		}
 	}
+
 	var buf bytes.Buffer
+
 	buf.WriteString(fence + "\n")
+
 	if len(node.Content) > 0 {
 		enc := yaml.NewEncoder(&buf)
 		enc.SetIndent(2)
+
 		_ = enc.Encode(node) // a tree of strings and decoded values always encodes
 		_ = enc.Close()
 	}
+
 	buf.WriteString(fence + "\n")
+
 	return buf.Bytes()
 }
 
@@ -91,10 +108,13 @@ func scalar(v string) *yaml.Node {
 // attribution is a flow-style {by, at} mapping.
 func attribution(a Attribution) *yaml.Node {
 	m := &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle}
+
 	m.Content = append(m.Content, scalar("by"), scalar(a.By))
+
 	if a.At != "" {
 		m.Content = append(m.Content, scalar("at"), scalar(a.At))
 	}
+
 	return m
 }
 
@@ -105,10 +125,12 @@ func (f Frontmatter) Stale(now time.Time) (bool, error) {
 	if f.StaleAfter == "" {
 		return false, nil
 	}
+
 	at, err := time.Parse(time.RFC3339, f.StaleAfter)
 	if err != nil {
 		at, err = time.Parse(time.DateOnly, f.StaleAfter)
 	}
+
 	if err != nil {
 		return false, apperr.Wrap(
 			err,
@@ -116,6 +138,7 @@ func (f Frontmatter) Stale(now time.Time) (bool, error) {
 			"stale_after is not an RFC 3339 datetime",
 		)
 	}
+
 	return !now.Before(at), nil
 }
 
@@ -130,30 +153,41 @@ func RenderIndex(entries []IndexEntry) []byte {
 		if a.Section != b.Section {
 			return a.Section < b.Section
 		}
+
 		if ta, tb := strings.ToLower(a.Title), strings.ToLower(b.Title); ta != tb {
 			return ta < tb
 		}
+
 		return a.Link < b.Link
 	})
-	var blocks []string
-	var block strings.Builder
+
+	var (
+		blocks []string
+		block  strings.Builder
+	)
+
 	section := ""
+
 	for i, e := range sorted {
 		if i == 0 || e.Section != section {
 			if block.Len() > 0 {
 				blocks = append(blocks, block.String())
 				block.Reset()
 			}
+
 			section = e.Section
 			if section != "" {
 				block.WriteString("# " + section + "\n\n")
 			}
 		}
+
 		block.WriteString(entryLine(e))
 	}
+
 	if block.Len() > 0 {
 		blocks = append(blocks, block.String())
 	}
+
 	return []byte(strings.Join(blocks, "\n"))
 }
 
@@ -162,9 +196,11 @@ func RenderIndex(entries []IndexEntry) []byte {
 func entryLine(e IndexEntry) string {
 	title := strings.NewReplacer("[", `\[`, "]", `\]`).Replace(e.Title)
 	line := "* [" + title + "](" + e.Link + ")"
+
 	if d := strings.Join(strings.Fields(e.Description), " "); d != "" {
 		line += " - " + d
 	}
+
 	return line + "\n"
 }
 
@@ -172,5 +208,6 @@ func entryLine(e IndexEntry) string {
 // block, a blank line, then the RenderIndex body.
 func RenderRootIndex(okfVersion string, entries []IndexEntry) []byte {
 	head := RenderFrontmatter(Frontmatter{OKFVersion: okfVersion})
+
 	return append(append(head, '\n'), RenderIndex(entries)...)
 }

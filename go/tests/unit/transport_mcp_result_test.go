@@ -24,9 +24,11 @@ import (
 // numberedLines returns n lines "line 1" … "line n", newline-terminated.
 func numberedLines(n int) []byte {
 	var b strings.Builder
+
 	for i := 1; i <= n; i++ {
 		fmt.Fprintf(&b, "line %d\n", i)
 	}
+
 	return []byte(b.String())
 }
 
@@ -40,6 +42,7 @@ func emitSteps(
 		for _, s := range steps {
 			obs.OnStepComplete(s)
 		}
+
 		return err
 	}
 }
@@ -52,13 +55,18 @@ func callStub(
 	opts mcp.Options,
 ) (*sdkmcp.CallToolResult, mcp.ToolResult) {
 	t.Helper()
+
 	srv, err := mcp.New(reg, opts)
 	require.NoError(t, err)
+
 	res, err := connectMCP(t, srv).CallTool(context.Background(),
 		&sdkmcp.CallToolParams{Name: "stub"})
 	require.NoError(t, err)
+
 	var out mcp.ToolResult
+
 	require.NoError(t, json.Unmarshal([]byte(toolText(t, res)), &out))
+
 	return res, out
 }
 
@@ -103,10 +111,12 @@ func TestTransportMcpToolResult_IsStepsPlusFailedTails(t *testing.T) {
 	res, out := callStub(t, reg, mcpOpts(t))
 
 	assert.True(t, res.IsError)
+
 	got := make([]string, 0, len(out.Steps))
 	for _, s := range out.Steps {
 		got = append(got, s.Step+" "+s.Status)
 	}
+
 	assert.Equal(t, []string{
 		"gofmt PASS",
 		"golangci-lint FAIL",
@@ -151,7 +161,9 @@ func TestTransportMcpFailedStepTail_RespectsConfigN(t *testing.T) {
 		},
 	))
 	opts := mcpOpts(t)
+
 	opts.Settings.TailLines = 3
+
 	_, out := callStub(t, reg, opts)
 
 	assert.Equal(t, "line 8\nline 9\nline 10\n", out.FailedTails["vet"])
@@ -188,6 +200,7 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 
 	require.Len(t, logs, 5)
 	assert.Empty(t, logs[1])
+
 	path := logs[0]
 	assert.Equal(t, filepath.Join(root, id), filepath.Dir(path))
 	assert.NotContains(t, filepath.Base(path), "/")
@@ -196,6 +209,7 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 		[]string{"cmd_tool_x-2.log", "cmd_tool_x-3.log", "cmd_tool_x-4.log"},
 		[]string{filepath.Base(logs[2]), filepath.Base(logs[3]), filepath.Base(logs[4])},
 	)
+
 	for i, want := range map[int]string{
 		0: "ok\n",
 		2: "literal\n",
@@ -206,6 +220,7 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 		require.NoError(t, rerr)
 		assert.Equal(t, want, string(got), "step %d", i)
 	}
+
 	info, err := os.Stat(path)
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
@@ -230,15 +245,19 @@ func TestTransportMcpOldRuns_PrunedAtStartup(t *testing.T) {
 	clock := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
 	rd := mcp.NewRunDir(root, func() time.Time { return clock })
 	ids := make([]string, 0, 25)
+
 	for range 25 {
 		id := rd.NewRunID()
 		require.NoError(t, os.MkdirAll(filepath.Join(root, id), 0o750))
+
 		ids = append(ids, id)
 		clock = clock.Add(time.Second)
 	}
 
 	opts := mcpOpts(t)
+
 	opts.RunDir = rd
+
 	srv, err := mcp.New(stubOpRegistry(t, "stub", `{"type":"object"}`, nil), opts)
 	require.NoError(t, err)
 	assert.Equal(t, ids, runDirs(t, root))
@@ -255,12 +274,15 @@ func TestTransportMcpOldRuns_PrunedAtStartup(t *testing.T) {
 // runDirs lists the entries of root by name.
 func runDirs(t *testing.T, root string) []string {
 	t.Helper()
+
 	entries, err := os.ReadDir(root)
 	require.NoError(t, err)
+
 	left := make([]string, 0, len(entries))
 	for _, e := range entries {
 		left = append(left, e.Name())
 	}
+
 	return left
 }
 
@@ -296,13 +318,17 @@ func TestTransportMcpBoundedTool_ReturnsShapedResult(t *testing.T) {
 
 	assert.False(t, res.IsError)
 	assert.Empty(t, out.Error)
+
 	raw, err := json.Marshal(res.StructuredContent)
 	require.NoError(t, err)
+
 	var structured mcp.ToolResult
+
 	require.NoError(t, json.Unmarshal(raw, &structured))
 	assert.Equal(t, out, structured)
 
 	require.Len(t, out.Steps, 2)
+
 	for i, want := range []string{"built\n", "careful\n"} {
 		got, err := os.ReadFile(out.Steps[i].Log)
 		require.NoError(t, err, out.Steps[i].Step)
@@ -333,6 +359,7 @@ func TestTransportMcpNew_RejectsInvalidMCPSettings(t *testing.T) {
 	} {
 		opts := mcpOpts(t)
 		mutate(&opts)
+
 		_, err := mcp.New(reg, opts)
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -350,14 +377,20 @@ func TestTransportMcpNew_RejectsInvalidMCPSettings(t *testing.T) {
 //     session starts, with an error naming the run directory and not the transport.
 func TestTransportMcpServe_PruneFailure(t *testing.T) {
 	t.Parallel()
+
 	root := filepath.Join(t.TempDir(), "runs")
 	require.NoError(t, os.WriteFile(root, []byte("x"), 0o600))
+
 	opts := mcpOpts(t)
+
 	opts.RunDir = mcp.NewRunDir(root, time.Now)
+
 	srv, err := mcp.New(stubOpRegistry(t, "stub", `{"type":"object"}`, nil), opts)
 	require.NoError(t, err)
+
 	out, err := os.CreateTemp(t.TempDir(), "stdout")
 	require.NoError(t, err)
+
 	err = srv.ServeStdio(t.Context(), io.NopCloser(strings.NewReader("")), out)
 	require.ErrorContains(t, err, "run dir")
 	assert.NotContains(t, err.Error(), "transport")

@@ -32,6 +32,7 @@ import (
 //   - Building rejects a tool row with no tool, and a run with no runner fails the row.
 func TestServicesGuard_Tool(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	ok := types.RenderSpec{ChartDir: "chart", Set: map[string]string{"kind": "hpa"}}
 	bad := types.RenderSpec{ChartDir: "chart", Set: map[string]string{"kind": "x"}}
@@ -42,6 +43,7 @@ func TestServicesGuard_Tool(t *testing.T) {
 	}, nil).AnyTimes()
 	r.EXPECT().Render(gomock.Any(), bad).
 		Return(nil, apperr.New(apperr.CodeUpstream, "unknown kind")).AnyTimes()
+
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
 		clientcodebase.Deps{Decorations: fixtures.Decorations(), Renderer: r})
 	require.NoError(t, err)
@@ -59,6 +61,7 @@ func TestServicesGuard_Tool(t *testing.T) {
 			Stdout: []byte("Deployment is invalid"),
 			Err:    apperr.Sentinel("exit status 1"),
 		}).Times(1)
+
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{"k8s": "1.29"}}, nil
 	}
@@ -70,13 +73,20 @@ func TestServicesGuard_Tool(t *testing.T) {
 	}
 	rows := []types.GuardRow{
 		row("valid", ok, "1.30"),
-		func() types.GuardRow { r := row("invalid", ok, "{k8s}"); r.Each = "k8s"; return r }(),
+		func() types.GuardRow {
+			r := row("invalid", ok, "{k8s}")
+
+			r.Each = "k8s"
+
+			return r
+		}(),
 		row("unrendered", bad, "1.30"),
 	}
 	gs, err := guard.NewFromConfig(rows, guard.Deps{
 		Runner: runner, Root: "/repo", Expanders: map[string]guard.Expander{"k8s": each},
 	})
 	require.NoError(t, err)
+
 	v := map[string]types.Verdict{}
 	for _, g := range gs {
 		v[g.Name()] = g.Run(t.Context(), cb)
@@ -92,6 +102,7 @@ func TestServicesGuard_Tool(t *testing.T) {
 	_, err = guard.NewFromConfig([]types.GuardRow{{Name: "t", Kind: types.GuardTool}},
 		guard.Deps{})
 	require.Error(t, err, "a tool row needs a tool")
+
 	gs, err = guard.NewFromConfig(
 		[]types.GuardRow{row("norunner", ok, "1")},
 		guard.Deps{},

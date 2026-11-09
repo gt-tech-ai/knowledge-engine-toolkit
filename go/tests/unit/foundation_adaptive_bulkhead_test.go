@@ -37,15 +37,18 @@ func TestAdaptiveBulkhead_LimitShrinksUnderLatencyAndRecovers(t *testing.T) {
 	for range 4 { // slow samples: RTT over the threshold shrinks the limit multiplicatively
 		require.NoError(t, bh.Execute(context.Background(), func() error {
 			time.Sleep(20 * time.Millisecond)
+
 			return nil
 		}))
 	}
+
 	shrunk := bh.Limit()
 	require.Less(t, shrunk, 10, "sustained latency must shrink the adaptive limit")
 
 	for range 5 { // fast samples: RTT under the threshold grows the limit back additively
 		require.NoError(t, bh.Execute(context.Background(), func() error { return nil }))
 	}
+
 	require.Greater(t, bh.Limit(), shrunk, "the limit recovers once latency subsides")
 }
 
@@ -72,10 +75,12 @@ func TestAdaptiveBulkhead_TryExecuteRejectsWhenFull(t *testing.T) {
 	})
 	started := make(chan struct{})
 	release := make(chan struct{})
+
 	go func() {
 		_ = bh.Execute(context.Background(), func() error {
 			close(started)
 			<-release
+
 			return nil
 		})
 	}()
@@ -105,6 +110,7 @@ func TestBulkhead_KindAdaptive_Selected(t *testing.T) {
 
 	bh, err := bulkhead.New(bulkhead.KindAdaptive)
 	require.NoError(t, err)
+
 	_, ok := bh.(*adaptive.Bulkhead)
 	require.True(t, ok, "KindAdaptive must select the adaptive backend")
 }
@@ -124,8 +130,10 @@ func TestAdaptiveBulkhead_TryExecuteRunsWhenSlotAvailable(t *testing.T) {
 
 	bh := adaptive.New(adaptive.DefaultConfig())
 	called := false
+
 	require.NoError(t, bh.TryExecute(func() error {
 		called = true
+
 		return nil
 	}))
 	require.True(t, called, "TryExecute must run the op when a slot is available")
@@ -155,18 +163,23 @@ func TestAdaptiveBulkhead_ExecuteRespectsContextCancellation(t *testing.T) {
 	})
 	started := make(chan struct{})
 	release := make(chan struct{})
+
 	go func() {
 		_ = bh.Execute(context.Background(), func() error {
 			close(started)
 			<-release
+
 			return nil
 		})
 	}()
+
 	<-started // the single slot is now held
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
+
 	go func() { done <- bh.Execute(ctx, func() error { return nil }) }()
+
 	cancel() // the blocked acquire must observe the cancellation and return
 
 	require.ErrorIs(t, <-done, context.Canceled)

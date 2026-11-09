@@ -41,6 +41,7 @@ func TestCQLCASSuite(t *testing.T) {
 // SetupSuite creates the keyspace and table and opens the session.
 func (s *CQLCASSuite) SetupSuite() {
 	s.CassandraIntegrationSuite.SetupSuite()
+
 	ctx := context.Background()
 	s.Require().NoError(s.Cassandra.Exec(ctx,
 		"CREATE KEYSPACE IF NOT EXISTS "+casKeyspace+" WITH replication = {'class': "+
@@ -49,12 +50,16 @@ func (s *CQLCASSuite) SetupSuite() {
 		ctx,
 		"CREATE TABLE IF NOT EXISTS "+casKeyspace+".kv (k text PRIMARY KEY, v int, w text)",
 	))
+
 	cfg := cql.DefaultConfig()
+
 	cfg.Cassandra.Hosts, cfg.Cassandra.Port = []string{s.CassandraHost}, s.CassandraPort
 	cfg.Cassandra.LocalDC = cassandradb.LocalDC
 	cfg.Keyspace, cfg.Timeout = casKeyspace, 20*time.Second
+
 	session, err := cql.NewFromConfig(ctx, cfg, cql.Deps{})
 	s.Require().NoError(err)
+
 	s.session = session
 }
 
@@ -63,6 +68,7 @@ func (s *CQLCASSuite) TearDownSuite() {
 	if s.session != nil {
 		s.session.Close()
 	}
+
 	s.CassandraIntegrationSuite.TearDownSuite()
 }
 
@@ -84,19 +90,23 @@ func (s *CQLCASSuite) TestApplyCAS_ReportsWhetherTheConditionHeld() {
 	applied, err := s.session.Query(insert, "a", 1, "x").WithContext(ctx).ApplyCAS()
 	s.Require().NoError(err)
 	s.True(applied)
+
 	applied, err = s.session.Query(insert, "a", 2, "y").WithContext(ctx).ApplyCAS()
 	s.Require().NoError(err)
 	s.False(applied)
 
 	update := "UPDATE kv SET v = ? WHERE k = ? IF v = ?"
+
 	applied, err = s.session.Query(update, 3, "a", 1).WithContext(ctx).ApplyCAS()
 	s.Require().NoError(err)
 	s.True(applied)
+
 	applied, err = s.session.Query(update, 4, "a", 1).WithContext(ctx).ApplyCAS()
 	s.Require().NoError(err)
 	s.False(applied)
 
 	var v int
+
 	s.Require().True(s.session.Query("SELECT v FROM kv WHERE k = ?", "a").
 		WithContext(ctx).Iter().Scan(&v))
 	s.Equal(3, v)

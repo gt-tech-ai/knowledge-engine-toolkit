@@ -90,6 +90,7 @@ func (r FieldRef) Key() string {
 	if r.Agg == AggNone {
 		return r.Name
 	}
+
 	return string(r.Agg) + "(" + r.Name + ")"
 }
 
@@ -123,10 +124,12 @@ func (e *AlgebraExpr) MarshalJSON() ([]byte, error) {
 	if e.Field != nil {
 		w = algebraWire{Field: e.Field.Name, Agg: e.Field.Agg}
 	}
+
 	out, err := json.Marshal(w)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: encode shelf")
 	}
+
 	return out, nil
 }
 
@@ -134,6 +137,7 @@ func (e *AlgebraExpr) MarshalJSON() ([]byte, error) {
 // leaf, one with "op" an operator node; anything else is CodeInvalidInput.
 func (e *AlgebraExpr) UnmarshalJSON(b []byte) error {
 	var w algebraWire
+
 	if err := json.Unmarshal(b, &w); err != nil {
 		return apperr.Wrap(
 			err,
@@ -141,6 +145,7 @@ func (e *AlgebraExpr) UnmarshalJSON(b []byte) error {
 			"chartspec: invalid shelf expression",
 		)
 	}
+
 	switch {
 	case w.Field != "" && w.Op == "" && len(w.Args) == 0:
 		*e = AlgebraExpr{Field: &FieldRef{Name: w.Field, Agg: w.Agg}}
@@ -152,6 +157,7 @@ func (e *AlgebraExpr) UnmarshalJSON(b []byte) error {
 			"chartspec: a shelf node is either a field or an operator",
 		)
 	}
+
 	return nil
 }
 
@@ -174,11 +180,13 @@ type Encodings struct {
 // label).
 func (e Encodings) Fields() []FieldRef {
 	var out []FieldRef
+
 	for _, ref := range []*FieldRef{e.Color, e.Size, e.Shape, e.Label} {
 		if ref != nil {
 			out = append(out, *ref)
 		}
 	}
+
 	return out
 }
 
@@ -269,10 +277,12 @@ func (s ChartSpec) MarshalJSON() ([]byte, error) {
 	for _, o := range s.Sort {
 		w.Sort = append(w.Sort, sortWire{Field: o.Field, Desc: o.Desc})
 	}
+
 	out, err := json.Marshal(w)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: encode")
 	}
+
 	return out, nil
 }
 
@@ -280,9 +290,11 @@ func (s ChartSpec) MarshalJSON() ([]byte, error) {
 // chartspec.Parse validates the whole spec and compiles the filter.
 func (s *ChartSpec) UnmarshalJSON(b []byte) error {
 	var w chartSpecWire
+
 	if err := json.Unmarshal(b, &w); err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: invalid JSON")
 	}
+
 	*s = ChartSpec{
 		TimeRange:  w.TimeRange,
 		Rows:       w.Rows,
@@ -297,6 +309,7 @@ func (s *ChartSpec) UnmarshalJSON(b []byte) error {
 	for _, o := range w.Sort {
 		s.Sort = append(s.Sort, OrderField{Field: o.Field, Desc: o.Desc})
 	}
+
 	return nil
 }
 

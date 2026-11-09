@@ -38,13 +38,17 @@ func runGuards(
 	deps guard.Deps,
 ) map[string]types.Verdict {
 	t.Helper()
+
 	gs, err := guard.NewFromConfig(rows, deps)
 	require.NoError(t, err)
+
 	cb := memoryCodebase(t, guardFiles())
 	out := map[string]types.Verdict{}
+
 	for _, g := range gs {
 		out[g.Name()] = g.Run(t.Context(), cb)
 	}
+
 	return out
 }
 
@@ -60,6 +64,7 @@ func runGuards(
 //     a selector with no file fails unless optional.
 func TestServicesGuard_Match(t *testing.T) {
 	t.Parallel()
+
 	deploy := types.FileSelector{Globs: []string{"deploy/*.yaml"}}
 	vs := runGuards(t, []types.GuardRow{
 		{
@@ -121,6 +126,7 @@ func TestServicesGuard_Match(t *testing.T) {
 //   - an allow pattern that does not compile fails the build of the guards.
 func TestServicesGuard_MatchAllow(t *testing.T) {
 	t.Parallel()
+
 	deploy := types.FileSelector{Globs: []string{"deploy/*.yaml"}}
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{"pinned": `app:latest`}}, nil
@@ -158,6 +164,7 @@ func TestServicesGuard_MatchAllow(t *testing.T) {
 //     an unexpected value is a finding at its line; a missing path is a finding.
 func TestServicesGuard_YAMLAndEach(t *testing.T) {
 	t.Parallel()
+
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{"f": "a", "n": "2"}, {"f": "b", "n": "2"}}, nil
 	}
@@ -194,6 +201,7 @@ func TestServicesGuard_YAMLAndEach(t *testing.T) {
 //     time is CodeInvalidInput.
 func TestServicesGuard_Expr(t *testing.T) {
 	t.Parallel()
+
 	policies := types.FileSelector{Globs: []string{"policy/*.yaml"}}
 	vs := runGuards(t, []types.GuardRow{
 		{
@@ -259,6 +267,7 @@ func TestServicesGuard_Expr(t *testing.T) {
 //     suite entry whose step carries the verdict.
 func TestServicesGuard_GoAndValidation(t *testing.T) {
 	t.Parallel()
+
 	computed := func(
 		_ context.Context, _ interfaces.Codebase, row *types.GuardRow, vars map[string]string,
 	) ([]types.Finding, error) {
@@ -286,9 +295,11 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
 		clientcodebase.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
+
 	entries := suite.Guards(gs[:1], cb)
 	require.Len(t, entries, 1)
 	assert.Equal(t, suite.KindGuard, entries[0].Kind)
+
 	res, err := entries[0].Job(suite.Env{Decs: fixtures.Decorations()}).
 		Execute(t.Context(), nil, "")
 	require.NoError(t, err)
@@ -319,6 +330,7 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 //   - objects carry the rendered kinds; a failing render fails the row with its error.
 func TestServicesGuard_ExprRender(t *testing.T) {
 	t.Parallel()
+
 	ok := types.RenderSpec{ChartDir: "chart", Set: map[string]string{"kind": "hpa"}}
 	bad := types.RenderSpec{ChartDir: "chart", Set: map[string]string{"kind": "x"}}
 	r := mocks.NewMockRenderer(gomock.NewController(t))
@@ -331,9 +343,11 @@ func TestServicesGuard_ExprRender(t *testing.T) {
 	r.EXPECT().Render(gomock.Any(), bad).
 		Return(nil, apperr.New(apperr.CodeUpstream, "helm template: unknown autoscaling.kind")).
 		AnyTimes()
+
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
 		clientcodebase.Deps{Decorations: fixtures.Decorations(), Renderer: r})
 	require.NoError(t, err)
+
 	gs, err := guard.NewFromConfig([]types.GuardRow{
 		{
 			Name: "one-hpa", Kind: types.GuardExpr, Render: ok,
@@ -347,10 +361,12 @@ func TestServicesGuard_ExprRender(t *testing.T) {
 		},
 	}, guard.Deps{})
 	require.NoError(t, err)
+
 	vs := map[string]types.Verdict{}
 	for _, g := range gs {
 		vs[g.Name()] = g.Run(t.Context(), cb)
 	}
+
 	assert.Equal(t, types.StatusPass, vs["one-hpa"].Status, vs["one-hpa"].Detail)
 	assert.Equal(t, types.StatusFail, vs["render-fails"].Status)
 	assert.Contains(t, vs["render-fails"].Detail, "unknown autoscaling.kind")
@@ -370,6 +386,7 @@ func TestServicesGuard_ExprRender(t *testing.T) {
 //   - an unknown format fails the row with its error.
 func TestServicesGuard_ExprDecode(t *testing.T) {
 	t.Parallel()
+
 	cb := memoryCodebase(t, map[string]string{
 		"tf/main.tf": "resource \"aws_kms_key\" \"cosign\" {\n" +
 			"  key_usage = \"SIGN_VERIFY\"\n}\n",
@@ -400,10 +417,12 @@ func TestServicesGuard_ExprDecode(t *testing.T) {
 		},
 	}, guard.Deps{})
 	require.NoError(t, err)
+
 	vs := map[string]types.Verdict{}
 	for _, g := range gs {
 		vs[g.Name()] = g.Run(t.Context(), cb)
 	}
+
 	assert.Equal(t, types.StatusPass, vs["hcl"].Status, vs["hcl"].Detail)
 	assert.Equal(t, types.StatusPass, vs["embedded"].Status, vs["embedded"].Detail)
 	assert.Equal(t, types.StatusFail, vs["unknown"].Status)
@@ -422,6 +441,7 @@ func TestServicesGuard_ExprDecode(t *testing.T) {
 //     passes and the digest of different bytes fails.
 func TestServicesGuard_ExprSHA256(t *testing.T) {
 	t.Parallel()
+
 	cb := memoryCodebase(t, map[string]string{"golden/case.json": "abc"})
 	sel := types.FileSelector{Paths: []string{"golden/case.json"}}
 	gs, err := guard.NewFromConfig([]types.GuardRow{
@@ -436,10 +456,12 @@ func TestServicesGuard_ExprSHA256(t *testing.T) {
 		},
 	}, guard.Deps{})
 	require.NoError(t, err)
+
 	vs := map[string]types.Verdict{}
 	for _, g := range gs {
 		vs[g.Name()] = g.Run(t.Context(), cb)
 	}
+
 	assert.Equal(t, types.StatusPass, vs["match"].Status, vs["match"].Detail)
 	assert.Equal(t, types.StatusFail, vs["differs"].Status)
 }
@@ -458,6 +480,7 @@ func TestServicesGuard_ExprSHA256(t *testing.T) {
 //   - decode('toml', text) decodes an embedded string, a local date as a timestamp.
 func TestServicesGuard_ExprTOMLAndNow(t *testing.T) {
 	t.Parallel()
+
 	cb := memoryCodebase(t, map[string]string{
 		"osv.toml": "[[IgnoredVulns]]\nid = \"GHSA-1\"\n" +
 			"ignoreUntil = 2026-06-01T00:00:00Z\n",
@@ -486,10 +509,12 @@ func TestServicesGuard_ExprTOMLAndNow(t *testing.T) {
 			guard.Deps{Now: func() time.Time { return now }},
 		)
 		require.NoError(t, err)
+
 		vs := map[string]types.Verdict{}
 		for _, g := range gs {
 			vs[g.Name()] = g.Run(t.Context(), cb)
 		}
+
 		return vs
 	}
 
@@ -529,6 +554,7 @@ func TestServicesGuard_ExprTOMLAndNow(t *testing.T) {
 //     still fails.
 func TestServicesGuard_GoUnavailableSkips(t *testing.T) {
 	t.Parallel()
+
 	cb := memoryCodebase(t, map[string]string{"a.txt": "x"})
 	rows := []types.GuardRow{
 		{Name: "needs a tool", Kind: types.GuardGo},
@@ -547,6 +573,7 @@ func TestServicesGuard_GoUnavailableSkips(t *testing.T) {
 		},
 	}})
 	require.NoError(t, err)
+
 	v := gs[0].Run(t.Context(), cb)
 	assert.Equal(t, types.StatusSkip, v.Status)
 	assert.Contains(t, v.Detail, "terraform is not installed")

@@ -15,6 +15,7 @@ import (
 // programRows are expr rows (one with a for) whose verdicts over guardFiles are known.
 func programRows() []types.GuardRow {
 	deploy := types.FileSelector{Globs: []string{"deploy/*"}}
+
 	return []types.GuardRow{
 		{
 			Name: "no-latest", Kind: types.GuardExpr, Files: deploy, Message: "latest",
@@ -42,6 +43,7 @@ func programRows() []types.GuardRow {
 //     passing); a CEL syntax error is CodeInvalidInput on each of two builds.
 func TestServicesGuard_SharedPrograms(t *testing.T) {
 	t.Parallel()
+
 	want := runGuards(t, programRows(), guard.Deps{})
 	require.Equal(t, types.StatusFail, want["no-latest"].Status)
 	assert.Equal(t, "latest", want["no-latest"].Findings[0].Message)
@@ -53,14 +55,19 @@ func TestServicesGuard_SharedPrograms(t *testing.T) {
 	)
 
 	progs := guard.NewPrograms()
+
 	var wg sync.WaitGroup
+
 	got := make([]map[string]types.Verdict, 2)
+
 	for i := range got {
 		wg.Go(
 			func() { got[i] = runGuards(t, programRows(), guard.Deps{Programs: progs}) },
 		)
 	}
+
 	wg.Wait()
+
 	for _, vs := range got {
 		assert.Equal(t, want, vs)
 	}
@@ -78,6 +85,7 @@ func TestServicesGuard_SharedPrograms(t *testing.T) {
 // builds a gate repeatedly hits.
 func BenchmarkNewFromConfig_Programs(b *testing.B) {
 	rows := programRows()
+
 	b.Run("fresh", func(b *testing.B) {
 		for b.Loop() {
 			if _, err := guard.NewFromConfig(rows, guard.Deps{}); err != nil {

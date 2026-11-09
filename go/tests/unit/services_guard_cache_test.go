@@ -23,10 +23,12 @@ func cachedGuardDeps(
 	fail string,
 ) guard.Deps {
 	t.Helper()
+
 	cache, err := stepcache.NewFromConfig(stepcache.Config{
 		Kind: stepcache.KindDir, Dir: t.TempDir(),
 	})
 	require.NoError(t, err)
+
 	return guard.Deps{
 		Cache:    cache,
 		Versions: func(tool string) string { return tool + "-1.0" },
@@ -43,9 +45,11 @@ func cachedGuardDeps(
 				vars map[string]string,
 			) ([]types.Finding, error) {
 				runs.Add(1)
+
 				if vars["dir"] == fail {
 					return []types.Finding{{File: vars["dir"], Message: "bad"}}, nil
 				}
+
 				return nil, nil
 			},
 		},
@@ -67,7 +71,9 @@ func cachedGuardDeps(
 //     cached; a row without inputs is never cached; a different tool version misses.
 func TestServicesGuard_GoCachedOnInputs(t *testing.T) {
 	t.Parallel()
+
 	var runs atomic.Int32
+
 	deps := cachedGuardDeps(t, &runs, "")
 	row := types.GuardRow{
 		Name: "validate", Verb: "test-infra", Kind: types.GuardGo, Each: "modules",
@@ -75,6 +81,7 @@ func TestServicesGuard_GoCachedOnInputs(t *testing.T) {
 	}
 	gs, err := guard.NewFromConfig([]types.GuardRow{row}, deps)
 	require.NoError(t, err)
+
 	g := gs[0]
 	files := guardFiles()
 
@@ -95,29 +102,38 @@ func TestServicesGuard_GoCachedOnInputs(t *testing.T) {
 
 	// A failure is not cached: the failing module runs again, the passing one does not.
 	var failing atomic.Int32
+
 	fdeps := cachedGuardDeps(t, &failing, "infra")
 	fg, err := guard.NewFromConfig([]types.GuardRow{row}, fdeps)
 	require.NoError(t, err)
+
 	for range 2 {
 		v = fg[0].Run(t.Context(), memoryCodebase(t, files))
 		assert.Equal(t, types.StatusFail, v.Status)
 	}
+
 	assert.Equal(t, int32(3), failing.Load())
 
 	// No inputs: never cached.
 	plain := row
+
 	plain.Inputs = types.FileSelector{}
+
 	pg, err := guard.NewFromConfig([]types.GuardRow{plain}, deps)
 	require.NoError(t, err)
+
 	before := runs.Load()
+
 	pg[0].Run(t.Context(), memoryCodebase(t, files))
 	pg[0].Run(t.Context(), memoryCodebase(t, files))
 	assert.Equal(t, before+4, runs.Load())
 
 	// Another tool version misses.
 	deps.Versions = func(string) string { return "2.0" }
+
 	vg, err := guard.NewFromConfig([]types.GuardRow{row}, deps)
 	require.NoError(t, err)
+
 	before = runs.Load()
 	v = vg[0].Run(t.Context(), memoryCodebase(t, files))
 	assert.Equal(t, types.StatusPass, v.Status)
@@ -136,7 +152,9 @@ func TestServicesGuard_GoCachedOnInputs(t *testing.T) {
 //     expansion order.
 func TestServicesGuard_ExpansionsRunInParallel(t *testing.T) {
 	t.Parallel()
+
 	var inFlight, peak atomic.Int32
+
 	deps := guard.Deps{
 		Expanders: map[string]guard.Expander{
 			"modules": func(context.Context, interfaces.Codebase) (
@@ -153,8 +171,10 @@ func TestServicesGuard_ExpansionsRunInParallel(t *testing.T) {
 				n := inFlight.Add(1)
 				for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
 				}
+
 				time.Sleep(20 * time.Millisecond)
 				inFlight.Add(-1)
+
 				return []types.Finding{{File: vars["dir"], Message: "seen"}}, nil
 			},
 		},
@@ -163,6 +183,7 @@ func TestServicesGuard_ExpansionsRunInParallel(t *testing.T) {
 		Name: "slow", Verb: "check", Kind: types.GuardGo, Each: "modules",
 	}}, deps)
 	require.NoError(t, err)
+
 	v := gs[0].Run(t.Context(), memoryCodebase(t, guardFiles()))
 	assert.Equal(t, types.StatusFail, v.Status)
 	require.Len(t, v.Findings, 3)
@@ -185,7 +206,9 @@ func TestServicesGuard_ExpansionsRunInParallel(t *testing.T) {
 //     and the edited row's own pass is then cached.
 func TestServicesGuard_RowEditMissesCache(t *testing.T) {
 	t.Parallel()
+
 	var runs atomic.Int32
+
 	deps := cachedGuardDeps(t, &runs, "")
 	row := types.GuardRow{
 		Name: "validate", Verb: "test-infra", Kind: types.GuardGo, Each: "modules",
@@ -193,8 +216,11 @@ func TestServicesGuard_RowEditMissesCache(t *testing.T) {
 		Data: map[string]any{"strict": false},
 	}
 	edited := row
+
 	edited.Data = map[string]any{"strict": true}
+
 	files := guardFiles()
+
 	for i, r := range []types.GuardRow{row, row, edited, edited} {
 		gs, err := guard.NewFromConfig([]types.GuardRow{r}, deps)
 		require.NoError(t, err)

@@ -48,7 +48,9 @@ type runGroup struct {
 //   - A run's unary middleware enforces the timeout; its stream middleware does not.
 func TestInterceptors_LaysOutTheControllerTier(t *testing.T) {
 	t.Parallel()
+
 	var runs []runGroup
+
 	native := func(layer decorate.Layer) ([]string, bool) {
 		switch layer {
 		case decorate.LayerTracing:
@@ -71,6 +73,7 @@ func TestInterceptors_LaysOutTheControllerTier(t *testing.T) {
 	}
 	adapt := func(unary, stream decorate.OpMiddleware) string {
 		runs = append(runs, runGroup{unary: unary, stream: stream})
+
 		return "run"
 	}
 	d := decorate.Deps{
@@ -83,6 +86,7 @@ func TestInterceptors_LaysOutTheControllerTier(t *testing.T) {
 
 	assert.Equal(t, []string{"tracing", "metrics", "run", "authn", "run"}, got)
 	require.Len(t, runs, 2)
+
 	slow := func(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
@@ -115,6 +119,7 @@ func serveUnary(
 			if err := fn(ctx); err != nil {
 				return nil, err
 			}
+
 			return connect.NewResponse(&probeMsg{}), nil
 		},
 		append(opts, connect.WithCodec(probeCodec{}))...)
@@ -125,8 +130,10 @@ func serveUnary(
 		http.NoBody,
 	)
 	req.Header.Set("Content-Type", "application/proto")
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
+
 	return rec.Code
 }
 
@@ -152,8 +159,10 @@ func serveStream(
 	body := bytes.NewReader([]byte{0, 0, 0, 0, 0})
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, optionsProcedure, body)
 	req.Header.Set("Content-Type", "application/connect+proto")
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
+
 	return rec.Body.String()
 }
 
@@ -174,7 +183,9 @@ func serveStream(
 //     rather than a dropped connection, and a stream outlives the timeout.
 func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 	t.Parallel()
+
 	ok := func(context.Context) error { return nil }
+
 	assert.Nil(t, interceptors.ServerOptions(
 		"probe", decorate.Deps{SkipRecovery: true}, interceptors.Edge{},
 	))
@@ -186,12 +197,14 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 	assert.Contains(t, serveStream(t.Context(), limited, ok), "resource_exhausted")
 
 	var actions []string
+
 	guarded := interceptors.ServerOptions("probe", decorate.Deps{
 		Auth: func(_ context.Context, action string) error {
 			actions = append(actions, action)
 			if len(actions) > 1 {
 				return apperr.New(apperr.CodeForbidden, "denied: secret-action-detail")
 			}
+
 			return nil
 		},
 		Timeout: 5 * time.Millisecond,
@@ -199,6 +212,7 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 	assert.Equal(t, http.StatusOK, serveUnary(t.Context(), guarded, ok))
 	assert.Equal(t, []string{"probe.test.v1.Probe/Do"}, actions)
 	assert.Equal(t, http.StatusForbidden, serveUnary(t.Context(), guarded, ok))
+
 	denied := serveStream(t.Context(), guarded, ok)
 	assert.Contains(t, denied, "permission denied")
 	assert.NotContains(t, denied, "secret-action-detail")
@@ -223,6 +237,7 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 		Timeout: 5 * time.Millisecond,
 	}, interceptors.Edge{})
 	assert.Equal(t, http.StatusNotFound, serveUnary(t.Context(), bounded, notFound))
+
 	slow := func(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
@@ -256,15 +271,20 @@ func TestGRPCServerOptions_DecoratesEveryRPC(t *testing.T) {
 	)
 
 	var actions []string
+
 	serve := func(d decorate.Deps) grpc_health_v1.HealthClient {
 		srv := grpcserver.NewServer(
 			grpcserver.DefaultServerConfig(),
 			grpcinterceptors.ServerOptions("health", d, grpcinterceptors.Edge{})...,
 		)
 		grpcserver.RegisterHealthService(srv)
+
 		lis := bufconn.Listen(1 << 20)
+
 		go func() { _ = srv.Serve(lis) }()
+
 		t.Cleanup(srv.Stop)
+
 		conn, err := grpc.NewClient(
 			"passthrough:///bufnet",
 			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
@@ -274,20 +294,25 @@ func TestGRPCServerOptions_DecoratesEveryRPC(t *testing.T) {
 		)
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = conn.Close() })
+
 		return grpc_health_v1.NewHealthClient(conn)
 	}
 	check := func(d decorate.Deps) error {
 		_, err := serve(d).Check(t.Context(), &grpc_health_v1.HealthCheckRequest{})
+
 		return err //nolint:wrapcheck // the test reads the status off the RPC's own error
 	}
 	watch := func(d decorate.Deps) error {
 		stream, err := serve(d).Watch(t.Context(), &grpc_health_v1.HealthCheckRequest{})
 		require.NoError(t, err)
+
 		_, err = stream.Recv()
+
 		return err //nolint:wrapcheck // the test reads the status off the RPC's own error
 	}
 	allow := decorate.Deps{Auth: func(_ context.Context, action string) error {
 		actions = append(actions, action)
+
 		return nil
 	}}
 	deny := decorate.Deps{Auth: func(context.Context, string) error {
@@ -302,8 +327,10 @@ func TestGRPCServerOptions_DecoratesEveryRPC(t *testing.T) {
 		"health.grpc.health.v1.Health/Check",
 		"health.grpc.health.v1.Health/Watch",
 	}, actions)
+
 	for _, rpc := range []func(decorate.Deps) error{check, watch} {
 		assert.Equal(t, codes.ResourceExhausted, status.Code(rpc(limited)))
+
 		denied := status.Convert(rpc(deny))
 		assert.Equal(t, codes.PermissionDenied, denied.Code())
 		assert.Equal(t, "permission denied", denied.Message())

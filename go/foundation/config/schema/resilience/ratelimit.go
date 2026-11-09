@@ -25,8 +25,10 @@ func (c RateLimitConfig) Validate() error {
 	if c.Rate < 0 {
 		return apperr.InvalidInput("resilience.rate_limit.rate must be >= 0")
 	}
+
 	if c.Burst < 0 {
 		return apperr.InvalidInput("resilience.rate_limit.burst must be >= 0")
 	}
+
 	return nil
 }

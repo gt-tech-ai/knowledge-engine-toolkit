@@ -17,20 +17,26 @@ import (
 func dottedOverrides(loader interfaces.ConfigLoader, section any, over *Config) error {
 	tiers, _ := section.(map[string]any)
 	cfg := reflect.ValueOf(over).Elem()
+
 	for i := range cfg.NumField() {
 		name := cfg.Type().Field(i).Tag.Get("mapstructure")
 		tier, _ := tiers[name].(map[string]any)
 		raw, ok := tier["overrides"].(map[string]any)
+
 		if !ok {
 			continue
 		}
+
 		key := SectionKey + "." + name + ".overrides"
 		t := cfg.Field(i).Addr().Interface().(*Tier)
+
 		t.Overrides = make(map[string]Layers, len(raw))
+
 		if err := t.readOverrides(loader, key, "", raw); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -46,12 +52,15 @@ func (t *Tier) readOverrides(
 		if !ok || (prefix != "" && isLayerKey(k)) {
 			continue
 		}
+
 		name := k
 		if prefix != "" {
 			name = prefix + "." + k
 		}
+
 		if hasLayer(inner) {
 			var l Layers
+
 			if err := loader.UnmarshalKey(key+"."+name, &l); err != nil {
 				return apperr.Wrap(
 					err,
@@ -59,12 +68,15 @@ func (t *Tier) readOverrides(
 					"load decoration override "+name,
 				)
 			}
+
 			t.Overrides[name] = l
 		}
+
 		if err := t.readOverrides(loader, key, name, inner); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -76,6 +88,7 @@ func hasLayer(m map[string]any) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -87,5 +100,6 @@ func isLayerKey(k string) bool {
 			return true
 		}
 	}
+
 	return false
 }

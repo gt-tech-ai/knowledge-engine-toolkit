@@ -29,6 +29,7 @@ import (
 //     up and remove volumes on down when asked; the stub finds no image.
 func TestClientsDocker_Exec(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	r := mocks.NewMockCommandRunner(gomock.NewController(t))
 	c, err := docker.NewFromConfig(ctx, docker.Config{Kind: docker.KindExec},
@@ -49,6 +50,7 @@ func TestClientsDocker_Exec(t *testing.T) {
 
 	r.EXPECT().RunBufferedWithEnv(gomock.Any(), "/repo", gomock.Nil(), "docker", "image",
 		"inspect", "gone:1").Return(exitWith(1, "Error: No such image: gone:1"))
+
 	_, err = c.Inspect(ctx, "gone:1")
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
@@ -77,6 +79,7 @@ func TestClientsDocker_Exec(t *testing.T) {
 	stub, err := docker.NewFromConfig(ctx, docker.Config{},
 		docker.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
+
 	_, err = stub.Inspect(ctx, "x")
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }

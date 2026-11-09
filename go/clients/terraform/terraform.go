@@ -64,6 +64,7 @@ func newExec(_ context.Context, _ Config, deps Deps) (interfaces.TerraformClient
 			"terraform exec: no command runner",
 		)
 	}
+
 	return exec.New(deps.Runner), nil
 }
 

@@ -50,6 +50,7 @@ func (c LoggingConfig) Validate() error {
 			"unknown logger kind: "+c.Kind,
 		)
 	}
+
 	return nil
 }
 

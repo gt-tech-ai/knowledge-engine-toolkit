@@ -65,18 +65,21 @@ func (Backend) Clause(col string, op types.FilterOperator, v any) EntPredicate {
 		if !ok {
 			return noop
 		}
+
 		return entsql.FieldContainsFold(col, s)
 	case types.OpIn:
 		vs, ok := v.([]any)
 		if !ok {
 			return noop
 		}
+
 		return entsql.FieldIn(col, vs...)
 	case types.OpNotIn:
 		vs, ok := v.([]any)
 		if !ok {
 			return noop
 		}
+
 		return entsql.FieldNotIn(col, vs...)
 	default:
 		return noop
@@ -100,21 +103,25 @@ func (Backend) ExistsClause(
 	return func(s *entsql.Selector) {
 		target := entsql.Table(join.Table)
 		colPreds := make([]*entsql.Predicate, 0, len(join.Columns))
+
 		for _, col := range join.Columns {
 			if p := colPredicate(target.C(col), op, v, join.CaseInsensitive); p != nil {
 				colPreds = append(colPreds, p)
 			}
 		}
+
 		if len(colPreds) == 0 {
 			// A malformed/no-column value ⇒ match-all (add no predicate), mirroring
 			// Clause's noop.
 			return
 		}
+
 		valuePred := colPreds[0]
 		if len(colPreds) > 1 {
 			// Multiple target columns (a member "name" over first_name + last_name) OR together.
 			valuePred = entsql.Or(colPreds...)
 		}
+
 		conds := []*entsql.Predicate{
 			// Correlate the subquery to the base row: target.<target_key> = <base>.<local_key>.
 			entsql.ColumnsEQ(target.C(join.TargetKey), s.C(join.LocalKey)),
@@ -125,6 +132,7 @@ func (Backend) ExistsClause(
 			// interceptor).
 			conds = append(conds, entsql.IsNull(target.C("deleted_at")))
 		}
+
 		sub := entsql.Select(target.C(join.TargetKey)).
 			From(target).
 			Where(entsql.And(conds...))
@@ -163,21 +171,25 @@ func colPredicate(
 		if !ok {
 			return nil
 		}
+
 		if caseInsensitive {
 			return entsql.ContainsFold(col, s)
 		}
+
 		return entsql.Contains(col, s)
 	case types.OpIn:
 		vs, ok := v.([]any)
 		if !ok {
 			return nil
 		}
+
 		return entsql.In(col, vs...)
 	case types.OpNotIn:
 		vs, ok := v.([]any)
 		if !ok {
 			return nil
 		}
+
 		return entsql.NotIn(col, vs...)
 	default:
 		return nil
@@ -207,6 +219,7 @@ func (Backend) Order(col string, desc bool) EntPredicate {
 	if desc {
 		dir = entsql.OrderDesc()
 	}
+
 	return entsql.OrderByField(col, dir).ToFunc()
 }
 
@@ -230,12 +243,14 @@ func (Backend) OrderJoin(join types.JoinTarget, desc bool) EntPredicate {
 	if desc {
 		tail = " DESC NULLS FIRST"
 	}
+
 	return func(s *entsql.Selector) {
 		for _, col := range join.Columns {
 			target := entsql.Table(join.Table)
 			conds := []*entsql.Predicate{
 				entsql.ColumnsEQ(target.C(join.TargetKey), s.C(join.LocalKey)),
 			}
+
 			if join.TargetSoftDeletes {
 				// Exclude a soft-deleted target so the sort never reads its stale value —
 				// the sort matches ExistsClause's filter on the same target (a
@@ -243,10 +258,12 @@ func (Backend) OrderJoin(join types.JoinTarget, desc bool) EntPredicate {
 				// soft-deleted row among the live ones.
 				conds = append(conds, entsql.IsNull(target.C("deleted_at")))
 			}
+
 			sub := entsql.Select(target.C(col)).
 				From(target).
 				Where(entsql.And(conds...)).
 				Limit(1)
+
 			s.OrderExprFunc(func(b *entsql.Builder) {
 				b.WriteByte('(')
 				b.Join(sub)
@@ -272,19 +289,23 @@ func (Backend) OrderOrdinal(col string, values []string, desc bool) EntPredicate
 	if len(values) == 0 {
 		return (Backend{}).Order(col, desc)
 	}
+
 	return func(s *entsql.Selector) {
 		s.OrderExprFunc(func(b *entsql.Builder) {
 			b.WriteString("CASE ")
 			b.WriteString(s.C(col))
+
 			for i, v := range values {
 				b.WriteString(" WHEN '")
 				b.WriteString(strings.ReplaceAll(v, "'", "''"))
 				b.WriteString("' THEN ")
 				b.WriteString(strconv.Itoa(i))
 			}
+
 			b.WriteString(" ELSE ")
 			b.WriteString(strconv.Itoa(len(values)))
 			b.WriteString(" END")
+
 			if desc {
 				b.WriteString(" DESC")
 			} else {
@@ -318,11 +339,14 @@ func (Backend) OrderDerived(d types.DerivedSort, desc bool) EntPredicate {
 	if desc {
 		tail = " DESC NULLS FIRST"
 	}
+
 	switch {
 	case d.Aggregate != nil:
 		agg := *d.Aggregate
 		target := entsql.Table(agg.Table)
+
 		var selExpr string
+
 		switch agg.Func {
 		case "max":
 			selExpr = entsql.Max(target.C(agg.Column))
@@ -331,6 +355,7 @@ func (Backend) OrderDerived(d types.DerivedSort, desc bool) EntPredicate {
 		default: // "count"
 			selExpr = entsql.Count("*")
 		}
+
 		return func(s *entsql.Selector) {
 			conds := []*entsql.Predicate{
 				entsql.ColumnsEQ(target.C(agg.TargetKey), s.C(agg.LocalKey)),
@@ -338,7 +363,9 @@ func (Backend) OrderDerived(d types.DerivedSort, desc bool) EntPredicate {
 			if agg.TargetSoftDeletes {
 				conds = append(conds, entsql.IsNull(target.C("deleted_at")))
 			}
+
 			sub := entsql.Select(selExpr).From(target).Where(entsql.And(conds...))
+
 			s.OrderExprFunc(func(b *entsql.Builder) {
 				b.WriteByte('(')
 				b.Join(sub)
@@ -348,12 +375,14 @@ func (Backend) OrderDerived(d types.DerivedSort, desc bool) EntPredicate {
 		}
 	case d.Interval != nil:
 		iv := *d.Interval
+
 		return func(s *entsql.Selector) {
 			s.OrderExprFunc(func(b *entsql.Builder) {
 				b.WriteByte('(')
 				b.WriteString(s.C(iv.BaseColumn))
 				b.WriteString(" + CASE ")
 				b.WriteString(s.C(iv.DiscriminatorColumn))
+
 				for _, c := range iv.Cases {
 					b.WriteString(" WHEN '")
 					b.WriteString(strings.ReplaceAll(c.Value, "'", "''"))
@@ -361,6 +390,7 @@ func (Backend) OrderDerived(d types.DerivedSort, desc bool) EntPredicate {
 					b.WriteString(strconv.FormatInt(c.Seconds, 10))
 					b.WriteByte(')')
 				}
+
 				b.WriteString(" ELSE NULL END)")
 				b.WriteString(tail)
 			})

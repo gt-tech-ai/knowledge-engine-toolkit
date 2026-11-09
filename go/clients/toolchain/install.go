@@ -36,6 +36,7 @@ func detectLinuxPackageManager() string {
 	if err != nil {
 		return "linux-apt"
 	}
+
 	content := strings.ToLower(string(data))
 	switch {
 	case strings.Contains(content, "arch"):
@@ -132,6 +133,7 @@ func NewInstaller(
 	for _, opt := range opts {
 		opt(i)
 	}
+
 	return i
 }
 
@@ -151,6 +153,7 @@ func (i *Installer) Install(
 			"no install method available for %s on %s", tool.Name, i.platform,
 		))
 	}
+
 	if method.Download != nil {
 		return i.installDownload(ctx, tool.Name, method.Download)
 	}
@@ -159,6 +162,7 @@ func (i *Installer) Install(
 	if inv.command == "winget" {
 		return i.runWinget(ctx, root, tool.Name, inv.args)
 	}
+
 	if isGoInstall(method) && (i.platform == osWindows && i.arch == archARM64) {
 		i.log.Info(
 			"cross-compiling as amd64 (Windows ARM64 workaround)",
@@ -166,6 +170,7 @@ func (i *Installer) Install(
 			tool.Name,
 		)
 	}
+
 	return i.runner.RunWithEnv(ctx, root, inv.env, inv.command, inv.args...)
 }
 
@@ -182,11 +187,14 @@ func (i *Installer) Provision(
 	autoYes, checkOnly bool,
 ) error {
 	_ = os.Setenv("GOTOOLCHAIN", "local")
+
 	i.log.Debug("platform detected", "key", i.platform)
 	i.ensureGoBinInPath()
+
 	if i.platform == osWindows {
 		i.ensureMsys2InPath()
 	}
+
 	if i.platform == osDarwin && !i.runner.Exists("brew") {
 		i.log.Warn("Homebrew not found; some tools may need manual installation")
 		i.log.Info("Install Homebrew: https://brew.sh")
@@ -194,12 +202,16 @@ func (i *Installer) Provision(
 
 	det := NewDetector(i.runner, i.log)
 	i.log.Info("Prerequisites:")
+
 	prereqErr := det.CheckPrerequisites(ctx, root, cat.Prerequisites())
+
 	i.log.Info("")
 
 	i.log.Info("Tools:")
+
 	required := cat.Required()
 	results := det.Scan(ctx, root, required)
+
 	if checkOnly {
 		return SummarizeMissing(prereqErr, results)
 	}
@@ -208,13 +220,16 @@ func (i *Installer) Provision(
 	if len(toInstall) == 0 || prereqErr != nil {
 		return prereqErr
 	}
+
 	yes, err := i.confirmRequired(ctx, required, toInstall, autoYes)
 	if err != nil {
 		return err
 	}
+
 	if !yes {
 		return reportSkipped(required, toInstall, i.log)
 	}
+
 	return i.installAndVerify(ctx, root, det, required, toInstall)
 }
 
@@ -227,6 +242,7 @@ func (i *Installer) selectInstallable(
 	force bool,
 ) []int {
 	var idxs []int
+
 	for j := range results {
 		needs := force ||
 			results[j].Status == types.StatusToolMissing ||
@@ -234,10 +250,12 @@ func (i *Installer) selectInstallable(
 		if !needs {
 			continue
 		}
+
 		if _, ok := i.resolveMethod(&required[j]); ok {
 			idxs = append(idxs, j)
 		}
 	}
+
 	return idxs
 }
 
@@ -254,6 +272,7 @@ func (i *Installer) confirmRequired(
 	for k, idx := range idxs {
 		names[k] = required[idx].Name
 	}
+
 	return i.confirm(
 		ctx,
 		fmt.Sprintf("Install missing tools (%s)?", strings.Join(names, ", ")),
@@ -271,6 +290,7 @@ func (i *Installer) confirm(
 	if autoYes {
 		return true, nil
 	}
+
 	if i.prompter == nil {
 		return false, apperr.New(
 			apperr.CodeInvalidInput,
@@ -278,6 +298,7 @@ func (i *Installer) confirm(
 				"asking",
 		)
 	}
+
 	return i.prompter.Confirm(ctx, question)
 }
 
@@ -286,13 +307,16 @@ func (i *Installer) confirm(
 func reportSkipped(required []types.ToolDef, idxs []int, log interfaces.Logger) error {
 	log.Info("Skipping tool installation")
 	log.Error(fmt.Sprintf("Missing tools (%d):", len(idxs)))
+
 	for _, idx := range idxs {
 		msg := required[idx].Name
 		if required[idx].FallbackURL != "" {
 			msg += "\n    Install: " + required[idx].FallbackURL
 		}
+
 		log.Error("  * " + msg)
 	}
+
 	return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
 		"%d required tool(s) missing from PATH -- install them and retry", len(idxs),
 	))
@@ -308,6 +332,7 @@ func (i *Installer) installAndVerify(
 	idxs []int,
 ) error {
 	var failures []string
+
 	for _, idx := range idxs {
 		tool := &required[idx]
 		if err := i.Install(ctx, root, tool); err != nil {
@@ -316,7 +341,9 @@ func (i *Installer) installAndVerify(
 				apperr.Wrap(err, apperr.CodeInternal, "install failed"),
 			)
 		}
+
 		i.addInstallDirToPath(tool)
+
 		if verify := det.Check(ctx, root, tool); verify.Status == types.StatusToolOK {
 			i.log.Info(verify.Message + " (installed)")
 		} else {
@@ -324,6 +351,7 @@ func (i *Installer) installAndVerify(
 			i.log.Error(tool.Name + ": still not available after install")
 		}
 	}
+
 	if len(failures) > 0 {
 		return apperr.Internal(fmt.Sprintf(
 			"%d tool(s) failed to install: %s",
@@ -331,6 +359,7 @@ func (i *Installer) installAndVerify(
 			strings.Join(failures, ", "),
 		))
 	}
+
 	return nil
 }
 
@@ -340,6 +369,7 @@ func toolError(tool *types.ToolDef, cause error) error {
 	if tool.FallbackURL != "" {
 		msg += "\n  Install manually: " + tool.FallbackURL
 	}
+
 	return apperr.Internal(msg)
 }
 
@@ -361,6 +391,7 @@ func (i *Installer) InstallTools(
 			"--ci installs the whole CI set; drop the tool names or drop --ci")
 	case opts.CI:
 		opts.Force = true
+
 		return i.InstallSet(ctx, root, cat.CI(), opts)
 	case len(opts.Names) > 0:
 		return i.InstallSet(ctx, root, cat.Installable(), opts)
@@ -385,7 +416,9 @@ func (i *Installer) InstallSet(
 	}
 
 	det := NewDetector(i.runner, i.log)
+
 	var toInstall []types.ToolDef
+
 	for j := range targets {
 		// --force rebuilds even an OK tool (the post-Go-bump case: right version,
 		// stale build-Go); otherwise skip anything already installed + current.
@@ -394,8 +427,10 @@ func (i *Installer) InstallSet(
 			toInstall = append(toInstall, targets[j])
 		}
 	}
+
 	if len(toInstall) == 0 {
 		i.log.Info("All requested tools are already installed")
+
 		return nil
 	}
 
@@ -403,8 +438,10 @@ func (i *Installer) InstallSet(
 	if opts.DryRun {
 		i.log.Info("Would install "+strconv.Itoa(len(toInstall))+" tool(s)",
 			"tools", strings.Join(names, ", "))
+
 		return nil
 	}
+
 	yes, err := i.confirm(
 		ctx,
 		fmt.Sprintf(
@@ -417,24 +454,31 @@ func (i *Installer) InstallSet(
 	if err != nil {
 		return err
 	}
+
 	if !yes {
 		i.log.Info("Skipping installation")
+
 		return nil
 	}
 
 	var failed []string
+
 	for j := range toInstall {
 		if err := i.Install(ctx, root, &toInstall[j]); err != nil {
 			i.log.Warn(fmt.Sprintf("Failed to install %s: %v", toInstall[j].Name, err))
+
 			failed = append(failed, toInstall[j].Name)
 		}
 	}
+
 	if len(failed) > 0 {
 		return apperr.New(apperr.CodeInternal, fmt.Sprintf(
 			"failed to install %d tool(s): %s", len(failed), strings.Join(failed, ", "),
 		))
 	}
+
 	i.log.Info("All tools installed successfully")
+
 	return nil
 }
 
@@ -444,11 +488,13 @@ func selectTargets(tools []types.ToolDef, names []string) ([]types.ToolDef, erro
 	if len(names) == 0 {
 		return tools, nil
 	}
+
 	byName := make(map[string]types.ToolDef, 2*len(tools))
 	for i := range tools {
 		byName[tools[i].Binary] = tools[i]
 		byName[tools[i].Name] = tools[i]
 	}
+
 	targets := make([]types.ToolDef, 0, len(names))
 	for _, name := range names {
 		t, ok := byName[name]
@@ -456,8 +502,10 @@ func selectTargets(tools []types.ToolDef, names []string) ([]types.ToolDef, erro
 			return nil, apperr.New(apperr.CodeInvalidInput, "unknown tool "+name+
 				"; installable: "+strings.Join(toolNames(tools), ", "))
 		}
+
 		targets = append(targets, t)
 	}
+
 	return targets, nil
 }
 
@@ -467,6 +515,7 @@ func toolNames(tools []types.ToolDef) []string {
 	for i := range tools {
 		names[i] = tools[i].Name
 	}
+
 	return names
 }
 
@@ -492,11 +541,14 @@ func (i *Installer) resolveMethod(tool *types.ToolDef) (types.InstallMethod, boo
 				return all, true
 			}
 		}
+
 		return m, true
 	}
+
 	if m, ok := tool.InstallMethods["all"]; ok {
 		return m, true
 	}
+
 	return types.InstallMethod{}, false
 }
 
@@ -527,6 +579,7 @@ func (i *Installer) buildInvocation(method types.InstallMethod) invocation {
 			inv.args = append([]string{inv.args[0], "-p", "1"}, inv.args[1:]...)
 		}
 	}
+
 	return inv
 }
 
@@ -540,17 +593,22 @@ func (i *Installer) runWinget(
 	err := i.runner.Run(ctx, root, "winget", args...)
 	if err == nil {
 		i.log.Info("installed via winget", "tool", toolName)
+
 		return nil
 	}
 
 	var exitErr *exec.ExitError
+
 	if apperr.As(err, &exitErr) {
 		if desc, ok := ClassifyWingetExit(exitErr.ExitCode()); ok {
 			i.log.Info(toolName + ": " + desc)
+
 			return nil
 		}
 	}
+
 	i.log.Error(fmt.Sprintf("winget install %s failed: %v", toolName, err))
+
 	return apperr.Wrap(err, apperr.CodeInternal, "winget install "+toolName)
 }
 

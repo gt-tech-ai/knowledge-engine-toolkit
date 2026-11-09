@@ -155,6 +155,7 @@ func TestConvenienceConstructors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(string(tt.code), func(t *testing.T) {
 			t.Parallel()
+
 			err := tt.fn("test message")
 			assert.Equal(t, tt.code, err.Code)
 		})
@@ -178,6 +179,7 @@ func TestWithDetails(t *testing.T) {
 	detailed := apperr.WithDetails(err, map[string]string{"user_id": "123"})
 
 	assert.Equal(t, "123", detailed.Details["user_id"], "details should contain user_id")
+
 	// Confirm the original is not mutated.
 	if err.Details != nil {
 		assert.NotEqual(

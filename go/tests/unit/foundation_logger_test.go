@@ -178,7 +178,9 @@ func TestRedactPII_CombinedSinglePass(t *testing.T) {
 // implementation (no small-input regression).
 func BenchmarkRedactPII(b *testing.B) {
 	input := "user john@example.com called 555-123-4567 from 192.168.1.1 token=abc123xyz"
+
 	b.ReportAllocs()
+
 	for range b.N {
 		_ = logger.RedactPII(input)
 	}
@@ -226,7 +228,9 @@ func TestNewLogger_CreatesValidLogger(t *testing.T) {
 
 	// Verify it can log without panicking
 	var buf bytes.Buffer
+
 	_ = buf // logger writes to stdout, but shouldn't panic
+
 	l.Info("test message", "key", "value")
 }
 
@@ -283,6 +287,7 @@ func TestTraceID_ExtractsFromContext(t *testing.T) {
 		SpanID:     spanID,
 		TraceFlags: trace.FlagsSampled,
 	})
+
 	ctx = trace.ContextWithSpanContext(context.Background(), spanCtx)
 
 	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", logger.TraceID(ctx))
@@ -315,6 +320,7 @@ func TestSpanID_ExtractsFromContext(t *testing.T) {
 		SpanID:     spanID,
 		TraceFlags: trace.FlagsSampled,
 	})
+
 	ctx = trace.ContextWithSpanContext(context.Background(), spanCtx)
 
 	assert.Equal(t, "00f067aa0ba902b7", logger.SpanID(ctx))

@@ -61,6 +61,7 @@ func (p *Publisher) PublishBatchKeyed(
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -82,6 +83,7 @@ func (p *Publisher) enqueue(
 		Metadata: metadata,
 	}
 	tracer.Inject(ctx, msg.Metadata)
+
 	select {
 	case p.broker.topic(topic) <- msg:
 		return nil
@@ -105,5 +107,6 @@ func (p *Publisher) PublishBatch(
 			return err
 		}
 	}
+
 	return nil
 }

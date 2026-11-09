@@ -28,6 +28,7 @@ import (
 //   - An empty manifest produces an empty Def slice
 func TestClientsToolchainDefsFromTools_ProjectsTools(t *testing.T) {
 	t.Parallel()
+
 	defs := toolchain.DefsFromTools([]types.ToolEntry{
 		{
 			Name:        "golangci-lint",
@@ -57,6 +58,7 @@ func TestClientsToolchainDefsFromTools_ProjectsTools(t *testing.T) {
 //   - Empty Tools slice yields empty Def slice (not nil panic)
 func TestClientsToolchainDefsFromTools_EmptyTools(t *testing.T) {
 	t.Parallel()
+
 	defs := toolchain.DefsFromTools(nil)
 	assert.Empty(t, defs, "expected 0 defs from empty manifest")
 }

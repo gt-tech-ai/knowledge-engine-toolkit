@@ -60,6 +60,7 @@ func newExec(_ context.Context, _ Config, deps Deps) (interfaces.GitClient, erro
 	if deps.Runner == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "git exec: no command runner")
 	}
+
 	return exec.New(deps.Runner), nil
 }
 

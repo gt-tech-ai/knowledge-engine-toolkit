@@ -89,29 +89,38 @@ func (c Config) Validate() error {
 	if c.Kind != "ent" && c.Kind != "gorm" {
 		return apperr.InvalidInput(`stores.kind must be "ent" or "gorm"`)
 	}
+
 	if c.DefaultPageSize < 1 {
 		return apperr.InvalidInput("stores.default_page_size must be >= 1")
 	}
+
 	if c.MaxPageSize < 0 {
 		return apperr.InvalidInput("stores.max_page_size must be >= 0")
 	}
+
 	if c.MaxPageSize > 0 && c.MaxPageSize < c.DefaultPageSize {
 		return apperr.InvalidInput("stores.max_page_size must be >= default_page_size")
 	}
+
 	if c.CountCap < 0 {
 		return apperr.InvalidInput("stores.count_cap must be >= 0")
 	}
+
 	if c.Cache.SuggestTTL < 0 {
 		return apperr.InvalidInput("stores.cache.suggest_ttl must be >= 0")
 	}
+
 	if c.Cache.CountTTL < 0 {
 		return apperr.InvalidInput("stores.cache.count_ttl must be >= 0")
 	}
+
 	if c.SlowQueryThreshold < 0 {
 		return apperr.InvalidInput("stores.slow_query_threshold must be >= 0")
 	}
+
 	if c.ListHardCap < 0 {
 		return apperr.InvalidInput("stores.list_hard_cap must be >= 0")
 	}
+
 	return nil
 }

@@ -191,12 +191,15 @@ func Render(e EcosystemSet, p Policy) ([]byte, error) {
 func Build(e EcosystemSet, p Policy) Config {
 	mgrs := slices.Clone(e.Managers)
 	slices.Sort(mgrs)
+
 	var rules []PackageRule
+
 	for _, m := range mgrs {
 		if r, ok := managerRule(m); ok {
 			rules = append(rules, r)
 		}
 	}
+
 	rules = append(rules, gated(e, p.GroupRules)...)
 	rules = append(rules, globalMajorRule())
 	rules = append(rules, gated(e, p.PinRules)...)
@@ -204,6 +207,7 @@ func Build(e EcosystemSet, p Policy) Config {
 
 	ignore := slices.Concat(e.IgnorePaths, gated(e, p.IgnorePaths))
 	slices.Sort(ignore)
+
 	return Config{
 		Schema:              schemaURL,
 		Extends:             slices.Clone(p.Extends),
@@ -223,11 +227,13 @@ func Build(e EcosystemSet, p Policy) Config {
 // gated returns the values of entries whose managers are all present in e.
 func gated[T any](e EcosystemSet, entries []Gated[T]) []T {
 	var out []T
+
 	for _, g := range entries {
 		if e.HasAll(g.When) {
 			out = append(out, g.Value)
 		}
 	}
+
 	return out
 }
 
@@ -267,6 +273,7 @@ func managerRule(m Manager) (PackageRule, bool) {
 			Automerge:     new(false),
 		}, true
 	}
+
 	return PackageRule{}, false
 }
 
@@ -288,6 +295,7 @@ func workspaceModuleRules(e EcosystemSet) []PackageRule {
 	if !e.Has(ManagerGomod) || e.GoModule == "" {
 		return nil
 	}
+
 	return []PackageRule{{
 		MatchManagers:     []string{string(ManagerGomod)},
 		MatchPackageNames: []string{e.GoModule + "/**"},
@@ -299,11 +307,14 @@ func workspaceModuleRules(e EcosystemSet) []PackageRule {
 // trailing newline.
 func marshal(cfg Config) ([]byte, error) {
 	var buf bytes.Buffer
+
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
+
 	if err := enc.Encode(cfg); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "marshal renovate config")
 	}
+
 	return buf.Bytes(), nil
 }

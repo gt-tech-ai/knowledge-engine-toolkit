@@ -25,19 +25,24 @@ func TestBuildQueues(t *testing.T) {
 	if len(q) != 1 {
 		t.Fatalf("want exactly 1 queue, got %d", len(q))
 	}
+
 	cfg, ok := q["heavy"]
 	if !ok {
 		t.Fatal("named queue heavy missing")
 	}
+
 	if cfg.MaxWorkers != 4 {
 		t.Errorf("heavy MaxWorkers = %d, want 4", cfg.MaxWorkers)
 	}
 
 	def := buildQueues("", 0)
+
 	cfg, ok = def[river.QueueDefault]
+
 	if !ok {
 		t.Fatal("default queue missing on empty name")
 	}
+
 	if cfg.MaxWorkers != defaultMaxWorkers {
 		t.Errorf("default MaxWorkers = %d, want %d", cfg.MaxWorkers, defaultMaxWorkers)
 	}

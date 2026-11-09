@@ -33,8 +33,10 @@ func (e *stepEmitter) complete(r types.StepResult) {
 	if e == nil {
 		return
 	}
+
 	e.mu.Lock()
 	e.obs.OnStepComplete(r)
+
 	e.count++
 	e.mu.Unlock()
 }
@@ -44,8 +46,10 @@ func (e *stepEmitter) delivered() int {
 	if e == nil {
 		return 0
 	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
 	return e.count
 }
 
@@ -63,5 +67,6 @@ func emitterFromCtx(ctx context.Context) *stepEmitter {
 	if e, ok := ctx.Value(emitterKey{}).(*stepEmitter); ok {
 		return e
 	}
+
 	return nil
 }

@@ -24,6 +24,7 @@ func Warn(j interfaces.AnyJob) interfaces.AnyJob {
 					results[i].Status = types.StatusWarn
 				}
 			}
+
 			return results, err
 		},
 	}

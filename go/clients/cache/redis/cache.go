@@ -161,6 +161,7 @@ func New(cfg *Config) *Cache {
 		// correctly without a custom root or InsecureSkipVerify.
 		opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	}
+
 	client := redis.NewClient(opts)
 
 	return &Cache{
@@ -179,6 +180,7 @@ func (c *Cache) opCtx(parent context.Context) (context.Context, context.CancelFu
 	if c.opTimeout > 0 {
 		return context.WithTimeout(parent, c.opTimeout)
 	}
+
 	return parent, func() {}
 }
 
@@ -195,12 +197,15 @@ func (c *Cache) Get(ctx context.Context, key string) ([]byte, bool) {
 			// Cache miss (key doesn't exist) - not an error
 			return nil, false
 		}
+
 		// Connection error or other Redis error - absorb it
 		if c.failureMode == FailureModeError && c.logger != nil {
 			c.logger.Error("redis cache get failed", "key", key, "error", err)
 		}
+
 		return nil, false
 	}
+
 	return val, true
 }
 
@@ -213,6 +218,7 @@ func (c *Cache) Set(ctx context.Context, key string, value []byte, ttl time.Dura
 	if ttl == 0 {
 		ttl = c.defaultTTL
 	}
+
 	err := c.client.Set(ctx, key, value, ttl).Err()
 	if err != nil && c.failureMode == FailureModeError && c.logger != nil {
 		c.logger.Error("redis cache set failed", "key", key, "error", err)
@@ -244,7 +250,9 @@ func (c *Cache) InvalidatePrefix(ctx context.Context, prefix string) error {
 	}
 
 	pattern := escapeGlob(prefix) + "*"
+
 	var cursor uint64
+
 	for {
 		keys, next, err := c.client.Scan(ctx, cursor, pattern, scanCount).Result()
 		if err != nil {
@@ -254,6 +262,7 @@ func (c *Cache) InvalidatePrefix(ctx context.Context, prefix string) error {
 				"redis scan for prefix invalidation",
 			)
 		}
+
 		if len(keys) > 0 {
 			if err := c.client.Unlink(ctx, keys...).Err(); err != nil {
 				return apperr.Wrap(
@@ -263,6 +272,7 @@ func (c *Cache) InvalidatePrefix(ctx context.Context, prefix string) error {
 				)
 			}
 		}
+
 		cursor = next
 		if cursor == 0 {
 			return nil
@@ -281,6 +291,7 @@ func (c *Cache) InvalidateAll(ctx context.Context) error {
 			"redis flushdb for full invalidation",
 		)
 	}
+
 	return nil
 }
 
@@ -306,17 +317,21 @@ func (c *Cache) GetOrLoad(
 		if err != nil {
 			return nil, err
 		}
+
 		// Best-effort cache population — errors are swallowed because the
 		// caller asked for data, not cache success.
 		c.Set(ctx, key, data, ttl)
+
 		return data, nil
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	if v == nil {
 		return nil, nil
 	}
+
 	return v.([]byte), nil
 }
 

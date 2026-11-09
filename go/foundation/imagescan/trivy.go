@@ -42,6 +42,7 @@ func (p TrivyPolicy) Validate() error {
 		return apperr.New(apperr.CodeInvalidInput,
 			"image scan policy: scanners, severity and ignore file are required")
 	}
+
 	return nil
 }
 
@@ -51,10 +52,12 @@ func (p TrivyPolicy) Args(ref string) []string {
 	if p.IgnoreUnfixed {
 		args = append(args, "--ignore-unfixed")
 	}
+
 	exit := "1"
 	if p.ReportOnly {
 		exit = "0"
 	}
+
 	return append(args, "--ignorefile", p.IgnoreFile, "--exit-code", exit, ref)
 }
 
@@ -75,15 +78,19 @@ func ScanImage(
 		if !strict {
 			return types.OneStep(trivyStep, types.StatusSkip, nil)
 		}
+
 		return types.OneStep(trivyStep, types.StatusFail, apperr.New(
 			apperr.CodeNotFound, "trivy not found on PATH; a strict scan can't run"))
 	}
+
 	if err := policy.Validate(); err != nil {
 		return types.OneStep(trivyStep, types.StatusFail, err)
 	}
+
 	if err := runner.Run(ctx, dir, "trivy", policy.Args(ref)...); err != nil {
 		return types.OneStep(trivyStep, types.StatusFail,
 			apperr.Wrap(err, apperr.CodeInternal, "unignored vulnerabilities in "+ref))
 	}
+
 	return types.OneStep(trivyStep, types.StatusPass, nil)
 }

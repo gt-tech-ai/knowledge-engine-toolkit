@@ -29,6 +29,8 @@ func (s stagedFiles) Select(
 	if err != nil {
 		return nil, err
 	}
+
 	slices.Sort(out)
+
 	return out, nil
 }

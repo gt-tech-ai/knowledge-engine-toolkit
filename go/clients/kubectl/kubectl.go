@@ -64,6 +64,7 @@ func newExec(_ context.Context, cfg Config, deps Deps) (interfaces.KubectlClient
 	if deps.Runner == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "kubectl exec: no command runner")
 	}
+
 	return exec.New(deps.Runner, cfg.Context), nil
 }
 

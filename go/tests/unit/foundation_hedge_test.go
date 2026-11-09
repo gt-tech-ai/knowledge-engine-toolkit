@@ -27,11 +27,14 @@ func TestHedger_Delay_BackupBeatsSlowFirst(t *testing.T) {
 	t.Parallel()
 
 	var attempts int32
+
 	op := func() error {
 		if atomic.AddInt32(&attempts, 1) == 1 {
 			time.Sleep(500 * time.Millisecond) // first attempt lands in the slow tail
+
 			return apperr.Sentinel("slow first attempt")
 		}
+
 		return nil // the backup responds immediately
 	}
 
@@ -39,6 +42,7 @@ func TestHedger_Delay_BackupBeatsSlowFirst(t *testing.T) {
 	require.NoError(t, err)
 
 	start := time.Now()
+
 	require.NoError(t, h.Hedge(context.Background(), op), "the fast backup's result wins")
 	require.Less(
 		t,
@@ -61,11 +65,13 @@ func TestHedger_Disabled_RunsOnce(t *testing.T) {
 	t.Parallel()
 
 	var calls int32
+
 	h, err := hedge.New(hedge.KindDisabled)
 	require.NoError(t, err)
 
 	require.NoError(t, h.Hedge(context.Background(), func() error {
 		atomic.AddInt32(&calls, 1)
+
 		return nil
 	}))
 	require.Equal(
@@ -111,8 +117,10 @@ func TestHedger_NewFromConfig_DefaultsToDisabled(t *testing.T) {
 	require.NoError(t, err)
 
 	var calls int32
+
 	require.NoError(t, h.Hedge(context.Background(), func() error {
 		atomic.AddInt32(&calls, 1)
+
 		return nil
 	}))
 	require.Equal(
@@ -143,6 +151,7 @@ func TestHedger_Delay_RespectsContextCancellation(t *testing.T) {
 	require.NoError(t, err)
 
 	block := make(chan struct{})
+
 	t.Cleanup(func() { close(block) }) // release the blocked op so its goroutine exits
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -150,6 +159,7 @@ func TestHedger_Delay_RespectsContextCancellation(t *testing.T) {
 
 	err = h.Hedge(ctx, func() error {
 		<-block
+
 		return nil
 	})
 	require.ErrorIs(t, err, context.Canceled, "a cancelled context aborts the hedge")

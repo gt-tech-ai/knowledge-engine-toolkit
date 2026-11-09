@@ -74,33 +74,43 @@ type Roles[T, P any, ID comparable] struct {
 // RolesOf returns the roles next has, each calling next's method of that name.
 func RolesOf[T, P any, ID comparable](next any) Roles[T, P, ID] {
 	var r Roles[T, P, ID]
+
 	if n, ok := next.(interfaces.Reader[T, ID]); ok {
 		r.Get = n.Get
 	}
+
 	if n, ok := next.(interfaces.Lister[T, P]); ok {
 		r.List = n.List
 	}
+
 	if n, ok := next.(interfaces.Creator[T, *T]); ok {
 		r.Create = n.Create
 	}
+
 	if n, ok := next.(interfaces.Updater[T, ID, *T]); ok {
 		r.Update = n.Update
 	}
+
 	if n, ok := next.(interfaces.Deleter[ID]); ok {
 		r.Delete = n.Delete
 	}
+
 	if n, ok := next.(interfaces.Exister[ID]); ok {
 		r.Exists = n.Exists
 	}
+
 	if n, ok := next.(interfaces.Inserter[T]); ok {
 		r.Insert = n.Insert
 	}
+
 	if n, ok := next.(interfaces.Upserter[T]); ok {
 		r.Upsert = n.Upsert
 	}
+
 	if n, ok := next.(interfaces.Purger); ok {
 		r.PurgeBefore = n.PurgeBefore
 	}
+
 	return r
 }
 
@@ -113,13 +123,16 @@ func (r Roles[T, P, ID]) missing[C any]() []string {
 		"PurgeBefore": r.PurgeBefore != nil,
 	}
 	t := reflect.TypeFor[C]()
+
 	var out []string
+
 	for i := range t.NumMethod() {
 		name := t.Method(i).Name
 		if present, isRole := has[name]; isRole && !present {
 			out = append(out, name)
 		}
 	}
+
 	return out
 }
 
@@ -151,6 +164,7 @@ func NewEntity[C, T, P any, ID comparable](
 			name+": no implementation of "+strings.Join(missing, ", "),
 		)
 	}
+
 	return Entity[T, P, ID]{roles: roles, run: run, validate: validate}, nil
 }
 
@@ -166,17 +180,23 @@ func call[R any](
 	fn func(context.Context) (R, error),
 ) (R, error) {
 	var out R
+
 	if !present {
 		return out, apperr.New(apperr.CodeInternal, op+" is not a role of this component")
 	}
+
 	if run == nil {
 		return fn(ctx)
 	}
+
 	err := run(ctx, op, kind, func(ctx context.Context) error {
 		var err error
+
 		out, err = fn(ctx)
+
 		return err
 	})
+
 	return out, err
 }
 
@@ -185,6 +205,7 @@ func (e Entity[T, P, ID]) check(v *T) error {
 	if e.validate == nil {
 		return nil
 	}
+
 	return e.validate(v)
 }
 
@@ -213,6 +234,7 @@ func (e Entity[T, P, ID]) Create(ctx context.Context, entity *T) (*T, error) {
 			if err := e.check(entity); err != nil {
 				return nil, err
 			}
+
 			return e.roles.Create(ctx, entity)
 		})
 }
@@ -224,6 +246,7 @@ func (e Entity[T, P, ID]) Update(ctx context.Context, id ID, entity *T) (*T, err
 			if err := e.check(entity); err != nil {
 				return nil, err
 			}
+
 			return e.roles.Update(ctx, id, entity)
 		})
 }
@@ -240,6 +263,7 @@ func (e Entity[T, P, ID]) Delete(ctx context.Context, id ID) error {
 			return struct{}{}, e.roles.Delete(ctx, id)
 		},
 	)
+
 	return err
 }
 
@@ -255,6 +279,7 @@ func (e Entity[T, P, ID]) Insert(ctx context.Context, entity *T) error {
 		func(ctx context.Context) (struct{}, error) {
 			return struct{}{}, e.roles.Insert(ctx, entity)
 		})
+
 	return err
 }
 
@@ -265,8 +290,10 @@ func (e Entity[T, P, ID]) Upsert(ctx context.Context, entity *T) error {
 			if err := e.check(entity); err != nil {
 				return struct{}{}, err
 			}
+
 			return struct{}{}, e.roles.Upsert(ctx, entity)
 		})
+
 	return err
 }
 

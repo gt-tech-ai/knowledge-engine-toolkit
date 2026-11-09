@@ -25,6 +25,7 @@ import (
 //   - NewFromConfig(kind=local) returns a non-nil lock whose Acquire grants a key.
 func TestLockFactory_LocalBackend(t *testing.T) {
 	t.Parallel()
+
 	l, err := lock.NewFromConfig(t.Context(), lock.Config{
 		Kind:          lock.KindLocal,
 		TTL:           30 * time.Second,
@@ -92,6 +93,7 @@ func TestLockFactory_Validation(t *testing.T) {
 //     release, held is cancelled and the lock's Release was called with the token.
 func TestHold_AcquiresThenReleaseCancels(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockDistributedLock(ctrl)
 	m.EXPECT().Acquire(gomock.Any(), "k").Return("tok", true, nil)
@@ -121,6 +123,7 @@ func TestHold_AcquiresThenReleaseCancels(t *testing.T) {
 //     the returned release is a safe no-op (no Release call on the mock).
 func TestHold_NotAcquired(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockDistributedLock(ctrl)
 	m.EXPECT().Acquire(gomock.Any(), "k").Return("", false, nil)
@@ -146,6 +149,7 @@ func TestHold_NotAcquired(t *testing.T) {
 //     stays live; after release the context is cancelled and the lock is freed.
 func TestHold_RenewsPeriodicallyWhileHeld(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockDistributedLock(ctrl)
 	m.EXPECT().Acquire(gomock.Any(), "k").Return("tok", true, nil)
@@ -179,6 +183,7 @@ func TestHold_RenewsPeriodicallyWhileHeld(t *testing.T) {
 //     held context becomes cancelled without release being called.
 func TestHold_LeaseLostCancelsHeld(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockDistributedLock(ctrl)
 	m.EXPECT().Acquire(gomock.Any(), "k").Return("tok", true, nil)
@@ -190,6 +195,7 @@ func TestHold_LeaseLostCancelsHeld(t *testing.T) {
 		Hold(context.Background(), "k")
 	require.NoError(t, err)
 	require.True(t, ok)
+
 	defer release()
 
 	select {

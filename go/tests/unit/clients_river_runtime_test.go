@@ -33,10 +33,12 @@ const unreachableDB = "postgres://u:p@127.0.0.1:1/db?sslmode=disable"
 //     whose Client() and pool are live (the pgxpool connects lazily, so no DB needed).
 func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("malformed dsn returns parse error", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := riverpkg.NewRuntime(ctx, riverpkg.RuntimeConfig{
 			Workers:     river.NewWorkers(),
 			DatabaseURL: "postgres://u:p@127.0.0.1:5432/db?pool_max_conns=notanumber",
@@ -47,6 +49,7 @@ func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 
 	t.Run("nil workers is rejected by the river client", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := riverpkg.NewRuntime(ctx, riverpkg.RuntimeConfig{
 			Workers:     nil, // the default queue is always configured, so nil Workers is invalid
 			DatabaseURL: unreachableDB,
@@ -57,6 +60,7 @@ func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 
 	t.Run("valid config constructs a live runtime", func(t *testing.T) {
 		t.Parallel()
+
 		rt, err := riverpkg.NewRuntime(ctx, riverpkg.RuntimeConfig{
 			Workers:     river.NewWorkers(),
 			DatabaseURL: unreachableDB,
@@ -90,6 +94,7 @@ func TestRiverRuntime_NewRuntime_ConfigParsing(t *testing.T) {
 //   - Stop closes the pool without error on a never-started runtime.
 func TestRiverRuntime_HealthAndLifecycle(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	rt, err := riverpkg.NewRuntime(ctx, riverpkg.RuntimeConfig{
@@ -102,6 +107,7 @@ func TestRiverRuntime_HealthAndLifecycle(t *testing.T) {
 
 	readyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+
 	require.Error(
 		t,
 		rt.Readiness(readyCtx),
@@ -110,6 +116,7 @@ func TestRiverRuntime_HealthAndLifecycle(t *testing.T) {
 
 	startCtx, cancelStart := context.WithTimeout(ctx, 5*time.Second)
 	defer cancelStart()
+
 	require.Error(
 		t,
 		rt.Start(startCtx),
@@ -136,6 +143,7 @@ func TestRiverMigrate_Errors(t *testing.T) {
 
 	t.Run("malformed dsn fails to open the pool", func(t *testing.T) {
 		t.Parallel()
+
 		err := riverpkg.Migrate(
 			context.Background(),
 			"postgres://u:p@127.0.0.1:5432/db?pool_max_conns=notanumber",
@@ -146,8 +154,11 @@ func TestRiverMigrate_Errors(t *testing.T) {
 
 	t.Run("unreachable database fails the apply", func(t *testing.T) {
 		t.Parallel()
+
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
 		defer cancel()
+
 		err := riverpkg.Migrate(ctx, unreachableDB)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "river migrate")

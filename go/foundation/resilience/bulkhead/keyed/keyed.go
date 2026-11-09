@@ -23,6 +23,7 @@ func (c Config) Validate() error {
 	if c.MaxPerKey <= 0 {
 		return apperr.InvalidInput("keyed limiter: max_per_key must be positive")
 	}
+
 	return nil
 }
 
@@ -42,6 +43,7 @@ func New(cfg Config) (*Limiter, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+
 	return &Limiter{held: map[string]int{}, limit: cfg.MaxPerKey}, nil
 }
 
@@ -50,11 +52,15 @@ func New(cfg Config) (*Limiter, error) {
 func (l *Limiter) TryAcquire(key string) (release func(), ok bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	if l.held[key] >= l.limit {
 		return nil, false
 	}
+
 	l.held[key]++
+
 	var once sync.Once
+
 	return func() { once.Do(func() { l.release(key) }) }, true
 }
 
@@ -62,6 +68,7 @@ func (l *Limiter) TryAcquire(key string) (release func(), ok bool) {
 func (l *Limiter) release(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	l.held[key]--
 	if l.held[key] <= 0 {
 		delete(l.held, key)

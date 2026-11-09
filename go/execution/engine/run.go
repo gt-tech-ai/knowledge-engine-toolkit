@@ -39,6 +39,7 @@ func RunJobGroup(
 			start := time.Now()
 			sr, err := job.Execute(withEmitter(gctx, emitter), runner, root)
 			elapsed := time.Since(start)
+
 			if err != nil {
 				// Discoverer or pre-execution failure: surface as a single Fail result
 				// so the gate can detect the failure rather than seeing zero results.
@@ -48,6 +49,7 @@ func RunJobGroup(
 					Error:  err.Error(),
 				}}
 			}
+
 			// Backstop: stamp the job-execute elapsed onto any result not already
 			// timed at a finer granularity (single-op adapter jobs, skip steps, the
 			// synthetic error result). FanOut per-unit durations are non-zero and
@@ -57,10 +59,14 @@ func RunJobGroup(
 					sr[i].Duration = elapsed
 				}
 			}
+
 			delivered := emitter.delivered()
+
 			mu.Lock()
+
 			all = append(all, sr...)
 			mu.Unlock()
+
 			// Fire only the steps FanOut did not already deliver live, avoiding a
 			// double OnStepComplete. Two shapes occur:
 			//   - adapter.Results jobs (lint/typecheck/…): sr IS the FanOut output,
@@ -75,14 +81,18 @@ func RunJobGroup(
 			// table and counts. No panic: the guard short-circuits before slicing.
 			if delivered < len(sr) {
 				obsMu.Lock()
+
 				for _, r := range sr[delivered:] {
 					obs.OnStepComplete(r)
 				}
+
 				obsMu.Unlock()
 			}
+
 			return nil // never cancel siblings; collect all results
 		})
 	}
+
 	_ = g.Wait()
 
 	return all, nil

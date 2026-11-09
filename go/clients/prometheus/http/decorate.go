@@ -48,20 +48,25 @@ type decoratedDoer struct {
 // Do sends req through the client tier and returns its response with a buffered body.
 func (d *decoratedDoer) Do(req *nethttp.Request) (*nethttp.Response, error) {
 	op := "prometheus." + path.Base(req.URL.Path)
+
 	return d.Exec(req.Context(), op,
 		func(ctx context.Context) (*nethttp.Response, error) {
 			resp, err := d.inner.Do(req.Clone(ctx))
 			if err != nil {
 				return nil, transportError(err, "prometheus request")
 			}
+
 			body, err := d.readBody(resp.Body)
 			if err != nil {
 				return nil, err
 			}
+
 			if isTransientStatus(resp.StatusCode) {
 				return nil, statusError(resp.StatusCode, bytes.NewReader(body))
 			}
+
 			resp.Body = io.NopCloser(bytes.NewReader(body))
+
 			return resp, nil
 		})
 }
@@ -69,18 +74,22 @@ func (d *decoratedDoer) Do(req *nethttp.Request) (*nethttp.Response, error) {
 // readBody reads and closes src, enforcing maxBodyBytes.
 func (d *decoratedDoer) readBody(src io.ReadCloser) ([]byte, error) {
 	defer func() { _ = src.Close() }()
+
 	r := io.Reader(src)
 	if d.maxBodyBytes > 0 {
 		r = io.LimitReader(src, d.maxBodyBytes+1)
 	}
+
 	body, err := io.ReadAll(r)
 	if err != nil {
 		return nil, transportError(err, "read prometheus response")
 	}
+
 	if d.maxBodyBytes > 0 && int64(len(body)) > d.maxBodyBytes {
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"prometheus response exceeds %d bytes; narrow the query", d.maxBodyBytes,
 		))
 	}
+
 	return body, nil
 }

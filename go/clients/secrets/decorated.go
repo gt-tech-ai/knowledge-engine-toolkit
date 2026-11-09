@@ -22,6 +22,7 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
+
 	return &decorated{base: base, Base: b}, nil
 }
 

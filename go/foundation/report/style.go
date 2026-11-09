@@ -41,6 +41,7 @@ func (s style) wrap(text string) string {
 	if !s.on {
 		return text
 	}
+
 	return "\x1b[" + s.code + "m" + text + "\x1b[" + s.reset + "m"
 }
 
@@ -51,6 +52,7 @@ func (s style) Fprintf(w io.Writer, format string, a ...any) {
 	if s.on {
 		text = "\x1b[" + s.code + "m" + text + "\x1b[" + ansiReset + "m"
 	}
+
 	_, _ = io.WriteString(w, text)
 }
 

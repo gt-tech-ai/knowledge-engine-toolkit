@@ -40,10 +40,12 @@ func NewEntity[W, T, P any, ID comparable, N any](
 	if err != nil {
 		return Entity[T, P, ID, N]{}, err
 	}
+
 	e, err := decorate.NewEntity[W](name, decorate.RolesOf[T, P, ID](next), b.run, nil)
 	if err != nil {
 		return Entity[T, P, ID, N]{}, err
 	}
+
 	return Entity[T, P, ID, N]{Base: b, Entity: e, next: next}, nil
 }
 
@@ -57,8 +59,11 @@ func (b Base) run(
 	body := func(ctx context.Context) (struct{}, error) { return struct{}{}, fn(ctx) }
 	if kind == decorate.RoleRead {
 		_, err := b.Exec(ctx, op, body)
+
 		return err
 	}
+
 	_, err := b.ExecTx(ctx, op, body)
+
 	return err
 }

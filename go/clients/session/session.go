@@ -74,14 +74,18 @@ func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, erro
 	if cred, ok := p.cached(ref); ok {
 		return cred, nil
 	}
+
 	v, err, _ := p.group.Do(ref.String(), func() (any, error) {
 		return p.resolve(ctx, ref)
 	})
 	if err != nil {
 		var zero Cred
+
 		return zero, err
 	}
+
 	cred, _ := v.(Cred)
+
 	return cred, nil
 }
 
@@ -90,12 +94,16 @@ func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, erro
 func (p *Provider[Cred]) cached(ref types.Ref) (Cred, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
 	cred, ok := p.cache[ref]
 	if ok && expired(cred) {
 		delete(p.cache, ref)
+
 		var zero Cred
+
 		return zero, false
 	}
+
 	return cred, ok
 }
 
@@ -105,7 +113,9 @@ func expired(cred any) bool {
 	if !ok {
 		return false
 	}
+
 	at := e.ExpiresAt()
+
 	return !at.IsZero() && at.Before(time.Now().Add(ExpirySkew))
 }
 
@@ -116,11 +126,14 @@ func (p *Provider[Cred]) resolve(ctx context.Context, ref types.Ref) (Cred, erro
 	if cred, ok := p.cached(ref); ok {
 		return cred, nil
 	}
+
 	var zero Cred
+
 	secret, err := p.src.Get(ctx, ref)
 	if err != nil {
 		return zero, err
 	}
+
 	cred, err := p.parse([]byte(secret.Reveal()))
 	if err != nil {
 		return zero, apperr.Wrap(
@@ -129,13 +142,17 @@ func (p *Provider[Cred]) resolve(ctx context.Context, ref types.Ref) (Cred, erro
 			"parse credential "+ref.String(),
 		)
 	}
+
 	if err := p.verify(ctx, cred); err != nil {
 		return zero, apperr.Wrap(err, apperr.CodeUnauthorized,
 			"credential "+ref.String()+" failed verification")
 	}
+
 	p.mu.Lock()
+
 	p.cache[ref] = cred
 	p.mu.Unlock()
+
 	return cred, nil
 }
 
@@ -145,5 +162,6 @@ func (p *Provider[Cred]) Env(ctx context.Context, ref types.Ref) ([]string, erro
 	if err != nil {
 		return nil, err
 	}
+
 	return p.project(cred), nil
 }

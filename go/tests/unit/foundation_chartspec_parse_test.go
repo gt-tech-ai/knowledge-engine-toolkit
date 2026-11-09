@@ -79,6 +79,7 @@ func TestChartSpecParse_AcceptsValidSpec(t *testing.T) {
 
 	again, err := json.Marshal(spec)
 	require.NoError(t, err)
+
 	reparsed, err := chartspec.Parse(again, chartCubeMap())
 	require.NoError(t, err)
 	assert.Equal(t, spec, reparsed)
@@ -193,12 +194,14 @@ func TestParse_StructuredFilterEqualsGrammarFilter(t *testing.T) {
 
 	fromTree, err := chartspec.Parse(builtJSON, chartCubeMap())
 	require.NoError(t, err)
+
 	fromGrammar, err := chartspec.Parse([]byte(grammarJSON), chartCubeMap())
 	require.NoError(t, err)
 	assert.Equal(t, tree, fromTree.FilterTree)
 
 	treePlan, err := chartspec.Compile(fromTree, chartCube())
 	require.NoError(t, err)
+
 	grammarPlan, err := chartspec.Compile(fromGrammar, chartCube())
 	require.NoError(t, err)
 	assert.Equal(t, grammarPlan, treePlan)
@@ -217,9 +220,12 @@ func TestParse_StructuredFilterEqualsGrammarFilter(t *testing.T) {
 //     is CodeInvalidInput.
 func TestChartSpecValidate_MatchesParse(t *testing.T) {
 	t.Parallel()
+
 	parsed, err := chartspec.Parse([]byte(validSpecJSON), chartCubeMap())
 	require.NoError(t, err)
+
 	var decoded types.ChartSpec
+
 	require.NoError(t, json.Unmarshal([]byte(validSpecJSON), &decoded))
 
 	validated, err := chartspec.Validate(decoded, chartCubeMap())

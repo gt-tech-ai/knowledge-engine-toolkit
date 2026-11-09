@@ -28,6 +28,7 @@ func New(cfg *Config) (interfaces.CQLSession, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return driver.Dial(cluster, &gocql.SimpleSpeculativeExecution{
 		NumAttempts:  1,
 		TimeoutDelay: speculativeDelay,
@@ -81,6 +82,7 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 			"cassandra: at least one host is required",
 		)
 	}
+
 	consistency, err := gocql.ParseConsistencyWrapper(cfg.Consistency)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -89,30 +91,38 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 			"cassandra: unknown consistency "+cfg.Consistency,
 		)
 	}
+
 	cluster := gocql.NewCluster(cfg.Hosts...)
 	if cfg.Port > 0 {
 		cluster.Port = cfg.Port
 	}
+
 	cluster.Keyspace = cfg.Keyspace
 	cluster.Consistency = consistency
+
 	if cfg.Timeout > 0 {
 		cluster.Timeout = cfg.Timeout
 	}
+
 	if cfg.ConnectTimeout > 0 {
 		cluster.ConnectTimeout = cfg.ConnectTimeout
 	}
+
 	cluster.PageSize = cfg.PageSize
 	if cfg.DisableHostDiscovery {
 		if err := pinContactPoint(cluster, cfg.Hosts); err != nil {
 			return nil, err
 		}
 	}
+
 	if cfg.ReconnectInterval > 0 {
 		cluster.ReconnectInterval = cfg.ReconnectInterval
 	}
+
 	if cfg.NumConns > 0 {
 		cluster.NumConns = cfg.NumConns
 	}
+
 	cluster.PoolConfig.HostSelectionPolicy = hostPolicy(cfg)
 	if cfg.Username != "" {
 		cluster.Authenticator = gocql.PasswordAuthenticator{
@@ -120,12 +130,14 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 			Password: cfg.Password,
 		}
 	}
+
 	if cfg.TLS {
 		cluster.SslOpts = &gocql.SslOptions{
 			Config:                 &tls.Config{MinVersion: tls.VersionTLS12},
 			EnableHostVerification: true,
 		}
 	}
+
 	return cluster, nil
 }
 
@@ -139,6 +151,7 @@ func hostPolicy(cfg *Config) gocql.HostSelectionPolicy {
 	if cfg.DisableHostDiscovery {
 		return local
 	}
+
 	return gocql.TokenAwareHostPolicy(local)
 }
 
@@ -149,19 +162,24 @@ func hostPolicy(cfg *Config) gocql.HostSelectionPolicy {
 // CodeInvalidInput, since a translated address must be an IP.
 func pinContactPoint(cluster *gocql.ClusterConfig, hosts []string) error {
 	var ip net.IP
+
 	if len(hosts) == 1 {
 		ip = net.ParseIP(hosts[0])
 	}
+
 	if ip == nil {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"cassandra: host discovery can be disabled only with one IP-literal host",
 		)
 	}
+
 	port := cluster.Port
+
 	cluster.DisableInitialHostLookup = true
 	cluster.AddressTranslator = gocql.AddressTranslatorFunc(
 		func(net.IP, int) (net.IP, int) { return ip, port },
 	)
+
 	return nil
 }

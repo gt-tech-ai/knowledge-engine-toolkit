@@ -45,12 +45,15 @@ func (s Stage[In, Out]) Then[C any](next interfaces.Pipeline[Out, C]) Stage[In, 
 	if next == nil {
 		panic("pipeline: Then stage must not be nil")
 	}
+
 	return func(ctx context.Context, input In) (C, error) {
 		mid, err := s(ctx, input)
 		if err != nil {
 			var zero C
+
 			return zero, err
 		}
+
 		return next.Execute(ctx, mid)
 	}
 }
@@ -74,6 +77,7 @@ func NewBase[P any](decs decorate.Decorations, name string) (Base, error) {
 	if err != nil {
 		return Base{}, err
 	}
+
 	return Base{Subject: subject}, nil
 }
 
@@ -86,6 +90,7 @@ func (b Base) Stage[In, Out any](
 	if fn == nil {
 		panic("pipeline: stage fn must not be nil")
 	}
+
 	return func(ctx context.Context, input In) (Out, error) {
 		return b.Exec(ctx, op, func(ctx context.Context) (Out, error) {
 			return fn(ctx, input)
@@ -104,16 +109,21 @@ func (b Base) FanOut[In, Out any](
 	return b.Stage(op, func(ctx context.Context, input In) ([]Out, error) {
 		outs := make([]Out, len(stages))
 		g, gctx := errgroup.WithContext(ctx)
+
 		for i, stage := range stages {
 			g.Go(func() error {
 				out, err := stage.Execute(gctx, input)
+
 				outs[i] = out
+
 				return err
 			})
 		}
+
 		if err := g.Wait(); err != nil {
 			return nil, err
 		}
+
 		return outs, nil
 	})
 }

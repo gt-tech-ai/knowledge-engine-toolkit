@@ -128,11 +128,14 @@ func (c Config) Validate() error {
 		c.WS.PongTimeout < 0 {
 		return apperr.InvalidInput("transport.ws timeouts must be >= 0")
 	}
+
 	if c.WS.MaxConnections < 0 || c.WS.MaxConnectionsPerUser < 0 {
 		return apperr.InvalidInput("transport.ws connection limits must be >= 0")
 	}
+
 	if c.MaxHeaderBytes < 0 {
 		return apperr.InvalidInput("transport.max_header_bytes must be >= 0")
 	}
+
 	return nil
 }

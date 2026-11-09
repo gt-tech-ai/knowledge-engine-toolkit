@@ -76,12 +76,14 @@ func New(reg Registry, opts Options) (*Server, error) {
 	if err := opts.Settings.Validate(); err != nil {
 		return nil, err
 	}
+
 	if opts.RunDir.root == "" {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"mcp: a run directory is required",
 		)
 	}
+
 	s := &Server{
 		reg:      reg,
 		settings: opts.Settings,
@@ -96,21 +98,28 @@ func New(reg Registry, opts Options) (*Server, error) {
 			}, opts.Settings.RunRetention),
 	}
 	background := false
+
 	for _, op := range reg.List() {
 		tool, err := toolFor(op)
 		if err != nil {
 			return nil, err
 		}
+
 		if op.Descriptor().Lifecycle == types.OpLifecycleLongRunning {
 			s.srv.AddTool(tool, s.startHandler(op))
+
 			background = true
+
 			continue
 		}
+
 		s.srv.AddTool(tool, s.handler(op))
 	}
+
 	if background {
 		s.addRunsTools()
 	}
+
 	return s, nil
 }
 
@@ -122,6 +131,7 @@ func (s *Server) Serve(ctx context.Context, t sdkmcp.Transport) error {
 	if err := s.prune(); err != nil {
 		return err
 	}
+
 	return s.session(ctx, t)
 }
 
@@ -135,6 +145,7 @@ func (s *Server) session(ctx context.Context, t sdkmcp.Transport) error {
 	err := s.srv.Run(ctx, t)
 	s.table.CancelAll()
 	s.table.Wait()
+
 	return apperr.Wrap(err, apperr.CodeInternal, "Server.Run")
 }
 
@@ -150,10 +161,12 @@ func (s *Server) ServeStdio(
 	if err := s.prune(); err != nil {
 		return err
 	}
+
 	err := s.session(ctx, &sdkmcp.IOTransport{Reader: in, Writer: out})
 	if err == nil || isShutdown(err) {
 		return nil
 	}
+
 	return apperr.Wrap(err, apperr.CodeInternal, "mcp server: transport failed")
 }
 
@@ -167,5 +180,6 @@ func isShutdown(err error) bool {
 			return true
 		}
 	}
+
 	return false
 }

@@ -22,10 +22,12 @@ func (files) Select(
 	spec types.TargetSpec,
 ) ([]string, error) {
 	sel := types.FileSelector{IncludeGenerated: true, Globs: globs(spec)}
+
 	found, err := cb.Files(ctx, sel)
 	if err != nil {
 		return nil, err
 	}
+
 	out := make([]string, 0, len(found))
 	for _, f := range found {
 		if spec.SkipHeredoc {
@@ -33,12 +35,15 @@ func (files) Select(
 			if err != nil {
 				return nil, err
 			}
+
 			if heredocRe.Match(text.Bytes) {
 				continue
 			}
 		}
+
 		out = append(out, f.Path)
 	}
+
 	return out, nil
 }
 
@@ -55,5 +60,6 @@ func (fileDirs) Select(
 	if err != nil {
 		return nil, err
 	}
+
 	return dirsOf(found), nil
 }

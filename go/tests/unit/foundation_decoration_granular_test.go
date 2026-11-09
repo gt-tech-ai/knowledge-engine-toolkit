@@ -26,7 +26,9 @@ import (
 // Deps shows which of them a component got.
 func granularCollab(t *testing.T) decorate.Collaborators {
 	t.Helper()
+
 	ctrl := gomock.NewController(t)
+
 	return decorate.Collaborators{Observability: decorate.Observability{
 		Logger:  mocks.NewMockLogger(ctrl),
 		Metrics: mocks.NewMockMetrics(ctrl),
@@ -47,6 +49,7 @@ func granularCollab(t *testing.T) decorate.Collaborators {
 //   - A sibling ("api.users.create") gets only the defaults and the "api" override.
 func TestDecorationTierFor_CascadesOverridesAlongTheNamesDots(t *testing.T) {
 	t.Parallel()
+
 	on, off := true, false
 	two, five := 2*time.Second, 5*time.Second
 	tier := decoration.Tier{
@@ -85,8 +88,10 @@ func TestDecorationTierFor_CascadesOverridesAlongTheNamesDots(t *testing.T) {
 //     orders, resolve.
 func TestDecorations_RefusesAnOverrideTurningOnALayerItsTierLacks(t *testing.T) {
 	t.Parallel()
+
 	on, off := true, false
 	cfg := decoration.DefaultConfig()
+
 	cfg.Workflows.Overrides = map[string]decoration.Layers{
 		"api.ask":   {Retry: decoration.Retry{Enabled: &on}},
 		"api.quiet": {Retry: decoration.Retry{Enabled: &off}, Logging: &off},
@@ -97,18 +102,21 @@ func TestDecorations_RefusesAnOverrideTurningOnALayerItsTierLacks(t *testing.T) 
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
 		"api.documents": {CircuitBreaker: decoration.CircuitBreaker{Enabled: &on}},
 	}
+
 	decs := decorate.NewDecorations(&cfg, granularCollab(t))
 
 	_, err := decs.Deps(workflow.Tier(), "api.ask")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "api.ask")
 	require.ErrorContains(t, err, "retry")
+
 	_, err = decs.Deps(store.Tier(), "api.documents")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "circuit_breaker")
 
 	_, err = decs.Deps(workflow.Tier(), "api.quiet")
 	require.NoError(t, err)
+
 	repo, err := decs.Deps(repository.Tier(), "api.documents")
 	require.NoError(t, err)
 	assert.NotNil(t, repo.Breaker)
@@ -131,14 +139,17 @@ func TestDecorations_RefusesAnOverrideTurningOnALayerItsTierLacks(t *testing.T) 
 //     resolve through Subject is reported by Verify.
 func TestDecorationsVerify_FailsOnAnOverrideNoComponentUses(t *testing.T) {
 	t.Parallel()
+
 	on := true
 	cfg := decoration.DefaultConfig()
+
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
 		"api.documents":  {Tracing: &on},
 		"api.documnets":  {Tracing: &on},
 		"identity.users": {Tracing: &on},
 	}
 	cfg.Pipelines.Overrides = map[string]decoration.Layers{"api": {Logging: &on}}
+
 	decs := decorate.NewDecorations(&cfg, granularCollab(t))
 	_, err := decs.Deps(repository.Tier(), "api.documents")
 	require.NoError(t, err)
@@ -151,7 +162,9 @@ func TestDecorationsVerify_FailsOnAnOverrideNoComponentUses(t *testing.T) {
 	assert.NotContains(t, err.Error(), "pipelines.overrides.api")
 
 	delete(cfg.Repositories.Overrides, "api.documnets")
+
 	clean := decorate.NewDecorations(&cfg, granularCollab(t))
+
 	_, err = clean.Deps(repository.Tier(), "api.documents")
 	require.NoError(t, err)
 	clean.Subject(pipeline.Tier(), "api.documents.create")
@@ -160,8 +173,10 @@ func TestDecorationsVerify_FailsOnAnOverrideNoComponentUses(t *testing.T) {
 	cfg.Workflows.Overrides = map[string]decoration.Layers{
 		"api.ask": {Retry: decoration.Retry{Enabled: &on}},
 	}
+
 	broken := decorate.NewDecorations(&cfg, granularCollab(t))
 	broken.Subject(workflow.Tier(), "api.ask")
+
 	err = broken.Verify("api")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "retry")
@@ -193,36 +208,46 @@ type documentsPipeline interface {
 //   - Each name counts as used for Verify.
 func TestConfiguredBases_ResolveEachStageJobAndGateByItsOwnName(t *testing.T) {
 	t.Parallel()
+
 	on := true
 	cfg := decoration.DefaultConfig()
+
 	cfg.Pipelines.Overrides = map[string]decoration.Layers{
 		"api.documents.create": {Logging: &on},
 	}
 	cfg.Jobs.Overrides = map[string]decoration.Layers{"events.sweep": {Logging: &on}}
 	cfg.Gates.Overrides = map[string]decoration.Layers{"events.nightly": {Logging: &on}}
+
 	ctrl := gomock.NewController(t)
 	logger := mocks.NewMockLogger(ctrl)
 	logger.EXPECT().WithContext(gomock.Any()).Return(logger).AnyTimes()
+
 	var logged []string
+
 	// The logging layer logs each operation at Debug as (tier, name, "operation", op).
 	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ string, kv ...any) {
 			logged = append(logged, kv[1].(string)+"."+kv[3].(string))
 		}).AnyTimes()
+
 	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{
 		Observability: decorate.Observability{Logger: logger},
 	})
 
 	pipes, err := pipeline.NewBase[documentsPipeline](decs, "api.documents")
 	require.NoError(t, err)
+
 	identity := func(_ context.Context, in string) (string, error) { return in, nil }
+
 	_, err = pipes.Stage("create", identity).Execute(t.Context(), "x")
 	require.NoError(t, err)
+
 	_, err = pipes.Stage("delete", identity).Execute(t.Context(), "x")
 	require.NoError(t, err)
 
 	jobs, err := job.NewBase(decs, "events.sweep")
 	require.NoError(t, err)
+
 	sweep := jobs.Local(
 		"sweep",
 		"events",

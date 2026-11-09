@@ -65,6 +65,7 @@ type lockedWriter struct {
 func (l *lockedWriter) Write(b []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	return l.w.Write(b) //nolint:wrapcheck // a pass-through writer
 }
 
@@ -77,6 +78,7 @@ func newPrinter(w io.Writer, level Level, rich, color bool, hints []Hint) *print
 		hints: hints,
 	}
 	p.level.Store(int32(level))
+
 	return p
 }
 
@@ -115,6 +117,7 @@ func (p *printer) resultsTable(results types.StepResults) {
 	if !p.at(LevelNormal) {
 		return
 	}
+
 	_, _ = fmt.Fprintln(p.w)
 	_, _ = fmt.Fprintf(
 		p.w,
@@ -128,22 +131,27 @@ func (p *printer) resultsTable(results types.StepResults) {
 		p.w, "  %-30s %-8s %10s  %s\n",
 		"──────────────────────────────", "──────", "────────", "─────",
 	)
+
 	var group string
+
 	for _, r := range results {
 		if r.Group != group {
 			group = r.Group
 			_, _ = fmt.Fprintln(p.w)
 			p.pal.bold.Fprintf(p.w, "  %s\n", group)
 		}
+
 		msg := stripCode(r.Error)
 		if len(msg) > 100 {
 			msg = msg[:97] + "..."
 		}
+
 		_, _ = fmt.Fprintf(
 			p.w, "    %-28s %-8s %10s  %s\n",
 			r.Name, p.status(r.Status), round(r.Duration), msg,
 		)
 	}
+
 	_, _ = fmt.Fprintln(p.w)
 }
 
@@ -153,11 +161,13 @@ func (p *printer) total(results types.StepResults, elapsed time.Duration) {
 	if !p.at(LevelNormal) {
 		return
 	}
+
 	if elapsed <= 0 {
 		for _, r := range results {
 			elapsed += r.Duration
 		}
 	}
+
 	_, _ = fmt.Fprintf(
 		p.w,
 		"  TOTAL: %s (%s)\n\n",
@@ -169,7 +179,9 @@ func (p *printer) total(results types.StepResults, elapsed time.Duration) {
 // counts joins the non-zero status counts, labelling passes as passed.
 func (p *printer) counts(results types.StepResults, passed string) string {
 	n := results.CountByStatus()
+
 	var parts []string
+
 	for _, c := range []struct {
 		label  string
 		status types.StepStatus
@@ -186,6 +198,7 @@ func (p *printer) counts(results types.StepResults, passed string) string {
 			)
 		}
 	}
+
 	return strings.Join(parts, ", ")
 }
 
@@ -211,10 +224,12 @@ func (p *printer) lineSummary(results types.StepResults, elapsed time.Duration) 
 	if !p.at(LevelNormal) {
 		return
 	}
+
 	summary := p.counts(results, "ok")
 	if summary == "" {
 		summary = "no steps"
 	}
+
 	_, _ = fmt.Fprintf(
 		p.w,
 		"\n%s  %s\n",
@@ -229,8 +244,11 @@ func (p *printer) failureBlock(results types.StepResults) {
 	if !p.at(LevelNormal) {
 		return
 	}
+
 	var flagged []*types.StepResult
+
 	failed := false
+
 	for i := range results {
 		r := &results[i]
 		if r.Status == types.StatusFail || r.Status == types.StatusWarn {
@@ -238,17 +256,22 @@ func (p *printer) failureBlock(results types.StepResults) {
 			failed = failed || r.Status == types.StatusFail
 		}
 	}
+
 	if len(flagged) == 0 {
 		return
 	}
+
 	heading := "Warnings:"
 	if failed {
 		heading = "Failures:"
 	}
+
 	p.pal.bold.Fprintf(p.w, "  %s\n", heading)
+
 	for _, r := range flagged {
 		p.stepDetail(r)
 	}
+
 	_, _ = fmt.Fprintln(p.w)
 }
 
@@ -259,6 +282,7 @@ func (p *printer) stepDetail(r *types.StepResult) {
 	if r.Status == types.StatusWarn {
 		label = p.pal.warn.Sprint("WARN")
 	}
+
 	_, _ = fmt.Fprintf(p.w, "\n    %s %s\n", label, p.pal.bold.Sprint(r.Name))
 
 	lines := ActionableLines(r.Detail, actionableLineLimit)
@@ -271,9 +295,11 @@ func (p *printer) stepDetail(r *types.StepResult) {
 			}
 		}
 	}
+
 	for _, l := range lines {
 		_, _ = fmt.Fprintf(p.w, "      %s\n", l)
 	}
+
 	if hint := p.hint(r); hint != "" {
 		_, _ = fmt.Fprintf(p.w, "      %s\n", p.pal.info.Sprint(hint))
 	}
@@ -287,6 +313,7 @@ func (p *printer) hint(r *types.StepResult) string {
 			return h.Text
 		}
 	}
+
 	return ""
 }
 
@@ -299,5 +326,6 @@ func stripCode(msg string) string {
 	if _, rest, ok := apperr.SplitCode(msg); ok {
 		return rest
 	}
+
 	return msg
 }

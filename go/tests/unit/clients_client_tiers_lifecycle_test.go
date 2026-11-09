@@ -126,6 +126,7 @@ func TestTransportTier_NewFromConfig(t *testing.T) {
 //   - Each client's Start and Stop return nil.
 func TestStatelessClients_LifecycleNoOps(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
@@ -155,8 +156,10 @@ func TestStatelessClients_LifecycleNoOps(t *testing.T) {
 // contract, so the test surfaces the lifecycle seam through a type assertion.
 func mustLifecycle(t *testing.T, v any) interfaces.Lifecycle {
 	t.Helper()
+
 	lc, ok := v.(interfaces.Lifecycle)
 	require.True(t, ok, "%T does not implement interfaces.Lifecycle", v)
+
 	return lc
 }
 

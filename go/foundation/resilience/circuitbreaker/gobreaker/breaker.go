@@ -82,11 +82,13 @@ func New(cfg Config) *Breaker {
 			if counts.ConsecutiveFailures >= cfg.ConsecutiveFailures {
 				return true
 			}
+
 			return cfg.MinRequests > 0 &&
 				counts.Requests >= cfg.MinRequests &&
 				float64(counts.TotalFailures)/float64(counts.Requests) >= cfg.FailureRatio
 		},
 	})
+
 	return &Breaker{inner: cb}
 }
 
@@ -104,5 +106,6 @@ func (b *Breaker) Execute(fn func() error) error {
 			"circuit breaker "+b.inner.Name()+" open",
 		)
 	}
+
 	return err
 }

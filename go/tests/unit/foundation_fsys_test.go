@@ -26,11 +26,13 @@ import (
 //     RemoveAll deletes a tree.
 func TestOSFS_RoundTrips(t *testing.T) {
 	t.Parallel()
+
 	fs := fsys.NewOSFS()
 	dir := t.TempDir()
 
 	sub := filepath.Join(dir, "a", "b")
 	require.NoError(t, fs.MkdirAll(sub, 0o755))
+
 	info, err := fs.Stat(sub)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir(), "MkdirAll + Stat report a directory")
@@ -38,6 +40,7 @@ func TestOSFS_RoundTrips(t *testing.T) {
 	file := filepath.Join(sub, "f.txt")
 	want := []byte("hello fsys")
 	require.NoError(t, fs.WriteFile(file, want, 0o644))
+
 	got, err := fs.ReadFile(file)
 	require.NoError(t, err)
 	assert.Equal(t, want, got, "WriteFile -> ReadFile round-trips bytes")
@@ -49,12 +52,15 @@ func TestOSFS_RoundTrips(t *testing.T) {
 
 	moved := filepath.Join(sub, "g.txt")
 	require.NoError(t, fs.Rename(file, moved))
+
 	_, err = fs.Stat(file)
 	require.Error(t, err, "old path is gone after Rename")
+
 	_, err = fs.Stat(moved)
 	assert.NoError(t, err, "new path exists after Rename")
 
 	require.NoError(t, fs.RemoveAll(filepath.Join(dir, "a")))
+
 	_, err = fs.Stat(sub)
 	assert.True(t, os.IsNotExist(err), "RemoveAll deletes the tree")
 }
@@ -71,12 +77,14 @@ func TestOSFS_RoundTrips(t *testing.T) {
 //   - DefaultFS() and NewOSFS() return non-nil FS values that can Stat a real path.
 func TestOSFS_Constructors(t *testing.T) {
 	t.Parallel()
+
 	dir := t.TempDir()
 	for name, fs := range map[string]fsys.FS{
 		"DefaultFS": fsys.DefaultFS(),
 		"NewOSFS":   fsys.NewOSFS(),
 	} {
 		require.NotNil(t, fs, name)
+
 		_, err := fs.Stat(dir)
 		assert.NoError(t, err, name)
 	}

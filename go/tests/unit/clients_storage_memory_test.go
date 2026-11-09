@@ -40,6 +40,7 @@ func TestStorageMemory_RoundTrip(t *testing.T) {
 
 	rc, err := c.Download(ctx, "b", "k")
 	require.NoError(t, err)
+
 	body, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	require.NoError(t, rc.Close())
@@ -62,6 +63,7 @@ func TestStorageMemory_RoundTrip(t *testing.T) {
 		strings.HasPrefix(getURL, "memory://"),
 		"the memory backend returns a synthetic URL",
 	)
+
 	putURL, err := c.PresignPutURL(ctx, "b", "k2", 60, "text/plain")
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(putURL, "memory://"))
@@ -69,17 +71,20 @@ func TestStorageMemory_RoundTrip(t *testing.T) {
 	require.NoError(t, c.Upload(ctx, "b", "x1", strings.NewReader("a"), "text/plain"))
 	require.NoError(t, c.Upload(ctx, "b", "x2", strings.NewReader("b"), "text/plain"))
 	require.NoError(t, c.DeleteBatch(ctx, "b", []string{"x1", "x2"}))
+
 	remaining, err := c.ListObjects(ctx, "b", "x")
 	require.NoError(t, err)
 	require.Empty(t, remaining)
 
 	require.NoError(t, c.Delete(ctx, "b", "k"))
+
 	exists, err = c.Exists(ctx, "b", "k")
 	require.NoError(t, err)
 	require.False(t, exists)
 
 	_, err = c.Download(ctx, "b", "missing")
 	require.Error(t, err, "a missing key is a not-found error")
+
 	_, err = c.Stat(ctx, "b", "missing")
 	require.Error(t, err)
 }
@@ -102,6 +107,7 @@ func TestStorageMemory_ListObjectsPage(t *testing.T) {
 	c := memory.New()
 	ctx := context.Background()
 	require.NoError(t, c.EnsureBucket(ctx, "b"))
+
 	for _, k := range []string{"docs/a", "docs/b", "docs/c", "other/x"} {
 		require.NoError(t, c.Upload(ctx, "b", k, strings.NewReader("y"), "text/plain"))
 	}
@@ -109,6 +115,7 @@ func TestStorageMemory_ListObjectsPage(t *testing.T) {
 	capped, err := c.ListObjectsPage(ctx, "b", "docs/", 2)
 	require.NoError(t, err)
 	require.Len(t, capped, 2, "the limit caps the result")
+
 	for _, o := range capped {
 		require.True(
 			t,
@@ -142,6 +149,7 @@ func TestStorageMemory_ListObjectsPageToken(t *testing.T) {
 	c := memory.New()
 	ctx := context.Background()
 	require.NoError(t, c.EnsureBucket(ctx, "b"))
+
 	for _, k := range []string{"docs/c", "docs/a", "docs/b", "other/x"} {
 		require.NoError(t, c.Upload(ctx, "b", k, strings.NewReader("y"), "text/plain"))
 	}
@@ -195,6 +203,7 @@ func TestStorageMemory_MultipartLifecycle(t *testing.T) {
 			{ETag: "e1", PartNumber: 1},
 		}),
 	)
+
 	exists, err := c.Exists(ctx, "b", "big")
 	require.NoError(t, err)
 	require.True(t, exists, "a completed multipart upload yields an object")
@@ -202,6 +211,7 @@ func TestStorageMemory_MultipartLifecycle(t *testing.T) {
 	aborted, err := c.CreateMultipartUpload(ctx, "b", "big2", "application/octet-stream")
 	require.NoError(t, err)
 	require.NoError(t, c.AbortMultipartUpload(ctx, "b", "big2", aborted))
+
 	ups, err = c.ListMultipartUploads(ctx, "b")
 	require.NoError(t, err)
 	require.Empty(t, ups, "no in-progress uploads remain after complete + abort")
@@ -234,6 +244,7 @@ func TestStorageFactory_KindMemory_Selected(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, c.Upload(ctx, "b", "k", strings.NewReader("x"), "text/plain"))
+
 	exists, err := c.Exists(ctx, "b", "k")
 	require.NoError(t, err)
 	require.True(t, exists, "the memory-backed client round-trips with no S3")

@@ -61,6 +61,7 @@ func kinds() client.Kinds[Config, Deps, interfaces.HelmClient] {
 						"helm exec: no command runner",
 					)
 				}
+
 				return exec.New(deps.Runner, deps.Root), nil
 			},
 		},

@@ -46,43 +46,57 @@ func (d *Dataset) Check(rules []Rule) error {
 	if len(rules) == 0 {
 		return nil
 	}
+
 	keys := d.keys()
+
 	env, err := ruleEnv(keys)
 	if err != nil {
 		return err
 	}
+
 	var failures []string
+
 	progs := make([]cel.Program, len(rules))
 	need := map[string]bool{}
+
 	for i := range rules {
 		prg, uses, err := compileRule(env, rules[i].Expr)
 		if err != nil {
 			failures = append(failures, rules[i].Name+": does not compile: "+err.Error())
+
 			continue
 		}
+
 		progs[i] = prg
+
 		maps.Copy(need, uses)
 	}
+
 	if need[dataVar] {
 		for _, k := range keys {
 			need[k] = true
 		}
 	}
+
 	act, err := d.activation(keys, need)
 	if err != nil {
 		return err
 	}
+
 	for i := range rules {
 		if progs[i] == nil {
 			continue
 		}
+
 		for _, msg := range evalRule(progs[i], act, rules[i].Message) {
 			failures = append(failures, rules[i].Name+": "+msg)
 		}
 	}
+
 	if len(failures) == 0 {
 		return nil
 	}
+
 	return apperr.New(apperr.CodeInvalidInput,
 		"data rules failed:\n  - "+strings.Join(failures, "\n  - "))
 }
@@ -95,30 +109,39 @@ func (d *Dataset) Validate(schema []byte) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "parse data schema")
 	}
+
 	const url = "dataset.schema.json"
+
 	c := jsonschema.NewCompiler()
+
 	if err := c.AddResource(url, doc); err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "load data schema")
 	}
+
 	sch, err := c.Compile(url)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "compile data schema")
 	}
+
 	values, err := d.values()
 	if err != nil {
 		return err
 	}
+
 	raw, err := json.Marshal(values)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "encode data as JSON")
 	}
+
 	inst, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "decode data JSON")
 	}
+
 	if err := sch.Validate(inst); err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "data does not match its schema")
 	}
+
 	return nil
 }
 
@@ -128,6 +151,7 @@ func (d *Dataset) values() (map[string]any, error) {
 	for _, k := range d.keys() {
 		all[k] = true
 	}
+
 	return d.decoded(all)
 }
 
@@ -139,16 +163,21 @@ func (d *Dataset) decoded(need map[string]bool) (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		if !ok {
 			continue
 		}
+
 		var v any
+
 		if err := n.Decode(&v); err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
 				"decode section "+key+" from "+d.sourceOf(key))
 		}
+
 		out[key] = v
 	}
+
 	return out, nil
 }
 
@@ -162,12 +191,14 @@ func (d *Dataset) activation(
 	if err != nil {
 		return nil, err
 	}
+
 	act := map[string]any{dataVar: values}
 	for _, k := range ruleVars(keys) {
 		if v, ok := values[k]; ok {
 			act[k] = v
 		}
 	}
+
 	return act, nil
 }
 
@@ -176,11 +207,13 @@ func (d *Dataset) activation(
 func ruleVars(keys []string) []string {
 	ident := regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	out := make([]string, 0, len(keys))
+
 	for _, k := range keys {
 		if k != dataVar && ident.MatchString(k) {
 			out = append(out, k)
 		}
 	}
+
 	return out
 }
 
@@ -190,15 +223,19 @@ func ruleVars(keys []string) []string {
 func ruleEnv(keys []string) (*cel.Env, error) {
 	vars := ruleVars(keys)
 	opts := make([]cel.EnvOption, 0, 8+len(vars))
+
 	opts = append(opts, ext.Strings(), ext.Lists(), ext.Sets(), cel.OptionalTypes(),
 		ext.Bindings(), ext.Math(), ext.Regex(), cel.Variable(dataVar, cel.DynType))
+
 	for _, k := range vars {
 		opts = append(opts, cel.Variable(k, cel.DynType))
 	}
+
 	env, err := cel.NewEnv(opts...)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "cel environment")
 	}
+
 	return env, nil
 }
 
@@ -208,20 +245,25 @@ func compileRule(env *cel.Env, expr string) (cel.Program, map[string]bool, error
 	if iss.Err() != nil {
 		return nil, nil, apperr.Wrap(iss.Err(), apperr.CodeInvalidInput, "compile")
 	}
+
 	prg, err := env.Program(ast)
 	if err != nil {
 		return nil, nil, apperr.Wrap(err, apperr.CodeInvalidInput, "program")
 	}
+
 	checked, err := cel.AstToCheckedExpr(ast)
 	if err != nil {
 		return nil, nil, apperr.Wrap(err, apperr.CodeInternal, "references")
 	}
+
 	uses := map[string]bool{}
+
 	for _, r := range checked.GetReferenceMap() {
 		if name := r.GetName(); name != "" {
 			uses[name] = true
 		}
 	}
+
 	return prg, uses, nil
 }
 
@@ -231,6 +273,7 @@ func evalRule(prg cel.Program, act map[string]any, message string) []string {
 	if err != nil {
 		return []string{"does not evaluate: " + err.Error()}
 	}
+
 	return ruleResult(out, message)
 }
 
@@ -242,9 +285,11 @@ func ruleResult(v ref.Val, message string) []string {
 		if got {
 			return nil
 		}
+
 		if message == "" {
 			message = "evaluated to false"
 		}
+
 		return []string{message}
 	default:
 		native, err := v.ConvertToNative(reflect.TypeFor[[]string]())
@@ -253,7 +298,9 @@ func ruleResult(v ref.Val, message string) []string {
 				"evaluates to %s, want a bool or a list of strings", v.Type().TypeName(),
 			)}
 		}
+
 		msgs, _ := native.([]string)
+
 		return msgs
 	}
 }

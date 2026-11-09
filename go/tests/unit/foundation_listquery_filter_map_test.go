@@ -47,6 +47,7 @@ func TestListQueryFieldBuilders(t *testing.T) {
 
 	t.Run("WithColumn overrides only the storage column", func(t *testing.T) {
 		t.Parallel()
+
 		base := listquery.String("display_name")
 		got := base.WithColumn("full_name")
 		require.Equal(t, "full_name", got.Column)
@@ -57,6 +58,7 @@ func TestListQueryFieldBuilders(t *testing.T) {
 
 	t.Run("WithJoin stamps a correlated-join target as a copy", func(t *testing.T) {
 		t.Parallel()
+
 		base := listquery.String("team_name")
 		got := base.WithJoin(types.JoinTarget{Table: "teams", Columns: []string{"name"}})
 		require.NotNil(t, got.Join)
@@ -66,6 +68,7 @@ func TestListQueryFieldBuilders(t *testing.T) {
 
 	t.Run("WithOrdinal sets the value-ordinal sort order as a copy", func(t *testing.T) {
 		t.Parallel()
+
 		base := listquery.String("status")
 		got := base.WithOrdinal([]string{"pending", "active", "done"})
 		require.Equal(t, []string{"pending", "active", "done"}, got.Ordinal)
@@ -98,6 +101,7 @@ func TestListQueryMapAccessors(t *testing.T) {
 		"Lookup finds a registered field and misses an unknown one",
 		func(t *testing.T) {
 			t.Parallel()
+
 			f, ok := m.Lookup("name")
 			require.True(t, ok)
 			require.Equal(t, "name", f.Name)
@@ -120,6 +124,7 @@ func TestListQueryMapAccessors(t *testing.T) {
 
 	t.Run("Join returns the joined target only for a joined field", func(t *testing.T) {
 		t.Parallel()
+
 		jt := m.Join("team_name")
 		require.NotNil(t, jt)
 		require.Equal(t, "teams", jt.Table)

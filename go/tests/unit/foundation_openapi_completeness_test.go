@@ -33,6 +33,7 @@ import (
 //     Violation whose RPC is the offending method and whose Reason names it.
 func TestCheckCompleteness_FlagsUnannotatedRESTRPC(t *testing.T) {
 	t.Parallel()
+
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(
 		t,
@@ -63,6 +64,7 @@ func TestCheckCompleteness_FlagsUnannotatedRESTRPC(t *testing.T) {
 //   - The same unclassifiable POST, when exempt, yields no violations.
 func TestCheckCompleteness_RespectsExemptMethods(t *testing.T) {
 	t.Parallel()
+
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(
 		t,
@@ -93,6 +95,7 @@ func TestCheckCompleteness_RespectsExemptMethods(t *testing.T) {
 //     yields zero violations.
 func TestCheckCompleteness_PassesFullyAnnotatedSurface(t *testing.T) {
 	t.Parallel()
+
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(
 		t,
@@ -121,6 +124,7 @@ func TestCheckCompleteness_PassesFullyAnnotatedSurface(t *testing.T) {
 //     and BuildRouteTable emits no routes for that same off-surface file (parity).
 func TestCheckCompleteness_SurfaceParityWithRouteTable(t *testing.T) {
 	t.Parallel()
+
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 
 	svcFDS := fixtures.BuildRouteFDS(

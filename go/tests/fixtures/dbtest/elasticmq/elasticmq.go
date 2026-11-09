@@ -59,6 +59,7 @@ func NewTestElasticMQ(ctx context.Context) (*TestElasticMQ, error) {
 		// A failed start (e.g. a readiness timeout) can still leave a container behind;
 		// TerminateContainer is nil-safe.
 		_ = testcontainers.TerminateContainer(container)
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
@@ -69,6 +70,7 @@ func NewTestElasticMQ(ctx context.Context) (*TestElasticMQ, error) {
 	host, err := container.Host(ctx)
 	if err != nil {
 		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
@@ -79,6 +81,7 @@ func NewTestElasticMQ(ctx context.Context) (*TestElasticMQ, error) {
 	port, err := container.MappedPort(ctx, elasticmqPort)
 	if err != nil {
 		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "failed to get mapped port")
 	}
 

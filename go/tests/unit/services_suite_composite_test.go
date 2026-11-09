@@ -46,7 +46,9 @@ func namedJob(name, group string) interfaces.AnyJob {
 //     name; a suite reference with no Suites func is likewise one failing job.
 func TestServicesSuite_Composite(t *testing.T) {
 	t.Parallel()
+
 	var refs []types.SuiteRef
+
 	c := suite.Composite{
 		Decs: fixtures.Decorations(),
 		Spec: types.Composite{Title: "Preflight", Phases: []types.CompositePhase{
@@ -60,6 +62,7 @@ func TestServicesSuite_Composite(t *testing.T) {
 		}},
 		Suites: func(ref types.SuiteRef) []interfaces.AnyJob {
 			refs = append(refs, ref)
+
 			return []interfaces.AnyJob{
 				namedJob(ref.Name+" a", ref.Name),
 				namedJob(ref.Name+" b", ref.Name),
@@ -75,13 +78,16 @@ func TestServicesSuite_Composite(t *testing.T) {
 	g := c.Gate()
 	phases := g.Phases()
 	require.Len(t, phases, 3, "the empty Toolchain phase is dropped")
+
 	names := func(i int) []string {
 		out := make([]string, 0, len(phases[i].Jobs))
 		for _, j := range phases[i].Jobs {
 			out = append(out, j.Meta().Name)
 		}
+
 		return out
 	}
+
 	assert.Equal(t, "Format", phases[0].Name)
 	assert.Equal(t, []string{"fmt a", "fmt b"}, names(0))
 	assert.Equal(t, "Lint & Type Check", phases[1].Name)
@@ -94,6 +100,7 @@ func TestServicesSuite_Composite(t *testing.T) {
 		{Name: "lint", Flags: []string{"go", "offline"}},
 		{Name: "check", Select: &types.Selection{Tags: []string{"mocks"}}},
 	}, refs)
+
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	require.NoError(t, g.Run(t.Context(), runner, "/r"))
 
@@ -106,6 +113,7 @@ func TestServicesSuite_Composite(t *testing.T) {
 	}
 	bg := bad.Gate()
 	require.Len(t, bg.Phases(), 2)
+
 	err := bg.Run(t.Context(), runner, "/r")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), string(apperr.CodeInvalidInput))

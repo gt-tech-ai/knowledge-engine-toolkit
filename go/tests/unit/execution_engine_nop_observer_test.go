@@ -21,6 +21,7 @@ func TestNopObserver_AllEventsAreInert(t *testing.T) {
 	t.Parallel()
 
 	var o engine.NopObserver
+
 	o.OnGateStart("gate", []string{"phase"})
 	o.OnPhaseStart("phase", []string{"step"})
 	o.OnStepStart("phase", "step")

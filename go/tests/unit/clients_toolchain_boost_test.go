@@ -21,8 +21,10 @@ import (
 // catalogFromEntries builds a Catalog from raw manifest tool entries.
 func catalogFromEntries(t *testing.T, entries ...types.ToolEntry) *toolchain.Catalog {
 	t.Helper()
+
 	cat, err := toolchain.NewCatalog(entries)
 	require.NoError(t, err)
+
 	return cat
 }
 
@@ -67,6 +69,7 @@ func wireRequiredEntry() types.ToolEntry {
 //     makes NewCatalog return an error
 func TestClientsToolchainNewCatalog_ProjectionErrorsPerCategory(t *testing.T) {
 	t.Parallel()
+
 	for _, cat := range []types.ToolCategory{
 		types.CategoryPrerequisite,
 		types.CategoryRequired,
@@ -92,6 +95,7 @@ func TestClientsToolchainNewCatalog_ProjectionErrorsPerCategory(t *testing.T) {
 //     min_version yields an error
 func TestClientsToolchainProjectLifecycleTools_HappyAndError(t *testing.T) {
 	t.Parallel()
+
 	defs, err := toolchain.ProjectLifecycleTools(toolEntries(t))
 	require.NoError(t, err)
 	assert.NotEmpty(t, defs)
@@ -121,6 +125,7 @@ func TestClientsToolchainProjectLifecycleTools_HappyAndError(t *testing.T) {
 //     absent) without error
 func TestClientsToolchainDetector_ListOptional(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().Exists("pgcli").Return(true)
@@ -145,6 +150,7 @@ func TestClientsToolchainDetector_ListOptional(t *testing.T) {
 //     return an error naming it
 func TestClientsToolchainDetector_CheckPrerequisites_Outdated(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().Exists("go").Return(true)
@@ -177,8 +183,10 @@ func TestClientsToolchainDetector_CheckPrerequisites_Outdated(t *testing.T) {
 //   - the resolved go parser returns "1.26.0" for bare "1.26.0" input
 func TestClientsToolchainGoVersionParse_Fallback(t *testing.T) {
 	t.Parallel()
+
 	cat, err := toolchain.NewCatalog(toolEntries(t))
 	require.NoError(t, err)
+
 	goDef, ok := cat.Find("go")
 	require.True(t, ok)
 	assert.Equal(t, "1.26.0", goDef.VersionParse("1.26.0"))
@@ -199,6 +207,7 @@ func TestClientsToolchainGoVersionParse_Fallback(t *testing.T) {
 //     Install return an error
 func TestClientsToolchainInstaller_Install_WingetGenericError(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().Run(
@@ -304,6 +313,7 @@ func TestClientsToolchainProvision_UserDeclines(t *testing.T) {
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().Exists("go").Return(true)
 	r.EXPECT().Exists("wire").Return(false)
+
 	p := mocks.NewMockPrompter(ctrl)
 	p.EXPECT().Confirm(gomock.Any(), gomock.Any()).Return(false, nil)
 
@@ -456,6 +466,7 @@ func TestClientsToolchainProvision_DarwinNoBrew(t *testing.T) {
 //     command and returns nil
 func TestClientsToolchainInstallSet_AllAlreadyInstalled(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().Exists("pgcli").Return(true)
@@ -483,6 +494,7 @@ func TestClientsToolchainInstallSet_AllAlreadyInstalled(t *testing.T) {
 //     prompts nothing (the prompter denies) and returns nil.
 func TestClientsToolchainInstallSet_DryRun(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().Exists("pgcli").Return(false)
@@ -630,6 +642,7 @@ func TestClientsToolchainProvision_WindowsPowershellTools(t *testing.T) {
 //     return an error naming it
 func TestClientsToolchainInstallSet_NamedSubsetFailure(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().Exists("grpcurl").Return(false)
@@ -675,6 +688,7 @@ func TestClientsToolchainInstallSet_UserDeclines(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().Exists("grpcurl").Return(false)
+
 	p := mocks.NewMockPrompter(ctrl)
 	p.EXPECT().Confirm(gomock.Any(), gomock.Any()).Return(false, nil)
 
@@ -708,5 +722,6 @@ func onPathBoost(want string) bool {
 			return true
 		}
 	}
+
 	return false
 }

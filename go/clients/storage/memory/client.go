@@ -73,7 +73,9 @@ func New() *Client {
 func (c *Client) EnsureBucket(_ context.Context, bucket string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	c.bucketOf(bucket)
+
 	return nil
 }
 
@@ -88,9 +90,12 @@ func (c *Client) Upload(
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "memory storage: read body")
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	c.put(bucket, key, data, contentType)
+
 	return nil
 }
 
@@ -98,10 +103,12 @@ func (c *Client) Upload(
 func (c *Client) Download(_ context.Context, bucket, key string) (io.ReadCloser, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	obj, err := c.get(bucket, key)
 	if err != nil {
 		return nil, err
 	}
+
 	return io.NopCloser(bytes.NewReader(obj.body)), nil
 }
 
@@ -109,7 +116,9 @@ func (c *Client) Download(_ context.Context, bucket, key string) (io.ReadCloser,
 func (c *Client) Delete(_ context.Context, bucket, key string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	delete(c.buckets[bucket], key)
+
 	return nil
 }
 
@@ -117,9 +126,11 @@ func (c *Client) Delete(_ context.Context, bucket, key string) error {
 func (c *Client) DeleteBatch(_ context.Context, bucket string, keys []string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	for _, key := range keys {
 		delete(c.buckets[bucket], key)
 	}
+
 	return nil
 }
 
@@ -127,7 +138,9 @@ func (c *Client) DeleteBatch(_ context.Context, bucket string, keys []string) er
 func (c *Client) Exists(_ context.Context, bucket, key string) (bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	_, ok := c.buckets[bucket][key]
+
 	return ok, nil
 }
 
@@ -138,10 +151,12 @@ func (c *Client) Stat(
 ) (interfaces.StorageObject, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	obj, err := c.get(bucket, key)
 	if err != nil {
 		return interfaces.StorageObject{}, err
 	}
+
 	return obj.meta, nil
 }
 
@@ -174,9 +189,13 @@ func (c *Client) CreateMultipartUpload(
 ) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	c.seq++
+
 	id := fmt.Sprintf("mem-upload-%d", c.seq)
+
 	c.uploads[id] = &multipart{bucket: bucket, key: key, contentType: contentType}
+
 	return id, nil
 }
 
@@ -207,6 +226,7 @@ func (c *Client) CompleteMultipartUpload(
 ) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	up, ok := c.uploads[uploadID]
 	if !ok || up.bucket != bucket || up.key != key {
 		return apperr.New(
@@ -219,11 +239,13 @@ func (c *Client) CompleteMultipartUpload(
 			),
 		)
 	}
+
 	// No part bytes exist (a memory backend has no part-PUT path); materialize the empty
 	// object so the multipart lifecycle completes. The client's ETags (the parts arg) are
 	// irrelevant to memory.
 	c.put(bucket, key, nil, up.contentType)
 	delete(c.uploads, uploadID)
+
 	return nil
 }
 
@@ -231,7 +253,9 @@ func (c *Client) CompleteMultipartUpload(
 func (c *Client) AbortMultipartUpload(_ context.Context, _, _, uploadID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	delete(c.uploads, uploadID)
+
 	return nil
 }
 
@@ -242,6 +266,7 @@ func (c *Client) ListMultipartUploads(
 ) ([]interfaces.MultipartUpload, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	uploads := make([]interfaces.MultipartUpload, 0)
 	for id, up := range c.uploads {
 		if up.bucket == bucket {
@@ -251,6 +276,7 @@ func (c *Client) ListMultipartUploads(
 			)
 		}
 	}
+
 	return uploads, nil
 }
 
@@ -261,12 +287,15 @@ func (c *Client) ListObjects(
 ) ([]interfaces.StorageObject, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	objects := make([]interfaces.StorageObject, 0)
+
 	for key, obj := range c.buckets[bucket] {
 		if strings.HasPrefix(key, prefix) {
 			objects = append(objects, obj.meta)
 		}
 	}
+
 	return objects, nil
 }
 
@@ -280,15 +309,18 @@ func (c *Client) ListObjectsPage(
 ) ([]interfaces.StorageObject, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	objects := make([]interfaces.StorageObject, 0)
 	for key, obj := range c.buckets[bucket] {
 		if limit > 0 && len(objects) >= limit {
 			break
 		}
+
 		if strings.HasPrefix(key, prefix) {
 			objects = append(objects, obj.meta)
 		}
 	}
+
 	return objects, nil
 }
 
@@ -304,22 +336,29 @@ func (c *Client) ListObjectsPageToken(
 ) ([]interfaces.StorageObject, string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	keys := make([]string, 0, len(c.buckets[bucket]))
 	for key := range c.buckets[bucket] {
 		if strings.HasPrefix(key, prefix) && key > continuationToken {
 			keys = append(keys, key)
 		}
 	}
+
 	sort.Strings(keys)
+
 	objects := make([]interfaces.StorageObject, 0, len(keys))
 	next := ""
+
 	for _, key := range keys {
 		if limit > 0 && len(objects) >= limit {
 			next = objects[len(objects)-1].Key // more remain → resume after the last returned key
+
 			break
 		}
+
 		objects = append(objects, c.buckets[bucket][key].meta)
 	}
+
 	return objects, next, nil
 }
 
@@ -330,12 +369,14 @@ func (c *Client) bucketOf(bucket string) map[string]object {
 		objects = make(map[string]object)
 		c.buckets[bucket] = objects
 	}
+
 	return objects
 }
 
 // put stores data under bucket/key with computed metadata. Caller holds c.mu.
 func (c *Client) put(bucket, key string, data []byte, contentType string) {
 	sum := sha256.Sum256(data)
+
 	c.bucketOf(bucket)[key] = object{
 		body: data,
 		meta: interfaces.StorageObject{
@@ -357,6 +398,7 @@ func (c *Client) get(bucket, key string) (object, error) {
 			fmt.Sprintf("memory storage: %s/%s not found", bucket, key),
 		)
 	}
+
 	return obj, nil
 }
 

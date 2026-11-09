@@ -28,14 +28,19 @@ func funcRegistry(
 	runs map[string]runFunc,
 ) *ops.Registry {
 	t.Helper()
+
 	ctrl := gomock.NewController(t)
 	descs := make([]types.OperationDescriptor, 0, 1+len(runs))
+
 	descs = append(descs,
 		opDesc("rm", types.SafetyDestructive, types.OpLifecycleBounded),
 	)
+
 	builders := map[string]ops.Builder[opsEnv]{"rm": mockBuilders(ctrl, descs)["rm"]}
+
 	for name, run := range runs {
 		desc := opDesc(name, types.SafetyReadOnly, types.OpLifecycleBounded)
+
 		desc.Timeout = d
 		descs = append(descs, desc)
 		builders[name] = func(
@@ -48,9 +53,11 @@ func funcRegistry(
 				Run(gomock.Any(), gomock.Any(), gomock.Any()).
 				DoAndReturn(run).
 				AnyTimes()
+
 			return op
 		}
 	}
+
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety:  types.SafetyMutating,
@@ -61,6 +68,7 @@ func funcRegistry(
 		Log:         fixtures.NopLogger(),
 	})
 	require.NoError(t, err)
+
 	return reg
 }
 
@@ -81,6 +89,7 @@ func TestExecutionOpsRegistryRun_TimeoutIsCodeTimeout(t *testing.T) {
 	reg := funcRegistry(t, 10*time.Millisecond, map[string]runFunc{
 		"slow": func(ctx context.Context, _ any, _ interfaces.ExecutionObserver) error {
 			<-ctx.Done()
+
 			return ctx.Err()
 		},
 	})
@@ -108,6 +117,7 @@ func TestExecutionOpsRegistryRun_CanceledIsCodeCanceled(t *testing.T) {
 		"stop": func(ctx context.Context, _ any, _ interfaces.ExecutionObserver) error {
 			cancel()
 			<-ctx.Done()
+
 			return ctx.Err()
 		},
 	})

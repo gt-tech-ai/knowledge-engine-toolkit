@@ -42,19 +42,25 @@ type adapterInput struct {
 //     type is INVALID_INPUT.
 func TestExecutionOpsAdapters_FuncDecodeAndDefaults(t *testing.T) {
 	t.Parallel()
-	var got adapterInput
-	var gotEnv opsEnv
+
+	var (
+		got    adapterInput
+		gotEnv opsEnv
+	)
+
 	b := ops.WithDefaults(ops.Func(func(
 		_ context.Context, in *adapterInput, env opsEnv, _ interfaces.ExecutionObserver,
 	) error {
 		in.Target = "mutated"
 		got, gotEnv = *in, env
+
 		return nil
 	}), func(in *adapterInput) { in.Fix = true })
 	op := b(opDesc("lint", types.SafetyReadOnly, types.OpLifecycleBounded),
 		opsEnv{Tag: "cli"})
 
 	var schema map[string]any
+
 	require.NoError(t, json.Unmarshal(op.InputSchema(), &schema))
 	assert.Equal(t, "object", schema["type"])
 	assert.Equal(t, false, schema["additionalProperties"])
@@ -65,9 +71,11 @@ func TestExecutionOpsAdapters_FuncDecodeAndDefaults(t *testing.T) {
 	in, err := ops.Decode(op, []byte(`{"target": "a"}`))
 	require.NoError(t, err)
 	assert.Equal(t, &adapterInput{Target: "a", Fix: true}, in)
+
 	empty, err := ops.Decode(op, nil)
 	require.NoError(t, err)
 	assert.Equal(t, &adapterInput{Fix: true}, empty)
+
 	_, err = ops.Decode(op, []byte(`{"targt": "a"}`))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), `"lint"`)
@@ -85,9 +93,12 @@ func TestExecutionOpsAdapters_FuncDecodeAndDefaults(t *testing.T) {
 func keys(v any) []string {
 	m, _ := v.(map[string]any)
 	out := make([]string, 0, len(m))
+
 	for k := range m {
 		out = append(out, k)
 	}
+
 	slices.Sort(out)
+
 	return out
 }

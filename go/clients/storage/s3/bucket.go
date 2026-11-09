@@ -27,16 +27,21 @@ func (c *s3Client) EnsureBucket(ctx context.Context, bucket string) error {
 	if _, err := c.api.CreateBucket(
 		ctx, &s3.CreateBucketInput{Bucket: aws.String(bucket)},
 	); err != nil {
-		var owned *s3types.BucketAlreadyOwnedByYou
-		var exists *s3types.BucketAlreadyExists
+		var (
+			owned  *s3types.BucketAlreadyOwnedByYou
+			exists *s3types.BucketAlreadyExists
+		)
+
 		if apperr.As(err, &owned) || apperr.As(err, &exists) {
 			return nil // created concurrently — idempotent success
 		}
+
 		return apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			fmt.Sprintf("create bucket %q", bucket),
 		)
 	}
+
 	return nil
 }

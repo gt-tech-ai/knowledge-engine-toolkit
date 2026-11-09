@@ -29,16 +29,19 @@ func TestRiverMigrate_CreatesRiverSchema(t *testing.T) {
 	ctx := context.Background()
 	db, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err, "start test database")
+
 	defer db.Close(ctx)
 
 	require.NoError(t, riverclient.Migrate(ctx, db.GetDSN()), "apply river schema")
 
 	conn, err := sql.Open("pgx", db.GetDSN())
 	require.NoError(t, err)
+
 	defer conn.Close()
 
 	for _, table := range []string{"river_job", "river_leader"} {
 		var exists bool
+
 		row := conn.QueryRowContext(
 			ctx,
 			`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = $1)`,

@@ -26,10 +26,12 @@ import (
 //     as lowercase hex) and hashes to its pinned SHA-256 address.
 func TestNodeHash_GoldenCorpus(t *testing.T) {
 	t.Parallel()
+
 	raw, err := os.ReadFile(
 		filepath.Join("..", "..", "..", "testdata", "chartspec", "nodes.golden.json"),
 	)
 	require.NoError(t, err)
+
 	var corpus struct {
 		Cases []struct {
 			Node      chartspec.Node `json:"node"`
@@ -38,12 +40,15 @@ func TestNodeHash_GoldenCorpus(t *testing.T) {
 			Hash      string         `json:"hash"`
 		} `json:"cases"`
 	}
+
 	require.NoError(t, json.Unmarshal(raw, &corpus))
 	require.GreaterOrEqual(t, len(corpus.Cases), 6)
+
 	for _, c := range corpus.Cases {
 		canonical, err := c.Node.Canonical()
 		require.NoError(t, err, c.Name)
 		assert.Equal(t, c.Canonical, string(canonical), c.Name)
+
 		h, err := c.Node.Hash()
 		require.NoError(t, err, c.Name)
 		assert.Equal(t, c.Hash, h.String(), c.Name)

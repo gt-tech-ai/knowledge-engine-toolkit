@@ -21,6 +21,7 @@ import (
 // jobs whose Execute ignores the runner, so it is never actually invoked.
 func gateNopRunner(t *testing.T) interfaces.CommandRunner {
 	t.Helper()
+
 	return mocks.NewMockCommandRunner(gomock.NewController(t))
 }
 
@@ -34,6 +35,7 @@ func recordingJob(
 	onRun func(),
 ) interfaces.AnyJob {
 	t.Helper()
+
 	j := mocks.NewMockAnyJob(gomock.NewController(t))
 	j.EXPECT().Meta().Return(types.JobMeta{Name: name}).AnyTimes()
 	j.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -41,10 +43,12 @@ func recordingJob(
 			if onRun != nil {
 				onRun()
 			}
+
 			return results, nil
 		},
 	).
 		AnyTimes()
+
 	return j
 }
 
@@ -71,11 +75,15 @@ func failResults(name, msg string) types.StepResults {
 //   - With two serial phases added in sequence, the job in phase1 runs strictly
 //     before the job in phase2 (observed via recorded execution order).
 func TestGate_PhaseOrdering(t *testing.T) {
-	var mu sync.Mutex
-	var order []string
+	var (
+		mu    sync.Mutex
+		order []string
+	)
+
 	record := func(name string) func() {
 		return func() {
 			mu.Lock()
+
 			order = append(order, name)
 			mu.Unlock()
 		}
@@ -145,6 +153,7 @@ func TestGate_AggregatesFailureErrors(t *testing.T) {
 
 	err := g.Run(context.Background(), gateNopRunner(t), "/")
 	require.Error(t, err, "expected error for two failed jobs")
+
 	msg := err.Error()
 	assert.Contains(
 		t,

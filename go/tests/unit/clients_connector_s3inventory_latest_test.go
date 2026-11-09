@@ -20,8 +20,10 @@ const inventoryPrefix = "inv/b/cfg/"
 // prefixCfg is inventoryCfg naming the report's folder instead of one manifest.
 func prefixCfg() interfaces.SourceConfig {
 	cfg := inventoryCfg()
+
 	cfg.InventoryManifestKey = ""
 	cfg.InventoryPrefix = inventoryPrefix
+
 	return cfg
 }
 
@@ -68,19 +70,23 @@ func reportKeys(sc *mocks.MockStorageClient) {
 //     key nor a folder is CodeInvalidInput at build
 func TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 	fixture := newInventoryFixture(t, "CSV")
 	source := func(list func(*mocks.MockStorageClient)) *s3inventory.Source {
 		sc := mocks.NewMockStorageClient(gomock.NewController(t))
 		fixture.serve(sc, map[string]int{})
 		list(sc)
+
 		src, err := s3inventory.NewSource(ctx, prefixCfg(), nil, stubBuilder(sc, nil))
 		require.NoError(t, err)
+
 		return src
 	}
 
 	_, afterThree, err := source(reportKeys).ListPage(ctx, "", 3)
 	require.NoError(t, err)
+
 	all := drain(t, source(reportKeys), "", 2)
 	rest := drain(t, source(func(*mocks.MockStorageClient) {}), afterThree, 3)
 	_, _, emptyErr := source(func(sc *mocks.MockStorageClient) {
@@ -91,7 +97,9 @@ func TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix(t *testing.T) {
 			}, "", nil)
 	}).ListPage(ctx, "", 2)
 	neither := prefixCfg()
+
 	neither.InventoryPrefix = ""
+
 	_, buildErr := s3inventory.NewSource(ctx, neither, nil, stubBuilder(nil, nil))
 
 	require.Equal(t, "2026-11-05T00-00Z/1:1", afterThree)

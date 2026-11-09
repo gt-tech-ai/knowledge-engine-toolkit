@@ -40,10 +40,12 @@ func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
 	if err := cfg.Policy.Validate("policy"); err != nil {
 		return nil, err
 	}
+
 	known, err := pairDescriptors(cfg.Descriptors, cfg.Builders)
 	if err != nil {
 		return nil, err
 	}
+
 	if err := checkPolicyNames(cfg.Policy, known); err != nil {
 		return nil, err
 	}
@@ -53,21 +55,26 @@ func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
 		ops:    map[string]interfaces.Operation{},
 		chains: map[string]decorate.OpMiddleware{},
 	}
+
 	for _, d := range cfg.Descriptors {
 		if !admits(cfg.Policy, d) {
 			continue
 		}
+
 		op, err := build(cfg.Builders[d.Name], d, cfg.Env)
 		if err != nil {
 			return nil, err
 		}
+
 		reg.ops[d.Name] = op
 		reg.chains[d.Name] = decorators(d, cfg.Log)
 		reg.list = append(reg.list, op)
 	}
+
 	slices.SortFunc(reg.list, func(a, b interfaces.Operation) int {
 		return strings.Compare(a.Descriptor().Name, b.Descriptor().Name)
 	})
+
 	return reg, nil
 }
 
@@ -84,12 +91,14 @@ func build[E any](
 			"operation %q: its builder returned no operation", d.Name,
 		))
 	}
+
 	if c, ok := op.(interface{ check() error }); ok {
 		if err := c.check(); err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
 				fmt.Sprintf("operation %q", d.Name))
 		}
 	}
+
 	return op, nil
 }
 
@@ -103,23 +112,29 @@ func pairDescriptors[E any](
 		if err := d.Validate(); err != nil {
 			return nil, err
 		}
+
 		if known[d.Name] {
 			return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 				"operation descriptor %q is declared twice", d.Name,
 			))
 		}
+
 		if b, ok := builders[d.Name]; !ok || b == nil {
 			return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 				"operation descriptor %q has no implementation", d.Name,
 			))
 		}
+
 		known[d.Name] = true
 	}
+
 	names := make([]string, 0, len(builders))
 	for name := range builders {
 		names = append(names, name)
 	}
+
 	slices.Sort(names)
+
 	for _, name := range names {
 		if !known[name] {
 			return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
@@ -127,5 +142,6 @@ func pairDescriptors[E any](
 			))
 		}
 	}
+
 	return known, nil
 }

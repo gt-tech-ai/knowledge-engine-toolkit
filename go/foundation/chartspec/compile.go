@@ -42,24 +42,30 @@ func Compile(spec types.ChartSpec, cube listquery.Schema) (Plan, error) {
 	if cube.Fields == nil {
 		return Plan{}, invalid("cube " + cube.Name + " has no field allow-list")
 	}
+
 	if spec.Cube != cube.Name {
 		return Plan{}, invalid("spec cube " + spec.Cube + " does not match " + cube.Name)
 	}
+
 	if spec.Grain != "" && len(cube.Grains) > 0 &&
 		!slices.Contains(cube.Grains, spec.Grain) {
 		return Plan{}, invalid(
 			"cube " + cube.Name + " is not rolled up at grain " + string(spec.Grain),
 		)
 	}
+
 	rows, cols := Normalize(spec.Rows), Normalize(spec.Columns)
+
 	query, err := aggregateQuery(spec, rows, cols)
 	if err != nil {
 		return Plan{}, err
 	}
+
 	plan := Plan{Query: query, Marks: make(map[PaneKey]types.Mark, len(rows)*len(cols))}
 	for _, r := range rows {
 		for _, c := range cols {
 			key := PaneKey{Row: tupleKey(r), Column: tupleKey(c)}
+
 			plan.Panes = append(plan.Panes, key)
 			plan.Marks[key] = markFor(
 				spec.Mark,
@@ -68,6 +74,7 @@ func Compile(spec types.ChartSpec, cube listquery.Schema) (Plan, error) {
 			)
 		}
 	}
+
 	return plan, nil
 }
 
@@ -90,29 +97,37 @@ func aggregateQuery(
 			if !slices.Contains(q.GroupBy, ref.Name) {
 				q.GroupBy = append(q.GroupBy, ref.Name)
 			}
+
 			return nil
 		}
+
 		if ref.Agg == types.AggCountDistinct {
 			return invalid("count_distinct is not answerable from additive partials")
 		}
+
 		if !seenMeasure[ref.Key()] {
 			seenMeasure[ref.Key()] = true
 			q.Measures = append(q.Measures, types.MeasureRef(ref))
 		}
+
 		return nil
 	}
+
 	var refs []types.FieldRef
+
 	for _, tuples := range [][]Tuple{rows, cols} {
 		for _, t := range tuples {
 			refs = append(refs, t.Fields...)
 		}
 	}
+
 	refs = append(append(refs, spec.Detail...), spec.Encodings.Fields()...)
 	for _, ref := range refs {
 		if err := add(ref); err != nil {
 			return types.AggregateQuery{}, err
 		}
 	}
+
 	for _, o := range spec.Sort {
 		if !slices.Contains(q.GroupBy, o.Field) && !seenMeasure[o.Field] {
 			return types.AggregateQuery{}, invalid(
@@ -120,6 +135,7 @@ func aggregateQuery(
 			)
 		}
 	}
+
 	return q, nil
 }
 
@@ -129,5 +145,6 @@ func tupleKey(t Tuple) string {
 	for _, f := range t.Fields {
 		keys = append(keys, f.Key())
 	}
+
 	return strings.Join(keys, ",")
 }

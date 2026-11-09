@@ -32,8 +32,10 @@ func TestPageToken_RoundTrip(t *testing.T) {
 
 	t.Run("offset token round-trips the page number", func(t *testing.T) {
 		t.Parallel()
+
 		enc, err := listquery.EncodeToken(types.PageToken{OffsetPage: 7})
 		require.NoError(t, err)
+
 		got, err := listquery.DecodeToken(enc)
 		require.NoError(t, err)
 		assert.Nil(t, got.Keyset)
@@ -44,12 +46,14 @@ func TestPageToken_RoundTrip(t *testing.T) {
 		"keyset token round-trips id, fingerprint, and sort values",
 		func(t *testing.T) {
 			t.Parallel()
+
 			enc, err := listquery.EncodeToken(types.PageToken{Keyset: &types.KeysetCursor{
 				SortValues:  []any{int64(1_700_000_000_000_000), "indexed"},
 				ID:          "11111111-2222-3333-4444-555555555555",
 				Fingerprint: []byte{0xde, 0xad, 0xbe, 0xef},
 			}})
 			require.NoError(t, err)
+
 			got, err := listquery.DecodeToken(enc)
 			require.NoError(t, err)
 			require.NotNil(t, got.Keyset)
@@ -65,6 +69,7 @@ func TestPageToken_RoundTrip(t *testing.T) {
 
 	t.Run("empty token is offset page 1", func(t *testing.T) {
 		t.Parallel()
+
 		got, err := listquery.DecodeToken("")
 		require.NoError(t, err)
 		assert.Nil(t, got.Keyset)
@@ -73,6 +78,7 @@ func TestPageToken_RoundTrip(t *testing.T) {
 
 	t.Run("malformed token is a clean InvalidInput", func(t *testing.T) {
 		t.Parallel()
+
 		_, err := listquery.DecodeToken("!!!not-base64!!!")
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))

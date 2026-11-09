@@ -70,22 +70,29 @@ func TestNewTestMinIO_WithImageOverridesTheDefault(t *testing.T) {
 	if testing.Short() || (os.Getenv("INTEGRATION") == "" && os.Getenv("CI") == "") {
 		t.Skip("set INTEGRATION=1 or CI=1 to run integration tests")
 	}
+
 	testcontainers.SkipIfProviderIsNotHealthy(t)
+
 	ctx := context.Background()
 
 	digest := strings.SplitN(miniodb.DefaultImage, "@", 2)[1]
 	digestOnly := "cgr.dev/chainguard/minio@" + digest
 	started, err := miniodb.NewTestMinIO(ctx, miniodb.WithImage(digestOnly))
+
 	t.Cleanup(func() { started.Close(ctx) })
 	require.NoError(t, err, "the overriding reference starts")
+
 	//nolint:noctx // test probe
 	resp, err := http.Get(started.Endpoint() + "/minio/health/ready")
 	require.NoError(t, err)
+
 	_ = resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	const missing = "cgr.dev/chainguard/minio:ke-fixture-override-probe-does-not-exist"
+
 	m, err := miniodb.NewTestMinIO(ctx, miniodb.WithImage(missing))
+
 	t.Cleanup(func() { m.Close(ctx) })
 	require.Error(t, err)
 	require.ErrorContains(t, err, missing)
@@ -101,14 +108,17 @@ func (s *StorageMinIOSuite) SetupSuite() {
 	s.Require().NoError(err, "create bucket")
 
 	cfg := infra.DefaultS3Config()
+
 	cfg.Endpoint = s.MinIOEndpoint
 	cfg.Bucket = testBucket
+
 	c, err := storage.NewFromConfig(
 		context.Background(),
 		storage.Config{Kind: storage.KindS3, S3: cfg},
 		storage.Deps{},
 	)
 	s.Require().NoError(err, "build storage client")
+
 	s.client = c
 }
 
@@ -126,6 +136,7 @@ func (s *StorageMinIOSuite) rawClient() *awss3.Client {
 		),
 	)
 	s.Require().NoError(err)
+
 	return awss3.NewFromConfig(awsCfg, func(o *awss3.Options) {
 		o.UsePathStyle = true
 		o.BaseEndpoint = aws.String(s.MinIOEndpoint)
@@ -136,6 +147,7 @@ func (s *StorageMinIOSuite) rawClient() *awss3.Client {
 func (s *StorageMinIOSuite) loadFixture() []byte {
 	data, err := os.ReadFile(filepath.Join("testdata", "sample.md"))
 	s.Require().NoError(err, "read fixture sample.md")
+
 	return data
 }
 
@@ -144,6 +156,7 @@ func (s *StorageMinIOSuite) loadFixture() []byte {
 // binary or relying on randomness.
 func (s *StorageMinIOSuite) largeFixture(minBytes int) []byte {
 	base := s.loadFixture()
+
 	return bytes.Repeat(base, (minBytes/len(base))+1)
 }
 
@@ -172,6 +185,7 @@ func (s *StorageMinIOSuite) TestUploadDownload_SmallAndMultipart() {
 		NoError(
 			s.client.Upload(ctx, testBucket, "large.md", bytes.NewReader(large), "text/markdown"),
 		)
+
 	got := s.download(ctx, "large.md")
 	s.Require().Len(got, len(large))
 	s.True(bytes.Equal(large, got), "multipart round-trip must be byte-identical")
@@ -189,6 +203,7 @@ func (s *StorageMinIOSuite) TestUploadDownload_SmallAndMultipart() {
 func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 	ctx := context.Background()
 	payload := s.loadFixture()
+
 	const ct = "text/markdown"
 
 	putURL, err := s.client.PresignPutURL(ctx, testBucket, "presigned.md", 300, ct)
@@ -202,6 +217,7 @@ func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 	)
 	s.Require().NoError(err)
 	putReq.Header.Set("Content-Type", ct)
+
 	putResp, err := http.DefaultClient.Do(putReq)
 	s.Require().NoError(err)
 	s.Require().NoError(putResp.Body.Close())
@@ -215,17 +231,22 @@ func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 		"My Report.md",
 	)
 	s.Require().NoError(err)
+
 	getReq, err := http.NewRequestWithContext(
 		s.T().Context(), http.MethodGet, getURL, http.NoBody,
 	)
 	s.Require().NoError(err)
+
 	getResp, err := http.DefaultClient.Do(getReq)
 	s.Require().NoError(err)
+
 	defer getResp.Body.Close()
+
 	// The signed response-content-disposition override must round-trip: MinIO returns
 	// it verbatim on the GET, forcing an attachment download under the display name.
 	s.Contains(getResp.Header.Get("Content-Disposition"), "attachment")
 	s.Contains(getResp.Header.Get("Content-Disposition"), "My Report.md")
+
 	body, err := io.ReadAll(getResp.Body)
 	s.Require().NoError(err)
 	s.Equal(payload, body)
@@ -243,6 +264,7 @@ func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 func (s *StorageMinIOSuite) TestStat_And_List() {
 	ctx := context.Background()
 	body := s.loadFixture()
+
 	for _, k := range []string{"docs/a.md", "docs/b.md", "other/c.md"} {
 		s.Require().
 			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), "text/markdown"))
@@ -277,14 +299,17 @@ func (s *StorageMinIOSuite) TestListObjectsPageToken_PagesToExhaustion() {
 	ctx := context.Background()
 	body := s.loadFixture()
 	want := []string{"page/a", "page/b", "page/c", "page/d", "page/e"}
+
 	for _, k := range want {
 		s.Require().
 			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), "text/markdown"))
 	}
 
 	var got []string
+
 	token := ""
 	pages := 0
+
 	for {
 		objs, next, err := s.client.ListObjectsPageToken(
 			ctx,
@@ -294,16 +319,20 @@ func (s *StorageMinIOSuite) TestListObjectsPageToken_PagesToExhaustion() {
 			2,
 		)
 		s.Require().NoError(err)
+
 		pages++
 		s.Require().
 			Less(pages, 10, "the crawl must terminate (guard against a non-empty-token loop)")
 		s.Require().LessOrEqual(len(objs), 2, "each page honors the limit")
+
 		for _, o := range objs {
 			got = append(got, o.Key)
 		}
+
 		if next == "" {
 			break
 		}
+
 		token = next
 	}
 
@@ -336,6 +365,7 @@ func (s *StorageMinIOSuite) TestDelete_DeleteBatch_Exists() {
 	s.True(exists)
 
 	s.Require().NoError(s.client.Delete(ctx, testBucket, "del/one.md"))
+
 	exists, err = s.client.Exists(ctx, testBucket, "del/one.md")
 	s.Require().NoError(err)
 	s.False(exists)
@@ -344,8 +374,10 @@ func (s *StorageMinIOSuite) TestDelete_DeleteBatch_Exists() {
 		s.Require().
 			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), "text/markdown"))
 	}
+
 	s.Require().
 		NoError(s.client.DeleteBatch(ctx, testBucket, []string{"batch/x.md", "batch/y.md"}))
+
 	objs, err := s.client.ListObjects(ctx, testBucket, "batch/")
 	s.Require().NoError(err)
 	s.Empty(objs)
@@ -355,8 +387,11 @@ func (s *StorageMinIOSuite) TestDelete_DeleteBatch_Exists() {
 func (s *StorageMinIOSuite) download(ctx context.Context, key string) []byte {
 	r, err := s.client.Download(ctx, testBucket, key)
 	s.Require().NoError(err)
+
 	defer r.Close()
+
 	data, err := io.ReadAll(r)
 	s.Require().NoError(err)
+
 	return data
 }

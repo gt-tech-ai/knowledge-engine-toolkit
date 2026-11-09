@@ -33,6 +33,7 @@ func TestMessagingMemory_RespectsContextCancellation(t *testing.T) {
 	for range 1024 {
 		require.NoError(t, pub.Publish(context.Background(), "full", []byte("x")))
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -58,10 +59,12 @@ func TestMessagingMemory_PublishBatchDelivers(t *testing.T) {
 	pub := memory.NewPublisher(broker)
 	sub := memory.NewSubscriber(broker, client.Base{})
 	got := make(chan []byte, 3)
+
 	go func() {
 		_ = sub.Subscribe(context.Background(), "batch",
 			func(_ context.Context, m *interfaces.Message) error {
 				got <- m.Payload
+
 				return nil
 			})
 	}()
@@ -77,6 +80,7 @@ func TestMessagingMemory_PublishBatchDelivers(t *testing.T) {
 			t.Fatalf("timed out waiting for payload %q", want)
 		}
 	}
+
 	require.NoError(t, sub.Close())
 }
 
@@ -95,12 +99,14 @@ func TestMessagingMemory_SubscribeStopsOnContextCancel(t *testing.T) {
 	sub := memory.NewSubscriber(memory.NewBroker(), client.Base{})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
+
 	go func() {
 		done <- sub.Subscribe(ctx, "topic",
 			func(context.Context, *interfaces.Message) error { return nil })
 	}()
 
 	cancel()
+
 	select {
 	case err := <-done:
 		require.Error(t, err, "a cancelled context must end the subscribe loop")

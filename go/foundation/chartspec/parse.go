@@ -47,6 +47,7 @@ func invalid(msg string) error {
 // rejection is CodeInvalidInput.
 func Parse(b []byte, m *listquery.Map) (types.ChartSpec, error) {
 	var spec types.ChartSpec
+
 	if err := json.Unmarshal(b, &spec); err != nil {
 		return types.ChartSpec{}, apperr.Wrap(
 			err,
@@ -54,6 +55,7 @@ func Parse(b []byte, m *listquery.Map) (types.ChartSpec, error) {
 			"chartspec: invalid JSON",
 		)
 	}
+
 	return Validate(spec, m)
 }
 
@@ -65,6 +67,7 @@ func Validate(spec types.ChartSpec, m *listquery.Map) (types.ChartSpec, error) {
 	if err := validate(&spec, m); err != nil {
 		return types.ChartSpec{}, err
 	}
+
 	return spec, nil
 }
 
@@ -73,13 +76,16 @@ func validate(spec *types.ChartSpec, m *listquery.Map) error {
 	if err := validateScalars(spec); err != nil {
 		return err
 	}
+
 	if m == nil {
 		return invalid("cube has no field allow-list")
 	}
+
 	keys, err := validateFields(spec, m)
 	if err != nil {
 		return err
 	}
+
 	for _, o := range spec.Sort {
 		if !keys[o.Field] {
 			return invalid(
@@ -87,6 +93,7 @@ func validate(spec *types.ChartSpec, m *listquery.Map) error {
 			)
 		}
 	}
+
 	return compileFilter(spec, m)
 }
 
@@ -95,16 +102,20 @@ func validateScalars(spec *types.ChartSpec) error {
 	if spec.Cube == "" {
 		return invalid("cube is required")
 	}
+
 	if spec.Grain != "" && !ValidGrain(spec.Grain) {
 		return invalid("unknown grain " + string(spec.Grain))
 	}
+
 	if !validMark(spec.Mark) {
 		return invalid("unknown mark " + string(spec.Mark))
 	}
+
 	if tr := spec.TimeRange; !tr.From.IsZero() && !tr.To.IsZero() &&
 		!tr.From.Before(tr.To) {
 		return invalid("time_range.from must precede time_range.to")
 	}
+
 	return nil
 }
 
@@ -117,6 +128,7 @@ func validateFields(spec *types.ChartSpec, m *listquery.Map) (map[string]bool, e
 			return nil, err
 		}
 	}
+
 	for _, ref := range spec.Detail {
 		f, ok := m.Lookup(ref.Name)
 		if !ok || f.Role == listquery.RoleMeasure || ref.Agg != types.AggNone {
@@ -124,14 +136,18 @@ func validateFields(spec *types.ChartSpec, m *listquery.Map) (map[string]bool, e
 				"detail field " + ref.Name + " is not a declared dimension",
 			)
 		}
+
 		keys[ref.Key()] = true
 	}
+
 	for _, ref := range spec.Encodings.Fields() {
 		if err := validateRef(ref, m); err != nil {
 			return nil, err
 		}
+
 		keys[ref.Key()] = true
 	}
+
 	return keys, nil
 }
 
@@ -141,11 +157,14 @@ func compileFilter(spec *types.ChartSpec, m *listquery.Map) error {
 	if spec.FilterTree == nil {
 		return nil
 	}
+
 	filter, err := listquery.ParseFilter(m, *spec.FilterTree)
 	if err != nil {
 		return err
 	}
+
 	spec.Filter = filter
+
 	return nil
 }
 
@@ -160,30 +179,39 @@ func validateShelf(
 	if e == nil {
 		return nil
 	}
+
 	if depth > MaxShelfDepth {
 		return invalid("shelf nesting exceeds max depth")
 	}
+
 	if e.Field != nil {
 		if e.Op != "" || len(e.Args) > 0 {
 			return invalid("a shelf node is either a field or an operator")
 		}
+
 		keys[e.Field.Key()] = true
+
 		return validateRef(*e.Field, m)
 	}
+
 	if !validOp(e.Op) {
 		return invalid("unknown shelf operator " + string(e.Op))
 	}
+
 	if len(e.Args) == 0 {
 		return invalid("shelf operator " + string(e.Op) + " needs operands")
 	}
+
 	for _, arg := range e.Args {
 		if arg == nil {
 			return invalid("null shelf operand")
 		}
+
 		if err := validateShelf(arg, m, depth+1, keys); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -194,19 +222,24 @@ func validateRef(ref types.FieldRef, m *listquery.Map) error {
 	if !ok {
 		return invalid("unknown field " + ref.Name)
 	}
+
 	if f.Role == listquery.RoleMeasure {
 		if ref.Agg == types.AggNone {
 			return invalid("measure " + ref.Name + " needs an aggregate")
 		}
+
 		if !f.Allows(ref.Agg) {
 			return invalid(
 				"aggregate " + string(ref.Agg) + " is not permitted on " + ref.Name,
 			)
 		}
+
 		return nil
 	}
+
 	if ref.Agg != types.AggNone {
 		return invalid("aggregate " + string(ref.Agg) + " on non-measure " + ref.Name)
 	}
+
 	return nil
 }

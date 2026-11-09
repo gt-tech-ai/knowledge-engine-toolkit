@@ -42,15 +42,19 @@ CREATE TABLE product_outbox (
 // with the producer-side insert the conformance suite drives.
 func newPgstore(t *testing.T) (*outboxpg.Store, *sql.DB) {
 	t.Helper()
+
 	ctx := context.Background()
 	pg, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err, "start postgres")
 	t.Cleanup(func() { pg.Close(context.Background()) })
+
 	db, err := pg.OpenDB()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
+
 	_, err = db.ExecContext(ctx, pgstoreSchema)
 	require.NoError(t, err)
+
 	store, err := outboxpg.New(db, outboxpg.Config{
 		Table:            "product_outbox",
 		TenantColumn:     "tenant",
@@ -59,6 +63,7 @@ func newPgstore(t *testing.T) (*outboxpg.Store, *sql.DB) {
 		MaxErrorLen:      16,
 	})
 	require.NoError(t, err)
+
 	return store, db
 }
 
@@ -71,13 +76,16 @@ func pgstoreEnqueue(
 	db *sql.DB,
 ) func(context.Context, *types.OutboxRecord) error {
 	tx := sqltx.New(db)
+
 	return func(ctx context.Context, rec *types.OutboxRecord) error {
 		if _, err := uuid.Parse(rec.Key); err != nil {
 			rec.Key = uuid.NewSHA1(uuid.NameSpaceOID, []byte(rec.Key)).String()
 		}
+
 		if rec.Attributes["event_type"] == "" {
 			rec.Attributes = map[string]string{"event_type": "suite.v1"}
 		}
+
 		return tx.WithTransaction(ctx, func(ctx context.Context) error {
 			return store.Enqueue(ctx, *rec)
 		})
@@ -98,6 +106,7 @@ func pgstoreEnqueue(
 //     the same id again is a no-op.
 func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 	requireIntegration(t)
+
 	ctx := t.Context()
 	store, db := newPgstore(t)
 	tx := sqltx.New(db)
@@ -116,8 +125,10 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
 	rolledBack := apperr.New(apperr.CodeConflict, "roll back")
+
 	err = tx.WithTransaction(ctx, func(ctx context.Context) error {
 		require.NoError(t, store.Enqueue(ctx, rec))
+
 		return rolledBack
 	})
 	require.ErrorIs(t, err, rolledBack)
@@ -127,10 +138,14 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 			return store.Enqueue(ctx, rec)
 		}))
 	}
+
 	var recs []types.OutboxRecord
+
 	require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
 		var err error
+
 		recs, err = store.Claim(ctx, "producer", 0, 10)
+
 		return err
 	}))
 	require.Len(t, recs, 1)
@@ -152,6 +167,7 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 //   - The shared OutboxStore conformance suite passes over a product-shaped table.
 func TestPgstore_PassesTheOutboxConformanceSuite(t *testing.T) {
 	requireIntegration(t)
+
 	store, db := newPgstore(t)
 	outboxtest.Run(t, outboxtest.Harness{
 		Store: store, Tx: sqltx.New(db), Enqueue: pgstoreEnqueue(store, db),
@@ -171,10 +187,12 @@ func TestPgstore_PassesTheOutboxConformanceSuite(t *testing.T) {
 //   - DeleteSentBefore removes only sent rows older than the cutoff.
 func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 	requireIntegration(t)
+
 	ctx := t.Context()
 	store, db := newPgstore(t)
 	key := uuid.New()
 	sent, parked := uuid.New(), uuid.New()
+
 	for _, id := range []uuid.UUID{sent, parked} {
 		require.NoError(t, pgstoreEnqueue(store, db)(ctx, &types.OutboxRecord{
 			ID: id, Lane: "facts", Tenant: "org-1", Key: key.String(),
@@ -184,10 +202,14 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 
 	tx := sqltx.New(db)
 	inTx := func(fn func(context.Context) error) error { return tx.WithTransaction(ctx, fn) }
+
 	var recs []types.OutboxRecord
+
 	require.NoError(t, inTx(func(ctx context.Context) error {
 		var err error
+
 		recs, err = store.Claim(ctx, "facts", 0, 10)
+
 		return err
 	}))
 	require.Len(t, recs, 2)
@@ -199,20 +221,27 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 		if err := store.MarkSent(ctx, sent); err != nil {
 			return err
 		}
+
 		return store.Park(ctx, parked, strings.Repeat("x", 40))
 	}))
+
 	var lastErr string
+
 	require.NoError(t, db.QueryRowContext(ctx,
 		`SELECT last_error FROM product_outbox WHERE id = $1`, parked).Scan(&lastErr))
 	require.Len(t, lastErr, 16)
 
 	purge := func(cutoff time.Time) int {
 		var n int
+
 		require.NoError(t, inTx(func(ctx context.Context) error {
 			var err error
+
 			n, err = store.DeleteSentBefore(ctx, cutoff)
+
 			return err
 		}))
+
 		return n
 	}
 	require.Zero(

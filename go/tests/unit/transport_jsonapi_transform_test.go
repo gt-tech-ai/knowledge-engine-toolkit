@@ -80,6 +80,7 @@ func TestTransformSingleResource(t *testing.T) {
 
 		data, ok := result["data"].(map[string]any)
 		require.True(t, ok, "expected data key")
+
 		attrs, ok := data["attributes"].(map[string]any)
 		require.True(t, ok, "attributes must be present even when the resource has none")
 		assert.Empty(t, attrs)
@@ -87,6 +88,7 @@ func TestTransformSingleResource(t *testing.T) {
 
 	t.Run("missing key wraps as meta", func(t *testing.T) {
 		t.Parallel()
+
 		body := map[string]any{"other": "value"}
 		result := codec.TransformSingleResource(body, cfg, "/test")
 		meta, ok := result["meta"].(map[string]any)
@@ -96,6 +98,7 @@ func TestTransformSingleResource(t *testing.T) {
 
 	t.Run("non-map value falls back", func(t *testing.T) {
 		t.Parallel()
+
 		body := map[string]any{"user": "not-a-map"}
 		result := codec.TransformSingleResource(body, cfg, "/test")
 		assert.Equal(t, body, result)
@@ -163,6 +166,7 @@ func TestTransformCollection(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "/api/v1/demo/users", links["self"])
 		assert.Equal(t, "/api/v1/demo/users?page_token=tok123", links["next"])
+
 		// The exact-count case carries no estimate flag (protojson omits the default false).
 		_, hasEstimate := meta["totalIsEstimate"]
 		assert.False(t, hasEstimate, "an exact total must not advertise an estimate")
@@ -260,6 +264,7 @@ func TestTransformError(t *testing.T) {
 		result := codec.TransformError(404, input)
 
 		var parsed map[string]any
+
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
 		errors, ok := parsed["errors"].([]any)
@@ -280,6 +285,7 @@ func TestTransformError(t *testing.T) {
 		result := codec.TransformError(400, input)
 
 		var parsed map[string]any
+
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
 		errObj := parsed["errors"].([]any)[0].(map[string]any)
@@ -299,6 +305,7 @@ func TestTransformError(t *testing.T) {
 		result := codec.TransformError(404, input)
 
 		var parsed map[string]any
+
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
 		errObj := parsed["errors"].([]any)[0].(map[string]any)
@@ -321,6 +328,7 @@ func TestTransformError(t *testing.T) {
 		result := codec.TransformError(500, input)
 
 		var parsed map[string]any
+
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
 		errObj := parsed["errors"].([]any)[0].(map[string]any)
@@ -335,6 +343,7 @@ func TestTransformError(t *testing.T) {
 		result := codec.TransformError(500, input)
 
 		var parsed map[string]any
+
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
 		errObj := parsed["errors"].([]any)[0].(map[string]any)
@@ -349,6 +358,7 @@ func TestTransformError(t *testing.T) {
 		result := codec.TransformError(503, nil)
 
 		var parsed map[string]any
+
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
 		errObj := parsed["errors"].([]any)[0].(map[string]any)
@@ -380,12 +390,14 @@ func TestIsRESTRequest(t *testing.T) {
 
 	t.Run("plain request is REST", func(t *testing.T) {
 		t.Parallel()
+
 		r := &http.Request{Header: http.Header{}}
 		assert.True(t, jsonapi.IsRESTRequest(r))
 	})
 
 	t.Run("connect protocol is not REST", func(t *testing.T) {
 		t.Parallel()
+
 		r := &http.Request{Header: http.Header{
 			"Connect-Protocol-Version": []string{"1"},
 		}}
@@ -394,6 +406,7 @@ func TestIsRESTRequest(t *testing.T) {
 
 	t.Run("grpc is not REST", func(t *testing.T) {
 		t.Parallel()
+
 		r := &http.Request{Header: http.Header{
 			"Content-Type": []string{"application/grpc"},
 		}}
@@ -402,6 +415,7 @@ func TestIsRESTRequest(t *testing.T) {
 
 	t.Run("grpc-web is not REST", func(t *testing.T) {
 		t.Parallel()
+
 		r := &http.Request{Header: http.Header{
 			"Content-Type": []string{"application/grpc-web"},
 		}}

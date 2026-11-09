@@ -63,7 +63,9 @@ func (b *metricsBuffer[T]) Wrap(
 	src interfaces.Stream[T],
 ) interfaces.Stream[T] {
 	s := &meteredStream[T]{buf: b}
+
 	s.out = b.inner.Wrap(ctx, &meteredSource[T]{Stream: src, s: s})
+
 	return s
 }
 
@@ -74,6 +76,7 @@ func (b *metricsBuffer[T]) Wrap(
 func (b *metricsBuffer[T]) add(items, bytes int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	b.heldItems += items
 	b.heldBytes += bytes
 	b.items.Set(float64(b.heldItems), b.name)
@@ -100,6 +103,7 @@ func (s *meteredStream[T]) Next(ctx context.Context) (item T, ok bool, err error
 		s.bytes.Add(-n)
 		s.buf.add(-1, -n)
 	}
+
 	return item, ok, err
 }
 
@@ -108,6 +112,7 @@ func (s *meteredStream[T]) Next(ctx context.Context) (item T, ok bool, err error
 func (s *meteredStream[T]) Close() error {
 	err := s.out.Close()
 	s.buf.add(-s.items.Swap(0), -s.bytes.Swap(0))
+
 	return err
 }
 
@@ -127,13 +132,16 @@ func (m *meteredSource[T]) Next(ctx context.Context) (item T, ok bool, err error
 	if !m.handed.IsZero() {
 		m.s.buf.wait.Observe(time.Since(m.handed).Seconds(), m.s.buf.name)
 	}
+
 	item, ok, err = m.Stream.Next(ctx)
 	if ok {
 		n := int64(m.s.buf.size(item))
 		m.s.items.Add(1)
 		m.s.bytes.Add(n)
 		m.s.buf.add(1, n)
+
 		m.handed = time.Now()
 	}
+
 	return item, ok, err
 }

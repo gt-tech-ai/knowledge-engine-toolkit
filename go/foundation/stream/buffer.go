@@ -88,6 +88,7 @@ func NewFromConfig[T any](cfg Config, size func(T) int) (Buffer[T], error) {
 					"and a size func, got max_items=%d max_bytes=%d",
 				cfg.MaxItems, cfg.MaxBytes))
 		}
+
 		return bounded[T]{maxItems: cfg.MaxItems, maxBytes: cfg.MaxBytes, size: size}, nil
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput,
@@ -127,13 +128,18 @@ func (b bounded[T]) Wrap(
 		sem:  semaphore.NewWeighted(int64(b.maxBytes)),
 		done: make(chan struct{}),
 	}
+
 	go q.produce(ctx, src, func(item T) int64 {
 		return int64(min(max(b.size(item), 0), b.maxBytes))
 	})
+
 	return newLatched(q.next, func() error {
 		cancel()
+
 		err := src.Close()
+
 		<-q.done
+
 		return err
 	})
 }
@@ -172,19 +178,25 @@ func (q *queue[T]) produce(
 	size func(T) int64,
 ) {
 	defer close(q.done)
+
 	for {
 		item, ok, err := src.Next(ctx)
 		if err != nil || !ok {
 			q.send(ctx, entry[T]{end: true, err: err})
+
 			return
 		}
+
 		n := size(item)
 		if err := q.sem.Acquire(ctx, n); err != nil {
 			q.exitErr = canceled(err)
+
 			return
 		}
+
 		if !q.send(ctx, entry[T]{item: item, n: n}) {
 			q.sem.Release(n)
+
 			return
 		}
 	}
@@ -197,6 +209,7 @@ func (q *queue[T]) send(ctx context.Context, e entry[T]) bool {
 		return true
 	case <-ctx.Done():
 		q.exitErr = canceled(ctx.Err())
+
 		return false
 	}
 }
@@ -204,6 +217,7 @@ func (q *queue[T]) send(ctx context.Context, e entry[T]) bool {
 // next takes the oldest entry, releasing its bytes to the producer.
 func (q *queue[T]) next(ctx context.Context) (item T, ok bool, err error) {
 	var zero T
+
 	select {
 	case e := <-q.ch:
 		return q.take(e)
@@ -223,9 +237,12 @@ func (q *queue[T]) next(ctx context.Context) (item T, ok bool, err error) {
 func (q *queue[T]) take(e entry[T]) (item T, ok bool, err error) {
 	if e.end {
 		var zero T
+
 		return zero, false, e.err
 	}
+
 	q.sem.Release(e.n)
+
 	return e.item, true, nil
 }
 
@@ -267,22 +284,28 @@ func newLatched[T any](
 // Next implements interfaces.Stream.
 func (l *latched[T]) Next(ctx context.Context) (item T, ok bool, err error) {
 	var zero T
+
 	if l.ended {
 		return zero, false, l.err
 	}
+
 	if l.closed.Load() {
 		return zero, false, nil
 	}
+
 	item, ok, err = l.next(ctx)
 	if l.closed.Load() {
 		// Close ran during next: whatever next saw (often the cancellation Close
 		// caused), the reader abandoned the stream, so report the end.
 		return zero, false, nil
 	}
+
 	if err != nil || !ok {
 		l.ended, l.err = true, err
+
 		return zero, false, err
 	}
+
 	return item, true, nil
 }
 
@@ -290,5 +313,6 @@ func (l *latched[T]) Next(ctx context.Context) (item T, ok bool, err error) {
 func (l *latched[T]) Close() error {
 	l.closed.Store(true)
 	l.once.Do(func() { l.closeErr = l.close() })
+
 	return l.closeErr
 }

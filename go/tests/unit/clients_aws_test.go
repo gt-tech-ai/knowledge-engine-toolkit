@@ -46,6 +46,7 @@ import (
 //     INVALID_INPUT.
 func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	decs := fixtures.Decorations()
 
@@ -55,6 +56,7 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 		awssts.Deps{Decorations: decs},
 	)
 	require.NoError(t, err)
+
 	who, err := stsc.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	require.NoError(t, err)
 	assert.Equal(t, awssts.StubAccount, aws.ToString(who.Account))
@@ -62,8 +64,10 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 	sm, err := secretsmanager.NewFromConfig(ctx, secretsmanager.Config{},
 		secretsmanager.Deps{Decorations: decs})
 	require.NoError(t, err)
+
 	_, err = sm.GetSecretValue(ctx, &awssm.GetSecretValueInput{SecretId: aws.String("x")})
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
+
 	put, err := sm.PutSecretValue(
 		ctx,
 		&awssm.PutSecretValueInput{SecretId: aws.String("x")},
@@ -77,43 +81,53 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 		awsquotas.Deps{Decorations: decs},
 	)
 	require.NoError(t, err)
+
 	_, err = sq.GetServiceQuota(ctx, &servicequotas.GetServiceQuotaInput{})
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
 	sesc, err := ses.NewFromConfig(ctx, ses.Config{}, ses.Deps{Decorations: decs})
 	require.NoError(t, err)
+
 	_, err = sesc.GetAccount(ctx, &sesv2.GetAccountInput{})
 	require.NoError(t, err)
+
 	br, err := bedrock.NewFromConfig(
 		ctx,
 		bedrock.Config{},
 		bedrock.Deps{Decorations: decs},
 	)
 	require.NoError(t, err)
+
 	_, err = br.Converse(ctx, &bedrockruntime.ConverseInput{})
 	require.NoError(t, err)
+
 	agent, err := awsbedrockagent.NewFromConfig(
 		ctx,
 		awsbedrockagent.Config{},
 		awsbedrockagent.Deps{Decorations: decs},
 	)
 	require.NoError(t, err)
+
 	_, err = agent.GetDataSource(ctx, &bedrockagent.GetDataSourceInput{})
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
+
 	iamc, err := awsiam.NewFromConfig(
 		ctx,
 		awsiam.Config{},
 		awsiam.Deps{Decorations: decs},
 	)
 	require.NoError(t, err)
+
 	_, err = iamc.SimulatePrincipalPolicy(ctx, &iam.SimulatePrincipalPolicyInput{})
 	require.NoError(t, err)
+
 	r53, err := awsroute53.NewFromConfig(
 		ctx,
 		awsroute53.Config{},
 		awsroute53.Deps{Decorations: decs},
 	)
 	require.NoError(t, err)
+
 	_, err = r53.ListHostedZonesByName(ctx, &route53.ListHostedZonesByNameInput{})
 	require.NoError(t, err)
 
@@ -134,6 +148,7 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 //     a transient failure of PutSecretValue reaches the caller after one call.
 func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	reg := promclient.NewRegistry()
 	decs := decorate.Fixed(decorate.Deps{
@@ -147,6 +162,7 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 
 	api.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).
 		Return(&awssm.DescribeSecretOutput{Name: aws.String("s")}, nil)
+
 	out, err := sm.DescribeSecret(
 		ctx,
 		&awssm.DescribeSecretInput{SecretId: aws.String("s")},
@@ -162,12 +178,14 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 	require.NoError(t, err)
 	agentAPI.EXPECT().GetDataSource(gomock.Any(), gomock.Any()).
 		Return(&bedrockagent.GetDataSourceOutput{}, nil)
+
 	_, err = agent.GetDataSource(ctx, &bedrockagent.GetDataSourceInput{})
 	require.NoError(t, err)
 	assert.InDelta(t, 1.0, clientOpCounter(t, reg, "get_data_source"), 0)
 
 	api.EXPECT().PutSecretValue(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.New(apperr.CodeUnavailable, "throttled")).Times(1)
+
 	_, err = sm.PutSecretValue(ctx, &awssm.PutSecretValueInput{SecretId: aws.String("s")})
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }

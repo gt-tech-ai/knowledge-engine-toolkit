@@ -20,6 +20,7 @@ import (
 // seqIDs returns a run-id source yielding run-1, run-2, … safely across goroutines.
 func seqIDs() func() string {
 	var n atomic.Int64
+
 	return func() string { return fmt.Sprintf("run-%d", n.Add(1)) }
 }
 
@@ -31,11 +32,13 @@ func heldRegistry(
 	d time.Duration,
 ) (reg *ops.Registry, started, release chan struct{}) {
 	t.Helper()
+
 	started, release = make(chan struct{}), make(chan struct{})
 	reg = funcRegistry(t, d, map[string]runFunc{
 		"hold": func(ctx context.Context, _ any, obs interfaces.ExecutionObserver) error {
 			obs.OnStepComplete(types.StepResult{Name: "lint", Status: types.StatusPass})
 			close(started)
+
 			select {
 			case <-release:
 				return nil
@@ -45,6 +48,7 @@ func heldRegistry(
 		},
 		"ok": func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
 	})
+
 	return reg, started, release
 }
 
@@ -79,6 +83,7 @@ func TestExecutionRunsStart_ReturnsRunIDImmediately(t *testing.T) {
 
 	close(release)
 	table.Wait()
+
 	snap, err = table.Status(id)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateSucceeded, snap.State)
@@ -100,9 +105,12 @@ func TestExecutionRunsStatus_TransitionsRunningToSucceeded(t *testing.T) {
 	t.Parallel()
 
 	reg, started, release := heldRegistry(t, time.Minute)
+
 	var finished atomic.Int64
+
 	table := runs.New(reg, seqIDs(), func(s runs.Snapshot) ([]string, error) {
 		finished.Add(1)
+
 		return []string{"/runs/" + s.ID + "/lint.log"}, nil
 	}, 0)
 
@@ -114,11 +122,13 @@ func TestExecutionRunsStatus_TransitionsRunningToSucceeded(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, snap.Steps, 1)
 	assert.Equal(t, "lint", snap.Steps[0].Name)
+
 	_, err = table.Result(id)
 	assert.Equal(t, apperr.CodeConflict, apperr.Code(err))
 
 	close(release)
 	table.Wait()
+
 	snap, err = table.Result(id)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateSucceeded, snap.State)
@@ -133,6 +143,7 @@ func TestExecutionRunsStatus_TransitionsRunningToSucceeded(t *testing.T) {
 
 	_, err = table.Status("nope")
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
+
 	_, err = table.Result("nope")
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(table.Cancel("nope")))
@@ -159,6 +170,7 @@ func TestExecutionRunsCancel_EndsRunAsCancelled(t *testing.T) {
 
 	require.NoError(t, table.Cancel(id))
 	table.Wait()
+
 	snap, err := table.Status(id)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateCancelled, snap.State)
@@ -185,6 +197,7 @@ func TestExecutionRunsTimeout_EndsRunAsFailedWithCodeTimeout(t *testing.T) {
 	require.NoError(t, err)
 
 	table.Wait()
+
 	snap, err := table.Status(id)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateFailed, snap.State)
@@ -212,6 +225,7 @@ func TestExecutionRunsCancelAll_StopsActiveRunsAndRefusesNewOnes(t *testing.T) {
 
 	table.CancelAll()
 	table.Wait()
+
 	snap, err := table.Status(id)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateCancelled, snap.State)
@@ -243,11 +257,13 @@ func TestExecutionRunsSecondStart_WhileActiveReturnsBusyWithRunID(t *testing.T) 
 	_, err = table.Start(context.Background(), "ok", nil)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 	assert.Contains(t, err.Error(), "busy: run-1 is running")
+
 	err = reg.Run(context.Background(), "ok", nil, nil)
 	assert.Contains(t, err.Error(), "busy: run-1 is running")
 
 	close(release)
 	table.Wait()
+
 	_, err = table.Start(context.Background(), "ok", nil)
 	require.NoError(t, err)
 	table.Wait()
@@ -277,6 +293,7 @@ func TestExecutionRunsOnDoneError_JoinsRunError(t *testing.T) {
 	id, err := table.Start(context.Background(), "ok", nil)
 	require.NoError(t, err)
 	table.Wait()
+
 	snap, err := table.Result(id)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateFailed, snap.State)
@@ -287,6 +304,7 @@ func TestExecutionRunsOnDoneError_JoinsRunError(t *testing.T) {
 	id, err = table.Start(context.Background(), "hold", nil)
 	require.NoError(t, err)
 	table.Wait()
+
 	snap, err = table.Result(id)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateFailed, snap.State)
@@ -309,6 +327,7 @@ func TestExecutionRunsRetention_ForgetsOldestFinishedRuns(t *testing.T) {
 
 	reg, _, _ := heldRegistry(t, time.Minute)
 	table := runs.New(reg, seqIDs(), nil, 2)
+
 	for range 3 {
 		_, err := table.Start(context.Background(), "ok", nil)
 		require.NoError(t, err)
@@ -319,7 +338,9 @@ func TestExecutionRunsRetention_ForgetsOldestFinishedRuns(t *testing.T) {
 	for _, s := range table.List() {
 		ids = append(ids, s.ID)
 	}
+
 	assert.Equal(t, []string{"run-2", "run-3"}, ids)
+
 	_, err := table.Status("run-1")
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }

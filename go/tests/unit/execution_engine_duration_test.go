@@ -30,10 +30,12 @@ func sleepingJob(
 	job.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, interfaces.CommandRunner, string) (types.StepResults, error) {
 			time.Sleep(sleep)
+
 			return results, err
 		},
 	).
 		AnyTimes()
+
 	return job
 }
 
@@ -56,6 +58,7 @@ func TestFanOut_StampsDurationWhenZero(t *testing.T) {
 			context.Background(), []int{0, 1},
 			func(_ context.Context, _ int) types.StepResult {
 				time.Sleep(2 * time.Millisecond)
+
 				return types.StepResult{Status: types.StatusPass} // Duration left zero
 			})
 	for i, r := range results {
@@ -76,6 +79,7 @@ func TestFanOut_StampsDurationWhenZero(t *testing.T) {
 //     not replaced by FanOut's measured elapsed.
 func TestFanOut_PreservesNonZeroDuration(t *testing.T) {
 	const want = 42 * time.Second
+
 	results := engine.Pool(1).
 		FanOut(
 			context.Background(), []int{0},
@@ -131,6 +135,7 @@ func TestRunJobGroup_StampsDurationOnZeroResult(t *testing.T) {
 //     not overwritten by the job-execute elapsed.
 func TestRunJobGroup_PreservesNonZeroDuration(t *testing.T) {
 	const want = 99 * time.Second
+
 	ctrl := gomock.NewController(t)
 	job := sleepingJob(
 		ctrl,

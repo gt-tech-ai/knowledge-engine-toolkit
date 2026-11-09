@@ -28,10 +28,12 @@ import (
 //     NewFromConfig and NewConsumerFromConfig return an error.
 func TestMessaging_SQSConstructionFailsOnUnloadableAWSConfig(t *testing.T) {
 	t.Setenv("AWS_CA_BUNDLE", filepath.Join(t.TempDir(), "missing-ca.pem"))
+
 	cfg := messaging.Config{Kind: messaging.KindSQS}
 
 	_, err := messaging.NewFromConfig(t.Context(), cfg, messaging.Deps{})
 	require.Error(t, err)
+
 	_, err = messaging.NewConsumerFromConfig(t.Context(), cfg, messaging.Deps{})
 	require.Error(t, err)
 }
@@ -51,22 +53,29 @@ func TestMessaging_SQSConstructionFailsOnUnloadableAWSConfig(t *testing.T) {
 //   - The redis kind with no injected client is CodeInvalidInput for both halves.
 func TestMessaging_FactoryBuildsEachKind(t *testing.T) {
 	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+
 	defer cancel()
 
 	deps := messaging.Deps{Broker: memory.NewBroker()}
 	pub, err := messaging.NewFromConfig(ctx, messaging.Config{}, deps)
 	require.NoError(t, err)
+
 	sub, err := messaging.NewConsumerFromConfig(ctx, messaging.Config{}, deps)
 	require.NoError(t, err)
 	require.NoError(t, pub.Publish(ctx, "t", []byte("hello")))
+
 	got := make(chan []byte, 1)
+
 	go func() {
 		_ = sub.Subscribe(ctx, "t", func(_ context.Context, m *interfaces.Message) error {
 			got <- m.Payload
+
 			return nil
 		})
 	}()
+
 	select {
 	case p := <-got:
 		assert.Equal(t, []byte("hello"), p)
@@ -83,13 +92,16 @@ func TestMessaging_FactoryBuildsEachKind(t *testing.T) {
 	sqsPub, err := messaging.NewFromConfig(ctx, sqsCfg, messaging.Deps{})
 	require.NoError(t, err)
 	assert.NotNil(t, sqsPub)
+
 	sqsSub, err := messaging.NewConsumerFromConfig(ctx, sqsCfg, messaging.Deps{})
 	require.NoError(t, err)
 	assert.NotNil(t, sqsSub)
 
 	redisCfg := messaging.Config{Kind: messaging.KindRedis}
+
 	_, err = messaging.NewFromConfig(ctx, redisCfg, messaging.Deps{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
 	_, err = messaging.NewConsumerFromConfig(ctx, redisCfg, messaging.Deps{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

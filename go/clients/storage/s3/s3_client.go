@@ -212,6 +212,7 @@ func NewClientFromAPI(
 	if threshold <= 0 {
 		threshold = defaultMultipartThreshold
 	}
+
 	return &s3Client{
 		api:         api,
 		threshold:   threshold,
@@ -236,9 +237,11 @@ func (c *s3Client) Upload(
 			fmt.Sprintf("reading upload body for %s/%s", bucket, key),
 		)
 	}
+
 	if !multipart {
 		return c.putSingle(ctx, bucket, key, bytes.NewReader(head), contentType)
 	}
+
 	return c.putMultipart(
 		ctx,
 		bucket,
@@ -258,7 +261,9 @@ func classifyBody(
 	// Grow a buffer up to threshold+1 bytes via io.CopyN so small uploads (the
 	// common case) only allocate their own size, not a full threshold-sized buffer.
 	var buf bytes.Buffer
+
 	_, rerr := io.CopyN(&buf, body, threshold+1)
+
 	switch {
 	case apperr.StdIs(rerr, io.EOF):
 		// Body smaller than threshold+1 → single-part.
@@ -281,6 +286,7 @@ func (c *s3Client) sseKMS() (mode types.ServerSideEncryption, keyID *string) {
 	if c.sseKMSKeyID == "" {
 		return "", nil
 	}
+
 	return types.ServerSideEncryptionAwsKms, aws.String(c.sseKMSKeyID)
 }
 
@@ -297,7 +303,9 @@ func (c *s3Client) putSingle(
 		Body:        body,
 		ContentType: aws.String(contentType),
 	}
+
 	in.ServerSideEncryption, in.SSEKMSKeyId = c.sseKMS()
+
 	_, err := c.api.PutObject(ctx, in)
 	if err != nil {
 		return apperr.Wrap(
@@ -306,6 +314,7 @@ func (c *s3Client) putSingle(
 			fmt.Sprintf("s3 put %s/%s", bucket, key),
 		)
 	}
+
 	return nil
 }
 
@@ -327,7 +336,9 @@ func (c *s3Client) putMultipart(
 		Key:         aws.String(key),
 		ContentType: aws.String(contentType),
 	}
+
 	createIn.ServerSideEncryption, createIn.SSEKMSKeyId = c.sseKMS()
+
 	created, err := c.api.CreateMultipartUpload(ctx, createIn)
 	if err != nil {
 		return apperr.Wrap(
@@ -336,6 +347,7 @@ func (c *s3Client) putMultipart(
 			fmt.Sprintf("s3 create multipart %s/%s", bucket, key),
 		)
 	}
+
 	uploadID := created.UploadId
 
 	// abort discards the in-progress upload on any failure so no incomplete
@@ -358,18 +370,22 @@ func (c *s3Client) putMultipart(
 	// of order) and sorted by part number before completion, which S3 requires.
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(maxUploadConcurrency)
+
 	var (
 		mu    sync.Mutex
 		parts []types.CompletedPart
 	)
+
 	for partNum := int32(1); ; partNum++ {
 		// Each part gets its own buffer: concurrent UploadPart goroutines must not
 		// share one. g.Go blocks once maxUploadConcurrency uploads are in flight,
 		// so at most that many buffers (plus the one being filled) are live at once.
 		buf := make([]byte, c.threshold)
 		n, rerr := io.ReadFull(body, buf)
+
 		if n > 0 {
 			part, data := partNum, buf[:n]
+
 			g.Go(func() error {
 				out, uerr := c.api.UploadPart(gctx, &s3.UploadPartInput{
 					Bucket:     aws.String(bucket),
@@ -385,21 +401,28 @@ func (c *s3Client) putMultipart(
 						fmt.Sprintf("s3 upload part %d %s/%s", part, bucket, key),
 					)
 				}
+
 				mu.Lock()
+
 				parts = append(
 					parts,
 					types.CompletedPart{ETag: out.ETag, PartNumber: aws.Int32(part)},
 				)
 				mu.Unlock()
+
 				return nil
 			})
 		}
+
 		if apperr.StdIs(rerr, io.EOF) || apperr.StdIs(rerr, io.ErrUnexpectedEOF) {
 			break
 		}
+
 		if rerr != nil {
 			_ = g.Wait()
+
 			abort()
+
 			return apperr.Wrap(
 				rerr,
 				apperr.CodeInternal,
@@ -407,8 +430,10 @@ func (c *s3Client) putMultipart(
 			)
 		}
 	}
+
 	if werr := g.Wait(); werr != nil {
 		abort()
+
 		return werr
 	}
 
@@ -426,12 +451,14 @@ func (c *s3Client) putMultipart(
 	})
 	if err != nil {
 		abort()
+
 		return apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			fmt.Sprintf("s3 complete multipart %s/%s", bucket, key),
 		)
 	}
+
 	return nil
 }
 
@@ -448,12 +475,14 @@ func (c *s3Client) Download(
 		if isNotFound(err) {
 			return nil, apperr.NotFound(fmt.Sprintf("object %s/%s", bucket, key))
 		}
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			fmt.Sprintf("s3 get %s/%s", bucket, key),
 		)
 	}
+
 	return out.Body, nil
 }
 
@@ -470,6 +499,7 @@ func (c *s3Client) Delete(ctx context.Context, bucket, key string) error {
 			fmt.Sprintf("s3 delete %s/%s", bucket, key),
 		)
 	}
+
 	return nil
 }
 
@@ -478,6 +508,7 @@ func (c *s3Client) DeleteBatch(ctx context.Context, bucket string, keys []string
 	if len(keys) == 0 {
 		return nil
 	}
+
 	// S3 DeleteObjects rejects a request with more than 1000 keys, so split into
 	// ≤1000-key chunks. Before this a >1000-key delete failed outright. A
 	// single chunk runs inline; multiple chunks run concurrently (bounded), and
@@ -485,11 +516,14 @@ func (c *s3Client) DeleteBatch(ctx context.Context, bucket string, keys []string
 	if len(keys) <= maxDeleteBatchKeys {
 		return c.deleteChunk(ctx, bucket, keys)
 	}
+
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(maxDeleteConcurrency)
+
 	for chunk := range slices.Chunk(keys, maxDeleteBatchKeys) {
 		g.Go(func() error { return c.deleteChunk(gctx, bucket, chunk) })
 	}
+
 	return g.Wait()
 }
 
@@ -500,6 +534,7 @@ func (c *s3Client) deleteChunk(ctx context.Context, bucket string, keys []string
 	for i, k := range keys {
 		objs[i] = types.ObjectIdentifier{Key: aws.String(k)}
 	}
+
 	out, err := c.api.DeleteObjects(ctx, &s3.DeleteObjectsInput{
 		Bucket: aws.String(bucket),
 		Delete: &types.Delete{Objects: objs, Quiet: aws.Bool(true)},
@@ -511,11 +546,13 @@ func (c *s3Client) deleteChunk(ctx context.Context, bucket string, keys []string
 			fmt.Sprintf("s3 delete batch %s (%d keys)", bucket, len(keys)),
 		)
 	}
+
 	// DeleteObjects reports per-object failures in the response body even when the
 	// HTTP call itself succeeds (Quiet suppresses successes, not errors). Surface
 	// them so a partial batch-delete failure is not silently swallowed.
 	if len(out.Errors) > 0 {
 		first := out.Errors[0]
+
 		return apperr.New(apperr.CodeInternal, fmt.Sprintf(
 			"s3 delete batch %s: %d of %d objects failed (first: key=%s code=%s message=%s)",
 			bucket,
@@ -526,6 +563,7 @@ func (c *s3Client) deleteChunk(ctx context.Context, bucket string, keys []string
 			aws.ToString(first.Message),
 		))
 	}
+
 	return nil
 }
 
@@ -539,12 +577,14 @@ func (c *s3Client) Exists(ctx context.Context, bucket, key string) (bool, error)
 		if isNotFound(err) {
 			return false, nil
 		}
+
 		return false, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			fmt.Sprintf("s3 head %s/%s", bucket, key),
 		)
 	}
+
 	return true, nil
 }
 
@@ -563,12 +603,14 @@ func (c *s3Client) Stat(
 				fmt.Sprintf("object %s/%s", bucket, key),
 			)
 		}
+
 		return interfaces.StorageObject{}, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			fmt.Sprintf("s3 head %s/%s", bucket, key),
 		)
 	}
+
 	return interfaces.StorageObject{
 		Key:          key,
 		ContentType:  aws.ToString(out.ContentType),
@@ -593,6 +635,7 @@ func (c *s3Client) PresignURL(
 			contentDispositionAttachment(displayFilename),
 		)
 	}
+
 	req, err := c.presign.PresignGetObject(
 		ctx,
 		in,
@@ -605,6 +648,7 @@ func (c *s3Client) PresignURL(
 			fmt.Sprintf("presign get %s/%s", bucket, key),
 		)
 	}
+
 	return req.URL, nil
 }
 
@@ -618,8 +662,10 @@ func contentDispositionAttachment(filename string) string {
 		if r < 0x20 || r == 0x7f || r == '"' || r == '\\' || r > 0x7f {
 			return '_'
 		}
+
 		return r
 	}, filename)
+
 	return fmt.Sprintf(
 		"attachment; filename=%q; filename*=UTF-8''%s",
 		ascii,
@@ -651,6 +697,7 @@ func (c *s3Client) PresignPutURL(
 			fmt.Sprintf("presign put %s/%s", bucket, key),
 		)
 	}
+
 	return req.URL, nil
 }
 
@@ -672,6 +719,7 @@ func (c *s3Client) CreateMultipartUpload(
 			fmt.Sprintf("s3 create multipart %s/%s", bucket, key),
 		)
 	}
+
 	return aws.ToString(out.UploadId), nil
 }
 
@@ -700,6 +748,7 @@ func (c *s3Client) PresignUploadPart(
 			fmt.Sprintf("presign upload part %d %s/%s", partNumber, bucket, key),
 		)
 	}
+
 	return req.URL, nil
 }
 
@@ -717,6 +766,7 @@ func (c *s3Client) CompleteMultipartUpload(
 			PartNumber: aws.Int32(p.PartNumber),
 		}
 	}
+
 	// S3 requires the completed parts in ascending part-number order and rejects an
 	// unordered list with InvalidPartOrder. The parts come from untrusted client input
 	// (a browser may report parallel-uploaded parts in completion order), so sort
@@ -724,6 +774,7 @@ func (c *s3Client) CompleteMultipartUpload(
 	slices.SortFunc(completed, func(a, b types.CompletedPart) int {
 		return cmp.Compare(aws.ToInt32(a.PartNumber), aws.ToInt32(b.PartNumber))
 	})
+
 	_, err := c.api.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
 		Bucket:          aws.String(bucket),
 		Key:             aws.String(key),
@@ -737,6 +788,7 @@ func (c *s3Client) CompleteMultipartUpload(
 			fmt.Sprintf("s3 complete multipart %s/%s", bucket, key),
 		)
 	}
+
 	return nil
 }
 
@@ -757,6 +809,7 @@ func (c *s3Client) AbortMultipartUpload(
 			fmt.Sprintf("s3 abort multipart %s/%s", bucket, key),
 		)
 	}
+
 	return nil
 }
 
@@ -769,7 +822,9 @@ func (c *s3Client) ListMultipartUploads(
 	pager := s3.NewListMultipartUploadsPaginator(c.api, &s3.ListMultipartUploadsInput{
 		Bucket: aws.String(bucket),
 	})
+
 	var uploads []interfaces.MultipartUpload
+
 	for pager.HasMorePages() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
@@ -779,6 +834,7 @@ func (c *s3Client) ListMultipartUploads(
 				"s3 list multipart uploads "+bucket,
 			)
 		}
+
 		uploads = slices.Grow(uploads, len(page.Uploads))
 		for _, u := range page.Uploads {
 			uploads = append(uploads, interfaces.MultipartUpload{
@@ -788,6 +844,7 @@ func (c *s3Client) ListMultipartUploads(
 			})
 		}
 	}
+
 	return uploads, nil
 }
 
@@ -800,7 +857,9 @@ func (c *s3Client) ListObjects(
 		Bucket: aws.String(bucket),
 		Prefix: aws.String(prefix),
 	})
+
 	var objs []interfaces.StorageObject
+
 	for pager.HasMorePages() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
@@ -810,6 +869,7 @@ func (c *s3Client) ListObjects(
 				fmt.Sprintf("s3 list %s/%s", bucket, prefix),
 			)
 		}
+
 		// Grow once per page so the inner appends don't repeatedly reallocate.
 		objs = slices.Grow(objs, len(page.Contents))
 		for _, o := range page.Contents {
@@ -821,6 +881,7 @@ func (c *s3Client) ListObjects(
 			})
 		}
 	}
+
 	return objs, nil
 }
 
@@ -837,13 +898,16 @@ func (c *s3Client) ListObjectsPage(
 		Bucket: aws.String(bucket),
 		Prefix: aws.String(prefix),
 	}
+
 	if limit > 0 {
 		n := limit
 		if n > math.MaxInt32 {
 			n = math.MaxInt32
 		}
+
 		in.MaxKeys = aws.Int32(int32(n))
 	}
+
 	page, err := c.api.ListObjectsV2(ctx, in)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -852,6 +916,7 @@ func (c *s3Client) ListObjectsPage(
 			fmt.Sprintf("s3 list %s/%s", bucket, prefix),
 		)
 	}
+
 	objs := make([]interfaces.StorageObject, 0, len(page.Contents))
 	for _, o := range page.Contents {
 		objs = append(objs, interfaces.StorageObject{
@@ -861,6 +926,7 @@ func (c *s3Client) ListObjectsPage(
 			LastModified: formatTime(o.LastModified),
 		})
 	}
+
 	return objs, nil
 }
 
@@ -882,13 +948,16 @@ func (c *s3Client) ListObjectsPageToken(
 	if continuationToken != "" {
 		in.ContinuationToken = aws.String(continuationToken)
 	}
+
 	if limit > 0 {
 		n := limit
 		if n > math.MaxInt32 {
 			n = math.MaxInt32
 		}
+
 		in.MaxKeys = aws.Int32(int32(n))
 	}
+
 	page, err := c.api.ListObjectsV2(ctx, in)
 	if err != nil {
 		return nil, "", apperr.Wrap(
@@ -897,6 +966,7 @@ func (c *s3Client) ListObjectsPageToken(
 			fmt.Sprintf("s3 list %s/%s", bucket, prefix),
 		)
 	}
+
 	objs := make([]interfaces.StorageObject, 0, len(page.Contents))
 	for _, o := range page.Contents {
 		objs = append(objs, interfaces.StorageObject{
@@ -906,6 +976,7 @@ func (c *s3Client) ListObjectsPageToken(
 			LastModified: formatTime(o.LastModified),
 		})
 	}
+
 	// IsTruncated + NextContinuationToken together signal "more pages"; when not
 	// truncated the token is absent, so nextToken == "" cleanly terminates the caller's
 	// loop.
@@ -913,6 +984,7 @@ func (c *s3Client) ListObjectsPageToken(
 	if aws.ToBool(page.IsTruncated) {
 		next = aws.ToString(page.NextContinuationToken)
 	}
+
 	return objs, next, nil
 }
 
@@ -920,18 +992,24 @@ func (c *s3Client) ListObjectsPageToken(
 // distinct typed errors (GetObject's NoSuchKey, HeadObject's NotFound) plus a
 // smithy APIError code fallback.
 func isNotFound(err error) bool {
-	var nsk *types.NoSuchKey
-	var nf *types.NotFound
+	var (
+		nsk *types.NoSuchKey
+		nf  *types.NotFound
+	)
+
 	if apperr.As(err, &nsk) || apperr.As(err, &nf) {
 		return true
 	}
+
 	var apiErr smithy.APIError
+
 	if apperr.As(err, &apiErr) {
 		switch apiErr.ErrorCode() {
 		case "NoSuchKey", "NotFound", "404":
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -940,6 +1018,7 @@ func formatTime(t *time.Time) string {
 	if t == nil {
 		return ""
 	}
+
 	return t.Format(time.RFC3339)
 }
 

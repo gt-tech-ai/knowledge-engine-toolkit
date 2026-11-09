@@ -28,6 +28,7 @@ func testKey() []byte { return bytes.Repeat([]byte{0x2b}, crypto.KeySize) }
 //     encryptions of the same plaintext produce different ciphertexts.
 func TestEncryptor_RoundTrip(t *testing.T) {
 	t.Parallel()
+
 	enc, err := crypto.New(testKey())
 	require.NoError(t, err)
 
@@ -57,8 +58,10 @@ func TestEncryptor_RoundTrip(t *testing.T) {
 //   - Decrypt with a different key returns an error and no plaintext.
 func TestEncryptor_WrongKeyFailsToDecrypt(t *testing.T) {
 	t.Parallel()
+
 	encA, err := crypto.New(testKey())
 	require.NoError(t, err)
+
 	encB, err := crypto.New(bytes.Repeat([]byte{0x3c}, crypto.KeySize))
 	require.NoError(t, err)
 
@@ -80,12 +83,15 @@ func TestEncryptor_WrongKeyFailsToDecrypt(t *testing.T) {
 //   - A single flipped byte in the ciphertext causes Decrypt to error.
 func TestEncryptor_TamperedCiphertextFails(t *testing.T) {
 	t.Parallel()
+
 	enc, err := crypto.New(testKey())
 	require.NoError(t, err)
+
 	ct, err := enc.Encrypt([]byte("secret"))
 	require.NoError(t, err)
 
 	ct[len(ct)-1] ^= 0xff // flip the last byte (inside the auth tag)
+
 	_, err = enc.Decrypt(ct)
 	require.Error(t, err, "tampered ciphertext must fail authentication")
 }
@@ -103,6 +109,7 @@ func TestEncryptor_TamperedCiphertextFails(t *testing.T) {
 //     and a decoded length != 32 each return an error.
 func TestNewFromConfig(t *testing.T) {
 	t.Parallel()
+
 	validKey := base64.StdEncoding.EncodeToString(testKey())
 
 	enc, err := crypto.NewFromConfig(crypto.Config{Key: validKey})
@@ -117,6 +124,7 @@ func TestNewFromConfig(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			_, err := crypto.NewFromConfig(crypto.Config{Key: key})
 			require.Error(t, err)
 		})
@@ -134,8 +142,10 @@ func TestNewFromConfig(t *testing.T) {
 //   - A 16-byte and a 0-byte key each return an error.
 func TestNew_RejectsWrongKeyLength(t *testing.T) {
 	t.Parallel()
+
 	_, err := crypto.New(bytes.Repeat([]byte{1}, 16))
 	require.Error(t, err)
+
 	_, err = crypto.New(nil)
 	require.Error(t, err)
 }
@@ -152,12 +162,14 @@ func FuzzEncryptRoundtrip(f *testing.F) {
 	f.Add([]byte(""))
 	f.Add([]byte("access_key_id=AKIA...;secret=...."))
 	f.Add(make([]byte, 1024))
+
 	enc, err := crypto.New(testKey())
 	require.NoError(f, err)
 
 	f.Fuzz(func(t *testing.T, plaintext []byte) {
 		ct, err := enc.Encrypt(plaintext)
 		require.NoError(t, err)
+
 		got, err := enc.Decrypt(ct)
 		require.NoError(t, err)
 		// bytes.Equal (not require.Equal): the roundtrip preserves byte CONTENT, and an

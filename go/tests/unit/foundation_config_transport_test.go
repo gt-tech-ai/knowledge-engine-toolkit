@@ -47,6 +47,7 @@ func TestTransportValidate_RejectsNegativeWSTimeout(t *testing.T) {
 	t.Parallel()
 
 	badWS := transport.DefaultConfig()
+
 	badWS.WS.IdleTimeout = -1
 	assert.Error(t, badWS.Validate(), "a negative WS idle timeout must be rejected")
 }
@@ -91,6 +92,7 @@ func TestTransportWS_HeartbeatDefaults(t *testing.T) {
 	require.NoError(t, c.Validate(), "the WS defaults must validate")
 
 	badPong := transport.DefaultConfig()
+
 	badPong.WS.PongTimeout = -1
 	assert.Error(t, badPong.Validate(), "a negative WS pong timeout must be rejected")
 }

@@ -24,14 +24,17 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
+
 	d := &decorated{base: base, Base: b}
 	if m := decs.Observability().Metrics; m != nil {
 		d.hits = m.Counter("cache_hits_total", "Total cache hits", "cache")
 		d.misses = m.Counter("cache_misses_total", "Total cache misses", "cache")
 	}
+
 	if inv, ok := base.(interfaces.CacheInvalidator); ok {
 		return &invalidating{decorated: d, inv: inv}, nil
 	}
+
 	return d, nil
 }
 
@@ -58,16 +61,22 @@ var _ interfaces.ByteCache = (*decorated)(nil)
 // Get returns the cached value, or a miss when the key is absent or the tier refused.
 func (d *decorated) Get(ctx context.Context, key string) ([]byte, bool) {
 	var hit bool
+
 	v, err := d.ExecOnce(ctx, "get", func(c context.Context) ([]byte, error) {
 		v, ok := d.base.Get(c, key)
+
 		hit = ok
+
 		return v, nil
 	})
+
 	hit = hit && err == nil
 	d.count(hit)
+
 	if !hit {
 		return nil, false
 	}
+
 	return v, true
 }
 
@@ -80,6 +89,7 @@ func (d *decorated) Set(
 ) {
 	_ = d.DoOnce(ctx, "set", func(c context.Context) error {
 		d.base.Set(c, key, value, ttl)
+
 		return nil
 	})
 }
@@ -88,6 +98,7 @@ func (d *decorated) Set(
 func (d *decorated) Delete(ctx context.Context, key string) {
 	_ = d.DoOnce(ctx, "delete", func(c context.Context) error {
 		d.base.Delete(c, key)
+
 		return nil
 	})
 }

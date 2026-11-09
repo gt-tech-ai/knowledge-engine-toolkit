@@ -96,6 +96,7 @@ type Field struct {
 // accepts only these fields.
 func (f Field) Sortable() Field {
 	f.Orderable = true
+
 	return f
 }
 
@@ -104,12 +105,14 @@ func (f Field) Sortable() Field {
 func (f Field) AsMeasure(aggs ...types.Aggregate) Field {
 	f.Role = RoleMeasure
 	f.Aggregates = aggs
+
 	return f
 }
 
 // AsTime returns a copy of the field declared as the analytics time field.
 func (f Field) AsTime() Field {
 	f.Role = RoleTime
+
 	return f
 }
 
@@ -122,6 +125,7 @@ func (f Field) Allows(agg types.Aggregate) bool {
 // (for resources where the wire field name is not the Ent column).
 func (f Field) WithColumn(column string) Field {
 	f.Column = column
+
 	return f
 }
 
@@ -129,6 +133,7 @@ func (f Field) WithColumn(column string) Field {
 // correlated EXISTS — set by the generator from a `(listquery.field).join` annotation.
 func (f Field) WithJoin(join types.JoinTarget) Field {
 	f.Join = &join
+
 	return f
 }
 
@@ -138,6 +143,7 @@ func (f Field) WithJoin(join types.JoinTarget) Field {
 // does not make the field sortable: combine it with Sortable.
 func (f Field) WithOrdinal(values []string) Field {
 	f.Ordinal = values
+
 	return f
 }
 
@@ -180,18 +186,21 @@ func (m *Map) Add(fields ...Field) *Map {
 	for _, f := range fields {
 		m.fields[f.Name] = f
 	}
+
 	return m
 }
 
 // Lookup returns the allow-listed field for a DTO name and whether it is allow-listed.
 func (m *Map) Lookup(name string) (Field, bool) {
 	f, ok := m.fields[name]
+
 	return f, ok
 }
 
 // Sortable reports whether name is an allow-listed field a client may sort by.
 func (m *Map) Sortable(name string) bool {
 	f, ok := m.fields[name]
+
 	return ok && f.Orderable
 }
 
@@ -203,6 +212,7 @@ func (m *Map) Column(field string) string {
 	if f, ok := m.fields[field]; ok {
 		return f.Column
 	}
+
 	return field
 }
 
@@ -214,6 +224,7 @@ func (m *Map) Join(field string) *types.JoinTarget {
 	if f, ok := m.fields[field]; ok {
 		return f.Join
 	}
+
 	return nil
 }
 
@@ -224,5 +235,6 @@ func (m *Map) Ordinal(field string) []string {
 	if f, ok := m.fields[field]; ok {
 		return f.Ordinal
 	}
+
 	return nil
 }

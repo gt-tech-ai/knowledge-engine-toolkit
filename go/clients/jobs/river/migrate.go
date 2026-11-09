@@ -32,8 +32,10 @@ func Migrate(ctx context.Context, databaseURL string) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "river migrate: new migrator")
 	}
+
 	if _, err := migrator.Migrate(ctx, rivermigrate.DirectionUp, nil); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "river migrate: apply up")
 	}
+
 	return nil
 }

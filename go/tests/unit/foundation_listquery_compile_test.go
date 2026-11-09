@@ -34,13 +34,16 @@ func (stringBackend) ExistsClause(
 	for i, col := range join.Columns {
 		preds[i] = fmt.Sprintf("%s.%s %s %v", join.Table, col, op, v)
 	}
+
 	inner := strings.Join(preds, " OR ")
 	if len(preds) > 1 {
 		inner = "(" + inner + ")"
 	}
+
 	if join.TargetSoftDeletes {
 		inner += fmt.Sprintf(" AND %s.deleted_at IS NULL", join.Table)
 	}
+
 	return fmt.Sprintf("EXISTS(%s WHERE %s.%s=<base>.%s AND %s)",
 		join.Table, join.Table, join.TargetKey, join.LocalKey, inner)
 }
@@ -61,6 +64,7 @@ func (stringBackend) Order(col string, desc bool) string {
 	if desc {
 		return col + " DESC"
 	}
+
 	return col + " ASC"
 }
 
@@ -71,11 +75,13 @@ func (stringBackend) OrderJoin(join types.JoinTarget, desc bool) string {
 	if desc {
 		dir = "DESC NULLS FIRST"
 	}
+
 	terms := make([]string, len(join.Columns))
 	for i, col := range join.Columns {
 		terms[i] = fmt.Sprintf("(SELECT %s.%s WHERE %s.%s=<base>.%s) %s",
 			join.Table, col, join.Table, join.TargetKey, join.LocalKey, dir)
 	}
+
 	return strings.Join(terms, ", ")
 }
 
@@ -86,6 +92,7 @@ func (stringBackend) OrderOrdinal(col string, values []string, desc bool) string
 	if desc {
 		dir = "DESC"
 	}
+
 	return fmt.Sprintf("CASE(%s;%s) %s", col, strings.Join(values, ","), dir)
 }
 
@@ -98,17 +105,21 @@ func (stringBackend) OrderDerived(d types.DerivedSort, desc bool) string {
 	if desc {
 		dir = "DESC NULLS FIRST"
 	}
+
 	switch {
 	case d.Aggregate != nil:
 		a := d.Aggregate
 		arg := "*"
+
 		if a.Func != "count" {
 			arg = a.Table + "." + a.Column
 		}
+
 		soft := ""
 		if a.TargetSoftDeletes {
 			soft = fmt.Sprintf(" AND %s.deleted_at IS NULL", a.Table)
 		}
+
 		return fmt.Sprintf(
 			"(SELECT %s(%s) FROM %s WHERE %s.%s=<base>.%s%s) %s",
 			strings.ToUpper(
@@ -125,9 +136,11 @@ func (stringBackend) OrderDerived(d types.DerivedSort, desc bool) string {
 	case d.Interval != nil:
 		iv := d.Interval
 		cases := make([]string, len(iv.Cases))
+
 		for i, c := range iv.Cases {
 			cases[i] = fmt.Sprintf("%s=>%ds", c.Value, c.Seconds)
 		}
+
 		return fmt.Sprintf("(%s + CASE(%s;%s)) %s",
 			iv.BaseColumn, iv.DiscriminatorColumn, strings.Join(cases, ","), dir)
 	default:
@@ -141,6 +154,7 @@ func resolveNameToTitle(field string) string {
 	if field == "name" {
 		return "title"
 	}
+
 	return field
 }
 
@@ -165,6 +179,7 @@ func resolveNameToTitle(field string) string {
 //     and dedups either tiebreaker symmetrically when the caller already sorts by it.
 func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 	t.Parallel()
+
 	b := stringBackend{}
 
 	t.Run("nil filter is a no-op", func(t *testing.T) {
@@ -191,6 +206,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 
 	t.Run("leaf clause resolves column and renders op/value", func(t *testing.T) {
 		t.Parallel()
+
 		clause := types.FilterClause{Field: "name", Operator: types.OpLike, Value: "rep"}
 		assert.Equal(
 			t,
@@ -201,6 +217,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 
 	t.Run("and composite preserves member order", func(t *testing.T) {
 		t.Parallel()
+
 		f := types.CompositeFilter{And: []types.Filter{
 			types.FilterClause{Field: "status", Operator: types.OpEq, Value: "indexed"},
 			types.FilterClause{Field: "name", Operator: types.OpLike, Value: "rep"},
@@ -216,6 +233,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 		"joined clause compiles to a correlated EXISTS (multi-column ORs)",
 		func(t *testing.T) {
 			t.Parallel()
+
 			// A member "name" filter joins users and ORs first_name/last_name — one
 			// EXISTS, one join. The clause carries the JoinTarget ResolveFilter would
 			// stamp in production.
@@ -237,6 +255,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 		"two joined clauses fold to two INDEPENDENT EXISTS (no dedup)",
 		func(t *testing.T) {
 			t.Parallel()
+
 			// Filtering by member name AND email — both on the users join — yields two
 			// independent EXISTS, never a duplicate JOIN (the payoff of the EXISTS
 			// mechanism).
@@ -275,6 +294,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 
 	t.Run("ResolveFilter stamps the join target from the JoinFn", func(t *testing.T) {
 		t.Parallel()
+
 		// ResolveFilter carries a field's JoinTarget onto the resolved clause so the
 		// runner (folding with an identity resolver) still compiles it to an EXISTS; a
 		// same-table field gets no join.
@@ -287,6 +307,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 					Columns:   []string{"first_name"},
 				}
 			}
+
 			return nil
 		}
 		joined := listquery.ResolveFilter(resolveNameToTitle, joinOf,
@@ -306,6 +327,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 
 	t.Run("nested and(eq, or(like, eq))", func(t *testing.T) {
 		t.Parallel()
+
 		f := types.CompositeFilter{And: []types.Filter{
 			types.FilterClause{Field: "status", Operator: types.OpEq, Value: "indexed"},
 			types.CompositeFilter{Or: []types.Filter{
@@ -322,6 +344,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 		"order resolves column and appends default created_at tiebreakers",
 		func(t *testing.T) {
 			t.Parallel()
+
 			got := listquery.CompileOrder[string, string](
 				b,
 				resolveNameToTitle,
@@ -337,6 +360,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 
 	t.Run("dedup when created_at is the primary sort", func(t *testing.T) {
 		t.Parallel()
+
 		got := listquery.CompileOrder[string, string](
 			b,
 			resolveNameToTitle,
@@ -351,6 +375,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 
 	t.Run("dedup when id is the primary sort", func(t *testing.T) {
 		t.Parallel()
+
 		got := listquery.CompileOrder[string, string](
 			b,
 			resolveNameToTitle,
@@ -367,6 +392,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 		"join-table keyset column overrides the created_at tiebreaker",
 		func(t *testing.T) {
 			t.Parallel()
+
 			// A membership join table keyed on joined_at (not created_at) passes its
 			// keyset column, so the compiled ORDER BY never references a non-existent
 			// created_at column.
@@ -385,6 +411,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 
 	t.Run("dedup when the passed keyset column is the primary sort", func(t *testing.T) {
 		t.Parallel()
+
 		got := listquery.CompileOrder[string, string](
 			b,
 			resolveNameToTitle,
@@ -405,6 +432,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 		"joined sort field renders OrderJoin before the tiebreakers",
 		func(t *testing.T) {
 			t.Parallel()
+
 			joinOf := func(field string) *types.JoinTarget {
 				if field == "member_name" {
 					return &types.JoinTarget{
@@ -412,6 +440,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 						Columns: []string{"first_name", "last_name"},
 					}
 				}
+
 				return nil
 			}
 			got := listquery.CompileOrder[string, string](
@@ -439,10 +468,12 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 		"ordinal sort field renders OrderOrdinal before the tiebreakers",
 		func(t *testing.T) {
 			t.Parallel()
+
 			ordinalOf := func(field string) []string {
 				if field == "role" {
 					return []string{"admin", "write", "read"}
 				}
+
 				return nil
 			}
 			got := listquery.CompileOrder[string, string](
@@ -470,6 +501,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 		"derived sort field renders OrderDerived before the tiebreakers",
 		func(t *testing.T) {
 			t.Parallel()
+
 			derivedOf := func(field string) *types.DerivedSort {
 				switch field {
 				case "document_count":
@@ -487,6 +519,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 						},
 					}}
 				}
+
 				return nil
 			}
 

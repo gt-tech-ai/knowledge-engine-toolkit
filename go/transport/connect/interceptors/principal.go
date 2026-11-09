@@ -58,6 +58,7 @@ func NewPrincipalInterceptor[P any](
 	if resolve == nil {
 		panic("interceptors: NewPrincipalInterceptor requires a non-nil resolver")
 	}
+
 	return principalInterceptor[P]{resolve: resolve, stub: stub}
 }
 
@@ -68,6 +69,7 @@ func (i principalInterceptor[P]) WrapUnary(next connect.UnaryFunc) connect.Unary
 		if err != nil {
 			return nil, err
 		}
+
 		return next(resolvedCtx, req)
 	}
 }
@@ -89,6 +91,7 @@ func (i principalInterceptor[P]) WrapStreamingHandler(
 		if err != nil {
 			return err
 		}
+
 		return next(resolvedCtx, conn)
 	}
 }
@@ -99,11 +102,15 @@ func (i principalInterceptor[P]) withPrincipal(
 	ctx context.Context,
 ) (context.Context, error) {
 	claims, ok := GetAuthClaims(ctx)
+
 	ctx = WithAuthClaims(ctx, nil) // Clear raw claims so none leak downstream unresolved.
+
 	if !ok {
 		return ctx, nil
 	}
+
 	var principal P
+
 	if i.stub != nil && claims.Synthetic {
 		principal = i.stub(claims)
 	} else {
@@ -111,12 +118,16 @@ func (i principalInterceptor[P]) withPrincipal(
 		if err != nil {
 			return ctx, resolveError(ctx, err, resolveErrorCode(err))
 		}
+
 		principal = resolved
 	}
+
 	if isNilPrincipal(principal) {
 		cause := apperr.Unauthorized("principal resolver returned a nil principal")
+
 		return ctx, resolveError(ctx, cause, connect.CodeUnauthenticated)
 	}
+
 	return coreprincipal.WithPrincipal(ctx, principal), nil
 }
 
@@ -124,6 +135,7 @@ func (i principalInterceptor[P]) withPrincipal(
 // returns the sanitized client-facing Connect error carrying code.
 func resolveError(ctx context.Context, err error, code connect.Code) error {
 	apperr.Capture(ctx, err)
+
 	return connect.NewError(code, apperr.Sentinel(errPrincipalResolution))
 }
 
@@ -132,9 +144,11 @@ func resolveError(ctx context.Context, err error, code connect.Code) error {
 // and an uncoded error is Unavailable (treated as transient).
 func resolveErrorCode(err error) connect.Code {
 	var connectErr *connect.Error
+
 	if apperr.As(err, &connectErr) {
 		return connectErr.Code()
 	}
+
 	switch apperr.Code(err) {
 	case apperr.CodeUnknown, apperr.CodeUnavailable, apperr.CodeUpstream:
 		return connect.CodeUnavailable

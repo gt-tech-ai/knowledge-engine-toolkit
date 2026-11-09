@@ -65,6 +65,7 @@ func (emptyOutput) Parse(res interfaces.CmdResult) types.Verdict {
 	if v.Status == types.StatusPass && len(bytes.TrimSpace(res.Stdout)) > 0 {
 		v.Status = types.StatusFail
 	}
+
 	return v
 }
 
@@ -80,6 +81,7 @@ func verdict(res interfaces.CmdResult, findings []types.Finding) types.Verdict {
 	default:
 		v.Status = types.StatusPass
 	}
+
 	return v
 }
 
@@ -91,5 +93,6 @@ func output(res interfaces.CmdResult) string {
 	if len(out) == 0 && res.Err != nil {
 		return res.Err.Error()
 	}
+
 	return string(out)
 }

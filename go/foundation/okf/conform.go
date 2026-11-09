@@ -24,6 +24,7 @@ func Conform(doc Doc, rules Rules) []Finding {
 		return []Finding{{Path: doc.Path, Line: 1, Rule: rule, Message: msg}}
 	}
 	fm := doc.Frontmatter
+
 	switch pathpkg.Base(doc.Path) {
 	case IndexFile:
 		switch {
@@ -49,19 +50,25 @@ func Conform(doc Doc, rules Rules) []Finding {
 				"log.md is an update history, not a concept: remove its frontmatter",
 			)
 		}
+
 		return nil
 	}
+
 	if !doc.HasFrontmatter {
 		return finding(RuleNoFrontmatter, "add a frontmatter block with at least `type`")
 	}
+
 	if fm.Type == "" {
 		return finding(RuleMissingKey, "frontmatter key `type` is missing or empty")
 	}
+
 	required, known := rules.RequiredKeys[fm.Type]
 	if len(rules.RequiredKeys) > 0 && !known {
 		return finding(RuleUnknownType, "type `"+fm.Type+"` is not in the vocabulary")
 	}
+
 	var out []Finding
+
 	for _, key := range required {
 		if !HasKey(fm, key) {
 			out = append(out, finding(
@@ -70,6 +77,7 @@ func Conform(doc Doc, rules Rules) []Finding {
 			)...)
 		}
 	}
+
 	return out
 }
 
@@ -80,6 +88,7 @@ func onlyOKFVersion(fm Frontmatter) bool {
 			return false
 		}
 	}
+
 	return fm.OKFVersion != "" && len(fm.Tags) == 0 && fm.Generated == nil &&
 		len(fm.Verified) == 0 && len(fm.Extra) == 0
 }
@@ -90,6 +99,7 @@ func HasKey(fm Frontmatter, key string) bool {
 	if field, ok := stringKeys(&fm)[key]; ok {
 		return *field != ""
 	}
+
 	switch key {
 	case "tags":
 		return len(fm.Tags) > 0
@@ -98,16 +108,21 @@ func HasKey(fm Frontmatter, key string) bool {
 	case "verified":
 		return len(fm.Verified) > 0
 	}
+
 	v, ok := fm.Extra[key]
+
 	return ok && v != nil && v != ""
 }
 
 // ConformLog reports where a log.md breaks OKF §9 as this package reads it: every `##`
 // heading outside a fenced block is a YYYY-MM-DD date, newest first with no repeats.
 func ConformLog(path string, data []byte) []Finding {
-	var out []Finding
-	var prev time.Time
-	var open string
+	var (
+		out  []Finding
+		prev time.Time
+		open string
+	)
+
 	for i, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSuffix(line, "\r")
 		if marker := fenceMarker(line); marker != "" {
@@ -116,20 +131,26 @@ func ConformLog(path string, data []byte) []Finding {
 			} else if strings.HasPrefix(marker, open[:1]) {
 				open = ""
 			}
+
 			continue
 		}
+
 		if open != "" || !strings.HasPrefix(line, "## ") {
 			continue
 		}
+
 		heading := strings.TrimSpace(strings.TrimPrefix(line, "## "))
+
 		date, err := time.Parse(time.DateOnly, heading)
 		if err != nil {
 			out = append(out, Finding{
 				Path: path, Line: i + 1, Rule: RuleLogHeading,
 				Message: "log heading `" + heading + "` is not a YYYY-MM-DD date",
 			})
+
 			continue
 		}
+
 		if !prev.IsZero() && !date.Before(prev) {
 			out = append(out, Finding{
 				Path: path,
@@ -139,7 +160,9 @@ func ConformLog(path string, data []byte) []Finding {
 					"keep dates newest first, one heading per date",
 			})
 		}
+
 		prev = date
 	}
+
 	return out
 }

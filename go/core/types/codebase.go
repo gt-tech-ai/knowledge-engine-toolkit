@@ -85,6 +85,7 @@ func (t Text) Lines() []string {
 	if s == "" {
 		return nil
 	}
+
 	return strings.Split(s, "\n")
 }
 

@@ -56,23 +56,29 @@ func TestAnalyticsCassandraSuite(t *testing.T) {
 // hour and day tables, and opens the session every test shares.
 func (s *AnalyticsCassandraSuite) SetupSuite() {
 	s.CassandraIntegrationSuite.SetupSuite()
+
 	ctx := context.Background()
 	s.Require().NoError(s.Cassandra.Exec(
 		ctx,
 		"CREATE KEYSPACE IF NOT EXISTS "+itKeyspace+" WITH replication = {'class': "+
 			"'SimpleStrategy', 'replication_factor': 1}",
 	))
+
 	for _, g := range []types.Grain{types.GrainHour, types.GrainDay} {
 		ddl, err := analyticscassandra.SchemaCQL(itKeyspace, itCube, g)
 		s.Require().NoError(err)
 		s.Require().NoError(s.Cassandra.Exec(ctx, ddl))
 	}
+
 	cfg := cql.DefaultConfig()
+
 	cfg.Cassandra.Hosts, cfg.Cassandra.Port = []string{s.CassandraHost}, s.CassandraPort
 	cfg.Cassandra.LocalDC = cassandradb.LocalDC
 	cfg.Keyspace, cfg.Timeout = itKeyspace, 20*time.Second
+
 	session, err := cql.NewFromConfig(ctx, cfg, cql.Deps{})
 	s.Require().NoError(err)
+
 	s.session = session
 }
 
@@ -81,6 +87,7 @@ func (s *AnalyticsCassandraSuite) TearDownSuite() {
 	if s.session != nil {
 		s.session.Close()
 	}
+
 	s.CassandraIntegrationSuite.TearDownSuite()
 }
 
@@ -99,6 +106,7 @@ func (s *AnalyticsCassandraSuite) newStore(
 		MaxConcurrentBuckets: 4,
 	})
 	s.Require().NoError(err)
+
 	return store
 }
 
@@ -120,18 +128,25 @@ func (s *AnalyticsCassandraSuite) totals(
 	ctx := context.Background()
 	stream, err := store.Aggregate(ctx, q)
 	s.Require().NoError(err)
+
 	defer func() { s.Require().NoError(stream.Close()) }()
+
 	out := map[string]chartspec.Partial{}
+
 	for {
 		rows, more, err := stream.Next(ctx)
 		s.Require().NoError(err)
+
 		for _, r := range rows {
 			p, err := chartspec.DecodePartial(r.Partials["tokens_in"])
 			s.Require().NoError(err)
+
 			acc := out[r.Group["team"]]
 			acc.Merge(p)
+
 			out[r.Group["team"]] = acc
 		}
+
 		if !more {
 			return out
 		}
@@ -191,24 +206,28 @@ func genFilter(r *rand.Rand, days []time.Time) randFilter {
 		switch r.Intn(4) {
 		case 0:
 			t := teams[r.Intn(len(teams))]
+
 			return randFilter{
 				json:  fmt.Sprintf(`{"$eq":{"team":%q}}`, t),
 				match: func(f types.Fact) bool { return f.Dims["team"] == t },
 			}
 		case 1:
 			a, b := teams[r.Intn(len(teams))], teams[r.Intn(len(teams))]
+
 			return randFilter{
 				json:  fmt.Sprintf(`{"$in":{"team":[%q,%q]}}`, a, b),
 				match: func(f types.Fact) bool { return f.Dims["team"] == a || f.Dims["team"] == b },
 			}
 		case 2:
 			m := models[r.Intn(len(models))]
+
 			return randFilter{
 				json:  fmt.Sprintf(`{"$ne":{"model":%q}}`, m),
 				match: func(f types.Fact) bool { return f.Dims["model"] != m },
 			}
 		default:
 			d := days[r.Intn(len(days))]
+
 			return randFilter{
 				json: fmt.Sprintf(`{"$gte":{"ts":%q}}`, d.Format(time.RFC3339)),
 				match: func(f types.Fact) bool {
@@ -218,12 +237,14 @@ func genFilter(r *rand.Rand, days []time.Time) randFilter {
 		}
 	}
 	a, b := leaf(), leaf()
+
 	if r.Intn(2) == 0 {
 		return randFilter{
 			json:  `{"$and":[` + a.json + `,` + b.json + `]}`,
 			match: func(f types.Fact) bool { return a.match(f) && b.match(f) },
 		}
 	}
+
 	return randFilter{
 		json:  `{"$or":[` + a.json + `,` + b.json + `]}`,
 		match: func(f types.Fact) bool { return a.match(f) || b.match(f) },
@@ -244,15 +265,21 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PushdownMatchesFullScan() {
 	store := s.newStore(s.session, 7)
 	org := "org-pushdown"
 	r := rand.New(rand.NewSource(42))
+
 	var days []time.Time
+
 	first := time.Date(2026, 9, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
+
 	for d := first; d.Before(end); d = d.AddDate(0, 0, 1) {
 		days = append(days, d)
 	}
+
 	facts := make([]types.Fact, 0, 80)
+
 	for i := range 80 {
 		at := days[r.Intn(len(days))].Add(time.Duration(r.Intn(24*60)) * time.Minute)
+
 		facts = append(facts, fact(
 			org,
 			fmt.Sprintf("f-%d", i),
@@ -262,7 +289,9 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PushdownMatchesFullScan() {
 			float64(1+r.Intn(100)),
 		))
 	}
+
 	s.Require().NoError(store.Write(context.Background(), facts))
+
 	m := listquery.NewMap().
 		Add(listquery.String("team"), listquery.String("model"), listquery.Time("ts").AsTime())
 
@@ -270,20 +299,26 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PushdownMatchesFullScan() {
 		gen := genFilter(r, days)
 		filter, err := listquery.Parse(m, gen.json)
 		s.Require().NoError(err, gen.json)
+
 		q := query(org, types.GrainDay, days[0], days[len(days)-1].AddDate(0, 0, 1))
+
 		q.Filter = filter
+
 		got := s.totals(store, q)
 
 		want := map[string]float64{}
+
 		for _, f := range facts {
 			if gen.match(f) {
 				want[f.Dims["team"]] += f.Measures["tokens_in"]
 			}
 		}
+
 		gotSums := map[string]float64{}
 		for team, p := range got {
 			gotSums[team] = chartspec.Finalize(p, types.AggSum)
 		}
+
 		s.Equal(want, gotSums, gen.json)
 	}
 }
@@ -333,6 +368,7 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
 	store := s.newStore(s.session, 2)
 	org := "org-paging"
 	facts := make([]types.Fact, 0, 5)
+
 	for i := range 5 {
 		facts = append(
 			facts,
@@ -346,7 +382,9 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
 			),
 		)
 	}
+
 	s.Require().NoError(store.Write(context.Background(), facts))
+
 	q := query(
 		org,
 		types.GrainHour,
@@ -357,23 +395,29 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
 
 	first, err := store.Aggregate(ctx, q)
 	s.Require().NoError(err)
+
 	page, more, err := first.Next(ctx)
 	s.Require().NoError(err)
 	s.True(more)
 	s.Len(page, 2)
+
 	token := first.ResumeToken()
 	s.NotEmpty(token)
 	s.Require().NoError(first.Close())
 
 	q.ResumeToken = token
+
 	rest := s.totals(store, q)
 	seen := map[string]int{}
+
 	for _, r := range page {
 		seen[r.Group["team"]]++
 	}
+
 	for team := range rest {
 		seen[team]++
 	}
+
 	s.Equal(map[string]int{"t-0": 1, "t-1": 1, "t-2": 1, "t-3": 1, "t-4": 1}, seen)
 }
 
@@ -393,8 +437,10 @@ func (c *crashingSession) Query(stmt string, values ...any) interfaces.CQLQuery 
 	q := c.CQLSession.Query(stmt, values...)
 	if !c.crashed && strings.HasPrefix(stmt, "INSERT INTO "+c.table+" ") {
 		c.crashed = true
+
 		return crashingQuery{CQLQuery: q}
 	}
+
 	return q
 }
 
@@ -443,6 +489,7 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CrashBetweenWritesDoesNotLoseMea
 
 	store := s.newStore(s.session, 0)
 	s.Require().NoError(store.Write(context.Background(), []types.Fact{f}))
+
 	for _, g := range []types.Grain{types.GrainHour, types.GrainDay} {
 		got := s.totals(
 			store,
@@ -470,11 +517,15 @@ func (s *AnalyticsCassandraSuite) partitionRows(
 		" WHERE org_id = ? AND cube = ? AND bucket = ?", org, itCube, bucket).
 		Iter()
 	n := 0
+
 	var key string
+
 	for iter.Scan(&key) {
 		n++
 	}
+
 	s.Require().NoError(iter.Close())
+
 	return n
 }
 
@@ -486,12 +537,15 @@ func (s *AnalyticsCassandraSuite) writeCompactionFacts(
 ) map[string][]float64 {
 	values := map[string][]float64{}
 	facts := make([]types.Fact, 0, 43)
+
 	for i := range 43 {
 		team := "t-1"
 		if i >= 40 {
 			team = "t-2"
 		}
+
 		v := float64(1 + i%17)
+
 		values[team] = append(values[team], v)
 		facts = append(
 			facts,
@@ -505,7 +559,9 @@ func (s *AnalyticsCassandraSuite) writeCompactionFacts(
 			),
 		)
 	}
+
 	s.Require().NoError(store.Write(context.Background(), facts))
+
 	return values
 }
 
@@ -522,6 +578,7 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CompactionPreservesTotals() {
 	store := s.newStore(s.session, 0)
 	org := "org-compact"
 	s.writeCompactionFacts(store, org)
+
 	bucket := time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC)
 	q := query(org, types.GrainHour, bucket, bucket.AddDate(0, 0, 1))
 	before := s.totals(store, q)
@@ -532,6 +589,7 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CompactionPreservesTotals() {
 
 	after := s.totals(store, q)
 	s.Equal(2, s.partitionRows(org, types.GrainHour, bucket))
+
 	for _, team := range []string{"t-1", "t-2"} {
 		for _, agg := range []types.Aggregate{
 			types.AggSum, types.AggCount, types.AggMin, types.AggMax, types.AggP95,
@@ -566,6 +624,7 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CompactionIsIdempotent() {
 	bucket := time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC)
 	q := query(org, types.GrainHour, bucket, bucket.AddDate(0, 0, 1))
 	want := 0.0
+
 	for _, v := range values["t-1"] {
 		want += v
 	}
@@ -579,6 +638,7 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CompactionIsIdempotent() {
 	late := fact(org, "late", lateAt, "t-1", "m", 100)
 	s.Require().NoError(store.Write(ctx, []types.Fact{late}))
 	s.Require().NoError(store.Compact(ctx, itCube, types.GrainHour, org, bucket))
+
 	got := s.totals(store, q)["t-1"]
 	s.InDelta(want+100, chartspec.Finalize(got, types.AggSum), 0)
 	s.InDelta(41.0, chartspec.Finalize(got, types.AggCount), 0)

@@ -52,6 +52,7 @@ func ParseTraceparent(s string) (trace.SpanContext, bool) {
 		propagation.MapCarrier{"traceparent": s},
 	)
 	sc := trace.SpanContextFromContext(ctx)
+
 	return sc, sc.IsValid()
 }
 
@@ -63,6 +64,7 @@ func InjectConversation(ctx context.Context, c Conversation) context.Context {
 	if !conversationIDPattern.MatchString(c.ID) || c.TurnIndex < 0 {
 		return ctx
 	}
+
 	values := map[string]string{
 		BaggageConversationID: c.ID,
 		BaggageTurnIndex:      strconv.Itoa(c.TurnIndex),
@@ -73,18 +75,23 @@ func InjectConversation(ctx context.Context, c Conversation) context.Context {
 			trace.ContextWithRemoteSpanContext(context.Background(), c.Prev),
 			carrier,
 		)
+
 		values[BaggagePrevTraceparent] = carrier.Get("traceparent")
 	}
+
 	bag := baggage.FromContext(ctx)
+
 	for key, value := range values {
 		member, err := baggage.NewMemberRaw(key, value)
 		if err != nil {
 			return ctx
 		}
+
 		if bag, err = bag.SetMember(member); err != nil {
 			return ctx
 		}
 	}
+
 	return baggage.ContextWithBaggage(ctx, bag)
 }
 
@@ -97,6 +104,7 @@ func ConversationStartOptions(c Conversation) []trace.SpanStartOption {
 	if !conversationIDPattern.MatchString(c.ID) || c.TurnIndex < 0 {
 		return nil
 	}
+
 	opts := []trace.SpanStartOption{trace.WithAttributes(
 		attribute.String(AttrConversationID, c.ID),
 		attribute.Int(AttrTurnIndex, c.TurnIndex),
@@ -104,5 +112,6 @@ func ConversationStartOptions(c Conversation) []trace.SpanStartOption {
 	if c.Prev.IsValid() {
 		opts = append(opts, trace.WithLinks(trace.Link{SpanContext: c.Prev}))
 	}
+
 	return opts
 }

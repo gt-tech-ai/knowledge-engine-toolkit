@@ -45,41 +45,51 @@ func (c Composite) Gate() *gate.Gate {
 	if c.Obs != nil {
 		b.Observe(c.Obs)
 	}
+
 	for _, p := range c.Spec.Phases {
 		jobs := c.phase(p)
 		if len(jobs) == 0 {
 			continue
 		}
+
 		if p.Serial {
 			b.Serial(p.Group, jobs...)
 		} else {
 			b.Parallel(p.Group, jobs...)
 		}
 	}
+
 	return b.Decorate(c.Decs)
 }
 
 // phase builds one phase's jobs: the suites' then the named ones.
 func (c Composite) phase(p types.CompositePhase) []interfaces.AnyJob {
 	var jobs []interfaces.AnyJob
+
 	for _, ref := range p.Suites {
 		if c.Suites == nil {
 			jobs = append(jobs, failed(ref.Name, apperr.New(apperr.CodeInvalidInput,
 				fmt.Sprintf("%s: no suites for %q", c.Spec.Title, ref.Name))))
+
 			continue
 		}
+
 		jobs = append(jobs, c.Suites(ref)...)
 	}
+
 	for _, name := range p.Jobs {
 		build, ok := c.Jobs[name]
 		if !ok {
 			jobs = append(jobs, failed(name, apperr.New(apperr.CodeInvalidInput,
 				fmt.Sprintf("%s: no job %q", c.Spec.Title, name))))
+
 			continue
 		}
+
 		if j := build(); j != nil {
 			jobs = append(jobs, j)
 		}
 	}
+
 	return jobs
 }

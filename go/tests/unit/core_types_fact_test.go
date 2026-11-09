@@ -73,14 +73,18 @@ func TestFact_MarshalMatchesGoldenFixture(t *testing.T) {
 	assert.Equal(t, string(want), string(got))
 
 	shifted := goldenFact()
+
 	shifted.TS = shifted.TS.In(time.FixedZone("EDT", -4*3600))
+
 	gotShifted, err := json.Marshal(shifted)
 	require.NoError(t, err)
 	assert.Equal(t, string(want), string(gotShifted))
 
 	var decoded types.Fact
+
 	require.NoError(t, json.Unmarshal(want, &decoded))
 	assert.True(t, decoded.TS.Equal(goldenFact().TS))
+
 	decoded.TS = goldenFact().TS
 	assert.Equal(t, goldenFact(), decoded)
 }
@@ -108,10 +112,12 @@ func TestFact_MarshalEscapesLikePython(t *testing.T) {
 
 	via, err := json.Marshal(fact)
 	require.NoError(t, err)
+
 	want := `{"cube":"c","dims":{"team":"a\u003cb\u003e\u0026c\u2028\u2029é"},` +
 		`"idempotency_key":"k","measures":{},"org_id":"o","schema":1,"ts":"2026-10-09T00:00:` +
 		`00Z"}`
 	assert.Equal(t, want, string(via))
+
 	direct, err := fact.MarshalJSON()
 	require.NoError(t, err)
 	assert.Equal(t, want, string(direct))
@@ -127,6 +133,7 @@ func TestFact_MarshalEscapesLikePython(t *testing.T) {
 //   - a fact whose schema is 2, or absent (0), is CodeInvalidInput
 func TestFact_UnmarshalRejectsUnknownSchema(t *testing.T) {
 	t.Parallel()
+
 	for _, body := range []string{
 		`{"cube":"c","dims":{},"idempotency_key":"k","measures":{},"org_id":"o","schema":2,"` +
 			`ts":"2026-10-09T00:00:00Z"}`,
@@ -134,6 +141,7 @@ func TestFact_UnmarshalRejectsUnknownSchema(t *testing.T) {
 			`0-09T00:00:00Z"}`,
 	} {
 		var f types.Fact
+
 		assert.Equal(
 			t,
 			apperr.CodeInvalidInput,

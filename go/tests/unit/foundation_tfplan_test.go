@@ -27,34 +27,42 @@ type planChange struct {
 // root output).
 func writeUnitPlan(t *testing.T, dir, unit string, outputs bool, changes ...planChange) {
 	t.Helper()
+
 	type change struct {
 		Importing map[string]string `json:"importing,omitempty"`
 		Actions   []string          `json:"actions"`
 	}
+
 	type resource struct {
 		Address string `json:"address"`
 		Change  change `json:"change"`
 	}
+
 	doc := struct {
 		OutputChanges   map[string]change `json:"output_changes,omitempty"`
 		FormatVersion   string            `json:"format_version"`
 		ResourceChanges []resource        `json:"resource_changes"`
 	}{FormatVersion: "1.2"}
+
 	for _, c := range changes {
 		ch := change{Actions: c.actions}
 		if c.importing {
 			ch.Importing = map[string]string{"id": "adopted"}
 		}
+
 		doc.ResourceChanges = append(
 			doc.ResourceChanges,
 			resource{Address: c.address, Change: ch},
 		)
 	}
+
 	if outputs {
 		doc.OutputChanges = map[string]change{"url": {Actions: []string{"update"}}}
 	}
+
 	data, err := json.Marshal(doc)
 	require.NoError(t, err)
+
 	unitDir := filepath.Join(dir, unit)
 	require.NoError(t, os.MkdirAll(unitDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(unitDir, tfplan.JSONFile), data, 0o600))
@@ -79,6 +87,7 @@ func writeUnitPlan(t *testing.T, dir, unit string, outputs bool, changes ...plan
 //     renders "No unit has pending changes", and FailedSummary carries the error.
 func TestFoundationTfplan(t *testing.T) {
 	t.Parallel()
+
 	dir := t.TempDir()
 	writeUnitPlan(
 		t,
@@ -122,10 +131,12 @@ func TestFoundationTfplan(t *testing.T) {
 
 	plans, err := tfplan.ReadUnits(dir)
 	require.NoError(t, err)
+
 	units := make([]string, 0, len(plans))
 	for _, p := range plans {
 		units = append(units, p.Unit)
 	}
+
 	assert.Equal(t, []string{"eks", "iam", "rds", "vpc"}, units)
 	assert.True(t, plans[3].HasChanges() && plans[3].Outputs, "vpc changes an output")
 	assert.False(t, plans[2].HasChanges(), "rds plans nothing")
@@ -142,8 +153,10 @@ func TestFoundationTfplan(t *testing.T) {
 	assert.Contains(t, got, "- forget `aws_iam_role.kept`")
 	assert.Contains(t, got, "| vpc (outputs change) | 0 | 1 | 0 |")
 	assert.NotContains(t, got, "data.aws_iam_policy.p", "a data source read is no change")
+
 	last := strings.Index(got, "#### Destroys")
 	require.GreaterOrEqual(t, last, 0, got)
+
 	for _, row := range []string{
 		"| eks | 2 | 0 | 1 |", "| iam | 0 | 0 | 1 |", "| vpc (outputs change) | 0 | 1 | 0 |",
 		"| rds | 0 | 0 | 0 |",
@@ -157,6 +170,7 @@ func TestFoundationTfplan(t *testing.T) {
 			row,
 			got,
 		)
+
 		last = at
 	}
 
@@ -168,6 +182,7 @@ func TestFoundationTfplan(t *testing.T) {
 	broken := filepath.Join(dir, "broken", tfplan.JSONFile)
 	require.NoError(t, os.MkdirAll(filepath.Dir(broken), 0o755))
 	require.NoError(t, os.WriteFile(broken, []byte("{"), 0o600))
+
 	_, err = tfplan.ReadUnits(dir)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	assert.Contains(t, err.Error(), broken)

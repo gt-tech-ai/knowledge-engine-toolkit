@@ -35,6 +35,7 @@ func TestInjectConversation_SetsBaggageKeys(t *testing.T) {
 
 	prev, ok := tracer.ParseTraceparent(prevTraceparent)
 	require.True(t, ok)
+
 	_, bad := tracer.ParseTraceparent("not-a-traceparent")
 	assert.False(t, bad)
 
@@ -116,6 +117,7 @@ func TestConversationStartOptions_FirstTurnHasNoLink(t *testing.T) {
 //     no options: zero attributes and zero links, even with a valid Prev
 func TestConversationStartOptions_RejectsInvalidConversation(t *testing.T) {
 	t.Parallel()
+
 	prev, ok := tracer.ParseTraceparent(prevTraceparent)
 	require.True(t, ok)
 

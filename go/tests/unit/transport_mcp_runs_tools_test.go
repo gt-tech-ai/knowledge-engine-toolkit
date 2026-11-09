@@ -40,12 +40,15 @@ func (o *slowOp) run(ctx context.Context, _ any, obs interfaces.ExecutionObserve
 	obs.OnStepComplete(types.StepResult{
 		Name: "build", Status: types.StatusPass, Detail: []byte("one\ntwo\n"),
 	})
+
 	o.started <- struct{}{}
+
 	select {
 	case <-o.release:
 		return nil
 	case <-ctx.Done():
 		o.ended.Add(1)
+
 		return apperr.Wrap(ctx.Err(), apperr.CodeCanceled, "Context.Err")
 	}
 }
@@ -53,6 +56,7 @@ func (o *slowOp) run(ctx context.Context, _ any, obs interfaces.ExecutionObserve
 // registry builds a registry admitting only this op, as long-running tool "slow".
 func (o *slowOp) registry(t *testing.T) *ops.Registry {
 	t.Helper()
+
 	return stubOpRegistryLC(t, "slow", `{"type":"object"}`,
 		types.OpLifecycleLongRunning, o.run)
 }
@@ -67,14 +71,17 @@ func callJSON(
 	out any,
 ) (isError bool, text string) {
 	t.Helper()
+
 	res, err := cs.CallTool(t.Context(), &sdkmcp.CallToolParams{
 		Name: name, Arguments: args,
 	})
 	require.NoError(t, err)
+
 	text = toolText(t, res)
 	if out != nil {
 		require.NoError(t, json.Unmarshal([]byte(text), out), text)
 	}
+
 	return res.IsError, text
 }
 
@@ -85,17 +92,23 @@ func awaitRunState(
 	id, want string,
 ) mcp.RunStatus {
 	t.Helper()
+
 	deadline := time.Now().Add(2 * time.Second)
+
 	for {
 		var st mcp.RunStatus
+
 		isErr, text := callJSON(t, cs, "runs.status", map[string]any{"run_id": id}, &st)
 		require.False(t, isErr, text)
+
 		if string(st.State) == want {
 			return st
 		}
+
 		if time.Now().After(deadline) {
 			t.Fatalf("run %s: state %s, want %s", id, st.State, want)
 		}
+
 		time.Sleep(10 * time.Millisecond)
 	}
 }
@@ -116,9 +129,11 @@ func TestTransportMcpLongRunningTool_ReturnsRunID(t *testing.T) {
 	op := newSlowOp()
 	srv, err := mcp.New(op.registry(t), mcpOpts(t))
 	require.NoError(t, err)
+
 	cs := connectMCP(t, srv)
 
 	var started mcp.RunStarted
+
 	isErr, text := callJSON(t, cs, "slow", nil, &started)
 	require.False(t, isErr, text)
 	assert.NotEmpty(t, started.RunID)
@@ -126,6 +141,7 @@ func TestTransportMcpLongRunningTool_ReturnsRunID(t *testing.T) {
 	<-op.started
 
 	op.release <- struct{}{}
+
 	awaitRunState(t, cs, started.RunID, "succeeded")
 }
 
@@ -149,39 +165,52 @@ func TestTransportMcpRunsTools_StatusResultCancelList(t *testing.T) {
 	op := newSlowOp()
 	opts := mcpOpts(t)
 	root := t.TempDir()
+
 	opts.RunDir = mcp.NewRunDir(root, time.Now)
+
 	srv, err := mcp.New(op.registry(t), opts)
 	require.NoError(t, err)
+
 	cs := connectMCP(t, srv)
 
 	var first mcp.RunStarted
+
 	callJSON(t, cs, "slow", nil, &first)
 	<-op.started
+
 	idArg := map[string]any{"run_id": first.RunID}
 
 	st := awaitRunState(t, cs, first.RunID, "running")
 	require.Len(t, st.Steps, 1)
 	assert.Equal(t, "build", st.Steps[0].Step)
 	assert.Equal(t, "slow", st.Op)
+
 	isErr, text := callJSON(t, cs, "runs.result", idArg, nil)
 	assert.True(t, isErr)
 	assert.Contains(t, text, "CONFLICT")
 
 	op.release <- struct{}{}
+
 	awaitRunState(t, cs, first.RunID, "succeeded")
+
 	var res mcp.ToolResult
+
 	isErr, text = callJSON(t, cs, "runs.result", idArg, &res)
 	require.False(t, isErr, text)
 	require.Len(t, res.Steps, 1)
+
 	log := res.Steps[0].Log
 	assert.Equal(t, root, filepath.Dir(filepath.Dir(log)))
+
 	body, err := os.ReadFile(log)
 	require.NoError(t, err)
 	assert.Equal(t, "one\ntwo\n", string(body))
 
 	var second mcp.RunStarted
+
 	callJSON(t, cs, "slow", nil, &second)
 	<-op.started
+
 	isErr, text = callJSON(
 		t,
 		cs,
@@ -193,6 +222,7 @@ func TestTransportMcpRunsTools_StatusResultCancelList(t *testing.T) {
 	awaitRunState(t, cs, second.RunID, "cancelled")
 
 	var list mcp.RunList
+
 	isErr, text = callJSON(t, cs, "runs.list", nil, &list)
 	require.False(t, isErr, text)
 	assert.Equal(t, []mcp.RunEntry{
@@ -203,6 +233,7 @@ func TestTransportMcpRunsTools_StatusResultCancelList(t *testing.T) {
 	isErr, text = callJSON(t, cs, "runs.status", map[string]any{"run_id": "nope"}, nil)
 	assert.True(t, isErr)
 	assert.Contains(t, text, "NOT_FOUND")
+
 	isErr, text = callJSON(t, cs, "runs.status", nil, nil)
 	assert.True(t, isErr)
 	assert.Contains(t, text, "INVALID_INPUT")
@@ -217,10 +248,13 @@ func stdioSession(
 	srv *mcp.Server,
 ) (*sdkmcp.ClientSession, *io.PipeWriter, <-chan error) {
 	t.Helper()
+
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	done := make(chan error, 1)
+
 	go func() { done <- srv.ServeStdio(ctx, inR, outW) }()
+
 	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test", Version: "test"}, nil)
 	cs, err := client.Connect(ctx,
 		&sdkmcp.IOTransport{Reader: outR, Writer: inW}, nil)
@@ -229,6 +263,7 @@ func stdioSession(
 		_ = cs.Close()
 		_ = outR.Close()
 	})
+
 	return cs, inW, done
 }
 
@@ -248,6 +283,7 @@ func TestTransportMcpEOF_CancelsActiveRunsBeforeExit(t *testing.T) {
 	op := newSlowOp()
 	srv, err := mcp.New(op.registry(t), mcpOpts(t))
 	require.NoError(t, err)
+
 	cs, inW, done := stdioSession(t.Context(), t, srv)
 	callJSON(t, cs, "slow", nil, &mcp.RunStarted{})
 	<-op.started
@@ -273,6 +309,7 @@ func TestTransportMcpCancel_CancelsActiveRunsBeforeExit(t *testing.T) {
 	op := newSlowOp()
 	srv, err := mcp.New(op.registry(t), mcpOpts(t))
 	require.NoError(t, err)
+
 	ctx, cancel := context.WithCancel(t.Context())
 	cs, inW, done := stdioSession(ctx, t, srv)
 	t.Cleanup(func() { _ = inW.Close() })
@@ -301,20 +338,24 @@ func TestTransportMcpLongRunningTool_BusyReplyIsToolResult(t *testing.T) {
 	op := newSlowOp()
 	srv, err := mcp.New(op.registry(t), mcpOpts(t))
 	require.NoError(t, err)
+
 	cs := connectMCP(t, srv)
 
 	var started mcp.RunStarted
+
 	isErr, text := callJSON(t, cs, "slow", nil, &started)
 	require.False(t, isErr, text)
 	<-op.started
 
 	var busy map[string]any
+
 	isErr, text = callJSON(t, cs, "slow", nil, &busy)
 	assert.True(t, isErr)
 	assert.IsType(t, []any{}, busy["steps"], text)
 	assert.Contains(t, busy["error"], "UNAVAILABLE: busy")
 
 	op.release <- struct{}{}
+
 	awaitRunState(t, cs, started.RunID, "succeeded")
 }
 
@@ -335,6 +376,7 @@ func TestTransportMcpRunsTools_OnlyWithLongRunningOperation(t *testing.T) {
 		func(context.Context, any, interfaces.ExecutionObserver) error { return nil })
 	srv, err := mcp.New(reg, mcpOpts(t))
 	require.NoError(t, err)
+
 	cs := connectMCP(t, srv)
 
 	res, err := cs.ListTools(t.Context(), nil)

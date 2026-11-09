@@ -93,6 +93,7 @@ func kinds() client.Kinds[Config, Deps, interfaces.DistributedLock] {
 						"redis lock requires a redis client",
 					)
 				}
+
 				return lockredis.New(deps.Redis, cfg.TTL), nil
 			},
 		},
@@ -111,22 +112,26 @@ func NewFromConfig(
 	if cfg.TTL <= 0 {
 		return nil, apperr.New(apperr.CodeInvalidInput, "lock ttl must be positive")
 	}
+
 	if cfg.RenewInterval <= 0 {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"lock renew_interval must be positive",
 		)
 	}
+
 	if cfg.RenewInterval*3 > cfg.TTL {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"lock renew_interval must be <= ttl/3",
 		)
 	}
+
 	lock, err := kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
 	if err != nil {
 		return nil, err
 	}
+
 	return NewLocker(lock, cfg.RenewInterval), nil
 }
 
@@ -169,17 +174,21 @@ func (l *locker) Hold(
 	if err != nil {
 		return canceledContext(ctx), func() {}, false, err
 	}
+
 	if !ok {
 		return canceledContext(ctx), func() {}, false, nil
 	}
 
 	heldCtx, cancel := context.WithCancel(ctx)
 	stop := make(chan struct{})
+
 	var once sync.Once
+
 	releaseFn := func() {
 		once.Do(func() {
 			close(stop)
 			cancel()
+
 			// Free the key on a context detached from ctx's cancellation, so a
 			// completed request (ctx cancelled) still releases the lock.
 			_ = l.Release(context.WithoutCancel(ctx), key, token)
@@ -189,6 +198,7 @@ func (l *locker) Hold(
 	go func() {
 		ticker := time.NewTicker(l.renewInterval)
 		defer ticker.Stop()
+
 		for {
 			select {
 			case <-stop:
@@ -202,6 +212,7 @@ func (l *locker) Hold(
 					// not Release — we no longer own the key (release, when
 					// the caller defers it, is a token-fenced no-op).
 					cancel()
+
 					return
 				}
 			}
@@ -217,5 +228,6 @@ func (l *locker) Hold(
 func canceledContext(ctx context.Context) context.Context {
 	c, cancel := context.WithCancel(ctx)
 	cancel()
+
 	return c
 }

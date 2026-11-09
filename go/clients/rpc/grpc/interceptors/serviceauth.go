@@ -16,9 +16,11 @@ func withServiceToken(ctx context.Context, token string) context.Context {
 	if token == "" {
 		return ctx
 	}
+
 	md, _ := metadata.FromOutgoingContext(ctx) // a nil MD's Get returns nothing
 	if len(md.Get(authorizationKey)) > 0 {
 		return ctx
 	}
+
 	return metadata.AppendToOutgoingContext(ctx, authorizationKey, "Bearer "+token)
 }

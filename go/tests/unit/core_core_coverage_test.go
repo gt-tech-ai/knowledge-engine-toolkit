@@ -203,6 +203,7 @@ func TestZapFields_NoDetails(t *testing.T) {
 	for _, want := range []string{"error_code", "error_message", "error_stack"} {
 		assert.True(t, keys[want], "expected %s field, got keys %v", want, keys)
 	}
+
 	for _, absent := range []string{"error_details", "error_cause"} {
 		assert.False(
 			t,
@@ -233,12 +234,15 @@ func TestZapFields_WithDetails(t *testing.T) {
 
 	fields := apperr.ZapFields(err)
 	found := false
+
 	for _, f := range fields {
 		if f.Key == "error_details" {
 			found = true
+
 			break
 		}
 	}
+
 	assert.True(t, found, "expected error_details field when Details is non-empty")
 }
 
@@ -275,6 +279,7 @@ func fieldKeySet(fields []zap.Field) map[string]bool {
 	for _, f := range fields {
 		keys[f.Key] = true
 	}
+
 	return keys
 }
 
@@ -337,6 +342,7 @@ func TestAppend(t *testing.T) {
 	require.Error(t, result)
 
 	result = apperr.Append(result, apperr.Sentinel("second"))
+
 	errs := apperr.Errors(result)
 	require.Len(t, errs, 2)
 }
@@ -621,6 +627,7 @@ func TestStdlib_As(t *testing.T) {
 	wrapped := apperr.Join(appErr)
 
 	var target *apperr.AppError
+
 	assert.True(t, apperr.As(wrapped, &target), "As should find *AppError in chain")
 	require.NotNil(t, target)
 	assert.Equal(t, apperr.ErrNotFound, target.Code)

@@ -51,6 +51,7 @@ func NewFromConfig(cfg Config) (*Client, error) {
 			"gorm: unknown kind \""+cfg.Kind+"\" (want postgres)",
 		)
 	}
+
 	return &Client{cfg: cfg}, nil
 }
 
@@ -63,6 +64,7 @@ func (c *Client) Close() error {
 	if c.db == nil {
 		return nil
 	}
+
 	return closePool(c.db)
 }
 
@@ -85,13 +87,18 @@ func (c *Client) Start(ctx context.Context) error {
 		if db != nil {
 			_ = closePool(db)
 		}
+
 		return apperr.Wrap(err, apperr.CodeInternal, "open gorm postgres")
 	}
+
 	if err := ping(ctx, db); err != nil {
 		_ = closePool(db)
+
 		return err
 	}
+
 	c.db = db
+
 	return nil
 }
 
@@ -106,6 +113,7 @@ func (c *Client) Liveness(_ context.Context) error {
 	if c.db == nil {
 		return apperr.Internal("gorm client not started")
 	}
+
 	return nil
 }
 
@@ -116,6 +124,7 @@ func (c *Client) Readiness(ctx context.Context) error {
 	if c.db == nil {
 		return apperr.Internal("gorm client not started")
 	}
+
 	return ping(ctx, c.db)
 }
 
@@ -126,6 +135,7 @@ func ping(ctx context.Context, db *gorm.DB) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "gorm sql.DB")
 	}
+
 	if err := sqlDB.PingContext(ctx); err != nil {
 		return apperr.Wrap(
 			err,
@@ -133,6 +143,7 @@ func ping(ctx context.Context, db *gorm.DB) error {
 			"gorm postgres ping failed",
 		)
 	}
+
 	return nil
 }
 
@@ -142,8 +153,10 @@ func closePool(db *gorm.DB) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "gorm sql.DB")
 	}
+
 	if err := sqlDB.Close(); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "close gorm postgres pool")
 	}
+
 	return nil
 }

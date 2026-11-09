@@ -171,8 +171,10 @@ func TestLogger_MockAsConsumerDependency(t *testing.T) {
 	mock.EXPECT().With("service", "api").Return(mock)
 
 	var l interfaces.Logger = mock
+
 	l.Info("request handled", "status", 200)
 	l.Error("request failed", "error", "timeout")
+
 	child := l.With("service", "api")
 	require.NotNil(t, child, "With must return non-nil child logger")
 }

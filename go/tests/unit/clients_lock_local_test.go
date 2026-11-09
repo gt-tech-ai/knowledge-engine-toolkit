@@ -26,6 +26,7 @@ import (
 //     Acquire on the same key returns acquired=false with an empty token.
 func TestLocalLock_Acquire_Contention(t *testing.T) {
 	t.Parallel()
+
 	l := local.New()
 	ctx := context.Background()
 
@@ -53,6 +54,7 @@ func TestLocalLock_Acquire_Contention(t *testing.T) {
 //     holder's token frees it so the next Acquire wins.
 func TestLocalLock_Release_TokenFenced(t *testing.T) {
 	t.Parallel()
+
 	l := local.New()
 	ctx := context.Background()
 
@@ -61,11 +63,13 @@ func TestLocalLock_Release_TokenFenced(t *testing.T) {
 	require.True(t, ok)
 
 	require.NoError(t, l.Release(ctx, "k", "not-the-token"))
+
 	_, ok2, err := l.Acquire(ctx, "k")
 	require.NoError(t, err)
 	assert.False(t, ok2, "foreign-token Release must not free the lock")
 
 	require.NoError(t, l.Release(ctx, "k", tok))
+
 	_, ok3, err := l.Acquire(ctx, "k")
 	require.NoError(t, err)
 	assert.True(t, ok3, "holder-token Release frees the lock")
@@ -84,6 +88,7 @@ func TestLocalLock_Release_TokenFenced(t *testing.T) {
 //     held=false; unknown key → held=false. Never an error on the local backend.
 func TestLocalLock_Renew(t *testing.T) {
 	t.Parallel()
+
 	l := local.New()
 	ctx := context.Background()
 
@@ -100,6 +105,7 @@ func TestLocalLock_Renew(t *testing.T) {
 	assert.False(t, held, "foreign token must not renew")
 
 	require.NoError(t, l.Release(ctx, "k", tok))
+
 	held, err = l.Renew(ctx, "k", tok)
 	require.NoError(t, err)
 	assert.False(t, held, "a released key cannot be renewed")
@@ -121,11 +127,13 @@ func TestLocalLock_Renew(t *testing.T) {
 //   - Acquire on two different keys both succeed; the two tokens are distinct.
 func TestLocalLock_DistinctKeys_Independent(t *testing.T) {
 	t.Parallel()
+
 	l := local.New()
 	ctx := context.Background()
 
 	tokA, okA, err := l.Acquire(ctx, "resource:a:lock")
 	require.NoError(t, err)
+
 	tokB, okB, err := l.Acquire(ctx, "resource:b:lock")
 	require.NoError(t, err)
 
@@ -147,23 +155,33 @@ func TestLocalLock_DistinctKeys_Independent(t *testing.T) {
 //     exactly one.
 func TestLocalLock_Acquire_ConcurrentSingleWinner(t *testing.T) {
 	t.Parallel()
+
 	l := local.New()
 	ctx := context.Background()
 
 	const n = 64
-	var wins atomic.Int64
-	var wg sync.WaitGroup
+
+	var (
+		wins atomic.Int64
+		wg   sync.WaitGroup
+	)
+
 	start := make(chan struct{})
+
 	wg.Add(n)
+
 	for range n {
 		go func() {
 			defer wg.Done()
+
 			<-start
+
 			if _, ok, err := l.Acquire(ctx, "hot"); err == nil && ok {
 				wins.Add(1)
 			}
 		}()
 	}
+
 	close(start)
 	wg.Wait()
 

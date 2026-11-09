@@ -90,14 +90,17 @@ func NewSource(
 			"connector s3_inventory: no inventory manifest key or report folder",
 		)
 	}
+
 	storage, err := connectors3.NewStorage(ctx, cfg, stsClient, build)
 	if err != nil {
 		return nil, err
 	}
+
 	reportBucket := cfg.InventoryBucket
 	if reportBucket == "" {
 		reportBucket = cfg.Bucket
 	}
+
 	return &Source{
 		storage:      storage,
 		bucket:       cfg.Bucket,
@@ -112,6 +115,7 @@ func NewSource(
 // count (bounded like the s3 kind's probe).
 func (s *Source) TestConnection(ctx context.Context) (int, error) {
 	objs, _, err := s.ListPage(ctx, "", defaultPageSize)
+
 	return len(objs), err
 }
 
@@ -128,39 +132,64 @@ func (s *Source) ListPage(
 ) ([]interfaces.StorageObject, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if limit <= 0 {
 		limit = defaultPageSize
 	}
-	stamp, position, err := s.splitToken(continuationToken)
+
+	file, row, err := s.resume(ctx, continuationToken)
 	if err != nil {
 		return nil, "", err
 	}
-	file, row, err := parseToken(position)
-	if err != nil {
-		return nil, "", err
-	}
-	if err := s.chooseReport(ctx, stamp); err != nil {
-		return nil, "", err
-	}
-	if err := s.loadReport(ctx); err != nil {
-		return nil, "", err
-	}
+
 	var page []interfaces.StorageObject
+
 	for file < len(s.report.Files) && len(page) < limit {
 		cur, err := s.readFrom(ctx, file, row, &page, limit)
 		if err != nil {
 			s.release()
+
 			return nil, "", err
 		}
+
 		file, row = cur.file, cur.row
 		if cur.rows == nil {
 			file, row = file+1, 0
 		}
 	}
+
 	if file >= len(s.report.Files) {
 		return page, "", nil
 	}
+
 	return page, s.token(file, row), nil
+}
+
+// resume loads the report continuationToken names and returns the data file and row it
+// points at.
+func (s *Source) resume(
+	ctx context.Context,
+	continuationToken string,
+) (file, row int, err error) {
+	stamp, position, err := s.splitToken(continuationToken)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	file, row, err = parseToken(position)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	if err := s.chooseReport(ctx, stamp); err != nil {
+		return 0, 0, err
+	}
+
+	if err := s.loadReport(ctx); err != nil {
+		return 0, 0, err
+	}
+
+	return file, row, nil
 }
 
 // readFrom fills *page from the data file at index file, after row rows. A cursor left
@@ -174,22 +203,29 @@ func (s *Source) readFrom(
 	limit int,
 ) (*cursor, error) {
 	reused := s.open != nil && s.open.file == file && s.open.row == row
+
 	cur, err := s.cursorAt(ctx, file, row)
 	if err != nil {
 		return nil, err
 	}
+
 	filled, err := s.fill(cur, *page, limit)
 	if err != nil && reused {
 		s.release()
+
 		if cur, err = s.cursorAt(ctx, file, row); err != nil {
 			return nil, err
 		}
+
 		filled, err = s.fill(cur, *page, limit)
 	}
+
 	if err != nil {
 		return nil, err
 	}
+
 	*page = filled
+
 	return cur, nil
 }
 
@@ -206,20 +242,26 @@ func (s *Source) fill(
 		record, err := next(cur)
 		if apperr.StdIs(err, io.EOF) {
 			s.release()
+
 			return page, nil
 		}
+
 		if err != nil {
 			return nil, err
 		}
+
 		cur.row++
+
 		obj, ok, err := s.cols.object(record, s.bucket, s.prefix)
 		if err != nil {
 			return nil, err
 		}
+
 		if ok {
 			page = append(page, obj)
 		}
 	}
+
 	ahead, err := cur.rows.Read()
 	switch {
 	case apperr.StdIs(err, io.EOF):
@@ -227,6 +269,7 @@ func (s *Source) fill(
 	case err == nil:
 		cur.pending = ahead
 	}
+
 	// Another read-ahead failure is left for the next page, which retries a fresh body.
 	return page, nil
 }
@@ -236,16 +279,21 @@ func (s *Source) fill(
 func next(cur *cursor) ([]string, error) {
 	if cur.pending != nil {
 		record := cur.pending
+
 		cur.pending = nil
+
 		return record, nil
 	}
+
 	record, err := cur.rows.Read()
 	if apperr.StdIs(err, io.EOF) {
 		return nil, io.EOF
 	}
+
 	if err != nil {
 		return nil, readError(err)
 	}
+
 	return record, nil
 }
 
@@ -254,16 +302,21 @@ func (s *Source) loadReport(ctx context.Context) error {
 	if s.report != nil {
 		return nil
 	}
+
 	body, err := s.storage.Download(ctx, s.reportBucket, s.manifestKey)
 	if err != nil {
 		return connectors3.ClassifyListError(err)
 	}
+
 	defer func() { _ = body.Close() }()
+
 	report, cols, err := parseManifest(body, s.bucket)
 	if err != nil {
 		return err
 	}
+
 	s.report, s.cols = report, cols
+
 	return nil
 }
 
@@ -273,42 +326,65 @@ func (s *Source) cursorAt(ctx context.Context, file, row int) (*cursor, error) {
 	if s.open != nil && s.open.file == file && s.open.row == row {
 		return s.open, nil
 	}
+
 	s.release()
+
 	key := s.report.Files[file].Key
+
 	body, err := s.storage.Download(ctx, s.reportBucket, key)
 	if err != nil {
 		return nil, connectors3.ClassifyListError(err)
 	}
-	var in io.Reader = body
-	if strings.HasSuffix(key, ".gz") {
-		gz, err := gzip.NewReader(body)
-		if err != nil {
-			_ = body.Close()
-			return nil, apperr.Wrap(
-				err,
-				apperr.CodeInvalidInput,
-				"connector s3_inventory: gunzip data file",
-			)
-		}
-		in = gz
+
+	in, err := dataReader(body, key)
+	if err != nil {
+		_ = body.Close()
+
+		return nil, err
 	}
+
 	rows := csv.NewReader(in)
+
 	rows.FieldsPerRecord = -1
 	rows.ReuseRecord = false
+
 	cur := &cursor{file: file, body: body, rows: rows}
+
 	s.open = cur
+
 	for cur.row < row {
 		if _, err := rows.Read(); err != nil {
 			s.release()
+
 			return nil, apperr.Wrap(
 				err,
 				apperr.CodeInvalidInput,
 				"connector s3_inventory: token past the data file's end",
 			)
 		}
+
 		cur.row++
 	}
+
 	return cur, nil
+}
+
+// dataReader returns body as plain text, gunzipping it when key names a .gz file.
+func dataReader(body io.Reader, key string) (io.Reader, error) {
+	if !strings.HasSuffix(key, ".gz") {
+		return body, nil
+	}
+
+	gz, err := gzip.NewReader(body)
+	if err != nil {
+		return nil, apperr.Wrap(
+			err,
+			apperr.CodeInvalidInput,
+			"connector s3_inventory: gunzip data file",
+		)
+	}
+
+	return gz, nil
 }
 
 // release closes the open data file, if any; its cursor's rows become nil.
@@ -316,6 +392,7 @@ func (s *Source) release() {
 	if s.open == nil {
 		return
 	}
+
 	_ = s.open.body.Close()
 	s.open.rows = nil
 	s.open = nil
@@ -325,6 +402,7 @@ func (s *Source) release() {
 // CodeInvalidInput; anything else (the body's transport) is transient CodeUnavailable.
 func readError(err error) error {
 	var parseErr *csv.ParseError
+
 	if apperr.As(err, &parseErr) {
 		return apperr.Wrap(
 			err,
@@ -332,6 +410,7 @@ func readError(err error) error {
 			"connector s3_inventory: malformed data file",
 		)
 	}
+
 	return apperr.Wrap(
 		err,
 		apperr.CodeUnavailable,
@@ -344,13 +423,16 @@ func parseToken(token string) (file, row int, err error) {
 	if token == "" {
 		return 0, 0, nil
 	}
+
 	fileText, rowText, found := strings.Cut(token, ":")
 	file, fileErr := strconv.Atoi(fileText)
 	row, rowErr := strconv.Atoi(rowText)
+
 	if !found || fileErr != nil || rowErr != nil || file < 0 || row < 0 {
 		return 0, 0, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"connector s3_inventory: malformed continuation token %q", token,
 		))
 	}
+
 	return file, row, nil
 }

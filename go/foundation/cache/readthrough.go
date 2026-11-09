@@ -69,13 +69,17 @@ func ReadThrough[T any](
 	opts ...ReadThroughOption[T],
 ) (T, error) {
 	var o readThroughOptions[T]
+
 	for _, opt := range opts {
 		opt(&o)
 	}
+
 	var zero T
+
 	if err := ctx.Err(); err != nil {
 		return zero, contextError(err)
 	}
+
 	if c != nil {
 		if data, hit := c.Get(ctx, key); hit {
 			if val, ok, decErr := Decode[T](data, version); decErr == nil && ok {
@@ -83,19 +87,23 @@ func ReadThrough[T any](
 			}
 		}
 	}
+
 	detached := context.WithoutCancel(ctx)
 	flight := sf.DoChan(key, func() (any, error) {
 		result, loadErr := recoverLoad(load)
 		if loadErr != nil {
 			return nil, loadErr
 		}
+
 		if c != nil && (o.cacheable == nil || o.cacheable(result)) {
 			if encoded, encErr := Encode(result, version); encErr == nil {
 				c.Set(detached, key, encoded, ttl)
 			}
 		}
+
 		return result, nil
 	})
+
 	select {
 	case <-ctx.Done():
 		return zero, contextError(ctx.Err())
@@ -103,9 +111,11 @@ func ReadThrough[T any](
 		if res.Err != nil {
 			return zero, res.Err
 		}
+
 		// The flight returns the exact value our load closure produced (a T), so the
 		// assertion is total.
 		result, _ := res.Val.(T)
+
 		return result, nil
 	}
 }
@@ -126,6 +136,7 @@ func recoverLoad[T any](load func() (T, error)) (result T, err error) {
 			)
 		}
 	}()
+
 	return load()
 }
 
@@ -139,5 +150,6 @@ func contextError(err error) error {
 			"cache: read-through wait timed out",
 		)
 	}
+
 	return apperr.Wrap(err, apperr.CodeCanceled, "cache: read-through wait canceled")
 }

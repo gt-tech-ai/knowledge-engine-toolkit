@@ -40,6 +40,7 @@ func lintSuite() types.Suite {
 	lint := func(tag string) types.Selection {
 		return types.Selection{Verbs: []string{"lint"}, Tags: []string{tag}}
 	}
+
 	return types.Suite{
 		Title: "Lint",
 		Select: types.Selection{
@@ -63,6 +64,7 @@ func entryNames(es []suite.Entry) []string {
 	for _, e := range es {
 		out = append(out, e.Name)
 	}
+
 	return out
 }
 
@@ -81,11 +83,13 @@ func entryNames(es []suite.Entry) []string {
 //     the catalog is INVALID_INPUT.
 func TestServicesSuite_SelectComposesFlags(t *testing.T) {
 	t.Parallel()
+
 	s := lintSuite()
 	catalog := suite.Runs(nil, nil, suiteRuns())
 	names := func(s types.Suite, cat []suite.Entry, flags ...string) []string {
 		got, err := suite.Select(s, cat, flags)
 		require.NoError(t, err)
+
 		return entryNames(got)
 	}
 	assert.Equal(t, []string{"golangci-lint", "ruff"}, names(s, catalog))
@@ -93,12 +97,15 @@ func TestServicesSuite_SelectComposesFlags(t *testing.T) {
 	assert.Equal(t, []string{"golangci-lint"}, names(s, catalog, "go", "fast"))
 	assert.Equal(t, []string{"lychee"}, names(s, catalog, "docs"))
 	assert.Empty(t, names(s, catalog, "docs", "offline"))
+
 	_, err := suite.Select(s, catalog, []string{"rust"})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "rust")
 
 	gated := s
+
 	gated.Gated = map[string]string{"offline": "offline"}
+
 	offline := suite.Runs(nil, nil, []types.ToolRun{
 		{
 			Name:  "lychee",
@@ -121,9 +128,12 @@ func TestServicesSuite_SelectComposesFlags(t *testing.T) {
 		"lint.off": {Group: "Lint", Tags: []string{"go"}},
 	})
 	withSteps := s
+
 	withSteps.Steps = []string{"lint.vet"}
+
 	all := append(append([]suite.Entry{}, catalog...), steps...)
 	assert.Equal(t, []string{"golangci-lint", "lint.vet"}, names(withSteps, all, "go"))
+
 	withSteps.Steps = []string{"lint.nope"}
 	_, err = suite.Select(withSteps, all, nil)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -142,14 +152,18 @@ func TestServicesSuite_SelectComposesFlags(t *testing.T) {
 //     drops an empty phase; an unphased group is INVALID_INPUT naming entry and group.
 func TestServicesSuite_PlanOrdersPhases(t *testing.T) {
 	t.Parallel()
+
 	s := lintSuite()
+
 	s.Phases[1].Serial = true
+
 	selected, err := suite.Select(
 		s,
 		suite.Runs(nil, nil, suiteRuns()),
 		[]string{"go", "docs"},
 	)
 	require.NoError(t, err)
+
 	plan, err := suite.Plan(s, selected)
 	require.NoError(t, err)
 	require.Len(t, plan, 2)
@@ -181,11 +195,16 @@ func TestServicesSuite_PlanOrdersPhases(t *testing.T) {
 //   - An unknown flag is one failing job naming the flag, from Gate and from Jobs.
 func TestServicesSuite_Gate(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	tr := mocks.NewMockToolRunner(ctrl)
-	var inFlight, peak atomic.Int32
-	var mu sync.Mutex
-	var ran []string
+
+	var (
+		inFlight, peak atomic.Int32
+		mu             sync.Mutex
+		ran            []string
+	)
+
 	tr.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2).
 		DoAndReturn(func(
 			_ context.Context, _ interfaces.Codebase, r types.ToolRun, _ types.RunOptions,
@@ -193,13 +212,17 @@ func TestServicesSuite_Gate(t *testing.T) {
 			n := inFlight.Add(1)
 			for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
 			}
+
 			time.Sleep(10 * time.Millisecond)
 			inFlight.Add(-1)
 			mu.Lock()
+
 			ran = append(ran, r.Name)
 			mu.Unlock()
+
 			return types.OneStep(r.Name, types.StatusPass, nil), nil
 		})
+
 	runner := mocks.NewMockCommandRunner(ctrl)
 	s := types.Suite{
 		Title:  "Lint",
@@ -220,17 +243,21 @@ func TestServicesSuite_Gate(t *testing.T) {
 		Run: func(_ context.Context, env *suite.StepEnv) (types.StepResults, error) {
 			assert.Same(t, runner, env.Runner.(*mocks.MockCommandRunner))
 			mu.Lock()
+
 			ran = append(ran, "lint.vet@"+env.Root)
 			mu.Unlock()
+
 			return types.OneStep("vet", types.StatusPass, nil), nil
 		},
 	}})...)
 	env := suite.Env{Decs: fixtures.Decorations()}
 	g := suite.Gate{Env: env, Suite: s, Catalog: catalog, Flags: []string{"go"}}.Gate()
 	phases := make([]string, 0, 2)
+
 	for _, p := range g.Phases() {
 		phases = append(phases, p.Name)
 	}
+
 	assert.Equal(t, []string{"Format", "Lint"}, phases)
 	require.NoError(t, g.Run(t.Context(), runner, "/r"))
 	assert.Equal(t, []string{"gofumpt", "golines", "lint.vet@/r"}, ran)
@@ -239,10 +266,12 @@ func TestServicesSuite_Gate(t *testing.T) {
 	plain := types.ToolRun{Name: "hadolint", Verb: "lint"}
 	tr.EXPECT().Run(gomock.Any(), nil, plain, types.RunOptions{Fix: true}).
 		Return(nil, apperr.New(apperr.CodeInvalidInput, "no value for {image}"))
+
 	j := suite.Runs(tr, nil, []types.ToolRun{plain})[0].Job(suite.Env{
 		Decs: fixtures.Decorations(), Opts: types.RunOptions{Fix: true},
 	})
 	assert.Equal(t, types.JobMeta{Name: "hadolint", Group: "lint"}, j.Meta())
+
 	got, err := j.Execute(t.Context(), runner, "/r")
 	require.NoError(t, err)
 	require.Len(t, got, 1)
@@ -251,8 +280,10 @@ func TestServicesSuite_Gate(t *testing.T) {
 
 	bad := suite.Gate{Env: env, Suite: s, Catalog: catalog, Flags: []string{"rust"}}
 	require.Error(t, bad.Gate().Run(t.Context(), runner, "/r"))
+
 	jobs := bad.Jobs()
 	require.Len(t, jobs, 1)
+
 	res, _ := jobs[0].Execute(t.Context(), runner, "/r")
 	require.Len(t, res, 1)
 	assert.Contains(t, res[0].Error, "rust")

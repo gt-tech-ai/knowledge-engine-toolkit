@@ -81,6 +81,7 @@ func jsonHandler(status int, body string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
+
 		_, _ = io.WriteString(w, body)
 	})
 }
@@ -93,15 +94,20 @@ func doREST(
 	method, path, body string,
 ) *httptest.ResponseRecorder {
 	t.Helper()
+
 	var reqBody io.Reader
+
 	if body != "" {
 		reqBody = strings.NewReader(body)
 	}
+
 	r := httptest.NewRequestWithContext(t.Context(), method, path, reqBody)
 	// Mark as a REST request (not Connect/gRPC) so the middleware transforms it.
 	r.Header.Set("Accept", "application/json")
+
 	rec := httptest.NewRecorder()
 	jsonapi.Middleware(inner, cfg).ServeHTTP(rec, r)
+
 	return rec
 }
 
@@ -118,6 +124,7 @@ func doREST(
 //     template matches; an unknown path returns false.
 func TestJSONAPIMatchRoute_MethodPathAndPrecedence(t *testing.T) {
 	t.Parallel()
+
 	cfg := docRoutes()
 
 	get, ok := cfg.MatchRoute("GET", "/api/v1/documents")
@@ -158,12 +165,15 @@ func TestJSONAPIMatchRoute_MethodPathAndPrecedence(t *testing.T) {
 //     yields 500 with a JSON:API errors[] envelope, not a 200 meta document.
 func TestJSONAPI_CreateMissingDataReturns500(t *testing.T) {
 	t.Parallel()
+
 	rec := doREST(t, docRoutes(), jsonHandler(http.StatusOK, `{"status":"ok"}`),
 		http.MethodPost, "/api/v1/documents",
 		`{"data":{"type":"documents","attributes":{"title":"x"}}}`)
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+
 	var out map[string]any
+
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
 	assert.Contains(t, out, "errors")
 	assert.NotContains(t, out, "data")
@@ -180,6 +190,7 @@ func TestJSONAPI_CreateMissingDataReturns500(t *testing.T) {
 //     200 with meta and no data member.
 func TestJSONAPI_ActionIsMetaOnly200(t *testing.T) {
 	t.Parallel()
+
 	rec := doREST(t,
 		docRoutes(),
 		jsonHandler(http.StatusOK, `{"document":{"id":"d1"},"processed":true}`),
@@ -189,7 +200,9 @@ func TestJSONAPI_ActionIsMetaOnly200(t *testing.T) {
 	)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
+
 	var out map[string]any
+
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
 	assert.Contains(t, out, "meta")
 	assert.NotContains(t, out, "data", "an ACTION is meta-only, never a data resource")
@@ -206,6 +219,7 @@ func TestJSONAPI_ActionIsMetaOnly200(t *testing.T) {
 //     {data:object}; DELETE → 204 no body.
 func TestJSONAPI_RolesProduceExpectedEnvelope(t *testing.T) {
 	t.Parallel()
+
 	cfg := docRoutes()
 
 	getOne := doREST(t,
@@ -216,6 +230,7 @@ func TestJSONAPI_RolesProduceExpectedEnvelope(t *testing.T) {
 		"",
 	)
 	assert.Equal(t, http.StatusOK, getOne.Code)
+
 	data := envData(t, getOne)
 	assert.Equal(t, "documents", data["type"])
 
@@ -230,8 +245,11 @@ func TestJSONAPI_RolesProduceExpectedEnvelope(t *testing.T) {
 		"",
 	)
 	assert.Equal(t, http.StatusOK, list.Code)
+
 	var listOut map[string]any
+
 	require.NoError(t, json.Unmarshal(list.Body.Bytes(), &listOut))
+
 	_, isArr := listOut["data"].([]any)
 	assert.True(t, isArr, "LIST data must be an array")
 	assert.Contains(t, listOut, "meta")
@@ -268,6 +286,7 @@ func TestJSONAPI_RolesProduceExpectedEnvelope(t *testing.T) {
 //     a Location header ending in the new id.
 func TestJSONAPI_CreateSuccessReturns201WithLocation(t *testing.T) {
 	t.Parallel()
+
 	rec := doREST(t,
 		docRoutes(),
 		jsonHandler(http.StatusOK, `{"document":{"id":"d9","title":"x"}}`),
@@ -292,9 +311,11 @@ func TestJSONAPI_CreateSuccessReturns201WithLocation(t *testing.T) {
 //     yield 400 errors[] and the inner handler is never invoked.
 func TestJSONAPI_CreateRequestWrongTypeReturns400(t *testing.T) {
 	t.Parallel()
+
 	called := false
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		called = true
+
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -332,12 +353,17 @@ func TestJSONAPI_CreateRequestWrongTypeReturns400(t *testing.T) {
 //     merged for the write); an ACTION POST body reaches the handler unchanged.
 func TestJSONAPI_CreateRequestValidEnvelopeUnwrapped(t *testing.T) {
 	t.Parallel()
+
 	var gotCreate, gotAction map[string]any
+
 	capture := func(dst *map[string]any) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			b, _ := io.ReadAll(r.Body)
+
 			_ = json.Unmarshal(b, dst)
+
 			w.Header().Set("Content-Type", "application/json")
+
 			_, _ = w.Write([]byte(`{"document":{"id":"d1"}}`))
 		})
 	}
@@ -379,20 +405,28 @@ func TestJSONAPI_CreateRequestValidEnvelopeUnwrapped(t *testing.T) {
 //     validator (the inner handler returns 400) surfaces as a JSON:API 400.
 func TestJSONAPI_ProtovalidateRunsPostUnwrap(t *testing.T) {
 	t.Parallel()
+
 	// Inner handler stands in for protovalidate: rejects the unwrapped message
 	// when a required attribute is empty.
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
+
 		var m map[string]any
+
 		_ = json.Unmarshal(b, &m)
+
 		if title, _ := m["title"].(string); title == "" {
 			w.WriteHeader(http.StatusBadRequest)
+
 			_, _ = w.Write(
 				[]byte(`{"code":"invalid_argument","message":"title required"}`),
 			)
+
 			return
 		}
+
 		w.Header().Set("Content-Type", "application/json")
+
 		_, _ = w.Write([]byte(`{"document":{"id":"d1"}}`))
 	})
 
@@ -410,10 +444,14 @@ func TestJSONAPI_ProtovalidateRunsPostUnwrap(t *testing.T) {
 // envData returns the response's data object (asserting it is one).
 func envData(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
+
 	var out map[string]any
+
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+
 	data, ok := out["data"].(map[string]any)
 	require.True(t, ok, "response has a data object: %s", rec.Body.String())
+
 	return data
 }
 
@@ -432,6 +470,7 @@ func envData(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 //     transport_jsonapi_jsonapi_gaps_test.go.)
 func TestJSONAPI_PassthroughCases(t *testing.T) {
 	t.Parallel()
+
 	cfg := docRoutes()
 
 	// Connect request → passthrough (Connect announces itself via this header).
@@ -441,6 +480,7 @@ func TestJSONAPI_PassthroughCases(t *testing.T) {
 		strings.NewReader(`{"x":1}`),
 	)
 	connectReq.Header.Set("Connect-Protocol-Version", "1")
+
 	connectRec := httptest.NewRecorder()
 	jsonapi.Middleware(jsonHandler(http.StatusOK, `{"raw":true}`), cfg).
 		ServeHTTP(connectRec, connectReq)
@@ -493,6 +533,7 @@ func TestJSONAPI_PassthroughCases(t *testing.T) {
 //   - A GET_ONE handler returning a body without the single key yields 500 errors[].
 func TestJSONAPI_GetOneMissingResourceReturns500(t *testing.T) {
 	t.Parallel()
+
 	rec := doREST(t, docRoutes(), jsonHandler(http.StatusOK, `{"unexpected":true}`),
 		http.MethodGet, "/api/v1/documents/d1", "")
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)

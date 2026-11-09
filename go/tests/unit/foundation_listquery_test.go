@@ -73,6 +73,7 @@ func TestFilterMap_LookupAndColumn(t *testing.T) {
 //     parse to a CompositeFilter holding the sub-clauses; empty/blank → nil filter.
 func TestParse_BasicAndComposite(t *testing.T) {
 	t.Parallel()
+
 	m := testFilterMap()
 
 	// Empty / blank → an empty filter (IsEmpty; a store applies no WHERE).
@@ -86,6 +87,7 @@ func TestParse_BasicAndComposite(t *testing.T) {
 	// $eq scalar.
 	f, err := listquery.Parse(m, `{"$eq": {"status": "indexed"}}`)
 	require.NoError(t, err)
+
 	clause, ok := f.(types.FilterClause)
 	require.True(t, ok, "$eq → FilterClause")
 	assert.Equal(t, "status", clause.Field)
@@ -95,6 +97,7 @@ func TestParse_BasicAndComposite(t *testing.T) {
 	// $in slice.
 	f, err = listquery.Parse(m, `{"$in": {"status": ["indexed", "failed"]}}`)
 	require.NoError(t, err)
+
 	clause, ok = f.(types.FilterClause)
 	require.True(t, ok)
 	assert.Equal(t, types.OpIn, clause.Operator)
@@ -103,6 +106,7 @@ func TestParse_BasicAndComposite(t *testing.T) {
 	// $like scalar.
 	f, err = listquery.Parse(m, `{"$like": {"name": "report"}}`)
 	require.NoError(t, err)
+
 	clause, _ = f.(types.FilterClause)
 	assert.Equal(t, types.OpLike, clause.Operator)
 	assert.Equal(t, "report", clause.Value)
@@ -111,10 +115,12 @@ func TestParse_BasicAndComposite(t *testing.T) {
 	f, err = listquery.Parse(m,
 		`{"$and": [ {"$eq": {"status": "indexed"}}, {"$like": {"name": "report"}} ]}`)
 	require.NoError(t, err)
+
 	comp, ok := f.(types.CompositeFilter)
 	require.True(t, ok, "$and → CompositeFilter")
 	require.Len(t, comp.And, 2)
 	assert.Empty(t, comp.Or)
+
 	first, _ := comp.And[0].(types.FilterClause)
 	assert.Equal(t, "status", first.Field)
 
@@ -122,6 +128,7 @@ func TestParse_BasicAndComposite(t *testing.T) {
 	f, err = listquery.Parse(m,
 		`{"$or": [ {"$eq": {"status": "indexed"}}, {"$eq": {"status": "failed"}} ]}`)
 	require.NoError(t, err)
+
 	comp, ok = f.(types.CompositeFilter)
 	require.True(t, ok)
 	require.Len(t, comp.Or, 2)
@@ -142,6 +149,7 @@ func TestParse_BasicAndComposite(t *testing.T) {
 //     return a CodeInvalidInput error.
 func TestParse_RejectsUnknownFieldAndTypeMismatch(t *testing.T) {
 	t.Parallel()
+
 	m := testFilterMap()
 
 	cases := map[string]string{
@@ -154,6 +162,7 @@ func TestParse_RejectsUnknownFieldAndTypeMismatch(t *testing.T) {
 	for name, filter := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			_, err := listquery.Parse(m, filter)
 			require.Error(t, err, "must reject %q", filter)
 			assert.True(t, apperr.Is(err, apperr.CodeInvalidInput),
@@ -175,10 +184,12 @@ func TestParse_RejectsUnknownFieldAndTypeMismatch(t *testing.T) {
 //     an $in array → CodeInvalidInput.
 func TestParse_InEmptyAndMixedArray(t *testing.T) {
 	t.Parallel()
+
 	m := testFilterMap()
 
 	f, err := listquery.Parse(m, `{"$in": {"status": []}}`)
 	require.NoError(t, err, "$in: [] is valid (matches nothing)")
+
 	clause, ok := f.(types.FilterClause)
 	require.True(t, ok)
 	assert.Equal(t, types.OpIn, clause.Operator)
@@ -201,6 +212,7 @@ func TestParse_InEmptyAndMixedArray(t *testing.T) {
 //   - A filter nested well past the cap returns CodeInvalidInput and does not panic.
 func TestParse_RejectsOverDepth(t *testing.T) {
 	t.Parallel()
+
 	m := testFilterMap()
 
 	// Build {"$and":[{"$and":[ ... {"$eq":{"status":"x"}} ... ]}]} nested 200 deep.
@@ -208,6 +220,7 @@ func TestParse_RejectsOverDepth(t *testing.T) {
 	for range 200 {
 		nested = `{"$and": [` + nested + `]}`
 	}
+
 	_, err := listquery.Parse(m, nested)
 	require.Error(t, err)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput),
@@ -226,6 +239,7 @@ func TestParse_RejectsOverDepth(t *testing.T) {
 //   - Parse(fixedMap, jsonStr) never panics; on nil error the result is a valid Filter.
 func FuzzParse(f *testing.F) {
 	m := testFilterMap()
+
 	for _, seed := range []string{
 		"", "{}", `{"$eq": {"status": "indexed"}}`,
 		`{"$in": {"status": []}}`,
@@ -235,6 +249,7 @@ func FuzzParse(f *testing.F) {
 	} {
 		f.Add(seed)
 	}
+
 	f.Fuzz(func(_ *testing.T, jsonStr string) {
 		got, err := listquery.Parse(m, jsonStr)
 		if err == nil && got != nil {
@@ -258,6 +273,7 @@ func FuzzParse(f *testing.F) {
 //     float, bool, and id fields decode to their natural Go values.
 func TestParse_ScalarTypes(t *testing.T) {
 	t.Parallel()
+
 	m := listquery.NewMap().Add(
 		listquery.Time("created_at"),
 		listquery.Float("score"),
@@ -268,8 +284,10 @@ func TestParse_ScalarTypes(t *testing.T) {
 	// Time: valid RFC3339 → time.Time.
 	f, err := listquery.Parse(m, `{"$gt": {"created_at": "2026-08-24T12:00:00Z"}}`)
 	require.NoError(t, err)
+
 	clause := f.(types.FilterClause)
 	assert.Equal(t, types.OpGt, clause.Operator)
+
 	ts, ok := clause.Value.(time.Time)
 	require.True(t, ok, "time field decodes to time.Time, got %T", clause.Value)
 	assert.Equal(t, 2026, ts.Year())

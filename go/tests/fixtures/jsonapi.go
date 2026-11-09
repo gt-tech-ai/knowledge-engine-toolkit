@@ -26,6 +26,7 @@ import (
 // synthetic options via dynamicpb without depending on the generated stubs.
 func JSONAPIAnnotations(tb testing.TB) protoreflect.FileDescriptor {
 	tb.Helper()
+
 	str := func(name string, num int32) *descriptorpb.FieldDescriptorProto {
 		return &descriptorpb.FieldDescriptorProto{
 			Name:     new(name),
@@ -85,6 +86,7 @@ func JSONAPIAnnotations(tb testing.TB) protoreflect.FileDescriptor {
 	}
 	fd, err := protodesc.NewFile(fdp, protoregistry.GlobalFiles)
 	require.NoError(tb, err, "build synthetic jsonapi/v1/annotations.proto")
+
 	return fd
 }
 
@@ -100,6 +102,7 @@ type JSONAPISetter struct {
 // jsonapi annotations file into a JSONAPISetter.
 func NewJSONAPISetter(tb testing.TB, fd protoreflect.FileDescriptor) JSONAPISetter {
 	tb.Helper()
+
 	return JSONAPISetter{
 		svcExt: dynamicpb.NewExtensionType(fd.Extensions().ByName("service")),
 		resExt: dynamicpb.NewExtensionType(fd.Extensions().ByName("resource")),
@@ -116,8 +119,10 @@ func (s JSONAPISetter) FileOptsWithService() *descriptorpb.FileOptions {
 	m := dynamicpb.NewMessage(s.svcMsg)
 	m.Set(s.svcMsg.Fields().ByName("name"), protoreflect.ValueOfString("testsvc"))
 	m.Set(s.svcMsg.Fields().ByName("base_path"), protoreflect.ValueOfString("/api/v1"))
+
 	opts := &descriptorpb.FileOptions{}
 	proto.SetExtension(opts, s.svcExt, m)
+
 	return opts
 }
 
@@ -128,17 +133,21 @@ func (s JSONAPISetter) MsgOptsWithResource(
 ) *descriptorpb.MessageOptions {
 	m := dynamicpb.NewMessage(s.resMsg)
 	m.Set(s.resMsg.Fields().ByName("type"), protoreflect.ValueOfString(resType))
+
 	if single != "" {
 		m.Set(s.resMsg.Fields().ByName("single_key"), protoreflect.ValueOfString(single))
 	}
+
 	if collection != "" {
 		m.Set(
 			s.resMsg.Fields().ByName("collection_key"),
 			protoreflect.ValueOfString(collection),
 		)
 	}
+
 	opts := &descriptorpb.MessageOptions{}
 	proto.SetExtension(opts, s.resExt, m)
+
 	return opts
 }
 
@@ -152,13 +161,16 @@ func (s JSONAPISetter) MethodOpts(
 	for _, ab := range additional {
 		rule.AdditionalBindings = append(rule.AdditionalBindings, httpRule(ab[0], ab[1]))
 	}
+
 	opts := &descriptorpb.MethodOptions{}
 	proto.SetExtension(opts, annotations.E_Http, rule)
+
 	if action {
 		m := dynamicpb.NewMessage(s.opMsg)
 		m.Set(s.opMsg.Fields().ByName("action"), protoreflect.ValueOfBool(true))
 		proto.SetExtension(opts, s.opExt, m)
 	}
+
 	return opts
 }
 
@@ -220,22 +232,32 @@ func fdsClosure(
 	roots ...protoreflect.FileDescriptor,
 ) []*descriptorpb.FileDescriptorProto {
 	seen := map[string]bool{}
-	var out []*descriptorpb.FileDescriptorProto
-	var visit func(fd protoreflect.FileDescriptor)
+
+	var (
+		out   []*descriptorpb.FileDescriptorProto
+		visit func(fd protoreflect.FileDescriptor)
+	)
+
 	visit = func(fd protoreflect.FileDescriptor) {
 		if seen[fd.Path()] {
 			return
 		}
+
 		seen[fd.Path()] = true
+
 		imps := fd.Imports()
+
 		for i := range imps.Len() {
 			visit(imps.Get(i).FileDescriptor)
 		}
+
 		out = append(out, protodesc.ToFileDescriptorProto(fd))
 	}
+
 	for _, r := range roots {
 		visit(r)
 	}
+
 	return out
 }
 
@@ -249,6 +271,7 @@ func BuildRouteFDS(
 	methods []*descriptorpb.MethodDescriptorProto,
 ) []byte {
 	tb.Helper()
+
 	jaFD := JSONAPIAnnotations(tb)
 	deps := fdsClosure(
 		descriptorpb.File_google_protobuf_descriptor_proto,
@@ -273,5 +296,6 @@ func BuildRouteFDS(
 	fds := &descriptorpb.FileDescriptorSet{File: append(deps, svcFile)}
 	raw, err := proto.Marshal(fds)
 	require.NoError(tb, err, "marshal synthetic FileDescriptorSet")
+
 	return raw
 }

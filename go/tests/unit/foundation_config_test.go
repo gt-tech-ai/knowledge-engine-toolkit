@@ -40,8 +40,12 @@ database:
   host: localhost
   port: 5432
 `)
-	var cfg interfaces.ConfigLoader
-	var err error
+
+	var (
+		cfg interfaces.ConfigLoader
+		err error
+	)
+
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err, "New")
 
@@ -77,8 +81,12 @@ log:
 log:
   level: warn
 `)
-	var cfg interfaces.ConfigLoader
-	var err error
+
+	var (
+		cfg interfaces.ConfigLoader
+		err error
+	)
+
 	cfg, err = config.New(
 		config.KindViper,
 		config.WithBaseDir(dir),
@@ -138,6 +146,7 @@ storage:
 	t.Setenv("MYAPP_STORAGE_S3_PUBLIC_ENDPOINT", "http://localhost:9000")
 
 	var s3 infra.S3Config
+
 	require.NoError(t, loadWithSchema(t, dir).UnmarshalKey("storage.s3", &s3))
 	assert.Equal(t, "http://localhost:9000", s3.PublicEndpoint,
 		"MYAPP_STORAGE_S3_PUBLIC_ENDPOINT must bind to storage.s3.public_endpoint")
@@ -223,10 +232,15 @@ app:
 `)
 
 	cfg := config.DefaultConfig()
+
 	cfg.Viper.BaseDir = dir
 	cfg.Viper.Env = "dev"
-	var loader interfaces.ConfigLoader
-	var err error
+
+	var (
+		loader interfaces.ConfigLoader
+		err    error
+	)
+
 	loader, err = config.NewFromConfig(cfg)
 	require.NoError(t, err, "NewFromConfig")
 
@@ -257,8 +271,11 @@ server:
   host: 0.0.0.0
 `)
 
-	var cfg interfaces.ConfigLoader
-	var err error
+	var (
+		cfg interfaces.ConfigLoader
+		err error
+	)
+
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err, "New")
 
@@ -268,6 +285,7 @@ server:
 			Port int    `mapstructure:"port"`
 		} `mapstructure:"server"`
 	}
+
 	require.NoError(t, cfg.Unmarshal(&target), "Unmarshal")
 	assert.Equal(t, 8080, target.Server.Port)
 	assert.Equal(t, "0.0.0.0", target.Server.Host)
@@ -291,8 +309,11 @@ feature:
   disabled: false
 `)
 
-	var cfg interfaces.ConfigLoader
-	var err error
+	var (
+		cfg interfaces.ConfigLoader
+		err error
+	)
+
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err, "New")
 
@@ -322,8 +343,11 @@ app:
   name: test
 `)
 
-	var cfg interfaces.ConfigLoader
-	var err error
+	var (
+		cfg interfaces.ConfigLoader
+		err error
+	)
+
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err, "New")
 
@@ -356,6 +380,7 @@ func TestConfig_MockAsConsumerDependency(t *testing.T) {
 	mock.EXPECT().Get("app.name").Return("test-service")
 
 	var cfg interfaces.ConfigLoader = mock
+
 	assert.Equal(t, "0.0.0.0", cfg.GetString("server.host"))
 	assert.Equal(t, 8080, cfg.GetInt("server.port"))
 	assert.False(t, cfg.GetBool("debug"), "expected debug = false")
@@ -387,8 +412,11 @@ database:
   sslmode: disable
 `)
 
-	var cfg interfaces.ConfigLoader
-	var err error
+	var (
+		cfg interfaces.ConfigLoader
+		err error
+	)
+
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err, "New")
 
@@ -400,6 +428,7 @@ database:
 		SSLMode  string `mapstructure:"sslmode"`
 		Port     int    `mapstructure:"port"`
 	}
+
 	require.NoError(t, cfg.UnmarshalKey("database", &dbCfg), "UnmarshalKey")
 
 	assert.Equal(t, "localhost", dbCfg.Host)
@@ -437,6 +466,7 @@ messaging:
 	cfg := loadWithSchema(t, dir)
 
 	var sqsCfg infra.SQSConfig
+
 	require.NoError(t, cfg.UnmarshalKey("messaging.sqs", &sqsCfg), "UnmarshalKey")
 	assert.Equal(
 		t,
@@ -473,8 +503,11 @@ server:
     write_timeout: 60s
 `)
 
-	var cfg interfaces.ConfigLoader
-	var err error
+	var (
+		cfg interfaces.ConfigLoader
+		err error
+	)
+
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err, "New")
 
@@ -486,6 +519,7 @@ server:
 			WriteTimeout time.Duration `mapstructure:"write_timeout"`
 		} `mapstructure:"http"`
 	}
+
 	require.NoError(t, cfg.UnmarshalKey("server", &serverCfg), "UnmarshalKey")
 
 	assert.Equal(t, 30*time.Second, serverCfg.HTTP.ReadTimeout)
@@ -577,6 +611,7 @@ func TestConfigBuilder_ConfigToOptions(t *testing.T) {
 	opts := original.ToOptions()
 
 	var rebuilt config.Config
+
 	for _, opt := range opts {
 		opt(&rebuilt)
 	}
@@ -706,6 +741,7 @@ server:
 		Host string `mapstructure:"host"`
 		Port int    `mapstructure:"port"`
 	}
+
 	err = cfg.UnmarshalKey("nonexistent.section", &target)
 	require.Error(t, err, "expected error for missing config key")
 	assert.Contains(
@@ -730,6 +766,7 @@ func TestConfigBuilder_NewFromConfigUnknownKind(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.DefaultConfig()
+
 	cfg.Kind = config.Kind(99)
 
 	_, err := config.NewFromConfig(cfg)
@@ -762,9 +799,11 @@ func TestConfig_DefaultEnvSelectors(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "base.yaml"), "tier: base\n")
 	writeFile(t, filepath.Join(dir, "staging.yaml"), "tier: staging\n")
 	writeFile(t, filepath.Join(dir, "production.yaml"), "tier: production\n")
+
 	tier := func() string {
 		cfg, err := config.New(config.KindViper, config.WithBaseDir(dir))
 		require.NoError(t, err, "New")
+
 		return cfg.GetString("tier")
 	}
 
@@ -825,6 +864,7 @@ messaging:
     queues:
       notification: "notification-staging"
 `)
+
 	cfg, err := config.New(
 		config.KindViper,
 		config.WithBaseDir(dir),
@@ -881,6 +921,7 @@ func TestConfig_ConsumerSchemaAndExtraEnv(t *testing.T) {
 	require.NoError(t, err, "New")
 
 	var root consumerRoot
+
 	require.NoError(t, cfg.Unmarshal(&root), "Unmarshal")
 	assert.Equal(t, 7, root.Widget.Size, "the consumer schema's envalias must bind")
 	assert.Equal(t, "on", cfg.GetString("feature.flag"), "ExtraEnv must bind the key")
@@ -915,6 +956,7 @@ func TestConfig_ResolveEnvFrom(t *testing.T) {
 // error.
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
+
 	err := os.WriteFile(path, []byte(content), 0o644)
 	require.NoErrorf(t, err, "write %s", path)
 }

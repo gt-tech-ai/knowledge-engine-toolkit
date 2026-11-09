@@ -39,7 +39,9 @@ func (c *Client) Start(_ context.Context) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "dial grpc client")
 	}
+
 	c.conn = conn
+
 	return nil
 }
 
@@ -52,6 +54,7 @@ func (c *Client) Stop(_ context.Context) error {
 			"close grpc connection",
 		)
 	}
+
 	return nil
 }
 
@@ -60,6 +63,7 @@ func (c *Client) Liveness(_ context.Context) error {
 	if c.conn == nil {
 		return apperr.Internal("grpc client not started")
 	}
+
 	return nil
 }
 
@@ -68,10 +72,12 @@ func (c *Client) Readiness(_ context.Context) error {
 	if c.conn == nil {
 		return apperr.Internal("grpc client not started")
 	}
+
 	if s := c.conn.GetState(); s == connectivity.TransientFailure ||
 		s == connectivity.Shutdown {
 		return apperr.Internal("grpc connection not ready: " + s.String())
 	}
+
 	return nil
 }
 

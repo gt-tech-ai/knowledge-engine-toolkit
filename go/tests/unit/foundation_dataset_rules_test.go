@@ -15,6 +15,7 @@ import (
 // procedures list whose second row has no steps.
 func rulesData(t *testing.T) *dataset.Dataset {
 	t.Helper()
+
 	d, err := dataset.Load(fstest.MapFS{
 		"data/ci.yaml": {Data: []byte(
 			"ci:\n  must_succeed: [build, test, build]\n  max_chars: 70000\n",
@@ -24,6 +25,7 @@ func rulesData(t *testing.T) *dataset.Dataset {
 		)},
 	}, "data")
 	require.NoError(t, err)
+
 	return d
 }
 
@@ -45,6 +47,7 @@ func rulesData(t *testing.T) *dataset.Dataset {
 //   - No rules, or all passing, is nil.
 func TestFoundationDataset_Check(t *testing.T) {
 	t.Parallel()
+
 	d := rulesData(t)
 
 	require.NoError(t, d.Check(nil))
@@ -105,6 +108,7 @@ func TestFoundationDataset_Check(t *testing.T) {
 //   - A schema that does not compile is INVALID_INPUT.
 func TestFoundationDataset_Validate(t *testing.T) {
 	t.Parallel()
+
 	d := rulesData(t)
 
 	ok := []byte(`{"type": "object", "properties": {"ci": {"type": "object",
@@ -136,16 +140,20 @@ func TestFoundationDataset_Validate(t *testing.T) {
 //   - A value that does not encode to a mapping is INVALID_INPUT naming it.
 func TestFoundationDataset_FromValue(t *testing.T) {
 	t.Parallel()
+
 	type ci struct {
 		MustSucceed []string `yaml:"must_succeed"`
 	}
+
 	d, err := dataset.FromValue("inline", struct {
 		CI ci `yaml:"ci"`
 	}{CI: ci{MustSucceed: []string{"a", "a"}}})
 	require.NoError(t, err)
+
 	jobs, err := d.Section[map[string][]string]("ci")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a", "a"}, jobs["must_succeed"])
+
 	err = d.Check([]dataset.Rule{{
 		Name: "distinct", Expr: "ci.must_succeed.distinct() == ci.must_succeed",
 		Message: "duplicate job",

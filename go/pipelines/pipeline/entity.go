@@ -36,10 +36,12 @@ func NewEntity[C, T, P any, ID comparable, N any](
 	if err != nil {
 		return Entity[T, P, ID, N]{}, err
 	}
+
 	e, err := decorate.NewEntity[C](name, decorate.RolesOf[T, P, ID](next), b.run, nil)
 	if err != nil {
 		return Entity[T, P, ID, N]{}, err
 	}
+
 	return Entity[T, P, ID, N]{Base: b, Entity: e, next: next}, nil
 }
 
@@ -55,5 +57,6 @@ func (b Base) run(
 		op,
 		func(ctx context.Context) (struct{}, error) { return struct{}{}, fn(ctx) },
 	)
+
 	return err
 }

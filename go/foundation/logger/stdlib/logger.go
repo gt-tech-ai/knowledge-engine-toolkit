@@ -89,12 +89,15 @@ func (l *Logger) WithContext(ctx context.Context) interfaces.Logger {
 
 	// Build field list with non-empty values
 	var fields []any
+
 	if correlationID != "" {
 		fields = append(fields, "correlation_id", correlationID)
 	}
+
 	if traceID != "" {
 		fields = append(fields, "trace_id", traceID)
 	}
+
 	if spanID != "" {
 		fields = append(fields, "span_id", spanID)
 	}
@@ -113,8 +116,10 @@ func newSlog(cfg Config) *slog.Logger {
 	}
 
 	var handler slog.Handler = slog.NewJSONHandler(os.Stdout, opts)
+
 	// Attach a full stack trace to every Error-level (and above) record.
 	handler = logctx.NewStacktraceHandler(handler, slog.LevelError)
+
 	return slog.New(handler)
 }
 
@@ -125,6 +130,7 @@ func canonicalAttr(groups []string, a slog.Attr) slog.Attr {
 	if len(groups) != 0 {
 		return a
 	}
+
 	switch a.Key {
 	case slog.TimeKey:
 		a.Key = "timestamp"
@@ -137,6 +143,7 @@ func canonicalAttr(groups []string, a slog.Attr) slog.Attr {
 			a.Value = slog.StringValue(strings.ToLower(lvl.String()))
 		}
 	}
+
 	return a
 }
 

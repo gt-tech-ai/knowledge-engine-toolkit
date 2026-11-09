@@ -18,10 +18,12 @@ import (
 // a policy that excludes "wipe" (destructive); ran records drift's decoded target.
 func cronRegistry(t *testing.T, ran *string) *ops.Registry {
 	t.Helper()
+
 	run := ops.Func(func(
 		_ context.Context, in *adapterInput, _ opsEnv, _ interfaces.ExecutionObserver,
 	) error {
 		*ran = in.Target
+
 		return nil
 	})
 	descs := []types.OperationDescriptor{
@@ -42,6 +44,7 @@ func cronRegistry(t *testing.T, ran *string) *ops.Registry {
 		},
 	})
 	require.NoError(t, err)
+
 	return reg
 }
 
@@ -58,7 +61,9 @@ func cronRegistry(t *testing.T, ran *string) *ops.Registry {
 //     INVALID_INPUT, and an unknown argument INVALID_INPUT; none of these run.
 func TestTransportCron_Run(t *testing.T) {
 	t.Parallel()
+
 	var ran string
+
 	reg := cronRegistry(t, &ran)
 	require.NoError(
 		t,
@@ -67,6 +72,7 @@ func TestTransportCron_Run(t *testing.T) {
 	assert.Equal(t, "live", ran)
 
 	ran = ""
+
 	for name, want := range map[string]apperr.ErrorCode{
 		"wipe": apperr.CodeForbidden, "nope": apperr.CodeNotFound,
 		"ask": apperr.CodeInvalidInput,
@@ -74,6 +80,7 @@ func TestTransportCron_Run(t *testing.T) {
 		err := cron.Run(t.Context(), reg, name, nil, nil)
 		assert.Equal(t, want, apperr.Code(err), name)
 	}
+
 	err := cron.Run(t.Context(), reg, "drift", []byte(`{"targt":"x"}`), nil)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Empty(t, ran)

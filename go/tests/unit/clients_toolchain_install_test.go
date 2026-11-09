@@ -19,6 +19,7 @@ import (
 // go-install required tool, for the Provision orchestrator tests.
 func provisionCatalog(t *testing.T) *toolchain.Catalog {
 	t.Helper()
+
 	cat, err := toolchain.NewCatalog([]types.ToolEntry{
 		{
 			Name:     "Go",
@@ -37,6 +38,7 @@ func provisionCatalog(t *testing.T) *toolchain.Catalog {
 		},
 	})
 	require.NoError(t, err)
+
 	return cat
 }
 
@@ -283,6 +285,7 @@ func TestClientsToolchainInstaller_Provision_ForceReinstallsPresent(t *testing.T
 //   - Install errors with a "no install method" message and makes no runner call.
 func TestClientsToolchainInstaller_Install_NoMethod(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl) // strict: no runner calls
 
@@ -380,6 +383,7 @@ func TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
+
 	for _, bin := range []string{"req-ci", "opt-ci"} {
 		r.EXPECT().
 			RunWithEnv(gomock.Any(), "/root", []string{"GOTOOLCHAIN=local"},
@@ -415,15 +419,18 @@ func TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet(t *testing.T) {
 		"present ci tools are reinstalled: --ci implies --force",
 		func(t *testing.T) {
 			t.Parallel()
+
 			for _, force := range []bool{false, true} {
 				r := mocks.NewMockCommandRunner(gomock.NewController(t))
 				r.EXPECT().Exists(gomock.Any()).AnyTimes().Return(true)
+
 				for _, bin := range []string{"req-ci", "opt-ci"} {
 					r.EXPECT().
 						RunWithEnv(gomock.Any(), "/root", []string{"GOTOOLCHAIN=local"},
 							"go", "install", "x/"+bin+"@v1.0.0").
 						Return(nil)
 				}
+
 				require.NoError(
 					t,
 					toolchain.NewInstaller(r, fixtures.NopLogger(), "linux-apt", denyPrompter(t)).
@@ -457,10 +464,12 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 
 	t.Run("declined", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		r := mocks.NewMockCommandRunner(ctrl)
 		r.EXPECT().Exists("go").Return(true)
 		r.EXPECT().Exists("wire").Return(false)
+
 		p := mocks.NewMockPrompter(ctrl)
 		p.EXPECT().
 			Confirm(gomock.Any(), "Install missing tools (wire)?").
@@ -482,12 +491,14 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 
 	t.Run("auto-yes skips the prompter", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		r := mocks.NewMockCommandRunner(ctrl)
 		r.EXPECT().Exists("grpcurl").Return(false)
 		r.EXPECT().
 			RunWithEnv(gomock.Any(), "/root", gomock.Any(), "go", "install", "grpcurl@v1").
 			Return(nil)
+
 		p := mocks.NewMockPrompter(ctrl) // no EXPECT: any Confirm call fails the test
 
 		inst := toolchain.NewInstaller(

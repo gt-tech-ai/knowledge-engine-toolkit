@@ -82,6 +82,7 @@ func HTTPMetrics(m interfaces.Metrics) Middleware {
 			if rec.status != http.StatusNotFound {
 				route = routeLabel(r)
 			}
+
 			elapsed := time.Since(start)
 			status := strconv.Itoa(rec.status)
 			duration.Observe(elapsed.Seconds(), r.Method, route, status)
@@ -104,9 +105,11 @@ func routeLabel(r *http.Request) string {
 		// (e.g. "/api/documents/{id}"), so it needs no normalization.
 		return p
 	}
+
 	if r.URL.Path == "" {
 		return "/"
 	}
+
 	// Catch-all forward (Pattern "/" or empty): the raw path carries entity ids,
 	// so collapse id-shaped segments to {id} before using it as a label.
 	return normalizeRoute(r.URL.Path)
@@ -130,35 +133,45 @@ func normalizeRoute(path string) string {
 	if !strings.ContainsAny(path, "0123456789") {
 		return path
 	}
+
 	// Walk the '/'-separated segments in place; only start building a new string
 	// once a segment is found that must be collapsed.
 	var b strings.Builder
+
 	rewritten := false
 	start := 0
+
 	for i := 0; i <= len(path); i++ {
 		if i < len(path) && path[i] != '/' {
 			continue
 		}
+
 		seg := path[start:i]
 		switch {
 		case looksLikeID(seg):
 			if !rewritten {
 				b.Grow(len(path) + len("{id}"))
 				b.WriteString(path[:start])
+
 				rewritten = true
 			}
+
 			b.WriteString("{id}")
 		case rewritten:
 			b.WriteString(seg)
 		}
+
 		if rewritten && i < len(path) {
 			b.WriteByte('/')
 		}
+
 		start = i + 1
 	}
+
 	if !rewritten {
 		return path
 	}
+
 	return b.String()
 }
 

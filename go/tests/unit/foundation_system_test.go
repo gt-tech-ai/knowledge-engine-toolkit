@@ -32,6 +32,7 @@ import (
 //     missing binary; the *WithEnv variants run the extra-env path.
 func TestRunner_RealCommands(t *testing.T) {
 	t.Parallel()
+
 	r := system.NewRunner()
 	ctx := context.Background()
 
@@ -48,6 +49,7 @@ func TestRunner_RealCommands(t *testing.T) {
 	assert.Equal(t, -1, bad.ExitCode, "missing binary never starts -> exit -1")
 
 	require.NoError(t, r.RunWithEnv(ctx, "", []string{"FOO=bar"}, "go", "version"))
+
 	envRes := r.RunBufferedWithEnv(ctx, "", []string{"FOO=bar"}, "go", "version")
 	assert.NoError(t, envRes.Err)
 }
@@ -63,11 +65,13 @@ func TestRunner_RealCommands(t *testing.T) {
 //     nil for a present tool and an error carrying the install hint for a missing one.
 func TestRunner_ExistsAndRequireTool(t *testing.T) {
 	t.Parallel()
+
 	r := system.NewRunner()
 	assert.True(t, r.Exists("go"))
 	assert.False(t, r.Exists("definitely-not-a-real-binary-xyz"))
 
 	require.NoError(t, r.RequireTool("go", "install go"))
+
 	err := r.RequireTool("definitely-not-a-real-binary-xyz", "brew install xyz")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "brew install xyz", "install hint surfaced")
@@ -83,6 +87,7 @@ func TestRunner_ExistsAndRequireTool(t *testing.T) {
 //   - Run with an already-cancelled context returns an error.
 func TestRunner_ContextCancelled(t *testing.T) {
 	t.Parallel()
+
 	r := system.NewRunner()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -106,6 +111,7 @@ func TestRunner_ContextCancelled(t *testing.T) {
 //     constructors work.
 func TestBufferingRunner(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 
 	inner := mocks.NewMockCommandRunner(ctrl)
@@ -117,6 +123,7 @@ func TestBufferingRunner(t *testing.T) {
 		Return(system.CmdResult{Stdout: []byte("out-"), Stderr: []byte("err")})
 	inner.EXPECT().Exists("anything").Return(true)
 	inner.EXPECT().RequireTool("x", "").Return(nil)
+
 	b := system.NewQuietBufferingRunner(inner)
 
 	res := b.RunBuffered(context.Background(), "", "x")
@@ -139,6 +146,7 @@ func TestBufferingRunner(t *testing.T) {
 	failingInner.EXPECT().
 		RunBuffered(gomock.Any(), "", "tool", "arg").
 		Return(system.CmdResult{Stderr: []byte("boom"), Err: apperr.Sentinel("exit 1")})
+
 	failing := system.NewQuietBufferingRunner(failingInner)
 	err := failing.Run(context.Background(), "", "tool", "arg")
 	require.Error(t, err)
@@ -150,6 +158,7 @@ func TestBufferingRunner(t *testing.T) {
 	okInner.EXPECT().
 		RunBuffered(gomock.Any(), "", "x").
 		Return(system.CmdResult{Stdout: []byte("hi")})
+
 	okRunner := system.NewQuietBufferingRunner(okInner)
 	require.NoError(t, okRunner.Run(context.Background(), "", "x"))
 
@@ -158,6 +167,7 @@ func TestBufferingRunner(t *testing.T) {
 	envInner.EXPECT().
 		RunWithEnv(gomock.Any(), "", []string{"A=b"}, "x").
 		Return(nil)
+
 	envRunner := system.NewQuietBufferingRunner(envInner)
 	require.NoError(
 		t,
@@ -169,6 +179,7 @@ func TestBufferingRunner(t *testing.T) {
 	replayInner.EXPECT().
 		RunBuffered(gomock.Any(), "", "x").
 		Return(system.CmdResult{Stdout: []byte("o"), Stderr: []byte("e")})
+
 	replay := system.NewBufferingRunner(replayInner)
 	require.NoError(t, replay.Run(context.Background(), "", "x"))
 
@@ -176,6 +187,7 @@ func TestBufferingRunner(t *testing.T) {
 	replayFailInner.EXPECT().
 		RunBuffered(gomock.Any(), "", "x").
 		Return(system.CmdResult{Err: apperr.Sentinel("x")})
+
 	replayFail := system.NewBufferingRunner(replayFailInner)
 	require.Error(t, replayFail.Run(context.Background(), "", "x"))
 
@@ -183,6 +195,7 @@ func TestBufferingRunner(t *testing.T) {
 	replayEnvInner.EXPECT().
 		RunWithEnv(gomock.Any(), "", []string{"A=b"}, "x").
 		Return(nil)
+
 	replayEnv := system.NewBufferingRunner(replayEnvInner)
 	require.NoError(
 		t,
@@ -196,22 +209,30 @@ func TestBufferingRunner(t *testing.T) {
 // Callers must not be parallel: the process stdio is global.
 func captureProcessStdio(t *testing.T) func() (stdout, stderr string) {
 	t.Helper()
+
 	oldOut, oldErr := os.Stdout, os.Stderr
 	outR, outW, err := os.Pipe()
 	require.NoError(t, err)
+
 	errR, errW, err := os.Pipe()
 	require.NoError(t, err)
+
 	os.Stdout, os.Stderr = outW, errW
+
 	restore := func() { os.Stdout, os.Stderr = oldOut, oldErr }
 	t.Cleanup(restore)
+
 	return func() (string, string) {
 		restore()
 		require.NoError(t, outW.Close())
 		require.NoError(t, errW.Close())
+
 		gotOut, err := io.ReadAll(outR)
 		require.NoError(t, err)
+
 		gotErr, err := io.ReadAll(errR)
 		require.NoError(t, err)
+
 		return string(gotOut), string(gotErr)
 	}
 }
@@ -232,7 +253,9 @@ func captureProcessStdio(t *testing.T) func() (stdout, stderr string) {
 func TestRunner_WritesChildOutputToInjectedWriters(t *testing.T) {
 	// Not parallel: swaps the process stdio.
 	ctx := context.Background()
+
 	var out, errOut bytes.Buffer
+
 	r := system.NewRunner(system.WithOutput(&out, &errOut))
 	decorated := system.NewBuilder(r).
 		WithLogging(func(string, ...any) {}).
@@ -242,9 +265,12 @@ func TestRunner_WritesChildOutputToInjectedWriters(t *testing.T) {
 	stop := captureProcessStdio(t)
 
 	require.NoError(t, r.Run(ctx, "", "go", "env", "GOVERSION"))
+
 	direct := out.String()
+
 	require.Error(t, r.Run(ctx, "", "go", "definitely-not-a-subcommand"))
 	require.NoError(t, decorated.Run(ctx, "", "go", "env", "GOVERSION"))
+
 	procOut, procErr := stop()
 
 	assert.Contains(t, direct, "go1.")
@@ -275,6 +301,7 @@ func TestRunner_DefaultsToProcessStdio(t *testing.T) {
 	stop := captureProcessStdio(t)
 
 	require.NoError(t, r.Run(context.Background(), "", "go", "env", "GOVERSION"))
+
 	procOut, _ := stop()
 
 	assert.Contains(t, procOut, "go1.")

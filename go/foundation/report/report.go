@@ -78,10 +78,12 @@ func NewFromConfig(
 	if err := streams.Require(); err != nil {
 		return nil, err
 	}
+
 	level := LevelNormal
 	if cfg.Verbose {
 		level = LevelVerbose
 	}
+
 	p := newPrinter(streams.Err, level, cfg.Interactive, cfg.Color, cfg.Hints)
 	switch cfg.Kind {
 	case "", KindQuiet:

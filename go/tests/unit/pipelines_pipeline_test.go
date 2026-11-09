@@ -47,6 +47,7 @@ func TestPipelineTier_Order(t *testing.T) {
 //   - A nil next stage or a nil stage function panics at wiring time.
 func TestPipelineStage_ThenComposesAndStopsOnError(t *testing.T) {
 	t.Parallel()
+
 	stages := pipeline.Base{}
 	parse := stages.Stage("parse", func(_ context.Context, s string) (int, error) {
 		return strconv.Atoi(s)
@@ -67,6 +68,7 @@ func TestPipelineStage_ThenComposesAndStopsOnError(t *testing.T) {
 		return 0, boom
 	})
 	untouched := mocks.NewMockPipeline[int, string](gomock.NewController(t))
+
 	_, err = failing.Then(untouched).Execute(t.Context(), "x")
 	require.ErrorIs(t, err, boom)
 
@@ -89,6 +91,7 @@ func TestPipelineStage_ThenComposesAndStopsOnError(t *testing.T) {
 //     "<pipeline>.<stage>", in order.
 func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 	t.Parallel()
+
 	boom := fixtures.Must(pipeline.NewBase[boomPipeline](fixtures.Decorations(), "boom"))
 	_, err := boom.Stage("boom", func(context.Context, int) (int, error) {
 		panic("boom")
@@ -100,6 +103,7 @@ func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 	span := mocks.NewMockSpan(ctrl)
 	span.EXPECT().SetAttribute(gomock.Any(), gomock.Any()).AnyTimes()
 	span.EXPECT().End().Times(2)
+
 	start := func(
 		ctx context.Context, _ string, _ ...interfaces.SpanOption,
 	) (context.Context, interfaces.Span) {
@@ -113,6 +117,7 @@ func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 			Start(gomock.Any(), "spec.reduce", gomock.Any()).
 			DoAndReturn(start),
 	)
+
 	stages := fixtures.Must(pipeline.NewBase[specPipeline](decorate.Fixed(decorate.Deps{
 		Observability: decorate.Observability{Tracer: tracer},
 	}), "spec"))
@@ -142,18 +147,23 @@ func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 //   - A fan-out with no stages returns an empty result.
 func TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
 	t.Parallel()
+
 	stages := pipeline.Base{}
 	started := make(chan struct{}, 3)
 	all := make(chan struct{})
+
 	go func() {
 		for range 3 {
 			<-started
 		}
+
 		close(all)
 	}()
+
 	times := func(k int) interfaces.Pipeline[int, int] {
 		return pipeline.Stage[int, int](func(ctx context.Context, n int) (int, error) {
 			started <- struct{}{}
+
 			select {
 			case <-all:
 				return n * k, nil
@@ -174,8 +184,10 @@ func TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
 	})
 	blocked := pipeline.Stage[int, int](func(ctx context.Context, _ int) (int, error) {
 		<-ctx.Done()
+
 		return 0, ctx.Err()
 	})
+
 	_, err = stages.FanOut("sources", blocked, failing).Execute(t.Context(), 1)
 	require.ErrorIs(t, err, boom)
 

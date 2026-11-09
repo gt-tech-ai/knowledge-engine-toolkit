@@ -35,11 +35,13 @@ func (c Config) Validate() error {
 	if c.Interval < 0 {
 		return apperr.New(apperr.CodeInvalidInput, "loop: interval must not be negative")
 	}
+
 	if c.ErrorBackoff < 0 {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"loop: error backoff must not be negative",
 		)
 	}
+
 	return nil
 }

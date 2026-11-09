@@ -59,6 +59,7 @@ func New(cfg Config) *Logger {
 	if sha := os.Getenv("GIT_SHA"); sha != "" {
 		l = l.With(slog.String("git_sha", sha))
 	}
+
 	return &Logger{inner: l}
 }
 
@@ -108,11 +109,15 @@ func (l *Logger) log(level slog.Level, msg string, keysAndValues []any) {
 	if !l.inner.Enabled(ctx, level) {
 		return
 	}
+
 	var pcs [1]uintptr
+
 	// Skip [runtime.Callers, log, the exported Debug/Info/Warn/Error] -> real caller.
 	runtime.Callers(3, pcs[:])
+
 	r := slog.NewRecord(time.Now(), level, msg, pcs[0])
 	r.Add(keysAndValues...)
+
 	_ = l.inner.Handler().Handle(ctx, r)
 }
 
@@ -138,12 +143,15 @@ func (l *Logger) WithContext(ctx context.Context) interfaces.Logger {
 
 	// Build field list with non-empty values
 	var fields []any
+
 	if correlationID != "" {
 		fields = append(fields, "correlation_id", correlationID)
 	}
+
 	if traceID != "" {
 		fields = append(fields, "trace_id", traceID)
 	}
+
 	if spanID != "" {
 		fields = append(fields, "span_id", spanID)
 	}
@@ -156,6 +164,7 @@ func newSlog(cfg Config) *slog.Logger {
 	level := parseLevel(cfg.Level)
 
 	var encoder zapcore.Encoder
+
 	encoderCfg := zap.NewProductionEncoderConfig()
 	// Canonical cross-service log schema: timestamp / level (lowercase) /
 	// message / caller. Kept identical in the stdlib logger and the Python
@@ -231,6 +240,7 @@ func (h *redactingHandler) Handle(ctx context.Context, r slog.Record) error {
 
 	r.Attrs(func(a slog.Attr) bool {
 		r2.AddAttrs(redactAttr(a))
+
 		return true
 	})
 
@@ -251,6 +261,7 @@ func (h *redactingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	for i, a := range attrs {
 		redacted[i] = redactAttr(a)
 	}
+
 	return &redactingHandler{inner: h.inner.WithAttrs(redacted)}
 }
 
@@ -280,11 +291,13 @@ func redactAttr(a slog.Attr) slog.Attr {
 	if noRedactKey(a.Key) {
 		return a
 	}
+
 	if a.Value.Kind() == slog.KindString {
 		return slog.Attr{
 			Key:   a.Key,
 			Value: slog.StringValue(logctx.RedactPII(a.Value.String())),
 		}
 	}
+
 	return a
 }

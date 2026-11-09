@@ -48,6 +48,7 @@ func Middleware(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !IsRESTRequest(r) {
 			inner.ServeHTTP(w, r)
+
 			return
 		}
 
@@ -57,6 +58,7 @@ func Middleware(
 		route, matched := cfg.MatchRoute(r.Method, r.URL.Path)
 		if !matched {
 			inner.ServeHTTP(w, r)
+
 			return
 		}
 
@@ -69,16 +71,22 @@ func Middleware(
 			// Server-request Body is always non-nil (net/http guarantees it; empty
 			// bodies read as EOF), so ReadAll is safe here.
 			body, err := io.ReadAll(r.Body)
+
 			_ = r.Body.Close()
+
 			if err != nil {
 				writeRequestError(w, "could not read request body")
+
 				return
 			}
+
 			unwrapped, msg := unwrapAndValidate(body, route.ResourceType)
 			if msg != "" {
 				writeRequestError(w, msg)
+
 				return
 			}
+
 			r.Body = io.NopCloser(bytes.NewReader(unwrapped))
 			r.ContentLength = int64(len(unwrapped))
 		}
@@ -98,10 +106,13 @@ func Middleware(
 		if cw.status >= 400 {
 			status := reclassifyBindingError(cw.status, cw.body.Bytes())
 			transformed := codec.TransformError(status, cw.body.Bytes())
+
 			w.Header().Set("Content-Type", contentTypeJSONAPI)
 			w.Header().Del("Content-Length")
 			w.WriteHeader(status)
+
 			_, _ = w.Write(transformed)
+
 			return
 		}
 
@@ -110,21 +121,27 @@ func Middleware(
 			w.Header().Set("Content-Type", contentTypeJSONAPI)
 			w.Header().Del("Content-Length")
 			w.WriteHeader(http.StatusNoContent)
+
 			return
 		}
 
 		// Guard against very large bodies.
 		if cw.body.Len() > maxBodySize {
 			w.WriteHeader(cw.status)
+
 			_, _ = w.Write(cw.body.Bytes())
+
 			return
 		}
 
 		var parsed map[string]any
+
 		if err := json.Unmarshal(cw.body.Bytes(), &parsed); err != nil {
 			// Can't parse — pass through unchanged.
 			w.WriteHeader(cw.status)
+
 			_, _ = w.Write(cw.body.Bytes())
+
 			return
 		}
 
@@ -137,13 +154,16 @@ func Middleware(
 		out, err := json.Marshal(result)
 		if err != nil {
 			w.WriteHeader(cw.status)
+
 			_, _ = w.Write(cw.body.Bytes())
+
 			return
 		}
 
 		w.Header().Set("Content-Type", contentTypeJSONAPI)
 		w.Header().Del("Content-Length")
 		w.WriteHeader(status)
+
 		_, _ = w.Write(out)
 	})
 }
@@ -175,24 +195,30 @@ func transformByRole(
 		if rc.SingleKey == "" && rc.CollectionKey != "" {
 			if !hasKey(parsed, rc.CollectionKey) {
 				writeMissingResourceError(w, rc.CollectionKey)
+
 				return nil, 0, false
 			}
+
 			return codec.TransformCollection(
 				parsed,
 				rc,
 				selfLink,
 			), http.StatusCreated, true
 		}
+
 		if !hasKey(parsed, rc.SingleKey) {
 			writeMissingResourceError(w, rc.SingleKey)
+
 			return nil, 0, false
 		}
+
 		result := codec.TransformSingleResource(parsed, rc, selfLink)
 		if data, ok := result["data"].(map[string]any); ok {
 			if id, ok := data["id"].(string); ok && id != "" {
 				w.Header().Set("Location", selfLink+"/"+id)
 			}
 		}
+
 		return result, http.StatusCreated, true
 
 	// The single-resource roles are listed so the exhaustive linter sees every declared
@@ -205,8 +231,10 @@ func transformByRole(
 	// answered with 204 before the transform; it reaches here only if that changes.)
 	if !hasKey(parsed, rc.SingleKey) {
 		writeMissingResourceError(w, rc.SingleKey)
+
 		return nil, 0, false
 	}
+
 	return codec.TransformSingleResource(parsed, rc, selfLink), http.StatusOK, true
 }
 
@@ -217,7 +245,9 @@ func hasKey(parsed map[string]any, key string) bool {
 	if key == "" {
 		return true
 	}
+
 	_, ok := parsed[key]
+
 	return ok
 }
 
@@ -230,36 +260,46 @@ func unwrapAndValidate(body []byte, resourceType string) (unwrapped []byte, msg 
 	if len(body) == 0 {
 		return nil, "request body is required and must be a JSON:API document"
 	}
+
 	var parsed map[string]any
+
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		return nil, "request body is not valid JSON"
 	}
+
 	dataRaw, ok := parsed["data"]
 	if !ok {
 		return nil, "request must be a JSON:API document with a data member"
 	}
+
 	data, ok := dataRaw.(map[string]any)
 	if !ok {
 		return nil, "request data member must be an object"
 	}
+
 	if typ, _ := data["type"].(string); typ != resourceType {
 		return nil, "request data.type must be " + resourceType
 	}
+
 	attrsRaw, ok := data["attributes"]
 	if !ok {
 		return nil, "request data.attributes is required"
 	}
+
 	attrs, ok := attrsRaw.(map[string]any)
 	if !ok {
 		return nil, "request data.attributes must be an object"
 	}
+
 	if id, ok := data["id"]; ok {
 		attrs["id"] = id
 	}
+
 	out, err := json.Marshal(attrs)
 	if err != nil {
 		return nil, "could not encode request attributes"
 	}
+
 	return out, ""
 }
 
@@ -277,12 +317,15 @@ func reclassifyBindingError(status int, body []byte) int {
 	if status != http.StatusInternalServerError {
 		return status
 	}
+
 	var parsed struct {
 		Code int `json:"code"`
 	}
+
 	if json.Unmarshal(body, &parsed) == nil && parsed.Code == int(connect.CodeUnknown) {
 		return http.StatusBadRequest
 	}
+
 	return status
 }
 
@@ -296,9 +339,11 @@ func writeRequestError(w http.ResponseWriter, message string) {
 	if err != nil {
 		body = nil
 	}
+
 	w.Header().Set("Content-Type", contentTypeJSONAPI)
 	w.Header().Del("Content-Length")
 	w.WriteHeader(http.StatusBadRequest)
+
 	_, _ = w.Write(codec.TransformError(http.StatusBadRequest, body))
 }
 
@@ -314,9 +359,11 @@ func writeMissingResourceError(w http.ResponseWriter, singleKey string) {
 	if err != nil {
 		body = nil
 	}
+
 	w.Header().Set("Content-Type", contentTypeJSONAPI)
 	w.Header().Del("Content-Length")
 	w.WriteHeader(http.StatusInternalServerError)
+
 	_, _ = w.Write(codec.TransformError(http.StatusInternalServerError, body))
 }
 
@@ -348,6 +395,7 @@ func (c *captureWriter) WriteHeader(code int) { c.status = code }
 // Write buffers the response body instead of sending it immediately.
 func (c *captureWriter) Write(b []byte) (int, error) {
 	n, err := c.body.Write(b)
+
 	return n, apperr.Wrap(err, apperr.CodeInternal, "buffer response body")
 }
 
@@ -365,5 +413,6 @@ func IsRESTRequest(r *http.Request) bool {
 
 	// gRPC and gRPC-Web use application/grpc* content types.
 	ct := r.Header.Get("Content-Type")
+
 	return !strings.HasPrefix(ct, "application/grpc")
 }

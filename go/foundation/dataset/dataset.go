@@ -46,17 +46,21 @@ func Load(fsys fs.FS, dir string) (*Dataset, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeNotFound, "read data dir "+dir)
 	}
+
 	d := newDataset()
+
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
 			continue
 		}
+
 		// io/fs paths are always slash-separated, so path (not filepath) is correct here.
 		name := path.Join(dir, e.Name()) // nosemgrep: use-filepath-join
 		if err := d.add(fsys, name); err != nil {
 			return nil, err
 		}
 	}
+
 	return d, nil
 }
 
@@ -66,29 +70,36 @@ func Load(fsys fs.FS, dir string) (*Dataset, error) {
 // read. A missing dir is CodeNotFound.
 func LoadTree(fsys fs.FS, dir string, skip ...string) (*Dataset, error) {
 	var files []string
+
 	err := fs.WalkDir(fsys, dir, func(p string, e fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+
 		rel := strings.TrimPrefix(strings.TrimPrefix(p, dir), "/")
 		if e.IsDir() && rel != "" && slices.Contains(skip, rel) {
 			return fs.SkipDir
 		}
+
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
 			files = append(files, p)
 		}
+
 		return nil
 	})
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeNotFound, "read data dir "+dir)
 	}
+
 	slices.Sort(files)
+
 	d := newDataset()
 	for _, p := range files {
 		if err := d.add(fsys, p); err != nil {
 			return nil, err
 		}
 	}
+
 	return d, nil
 }
 
@@ -111,6 +122,7 @@ func newDataset() *Dataset {
 func FromValue(name string, v any) (*Dataset, error) {
 	d := newDataset()
 	rv := reflect.Indirect(reflect.ValueOf(v))
+
 	switch {
 	case rv.Kind() == reflect.Struct && !hasInline(rv.Type()):
 		for key, i := range fieldsByKey(rv.Type()) {
@@ -122,9 +134,11 @@ func FromValue(name string, v any) (*Dataset, error) {
 		}
 	case rv.Kind() == reflect.Struct:
 		var root yaml.Node
+
 		if err := root.Encode(v); err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "encode "+name)
 		}
+
 		for i := 0; i+1 < len(root.Content); i += 2 {
 			d.sections[root.Content[i].Value] = root.Content[i+1]
 		}
@@ -132,9 +146,11 @@ func FromValue(name string, v any) (*Dataset, error) {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			name+" is not a struct or a string-keyed map")
 	}
+
 	for _, key := range d.keys() {
 		d.files[key] = []string{name}
 	}
+
 	return d, nil
 }
 
@@ -145,6 +161,7 @@ func hasInline(t reflect.Type) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -154,7 +171,9 @@ func (d *Dataset) keys() []string {
 	for k := range d.goValues {
 		out = append(out, k)
 	}
+
 	slices.Sort(out)
+
 	return out
 }
 
@@ -164,15 +183,19 @@ func (d *Dataset) node(key string) (*yaml.Node, bool, error) {
 	if n, ok := d.sections[key]; ok {
 		return n, true, nil
 	}
+
 	v, ok := d.goValues[key]
 	if !ok {
 		return nil, false, nil
 	}
+
 	var n yaml.Node
+
 	if err := n.Encode(v); err != nil {
 		return nil, true, apperr.Wrap(err, apperr.CodeInvalidInput,
 			"encode section "+key+" from "+d.sourceOf(key))
 	}
+
 	return &n, true, nil
 }
 
@@ -182,13 +205,17 @@ func (d *Dataset) add(fsys fs.FS, p string) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "read "+p)
 	}
+
 	var doc map[string]yaml.Node
+
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
 	}
+
 	for _, key := range slices.Sorted(maps.Keys(doc)) {
 		node := doc[key]
 		unfold(&node)
+
 		if prev, ok := d.sections[key]; ok {
 			if err := d.merge(prev, &node, key, p); err != nil {
 				return err
@@ -197,8 +224,10 @@ func (d *Dataset) add(fsys fs.FS, p string) error {
 			d.sections[key] = &node
 			d.claim(&node, key, p)
 		}
+
 		d.files[key] = append(d.files[key], p)
 	}
+
 	return nil
 }
 
@@ -211,15 +240,19 @@ func (d *Dataset) merge(dst, src *yaml.Node, at, p string) error {
 		for i := 0; i+1 < len(src.Content); i += 2 {
 			k, v := src.Content[i], src.Content[i+1]
 			sub := at + "." + k.Value
+
 			if existing := mappingValue(dst, k.Value); existing != nil {
 				if err := d.merge(existing, v, sub, p); err != nil {
 					return err
 				}
+
 				continue
 			}
+
 			dst.Content = append(dst.Content, k, v)
 			d.claim(v, sub, p)
 		}
+
 		return nil
 	case dst.Kind == yaml.SequenceNode && src.Kind == yaml.SequenceNode:
 		for _, item := range src.Content {
@@ -228,8 +261,10 @@ func (d *Dataset) merge(dst, src *yaml.Node, at, p string) error {
 				return conflict(key, prev, p)
 			}
 		}
+
 		dst.Content = append(dst.Content, src.Content...)
 		d.claim(src, at, p)
+
 		return nil
 	default:
 		return conflict(at, d.firstFile(at), p)
@@ -250,6 +285,7 @@ func (d *Dataset) claim(n *yaml.Node, at, p string) {
 			if name == "" {
 				continue
 			}
+
 			if _, seen := d.origin[at+"["+name+"]"]; !seen {
 				d.origin[at+"["+name+"]"] = p
 			}
@@ -265,10 +301,12 @@ func (d *Dataset) firstFile(at string) string {
 	if p, ok := d.origin[at]; ok {
 		return p
 	}
+
 	top, _, _ := strings.Cut(at, ".")
 	if files := d.files[top]; len(files) > 0 {
 		return files[0]
 	}
+
 	return "?"
 }
 
@@ -279,6 +317,7 @@ func mappingValue(m *yaml.Node, key string) *yaml.Node {
 			return m.Content[i+1]
 		}
 	}
+
 	return nil
 }
 
@@ -287,9 +326,11 @@ func itemName(item *yaml.Node) string {
 	if item.Kind != yaml.MappingNode {
 		return ""
 	}
+
 	if v := mappingValue(item, "name"); v != nil && v.Kind == yaml.ScalarNode {
 		return v.Value
 	}
+
 	return ""
 }
 
@@ -306,6 +347,7 @@ func unfold(n *yaml.Node) {
 	if n.Kind == yaml.ScalarNode && n.Style&yaml.FoldedStyle != 0 {
 		n.Style = n.Style&^yaml.FoldedStyle | yaml.LiteralStyle
 	}
+
 	for _, c := range n.Content {
 		unfold(c)
 	}
@@ -316,23 +358,29 @@ func unfold(n *yaml.Node) {
 // CodeInvalidInput naming the section's files.
 func (d *Dataset) Section[T any](name string) (T, error) {
 	var out T
+
 	node, ok, err := d.node(name)
 	if err != nil {
 		return out, err
 	}
+
 	if !ok {
 		return out, apperr.New(apperr.CodeNotFound, "no data section "+`"`+name+`"`)
 	}
+
 	raw, err := yaml.Marshal(node)
 	if err != nil {
 		return out, apperr.Wrap(err, apperr.CodeInternal, "re-encode section "+name)
 	}
+
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	dec.KnownFields(true)
+
 	if err := dec.Decode(&out); err != nil {
 		return out, apperr.Wrap(err, apperr.CodeInvalidInput,
 			"decode section "+name+" from "+d.sourceOf(name))
 	}
+
 	return out, nil
 }
 

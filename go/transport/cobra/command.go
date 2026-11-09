@@ -74,31 +74,39 @@ func Command(reg *ops.Registry, name string, opts Options) (*spf.Command, error)
 	if err != nil {
 		return nil, err
 	}
+
 	desc := op.Descriptor()
 	use := opts.Use
+
 	if use == "" {
 		use = desc.Name
 	}
+
 	cmd := &spf.Command{
 		Use: use, Short: desc.Summary, SilenceUsage: true,
 		Annotations: map[string]string{OperationAnnotation: name},
 	}
 	flags := op.NewInput()
+
 	b, err := bind(cmd, flags)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
 			fmt.Sprintf("operation %q", name))
 	}
+
 	cmd.Args = spf.RangeArgs(0, b.maxArgs())
 	cmd.RunE = func(c *spf.Command, args []string) error {
 		input := op.NewInput()
 		dst := reflect.ValueOf(input).Elem()
 		b.setFlags(c, reflect.ValueOf(flags).Elem(), dst)
+
 		if err := b.positional(dst, args); err != nil {
 			return err
 		}
+
 		return reg.Run(c.Context(), name, input, opts.Observer)
 	}
+
 	return cmd, nil
 }
 
@@ -122,6 +130,7 @@ func (b *binding) maxArgs() int {
 	if b.rest >= 0 {
 		return int(^uint(0) >> 1)
 	}
+
 	return len(b.args)
 }
 
@@ -141,15 +150,19 @@ func (b *binding) positional(dst reflect.Value, args []string) error {
 		if b.rest >= 0 && i >= b.rest {
 			f := dst.Field(b.args[b.rest])
 			f.Set(reflect.Append(f, reflect.ValueOf(a)))
+
 			continue
 		}
+
 		f, ok := b.args[i]
 		if !ok {
 			return apperr.New(apperr.CodeInvalidInput,
 				fmt.Sprintf("unexpected argument %q", a))
 		}
+
 		dst.Field(f).SetString(a)
 	}
+
 	return nil
 }
 
@@ -157,6 +170,7 @@ func (b *binding) positional(dst reflect.Value, args []string) error {
 func bind(cmd *spf.Command, input any) (*binding, error) {
 	v := reflect.ValueOf(input).Elem()
 	b := &binding{args: map[int]int{}, flags: map[string]int{}, rest: -1}
+
 	for i := range v.NumField() {
 		sf, fv := v.Type().Field(i), v.Field(i)
 		if tag, ok := sf.Tag.Lookup("flag"); ok {
@@ -164,14 +178,17 @@ func bind(cmd *spf.Command, input any) (*binding, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			b.flags[name] = i
 		}
+
 		if tag, ok := sf.Tag.Lookup("arg"); ok {
 			if err := addArg(b, sf, fv, i, tag); err != nil {
 				return nil, err
 			}
 		}
 	}
+
 	return b, nil
 }
 
@@ -188,8 +205,10 @@ func addFlag(
 		return "", apperr.New(apperr.CodeInvalidInput,
 			fmt.Sprintf("field %s: flag tag %q is not name,short,usage", sf.Name, tag))
 	}
+
 	name, short, usage := parts[0], parts[1], parts[2]
 	fs := cmd.Flags()
+
 	switch p := fv.Addr().Interface().(type) {
 	case *bool:
 		fs.BoolVarP(p, name, short, *p, usage)
@@ -205,10 +224,12 @@ func addFlag(
 		return "", apperr.New(apperr.CodeInvalidInput,
 			fmt.Sprintf("field %s: unsupported flag type %s", sf.Name, sf.Type))
 	}
+
 	if strings.Contains(sf.Tag.Get("jsonschema"), "required") {
 		return name, apperr.Wrap(cmd.MarkFlagRequired(name), apperr.CodeInternal,
 			"mark flag "+name+" required")
 	}
+
 	return name, nil
 }
 
@@ -225,6 +246,7 @@ func addArg(
 		return apperr.New(apperr.CodeInvalidInput,
 			fmt.Sprintf("field %s: arg tag %q is not an index", sf.Name, tag))
 	}
+
 	switch fv.Interface().(type) {
 	case string:
 	case []string:
@@ -233,6 +255,8 @@ func addArg(
 		return apperr.New(apperr.CodeInvalidInput,
 			fmt.Sprintf("field %s: unsupported argument type %s", sf.Name, sf.Type))
 	}
+
 	b.args[n] = i
+
 	return nil
 }

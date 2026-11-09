@@ -48,6 +48,7 @@ func (s ResourceSchema) KeysetColumn() string {
 			return s.Fields[i].Column
 		}
 	}
+
 	return tiebreakerCreatedAt
 }
 
@@ -59,11 +60,13 @@ func (s ResourceSchema) KeysetColumn() string {
 // timestamps.
 func (s ResourceSchema) TimeColumns() map[string]bool {
 	out := make(map[string]bool)
+
 	for i := range s.Fields {
 		if s.Fields[i].Type == FieldTime {
 			out[s.Fields[i].Column] = true
 		}
 	}
+
 	return out
 }
 
@@ -79,6 +82,7 @@ func (s ResourceSchema) Field(name string) (FieldSchema, bool) {
 			return s.Fields[i], true
 		}
 	}
+
 	return FieldSchema{}, false
 }
 

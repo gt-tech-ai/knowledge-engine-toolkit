@@ -33,6 +33,7 @@ func BuildDescriptorSet(
 		return nil, apperr.Wrap(res.Err, apperr.CodeInternal,
 			"buf build descriptor: "+strings.TrimSpace(string(res.Stderr)))
 	}
+
 	return res.Stdout, nil
 }
 
@@ -62,6 +63,7 @@ func loadDescriptorTypes(
 	fdsBytes []byte,
 ) (*protoregistry.Files, *protoregistry.Types, error) {
 	var fds descriptorpb.FileDescriptorSet
+
 	if err := proto.Unmarshal(fdsBytes, &fds); err != nil {
 		return nil, nil, apperr.Wrap(
 			err,
@@ -76,13 +78,16 @@ func loadDescriptorTypes(
 	}
 
 	types := &protoregistry.Types{}
+
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		exts := fd.Extensions()
 		for i := range exts.Len() {
 			_ = types.RegisterExtension(dynamicpb.NewExtensionType(exts.Get(i)))
 		}
+
 		return true
 	})
+
 	return files, types, nil
 }
 
@@ -111,6 +116,7 @@ func readServiceConfigs(
 
 	svcExt, _ := types.FindExtensionByName(jsonAPIServiceExtension)
 	resExt, _ := types.FindExtensionByName(jsonAPIResourceExtension)
+
 	if svcExt == nil || resExt == nil {
 		return nil, nil, apperr.New(
 			apperr.CodeInvalidInput,
@@ -123,14 +129,17 @@ func readServiceConfigs(
 
 	configs = map[string]serviceConfig{}
 	pkgToService = map[string]string{}
+
 	var walkErr error
 
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		svc, ok, err := readServiceOption(fd, svcExt, types)
 		if err != nil {
 			walkErr = apperr.Wrap(err, apperr.CodeInternal, fd.Path())
+
 			return false
 		}
+
 		if !ok {
 			return true // file is not part of the JSON:API surface
 		}
@@ -144,8 +153,10 @@ func readServiceConfigs(
 					pkgPath, existing, svc.name,
 				),
 			)
+
 			return false
 		}
+
 		pkgToService[pkgPath] = svc.name
 
 		cfg, exists := configs[svc.name]
@@ -165,6 +176,7 @@ func readServiceConfigs(
 					svc.name, cfg.basePath, svc.basePath,
 				),
 			)
+
 			return false
 		}
 
@@ -176,12 +188,15 @@ func readServiceConfigs(
 			cfg.resources,
 		); err != nil {
 			walkErr = err
+
 			return false
 		}
 
 		configs[svc.name] = cfg
+
 		return true
 	})
+
 	if walkErr != nil {
 		return nil, nil, walkErr
 	}
@@ -209,6 +224,7 @@ func validateResourceKeys(svcName string, resources map[string]resourceConfig) e
 		if key == "" {
 			return nil
 		}
+
 		if prev, taken := owner[key]; taken && prev != resourceType {
 			return apperr.New(
 				apperr.CodeInvalidInput,
@@ -218,7 +234,9 @@ func validateResourceKeys(svcName string, resources map[string]resourceConfig) e
 				),
 			)
 		}
+
 		owner[key] = resourceType
+
 		return nil
 	}
 	// Iterate in a stable order so the reported conflict is deterministic.
@@ -226,16 +244,20 @@ func validateResourceKeys(svcName string, resources map[string]resourceConfig) e
 	for t := range resources {
 		types = append(types, t)
 	}
+
 	sort.Strings(types)
+
 	for _, t := range types {
 		rc := resources[t]
 		if err := claim(rc.singleKey, rc.resourceType); err != nil {
 			return err
 		}
+
 		if err := claim(rc.collectionKey, rc.resourceType); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -292,13 +314,16 @@ func mergeFileResources(
 	msgs := fd.Messages()
 	for i := range msgs.Len() {
 		md := msgs.Get(i)
+
 		rc, ok, err := readResourceOption(md, resExt, types)
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, fd.Path())
 		}
+
 		if !ok {
 			continue
 		}
+
 		if rc.resourceType == "" {
 			// A resource annotation without a type cannot key the resource
 			// set and would silently collide with other type-less ones.
@@ -311,6 +336,7 @@ func mergeFileResources(
 				),
 			)
 		}
+
 		merged, err := mergeResource(resources[rc.resourceType], rc)
 		if err != nil {
 			return apperr.Wrap(
@@ -319,8 +345,10 @@ func mergeFileResources(
 				fmt.Sprintf("service %q", svcName),
 			)
 		}
+
 		resources[rc.resourceType] = merged
 	}
+
 	return nil
 }
 
@@ -334,6 +362,7 @@ func readServiceOption(
 	if err != nil || !ok {
 		return serviceOpt{}, false, err
 	}
+
 	return serviceOpt{
 		name:     stringField(msg, "name"),
 		basePath: stringField(msg, "base_path"),
@@ -350,6 +379,7 @@ func readResourceOption(
 	if err != nil || !ok {
 		return resourceConfig{}, false, err
 	}
+
 	return resourceConfig{
 		resourceType:  stringField(msg, "type"),
 		singleKey:     stringField(msg, "single_key"),
@@ -372,6 +402,7 @@ func readOperationOption(
 	if err != nil || !ok {
 		return false, err
 	}
+
 	return boolField(msg, "action"), nil
 }
 
@@ -390,18 +421,22 @@ func extensionMessage(
 	if opts == nil {
 		return nil, false, nil
 	}
+
 	raw, err := proto.Marshal(opts)
 	if err != nil {
 		return nil, false, apperr.Wrap(err, apperr.CodeInternal, "marshal options")
 	}
+
 	dm := dynamicpb.NewMessage(opts.ProtoReflect().Descriptor())
 	if err := (proto.UnmarshalOptions{Resolver: types}).Unmarshal(raw, dm); err != nil {
 		return nil, false, apperr.Wrap(err, apperr.CodeInternal, "decode options")
 	}
+
 	xd := ext.TypeDescriptor()
 	if !dm.Has(xd) {
 		return nil, false, nil
 	}
+
 	return dm.Get(xd).Message(), true, nil
 }
 
@@ -412,6 +447,7 @@ func stringField(msg protoreflect.Message, name string) string {
 	if fd == nil {
 		return ""
 	}
+
 	return msg.Get(fd).String()
 }
 
@@ -422,6 +458,7 @@ func boolField(msg protoreflect.Message, name string) bool {
 	if fd == nil {
 		return false
 	}
+
 	return msg.Get(fd).Bool()
 }
 
@@ -443,6 +480,7 @@ func mergeResource(existing, incoming resourceConfig) (resourceConfig, error) {
 	if err != nil {
 		return resourceConfig{}, err
 	}
+
 	collection, err := mergeKey(
 		"collection_key",
 		incoming.resourceType,
@@ -452,6 +490,7 @@ func mergeResource(existing, incoming resourceConfig) (resourceConfig, error) {
 	if err != nil {
 		return resourceConfig{}, err
 	}
+
 	pagination, err := mergeKey(
 		"pagination_key",
 		incoming.resourceType,

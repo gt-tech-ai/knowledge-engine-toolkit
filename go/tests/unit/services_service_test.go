@@ -80,6 +80,7 @@ func (s countingService) Count(ctx context.Context) (int, error) {
 //     error; a zero Base runs the operation undecorated.
 func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 	t.Parallel()
+
 	base := fixtures.Must(
 		service.NewBase[counterService](
 			decorate.Fixed(decorate.Deps{Timeout: 20 * time.Millisecond}),
@@ -94,6 +95,7 @@ func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 
 	_, err = base.Exec(t.Context(), "slow", func(ctx context.Context) (int, error) {
 		<-ctx.Done()
+
 		return 0, ctx.Err()
 	})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
@@ -123,6 +125,7 @@ func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 //   - A list-less contract serves Get, Create, Update and Delete the same way.
 func TestServiceEntity_DelegatesValidatesAndAuthorizes(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	repo := mocks.NewMockRepository[te, tp, string](ctrl)
 	invalid := apperr.New(apperr.CodeInvalidInput, "name required")
@@ -130,10 +133,13 @@ func TestServiceEntity_DelegatesValidatesAndAuthorizes(t *testing.T) {
 		if e.Name == "" {
 			return invalid
 		}
+
 		return nil
 	}
 	denied := apperr.New(apperr.CodeForbidden, "denied")
+
 	var actions []string
+
 	svc := fixtures.Must(
 		service.NewEntity[interfaces.Service[te, tp, string], te, tp, string](
 			decorate.Fixed(decorate.Deps{
@@ -142,6 +148,7 @@ func TestServiceEntity_DelegatesValidatesAndAuthorizes(t *testing.T) {
 					if action == "widgets.delete" {
 						return denied
 					}
+
 					return nil
 				},
 			}), "widgets", repo, validate),
@@ -157,13 +164,17 @@ func TestServiceEntity_DelegatesValidatesAndAuthorizes(t *testing.T) {
 	got, err := svc.Get(t.Context(), "w1")
 	require.NoError(t, err)
 	assert.Same(t, w, got)
+
 	page, err := svc.List(t.Context(), tp{}, types.PageRequest{})
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), page.Total)
+
 	_, err = svc.Create(t.Context(), w)
 	require.NoError(t, err)
+
 	_, err = svc.Update(t.Context(), "w1", w)
 	require.NoError(t, err)
+
 	_, err = svc.Create(t.Context(), &te{ID: "w2"})
 	require.ErrorIs(t, err, invalid)
 	require.ErrorIs(t, svc.Delete(t.Context(), "w1"), denied)
@@ -174,10 +185,12 @@ func TestServiceEntity_DelegatesValidatesAndAuthorizes(t *testing.T) {
 
 	keyed := mocks.NewMockCRUDNoListRepository[te, string](ctrl)
 	keyed.EXPECT().Delete(gomock.Any(), "w1").Return(nil)
+
 	noList := fixtures.Must(service.NewEntity[
 		interfaces.CRUDNoListRepository[te, string], te, tp, string,
 	](fixtures.Decorations(), "keyed", keyed, validate))
 	require.NoError(t, noList.Delete(t.Context(), "w1"))
+
 	_, err = noList.Update(t.Context(), "w1", &te{})
 	require.ErrorIs(t, err, invalid)
 }

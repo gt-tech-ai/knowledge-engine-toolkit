@@ -48,16 +48,20 @@ func (p Registry) Run(ctx context.Context, _ Target) types.Verdict {
 	if err != nil {
 		return fail(p.Name(), "IAM SimulatePrincipalPolicy failed: "+err.Error())
 	}
+
 	var denied []string
+
 	for i := range out.EvaluationResults {
 		r := &out.EvaluationResults[i]
 		if r.EvalDecision != iamtypes.PolicyEvaluationDecisionTypeAllowed {
 			denied = append(denied, aws.ToString(r.EvalActionName))
 		}
 	}
+
 	if len(denied) > 0 {
 		return fail(p.Name(), "role "+p.RoleARN+" is denied ECR pull action(s): "+
 			strings.Join(denied, ", "), denied...)
 	}
+
 	return pass("role " + p.RoleARN + " is allowed all ECR pull actions")
 }

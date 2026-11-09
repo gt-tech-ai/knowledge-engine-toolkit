@@ -32,5 +32,6 @@ func (v *Validator[T]) Validate(entity *T) error {
 			return err
 		}
 	}
+
 	return nil
 }

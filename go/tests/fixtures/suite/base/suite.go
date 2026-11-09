@@ -29,12 +29,16 @@ func (s *TestSuite) SetupSuite() {
 func (s *TestSuite) IsIntegration() bool {
 	if testing.Short() {
 		s.T().Skip("skipping integration test in short mode")
+
 		return false
 	}
+
 	if os.Getenv("INTEGRATION") == "" && os.Getenv("CI") == "" {
 		s.T().Skip("set INTEGRATION=1 or CI=1 to run integration tests")
+
 		return false
 	}
+
 	return true
 }
 

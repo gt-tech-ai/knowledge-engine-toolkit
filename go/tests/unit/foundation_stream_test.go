@@ -25,17 +25,24 @@ import (
 //     error) and keeps reporting it; Close is idempotent.
 func TestStream_FromSliceYieldsInOrderThenEnds(t *testing.T) {
 	t.Parallel()
+
 	s := stream.FromSlice([]string{"a", "b", "c"})
+
 	var got []string
+
 	for {
 		item, ok, err := s.Next(t.Context())
 		require.NoError(t, err)
+
 		if !ok {
 			break
 		}
+
 		got = append(got, item)
 	}
+
 	require.Equal(t, []string{"a", "b", "c"}, got)
+
 	item, ok, err := s.Next(t.Context())
 	require.NoError(t, err)
 	require.False(t, ok)
@@ -57,29 +64,39 @@ func TestStream_FromSliceYieldsInOrderThenEnds(t *testing.T) {
 //     chunks could have been one (the split is greedy).
 func TestChunk_SplitsAtMaxBytesKeepingOrder(t *testing.T) {
 	t.Parallel()
+
 	law := func(raw []uint8, budget uint8) bool {
 		maxBytes := int(budget)%64 + 1
 		items := make([]int, len(raw))
+
 		for i, r := range raw {
 			items[i] = int(r)%maxBytes + 1
 		}
+
 		chunks, err := stream.Chunk(items, func(n int) int { return n }, maxBytes)
 		if err != nil {
 			return false
 		}
+
 		var flat []int
+
 		prev := -1
+
 		for _, c := range chunks {
 			total := 0
 			for _, n := range c {
 				total += n
 			}
+
 			if len(c) == 0 || total > maxBytes || (prev >= 0 && prev+c[0] <= maxBytes) {
 				return false
 			}
+
 			prev = total
+
 			flat = append(flat, c...)
 		}
+
 		return slices.Equal(flat, items)
 	}
 	require.NoError(t, quick.Check(law, &quick.Config{MaxCount: 300}))
@@ -97,6 +114,7 @@ func TestChunk_SplitsAtMaxBytesKeepingOrder(t *testing.T) {
 //     CodeInvalidInput; no input yields no chunks.
 func TestChunk_OversizedItemIsResourceExhausted(t *testing.T) {
 	t.Parallel()
+
 	size := func(s string) int { return len(s) }
 
 	_, err := stream.Chunk([]string{"ab", "toolong"}, size, 4)
@@ -125,10 +143,12 @@ func TestChunk_OversizedItemIsResourceExhausted(t *testing.T) {
 //   - A non-positive budget is CodeInvalidInput, and the source is still closed.
 func TestCollect_StopsAtBudgetAndClosesSource(t *testing.T) {
 	t.Parallel()
+
 	size := func(s string) int { return len(s) }
 
 	t.Run("within budget", func(t *testing.T) {
 		t.Parallel()
+
 		src := scriptedStream(t, []string{"aa", "bb"}, nil)
 		got, err := stream.Collect(t.Context(), src, size, 4)
 		require.NoError(t, err)
@@ -137,6 +157,7 @@ func TestCollect_StopsAtBudgetAndClosesSource(t *testing.T) {
 
 	t.Run("over budget", func(t *testing.T) {
 		t.Parallel()
+
 		// Exactly three reads are expected: a fourth fails the test as unexpected.
 		src := mocks.NewMockStream[string](gomock.NewController(t))
 		gomock.InOrder(
@@ -145,12 +166,14 @@ func TestCollect_StopsAtBudgetAndClosesSource(t *testing.T) {
 			src.EXPECT().Next(gomock.Any()).Return("cc", true, nil),
 		)
 		src.EXPECT().Close().Return(nil).Times(1)
+
 		_, err := stream.Collect(t.Context(), src, size, 5)
 		require.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	})
 
 	t.Run("non-positive budget", func(t *testing.T) {
 		t.Parallel()
+
 		src := scriptedStream(t, nil, nil)
 		_, err := stream.Collect(t.Context(), src, size, 0)
 		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -158,6 +181,7 @@ func TestCollect_StopsAtBudgetAndClosesSource(t *testing.T) {
 
 	t.Run("source error", func(t *testing.T) {
 		t.Parallel()
+
 		boom := apperr.New(apperr.CodeUnavailable, "store down")
 		src := scriptedStream(t, []string{"aa"}, boom)
 		_, err := stream.Collect(t.Context(), src, size, 8)
@@ -174,16 +198,20 @@ func scriptedStream(
 	endErr error,
 ) *mocks.MockStream[string] {
 	t.Helper()
+
 	src := mocks.NewMockStream[string](gomock.NewController(t))
 	calls := make([]any, 0, len(items)+1)
+
 	for _, item := range items {
 		calls = append(calls, src.EXPECT().Next(gomock.Any()).Return(item, true, nil))
 	}
+
 	calls = append(
 		calls,
 		src.EXPECT().Next(gomock.Any()).Return("", false, endErr).MaxTimes(1),
 	)
 	gomock.InOrder(calls...)
 	src.EXPECT().Close().Return(nil).Times(1)
+
 	return src
 }

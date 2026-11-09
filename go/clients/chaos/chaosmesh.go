@@ -53,10 +53,12 @@ func newChaosMesh(
 			"chaos chaos-mesh: no command runner",
 		)
 	}
+
 	managedBy := cfg.ManagedBy
 	if managedBy == "" {
 		managedBy = DefaultManagedBy
 	}
+
 	return &chaosMeshInjector{
 		runner:    deps.Runner,
 		root:      deps.Root,
@@ -154,22 +156,29 @@ func (c *chaosMeshInjector) Inject(ctx context.Context, f types.Fault) error {
 	if err != nil {
 		return err
 	}
+
 	data, err := json.MarshalIndent(res, "", "  ")
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "render chaos resource "+f.Name)
 	}
+
 	file, err := os.CreateTemp("", "chaos-*.json")
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create chaos manifest file")
 	}
+
 	defer func() { _ = os.Remove(file.Name()) }()
+
 	if _, err := file.Write(data); err != nil {
 		_ = file.Close()
+
 		return apperr.Wrap(err, apperr.CodeInternal, "write chaos manifest file")
 	}
+
 	if err := file.Close(); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "close chaos manifest file")
 	}
+
 	out := c.runner.RunBuffered(ctx, c.root, "kubectl", "create", "-f", file.Name())
 	if out.Err != nil && strings.Contains(string(out.Stderr), "AlreadyExists") {
 		return apperr.Wrap(out.Err, apperr.CodeConflict, fmt.Sprintf(
@@ -177,12 +186,14 @@ func (c *chaosMeshInjector) Inject(ctx context.Context, f types.Fault) error {
 			f.Target.Namespace, f.Name,
 		))
 	}
+
 	if out.Err != nil {
 		return apperr.Wrap(out.Err, apperr.CodeUpstream, fmt.Sprintf(
 			"kubectl create %s %s/%s: %s",
 			res.Kind, f.Target.Namespace, f.Name, strings.TrimSpace(string(out.Stderr)),
 		))
 	}
+
 	return nil
 }
 
@@ -193,15 +204,18 @@ func (c *chaosMeshInjector) Revert(ctx context.Context, f types.Fault) error {
 	if err != nil {
 		return err
 	}
+
 	resource := strings.ToLower(kind) + "." + chaosMeshGroup
 	out := c.runner.RunBuffered(ctx, c.root, "kubectl", "delete", resource, f.Name,
 		"--namespace", f.Target.Namespace, "--ignore-not-found", "--wait=true")
+
 	if out.Err != nil {
 		return apperr.Wrap(out.Err, apperr.CodeUpstream, fmt.Sprintf(
 			"kubectl delete %s %s/%s: %s",
 			resource, f.Target.Namespace, f.Name, strings.TrimSpace(string(out.Stderr)),
 		))
 	}
+
 	return nil
 }
 
@@ -221,6 +235,7 @@ func (c *chaosMeshInjector) Active(
 			namespace, strings.TrimSpace(string(out.Stderr)),
 		))
 	}
+
 	return strings.Fields(string(out.Stdout)), nil
 }
 
@@ -246,6 +261,7 @@ func chaosMeshResourceFor(f types.Fault, managedBy string) (chaosMeshResource, e
 	if err != nil {
 		return chaosMeshResource{}, err
 	}
+
 	ns := f.Target.Namespace
 	res := chaosMeshResource{
 		APIVersion: chaosMeshAPIVersion,
@@ -257,6 +273,7 @@ func chaosMeshResourceFor(f types.Fault, managedBy string) (chaosMeshResource, e
 		},
 	}
 	source := podsOf(ns, f.Target.Service)
+
 	switch f.Spec.Type {
 	case types.FaultPodKill:
 		res.Spec = podChaosSpec{
@@ -272,6 +289,7 @@ func chaosMeshResourceFor(f types.Fault, managedBy string) (chaosMeshResource, e
 		res.Spec = networkSpec(f, source, "loss",
 			nil, &networkChaosLoss{Loss: strconv.Itoa(f.Spec.LossPercent)})
 	}
+
 	return res, nil
 }
 

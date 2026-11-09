@@ -29,6 +29,7 @@ func New(db *sql.DB) *Manager {
 	if db == nil {
 		panic("sqltx: db must not be nil")
 	}
+
 	return &Manager{db: db}
 }
 
@@ -47,6 +48,7 @@ func (m *Manager) Begin(
 	if err != nil {
 		return ctx, nil, err
 	}
+
 	return interfaces.WithInTx(store.WithClient(ctx, tx)), tx, nil
 }
 
@@ -61,12 +63,15 @@ func (m *Manager) WithTransaction(
 	if err != nil {
 		return err
 	}
+
 	// A no-op after a successful commit, so it also covers a failed one.
 	defer func() { _ = tx.Rollback() }()
+
 	txCtx := interfaces.WithAfterCommit(interfaces.WithInTx(store.WithClient(ctx, tx)))
 	if err := fn(txCtx); err != nil {
 		return err
 	}
+
 	if err := tx.Commit(); err != nil {
 		return apperr.Wrap(
 			err,
@@ -74,7 +79,9 @@ func (m *Manager) WithTransaction(
 			"sqltx: commit",
 		)
 	}
+
 	interfaces.RunAfterCommit(txCtx)
+
 	return nil
 }
 
@@ -86,6 +93,7 @@ func (m *Manager) begin(ctx context.Context) (*sql.Tx, error) {
 			"sqltx: a transaction is already open on this context",
 		)
 	}
+
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -94,5 +102,6 @@ func (m *Manager) begin(ctx context.Context) (*sql.Tx, error) {
 			"sqltx: begin",
 		)
 	}
+
 	return tx, nil
 }

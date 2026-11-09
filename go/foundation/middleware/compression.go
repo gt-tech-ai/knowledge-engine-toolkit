@@ -22,6 +22,7 @@ func newGzipWriterPool() *sync.Pool {
 	return &sync.Pool{
 		New: func() any {
 			w, _ := gzip.NewWriterLevel(io.Discard, gzip.DefaultCompression)
+
 			return w
 		},
 	}
@@ -31,10 +32,12 @@ func newGzipWriterPool() *sync.Pool {
 // Each returned middleware owns one gzip writer pool shared by its requests.
 func Compression() Middleware {
 	pool := newGzipWriterPool()
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 				next.ServeHTTP(w, r)
+
 				return
 			}
 
@@ -81,6 +84,7 @@ func (cw *compressWriter) Write(b []byte) (int, error) {
 	if cw.gzWriter != nil {
 		// Already compressing — write directly to gzip
 		n, err := cw.gzWriter.Write(b)
+
 		return n, apperr.Wrap(err, apperr.CodeInternal, "gzip write")
 	}
 
@@ -88,6 +92,7 @@ func (cw *compressWriter) Write(b []byte) (int, error) {
 
 	if len(cw.buf) >= compressionThreshold {
 		cw.startGzip()
+
 		// startGzip wrote the full buffer (which includes b)
 		return len(b), nil
 	}
@@ -105,6 +110,7 @@ func (cw *compressWriter) startGzip() {
 
 	gz := cw.pool.Get().(*gzip.Writer)
 	gz.Reset(cw.ResponseWriter)
+
 	cw.gzWriter = gz
 
 	// Write buffered content
@@ -122,8 +128,10 @@ func (cw *compressWriter) Close() {
 	if cw.gzWriter != nil {
 		_ = cw.gzWriter.Close()
 		cw.pool.Put(cw.gzWriter)
+
 		return
 	}
+
 	if len(cw.buf) > 0 {
 		// Below threshold, write uncompressed
 		_, _ = cw.ResponseWriter.Write(cw.buf)

@@ -20,6 +20,7 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
+
 	return &decorated{base: base, Base: b}, nil
 }
 
@@ -50,8 +51,10 @@ func (d *decorated) Acquire(
 ) (token string, acquired bool, err error) {
 	l, err := d.Exec(ctx, "acquire", func(ctx context.Context) (lease, error) {
 		t, ok, err := d.base.Acquire(ctx, key)
+
 		return lease{token: t, acquired: ok}, err
 	})
+
 	return l.token, l.acquired, err
 }
 

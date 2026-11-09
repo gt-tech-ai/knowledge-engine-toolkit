@@ -37,5 +37,6 @@ func (c HedgeConfig) Validate() error {
 	if c.Delay < 0 {
 		return apperr.InvalidInput("resilience.hedge.delay must be >= 0")
 	}
+
 	return nil
 }

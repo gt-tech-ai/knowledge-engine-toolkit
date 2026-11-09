@@ -16,7 +16,9 @@ func EqualJitter(d time.Duration) time.Duration {
 	if d <= 0 {
 		return d
 	}
+
 	half := d / 2
+
 	return half + time.Duration(upTo(int64(half)))
 }
 
@@ -27,6 +29,7 @@ func FullJitter(d time.Duration) time.Duration {
 	if d <= 0 {
 		return d
 	}
+
 	return time.Duration(upTo(int64(d)))
 }
 
@@ -36,6 +39,7 @@ func upTo(n int64) int64 {
 	if n == math.MaxInt64 {
 		return rand.Int64() //nolint:gosec // backoff desync, not security: a weak PRNG is fine.
 	}
+
 	//nolint:gosec // backoff desync, not a security decision — a weak PRNG is fine.
 	return rand.Int64N(n + 1)
 }

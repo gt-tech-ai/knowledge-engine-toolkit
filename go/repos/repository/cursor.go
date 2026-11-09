@@ -19,6 +19,7 @@ func ParseUUIDCursor(s string) (any, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse uuid cursor")
 	}
+
 	return id, nil
 }
 
@@ -51,6 +52,7 @@ func (c *CursorCodec) Encode(createdAt time.Time, id string) string {
 	// per-page hot path. RFC3339Nano contains no '|' and ids are UUIDs, so
 	// the first '|' is an unambiguous separator.
 	payload := createdAt.UTC().Format(time.RFC3339Nano) + "|" + id
+
 	return base64.RawURLEncoding.EncodeToString([]byte(payload))
 }
 
@@ -73,6 +75,7 @@ func (c *CursorCodec) Decode(cursor string) (CursorPayload, error) {
 			"invalid cursor payload: missing separator",
 		)
 	}
+
 	createdAt, err := time.Parse(time.RFC3339Nano, ts)
 	if err != nil {
 		return CursorPayload{}, apperr.Wrap(

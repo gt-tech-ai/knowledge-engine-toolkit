@@ -26,5 +26,6 @@ func WithSkipCount(ctx context.Context) context.Context {
 // private context key.
 func CountSkipped(ctx context.Context) bool {
 	skip, _ := ctx.Value(skipCountKeyType{}).(bool)
+
 	return skip
 }

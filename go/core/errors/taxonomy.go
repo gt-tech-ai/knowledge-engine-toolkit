@@ -45,6 +45,7 @@ func GRPCStatus(code ErrorCode) uint32 {
 	if info, ok := infoOf(code); ok {
 		return info.grpc
 	}
+
 	return grpcInternal
 }
 
@@ -52,6 +53,7 @@ func GRPCStatus(code ErrorCode) uint32 {
 // and an edge sends its generic internal message instead.
 func SafeMessage(code ErrorCode) string {
 	info, _ := infoOf(code)
+
 	return info.safeMessage
 }
 
@@ -59,5 +61,6 @@ func SafeMessage(code ErrorCode) string {
 // carrying code; a code the taxonomy does not declare is shown.
 func HidesMessage(code ErrorCode) bool {
 	info, _ := infoOf(code)
+
 	return info.hideMessage
 }

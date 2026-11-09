@@ -74,6 +74,7 @@ func TestWrapPreservesOriginStack(t *testing.T) {
 	wrapped := apperr.Wrap(origin, apperr.CodeUnavailable, "wrapped")
 
 	var wrappedErr *apperr.AppError
+
 	require.ErrorAs(t, wrapped, &wrappedErr)
 	assert.Equal(t, originStack, wrappedErr.StackTrace(),
 		"wrapping an AppError should preserve the origin stack")
@@ -104,11 +105,13 @@ func TestStackTraceStartsAtCaller(t *testing.T) {
 	}
 
 	var wrapped *apperr.AppError
+
 	require.ErrorAs(
 		t,
 		apperr.Wrap(apperr.Sentinel("cause"), apperr.CodeInternal, "origin"),
 		&wrapped,
 	)
+
 	first, _, _ := strings.Cut(wrapped.StackTrace(), "\n")
 	assert.True(t, strings.HasSuffix(first, ".TestStackTraceStartsAtCaller"),
 		"Wrap: first frame = %q, want the calling test function", first)
@@ -199,6 +202,7 @@ func TestWithSpanKind(t *testing.T) {
 	t.Parallel()
 
 	var cfg interfaces.SpanConfig
+
 	interfaces.WithSpanKind(interfaces.SpanKindClient)(&cfg)
 
 	assert.Equal(t, interfaces.SpanKindClient, cfg.Kind)

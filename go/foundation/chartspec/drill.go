@@ -22,32 +22,40 @@ func Drill(
 			"cube " + cube.Name + " has no field allow-list",
 		)
 	}
+
 	child, ok := childOf(cube.Hierarchies, field)
 	if !ok {
 		return types.ChartSpec{}, invalid(
 			"field " + field + " has no child level to drill into",
 		)
 	}
+
 	if _, declared := cube.Fields.Lookup(child); !declared {
 		return types.ChartSpec{}, invalid(
 			"drill child " + child + " is not declared by the cube",
 		)
 	}
+
 	swap := func(ref types.FieldRef) types.FieldRef {
 		if ref.Name == field && ref.Agg == types.AggNone {
 			ref.Name = child
 		}
+
 		return ref
 	}
 	out := spec
+
 	out.Rows, out.Columns = drillShelf(spec.Rows, swap), drillShelf(spec.Columns, swap)
 	out.Detail = make([]types.FieldRef, len(spec.Detail))
+
 	for i, ref := range spec.Detail {
 		out.Detail[i] = swap(ref)
 	}
+
 	if spec.Detail == nil {
 		out.Detail = nil
 	}
+
 	if spec.Sort != nil {
 		out.Sort = slices.Clone(spec.Sort)
 		for i := range out.Sort {
@@ -56,6 +64,7 @@ func Drill(
 			}
 		}
 	}
+
 	enc := []**types.FieldRef{
 		&out.Encodings.Color,
 		&out.Encodings.Size,
@@ -65,9 +74,11 @@ func Drill(
 	for _, slot := range enc {
 		if *slot != nil {
 			swapped := swap(**slot)
+
 			*slot = &swapped
 		}
 	}
+
 	return out, nil
 }
 
@@ -80,6 +91,7 @@ func childOf(hierarchies [][]string, field string) (string, bool) {
 			}
 		}
 	}
+
 	return "", false
 }
 
@@ -91,13 +103,17 @@ func drillShelf(
 	if e == nil {
 		return nil
 	}
+
 	if e.Field != nil {
 		ref := swap(*e.Field)
+
 		return &types.AlgebraExpr{Field: &ref}
 	}
+
 	args := make([]*types.AlgebraExpr, len(e.Args))
 	for i, arg := range e.Args {
 		args[i] = drillShelf(arg, swap)
 	}
+
 	return &types.AlgebraExpr{Op: e.Op, Args: args}
 }

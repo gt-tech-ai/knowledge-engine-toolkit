@@ -35,12 +35,14 @@ func Adapt[Req, Resp any](
 		req, err := parse(r)
 		if err != nil {
 			bc.WriteError(w, err)
+
 			return
 		}
 
 		resp, err := handler(r.Context(), req)
 		if err != nil {
 			bc.WriteError(w, err)
+
 			return
 		}
 
@@ -68,12 +70,14 @@ func AdaptNoContent[Req, Resp any](
 		req, err := parse(r)
 		if err != nil {
 			bc.WriteError(w, err)
+
 			return
 		}
 
 		_, err = handler(r.Context(), req)
 		if err != nil {
 			bc.WriteError(w, err)
+
 			return
 		}
 

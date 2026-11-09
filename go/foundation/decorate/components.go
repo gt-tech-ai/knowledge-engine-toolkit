@@ -24,14 +24,18 @@ func (d Decorations) Components() []Component {
 	if d.reg == nil {
 		return nil
 	}
+
 	d.reg.mu.Lock()
 	defer d.reg.mu.Unlock()
+
 	var out []Component
+
 	for _, tier := range slices.Sorted(maps.Keys(d.reg.used)) {
 		for _, name := range slices.Sorted(maps.Keys(d.reg.used[tier])) {
 			out = append(out, Component{Tier: tier, Name: name})
 		}
 	}
+
 	return out
 }
 
@@ -44,22 +48,28 @@ func (d Decorations) VerifyExplicit(prefixes ...string) error {
 	if d.reg == nil {
 		return err
 	}
+
 	cfg := d.cfg
 	if cfg == nil {
 		cfg = &decoration.Config{}
 	}
+
 	keys := map[string]string{}
 	overrides := map[string]map[string]decoration.Layers{}
 	sections := cfg.Sections()
+
 	for i := range sections {
 		keys[sections[i].Name] = sections[i].Key
 		overrides[sections[i].Name] = sections[i].Tier.Overrides
 	}
+
 	var missing []string
+
 	for _, c := range d.Components() {
 		if !owned(c.Name, prefixes) {
 			continue
 		}
+
 		if _, ok := overrides[c.Tier][c.Name]; !ok {
 			missing = append(
 				missing,
@@ -67,9 +77,11 @@ func (d Decorations) VerifyExplicit(prefixes ...string) error {
 			)
 		}
 	}
+
 	if len(missing) == 0 {
 		return err
 	}
+
 	miss := apperr.New(
 		apperr.CodeInvalidInput,
 		"no entry for "+strings.Join(missing, ", "),
@@ -77,5 +89,6 @@ func (d Decorations) VerifyExplicit(prefixes ...string) error {
 	if err != nil {
 		return apperr.Wrap(apperr.Join(err, miss), apperr.CodeInvalidInput, "decoration")
 	}
+
 	return apperr.Wrap(miss, apperr.CodeInvalidInput, "decoration")
 }

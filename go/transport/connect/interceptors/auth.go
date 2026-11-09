@@ -78,6 +78,7 @@ func WithAuthClaims(
 // does once it has resolved them), so ok=true always means non-nil claims.
 func GetAuthClaims(ctx context.Context) (*AuthClaims, bool) {
 	claims, ok := ctx.Value(authContextKey{}).(*AuthClaims)
+
 	return claims, ok && claims != nil
 }
 
@@ -120,6 +121,7 @@ type authInterceptor struct {
 // stub mode every real caller would silently get the synthetic claims.
 func NewAuthInterceptor(stub bool, headers HeaderMap) connect.Interceptor {
 	mustHaveSubHeader(headers)
+
 	return authInterceptor{headers: headers, stub: stub}
 }
 
@@ -165,6 +167,7 @@ func (a authInterceptor) withClaims(ctx context.Context, h http.Header) context.
 		// Dev shortcut: no gateway, synthesize dev claims.
 		return WithAuthClaims(ctx, newStubDevClaims())
 	}
+
 	if sub == "" {
 		return ctx
 	}
@@ -179,6 +182,7 @@ func (a authInterceptor) withClaims(ctx context.Context, h http.Header) context.
 	if roles := h.Get(a.headers.Roles); roles != "" {
 		claims.Roles = splitRoles(roles)
 	}
+
 	return WithAuthClaims(ctx, claims)
 }
 
@@ -187,10 +191,12 @@ func (a authInterceptor) withClaims(ctx context.Context, h http.Header) context.
 // discarded.
 func splitRoles(s string) []string {
 	var roles []string
+
 	for role := range strings.SplitSeq(s, ",") {
 		if role = strings.TrimSpace(role); role != "" {
 			roles = append(roles, role)
 		}
 	}
+
 	return roles
 }

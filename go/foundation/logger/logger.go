@@ -56,8 +56,10 @@ func (k Kind) String() string {
 // Returns an error if the kind is unknown.
 func New(kind Kind, opts ...options.Option[Config]) (interfaces.Logger, error) {
 	cfg := DefaultConfig()
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
+
 	return NewFromConfig(cfg)
 }
 
@@ -71,6 +73,7 @@ func NewFromConfig(cfg Config) (interfaces.Logger, error) {
 			Format:    cfg.Format,
 			RedactPII: cfg.RedactPII,
 		}
+
 		return zap.New(zapCfg), nil
 
 	case KindStdlib:
@@ -78,6 +81,7 @@ func NewFromConfig(cfg Config) (interfaces.Logger, error) {
 			Level:     cfg.Level,
 			AddSource: cfg.AddSource,
 		}
+
 		return stdlib.New(stdlibCfg), nil
 
 	default:

@@ -124,6 +124,7 @@ func TestClassify_DerivesEachRole(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			got, err := openapi.Classify(tc.in)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
@@ -216,6 +217,7 @@ func TestClassify_UnclassifiableRestRpcErrors(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			_, err := openapi.Classify(tc.in)
 			require.Error(t, err)
 			assert.True(

@@ -92,6 +92,7 @@ func (c *DatabaseConfig) DSN() string {
 		Path:     "/" + c.Database,
 		RawQuery: url.Values{"sslmode": {c.SSLMode}}.Encode(),
 	}
+
 	return dsn.String()
 }
 
@@ -100,5 +101,6 @@ func (c *DatabaseConfig) Validate() error {
 	if c.Host == "" {
 		return apperr.InvalidInput("database.host is required")
 	}
+
 	return nil
 }

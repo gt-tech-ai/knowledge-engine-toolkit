@@ -19,10 +19,14 @@ func Exec[R any](
 	fn func(context.Context) (R, error),
 ) (R, error) {
 	var result R
+
 	err := mw.WrapOp(ctx, op, func(ctx context.Context) error {
 		var e error
+
 		result, e = fn(ctx)
+
 		return e
 	})
+
 	return result, err
 }

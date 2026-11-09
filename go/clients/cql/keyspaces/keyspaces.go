@@ -66,6 +66,7 @@ func New(cfg *Config) (interfaces.CQLSession, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return driver.Dial(cluster, nil)
 }
 
@@ -76,6 +77,7 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 	if cfg.Region == "" {
 		return nil, apperr.New(apperr.CodeInvalidInput, "keyspaces: region is required")
 	}
+
 	consistency, err := gocql.ParseConsistencyWrapper(cfg.Consistency)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -84,28 +86,37 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 			"keyspaces: unknown consistency "+cfg.Consistency,
 		)
 	}
+
 	provider := cfg.Credentials
 	if provider == nil {
 		provider = defaultChain(cfg.Region)
 	}
+
 	host := Endpoint(cfg.Region)
 	cluster := gocql.NewCluster(host)
+
 	cluster.Port = DefaultPort
+
 	if cfg.Port > 0 {
 		cluster.Port = cfg.Port
 	}
+
 	cluster.Keyspace = cfg.Keyspace
 	cluster.Consistency = consistency
+
 	if cfg.Timeout > 0 {
 		cluster.Timeout = cfg.Timeout
 	}
+
 	if cfg.ConnectTimeout > 0 {
 		cluster.ConnectTimeout = cfg.ConnectTimeout
 	}
+
 	cluster.PageSize = cfg.PageSize
 	if cfg.NumConns > 0 {
 		cluster.NumConns = cfg.NumConns
 	}
+
 	cluster.DisableInitialHostLookup = true
 	cluster.SslOpts = &gocql.SslOptions{
 		Config: &tls.Config{
@@ -119,6 +130,7 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 		cfg.Region,
 		credentialsCallback(provider),
 	)
+
 	return cluster, nil
 }
 
@@ -130,6 +142,7 @@ func credentialsCallback(
 	return func() (sigv4.SigV4Credentials, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), credentialsTimeout)
 		defer cancel()
+
 		creds, err := provider.Retrieve(ctx)
 		if err != nil {
 			return sigv4.SigV4Credentials{}, apperr.Wrap(
@@ -138,6 +151,7 @@ func credentialsCallback(
 				"keyspaces: retrieve AWS credentials",
 			)
 		}
+
 		return sigv4.SigV4Credentials{
 			AccessKeyId:     creds.AccessKeyID,
 			SecretAccessKey: creds.SecretAccessKey,
@@ -150,9 +164,12 @@ func credentialsCallback(
 // region on its first Retrieve (so construction does no I/O) and caches it; a
 // chain that cannot be loaded is CodeInternal on every Retrieve.
 func defaultChain(region string) aws.CredentialsProvider {
-	var once sync.Once
-	var chain aws.CredentialsProvider
-	var loadErr error
+	var (
+		once    sync.Once
+		chain   aws.CredentialsProvider
+		loadErr error
+	)
+
 	return aws.CredentialsProviderFunc(
 		func(ctx context.Context) (aws.Credentials, error) {
 			once.Do(func() {
@@ -166,13 +183,17 @@ func defaultChain(region string) aws.CredentialsProvider {
 						apperr.CodeInternal,
 						"keyspaces: load AWS credentials chain",
 					)
+
 					return
 				}
+
 				chain = awsCfg.Credentials
 			})
+
 			if loadErr != nil {
 				return aws.Credentials{}, loadErr
 			}
+
 			return chain.Retrieve(ctx)
 		},
 	)

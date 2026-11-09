@@ -29,14 +29,18 @@ func (h Hash) String() string { return hex.EncodeToString(h[:]) }
 // CodeInvalidInput.
 func ParseHash(s string) (Hash, error) {
 	var h Hash
+
 	b, err := hex.DecodeString(s)
+
 	if err != nil || len(b) != len(h) {
 		return Hash{}, apperr.New(
 			apperr.CodeInvalidInput,
 			"chartspec: invalid node hash "+s,
 		)
 	}
+
 	copy(h[:], b)
+
 	return h, nil
 }
 
@@ -67,6 +71,7 @@ func absent(v any) bool {
 	if v == nil {
 		return true
 	}
+
 	rv := reflect.ValueOf(v)
 	switch rv.Kind() {
 	case reflect.Slice, reflect.Map, reflect.Pointer, reflect.Interface:
@@ -101,35 +106,45 @@ func (n Node) MarshalJSON() ([]byte, error) {
 		if absent(v) {
 			continue
 		}
+
 		if w.Fields == nil {
 			w.Fields = map[string]any{}
 		}
+
 		w.Fields[k] = v
 	}
+
 	for k, h := range n.Children {
 		if h.IsZero() {
 			continue
 		}
+
 		if w.Children == nil {
 			w.Children = map[string]string{}
 		}
+
 		w.Children[k] = h.String()
 	}
+
 	for k, hs := range n.Lists {
 		if len(hs) == 0 {
 			continue
 		}
+
 		if w.Lists == nil {
 			w.Lists = map[string][]string{}
 		}
+
 		for _, h := range hs {
 			w.Lists[k] = append(w.Lists[k], h.String())
 		}
 	}
+
 	out, err := json.Marshal(w)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: encode node")
 	}
+
 	return out, nil
 }
 
@@ -138,37 +153,48 @@ func (n Node) MarshalJSON() ([]byte, error) {
 func (n *Node) UnmarshalJSON(data []byte) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
+
 	var w nodeWire
+
 	if err := dec.Decode(&w); err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: invalid node JSON")
 	}
+
 	if w.Kind == "" {
 		return apperr.New(apperr.CodeInvalidInput, "chartspec: a node needs a kind")
 	}
+
 	node := Node{Kind: w.Kind, Fields: w.Fields}
 	for k, s := range w.Children {
 		h, err := ParseHash(s)
 		if err != nil {
 			return err
 		}
+
 		if node.Children == nil {
 			node.Children = map[string]Hash{}
 		}
+
 		node.Children[k] = h
 	}
+
 	for k, ss := range w.Lists {
 		if node.Lists == nil {
 			node.Lists = map[string][]Hash{}
 		}
+
 		for _, s := range ss {
 			h, err := ParseHash(s)
 			if err != nil {
 				return err
 			}
+
 			node.Lists[k] = append(node.Lists[k], h)
 		}
 	}
+
 	*n = node
+
 	return nil
 }
 
@@ -180,6 +206,7 @@ func (n Node) Canonical() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	out, err := jcs.Transform(raw)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -188,6 +215,7 @@ func (n Node) Canonical() ([]byte, error) {
 			"chartspec: canonicalize node",
 		)
 	}
+
 	return out, nil
 }
 
@@ -198,10 +226,14 @@ func (n Node) Hash() (Hash, error) {
 	if err != nil {
 		return Hash{}, err
 	}
+
 	h := sha256.New()
 	h.Write([]byte(hashDomain))
 	h.Write(canonical)
+
 	var out Hash
+
 	copy(out[:], h.Sum(nil))
+
 	return out, nil
 }

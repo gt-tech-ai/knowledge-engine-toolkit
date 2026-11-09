@@ -66,11 +66,13 @@ func TestResilienceValidate_RemainingBranches(t *testing.T) {
 
 	// Budget: negative ceiling rejected.
 	badBudget := resilience.DefaultBudgetConfig()
+
 	badBudget.MaxRetries = -1
 	require.Error(t, badBudget.Validate(), "a negative retry budget must be rejected")
 
 	// Timeout: negative deadline rejected.
 	badTimeout := resilience.DefaultTimeoutConfig()
+
 	badTimeout.Timeout = -1
 	require.Error(t, badTimeout.Validate(), "a negative timeout must be rejected")
 
@@ -78,14 +80,17 @@ func TestResilienceValidate_RemainingBranches(t *testing.T) {
 	require.NoError(t, resilience.DefaultBulkheadConfig().Validate())
 
 	badMax := resilience.DefaultBulkheadConfig()
+
 	badMax.MaxConcurrent = 0
 	require.Error(t, badMax.Validate(), "max_concurrent < 1 must be rejected")
 
 	badMin := resilience.DefaultBulkheadConfig()
+
 	badMin.MinConcurrent = -1
 	require.Error(t, badMin.Validate(), "min_concurrent < 0 must be rejected")
 
 	badRatio := resilience.DefaultBulkheadConfig()
+
 	badRatio.BackoffRatio = 1.5
 	require.Error(t, badRatio.Validate(), "backoff_ratio outside (0,1] must be rejected")
 
@@ -93,15 +98,18 @@ func TestResilienceValidate_RemainingBranches(t *testing.T) {
 	require.NoError(t, resilience.DefaultRateLimitConfig().Validate())
 
 	badRate := resilience.DefaultRateLimitConfig()
+
 	badRate.Rate = -1
 	require.Error(t, badRate.Validate(), "a negative rate must be rejected")
 
 	badBurst := resilience.DefaultRateLimitConfig()
+
 	badBurst.Burst = -1
 	require.Error(t, badBurst.Validate(), "a negative burst must be rejected")
 
 	// Breaker: the interval and timeout guards (failure-ratio is covered elsewhere).
 	badInterval := resilience.DefaultBreakerConfig()
+
 	badInterval.Interval = -1
 	require.Error(
 		t,
@@ -110,6 +118,7 @@ func TestResilienceValidate_RemainingBranches(t *testing.T) {
 	)
 
 	badBreakerTimeout := resilience.DefaultBreakerConfig()
+
 	badBreakerTimeout.Timeout = -1
 	require.Error(
 		t,
@@ -119,10 +128,12 @@ func TestResilienceValidate_RemainingBranches(t *testing.T) {
 
 	// Retry: the max_retries and max_interval guards.
 	badRetries := resilience.DefaultRetryConfig()
+
 	badRetries.MaxRetries = -1
 	require.Error(t, badRetries.Validate(), "a negative max_retries must be rejected")
 
 	badMaxInterval := resilience.DefaultRetryConfig()
+
 	badMaxInterval.MaxInterval = -1
 	assert.Error(t, badMaxInterval.Validate(), "a negative max_interval must be rejected")
 }
@@ -155,23 +166,29 @@ func TestLayerConfigValidate_RemainingBranches(t *testing.T) {
 
 	// repos: each duration/version guard.
 	badTTL := repos.DefaultConfig()
+
 	badTTL.Caching.TTL = -1
 	require.Error(t, badTTL.Validate(), "a negative cache TTL must be rejected")
 
 	badVersion := repos.DefaultConfig()
+
 	badVersion.Caching.Version = -1
 	require.Error(t, badVersion.Validate(), "a negative cache version must be rejected")
 
 	// stores: an ORM kind no store kind implements.
 	badKind := stores.DefaultConfig()
+
 	badKind.Kind = "mongo"
 	require.Error(t, badKind.Validate(), "an unknown store kind must be rejected")
+
 	gormKind := stores.DefaultConfig()
+
 	gormKind.Kind = "gorm"
 	require.NoError(t, gormKind.Validate(), "gorm is a store kind")
 
 	// pipelines: non-positive multipart sizes.
 	badThreshold := pipelines.DefaultConfig()
+
 	badThreshold.Upload.MultipartThresholdBytes = 0
 	require.Error(
 		t,
@@ -180,6 +197,7 @@ func TestLayerConfigValidate_RemainingBranches(t *testing.T) {
 	)
 
 	badPartSize := pipelines.DefaultConfig()
+
 	badPartSize.Upload.MultipartPartSizeBytes = 0
 	require.Error(
 		t,
@@ -189,10 +207,12 @@ func TestLayerConfigValidate_RemainingBranches(t *testing.T) {
 
 	// stores: the branches the existing test does not cover.
 	badMaxPage := stores.DefaultConfig()
+
 	badMaxPage.MaxPageSize = -1
 	require.Error(t, badMaxPage.Validate(), "a negative max_page_size must be rejected")
 
 	badCountCap := stores.DefaultConfig()
+
 	badCountCap.CountCap = -1
 	require.Error(t, badCountCap.Validate(), "a negative count_cap must be rejected")
 
@@ -205,15 +225,20 @@ func TestLayerConfigValidate_RemainingBranches(t *testing.T) {
 	)
 	assert.Equal(t, 45*time.Second, stores.DefaultConfig().Cache.SuggestTTL)
 	assert.Equal(t, 60*time.Second, stores.DefaultConfig().Cache.CountTTL)
+
 	badSuggestTTL := stores.DefaultConfig()
+
 	badSuggestTTL.Cache.SuggestTTL = -1
 	require.Error(t, badSuggestTTL.Validate(), "a negative suggest_ttl must be rejected")
+
 	badCountTTL := stores.DefaultConfig()
+
 	badCountTTL.Cache.CountTTL = -1
 	require.Error(t, badCountTTL.Validate(), "a negative count_ttl must be rejected")
 
 	// transport: the header-cap guard.
 	badHeader := transport.DefaultConfig()
+
 	badHeader.MaxHeaderBytes = -1
 	require.Error(t, badHeader.Validate(), "a negative max_header_bytes must be rejected")
 

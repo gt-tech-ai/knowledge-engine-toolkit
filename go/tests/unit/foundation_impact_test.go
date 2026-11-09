@@ -24,6 +24,7 @@ import (
 //     sorted.
 func TestFoundationImpact_Affected(t *testing.T) {
 	t.Parallel()
+
 	m := impact.Map[string]{
 		Owned: map[string][]string{
 			"staging": {"envs/staging"}, "partner": {"envs/partner"},
@@ -58,6 +59,7 @@ func TestFoundationImpact_Affected(t *testing.T) {
 //   - SplitPaths splits NUL- and newline-separated git output, dropping empties.
 func TestFoundationImpact_Classify(t *testing.T) {
 	t.Parallel()
+
 	classes := []impact.Class{
 		{Name: "go", Patterns: []string{`^shared/`, `\.go$`}},
 		{Name: "docs", Patterns: []string{`^shared/`, `^docs/`}},

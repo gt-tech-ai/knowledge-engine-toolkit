@@ -18,6 +18,7 @@ func NewRateLimit(l interfaces.RateLimiter) OpMiddleware {
 					op+": rate limit exceeded",
 				)
 			}
+
 			return next(ctx)
 		},
 	)

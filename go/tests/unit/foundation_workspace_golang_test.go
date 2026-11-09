@@ -34,9 +34,11 @@ func wsGoMod(t *testing.T, dir string) {
 // goListOut answers a mocked `go list` with the given packages (none: empty output).
 func goListOut(pkgs ...string) interfaces.CmdResult {
 	var out strings.Builder
+
 	for _, p := range pkgs {
 		out.WriteString(p + "\n")
 	}
+
 	return interfaces.CmdResult{Stdout: []byte(out.String())}
 }
 
@@ -53,6 +55,7 @@ func goListOut(pkgs ...string) interfaces.CmdResult {
 //   - A missing go.work is CodeNotFound; a malformed one is CodeInvalidInput.
 func TestGoWorkModules(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	wsWrite(
 		t,
@@ -76,6 +79,7 @@ func TestGoWorkModules(t *testing.T) {
 
 	bad := t.TempDir()
 	wsWrite(t, filepath.Join(bad, "go.work"), "go 1.26.5\nuse (\n")
+
 	_, err = golang.GoWorkModules(os.DirFS(bad), nil)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err)
 }
@@ -97,6 +101,7 @@ func TestGoWorkModules(t *testing.T) {
 //   - A go.work with no go directive is CodeInvalidInput; a missing one CodeNotFound.
 func TestScopedWork(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	wsWrite(t, filepath.Join(root, "go.work"), `go 1.26.5
 
@@ -125,6 +130,7 @@ replace (
 
 	data, err := golang.ScopedWork(os.DirFS(root), root, "a")
 	require.NoError(t, err)
+
 	content := string(data)
 	assert.Contains(t, content, "go 1.26.5\n")
 	assert.Contains(t, content, "toolchain go1.26.6\n")
@@ -142,10 +148,12 @@ replace (
 
 	bad := t.TempDir()
 	wsWrite(t, filepath.Join(bad, "go.work"), "use (\n\t.\n)\n")
+
 	_, err = golang.ScopedWork(os.DirFS(bad), bad, "a")
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err)
 
 	missing := t.TempDir()
+
 	_, err = golang.ScopedWork(os.DirFS(missing), missing, "a")
 	assert.True(t, apperr.Is(err, apperr.CodeNotFound), err)
 }
@@ -161,12 +169,14 @@ replace (
 //   - A missing go.mod, or one with no module directive, is CodeNotFound.
 func TestModulePath(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	wsWrite(
 		t,
 		filepath.Join(root, "go.mod"),
 		"module github.com/example/shelf\n\ngo 1.26\n",
 	)
+
 	got, err := golang.ModulePath(os.DirFS(root))
 	require.NoError(t, err)
 	assert.Equal(t, "github.com/example/shelf", got)
@@ -176,6 +186,7 @@ func TestModulePath(t *testing.T) {
 
 	noModule := t.TempDir()
 	wsWrite(t, filepath.Join(noModule, "go.mod"), "go 1.26\n")
+
 	_, err = golang.ModulePath(os.DirFS(noModule))
 	assert.True(t, apperr.Is(err, apperr.CodeNotFound), err)
 }
@@ -191,6 +202,7 @@ func TestModulePath(t *testing.T) {
 //   - A nested *.pb.go is found; an empty or missing directory reports false.
 func TestHasGeneratedPackages(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen", "pb"), 0o755))
 	assert.False(t, golang.HasGeneratedPackages(os.DirFS(root), "gen/pb"), "empty dir")
@@ -217,11 +229,13 @@ func TestHasGeneratedPackages(t *testing.T) {
 //   - keep drops a module by relative path; no staged files is nil.
 func TestStagedModules(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	wsGoMod(t, root)
 	wsGoMod(t, filepath.Join(root, "libs", "alpha"))
 	wsGoMod(t, filepath.Join(root, "libs", "beta"))
 	wsGoMod(t, filepath.Join(root, "gen", "pb"))
+
 	fsys := os.DirFS(root)
 
 	got := golang.StagedModules(fsys, []string{
@@ -246,6 +260,7 @@ func TestStagedModules(t *testing.T) {
 //   - IsRaceSupported is false exactly on windows/arm64.
 func TestIsRaceSupported(t *testing.T) {
 	t.Parallel()
+
 	winArm := runtime.GOOS == "windows" && runtime.GOARCH == "arm64"
 	assert.Equal(t, !winArm, golang.IsRaceSupported())
 }
@@ -264,6 +279,7 @@ func TestIsRaceSupported(t *testing.T) {
 //   - A failed listing runs once; both calls return the same error.
 func TestLister_GoListPackagesMemoizes(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	okDir := filepath.Join(t.TempDir(), "ok")
 	badDir := filepath.Join(t.TempDir(), "bad")
@@ -279,25 +295,33 @@ func TestLister_GoListPackagesMemoizes(t *testing.T) {
 		}).Times(1)
 
 	const goroutines = 20
+
 	results := make([][]string, goroutines)
+
 	var wg sync.WaitGroup
+
 	for i := range goroutines {
 		wg.Go(func() {
 			pkgs, err := lister.GoListPackages(ctx, runner, okDir)
 			assert.NoError(t, err)
+
 			results[i] = pkgs
 		})
 	}
+
 	wg.Wait()
+
 	later, err := lister.GoListPackages(ctx, runner, okDir)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"example.com/ok", "example.com/ok/sub"}, later)
+
 	for i, r := range results {
 		assert.Equal(t, later, r, "concurrent call %d saw a different result", i)
 	}
 
 	_, errFirst := lister.GoListPackages(ctx, runner, badDir)
 	require.Error(t, errFirst)
+
 	_, errSecond := lister.GoListPackages(ctx, runner, badDir)
 	require.Error(t, errSecond)
 	assert.Equal(t, errFirst.Error(), errSecond.Error(), "the cached error is returned")
@@ -317,11 +341,14 @@ func TestLister_GoListPackagesMemoizes(t *testing.T) {
 //     `go list` fails is dropped. Survivors keep their input order.
 func TestLister_FilterModulesWithGoPackages(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	for _, mod := range []string{"a", "empty", "notmod", "b"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, mod), 0o755))
 	}
+
 	wsGoMod(t, filepath.Join(root, "broken"))
+
 	failed := interfaces.CmdResult{
 		Err:    apperr.New(apperr.CodeInternal, "exit status 1"),
 		Stderr: []byte("conflict"),
@@ -358,10 +385,12 @@ func TestLister_FilterModulesWithGoPackages(t *testing.T) {
 //   - A load failure inside a real module → true; inside a non-module dir → false.
 func TestLister_HasGoPackagesWithTags(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	module, notModule := filepath.Join(root, "m"), filepath.Join(root, "n")
 	require.NoError(t, os.MkdirAll(notModule, 0o750))
 	wsGoMod(t, module)
+
 	failed := interfaces.CmdResult{Err: apperr.New(apperr.CodeInternal, "exit status 1")}
 
 	cases := []struct {
@@ -402,6 +431,7 @@ func TestLister_HasGoPackagesWithTags(t *testing.T) {
 //     CodeInvalidInput.
 func TestWorkspaceGraph(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	wsWrite(
 		t,
@@ -434,6 +464,7 @@ func TestWorkspaceGraph(t *testing.T) {
 	read := func(rel string) []byte {
 		b, err := os.ReadFile(filepath.Join(root, rel))
 		require.NoError(t, err)
+
 		return b
 	}
 	parsed, err := golang.ParseWorkspaceGraph(read("go.work"), map[string][]byte{
@@ -446,6 +477,7 @@ func TestWorkspaceGraph(t *testing.T) {
 
 	_, err = golang.WorkspaceGraph(os.DirFS(t.TempDir()))
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
+
 	_, err = golang.ParseWorkspaceGraph([]byte("use (\n"), nil)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

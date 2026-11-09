@@ -75,6 +75,7 @@ func (rs StepResults) HasFailures() bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -86,6 +87,7 @@ func (rs StepResults) AllPassed() bool {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -95,17 +97,20 @@ func (rs StepResults) CountByStatus() map[StepStatus]int {
 	for _, r := range rs {
 		counts[r.Status]++
 	}
+
 	return counts
 }
 
 // FailedNames returns the names of all failed steps.
 func (rs StepResults) FailedNames() []string {
 	var names []string
+
 	for _, r := range rs {
 		if r.Status == StatusFail {
 			names = append(names, r.Name)
 		}
 	}
+
 	return names
 }
 
@@ -116,6 +121,7 @@ func NewStep(name string, status StepStatus, err error) StepResult {
 	if err != nil {
 		r.Error = err.Error()
 	}
+
 	return r
 }
 
@@ -137,6 +143,7 @@ func CheckStep(name string, err error) (StepResults, error) {
 	if err != nil {
 		return OneStep(name, StatusFail, err), err
 	}
+
 	return OneStep(name, StatusPass, nil), nil
 }
 

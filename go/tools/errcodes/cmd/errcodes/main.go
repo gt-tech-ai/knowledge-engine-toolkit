@@ -20,9 +20,12 @@ import (
 // main parses -root and writes the outputs, exiting 1 on any error.
 func main() {
 	root := flag.String("root", ".", "the repository root")
+
 	flag.Parse()
+
 	if err := run(context.Background(), *root); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "errcodes:", err)
+
 		os.Exit(1)
 	}
 }
@@ -30,10 +33,12 @@ func main() {
 // run renders the taxonomy under root and writes each output beneath it.
 func run(ctx context.Context, root string) error {
 	cb := codebase.New(fscodebase.New(root), codebase.NewSnapshot("errcodes"), nil)
+
 	out, err := errcodes.New().Render(ctx, cb)
 	if err != nil {
 		return err
 	}
+
 	return gen.Apply(ctx, func(p string, data []byte) error {
 		dst := filepath.Join(root, filepath.FromSlash(p))
 		// A committed source file, readable like every other one.
@@ -41,6 +46,7 @@ func run(ctx context.Context, root string) error {
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "write "+p)
 		}
+
 		return nil
 	}, out)
 }

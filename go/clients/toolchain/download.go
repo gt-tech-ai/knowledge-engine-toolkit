@@ -75,16 +75,20 @@ func (d httpDownloader) Fetch(ctx context.Context, url string) (io.ReadCloser, e
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "build request for "+url)
 	}
+
 	resp, err := d.client.Do(req)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeUnavailable, "download "+url)
 	}
+
 	if resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()
+
 		return nil, apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
 			"download %s: HTTP %d", url, resp.StatusCode,
 		))
 	}
+
 	return resp.Body, nil
 }
 
@@ -94,6 +98,7 @@ func platformOS(platform string) string {
 	if strings.HasPrefix(platform, "linux") {
 		return "linux"
 	}
+
 	return platform
 }
 
@@ -110,6 +115,7 @@ func (i *Installer) installDownload(
 	goos := platformOS(i.platform)
 	target := goos + "-" + i.arch
 	artifact, ok := dl.Artifacts[target]
+
 	if !ok && target == windowsARM64 {
 		artifact, ok = dl.Artifacts[windowsAMD64]
 		if ok {
@@ -117,6 +123,7 @@ func (i *Installer) installDownload(
 				"(runs under x64 emulation)", "tool", toolName)
 		}
 	}
+
 	if !ok || artifact.SHA256 == "" {
 		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
 			"%s %s has no pinned sha256 for %s; refusing an unverified download",
@@ -131,6 +138,7 @@ func (i *Installer) installDownload(
 			"cannot resolve the install dir (GOBIN)",
 		)
 	}
+
 	if err := os.MkdirAll(binDir, 0o750); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create install dir "+binDir)
 	}
@@ -141,18 +149,22 @@ func (i *Installer) installDownload(
 			"install %s %s (%s)", toolName, dl.Version, target,
 		))
 	}
+
 	defer func() { _ = os.Remove(archive) }()
 
 	binary := dl.Binary
 	if goos == osWindows {
 		binary += ".exe"
 	}
+
 	member := cmp.Or(artifact.Member, binary)
 	if err := placeBinary(archive, artifact.URL, member, binary, binDir); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "install "+toolName)
 	}
+
 	i.log.Info("installed (sha256 verified)",
 		"tool", toolName, "version", dl.Version, "path", filepath.Join(binDir, binary))
+
 	return nil
 }
 
@@ -167,33 +179,41 @@ func (i *Installer) fetchVerified(
 	if err != nil {
 		return "", err
 	}
+
 	defer func() { _ = body.Close() }()
 
 	tmp, err := os.CreateTemp("", "search-tool-*")
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "create download temp file")
 	}
+
 	hash := sha256.New()
 	n, copyErr := io.Copy(
 		io.MultiWriter(tmp, hash),
 		io.LimitReader(body, maxDownloadSize+1),
 	)
+
 	if copyErr == nil && n > maxDownloadSize {
 		copyErr = apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"artifact exceeds %d bytes", int64(maxDownloadSize),
 		))
 	}
+
 	closeErr := tmp.Close()
 	if err := apperr.Join(copyErr, closeErr); err != nil {
 		_ = os.Remove(tmp.Name())
+
 		return "", apperr.Wrap(err, apperr.CodeUnavailable, "read "+artifact.URL)
 	}
+
 	if got := hex.EncodeToString(hash.Sum(nil)); got != artifact.SHA256 {
 		_ = os.Remove(tmp.Name())
+
 		return "", apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"sha256 mismatch for %s: got %s, want %s", artifact.URL, got, artifact.SHA256,
 		))
 	}
+
 	return tmp.Name(), nil
 }
 
@@ -207,22 +227,29 @@ func placeBinary(artifactPath, url, member, binary, binDir string) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "stage binary in "+binDir)
 	}
+
 	stagedPath := staged.Name()
 	writeErr := extractBinary(artifactPath, url, member, staged)
 	closeErr := staged.Close()
+
 	if err := apperr.Join(writeErr, closeErr); err != nil {
 		_ = os.Remove(stagedPath)
+
 		return err
 	}
 
 	if err := os.Chmod(stagedPath, 0o755); err != nil {
 		_ = os.Remove(stagedPath)
+
 		return apperr.Wrap(err, apperr.CodeInternal, "mark binary executable")
 	}
+
 	if err := os.Rename(stagedPath, filepath.Join(binDir, binary)); err != nil {
 		_ = os.Remove(stagedPath)
+
 		return apperr.Wrap(err, apperr.CodeInternal, "place binary "+binary)
 	}
+
 	return nil
 }
 
@@ -249,12 +276,16 @@ func extractFromGz(src string, w io.Writer) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open verified archive")
 	}
+
 	defer func() { _ = f.Close() }()
+
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "read gzip archive")
 	}
+
 	defer func() { _ = gz.Close() }()
+
 	return boundedCopy(w, gz)
 }
 
@@ -264,7 +295,9 @@ func copyFile(src string, w io.Writer) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open verified artifact")
 	}
+
 	defer func() { _ = f.Close() }()
+
 	return boundedCopy(w, f)
 }
 
@@ -275,21 +308,27 @@ func extractFromTarGz(src, binary string, w io.Writer) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open verified archive")
 	}
+
 	defer func() { _ = f.Close() }()
+
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "read gzip archive")
 	}
+
 	defer func() { _ = gz.Close() }()
+
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
 		if apperr.StdIs(err, io.EOF) {
 			return missingEntry(binary)
 		}
+
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "read tar archive")
 		}
+
 		if hdr.Typeflag == tar.TypeReg && path.Base(hdr.Name) == binary {
 			return boundedCopy(w, tr)
 		}
@@ -303,12 +342,15 @@ func extractFromZip(src, binary string, w io.Writer) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "read zip archive")
 	}
+
 	defer func() { _ = zr.Close() }()
+
 	for _, entry := range zr.File {
 		if !entry.FileInfo().IsDir() && path.Base(entry.Name) == binary {
 			return copyZipEntry(entry, w)
 		}
 	}
+
 	return missingEntry(binary)
 }
 
@@ -318,7 +360,9 @@ func copyZipEntry(entry *zip.File, w io.Writer) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "open zip entry "+entry.Name)
 	}
+
 	defer func() { _ = rc.Close() }()
+
 	return boundedCopy(w, rc)
 }
 
@@ -328,12 +372,14 @@ func boundedCopy(w io.Writer, r io.Reader) error {
 	if err != nil && !apperr.StdIs(err, io.EOF) {
 		return apperr.Wrap(err, apperr.CodeInternal, "extract binary")
 	}
+
 	if n > maxBinarySize {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"binary exceeds the extraction size cap",
 		)
 	}
+
 	return nil
 }
 

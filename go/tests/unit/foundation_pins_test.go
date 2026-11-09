@@ -80,6 +80,7 @@ func pinsPolicy() pins.Policy {
 //     has no managers.
 func TestFoundationPins_Detect(t *testing.T) {
 	t.Parallel()
+
 	got, err := pins.Detect(t.Context(), memoryCodebase(t, pinsEcosystems()))
 	require.NoError(t, err)
 	assert.Equal(t, []pins.Manager{
@@ -212,6 +213,7 @@ const pinsGolden = `{
 //     manager's unset lists are omitted rather than rendered as null.
 func TestFoundationPins_Render(t *testing.T) {
 	t.Parallel()
+
 	e := pins.EcosystemSet{
 		Managers:    []pins.Manager{pins.ManagerGomod, pins.ManagerGithubActions},
 		IgnorePaths: []string{".venv/**", "**/node_modules/**"},
@@ -227,6 +229,7 @@ func TestFoundationPins_Render(t *testing.T) {
 	assert.Equal(t, got, again)
 
 	bare := pinsPolicy()
+
 	bare.CustomManagers[0].Value = pins.CustomManager{CustomType: "regex"}
 	got, err = pins.Render(e, bare)
 	require.NoError(t, err)
@@ -252,11 +255,14 @@ func TestFoundationPins_Render(t *testing.T) {
 //     a Dockerfile makes renovate.json drift.
 func TestFoundationPins_Generator(t *testing.T) {
 	t.Parallel()
+
 	g := pins.NewGenerator("", pinsPolicy())
 	assert.Equal(t, "renovate", g.Name())
+
 	files := map[string]string{"go.mod": "module example.com/mono\n"}
 	out, err := g.Render(t.Context(), memoryCodebase(t, files))
 	require.NoError(t, err)
+
 	files[pins.ConfigFileName] = string(out[pins.ConfigFileName])
 
 	d, err := gen.Check(t.Context(), memoryCodebase(t, files), g)

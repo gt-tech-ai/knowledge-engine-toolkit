@@ -20,45 +20,56 @@ func ParseSort(m *Map, spec string) ([]types.OrderField, error) {
 	if strings.TrimSpace(spec) == "" {
 		return nil, nil
 	}
+
 	var out []types.OrderField
+
 	seen := make(map[string]bool)
+
 	for tok := range strings.SplitSeq(spec, ",") {
 		of, err := parseSortToken(m, tok)
 		if err != nil {
 			return nil, err
 		}
+
 		if seen[of.Field] {
 			return nil, apperr.New(
 				apperr.CodeInvalidInput,
 				"sort: field repeated: "+of.Field,
 			)
 		}
+
 		seen[of.Field] = true
 		out = append(out, of)
 	}
+
 	return out, nil
 }
 
 // parseSortToken parses one `field[:dir]` token against the sortable allow-list.
 func parseSortToken(m *Map, tok string) (types.OrderField, error) {
 	field, dir, hasDir := strings.Cut(tok, ":")
+
 	field = strings.TrimSpace(field)
+
 	if field == "" {
 		return types.OrderField{}, apperr.New(
 			apperr.CodeInvalidInput,
 			"sort: empty field",
 		)
 	}
+
 	if !m.Sortable(field) {
 		return types.OrderField{}, apperr.New(
 			apperr.CodeInvalidInput,
 			"sort: field not sortable: "+field,
 		)
 	}
+
 	of := types.OrderField{Field: field}
 	if !hasDir {
 		return of, nil
 	}
+
 	switch dir = strings.TrimSpace(dir); {
 	case strings.EqualFold(dir, "asc"):
 	case strings.EqualFold(dir, "desc"):
@@ -69,5 +80,6 @@ func parseSortToken(m *Map, tok string) (types.OrderField, error) {
 			"sort: direction must be asc or desc: "+dir,
 		)
 	}
+
 	return of, nil
 }

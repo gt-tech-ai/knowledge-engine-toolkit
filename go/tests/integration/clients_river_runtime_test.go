@@ -33,6 +33,7 @@ func (w *pingWorker) Work(_ context.Context, _ *river.Job[pingArgs]) error {
 	case w.fired <- struct{}{}:
 	default:
 	}
+
 	return nil
 }
 
@@ -51,7 +52,9 @@ func TestRiverRuntime_PeriodicJobFiresAndStops(t *testing.T) {
 	ctx := context.Background()
 	db, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err)
+
 	defer db.Close(ctx)
+
 	require.NoError(t, riverclient.Migrate(ctx, db.GetDSN()))
 
 	fired := make(chan struct{}, 1)
@@ -85,5 +88,6 @@ func TestRiverRuntime_PeriodicJobFiresAndStops(t *testing.T) {
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
 	require.NoError(t, rt.Stop(stopCtx))
 }

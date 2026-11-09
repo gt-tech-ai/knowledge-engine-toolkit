@@ -24,6 +24,7 @@ func (d *Dataset) Decode(out any) error {
 			"dataset decode needs a non-nil pointer to a struct",
 		)
 	}
+
 	fields := fieldsByKey(v.Elem().Type())
 	for _, key := range d.keys() {
 		idx, ok := fields[key]
@@ -31,10 +32,12 @@ func (d *Dataset) Decode(out any) error {
 			return apperr.New(apperr.CodeInvalidInput,
 				"data key "+`"`+key+`"`+" in "+d.sourceOf(key)+" has no field")
 		}
+
 		if err := d.decodeInto(key, v.Elem().Field(idx).Addr().Interface()); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -44,16 +47,20 @@ func (d *Dataset) decodeInto(key string, dst any) error {
 	if err != nil {
 		return err
 	}
+
 	raw, err := yaml.Marshal(node)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "re-encode section "+key)
 	}
+
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	dec.KnownFields(true)
+
 	if err := dec.Decode(dst); err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput,
 			"decode section "+key+" from "+d.sourceOf(key))
 	}
+
 	return nil
 }
 
@@ -61,11 +68,13 @@ func (d *Dataset) decodeInto(key string, dst any) error {
 // the lower-cased field name when untagged. A field tagged "-" is skipped.
 func fieldsByKey(t reflect.Type) map[string]int {
 	out := map[string]int{}
+
 	for i := range t.NumField() {
 		f := t.Field(i)
 		if !f.IsExported() {
 			continue
 		}
+
 		name, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
 		switch name {
 		case "-":
@@ -73,7 +82,9 @@ func fieldsByKey(t reflect.Type) map[string]int {
 		case "":
 			name = strings.ToLower(f.Name)
 		}
+
 		out[name] = i
 	}
+
 	return out
 }

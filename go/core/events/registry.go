@@ -39,20 +39,26 @@ func (r *Registry) Register(eventType EventType, factory Factory) error {
 	if eventType == "" {
 		return apperr.InvalidInput("event type must not be empty")
 	}
+
 	if err := checkFactory(eventType, factory); err != nil {
 		return err
 	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if _, exists := r.factories[eventType]; exists {
 		return apperr.InvalidInput(
 			fmt.Sprintf("event type %q already registered", eventType),
 		)
 	}
+
 	if r.factories == nil {
 		r.factories = make(map[EventType]Factory)
 	}
+
 	r.factories[eventType] = factory
+
 	return nil
 }
 
@@ -64,6 +70,7 @@ func checkFactory(eventType EventType, factory Factory) error {
 			fmt.Sprintf("nil factory for event type %q", eventType),
 		)
 	}
+
 	v := reflect.ValueOf(factory())
 	if v.Kind() != reflect.Pointer || v.IsNil() {
 		return apperr.InvalidInput(fmt.Sprintf(
@@ -71,6 +78,7 @@ func checkFactory(eventType EventType, factory Factory) error {
 			eventType, v.Kind(),
 		))
 	}
+
 	return nil
 }
 
@@ -84,23 +92,30 @@ func (r *Registry) Parse(data []byte) (Event, error) {
 	var envelope struct {
 		EventType EventType `json:"event_type"`
 	}
+
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse event")
 	}
+
 	if envelope.EventType == "" {
 		return nil, apperr.InvalidInput("event payload has no event_type")
 	}
+
 	r.mu.RLock()
+
 	factory, ok := r.factories[envelope.EventType]
 	r.mu.RUnlock()
+
 	if !ok {
 		return nil, apperr.InvalidInput(
 			fmt.Sprintf("unknown event type: %s", envelope.EventType),
 		)
 	}
+
 	event := factory()
 	if err := json.Unmarshal(data, event); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse event")
 	}
+
 	return event, nil
 }

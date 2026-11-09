@@ -16,10 +16,13 @@ func AddToPathIfMissing(dir string, log interfaces.Logger) {
 	for _, p := range filepath.SplitList(pathEnv) {
 		if strings.EqualFold(p, dir) {
 			log.Debug("PATH entry already present", "dir", dir)
+
 			return
 		}
 	}
+
 	log.Info("Adding to PATH", "dir", dir)
+
 	_ = os.Setenv("PATH", dir+string(os.PathListSeparator)+pathEnv)
 }
 
@@ -29,14 +32,17 @@ func resolveGoBin() string {
 	if gobin := os.Getenv("GOBIN"); gobin != "" {
 		return gobin
 	}
+
 	gopath := os.Getenv("GOPATH")
 	if gopath == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return ""
 		}
+
 		gopath = filepath.Join(home, "go")
 	}
+
 	return filepath.Join(gopath, "bin")
 }
 
@@ -47,7 +53,9 @@ func (i *Installer) ensureGoBinInPath() {
 	if gobin == "" {
 		return
 	}
+
 	AddToPathIfMissing(gobin, i.log)
+
 	if i.platform == osWindows && i.arch == archARM64 {
 		AddToPathIfMissing(filepath.Join(gobin, "windows_amd64"), i.log)
 	}
@@ -70,10 +78,12 @@ func (i *Installer) addInstallDirToPath(tool *types.ToolDef) {
 	if !ok {
 		return
 	}
+
 	switch {
 	case isGoInstall(method) || method.Download != nil:
 		if gobin := resolveGoBin(); gobin != "" {
 			AddToPathIfMissing(gobin, i.log)
+
 			if i.platform == osWindows && i.arch == archARM64 {
 				AddToPathIfMissing(filepath.Join(gobin, "windows_amd64"), i.log)
 			}

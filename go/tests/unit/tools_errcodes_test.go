@@ -24,12 +24,16 @@ const repoRoot = "../../.."
 // keyed by their repository-relative paths.
 func committedTaxonomy(t *testing.T) map[string]string {
 	t.Helper()
+
 	files := map[string]string{}
+
 	for _, p := range []string{errcodes.SourcePath, errcodes.GoPath, errcodes.PythonPath} {
 		b, err := os.ReadFile(filepath.FromSlash(repoRoot + "/" + p))
 		require.NoError(t, err)
+
 		files[p] = string(b)
 	}
+
 	return files
 }
 
@@ -46,6 +50,7 @@ func committedTaxonomy(t *testing.T) map[string]string {
 //     repository reports both in sync.
 func TestErrcodes_CommittedOutputsMatchTaxonomy(t *testing.T) {
 	t.Parallel()
+
 	cb := codebase.New(
 		fscodebase.New(filepath.FromSlash(repoRoot)),
 		codebase.NewSnapshot("errcodes"),
@@ -77,6 +82,7 @@ func TestErrcodes_CommittedOutputsMatchTaxonomy(t *testing.T) {
 //     makes gen.Check report that one path out of sync.
 func TestErrcodes_HandEditIsDrift(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		name, path, from, to string
 	}{
@@ -94,8 +100,10 @@ func TestErrcodes_HandEditIsDrift(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			files := committedTaxonomy(t)
 			require.Contains(t, files[tc.path], tc.from)
+
 			files[tc.path] = strings.Replace(files[tc.path], tc.from, tc.to, 1)
 
 			d, err := gen.Check(t.Context(), memoryCodebase(t, files), errcodes.New())
@@ -118,6 +126,7 @@ func TestErrcodes_HandEditIsDrift(t *testing.T) {
 //     field and a row missing its Go name each fail Render with CodeInvalidInput.
 func TestErrcodes_RejectsInvalidTaxonomy(t *testing.T) {
 	t.Parallel()
+
 	row := func(fields string) string {
 		return "codes:\n  - code: A\n    go: CodeA\n    doc: a\n    http: 500\n" + fields
 	}
@@ -130,9 +139,11 @@ func TestErrcodes_RejectsInvalidTaxonomy(t *testing.T) {
 		"missing go": "codes:\n  - {code: A, doc: a, http: 500, grpc: INTERNAL," +
 			" retry: none}\n",
 	}
+
 	for name, src := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			cb := memoryCodebase(t, map[string]string{errcodes.SourcePath: src})
 
 			_, err := errcodes.New().Render(t.Context(), cb)

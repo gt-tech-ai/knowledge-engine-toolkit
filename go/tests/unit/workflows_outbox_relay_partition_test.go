@@ -26,7 +26,9 @@ import (
 func TestRelayConfig_Partitions(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, outbox.DefaultRelayConfig("audit").Validate())
+
 	cfg := outbox.DefaultRelayConfig("audit")
+
 	cfg.Partitions, cfg.Partition = 3, 2
 	require.NoError(t, cfg.Validate())
 
@@ -46,10 +48,13 @@ func TestRelayConfig_Partitions(t *testing.T) {
 //   - a relay configured for partition 2 of 3 calls Claim with partition 2
 func TestRelay_ClaimsItsPartition(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockOutboxStore(ctrl)
 	cfg := relayConfig(10, 1, 3)
+
 	cfg.Partitions, cfg.Partition = 3, 2
+
 	store.EXPECT().Claim(gomock.Any(), "audit", 2, 100).Return(nil, nil)
 
 	relay := outbox.NewRelay(cfg, relayTx(t), store, mocks.NewMockOutboxSink(ctrl), nil,

@@ -26,6 +26,7 @@ import (
 //     explicit --source winget appended after the method's own args.
 func TestClientsToolchainInstaller_Install_WingetAddsNonInteractiveFlags(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().Run(
@@ -65,10 +66,12 @@ func TestClientsToolchainInstaller_Install_WingetAddsNonInteractiveFlags(t *test
 //     GOTOOLCHAIN=local, GOARCH=amd64, and CGO_ENABLED=0 in the environment.
 func TestClientsToolchainInstaller_Install_WindowsArm64CrossCompiles(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 
 	var gotEnv, gotArgs []string
+
 	r.EXPECT().RunWithEnv(gomock.Any(), "/root", gomock.Any(), "go", gomock.Any()).
 		DoAndReturn(func(
 			_ context.Context,
@@ -78,6 +81,7 @@ func TestClientsToolchainInstaller_Install_WindowsArm64CrossCompiles(t *testing.
 			args ...string,
 		) error {
 			gotEnv, gotArgs = env, args
+
 			return nil
 		})
 
@@ -116,6 +120,7 @@ func TestClientsToolchainInstaller_Install_WindowsArm64CrossCompiles(t *testing.
 //     mock with no powershell expectation fails if the native path is taken.
 func TestClientsToolchainInstaller_Install_WindowsPrefersGoInstall(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl) // strict: only the go-install call is allowed
 	r.EXPECT().

@@ -21,5 +21,6 @@ func SplitCode(text string) (code, rest string, ok bool) {
 	if !found || !codeShape.MatchString(prefix) {
 		return "", "", false
 	}
+
 	return prefix, rest, true
 }

@@ -151,6 +151,7 @@ func (m InstallMethodEntry) validate() error {
 		InstallKindURL: {"url kind requires an https:// url", []string{m.URL}},
 	}
 	req, known := required[m.Kind]
+
 	switch {
 	case !known:
 		return apperr.New(apperr.CodeInvalidInput,
@@ -162,6 +163,7 @@ func (m InstallMethodEntry) validate() error {
 	case m.Kind == InstallKindGitHubRelease || m.Kind == InstallKindURL:
 		return m.validateDownload()
 	}
+
 	return nil
 }
 
@@ -188,11 +190,13 @@ func (m InstallMethodEntry) validateDownload() error {
 			fmt.Sprintf("%s kind requires version, binary, and assets", m.Kind),
 		)
 	}
+
 	if !filepath.IsLocal(m.Binary) || strings.ContainsAny(m.Binary, `/\`) {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"binary %q must be a plain file name", m.Binary,
 		))
 	}
+
 	for platform, a := range m.Assets {
 		if !assetPlatforms(platform) {
 			return apperr.New(
@@ -200,12 +204,14 @@ func (m InstallMethodEntry) validateDownload() error {
 				fmt.Sprintf("asset platform %q is not an os-arch key", platform),
 			)
 		}
+
 		if a.Name == "" || !sha256Hex.MatchString(a.SHA256) {
 			return apperr.New(
 				apperr.CodeInvalidInput,
 				fmt.Sprintf("asset %q needs a name and a 64-hex sha256", platform),
 			)
 		}
+
 		if unsupportedArchive(a.Name) {
 			return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 				"asset %q (%s) is an archive format the installer can't extract (%s)",
@@ -213,6 +219,7 @@ func (m InstallMethodEntry) validateDownload() error {
 			))
 		}
 	}
+
 	return nil
 }
 
@@ -220,6 +227,7 @@ func (m InstallMethodEntry) validateDownload() error {
 // other than the ones the installer extracts.
 func unsupportedArchive(name string) bool {
 	has := func(sfx string) bool { return strings.HasSuffix(name, sfx) }
+
 	return !slices.ContainsFunc(archiveSuffixes(), has) &&
 		slices.ContainsFunc(unpackedSuffixes(), has)
 }
@@ -283,6 +291,7 @@ func (t ToolEntry) InLifecycle() bool { return t.Category != "" }
 // validate reports all structural errors for a single tool entry.
 func (t ToolEntry) validate() []error {
 	var errs []error
+
 	if t.Binary == "" {
 		errs = append(
 			errs,
@@ -292,6 +301,7 @@ func (t ToolEntry) validate() []error {
 			),
 		)
 	}
+
 	if !validVersionParse(t.VersionParse) {
 		errs = append(
 			errs,
@@ -305,6 +315,7 @@ func (t ToolEntry) validate() []error {
 			),
 		)
 	}
+
 	if t.CI && t.Category != CategoryRequired && t.Category != CategoryOptional {
 		errs = append(
 			errs,
@@ -314,6 +325,7 @@ func (t ToolEntry) validate() []error {
 			),
 		)
 	}
+
 	if t.Category != "" && !validCategory(t.Category) {
 		errs = append(
 			errs,
@@ -323,6 +335,7 @@ func (t ToolEntry) validate() []error {
 			),
 		)
 	}
+
 	for platform := range t.Install {
 		method := t.Install[platform]
 		if err := method.validate(); err != nil {
@@ -336,6 +349,7 @@ func (t ToolEntry) validate() []error {
 			)
 		}
 	}
+
 	return errs
 }
 
@@ -363,7 +377,9 @@ func validCategory(c ToolCategory) bool {
 // binary declared by two entries (a lookup by binary would silently pick one).
 func ValidateToolEntries(tools []ToolEntry) []error {
 	var errs []error
+
 	seen := make(map[string]bool, len(tools))
+
 	for i := range tools {
 		errs = append(errs, tools[i].validate()...)
 		if b := tools[i].Binary; b != "" {
@@ -371,8 +387,10 @@ func ValidateToolEntries(tools []ToolEntry) []error {
 				errs = append(errs, apperr.New(apperr.CodeInvalidInput,
 					fmt.Sprintf("tool %q: duplicate binary %q", tools[i].Name, b)))
 			}
+
 			seen[b] = true
 		}
 	}
+
 	return errs
 }

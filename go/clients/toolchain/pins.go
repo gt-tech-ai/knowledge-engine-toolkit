@@ -28,6 +28,7 @@ func (execPathResolver) LookPath(
 	file string,
 ) (string, error) {
 	wrapRes0, wrapErr := exec.LookPath(file)
+
 	return wrapRes0, apperr.Wrap(wrapErr, apperr.CodeInternal, "exec.LookPath")
 }
 
@@ -59,18 +60,23 @@ func (i *Installer) CheckPins(
 	tools []types.ToolDef,
 ) types.StepResults {
 	var out types.StepResults
+
 	for j := range tools {
 		tool := &tools[j]
 		method, ok := i.resolveMethod(tool)
+
 		if !ok || !isGoInstall(method) {
 			continue
 		}
+
 		pkg, want, pinned := strings.Cut(method.Args[len(method.Args)-1], "@")
 		if !pinned {
 			continue
 		}
+
 		out = append(out, i.checkPin(ctx, root, tool, pkg, want))
 	}
+
 	return out
 }
 
@@ -82,6 +88,7 @@ func (i *Installer) checkPin(
 	pkg, want string,
 ) types.StepResult {
 	name := tool.Name + " is the pinned " + want
+
 	path, err := i.paths.LookPath(tool.Binary)
 	if err != nil {
 		return types.StepResult{
@@ -90,8 +97,10 @@ func (i *Installer) checkPin(
 			Error:  "not on PATH",
 		}
 	}
+
 	res := i.runner.RunBuffered(ctx, root, "go", "version", "-m", path)
 	gotPkg, got := buildInfo(string(res.Stdout))
+
 	if res.Err != nil || got == "" {
 		return types.StepResult{
 			Name:   name,
@@ -99,13 +108,16 @@ func (i *Installer) checkPin(
 			Error:  path + " carries no Go build info to check",
 		}
 	}
+
 	if gotPkg == pkg && got == want {
 		return types.StepResult{Name: name, Status: types.StatusPass}
 	}
+
 	fix := "go install " + pkg + "@" + want
 	if i.reinstallHint != nil {
 		fix = i.reinstallHint(tool.Binary, pkg+"@"+want)
 	}
+
 	return types.StepResult{
 		Name:   name,
 		Status: types.StatusFail,
@@ -135,6 +147,7 @@ func buildInfo(out string) (pkg, version string) {
 			version = fields[2]
 		}
 	}
+
 	return pkg, version
 }
 
@@ -152,16 +165,20 @@ func (i *Installer) InstalledVersion(
 	if err != nil {
 		return ""
 	}
+
 	res := i.runner.RunBuffered(ctx, root, "go", "version", "-m", path)
 	if pkg, ver := buildInfo(string(res.Stdout)); res.Err == nil && ver != "" {
 		return pkg + "@" + ver
 	}
+
 	if len(tool.VersionCmd) == 0 {
 		return ""
 	}
+
 	out := i.runner.RunBuffered(ctx, root, tool.VersionCmd[0], tool.VersionCmd[1:]...)
 	if out.Err != nil {
 		return ""
 	}
+
 	return strings.TrimSpace(string(out.Stdout))
 }

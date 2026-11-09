@@ -82,10 +82,12 @@ func keysetReader(rows []int, sort []types.OrderField) listquery.Reader[int, int
 //     default-ordered offset page bridges to a KEYSET next-token (infinite scroll).
 func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 	t.Parallel()
+
 	customSort := []types.OrderField{{Field: "name", Desc: false}}
 
 	t.Run("keyset cursor on a custom sort is rejected", func(t *testing.T) {
 		t.Parallel()
+
 		tok, err := listquery.EncodeToken(types.PageToken{Keyset: &types.KeysetCursor{
 			SortValues:  []any{"n1"},
 			ID:          "1",
@@ -105,6 +107,7 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 
 	t.Run("custom-sort offset page mints an offset next-token", func(t *testing.T) {
 		t.Parallel()
+
 		page, err := listquery.Run(
 			context.Background(),
 			types.PageRequest{PageSize: 2},
@@ -112,6 +115,7 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.NotEmpty(t, page.NextCursor, "hasMore ⇒ a next cursor")
+
 		decoded, err := listquery.DecodeToken(page.NextCursor)
 		require.NoError(t, err)
 		assert.Nil(t, decoded.Keyset, "a custom sort pages by offset, not keyset")
@@ -120,6 +124,7 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 
 	t.Run("default-order offset page bridges to a keyset next-token", func(t *testing.T) {
 		t.Parallel()
+
 		page, err := listquery.Run(
 			context.Background(),
 			types.PageRequest{PageSize: 2},
@@ -127,6 +132,7 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.NotEmpty(t, page.NextCursor)
+
 		decoded, err := listquery.DecodeToken(page.NextCursor)
 		require.NoError(t, err)
 		require.NotNil(
@@ -143,6 +149,7 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 	// must REJECT the cursor, not honor it.
 	t.Run("keyset cursor rejected when the filter changed under it", func(t *testing.T) {
 		t.Parallel()
+
 		// Mint a valid default-order keyset cursor with NO filter.
 		first, err := listquery.Run(
 			context.Background(),
@@ -156,6 +163,7 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 		// fingerprint (sort ⊕ filter) no longer matches the cursor's, so the seek is
 		// rejected.
 		reader := keysetReader([]int{1, 2, 3}, nil)
+
 		reader.Filter = types.FilterClause{
 			Field:    "name",
 			Operator: types.OpEq,

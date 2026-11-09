@@ -30,6 +30,7 @@ func TestDiscovererFunc_Discover(t *testing.T) {
 		f := interfaces.DiscovererFunc[string](
 			func(_ context.Context, root string) ([]string, error) {
 				require.Equalf(t, "/repo", root, "unexpected root %q", root)
+
 				return want, nil
 			},
 		)

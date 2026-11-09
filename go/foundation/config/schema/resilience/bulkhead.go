@@ -58,15 +58,18 @@ func (c BulkheadConfig) Validate() error {
 			"resilience.adaptive_limit.max_concurrent must be >= 1",
 		)
 	}
+
 	if c.MinConcurrent < 0 {
 		return apperr.InvalidInput(
 			"resilience.adaptive_limit.min_concurrent must be >= 0",
 		)
 	}
+
 	if c.BackoffRatio <= 0 || c.BackoffRatio > 1 {
 		return apperr.InvalidInput(
 			"resilience.adaptive_limit.backoff_ratio must be in (0,1]",
 		)
 	}
+
 	return nil
 }

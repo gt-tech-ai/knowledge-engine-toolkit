@@ -33,11 +33,13 @@ func TestClientsToolchainAddToPathIfMissing_Idempotent(t *testing.T) {
 	toolchain.AddToPathIfMissing("/opt/tool/bin", fixtures.NopLogger())
 
 	count := 0
+
 	for _, e := range filepath.SplitList(os.Getenv("PATH")) {
 		if strings.EqualFold(e, "/opt/tool/bin") {
 			count++
 		}
 	}
+
 	assert.Equal(t, 1, count, "dir should appear exactly once on PATH")
 }
 
@@ -56,9 +58,11 @@ func TestClientsToolchainAddToPathIfMissing_Idempotent(t *testing.T) {
 func TestClientsToolchainProvision_ResolveGoBin_EnvDriven(t *testing.T) {
 	provision := func(t *testing.T) {
 		t.Helper()
+
 		ctrl := gomock.NewController(t)
 		r := mocks.NewMockCommandRunner(ctrl)
 		registerToolScanMock(r) // hermetic tool scan (Exists/RunBuffered)
+
 		inst := toolchain.NewInstaller(
 			r,
 			fixtures.NopLogger(),
@@ -105,10 +109,12 @@ func TestClientsToolchainProvision_ResolveGoBin_EnvDriven(t *testing.T) {
 		t.Setenv("GOBIN", "")
 		t.Setenv("GOPATH", "")
 		provision(t)
+
 		home, err := os.UserHomeDir()
 		if err != nil {
 			t.Skip("home dir unresolvable on this host")
 		}
+
 		assert.True(t, onPath(filepath.Join(home, "go", "bin")),
 			"~/go/bin must be added to PATH, got %q", os.Getenv("PATH"))
 	})

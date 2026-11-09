@@ -27,12 +27,14 @@ func newSSEKMSStorage(
 	threshold int64,
 ) interfaces.StorageClient {
 	t.Helper()
+
 	c, err := storage.NewFromConfig(t.Context(), storage.Config{
 		Kind:               storage.KindS3,
 		MultipartThreshold: threshold,
 		S3:                 infra.S3Config{SSEKMSKeyID: keyID},
 	}, storage.Deps{API: api})
 	require.NoError(t, err)
+
 	return c
 }
 
@@ -48,6 +50,7 @@ func newSSEKMSStorage(
 //     without one, neither field is set.
 func TestS3_SSEKMSOnUpload(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 
 	api := mocks.NewMockS3API(gomock.NewController(t))
@@ -57,6 +60,7 @@ func TestS3_SSEKMSOnUpload(t *testing.T) {
 		) (*awss3.PutObjectOutput, error) {
 			assert.Equal(t, s3types.ServerSideEncryptionAwsKms, in.ServerSideEncryption)
 			assert.Equal(t, "arn:key", aws.ToString(in.SSEKMSKeyId))
+
 			return &awss3.PutObjectOutput{}, nil
 		})
 	require.NoError(t, newSSEKMSStorage(t, api, "arn:key", 0).
@@ -71,6 +75,7 @@ func TestS3_SSEKMSOnUpload(t *testing.T) {
 		) (*awss3.CreateMultipartUploadOutput, error) {
 			assert.Equal(t, s3types.ServerSideEncryptionAwsKms, in.ServerSideEncryption)
 			assert.Equal(t, "arn:key", aws.ToString(in.SSEKMSKeyId))
+
 			return nil, errS3
 		})
 	require.Error(t, newSSEKMSStorage(t, multi, "arn:key", 5).
@@ -83,6 +88,7 @@ func TestS3_SSEKMSOnUpload(t *testing.T) {
 		) (*awss3.PutObjectOutput, error) {
 			assert.Empty(t, in.ServerSideEncryption)
 			assert.Nil(t, in.SSEKMSKeyId)
+
 			return &awss3.PutObjectOutput{}, nil
 		})
 	require.NoError(t, newSSEKMSStorage(t, plain, "", 0).
@@ -99,8 +105,10 @@ func TestS3_SSEKMSOnUpload(t *testing.T) {
 //   - GetObject returning NoSuchKey makes Download CodeNotFound.
 func TestS3_DownloadMissingKeyIsNotFound(t *testing.T) {
 	t.Parallel()
+
 	api := mocks.NewMockS3API(gomock.NewController(t))
 	api.EXPECT().GetObject(gomock.Any(), gomock.Any()).Return(nil, &s3types.NoSuchKey{})
+
 	_, err := newSSEKMSStorage(t, api, "", 0).Download(t.Context(), "b", "missing")
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }

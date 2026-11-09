@@ -58,11 +58,14 @@ func (l *line) OnStepComplete(r types.StepResult) {
 	if !l.p.richLine() {
 		return
 	}
+
 	l.ticked[r.Name] = true
 	_, _ = fmt.Fprintf(l.p.w, "  %s %s  %s\n", l.icon(r.Status), r.Name, l.metric(r))
+
 	if len(r.Children) > 1 {
 		for _, c := range r.Children {
 			name := strings.TrimPrefix(c.Name, r.Name+"/")
+
 			_, _ = fmt.Fprintf(
 				l.p.w,
 				"      %s %s  %s\n",
@@ -83,6 +86,7 @@ func (l *line) OnPhaseComplete(
 	if !l.p.at(LevelNormal) {
 		return
 	}
+
 	_, _ = fmt.Fprintf(
 		l.p.w, "%s %s  %s  %s\n",
 		l.p.pal.info.Sprint("==>"),
@@ -101,15 +105,18 @@ func (l *line) OnGateComplete(
 ) {
 	if l.p.richLine() {
 		var unticked types.StepResults
+
 		for _, r := range results {
 			if !l.ticked[r.Name] {
 				unticked = append(unticked, r)
 			}
 		}
+
 		if len(unticked) > 0 {
 			l.p.resultsTable(unticked)
 		}
 	}
+
 	l.p.failureBlock(results)
 	l.p.lineSummary(results, elapsed)
 }
@@ -135,6 +142,7 @@ func (l *line) metric(r types.StepResult) string {
 	if r.Tests > 0 {
 		return l.p.pal.muted.Sprintf("%d tests · %s", r.Tests, round(r.Duration))
 	}
+
 	return l.p.pal.muted.Sprintf("(%s)", round(r.Duration))
 }
 
@@ -143,6 +151,7 @@ func (l *line) childMetric(r types.StepResult) string {
 	if r.Tests > 0 {
 		return l.p.pal.muted.Sprintf("%d · %s", r.Tests, round(r.Duration))
 	}
+
 	return l.p.pal.muted.Sprint(round(r.Duration).String())
 }
 
@@ -166,5 +175,6 @@ func padRight(s string, width int) string {
 	if len(s) >= width {
 		return s
 	}
+
 	return s + strings.Repeat(" ", width-len(s))
 }

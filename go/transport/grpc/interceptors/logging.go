@@ -32,6 +32,7 @@ func logging(logger interfaces.Logger) around {
 		start := time.Now()
 		err := next(ctx)
 		duration := time.Since(start)
+
 		if err != nil {
 			logger.WithContext(ctx).Error(
 				"gRPC request failed",
@@ -48,6 +49,7 @@ func logging(logger interfaces.Logger) around {
 				"code", "OK",
 			)
 		}
+
 		return err
 	}
 }

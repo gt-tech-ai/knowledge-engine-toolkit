@@ -137,7 +137,9 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 				Install: map[string]types.InstallMethodEntry{
 					"windows": func() types.InstallMethodEntry {
 						m := pinnedRelease()
+
 						m.Repo = ""
+
 						return m
 					}(),
 				},
@@ -150,7 +152,9 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 			wantErr: "requires version, binary, and assets",
 			tool: toolWith(func() types.InstallMethodEntry {
 				m := pinnedURL()
+
 				m.Version = ""
+
 				return m
 			}()),
 		},
@@ -159,7 +163,9 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 			wantErr: "requires version, binary, and assets",
 			tool: toolWith(func() types.InstallMethodEntry {
 				m := pinnedRelease()
+
 				m.Assets = nil
+
 				return m
 			}()),
 		},
@@ -168,9 +174,11 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 			wantErr: "needs a name and a 64-hex sha256",
 			tool: toolWith(func() types.InstallMethodEntry {
 				m := pinnedURL()
+
 				m.Assets = map[string]types.AssetEntry{
 					"linux-amd64": {Name: "x.tar.gz", SHA256: "not-a-digest"},
 				}
+
 				return m
 			}()),
 		},
@@ -179,9 +187,11 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 			wantErr: "is not an os-arch key",
 			tool: toolWith(func() types.InstallMethodEntry {
 				m := pinnedURL()
+
 				m.Assets = map[string]types.AssetEntry{
 					"plan9-mips": {Name: "x", SHA256: strings.Repeat("a", 64)},
 				}
+
 				return m
 			}()),
 		},
@@ -190,7 +200,9 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 			wantErr: "requires an https:// url",
 			tool: toolWith(func() types.InstallMethodEntry {
 				m := pinnedURL()
+
 				m.URL = "http://example.test/dl"
+
 				return m
 			}()),
 		},
@@ -204,9 +216,11 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 			wantErr: "needs a name and a 64-hex sha256",
 			tool: toolWith(func() types.InstallMethodEntry {
 				m := pinnedURL()
+
 				m.Assets = map[string]types.AssetEntry{
 					"linux-amd64": {SHA256: strings.Repeat("a", 64)},
 				}
+
 				return m
 			}()),
 		},
@@ -215,7 +229,9 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 			wantErr: "requires version, binary, and assets",
 			tool: toolWith(func() types.InstallMethodEntry {
 				m := pinnedRelease()
+
 				m.Binary = ""
+
 				return m
 			}()),
 		},
@@ -239,12 +255,15 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			err := apperr.Join(types.ValidateToolEntries(
 				[]types.ToolEntry{tc.tool})...)
 			if tc.wantErr == "" {
 				require.NoError(t, err)
+
 				return
 			}
+
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.wantErr, "the rule that fired")
 		})

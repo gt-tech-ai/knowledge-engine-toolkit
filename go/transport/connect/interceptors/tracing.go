@@ -28,6 +28,7 @@ func setTraceResponse(ctx context.Context, h http.Header) {
 	// Empty when ctx carries no valid span context.
 	carrier := propagation.MapCarrier{}
 	propagation.TraceContext{}.Inject(ctx, carrier)
+
 	if tp := carrier["traceparent"]; tp != "" {
 		h.Set(TraceResponseHeader, tp)
 	}
@@ -57,6 +58,7 @@ func (i tracingInterceptor) startServerSpan(
 	ctx context.Context, h http.Header, procedure string,
 ) (context.Context, interfaces.Span) {
 	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(h))
+
 	service, method := parseConnectProcedure(procedure)
 
 	ctx, span := i.tracer.Start(
@@ -66,9 +68,11 @@ func (i tracingInterceptor) startServerSpan(
 	span.SetAttribute("rpc.system", "connect")
 	span.SetAttribute("rpc.service", service)
 	span.SetAttribute("rpc.method", method)
+
 	if requestID := h.Get("X-Request-ID"); requestID != "" {
 		span.SetAttribute("http.request_id", requestID)
 	}
+
 	return ctx, span
 }
 
@@ -87,13 +91,16 @@ func (i tracingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc 
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		ctx, span := i.startServerSpan(ctx, req.Header(), req.Spec().Procedure)
 		defer span.End()
+
 		resp, err := next(ctx, req)
 		finishSpan(span, err)
+
 		// Return the trace id to the caller. Only on success: the error path
 		// returns a nil response, which has no header map to stamp.
 		if err == nil && resp != nil {
 			setTraceResponse(ctx, resp.Header())
 		}
+
 		return resp, err
 	}
 }
@@ -112,12 +119,15 @@ func (i tracingInterceptor) WrapStreamingHandler(
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		ctx, span := i.startServerSpan(ctx, conn.RequestHeader(), conn.Spec().Procedure)
 		defer span.End()
+
 		// Stamp the trace id on the response header BEFORE next(): streaming response
 		// headers flush with the first Send, so setting it afterwards would be too late
 		//
 		setTraceResponse(ctx, conn.ResponseHeader())
+
 		err := next(ctx, conn)
 		finishSpan(span, err)
+
 		return err
 	}
 }
@@ -132,5 +142,6 @@ func parseConnectProcedure(procedure string) (service, method string) {
 	if i := strings.IndexByte(p, '/'); i >= 0 {
 		return p[:i], p[i+1:]
 	}
+
 	return "", procedure
 }

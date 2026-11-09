@@ -110,8 +110,10 @@ func WithMaxElapsedTime(d time.Duration) options.Option[Config] {
 // Returns an error if the kind is unknown.
 func New(kind Kind, opts ...options.Option[Config]) (interfaces.Retrier, error) {
 	cfg := DefaultConfig()
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
+
 	return NewFromConfig(cfg)
 }
 
@@ -127,6 +129,7 @@ func NewFromConfig(cfg Config) (interfaces.Retrier, error) {
 			Multiplier:      cfg.Multiplier,
 			MaxElapsedTime:  cfg.MaxElapsedTime,
 		}
+
 		return exponential.New(expCfg), nil
 
 	default:

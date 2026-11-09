@@ -42,6 +42,7 @@ func fileProc() []types.Procedure {
 // write creates root/rel with data, making its directory.
 func write(t *testing.T, root, rel, data string) {
 	t.Helper()
+
 	path := filepath.Join(root, rel)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
 	require.NoError(t, os.WriteFile(path, []byte(data), 0o600))
@@ -63,11 +64,13 @@ func write(t *testing.T, root, rel, data string) {
 //     once it is gone.
 func TestServicesProcedure_FileOps(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	write(t, root, "conf/kept.yaml", "mine")
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "conf", "dir.yaml"), 0o750))
 	write(t, root, "conf/secrets.yaml.example", "token: x")
 	write(t, root, "out/stale/a/b.txt", "old")
+
 	eng := procEngine(t, &recorder{}, fileProc(), procedure.Deps{
 		Root: root, FS: fsys.NewOSFS(),
 	})
@@ -88,18 +91,22 @@ func TestServicesProcedure_FileOps(t *testing.T) {
 		require.NoError(t, readErr, rel)
 		assert.Equal(t, want, string(got), rel)
 	}
+
 	info, err := os.Stat(filepath.Join(root, "conf", "secrets.yaml"))
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+
 	info, err = os.Stat(filepath.Join(root, "out", "cache"))
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
 	assert.NoDirExists(t, filepath.Join(root, "out", "stale"))
 
 	write(t, root, "conf/secrets.yaml", "edited")
+
 	res, err = eng.Run(t.Context(), "files", in, types.RunOptions{})
 	require.NoError(t, err)
 	assert.False(t, res.HasFailures(), "%+v", res)
+
 	got, err := os.ReadFile(filepath.Join(root, "conf", "secrets.yaml"))
 	require.NoError(t, err)
 	assert.Equal(t, "edited", string(got), "copy never overwrites an existing path")
@@ -120,8 +127,10 @@ func TestServicesProcedure_FileOps(t *testing.T) {
 //     is not octal.
 func TestServicesProcedure_FileRefusals(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	write(t, root, "conf/full/keep.txt", "work")
+
 	one := func(f types.ProcFile) types.StepResult {
 		eng := procEngine(t, &recorder{}, []types.Procedure{{
 			Name: "one", Steps: []types.ProcStep{{Name: "f", File: &f}},
@@ -129,6 +138,7 @@ func TestServicesProcedure_FileRefusals(t *testing.T) {
 		res, err := eng.Run(t.Context(), "one", nil, types.RunOptions{})
 		require.NoError(t, err)
 		require.Len(t, res, 1)
+
 		return res[0]
 	}
 
@@ -136,9 +146,11 @@ func TestServicesProcedure_FileRefusals(t *testing.T) {
 	assert.Equal(t, types.StatusFail, full.Status)
 	assert.Contains(t, full.Error, "conf/full")
 	assert.FileExists(t, filepath.Join(root, "conf", "full", "keep.txt"))
+
 	missing := one(types.ProcFile{Op: types.FileCopy, From: "conf/no.example", Path: "c"})
 	assert.Equal(t, types.StatusFail, missing.Status)
 	assert.Contains(t, missing.Error, "conf/no.example")
+
 	escape := one(types.ProcFile{Op: types.FileEnsure, Path: "../escape.yaml"})
 	assert.Equal(t, types.StatusFail, escape.Status)
 	assert.Contains(t, escape.Error, "outside the root")
@@ -152,9 +164,11 @@ func TestServicesProcedure_FileRefusals(t *testing.T) {
 		"paths": []any{"a.yaml"}, "from": "b",
 	}, types.RunOptions{DryRun: true})
 	require.NoError(t, err)
+
 	for i := range res {
 		assert.Equal(t, types.StatusSkip, res[i].Status, res[i].Name)
 	}
+
 	entries, err := os.ReadDir(dry)
 	require.NoError(t, err)
 	assert.Empty(t, entries)

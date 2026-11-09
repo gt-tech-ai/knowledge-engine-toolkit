@@ -15,7 +15,9 @@ const summaryWidth = 200
 // noise (see IsNoiseLine). Each line is trimmed and capped at 200 characters.
 func ActionableLines(output []byte, limit int) []string {
 	lines := nonEmptyLines(output)
+
 	var priority []string
+
 	for _, line := range lines {
 		switch {
 		case strings.HasPrefix(line, "--- FAIL:"),
@@ -28,26 +30,33 @@ func ActionableLines(output []byte, limit int) []string {
 		case strings.HasPrefix(line, "diff --git "):
 			priority = append(priority, diffFile(line))
 		}
+
 		if len(priority) >= limit {
 			break
 		}
 	}
+
 	if len(priority) > 0 {
 		for i := range priority {
 			priority[i] = truncate(priority[i])
 		}
+
 		return priority
 	}
+
 	var kept []string
+
 	for _, line := range lines {
 		if IsNoiseLine(line) {
 			continue
 		}
+
 		kept = append(kept, truncate(line))
 		if len(kept) >= limit {
 			break
 		}
 	}
+
 	return kept
 }
 
@@ -58,6 +67,7 @@ func IsNoiseLine(line string) bool {
 	if line == "" || line == "FAIL" || line == "PASS" {
 		return true
 	}
+
 	return isRunnerDecoration(line) ||
 		isTestBoilerplate(line) ||
 		isToolNoise(line) ||
@@ -69,11 +79,13 @@ func IsNoiseLine(line string) bool {
 // nonEmptyLines splits data into trimmed, non-empty lines.
 func nonEmptyLines(data []byte) []string {
 	var lines []string
+
 	for raw := range bytes.SplitSeq(data, []byte("\n")) {
 		if s := strings.TrimSpace(string(raw)); s != "" {
 			lines = append(lines, s)
 		}
 	}
+
 	return lines
 }
 
@@ -82,6 +94,7 @@ func diffFile(line string) string {
 	if _, after, ok := strings.Cut(strings.TrimPrefix(line, "diff --git "), " b/"); ok {
 		return after
 	}
+
 	return line
 }
 
@@ -90,6 +103,7 @@ func truncate(s string) string {
 	if len(s) > summaryWidth {
 		return s[:summaryWidth-3] + "..."
 	}
+
 	return s
 }
 
@@ -127,6 +141,7 @@ func isToolNoise(line string) bool {
 		strings.HasPrefix(line, "$ "):
 		return true
 	}
+
 	return false
 }
 
@@ -143,9 +158,11 @@ func isDiffContent(line string) bool {
 	if len(line) < 2 {
 		return false
 	}
+
 	if line == "+" || line == "-" {
 		return true
 	}
+
 	return (line[0] == '+' && line[1] != '+') || (line[0] == '-' && line[1] != '-')
 }
 
@@ -154,6 +171,7 @@ func isVulncheckNoise(line string) bool {
 	if len(line) > 2 && line[0] == '#' && line[1] >= '0' && line[1] <= '9' {
 		return true
 	}
+
 	for _, prefix := range []string{
 		"More info:", "Standard library", "Found in:", "Fixed in:",
 		"Example traces found:", "Your code is affected by", "This scan also found",
@@ -163,6 +181,7 @@ func isVulncheckNoise(line string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -172,12 +191,14 @@ func isSourceError(line string) bool {
 	if isCallTraceOrDiff(strings.TrimSpace(line)) {
 		return false
 	}
+
 	for _, ext := range []string{".go:", ".py:", ".ts:", ".tsx:"} {
 		if _, after, ok := strings.Cut(line, ext); ok && after != "" &&
 			after[0] >= '0' && after[0] <= '9' {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -187,9 +208,11 @@ func isCallTraceOrDiff(line string) bool {
 		strings.HasPrefix(line, "@@") || strings.HasPrefix(line, "diff --git") {
 		return true
 	}
+
 	if len(line) > 2 && line[0] == '#' && line[1] >= '0' && line[1] <= '9' {
 		return true
 	}
+
 	return strings.Contains(line, " calls ") ||
 		strings.Contains(line, "which eventually calls")
 }

@@ -29,6 +29,7 @@ func (v Version) MeetsMinimum(required Version) bool {
 	if v.Major != required.Major {
 		return v.Major > required.Major
 	}
+
 	return v.Minor >= required.Minor
 }
 
@@ -158,7 +159,9 @@ type InstallToolsOptions struct {
 // ParseFirstVersion extracts a version-like substring (digits.digits...) from s.
 func ParseFirstVersion(s string) string {
 	var start int
+
 	found := false
+
 	for i, c := range s {
 		if c >= '0' && c <= '9' {
 			if !found {
@@ -169,9 +172,11 @@ func ParseFirstVersion(s string) string {
 			return s[start:i]
 		}
 	}
+
 	if found {
 		return s[start:]
 	}
+
 	return ""
 }
 
@@ -179,22 +184,27 @@ func ParseFirstVersion(s string) string {
 func ParseVersion(s string) (Version, error) {
 	s = strings.TrimPrefix(s, "v")
 	s = strings.TrimSpace(s)
+
 	parts := strings.SplitN(s, ".", 3)
+
 	if len(parts) < 2 {
 		return Version{}, apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf("invalid version %q: expected major.minor", s),
 		)
 	}
+
 	major, err := strconv.Atoi(parts[0])
 	if err != nil {
 		return Version{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 			fmt.Sprintf("invalid major version %q", parts[0]))
 	}
+
 	minor, err := strconv.Atoi(parts[1])
 	if err != nil {
 		return Version{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 			fmt.Sprintf("invalid minor version %q", parts[1]))
 	}
+
 	return Version{Major: major, Minor: minor}, nil
 }

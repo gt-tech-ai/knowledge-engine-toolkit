@@ -84,6 +84,7 @@ func TestMapErrorToHTTPStatus_AppError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			status := rest.MapErrorToHTTPStatus(tt.err)
 			assert.Equal(t, tt.expected, status)
 		})
@@ -135,7 +136,9 @@ func TestWriteJSON_Success(t *testing.T) {
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 	body, _ := io.ReadAll(rec.Body)
+
 	var result map[string]string
+
 	require.NoError(t, json.Unmarshal(body, &result))
 	assert.Equal(t, "value", result["key"])
 }
@@ -195,7 +198,9 @@ func TestWriteError_AppError(t *testing.T) {
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 	body, _ := io.ReadAll(rec.Body)
+
 	var resp rest.ErrorResponse
+
 	require.NoError(t, json.Unmarshal(body, &resp))
 	assert.Equal(t, string(apperr.CodeNotFound), resp.Code)
 	assert.Equal(t, "user not found", resp.Error)
@@ -224,7 +229,9 @@ func TestWriteError_InternalAppError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
 	body, _ := io.ReadAll(rec.Body)
+
 	var resp rest.ErrorResponse
+
 	require.NoError(t, json.Unmarshal(body, &resp))
 	assert.Equal(t, string(apperr.CodeInternal), resp.Code)
 	assert.Equal(
@@ -257,7 +264,9 @@ func TestWriteError_PlainError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
 	body, _ := io.ReadAll(rec.Body)
+
 	var resp rest.ErrorResponse
+
 	require.NoError(t, json.Unmarshal(body, &resp))
 	assert.Equal(t, "internal server error", resp.Error)
 }
@@ -365,7 +374,9 @@ func TestWriteError_UnauthorizedAppError(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 
 	body, _ := io.ReadAll(rec.Body)
+
 	var resp rest.ErrorResponse
+
 	require.NoError(t, json.Unmarshal(body, &resp))
 	assert.Equal(t, "invalid token", resp.Error)
 }
@@ -393,7 +404,9 @@ func TestWriteError_ConflictAppError(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, rec.Code)
 
 	body, _ := io.ReadAll(rec.Body)
+
 	var resp rest.ErrorResponse
+
 	require.NoError(t, json.Unmarshal(body, &resp))
 	assert.Equal(t, "duplicate key", resp.Error)
 }

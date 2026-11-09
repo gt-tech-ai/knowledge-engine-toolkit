@@ -80,14 +80,18 @@ func (c *AuthConfig) Validate() error {
 			"auth.service_stub must be false when auth.stub is false",
 		)
 	}
+
 	if c.Stub {
 		return nil
 	}
+
 	if c.OIDC.Issuer == "" {
 		return apperr.InvalidInput("auth.oidc.issuer is required when stub=false")
 	}
+
 	if c.OIDC.Audience == "" {
 		return apperr.InvalidInput("auth.oidc.audience is required when stub=false")
 	}
+
 	return nil
 }

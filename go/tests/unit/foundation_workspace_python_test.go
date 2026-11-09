@@ -28,6 +28,7 @@ func pyRoots() []string { return []string{"libs/python", "services/python", "too
 //     missing root is tolerated, and an empty repository yields none.
 func TestPythonPackages(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	wsWrite(
 		t,
@@ -80,22 +81,27 @@ func TestPythonPackages_Errors(t *testing.T) {
 
 	t.Run("root that is a file", func(t *testing.T) {
 		t.Parallel()
+
 		root := t.TempDir()
 		wsWrite(t, filepath.Join(root, "tools"), "not a dir")
+
 		_, err := python.Packages(os.DirFS(root), pyRoots(), nil)
 		require.Error(t, err)
 	})
 
 	t.Run("unreadable nested directory", func(t *testing.T) {
 		t.Parallel()
+
 		if os.Geteuid() == 0 {
 			t.Skip("root ignores directory permissions")
 		}
+
 		root := t.TempDir()
 		bad := filepath.Join(root, "libs", "python", "shelf", "sub")
 		require.NoError(t, os.MkdirAll(bad, 0o755))
 		require.NoError(t, os.Chmod(bad, 0o000))
 		t.Cleanup(func() { _ = os.Chmod(bad, 0o755) })
+
 		_, err := python.Packages(os.DirFS(root), pyRoots(), nil)
 		require.Error(t, err)
 	})
@@ -113,6 +119,7 @@ func TestPythonPackages_Errors(t *testing.T) {
 //     *.egg-info; without src/ the package directory's base name is used.
 func TestPythonModuleName(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	for _, d := range []string{"__pycache__", "shelf.egg-info", "shelf_core"} {
 		require.NoError(
@@ -120,6 +127,7 @@ func TestPythonModuleName(t *testing.T) {
 			os.MkdirAll(filepath.Join(root, "libs", "shelf", "src", d), 0o755),
 		)
 	}
+
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "flat"), 0o755))
 
 	assert.Equal(t, "shelf_core", python.ModuleName(os.DirFS(root), "libs/shelf"))

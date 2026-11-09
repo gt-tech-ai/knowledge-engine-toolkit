@@ -24,18 +24,22 @@ func Packages(
 	filter func(relPath string) bool,
 ) ([]string, error) {
 	var packages []string
+
 	for _, searchDir := range roots {
 		entries, err := fs.ReadDir(fsys, searchDir)
 		if apperr.StdIs(err, fs.ErrNotExist) {
 			continue
 		}
+
 		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInternal, "read directory "+searchDir)
 		}
+
 		for _, entry := range entries {
 			if !entry.IsDir() {
 				continue
 			}
+
 			err := findPyprojectDirs(fsys, path.Join(searchDir, entry.Name()), filter,
 				&packages)
 			if err != nil {
@@ -43,6 +47,7 @@ func Packages(
 			}
 		}
 	}
+
 	return packages, nil
 }
 
@@ -59,16 +64,20 @@ func findPyprojectDirs(
 		if filter == nil || filter(dir) {
 			*out = append(*out, dir)
 		}
+
 		return nil
 	}
+
 	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "read directory "+dir)
 	}
+
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
+
 		if err := findPyprojectDirs(
 			fsys,
 			path.Join(dir, entry.Name()), // nosemgrep: use-filepath-join
@@ -78,6 +87,7 @@ func findPyprojectDirs(
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -87,6 +97,7 @@ func findPyprojectDirs(
 // artifacts; the directory's base name without a src/ layout.
 func ModuleName(fsys fs.FS, pkgDir string) string {
 	src := path.Join(pkgDir, "src") // nosemgrep: use-filepath-join
+
 	entries, err := fs.ReadDir(fsys, src)
 	if err == nil {
 		for _, e := range entries {
@@ -97,5 +108,6 @@ func ModuleName(fsys fs.FS, pkgDir string) string {
 			}
 		}
 	}
+
 	return path.Base(pkgDir)
 }

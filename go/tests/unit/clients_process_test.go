@@ -28,7 +28,9 @@ func readyAfter(
 	n int32,
 ) (*mocks.MockProbe[interfaces.ProcessHandle], *atomic.Int32) {
 	t.Helper()
+
 	var runs atomic.Int32
+
 	p := mocks.NewMockProbe[interfaces.ProcessHandle](gomock.NewController(t))
 	p.EXPECT().Name().Return("ready").AnyTimes()
 	p.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -36,8 +38,10 @@ func readyAfter(
 			if runs.Add(1) >= n {
 				return types.Verdict{Status: types.StatusPass}
 			}
+
 			return types.Verdict{Status: types.StatusFail}
 		}).AnyTimes()
+
 	return p, &runs
 }
 
@@ -60,21 +64,27 @@ func sleeper() types.ProcessSpec {
 //     left; an empty command is INVALID_INPUT.
 func TestClientsProcess_StartReadyStop(t *testing.T) {
 	t.Parallel()
+
 	sup, err := process.NewFromConfig(process.Config{Kind: process.KindExec})
 	require.NoError(t, err)
+
 	ready, runs := readyAfter(t, 3)
 
 	h, err := sup.Start(t.Context(), sleeper(), ready)
 	require.NoError(t, err)
 	assert.Equal(t, int32(3), runs.Load())
+
 	stopped := time.Now()
+
 	require.NoError(t, h.Stop(t.Context()))
 	assert.Less(t, time.Since(stopped), 5*time.Second)
 	require.Error(t, h.Wait())
 
 	never, _ := readyAfter(t, 1000)
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+
 	defer cancel()
+
 	_, err = sup.Start(ctx, sleeper(), never)
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
 
@@ -108,6 +118,7 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 //     handles return at once; an unknown kind is INVALID_INPUT.
 func TestClientsProcess_DetachAndStub(t *testing.T) {
 	t.Parallel()
+
 	sup, err := process.NewFromConfig(process.Config{Kind: process.KindExec})
 	require.NoError(t, err)
 	require.NoError(
@@ -119,6 +130,7 @@ func TestClientsProcess_DetachAndStub(t *testing.T) {
 
 	stub, err := process.NewFromConfig(process.Config{})
 	require.NoError(t, err)
+
 	h, err := stub.Start(t.Context(), sleeper(), nil)
 	require.NoError(t, err)
 	require.NoError(t, h.Wait())
@@ -139,8 +151,10 @@ func TestClientsProcess_DetachAndStub(t *testing.T) {
 //     creating it 0600; a LogFile in a missing directory is CodeUnavailable.
 func TestClientsProcess_LogFile(t *testing.T) {
 	t.Parallel()
+
 	sup, err := process.NewFromConfig(process.Config{Kind: process.KindExec})
 	require.NoError(t, err)
+
 	log := filepath.Join(t.TempDir(), "serve.log")
 	run := func(word string) {
 		h, err := sup.Start(t.Context(), types.ProcessSpec{
@@ -157,6 +171,7 @@ func TestClientsProcess_LogFile(t *testing.T) {
 	data, err := os.ReadFile(log)
 	require.NoError(t, err)
 	assert.Equal(t, strings.Repeat("one\n", 2)+strings.Repeat("two\n", 2), string(data))
+
 	info, err := os.Stat(log)
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())

@@ -36,8 +36,10 @@ func TestClientsToolchainInstall_DefaultDownloaderFetchesOverHTTP(t *testing.T) 
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/pinned" {
 				http.NotFound(w, r)
+
 				return
 			}
+
 			_, _ = w.Write(checksumPayload())
 		}),
 	)
@@ -72,9 +74,12 @@ func TestClientsToolchainInstall_DefaultDownloaderFetchesOverHTTP(t *testing.T) 
 			if tc.wantErr {
 				require.Error(t, err)
 				assert.Empty(t, dirEntries(t, binDir))
+
 				return
 			}
+
 			require.NoError(t, err)
+
 			got, err := os.ReadFile(filepath.Join(binDir, "pinned"))
 			require.NoError(t, err)
 			assert.Equal(t, checksumPayload(), got)
@@ -97,9 +102,12 @@ func TestClientsToolchainInstall_WindowsARM64FallsBackToAMD64Asset(t *testing.T)
 	binDir, _ := isolateInstallDirs(t)
 	ctrl := gomock.NewController(t)
 	dl := mocks.NewMockDownloader(ctrl)
+
 	const url = "https://example.test/pinned-windows-amd64.exe"
+
 	dl.EXPECT().Fetch(gomock.Any(), url).
 		Return(io.NopCloser(bytes.NewReader(checksumPayload())), nil)
+
 	tool := downloadTool(map[string]types.Artifact{
 		"windows-amd64": {URL: url, SHA256: sha256Hex(checksumPayload())},
 	})

@@ -42,14 +42,17 @@ func TestExponentialRetry_CustomIsRetryable(t *testing.T) {
 	calls := 0
 	err := r.Retry(context.Background(), func() error {
 		calls++
+
 		return terminal
 	})
 	require.Error(t, err, "Retry must return the terminal error")
 	assert.Equal(t, 1, calls, "a non-retryable error must not be retried")
 
 	resultCalls := 0
+
 	_, err = exponential.RetryWithResult(context.Background(), r, func() (int, error) {
 		resultCalls++
+
 		return 0, terminal
 	})
 	require.Error(t, err, "RetryWithResult must return the terminal error")

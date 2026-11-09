@@ -51,14 +51,18 @@ func buildResult(
 		if s.Status != types.StatusFail {
 			continue
 		}
+
 		if res.FailedTails == nil {
 			res.FailedTails = map[string]string{}
 		}
+
 		res.FailedTails[s.Name] = failureText(s, tailN)
 	}
+
 	if err != nil {
 		res.Error = codedMessage(err)
 	}
+
 	return res
 }
 
@@ -75,8 +79,10 @@ func summarize(steps []types.StepResult, logs []string) []StepSummary {
 		if i < len(logs) {
 			sum.Log = logs[i]
 		}
+
 		out = append(out, sum)
 	}
+
 	return out
 }
 
@@ -87,25 +93,33 @@ func summarize(steps []types.StepResult, logs []string) []StepSummary {
 // when several modules report a same-named package.
 func flatten(steps []types.StepResult) []types.StepResult {
 	var out []types.StepResult
+
 	seen := map[string]int{}
+
 	var walk func(prefix string, group []types.StepResult)
+
 	walk = func(prefix string, group []types.StepResult) {
 		for _, s := range group {
 			name := s.Name
 			if prefix != "" {
 				name = prefix + "/" + s.Name
 			}
+
 			seen[name]++
 			if seen[name] > 1 {
 				name = fmt.Sprintf("%s #%d", name, seen[name])
 			}
+
 			children := s.Children
+
 			s.Name, s.Children = name, nil
 			out = append(out, s)
+
 			walk(name, children)
 		}
 	}
 	walk("", steps)
+
 	return out
 }
 
@@ -116,6 +130,7 @@ func failureText(s types.StepResult, n int) string {
 	if len(s.Detail) == 0 {
 		return s.Error
 	}
+
 	return tail(s.Detail, n)
 }
 
@@ -124,16 +139,20 @@ func tail(out []byte, n int) string {
 	if n <= 0 {
 		return ""
 	}
+
 	s := string(out)
 	body := strings.TrimSuffix(s, "\n")
 	cut := len(body)
+
 	for range n {
 		i := strings.LastIndexByte(body[:cut], '\n')
 		if i < 0 {
 			return s
 		}
+
 		cut = i
 	}
+
 	return s[cut+1:]
 }
 
@@ -142,8 +161,10 @@ func tail(out []byte, n int) string {
 func codedMessage(err error) string {
 	msg := err.Error()
 	code := string(apperr.Code(err))
+
 	if strings.HasPrefix(msg, code) {
 		return msg
 	}
+
 	return fmt.Sprintf("%s: %s", code, msg)
 }

@@ -87,8 +87,10 @@ func WithBurst(b int) options.Option[Config] {
 // options. Returns an error if the kind is unknown.
 func New(kind Kind, opts ...options.Option[Config]) (interfaces.RateLimiter, error) {
 	cfg := DefaultConfig()
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
+
 	return NewFromConfig(cfg)
 }
 
@@ -101,6 +103,7 @@ func NewFromConfig(cfg Config) (interfaces.RateLimiter, error) {
 			Rate:  cfg.Rate,
 			Burst: cfg.Burst,
 		}
+
 		return token.New(tokenCfg), nil
 
 	default:

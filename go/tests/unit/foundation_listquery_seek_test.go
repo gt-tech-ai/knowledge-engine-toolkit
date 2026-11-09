@@ -31,6 +31,7 @@ func TestSeekFilter_Expansion(t *testing.T) {
 
 	t.Run("single ascending column is a strict greater-than", func(t *testing.T) {
 		t.Parallel()
+
 		f := listquery.SeekFilter(
 			[]listquery.KeysetColumn{{Column: "created_at", Desc: false}},
 			[]any{time.UnixMicro(1000).UTC()},
@@ -43,6 +44,7 @@ func TestSeekFilter_Expansion(t *testing.T) {
 
 	t.Run("single descending column is a strict less-than", func(t *testing.T) {
 		t.Parallel()
+
 		f := listquery.SeekFilter(
 			[]listquery.KeysetColumn{{Column: "created_at", Desc: true}},
 			[]any{time.UnixMicro(1000).UTC()},
@@ -56,6 +58,7 @@ func TestSeekFilter_Expansion(t *testing.T) {
 		"two descending columns expand to strict OR (eq AND strict)",
 		func(t *testing.T) {
 			t.Parallel()
+
 			ts := time.UnixMicro(2000).UTC()
 			f := listquery.SeekFilter(
 				[]listquery.KeysetColumn{
@@ -79,10 +82,12 @@ func TestSeekFilter_Expansion(t *testing.T) {
 			tail, ok := top.Or[1].(types.CompositeFilter)
 			require.True(t, ok)
 			require.Len(t, tail.And, 2)
+
 			eq, ok := tail.And[0].(types.FilterClause)
 			require.True(t, ok)
 			assert.Equal(t, "created_at", eq.Field)
 			assert.Equal(t, types.OpEq, eq.Operator)
+
 			idClause, ok := tail.And[1].(types.FilterClause)
 			require.True(t, ok)
 			assert.Equal(t, "id", idClause.Field)

@@ -104,6 +104,7 @@ func (l *Loader) Load() error {
 	if err := checkSchema(l.schema); err != nil {
 		return err
 	}
+
 	l.v.SetConfigType("yaml")
 	l.v.AutomaticEnv()
 	l.v.SetEnvPrefix(l.prefix)
@@ -111,6 +112,7 @@ func (l *Loader) Load() error {
 
 	// Layer 1: Base config
 	l.v.SetConfigFile(l.baseDir + "/base.yaml")
+
 	if err := l.v.ReadInConfig(); err != nil {
 		if !os.IsNotExist(err) {
 			return apperr.Wrap(err, apperr.CodeInternal, "read base config")
@@ -122,6 +124,7 @@ func (l *Loader) Load() error {
 		envFile := fmt.Sprintf("%s/%s.yaml", l.baseDir, l.env)
 		if _, err := os.Stat(envFile); err == nil {
 			l.v.SetConfigFile(envFile)
+
 			if err := l.v.MergeInConfig(); err != nil {
 				return apperr.Wrap(
 					err,
@@ -136,6 +139,7 @@ func (l *Loader) Load() error {
 	secretsFile := l.baseDir + "/secrets.yaml"
 	if _, err := os.Stat(secretsFile); err == nil {
 		l.v.SetConfigFile(secretsFile)
+
 		if err := l.v.MergeInConfig(); err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "merge secrets")
 		}
@@ -147,6 +151,7 @@ func (l *Loader) Load() error {
 	if l.schema != nil {
 		deriveEnvBindings(l.v, l.schema, l.prefix, l.extraEnv)
 	}
+
 	for key, names := range l.extraEnv {
 		_ = l.v.BindEnv(append([]string{key}, names...)...)
 	}
@@ -183,6 +188,7 @@ func (l *Loader) Unmarshal(target any) error {
 			"unmarshal config",
 		)
 	}
+
 	return nil
 }
 
@@ -203,6 +209,7 @@ func (l *Loader) UnmarshalKey(key string, target any) error {
 	// then expand dotted sub-keys into nested maps for mapstructure.
 	resolved := make(map[string]any)
 	prefix := key + "."
+
 	for _, k := range l.v.AllKeys() {
 		if strings.HasPrefix(k, prefix) {
 			subKey := k[len(prefix):]
@@ -231,6 +238,7 @@ func (l *Loader) UnmarshalKey(key string, target any) error {
 			"decode config",
 		)
 	}
+
 	return nil
 }
 
@@ -239,13 +247,16 @@ func setNested(m map[string]any, key string, value any) {
 	parts := strings.SplitN(key, ".", 2)
 	if len(parts) == 1 {
 		m[key] = value
+
 		return
 	}
+
 	sub, ok := m[parts[0]].(map[string]any)
 	if !ok {
 		sub = make(map[string]any)
 		m[parts[0]] = sub
 	}
+
 	setNested(sub, parts[1], value)
 }
 

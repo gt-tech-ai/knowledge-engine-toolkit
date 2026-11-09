@@ -65,6 +65,7 @@ func newExec(_ context.Context, _ Config, deps Deps) (interfaces.DockerClient, e
 	if deps.Runner == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "docker exec: no command runner")
 	}
+
 	return exec.New(deps.Runner, deps.Root), nil
 }
 

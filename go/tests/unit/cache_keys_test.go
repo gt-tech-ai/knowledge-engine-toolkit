@@ -26,6 +26,7 @@ import (
 //     semantics); a changed access level and a smaller access set each → a different fp.
 func TestAccessFingerprint_RotatesOnScopeChange(t *testing.T) {
 	t.Parallel()
+
 	base := cache.AccessFingerprint("scope-a", "scope-b", "restricted")
 	assert.Equal(
 		t,
@@ -71,6 +72,7 @@ func TestAccessFingerprint_RotatesOnScopeChange(t *testing.T) {
 //     hit-rate cost, not a correctness bug.)
 func TestFilterHash_StableAndDiscriminating(t *testing.T) {
 	t.Parallel()
+
 	f1 := types.FilterClause{Field: "status", Operator: types.OpEq, Value: "indexed"}
 	f2 := types.FilterClause{Field: "status", Operator: types.OpEq, Value: "failed"}
 	f1Again := types.FilterClause{Field: "status", Operator: types.OpEq, Value: "indexed"}
@@ -106,6 +108,7 @@ func TestFilterHash_StableAndDiscriminating(t *testing.T) {
 //     access_fp → a different key.
 func TestCountKey_GenerationRotationChangesKey(t *testing.T) {
 	t.Parallel()
+
 	fp := cache.AccessFingerprint("org-1")
 	fh := cache.FilterHash(nil)
 	k1 := cache.CountKey("tenant-1", "connector_info", "gen-a", fp, fh)
@@ -156,6 +159,7 @@ func TestCountKey_GenerationRotationChangesKey(t *testing.T) {
 //     delimiter-bearing prefix produces a distinct key rather than colliding.
 func TestSuggestKey_DiscriminatesFieldAccessPrefix(t *testing.T) {
 	t.Parallel()
+
 	fp := cache.AccessFingerprint("scope-a", "restricted")
 	base := cache.SuggestKey("tenant-1", "document", "status", fp, "ind", 10)
 	assert.Equal(

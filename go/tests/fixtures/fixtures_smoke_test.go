@@ -24,6 +24,7 @@ import (
 //     passes a value through and panics on a constructor error.
 func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	// Logger: zero and multi variadic, plus With/WithContext chaining.
@@ -40,10 +41,12 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	c.Add(1, "lbl")
 	m.Counter("n", "h", "lbl").Inc("a")
 	m.Histogram("n", "h", nil).Observe(1)
+
 	g := m.Gauge("n", "h")
 	g.Set(1)
 	g.Inc()
 	g.Dec()
+
 	_ = m.Handler()
 
 	// Tracer no-op + spy capture.
@@ -51,12 +54,15 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	_, sp := tr.Start(ctx, "op")
 	sp.SetAttribute("k", "v")
 	sp.End()
+
 	_ = tr.Shutdown(ctx)
 
 	var gotKey string
+
 	spy := fixtures.SpyTracer(func(k string, _ any) { gotKey = k })
 	_, s2 := spy.Start(ctx, "op")
 	s2.SetAttribute("attr", 1)
+
 	if gotKey != "attr" {
 		t.Fatalf("SpyTracer: got key %q, want attr", gotKey)
 	}
@@ -67,25 +73,30 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 		got.Name != "mock" {
 		t.Fatalf("StubService.Get: %+v, want Name=mock", got)
 	}
+
 	boom := apperr.Sentinel("boom")
 	if _, err := fixtures.StubService(boom, false).Get(ctx, "1"); !errors.Is(err, boom) {
 		t.Fatalf("StubService(err).Get: %v, want boom", err)
 	}
+
 	assertPanics(t, func() { _, _ = fixtures.StubService(nil, true).Get(ctx, "1") })
 
 	// Pipeline: pass/err/panic.
 	if got, _ := fixtures.PassPipeline().Execute(ctx, "x"); got != "mock-output-x" {
 		t.Fatalf("PassPipeline: %q", got)
 	}
+
 	if _, err := fixtures.ErrPipeline(boom).Execute(ctx, "x"); !errors.Is(err, boom) {
 		t.Fatalf("ErrPipeline: %v", err)
 	}
+
 	assertPanics(t, func() { _, _ = fixtures.PanicPipeline().Execute(ctx, "x") })
 
 	// Must: the value through, a constructor error as a panic.
 	if got := fixtures.Must(7, nil); got != 7 {
 		t.Errorf("Must = %d, want 7", got)
 	}
+
 	assertPanics(
 		t,
 		func() { fixtures.Must(0, apperr.New(apperr.CodeInternal, "wiring")) },
@@ -94,13 +105,16 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	// Retrier: fails twice then succeeds → 3 attempts.
 	retrier, attempts := fixtures.StubRetrier(2, false)
 	calls := 0
+
 	_ = retrier.Retry(ctx, func() error {
 		calls++
 		if calls <= 2 {
 			return boom
 		}
+
 		return nil
 	})
+
 	if attempts() != 3 {
 		t.Fatalf("StubRetrier attempts: %d, want 3", attempts())
 	}
@@ -110,9 +124,16 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 		Execute(func() error { return nil }); err == nil {
 		t.Fatal("open circuit breaker should reject")
 	}
+
 	ran := false
+
 	_ = fixtures.StubCircuitBreaker(false).
-		Execute(func() error { ran = true; return nil })
+		Execute(func() error {
+			ran = true
+
+			return nil
+		})
+
 	if !ran {
 		t.Fatal("closed circuit breaker should run fn")
 	}
@@ -121,6 +142,7 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	if !fixtures.StubRateLimiter(true).Allow() {
 		t.Fatal("allowed rate limiter should allow")
 	}
+
 	if fixtures.StubRateLimiter(false).Allow() {
 		t.Fatal("denied rate limiter should deny")
 	}
@@ -130,9 +152,11 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	if cs.Context() != ctx {
 		t.Fatal("StubClientStream.Context should echo ctx")
 	}
+
 	if err := cs.RecvMsg(nil); !errors.Is(err, boom) {
 		t.Fatalf("RecvMsg #1: %v, want boom", err)
 	}
+
 	if err := cs.RecvMsg(nil); !errors.Is(err, io.EOF) {
 		t.Fatalf("RecvMsg #2: %v, want EOF", err)
 	}
@@ -140,15 +164,19 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	// StubStore: in-memory CRUD is observable end-to-end.
 	store := fixtures.StubStore()
 	created, err := store.Create(ctx, &fixtures.TestEntity{ID: "e1", Name: "alice"})
+
 	if err != nil || created.Name != "alice" {
 		t.Fatalf("StubStore.Create: %+v, %v", created, err)
 	}
+
 	if got, _ := store.Get(ctx, "e1"); got == nil || got.Name != "alice" {
 		t.Fatalf("StubStore.Get after Create: %+v", got)
 	}
+
 	if ok, _ := store.Exists(ctx, "e1"); !ok {
 		t.Fatal("StubStore.Exists after Create should be true")
 	}
+
 	_ = store.Delete(ctx, "e1")
 	if got, _ := store.Get(ctx, "e1"); got != nil {
 		t.Fatalf("StubStore.Get after Delete: %+v, want nil", got)
@@ -158,14 +186,18 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	spyLog := fixtures.NewSpyLogger()
 	spyLog.Error("direct-err")
 	spyLog.Debug("dbg")
+
 	child := spyLog.WithContext(ctx)
 	child.Error("child-err")
+
 	if len(spyLog.ErrorCalls) != 1 || spyLog.ErrorCalls[0] != "direct-err" {
 		t.Fatalf("SpyLogger.ErrorCalls: %v", spyLog.ErrorCalls)
 	}
+
 	if len(spyLog.DebugCalls) != 1 || spyLog.DebugCalls[0] != "dbg" {
 		t.Fatalf("SpyLogger.DebugCalls: %v", spyLog.DebugCalls)
 	}
+
 	if len(*spyLog.ChildErrorCalls) != 1 || (*spyLog.ChildErrorCalls)[0] != "child-err" {
 		t.Fatalf("SpyLogger.ChildErrorCalls: %v", *spyLog.ChildErrorCalls)
 	}
@@ -174,10 +206,12 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 // assertPanics fails the test if fn does not panic.
 func assertPanics(t *testing.T, fn func()) {
 	t.Helper()
+
 	defer func() {
 		if recover() == nil {
 			t.Fatal("expected panic, got none")
 		}
 	}()
+
 	fn()
 }

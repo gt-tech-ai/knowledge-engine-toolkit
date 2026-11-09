@@ -32,12 +32,15 @@ import (
 //     chaos-mesh with no runner is INVALID_INPUT.
 func TestChaosFromConfig(t *testing.T) {
 	t.Parallel()
+
 	stub, err := chaos.NewFromConfig(t.Context(), chaos.Config{},
 		chaos.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
+
 	f := types.Fault{Name: "f", Spec: types.FaultSpec{Type: types.FaultPodKill}}
 	require.NoError(t, stub.Inject(t.Context(), f))
 	require.NoError(t, stub.Revert(t.Context(), f))
+
 	active, err := stub.Active(t.Context(), "ns")
 	require.NoError(t, err)
 	assert.Empty(t, active)
@@ -72,6 +75,7 @@ func TestChaosFromConfig(t *testing.T) {
 //     --ignore-not-found --wait=true`.
 func TestChaosMeshInjector_CreatesAndDeletesTheFaultResource(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		wantSpec map[string]any
 		kind     string
@@ -135,6 +139,7 @@ func TestChaosMeshInjector_CreatesAndDeletesTheFaultResource(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(string(tc.fault.Type), func(t *testing.T) {
 			t.Parallel()
+
 			runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 			fault := types.Fault{
 				Name: "exp-20260925-101500",
@@ -145,7 +150,9 @@ func TestChaosMeshInjector_CreatesAndDeletesTheFaultResource(t *testing.T) {
 				Spec:     tc.fault,
 				Duration: 2 * time.Minute,
 			}
+
 			var chaosManifest []byte
+
 			runner.EXPECT().
 				RunBuffered(gomock.Any(), "/root", "kubectl", "create", "-f", gomock.Any()).
 				DoAndReturn(func(
@@ -155,7 +162,9 @@ func TestChaosMeshInjector_CreatesAndDeletesTheFaultResource(t *testing.T) {
 				) interfaces.CmdResult {
 					data, err := os.ReadFile(args[2])
 					require.NoError(t, err)
+
 					chaosManifest = data
+
 					return interfaces.CmdResult{}
 				})
 			runner.EXPECT().
@@ -177,6 +186,7 @@ func TestChaosMeshInjector_CreatesAndDeletesTheFaultResource(t *testing.T) {
 			require.NoError(t, inj.Revert(t.Context(), fault))
 
 			var got map[string]any
+
 			require.NoError(t, json.Unmarshal(chaosManifest, &got))
 			assert.Equal(t, "chaos-mesh.org/v1alpha1", got["apiVersion"])
 			assert.Equal(t, tc.kind, got["kind"])
@@ -203,6 +213,7 @@ func TestChaosMeshInjector_CreatesAndDeletesTheFaultResource(t *testing.T) {
 //   - When `kubectl create` fails, Inject returns an error containing its stderr.
 func TestChaosMeshInjector_InjectFailureCarriesKubectlStderr(t *testing.T) {
 	t.Parallel()
+
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	runner.EXPECT().
 		RunBuffered(gomock.Any(), ".", "kubectl", "create", "-f", gomock.Any()).
@@ -210,6 +221,7 @@ func TestChaosMeshInjector_InjectFailureCarriesKubectlStderr(t *testing.T) {
 			Err:    apperr.New(apperr.CodeInternal, "exit status 1"),
 			Stderr: []byte("forbidden: cannot create podchaos\n"),
 		})
+
 	inj, err := chaos.NewFromConfig(t.Context(),
 		chaos.Config{Kind: chaos.KindChaosMesh, ManagedBy: "acme-chaos"},
 		chaos.Deps{Decorations: fixtures.Decorations(), Runner: runner, Root: "."})
@@ -248,6 +260,7 @@ func chaosSelector(service string) map[string]any {
 //     call (the strict mock would fail the test).
 func TestChaosMeshInjector_CleansUpAndFailsLoudly(t *testing.T) {
 	t.Parallel()
+
 	fault := types.Fault{
 		Name:   "exp-1",
 		Target: types.FaultTarget{Namespace: "acme-app", Service: "api"},
@@ -258,15 +271,19 @@ func TestChaosMeshInjector_CleansUpAndFailsLoudly(t *testing.T) {
 			chaos.Config{Kind: chaos.KindChaosMesh, ManagedBy: "acme-chaos"},
 			chaos.Deps{Decorations: fixtures.Decorations(), Runner: r, Root: "."})
 		require.NoError(t, err)
+
 		return inj
 	}
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
+
 	var appliedManifest string
+
 	runner.EXPECT().
 		RunBuffered(gomock.Any(), ".", "kubectl", "create", "-f", gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, _ string, a ...string) interfaces.CmdResult {
 			appliedManifest = a[2]
+
 			return interfaces.CmdResult{}
 		})
 	runner.EXPECT().RunBuffered(gomock.Any(), ".", "kubectl", "delete", gomock.Any(),
@@ -277,6 +294,7 @@ func TestChaosMeshInjector_CleansUpAndFailsLoudly(t *testing.T) {
 				"error: the server has asked for the client to provide credentials\n",
 			),
 		})
+
 	inj := newInj(runner)
 
 	require.NoError(t, inj.Inject(t.Context(), fault))
@@ -287,6 +305,7 @@ func TestChaosMeshInjector_CleansUpAndFailsLoudly(t *testing.T) {
 			"chaos-",
 		),
 	)
+
 	_, err := os.Stat(appliedManifest)
 	require.ErrorIs(
 		t,
@@ -304,8 +323,11 @@ func TestChaosMeshInjector_CleansUpAndFailsLoudly(t *testing.T) {
 	)
 
 	unknown := fault
+
 	unknown.Spec.Type = "cpu-burn"
+
 	strict := newInj(mocks.NewMockCommandRunner(gomock.NewController(t)))
+
 	for _, err := range []error{
 		strict.Inject(t.Context(), unknown), strict.Revert(t.Context(), unknown),
 	} {

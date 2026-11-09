@@ -67,8 +67,10 @@ func NewEnumMapper[P, D comparable](
 				label, d, existing, p,
 			))
 		}
+
 		toProto[d] = p
 	}
+
 	return EnumMapper[P, D]{
 		label:      label,
 		protoZero:  protoZero,
@@ -83,6 +85,7 @@ func NewEnumMapper[P, D comparable](
 // value with their own message rather than the mapper's generic one.
 func (m EnumMapper[P, D]) ToDomainOK(p P) (D, bool) {
 	d, ok := m.toDomain[p]
+
 	return d, ok
 }
 
@@ -92,6 +95,7 @@ func (m EnumMapper[P, D]) ToDomainOrError(p P) (D, error) {
 	if d, ok := m.ToDomainOK(p); ok {
 		return d, nil
 	}
+
 	return m.domainZero, apperr.InvalidInput(fmt.Sprintf("unknown %s: %v", m.label, p))
 }
 
@@ -101,6 +105,7 @@ func (m EnumMapper[P, D]) ToProtoValue(d D) P {
 	if p, ok := m.toProto[d]; ok {
 		return p
 	}
+
 	return m.protoZero
 }
 
@@ -110,8 +115,10 @@ func (m EnumMapper[P, D]) ToProtoValue(d D) P {
 func (m EnumMapper[P, D]) ToDomainFilter(p P) (D, bool) {
 	if p == m.protoZero {
 		var zero D
+
 		return zero, false
 	}
+
 	return m.ToDomainOK(p)
 }
 

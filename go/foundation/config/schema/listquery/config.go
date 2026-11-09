@@ -47,8 +47,10 @@ func (c Config) Validate() error {
 	if c.Facet.RowThreshold < 1 {
 		return apperr.InvalidInput("listquery.facet.row_threshold must be >= 1")
 	}
+
 	if c.Facet.ReconcileInterval <= 0 {
 		return apperr.InvalidInput("listquery.facet.reconcile_interval must be > 0")
 	}
+
 	return nil
 }

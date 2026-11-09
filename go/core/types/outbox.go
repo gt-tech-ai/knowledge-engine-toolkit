@@ -20,7 +20,9 @@ func OutboxPartition(key string, partitions int) int {
 	if partitions < 2 {
 		return 0
 	}
+
 	h := fnv.New32a()
+
 	_, _ = h.Write([]byte(key)) // hash.Hash.Write never returns an error.
 	// Widening both operands to int64 keeps every conversion lossless; the remainder is
 	// below partitions, so it fits an int.

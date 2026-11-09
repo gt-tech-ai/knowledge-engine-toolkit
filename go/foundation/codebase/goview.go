@@ -52,23 +52,29 @@ func (g *goView) modules(ctx context.Context) ([]string, error) {
 		if perr != nil {
 			return nil, apperr.Wrap(perr, apperr.CodeInvalidInput, "parse go.work")
 		}
+
 		out := make([]string, 0, len(wf.Use))
 		for _, u := range wf.Use {
 			out = append(out, path.Clean(u.Path))
 		}
+
 		slices.Sort(out)
+
 		return out, nil
 	case !apperr.Is(err, apperr.CodeNotFound):
 		return nil, err
 	}
+
 	mods, err := g.parent.Files(ctx, types.FileSelector{Globs: []string{"**/go.mod"}})
 	if err != nil {
 		return nil, err
 	}
+
 	out := make([]string, 0, len(mods))
 	for _, m := range mods {
 		out = append(out, path.Dir(m.Path))
 	}
+
 	return out, nil
 }
 
@@ -82,26 +88,34 @@ func (g *goView) Parse(
 	if !ok {
 		return nil, apperr.New(apperr.CodeInvalidInput, "unknown parse mode")
 	}
+
 	files, err := g.parent.Files(ctx, sel)
 	if err != nil {
 		return nil, err
 	}
+
 	files = slices.DeleteFunc(files, func(f types.File) bool {
 		return !strings.HasSuffix(f.Path, ".go")
 	})
+
 	out := make([]types.GoFile, len(files))
 	eg, gctx := errgroup.WithContext(ctx)
 	eg.SetLimit(runtime.NumCPU())
+
 	for i, f := range files {
 		eg.Go(func() error {
 			parsed, err := g.parse(gctx, f.Path, mode, fset)
+
 			out[i] = parsed
+
 			return err
 		})
 	}
+
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -113,19 +127,23 @@ func (g *goView) parse(
 	fset *token.FileSet,
 ) (types.GoFile, error) {
 	key := "go|parse|" + strconv.Itoa(int(mode)) + "|" + p
+
 	return g.parent.snap.Memo(ctx, key, func(ctx context.Context) (types.GoFile, error) {
 		text, err := g.parent.Text(ctx, p)
 		if err != nil {
 			return types.GoFile{}, err
 		}
+
 		flags := parser.ParseComments
 		if mode == types.ParseImports {
 			flags = parser.ImportsOnly | parser.ParseComments
 		}
+
 		file, err := parser.ParseFile(fset, p, text.Bytes, flags)
 		if err != nil {
 			return types.GoFile{}, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
 		}
+
 		return types.GoFile{Path: p, FileSet: fset, AST: file}, nil
 	})
 }

@@ -85,6 +85,7 @@ func kinds() client.Kinds[Config, Deps, interfaces.Source] {
 						"file credential source requires a CommandRunner for the git-ignore write guard",
 					)
 				}
+
 				return file.New(cfg.Files, deps.Runner), nil
 			},
 			KindAWSSM: func(ctx context.Context, cfg Config, _ Deps) (interfaces.Source, error) {

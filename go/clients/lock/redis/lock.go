@@ -89,14 +89,18 @@ func (l *Lock) Acquire(
 	if err != nil {
 		return "", false, apperr.Wrap(err, apperr.CodeInternal, "generate lock token")
 	}
+
 	token = id.String()
+
 	ok, err := l.client.SetNX(ctx, key, token, l.ttl).Result()
 	if err != nil {
 		return "", false, apperr.Wrap(err, apperr.CodeUnavailable, "acquire lock")
 	}
+
 	if !ok {
 		return "", false, nil
 	}
+
 	return token, true, nil
 }
 
@@ -108,6 +112,7 @@ func (l *Lock) Renew(ctx context.Context, key, token string) (held bool, err err
 	if err != nil {
 		return false, apperr.Wrap(err, apperr.CodeUnavailable, "renew lock")
 	}
+
 	return res == 1, nil
 }
 
@@ -117,5 +122,6 @@ func (l *Lock) Release(ctx context.Context, key, token string) error {
 	if err := l.releaseScript.Run(ctx, l.client, []string{key}, token).Err(); err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "release lock")
 	}
+
 	return nil
 }

@@ -21,7 +21,9 @@ func (s *Server) Stop(ctx context.Context) error {
 	if srv == nil {
 		return nil
 	}
+
 	s.logger.Info("Connect server shutting down")
+
 	if err := srv.Shutdown(ctx); err != nil {
 		return apperr.Wrap(
 			err,
@@ -29,6 +31,7 @@ func (s *Server) Stop(ctx context.Context) error {
 			"shut down connect server",
 		)
 	}
+
 	return nil
 }
 
@@ -42,5 +45,6 @@ func (s *Server) Readiness(_ context.Context) error {
 	if s.httpServer.Load() == nil {
 		return apperr.Internal("connect server not started")
 	}
+
 	return nil
 }

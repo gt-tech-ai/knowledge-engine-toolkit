@@ -40,6 +40,7 @@ func (a *sqsAPI) GetQueueUrl(
 		"get_queue_url",
 		func(cctx context.Context) (*awssqs.GetQueueUrlOutput, error) {
 			out, err := a.inner.GetQueueUrl(cctx, in, optFns...)
+
 			return out, classify(err)
 		},
 	)
@@ -56,6 +57,7 @@ func (a *sqsAPI) SendMessageBatch(
 		"send_message_batch",
 		func(cctx context.Context) (*awssqs.SendMessageBatchOutput, error) {
 			out, err := a.inner.SendMessageBatch(cctx, in, optFns...)
+
 			return out, classify(err)
 		},
 	)
@@ -91,12 +93,16 @@ func (a *s3API) PutObject(
 				)
 			}
 		}
+
 		out, err := a.inner.PutObject(ctx, in, optFns...)
+
 		return out, classify(err)
 	}
+
 	if rewindable {
 		return a.Exec(ctx, "put_object", put)
 	}
+
 	return a.ExecOnce(ctx, "put_object", put)
 }
 
@@ -111,10 +117,13 @@ func classify(err error) error {
 		) || apperr.StdIs(err, context.DeadlineExceeded) {
 		return err
 	}
+
 	var apiErr smithy.APIError
+
 	if !apperr.As(err, &apiErr) || apiErr.ErrorFault() != smithy.FaultClient {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "aws call failed")
 	}
+
 	switch name := apiErr.ErrorCode(); {
 	case strings.Contains(name, "Throttl"), name == "SlowDown", name == "RequestTimeout":
 		return apperr.Wrap(err, apperr.CodeUnavailable, "aws call throttled")

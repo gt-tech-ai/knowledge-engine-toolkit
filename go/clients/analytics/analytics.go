@@ -116,7 +116,9 @@ func newCassandra(
 			return cql.NewFromConfig(ctx, c, cql.Deps{})
 		}
 	}
+
 	session := cfg.CQL
+
 	return analyticscassandra.NewLazy(
 		func(ctx context.Context) (interfaces.CQLSession, error) { return dial(ctx, session) },
 		analyticscassandra.Config{

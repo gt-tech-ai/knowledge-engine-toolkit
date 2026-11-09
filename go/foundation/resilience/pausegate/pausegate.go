@@ -44,13 +44,16 @@ func New(cfg Config, paused interfaces.Gauge, now func() time.Time) (*Gate, erro
 	if now == nil {
 		panic("pausegate: now must not be nil")
 	}
+
 	if cfg.Pause <= 0 {
 		return nil, apperr.InvalidInput("pausegate: pause must be positive")
 	}
+
 	codes := cfg.Codes
 	if len(codes) == 0 {
 		codes = []apperr.ErrorCode{apperr.CodeUnavailable}
 	}
+
 	return &Gate{pause: cfg.Pause, codes: codes, paused: paused, now: now}, nil
 }
 
@@ -60,8 +63,10 @@ func (g *Gate) Observe(err error) {
 	if err == nil || !slices.Contains(g.codes, apperr.Code(err)) {
 		return
 	}
+
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
 	g.until = g.now().Add(g.pause)
 	g.set(1)
 }
@@ -71,13 +76,16 @@ func (g *Gate) Observe(err error) {
 func (g *Gate) Ready(context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
 	if g.now().Before(g.until) {
 		return apperr.New(
 			apperr.CodeUnavailable,
 			"pausegate: downstream unavailable, paused",
 		)
 	}
+
 	g.set(0)
+
 	return nil
 }
 

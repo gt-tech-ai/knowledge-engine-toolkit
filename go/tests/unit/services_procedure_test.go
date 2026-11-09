@@ -51,17 +51,23 @@ func (r *recorder) record(
 	stream bool,
 ) (string, bool) {
 	line := strings.Join(append([]string{exe}, args...), " ")
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.calls = append(r.calls, line)
 	if stream {
 		r.streamed = append(r.streamed, line)
 	}
+
 	if r.envs == nil {
 		r.envs = map[string][]string{}
 	}
+
 	r.envs[line] = env
+
 	rest, failed := strings.CutPrefix(r.out[line], "!")
+
 	return rest, failed
 }
 
@@ -84,6 +90,7 @@ func (r *recorder) runner(ctrl *gomock.Controller) *mocks.MockCommandRunner {
 					Stderr: []byte(out),
 				}
 			}
+
 			return interfaces.CmdResult{Stdout: []byte(out)}
 		}).AnyTimes()
 	m.EXPECT().RunWithEnv(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
@@ -94,8 +101,10 @@ func (r *recorder) runner(ctrl *gomock.Controller) *mocks.MockCommandRunner {
 			if _, failed := r.record(env, exe, args, true); failed {
 				return apperr.Sentinel("exit 1")
 			}
+
 			return nil
 		}).AnyTimes()
+
 	return m
 }
 
@@ -107,23 +116,31 @@ func procEngine(
 	deps procedure.Deps,
 ) interfaces.ProcedureRunner {
 	t.Helper()
+
 	ctrl := gomock.NewController(t)
+
 	deps.Runner = rec.runner(ctrl)
 	deps.Tools = func(name string) (interfaces.ToolSpec, bool) {
 		return toolOf(ctrl, name), name != "unknown"
 	}
+
 	eng, err := procedure.NewFromConfig(procedure.Config{Procedures: procs}, deps)
 	require.NoError(t, err)
+
 	return eng
 }
 
 // pruneProcedure decodes the prune fixture.
 func pruneProcedure(t *testing.T) types.Procedure {
 	t.Helper()
+
 	raw, err := os.ReadFile(filepath.Join("testdata", "procedure", "prune.yaml"))
 	require.NoError(t, err)
+
 	var p types.Procedure
+
 	require.NoError(t, yaml.Unmarshal(raw, &p))
+
 	return p
 }
 
@@ -133,6 +150,7 @@ func statuses(res types.StepResults) map[string]types.StepStatus {
 	for _, r := range res {
 		out[r.Name] = r.Status
 	}
+
 	return out
 }
 
@@ -149,6 +167,7 @@ func statuses(res types.StepResults) map[string]types.StepStatus {
 //     mutating step reports its command without a question.
 func TestServicesProcedure_Prune(t *testing.T) {
 	t.Parallel()
+
 	in := map[string]any{
 		"project": "app", "compose_files": []string{"-f", "c.yaml"},
 		"remove_all": false,
@@ -161,6 +180,7 @@ func TestServicesProcedure_Prune(t *testing.T) {
 	prompter := mocks.NewMockPrompter(ctrl)
 	prompter.EXPECT().Confirm(gomock.Any(),
 		"Remove every app container, image and volume?").Return(true, nil)
+
 	eng := procEngine(t, rec, []types.Procedure{pruneProcedure(t)},
 		procedure.Deps{Prompter: prompter})
 
@@ -178,6 +198,7 @@ func TestServicesProcedure_Prune(t *testing.T) {
 	assert.Equal(t, "prune", res[0].Group)
 
 	dry := &recorder{out: listings}
+
 	eng = procEngine(t, dry, []types.Procedure{pruneProcedure(t)}, procedure.Deps{})
 	res, err = eng.Run(t.Context(), "prune", in, types.RunOptions{DryRun: true})
 	require.NoError(t, err)
@@ -203,6 +224,7 @@ func TestServicesProcedure_Prune(t *testing.T) {
 //     skip is skipped, as is one whose missing policy a variable set to skip.
 func TestServicesProcedure_ControlFlow(t *testing.T) {
 	t.Parallel()
+
 	rec := &recorder{out: map[string]string{
 		"kubectl get -o json": `{"items":["x"]}`, "false": "!boom", "probe": "!",
 	}}
@@ -253,6 +275,7 @@ func TestServicesProcedure_ControlFlow(t *testing.T) {
 		[]string{"docker tag dev-1", "echo 1 1", "false", "false"},
 		rec.calls[4:],
 	)
+
 	st := statuses(res)
 	assert.Equal(t, types.StatusPass, st["deploy web"])
 	assert.Equal(t, types.StatusSkip, st["absent"])
@@ -274,6 +297,7 @@ func TestServicesProcedure_ControlFlow(t *testing.T) {
 //     invalid steps fail NewFromConfig.
 func TestServicesProcedure_Refusals(t *testing.T) {
 	t.Parallel()
+
 	confirmed := []types.Procedure{{Name: "p", Steps: []types.ProcStep{
 		{Name: "rm", Confirm: "Delete?", Tool: "rm"},
 	}}}
@@ -282,12 +306,14 @@ func TestServicesProcedure_Refusals(t *testing.T) {
 	_, err := eng.Run(t.Context(), "p", nil, types.RunOptions{})
 	assert.Equal(t, apperr.CodeCanceled, apperr.Code(err))
 	assert.Empty(t, rec.calls)
+
 	_, err = eng.Run(t.Context(), "p", nil, types.RunOptions{Yes: true})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"rm"}, rec.calls)
 
 	_, err = eng.Run(t.Context(), "nope", nil, types.RunOptions{})
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
+
 	eng = procEngine(t, rec, []types.Procedure{{Name: "v", Steps: []types.ProcStep{
 		{Name: "x", Tool: "echo", Args: []string{"{missing}"}},
 	}}}, procedure.Deps{})
@@ -330,6 +356,7 @@ func TestServicesProcedure_Refusals(t *testing.T) {
 //     row, not an engine error.
 func TestServicesProcedure_FinallyAndFail(t *testing.T) {
 	t.Parallel()
+
 	procs := []types.Procedure{
 		{Name: "db", Inputs: []string{"name", "soft"}, Steps: []types.ProcStep{
 			{Name: "name", When: "name.contains(' ')", Fail: "name {name} has a space"},
@@ -359,6 +386,7 @@ func TestServicesProcedure_FinallyAndFail(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"docker compose up", "false", "docker compose down true"},
 		rec.calls)
+
 	st := statuses(res)
 	assert.Equal(t, types.StatusSkip, st["name"])
 	assert.Equal(t, types.StatusWarn, st["soft"])
@@ -378,11 +406,13 @@ func TestServicesProcedure_FinallyAndFail(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	rec.calls = nil
 	res, err = eng.Run(ctx, "db", map[string]any{"name": "ok", "soft": false},
 		types.RunOptions{})
 	require.NoError(t, err)
 	assert.Contains(t, rec.calls, "docker compose down true")
+
 	st = statuses(res)
 	assert.Equal(t, types.StatusFail, st["interrupted"])
 	assert.Equal(t, "interrupted", res[len(res)-3].Error)
@@ -409,6 +439,7 @@ func TestServicesProcedure_FinallyAndFail(t *testing.T) {
 //     steps still do, and Run returns no error.
 func TestServicesProcedure_StepPanicIsAFailedRow(t *testing.T) {
 	t.Parallel()
+
 	procs := []types.Procedure{
 		{
 			Name: "p",
@@ -433,6 +464,7 @@ func TestServicesProcedure_StepPanicIsAFailedRow(t *testing.T) {
 	res, err := eng.Run(t.Context(), "p", nil, types.RunOptions{})
 
 	require.NoError(t, err)
+
 	st := statuses(res)
 	assert.Equal(t, types.StatusFail, st["boom"])
 	assert.Contains(t, res[0].Error, "panic recovered")
@@ -452,6 +484,7 @@ func TestServicesProcedure_StepPanicIsAFailedRow(t *testing.T) {
 //     procedure's group, and its job runs the procedure with the suite's options.
 func TestServicesProcedure_SuiteEntry(t *testing.T) {
 	t.Parallel()
+
 	procs := []types.Procedure{{Name: "p", Group: "Clean", Steps: []types.ProcStep{
 		{Name: "rm", Tool: "rm", Mutating: true},
 	}}}
@@ -460,6 +493,7 @@ func TestServicesProcedure_SuiteEntry(t *testing.T) {
 	require.Len(t, es, 1)
 	assert.Equal(t, "Clean", es[0].Group)
 	assert.Equal(t, suite.KindProcedure, es[0].Kind)
+
 	res, err := es[0].Job(suite.Env{
 		Decs: fixtures.Decorations(),
 		Opts: types.RunOptions{DryRun: true},
@@ -488,6 +522,7 @@ func TestServicesProcedure_SuiteEntry(t *testing.T) {
 //     when the engine is built.
 func TestServicesProcedure_EnvAndStream(t *testing.T) {
 	t.Parallel()
+
 	rec := &recorder{out: map[string]string{"uv fail": "!"}}
 	procs := []types.Procedure{{
 		Name: "run", Inputs: []string{"extra", "profile"},
@@ -541,6 +576,7 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 		rec.streamed,
 	)
 	assert.Equal(t, []string{"A=small"}, rec.envs["uv run"])
+
 	st := statuses(res)
 	assert.Equal(t, types.StatusPass, st["streamed"])
 	assert.Equal(t, types.StatusFail, st["broken"])
@@ -579,6 +615,7 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 //     missing, mistyped or unparseable key.
 func TestServicesProcedure_VarsAccessors(t *testing.T) {
 	t.Parallel()
+
 	vars := procedure.Vars{
 		"env": "staging", "yes": true, "only": []string{"api"}, "units": []any{"a", 2},
 		"code": 3, "exit": int64(4), "n": float64(5), "odd": struct{}{},
@@ -624,6 +661,7 @@ func TestServicesProcedure_VarsAccessors(t *testing.T) {
 //     without each fails compilation.
 func TestServicesProcedure_ConcurrentEachOverObjects(t *testing.T) {
 	t.Parallel()
+
 	rec := &recorder{out: map[string]string{"go build -o bin/b .": "!boom"}}
 	targets := []any{
 		map[string]any{
@@ -688,6 +726,7 @@ func TestServicesProcedure_ConcurrentEachOverObjects(t *testing.T) {
 //     skipped under the real one.
 func TestServicesProcedure_PlatformVariables(t *testing.T) {
 	t.Parallel()
+
 	rec := &recorder{}
 	eng := procEngine(t, rec, []types.Procedure{
 		{Name: "main", Vars: []types.ProcVar{
@@ -731,6 +770,7 @@ func TestServicesProcedure_PlatformVariables(t *testing.T) {
 //     a step setting both tool and exec is refused at compile.
 func TestServicesProcedure_ExecRunsTheCallersArgv(t *testing.T) {
 	t.Parallel()
+
 	rec := &recorder{}
 	procs := []types.Procedure{{
 		Name: "run", Inputs: []string{"command"},

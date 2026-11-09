@@ -39,6 +39,7 @@ func (c *Client) kubectl(
 	if c.kubeContext != "" {
 		args = append([]string{"--context", c.kubeContext}, args...)
 	}
+
 	return client.Output(
 		c.runner.RunBuffered(ctx, "", "kubectl", args...),
 		"kubectl "+what,
@@ -50,6 +51,7 @@ func namespaced(ns string, args ...string) []string {
 	if ns == "" {
 		return args
 	}
+
 	return append([]string{"-n", ns}, args...)
 }
 
@@ -59,6 +61,7 @@ func (c *Client) Get(ctx context.Context, ns, kind, name string) ([]byte, error)
 	if name != "" {
 		args = append(args, name)
 	}
+
 	return c.kubectl(ctx, "get", namespaced(ns, append(args, "-o", "json")...)...)
 }
 
@@ -68,12 +71,17 @@ func (c *Client) Apply(ctx context.Context, ns string, files ...string) error {
 	if len(files) == 0 {
 		return apperr.New(apperr.CodeInvalidInput, "kubectl apply: no files")
 	}
+
 	args := make([]string, 0, 1+2*len(files))
+
 	args = append(args, "apply")
+
 	for _, f := range files {
 		args = append(args, "-f", f)
 	}
+
 	_, err := c.kubectl(ctx, "apply", namespaced(ns, args...)...)
+
 	return err
 }
 
@@ -85,6 +93,7 @@ func (c *Client) Rollout(
 ) error {
 	_, err := c.kubectl(ctx, "rollout status", namespaced(ns, "rollout", "status",
 		kind+"/"+name, "--timeout="+timeout.String())...)
+
 	return err
 }
 
@@ -95,19 +104,23 @@ func (c *Client) AuthCanI(ctx context.Context, verb, resource string) (bool, err
 	if c.kubeContext != "" {
 		args = append([]string{"--context", c.kubeContext}, args...)
 	}
+
 	res := c.runner.RunBuffered(ctx, "", "kubectl", args...)
 	if res.Err != nil && res.ExitCode == 1 &&
 		strings.TrimSpace(string(res.Stdout)) == "no" {
 		return false, nil
 	}
+
 	if _, err := client.Output(res, "kubectl auth can-i"); err != nil {
 		return false, err
 	}
+
 	return true, nil
 }
 
 // CurrentContext runs `kubectl config current-context`.
 func (c *Client) CurrentContext(ctx context.Context) (string, error) {
 	out, err := c.kubectl(ctx, "config current-context", "config", "current-context")
+
 	return strings.TrimSpace(string(out)), err
 }

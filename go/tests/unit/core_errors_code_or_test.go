@@ -20,6 +20,7 @@ import (
 //   - An uncoded error and a nil error yield the fallback
 func TestCodeOr_KeepsCodeElseFallsBack(t *testing.T) {
 	t.Parallel()
+
 	conflict := apperr.New(apperr.CodeConflict, "dup")
 
 	assert.Equal(

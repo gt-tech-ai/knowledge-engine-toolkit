@@ -42,9 +42,11 @@ func mockBuilders(
 		) interfaces.Operation {
 			op := mocks.NewMockOperation(ctrl)
 			op.EXPECT().Descriptor().Return(desc).AnyTimes()
+
 			return op
 		}
 	}
+
 	return b
 }
 
@@ -66,7 +68,9 @@ func listedNames(reg *ops.Registry) []string {
 	for _, op := range reg.List() {
 		names = append(names, op.Descriptor().Name)
 	}
+
 	sort.Strings(names)
+
 	return names
 }
 
@@ -76,7 +80,9 @@ func newPolicyRegistry(
 	policy types.ExposurePolicy,
 ) (*ops.Registry, error) {
 	t.Helper()
+
 	descs := mixedDescs()
+
 	return ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy:      policy,
 		Descriptors: descs,
@@ -112,8 +118,10 @@ func TestExecutionOpsPolicy_ExcludesOperationAboveMaxSafety(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"ask", "long", "mut", "ro"}, listedNames(reg))
+
 	_, ok := reg.Lookup("cred")
 	assert.False(t, ok)
+
 	_, ok = reg.Lookup("mut")
 	assert.True(t, ok)
 }
@@ -197,6 +205,7 @@ func TestExecutionOpsFactory_FailsOnDescriptorWithoutImplementation(t *testing.T
 	descs := mixedDescs()
 	builders := mockBuilders(ctrl, descs)
 	delete(builders, "ro")
+
 	_, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety:  types.SafetyCredentialed,

@@ -19,31 +19,42 @@ import (
 // build the logger inside fn.
 func zapCaptureStdout(t *testing.T, fn func()) string {
 	t.Helper()
+
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
+
 	orig := os.Stdout
+
 	os.Stdout = w
+
 	defer func() { os.Stdout = orig }()
 
 	fn()
 
 	_ = w.Close()
+
 	out, _ := io.ReadAll(r)
+
 	return string(out)
 }
 
 // zapLastJSONLine parses the last non-empty JSON line from captured logger output.
 func zapLastJSONLine(t *testing.T, s string) map[string]any {
 	t.Helper()
+
 	var rec map[string]any
+
 	for _, line := range strings.Split(strings.TrimSpace(s), "\n") {
 		if line == "" {
 			continue
 		}
+
 		require.NoError(t, json.Unmarshal([]byte(line), &rec),
 			"log line is not JSON: %q", line)
 	}
+
 	require.NotNil(t, rec, "no log output captured")
+
 	return rec
 }
 

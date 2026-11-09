@@ -38,21 +38,26 @@ func (generator) Render(
 	if err != nil {
 		return nil, err
 	}
+
 	codes, err := parse(src.Bytes)
 	if err != nil {
 		return nil, err
 	}
+
 	goSrc, err := execute("codes.go.tmpl", codes)
 	if err != nil {
 		return nil, err
 	}
+
 	if goSrc, err = format.Source(goSrc); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "format "+GoPath)
 	}
+
 	pySrc, err := execute("codes.py.tmpl", codes)
 	if err != nil {
 		return nil, err
 	}
+
 	return types.Artifacts{GoPath: goSrc, PythonPath: pySrc}, nil
 }
 
@@ -69,10 +74,13 @@ func execute(name string, codes []code) ([]byte, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "parse template "+name)
 	}
+
 	var buf bytes.Buffer
+
 	if err := t.Execute(&buf, codes); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "render "+name)
 	}
+
 	return buf.Bytes(), nil
 }
 
@@ -84,6 +92,7 @@ func facts(c code) string {
 		retryPermanent: "permanent",
 		retryNone:      "neither transient nor permanent",
 	}[c.Retry]
+
 	return "HTTP " + strconv.Itoa(c.HTTP) + ", gRPC " + c.GRPC + "; " + retry
 }
 
@@ -92,6 +101,7 @@ func upperFirst(s string) string {
 	if s == "" {
 		return s
 	}
+
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
@@ -99,7 +109,9 @@ func upperFirst(s string) string {
 // (counted in the width), joined by newlines. A word longer than a line stands alone.
 func wrap(prefix string, width int, text string) string {
 	var lines []string
+
 	line := prefix
+
 	for _, w := range strings.Fields(text) {
 		switch {
 		case line == prefix:
@@ -111,5 +123,6 @@ func wrap(prefix string, width int, text string) string {
 			line += " " + w
 		}
 	}
+
 	return strings.Join(append(lines, line), "\n")
 }

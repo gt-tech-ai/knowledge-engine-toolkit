@@ -40,6 +40,7 @@ func newCassandraStore(
 	session *mocks.MockCQLSession,
 ) *analyticscassandra.Store {
 	t.Helper()
+
 	store, err := analyticscassandra.New(session, analyticscassandra.Config{
 		Cubes: map[string][]types.Grain{"genai_calls": {types.GrainHour, types.GrainDay}},
 		BucketWidth: map[types.Grain]types.Grain{
@@ -49,6 +50,7 @@ func newCassandraStore(
 		MaxConcurrentBuckets: 2,
 	})
 	require.NoError(t, err)
+
 	return store
 }
 
@@ -62,6 +64,7 @@ func expectPage(
 ) {
 	query := mocks.NewMockCQLQuery(ctrl)
 	iter := mocks.NewMockCQLIter(ctrl)
+
 	session.EXPECT().
 		Query(gomock.Any(), "org-1", "genai_calls", bucket, lo, hi).
 		Return(query)
@@ -70,17 +73,21 @@ func expectPage(
 	query.EXPECT().PageState(gomock.Nil()).Return(query)
 	query.EXPECT().Idempotent(true).Return(query)
 	query.EXPECT().Iter().Return(iter)
+
 	i := 0
+
 	iter.EXPECT().
 		Scan(gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(dest ...any) bool {
 			if i >= len(rows) {
 				return false
 			}
+
 			*dest[0].(*time.Time) = rows[i].ts
 			*dest[1].(*map[string]string) = rows[i].dims
 			*dest[2].(*map[string][]byte) = rows[i].partials
 			i++
+
 			return true
 		}).
 		Times(len(rows) + 1)
@@ -91,8 +98,10 @@ func expectPage(
 // encoded returns the encoded single-observation partial of v.
 func encoded(t *testing.T, v float64) []byte {
 	t.Helper()
+
 	p, err := chartspec.NewPartial(v)
 	require.NoError(t, err)
+
 	return chartspec.EncodePartial(p)
 }
 
@@ -115,6 +124,7 @@ func TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder(t *testing.T) {
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
 	from, to := day(time.September, 15), day(time.November, 2)
+
 	for _, b := range []time.Time{
 		day(time.September, 1), day(time.October, 1), day(time.November, 1),
 	} {
@@ -139,23 +149,30 @@ func TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder(t *testing.T) {
 		TimeRange: types.TimeRange{From: from, To: to},
 	})
 	require.NoError(t, err)
+
 	defer func() { require.NoError(t, stream.Close()) }()
 
-	var teams []string
-	var mores []bool
+	var (
+		teams []string
+		mores []bool
+	)
+
 	for {
 		rows, more, err := stream.Next(context.Background())
 		require.NoError(t, err)
+
 		for _, r := range rows {
 			teams = append(teams, r.Group["team"])
 			assert.Equal(t, map[string]string{"team": r.Group["team"]}, r.Group)
 			assert.Len(t, r.Partials, 1)
 		}
+
 		mores = append(mores, more)
 		if !more {
 			break
 		}
 	}
+
 	assert.Equal(t, []string{"September", "October", "November"}, teams)
 	assert.Equal(t, []bool{true, true, false}, mores)
 	assert.Empty(t, stream.ResumeToken())
@@ -214,6 +231,7 @@ func TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual(t *testing.T) {
 		TimeRange: types.TimeRange{From: day(time.October, 1), To: day(time.November, 1)},
 	})
 	require.NoError(t, err)
+
 	rows, more, err := stream.Next(context.Background())
 	require.NoError(t, err)
 	require.NoError(t, stream.Close())
@@ -259,6 +277,7 @@ func TestCassandraStore_ReadsTheWindowsPartialFirstBucket(t *testing.T) {
 		TimeRange: types.TimeRange{From: from, To: to},
 	})
 	require.NoError(t, err)
+
 	rows, more, err := stream.Next(context.Background())
 	require.NoError(t, err)
 	require.NoError(t, stream.Close())
@@ -289,6 +308,7 @@ func TestCassandraStore_WriteUpsertsOnePartialRowPerGrain(t *testing.T) {
 	dims := map[string]string{"team": "t-1", "model": "m"}
 	insert := "INSERT INTO %s (org_id, cube, bucket, ts, dims_key, idempotency_key, " +
 		"dims, partials) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+
 	for table, keys := range map[string][2]time.Time{
 		"genai_calls_hour": {
 			day(time.October, 9), time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC),
@@ -296,6 +316,7 @@ func TestCassandraStore_WriteUpsertsOnePartialRowPerGrain(t *testing.T) {
 		"genai_calls_day": {day(time.October, 1), day(time.October, 9)},
 	} {
 		query := mocks.NewMockCQLQuery(ctrl)
+
 		session.EXPECT().
 			Query(
 				fmt.Sprintf(insert, table),
@@ -314,6 +335,7 @@ func TestCassandraStore_WriteUpsertsOnePartialRowPerGrain(t *testing.T) {
 				)
 				require.NoError(t, err)
 				assert.InDelta(t, 42.0, chartspec.Finalize(p, types.AggSum), 0)
+
 				return query
 			})
 		query.EXPECT().WithContext(gomock.Any()).Return(query)
@@ -352,6 +374,7 @@ func TestCassandraStore_RejectsInvalidQueriesAndFacts(t *testing.T) {
 	store := newCassandraStore(t, mocks.NewMockCQLSession(gomock.NewController(t)))
 	ctx := context.Background()
 	rng := types.TimeRange{From: day(time.October, 1), To: day(time.October, 2)}
+
 	for name, q := range map[string]types.AggregateQuery{
 		"cube":  {Cube: "other", OrgID: "o", TimeRange: rng},
 		"grain": {Cube: "genai_calls", OrgID: "o", Grain: types.GrainMinute, TimeRange: rng},
@@ -361,6 +384,7 @@ func TestCassandraStore_RejectsInvalidQueriesAndFacts(t *testing.T) {
 		_, err := store.Aggregate(ctx, q)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 	}
+
 	for name, f := range map[string]types.Fact{
 		"cube": {Cube: "other", OrgID: "o", IdempotencyKey: "k"},
 		"org":  {Cube: "genai_calls", IdempotencyKey: "k"},
@@ -379,6 +403,7 @@ func TestCassandraStore_RejectsInvalidQueriesAndFacts(t *testing.T) {
 			name,
 		)
 	}
+
 	for name, cfg := range map[string]analyticscassandra.Config{
 		"grain": {
 			Cubes:       map[string][]types.Grain{"genai_calls": {"fortnight"}},
@@ -417,6 +442,7 @@ func TestCassandraStore_PageErrorIsTerminal(t *testing.T) {
 	from, to := day(time.September, 15), day(time.October, 15)
 	query := mocks.NewMockCQLQuery(ctrl)
 	iter := mocks.NewMockCQLIter(ctrl)
+
 	session.EXPECT().
 		Query(gomock.Any(), "org-1", "genai_calls", day(time.September, 1), from, to).
 		Return(query)
@@ -439,6 +465,7 @@ func TestCassandraStore_PageErrorIsTerminal(t *testing.T) {
 		TimeRange: types.TimeRange{From: from, To: to},
 	})
 	require.NoError(t, err)
+
 	defer func() { require.NoError(t, stream.Close()) }()
 
 	for range 2 {
@@ -466,9 +493,11 @@ func TestCassandraStore_ResumeTokenIsBoundToItsQuery(t *testing.T) {
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
 	from, to := day(time.September, 15), day(time.October, 15)
+
 	for _, b := range []time.Time{day(time.September, 1), day(time.October, 1)} {
 		expectPage(ctrl, session, b, from, to, nil)
 	}
+
 	q := types.AggregateQuery{
 		Cube: "genai_calls", OrgID: "org-1", Grain: types.GrainDay,
 		Measures:  []types.MeasureRef{{Name: "tokens_in", Agg: types.AggSum}},
@@ -476,9 +505,11 @@ func TestCassandraStore_ResumeTokenIsBoundToItsQuery(t *testing.T) {
 	}
 	stream, err := store.Aggregate(context.Background(), q)
 	require.NoError(t, err)
+
 	_, more, err := stream.Next(context.Background())
 	require.NoError(t, err)
 	require.True(t, more)
+
 	token := stream.ResumeToken()
 	require.NoError(t, stream.Close())
 	require.NotEmpty(t, token)
@@ -496,6 +527,7 @@ func newTTLStore(
 	ttl time.Duration,
 ) *analyticscassandra.Store {
 	t.Helper()
+
 	store, err := analyticscassandra.New(session, analyticscassandra.Config{
 		Cubes:       map[string][]types.Grain{"genai_calls": {types.GrainHour}},
 		BucketWidth: map[types.Grain]types.Grain{types.GrainHour: types.GrainDay},
@@ -503,6 +535,7 @@ func newTTLStore(
 		PageSize:    100,
 	})
 	require.NoError(t, err)
+
 	return store
 }
 
@@ -521,11 +554,13 @@ func newTTLStore(
 //     call at all and returns nil (its rows expire on their own)
 func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 	t.Parallel()
+
 	ttl := 10 * 24 * time.Hour
 	today := time.Now().UTC().Truncate(24 * time.Hour)
 
 	t.Run("within retention", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		session := mocks.NewMockCQLSession(ctrl)
 		query := mocks.NewMockCQLQuery(ctrl)
@@ -541,13 +576,16 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 		query.EXPECT().PageState(gomock.Nil()).Return(query)
 		query.EXPECT().Idempotent(true).Return(query)
 		query.EXPECT().Iter().Return(iter)
+
 		served := false
+
 		iter.EXPECT().
 			Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			DoAndReturn(func(dest ...any) bool {
 				if served {
 					return false
 				}
+
 				served = true
 				*dest[0].(*time.Time) = ts
 				*dest[1].(*string) = "team=t-1"
@@ -556,6 +594,7 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 				*dest[4].(*map[string][]byte) = map[string][]byte{
 					"tokens_in": encoded(t, 7),
 				}
+
 				return true
 			}).
 			Times(2)
@@ -563,6 +602,7 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 		iter.EXPECT().Close().Return(nil)
 
 		want := int(time.Until(bucket.AddDate(0, 0, 1).Add(ttl)) / time.Second)
+
 		session.EXPECT().Batch(gomock.Any()).Return(batch)
 		batch.EXPECT().WithContext(gomock.Any()).Return(batch)
 		batch.EXPECT().Query(
@@ -594,6 +634,7 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 
 	t.Run("past retention", func(t *testing.T) {
 		t.Parallel()
+
 		session := mocks.NewMockCQLSession(gomock.NewController(t))
 		bucket := today.AddDate(0, 0, -12)
 
@@ -621,6 +662,7 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 //     is CodeUnavailable without touching the session.
 func TestCassandraStore_ReadinessQueriesTheCoordinator(t *testing.T) {
 	t.Parallel()
+
 	for _, tc := range []struct {
 		execErr error
 		name    string
@@ -630,6 +672,7 @@ func TestCassandraStore_ReadinessQueriesTheCoordinator(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			ctrl := gomock.NewController(t)
 			session := mocks.NewMockCQLSession(ctrl)
 			query := mocks.NewMockCQLQuery(ctrl)
@@ -639,22 +682,27 @@ func TestCassandraStore_ReadinessQueriesTheCoordinator(t *testing.T) {
 			query.EXPECT().WithContext(gomock.Any()).Return(query)
 			query.EXPECT().Idempotent(true).Return(query)
 			query.EXPECT().Exec().Return(tc.execErr)
+
 			store := newCassandraStore(t, session)
 
 			err := store.Readiness(t.Context())
 
 			if tc.execErr == nil {
 				require.NoError(t, err)
+
 				return
 			}
+
 			assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 		})
 	}
 
 	t.Run("stopped", func(t *testing.T) {
 		t.Parallel()
+
 		session := mocks.NewMockCQLSession(gomock.NewController(t))
 		session.EXPECT().Close()
+
 		store := newCassandraStore(t, session)
 		require.NoError(t, store.Stop(t.Context()))
 

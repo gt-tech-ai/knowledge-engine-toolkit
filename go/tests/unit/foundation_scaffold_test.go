@@ -49,6 +49,7 @@ func scaffoldPolicy(path string) types.FilePolicy {
 //     every file and applying it writes nothing; dry run writes nothing.
 func TestFoundationScaffold_PlanAndApply(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	files := map[string]string{
 		"svc/README.md": "# hand written\n",
@@ -58,17 +59,23 @@ func TestFoundationScaffold_PlanAndApply(t *testing.T) {
 	plan, err := scaffold.Plan(ctx, scaffoldTemplates(), data, scaffoldPolicy,
 		memoryCodebase(t, files))
 	require.NoError(t, err)
+
 	actions := map[string]types.FileAction{}
 	for _, e := range plan.Entries {
 		actions[e.Path] = e.Action
 	}
+
 	assert.Equal(t, map[string]types.FileAction{
 		"svc/main.go": types.FileCreate, "svc/README.md": types.FileKeep,
 		"svc/wire.go": types.FileUpdate,
 	}, actions)
 
 	written := map[string]string{}
-	write := func(p string, b []byte) error { written[p] = string(b); return nil }
+	write := func(p string, b []byte) error {
+		written[p] = string(b)
+
+		return nil
+	}
 	require.NoError(t, scaffold.Apply(ctx, write, plan, true))
 	assert.Empty(t, written)
 	require.NoError(t, scaffold.Apply(ctx, write, plan, false))
@@ -78,6 +85,7 @@ func TestFoundationScaffold_PlanAndApply(t *testing.T) {
 	}, written)
 
 	maps.Copy(files, written)
+
 	again, err := scaffold.Plan(ctx, scaffoldTemplates(), data, scaffoldPolicy,
 		memoryCodebase(t, files))
 	require.NoError(t, err)
@@ -97,6 +105,7 @@ func TestFoundationScaffold_PlanAndApply(t *testing.T) {
 //     nothing and is CONFLICT naming the file; missing template data is INVALID_INPUT.
 func TestFoundationScaffold_Conflicts(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	plan, err := scaffold.Plan(
 		ctx,
@@ -106,10 +115,16 @@ func TestFoundationScaffold_Conflicts(t *testing.T) {
 		memoryCodebase(t, map[string]string{"svc/wire.go": "no marker\n"}),
 	)
 	require.NoError(t, err)
+
 	written := 0
+
 	err = scaffold.Apply(
 		ctx,
-		func(string, []byte) error { written++; return nil },
+		func(string, []byte) error {
+			written++
+
+			return nil
+		},
 		plan,
 		false,
 	)
@@ -135,6 +150,7 @@ func TestFoundationScaffold_Conflicts(t *testing.T) {
 //     differs and kept when it matches; a Preserve file without a marker conflicts.
 func TestFoundationScaffold_PlanFiles(t *testing.T) {
 	t.Parallel()
+
 	cb := memoryCodebase(t, map[string]string{
 		"a/hand.yaml": "tuned: true\n",
 		"a/gen.hcl":   "old\n",
@@ -162,13 +178,16 @@ func TestFoundationScaffold_PlanFiles(t *testing.T) {
 
 	got := map[string]types.FileAction{}
 	paths := make([]string, 0, len(plan.Entries))
+
 	for _, e := range plan.Entries {
 		got[e.Path] = e.Action
 		paths = append(paths, e.Path)
+
 		if e.Path == "a/hand.yaml" {
 			assert.Equal(t, "tuned: true\n", string(e.Content))
 		}
 	}
+
 	assert.Equal(
 		t,
 		[]string{

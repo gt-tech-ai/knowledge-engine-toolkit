@@ -74,6 +74,7 @@ func NewSubscriber(cfg Config) (*Subscriber, error) {
 	if cfg.Client == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "redis messaging: nil client")
 	}
+
 	return &Subscriber{
 		client:   cfg.Client,
 		logger:   cfg.Logger,
@@ -92,10 +93,13 @@ func (s *Subscriber) Subscribe(
 	if err != nil {
 		return err
 	}
+
 	if err := ps.Subscribe(ctx, topic); err != nil {
 		s.rollback(s.channels, topic)
+
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis subscribe")
 	}
+
 	return nil
 }
 
@@ -106,9 +110,11 @@ func (s *Subscriber) Unsubscribe(ctx context.Context, topic string) error {
 	if ps == nil || !ok {
 		return nil
 	}
+
 	if err := ps.Unsubscribe(ctx, topic); err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis unsubscribe")
 	}
+
 	return nil
 }
 
@@ -121,10 +127,13 @@ func (s *Subscriber) PSubscribe(
 	if err != nil {
 		return err
 	}
+
 	if err := ps.PSubscribe(ctx, pattern); err != nil {
 		s.rollback(s.patterns, pattern)
+
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis psubscribe")
 	}
+
 	return nil
 }
 
@@ -135,9 +144,11 @@ func (s *Subscriber) PUnsubscribe(ctx context.Context, pattern string) error {
 	if ps == nil || !ok {
 		return nil
 	}
+
 	if err := ps.PUnsubscribe(ctx, pattern); err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis punsubscribe")
 	}
+
 	return nil
 }
 
@@ -153,11 +164,15 @@ func (s *Subscriber) register(
 ) (*goredis.PubSub, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if s.closed {
 		return nil, apperr.New(apperr.CodeUnavailable, "redis subscriber closed")
 	}
+
 	s.ensureStartedLocked(ctx)
+
 	reg[key] = handler
+
 	return s.pubsub, nil
 }
 
@@ -176,8 +191,10 @@ func (s *Subscriber) unregister(
 ) (*goredis.PubSub, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	_, ok := reg[key]
 	delete(reg, key)
+
 	return s.pubsub, ok
 }
 
@@ -185,13 +202,19 @@ func (s *Subscriber) unregister(
 // and nil-safe (Close before any Subscribe is a no-op).
 func (s *Subscriber) Close() error {
 	s.mu.Lock()
+
 	if s.closed {
 		s.mu.Unlock()
+
 		return nil
 	}
+
 	s.closed = true
+
 	ps := s.pubsub
+
 	s.pubsub = nil
+
 	cancel := s.cancel
 	s.mu.Unlock()
 
@@ -199,16 +222,21 @@ func (s *Subscriber) Close() error {
 	if cancel != nil {
 		cancel()
 	}
+
 	if ps == nil {
 		return nil
 	}
+
 	// Closing the pubsub closes the channel returned by Channel(), so the dispatch
 	// goroutine's range loop exits; wait for it to drain.
 	err := ps.Close()
+
 	s.wg.Wait()
+
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis subscriber close")
 	}
+
 	return nil
 }
 
@@ -218,6 +246,7 @@ func (s *Subscriber) ensureStartedLocked(ctx context.Context) {
 	if s.pubsub != nil {
 		return
 	}
+
 	// A subscriber-lifetime context, cancelled by Close, is passed to every handler
 	// so an in-flight handler can observe shutdown. It is derived from the first
 	// subscribing call's ctx without its cancellation: the dispatch loop outlives that
@@ -226,12 +255,15 @@ func (s *Subscriber) ensureStartedLocked(ctx context.Context) {
 	// any other request-scoped value reach every handler's ctx for the subscriber's
 	// whole life; a handler must read per-message identity from the message itself.
 	dispatchCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+
 	s.cancel = cancel
 	// Subscribe with no channels: the subscription is opened, and channels/patterns
 	// are added dynamically by Subscribe/PSubscribe.
 	s.pubsub = s.client.Subscribe(dispatchCtx)
+
 	ch := s.pubsub.Channel()
 	s.wg.Add(1)
+
 	go s.dispatch(dispatchCtx, ch)
 }
 
@@ -242,20 +274,26 @@ func (s *Subscriber) ensureStartedLocked(ctx context.Context) {
 // (Pub/Sub has no requeue).
 func (s *Subscriber) dispatch(ctx context.Context, ch <-chan *goredis.Message) {
 	defer s.wg.Done()
+
 	for msg := range ch {
 		s.mu.RLock()
+
 		handler, ok := s.channels[msg.Channel]
 		if !ok && msg.Pattern != "" {
 			handler, ok = s.patterns[msg.Pattern]
 		}
+
 		s.mu.RUnlock()
+
 		if !ok {
 			continue
 		}
+
 		m := &interfaces.Message{Topic: msg.Channel, Payload: []byte(msg.Payload)}
 		err := s.handlers.DoOnce(ctx, m.Topic, func(ctx context.Context) error {
 			return handler(ctx, m)
 		})
+
 		if err != nil && s.logger != nil {
 			s.logger.WithContext(ctx).Error(
 				"message handle failed", "topic", m.Topic, "error", err,

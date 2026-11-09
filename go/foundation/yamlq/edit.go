@@ -33,17 +33,22 @@ func Upsert(src []byte, path string, value any) ([]byte, error) {
 // sequence item is CodeInvalidInput.
 func UpsertAt(src []byte, index int, path string, value any) ([]byte, error) {
 	var node yaml.Node
+
 	if err := node.Encode(value); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "encode the value")
 	}
+
 	if docs, err := DecodeAll(src); err == nil && len(docs) == 0 && index == 0 {
 		return upsertEmpty(src, path, &node)
 	}
+
 	steps, docs, err := prepare(src, index, path)
 	if err != nil {
 		return nil, err
 	}
+
 	e := upsert{lines: splitLines(src), docs: docs, index: index, path: path, node: &node}
+
 	return e.run(steps)
 }
 
@@ -73,10 +78,12 @@ func (e upsert) run(steps []step) ([]byte, error) {
 	cur := root(e.docs[e.index])
 	for i, st := range steps {
 		cur = deref(cur)
+
 		next, err := child(cur, st)
 		if err != nil {
 			return nil, err
 		}
+
 		switch {
 		case next == nil:
 			return e.missing(cur, steps[i:])
@@ -87,10 +94,13 @@ func (e upsert) run(steps []step) ([]byte, error) {
 			if ok && holds(out, e.index, e.path, e.node) {
 				return out, nil
 			}
+
 			*next = yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
 		}
+
 		cur = next
 	}
+
 	return nil, invalid(e.path, "an edit needs at least one step")
 }
 
@@ -101,8 +111,11 @@ func (e upsert) leaf(parent, old *yaml.Node) ([]byte, error) {
 		holds(out, e.index, e.path, e.node) {
 		return out, nil
 	}
+
 	keepComments(e.node, old)
+
 	*old = *e.node
+
 	return encodeAll(e.docs)
 }
 
@@ -112,9 +125,11 @@ func (e upsert) missing(parent *yaml.Node, steps []step) ([]byte, error) {
 	if out, ok := appendKeys(e.lines, parent, steps, e.node); ok {
 		return out, nil
 	}
+
 	if err := build(parent, steps, e.node); err != nil {
 		return nil, err
 	}
+
 	return encodeAll(e.docs)
 }
 
@@ -134,27 +149,35 @@ func AppendAt(src []byte, index int, path string, value any) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	seq := root(docs[index])
 	for _, st := range steps {
 		if seq, err = child(deref(seq), st); err != nil {
 			return nil, err
 		}
+
 		if seq == nil {
 			return nil, invalid(path, "selects nothing")
 		}
 	}
+
 	seq = deref(seq)
 	if seq.Kind != yaml.SequenceNode {
 		return nil, invalid(path, "does not select a sequence")
 	}
+
 	var node yaml.Node
+
 	if err := node.Encode(value); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "encode the value")
 	}
+
 	if out, ok := appendItem(splitLines(src), seq, &node); ok {
 		return out, nil
 	}
+
 	seq.Content = append(seq.Content, &node)
+
 	return encodeAll(docs)
 }
 
@@ -164,16 +187,21 @@ func appendItem(lines []string, seq, item *yaml.Node) ([]byte, bool) {
 	if seq.Style&yaml.FlowStyle != 0 || len(seq.Content) == 0 {
 		return nil, false
 	}
+
 	last := seq.Content[len(seq.Content)-1]
 	dash := last.Column - 3
+
 	if dash < 0 || last.Line < 1 || last.Line > len(lines) ||
 		len(lines[last.Line-1]) < dash+2 ||
 		!strings.HasPrefix(lines[last.Line-1][dash:], "- ") {
 		return nil, false
 	}
+
 	var buf bytes.Buffer
+
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
+
 	block := &yaml.Node{
 		Kind:    yaml.SequenceNode,
 		Tag:     "!!seq",
@@ -182,15 +210,19 @@ func appendItem(lines []string, seq, item *yaml.Node) ([]byte, bool) {
 	if enc.Encode(block) != nil || enc.Close() != nil {
 		return nil, false
 	}
+
 	indent := strings.Repeat(" ", dash)
 	insert := splitLines(buf.Bytes())
+
 	for i, l := range insert {
 		if l != "" {
 			insert[i] = indent + l
 		}
 	}
+
 	at := maxLine(last)
 	out := append(append(lines[:at:at], insert...), lines[at:]...)
+
 	return joinLines(out), true
 }
 
@@ -208,28 +240,38 @@ func DeleteAt(src []byte, index int, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	parent := root(docs[index])
 	for _, st := range steps[:len(steps)-1] {
 		if parent, err = child(deref(parent), st); err != nil || parent == nil {
 			return src, err
 		}
 	}
+
 	parent = deref(parent)
+
 	last := steps[len(steps)-1]
 	first, entry, pos := entryOf(parent, last)
+
 	if entry == nil {
 		return src, nil
 	}
+
 	if parent.Style&yaml.FlowStyle == 0 {
 		lines := splitLines(src)
 		from := first.Line - strings.Count(first.HeadComment, "\n") - 1
+
 		if first.HeadComment != "" {
 			from--
 		}
+
 		to := maxLine(entry)
+
 		return joinLines(append(lines[:from:from], lines[to:]...)), nil
 	}
+
 	parent.Content = append(parent.Content[:pos], parent.Content[pos+width(parent):]...)
+
 	return encodeAll(docs)
 }
 
@@ -239,22 +281,27 @@ func prepare(src []byte, index int, path string) ([]step, []*yaml.Node, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+
 	if len(steps) == 0 {
 		return nil, nil, invalid(path, "an edit needs at least one step")
 	}
+
 	for _, st := range steps {
 		if st.kind != stepKey && st.kind != stepIndex {
 			return nil, nil, invalid(path, "an edit path uses only .key and [n] steps")
 		}
 	}
+
 	docs, err := DecodeAll(src)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	if index < 0 || index >= len(docs) {
 		return nil, nil, apperr.New(apperr.CodeInvalidInput,
 			fmt.Sprintf("document %d of %d", index, len(docs)))
 	}
+
 	return steps, docs, nil
 }
 
@@ -266,11 +313,14 @@ func child(n *yaml.Node, st step) (*yaml.Node, error) {
 			return nil, apperr.New(apperr.CodeInvalidInput,
 				fmt.Sprintf("no sequence item %d", st.index))
 		}
+
 		return n.Content[st.index], nil
 	}
+
 	if n.Kind != yaml.MappingNode {
 		return nil, apperr.New(apperr.CodeInvalidInput, "not a mapping at "+st.key)
 	}
+
 	return valueOf(n, st.key), nil
 }
 
@@ -289,6 +339,7 @@ func entryOf(parent *yaml.Node, last step) (first, value *yaml.Node, pos int) {
 			}
 		}
 	}
+
 	return nil, nil, 0
 }
 
@@ -297,6 +348,7 @@ func width(n *yaml.Node) int {
 	if n.Kind == yaml.MappingNode {
 		return 2
 	}
+
 	return 1
 }
 
@@ -311,11 +363,14 @@ func replaceScalar(lines []string, parent, old, replacement *yaml.Node) ([]byte,
 		old.Line < 1 || old.Line > len(lines) {
 		return nil, false
 	}
+
 	line := lines[old.Line-1]
 	start := old.Column - 1
+
 	if start < 0 || start > len(line) {
 		return nil, false
 	}
+
 	end := start + tokenLen(line[start:])
 	if rest := strings.TrimSpace(
 		line[end:],
@@ -323,15 +378,19 @@ func replaceScalar(lines []string, parent, old, replacement *yaml.Node) ([]byte,
 		!strings.HasPrefix(rest, "#") {
 		return nil, false
 	}
+
 	text, err := yaml.Marshal(replacement)
 	if err != nil {
 		return nil, false
 	}
+
 	token := strings.TrimSuffix(string(text), "\n")
 	if strings.Contains(token, "\n") {
 		return nil, false
 	}
+
 	lines[old.Line-1] = line[:start] + token + line[end:]
+
 	return joinLines(lines), true
 }
 
@@ -343,7 +402,9 @@ func holds(out []byte, index int, path string, replacement *yaml.Node) bool {
 	if err != nil || index >= len(docs) {
 		return false
 	}
+
 	got, err := Path(docs[index], path)
+
 	return err == nil && len(got) == 1 && got[0].Node.Kind == yaml.ScalarNode &&
 		got[0].Value == replacement.Value
 }
@@ -363,12 +424,15 @@ func tokenLen(s string) int {
 				return i + 1
 			}
 		}
+
 		return len(s)
 	}
+
 	end := len(s)
 	if i := strings.Index(s, " #"); i >= 0 {
 		end = i
 	}
+
 	return len(strings.TrimRight(s[:end], " \t"))
 }
 
@@ -381,11 +445,13 @@ func appendKeys(lines []string, parent *yaml.Node, steps []step, value *yaml.Nod
 		len(parent.Content) == 0 {
 		return nil, false
 	}
+
 	for _, st := range steps {
 		if st.kind != stepKey {
 			return nil, false
 		}
 	}
+
 	insert, ok := encodeBlock(
 		steps,
 		value,
@@ -394,8 +460,10 @@ func appendKeys(lines []string, parent *yaml.Node, steps []step, value *yaml.Nod
 	if !ok {
 		return nil, false
 	}
+
 	at := maxLine(parent)
 	out := append(append(lines[:at:at], insert...), lines[at:]...)
+
 	return joinLines(out), true
 }
 
@@ -406,10 +474,12 @@ func upsertEmpty(src []byte, path string, value *yaml.Node) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	insert, ok := encodeBlock(steps, value, "")
 	if !ok || len(steps) == 0 {
 		return nil, invalid(path, "an empty document takes only .key steps")
 	}
+
 	return joinLines(append(splitLines(src), insert...)), nil
 }
 
@@ -430,15 +500,19 @@ func spliceUnderNull(
 		key.Line < 1 || key.Line > len(lines) {
 		return nil, false
 	}
+
 	header, ok := nullHeader(lines[key.Line-1], key)
 	if !ok {
 		return nil, false
 	}
+
 	insert, ok := encodeBlock(rest, value, strings.Repeat(" ", key.Column+1))
 	if !ok {
 		return nil, false
 	}
+
 	out := append(append(append([]string{}, lines[:key.Line-1]...), header), insert...)
+
 	return joinLines(append(out, lines[key.Line:]...)), true
 }
 
@@ -450,19 +524,24 @@ func nullHeader(line string, key *yaml.Node) (string, bool) {
 	if end >= len(line) || line[end] != ':' {
 		return "", false
 	}
+
 	tail := strings.TrimSpace(line[end+1:])
 	for _, token := range []string{"~", "null", "Null", "NULL"} {
 		if t, ok := strings.CutPrefix(tail, token); ok && (t == "" || t[0] == ' ') {
 			tail = strings.TrimSpace(t)
+
 			break
 		}
 	}
+
 	if tail == "" {
 		return line[:end+1], true
 	}
+
 	if !strings.HasPrefix(tail, "#") {
 		return "", false
 	}
+
 	return line[:end+1] + " " + tail, true
 }
 
@@ -473,18 +552,23 @@ func encodeBlock(steps []step, value *yaml.Node, indent string) ([]string, bool)
 	if build(block, steps, value) != nil {
 		return nil, false
 	}
+
 	var buf bytes.Buffer
+
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
+
 	if enc.Encode(block) != nil || enc.Close() != nil {
 		return nil, false
 	}
+
 	lines := splitLines(buf.Bytes())
 	for i, l := range lines {
 		if l != "" {
 			lines[i] = indent + l
 		}
 	}
+
 	return lines, true
 }
 
@@ -494,14 +578,19 @@ func build(n *yaml.Node, steps []step, value *yaml.Node) error {
 		if st.kind != stepKey || n.Kind != yaml.MappingNode {
 			return apperr.New(apperr.CodeInvalidInput, "cannot create a sequence item")
 		}
+
 		if i == len(steps)-1 {
 			n.Content = append(n.Content, keyNode(st.key), value)
+
 			return nil
 		}
+
 		next := &yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
+
 		n.Content = append(n.Content, keyNode(st.key), next)
 		n = next
 	}
+
 	return nil
 }
 
@@ -512,9 +601,11 @@ func maxLine(n *yaml.Node) int {
 	if n.Kind == yaml.ScalarNode && n.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 {
 		m += strings.Count(strings.TrimSuffix(n.Value, "\n"), "\n") + 1
 	}
+
 	for _, c := range n.Content {
 		m = max(m, maxLine(c))
 	}
+
 	return m
 }
 
@@ -536,6 +627,7 @@ func splitLines(src []byte) []string {
 	if s == "" {
 		return nil
 	}
+
 	return strings.Split(s, "\n")
 }
 
@@ -544,6 +636,7 @@ func joinLines(lines []string) []byte {
 	if len(lines) == 0 {
 		return nil
 	}
+
 	return []byte(strings.Join(lines, "\n") + "\n")
 }
 
@@ -551,16 +644,22 @@ func joinLines(lines []string) []byte {
 // CodeInvalidInput.
 func DecodeAll(src []byte) ([]*yaml.Node, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(src))
+
 	var docs []*yaml.Node
+
 	for {
 		var doc yaml.Node
+
 		err := dec.Decode(&doc)
+
 		if err == io.EOF { //nolint:errorlint // the decoder returns io.EOF unwrapped
 			return docs, nil
 		}
+
 		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "decode yaml")
 		}
+
 		docs = append(docs, &doc)
 	}
 }
@@ -568,15 +667,19 @@ func DecodeAll(src []byte) ([]*yaml.Node, error) {
 // encodeAll re-encodes docs with two-space indentation, separated by `---`.
 func encodeAll(docs []*yaml.Node) ([]byte, error) {
 	var buf bytes.Buffer
+
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
+
 	for _, doc := range docs {
 		if err := enc.Encode(doc); err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInternal, "encode yaml")
 		}
 	}
+
 	if err := enc.Close(); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "encode yaml")
 	}
+
 	return buf.Bytes(), nil
 }

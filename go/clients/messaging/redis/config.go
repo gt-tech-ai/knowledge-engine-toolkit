@@ -43,9 +43,11 @@ func NewFromConfig(cfg Config) (interfaces.CountingPublisher, *Subscriber, error
 	if err != nil {
 		return nil, nil, err
 	}
+
 	sub, err := NewSubscriber(cfg)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	return pub, sub, nil
 }

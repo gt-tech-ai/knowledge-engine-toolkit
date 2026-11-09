@@ -42,6 +42,7 @@ type Routing struct {
 //   - the lane ends with exactly the broken route's two rows pending, none parked.
 func RunRouting(t *testing.T, h Harness, r Routing) {
 	t.Helper()
+
 	ctx, lane := context.Background(), newLane()
 	want := map[string][]string{}
 	enqueue := func(route string, n int) {
@@ -57,12 +58,15 @@ func RunRouting(t *testing.T, h Harness, r Routing) {
 				CreatedAt:  time.Now().Add(-time.Minute),
 			}
 			require.NoError(t, h.Enqueue(ctx, &rec))
+
 			want[route] = append(want[route], payload)
 		}
 	}
+
 	for _, route := range r.Healthy {
 		enqueue(route, 3)
 	}
+
 	enqueue(r.Broken, 2)
 
 	require.NoError(t, r.RunOnce(ctx, lane))
@@ -73,6 +77,7 @@ func RunRouting(t *testing.T, h Harness, r Routing) {
 		sort.Strings(got)
 		require.Equalf(t, want[route], got, "route %s", route)
 	}
+
 	stats, err := h.Store.Stats(ctx, lane)
 	require.NoError(t, err)
 	require.Equal(t, 2, stats.Pending)

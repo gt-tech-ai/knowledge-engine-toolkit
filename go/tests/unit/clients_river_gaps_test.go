@@ -25,6 +25,7 @@ import (
 //   - On a zero-value Runtime (nil pool), Liveness and Readiness both return an error.
 func TestRiverRuntime_UninitializedHealth(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 	rt := &riverpkg.Runtime{} // no pool constructed
 
@@ -52,9 +53,11 @@ func TestRiverRuntime_UninitializedHealth(t *testing.T) {
 //     under a valid decoration is INTERNAL. Neither opens a connection.
 func TestNewInsertClient_FailsLoudlyBeforeOpeningAPool(t *testing.T) {
 	t.Parallel()
+
 	on := true
 	bad := decoration.DefaultConfig()
 	semaphore := decoration.Bulkhead{Enabled: &on}
+
 	semaphore.Kind = "semaphore"
 	bad.Clients.Overrides = map[string]decoration.Layers{
 		riverpkg.InsertClientName: {Bulkhead: semaphore},
@@ -65,6 +68,7 @@ func TestNewInsertClient_FailsLoudlyBeforeOpeningAPool(t *testing.T) {
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	defaults := decoration.DefaultConfig()
+
 	_, err = riverpkg.NewInsertClient(t.Context(), "::not a dsn::", 1,
 		decorate.NewDecorations(&defaults, decorate.Collaborators{}))
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))

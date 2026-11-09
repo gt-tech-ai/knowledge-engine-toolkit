@@ -42,21 +42,26 @@ func (i clientInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		op := strings.TrimPrefix(req.Spec().Procedure, "/")
 		run := i.base.Exec[connect.AnyResponse]
+
 		if req.Spec().IdempotencyLevel == connect.IdempotencyUnknown {
 			run = i.base.ExecOnce[connect.AnyResponse]
 		}
+
 		resp, err := run(
 			ctx,
 			op,
 			func(ctx context.Context) (connect.AnyResponse, error) {
 				injectTrace(ctx, req.Header())
+
 				resp, err := next(ctx, req)
+
 				return resp, wire.FromError(err)
 			},
 		)
 		if err != nil {
 			return nil, wire.ToConnect(err)
 		}
+
 		return resp, nil
 	}
 }
@@ -68,6 +73,7 @@ func (i clientInterceptor) WrapStreamingClient(
 	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
 		conn := next(ctx, spec)
 		injectTrace(ctx, conn.RequestHeader())
+
 		return conn
 	}
 }

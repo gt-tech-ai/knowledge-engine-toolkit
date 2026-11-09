@@ -17,6 +17,7 @@ func NewRetry(retrier interfaces.Retrier) OpMiddleware {
 			if interfaces.InTx(ctx) {
 				return next(ctx)
 			}
+
 			return retrier.Retry(ctx, func() error { return next(ctx) })
 		},
 	)

@@ -21,6 +21,7 @@ func (c *stackCaptureHandler) Enabled(context.Context, slog.Level) bool { return
 
 func (c *stackCaptureHandler) Handle(_ context.Context, r slog.Record) error {
 	c.rec = r
+
 	return nil
 }
 func (c *stackCaptureHandler) WithAttrs([]slog.Attr) slog.Handler { return c }
@@ -28,15 +29,21 @@ func (c *stackCaptureHandler) WithGroup(string) slog.Handler      { return c }
 
 // stackAttrValue returns the value of the injected stacktrace attribute, if any.
 func stackAttrValue(r slog.Record) (string, bool) {
-	var stack string
-	var found bool
+	var (
+		stack string
+		found bool
+	)
+
 	r.Attrs(func(a slog.Attr) bool {
 		if a.Key == logctx.StacktraceKey {
 			stack, found = a.Value.String(), true
+
 			return false
 		}
+
 		return true
 	})
+
 	return stack, found
 }
 
@@ -54,6 +61,7 @@ func stackAttrValue(r slog.Record) (string, bool) {
 //     proving the walk continued past the plumbing rather than stopping in it.
 func TestStacktraceHandler_SkipsLoggingPlumbing(t *testing.T) {
 	t.Parallel()
+
 	ch := &stackCaptureHandler{}
 	h := logctx.NewStacktraceHandler(ch, slog.LevelError)
 
@@ -72,6 +80,7 @@ func TestStacktraceHandler_SkipsLoggingPlumbing(t *testing.T) {
 		assert.NotContains(t, stack, noise,
 			"stacktrace leaks logging-plumbing frame %q (should be skipped)", noise)
 	}
+
 	// The handler's own frames live under foundation/logger/ and are filtered; the
 	// captured stack therefore starts at this test's call to Handle and continues
 	// up to the test runner. tRunner's presence proves captureStack walked the real
@@ -94,6 +103,7 @@ func TestStacktraceHandler_SkipsLoggingPlumbing(t *testing.T) {
 //     creation site (this test file), not the handler's call site.
 func TestStacktraceHandler_PrefersOriginStack(t *testing.T) {
 	t.Parallel()
+
 	ch := &stackCaptureHandler{}
 	h := logctx.NewStacktraceHandler(ch, slog.LevelError)
 
@@ -125,6 +135,7 @@ func TestStacktraceHandler_PrefersOriginStack(t *testing.T) {
 //     stacktrace attribute.
 func TestStacktraceHandler_BelowThresholdNoStack(t *testing.T) {
 	t.Parallel()
+
 	ch := &stackCaptureHandler{}
 	h := logctx.NewStacktraceHandler(ch, slog.LevelError)
 

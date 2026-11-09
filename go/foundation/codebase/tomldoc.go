@@ -13,9 +13,11 @@ import (
 // time to its text, so an expression compares every date as a timestamp.
 func decodeTOML(src []byte, p string) (any, error) {
 	var doc map[string]any
+
 	if err := toml.Unmarshal(src, &doc); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "toml "+p)
 	}
+
 	return normalizeTOML(doc), nil
 }
 
@@ -27,11 +29,13 @@ func normalizeTOML(v any) any {
 		for k, e := range t {
 			t[k] = normalizeTOML(e)
 		}
+
 		return t
 	case []any:
 		for i, e := range t {
 			t[i] = normalizeTOML(e)
 		}
+
 		return t
 	case toml.LocalDate:
 		return t.AsTime(time.UTC)

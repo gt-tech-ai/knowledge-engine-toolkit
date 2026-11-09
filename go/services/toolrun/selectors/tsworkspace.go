@@ -29,34 +29,45 @@ func (tsWorkspace) Select(
 	if apperr.Is(err, apperr.CodeNotFound) {
 		return nil, nil
 	}
+
 	if err != nil {
 		return nil, err
 	}
+
 	var ws struct {
 		// Packages are the workspace's package directory patterns.
 		Packages []string `yaml:"packages"`
 	}
+
 	if err := yaml.Unmarshal(text.Bytes, &ws); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+workspaceFile)
 	}
+
 	sel := types.FileSelector{}
+
 	for _, p := range ws.Packages {
 		if neg, ok := strings.CutPrefix(p, "!"); ok {
 			sel.Exclude = append(sel.Exclude, path.Join(neg, "package.json"))
+
 			continue
 		}
+
 		sel.Globs = append(sel.Globs, path.Join(p, "package.json"))
 	}
+
 	if len(sel.Globs) == 0 {
 		return nil, nil
 	}
+
 	found, err := cb.Files(ctx, sel)
 	if err != nil {
 		return nil, err
 	}
+
 	paths := make([]string, 0, len(found))
 	for _, f := range found {
 		paths = append(paths, f.Path)
 	}
+
 	return dirsOf(paths), nil
 }

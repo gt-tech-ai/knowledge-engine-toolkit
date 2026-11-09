@@ -46,6 +46,7 @@ func (s *SQSElasticMQSuite) SetupSuite() {
 	s.cfg.Endpoint = s.ElasticMQEndpoint
 
 	s.raw = s.rawClient()
+
 	_, err := s.raw.CreateQueue(context.Background(), &awssqs.CreateQueueInput{
 		QueueName: aws.String(emqTestQueue),
 	})
@@ -67,6 +68,7 @@ func (s *SQSElasticMQSuite) rawClient() *awssqs.Client {
 		),
 	)
 	s.Require().NoError(err)
+
 	return awssqs.NewFromConfig(awsCfg, func(o *awssqs.Options) {
 		o.BaseEndpoint = aws.String(s.ElasticMQEndpoint)
 	})
@@ -90,6 +92,7 @@ func (s *SQSElasticMQSuite) TestPublish_RoundTrip() {
 	s.Require().NoError(err)
 
 	const body = `{"event":"widget.created","id":"abc"}`
+
 	s.Require().NoError(pub.Publish(context.Background(), emqTestQueue, []byte(body)))
 
 	url, err := s.raw.GetQueueUrl(
@@ -97,6 +100,7 @@ func (s *SQSElasticMQSuite) TestPublish_RoundTrip() {
 		&awssqs.GetQueueUrlInput{QueueName: aws.String(emqTestQueue)},
 	)
 	s.Require().NoError(err)
+
 	out, err := s.raw.ReceiveMessage(context.Background(), &awssqs.ReceiveMessageInput{
 		QueueUrl:            url.QueueUrl,
 		MaxNumberOfMessages: 1,

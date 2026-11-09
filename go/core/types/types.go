@@ -84,6 +84,7 @@ type Timestamps struct {
 // SoftDelete marks the entity as deleted.
 func (t *Timestamps) SoftDelete() {
 	now := time.Now()
+
 	t.DeletedAt = &now
 }
 

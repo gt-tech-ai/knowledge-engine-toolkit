@@ -23,15 +23,18 @@ func checkSchema(schema any) error {
 	if schema == nil {
 		return nil
 	}
+
 	t := reflect.TypeOf(schema)
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
+
 	if t.Kind() != reflect.Struct {
 		return apperr.InvalidInput(fmt.Sprintf(
 			"config schema must be a struct or a pointer to one, got %T", schema,
 		))
 	}
+
 	return nil
 }
 
@@ -51,6 +54,7 @@ func deriveEnvBindings(
 	for key := range skip {
 		skipped[strings.ToLower(key)] = true
 	}
+
 	walkEnvBindings(v, reflect.TypeOf(cfg), "", envPrefix, skipped)
 }
 
@@ -64,34 +68,45 @@ func walkEnvBindings(
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
+
 	if t.Kind() != reflect.Struct {
 		return
 	}
+
 	for i := range t.NumField() {
 		f := t.Field(i)
 		name, squash, ok := fieldKey(f)
+
 		if !ok {
 			continue
 		}
+
 		ft := f.Type
 		if ft.Kind() == reflect.Pointer {
 			ft = ft.Elem()
 		}
+
 		if squash && ft.Kind() == reflect.Struct {
 			walkEnvBindings(v, ft, prefix, envPrefix, skipped)
+
 			continue
 		}
+
 		path := strings.ToLower(name)
 		if prefix != "" {
 			path = prefix + "." + path
 		}
+
 		if ft.Kind() == reflect.Struct {
 			walkEnvBindings(v, ft, path, envPrefix, skipped)
+
 			continue
 		}
+
 		if skipped[path] {
 			continue
 		}
+
 		bindLeaf(v, path, envPrefix, f.Tag.Get("envalias"))
 	}
 }
@@ -104,10 +119,12 @@ func fieldKey(f reflect.StructField) (name string, squash, ok bool) {
 	if !f.IsExported() {
 		return "", false, false
 	}
+
 	name, opts, _ := strings.Cut(f.Tag.Get("mapstructure"), ",")
 	if name == "-" {
 		return "", false, false
 	}
+
 	for opt := range strings.SplitSeq(opts, ",") {
 		switch strings.TrimSpace(opt) {
 		case "squash":
@@ -116,9 +133,11 @@ func fieldKey(f reflect.StructField) (name string, squash, ok bool) {
 			return "", false, false
 		}
 	}
+
 	if name == "" {
 		name = f.Name
 	}
+
 	return name, squash, true
 }
 
@@ -130,9 +149,11 @@ func bindLeaf(v *viper.Viper, path, envPrefix, aliases string) {
 	if envPrefix != "" {
 		envName = strings.ToUpper(envPrefix) + "_" + envName
 	}
+
 	names := []string{path, envName}
 	if aliases != "" {
 		names = append(names, strings.Split(aliases, ",")...)
 	}
+
 	_ = v.BindEnv(names...)
 }

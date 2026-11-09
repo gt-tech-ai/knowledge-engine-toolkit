@@ -56,6 +56,7 @@ func marshalFilter(v any) ([]byte, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "filter: encode")
 	}
+
 	return out, nil
 }
 
@@ -65,12 +66,15 @@ func (n FilterNode) arms() int {
 	if n.Clause != nil {
 		count++
 	}
+
 	if n.And != nil {
 		count++
 	}
+
 	if n.Or != nil {
 		count++
 	}
+
 	return count
 }
 
@@ -103,7 +107,9 @@ func (n *FilterNode) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
+
 	*n = node
+
 	return nil
 }
 
@@ -113,45 +119,57 @@ func decodeFilterNode(data []byte, depth int) (FilterNode, error) {
 		return FilterNode{}, apperr.New(apperr.CodeInvalidInput,
 			"filter: nesting exceeds max depth")
 	}
+
 	var obj map[string]json.RawMessage
+
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return FilterNode{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 			"filter: a node must be a JSON object")
 	}
+
 	if len(obj) == 0 {
 		return FilterNode{}, nil
 	}
+
 	if len(obj) != 1 {
 		return FilterNode{}, apperr.New(apperr.CodeInvalidInput,
 			"filter: each object must carry exactly one operator")
 	}
+
 	for key, raw := range obj {
 		if key == filterAndKey || key == filterOrKey {
 			return decodeFilterGroup(key, raw, depth)
 		}
+
 		return decodeFilterClause(key, raw)
 	}
+
 	return FilterNode{}, nil // unreachable: obj has exactly one key
 }
 
 // decodeFilterGroup decodes the array body of an $and or $or group.
 func decodeFilterGroup(key string, raw json.RawMessage, depth int) (FilterNode, error) {
 	var items []json.RawMessage
+
 	if err := json.Unmarshal(raw, &items); err != nil {
 		return FilterNode{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 			"filter: "+key+" must be an array of filters")
 	}
+
 	members := make([]FilterNode, 0, len(items))
 	for _, item := range items {
 		member, err := decodeFilterNode(item, depth+1)
 		if err != nil {
 			return FilterNode{}, err
 		}
+
 		members = append(members, member)
 	}
+
 	if key == filterAndKey {
 		return FilterNode{And: members}, nil
 	}
+
 	return FilterNode{Or: members}, nil
 }
 
@@ -162,26 +180,34 @@ func decodeFilterClause(token string, raw json.RawMessage) (FilterNode, error) {
 		return FilterNode{}, apperr.New(apperr.CodeInvalidInput,
 			"filter: unknown operator "+token)
 	}
+
 	var body map[string]json.RawMessage
+
 	if err := json.Unmarshal(raw, &body); err != nil {
 		return FilterNode{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 			"filter: operator body must be {field: value}")
 	}
+
 	if len(body) != 1 {
 		return FilterNode{}, apperr.New(apperr.CodeInvalidInput,
 			"filter: operator body must carry exactly one field")
 	}
+
 	for field, rawValue := range body {
 		dec := json.NewDecoder(bytes.NewReader(rawValue))
 		dec.UseNumber()
+
 		var value any
+
 		if err := dec.Decode(&value); err != nil {
 			return FilterNode{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 				"filter: invalid value")
 		}
+
 		return FilterNode{
 			Clause: &FilterNodeClause{Field: field, Op: op, Value: value},
 		}, nil
 	}
+
 	return FilterNode{}, nil // unreachable: body has exactly one field
 }

@@ -53,6 +53,7 @@ func NewPublisher(ctx context.Context, cfg Config) (*Publisher, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &Publisher{api: api, urls: make(map[string]string)}, nil
 }
 
@@ -82,12 +83,14 @@ func (p *Publisher) PublishBatchKeyed(
 ) error {
 	trace := traceAttributes(ctx)
 	entries := make([]sqstypes.SendMessageBatchRequestEntry, len(items))
+
 	for i, item := range items {
 		entries[i] = sqstypes.SendMessageBatchRequestEntry{
 			MessageBody:       aws.String(string(item.Payload)),
 			MessageAttributes: withKey(trace, item.Key),
 		}
 	}
+
 	return p.sendBatch(ctx, topic, entries)
 }
 
@@ -105,6 +108,7 @@ func (p *Publisher) send(
 	if err != nil {
 		return err
 	}
+
 	if _, err := p.api.SendMessage(ctx, &awssqs.SendMessageInput{
 		QueueUrl:          aws.String(url),
 		MessageBody:       aws.String(string(payload)),
@@ -112,6 +116,7 @@ func (p *Publisher) send(
 	}); err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "sqs send message")
 	}
+
 	return nil
 }
 
@@ -127,12 +132,14 @@ func (p *Publisher) PublishBatch(
 ) error {
 	attrs := traceAttributes(ctx)
 	entries := make([]sqstypes.SendMessageBatchRequestEntry, len(payloads))
+
 	for i, payload := range payloads {
 		entries[i] = sqstypes.SendMessageBatchRequestEntry{
 			MessageBody:       aws.String(string(payload)),
 			MessageAttributes: attrs,
 		}
 	}
+
 	return p.sendBatch(ctx, topic, entries)
 }
 
@@ -147,14 +154,17 @@ func (p *Publisher) sendBatch(
 	if len(entries) == 0 {
 		return nil
 	}
+
 	url, err := p.queueURL(ctx, topic)
 	if err != nil {
 		return err
 	}
+
 	for i := range entries {
 		// Id is the per-request entry id (unique within the batch); the index serves.
 		entries[i].Id = aws.String(strconv.Itoa(i))
 	}
+
 	for start := 0; start < len(entries); start += maxBatchSize {
 		out, err := p.api.SendMessageBatch(ctx, &awssqs.SendMessageBatchInput{
 			QueueUrl: aws.String(url),
@@ -163,10 +173,12 @@ func (p *Publisher) sendBatch(
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeUnavailable, "sqs send message batch")
 		}
+
 		if len(out.Failed) > 0 {
 			return failedEntriesError("sqs send message batch", out.Failed)
 		}
 	}
+
 	return nil
 }
 
@@ -176,9 +188,11 @@ func (p *Publisher) sendBatch(
 func traceAttributes(ctx context.Context) map[string]sqstypes.MessageAttributeValue {
 	carrier := map[string]string{}
 	tracer.Inject(ctx, carrier)
+
 	if len(carrier) == 0 {
 		return nil
 	}
+
 	attrs := make(map[string]sqstypes.MessageAttributeValue, len(carrier))
 	for k, v := range carrier {
 		attrs[k] = sqstypes.MessageAttributeValue{
@@ -186,6 +200,7 @@ func traceAttributes(ctx context.Context) map[string]sqstypes.MessageAttributeVa
 			StringValue: aws.String(v),
 		}
 	}
+
 	return attrs
 }
 
@@ -199,10 +214,12 @@ func withKey(
 	for k, v := range attrs {
 		out[k] = v
 	}
+
 	out[interfaces.PartitionKeyAttribute] = sqstypes.MessageAttributeValue{
 		DataType:    aws.String("String"),
 		StringValue: aws.String(key),
 	}
+
 	return out
 }
 
@@ -214,6 +231,7 @@ func failedEntriesError(op string, failed []sqstypes.BatchResultErrorEntry) erro
 	for i, f := range failed {
 		parts[i] = aws.ToString(f.Id) + ":" + aws.ToString(f.Code)
 	}
+
 	return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
 		"%s: failed entries [%s]", op, strings.Join(parts, ", "),
 	))
@@ -224,13 +242,17 @@ func failedEntriesError(op string, failed []sqstypes.BatchResultErrorEntry) erro
 func (p *Publisher) queueURL(ctx context.Context, topic string) (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
 	if url, ok := p.urls[topic]; ok {
 		return url, nil
 	}
+
 	url, err := ensureQueue(ctx, p.api, topic)
 	if err != nil {
 		return "", err
 	}
+
 	p.urls[topic] = url
+
 	return url, nil
 }

@@ -339,7 +339,9 @@ func TestTimestamps_SoftDelete(t *testing.T) {
 	require.Nil(t, ts.DeletedAt, "DeletedAt should be nil before SoftDelete")
 
 	before := time.Now()
+
 	ts.SoftDelete()
+
 	after := time.Now()
 
 	require.NotNil(t, ts.DeletedAt, "DeletedAt should be set after SoftDelete")

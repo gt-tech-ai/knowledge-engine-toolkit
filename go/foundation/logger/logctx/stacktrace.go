@@ -45,6 +45,7 @@ func (h *stacktraceHandler) Handle(ctx context.Context, r slog.Record) error {
 	if r.Level < h.level {
 		return h.inner.Handle(ctx, r)
 	}
+
 	// Prefer an origin stack carried by a logged error (e.g. an AppError) so the
 	// trace points at where the error was created, not this logging call site.
 	// Fall back to capturing the current stack when no error supplies one.
@@ -52,8 +53,10 @@ func (h *stacktraceHandler) Handle(ctx context.Context, r slog.Record) error {
 	if stack == "" {
 		stack = captureStack()
 	}
+
 	r2 := r.Clone()
 	r2.AddAttrs(slog.String(StacktraceKey, stack))
+
 	return h.inner.Handle(ctx, r2)
 }
 
@@ -72,15 +75,19 @@ type stackTracer interface {
 // attribute, or "" when no attribute supplies one.
 func originStack(r slog.Record) string {
 	var stack string
+
 	r.Attrs(func(a slog.Attr) bool {
 		if st, ok := a.Value.Resolve().Any().(stackTracer); ok {
 			if s := st.StackTrace(); s != "" {
 				stack = s
+
 				return false
 			}
 		}
+
 		return true
 	})
+
 	return stack
 }
 
@@ -106,6 +113,7 @@ func captureStack() string {
 	frames := runtime.CallersFrames(pcs[:n])
 
 	var b strings.Builder
+
 	for {
 		frame, more := frames.Next()
 		// Drop logging plumbing frames wherever they appear so the trace shows
@@ -118,10 +126,12 @@ func captureStack() string {
 			b.WriteString(strconv.Itoa(frame.Line))
 			b.WriteByte('\n')
 		}
+
 		if !more {
 			break
 		}
 	}
+
 	return b.String()
 }
 

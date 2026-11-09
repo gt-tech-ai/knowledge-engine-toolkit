@@ -39,10 +39,12 @@ func NewEntity[R, T, P any, ID comparable, N any](
 	if err != nil {
 		return Entity[T, P, ID, N]{}, err
 	}
+
 	roles := decorate.RolesOf[T, P, ID](next)
 	if cache != nil {
 		roles = cached(roles, *cache, name)
 	}
+
 	run := func(
 		ctx context.Context,
 		op string,
@@ -50,6 +52,7 @@ func NewEntity[R, T, P any, ID comparable, N any](
 		fn func(context.Context) error,
 	) error {
 		s := b.Subject
+
 		switch kind {
 		case decorate.RoleCreate:
 			s = b.Once()
@@ -57,14 +60,18 @@ func NewEntity[R, T, P any, ID comparable, N any](
 			s = b.Observed()
 		case decorate.RoleRead, decorate.RoleWrite:
 		}
+
 		_, err := s.Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
 			return struct{}{}, fn(ctx)
 		})
+
 		return err
 	}
+
 	e, err := decorate.NewEntity[R](name, roles, run, nil)
 	if err != nil {
 		return Entity[T, P, ID, N]{}, err
 	}
+
 	return Entity[T, P, ID, N]{Base: b, Entity: e, next: next}, nil
 }

@@ -52,6 +52,7 @@ func TestGRPCServerFactory(t *testing.T) {
 	go func() {
 		_ = server.Serve(lis)
 	}()
+
 	defer server.GracefulStop()
 
 	// Connect a client and verify health check works
@@ -60,6 +61,7 @@ func TestGRPCServerFactory(t *testing.T) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err, "failed to connect to server")
+
 	defer func() { _ = conn.Close() }()
 
 	client := healthpb.NewHealthClient(conn)
@@ -95,12 +97,14 @@ func TestGRPCClientFactory(t *testing.T) {
 	go func() {
 		_ = server.Serve(lis)
 	}()
+
 	defer server.GracefulStop()
 
 	// Use the package's client factory
 	clientCfg := platformgrpc.DefaultClientConfig(lis.Addr().String())
 	conn, err := platformgrpc.NewClient(clientCfg)
 	require.NoError(t, err, "failed to create gRPC client")
+
 	defer func() { _ = conn.Close() }()
 
 	// Verify actual connectivity via health check
@@ -125,11 +129,15 @@ func TestGRPCClientFactory(t *testing.T) {
 //     "grpc.health.v1.Health/Check".
 func TestRPCNewFromConfig_DecoratesEveryCall(t *testing.T) {
 	t.Parallel()
+
 	server := grpcserver.NewServer(grpcserver.DefaultServerConfig())
 	grpcserver.RegisterHealthService(server)
+
 	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
+
 	go func() { _ = server.Serve(lis) }()
+
 	t.Cleanup(server.GracefulStop)
 
 	reg := promclient.NewRegistry()

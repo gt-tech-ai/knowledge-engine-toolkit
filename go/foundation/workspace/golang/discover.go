@@ -21,6 +21,7 @@ func ModulePath(fsys fs.FS) (string, error) {
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeNotFound, "open root go.mod")
 	}
+
 	mod := modfile.ModulePath(data)
 	if mod == "" {
 		return "", apperr.New(
@@ -28,6 +29,7 @@ func ModulePath(fsys fs.FS) (string, error) {
 			"no module directive found in root go.mod",
 		)
 	}
+
 	return mod, nil
 }
 
@@ -40,17 +42,22 @@ func ModulePath(fsys fs.FS) (string, error) {
 // cheap on a populated tree.
 func HasGeneratedPackages(fsys fs.FS, pbDir string) bool {
 	found := false
+
 	_ = fs.WalkDir(fsys, pbDir, func(_ string, d fs.DirEntry, err error) error {
 		if err != nil {
 			//nolint:nilerr // best-effort scan: keep walking past unreadable entries
 			return nil
 		}
+
 		if !d.IsDir() && strings.HasSuffix(d.Name(), ".pb.go") {
 			found = true
+
 			return fs.SkipAll
 		}
+
 		return nil
 	})
+
 	return found
 }
 
@@ -66,20 +73,25 @@ func StagedModules(
 	keep func(relPath string) bool,
 ) []string {
 	seen := make(map[string]struct{})
+
 	var modules []string
+
 	for _, f := range stagedFiles {
 		mod, ok := owningModule(fsys, path.Dir(filepath.ToSlash(f)))
 		if !ok {
 			continue
 		}
+
 		if _, dup := seen[mod]; dup {
 			continue
 		}
+
 		seen[mod] = struct{}{}
 		if keep == nil || keep(mod) {
 			modules = append(modules, mod)
 		}
 	}
+
 	return modules
 }
 
@@ -90,13 +102,16 @@ func owningModule(fsys fs.FS, dir string) (string, bool) {
 		if isFile(fsys, path.Join(dir, modFile)) { // nosemgrep: use-filepath-join
 			return dir, true
 		}
+
 		dir = path.Dir(dir)
 	}
+
 	return ".", isFile(fsys, modFile)
 }
 
 // isFile reports whether name exists in fsys.
 func isFile(fsys fs.FS, name string) bool {
 	_, err := fs.Stat(fsys, name)
+
 	return err == nil
 }

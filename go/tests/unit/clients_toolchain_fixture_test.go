@@ -18,11 +18,15 @@ import (
 // of every shape, and checks it is valid.
 func toolEntries(t *testing.T) []types.ToolEntry {
 	t.Helper()
+
 	raw, err := os.ReadFile(filepath.Join("testdata", "toolchain", "tools.yaml"))
 	require.NoError(t, err)
+
 	var tools []types.ToolEntry
+
 	require.NoError(t, yaml.Unmarshal(raw, &tools))
 	require.Empty(t, types.ValidateToolEntries(tools))
+
 	return tools
 }
 
@@ -30,9 +34,11 @@ func toolEntries(t *testing.T) []types.ToolEntry {
 // session does.
 func denyPrompter(t *testing.T) interfaces.Prompter {
 	t.Helper()
+
 	p := mocks.NewMockPrompter(gomock.NewController(t))
 	p.EXPECT().Confirm(gomock.Any(), gomock.Any()).
 		Return(false, interfaces.NonInteractiveError()).AnyTimes()
+
 	return p
 }
 
@@ -41,11 +47,13 @@ func denyPrompter(t *testing.T) interfaces.Prompter {
 // Run expectations on top.
 func registerToolScanMock(r *mocks.MockCommandRunner) {
 	r.EXPECT().Exists(gomock.Any()).Return(true).AnyTimes()
+
 	for i := range 9 {
 		args := make([]any, 0, 3+i)
 		for range 3 + i {
 			args = append(args, gomock.Any())
 		}
+
 		r.EXPECT().RunBuffered(args[0], args[1], args[2], args[3:]...).
 			Return(interfaces.CmdResult{}).AnyTimes()
 	}

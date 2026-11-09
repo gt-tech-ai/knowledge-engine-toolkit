@@ -53,13 +53,17 @@ func command(spec types.ProcessSpec) (*osexec.Cmd, func(), error) {
 			"process "+spec.Name+": no program",
 		)
 	}
+
 	// The program is the caller's by design, and a supervised process outlives the
 	// context that started it (Stop ends it), so it is not bound to one.
 	prog, args := spec.Args[0], spec.Args[1:]
 	cmd := osexec.Command(prog, args...) //nolint:noctx // see above
+
 	cmd.Dir = spec.Dir
 	cmd.Env = types.MergeEnv(os.Environ(), spec.Env)
+
 	release := func() {}
+
 	if spec.LogFile != "" {
 		f, err := os.OpenFile(
 			spec.LogFile,
@@ -70,18 +74,23 @@ func command(spec types.ProcessSpec) (*osexec.Cmd, func(), error) {
 			return nil, nil, apperr.Wrap(err, apperr.CodeUnavailable,
 				"open "+spec.Name+"'s log "+spec.LogFile)
 		}
+
 		release = func() { _ = f.Close() }
+
 		if spec.Stdout == nil {
 			spec.Stdout = f
 		}
+
 		if spec.Stderr == nil {
 			spec.Stderr = f
 		}
 	}
+
 	cmd.Stdout, cmd.Stderr = orDiscard(spec.Stdout), orDiscard(spec.Stderr)
 	// A child the process leaves behind may hold its output open; stop copying a
 	// moment after the process itself exits.
 	cmd.WaitDelay = waitDelay
+
 	return cmd, release, nil
 }
 
@@ -90,6 +99,7 @@ func orDiscard(w io.Writer) io.Writer {
 	if w == nil {
 		return io.Discard
 	}
+
 	return w
 }
 
@@ -104,23 +114,33 @@ func (s *Supervisor) Start(
 		return nil, err
 	}
 	defer release()
+
 	ownGroup(cmd)
+
 	if err := cmd.Start(); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeUnavailable, "start "+spec.Name)
 	}
+
 	h := newHandle(spec.Name, cmd)
+
 	s.mu.Lock()
+
 	s.started = append(s.started, h)
 	s.mu.Unlock()
+
 	if ready == nil {
 		return h, nil
 	}
+
 	if err := h.awaitReady(ctx, ready); err != nil {
 		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), maxBackoff)
 		defer cancel()
+
 		_ = h.Stop(stopCtx)
+
 		return nil, err
 	}
+
 	return h, nil
 }
 
@@ -133,28 +153,37 @@ func (s *Supervisor) Detach(spec types.ProcessSpec) error {
 		return err
 	}
 	defer release()
+
 	ownSession(cmd)
+
 	if err := cmd.Start(); err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "start "+spec.Name)
 	}
+
 	if err := cmd.Process.Release(); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "release "+spec.Name)
 	}
+
 	return nil
 }
 
 // StopAll stops every supervised process, newest first, and returns the first error.
 func (s *Supervisor) StopAll(ctx context.Context) error {
 	s.mu.Lock()
+
 	hs := slices.Clone(s.started)
+
 	s.started = nil
 	s.mu.Unlock()
+
 	var first error
+
 	for _, h := range slices.Backward(hs) {
 		if err := h.Stop(ctx); err != nil && first == nil {
 			first = err
 		}
 	}
+
 	return first
 }
 
@@ -180,12 +209,14 @@ func newHandle(name string, cmd *osexec.Cmd) *handle {
 		h.err = cmd.Wait()
 		close(h.done)
 	}()
+
 	return h
 }
 
 // Wait blocks until the process exits.
 func (h *handle) Wait() error {
 	<-h.done
+
 	return h.err
 }
 
@@ -197,13 +228,16 @@ func (h *handle) Stop(ctx context.Context) error {
 		return nil
 	default:
 	}
+
 	terminate(h.cmd)
+
 	select {
 	case <-h.done:
 		return nil
 	case <-ctx.Done():
 		kill(h.cmd)
 		<-h.done
+
 		return apperr.Wrap(ctx.Err(), apperr.ContextCode(ctx.Err(), apperr.CodeTimeout),
 			"stop "+h.name+": killed")
 	}
@@ -216,14 +250,17 @@ func (h *handle) awaitReady(
 	ready interfaces.Probe[interfaces.ProcessHandle],
 ) error {
 	wait := firstBackoff
+
 	for {
 		if v := ready.Run(ctx, h); v.Status == types.StatusPass {
 			return nil
 		}
+
 		timer := time.NewTimer(wait)
 		select {
 		case <-h.done:
 			timer.Stop()
+
 			return apperr.Wrap(
 				h.err,
 				apperr.CodeUpstream,
@@ -231,6 +268,7 @@ func (h *handle) awaitReady(
 			)
 		case <-ctx.Done():
 			timer.Stop()
+
 			return apperr.Wrap(
 				ctx.Err(),
 				apperr.ContextCode(ctx.Err(), apperr.CodeTimeout),
@@ -238,6 +276,7 @@ func (h *handle) awaitReady(
 			)
 		case <-timer.C:
 		}
+
 		wait = min(2*wait, maxBackoff)
 	}
 }

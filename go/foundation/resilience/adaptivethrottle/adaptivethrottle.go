@@ -83,14 +83,17 @@ func New(cfg Config) *Throttler {
 	if k <= 0 {
 		k = 2.0
 	}
+
 	decay := cfg.Decay
 	if decay <= 0 || decay > 1 {
 		decay = 0.98
 	}
+
 	r := cfg.Rand
 	if r == nil {
 		r = rand.Float64
 	}
+
 	return &Throttler{k: k, decay: decay, rand: r}
 }
 
@@ -100,10 +103,12 @@ func New(cfg Config) *Throttler {
 // probability and a recovery lowers it.
 func (t *Throttler) Do(_ context.Context, op func() error) error {
 	t.mu.Lock()
+
 	// Age the window, then decide from the pre-attempt ratio so a cold start (0/0) never
 	// sheds.
 	t.requests *= t.decay
 	t.accepts *= t.decay
+
 	shed := t.rand() < t.rejectionProbability()
 	t.requests++ // this attempt counts as a request whether shed or allowed
 	t.mu.Unlock()
@@ -111,12 +116,15 @@ func (t *Throttler) Do(_ context.Context, op func() error) error {
 	if shed {
 		return ErrThrottled
 	}
+
 	err := op()
 	if err == nil {
 		t.mu.Lock()
+
 		t.accepts++
 		t.mu.Unlock()
 	}
+
 	return err
 }
 
@@ -125,6 +133,7 @@ func (t *Throttler) Do(_ context.Context, op func() error) error {
 func (t *Throttler) RejectionProbability() float64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	return t.rejectionProbability()
 }
 

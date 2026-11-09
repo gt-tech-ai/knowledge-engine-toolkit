@@ -76,6 +76,7 @@ var pathParamSegment = regexp.MustCompile(`^\{[^/{}]+\}$`)
 func pathEndsInParam(pathTemplate string) bool {
 	trimmed := strings.TrimRight(pathTemplate, "/")
 	last := trimmed[strings.LastIndex(trimmed, "/")+1:]
+
 	return pathParamSegment.MatchString(last)
 }
 

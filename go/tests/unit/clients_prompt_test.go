@@ -18,7 +18,9 @@ import (
 func requireNonInteractive(t *testing.T, err error) {
 	t.Helper()
 	require.Error(t, err)
+
 	var ae *apperr.AppError
+
 	require.True(t, apperr.As(err, &ae), "want *errors.AppError, got %T", err)
 	assert.Equal(t, apperr.CodeInvalidInput, ae.Code)
 	assert.Contains(t, err.Error(), "--yes")
@@ -37,6 +39,7 @@ func requireNonInteractive(t *testing.T, err error) {
 //   - The question followed by " [y/N] " is written to the injected writer.
 func TestPrompt_TTYReadsInjectedReader(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		in   string
 		want bool
@@ -49,11 +52,14 @@ func TestPrompt_TTYReadsInjectedReader(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(strings.TrimSpace(tc.in), func(t *testing.T) {
 			t.Parallel()
+
 			var out bytes.Buffer
+
 			p, err := prompt.NewFromConfig(context.Background(),
 				prompt.Config{Kind: prompt.KindTTY},
 				prompt.Deps{In: strings.NewReader(tc.in), Out: &out})
 			require.NoError(t, err)
+
 			got, err := p.Confirm(context.Background(), "Install pkgsite?")
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
@@ -73,10 +79,12 @@ func TestPrompt_TTYReadsInjectedReader(t *testing.T) {
 //   - An empty reader yields a CodeInvalidInput error naming --yes.
 func TestPrompt_TTYEOFReturnsCodedError(t *testing.T) {
 	t.Parallel()
+
 	p, err := prompt.NewFromConfig(context.Background(),
 		prompt.Config{Kind: prompt.KindTTY},
 		prompt.Deps{In: strings.NewReader(""), Out: io.Discard})
 	require.NoError(t, err)
+
 	_, err = p.Confirm(context.Background(), "Install pkgsite?")
 	requireNonInteractive(t, err)
 }
@@ -93,11 +101,14 @@ func TestPrompt_TTYEOFReturnsCodedError(t *testing.T) {
 //     and a CodeCanceled error, and writes no question.
 func TestPrompt_TTYCancelledContextDoesNotAsk(t *testing.T) {
 	t.Parallel()
+
 	var out strings.Builder
+
 	p, err := prompt.NewFromConfig(context.Background(),
 		prompt.Config{Kind: prompt.KindTTY},
 		prompt.Deps{In: strings.NewReader("y\n"), Out: &out})
 	require.NoError(t, err)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -119,12 +130,14 @@ func TestPrompt_TTYCancelledContextDoesNotAsk(t *testing.T) {
 //   - Confirm returns a CodeInvalidInput error naming --yes, without reading any input.
 func TestPrompt_DenyReturnsCodedError(t *testing.T) {
 	t.Parallel()
+
 	p, err := prompt.NewFromConfig(
 		context.Background(),
 		prompt.Config{Kind: prompt.KindDeny},
 		prompt.Deps{},
 	)
 	require.NoError(t, err)
+
 	_, err = p.Confirm(context.Background(), "Install pkgsite?")
 	requireNonInteractive(t, err)
 }
@@ -139,8 +152,10 @@ func TestPrompt_DenyReturnsCodedError(t *testing.T) {
 //   - An empty Config builds a Prompter whose Confirm is the --yes error.
 func TestPrompt_DefaultIsDeny(t *testing.T) {
 	t.Parallel()
+
 	p, err := prompt.NewFromConfig(context.Background(), prompt.Config{}, prompt.Deps{})
 	require.NoError(t, err)
+
 	_, err = p.Confirm(context.Background(), "Install pkgsite?")
 	requireNonInteractive(t, err)
 }
@@ -157,6 +172,7 @@ func TestPrompt_DefaultIsDeny(t *testing.T) {
 //     tty; tty without In/Out is CodeInvalidInput.
 func TestPrompt_UnknownKindFails(t *testing.T) {
 	t.Parallel()
+
 	p, err := prompt.NewFromConfig(
 		context.Background(),
 		prompt.Config{Kind: "bogus"},

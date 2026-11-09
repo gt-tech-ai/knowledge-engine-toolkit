@@ -41,8 +41,11 @@ import (
 func TestCircuitBreaker_FactoryReturnsInterface(t *testing.T) {
 	t.Parallel()
 
-	var cb interfaces.CircuitBreaker
-	var err error
+	var (
+		cb  interfaces.CircuitBreaker
+		err error
+	)
+
 	cb, err = circuitbreaker.New(circuitbreaker.KindGoBreaker, "test")
 	require.NoError(t, err, "unexpected error")
 
@@ -64,8 +67,11 @@ func TestCircuitBreaker_FactoryReturnsInterface(t *testing.T) {
 func TestCircuitBreaker_OpensAfterConsecutiveFailures(t *testing.T) {
 	t.Parallel()
 
-	var cb interfaces.CircuitBreaker
-	var err error
+	var (
+		cb  interfaces.CircuitBreaker
+		err error
+	)
+
 	cb, err = circuitbreaker.NewFromConfig(circuitbreaker.Config{
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                "test-cb",
@@ -85,8 +91,10 @@ func TestCircuitBreaker_OpensAfterConsecutiveFailures(t *testing.T) {
 	}
 
 	ran := false
+
 	err = cb.Execute(func() error {
 		ran = true
+
 		return nil
 	})
 	require.Error(t, err, "expected circuit breaker to be open")
@@ -128,8 +136,10 @@ func TestCircuitBreaker_DomainErrorsDoNotTrip(t *testing.T) {
 	ran := false
 	got := cb.Execute(func() error {
 		ran = true
+
 		return apperr.Conflict("dup")
 	})
+
 	require.True(
 		t,
 		ran,
@@ -165,21 +175,29 @@ func TestCircuitBreaker_FailureRatioTrips(t *testing.T) {
 	require.NoError(t, err)
 
 	opened := false
+
 	for i := range 60 {
 		var opErr error
+
 		if i%2 == 0 {
 			opErr = apperr.Sentinel("unavailable") // infra failure (retryable)
 		}
+
 		ran := false
+
 		_ = cb.Execute(func() error {
 			ran = true
+
 			return opErr
 		})
+
 		if !ran {
 			opened = true // breaker rejected the call without running it
+
 			break
 		}
 	}
+
 	require.True(
 		t,
 		opened,
@@ -220,8 +238,10 @@ func TestCircuitBreaker_CallerCancellationDoesNotTrip(t *testing.T) {
 	ran := false
 	got := cb.Execute(func() error {
 		ran = true
+
 		return context.Canceled
 	})
+
 	require.True(
 		t,
 		ran,
@@ -289,6 +309,7 @@ func TestCircuitBreaker_MockAsConsumerDependency(t *testing.T) {
 	mock.EXPECT().Execute(gomock.Any()).Return(nil)
 
 	var cb interfaces.CircuitBreaker = mock
+
 	require.NoError(t, cb.Execute(func() error { return nil }), "unexpected error")
 }
 
@@ -311,6 +332,7 @@ func TestCircuitBreaker_MockReturnsError(t *testing.T) {
 	mock.EXPECT().Execute(gomock.Any()).Return(openErr)
 
 	var cb interfaces.CircuitBreaker = mock
+
 	err := cb.Execute(func() error { return nil })
 	assert.ErrorIs(t, err, openErr)
 }
@@ -335,6 +357,7 @@ func TestRetryBudget_BlocksWhenExhausted(t *testing.T) {
 
 	ctx := context.Background()
 	b := budget.NewBudget(2)
+
 	ctx = budget.WithRetryBudget(ctx, b)
 
 	require.True(t, budget.ConsumeRetry(ctx), "retry 1 should be allowed")
@@ -387,6 +410,7 @@ func TestRetryBudget_Remaining(t *testing.T) {
 
 	ctx := context.Background()
 	b := budget.NewBudget(3)
+
 	ctx = budget.WithRetryBudget(ctx, b)
 
 	assert.Equal(t, int32(3), budget.Remaining(ctx))
@@ -422,9 +446,11 @@ func TestRetryBudget_ChargesRetriesNotFirstAttempts(t *testing.T) {
 
 	t.Run("first attempts are free", func(t *testing.T) {
 		t.Parallel()
+
 		ctx := budget.WithRetryBudget(context.Background(), budget.NewBudget(1))
 		for range 3 {
 			require.NoError(t, r.Retry(ctx, func() error { return nil }))
+
 			v, err := exponential.RetryWithResult(
 				ctx,
 				r,
@@ -433,15 +459,20 @@ func TestRetryBudget_ChargesRetriesNotFirstAttempts(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, 7, v)
 		}
+
 		assert.Equal(t, int32(1), budget.Remaining(ctx))
 	})
 
 	t.Run("a budget of 2 allows 2 retries", func(t *testing.T) {
 		t.Parallel()
+
 		ctx := budget.WithRetryBudget(context.Background(), budget.NewBudget(2))
+
 		var attempts atomic.Int32
+
 		err := r.Retry(ctx, func() error {
 			attempts.Add(1)
+
 			return apperr.Sentinel("transient")
 		})
 		require.ErrorIs(t, err, budget.ErrRetryBudgetExhausted)
@@ -467,8 +498,11 @@ func TestRetryBudget_ChargesRetriesNotFirstAttempts(t *testing.T) {
 func TestRetry_FactoryReturnsInterface(t *testing.T) {
 	t.Parallel()
 
-	var r interfaces.Retrier
-	var err error
+	var (
+		r   interfaces.Retrier
+		err error
+	)
+
 	r, err = retry.New(retry.KindExponential)
 	require.NoError(t, err, "unexpected error")
 
@@ -493,8 +527,11 @@ func TestRetry_FactoryReturnsInterface(t *testing.T) {
 func TestRetry_SucceedsOnFirstAttempt(t *testing.T) {
 	t.Parallel()
 
-	var r interfaces.Retrier
-	var err error
+	var (
+		r   interfaces.Retrier
+		err error
+	)
+
 	r, err = retry.NewFromConfig(retry.Config{
 		Kind:            retry.KindExponential,
 		MaxRetries:      3,
@@ -506,9 +543,12 @@ func TestRetry_SucceedsOnFirstAttempt(t *testing.T) {
 	require.NoError(t, err, "unexpected error")
 
 	ctx := context.Background()
+
 	var attempts atomic.Int32
+
 	require.NoError(t, r.Retry(ctx, func() error {
 		attempts.Add(1)
+
 		return nil
 	}), "unexpected error")
 	assert.Equal(t, int32(1), attempts.Load(), "expected exactly 1 attempt")
@@ -530,8 +570,11 @@ func TestRetry_SucceedsOnFirstAttempt(t *testing.T) {
 func TestRetry_RetriesOnTransientError(t *testing.T) {
 	t.Parallel()
 
-	var r interfaces.Retrier
-	var err error
+	var (
+		r   interfaces.Retrier
+		err error
+	)
+
 	r, err = retry.NewFromConfig(retry.Config{
 		Kind:            retry.KindExponential,
 		MaxRetries:      3,
@@ -543,11 +586,14 @@ func TestRetry_RetriesOnTransientError(t *testing.T) {
 	require.NoError(t, err, "unexpected error")
 
 	ctx := context.Background()
+
 	var attempts atomic.Int32
+
 	require.NoError(t, r.Retry(ctx, func() error {
 		if attempts.Add(1) < 3 {
 			return apperr.Sentinel("transient")
 		}
+
 		return nil
 	}), "unexpected error")
 	assert.Equal(t, int32(3), attempts.Load(), "expected 3 total attempts")
@@ -580,9 +626,12 @@ func TestRetry_DoesNotRetryPermanentError(t *testing.T) {
 	require.NoError(t, err, "unexpected error")
 
 	permanent := apperr.New(apperr.CodeConflict, "duplicate resource")
+
 	var attempts atomic.Int32
+
 	got := r.Retry(context.Background(), func() error {
 		attempts.Add(1)
+
 		return permanent
 	})
 
@@ -655,6 +704,7 @@ func TestRetry_MockAsConsumerDependency(t *testing.T) {
 	mock.EXPECT().Retry(gomock.Any(), gomock.Any()).Return(nil)
 
 	var r interfaces.Retrier = mock
+
 	require.NoError(
 		t,
 		r.Retry(context.Background(), func() error { return nil }),
@@ -681,6 +731,7 @@ func TestRetry_MockReturnsError(t *testing.T) {
 	mock.EXPECT().Retry(gomock.Any(), gomock.Any()).Return(retryErr)
 
 	var r interfaces.Retrier = mock
+
 	err := r.Retry(context.Background(), func() error { return nil })
 	assert.ErrorIs(t, err, retryErr)
 }
@@ -703,8 +754,11 @@ func TestRetry_MockReturnsError(t *testing.T) {
 func TestBulkhead_FactoryReturnsInterface(t *testing.T) {
 	t.Parallel()
 
-	var bh interfaces.Bulkhead
-	var err error
+	var (
+		bh  interfaces.Bulkhead
+		err error
+	)
+
 	bh, err = bulkhead.New(bulkhead.KindChannel)
 	require.NoError(t, err, "unexpected error")
 
@@ -729,8 +783,11 @@ func TestBulkhead_FactoryReturnsInterface(t *testing.T) {
 func TestBulkhead_LimitsConcurrency(t *testing.T) {
 	t.Parallel()
 
-	var bh interfaces.Bulkhead
-	var err error
+	var (
+		bh  interfaces.Bulkhead
+		err error
+	)
+
 	bh, err = bulkhead.NewFromConfig(bulkhead.Config{
 		Kind:          bulkhead.KindChannel,
 		MaxConcurrent: 2,
@@ -738,10 +795,12 @@ func TestBulkhead_LimitsConcurrency(t *testing.T) {
 	require.NoError(t, err, "unexpected error")
 
 	blocker := make(chan struct{})
+
 	for range 2 {
 		go func() {
 			_ = bh.Execute(context.Background(), func() error {
 				<-blocker
+
 				return nil
 			})
 		}()
@@ -810,6 +869,7 @@ func TestBulkhead_MockAsConsumerDependency(t *testing.T) {
 	mock.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil)
 
 	var bh interfaces.Bulkhead = mock
+
 	require.NoError(
 		t,
 		bh.Execute(context.Background(), func() error { return nil }),
@@ -836,6 +896,7 @@ func TestBulkhead_MockTryExecuteFull(t *testing.T) {
 	mock.EXPECT().TryExecute(gomock.Any()).Return(fullErr)
 
 	var bh interfaces.Bulkhead = mock
+
 	err := bh.TryExecute(func() error { return nil })
 	assert.ErrorIs(t, err, fullErr)
 }
@@ -858,8 +919,11 @@ func TestBulkhead_MockTryExecuteFull(t *testing.T) {
 func TestRateLimiter_FactoryReturnsInterface(t *testing.T) {
 	t.Parallel()
 
-	var lim interfaces.RateLimiter
-	var err error
+	var (
+		lim interfaces.RateLimiter
+		err error
+	)
+
 	lim, err = ratelimiter.New(ratelimiter.KindToken)
 	require.NoError(t, err, "unexpected error")
 
@@ -879,8 +943,11 @@ func TestRateLimiter_FactoryReturnsInterface(t *testing.T) {
 func TestRateLimiter_AllowsWithinRate(t *testing.T) {
 	t.Parallel()
 
-	var lim interfaces.RateLimiter
-	var err error
+	var (
+		lim interfaces.RateLimiter
+		err error
+	)
+
 	lim, err = ratelimiter.NewFromConfig(ratelimiter.Config{
 		Kind:  ratelimiter.KindToken,
 		Rate:  1000,
@@ -912,8 +979,11 @@ func TestRateLimiter_AllowsWithinRate(t *testing.T) {
 func TestRateLimiter_RejectsOverBurst(t *testing.T) {
 	t.Parallel()
 
-	var lim interfaces.RateLimiter
-	var err error
+	var (
+		lim interfaces.RateLimiter
+		err error
+	)
+
 	lim, err = ratelimiter.NewFromConfig(ratelimiter.Config{
 		Kind:  ratelimiter.KindToken,
 		Rate:  1,
@@ -940,8 +1010,11 @@ func TestRateLimiter_RejectsOverBurst(t *testing.T) {
 func TestRateLimiter_WaitRespectsContext(t *testing.T) {
 	t.Parallel()
 
-	var lim interfaces.RateLimiter
-	var err error
+	var (
+		lim interfaces.RateLimiter
+		err error
+	)
+
 	lim, err = ratelimiter.NewFromConfig(ratelimiter.Config{
 		Kind:  ratelimiter.KindToken,
 		Rate:  1,
@@ -1015,6 +1088,7 @@ func TestRateLimiter_MockAsConsumerDependency(t *testing.T) {
 	mock.EXPECT().Wait(gomock.Any()).Return(nil)
 
 	var lim interfaces.RateLimiter = mock
+
 	require.True(t, lim.Allow(), "expected Allow() to return true")
 	require.NoError(t, lim.Wait(context.Background()), "unexpected error")
 }
@@ -1037,5 +1111,6 @@ func TestRateLimiter_MockDeniesAccess(t *testing.T) {
 	mock.EXPECT().Allow().Return(false)
 
 	var lim interfaces.RateLimiter = mock
+
 	require.False(t, lim.Allow(), "expected Allow() to return false")
 }

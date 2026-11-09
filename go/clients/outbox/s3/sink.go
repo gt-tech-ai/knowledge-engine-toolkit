@@ -65,6 +65,7 @@ func New(cfg Config, api API) (*Sink, error) {
 	if tmpl == "" {
 		tmpl = DefaultKeyTemplate
 	}
+
 	switch {
 	case api == nil || cfg.Bucket == "":
 		return nil, apperr.New(
@@ -77,6 +78,7 @@ func New(cfg Config, api API) (*Sink, error) {
 			"outbox s3 sink: key template must contain {id}",
 		)
 	}
+
 	return &Sink{api: api, bucket: cfg.Bucket, template: tmpl}, nil
 }
 
@@ -93,6 +95,7 @@ func (s *Sink) Send(ctx context.Context, recs []types.OutboxRecord) []error {
 			)
 		}
 	}
+
 	return results
 }
 
@@ -106,16 +109,19 @@ func (s *Sink) input(rec *types.OutboxRecord) *awss3.PutObjectInput {
 		ChecksumAlgorithm: s3types.ChecksumAlgorithmSha256,
 		ChecksumSHA256:    aws.String(base64.StdEncoding.EncodeToString(sum[:])),
 	}
+
 	if kms := rec.Attributes[KMSKeyAttribute]; kms != "" {
 		in.ServerSideEncryption = s3types.ServerSideEncryptionAwsKms
 		in.SSEKMSKeyId = aws.String(kms)
 	}
+
 	return in
 }
 
 // key renders the object key for rec.
 func (s *Sink) key(rec *types.OutboxRecord) string {
 	created := rec.CreatedAt.UTC()
+
 	return strings.NewReplacer(
 		"{tenant}", rec.Tenant,
 		"{key}", rec.Key,

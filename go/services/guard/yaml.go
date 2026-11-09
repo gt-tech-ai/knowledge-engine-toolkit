@@ -17,22 +17,28 @@ func yamlCheck(
 	if _, missing, err := files(ctx, cb, r); err != nil || missing != nil {
 		return missing, err
 	}
+
 	docs, err := cb.YAML().Docs(ctx, r.Files)
 	if err != nil {
 		return nil, err
 	}
+
 	var out []types.Finding
+
 	for _, d := range docs {
 		ms, err := cb.YAML().Query(ctx, d, r.Path)
 		if err != nil {
 			return nil, err
 		}
+
 		if len(ms) == 0 {
 			out = append(out, types.Finding{
 				File: d.Path, Rule: keyPath, Message: d.Path + " has no " + r.Path,
 			})
+
 			continue
 		}
+
 		for _, m := range ms {
 			if r.Expect != "" && m.Value != r.Expect {
 				out = append(out, types.Finding{
@@ -48,6 +54,7 @@ func yamlCheck(
 			}
 		}
 	}
+
 	return out, nil
 }
 

@@ -25,17 +25,23 @@ import (
 //   - A nil decorator runs the passes undecorated.
 func TestNewGroupFromSpecs_DecoratesAndRunsEverySpec(t *testing.T) {
 	t.Parallel()
+
 	for _, decorated := range []bool{true, false} {
 		synctest.Test(t, func(t *testing.T) {
-			var a, b atomic.Int64
-			var ops []string
-			var decorate loop.Decorator
+			var (
+				a, b     atomic.Int64
+				ops      []string
+				decorate loop.Decorator
+			)
+
 			if decorated {
 				decorate = func(op string, pass passWorkflow) passWorkflow {
 					ops = append(ops, op)
+
 					return pass
 				}
 			}
+
 			schedule := loop.Config{Interval: time.Minute, RunAtStart: true}
 			group, err := loop.NewGroupFromSpecs([]loop.Spec{
 				{Run: countPass(&a), Name: "a", Op: "loop.a", Schedule: schedule},
@@ -48,6 +54,7 @@ func TestNewGroupFromSpecs_DecoratesAndRunsEverySpec(t *testing.T) {
 			require.Equal(t, int64(1), a.Load())
 			require.Equal(t, int64(1), b.Load())
 			require.NoError(t, group.Stop(t.Context()))
+
 			if decorated {
 				require.Equal(t, []string{"loop.a", "loop.b"}, ops)
 			} else {
@@ -67,6 +74,7 @@ func TestNewGroupFromSpecs_DecoratesAndRunsEverySpec(t *testing.T) {
 //   - A spec with a negative Interval is CodeInvalidInput.
 func TestNewGroupFromSpecs_RejectsAnInvalidSchedule(t *testing.T) {
 	t.Parallel()
+
 	_, err := loop.NewGroupFromSpecs([]loop.Spec{
 		{
 			Run:      okPass,
@@ -85,6 +93,7 @@ type passWorkflow = interfaces.Workflow[struct{}, struct{}]
 func countPass(n *atomic.Int64) func(context.Context) error {
 	return func(context.Context) error {
 		n.Add(1)
+
 		return nil
 	}
 }

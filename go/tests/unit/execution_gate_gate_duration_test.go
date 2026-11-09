@@ -20,6 +20,7 @@ import (
 // is non-trivial.
 func sleepyJob(t *testing.T, name string) interfaces.AnyJob {
 	t.Helper()
+
 	return recordingJob(t, name, passResults(name), func() {
 		time.Sleep(2 * time.Millisecond)
 	})
@@ -44,8 +45,12 @@ func sleepyJob(t *testing.T, name string) interfaces.AnyJob {
 //   - Both the phase elapsed and the gate elapsed are strictly positive.
 func TestGate_SerialPhaseFiresPhaseCompleteOnceWithElapsed(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	var phaseResults types.StepResults
-	var phaseElapsed, gateElapsed time.Duration
+
+	var (
+		phaseResults              types.StepResults
+		phaseElapsed, gateElapsed time.Duration
+	)
+
 	obs := mocks.NewMockExecutionObserver(ctrl)
 	obs.EXPECT().OnGateStart(gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnPhaseStart(gomock.Any(), gomock.Any()).AnyTimes()

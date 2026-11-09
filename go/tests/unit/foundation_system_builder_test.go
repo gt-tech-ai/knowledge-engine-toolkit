@@ -29,6 +29,7 @@ func recordHooks(ctrl *gomock.Controller, events *[]string) *mocks.MockCmdHook {
 	hook.EXPECT().OnFailure(gomock.Any()).Do(func(cmd string) {
 		*events = append(*events, "fail:"+cmd)
 	}).AnyTimes()
+
 	return hook
 }
 
@@ -49,6 +50,7 @@ func okInner(ctrl *gomock.Controller, stdout string) *mocks.MockCommandRunner {
 	).Return(system.CmdResult{Stdout: []byte(stdout)}).AnyTimes()
 	inner.EXPECT().Exists(gomock.Any()).Return(true).AnyTimes()
 	inner.EXPECT().RequireTool(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
 	return inner
 }
 
@@ -66,10 +68,15 @@ func okInner(ctrl *gomock.Controller, stdout string) *mocks.MockCommandRunner {
 //     start+fail; the cmd string is name-only when there are no args.
 func TestRunnerBuilder_DecoratesAndFiresHooks(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
+
 	var logs []string
+
 	logf := func(format string, a ...any) { logs = append(logs, fmt.Sprintf(format, a...)) }
+
 	var events []string
+
 	hook := recordHooks(ctrl, &events)
 	inner := okInner(ctrl, "ok")
 
@@ -80,11 +87,13 @@ func TestRunnerBuilder_DecoratesAndFiresHooks(t *testing.T) {
 		Build()
 
 	require.NoError(t, r.Run(context.Background(), "d", "go", "version"))
+
 	_ = r.RunBuffered(context.Background(), "d", "go", "list")
 	require.NoError(
 		t,
 		r.RunWithEnv(context.Background(), "d", []string{"A=b"}, "go", "env"),
 	)
+
 	_ = r.RunBufferedWithEnv(context.Background(), "d", nil, "go", "x")
 	assert.True(t, r.Exists("go"), "Exists delegates through the chain")
 	require.NoError(t, r.RequireTool("go", ""))
@@ -95,6 +104,7 @@ func TestRunnerBuilder_DecoratesAndFiresHooks(t *testing.T) {
 
 	// Failing inner fires OnFailure for both Run and RunBuffered.
 	var failEvents []string
+
 	failHook := recordHooks(ctrl, &failEvents)
 	failInner := mocks.NewMockCommandRunner(ctrl)
 	boom := apperr.Sentinel("boom")
@@ -110,6 +120,7 @@ func TestRunnerBuilder_DecoratesAndFiresHooks(t *testing.T) {
 	failInner.EXPECT().RunBufferedWithEnv(
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Return(system.CmdResult{Err: boom}).AnyTimes()
+
 	fr := system.NewBuilder(failInner).WithHook(failHook).Build()
 	require.Error(t, fr.Run(context.Background(), "", "x", "y"))
 	require.Error(t, fr.RunBuffered(context.Background(), "", "z").Err)
@@ -120,6 +131,7 @@ func TestRunnerBuilder_DecoratesAndFiresHooks(t *testing.T) {
 
 	// cmdStr is name-only when there are no args.
 	var soloEvents []string
+
 	nr := system.NewBuilder(okInner(ctrl, "")).
 		WithHook(recordHooks(ctrl, &soloEvents)).
 		Build()
@@ -140,13 +152,17 @@ func TestRunnerBuilder_DecoratesAndFiresHooks(t *testing.T) {
 //     still delegate; the would-execute line is logged.
 func TestRunnerBuilder_DryRunSkipsExecution(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
+
 	var logs []string
+
 	// Inner's execute methods are NOT expected — dry-run must never call them, and
 	// gomock fails on any unexpected call. Only the read-only checks delegate.
 	inner := mocks.NewMockCommandRunner(ctrl)
 	inner.EXPECT().Exists(gomock.Any()).Return(true).AnyTimes()
 	inner.EXPECT().RequireTool(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
 	r := system.NewBuilder(inner).
 		WithLogging(func(
 			format string,
@@ -182,11 +198,13 @@ func TestRunnerBuilder_DryRunSkipsExecution(t *testing.T) {
 //   - Exists and RequireTool delegate unchanged.
 func TestRunnerBuilder_WithEnvAddsEnvToEveryRun(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	inner := mocks.NewMockCommandRunner(ctrl)
 	ctx := context.Background()
 	ci := []string{"CI=true"}
 	both := []string{"CI=true", "CI=false"}
+
 	inner.EXPECT().RunWithEnv(ctx, "d", ci, "go", "test").Return(nil)
 	inner.EXPECT().RunWithEnv(ctx, "d", both, "go", "test").Return(nil)
 	inner.EXPECT().RunBufferedWithEnv(ctx, "d", ci, "go", "vet").
@@ -217,6 +235,7 @@ func TestRunnerBuilder_WithEnvAddsEnvToEveryRun(t *testing.T) {
 //     captures its stdout.
 func TestRunner_RunBufferedWithInput(t *testing.T) {
 	t.Parallel()
+
 	r := system.NewRunner()
 
 	res := r.RunBufferedWithInput(t.Context(), "", []string{"FOO=a"}, []byte("b\n"),
@@ -240,13 +259,16 @@ func TestRunner_RunBufferedWithInput(t *testing.T) {
 //     output.
 func TestBuilder_RunBufferedWithInput(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	base.EXPECT().
 		RunBufferedWithInput(gomock.Any(), "/d", []string{"E=1", "X=2"}, []byte("in"),
 			"kubectl", "apply", "-f", "-").
 		Return(system.CmdResult{Stdout: []byte("applied\n")}).Times(2)
+
 	var logs, events []string
+
 	r := system.NewBuilder(base).
 		WithEnv("E=1").
 		WithLogging(func(format string, args ...any) {
@@ -269,6 +291,7 @@ func TestBuilder_RunBufferedWithInput(t *testing.T) {
 		dry.RunBufferedWithInput(t.Context(), "/d", nil, []byte("in"), "kubectl"))
 
 	b := system.NewQuietBufferingRunner(system.NewBuilder(base).WithEnv("E=1").Build())
+
 	_ = b.RunBufferedWithInput(t.Context(), "/d", []string{"X=2"}, []byte("in"),
 		"kubectl", "apply", "-f", "-")
 	assert.Equal(t, "applied\n", string(b.Captured()))

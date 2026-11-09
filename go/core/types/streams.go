@@ -24,5 +24,6 @@ func (s Streams) Require() error {
 			"streams: out and err are both required",
 		)
 	}
+
 	return nil
 }

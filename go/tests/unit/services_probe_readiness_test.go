@@ -52,6 +52,7 @@ func TestOIDCProbe(t *testing.T) {
 
 	t.Run("pass_on_200", func(t *testing.T) {
 		t.Parallel()
+
 		doer := mocks.NewMockHTTPDoer(gomock.NewController(t))
 		//nolint:bodyclose // a mock response: the code under test closes the body
 		doer.EXPECT().Do(gomock.Any()).Return(newResp(http.StatusOK), nil)
@@ -65,12 +66,16 @@ func TestOIDCProbe(t *testing.T) {
 	// A 404 from discovery fails, and the GET targets the tenant's discovery URL.
 	t.Run("fails_when_discovery_not_200", func(t *testing.T) {
 		t.Parallel()
+
 		doer := mocks.NewMockHTTPDoer(gomock.NewController(t))
+
 		var gotURL string
+
 		doer.EXPECT().
 			Do(gomock.Any()).
 			DoAndReturn(func(r *http.Request) (*http.Response, error) {
 				gotURL = r.URL.String()
+
 				return newResp(http.StatusNotFound), nil
 			})
 
@@ -102,6 +107,7 @@ func TestSecretsProbe(t *testing.T) {
 
 	t.Run("skips_when_no_names", func(t *testing.T) {
 		t.Parallel()
+
 		sm := mocks.NewMockAWSSecretsManagerAPI(
 			gomock.NewController(t),
 		) // no calls expected
@@ -117,6 +123,7 @@ func TestSecretsProbe(t *testing.T) {
 	// test_secrets_probe_fails_when_a_secret_is_missing
 	t.Run("fails_when_a_secret_is_missing", func(t *testing.T) {
 		t.Parallel()
+
 		sm := mocks.NewMockAWSSecretsManagerAPI(gomock.NewController(t))
 		sm.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(
@@ -130,6 +137,7 @@ func TestSecretsProbe(t *testing.T) {
 						"ResourceNotFoundException",
 					)
 				}
+
 				return &secretsmanager.DescribeSecretOutput{}, nil
 			}).
 			Times(2)
@@ -150,6 +158,7 @@ func TestSecretsProbe(t *testing.T) {
 
 	t.Run("pass_when_all_present", func(t *testing.T) {
 		t.Parallel()
+
 		sm := mocks.NewMockAWSSecretsManagerAPI(gomock.NewController(t))
 		sm.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).
 			Return(&secretsmanager.DescribeSecretOutput{}, nil).Times(2)
@@ -188,11 +197,13 @@ func TestDNSProbe(t *testing.T) {
 	// test_dns_probe_fails_when_ns_delegation_absent
 	t.Run("fails_when_ns_delegation_absent", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		r53 := mocks.NewMockAWSRoute53API(ctrl)
 		r53.EXPECT().
 			ListHostedZonesByName(gomock.Any(), gomock.Any()).
 			Return(zoneListing, nil)
+
 		res := mocks.NewMockNSResolver(ctrl)
 		res.EXPECT().
 			LookupNS(gomock.Any(), "acme.com").
@@ -207,11 +218,13 @@ func TestDNSProbe(t *testing.T) {
 
 	t.Run("pass_when_zone_and_delegation", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		r53 := mocks.NewMockAWSRoute53API(ctrl)
 		r53.EXPECT().
 			ListHostedZonesByName(gomock.Any(), gomock.Any()).
 			Return(zoneListing, nil)
+
 		res := mocks.NewMockNSResolver(ctrl)
 		res.EXPECT().LookupNS(gomock.Any(), "acme.com").
 			Return([]*net.NS{{Host: "ns-1.awsdns-00.com."}}, nil)
@@ -239,6 +252,7 @@ func TestSESProbe(t *testing.T) {
 	// test_ses_probe_fails_when_production_access_disabled
 	t.Run("fails_when_production_access_disabled", func(t *testing.T) {
 		t.Parallel()
+
 		ses := mocks.NewMockAWSSESAPI(gomock.NewController(t))
 		ses.EXPECT().GetAccount(gomock.Any(), gomock.Any()).
 			Return(&sesv2.GetAccountOutput{ProductionAccessEnabled: false}, nil)
@@ -256,6 +270,7 @@ func TestSESProbe(t *testing.T) {
 
 	t.Run("pass_when_production_access_enabled", func(t *testing.T) {
 		t.Parallel()
+
 		ses := mocks.NewMockAWSSESAPI(gomock.NewController(t))
 		ses.EXPECT().GetAccount(gomock.Any(), gomock.Any()).
 			Return(&sesv2.GetAccountOutput{ProductionAccessEnabled: true}, nil)
@@ -291,6 +306,7 @@ func TestBedrockProbe(t *testing.T) {
 	// test_bedrock_probe_unverified_with_no_invoke
 	t.Run("unverified_with_no_invoke", func(t *testing.T) {
 		t.Parallel()
+
 		br := mocks.NewMockAWSBedrockAPI(
 			gomock.NewController(t),
 		) // no Converse call expected
@@ -305,6 +321,7 @@ func TestBedrockProbe(t *testing.T) {
 			)
 
 		assert.Equal(t, types.StatusWarn, got.Status)
+
 		detail, unverified := readiness.IsUnverified(got)
 		assert.True(t, unverified, "a skipped billed call is reported unverified")
 		assert.True(t, strings.HasPrefix(detail, "--no-invoke:"), detail)
@@ -313,8 +330,11 @@ func TestBedrockProbe(t *testing.T) {
 	// test_bedrock_probe_invokes_each_configured_model_once_with_one_token
 	t.Run("invokes_each_configured_model_once_with_one_token", func(t *testing.T) {
 		t.Parallel()
+
 		br := mocks.NewMockAWSBedrockAPI(gomock.NewController(t))
+
 		var calledIDs []string
+
 		br.EXPECT().Converse(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(
 				_ context.Context,
@@ -325,6 +345,7 @@ func TestBedrockProbe(t *testing.T) {
 				require.NotNil(t, in.InferenceConfig)
 				require.NotNil(t, in.InferenceConfig.MaxTokens)
 				assert.Equal(t, int32(1), *in.InferenceConfig.MaxTokens)
+
 				return &bedrockruntime.ConverseOutput{}, nil
 			}).
 			Times(2)
@@ -361,6 +382,7 @@ func TestQuotasProbe(t *testing.T) {
 	// test_quotas_probe_skips_when_minimums_unset
 	t.Run("skips_when_minimums_unset", func(t *testing.T) {
 		t.Parallel()
+
 		q := mocks.NewMockAWSServiceQuotasAPI(
 			gomock.NewController(t),
 		) // no calls expected
@@ -375,6 +397,7 @@ func TestQuotasProbe(t *testing.T) {
 
 	t.Run("fails_when_below_minimum", func(t *testing.T) {
 		t.Parallel()
+
 		q := mocks.NewMockAWSServiceQuotasAPI(gomock.NewController(t))
 		q.EXPECT().GetServiceQuota(gomock.Any(), gomock.Any()).
 			Return(
@@ -414,6 +437,7 @@ func TestRegistryProbe(t *testing.T) {
 	// test_registry_probe_fails_when_pull_denied
 	t.Run("fails_when_pull_denied", func(t *testing.T) {
 		t.Parallel()
+
 		im := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
 		im.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
 			Return(&iam.SimulatePrincipalPolicyOutput{
@@ -444,6 +468,7 @@ func TestRegistryProbe(t *testing.T) {
 
 	t.Run("pass_when_all_allowed", func(t *testing.T) {
 		t.Parallel()
+
 		im := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
 		im.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
 			Return(&iam.SimulatePrincipalPolicyOutput{
@@ -485,6 +510,7 @@ func TestClusterProbe(t *testing.T) {
 	// test_cluster_probe_fails_when_cannot_access
 	t.Run("fails_when_cannot_access", func(t *testing.T) {
 		t.Parallel()
+
 		runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 		runner.EXPECT().
 			RunBuffered(gomock.Any(), gomock.Any(), "kubectl", gomock.Any()).
@@ -504,12 +530,16 @@ func TestClusterProbe(t *testing.T) {
 
 	t.Run("pass_when_authorized", func(t *testing.T) {
 		t.Parallel()
+
 		runner := mocks.NewMockCommandRunner(gomock.NewController(t))
+
 		var gotArgs []string
+
 		runner.EXPECT().
 			RunBuffered(gomock.Any(), gomock.Any(), "kubectl", gomock.Any()).
 			DoAndReturn(func(_ context.Context, _, _ string, args ...string) interfaces.CmdResult {
 				gotArgs = args
+
 				return interfaces.CmdResult{Stdout: []byte("yes\n")}
 			})
 

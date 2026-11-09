@@ -75,6 +75,7 @@ func TestClientsToolchainCatalog_ProjectsManifestByCategory(t *testing.T) {
 
 	_, ok = cat.Find("ruff")
 	assert.False(t, ok, "registry-only tool is not a lifecycle spec")
+
 	_, ok = cat.Find("nonexistent")
 	assert.False(t, ok)
 }

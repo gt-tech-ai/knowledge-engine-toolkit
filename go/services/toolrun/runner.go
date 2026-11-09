@@ -86,22 +86,27 @@ func NewFromConfig(cfg Config, deps Deps) (interfaces.ToolRunner, error) {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"toolrun: needs a command runner and a tool resolver")
 	}
+
 	keyed := !stepcache.IsOff(deps.Cache)
 	if deps.Cache == nil {
 		off, err := stepcache.NewFromConfig(stepcache.Config{})
 		if err != nil {
 			return nil, err
 		}
+
 		deps.Cache = off
 	}
+
 	name := cfg.Name
 	if name == "" {
 		name = "toolrun"
 	}
+
 	base, err := service.NewBase[interfaces.ToolRunner](deps.Decorations, name)
 	if err != nil {
 		return nil, err
 	}
+
 	return &runner{Base: base, deps: deps, keyed: keyed}, nil
 }
 
@@ -130,26 +135,32 @@ func (r *runner) run(
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"tool run "+run.Name+": unknown tool "+run.Tool)
 	}
+
 	if err := validate(run); err != nil {
 		return nil, err
 	}
+
 	run, err := substitute(run, opts.Vars)
 	if err != nil {
 		return nil, err
 	}
+
 	parser, err := parsers.NewFromConfig(run.Parse)
 	if err != nil {
 		return nil, err
 	}
+
 	// A prefixed tool (`uv run ruff`) runs through its prefix, so the prefix is what
 	// must be installed.
 	if exe, _ := spec.Cmd(); !r.deps.Runner.Exists(exe) {
 		return types.StepResults{missing(run, spec, opts.Strict)}, nil
 	}
+
 	targets, err := r.targets(ctx, cb, run.Targets)
 	if err != nil {
 		return nil, err
 	}
+
 	inv := &invocation{run: run, spec: spec, parser: parser, fix: opts.Fix}
 	if len(targets) == 0 && (run.Targets.Kind != "" || run.Each == types.EachTarget) {
 		return types.StepResults{{
@@ -157,9 +168,11 @@ func (r *runner) run(
 			Detail: []byte("no targets"),
 		}}, nil
 	}
+
 	if run.Each != types.EachTarget {
 		return types.StepResults{r.invoke(ctx, cb, inv, "", targets)}, nil
 	}
+
 	return engine.Pool(r.deps.Pool).FanOut(ctx, targets,
 		func(ctx context.Context, target string) types.StepResult {
 			return r.invoke(ctx, cb, inv, target, []string{target})
@@ -179,6 +192,7 @@ func validate(run types.ToolRun) error {
 	if ok {
 		return nil
 	}
+
 	return apperr.New(
 		apperr.CodeInvalidInput,
 		"tool run "+run.Name+": bad each, cwd or missing "+
@@ -192,7 +206,9 @@ func validCwd(cwd string) bool {
 	case "", types.CwdRoot, types.CwdTarget:
 		return true
 	}
+
 	clean := path.Clean(cwd)
+
 	return !path.IsAbs(clean) && clean != ".." && !strings.HasPrefix(clean, "../")
 }
 
@@ -201,6 +217,7 @@ func validCwd(cwd string) bool {
 // variable. `{target}` is left for the invocation.
 func substitute(run types.ToolRun, vars map[string]string) (types.ToolRun, error) {
 	var missingVar string
+
 	sub := func(args []string) []string {
 		out := make([]string, len(args))
 		for i, a := range args {
@@ -209,20 +226,26 @@ func substitute(run types.ToolRun, vars map[string]string) (types.ToolRun, error
 				if m == targetPlaceholder {
 					return m
 				}
+
 				v, ok := vars[name]
 				if !ok && missingVar == "" {
 					missingVar = name
 				}
+
 				return v
 			})
 		}
+
 		return out
 	}
+
 	run.Args, run.FixArgs, run.Env = sub(run.Args), sub(run.FixArgs), sub(run.Env)
+
 	if missingVar != "" {
 		return run, apperr.New(apperr.CodeInvalidInput,
 			"tool run "+run.Name+": no value for {"+missingVar+"}")
 	}
+
 	return run, nil
 }
 
@@ -231,6 +254,7 @@ func group(run types.ToolRun) string {
 	if run.Group != "" {
 		return run.Group
 	}
+
 	return run.Verb
 }
 
@@ -240,6 +264,7 @@ func missing(run types.ToolRun, spec interfaces.ToolSpec, strict bool) types.Ste
 	if strict || run.Missing == types.MissingFail {
 		status = types.StatusFail
 	}
+
 	return types.StepResult{
 		Name: run.Name, Group: group(run), Status: status,
 		Error: spec.Binary() + " is not installed: " + spec.InstallHint(),
@@ -255,12 +280,14 @@ func (r *runner) targets(
 	if spec.Kind == "" {
 		return nil, nil
 	}
+
 	sel, err := selectors.NewFromConfig(spec.Kind, selectors.Deps{
 		Git: r.deps.Git, Root: r.deps.Root,
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	return sel.Select(ctx, cb, spec)
 }
 
@@ -291,6 +318,7 @@ func (r *runner) invoke(
 	run := inv.run
 	name := strings.TrimSpace(run.Name + " " + target)
 	dir, argTargets := r.deps.Root, targets
+
 	switch run.Cwd {
 	case "", types.CwdRoot:
 	case types.CwdTarget:
@@ -298,10 +326,12 @@ func (r *runner) invoke(
 	default:
 		dir = filepath.Join(r.deps.Root, filepath.FromSlash(run.Cwd))
 	}
+
 	args := expand(run.Args, argTargets)
 	if inv.fix {
 		args = append(args, run.FixArgs...)
 	}
+
 	key, err := r.key(ctx, cb, run, target, args)
 	if err != nil {
 		return types.StepResult{
@@ -309,6 +339,7 @@ func (r *runner) invoke(
 			Error: err.Error(),
 		}
 	}
+
 	if key != "" {
 		if hit, err := r.deps.Cache.Hit(ctx, key); err == nil && hit {
 			return types.StepResult{
@@ -317,27 +348,36 @@ func (r *runner) invoke(
 			}
 		}
 	}
+
 	exe, cmdArgs := inv.spec.Cmd(args...)
+
 	var res interfaces.CmdResult
+
 	if len(run.Env) > 0 {
 		res = r.deps.Runner.RunBufferedWithEnv(ctx, dir, run.Env, exe, cmdArgs...)
 	} else {
 		res = r.deps.Runner.RunBuffered(ctx, dir, exe, cmdArgs...)
 	}
+
 	v := inv.parser.Parse(res)
 	for i := range v.Findings {
 		v.Findings[i].Check = run.Name
 	}
+
 	if run.Advisory && v.Status == types.StatusFail {
 		v.Status = types.StatusWarn
 	}
+
 	step := v.Step(name, group(run))
+
 	step.Duration = res.Duration
+
 	if key != "" && v.Status == types.StatusPass {
 		if err := r.deps.Cache.Record(ctx, key); err != nil {
 			step.Status, step.Error = types.StatusWarn, "passed; not cached: "+err.Error()
 		}
 	}
+
 	return step
 }
 
@@ -353,6 +393,7 @@ func (r *runner) cwdOf(
 		return filepath.Join(r.deps.Root, filepath.FromSlash(path.Dir(target))),
 			[]string{path.Base(target)}
 	}
+
 	return filepath.Join(r.deps.Root, filepath.FromSlash(target)), []string{"."}
 }
 
@@ -371,6 +412,7 @@ func expand(args, targets []string) []string {
 			out = append(out, a)
 		}
 	}
+
 	return out
 }
 
@@ -387,14 +429,17 @@ func (r *runner) key(
 	if !r.keyed || run.Inputs.IsZero() {
 		return "", nil
 	}
+
 	digest, err := stepcache.Digest(ctx, cb, withTarget(run.Inputs, target))
 	if err != nil {
 		return "", err
 	}
+
 	version := ""
 	if r.deps.Versions != nil {
 		version = r.deps.Versions(run.Tool)
 	}
+
 	def, err := json.Marshal(run)
 	if err != nil {
 		return "", apperr.Wrap(
@@ -403,6 +448,7 @@ func (r *runner) key(
 			"tool run "+run.Name+": cache key",
 		)
 	}
+
 	return stepcache.Key(digest, version,
 		append([]string{string(def), target}, args...)), nil
 }
@@ -415,8 +461,11 @@ func withTarget(sel types.FileSelector, target string) types.FileSelector {
 		for i, s := range in {
 			out[i] = strings.ReplaceAll(s, targetPlaceholder, target)
 		}
+
 		return out
 	}
+
 	sel.Roots, sel.Paths, sel.Globs = sub(sel.Roots), sub(sel.Paths), sub(sel.Globs)
+
 	return sel
 }

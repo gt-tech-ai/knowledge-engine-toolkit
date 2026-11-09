@@ -20,6 +20,7 @@ func HasPathsChanged(
 	paths ...string,
 ) (bool, error) {
 	args := make([]string, 0, 5+len(paths))
+
 	args = append(args, "diff", "--quiet", from, to, "--")
 	args = append(args, paths...)
 
@@ -28,10 +29,13 @@ func HasPathsChanged(
 		// git diff --quiet exits 1 when there are differences; that's the
 		// normal "changed" signal, not a real error.
 		var exitErr *exec.ExitError
+
 		if apperr.As(result.Err, &exitErr) {
 			return true, nil
 		}
+
 		return false, result.Err
 	}
+
 	return false, nil
 }

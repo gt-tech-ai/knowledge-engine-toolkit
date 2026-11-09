@@ -73,6 +73,7 @@ func TestRequestID_PreservesExisting(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
 	req.Header.Set("X-Request-ID", "existing-id")
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -278,6 +279,7 @@ func TestCompression_CompressesLargeResponse(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
 	req.Header.Set("Accept-Encoding", "gzip")
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -291,7 +293,9 @@ func TestCompression_CompressesLargeResponse(t *testing.T) {
 	// Verify we can decompress
 	reader, err := gzip.NewReader(rec.Body)
 	require.NoError(t, err, "gzip decode must not fail")
+
 	defer func() { _ = reader.Close() }()
+
 	body, _ := io.ReadAll(reader)
 	assert.Contains(t, string(body), "hello world")
 }
@@ -317,6 +321,7 @@ func TestCompression_SkipsSmallResponse(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
 	req.Header.Set("Accept-Encoding", "gzip")
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -603,6 +608,7 @@ func TestHTTPMetrics_RouteLabelNormalizationCases(t *testing.T) {
 				Return(hist)
 
 			var gotRoute string
+
 			hist.EXPECT().Observe(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			counter.EXPECT().
 				Inc(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -655,6 +661,7 @@ func TestHTTPMetrics_EmptyPathRouteLabel(t *testing.T) {
 		Return(hist)
 
 	var gotRoute string
+
 	hist.EXPECT().Observe(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 	counter.EXPECT().
 		Inc(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -666,6 +673,7 @@ func TestHTTPMetrics_EmptyPathRouteLabel(t *testing.T) {
 	handler := middleware.HTTPMetrics(m)(inner)
 
 	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+
 	req.URL.Path = "" // simulate a malformed request with no path
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 
@@ -691,6 +699,7 @@ func TestHTTPMetrics_FlushesResponseWriter(t *testing.T) {
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
+
 			w.WriteHeader(http.StatusOK)
 		}),
 	)
@@ -749,14 +758,18 @@ func TestChain_AppliesInOrder(t *testing.T) {
 	m1 := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			order = append(order, "m1-before")
+
 			next.ServeHTTP(w, r)
+
 			order = append(order, "m1-after")
 		})
 	}
 	m2 := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			order = append(order, "m2-before")
+
 			next.ServeHTTP(w, r)
+
 			order = append(order, "m2-after")
 		})
 	}

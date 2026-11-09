@@ -30,9 +30,11 @@ func TestExecutionOpsReservation_RunAfterReleaseIsInternal(t *testing.T) {
 	t.Parallel()
 
 	var ran atomic.Bool
+
 	reg := funcRegistry(t, time.Minute, map[string]runFunc{
 		"ok": func(context.Context, any, interfaces.ExecutionObserver) error {
 			ran.Store(true)
+
 			return nil
 		},
 	})
@@ -82,7 +84,9 @@ func TestExecutionOpsRegistryRun_NilContextRuns(t *testing.T) {
 	reg := funcRegistry(t, time.Minute, map[string]runFunc{
 		"ok": func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
 	})
+
 	var nilCtx context.Context
+
 	require.NotPanics(t, func() {
 		assert.NoError(t, reg.Run(nilCtx, "ok", nil, nil))
 	})
@@ -132,6 +136,7 @@ func TestExecutionOpsNewFromConfig_RejectsDuplicateDescriptor(t *testing.T) {
 //     mismatch also names the operation's real input type.
 func TestExecutionOpsNewFromConfig_RejectsBrokenBuilders(t *testing.T) {
 	t.Parallel()
+
 	run := ops.Func(func(
 		context.Context, *adapterInput, opsEnv, interfaces.ExecutionObserver,
 	) error {
@@ -161,6 +166,7 @@ func TestExecutionOpsNewFromConfig_RejectsBrokenBuilders(t *testing.T) {
 		require.ErrorContains(t, err, `"op"`, name)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 	}
+
 	_, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
@@ -190,7 +196,9 @@ func TestExecutionOpsRegistryRun_LogsTheMappedCode(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	log := mocks.NewMockLogger(ctrl)
 	log.EXPECT().WithContext(gomock.Any()).Return(log).AnyTimes()
+
 	var logged error
+
 	log.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes().
 		Do(func(_ string, kv ...any) {
 			for i := 0; i+1 < len(kv); i += 2 {
@@ -201,14 +209,18 @@ func TestExecutionOpsRegistryRun_LogsTheMappedCode(t *testing.T) {
 		})
 
 	desc := opDesc("slow", types.SafetyReadOnly, types.OpLifecycleBounded)
+
 	desc.Timeout = 10 * time.Millisecond
+
 	op := mocks.NewMockOperation(ctrl)
 	op.EXPECT().Descriptor().Return(desc).AnyTimes()
 	op.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(ctx context.Context, _ any, _ interfaces.ExecutionObserver) error {
 			<-ctx.Done()
+
 			return ctx.Err()
 		})
+
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety:  types.SafetyReadOnly,

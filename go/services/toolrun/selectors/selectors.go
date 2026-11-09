@@ -54,6 +54,7 @@ func NewFromConfig(kind string, deps Deps) (interfaces.TargetSelector, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return narrowed{inner: sel}, nil
 }
 
@@ -75,6 +76,7 @@ func newKind(kind string, deps Deps) (interfaces.TargetSelector, error) {
 			return nil, apperr.New(apperr.CodeInvalidInput,
 				"selector staged_files: no git operations")
 		}
+
 		return stagedFiles{git: deps.Git, root: deps.Root}, nil
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput, "unknown target selector "+kind)
@@ -87,7 +89,9 @@ func dirsOf(paths []string) []string {
 	for _, p := range paths {
 		out = append(out, path.Dir(p))
 	}
+
 	slices.Sort(out)
+
 	return slices.Compact(out)
 }
 
@@ -108,6 +112,7 @@ func (n narrowed) Select(
 	if err != nil || (len(spec.Roots) == 0 && len(spec.Exclude) == 0) {
 		return targets, err
 	}
+
 	out := make([]string, 0, len(targets))
 	for _, t := range targets {
 		if inRoots(t, spec.Roots) &&
@@ -117,6 +122,7 @@ func (n narrowed) Select(
 			out = append(out, t)
 		}
 	}
+
 	return out, nil
 }
 
@@ -125,12 +131,14 @@ func inRoots(p string, roots []string) bool {
 	if len(roots) == 0 {
 		return true
 	}
+
 	for _, r := range roots {
 		r = path.Clean(r)
 		if p == r || strings.HasPrefix(p, r+"/") {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -140,5 +148,6 @@ func globs(spec types.TargetSpec) []string {
 	if spec.Glob != "" {
 		out = append(out, spec.Glob)
 	}
+
 	return append(out, spec.Globs...)
 }

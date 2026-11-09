@@ -26,6 +26,7 @@ import (
 //   - Run on the built runner reaches the underlying base runner exactly once.
 func TestBuilderNoDecorators(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	// The Times(1) expectation IS the "base.Run was called" assertion (verified at
@@ -50,11 +51,14 @@ func TestBuilderNoDecorators(t *testing.T) {
 //     "[runner]" and the command name.
 func TestBuilderWithLogging(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	base.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
+
 	var logs []string
+
 	logf := func(format string, args ...any) {
 		logs = append(logs, fmt.Sprintf(format, args...))
 	}
@@ -81,11 +85,14 @@ func TestBuilderWithLogging(t *testing.T) {
 //     unchanged, and emits one log entry.
 func TestBuilderWithLogging_RunBuffered(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	base.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(system.CmdResult{Duration: 42 * time.Millisecond}).Times(1)
+
 	var logs []string
+
 	logf := func(format string, args ...any) {
 		logs = append(logs, fmt.Sprintf(format, args...))
 	}
@@ -108,12 +115,15 @@ func TestBuilderWithLogging_RunBuffered(t *testing.T) {
 //   - One RunWithEnv call reaches the base once and produces one log entry.
 func TestBuilderWithLogging_RunWithEnv(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	base.EXPECT().RunWithEnv(
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Return(nil).Times(1)
+
 	var logs []string
+
 	logf := func(format string, args ...any) {
 		logs = append(logs, fmt.Sprintf(format, args...))
 	}
@@ -143,12 +153,15 @@ func TestBuilderWithLogging_RunWithEnv(t *testing.T) {
 //     records what would have executed.
 func TestBuilderWithDryRun(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	// No Run expectation: dry-run must not call base.Run, and gomock fails the test
 	// on any unexpected call — the assertion that the base is never executed.
 	base.EXPECT().Exists(gomock.Any()).Return(true).AnyTimes()
+
 	var logs []string
+
 	logf := func(format string, args ...any) {
 		logs = append(logs, fmt.Sprintf(format, args...))
 	}
@@ -164,11 +177,13 @@ func TestBuilderWithDryRun(t *testing.T) {
 	assert.True(t, r.Exists("go"), "Exists should delegate to base even in dry-run")
 
 	found := false
+
 	for _, l := range logs {
 		if strings.Contains(l, "[dry-run]") {
 			found = true
 		}
 	}
+
 	assert.True(t, found, "expected a [dry-run] log entry")
 }
 
@@ -184,6 +199,7 @@ func TestBuilderWithDryRun(t *testing.T) {
 //     returns a nil-error CmdResult.
 func TestBuilderWithDryRun_RunBuffered(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	// No RunBuffered expectation: dry-run must not call it; gomock fails on any call.
 	base := mocks.NewMockCommandRunner(ctrl)
@@ -205,6 +221,7 @@ func TestBuilderWithDryRun_RunBuffered(t *testing.T) {
 //   - A runner that blocks 500ms under a 10ms timeout returns a (deadline) error.
 func TestBuilderWithTimeout(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	// A mock whose Run blocks until the context is cancelled, so the timeout
 	// decorator's deadline is what unblocks it — reproducing the old slow runner.
@@ -239,11 +256,14 @@ func TestBuilderWithTimeout(t *testing.T) {
 //     one log entry.
 func TestFoundationBuilderComposition(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := mocks.NewMockCommandRunner(ctrl)
 	base.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
+
 	var logs []string
+
 	logf := func(format string, args ...any) {
 		logs = append(logs, fmt.Sprintf(format, args...))
 	}

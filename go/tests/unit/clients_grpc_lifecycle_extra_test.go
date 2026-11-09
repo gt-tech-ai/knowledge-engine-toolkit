@@ -24,6 +24,7 @@ import (
 //   - Readiness fails after Stop (the connection is in a terminal Shutdown state).
 func TestGRPCLifecycleClient_StartStopReadiness(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	c := grpcclient.NewLifecycleClient(grpcclient.ClientConfig{Target: "127.0.0.1:1"})

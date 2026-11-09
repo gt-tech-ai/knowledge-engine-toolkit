@@ -70,6 +70,7 @@ func NewEntity[S, C, T, P any, ID comparable](
 	if err != nil {
 		return Entity[C, T, P, ID]{}, err
 	}
+
 	run := func(
 		ctx context.Context,
 		op string,
@@ -79,15 +80,20 @@ func NewEntity[S, C, T, P any, ID comparable](
 		body := func(ctx context.Context) (struct{}, error) { return struct{}{}, fn(ctx) }
 		if kind == decorate.RoleRead {
 			_, err := b.Exec(ctx, op, body)
+
 			return err
 		}
+
 		_, err := b.Write(ctx, op, body)
+
 		return err
 	}
+
 	e, err := decorate.NewEntity[S](name, rolesOf(b, f), run, nil)
 	if err != nil {
 		return Entity[C, T, P, ID]{}, err
 	}
+
 	return Entity[C, T, P, ID]{Base: b, Entity: e}, nil
 }
 
@@ -97,11 +103,13 @@ func rolesOf[C, T, P any, ID comparable](
 	f Funcs[C, T, P, ID],
 ) decorate.Roles[T, P, ID] {
 	var r decorate.Roles[T, P, ID]
+
 	if f.Get != nil {
 		r.Get = func(ctx context.Context, id ID) (*T, error) {
 			return f.Get(ctx, b.Client(ctx), id)
 		}
 	}
+
 	if f.List != nil {
 		r.List = func(
 			ctx context.Context,
@@ -111,40 +119,48 @@ func rolesOf[C, T, P any, ID comparable](
 			return f.List(ctx, b.Client(ctx), params, page)
 		}
 	}
+
 	if f.Create != nil {
 		r.Create = func(ctx context.Context, v *T) (*T, error) {
 			return f.Create(ctx, b.Client(ctx), v)
 		}
 	}
+
 	if f.Update != nil {
 		r.Update = func(ctx context.Context, id ID, v *T) (*T, error) {
 			return f.Update(ctx, b.Client(ctx), id, v)
 		}
 	}
+
 	if f.Delete != nil {
 		r.Delete = func(ctx context.Context, id ID) error {
 			return f.Delete(ctx, b.Client(ctx), id)
 		}
 	}
+
 	if f.Exists != nil {
 		r.Exists = func(ctx context.Context, id ID) (bool, error) {
 			return f.Exists(ctx, b.Client(ctx), id)
 		}
 	}
+
 	if f.Insert != nil {
 		r.Insert = func(ctx context.Context, v *T) error {
 			return f.Insert(ctx, b.Client(ctx), v)
 		}
 	}
+
 	if f.Upsert != nil {
 		r.Upsert = func(ctx context.Context, v *T) error {
 			return f.Upsert(ctx, b.Client(ctx), v)
 		}
 	}
+
 	if f.PurgeBefore != nil {
 		r.PurgeBefore = func(ctx context.Context, cutoff time.Time) (int, error) {
 			return f.PurgeBefore(ctx, b.Client(ctx), cutoff)
 		}
 	}
+
 	return r
 }

@@ -47,6 +47,7 @@ func (b *Bulkhead) Execute(ctx context.Context, fn func() error) error {
 	select {
 	case b.sem <- struct{}{}:
 		defer func() { <-b.sem }()
+
 		return fn()
 	case <-ctx.Done():
 		return apperr.Wrap(
@@ -63,6 +64,7 @@ func (b *Bulkhead) TryExecute(fn func() error) error {
 	select {
 	case b.sem <- struct{}{}:
 		defer func() { <-b.sem }()
+
 		return fn()
 	default:
 		return ErrBulkheadFull

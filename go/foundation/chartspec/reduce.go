@@ -39,6 +39,7 @@ func NewPartial(value float64) (Partial, error) {
 			"chartspec: observation must be finite",
 		)
 	}
+
 	sketch, err := ddsketch.NewDefaultDDSketch(SketchRelativeAccuracy)
 	if err != nil {
 		return Partial{}, apperr.Wrap(
@@ -47,6 +48,7 @@ func NewPartial(value float64) (Partial, error) {
 			"chartspec: create sketch",
 		)
 	}
+
 	if err := sketch.Add(value); err != nil {
 		return Partial{}, apperr.Wrap(
 			err,
@@ -54,6 +56,7 @@ func NewPartial(value float64) (Partial, error) {
 			"chartspec: add observation",
 		)
 	}
+
 	return Partial{Sketch: sketch, Sum: value, Count: 1, Min: value, Max: value}, nil
 }
 
@@ -62,17 +65,22 @@ func (p *Partial) Merge(o Partial) {
 	if o.Count == 0 {
 		return
 	}
+
 	if p.Count == 0 {
 		*p = o
 		if o.Sketch != nil {
 			p.Sketch = o.Sketch.Copy()
 		}
+
 		return
 	}
+
 	p.Sum += o.Sum
 	p.Count += o.Count
+
 	p.Min = math.Min(p.Min, o.Min)
 	p.Max = math.Max(p.Max, o.Max)
+
 	switch {
 	case o.Sketch == nil:
 	case p.Sketch == nil:
@@ -89,11 +97,13 @@ func mergeSketch(dst, src *ddsketch.DDSketch) {
 	if err := dst.MergeWith(src); err == nil {
 		return
 	}
+
 	src.ForEach(func(value, count float64) bool {
 		_ = dst.AddWithCount(
 			value,
 			count,
 		) // value came from a valid sketch bin; Add cannot reject it
+
 		return false
 	})
 }
@@ -127,6 +137,7 @@ func finalizeValue(p Partial, agg types.Aggregate) float64 {
 	if p.Count == 0 {
 		return math.NaN()
 	}
+
 	switch agg {
 	case types.AggAvg:
 		return p.Sum / p.Count
@@ -152,9 +163,11 @@ func quantile(s *ddsketch.DDSketch, q float64) float64 {
 	if s == nil {
 		return math.NaN()
 	}
+
 	v, err := s.GetValueAtQuantile(q)
 	if err != nil {
 		return math.NaN()
 	}
+
 	return v
 }

@@ -87,6 +87,7 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 	assert.True(t, proxied.DisableInitialHostLookup)
 	assert.Equal(t, 2*time.Second, proxied.ReconnectInterval)
 	require.NotNil(t, proxied.AddressTranslator)
+
 	ip, port := proxied.AddressTranslator.Translate(net.ParseIP("172.17.0.4"), 9042)
 	assert.Equal(t, "127.0.0.1", ip.String())
 	assert.Equal(t, 19042, port)
@@ -149,9 +150,11 @@ func TestKeyspacesConfig_UsesTLSAndSigV4(t *testing.T) {
 	assert.Equal(t, uint16(tls.VersionTLS12), cluster.SslOpts.MinVersion)
 	assert.Equal(t, gocql.LocalQuorum, cluster.Consistency)
 	assert.True(t, cluster.DisableInitialHostLookup)
+
 	auth, ok := cluster.Authenticator.(sigv4.AwsAuthenticator)
 	require.True(t, ok)
 	assert.Equal(t, "us-east-1", auth.Region)
+
 	creds, err := auth.CredentialsCallback()
 	require.NoError(t, err)
 	assert.Equal(
@@ -185,6 +188,7 @@ func TestKeyspacesConfig_UsesTLSAndSigV4(t *testing.T) {
 //     loading the AWS chain at construction
 func TestClusterConfig_ZeroValuesKeepDriverDefaults(t *testing.T) {
 	t.Parallel()
+
 	want := gocql.NewCluster("x")
 
 	plain, err := cassandrabackend.Cluster(
@@ -201,6 +205,7 @@ func TestClusterConfig_ZeroValuesKeepDriverDefaults(t *testing.T) {
 	assert.Equal(t, want.Timeout, ks.Timeout)
 	assert.Equal(t, want.ConnectTimeout, ks.ConnectTimeout)
 	assert.Equal(t, 9142, ks.Port)
+
 	_, ok := ks.Authenticator.(sigv4.AwsAuthenticator)
 	assert.True(t, ok)
 }

@@ -21,6 +21,7 @@ import (
 //     row, and the result keeps the rows' order.
 func TestSelect(t *testing.T) {
 	t.Parallel()
+
 	runs := []types.ToolRun{
 		{Name: "golangci-lint", Verb: "lint", Tags: []string{"go"}},
 		{Name: "ruff", Verb: "lint", Tags: []string{"python", "fast"}},
@@ -32,6 +33,7 @@ func TestSelect(t *testing.T) {
 		for _, r := range rs {
 			out = append(out, r.Name)
 		}
+
 		return out
 	}
 	cases := map[string]struct {
@@ -71,6 +73,7 @@ func TestSelect(t *testing.T) {
 			[]string{"golangci-lint", "ruff"},
 		},
 	}
+
 	for name, tc := range cases {
 		assert.Equal(t, tc.want, names(toolrun.Select(runs, tc.sel)), name)
 	}

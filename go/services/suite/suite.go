@@ -82,18 +82,24 @@ type PlannedPhase struct {
 // listed step the catalog lacks, is CodeInvalidInput.
 func Select(s types.Suite, catalog []Entry, flags []string) ([]Entry, error) {
 	var sels, mods []types.Selection
+
 	for _, f := range flags {
 		if sel, ok := s.Selectors[f]; ok {
 			sels = append(sels, sel)
+
 			continue
 		}
+
 		if mod, ok := s.Modifiers[f]; ok {
 			mods = append(mods, mod)
+
 			continue
 		}
+
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"suite %s has no flag %q (known: %s)", s.Title, f, flagNames(s)))
 	}
+
 	for _, name := range s.Steps {
 		if !slices.ContainsFunc(catalog, func(e Entry) bool {
 			return e.Kind == KindStep && e.Name == name
@@ -102,18 +108,23 @@ func Select(s types.Suite, catalog []Entry, flags []string) ([]Entry, error) {
 				"suite %s: no registered step %q", s.Title, name))
 		}
 	}
+
 	if len(sels) == 0 {
 		sels = []types.Selection{s.Select}
 	}
+
 	var out []Entry
+
 	for _, e := range catalog {
 		if e.Kind == KindStep && !slices.Contains(s.Steps, e.Name) {
 			continue
 		}
+
 		if matchesAny(e, sels) && matchesAll(e, mods) && ungated(s, e, flags) {
 			out = append(out, e)
 		}
 	}
+
 	return out, nil
 }
 
@@ -124,12 +135,15 @@ func Tools(s types.Suite, catalog []Entry, flags []string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	set := map[string]bool{}
+
 	for _, e := range selected {
 		for _, t := range e.Tools {
 			set[t] = true
 		}
 	}
+
 	return slices.Sorted(maps.Keys(set)), nil
 }
 
@@ -138,6 +152,7 @@ func Tools(s types.Suite, catalog []Entry, flags []string) ([]string, error) {
 // silently not run.
 func Plan(s types.Suite, entries []Entry) ([]PlannedPhase, error) {
 	byGroup := map[string][]Entry{}
+
 	for _, e := range entries {
 		if !slices.ContainsFunc(
 			s.Phases,
@@ -150,14 +165,18 @@ func Plan(s types.Suite, entries []Entry) ([]PlannedPhase, error) {
 				e.Group,
 			))
 		}
+
 		byGroup[e.Group] = append(byGroup[e.Group], e)
 	}
+
 	var out []PlannedPhase
+
 	for _, p := range s.Phases {
 		if es := byGroup[p.Group]; len(es) > 0 {
 			out = append(out, PlannedPhase{Group: p.Group, Entries: es, Serial: p.Serial})
 		}
 	}
+
 	return out, nil
 }
 
@@ -192,11 +211,14 @@ func (g Gate) Gate() *gate.Gate {
 	if g.Obs != nil {
 		b.Observe(g.Obs)
 	}
+
 	phases, err := g.phases()
 	if err != nil {
 		b.Serial(g.Suite.Title, failed(g.Suite.Title, err))
+
 		return b.Decorate(g.Env.Decs)
 	}
+
 	for _, p := range phases {
 		if p.serial {
 			b.Serial(p.group, p.jobs...)
@@ -204,6 +226,7 @@ func (g Gate) Gate() *gate.Gate {
 			b.Parallel(p.group, p.jobs...)
 		}
 	}
+
 	return b.Decorate(g.Env.Decs)
 }
 
@@ -214,10 +237,13 @@ func (g Gate) Jobs() []interfaces.AnyJob {
 	if err != nil {
 		return []interfaces.AnyJob{failed(g.Suite.Title, err)}
 	}
+
 	var jobs []interfaces.AnyJob
+
 	for _, p := range phases {
 		jobs = append(jobs, p.jobs...)
 	}
+
 	return jobs
 }
 
@@ -238,26 +264,32 @@ func (g Gate) phases() ([]phase, error) {
 	if g.Err != nil {
 		return nil, g.Err
 	}
+
 	selected, err := Select(g.Suite, g.Catalog, g.Flags)
 	if err != nil {
 		return nil, err
 	}
+
 	planned, err := Plan(g.Suite, selected)
 	if err != nil {
 		return nil, err
 	}
+
 	env := g.Env
 	if env.Snapshot == nil {
 		env.Snapshot = codebase.NewSnapshot(strings.ToLower(g.Suite.Title))
 	}
+
 	out := make([]phase, 0, len(planned))
 	for _, p := range planned {
 		jobs := make([]interfaces.AnyJob, 0, len(p.Entries))
 		for _, e := range p.Entries {
 			jobs = append(jobs, e.Job(env))
 		}
+
 		out = append(out, phase{group: p.Group, jobs: jobs, serial: p.Serial})
 	}
+
 	return out, nil
 }
 
@@ -269,6 +301,7 @@ func Build(env Env, verb, name, group string, run job.Run) interfaces.AnyJob {
 	if prefix == "" {
 		prefix = "suite"
 	}
+
 	b, err := job.NewBase(env.Decs, job.Component(prefix, verb, name))
 	if err != nil {
 		return job.Base{}.Func(name, group, func(
@@ -277,6 +310,7 @@ func Build(env Env, verb, name, group string, run job.Run) interfaces.AnyJob {
 			return nil, err
 		})
 	}
+
 	return b.Func(name, group, run)
 }
 
@@ -303,6 +337,7 @@ func matchesAll(e Entry, mods []types.Selection) bool {
 func ungated(s types.Suite, e Entry, flags []string) bool {
 	return !slices.ContainsFunc(e.Tags, func(tag string) bool {
 		flag, ok := s.Gated[tag]
+
 		return ok && !slices.Contains(flags, flag)
 	})
 }
@@ -313,9 +348,12 @@ func flagNames(s types.Suite) string {
 	for k := range s.Selectors {
 		names = append(names, k)
 	}
+
 	for k := range s.Modifiers {
 		names = append(names, k)
 	}
+
 	sort.Strings(names)
+
 	return strings.Join(names, ", ")
 }

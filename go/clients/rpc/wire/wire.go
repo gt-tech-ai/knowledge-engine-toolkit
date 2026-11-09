@@ -63,16 +63,20 @@ func FromError(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	if apperr.Code(err) != apperr.CodeUnknown {
 		return err
 	}
+
 	c := connect.CodeOf(err)
 	if c == connect.CodeUnknown {
 		if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
 			c = connect.Code(st.Code())
 		}
 	}
+
 	m := fromWire(c)
+
 	return apperr.Wrap(err, m.code, m.msg)
 }
 
@@ -96,10 +100,13 @@ func ToGRPC(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	var sent grpcStatus
+
 	if apperr.As(err, &sent) {
 		return sent
 	}
+
 	return status.Error(codes.Code(Code(apperr.Code(err))), err.Error())
 }
 
@@ -109,9 +116,12 @@ func ToConnect(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	var cerr *connect.Error
+
 	if apperr.As(err, &cerr) {
 		return cerr
 	}
+
 	return connect.NewError(Code(apperr.Code(err)), err)
 }

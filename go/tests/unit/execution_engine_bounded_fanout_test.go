@@ -35,21 +35,26 @@ func TestFanOut_HoldsAtMostNumWorkersGoroutines(t *testing.T) {
 		items   = 10000
 		workers = 4
 	)
+
 	base := runtime.NumGoroutine()
+
 	var peakExtra atomic.Int64
 
 	its := make([]int, items)
 	engine.Pool(workers).
 		FanOut(context.Background(), its, func(_ context.Context, _ int) types.StepResult {
 			extra := int64(runtime.NumGoroutine() - base)
+
 			for {
 				cur := peakExtra.Load()
 				if extra <= cur || peakExtra.CompareAndSwap(cur, extra) {
 					break
 				}
 			}
+
 			// Hold the worker slot briefly so overlapping workers are observable.
 			time.Sleep(time.Microsecond)
+
 			return types.StepResult{Status: types.StatusPass}
 		})
 

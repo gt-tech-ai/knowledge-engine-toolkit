@@ -26,19 +26,24 @@ func Parse(path string, data []byte) (Doc, error) {
 	doc := Doc{Path: path, Body: src, BodyStartLine: 1}
 	text := strings.TrimPrefix(src, bom)
 	first, rest, _ := strings.Cut(text, "\n")
+
 	if strings.TrimSuffix(first, "\r") == fence {
 		block, body, line, ok := splitFrontmatter(rest)
 		if !ok {
 			return Doc{}, invalid(path, "the frontmatter block has no closing `---` line")
 		}
+
 		fm, err := decodeFrontmatter(path, block)
 		if err != nil {
 			return Doc{}, err
 		}
+
 		doc.HasFrontmatter, doc.Frontmatter = true, fm
 		doc.Body, doc.BodyStartLine = body, line
 	}
+
 	doc.Links = extractLinks(doc.Body, doc.BodyStartLine)
+
 	return doc, nil
 }
 
@@ -50,13 +55,17 @@ func splitFrontmatter(rest string) (block, body string, bodyLine int, ok bool) {
 		line, _, more := strings.Cut(rest[offset:], "\n")
 		if strings.TrimSuffix(line, "\r") == fence {
 			end := min(offset+len(line)+1, len(rest))
+
 			return rest[:offset], rest[end:], n + 1, true
 		}
+
 		if !more {
 			break
 		}
+
 		offset += len(line) + 1
 	}
+
 	return "", "", 0, false
 }
 
@@ -68,6 +77,7 @@ func invalid(path, why string) error {
 // decodeFrontmatter decodes a YAML block into a Frontmatter, keeping unknown keys.
 func decodeFrontmatter(path, block string) (Frontmatter, error) {
 	var root yaml.Node
+
 	if err := yaml.Unmarshal([]byte(block), &root); err != nil {
 		return Frontmatter{}, apperr.Wrap(
 			err,
@@ -75,14 +85,18 @@ func decodeFrontmatter(path, block string) (Frontmatter, error) {
 			path+": invalid frontmatter YAML",
 		)
 	}
+
 	if len(root.Content) == 0 {
 		return Frontmatter{}, nil
 	}
+
 	node := root.Content[0]
 	if node.Kind != yaml.MappingNode {
 		return Frontmatter{}, invalid(path, "the frontmatter is not a YAML mapping")
 	}
+
 	var fm Frontmatter
+
 	for i := 0; i+1 < len(node.Content); i += 2 {
 		key, value := node.Content[i].Value, node.Content[i+1]
 		if err := decodeKey(&fm, key, value); err != nil {
@@ -93,6 +107,7 @@ func decodeFrontmatter(path, block string) (Frontmatter, error) {
 			)
 		}
 	}
+
 	return fm, nil
 }
 
@@ -110,6 +125,7 @@ func decode(value *yaml.Node, out any) error {
 	if err := value.Decode(out); err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "decode the value")
 	}
+
 	return nil
 }
 
@@ -118,27 +134,36 @@ func decodeKey(fm *Frontmatter, key string, value *yaml.Node) error {
 	if field, ok := stringKeys(fm)[key]; ok {
 		return decode(value, field)
 	}
+
 	switch key {
 	case "tags":
 		return decode(value, &fm.Tags)
 	case "generated":
 		fm.Generated = &Attribution{}
+
 		return decode(value, fm.Generated)
 	case "verified":
 		if value.Kind == yaml.MappingNode {
 			fm.Verified = make([]Attribution, 1)
+
 			return decode(value, &fm.Verified[0])
 		}
+
 		return decode(value, &fm.Verified)
 	}
+
 	var v any
+
 	if err := decode(value, &v); err != nil {
 		return err
 	}
+
 	if fm.Extra == nil {
 		fm.Extra = map[string]any{}
 	}
+
 	fm.Extra[key] = v
+
 	return nil
 }
 
@@ -158,8 +183,11 @@ var (
 // extractLinks lists the links in body, skipping fenced blocks and code spans; firstLine
 // is the file line body starts on.
 func extractLinks(body string, firstLine int) []Link {
-	var links []Link
-	var open string
+	var (
+		links []Link
+		open  string
+	)
+
 	for i, line := range strings.Split(body, "\n") {
 		line = strings.TrimSuffix(line, "\r")
 		if marker := fenceMarker(line); marker != "" {
@@ -169,19 +197,24 @@ func extractLinks(body string, firstLine int) []Link {
 			case strings.HasPrefix(marker, open[:1]):
 				open = ""
 			}
+
 			continue
 		}
+
 		if open != "" {
 			continue
 		}
+
 		line = blankCodeSpans(line)
 		for _, m := range refDefinition.FindAllStringSubmatch(line, -1) {
 			links = appendLink(links, m[1], firstLine+i)
 		}
+
 		for _, m := range inlineLink.FindAllStringSubmatch(line, -1) {
 			links = appendLink(links, m[1], firstLine+i)
 		}
 	}
+
 	return links
 }
 
@@ -192,11 +225,13 @@ func fenceMarker(line string) string {
 	if len(line)-len(trimmed) > 3 {
 		return ""
 	}
+
 	for _, c := range []string{"`", "~"} {
 		if strings.HasPrefix(trimmed, c+c+c) {
 			return trimmed[:len(trimmed)-len(strings.TrimLeft(trimmed, c))]
 		}
 	}
+
 	return ""
 }
 
@@ -207,19 +242,26 @@ func blankCodeSpans(line string) string {
 	for i := 0; i < len(b); {
 		if b[i] != '`' {
 			i++
+
 			continue
 		}
+
 		n := runLength(b, i)
 		end := closingRun(b, i+n, n)
+
 		if end < 0 {
 			i += n
+
 			continue
 		}
+
 		for j := i; j < end+n; j++ {
 			b[j] = ' '
 		}
+
 		i = end + n
 	}
+
 	return string(b)
 }
 
@@ -229,6 +271,7 @@ func runLength(b []byte, i int) int {
 	for i+n < len(b) && b[i+n] == '`' {
 		n++
 	}
+
 	return n
 }
 
@@ -237,24 +280,31 @@ func closingRun(b []byte, i, n int) int {
 	for i < len(b) {
 		if b[i] != '`' {
 			i++
+
 			continue
 		}
+
 		run := runLength(b, i)
 		if run == n {
 			return i
 		}
+
 		i += run
 	}
+
 	return -1
 }
 
 // appendLink classifies raw and appends it, dropping an empty target.
 func appendLink(links []Link, raw string, line int) []Link {
 	raw = strings.TrimSuffix(strings.TrimPrefix(raw, "<"), ">")
+
 	target, fragment, _ := strings.Cut(raw, "#")
+
 	if target == "" && fragment == "" {
 		return links
 	}
+
 	link := Link{Target: target, Fragment: fragment, Line: line}
 	switch {
 	case target == "":
@@ -266,5 +316,6 @@ func appendLink(links []Link, raw string, line int) []Link {
 	default:
 		link.Kind = LinkRelative
 	}
+
 	return append(links, link)
 }

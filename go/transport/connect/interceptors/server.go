@@ -43,10 +43,13 @@ type Edge struct {
 // (a panic, a shed request, a denial, a timeout) becomes a *connect.Error of its code.
 func ServerOptions(name string, d decorate.Deps, edge Edge) []connect.HandlerOption {
 	chain := transport.Interceptors(name, d, native(d), adapt, edge.Authn)
+
 	chain = append(chain, edge.Inner...)
+
 	if len(chain) == 0 {
 		return nil
 	}
+
 	return []connect.HandlerOption{connect.WithInterceptors(chain...)}
 }
 
@@ -86,6 +89,7 @@ func when(present bool, build func() connect.Interceptor) []connect.Interceptor 
 	if !present {
 		return nil
 	}
+
 	return []connect.Interceptor{build()}
 }
 
@@ -110,14 +114,17 @@ func (i tierInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 			resp       connect.AnyResponse
 			handlerErr error
 		)
+
 		err := i.unary.WrapOp(
 			ctx,
 			operation(req.Spec()),
 			func(ctx context.Context) error {
 				resp, handlerErr = next(ctx, req)
+
 				return handlerErr
 			},
 		)
+
 		return resp, connectError(ctx, err, handlerErr)
 	}
 }
@@ -135,14 +142,17 @@ func (i tierInterceptor) WrapStreamingHandler(
 ) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		var handlerErr error
+
 		err := i.stream.WrapOp(
 			ctx,
 			operation(conn.Spec()),
 			func(ctx context.Context) error {
 				handlerErr = next(ctx, conn)
+
 				return handlerErr
 			},
 		)
+
 		return connectError(ctx, err, handlerErr)
 	}
 }
@@ -155,7 +165,9 @@ func connectError(ctx context.Context, err, handlerErr error) error {
 		err == handlerErr { //nolint:errorlint // identity: the handler's own error
 		return err
 	}
+
 	apperr.Capture(ctx, err)
+
 	return wire.SanitizeConnect(err)
 }
 

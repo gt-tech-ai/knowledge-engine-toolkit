@@ -40,6 +40,7 @@ func minioS3Client(endpoint string) connectors3.S3ClientBuilder {
 		if err != nil {
 			return nil, err
 		}
+
 		return storages3.NewClient(client, "", ""), nil
 	}
 }
@@ -67,6 +68,7 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 	t.Cleanup(func() { m.Close(ctx) })
 
 	const bucket = "corp-connector"
+
 	adminCreds := credentials.NewStaticCredentialsProvider(
 		miniofix.RootUser,
 		miniofix.RootPassword,
@@ -82,6 +84,7 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 
 	_, err = admin.CreateBucket(ctx, &awss3.CreateBucketInput{Bucket: aws.String(bucket)})
 	require.NoError(t, err)
+
 	// Two objects under docs/, one outside the prefix (must not be counted).
 	for _, key := range []string{"docs/a.txt", "docs/b.txt", "other/c.txt"} {
 		_, err = admin.PutObject(ctx, &awss3.PutObjectInput{
@@ -108,6 +111,7 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 
 	src, err := builder.Build(ctx, cfg)
 	require.NoError(t, err)
+
 	n, err := src.TestConnection(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 2, n, "only the two docs/ objects are under the prefix")
@@ -115,10 +119,13 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 	// A nonexistent bucket is a client-fault error → CodeInvalidInput (not a transport
 	// error).
 	badCfg := cfg
+
 	badCfg.Bucket = "does-not-exist"
 	badCfg.Prefix = ""
+
 	badSrc, err := builder.Build(ctx, badCfg)
 	require.NoError(t, err)
+
 	_, err = badSrc.TestConnection(ctx)
 	require.True(
 		t,

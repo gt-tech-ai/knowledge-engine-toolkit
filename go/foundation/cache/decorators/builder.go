@@ -39,6 +39,7 @@ func NewBuilder(base interfaces.ByteCache, name string) *Builder {
 // operation durations via the interfaces.Metrics abstraction.
 func (b *Builder) WithMetrics(m interfaces.Metrics) *Builder {
 	b.metrics = m
+
 	return b
 }
 
@@ -100,6 +101,7 @@ func (d *metricsDecorator) Get(ctx context.Context, key string) ([]byte, bool) {
 	} else {
 		d.misses.Inc(d.name)
 	}
+
 	return val, ok
 }
 
@@ -111,6 +113,7 @@ func (d *metricsDecorator) Set(
 	ttl time.Duration,
 ) {
 	start := time.Now()
+
 	d.inner.Set(ctx, key, value, ttl)
 	d.duration.Observe(time.Since(start).Seconds(), d.name)
 }
@@ -118,6 +121,7 @@ func (d *metricsDecorator) Set(
 // Delete removes a key and records duration.
 func (d *metricsDecorator) Delete(ctx context.Context, key string) {
 	start := time.Now()
+
 	d.inner.Delete(ctx, key)
 	d.duration.Observe(time.Since(start).Seconds(), d.name)
 }

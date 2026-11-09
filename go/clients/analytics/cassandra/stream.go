@@ -71,7 +71,9 @@ func queryFingerprint(q types.AggregateQuery) (string, error) {
 			"analytics: query is not serializable",
 		)
 	}
+
 	sum := sha256.Sum256(b)
+
 	return hex.EncodeToString(sum[:16]), nil
 }
 
@@ -81,19 +83,23 @@ func decodeToken(b []byte, fingerprint string) (*resumeToken, error) {
 	if len(b) == 0 {
 		return nil, nil //nolint:nilnil // no token is a valid "start from the beginning"
 	}
+
 	var t resumeToken
+
 	if err := json.Unmarshal(b, &t); err != nil || t.Bucket == nil {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"analytics: malformed resume token",
 		)
 	}
+
 	if t.Query != fingerprint {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"analytics: resume token belongs to a different query",
 		)
 	}
+
 	return &t, nil
 }
 
@@ -105,17 +111,24 @@ func (p *readPlan) fetch(ctx context.Context, bucket time.Time, state []byte) pa
 		p.org, p.cube, bucket, p.lo, p.hi,
 	).WithContext(ctx).PageSize(p.pageSize).PageState(state).Idempotent(true).Iter()
 	out := page{bucket: bucket}
-	var ts time.Time
-	var dims map[string]string
-	var partials map[string][]byte
+
+	var (
+		ts       time.Time
+		dims     map[string]string
+		partials map[string][]byte
+	)
+
 	for iter.Scan(&ts, &dims, &partials) {
 		if p.keep(stored{ts: ts.UTC(), dims: dims}) {
 			out.rows = append(out.rows, p.project(ts, dims, partials))
 		}
+
 		ts, dims, partials = time.Time{}, nil, nil
 	}
+
 	out.next = iter.PageState()
 	out.err = iter.Close()
+
 	return out
 }
 
@@ -133,11 +146,13 @@ func (p *readPlan) project(
 	for _, name := range p.groupBy {
 		row.Group[name] = dims[name]
 	}
+
 	for _, name := range p.measures {
 		if blob, ok := partials[name]; ok {
 			row.Partials[name] = blob
 		}
 	}
+
 	return row
 }
 
@@ -186,18 +201,24 @@ func newStream(
 ) *stream {
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	s := &stream{ctx: sctx, cancel: cancel, plan: plan, window: window}
+
 	for i, b := range buckets {
 		if resume != nil && b.UnixMilli() < *resume.Bucket {
 			continue
 		}
+
 		if resume != nil && b.UnixMilli() == *resume.Bucket {
 			s.first = resume.Page
 		}
+
 		s.buckets = buckets[i:]
+
 		break
 	}
+
 	s.chans = make([]chan page, len(s.buckets))
 	s.fill()
+
 	return s
 }
 
@@ -206,13 +227,19 @@ func (s *stream) fill() {
 	for s.started < len(s.buckets) && s.started < s.cur+s.window {
 		i := s.started
 		ch := make(chan page, 1)
+
 		s.chans[i] = ch
+
 		state := []byte(nil)
+
 		if i == 0 {
 			state = s.first
 		}
+
 		s.wg.Add(1)
+
 		go s.read(s.buckets[i], state, ch)
+
 		s.started++
 	}
 }
@@ -221,6 +248,7 @@ func (s *stream) fill() {
 func (s *stream) read(bucket time.Time, state []byte, ch chan<- page) {
 	defer s.wg.Done()
 	defer close(ch)
+
 	for {
 		p := s.plan.fetch(s.ctx, bucket, state)
 		select {
@@ -228,9 +256,11 @@ func (s *stream) read(bucket time.Time, state []byte, ch chan<- page) {
 		case <-s.ctx.Done():
 			return
 		}
+
 		if p.err != nil || len(p.next) == 0 {
 			return
 		}
+
 		state = p.next
 	}
 }
@@ -241,19 +271,25 @@ func (s *stream) Next(ctx context.Context) ([]types.Row, bool, error) {
 	if s.err != nil {
 		return nil, false, s.err
 	}
+
 	for s.cur < len(s.buckets) {
 		select {
 		case p, ok := <-s.chans[s.cur]:
 			if !ok {
 				s.cur++
 				s.fill()
+
 				continue
 			}
+
 			if p.err != nil {
 				s.err = p.err
+
 				return nil, false, s.err
 			}
+
 			s.token = s.position(p)
+
 			return p.rows, len(p.next) > 0 || s.cur+1 < len(s.buckets), nil
 		case <-ctx.Done():
 			return nil, false, apperr.Wrap(
@@ -263,6 +299,7 @@ func (s *stream) Next(ctx context.Context) ([]types.Row, bool, error) {
 			)
 		}
 	}
+
 	return nil, false, nil
 }
 
@@ -271,15 +308,20 @@ func (s *stream) Next(ctx context.Context) ([]types.Row, bool, error) {
 func (s *stream) position(p page) []byte {
 	at := p.bucket.UnixMilli()
 	t := resumeToken{Bucket: &at, Query: s.plan.fingerprint, Page: p.next}
+
 	if len(p.next) == 0 {
 		if s.cur+1 >= len(s.buckets) {
 			return nil
 		}
+
 		next := s.buckets[s.cur+1].UnixMilli()
+
 		t = resumeToken{Bucket: &next, Query: s.plan.fingerprint}
 	}
+
 	//nolint:errchkjson // a string and a byte slice always marshal
 	b, _ := json.Marshal(t)
+
 	return b
 }
 
@@ -292,8 +334,10 @@ func (s *stream) Close() error {
 	if s.closed {
 		return nil
 	}
+
 	s.closed = true
 	s.cancel()
 	s.wg.Wait()
+
 	return nil
 }

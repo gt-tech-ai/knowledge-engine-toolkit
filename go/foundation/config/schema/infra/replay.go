@@ -36,8 +36,10 @@ func (c ReplayConfig) Validate() error {
 	if c.MaxSize <= 0 {
 		return apperr.InvalidInput("replay.max_size must be positive")
 	}
+
 	if c.TTL <= 0 {
 		return apperr.InvalidInput("replay.ttl must be positive")
 	}
+
 	return nil
 }

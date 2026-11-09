@@ -19,6 +19,7 @@ import (
 // fixtures, standing in for the manifest's go-version strategy.
 func goVersionParse(s string) string {
 	const prefix = "go version go"
+
 	if len(s) > len(prefix) {
 		rest := s[len(prefix):]
 		for i := range len(rest) {
@@ -26,8 +27,10 @@ func goVersionParse(s string) string {
 				return rest[:i]
 			}
 		}
+
 		return rest
 	}
+
 	return ""
 }
 

@@ -194,6 +194,7 @@ func TestMetricsBuilder_ConfigToOptions(t *testing.T) {
 	opts := original.ToOptions()
 
 	var rebuilt metrics.Config
+
 	for _, opt := range opts {
 		opt(&rebuilt)
 	}
@@ -309,18 +310,21 @@ func TestMetricsBuilder_PromAlreadyRegistered(t *testing.T) {
 	// Counter: register twice with same name and identical descriptor.
 	c1 := m.Counter("prom_dup_counter", "duplicate counter", "method")
 	c2 := m.Counter("prom_dup_counter", "duplicate counter", "method")
+
 	c1.Inc("GET")
 	c2.Inc("POST")
 
 	// Histogram: register twice with same name and identical descriptor.
 	h1 := m.Histogram("prom_dup_histogram", "duplicate histogram", nil, "method")
 	h2 := m.Histogram("prom_dup_histogram", "duplicate histogram", nil, "method")
+
 	h1.Observe(0.1, "GET")
 	h2.Observe(0.2, "POST")
 
 	// Gauge: register twice with same name and identical descriptor.
 	g1 := m.Gauge("prom_dup_gauge", "duplicate gauge", "service")
 	g2 := m.Gauge("prom_dup_gauge", "duplicate gauge", "service")
+
 	g1.Set(1.0, "api")
 	g2.Set(2.0, "api")
 }
@@ -360,6 +364,7 @@ func TestMetrics_MockAsConsumerDependency(t *testing.T) {
 	mockGauge.EXPECT().Set(42.0)
 
 	var m interfaces.Metrics = mockMetrics
+
 	c := m.Counter("http_requests_total", "Total HTTP requests", "method")
 	c.Inc("GET")
 

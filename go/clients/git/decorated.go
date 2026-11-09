@@ -21,6 +21,7 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
+
 	return &decorator{base: base, Base: b}, nil
 }
 
@@ -119,6 +120,7 @@ func (d *decorator) IsRepo(ctx context.Context, root string) bool {
 	ok, err := d.Exec(ctx, "is_repo", func(c context.Context) (bool, error) {
 		return d.base.IsRepo(c, root), nil
 	})
+
 	return err == nil && ok
 }
 

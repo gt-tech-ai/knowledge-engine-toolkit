@@ -63,6 +63,7 @@ func NewSource(
 	if err != nil {
 		return nil, err
 	}
+
 	return &Source{storage: client, bucket: cfg.Bucket, prefix: cfg.Prefix}, nil
 }
 
@@ -87,10 +88,12 @@ func NewStorage(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := build(ctx, creds, cfg.Region)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "connector s3: build client")
 	}
+
 	return client, nil
 }
 
@@ -103,6 +106,7 @@ func (s *Source) TestConnection(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, ClassifyListError(err)
 	}
+
 	return len(objs), nil
 }
 
@@ -122,6 +126,7 @@ func (s *Source) ListPage(
 	if err != nil {
 		return nil, "", ClassifyListError(err)
 	}
+
 	return objs, next, nil
 }
 
@@ -139,6 +144,7 @@ func ClassifyListError(err error) error {
 			"connector s3: cannot list bucket (check bucket, prefix, region, and credentials)",
 		)
 	}
+
 	return apperr.Wrap(
 		err,
 		apperr.CodeUnavailable,
@@ -155,18 +161,25 @@ func ClassifyListError(err error) error {
 // unknown and only the status identifies them).
 func isConfigurationError(err error) bool {
 	var credErr *credentialsError
+
 	if apperr.As(err, &credErr) {
 		return true
 	}
+
 	var apiErr smithy.APIError
+
 	if apperr.As(err, &apiErr) && apiErr.ErrorFault() == smithy.FaultClient {
 		return true
 	}
+
 	var respErr interface{ HTTPStatusCode() int }
+
 	if !apperr.As(err, &respErr) {
 		return false
 	}
+
 	status := respErr.HTTPStatusCode()
+
 	return status >= http.StatusBadRequest &&
 		status < http.StatusInternalServerError &&
 		status != http.StatusRequestTimeout &&

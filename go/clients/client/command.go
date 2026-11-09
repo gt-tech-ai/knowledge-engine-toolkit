@@ -18,14 +18,17 @@ func Output(res interfaces.CmdResult, what string) ([]byte, error) {
 	if res.Err == nil {
 		return res.Stdout, nil
 	}
+
 	code := apperr.CodeUpstream
 	if res.ExitCode == -1 {
 		code = apperr.CodeUnavailable
 	}
+
 	msg := what
 	if tail := bytes.TrimSpace(res.Stderr); len(tail) > 0 {
 		msg += ": " + string(tail[max(0, len(tail)-stderrTail):])
 	}
+
 	return nil, apperr.Wrap(res.Err, code, msg)
 }
 
@@ -33,10 +36,12 @@ func Output(res interfaces.CmdResult, what string) ([]byte, error) {
 // fields.
 func SplitNUL(out []byte) []string {
 	var fields []string
+
 	for f := range strings.SplitSeq(string(out), "\x00") {
 		if f != "" {
 			fields = append(fields, f)
 		}
 	}
+
 	return fields
 }

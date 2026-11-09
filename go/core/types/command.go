@@ -118,11 +118,13 @@ func (f *FlagSpec) FlagField() string {
 	if f.Field != "" {
 		return f.Field
 	}
+
 	out := []byte(f.Name)
 	for i, c := range out {
 		if c == '-' {
 			out[i] = '_'
 		}
 	}
+
 	return string(out)
 }

@@ -25,6 +25,7 @@ func decorators(
 	if log != nil {
 		mws = append(mws, decorate.NewLogging(log, "operation", d.Name))
 	}
+
 	return decorate.Chain(append(mws, codeMap(d))...)
 }
 
@@ -38,6 +39,7 @@ func codeMap(d types.OperationDescriptor) decorate.OpMiddleware {
 			if err == nil {
 				return nil
 			}
+
 			switch {
 			case apperr.StdIs(ctx.Err(), context.DeadlineExceeded):
 				return apperr.Wrap(err, apperr.CodeTimeout, fmt.Sprintf(
@@ -48,6 +50,7 @@ func codeMap(d types.OperationDescriptor) decorate.OpMiddleware {
 					"operation %s was canceled", d.Name,
 				))
 			}
+
 			return err
 		},
 	)

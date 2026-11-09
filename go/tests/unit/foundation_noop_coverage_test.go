@@ -167,6 +167,7 @@ func newMapByteCache(ctrl *gomock.Controller) *mocks.MockByteCache {
 	c.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, key string) ([]byte, bool) {
 			v, ok := store[key]
+
 			return v, ok
 		},
 	).AnyTimes()
@@ -180,6 +181,7 @@ func newMapByteCache(ctrl *gomock.Controller) *mocks.MockByteCache {
 			delete(store, key)
 		},
 	).AnyTimes()
+
 	return c
 }
 
@@ -202,6 +204,7 @@ func TestFoundationCacheDecorator_BuilderNoMetrics(t *testing.T) {
 
 	ctx := context.Background()
 	decorated.Set(ctx, "key", []byte("val"), time.Minute)
+
 	v, ok := decorated.Get(ctx, "key")
 	assert.True(t, ok, "Get after Set must return ok=true")
 	assert.Equal(t, "val", string(v))
@@ -234,6 +237,7 @@ func TestFoundationCacheDecorator_BuilderWithMetrics(t *testing.T) {
 
 	// Set + Get (hit) - exercises metricsDecorator.Set and .Get hit path.
 	decorated.Set(ctx, "key", []byte("val"), time.Minute)
+
 	v, ok := decorated.Get(ctx, "key")
 	assert.True(t, ok, "Get after Set must return ok=true")
 	assert.Equal(t, "val", string(v))
@@ -244,6 +248,7 @@ func TestFoundationCacheDecorator_BuilderWithMetrics(t *testing.T) {
 
 	// Delete - exercises metricsDecorator.Delete.
 	decorated.Delete(ctx, "key")
+
 	_, ok = decorated.Get(ctx, "key")
 	assert.False(t, ok, "Get after Delete must return ok=false")
 }

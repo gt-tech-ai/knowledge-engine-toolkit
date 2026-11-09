@@ -32,6 +32,7 @@ func checksumPayload() []byte {
 // sha256Hex returns the lowercase hex SHA-256 of b — the manifest's checksum form.
 func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
+
 	return hex.EncodeToString(sum[:])
 }
 
@@ -56,37 +57,46 @@ func downloadTool(artifacts map[string]types.Artifact) *types.ToolDef {
 // partially written temp file — is left behind.
 func isolateInstallDirs(t *testing.T) (binDir, tmpDir string) {
 	t.Helper()
+
 	binDir, tmpDir = t.TempDir(), t.TempDir()
 	t.Setenv("GOBIN", binDir)
 	t.Setenv("TMPDIR", tmpDir)
+
 	return binDir, tmpDir
 }
 
 // dirEntries lists a directory's entry names.
 func dirEntries(t *testing.T, dir string) []string {
 	t.Helper()
+
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
+
 	names := make([]string, 0, len(entries))
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
+
 	return names
 }
 
 // tarGz packs one file at name into a gzip-compressed tarball.
 func tarGz(t *testing.T, name string, body []byte) []byte {
 	t.Helper()
+
 	var buf bytes.Buffer
+
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
 	require.NoError(t, tw.WriteHeader(&tar.Header{
 		Name: name, Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg,
 	}))
+
 	_, err := tw.Write(body)
 	require.NoError(t, err)
 	require.NoError(t, tw.Close())
 	require.NoError(t, gz.Close())
+
 	return buf.Bytes()
 }
 
@@ -94,24 +104,31 @@ func tarGz(t *testing.T, name string, body []byte) []byte {
 // release ships when the artifact is one bare gzipped binary (e.g. taplo).
 func gzOf(t *testing.T, body []byte) []byte {
 	t.Helper()
+
 	var buf bytes.Buffer
+
 	gz := gzip.NewWriter(&buf)
 	_, err := gz.Write(body)
 	require.NoError(t, err)
 	require.NoError(t, gz.Close())
+
 	return buf.Bytes()
 }
 
 // zipOf packs one file at name into a zip archive.
 func zipOf(t *testing.T, name string, body []byte) []byte {
 	t.Helper()
+
 	var buf bytes.Buffer
+
 	zw := zip.NewWriter(&buf)
 	w, err := zw.Create(name)
 	require.NoError(t, err)
+
 	_, err = w.Write(body)
 	require.NoError(t, err)
 	require.NoError(t, zw.Close())
+
 	return buf.Bytes()
 }
 
@@ -194,6 +211,7 @@ func TestClientsToolchainInstall_VerifiesSHA256BeforePlacingBinary(t *testing.T)
 			got, err := os.ReadFile(placed)
 			require.NoError(t, err)
 			assert.Equal(t, checksumPayload(), got)
+
 			info, err := os.Stat(placed)
 			require.NoError(t, err)
 			assert.NotZero(
@@ -223,6 +241,7 @@ func TestClientsToolchainInstall_LeavesNothingWhenTheArtifactIsUnusable(t *testi
 	url := "https://example.test/pinned_linux_amd64.tar.gz"
 	install := func(t *testing.T, dl *mocks.MockDownloader, sha string) error {
 		t.Helper()
+
 		tool := downloadTool(
 			map[string]types.Artifact{"linux-amd64": {URL: url, SHA256: sha}},
 		)
@@ -234,6 +253,7 @@ func TestClientsToolchainInstall_LeavesNothingWhenTheArtifactIsUnusable(t *testi
 			toolchain.WithArch("amd64"),
 			toolchain.WithDownloader(dl),
 		)
+
 		return inst.Install(context.Background(), "/root", tool)
 	}
 

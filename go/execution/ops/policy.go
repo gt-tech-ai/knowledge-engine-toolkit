@@ -14,6 +14,7 @@ import (
 func admits(p types.ExposurePolicy, d types.OperationDescriptor) bool {
 	opRank, _ := d.SafetyClass.Rank()
 	maxRank, _ := p.MaxSafety.Rank()
+
 	return opRank <= maxRank &&
 		slices.Contains(p.Lifecycles, d.Lifecycle) &&
 		(len(p.Allow) == 0 || slices.Contains(p.Allow, d.Name)) &&
@@ -32,5 +33,6 @@ func checkPolicyNames(p types.ExposurePolicy, known map[string]bool) error {
 			}
 		}
 	}
+
 	return nil
 }

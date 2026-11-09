@@ -42,6 +42,7 @@ import (
 func TraceParentFromContext(ctx context.Context) string {
 	carrier := propagation.MapCarrier{}
 	propagation.TraceContext{}.Inject(ctx, carrier)
+
 	return carrier["traceparent"]
 }
 
@@ -56,6 +57,7 @@ func TraceIDFromContext(ctx context.Context) string {
 	if len(parts) >= 2 && len(parts[1]) == 32 {
 		return parts[1]
 	}
+
 	return ""
 }
 
@@ -68,20 +70,26 @@ func TraceIDFromContext(ctx context.Context) string {
 // real one; on the (practically impossible) rand failure it returns ctx unchanged,
 // degrading to the configured ratio rather than erroring on a request path.
 func ContextWithForcedSample(ctx context.Context) context.Context {
-	var tid oteltrace.TraceID
-	var sid oteltrace.SpanID
+	var (
+		tid oteltrace.TraceID
+		sid oteltrace.SpanID
+	)
+
 	if _, err := rand.Read(tid[:]); err != nil {
 		return ctx
 	}
+
 	if _, err := rand.Read(sid[:]); err != nil {
 		return ctx
 	}
+
 	sc := oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
 		TraceID:    tid,
 		SpanID:     sid,
 		TraceFlags: oteltrace.FlagsSampled,
 		Remote:     true,
 	})
+
 	return oteltrace.ContextWithRemoteSpanContext(ctx, sc)
 }
 
@@ -93,6 +101,7 @@ func normalizeEndpoint(endpoint string) string {
 	if i := strings.Index(endpoint, "://"); i != -1 {
 		endpoint = endpoint[i+3:]
 	}
+
 	return strings.TrimSuffix(endpoint, "/")
 }
 
@@ -130,8 +139,10 @@ func New(
 	opts ...options.Option[Config],
 ) (interfaces.Tracer, error) {
 	cfg := DefaultConfig("unnamed-service")
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
+
 	return NewFromConfig(ctx, cfg)
 }
 
@@ -146,6 +157,7 @@ func NewFromConfig(ctx context.Context, cfg Config) (interfaces.Tracer, error) {
 			SampleRate:  cfg.SampleRate,
 			Insecure:    cfg.Insecure,
 		}
+
 		return oteltracer.New(ctx, otelCfg)
 
 	case KindNoop:

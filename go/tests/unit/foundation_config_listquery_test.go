@@ -33,6 +33,7 @@ func TestListqueryFacetConfig(t *testing.T) {
 	require.NoError(t, def.Validate(), "the default facet config must validate")
 
 	badThreshold := listquerycfg.DefaultConfig()
+
 	badThreshold.Facet.RowThreshold = 0
 	require.Error(
 		t,
@@ -41,6 +42,7 @@ func TestListqueryFacetConfig(t *testing.T) {
 	)
 
 	badInterval := listquerycfg.DefaultConfig()
+
 	badInterval.Facet.ReconcileInterval = 0
 	assert.Error(
 		t,

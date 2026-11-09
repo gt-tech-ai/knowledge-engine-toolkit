@@ -77,6 +77,7 @@ func (b *BufferingRunner) RunBuffered(
 	b.buf.Write(result.Stdout)
 	b.buf.Write(result.Stderr)
 	b.mu.Unlock()
+
 	return result
 }
 
@@ -94,6 +95,7 @@ func (b *BufferingRunner) RunBufferedWithEnv(
 	b.buf.Write(result.Stdout)
 	b.buf.Write(result.Stderr)
 	b.mu.Unlock()
+
 	return result
 }
 
@@ -112,6 +114,7 @@ func (b *BufferingRunner) RunBufferedWithInput(
 	b.buf.Write(result.Stdout)
 	b.buf.Write(result.Stderr)
 	b.mu.Unlock()
+
 	return result
 }
 
@@ -128,6 +131,7 @@ func (b *BufferingRunner) RequireTool(name, installHint string) error {
 func (b *BufferingRunner) Captured() []byte {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	return bytes.Clone(b.buf.Bytes())
 }
 
@@ -150,6 +154,7 @@ func (b *BufferingRunner) runBufferedAndReplay(
 		if err == nil && !b.quiet {
 			fmt.Fprintf(os.Stderr, "ok %s\n", cmdStr)
 		}
+
 		return err
 	}
 
@@ -159,6 +164,7 @@ func (b *BufferingRunner) runBufferedAndReplay(
 		if len(result.Stdout) > 0 {
 			_, _ = os.Stdout.Write(result.Stdout)
 		}
+
 		if len(result.Stderr) > 0 {
 			_, _ = os.Stderr.Write(result.Stderr)
 		}
@@ -173,11 +179,13 @@ func (b *BufferingRunner) runBufferedAndReplay(
 		if !b.quiet {
 			fmt.Fprintf(os.Stderr, "FAIL %s\n", cmdStr)
 		}
+
 		return apperr.Wrap(result.Err, apperr.CodeInternal, cmdStr+" failed")
 	}
 
 	if !b.quiet {
 		fmt.Fprintf(os.Stderr, "ok %s\n", cmdStr)
 	}
+
 	return nil
 }

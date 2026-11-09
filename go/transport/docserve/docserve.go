@@ -110,7 +110,9 @@ func (s *Server) Serve(ctx context.Context, targets Targets) error {
 	if err := s.d.Streams.Require(); err != nil {
 		return err
 	}
+
 	var procs []interfaces.ProcessHandle
+
 	for _, start := range []struct {
 		run func(context.Context) (interfaces.ProcessHandle, error)
 		on  bool
@@ -118,13 +120,17 @@ func (s *Server) Serve(ctx context.Context, targets Targets) error {
 		if !start.on && !targets.all() {
 			continue
 		}
+
 		p, err := start.run(ctx)
 		if err != nil {
 			return err
 		}
+
 		procs = append(procs, p)
 	}
+
 	var api *http.Server
+
 	if targets.API || targets.all() {
 		srv, err := s.ServeAPIDocs(ctx)
 		switch {
@@ -136,13 +142,17 @@ func (s *Server) Serve(ctx context.Context, targets Targets) error {
 			api = srv
 		}
 	}
+
 	if len(procs) == 0 && api == nil {
 		s.d.Log.Warn("No doc servers started")
+
 		return nil
 	}
+
 	s.d.Log.Info("Press Ctrl+C to stop")
 	<-ctx.Done()
 	s.shutdown(ctx, api, procs)
+
 	return nil
 }
 
@@ -156,8 +166,10 @@ func (s *Server) shutdown(
 		if err := api.Shutdown(stop); err != nil {
 			s.d.Log.Warn("API docs server shutdown", "error", err.Error())
 		}
+
 		cancel()
 	}
+
 	for _, p := range procs {
 		if err := p.Wait(); err != nil {
 			s.d.Log.Debug("doc server exited", "error", err.Error())
@@ -170,6 +182,7 @@ func (s *Server) ServeGoDocs(ctx context.Context) (interfaces.ProcessHandle, err
 	if err := s.d.Runner.RequireTool("pkgsite", s.cfg.PkgsiteHint); err != nil {
 		return nil, err
 	}
+
 	return s.start(ctx, "pkgsite", "Go", s.cfg.GoPort,
 		[]string{"pkgsite", "-http=:" + s.cfg.GoPort})
 }
@@ -180,16 +193,19 @@ func (s *Server) ServeGoDocs(ctx context.Context) (interfaces.ProcessHandle, err
 // unvendored dependency at import time may not render. None found is CodeInvalidInput.
 func (s *Server) ServePythonDocs(ctx context.Context) (interfaces.ProcessHandle, error) {
 	root := os.DirFS(s.cfg.Root)
+
 	pkgs, err := python.Packages(root, s.cfg.PythonRoots, s.d.Keep)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "discover Python packages")
 	}
+
 	if len(pkgs) == 0 {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"no documentable Python packages found",
 		)
 	}
+
 	args := []string{
 		"uvx", "pdoc", "--no-browser", "--host", "localhost", "--port",
 		s.cfg.PythonPort,
@@ -200,6 +216,7 @@ func (s *Server) ServePythonDocs(ctx context.Context) (interfaces.ProcessHandle,
 			filepath.Join(s.cfg.Root, pkg, "src", python.ModuleName(root, pkg)),
 		)
 	}
+
 	return s.start(ctx, "uvx", "Python", s.cfg.PythonPort, args)
 }
 
@@ -214,7 +231,9 @@ func (s *Server) start(
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "start "+name)
 	}
+
 	s.d.Log.Info(what+" docs server started", "url", "http://localhost:"+port)
+
 	return p, nil
 }
 
@@ -226,49 +245,65 @@ func (s *Server) ServeAPIDocs(ctx context.Context) (*http.Server, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	mux := http.NewServeMux()
+
 	var root http.Handler
+
 	if len(specs) == 1 {
 		mux.Handle("/openapi.json", docs.SpecHandler(specs[0].data))
+
 		root = docs.RedocHandler("/openapi.json", title(specs[0].name))
 	} else {
 		index := template.Must(template.New("index").Parse(indexPage))
 		names := make([]string, 0, len(specs))
+
 		for _, sp := range specs {
 			url := "/" + sp.name + "/openapi.json"
 			mux.Handle(url, docs.SpecHandler(sp.data))
 			mux.Handle("/"+sp.name, docs.RedocHandler(url, title(sp.name)))
+
 			names = append(names, sp.name)
 		}
+
 		root = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
 			if err := index.Execute(w, names); err != nil {
 				s.d.Log.Warn("render API docs index", "error", err.Error())
 			}
 		})
 	}
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
+
 			return
 		}
+
 		root.ServeHTTP(w, r)
 	})
+
 	srv := &http.Server{
 		Addr:              ":" + s.cfg.APIPort,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", srv.Addr)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "listen "+srv.Addr)
 	}
+
 	go func() {
 		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 			s.d.Log.Warn("API docs server error", "error", err.Error())
 		}
 	}()
+
 	s.d.Log.Info("API docs server started", "url", "http://localhost:"+s.cfg.APIPort)
+
 	return srv, nil
 }
 
@@ -285,31 +320,40 @@ type spec struct {
 // CodeNotFound, and a spec that exists but cannot be read is CodeInternal.
 func (s *Server) readSpecs() ([]spec, error) {
 	dir := filepath.Join(s.cfg.Root, filepath.FromSlash(s.cfg.ServerDir))
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "read "+dir)
 	}
+
 	var out []spec
+
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
+
 		p := filepath.Join(dir, e.Name(), filepath.FromSlash(s.cfg.OpenAPISpec))
 		data, err := os.ReadFile(
 			p,
 		)
+
 		if os.IsNotExist(err) {
 			continue
 		}
+
 		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInternal, "read "+p)
 		}
+
 		out = append(out, spec{name: e.Name(), data: data})
 	}
+
 	if len(out) == 0 {
 		return nil, apperr.New(apperr.CodeNotFound,
 			"no "+s.cfg.OpenAPISpec+" under "+dir+" (generate the specs first)")
 	}
+
 	return out, nil
 }
 
@@ -318,5 +362,6 @@ func title(name string) string {
 	if name == "" {
 		return name
 	}
+
 	return strings.ToUpper(name[:1]) + name[1:]
 }

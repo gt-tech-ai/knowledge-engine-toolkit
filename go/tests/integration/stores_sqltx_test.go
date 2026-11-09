@@ -18,15 +18,19 @@ import (
 // newSQLTxDB starts Postgres with a one-column table and returns the database.
 func newSQLTxDB(t *testing.T) *sql.DB {
 	t.Helper()
+
 	ctx := context.Background()
 	pg, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err, "start postgres")
 	t.Cleanup(func() { pg.Close(context.Background()) })
+
 	db, err := pg.OpenDB()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
+
 	_, err = db.ExecContext(ctx, `CREATE TABLE notes (body text NOT NULL)`)
 	require.NoError(t, err)
+
 	return db
 }
 
@@ -47,6 +51,7 @@ func newSQLTxDB(t *testing.T) *sql.DB {
 //     running its body, through both WithTransaction and Begin.
 func TestSQLTx_CommitsRollsBackAndRefusesNesting(t *testing.T) {
 	requireIntegration(t)
+
 	db := newSQLTxDB(t)
 	mgr := sqltx.New(db)
 	ctx := t.Context()
@@ -54,6 +59,7 @@ func TestSQLTx_CommitsRollsBackAndRefusesNesting(t *testing.T) {
 		tx, ok := sqltx.Tx(ctx)
 		require.True(t, ok, "the body runs on a bound transaction")
 		require.True(t, interfaces.InTx(ctx))
+
 		if _, err := tx.ExecContext(
 			ctx,
 			`INSERT INTO notes (body) VALUES ($1)`,
@@ -61,18 +67,23 @@ func TestSQLTx_CommitsRollsBackAndRefusesNesting(t *testing.T) {
 		); err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "sqltx test: insert")
 		}
+
 		return nil
 	}
 	count := func() int {
 		var n int
+
 		require.NoError(t, db.QueryRowContext(ctx, `SELECT count(*) FROM notes`).Scan(&n))
+
 		return n
 	}
 
 	hooks := 0
+
 	require.NoError(t, mgr.WithTransaction(ctx, func(ctx context.Context) error {
 		interfaces.RegisterAfterCommit(ctx, func() { hooks++ })
 		require.Zero(t, hooks, "the hook waits for the commit")
+
 		return insert(ctx, "kept")
 	}))
 	require.Equal(t, 1, count())
@@ -81,6 +92,7 @@ func TestSQLTx_CommitsRollsBackAndRefusesNesting(t *testing.T) {
 	err := mgr.WithTransaction(ctx, func(ctx context.Context) error {
 		interfaces.RegisterAfterCommit(ctx, func() { hooks++ })
 		require.NoError(t, insert(ctx, "dropped"))
+
 		return apperr.New(apperr.CodeConflict, "body failed")
 	})
 	require.Equal(t, apperr.CodeConflict, apperr.Code(err))
@@ -88,9 +100,11 @@ func TestSQLTx_CommitsRollsBackAndRefusesNesting(t *testing.T) {
 	require.Equal(t, 1, hooks, "a rolled-back transaction runs no hook")
 
 	ran := false
+
 	err = mgr.WithTransaction(ctx, func(ctx context.Context) error {
 		return mgr.WithTransaction(ctx, func(context.Context) error {
 			ran = true
+
 			return nil
 		})
 	})
@@ -100,6 +114,7 @@ func TestSQLTx_CommitsRollsBackAndRefusesNesting(t *testing.T) {
 	txCtx, tx, err := mgr.Begin(ctx)
 	require.NoError(t, err)
 	require.NoError(t, insert(txCtx, "begun"))
+
 	_, _, err = mgr.Begin(txCtx)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	require.NoError(t, tx.Commit())

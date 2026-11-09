@@ -37,12 +37,14 @@ func (s source) Get(_ context.Context, ref types.Ref) (types.Secret, error) {
 			fmt.Sprintf("no environment variable mapped for credential %s", ref),
 		)
 	}
+
 	value := os.Getenv(name)
 	if value == "" {
 		return types.Secret{}, apperr.NotFound(
 			fmt.Sprintf("environment variable %s is unset for credential %s", name, ref),
 		)
 	}
+
 	return types.NewSecret(value), nil
 }
 

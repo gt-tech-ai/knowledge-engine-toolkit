@@ -26,6 +26,7 @@ func SeekFilter(cols []KeysetColumn, values []any) types.Filter {
 	if len(cols) == 0 {
 		return types.CompositeFilter{}
 	}
+
 	return seekFrom(cols, values, 0)
 }
 
@@ -37,12 +38,14 @@ func seekFrom(cols []KeysetColumn, values []any, i int) types.Filter {
 	if i == len(cols)-1 {
 		return strict
 	}
+
 	eq := types.FilterClause{
 		Field:    cols[i].Column,
 		Operator: types.OpEq,
 		Value:    values[i],
 	}
 	tail := types.CompositeFilter{And: []types.Filter{eq, seekFrom(cols, values, i+1)}}
+
 	return types.CompositeFilter{Or: []types.Filter{strict, tail}}
 }
 
@@ -55,5 +58,6 @@ func strictClause(c KeysetColumn, v any) types.FilterClause {
 	if c.Desc {
 		op = types.OpLt
 	}
+
 	return types.FilterClause{Field: c.Column, Operator: op, Value: v}
 }

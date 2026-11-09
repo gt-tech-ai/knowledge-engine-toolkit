@@ -119,8 +119,11 @@ func (c Config) MatchRoute(method, path string) (RouteEntry, bool) {
 
 	segs := splitPath(path)
 
-	var best RouteEntry
-	var bestLiterals int
+	var (
+		best         RouteEntry
+		bestLiterals int
+	)
+
 	found := false
 	// Index-based iteration avoids copying the (large) RouteEntry each loop.
 	for i := range c.Routes {
@@ -128,16 +131,19 @@ func (c Config) MatchRoute(method, path string) (RouteEntry, bool) {
 		if !strings.EqualFold(e.Method, method) {
 			continue
 		}
+
 		literals, ok := matchTemplate(splitPath(e.PathTemplate), segs)
 		if !ok {
 			continue
 		}
+
 		// Prefer the template with the most literal (non-wildcard) segment
 		// matches, so a literal route beats a {param} route at the same position.
 		if !found || literals > bestLiterals {
 			best, bestLiterals, found = e, literals, true
 		}
 	}
+
 	return best, found
 }
 
@@ -154,15 +160,19 @@ func matchTemplate(tmpl, path []string) (literals int, ok bool) {
 	if len(tmpl) != len(path) {
 		return 0, false
 	}
+
 	for i, t := range tmpl {
 		if isParam(t) {
 			continue
 		}
+
 		if t != path[i] {
 			return 0, false
 		}
+
 		literals++
 	}
+
 	return literals, true
 }
 

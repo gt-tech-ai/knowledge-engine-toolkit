@@ -54,6 +54,7 @@ func TestGuardDomain(t *testing.T) {
 //     skipped; any other error is returned.
 func TestProjectEnv(t *testing.T) {
 	t.Parallel()
+
 	ref := types.Ref{Env: "stg", Class: "mgmt"}
 	fields := map[string]string{
 		"client_secret": "AUTH0_CLIENT_SECRET",
@@ -61,7 +62,13 @@ func TestProjectEnv(t *testing.T) {
 		"password":      "E2E_PASSWORD",
 	}
 	src := mocks.NewMockSource(gomock.NewController(t))
-	at := func(field string) types.Ref { r := ref; r.Field = field; return r }
+	at := func(field string) types.Ref {
+		r := ref
+
+		r.Field = field
+
+		return r
+	}
 	src.EXPECT().Get(gomock.Any(), at("client_id")).Return(types.NewSecret("id"), nil)
 	src.EXPECT().
 		Get(gomock.Any(), at("client_secret")).
@@ -76,6 +83,7 @@ func TestProjectEnv(t *testing.T) {
 	hard := mocks.NewMockSource(gomock.NewController(t))
 	hard.EXPECT().Get(gomock.Any(), gomock.Any()).
 		Return(types.Secret{}, apperr.New(apperr.CodeUnavailable, "down")).AnyTimes()
+
 	_, err = secrets.ProjectEnv(t.Context(), hard, ref, fields)
 	assert.True(t, apperr.Is(err, apperr.CodeUnavailable), "got %v", err)
 }

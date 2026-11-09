@@ -49,13 +49,16 @@ func Diff(a, b Hash, get NodeGetter) ([]Change, error) {
 	if a == b {
 		return nil, nil
 	}
+
 	if a.IsZero() || b.IsZero() {
 		return []Change{{Before: a, After: b}}, nil
 	}
+
 	d := differ{dec: decoder{get: get}}
 	if err := d.node(a, b, "", 0); err != nil {
 		return nil, err
 	}
+
 	return d.changes, nil
 }
 
@@ -64,6 +67,7 @@ func join(path, name string) string {
 	if path == "" {
 		return name
 	}
+
 	return path + "." + name
 }
 
@@ -75,21 +79,27 @@ func (d *differ) node(a, b Hash, path string, depth int) error {
 			"chartspec: tree nesting exceeds max depth",
 		)
 	}
+
 	na, err := d.dec.fetch(a)
 	if err != nil {
 		return err
 	}
+
 	nb, err := d.dec.fetch(b)
 	if err != nil {
 		return err
 	}
+
 	if na.Kind != nb.Kind {
 		d.changes = append(d.changes, Change{Path: path, Before: a, After: b})
+
 		return nil
 	}
+
 	if err := d.fields(na, nb, a, b, path); err != nil {
 		return err
 	}
+
 	for _, name := range unionKeys(na.Children, nb.Children) {
 		if err := d.child(
 			na.Children[name],
@@ -100,6 +110,7 @@ func (d *differ) node(a, b Hash, path string, depth int) error {
 			return err
 		}
 	}
+
 	for _, name := range unionKeys(na.Lists, nb.Lists) {
 		la, lb := na.Lists[name], nb.Lists[name]
 		for i := range max(len(la), len(lb)) {
@@ -109,6 +120,7 @@ func (d *differ) node(a, b Hash, path string, depth int) error {
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -120,6 +132,7 @@ func (d *differ) child(a, b Hash, path string, depth int) error {
 		return nil
 	case a.IsZero() || b.IsZero():
 		d.changes = append(d.changes, Change{Path: path, Before: a, After: b})
+
 		return nil
 	default:
 		return d.node(a, b, path, depth+1)
@@ -133,10 +146,12 @@ func (d *differ) fields(na, nb Node, a, b Hash, path string) error {
 		if err != nil {
 			return err
 		}
+
 		vb, err := canonicalValue(nb.Fields[name])
 		if err != nil {
 			return err
 		}
+
 		if !bytes.Equal(va, vb) {
 			d.changes = append(
 				d.changes,
@@ -144,6 +159,7 @@ func (d *differ) fields(na, nb Node, a, b Hash, path string) error {
 			)
 		}
 	}
+
 	return nil
 }
 
@@ -153,10 +169,12 @@ func canonicalValue(v any) ([]byte, error) {
 	if absent(v) {
 		return nil, nil
 	}
+
 	raw, err := json.Marshal(v)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: encode field")
 	}
+
 	out, err := jcs.Transform(raw)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -165,6 +183,7 @@ func canonicalValue(v any) ([]byte, error) {
 			"chartspec: canonicalize field",
 		)
 	}
+
 	return out, nil
 }
 
@@ -176,7 +195,9 @@ func unionKeys[V any](a, b map[string]V) []string {
 			keys = append(keys, k)
 		}
 	}
+
 	slices.Sort(keys)
+
 	return keys
 }
 
@@ -185,5 +206,6 @@ func elem(hs []Hash, i int) Hash {
 	if i < len(hs) {
 		return hs[i]
 	}
+
 	return Hash{}
 }

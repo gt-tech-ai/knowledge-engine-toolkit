@@ -66,10 +66,12 @@ func NewAWSClient(ctx context.Context, cfg infra.S3Config) (*s3.Client, error) {
 			),
 		))
 	}
+
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "loading aws config")
 	}
+
 	return s3.NewFromConfig(awsCfg, s3OptionsApplier(cfg)), nil
 }
 
@@ -98,5 +100,6 @@ func NewAWSClientWithCredentials(
 			"loading aws config with credentials",
 		)
 	}
+
 	return s3.NewFromConfig(awsCfg, s3OptionsApplier(cfg)), nil
 }

@@ -88,6 +88,7 @@ func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
 		// A failed start (e.g. a readiness timeout) can still leave a container behind;
 		// TerminateContainer is nil-safe.
 		_ = testcontainers.TerminateContainer(container)
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
@@ -98,6 +99,7 @@ func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
 	host, err := container.Host(ctx)
 	if err != nil {
 		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
@@ -108,6 +110,7 @@ func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
 	port, err := container.MappedPort(ctx, minioAPIPort)
 	if err != nil {
 		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "failed to get mapped port")
 	}
 

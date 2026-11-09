@@ -75,19 +75,24 @@ func FuzzActionableLines(f *testing.F) {
 		if limit < 1 || limit > 50 {
 			return
 		}
+
 		lines := report.ActionableLines([]byte(output), limit)
 		assert.LessOrEqual(t, len(lines), limit)
+
 		for _, l := range lines {
 			found := false
+
 			for raw := range strings.SplitSeq(output, "\n") {
 				in := strings.TrimSpace(raw)
 				if in == l || (len(in) > 200 && l == in[:197]+"...") ||
 					strings.HasPrefix(in, "diff --git ") &&
 						strings.HasSuffix(in, " b/"+l) {
 					found = true
+
 					break
 				}
 			}
+
 			assert.True(t, found, "line %q is not from the input", l)
 		}
 	})

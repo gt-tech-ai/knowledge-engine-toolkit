@@ -28,6 +28,7 @@ func is4xxConnectCode(code connect.Code) bool {
 		connect.CodeCanceled:
 		return true
 	}
+
 	return false
 }
 
@@ -100,13 +101,18 @@ func (i loggingInterceptor) logAccess(
 	l := i.logger.WithContext(ctx)
 	if err == nil {
 		l.Info("request", "procedure", procedure, "duration", duration, "status", 200)
+
 		return
 	}
+
 	code := connect.CodeUnknown
+
 	var connectErr *connect.Error
+
 	if apperr.As(err, &connectErr) {
 		code = connectErr.Code()
 	}
+
 	// Prefer the real domain error captured by the error mapper over the sanitized client
 	// error, so the log records the true cause (expanded to error_code / error_cause by
 	// the structured logger).
@@ -114,6 +120,7 @@ func (i loggingInterceptor) logAccess(
 	if realErr := apperr.Captured(ctx); realErr != nil {
 		logErr = realErr
 	}
+
 	fields := []any{
 		"procedure", procedure,
 		"duration", duration,
@@ -131,9 +138,11 @@ func (i loggingInterceptor) logAccess(
 func (i loggingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		ctx = apperr.WithSink(ctx)
+
 		start := time.Now()
 		resp, err := next(ctx, req)
 		i.logAccess(ctx, req.Spec().Procedure, time.Since(start), err)
+
 		return resp, err
 	}
 }
@@ -151,9 +160,11 @@ func (i loggingInterceptor) WrapStreamingHandler(
 ) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		ctx = apperr.WithSink(ctx)
+
 		start := time.Now()
 		err := next(ctx, conn)
 		i.logAccess(ctx, conn.Spec().Procedure, time.Since(start), err)
+
 		return err
 	}
 }

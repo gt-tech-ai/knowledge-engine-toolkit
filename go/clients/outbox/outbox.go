@@ -66,6 +66,7 @@ func tier[A any](kind string, cfg Config, deps Deps) (client.Base, error) {
 	if name == "" {
 		name = "outbox"
 	}
+
 	return client.NewBase[A](deps.Decorations, name+"."+kind)
 }
 
@@ -88,8 +89,10 @@ func kinds() client.Kinds[Config, Deps, interfaces.OutboxSink] {
 					if err != nil {
 						return nil, err
 					}
+
 					api = decorateSQS(api, b)
 				}
+
 				return outboxsqs.New(cfg.SQS, api) // reports a missing API
 			},
 			KindS3: func(
@@ -101,8 +104,10 @@ func kinds() client.Kinds[Config, Deps, interfaces.OutboxSink] {
 					if err != nil {
 						return nil, err
 					}
+
 					api = decorateS3(api, b)
 				}
+
 				return outboxs3.New(cfg.S3, api) // reports a missing API
 			},
 		},

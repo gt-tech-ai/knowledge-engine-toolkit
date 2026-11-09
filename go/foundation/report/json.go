@@ -84,6 +84,7 @@ func (j *jsonReport) OnGateComplete(
 	for s, n := range results.CountByStatus() {
 		g.Counts[s.String()] = n
 	}
+
 	for _, r := range results {
 		g.Steps = append(g.Steps, jsonStep{
 			Name:   r.Name,
@@ -97,7 +98,9 @@ func (j *jsonReport) OnGateComplete(
 			Tests:      r.Tests,
 		})
 	}
+
 	enc := json.NewEncoder(j.w)
 	enc.SetIndent("", "  ")
+
 	_ = enc.Encode(g)
 }

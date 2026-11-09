@@ -24,5 +24,6 @@ func (c TimeoutConfig) Validate() error {
 	if c.Timeout < 0 {
 		return apperr.InvalidInput("resilience.timeout.timeout must be >= 0")
 	}
+
 	return nil
 }

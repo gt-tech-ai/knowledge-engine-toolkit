@@ -88,12 +88,15 @@ func (c Config) Validate() error {
 	if c.TenantColumn != "" {
 		names = append(names, c.TenantColumn)
 	}
+
 	if c.PartitionColumn != "" {
 		names = append(names, c.PartitionColumn)
 	}
+
 	for _, col := range c.AttributeColumns {
 		names = append(names, col)
 	}
+
 	for _, n := range names {
 		if !isIdentifier(n) {
 			return apperr.InvalidInput(
@@ -101,20 +104,24 @@ func (c Config) Validate() error {
 			)
 		}
 	}
+
 	if c.Lease <= 0 {
 		return apperr.InvalidInput("outbox postgres store: lease must be positive")
 	}
+
 	if c.MaxErrorLen < 0 {
 		return apperr.InvalidInput(
 			"outbox postgres store: max_error_len must not be negative",
 		)
 	}
+
 	if c.Partitions < 0 || (c.Partitions > 1 && c.PartitionColumn == "") {
 		return apperr.InvalidInput(
 			"outbox postgres store: partitions must not be negative, " +
 				"and above 1 needs partition_column",
 		)
 	}
+
 	return nil
 }
 
@@ -130,11 +137,13 @@ func isIdentifier(n string) bool {
 	if n == "" || len(n) > 63 || (n[0] >= '0' && n[0] <= '9') {
 		return false
 	}
+
 	for _, r := range n {
 		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_' {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -143,6 +152,7 @@ func (c Config) keyColumn() string {
 	if c.KeyColumn == "" {
 		return "aggregate_id"
 	}
+
 	return c.KeyColumn
 }
 
@@ -176,20 +186,27 @@ func New(db *sql.DB, cfg Config) (*Store, error) {
 	if db == nil {
 		panic("outbox postgres store: db must not be nil")
 	}
+
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+
 	s := &Store{
 		db: db, lease: cfg.Lease, maxErrorLen: cfg.MaxErrorLen,
 		tenantColumn: cfg.TenantColumn != "", partitions: cfg.partitions(),
 		partitionColumn: cfg.PartitionColumn != "",
 	}
+
 	var attrCols strings.Builder
+
 	for key, col := range cfg.AttributeColumns {
 		s.attrKeys = append(s.attrKeys, key)
+
 		attrCols.WriteString(", " + col + "::text")
 	}
+
 	t := cfg.Table
+
 	s.claimSQL = claimSQL(cfg, attrCols.String())
 	s.statsSQL = statsSQL(cfg)
 	s.sentSQL = fmt.Sprintf(
@@ -203,6 +220,7 @@ WHERE id = $1 AND status = 'pending'`, t)
 WHERE id = $1 AND status = 'pending'`, t)
 	s.purgeSQL = fmt.Sprintf(`DELETE FROM %s WHERE status = 'sent' AND sent_at < $1`, t)
 	s.enqueueSQL = enqueueSQL(cfg, s.attrKeys)
+
 	return s, nil
 }
 
@@ -215,10 +233,12 @@ func claimSQL(cfg Config, attrCols string) string {
 	if cfg.TenantColumn != "" {
 		tenant = cfg.TenantColumn
 	}
+
 	partition := ""
 	if cfg.PartitionColumn != "" {
 		partition = " AND " + cfg.PartitionColumn + " = $4"
 	}
+
 	return fmt.Sprintf(`
 UPDATE %[1]s SET attempts = attempts + 1,
 	next_attempt_at = now() + make_interval(secs => $3)
@@ -243,6 +263,7 @@ func statsSQL(cfg Config) string {
 			cfg.PartitionColumn, cfg.partitions(),
 		)
 	}
+
 	return fmt.Sprintf(`
 SELECT count(*) FILTER (WHERE status = 'pending'),
        count(*) FILTER (WHERE status = 'parked'),
@@ -260,17 +281,22 @@ func enqueueSQL(cfg Config, attrKeys []string) string {
 	if cfg.TenantColumn != "" {
 		cols = append(cols, cfg.TenantColumn)
 	}
+
 	if cfg.PartitionColumn != "" {
 		cols = append(cols, cfg.PartitionColumn)
 	}
+
 	for _, key := range attrKeys {
 		cols = append(cols, cfg.AttributeColumns[key])
 	}
+
 	vals := make([]string, len(cols))
 	for i := range cols {
 		vals[i] = fmt.Sprintf("$%d", i+1)
 	}
+
 	vals[3] = "COALESCE($4, now())"
+
 	return fmt.Sprintf(`INSERT INTO %s
 	(%s, status, attempts, next_attempt_at, last_error)
 VALUES (%s, 'pending', 0, now(), '')
@@ -286,27 +312,35 @@ func (s *Store) Enqueue(ctx context.Context, rec types.OutboxRecord) error {
 	if err != nil {
 		return err
 	}
+
 	id := rec.ID
 	if id == uuid.Nil {
 		id = uuid.New()
 	}
+
 	var created any
+
 	if !rec.CreatedAt.IsZero() {
 		created = rec.CreatedAt
 	}
+
 	args := []any{id, rec.Lane, rec.Payload, created, nullable(rec.Key)}
 	if s.tenantColumn {
 		args = append(args, nullable(rec.Tenant))
 	}
+
 	if s.partitionColumn {
 		args = append(args, types.OutboxPartition(rec.Key, s.partitions))
 	}
+
 	for _, key := range s.attrKeys {
 		args = append(args, nullable(rec.Attributes[key]))
 	}
+
 	if _, err := tx.ExecContext(ctx, s.enqueueSQL, args...); err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "outbox postgres store: enqueue")
 	}
+
 	return nil
 }
 
@@ -315,6 +349,7 @@ func nullable(v string) any {
 	if v == "" {
 		return nil
 	}
+
 	return v
 }
 
@@ -330,6 +365,7 @@ func (s *Store) Claim(
 	if limit <= 0 {
 		return nil, apperr.InvalidInput("outbox postgres store: claim limit must be > 0")
 	}
+
 	if partition < 0 || partition >= s.partitions {
 		return nil, apperr.InvalidInput(fmt.Sprintf(
 			"outbox postgres store: partition %d is outside [0, %d)",
@@ -337,14 +373,17 @@ func (s *Store) Claim(
 			s.partitions,
 		))
 	}
+
 	tx, err := writeTx(ctx, "claim")
 	if err != nil {
 		return nil, err
 	}
+
 	args := []any{lane, limit, s.lease.Seconds()}
 	if s.partitionColumn {
 		args = append(args, partition)
 	}
+
 	rows, err := tx.QueryContext(ctx, s.claimSQL, args...)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -353,15 +392,25 @@ func (s *Store) Claim(
 			"outbox postgres store: claim",
 		)
 	}
+
 	defer func() { _ = rows.Close() }()
+
+	return s.collectClaimed(rows)
+}
+
+// collectClaimed reads every claimed row into a record.
+func (s *Store) collectClaimed(rows *sql.Rows) ([]types.OutboxRecord, error) {
 	var out []types.OutboxRecord
+
 	for rows.Next() {
 		rec, err := s.scanClaimed(rows)
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, rec)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, apperr.Wrap(
 			err,
@@ -369,6 +418,7 @@ func (s *Store) Claim(
 			"outbox postgres store: claim rows",
 		)
 	}
+
 	return out, nil
 }
 
@@ -376,8 +426,10 @@ func (s *Store) Claim(
 // Attributes.
 func (s *Store) scanClaimed(rows *sql.Rows) (types.OutboxRecord, error) {
 	var rec types.OutboxRecord
+
 	attrs := make([]sql.NullString, len(s.attrKeys))
 	dest := make([]any, 0, 7+len(attrs))
+
 	dest = append(dest,
 		&rec.ID,
 		&rec.Lane,
@@ -387,9 +439,11 @@ func (s *Store) scanClaimed(rows *sql.Rows) (types.OutboxRecord, error) {
 		&rec.Attempts,
 		&rec.CreatedAt,
 	)
+
 	for i := range attrs {
 		dest = append(dest, &attrs[i])
 	}
+
 	if err := rows.Scan(dest...); err != nil {
 		return types.OutboxRecord{}, apperr.Wrap(
 			err,
@@ -397,12 +451,14 @@ func (s *Store) scanClaimed(rows *sql.Rows) (types.OutboxRecord, error) {
 			"outbox postgres store: scan claim",
 		)
 	}
+
 	if len(attrs) > 0 {
 		rec.Attributes = make(map[string]string, len(attrs))
 		for i, key := range s.attrKeys {
 			rec.Attributes[key] = attrs[i].String
 		}
 	}
+
 	return rec, nil
 }
 
@@ -436,10 +492,13 @@ func (s *Store) Stats(ctx context.Context, lane string) (types.OutboxStats, erro
 		stats  types.OutboxStats
 		oldest sql.NullTime
 	)
+
 	row := s.db.QueryRowContext
+
 	if tx, ok := store.ClientFrom[*sql.Tx](ctx); ok {
 		row = tx.QueryRowContext
 	}
+
 	err := row(ctx, s.statsSQL, lane).
 		Scan(&stats.Pending, &stats.Parked, &oldest, &stats.Stranded)
 	if err != nil {
@@ -449,9 +508,11 @@ func (s *Store) Stats(ctx context.Context, lane string) (types.OutboxStats, erro
 			"outbox postgres store: stats",
 		)
 	}
+
 	if oldest.Valid {
 		stats.OldestPending = oldest.Time
 	}
+
 	return stats, nil
 }
 
@@ -463,6 +524,7 @@ func (s *Store) DeleteSentBefore(ctx context.Context, cutoff time.Time) (int, er
 	if err != nil {
 		return 0, err
 	}
+
 	res, err := tx.ExecContext(ctx, s.purgeSQL, cutoff)
 	if err != nil {
 		return 0, apperr.Wrap(
@@ -471,6 +533,7 @@ func (s *Store) DeleteSentBefore(ctx context.Context, cutoff time.Time) (int, er
 			"outbox postgres store: delete sent",
 		)
 	}
+
 	n, err := res.RowsAffected()
 	if err != nil {
 		return 0, apperr.Wrap(
@@ -479,6 +542,7 @@ func (s *Store) DeleteSentBefore(ctx context.Context, cutoff time.Time) (int, er
 			"outbox postgres store: delete sent count",
 		)
 	}
+
 	return int(n), nil
 }
 
@@ -495,6 +559,7 @@ func (s *Store) exec(
 	if err != nil {
 		return err
 	}
+
 	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 		return apperr.Wrap(
 			err,
@@ -502,6 +567,7 @@ func (s *Store) exec(
 			"outbox postgres store: "+op+" "+id.String(),
 		)
 	}
+
 	return nil
 }
 
@@ -516,6 +582,7 @@ func writeTx(ctx context.Context, op string) (*sql.Tx, error) {
 			"outbox postgres store: "+op+" writes outside a transaction",
 		)
 	}
+
 	return tx, nil
 }
 
@@ -524,5 +591,6 @@ func (s *Store) truncate(lastErr string) string {
 	if s.maxErrorLen == 0 || len(lastErr) <= s.maxErrorLen {
 		return lastErr
 	}
+
 	return strings.ToValidUTF8(lastErr[:s.maxErrorLen], "")
 }

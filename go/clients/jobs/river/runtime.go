@@ -81,10 +81,12 @@ func NewRuntime(ctx context.Context, cfg RuntimeConfig) (*Runtime, error) {
 			"river runtime: parse pool config",
 		)
 	}
+
 	poolCfg.MaxConns = defaultMaxConns
 	if cfg.MaxConns > 0 {
 		poolCfg.MaxConns = cfg.MaxConns
 	}
+
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "river runtime: open pool")
@@ -92,6 +94,7 @@ func NewRuntime(ctx context.Context, cfg RuntimeConfig) (*Runtime, error) {
 
 	queues := buildQueues(cfg.QueueName, cfg.MaxWorkers)
 	maps.Copy(queues, cfg.ExtraQueues)
+
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues:       queues,
 		Workers:      cfg.Workers,
@@ -99,8 +102,10 @@ func NewRuntime(ctx context.Context, cfg RuntimeConfig) (*Runtime, error) {
 	})
 	if err != nil {
 		pool.Close()
+
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "river runtime: new client")
 	}
+
 	return &Runtime{pool: pool, client: client}, nil
 }
 
@@ -113,9 +118,11 @@ func buildQueues(queueName string, maxWorkers int) map[string]river.QueueConfig 
 	if queueName == "" {
 		queueName = river.QueueDefault
 	}
+
 	if maxWorkers <= 0 {
 		maxWorkers = defaultMaxWorkers
 	}
+
 	return map[string]river.QueueConfig{queueName: {MaxWorkers: maxWorkers}}
 }
 
@@ -124,6 +131,7 @@ func (r *Runtime) Start(ctx context.Context) error {
 	if err := r.client.Start(ctx); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "river runtime: start")
 	}
+
 	return nil
 }
 
@@ -132,9 +140,11 @@ func (r *Runtime) Start(ctx context.Context) error {
 func (r *Runtime) Stop(ctx context.Context) error {
 	err := r.client.Stop(ctx)
 	r.pool.Close()
+
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "river runtime: stop")
 	}
+
 	return nil
 }
 

@@ -22,17 +22,22 @@ func convertToOAS3(
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "marshal swagger")
 	}
+
 	var doc2 openapi2.T
+
 	if err := json.Unmarshal(raw, &doc2); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse swagger")
 	}
+
 	// protoc-gen-openapiv2 declares JSON; a spec that omits it would convert to */*.
 	if len(doc2.Consumes) == 0 {
 		doc2.Consumes = []string{mediaJSON}
 	}
+
 	if len(doc2.Produces) == 0 {
 		doc2.Produces = []string{mediaJSON}
 	}
+
 	doc3, err := openapi2conv.ToV3(&doc2)
 	if err != nil {
 		return nil, apperr.Wrap(
@@ -41,10 +46,13 @@ func convertToOAS3(
 			"convert swagger to openapi 3",
 		)
 	}
+
 	if raw, err = json.Marshal(doc3); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "marshal openapi 3")
 	}
+
 	var oas map[string]any
+
 	if err := json.Unmarshal(raw, &oas); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "decode openapi 3")
 	}
@@ -55,22 +63,28 @@ func convertToOAS3(
 			graftRefSiblings(def, schemas[name])
 		}
 	}
+
 	if _, ok := swagger["info"]; !ok {
 		oas["info"] = map[string]any{"title": cfg.service + " API", "version": "1.0.0"}
 	}
+
 	if _, ok := oas["servers"]; !ok {
 		oas["servers"] = []any{map[string]any{"url": cfg.basePath}}
 	}
+
 	if len(headers) == 0 {
 		return oas, nil
 	}
+
 	components, _ := oas["components"].(map[string]any)
 	if components == nil {
 		components = map[string]any{}
 		oas["components"] = components
 	}
+
 	schemes := make(map[string]any, len(headers))
 	required := make(map[string]any, len(headers))
+
 	for scheme, header := range headers {
 		schemes[scheme] = map[string]any{
 			keyType: keyAPIKey,
@@ -79,8 +93,10 @@ func convertToOAS3(
 		}
 		required[scheme] = []any{}
 	}
+
 	components["securitySchemes"] = schemes
 	oas["security"] = []any{required}
+
 	return oas, nil
 }
 
@@ -96,14 +112,17 @@ func graftRefSiblings(from, to any) {
 		if !ok {
 			return
 		}
+
 		if _, isRef := f[keyRef]; isRef {
 			for k, v := range f {
 				if _, set := t[k]; !set {
 					t[k] = v
 				}
 			}
+
 			return
 		}
+
 		for k, v := range f {
 			graftRefSiblings(v, t[k])
 		}
@@ -112,6 +131,7 @@ func graftRefSiblings(from, to any) {
 		if !ok || len(t) != len(f) {
 			return
 		}
+
 		for i := range f {
 			graftRefSiblings(f[i], t[i])
 		}

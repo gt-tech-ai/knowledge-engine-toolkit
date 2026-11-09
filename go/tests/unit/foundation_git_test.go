@@ -27,6 +27,7 @@ import (
 //   - Two newline-separated paths from git become a two-element []string in order.
 func TestStagedFiles_ReturnsParsedPaths(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().
@@ -35,6 +36,7 @@ func TestStagedFiles_ReturnsParsedPaths(t *testing.T) {
 
 	got, err := git.StagedFiles(context.Background(), r, "/repo")
 	require.NoError(t, err)
+
 	want := []string{"pkg/foo.go", "pkg/bar.go"}
 	require.Equal(t, want, got)
 }
@@ -50,6 +52,7 @@ func TestStagedFiles_ReturnsParsedPaths(t *testing.T) {
 //   - Empty git stdout produces a nil slice, not [""].
 func TestStagedFiles_EmptyOutputReturnsNil(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().
@@ -74,6 +77,7 @@ func TestStagedFiles_EmptyOutputReturnsNil(t *testing.T) {
 //   - StageFiles forwards exactly [add, --, a.go, b.go] to the runner.
 func TestStageFiles_CallsGitAdd(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	// The exact-args expectation is the assertion: gomock verifies StageFiles
@@ -96,6 +100,7 @@ func TestStageFiles_CallsGitAdd(t *testing.T) {
 //   - Calling StageFiles with zero paths leaves the runner untouched (no Run call).
 func TestStageFiles_NoPaths_NoOp(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	// No EXPECT() on Run: gomock fails the test if StageFiles issues any command
 	// for an empty path set, which is the "no run call" assertion.
@@ -117,6 +122,7 @@ func TestStageFiles_NoPaths_NoOp(t *testing.T) {
 //   - A git ExitError surfaces as changed=true with a nil error return.
 func TestHasPathsChanged_ExitOneMeansChanged(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	// Simulate git diff --quiet returning exit code 1 (differences found).
@@ -147,6 +153,7 @@ func TestHasPathsChanged_ExitOneMeansChanged(t *testing.T) {
 //   - A nil runner error yields changed=false with a nil error return.
 func TestHasPathsChanged_NoErrorMeansUnchanged(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().

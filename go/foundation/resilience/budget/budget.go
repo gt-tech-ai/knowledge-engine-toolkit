@@ -36,6 +36,7 @@ type Budget struct {
 func NewBudget(maxRetries int32) *Budget {
 	b := &Budget{}
 	b.remaining.Store(maxRetries)
+
 	return b
 }
 
@@ -52,11 +53,13 @@ func ConsumeRetry(ctx context.Context) bool {
 	if !ok {
 		return true // no budget = unlimited
 	}
+
 	for {
 		current := b.remaining.Load()
 		if current <= 0 {
 			return false
 		}
+
 		if b.remaining.CompareAndSwap(current, current-1) {
 			return true
 		}
@@ -70,5 +73,6 @@ func Remaining(ctx context.Context) int32 {
 	if !ok {
 		return -1 // no budget
 	}
+
 	return b.remaining.Load()
 }

@@ -25,34 +25,47 @@ func Interceptors[I any](
 ) []I {
 	tier := Tier()
 	streamDeps := d
+
 	streamDeps.Timeout = 0
+
 	var (
 		out           []I
 		unary, stream []decorate.OpMiddleware
 	)
+
 	flush := func() {
 		if len(unary)+len(stream) > 0 {
 			out = append(out, adapt(decorate.Chain(unary...), decorate.Chain(stream...)))
 		}
+
 		unary, stream = nil, nil
 	}
+
 	for _, layer := range tier.Order {
 		if layer == decorate.LayerAuth {
 			flush()
+
 			out = append(out, authn...)
 		}
+
 		if ics, ok := native(layer); ok {
 			flush()
+
 			out = append(out, ics...)
+
 			continue
 		}
+
 		if mw := tier.Middleware(layer, name, d); mw != nil {
 			unary = append(unary, mw)
 		}
+
 		if mw := tier.Middleware(layer, name, streamDeps); mw != nil {
 			stream = append(stream, mw)
 		}
 	}
+
 	flush()
+
 	return out
 }

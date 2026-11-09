@@ -84,9 +84,11 @@ func New(cfg Config) *Bulkhead {
 	maxL := math.Max(minL, float64(cfg.MaxConcurrent))
 	init := math.Min(maxL, math.Max(minL, float64(cfg.InitialConcurrent)))
 	ratio := cfg.BackoffRatio
+
 	if ratio <= 0 || ratio >= 1 {
 		ratio = 0.9
 	}
+
 	return &Bulkhead{
 		limit:        init,
 		minLimit:     minL,
@@ -103,9 +105,11 @@ func (b *Bulkhead) Execute(ctx context.Context, fn func() error) error {
 	if err := b.acquire(ctx); err != nil {
 		return err
 	}
+
 	start := time.Now()
 	err := fn()
 	b.release(time.Since(start), err)
+
 	return err
 }
 
@@ -113,16 +117,20 @@ func (b *Bulkhead) Execute(ctx context.Context, fn func() error) error {
 // otherwise returns ErrBulkheadFull; it adjusts the limit from fn's latency and outcome.
 func (b *Bulkhead) TryExecute(fn func() error) error {
 	b.mu.Lock()
+
 	if b.inFlight >= int(b.limit) {
 		b.mu.Unlock()
+
 		return ErrBulkheadFull
 	}
+
 	b.inFlight++
 	b.mu.Unlock()
 
 	start := time.Now()
 	err := fn()
 	b.release(time.Since(start), err)
+
 	return err
 }
 
@@ -130,6 +138,7 @@ func (b *Bulkhead) TryExecute(fn func() error) error {
 func (b *Bulkhead) Limit() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	return int(b.limit)
 }
 
@@ -137,13 +146,17 @@ func (b *Bulkhead) Limit() int {
 func (b *Bulkhead) acquire(ctx context.Context) error {
 	for {
 		b.mu.Lock()
+
 		if b.inFlight < int(b.limit) {
 			b.inFlight++
 			b.mu.Unlock()
+
 			return nil
 		}
+
 		wait := b.notify
 		b.mu.Unlock()
+
 		select {
 		case <-ctx.Done():
 			return apperr.Wrap(
@@ -161,11 +174,14 @@ func (b *Bulkhead) acquire(ctx context.Context) error {
 // slot.
 func (b *Bulkhead) release(rtt time.Duration, opErr error) {
 	b.mu.Lock()
+
 	if b.inFlight > 0 {
 		b.inFlight--
 	}
+
 	b.adjust(rtt, opErr)
 	close(b.notify)
+
 	b.notify = make(chan struct{})
 	b.mu.Unlock()
 }
@@ -176,7 +192,9 @@ func (b *Bulkhead) release(rtt time.Duration, opErr error) {
 func (b *Bulkhead) adjust(rtt time.Duration, opErr error) {
 	if opErr != nil || (b.rttThreshold > 0 && rtt > b.rttThreshold) {
 		b.limit = math.Max(b.minLimit, b.limit*b.backoffRatio)
+
 		return
 	}
+
 	b.limit = math.Min(b.maxLimit, b.limit+1)
 }

@@ -43,6 +43,7 @@ type decodedData struct {
 //     INVALID_INPUT.
 func TestDataset_Decode(t *testing.T) {
 	t.Parallel()
+
 	good := fstest.MapFS{
 		"data/tools.yaml": {Data: []byte("tools:\n  - name: buf\n    pin: v1.73.0\n")},
 		"data/paths.yaml": {Data: []byte("paths:\n  root: .\nlimits: {max: 3}\n")},
@@ -51,6 +52,7 @@ func TestDataset_Decode(t *testing.T) {
 	require.NoError(t, err)
 
 	var out decodedData
+
 	require.NoError(t, d.Decode(&out))
 	assert.Equal(t, []datasetTool{{Name: "buf", Pin: "v1.73.0"}}, out.Tools)
 	assert.Equal(t, ".", out.Paths.Root)
@@ -61,6 +63,7 @@ func TestDataset_Decode(t *testing.T) {
 		"data/extra.yaml": {Data: []byte("mystery: 1\n")},
 	}, "data")
 	require.NoError(t, err)
+
 	err = unknownKey.Decode(&decodedData{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "mystery")
@@ -70,13 +73,16 @@ func TestDataset_Decode(t *testing.T) {
 		"data/paths.yaml": {Data: []byte("paths:\n  rooot: .\n")},
 	}, "data")
 	require.NoError(t, err)
+
 	err = unknownField.Decode(&decodedData{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "data/paths.yaml")
 
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(d.Decode(decodedData{})))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(d.Decode((*decodedData)(nil))))
+
 	var notStruct map[string]any
+
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(d.Decode(&notStruct)))
 }
 
@@ -93,24 +99,29 @@ func TestDataset_Decode(t *testing.T) {
 //     Section and Decode exactly as yaml.Unmarshal decodes them.
 func TestDataset_DecodeKeepsBlockScalars(t *testing.T) {
 	t.Parallel()
+
 	src := "q:\n" +
 		"  folded: >-\n    (\n      sum(rate(x[2m]))\n      >= 0\n    ) or vector(0)\n" +
 		"  literal: |\n    a\n      b\n" +
 		"  quoted: \"123\"\n" +
 		"  plain: 7\n"
+
 	type queries struct {
 		Folded  string `yaml:"folded"`
 		Literal string `yaml:"literal"`
 		Quoted  string `yaml:"quoted"`
 		Plain   int    `yaml:"plain"`
 	}
+
 	var want struct {
 		Q queries `yaml:"q"`
 	}
+
 	require.NoError(t, yaml.Unmarshal([]byte(src), &want))
 
 	ds, err := dataset.Load(fstest.MapFS{"data/q.yaml": {Data: []byte(src)}}, "data")
 	require.NoError(t, err)
+
 	got, err := ds.Section[queries]("q")
 	require.NoError(t, err)
 	assert.Equal(t, want.Q, got)
@@ -118,6 +129,7 @@ func TestDataset_DecodeKeepsBlockScalars(t *testing.T) {
 	var all struct {
 		Q queries `yaml:"q"`
 	}
+
 	require.NoError(t, ds.Decode(&all))
 	assert.Equal(t, want.Q, all.Q)
 }

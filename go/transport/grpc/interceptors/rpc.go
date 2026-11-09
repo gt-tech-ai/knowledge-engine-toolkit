@@ -22,11 +22,15 @@ func unary(a around) grpc.UnaryServerInterceptor {
 		handler grpc.UnaryHandler,
 	) (any, error) {
 		var resp any
+
 		err := a(ctx, info.FullMethod, func(ctx context.Context) error {
 			var err error
+
 			resp, err = handler(ctx, req)
+
 			return err
 		})
+
 		return resp, err
 	}
 }

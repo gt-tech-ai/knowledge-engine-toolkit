@@ -35,6 +35,7 @@ type datasetTool struct {
 //     INVALID_INPUT naming it.
 func TestFoundationDataset_LoadAndSection(t *testing.T) {
 	t.Parallel()
+
 	fsys := fstest.MapFS{
 		"data/tools.yaml":  {Data: []byte("tools:\n  - name: buf\n    pin: v1.73.0\n")},
 		"data/paths.yaml":  {Data: []byte("paths:\n  root: .\nlimits: {max: 3}\n")},
@@ -90,6 +91,7 @@ func TestFoundationDataset_LoadAndSection(t *testing.T) {
 //     files; a named item repeated within one file is not a conflict.
 func TestFoundationDataset_MergesAcrossFiles(t *testing.T) {
 	t.Parallel()
+
 	fsys := fstest.MapFS{
 		"d/a.yaml": {Data: []byte("check:\n  ratchet: {root: cli}\ntools:\n" +
 			"  - name: buf\n    pin: v1\n")},
@@ -120,6 +122,7 @@ func TestFoundationDataset_MergesAcrossFiles(t *testing.T) {
 	for name, tc := range conflicts {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			fs := fstest.MapFS{
 				"d/a.yaml": fsys["d/a.yaml"], "d/b.yaml": fsys["d/b.yaml"],
 				"d/c.yaml": {Data: []byte(tc.c)},
@@ -147,6 +150,7 @@ func TestFoundationDataset_MergesAcrossFiles(t *testing.T) {
 //     missing root is NOT_FOUND.
 func TestFoundationDataset_LoadTree(t *testing.T) {
 	t.Parallel()
+
 	fsys := fstest.MapFS{
 		"cfg/a.yaml":           {Data: []byte("tools:\n  - name: a\n")},
 		"cfg/g/b.yaml":         {Data: []byte("tools:\n  - name: b\n")},
@@ -156,6 +160,7 @@ func TestFoundationDataset_LoadTree(t *testing.T) {
 	}
 	d, err := dataset.LoadTree(fsys, "cfg", "templates")
 	require.NoError(t, err)
+
 	tools, err := d.Section[[]datasetTool]("tools")
 	require.NoError(t, err)
 	assert.Equal(t, []datasetTool{{Name: "a"}, {Name: "b"}, {Name: "z"}}, tools)

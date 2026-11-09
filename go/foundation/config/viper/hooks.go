@@ -39,6 +39,7 @@ func StringToStringMapHookFunc() mapstructure.DecodeHookFuncType {
 		if from.Kind() != reflect.String {
 			return data, nil
 		}
+
 		if to.Kind() != reflect.Map ||
 			to.Key().Kind() != reflect.String ||
 			to.Elem().Kind() != reflect.String {
@@ -47,20 +48,25 @@ func StringToStringMapHookFunc() mapstructure.DecodeHookFuncType {
 
 		raw, _ := data.(string)
 		result := make(map[string]string)
+
 		if strings.TrimSpace(raw) == "" {
 			return result, nil
 		}
+
 		for entry := range strings.SplitSeq(raw, mapEntrySeparator) {
 			entry = strings.TrimSpace(entry)
 			if entry == "" {
 				continue
 			}
+
 			key, value, ok := strings.Cut(entry, mapKVSeparator)
 			if !ok {
 				continue
 			}
+
 			result[strings.TrimSpace(key)] = strings.TrimSpace(value)
 		}
+
 		return result, nil
 	}
 }

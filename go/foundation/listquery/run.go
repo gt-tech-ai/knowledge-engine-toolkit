@@ -39,6 +39,7 @@ func (b Bounds) countCap() int {
 	if b.CountCap > 0 {
 		return b.CountCap
 	}
+
 	return DefaultCountCap
 }
 
@@ -128,6 +129,7 @@ func Run[T, D any](
 	if err != nil {
 		return nil, err
 	}
+
 	cols := KeysetColumns(
 		r.Resolve,
 		r.ResolveJoin,
@@ -139,20 +141,24 @@ func Run[T, D any](
 	order := orderFields(cols)
 	userF := ResolveFilter(r.Resolve, r.ResolveJoin, r.Filter)
 	limit := pageLimit(page, r.Bounds)
+
 	if tok.Keyset != nil {
 		if r.Keyset == nil {
 			return nil, apperr.InvalidInput(
 				"keyset pagination is not supported for this resource",
 			)
 		}
+
 		if !defaultOrdering(r) {
 			return nil, apperr.InvalidInput(
 				"keyset (infinite-scroll) pagination is only available for the default ordering; " +
 					"a custom sort uses page navigation",
 			)
 		}
+
 		return keysetPage(ctx, *tok.Keyset, cols, order, userF, limit, r)
 	}
+
 	return offsetPage(ctx, int(tok.OffsetPage), cols, order, userF, limit, r)
 }
 
@@ -177,9 +183,11 @@ func pageLimit(page types.PageRequest, b Bounds) int {
 			limit = 10
 		}
 	}
+
 	if b.MaxSize > 0 && limit > b.MaxSize {
 		limit = b.MaxSize
 	}
+
 	return limit
 }
 
@@ -199,7 +207,9 @@ func offsetPage[T, D any](
 	if pageNum < 1 {
 		pageNum = 1
 	}
+
 	filters := nonEmpty(userF)
+
 	rows, err := r.Runner.List(ctx, types.ListSpec{
 		Filters: filters,
 		Order:   order,
@@ -209,12 +219,17 @@ func offsetPage[T, D any](
 	if err != nil {
 		return nil, r.MapErr(err)
 	}
+
 	hasMore := len(rows) > limit
 	if hasMore {
 		rows = rows[:limit]
 	}
-	var total int64
-	var estimate bool
+
+	var (
+		total    int64
+		estimate bool
+	)
+
 	// A count-cache decorator that already holds the total sets WithSkipCount on its
 	// inner call, so Run skips the (otherwise recomputed) bounded count and the decorator
 	// injects the cached value.
@@ -223,14 +238,17 @@ func offsetPage[T, D any](
 			return nil, err
 		}
 	}
+
 	next, err := offsetNextCursor(hasMore, pageNum, cols, rows, r)
 	if err != nil {
 		return nil, err
 	}
+
 	items, err := mapAll(rows, r.ToDomain)
 	if err != nil {
 		return nil, err
 	}
+
 	return &types.Page[D]{
 		Items:           items,
 		NextCursor:      next,
@@ -252,13 +270,16 @@ func boundedTotal[T, D any](
 	r Reader[T, D],
 ) (total int64, isEstimate bool, err error) {
 	capN := r.Bounds.countCap()
+
 	n, err := r.Runner.Count(ctx, filters, capN+1)
 	if err != nil {
 		return 0, false, r.MapErr(err)
 	}
+
 	if n > capN {
 		return int64(capN), true, nil
 	}
+
 	return int64(n), false, nil
 }
 
@@ -280,10 +301,12 @@ func keysetPage[T, D any](
 			"page token does not match the current query (sort or filter changed)",
 		)
 	}
+
 	values, err := cursorValues(r.Keyset, cols, cur)
 	if err != nil {
 		return nil, err
 	}
+
 	rows, err := r.Runner.List(ctx, types.ListSpec{
 		Filters: append(nonEmpty(userF), SeekFilter(cols, values)),
 		Order:   order,
@@ -292,10 +315,12 @@ func keysetPage[T, D any](
 	if err != nil {
 		return nil, r.MapErr(err)
 	}
+
 	hasMore := len(rows) > limit
 	if hasMore {
 		rows = rows[:limit]
 	}
+
 	next := ""
 	if hasMore && len(rows) > 0 {
 		if next, err = mintKeysetCursor(
@@ -308,10 +333,12 @@ func keysetPage[T, D any](
 			return nil, err
 		}
 	}
+
 	items, err := mapAll(rows, r.ToDomain)
 	if err != nil {
 		return nil, err
 	}
+
 	return &types.Page[D]{
 		Items:      items,
 		NextCursor: next,
@@ -330,36 +357,46 @@ func cursorValues[T any](
 ) ([]any, error) {
 	values := make([]any, len(cols))
 	si := 0
+
 	for i, c := range cols {
 		if c.Column == KeysetIDColumn {
 			id, err := parseID(ks, cur.ID)
 			if err != nil {
 				return nil, err
 			}
+
 			values[i] = id
+
 			continue
 		}
+
 		if si >= len(cur.SortValues) {
 			return nil, apperr.InvalidInput(
 				"keyset cursor has too few sort values for the sort",
 			)
 		}
+
 		v := cur.SortValues[si]
 		si++
+
 		if ks.TimestampCols[c.Column] {
 			t, err := unixMicroToTime(v)
 			if err != nil {
 				return nil, err
 			}
+
 			v = t
 		}
+
 		values[i] = v
 	}
+
 	if si != len(cur.SortValues) {
 		return nil, apperr.InvalidInput(
 			"keyset cursor has too many sort values for the sort",
 		)
 	}
+
 	return values, nil
 }
 
@@ -376,20 +413,26 @@ func mintKeysetCursor[T any](
 	filter types.Filter,
 ) (string, error) {
 	sortValues := make([]any, 0, len(cols))
+
 	var id string
+
 	for _, c := range cols {
 		v, ok := ks.RowValue(lastRow, c.Column)
 		if !ok {
 			return "", apperr.Internal("keyset cursor cannot extract column " + c.Column)
 		}
+
 		if c.Column == KeysetIDColumn {
 			s, isStr := v.(string)
 			if !isStr {
 				return "", apperr.Internal("keyset id column value is not a string")
 			}
+
 			id = s
+
 			continue
 		}
+
 		if ks.TimestampCols[c.Column] {
 			t, isTime := v.(time.Time)
 			if !isTime {
@@ -397,10 +440,13 @@ func mintKeysetCursor[T any](
 					"keyset timestamp column value is not a time.Time",
 				)
 			}
+
 			v = t.UnixMicro()
 		}
+
 		sortValues = append(sortValues, v)
 	}
+
 	return EncodeToken(types.PageToken{Keyset: &types.KeysetCursor{
 		SortValues:  sortValues,
 		ID:          id,
@@ -425,9 +471,11 @@ func offsetNextCursor[T, D any](
 	if !hasMore {
 		return "", nil
 	}
+
 	if defaultOrdering(r) && len(rows) > 0 {
 		return mintKeysetCursor(r.Keyset, cols, rows[len(rows)-1], r.Sort, r.Filter)
 	}
+
 	//nolint:gosec // G115: a 1-based page number is small and positive, well within int32.
 	return EncodeToken(types.PageToken{OffsetPage: int32(pageNum + 1)})
 }
@@ -439,10 +487,12 @@ func parseID[T any](ks *Keyset[T], id string) (any, error) {
 	if ks.ParseID == nil {
 		return id, nil
 	}
+
 	v, err := ks.ParseID(id)
 	if err != nil {
 		return nil, apperr.InvalidInput("keyset cursor id is malformed")
 	}
+
 	return v, nil
 }
 
@@ -462,6 +512,7 @@ func orderFields(cols []KeysetColumn) []types.OrderField {
 			Desc:    c.Desc,
 		}
 	}
+
 	return out
 }
 
@@ -471,6 +522,7 @@ func nonEmpty(f types.Filter) []types.Filter {
 	if f == nil || f.IsEmpty() {
 		return nil
 	}
+
 	return []types.Filter{f}
 }
 
@@ -503,7 +555,9 @@ func mapAll[T, D any](rows []T, toDomain func(T) (D, error)) ([]D, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		items[i] = d
 	}
+
 	return items, nil
 }

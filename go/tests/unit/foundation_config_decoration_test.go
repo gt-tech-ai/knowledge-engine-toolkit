@@ -42,6 +42,7 @@ func TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults(t *testing.T) {
 
 	t.Run("absent", func(t *testing.T) {
 		t.Parallel()
+
 		loader := mocks.NewMockConfigLoader(gomock.NewController(t))
 		loader.EXPECT().Get("decoration").Return(nil)
 
@@ -53,14 +54,17 @@ func TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults(t *testing.T) {
 
 	t.Run("partial", func(t *testing.T) {
 		t.Parallel()
+
 		loader := mocks.NewMockConfigLoader(gomock.NewController(t))
 		loader.EXPECT().Get("decoration").Return(map[string]any{"clients": nil})
 		loader.EXPECT().UnmarshalKey("decoration", gomock.Any()).DoAndReturn(
 			func(_ string, target any) error {
 				on := true
+
 				target.(*decoration.Config).Clients.Overrides = map[string]decoration.Layers{
 					"storage": {Retry: decoration.Retry{Enabled: &on}},
 				}
+
 				return nil
 			},
 		)
@@ -68,6 +72,7 @@ func TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults(t *testing.T) {
 		cfg, err := decoration.Load(loader)
 
 		require.NoError(t, err)
+
 		storage := cfg.Clients.For("storage")
 		assert.True(t, decoration.On(storage.Retry.Enabled))
 		assert.True(t, decoration.On(storage.Bulkhead.Enabled))
@@ -79,6 +84,7 @@ func TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults(t *testing.T) {
 
 	t.Run("unmarshal failure", func(t *testing.T) {
 		t.Parallel()
+
 		loader := mocks.NewMockConfigLoader(gomock.NewController(t))
 		loader.EXPECT().Get("decoration").Return(map[string]any{"clients": "maybe"})
 		loader.EXPECT().
@@ -108,6 +114,7 @@ func TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults(t *testing.T) {
 //     "outbox.s3" beneath it) resolves each.
 func TestLoadDecorationConfig_KeepsDottedComponentNames(t *testing.T) {
 	t.Parallel()
+
 	dir := t.TempDir()
 	write := func(name, body string) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600))
@@ -132,6 +139,7 @@ func TestLoadDecorationConfig_KeepsDottedComponentNames(t *testing.T) {
       seed.ingress.gateway:
         timeout: 9s
 `)
+
 	loader, err := config.New(
 		config.KindViper,
 		config.WithBaseDir(dir),
@@ -146,11 +154,13 @@ func TestLoadDecorationConfig_KeepsDottedComponentNames(t *testing.T) {
 	require.NotNil(t, gw.Timeout)
 	assert.Equal(t, 9*time.Second, *gw.Timeout)
 	assert.True(t, decoration.On(gw.Retry.Enabled))
+
 	sqs := cfg.Clients.For("outbox.sqs")
 	require.NotNil(t, sqs.Timeout)
 	assert.Equal(t, 5*time.Second, *sqs.Timeout)
 	assert.True(t, decoration.On(sqs.Bulkhead.Enabled), "keeps the engine default")
 	assert.False(t, decoration.On(cfg.Clients.For("outbox").Logging))
+
 	s3 := cfg.Clients.For("outbox.s3")
 	require.NotNil(t, s3.Timeout)
 	assert.Equal(t, 4*time.Second, *s3.Timeout)
@@ -178,6 +188,7 @@ func TestLoadDecorationConfig_KeepsDottedComponentNames(t *testing.T) {
 //     INVALID_INPUT.
 func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	collab := decorate.Collaborators{Observability: decorate.Observability{
 		Logger:  mocks.NewMockLogger(ctrl),
@@ -189,6 +200,7 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	deps := func(tier decorate.Tier, name string) decorate.Deps {
 		d, err := decs.Deps(tier, name)
 		require.NoError(t, err)
+
 		return d
 	}
 
@@ -212,6 +224,7 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	assert.NotNil(t, storage.Breaker)
 	assert.Nil(t, storage.Retrier)
 	assert.False(t, storage.ShedLoad)
+
 	api := deps(transport.Tier(), "api")
 	assert.Nil(t, api.Bulkhead)
 	assert.Nil(t, api.RateLimiter)
@@ -222,12 +235,14 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 
 	off, on, timeout := false, true, 2*time.Second
 	cfg := decoration.DefaultConfig()
+
 	cfg.Services.Overrides = map[string]decoration.Layers{
 		"billing": {Tracing: &off, Recovery: &off, Metrics: &on, Timeout: &timeout},
 	}
 	cfg.Controllers.Overrides = map[string]decoration.Layers{
 		"api": {Bulkhead: decoration.Bulkhead{Enabled: &on}},
 	}
+
 	tuned := decorate.NewDecorations(&cfg, collab)
 	billing, err := tuned.Deps(service.Tier(), "billing")
 	require.NoError(t, err)
@@ -235,10 +250,12 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	assert.NotNil(t, billing.Metrics)
 	assert.True(t, billing.SkipRecovery)
 	assert.Equal(t, timeout, billing.Timeout)
+
 	shedding, err := tuned.Deps(transport.Tier(), "api")
 	require.NoError(t, err)
 	assert.NotNil(t, shedding.Bulkhead)
 	assert.True(t, shedding.ShedLoad)
+
 	users, err := tuned.Deps(service.Tier(), "users")
 	require.NoError(t, err)
 	assert.Equal(t, svc, users)
@@ -247,6 +264,7 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	bad := decoration.DefaultConfig()
+
 	bad.Clients.Defaults.Bulkhead.Enabled = &on
 	bad.Clients.Defaults.Bulkhead.Kind = "semaphore"
 	_, err = decorate.NewDecorations(&bad, collab).Deps(client.Tier(), "lock")
@@ -266,10 +284,12 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 //     Deps carry no panic logger.
 func TestDecorations_RecoveryLogsAPanicWithLoggingOff(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	logger := mocks.NewMockLogger(ctrl)
 	logger.EXPECT().WithContext(gomock.Any()).Return(logger)
 	logger.EXPECT().Error("service panic recovered", gomock.Any())
+
 	defaults := decoration.DefaultConfig()
 	collab := decorate.Collaborators{
 		Observability: decorate.Observability{Logger: logger},
@@ -301,6 +321,7 @@ func TestDecorations_RecoveryLogsAPanicWithLoggingOff(t *testing.T) {
 //     a section that fails to decode is INVALID_INPUT.
 func TestLoadDecorations_ReadsTheSectionWithTheCollaborators(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	collab := decorate.Collaborators{Observability: decorate.Observability{
 		Logger:  mocks.NewMockLogger(ctrl),
@@ -310,8 +331,10 @@ func TestLoadDecorations_ReadsTheSectionWithTheCollaborators(t *testing.T) {
 
 	absent := mocks.NewMockConfigLoader(ctrl)
 	absent.EXPECT().Get(decoration.SectionKey).Return(nil)
+
 	decs, err := decorate.LoadDecorations(absent, collab)
 	require.NoError(t, err)
+
 	search, err := decs.Deps(client.Tier(), "search")
 	require.NoError(t, err)
 	assert.Equal(t, collab.Observability, search.Observability)
@@ -321,13 +344,17 @@ func TestLoadDecorations_ReadsTheSectionWithTheCollaborators(t *testing.T) {
 	quiet.EXPECT().UnmarshalKey(decoration.SectionKey, gomock.Any()).DoAndReturn(
 		func(_ string, out any) error {
 			off := false
+
 			out.(*decoration.Config).Clients.Overrides = map[string]decoration.Layers{
 				"search": {Tracing: &off},
 			}
+
 			return nil
 		})
+
 	decs, err = decorate.LoadDecorations(quiet, collab)
 	require.NoError(t, err)
+
 	search, err = decs.Deps(client.Tier(), "search")
 	require.NoError(t, err)
 	assert.Nil(t, search.Tracer)
@@ -337,6 +364,7 @@ func TestLoadDecorations_ReadsTheSectionWithTheCollaborators(t *testing.T) {
 	broken.EXPECT().Get(decoration.SectionKey).Return(map[string]any{}).AnyTimes()
 	broken.EXPECT().UnmarshalKey(decoration.SectionKey, gomock.Any()).
 		Return(apperr.Sentinel("bad yaml"))
+
 	_, err = decorate.LoadDecorations(broken, collab)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

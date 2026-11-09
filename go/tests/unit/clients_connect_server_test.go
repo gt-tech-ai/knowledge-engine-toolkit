@@ -148,6 +148,7 @@ func TestConnectServer_HealthzHandler(t *testing.T) {
 	srv.Mux().ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
+
 	body, _ := io.ReadAll(rec.Body)
 	assert.Equal(t, "ok", string(body))
 }
@@ -179,6 +180,7 @@ func TestConnectServer_ReadyzHandler(t *testing.T) {
 	srv.Mux().ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
+
 	body, _ := io.ReadAll(rec.Body)
 	assert.Equal(t, "ok", string(body))
 }

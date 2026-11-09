@@ -26,13 +26,17 @@ func TestEqualJitter_RangeAndVariation(t *testing.T) {
 	t.Parallel()
 
 	const d = 800 * time.Millisecond
+
 	seen := make(map[time.Duration]struct{})
+
 	for range 200 {
 		j := retry.EqualJitter(d)
 		require.GreaterOrEqual(t, j, d/2, "jitter must be >= d/2 (equal jitter floor)")
 		require.LessOrEqual(t, j, d, "jitter must be <= d")
+
 		seen[j] = struct{}{}
 	}
+
 	require.Greater(t, len(seen), 1, "jitter must vary across calls (no lock-step)")
 	require.Zero(t, retry.EqualJitter(0), "a zero backoff is returned unchanged")
 	require.Equal(
@@ -56,13 +60,17 @@ func TestFullJitter_RangeAndVariation(t *testing.T) {
 	t.Parallel()
 
 	const d = 800 * time.Millisecond
+
 	seen := make(map[time.Duration]struct{})
+
 	for range 200 {
 		j := retry.FullJitter(d)
 		require.GreaterOrEqual(t, j, time.Duration(0))
 		require.LessOrEqual(t, j, d)
+
 		seen[j] = struct{}{}
 	}
+
 	require.Greater(t, len(seen), 1)
 	require.Zero(t, retry.FullJitter(0))
 	require.Equal(t, -5*time.Second, retry.FullJitter(-5*time.Second))
@@ -80,11 +88,13 @@ func TestFullJitter_RangeAndVariation(t *testing.T) {
 //     within [0, MaxInt64] and [MaxInt64/2, MaxInt64] respectively
 func TestJitter_MaxDurationDoesNotOverflow(t *testing.T) {
 	t.Parallel()
+
 	maxD := time.Duration(math.MaxInt64)
 
 	for range 100 {
 		full := retry.FullJitter(maxD)
 		require.GreaterOrEqual(t, full, time.Duration(0))
+
 		equal := retry.EqualJitter(maxD)
 		require.GreaterOrEqual(t, equal, maxD/2)
 	}

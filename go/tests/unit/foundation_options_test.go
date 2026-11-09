@@ -65,6 +65,7 @@ func TestApplyOptions(t *testing.T) {
 
 	t.Run("applies single option", func(t *testing.T) {
 		t.Parallel()
+
 		cfg := &testConfig{MaxRetries: 3}
 		options.ApplyOptions(cfg, withMaxRetries(5))
 		assert.Equal(t, 5, cfg.MaxRetries)
@@ -72,6 +73,7 @@ func TestApplyOptions(t *testing.T) {
 
 	t.Run("applies multiple options in order", func(t *testing.T) {
 		t.Parallel()
+
 		cfg := &testConfig{}
 		options.ApplyOptions(
 			cfg,
@@ -89,6 +91,7 @@ func TestApplyOptions(t *testing.T) {
 
 	t.Run("later options override earlier ones", func(t *testing.T) {
 		t.Parallel()
+
 		cfg := &testConfig{}
 		options.ApplyOptions(
 			cfg,
@@ -101,6 +104,7 @@ func TestApplyOptions(t *testing.T) {
 
 	t.Run("handles empty option list", func(t *testing.T) {
 		t.Parallel()
+
 		cfg := &testConfig{MaxRetries: 3}
 		options.ApplyOptions(cfg)
 		assert.Equal(t, 3, cfg.MaxRetries, "no options should leave config unchanged")
@@ -108,8 +112,11 @@ func TestApplyOptions(t *testing.T) {
 
 	t.Run("handles nil options in list", func(t *testing.T) {
 		t.Parallel()
+
 		cfg := &testConfig{}
+
 		var trailing options.Option[testConfig]
+
 		options.ApplyOptions(
 			cfg,
 			withMaxRetries(3),

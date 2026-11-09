@@ -14,5 +14,6 @@ func ParseUUID(s, field string) (uuid.UUID, error) {
 	if err != nil {
 		return uuid.Nil, apperr.InvalidInput(field + " must be a valid UUID")
 	}
+
 	return id, nil
 }

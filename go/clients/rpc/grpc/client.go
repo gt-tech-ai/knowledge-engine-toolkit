@@ -71,5 +71,6 @@ func NewClient(cfg ClientConfig, opts ...grpc.DialOption) (*grpc.ClientConn, err
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "create grpc client")
 	}
+
 	return conn, nil
 }

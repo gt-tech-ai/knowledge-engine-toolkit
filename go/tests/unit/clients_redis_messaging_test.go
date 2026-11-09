@@ -33,9 +33,14 @@ import (
 //     to their core interfaces and construct without panic.
 func TestMessagingCapabilityInterfaces_MocksSatisfyContracts(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
-	var dyn interfaces.DynamicConsumer = mocks.NewMockDynamicConsumer(ctrl)
-	var pat interfaces.PatternConsumer = mocks.NewMockPatternConsumer(ctrl)
+
+	var (
+		dyn interfaces.DynamicConsumer = mocks.NewMockDynamicConsumer(ctrl)
+		pat interfaces.PatternConsumer = mocks.NewMockPatternConsumer(ctrl)
+	)
+
 	require.NotNil(t, dyn)
 	require.NotNil(t, pat)
 }
@@ -53,6 +58,7 @@ func TestMessagingCapabilityInterfaces_MocksSatisfyContracts(t *testing.T) {
 //     coded InvalidInput error.
 func TestRedisMessaging_NilClient_Rejected(t *testing.T) {
 	t.Parallel()
+
 	_, _, fromErr := msgredis.NewFromConfig(msgredis.Config{})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(fromErr))
 

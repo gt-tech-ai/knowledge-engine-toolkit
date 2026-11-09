@@ -34,19 +34,25 @@ func probeServer(
 	errs ...error,
 ) string {
 	t.Helper()
+
 	mux := http.NewServeMux()
 	mux.Handle(probeProcedure, connect.NewUnaryHandler(probeProcedure, func(
 		_ context.Context, req *connect.Request[emptypb.Empty],
 	) (*connect.Response[emptypb.Empty], error) {
 		n := int(calls.Add(1))
+
 		traceparent.Store(req.Header().Get("traceparent"))
+
 		if n <= len(errs) {
 			return nil, errs[n-1]
 		}
+
 		return connect.NewResponse(&emptypb.Empty{}), nil
 	}))
+
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
+
 	return srv.URL
 }
 
@@ -69,6 +75,7 @@ func probeClientAt(
 		interceptors.ClientOptions(base),
 		connect.WithIdempotency(level),
 	)
+
 	return connect.NewClient[emptypb.Empty, emptypb.Empty](
 		http.DefaultClient, url+probeProcedure, opts...,
 	)
@@ -92,13 +99,17 @@ func probeClientAt(
 //   - An open breaker: no call, CodeUnavailable.
 func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 	otel.SetTextMapPropagator(propagation.TraceContext{})
+
 	sc := sampledSpanContext()
 	ctx := oteltrace.ContextWithSpanContext(context.Background(), sc)
 	down := connect.NewError(connect.CodeUnavailable, nil)
 
 	t.Run("transient", func(t *testing.T) {
-		var calls atomic.Int32
-		var tp atomic.Value
+		var (
+			calls atomic.Int32
+			tp    atomic.Value
+		)
+
 		url := probeServer(t, &calls, &tp, down, down)
 		_, err := probeClient(url, wireBase("probe", fastRetrier(t))).
 			CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
@@ -108,8 +119,11 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 	})
 
 	t.Run("non-idempotent", func(t *testing.T) {
-		var calls atomic.Int32
-		var tp atomic.Value
+		var (
+			calls atomic.Int32
+			tp    atomic.Value
+		)
+
 		url := probeServer(t, &calls, &tp, down, down)
 		_, err := probeClientAt(
 			url,
@@ -121,8 +135,11 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 	})
 
 	t.Run("permanent", func(t *testing.T) {
-		var calls atomic.Int32
-		var tp atomic.Value
+		var (
+			calls atomic.Int32
+			tp    atomic.Value
+		)
+
 		bad := connect.NewError(connect.CodeInvalidArgument, apperr.Sentinel("bad query"))
 		url := probeServer(t, &calls, &tp, bad, bad)
 		_, err := probeClient(url, wireBase("probe", fastRetrier(t))).
@@ -133,8 +150,11 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 	})
 
 	t.Run("open breaker", func(t *testing.T) {
-		var calls atomic.Int32
-		var tp atomic.Value
+		var (
+			calls atomic.Int32
+			tp    atomic.Value
+		)
+
 		url := probeServer(t, &calls, &tp)
 		base := wireBase(
 			"probe",

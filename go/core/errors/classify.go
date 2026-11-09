@@ -8,6 +8,7 @@ import "net/http"
 // window resets. The retry class of each code is the taxonomy's (codes.go).
 func IsTransient(err error) bool {
 	info, ok := infoOf(Code(err))
+
 	return ok && info.retry == retryTransient
 }
 
@@ -17,6 +18,7 @@ func IsTransient(err error) bool {
 // resets.
 func IsPermanent(err error) bool {
 	info, ok := infoOf(Code(err))
+
 	return ok && info.retry == retryPermanent
 }
 
@@ -26,5 +28,6 @@ func ToHTTPStatus(code ErrorCode) int {
 	if info, ok := infoOf(code); ok {
 		return info.http
 	}
+
 	return http.StatusInternalServerError
 }

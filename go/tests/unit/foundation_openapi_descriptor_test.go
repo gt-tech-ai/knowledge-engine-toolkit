@@ -31,9 +31,11 @@ import (
 //   - MergeSwaggerFiles([a,b]) and MergeSwaggerFiles([b,a]) yield the same info.
 func TestMergeSwaggerFiles_OrderIndependent(t *testing.T) {
 	t.Parallel()
+
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.swagger.json")
 	b := filepath.Join(dir, "b.swagger.json")
+
 	require.NoError(t, os.WriteFile(
 		a,
 		[]byte(`{"info":{"title":"a"},"paths":{"/a":{}}}`),
@@ -47,6 +49,7 @@ func TestMergeSwaggerFiles_OrderIndependent(t *testing.T) {
 
 	m1, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{a, b})
 	require.NoError(t, err)
+
 	m2, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{b, a})
 	require.NoError(t, err)
 

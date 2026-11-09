@@ -62,13 +62,16 @@ func FuzzSplitCode(f *testing.F) {
 	for _, seed := range []string{"UPSTREAM: x", "a: b", "", "X:", "X: ", "A_1: : :"} {
 		f.Add(seed)
 	}
+
 	f.Fuzz(func(t *testing.T, text string) {
 		code, rest, ok := apperr.SplitCode(text)
 		if !ok {
 			assert.Empty(t, code)
 			assert.Empty(t, rest)
+
 			return
 		}
+
 		assert.Equal(t, text, code+": "+rest)
 	})
 }

@@ -27,18 +27,22 @@ var (
 func lookup(vars Vars, path string) (any, bool) {
 	segs := strings.Split(path, ".")
 	v, ok := vars[segs[0]]
+
 	if !ok {
 		return nil, false
 	}
+
 	for _, key := range segs[1:] {
 		m, isMap := v.(map[string]any)
 		if !isMap {
 			return nil, false
 		}
+
 		if v, ok = m[key]; !ok {
 			return nil, false
 		}
 	}
+
 	return v, true
 }
 
@@ -63,6 +67,7 @@ func exprArg(arg string) (string, bool) {
 	if strings.HasPrefix(arg, "${") && strings.HasSuffix(arg, "}") {
 		return arg[2 : len(arg)-1], true
 	}
+
 	return "", false
 }
 
@@ -73,10 +78,12 @@ func (c *compiled) eval(ctx context.Context, src string, vars Vars) (any, error)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, src)
 	}
+
 	pb, err := out.ConvertToNative(reflect.TypeFor[*structpb.Value]())
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, src)
 	}
+
 	return pb.(*structpb.Value).AsInterface(), nil
 }
 
@@ -86,10 +93,12 @@ func (c *compiled) evalBool(ctx context.Context, src string, vars Vars) (bool, e
 	if err != nil {
 		return false, err
 	}
+
 	b, ok := v.(bool)
 	if !ok {
 		return false, apperr.New(apperr.CodeInvalidInput, src+": not a bool")
 	}
+
 	return b, nil
 }
 
@@ -99,10 +108,12 @@ func (c *compiled) evalList(ctx context.Context, src string, vars Vars) ([]any, 
 	if err != nil {
 		return nil, err
 	}
+
 	l, ok := v.([]any)
 	if !ok {
 		return nil, apperr.New(apperr.CodeInvalidInput, src+": not a list")
 	}
+
 	return l, nil
 }
 
@@ -110,21 +121,27 @@ func (c *compiled) evalList(ctx context.Context, src string, vars Vars) ([]any, 
 // value is CodeInvalidInput.
 func text(s string, vars Vars) (string, error) {
 	var missing string
+
 	out := placeholder.ReplaceAllStringFunc(s, func(m string) string {
 		name := m[1 : len(m)-1]
 		v, ok := lookup(vars, name)
+
 		if !ok {
 			missing = name
+
 			return m
 		}
+
 		return scalar(v)
 	})
+
 	if missing != "" {
 		return "", apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf("no variable %q", missing),
 		)
 	}
+
 	return out, nil
 }
 
@@ -134,9 +151,11 @@ func (c *compiled) args(ctx context.Context, in []string, vars Vars) ([]string, 
 	out := make([]string, 0, len(in))
 	for _, a := range in {
 		var v any
+
 		switch m := splat.FindStringSubmatch(a); {
 		case m != nil:
 			var ok bool
+
 			if v, ok = lookup(vars, m[1]); !ok {
 				return nil, apperr.New(
 					apperr.CodeInvalidInput,
@@ -150,16 +169,22 @@ func (c *compiled) args(ctx context.Context, in []string, vars Vars) ([]string, 
 				if err != nil {
 					return nil, err
 				}
+
 				out = append(out, t)
+
 				continue
 			}
+
 			var err error
+
 			if v, err = c.eval(ctx, x, vars); err != nil {
 				return nil, err
 			}
 		}
+
 		out = append(out, list(v)...)
 	}
+
 	return out, nil
 }
 
@@ -169,10 +194,12 @@ func list(v any) []string {
 	if rv.Kind() != reflect.Slice {
 		return []string{scalar(v)}
 	}
+
 	out := make([]string, rv.Len())
 	for i := range out {
 		out[i] = scalar(rv.Index(i).Interface())
 	}
+
 	return out
 }
 
@@ -181,5 +208,6 @@ func scalar(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
+
 	return fmt.Sprint(v)
 }

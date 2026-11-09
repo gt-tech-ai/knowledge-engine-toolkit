@@ -29,12 +29,15 @@ func Classify(classes []Class, changed []string) ([]bool, error) {
 				return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
 					"change class "+c.Name+": pattern "+p)
 			}
+
 			if slices.ContainsFunc(changed, re.MatchString) {
 				out[i] = true
+
 				break
 			}
 		}
 	}
+
 	return out, nil
 }
 

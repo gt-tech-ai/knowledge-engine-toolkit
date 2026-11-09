@@ -31,6 +31,7 @@ var errCaptured = status.Error(codes.Aborted, "captured")
 // millisecond backoff.
 func fastRetrier(t *testing.T) decorate.Deps {
 	t.Helper()
+
 	r, err := retry.NewFromConfig(retry.Config{
 		Kind:            retry.KindExponential,
 		MaxRetries:      2,
@@ -40,6 +41,7 @@ func fastRetrier(t *testing.T) decorate.Deps {
 		MaxElapsedTime:  time.Second,
 	})
 	require.NoError(t, err)
+
 	return decorate.Deps{Retrier: r}
 }
 
@@ -53,6 +55,7 @@ func dialDecorated(
 	stream grpc.StreamClientInterceptor,
 ) *grpc.ClientConn {
 	t.Helper()
+
 	opts := append(grpcinterceptors.ClientOptions(base, token),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithChainUnaryInterceptor(unary),
@@ -61,6 +64,7 @@ func dialDecorated(
 	conn, err := grpc.NewClient("passthrough:///decorated-client-test", opts...)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
+
 	return conn
 }
 
@@ -82,6 +86,7 @@ func dialDecorated(
 //   - With an empty token neither call carries an authorization value.
 func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
 	otel.SetTextMapPropagator(propagation.TraceContext{})
+
 	sc := sampledSpanContext()
 	ctx := oteltrace.ContextWithSpanContext(context.Background(), sc)
 
@@ -94,6 +99,7 @@ func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var unary, stream []metadata.MD
+
 			conn := dialDecorated(
 				t,
 				wireBase("probe", fastRetrier(t)),
@@ -102,27 +108,34 @@ func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
 					_ grpc.UnaryInvoker, _ ...grpc.CallOption,
 				) error {
 					md, _ := metadata.FromOutgoingContext(ctx)
+
 					unary = append(unary, md)
+
 					return errCaptured
 				},
 				func(ctx context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string,
 					_ grpc.Streamer, _ ...grpc.CallOption,
 				) (grpc.ClientStream, error) {
 					md, _ := metadata.FromOutgoingContext(ctx)
+
 					stream = append(stream, md)
+
 					return nil, errCaptured
 				},
 			)
 
 			require.Equal(t, codes.Aborted,
 				status.Code(conn.Invoke(ctx, "/test.Service/Unary", nil, nil)))
+
 			_, err := conn.NewStream(ctx, &grpc.StreamDesc{}, "/test.Service/Stream")
 			require.Equal(t, codes.Aborted, status.Code(err))
 
 			require.Len(t, unary, 3, "the transient failure is retried")
 			require.Len(t, stream, 1, "a stream open is never retried")
+
 			for i, md := range append(unary, stream...) {
 				assert.Equal(t, tc.want, md.Get("authorization"), "call %d", i)
+
 				tp := md.Get("traceparent")
 				require.Len(t, tp, 1, "call %d", i)
 				assert.Contains(t, tp[0], sc.TraceID().String(), "call %d", i)
@@ -147,6 +160,7 @@ func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
 //   - An open breaker rejects without calling the server, as codes.Unavailable.
 func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 	t.Parallel()
+
 	noStream := func(context.Context, *grpc.StreamDesc, *grpc.ClientConn, string,
 		grpc.Streamer, ...grpc.CallOption,
 	) (grpc.ClientStream, error) {
@@ -160,12 +174,14 @@ func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 			if *calls <= len(errs) {
 				return errs[*calls-1]
 			}
+
 			return nil
 		}
 	}
 
 	t.Run("permanent", func(t *testing.T) {
 		t.Parallel()
+
 		calls := 0
 		bad := status.Error(codes.InvalidArgument, "bad query")
 		conn := dialDecorated(t, wireBase("probe", fastRetrier(t)), "",
@@ -178,6 +194,7 @@ func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 
 	t.Run("transient", func(t *testing.T) {
 		t.Parallel()
+
 		calls := 0
 		down := status.Error(codes.Unavailable, "down")
 		conn := dialDecorated(t, wireBase("probe", fastRetrier(t)), "",
@@ -191,6 +208,7 @@ func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 
 	t.Run("open breaker", func(t *testing.T) {
 		t.Parallel()
+
 		calls := 0
 		conn := dialDecorated(
 			t,

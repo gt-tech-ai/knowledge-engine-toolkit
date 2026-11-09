@@ -50,6 +50,7 @@ func TestJobTier_OrdersRecoveryOutermost(t *testing.T) {
 //   - With the tier observed, one span named "<job>.execute" covers the run.
 func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
 	tracer := mocks.NewMockTracer(ctrl)
@@ -68,6 +69,7 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 				return ctx, span
 			},
 		)
+
 	boom := apperr.New(apperr.CodeQualityFailed, "lint failed")
 	fail := false
 	lint := fixtures.Must(job.NewBase(decorate.Fixed(decorate.Deps{
@@ -76,13 +78,16 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 		_ context.Context, r interfaces.CommandRunner, root string,
 	) (types.StepResults, error) {
 		assert.Same(t, runner, r)
+
 		if fail {
 			return nil, boom
 		}
+
 		return types.StepResults{{Name: root, Status: types.StatusPass}}, nil
 	})
 
 	assert.Equal(t, types.JobMeta{Name: "lint", Group: "Static"}, lint.Meta())
+
 	got, err := lint.Execute(t.Context(), runner, "/repo")
 	require.NoError(t, err)
 	assert.Equal(t, types.StepResults{{Name: "/repo", Status: types.StatusPass}}, got)
@@ -106,6 +111,7 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 //     recovery is the tier's outermost layer.
 func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	meta := types.JobMeta{Name: "seed", Group: "Seed", Tool: "psql"}
 	results := types.StepResults{{Name: "seed", Status: types.StatusPass}}
@@ -115,6 +121,7 @@ func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 		func(context.Context) (types.StepResults, error) { return results, nil },
 	)
 	assert.Equal(t, types.JobMeta{Name: "seed", Group: "Seed"}, seed.Meta())
+
 	got, err := seed.Execute(t.Context(), nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, results, got)
@@ -126,8 +133,10 @@ func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 			panic("boom")
 		},
 	)
+
 	wrapped := fixtures.Must(job.NewBase(fixtures.Decorations(), "wrapped")).Wrap(inner)
 	assert.Equal(t, meta, wrapped.Meta())
+
 	_, err = wrapped.Execute(t.Context(), nil, "/repo")
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }
@@ -143,6 +152,7 @@ func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 //   - An error is one Fail step carrying the error's message, and no execution error.
 func TestJobBase_CheckReportsOneStep(t *testing.T) {
 	t.Parallel()
+
 	pass := job.Base{}.Check("fmt", "Go", func(context.Context) error { return nil })
 	got, err := pass.Execute(context.Background(), nil, "")
 	require.NoError(t, err)
@@ -152,6 +162,7 @@ func TestJobBase_CheckReportsOneStep(t *testing.T) {
 	fail := job.Base{}.Check("fmt", "Go", func(context.Context) error {
 		return apperr.New(apperr.CodeInvalidInput, "unformatted")
 	})
+
 	got, err = fail.Execute(context.Background(), nil, "")
 	require.NoError(t, err)
 	require.Len(t, got, 1)
@@ -170,6 +181,7 @@ func TestJobBase_CheckReportsOneStep(t *testing.T) {
 //   - An execution error passes through unchanged.
 func TestJobWarn_DowngradesFailures(t *testing.T) {
 	t.Parallel()
+
 	inner := job.Base{}.Func("doctor", "Setup", func(
 		context.Context, interfaces.CommandRunner, string,
 	) (types.StepResults, error) {
@@ -193,6 +205,7 @@ func TestJobWarn_DowngradesFailures(t *testing.T) {
 	) (types.StepResults, error) {
 		return nil, boom
 	}))
+
 	_, err = broken.Execute(context.Background(), nil, "")
 	assert.ErrorIs(t, err, boom)
 }

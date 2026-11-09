@@ -100,6 +100,7 @@ func (b *builder) Build(
 	if prefix == "" {
 		prefix = "connector"
 	}
+
 	return kinds().Build(
 		ctx,
 		client.Kind(src.Kind),

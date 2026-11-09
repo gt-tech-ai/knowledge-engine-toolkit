@@ -54,6 +54,7 @@ func CheckCompleteness(
 	svcExt, _ := types.FindExtensionByName(jsonAPIServiceExtension)
 	resExt, _ := types.FindExtensionByName(jsonAPIResourceExtension)
 	opExt, _ := types.FindExtensionByName(jsonAPIOperationExtension)
+
 	if svcExt == nil || resExt == nil || opExt == nil {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
@@ -66,15 +67,19 @@ func CheckCompleteness(
 		)
 	}
 
-	var violations []Violation
-	var walkErr error
+	var (
+		violations []Violation
+		walkErr    error
+	)
 
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		_, ok, err := readServiceOption(fd, svcExt, types)
 		if err != nil {
 			walkErr = apperr.Wrap(err, apperr.CodeInternal, fd.Path())
+
 			return false
 		}
+
 		if !ok {
 			return true // not part of the JSON:API REST surface
 		}
@@ -86,13 +91,17 @@ func CheckCompleteness(
 				vs, err := methodViolations(methods.Get(j), resExt, opExt, types, exempt)
 				if err != nil {
 					walkErr = err
+
 					return false
 				}
+
 				violations = append(violations, vs...)
 			}
 		}
+
 		return true
 	})
+
 	if walkErr != nil {
 		return nil, walkErr
 	}
@@ -100,6 +109,7 @@ func CheckCompleteness(
 	sort.Slice(violations, func(i, j int) bool {
 		return violations[i].RPC < violations[j].RPC
 	})
+
 	return violations, nil
 }
 
@@ -119,6 +129,7 @@ func methodViolations(
 	if err != nil {
 		return nil, err
 	}
+
 	if len(bindings) == 0 {
 		return nil, nil // gRPC-only method — not a REST route
 	}
@@ -134,6 +145,7 @@ func methodViolations(
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, rpc)
 	}
+
 	if hasRes && rc.resourceType == "" {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
@@ -145,6 +157,7 @@ func methodViolations(
 	}
 
 	var out []Violation
+
 	for _, b := range bindings {
 		if _, err := Classify(Binding{
 			RPC:           rpc,
@@ -157,8 +170,10 @@ func methodViolations(
 			if exempt[rpc] {
 				continue // a genuine action/internal RPC — not a violation
 			}
+
 			out = append(out, Violation{RPC: rpc, Reason: err.Error()})
 		}
 	}
+
 	return out, nil
 }

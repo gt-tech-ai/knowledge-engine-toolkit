@@ -19,5 +19,6 @@ func (c BudgetConfig) Validate() error {
 	if c.MaxRetries < 0 {
 		return apperr.InvalidInput("resilience.budget.max_retries must be >= 0")
 	}
+
 	return nil
 }

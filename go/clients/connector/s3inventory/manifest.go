@@ -64,6 +64,7 @@ type schema map[string]int
 // oversized-object cap never fires. A malformed or unusable report is CodeInvalidInput.
 func parseManifest(body io.Reader, sourceBucket string) (*manifest, schema, error) {
 	var m manifest
+
 	if err := json.NewDecoder(io.LimitReader(body, maxManifestBytes)).
 		Decode(&m); err != nil {
 		return nil, nil, apperr.Wrap(
@@ -72,6 +73,7 @@ func parseManifest(body io.Reader, sourceBucket string) (*manifest, schema, erro
 			"connector s3_inventory: decode manifest",
 		)
 	}
+
 	if !strings.EqualFold(m.FileFormat, formatCSV) {
 		return nil, nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"connector s3_inventory: report format %q is not supported; "+
@@ -79,6 +81,7 @@ func parseManifest(body io.Reader, sourceBucket string) (*manifest, schema, erro
 			m.FileFormat,
 		))
 	}
+
 	if m.SourceBucket != sourceBucket {
 		return nil, nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"connector s3_inventory: the report lists bucket %q, not %q",
@@ -86,10 +89,12 @@ func parseManifest(body io.Reader, sourceBucket string) (*manifest, schema, erro
 			sourceBucket,
 		))
 	}
+
 	cols := schema{}
 	for i, name := range strings.Split(m.FileSchema, ",") {
 		cols[strings.TrimSpace(name)] = i
 	}
+
 	for _, name := range [...]string{colBucket, colKey, colETag, colSize} {
 		if _, ok := cols[name]; !ok {
 			return nil, nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
@@ -99,6 +104,7 @@ func parseManifest(body io.Reader, sourceBucket string) (*manifest, schema, erro
 			))
 		}
 	}
+
 	return &m, cols, nil
 }
 
@@ -108,6 +114,7 @@ func (s schema) field(row []string, name string) string {
 	if !ok || i >= len(row) {
 		return ""
 	}
+
 	return row[i]
 }
 
@@ -124,15 +131,18 @@ func (s schema) object(
 		s.field(row, colIsDeleteMarker) == "true" {
 		return interfaces.StorageObject{}, false, nil
 	}
+
 	key, err := url.QueryUnescape(s.field(row, colKey))
 	if err != nil {
 		return interfaces.StorageObject{}, false, apperr.Wrap(
 			err, apperr.CodeInvalidInput, "connector s3_inventory: undecodable key",
 		)
 	}
+
 	if !strings.HasPrefix(key, prefix) {
 		return interfaces.StorageObject{}, false, nil
 	}
+
 	obj := interfaces.StorageObject{
 		Key:          key,
 		LastModified: rfc3339(s.field(row, colLastModified)),
@@ -140,6 +150,7 @@ func (s schema) object(
 	if etag := s.field(row, colETag); etag != "" {
 		obj.ETag = `"` + etag + `"`
 	}
+
 	if size := s.field(row, colSize); size != "" {
 		if _, err := fmt.Sscan(size, &obj.Size); err != nil {
 			return interfaces.StorageObject{}, false, apperr.Wrap(
@@ -147,6 +158,7 @@ func (s schema) object(
 			)
 		}
 	}
+
 	return obj, true, nil
 }
 
@@ -157,5 +169,6 @@ func rfc3339(value string) string {
 	if err != nil {
 		return value
 	}
+
 	return t.UTC().Format(time.RFC3339)
 }

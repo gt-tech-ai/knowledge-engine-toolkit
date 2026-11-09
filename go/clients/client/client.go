@@ -72,6 +72,7 @@ func Handler() Option {
 		o.adjust = append(o.adjust, func(d decorate.Deps) decorate.Deps {
 			d = d.WithoutRetry()
 			d.Breaker, d.Bulkhead = nil, nil
+
 			return d
 		})
 	}
@@ -91,6 +92,7 @@ func newOptions(opts []Option) options {
 	for _, opt := range opts {
 		opt(&o)
 	}
+
 	return o
 }
 
@@ -104,10 +106,12 @@ func NewBase[C any](
 	opts ...Option,
 ) (Base, error) {
 	o := newOptions(opts)
+
 	subject, err := decs.SubjectOf[C](o.tier, name, o.adjust...)
 	if err != nil {
 		return Base{}, err
 	}
+
 	return Base{Subject: subject}, nil
 }
 
@@ -117,16 +121,19 @@ func NewBase[C any](
 // the client as a whole.
 func NewWireBase(decs decorate.Decorations, name string, opts ...Option) (Base, error) {
 	o := newOptions(opts)
+
 	subject, err := decs.NewSubject(o.tier, name, nil, o.adjust...)
 	if err != nil {
 		return Base{}, err
 	}
+
 	return Base{Subject: subject}, nil
 }
 
 // Do runs the error-only idempotent operation op.
 func (b Base) Do(ctx context.Context, op string, fn func(context.Context) error) error {
 	_, err := b.Exec(ctx, op, unit(fn))
+
 	return err
 }
 
@@ -137,6 +144,7 @@ func (b Base) DoOnce(
 	fn func(context.Context) error,
 ) error {
 	_, err := b.ExecOnce(ctx, op, unit(fn))
+
 	return err
 }
 
@@ -152,12 +160,16 @@ func (b Base) Stream[R any](
 	if timeout := b.Timeout(op); timeout > 0 {
 		ctx, release = context.WithTimeout(ctx, timeout)
 	}
+
 	stream, err = b.Streaming().Exec(ctx, op, open)
 	if err != nil {
 		release()
+
 		var zero R
+
 		return zero, func() {}, err
 	}
+
 	return stream, release, nil
 }
 
@@ -175,6 +187,7 @@ func (b Base) Open[R any](
 	if timeout <= 0 {
 		return b.Streaming().Exec(ctx, op, open)
 	}
+
 	return b.Streaming().Exec(ctx, op, func(ctx context.Context) (R, error) {
 		return openWithin(ctx, timeout, op, open)
 	})
@@ -199,23 +212,32 @@ func openWithin[R any](
 ) (R, error) {
 	openCtx, abort := context.WithCancel(ctx)
 	done := make(chan opened[R], 1)
+
 	go func() {
 		stream, err := open(openCtx)
 		done <- opened[R]{stream: stream, err: err}
 	}()
+
 	timer := time.NewTimer(timeout)
+
 	defer timer.Stop()
+
 	select {
 	case res := <-done:
 		if res.err != nil {
 			abort()
+
 			return res.stream, res.err
 		}
+
 		context.AfterFunc(ctx, abort) // release the child once the parent ends
+
 		return res.stream, nil
 	case <-timer.C:
 		abort()
+
 		var zero R
+
 		return zero, apperr.New(
 			apperr.CodeTimeout,
 			op+" open timed out after "+timeout.String(),

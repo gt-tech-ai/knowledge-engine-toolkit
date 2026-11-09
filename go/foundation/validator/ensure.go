@@ -23,10 +23,12 @@ func Ensure(dtos ...interfaces.Validatable) error {
 		if isNil(dto) {
 			continue
 		}
+
 		if err := dto.Validate(); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -37,6 +39,7 @@ func isNil(v interfaces.Validatable) bool {
 	if v == nil {
 		return true
 	}
+
 	rv := reflect.ValueOf(v)
 	switch rv.Kind() {
 	case reflect.Pointer, reflect.Map, reflect.Chan, reflect.Func, reflect.Slice:

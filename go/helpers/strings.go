@@ -7,6 +7,7 @@ func Truncate(s string, limit int) string {
 	if len(runes) <= limit {
 		return s
 	}
+
 	return string(runes[:limit])
 }
 
@@ -15,11 +16,13 @@ func IsAllDigits(s string) bool {
 	if s == "" {
 		return false
 	}
+
 	for i := range len(s) {
 		if s[i] < '0' || s[i] > '9' {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -29,11 +32,13 @@ func IsHex(s string) bool {
 	if s == "" {
 		return false
 	}
+
 	for i := range len(s) {
 		if !isHexByte(s[i]) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -48,16 +53,20 @@ func IsUUID(s string) bool {
 	if len(s) != 36 {
 		return false
 	}
+
 	if s[8] != '-' || s[13] != '-' || s[18] != '-' || s[23] != '-' {
 		return false
 	}
+
 	for i := range len(s) {
 		if i == 8 || i == 13 || i == 18 || i == 23 {
 			continue
 		}
+
 		if !isHexByte(s[i]) {
 			return false
 		}
 	}
+
 	return true
 }

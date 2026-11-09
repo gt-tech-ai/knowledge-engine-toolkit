@@ -92,6 +92,7 @@ func (w Creator[T, C]) Create(ctx context.Context, in C) (*T, error) {
 		if err := check(w.validate, in); err != nil {
 			return nil, err
 		}
+
 		return w.inner.Create(ctx, in)
 	})
 }
@@ -125,6 +126,7 @@ func (w Updater[T, ID, U]) Update(ctx context.Context, id ID, in U) (*T, error) 
 		if err := check(w.validate, in); err != nil {
 			return nil, err
 		}
+
 		return w.inner.Update(ctx, id, in)
 	})
 }
@@ -134,6 +136,7 @@ func check[V any](validate func(V) error, in V) error {
 	if validate == nil {
 		return nil
 	}
+
 	return validate(in)
 }
 
@@ -208,6 +211,7 @@ func (i Inserter[T]) Insert(ctx context.Context, entity *T) error {
 	_, err := i.op.Exec(ctx, "insert", func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, i.inner.Insert(ctx, entity)
 	})
+
 	return err
 }
 
@@ -230,6 +234,7 @@ func (d Deleter[ID]) Delete(ctx context.Context, id ID) error {
 	_, err := d.op.Exec(ctx, "delete", func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, d.inner.Delete(ctx, id)
 	})
+
 	return err
 }
 
@@ -327,6 +332,7 @@ func (r Outbox) Enqueue(ctx context.Context, rec types.OutboxRecord) error {
 	_, err := r.claim.Exec(ctx, "enqueue", func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, r.inner.Enqueue(ctx, rec)
 	})
+
 	return err
 }
 
@@ -401,5 +407,6 @@ func (r Outbox) do(
 	_, err := r.op.Exec(ctx, op, func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, fn(ctx)
 	})
+
 	return err
 }

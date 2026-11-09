@@ -69,19 +69,25 @@ func (c *Client) OrganizationIDs(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var ids []string
+
 	for page := 0; ; page++ {
 		var orgs []struct {
 			ID string `json:"id"`
 		}
+
 		endpoint := fmt.Sprintf("%s/organizations?per_page=%d&page=%d",
 			c.api(), pageSize, page)
+
 		if err := c.getJSON(ctx, endpoint, token, &orgs); err != nil {
 			return nil, err
 		}
+
 		if len(orgs) == 0 {
 			return ids, nil
 		}
+
 		for _, o := range orgs {
 			ids = append(ids, o.ID)
 		}
@@ -94,17 +100,22 @@ func (c *Client) OrganizationID(ctx context.Context, name string) (string, error
 	if err != nil {
 		return "", err
 	}
+
 	var org struct {
 		ID string `json:"id"`
 	}
+
 	endpoint := c.api() + "/organizations/name/" + url.PathEscape(name)
+
 	if err := c.getJSON(ctx, endpoint, token, &org); err != nil {
 		return "", err
 	}
+
 	if org.ID == "" {
 		return "", apperr.New(apperr.CodeUpstream,
 			fmt.Sprintf("auth0: no id in the response for organization %q", name))
 	}
+
 	return org.ID, nil
 }
 
@@ -118,6 +129,7 @@ func (c *Client) SigningKey(ctx context.Context) (types.SigningKey, error) {
 			X5C []string `json:"x5c"`
 		} `json:"keys"`
 	}
+
 	if err := c.getJSON(
 		ctx,
 		"https://"+c.domain+"/.well-known/jwks.json",
@@ -126,15 +138,18 @@ func (c *Client) SigningKey(ctx context.Context) (types.SigningKey, error) {
 	); err != nil {
 		return types.SigningKey{}, err
 	}
+
 	for _, k := range jwks.Keys {
 		if k.Use == "sig" && len(k.X5C) > 0 {
 			pemKey, err := x5cToPEM(k.X5C[0])
 			if err != nil {
 				return types.SigningKey{}, err
 			}
+
 			return types.SigningKey{PublicKeyPEM: pemKey, KeyID: k.Kid}, nil
 		}
 	}
+
 	return types.SigningKey{}, apperr.New(apperr.CodeUpstream,
 		"auth0: the tenant's JWKS has no signing key with a certificate")
 }
@@ -148,40 +163,50 @@ func (c *Client) bearer(ctx context.Context) (string, error) {
 		return "", apperr.New(apperr.CodeInvalidInput,
 			"auth0: Management API calls need a client id and secret")
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	if c.token != "" && (c.expires.IsZero() || time.Now().Before(c.expires)) {
 		return c.token, nil
 	}
+
 	form := url.Values{
 		"grant_type":    {"client_credentials"},
 		"client_id":     {c.clientID},
 		"client_secret": {c.clientSecret},
 		"audience":      {c.api() + "/"},
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		"https://"+c.domain+"/oauth/token", strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "auth0: build the token request")
 	}
+
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
 	var out struct {
 		AccessToken string `json:"access_token"`
 		ExpiresIn   int    `json:"expires_in"`
 	}
+
 	if err := c.send(req, &out); err != nil {
 		return "", err
 	}
+
 	if out.AccessToken == "" {
 		return "", apperr.New(
 			apperr.CodeUpstream,
 			"auth0: the token response had no access_token",
 		)
 	}
+
 	c.token, c.expires = out.AccessToken, time.Time{}
 	if out.ExpiresIn > 0 {
 		c.expires = time.Now().Add(time.Duration(out.ExpiresIn)*time.Second - tokenSkew)
 	}
+
 	return c.token, nil
 }
 
@@ -191,9 +216,11 @@ func (c *Client) getJSON(ctx context.Context, endpoint, token string, out any) e
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "auth0: build the request")
 	}
+
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+
 	return c.send(req, out)
 }
 
@@ -204,19 +231,25 @@ func (c *Client) send(req *http.Request, out any) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUpstream, "auth0: "+req.URL.Path)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
 		code := apperr.CodeUpstream
+
 		if resp.StatusCode == http.StatusNotFound {
 			code = apperr.CodeNotFound
 		}
+
 		return apperr.New(code, fmt.Sprintf("auth0: %s returned HTTP %d: %s",
 			req.URL.Path, resp.StatusCode, strings.TrimSpace(string(snippet))))
 	}
+
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		return apperr.Wrap(err, apperr.CodeUpstream, "auth0: decode "+req.URL.Path)
 	}
+
 	return nil
 }
 
@@ -227,6 +260,7 @@ func x5cToPEM(x5c string) (string, error) {
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeUpstream, "auth0: decode the JWKS x5c")
 	}
+
 	cert, err := x509.ParseCertificate(der)
 	if err != nil {
 		return "", apperr.Wrap(
@@ -235,9 +269,11 @@ func x5cToPEM(x5c string) (string, error) {
 			"auth0: parse the JWKS certificate",
 		)
 	}
+
 	pub, err := x509.MarshalPKIXPublicKey(cert.PublicKey)
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeUpstream, "auth0: marshal the public key")
 	}
+
 	return string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pub})), nil
 }

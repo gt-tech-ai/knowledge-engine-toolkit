@@ -31,10 +31,13 @@ import (
 //   - The postgres kind without a DB is CodeInvalidInput.
 func TestOutboxStoreNewFromConfig_StubBootsAndIsDecorated(t *testing.T) {
 	t.Parallel()
+
 	reg := promclient.NewRegistry()
 	on := true
 	cfg := decoration.DefaultConfig()
+
 	cfg.Stores.Defaults.Metrics = &on
+
 	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{
 		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
 	})
@@ -42,15 +45,19 @@ func TestOutboxStoreNewFromConfig_StubBootsAndIsDecorated(t *testing.T) {
 	s, err := outboxstore.NewFromConfig(t.Context(), outboxstore.Config{},
 		outboxstore.Deps{Decorations: decs})
 	require.NoError(t, err)
+
 	recs, err := s.Claim(t.Context(), "events", 0, 10)
 	require.NoError(t, err)
 	assert.Empty(t, recs)
+
 	stats, err := s.Stats(t.Context(), "events")
 	require.NoError(t, err)
 	assert.Zero(t, stats.Pending)
+
 	n, err := s.DeleteSentBefore(t.Context(), time.Now())
 	require.NoError(t, err)
 	assert.Zero(t, n)
+
 	for _, op := range []string{"claim", "stats", "delete_sent_before"} {
 		assert.InDelta(t, 1, storeOpCounter(t, reg, op), 0, op)
 	}

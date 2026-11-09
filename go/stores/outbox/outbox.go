@@ -76,14 +76,17 @@ func NewFromConfig(
 	if err != nil {
 		return nil, err
 	}
+
 	name := cfg.Name
 	if name == "" {
 		name = "outbox"
 	}
+
 	b, err := store.NewBase[interfaces.OutboxStore](deps.Decorations, name, deps.DB)
 	if err != nil {
 		return nil, err
 	}
+
 	return decorate.NewOutbox(b.Subject, b.Subject, s), nil
 }
 
@@ -99,5 +102,6 @@ func newPostgres(
 			"outbox store: postgres needs a DB",
 		)
 	}
+
 	return postgres.New(deps.DB, cfg.Postgres)
 }

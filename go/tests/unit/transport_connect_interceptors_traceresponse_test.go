@@ -22,16 +22,21 @@ import (
 // exactly that id to the caller.
 func validSpanCtx(t *testing.T) (ctx context.Context, traceParent string) {
 	t.Helper()
+
 	traceID, err := trace.TraceIDFromHex("0123456789abcdef0123456789abcdef")
 	require.NoError(t, err)
+
 	spanID, err := trace.SpanIDFromHex("0123456789abcdef")
 	require.NoError(t, err)
+
 	sc := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    traceID,
 		SpanID:     spanID,
 		TraceFlags: trace.FlagsSampled,
 	})
+
 	ctx = trace.ContextWithSpanContext(context.Background(), sc)
+
 	return ctx, tracer.TraceParentFromContext(ctx)
 }
 
@@ -43,6 +48,7 @@ func anySpan(ctrl *gomock.Controller) *mocks.MockSpan {
 	s.EXPECT().SetStatus(gomock.Any(), gomock.Any()).AnyTimes()
 	s.EXPECT().RecordError(gomock.Any()).AnyTimes()
 	s.EXPECT().End().AnyTimes()
+
 	return s
 }
 
@@ -168,9 +174,11 @@ func TestTracingInterceptor_StreamingSetsTraceResponseBeforeHandler(t *testing.T
 	conn.EXPECT().ResponseHeader().Return(respHeader).AnyTimes()
 
 	var headerAtHandler string
+
 	handler := interceptors.TracingInterceptor(tr).WrapStreamingHandler(
 		func(context.Context, connect.StreamingHandlerConn) error {
 			headerAtHandler = respHeader.Get("traceresponse") // captured before any Send
+
 			return nil
 		},
 	)

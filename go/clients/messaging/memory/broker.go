@@ -33,10 +33,12 @@ func NewBroker() *Broker {
 func (b *Broker) topic(name string) chan *interfaces.Message {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	ch := b.topics[name]
 	if ch == nil {
 		ch = make(chan *interfaces.Message, topicBuffer)
 		b.topics[name] = ch
 	}
+
 	return ch
 }

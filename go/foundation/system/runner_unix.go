@@ -36,11 +36,13 @@ func configureProcessGroup(cmd *exec.Cmd) {
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
+
 	cmd.SysProcAttr.Setpgid = true
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return nil
 		}
+
 		// Negative PID targets the whole process group (the child is the group
 		// leader because Setpgid made its PID == PGID).
 		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM); err != nil {
@@ -48,6 +50,7 @@ func configureProcessGroup(cmd *exec.Cmd) {
 			// (e.g. the group already gone).
 			return cmd.Process.Signal(syscall.SIGTERM)
 		}
+
 		return nil
 	}
 	cmd.WaitDelay = processGroupGrace

@@ -94,10 +94,12 @@ func NewAWSClient(ctx context.Context, cfg Config) (*awssqs.Client, error) {
 			"sqs: a static access key needs its secret access key",
 		)
 	}
+
 	loadOpts := []func(*awsconfig.LoadOptions) error{}
 	if cfg.AWSRegion != "" {
 		loadOpts = append(loadOpts, awsconfig.WithRegion(cfg.AWSRegion))
 	}
+
 	if cfg.AccessKeyID != "" {
 		loadOpts = append(loadOpts, awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(
@@ -129,6 +131,7 @@ func resolveAPI(ctx context.Context, cfg Config) (API, error) {
 	if cfg.API != nil {
 		return cfg.API, nil
 	}
+
 	return NewAWSClient(ctx, cfg)
 }
 
@@ -147,6 +150,7 @@ func ensureQueue(ctx context.Context, api API, queueName string) (string, error)
 	}
 
 	var notExist *sqstypes.QueueDoesNotExist
+
 	if !apperr.As(err, &notExist) {
 		return "", apperr.Wrap(err, apperr.CodeUnavailable, "sqs get queue url")
 	}
@@ -158,5 +162,6 @@ func ensureQueue(ctx context.Context, api API, queueName string) (string, error)
 	if cerr != nil {
 		return "", apperr.Wrap(cerr, apperr.CodeUnavailable, "sqs create queue")
 	}
+
 	return aws.ToString(created.QueueUrl), nil
 }

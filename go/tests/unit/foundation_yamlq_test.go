@@ -42,7 +42,9 @@ spec:
 //     path is CodeInvalidInput.
 func TestYamlq_Path(t *testing.T) {
 	t.Parallel()
+
 	var root yaml.Node
+
 	require.NoError(t, yaml.Unmarshal([]byte(yamlqDoc), &root))
 
 	got, err := yamlq.Path(&root, "$.metadata.name")
@@ -82,6 +84,7 @@ func TestYamlq_Path(t *testing.T) {
 
 	_, err = yamlq.Path(&root, "$.a[x]")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
 	_, err = yamlq.Path(&root, "metadata")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
@@ -92,6 +95,7 @@ func values(ms []yamlq.Match) []string {
 	for _, m := range ms {
 		out = append(out, m.Value)
 	}
+
 	return out
 }
 
@@ -121,6 +125,7 @@ other: true
 //     the second document survive byte for byte; a wildcard path is CodeInvalidInput.
 func TestYamlq_UpsertAndDelete(t *testing.T) {
 	t.Parallel()
+
 	out, err := yamlq.Upsert([]byte(yamlqEditDoc), "$.customers.acme.region", "eu-west-1")
 	require.NoError(t, err)
 	assert.Equal(t, `# deployment rows
@@ -188,11 +193,13 @@ other: true
 //     holds the new value at the path and keeps the sibling values.
 func TestYamlq_UpsertFlowAndMultiline(t *testing.T) {
 	t.Parallel()
+
 	type check struct {
 		want map[string]string
 		src  string
 		path string
 	}
+
 	for name, c := range map[string]check{
 		"flow mapping": {
 			src:  "region: {primary: us-east-1, rows: [a]}\n",
@@ -217,8 +224,11 @@ func TestYamlq_UpsertFlowAndMultiline(t *testing.T) {
 	} {
 		out, err := yamlq.Upsert([]byte(c.src), c.path, "eu-west-1")
 		require.NoError(t, err, name)
+
 		var doc yaml.Node
+
 		require.NoError(t, yaml.Unmarshal(out, &doc), name+": %s", out)
+
 		for path, want := range c.want {
 			got, err := yamlq.Path(&doc, path)
 			require.NoError(t, err, name)
@@ -244,6 +254,7 @@ func TestYamlq_UpsertFlowAndMultiline(t *testing.T) {
 //     selects nothing returns it unchanged; a malformed path is CodeInvalidInput.
 func TestYamlq_Rewrite(t *testing.T) {
 	t.Parallel()
+
 	const doc = `spec:
   head:
     - name: ray-head
@@ -255,10 +266,12 @@ func TestYamlq_Rewrite(t *testing.T) {
     - name: sidecar
       image: reg/other:1
 `
+
 	pin := func(old string) (string, bool) {
 		if !strings.Contains(old, "reg/vertiva/ingestion-ray") {
 			return "", false
 		}
+
 		return "reg/vertiva/ingestion-ray@sha256:abc", true
 	}
 	out, err := yamlq.Rewrite([]byte(doc), "$..image", pin)
@@ -303,11 +316,13 @@ func TestYamlq_Rewrite(t *testing.T) {
 //   - A path that selects no sequence is INVALID_INPUT.
 func TestYamlq_Append(t *testing.T) {
 	t.Parallel()
+
 	type row struct {
 		Name    string `yaml:"name"`
 		ID      string `yaml:"account_id"`
 		Enabled bool   `yaml:"enabled"`
 	}
+
 	src := `deploy:
   # the rows
   rows:
@@ -342,8 +357,10 @@ func TestYamlq_Append(t *testing.T) {
 	} {
 		out, err := yamlq.Append([]byte(in), "$.rows", row{Name: "z"})
 		require.NoError(t, err, name)
+
 		docs, err := yamlq.DecodeAll(out)
 		require.NoError(t, err, name)
+
 		got, err := yamlq.Path(docs[0], "$.rows[*].name")
 		require.NoError(t, err, name)
 		assert.Equal(t, "z", got[len(got)-1].Value, name)
@@ -351,6 +368,7 @@ func TestYamlq_Append(t *testing.T) {
 
 	_, err = yamlq.Append([]byte(src), "$.deploy.other", row{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
 	_, err = yamlq.Append([]byte(src), "$.deploy.missing", row{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
@@ -369,6 +387,7 @@ func TestYamlq_Append(t *testing.T) {
 //   - A quoted key falls back to re-encoding and still holds the value.
 func TestYamlq_UpsertUnderNull(t *testing.T) {
 	t.Parallel()
+
 	q := &yaml.Node{
 		Kind:  yaml.ScalarNode,
 		Tag:   "!!str",
@@ -389,11 +408,13 @@ func TestYamlq_UpsertUnderNull(t *testing.T) {
 			want: "shelf:\n  books:\n    title: \"v\"\n",
 		},
 	}
+
 	for name, tc := range cases {
 		path := "$.shelf.books.title"
 		if name == "tilde with comment" {
 			path = "$.a.shelf.books.title"
 		}
+
 		out, err := yamlq.Upsert([]byte(tc.src), path, q)
 		require.NoError(t, err, name)
 		assert.Equal(t, tc.want, string(out), name)
@@ -401,8 +422,10 @@ func TestYamlq_UpsertUnderNull(t *testing.T) {
 
 	out, err := yamlq.Upsert([]byte("\"shelf\": ~\n"), "$.shelf.title", q)
 	require.NoError(t, err)
+
 	docs, err := yamlq.DecodeAll(out)
 	require.NoError(t, err)
+
 	got, err := yamlq.Path(docs[0], "$.shelf.title")
 	require.NoError(t, err)
 	require.Len(t, got, 1)
@@ -420,6 +443,7 @@ func TestYamlq_UpsertUnderNull(t *testing.T) {
 //     comment kept above them; a sequence step on an empty source is CodeInvalidInput.
 func TestYamlq_UpsertEmptyDocument(t *testing.T) {
 	t.Parallel()
+
 	out, err := yamlq.Upsert(nil, "$.shelf.title", "v")
 	require.NoError(t, err)
 	assert.Equal(t, "shelf:\n  title: v\n", string(out))

@@ -57,9 +57,11 @@ func (m *Manager) Start(ctx context.Context) error {
 			for j := i - 1; j >= 0; j-- {
 				_ = m.entries[j].client.Stop(ctx)
 			}
+
 			return apperr.Wrap(err, apperr.CodeInternal, "start "+e.name)
 		}
 	}
+
 	return nil
 }
 
@@ -67,6 +69,7 @@ func (m *Manager) Start(ctx context.Context) error {
 // and returning the first error encountered so shutdown always completes.
 func (m *Manager) Stop(ctx context.Context) error {
 	var firstErr error
+
 	for i := len(m.entries) - 1; i >= 0; i-- {
 		if err := m.entries[i].client.Stop(ctx); err != nil && firstErr == nil {
 			firstErr = apperr.Wrap(
@@ -76,5 +79,6 @@ func (m *Manager) Stop(ctx context.Context) error {
 			)
 		}
 	}
+
 	return firstErr
 }

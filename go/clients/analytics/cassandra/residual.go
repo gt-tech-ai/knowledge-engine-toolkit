@@ -49,8 +49,10 @@ func (residual) Clause(col string, op types.FilterOperator, v any) predicate {
 	if col == TimeField {
 		return func(r stored) bool { return compareTime(r.ts, op, v) }
 	}
+
 	return func(r stored) bool {
 		got, ok := r.dims[col]
+
 		return ok && compareString(got, op, v)
 	}
 }
@@ -68,6 +70,7 @@ func (residual) And(subs []predicate) predicate {
 				return false
 			}
 		}
+
 		return true
 	}
 }
@@ -80,6 +83,7 @@ func (residual) Or(subs []predicate) predicate {
 				return true
 			}
 		}
+
 		return false
 	}
 }
@@ -110,11 +114,13 @@ func compareString(got string, op types.FilterOperator, v any) bool {
 		return got != fmt.Sprint(v)
 	case types.OpIn, types.OpNotIn:
 		found := false
+
 		if list, ok := v.([]any); ok {
 			for _, item := range list {
 				found = found || got == fmt.Sprint(item)
 			}
 		}
+
 		return found == (op == types.OpIn)
 	case types.OpLike:
 		return strings.Contains(strings.ToLower(got), strings.ToLower(fmt.Sprint(v)))
@@ -137,6 +143,7 @@ func compareTime(got time.Time, op types.FilterOperator, v any) bool {
 	if !ok {
 		return false
 	}
+
 	switch op {
 	case types.OpEq:
 		return got.Equal(want)
@@ -163,21 +170,25 @@ func compareTime(got time.Time, op types.FilterOperator, v any) bool {
 // is always a superset of the matching rows; the residual predicate is exact.
 func pushdown(f types.Filter, lo, hi time.Time) (from, to time.Time) {
 	var clauses []types.Filter
+
 	switch v := f.(type) {
 	case types.FilterClause:
 		clauses = []types.Filter{v}
 	case types.CompositeFilter:
 		clauses = v.And
 	}
+
 	for _, c := range clauses {
 		clause, ok := c.(types.FilterClause)
 		if !ok || clause.Field != TimeField {
 			continue
 		}
+
 		at, ok := clause.Value.(time.Time)
 		if !ok {
 			continue
 		}
+
 		switch clause.Operator {
 		case types.OpGt, types.OpGte:
 			if down := at.Truncate(time.Millisecond); down.After(lo) {
@@ -199,6 +210,7 @@ func pushdown(f types.Filter, lo, hi time.Time) (from, to time.Time) {
 			// These do not bound the range; the residual predicate applies them.
 		}
 	}
+
 	return lo, hi
 }
 
@@ -207,6 +219,7 @@ func maxTime(a, b time.Time) time.Time {
 	if b.After(a) {
 		return b
 	}
+
 	return a
 }
 
@@ -215,5 +228,6 @@ func minTime(a, b time.Time) time.Time {
 	if b.Before(a) {
 		return b
 	}
+
 	return a
 }

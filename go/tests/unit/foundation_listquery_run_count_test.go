@@ -35,6 +35,7 @@ func (r *countStubRunner) Count(
 	if r.total > bound {
 		return bound, nil
 	}
+
 	return r.total, nil
 }
 
@@ -71,6 +72,7 @@ func TestRun_OffsetTotalCount_BoundedExactVsEstimate(t *testing.T) {
 
 	t.Run("within cap is exact", func(t *testing.T) {
 		t.Parallel()
+
 		r := &countStubRunner{rows: []int{1, 2, 3}, total: 3}
 		page, err := listquery.Run(
 			context.Background(),
@@ -85,6 +87,7 @@ func TestRun_OffsetTotalCount_BoundedExactVsEstimate(t *testing.T) {
 
 	t.Run("over cap is a capped estimate", func(t *testing.T) {
 		t.Parallel()
+
 		r := &countStubRunner{rows: []int{1, 2, 3}, total: 5000}
 		page, err := listquery.Run(
 			context.Background(),
@@ -102,6 +105,7 @@ func TestRun_OffsetTotalCount_BoundedExactVsEstimate(t *testing.T) {
 	// catch it).
 	t.Run("exactly at cap is exact", func(t *testing.T) {
 		t.Parallel()
+
 		r := &countStubRunner{rows: []int{1, 2, 3}, total: 10}
 		page, err := listquery.Run(
 			context.Background(),
@@ -121,6 +125,7 @@ func TestRun_OffsetTotalCount_BoundedExactVsEstimate(t *testing.T) {
 
 	t.Run("one over cap is a capped estimate", func(t *testing.T) {
 		t.Parallel()
+
 		r := &countStubRunner{rows: []int{1, 2, 3}, total: 11}
 		page, err := listquery.Run(
 			context.Background(),
@@ -147,6 +152,7 @@ func TestRun_OffsetTotalCount_BoundedExactVsEstimate(t *testing.T) {
 //   - With Bounds.CountCap == 0, Run asks the runner for DefaultCountCap+1.
 func TestRun_OffsetTotalCount_DefaultCapFallback(t *testing.T) {
 	t.Parallel()
+
 	r := &countStubRunner{rows: []int{1}, total: 1}
 	_, err := listquery.Run(
 		context.Background(),

@@ -52,6 +52,7 @@ func New(client *goredis.Client, cfg Config) *Buffer {
 	if cfg.KeyPrefix == "" {
 		cfg.KeyPrefix = DefaultKeyPrefix
 	}
+
 	return &Buffer{client: client, cfg: cfg, pruneScript: goredis.NewScript(pruneLua)}
 }
 
@@ -76,9 +77,11 @@ func (b *Buffer) Append(ctx context.Context, key, msgID string, payload []byte) 
 	pipe.RPush(ctx, lk, msgID+nul+string(payload))
 	pipe.LTrim(ctx, lk, int64(-b.cfg.MaxSize), -1)
 	pipe.Expire(ctx, lk, b.cfg.TTL)
+
 	if _, err := pipe.Exec(ctx); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "replaybuffer append")
 	}
+
 	return nil
 }
 
@@ -98,25 +101,31 @@ func (b *Buffer) ReplayAfter(
 	if err != nil {
 		return nil, false, apperr.Wrap(err, apperr.CodeInternal, "replaybuffer lrange")
 	}
+
 	lw, err := b.client.Get(ctx, b.lwKey(key)).Result()
 	if err != nil && !apperr.StdIs(err, goredis.Nil) {
 		return nil, false, apperr.Wrap(err, apperr.CodeInternal, "replaybuffer get lw")
 	}
+
 	if len(elems) == 0 && lw == "" {
 		return nil, false, nil // absent or expired → gap
 	}
+
 	if afterMsgID == "" {
 		return nil, false, nil // received nothing → full-refresh
 	}
+
 	msgs := decodeAll(elems)
 	if afterMsgID == lw {
 		return msgs, true, nil // acked exactly the low-water mark → whole tail is gapless
 	}
+
 	for i, m := range msgs {
 		if m.ID == afterMsgID {
 			return msgs[i+1:], true, nil
 		}
 	}
+
 	return nil, false, nil // not retained → gap
 }
 
@@ -156,6 +165,7 @@ func (b *Buffer) Prune(ctx context.Context, key, upToMsgID string) error {
 	).Err(); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "replaybuffer prune")
 	}
+
 	return nil
 }
 
@@ -164,6 +174,7 @@ func (b *Buffer) Delete(ctx context.Context, key string) error {
 	if err := b.client.Del(ctx, b.listKey(key), b.lwKey(key)).Err(); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "replaybuffer delete")
 	}
+
 	return nil
 }
 
@@ -172,8 +183,10 @@ func decodeAll(elems []string) []interfaces.BufferedMessage {
 	msgs := make([]interfaces.BufferedMessage, 0, len(elems))
 	for _, e := range elems {
 		id, payload := decode(e)
+
 		msgs = append(msgs, interfaces.BufferedMessage{ID: id, Payload: payload})
 	}
+
 	return msgs
 }
 
@@ -183,5 +196,6 @@ func decode(e string) (id string, payload []byte) {
 	if !found {
 		return e, nil
 	}
+
 	return id, []byte(rest)
 }

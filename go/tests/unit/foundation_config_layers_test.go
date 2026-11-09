@@ -51,10 +51,12 @@ func TestLayerConfigValidate_RejectsBadValues(t *testing.T) {
 	require.NoError(t, repos.DefaultConfig().Validate())
 
 	badPage := stores.DefaultConfig()
+
 	badPage.DefaultPageSize = 0
 	require.Error(t, badPage.Validate())
 
 	badMax := stores.DefaultConfig()
+
 	badMax.MaxPageSize = 5 // below default_page_size 20
 	assert.Error(t, badMax.Validate())
 }

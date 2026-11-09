@@ -35,6 +35,7 @@ func UUID(field, v string) error {
 	if _, err := uuid.Parse(v); err != nil {
 		return apperr.InvalidInput(field + ": must be a valid UUID")
 	}
+
 	return nil
 }
 
@@ -48,6 +49,7 @@ func MinMaxLen(field, v string, minLen, maxLen int) error {
 			fmt.Sprintf("%s: length %d not in [%d, %d]", field, n, minLen, maxLen),
 		)
 	}
+
 	return nil
 }
 
@@ -58,6 +60,7 @@ func MaxBytes(field, v string, maxBytes int) error {
 			fmt.Sprintf("%s: %d bytes exceeds max %d", field, len(v), maxBytes),
 		)
 	}
+
 	return nil
 }
 
@@ -69,11 +72,13 @@ func Filename(field, v string, maxBytes int) error {
 	if v == "" {
 		return apperr.InvalidInput(field + ": must not be empty")
 	}
+
 	if maxBytes > 0 && len(v) > maxBytes {
 		return apperr.InvalidInput(
 			fmt.Sprintf("%s: %d bytes exceeds max %d", field, len(v), maxBytes),
 		)
 	}
+
 	// The proto CEL rejects ANY ".." substring (not just a leading traversal), so mirror
 	// that in addition to filepath.IsLocal (which only rejects an absolute/escaping path)
 	// and the separators.
@@ -82,9 +87,11 @@ func Filename(field, v string, maxBytes int) error {
 			field + ": must be a bare, local filename (no path separators or traversal)",
 		)
 	}
+
 	if strings.ContainsFunc(v, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
 		return apperr.InvalidInput(field + ": must not contain control characters")
 	}
+
 	return nil
 }
 
@@ -96,6 +103,7 @@ func HTTPSURL(field, v string) error {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return apperr.InvalidInput(field + ": must be an http(s) URL")
 	}
+
 	return nil
 }
 
@@ -107,6 +115,7 @@ func Email(field, v string) error {
 	if err != nil || addr.Name != "" || addr.Address != v {
 		return apperr.InvalidInput(field + ": must be a valid email address")
 	}
+
 	return nil
 }
 
@@ -119,6 +128,7 @@ func IntRange(field string, v, lo, hi int64) error {
 			fmt.Sprintf("%s: %d out of range [%d, %d]", field, v, lo, hi),
 		)
 	}
+
 	return nil
 }
 
@@ -129,6 +139,7 @@ func MaxItems(field string, n, maxItems int) error {
 			fmt.Sprintf("%s: %d items exceeds max %d", field, n, maxItems),
 		)
 	}
+
 	return nil
 }
 
@@ -140,6 +151,7 @@ func EnumDefined(field string, v int32, valid []int32) error {
 			return nil
 		}
 	}
+
 	return apperr.InvalidInput(
 		fmt.Sprintf("%s: %d is not a defined enum value", field, v),
 	)

@@ -55,6 +55,7 @@ func CORS(cfg *CORSConfig) Middleware {
 	// Build a set for O(1) origin lookup
 	allowAll := len(cfg.AllowOrigins) == 1 && cfg.AllowOrigins[0] == "*"
 	originSet := make(map[string]struct{}, len(cfg.AllowOrigins))
+
 	for _, o := range cfg.AllowOrigins {
 		originSet[o] = struct{}{}
 	}
@@ -74,13 +75,16 @@ func CORS(cfg *CORSConfig) Middleware {
 
 			w.Header().Set("Access-Control-Allow-Methods", methods)
 			w.Header().Set("Access-Control-Allow-Headers", headers)
+
 			if exposed != "" {
 				w.Header().Set("Access-Control-Expose-Headers", exposed)
 			}
+
 			w.Header().Set("Access-Control-Max-Age", cfg.MaxAge)
 
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
+
 				return
 			}
 

@@ -38,6 +38,7 @@ func TestDeadLetterQueue_SwallowsBackendFailureAndRedrives(t *testing.T) {
 	failingBackend.EXPECT().
 		Send(gomock.Any(), gomock.Any()).
 		Return(apperr.Sentinel("dlq unavailable"))
+
 	failing := deadletter.New(failingBackend, fixtures.NewSpyLogger())
 	require.False(t, failing.Send(context.Background(), letter),
 		"a backend failure must return false so the caller redrives the source message")

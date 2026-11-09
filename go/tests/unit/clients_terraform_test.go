@@ -42,6 +42,7 @@ const terraformShow = `{"format_version":"1.2","resource_changes":[
 //     INVALID_INPUT; the stub plans nothing.
 func TestClientsTerraform_PlanAndApply(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	r := mocks.NewMockCommandRunner(gomock.NewController(t))
 	c, err := terraform.NewFromConfig(ctx, terraform.Config{Kind: terraform.KindExec},
@@ -56,6 +57,7 @@ func TestClientsTerraform_PlanAndApply(t *testing.T) {
 		r.EXPECT().RunBuffered(gomock.Any(), "envs/stg", "terraform", "show", "-json",
 			"tf.plan").Return(interfaces.CmdResult{Stdout: []byte(terraformShow)}),
 	)
+
 	p, err := c.Plan(ctx, "envs/stg", "tf.plan")
 	require.NoError(t, err)
 	assert.Equal(t, 2, p.Add)
@@ -73,12 +75,14 @@ func TestClientsTerraform_PlanAndApply(t *testing.T) {
 
 	r.EXPECT().RunBuffered(gomock.Any(), "envs/stg", "terraform", "show", "-json", "x").
 		Return(interfaces.CmdResult{Stdout: []byte("not json")})
+
 	_, err = c.Show(ctx, "envs/stg", "x")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	stub, err := terraform.NewFromConfig(ctx, terraform.Config{},
 		terraform.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
+
 	p, err = stub.Plan(ctx, "d", "o")
 	require.NoError(t, err)
 	assert.True(t, p.Empty())

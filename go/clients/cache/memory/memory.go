@@ -58,6 +58,7 @@ func New(maxEntries int, defaultTTL time.Duration, now func() time.Time) *Cache 
 	if maxEntries <= 0 {
 		maxEntries = DefaultMaxEntries
 	}
+
 	return &Cache{
 		now:   now,
 		items: map[string]*list.Element{},
@@ -72,16 +73,21 @@ func New(maxEntries int, defaultTTL time.Duration, now func() time.Time) *Cache 
 func (c *Cache) Get(_ context.Context, key string) ([]byte, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	el, ok := c.items[key]
 	if !ok {
 		return nil, false
 	}
+
 	e, _ := el.Value.(*entry)
 	if !c.now().Before(e.expires) {
 		c.remove(el)
+
 		return nil, false
 	}
+
 	c.order.MoveToFront(el)
+
 	return append([]byte(nil), e.value...), true
 }
 
@@ -92,17 +98,22 @@ func (c *Cache) Set(_ context.Context, key string, value []byte, ttl time.Durati
 	if ttl == 0 {
 		ttl = c.ttl
 	}
+
 	if ttl <= 0 {
 		return
 	}
+
 	e := &entry{key: key, value: append([]byte(nil), value...), expires: c.now().Add(ttl)}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	if el, ok := c.items[key]; ok {
 		el.Value = e
 		c.order.MoveToFront(el)
+
 		return
 	}
+
 	c.items[key] = c.order.PushFront(e)
 	for c.order.Len() > c.max {
 		c.remove(c.order.Back())
@@ -113,6 +124,7 @@ func (c *Cache) Set(_ context.Context, key string, value []byte, ttl time.Durati
 func (c *Cache) Delete(_ context.Context, key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	if el, ok := c.items[key]; ok {
 		c.remove(el)
 	}

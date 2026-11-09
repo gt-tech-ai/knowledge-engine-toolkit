@@ -25,6 +25,7 @@ import (
 //   - a file that does not parse is CodeInvalidInput naming it.
 func TestFoundationCodebase_Docs(t *testing.T) {
 	t.Parallel()
+
 	cb := memoryCodebase(t, map[string]string{
 		"infra/main.tf": "resource \"aws_kms_alias\" \"cosign\" {\n" +
 			"  name          = \"alias/cosign\"\n" +
@@ -71,8 +72,10 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, tf, 1)
 	assert.Equal(t, "hcl", tf[0].Format)
+
 	doc, ok := tf[0].Value.(map[string]any)
 	require.True(t, ok)
+
 	aliases := doc["resource"].(map[string]any)["aws_kms_alias"].(map[string]any)
 	alias := aliases["cosign"].([]any)[0].(map[string]any)
 	assert.Equal(t, "alias/cosign", alias["name"])
@@ -88,11 +91,13 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, alloy, 1)
 	assert.Equal(t, "alloy", alloy[0].Format)
+
 	adoc := alloy[0].Value.(map[string]any)
 	sources := adoc["loki.source.kubernetes"].(map[string]any)
 	source := sources["pods"].([]any)[0].(map[string]any)
 	assert.Equal(t, []any{"loki.process.redact.receiver"}, source["forward_to"],
 		"a reference is its source text")
+
 	proc := adoc["loki.process"].(map[string]any)["redact"].([]any)[0].(map[string]any)
 	stages := proc["stage.replace"].([]any)
 	require.Len(t, stages, 2)

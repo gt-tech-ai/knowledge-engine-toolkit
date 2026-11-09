@@ -48,6 +48,7 @@ func DefaultServerConfig() ServerConfig {
 // Interceptors should be provided via options.
 func NewServer(cfg ServerConfig, opts ...grpc.ServerOption) *grpc.Server {
 	serverOpts := make([]grpc.ServerOption, 0, 4+len(opts))
+
 	serverOpts = append(serverOpts,
 		grpc.MaxRecvMsgSize(cfg.MaxMessageSize),
 		grpc.MaxSendMsgSize(cfg.MaxMessageSize),

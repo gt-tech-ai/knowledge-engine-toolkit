@@ -19,6 +19,7 @@ func (v Verdict) Step(name, group string) StepResult {
 	if v.Status == StatusFail || v.Status == StatusWarn {
 		r.Error = v.summary()
 	}
+
 	return r
 }
 
@@ -39,7 +40,9 @@ func (v Verdict) render() string {
 	if len(v.Findings) == 0 {
 		return v.Detail
 	}
+
 	var b strings.Builder
+
 	for _, f := range v.Findings {
 		switch {
 		case f.File != "" && f.Line > 0:
@@ -47,13 +50,17 @@ func (v Verdict) render() string {
 		case f.File != "":
 			b.WriteString(f.File + ": ")
 		}
+
 		if f.Rule != "" {
 			b.WriteString(f.Rule + ": ")
 		}
+
 		b.WriteString(f.Message + "\n")
 	}
+
 	if v.Detail != "" {
 		b.WriteString(v.Detail + "\n")
 	}
+
 	return b.String()
 }

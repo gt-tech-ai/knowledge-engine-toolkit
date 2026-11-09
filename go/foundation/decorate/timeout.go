@@ -16,13 +16,17 @@ func NewTimeout(timeout time.Duration) OpMiddleware {
 			if timeout <= 0 {
 				return next(ctx)
 			}
+
 			ctx, cancel := context.WithTimeout(ctx, timeout)
+
 			defer cancel()
+
 			err := next(ctx)
 			if err != nil && apperr.StdIs(err, context.DeadlineExceeded) &&
 				apperr.Code(err) != apperr.CodeTimeout {
 				return apperr.Wrap(err, apperr.CodeTimeout, op+" timed out")
 			}
+
 			return err
 		},
 	)

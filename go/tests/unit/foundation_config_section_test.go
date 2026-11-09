@@ -23,21 +23,26 @@ import (
 //   - A decode failure and a validation failure are CodeInvalidInput.
 func TestSection_DecodesAndValidates(t *testing.T) {
 	t.Parallel()
+
 	loader := mocks.NewMockConfigLoader(gomock.NewController(t))
 
 	loader.EXPECT().UnmarshalKey("logging", gomock.Any()).DoAndReturn(
 		func(_ string, target any) error {
 			cfg, ok := target.(*infra.LoggingConfig)
 			require.True(t, ok)
+
 			*cfg = infra.DefaultLoggingConfig()
+
 			return nil
 		})
+
 	got, err := config.Section[infra.LoggingConfig](loader, "logging")
 	require.NoError(t, err)
 	require.Equal(t, infra.DefaultLoggingConfig(), got)
 
 	loader.EXPECT().UnmarshalKey("logging", gomock.Any()).
 		Return(apperr.Sentinel("bad yaml"))
+
 	_, err = config.Section[infra.LoggingConfig](loader, "logging")
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
@@ -45,9 +50,12 @@ func TestSection_DecodesAndValidates(t *testing.T) {
 		func(_ string, target any) error {
 			cfg, ok := target.(*infra.LoggingConfig)
 			require.True(t, ok)
+
 			cfg.Level = "shout"
+
 			return nil
 		})
+
 	_, err = config.Section[infra.LoggingConfig](loader, "logging")
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

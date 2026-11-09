@@ -21,17 +21,21 @@ func AppendSummary(path, markdown string) error {
 	if path == "" {
 		return nil
 	}
+
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, summaryMode)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open the job summary")
 	}
+
 	_, werr := f.WriteString(markdown + "\n")
 	if cerr := f.Close(); werr == nil {
 		werr = cerr
 	}
+
 	if werr != nil {
 		return apperr.Wrap(werr, apperr.CodeInternal, "write the job summary")
 	}
+
 	return nil
 }
 
@@ -46,6 +50,7 @@ func MaskEnv(w io.Writer, env []string) error {
 			if line = strings.TrimSpace(line); line == "" {
 				continue
 			}
+
 			if _, err := fmt.Fprintf(
 				w,
 				"::add-mask::%s\n",
@@ -55,6 +60,7 @@ func MaskEnv(w io.Writer, env []string) error {
 			}
 		}
 	}
+
 	return nil
 }
 

@@ -40,14 +40,17 @@ func TestWorkflowTier_Order(t *testing.T) {
 // after a successful fn.
 func txManager(t *testing.T, n int, commitErr error) *mocks.MockTransactionManager {
 	t.Helper()
+
 	tx := mocks.NewMockTransactionManager(gomock.NewController(t))
 	tx.EXPECT().WithTransaction(gomock.Any(), gomock.Any()).Times(n).DoAndReturn(
 		func(ctx context.Context, fn func(context.Context) error) error {
 			if err := fn(interfaces.WithInTx(ctx)); err != nil {
 				return err
 			}
+
 			return commitErr
 		})
+
 	return tx
 }
 
@@ -85,6 +88,7 @@ func inTx(ctx context.Context) (bool, error) { return interfaces.InTx(ctx), nil 
 //   - Name is the workflow's.
 func TestWorkflowBase_ReadCommandAndSagaShapes(t *testing.T) {
 	t.Parallel()
+
 	flows := testWorkflow(txManager(t, 2, nil))
 	assert.Equal(t, "test", flows.Name())
 
@@ -116,6 +120,7 @@ func TestWorkflowBase_ReadCommandAndSagaShapes(t *testing.T) {
 //     zero output.
 func TestWorkflowBase_TransactionErrorsKeepTheirCodeAndNoResult(t *testing.T) {
 	t.Parallel()
+
 	for name, tc := range map[string]struct {
 		bodyErr, commitErr error
 		code               apperr.ErrorCode
@@ -130,8 +135,10 @@ func TestWorkflowBase_TransactionErrorsKeepTheirCodeAndNoResult(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			flows := testWorkflow(txManager(t, 2, tc.commitErr))
 			body := func(context.Context) (int, error) { return 7, tc.bodyErr }
+
 			for shape, run := range map[string]func() (int, error){
 				"ExecTx": func() (int, error) { return flows.ExecTx(t.Context(), "order", body) },
 				"InTx":   func() (int, error) { return flows.InTx(t.Context(), body) },
@@ -158,15 +165,18 @@ func TestWorkflowBase_TransactionErrorsKeepTheirCodeAndNoResult(t *testing.T) {
 //   - ExecTx on a base with no transaction manager fails INTERNAL.
 func TestWorkflowBase_RefusesANestedOrUnmanagedTransaction(t *testing.T) {
 	t.Parallel()
+
 	flows := testWorkflow(txManager(t, 0, nil))
 	nested := interfaces.WithInTx(t.Context())
 	body := func(context.Context) (int, error) {
 		t.Error("the body of a refused transaction must not run")
+
 		return 0, nil
 	}
 
 	_, err := flows.ExecTx(nested, "nested", body)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
+
 	_, err = flows.InTx(nested, body)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
@@ -185,11 +195,17 @@ func TestWorkflowBase_RefusesANestedOrUnmanagedTransaction(t *testing.T) {
 //     error; a panicking pass returns INTERNAL.
 func TestWorkflowBasePass_DecoratesALoopPass(t *testing.T) {
 	t.Parallel()
+
 	flows := testWorkflow(txManager(t, 0, nil))
-	var decorator loop.Decorator = flows.Pass
-	var sawTx bool
+
+	var (
+		decorator loop.Decorator = flows.Pass
+		sawTx     bool
+	)
+
 	pass := decorator("relay-pass", loop.Pass(func(ctx context.Context) error {
 		sawTx = interfaces.InTx(ctx)
+
 		return apperr.New(apperr.CodeUnavailable, "sink down")
 	}))
 	_, err := pass.Execute(t.Context(), struct{}{})
@@ -213,12 +229,14 @@ func TestWorkflowBasePass_DecoratesALoopPass(t *testing.T) {
 //   - A panicking operation returns an INTERNAL error.
 func TestWorkflowBase_AppliesTimeoutAndRecovery(t *testing.T) {
 	t.Parallel()
+
 	bounded := fixtures.Must(workflow.NewBase[testFlows](decorate.Fixed(decorate.Deps{
 		Observability: decorate.Observability{Logger: fixtures.NopLogger()},
 		Timeout:       5 * time.Millisecond,
 	}), "bounded", nil))
 	_, err := bounded.Exec(t.Context(), "slow", func(ctx context.Context) (int, error) {
 		<-ctx.Done()
+
 		return 0, ctx.Err()
 	})
 	require.ErrorIs(t, err, context.DeadlineExceeded)

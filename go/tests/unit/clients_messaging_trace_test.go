@@ -38,21 +38,26 @@ func traceOf(ctx context.Context) oteltrace.TraceID {
 //   - A handler's context carries the publisher's trace id.
 func TestMemoryMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 	otel.SetTextMapPropagator(propagation.TraceContext{})
+
 	sc := sampledSpanContext()
 	ctx := oteltrace.ContextWithSpanContext(t.Context(), sc)
 	// The consumer runs on its own context, with no span of the publisher's.
 	consumer := oteltrace.ContextWithSpanContext(ctx, oteltrace.SpanContext{})
 	broker := memory.NewBroker()
 	require.NoError(t, memory.NewPublisher(broker).Publish(ctx, "topic", []byte("x")))
+
 	sub := memory.NewSubscriber(broker, client.Base{})
 	got := make(chan oteltrace.TraceID, 1)
+
 	go func() {
 		_ = sub.Subscribe(consumer, "topic",
 			func(ctx context.Context, _ *interfaces.Message) error {
 				got <- traceOf(ctx)
+
 				return nil
 			})
 	}()
+
 	assert.Equal(t, sc.TraceID(), recv(t, got, "the handler to run"))
 	require.NoError(t, sub.Close())
 }
@@ -71,6 +76,7 @@ func TestMemoryMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 //     and runs the handler on a context carrying the publisher's trace id.
 func TestSQSMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 	otel.SetTextMapPropagator(propagation.TraceContext{})
+
 	sc := sampledSpanContext()
 	ctx := oteltrace.ContextWithSpanContext(t.Context(), sc)
 	// The consumer runs on its own context, with no span of the publisher's.
@@ -79,20 +85,27 @@ func TestSQSMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
 		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
 		AnyTimes()
+
 	var sent map[string]sqstypes.MessageAttributeValue
+
 	api.EXPECT().SendMessage(gomock.Any(), gomock.Any()).DoAndReturn(func(
 		_ context.Context, in *awssqs.SendMessageInput, _ ...func(*awssqs.Options),
 	) (*awssqs.SendMessageOutput, error) {
 		sent = in.MessageAttributes
+
 		return &awssqs.SendMessageOutput{}, nil
 	})
+
 	var batched map[string]sqstypes.MessageAttributeValue
+
 	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).DoAndReturn(func(
 		_ context.Context, in *awssqs.SendMessageBatchInput, _ ...func(*awssqs.Options),
 	) (*awssqs.SendMessageBatchOutput, error) {
 		batched = in.Entries[0].MessageAttributes
+
 		return &awssqs.SendMessageBatchOutput{}, nil
 	})
+
 	pub, err := sqs.NewPublisher(ctx, sqs.Config{API: api})
 	require.NoError(t, err)
 	require.NoError(t, pub.Publish(ctx, "q", []byte("x")))
@@ -107,36 +120,46 @@ func TestSQSMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 	assert.Equal(t, sent, batched)
 
 	var asked []string
+
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).DoAndReturn(func(
 		ctx context.Context, in *awssqs.ReceiveMessageInput, _ ...func(*awssqs.Options),
 	) (*awssqs.ReceiveMessageOutput, error) {
 		if asked == nil {
 			asked = in.MessageAttributeNames
+
 			return &awssqs.ReceiveMessageOutput{Messages: []sqstypes.Message{{
 				MessageId: aws.String("m1"), Body: aws.String("x"),
 				ReceiptHandle: aws.String("rh"), MessageAttributes: sent,
 			}}}, nil
 		}
+
 		<-ctx.Done()
+
 		return nil, ctx.Err()
 	}).AnyTimes()
 	api.EXPECT().DeleteMessageBatch(gomock.Any(), gomock.Any()).
 		Return(&awssqs.DeleteMessageBatchOutput{}, nil).AnyTimes()
+
 	sub, err := sqs.NewSubscriber(
 		ctx,
 		sqs.Config{API: api, BaseBackoff: time.Millisecond},
 	)
 	require.NoError(t, err)
+
 	type delivery struct {
 		metadata map[string]string
 		trace    oteltrace.TraceID
 	}
+
 	got := make(chan delivery, 1)
+
 	require.NoError(t, sub.Subscribe(consumer, "q",
 		func(ctx context.Context, m *interfaces.Message) error {
 			got <- delivery{trace: traceOf(ctx), metadata: m.Metadata}
+
 			return nil
 		}))
+
 	d := recv(t, got, "the handler to run")
 	require.NoError(t, sub.Close())
 	assert.Equal(t, []string{"All"}, asked)

@@ -33,9 +33,11 @@ func (p *Prompter) Confirm(ctx context.Context, question string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, apperr.Wrap(err, apperr.CodeCanceled, "confirmation cancelled")
 	}
+
 	if _, err := fmt.Fprintf(p.out, "%s [y/N] ", question); err != nil {
 		return false, apperr.Wrap(err, apperr.CodeInternal, "write confirmation prompt")
 	}
+
 	line, err := p.in.ReadString('\n')
 	switch {
 	case err == io.EOF && line == "":
@@ -43,6 +45,8 @@ func (p *Prompter) Confirm(ctx context.Context, question string) (bool, error) {
 	case err != nil && err != io.EOF:
 		return false, apperr.Wrap(err, apperr.CodeInternal, "read confirmation answer")
 	}
+
 	answer := strings.ToLower(strings.TrimSpace(line))
+
 	return answer == "y" || answer == "yes", nil
 }

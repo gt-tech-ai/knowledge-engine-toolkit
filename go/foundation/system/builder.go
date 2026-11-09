@@ -44,6 +44,7 @@ func NewBuilder(base CommandRunner) *Builder {
 // directory, duration, and error after each call.
 func (b *Builder) WithLogging(logf LogFunc) *Builder {
 	b.logf = logf
+
 	return b
 }
 
@@ -51,6 +52,7 @@ func (b *Builder) WithLogging(logf LogFunc) *Builder {
 // given deadline.
 func (b *Builder) WithTimeout(d time.Duration) *Builder {
 	b.timeout = d
+
 	return b
 }
 
@@ -59,6 +61,7 @@ func (b *Builder) WithTimeout(d time.Duration) *Builder {
 // become their WithEnv forms.
 func (b *Builder) WithEnv(env ...string) *Builder {
 	b.env = append(b.env, env...)
+
 	return b
 }
 
@@ -66,6 +69,7 @@ func (b *Builder) WithEnv(env ...string) *Builder {
 // (OnStart, OnSuccess, OnFailure) around every command execution.
 func (b *Builder) WithHook(hook interfaces.CmdHook) *Builder {
 	b.hook = hook
+
 	return b
 }
 
@@ -73,6 +77,7 @@ func (b *Builder) WithHook(hook interfaces.CmdHook) *Builder {
 // without actually running commands.
 func (b *Builder) WithDryRun(enabled bool) *Builder {
 	b.dryRun = enabled
+
 	return b
 }
 
@@ -84,15 +89,19 @@ func (b *Builder) Build() CommandRunner {
 	if len(b.env) > 0 {
 		r = &envRunner{inner: r, env: b.env}
 	}
+
 	if b.hook != nil {
 		r = &hookRunner{inner: r, hook: b.hook}
 	}
+
 	if b.timeout > 0 {
 		r = &timeoutRunner{inner: r, timeout: b.timeout}
 	}
+
 	if b.logf != nil {
 		r = &loggingRunner{inner: r, logf: b.logf}
 	}
+
 	if b.dryRun {
 		r = &dryRunRunner{inner: r, logf: b.logf}
 	}
@@ -196,6 +205,7 @@ func (d *loggingRunner) Run(ctx context.Context, dir, name string, args ...strin
 	err := d.inner.Run(ctx, dir, name, args...)
 	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
 		name, strings.Join(args, " "), dir, time.Since(start), err)
+
 	return err
 }
 
@@ -212,6 +222,7 @@ func (d *loggingRunner) RunWithEnv(
 	err := d.inner.RunWithEnv(ctx, dir, extraEnv, name, args...)
 	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
 		name, strings.Join(args, " "), dir, time.Since(start), err)
+
 	return err
 }
 
@@ -226,6 +237,7 @@ func (d *loggingRunner) RunBuffered(
 	cr := d.inner.RunBuffered(ctx, dir, name, args...)
 	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
 		name, strings.Join(args, " "), dir, time.Since(start), cr.Err)
+
 	return cr
 }
 
@@ -242,6 +254,7 @@ func (d *loggingRunner) RunBufferedWithEnv(
 	cr := d.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
 	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
 		name, strings.Join(args, " "), dir, time.Since(start), cr.Err)
+
 	return cr
 }
 
@@ -260,6 +273,7 @@ func (d *loggingRunner) RunBufferedWithInput(
 	cr := d.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
 	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
 		name, strings.Join(args, " "), dir, time.Since(start), cr.Err)
+
 	return cr
 }
 
@@ -291,6 +305,7 @@ type timeoutRunner struct {
 func (d *timeoutRunner) Run(ctx context.Context, dir, name string, args ...string) error {
 	ctx, cancel := context.WithTimeout(ctx, d.timeout)
 	defer cancel()
+
 	return d.inner.Run(ctx, dir, name, args...)
 }
 
@@ -305,6 +320,7 @@ func (d *timeoutRunner) RunWithEnv(
 ) error {
 	ctx, cancel := context.WithTimeout(ctx, d.timeout)
 	defer cancel()
+
 	return d.inner.RunWithEnv(ctx, dir, extraEnv, name, args...)
 }
 
@@ -317,6 +333,7 @@ func (d *timeoutRunner) RunBuffered(
 ) CmdResult {
 	ctx, cancel := context.WithTimeout(ctx, d.timeout)
 	defer cancel()
+
 	return d.inner.RunBuffered(ctx, dir, name, args...)
 }
 
@@ -331,6 +348,7 @@ func (d *timeoutRunner) RunBufferedWithEnv(
 ) CmdResult {
 	ctx, cancel := context.WithTimeout(ctx, d.timeout)
 	defer cancel()
+
 	return d.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
 }
 
@@ -347,6 +365,7 @@ func (d *timeoutRunner) RunBufferedWithInput(
 ) CmdResult {
 	ctx, cancel := context.WithTimeout(ctx, d.timeout)
 	defer cancel()
+
 	return d.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
 }
 
@@ -384,6 +403,7 @@ func (d *dryRunRunner) log(name string, args ...string) {
 // Run logs the command instead of executing it and returns nil.
 func (d *dryRunRunner) Run(_ context.Context, _, name string, args ...string) error {
 	d.log(name, args...)
+
 	return nil
 }
 
@@ -396,6 +416,7 @@ func (d *dryRunRunner) RunWithEnv(
 	args ...string,
 ) error {
 	d.log(name, args...)
+
 	return nil
 }
 
@@ -406,6 +427,7 @@ func (d *dryRunRunner) RunBuffered(
 	args ...string,
 ) CmdResult {
 	d.log(name, args...)
+
 	return CmdResult{}
 }
 
@@ -419,6 +441,7 @@ func (d *dryRunRunner) RunBufferedWithEnv(
 	args ...string,
 ) CmdResult {
 	d.log(name, args...)
+
 	return CmdResult{}
 }
 
@@ -433,6 +456,7 @@ func (d *dryRunRunner) RunBufferedWithInput(
 	args ...string,
 ) CmdResult {
 	d.log(name, args...)
+
 	return CmdResult{}
 }
 
@@ -464,6 +488,7 @@ func (h *hookRunner) cmdStr(name string, args []string) string {
 	if len(args) == 0 {
 		return name
 	}
+
 	return name + " " + strings.Join(args, " ")
 }
 
@@ -472,12 +497,14 @@ func (h *hookRunner) cmdStr(name string, args []string) string {
 func (h *hookRunner) Run(ctx context.Context, dir, name string, args ...string) error {
 	cs := h.cmdStr(name, args)
 	h.hook.OnStart(cs)
+
 	err := h.inner.Run(ctx, dir, name, args...)
 	if err != nil {
 		h.hook.OnFailure(cs)
 	} else {
 		h.hook.OnSuccess(cs)
 	}
+
 	return err
 }
 
@@ -492,12 +519,14 @@ func (h *hookRunner) RunWithEnv(
 ) error {
 	cs := h.cmdStr(name, args)
 	h.hook.OnStart(cs)
+
 	err := h.inner.RunWithEnv(ctx, dir, extraEnv, name, args...)
 	if err != nil {
 		h.hook.OnFailure(cs)
 	} else {
 		h.hook.OnSuccess(cs)
 	}
+
 	return err
 }
 
@@ -510,12 +539,14 @@ func (h *hookRunner) RunBuffered(
 ) CmdResult {
 	cs := h.cmdStr(name, args)
 	h.hook.OnStart(cs)
+
 	cr := h.inner.RunBuffered(ctx, dir, name, args...)
 	if cr.Err != nil {
 		h.hook.OnFailure(cs)
 	} else {
 		h.hook.OnSuccess(cs)
 	}
+
 	return cr
 }
 
@@ -531,12 +562,14 @@ func (h *hookRunner) RunBufferedWithEnv(
 ) CmdResult {
 	cs := h.cmdStr(name, args)
 	h.hook.OnStart(cs)
+
 	cr := h.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
 	if cr.Err != nil {
 		h.hook.OnFailure(cs)
 	} else {
 		h.hook.OnSuccess(cs)
 	}
+
 	return cr
 }
 
@@ -553,12 +586,14 @@ func (h *hookRunner) RunBufferedWithInput(
 ) CmdResult {
 	cs := h.cmdStr(name, args)
 	h.hook.OnStart(cs)
+
 	cr := h.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
 	if cr.Err != nil {
 		h.hook.OnFailure(cs)
 	} else {
 		h.hook.OnSuccess(cs)
 	}
+
 	return cr
 }
 

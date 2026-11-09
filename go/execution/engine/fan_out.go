@@ -53,6 +53,7 @@ func (p Pool) FanOut[T any](
 	// spawning and mark the remaining items (the tail loop below) as cancelled, so
 	// every item still gets a result.
 	i := 0
+
 spawnLoop:
 	for ; i < len(items); i++ {
 		select {
@@ -62,6 +63,7 @@ spawnLoop:
 		}
 
 		idx, it := i, items[i]
+
 		g.Go(func() error {
 			defer func() { <-sem }()
 
@@ -88,8 +90,10 @@ spawnLoop:
 			if r.Duration == 0 {
 				r.Duration = time.Since(start)
 			}
+
 			results[idx] = r
 			emitter.complete(r)
+
 			return nil // never cancel sibling goroutines
 		})
 	}
@@ -106,5 +110,6 @@ spawnLoop:
 	}
 
 	_ = g.Wait()
+
 	return results
 }

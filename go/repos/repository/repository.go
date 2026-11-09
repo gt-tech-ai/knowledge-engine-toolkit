@@ -41,5 +41,6 @@ func NewBase[R any](decs decorate.Decorations, name string) (Base, error) {
 	if err != nil {
 		return Base{}, err
 	}
+
 	return Base{Subject: subject}, nil
 }

@@ -27,6 +27,7 @@ import (
 // call) rather than silently absorbing.
 func engineNopRunner(t *testing.T) interfaces.CommandRunner {
 	t.Helper()
+
 	return mocks.NewMockCommandRunner(gomock.NewController(t))
 }
 
@@ -39,17 +40,20 @@ func capturingObserver(
 	onStep func(types.StepResult),
 ) *mocks.MockExecutionObserver {
 	t.Helper()
+
 	obs := mocks.NewMockExecutionObserver(gomock.NewController(t))
 	obs.EXPECT().OnGateStart(gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnPhaseStart(gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnStepStart(gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnPhaseComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnGateComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
 	if onStep != nil {
 		obs.EXPECT().OnStepComplete(gomock.Any()).Do(onStep).AnyTimes()
 	} else {
 		obs.EXPECT().OnStepComplete(gomock.Any()).AnyTimes()
 	}
+
 	return obs
 }
 
@@ -65,6 +69,7 @@ func newFanOutJob(
 	extra *types.StepResult,
 ) interfaces.AnyJob {
 	t.Helper()
+
 	j := mocks.NewMockAnyJob(gomock.NewController(t))
 	j.EXPECT().Meta().Return(types.JobMeta{Name: "fanout"}).AnyTimes()
 	j.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -78,15 +83,18 @@ func newFanOutJob(
 					if item == blockOn && release != nil {
 						<-release
 					}
+
 					return types.StepResult{Name: item, Status: types.StatusPass}
 				})
 			if extra != nil {
 				results = append(results, *extra)
 			}
+
 			return results, nil
 		},
 	).
 		AnyTimes()
+
 	return j
 }
 
@@ -117,6 +125,7 @@ func TestFanOut_AllUnitsCollected(t *testing.T) {
 						Error:  "injected failure",
 					}
 				}
+
 				return types.StepResult{
 					Name:   fmt.Sprintf("item-%d", item),
 					Status: types.StatusPass,
@@ -124,7 +133,9 @@ func TestFanOut_AllUnitsCollected(t *testing.T) {
 			})
 
 	require.Len(t, results, len(items))
+
 	var failed, passed int
+
 	for _, r := range results {
 		switch r.Status {
 		case types.StatusFail:
@@ -135,6 +146,7 @@ func TestFanOut_AllUnitsCollected(t *testing.T) {
 			t.Errorf("unexpected status %v", r.Status)
 		}
 	}
+
 	assert.Equal(t, 1, failed, "expected 1 failed result")
 	assert.Equal(t, 4, passed, "expected 4 passed results")
 }
@@ -156,7 +168,9 @@ func TestFanOut_BoundedConcurrency(t *testing.T) {
 		numItems   = 10
 		maxWorkers = 3
 	)
+
 	var peak, current int64
+
 	items := make([]int, numItems)
 
 	engine.Pool(maxWorkers).
@@ -165,6 +179,7 @@ func TestFanOut_BoundedConcurrency(t *testing.T) {
 			func(_ context.Context, _ int) types.StepResult {
 				c := atomic.AddInt64(&current, 1)
 				defer atomic.AddInt64(&current, -1)
+
 				// track peak
 				for {
 					p := atomic.LoadInt64(&peak)
@@ -172,7 +187,9 @@ func TestFanOut_BoundedConcurrency(t *testing.T) {
 						break
 					}
 				}
+
 				time.Sleep(5 * time.Millisecond) // hold slot briefly
+
 				return types.StepResult{Status: types.StatusPass}
 			})
 
@@ -205,18 +222,22 @@ func TestFanOut_PanicConvertsToFail(t *testing.T) {
 				if item == "panic-me" {
 					panic("simulated panic")
 				}
+
 				return types.StepResult{Name: item, Status: types.StatusPass}
 			})
 
 	require.Len(t, results, 3)
+
 	for _, r := range results {
 		if r.Name == "panic-me" || (r.Name == "" && r.Status == types.StatusFail) {
 			// panic result may have empty name depending on impl; just verify Fail
 			assert.Equal(t, types.StatusFail, r.Status, "panic item should be StatusFail")
 			assert.NotEmpty(t, r.Detail, "panic result should have Detail (stack trace)")
+
 			return
 		}
 	}
+
 	assert.Fail(t, "no failed result found for the panicking item")
 }
 
@@ -251,6 +272,7 @@ func TestFanOut_CtxCancelStopsFeeding(t *testing.T) {
 				close(started) // signal first item started
 				<-released     // hold semaphore until test releases
 			}
+
 			return types.StepResult{Name: strconv.Itoa(item), Status: types.StatusPass}
 		})
 	}()
@@ -261,14 +283,17 @@ func TestFanOut_CtxCancelStopsFeeding(t *testing.T) {
 
 	rs := <-results
 	require.Len(t, rs, len(items), "expected one result per item")
+
 	// At least the items that didn't get a semaphore slot should be Fail (cancelled).
 	// Item 0 ran to completion (StatusPass); others should be Fail.
 	failed := 0
+
 	for _, r := range rs {
 		if r.Status == types.StatusFail {
 			failed++
 		}
 	}
+
 	// With numWorkers=1, items 1-7 cannot proceed after cancellation.
 	assert.GreaterOrEqual(t, failed, 1, "expected at least 1 cancelled (Fail) result")
 }
@@ -307,6 +332,7 @@ func TestRunJobGroup_CollectsAllResults(t *testing.T) {
 	jobs := []interfaces.AnyJob{jobA, jobB}
 
 	var steps []types.StepResult
+
 	obs := capturingObserver(t, func(r types.StepResult) { steps = append(steps, r) })
 
 	results, err := engine.RunJobGroup(
@@ -338,13 +364,17 @@ func TestRunJobGroup_CollectsAllResults(t *testing.T) {
 //     same calls without panicking.
 func TestObserverStartEvents(t *testing.T) {
 	var nop interfaces.ExecutionObserver = engine.NopObserver{}
+
 	// Must not panic.
 	nop.OnGateStart("gate", []string{"phase-a"})
 	nop.OnPhaseStart("phase-a", []string{"job-1"})
 	nop.OnStepStart("job-1", "phase-a")
 
-	var gateStarts, phaseStarts, stepStarts []string
-	var gateStartPhases [][]string
+	var (
+		gateStarts, phaseStarts, stepStarts []string
+		gateStartPhases                     [][]string
+	)
+
 	obs := mocks.NewMockExecutionObserver(gomock.NewController(t))
 	obs.EXPECT().OnStepComplete(gomock.Any()).AnyTimes()
 	obs.EXPECT().OnPhaseComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
@@ -367,6 +397,7 @@ func TestObserverStartEvents(t *testing.T) {
 	}).AnyTimes()
 
 	var o interfaces.ExecutionObserver = obs
+
 	o.OnGateStart("gate", []string{"phase-a", "phase-b"})
 	o.OnPhaseStart("phase-a", []string{"job-1"})
 	o.OnStepStart("job-1", "phase-a")
@@ -418,16 +449,23 @@ func TestObserverStartEvents(t *testing.T) {
 func TestRunJobGroup_FanOutEmitsLivePerUnit(t *testing.T) {
 	release := make(chan struct{})
 
-	var mu sync.Mutex
-	var names []string
+	var (
+		mu    sync.Mutex
+		names []string
+	)
+
 	seen := make(chan struct{})
+
 	var seenOnce bool
+
 	obs := capturingObserver(t, func(r types.StepResult) {
 		mu.Lock()
 		defer mu.Unlock()
+
 		names = append(names, r.Name)
 		if r.Name == "fast" && !seenOnce {
 			seenOnce = true
+
 			close(seen)
 		}
 	})
@@ -436,11 +474,13 @@ func TestRunJobGroup_FanOutEmitsLivePerUnit(t *testing.T) {
 	runner := engineNopRunner(t)
 
 	done := make(chan struct{})
+
 	go func() {
 		_, _ = engine.RunJobGroup(
 			context.Background(), runner, "/",
 			[]interfaces.AnyJob{job}, obs,
 		)
+
 		close(done)
 	}()
 
@@ -452,14 +492,17 @@ func TestRunJobGroup_FanOutEmitsLivePerUnit(t *testing.T) {
 			"fast unit's OnStepComplete not observed live (batched at job end?)",
 		)
 	}
+
 	close(release)
 	<-done
 
 	mu.Lock()
+
 	c := map[string]int{}
 	for _, n := range names {
 		c[n]++
 	}
+
 	mu.Unlock()
 	require.Equal(t, 1, c["fast"], "expected each unit delivered exactly once, got %v", c)
 	require.Equal(t, 1, c["slow"], "expected each unit delivered exactly once, got %v", c)
@@ -482,10 +525,14 @@ func TestRunJobGroup_FanOutEmitsLivePerUnit(t *testing.T) {
 func TestRunJobGroup_FanOutPlusExtraStep_NoDoubleFire(t *testing.T) {
 	extra := types.StepResult{Name: "coverage", Status: types.StatusPass}
 
-	var mu sync.Mutex
-	var names []string
+	var (
+		mu    sync.Mutex
+		names []string
+	)
+
 	obs := capturingObserver(t, func(r types.StepResult) {
 		mu.Lock()
+
 		names = append(names, r.Name)
 		mu.Unlock()
 	})
@@ -499,10 +546,12 @@ func TestRunJobGroup_FanOutPlusExtraStep_NoDoubleFire(t *testing.T) {
 
 	require.Len(t, all, 3, "want 3 aggregate results")
 	mu.Lock()
+
 	c := map[string]int{}
 	for _, n := range names {
 		c[n]++
 	}
+
 	mu.Unlock()
 	require.Equal(t, 1, c["a"], "expected each step delivered exactly once, got %v", c)
 	require.Equal(t, 1, c["b"], "expected each step delivered exactly once, got %v", c)
@@ -628,18 +677,22 @@ func TestStep_WarnOnly_PreservesPass(t *testing.T) {
 //     results; empty input returns nil.
 func TestStepsSerial_RunsInOrder(t *testing.T) {
 	var order []string
+
 	mk := func(name string) engine.Step {
 		return engine.Step{Name: name, Group: "g", Run: func(_ context.Context) error {
 			order = append(order, name) // no lock: serial execution guarantees no race
+
 			return nil
 		}}
 	}
 
 	results := engine.Steps{mk("a"), mk("b"), mk("c")}.Serial(context.Background())
 	require.Len(t, results, 3)
+
 	for _, r := range results {
 		assert.Equal(t, types.StatusPass, r.Status)
 	}
+
 	assert.Equal(t, []string{"a", "b", "c"}, order, "steps must run in input order")
 
 	assert.Nil(t, engine.Steps{}.Serial(context.Background()), "empty input returns nil")

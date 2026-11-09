@@ -55,6 +55,7 @@ func defaultIsRetryable(err error) bool {
 	if apperr.StdIs(err, context.Canceled) {
 		return false
 	}
+
 	switch apperr.Code(err) {
 	case apperr.CodeConflict,
 		apperr.CodeInvalidInput,
@@ -115,6 +116,7 @@ func (r *Retrier) classify() func(error) bool {
 	if r.cfg.IsRetryable != nil {
 		return r.cfg.IsRetryable
 	}
+
 	return defaultIsRetryable
 }
 
@@ -128,13 +130,17 @@ func (r *Retrier) Retry(ctx context.Context, op func() error) error {
 		if retrying && !budget.ConsumeRetry(ctx) {
 			return struct{}{}, backoff.Permanent(budget.ErrRetryBudgetExhausted)
 		}
+
 		retrying = true
+
 		if e := op(); e != nil {
 			if !isRetryable(e) {
 				return struct{}{}, backoff.Permanent(e)
 			}
+
 			return struct{}{}, e
 		}
+
 		return struct{}{}, nil
 	}, r.retryOpts()...)
 
@@ -150,16 +156,22 @@ func RetryWithResult[T any](
 ) (T, error) {
 	isRetryable := r.classify()
 	retrying := false
+
 	return backoff.Retry(ctx, func() (T, error) {
 		if retrying && !budget.ConsumeRetry(ctx) {
 			var zero T
+
 			return zero, backoff.Permanent(budget.ErrRetryBudgetExhausted)
 		}
+
 		retrying = true
+
 		v, e := op()
+
 		if e != nil && !isRetryable(e) {
 			return v, backoff.Permanent(e)
 		}
+
 		return v, e
 	}, r.retryOpts()...)
 }
@@ -167,6 +179,7 @@ func RetryWithResult[T any](
 // retryOpts builds backoff v5 retry options from the stored config.
 func (r *Retrier) retryOpts() []backoff.RetryOption {
 	b := backoff.NewExponentialBackOff()
+
 	b.InitialInterval = r.cfg.InitialInterval
 	b.MaxInterval = r.cfg.MaxInterval
 	b.Multiplier = r.cfg.Multiplier
@@ -180,5 +193,6 @@ func (r *Retrier) retryOpts() []backoff.RetryOption {
 		// WithMaxTries counts the first attempt; MaxRetries counts only the retries.
 		opts = append(opts, backoff.WithMaxTries(uint(r.cfg.MaxRetries)+1))
 	}
+
 	return opts
 }

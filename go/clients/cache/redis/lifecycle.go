@@ -30,6 +30,7 @@ func (c *Cache) Liveness(_ context.Context) error {
 	if c.client == nil {
 		return apperr.Internal("redis cache not initialized")
 	}
+
 	return nil
 }
 

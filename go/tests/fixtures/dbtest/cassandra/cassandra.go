@@ -61,6 +61,7 @@ func NewTestCassandra(ctx context.Context) (*TestCassandra, error) {
 				WithStartupTimeout(startupTimeout),
 		).WithDeadline(startupTimeout),
 	}
+
 	container, err := testcontainers.GenericContainer(
 		ctx,
 		testcontainers.GenericContainerRequest{
@@ -70,31 +71,39 @@ func NewTestCassandra(ctx context.Context) (*TestCassandra, error) {
 	)
 	if err != nil {
 		_ = testcontainers.TerminateContainer(container)
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			"failed to start Cassandra container",
 		)
 	}
+
 	host, err := container.Host(ctx)
 	if err != nil {
 		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			"failed to get container host",
 		)
 	}
+
 	mapped, err := container.MappedPort(ctx, cqlPort)
 	if err != nil {
 		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "failed to get mapped port")
 	}
+
 	port, err := strconv.Atoi(mapped.Port())
 	if err != nil {
 		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "invalid mapped port")
 	}
+
 	return &TestCassandra{container: container, host: host, port: port}, nil
 }
 
@@ -111,10 +120,13 @@ func (c *TestCassandra) Exec(ctx context.Context, cql string) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "cqlsh exec failed")
 	}
+
 	if code != 0 {
 		text, _ := io.ReadAll(out)
+
 		return apperr.New(apperr.CodeInternal, "cqlsh: "+string(text))
 	}
+
 	return nil
 }
 

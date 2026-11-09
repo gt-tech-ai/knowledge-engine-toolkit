@@ -34,20 +34,24 @@ func pollEvery(
 	check func(context.Context) (bool, error),
 ) error {
 	deadline := time.Now().Add(timeout)
+
 	for {
 		ok, err := check(ctx)
 		if ok {
 			return nil
 		}
+
 		if time.Now().After(deadline) {
 			if err != nil {
 				return apperr.Wrap(err, apperr.CodeUnavailable, "e2ekit: "+what)
 			}
+
 			return apperr.New(
 				apperr.CodeUnavailable,
 				"e2ekit: "+what+" did not materialize within "+timeout.String(),
 			)
 		}
+
 		select {
 		case <-ctx.Done():
 			return apperr.Wrap(

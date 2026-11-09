@@ -18,6 +18,7 @@ func SafeMessage(code apperr.ErrorCode) string {
 	if msg := apperr.SafeMessage(code); msg != "" {
 		return msg
 	}
+
 	return msgInternal
 }
 
@@ -28,11 +29,15 @@ func SanitizeConnect(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	var cerr *connect.Error
+
 	if apperr.As(err, &cerr) {
 		return cerr
 	}
+
 	c := apperr.Code(err)
+
 	return connect.NewError(Code(c), apperr.Sentinel(SafeMessage(c)))
 }
 
@@ -43,10 +48,14 @@ func SanitizeGRPC(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	var sent grpcStatus
+
 	if apperr.As(err, &sent) {
 		return sent
 	}
+
 	c := apperr.Code(err)
+
 	return status.Error(codes.Code(Code(c)), SafeMessage(c))
 }

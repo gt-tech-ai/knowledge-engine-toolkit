@@ -24,6 +24,7 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
+
 	return &decorated{AnalyticsStore: base, Base: b}, nil
 }
 
@@ -85,6 +86,7 @@ func (d *decorated) Compact(
 				"analytics: store does not compact",
 			)
 		}
+
 		return c.Compact(ctx, cube, grain, org, bucket)
 	})
 }

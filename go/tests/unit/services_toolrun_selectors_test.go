@@ -19,9 +19,11 @@ import (
 // memoryCodebase returns the memory-kind codebase over files.
 func memoryCodebase(t *testing.T, files map[string]string) interfaces.Codebase {
 	t.Helper()
+
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
 		clientcodebase.Deps{Decorations: fixtures.Decorations(), Files: files})
 	require.NoError(t, err)
+
 	return cb
 }
 
@@ -34,10 +36,13 @@ func selectWith(
 	spec types.TargetSpec,
 ) []string {
 	t.Helper()
+
 	sel, err := selectors.NewFromConfig(kind, deps)
 	require.NoError(t, err)
+
 	got, err := sel.Select(t.Context(), cb, spec)
 	require.NoError(t, err)
+
 	return got
 }
 
@@ -57,6 +62,7 @@ func selectWith(
 //     exclusion and yields nothing without one; staged_files asks git with the glob.
 func TestToolrunSelectors_Kinds(t *testing.T) {
 	t.Parallel()
+
 	cb := memoryCodebase(t, map[string]string{
 		"go.work":  "go 1.27\n\nuse (\n\t./a\n\t./b\n\t./b/inner\n)\n",
 		"a/go.mod": "module a\n", "a/a.go": "package a\n",
@@ -130,8 +136,10 @@ func TestToolrunSelectors_Kinds(t *testing.T) {
 //   - An unknown kind and staged_files without git operations are INVALID_INPUT.
 func TestToolrunSelectors_Unknown(t *testing.T) {
 	t.Parallel()
+
 	_, err := selectors.NewFromConfig("go_module", selectors.Deps{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
 	_, err = selectors.NewFromConfig(selectors.KindStagedFiles, selectors.Deps{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
@@ -149,6 +157,7 @@ func TestToolrunSelectors_Unknown(t *testing.T) {
 //   - Exclude drops targets matching a glob, for every kind.
 func TestToolrunSelectors_RootsGlobsAndExclude(t *testing.T) {
 	t.Parallel()
+
 	cb := memoryCodebase(t, map[string]string{
 		"go.work":                        "go 1.27\n\nuse (\n\t./pkg\n\t./gen/api\n)\n",
 		"pkg/go.mod":                     "module p\n",

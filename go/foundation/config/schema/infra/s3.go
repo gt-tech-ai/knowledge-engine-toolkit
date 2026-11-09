@@ -65,6 +65,7 @@ func (c S3Config) EffectiveMultipartPresignExpiry() time.Duration {
 	if c.MultipartPresignExpiry > 0 {
 		return c.MultipartPresignExpiry
 	}
+
 	return 4 * c.PresignExpiry
 }
 
@@ -95,9 +96,11 @@ func (c S3Config) Validate() error {
 			fmt.Sprintf("invalid s3 kind %q: must be \"s3\" or \"minio\"", c.Kind),
 		)
 	}
+
 	if c.Bucket == "" {
 		return apperr.InvalidInput("s3 bucket must not be empty")
 	}
+
 	// A multipart part-URL must live at least as long as a single-part PUT URL:
 	// EffectiveMultipartPresignExpiry is what the reaper TTL and cleanup grace are
 	// sized above, so a shorter value would let a live multipart upload be reaped
@@ -108,5 +111,6 @@ func (c S3Config) Validate() error {
 			c.MultipartPresignExpiry, c.PresignExpiry,
 		))
 	}
+
 	return nil
 }

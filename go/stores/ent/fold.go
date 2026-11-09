@@ -19,9 +19,11 @@ import (
 func FoldFilters(filters []types.Filter) []func(*entsql.Selector) {
 	b := New()
 	out := make([]func(*entsql.Selector), len(filters))
+
 	for i, f := range filters {
 		out[i] = listquery.CompileSeek(b, f)
 	}
+
 	return out
 }
 
@@ -33,6 +35,7 @@ func FoldFilters(filters []types.Filter) []func(*entsql.Selector) {
 func FoldOrder(order []types.OrderField) []func(*entsql.Selector) {
 	b := New()
 	out := make([]func(*entsql.Selector), len(order))
+
 	for i, o := range order {
 		switch {
 		case o.Join != nil:
@@ -47,5 +50,6 @@ func FoldOrder(order []types.OrderField) []func(*entsql.Selector) {
 			out[i] = b.Order(o.Field, o.Desc)
 		}
 	}
+
 	return out
 }

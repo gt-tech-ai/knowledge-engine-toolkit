@@ -107,8 +107,10 @@ func WithMaxConcurrent(n int) options.Option[Config] {
 // Returns an error if the kind is unknown.
 func New(kind Kind, opts ...options.Option[Config]) (interfaces.Bulkhead, error) {
 	cfg := DefaultConfig()
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
+
 	return NewFromConfig(cfg)
 }
 
@@ -120,6 +122,7 @@ func NewFromConfig(cfg Config) (interfaces.Bulkhead, error) {
 		chCfg := channel.Config{
 			MaxConcurrent: cfg.MaxConcurrent,
 		}
+
 		return channel.New(chCfg), nil
 
 	case KindAdaptive:
@@ -130,6 +133,7 @@ func NewFromConfig(cfg Config) (interfaces.Bulkhead, error) {
 			RTTThreshold:      cfg.RTTThreshold,
 			BackoffRatio:      cfg.BackoffRatio,
 		}
+
 		return adaptive.New(adCfg), nil
 
 	default:

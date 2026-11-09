@@ -70,7 +70,9 @@ func NewDecorations(cfg *decoration.Config, c Collaborators) Decorations {
 	if cfg == nil {
 		return Decorations{collab: &c, reg: newRegistry()}
 	}
+
 	own := *cfg
+
 	return Decorations{cfg: &own, collab: &c, reg: newRegistry()}
 }
 
@@ -85,6 +87,7 @@ func LoadDecorations(
 	if err != nil {
 		return Decorations{}, err
 	}
+
 	return NewDecorations(&cfg, c), nil
 }
 
@@ -99,6 +102,7 @@ func (d Decorations) collaborators() Collaborators {
 	if d.collab == nil {
 		return Collaborators{}
 	}
+
 	return *d.collab
 }
 
@@ -108,13 +112,16 @@ func (d Decorations) collaborators() Collaborators {
 // does not order, or a layer whose tuning is invalid, is CodeInvalidInput.
 func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 	d.reg.use(tier.Name, name)
+
 	if d.fixed != nil {
 		return *d.fixed, nil
 	}
+
 	cfg := d.cfg
 	if cfg == nil {
 		cfg = &decoration.Config{}
 	}
+
 	tc, ok := cfg.Tier(tier.Name)
 	if !ok {
 		return Deps{}, apperr.New(
@@ -122,9 +129,11 @@ func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 			fmt.Sprintf("decoration: no config for tier %q", tier.Name),
 		)
 	}
+
 	if err := tier.check(name, tc.Overriding(name)); err != nil {
 		return Deps{}, err
 	}
+
 	return Build(name, tc.For(name), d.collaborators())
 }
 
@@ -134,10 +143,12 @@ func (d Decorations) ownOverride(tier Tier, name string) decoration.Layers {
 	if d.cfg == nil || d.fixed != nil {
 		return decoration.Layers{}
 	}
+
 	tc, ok := d.cfg.Tier(tier.Name)
 	if !ok {
 		return decoration.Layers{}
 	}
+
 	return tc.Overrides[name]
 }
 
@@ -165,6 +176,7 @@ type Resolved struct {
 func (d Decorations) Inventory() []Resolved {
 	comps := d.Components()
 	out := make([]Resolved, 0, len(comps))
+
 	for _, c := range comps {
 		r := Resolved{Tier: c.Tier, Name: c.Name}
 		if d.cfg != nil && d.fixed == nil {
@@ -172,8 +184,10 @@ func (d Decorations) Inventory() []Resolved {
 				r.Layers, r.Sources = tc.For(c.Name), tc.Sources(c.Name)
 			}
 		}
+
 		out = append(out, r)
 	}
+
 	return out
 }
 
@@ -185,8 +199,10 @@ func (d Decorations) Subject(tier Tier, name string) Subject {
 	deps, err := d.Deps(tier, name)
 	if err != nil {
 		d.reg.fail(err)
+
 		return tier.Subject(name, Deps{})
 	}
+
 	return tier.Subject(name, deps)
 }
 
@@ -198,43 +214,55 @@ func Build(name string, l decoration.Layers, c Collaborators) (Deps, error) {
 	if !deps.SkipRecovery {
 		deps.PanicLogger = c.Logger
 	}
+
 	if decoration.On(l.Logging) {
 		deps.Logger = c.Logger
 	}
+
 	if decoration.On(l.Metrics) {
 		deps.Metrics = c.Metrics
 	}
+
 	if decoration.On(l.Tracing) {
 		deps.Tracer = c.Tracer
 	}
+
 	if decoration.On(l.Auth) {
 		deps.Auth = c.Auth
 	}
+
 	if l.Timeout != nil {
 		deps.Timeout = *l.Timeout
 	}
+
 	var err error
+
 	if decoration.On(l.Retry.Enabled) {
 		if deps.Retrier, err = newRetrier(l.Retry); err != nil {
 			return Deps{}, wrapLayer(err, name, "retry")
 		}
 	}
+
 	if decoration.On(l.CircuitBreaker.Enabled) {
 		if deps.Breaker, err = newBreaker(name, l.CircuitBreaker); err != nil {
 			return Deps{}, wrapLayer(err, name, "circuit_breaker")
 		}
 	}
+
 	if decoration.On(l.Bulkhead.Enabled) {
 		if deps.Bulkhead, err = newBulkhead(l.Bulkhead); err != nil {
 			return Deps{}, wrapLayer(err, name, "bulkhead")
 		}
+
 		deps.ShedLoad = decoration.On(l.Bulkhead.Shed)
 	}
+
 	if decoration.On(l.RateLimit.Enabled) {
 		if deps.RateLimiter, err = newRateLimiter(l.RateLimit); err != nil {
 			return Deps{}, wrapLayer(err, name, "rate_limit")
 		}
 	}
+
 	return deps, nil
 }
 
@@ -243,6 +271,7 @@ func newRetrier(r decoration.Retry) (interfaces.Retrier, error) {
 	if err := r.Validate(); err != nil {
 		return nil, err
 	}
+
 	return retry.NewFromConfig(retry.Config{
 		Kind:            retry.KindExponential,
 		MaxRetries:      r.MaxRetries,
@@ -261,6 +290,7 @@ func newBreaker(
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
+
 	return circuitbreaker.NewFromConfig(circuitbreaker.Config{
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                name,
@@ -279,7 +309,9 @@ func newBulkhead(b decoration.Bulkhead) (interfaces.Bulkhead, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
+
 	var kind bulkhead.Kind
+
 	switch b.Kind {
 	case "", "channel":
 		kind = bulkhead.KindChannel
@@ -290,6 +322,7 @@ func newBulkhead(b decoration.Bulkhead) (interfaces.Bulkhead, error) {
 			"unknown bulkhead kind %q (want channel|adaptive)", b.Kind,
 		))
 	}
+
 	return bulkhead.NewFromConfig(bulkhead.Config{
 		Kind:              kind,
 		MaxConcurrent:     b.MaxConcurrent,
@@ -305,6 +338,7 @@ func newRateLimiter(r decoration.RateLimit) (interfaces.RateLimiter, error) {
 	if err := r.Validate(); err != nil {
 		return nil, err
 	}
+
 	return ratelimiter.New(
 		ratelimiter.KindToken,
 		ratelimiter.WithRate(r.Rate),

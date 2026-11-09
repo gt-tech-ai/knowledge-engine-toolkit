@@ -81,6 +81,7 @@ func TestViperLoader_Viper(t *testing.T) {
 app:
   name: viper-test
 `)
+
 	cfg := viperloader.Config{BaseDir: dir, Prefix: "MYAPP"}
 	loader := viperloader.New(cfg)
 	require.NoError(t, loader.Load(), "Load")
@@ -435,6 +436,7 @@ func TestCORS_SpecificOrigin_Allowed(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(t.Context(), "GET", "/api/data", http.NoBody)
 	req.Header.Set("Origin", "https://app.example.com")
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -476,6 +478,7 @@ func TestCORS_SpecificOrigin_Disallowed(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(t.Context(), "GET", "/api/data", http.NoBody)
 	req.Header.Set("Origin", "https://evil.com")
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -565,6 +568,7 @@ func TestCORS_Preflight_SpecificOrigin(t *testing.T) {
 		http.NoBody,
 	)
 	req.Header.Set("Origin", "https://app.example.com")
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -607,6 +611,7 @@ func TestGetRequestID_UnrelatedContext(t *testing.T) {
 	t.Parallel()
 
 	type otherKey struct{}
+
 	ctx := context.WithValue(context.Background(), otherKey{}, "something")
 	id := middleware.GetRequestID(ctx)
 	assert.Empty(t, id, "GetRequestID(unrelated ctx) should return empty string")
@@ -643,6 +648,7 @@ func TestCompression_MultipleWrites(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
 	req.Header.Set("Accept-Encoding", "gzip")
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -655,6 +661,7 @@ func TestCompression_MultipleWrites(t *testing.T) {
 
 	reader, err := gzip.NewReader(rec.Body)
 	require.NoError(t, err, "gzip decode")
+
 	defer func() { _ = reader.Close() }()
 
 	body, _ := io.ReadAll(reader)
@@ -685,6 +692,7 @@ func TestCompression_ExactThreshold(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
 	req.Header.Set("Accept-Encoding", "gzip")
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -752,11 +760,14 @@ func TestRetryWithResult_SucceedsAfterRetries(t *testing.T) {
 	})
 
 	ctx := context.Background()
+
 	var attempts atomic.Int32
+
 	result, err := exponential.RetryWithResult(ctx, r, func() (int, error) {
 		if attempts.Add(1) < 3 {
 			return 0, apperr.Sentinel("transient")
 		}
+
 		return 42, nil
 	})
 	require.NoError(t, err, "unexpected error")
@@ -820,8 +831,10 @@ func TestRetryWithResult_BudgetExhausted(t *testing.T) {
 	ctx := budget.WithRetryBudget(context.Background(), b)
 
 	var attempts atomic.Int32
+
 	_, err := exponential.RetryWithResult(ctx, r, func() (int, error) {
 		attempts.Add(1)
+
 		return 0, apperr.Sentinel("transient")
 	})
 	require.Error(t, err, "expected error when budget exhausted")
@@ -852,8 +865,10 @@ func TestRetry_Retry_BudgetExhausted(t *testing.T) {
 	ctx := budget.WithRetryBudget(context.Background(), b)
 
 	var attempts atomic.Int32
+
 	err := r.Retry(ctx, func() error {
 		attempts.Add(1)
+
 		return apperr.Sentinel("transient")
 	})
 	require.Error(t, err, "expected error when budget exhausted")
@@ -884,6 +899,7 @@ func TestRetry_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var attempts atomic.Int32
+
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		cancel()
@@ -891,6 +907,7 @@ func TestRetry_ContextCancelled(t *testing.T) {
 
 	err := r.Retry(ctx, func() error {
 		attempts.Add(1)
+
 		return apperr.Sentinel("transient")
 	})
 	require.Error(t, err, "expected error from cancelled context")
@@ -957,6 +974,7 @@ func TestRetryBudget_ConsumeRetry_Idempotent(t *testing.T) {
 	ctx := budget.WithRetryBudget(context.Background(), b)
 
 	require.True(t, budget.ConsumeRetry(ctx), "first consume should succeed")
+
 	for i := range 5 {
 		assert.False(t, budget.ConsumeRetry(ctx), "consume %d should have failed", i+2)
 	}
@@ -1152,6 +1170,7 @@ func TestOTelTracer_SpanConversions(t *testing.T) {
 		spanCtx, span := tr.Start(ctx, "test-operation", opts...)
 		ro, ok := oteltrace.SpanFromContext(spanCtx).(sdktrace.ReadOnlySpan)
 		require.True(t, ok, "a sampled span must be readable")
+
 		return span, ro
 	}
 
@@ -1183,6 +1202,7 @@ func TestOTelTracer_SpanConversions(t *testing.T) {
 	span, ro = readOnly()
 	span.SetStatus(interfaces.SpanStatusOK, "")
 	assert.Equal(t, codes.Ok, ro.Status().Code)
+
 	span, ro = readOnly()
 	span.SetStatus(interfaces.SpanStatusUnset, "")
 	assert.Equal(t, codes.Unset, ro.Status().Code)
@@ -1252,6 +1272,7 @@ func TestOTelTracer_SampleRates(t *testing.T) {
 
 		tr, err := oteltracer.New(ctx, cfg)
 		require.NoError(t, err, "oteltracer.New with rate %f", rate)
+
 		_ = tr.Shutdown(ctx)
 	}
 }
@@ -1280,6 +1301,7 @@ func TestOTelTracer_SecureMode(t *testing.T) {
 
 	tr, err := oteltracer.New(ctx, cfg)
 	require.NoError(t, err, "oteltracer.New (secure)")
+
 	_ = tr.Shutdown(ctx)
 }
 
@@ -1297,10 +1319,12 @@ func TestTracer_NewFromConfig_KindOTel(t *testing.T) {
 
 	ctx := context.Background()
 	cfg := tracer.DefaultConfig("factory-test")
+
 	cfg.Insecure = true
 
 	tr, err := tracer.NewFromConfig(ctx, cfg)
 	require.NoError(t, err, "NewFromConfig")
+
 	defer func() { _ = tr.Shutdown(ctx) }()
 
 	require.NotNil(t, tr, "expected non-nil tracer from factory")
@@ -1329,6 +1353,7 @@ func TestTracer_New_WithOptions(t *testing.T) {
 		tracer.WithInsecure(true),
 	)
 	require.NoError(t, err, "tracer.New")
+
 	defer func() { _ = tr.Shutdown(ctx) }()
 
 	require.NotNil(t, tr, "expected non-nil tracer")

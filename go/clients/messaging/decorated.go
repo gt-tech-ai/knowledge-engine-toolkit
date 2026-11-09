@@ -25,10 +25,12 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
+
 	d := &decorated{base: base, Base: b}
 	if keyed, ok := base.(interfaces.KeyedPublisher); ok {
 		return &decoratedKeyed{decorated: d, keyed: keyed}, nil
 	}
+
 	return d, nil
 }
 

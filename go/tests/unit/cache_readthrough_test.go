@@ -36,11 +36,15 @@ import (
 //     racy for a black-box goroutine stampede.
 func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockByteCache(ctrl)
-	const key = "k1"
-	const ttl = time.Minute
-	const callers = 20
+
+	const (
+		key     = "k1"
+		ttl     = time.Minute
+		callers = 20
+	)
 
 	// Rendezvous barrier INSIDE Get — the call ReadThrough makes immediately before
 	// singleflight.Do. Every caller blocks here until all `callers` have arrived, then
@@ -52,31 +56,44 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 	// load (flaky "expected 1, actual 2"). The winner still Sets once (AnyTimes covers
 	// the collapsed single Set).
 	var arrived sync.WaitGroup
+
 	arrived.Add(callers)
+
 	releaseGet := make(chan struct{})
+
 	m.EXPECT().Get(gomock.Any(), key).DoAndReturn(
 		func(context.Context, string) ([]byte, bool) {
 			arrived.Done()
 			<-releaseGet
+
 			return nil, false
 		},
 	).Times(callers)
 	m.EXPECT().Set(gomock.Any(), key, gomock.Any(), ttl).AnyTimes()
 
-	var sf singleflight.Group
-	var loadCount int32
+	var (
+		sf        singleflight.Group
+		loadCount int32
+	)
+
 	release := make(
 		chan struct{},
 	) // the single winner's load blocks here so all callers pile onto one flight
 	started := make(
 		chan struct{},
 	) // the winner closes this once it is confirmed in-flight
-	var startOnce sync.Once
-	var wg sync.WaitGroup
+
+	var (
+		startOnce sync.Once
+		wg        sync.WaitGroup
+	)
+
 	for range callers {
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
+
 			v, err := cache.ReadThrough(
 				context.Background(), m, &sf, key, ttl, 1,
 				func() (int, error) {
@@ -85,6 +102,7 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 						func() { close(started) },
 					) // the winner signals it is in-flight
 					<-release
+
 					return 42, nil
 				},
 			)
@@ -92,6 +110,7 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 			assert.Equal(t, 42, v)
 		}()
 	}
+
 	// Open the Get barrier once every caller has reached it, so all callers proceed to Do
 	// together.
 	go func() { arrived.Wait(); close(releaseGet) }()
@@ -106,11 +125,14 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("the single-flight winner never entered its load")
 	}
+
 	for range 100 {
 		runtime.Gosched()
 	}
+
 	close(release)
 	wg.Wait()
+
 	// Assert the collapse HAPPENED — at least one load, but fewer than the caller count —
 	// rather than exactly one. Exactly-one is not deterministically achievable for a
 	// black-box goroutine stampede: a caller can always be preempted in the few
@@ -138,14 +160,18 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 //     decoded value and never invokes load.
 func TestReadThrough_HitSkipsLoad(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockByteCache(ctrl)
+
 	const key = "k2"
+
 	encoded, err := cache.Encode(99, 1)
 	require.NoError(t, err)
 	m.EXPECT().Get(gomock.Any(), key).Return(encoded, true)
 
 	var sf singleflight.Group
+
 	loadCalled := false
 	v, err := cache.ReadThrough(
 		context.Background(),
@@ -156,6 +182,7 @@ func TestReadThrough_HitSkipsLoad(t *testing.T) {
 		1,
 		func() (int, error) {
 			loadCalled = true
+
 			return 0, nil
 		},
 	)
@@ -176,14 +203,19 @@ func TestReadThrough_HitSkipsLoad(t *testing.T) {
 //   - Get miss + load returns an error → the error propagates and Set is never called.
 func TestReadThrough_LoadErrorPropagatesUncached(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockByteCache(ctrl)
+
 	const key = "kerr"
+
 	errLoad := apperr.Sentinel("backend load failed")
+
 	m.EXPECT().Get(gomock.Any(), key).Return(nil, false)
 	m.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 	var sf singleflight.Group
+
 	_, err := cache.ReadThrough(
 		context.Background(),
 		m,
@@ -212,18 +244,25 @@ func TestReadThrough_LoadErrorPropagatesUncached(t *testing.T) {
 //   - Get returns an envelope encoded at version-1 → load runs and its value is returned.
 func TestReadThrough_StaleVersionReloads(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockByteCache(ctrl)
-	const key = "kstale"
-	const version = 2
+
+	const (
+		key     = "kstale"
+		version = 2
+	)
+
 	stale, err := cache.Encode(1, version-1) // encoded at the PREVIOUS version
 	require.NoError(t, err)
 	m.EXPECT().Get(gomock.Any(), key).Return(stale, true)
 	m.EXPECT().
 		Set(gomock.Any(), key, gomock.Any(), gomock.Any())
+
 		// the fresh value is re-cached
 
 	var sf singleflight.Group
+
 	loaded := false
 	v, err := cache.ReadThrough(
 		context.Background(),
@@ -234,6 +273,7 @@ func TestReadThrough_StaleVersionReloads(t *testing.T) {
 		version,
 		func() (int, error) {
 			loaded = true
+
 			return 77, nil
 		},
 	)

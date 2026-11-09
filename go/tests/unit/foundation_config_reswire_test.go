@@ -21,23 +21,32 @@ import (
 // effective concurrency ceiling. It releases the held slots before returning.
 func assertBulkheadLimit(t *testing.T, bh interfaces.Bulkhead, limit int) {
 	t.Helper()
+
 	entered := make(chan struct{}, limit)
 	release := make(chan struct{})
+
 	var wg sync.WaitGroup
+
 	for range limit {
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
+
 			_ = bh.Execute(context.Background(), func() error {
 				entered <- struct{}{}
+
 				<-release
+
 				return nil
 			})
 		}()
 	}
+
 	for range limit { // all `limit` slots now held
 		<-entered
 	}
+
 	require.Error(t, bh.TryExecute(func() error { return nil }),
 		"an over-limit TryExecute must be rejected (bulkhead full)")
 	close(release)
@@ -59,6 +68,7 @@ func assertBulkheadLimit(t *testing.T, bh interfaces.Bulkhead, limit int) {
 func TestReswire_HedgeDefault_RunsOnce(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "base.yaml"), "database:\n  host: localhost\n")
+
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
 
@@ -66,8 +76,10 @@ func TestReswire_HedgeDefault_RunsOnce(t *testing.T) {
 	require.NoError(t, err)
 
 	var calls int32
+
 	require.NoError(t, h.Hedge(context.Background(), func() error {
 		atomic.AddInt32(&calls, 1)
+
 		return nil
 	}))
 	assert.Equal(t, int32(1), atomic.LoadInt32(&calls),
@@ -90,6 +102,7 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "base.yaml"),
 		"resilience:\n  hedge:\n    kind: delay\n    delay: 1ms\n")
+
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
 
@@ -97,18 +110,23 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 	require.NoError(t, err)
 
 	var calls int32
+
 	first := make(chan struct{})
 	backup := make(chan struct{})
 	release := make(chan struct{})
 	done := make(chan error, 1)
+
 	go func() {
 		done <- h.Hedge(context.Background(), func() error {
 			if atomic.AddInt32(&calls, 1) == 1 {
 				close(first)
 				<-release // hold the first attempt so the delay elapses and the backup fires
+
 				return nil
 			}
+
 			close(backup)
+
 			return nil
 		})
 	}()
@@ -138,6 +156,7 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 func TestReswire_AdaptiveThrottleDefault_NeverSheds(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "base.yaml"), "database:\n  host: localhost\n")
+
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
 
@@ -146,9 +165,15 @@ func TestReswire_AdaptiveThrottleDefault_NeverSheds(t *testing.T) {
 
 	boom := apperr.Sentinel("boom")
 	calls := 0
+
 	for range 100 {
-		_ = th.Do(context.Background(), func() error { calls++; return boom })
+		_ = th.Do(context.Background(), func() error {
+			calls++
+
+			return boom
+		})
 	}
+
 	assert.Equal(
 		t,
 		100,
@@ -180,6 +205,7 @@ func TestReswire_AdaptiveThrottleReadsOverlay_Sheds(t *testing.T) {
 		filepath.Join(dir, "base.yaml"),
 		"resilience:\n  adaptive_throttle:\n    kind: enabled\n    k: 2.0\n    decay: 0.98\n",
 	)
+
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
 
@@ -187,11 +213,19 @@ func TestReswire_AdaptiveThrottleReadsOverlay_Sheds(t *testing.T) {
 	require.NoError(t, err)
 
 	boom := apperr.Sentinel("boom")
+
 	const attempts = 100
+
 	calls := 0
+
 	for range attempts {
-		_ = th.Do(context.Background(), func() error { calls++; return boom })
+		_ = th.Do(context.Background(), func() error {
+			calls++
+
+			return boom
+		})
 	}
+
 	assert.Less(
 		t,
 		calls,

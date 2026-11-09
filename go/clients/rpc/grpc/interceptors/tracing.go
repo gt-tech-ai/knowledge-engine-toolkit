@@ -21,6 +21,8 @@ func injectTraceContext(ctx context.Context) context.Context {
 	} else {
 		md = metadata.MD{}
 	}
+
 	otel.GetTextMapPropagator().Inject(ctx, wire.MetadataCarrier{MD: md})
+
 	return metadata.NewOutgoingContext(ctx, md)
 }

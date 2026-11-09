@@ -22,8 +22,10 @@ import (
 // captured from the console this package replaces, so they pin its exact bytes.
 func consoleGolden(t *testing.T, name string) string {
 	t.Helper()
+
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "report", name))
 	require.NoError(t, err)
+
 	return string(data)
 }
 
@@ -49,6 +51,7 @@ func consoleRun() (lint, unit types.StepResults) {
 	noisy := []byte("=== RUN   TestX\n--- PASS: TestX (0.00s)\n{\"level\":\"info\"}\n" +
 		"apps/python/server/x.py:12:5: F401 `os` imported but unused\n" +
 		"apps/python/server/y.py:3:1: E501 line too long\nFound 2 errors.\n")
+
 	lint = types.StepResults{
 		{
 			Name:     "golangci (Go)",
@@ -95,13 +98,16 @@ func consoleRun() (lint, unit types.StepResults) {
 			Error:  "2 stale links",
 		},
 	}
+
 	return lint, unit
 }
 
 // replayConsoleRun drives obs through the fixed run.
 func replayConsoleRun(obs interfaces.ExecutionObserver) {
 	lint, unit := consoleRun()
+
 	obs.OnGateStart("preflight", []string{"Lint", "Unit Tests"})
+
 	for _, phase := range []struct {
 		name    string
 		results types.StepResults
@@ -111,13 +117,17 @@ func replayConsoleRun(obs interfaces.ExecutionObserver) {
 		for _, r := range phase.results {
 			names = append(names, r.Name)
 		}
+
 		obs.OnPhaseStart(phase.name, names)
+
 		for _, r := range phase.results {
 			obs.OnStepStart(r.Name, r.Group)
 			obs.OnStepComplete(r)
 		}
+
 		obs.OnPhaseComplete(phase.name, phase.results, phase.elapsed)
 	}
+
 	all := append(append(types.StepResults{}, lint...), unit...)
 	obs.OnGateComplete("preflight", all, 6*time.Second)
 }
@@ -129,11 +139,15 @@ func newTestConsole(
 	level report.Level,
 ) (*report.Console, *bytes.Buffer) {
 	t.Helper()
+
 	var out, errOut bytes.Buffer
+
 	cfg.Hints = consoleHints()
+
 	c, err := report.NewConsole(types.Streams{Out: &out, Err: &errOut}, cfg)
 	require.NoError(t, err)
 	c.SetLevel(level)
+
 	return c, &errOut
 }
 
@@ -157,6 +171,7 @@ func TestConsole_Golden(t *testing.T) {
 		"registry unreachable",
 	)
 	observe := func(c *report.Console) { replayConsoleRun(c.Observer()) }
+
 	cases := []struct { //nolint:govet // fieldalignment: rows read in field order
 		golden string
 		cfg    report.ConsoleConfig
@@ -198,6 +213,7 @@ func TestConsole_Golden(t *testing.T) {
 				hook.OnStart("go vet ./...")
 				hook.OnSuccess("go vet ./...")
 				hook.OnFailure("ruff check .")
+
 				log := c.Logger().With("module", "cli")
 				log.Debug("resolved", "tools", 3)
 				log.Info("installing")
@@ -206,9 +222,11 @@ func TestConsole_Golden(t *testing.T) {
 			},
 		},
 	}
+
 	for _, tc := range cases {
 		t.Run(tc.golden, func(t *testing.T) {
 			t.Parallel()
+
 			c, errOut := newTestConsole(t, tc.cfg, tc.level)
 			tc.run(c)
 			assert.Equal(t, consoleGolden(t, tc.golden), errOut.String())
@@ -279,7 +297,9 @@ func TestConsole_StepSummary(t *testing.T) {
 	t.Parallel()
 
 	lint, unit := consoleRun()
+
 	var buf bytes.Buffer
+
 	require.NoError(
 		t,
 		report.WriteStepSummary(&buf, append(lint, unit...), 6*time.Second),
@@ -297,6 +317,7 @@ func TestConsole_StepSummary(t *testing.T) {
 		report.LevelNormal,
 	)
 	replayConsoleRun(c.Observer())
+
 	got, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, consoleGolden(t, "step_summary.md"), string(got))
@@ -347,11 +368,15 @@ func TestConsole_Groups(t *testing.T) {
 //     with no race reported.
 func TestFoundationReport_ConsoleConcurrentWrites(t *testing.T) {
 	t.Parallel()
+
 	var out, errOut bytes.Buffer
+
 	c, err := report.NewConsole(types.Streams{Out: &out, Err: &errOut},
 		report.ConsoleConfig{CI: true})
 	require.NoError(t, err)
+
 	var wg sync.WaitGroup
+
 	for range 50 {
 		wg.Go(func() {
 			for range 20 {
@@ -359,9 +384,12 @@ func TestFoundationReport_ConsoleConcurrentWrites(t *testing.T) {
 			}
 		})
 	}
+
 	wg.Wait()
+
 	lines := strings.Split(strings.TrimSuffix(errOut.String(), "\n"), "\n")
 	require.Len(t, lines, 1000)
+
 	for _, l := range lines {
 		assert.Equal(t, "line x", l)
 	}

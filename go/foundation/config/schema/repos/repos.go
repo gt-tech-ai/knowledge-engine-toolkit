@@ -39,8 +39,10 @@ func (c Config) Validate() error {
 	if c.Caching.TTL < 0 {
 		return apperr.InvalidInput("repos.caching.ttl must be >= 0")
 	}
+
 	if c.Caching.Version < 0 {
 		return apperr.InvalidInput("repos.caching.version must be >= 0")
 	}
+
 	return nil
 }

@@ -57,6 +57,7 @@ func cachingRepo(
 	if withKeyFunc {
 		c.IDOf = func(e *te) string { return e.ID }
 	}
+
 	return fixtures.Must(
 		repository.NewEntity[interfaces.Repository[te, tp, string], te, tp, string](
 			fixtures.Decorations(), "repo", store, &c,
@@ -82,11 +83,13 @@ func cachingRepo(
 //     backend.
 func TestCached_Get(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 	stored := te{ID: "id", Name: "cached"}
 
 	t.Run("hit serves from cache", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](
@@ -103,10 +106,12 @@ func TestCached_Get(t *testing.T) {
 
 	t.Run("miss fetches, caches, and copies", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
 		backend := &te{ID: "id", Name: "fresh"}
+
 		cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(nil, false)
 		store.EXPECT().Get(gomock.Any(), "id").Return(backend, nil)
 		cache.EXPECT().Set(gomock.Any(), "repo:repo:id", gomock.Any(), time.Minute)
@@ -126,9 +131,11 @@ func TestCached_Get(t *testing.T) {
 	} {
 		t.Run("miss on "+tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			ctrl := gomock.NewController(t)
 			cache := mocks.NewMockByteCache(ctrl)
 			store := mocks.NewMockStore[te, tp, string](ctrl)
+
 			cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(tc.data, true)
 			store.EXPECT().Get(gomock.Any(), "id").Return(&te{ID: "id"}, nil)
 			cache.EXPECT().Set(gomock.Any(), "repo:repo:id", gomock.Any(), gomock.Any())
@@ -140,10 +147,12 @@ func TestCached_Get(t *testing.T) {
 
 	t.Run("backend error propagates", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
 		sentinel := apperr.New(apperr.CodeInternal, "backend down")
+
 		cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(nil, false)
 		store.EXPECT().Get(gomock.Any(), "id").Return(nil, sentinel)
 
@@ -155,8 +164,10 @@ func TestCached_Get(t *testing.T) {
 // mustEncode encodes value at version, failing the test on error.
 func mustEncode(t *testing.T, value te, version int) []byte {
 	t.Helper()
+
 	b, err := fcache.Encode(value, version)
 	require.NoError(t, err)
+
 	return b
 }
 
@@ -175,10 +186,12 @@ func mustEncode(t *testing.T, value te, version int) []byte {
 //   - Update and Delete evict the key on success and skip eviction on failure.
 func TestCached_Writes(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("create warms with key func", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
@@ -194,6 +207,7 @@ func TestCached_Writes(t *testing.T) {
 
 	t.Run("create without key func does not warm", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl) // no Set expectation → must not warm
 		store := mocks.NewMockStore[te, tp, string](ctrl)
@@ -205,6 +219,7 @@ func TestCached_Writes(t *testing.T) {
 
 	t.Run("create error is not cached", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl) // no Set expectation
 		store := mocks.NewMockStore[te, tp, string](ctrl)
@@ -217,6 +232,7 @@ func TestCached_Writes(t *testing.T) {
 
 	t.Run("update evicts on success, not on failure", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
@@ -232,12 +248,14 @@ func TestCached_Writes(t *testing.T) {
 		repo := cachingRepo(store, cache, true)
 		_, err := repo.Update(ctx, "id", &te{ID: "id"})
 		require.NoError(t, err)
+
 		_, err = repo.Update(ctx, "id", &te{ID: "id"})
 		assert.ErrorIs(t, err, sentinel)
 	})
 
 	t.Run("delete evicts on success, not on failure", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
@@ -270,13 +288,16 @@ func TestCached_Writes(t *testing.T) {
 //   - List delegates to the inner repository.
 func TestCached_ExistsAndList(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("exists hit skips backend", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl) // no Exists expectation
+
 		cache.EXPECT().
 			Get(gomock.Any(), "repo:repo:id").
 			Return(mustEncode(t, te{ID: "id"}, cacheVersion), true)
@@ -288,9 +309,11 @@ func TestCached_ExistsAndList(t *testing.T) {
 
 	t.Run("exists miss hits backend", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
+
 		cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(nil, false)
 		store.EXPECT().Exists(gomock.Any(), "id").Return(true, nil)
 
@@ -301,6 +324,7 @@ func TestCached_ExistsAndList(t *testing.T) {
 
 	t.Run("list passes through", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl) // never touched
 		store := mocks.NewMockStore[te, tp, string](ctrl)
@@ -332,6 +356,7 @@ func TestCached_ExistsAndList(t *testing.T) {
 //   - Update and Delete evict at once and again after the commit.
 func TestCached_InTransaction(t *testing.T) {
 	t.Parallel()
+
 	txCtx := func() context.Context {
 		return interfaces.WithAfterCommit(interfaces.WithInTx(context.Background()))
 	}
@@ -339,17 +364,20 @@ func TestCached_InTransaction(t *testing.T) {
 
 	t.Run("get and exists bypass the cache", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl) // no expectations → must not be called
 		store := mocks.NewMockStore[te, tp, string](ctrl)
 		store.EXPECT().Get(gomock.Any(), "id").Return(row, nil)
 		store.EXPECT().Exists(gomock.Any(), "id").Return(true, nil)
+
 		repo := cachingRepo(store, cache, true)
 		ctx := txCtx()
 
 		got, err := repo.Get(ctx, "id")
 		require.NoError(t, err)
 		assert.Equal(t, "uncommitted", got.Name)
+
 		ok, err := repo.Exists(ctx, "id")
 		require.NoError(t, err)
 		assert.True(t, ok)
@@ -358,10 +386,12 @@ func TestCached_InTransaction(t *testing.T) {
 
 	t.Run("create primes only after commit", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
 		store.EXPECT().Create(gomock.Any(), gomock.Any()).Return(row, nil).Times(2)
+
 		repo := cachingRepo(store, cache, true)
 
 		rolledBack := txCtx()
@@ -369,6 +399,7 @@ func TestCached_InTransaction(t *testing.T) {
 		require.NoError(t, err) // no Set: the hooks never run, as on a rollback
 
 		committed := txCtx()
+
 		_, err = repo.Create(committed, &te{Name: "uncommitted"})
 		require.NoError(t, err)
 		cache.EXPECT().Set(gomock.Any(), "repo:repo:id", gomock.Any(), time.Minute)
@@ -377,15 +408,18 @@ func TestCached_InTransaction(t *testing.T) {
 
 	t.Run("update and delete evict again after commit", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
 		store.EXPECT().Update(gomock.Any(), "id", gomock.Any()).Return(row, nil)
 		store.EXPECT().Delete(gomock.Any(), "id").Return(nil)
+
 		repo := cachingRepo(store, cache, true)
 		ctx := txCtx()
 
 		cache.EXPECT().Delete(gomock.Any(), "repo:repo:id").Times(2)
+
 		_, err := repo.Update(ctx, "id", &te{Name: "uncommitted"})
 		require.NoError(t, err)
 		require.NoError(t, repo.Delete(ctx, "id"))

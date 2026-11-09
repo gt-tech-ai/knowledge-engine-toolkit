@@ -43,15 +43,19 @@ func (l *Lock) Acquire(
 ) (token string, acquired bool, err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	if _, busy := l.held[key]; busy {
 		return "", false, nil
 	}
+
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return "", false, apperr.Wrap(err, apperr.CodeInternal, "generate lock token")
 	}
+
 	token = id.String()
 	l.held[key] = token
+
 	return token, true, nil
 }
 
@@ -61,7 +65,9 @@ func (l *Lock) Acquire(
 func (l *Lock) Renew(_ context.Context, key, token string) (held bool, err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	cur, ok := l.held[key]
+
 	return ok && cur == token, nil
 }
 
@@ -70,8 +76,10 @@ func (l *Lock) Renew(_ context.Context, key, token string) (held bool, err error
 func (l *Lock) Release(_ context.Context, key, token string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	if cur, ok := l.held[key]; ok && cur == token {
 		delete(l.held, key)
 	}
+
 	return nil
 }

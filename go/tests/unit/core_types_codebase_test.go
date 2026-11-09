@@ -20,6 +20,7 @@ import (
 func TestCoreTypesFileSelector_IsZero(t *testing.T) {
 	t.Parallel()
 	assert.True(t, types.FileSelector{}.IsZero())
+
 	for name, s := range map[string]types.FileSelector{
 		"roots":             {Roots: []string{"a"}},
 		"paths":             {Paths: []string{"a.go"}},
@@ -45,6 +46,7 @@ func TestCoreTypesFileSelector_IsZero(t *testing.T) {
 //     empty file has none.
 func TestCoreTypesText_Lines(t *testing.T) {
 	t.Parallel()
+
 	for _, src := range []string{"a\nb\n", "a\nb", "a\r\nb\r\n", "a\r\nb"} {
 		assert.Equal(
 			t,
@@ -54,5 +56,6 @@ func TestCoreTypesText_Lines(t *testing.T) {
 			src,
 		)
 	}
+
 	assert.Empty(t, types.Text{}.Lines())
 }

@@ -70,11 +70,13 @@ func streamClient(base client.Base, token string) grpc.StreamClientInterceptor {
 			ctx context.Context,
 		) (grpc.ClientStream, error) {
 			s, err := streamer(outgoing(ctx, token), desc, cc, method, opts...)
+
 			return s, wire.FromError(err)
 		})
 		if err != nil {
 			return nil, wire.ToGRPC(err)
 		}
+
 		return stream, nil
 	}
 }

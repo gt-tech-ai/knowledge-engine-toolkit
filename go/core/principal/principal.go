@@ -19,9 +19,12 @@ func WithPrincipal[P any](ctx context.Context, principal P) context.Context {
 // zero value) when the context is nil or holds no principal of that type.
 func PrincipalFrom[P any](ctx context.Context) (P, bool) {
 	var zero P
+
 	if ctx == nil {
 		return zero, false
 	}
+
 	principal, ok := ctx.Value(principalKey[P]{}).(P)
+
 	return principal, ok
 }

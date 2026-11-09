@@ -44,6 +44,7 @@ type keysetWire struct {
 // unencodable value.
 func EncodeToken(tok types.PageToken) (string, error) {
 	var w tokenWire
+
 	if tok.Keyset != nil {
 		w.Keyset = &keysetWire{
 			SortValues:  tok.Keyset.SortValues,
@@ -53,10 +54,12 @@ func EncodeToken(tok types.PageToken) (string, error) {
 	} else {
 		w.OffsetPage = tok.OffsetPage
 	}
+
 	raw, err := json.Marshal(w)
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "marshal page token")
 	}
+
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
@@ -70,14 +73,18 @@ func DecodeToken(token string) (types.PageToken, error) {
 	if token == "" {
 		return types.PageToken{OffsetPage: 1}, nil
 	}
+
 	raw, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil {
 		return types.PageToken{}, apperr.InvalidInput("malformed page token")
 	}
+
 	var w tokenWire
+
 	if err := json.Unmarshal(raw, &w); err != nil {
 		return types.PageToken{}, apperr.InvalidInput("malformed page token")
 	}
+
 	if w.Keyset != nil {
 		return types.PageToken{Keyset: &types.KeysetCursor{
 			SortValues:  w.Keyset.SortValues,
@@ -85,5 +92,6 @@ func DecodeToken(token string) (types.PageToken, error) {
 			Fingerprint: w.Keyset.Fingerprint,
 		}}, nil
 	}
+
 	return types.PageToken{OffsetPage: w.OffsetPage}, nil
 }

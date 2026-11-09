@@ -66,11 +66,14 @@ func (o *funcOp[T, E]) Run(
 	in, ok := input.(*T)
 	if !ok || in == nil {
 		var zero T
+
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: input is %T, want *%T", o.desc.Name, input, zero,
 		))
 	}
+
 	cp := *in
+
 	return o.run(ctx, &cp, o.env, obs)
 }
 
@@ -96,6 +99,7 @@ func (o seededOp[T]) NewInput() any {
 	if t, ok := in.(*T); ok {
 		o.seed(t)
 	}
+
 	return in
 }
 
@@ -109,15 +113,18 @@ func (o seededOp[T]) check() error {
 			fmt.Sprintf("nil defaults seed for %T", new(T)),
 		)
 	}
+
 	in := o.Operation.NewInput()
 	if _, ok := in.(*T); !ok {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"defaults seed %T, but the operation's input is %T", new(T), in,
 		))
 	}
+
 	if inner, ok := o.Operation.(interface{ check() error }); ok {
 		return inner.check()
 	}
+
 	return nil
 }
 
@@ -127,11 +134,14 @@ func (o seededOp[T]) check() error {
 func InputSchema(v any) []byte {
 	r := &jsonschema.Reflector{DoNotReference: true, ExpandedStruct: true}
 	s := r.Reflect(v)
+
 	s.Version = ""
+
 	blob, err := json.Marshal(s)
 	if err != nil {
 		panic(fmt.Sprintf("ops: reflect schema of %s: %v", reflect.TypeOf(v), err))
 	}
+
 	return blob
 }
 
@@ -161,26 +171,33 @@ type keyChecker interface {
 func decode(op interfaces.Operation, raw []byte, local bool) (any, error) {
 	input := op.NewInput()
 	trimmed := bytes.TrimSpace(raw)
+
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return input, nil
 	}
+
 	name := op.Descriptor().Name
 	dec := json.NewDecoder(bytes.NewReader(trimmed))
 	dec.DisallowUnknownFields()
+
 	if err := dec.Decode(input); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: decode arguments", name,
 		))
 	}
+
 	kc, checks := op.(keyChecker)
 	m, isMap := input.(*map[string]any)
+
 	if !checks || !isMap || m == nil {
 		return input, nil
 	}
+
 	if key := kc.undeclared(*m, local); key != "" {
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: unknown argument %q", name, key,
 		))
 	}
+
 	return input, nil
 }

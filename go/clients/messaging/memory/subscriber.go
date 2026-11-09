@@ -43,10 +43,12 @@ func (s *Subscriber) Subscribe(
 	handler interfaces.MessageHandler,
 ) error {
 	ch := s.broker.topic(topic)
+
 	for {
 		select {
 		case msg := <-ch:
 			hctx := tracer.Extract(ctx, msg.Metadata)
+
 			_ = s.handlers.DoOnce(hctx, topic, func(ctx context.Context) error {
 				return handler(ctx, msg)
 			})
@@ -65,5 +67,6 @@ func (s *Subscriber) Subscribe(
 // Close stops the receive loop (idempotent).
 func (s *Subscriber) Close() error {
 	s.once.Do(func() { close(s.done) })
+
 	return nil
 }

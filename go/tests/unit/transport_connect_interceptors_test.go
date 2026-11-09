@@ -67,9 +67,11 @@ func TestBudgetInterceptor_AttachesSharedBudget(t *testing.T) {
 	t.Parallel()
 
 	var withBudget int32 = -99
+
 	h := interceptors.BudgetInterceptor(7).WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			withBudget = budget.Remaining(ctx)
+
 			return newTestResponse(), nil
 		},
 	)
@@ -83,12 +85,15 @@ func TestBudgetInterceptor_AttachesSharedBudget(t *testing.T) {
 	)
 
 	var disabled int32 = -99
+
 	h0 := interceptors.BudgetInterceptor(0).WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			disabled = budget.Remaining(ctx)
+
 			return newTestResponse(), nil
 		},
 	)
+
 	_, err = h0(context.Background(), newTestRequest())
 	require.NoError(t, err)
 	assert.Equal(
@@ -155,6 +160,7 @@ func newTestRequestWithHeaders(headers map[string]string) connect.AnyRequest {
 	for k, v := range headers {
 		req.Header().Set(k, v)
 	}
+
 	return req
 }
 
@@ -174,6 +180,7 @@ func TestAuthInterceptor_WithAllHeaders(t *testing.T) {
 	t.Parallel()
 
 	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+
 	var (
 		claims *interceptors.AuthClaims
 		ok     bool
@@ -182,6 +189,7 @@ func TestAuthInterceptor_WithAllHeaders(t *testing.T) {
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			claims, ok = interceptors.GetAuthClaims(ctx)
+
 			return newTestResponse(), nil
 		},
 	)
@@ -218,11 +226,13 @@ func TestAuthInterceptor_NoSub(t *testing.T) {
 	t.Parallel()
 
 	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+
 	var ok bool
 
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			_, ok = interceptors.GetAuthClaims(ctx)
+
 			return newTestResponse(), nil
 		},
 	)
@@ -248,6 +258,7 @@ func TestAuthInterceptor_SubOnly_NoRoles(t *testing.T) {
 	t.Parallel()
 
 	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+
 	var (
 		claims *interceptors.AuthClaims
 		ok     bool
@@ -256,6 +267,7 @@ func TestAuthInterceptor_SubOnly_NoRoles(t *testing.T) {
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			claims, ok = interceptors.GetAuthClaims(ctx)
+
 			return newTestResponse(), nil
 		},
 	)
@@ -286,6 +298,7 @@ func TestAuthInterceptor_EmptyRoles(t *testing.T) {
 	t.Parallel()
 
 	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+
 	var (
 		claims *interceptors.AuthClaims
 		ok     bool
@@ -294,6 +307,7 @@ func TestAuthInterceptor_EmptyRoles(t *testing.T) {
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			claims, ok = interceptors.GetAuthClaims(ctx)
+
 			return newTestResponse(), nil
 		},
 	)
@@ -324,6 +338,7 @@ func TestAuthInterceptor_RolesWithTrailingComma(t *testing.T) {
 	t.Parallel()
 
 	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+
 	var (
 		claims *interceptors.AuthClaims
 		ok     bool
@@ -332,6 +347,7 @@ func TestAuthInterceptor_RolesWithTrailingComma(t *testing.T) {
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			claims, ok = interceptors.GetAuthClaims(ctx)
+
 			return newTestResponse(), nil
 		},
 	)
@@ -364,6 +380,7 @@ func TestAuthInterceptor_StubMode_SynthesizesDevClaims(t *testing.T) {
 	t.Parallel()
 
 	interceptor := interceptors.NewAuthInterceptor(true, testHeaders())
+
 	var (
 		claims *interceptors.AuthClaims
 		ok     bool
@@ -372,6 +389,7 @@ func TestAuthInterceptor_StubMode_SynthesizesDevClaims(t *testing.T) {
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			claims, ok = interceptors.GetAuthClaims(ctx)
+
 			return newTestResponse(), nil
 		},
 	)
@@ -413,6 +431,7 @@ func TestAuthInterceptor_StubMode_RealHeadersWin(t *testing.T) {
 	t.Parallel()
 
 	interceptor := interceptors.NewAuthInterceptor(true, testHeaders())
+
 	var (
 		claims *interceptors.AuthClaims
 		ok     bool
@@ -421,6 +440,7 @@ func TestAuthInterceptor_StubMode_RealHeadersWin(t *testing.T) {
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			claims, ok = interceptors.GetAuthClaims(ctx)
+
 			return newTestResponse(), nil
 		},
 	)
@@ -825,6 +845,7 @@ func TestTracingInterceptor_ExtractsTraceContext(t *testing.T) {
 	// NOT parallel: this test mutates the global OTel propagator via
 	// otel.SetTextMapPropagator.
 	prev := otel.GetTextMapPropagator()
+
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 	t.Cleanup(func() { otel.SetTextMapPropagator(prev) })
 
@@ -861,9 +882,11 @@ func TestTracingInterceptor_ExtractsTraceContext(t *testing.T) {
 
 	// Capture the context the inner handler receives to verify extraction.
 	var extracted trace.SpanContext
+
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			extracted = trace.SpanContextFromContext(ctx)
+
 			return newTestResponse(), nil
 		},
 	)
@@ -900,10 +923,12 @@ func TestTracingInterceptor_RecordsRequestID(t *testing.T) {
 
 	// Use a spy tracer to capture span attributes
 	var recordedAttrs map[string]any
+
 	spyTracer := fixtures.SpyTracer(func(key string, value any) {
 		if recordedAttrs == nil {
 			recordedAttrs = make(map[string]any)
 		}
+
 		recordedAttrs[key] = value
 	})
 
@@ -991,10 +1016,13 @@ func TestAuthInterceptor_SplitRoles_DoubleComma(t *testing.T) {
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			claims, ok := interceptors.GetAuthClaims(ctx)
 			assert.True(t, ok, "expected claims in context")
+
 			if !ok {
 				return newTestResponse(), nil
 			}
+
 			assert.Len(t, claims.Roles, 2)
+
 			return newTestResponse(), nil
 		},
 	)
@@ -1002,6 +1030,7 @@ func TestAuthInterceptor_SplitRoles_DoubleComma(t *testing.T) {
 	req := newTestRequest()
 	req.Header().Set(testHeaders().Sub, "user-1")
 	req.Header().Set(testHeaders().Roles, "admin,,editor")
+
 	_, _ = handler(context.Background(), req)
 }
 
@@ -1023,10 +1052,13 @@ func TestAuthInterceptor_SingleRole(t *testing.T) {
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			claims, ok := interceptors.GetAuthClaims(ctx)
 			assert.True(t, ok, "expected claims")
+
 			if !ok {
 				return newTestResponse(), nil
 			}
+
 			assert.Equal(t, []string{"viewer"}, claims.Roles)
+
 			return newTestResponse(), nil
 		},
 	)
@@ -1034,6 +1066,7 @@ func TestAuthInterceptor_SingleRole(t *testing.T) {
 	req := newTestRequest()
 	req.Header().Set(testHeaders().Sub, "user-1")
 	req.Header().Set(testHeaders().Roles, "viewer")
+
 	_, _ = handler(context.Background(), req)
 }
 
@@ -1055,12 +1088,15 @@ func TestAuthInterceptor_StreamingExtractsHeaders(t *testing.T) {
 	t.Parallel()
 
 	interceptor := interceptors.NewAuthInterceptor(false, testHeaders())
+
 	var (
 		claims *interceptors.AuthClaims
 		ok     bool
 	)
+
 	next := func(ctx context.Context, _ connect.StreamingHandlerConn) error {
 		claims, ok = interceptors.GetAuthClaims(ctx)
+
 		return nil
 	}
 
@@ -1070,6 +1106,7 @@ func TestAuthInterceptor_StreamingExtractsHeaders(t *testing.T) {
 	header := http.Header{}
 	header.Set(testHeaders().Sub, "stream-user")
 	header.Set(testHeaders().Tenant, "org-7")
+
 	conn := mocks.NewMockStreamingHandlerConn(gomock.NewController(t))
 	conn.EXPECT().RequestHeader().Return(header).AnyTimes()
 

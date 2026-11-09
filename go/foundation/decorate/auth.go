@@ -20,6 +20,7 @@ func NewAuth(
 					return err
 				}
 			}
+
 			return next(ctx)
 		},
 	)

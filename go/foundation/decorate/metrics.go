@@ -56,10 +56,13 @@ func (m metricsMW) WrapOp(
 ) error {
 	start := time.Now()
 	err := next(ctx)
+
 	m.ops.Inc(m.name, op)
 	m.dur.Observe(time.Since(start).Seconds(), m.name, op)
+
 	if err != nil {
 		m.errs.Inc(m.name, op)
 	}
+
 	return err
 }

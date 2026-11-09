@@ -58,6 +58,7 @@ func MapInput[E any](
 	run MapRun[E],
 ) Builder[E] {
 	schema := MapSchema(flags, args)
+
 	return func(desc types.OperationDescriptor, env E) interfaces.Operation {
 		return &mapOp[E]{
 			desc: desc, env: env, run: run, schema: schema, flags: flags, args: args,
@@ -82,6 +83,7 @@ func (o *mapOp[E]) undeclared(in map[string]any, local bool) string {
 			return k
 		}
 	}
+
 	return ""
 }
 
@@ -91,11 +93,13 @@ func (o *mapOp[E]) declares(key string, local bool) bool {
 	if key == o.args.Rest && key != "" || slices.Contains(o.args.Names, key) {
 		return true
 	}
+
 	for i := range o.flags {
 		if o.flags[i].FlagField() == key {
 			return local || !o.flags[i].Secret
 		}
 	}
+
 	return false
 }
 
@@ -111,11 +115,14 @@ func (o *mapOp[E]) Run(
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: input is %T, want *map[string]any", o.desc.Name, input))
 	}
+
 	cp := make(map[string]any, len(*in))
 	for k, v := range *in {
 		cp[k] = v
 	}
+
 	FillInput(o.flags, o.args, cp)
+
 	return o.run(ctx, cp, o.env, obs)
 }
 
@@ -129,17 +136,22 @@ func FillInput(flags []types.FlagSpec, args types.ArgSpec, in map[string]any) {
 	for i := range flags {
 		f := &flags[i]
 		v, ok := in[f.FlagField()]
+
 		if !ok {
 			in[f.FlagField()] = flagDefault(f)
+
 			continue
 		}
+
 		in[f.FlagField()] = coerce(f.Type, v)
 	}
+
 	for _, n := range args.Names {
 		if _, ok := in[n]; !ok {
 			in[n] = ""
 		}
 	}
+
 	if args.Rest != "" {
 		if _, ok := in[args.Rest]; !ok {
 			in[args.Rest] = []string{}
@@ -154,6 +166,7 @@ func coerce(flagType string, v any) any {
 	if flagType == types.FlagDuration {
 		return duration(v)
 	}
+
 	switch x := v.(type) {
 	case float64:
 		if flagType == types.FlagInt {
@@ -165,9 +178,11 @@ func coerce(flagType string, v any) any {
 			for _, item := range x {
 				out = append(out, fmt.Sprint(item))
 			}
+
 			return out
 		}
 	}
+
 	return v
 }
 
@@ -176,6 +191,7 @@ func flagDefault(f *types.FlagSpec) any {
 	if f.Default != nil {
 		return coerce(f.Type, f.Default)
 	}
+
 	switch f.Type {
 	case types.FlagString:
 		return ""
@@ -205,6 +221,7 @@ func duration(v any) any {
 			return d
 		}
 	}
+
 	return v
 }
 
@@ -213,36 +230,44 @@ func duration(v any) any {
 // property, so a schema-driven caller (an MCP tool) never asks for it.
 func MapSchema(flags []types.FlagSpec, args types.ArgSpec) []byte {
 	props := map[string]any{}
+
 	var required []string
+
 	for i := range flags {
 		f := &flags[i]
 		if f.Secret {
 			continue
 		}
+
 		p := map[string]any{schemaType: jsonType(f.Type)}
 		if types.IsListFlag(f.Type) {
 			p["items"] = map[string]any{schemaType: schemaString}
 		}
+
 		if f.Usage != "" {
 			p["description"] = f.Usage
 		}
+
 		props[f.FlagField()] = p
 		if f.Required {
 			required = append(required, f.FlagField())
 		}
 	}
+
 	for i, n := range args.Names {
 		props[n] = map[string]any{schemaType: schemaString}
 		if i < args.Min {
 			required = append(required, n)
 		}
 	}
+
 	if args.Rest != "" {
 		props[args.Rest] = map[string]any{
 			schemaType: "array",
 			"items":    map[string]any{schemaType: schemaString},
 		}
 	}
+
 	s := map[string]any{
 		schemaType:             "object",
 		"properties":           props,
@@ -251,10 +276,12 @@ func MapSchema(flags []types.FlagSpec, args types.ArgSpec) []byte {
 	if len(required) > 0 {
 		s["required"] = required
 	}
+
 	blob, err := json.Marshal(s)
 	if err != nil {
 		panic(fmt.Sprintf("ops: map schema: %v", err))
 	}
+
 	return blob
 }
 

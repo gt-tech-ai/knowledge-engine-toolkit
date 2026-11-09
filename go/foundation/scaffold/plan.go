@@ -38,32 +38,40 @@ func Plan(
 	cb interfaces.Codebase,
 ) (types.FilePlan, error) {
 	var plan types.FilePlan
+
 	err := iofs.WalkDir(tmpl, ".", func(name string, d iofs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
+
 		path, err := render(name, strings.TrimSuffix(name, tmplSuffix), data)
 		if err != nil {
 			return err
 		}
+
 		src, err := iofs.ReadFile(tmpl, name)
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "read template "+name)
 		}
+
 		content, err := render(name, string(src), data)
 		if err != nil {
 			return err
 		}
+
 		entry, err := decide(ctx, cb, string(path), content, policy(string(path)))
 		if err != nil {
 			return err
 		}
+
 		plan.Entries = append(plan.Entries, entry)
+
 		return nil
 	})
 	if err != nil {
 		return types.FilePlan{}, apperr.Wrap(err, apperr.Code(err), "scaffold plan")
 	}
+
 	return plan, nil
 }
 
@@ -76,13 +84,16 @@ func PlanFiles(
 	policy func(path string) types.FilePolicy,
 ) (types.FilePlan, error) {
 	var plan types.FilePlan
+
 	for _, path := range slices.Sorted(maps.Keys(files)) {
 		entry, err := decide(ctx, cb, path, files[path], policy(path))
 		if err != nil {
 			return types.FilePlan{}, apperr.Wrap(err, apperr.Code(err), "scaffold plan")
 		}
+
 		plan.Entries = append(plan.Entries, entry)
 	}
+
 	return plan, nil
 }
 
@@ -92,10 +103,13 @@ func render(name, text string, data any) ([]byte, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse template "+name)
 	}
+
 	var b bytes.Buffer
+
 	if err := t.Execute(&b, data); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "render template "+name)
 	}
+
 	return b.Bytes(), nil
 }
 
@@ -109,31 +123,40 @@ func decide(
 ) (types.FileEntry, error) {
 	e := types.FileEntry{Path: path, Content: content, Policy: policy}
 	text, err := cb.Text(ctx, path)
+
 	switch {
 	case apperr.Is(err, apperr.CodeNotFound):
 		e.Action = types.FileCreate
+
 		return e, nil
 	case err != nil:
 		return e, err
 	}
+
 	have := text.Bytes
+
 	switch policy {
 	case types.PolicyOnce:
 		e.Action, e.Content = types.FileKeep, have
+
 		return e, nil
 	case types.PolicyPreserve:
 		merged, ok := preserve(content, have)
 		if !ok {
 			e.Action, e.Reason = types.FileConflict, "no "+PreserveMarker+" line"
+
 			return e, nil
 		}
+
 		e.Content = merged
 	case types.PolicyRegenerate:
 	}
+
 	e.Action = types.FileUpdate
 	if bytes.Equal(e.Content, have) {
 		e.Action = types.FileKeep
 	}
+
 	return e, nil
 }
 
@@ -144,16 +167,19 @@ func preserve(fresh, have []byte) ([]byte, bool) {
 	if !ok {
 		return nil, false
 	}
+
 	at, ok := markerAt(have)
 	if !ok {
 		return nil, false
 	}
+
 	return append(head[:len(head):len(head)], have[at:]...), true
 }
 
 // cut returns src up to its marker line.
 func cut(src []byte) ([]byte, bool) {
 	at, ok := markerAt(src)
+
 	return src[:at], ok
 }
 
@@ -163,5 +189,6 @@ func markerAt(src []byte) (int, bool) {
 	if i < 0 {
 		return 0, false
 	}
+
 	return bytes.LastIndexByte(src[:i], '\n') + 1, true
 }

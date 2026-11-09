@@ -73,6 +73,7 @@ func (e EcosystemSet) HasAll(ms []Manager) bool {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -84,25 +85,32 @@ func Detect(ctx context.Context, cb interfaces.Codebase) (EcosystemSet, error) {
 	if err != nil {
 		return EcosystemSet{}, err
 	}
+
 	present, marks := map[Manager]bool{}, markers()
+
 	for _, f := range files {
 		if pruned(f.Path) {
 			continue
 		}
+
 		if m, ok := classify(f.Path, marks); ok {
 			present[m] = true
 		}
 	}
+
 	managers := make([]Manager, 0, len(present))
 	for m := range present {
 		managers = append(managers, m)
 	}
+
 	slices.Sort(managers)
 
 	var goModule string
+
 	if text, err := cb.Text(ctx, "go.mod"); err == nil {
 		goModule = modulePath(string(text.Bytes))
 	}
+
 	return EcosystemSet{
 		Managers:    managers,
 		IgnorePaths: []string{"**/node_modules/**", ".venv/**"},
@@ -118,6 +126,7 @@ func pruned(p string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -140,8 +149,10 @@ func classify(p string, marks map[string]Manager) (Manager, bool) {
 	if m, ok := marks[name]; ok {
 		return m, true
 	}
+
 	lower := strings.ToLower(name)
 	yml := strings.HasSuffix(lower, ".yml") || strings.HasSuffix(lower, ".yaml")
+
 	switch {
 	case yml && (strings.HasPrefix(lower, "docker-compose") ||
 		strings.HasPrefix(lower, "compose")):
@@ -155,6 +166,7 @@ func classify(p string, marks map[string]Manager) (Manager, bool) {
 			(name == "action.yml" || name == "action.yaml"):
 		return ManagerGithubActions, true
 	}
+
 	return "", false
 }
 
@@ -165,5 +177,6 @@ func modulePath(gomod string) string {
 			return strings.Trim(strings.TrimSpace(v), `"`)
 		}
 	}
+
 	return ""
 }

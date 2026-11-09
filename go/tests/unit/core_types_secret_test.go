@@ -25,7 +25,9 @@ import (
 //     return the mask and never the value; Reveal returns the raw value.
 func TestSecret_MasksEverywhereAndRevealsExplicitly(t *testing.T) {
 	t.Parallel()
+
 	const raw = "super-secret-token-value"
+
 	s := types.NewSecret(raw)
 
 	require.Equal(t, raw, s.Reveal(), "Reveal must return the raw value")
@@ -75,6 +77,7 @@ func TestSecret_ZeroValue(t *testing.T) {
 //   - Ref{dev, bootstrap, client_secret} renders "dev/bootstrap/client_secret".
 func TestRef_String(t *testing.T) {
 	t.Parallel()
+
 	r := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
 	assert.Equal(t, "dev/bootstrap/client_secret", r.String())
 }

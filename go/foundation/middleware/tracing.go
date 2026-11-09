@@ -22,6 +22,7 @@ func HTTPTracing() Middleware {
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	)
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := httpPropagator.Extract(
@@ -37,7 +38,9 @@ func HTTPTracing() Middleware {
 					attribute.String("url.path", r.URL.Path),
 				),
 			)
+
 			defer span.End()
+
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

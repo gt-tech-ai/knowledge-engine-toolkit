@@ -26,6 +26,7 @@ func (Client) Apply(_ context.Context, _ string, files ...string) error {
 	if len(files) == 0 {
 		return apperr.New(apperr.CodeInvalidInput, "kubectl apply: no files")
 	}
+
 	return nil
 }
 

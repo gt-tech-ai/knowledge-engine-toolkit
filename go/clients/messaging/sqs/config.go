@@ -88,6 +88,7 @@ func (c *Config) validate() error {
 			"sqs: wait time %ds outside [0, %d]", c.WaitTimeSeconds, maxWaitTimeSeconds,
 		))
 	}
+
 	d := c.NackDelay
 	if d.Min < 0 || d.Min > d.Max || d.Max > maxVisibilityTimeout {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
@@ -95,5 +96,6 @@ func (c *Config) validate() error {
 			d.Min, d.Max, maxVisibilityTimeout,
 		))
 	}
+
 	return nil
 }

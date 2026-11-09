@@ -85,6 +85,7 @@ func TestCircuitBreaker_ToOptions(t *testing.T) {
 	for _, opt := range opts {
 		opt(&dst)
 	}
+
 	assert.Equal(t, "src", dst.Name)
 }
 
@@ -103,6 +104,7 @@ func TestCircuitBreaker_KindString(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, "gobreaker", circuitbreaker.KindGoBreaker.String())
+
 	unknown := circuitbreaker.Kind(99)
 	assert.Contains(
 		t,
@@ -180,9 +182,11 @@ func TestRetry_ToOptions(t *testing.T) {
 	src := retry.Config{Kind: retry.KindExponential, MaxRetries: 7}
 	opts := src.ToOptions()
 	dst := retry.DefaultConfig()
+
 	for _, opt := range opts {
 		opt(&dst)
 	}
+
 	assert.Equal(t, 7, dst.MaxRetries)
 }
 
@@ -201,6 +205,7 @@ func TestRetry_KindString(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, "exponential", retry.KindExponential.String())
+
 	unknown := retry.Kind(99)
 	assert.Contains(
 		t,
@@ -261,11 +266,13 @@ func TestExponential_RetryWithResult(t *testing.T) {
 
 	// Failure case - succeeds on 2nd attempt
 	attempt := 0
+
 	result, err = exponential.RetryWithResult(ctx, r, func() (string, error) {
 		attempt++
 		if attempt < 2 {
 			return "", apperr.Sentinel("transient")
 		}
+
 		return "recovered", nil
 	})
 	require.NoError(t, err, "RetryWithResult must not return error after recovery")
@@ -314,9 +321,11 @@ func TestRateLimiter_ToOptions(t *testing.T) {
 	src := ratelimiter.Config{Kind: ratelimiter.KindToken, Rate: 42.0, Burst: 3}
 	opts := src.ToOptions()
 	dst := ratelimiter.DefaultConfig()
+
 	for _, opt := range opts {
 		opt(&dst)
 	}
+
 	assert.InDelta(t, 42.0, dst.Rate, 0)
 }
 
@@ -335,6 +344,7 @@ func TestRateLimiter_KindString(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, "token", ratelimiter.KindToken.String())
+
 	unknown := ratelimiter.Kind(99)
 	assert.Contains(
 		t,
@@ -399,9 +409,11 @@ func TestBulkhead_ToOptions(t *testing.T) {
 	src := bulkhead.Config{Kind: bulkhead.KindChannel, MaxConcurrent: 15}
 	opts := src.ToOptions()
 	dst := bulkhead.DefaultConfig()
+
 	for _, opt := range opts {
 		opt(&dst)
 	}
+
 	assert.Equal(t, 15, dst.MaxConcurrent)
 }
 
@@ -420,6 +432,7 @@ func TestBulkhead_KindString(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, "channel", bulkhead.KindChannel.String())
+
 	unknown := bulkhead.Kind(99)
 	assert.Contains(
 		t,
@@ -479,12 +492,15 @@ func TestChannel_ExecuteCancelledContext(t *testing.T) {
 	// Fill all slots
 	bh := channel.New(channel.Config{MaxConcurrent: 1})
 	blocker := make(chan struct{})
+
 	go func() {
 		_ = bh.Execute(context.Background(), func() error {
 			<-blocker
+
 			return nil
 		})
 	}()
+
 	time.Sleep(20 * time.Millisecond)
 
 	// Try to execute with cancelled context
@@ -550,9 +566,11 @@ func TestTracer_ToOptions(t *testing.T) {
 	src := tracer.Config{ServiceName: "src-svc", Endpoint: "localhost:4317"}
 	opts := src.ToOptions()
 	dst := tracer.DefaultConfig("default")
+
 	for _, opt := range opts {
 		opt(&dst)
 	}
+
 	assert.Equal(t, "src-svc", dst.ServiceName)
 }
 
@@ -571,6 +589,7 @@ func TestTracer_KindString(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, "otel", tracer.KindOTel.String())
+
 	unknown := tracer.Kind(99)
 	assert.Contains(
 		t,
@@ -597,12 +616,16 @@ func TestConfig_ToOptions(t *testing.T) {
 	t.Parallel()
 
 	src := config.DefaultConfig()
+
 	src.Viper.BaseDir = "/custom"
+
 	opts := src.ToOptions()
 	dst := config.DefaultConfig()
+
 	for _, opt := range opts {
 		opt(&dst)
 	}
+
 	assert.Equal(t, "/custom", dst.Viper.BaseDir)
 }
 
@@ -638,6 +661,7 @@ func TestConfig_KindString(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, "viper", config.KindViper.String())
+
 	unknown := config.Kind(99)
 	assert.Contains(
 		t,

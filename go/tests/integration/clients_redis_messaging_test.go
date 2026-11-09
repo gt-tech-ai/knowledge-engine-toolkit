@@ -47,6 +47,7 @@ func TestRedisMessagingSuite(t *testing.T) {
 func (s *RedisMessagingSuite) newClient() *goredis.Client {
 	c := goredis.NewClient(&goredis.Options{Addr: s.RedisAddr})
 	s.T().Cleanup(func() { _ = c.Close() })
+
 	return c
 }
 
@@ -59,6 +60,7 @@ func (s *RedisMessagingSuite) waitSubscribed(
 ) {
 	s.Require().Eventually(func() bool {
 		res, err := probe.PubSubNumSub(context.Background(), channel).Result()
+
 		return err == nil && res[channel] >= 1
 	}, 5*time.Second, 10*time.Millisecond, "subscription for %q not active", channel)
 }
@@ -67,6 +69,7 @@ func (s *RedisMessagingSuite) waitSubscribed(
 func (s *RedisMessagingSuite) waitUnsubscribed(probe *goredis.Client, channel string) {
 	s.Require().Eventually(func() bool {
 		res, err := probe.PubSubNumSub(context.Background(), channel).Result()
+
 		return err == nil && res[channel] == 0
 	}, 5*time.Second, 10*time.Millisecond, "subscription for %q still active", channel)
 }
@@ -75,6 +78,7 @@ func (s *RedisMessagingSuite) waitUnsubscribed(probe *goredis.Client, channel st
 func (s *RedisMessagingSuite) waitPatterns(probe *goredis.Client, n int64) {
 	s.Require().Eventually(func() bool {
 		got, err := probe.PubSubNumPat(context.Background()).Result()
+
 		return err == nil && got >= n
 	}, 5*time.Second, 10*time.Millisecond, "pattern subscription not active")
 }
@@ -84,6 +88,7 @@ func (s *RedisMessagingSuite) waitPatterns(probe *goredis.Client, n int64) {
 func chanHandler(out chan<- string) coreiface.MessageHandler {
 	return func(_ context.Context, msg *coreiface.Message) error {
 		out <- string(msg.Payload)
+
 		return nil
 	}
 }
@@ -91,12 +96,15 @@ func chanHandler(out chan<- string) coreiface.MessageHandler {
 // recvChan reads one value from ch or fails after a bounded wait (no fixed sleep).
 func recvChan[T any](t *testing.T, ch <-chan T, what string) T {
 	t.Helper()
+
 	select {
 	case v := <-ch:
 		return v
 	case <-time.After(3 * time.Second):
 		require.Failf(t, "timeout", "timed out waiting for %s", what)
+
 		var zero T
+
 		return zero
 	}
 }
@@ -115,9 +123,11 @@ func recvChan[T any](t *testing.T, ch <-chan T, what string) T {
 func (s *RedisMessagingSuite) TestPublisher_PublishesToChannel() {
 	pub, err := msgredis.NewPublisher(msgredis.Config{Client: s.newClient()})
 	s.Require().NoError(err)
+
 	sub, err := msgredis.NewSubscriber(msgredis.Config{Client: s.newClient()})
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = sub.Close() })
+
 	probe := s.newClient()
 
 	ctx := context.Background()
@@ -133,6 +143,7 @@ func (s *RedisMessagingSuite) TestPublisher_PublishesToChannel() {
 
 	s.Require().
 		NoError(pub.PublishBatch(ctx, "events", [][]byte{[]byte("a"), []byte("b")}))
+
 	batch := []string{recvChan(s.T(), got, "batch 1"), recvChan(s.T(), got, "batch 2")}
 	s.ElementsMatch([]string{"a", "b"}, batch)
 
@@ -162,7 +173,9 @@ func (s *RedisMessagingSuite) TestPublisher_Error_Unavailable() {
 	dead := goredis.NewClient(
 		&goredis.Options{Addr: "127.0.0.1:1", DialTimeout: time.Second},
 	)
+
 	s.T().Cleanup(func() { _ = dead.Close() })
+
 	pub, err := msgredis.NewPublisher(msgredis.Config{Client: dead})
 	s.Require().NoError(err)
 
@@ -206,6 +219,7 @@ func (s *RedisMessagingSuite) TestSubscriber_DynamicSubscribeUnsubscribe() {
 	s.Require().NoError(probe.Publish(ctx, "chan.A", "a2").Err())
 	s.Require().NoError(probe.Publish(ctx, "chan.B", "b1").Err())
 	s.Equal("b1", recvChan(s.T(), chB, "chan.B live"))
+
 	select {
 	case m := <-chA:
 		s.Failf("unexpected delivery", "on unsubscribed channel A: %q", m)
@@ -240,9 +254,11 @@ func (s *RedisMessagingSuite) TestSubscriber_PatternSubscribeReceivesMatching() 
 	s.Require().NoError(sub.PUnsubscribe(ctx, "news.*"))
 	s.Require().Eventually(func() bool {
 		got, err := probe.PubSubNumPat(ctx).Result()
+
 		return err == nil && got == 0
 	}, 5*time.Second, 10*time.Millisecond, "pattern still active")
 	s.Require().NoError(probe.Publish(ctx, "news.weather", "rain").Err())
+
 	select {
 	case m := <-chP:
 		s.Failf("unexpected delivery", "after PUnsubscribe: %q", m)
@@ -272,7 +288,9 @@ func (s *RedisMessagingSuite) TestSubscriber_FirstCallerCancel_KeepsDelivering()
 	alive := make(chan bool, 4)
 	handler := func(hctx context.Context, msg *coreiface.Message) error {
 		alive <- hctx.Err() == nil
+
 		got <- string(msg.Payload)
+
 		return nil
 	}
 	s.Require().NoError(sub.Subscribe(firstCtx, "first", handler))
@@ -312,6 +330,7 @@ func (s *RedisMessagingSuite) TestSubscriber_HandlerError_LoggedNotRequeued() {
 	received := make(chan string, 8)
 	failing := func(_ context.Context, msg *coreiface.Message) error {
 		received <- string(msg.Payload)
+
 		return apperr.New(apperr.CodeInternal, "boom")
 	}
 	s.Require().NoError(sub.Subscribe(ctx, "err.chan", failing))
@@ -321,6 +340,7 @@ func (s *RedisMessagingSuite) TestSubscriber_HandlerError_LoggedNotRequeued() {
 	s.Equal("m1", recvChan(s.T(), received, "first delivery"))
 	s.Require().NoError(probe.Publish(ctx, "err.chan", "m2").Err())
 	s.Equal("m2", recvChan(s.T(), received, "loop continues after error"))
+
 	select {
 	case m := <-received:
 		s.Failf("redelivery", "message redelivered after handler error: %q", m)
@@ -348,6 +368,7 @@ func (s *RedisMessagingSuite) TestSubscriber_Close_IdempotentAndNilSafe() {
 	s.Require().NoError(err)
 
 	ctx := context.Background()
+
 	s.Require().
 		NoError(sub.Close())
 		// close before any subscribe (nil pubsub)
@@ -356,6 +377,7 @@ func (s *RedisMessagingSuite) TestSubscriber_Close_IdempotentAndNilSafe() {
 	s.Require().NoError(sub.PUnsubscribe(ctx, "p"))
 	s.Require().
 		Error(sub.Subscribe(ctx, "y", chanHandler(make(chan string, 1))))
+
 	// closed
 }
 
@@ -403,8 +425,10 @@ func (s *RedisMessagingSuite) TestNewPublisher_KindRedis() {
 	pub, err := messaging.NewFromConfig(context.Background(), cfg, deps)
 	s.Require().NoError(err)
 	s.Require().NotNil(pub)
+
 	subI, err := messaging.NewConsumerFromConfig(context.Background(), cfg, deps)
 	s.Require().NoError(err)
+
 	sub, ok := subI.(*msgredis.Subscriber)
 	s.Require().True(ok)
 	s.T().Cleanup(func() { _ = sub.Close() })

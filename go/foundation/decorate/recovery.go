@@ -27,9 +27,11 @@ func NewRecovery(logger interfaces.Logger, tier, name string) OpMiddleware {
 							"stack", string(debug.Stack()),
 						)
 					}
+
 					err = apperr.Internal("internal " + tier + " error: panic recovered")
 				}
 			}()
+
 			return next(ctx)
 		},
 	)

@@ -22,6 +22,7 @@ func Chain(mws ...OpMiddleware) OpMiddleware {
 	// Copy so a later mutation of the caller's slice can't reorder the chain.
 	cp := make([]OpMiddleware, len(mws))
 	copy(cp, mws)
+
 	return chain{mws: cp}
 }
 
@@ -37,9 +38,11 @@ func (c chain) WrapOp(
 	// per-iteration loop variables make mw/inner fresh each step (no capture bug).
 	for _, mw := range slices.Backward(c.mws) {
 		inner := wrapped
+
 		wrapped = func(ctx context.Context) error {
 			return mw.WrapOp(ctx, op, inner)
 		}
 	}
+
 	return wrapped(ctx)
 }

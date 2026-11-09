@@ -38,6 +38,7 @@ func (c *Client) terraform(
 // Init runs `terraform init -input=false`.
 func (c *Client) Init(ctx context.Context, dir string) error {
 	_, err := c.terraform(ctx, dir, "init", "-input=false")
+
 	return err
 }
 
@@ -46,12 +47,14 @@ func (c *Client) Plan(ctx context.Context, dir, out string) (types.Plan, error) 
 	if _, err := c.terraform(ctx, dir, "plan", "-input=false", "-out="+out); err != nil {
 		return types.Plan{}, err
 	}
+
 	return c.Show(ctx, dir, out)
 }
 
 // Apply runs `terraform apply -input=false planFile`.
 func (c *Client) Apply(ctx context.Context, dir, planFile string) error {
 	_, err := c.terraform(ctx, dir, "apply", "-input=false", planFile)
+
 	return err
 }
 
@@ -61,6 +64,7 @@ func (c *Client) Show(ctx context.Context, dir, planFile string) (types.Plan, er
 	if err != nil {
 		return types.Plan{}, err
 	}
+
 	return Parse(out)
 }
 
@@ -90,6 +94,7 @@ type showJSON struct {
 // create) both adds and destroys.
 func Parse(out []byte) (types.Plan, error) {
 	var doc showJSON
+
 	if err := json.Unmarshal(out, &doc); err != nil {
 		return types.Plan{}, apperr.Wrap(
 			err,
@@ -97,26 +102,33 @@ func Parse(out []byte) (types.Plan, error) {
 			"parse terraform plan",
 		)
 	}
+
 	var p types.Plan
+
 	for _, rc := range doc.ResourceChanges {
 		acts := rc.Change.Actions
 		create, del := slices.Contains(acts, "create"), slices.Contains(acts, "delete")
 		update := slices.Contains(acts, "update")
+
 		if !create && !del && !update {
 			continue
 		}
+
 		p.Changes = append(p.Changes, types.ResourceChange{
 			Address: rc.Address, Type: rc.Type, Name: rc.Name, Actions: acts,
 		})
 		if create {
 			p.Add++
 		}
+
 		if del {
 			p.Destroy++
 		}
+
 		if update {
 			p.Change++
 		}
 	}
+
 	return p, nil
 }

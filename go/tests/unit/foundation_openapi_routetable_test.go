@@ -38,8 +38,10 @@ func sortedEntries(entries []openapi.RouteEntry) []openapi.RouteEntry {
 		if out[i].PathTemplate != out[j].PathTemplate {
 			return out[i].PathTemplate < out[j].PathTemplate
 		}
+
 		return out[i].Method < out[j].Method
 	})
+
 	return out
 }
 
@@ -133,6 +135,7 @@ func docHeaders() map[string]string {
 // table, and runs openapi.Convert over them, returning the parsed output spec.
 func runDocConvert(t *testing.T, swagger string) map[string]any {
 	t.Helper()
+
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(t, s.FileOptsWithService(),
 		docMessages(s), docMethods(s))
@@ -161,8 +164,11 @@ func runDocConvert(t *testing.T, swagger string) map[string]any {
 
 	data, err := os.ReadFile(res.Written[0])
 	require.NoError(t, err)
+
 	var spec map[string]any
+
 	require.NoError(t, json.Unmarshal(data, &spec))
+
 	return spec
 }
 
@@ -174,10 +180,12 @@ func successSchema(
 	path, method string,
 ) map[string]any {
 	t.Helper()
+
 	paths := openapiAsMap(t, spec["paths"], "paths")
 	op := openapiAsMap(t, openapiAsMap(t, paths[path], path)[method], method)
 	resp := openapiAsMap(t, openapiAsMap(t, op["responses"], "responses")["200"], "200")
 	content := openapiAsMap(t, resp["content"], "content")
+
 	return openapiAsMap(t,
 		openapiAsMap(t, content["application/vnd.api+json"], "aj")["schema"], "schema")
 }
@@ -203,6 +211,7 @@ func successSchema(
 //   - a gRPC-only method (no http binding) is skipped.
 func TestRouteTable_EmitsEntryPerHTTPRPC(t *testing.T) {
 	t.Parallel()
+
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 
 	messages := []*descriptorpb.DescriptorProto{
@@ -322,6 +331,7 @@ func TestRouteTable_EmitsEntryPerHTTPRPC(t *testing.T) {
 //     coded apperr.CodeInvalidInput, naming the offending RPC.
 func TestRouteTable_ErrorsOnUnclassifiableRPC(t *testing.T) {
 	t.Parallel()
+
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(
 		t,
@@ -353,6 +363,7 @@ func TestRouteTable_ErrorsOnUnclassifiableRPC(t *testing.T) {
 //     entry for that RPC.
 func TestRouteTable_ExemptSkipsUnclassifiable(t *testing.T) {
 	t.Parallel()
+
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(
 		t,
@@ -387,11 +398,13 @@ func TestRouteTable_ExemptSkipsUnclassifiable(t *testing.T) {
 //     meta-only (no data member).
 func TestOpenAPI_MarksDataRequiredByRole(t *testing.T) {
 	t.Parallel()
+
 	spec := runDocConvert(t, docSwagger)
 
 	// GET_ONE: single data object required.
 	getEnv := successSchema(t, spec, "/api/v1/documents/{document_id}", "get")
 	require.Contains(t, getEnv["required"], "data")
+
 	getData := openapiAsMap(
 		t,
 		openapiAsMap(t, getEnv["properties"], "props")["data"],
@@ -436,6 +449,7 @@ func TestOpenAPI_MarksDataRequiredByRole(t *testing.T) {
 //     <Request>Attributes schema; GET has no requestBody.
 func TestOpenAPI_WriteOpsGetRequestEnvelope(t *testing.T) {
 	t.Parallel()
+
 	spec := runDocConvert(t, docSwagger)
 	paths := openapiAsMap(t, spec["paths"], "paths")
 
@@ -444,12 +458,14 @@ func TestOpenAPI_WriteOpsGetRequestEnvelope(t *testing.T) {
 		rb := openapiAsMap(t, op["requestBody"], "requestBody")
 		content := openapiAsMap(t, rb["content"], "content")
 		require.Contains(t, content, "application/vnd.api+json")
+
 		schema := openapiAsMap(
 			t,
 			openapiAsMap(t, content["application/vnd.api+json"], "aj")["schema"],
 			"schema",
 		)
 		require.Contains(t, schema["required"], "data")
+
 		data := openapiAsMap(
 			t,
 			openapiAsMap(t, schema["properties"], "props")["data"],
@@ -457,6 +473,7 @@ func TestOpenAPI_WriteOpsGetRequestEnvelope(t *testing.T) {
 		)
 		dataProps := openapiAsMap(t, data["properties"], "dp")
 		require.Contains(t, dataProps, "type")
+
 		attrs := openapiAsMap(t, dataProps["attributes"], "attributes")
 		assert.Equal(t, "#/components/schemas/"+attrsSchema, attrs["$ref"],
 			"%s %s attributes schema", method, path)
@@ -494,6 +511,7 @@ func TestOpenAPI_WriteOpsGetRequestEnvelope(t *testing.T) {
 //     still resolves to its RouteEntry and gets the collection envelope.
 func TestOpenAPI_RouteLookupNormalizesBasePath(t *testing.T) {
 	t.Parallel()
+
 	relSwagger := `{
       "swagger": "2.0", "info": {"title": "testsvc"},
       "paths": {"/documents": {"get": {"operationId": "ListDocuments",
@@ -530,6 +548,7 @@ func TestOpenAPI_RouteLookupNormalizesBasePath(t *testing.T) {
 //   - Two resources sharing a single key make Convert fail, even on the new path.
 func TestOpenAPI_ResourceKeyConflictStillErrors(t *testing.T) {
 	t.Parallel()
+
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	messages := []*descriptorpb.DescriptorProto{
 		fixtures.ResourceMessage(s, "Document", "documents", "document", ""),
@@ -555,6 +574,7 @@ func TestOpenAPI_ResourceKeyConflictStillErrors(t *testing.T) {
 
 	descPath := filepath.Join(t.TempDir(), "d.binpb")
 	require.NoError(t, os.WriteFile(descPath, fds, 0o644))
+
 	inDir := filepath.Join(t.TempDir(), "in")
 	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o755))
 	require.NoError(t, os.WriteFile(
@@ -587,6 +607,7 @@ func TestOpenAPI_ResourceKeyConflictStillErrors(t *testing.T) {
 //     parses as valid Go.
 func TestRouteTable_WritesRuntimeTablePerService(t *testing.T) {
 	t.Parallel()
+
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(t, s.FileOptsWithService(),
 		docMessages(s), docMethods(s))
@@ -594,6 +615,7 @@ func TestRouteTable_WritesRuntimeTablePerService(t *testing.T) {
 	require.NoError(t, err)
 
 	const runtimeImport = "example.com/rt/jsonapi"
+
 	outDir := t.TempDir()
 	require.NoError(
 		t,
@@ -602,6 +624,7 @@ func TestRouteTable_WritesRuntimeTablePerService(t *testing.T) {
 
 	gen, err := os.ReadFile(filepath.Join(outDir, "testsvc", "routes.go"))
 	require.NoError(t, err)
+
 	src := string(gen)
 
 	assert.Contains(t, src, "package testsvc")
@@ -640,6 +663,7 @@ func TestRouteTable_WritesRuntimeTablePerService(t *testing.T) {
 //     annotation yields a {meta} envelope with no data member.
 func TestOpenAPI_ResourcelessGetOneIsMetaOnly(t *testing.T) {
 	t.Parallel()
+
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	messages := []*descriptorpb.DescriptorProto{
 		fixtures.EmptyMessage("Empty"),
@@ -657,11 +681,13 @@ func TestOpenAPI_ResourcelessGetOneIsMetaOnly(t *testing.T) {
 	)
 	descPath := filepath.Join(t.TempDir(), "d.binpb")
 	require.NoError(t, os.WriteFile(descPath, fds, 0o644))
+
 	routes, err := openapi.BuildRouteTable(fds, nil)
 	require.NoError(t, err)
 
 	inDir := filepath.Join(t.TempDir(), "in")
 	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o755))
+
 	swagger := `{"swagger":"2.0","info":{"title":"t"},
       "paths":{"/api/v1/notes/{note_id}":{"get":{"operationId":"GetNote",
         "responses":{"200":{"description":"ok",
@@ -680,9 +706,12 @@ func TestOpenAPI_ResourcelessGetOneIsMetaOnly(t *testing.T) {
 		routes, nil,
 	)
 	require.NoError(t, err)
+
 	data, err := os.ReadFile(res.Written[0])
 	require.NoError(t, err)
+
 	var spec map[string]any
+
 	require.NoError(t, json.Unmarshal(data, &spec))
 
 	env := successSchema(t, spec, "/api/v1/notes/{note_id}", "get")

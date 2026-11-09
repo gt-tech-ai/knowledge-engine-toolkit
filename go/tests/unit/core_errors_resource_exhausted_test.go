@@ -37,6 +37,7 @@ func TestResourceExhausted_MapsGRPC8AndHTTP429(t *testing.T) {
 		http.StatusTooManyRequests,
 		apperr.ToHTTPStatus(apperr.CodeResourceExhausted),
 	)
+
 	code, msg := rpc.Sanitize(err)
 	assert.Equal(t, connect.CodeResourceExhausted, code)
 	assert.Equal(t, connect.Code(8), code)

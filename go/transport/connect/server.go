@@ -89,10 +89,12 @@ func NewServer(cfg ServerConfig, logger interfaces.Logger) *Server {
 	// Health endpoints
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
+
 		_, _ = w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
+
 		_, _ = w.Write([]byte("ok"))
 	})
 
@@ -155,14 +157,17 @@ func (s *Server) Start(ctx context.Context) error {
 			"connect server listen on "+addr,
 		)
 	}
+
 	s.httpServer.Store(srv)
 
 	s.logger.Info("Connect server starting", "port", s.cfg.Port)
+
 	go func() {
 		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 			s.logger.Error("connect server serve error", "error", err)
 		}
 	}()
+
 	return nil
 }
 
@@ -172,9 +177,13 @@ func (s *Server) Shutdown() error {
 	if srv == nil {
 		return nil
 	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), s.cfg.ShutdownTimeout)
+
 	defer cancel()
+
 	s.logger.Info("Connect server shutting down")
+
 	if err := srv.Shutdown(ctx); err != nil {
 		return apperr.Wrap(
 			err,
@@ -182,6 +191,7 @@ func (s *Server) Shutdown() error {
 			"shut down connect server",
 		)
 	}
+
 	return nil
 }
 

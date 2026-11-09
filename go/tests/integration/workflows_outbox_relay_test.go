@@ -40,9 +40,11 @@ import (
 // suite gate), and when no container provider is reachable.
 func requireIntegration(t *testing.T) {
 	t.Helper()
+
 	if testing.Short() || (os.Getenv("INTEGRATION") == "" && os.Getenv("CI") == "") {
 		t.Skip("set INTEGRATION=1 or CI=1 (without -short) to run integration tests")
 	}
+
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 }
 
@@ -81,15 +83,19 @@ func newOutboxStore(
 	tx interfaces.TransactionManager,
 ) {
 	t.Helper()
+
 	ctx := context.Background()
 	pg, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err, "start postgres")
 	t.Cleanup(func() { pg.Close(context.Background()) })
+
 	db, err := pg.OpenDB()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
+
 	_, err = db.ExecContext(ctx, relaySchema)
 	require.NoError(t, err)
+
 	store, err = outboxstore.NewFromConfig(ctx, outboxstore.Config{
 		Kind: outboxstore.KindPostgres,
 		Postgres: outboxpg.Config{
@@ -100,11 +106,13 @@ func newOutboxStore(
 		},
 	}, outboxstore.Deps{DB: db})
 	require.NoError(t, err)
+
 	enqueue = func(ctx context.Context, rec *types.OutboxRecord) error {
 		created := rec.CreatedAt
 		if created.IsZero() {
 			created = time.Now()
 		}
+
 		_, err := db.ExecContext(ctx, `INSERT INTO relay_outbox
 			(id, lane, route, aggregate_id, tenant, payload, created_at)
 			VALUES ($1,$2,$3,$4,$5,$6,$7)`,
@@ -113,14 +121,17 @@ func newOutboxStore(
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "relay test: enqueue")
 		}
+
 		return nil
 	}
+
 	return store, enqueue, sqltx.New(db)
 }
 
 // awsConfig is a static-credential AWS config for a local emulator.
 func awsConfig(t *testing.T, key, secret string) aws.Config {
 	t.Helper()
+
 	cfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
 		awsconfig.WithRegion("us-east-1"),
@@ -129,6 +140,7 @@ func awsConfig(t *testing.T, key, secret string) aws.Config {
 		),
 	)
 	require.NoError(t, err)
+
 	return cfg
 }
 
@@ -140,30 +152,37 @@ func enqueueN(
 	n int,
 ) []uuid.UUID {
 	t.Helper()
+
 	ids := make([]uuid.UUID, n)
 	for i := range n {
 		ids[i] = uuid.New()
+
 		rec := types.OutboxRecord{
 			ID: ids[i], Lane: lane, Tenant: "org-1", Key: strconv.Itoa(i),
 			Payload: []byte(`{"seq":` + strconv.Itoa(i) + `}`), CreatedAt: enqueuedAt(),
 		}
 		require.NoError(t, enqueue(context.Background(), &rec))
 	}
+
 	return ids
 }
 
 // drain runs the relay until the lane has nothing pending (bounded).
 func drain(t *testing.T, relay *outbox.Relay, store interfaces.OutboxStore, lane string) {
 	t.Helper()
+
 	ctx := context.Background()
 	for range 10 {
 		require.NoError(t, relay.RunOnce(ctx))
+
 		stats, err := store.Stats(ctx, lane)
 		require.NoError(t, err)
+
 		if stats.Pending == 0 {
 			return
 		}
 	}
+
 	t.Fatal("relay did not drain the lane")
 }
 
@@ -180,6 +199,7 @@ func drain(t *testing.T, relay *outbox.Relay, store interfaces.OutboxStore, lane
 //     the rows' keys, unchanged; the lane ends with 0 pending.
 func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 	requireIntegration(t)
+
 	ctx := context.Background()
 	store, enqueue, tx := newOutboxStore(t)
 	emq, err := elasticmqdb.NewTestElasticMQ(ctx)
@@ -197,8 +217,10 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := outboxclient.DefaultConfig()
+
 	cfg.Kind = outboxclient.KindSQS
 	cfg.SQS.Queue = "outbox-e2e"
+
 	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
@@ -222,19 +244,23 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, out.Messages, "queue ran dry after %d messages", len(got))
+
 		for _, m := range out.Messages {
 			id := aws.ToString(m.MessageAttributes["outbox_id"].StringValue)
 			require.NotContains(t, got, id, "duplicate delivery")
+
 			got[id] = aws.ToString(m.Body)
 			keys[id] = aws.ToString(
 				m.MessageAttributes[interfaces.PartitionKeyAttribute].StringValue,
 			)
 		}
 	}
+
 	for i, id := range ids {
 		require.Equal(t, `{"seq":`+strconv.Itoa(i)+`}`, got[id.String()])
 		require.Equal(t, strconv.Itoa(i), keys[id.String()])
 	}
+
 	stats, err := store.Stats(ctx, "events")
 	require.NoError(t, err)
 	require.Equal(t, types.OutboxStats{}, stats)
@@ -254,6 +280,7 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 //     leaves 900 of another 1,000-row lane pending.
 func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 	requireIntegration(t)
+
 	ctx := context.Background()
 	store, enqueue, tx := newOutboxStore(t)
 	sink, err := outboxclient.NewFromConfig(
@@ -266,11 +293,13 @@ func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 	enqueueN(t, enqueue, "single", 1000)
 
 	draining := outbox.DefaultRelayConfig("burst")
+
 	draining.DrainBudget = time.Minute
 	require.NoError(
 		t,
 		outbox.NewRelay(draining, tx, store, sink, nil, nil, nil).RunOnce(ctx),
 	)
+
 	single := outbox.DefaultRelayConfig("single")
 	require.NoError(
 		t,
@@ -280,6 +309,7 @@ func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 	burst, err := store.Stats(ctx, "burst")
 	require.NoError(t, err)
 	require.Zero(t, burst.Pending)
+
 	once, err := store.Stats(ctx, "single")
 	require.NoError(t, err)
 	require.Equal(t, 900, once.Pending)
@@ -299,6 +329,7 @@ func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 //     ends with 0 pending.
 func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 	requireIntegration(t)
+
 	ctx := context.Background()
 	store, enqueue, tx := newOutboxStore(t)
 	mio, err := miniodb.NewTestMinIO(ctx)
@@ -311,7 +342,9 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 			o.BaseEndpoint, o.UsePathStyle = aws.String(mio.Endpoint()), true
 		},
 	)
+
 	const bucket = "audit-worm"
+
 	_, err = api.CreateBucket(
 		ctx,
 		&awss3.CreateBucketInput{
@@ -320,6 +353,7 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
+
 	_, err = api.PutObjectLockConfiguration(ctx, &awss3.PutObjectLockConfigurationInput{
 		Bucket: aws.String(bucket),
 		ObjectLockConfiguration: &s3types.ObjectLockConfiguration{
@@ -332,8 +366,10 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := outboxclient.DefaultConfig()
+
 	cfg.Kind = outboxclient.KindS3
 	cfg.S3.Bucket = bucket
+
 	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{S3API: api})
 	require.NoError(t, err)
 
@@ -354,15 +390,19 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 		&awss3.ListObjectsV2Input{Bucket: aws.String(bucket)},
 	)
 	require.NoError(t, err)
+
 	keys := make([]string, 0, len(listed.Contents))
 	for _, o := range listed.Contents {
 		keys = append(keys, aws.ToString(o.Key))
 	}
+
 	day := enqueuedAt().Format("2006/01/02")
 	want := make([]string, len(ids))
+
 	for i, id := range ids {
 		want[i] = "org-1/" + day + "/" + id.String()
 	}
+
 	sort.Strings(keys)
 	sort.Strings(want)
 	require.Equal(t, want, keys)
@@ -375,16 +415,21 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.Equal(t, s3types.ObjectLockModeCompliance, head.ObjectLockMode)
+
 		obj, err := api.GetObject(
 			ctx,
 			&awss3.GetObjectInput{Bucket: aws.String(bucket), Key: key},
 		)
 		require.NoError(t, err)
+
 		body, err := io.ReadAll(obj.Body)
+
 		_ = obj.Body.Close()
+
 		require.NoError(t, err)
 		require.Equal(t, `{"seq":`+strconv.Itoa(i)+`}`, string(body))
 	}
+
 	stats, err := store.Stats(ctx, "audit")
 	require.NoError(t, err)
 	require.Equal(t, types.OutboxStats{}, stats)
@@ -405,11 +450,13 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 //     pending.
 func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 	requireIntegration(t)
+
 	ctx := context.Background()
 	store, enqueue, tx := newOutboxStore(t)
 	emq, err := elasticmqdb.NewTestElasticMQ(ctx)
 	require.NoError(t, err, "start elasticmq")
 	t.Cleanup(func() { emq.Close(context.Background()) })
+
 	api := awssqs.NewFromConfig(
 		awsConfig(t, elasticmqdb.AccessKey, elasticmqdb.SecretKey),
 		func(o *awssqs.Options) { o.BaseEndpoint = aws.String(emq.Endpoint()) },
@@ -425,21 +472,27 @@ func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 	}
 	routes := map[string]string{"member_removed": "q-member-removed"} // never created
 	urls := map[string]string{}
+
 	for _, route := range healthy {
 		in := &awssqs.CreateQueueInput{QueueName: aws.String("q-" + route)}
 		if route == "ordered" { // a FIFO queue rejects any entry without a group id
 			in.QueueName = aws.String("q-ordered.fifo")
 			in.Attributes = map[string]string{"FifoQueue": "true"}
 		}
+
 		routes[route] = aws.ToString(in.QueueName)
+
 		out, err := api.CreateQueue(ctx, in)
 		require.NoError(t, err)
+
 		urls[route] = aws.ToString(out.QueueUrl)
 	}
 
 	cfg := outboxclient.DefaultConfig()
+
 	cfg.Kind = outboxclient.KindSQS
 	cfg.SQS.Routes = routes
+
 	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
@@ -451,11 +504,13 @@ func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 				relay := outbox.NewRelay(
 					outbox.DefaultRelayConfig(lane), tx, store, sink, nil, nil, nil,
 				)
+
 				return relay.RunOnce(ctx)
 			},
 			Healthy: healthy, Broken: "member_removed",
 			Delivered: func(ctx context.Context, route string) ([]string, error) {
 				var got []string
+
 				for {
 					out, err := api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
 						QueueUrl: aws.String(
@@ -471,6 +526,7 @@ func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 							"receive sqs messages",
 						)
 					}
+
 					for _, m := range out.Messages {
 						got = append(got, aws.ToString(m.Body))
 					}
@@ -501,19 +557,27 @@ CREATE TABLE partitioned_outbox (
 // those were claimed more than once.
 func partitionCounts(t *testing.T, db *sql.DB) (sent, reclaimed map[int]int) {
 	t.Helper()
+
 	rows, err := db.QueryContext(context.Background(), `
 SELECT part, count(*) FILTER (WHERE status = 'sent'),
        count(*) FILTER (WHERE status = 'sent' AND attempts > 1)
 FROM partitioned_outbox GROUP BY part`)
 	require.NoError(t, err)
+
 	defer func() { _ = rows.Close() }()
+
 	sent, reclaimed = map[int]int{}, map[int]int{}
+
 	for rows.Next() {
 		var part, s, r int
+
 		require.NoError(t, rows.Scan(&part, &s, &r))
+
 		sent[part], reclaimed[part] = s, r
 	}
+
 	require.NoError(t, rows.Err())
+
 	return sent, reclaimed
 }
 
@@ -533,15 +597,19 @@ FROM partitioned_outbox GROUP BY part`)
 //     pending rows as Stranded
 func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 	requireIntegration(t)
+
 	ctx := context.Background()
 	pg, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err, "start postgres")
 	t.Cleanup(func() { pg.Close(context.Background()) })
+
 	db, err := pg.OpenDB()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
+
 	_, err = db.ExecContext(ctx, partitionedSchema)
 	require.NoError(t, err)
+
 	store, err := outboxstore.NewFromConfig(ctx, outboxstore.Config{
 		Kind: outboxstore.KindPostgres,
 		Postgres: outboxpg.Config{
@@ -550,21 +618,27 @@ func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 		},
 	}, outboxstore.Deps{DB: db})
 	require.NoError(t, err)
+
 	tx := sqltx.New(db)
 	want := map[int]int{}
+
 	require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
 		for i := range 200 {
 			key := "doc-" + strconv.Itoa(i)
 			want[types.OutboxPartition(key, 2)]++
+
 			rec := types.OutboxRecord{Lane: "split", Key: key, Payload: []byte(key)}
+
 			if err := store.Enqueue(ctx, rec); err != nil {
 				return err
 			}
 		}
+
 		return nil
 	}))
 	require.Positive(t, want[0])
 	require.Positive(t, want[1])
+
 	narrowed, err := outboxstore.NewFromConfig(ctx, outboxstore.Config{
 		Kind: outboxstore.KindPostgres,
 		Postgres: outboxpg.Config{
@@ -573,31 +647,40 @@ func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 		},
 	}, outboxstore.Deps{DB: db})
 	require.NoError(t, err)
+
 	stats, err := narrowed.Stats(ctx, "split")
 	require.NoError(t, err)
 	require.Equal(t, want[1], stats.Stranded, "partition 1 is stranded at one partition")
+
 	sink, err := outboxclient.NewFromConfig(
 		ctx,
 		outboxclient.DefaultConfig(),
 		outboxclient.Deps{},
 	)
 	require.NoError(t, err)
+
 	relayFor := func(partition int) *outbox.Relay {
 		cfg := outbox.DefaultRelayConfig("split")
+
 		cfg.Partitions, cfg.Partition, cfg.DrainBudget = 2, partition, time.Minute
+
 		return outbox.NewRelay(cfg, tx, store, sink, nil, nil, nil)
 	}
 
 	require.NoError(t, relayFor(1).RunOnce(ctx))
+
 	sent, _ := partitionCounts(t, db)
 	require.Equal(t, map[int]int{0: 0, 1: want[1]}, sent)
 
 	done := make(chan error, 2)
+
 	for partition := range 2 {
 		go func() { done <- relayFor(partition).RunOnce(ctx) }()
 	}
+
 	require.NoError(t, <-done)
 	require.NoError(t, <-done)
+
 	sent, reclaimed := partitionCounts(t, db)
 	require.Equal(t, want, sent)
 	require.Equal(t, map[int]int{0: 0, 1: 0}, reclaimed)

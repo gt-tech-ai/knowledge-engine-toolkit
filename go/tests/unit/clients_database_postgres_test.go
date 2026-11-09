@@ -59,8 +59,10 @@ func TestStartPoolStatsCollector_PublishesGauges(t *testing.T) {
 		http.NoBody,
 	)
 	m.Handler().ServeHTTP(rec, req)
+
 	body, err := io.ReadAll(rec.Result().Body)
 	require.NoError(t, err)
+
 	out := string(body)
 
 	assert.Contains(t, out, "db_pool_max_connections 17")

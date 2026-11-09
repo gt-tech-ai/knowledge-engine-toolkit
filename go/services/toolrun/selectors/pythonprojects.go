@@ -20,9 +20,11 @@ func (pythonProjects) Select(
 	if err != nil {
 		return nil, err
 	}
+
 	paths := make([]string, 0, len(found))
 	for _, f := range found {
 		paths = append(paths, f.Path)
 	}
+
 	return dirsOf(paths), nil
 }

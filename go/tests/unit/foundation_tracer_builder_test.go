@@ -76,6 +76,7 @@ func TestTracer_MockAsConsumerDependency(t *testing.T) {
 	mockTracer.EXPECT().Shutdown(gomock.Any()).Return(nil)
 
 	var tr interfaces.Tracer = mockTracer
+
 	spanCtx, span := tr.Start(ctx, "handleRequest")
 	require.NotNil(t, spanCtx, "Start must return non-nil context")
 	span.SetAttribute("user.id", "abc-123")
@@ -103,6 +104,7 @@ func TestTracer_MockShutdownError(t *testing.T) {
 	mock.EXPECT().Shutdown(gomock.Any()).Return(shutdownErr)
 
 	var tr interfaces.Tracer = mock
+
 	err := tr.Shutdown(context.Background())
 	assert.ErrorIs(t, err, shutdownErr)
 }
@@ -217,6 +219,7 @@ func TestTracerBuilder_ConfigToOptions(t *testing.T) {
 	opts := original.ToOptions()
 
 	var rebuilt tracer.Config
+
 	for _, opt := range opts {
 		opt(&rebuilt)
 	}

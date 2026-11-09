@@ -54,13 +54,18 @@ func (s *RedisCacheSuite) TearDownTest() {
 // letting mutate adjust the config first.
 func (s *RedisCacheSuite) newCache(mutate func(*rediscache.Config)) *rediscache.Cache {
 	cfg := rediscache.DefaultConfig()
+
 	cfg.Addr = s.RedisAddr
 	cfg.OpTimeout = 2 * time.Second
+
 	if mutate != nil {
 		mutate(&cfg)
 	}
+
 	c := rediscache.New(&cfg)
+
 	s.T().Cleanup(func() { _ = c.Close() })
+
 	return c
 }
 
@@ -71,14 +76,19 @@ func (s *RedisCacheSuite) unreachableCache(
 ) *rediscache.Cache {
 	lis, err := (&net.ListenConfig{}).Listen(s.T().Context(), "tcp", "127.0.0.1:0")
 	s.Require().NoError(err)
+
 	addr := lis.Addr().String()
 	s.Require().NoError(lis.Close())
+
 	cfg := &rediscache.Config{Addr: addr, OpTimeout: time.Second}
 	if mutate != nil {
 		mutate(cfg)
 	}
+
 	c := rediscache.New(cfg)
+
 	s.T().Cleanup(func() { _ = c.Close() })
+
 	return c
 }
 
@@ -152,6 +162,7 @@ func (s *RedisCacheSuite) TestDelete() {
 	key := s.uniqueKey("del")
 
 	s.cache.Set(ctx, key, []byte("to-be-deleted"), time.Minute)
+
 	_, hit := s.cache.Get(ctx, key)
 	s.Require().True(hit, "key should exist before Delete")
 
@@ -178,6 +189,7 @@ func (s *RedisCacheSuite) TestGetOrLoad_PopulatesOnMiss() {
 
 	loader := func() ([]byte, error) {
 		calls++
+
 		return []byte("loaded-value"), nil
 	}
 
@@ -215,6 +227,7 @@ func (s *RedisCacheSuite) TestGetOrLoad_LoaderErrorAndNilValue() {
 	}, time.Minute)
 	s.Require().ErrorIs(err, errLoad)
 	s.Nil(val)
+
 	_, ok := s.cache.Get(ctx, s.uniqueKey("err"))
 	s.False(ok, "cache should not be populated after loader error")
 
@@ -288,6 +301,7 @@ func (s *RedisCacheSuite) TestTTLSelection() {
 	unset.Set(ctx, fallback, []byte("v"), 0)
 	s.Greater(ttlOf(unset, fallback), time.Duration(0), "New falls back to a 5m default")
 	s.LessOrEqual(ttlOf(unset, fallback), 5*time.Minute)
+
 	got, ok := unset.Get(ctx, fallback)
 	s.True(ok)
 	s.Equal([]byte("v"), got)
@@ -308,11 +322,13 @@ func (s *RedisCacheSuite) TestZeroOpTimeout() {
 	key := s.uniqueKey("k")
 
 	c.Set(ctx, key, []byte("value1"), time.Minute)
+
 	got, ok := c.Get(ctx, key)
 	s.Require().True(ok, "expected cache hit after Set with zero OpTimeout")
 	s.Equal([]byte("value1"), got)
 
 	c.Delete(ctx, key)
+
 	_, ok = c.Get(ctx, key)
 	s.False(ok, "expected cache miss after Delete with zero OpTimeout")
 }
@@ -342,6 +358,7 @@ func (s *RedisCacheSuite) TestInvalidatePrefix() {
 	}
 	present := func(k string) bool {
 		_, ok := s.cache.Get(ctx, p+k)
+
 		return ok
 	}
 
@@ -386,6 +403,7 @@ func (s *RedisCacheSuite) TestInvalidateAll() {
 
 	_, ok := c.Get(ctx, "k1")
 	s.False(ok, "k1 should be cleared by InvalidateAll")
+
 	_, ok = c.Get(ctx, "k2")
 	s.False(ok, "k2 should be cleared by InvalidateAll")
 }
@@ -432,6 +450,7 @@ func (s *RedisCacheSuite) TestUnreachable_ByteCacheDegradesToMiss() {
 		cfg.FailureMode = rediscache.FailureModeError
 		cfg.Logger = spy
 	})
+
 	val, ok = logged.Get(ctx, "key1")
 	s.False(ok, "expected miss when Redis is unavailable")
 	s.Nil(val)
@@ -443,6 +462,7 @@ func (s *RedisCacheSuite) TestUnreachable_ByteCacheDegradesToMiss() {
 		cfg.FailureMode = rediscache.FailureModeError
 		cfg.Logger = nil
 	})
+
 	val, ok = silent.Get(ctx, "any-key")
 	s.False(ok, "expected miss when Redis is unavailable")
 	s.Nil(val)

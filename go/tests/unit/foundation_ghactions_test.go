@@ -31,17 +31,21 @@ import (
 //     one command per non-empty trimmed line of each value, with %, CR and LF escaped.
 func TestFoundationGhactions(t *testing.T) {
 	t.Parallel()
+
 	path := filepath.Join(t.TempDir(), "summary.md")
 	require.NoError(t, ghactions.AppendSummary(path, "### one"))
 	require.NoError(t, ghactions.AppendSummary(path, "### two"))
+
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, "### one\n### two\n", string(data))
 	require.NoError(t, ghactions.AppendSummary("", "nowhere"))
+
 	err = ghactions.AppendSummary(filepath.Join(path, "nested"), "x")
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
 	var out bytes.Buffer
+
 	require.NoError(t, ghactions.MaskEnv(&out, []string{
 		"AUTH0_CLIENT_SECRET=s3cr3t%",
 		"GITHUB_APP_KEY=-----BEGIN KEY-----\n abc \n\n-----END KEY-----",
@@ -79,12 +83,16 @@ func TestGhactions_TruncateComment(t *testing.T) {
 	long := "HEAD-" + strings.Repeat("é", 1000) + "-TAIL"
 	got := ghactions.TruncateComment(long, 400)
 	assert.LessOrEqual(t, utf8.RuneCountInString(got), 400)
+
 	head, rest, ok := strings.Cut(got, "\n\n… ")
 	require.True(t, ok, got)
+
 	count, _, ok := strings.Cut(rest, " characters cut")
 	require.True(t, ok, got)
+
 	_, tail, ok := strings.Cut(rest, " …\n\n")
 	require.True(t, ok, got)
+
 	kept := utf8.RuneCountInString(head) + utf8.RuneCountInString(tail)
 	assert.Equal(t, strconv.Itoa(utf8.RuneCountInString(long)-kept), count,
 		"the notice names exactly the characters removed")
@@ -94,8 +102,10 @@ func TestGhactions_TruncateComment(t *testing.T) {
 	assert.Contains(t, got, "characters cut to fit GitHub's comment limit")
 
 	fenced := "<details>\n```\n" + strings.Repeat("x", 1000) + "\n```\n</details>"
+
 	got = ghactions.TruncateComment(fenced, 400)
 	assert.LessOrEqual(t, utf8.RuneCountInString(got), 400)
+
 	before, after, ok := strings.Cut(got, "characters cut")
 	require.True(t, ok, got)
 	assert.Zero(

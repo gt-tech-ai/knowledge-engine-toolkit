@@ -41,12 +41,15 @@ func (m tracingMW) WrapOp(
 ) error {
 	ctx, span := m.tracer.Start(ctx, m.name+"."+op, interfaces.WithSpanKind(m.kind))
 	defer span.End()
+
 	span.SetAttribute(m.tier+".name", m.name)
 	span.SetAttribute(m.tier+".operation", op)
+
 	err := next(ctx)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(interfaces.SpanStatusError, err.Error())
 	}
+
 	return err
 }

@@ -73,6 +73,7 @@ func serverPaths() map[string]serverPath {
 //   - Headers outside the map are ignored.
 func TestAuthInterceptor_HeaderMap(t *testing.T) {
 	t.Parallel()
+
 	ic := interceptors.NewAuthInterceptor(false, customHeaders())
 
 	ctx, err := invokeUnaryWith(
@@ -84,6 +85,7 @@ func TestAuthInterceptor_HeaderMap(t *testing.T) {
 		}),
 	)
 	require.NoError(t, err)
+
 	claims, ok := interceptors.GetAuthClaims(ctx)
 	require.True(t, ok, "claims must be read from the custom headers")
 	assert.Equal(t, interceptors.AuthClaims{
@@ -103,6 +105,7 @@ func TestAuthInterceptor_HeaderMap(t *testing.T) {
 		}),
 	)
 	require.NoError(t, err)
+
 	_, ok = interceptors.GetAuthClaims(ctx)
 	assert.False(t, ok, "a header outside the map must be ignored")
 }
@@ -124,6 +127,7 @@ func TestAuthInterceptor_HeaderMap(t *testing.T) {
 //     and SessionVarStamper panics on an empty variable name.
 func TestInterceptorWiring_FailsLoudlyOnMisconfiguration(t *testing.T) {
 	t.Parallel()
+
 	extract := func(context.Context) (uuid.UUID, bool) { return uuid.Nil, false }
 
 	assert.Panics(
@@ -163,12 +167,15 @@ func TestInterceptorWiring_FailsLoudlyOnMisconfiguration(t *testing.T) {
 //   - A request without claims passes through with no principal and no resolver call.
 func TestPrincipalInterceptor_ResolvesConsumerPrincipal(t *testing.T) {
 	t.Parallel()
+
 	for name, invoke := range serverPaths() {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			calls := 0
 			resolve := func(_ context.Context, c *interceptors.AuthClaims) (principal, error) {
 				calls++
+
 				return principal{Sub: c.Sub, Tenant: c.TenantID}, nil
 			}
 			ic := interceptors.NewPrincipalInterceptor[principal](resolve, nil)
@@ -177,17 +184,21 @@ func TestPrincipalInterceptor_ResolvesConsumerPrincipal(t *testing.T) {
 				&interceptors.AuthClaims{Sub: "u1", TenantID: "t1"})
 			got, err := invoke(ic, ctx)
 			require.NoError(t, err)
+
 			p, ok := coreprincipal.PrincipalFrom[principal](got)
 			require.True(t, ok)
 			assert.Equal(t, principal{Sub: "u1", Tenant: "t1"}, p)
+
 			claims, ok := interceptors.GetAuthClaims(got)
 			assert.False(t, ok, "cleared claims must read as absent")
 			assert.Nil(t, claims, "raw claims must be cleared once resolved")
+
 			_, ok = coreprincipal.PrincipalFrom[otherPrincipal](got)
 			assert.False(t, ok, "a principal of another type must not be visible")
 
 			got, err = invoke(ic, context.Background())
 			require.NoError(t, err)
+
 			_, ok = coreprincipal.PrincipalFrom[principal](got)
 			assert.False(t, ok, "no claims → no principal")
 			assert.Equal(t, 1, calls, "no claims → no resolver call")
@@ -218,6 +229,7 @@ func TestPrincipalInterceptor_ResolvesConsumerPrincipal(t *testing.T) {
 //     is captured in the request's error sink for the access log.
 func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 	t.Parallel()
+
 	stub := func(c *interceptors.AuthClaims) principal {
 		return principal{Sub: c.Sub, Tenant: "stub"}
 	}
@@ -231,6 +243,7 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 		interceptors.WithAuthClaims(context.Background(), synthetic),
 	)
 	require.NoError(t, err)
+
 	p, _ := coreprincipal.PrincipalFrom[principal](got)
 	assert.Equal(t, "stub", p.Tenant, "synthetic claims take the stub principal")
 
@@ -242,16 +255,19 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
+
 	p, _ = coreprincipal.PrincipalFrom[principal](got)
 	assert.Equal(t, "resolved", p.Tenant, "real claims resolve even with a stub set")
 
 	got, err = invokeUnary(interceptors.NewPrincipalInterceptor[principal](resolve, nil),
 		interceptors.WithAuthClaims(context.Background(), synthetic))
 	require.NoError(t, err)
+
 	p, _ = coreprincipal.PrincipalFrom[principal](got)
 	assert.Equal(t, "resolved", p.Tenant, "without a stub, synthetic claims resolve")
 
 	const secret = "pq: host db-7.internal password auth failed"
+
 	cases := map[string]struct {
 		err  error
 		want connect.Code
@@ -281,6 +297,7 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 			connect.CodeResourceExhausted,
 		},
 	}
+
 	for path, invoke := range serverPaths() {
 		for name, tc := range cases {
 			failing := func(context.Context, *interceptors.AuthClaims) (principal, error) {
@@ -295,7 +312,9 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 			label := path + "/" + name
 			assert.Nil(t, handled, "%s: the handler must not run", label)
 			assert.Equal(t, tc.want, connect.CodeOf(err), label)
+
 			var connectErr *connect.Error
+
 			require.ErrorAs(t, err, &connectErr, label)
 			assert.NotContains(
 				t,
@@ -328,11 +347,13 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 //     (synthetic claims) fails with CodeUnauthenticated and never reaches the handler.
 func TestPrincipalInterceptor_RejectsNilPrincipal(t *testing.T) {
 	t.Parallel()
+
 	nilResolve := func(
 		context.Context,
 		*interceptors.AuthClaims,
 	) (*principal, error) {
 		var none *principal
+
 		return none, nil
 	}
 	nilStub := func(*interceptors.AuthClaims) *principal { return nil }
@@ -379,9 +400,11 @@ func TestPrincipalInterceptor_RejectsNilPrincipal(t *testing.T) {
 //     stampers.
 func TestTenantScopeInterceptor_StampsExtractedTenant(t *testing.T) {
 	t.Parallel()
+
 	for name, invoke := range serverPaths() {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			tenant, resolved := uuid.New(), true
 			extract := func(context.Context) (uuid.UUID, bool) { return tenant, resolved }
 			stampers := []interceptors.TenantStamper{
@@ -389,13 +412,16 @@ func TestTenantScopeInterceptor_StampsExtractedTenant(t *testing.T) {
 				interceptors.SessionVarStamper("app.tenant"),
 			}
 			ic := interceptors.NewTenantScopeInterceptor(extract, stampers...)
+
 			stampers[0] = func(ctx context.Context, _ uuid.UUID) context.Context { return ctx }
 
 			got, err := invoke(ic, context.Background())
 			require.NoError(t, err)
+
 			id, ok := coretenant.TenantFromContext(got)
 			assert.True(t, ok, "the core tenant context must be stamped")
 			assert.Equal(t, tenant, id)
+
 			v, ok := entsql.VarFromContext(got, "app.tenant")
 			assert.True(t, ok, "the session variable must be stamped")
 			assert.Equal(t, tenant.String(), v)
@@ -405,10 +431,13 @@ func TestTenantScopeInterceptor_StampsExtractedTenant(t *testing.T) {
 				"nil uuid":   func() { tenant, resolved = uuid.Nil, true },
 			} {
 				set()
+
 				unstamped, err := invoke(ic, context.Background())
 				require.NoError(t, err)
+
 				_, ok = coretenant.TenantFromContext(unstamped)
 				assert.False(t, ok, "%s: no tenant context may be stamped", label)
+
 				_, ok = entsql.VarFromContext(unstamped, "app.tenant")
 				assert.False(t, ok, "%s: no session variable may be stamped", label)
 			}
@@ -432,8 +461,12 @@ func TestTenantScopeInterceptor_StampsExtractedTenant(t *testing.T) {
 //     validation interceptor in Edge.Inner rejects the request.
 func TestServerOptions_RunsAuthnInOrderBeforeInner(t *testing.T) {
 	t.Parallel()
-	var order []string
-	var seen *interceptors.AuthClaims
+
+	var (
+		order []string
+		seen  *interceptors.AuthClaims
+	)
+
 	probe := func(name string) connect.Interceptor {
 		return connect.UnaryInterceptorFunc(
 			func(next connect.UnaryFunc) connect.UnaryFunc {
@@ -442,9 +475,11 @@ func TestServerOptions_RunsAuthnInOrderBeforeInner(t *testing.T) {
 					req connect.AnyRequest,
 				) (connect.AnyResponse, error) {
 					order = append(order, name)
+
 					if seen == nil {
 						seen, _ = interceptors.GetAuthClaims(ctx)
 					}
+
 					return next(ctx, req)
 				}
 			},
@@ -506,6 +541,7 @@ func serveProbe(
 	headers map[string]string,
 ) int {
 	const procedure = "/test.v1.Probe/Do"
+
 	handler := connect.NewUnaryHandler(
 		procedure,
 		func(context.Context, *connect.Request[probeMsg]) (*connect.Response[probeMsg], error) {
@@ -514,11 +550,14 @@ func serveProbe(
 		append(opts, connect.WithCodec(probeCodec{}))...)
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, procedure, http.NoBody)
 	req.Header.Set("Content-Type", "application/proto")
+
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
+
 	return rec.Code
 }
 
@@ -536,9 +575,11 @@ func invokeUnaryWith(
 	seen := make(chan context.Context, 1)
 	next := func(c context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 		seen <- c
+
 		return newTestResponse(), nil
 	}
 	_, err := ic.WrapUnary(next)(ctx, req)
+
 	return observed(seen), err
 }
 
@@ -564,11 +605,13 @@ func invokeStreaming(
 	err := ic.WrapStreamingHandler(
 		func(c context.Context, _ connect.StreamingHandlerConn) error {
 			seen <- c
+
 			return nil
 		},
 	)(
 		ctx,
 		nil,
 	)
+
 	return observed(seen), err
 }

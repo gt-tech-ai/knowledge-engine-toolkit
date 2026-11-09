@@ -59,9 +59,11 @@ func (f Fact) MarshalJSON() ([]byte, error) {
 	if dims == nil {
 		dims = map[string]string{} // Python renders an empty mapping as {}, never null.
 	}
+
 	if measures == nil {
 		measures = map[string]float64{}
 	}
+
 	// A map marshals with its keys sorted (cube, dims, idempotency_key, measures,
 	// org_id, schema, ts), the order the Python encoder emits.
 	out, err := json.Marshal(map[string]any{
@@ -76,6 +78,7 @@ func (f Fact) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "fact: encode")
 	}
+
 	return out, nil
 }
 
@@ -83,19 +86,23 @@ func (f Fact) MarshalJSON() ([]byte, error) {
 // timestamp, or a schema other than FactSchemaVersion, is CodeInvalidInput.
 func (f *Fact) UnmarshalJSON(b []byte) error {
 	var w factWire
+
 	if err := json.Unmarshal(b, &w); err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "fact: decode")
 	}
+
 	if w.Schema != FactSchemaVersion {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"fact: unknown schema version "+strconv.Itoa(w.Schema),
 		)
 	}
+
 	ts, err := time.Parse(time.RFC3339Nano, w.TS)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "fact: invalid ts")
 	}
+
 	*f = Fact{
 		TS:             ts,
 		Dims:           w.Dims,
@@ -105,5 +112,6 @@ func (f *Fact) UnmarshalJSON(b []byte) error {
 		IdempotencyKey: w.IdempotencyKey,
 		Schema:         w.Schema,
 	}
+
 	return nil
 }

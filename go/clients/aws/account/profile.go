@@ -39,6 +39,7 @@ func ConfigPath(getenv func(string) string) (string, error) {
 	if override := getenv("AWS_CONFIG_FILE"); override != "" {
 		return override, nil
 	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", apperr.Wrap(
@@ -47,6 +48,7 @@ func ConfigPath(getenv func(string) string) (string, error) {
 			"resolve home dir for ~/.aws/config",
 		)
 	}
+
 	return filepath.Join(home, ".aws", "config"), nil
 }
 
@@ -61,9 +63,11 @@ func UpsertProfile(path, owner string, p Profile) error {
 	if err != nil && !os.IsNotExist(err) {
 		return apperr.Wrap(err, apperr.CodeInternal, "read aws config "+path)
 	}
+
 	begin, end := "# >>> "+owner+" managed", "# <<< "+owner+" managed"
 	pre, inner, post := splitManaged(string(existing), begin, end)
 	sessionHeader, profileHeader := "sso-session "+p.SSOSession, "profile "+p.Name
+
 	if err := refuseUnmanaged(
 		path,
 		owner,
@@ -75,6 +79,7 @@ func UpsertProfile(path, owner string, p Profile) error {
 	}
 
 	sections := parseSections(inner)
+
 	sections = upsertSection(sections, sessionHeader, []string{
 		"sso_start_url = " + p.SSOStartURL,
 		"sso_region = " + p.SSORegion,
@@ -88,11 +93,13 @@ func UpsertProfile(path, owner string, p Profile) error {
 	})
 
 	var b strings.Builder
+
 	b.WriteString(pre)
 	b.WriteString(begin + "\n")
 	b.WriteString(renderSections(sections))
 	b.WriteString(end + "\n")
 	b.WriteString(post)
+
 	return writeFileAtomic(path, []byte(b.String()))
 }
 
@@ -108,6 +115,7 @@ func refuseUnmanaged(path, owner, unmanaged string, headers ...string) error {
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -122,17 +130,23 @@ func splitManaged(content, begin, end string) (pre, inner, post string) {
 		if pre != "" && !strings.HasSuffix(pre, "\n") {
 			pre += "\n"
 		}
+
 		if pre != "" {
 			pre += "\n"
 		}
+
 		return pre, "", ""
 	}
+
 	pre = content[:at]
+
 	rest := content[at+len(begin)+1:]
 	stop := strings.Index(rest, end+"\n")
+
 	if stop == -1 {
 		return pre, rest, ""
 	}
+
 	return pre, rest[:stop], rest[stop+len(end)+1:]
 }
 
@@ -149,6 +163,7 @@ type iniSection struct {
 // line before the first header (the writer owns every byte between the fences).
 func parseSections(inner string) []iniSection {
 	var sections []iniSection
+
 	for line := range strings.SplitSeq(inner, "\n") {
 		trimmed := strings.TrimSpace(line)
 		switch {
@@ -157,9 +172,11 @@ func parseSections(inner string) []iniSection {
 		case trimmed == "" || len(sections) == 0:
 		default:
 			last := &sections[len(sections)-1]
+
 			last.body = append(last.body, trimmed)
 		}
 	}
+
 	return sections
 }
 
@@ -168,21 +185,26 @@ func upsertSection(sections []iniSection, header string, body []string) []iniSec
 	for i := range sections {
 		if sections[i].header == header {
 			sections[i].body = body
+
 			return sections
 		}
 	}
+
 	return append(sections, iniSection{header: header, body: body})
 }
 
 // renderSections serializes stanzas, one newline-terminated line each.
 func renderSections(sections []iniSection) string {
 	var b strings.Builder
+
 	for _, s := range sections {
 		b.WriteString("[" + s.header + "]\n")
+
 		for _, line := range s.body {
 			b.WriteString(line + "\n")
 		}
 	}
+
 	return b.String()
 }
 
@@ -193,25 +215,35 @@ func writeFileAtomic(path string, data []byte) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create dir "+dir)
 	}
+
 	tmp, err := os.CreateTemp(dir, ".aws-config-*")
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create temp aws config")
 	}
+
 	name := tmp.Name()
+
 	defer os.Remove(name)
+
 	if err := tmp.Chmod(0o600); err != nil {
 		tmp.Close()
+
 		return apperr.Wrap(err, apperr.CodeInternal, "chmod temp aws config")
 	}
+
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
+
 		return apperr.Wrap(err, apperr.CodeInternal, "write temp aws config")
 	}
+
 	if err := tmp.Close(); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "close temp aws config")
 	}
+
 	if err := os.Rename(name, path); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "rename temp aws config into place")
 	}
+
 	return nil
 }

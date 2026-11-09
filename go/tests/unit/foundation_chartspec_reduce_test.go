@@ -19,12 +19,15 @@ import (
 // bucket holds) into one partial.
 func partialOf(t *testing.T, values []float64) chartspec.Partial {
 	t.Helper()
+
 	var p chartspec.Partial
+
 	for _, v := range values {
 		one, err := chartspec.NewPartial(v)
 		require.NoError(t, err)
 		p.Merge(one)
 	}
+
 	return p
 }
 
@@ -35,8 +38,10 @@ func positives(raw []float64) []float64 {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
 			continue
 		}
+
 		out = append(out, 0.001+math.Mod(math.Abs(v), 1e6))
 	}
+
 	return out
 }
 
@@ -52,23 +57,28 @@ func sameAnswers(a, b chartspec.Partial) bool {
 			return false
 		}
 	}
+
 	for _, agg := range []types.Aggregate{types.AggSum, types.AggAvg} {
 		x, y := chartspec.Finalize(a, agg), chartspec.Finalize(b, agg)
 		if math.IsNaN(x) && math.IsNaN(y) {
 			continue
 		}
+
 		if math.Abs(x-y) > 1e-9*math.Max(1, math.Abs(x)) {
 			return false
 		}
 	}
+
 	return true
 }
 
 // merged returns a fresh partial equal to x ⊕ y, leaving both operands untouched.
 func merged(x, y chartspec.Partial) chartspec.Partial {
 	var out chartspec.Partial
+
 	out.Merge(x)
 	out.Merge(y)
+
 	return out
 }
 
@@ -103,6 +113,7 @@ func TestPartial_MergeIsAssociativeAndCommutative(t *testing.T) {
 		right := merged(a, merged(b, c))
 		after := chartspec.Finalize(b, types.AggP95)
 		unchanged := before == after || (math.IsNaN(before) && math.IsNaN(after))
+
 		return sameAnswers(left, right) && sameAnswers(merged(a, b), merged(b, a)) &&
 			unchanged
 	}
@@ -135,13 +146,16 @@ func TestFinalize_ComputesEachAggregate(t *testing.T) {
 	assert.InEpsilon(t, 2.0, chartspec.Finalize(p, types.AggP50), 0.01)
 
 	var empty chartspec.Partial
+
 	assert.InDelta(t, 0.0, chartspec.Finalize(empty, types.AggSum), 0)
 	assert.InDelta(t, 0.0, chartspec.Finalize(empty, types.AggCount), 0)
+
 	for _, agg := range []types.Aggregate{
 		types.AggAvg, types.AggMin, types.AggMax, types.AggP95,
 	} {
 		assert.True(t, math.IsNaN(chartspec.Finalize(empty, agg)), agg)
 	}
+
 	assert.True(t, math.IsNaN(chartspec.Finalize(p, types.AggCountDistinct)))
 
 	_, err := chartspec.NewPartial(math.NaN())
@@ -165,20 +179,28 @@ func TestSketch_MergePreservesQuantilesWithin1Pct(t *testing.T) {
 	for trial := range 50 {
 		n := 50 + r.Intn(2000)
 		values := make([]float64, n)
+
 		for i := range values {
 			values[i] = math.Exp(r.Float64()*14 - 7) // 1e-3 … 1e3, log-spread
 		}
+
 		shards := 1 + r.Intn(8)
+
 		var total chartspec.Partial
+
 		for s := range shards {
 			var shard []float64
+
 			for i := s; i < n; i += shards {
 				shard = append(shard, values[i])
 			}
+
 			total.Merge(partialOf(t, shard))
 		}
+
 		sorted := slices.Clone(values)
 		slices.Sort(sorted)
+
 		for _, q := range []struct {
 			agg types.Aggregate
 			q   float64

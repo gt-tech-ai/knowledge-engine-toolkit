@@ -30,7 +30,9 @@ import (
 //     a JSON list a strings flag as []string; the schema still names every key.
 func TestExecutionOps_MapInputDefaults(t *testing.T) {
 	t.Parallel()
+
 	var got map[string]any
+
 	b := ops.MapInput([]types.FlagSpec{
 		{Name: "dry-run", Type: types.FlagBool},
 		{Name: "profile", Type: types.FlagString, Default: "base"},
@@ -41,6 +43,7 @@ func TestExecutionOps_MapInputDefaults(t *testing.T) {
 		_ context.Context, in map[string]any, _ struct{}, _ interfaces.ExecutionObserver,
 	) error {
 		got = in
+
 		return nil
 	})
 	op := b(types.OperationDescriptor{Name: "x"}, struct{}{})
@@ -79,6 +82,7 @@ func TestExecutionOps_MapInputDefaults(t *testing.T) {
 //   - DecodeLocal admits the secret key and still rejects an undeclared one.
 func TestExecutionOps_MapInputSecretFlag(t *testing.T) {
 	t.Parallel()
+
 	op := ops.MapInput([]types.FlagSpec{
 		{Name: "client-id", Type: types.FlagString},
 		{Name: "client-secret", Type: types.FlagString, Secret: true},
@@ -94,17 +98,20 @@ func TestExecutionOps_MapInputSecretFlag(t *testing.T) {
 
 	_, err := ops.Decode(op, []byte(`{"client_id":"a","env":"e"}`))
 	require.NoError(t, err)
+
 	for _, raw := range []string{`{"client_secret":"s"}`, `{"bogus":1}`} {
 		_, err = ops.Decode(op, []byte(raw))
 		require.Error(t, err, raw)
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err.Error())
 	}
+
 	_, err = ops.Decode(op, []byte(`{"client_secret":"s"}`))
 	assert.Contains(t, err.Error(), "client_secret")
 
 	in, err := ops.DecodeLocal(op, []byte(`{"client_secret":"s"}`))
 	require.NoError(t, err)
 	assert.Equal(t, &map[string]any{"client_secret": "s"}, in)
+
 	_, err = ops.DecodeLocal(op, []byte(`{"bogus":1}`))
 	require.Error(t, err)
 }

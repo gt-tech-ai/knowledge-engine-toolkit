@@ -67,19 +67,25 @@ func (e *engine) probe(
 	vars Vars,
 ) types.StepResult {
 	start := time.Now()
+
 	chk, err := c.check(ctx, p, vars)
 	if err == nil {
 		err = e.retry(ctx, chk)
 	}
+
 	res := c.result(name, types.StatusPass, "")
+
 	if err != nil {
 		msg := err.Error()
 		if chk.hint != "" {
 			msg += " (hint: " + chk.hint + ")"
 		}
+
 		res = c.result(name, types.StatusFail, msg)
 	}
+
 	res.Duration = time.Since(start)
+
 	return res
 }
 
@@ -88,22 +94,28 @@ func (e *engine) probe(
 func (e *engine) retry(ctx context.Context, chk check) error {
 	if chk.timeout > 0 {
 		var cancel context.CancelFunc
+
 		ctx, cancel = context.WithTimeout(ctx, chk.timeout)
+
 		defer cancel()
 	}
+
 	wait := chk.delay
 	for {
 		err := e.attempt(ctx, chk)
 		if err == nil || chk.timeout == 0 {
 			return err
 		}
+
 		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
+
 			return err
 		case <-timer.C:
 		}
+
 		wait = min(wait*2, chk.maxDelay)
 	}
 }
@@ -112,6 +124,7 @@ func (e *engine) retry(ctx context.Context, chk check) error {
 func (e *engine) attempt(ctx context.Context, chk check) error {
 	ctx, cancel := context.WithTimeout(ctx, probeAttemptTimeout)
 	defer cancel()
+
 	switch {
 	case chk.http != "":
 		return e.probeHTTP(ctx, chk)
@@ -128,15 +141,19 @@ func (e *engine) probeHTTP(ctx context.Context, chk check) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "probe request "+chk.http)
 	}
+
 	doer := e.deps.HTTP
 	if doer == nil {
 		doer = http.DefaultClient
 	}
+
 	resp, err := doer.Do(req)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "HTTP GET "+chk.http)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
+
 	switch {
 	case chk.status != 0 && resp.StatusCode != chk.status:
 		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
@@ -147,28 +164,35 @@ func (e *engine) probeHTTP(ctx context.Context, chk check) error {
 	case chk.contains == "":
 		return nil
 	}
+
 	body, err := io.ReadAll(io.LimitReader(resp.Body, probeBodyLimit))
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "read body from "+chk.http)
 	}
+
 	if !strings.Contains(string(body), chk.contains) {
 		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
 			"HTTP GET %s: body does not contain %q", chk.http, chk.contains))
 	}
+
 	return nil
 }
 
 // probeTCP opens and closes a connection to addr.
 func (e *engine) probeTCP(ctx context.Context, addr string) error {
 	var dialer interfaces.Dialer = &net.Dialer{}
+
 	if e.deps.Dialer != nil {
 		dialer = e.deps.Dialer
 	}
+
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "TCP connect "+addr)
 	}
+
 	_ = conn.Close()
+
 	return nil
 }
 
@@ -182,14 +206,17 @@ func (e *engine) probeExec(ctx context.Context, chk check) error {
 		chk.exec[1:]...)
 	line := strings.Join(chk.exec, " ")
 	out := strings.TrimSpace(string(r.Stdout) + string(r.Stderr))
+
 	if r.Err != nil {
 		return apperr.Wrap(r.Err, apperr.CodeUnavailable,
 			fmt.Sprintf("%s (output: %s)", line, out))
 	}
+
 	if !strings.Contains(string(r.Stdout), chk.contains) {
 		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
 			"%s: output does not contain %q (output: %s)", line, chk.contains, out))
 	}
+
 	return nil
 }
 
@@ -201,6 +228,7 @@ func (c *compiled) check(
 	vars Vars,
 ) (check, error) {
 	var chk check
+
 	texts := []struct {
 		dst *string
 		src string
@@ -210,31 +238,40 @@ func (c *compiled) check(
 		{&chk.contains, p.Contains},
 		{&chk.hint, p.Hint},
 	}
+
 	for _, t := range texts {
 		v, err := text(t.src, vars)
 		if err != nil {
 			return chk, err
 		}
+
 		*t.dst = v
 	}
+
 	argv, err := c.args(ctx, p.Exec, vars)
 	if err != nil {
 		return chk, err
 	}
+
 	chk.exec = argv
+
 	kinds := 0
+
 	for _, set := range []bool{chk.http != "", chk.tcp != "", len(chk.exec) > 0} {
 		if set {
 			kinds++
 		}
 	}
+
 	if kinds != 1 {
 		return chk, apperr.New(apperr.CodeInvalidInput,
 			"a probe expands to exactly one of http, tcp, exec")
 	}
+
 	if err := probeSchedule(&chk, p, vars); err != nil {
 		return chk, err
 	}
+
 	return chk, nil
 }
 
@@ -244,11 +281,13 @@ func probeSchedule(chk *check, p *types.ProcProbe, vars Vars) error {
 	if err != nil {
 		return err
 	}
+
 	if status != "" {
 		if chk.status, err = strconv.Atoi(status); err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "probe status "+status)
 		}
 	}
+
 	for _, d := range []struct {
 		dst *time.Duration
 		src string
@@ -262,13 +301,17 @@ func probeSchedule(chk *check, p *types.ProcProbe, vars Vars) error {
 		if err != nil {
 			return err
 		}
+
 		*d.dst = d.def
+
 		if v == "" {
 			continue
 		}
+
 		if *d.dst, err = time.ParseDuration(v); err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "probe duration "+v)
 		}
 	}
+
 	return nil
 }

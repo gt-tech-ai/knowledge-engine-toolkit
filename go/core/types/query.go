@@ -285,18 +285,24 @@ type KeysetCursor struct {
 // ordering).
 func Fingerprint(sort []OrderField, filter Filter) []byte {
 	var b strings.Builder
+
 	b.WriteString("sort:")
+
 	for _, of := range sort {
 		b.WriteString(of.Field)
+
 		if of.Desc {
 			b.WriteString("|desc;")
 		} else {
 			b.WriteString("|asc;")
 		}
 	}
+
 	b.WriteString("|filter:")
 	encodeFilterFingerprint(&b, filter)
+
 	sum := sha256.Sum256([]byte(b.String()))
+
 	return sum[:]
 }
 
@@ -306,8 +312,10 @@ func Fingerprint(sort []OrderField, filter Filter) []byte {
 func encodeFilterFingerprint(b *strings.Builder, f Filter) {
 	if f == nil || f.IsEmpty() {
 		b.WriteString("()")
+
 		return
 	}
+
 	switch v := f.(type) {
 	case FilterClause:
 		b.WriteString("clause(")
@@ -320,18 +328,24 @@ func encodeFilterFingerprint(b *strings.Builder, f Filter) {
 	case CompositeFilter:
 		if len(v.And) > 0 {
 			b.WriteString("and(")
+
 			for _, sub := range v.And {
 				encodeFilterFingerprint(b, sub)
 				b.WriteByte(',')
 			}
+
 			b.WriteByte(')')
+
 			return
 		}
+
 		b.WriteString("or(")
+
 		for _, sub := range v.Or {
 			encodeFilterFingerprint(b, sub)
 			b.WriteByte(',')
 		}
+
 		b.WriteByte(')')
 	default:
 		b.WriteString("()")
@@ -353,10 +367,12 @@ func encodeValueFingerprint(b *strings.Builder, v any) {
 		b.WriteString(strconv.FormatBool(x))
 	case []any:
 		b.WriteString("list:[")
+
 		for _, e := range x {
 			encodeValueFingerprint(b, e)
 			b.WriteByte(',')
 		}
+
 		b.WriteByte(']')
 	default:
 		// int/int64/float64/time.Time and other scalars the listquery parser emits: the Go

@@ -73,7 +73,9 @@ func (l *Lister) isGoModule(dir string) bool {
 	if err != nil || l.fsys == nil {
 		return false
 	}
+
 	_, err = fs.Stat(l.fsys, filepath.ToSlash(filepath.Join(rel, "go.mod")))
+
 	return err == nil
 }
 
@@ -91,23 +93,29 @@ func (l *Lister) GoListPackages(
 	dir string,
 ) ([]string, error) {
 	l.mu.Lock()
+
 	once, ok := l.once[dir]
 	if !ok {
 		once = &sync.Once{}
 		l.once[dir] = once
 	}
+
 	l.mu.Unlock()
 
 	once.Do(func() {
 		pkgs, err := goList(ctx, r, dir)
+
 		l.mu.Lock()
+
 		l.cache[dir] = goListResult{pkgs: pkgs, err: err}
 		l.mu.Unlock()
 	})
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	res := l.cache[dir]
+
 	return res.pkgs, res.err
 }
 
@@ -122,10 +130,12 @@ func goList(
 ) ([]string, error) {
 	args := append(append([]string{"list"}, flags...), "./...")
 	res := r.RunBuffered(ctx, dir, "go", args...)
+
 	if res.Err != nil {
 		return nil, apperr.Wrap(res.Err, apperr.CodeInternal,
 			"go list in "+dir+": "+strings.TrimSpace(string(res.Stderr)))
 	}
+
 	return strings.Fields(string(res.Stdout)), nil
 }
 
@@ -147,6 +157,7 @@ func (l *Lister) hasGoPackages(
 	if err != nil {
 		return l.isGoModule(dir)
 	}
+
 	return len(pkgs) > 0
 }
 
@@ -165,6 +176,7 @@ func (l *Lister) HasGoPackagesWithTags(
 	if err != nil {
 		return l.isGoModule(dir)
 	}
+
 	return len(pkgs) > 0
 }
 
@@ -186,14 +198,19 @@ func (l *Lister) FilterModulesWithGoPackages(
 		// i is the module's index, so each probe fills its own keep slot.
 		i int
 	}
+
 	probes := make([]probe, len(modules))
+
 	for i, mod := range modules {
 		probes[i] = probe{dir: filepath.Join(root, mod), i: i}
 	}
+
 	keep := make([]bool, len(modules))
+
 	engine.Pool(0).
 		FanOut(ctx, probes, func(ctx context.Context, p probe) types.StepResult {
 			keep[p.i] = l.hasGoPackages(ctx, r, p.dir)
+
 			return types.StepResult{Name: p.dir, Status: types.StatusPass}
 		})
 
@@ -203,5 +220,6 @@ func (l *Lister) FilterModulesWithGoPackages(
 			filtered = append(filtered, mod)
 		}
 	}
+
 	return filtered
 }

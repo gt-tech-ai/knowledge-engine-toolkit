@@ -26,6 +26,7 @@ import (
 //   - A parseable body overrides code and supplies detail.
 func TestTransformError_BodyFallbacks(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name       string
 		wantCode   string
@@ -72,22 +73,28 @@ func TestTransformError_BodyFallbacks(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			var doc map[string]any
+
 			require.NoError(
 				t,
 				json.Unmarshal(codec.TransformError(tt.status, tt.body), &doc),
 			)
+
 			errs, ok := doc["errors"].([]any)
 			require.True(t, ok)
 			require.Len(t, errs, 1)
+
 			e := errs[0].(map[string]any)
 			assert.Equal(t, tt.wantCode, e["code"])
 			assert.Equal(t, tt.wantStatus, e["status"])
+
 			if tt.wantDetail == "" {
 				assert.NotContains(t, e, "detail")
 			} else {
 				assert.Equal(t, tt.wantDetail, e["detail"])
 			}
+
 			assert.NotContains(t, e, "title")
 		})
 	}
@@ -107,6 +114,7 @@ func TestTransformError_BodyFallbacks(t *testing.T) {
 //     non-array collection value passes through.
 func TestTransformResource_Fallbacks(t *testing.T) {
 	t.Parallel()
+
 	cfg := codec.ResourceConfig{
 		Type:          "users",
 		SingleKey:     "user",
@@ -139,6 +147,7 @@ func TestTransformResource_Fallbacks(t *testing.T) {
 	)
 	assert.Equal(t, "/api/users/1", full["links"].(map[string]any)["self"])
 	assert.Equal(t, map[string]any{"currentOrgId": "o1"}, full["meta"])
+
 	data := full["data"].(map[string]any)
 	assert.Equal(t, "users", data["type"])
 	assert.Equal(t, "1", data["id"])

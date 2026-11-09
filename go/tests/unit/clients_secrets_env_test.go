@@ -23,6 +23,7 @@ import (
 //   - Get on a mapped Ref returns a Secret revealing the mapped variable's value.
 func TestEnvSource_ResolvesMappedVariable(t *testing.T) {
 	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+
 	t.Setenv("KE_DEV_BOOTSTRAP_CLIENT_SECRET", "s3cr3t")
 
 	src := env.New(map[types.Ref]string{ref: "KE_DEV_BOOTSTRAP_CLIENT_SECRET"})
@@ -54,6 +55,7 @@ func TestEnvSource_MissingAndUnmappedAreNotFound(t *testing.T) {
 	)
 
 	unset := env.New(map[types.Ref]string{ref: "KE_DEFINITELY_UNSET_VAR_XYZ_9137"})
+
 	_, err = unset.Get(context.Background(), ref)
 	require.True(
 		t,

@@ -21,6 +21,7 @@ func folderOf(cfg interfaces.SourceConfig) string {
 	if cfg.InventoryManifestKey != "" || cfg.InventoryPrefix == "" {
 		return ""
 	}
+
 	return strings.TrimSuffix(cfg.InventoryPrefix, "/") + "/"
 }
 
@@ -31,12 +32,14 @@ func (s *Source) splitToken(token string) (stamp, position string, err error) {
 	if s.folder == "" || token == "" {
 		return "", token, nil
 	}
+
 	stamp, position, found := strings.Cut(token, "/")
 	if !found || stamp == "" {
 		return "", "", apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"connector s3_inventory: malformed continuation token %q", token,
 		))
 	}
+
 	return stamp, position, nil
 }
 
@@ -46,6 +49,7 @@ func (s *Source) token(file, row int) string {
 	if s.folder == "" {
 		return position
 	}
+
 	return s.stamp + "/" + position
 }
 
@@ -56,22 +60,29 @@ func (s *Source) chooseReport(ctx context.Context, stamp string) error {
 	if s.folder == "" {
 		return nil
 	}
+
 	if stamp == "" {
 		if s.stamp != "" {
 			return nil
 		}
+
 		newest, err := s.newestReport(ctx)
 		if err != nil {
 			return err
 		}
+
 		stamp = newest
 	}
+
 	if stamp == s.stamp {
 		return nil
 	}
+
 	s.release()
+
 	s.report, s.stamp = nil, stamp
 	s.manifestKey = s.folder + stamp + "/manifest.json"
+
 	return nil
 }
 
@@ -81,6 +92,7 @@ func (s *Source) chooseReport(ctx context.Context, stamp string) error {
 // report has not been delivered yet.
 func (s *Source) newestReport(ctx context.Context) (string, error) {
 	var newest, token string
+
 	for {
 		objs, next, err := s.storage.ListObjectsPageToken(
 			ctx, s.reportBucket, s.folder, token, defaultPageSize,
@@ -88,24 +100,30 @@ func (s *Source) newestReport(ctx context.Context) (string, error) {
 		if err != nil {
 			return "", connectors3.ClassifyListError(err)
 		}
+
 		for i := range objs {
 			rel := strings.TrimPrefix(objs[i].Key, s.folder)
 			dir, name := path.Split(rel)
 			stamp := strings.TrimSuffix(dir, "/")
+
 			if name == checksumName && stamp != "" && !strings.Contains(stamp, "/") &&
 				stamp > newest {
 				newest = stamp
 			}
 		}
+
 		if next == "" {
 			break
 		}
+
 		token = next
 	}
+
 	if newest == "" {
 		return "", apperr.New(apperr.CodeNotFound, fmt.Sprintf(
 			"connector s3_inventory: no complete report under %q", s.folder,
 		))
 	}
+
 	return newest, nil
 }

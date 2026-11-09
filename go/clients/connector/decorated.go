@@ -20,6 +20,7 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
+
 	return &decorated{base: base, Base: b}, nil
 }
 
@@ -56,7 +57,9 @@ func (d *decorated) ListPage(
 ) ([]interfaces.StorageObject, string, error) {
 	res, err := d.Exec(ctx, "list_page", func(ctx context.Context) (page, error) {
 		objs, next, err := d.base.ListPage(ctx, continuationToken, limit)
+
 		return page{objects: objs, next: next}, err
 	})
+
 	return res.objects, res.next, err
 }

@@ -24,12 +24,15 @@ func streamSize(s string) int { return len(s) }
 // pulled; it may be closed any number of times.
 func endlessStream(t *testing.T, pulled *atomic.Int64) *mocks.MockStream[string] {
 	t.Helper()
+
 	src := mocks.NewMockStream[string](gomock.NewController(t))
 	src.EXPECT().Next(gomock.Any()).DoAndReturn(func(any) (string, bool, error) {
 		pulled.Add(1)
+
 		return "ab", true, nil
 	}).AnyTimes()
 	src.EXPECT().Close().Return(nil).AnyTimes()
+
 	return src
 }
 
@@ -46,6 +49,7 @@ func endlessStream(t *testing.T, pulled *atomic.Int64) *mocks.MockStream[string]
 //   - Each item the reader takes lets the producer pull exactly one more.
 func TestBuffer_BoundedBlocksProducerAtCapacity(t *testing.T) {
 	t.Parallel()
+
 	cases := map[string]stream.Config{
 		"item bound": {Kind: stream.KindBounded, MaxItems: 2, MaxBytes: 1 << 20},
 		"byte bound": {Kind: stream.KindBounded, MaxItems: 10, MaxBytes: 4},
@@ -53,10 +57,14 @@ func TestBuffer_BoundedBlocksProducerAtCapacity(t *testing.T) {
 	for name, cfg := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			var pulled atomic.Int64
+
 			buf, err := stream.NewFromConfig(cfg, streamSize)
 			require.NoError(t, err)
+
 			out := buf.Wrap(t.Context(), endlessStream(t, &pulled))
+
 			defer func() { require.NoError(t, out.Close()) }()
 
 			require.Eventually(t, func() bool { return pulled.Load() == 3 },
@@ -88,26 +96,35 @@ func TestBuffer_BoundedBlocksProducerAtCapacity(t *testing.T) {
 //     Next repeats; Close closes the source exactly once.
 func TestBuffer_DeliversItemsBeforeSourceError(t *testing.T) {
 	t.Parallel()
+
 	for _, kind := range []stream.Kind{stream.KindDirect, stream.KindBounded} {
 		t.Run(kind.String(), func(t *testing.T) {
 			t.Parallel()
+
 			boom := apperr.New(apperr.CodeUnavailable, "store down")
 			buf, err := stream.NewFromConfig(
 				stream.Config{Kind: kind, MaxItems: 1, MaxBytes: 1}, streamSize)
 			require.NoError(t, err)
+
 			out := buf.Wrap(t.Context(), scriptedStream(t, []string{"aa", "bb"}, boom))
 
 			var got []string
+
 			for {
 				item, ok, err := out.Next(t.Context())
 				if err != nil {
 					require.ErrorIs(t, err, boom)
+
 					break
 				}
+
 				require.True(t, ok)
+
 				got = append(got, item)
 			}
+
 			require.Equal(t, []string{"aa", "bb"}, got)
+
 			_, ok, err := out.Next(t.Context())
 			require.False(t, ok)
 			require.ErrorIs(t, err, boom)
@@ -128,10 +145,13 @@ func TestBuffer_DeliversItemsBeforeSourceError(t *testing.T) {
 //     reports the end of the stream.
 func TestBuffer_CloseStopsProducer(t *testing.T) {
 	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+
 	var pulled atomic.Int64
+
 	src := mocks.NewMockStream[string](gomock.NewController(t))
 	src.EXPECT().Next(gomock.Any()).DoAndReturn(func(any) (string, bool, error) {
 		pulled.Add(1)
+
 		return "ab", true, nil
 	}).AnyTimes()
 	src.EXPECT().Close().Return(nil).Times(1)
@@ -145,12 +165,14 @@ func TestBuffer_CloseStopsProducer(t *testing.T) {
 		streamSize,
 	)
 	require.NoError(t, err)
+
 	out := buf.Wrap(t.Context(), src)
 	_, ok, err := out.Next(t.Context())
 	require.NoError(t, err)
 	require.True(t, ok)
 
 	require.NoError(t, out.Close())
+
 	_, ok, err = out.Next(t.Context())
 	require.NoError(t, err)
 	require.False(t, ok)
@@ -160,17 +182,23 @@ func TestBuffer_CloseStopsProducer(t *testing.T) {
 // ignores its context, like a source stuck in I/O), then reports the end.
 func blockingStream(t *testing.T) *mocks.MockStream[string] {
 	t.Helper()
+
 	release := make(chan struct{})
+
 	var once sync.Once
+
 	src := mocks.NewMockStream[string](gomock.NewController(t))
 	src.EXPECT().Next(gomock.Any()).DoAndReturn(func(any) (string, bool, error) {
 		<-release
+
 		return "", false, nil
 	}).AnyTimes()
 	src.EXPECT().Close().DoAndReturn(func() error {
 		once.Do(func() { close(release) })
+
 		return nil
 	}).AnyTimes()
+
 	return src
 }
 
@@ -186,26 +214,32 @@ func blockingStream(t *testing.T) *mocks.MockStream[string] {
 //     source return the end of the stream, and no goroutine is left behind.
 func TestBuffer_CloseUnblocksPendingNext(t *testing.T) {
 	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+
 	for _, kind := range []stream.Kind{stream.KindDirect, stream.KindBounded} {
 		t.Run(kind.String(), func(t *testing.T) {
 			buf, err := stream.NewFromConfig(
 				stream.Config{Kind: kind, MaxItems: 1, MaxBytes: 1}, streamSize)
 			require.NoError(t, err)
+
 			out := buf.Wrap(t.Context(), blockingStream(t))
 
 			type result struct {
 				err error
 				ok  bool
 			}
+
 			done := make(chan result, 1)
+
 			go func() {
 				_, ok, err := out.Next(t.Context())
 				done <- result{ok: ok, err: err}
 			}()
+
 			require.Never(t, func() bool { return len(done) > 0 },
 				20*time.Millisecond, time.Millisecond)
 
 			require.NoError(t, out.Close())
+
 			select {
 			case got := <-done:
 				require.NoError(t, got.err)
@@ -227,14 +261,18 @@ func TestBuffer_CloseUnblocksPendingNext(t *testing.T) {
 //   - A bounded Next whose context deadline has passed returns CodeTimeout.
 func TestBuffer_ExpiredDeadlineIsTimeout(t *testing.T) {
 	t.Parallel()
+
 	buf, err := stream.NewFromConfig(
 		stream.Config{Kind: stream.KindBounded, MaxItems: 1, MaxBytes: 1}, streamSize)
 	require.NoError(t, err)
+
 	out := buf.Wrap(t.Context(), blockingStream(t))
+
 	defer func() { require.NoError(t, out.Close()) }()
 
 	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 	defer cancel()
+
 	_, ok, err := out.Next(ctx)
 	require.False(t, ok)
 	require.Equal(t, apperr.CodeTimeout, apperr.Code(err))
@@ -255,12 +293,17 @@ func TestBuffer_ExpiredDeadlineIsTimeout(t *testing.T) {
 //     on the wait histogram, labelled with the buffer's name.
 func TestBuffer_MetricsRecordDepthAndBlockedTime(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockMetrics(ctrl)
 	itemsGauge, bytesGauge := mocks.NewMockGauge(ctrl), mocks.NewMockGauge(ctrl)
 	wait := mocks.NewMockHistogram(ctrl)
-	var items, bytes atomic.Int64
-	var waited atomic.Bool
+
+	var (
+		items, bytes atomic.Int64
+		waited       atomic.Bool
+	)
+
 	m.EXPECT().Gauge("stream_buffer_items", gomock.Any(), "buffer").Return(itemsGauge)
 	m.EXPECT().Gauge("stream_buffer_bytes", gomock.Any(), "buffer").Return(bytesGauge)
 	m.EXPECT().
@@ -288,12 +331,16 @@ func TestBuffer_MetricsRecordDepthAndBlockedTime(t *testing.T) {
 		streamSize,
 	)
 	require.NoError(t, err)
+
 	buf := stream.NewMetrics(inner, m, "frames", streamSize)
+
 	var pulled atomic.Int64
+
 	out := buf.Wrap(t.Context(), endlessStream(t, &pulled))
 
 	require.Eventually(t, func() bool { return items.Load() == 3 && bytes.Load() == 6 },
 		5*time.Second, time.Millisecond)
+
 	_, ok, err := out.Next(t.Context())
 	require.NoError(t, err)
 	require.True(t, ok)
@@ -319,12 +366,16 @@ func TestBuffer_MetricsRecordDepthAndBlockedTime(t *testing.T) {
 //     stream is drained both gauges read zero and every item comes through in order.
 func TestBuffer_MetricsOverDirectHoldNothing(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockMetrics(ctrl)
 	itemsGauge, bytesGauge := mocks.NewMockGauge(ctrl), mocks.NewMockGauge(ctrl)
+
 	var items, bytes atomic.Int64
+
 	m.EXPECT().Gauge("stream_buffer_items", gomock.Any(), "buffer").Return(itemsGauge)
 	m.EXPECT().Gauge("stream_buffer_bytes", gomock.Any(), "buffer").Return(bytesGauge)
+
 	wait := mocks.NewMockHistogram(ctrl)
 	wait.EXPECT().Observe(gomock.Any(), "pages").AnyTimes()
 	m.EXPECT().Histogram(gomock.Any(), gomock.Any(), gomock.Any(), "buffer").Return(wait)
@@ -337,6 +388,7 @@ func TestBuffer_MetricsOverDirectHoldNothing(t *testing.T) {
 
 	inner, err := stream.NewFromConfig(stream.Config{}, streamSize)
 	require.NoError(t, err)
+
 	buf := stream.NewMetrics(inner, m, "pages", streamSize)
 	got, err := stream.Collect(t.Context(),
 		buf.Wrap(t.Context(), stream.FromSlice([]string{"ab", "cd"})), streamSize, 8)
@@ -359,6 +411,7 @@ func TestBuffer_MetricsOverDirectHoldNothing(t *testing.T) {
 //     unchanged.
 func TestBuffer_UnknownKindFailsLoudly(t *testing.T) {
 	t.Parallel()
+
 	for s, want := range map[string]stream.Kind{
 		"direct": stream.KindDirect, "bounded": stream.KindBounded,
 	} {
@@ -367,6 +420,7 @@ func TestBuffer_UnknownKindFailsLoudly(t *testing.T) {
 		require.Equal(t, want, got)
 		require.Equal(t, s, got.String())
 	}
+
 	_, err := stream.ParseKind("ring")
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
@@ -378,12 +432,14 @@ func TestBuffer_UnknownKindFailsLoudly(t *testing.T) {
 		_, err := stream.NewFromConfig(cfg, streamSize)
 		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 	}
+
 	_, err = stream.NewFromConfig[string](
 		stream.Config{Kind: stream.KindBounded, MaxItems: 1, MaxBytes: 1}, nil)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "nil size")
 
 	buf, err := stream.NewFromConfig(stream.Config{}, streamSize)
 	require.NoError(t, err)
+
 	got, err := stream.Collect(t.Context(),
 		buf.Wrap(t.Context(), stream.FromSlice([]string{"a", "b"})), streamSize, 8)
 	require.NoError(t, err)

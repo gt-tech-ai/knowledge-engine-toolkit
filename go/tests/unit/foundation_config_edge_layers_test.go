@@ -69,10 +69,12 @@ func hasMultipartPartsField(t reflect.Type) bool {
 			tag == "multipart_parts" || tag == "max_multipart_parts" {
 			return true
 		}
+
 		if f.Type.Kind() == reflect.Struct && hasMultipartPartsField(f.Type) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -100,6 +102,7 @@ func TestWorkersConfig_ValidatesSweepTimings(t *testing.T) {
 	require.NoError(t, good.Validate(expiry))
 
 	bad := good
+
 	bad.ReaperTTL = 30 * time.Minute // <= expiry
 	require.Error(
 		t,
@@ -166,6 +169,7 @@ workers:
   fan_out_workers: 16
   relay_interval: 30s
 `)
+
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
 

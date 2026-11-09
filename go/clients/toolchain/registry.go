@@ -52,6 +52,7 @@ func NewRegistry() *Registry {
 // Register adds a tool to the registry, keyed by binary name.
 func (r *Registry) Register(t *Tool) {
 	r.mu.Lock()
+
 	r.tools[t.Binary()] = t
 	r.mu.Unlock()
 }
@@ -60,11 +61,14 @@ func (r *Registry) Register(t *Tool) {
 // Returns a minimal fallback Tool if the binary is not registered.
 func (r *Registry) Get(binary string) *Tool {
 	r.mu.RLock()
+
 	t, ok := r.tools[binary]
 	r.mu.RUnlock()
+
 	if ok {
 		return t
 	}
+
 	return NewTool(binary, binary, "", nil)
 }
 
@@ -72,6 +76,7 @@ func (r *Registry) Get(binary string) *Tool {
 func (r *Registry) Len() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	return len(r.tools)
 }
 
@@ -82,6 +87,7 @@ func NewRegistryFromDefs(defs []Def) *Registry {
 	for _, d := range defs {
 		r.Register(NewTool(d.Name, d.Binary, d.InstallHint, d.Prefix))
 	}
+
 	return r
 }
 
@@ -107,6 +113,7 @@ func DefsFromTools(tools []types.ToolEntry) []Def {
 	defs := make([]Def, 0, len(tools))
 	for i := range tools {
 		t := &tools[i]
+
 		defs = append(defs, Def{
 			Name:        t.Name,
 			Binary:      t.Binary,
@@ -114,5 +121,6 @@ func DefsFromTools(tools []types.ToolEntry) []Def {
 			Prefix:      t.Cmd,
 		})
 	}
+
 	return defs
 }

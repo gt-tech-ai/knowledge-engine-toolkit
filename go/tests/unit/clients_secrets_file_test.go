@@ -161,6 +161,7 @@ func TestFileSource_ReadsExportAndQuotedDotenv(t *testing.T) {
 		Run(gomock.Any(), gomock.Any(), "git", "check-ignore", "-q", gomock.Any()).
 		Return(nil)
 	require.NoError(t, src.Put(context.Background(), sec, types.NewSecret("rotated")))
+
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "export CLIENT_SECRET=rotated",

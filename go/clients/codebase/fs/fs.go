@@ -32,39 +32,49 @@ func New(root string) *Source {
 // List walks root, skipping `.git`, and returns every regular file, sorted.
 func (s *Source) List(ctx context.Context) ([]types.File, error) {
 	var out []types.File
+
 	err := filepath.WalkDir(s.root, func(p string, d iofs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+
 		if err := ctx.Err(); err != nil {
 			return apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled), "walk")
 		}
+
 		if d.IsDir() {
 			if d.Name() == ".git" {
 				return filepath.SkipDir
 			}
+
 			return nil
 		}
+
 		if !d.Type().IsRegular() {
 			return nil
 		}
+
 		rel, err := filepath.Rel(s.root, p)
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "relative path of "+p)
 		}
+
 		out = append(out, types.File{Path: filepath.ToSlash(rel)})
+
 		return nil
 	})
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeInternal),
 			"walk "+s.root)
 	}
+
 	// A walk orders by entry name, so "a/x" would precede "a-b/x"; the contract is
 	// sorted by path.
 	slices.SortFunc(
 		out,
 		func(a, b types.File) int { return strings.Compare(a.Path, b.Path) },
 	)
+
 	return out, nil
 }
 
@@ -86,7 +96,9 @@ func ReadFile(root, p string) ([]byte, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "open "+root)
 	}
+
 	defer func() { _ = r.Close() }()
+
 	data, err := r.ReadFile(filepath.FromSlash(p))
 	switch {
 	case err == nil:

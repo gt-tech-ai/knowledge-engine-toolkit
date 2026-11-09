@@ -21,6 +21,7 @@ import (
 //     tool without a prefix directly.
 func TestClientsToolchainRegistry_GetAndCmd(t *testing.T) {
 	t.Parallel()
+
 	r := toolchain.NewRegistry()
 	assert.Equal(t, 0, r.Len())
 	r.Register(toolchain.NewTool("golangci-lint", "golangci-lint",

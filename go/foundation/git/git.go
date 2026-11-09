@@ -20,6 +20,7 @@ func StagedFiles(
 	patterns ...string,
 ) ([]string, error) {
 	args := make([]string, 0, 5+len(patterns))
+
 	args = append(args, "diff", "--cached", "--name-only", "--diff-filter=ACM", "--")
 	args = append(args, patterns...)
 
@@ -32,6 +33,7 @@ func StagedFiles(
 	if raw == "" {
 		return nil, nil
 	}
+
 	return strings.Split(raw, "\n"), nil
 }
 
@@ -45,6 +47,8 @@ func StageFiles(
 	if len(paths) == 0 {
 		return nil
 	}
+
 	args := append([]string{"add", "--"}, paths...)
+
 	return r.Run(ctx, root, "git", args...)
 }

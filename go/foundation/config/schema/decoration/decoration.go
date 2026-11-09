@@ -111,6 +111,7 @@ func On(b *bool) bool { return b != nil && *b }
 func Merge(base, over Layers) Layers {
 	merged := base
 	mergeValue(reflect.ValueOf(&merged).Elem(), reflect.ValueOf(over))
+
 	return merged
 }
 
@@ -155,11 +156,13 @@ func (t Tier) For(name string) Layers {
 // name: each dotted prefix's override from the shortest, then name's own.
 func (t Tier) Overriding(name string) Layers {
 	var l Layers
+
 	for i := range len(name) {
 		if name[i] == '.' {
 			l = Merge(l, t.Overrides[name[:i]])
 		}
 	}
+
 	return Merge(l, t.Overrides[name])
 }
 
@@ -168,9 +171,11 @@ func (t Tier) Overriding(name string) Layers {
 // name and for name itself that has an override.
 func (t Tier) Sources(name string) []string {
 	var out []string
+
 	if !reflect.ValueOf(t.Defaults).IsZero() {
 		out = append(out, "defaults")
 	}
+
 	for i := range len(name) {
 		if name[i] == '.' {
 			if _, ok := t.Overrides[name[:i]]; ok {
@@ -178,9 +183,11 @@ func (t Tier) Sources(name string) []string {
 			}
 		}
 	}
+
 	if _, ok := t.Overrides[name]; ok {
 		out = append(out, "overrides."+name)
 	}
+
 	return out
 }
 
@@ -191,11 +198,14 @@ func (t Tier) overlay(over Tier) Tier {
 	if t.Overrides == nil && over.Overrides == nil {
 		return out
 	}
+
 	out.Overrides = make(map[string]Layers, len(t.Overrides)+len(over.Overrides))
 	maps.Copy(out.Overrides, t.Overrides)
+
 	for name := range over.Overrides {
 		out.Overrides[name] = Merge(out.Overrides[name], over.Overrides[name])
 	}
+
 	return out
 }
 
@@ -267,6 +277,7 @@ func (c *Config) Tier(name string) (Tier, bool) {
 			return sections[i].Tier, true
 		}
 	}
+
 	return Tier{}, false
 }
 
@@ -293,12 +304,15 @@ func (c *Config) Overlay(over *Config) Config {
 // limit and bulkhead included, is off; a controller's bulkhead, once enabled, sheds.
 func DefaultConfig() Config {
 	repos := base(false)
+
 	repos.Retry.Enabled = ptr(true)
 	repos.CircuitBreaker.Enabled = ptr(true)
 	// A controller's bulkhead, once enabled, sheds: a request queued behind a full
 	// bulkhead holds its connection, so the edge rejects it instead.
 	controllers := base(true)
+
 	controllers.Bulkhead.Shed = ptr(true)
+
 	guarded := func() Layers {
 		return Layers{
 			Timeout:        ptr(30 * time.Second),
@@ -306,6 +320,7 @@ func DefaultConfig() Config {
 			CircuitBreaker: CircuitBreaker{Enabled: ptr(true)},
 		}
 	}
+
 	return Config{
 		Clients: Tier{Defaults: base(true), Overrides: map[string]Layers{
 			"storage":    guarded(),
@@ -365,7 +380,9 @@ func Load(loader interfaces.ConfigLoader) (Config, error) {
 	if section == nil {
 		return DefaultConfig(), nil
 	}
+
 	var over Config
+
 	if err := loader.UnmarshalKey(SectionKey, &over); err != nil {
 		return Config{}, apperr.Wrap(
 			err,
@@ -373,9 +390,12 @@ func Load(loader interfaces.ConfigLoader) (Config, error) {
 			"load decoration config",
 		)
 	}
+
 	if err := dottedOverrides(loader, section, &over); err != nil {
 		return Config{}, err
 	}
+
 	def := DefaultConfig()
+
 	return def.Overlay(&over), nil
 }

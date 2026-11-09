@@ -69,6 +69,7 @@ func TestErrorsBuilder_UnknownKindReturnsError(t *testing.T) {
 	_, err := errors.NewDBMapper("bogus")
 	require.Error(t, err, "expected error for unknown kind")
 	assert.Contains(t, err.Error(), `"bogus"`)
+
 	mapper, err := errors.NewDBMapper("")
 	require.NoError(t, err)
 	assert.NotNil(t, mapper)

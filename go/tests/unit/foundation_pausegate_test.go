@@ -25,6 +25,7 @@ import (
 //     elapses, then it reopens (the gauge reads 0).
 func TestPauseGate_ClosesForThePauseOnAnOutage(t *testing.T) {
 	t.Parallel()
+
 	now := time.Unix(1_000, 0)
 	gauge := mocks.NewMockGauge(gomock.NewController(t))
 	gate, err := pausegate.New(pausegate.Config{Pause: 30 * time.Second}, gauge,
@@ -41,8 +42,11 @@ func TestPauseGate_ClosesForThePauseOnAnOutage(t *testing.T) {
 	require.Equal(t, apperr.CodeUnavailable, apperr.Code(gate.Ready(t.Context())))
 
 	now = now.Add(29 * time.Second)
+
 	require.Error(t, gate.Ready(t.Context()))
+
 	now = now.Add(time.Second)
+
 	require.NoError(t, gate.Ready(t.Context()))
 }
 
@@ -55,6 +59,7 @@ func TestPauseGate_ClosesForThePauseOnAnOutage(t *testing.T) {
 //   - Pause <= 0 is CodeInvalidInput.
 func TestPauseGate_RejectsANonPositivePause(t *testing.T) {
 	t.Parallel()
+
 	_, err := pausegate.New(pausegate.Config{}, nil, time.Now)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

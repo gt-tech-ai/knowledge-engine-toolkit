@@ -41,12 +41,15 @@ func TransformSingleResource(
 	// GetCurrentUserResponse that include extra fields alongside the
 	// primary resource (e.g. currentOrgId, currentOrgMembership).
 	meta := make(map[string]any)
+
 	for k, v := range body {
 		if k == cfg.SingleKey {
 			continue
 		}
+
 		meta[k] = v
 	}
+
 	if len(meta) > 0 {
 		result["meta"] = meta
 	}
@@ -66,6 +69,7 @@ func TransformMeta(body map[string]any) map[string]any {
 	for k, v := range body {
 		meta[k] = v
 	}
+
 	return map[string]any{"meta": meta}
 }
 
@@ -88,6 +92,7 @@ func TransformCollection(
 			return body
 		}
 	}
+
 	// If the collection key is missing (protobuf omits empty repeated
 	// fields), treat it as an empty array rather than falling back.
 
@@ -96,8 +101,10 @@ func TransformCollection(
 		m, ok := item.(map[string]any)
 		if !ok {
 			data = append(data, item) // preserve non-object items
+
 			continue
 		}
+
 		data = append(data, buildResourceObject(m, cfg.Type))
 	}
 
@@ -116,6 +123,7 @@ func TransformCollection(
 					if tc, ok := pg["totalCount"]; ok {
 						meta["totalCount"] = tc
 					}
+
 					// Forward the bounded-count "N+" estimate flag: protojson emits it only
 					// when true (non-default bool), so its presence in meta signals the total is capped.
 					// Dropping it here silently hid the estimate from every REST client (the UI could
@@ -123,6 +131,7 @@ func TransformCollection(
 					if est, ok := pg["totalIsEstimate"]; ok {
 						meta["totalIsEstimate"] = est
 					}
+
 					if npt, ok := pg["nextPageToken"]; ok {
 						if s, ok := npt.(string); ok && s != "" {
 							links["next"] = selfLink + "?page_token=" + s
@@ -158,8 +167,10 @@ func buildResourceObject(resource map[string]any, resourceType string) map[strin
 		if k == "id" {
 			continue
 		}
+
 		attrs[k] = v
 	}
+
 	// Emitted even when empty: the generated OpenAPI marks `attributes` required on
 	// every resource object, so omitting it for an all-default resource would hand
 	// the client a document its own generated types say cannot exist.
@@ -200,10 +211,12 @@ func TransformError(statusCode int, body []byte) []byte {
 	// Try to parse the Connect error body.
 	if len(body) > 0 {
 		var parsed map[string]any
+
 		if err := json.Unmarshal(body, &parsed); err == nil {
 			if c := normalizeErrorCode(parsed[MemberCode]); c != "" {
 				code = c
 			}
+
 			if m, ok := parsed["message"].(string); ok && m != "" {
 				detail = m
 			}
@@ -215,6 +228,7 @@ func TransformError(statusCode int, body []byte) []byte {
 		MemberCode: code,
 		"status":   statusStr,
 	}
+
 	if detail != "" {
 		member["detail"] = detail
 	}
@@ -224,6 +238,7 @@ func TransformError(statusCode int, body []byte) []byte {
 		// Should not happen, but return a safe fallback.
 		return []byte(`{"errors":[{"code":"unknown","status":"` + statusStr + `"}]}`)
 	}
+
 	return out
 }
 
@@ -251,5 +266,6 @@ func normalizeErrorCode(raw any) string {
 			return connect.Code(n).String()
 		}
 	}
+
 	return ""
 }

@@ -60,6 +60,7 @@ func NewFromConfig(cfg Config) (interfaces.StepCache, error) {
 		if cfg.Dir == "" {
 			return nil, apperr.New(apperr.CodeInvalidInput, "stepcache dir: no directory")
 		}
+
 		return newDir(cfg), nil
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput,
@@ -73,15 +74,18 @@ func Key(inputs []byte, toolVersion string, args []string) string {
 	h := sha256.New()
 	field := func(b []byte) {
 		var n [8]byte
+
 		binary.BigEndian.PutUint64(n[:], uint64(len(b)))
 		h.Write(n[:])
 		h.Write(b)
 	}
 	field(inputs)
 	field([]byte(toolVersion))
+
 	for _, a := range args {
 		field([]byte(a))
 	}
+
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -96,17 +100,21 @@ func Digest(
 	if err != nil {
 		return nil, err
 	}
+
 	h := sha256.New()
+
 	for _, f := range files {
 		text, err := cb.Text(ctx, f.Path)
 		if err != nil {
 			return nil, err
 		}
+
 		h.Write([]byte(f.Path))
 		h.Write([]byte{0})
 		h.Write(text.Bytes)
 		h.Write([]byte{0})
 	}
+
 	return h.Sum(nil), nil
 }
 
@@ -117,14 +125,18 @@ func BinarySalt() (string, error) {
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: locate executable")
 	}
+
 	f, err := os.Open(exe)
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: open "+exe)
 	}
+
 	defer func() { _ = f.Close() }()
+
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: read "+exe)
 	}
+
 	return hex.EncodeToString(h.Sum(nil)), nil
 }

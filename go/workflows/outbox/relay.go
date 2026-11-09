@@ -100,6 +100,7 @@ func (c RelayConfig) Validate() error {
 			"outbox relay: partition must be in [0, partitions)",
 		)
 	}
+
 	return nil
 }
 
@@ -122,9 +123,11 @@ func LoadRelayConfig(
 			)
 		}
 	}
+
 	if err := cfg.Validate(); err != nil {
 		return RelayConfig{}, err
 	}
+
 	return cfg, nil
 }
 
@@ -191,6 +194,7 @@ func NewRelay(
 	if err := cfg.Validate(); err != nil {
 		panic(err)
 	}
+
 	if tx == nil || store == nil || sink == nil {
 		panic(
 			apperr.New(
@@ -199,12 +203,14 @@ func NewRelay(
 			),
 		)
 	}
+
 	base, err := workflow.NewBase[relayContract](
 		decorate.Fixed(decorate.Deps{}), "outbox relay "+cfg.Lane, tx,
 	)
 	if err != nil {
 		panic(err)
 	}
+
 	r := &Relay{
 		tx:  base,
 		cfg: cfg, store: store, sink: sink, logger: logger, tracer: tracer,
@@ -213,9 +219,11 @@ func NewRelay(
 	if metrics != nil {
 		r.registerMetrics(metrics)
 	}
+
 	for _, opt := range opts {
 		opt(r)
 	}
+
 	return r
 }
 
@@ -259,16 +267,22 @@ func (r *Relay) registerMetrics(metrics interfaces.Metrics) {
 func (r *Relay) RunOnce(ctx context.Context) error {
 	if r.tracer != nil {
 		var span interfaces.Span
+
 		ctx, span = r.tracer.Start(ctx, "outbox.relay.run")
+
 		defer span.End()
+
 		span.SetAttribute("outbox.lane", r.cfg.Lane)
+
 		err := r.runOnce(ctx)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(interfaces.SpanStatusError, err.Error())
 		}
+
 		return err
 	}
+
 	return r.runOnce(ctx)
 }
 
@@ -276,24 +290,33 @@ func (r *Relay) RunOnce(ctx context.Context) error {
 func (r *Relay) runOnce(ctx context.Context) error {
 	start := r.now()
 	passes := 0
+
 	var err error
+
 	for {
 		var claimed int
+
 		claimed, err = r.pass(ctx)
+
 		if claimed < 0 {
 			break // the claim failed; nothing was delivered this pass
 		}
+
 		passes++
+
 		if err != nil || !r.drainMore(ctx, start, claimed) {
 			break
 		}
 	}
+
 	if passes > 0 {
 		if r.passes != nil {
 			r.passes.Observe(float64(passes), r.cfg.Lane)
 		}
+
 		r.refreshGauges(ctx)
 	}
+
 	return err
 }
 
@@ -326,25 +349,34 @@ func (r *Relay) pass(ctx context.Context) (int, error) {
 		mu    sync.Mutex
 		first error
 	)
+
 	keep := func(err error) {
 		mu.Lock()
 		defer mu.Unlock()
+
 		if first == nil {
 			first = err
 		}
 	}
+
 	var g errgroup.Group
+
 	g.SetLimit(r.cfg.Concurrency)
+
 	for start := 0; start < len(recs); start += r.cfg.SendBatch {
 		chunk := recs[start:min(start+r.cfg.SendBatch, len(recs))]
+
 		g.Go(func() error {
 			for _, err := range r.deliver(ctx, chunk) {
 				keep(err)
 			}
+
 			return nil
 		})
 	}
+
 	_ = g.Wait() // workers report through keep, never through the group.
+
 	return len(recs), first
 }
 
@@ -361,20 +393,26 @@ func (r *Relay) deliver(ctx context.Context, chunk []types.OutboxRecord) []error
 				len(chunk),
 			),
 		)
+
 		results = make([]error, len(chunk))
+
 		for i := range results {
 			results[i] = mismatch
 		}
 	}
+
 	var errs []error
+
 	for i := range chunk {
 		if interrupted(ctx, results[i]) {
 			continue // the row stays leased and is re-claimed when its lease expires
 		}
+
 		if err := r.finalize(ctx, &chunk[i], results[i]); err != nil {
 			errs = append(errs, err)
 		}
 	}
+
 	return errs
 }
 
@@ -405,9 +443,11 @@ func (r *Relay) finalize(
 			"outbox relay: finalize "+rec.ID.String(),
 		)
 	}
+
 	if outcome != nil {
 		outcome.Inc(r.cfg.Lane)
 	}
+
 	return nil
 }
 
@@ -426,6 +466,7 @@ func (r *Relay) record(
 		return r.parked, r.store.Park(ctx, rec.ID, sendErr.Error())
 	default:
 		next := r.now().Add(r.jitter(r.backoff(rec.Attempts)))
+
 		return r.retried, r.store.Retry(ctx, rec.ID, next, sendErr.Error())
 	}
 }
@@ -437,8 +478,10 @@ func (r *Relay) backoff(attempts int) time.Duration {
 		if d >= r.cfg.MaxBackoff/2 {
 			return r.cfg.MaxBackoff
 		}
+
 		d *= 2
 	}
+
 	return min(d, r.cfg.MaxBackoff)
 }
 
@@ -448,18 +491,22 @@ func (r *Relay) refreshGauges(ctx context.Context) {
 	if r.depth == nil {
 		return
 	}
+
 	stats, err := r.store.Stats(ctx, r.cfg.Lane)
 	if err != nil {
 		if r.logger != nil {
 			r.logger.WithContext(ctx).
 				Warn("outbox relay: stats failed", "lane", r.cfg.Lane, "error", err.Error())
 		}
+
 		return
 	}
+
 	lag := 0.0
 	if !stats.OldestPending.IsZero() {
 		lag = max(r.now().Sub(stats.OldestPending).Seconds(), 0)
 	}
+
 	r.depth.Set(float64(stats.Pending), r.cfg.Lane)
 	r.lag.Set(lag, r.cfg.Lane)
 }

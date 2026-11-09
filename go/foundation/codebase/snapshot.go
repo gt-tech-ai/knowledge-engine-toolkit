@@ -54,6 +54,7 @@ func (s *Snapshot) Key() string { return s.key }
 func (s *Snapshot) Keys() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return slices.Sorted(maps.Keys(s.entries))
 }
 
@@ -70,43 +71,56 @@ func (s *Snapshot) Memo[T any](
 	build func(context.Context) (T, error),
 ) (T, error) {
 	var zero T
+
 	for {
 		s.mu.Lock()
+
 		e, ok := s.entries[key]
 		if !ok {
 			e = &entry{done: make(chan struct{})}
 			s.entries[key] = e
 			s.mu.Unlock()
+
 			val, panicked, err := safeBuild(ctx, key, build)
+
 			e.val, e.err = val, err
 			e.cancelled = err != nil && !panicked && ctx.Err() != nil
+
 			if panicked || e.cancelled {
 				s.mu.Lock()
 				delete(s.entries, key)
 				s.mu.Unlock()
 			}
+
 			close(e.done)
+
 			return val, err
 		}
+
 		s.mu.Unlock()
+
 		select {
 		case <-e.done:
 		case <-ctx.Done():
 			return zero, apperr.Wrap(ctx.Err(), apperr.ContextCode(ctx.Err(),
 				apperr.CodeTimeout), "memo "+key)
 		}
+
 		if e.cancelled {
 			continue // the builder's context ended; build again for this caller
 		}
+
 		if e.err != nil {
 			return zero, e.err
 		}
+
 		v, ok := e.val.(T)
 		if !ok {
 			return zero, apperr.New(apperr.CodeInternal, fmt.Sprintf(
 				"memo %q holds %T, not the requested type", key, e.val,
 			))
 		}
+
 		return v, nil
 	}
 }
@@ -128,6 +142,8 @@ func safeBuild[T any](
 			)
 		}
 	}()
+
 	val, err = build(ctx)
+
 	return val, false, err
 }

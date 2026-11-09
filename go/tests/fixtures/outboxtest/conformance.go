@@ -62,15 +62,18 @@ func Run(t *testing.T, h Harness) {
 // returns their ids in creation order.
 func seed(t *testing.T, h Harness, lane string, n int, oldest time.Time) []uuid.UUID {
 	t.Helper()
+
 	ids := make([]uuid.UUID, n)
 	for i := range n {
 		ids[i] = uuid.New()
+
 		rec := types.OutboxRecord{
 			ID: ids[i], Lane: lane, Tenant: "org-1", Key: "k", Payload: []byte(`{"n":1}`),
 			CreatedAt: oldest.Add(time.Duration(i) * time.Second),
 		}
 		require.NoError(t, h.Enqueue(context.Background(), &rec))
 	}
+
 	return ids
 }
 
@@ -80,11 +83,15 @@ const claimLimit = 10
 // claim leases up to claimLimit due rows of lane in one transaction.
 func (h Harness) claim(ctx context.Context, lane string) ([]types.OutboxRecord, error) {
 	var recs []types.OutboxRecord
+
 	err := h.write(ctx, func(ctx context.Context) error {
 		var err error
+
 		recs, err = h.Store.Claim(ctx, lane, 0, claimLimit)
+
 		return err
 	})
+
 	return recs, err
 }
 
@@ -107,23 +114,30 @@ func (h Harness) concurrentClaimsAreDisjoint(t *testing.T) {
 		errs []error
 		wg   sync.WaitGroup
 	)
+
 	for range 5 {
 		wg.Go(func() {
 			recs, err := h.claim(ctx, lane)
+
 			mu.Lock()
 			defer mu.Unlock()
+
 			errs = append(errs, err) // checked after Wait: FailNow is test-goroutine only
+
 			for i := range recs {
 				got[recs[i].ID]++
 			}
 		})
 	}
+
 	wg.Wait()
 
 	for _, err := range errs {
 		require.NoError(t, err)
 	}
+
 	require.Len(t, got, len(want))
+
 	for _, id := range want {
 		require.Equalf(t, 1, got[id], "row %s claimed %d times", id, got[id])
 	}

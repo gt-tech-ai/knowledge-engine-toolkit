@@ -33,15 +33,18 @@ import (
 //   - A glob with no literal prefix lists the whole tree's ignored files.
 func TestCodebaseClient_GitKindIncludeIgnored(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	writeFiles(t, root, map[string]string{
 		"a.go": "package a\n", "out/zz_gen.go": "package out\n", "out/log.txt": "x\n",
 	})
+
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--cached").
 		Return(interfaces.CmdResult{Stdout: []byte("a.go\x00")}).AnyTimes()
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--others",
 		"--exclude-standard").Return(interfaces.CmdResult{}).AnyTimes()
+
 	ignored := []byte("out/log.txt\x00out/zz_gen.go\x00")
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--others",
 		"--ignored", "--exclude-standard", "--", "out").
@@ -52,6 +55,7 @@ func TestCodebaseClient_GitKindIncludeIgnored(t *testing.T) {
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--others",
 		"--ignored", "--exclude-standard").
 		Return(interfaces.CmdResult{Stdout: ignored}).Times(1)
+
 	cb, err := clientcodebase.NewFromConfig(t.Context(),
 		clientcodebase.Config{Kind: clientcodebase.KindGit, Root: root},
 		clientcodebase.Deps{Decorations: fixtures.Decorations(), Runner: runner})

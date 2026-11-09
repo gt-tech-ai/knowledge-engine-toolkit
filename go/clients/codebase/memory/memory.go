@@ -33,6 +33,7 @@ func (s *Source) List(context.Context) ([]types.File, error) {
 	for _, p := range slices.Sorted(maps.Keys(s.files)) {
 		out = append(out, types.File{Path: p})
 	}
+
 	return out, nil
 }
 
@@ -42,6 +43,7 @@ func (s *Source) Read(_ context.Context, p string) ([]byte, error) {
 	if !ok {
 		return nil, apperr.NotFound("no file " + p)
 	}
+
 	return []byte(body), nil
 }
 

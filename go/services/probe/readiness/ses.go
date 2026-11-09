@@ -29,8 +29,10 @@ func (p SES) Run(ctx context.Context, _ Target) types.Verdict {
 	if err != nil {
 		return fail(p.Name(), "SES GetAccount failed: "+err.Error())
 	}
+
 	if !out.ProductionAccessEnabled {
 		return fail(p.Name(), "SES is in the sandbox (production access disabled)")
 	}
+
 	return pass("SES production access enabled")
 }

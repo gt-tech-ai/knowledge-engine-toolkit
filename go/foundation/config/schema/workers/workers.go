@@ -96,9 +96,11 @@ func (c Config) Validate(multipartExpiry time.Duration) error {
 	if c.Port < 0 {
 		return apperr.InvalidInput("workers.port must be >= 0")
 	}
+
 	if c.BatchSize < 0 || c.FanOutWorkers < 0 {
 		return apperr.InvalidInput("workers.batch_size / fan_out_workers must be >= 0")
 	}
+
 	if c.RelayDrainBudget < 0 ||
 		(c.RelayInterval > 0 && c.RelayDrainBudget >= c.RelayInterval) {
 		return apperr.InvalidInput(fmt.Sprintf(
@@ -106,20 +108,24 @@ func (c Config) Validate(multipartExpiry time.Duration) error {
 			c.RelayDrainBudget, c.RelayInterval,
 		))
 	}
+
 	if multipartExpiry <= 0 {
 		return nil
 	}
+
 	if c.ReaperTTL > 0 && c.ReaperTTL <= multipartExpiry {
 		return apperr.InvalidInput(fmt.Sprintf(
 			"workers.reaper_ttl (%s) must exceed the multipart presign expiry (%s)",
 			c.ReaperTTL, multipartExpiry,
 		))
 	}
+
 	if c.OrphanGrace > 0 && c.OrphanGrace <= multipartExpiry {
 		return apperr.InvalidInput(fmt.Sprintf(
 			"workers.orphan_grace (%s) must exceed the multipart presign expiry (%s)",
 			c.OrphanGrace, multipartExpiry,
 		))
 	}
+
 	return nil
 }

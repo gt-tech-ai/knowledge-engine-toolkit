@@ -49,11 +49,13 @@ func TestNewFromConfig_DefaultsToStub(t *testing.T) {
 		t,
 		store.Write(ctx, []types.Fact{{Cube: "genai_calls", OrgID: "o", TS: time.Now()}}),
 	)
+
 	stream, err := store.Aggregate(
 		ctx,
 		types.AggregateQuery{Cube: "genai_calls", OrgID: "o"},
 	)
 	require.NoError(t, err)
+
 	rows, more, err := stream.Next(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, rows)
@@ -81,20 +83,26 @@ func TestNewFromConfig_DefaultsToStub(t *testing.T) {
 //   - a session factory error is returned by Start, coded
 func TestNewFromConfig_CassandraKindDialsNestedConfigAtStart(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
+
 	var got []cql.Config
+
 	cfg := analytics.DefaultConfig()
+
 	cfg.Kind = analytics.KindCassandra
 	cfg.CQL.Kind = cql.KindKeyspaces
 	cfg.CQL.Keyspaces.Region = "us-east-1"
 	cfg.CQL.Keyspace = "analytics"
 	cfg.Cubes = map[string][]types.Grain{"genai_calls": {types.GrainHour, types.GrainDay}}
+
 	store, err := analytics.NewFromConfig(ctx, cfg, analytics.Deps{
 		Dial: func(_ context.Context, c cql.Config) (interfaces.CQLSession, error) {
 			got = append(got, c)
+
 			return session, nil
 		},
 	})

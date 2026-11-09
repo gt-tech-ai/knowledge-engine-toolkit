@@ -80,6 +80,7 @@ func (s *Session) ExpiresAt() time.Time {
 	if !s.Creds.CanExpire {
 		return time.Time{}
 	}
+
 	return s.Creds.Expires
 }
 
@@ -146,12 +147,15 @@ func newSDK(_ context.Context, cfg Config, deps Deps) (Resolver, error) {
 	if deps.Target == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "account sdk: no target mapping")
 	}
+
 	if deps.LoadAWS == nil {
 		deps.LoadAWS = loadDefault
 	}
+
 	if deps.Getenv == nil {
 		deps.Getenv = func(string) string { return "" }
 	}
+
 	return &sdkResolver{cfg: cfg, deps: deps, cache: map[string]Session{}}, nil
 }
 
@@ -183,17 +187,22 @@ func (r *sdkResolver) Resolve(
 	if s, ok := r.cached(key); ok {
 		return s, nil
 	}
+
 	v, err, _ := r.group.Do(key, func() (any, error) {
 		s, err := r.resolve(ctx, env, forceProfile)
 		if err != nil {
 			return Session{}, err
 		}
+
 		r.mu.Lock()
+
 		r.cache[key] = s
 		r.mu.Unlock()
+
 		return s, nil
 	})
 	s, _ := v.(Session)
+
 	return s, err
 }
 
@@ -201,15 +210,19 @@ func (r *sdkResolver) Resolve(
 func (r *sdkResolver) cached(key string) (Session, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	s, ok := r.cache[key]
 	if !ok {
 		return Session{}, false
 	}
+
 	if at := s.ExpiresAt(); !at.IsZero() &&
 		at.Before(time.Now().Add(session.ExpirySkew)) {
 		delete(r.cache, key)
+
 		return Session{}, false
 	}
+
 	return s, true
 }
 
@@ -223,20 +236,24 @@ func (r *sdkResolver) resolve(
 	if err != nil {
 		return Session{}, err
 	}
+
 	profile := ""
 	if forceProfile || !r.ambient() {
 		profile = t.Profile
 	}
+
 	awscfg, err := r.deps.LoadAWS(ctx, profile, t.Region)
 	if err != nil {
 		return Session{}, apperr.Wrap(err, apperr.CodeUnauthorized,
 			"load AWS config for "+env+": "+t.LoginHint)
 	}
+
 	creds, err := awscfg.Credentials.Retrieve(ctx)
 	if err != nil {
 		return Session{}, apperr.Wrap(err, apperr.CodeUnauthorized,
 			"retrieve AWS credentials for "+env+": "+t.LoginHint)
 	}
+
 	// Pin the snapshot so the STS call, and every later use, acts on exactly the
 	// credentials verified here.
 	awscfg.Credentials = credentials.StaticCredentialsProvider{Value: creds}
@@ -245,15 +262,18 @@ func (r *sdkResolver) resolve(
 	if err != nil {
 		return Session{}, err
 	}
+
 	out, err := api.GetCallerIdentity(ctx, &awssts.GetCallerIdentityInput{})
 	if err != nil {
 		return Session{}, mapSTSError(err, env, t.LoginHint)
 	}
+
 	if got := aws.ToString(out.Account); got != t.ExpectedAccount {
 		return Session{}, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"wrong account: credentials are for %s, expected %s for %s",
 			got, t.ExpectedAccount, env))
 	}
+
 	return Session{
 		AWS: awscfg, Creds: creds, Account: t.ExpectedAccount,
 		Region: t.Region, Profile: profile, Principal: aws.ToString(out.Arn),
@@ -265,6 +285,7 @@ func (r *sdkResolver) stsFor(ctx context.Context, awscfg *aws.Config) (sts.API, 
 	if r.deps.STS != nil {
 		return r.deps.STS, nil
 	}
+
 	return sts.NewFromConfig(ctx,
 		sts.Config{Kind: sts.KindSDK, Name: r.cfg.Name},
 		sts.Deps{Decorations: r.deps.Decorations, AWS: awscfg})
@@ -283,6 +304,7 @@ func (r *sdkResolver) ambient() bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -291,6 +313,7 @@ func (r *sdkResolver) ambient() bool {
 // anything else is an unavailable upstream.
 func mapSTSError(err error, env, hint string) error {
 	var apiErr smithy.APIError
+
 	if apperr.As(err, &apiErr) {
 		switch apiErr.ErrorCode() {
 		case "ExpiredToken", "InvalidClientTokenId", "UnrecognizedClientException",
@@ -299,6 +322,7 @@ func mapSTSError(err error, env, hint string) error {
 				"AWS session for "+env+" is not valid: "+hint)
 		}
 	}
+
 	return apperr.Wrap(err, apperr.CodeUnavailable, "sts:GetCallerIdentity")
 }
 
@@ -309,7 +333,9 @@ func loadDefault(ctx context.Context, profile, region string) (aws.Config, error
 	if profile != "" {
 		opts = append(opts, awsconfig.WithSharedConfigProfile(profile))
 	}
+
 	cfg, err := awsconfig.LoadDefaultConfig(ctx, opts...)
+
 	return cfg, apperr.Wrap(err, apperr.CodeInternal, "config.LoadDefaultConfig")
 }
 

@@ -111,12 +111,15 @@ func TestFieldsWithDetails(t *testing.T) {
 	fields := apperr.ZapFields(appErr)
 
 	found := false
+
 	for _, f := range fields {
 		if f.Key == "error_details" {
 			found = true
+
 			assert.Equal(t, zapcore.ObjectMarshalerType, f.Type)
 		}
 	}
+
 	assert.True(t, found, "expected error_details field when Details is non-empty")
 }
 
@@ -383,6 +386,7 @@ func TestMarshalLogObject_WithDetails(t *testing.T) {
 	ctx := entries[0].ContextMap()
 	errObj, ok := ctx["error"]
 	require.True(t, ok, "expected 'error' field in log entry")
+
 	errMap, ok := errObj.(map[string]any)
 	require.True(t, ok, "expected error field to be map, got %T", errObj)
 	assert.Contains(
@@ -454,10 +458,12 @@ func TestMarshalLogObject_CauseAndStack(t *testing.T) {
 // assertions.
 func contextFieldMap(m map[string]any) map[string]string {
 	result := make(map[string]string)
+
 	for k, v := range m {
 		if s, ok := v.(string); ok {
 			result[k] = s
 		}
 	}
+
 	return result
 }

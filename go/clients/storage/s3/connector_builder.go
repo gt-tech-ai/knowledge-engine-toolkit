@@ -33,6 +33,7 @@ func NewConnectorClientBuilder(base infra.S3Config) ConnectorClientBuilder {
 	if base.Kind == kindMinIO {
 		endpoint = base.Endpoint
 	}
+
 	return func(
 		ctx context.Context,
 		creds aws.CredentialsProvider,
@@ -41,12 +42,14 @@ func NewConnectorClientBuilder(base infra.S3Config) ConnectorClientBuilder {
 		if region == "" {
 			region = base.Region // per-connector region absent → the app-config region
 		}
+
 		cfg := infra.S3Config{Kind: "s3", Region: region}
 		if endpoint != "" {
 			cfg.Kind = kindMinIO
 			cfg.Endpoint = endpoint
 			cfg.ForcePathStyle = true
 		}
+
 		client, err := NewAWSClientWithCredentials(ctx, cfg, creds, region)
 		if err != nil {
 			return nil, apperr.Wrap(
@@ -55,6 +58,7 @@ func NewConnectorClientBuilder(base infra.S3Config) ConnectorClientBuilder {
 				"connector s3: build client",
 			)
 		}
+
 		return NewClient(client, "", ""), nil
 	}
 }

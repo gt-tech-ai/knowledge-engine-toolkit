@@ -64,6 +64,7 @@ func newTTY(_ context.Context, _ Config, deps Deps) (interfaces.Prompter, error)
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"prompt tty: requires an input reader and an output writer")
 	}
+
 	return tty.New(deps.In, deps.Out), nil
 }
 

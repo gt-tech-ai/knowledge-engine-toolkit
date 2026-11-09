@@ -106,6 +106,7 @@ func TestCursorCodec_DecodeInvalid(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			_, err := codec.Decode(tc.token)
 			require.Error(t, err)
 			assert.True(

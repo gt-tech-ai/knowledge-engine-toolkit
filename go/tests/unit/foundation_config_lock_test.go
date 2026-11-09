@@ -44,18 +44,22 @@ func TestLockConfigValidate(t *testing.T) {
 	require.NoError(t, def.Validate(), "the default lock config must validate")
 
 	redis := infra.DefaultLockConfig()
+
 	redis.Kind = "redis"
 	require.NoError(t, redis.Validate(), "kind=redis must validate")
 
 	badKind := infra.DefaultLockConfig()
+
 	badKind.Kind = "zookeeper"
 	require.Error(t, badKind.Validate(), "an unknown lock kind must be rejected")
 
 	badTTL := infra.DefaultLockConfig()
+
 	badTTL.TTL = 0
 	require.Error(t, badTTL.Validate(), "a non-positive ttl must be rejected")
 
 	badRenew := infra.DefaultLockConfig()
+
 	badRenew.RenewInterval = 0
 	require.Error(
 		t,
@@ -64,6 +68,7 @@ func TestLockConfigValidate(t *testing.T) {
 	)
 
 	tooFast := infra.DefaultLockConfig()
+
 	tooFast.RenewInterval = 20 * time.Second // > ttl/3 (30s/3 = 10s)
 	assert.Error(
 		t,

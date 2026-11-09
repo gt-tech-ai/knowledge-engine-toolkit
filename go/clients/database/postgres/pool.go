@@ -38,6 +38,7 @@ func Check(db *sql.DB) func() error {
 	return func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), readinessTimeout)
 		defer cancel()
+
 		return Ping(ctx, db)
 	}
 }
@@ -50,6 +51,7 @@ func Check(db *sql.DB) func() error {
 func Ping(ctx context.Context, db *sql.DB) error {
 	pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)
 	defer cancel()
+
 	if err := db.PingContext(pingCtx); err != nil {
 		return apperr.Wrap(
 			err,
@@ -57,6 +59,7 @@ func Ping(ctx context.Context, db *sql.DB) error {
 			"database ping failed (check DSN and connectivity)",
 		)
 	}
+
 	return nil
 }
 
@@ -113,9 +116,11 @@ func StartStatsCollector(
 	}
 
 	publish()
+
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+
 		for {
 			select {
 			case <-ctx.Done():

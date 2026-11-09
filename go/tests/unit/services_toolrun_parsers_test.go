@@ -15,8 +15,10 @@ import (
 // parseWith parses res with the parser kind.
 func parseWith(t *testing.T, kind string, res interfaces.CmdResult) types.Verdict {
 	t.Helper()
+
 	p, err := parsers.NewFromConfig(kind)
 	require.NoError(t, err)
+
 	return p.Parse(res)
 }
 
@@ -32,17 +34,20 @@ func parseWith(t *testing.T, kind string, res interfaces.CmdResult) types.Verdic
 func TestToolrunParsers_ExitCode(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, types.StatusPass, parseWith(t, "", interfaces.CmdResult{}).Status)
+
 	v := parseWith(t, parsers.KindExitCode, interfaces.CmdResult{
 		ExitCode: 1, Err: apperr.New(apperr.CodeInternal, "exit 1"),
 		Stdout: []byte("out\n"), Stderr: []byte("err\n"),
 	})
 	assert.Equal(t, types.StatusFail, v.Status)
 	assert.Equal(t, "out\nerr", v.Detail)
+
 	v = parseWith(t, parsers.KindExitCode, interfaces.CmdResult{
 		ExitCode: -1, Err: apperr.New(apperr.CodeNotFound, "no such binary"),
 	})
 	assert.Equal(t, types.StatusFail, v.Status)
 	assert.Contains(t, v.Detail, "no such binary")
+
 	v = parseWith(
 		t,
 		parsers.KindGCC,
@@ -73,11 +78,13 @@ func TestToolrunParsers_EmptyOutput(t *testing.T) {
 			interfaces.CmdResult{Stdout: []byte("\n")},
 		).Status,
 	)
+
 	v := parseWith(t, parsers.KindEmptyOutput, interfaces.CmdResult{
 		Stdout: []byte(" M a.go\n?? b.go\n"),
 	})
 	assert.Equal(t, types.StatusFail, v.Status)
 	assert.Equal(t, "M a.go\n?? b.go", v.Detail)
+
 	v = parseWith(t, parsers.KindEmptyOutput, interfaces.CmdResult{
 		ExitCode: 128, Err: apperr.New(apperr.CodeInternal, "exit 128"),
 		Stderr: []byte("not a git repository"),
@@ -98,14 +105,17 @@ func TestToolrunParsers_EmptyOutput(t *testing.T) {
 //     file and line; non-SARIF output leaves the exit code to decide.
 func TestToolrunParsers_Formats(t *testing.T) {
 	t.Parallel()
+
 	fail := interfaces.CmdResult{
 		ExitCode: 1,
 		Err:      apperr.New(apperr.CodeInternal, "exit 1"),
 	}
 
 	gccRes := fail
+
 	gccRes.Stdout = []byte("# pkg\nx/a.go:12:5: undefined: foo\nnoise\n")
 	gccRes.Stderr = []byte("b.c:3: warning: unused\n")
+
 	v := parseWith(t, parsers.KindGCC, gccRes)
 	assert.Equal(t, types.StatusFail, v.Status)
 	assert.Equal(t, []types.Finding{
@@ -114,12 +124,14 @@ func TestToolrunParsers_Formats(t *testing.T) {
 	}, v.Findings)
 
 	jl := fail
+
 	jl.Stdout = []byte(`{"file":"a.py","line":2,"rule":"E1","message":"bad"}` +
 		"\nnot json\n{\"other\":1}\n")
 	assert.Equal(t, []types.Finding{{File: "a.py", Line: 2, Rule: "E1", Message: "bad"}},
 		parseWith(t, parsers.KindJSONLines, jl).Findings)
 
 	sr := fail
+
 	sr.Stdout = []byte(`{"runs":[{"results":[{"ruleId":"R1","message":{"text":"m"},` +
 		`"locations":[{"physicalLocation":{"artifactLocation":{"uri":"f.go"},` +
 		`"region":{"startLine":7}}}]},{"ruleId":"R2","message":{"text":"n"}}]}]}`)
@@ -127,6 +139,7 @@ func TestToolrunParsers_Formats(t *testing.T) {
 		{File: "f.go", Line: 7, Rule: "R1", Message: "m"},
 		{Rule: "R2", Message: "n"},
 	}, parseWith(t, parsers.KindSARIF, sr).Findings)
+
 	bad := parseWith(t, parsers.KindSARIF, interfaces.CmdResult{Stdout: []byte("oops")})
 	assert.Equal(t, types.StatusPass, bad.Status)
 	assert.Empty(t, bad.Findings)
@@ -148,6 +161,7 @@ func TestToolrunParsers_Formats(t *testing.T) {
 //     verdict and leaves the result's stdout byte-for-byte unchanged.
 func TestToolrunParsers_LeavesOutputIntact(t *testing.T) {
 	t.Parallel()
+
 	stdout := []byte("out\n\n\n\n")
 	res := interfaces.CmdResult{Stdout: stdout, Stderr: []byte("err\n")}
 	v := parseWith(t, "", res)

@@ -33,6 +33,7 @@ import (
 //     CodeNotFound and writes no object at that key.
 func TestStorageMemory_ErrorPaths(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 	c := memory.New()
 
@@ -44,6 +45,7 @@ func TestStorageMemory_ErrorPaths(t *testing.T) {
 
 	id, err := c.CreateMultipartUpload(ctx, "b", "intended", "application/octet-stream")
 	require.NoError(t, err)
+
 	err = c.CompleteMultipartUpload(ctx, "b", "elsewhere", id, nil)
 	require.Equal(
 		t,
@@ -52,6 +54,7 @@ func TestStorageMemory_ErrorPaths(t *testing.T) {
 		"a mismatched key is not the upload: %v",
 		err,
 	)
+
 	exists, err := c.Exists(ctx, "b", "elsewhere")
 	require.NoError(t, err)
 	require.False(t, exists, "a mismatched complete must not write an object")
@@ -72,6 +75,7 @@ func TestStorageClient_Exists_ReturnsTrueWhenPresent(t *testing.T) {
 	api := mocks.NewMockS3API(gomock.NewController(t))
 	api.EXPECT().HeadObject(gomock.Any(), gomock.Any()).
 		Return(&awss3.HeadObjectOutput{ContentLength: aws.Int64(5)}, nil)
+
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 
 	exists, err := c.Exists(context.Background(), "b", "k")

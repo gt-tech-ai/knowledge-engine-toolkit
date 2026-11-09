@@ -50,19 +50,25 @@ type sarif struct{}
 // yields no findings, so the exit code alone decides.
 func (sarif) Parse(res interfaces.CmdResult) types.Verdict {
 	var log sarifLog
+
 	if json.Unmarshal(res.Stdout, &log) != nil {
 		return verdict(res, nil)
 	}
+
 	var findings []types.Finding
+
 	for _, run := range log.Runs {
 		for _, r := range run.Results {
 			f := types.Finding{Rule: r.RuleID, Message: r.Message.Text}
 			if len(r.Locations) > 0 {
 				loc := r.Locations[0].PhysicalLocation
+
 				f.File, f.Line = loc.ArtifactLocation.URI, loc.Region.StartLine
 			}
+
 			findings = append(findings, f)
 		}
 	}
+
 	return verdict(res, findings)
 }

@@ -23,7 +23,9 @@ func Parse(m *Map, jsonStr string) (types.Filter, error) {
 	if strings.TrimSpace(jsonStr) == "" {
 		return types.CompositeFilter{}, nil // no filter → IsEmpty
 	}
+
 	var node types.FilterNode
+
 	if err := json.Unmarshal([]byte(jsonStr), &node); err != nil {
 		return nil, apperr.Wrap(
 			err,
@@ -31,6 +33,7 @@ func Parse(m *Map, jsonStr string) (types.Filter, error) {
 			"filter: invalid JSON",
 		)
 	}
+
 	return ParseFilter(m, node)
 }
 
@@ -44,6 +47,7 @@ func ParseFilter(m *Map, n types.FilterNode) (types.Filter, error) {
 	if n.Clause == nil && n.And == nil && n.Or == nil {
 		return types.CompositeFilter{}, nil // no filter → IsEmpty
 	}
+
 	return parseNode(m, n, 0)
 }
 
@@ -56,18 +60,22 @@ func parseNode(m *Map, n types.FilterNode, depth int) (types.Filter, error) {
 			"filter: nesting exceeds max depth",
 		)
 	}
+
 	arms := 0
+
 	for _, set := range []bool{n.Clause != nil, n.And != nil, n.Or != nil} {
 		if set {
 			arms++
 		}
 	}
+
 	if arms != 1 {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"filter: each node must carry exactly one operator",
 		)
 	}
+
 	switch {
 	case n.Clause != nil:
 		return parseClause(m, *n.Clause)
@@ -91,17 +99,21 @@ func parseComposite(
 			"filter: "+key+" must not be empty",
 		)
 	}
+
 	subs := make([]types.Filter, 0, len(members))
 	for _, member := range members {
 		f, err := parseNode(m, member, depth+1)
 		if err != nil {
 			return nil, err
 		}
+
 		subs = append(subs, f)
 	}
+
 	if key == "$and" {
 		return types.CompositeFilter{And: subs}, nil
 	}
+
 	return types.CompositeFilter{Or: subs}, nil
 }
 
@@ -114,6 +126,7 @@ func parseClause(m *Map, c types.FilterNodeClause) (types.Filter, error) {
 			"filter: unknown operator "+string(c.Op),
 		)
 	}
+
 	field, ok := m.Lookup(c.Field)
 	if !ok {
 		return nil, apperr.New(
@@ -121,10 +134,12 @@ func parseClause(m *Map, c types.FilterNodeClause) (types.Filter, error) {
 			"filter: field not allow-listed: "+c.Field,
 		)
 	}
+
 	value, err := decodeValue(c.Op, c.Value, field.Type)
 	if err != nil {
 		return nil, err
 	}
+
 	return types.FilterClause{Field: field.Name, Operator: c.Op, Value: value}, nil
 }
 
@@ -135,6 +150,7 @@ func decodeValue(op types.FilterOperator, v any, ft FieldType) (any, error) {
 	if op != types.OpIn && op != types.OpNotIn {
 		return decodeScalar(v, ft)
 	}
+
 	arr, ok := v.([]any)
 	if !ok {
 		return nil, apperr.New(
@@ -142,14 +158,17 @@ func decodeValue(op types.FilterOperator, v any, ft FieldType) (any, error) {
 			"filter: in/not_in requires a []any array",
 		)
 	}
+
 	out := make([]any, 0, len(arr))
 	for _, el := range arr {
 		d, err := decodeScalar(el, ft)
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, d)
 	}
+
 	return out, nil
 }
 
@@ -162,6 +181,7 @@ func decodeScalar(v any, ft FieldType) (any, error) {
 		apperr.CodeInvalidInput,
 		"filter: value type does not match field type",
 	)
+
 	switch ft {
 	case FieldString, FieldID:
 		if s, ok := v.(string); ok {
@@ -184,6 +204,7 @@ func decodeScalar(v any, ft FieldType) (any, error) {
 		if !ok {
 			return nil, mismatch
 		}
+
 		ts, err := time.Parse(time.RFC3339, s)
 		if err != nil {
 			return nil, apperr.Wrap(
@@ -192,32 +213,39 @@ func decodeScalar(v any, ft FieldType) (any, error) {
 				"filter: time value must be RFC3339",
 			)
 		}
+
 		return ts, nil
 	}
+
 	return nil, mismatch
 }
 
 // safeInt reads a whole number within ±maxSafeInt from a json.Number or a float64.
 func safeInt(v any) (int64, bool) {
 	var n int64
+
 	switch x := v.(type) {
 	case json.Number:
 		parsed, err := x.Int64()
 		if err != nil {
 			return 0, false
 		}
+
 		n = parsed
 	case float64:
 		if x != math.Trunc(x) || math.Abs(x) > maxSafeInt {
 			return 0, false
 		}
+
 		n = int64(x)
 	default:
 		return 0, false
 	}
+
 	if n > maxSafeInt || n < -maxSafeInt {
 		return 0, false
 	}
+
 	return n, true
 }
 
@@ -226,6 +254,7 @@ func number(v any) (float64, bool) {
 	switch x := v.(type) {
 	case json.Number:
 		f, err := x.Float64()
+
 		return f, err == nil
 	case float64:
 		return x, !math.IsInf(x, 0) && !math.IsNaN(x)

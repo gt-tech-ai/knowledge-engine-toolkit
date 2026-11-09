@@ -61,6 +61,7 @@ func NewRunner(opts ...RunnerOption) *Runner {
 	for _, opt := range opts {
 		opt(r)
 	}
+
 	return r
 }
 
@@ -131,12 +132,15 @@ func (d *Runner) runBuffered(
 		name,
 		args...,
 	)
+
 	cmd.Dir = dir
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+
 	if input != nil {
 		cmd.Stdin = bytes.NewReader(input)
 	}
+
 	cmd.Env = types.MergeEnv(os.Environ(), extraEnv)
 	configureProcessGroup(cmd)
 
@@ -145,6 +149,7 @@ func (d *Runner) runBuffered(
 	dur := time.Since(start)
 
 	exitCode := 0
+
 	if err != nil {
 		// ProcessState is set when the process ran and exited (incl. non-zero);
 		// nil when it never started (e.g. binary not found) — report -1 then.
@@ -167,6 +172,7 @@ func (d *Runner) runBuffered(
 // Exists checks whether a binary is available on PATH.
 func (d *Runner) Exists(name string) bool {
 	_, err := exec.LookPath(name)
+
 	return err == nil
 }
 
@@ -175,10 +181,12 @@ func (d *Runner) RequireTool(name, installHint string) error {
 	if d.Exists(name) {
 		return nil
 	}
+
 	msg := name + " not found on PATH"
 	if installHint != "" {
 		msg = fmt.Sprintf("%s not found on PATH; install: %s", name, installHint)
 	}
+
 	return apperr.NotFound(msg)
 }
 
@@ -188,6 +196,7 @@ func (d *Runner) stdoutWriter() io.Writer {
 	if d.stdout != nil {
 		return d.stdout
 	}
+
 	return os.Stdout
 }
 
@@ -197,6 +206,7 @@ func (d *Runner) stderrWriter() io.Writer {
 	if d.stderr != nil {
 		return d.stderr
 	}
+
 	return os.Stderr
 }
 
@@ -213,6 +223,7 @@ func (d *Runner) runWithEnv(
 		name,
 		args...,
 	)
+
 	cmd.Dir = dir
 	cmd.Stdout = d.stdoutWriter()
 	cmd.Stderr = d.stderrWriter()
@@ -224,10 +235,13 @@ func (d *Runner) runWithEnv(
 		if len(args) > 0 {
 			cs = name + " " + strings.Join(args, " ")
 		}
+
 		if ctx.Err() != nil {
 			return apperr.Wrap(ctx.Err(), apperr.CodeInternal, cs+" interrupted")
 		}
+
 		return apperr.Wrap(err, apperr.CodeInternal, cs+" failed")
 	}
+
 	return nil
 }

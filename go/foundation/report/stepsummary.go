@@ -22,6 +22,7 @@ func WriteStepSummary(w io.Writer, results types.StepResults, total time.Duratio
 	if len(results) > 0 && results[0].Group != "" {
 		group = results[0].Group
 	}
+
 	n := results.CountByStatus()
 	if len(results) > 0 && n[types.StatusPass] == len(results) {
 		return writeSummary(
@@ -32,6 +33,7 @@ func WriteStepSummary(w io.Writer, results types.StepResults, total time.Duratio
 			round(total),
 		)
 	}
+
 	err := writeSummary(
 		w,
 		"### %s: %d passed, %d failed, %d warned, %d skipped (%s)\n\n"+
@@ -47,7 +49,9 @@ func WriteStepSummary(w io.Writer, results types.StepResults, total time.Duratio
 		if err != nil || r.Status == types.StatusPass {
 			continue
 		}
+
 		icon := "&#x274C;"
+
 		switch r.Status {
 		case types.StatusSkip:
 			icon = "&#x23ED;"
@@ -55,10 +59,12 @@ func WriteStepSummary(w io.Writer, results types.StepResults, total time.Duratio
 			icon = "&#x26A0;"
 		case types.StatusPass, types.StatusFail:
 		}
+
 		msg := r.Error
 		if len(msg) > summaryErrorWidth {
 			msg = msg[:summaryErrorWidth-3] + "..."
 		}
+
 		err = writeSummary(
 			w,
 			"| %s | %s | %s | %s |\n",
@@ -68,9 +74,11 @@ func WriteStepSummary(w io.Writer, results types.StepResults, total time.Duratio
 			msg,
 		)
 	}
+
 	if err != nil {
 		return err
 	}
+
 	return writeSummary(w, "\n")
 }
 
@@ -79,6 +87,7 @@ func writeSummary(w io.Writer, format string, a ...any) error {
 	if _, err := fmt.Fprintf(w, format, a...); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "report: write step summary")
 	}
+
 	return nil
 }
 
@@ -115,6 +124,8 @@ func (s *stepSummary) OnGateComplete(
 	if err != nil {
 		return
 	}
+
 	defer func() { _ = f.Close() }()
+
 	_ = WriteStepSummary(f, results, elapsed)
 }

@@ -96,6 +96,7 @@ func Convert(
 			"walk "+inDir,
 		)
 	}
+
 	if len(swaggerFiles) == 0 {
 		return Result{}, nil
 	}
@@ -120,22 +121,29 @@ func Convert(
 	// single per-service spec. Files whose package declares no service
 	// annotation are skipped (e.g. ws/v1, retrieval/v1, jsonapi/v1).
 	byService := make(map[string][]string)
+
 	var skipped []string
+
 	for _, sf := range swaggerFiles {
 		rel, err := filepath.Rel(inDir, sf)
 		if err != nil {
 			return Result{}, apperr.Wrap(err, apperr.CodeInternal, "rel path")
 		}
+
 		pkgPath := filepath.ToSlash(filepath.Dir(rel))
 		svc, ok := pkgToService[pkgPath]
+
 		if !ok {
 			skipped = append(skipped, sf)
+
 			continue
 		}
+
 		byService[svc] = append(byService[svc], sf)
 	}
 
 	var written []string
+
 	for svc, files := range byService {
 		cfg, ok := configs[svc]
 		if !ok {
@@ -163,11 +171,13 @@ func Convert(
 				"process service "+svc,
 			)
 		}
+
 		written = append(written, outPath)
 	}
 
 	sort.Strings(written)
 	sort.Strings(skipped)
+
 	return Result{Written: written, Skipped: skipped}, nil
 }
 
@@ -178,7 +188,9 @@ func findSwaggerFiles(fsys interfaces.FS, dir string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var files []string
+
 	for _, e := range entries {
 		p := filepath.Join(dir, e.Name())
 		if e.IsDir() {
@@ -186,13 +198,17 @@ func findSwaggerFiles(fsys interfaces.FS, dir string) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			files = append(files, sub...)
+
 			continue
 		}
+
 		if strings.HasSuffix(e.Name(), ".swagger.json") {
 			files = append(files, p)
 		}
 	}
+
 	return files, nil
 }
 
@@ -215,6 +231,7 @@ func MergeSwaggerFiles(fsys interfaces.FS, files []string) (map[string]any, erro
 		}
 
 		var spec map[string]any
+
 		if err := json.Unmarshal(data, &spec); err != nil {
 			return nil, apperr.Wrap(
 				err,
@@ -225,6 +242,7 @@ func MergeSwaggerFiles(fsys interfaces.FS, files []string) (map[string]any, erro
 
 		if merged == nil {
 			merged = spec
+
 			continue
 		}
 
@@ -235,6 +253,7 @@ func MergeSwaggerFiles(fsys interfaces.FS, files []string) (map[string]any, erro
 				mergedPaths = make(map[string]any)
 				merged["paths"] = mergedPaths
 			}
+
 			maps.Copy(mergedPaths, paths)
 		}
 
@@ -245,6 +264,7 @@ func MergeSwaggerFiles(fsys interfaces.FS, files []string) (map[string]any, erro
 				mergedDefs = make(map[string]any)
 				merged["definitions"] = mergedDefs
 			}
+
 			maps.Copy(mergedDefs, defs)
 		}
 	}
@@ -284,10 +304,12 @@ func processSpec(
 	}
 
 	outputPath := filepath.Join(outputDir, "openapi.json")
+
 	out, err := json.MarshalIndent(oas3, "", "  ")
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "marshal output")
 	}
+
 	out = append(out, '\n')
 
 	if err := fsys.WriteFile(outputPath, out, 0o600); err != nil {

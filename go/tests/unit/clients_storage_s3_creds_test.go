@@ -25,6 +25,7 @@ import (
 //     kind="minio" with a key does; kind="minio" with no key does not.
 func TestUseStaticCredentials(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		name string
 		cfg  infra.S3Config
@@ -62,6 +63,7 @@ func TestUseStaticCredentials(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := s3.UseStaticCredentials(tc.cfg); got != tc.want {
 				t.Errorf("UseStaticCredentials(%+v) = %v, want %v", tc.cfg, got, tc.want)
 			}
@@ -85,6 +87,7 @@ func TestUseStaticCredentials(t *testing.T) {
 //     constructed offline (the AWS client is lazy).
 func TestNewConnectorClientBuilder(t *testing.T) {
 	t.Parallel()
+
 	build := s3.NewConnectorClientBuilder(infra.S3Config{
 		Kind:     "minio",
 		Endpoint: "http://minio:9000",
@@ -97,14 +100,17 @@ func TestNewConnectorClientBuilder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build with explicit region: %v", err)
 	}
+
 	if client == nil {
 		t.Fatal("build returned a nil client for an explicit region")
 	}
+
 	// An empty per-connector region falls back to the base region without error.
 	fallback, err := build(ctx, creds, "")
 	if err != nil {
 		t.Fatalf("build with region fallback: %v", err)
 	}
+
 	if fallback == nil {
 		t.Fatal("region-fallback build returned a nil client")
 	}

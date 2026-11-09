@@ -57,6 +57,7 @@ func newObject(_ context.Context, _ Config, deps Deps) (interfaces.PlanStore, er
 			"planstore object: no storage client",
 		)
 	}
+
 	return objectStore{storage: deps.Storage, log: deps.Log}, nil
 }
 
@@ -68,37 +69,47 @@ func (st objectStore) Save(ctx context.Context, set types.PlanSet) error {
 	if err != nil {
 		return err
 	}
+
 	m := manifest{Owner: set.Owner}
 	for _, f := range files {
 		rel, err := filepath.Rel(set.Dir, filepath.Dir(f))
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "locate the unit of "+f)
 		}
+
 		unit := filepath.ToSlash(rel)
+
 		data, err := os.ReadFile(f)
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "read "+f)
 		}
+
 		sum := sha256.Sum256(data)
 		key := set.Prefix + set.RunID + "/" + unit + "/" + set.File
+
 		if err := st.storage.Upload(ctx, set.Bucket, key, bytes.NewReader(data),
 			"application/octet-stream"); err != nil {
 			return apperr.Wrap(err, apperr.CodeUpstream, fmt.Sprintf(
 				"store the saved plan of %s in %s/%s", unit, set.Bucket, key))
 		}
+
 		st.logf("saved plan stored", "unit", unit, "bucket", set.Bucket, "key", key)
+
 		m.Units = append(m.Units, manifestUnit{
 			Unit: unit, Key: key, SHA256: hex.EncodeToString(sum[:]),
 		})
 	}
+
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "encode the plan manifest")
 	}
+
 	path := filepath.Join(set.Dir, set.Manifest)
 	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "write "+path)
 	}
+
 	return nil
 }
 
@@ -113,40 +124,52 @@ func (st objectStore) Load(ctx context.Context, set types.PlanSet) error {
 	if err != nil {
 		return err
 	}
+
 	present, err := FindPlans(set.Dir, set.File)
 	if err != nil {
 		return err
 	}
+
 	if len(present) > 0 {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"%s already holds saved plans (%s): Load restores only the plans %s lists, "+
 				"into a directory that holds none", set.Dir, strings.Join(present, ", "),
 			set.Manifest))
 	}
+
 	for _, u := range m.Units {
 		if err := checkEntry(set, u); err != nil {
 			return err
 		}
 	}
+
 	var mismatched []string
+
 	for _, u := range m.Units {
 		dest := filepath.Join(set.Dir, filepath.FromSlash(u.Unit), set.File)
+
 		sum, err := st.fetch(ctx, set.Bucket, u.Key, dest)
 		if err != nil {
 			return err
 		}
+
 		if sum != u.SHA256 {
 			_ = os.Remove(dest)
+
 			mismatched = append(mismatched, u.Unit)
+
 			continue
 		}
+
 		st.logf("saved plan fetched", "unit", u.Unit, "bucket", set.Bucket, "key", u.Key)
 	}
+
 	if len(mismatched) > 0 {
 		return apperr.New(apperr.CodeConflict, fmt.Sprintf(
 			"the stored plan of %s does not match the SHA-256 in %s, so nothing was "+
 				"applied: plan again", strings.Join(mismatched, ", "), set.Manifest))
 	}
+
 	return nil
 }
 
@@ -154,15 +177,19 @@ func (st objectStore) Load(ctx context.Context, set types.PlanSet) error {
 // and list at least one unit.
 func readManifest(set types.PlanSet) (manifest, error) {
 	path := filepath.Join(set.Dir, set.Manifest)
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return manifest{}, apperr.Wrap(err, apperr.CodeInvalidInput, "read "+path+
 			": Load restores the plans a Save listed there")
 	}
+
 	var m manifest
+
 	if err := json.Unmarshal(data, &m); err != nil {
 		return manifest{}, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+path)
 	}
+
 	switch {
 	case m.Owner != set.Owner:
 		return manifest{}, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
@@ -170,6 +197,7 @@ func readManifest(set types.PlanSet) (manifest, error) {
 	case len(m.Units) == 0:
 		return manifest{}, apperr.New(apperr.CodeInvalidInput, path+" lists no plan")
 	}
+
 	return m, nil
 }
 
@@ -184,6 +212,7 @@ func checkEntry(set types.PlanSet, u manifestUnit) error {
 			"the plan manifest entry %q (key %q) is not a plan of %s under %s",
 			u.Unit, u.Key, set.Owner, set.Prefix))
 	}
+
 	return nil
 }
 
@@ -206,23 +235,30 @@ func (st objectStore) fetch(
 		return "", apperr.Wrap(err, apperr.CodeUpstream,
 			fmt.Sprintf("fetch the saved plan %s/%s", bucket, key))
 	}
+
 	defer func() { _ = body.Close() }()
+
 	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "create "+filepath.Dir(dest))
 	}
+
 	f, err := os.OpenFile(dest, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "create "+dest)
 	}
+
 	h := sha256.New()
 	_, cerr := io.Copy(io.MultiWriter(f, h), body)
+
 	if err := f.Close(); cerr == nil {
 		cerr = err
 	}
+
 	if cerr != nil {
 		return "", apperr.Wrap(cerr, apperr.CodeUpstream,
 			fmt.Sprintf("download the saved plan %s/%s", bucket, key))
 	}
+
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 

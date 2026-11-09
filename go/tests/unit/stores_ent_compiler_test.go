@@ -19,6 +19,7 @@ import (
 func renderPred(pred entcompiler.EntPredicate) (query string, args []any) {
 	sel := entsql.Dialect(dialect.Postgres).Select("*").From(entsql.Table("documents"))
 	pred(sel)
+
 	return sel.Query()
 }
 
@@ -29,7 +30,9 @@ func renderOrder(orders []entcompiler.EntPredicate) string {
 	for _, o := range orders {
 		o(sel)
 	}
+
 	q, _ := sel.Query()
+
 	return q
 }
 
@@ -49,10 +52,12 @@ func renderOrder(orders []entcompiler.EntPredicate) string {
 //   - Empty() adds no WHERE clause.
 func TestEntBackend_Clauses(t *testing.T) {
 	t.Parallel()
+
 	b := entcompiler.New()
 
 	t.Run("scalar operators are parameterized", func(t *testing.T) {
 		t.Parallel()
+
 		cases := []struct {
 			name string
 			op   types.FilterOperator
@@ -68,9 +73,11 @@ func TestEntBackend_Clauses(t *testing.T) {
 		for _, tc := range cases {
 			col := "status"
 			val := any("indexed")
+
 			if strings.HasPrefix(tc.name, "g") || strings.HasPrefix(tc.name, "l") {
 				col, val = "page_count", int64(3)
 			}
+
 			q, args := renderPred(b.Clause(col, tc.op, val))
 			assert.Contains(t, q, tc.frag, tc.name)
 			assert.Equal(t, []any{val}, args, tc.name)
@@ -81,6 +88,7 @@ func TestEntBackend_Clauses(t *testing.T) {
 		"like resolves to a case-insensitive parameterized match on the column",
 		func(t *testing.T) {
 			t.Parallel()
+
 			q, args := renderPred(b.Clause("title", types.OpLike, "rep"))
 			assert.Contains(t, q, "title")
 			assert.Contains(t, q, "$1")
@@ -90,6 +98,7 @@ func TestEntBackend_Clauses(t *testing.T) {
 
 	t.Run("in expands the parser []any to $1, $2", func(t *testing.T) {
 		t.Parallel()
+
 		q, args := renderPred(b.Clause("status", types.OpIn, []any{"indexed", "pending"}))
 		assert.Contains(t, q, `"status" IN ($1, $2)`)
 		assert.Equal(t, []any{"indexed", "pending"}, args)
@@ -97,6 +106,7 @@ func TestEntBackend_Clauses(t *testing.T) {
 
 	t.Run("not_in expands the parser []any", func(t *testing.T) {
 		t.Parallel()
+
 		q, args := renderPred(b.Clause("status", types.OpNotIn, []any{"failed"}))
 		assert.Contains(t, q, `"status" NOT IN ($1)`)
 		assert.Equal(t, []any{"failed"}, args)
@@ -104,6 +114,7 @@ func TestEntBackend_Clauses(t *testing.T) {
 
 	t.Run("empty adds no WHERE", func(t *testing.T) {
 		t.Parallel()
+
 		q, args := renderPred(b.Empty())
 		assert.NotContains(t, q, "WHERE")
 		assert.Empty(t, args)
@@ -129,10 +140,12 @@ func TestEntBackend_Clauses(t *testing.T) {
 //     it is the primary sort field.
 func TestEntBackend_CompositeAndOrder(t *testing.T) {
 	t.Parallel()
+
 	b := entcompiler.New()
 
 	t.Run("nested and/or is parameterized in clause order", func(t *testing.T) {
 		t.Parallel()
+
 		f := types.CompositeFilter{And: []types.Filter{
 			types.FilterClause{Field: "status", Operator: types.OpEq, Value: "indexed"},
 			types.CompositeFilter{Or: []types.Filter{
@@ -160,6 +173,7 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 		"order resolves column and appends default created_at tiebreakers",
 		func(t *testing.T) {
 			t.Parallel()
+
 			orders := listquery.CompileOrder[entcompiler.EntPredicate, entcompiler.EntPredicate](
 				b,
 				resolveNameToTitle,
@@ -177,6 +191,7 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 
 	t.Run("created_at primary sort dedups its tiebreaker", func(t *testing.T) {
 		t.Parallel()
+
 		orders := listquery.CompileOrder[entcompiler.EntPredicate, entcompiler.EntPredicate](
 			b,
 			resolveNameToTitle,
@@ -193,6 +208,7 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 
 	t.Run("id primary sort dedups its tiebreaker", func(t *testing.T) {
 		t.Parallel()
+
 		orders := listquery.CompileOrder[entcompiler.EntPredicate, entcompiler.EntPredicate](
 			b,
 			resolveNameToTitle,
@@ -211,6 +227,7 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 		"join-table keyset column replaces the created_at tiebreaker",
 		func(t *testing.T) {
 			t.Parallel()
+
 			// A membership join table keyed on joined_at passes its keyset column so the
 			// ORDER BY never references a non-existent created_at column — the fix that
 			// unblocks org_member/team_member.
@@ -250,6 +267,7 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 //     ILIKE), both parameterized.
 func TestEntBackend_ExistsClauseHonorsCaseInsensitive(t *testing.T) {
 	t.Parallel()
+
 	b := entcompiler.New()
 	base := types.JoinTarget{
 		Table:     "users",
@@ -259,14 +277,18 @@ func TestEntBackend_ExistsClauseHonorsCaseInsensitive(t *testing.T) {
 	}
 
 	fold := base
+
 	fold.CaseInsensitive = true
+
 	q, args := renderPred(b.ExistsClause(fold, types.OpLike, "ann"))
 	assert.Contains(t, q, "ILIKE", "case-insensitive $like must fold via ILIKE")
 	assert.Contains(t, q, "$1")
 	assert.Equal(t, []any{"%ann%"}, args)
 
 	sensitive := base
+
 	sensitive.CaseInsensitive = false
+
 	q2, args2 := renderPred(b.ExistsClause(sensitive, types.OpLike, "ann"))
 	assert.NotContains(t, q2, "ILIKE", "case-sensitive $like must NOT fold")
 	assert.Contains(t, q2, "LIKE")
@@ -292,6 +314,7 @@ func TestEntBackend_ExistsClauseHonorsCaseInsensitive(t *testing.T) {
 //     soft-deleted target's stale value; a join without it has no such guard.
 func TestEntBackend_OrderJoin(t *testing.T) {
 	t.Parallel()
+
 	b := entcompiler.New()
 	join := types.JoinTarget{
 		Table: "users", LocalKey: "user_id", TargetKey: "id",
@@ -344,6 +367,7 @@ func TestEntBackend_OrderJoin(t *testing.T) {
 //     ascending → " ASC", desc → " DESC".
 func TestEntBackend_OrderOrdinal(t *testing.T) {
 	t.Parallel()
+
 	b := entcompiler.New()
 	values := []string{"admin", "write", "read"}
 
@@ -385,6 +409,7 @@ func TestEntBackend_OrderOrdinal(t *testing.T) {
 //     … ELSE NULL END) <dir>`, the seconds inlined as trusted spec literals.
 func TestEntBackend_OrderDerived(t *testing.T) {
 	t.Parallel()
+
 	b := entcompiler.New()
 
 	agg := types.DerivedSort{Aggregate: &types.AggregateSpec{
@@ -427,11 +452,14 @@ func TestEntBackend_OrderDerived(t *testing.T) {
 // order.
 func assertOrderedColumns(t *testing.T, q string, fragments ...string) {
 	t.Helper()
+
 	prev := -1
+
 	for _, frag := range fragments {
 		idx := strings.Index(q, frag)
 		assert.GreaterOrEqual(t, idx, 0, "fragment %q present", frag)
 		assert.Greater(t, idx, prev, "fragment %q after previous", frag)
+
 		prev = idx
 	}
 }

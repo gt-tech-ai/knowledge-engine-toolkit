@@ -40,13 +40,16 @@ func budgetRoots() []string {
 // the non-test Go files under roots.
 func sizeViolations(t *testing.T, cb interfaces.Codebase, roots []string) []string {
 	t.Helper()
+
 	files, err := cb.Go().Parse(t.Context(), types.FileSelector{
 		Roots:   roots,
 		Exts:    []string{".go"},
 		Exclude: []string{"**/*_test.go"},
 	}, types.ParseComments)
 	require.NoError(t, err)
+
 	var out []string
+
 	for _, f := range files {
 		if n := f.FileSet.File(f.AST.Pos()).LineCount(); n > maxFileLines {
 			out = append(
@@ -54,29 +57,36 @@ func sizeViolations(t *testing.T, cb interfaces.Codebase, roots []string) []stri
 				fmt.Sprintf("%s: %d lines (max %d)", f.Path, n, maxFileLines),
 			)
 		}
+
 		for _, decl := range f.AST.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok || fn.Body == nil {
 				continue
 			}
+
 			out = append(out, funcViolations(f.FileSet, f.Path, fn)...)
 		}
 	}
+
 	return out
 }
 
 // funcViolations reports fn when its span or its block nesting exceeds the budget.
 func funcViolations(fset *token.FileSet, path string, fn *ast.FuncDecl) []string {
 	var out []string
+
 	span := fset.Position(fn.End()).Line - fset.Position(fn.Pos()).Line + 1
+
 	if span > maxFuncLines {
 		out = append(out, fmt.Sprintf("%s: func %s is %d lines (max %d)",
 			path, fn.Name.Name, span, maxFuncLines))
 	}
+
 	if depth := nesting(fn.Body, 0); depth > maxNesting {
 		out = append(out, fmt.Sprintf("%s: func %s nests %d deep (max %d)",
 			path, fn.Name.Name, depth, maxNesting))
 	}
+
 	return out
 }
 
@@ -84,21 +94,27 @@ func funcViolations(fset *token.FileSet, path string, fn *ast.FuncDecl) []string
 // function literal starts its own count, as it is its own function.
 func nesting(n ast.Node, depth int) int {
 	deepest := depth
+
 	ast.Inspect(n, func(child ast.Node) bool {
 		if child == n {
 			return true
 		}
+
 		switch c := child.(type) {
 		case *ast.FuncLit:
 			deepest = max(deepest, nesting(c.Body, 0))
+
 			return false
 		case *ast.IfStmt, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt,
 			*ast.TypeSwitchStmt, *ast.SelectStmt:
 			deepest = max(deepest, nesting(c, depth+1))
+
 			return false
 		}
+
 		return true
 	})
+
 	return deepest
 }
 
@@ -113,6 +129,7 @@ func nesting(n ast.Node, depth int) int {
 //     50 lines, a nesting depth over 4, or more than 800 lines.
 func TestCodeSizeBudget_TreesStayWithinBudget(t *testing.T) {
 	t.Parallel()
+
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{
 		Kind: clientcodebase.KindFS,
 		Root: filepath.Join("..", ".."),
@@ -133,6 +150,7 @@ func TestCodeSizeBudget_TreesStayWithinBudget(t *testing.T) {
 //     and a 50-line function with four levels is not.
 func TestCodeSizeBudget_FlagsAnOverBudgetFunction(t *testing.T) {
 	t.Parallel()
+
 	long := "func Long() {\n" + strings.Repeat("\t_ = 1\n", 49) + "}\n"
 	fits := "func Fits() {\n" + strings.Repeat("\t_ = 1\n", 48) + "}\n"
 	deep := "func Deep() {\n" + strings.Repeat(

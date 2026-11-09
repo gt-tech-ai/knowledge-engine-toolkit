@@ -154,6 +154,7 @@ func TestRedocHandler_EscapesTitle(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
+
 	body := rec.Body.String()
 	// html/template auto-escapes, so the script tag should be escaped.
 	assert.NotContains(

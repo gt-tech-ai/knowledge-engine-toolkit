@@ -54,13 +54,16 @@ func (k Kinds[C, D, T]) New(ctx context.Context, kind Kind, cfg C, deps D) (T, e
 	if kind == "" {
 		kind = k.Default
 	}
+
 	build, ok := k.Backends[kind]
 	if !ok {
 		var zero T
+
 		return zero, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"%s: unknown kind %q (want one of %s)", k.Family, kind, k.known(),
 		))
 	}
+
 	return build(ctx, cfg, deps)
 }
 
@@ -76,20 +79,25 @@ func (k Kinds[C, D, T]) Build(
 	name string,
 ) (T, error) {
 	var zero T
+
 	base, err := k.New(ctx, kind, cfg, deps)
 	if err != nil {
 		return zero, err
 	}
+
 	if name == "" {
 		name = k.Family
 	}
+
 	if kind == "" {
 		kind = k.Default
 	}
+
 	opts := slices.Clone(k.Options)
 	if slices.Contains(k.AtMostOnce, kind) {
 		opts = append(opts, AtMostOnce())
 	}
+
 	return k.Decorate(base, decs, name, opts...)
 }
 
@@ -99,6 +107,8 @@ func (k Kinds[C, D, T]) known() string {
 	for kind := range k.Backends {
 		names = append(names, string(kind))
 	}
+
 	slices.Sort(names)
+
 	return strings.Join(names, ", ")
 }

@@ -29,6 +29,7 @@ import (
 //   - A successful handler response passes through unchanged with no error
 func TestGRPCLoggingServerInterceptor_LogsSuccess(t *testing.T) {
 	t.Parallel()
+
 	logger := fixtures.NopLogger()
 	interceptor := grpcinterceptors.LoggingServerInterceptor(logger)
 
@@ -57,6 +58,7 @@ func TestGRPCLoggingServerInterceptor_LogsSuccess(t *testing.T) {
 //     interceptor
 func TestGRPCLoggingServerInterceptor_LogsError(t *testing.T) {
 	t.Parallel()
+
 	logger := fixtures.NopLogger()
 	interceptor := grpcinterceptors.LoggingServerInterceptor(logger)
 
@@ -82,6 +84,7 @@ func TestGRPCLoggingServerInterceptor_LogsError(t *testing.T) {
 //   - A successful handler response passes through unchanged with no error
 func TestGRPCMetricsServerInterceptor_RecordsMetrics(t *testing.T) {
 	t.Parallel()
+
 	metrics := fixtures.NopMetrics()
 	interceptor := grpcinterceptors.MetricsServerInterceptor(metrics)
 
@@ -108,6 +111,7 @@ func TestGRPCMetricsServerInterceptor_RecordsMetrics(t *testing.T) {
 //   - A successful handler response passes through unchanged with no error
 func TestGRPCTracingServerInterceptor_CreatesSpan(t *testing.T) {
 	t.Parallel()
+
 	tracer := fixtures.NopTracer()
 	interceptor := grpcinterceptors.TracingServerInterceptor(tracer)
 
@@ -137,20 +141,25 @@ func TestGRPCTracingServerInterceptor_CreatesSpan(t *testing.T) {
 func TestGRPCTracingServerInterceptor_ContinuesCallerTrace(t *testing.T) {
 	// NOT parallel: this test sets the global OTel propagator.
 	prev := otel.GetTextMapPropagator()
+
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 	t.Cleanup(func() { otel.SetTextMapPropagator(prev) })
 
 	const traceID = "4bf92f3577b34da6a3ce929d0e0e4736"
+
 	ctx := metadata.NewIncomingContext(t.Context(), metadata.Pairs(
 		"traceparent", "00-"+traceID+"-00f067aa0ba902b7-01",
 	))
+
 	var got oteltrace.SpanContext
+
 	_, err := grpcinterceptors.TracingServerInterceptor(fixtures.NopTracer())(
 		ctx,
 		nil,
 		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
 		func(ctx context.Context, _ any) (any, error) {
 			got = oteltrace.SpanContextFromContext(ctx)
+
 			return nil, nil //nolint:nilnil // the probe handler has no response
 		},
 	)

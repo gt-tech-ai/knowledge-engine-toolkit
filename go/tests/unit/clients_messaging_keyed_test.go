@@ -29,16 +29,21 @@ func receiveKeyed(
 	n int,
 ) []*interfaces.Message {
 	t.Helper()
+
 	sub := memory.NewSubscriber(broker, client.Base{})
 	got := make(chan *interfaces.Message, n)
+
 	go func() {
 		_ = sub.Subscribe(context.Background(), topic,
 			func(_ context.Context, msg *interfaces.Message) error {
 				got <- msg
+
 				return nil
 			})
 	}()
+
 	t.Cleanup(func() { _ = sub.Close() })
+
 	out := make([]*interfaces.Message, 0, n)
 	for range n {
 		select {
@@ -48,6 +53,7 @@ func receiveKeyed(
 			t.Fatalf("received %d of %d messages", len(out), n)
 		}
 	}
+
 	return out
 }
 
@@ -63,6 +69,7 @@ func receiveKeyed(
 //     partition_key metadata is its key, and OrderedPerKey is true
 func TestMemoryPublisher_KeyedKeepsOrderAndKey(t *testing.T) {
 	t.Parallel()
+
 	broker := memory.NewBroker()
 	pub := memory.NewPublisher(broker)
 	ctx := context.Background()
@@ -77,10 +84,12 @@ func TestMemoryPublisher_KeyedKeepsOrderAndKey(t *testing.T) {
 	msgs := receiveKeyed(t, broker, "t", 4)
 	bodies := make([]string, len(msgs))
 	keys := make([]string, len(msgs))
+
 	for i, msg := range msgs {
 		bodies[i] = string(msg.Payload)
 		keys[i] = msg.Metadata[interfaces.PartitionKeyAttribute]
 	}
+
 	assert.Equal(t, []string{"a", "b", "c", "d"}, bodies)
 	assert.Equal(t, []string{"doc-1", "doc-2", "doc-1", "doc-1"}, keys)
 	assert.True(t, pub.OrderedPerKey())
@@ -98,6 +107,7 @@ func TestMemoryPublisher_KeyedKeepsOrderAndKey(t *testing.T) {
 //     own key with unique ids; OrderedPerKey is false
 func TestSQSPublisher_KeyedSendsThePartitionKeyAttribute(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockAPI(ctrl)
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
@@ -122,11 +132,16 @@ func TestSQSPublisher_KeyedSendsThePartitionKeyAttribute(t *testing.T) {
 					in.MessageAttributes[interfaces.PartitionKeyAttribute].DataType,
 				),
 			)
+
 			return &awssqs.SendMessageOutput{}, nil
 		})
+
 	var sizes []int
+
 	ids := map[string]bool{}
+
 	var keys []string
+
 	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).Times(2).DoAndReturn(
 		func(
 			_ context.Context,
@@ -143,18 +158,23 @@ func TestSQSPublisher_KeyedSendsThePartitionKeyAttribute(t *testing.T) {
 					),
 				)
 			}
+
 			return &awssqs.SendMessageBatchOutput{}, nil
 		})
+
 	pub := fixtures.Must(sqs.NewPublisher(t.Context(), sqs.Config{API: api}))
 	ctx := context.Background()
 
 	require.NoError(t, pub.PublishKeyed(ctx, "q", "doc-9", []byte("x")))
+
 	items := make([]interfaces.KeyedPayload, 12)
 	want := make([]string, 12)
+
 	for i := range items {
 		want[i] = []string{"even", "odd"}[i%2]
 		items[i] = interfaces.KeyedPayload{Key: want[i], Payload: []byte("p")}
 	}
+
 	require.NoError(t, pub.PublishBatchKeyed(ctx, "q", items))
 
 	assert.Equal(t, []int{10, 2}, sizes)
@@ -175,6 +195,7 @@ func TestSQSPublisher_KeyedSendsThePartitionKeyAttribute(t *testing.T) {
 //     Decorate over an unkeyed base does not claim the capability
 func TestDecorate_KeepsTheKeyedCapability(t *testing.T) {
 	t.Parallel()
+
 	deps := decorate.Fixed(decorate.Deps{Timeout: time.Minute})
 	broker := memory.NewBroker()
 	pub := fixtures.Must(
@@ -182,6 +203,7 @@ func TestDecorate_KeepsTheKeyedCapability(t *testing.T) {
 	)
 	keyed, ok := pub.(interfaces.KeyedPublisher)
 	require.True(t, ok)
+
 	ctx := context.Background()
 
 	require.NoError(t, keyed.PublishKeyed(ctx, "t", "k1", []byte("a")))
@@ -197,6 +219,7 @@ func TestDecorate_KeepsTheKeyedCapability(t *testing.T) {
 	plain := fixtures.Must(
 		messaging.Decorate(mocks.NewMockMessagePublisher(ctrl), deps, "p"),
 	)
+
 	_, ok = plain.(interfaces.KeyedPublisher)
 	assert.False(t, ok)
 }

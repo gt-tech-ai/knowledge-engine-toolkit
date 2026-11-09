@@ -48,48 +48,60 @@ func cached[T, P any, ID comparable](
 	name string,
 ) decorate.Roles[T, P, ID] {
 	rc := &roleCache[T, ID]{cache: c, name: name}
+
 	if get := roles.Get; get != nil {
 		roles.Get = func(ctx context.Context, id ID) (*T, error) { return rc.get(ctx, id, get) }
 	}
+
 	if exists := roles.Exists; exists != nil {
 		roles.Exists = func(ctx context.Context, id ID) (bool, error) {
 			if interfaces.InTx(ctx) {
 				return exists(ctx, id)
 			}
+
 			if _, ok := rc.read(ctx, CacheKey(name, id)); ok {
 				return true, nil
 			}
+
 			return exists(ctx, id)
 		}
 	}
+
 	if create := roles.Create; create != nil && c.IDOf != nil {
 		roles.Create = func(ctx context.Context, entity *T) (*T, error) {
 			result, err := create(ctx, entity)
 			if err != nil {
 				return nil, err
 			}
+
 			rc.prime(ctx, CacheKey(name, c.IDOf(result)), result)
+
 			return result, nil
 		}
 	}
+
 	if update := roles.Update; update != nil {
 		roles.Update = func(ctx context.Context, id ID, entity *T) (*T, error) {
 			result, err := update(ctx, id, entity)
 			if err == nil {
 				rc.evict(ctx, CacheKey(name, id))
 			}
+
 			return result, err
 		}
 	}
+
 	if del := roles.Delete; del != nil {
 		roles.Delete = func(ctx context.Context, id ID) error {
 			err := del(ctx, id)
 			if err == nil {
 				rc.evict(ctx, CacheKey(name, id))
 			}
+
 			return err
 		}
 	}
+
 	return roles
 }
 
@@ -111,10 +123,12 @@ func (c *roleCache[T, ID]) read(ctx context.Context, key string) (*T, bool) {
 	if !hit {
 		return nil, false
 	}
+
 	val, ok, err := cache.Decode[T](data, c.cache.Version)
 	if err != nil || !ok {
 		return nil, false
 	}
+
 	return &val, true
 }
 
@@ -132,6 +146,7 @@ func (c *roleCache[T, ID]) prime(ctx context.Context, key string, entity *T) {
 	if err != nil {
 		return
 	}
+
 	interfaces.RegisterAfterCommit(ctx, func() {
 		c.cache.Store.Set(ctx, key, encoded, c.cache.TTL)
 	})
@@ -140,6 +155,7 @@ func (c *roleCache[T, ID]) prime(ctx context.Context, key string, entity *T) {
 // evict drops key now and, inside a transaction, again after the commit.
 func (c *roleCache[T, ID]) evict(ctx context.Context, key string) {
 	c.cache.Store.Delete(ctx, key)
+
 	if interfaces.InTx(ctx) {
 		interfaces.RegisterAfterCommit(ctx, func() { c.cache.Store.Delete(ctx, key) })
 	}
@@ -155,21 +171,27 @@ func (c *roleCache[T, ID]) get(
 	if interfaces.InTx(ctx) {
 		return get(ctx, id)
 	}
+
 	key := CacheKey(c.name, id)
 	if val, ok := c.read(ctx, key); ok {
 		return val, nil
 	}
+
 	v, err, _ := c.sf.Do(key, func() (any, error) {
 		result, err := get(ctx, id)
 		if err != nil {
 			return nil, err
 		}
+
 		c.write(ctx, key, result)
+
 		return result, nil
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	entity := *v.(*T)
+
 	return &entity, nil
 }

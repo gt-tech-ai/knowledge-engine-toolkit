@@ -7,12 +7,14 @@ import "path/filepath"
 func Unique[T comparable](s []T) []T {
 	seen := make(map[T]struct{}, len(s))
 	out := make([]T, 0, len(s))
+
 	for _, v := range s {
 		if _, ok := seen[v]; !ok {
 			seen[v] = struct{}{}
 			out = append(out, v)
 		}
 	}
+
 	return out
 }
 
@@ -23,5 +25,6 @@ func UniqueDirs(paths []string) []string {
 	for i, p := range paths {
 		dirs[i] = filepath.Dir(p)
 	}
+
 	return Unique(dirs)
 }

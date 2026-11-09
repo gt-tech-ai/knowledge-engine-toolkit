@@ -35,25 +35,30 @@ func (Bedrock) Name() string { return "bedrock" }
 // Unverified. The first model that fails to converse fails the probe, naming it.
 func (p Bedrock) Run(ctx context.Context, t Target) types.Verdict {
 	var ids []string
+
 	for _, id := range p.ModelIDs {
 		if id != "" && !slices.Contains(ids, id) {
 			ids = append(ids, id)
 		}
 	}
+
 	if len(ids) == 0 {
 		return skip("no bedrock model ids configured to confirm")
 	}
+
 	list := strconv.Itoa(len(ids)) + " model id(s)"
 	if t.NoInvoke {
 		return types.Verdict{Status: types.StatusWarn, Detail: Unverified +
 			"--no-invoke: skipped the billed Converse for " + list + ": " +
 			strings.Join(ids, ", ")}
 	}
+
 	for _, id := range ids {
 		if _, err := p.Bedrock.Converse(ctx, converseInput(id)); err != nil {
 			return fail(p.Name(), "model "+id+" not invokable: "+err.Error(), id)
 		}
 	}
+
 	return pass("confirmed " + list + " with a 1-token Converse each: " +
 		strings.Join(ids, ", "))
 }
@@ -61,6 +66,7 @@ func (p Bedrock) Run(ctx context.Context, t Target) types.Verdict {
 // converseInput is the smallest billed request: one user message, one output token.
 func converseInput(modelID string) *bedrockruntime.ConverseInput {
 	maxTokens := int32(1)
+
 	return &bedrockruntime.ConverseInput{
 		ModelId: aws.String(modelID),
 		Messages: []brtypes.Message{

@@ -21,12 +21,14 @@ func decodeAlloy(src []byte, p string) (any, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "alloy "+p)
 	}
+
 	return alloyBody(file.Body), nil
 }
 
 // alloyBody converts a block body: attributes and nested blocks.
 func alloyBody(body ast.Body) map[string]any {
 	out := map[string]any{}
+
 	for _, stmt := range body {
 		switch s := stmt.(type) {
 		case *ast.AttributeStmt:
@@ -34,18 +36,23 @@ func alloyBody(body ast.Body) map[string]any {
 		case *ast.BlockStmt:
 			name := strings.Join(s.Name, ".")
 			holder := out
+
 			if s.Label != "" {
 				labelled, _ := out[name].(map[string]any)
 				if labelled == nil {
 					labelled = map[string]any{}
 					out[name] = labelled
 				}
+
 				holder, name = labelled, s.Label
 			}
+
 			bodies, _ := holder[name].([]any)
+
 			holder[name] = append(bodies, alloyBody(s.Body))
 		}
 	}
+
 	return out
 }
 
@@ -60,20 +67,24 @@ func alloyExpr(expr ast.Expr) any {
 		for _, el := range e.Elements {
 			out = append(out, alloyExpr(el))
 		}
+
 		return out
 	case *ast.ObjectExpr:
 		out := make(map[string]any, len(e.Fields))
 		for _, f := range e.Fields {
 			out[f.Name.Name] = alloyExpr(f.Value)
 		}
+
 		return out
 	case *ast.ParenExpr:
 		return alloyExpr(e.Inner)
 	default:
 		var b strings.Builder
+
 		if err := printer.Fprint(&b, expr); err != nil {
 			return ""
 		}
+
 		return b.String()
 	}
 }
@@ -89,6 +100,7 @@ func alloyLiteral(e *ast.LiteralExpr) any {
 		if n, err := strconv.ParseInt(e.Value, 10, 64); err == nil {
 			return n
 		}
+
 		if f, err := strconv.ParseFloat(e.Value, 64); err == nil {
 			return f
 		}
@@ -101,5 +113,6 @@ func alloyLiteral(e *ast.LiteralExpr) any {
 	case token.NULL:
 		return nil
 	}
+
 	return e.Value
 }

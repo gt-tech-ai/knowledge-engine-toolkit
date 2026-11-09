@@ -45,9 +45,11 @@ func newTestMapper() apprpc.EnumMapper[enumP, enumD] {
 //   - ToDomainEntries exposes the forward table for derived projections.
 func TestEnumMapper(t *testing.T) {
 	t.Parallel()
+
 	m := newTestMapper()
 
 	assert.Equal(t, pOne, m.ToProtoValue(dOne))
+
 	d, ok := m.ToDomainOK(pTwo)
 	assert.True(t, ok)
 	assert.Equal(t, dTwo, d)
@@ -64,6 +66,7 @@ func TestEnumMapper(t *testing.T) {
 
 	_, ok = m.ToDomainFilter(pUnspecified) // unspecified → "no filter"
 	assert.False(t, ok)
+
 	fd, ok := m.ToDomainFilter(pOne)
 	assert.True(t, ok)
 	assert.Equal(t, dOne, fd)

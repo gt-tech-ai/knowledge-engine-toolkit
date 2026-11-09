@@ -52,31 +52,40 @@ func (s *Store) Compact(
 	if !ok || !slices.Contains(grains, grain) {
 		return apperr.New(apperr.CodeInvalidInput, "analytics: undeclared cube or grain")
 	}
+
 	width := s.cfg.BucketWidth[grain]
+
 	bucket = bucket.UTC()
+
 	end := chartspec.Next(bucket, width)
 	now := time.Now()
+
 	if !chartspec.Truncate(bucket, width).Equal(bucket) || end.After(now) {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"analytics: only a closed, aligned bucket can be compacted",
 		)
 	}
+
 	var ttlSeconds int
+
 	if ttl := s.cfg.TTL[grain]; ttl > 0 {
 		ttlSeconds = int(end.Add(ttl).Sub(now) / time.Second)
 		if ttlSeconds < 1 {
 			return nil
 		}
 	}
+
 	session, err := s.sess()
 	if err != nil {
 		return err
 	}
+
 	groups, err := s.readPartition(ctx, session, cube, grain, org, bucket)
 	if err != nil {
 		return err
 	}
+
 	for _, g := range groups {
 		if err := compactGroup(
 			ctx,
@@ -91,6 +100,7 @@ func (s *Store) Compact(
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -105,8 +115,11 @@ func (s *Store) readPartition(
 	bucket time.Time,
 ) ([]*groupRows, error) {
 	var groups []*groupRows
+
 	index := map[string]*groupRows{}
+
 	var state []byte
+
 	for {
 		iter := session.Query(
 			"SELECT ts, dims_key, idempotency_key, dims, partials FROM "+TableName(
@@ -118,30 +131,39 @@ func (s *Store) readPartition(
 			cube,
 			bucket,
 		).WithContext(ctx).PageSize(s.cfg.PageSize).PageState(state).Idempotent(true).Iter()
-		var ts time.Time
-		var dimsKey, key string
-		var dims map[string]string
-		var partials map[string][]byte
+
+		var (
+			ts           time.Time
+			dimsKey, key string
+			dims         map[string]string
+			partials     map[string][]byte
+		)
+
 		for iter.Scan(&ts, &dimsKey, &key, &dims, &partials) {
 			id := ts.UTC().Format(time.RFC3339Nano) + "|" + dimsKey
 			g, ok := index[id]
+
 			if !ok {
 				g = &groupRows{ts: ts.UTC(), dims: dims, dimsKey: dimsKey}
 				index[id] = g
 				groups = append(groups, g)
 			}
+
 			if key == "" {
 				g.compacted = partials
 			} else {
 				g.keys = append(g.keys, key)
 				g.facts = append(g.facts, partials)
 			}
+
 			ts, dimsKey, key, dims, partials = time.Time{}, "", "", nil, nil
 		}
+
 		state = iter.PageState()
 		if err := iter.Close(); err != nil {
 			return nil, err
 		}
+
 		if len(state) == 0 {
 			return groups, nil
 		}
@@ -165,33 +187,43 @@ func compactGroup(
 	upsert := "INSERT INTO " + table +
 		" (org_id, cube, bucket, ts, dims_key, idempotency_key, dims, partials)" +
 		" VALUES (?, ?, ?, ?, ?, '', ?, ?)"
+
 	var ttlArgs []any
+
 	if ttlSeconds > 0 {
 		upsert += " USING TTL ?"
+
 		ttlArgs = []any{ttlSeconds}
 	}
+
 	merged := g.compacted
 	for start := 0; start < len(g.keys); start += compactChunk {
 		end := min(start+compactChunk, len(g.keys))
+
 		next, err := mergePartials(merged, g.facts[start:end])
 		if err != nil {
 			return err
 		}
+
 		batch := session.Batch(interfaces.CQLLoggedBatch).WithContext(ctx)
 		batch.Query(
 			upsert,
 			append([]any{org, cube, bucket, g.ts, dimsKey, g.dims, next}, ttlArgs...)...)
+
 		for _, key := range g.keys[start:end] {
 			batch.Query("DELETE FROM "+table+
 				" WHERE org_id = ? AND cube = ? AND bucket = ? AND ts = ?"+
 				" AND dims_key = ? AND idempotency_key = ?",
 				org, cube, bucket, g.ts, dimsKey, key)
 		}
+
 		if err := session.ExecuteBatch(batch); err != nil {
 			return err
 		}
+
 		merged = next
 	}
+
 	return nil
 }
 
@@ -207,23 +239,30 @@ func mergePartials(
 			if err != nil {
 				return err
 			}
+
 			cur := acc[name]
 			cur.Merge(p)
+
 			acc[name] = cur
 		}
+
 		return nil
 	}
+
 	if err := add(base); err != nil {
 		return nil, err
 	}
+
 	for _, row := range rows {
 		if err := add(row); err != nil {
 			return nil, err
 		}
 	}
+
 	out := make(map[string][]byte, len(acc))
 	for name, p := range acc {
 		out[name] = chartspec.EncodePartial(p)
 	}
+
 	return out, nil
 }

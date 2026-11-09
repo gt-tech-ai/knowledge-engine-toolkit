@@ -12,6 +12,7 @@ func Recovery(logger interfaces.Logger) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer recoverPanic(logger, w, r)
+
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -24,6 +25,7 @@ func recoverPanic(logger interfaces.Logger, w http.ResponseWriter, r *http.Reque
 	if rec == nil {
 		return
 	}
+
 	logger.WithContext(r.Context()).Error(
 		"panic recovered",
 		"panic", rec,

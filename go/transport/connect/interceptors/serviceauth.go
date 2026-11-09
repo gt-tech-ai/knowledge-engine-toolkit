@@ -33,15 +33,18 @@ func NewStaticTokenValidator(serviceTokens map[string]string) *StaticTokenValida
 	accepted := make(map[string][]string, len(serviceTokens))
 	for caller, raw := range serviceTokens {
 		var toks []string
+
 		for t := range strings.SplitSeq(raw, ",") {
 			if t = strings.TrimSpace(t); t != "" {
 				toks = append(toks, t)
 			}
 		}
+
 		if len(toks) > 0 {
 			accepted[caller] = toks
 		}
 	}
+
 	return &StaticTokenValidator{accepted: accepted}
 }
 
@@ -51,6 +54,7 @@ func (v *StaticTokenValidator) Validate(token string) (string, bool) {
 	if token == "" {
 		return "", false
 	}
+
 	for caller, toks := range v.accepted {
 		for _, t := range toks {
 			if subtle.ConstantTimeCompare([]byte(token), []byte(t)) == 1 {
@@ -58,6 +62,7 @@ func (v *StaticTokenValidator) Validate(token string) (string, bool) {
 			}
 		}
 	}
+
 	return "", false
 }
 
@@ -84,6 +89,7 @@ func WithCallerIdentity(ctx context.Context, caller string) context.Context {
 // interceptor, if the request was authenticated.
 func GetCallerIdentity(ctx context.Context) (string, bool) {
 	caller, ok := ctx.Value(callerContextKey{}).(string)
+
 	return caller, ok
 }
 
@@ -128,6 +134,7 @@ func (s serviceAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 		if err != nil {
 			return nil, err
 		}
+
 		return next(ctx, req)
 	}
 }
@@ -149,6 +156,7 @@ func (s serviceAuthInterceptor) WrapStreamingHandler(
 		if err != nil {
 			return err
 		}
+
 		return next(ctx, conn)
 	}
 }
@@ -165,6 +173,7 @@ func (s serviceAuthInterceptor) authenticate(
 	if s.stub {
 		return WithCallerIdentity(ctx, stubCaller), nil
 	}
+
 	caller, ok := s.validator.Validate(bearerToken(h.Get(headerAuthorization)))
 	if !ok {
 		if s.audit {
@@ -174,13 +183,16 @@ func (s serviceAuthInterceptor) authenticate(
 					"procedure", procedure,
 				)
 			}
+
 			return ctx, nil
 		}
+
 		return nil, connect.NewError(
 			connect.CodeUnauthenticated,
 			apperr.Unauthorized("service authentication required"),
 		)
 	}
+
 	if s.audit && s.logger != nil {
 		s.logger.Info(
 			"service auth: caller authenticated (audit mode)",
@@ -188,6 +200,7 @@ func (s serviceAuthInterceptor) authenticate(
 			"procedure", procedure,
 		)
 	}
+
 	return WithCallerIdentity(ctx, caller), nil
 }
 
@@ -198,5 +211,6 @@ func bearerToken(header string) string {
 		strings.EqualFold(header[:len(bearerPrefix)], bearerPrefix) {
 		return strings.TrimSpace(header[len(bearerPrefix):])
 	}
+
 	return ""
 }

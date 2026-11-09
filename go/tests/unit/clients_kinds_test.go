@@ -43,7 +43,9 @@ import (
 //     "bogus" is CodeInvalidInput, and the message names the family and the bad kind.
 func TestClientFamilies_RejectAnUnknownKind(t *testing.T) {
 	t.Parallel()
+
 	const bogus client.Kind = "bogus"
+
 	families := map[string]func(ctx context.Context) error{
 		"analytics": func(ctx context.Context) error {
 			_, err := analytics.NewFromConfig(
@@ -51,19 +53,23 @@ func TestClientFamilies_RejectAnUnknownKind(t *testing.T) {
 				analytics.Config{Kind: bogus},
 				analytics.Deps{},
 			)
+
 			return err
 		},
 		"cache": func(ctx context.Context) error {
 			_, err := cache.NewFromConfig(ctx, cache.Config{Kind: bogus}, cache.Deps{})
+
 			return err
 		},
 		"connector": func(ctx context.Context) error {
 			_, err := connector.NewSourceBuilder(connector.Config{}, connector.Deps{}).
 				Build(ctx, interfaces.SourceConfig{Kind: interfaces.ConnectorKind(bogus)})
+
 			return err
 		},
 		"cql": func(ctx context.Context) error {
 			_, err := cql.NewFromConfig(ctx, cql.Config{Kind: bogus}, cql.Deps{})
+
 			return err
 		},
 		"database": func(ctx context.Context) error {
@@ -72,12 +78,14 @@ func TestClientFamilies_RejectAnUnknownKind(t *testing.T) {
 				database.Config{Kind: bogus},
 				database.Deps{},
 			)
+
 			return err
 		},
 		"lock": func(ctx context.Context) error {
 			_, err := lock.NewFromConfig(ctx, lock.Config{
 				Kind: bogus, TTL: time.Minute, RenewInterval: time.Second,
 			}, lock.Deps{})
+
 			return err
 		},
 		"messaging": func(ctx context.Context) error {
@@ -91,22 +99,26 @@ func TestClientFamilies_RejectAnUnknownKind(t *testing.T) {
 					ctx, messaging.Config{Kind: bogus}, messaging.Deps{},
 				)
 			}
+
 			return err
 		},
 		"outbox": func(ctx context.Context) error {
 			_, err := outbox.NewFromConfig(ctx, outbox.Config{Kind: bogus}, outbox.Deps{})
+
 			return err
 		},
 		"outbox store": func(ctx context.Context) error {
 			_, err := outboxstore.NewFromConfig(
 				ctx, outboxstore.Config{Kind: bogus}, outboxstore.Deps{},
 			)
+
 			return err
 		},
 		"prometheus": func(ctx context.Context) error {
 			_, err := prometheus.NewFromConfig(
 				ctx, prometheus.Config{Kind: bogus}, prometheus.Deps{},
 			)
+
 			return err
 		},
 		"replaybuffer": func(ctx context.Context) error {
@@ -115,10 +127,12 @@ func TestClientFamilies_RejectAnUnknownKind(t *testing.T) {
 				replaybuffer.Config{Kind: bogus, MaxSize: 1, TTL: time.Minute},
 				replaybuffer.Deps{},
 			)
+
 			return err
 		},
 		"rpc": func(ctx context.Context) error {
 			_, err := rpc.NewFromConfig(ctx, rpc.Config{Kind: bogus}, rpc.Deps{})
+
 			return err
 		},
 		"secrets": func(ctx context.Context) error {
@@ -127,6 +141,7 @@ func TestClientFamilies_RejectAnUnknownKind(t *testing.T) {
 				secrets.Config{Kind: bogus},
 				secrets.Deps{},
 			)
+
 			return err
 		},
 		"storage": func(ctx context.Context) error {
@@ -135,18 +150,22 @@ func TestClientFamilies_RejectAnUnknownKind(t *testing.T) {
 				storage.Config{Kind: bogus},
 				storage.Deps{},
 			)
+
 			return err
 		},
 		"transport": func(ctx context.Context) error {
 			_, err := server.NewFromConfig(
 				ctx, server.Config{Kind: bogus}, server.Deps{},
 			)
+
 			return err
 		},
 	}
+
 	for family, build := range families {
 		t.Run(family, func(t *testing.T) {
 			t.Parallel()
+
 			err := build(t.Context())
 			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 			assert.ErrorContains(t, err, family+`: unknown kind "bogus"`)
@@ -166,10 +185,13 @@ func TestClientFamilies_RejectAnUnknownKind(t *testing.T) {
 //     is retried; on an AtMostOnce kind, named or selected as the Default, it is not.
 func TestKindsBuild_NeverRetriesAnAtMostOnceKind(t *testing.T) {
 	t.Parallel()
+
 	backend := func(context.Context, struct{}, struct{}) (toyClient, error) {
 		return toyBackend{}, nil
 	}
+
 	var attempts []int
+
 	kinds := client.Kinds[struct{}, struct{}, toyClient]{
 		Family:     "toy",
 		Default:    "once",
@@ -185,26 +207,34 @@ func TestKindsBuild_NeverRetriesAnAtMostOnceKind(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
+
 			n := 0
+
 			_, _ = b.Exec(t.Context(), "ping", func(context.Context) (struct{}, error) {
 				n++
+
 				return struct{}{}, apperr.New(apperr.CodeUnavailable, "down")
 			})
+
 			attempts = append(attempts, n)
+
 			return base, nil
 		},
 	}
 	on := true
 	cfg := decoration.DefaultConfig()
+
 	cfg.Clients.Defaults.Retry.Enabled = &on
 	cfg.Clients.Defaults.Retry.InitialInterval = time.Millisecond
 	cfg.Clients.Defaults.Retry.MaxInterval = time.Millisecond
+
 	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
 
 	for _, kind := range []client.Kind{"any", "once", ""} {
 		_, err := kinds.Build(t.Context(), kind, struct{}{}, struct{}{}, decs, "")
 		require.NoError(t, err)
 	}
+
 	require.Len(t, attempts, 3)
 	assert.Greater(t, attempts[0], 1)
 	assert.Equal(t, 1, attempts[1])

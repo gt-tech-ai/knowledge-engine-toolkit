@@ -40,10 +40,12 @@ func (m loggingMW) WrapOp(
 ) error {
 	l := m.logger.WithContext(ctx)
 	l.Debug(m.tier+"."+op, m.tier, m.name, "operation", op)
+
 	err := next(ctx)
 	if err == nil {
 		return nil
 	}
+
 	msg, fields := m.tier+"."+op+" failed", []any{
 		m.tier,
 		m.name,
@@ -60,5 +62,6 @@ func (m loggingMW) WrapOp(
 	default:
 		l.Error(msg, fields...)
 	}
+
 	return err
 }

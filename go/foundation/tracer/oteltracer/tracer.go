@@ -59,6 +59,7 @@ func New(ctx context.Context, cfg Config) (*Tracer, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	// The tracer comes from this provider, not the global one: another New may install
 	// its provider between setup and here, and this tracer must keep its own sampler.
 	return &Tracer{
@@ -82,11 +83,13 @@ func (t *Tracer) Start(
 	}
 
 	var spanOpts []trace.SpanStartOption
+
 	if cfg.Kind != interfaces.SpanKindInternal {
 		spanOpts = append(spanOpts, trace.WithSpanKind(toOTelSpanKind(cfg.Kind)))
 	}
 
 	ctx, s := t.inner.Start(ctx, name, spanOpts...)
+
 	return ctx, &span{inner: s}
 }
 
@@ -96,6 +99,7 @@ func (t *Tracer) Shutdown(ctx context.Context) error {
 	if t.shutdownFn != nil {
 		return t.shutdownFn(ctx)
 	}
+
 	return nil
 }
 
@@ -178,6 +182,7 @@ func setup(ctx context.Context, cfg Config) (*sdktrace.TracerProvider, error) {
 	}
 
 	var sampler sdktrace.Sampler
+
 	switch {
 	case cfg.SampleRate >= 1.0:
 		sampler = sdktrace.AlwaysSample()

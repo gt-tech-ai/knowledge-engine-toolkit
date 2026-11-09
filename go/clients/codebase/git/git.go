@@ -48,10 +48,12 @@ func (s *Source) List(ctx context.Context) ([]types.File, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	untracked, err := s.lines(ctx, "ls-files", "-z", "--others", "--exclude-standard")
 	if err != nil {
 		return nil, err
 	}
+
 	out := make([]types.File, 0, len(tracked)+len(untracked))
 	for _, p := range tracked {
 		// A tracked path deleted from the working tree is not a file to read.
@@ -59,13 +61,16 @@ func (s *Source) List(ctx context.Context) ([]types.File, error) {
 			out = append(out, types.File{Path: p})
 		}
 	}
+
 	for _, p := range untracked {
 		out = append(out, types.File{Path: p, Untracked: true})
 	}
+
 	slices.SortFunc(
 		out,
 		func(a, b types.File) int { return strings.Compare(a.Path, b.Path) },
 	)
+
 	return out, nil
 }
 
@@ -76,15 +81,19 @@ func (s *Source) ListIgnored(ctx context.Context, scope []string) ([]types.File,
 	if len(scope) > 0 {
 		args = append(append(args, "--"), scope...)
 	}
+
 	paths, err := s.lines(ctx, args...)
 	if err != nil {
 		return nil, err
 	}
+
 	slices.Sort(paths)
+
 	out := make([]types.File, 0, len(paths))
 	for _, p := range paths {
 		out = append(out, types.File{Path: p, Untracked: true, Ignored: true})
 	}
+
 	return out, nil
 }
 
@@ -100,18 +109,22 @@ func (s *Source) Changed(ctx context.Context, base string) (map[string]bool, err
 		"--quiet", base+"^{commit}"); res.Err != nil {
 		return nil, apperr.Wrap(res.Err, apperr.CodeNotFound, "unknown base "+base)
 	}
+
 	diff, err := s.lines(ctx, "diff", "--name-only", "-z", "--merge-base", base)
 	if err != nil {
 		return nil, err
 	}
+
 	untracked, err := s.lines(ctx, "ls-files", "-z", "--others", "--exclude-standard")
 	if err != nil {
 		return nil, err
 	}
+
 	out := map[string]bool{}
 	for _, p := range slices.Concat(diff, untracked) {
 		out[p] = true
 	}
+
 	return out, nil
 }
 
@@ -122,13 +135,16 @@ func (s *Source) lines(ctx context.Context, args ...string) ([]string, error) {
 	if res.ExitCode == notARepo {
 		return nil, nil
 	}
+
 	if res.Err != nil {
 		return nil, apperr.Wrap(res.Err, apperr.CodeUnavailable,
 			"git "+strings.Join(args, " ")+": "+strings.TrimSpace(string(res.Stderr)))
 	}
+
 	out := client.SplitNUL(res.Stdout)
 	for i, p := range out {
 		out[i] = filepath.ToSlash(p)
 	}
+
 	return out, nil
 }

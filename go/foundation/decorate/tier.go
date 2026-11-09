@@ -107,6 +107,7 @@ func (d Deps) panicLogger() interfaces.Logger {
 	if d.PanicLogger != nil {
 		return d.PanicLogger
 	}
+
 	return d.Logger
 }
 
@@ -114,6 +115,7 @@ func (d Deps) panicLogger() interfaces.Logger {
 // create whose commit may have landed).
 func (d Deps) WithoutRetry() Deps {
 	d.Retrier = nil
+
 	return d
 }
 
@@ -125,6 +127,7 @@ func (t Tier) Chain(name string, d Deps) OpMiddleware {
 			mws = append(mws, mw)
 		}
 	}
+
 	return Chain(mws...)
 }
 
@@ -187,6 +190,7 @@ func when(present bool, build func() OpMiddleware) OpMiddleware {
 	if !present {
 		return nil
 	}
+
 	return build()
 }
 
@@ -200,7 +204,9 @@ func (t Tier) Subject(name string, d Deps) Subject {
 // chains builds the chains one operation can run on from d.
 func (t Tier) chains(name string, d Deps) chains {
 	streaming := d.WithoutRetry()
+
 	streaming.Timeout = 0
+
 	return chains{
 		full:      t.Chain(name, d),
 		once:      t.Chain(name, d.WithoutRetry()),
@@ -243,6 +249,7 @@ func (c chains) pick(v view) OpMiddleware {
 	case viewFull:
 		return c.full
 	}
+
 	return c.full
 }
 
@@ -290,6 +297,7 @@ func (s Subject) Name() string { return s.name }
 // commit may have landed (a create, a claim).
 func (s Subject) Once() Subject {
 	s.view = viewOnce
+
 	return s
 }
 
@@ -297,6 +305,7 @@ func (s Subject) Once() Subject {
 // statement that runs inside a caller's transaction.
 func (s Subject) Observed() Subject {
 	s.view = viewObserved
+
 	return s
 }
 
@@ -305,6 +314,7 @@ func (s Subject) Observed() Subject {
 // by its loop), which the config tunes with the component.
 func (s Subject) Component() Subject {
 	s.ops = nil
+
 	return s
 }
 
@@ -312,6 +322,7 @@ func (s Subject) Component() Subject {
 // opening a stream whose deadline the caller sets from Timeout.
 func (s Subject) Streaming() Subject {
 	s.view = viewStreaming
+
 	return s
 }
 
@@ -321,6 +332,7 @@ func (s Subject) Timeout(op string) time.Duration {
 	if s.ops == nil {
 		return s.all.timeout
 	}
+
 	return s.ops[op].timeout
 }
 
@@ -335,18 +347,22 @@ func (s Subject) Exec[R any](
 	c := s.all
 	if s.ops != nil {
 		var ok bool
+
 		if c, ok = s.ops[op]; !ok {
 			var zero R
+
 			return zero, apperr.New(
 				apperr.CodeInternal,
 				"decorate: "+s.name+" has no operation "+op,
 			)
 		}
 	}
+
 	mw := c.pick(s.view)
 	if mw == nil {
 		return fn(ctx)
 	}
+
 	return Exec(ctx, mw, op, fn)
 }
 

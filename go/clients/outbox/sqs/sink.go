@@ -96,18 +96,22 @@ func New(cfg Config, api API) (*Sink, error) {
 			"outbox sqs sink: api and a queue or routes are required",
 		)
 	}
+
 	routes := make(map[string]string, len(cfg.Routes))
 	for route, queue := range cfg.Routes {
 		if route == "" || queue == "" {
 			return nil, apperr.New(apperr.CodeInvalidInput,
 				"outbox sqs sink: route "+route+" needs a non-empty name and queue")
 		}
+
 		routes[route] = queue
 	}
+
 	fair := make(map[string]bool, len(cfg.FairQueues))
 	for _, queue := range cfg.FairQueues {
 		fair[queue] = true
 	}
+
 	return &Sink{
 		api:    api,
 		queue:  cfg.Queue,
@@ -127,19 +131,26 @@ func New(cfg Config, api API) (*Sink, error) {
 func (s *Sink) Send(ctx context.Context, recs []types.OutboxRecord) []error {
 	results := make([]error, len(recs))
 	groups := map[string][]int{}
+
 	for i := range recs {
 		queue, err := s.route(&recs[i])
 		if err != nil {
 			results[i] = err
+
 			continue
 		}
+
 		groups[queue] = append(groups[queue], i)
 	}
+
 	var wg sync.WaitGroup
+
 	for queue, idx := range groups {
 		wg.Go(func() { s.sendQueue(ctx, queue, recs, idx, results) })
 	}
+
 	wg.Wait()
+
 	return results
 }
 
@@ -149,9 +160,11 @@ func (s *Sink) route(rec *types.OutboxRecord) (string, error) {
 	if route == "" && s.queue != "" {
 		return s.queue, nil
 	}
+
 	if queue, ok := s.routes[route]; ok {
 		return queue, nil
 	}
+
 	return "", apperr.New(
 		apperr.CodeInvalidInput,
 		"outbox sqs sink: no queue for route "+strconv.Quote(route),
@@ -172,15 +185,19 @@ func (s *Sink) sendQueue(
 		for _, i := range idx {
 			results[i] = err
 		}
+
 		return
 	}
+
 	for _, part := range packBatches(recs, idx, results) {
 		batch := make([]types.OutboxRecord, len(part))
 		for j, i := range part {
 			batch[j] = recs[i]
 		}
+
 		out := make([]error, len(part))
 		s.sendBatch(ctx, url, s.delivery(queue), batch, out)
+
 		for j, i := range part {
 			results[i] = out[j]
 		}
@@ -196,9 +213,13 @@ func packBatches(
 	idx []int,
 	results []error,
 ) [][]int {
-	var runs [][]int
-	var run []int
+	var (
+		runs [][]int
+		run  []int
+	)
+
 	size := 0
+
 	for _, i := range idx {
 		n := messageSize(&recs[i])
 		if n > maxMessageBytes {
@@ -207,18 +228,24 @@ func packBatches(
 				"outbox sqs sink: message of "+strconv.Itoa(n)+
 					" bytes exceeds the SQS limit of "+strconv.Itoa(maxMessageBytes),
 			)
+
 			continue
 		}
+
 		if len(run) == maxBatch || (len(run) > 0 && size+n > maxBatchBytes) {
 			runs = append(runs, run)
 			run, size = nil, 0
 		}
+
 		run = append(run, i)
+
 		size += n
 	}
+
 	if len(run) > 0 {
 		runs = append(runs, run)
 	}
+
 	return runs
 }
 
@@ -229,6 +256,7 @@ func messageSize(rec *types.OutboxRecord) int {
 	for name, v := range messageAttributes(rec) {
 		n += len(name) + len(aws.ToString(v.DataType)) + len(aws.ToString(v.StringValue))
 	}
+
 	return n
 }
 
@@ -244,6 +272,7 @@ type delivery struct {
 // delivery returns how messages to queue are sent.
 func (s *Sink) delivery(queue string) delivery {
 	fifo := strings.HasSuffix(queue, fifoSuffix)
+
 	return delivery{grouped: fifo || s.fair[queue], deduplicated: fifo}
 }
 
@@ -259,18 +288,22 @@ func (s *Sink) sendBatch(
 	entries := make([]sqstypes.SendMessageBatchRequestEntry, len(recs))
 	for i := range recs {
 		rec := &recs[i]
+
 		entries[i] = sqstypes.SendMessageBatchRequestEntry{
 			Id:                aws.String(strconv.Itoa(i)),
 			MessageBody:       aws.String(string(rec.Payload)),
 			MessageAttributes: messageAttributes(rec),
 		}
+
 		if how.grouped {
 			entries[i].MessageGroupId = aws.String(groupID(rec))
 		}
+
 		if how.deduplicated {
 			entries[i].MessageDeduplicationId = aws.String(rec.ID.String())
 		}
 	}
+
 	out, err := s.api.SendMessageBatch(
 		ctx,
 		&awssqs.SendMessageBatchInput{QueueUrl: aws.String(url), Entries: entries},
@@ -284,26 +317,32 @@ func (s *Sink) sendBatch(
 				"outbox sqs sink: send batch",
 			),
 		)
+
 		return
 	}
+
 	fill(
 		results,
 		apperr.New(apperr.CodeInternal, "outbox sqs sink: no result for entry"),
 	)
+
 	for _, ok := range out.Successful {
 		if i, valid := entryIndex(ok.Id, len(recs)); valid {
 			results[i] = nil
 		}
 	}
+
 	for _, failed := range out.Failed {
 		i, valid := entryIndex(failed.Id, len(recs))
 		if !valid {
 			continue
 		}
+
 		code := apperr.CodeUnavailable
 		if failed.SenderFault {
 			code = apperr.CodeInvalidInput
 		}
+
 		results[i] = apperr.New(
 			code,
 			"outbox sqs sink: "+aws.ToString(
@@ -319,11 +358,14 @@ func (s *Sink) sendBatch(
 // runs outside the lock so a slow queue never blocks another queue's lookup.
 func (s *Sink) queueURL(ctx context.Context, queue string) (string, error) {
 	s.mu.Lock()
+
 	url, ok := s.urls[queue]
 	s.mu.Unlock()
+
 	if ok {
 		return url, nil
 	}
+
 	out, err := s.api.GetQueueUrl(
 		ctx,
 		&awssqs.GetQueueUrlInput{QueueName: aws.String(queue)},
@@ -335,16 +377,21 @@ func (s *Sink) queueURL(ctx context.Context, queue string) (string, error) {
 			"outbox sqs sink: resolve queue "+queue,
 		)
 	}
+
 	url = aws.ToString(out.QueueUrl)
+
 	s.mu.Lock()
+
 	s.urls[queue] = url
 	s.mu.Unlock()
+
 	return url, nil
 }
 
 // entryIndex parses a batch entry id back to its index, rejecting a foreign id.
 func entryIndex(id *string, n int) (int, bool) {
 	i, err := strconv.Atoi(aws.ToString(id))
+
 	return i, err == nil && i >= 0 && i < n
 }
 
@@ -355,6 +402,7 @@ func groupID(rec *types.OutboxRecord) string {
 			return id
 		}
 	}
+
 	return rec.Lane
 }
 
@@ -370,12 +418,15 @@ func messageAttributes(
 	if rec.Tenant != "" {
 		attrs["tenant"] = stringAttr(rec.Tenant)
 	}
+
 	if rec.Lane != "" {
 		attrs["lane"] = stringAttr(rec.Lane)
 	}
+
 	if rec.Key != "" {
 		attrs[interfaces.PartitionKeyAttribute] = stringAttr(rec.Key)
 	}
+
 	return attrs
 }
 

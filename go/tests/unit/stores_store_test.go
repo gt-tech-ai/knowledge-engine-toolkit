@@ -53,6 +53,7 @@ type documentsReads interface {
 //   - A bound client of another type is ignored.
 func TestStoreBase_UsesTheTransactionsClientWhenOneIsBound(t *testing.T) {
 	t.Parallel()
+
 	raw, tx := &storeClient{name: "raw"}, &storeClient{name: "tx"}
 	base := fixtures.Must(
 		store.NewBase[documentsStore](fixtures.Decorations(), "documents", raw),
@@ -65,6 +66,7 @@ func TestStoreBase_UsesTheTransactionsClientWhenOneIsBound(t *testing.T) {
 
 	other := store.WithClient(context.Background(), "not a storeClient")
 	assert.Same(t, raw, base.Client(other))
+
 	got, ok := store.ClientFrom[*storeClient](inTx)
 	assert.True(t, ok)
 	assert.Same(t, tx, got)
@@ -73,12 +75,15 @@ func TestStoreBase_UsesTheTransactionsClientWhenOneIsBound(t *testing.T) {
 // storeOpCounter returns store_operations_total for the operation op in reg.
 func storeOpCounter(t *testing.T, reg *promclient.Registry, op string) float64 {
 	t.Helper()
+
 	mfs, err := reg.Gather()
 	require.NoError(t, err)
+
 	for _, mf := range mfs {
 		if mf.GetName() != "store_operations_total" {
 			continue
 		}
+
 		for _, m := range mf.GetMetric() {
 			for _, l := range m.GetLabel() {
 				if l.GetName() == "operation" && l.GetValue() == op {
@@ -87,6 +92,7 @@ func storeOpCounter(t *testing.T, reg *promclient.Registry, op string) float64 {
 			}
 		}
 	}
+
 	return 0
 }
 
@@ -102,6 +108,7 @@ func storeOpCounter(t *testing.T, reg *promclient.Registry, op string) float64 {
 //   - Exec (a read) runs on either.
 func TestStoreBaseWrite_RunsOnlyInsideATransaction(t *testing.T) {
 	t.Parallel()
+
 	base := fixtures.Must(store.NewBase[documentsStore](
 		fixtures.Decorations(), "documents", &storeClient{name: "raw"},
 	))
@@ -113,6 +120,7 @@ func TestStoreBaseWrite_RunsOnlyInsideATransaction(t *testing.T) {
 
 	_, err = base.Write(t.Context(), "create", func(context.Context) (int, error) {
 		t.Error("a write outside a transaction must not run")
+
 		return 0, nil
 	})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
@@ -155,7 +163,9 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 
 	on := true
 	cfg := decoration.DefaultConfig()
+
 	cfg.Stores.Defaults.Metrics = &on
+
 	decs := decorate.NewDecorations(&cfg, collab)
 	docs, err := store.NewEntity[documentsReads](
 		decs,

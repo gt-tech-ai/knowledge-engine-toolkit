@@ -100,6 +100,7 @@ func grpcNumber(name string) (int, bool) {
 			return i, true
 		}
 	}
+
 	return 0, false
 }
 
@@ -109,20 +110,26 @@ func grpcNumber(name string) (int, bool) {
 func parse(src []byte) ([]code, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(src))
 	dec.KnownFields(true)
+
 	var tx taxonomy
+
 	if err := dec.Decode(&tx); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "decode "+SourcePath)
 	}
+
 	if len(tx.Codes) == 0 {
 		return nil, apperr.InvalidInput(SourcePath + ": no codes")
 	}
+
 	seen := map[string]bool{}
+
 	for i := range tx.Codes {
 		c := &tx.Codes[i]
 		if err := validate(c, seen); err != nil {
 			return nil, err
 		}
 	}
+
 	return tx.Codes, nil
 }
 
@@ -134,6 +141,7 @@ func validate(c *code, seen map[string]bool) error {
 			SourcePath + ": code " + strconv.Quote(c.Code) + ": " + why,
 		)
 	}
+
 	switch {
 	case !codeRE.MatchString(c.Code):
 		return bad("the code is not upper snake case")
@@ -150,11 +158,14 @@ func validate(c *code, seen map[string]bool) error {
 	case seen["code "+c.Code] || seen["go "+c.Go]:
 		return bad("the code or its Go name is declared twice")
 	}
+
 	n, ok := grpcNumber(c.GRPC)
 	if !ok {
 		return bad("grpc " + strconv.Quote(c.GRPC) + " is not a gRPC status")
 	}
+
 	c.GRPCNumber = n
 	seen["code "+c.Code], seen["go "+c.Go] = true, true
+
 	return nil
 }

@@ -30,12 +30,15 @@ func newRecordingLifecycle(
 	c := mocks.NewMockLifecycle(ctrl)
 	c.EXPECT().Start(gomock.Any()).DoAndReturn(func(context.Context) error {
 		*log = append(*log, "start:"+name)
+
 		return startErr
 	}).AnyTimes()
 	c.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) error {
 		*log = append(*log, "stop:"+name)
+
 		return stopErr
 	}).AnyTimes()
+
 	return c
 }
 
@@ -52,7 +55,9 @@ func TestLifecycleManager_StartsInOrderStopsInReverse(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
+
 	var log []string
+
 	m := lifecycle.New()
 	m.Register("a", newRecordingLifecycle(ctrl, "a", &log, nil, nil))
 	m.Register("b", newRecordingLifecycle(ctrl, "b", &log, nil, nil))
@@ -81,7 +86,9 @@ func TestLifecycleManager_RollsBackOnStartFailure(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
+
 	var log []string
+
 	m := lifecycle.New()
 	m.Register("a", newRecordingLifecycle(ctrl, "a", &log, nil, nil))
 	m.Register("b", newRecordingLifecycle(ctrl, "b", &log, apperr.Sentinel("boom"), nil))
@@ -106,13 +113,16 @@ func TestLifecycleManager_StopContinuesPastFailure(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
+
 	var log []string
+
 	m := lifecycle.New()
 	m.Register("a", newRecordingLifecycle(ctrl, "a", &log, nil, nil))
 	m.Register("b", newRecordingLifecycle(ctrl, "b", &log, nil, apperr.Sentinel("boom")))
 	m.Register("c", newRecordingLifecycle(ctrl, "c", &log, nil, nil))
 
 	require.NoError(t, m.Start(context.Background()))
+
 	log = log[:0] // observe only the stop order
 
 	err := m.Stop(context.Background())

@@ -22,6 +22,7 @@ import (
 // responsible for recording the real cause server-side.
 func Sanitize(err error) (code connect.Code, message string) {
 	c := apperr.Code(err)
+
 	return wire.Code(c), wire.SafeMessage(c)
 }
 
@@ -38,6 +39,7 @@ func ToConnectError(ctx context.Context, err error) error {
 	apperr.Capture(ctx, err)
 
 	code, msg := Sanitize(err)
+
 	return connect.NewError(code, apperr.Sentinel(msg))
 }
 

@@ -37,6 +37,7 @@ func (d *Detector) Check(
 ) types.ToolCheckResult {
 	if !d.runner.Exists(tool.Binary) {
 		d.log.Debug("tool lookup: not found", "tool", tool.Name, "binary", tool.Binary)
+
 		return types.ToolCheckResult{
 			Tool:    tool,
 			Status:  types.StatusToolMissing,
@@ -70,9 +71,11 @@ func (d *Detector) checkVersion(
 		"cmd",
 		strings.Join(tool.VersionCmd, " "),
 	)
+
 	result := d.runner.RunBuffered(ctx, root, tool.VersionCmd[0], tool.VersionCmd[1:]...)
 	if result.Err != nil {
 		d.log.Debug("version command failed", "tool", tool.Name, "error", result.Err)
+
 		return types.ToolCheckResult{
 			Tool:   tool,
 			Status: types.StatusToolOutdated,
@@ -87,6 +90,7 @@ func (d *Detector) checkVersion(
 
 	raw := strings.TrimSpace(string(result.Stdout))
 	d.log.Debug("raw version output", "tool", tool.Name, "output", raw)
+
 	verStr := raw
 	if tool.VersionParse != nil {
 		verStr = tool.VersionParse(raw)
@@ -95,6 +99,7 @@ func (d *Detector) checkVersion(
 	ver, err := types.ParseVersion(verStr)
 	if err != nil {
 		d.log.Debug("version parse error", "tool", tool.Name, "error", err)
+
 		return types.ToolCheckResult{
 			Tool:   tool,
 			Status: types.StatusToolOK,
@@ -140,8 +145,10 @@ func (d *Detector) Scan(
 	for i := range tools {
 		result := d.Check(ctx, root, &tools[i])
 		d.logResult(result)
+
 		results = append(results, result)
 	}
+
 	return results
 }
 
@@ -154,6 +161,7 @@ func (d *Detector) CheckPrerequisites(
 	prereqs []types.ToolDef,
 ) error {
 	var missing []string
+
 	for i := range prereqs {
 		result := d.Check(ctx, root, &prereqs[i])
 		switch result.Status {
@@ -161,11 +169,13 @@ func (d *Detector) CheckPrerequisites(
 			d.log.Info(result.Message)
 		case types.StatusToolOutdated:
 			d.log.Error(result.Message)
+
 			missing = append(missing, prereqHint(&prereqs[i], fmt.Sprintf(
 				"need >= %s, found %s", prereqs[i].MinVersion, result.Found,
 			)))
 		case types.StatusToolMissing:
 			d.log.Error(result.Message)
+
 			missing = append(missing, prereqHint(&prereqs[i], "not found on PATH"))
 		}
 	}
@@ -176,6 +186,7 @@ func (d *Detector) CheckPrerequisites(
 			"missing prerequisites:\n  "+strings.Join(missing, "\n  "),
 		)
 	}
+
 	return nil
 }
 
@@ -187,12 +198,15 @@ func (d *Detector) ListOptional(
 	optional []types.ToolDef,
 ) {
 	d.log.Info("Optional developer tools")
+
 	for i := range optional {
 		t := &optional[i]
 		status := "tool not installed"
+
 		if d.Check(ctx, root, t).Status == types.StatusToolOK {
 			status = "tool installed"
 		}
+
 		d.log.Info(status, "name", t.Name, "desc", t.Description)
 	}
 }
@@ -215,6 +229,7 @@ func prereqHint(tool *types.ToolDef, reason string) string {
 	if tool.FallbackURL != "" {
 		reason += "\n  Install manually: " + tool.FallbackURL
 	}
+
 	return fmt.Sprintf("%s: %s", tool.Name, reason)
 }
 
@@ -223,22 +238,27 @@ func prereqHint(tool *types.ToolDef, reason string) string {
 // when nothing is missing.
 func SummarizeMissing(prereqErr error, results []types.ToolCheckResult) error {
 	var lines []string
+
 	if prereqErr != nil {
 		lines = append(lines, prereqErr.Error())
 	}
+
 	for i := range results {
 		r := &results[i]
 		if r.Status != types.StatusToolMissing &&
 			r.Status != types.StatusToolOutdated {
 			continue
 		}
+
 		msg := r.Tool.Name
 		if r.Status == types.StatusToolOutdated && r.Found != "" {
 			msg += fmt.Sprintf(" (found %s, need >= %s)", r.Found, r.Tool.MinVersion)
 		}
+
 		if r.Tool.FallbackURL != "" {
 			msg += "\n    Install: " + r.Tool.FallbackURL
 		}
+
 		lines = append(lines, msg)
 	}
 
@@ -248,5 +268,6 @@ func SummarizeMissing(prereqErr error, results []types.ToolCheckResult) error {
 			"missing dependencies:\n  "+strings.Join(lines, "\n  "),
 		)
 	}
+
 	return nil
 }

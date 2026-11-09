@@ -35,6 +35,7 @@ func IsUnverified(v types.Verdict) (string, bool) {
 	if v.Status != types.StatusWarn || !strings.HasPrefix(v.Detail, Unverified) {
 		return v.Detail, false
 	}
+
 	return strings.TrimPrefix(v.Detail, Unverified), true
 }
 
@@ -49,6 +50,7 @@ func fail(check, detail string, items ...string) types.Verdict {
 	for _, it := range items {
 		v.Findings = append(v.Findings, types.Finding{Check: check, Message: it})
 	}
+
 	return v
 }
 

@@ -39,6 +39,7 @@ func (c *Client) docker(
 	args ...string,
 ) ([]byte, error) {
 	res := c.runner.RunBufferedWithEnv(ctx, c.root, env, "docker", args...)
+
 	return client.Output(res, "docker "+what)
 }
 
@@ -49,25 +50,32 @@ func (c *Client) Build(ctx context.Context, spec types.BuildSpec) error {
 	if spec.Dockerfile != "" {
 		args = append(args, "-f", spec.Dockerfile)
 	}
+
 	if spec.Target != "" {
 		args = append(args, "--target", spec.Target)
 	}
+
 	if spec.Platform != "" {
 		args = append(args, "--platform", spec.Platform)
 	}
+
 	for _, k := range slices.Sorted(maps.Keys(spec.BuildArgs)) {
 		args = append(args, "--build-arg", k+"="+spec.BuildArgs[k])
 	}
+
 	for _, t := range spec.Tags {
 		args = append(args, "-t", t)
 	}
+
 	_, err := c.docker(ctx, "build", nil, append(args, spec.Context)...)
+
 	return err
 }
 
 // Push runs `docker push ref`.
 func (c *Client) Push(ctx context.Context, ref string) error {
 	_, err := c.docker(ctx, "push", nil, "push", ref)
+
 	return err
 }
 
@@ -85,6 +93,7 @@ func (c *Client) Inspect(ctx context.Context, ref string) ([]byte, error) {
 	if res.Err != nil && strings.Contains(string(res.Stderr), "No such image") {
 		return nil, apperr.Wrap(res.Err, apperr.CodeNotFound, "no image "+ref)
 	}
+
 	return client.Output(res, "docker image inspect")
 }
 
@@ -92,6 +101,7 @@ func (c *Client) Inspect(ctx context.Context, ref string) ([]byte, error) {
 func (c *Client) ComposeUp(ctx context.Context, spec types.ComposeSpec) error {
 	args := append(compose(spec), "up", "-d", "--wait")
 	_, err := c.docker(ctx, "compose up", spec.Env, append(args, spec.Services...)...)
+
 	return err
 }
 
@@ -101,7 +111,9 @@ func (c *Client) ComposeDown(ctx context.Context, spec types.ComposeSpec) error 
 	if spec.RemoveVolumes {
 		args = append(args, "--volumes")
 	}
+
 	_, err := c.docker(ctx, "compose down", spec.Env, args...)
+
 	return err
 }
 
@@ -111,11 +123,14 @@ func compose(spec types.ComposeSpec) []string {
 	if spec.Project != "" {
 		args = append(args, "-p", spec.Project)
 	}
+
 	for _, f := range spec.Files {
 		args = append(args, "-f", f)
 	}
+
 	for _, p := range spec.Profiles {
 		args = append(args, "--profile", p)
 	}
+
 	return args
 }

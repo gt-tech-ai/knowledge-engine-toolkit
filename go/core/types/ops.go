@@ -108,6 +108,7 @@ func (d OperationDescriptor) Validate() error {
 			"operation descriptor has an empty name",
 		)
 	}
+
 	if _, ok := d.SafetyClass.Rank(); !ok {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: unknown safety class %q (want read_only, mutating, destructive or "+
@@ -116,6 +117,7 @@ func (d OperationDescriptor) Validate() error {
 			d.SafetyClass,
 		))
 	}
+
 	if strings.HasPrefix(d.Name, ReservedOperationPrefix) {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: the %q name prefix is reserved for the background-run tools",
@@ -123,6 +125,7 @@ func (d OperationDescriptor) Validate() error {
 			ReservedOperationPrefix,
 		))
 	}
+
 	if !d.Lifecycle.Valid() {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: unknown lifecycle %q (want bounded, long_running or interactive)",
@@ -130,11 +133,13 @@ func (d OperationDescriptor) Validate() error {
 			d.Lifecycle,
 		))
 	}
+
 	if d.Timeout <= 0 {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: timeout must be positive, got %s", d.Name, d.Timeout,
 		))
 	}
+
 	return nil
 }
 
@@ -166,6 +171,7 @@ func (p ExposurePolicy) Validate(name string) error {
 			"exposure policy %q: unknown max_safety %q", name, p.MaxSafety,
 		))
 	}
+
 	for _, l := range p.Lifecycles {
 		if !l.Valid() {
 			return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
@@ -173,6 +179,7 @@ func (p ExposurePolicy) Validate(name string) error {
 			))
 		}
 	}
+
 	return nil
 }
 
@@ -212,5 +219,6 @@ func (s MCPSettings) Validate() error {
 			s.RunDir,
 		))
 	}
+
 	return nil
 }

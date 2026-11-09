@@ -50,6 +50,7 @@ func NewConsole(streams types.Streams, cfg ConsoleConfig) (*Console, error) {
 	if err := streams.Require(); err != nil {
 		return nil, err
 	}
+
 	return &Console{
 		p:   newPrinter(streams.Err, LevelNormal, !cfg.CI, cfg.Color, cfg.Hints),
 		cfg: cfg,
@@ -68,8 +69,10 @@ func (c *Console) Level() Level { return Level(c.p.level.Load()) }
 func (c *Console) Groupf(format string, a ...any) {
 	if c.cfg.GitHubActions {
 		_, _ = fmt.Fprintf(c.p.w, "::group::%s\n", fmt.Sprintf(format, a...))
+
 		return
 	}
+
 	if c.p.at(LevelVerbose) {
 		c.p.headerf(format, a...)
 	}
@@ -121,6 +124,7 @@ func (c *Console) Errorf(format string, a ...any) {
 // verdict is also appended there.
 func (c *Console) Observer() interfaces.ExecutionObserver {
 	var obs interfaces.ExecutionObserver
+
 	switch {
 	case c.p.at(LevelVerbose):
 		obs = &table{p: c.p}
@@ -129,9 +133,11 @@ func (c *Console) Observer() interfaces.ExecutionObserver {
 	default:
 		obs = newLine(c.p)
 	}
+
 	if c.cfg.StepSummaryPath != "" {
 		obs = Composite(obs, &stepSummary{path: c.cfg.StepSummaryPath})
 	}
+
 	return obs
 }
 
@@ -140,14 +146,19 @@ func (c *Console) Observer() interfaces.ExecutionObserver {
 // ExitCode(code); any other error prints as "Error: <err>" and exits 1.
 func (c *Console) FormatError(err error) int {
 	var appErr *apperr.AppError
+
 	if apperr.As(err, &appErr) {
 		c.Errorf("%s: %s", appErr.Code, appErr.Message)
+
 		if appErr.Err != nil {
 			c.Debugf("  cause: %v", appErr.Err)
 		}
+
 		return ExitCode(appErr.Code)
 	}
+
 	c.Errorf("Error: %v", err)
+
 	return 1
 }
 
@@ -251,7 +262,9 @@ func (l *consoleLogger) Error(
 // With returns a logger that appends kvs to every message after the pairs already bound.
 func (l *consoleLogger) With(kvs ...any) interfaces.Logger {
 	merged := make([]any, 0, len(l.kvs)+len(kvs))
+
 	merged = append(append(merged, l.kvs...), kvs...)
+
 	return &consoleLogger{c: l.c, kvs: merged}
 }
 
@@ -264,12 +277,16 @@ func (l *consoleLogger) format(msg string, kvs []any) string {
 	if len(l.kvs) == 0 && len(kvs) == 0 {
 		return msg
 	}
+
 	var sb strings.Builder
+
 	sb.WriteString(msg)
+
 	for _, list := range [][]any{l.kvs, kvs} {
 		for i := 0; i+1 < len(list); i += 2 {
 			_, _ = fmt.Fprintf(&sb, " %v=%v", list[i], list[i+1])
 		}
 	}
+
 	return sb.String()
 }

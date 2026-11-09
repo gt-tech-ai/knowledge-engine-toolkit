@@ -31,13 +31,16 @@ func NewHedge(loader interfaces.ConfigLoader) (interfaces.Hedger, error) {
 			)
 		}
 	}
+
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
+
 	kind, err := hedgeKind(c.Kind)
 	if err != nil {
 		return nil, err
 	}
+
 	return hedge.NewFromConfig(hedge.Config{Kind: kind, Delay: c.Delay})
 }
 
@@ -76,9 +79,11 @@ func NewAdaptiveThrottle(
 			)
 		}
 	}
+
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
+
 	switch c.Kind {
 	case "", "disabled":
 		return adaptivethrottle.NewDisabled(), nil

@@ -42,8 +42,10 @@ func (q *Queue) Send(ctx context.Context, letter interfaces.DeadLetter) bool {
 				"error", err.Error(),
 			)
 		}
+
 		return false
 	}
+
 	return true
 }
 
@@ -62,7 +64,9 @@ var _ interfaces.DeadLetterBackend = (*StubBackend)(nil)
 // Send records the letter in memory.
 func (b *StubBackend) Send(_ context.Context, letter interfaces.DeadLetter) error {
 	b.mu.Lock()
+
 	b.Letters = append(b.Letters, letter)
 	b.mu.Unlock()
+
 	return nil
 }

@@ -34,7 +34,9 @@ func (p Secrets) Run(ctx context.Context, _ Target) types.Verdict {
 	if len(p.Names) == 0 {
 		return skip("no bootstrap secrets configured to check")
 	}
+
 	var missing []string
+
 	for _, name := range p.Names {
 		if _, err := p.SM.DescribeSecret(ctx, &secretsmanager.DescribeSecretInput{
 			SecretId: aws.String(name),
@@ -42,11 +44,13 @@ func (p Secrets) Run(ctx context.Context, _ Target) types.Verdict {
 			missing = append(missing, name)
 		}
 	}
+
 	if len(missing) > 0 {
 		return fail(
 			p.Name(),
 			"missing secret(s): "+strings.Join(missing, ", "),
 			missing...)
 	}
+
 	return pass("all bootstrap secrets present: " + strings.Join(p.Names, ", "))
 }

@@ -28,7 +28,9 @@ import (
 //   - A row with no data sees `data` as null.
 func TestServicesGuard_ExprData(t *testing.T) {
 	t.Parallel()
+
 	var rows []types.GuardRow
+
 	require.NoError(t, yaml.Unmarshal([]byte(`
 - name: "{set} admits only its callers"
   kind: expr
@@ -46,6 +48,7 @@ func TestServicesGuard_ExprData(t *testing.T) {
   kind: expr
   expr: data == null
 `), &rows))
+
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{"set": "open"}, {"set": "closed"}}, nil
 	}
@@ -53,8 +56,10 @@ func TestServicesGuard_ExprData(t *testing.T) {
 		Expanders: map[string]guard.Expander{"sets": each},
 	})
 	require.NoError(t, err)
+
 	cb := memoryCodebase(t, guardFiles())
 	v := map[string]types.Verdict{}
+
 	for _, g := range gs {
 		v[g.Name()] = g.Run(t.Context(), cb)
 	}
@@ -82,7 +87,9 @@ func TestServicesGuard_ExprData(t *testing.T) {
 //     building.
 func TestServicesGuard_For(t *testing.T) {
 	t.Parallel()
+
 	var rows []types.GuardRow
+
 	require.NoError(t, yaml.Unmarshal([]byte(`
 - name: "{set} has port {port}"
   kind: expr
@@ -101,6 +108,7 @@ func TestServicesGuard_For(t *testing.T) {
   for: data
   expr: "true"
 `), &rows))
+
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{"env": "dev"}, {"env": "prod"}}, nil
 	}
@@ -108,8 +116,10 @@ func TestServicesGuard_For(t *testing.T) {
 		Expanders: map[string]guard.Expander{"envs": each},
 	})
 	require.NoError(t, err)
+
 	cb := memoryCodebase(t, guardFiles())
 	v := map[string]types.Verdict{}
+
 	for _, g := range gs {
 		v[g.Name()] = g.Run(t.Context(), cb)
 	}

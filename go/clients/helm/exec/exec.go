@@ -38,7 +38,9 @@ func (c *Client) Template(ctx context.Context, spec types.RenderSpec) ([]byte, e
 	if release == "" {
 		release = path.Base(spec.ChartDir)
 	}
+
 	args := append([]string{"template", release, spec.ChartDir}, values(spec)...)
+
 	return client.Output(
 		c.runner.RunBuffered(ctx, c.root, "helm", args...),
 		"helm template",
@@ -55,16 +57,20 @@ func (c *Client) DependencyBuild(ctx context.Context, chartDir string) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create a helm home for "+chartDir)
 	}
+
 	defer func() { _ = os.RemoveAll(home) }()
+
 	cache := filepath.Join(home, "cache")
 	if err := os.MkdirAll(cache, 0o750); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create a helm cache for "+chartDir)
 	}
+
 	_, err = client.Output(
 		c.runner.RunBuffered(ctx, c.root, "helm", "dependency", "build", chartDir,
 			"--repository-cache", cache,
 			"--repository-config", filepath.Join(home, "repositories.yaml")),
 		"helm dependency build")
+
 	return err
 }
 
@@ -75,20 +81,25 @@ func (c *Client) Lint(ctx context.Context, spec types.RenderSpec) error {
 		c.runner.RunBuffered(ctx, c.root, "helm", args...),
 		"helm lint",
 	)
+
 	return err
 }
 
 // values are spec's namespace, values files and sorted --set flags.
 func values(spec types.RenderSpec) []string {
 	var args []string
+
 	if spec.Namespace != "" {
 		args = append(args, "--namespace", spec.Namespace)
 	}
+
 	for _, f := range spec.ValuesFiles {
 		args = append(args, "-f", f)
 	}
+
 	for _, k := range slices.Sorted(maps.Keys(spec.Set)) {
 		args = append(args, "--set", k+"="+spec.Set[k])
 	}
+
 	return args
 }

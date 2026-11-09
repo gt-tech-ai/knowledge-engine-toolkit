@@ -62,6 +62,7 @@ func WithInTx(ctx context.Context) context.Context {
 // subsequent command fails until it ends, so retrying only masks the real error.
 func InTx(ctx context.Context) bool {
 	v, _ := ctx.Value(inTxKey{}).(bool)
+
 	return v
 }
 
@@ -95,9 +96,12 @@ func RegisterAfterCommit(ctx context.Context, fn func()) {
 	reg, ok := ctx.Value(afterCommitKey{}).(*afterCommitReg)
 	if !ok || reg == nil {
 		fn()
+
 		return
 	}
+
 	reg.mu.Lock()
+
 	reg.hooks = append(reg.hooks, fn)
 	reg.mu.Unlock()
 }
@@ -110,10 +114,14 @@ func RunAfterCommit(ctx context.Context) {
 	if !ok || reg == nil {
 		return
 	}
+
 	reg.mu.Lock()
+
 	hooks := reg.hooks
+
 	reg.hooks = nil
 	reg.mu.Unlock()
+
 	for _, fn := range hooks {
 		fn()
 	}

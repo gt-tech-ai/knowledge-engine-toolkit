@@ -44,6 +44,7 @@ See [the contract](../contract.md#rules).
 //     the closing fence and BodyStartLine is that line.
 func TestOKFParse_FrontmatterAndBody(t *testing.T) {
 	t.Parallel()
+
 	doc, err := okf.Parse("docs/guides/endpoint.md", []byte(okfConcept))
 	require.NoError(t, err)
 
@@ -89,6 +90,7 @@ func TestOKFParse_FrontmatterAndBody(t *testing.T) {
 //   - A two-entry list parses to two attributions in order.
 func TestOKFParse_VerifiedList(t *testing.T) {
 	t.Parallel()
+
 	src := "---\ntype: Guide\nverified:\n" +
 		"  - {by: human:ada, at: 2026-10-01T00:00:00Z}\n  - {by: process:nightly}\n---\n"
 	doc, err := okf.Parse("a.md", []byte(src))
@@ -110,6 +112,7 @@ func TestOKFParse_VerifiedList(t *testing.T) {
 //     `---` that is not the first line is body text, not a fence.
 func TestOKFParse_NoFrontmatter(t *testing.T) {
 	t.Parallel()
+
 	src := "# Title\n\n---\ntype: Guide\n---\n"
 	doc, err := okf.Parse("a.md", []byte(src))
 	require.NoError(t, err)
@@ -130,6 +133,7 @@ func TestOKFParse_NoFrontmatter(t *testing.T) {
 //     CodeInvalidInput whose message names the file.
 func TestOKFParse_InvalidFrontmatter(t *testing.T) {
 	t.Parallel()
+
 	for name, src := range map[string]string{
 		"invalid yaml":  "---\ntype: [unclosed\n---\nbody\n",
 		"unterminated":  "---\ntype: Guide\nbody\n",
@@ -152,6 +156,7 @@ func TestOKFParse_InvalidFrontmatter(t *testing.T) {
 //   - A BOM-prefixed CRLF file parses its type and its body.
 func TestOKFParse_CRLFAndBOM(t *testing.T) {
 	t.Parallel()
+
 	src := "\ufeff---\r\ntype: Guide\r\n---\r\n# T\r\n"
 	doc, err := okf.Parse("a.md", []byte(src))
 	require.NoError(t, err)
@@ -171,6 +176,7 @@ func TestOKFParse_CRLFAndBOM(t *testing.T) {
 //     fragment and kind; links inside a fenced block or an inline code span are not.
 func TestOKFParse_LinksClassified(t *testing.T) {
 	t.Parallel()
+
 	src := strings.Join([]string{
 		"---",
 		"type: Guide",
@@ -211,6 +217,7 @@ func TestOKFParse_LinksClassified(t *testing.T) {
 //     empty fields are omitted.
 func TestOKFRenderFrontmatter_RoundTrip(t *testing.T) {
 	t.Parallel()
+
 	fm := okf.Frontmatter{
 		Type:        "Story",
 		Title:       "Story 1.2 — Add: a thing",
@@ -252,6 +259,7 @@ zeta: z
 //     unparseable value is CodeInvalidInput.
 func TestOKFFrontmatter_Stale(t *testing.T) {
 	t.Parallel()
+
 	at := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	fm := okf.Frontmatter{StaleAfter: "2026-06-01T00:00:00Z"}
 
@@ -283,6 +291,7 @@ func TestOKFFrontmatter_Stale(t *testing.T) {
 //     identical bytes.
 func TestOKFRenderIndex_GroupsAndSorts(t *testing.T) {
 	t.Parallel()
+
 	entries := []okf.IndexEntry{
 		{Title: "zeta", Link: "zeta.md", Description: "Last.", Section: "Guides"},
 		{Title: "Alpha", Link: "alpha.md", Description: "First.", Section: "Guides"},
@@ -315,6 +324,7 @@ func TestOKFRenderIndex_GroupsAndSorts(t *testing.T) {
 //   - The output opens with an okf_version-only block, then the RenderIndex body.
 func TestOKFRenderRootIndex_OKFVersion(t *testing.T) {
 	t.Parallel()
+
 	got := okf.RenderRootIndex(
 		"0.2",
 		[]okf.IndexEntry{{Title: "Guides", Link: "guides/"}},
@@ -344,15 +354,20 @@ func okfRules() okf.Rules {
 // conformRules parses src at path and returns the rule names Conform reports.
 func conformRules(t *testing.T, path, src string, rules okf.Rules) []string {
 	t.Helper()
+
 	doc, err := okf.Parse(path, []byte(src))
 	require.NoError(t, err)
+
 	findings := okf.Conform(doc, rules)
 	got := make([]string, 0, len(findings))
+
 	for _, f := range findings {
 		assert.Equal(t, path, f.Path)
 		assert.NotEmpty(t, f.Message)
+
 		got = append(got, f.Rule)
 	}
+
 	return got
 }
 
@@ -368,6 +383,7 @@ func conformRules(t *testing.T, path, src string, rules okf.Rules) []string {
 //     passes.
 func TestOKFConform_Concepts(t *testing.T) {
 	t.Parallel()
+
 	ok := "---\ntype: Guide\ntitle: T\ndescription: D\n---\n"
 	assert.Empty(t, conformRules(t, "docs/g.md", ok, okfRules()))
 	assert.Equal(
@@ -446,9 +462,11 @@ func TestOKFConform_ReservedNames(t *testing.T) {
 func logRules(src string) []string {
 	findings := okf.ConformLog("docs/e/log.md", []byte(src))
 	got := make([]string, 0, len(findings))
+
 	for _, f := range findings {
 		got = append(got, f.Rule)
 	}
+
 	return got
 }
 
@@ -505,14 +523,17 @@ func FuzzOKFParse(f *testing.F) {
 	} {
 		f.Add(seed)
 	}
+
 	f.Fuzz(func(t *testing.T, src string) {
 		doc, err := okf.Parse("f.md", []byte(src))
 		if err != nil {
 			return
 		}
+
 		if !strings.HasSuffix(src, doc.Body) {
 			t.Fatalf("body %q is not a suffix of %q", doc.Body, src)
 		}
+
 		lines := strings.Count(src, "\n") + 1
 		for _, l := range doc.Links {
 			if l.Line < 1 || l.Line > lines {
@@ -533,6 +554,7 @@ func FuzzOKFParse(f *testing.F) {
 //     key counts when Extra holds a non-empty value.
 func TestOKFHasKey(t *testing.T) {
 	t.Parallel()
+
 	fm := okf.Frontmatter{
 		Title:     "T",
 		Generated: &okf.Attribution{By: "human:ada"},
@@ -545,6 +567,7 @@ func TestOKFHasKey(t *testing.T) {
 	} {
 		assert.Equal(t, want, okf.HasKey(fm, key), key)
 	}
+
 	assert.False(
 		t,
 		okf.HasKey(okf.Frontmatter{Generated: &okf.Attribution{}}, "generated"),

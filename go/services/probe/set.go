@@ -60,10 +60,12 @@ func NewSet[T any](
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"probe set "+name+": retry and timeout must not be negative")
 	}
+
 	base, err := service.NewBase[interfaces.ProbeSet[T]](decs, name)
 	if err != nil {
 		return nil, err
 	}
+
 	return &set[T]{Base: base, name: name, probes: probes, opts: opts}, nil
 }
 
@@ -78,6 +80,7 @@ func (s *set[T]) Run(ctx context.Context, target T) (types.StepResults, error) {
 			return res, apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled),
 				"probe set "+s.name)
 		}
+
 		return res, nil
 	})
 }
@@ -90,15 +93,19 @@ func (s *set[T]) step(
 ) types.StepResult {
 	start := time.Now()
 	v := s.once(ctx, p, target)
+
 	for try := 0; try < s.opts.Retry && v.Status == types.StatusFail && v.Transient; try++ {
 		v = s.once(ctx, p, target)
 	}
+
 	r := v.Step(p.Name(), s.name)
 	if v.Status == types.StatusSkip && s.opts.Strict {
 		r.Status = types.StatusFail
 		r.Error = "skipped under strict: " + v.Detail
 	}
+
 	r.Duration = time.Since(start)
+
 	return r
 }
 
@@ -113,16 +120,22 @@ func (s *set[T]) once(
 	if s.opts.Timeout == 0 {
 		return safeRun(ctx, p, target)
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, s.opts.Timeout)
+
 	defer cancel()
+
 	done := make(chan types.Verdict, 1)
+
 	go func() { done <- safeRun(ctx, p, target) }()
+
 	select {
 	case v := <-done:
 		return v
 	case <-ctx.Done():
 		err := apperr.Wrap(ctx.Err(), apperr.ContextCode(ctx.Err(), apperr.CodeTimeout),
 			fmt.Sprintf("probe %s did not finish in %s", p.Name(), s.opts.Timeout))
+
 		return types.Verdict{
 			Status:    types.StatusFail,
 			Detail:    err.Error(),
@@ -151,5 +164,6 @@ func safeRun[T any](
 			}
 		}
 	}()
+
 	return p.Run(ctx, target)
 }

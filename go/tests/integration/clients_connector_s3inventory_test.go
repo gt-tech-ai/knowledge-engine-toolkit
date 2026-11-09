@@ -37,16 +37,21 @@ func writeInventory(
 	perFile int,
 ) string {
 	t.Helper()
+
 	listed, err := admin.ListObjectsV2(
 		ctx,
 		&awss3.ListObjectsV2Input{Bucket: aws.String(bucket)},
 	)
 	require.NoError(t, err)
+
 	var files []map[string]any
+
 	for start := 0; start < len(listed.Contents); start += perFile {
 		var buf bytes.Buffer
+
 		gz := gzip.NewWriter(&buf)
 		rows := csv.NewWriter(gz)
+
 		for _, o := range listed.Contents[start:min(start+perFile, len(listed.Contents))] {
 			require.NoError(t, rows.Write([]string{
 				bucket,
@@ -56,10 +61,13 @@ func writeInventory(
 				strings.Trim(aws.ToString(o.ETag), `"`),
 			}))
 		}
+
 		rows.Flush()
 		require.NoError(t, rows.Error())
 		require.NoError(t, gz.Close())
+
 		key := fmt.Sprintf("inv/%s/data/%d.csv.gz", bucket, len(files))
+
 		_, err = admin.PutObject(ctx, &awss3.PutObjectInput{
 			Bucket: aws.String(
 				reportBucket,
@@ -68,8 +76,10 @@ func writeInventory(
 			Body: bytes.NewReader(buf.Bytes()),
 		})
 		require.NoError(t, err)
+
 		files = append(files, map[string]any{"key": key})
 	}
+
 	manifest, err := json.Marshal(map[string]any{
 		"sourceBucket": bucket,
 		"fileFormat":   "CSV",
@@ -77,7 +87,9 @@ func writeInventory(
 		"files":        files,
 	})
 	require.NoError(t, err)
+
 	manifestKey := "inv/" + bucket + "/manifest.json"
+
 	_, err = admin.PutObject(ctx, &awss3.PutObjectInput{
 		Bucket: aws.String(
 			reportBucket,
@@ -86,6 +98,7 @@ func writeInventory(
 		Body: bytes.NewReader(manifest),
 	})
 	require.NoError(t, err)
+
 	return manifestKey
 }
 
@@ -97,15 +110,20 @@ func crawl(
 	limit int,
 ) []interfaces.StorageObject {
 	t.Helper()
+
 	var all []interfaces.StorageObject
+
 	token := ""
+
 	for {
 		page, next, err := src.ListPage(ctx, token, limit)
 		require.NoError(t, err)
+
 		all = append(all, page...)
 		if next == "" {
 			return all
 		}
+
 		token = next
 	}
 }
@@ -128,17 +146,21 @@ func TestS3Inventory_ListsAWrittenReportLikeTheBucket(t *testing.T) {
 	m, err := miniofix.NewTestMinIO(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { m.Close(ctx) })
+
 	admin, err := storages3.NewAWSClientWithCredentials(ctx, infra.S3Config{
 		Kind: "minio", Endpoint: m.Endpoint(), ForcePathStyle: true, Region: "us-east-1",
 	}, credentials.NewStaticCredentialsProvider(
 		miniofix.RootUser, miniofix.RootPassword, "",
 	), "us-east-1")
 	require.NoError(t, err)
+
 	const bucket, reports = "corp-docs", "corp-reports"
+
 	for _, b := range []string{bucket, reports} {
 		_, err = admin.CreateBucket(ctx, &awss3.CreateBucketInput{Bucket: aws.String(b)})
 		require.NoError(t, err)
 	}
+
 	keys := []string{
 		"docs/a.pdf", "docs/b.pdf", "docs/my report (2).pdf", "docs/d.pdf", "docs/e.pdf",
 		"other/x.pdf", "other/y.pdf",
@@ -153,6 +175,7 @@ func TestS3Inventory_ListsAWrittenReportLikeTheBucket(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
+
 	manifestKey := writeInventory(ctx, t, admin, bucket, reports, 3)
 	builder := connectorpkg.NewSourceBuilder(connectorpkg.Config{}, connectorpkg.Deps{
 		BuildS3Client: minioS3Client(m.Endpoint()),
@@ -168,9 +191,11 @@ func TestS3Inventory_ListsAWrittenReportLikeTheBucket(t *testing.T) {
 	}
 	listing, err := builder.Build(ctx, cfg)
 	require.NoError(t, err)
+
 	cfg.Kind = interfaces.ConnectorKindS3Inventory
 	cfg.InventoryBucket = reports
 	cfg.InventoryManifestKey = manifestKey
+
 	inventory, err := builder.Build(ctx, cfg)
 	require.NoError(t, err)
 

@@ -34,11 +34,14 @@ func (r *registry) use(tier, name string) {
 	if r == nil {
 		return
 	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if r.used[tier] == nil {
 		r.used[tier] = map[string]struct{}{}
 	}
+
 	r.used[tier][name] = struct{}{}
 }
 
@@ -47,8 +50,10 @@ func (r *registry) fail(err error) {
 	if r == nil {
 		return
 	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.errs = append(r.errs, err)
 }
 
@@ -60,6 +65,7 @@ func (r *registry) covers(tier, key string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -74,12 +80,16 @@ func (d Decorations) Verify(prefixes ...string) error {
 	if d.reg == nil {
 		return nil
 	}
+
 	d.reg.mu.Lock()
 	defer d.reg.mu.Unlock()
+
 	errs := slices.Clone(d.reg.errs)
 	if d.cfg != nil {
 		var unused []string
+
 		sections := d.cfg.Sections()
+
 		for i := range sections {
 			s := &sections[i]
 			for _, key := range slices.Sorted(maps.Keys(s.Tier.Overrides)) {
@@ -91,6 +101,7 @@ func (d Decorations) Verify(prefixes ...string) error {
 				}
 			}
 		}
+
 		if len(unused) > 0 {
 			errs = append(errs, apperr.New(
 				apperr.CodeInvalidInput,
@@ -98,9 +109,11 @@ func (d Decorations) Verify(prefixes ...string) error {
 			))
 		}
 	}
+
 	if len(errs) == 0 {
 		return nil
 	}
+
 	return apperr.Wrap(apperr.Join(errs...), apperr.CodeInvalidInput, "decoration")
 }
 
@@ -111,6 +124,7 @@ func owned(key string, prefixes []string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -138,5 +152,6 @@ func (t Tier) check(name string, l decoration.Layers) error {
 				" turns on "+s.key+", which the "+t.Name+" tier does not run")
 		}
 	}
+
 	return nil
 }

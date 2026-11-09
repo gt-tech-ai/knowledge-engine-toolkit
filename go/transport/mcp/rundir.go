@@ -30,6 +30,7 @@ func NewRunDir(root string, now func() time.Time) RunDir {
 	if now == nil {
 		now = time.Now
 	}
+
 	return RunDir{root: root, now: now}
 }
 
@@ -52,30 +53,40 @@ func (d RunDir) WriteSteps(
 	dir := filepath.Join(d.root, runID)
 	used := map[string]bool{}
 	made := false
+
 	for i, s := range steps {
 		if len(s.Detail) == 0 {
 			continue
 		}
+
 		if !made {
 			if err := os.MkdirAll(dir, 0o750); err != nil {
 				return logs, apperr.Wrap(err, apperr.CodeInternal, "mcp: create run dir")
 			}
+
 			made = true
 		}
+
 		base := safeName(s.Name)
 		name := base
+
 		for n := 2; used[name]; n++ {
 			name = fmt.Sprintf("%s-%d", base, n)
 		}
+
 		used[name] = true
+
 		path := filepath.Join(dir, name+".log")
+
 		if err := os.WriteFile(path, s.Detail, 0o600); err != nil {
 			return logs, apperr.Wrap(err, apperr.CodeInternal, fmt.Sprintf(
 				"mcp: write step log %q", s.Name,
 			))
 		}
+
 		logs[i] = path
 	}
+
 	return logs, nil
 }
 
@@ -87,15 +98,19 @@ func (d RunDir) Prune(keep int) error {
 	if os.IsNotExist(err) {
 		return nil
 	}
+
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "mcp: read run dir")
 	}
+
 	var runs []string
+
 	for _, e := range entries {
 		if _, perr := time.Parse(runIDLayout, e.Name()); e.IsDir() && perr == nil {
 			runs = append(runs, e.Name())
 		}
 	}
+
 	for _, name := range runs[:max(len(runs)-keep, 0)] {
 		if err := os.RemoveAll(filepath.Join(d.root, name)); err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, fmt.Sprintf(
@@ -103,6 +118,7 @@ func (d RunDir) Prune(keep int) error {
 			))
 		}
 	}
+
 	return nil
 }
 
@@ -114,6 +130,7 @@ func safeName(name string) string {
 			r == '_', r == '.', r == '-':
 			return r
 		}
+
 		return '_'
 	}, name)
 }

@@ -103,8 +103,10 @@ func TestForceSampledTraceparent(t *testing.T) {
 //   - A 200 with N batches returns N, and the request targets /api/traces/{id}.
 func TestTelemetryClient_TraceInTempo(t *testing.T) {
 	var gotURL string
+
 	doer := doerFunc(func(r *http.Request) (*http.Response, error) {
 		gotURL = r.URL.String()
+
 		return jsonResponse(http.StatusOK, `{"batches":[{},{}]}`), nil
 	})
 	c := e2ekit.NewTelemetryClient(
@@ -204,8 +206,10 @@ func TestTelemetryClient_TraceSpansService(t *testing.T) {
 //     onto /api/v1/query.
 func TestTelemetryClient_MetricValue(t *testing.T) {
 	var gotURL string
+
 	doer := doerFunc(func(r *http.Request) (*http.Response, error) {
 		gotURL = r.URL.String()
+
 		return jsonResponse(
 			http.StatusOK,
 			`{"data":{"result":[{"value":[123.4,"5"]}]}}`,
@@ -261,8 +265,10 @@ func TestTelemetryClient_MetricValue_Empty(t *testing.T) {
 //     values.
 func TestTelemetryClient_LogHasTrace(t *testing.T) {
 	var gotQuery string
+
 	doer := doerFunc(func(r *http.Request) (*http.Response, error) {
 		gotQuery = r.URL.Query().Get("query")
+
 		return jsonResponse(
 			http.StatusOK,
 			`{"data":{"result":[{"values":[["1","a"],["2","b"]]}]}}`,
@@ -322,11 +328,13 @@ func TestTelemetryClient_QueryError(t *testing.T) {
 //   - PollTraceInTempo returns nil once Tempo holds a batch for the trace.
 func TestPollHelpers(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 	errCheck := apperr.Sentinel("backend not ready")
 
 	t.Run("PollUntil returns once check succeeds", func(t *testing.T) {
 		t.Parallel()
+
 		calls := 0
 		err := e2ekit.PollUntil(
 			ctx,
@@ -334,6 +342,7 @@ func TestPollHelpers(t *testing.T) {
 			"effect",
 			func(context.Context) (bool, error) {
 				calls++
+
 				return true, nil
 			},
 		)
@@ -343,6 +352,7 @@ func TestPollHelpers(t *testing.T) {
 
 	t.Run("PollUntil wraps the last error at the deadline", func(t *testing.T) {
 		t.Parallel()
+
 		err := e2ekit.PollUntil(ctx, 0, "effect", func(context.Context) (bool, error) {
 			return false, errCheck
 		})
@@ -352,6 +362,7 @@ func TestPollHelpers(t *testing.T) {
 
 	t.Run("PollUntil names a miss at the deadline", func(t *testing.T) {
 		t.Parallel()
+
 		err := e2ekit.PollUntil(ctx, 0, "effect", func(context.Context) (bool, error) {
 			return false, nil
 		})
@@ -362,8 +373,10 @@ func TestPollHelpers(t *testing.T) {
 
 	t.Run("PollUntil stops on cancellation", func(t *testing.T) {
 		t.Parallel()
+
 		cctx, cancel := context.WithCancel(ctx)
 		cancel()
+
 		err := e2ekit.PollUntil(
 			cctx,
 			time.Minute,
@@ -377,6 +390,7 @@ func TestPollHelpers(t *testing.T) {
 
 	t.Run("PollTraceInTempo returns once the trace lands", func(t *testing.T) {
 		t.Parallel()
+
 		doer := doerFunc(func(*http.Request) (*http.Response, error) {
 			return jsonResponse(http.StatusOK, `{"batches":[{}]}`), nil
 		})

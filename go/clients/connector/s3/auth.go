@@ -70,6 +70,7 @@ func credentialsFromConfig(
 				"connector s3 auth: access_key requires an access key id and a secret access key",
 			)
 		}
+
 		return markedProvider{inner: credentials.NewStaticCredentialsProvider(
 			accessKeyID,
 			secretAccessKey,
@@ -79,6 +80,7 @@ func credentialsFromConfig(
 		if err := validateIAMRole(iamRoleARN, externalID, stsClient); err != nil {
 			return nil, err
 		}
+
 		return markedProvider{inner: stscreds.NewAssumeRoleProvider(
 			stsClient,
 			iamRoleARN,
@@ -121,6 +123,7 @@ func validateIAMRole(
 			"connector s3 auth: external id must be 2-1224 characters of [A-Za-z0-9_+=,.@:/-]",
 		)
 	}
+
 	return nil
 }
 
@@ -140,6 +143,7 @@ func (p markedProvider) Retrieve(ctx context.Context) (aws.Credentials, error) {
 	if err == nil {
 		return creds, nil
 	}
+
 	if apperr.StdIs(err, context.Canceled) ||
 		apperr.StdIs(err, context.DeadlineExceeded) {
 		return creds, apperr.Wrap(
@@ -148,6 +152,7 @@ func (p markedProvider) Retrieve(ctx context.Context) (aws.Credentials, error) {
 			"retrieve credentials",
 		)
 	}
+
 	return creds, &credentialsError{err: err}
 }
 

@@ -73,6 +73,7 @@ func (e *AppError) Error() string {
 	if e.Err != nil {
 		return fmt.Sprintf("%s: %s: %s", e.Code, e.Message, e.Err.Error())
 	}
+
 	return fmt.Sprintf("%s: %s", e.Code, e.Message)
 }
 
@@ -89,10 +90,13 @@ func (e *AppError) StackTrace() string {
 	if len(e.stack) == 0 {
 		return ""
 	}
+
 	var sb strings.Builder
+
 	frames := runtime.CallersFrames(e.stack)
 	skipping := true
 	prefix := pkgPrefix()
+
 	for {
 		frame, more := frames.Next()
 		// Drop the New/Wrap/helper frames at the head of the trace.
@@ -100,14 +104,19 @@ func (e *AppError) StackTrace() string {
 			if !more {
 				break
 			}
+
 			continue
 		}
+
 		skipping = false
+
 		fmt.Fprintf(&sb, "%s\n\t%s:%d\n", frame.Function, frame.File, frame.Line)
+
 		if !more {
 			break
 		}
 	}
+
 	return strings.TrimRight(sb.String(), "\n")
 }
 
@@ -123,7 +132,9 @@ func pkgPrefix() string {
 // excluding runtime.Callers and callers itself.
 func callers() []uintptr {
 	var pcs [32]uintptr
+
 	n := runtime.Callers(2, pcs[:])
+
 	return pcs[:n]
 }
 
@@ -131,9 +142,11 @@ func callers() []uintptr {
 // AppError; otherwise it captures a fresh stack at the wrap site.
 func stackFromOrCapture(err error) []uintptr {
 	var appErr *AppError
+
 	if stderrors.As(err, &appErr) && len(appErr.stack) > 0 {
 		return appErr.stack
 	}
+
 	return callers()
 }
 
@@ -152,6 +165,7 @@ func Wrap(err error, code ErrorCode, message string) error {
 	if err == nil {
 		return nil
 	}
+
 	return &AppError{
 		Code:    code,
 		Message: message,
@@ -165,6 +179,7 @@ func Is(err error, code ErrorCode) bool {
 	if appErr, ok := stderrors.AsType[*AppError](err); ok {
 		return appErr.Code == code
 	}
+
 	return false
 }
 
@@ -174,6 +189,7 @@ func Code(err error) ErrorCode {
 	if appErr, ok := stderrors.AsType[*AppError](err); ok {
 		return appErr.Code
 	}
+
 	return CodeUnknown
 }
 
@@ -184,6 +200,7 @@ func CodeOr(err error, fallback ErrorCode) ErrorCode {
 	if code := Code(err); code != CodeUnknown {
 		return code
 	}
+
 	return fallback
 }
 
@@ -196,6 +213,7 @@ func ContextCode(err error, fallback ErrorCode) ErrorCode {
 	if code := Code(err); code != CodeUnknown {
 		return code
 	}
+
 	switch {
 	case stderrors.Is(err, context.DeadlineExceeded):
 		return CodeTimeout
@@ -209,8 +227,10 @@ func ContextCode(err error, fallback ErrorCode) ErrorCode {
 // WithDetails returns a copy of the error with additional details.
 func WithDetails(err *AppError, details map[string]string) *AppError {
 	copied := *err
+
 	copied.Details = make(map[string]string, len(details))
 	maps.Copy(copied.Details, details)
+
 	return &copied
 }
 

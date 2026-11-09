@@ -123,13 +123,16 @@ type compiled struct {
 // procedure and step; the Finally steps are checked the same way. Building does no I/O.
 func NewFromConfig(cfg Config, deps Deps) (interfaces.ProcedureRunner, error) {
 	e := &engine{deps: deps, procs: map[string]*compiled{}}
+
 	for i := range cfg.Procedures {
 		p := cfg.Procedures[i]
 		if _, dup := e.procs[p.Name]; dup {
 			return nil, apperr.New(apperr.CodeInvalidInput, "duplicate procedure "+p.Name)
 		}
+
 		e.procs[p.Name] = &compiled{proc: p, group: cmp(p.Group, p.Name)}
 	}
+
 	for _, c := range e.procs {
 		if err := e.compile(c); err != nil {
 			return nil, apperr.Wrap(
@@ -139,6 +142,7 @@ func NewFromConfig(cfg Config, deps Deps) (interfaces.ProcedureRunner, error) {
 			)
 		}
 	}
+
 	return e, nil
 }
 
@@ -150,27 +154,35 @@ func (e *engine) compile(c *compiled) error {
 	for _, v := range c.proc.Vars {
 		names = append(names, v.Name)
 	}
+
 	names = append(names, stepNames(c.proc.Steps)...)
 	names = append(names, stepNames(c.proc.Finally)...)
 	names = append(names, VarOS, VarArch, VarFailed, VarCanceled)
+
 	opts := make([]cel.EnvOption, 0, len(names)+1)
+
 	opts = append(opts, celLibs())
+
 	for _, n := range slices.Compact(slices.Sorted(slices.Values(names))) {
 		opts = append(opts, cel.Variable(n, cel.DynType))
 	}
+
 	env, err := cel.NewEnv(opts...)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "cel environment")
 	}
+
 	c.progs = map[string]cel.Program{}
 	for _, v := range c.proc.Vars {
 		if err := c.program(env, v.Expr); err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "var "+v.Name)
 		}
 	}
+
 	if err := e.compileSteps(env, c, c.proc.Steps); err != nil {
 		return err
 	}
+
 	return e.compileSteps(env, c, c.proc.Finally)
 }
 
@@ -181,25 +193,32 @@ func (e *engine) compileSteps(env *cel.Env, c *compiled, steps []types.ProcStep)
 		if err := e.validate(st); err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+st.Name)
 		}
+
 		exprs := []string{st.When, st.Each}
+
 		var probeExec []string
+
 		if st.Probe != nil {
 			probeExec = st.Probe.Exec
 		}
+
 		for _, a := range slices.Concat(st.Args, st.Exec, st.Env, probeExec) {
 			if x, ok := exprArg(a); ok {
 				exprs = append(exprs, x)
 			}
 		}
+
 		for _, x := range exprs {
 			if err := c.program(env, x); err != nil {
 				return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+st.Name)
 			}
 		}
+
 		if err := e.compileSteps(env, c, st.Parallel); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -208,6 +227,7 @@ func (e *engine) validate(st *types.ProcStep) error {
 	if err := validShape(st); err != nil {
 		return err
 	}
+
 	switch {
 	case st.Step != "" && e.deps.Steps[st.Step] == nil:
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
@@ -219,10 +239,12 @@ func (e *engine) validate(st *types.ProcStep) error {
 		if e.deps.Tools == nil {
 			return apperr.New(apperr.CodeInvalidInput, "no toolchain for tool "+st.Tool)
 		}
+
 		if _, ok := e.deps.Tools(st.Tool); !ok {
 			return apperr.New(apperr.CodeInvalidInput, "unknown tool "+st.Tool)
 		}
 	}
+
 	return validCapture(st)
 }
 
@@ -243,12 +265,14 @@ func validShape(st *types.ProcStep) error {
 	case st.File != nil:
 		return validFile(st.File)
 	}
+
 	return nil
 }
 
 // kinds counts what st runs: a valid step runs exactly one thing.
 func kinds(st *types.ProcStep) int {
 	n := 0
+
 	for _, set := range []bool{
 		st.Tool != "", len(st.Exec) > 0, st.Step != "", st.Call != "", len(st.Parallel) > 0,
 		st.Fail != "", st.Probe != nil, st.File != nil,
@@ -257,6 +281,7 @@ func kinds(st *types.ProcStep) int {
 			n++
 		}
 	}
+
 	return n
 }
 
@@ -276,6 +301,7 @@ func validCapture(st *types.ProcStep) error {
 	}, st.Capture.As):
 		return apperr.New(apperr.CodeInvalidInput, "unknown capture mode "+st.Capture.As)
 	}
+
 	return nil
 }
 
@@ -284,15 +310,19 @@ func (c *compiled) program(env *cel.Env, src string) error {
 	if src == "" || c.progs[src] != nil {
 		return nil
 	}
+
 	ast, iss := env.Compile(src)
 	if iss.Err() != nil {
 		return apperr.Wrap(iss.Err(), apperr.CodeInvalidInput, src)
 	}
+
 	prg, err := env.Program(ast)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, src)
 	}
+
 	c.progs[src] = prg
+
 	return nil
 }
 
@@ -300,17 +330,21 @@ func (c *compiled) program(env *cel.Env, src string) error {
 // and loop items.
 func stepNames(steps []types.ProcStep) []string {
 	var out []string
+
 	for i := range steps {
 		st := &steps[i]
 		if st.Capture != nil {
 			out = append(out, st.Capture.Var)
 		}
+
 		out = append(out, st.Sets...)
 		if st.Each != "" {
 			out = append(out, cmp(st.As, "item"))
 		}
+
 		out = append(out, stepNames(st.Parallel)...)
 	}
+
 	return out
 }
 
@@ -319,5 +353,6 @@ func cmp(s, def string) string {
 	if s == "" {
 		return def
 	}
+
 	return s
 }

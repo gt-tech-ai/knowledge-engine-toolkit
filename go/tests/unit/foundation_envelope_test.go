@@ -109,6 +109,7 @@ func TestEnvelope_ZeroValue(t *testing.T) {
 	}
 
 	var zero empty
+
 	version := 5
 
 	data, err := cache.Encode(zero, version)
@@ -144,6 +145,7 @@ func TestEnvelope_CachedAtIsRecent(t *testing.T) {
 	var raw struct {
 		CachedAt time.Time `json:"cached_at"`
 	}
+
 	require.NoError(t, json.Unmarshal(data, &raw), "raw envelope must be valid JSON")
 
 	assert.False(t, raw.CachedAt.Before(before.Add(-2*time.Second)),

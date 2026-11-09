@@ -119,6 +119,7 @@ func TestDatabaseConfig_DSNEscapesCredentials(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			cfg := infra.DatabaseConfig{
 				Host:     "db.example.com",
 				Port:     6432,
@@ -175,9 +176,11 @@ func FuzzDatabaseConfig_DSNRoundTrip(f *testing.F) {
 		if user == "" || database == "" {
 			t.Skip("pgx substitutes defaults for an empty user or database")
 		}
+
 		if strings.ContainsRune(user+password+database, 0) {
 			t.Skip("Postgres strings cannot contain NUL")
 		}
+
 		host := dsnHosts()[int(hostIdx)%len(dsnHosts())]
 		cfg := infra.DatabaseConfig{
 			Host: host, Port: 5432, User: user, Password: password,
@@ -234,6 +237,7 @@ func TestDatabaseConfig_Validate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			err := tt.cfg.Validate()
 			if tt.wantErr {
 				require.Error(t, err)
@@ -363,6 +367,7 @@ func TestServerConfig_Validate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			err := tt.cfg.Validate()
 			if tt.wantErr {
 				require.Error(t, err)
@@ -570,6 +575,7 @@ func TestAuthConfig_Validate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			err := tt.cfg.Validate()
 			if tt.wantErr {
 				require.Error(t, err)
@@ -593,6 +599,7 @@ func TestAuthConfig_Validate(t *testing.T) {
 //   - DefaultAuthConfig() sets both Stub and ServiceStub to true
 func TestDefaultAuthConfig_ServiceStubEnabled(t *testing.T) {
 	t.Parallel()
+
 	cfg := infra.DefaultAuthConfig()
 	require.True(t, cfg.Stub, "default must enable end-user stub for local dev")
 	require.True(
@@ -659,6 +666,7 @@ func TestLoggingConfig_GetKind(t *testing.T) {
 	for _, tc := range cases {
 		cfg := infra.LoggingConfig{Kind: tc.kind}
 		_, err := cfg.GetKind()
+
 		if tc.wantErr {
 			assert.Error(t, err, "GetKind(%q) must return error", tc.kind)
 		} else {
@@ -698,6 +706,7 @@ func TestS3Config_Validate(t *testing.T) {
 
 	cfg := infra.DefaultS3Config()
 	require.Error(t, cfg.Validate(), "the consumer must name its bucket")
+
 	cfg.Bucket = "objects"
 	require.NoError(t, cfg.Validate())
 }
@@ -773,6 +782,7 @@ func TestS3Config_Validate_MultipartExpiry(t *testing.T) {
 	base := infra.S3Config{Kind: "s3", Bucket: "b", PresignExpiry: 15 * time.Minute}
 
 	tooShort := base
+
 	tooShort.MultipartPresignExpiry = time.Minute
 	require.Error(
 		t,
@@ -781,6 +791,7 @@ func TestS3Config_Validate_MultipartExpiry(t *testing.T) {
 	)
 
 	longer := base
+
 	longer.MultipartPresignExpiry = time.Hour
 	require.NoError(t, longer.Validate())
 	assert.Equal(t, time.Hour, longer.EffectiveMultipartPresignExpiry(),

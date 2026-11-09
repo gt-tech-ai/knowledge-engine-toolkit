@@ -58,12 +58,15 @@ func ResolveFilter(resolve ColumnFn, joinOf JoinFn, f types.Filter) types.Filter
 	if f == nil || f.IsEmpty() {
 		return f
 	}
+
 	switch v := f.(type) {
 	case types.FilterClause:
 		var join *types.JoinTarget
+
 		if joinOf != nil {
 			join = joinOf(v.Field)
 		}
+
 		return types.FilterClause{
 			Field:    resolve(v.Field),
 			Operator: v.Operator,
@@ -74,6 +77,7 @@ func ResolveFilter(resolve ColumnFn, joinOf JoinFn, f types.Filter) types.Filter
 		if len(v.And) > 0 {
 			return types.CompositeFilter{And: resolveEach(resolve, joinOf, v.And)}
 		}
+
 		return types.CompositeFilter{Or: resolveEach(resolve, joinOf, v.Or)}
 	default:
 		return f
@@ -86,6 +90,7 @@ func resolveEach(resolve ColumnFn, joinOf JoinFn, subs []types.Filter) []types.F
 	for i, sub := range subs {
 		out[i] = ResolveFilter(resolve, joinOf, sub)
 	}
+
 	return out
 }
 
@@ -123,6 +128,7 @@ func Compile[Q, S any](
 	if f == nil || f.IsEmpty() {
 		return b.Empty()
 	}
+
 	switch v := f.(type) {
 	case types.FilterClause:
 		// A clause carrying a JoinTarget (stamped by ResolveFilter) compiles to a
@@ -131,12 +137,14 @@ func Compile[Q, S any](
 		if v.Join != nil {
 			return b.ExistsClause(*v.Join, v.Operator, v.Value)
 		}
+
 		return b.Clause(resolve(v.Field), v.Operator, v.Value)
 	case types.CompositeFilter:
 		// The parser populates exactly one arm ($and or $or); prefer And when present.
 		if len(v.And) > 0 {
 			return b.And(compileEach(b, resolve, v.And))
 		}
+
 		return b.Or(compileEach(b, resolve, v.Or))
 	default:
 		return b.Empty()
@@ -153,6 +161,7 @@ func compileEach[Q, S any](
 	for _, sub := range subs {
 		out = append(out, Compile(b, resolve, sub))
 	}
+
 	return out
 }
 
@@ -204,15 +213,18 @@ func KeysetColumns(
 	if tiebreaker == "" {
 		tiebreaker = tiebreakerCreatedAt
 	}
+
 	out := make([]KeysetColumn, 0, len(ofs)+2)
 	seen := make(map[string]bool, len(ofs)+2)
 	appendCol := func(col string, desc bool) {
 		if seen[col] {
 			return
 		}
+
 		seen[col] = true
 		out = append(out, KeysetColumn{Column: col, Desc: desc})
 	}
+
 	for _, of := range ofs {
 		// A joined sort field carries a JoinTarget instead of a base column; the ORDER BY
 		// is a correlated subquery, so it never participates in the keyset seek (a joined
@@ -223,11 +235,14 @@ func KeysetColumns(
 				key := "\x00join\x00" + j.Table + "\x00" + strings.Join(j.Columns, ",")
 				if !seen[key] {
 					seen[key] = true
+
 					out = append(out, KeysetColumn{Join: j, Desc: of.Desc})
 				}
+
 				continue
 			}
 		}
+
 		// A derived sort field carries a correlated-aggregate / interval spec instead of
 		// a base column (a Documents/Members count, a Next Sync). Like a join it never
 		// participates in the keyset seek (always a custom sort → the offset pager).
@@ -238,11 +253,14 @@ func KeysetColumns(
 				key := "\x00derived\x00" + of.Field
 				if !seen[key] {
 					seen[key] = true
+
 					out = append(out, KeysetColumn{Derived: d, Desc: of.Desc})
 				}
+
 				continue
 			}
 		}
+
 		// A same-table field with a value ordinal sorts by a CASE over its column; it
 		// dedups on the resolved column like a plain column (an ordinal is just a
 		// different ORDER BY over that column).
@@ -256,13 +274,17 @@ func KeysetColumns(
 						KeysetColumn{Column: col, Ordinal: ord, Desc: of.Desc},
 					)
 				}
+
 				continue
 			}
 		}
+
 		appendCol(col, of.Desc)
 	}
+
 	appendCol(tiebreaker, true)
 	appendCol(tiebreakerID, true)
+
 	return out
 }
 
@@ -281,6 +303,7 @@ func CompileOrder[Q, S any](
 ) []S {
 	cols := KeysetColumns(resolve, joinOf, ordinalOf, derivedOf, ofs, tiebreaker)
 	out := make([]S, 0, len(cols))
+
 	for _, kc := range cols {
 		// A joined sort column renders as an ORDER BY over a correlated subquery; a
 		// derived column as an aggregate/interval expression; an ordinal column as a CASE
@@ -297,5 +320,6 @@ func CompileOrder[Q, S any](
 			out = append(out, b.Order(kc.Column, kc.Desc))
 		}
 	}
+
 	return out
 }

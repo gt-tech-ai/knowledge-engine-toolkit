@@ -39,9 +39,11 @@ func TestRepositoryTier_Order(t *testing.T) {
 // how often it was asked to.
 func passThroughRetrier(t *testing.T, times int) interfaces.Retrier {
 	t.Helper()
+
 	r := mocks.NewMockRetrier(gomock.NewController(t))
 	r.EXPECT().Retry(gomock.Any(), gomock.Any()).Times(times).DoAndReturn(
 		func(_ context.Context, op func() error) error { return op() })
+
 	return r
 }
 
@@ -66,6 +68,7 @@ type widgetsQueries interface {
 //   - A query over the timeout ends with the deadline; a zero Base runs undecorated.
 func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 	t.Parallel()
+
 	base := fixtures.Must(repository.NewBase[widgetsQueries](decorate.Fixed(decorate.Deps{
 		Timeout: 20 * time.Millisecond,
 		Retrier: passThroughRetrier(t, 2),
@@ -84,6 +87,7 @@ func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 
 	_, err = base.Exec(t.Context(), "slow", func(ctx context.Context) (int, error) {
 		<-ctx.Done()
+
 		return 0, ctx.Err()
 	})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
@@ -114,6 +118,7 @@ func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 //     strict mock allows no call) or a deadline, and returns the store's error.
 func TestRepositoryEntity_NarrowContracts(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	decs := decorate.Fixed(decorate.Deps{
 		Retrier: passThroughRetrier(t, 2),
@@ -122,6 +127,7 @@ func TestRepositoryEntity_NarrowContracts(t *testing.T) {
 
 	reads := mocks.NewMockReadListExistStore[te, tp, string](ctrl)
 	reads.EXPECT().Exists(gomock.Any(), "w1").Return(true, nil)
+
 	ro := fixtures.Must(repository.NewEntity[
 		interfaces.ReadListExistStore[te, tp, string], te, tp, string,
 	](decs, "widgets", reads, nil))
@@ -131,6 +137,7 @@ func TestRepositoryEntity_NarrowContracts(t *testing.T) {
 
 	keyed := mocks.NewMockCRUDNoListStore[te, string](ctrl)
 	keyed.EXPECT().Delete(gomock.Any(), "w1").Return(nil)
+
 	kr := fixtures.Must(repository.NewEntity[
 		interfaces.CRUDNoListStore[te, string], te, tp, string,
 	](decs, "widgets", keyed, nil))
@@ -138,12 +145,15 @@ func TestRepositoryEntity_NarrowContracts(t *testing.T) {
 
 	appends := mocks.NewMockInsertOnlyStore[te](ctrl)
 	conflict := apperr.New(apperr.CodeConflict, "duplicate")
+
 	appends.EXPECT().Insert(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, _ *te) error {
 			_, bounded := ctx.Deadline()
 			assert.False(t, bounded, "an in-transaction append is never timed out")
+
 			return conflict
 		})
+
 	ar := fixtures.Must(repository.NewEntity[
 		interfaces.InsertOnlyStore[te], te, tp, string,
 	](decs, "widgets", appends, nil))

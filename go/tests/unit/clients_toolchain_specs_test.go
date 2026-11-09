@@ -34,6 +34,7 @@ func TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest(t *testing.T
 	find := func(binary string) types.ToolDef {
 		d, ok := cat.Find(binary)
 		require.True(t, ok, "lifecycle tool %q must be projected", binary)
+
 		return d
 	}
 
@@ -72,6 +73,7 @@ func TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest(t *testing.T
 	require.NotNil(t, win.Download)
 	assert.Equal(t, lintEntry.Binary, win.Download.Binary)
 	assert.Equal(t, lintEntry.Version, win.Download.Version)
+
 	asset := lintEntry.Assets["windows-amd64"]
 	assert.Equal(t, types.Artifact{
 		URL: "https://github.com/" + lintEntry.Org + "/" + lintEntry.Repo +
@@ -140,13 +142,17 @@ func TestClientsToolchainResolveVersionParse_Behavior(t *testing.T) {
 // platform, failing the test when either is missing.
 func manifestInstall(t *testing.T, binary, platform string) types.InstallMethodEntry {
 	t.Helper()
+
 	for i := range toolEntries(t) {
 		if toolEntries(t)[i].Binary == binary {
 			m, ok := toolEntries(t)[i].Install[platform]
 			require.True(t, ok, "%s has no %s install method", binary, platform)
+
 			return m
 		}
 	}
+
 	require.Failf(t, "tool missing", "no %q tool in the manifest", binary)
+
 	return types.InstallMethodEntry{}
 }

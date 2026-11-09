@@ -16,6 +16,7 @@ import (
 // appendSeq appends msg-1..msg-n (payload = the id's bytes) under key "k".
 func appendSeq(t *testing.T, b interfaces.ReplayBuffer, n int) {
 	t.Helper()
+
 	for i := 1; i <= n; i++ {
 		id := "msg-" + itoa(i)
 		require.NoError(t, b.Append(context.Background(), "k", id, []byte(id)))
@@ -26,13 +27,19 @@ func itoa(i int) string {
 	if i == 0 {
 		return "0"
 	}
+
 	var buf [20]byte
+
 	pos := len(buf)
+
 	for i > 0 {
 		pos--
+
 		buf[pos] = byte('0' + i%10)
+
 		i /= 10
 	}
+
 	return string(buf[pos:])
 }
 
@@ -41,6 +48,7 @@ func ids(msgs []interfaces.BufferedMessage) []string {
 	for i, m := range msgs {
 		out[i] = m.ID
 	}
+
 	return out
 }
 
@@ -61,6 +69,7 @@ func ids(msgs []interfaces.BufferedMessage) []string {
 //     key → complete=false.
 func TestReplayBufferMemory_ReplayAfter(t *testing.T) {
 	t.Parallel()
+
 	b := memory.New(100, time.Minute)
 	appendSeq(t, b, 5)
 
@@ -99,6 +108,7 @@ func TestReplayBufferMemory_ReplayAfter(t *testing.T) {
 //     gap).
 func TestReplayBufferMemory_Prune(t *testing.T) {
 	t.Parallel()
+
 	b := memory.New(100, time.Minute)
 	appendSeq(t, b, 5)
 
@@ -129,6 +139,7 @@ func TestReplayBufferMemory_Prune(t *testing.T) {
 //     evicted msg-1 is a gap; ReplayAfter(msg-3) returns msg-4,5.
 func TestReplayBufferMemory_NBoundEvictsOldest(t *testing.T) {
 	t.Parallel()
+
 	b := memory.New(3, time.Minute)
 	appendSeq(t, b, 5)
 
@@ -155,11 +166,13 @@ func TestReplayBufferMemory_NBoundEvictsOldest(t *testing.T) {
 //     buffer expired).
 func TestReplayBufferMemory_TTLExpires(t *testing.T) {
 	t.Parallel()
+
 	b := memory.New(100, 20*time.Millisecond)
 	appendSeq(t, b, 3)
 
 	assert.Eventually(t, func() bool {
 		_, complete, err := b.ReplayAfter(context.Background(), "k", "msg-1")
+
 		return err == nil && !complete
 	}, time.Second, 5*time.Millisecond, "buffer must expire after its TTL")
 }
@@ -178,6 +191,7 @@ func TestReplayBufferMemory_TTLExpires(t *testing.T) {
 //     msg-(j+1)…msg-n in order, complete=true — no duplicates, no gaps.
 func TestReplayBufferMemory_ReplayAfterProperty(t *testing.T) {
 	t.Parallel()
+
 	property := func(nRaw, jRaw uint8) bool {
 		n := int(nRaw%50) + 1 // 1..50
 		j := int(jRaw)%n + 1  // 1..n
@@ -188,19 +202,23 @@ func TestReplayBufferMemory_ReplayAfterProperty(t *testing.T) {
 		if err != nil || !complete {
 			return false
 		}
+
 		want := make([]string, 0, n-j)
 		for i := j + 1; i <= n; i++ {
 			want = append(want, "msg-"+itoa(i))
 		}
+
 		got := ids(tail)
 		if len(got) != len(want) {
 			return false
 		}
+
 		for i := range want {
 			if got[i] != want[i] {
 				return false
 			}
 		}
+
 		return true
 	}
 	require.NoError(t, quick.Check(property, &quick.Config{MaxCount: 200}))

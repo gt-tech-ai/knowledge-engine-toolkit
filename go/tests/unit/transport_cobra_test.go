@@ -50,6 +50,7 @@ type cobraBadInput struct {
 // receives check's input.
 func cobraRegistry(t *testing.T, got *cobraInput) *ops.Registry {
 	t.Helper()
+
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
@@ -63,6 +64,7 @@ func cobraRegistry(t *testing.T, got *cobraInput) *ops.Registry {
 				_ context.Context, in *cobraInput, _ opsEnv, _ interfaces.ExecutionObserver,
 			) error {
 				*got = *in
+
 				return nil
 			}),
 			"bad": ops.Func(func(
@@ -73,17 +75,20 @@ func cobraRegistry(t *testing.T, got *cobraInput) *ops.Registry {
 		},
 	})
 	require.NoError(t, err)
+
 	return reg
 }
 
 // execCobra runs args through the command for name.
 func execCobra(t *testing.T, reg *ops.Registry, args ...string) error {
 	t.Helper()
+
 	cmd, err := opscobra.Command(reg, "check", opscobra.Options{})
 	require.NoError(t, err)
 	cmd.SetArgs(args)
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
+
 	return apperr.Wrap(cmd.ExecuteContext(t.Context()), apperr.CodeInternal, "execute")
 }
 
@@ -102,7 +107,9 @@ func execCobra(t *testing.T, reg *ops.Registry, args ...string) error {
 //     INVALID_INPUT naming the field; an unknown operation is NOT_FOUND.
 func TestTransportCobra_Command(t *testing.T) {
 	t.Parallel()
+
 	var got cobraInput
+
 	reg := cobraRegistry(t, &got)
 	cmd, err := opscobra.Command(reg, "check", opscobra.Options{})
 	require.NoError(t, err)
@@ -117,12 +124,14 @@ func TestTransportCobra_Command(t *testing.T) {
 	}, got)
 
 	got = cobraInput{}
+
 	require.Error(t, execCobra(t, reg, "--fix"))
 	assert.Equal(t, cobraInput{}, got, "nothing ran")
 
 	_, err = opscobra.Command(reg, "bad", opscobra.Options{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "Ratio")
+
 	_, err = opscobra.Command(reg, "nope", opscobra.Options{})
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }
@@ -142,14 +151,19 @@ func TestTransportCobra_Command(t *testing.T) {
 //     separately for `--fix --only a` and `--only b` decode exactly their own flags.
 func TestTransportCobra_FreshInputPerRun(t *testing.T) {
 	t.Parallel()
+
 	var got cobraInput
+
 	reg := cobraRegistry(t, &got)
 	cmd, err := opscobra.Command(reg, "check", opscobra.Options{})
 	require.NoError(t, err)
+
 	var jsonOut bool
+
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print JSON")
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
+
 	for _, args := range [][]string{
 		{"-e", "s", "--json", "api", "x", "y"},
 		{"-e", "s", "--json", "web"},
@@ -157,6 +171,7 @@ func TestTransportCobra_FreshInputPerRun(t *testing.T) {
 		cmd.SetArgs(args)
 		require.NoError(t, cmd.ExecuteContext(t.Context()))
 	}
+
 	assert.True(t, jsonOut)
 	assert.Equal(t, cobraInput{Env: "s", Target: "web"}, got)
 

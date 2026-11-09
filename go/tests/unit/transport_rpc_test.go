@@ -111,6 +111,7 @@ func TestToConnectError_AllCodes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			result := rpc.ToConnectError(context.Background(), tt.appErr)
 			assert.Equal(t, tt.wantCode, connect.CodeOf(result))
 		})
@@ -149,7 +150,9 @@ func TestToConnectError_CapturesRealError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			ctx := apperr.WithSink(context.Background())
+
 			_ = rpc.ToConnectError(ctx, tt.appErr)
 			assert.Equal(t, tt.appErr, apperr.Captured(ctx),
 				"the real error must be captured for the request logger")
@@ -193,6 +196,7 @@ func TestToConnectError_ClientSafeMessages(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			result := rpc.ToConnectError(context.Background(), tt.appErr)
 			assert.NotContains(t, result.Error(), sensitiveMsg,
 				"Connect error message should not contain original error text")
@@ -305,6 +309,7 @@ func TestFromRPCError_ConnectCodes(t *testing.T) {
 	for _, tt := range fromRPCCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			wire := connect.NewError(tt.connect, apperr.Sentinel("peer: "+tt.name))
 			got := rpc.FromRPCError(wire)
 			assert.True(
@@ -336,6 +341,7 @@ func TestFromRPCError_GRPCStatusCodes(t *testing.T) {
 	for _, tt := range fromRPCCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			wire := status.Error(tt.grpc, "peer: "+tt.name)
 			got := rpc.FromRPCError(wire)
 			assert.True(
@@ -405,6 +411,7 @@ func TestFromRPCError_RoundTrip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			want := apperr.Code(tt.appErr)
 			wire := rpc.ToConnectError(context.Background(), tt.appErr)
 			got := rpc.FromRPCError(wire)

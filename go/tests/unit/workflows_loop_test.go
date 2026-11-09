@@ -28,9 +28,11 @@ import (
 func TestLoopConfig_RejectsNegativeDurations(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, loop.Config{}.Validate())
+
 	invalid := []loop.Config{{Interval: -time.Second}, {ErrorBackoff: -time.Second}}
 	for _, cfg := range invalid {
 		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(cfg.Validate()))
+
 		_, err := loop.NewTicker("bad", loop.Pass(okPass), cfg, quietLogger(t))
 		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	}
@@ -47,24 +49,30 @@ func TestLoopConfig_RejectsNegativeDurations(t *testing.T) {
 //     pass waits one Interval. Run returns nil when its context ends.
 func TestTicker_RunsAtStartThenEveryInterval(t *testing.T) {
 	t.Parallel()
+
 	for _, atStart := range []bool{true, false} {
 		synctest.Test(t, func(t *testing.T) {
 			var passes atomic.Int64
+
 			tk, err := loop.NewTicker("refresh", loop.Pass(func(context.Context) error {
 				passes.Add(1)
+
 				return nil
 			}), loop.Config{Interval: time.Minute, RunAtStart: atStart}, quietLogger(t))
 			require.NoError(t, err)
 
 			ctx, cancel := context.WithCancel(t.Context())
 			done := make(chan error, 1)
+
 			go func() { done <- tk.Run(ctx) }()
 
 			synctest.Wait()
+
 			first := int64(0)
 			if atStart {
 				first = 1
 			}
+
 			require.Equal(t, first, passes.Load())
 			time.Sleep(3 * time.Minute)
 			synctest.Wait()
@@ -93,14 +101,17 @@ func TestTicker_FailedPassIsLoggedAndRetried(t *testing.T) {
 		logger.EXPECT().Warn("loop pass failed", "loop", "drain", "error", boom).Times(2)
 
 		var passes atomic.Int64
+
 		tk, err := loop.NewTicker("drain", loop.Pass(func(context.Context) error {
 			passes.Add(1)
+
 			return boom
 		}), loop.Config{ErrorBackoff: 5 * time.Second}, logger)
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)
+
 		go func() { done <- tk.Run(ctx) }()
 
 		synctest.Wait()
@@ -125,12 +136,16 @@ func TestTicker_FailedPassIsLoggedAndRetried(t *testing.T) {
 //     no goroutine outlives Run (goleak).
 func TestTicker_BackToBackWhenIntervalIsZero(t *testing.T) {
 	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+
 	ctx, cancel := context.WithCancel(t.Context())
+
 	var passes atomic.Int64
+
 	tk, err := loop.NewTicker("drain", loop.Pass(func(context.Context) error {
 		if passes.Add(1) == 3 {
 			cancel()
 		}
+
 		return nil
 	}), loop.Config{}, quietLogger(t))
 	require.NoError(t, err)
@@ -152,10 +167,12 @@ func TestTicker_BackToBackWhenIntervalIsZero(t *testing.T) {
 //   - No goroutine outlives Run (goleak).
 func TestTicker_ReturnsNilWhenContextEnds(t *testing.T) {
 	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+
 	boom := apperr.New(apperr.CodeUnavailable, "flush failed")
 	debugged := mocks.NewMockLogger(gomock.NewController(t))
 	debugged.EXPECT().
 		Debug("loop pass failed during shutdown", "loop", "relay", "error", boom)
+
 	cases := []struct {
 		logger *mocks.MockLogger
 		result func(ctx context.Context) error
@@ -168,13 +185,16 @@ func TestTicker_ReturnsNilWhenContextEnds(t *testing.T) {
 		tk, err := loop.NewTicker("relay", loop.Pass(func(ctx context.Context) error {
 			close(started)
 			<-ctx.Done()
+
 			return tc.result(ctx)
 		}), loop.Config{Interval: time.Hour, RunAtStart: true}, tc.logger)
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)
+
 		go func() { done <- tk.Run(ctx) }()
+
 		<-started
 		cancel()
 		require.NoError(t, <-done)
@@ -194,6 +214,7 @@ func TestGroup_RunsEveryRunnerUntilContextEnds(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		var a, b atomic.Int64
+
 		g := loop.NewGroup(quietLogger(t))
 		g.Add("a", mustTicker(t, &a))
 		g.Add("b", mustTicker(t, &b))
@@ -210,6 +231,7 @@ func TestGroup_RunsEveryRunnerUntilContextEnds(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		var a atomic.Int64
+
 		g := loop.NewGroup(quietLogger(t))
 		g.Add("a", mustTicker(t, &a))
 		require.NoError(t, g.Start(t.Context()))
@@ -236,6 +258,7 @@ func TestGroup_OneFailingRunnerDoesNotStopTheOthers(t *testing.T) {
 		logger.EXPECT().Error("loop stopped", "loop", "consumer", "error", boom).Times(1)
 
 		var ticks atomic.Int64
+
 		g := loop.NewGroup(logger)
 		g.Add("consumer", loop.RunnerFunc(func(context.Context) error { return boom }))
 		g.Add("relay", mustTicker(t, &ticks))
@@ -271,10 +294,12 @@ func TestGroup_ShutdownIsNotAFailure(t *testing.T) {
 		g := loop.NewGroup(logger)
 		g.Add("drainer", loop.RunnerFunc(func(ctx context.Context) error {
 			<-ctx.Done()
+
 			return apperr.Wrap(ctx.Err(), apperr.CodeCanceled, "ensure group")
 		}))
 		g.Add("consumer", loop.RunnerFunc(func(ctx context.Context) error {
 			<-ctx.Done()
+
 			return boom
 		}))
 		require.NoError(t, g.Start(t.Context()))
@@ -304,6 +329,7 @@ func TestGroup_MisuseIsReported(t *testing.T) {
 		g := loop.NewGroup(quietLogger(t))
 		g.Add("stuck", loop.RunnerFunc(func(context.Context) error {
 			<-release
+
 			return nil
 		}))
 		require.NoError(t, g.Start(t.Context()))
@@ -311,6 +337,7 @@ func TestGroup_MisuseIsReported(t *testing.T) {
 
 		stopCtx, cancel := context.WithTimeout(t.Context(), time.Second)
 		defer cancel()
+
 		require.Equal(t, apperr.CodeTimeout, apperr.Code(g.Stop(stopCtx)))
 		close(release)
 		g.Wait()
@@ -327,10 +354,12 @@ func TestGroup_MisuseIsReported(t *testing.T) {
 //   - Execute returns the wrapped function's error unchanged, and nil on success.
 func TestPass_ReturnsTheFunctionsError(t *testing.T) {
 	t.Parallel()
+
 	boom := apperr.New(apperr.CodeInternal, "pass failed")
 	_, err := loop.Pass(func(context.Context) error { return boom }).
 		Execute(t.Context(), struct{}{})
 	require.ErrorIs(t, err, boom)
+
 	_, err = loop.Pass(okPass).Execute(t.Context(), struct{}{})
 	require.NoError(t, err)
 }
@@ -341,16 +370,20 @@ func okPass(context.Context) error { return nil }
 // quietLogger returns a mock logger that fails the test on any warn or error.
 func quietLogger(t *testing.T) *mocks.MockLogger {
 	t.Helper()
+
 	return mocks.NewMockLogger(gomock.NewController(t))
 }
 
 // mustTicker returns a one-minute ticker with a startup pass that counts into n.
 func mustTicker(t *testing.T, n *atomic.Int64) *loop.Ticker {
 	t.Helper()
+
 	tk, err := loop.NewTicker("count", loop.Pass(func(context.Context) error {
 		n.Add(1)
+
 		return nil
 	}), loop.Config{Interval: time.Minute, RunAtStart: true}, quietLogger(t))
 	require.NoError(t, err)
+
 	return tk
 }

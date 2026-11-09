@@ -159,12 +159,14 @@ func (s *ReplayBufferRedisSuite) TestTTLExpiresAndDelete() {
 	s.appendSeq(b, "k", 3)
 	s.Eventually(func() bool {
 		_, complete, err := b.ReplayAfter(context.Background(), "k", "msg-1")
+
 		return err == nil && !complete
 	}, 4*time.Second, 100*time.Millisecond, "buffer must expire after its TTL")
 
 	b2 := s.newBuffer(100, time.Minute)
 	s.appendSeq(b2, "d", 3)
 	s.Require().NoError(b2.Delete(context.Background(), "d"))
+
 	_, complete, err := b2.ReplayAfter(context.Background(), "d", "msg-1")
 	s.Require().NoError(err)
 	s.False(complete, "deleted buffer → gap")
@@ -217,13 +219,19 @@ func itoaI(i int) string {
 	if i == 0 {
 		return "0"
 	}
+
 	var buf [20]byte
+
 	pos := len(buf)
+
 	for i > 0 {
 		pos--
+
 		buf[pos] = byte('0' + i%10)
+
 		i /= 10
 	}
+
 	return string(buf[pos:])
 }
 
@@ -232,5 +240,6 @@ func idsI(msgs []interfaces.BufferedMessage) []string {
 	for i, m := range msgs {
 		out[i] = m.ID
 	}
+
 	return out
 }

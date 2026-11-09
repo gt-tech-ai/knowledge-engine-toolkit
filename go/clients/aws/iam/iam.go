@@ -77,9 +77,11 @@ func newSDK(_ context.Context, _ Config, deps Deps) (API, error) {
 	if deps.API != nil {
 		return deps.API, nil
 	}
+
 	if deps.AWS == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "iam sdk: no aws config")
 	}
+
 	return iam.NewFromConfig(*deps.AWS), nil
 }
 
@@ -101,6 +103,7 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
+
 	return &decorator{base: base, Base: b}, nil
 }
 

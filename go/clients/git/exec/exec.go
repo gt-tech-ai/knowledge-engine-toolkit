@@ -31,6 +31,7 @@ func New(runner interfaces.CommandRunner) *Client { return &Client{runner: runne
 // git runs git args in root and returns stdout or a coded error.
 func (c *Client) git(ctx context.Context, root string, args ...string) ([]byte, error) {
 	res := c.runner.RunBuffered(ctx, root, "git", args...)
+
 	return client.Output(res, "git "+args[0])
 }
 
@@ -42,13 +43,17 @@ func (c *Client) HasPathsChanged(
 ) (bool, error) {
 	args := append([]string{diffCmd, "--quiet", from, to, "--"}, paths...)
 	res := c.runner.RunBuffered(ctx, root, "git", args...)
+
 	if res.Err == nil {
 		return false, nil
 	}
+
 	if res.ExitCode == 1 {
 		return true, nil
 	}
+
 	_, err := client.Output(res, "git "+diffCmd)
+
 	return false, err
 }
 
@@ -57,7 +62,9 @@ func (c *Client) StageFiles(ctx context.Context, root string, paths []string) er
 	if len(paths) == 0 {
 		return nil
 	}
+
 	_, err := c.git(ctx, root, append([]string{"add", "--"}, paths...)...)
+
 	return err
 }
 
@@ -72,6 +79,7 @@ func (c *Client) StagedFiles(
 		"--",
 	}, patterns...)
 	out, err := c.git(ctx, root, args...)
+
 	return client.SplitNUL(out), err
 }
 
@@ -86,13 +94,16 @@ func (c *Client) LsFiles(
 	if res.ExitCode == notARepo {
 		return nil, nil
 	}
+
 	out, err := client.Output(res, "git ls-files")
+
 	return client.SplitNUL(out), err
 }
 
 // ChangedSince lists the files changed since the merge base with base.
 func (c *Client) ChangedSince(ctx context.Context, root, base string) ([]string, error) {
 	out, err := c.git(ctx, root, diffCmd, "--name-only", "-z", "--merge-base", base)
+
 	return client.SplitNUL(out), err
 }
 
@@ -107,6 +118,7 @@ func (c *Client) RevParse(ctx context.Context, root, ref string) (string, error)
 	if res.Err != nil {
 		return "", apperr.Wrap(res.Err, apperr.CodeNotFound, "unknown revision "+ref)
 	}
+
 	return strings.TrimSpace(string(res.Stdout)), nil
 }
 
@@ -135,6 +147,7 @@ func (c *Client) RemoteHasRef(
 // IsRepo reports whether root is inside a working tree.
 func (c *Client) IsRepo(ctx context.Context, root string) bool {
 	res := c.runner.RunBuffered(ctx, root, "git", "rev-parse", "--is-inside-work-tree")
+
 	return res.Err == nil && strings.TrimSpace(string(res.Stdout)) == "true"
 }
 
@@ -164,6 +177,7 @@ func (c *Client) LsUntracked(
 	out, err := c.git(ctx, root, append([]string{
 		"ls-files", "-z", "--others", "--exclude-standard", "--",
 	}, pathspecs...)...)
+
 	return client.SplitNUL(out), err
 }
 
@@ -177,13 +191,16 @@ func (c *Client) Grep(ctx context.Context, root, needle string) ([]string, error
 	if res.Err != nil && res.ExitCode == grepNoMatch {
 		return nil, nil
 	}
+
 	out, err := client.Output(res, "git grep")
+
 	return client.SplitNUL(out), err
 }
 
 // Move runs `git mv -- from to`.
 func (c *Client) Move(ctx context.Context, root, from, to string) error {
 	_, err := c.git(ctx, root, "mv", "--", from, to)
+
 	return err
 }
 
@@ -192,7 +209,9 @@ func (c *Client) Remove(ctx context.Context, root string, paths []string) error 
 	if len(paths) == 0 {
 		return nil
 	}
+
 	_, err := c.git(ctx, root, append([]string{"rm", "-q", "-f", "--"}, paths...)...)
+
 	return err
 }
 
@@ -210,6 +229,8 @@ func (c *Client) Tag(ctx context.Context, root string) (string, error) {
 	if res.ExitCode == notARepo {
 		return "", nil
 	}
+
 	out, err := client.Output(res, "git describe")
+
 	return strings.TrimSpace(string(out)), err
 }

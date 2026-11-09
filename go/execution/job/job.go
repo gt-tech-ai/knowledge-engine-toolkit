@@ -48,6 +48,7 @@ func NewBase(decs decorate.Decorations, name string) (Base, error) {
 	if err != nil {
 		return Base{}, err
 	}
+
 	return Base{Subject: subject}, nil
 }
 
@@ -81,6 +82,7 @@ func (b Base) Check(
 		if err := run(ctx); err != nil {
 			sr.Status, sr.Error = types.StatusFail, err.Error()
 		}
+
 		return types.StepResults{sr}, nil
 	})
 }

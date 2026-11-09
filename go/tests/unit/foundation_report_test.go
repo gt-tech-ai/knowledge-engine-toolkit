@@ -38,12 +38,15 @@ func reportSteps() types.StepResults {
 // drive sends one gate with one phase of reportSteps through obs.
 func drive(obs interfaces.ExecutionObserver) {
 	steps := reportSteps()
+
 	obs.OnGateStart("preflight", []string{"lint"})
 	obs.OnPhaseStart("lint", []string{"gofmt", "vet"})
+
 	for _, s := range steps {
 		obs.OnStepStart(s.Name, s.Group)
 		obs.OnStepComplete(s)
 	}
+
 	obs.OnPhaseComplete("lint", steps, 3*time.Second)
 	obs.OnGateComplete("preflight", steps, 4*time.Second)
 }
@@ -51,10 +54,13 @@ func drive(obs interfaces.ExecutionObserver) {
 // reportOf builds kind over fresh buffers and drives it.
 func reportOf(t *testing.T, cfg report.Config) (out, errOut string) {
 	t.Helper()
+
 	var o, e bytes.Buffer
+
 	obs, err := report.NewFromConfig(cfg, types.Streams{Out: &o, Err: &e})
 	require.NoError(t, err)
 	drive(obs)
+
 	return o.String(), e.String()
 }
 
@@ -73,6 +79,7 @@ func reportOf(t *testing.T, cfg report.Config) (out, errOut string) {
 //     with their TOTAL lines; none writes to Out or emits ANSI without Color.
 func TestFoundationReport_LineAndTable(t *testing.T) {
 	t.Parallel()
+
 	hints := []report.Hint{{Group: "lint", Substr: "vet", Text: "Run: go vet ./..."}}
 	failureBlock := "  Failures:\n\n" +
 		"    FAIL vet\n" +
@@ -125,12 +132,14 @@ func TestFoundationReport_LineAndTable(t *testing.T) {
 //     kind and missing streams are INVALID_INPUT.
 func TestFoundationReport_MachineKinds(t *testing.T) {
 	t.Parallel()
+
 	out, errOut := reportOf(t, report.Config{Kind: report.KindGHActions})
 	assert.Empty(t, errOut)
 	assert.Equal(t, "::group::lint\n  PASS  gofmt\n  FAIL  vet\n::endgroup::\n"+
 		"::error title=vet::1 finding\n::error title=Gate::1 step(s) failed\n", out)
 
 	out, _ = reportOf(t, report.Config{Kind: report.KindJSON})
+
 	var doc struct {
 		Counts map[string]int `json:"counts"`
 		Gate   string         `json:"gate"`
@@ -142,6 +151,7 @@ func TestFoundationReport_MachineKinds(t *testing.T) {
 		ElapsedMS int64 `json:"elapsed_ms"`
 		Passed    bool  `json:"passed"`
 	}
+
 	require.NoError(t, json.Unmarshal([]byte(out), &doc))
 	assert.Equal(t, "preflight", doc.Gate)
 	assert.False(t, doc.Passed)
@@ -155,9 +165,11 @@ func TestFoundationReport_MachineKinds(t *testing.T) {
 	assert.Empty(t, out+errOut)
 
 	var a, b bytes.Buffer
+
 	gh, err := report.NewFromConfig(report.Config{Kind: report.KindGHActions},
 		types.Streams{Out: &a, Err: &a})
 	require.NoError(t, err)
+
 	js, err := report.NewFromConfig(report.Config{Kind: report.KindJSON},
 		types.Streams{Out: &b, Err: &b})
 	require.NoError(t, err)
@@ -170,6 +182,7 @@ func TestFoundationReport_MachineKinds(t *testing.T) {
 		types.Streams{Out: &a, Err: &a},
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
 	_, err = report.NewFromConfig(report.Config{}, types.Streams{Out: &a})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
@@ -186,10 +199,13 @@ func TestFoundationReport_MachineKinds(t *testing.T) {
 //     `:` and `,` and encodes `%` and the newline.
 func TestFoundationReport_GHActionsEscapes(t *testing.T) {
 	t.Parallel()
+
 	var out bytes.Buffer
+
 	obs, err := report.NewFromConfig(report.Config{Kind: report.KindGHActions},
 		types.Streams{Out: &out, Err: &out})
 	require.NoError(t, err)
+
 	step := types.StepResult{
 		Name: "lint:go,x", Group: "lint", Status: types.StatusFail,
 		Error: "a.go:3: 100% bad,\nsee above",

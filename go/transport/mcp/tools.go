@@ -21,14 +21,17 @@ import (
 func toolFor(op interfaces.Operation) (*sdkmcp.Tool, error) {
 	d := op.Descriptor()
 	schema := op.InputSchema()
+
 	var top struct {
 		Type string `json:"type"`
 	}
+
 	if json.Unmarshal(schema, &top) != nil || top.Type != "object" {
 		return nil, apperr.New(apperr.CodeInternal, fmt.Sprintf(
 			"operation %q: input schema is not a JSON object schema", d.Name,
 		))
 	}
+
 	return &sdkmcp.Tool{
 		Name:        d.Name,
 		Description: d.Summary,
@@ -44,6 +47,7 @@ func toolFor(op interfaces.Operation) (*sdkmcp.Tool, error) {
 // log-write failure is joined onto the run's own error, which keeps its code.
 func (s *Server) handler(op interfaces.Operation) sdkmcp.ToolHandler {
 	name := op.Descriptor().Name
+
 	return func(
 		ctx context.Context,
 		req *sdkmcp.CallToolRequest,
@@ -54,10 +58,14 @@ func (s *Server) handler(op interfaces.Operation) sdkmcp.ToolHandler {
 		if err != nil {
 			return s.result(nil, nil, err)
 		}
+
 		obs := &runs.Collector{}
+
 		err = s.reg.Run(ctx, name, input, obs)
+
 		steps := flatten(obs.Steps())
 		logs, werr := s.runs.WriteSteps(s.runs.NewRunID(), steps)
+
 		return s.result(steps, logs, apperr.Join(err, werr))
 	}
 }
@@ -79,7 +87,9 @@ func decodeArgs(raw json.RawMessage, input any) error {
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return nil
 	}
+
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
+
 	return apperr.Wrap(dec.Decode(input), apperr.CodeInvalidInput, "Decoder.Decode")
 }

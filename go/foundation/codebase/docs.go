@@ -56,14 +56,19 @@ func (v *view) Docs(
 	if len(sel.Exts) == 0 {
 		sel.Exts = []string{extYAML, extYML}
 	}
+
 	files, err := v.Files(ctx, sel)
 	if err != nil {
 		return nil, err
 	}
+
 	var out []types.Document
+
 	for _, f := range files {
 		format := docFormat(path.Ext(f.Path))
+
 		var docs []any
+
 		switch format {
 		case formatYAML:
 			docs, err = v.yamlDocs(ctx, f.Path)
@@ -76,9 +81,11 @@ func (v *view) Docs(
 		default:
 			continue
 		}
+
 		if err != nil {
 			return nil, err
 		}
+
 		for i, d := range docs {
 			out = append(
 				out,
@@ -86,6 +93,7 @@ func (v *view) Docs(
 			)
 		}
 	}
+
 	return out, nil
 }
 
@@ -95,9 +103,11 @@ func (v *view) yamlDocs(ctx context.Context, p string) ([]any, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	out := make([]any, 0, len(nodes))
 	for i := range nodes {
 		var doc any
+
 		if err := v.yamlView.Decode(
 			ctx,
 			types.YAMLDoc{Path: p, Index: i},
@@ -105,8 +115,10 @@ func (v *view) yamlDocs(ctx context.Context, p string) ([]any, error) {
 		); err != nil {
 			return nil, err
 		}
+
 		out = append(out, doc)
 	}
+
 	return out, nil
 }
 
@@ -124,16 +136,19 @@ func (v *view) oneDoc(
 			if err != nil {
 				return nil, err
 			}
+
 			doc, err := decode(text.Bytes, p)
 			if err != nil {
 				return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
 			}
+
 			return doc, nil
 		},
 	)
 	if err != nil {
 		return nil, err
 	}
+
 	return []any{doc}, nil
 }
 
@@ -142,8 +157,11 @@ func (v *view) oneDoc(
 // configuration embedded in another file (an Alloy config inside a Helm values string).
 // An unknown format or a parse error is CodeInvalidInput.
 func Decode(format, name string, src []byte) (any, error) {
-	var doc any
-	var err error
+	var (
+		doc any
+		err error
+	)
+
 	switch format {
 	case formatYAML:
 		err = yaml.Unmarshal(src, &doc)
@@ -156,9 +174,11 @@ func Decode(format, name string, src []byte) (any, error) {
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput, "decode: unknown format "+format)
 	}
+
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+name+" as "+format)
 	}
+
 	return doc, nil
 }
 
@@ -170,9 +190,12 @@ func decodeHCL(src []byte, p string) (any, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "hcl "+p)
 	}
+
 	var doc any
+
 	if err := json.Unmarshal(b, &doc); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "hcl json "+p)
 	}
+
 	return doc, nil
 }

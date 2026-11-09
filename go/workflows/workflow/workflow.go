@@ -52,6 +52,7 @@ func NewBase[W any](
 	if err != nil {
 		return Base{}, err
 	}
+
 	return Base{tx: tx, Subject: subject}, nil
 }
 
@@ -79,27 +80,34 @@ func (b Base) InTx[R any](
 	fn func(context.Context) (R, error),
 ) (R, error) {
 	var zero R
+
 	if interfaces.InTx(ctx) {
 		return zero, apperr.New(
 			apperr.CodeInternal,
 			"workflow "+b.Name()+": a transaction is already open on this context",
 		)
 	}
+
 	if b.tx == nil {
 		return zero, apperr.New(
 			apperr.CodeInternal,
 			"workflow "+b.Name()+": no transaction manager",
 		)
 	}
+
 	var out R
+
 	err := b.tx.WithTransaction(ctx, func(txCtx context.Context) error {
 		var err error
+
 		out, err = fn(txCtx)
+
 		return err
 	})
 	if err != nil {
 		return zero, err
 	}
+
 	return out, nil
 }
 

@@ -31,20 +31,25 @@ func (y *yamlView) Docs(
 	if len(sel.Exts) == 0 {
 		sel.Exts = []string{extYAML, extYML}
 	}
+
 	files, err := y.parent.Files(ctx, sel)
 	if err != nil {
 		return nil, err
 	}
+
 	var out []types.YAMLDoc
+
 	for _, f := range files {
 		nodes, err := y.nodes(ctx, f.Path)
 		if err != nil {
 			return nil, err
 		}
+
 		for i := range nodes {
 			out = append(out, types.YAMLDoc{Path: f.Path, Index: i})
 		}
 	}
+
 	return out, nil
 }
 
@@ -58,14 +63,17 @@ func (y *yamlView) Query(
 	if err != nil {
 		return nil, err
 	}
+
 	matches, err := yamlq.Path(node, path)
 	if err != nil {
 		return nil, err
 	}
+
 	out := make([]types.YAMLMatch, 0, len(matches))
 	for _, m := range matches {
 		out = append(out, types.YAMLMatch{Value: m.Value, Kind: m.Kind, Line: m.Line})
 	}
+
 	return out, nil
 }
 
@@ -75,10 +83,12 @@ func (y *yamlView) Decode(ctx context.Context, doc types.YAMLDoc, out any) error
 	if err != nil {
 		return err
 	}
+
 	if err := node.Decode(out); err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput,
 			fmt.Sprintf("decode %s document %d", doc.Path, doc.Index))
 	}
+
 	return nil
 }
 
@@ -88,10 +98,12 @@ func (y *yamlView) node(ctx context.Context, doc types.YAMLDoc) (*yaml.Node, err
 	if err != nil {
 		return nil, err
 	}
+
 	if doc.Index < 0 || doc.Index >= len(nodes) {
 		return nil, apperr.New(apperr.CodeNotFound,
 			fmt.Sprintf("%s has no document %d", doc.Path, doc.Index))
 	}
+
 	return nodes[doc.Index], nil
 }
 
@@ -106,16 +118,19 @@ func (y *yamlView) nodes(ctx context.Context, p string) ([]*yaml.Node, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			docs, err := yamlq.DecodeAll(text.Bytes)
 			if err != nil {
 				return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
 			}
+
 			out := docs[:0]
 			for _, d := range docs {
 				if len(d.Content) > 0 && !emptyDoc(d.Content[0]) {
 					out = append(out, d)
 				}
 			}
+
 			return out, nil
 		},
 	)

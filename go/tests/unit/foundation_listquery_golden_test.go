@@ -44,22 +44,28 @@ type filterGolden struct {
 // loadFilterGolden reads the shared filter corpus and builds its allow-list.
 func loadFilterGolden(tb testing.TB) (filterGolden, *listquery.Map) {
 	tb.Helper()
+
 	raw, err := os.ReadFile(
 		filepath.Join("..", "..", "..", "testdata", "listquery", "filters.golden.json"),
 	)
 	require.NoError(tb, err)
+
 	var g filterGolden
+
 	require.NoError(tb, json.Unmarshal(raw, &g))
+
 	ctors := map[string]func(string) listquery.Field{
 		"string": listquery.String, "id": listquery.ID, "int": listquery.Int,
 		"float": listquery.Float, "bool": listquery.Bool, "time": listquery.Time,
 	}
 	m := listquery.NewMap()
+
 	for name, typ := range g.SchemaFields {
 		ctor, ok := ctors[typ]
 		require.True(tb, ok, "unknown field type %q", typ)
 		m.Add(ctor(name))
 	}
+
 	return g, m
 }
 
@@ -94,6 +100,7 @@ func groupWire(members []types.Filter) []any {
 	for _, m := range members {
 		out = append(out, filterWire(m))
 	}
+
 	return out
 }
 
@@ -107,6 +114,7 @@ func valueWire(v any) any {
 		for _, el := range x {
 			out = append(out, valueWire(el))
 		}
+
 		return out
 	default:
 		return v
@@ -116,12 +124,17 @@ func valueWire(v any) any {
 // canonicalJSON re-encodes JSON with sorted keys and exact numbers.
 func canonicalJSON(tb testing.TB, raw []byte) string {
 	tb.Helper()
+
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
+
 	var v any
+
 	require.NoError(tb, dec.Decode(&v))
+
 	out, err := json.Marshal(v)
 	require.NoError(tb, err)
+
 	return string(out)
 }
 
@@ -139,15 +152,19 @@ func canonicalJSON(tb testing.TB, raw []byte) string {
 //     fails with its expected error code.
 func TestListQueryGolden_ParsesCorpus(t *testing.T) {
 	t.Parallel()
+
 	g, m := loadFilterGolden(t)
 	for _, c := range g.Cases {
 		got, err := listquery.Parse(m, c.Input)
 		if c.Want.ErrorCode != "" {
 			require.Error(t, err, c.Name)
 			assert.Equal(t, c.Want.ErrorCode, apperr.Code(err), c.Name)
+
 			continue
 		}
+
 		require.NoError(t, err, c.Name)
+
 		gotJSON, err := json.Marshal(filterWire(got))
 		require.NoError(t, err)
 		assert.Equal(
@@ -172,14 +189,18 @@ func TestListQueryGolden_ParsesCorpus(t *testing.T) {
 //     way.
 func TestParseFilter_MatchesParse(t *testing.T) {
 	t.Parallel()
+
 	g, m := loadFilterGolden(t)
 	for _, c := range g.Cases {
 		want, wantErr := listquery.Parse(m, c.Input)
+
 		var n types.FilterNode
+
 		got, gotErr := types.Filter(nil), json.Unmarshal([]byte(c.Input), &n)
 		if gotErr == nil {
 			got, gotErr = listquery.ParseFilter(m, n)
 		}
+
 		assert.Equal(t, apperr.Code(wantErr), apperr.Code(gotErr), c.Name)
 		assert.Equal(t, want, got, c.Name)
 	}
@@ -201,6 +222,7 @@ func TestParseFilter_MatchesParse(t *testing.T) {
 //     is the empty filter.
 func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 	t.Parallel()
+
 	_, m := loadFilterGolden(t)
 	clause := func(v any) types.FilterNode {
 		return types.FilterNode{
@@ -228,13 +250,19 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 	for range types.MaxFilterDepth + 1 {
 		deep = types.FilterNode{And: []types.FilterNode{deep}}
 	}
+
 	twoArms := clause(float64(1))
+
 	twoArms.Or = []types.FilterNode{clause(float64(2))}
+
 	withOp := func(op types.FilterOperator) types.FilterNode {
 		n := clause(float64(1))
+
 		n.Clause.Op = op
+
 		return n
 	}
+
 	for name, n := range map[string]types.FilterNode{
 		"fraction":         clause(1.5),
 		"beyond 2^53":      clause(float64(1 << 53)),
@@ -265,16 +293,21 @@ func FuzzFilterNode_RoundTrip(f *testing.F) {
 	for _, c := range g.Cases {
 		f.Add(c.Input)
 	}
+
 	f.Fuzz(func(t *testing.T, in string) {
 		var n types.FilterNode
+
 		if json.Unmarshal([]byte(in), &n) != nil {
 			return
 		}
+
 		out, err := json.Marshal(n)
 		if err != nil {
 			t.Fatalf("decoded tree does not encode: %v", err)
 		}
+
 		var again types.FilterNode
+
 		require.NoError(t, json.Unmarshal(out, &again))
 		require.Equal(t, n, again)
 

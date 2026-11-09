@@ -40,6 +40,7 @@ func NewPublisher(cfg Config) (*Publisher, error) {
 	if cfg.Client == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "redis messaging: nil client")
 	}
+
 	return &Publisher{client: cfg.Client}, nil
 }
 
@@ -49,6 +50,7 @@ func (p *Publisher) Publish(ctx context.Context, topic string, payload []byte) e
 	if err := p.client.Publish(ctx, topic, payload).Err(); err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis publish")
 	}
+
 	return nil
 }
 
@@ -66,6 +68,7 @@ func (p *Publisher) PublishCount(
 	if err != nil {
 		return 0, apperr.Wrap(err, apperr.CodeUnavailable, "redis publish")
 	}
+
 	return int(n), nil
 }
 
@@ -79,12 +82,15 @@ func (p *Publisher) PublishBatch(
 	if len(payloads) == 0 {
 		return nil
 	}
+
 	pipe := p.client.Pipeline()
 	for _, payload := range payloads {
 		pipe.Publish(ctx, topic, payload)
 	}
+
 	if _, err := pipe.Exec(ctx); err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis publish batch")
 	}
+
 	return nil
 }

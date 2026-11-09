@@ -53,10 +53,12 @@ func MetricsInterceptor(m interfaces.Metrics) connect.Interceptor {
 func (i metricsInterceptor) record(procedure string, start time.Time, err error) {
 	service, method := parseConnectProcedure(procedure)
 	i.requestDuration.Observe(time.Since(start).Seconds(), service, method)
+
 	code := "ok"
 	if err != nil {
 		code = connect.CodeOf(err).String()
 	}
+
 	i.requestsTotal.Inc(service, method, code)
 }
 
@@ -66,6 +68,7 @@ func (i metricsInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc 
 		start := time.Now()
 		resp, err := next(ctx, req)
 		i.record(req.Spec().Procedure, start, err)
+
 		return resp, err
 	}
 }
@@ -86,6 +89,7 @@ func (i metricsInterceptor) WrapStreamingHandler(
 		start := time.Now()
 		err := next(ctx, conn)
 		i.record(conn.Spec().Procedure, start, err)
+
 		return err
 	}
 }

@@ -26,13 +26,17 @@ func probeOf(
 ) *mocks.MockProbe[string] {
 	p := mocks.NewMockProbe[string](ctrl)
 	p.EXPECT().Name().Return(name).AnyTimes()
+
 	calls := 0
+
 	p.EXPECT().Run(gomock.Any(), "target").DoAndReturn(
 		func(context.Context, string) types.Verdict {
 			v := verdicts[min(calls, len(verdicts)-1)]
 			calls++
+
 			return v
 		}).AnyTimes()
+
 	return p
 }
 
@@ -43,8 +47,10 @@ func newSet(
 	probes ...interfaces.Probe[string],
 ) interfaces.ProbeSet[string] {
 	t.Helper()
+
 	set, err := probe.NewSet(fixtures.Decorations(), "guards", probes, opts)
 	require.NoError(t, err)
+
 	return set
 }
 
@@ -61,6 +67,7 @@ func newSet(
 //     listed in Detail; a warning keeps its status.
 func TestServicesProbe_OneStepPerProbeInOrder(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	set := newSet(
 		t,
@@ -114,6 +121,7 @@ func TestServicesProbe_OneStepPerProbeInOrder(t *testing.T) {
 //     probe's detail.
 func TestServicesProbe_Strict(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	skip := types.Verdict{Status: types.StatusSkip, Detail: "helm not installed"}
 
@@ -143,16 +151,21 @@ func TestServicesProbe_Strict(t *testing.T) {
 //     the other probes' steps are unaffected.
 func TestServicesProbe_Timeout(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	release := make(chan struct{})
+
 	t.Cleanup(func() { close(release) })
+
 	hung := mocks.NewMockProbe[string](ctrl)
 	hung.EXPECT().Name().Return("hung").AnyTimes()
 	hung.EXPECT().Run(gomock.Any(), "target").DoAndReturn(
 		func(context.Context, string) types.Verdict {
 			<-release
+
 			return types.Verdict{Status: types.StatusPass}
 		})
+
 	set := newSet(t, probe.Options{Timeout: 50 * time.Millisecond},
 		hung, probeOf(ctrl, "ok", types.Verdict{Status: types.StatusPass}))
 	res, err := set.Run(t.Context(), "target")
@@ -174,6 +187,7 @@ func TestServicesProbe_Timeout(t *testing.T) {
 //     once.
 func TestServicesProbe_Retry(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	flaky := types.Verdict{Status: types.StatusFail, Transient: true, Detail: "not ready"}
 	pass := types.Verdict{Status: types.StatusPass}
@@ -196,6 +210,7 @@ func TestServicesProbe_Retry(t *testing.T) {
 	once.EXPECT().Name().Return("once").AnyTimes()
 	once.EXPECT().Run(gomock.Any(), "target").
 		Return(types.Verdict{Status: types.StatusFail, Detail: "bad"}).Times(1)
+
 	res, err = newSet(t, probe.Options{Retry: 3}, once).Run(t.Context(), "target")
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, res[0].Status)
@@ -212,9 +227,11 @@ func TestServicesProbe_Retry(t *testing.T) {
 //     INVALID_INPUT from NewSet.
 func TestServicesProbe_CancelledAndInvalid(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	_, err := newSet(
 		t,
 		probe.Options{},
@@ -229,6 +246,7 @@ func TestServicesProbe_CancelledAndInvalid(t *testing.T) {
 		probe.Options{Retry: -1},
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
 	_, err = probe.NewSet[string](
 		fixtures.Decorations(),
 		"g",
@@ -251,12 +269,14 @@ func TestServicesProbe_CancelledAndInvalid(t *testing.T) {
 //     steps are unaffected.
 func TestServicesProbe_PanickingProbe(t *testing.T) {
 	t.Parallel()
+
 	for _, opts := range []probe.Options{{}, {Timeout: time.Minute}} {
 		ctrl := gomock.NewController(t)
 		bad := mocks.NewMockProbe[string](ctrl)
 		bad.EXPECT().Name().Return("bad").AnyTimes()
 		bad.EXPECT().Run(gomock.Any(), "target").DoAndReturn(
 			func(context.Context, string) types.Verdict { panic("nil map") })
+
 		res, err := newSet(t, opts, bad,
 			probeOf(ctrl, "ok", types.Verdict{Status: types.StatusPass})).
 			Run(t.Context(), "target")

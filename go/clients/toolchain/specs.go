@@ -14,17 +14,21 @@ import (
 // DefsFromTools.
 func ProjectLifecycleTools(tools []types.ToolEntry) ([]types.ToolDef, error) {
 	var out []types.ToolDef
+
 	for i := range tools {
 		entry := tools[i]
 		if !entry.InLifecycle() {
 			continue
 		}
+
 		def, err := projectTool(entry)
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, def)
 	}
+
 	return out, nil
 }
 
@@ -36,17 +40,21 @@ func ProjectToolsByCategory(
 	cat types.ToolCategory,
 ) ([]types.ToolDef, error) {
 	var out []types.ToolDef
+
 	for i := range tools {
 		entry := tools[i]
 		if entry.Category != cat {
 			continue
 		}
+
 		def, err := projectTool(entry)
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, def)
 	}
+
 	return out, nil
 }
 
@@ -73,6 +81,7 @@ func projectTool(e types.ToolEntry) (types.ToolDef, error) {
 				fmt.Sprintf("tool %q min_version", e.Binary),
 			)
 		}
+
 		def.MinVersion = &v
 	}
 
@@ -81,6 +90,7 @@ func projectTool(e types.ToolEntry) (types.ToolDef, error) {
 		for platform := range e.Install {
 			methods[platform] = buildInstallMethod(e.Install[platform])
 		}
+
 		def.InstallMethods = methods
 	}
 
@@ -106,6 +116,7 @@ func parseGoVersion(s string) string {
 			return part[2:]
 		}
 	}
+
 	return types.ParseFirstVersion(s)
 }
 
@@ -124,6 +135,7 @@ func buildInstallMethod(m types.InstallMethodEntry) types.InstallMethod {
 			m.Repo,
 			m.Tag,
 		)
+
 		return types.InstallMethod{Download: buildDownload(m, base)}
 	case types.InstallKindURL:
 		return types.InstallMethod{
@@ -131,6 +143,7 @@ func buildInstallMethod(m types.InstallMethodEntry) types.InstallMethod {
 		}
 	case types.InstallKindCommand:
 	}
+
 	// types.InstallKindCommand; validation rejects any other kind.
 	return types.InstallMethod{Command: m.Command, Args: m.Args}
 }
@@ -146,5 +159,6 @@ func buildDownload(m types.InstallMethodEntry, base string) *types.Download {
 			Member: a.Member,
 		}
 	}
+
 	return &types.Download{Artifacts: artifacts, Binary: m.Binary, Version: m.Version}
 }

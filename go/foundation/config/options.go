@@ -80,9 +80,11 @@ func WithExtraEnv(bindings map[string][]string) options.Option[Config] {
 	return func(c *Config) {
 		merged := make(map[string][]string, len(c.Viper.ExtraEnv)+len(bindings))
 		maps.Copy(merged, c.Viper.ExtraEnv)
+
 		for key, names := range bindings {
 			merged[key] = slices.Clone(names)
 		}
+
 		c.Viper.ExtraEnv = merged
 	}
 }

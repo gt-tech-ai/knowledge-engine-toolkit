@@ -36,10 +36,13 @@ var _ interfaces.Deduplicator = (*Memory)(nil)
 func (m *Memory) Seen(_ context.Context, key string) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	now := time.Now()
 	if seenAt, ok := m.seen[key]; ok && (m.ttl == 0 || now.Sub(seenAt) < m.ttl) {
 		return true, nil
 	}
+
 	m.seen[key] = now
+
 	return false, nil
 }

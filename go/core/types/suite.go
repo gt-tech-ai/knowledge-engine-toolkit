@@ -53,6 +53,7 @@ func (s Selection) Matches(name, verb string, tags []string) bool {
 		slices.ContainsFunc(s.ExcludeTags, has):
 		return false
 	}
+
 	return true
 }
 

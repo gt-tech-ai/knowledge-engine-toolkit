@@ -24,9 +24,11 @@ import (
 //     or an argument changes, including when bytes move between fields.
 func TestFoundationStepcache_Key(t *testing.T) {
 	t.Parallel()
+
 	base := stepcache.Key([]byte("src"), "v1", []string{"run", "./..."})
 	assert.Len(t, base, 64)
 	assert.Equal(t, base, stepcache.Key([]byte("src"), "v1", []string{"run", "./..."}))
+
 	for name, other := range map[string]string{
 		"input":   stepcache.Key([]byte("srd"), "v1", []string{"run", "./..."}),
 		"version": stepcache.Key([]byte("src"), "v2", []string{"run", "./..."}),
@@ -49,12 +51,14 @@ func TestFoundationStepcache_Key(t *testing.T) {
 //     key; an unknown kind and a dir kind with no directory are INVALID_INPUT.
 func TestFoundationStepcache_Kinds(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	key := stepcache.Key([]byte("a"), "v", nil)
 
 	off, err := stepcache.NewFromConfig(stepcache.Config{})
 	require.NoError(t, err)
 	require.NoError(t, off.Record(ctx, key))
+
 	hit, err := off.Hit(ctx, key)
 	require.NoError(t, err)
 	assert.False(t, hit)
@@ -65,19 +69,24 @@ func TestFoundationStepcache_Kinds(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, c.Record(ctx, key))
 	require.NoError(t, c.Record(ctx, key))
+
 	again, err := stepcache.NewFromConfig(cfg)
 	require.NoError(t, err)
+
 	hit, err = again.Hit(ctx, key)
 	require.NoError(t, err)
 	assert.True(t, hit)
+
 	hit, err = again.Hit(ctx, stepcache.Key([]byte("b"), "v", nil))
 	require.NoError(t, err)
 	assert.False(t, hit)
+
 	_, err = again.Hit(ctx, "../../etc/passwd")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	_, err = stepcache.NewFromConfig(stepcache.Config{Kind: "redis"})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
 	_, err = stepcache.NewFromConfig(stepcache.Config{Kind: stepcache.KindDir})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
@@ -95,6 +104,7 @@ func TestFoundationStepcache_Kinds(t *testing.T) {
 //     BinarySalt is a stable hex SHA-256 of the running executable.
 func TestFoundationStepcache_SaltPartitionsKeys(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	root := t.TempDir()
 	key := stepcache.Key([]byte("a"), "v", nil)
@@ -103,9 +113,11 @@ func TestFoundationStepcache_SaltPartitionsKeys(t *testing.T) {
 			Kind: stepcache.KindDir, Dir: root, Salt: salt,
 		})
 		require.NoError(t, err)
+
 		return c
 	}
 	require.NoError(t, open("a").Record(ctx, key))
+
 	for salt, want := range map[string]bool{"a": true, "b": false, "": false} {
 		hit, err := open(salt).Hit(ctx, key)
 		require.NoError(t, err)
@@ -115,6 +127,7 @@ func TestFoundationStepcache_SaltPartitionsKeys(t *testing.T) {
 	salt, err := stepcache.BinarySalt()
 	require.NoError(t, err)
 	assert.Regexp(t, `^[0-9a-f]{64}$`, salt)
+
 	again, err := stepcache.BinarySalt()
 	require.NoError(t, err)
 	assert.Equal(t, salt, again)
@@ -133,29 +146,35 @@ func TestFoundationStepcache_SaltPartitionsKeys(t *testing.T) {
 //     error until the cache is used.
 func TestFoundationStepcache_SaltDirsAndBinary(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	root, policy := t.TempDir(), t.TempDir()
 	file := filepath.Join(policy, "rules.yaml")
 	require.NoError(t, os.WriteFile(file, []byte("max: 1\n"), 0o600))
+
 	key := stepcache.Key([]byte("a"), "v", nil)
 	open := func(dirs ...string) interfaces.StepCache {
 		c, err := stepcache.NewFromConfig(stepcache.Config{
 			Kind: stepcache.KindDir, Dir: root, SaltBinary: true, SaltDirs: dirs,
 		})
 		require.NoError(t, err)
+
 		return c
 	}
 	require.NoError(t, open(policy).Record(ctx, key))
+
 	hit, err := open(policy).Hit(ctx, key)
 	require.NoError(t, err)
 	assert.True(t, hit, "unchanged salt dirs hit")
 
 	require.NoError(t, os.WriteFile(file, []byte("max: 2\n"), 0o600))
+
 	hit, err = open(policy).Hit(ctx, key)
 	require.NoError(t, err)
 	assert.False(t, hit, "an edited salt dir misses")
 
 	missing := open(filepath.Join(policy, "absent"))
+
 	_, err = missing.Hit(ctx, key)
 	require.NoError(t, err, "a missing salt dir hashes empty")
 }

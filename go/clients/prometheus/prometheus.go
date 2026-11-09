@@ -87,18 +87,22 @@ func newHTTP(
 			"prometheus: http.base_url is required for the http kind",
 		)
 	}
+
 	name := cfg.Name
 	if name == "" {
 		name = "prometheus"
 	}
+
 	base, err := client.NewWireBase(deps.Decorations, name)
 	if err != nil {
 		return nil, err
 	}
+
 	doer := deps.Doer
 	if doer == nil {
 		doer = &nethttp.Client{Timeout: cfg.HTTP.Timeout}
 	}
+
 	return promhttp.New(cfg.HTTP.BaseURL, promhttp.DecorateDoer(
 		doer, base, cfg.HTTP.MaxBodyBytes,
 	)), nil

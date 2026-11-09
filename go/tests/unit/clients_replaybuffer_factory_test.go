@@ -36,6 +36,7 @@ func TestReplayBufferFactory(t *testing.T) {
 	}, replaybuffer.Deps{})
 	require.NoError(t, err)
 	require.NoError(t, buf.Append(context.Background(), "k", "msg-1", []byte("x")))
+
 	tail, complete, err := buf.ReplayAfter(context.Background(), "k", "msg-1")
 	require.NoError(t, err)
 	assert.True(t, complete)
@@ -72,12 +73,14 @@ func TestReplayBufferFactory(t *testing.T) {
 //     forever).
 func TestReplayBufferTimeoutDecorator(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	base := pkgmocks.NewMockReplayBuffer(ctrl)
 	base.EXPECT().
 		Append(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(ctx context.Context, _, _ string, _ []byte) error {
 			<-ctx.Done() // wedged backend: only returns once the timeout cancels the context
+
 			return ctx.Err()
 		})
 

@@ -38,6 +38,7 @@ func toolOf(ctrl *gomock.Controller, binary string) *mocks.MockToolSpec {
 	spec.EXPECT().Cmd(gomock.Any()).DoAndReturn(func(args ...string) (string, []string) {
 		return binary, args
 	}).AnyTimes()
+
 	return spec
 }
 
@@ -49,6 +50,7 @@ func newToolRunner(
 	cache interfaces.StepCache,
 ) interfaces.ToolRunner {
 	t.Helper()
+
 	tr, err := toolrun.NewFromConfig(toolrun.Config{}, toolrun.Deps{
 		Decorations: fixtures.Decorations(),
 		Runner:      runner,
@@ -60,6 +62,7 @@ func newToolRunner(
 		Versions: func(string) string { return "v1" },
 	})
 	require.NoError(t, err)
+
 	return tr
 }
 
@@ -76,9 +79,11 @@ func newToolRunner(
 //     tool (`uv run ruff`) runs when its prefix is installed.
 func TestServicesToolrun_MissingAndUnknownTool(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
 	runner.EXPECT().Exists("hadolint").Return(false).AnyTimes()
+
 	tr := newToolRunner(t, runner, toolOf(ctrl, "hadolint"), nil)
 	cb := memoryCodebase(t, map[string]string{"Dockerfile": "FROM x\n"})
 	run := types.ToolRun{Name: "hadolint", Verb: "lint", Tool: "hadolint"}
@@ -111,6 +116,7 @@ func TestServicesToolrun_MissingAndUnknownTool(t *testing.T) {
 	runner.EXPECT().Exists("uv").Return(true).AnyTimes()
 	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "uv", "run", "ruff", "check").
 		Return(interfaces.CmdResult{})
+
 	res, err = newToolRunner(t, runner, ruff, nil).Run(t.Context(), cb,
 		types.ToolRun{Name: "ruff", Verb: "lint", Tool: "ruff", Args: []string{"check"}},
 		types.RunOptions{})
@@ -137,6 +143,7 @@ func TestServicesToolrun_MissingAndUnknownTool(t *testing.T) {
 //     its own step.
 func TestServicesToolrun_EachTargetFansOut(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
 	runner.EXPECT().Exists("golangci-lint").Return(true).AnyTimes()
@@ -148,6 +155,7 @@ func TestServicesToolrun_EachTargetFansOut(t *testing.T) {
 		Err:      apperr.New(apperr.CodeInternal, "exit 1"),
 		Stdout:   []byte("bad"),
 	})
+
 	tr := newToolRunner(t, runner, toolOf(ctrl, "golangci-lint"), nil)
 	res, err := tr.Run(t.Context(), memoryCodebase(t, lintModules()), types.ToolRun{
 		Name: "golangci-lint", Verb: "lint", Tool: "golangci-lint",
@@ -175,6 +183,7 @@ func TestServicesToolrun_EachTargetFansOut(t *testing.T) {
 //     step; the gcc parser's findings carry the run's name as their check.
 func TestServicesToolrun_EachRunAndParse(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
 	runner.EXPECT().Exists("shellcheck").Return(true)
@@ -183,6 +192,7 @@ func TestServicesToolrun_EachRunAndParse(t *testing.T) {
 		ExitCode: 1, Err: apperr.New(apperr.CodeInternal, "exit 1"),
 		Stdout: []byte("a.sh:3:1: warning: quote this\n"),
 	})
+
 	tr := newToolRunner(t, runner, toolOf(ctrl, "shellcheck"), nil)
 	res, err := tr.Run(t.Context(),
 		memoryCodebase(t, map[string]string{"a.sh": "", "b/c.sh": "", "d.md": ""}),
@@ -212,15 +222,18 @@ func TestServicesToolrun_EachRunAndParse(t *testing.T) {
 //     version is probed.
 func TestServicesToolrun_Cache(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	cache, err := stepcache.NewFromConfig(stepcache.Config{
 		Kind: stepcache.KindDir, Dir: t.TempDir(),
 	})
 	require.NoError(t, err)
+
 	runner := mocks.NewMockCommandRunner(ctrl)
 	runner.EXPECT().Exists("vet").Return(true).AnyTimes()
 	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "vet", gomock.Any()).
 		Return(interfaces.CmdResult{}).Times(3)
+
 	tr := newToolRunner(t, runner, toolOf(ctrl, "vet"), cache)
 	run := types.ToolRun{
 		Name: "vet", Verb: "lint", Tool: "vet", Args: []string{"{target}"},
@@ -242,10 +255,13 @@ func TestServicesToolrun_Cache(t *testing.T) {
 	assert.Equal(t, types.StatusPass, res[1].Status)
 
 	uncached := run
+
 	uncached.Inputs = types.FileSelector{}
 	uncached.Each = types.EachRun
+
 	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "vet", "a", "b").
 		Return(interfaces.CmdResult{}).Times(2)
+
 	for range 2 {
 		res, err = tr.Run(
 			t.Context(),
@@ -259,6 +275,7 @@ func TestServicesToolrun_Cache(t *testing.T) {
 
 	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "vet", gomock.Any()).
 		Return(interfaces.CmdResult{}).Times(4)
+
 	off, err := toolrun.NewFromConfig(toolrun.Config{}, toolrun.Deps{
 		Decorations: fixtures.Decorations(),
 		Runner:      runner,
@@ -268,10 +285,12 @@ func TestServicesToolrun_Cache(t *testing.T) {
 		},
 		Versions: func(string) string {
 			t.Error("the off cache probed a tool version")
+
 			return ""
 		},
 	})
 	require.NoError(t, err)
+
 	for range 2 {
 		res, err = off.Run(t.Context(), memoryCodebase(t, files), run, types.RunOptions{})
 		require.NoError(t, err)
@@ -291,11 +310,13 @@ func TestServicesToolrun_Cache(t *testing.T) {
 //     is then cached.
 func TestServicesToolrun_RunEditMissesCache(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	cache, err := stepcache.NewFromConfig(stepcache.Config{
 		Kind: stepcache.KindDir, Dir: t.TempDir(),
 	})
 	require.NoError(t, err)
+
 	runner := mocks.NewMockCommandRunner(ctrl)
 	runner.EXPECT().Exists("vet").Return(true).AnyTimes()
 	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "vet", gomock.Any()).
@@ -303,6 +324,7 @@ func TestServicesToolrun_RunEditMissesCache(t *testing.T) {
 	runner.EXPECT().RunBufferedWithEnv(
 		gomock.Any(), gomock.Any(), gomock.Any(), "vet", gomock.Any(),
 	).Return(interfaces.CmdResult{}).Times(1)
+
 	tr := newToolRunner(t, runner, toolOf(ctrl, "vet"), cache)
 	run := types.ToolRun{
 		Name: "vet", Verb: "lint", Tool: "vet", Args: []string{"."},
@@ -310,11 +332,15 @@ func TestServicesToolrun_RunEditMissesCache(t *testing.T) {
 		Inputs: types.FileSelector{Exts: []string{".go"}},
 	}
 	edited := run
+
 	edited.Env = []string{"GOFLAGS=-tags=e2e"}
+
 	cb := memoryCodebase(t, lintModules())
+
 	for i, r := range []types.ToolRun{run, run, edited, edited} {
 		res, err := tr.Run(t.Context(), cb, r, types.RunOptions{})
 		require.NoError(t, err)
+
 		want := []types.StepStatus{
 			types.StatusPass, types.StatusSkip, types.StatusPass, types.StatusSkip,
 		}[i]
@@ -334,9 +360,11 @@ func TestServicesToolrun_RunEditMissesCache(t *testing.T) {
 //     both each: target and each: run, and the tool never runs.
 func TestServicesToolrun_NoTargetsSkips(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
 	runner.EXPECT().Exists("shellcheck").Return(true).AnyTimes()
+
 	tr := newToolRunner(t, runner, toolOf(ctrl, "shellcheck"), nil)
 	for _, each := range []string{types.EachTarget, types.EachRun} {
 		res, err := tr.Run(t.Context(), memoryCodebase(t, map[string]string{"a.md": ""}),
@@ -369,11 +397,13 @@ func TestServicesToolrun_NoTargetsSkips(t *testing.T) {
 //     escaping the root is INVALID_INPUT.
 func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	cache, err := stepcache.NewFromConfig(stepcache.Config{
 		Kind: stepcache.KindDir, Dir: t.TempDir(),
 	})
 	require.NoError(t, err)
+
 	runner := mocks.NewMockCommandRunner(ctrl)
 	runner.EXPECT().Exists("buf").Return(true).AnyTimes()
 	runner.EXPECT().RunBuffered(gomock.Any(), filepath.Join(toolrunRoot, "zarf", "proto"),
@@ -381,6 +411,7 @@ func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 		ExitCode: 1, Err: apperr.New(apperr.CodeInternal, "exit 1"),
 		Stdout: []byte("removed field"),
 	}).Times(2)
+
 	tr := newToolRunner(t, runner, toolOf(ctrl, "buf"), cache)
 	cb := memoryCodebase(
 		t,
@@ -403,6 +434,7 @@ func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 
 	runner.EXPECT().RunBuffered(gomock.Any(), toolrunRoot, "buf", "lint").
 		Return(interfaces.CmdResult{})
+
 	res, err := tr.Run(t.Context(), cb, types.ToolRun{
 		Name: "lint", Verb: "check", Tool: "buf", Args: []string{"lint"},
 	}, types.RunOptions{})
@@ -429,11 +461,13 @@ func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 //     variable; changing a var's value misses the cache.
 func TestServicesToolrun_RunOptions(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	cache, err := stepcache.NewFromConfig(stepcache.Config{
 		Kind: stepcache.KindDir, Dir: t.TempDir(),
 	})
 	require.NoError(t, err)
+
 	runner := mocks.NewMockCommandRunner(ctrl)
 	runner.EXPECT().Exists("trivy").Return(true).AnyTimes()
 	runner.EXPECT().Exists("hadolint").Return(false).AnyTimes()
@@ -441,6 +475,7 @@ func TestServicesToolrun_RunOptions(t *testing.T) {
 		"--exit-code", "1").Return(interfaces.CmdResult{})
 	runner.EXPECT().RunBuffered(gomock.Any(), toolrunRoot, "trivy", "image", "api:2",
 		"--exit-code", "1").Return(interfaces.CmdResult{})
+
 	spec := toolOf(ctrl, "trivy")
 	tr, err := toolrun.NewFromConfig(toolrun.Config{}, toolrun.Deps{
 		Decorations: fixtures.Decorations(), Runner: runner, Root: toolrunRoot,
@@ -449,10 +484,12 @@ func TestServicesToolrun_RunOptions(t *testing.T) {
 			if name == "hadolint" {
 				return toolOf(ctrl, "hadolint"), true
 			}
+
 			return spec, name == "trivy"
 		},
 	})
 	require.NoError(t, err)
+
 	cb := memoryCodebase(t, map[string]string{"Dockerfile": "FROM x\n"})
 
 	res, err := tr.Run(t.Context(), cb,
@@ -491,12 +528,14 @@ func TestServicesToolrun_RunOptions(t *testing.T) {
 //     with no Env keeps the plain call.
 func TestServicesToolrun_Env(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
 	runner.EXPECT().Exists("ruff").Return(true)
 	runner.EXPECT().RunBufferedWithEnv(gomock.Any(), gomock.Any(),
 		[]string{"-VIRTUAL_ENV", "MODE=ci"}, "ruff", "check").
 		Return(interfaces.CmdResult{})
+
 	tr := newToolRunner(t, runner, toolOf(ctrl, "ruff"), nil)
 	res, err := tr.Run(t.Context(), nil, types.ToolRun{
 		Name: "ruff", Verb: "lint", Tool: "ruff", Args: []string{"check"},

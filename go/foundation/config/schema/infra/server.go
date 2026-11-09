@@ -50,5 +50,6 @@ func (c ServerConfig) Validate() error {
 	if c.Port == 0 {
 		return apperr.InvalidInput("server.port is required (got 0)")
 	}
+
 	return nil
 }

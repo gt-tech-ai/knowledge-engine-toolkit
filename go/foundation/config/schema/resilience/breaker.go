@@ -53,11 +53,14 @@ func (c BreakerConfig) Validate() error {
 			"resilience.circuit_breaker.failure_ratio must be in [0,1]",
 		)
 	}
+
 	if c.Interval < 0 {
 		return apperr.InvalidInput("resilience.circuit_breaker.interval must be >= 0")
 	}
+
 	if c.Timeout < 0 {
 		return apperr.InvalidInput("resilience.circuit_breaker.timeout must be >= 0")
 	}
+
 	return nil
 }

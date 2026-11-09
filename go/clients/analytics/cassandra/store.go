@@ -88,7 +88,9 @@ func New(session interfaces.CQLSession, cfg Config) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	s.session = session
+
 	return s, nil
 }
 
@@ -103,7 +105,9 @@ func NewLazy(
 	if err != nil {
 		return nil, err
 	}
+
 	s.dial = dial
+
 	return s, nil
 }
 
@@ -112,15 +116,19 @@ func newStore(cfg Config) (*Store, error) {
 	if cfg.PageSize <= 0 {
 		cfg.PageSize = 500
 	}
+
 	if cfg.MaxConcurrentBuckets <= 0 {
 		cfg.MaxConcurrentBuckets = 8
 	}
+
 	if cfg.SchemaPollInterval <= 0 {
 		cfg.SchemaPollInterval = time.Second
 	}
+
 	if cfg.SchemaTimeout <= 0 {
 		cfg.SchemaTimeout = 2 * time.Minute
 	}
+
 	for cube, grains := range cfg.Cubes {
 		if !identifier.MatchString(cube) {
 			return nil, apperr.New(
@@ -128,6 +136,7 @@ func newStore(cfg Config) (*Store, error) {
 				"analytics: invalid cube name "+cube,
 			)
 		}
+
 		for _, g := range grains {
 			width, ok := cfg.BucketWidth[g]
 			if !ok {
@@ -136,6 +145,7 @@ func newStore(cfg Config) (*Store, error) {
 					"analytics: no bucket width for grain "+string(g),
 				)
 			}
+
 			if !chartspec.ValidGrain(g) || !chartspec.ValidGrain(width) {
 				return nil, apperr.New(
 					apperr.CodeInvalidInput,
@@ -144,6 +154,7 @@ func newStore(cfg Config) (*Store, error) {
 			}
 		}
 	}
+
 	return &Store{cfg: cfg}, nil
 }
 
@@ -160,6 +171,7 @@ func SchemaCQL(keyspace, cube string, grain types.Grain) (string, error) {
 			"analytics: invalid keyspace or cube name",
 		)
 	}
+
 	return "CREATE TABLE IF NOT EXISTS " + keyspace + "." + TableName(cube, grain) + ` (
   org_id text, cube text, bucket timestamp, ts timestamp, dims_key text,
   idempotency_key text,
@@ -175,25 +187,34 @@ func SchemaCQL(keyspace, cube string, grain types.Grain) (string, error) {
 func (s *Store) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	dialed := false
+
 	if s.session == nil && s.dial != nil {
 		session, err := s.dial(ctx)
 		if err != nil {
 			return err
 		}
+
 		s.session, dialed = session, true
 	}
+
 	if !s.cfg.EnsureSchema || s.schemaReady || s.session == nil {
 		return nil
 	}
+
 	if err := s.ensureSchema(ctx, s.session); err != nil {
 		if dialed {
 			s.session.Close()
+
 			s.session = nil
 		}
+
 		return err
 	}
+
 	s.schemaReady = true
+
 	return nil
 }
 
@@ -201,10 +222,13 @@ func (s *Store) Start(ctx context.Context) error {
 func (s *Store) Stop(context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if s.session != nil {
 		s.session.Close()
+
 		s.session = nil
 	}
+
 	return nil
 }
 
@@ -223,10 +247,12 @@ func (s *Store) Readiness(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
 	err = session.Query(readinessQuery).WithContext(ctx).Idempotent(true).Exec()
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "analytics: store is not ready")
 	}
+
 	return nil
 }
 
@@ -234,9 +260,11 @@ func (s *Store) Readiness(ctx context.Context) error {
 func (s *Store) sess() (interfaces.CQLSession, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	if s.session == nil {
 		return nil, apperr.New(apperr.CodeUnavailable, "analytics: store is not started")
 	}
+
 	return s.session, nil
 }
 
@@ -247,6 +275,7 @@ func DimsKey(dims map[string]string) string {
 	for k, v := range dims {
 		values.Set(k, v)
 	}
+
 	return values.Encode()
 }
 
@@ -261,11 +290,14 @@ func (s *Store) Write(ctx context.Context, facts []types.Fact) error {
 		grain    types.Grain
 		fact     types.Fact
 	}
+
 	session, err := s.sess()
 	if err != nil {
 		return err
 	}
+
 	var jobs []job
+
 	for _, fact := range facts {
 		grains, ok := s.cfg.Cubes[fact.Cube]
 		if !ok {
@@ -274,35 +306,43 @@ func (s *Store) Write(ctx context.Context, facts []types.Fact) error {
 				"analytics: undeclared cube "+fact.Cube,
 			)
 		}
+
 		if fact.OrgID == "" || fact.IdempotencyKey == "" {
 			return apperr.New(
 				apperr.CodeInvalidInput,
 				"analytics: a fact needs an org_id and an idempotency_key",
 			)
 		}
+
 		if fact.Schema != 0 && fact.Schema != types.FactSchemaVersion {
 			return apperr.New(
 				apperr.CodeInvalidInput,
 				"analytics: unknown fact schema version",
 			)
 		}
+
 		partials := make(map[string][]byte, len(fact.Measures))
 		for name, v := range fact.Measures {
 			p, err := chartspec.NewPartial(v)
 			if err != nil {
 				return err
 			}
+
 			partials[name] = chartspec.EncodePartial(p)
 		}
+
 		for _, grain := range grains {
 			jobs = append(jobs, job{partials: partials, fact: fact, grain: grain})
 		}
 	}
+
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(s.cfg.MaxConcurrentBuckets)
+
 	for _, j := range jobs {
 		g.Go(func() error { return s.insert(gctx, session, j.fact, j.grain, j.partials) })
 	}
+
 	return g.Wait()
 }
 
@@ -327,10 +367,13 @@ func (s *Store) insert(
 		fact.Dims,
 		partials,
 	}
+
 	if ttl := s.cfg.TTL[grain]; ttl > 0 {
 		stmt += " USING TTL ?"
+
 		args = append(args, int(ttl/time.Second))
 	}
+
 	return session.Query(stmt, args...).WithContext(ctx).Idempotent(true).Exec()
 }
 
@@ -351,16 +394,19 @@ func (s *Store) Aggregate(
 			"analytics: undeclared cube "+q.Cube,
 		)
 	}
+
 	grain := q.Grain
 	if grain == "" && len(grains) > 0 {
 		grain = coarsest(grains)
 	}
+
 	if !slices.Contains(grains, grain) {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"analytics: cube "+q.Cube+" has no grain "+string(grain),
 		)
 	}
+
 	if q.OrgID == "" || q.TimeRange.From.IsZero() || q.TimeRange.To.IsZero() ||
 		!q.TimeRange.From.Before(q.TimeRange.To) {
 		return nil, apperr.New(
@@ -368,27 +414,34 @@ func (s *Store) Aggregate(
 			"analytics: a query needs an org_id and a bounded time range",
 		)
 	}
+
 	width := s.cfg.BucketWidth[grain]
 	lo, hi := pushdown(q.Filter, q.TimeRange.From.UTC(), q.TimeRange.To.UTC())
 	// A row is stamped at its grain bucket's start, so the read starts at the bucket
 	// lo falls in: a window starting mid-bucket counts that bucket rather than losing it.
 	lo = chartspec.Truncate(lo, grain)
+
 	var buckets []time.Time
+
 	for b := chartspec.Truncate(lo, width); b.Before(hi); b = chartspec.Next(b, width) {
 		buckets = append(buckets, b)
 	}
+
 	fingerprint, err := queryFingerprint(q)
 	if err != nil {
 		return nil, err
 	}
+
 	resume, err := decodeToken(q.ResumeToken, fingerprint)
 	if err != nil {
 		return nil, err
 	}
+
 	session, err := s.sess()
 	if err != nil {
 		return nil, err
 	}
+
 	plan := &readPlan{
 		session:     session,
 		fingerprint: fingerprint,
@@ -402,6 +455,7 @@ func (s *Store) Aggregate(
 		measures:    measureNames(q.Measures),
 		keep:        compileResidual(q.Filter),
 	}
+
 	return newStream(ctx, plan, buckets, resume, s.cfg.MaxConcurrentBuckets), nil
 }
 
@@ -418,16 +472,19 @@ func coarsest(grains []types.Grain) types.Grain {
 			return g
 		}
 	}
+
 	return grains[0]
 }
 
 // measureNames returns the distinct measure names q computes.
 func measureNames(measures []types.MeasureRef) []string {
 	var out []string
+
 	for _, m := range measures {
 		if !slices.Contains(out, m.Name) {
 			out = append(out, m.Name)
 		}
 	}
+
 	return out
 }

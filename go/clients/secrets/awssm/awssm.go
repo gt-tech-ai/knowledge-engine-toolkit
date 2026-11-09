@@ -77,6 +77,7 @@ func NewClient(
 			"loading aws config for secrets manager",
 		)
 	}
+
 	return New(secretsmanager.NewFromConfig(awsCfg), locs), nil
 }
 
@@ -91,6 +92,7 @@ func (s source) Get(ctx context.Context, ref types.Ref) (types.Secret, error) {
 			fmt.Sprintf("no secrets-manager location mapped for credential %s", ref),
 		)
 	}
+
 	out, err := s.api.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(loc.SecretID),
 	})
@@ -101,12 +103,15 @@ func (s source) Get(ctx context.Context, ref types.Ref) (types.Secret, error) {
 			"fetching secret from secrets manager",
 		)
 	}
+
 	if out.SecretString == nil {
 		return types.Secret{}, apperr.NotFound(
 			fmt.Sprintf("secret %q has no string value for %s", loc.SecretID, ref),
 		)
 	}
+
 	var fields map[string]string
+
 	if err := json.Unmarshal([]byte(*out.SecretString), &fields); err != nil {
 		return types.Secret{}, apperr.Wrap(
 			err,
@@ -114,6 +119,7 @@ func (s source) Get(ctx context.Context, ref types.Ref) (types.Secret, error) {
 			"decoding secrets manager json",
 		)
 	}
+
 	value, found := fields[loc.Field]
 	if !found || value == "" {
 		return types.Secret{}, apperr.NotFound(
@@ -125,6 +131,7 @@ func (s source) Get(ctx context.Context, ref types.Ref) (types.Secret, error) {
 			),
 		)
 	}
+
 	return types.NewSecret(value), nil
 }
 

@@ -35,8 +35,10 @@ func shelfLeaves() []types.FieldRef {
 func genShelf(r *rand.Rand, depth int) *types.AlgebraExpr {
 	if depth <= 1 || r.Intn(3) == 0 {
 		leaf := shelfLeaves()[r.Intn(len(shelfLeaves()))]
+
 		return &types.AlgebraExpr{Field: &leaf}
 	}
+
 	opsList := []types.AlgebraOp{
 		types.AlgebraCross,
 		types.AlgebraConcat,
@@ -44,9 +46,11 @@ func genShelf(r *rand.Rand, depth int) *types.AlgebraExpr {
 	}
 	n := 1 + r.Intn(3)
 	args := make([]*types.AlgebraExpr, n)
+
 	for i := range args {
 		args[i] = genShelf(r, depth-1)
 	}
+
 	return &types.AlgebraExpr{Op: opsList[r.Intn(len(opsList))], Args: args}
 }
 
@@ -63,9 +67,12 @@ func tupleKeys(tuples []chartspec.Tuple) []string {
 		for _, f := range t.Fields {
 			names = append(names, f.Key())
 		}
+
 		out = append(out, strings.Join(names, ","))
 	}
+
 	slices.Sort(out)
+
 	return out
 }
 
@@ -99,6 +106,7 @@ func TestAlgebra_CrossDistributesOverConcat(t *testing.T) {
 				op(types.AlgebraCross, a.E, c.E),
 			),
 		)
+
 		return slices.Equal(tupleKeys(left), tupleKeys(right))
 	}
 	require.NoError(t, quick.Check(law, &quick.Config{MaxCount: 300}))
@@ -143,10 +151,12 @@ func TestAlgebra_NestIsSubsetOfCross(t *testing.T) {
 	law := func(a, b randShelf) bool {
 		nest := chartspec.Normalize(op(types.AlgebraNest, a.E, b.E))
 		cross := tupleKeys(chartspec.Normalize(op(types.AlgebraCross, a.E, b.E)))
+
 		for _, tuple := range nest {
 			if !tuple.Nested {
 				return false
 			}
+
 			if _, found := slices.BinarySearch(
 				cross,
 				tupleKeys([]chartspec.Tuple{tuple})[0],
@@ -154,6 +164,7 @@ func TestAlgebra_NestIsSubsetOfCross(t *testing.T) {
 				return false
 			}
 		}
+
 		return true
 	}
 	require.NoError(t, quick.Check(law, &quick.Config{MaxCount: 300}))

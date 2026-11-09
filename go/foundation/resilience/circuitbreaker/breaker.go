@@ -136,8 +136,10 @@ func New(
 	opts ...options.Option[Config],
 ) (interfaces.CircuitBreaker, error) {
 	cfg := DefaultConfig(name)
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
+
 	return NewFromConfig(cfg)
 }
 
@@ -155,6 +157,7 @@ func NewFromConfig(cfg Config) (interfaces.CircuitBreaker, error) {
 			FailureRatio:        cfg.FailureRatio,
 			MinRequests:         cfg.MinRequests,
 		}
+
 		return gb.New(gbCfg), nil
 
 	default:

@@ -28,6 +28,7 @@ import (
 //     INVALID_INPUT.
 func TestServicesSuite_Tools(t *testing.T) {
 	t.Parallel()
+
 	gs, err := guard.NewFromConfig([]types.GuardRow{
 		{
 			Name: "validate", Verb: "lint", Kind: types.GuardGo, Tags: []string{"infra"},
@@ -50,6 +51,7 @@ func TestServicesSuite_Tools(t *testing.T) {
 		RenderTool: "helm",
 	})
 	require.NoError(t, err)
+
 	catalog := append(append(suite.Runs(nil, nil, []types.ToolRun{
 		{
 			Name: "golangci-lint",
@@ -101,6 +103,7 @@ func TestServicesSuite_Tools(t *testing.T) {
 //     error the guard's message; a cached skip stays Skip under Strict.
 func TestServicesSuite_StrictFailsSkippedGuard(t *testing.T) {
 	t.Parallel()
+
 	gs, err := guard.NewFromConfig([]types.GuardRow{
 		{Name: "tool", Verb: "check", Kind: types.GuardGo},
 		{
@@ -126,6 +129,7 @@ func TestServicesSuite_StrictFailsSkippedGuard(t *testing.T) {
 		Cache: cachedGuardDeps(t, nil, "").Cache,
 	})
 	require.NoError(t, err)
+
 	cb := memoryCodebase(t, guardFiles())
 	run := func(strict bool, i int) types.StepResult {
 		job := suite.Guards(gs, cb)[i].Job(suite.Env{
@@ -134,9 +138,11 @@ func TestServicesSuite_StrictFailsSkippedGuard(t *testing.T) {
 		res, err := job.Execute(t.Context(), nil, "/r")
 		require.NoError(t, err)
 		require.Len(t, res, 1)
+
 		return res[0]
 	}
 	assert.Equal(t, types.StatusSkip, run(false, 0).Status)
+
 	strict := run(true, 0)
 	assert.Equal(t, types.StatusFail, strict.Status)
 	assert.Contains(t, strict.Error, "terraform is not installed")
@@ -147,6 +153,7 @@ func TestServicesSuite_StrictFailsSkippedGuard(t *testing.T) {
 		run(true, 1).Status,
 		"the first run records the pass",
 	)
+
 	cached := run(true, 1)
 	assert.Equal(t, types.StatusSkip, cached.Status, "a cached pass is no strict failure")
 	assert.Equal(t, types.CachedDetail, string(cached.Detail))

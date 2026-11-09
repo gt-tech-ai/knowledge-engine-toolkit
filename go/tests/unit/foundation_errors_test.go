@@ -120,12 +120,14 @@ func TestDBErrorMapping(t *testing.T) {
 
 			if tt.expectedNil {
 				assert.NoError(t, mappedErr, "mapper must return nil for nil input")
+
 				return
 			}
 
 			require.Error(t, mappedErr, "mapper must return non-nil error")
 
 			var appErr *apperr.AppError
+
 			require.ErrorAs(
 				t,
 				mappedErr, &appErr,

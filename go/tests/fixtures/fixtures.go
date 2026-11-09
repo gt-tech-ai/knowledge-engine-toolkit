@@ -72,6 +72,7 @@ func NopLogger() interfaces.Logger {
 	m.EXPECT().Error(gomock.Any(), gomock.Any()).AnyTimes()
 	m.EXPECT().With(gomock.Any()).Return(m).AnyTimes()
 	m.EXPECT().WithContext(gomock.Any()).Return(m).AnyTimes()
+
 	return m
 }
 
@@ -104,6 +105,7 @@ func NopMetrics() interfaces.Metrics {
 		AnyTimes()
 	m.EXPECT().Gauge(gomock.Any(), gomock.Any(), gomock.Any()).Return(gauge).AnyTimes()
 	m.EXPECT().Handler().Return(http.NotFoundHandler()).AnyTimes()
+
 	return m
 }
 
@@ -141,6 +143,7 @@ func SpyTracer(onSetAttribute func(key string, value any)) interfaces.Tracer {
 	).
 		AnyTimes()
 	t.EXPECT().Shutdown(gomock.Any()).Return(nil).AnyTimes()
+
 	return t
 }
 
@@ -161,9 +164,11 @@ func StubService(
 			if panicOnGet {
 				panic("test panic")
 			}
+
 			if getErr != nil {
 				return nil, getErr
 			}
+
 			return &TestEntity{ID: id, Name: "mock"}, nil
 		},
 	).AnyTimes()
@@ -177,6 +182,7 @@ func StubService(
 	).
 		AnyTimes()
 	m.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
 	return m
 }
 
@@ -190,6 +196,7 @@ func StubPipeline(
 ) *mocks.MockPipeline[string, string] {
 	p := mocks.NewMockPipeline[string, string](newCtrl())
 	p.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(exec).AnyTimes()
+
 	return p
 }
 
@@ -219,6 +226,7 @@ func StubWorkflow(
 ) *mocks.MockWorkflow[string, string] {
 	w := mocks.NewMockWorkflow[string, string](newCtrl())
 	w.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(exec).AnyTimes()
+
 	return w
 }
 
@@ -256,6 +264,7 @@ func StubRetrier(
 	alwaysFail bool,
 ) (retrier *mocks.MockRetrier, attempts func() int) {
 	var count int
+
 	retrier = mocks.NewMockRetrier(newCtrl())
 	retrier.EXPECT().Retry(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, op func() error) error {
@@ -263,18 +272,24 @@ func StubRetrier(
 			if alwaysFail {
 				maxAttempts = 3
 			}
+
 			var lastErr error
+
 			for range maxAttempts {
 				count++
+
 				lastErr = op()
 				if lastErr == nil {
 					return nil
 				}
 			}
+
 			return lastErr
 		},
 	).AnyTimes()
+
 	attempts = func() int { return count }
+
 	return retrier, attempts
 }
 
@@ -286,8 +301,10 @@ func StubCircuitBreaker(open bool) *mocks.MockCircuitBreaker {
 		if open {
 			return apperr.New(apperr.CodeUnavailable, "circuit breaker is open")
 		}
+
 		return fn()
 	}).AnyTimes()
+
 	return cb
 }
 
@@ -300,8 +317,10 @@ func StubRateLimiter(allowed bool) *mocks.MockRateLimiter {
 		if !allowed {
 			return apperr.Sentinel("rate limit exceeded")
 		}
+
 		return nil
 	}).AnyTimes()
+
 	return rl
 }
 
@@ -323,15 +342,20 @@ func StubClientStream(
 	s.EXPECT().CloseSend().Return(nil).AnyTimes()
 	s.EXPECT().Context().Return(ctx).AnyTimes()
 	s.EXPECT().SendMsg(gomock.Any()).Return(sendErr).AnyTimes()
+
 	var recvIdx int
+
 	s.EXPECT().RecvMsg(gomock.Any()).DoAndReturn(func(any) error {
 		if recvIdx >= len(recvErrs) {
 			return io.EOF
 		}
+
 		err := recvErrs[recvIdx]
 		recvIdx++
+
 		return err
 	}).AnyTimes()
+
 	return s
 }
 
@@ -350,6 +374,7 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 			if e, ok := items[id]; ok {
 				return e, nil
 			}
+
 			return nil, nil //nolint:nilnil // not-found is (nil, nil) by design
 		},
 	).AnyTimes()
@@ -363,6 +388,7 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 			for _, e := range items {
 				out = append(out, *e)
 			}
+
 			return &types.Page[TestEntity]{Items: out, Total: int64(len(out))}, nil
 		},
 	).
@@ -370,6 +396,7 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 	s.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, e *TestEntity) (*TestEntity, error) {
 			items[e.ID] = e
+
 			return e, nil
 		},
 	).
@@ -377,17 +404,28 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 	s.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, id string, e *TestEntity) (*TestEntity, error) {
 			items[id] = e
+
 			return e, nil
 		},
 	).
 		AnyTimes()
 	s.EXPECT().Delete(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, id string) error { delete(items, id); return nil },
+
+		func(_ context.Context, id string) error {
+			delete(items, id)
+
+			return nil
+		},
 	).AnyTimes()
 	s.EXPECT().Exists(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, id string) (bool, error) { _, ok := items[id]; return ok, nil },
+		func(_ context.Context, id string) (bool, error) {
+			_, ok := items[id]
+
+			return ok, nil
+		},
 	).
 		AnyTimes()
+
 	return s
 }
 
@@ -449,6 +487,7 @@ func NewSpyLogger() *SpyLogger {
 		ChildErrorCalls: &[]string{},
 	}
 	configureSpyLogger(s)
+
 	return s
 }
 
@@ -496,6 +535,7 @@ func configureSpyLogger(s *SpyLogger) {
 				ChildErrorCalls: &[]string{},
 			}
 			configureSpyLogger(child)
+
 			return child
 		}).
 		AnyTimes()

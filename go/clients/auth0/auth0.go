@@ -85,14 +85,17 @@ func newManagement(
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"auth0: domain is required for the management kind")
 	}
+
 	doer := deps.Doer
 	if doer == nil {
 		timeout := cfg.Timeout
 		if timeout <= 0 {
 			timeout = DefaultTimeout
 		}
+
 		doer = &http.Client{Timeout: timeout}
 	}
+
 	return management.New(doer, cfg.Domain, deps.ClientID, deps.ClientSecret), nil
 }
 

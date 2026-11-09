@@ -20,21 +20,26 @@ func Normalize(s types.Shelf) []Tuple {
 	if s == nil {
 		return []Tuple{{}}
 	}
+
 	if s.Field != nil {
 		return []Tuple{{Fields: []types.FieldRef{*s.Field}}}
 	}
+
 	switch s.Op {
 	case types.AlgebraConcat:
 		var out []Tuple
+
 		for _, arg := range s.Args {
 			out = append(out, Normalize(arg)...)
 		}
+
 		return out
 	case types.AlgebraCross, types.AlgebraNest:
 		out := []Tuple{{}}
 		for _, arg := range s.Args {
 			out = product(out, Normalize(arg), s.Op == types.AlgebraNest)
 		}
+
 		return out
 	default:
 		return nil
@@ -48,9 +53,11 @@ func product(left, right []Tuple, nest bool) []Tuple {
 	for _, l := range left {
 		for _, r := range right {
 			fields := make([]types.FieldRef, 0, len(l.Fields)+len(r.Fields))
+
 			fields = append(append(fields, l.Fields...), r.Fields...)
 			out = append(out, Tuple{Fields: fields, Nested: nest || l.Nested || r.Nested})
 		}
 	}
+
 	return out
 }

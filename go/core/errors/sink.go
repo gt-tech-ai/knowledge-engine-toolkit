@@ -34,5 +34,6 @@ func Captured(ctx context.Context) error {
 	if s, ok := ctx.Value(sinkKey{}).(*sink); ok {
 		return s.err
 	}
+
 	return nil
 }

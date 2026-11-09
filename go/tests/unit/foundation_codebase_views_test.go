@@ -41,27 +41,37 @@ func viewFiles() map[string]string {
 // file's reads, with notes/untracked.md untracked.
 func sourceOf(t *testing.T) (*mocks.MockCodebaseSource, map[string]int, *sync.Mutex) {
 	t.Helper()
+
 	src := mocks.NewMockCodebaseSource(gomock.NewController(t))
 	files := viewFiles()
 	list := make([]types.File, 0, len(files))
+
 	for p := range files {
 		list = append(list, types.File{Path: p, Untracked: p == "notes/untracked.md"})
 	}
+
 	sort.Slice(list, func(i, j int) bool { return list[i].Path < list[j].Path })
 	src.EXPECT().List(gomock.Any()).Return(list, nil).AnyTimes()
+
 	reads := map[string]int{}
+
 	var mu sync.Mutex
+
 	src.EXPECT().Read(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, p string) ([]byte, error) {
 			mu.Lock()
+
 			reads[p]++
 			mu.Unlock()
+
 			body, ok := files[p]
 			if !ok {
 				return nil, apperr.NotFound(p)
 			}
+
 			return []byte(body), nil
 		}).AnyTimes()
+
 	return src, reads, &mu
 }
 
@@ -79,6 +89,7 @@ func sourceOf(t *testing.T) (*mocks.MockCodebaseSource, map[string]int, *sync.Mu
 //     once; Rendered without a renderer is CodeUnavailable.
 func TestCodebase_FilesTextAndMatch(t *testing.T) {
 	t.Parallel()
+
 	src, reads, mu := sourceOf(t)
 	r := codebase.New(src, codebase.NewSnapshot("t"), nil)
 	ctx := t.Context()
@@ -132,14 +143,17 @@ func TestCodebase_FilesTextAndMatch(t *testing.T) {
 		[]*regexp.Regexp{regexp.MustCompile(`PNG`)},
 	)
 	require.NoError(t, err)
+
 	text, err := r.Text(ctx, "assets/logo.png")
 	require.NoError(t, err)
 	assert.True(t, text.Binary)
 
 	mu.Lock()
+
 	for p, n := range reads {
 		assert.Equal(t, 1, n, "%s read once", p)
 	}
+
 	mu.Unlock()
 
 	_, err = r.Rendered(ctx, types.RenderSpec{ChartDir: "charts/api"})
@@ -158,6 +172,7 @@ func TestCodebase_FilesTextAndMatch(t *testing.T) {
 //     documents; Query selects a field with its line; Decode fills a struct.
 func TestCodebase_GoAndYAMLViews(t *testing.T) {
 	t.Parallel()
+
 	src, _, _ := sourceOf(t)
 	r := codebase.New(src, codebase.NewSnapshot("t"), nil)
 	ctx := t.Context()
@@ -172,6 +187,7 @@ func TestCodebase_GoAndYAMLViews(t *testing.T) {
 	require.Len(t, gofiles, 2)
 	assert.Equal(t, "svc/b/b.go", gofiles[1].Path)
 	assert.Len(t, gofiles[1].AST.Imports, 2)
+
 	again, err := r.Go().Parse(ctx, sel, types.ParseImports)
 	require.NoError(t, err)
 	assert.Same(t, gofiles[0].AST, again[0].AST)
@@ -186,12 +202,15 @@ func TestCodebase_GoAndYAMLViews(t *testing.T) {
 		},
 		docs,
 	)
+
 	got, err := r.YAML().Query(ctx, docs[1], "$.metadata.name")
 	require.NoError(t, err)
 	assert.Equal(t, []types.YAMLMatch{{Value: "api-svc", Kind: "scalar", Line: 7}}, got)
+
 	var obj struct {
 		Kind string `yaml:"kind"`
 	}
+
 	require.NoError(t, r.YAML().Decode(ctx, docs[0], &obj))
 	assert.Equal(t, "Deployment", obj.Kind)
 }
@@ -205,11 +224,13 @@ func TestCodebase_GoAndYAMLViews(t *testing.T) {
 //   - Two Rendered calls for one spec call the renderer once and return its objects.
 func TestCodebase_RenderedIsMemoized(t *testing.T) {
 	t.Parallel()
+
 	src, _, _ := sourceOf(t)
 	renderer := mocks.NewMockRenderer(gomock.NewController(t))
 	spec := types.RenderSpec{ChartDir: "charts/api", ValuesFiles: []string{"v.yaml"}}
 	renderer.EXPECT().Render(gomock.Any(), spec).
 		Return([]types.Object{{Kind: "Deployment", Name: "api"}}, nil).Times(1)
+
 	r := codebase.New(src, codebase.NewSnapshot("t"), renderer)
 	for range 2 {
 		objs, err := r.Rendered(t.Context(), spec)
@@ -224,5 +245,6 @@ func paths(files []types.File) []string {
 	for _, f := range files {
 		out = append(out, f.Path)
 	}
+
 	return out
 }

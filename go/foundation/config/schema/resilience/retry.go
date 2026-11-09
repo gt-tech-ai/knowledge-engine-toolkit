@@ -49,14 +49,18 @@ func (c RetryConfig) Validate() error {
 	if c.MaxRetries < 0 {
 		return apperr.InvalidInput("resilience.retry.max_retries must be >= 0")
 	}
+
 	if c.InitialInterval < 0 {
 		return apperr.InvalidInput("resilience.retry.initial_interval must be >= 0")
 	}
+
 	if c.MaxInterval < 0 {
 		return apperr.InvalidInput("resilience.retry.max_interval must be >= 0")
 	}
+
 	if c.Multiplier < 1 {
 		return apperr.InvalidInput("resilience.retry.multiplier must be >= 1")
 	}
+
 	return nil
 }

@@ -56,6 +56,7 @@ func (s source) Get(_ context.Context, ref types.Ref) (types.Secret, error) {
 			fmt.Sprintf("no file location mapped for credential %s", ref),
 		)
 	}
+
 	data, err := os.ReadFile(loc.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -63,18 +64,21 @@ func (s source) Get(_ context.Context, ref types.Ref) (types.Secret, error) {
 				fmt.Sprintf("credential file %q does not exist for %s", loc.Path, ref),
 			)
 		}
+
 		return types.Secret{}, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			"reading credential file",
 		)
 	}
+
 	value, found := lookup(data, loc.Key)
 	if !found || value == "" {
 		return types.Secret{}, apperr.NotFound(
 			fmt.Sprintf("key %q not found in credential file for %s", loc.Key, ref),
 		)
 	}
+
 	return types.NewSecret(value), nil
 }
 
@@ -89,12 +93,14 @@ func (s source) Put(ctx context.Context, ref types.Ref, value types.Secret) erro
 			fmt.Sprintf("no file location mapped for credential %s", ref),
 		)
 	}
+
 	// Ensure the parent directory exists (0700 — a secrets dir), so a first write to a
 	// not-yet-created git-ignored store (e.g. .secrets/) succeeds; the check-ignore below
 	// also runs with this directory as its working dir.
 	if err := os.MkdirAll(filepath.Dir(loc.Path), 0o700); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "creating credential directory")
 	}
+
 	// `git check-ignore -q <path>` exits 0 when the path IS ignored; the CommandRunner
 	// returns a non-nil error for any non-zero exit (not-ignored, or git unavailable),
 	// so we fail SAFE — refuse the write unless git positively confirms the path ignored.
@@ -119,10 +125,12 @@ func (s source) Put(ctx context.Context, ref types.Ref, value types.Secret) erro
 	if err != nil && !os.IsNotExist(err) {
 		return apperr.Wrap(err, apperr.CodeInternal, "reading credential file for update")
 	}
+
 	updated := upsert(data, loc.Key, value.Reveal())
 	if err := os.WriteFile(loc.Path, updated, credentialFilePerm); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "writing credential file")
 	}
+
 	return nil
 }
 
@@ -135,6 +143,7 @@ func lookup(data []byte, key string) (string, bool) {
 			return v, true
 		}
 	}
+
 	return "", false
 }
 
@@ -145,6 +154,7 @@ func upsert(data []byte, key, value string) []byte {
 	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	replaced := false
 	out := make([]string, 0, len(lines)+1)
+
 	for _, l := range lines {
 		if k, _, ok := splitKV(l); ok && k == key {
 			// Preserve a shell `export ` prefix on the replaced line, so updating a key in a
@@ -154,18 +164,24 @@ func upsert(data []byte, key, value string) []byte {
 			} else {
 				out = append(out, line)
 			}
+
 			replaced = true
+
 			continue
 		}
+
 		out = append(out, l)
 	}
+
 	if !replaced {
 		out = append(out, line)
 	}
+
 	// Drop a leading empty element from splitting an empty/whitespace buffer.
 	if len(out) > 0 && strings.TrimSpace(out[0]) == "" {
 		out = out[1:]
 	}
+
 	return []byte(strings.Join(out, "\n") + "\n")
 }
 
@@ -178,14 +194,18 @@ func upsert(data []byte, key, value string) []byte {
 // literal.
 func splitKV(line string) (key, value string, ok bool) {
 	trimmed := strings.TrimSpace(line)
+
 	trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "export "))
+
 	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 		return "", "", false
 	}
+
 	eq := strings.IndexByte(trimmed, '=')
 	if eq < 0 {
 		return "", "", false
 	}
+
 	return strings.TrimSpace(
 			trimmed[:eq],
 		), unquote(
@@ -201,5 +221,6 @@ func unquote(v string) string {
 			return v[1 : len(v)-1]
 		}
 	}
+
 	return v
 }

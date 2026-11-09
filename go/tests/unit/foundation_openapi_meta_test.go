@@ -37,6 +37,7 @@ import (
 //     $ref) — no dangling reference remains in the generated spec.
 func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
 	t.Parallel()
+
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	messages := []*descriptorpb.DescriptorProto{
 		fixtures.EmptyMessage("Empty"),
@@ -57,11 +58,13 @@ func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
 
 	descPath := filepath.Join(t.TempDir(), "d.binpb")
 	require.NoError(t, os.WriteFile(descPath, fds, 0o644))
+
 	routes, err := openapi.BuildRouteTable(fds, nil)
 	require.NoError(t, err)
 
 	inDir := filepath.Join(t.TempDir(), "in")
 	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o755))
+
 	// The swagger response schema is a truly empty object (no properties) — exactly
 	// what protoc-gen-openapiv2 emits for an empty response message.
 	swagger := `{"swagger":"2.0","info":{"title":"t"},
@@ -81,9 +84,12 @@ func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
 		routes, nil,
 	)
 	require.NoError(t, err)
+
 	data, err := os.ReadFile(res.Written[0])
 	require.NoError(t, err)
+
 	var spec map[string]any
+
 	require.NoError(t, json.Unmarshal(data, &spec))
 
 	env := successSchema(t, spec, "/api/v1/things/{thing_id}/pause", "post")

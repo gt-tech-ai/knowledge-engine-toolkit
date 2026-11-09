@@ -40,6 +40,7 @@ func (g *ghActions) OnPhaseComplete(name string, _ types.StepResults, _ time.Dur
 	for _, r := range g.pending {
 		_, _ = fmt.Fprintf(g.w, "  %-4s  %s\n", r.Status, r.Name)
 	}
+
 	_, _ = fmt.Fprintln(g.w, "::endgroup::")
 	for _, r := range g.pending {
 		if r.Status == types.StatusFail && r.Error != "" {
@@ -51,6 +52,7 @@ func (g *ghActions) OnPhaseComplete(name string, _ types.StepResults, _ time.Dur
 			)
 		}
 	}
+
 	g.pending = g.pending[:0]
 }
 
@@ -58,8 +60,10 @@ func (g *ghActions) OnPhaseComplete(name string, _ types.StepResults, _ time.Dur
 func (g *ghActions) OnGateComplete(_ string, results types.StepResults, _ time.Duration) {
 	if n := results.CountByStatus()[types.StatusFail]; n > 0 {
 		_, _ = fmt.Fprintf(g.w, "::error title=Gate::%d step(s) failed\n", n)
+
 		return
 	}
+
 	_, _ = fmt.Fprintln(g.w, "::notice title=Gate::all steps passed")
 }
 

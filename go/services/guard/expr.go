@@ -74,6 +74,7 @@ func NewPrograms() *Programs {
 // digest), and exprVars as dyn.
 func newEnv() (*cel.Env, error) {
 	opts := make([]cel.EnvOption, 0, 10+len(exprVars()))
+
 	opts = append(
 		opts,
 		ext.Strings(),
@@ -87,13 +88,16 @@ func newEnv() (*cel.Env, error) {
 		decodeFunc(),
 		sha256Func(),
 	)
+
 	for _, v := range exprVars() {
 		opts = append(opts, cel.Variable(v, cel.DynType))
 	}
+
 	env, err := cel.NewEnv(opts...)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "cel environment")
 	}
+
 	return env, nil
 }
 
@@ -103,22 +107,29 @@ func newEnv() (*cel.Env, error) {
 // file, line and message.
 func (ps *Programs) compile(expr string) (*program, error) {
 	ps.mu.Lock()
+
 	cached, ok := ps.byExpr[expr]
 	ps.mu.Unlock()
+
 	if ok {
 		return cached, nil
 	}
+
 	env, err := ps.env()
 	if err != nil {
 		return nil, err
 	}
+
 	p, err := compileIn(env, expr)
 	if err != nil {
 		return nil, err
 	}
+
 	ps.mu.Lock()
+
 	ps.byExpr[expr] = p
 	ps.mu.Unlock()
+
 	return p, nil
 }
 
@@ -128,20 +139,25 @@ func compileIn(env *cel.Env, expr string) (*program, error) {
 	if iss.Err() != nil {
 		return nil, apperr.Wrap(iss.Err(), apperr.CodeInvalidInput, "expr")
 	}
+
 	prg, err := env.Program(ast)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "expr")
 	}
+
 	checked, err := cel.AstToCheckedExpr(ast)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "expr references")
 	}
+
 	uses := map[string]bool{}
+
 	for _, r := range checked.GetReferenceMap() {
 		if slices.Contains(exprVars(), r.GetName()) {
 			uses[r.GetName()] = true
 		}
 	}
+
 	return &program{prg: prg, uses: uses}, nil
 }
 
@@ -156,19 +172,24 @@ func exprCheck(
 	clock func() time.Time,
 ) ([]types.Finding, error) {
 	act, missing, err := activation(ctx, cb, r, p, vars)
+
 	if clock == nil {
 		clock = time.Now
 	}
+
 	if act != nil {
 		act["now"] = clock()
 	}
+
 	if err != nil || missing != nil {
 		return missing, err
 	}
+
 	out, _, err := p.prg.ContextEval(ctx, act)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "expr")
 	}
+
 	return results(out, r.Message)
 }
 
@@ -181,13 +202,16 @@ func decodeFunc() cel.EnvOption {
 			cel.BinaryBinding(func(format, text ref.Val) ref.Val {
 				f, ok1 := format.Value().(string)
 				t, ok2 := text.Value().(string)
+
 				if !ok1 || !ok2 {
 					return celtypes.NewErr("decode: format and text must be strings")
 				}
+
 				doc, err := codebase.Decode(f, "<embedded>", []byte(t))
 				if err != nil {
 					return celtypes.WrapErr(err)
 				}
+
 				return celtypes.DefaultTypeAdapter.NativeToValue(doc)
 			})))
 }
@@ -202,7 +226,9 @@ func sha256Func() cel.EnvOption {
 				if !ok {
 					return celtypes.NewErr("sha256: text must be a string")
 				}
+
 				sum := sha256.Sum256([]byte(t))
+
 				return celtypes.String(hex.EncodeToString(sum[:]))
 			})))
 }
@@ -221,45 +247,58 @@ func activation(
 		if err != nil || missing != nil {
 			return nil, missing, err
 		}
+
 		paths := make([]string, len(fs))
 		texts := map[string]any{}
+
 		for i, f := range fs {
 			paths[i] = f.Path
+
 			if !p.uses["file"] {
 				continue
 			}
+
 			t, err := cb.Text(ctx, f.Path)
 			if err != nil {
 				return nil, nil, err
 			}
+
 			texts[f.Path] = map[string]any{
 				keyPath: f.Path, "text": string(t.Bytes), "lines": t.Lines(),
 			}
 		}
+
 		act["files"], act["file"] = paths, texts
 	}
+
 	if p.uses["docs"] {
 		docs, err := decodeDocs(ctx, cb, r.Files)
 		if err != nil {
 			return nil, nil, err
 		}
+
 		act["docs"] = docs
 	}
+
 	if p.uses["objects"] && r.Render.ChartDir != "" {
 		objs, err := cb.Rendered(ctx, r.Render)
 		if err != nil {
 			return nil, nil, err
 		}
+
 		list := make([]any, len(objs))
 		for i := range objs {
 			o := &objs[i]
+
 			list[i] = map[string]any{
 				"kind": o.Kind, "name": o.Name,
 				"namespace": o.Namespace, "source": o.Source, "doc": o.Doc,
 			}
 		}
+
 		act["objects"] = list
 	}
+
 	return act, nil, nil
 }
 
@@ -275,12 +314,14 @@ func decodeDocs(
 	if err != nil {
 		return nil, err
 	}
+
 	out := make([]any, 0, len(docs))
 	for _, d := range docs {
 		out = append(out, map[string]any{
 			keyPath: d.Path, "index": d.Index, "format": d.Format, "doc": d.Value,
 		})
 	}
+
 	return out, nil
 }
 
@@ -290,12 +331,14 @@ func results(v ref.Val, message string) ([]types.Finding, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "expr result")
 	}
+
 	native := pb.(*structpb.Value).AsInterface()
 	switch x := native.(type) {
 	case bool:
 		if x {
 			return nil, nil
 		}
+
 		return []types.Finding{{Message: message}}, nil
 	case []any:
 		out := make([]types.Finding, 0, len(x))
@@ -304,10 +347,13 @@ func results(v ref.Val, message string) ([]types.Finding, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			out = append(out, f)
 		}
+
 		return out, nil
 	}
+
 	return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 		"expr result %T: want a bool or a list of findings", native))
 }
@@ -319,14 +365,18 @@ func finding(e any) (types.Finding, error) {
 		return types.Finding{Message: x}, nil
 	case map[string]any:
 		f := types.Finding{}
+
 		f.File, _ = x["file"].(string)
 		f.Message, _ = x["message"].(string)
 		f.Rule, _ = x["rule"].(string)
+
 		if n, ok := x["line"].(float64); ok {
 			f.Line = int(n)
 		}
+
 		return f, nil
 	}
+
 	return types.Finding{}, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 		"expr finding %T: want a string or a map", e))
 }
@@ -348,17 +398,22 @@ func (g *guard) forEach(
 	expansions []map[string]string,
 ) ([]map[string]string, error) {
 	var out []map[string]string
+
 	for _, vars := range expansions {
 		act := baseActivation(vars, g.row.Data)
+
 		act["now"] = time.Now()
+
 		val, _, err := g.forPrg.prg.ContextEval(ctx, act)
 		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "for")
 		}
+
 		pb, err := val.ConvertToNative(reflect.TypeFor[*structpb.Value]())
 		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "for result")
 		}
+
 		items, ok := pb.(*structpb.Value).AsInterface().([]any)
 		if !ok {
 			return nil, apperr.New(
@@ -366,6 +421,7 @@ func (g *guard) forEach(
 				"for must return a list of maps",
 			)
 		}
+
 		for _, item := range items {
 			m, ok := item.(map[string]any)
 			if !ok {
@@ -374,16 +430,20 @@ func (g *guard) forEach(
 					"for must return a list of maps",
 				)
 			}
+
 			row := maps.Clone(vars)
 			if row == nil {
 				row = map[string]string{}
 			}
+
 			for k, v := range m {
 				row[k] = placeholder(v)
 			}
+
 			out = append(out, row)
 		}
 	}
+
 	return out, nil
 }
 
@@ -393,8 +453,10 @@ func placeholder(v any) string {
 	if f, ok := v.(float64); ok && f == math.Trunc(f) {
 		return strconv.FormatInt(int64(f), 10)
 	}
+
 	if s, ok := v.(string); ok {
 		return s
 	}
+
 	return fmt.Sprint(v)
 }

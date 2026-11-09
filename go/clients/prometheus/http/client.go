@@ -99,11 +99,13 @@ func (c *Client) Query(ctx context.Context, promql string) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	if body.Data.ResultType != "vector" {
 		return 0, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"query returned a %q, want an instant vector", body.Data.ResultType,
 		))
 	}
+
 	switch n := len(body.Data.Result); {
 	case n == 0:
 		return 0, apperr.New(apperr.CodeNotFound, "query returned no sample (no data)")
@@ -112,10 +114,12 @@ func (c *Client) Query(ctx context.Context, promql string) (float64, error) {
 			"query returned %d series, want one (aggregate it, e.g. with sum or max)", n,
 		))
 	}
+
 	s, err := parseSample(body.Data.Result[0].Value)
 	if err != nil {
 		return 0, err
 	}
+
 	return s.Value, nil
 }
 
@@ -134,6 +138,7 @@ func (c *Client) QueryRange(
 			step, start.Format(time.RFC3339), end.Format(time.RFC3339),
 		))
 	}
+
 	body, err := c.get(ctx, "/api/v1/query_range", url.Values{
 		"query": {promql},
 		"start": {strconv.FormatInt(start.Unix(), 10)},
@@ -143,11 +148,13 @@ func (c *Client) QueryRange(
 	if err != nil {
 		return nil, err
 	}
+
 	if body.Data.ResultType != "matrix" {
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"query returned a %q, want a range matrix", body.Data.ResultType,
 		))
 	}
+
 	switch n := len(body.Data.Result); {
 	case n == 0:
 		return []Sample{}, nil
@@ -156,15 +163,19 @@ func (c *Client) QueryRange(
 			"query returned %d series, want one (aggregate it, e.g. with sum)", n,
 		))
 	}
+
 	raw := body.Data.Result[0].Values
 	out := make([]Sample, 0, len(raw))
+
 	for _, pair := range raw {
 		s, err := parseSample(pair)
 		if err != nil {
 			return nil, err
 		}
+
 		out = append(out, s)
 	}
+
 	return out, nil
 }
 
@@ -175,7 +186,9 @@ func (c *Client) get(
 	params url.Values,
 ) (response, error) {
 	var body response
+
 	endpoint := c.baseURL + path + "?" + params.Encode()
+
 	req, err := nethttp.NewRequestWithContext(
 		ctx,
 		nethttp.MethodGet,
@@ -189,24 +202,29 @@ func (c *Client) get(
 			"build prometheus query request",
 		)
 	}
+
 	resp, err := c.doer.Do(req)
 	if err != nil {
 		return body, transportError(err, "query prometheus")
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != nethttp.StatusOK {
 		return body, statusError(resp.StatusCode, resp.Body)
 	}
+
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return body, apperr.Wrap(err, apperr.CodeUpstream, "decode prometheus response")
 	}
+
 	if body.Status != "success" {
 		return body, apperr.New(
 			apperr.CodeUpstream,
 			"prometheus query failed: "+body.Error,
 		)
 	}
+
 	return body, nil
 }
 
@@ -224,6 +242,7 @@ func transportError(err error, msg string) error {
 	default:
 		code = apperr.CodeUnavailable
 	}
+
 	return apperr.Wrap(err, code, msg)
 }
 
@@ -245,10 +264,13 @@ func isTransientStatus(status int) bool {
 // CodeInvalidInput. Any other status is CodeUpstream.
 func statusError(status int, body io.Reader) error {
 	msg := fmt.Sprintf("prometheus query failed (HTTP %d)", status)
+
 	var env response
+
 	if json.NewDecoder(body).Decode(&env) == nil && env.Error != "" {
 		msg += ": " + env.Error
 	}
+
 	switch {
 	case isTransientStatus(status):
 		return apperr.New(apperr.CodeUnavailable, msg)
@@ -263,6 +285,7 @@ func statusError(status int, body io.Reader) error {
 // infinite value.
 func parseSample(pair [2]json.RawMessage) (Sample, error) {
 	var ts float64
+
 	if err := json.Unmarshal(pair[0], &ts); err != nil {
 		return Sample{}, apperr.Wrap(
 			err,
@@ -270,7 +293,9 @@ func parseSample(pair [2]json.RawMessage) (Sample, error) {
 			"parse prometheus sample time",
 		)
 	}
+
 	var raw string
+
 	if err := json.Unmarshal(pair[1], &raw); err != nil {
 		return Sample{}, apperr.Wrap(
 			err,
@@ -278,6 +303,7 @@ func parseSample(pair [2]json.RawMessage) (Sample, error) {
 			"parse prometheus sample",
 		)
 	}
+
 	v, err := strconv.ParseFloat(raw, 64)
 	if err != nil {
 		return Sample{}, apperr.Wrap(
@@ -286,12 +312,15 @@ func parseSample(pair [2]json.RawMessage) (Sample, error) {
 			"parse prometheus sample value",
 		)
 	}
+
 	if math.IsNaN(v) || math.IsInf(v, 0) {
 		return Sample{}, apperr.New(
 			apperr.CodeNotFound,
 			"query returned "+raw+" (no data)",
 		)
 	}
+
 	sec, frac := math.Modf(ts)
+
 	return Sample{Time: time.Unix(int64(sec), int64(frac*1e9)).UTC(), Value: v}, nil
 }

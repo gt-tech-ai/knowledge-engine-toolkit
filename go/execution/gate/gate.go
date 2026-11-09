@@ -80,18 +80,21 @@ func New(name string) *Gate { return &Gate{name: name, obs: engine.NopObserver{}
 // Parallel adds a phase in which all jobs run concurrently.
 func (g *Gate) Parallel(name string, jobs ...interfaces.AnyJob) *Gate {
 	g.phases = append(g.phases, Phase{Name: name, Jobs: jobs, parallel: true})
+
 	return g
 }
 
 // Serial adds a phase in which jobs run one after another.
 func (g *Gate) Serial(name string, jobs ...interfaces.AnyJob) *Gate {
 	g.phases = append(g.phases, Phase{Name: name, Jobs: jobs, parallel: false})
+
 	return g
 }
 
 // StopOnFailure makes the gate skip its remaining phases after any failure.
 func (g *Gate) StopOnFailure() *Gate {
 	g.stopOnFailure = true
+
 	return g
 }
 
@@ -101,6 +104,7 @@ func (g *Gate) Observe(obs interfaces.ExecutionObserver) *Gate {
 	if obs != nil {
 		g.obs = obs
 	}
+
 	return g
 }
 
@@ -108,6 +112,7 @@ func (g *Gate) Observe(obs interfaces.ExecutionObserver) *Gate {
 // component named after g; it returns g.
 func (g *Gate) Decorate(decs decorate.Decorations) *Gate {
 	g.op = decs.Subject(Tier(), g.name)
+
 	return g
 }
 
@@ -135,6 +140,7 @@ func (g *Gate) Run(
 	_, err := g.op.Exec(ctx, "run", func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, g.run(ctx, runner, root)
 	})
+
 	return err
 }
 
@@ -150,6 +156,7 @@ func (g *Gate) run(
 	for i, p := range g.phases {
 		phaseNames[i] = p.Name
 	}
+
 	g.obs.OnGateStart(g.name, phaseNames)
 
 	var (
@@ -159,11 +166,14 @@ func (g *Gate) run(
 
 	for _, phase := range g.phases {
 		phaseResults, err := runPhase(ctx, runner, root, phase, g.obs)
+
 		all = append(all, phaseResults...)
 
 		if err != nil || phaseResults.HasFailures() {
 			phaseErr := phaseFailureError(phase.Name, phaseResults)
+
 			gateErr = apperr.Join(gateErr, phaseErr)
+
 			if g.stopOnFailure {
 				break
 			}
@@ -171,9 +181,11 @@ func (g *Gate) run(
 	}
 
 	g.obs.OnGateComplete(g.name, all, time.Since(gateStart))
+
 	if gateErr != nil {
 		return apperr.Wrap(gateErr, apperr.CodeQualityFailed, "gate "+g.name+" failed")
 	}
+
 	return nil
 }
 
@@ -194,12 +206,14 @@ func runPhase(
 	for i, j := range phase.Jobs {
 		jobNames[i] = j.Meta().Name
 	}
+
 	obs.OnPhaseStart(phase.Name, jobNames)
 
 	var (
 		results  types.StepResults
 		phaseErr error
 	)
+
 	if phase.parallel {
 		results, phaseErr = engine.RunJobGroup(ctx, runner, root, phase.Jobs, obs)
 	} else {
@@ -211,11 +225,15 @@ func runPhase(
 				[]interfaces.AnyJob{job},
 				obs,
 			)
+
 			results = append(results, sr...)
+
 			if err != nil {
 				phaseErr = err
+
 				break
 			}
+
 			if sr.HasFailures() {
 				break
 			}
@@ -223,6 +241,7 @@ func runPhase(
 	}
 
 	obs.OnPhaseComplete(phase.Name, results, time.Since(start))
+
 	return results, phaseErr
 }
 
@@ -230,6 +249,7 @@ func runPhase(
 // failed step errors in results.
 func phaseFailureError(phaseName string, results types.StepResults) error {
 	var errs []error
+
 	for _, r := range results {
 		if r.Status == types.StatusFail && r.Error != "" {
 			errs = append(
@@ -241,9 +261,11 @@ func phaseFailureError(phaseName string, results types.StepResults) error {
 			)
 		}
 	}
+
 	if len(errs) == 0 {
 		return apperr.New(apperr.CodeQualityFailed, "phase "+phaseName+" failed")
 	}
+
 	return apperr.Wrap(
 		apperr.Join(errs...),
 		apperr.CodeQualityFailed,

@@ -77,10 +77,12 @@ func NewFromConfig(
 // CodeInvalidInput.
 func FindPlans(dir, file string) ([]string, error) {
 	var found []string
+
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err == nil && !d.IsDir() && d.Name() == file {
 			found = append(found, path)
 		}
+
 		return err
 	})
 	if err != nil {
@@ -90,6 +92,7 @@ func FindPlans(dir, file string) ([]string, error) {
 			"read the saved plans under "+dir,
 		)
 	}
+
 	return found, nil
 }
 

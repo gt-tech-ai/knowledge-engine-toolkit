@@ -37,6 +37,7 @@ func stubBuilder(
 		if capture != nil {
 			capture(creds)
 		}
+
 		return sc, nil
 	}
 }
@@ -70,10 +71,12 @@ func s3Cfg(method string) interfaces.SourceConfig {
 //     CodeInvalidInput; a transport (non-API) error → CodeUnavailable.
 func TestS3ConnectorSource_TestConnection(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("counts objects under the prefix", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		sc := mocks.NewMockStorageClient(ctrl)
 		sc.EXPECT().ListObjectsPage(gomock.Any(), "b", "docs/", gomock.Any()).
@@ -86,6 +89,7 @@ func TestS3ConnectorSource_TestConnection(t *testing.T) {
 			stubBuilder(sc, nil),
 		)
 		require.NoError(t, err)
+
 		n, err := src.TestConnection(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 2, n)
@@ -93,6 +97,7 @@ func TestS3ConnectorSource_TestConnection(t *testing.T) {
 
 	t.Run("a client-fault API error → InvalidInput", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		sc := mocks.NewMockStorageClient(ctrl)
 		sc.EXPECT().
@@ -115,6 +120,7 @@ func TestS3ConnectorSource_TestConnection(t *testing.T) {
 
 	t.Run("a transport error → Unavailable", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		sc := mocks.NewMockStorageClient(ctrl)
 		sc.EXPECT().
@@ -154,10 +160,12 @@ func TestS3ConnectorSource_TestConnection(t *testing.T) {
 //     CodeUnavailable (transient).
 func TestS3ConnectorSource_ListPage(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("streams a page and returns the resume token", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		sc := mocks.NewMockStorageClient(ctrl)
 		sc.EXPECT().
@@ -171,6 +179,7 @@ func TestS3ConnectorSource_ListPage(t *testing.T) {
 			stubBuilder(sc, nil),
 		)
 		require.NoError(t, err)
+
 		objs, next, err := src.ListPage(ctx, "tok1", 1000)
 		require.NoError(t, err)
 		require.Len(t, objs, 1)
@@ -179,6 +188,7 @@ func TestS3ConnectorSource_ListPage(t *testing.T) {
 
 	t.Run("a client-fault API error → InvalidInput (terminal)", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		sc := mocks.NewMockStorageClient(ctrl)
 		sc.EXPECT().
@@ -201,6 +211,7 @@ func TestS3ConnectorSource_ListPage(t *testing.T) {
 
 	t.Run("a transport error → Unavailable (transient)", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		sc := mocks.NewMockStorageClient(ctrl)
 		sc.EXPECT().
@@ -236,6 +247,7 @@ func TestS3ConnectorSource_ListPage(t *testing.T) {
 //     field such as the external id).
 func TestS3ConnectorSource_AuthSelection(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	sc := mocks.NewMockStorageClient(ctrl)
@@ -249,6 +261,7 @@ func TestS3ConnectorSource_AuthSelection(t *testing.T) {
 
 	for _, method := range []string{"access_key", "iam_role"} {
 		var captured aws.CredentialsProvider
+
 		_, err := connectors3.NewSource(
 			ctx,
 			s3Cfg(method),
@@ -265,6 +278,7 @@ func TestS3ConnectorSource_AuthSelection(t *testing.T) {
 	}
 
 	var static aws.CredentialsProvider
+
 	_, err = connectors3.NewSource(
 		ctx,
 		s3Cfg("access_key"),
@@ -272,6 +286,7 @@ func TestS3ConnectorSource_AuthSelection(t *testing.T) {
 		stubBuilder(sc, func(c aws.CredentialsProvider) { static = c }),
 	)
 	require.NoError(t, err)
+
 	creds, err := static.Retrieve(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "AK", creds.AccessKeyID)
@@ -297,6 +312,7 @@ func TestS3ConnectorSource_AuthSelection(t *testing.T) {
 //     without an external id.
 func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	cases := []struct {
@@ -359,17 +375,22 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			ctrl := gomock.NewController(t)
 			cfg := s3Cfg(tc.method)
+
 			if tc.mutate != nil {
 				tc.mutate(&cfg)
 			}
+
 			var stsClient stscreds.AssumeRoleAPIClient
+
 			if !tc.nilSTS {
 				stsClient = mocks.NewMockAssumeRoleAPIClient(
 					ctrl,
 				) // no EXPECT: STS is never called
 			}
+
 			_, err := connectors3.NewSource(
 				ctx,
 				cfg,
@@ -388,9 +409,12 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 
 	t.Run("the connector builder surfaces the refusal", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cfg := s3Cfg("iam_role")
+
 		cfg.ExternalID = ""
+
 		b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
 			BuildS3Client: stubBuilder(mocks.NewMockStorageClient(ctrl), nil),
 			STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
@@ -421,6 +445,7 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 //     CodeUnavailable.
 func TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	// listViaCredentials mimics the SDK: the S3 call retrieves the credentials first, and
@@ -437,11 +462,13 @@ func TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures(t *testing.T) {
 		) ([]interfaces.StorageObject, error) {
 			_, err := (*captured).Retrieve(ctx)
 			require.Error(t, err)
+
 			opErr := &smithy.OperationError{
 				ServiceID:     "S3",
 				OperationName: "ListObjectsV2",
 				Err:           err,
 			}
+
 			return nil, apperr.Wrap(opErr, apperr.CodeInternal, "s3 list b/docs/")
 		}
 	}
@@ -472,12 +499,15 @@ func TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures(t *testing.T) {
 	for _, tc := range credCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			ctrl := gomock.NewController(t)
 			stsClient := mocks.NewMockAssumeRoleAPIClient(ctrl)
 			stsClient.EXPECT().
 				AssumeRole(gomock.Any(), gomock.Any(), gomock.Any()).
 				Return(nil, tc.stsErr)
+
 			var captured aws.CredentialsProvider
+
 			sc := mocks.NewMockStorageClient(ctrl)
 			sc.EXPECT().
 				ListObjectsPage(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
@@ -490,6 +520,7 @@ func TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures(t *testing.T) {
 				stubBuilder(sc, func(c aws.CredentialsProvider) { captured = c }),
 			)
 			require.NoError(t, err)
+
 			_, err = src.TestConnection(ctx)
 			require.Equal(t, tc.want, apperr.Code(err), "%v", err)
 		})
@@ -519,6 +550,7 @@ func TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures(t *testing.T) {
 	for _, tc := range statusCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			ctrl := gomock.NewController(t)
 			sc := mocks.NewMockStorageClient(ctrl)
 			apiErr := &smithyhttp.ResponseError{
@@ -540,6 +572,7 @@ func TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures(t *testing.T) {
 				stubBuilder(sc, nil),
 			)
 			require.NoError(t, err)
+
 			_, err = src.TestConnection(ctx)
 			require.Equal(t, tc.want, apperr.Code(err), "%v", err)
 		})
@@ -561,10 +594,12 @@ func TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures(t *testing.T) {
 //     forwards with nil-obs deps).
 func TestConnectorSourceBuilder_Build(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("unknown kind fails loud", func(t *testing.T) {
 		t.Parallel()
+
 		b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{})
 		_, err := b.Build(ctx, interfaces.SourceConfig{Kind: "bogus"})
 		require.True(t, apperr.Is(err, apperr.CodeInvalidInput))
@@ -574,6 +609,7 @@ func TestConnectorSourceBuilder_Build(t *testing.T) {
 		"s3 kind builds a decorated source that probes via StorageClient",
 		func(t *testing.T) {
 			t.Parallel()
+
 			ctrl := gomock.NewController(t)
 			sc := mocks.NewMockStorageClient(ctrl)
 			sc.EXPECT().ListObjectsPage(gomock.Any(), "b", "docs/", gomock.Any()).
@@ -585,6 +621,7 @@ func TestConnectorSourceBuilder_Build(t *testing.T) {
 			})
 			src, err := b.Build(ctx, s3Cfg("access_key"))
 			require.NoError(t, err)
+
 			n, err := src.TestConnection(ctx)
 			require.NoError(t, err)
 			require.Equal(t, 1, n)
@@ -606,6 +643,7 @@ func TestConnectorSourceBuilder_Build(t *testing.T) {
 //     RoleArn and ExternalId and returns the assumed credentials.
 func TestS3ConnectorSource_IAMRoleSendsExternalID(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	sc := mocks.NewMockStorageClient(ctrl)
@@ -618,6 +656,7 @@ func TestS3ConnectorSource_IAMRoleSendsExternalID(t *testing.T) {
 		) (*sts.AssumeRoleOutput, error) {
 			require.Equal(t, "arn:aws:iam::1:role/r", aws.ToString(in.RoleArn))
 			require.Equal(t, "ext-1", aws.ToString(in.ExternalId))
+
 			return &sts.AssumeRoleOutput{Credentials: &ststypes.Credentials{
 				AccessKeyId:     aws.String("ASIA"),
 				SecretAccessKey: aws.String("secret"),
@@ -627,6 +666,7 @@ func TestS3ConnectorSource_IAMRoleSendsExternalID(t *testing.T) {
 		})
 
 	var captured aws.CredentialsProvider
+
 	_, err := connectors3.NewSource(
 		ctx,
 		s3Cfg("iam_role"),
@@ -634,6 +674,7 @@ func TestS3ConnectorSource_IAMRoleSendsExternalID(t *testing.T) {
 		stubBuilder(sc, func(c aws.CredentialsProvider) { captured = c }),
 	)
 	require.NoError(t, err)
+
 	creds, err := captured.Retrieve(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "ASIA", creds.AccessKeyID)

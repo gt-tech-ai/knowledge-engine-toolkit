@@ -66,7 +66,9 @@ func TestControllerTier_OrdersObservabilityOutermost(t *testing.T) {
 //   - Auth sees the action "<controller>.<op>".
 func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 	t.Parallel()
+
 	var actions []string
+
 	base := fixtures.Must(transport.NewBase[usersController](decorate.Fixed(decorate.Deps{
 		Observability: decorate.Observability{
 			Logger:  fixtures.NopLogger(),
@@ -75,6 +77,7 @@ func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 		},
 		Auth: func(_ context.Context, action string) error {
 			actions = append(actions, action)
+
 			return nil
 		},
 	}), "users"))
@@ -91,6 +94,7 @@ func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 	failing := func(context.Context, string) (string, error) {
 		return "", apperr.New(apperr.CodeNotFound, "no such user")
 	}
+
 	_, err = base.Handler("get", failing)(t.Context(), "c")
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }
@@ -108,9 +112,11 @@ func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 //   - A handler that outlives the timeout returns CodeTimeout.
 func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 	t.Parallel()
+
 	ran := false
 	handler := func(context.Context, string) (string, error) {
 		ran = true
+
 		return "", nil
 	}
 
@@ -123,27 +129,35 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 
 	bh, err := bulkhead.New(bulkhead.KindChannel, bulkhead.WithMaxConcurrent(1))
 	require.NoError(t, err)
+
 	held, release := make(chan struct{}), make(chan struct{})
+
 	go func() {
 		_ = bh.Execute(context.Background(), func() error {
 			close(held)
 			<-release
+
 			return nil
 		})
 	}()
+
 	<-held
+
 	defer close(release)
+
 	shedding := fixtures.Must(
 		transport.NewBase[opController](
 			decorate.Fixed(decorate.Deps{Bulkhead: bh, ShedLoad: true}),
 			"c",
 		),
 	)
+
 	_, err = shedding.Handler("op", handler)(t.Context(), "")
 	assert.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	assert.False(t, ran)
 
 	panicking := func(context.Context, string) (string, error) { panic("boom") }
+
 	_, err = fixtures.Must(transport.NewBase[opController](fixtures.Decorations(), "c")).
 		Handler("op", panicking)(
 		t.Context(),
@@ -153,6 +167,7 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 
 	slow := func(ctx context.Context, _ string) (string, error) {
 		<-ctx.Done()
+
 		return "", ctx.Err()
 	}
 	bounded := fixtures.Must(
@@ -161,6 +176,7 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 			"c",
 		),
 	)
+
 	_, err = bounded.Handler("op", slow)(t.Context(), "")
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
 }
@@ -178,12 +194,15 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 //   - An override turns on the rate limit and a shedding bulkhead for one controller.
 func TestDecorations_ControllerTierFromConfig(t *testing.T) {
 	t.Parallel()
+
 	cfg := decoration.DefaultConfig()
 	on := true
+
 	cfg.Controllers.Overrides = map[string]decoration.Layers{"upload": {
 		RateLimit: decoration.RateLimit{Enabled: &on},
 		Bulkhead:  decoration.Bulkhead{Enabled: &on, Shed: &on},
 	}}
+
 	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{
 		Observability: decorate.Observability{Logger: fixtures.NopLogger()},
 	})

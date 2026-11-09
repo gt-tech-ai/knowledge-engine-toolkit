@@ -37,9 +37,11 @@ func (p DNS) Run(ctx context.Context, _ Target) types.Verdict {
 	if err != nil {
 		return fail(p.Name(), "list Route 53 hosted zones: "+err.Error())
 	}
+
 	ns, nsErr := p.Resolver.LookupNS(ctx, p.ApexDomain)
 	delegated := nsErr == nil && len(ns) > 0
 	apex := "apex " + p.ApexDomain
+
 	switch {
 	case zoneFound && delegated:
 		return pass(apex + " has a hosted zone and resolves NS delegation")
@@ -59,16 +61,19 @@ func (p DNS) Run(ctx context.Context, _ Target) types.Verdict {
 // (trailing-dot) form exists.
 func (p DNS) hostedZoneExists(ctx context.Context) (bool, error) {
 	want := strings.TrimSuffix(p.ApexDomain, ".") + "."
+
 	out, err := p.Route53.ListHostedZonesByName(ctx, &route53.ListHostedZonesByNameInput{
 		DNSName: aws.String(want),
 	})
 	if err != nil {
 		return false, err
 	}
+
 	for i := range out.HostedZones {
 		if aws.ToString(out.HostedZones[i].Name) == want {
 			return true, nil
 		}
 	}
+
 	return false, nil
 }

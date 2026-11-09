@@ -33,6 +33,7 @@ func TestAdapt_Success(t *testing.T) {
 	t.Parallel()
 
 	type Req struct{ ID string }
+
 	type Resp struct {
 		Name string `json:"name"`
 	}
@@ -63,6 +64,7 @@ func TestAdapt_Success(t *testing.T) {
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 	var body Resp
+
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Equal(t, "user-", body.Name) // PathValue returns "" without mux routing
 }
@@ -82,6 +84,7 @@ func TestAdapt_ParseError(t *testing.T) {
 	t.Parallel()
 
 	type Req struct{ ID string }
+
 	type Resp struct {
 		Name string `json:"name"`
 	}
@@ -92,6 +95,7 @@ func TestAdapt_ParseError(t *testing.T) {
 		bc,
 		func(_ context.Context, _ Req) (Resp, error) {
 			handlerCalled = true
+
 			return Resp{}, nil
 		},
 		http.StatusOK,
@@ -129,6 +133,7 @@ func TestAdapt_HandlerError(t *testing.T) {
 	t.Parallel()
 
 	type Req struct{ ID string }
+
 	type Resp struct {
 		Name string `json:"name"`
 	}
@@ -176,6 +181,7 @@ func TestAdaptNoContent_Success(t *testing.T) {
 	t.Parallel()
 
 	type Req struct{ ID string }
+
 	type Resp struct{}
 
 	bc := &rest.BaseController{}
@@ -218,6 +224,7 @@ func TestAdaptNoContent_ParseError(t *testing.T) {
 	t.Parallel()
 
 	type Req struct{ ID string }
+
 	type Resp struct{}
 
 	bc := &rest.BaseController{}
@@ -258,6 +265,7 @@ func TestAdaptNoContent_HandlerError(t *testing.T) {
 	t.Parallel()
 
 	type Req struct{ ID string }
+
 	type Resp struct{}
 
 	bc := &rest.BaseController{}

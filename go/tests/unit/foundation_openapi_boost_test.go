@@ -31,9 +31,11 @@ import (
 //     malformed-JSON file errors.
 func TestMergeSwaggerFiles_MergesPathsAndDefinitions(t *testing.T) {
 	t.Parallel()
+
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.swagger.json")
 	b := filepath.Join(dir, "b.swagger.json")
+
 	require.NoError(t, os.WriteFile(a, []byte(
 		`{"info":{"title":"base"},"paths":{"/a":{}},"definitions":{"A":{"type":"object"}}}`,
 	), 0o644))
@@ -43,9 +45,11 @@ func TestMergeSwaggerFiles_MergesPathsAndDefinitions(t *testing.T) {
 
 	merged, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{a, b})
 	require.NoError(t, err)
+
 	paths := openapiAsMap(t, merged["paths"], "paths")
 	require.Contains(t, paths, "/a")
 	require.Contains(t, paths, "/b")
+
 	defs := openapiAsMap(t, merged["definitions"], "definitions")
 	require.Contains(t, defs, "A")
 	require.Contains(t, defs, "B")
@@ -58,6 +62,7 @@ func TestMergeSwaggerFiles_MergesPathsAndDefinitions(t *testing.T) {
 
 	bad := filepath.Join(dir, "bad.swagger.json")
 	require.NoError(t, os.WriteFile(bad, []byte("{not json"), 0o644))
+
 	_, err = openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{bad})
 	require.Error(t, err)
 
@@ -66,12 +71,14 @@ func TestMergeSwaggerFiles_MergesPathsAndDefinitions(t *testing.T) {
 	base := filepath.Join(dir, "0base.swagger.json")
 	addP := filepath.Join(dir, "1paths.swagger.json")
 	addD := filepath.Join(dir, "2defs.swagger.json")
+
 	require.NoError(t, os.WriteFile(base, []byte(`{"info":{"title":"base"}}`), 0o644))
 	require.NoError(t, os.WriteFile(addP, []byte(`{"paths":{"/p":{}}}`), 0o644))
 	require.NoError(
 		t,
 		os.WriteFile(addD, []byte(`{"definitions":{"D":{"type":"object"}}}`), 0o644),
 	)
+
 	merged2, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{base, addP, addD})
 	require.NoError(t, err)
 	require.Contains(t, openapiAsMap(t, merged2["paths"], "paths"), "/p")
@@ -90,6 +97,7 @@ func TestMergeSwaggerFiles_MergesPathsAndDefinitions(t *testing.T) {
 //     missing descriptor errors.
 func TestOpenAPIConvert_EmptyAndErrors(t *testing.T) {
 	t.Parallel()
+
 	empty := t.TempDir()
 	res, err := openapi.Convert(
 		fsys.NewOSFS(),
@@ -109,6 +117,7 @@ func TestOpenAPIConvert_EmptyAndErrors(t *testing.T) {
 		filepath.Join(inRoot, "workspace", "v1", "x.swagger.json"),
 		[]byte(`{"swagger":"2.0"}`), 0o644,
 	))
+
 	_, err = openapi.Convert(fsys.NewOSFS(), inRoot, filepath.Join(root, "out"),
 		filepath.Join(root, "missing.binpb"), nil, nil)
 	require.Error(t, err)

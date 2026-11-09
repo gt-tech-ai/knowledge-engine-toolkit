@@ -46,15 +46,20 @@ func TestFilterNode_JSONRoundTripsGrammar(t *testing.T) {
 	}
 	for _, in := range inputs {
 		var n types.FilterNode
+
 		require.NoError(t, json.Unmarshal([]byte(in), &n), in)
+
 		out, err := json.Marshal(n)
 		require.NoError(t, err, in)
+
 		var want bytes.Buffer
+
 		require.NoError(t, json.Compact(&want, []byte(in)))
 		assert.Equal(t, want.String(), string(out), in)
 	}
 
 	var n types.FilterNode
+
 	require.NoError(t, json.Unmarshal([]byte(`{"$lt": {"page_count": 12}}`), &n))
 	require.NotNil(t, n.Clause)
 	assert.Equal(t, types.FilterNodeClause{
@@ -92,6 +97,7 @@ func TestFilterNode_RejectsTwoArms(t *testing.T) {
 		"non-object node":   `["$eq"]`,
 	} {
 		var n types.FilterNode
+
 		err := json.NewDecoder(strings.NewReader(in)).Decode(&n)
 		require.Error(t, err, name)
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "%s: got %v", name, err)

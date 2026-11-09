@@ -39,7 +39,9 @@ func TestRedactPII_SharedVectors(t *testing.T) {
 		filepath.Join("..", "..", "..", "testdata", "redact_vectors.json"),
 	)
 	require.NoError(t, err)
+
 	var vectors []redactVector
+
 	require.NoError(t, json.Unmarshal(raw, &vectors))
 	require.NotEmpty(t, vectors)
 

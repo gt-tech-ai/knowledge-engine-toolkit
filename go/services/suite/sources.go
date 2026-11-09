@@ -24,13 +24,17 @@ func Runs(
 	for i := range runs {
 		r := runs[i]
 		group := r.Group
+
 		if group == "" {
 			group = r.Verb
 		}
+
 		var shells []string
+
 		if r.Tool != "" {
 			shells = []string{r.Tool}
 		}
+
 		out = append(out, Entry{
 			Name: r.Name, Verb: r.Verb, Group: group, Kind: KindRun, Tags: r.Tags,
 			Tools: shells,
@@ -42,11 +46,13 @@ func Runs(
 					if err != nil {
 						return types.OneStep(r.Name, types.StatusFail, err), nil
 					}
+
 					return res, nil
 				})
 			},
 		})
 	}
+
 	return out
 }
 
@@ -85,6 +91,7 @@ func Steps(steps map[string]Step) []Entry {
 	out := make([]Entry, 0, len(steps))
 	for name, st := range steps {
 		verb, _, _ := strings.Cut(name, ".")
+
 		out = append(out, Entry{
 			Name: name, Verb: verb, Group: st.Group, Kind: KindStep, Tags: st.Tags,
 			Tools: st.Tools,
@@ -97,7 +104,9 @@ func Steps(steps map[string]Step) []Entry {
 			},
 		})
 	}
+
 	slices.SortFunc(out, func(a, b Entry) int { return strings.Compare(a.Name, b.Name) })
+
 	return out
 }
 
@@ -111,6 +120,7 @@ func Guards(gs []interfaces.Guard, cb interfaces.Codebase) []Entry {
 	out := make([]Entry, 0, len(gs))
 	for _, g := range gs {
 		m := g.Meta()
+
 		out = append(out, Entry{
 			Name: m.Name, Verb: m.Verb, Group: m.Group, Kind: KindGuard, Tags: m.Tags,
 			Tools: m.Tools,
@@ -123,6 +133,7 @@ func Guards(gs []interfaces.Guard, cb interfaces.Codebase) []Entry {
 						v.Detail != types.CachedDetail {
 						v.Status = types.StatusFail
 					}
+
 					step := types.StepResult{
 						Name:   m.Name,
 						Group:  m.Group,
@@ -133,11 +144,13 @@ func Guards(gs []interfaces.Guard, cb interfaces.Codebase) []Entry {
 					} else if step.Error = strings.TrimSpace(v.Detail); step.Error == "" {
 						step.Error = "failed"
 					}
+
 					return types.StepResults{step}, nil
 				})
 			},
 		})
 	}
+
 	return out
 }
 
@@ -156,9 +169,11 @@ func Procedures(
 	for i := range procs {
 		p := procs[i]
 		group := p.Group
+
 		if group == "" {
 			group = p.Name
 		}
+
 		out = append(out, Entry{
 			Name: p.Name, Verb: verb, Group: group, Kind: KindProcedure,
 			Job: func(env Env) interfaces.AnyJob {
@@ -170,5 +185,6 @@ func Procedures(
 			},
 		})
 	}
+
 	return out
 }

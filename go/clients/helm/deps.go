@@ -23,5 +23,6 @@ func BuildDeps(
 	_, err := s.Memo(ctx, depsKey+chartDir, func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, c.DependencyBuild(ctx, chartDir)
 	})
+
 	return err
 }

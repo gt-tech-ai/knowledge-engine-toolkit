@@ -82,6 +82,7 @@ type errorResult struct {
 // the same ToolResult a bounded tool's failure does.
 func (s *Server) startHandler(op interfaces.Operation) sdkmcp.ToolHandler {
 	name := op.Descriptor().Name
+
 	return func(
 		ctx context.Context,
 		req *sdkmcp.CallToolRequest,
@@ -92,10 +93,12 @@ func (s *Server) startHandler(op interfaces.Operation) sdkmcp.ToolHandler {
 		if err != nil {
 			return s.result(nil, nil, err)
 		}
+
 		id, err := s.table.Start(ctx, name, input)
 		if err != nil {
 			return s.result(nil, nil, err)
 		}
+
 		return reply(RunStarted{RunID: id, State: runs.StateRunning}, false)
 	}
 }
@@ -108,6 +111,7 @@ func (s *Server) addRunsTools() {
 			if err != nil {
 				return replyErr(err)
 			}
+
 			return reply(RunStatus{
 				RunID: snap.ID, Op: snap.Op, State: snap.State,
 				Steps: summarize(flatten(snap.Steps), snap.LogPaths),
@@ -121,9 +125,11 @@ func (s *Server) addRunsTools() {
 			if err != nil {
 				return replyErr(err)
 			}
+
 			res := buildResult(
 				flatten(snap.Steps), s.settings.TailLines, snap.LogPaths, snap.Err,
 			)
+
 			return reply(res, snap.Err != nil)
 		})
 	s.addRunTool("runs.cancel", "Cancel a background run (a no-op once it has ended)",
@@ -131,10 +137,12 @@ func (s *Server) addRunsTools() {
 			if err := s.table.Cancel(id); err != nil {
 				return replyErr(err)
 			}
+
 			snap, err := s.table.Status(id)
 			if err != nil {
 				return replyErr(err)
 			}
+
 			return reply(entry(&snap), false)
 		})
 	s.srv.AddTool(&sdkmcp.Tool{
@@ -144,9 +152,11 @@ func (s *Server) addRunsTools() {
 	}, func(context.Context, *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
 		list := RunList{Runs: []RunEntry{}}
 		snaps := s.table.List()
+
 		for i := range snaps {
 			list.Runs = append(list.Runs, entry(&snaps[i]))
 		}
+
 		return reply(list, false)
 	})
 }
@@ -163,16 +173,19 @@ func (s *Server) addRunTool(
 		InputSchema: json.RawMessage(runIDSchema),
 	}, func(_ context.Context, req *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
 		var in runIDInput
+
 		if err := decodeArgs(req.Params.Arguments, &in); err != nil {
 			return replyErr(
 				apperr.Wrap(err, apperr.CodeInvalidInput, name+": decode arguments"),
 			)
 		}
+
 		if in.RunID == "" {
 			return replyErr(
 				apperr.New(apperr.CodeInvalidInput, name+": run_id is required"),
 			)
 		}
+
 		return fn(in.RunID)
 	})
 }
@@ -188,6 +201,7 @@ func reply(v any, failed bool) (*sdkmcp.CallToolResult, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "mcp: encode tool result")
 	}
+
 	return &sdkmcp.CallToolResult{
 		Content:           []sdkmcp.Content{&sdkmcp.TextContent{Text: string(text)}},
 		StructuredContent: v,

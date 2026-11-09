@@ -186,6 +186,7 @@ func TestCompile_RejectsWithCodedInvalidInput(t *testing.T) {
 
 	cube := chartCube()
 	cube.Fields.Add(listquery.String("user_id").AsMeasure(types.AggCountDistinct))
+
 	for name, spec := range map[string]types.ChartSpec{
 		"cube mismatch": {Cube: "other", Rows: leaf("team", "")},
 		"grain": {
@@ -247,6 +248,7 @@ func TestDrill_TeamToWorkspace(t *testing.T) {
 		drilled.Sort,
 	)
 	assert.Equal(t, "team", spec.Sort[0].Field, "input sort unchanged")
+
 	_, err = chartspec.Drill(
 		spec,
 		listquery.Schema{Hierarchies: chartCube().Hierarchies},
@@ -269,6 +271,7 @@ func TestDrill_TeamToWorkspace(t *testing.T) {
 		spec.Detail,
 		"input detail unchanged",
 	)
+
 	for _, field := range []string{"workspace", "model"} {
 		_, err := chartspec.Drill(drilled, chartCube(), field)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), field)

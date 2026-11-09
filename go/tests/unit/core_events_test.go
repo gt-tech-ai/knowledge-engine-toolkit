@@ -40,11 +40,13 @@ func (e widgetValue) Metadata() events.EventMetadata { return e.EventMetadata }
 // registered.
 func newWidgetRegistry(tb testing.TB) *events.Registry {
 	tb.Helper()
+
 	reg := events.NewRegistry()
 	require.NoError(
 		tb,
 		reg.Register("widget.created", func() events.Event { return &widgetCreated{} }),
 	)
+
 	return reg
 }
 
@@ -66,6 +68,7 @@ func newWidgetRegistry(tb testing.TB) *events.Registry {
 //     does not return a non-nil pointer are each rejected with CodeInvalidInput.
 func TestRegistryParsesConsumerEvents(t *testing.T) {
 	t.Parallel()
+
 	reg := newWidgetRegistry(t)
 
 	evt, err := reg.Parse(
@@ -74,6 +77,7 @@ func TestRegistryParsesConsumerEvents(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
+
 	got, ok := evt.(*widgetCreated)
 	require.True(t, ok, "want *widgetCreated, got %T", evt)
 	assert.Equal(t, "w1", got.WidgetID)
@@ -127,15 +131,20 @@ func TestRegistryParsesConsumerEvents(t *testing.T) {
 //   - Concurrent Register and Parse calls all succeed and every registered type parses.
 func TestRegistry_ZeroValueAndConcurrentUse(t *testing.T) {
 	t.Parallel()
+
 	var reg events.Registry
+
 	require.NoError(
 		t,
 		reg.Register("widget.created", func() events.Event { return &widgetCreated{} }),
 	)
 
 	const workers = 16
+
 	var wg sync.WaitGroup
+
 	errs := make(chan error, 2*workers)
+
 	for i := range workers {
 		wg.Go(func() {
 			errs <- reg.Register(events.EventType(fmt.Sprintf("widget.v%d", i)),
@@ -146,11 +155,14 @@ func TestRegistry_ZeroValueAndConcurrentUse(t *testing.T) {
 			errs <- err
 		})
 	}
+
 	wg.Wait()
 	close(errs)
+
 	for err := range errs {
 		require.NoError(t, err)
 	}
+
 	for i := range workers {
 		_, err := reg.Parse(fmt.Appendf(nil, `{"event_type":"widget.v%d"}`, i))
 		assert.NoError(t, err, "widget.v%d must be registered", i)
@@ -173,6 +185,7 @@ func FuzzRegistryRoundTrip(f *testing.F) {
 	f.Add("e1", "t1", "w1")
 	f.Add("", "", "")
 	f.Add("é\"\\", "tenant/with/slash", "\x00")
+
 	reg := newWidgetRegistry(f)
 
 	f.Fuzz(func(t *testing.T, eventID, tenantID, widgetID string) {
@@ -186,10 +199,13 @@ func FuzzRegistryRoundTrip(f *testing.F) {
 		}
 		data, err := json.Marshal(in)
 		require.NoError(t, err)
+
 		out, err := reg.Parse(data)
 		require.NoError(t, err)
+
 		// JSON replaces invalid UTF-8 with U+FFFD, so compare against the decoded form.
 		var want widgetCreated
+
 		require.NoError(t, json.Unmarshal(data, &want))
 		assert.Equal(t, &want, out)
 	})

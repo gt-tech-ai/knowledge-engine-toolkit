@@ -104,14 +104,17 @@ func TestResilienceValidate_RejectsBadValues(t *testing.T) {
 	require.NoError(t, resilience.DefaultBreakerConfig().Validate())
 
 	bad := resilience.DefaultRetryConfig()
+
 	bad.InitialInterval = -1
 	require.Error(t, bad.Validate(), "negative initial_interval must be rejected")
 
 	badMul := resilience.DefaultRetryConfig()
+
 	badMul.Multiplier = 0
 	require.Error(t, badMul.Validate(), "multiplier < 1 must be rejected")
 
 	badRatio := resilience.DefaultBreakerConfig()
+
 	badRatio.FailureRatio = 2
 	assert.Error(t, badRatio.Validate(), "failure_ratio > 1 must be rejected")
 }

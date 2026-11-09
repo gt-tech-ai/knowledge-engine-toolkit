@@ -33,6 +33,7 @@ import (
 //     that error and ExitCode -1, and Exists reports false.
 func TestGateRunLocal_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 
 	var (
@@ -61,6 +62,7 @@ func TestGateRunLocal_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
 			bufEnv = runner.RunBufferedWithEnv(ctx, "/dir", []string{"K=V"}, "echo", "hi")
 			exists = runner.Exists("echo")
 			requireErr = runner.RequireTool("echo", "install echo")
+
 			return types.StepResults{{Name: "probe", Status: types.StatusPass}}, nil
 		},
 	).

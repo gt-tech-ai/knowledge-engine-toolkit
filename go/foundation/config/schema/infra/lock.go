@@ -47,14 +47,18 @@ func (c LockConfig) Validate() error {
 	default:
 		return apperr.InvalidInput("lock.kind must be \"local\" or \"redis\"")
 	}
+
 	if c.TTL <= 0 {
 		return apperr.InvalidInput("lock.ttl must be > 0")
 	}
+
 	if c.RenewInterval <= 0 {
 		return apperr.InvalidInput("lock.renew_interval must be > 0")
 	}
+
 	if c.RenewInterval*3 > c.TTL {
 		return apperr.InvalidInput("lock.renew_interval must be <= lock.ttl/3")
 	}
+
 	return nil
 }

@@ -20,6 +20,7 @@ import (
 //   - A disabled section yields the noop tracer without reporting a fallback.
 func TestNewFromTracing_DisabledIsNoop(t *testing.T) {
 	t.Parallel()
+
 	warned := false
 	tr := tracer.NewFromTracing(t.Context(), "svc", infra.TracingConfig{Enabled: false},
 		func(string, ...any) { warned = true })

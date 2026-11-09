@@ -29,17 +29,22 @@ func Run(
 	if err != nil {
 		return err
 	}
+
 	op, _ := reg.Lookup(name)
 	if op.Descriptor().Lifecycle == types.OpLifecycleInteractive {
 		res.Release()
+
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q is interactive; a scheduled job cannot run it", name,
 		))
 	}
+
 	input, err := ops.Decode(op, raw)
 	if err != nil {
 		res.Release()
+
 		return err
 	}
+
 	return res.Run(ctx, input, obs)
 }

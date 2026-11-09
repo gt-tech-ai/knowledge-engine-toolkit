@@ -21,6 +21,7 @@ const keySeparator = "\x00"
 // with a different key.
 func hashParts(parts ...string) string {
 	sum := sha256.Sum256([]byte(strings.Join(parts, keySeparator)))
+
 	return hex.EncodeToString(sum[:])
 }
 
@@ -35,6 +36,7 @@ func hashParts(parts ...string) string {
 func AccessFingerprint(scope ...string) string {
 	sorted := append([]string(nil), scope...)
 	sort.Strings(sorted)
+
 	return hashParts(sorted...)
 }
 

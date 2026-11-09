@@ -83,11 +83,14 @@ func newGRPC(_ context.Context, cfg Config, deps Deps) (RPCClient, error) {
 	if name == "" {
 		name = "rpc"
 	}
+
 	base, err := client.NewWireBase(deps.Decorations, name)
 	if err != nil {
 		return nil, err
 	}
+
 	opts := interceptors.ClientOptions(base, cfg.ServiceToken)
+
 	return grpcbackend.NewLifecycleClient(cfg.GRPC, opts...), nil
 }
 

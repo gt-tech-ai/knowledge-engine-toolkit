@@ -30,6 +30,8 @@ func TenantFromContext(ctx context.Context) (uuid.UUID, bool) {
 	if ctx == nil {
 		return uuid.Nil, false
 	}
+
 	tenant, ok := ctx.Value(tenantKey{}).(uuid.UUID)
+
 	return tenant, ok
 }

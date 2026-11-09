@@ -26,6 +26,7 @@ import (
 //     Shutdown all run without error or panic.
 func TestNoopTracer_SpanIsInert(t *testing.T) {
 	t.Parallel()
+
 	tr, err := nooptracer.New()
 	require.NoError(t, err)
 

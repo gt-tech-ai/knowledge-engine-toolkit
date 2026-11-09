@@ -35,6 +35,7 @@ import (
 //     store's result and coded error unchanged.
 func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockOutboxStore(ctrl)
 	repo := fixtures.Must(outboxrepo.New(
@@ -45,11 +46,13 @@ func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 
 	bounded := gomock.Cond(func(ctx context.Context) bool {
 		_, ok := ctx.Deadline()
+
 		return ok
 	})
 	id, next, cutoff := uuid.New(), time.Unix(100, 0), time.Unix(50, 0)
 	claimed := []types.OutboxRecord{{ID: id, Lane: "facts"}}
 	conflict := apperr.New(apperr.CodeConflict, "not pending")
+
 	store.EXPECT().Claim(bounded, "facts", 0, 10).Return(claimed, nil)
 	store.EXPECT().MarkSent(bounded, id).Return(conflict)
 	store.EXPECT().Retry(bounded, id, next, "boom").Return(nil)
@@ -63,9 +66,11 @@ func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 	assert.Equal(t, apperr.CodeConflict, apperr.Code(repo.MarkSent(t.Context(), id)))
 	require.NoError(t, repo.Retry(t.Context(), id, next, "boom"))
 	require.NoError(t, repo.Park(t.Context(), id, "boom"))
+
 	stats, err := repo.Stats(t.Context(), "facts")
 	require.NoError(t, err)
 	assert.Equal(t, types.OutboxStats{Pending: 3}, stats)
+
 	n, err := repo.DeleteSentBefore(t.Context(), cutoff)
 	require.NoError(t, err)
 	assert.Equal(t, 7, n)

@@ -64,11 +64,14 @@ func (m *Metrics) Counter(name, help string, labels ...string) interfaces.Counte
 	}, labels)
 	if err := m.reg.Register(c); err != nil {
 		var are prometheus.AlreadyRegisteredError
+
 		if apperr.As(err, &are) {
 			return &counter{inner: are.ExistingCollector.(*prometheus.CounterVec)}
 		}
+
 		panic(err)
 	}
+
 	return &counter{inner: c}
 }
 
@@ -87,11 +90,14 @@ func (m *Metrics) Histogram(
 	}, labels)
 	if err := m.reg.Register(h); err != nil {
 		var are prometheus.AlreadyRegisteredError
+
 		if apperr.As(err, &are) {
 			return &histogram{inner: are.ExistingCollector.(*prometheus.HistogramVec)}
 		}
+
 		panic(err)
 	}
+
 	return &histogram{inner: h}
 }
 
@@ -105,11 +111,14 @@ func (m *Metrics) Gauge(name, help string, labels ...string) interfaces.Gauge {
 	}, labels)
 	if err := m.reg.Register(g); err != nil {
 		var are prometheus.AlreadyRegisteredError
+
 		if apperr.As(err, &are) {
 			return &gauge{inner: are.ExistingCollector.(*prometheus.GaugeVec)}
 		}
+
 		panic(err)
 	}
+
 	return &gauge{inner: g}
 }
 
@@ -133,6 +142,7 @@ func newRegistry() *prometheus.Registry {
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
+
 	return reg
 }
 
@@ -224,5 +234,6 @@ func NewHTTPServerMetrics(reg prometheus.Registerer) *HTTPServerMetrics {
 	}
 
 	reg.MustRegister(m.RequestsTotal, m.RequestDuration, m.ResponseSize)
+
 	return m
 }

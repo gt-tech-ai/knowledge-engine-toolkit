@@ -19,6 +19,7 @@ func Int32OrPanic[T ~int | ~int32 | ~int64](n T) int32 {
 	if int64(n) > math.MaxInt32 || int64(n) < math.MinInt32 {
 		panic(fmt.Sprintf("value '%d' out of int32 range", n))
 	}
+
 	return int32(n)
 }
 
@@ -31,8 +32,10 @@ func CountToInt32(n int64) int32 {
 	if n < 0 {
 		return 0
 	}
+
 	if n > math.MaxInt32 {
 		return math.MaxInt32
 	}
+
 	return int32(n)
 }

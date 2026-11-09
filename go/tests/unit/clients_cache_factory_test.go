@@ -27,6 +27,7 @@ import (
 //     invalidate.
 func TestCacheFactory_DefaultsToAMissingStubAndBuildsRedisOffline(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 
 	cfg := cache.DefaultConfig()
@@ -38,14 +39,17 @@ func TestCacheFactory_DefaultsToAMissingStubAndBuildsRedisOffline(t *testing.T) 
 	stub, err := cache.NewFromConfig(ctx, cfg, cache.Deps{})
 	require.NoError(t, err)
 	stub.Set(ctx, "k", []byte("v"), 0)
+
 	_, hit := stub.Get(ctx, "k")
 	assert.False(t, hit)
 
 	cfg.Kind = cache.KindRedis
 	cfg.Redis.Addr = "localhost:6379"
 	cfg.Redis.TLS = true
+
 	redis, err := cache.NewFromConfig(ctx, cfg, cache.Deps{})
 	require.NoError(t, err)
+
 	_, invalidates := redis.(interfaces.CacheInvalidator)
 	assert.True(t, invalidates, "the decorated redis cache keeps prefix invalidation")
 }

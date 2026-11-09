@@ -33,7 +33,9 @@ func validFile(f *types.ProcFile) error {
 	case (f.Op == types.FileCopy) != (f.From != ""):
 		return apperr.New(apperr.CodeInvalidInput, "from is set exactly on a copy")
 	}
+
 	_, err := mode(f.Mode, 0)
+
 	return err
 }
 
@@ -42,6 +44,7 @@ func mode(s string, def fs.FileMode) (fs.FileMode, error) {
 	if s == "" {
 		return def, nil
 	}
+
 	n, err := strconv.ParseUint(s, 8, 32)
 	if err != nil || n > uint64(fs.ModePerm) {
 		return 0, apperr.New(
@@ -49,6 +52,7 @@ func mode(s string, def fs.FileMode) (fs.FileMode, error) {
 			"file mode "+s+" is not octal 0-0777",
 		)
 	}
+
 	return fs.FileMode(n), nil
 }
 
@@ -64,8 +68,11 @@ func (e *engine) file(
 	if err != nil {
 		return c.result(name, types.StatusFail, err.Error())
 	}
+
 	res := c.result(name, types.StatusPass, "")
+
 	res.Detail = []byte(msg)
+
 	return res
 }
 
@@ -75,7 +82,9 @@ func (e *engine) applyFile(f *types.ProcFile, vars Vars) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	files := e.fs()
+
 	switch f.Op {
 	case types.FileEnsure:
 		return ensureFile(files, path, f.Mode)
@@ -84,17 +93,20 @@ func (e *engine) applyFile(f *types.ProcFile, vars Vars) (string, error) {
 		if fromErr != nil {
 			return "", fromErr
 		}
+
 		return copyFile(files, from, path, f.Mode)
 	case types.FileMkdir:
 		perm, _ := mode(f.Mode, defaultDirMode)
 		if err := files.MkdirAll(path, perm); err != nil {
 			return "", apperr.Wrap(err, apperr.CodeInternal, "create "+path)
 		}
+
 		return "created " + path, nil
 	default:
 		if err := files.RemoveAll(path); err != nil {
 			return "", apperr.Wrap(err, apperr.CodeInternal, "remove "+path)
 		}
+
 		return "removed " + path, nil
 	}
 }
@@ -104,6 +116,7 @@ func (e *engine) fs() interfaces.FS {
 	if e.deps.FS != nil {
 		return e.deps.FS
 	}
+
 	return fsys.DefaultFS()
 }
 
@@ -114,9 +127,11 @@ func (e *engine) rooted(rel string, vars Vars) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	if !filepath.IsLocal(p) {
 		return "", apperr.New(apperr.CodeInvalidInput, p+" is outside the root")
 	}
+
 	return filepath.Join(e.deps.Root, p), nil
 }
 
@@ -132,16 +147,19 @@ func ensureFile(files interfaces.FS, path, perm string) (string, error) {
 		if readErr != nil {
 			return "", apperr.Wrap(readErr, apperr.CodeInternal, "read "+path)
 		}
+
 		if len(entries) > 0 {
 			return "", apperr.New(apperr.CodeConflict,
 				path+" is a non-empty directory, not a file; remove it")
 		}
+
 		if err := files.RemoveAll(path); err != nil {
 			return "", apperr.Wrap(err, apperr.CodeInternal, "remove "+path)
 		}
 	case !apperr.StdIs(err, fs.ErrNotExist):
 		return "", apperr.Wrap(err, apperr.CodeInternal, "stat "+path)
 	}
+
 	return "created " + path, write(files, path, nil, perm)
 }
 
@@ -150,25 +168,31 @@ func copyFile(files interfaces.FS, from, path, perm string) (string, error) {
 	if _, err := files.Stat(path); err == nil {
 		return path + " exists", nil
 	}
+
 	data, err := files.ReadFile(from)
 	if err != nil {
 		code := apperr.CodeInternal
 		if apperr.StdIs(err, fs.ErrNotExist) {
 			code = apperr.CodeNotFound
 		}
+
 		return "", apperr.Wrap(err, code, "read "+from)
 	}
+
 	return "copied " + from + " to " + path, write(files, path, data, perm)
 }
 
 // write creates path's directory and writes data with perm (default 0644).
 func write(files interfaces.FS, path string, data []byte, perm string) error {
 	m, _ := mode(perm, defaultFileMode)
+
 	if err := files.MkdirAll(filepath.Dir(path), defaultDirMode); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create the directory of "+path)
 	}
+
 	if err := files.WriteFile(path, data, m); err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "write "+path)
 	}
+
 	return nil
 }

@@ -88,6 +88,7 @@ func newFS(_ context.Context, cfg Config, deps Deps) (interfaces.Codebase, error
 	if cfg.Root == "" {
 		return nil, apperr.New(apperr.CodeInvalidInput, "codebase fs: no root")
 	}
+
 	return compose(fs.New(cfg.Root), cfg, deps), nil
 }
 
@@ -97,6 +98,7 @@ func newGit(_ context.Context, cfg Config, deps Deps) (interfaces.Codebase, erro
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"codebase git: needs a root and a command runner")
 	}
+
 	return compose(git.New(cfg.Root, deps.Runner), cfg, deps), nil
 }
 
@@ -106,6 +108,7 @@ func compose(src interfaces.CodebaseSource, cfg Config, deps Deps) interfaces.Co
 	if snap == nil {
 		snap = views.NewSnapshot(cfg.Root)
 	}
+
 	return views.New(src, snap, deps.Renderer)
 }
 

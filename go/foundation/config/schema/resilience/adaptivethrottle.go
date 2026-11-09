@@ -39,8 +39,10 @@ func (c AdaptiveThrottleConfig) Validate() error {
 	if c.K < 0 {
 		return apperr.InvalidInput("resilience.adaptive_throttle.k must be >= 0")
 	}
+
 	if c.Decay < 0 || c.Decay > 1 {
 		return apperr.InvalidInput("resilience.adaptive_throttle.decay must be in [0,1]")
 	}
+
 	return nil
 }

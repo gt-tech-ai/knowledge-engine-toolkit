@@ -19,5 +19,6 @@ func GuardDomain(subject, expected, resolved string) error {
 			"refusing %s: resolved domain %q does not match the expected %q",
 			subject, resolved, expected))
 	}
+
 	return nil
 }

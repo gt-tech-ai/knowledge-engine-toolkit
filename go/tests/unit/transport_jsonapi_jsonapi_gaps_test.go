@@ -27,13 +27,16 @@ import (
 //     verbatim with the inner status, not wrapped in a JSON:API envelope.
 func TestMiddleware_LargeBodyPassthrough(t *testing.T) {
 	t.Parallel()
+
 	big := make([]byte, (1<<20)+64) // just over the 1 MiB limit
 	for i := range big {
 		big[i] = 'a'
 	}
+
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+
 		_, _ = w.Write(big)
 	})
 	handler := jsonapi.Middleware(inner, docRoutes())
@@ -73,6 +76,7 @@ func TestMiddleware_LargeBodyPassthrough(t *testing.T) {
 //   - inner 500 + {"code":13} → the middleware responds 500 (unchanged).
 func TestMiddleware_ReclassifiesVanguardBindingError(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		name string
 		code int
@@ -84,8 +88,10 @@ func TestMiddleware_ReclassifiesVanguardBindingError(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
+
 				_, _ = w.Write(fmt.Appendf(nil, `{"code":%d,"message":"boom"}`, tc.code))
 			})
 			handler := jsonapi.Middleware(inner, docRoutes())
@@ -116,10 +122,12 @@ func TestMiddleware_ReclassifiesVanguardBindingError(t *testing.T) {
 //     verbatim with the inner status.
 func TestMiddleware_UnparseableBodyPassthrough(t *testing.T) {
 	t.Parallel()
+
 	raw := []byte("[this is not json")
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+
 		_, _ = w.Write(raw)
 	})
 	handler := jsonapi.Middleware(inner, docRoutes())
@@ -154,6 +162,7 @@ func TestMiddleware_UnparseableBodyPassthrough(t *testing.T) {
 //     object elements into resource objects.
 func TestTransformCollection_PreservesNonObjectItems(t *testing.T) {
 	t.Parallel()
+
 	cfg := codec.ResourceConfig{Type: "users", CollectionKey: "users"}
 	body := map[string]any{
 		"users": []any{
@@ -168,6 +177,7 @@ func TestTransformCollection_PreservesNonObjectItems(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, data, 2)
 	assert.Equal(t, "scalar-item", data[0], "a non-object item is preserved verbatim")
+
 	obj, ok := data[1].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "users", obj["type"])

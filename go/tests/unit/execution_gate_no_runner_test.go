@@ -28,9 +28,11 @@ func TestGateRunLocal_RunsLocalJobs(t *testing.T) {
 	t.Parallel()
 
 	var ran []string
+
 	local := func(name string) func(context.Context) (types.StepResults, error) {
 		return func(context.Context) (types.StepResults, error) {
 			ran = append(ran, name)
+
 			return types.StepResults{{Name: name, Status: types.StatusPass}}, nil
 		}
 	}

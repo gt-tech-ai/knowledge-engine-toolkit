@@ -18,6 +18,7 @@ func NewBulkhead(b interfaces.Bulkhead, shed bool) OpMiddleware {
 			if !shed {
 				return b.Execute(ctx, func() error { return next(ctx) })
 			}
+
 			ran, err := bulkhead.Shed(b, func() error { return next(ctx) })
 			if !ran {
 				return apperr.Wrap(
@@ -26,6 +27,7 @@ func NewBulkhead(b interfaces.Bulkhead, shed bool) OpMiddleware {
 					op+": concurrency limit reached",
 				)
 			}
+
 			return err
 		},
 	)

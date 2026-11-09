@@ -90,6 +90,7 @@ func name(cfg Config) string {
 	if cfg.Name == "" {
 		return family
 	}
+
 	return cfg.Name
 }
 
@@ -125,6 +126,7 @@ func broker(deps Deps) *memory.Broker {
 	if deps.Broker != nil {
 		return deps.Broker
 	}
+
 	return memory.NewBroker()
 }
 
@@ -211,5 +213,6 @@ func NewConsumerFromConfig(
 	if err != nil {
 		return nil, err
 	}
+
 	return consumers(handlers).New(ctx, cfg.Kind, cfg, deps)
 }

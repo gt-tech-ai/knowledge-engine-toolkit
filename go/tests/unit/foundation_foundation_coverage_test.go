@@ -105,6 +105,7 @@ func TestStdlibLogger_WithContext(t *testing.T) {
 
 	// With correlation ID, should return enriched logger
 	ctx = logctx.WithCorrelationID(ctx, "req-456")
+
 	enriched := l.WithContext(ctx)
 	require.NotNil(t, enriched, "expected non-nil enriched logger")
 	enriched.Info("message with correlation")
@@ -235,6 +236,7 @@ func TestZapLogger_WithContext(t *testing.T) {
 	assert.Equal(t, l, same, "expected same logger when no correlation ID")
 
 	ctx = logctx.WithCorrelationID(ctx, "req-789")
+
 	enriched := l.WithContext(ctx)
 	require.NotNil(t, enriched, "expected non-nil enriched logger")
 	enriched.Info("message with correlation")
@@ -360,6 +362,7 @@ func TestLoggerConfig_ToOptions(t *testing.T) {
 	for _, opt := range opts {
 		opt(&target)
 	}
+
 	assert.Equal(t, logger.KindStdlib, target.Kind)
 	assert.Equal(t, "warn", target.Level)
 }
@@ -406,6 +409,7 @@ func TestLoggerKind_String(t *testing.T) {
 
 	assert.Equal(t, "zap", logger.KindZap.String())
 	assert.Equal(t, "stdlib", logger.KindStdlib.String())
+
 	unknown := logger.Kind(99)
 	assert.Contains(
 		t,
@@ -490,6 +494,7 @@ func TestNoopMetrics_AllOperations(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
+
 	var _ interfaces.Metrics = m
 
 	// Counter
@@ -598,6 +603,7 @@ func TestPromMetrics_Handler(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
+
 	body, _ := io.ReadAll(rec.Body)
 	assert.NotEmpty(t, body, "expected non-empty metrics response")
 }
@@ -631,6 +637,7 @@ func TestPromMetrics_DefaultConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := prom.DefaultConfig()
+
 	_ = cfg // just verify it doesn't panic
 }
 
@@ -703,6 +710,7 @@ func TestMetricsKind_String(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, "prometheus", metrics.KindPrometheus.String())
+
 	unknown := metrics.Kind(99)
 	assert.Contains(
 		t,
@@ -733,6 +741,7 @@ func TestMetricsConfig_ToOptions(t *testing.T) {
 	for _, opt := range opts {
 		opt(&target)
 	}
+
 	assert.Equal(t, "/custom", target.Path)
 }
 

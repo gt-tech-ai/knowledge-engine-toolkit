@@ -26,17 +26,21 @@ func (p Cluster) Run(ctx context.Context, t Target) types.Verdict {
 	res := p.Runner.RunBuffered(ctx, "", "kubectl",
 		"--context", t.KubeContext, "auth", "can-i", "get", "pods")
 	answer := strings.TrimSpace(string(res.Stdout))
+
 	if res.Err == nil && answer == "yes" {
 		return pass(
 			"cluster context " + t.KubeContext + " is reachable (auth can-i: yes)",
 		)
 	}
+
 	detail := "kubectl --context " + t.KubeContext + " auth can-i get pods"
+
 	switch {
 	case answer != "" && answer != "yes":
 		detail += " returned " + answer
 	case res.Err != nil:
 		detail += " failed: " + res.Err.Error()
 	}
+
 	return fail(p.Name(), detail)
 }

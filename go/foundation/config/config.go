@@ -60,8 +60,10 @@ func (k Kind) String() string {
 //	port := cfg.GetInt("server.port")
 func New(kind Kind, opts ...options.Option[Config]) (interfaces.ConfigLoader, error) {
 	cfg := DefaultConfig()
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
+
 	return NewFromConfig(cfg)
 }
 
@@ -75,6 +77,7 @@ func NewFromConfig(cfg Config) (interfaces.ConfigLoader, error) {
 		if err := loader.Load(); err != nil {
 			return nil, err
 		}
+
 		return loader, nil
 
 	default:

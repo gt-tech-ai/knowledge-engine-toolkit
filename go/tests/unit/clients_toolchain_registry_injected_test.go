@@ -36,6 +36,7 @@ func TestClientsToolchainCatalog_FromInjectedDefs(t *testing.T) {
 
 	fallback := reg.Get("nope")
 	assert.Equal(t, "nope", fallback.Binary())
+
 	exe, args = fallback.Cmd("x")
 	assert.Equal(t, "nope", exe)
 	assert.Equal(t, []string{"x"}, args)

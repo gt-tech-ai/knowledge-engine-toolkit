@@ -21,22 +21,28 @@ import (
 //   - Releasing frees exactly one slot, and a second release of the same slot is a no-op.
 func TestKeyedLimiter_CapsEachKeyIndependently(t *testing.T) {
 	t.Parallel()
+
 	l, err := keyed.New(keyed.Config{MaxPerKey: 2})
 	require.NoError(t, err)
 
 	r1, ok := l.TryAcquire("org-a")
 	require.True(t, ok)
+
 	_, ok = l.TryAcquire("org-a")
 	require.True(t, ok)
+
 	_, ok = l.TryAcquire("org-a")
 	require.False(t, ok, "org-a is at its cap")
+
 	_, ok = l.TryAcquire("org-b")
 	require.True(t, ok, "org-b has its own slots")
 
 	r1()
 	r1()
+
 	_, ok = l.TryAcquire("org-a")
 	require.True(t, ok, "the release freed one slot")
+
 	_, ok = l.TryAcquire("org-a")
 	require.False(t, ok, "a double release frees only one slot")
 }
@@ -50,6 +56,7 @@ func TestKeyedLimiter_CapsEachKeyIndependently(t *testing.T) {
 //   - MaxPerKey <= 0 is CodeInvalidInput.
 func TestKeyedLimiter_RejectsANonPositiveCap(t *testing.T) {
 	t.Parallel()
+
 	_, err := keyed.New(keyed.Config{})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

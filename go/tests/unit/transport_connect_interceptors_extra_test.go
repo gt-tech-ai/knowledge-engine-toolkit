@@ -52,6 +52,7 @@ func TestLoggingInterceptor_StatusCodeMapping(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.code.String(), func(t *testing.T) {
 			t.Parallel()
+
 			spy := fixtures.NewSpyLogger()
 			handler := interceptors.NewLoggingInterceptor(spy).WrapUnary(
 				func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
@@ -60,6 +61,7 @@ func TestLoggingInterceptor_StatusCodeMapping(t *testing.T) {
 			)
 			_, err := handler(context.Background(), newTestRequest())
 			require.Error(t, err)
+
 			if tc.wantWarn {
 				assert.Len(t, *spy.ChildWarnCalls, 1, "4xx codes log at Warn")
 				assert.Empty(t, *spy.ChildErrorCalls, "4xx codes must not log at Error")
@@ -88,6 +90,7 @@ func TestAuthInterceptor_StreamingClientIsNoOp(t *testing.T) {
 	wrapped := interceptors.NewAuthInterceptor(false, testHeaders()).WrapStreamingClient(
 		func(context.Context, connect.Spec) connect.StreamingClientConn {
 			called = true
+
 			return nil
 		},
 	)
@@ -127,6 +130,7 @@ func TestPrincipalInterceptor_StreamingFailsClosed(t *testing.T) {
 	).WrapStreamingHandler(
 		func(context.Context, connect.StreamingHandlerConn) error {
 			called = true
+
 			return nil
 		},
 	)
@@ -149,6 +153,7 @@ func TestPrincipalInterceptor_StreamingFailsClosed(t *testing.T) {
 //     the error branch), including for a procedure with no method segment.
 func TestConnectTracingInterceptors_RecordErrorOnFailure(t *testing.T) {
 	t.Parallel()
+
 	tracer := fixtures.NopTracer()
 	boom := connect.NewError(connect.CodeInternal, apperr.Sentinel("handler fault"))
 	failing := func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {

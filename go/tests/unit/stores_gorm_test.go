@@ -28,6 +28,7 @@ func TestGormAdapter_KindAndUnknown(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, "postgres", gormadapter.KindPostgres)
+
 	_, err := gormadapter.NewFromConfig(gormadapter.Config{})
 	require.NoError(t, err)
 
@@ -78,6 +79,7 @@ func TestGormAdapter_LifecycleUnreachable(t *testing.T) {
 	require.NotNil(t, client)
 
 	var _ interfaces.Client = client
+
 	ctx := context.Background()
 
 	// Before Start: the pool is unopened.

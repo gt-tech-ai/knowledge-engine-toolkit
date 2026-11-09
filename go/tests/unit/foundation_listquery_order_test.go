@@ -36,6 +36,7 @@ func sortMap() *listquery.Map {
 //     order is preserved and whitespace around tokens is tolerated.
 func TestParseSort_ParsesDirections(t *testing.T) {
 	t.Parallel()
+
 	m := sortMap()
 
 	cases := []struct {
@@ -66,6 +67,7 @@ func TestParseSort_ParsesDirections(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			got, err := listquery.ParseSort(m, tc.spec)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
@@ -86,6 +88,7 @@ func TestParseSort_ParsesDirections(t *testing.T) {
 //     colon, an empty token and a repeated field each fail with CodeInvalidInput.
 func TestParseSort_RejectsUnknownUnsortableAndBadDirection(t *testing.T) {
 	t.Parallel()
+
 	m := sortMap()
 
 	for name, spec := range map[string]string{
@@ -99,6 +102,7 @@ func TestParseSort_RejectsUnknownUnsortableAndBadDirection(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			got, err := listquery.ParseSort(m, spec)
 			require.Error(t, err)
 			assert.Nil(t, got)
@@ -124,6 +128,7 @@ func TestParseSort_RejectsUnknownUnsortableAndBadDirection(t *testing.T) {
 //     caller's direction).
 func TestKeysetColumns(t *testing.T) {
 	t.Parallel()
+
 	identity := func(f string) string { return f }
 
 	cases := []struct {
@@ -197,18 +202,22 @@ func TestKeysetColumns(t *testing.T) {
 func FuzzParseSort(f *testing.F) {
 	m := sortMap()
 	sortable := map[string]bool{"created_at": true, "name": true, "status": true}
+
 	for _, seed := range []string{
 		"", "name", "a:desc,b", "created_at:desc,name", ",,,", "x:y:z", " : ", "secret_note",
 	} {
 		f.Add(seed)
 	}
+
 	f.Fuzz(func(t *testing.T, spec string) {
 		got, err := listquery.ParseSort(m, spec)
 		if err != nil {
 			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 			assert.Nil(t, got)
+
 			return
 		}
+
 		for _, of := range got {
 			assert.True(
 				t,

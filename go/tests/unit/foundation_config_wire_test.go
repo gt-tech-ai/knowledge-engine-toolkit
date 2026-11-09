@@ -43,6 +43,7 @@ server:
 	require.NoError(t, err, "config.New")
 
 	var serverCfg infra.ServerConfig
+
 	require.NoError(t, loader.UnmarshalKey("server.http", &serverCfg), "UnmarshalKey")
 
 	// Assert: Config loaded correctly
@@ -109,6 +110,7 @@ database:
 	require.NoError(t, err, "config.New")
 
 	var dbCfg infra.DatabaseConfig
+
 	require.NoError(t, loader.UnmarshalKey("database", &dbCfg), "UnmarshalKey")
 
 	// Assert
@@ -151,6 +153,7 @@ redis:
 	require.NoError(t, err, "config.New")
 
 	var redisCfg infra.RedisConfig
+
 	require.NoError(t, loader.UnmarshalKey("redis", &redisCfg), "UnmarshalKey")
 
 	// Assert

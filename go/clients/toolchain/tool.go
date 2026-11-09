@@ -50,10 +50,13 @@ func (t *Tool) Cmd(args ...string) (exe string, cmdArgs []string) {
 	if len(t.prefix) == 0 {
 		return t.binary, args
 	}
+
 	full := make([]string, 0, len(t.prefix)-1+1+len(args))
+
 	full = append(full, t.prefix[1:]...)
 	full = append(full, t.binary)
 	full = append(full, args...)
+
 	return t.prefix[0], full
 }
 

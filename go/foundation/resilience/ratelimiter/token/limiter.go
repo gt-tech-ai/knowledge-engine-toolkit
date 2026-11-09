@@ -57,5 +57,6 @@ func (l *Limiter) Wait(ctx context.Context) error {
 			"rate limiter wait",
 		)
 	}
+
 	return nil
 }

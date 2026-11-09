@@ -21,6 +21,7 @@ import (
 // derived env binding can surface them through UnmarshalKey.
 func baseWithDB(t *testing.T) string {
 	t.Helper()
+
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "base.yaml"), `
 database:
@@ -30,6 +31,7 @@ storage:
   s3:
     bucket: "from-yaml"
 `)
+
 	return dir
 }
 
@@ -62,6 +64,7 @@ func loadWithSchema(
 	t *testing.T, dir string, extra ...options.Option[config.Config],
 ) interfaces.ConfigLoader {
 	t.Helper()
+
 	opts := []options.Option[config.Config]{
 		config.WithBaseDir(dir),
 		config.WithEnvironment(""),
@@ -70,6 +73,7 @@ func loadWithSchema(
 	}
 	cfg, err := config.New(config.KindViper, append(opts, extra...)...)
 	require.NoError(t, err)
+
 	return cfg
 }
 
@@ -100,10 +104,13 @@ messaging:
 	cfg := loadWithSchema(t, dir)
 
 	var db infra.DatabaseConfig
+
 	require.NoError(t, cfg.UnmarshalKey("database", &db))
 	assert.Equal(t, 77, db.MaxConnections,
 		"MYAPP_DATABASE_MAX_CONNECTIONS must bind database.max_connections")
+
 	var sqs infra.SQSConfig
+
 	require.NoError(t, cfg.UnmarshalKey("messaging.sqs", &sqs))
 	assert.Equal(
 		t,
@@ -143,12 +150,17 @@ tracing:
 	cfg := loadWithSchema(t, dir)
 
 	var db infra.DatabaseConfig
+
 	require.NoError(t, cfg.UnmarshalKey("database", &db))
 	assert.Equal(t, "db.internal", db.Host, "DB_HOST must override database.host")
+
 	var s3 infra.S3Config
+
 	require.NoError(t, cfg.UnmarshalKey("storage.s3", &s3))
 	assert.Equal(t, "prod-bucket", s3.Bucket, "S3_BUCKET must override storage.s3.bucket")
+
 	var tracing infra.TracingConfig
+
 	require.NoError(t, cfg.UnmarshalKey("tracing", &tracing))
 	assert.Equal(t, "collector:4317", tracing.Endpoint,
 		"OTEL_EXPORTER_OTLP_ENDPOINT must override tracing.endpoint")
@@ -176,6 +188,7 @@ func TestConfig_EmptyPrefix_BindsBarePath(t *testing.T) {
 	require.NoError(t, err)
 
 	var db infra.DatabaseConfig
+
 	require.NoError(t, cfg.UnmarshalKey("database", &db))
 	assert.Equal(
 		t,
@@ -207,6 +220,7 @@ func TestConfig_CustomPrefixOwnsDerivedEnvBindings(t *testing.T) {
 	cfg := loadWithSchema(t, dir)
 
 	var s3 infra.S3Config
+
 	require.NoError(t, cfg.UnmarshalKey("storage.s3", &s3))
 	assert.Equal(
 		t,
@@ -238,10 +252,12 @@ func TestConfig_CustomPrefixOwnsDerivedEnvBindings(t *testing.T) {
 func TestConfig_ExtraEnvReplacesSchemaBinding(t *testing.T) {
 	dir := baseWithDB(t)
 	repoint := config.WithExtraEnv(map[string][]string{"database.host": {"PGHOST"}})
+
 	t.Setenv("DB_HOST", "from-alias")
 	t.Setenv("PGHOST", "from-extra")
 
 	var db infra.DatabaseConfig
+
 	require.NoError(t, loadWithSchema(t, dir, repoint).UnmarshalKey("database", &db))
 	assert.Equal(
 		t,
@@ -300,12 +316,14 @@ func TestConfig_SchemaTagForms_Bind(t *testing.T) {
 	require.NoError(t, err)
 
 	var root squashRoot
+
 	require.NoError(t, cfg.Unmarshal(&root))
 	assert.Equal(t, "db.internal", root.Host, "the squashed DB_HOST alias must bind host")
 	assert.Equal(t, 6543, root.Port, "MYAPP_PORT must bind the squashed port")
 	assert.Equal(t, "app", root.User, "YAML values of the squashed section still decode")
 	assert.Equal(t, "blue", root.Label, "the tag name before the comma names the key")
 	assert.Equal(t, 3, root.Replicas, "an untagged field binds by its field name")
+
 	loader, ok := cfg.(*viperloader.Loader)
 	require.True(t, ok)
 	assert.NotContains(
@@ -328,8 +346,10 @@ func TestConfig_SchemaTagForms_Bind(t *testing.T) {
 //     CodeInvalidInput.
 func TestConfig_InvalidSchemaRejected(t *testing.T) {
 	t.Parallel()
+
 	dir := t.TempDir()
 	root := &bindingSchema{}
+
 	for name, schema := range map[string]any{
 		"map":                map[string]any{"database": map[string]any{}},
 		"scalar":             42,
@@ -374,6 +394,7 @@ auth:
 	cfg := loadWithSchema(t, dir)
 
 	var auth infra.AuthConfig
+
 	require.NoError(t, cfg.UnmarshalKey("auth", &auth))
 	assert.Equal(
 		t,

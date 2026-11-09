@@ -32,6 +32,7 @@ func TestRun_SkipCount(t *testing.T) {
 
 	t.Run("flag skips the count entirely", func(t *testing.T) {
 		t.Parallel()
+
 		r := &countStubRunner{rows: []int{1, 2}, total: 500}
 		page, err := listquery.Run(
 			listquery.WithSkipCount(context.Background()),
@@ -46,6 +47,7 @@ func TestRun_SkipCount(t *testing.T) {
 
 	t.Run("without the flag the bounded total is computed", func(t *testing.T) {
 		t.Parallel()
+
 		r := &countStubRunner{rows: []int{1, 2}, total: 3}
 		page, err := listquery.Run(
 			context.Background(),
@@ -61,6 +63,7 @@ func TestRun_SkipCount(t *testing.T) {
 		"the flag does not leak to a sibling List on the original context",
 		func(t *testing.T) {
 			t.Parallel()
+
 			base := context.Background()
 			// A skip-count child context is used for one call...
 			skipped := &countStubRunner{rows: []int{1}, total: 100}
@@ -70,6 +73,7 @@ func TestRun_SkipCount(t *testing.T) {
 				runCountReader(skipped, 10),
 			)
 			require.NoError(t, err)
+
 			// ...and the ORIGINAL context still computes a real total for an unrelated reader.
 			sibling := &countStubRunner{rows: []int{1, 2, 3}, total: 3}
 			page, err := listquery.Run(

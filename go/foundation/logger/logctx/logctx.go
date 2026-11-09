@@ -31,6 +31,7 @@ func CorrelationID(ctx context.Context) string {
 	if id, ok := ctx.Value(correlationIDKey).(string); ok {
 		return id
 	}
+
 	return ""
 }
 
@@ -42,6 +43,7 @@ func TraceID(ctx context.Context) string {
 	if !spanCtx.IsValid() {
 		return ""
 	}
+
 	return spanCtx.TraceID().String()
 }
 
@@ -53,6 +55,7 @@ func SpanID(ctx context.Context) string {
 	if !spanCtx.IsValid() {
 		return ""
 	}
+
 	return spanCtx.SpanID().String()
 }
 

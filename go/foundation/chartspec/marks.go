@@ -23,13 +23,16 @@ func kindOf(t Tuple, fields *listquery.Map) fieldKind {
 	if len(t.Fields) == 0 {
 		return kindOrdinal
 	}
+
 	last := t.Fields[len(t.Fields)-1]
 	if last.Agg != types.AggNone {
 		return kindQuantitative
 	}
+
 	if f, ok := fields.Lookup(last.Name); ok && f.Role == listquery.RoleTime {
 		return kindTemporal
 	}
+
 	return kindOrdinal
 }
 
@@ -39,6 +42,7 @@ func markFor(explicit types.Mark, row, col fieldKind) types.Mark {
 	if explicit != types.MarkAuto {
 		return explicit
 	}
+
 	switch {
 	case row == kindQuantitative && col == kindQuantitative:
 		return types.MarkPoint

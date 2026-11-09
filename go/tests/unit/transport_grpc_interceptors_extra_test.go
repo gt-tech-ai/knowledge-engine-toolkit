@@ -29,6 +29,7 @@ import (
 //   - parseGRPCMethod falls back to ("", fullMethod) for a malformed method string.
 func TestGRPCInterceptors_ErrorBranches(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 	boom := status.Error(codes.Internal, "handler fault")
 
@@ -38,6 +39,7 @@ func TestGRPCInterceptors_ErrorBranches(t *testing.T) {
 
 	t.Run("metrics server labels the error code", func(t *testing.T) {
 		t.Parallel()
+
 		ic := grpcinterceptors.MetricsServerInterceptor(fixtures.NopMetrics())
 		_, err := ic(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/svc.S/M"}, failHandler)
 		require.Error(t, err)
@@ -46,6 +48,7 @@ func TestGRPCInterceptors_ErrorBranches(t *testing.T) {
 
 	t.Run("metrics server tolerates a malformed method", func(t *testing.T) {
 		t.Parallel()
+
 		ic := grpcinterceptors.MetricsServerInterceptor(fixtures.NopMetrics())
 		// A method with no service/method separator exercises parseGRPCMethod's fallback.
 		_, err := ic(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "malformed"},
@@ -55,6 +58,7 @@ func TestGRPCInterceptors_ErrorBranches(t *testing.T) {
 
 	t.Run("tracing server records the error on the span", func(t *testing.T) {
 		t.Parallel()
+
 		ic := grpcinterceptors.TracingServerInterceptor(fixtures.NopTracer())
 		_, err := ic(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/svc.S/M"}, failHandler)
 		require.Error(t, err)

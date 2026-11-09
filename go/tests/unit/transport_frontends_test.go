@@ -45,10 +45,12 @@ type syncInput struct {
 //     JSON), and each run receives the same decoded input.
 func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 	t.Parallel()
+
 	var (
 		mu   sync.Mutex
 		seen []syncInput
 	)
+
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety: types.SafetyMutating, Lifecycles: allLifecycles(),
@@ -62,7 +64,9 @@ func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 			) error {
 				mu.Lock()
 				defer mu.Unlock()
+
 				seen = append(seen, *in)
+
 				return nil
 			}),
 		},
@@ -78,6 +82,7 @@ func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 
 	srv, err := mcp.New(reg, mcpOpts(t))
 	require.NoError(t, err)
+
 	res, err := connectMCP(t, srv).CallTool(t.Context(), &sdkmcp.CallToolParams{
 		Name:      "sync",
 		Arguments: map[string]any{"env": "staging", "fix": true, "target": "api"},

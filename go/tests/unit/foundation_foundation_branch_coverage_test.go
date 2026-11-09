@@ -52,6 +52,7 @@ func TestLifecycleNoOp_StartStop(t *testing.T) {
 	t.Parallel()
 
 	var n lifecycle.NoOp
+
 	ctx := context.Background()
 	assert.NoError(t, n.Start(ctx), "NoOp.Start must be a nil-returning no-op")
 	assert.NoError(t, n.Stop(ctx), "NoOp.Stop must be a nil-returning no-op")

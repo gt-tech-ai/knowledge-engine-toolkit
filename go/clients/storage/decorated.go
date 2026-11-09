@@ -26,6 +26,7 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
+
 	return &decorator{base: base, Base: b}, nil
 }
 
@@ -67,6 +68,7 @@ func (d *decorator) Download(
 	if err != nil {
 		return nil, err
 	}
+
 	return &cleanupReadCloser{ReadCloser: rc, cleanup: cleanup}, nil
 }
 
@@ -87,6 +89,7 @@ type cleanupReadCloser struct {
 func (c *cleanupReadCloser) Close() error {
 	err := c.ReadCloser.Close()
 	c.once.Do(c.cleanup)
+
 	return apperr.Wrap(
 		err,
 		apperr.CodeOr(err, apperr.CodeInternal),
@@ -267,8 +270,10 @@ func (d *decorator) ListObjectsPageToken(
 			objs, next, listErr := d.base.ListObjectsPageToken(
 				c, bucket, prefix, continuationToken, limit,
 			)
+
 			return listPageResult{objects: objs, next: next}, listErr
 		})
+
 	return res.objects, res.next, err
 }
 

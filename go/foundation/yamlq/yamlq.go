@@ -63,8 +63,11 @@ func parse(path string) ([]step, error) {
 	if !strings.HasPrefix(path, "$") {
 		return nil, invalid(path, "a path starts with $")
 	}
+
 	var steps []step
+
 	rest := path[1:]
+
 	for rest != "" {
 		switch {
 		case strings.HasPrefix(rest, ".."):
@@ -72,6 +75,7 @@ func parse(path string) ([]step, error) {
 			if key == "" {
 				return nil, invalid(path, "`..` needs a key")
 			}
+
 			steps, rest = append(steps, step{kind: stepDeep, key: key}), tail
 		case strings.HasPrefix(rest, ".*"):
 			steps, rest = append(steps, step{kind: stepAllValues}), rest[2:]
@@ -80,12 +84,14 @@ func parse(path string) ([]step, error) {
 			if key == "" {
 				return nil, invalid(path, "`.` needs a key")
 			}
+
 			steps, rest = append(steps, step{kind: stepKey, key: key}), tail
 		case strings.HasPrefix(rest, "["):
 			end := strings.IndexByte(rest, ']')
 			if end < 0 {
 				return nil, invalid(path, "unclosed [")
 			}
+
 			inner := rest[1:end]
 			if inner == "*" {
 				steps = append(steps, step{kind: stepAllItems})
@@ -94,13 +100,16 @@ func parse(path string) ([]step, error) {
 				if err != nil || n < 0 {
 					return nil, invalid(path, "an index is * or a non-negative integer")
 				}
+
 				steps = append(steps, step{kind: stepIndex, index: n})
 			}
+
 			rest = rest[end+1:]
 		default:
 			return nil, invalid(path, "unexpected "+strconv.Quote(rest))
 		}
 	}
+
 	return steps, nil
 }
 
@@ -110,6 +119,7 @@ func splitKey(s string) (key, rest string) {
 	if end < 0 {
 		return s, ""
 	}
+
 	return s[:end], s[end:]
 }
 
@@ -124,14 +134,17 @@ func Path(node *yaml.Node, path string) ([]Match, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	cur := []*yaml.Node{root(node)}
 	for _, st := range steps {
 		cur = apply(cur, st)
 	}
+
 	out := make([]Match, 0, len(cur))
 	for _, n := range cur {
 		out = append(out, matchOf(n))
 	}
+
 	return out, nil
 }
 
@@ -140,6 +153,7 @@ func root(node *yaml.Node) *yaml.Node {
 	if node != nil && node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
 		return node.Content[0]
 	}
+
 	return node
 }
 
@@ -148,17 +162,20 @@ func deref(n *yaml.Node) *yaml.Node {
 	for n != nil && n.Kind == yaml.AliasNode {
 		n = n.Alias
 	}
+
 	return n
 }
 
 // apply runs one step over every current node.
 func apply(cur []*yaml.Node, st step) []*yaml.Node {
 	var out []*yaml.Node
+
 	for _, n := range cur {
 		n = deref(n)
 		if n == nil {
 			continue
 		}
+
 		switch st.kind {
 		case stepKey:
 			if v := valueOf(n, st.key); v != nil {
@@ -182,6 +199,7 @@ func apply(cur []*yaml.Node, st step) []*yaml.Node {
 			}
 		}
 	}
+
 	return out
 }
 
@@ -190,11 +208,13 @@ func valueOf(n *yaml.Node, key string) *yaml.Node {
 	if n.Kind != yaml.MappingNode {
 		return nil
 	}
+
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		if n.Content[i].Value == key {
 			return n.Content[i+1]
 		}
 	}
+
 	return nil
 }
 
@@ -204,13 +224,16 @@ func deep(n *yaml.Node, key string) []*yaml.Node {
 	if n == nil {
 		return nil
 	}
+
 	var out []*yaml.Node
+
 	switch n.Kind {
 	case yaml.MappingNode:
 		for i := 0; i+1 < len(n.Content); i += 2 {
 			if n.Content[i].Value == key {
 				out = append(out, n.Content[i+1])
 			}
+
 			out = append(out, deep(n.Content[i+1], key)...)
 		}
 	case yaml.SequenceNode, yaml.DocumentNode:
@@ -220,6 +243,7 @@ func deep(n *yaml.Node, key string) []*yaml.Node {
 	case yaml.ScalarNode, yaml.AliasNode:
 		// A scalar has no keys; deref already resolved an alias.
 	}
+
 	return out
 }
 
@@ -238,5 +262,6 @@ func matchOf(n *yaml.Node) Match {
 	case yaml.DocumentNode:
 		m.Kind = "document"
 	}
+
 	return m
 }

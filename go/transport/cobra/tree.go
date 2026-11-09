@@ -46,36 +46,48 @@ func node(
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.Code(err), "command "+spec.Use)
 	}
+
 	cmd.Use, cmd.Short, cmd.Long, cmd.Example = spec.Use, spec.Short, spec.Long, spec.Example
 	cmd.Aliases, cmd.Hidden, cmd.SilenceUsage = spec.Aliases, spec.Hidden, true
+
 	for i := range spec.Flags {
 		f := &spec.Flags[i]
 		fs := cmd.Flags()
+
 		if f.Persistent {
 			fs = cmd.PersistentFlags()
 		}
+
 		if err := addSpecFlag(fs, f); err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "command "+spec.Use)
 		}
+
 		if f.Required {
 			_ = cmd.MarkFlagRequired(f.Name) // the flag was just added
 		}
 	}
+
 	scope := slices.Concat(inherited, persistent(spec.Flags))
+
 	var groups []string
+
 	for i := range spec.Commands {
 		sub := &spec.Commands[i]
+
 		child, err := node(sub, scope, reg, opts)
 		if err != nil {
 			return nil, err
 		}
+
 		if sub.Group != "" && !slices.Contains(groups, sub.Group) {
 			groups = append(groups, sub.Group)
 			cmd.AddGroup(&spf.Group{ID: sub.Group, Title: sub.Group + ":"})
 		}
+
 		child.GroupID = sub.Group
 		cmd.AddCommand(child)
 	}
+
 	return cmd, nil
 }
 
@@ -92,36 +104,47 @@ func leafOrGroup(
 			RunE: func(c *spf.Command, _ []string) error { return c.Help() },
 		}, nil
 	}
+
 	bare := len(spec.Flags) == 0 && len(spec.Args.Names) == 0 && spec.Args.Rest == ""
 	hooked := opts.Resolve != nil || opts.Before != nil || opts.After != nil
+
 	if bare && !hooked {
 		return Command(reg, spec.Op, opts)
 	}
+
 	if opts.Resolve == nil {
 		if _, err := reg.Find(spec.Op); err != nil {
 			return nil, err
 		}
 	}
+
 	scope := slices.Concat(inherited, spec.Flags)
 	cmd := &spf.Command{
 		Args:        argsRule(spec.Args),
 		Annotations: map[string]string{OperationAnnotation: spec.Op},
 	}
+
 	cmd.RunE = func(c *spf.Command, args []string) error {
 		in := values(c.Flags(), scope, spec.Args, args)
 		name := spec.Op
+
 		var err error
+
 		if opts.Before != nil {
 			name, err = opts.Before(c, name, in)
 		}
+
 		if err == nil {
 			err = run(c, name, in, reg, opts)
 		}
+
 		if opts.After != nil {
 			return opts.After(c, name, err)
 		}
+
 		return err
 	}
+
 	return cmd, nil
 }
 
@@ -133,17 +156,21 @@ func run(
 	runReg, obs := reg, opts.Observer
 	if opts.Resolve != nil {
 		var err error
+
 		if runReg, obs, err = opts.Resolve(c.Context(), name); err != nil {
 			return err
 		}
 	}
+
 	raw, err := json.Marshal(in)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "encode input")
 	}
+
 	if opts.Run != nil {
 		return opts.Run(c.Context(), runReg, name, raw, obs)
 	}
+
 	return RunLocal(c.Context(), runReg, name, raw, obs)
 }
 
@@ -158,10 +185,12 @@ func RunLocal(
 	if err != nil {
 		return err
 	}
+
 	input, err := ops.DecodeLocal(op, raw)
 	if err != nil {
 		return err
 	}
+
 	return reg.Run(ctx, name, input, obs)
 }
 
@@ -173,27 +202,35 @@ func values(
 	args []string,
 ) map[string]any {
 	out := map[string]any{}
+
 	for i := range scope {
 		f := &scope[i]
 		if !fs.Changed(f.Name) && f.Default == nil {
 			continue
 		}
+
 		out[f.FlagField()] = flagValue(fs, f)
 	}
+
 	for i, a := range args {
 		if i < len(spec.Names) {
 			out[spec.Names[i]] = a
+
 			continue
 		}
+
 		out[spec.Rest] = args[i:]
+
 		break
 	}
+
 	return out
 }
 
 // flagValue reads f's parsed value (a duration as nanoseconds).
 func flagValue(fs *pflag.FlagSet, f *types.FlagSpec) any {
 	var v any
+
 	switch f.Type {
 	case types.FlagString:
 		v, _ = fs.GetString(f.Name)
@@ -205,10 +242,12 @@ func flagValue(fs *pflag.FlagSet, f *types.FlagSpec) any {
 		v, _ = fs.GetStringArray(f.Name)
 	case types.FlagDuration:
 		d, _ := fs.GetDuration(f.Name)
+
 		v = d.Nanoseconds()
 	default:
 		v, _ = fs.GetBool(f.Name)
 	}
+
 	return v
 }
 
@@ -217,6 +256,7 @@ func addSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 	if len(f.Short) > 1 {
 		return apperr.New(apperr.CodeInvalidInput, "flag "+f.Name+": short is one letter")
 	}
+
 	def := f.Default
 	switch f.Type {
 	case types.FlagString:
@@ -231,8 +271,10 @@ func addSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 		fs.StringArrayP(f.Name, f.Short, strs(def), f.Usage)
 	case types.FlagDuration:
 		var d time.Duration
+
 		if s, ok := def.(string); ok {
 			var err error
+
 			if d, err = time.ParseDuration(s); err != nil {
 				return apperr.Wrap(
 					err,
@@ -241,6 +283,7 @@ func addSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 				)
 			}
 		}
+
 		fs.DurationP(f.Name, f.Short, d, f.Usage)
 	case "", types.FlagBool:
 		b, _ := def.(bool)
@@ -249,9 +292,11 @@ func addSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"flag %s: unknown type %q", f.Name, f.Type))
 	}
+
 	if f.Hidden {
 		_ = fs.MarkHidden(f.Name) // the flag was just added
 	}
+
 	return nil
 }
 
@@ -260,17 +305,20 @@ func argsRule(spec types.ArgSpec) spf.PositionalArgs {
 	if spec.Rest != "" {
 		return spf.MinimumNArgs(spec.Min)
 	}
+
 	return spf.RangeArgs(spec.Min, len(spec.Names))
 }
 
 // persistent returns the persistent flags of fs.
 func persistent(fs []types.FlagSpec) []types.FlagSpec {
 	var out []types.FlagSpec
+
 	for i := range fs {
 		if fs[i].Persistent {
 			out = append(out, fs[i])
 		}
 	}
+
 	return out
 }
 
@@ -284,7 +332,9 @@ func strs(v any) []string {
 		for i, e := range x {
 			out[i] = strings.TrimSpace(fmt.Sprint(e))
 		}
+
 		return out
 	}
+
 	return nil
 }

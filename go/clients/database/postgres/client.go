@@ -41,15 +41,20 @@ func (c *Client) Start(ctx context.Context) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open database")
 	}
+
 	db.SetMaxOpenConns(c.cfg.MaxConnections)
 	db.SetMaxIdleConns(c.cfg.MaxIdleConnections)
 	db.SetConnMaxLifetime(c.cfg.ConnectionMaxLifetime)
 	db.SetConnMaxIdleTime(c.cfg.ConnMaxIdleTime)
+
 	if err := Ping(ctx, db); err != nil {
 		_ = db.Close()
+
 		return err
 	}
+
 	c.db = db
+
 	return nil
 }
 
@@ -62,6 +67,7 @@ func (c *Client) Stop(_ context.Context) error {
 			"close postgres pool",
 		)
 	}
+
 	return nil
 }
 
@@ -70,6 +76,7 @@ func (c *Client) Liveness(_ context.Context) error {
 	if c.db == nil {
 		return apperr.Internal("database pool not started")
 	}
+
 	return nil
 }
 
@@ -78,6 +85,7 @@ func (c *Client) Readiness(ctx context.Context) error {
 	if c.db == nil {
 		return apperr.Internal("database pool not started")
 	}
+
 	return Ping(ctx, c.db)
 }
 

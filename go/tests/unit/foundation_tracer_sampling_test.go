@@ -18,16 +18,20 @@ import (
 // force-sampled header triggers).
 func remoteSampledParent(t *testing.T) context.Context {
 	t.Helper()
+
 	tid, err := oteltrace.TraceIDFromHex("0123456789abcdef0123456789abcdef")
 	require.NoError(t, err)
+
 	sid, err := oteltrace.SpanIDFromHex("0123456789abcdef")
 	require.NoError(t, err)
+
 	sc := oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
 		TraceID:    tid,
 		SpanID:     sid,
 		TraceFlags: oteltrace.FlagsSampled,
 		Remote:     true,
 	})
+
 	return oteltrace.ContextWithRemoteSpanContext(context.Background(), sc)
 }
 
@@ -163,6 +167,7 @@ func TestContextWithForcedSample(t *testing.T) {
 //     non-recording and every rate-1 root span is recording.
 func TestTracer_ConcurrentNewKeepsOwnSampler(t *testing.T) {
 	const pairs = 64
+
 	ctx := t.Context()
 
 	type result struct {
@@ -170,10 +175,14 @@ func TestTracer_ConcurrentNewKeepsOwnSampler(t *testing.T) {
 		rate      float64
 		recording bool
 	}
+
 	results := make(chan result, 2*pairs)
+
 	var wg sync.WaitGroup
+
 	for i := range 2 * pairs {
 		rate := float64(i % 2)
+
 		wg.Go(func() {
 			tr, err := tracer.New(ctx, tracer.KindOTel,
 				tracer.WithServiceName("tracer-concurrent-test"),
@@ -182,9 +191,12 @@ func TestTracer_ConcurrentNewKeepsOwnSampler(t *testing.T) {
 			)
 			if err != nil {
 				results <- result{err: err}
+
 				return
 			}
+
 			t.Cleanup(func() { _ = tr.Shutdown(context.WithoutCancel(ctx)) })
+
 			// Spans are never ended, so nothing is queued for export to the collector.
 			retCtx, _ := tr.Start(ctx, "root")
 			results <- result{
@@ -192,6 +204,7 @@ func TestTracer_ConcurrentNewKeepsOwnSampler(t *testing.T) {
 			}
 		})
 	}
+
 	wg.Wait()
 	close(results)
 

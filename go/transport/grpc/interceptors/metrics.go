@@ -43,18 +43,23 @@ func metrics(m interfaces.Metrics) around {
 		defaultDurationBuckets(),
 		"service", "method",
 	)
+
 	return func(
 		ctx context.Context, fullMethod string, next func(context.Context) error,
 	) error {
 		start := time.Now()
 		service, method := parseGRPCMethod(fullMethod)
 		err := next(ctx)
+
 		requestDuration.Observe(time.Since(start).Seconds(), service, method)
+
 		code := "OK"
 		if err != nil {
 			code = status.Code(err).String()
 		}
+
 		requestsTotal.Inc(service, method, code)
+
 		return err
 	}
 }
@@ -66,5 +71,6 @@ func parseGRPCMethod(fullMethod string) (service, method string) {
 	if len(parts) >= 2 {
 		return parts[0], parts[1]
 	}
+
 	return "", fullMethod
 }

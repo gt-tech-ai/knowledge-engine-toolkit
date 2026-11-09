@@ -44,10 +44,12 @@ func (c Config) Validate() error {
 			"pipelines.upload.multipart_threshold_bytes must be >= 1",
 		)
 	}
+
 	if c.Upload.MultipartPartSizeBytes < 1 {
 		return apperr.InvalidInput(
 			"pipelines.upload.multipart_part_size_bytes must be >= 1",
 		)
 	}
+
 	return nil
 }

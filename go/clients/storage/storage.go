@@ -79,13 +79,16 @@ func newS3(ctx context.Context, cfg Config, deps Deps) (interfaces.StorageClient
 			cfg.S3.SSEKMSKeyID,
 		), nil
 	}
+
 	if err := cfg.S3.Validate(); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "invalid s3 config")
 	}
+
 	awsClient, err := s3.NewAWSClient(ctx, cfg.S3)
 	if err != nil {
 		return nil, err
 	}
+
 	return s3.NewClient(awsClient, cfg.S3.PublicEndpoint, cfg.S3.SSEKMSKeyID), nil
 }
 

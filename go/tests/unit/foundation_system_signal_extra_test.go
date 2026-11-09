@@ -39,19 +39,24 @@ func TestRunner_CancelTearsDownProcessGroup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	r := system.NewRunner()
 	done := make(chan error, 1)
+
 	go func() { done <- r.Run(ctx, dir, "sh", "-c", script) }()
 
 	var gcPid int
+
 	require.Eventually(t, func() bool {
 		b, err := os.ReadFile(pidFile)
 		if err != nil {
 			return false
 		}
+
 		gcPid, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+
 		return gcPid > 0
 	}, 5*time.Second, 20*time.Millisecond, "grandchild should start and record its PID")
 
 	cancel()
+
 	select {
 	case <-done:
 	case <-time.After(15 * time.Second):

@@ -29,6 +29,7 @@ func treeSpec() types.CommandSpec {
 		{Name: "only", Type: types.FlagStrings, Usage: "services to start"},
 		{Name: "wait", Type: types.FlagDuration, Default: "2s", Usage: "readiness wait"},
 	}
+
 	return types.CommandSpec{
 		Use: "app", Short: "the app CLI",
 		Flags: []types.FlagSpec{
@@ -69,6 +70,7 @@ type treeGot struct {
 // cobraInput; got receives their inputs.
 func treeRegistry(t *testing.T, got *treeGot) *ops.Registry {
 	t.Helper()
+
 	up := treeSpec().Commands[0].Commands[0]
 	flags := append([]types.FlagSpec{{Name: "env", Type: types.FlagString}}, up.Flags...)
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
@@ -84,17 +86,20 @@ func treeRegistry(t *testing.T, got *treeGot) *ops.Registry {
 				_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
 			) error {
 				got.up = in
+
 				return nil
 			}),
 			"check": ops.Func(func(
 				_ context.Context, in *cobraInput, _ opsEnv, _ interfaces.ExecutionObserver,
 			) error {
 				got.typed = *in
+
 				return nil
 			}),
 		},
 	})
 	require.NoError(t, err)
+
 	return reg
 }
 
@@ -113,7 +118,9 @@ func treeRegistry(t *testing.T, got *treeGot) *ops.Registry {
 //     flags; an unknown operation fails the build.
 func TestTransportCobra_Tree(t *testing.T) {
 	t.Parallel()
+
 	var got treeGot
+
 	reg := treeRegistry(t, &got)
 	root, err := opscobra.Tree(treeSpec(), reg, opscobra.Options{})
 	require.NoError(t, err)
@@ -143,7 +150,9 @@ func TestTransportCobra_Tree(t *testing.T) {
 
 	root, err = opscobra.Tree(treeSpec(), reg, opscobra.Options{})
 	require.NoError(t, err)
+
 	var help bytes.Buffer
+
 	root.SetOut(&help)
 	root.SetArgs([]string{})
 	require.NoError(t, root.ExecuteContext(t.Context()))
@@ -153,14 +162,17 @@ func TestTransportCobra_Tree(t *testing.T) {
 
 	op, err := reg.Find("dev.up")
 	require.NoError(t, err)
+
 	var schema struct {
 		Properties map[string]any `json:"properties"`
 	}
+
 	require.NoError(t, json.Unmarshal(op.InputSchema(), &schema))
 	assert.Contains(t, schema.Properties, "only")
 	assert.Contains(t, schema.Properties, "profile")
 
 	bad := treeSpec()
+
 	bad.Commands[1].Op = "nope"
 	_, err = opscobra.Tree(bad, reg, opscobra.Options{})
 	require.Error(t, err)
@@ -169,10 +181,14 @@ func TestTransportCobra_Tree(t *testing.T) {
 // roundTrip normalizes v through JSON, as the operation's decoder sees it.
 func roundTrip(t *testing.T, v map[string]any) map[string]any {
 	t.Helper()
+
 	raw, err := json.Marshal(v)
 	require.NoError(t, err)
+
 	var out map[string]any
+
 	require.NoError(t, json.Unmarshal(raw, &out))
+
 	return out
 }
 
@@ -188,11 +204,14 @@ func roundTrip(t *testing.T, v map[string]any) map[string]any {
 //   - `kb --client-secret s --client-id a` runs the operation with both keys set.
 func TestTransportCobra_TreePassesASecretFlag(t *testing.T) {
 	t.Parallel()
+
 	flags := []types.FlagSpec{
 		{Name: "client-id", Type: types.FlagString},
 		{Name: "client-secret", Type: types.FlagString, Secret: true},
 	}
+
 	var got map[string]any
+
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
@@ -206,11 +225,13 @@ func TestTransportCobra_TreePassesASecretFlag(t *testing.T) {
 					_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
 				) error {
 					got = in
+
 					return nil
 				}),
 		},
 	})
 	require.NoError(t, err)
+
 	root, err := opscobra.Tree(types.CommandSpec{
 		Use: "app", Commands: []types.CommandSpec{{Use: "kb", Op: "kb", Flags: flags}},
 	}, reg, opscobra.Options{})
@@ -237,10 +258,14 @@ func TestTransportCobra_TreePassesASecretFlag(t *testing.T) {
 //     annotation and a group none; a leaf naming an unknown operation fails when it runs.
 func TestTransportCobra_TreeResolvesPerRun(t *testing.T) {
 	t.Parallel()
+
 	var got treeGot
+
 	obs := mocks.NewMockExecutionObserver(gomock.NewController(t))
 	flags := []types.FlagSpec{{Name: "env", Type: types.FlagString}}
+
 	var seen interfaces.ExecutionObserver
+
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
@@ -253,16 +278,20 @@ func TestTransportCobra_TreeResolvesPerRun(t *testing.T) {
 				_ context.Context, in map[string]any, _ opsEnv, o interfaces.ExecutionObserver,
 			) error {
 				got.up, seen = in, o
+
 				return nil
 			}),
 		},
 	})
 	require.NoError(t, err)
+
 	var resolved []string
+
 	opts := opscobra.Options{Resolve: func(
 		_ context.Context, op string,
 	) (*ops.Registry, interfaces.ExecutionObserver, error) {
 		resolved = append(resolved, op)
+
 		return reg, obs, nil
 	}}
 	spec := types.CommandSpec{Use: "app", Commands: []types.CommandSpec{
@@ -283,6 +312,7 @@ func TestTransportCobra_TreeResolvesPerRun(t *testing.T) {
 
 	dev, _, err := root.Find([]string{"dev"})
 	require.NoError(t, err)
+
 	up, _, err := root.Find([]string{"dev", "up"})
 	require.NoError(t, err)
 	assert.Empty(t, dev.Annotations[opscobra.OperationAnnotation])
@@ -305,8 +335,11 @@ func TestTransportCobra_TreeResolvesPerRun(t *testing.T) {
 //     types the flag as a string array.
 func TestTransportCobra_TreeStringArrayFlag(t *testing.T) {
 	t.Parallel()
+
 	flags := []types.FlagSpec{{Name: "tag", Type: types.FlagStringArray}}
+
 	var got map[string]any
+
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
@@ -319,11 +352,13 @@ func TestTransportCobra_TreeStringArrayFlag(t *testing.T) {
 				_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
 			) error {
 				got = in
+
 				return nil
 			}),
 		},
 	})
 	require.NoError(t, err)
+
 	root, err := opscobra.Tree(types.CommandSpec{
 		Use: "app", Commands: []types.CommandSpec{{Use: "tag", Op: "tag", Flags: flags}},
 	}, reg, opscobra.Options{})
@@ -354,6 +389,7 @@ func TestTransportCobra_TreeStringArrayFlag(t *testing.T) {
 //     return is the command's error.
 func TestTransportCobra_TreeRunHooks(t *testing.T) {
 	t.Parallel()
+
 	flags := []types.FlagSpec{{Name: "fix"}}
 	ran := map[string]map[string]any{}
 	run := func(name string) ops.Builder[opsEnv] {
@@ -367,6 +403,7 @@ func TestTransportCobra_TreeRunHooks(t *testing.T) {
 				_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
 			) error {
 				ran[name] = in
+
 				return apperr.New(apperr.CodeInternal, "boom")
 			},
 		)
@@ -385,17 +422,21 @@ func TestTransportCobra_TreeRunHooks(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+
 	var after []string
+
 	opts := opscobra.Options{
 		Before: func(_ *spf.Command, op string, in map[string]any) (string, error) {
 			in["extra"] = "x"
 			if in["fix"] == true {
 				return op + ".fix", nil
 			}
+
 			return op, nil
 		},
 		After: func(_ *spf.Command, op string, err error) error {
 			after = append(after, op)
+
 			return apperr.Wrap(err, apperr.CodeInternal, "after")
 		},
 	}
@@ -424,14 +465,17 @@ func TestTransportCobra_TreeRunHooks(t *testing.T) {
 //   - a `default: 2m` duration flag reports 2m0s as its default and is not changed.
 func TestTransportCobra_TreeDurationDefault(t *testing.T) {
 	t.Parallel()
+
 	root, err := opscobra.Tree(types.CommandSpec{
 		Use: "app", Commands: []types.CommandSpec{{Use: "grp", Flags: []types.FlagSpec{
 			{Name: "wait", Type: types.FlagDuration, Default: "2m"},
 		}}},
 	}, nil, opscobra.Options{})
 	require.NoError(t, err)
+
 	grp, _, err := root.Find([]string{"grp"})
 	require.NoError(t, err)
+
 	f := grp.Flags().Lookup("wait")
 	require.NotNil(t, f)
 	assert.Equal(t, "2m0s", f.DefValue)
@@ -452,8 +496,11 @@ func TestTransportCobra_TreeDurationDefault(t *testing.T) {
 //     passing RunLocal as Run runs the operation as the default does.
 func TestTransportCobra_TreeRunOverride(t *testing.T) {
 	t.Parallel()
+
 	flags := []types.FlagSpec{{Name: "env", Type: types.FlagString}}
+
 	var ran map[string]any
+
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
@@ -466,11 +513,13 @@ func TestTransportCobra_TreeRunOverride(t *testing.T) {
 				_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
 			) error {
 				ran = in
+
 				return nil
 			}),
 		},
 	})
 	require.NoError(t, err)
+
 	spec := types.CommandSpec{
 		Use:      "app",
 		Commands: []types.CommandSpec{{Use: "drift", Op: "drift", Flags: flags}},
@@ -482,6 +531,7 @@ func TestTransportCobra_TreeRunOverride(t *testing.T) {
 		root, err := opscobra.Tree(spec, reg, opscobra.Options{Run: run})
 		require.NoError(t, err)
 		root.SetArgs([]string{"drift", "--env", "staging"})
+
 		return root.ExecuteContext(t.Context())
 	}
 
@@ -490,11 +540,13 @@ func TestTransportCobra_TreeRunOverride(t *testing.T) {
 		op  string
 		raw string
 	}
+
 	err = tree(func(
 		_ context.Context, r *ops.Registry, op string, raw []byte,
 		_ interfaces.ExecutionObserver,
 	) error {
 		got.reg, got.op, got.raw = r, op, string(raw)
+
 		return apperr.New(apperr.CodeForbidden, "scheduled")
 	})
 

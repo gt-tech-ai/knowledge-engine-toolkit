@@ -63,6 +63,7 @@ func MapDBError(err error) error {
 	}
 
 	var pgErr *pgconn.PgError
+
 	if apperr.As(err, &pgErr) {
 		return mapPgError(pgErr)
 	}

@@ -51,6 +51,7 @@ func WithClient[C any](ctx context.Context, c C) context.Context {
 // ClientFrom returns the client of type C bound to ctx, and whether one is.
 func ClientFrom[C any](ctx context.Context) (C, bool) {
 	c, ok := ctx.Value(clientKey[C]{}).(C)
+
 	return c, ok
 }
 
@@ -77,6 +78,7 @@ func NewBase[S, C any](decs decorate.Decorations, name string, raw C) (Base[C], 
 	if err != nil {
 		return Base[C]{}, err
 	}
+
 	return Base[C]{raw: raw, Subject: subject}, nil
 }
 
@@ -86,6 +88,7 @@ func (b Base[C]) Client(ctx context.Context) C {
 	if c, ok := ClientFrom[C](ctx); ok {
 		return c
 	}
+
 	return b.raw
 }
 
@@ -99,10 +102,12 @@ func (b Base[C]) Write[R any](
 ) (R, error) {
 	if !interfaces.InTx(ctx) {
 		var zero R
+
 		return zero, apperr.New(
 			apperr.CodeInternal,
 			"store "+b.Name()+": "+op+" writes outside a transaction",
 		)
 	}
+
 	return b.Exec(ctx, op, fn)
 }

@@ -99,6 +99,7 @@ func TestReadOnlyProbeIsListerNotStore(t *testing.T) {
 //     Exister), verified at compile time by the assertions.
 func TestRoleInterfacesExist(t *testing.T) {
 	t.Parallel()
+
 	// The compile-time var _ assertions above are the assertion; reaching this
 	// line means every role exists with the base-compatible signature.
 }

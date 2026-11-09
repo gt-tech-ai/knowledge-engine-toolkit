@@ -73,17 +73,22 @@ type grypeReport struct {
 // error.
 func GrypeEmergencies(report []byte) ([]Emergency, error) {
 	var r grypeReport
+
 	if err := json.Unmarshal(report, &r); err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse grype JSON report")
 	}
+
 	var out []Emergency
+
 	for i := range r.Matches {
 		m := &r.Matches[i]
 		v := &m.Vulnerability
+
 		if len(v.KnownExploited) == 0 || v.Fix.State != "fixed" ||
 			len(v.Fix.Versions) == 0 {
 			continue
 		}
+
 		out = append(out, Emergency{
 			ID:       v.ID,
 			Severity: v.Severity,
@@ -92,6 +97,7 @@ func GrypeEmergencies(report []byte) ([]Emergency, error) {
 			FixedIn:  v.Fix.Versions[0],
 		})
 	}
+
 	return out, nil
 }
 
@@ -104,18 +110,22 @@ func CheckGrypeReport(path string) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeNotFound, "read grype report "+path)
 	}
+
 	found, err := GrypeEmergencies(report)
 	if err != nil {
 		return err
 	}
+
 	if len(found) == 0 {
 		return nil
 	}
+
 	lines := make([]string, 0, len(found))
 	for _, e := range found {
 		lines = append(lines, fmt.Sprintf("%s %s %s (fixed in %s)",
 			e.ID, e.Package, e.Version, e.FixedIn))
 	}
+
 	return apperr.New(apperr.CodeUpstream,
 		"known-exploited vulnerabilities with a fix: "+strings.Join(lines, "; "))
 }

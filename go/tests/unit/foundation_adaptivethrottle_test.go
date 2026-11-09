@@ -35,6 +35,7 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 	for range 10 { // healthy: accepts keep pace with requests → no rejection
 		require.NoError(t, th.Do(ctx, func() error { return nil }))
 	}
+
 	require.Zero(t, th.RejectionProbability(), "a healthy backend is not throttled")
 
 	for range 20 { // backend down: accepts frozen while requests climb → rejection rises
@@ -43,6 +44,7 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 			th.Do(ctx, func() error { return apperr.Sentinel("backend down") }),
 		)
 	}
+
 	failProb := th.RejectionProbability()
 	require.Positive(
 		t,
@@ -53,6 +55,7 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 	for range 40 { // recovery: accepts climb again → rejection eases
 		require.NoError(t, th.Do(ctx, func() error { return nil }))
 	}
+
 	require.Less(
 		t,
 		th.RejectionProbability(),
@@ -88,6 +91,7 @@ func TestThrottler_ShedsLocallyWithoutCallingOp(t *testing.T) {
 	called := false
 	err := th.Do(ctx, func() error {
 		called = true
+
 		return nil
 	})
 	require.ErrorIs(t, err, adaptivethrottle.ErrThrottled)
@@ -108,6 +112,7 @@ func TestThrottler_DefaultsCoerceInvalidConfig(t *testing.T) {
 	t.Parallel()
 
 	_ = adaptivethrottle.DefaultConfig()
+
 	th := adaptivethrottle.New(
 		adaptivethrottle.Config{K: 0, Decay: 0},
 	) // coerced to 2.0 / 0.98, default RNG

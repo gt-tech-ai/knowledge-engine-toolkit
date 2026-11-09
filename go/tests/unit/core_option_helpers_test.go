@@ -28,6 +28,7 @@ func TestOption_IsSomeIsNoneUnwrapOrElse(t *testing.T) {
 	assert.False(t, some.IsNone())
 	assert.Equal(t, 42, some.UnwrapOrElse(func() int {
 		t.Fatal("fallback must not be called when a value is present")
+
 		return -1
 	}))
 
@@ -51,6 +52,7 @@ func TestSomeIfNotEmpty(t *testing.T) {
 	t.Parallel()
 
 	assert.True(t, types.SomeIfNotEmpty("").IsNone())
+
 	got := types.SomeIfNotEmpty("hello")
 	assert.True(t, got.IsSome())
 	assert.Equal(t, "hello", got.UnwrapOr(""))

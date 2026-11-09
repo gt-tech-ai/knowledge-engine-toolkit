@@ -22,13 +22,17 @@ const partialHeaderLen = 1 + 4*8
 // float64, then the DDSketch with its index mapping) for storage in a row.
 func EncodePartial(p Partial) []byte {
 	out := make([]byte, partialHeaderLen, partialHeaderLen+64)
+
 	out[0] = partialCodecVersion
+
 	for i, v := range []float64{p.Sum, p.Count, p.Min, p.Max} {
 		binary.BigEndian.PutUint64(out[1+8*i:], math.Float64bits(v))
 	}
+
 	if p.Sketch != nil {
 		p.Sketch.Encode(&out, false)
 	}
+
 	return out
 }
 
@@ -41,10 +45,12 @@ func DecodePartial(b []byte) (Partial, error) {
 			"chartspec: malformed partial",
 		)
 	}
+
 	f := func(i int) float64 {
 		return math.Float64frombits(binary.BigEndian.Uint64(b[1+8*i:]))
 	}
 	p := Partial{Sum: f(0), Count: f(1), Min: f(2), Max: f(3)}
+
 	if rest := b[partialHeaderLen:]; len(rest) > 0 {
 		sketch, err := ddsketch.DecodeDDSketch(rest, store.DefaultProvider, nil)
 		if err != nil {
@@ -54,8 +60,10 @@ func DecodePartial(b []byte) (Partial, error) {
 				"chartspec: malformed partial sketch",
 			)
 		}
+
 		p.Sketch = sketch
 	}
+
 	return p, nil
 }
 
@@ -63,6 +71,7 @@ func DecodePartial(b []byte) (Partial, error) {
 // UTC day or UTC month); an unknown grain returns t in UTC unchanged.
 func Truncate(t time.Time, g types.Grain) time.Time {
 	t = t.UTC()
+
 	switch g {
 	case types.GrainMinute:
 		return t.Truncate(time.Minute)

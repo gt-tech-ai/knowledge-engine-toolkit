@@ -72,8 +72,10 @@ func WithDelay(d time.Duration) options.Option[Config] {
 // error if the kind is unknown.
 func New(kind Kind, opts ...options.Option[Config]) (interfaces.Hedger, error) {
 	cfg := DefaultConfig()
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
+
 	return NewFromConfig(cfg)
 }
 

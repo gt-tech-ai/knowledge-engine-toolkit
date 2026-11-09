@@ -16,17 +16,21 @@ import (
 func (e *AppError) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("code", string(e.Code))
 	enc.AddString("message", e.Message)
+
 	if e.Err != nil {
 		enc.AddString("cause", e.Err.Error())
 	}
+
 	if stack := e.StackTrace(); stack != "" {
 		enc.AddString("stack", stack)
 	}
+
 	if len(e.Details) > 0 {
 		if err := enc.AddObject("details", zapMap(e.Details)); err != nil {
 			return Wrap(err, CodeInternal, "encode error details")
 		}
 	}
+
 	return nil
 }
 
@@ -35,9 +39,11 @@ func (e *AppError) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 // stack. Otherwise it returns a plain zap.Error field.
 func ZapError(err error) zap.Field {
 	var appErr *AppError
+
 	if stderrors.As(err, &appErr) {
 		return zap.Object("error", appErr)
 	}
+
 	return zap.Error(err)
 }
 
@@ -52,16 +58,20 @@ func ZapFields(err *AppError) []zap.Field {
 	if err.Err != nil {
 		fields = append(fields, zap.String("error_cause", err.Err.Error()))
 	}
+
 	if stack := err.StackTrace(); stack != "" {
 		fields = append(fields, zap.String("error_stack", stack))
 	}
+
 	if len(err.Details) > 0 {
 		details := make([]zap.Field, 0, len(err.Details))
 		for k, v := range err.Details {
 			details = append(details, zap.String(k, v))
 		}
+
 		fields = append(fields, zap.Object("error_details", zapFields(details)))
 	}
+
 	return fields
 }
 
@@ -70,6 +80,7 @@ func ZapFields(err *AppError) []zap.Field {
 // logged at Error level.
 func LogError(logger *zap.Logger, msg string, err error) {
 	var appErr *AppError
+
 	if stderrors.As(err, &appErr) {
 		fields := ZapFields(appErr)
 		if IsTransient(appErr) {
@@ -77,8 +88,10 @@ func LogError(logger *zap.Logger, msg string, err error) {
 		} else {
 			logger.Error(msg, fields...)
 		}
+
 		return
 	}
+
 	logger.Error(msg, zap.Error(err))
 }
 
@@ -117,6 +130,7 @@ func (m zapMap) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	for k, v := range m {
 		enc.AddString(k, v)
 	}
+
 	return nil
 }
 
@@ -128,5 +142,6 @@ func (f zapFields) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	for _, field := range f {
 		field.AddTo(enc)
 	}
+
 	return nil
 }

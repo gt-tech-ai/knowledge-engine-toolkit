@@ -33,6 +33,7 @@ func (*Collector) OnStepStart(string, string) {}
 func (c *Collector) OnStepComplete(result types.StepResult) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	c.steps = append(c.steps, result)
 }
 
@@ -46,5 +47,6 @@ func (*Collector) OnGateComplete(string, types.StepResults, time.Duration) {}
 func (c *Collector) Steps() []types.StepResult {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	return append([]types.StepResult(nil), c.steps...)
 }

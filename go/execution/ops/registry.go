@@ -54,6 +54,7 @@ func (r *Registry) List() []interfaces.Operation {
 // unknown or the policy excludes it.
 func (r *Registry) Lookup(name string) (interfaces.Operation, bool) {
 	op, ok := r.ops[name]
+
 	return op, ok
 }
 
@@ -63,6 +64,7 @@ func (r *Registry) Find(name string) (interfaces.Operation, error) {
 	if op, ok := r.ops[name]; ok {
 		return op, nil
 	}
+
 	return nil, r.missing(name)
 }
 
@@ -77,6 +79,7 @@ func (r *Registry) Run(
 	if err != nil {
 		return err
 	}
+
 	return res.Run(ctx, input, obs)
 }
 
@@ -88,20 +91,25 @@ func (r *Registry) Reserve(name, holder string) (interfaces.Reservation, error) 
 	if _, ok := r.ops[name]; !ok {
 		return nil, r.missing(name)
 	}
+
 	if holder == "" {
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"reserve operation %q: holder is empty", name,
 		))
 	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if r.holder != "" {
 		return nil, apperr.New(
 			apperr.CodeUnavailable,
 			fmt.Sprintf("busy: %s is running", r.holder),
 		)
 	}
+
 	r.holder = holder
+
 	return &Reservation{reg: r, name: name}, nil
 }
 
@@ -118,10 +126,13 @@ func (s *Reservation) Run(
 			"reservation for operation %q already used or released", s.name,
 		))
 	}
+
 	defer s.free()
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
 	return s.reg.exec(ctx, s.name, input, obs)
 }
 
@@ -136,10 +147,13 @@ func (s *Reservation) Release() {
 func (s *Reservation) claim() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if s.done {
 		return false
 	}
+
 	s.done = true
+
 	return true
 }
 
@@ -147,6 +161,7 @@ func (s *Reservation) claim() bool {
 func (s *Reservation) free() {
 	s.once.Do(func() {
 		s.reg.mu.Lock()
+
 		s.reg.holder = ""
 		s.reg.mu.Unlock()
 	})
@@ -165,6 +180,7 @@ func (r *Registry) exec(
 			return struct{}{}, op.Run(ctx, input, obs)
 		},
 	)
+
 	return err
 }
 
@@ -175,5 +191,6 @@ func (r *Registry) missing(name string) error {
 			"operation %q is not exposed by this front-end's policy", name,
 		))
 	}
+
 	return apperr.New(apperr.CodeNotFound, fmt.Sprintf("unknown operation %q", name))
 }

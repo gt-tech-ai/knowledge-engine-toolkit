@@ -40,6 +40,7 @@ func response(code int, body string) *http.Response {
 //     TCP connection fail with the hint appended.
 func TestServicesProcedure_ProbeKinds(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	doer := mocks.NewMockHTTPDoer(ctrl)
 	doer.EXPECT().
@@ -57,16 +58,21 @@ func TestServicesProcedure_ProbeKinds(t *testing.T) {
 			}
 		}).
 		AnyTimes()
+
 	dialer := mocks.NewMockDialer(ctrl)
 	dialer.EXPECT().DialContext(gomock.Any(), "tcp", gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, addr string) (net.Conn, error) {
 			if addr == "db:5432" {
 				client, server := net.Pipe()
+
 				_ = server.Close()
+
 				return client, nil
 			}
+
 			return nil, apperr.Sentinel("connection refused")
 		}).AnyTimes()
+
 	probe := &types.ProcProbe{
 		HTTP: "{item.http}", TCP: "{item.tcp}", Exec: []string{"{item.exec...}"},
 		Status: "{item.status}", Contains: "{item.contains}", Hint: "{item.hint}",
@@ -89,6 +95,7 @@ func TestServicesProcedure_ProbeKinds(t *testing.T) {
 		for i := 0; i < len(kv); i += 2 {
 			m[kv[i].(string)] = kv[i+1]
 		}
+
 		return m
 	}
 
@@ -104,22 +111,27 @@ func TestServicesProcedure_ProbeKinds(t *testing.T) {
 	}}, types.RunOptions{})
 
 	require.NoError(t, err)
+
 	names := make([]string, 0, len(res))
 	for i := range res {
 		names = append(names, res[i].Name)
 	}
+
 	assert.Equal(
 		t,
 		[]string{"api", "kong", "down", "body", "db", "redis", "seed", "empty"},
 		names,
 	)
+
 	st := statuses(res)
 	for _, pass := range []string{"api", "kong", "db", "seed"} {
 		assert.Equal(t, types.StatusPass, st[pass], pass)
 	}
+
 	for _, fail := range []string{"down", "body", "redis", "empty"} {
 		assert.Equal(t, types.StatusFail, st[fail], fail)
 	}
+
 	assert.Contains(t, res[2].Error, "status 503")
 	assert.Contains(t, res[3].Error, `does not contain "ok"`)
 	assert.Contains(t, res[5].Error, "is redis up?")
@@ -138,8 +150,11 @@ func TestServicesProcedure_ProbeKinds(t *testing.T) {
 //   - A probe naming no kind, or two, fails its row with CodeInvalidInput text.
 func TestServicesProcedure_ProbeRetriesUntilTimeout(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
+
 	var attempts atomic.Int32
+
 	doer := mocks.NewMockHTTPDoer(ctrl)
 	doer.EXPECT().
 		Do(gomock.Any()).
@@ -147,9 +162,11 @@ func TestServicesProcedure_ProbeRetriesUntilTimeout(t *testing.T) {
 			if r.URL.Host == "late" && attempts.Add(1) >= 3 {
 				return response(http.StatusOK, ""), nil
 			}
+
 			return response(http.StatusBadGateway, ""), nil
 		}).
 		AnyTimes()
+
 	retry := func(url string) *types.ProcProbe {
 		return &types.ProcProbe{HTTP: url, Timeout: "2s", Delay: "1ms", MaxDelay: "2ms"}
 	}
@@ -204,6 +221,7 @@ func TestServicesProcedure_ProbeRetriesUntilTimeout(t *testing.T) {
 //     with no kind field at all fails the same way.
 func TestServicesProcedure_ProbeIsAStepKind(t *testing.T) {
 	t.Parallel()
+
 	for name, st := range map[string]types.ProcStep{
 		"probe and tool": {Name: "x", Tool: "echo", Probe: &types.ProcProbe{TCP: "a:1"}},
 		"empty probe":    {Name: "x", Probe: &types.ProcProbe{Contains: "ok"}},

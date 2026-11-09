@@ -42,10 +42,13 @@ type Edge struct {
 // only the code's client-safe message, the real error captured for the request log.
 func ServerOptions(name string, d decorate.Deps, edge Edge) []grpc.ServerOption {
 	var opts []grpc.ServerOption
+
 	unaries := transport.Interceptors(name, d, nativeUnary(d), adaptUnary, edge.Authn)
+
 	if len(unaries) > 0 {
 		opts = append(opts, grpc.ChainUnaryInterceptor(unaries...))
 	}
+
 	streams := transport.Interceptors(
 		name,
 		d,
@@ -56,6 +59,7 @@ func ServerOptions(name string, d decorate.Deps, edge Edge) []grpc.ServerOption 
 	if len(streams) > 0 {
 		opts = append(opts, grpc.ChainStreamInterceptor(streams...))
 	}
+
 	return opts
 }
 
@@ -122,6 +126,7 @@ func when[I any](present bool, build func() around, shape func(around) I) []I {
 	if !present {
 		return nil
 	}
+
 	return []I{shape(build())}
 }
 
@@ -142,14 +147,17 @@ func tier(mw decorate.OpMiddleware) around {
 		ctx context.Context, fullMethod string, next func(context.Context) error,
 	) error {
 		var handlerErr error
+
 		err := mw.WrapOp(
 			ctx,
 			strings.TrimPrefix(fullMethod, "/"),
 			func(ctx context.Context) error {
 				handlerErr = next(ctx)
+
 				return handlerErr
 			},
 		)
+
 		return statusError(ctx, err, handlerErr)
 	}
 }
@@ -162,6 +170,8 @@ func statusError(ctx context.Context, err, handlerErr error) error {
 		err == handlerErr { //nolint:errorlint // identity: the handler's own error
 		return err
 	}
+
 	apperr.Capture(ctx, err)
+
 	return wire.SanitizeGRPC(err)
 }

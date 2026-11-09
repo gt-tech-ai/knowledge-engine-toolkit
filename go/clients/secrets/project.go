@@ -24,16 +24,23 @@ func ProjectEnv(
 	block := make([]string, 0, len(fields))
 	for field, envVar := range fields {
 		r := ref
+
 		r.Field = field
+
 		secret, err := src.Get(ctx, r)
+
 		if apperr.Is(err, apperr.CodeNotFound) {
 			continue
 		}
+
 		if err != nil {
 			return nil, err
 		}
+
 		block = append(block, envVar+"="+secret.Reveal())
 	}
+
 	sort.Strings(block)
+
 	return block, nil
 }
