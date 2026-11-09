@@ -1,6 +1,9 @@
 package infra
 
-import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+import (
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+)
 
 // OIDCConfig holds the OpenID Connect provider parameters a service validates end-user
 // tokens against (all non-secret).
@@ -67,7 +70,14 @@ type AuthConfig struct {
 // service-to-service auth stubs enabled (no identity provider or service tokens required
 // locally).
 func DefaultAuthConfig() AuthConfig {
-	return AuthConfig{Stub: true, ServiceStub: true}
+	return AuthConfig{
+		Stub:             true,
+		ServiceStub:      true,
+		OIDC:             stdx.Zero[OIDCConfig](),
+		ServiceTokens:    nil,
+		ServiceToken:     "",
+		ServiceAuthAudit: false,
+	}
 }
 
 // Validate returns an error when stub=false but the required OIDC params are missing, or

@@ -48,7 +48,7 @@ func cached[T, P any, ID comparable](
 	c Cache[T, ID],
 	name string,
 ) decorate.Roles[T, P, ID] {
-	rc := &roleCache[T, ID]{cache: c, name: name}
+	rc := &roleCache[T, ID]{cache: c, name: name, sf: singleflight.Group{}}
 
 	cacheReads(&roles, rc)
 	cacheWrites(&roles, rc)

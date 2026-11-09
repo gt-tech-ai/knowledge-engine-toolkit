@@ -6,6 +6,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // NodeGetter fetches a stored node by hash, reporting false when the store lacks it.
@@ -228,7 +229,13 @@ func (d decoder) orderField(h Hash) (types.OrderField, error) {
 		return types.OrderField{}, err
 	}
 
-	return types.OrderField{Field: field, Desc: desc}, nil
+	return types.OrderField{
+		Field:   field,
+		Desc:    desc,
+		Join:    nil,
+		Derived: nil,
+		Ordinal: nil,
+	}, nil
 }
 
 // fieldRef decodes a chart_field_ref node.
@@ -279,7 +286,7 @@ func (d decoder) shelf(hash Hash, depth int) (*types.AlgebraExpr, error) {
 		return nil, err
 	}
 
-	algebraExpr := &types.AlgebraExpr{Op: types.AlgebraOp(op)}
+	algebraExpr := &types.AlgebraExpr{Op: types.AlgebraOp(op), Field: nil, Args: nil}
 
 	for _, ah := range node.Lists[memberArgs] {
 		arg, err := d.shelf(ah, depth+1)
@@ -300,13 +307,13 @@ func shelfLeaf(n Node) (*types.AlgebraExpr, error) {
 		return nil, err
 	}
 
-	return &types.AlgebraExpr{Field: ref}, nil
+	return &types.AlgebraExpr{Field: ref, Op: "", Args: nil}, nil
 }
 
 // encodings decodes the encoding channels; the zero hash is no encodings.
 func (d decoder) encodings(h Hash) (types.Encodings, error) {
 	if h.IsZero() {
-		return types.Encodings{}, nil
+		return stdx.Zero[types.Encodings](), nil
 	}
 
 	node, err := d.fetch(h, kindEncodings)
@@ -348,7 +355,7 @@ func (d decoder) optionalFieldRef(hash Hash) (*types.FieldRef, error) {
 // timeRange decodes the window; the zero hash is the zero window.
 func (d decoder) timeRange(h Hash) (types.TimeRange, error) {
 	if h.IsZero() {
-		return types.TimeRange{}, nil
+		return stdx.Zero[types.TimeRange](), nil
 	}
 
 	node, err := d.fetch(h, kindTimeRange)
@@ -408,7 +415,7 @@ func (d decoder) filterNode(hash Hash, depth int) (types.FilterNode, error) {
 	}
 
 	if operation == "" {
-		return types.FilterNode{}, nil
+		return stdx.Zero[types.FilterNode](), nil
 	}
 
 	members, err := d.filterMembers(node, depth)
@@ -426,11 +433,15 @@ func filterClauseOf(node Node, operation string) (types.FilterNode, error) {
 		return types.FilterNode{}, err
 	}
 
-	return types.FilterNode{Clause: &types.FilterNodeClause{
-		Field: field,
-		Op:    types.FilterOperator(operation),
-		Value: node.Fields[memberValue],
-	}}, nil
+	return types.FilterNode{
+		Clause: &types.FilterNodeClause{
+			Field: field,
+			Op:    types.FilterOperator(operation),
+			Value: node.Fields[memberValue],
+		},
+		And: nil,
+		Or:  nil,
+	}, nil
 }
 
 // filterMembers decodes a group's members, non-nil even when empty.
@@ -453,9 +464,9 @@ func (d decoder) filterMembers(n Node, depth int) ([]types.FilterNode, error) {
 func filterGroup(operation string, members []types.FilterNode) (types.FilterNode, error) {
 	switch operation {
 	case groupAnd:
-		return types.FilterNode{And: members}, nil
+		return types.FilterNode{And: members, Clause: nil, Or: nil}, nil
 	case groupOr:
-		return types.FilterNode{Or: members}, nil
+		return types.FilterNode{Or: members, Clause: nil, And: nil}, nil
 	default:
 		return types.FilterNode{}, apperr.New(apperr.CodeInvalidInput,
 			"chartspec: unknown filter group op "+operation)

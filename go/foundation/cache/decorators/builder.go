@@ -27,7 +27,7 @@ type Builder struct {
 
 // NewBuilder creates a new decorator builder wrapping the given base cache.
 func NewBuilder(base interfaces.ByteCache, name string) *Builder {
-	return &Builder{base: base, name: name}
+	return &Builder{base: base, name: name, metrics: nil}
 }
 
 // WithMetrics adds a metrics decorator that records hits, misses, and

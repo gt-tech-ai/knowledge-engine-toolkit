@@ -60,6 +60,7 @@ func NewLister(fsys fs.FS, root string) *Lister {
 		cache: map[string]goListResult{},
 		fsys:  fsys,
 		root:  root,
+		mu:    sync.Mutex{},
 	}
 }
 
@@ -173,7 +174,16 @@ func (l *Lister) FilterModulesWithGoPackages(
 		FanOut(ctx, probes, func(ctx context.Context, p probe) types.StepResult {
 			keep[p.i] = l.hasGoPackages(ctx, commandRunner, p.dir)
 
-			return types.StepResult{Name: p.dir, Status: types.StatusPass}
+			return types.StepResult{
+				Name:     p.dir,
+				Status:   types.StatusPass,
+				Group:    "",
+				Error:    "",
+				Detail:   nil,
+				Children: nil,
+				Duration: 0,
+				Tests:    0,
+			}
 		})
 
 	filtered := make([]string, 0, len(modules))

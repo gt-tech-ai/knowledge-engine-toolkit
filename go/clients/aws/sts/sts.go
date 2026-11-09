@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/aws/smithy-go/middleware"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
@@ -71,6 +72,8 @@ func kinds() client.Kinds[Config, Deps, API] {
 			KindStub: func(context.Context, Config, Deps) (API, error) { return Stub{}, nil },
 			KindSDK:  newSDK,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -150,8 +153,9 @@ func (Stub) GetCallerIdentity(
 	_ ...func(*sts.Options),
 ) (*sts.GetCallerIdentityOutput, error) {
 	return &sts.GetCallerIdentityOutput{
-		Account: aws.String(StubAccount),
-		Arn:     aws.String("arn:aws:iam::" + StubAccount + ":user/stub"),
-		UserId:  aws.String("stub"),
+		Account:        aws.String(StubAccount),
+		Arn:            aws.String("arn:aws:iam::" + StubAccount + ":user/stub"),
+		UserId:         aws.String("stub"),
+		ResultMetadata: middleware.Metadata{},
 	}, nil
 }

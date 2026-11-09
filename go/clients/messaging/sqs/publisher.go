@@ -56,7 +56,12 @@ func NewPublisher(ctx context.Context, cfg *Config) (*Publisher, error) {
 		return nil, err
 	}
 
-	return &Publisher{api: api, urls: make(map[string]string)}, nil
+	return &Publisher{
+		api:  api,
+		urls: make(map[string]string),
+		NoOp: lifecycle.NoOp{},
+		mu:   sync.Mutex{},
+	}, nil
 }
 
 // Publish sends payload to the queue named topic, resolving (and creating, if
@@ -86,11 +91,13 @@ func (p *Publisher) PublishBatchKeyed(
 	trace := traceAttributes(ctx)
 	entries := make([]sqstypes.SendMessageBatchRequestEntry, len(items))
 
-	for i, item := range items {
-		entries[i] = sqstypes.SendMessageBatchRequestEntry{
-			MessageBody:       aws.String(string(item.Payload)),
-			MessageAttributes: withKey(trace, item.Key),
-		}
+	for index, item := range items {
+		var sendMessageBatchRequestEntry sqstypes.SendMessageBatchRequestEntry
+
+		sendMessageBatchRequestEntry.MessageBody = aws.String(string(item.Payload))
+		sendMessageBatchRequestEntry.MessageAttributes = withKey(trace, item.Key)
+
+		entries[index] = sendMessageBatchRequestEntry
 	}
 
 	return p.sendBatch(ctx, topic, entries)
@@ -112,11 +119,13 @@ func (p *Publisher) PublishBatch(
 	attrs := traceAttributes(ctx)
 	entries := make([]sqstypes.SendMessageBatchRequestEntry, len(payloads))
 
-	for i, payload := range payloads {
-		entries[i] = sqstypes.SendMessageBatchRequestEntry{
-			MessageBody:       aws.String(string(payload)),
-			MessageAttributes: attrs,
-		}
+	for index, payload := range payloads {
+		var sendMessageBatchRequestEntry sqstypes.SendMessageBatchRequestEntry
+
+		sendMessageBatchRequestEntry.MessageBody = aws.String(string(payload))
+		sendMessageBatchRequestEntry.MessageAttributes = attrs
+
+		entries[index] = sendMessageBatchRequestEntry
 	}
 
 	return p.sendBatch(ctx, topic, entries)
@@ -135,9 +144,13 @@ func (p *Publisher) send(
 	}
 
 	_, err = p.api.SendMessage(ctx, &awssqs.SendMessageInput{
-		QueueUrl:          aws.String(url),
-		MessageBody:       aws.String(string(payload)),
-		MessageAttributes: attrs,
+		QueueUrl:                aws.String(url),
+		MessageBody:             aws.String(string(payload)),
+		MessageAttributes:       attrs,
+		DelaySeconds:            0,
+		MessageDeduplicationId:  nil,
+		MessageGroupId:          nil,
+		MessageSystemAttributes: nil,
 	})
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "sqs send message")
@@ -211,8 +224,11 @@ func traceAttributes(ctx context.Context) map[string]sqstypes.MessageAttributeVa
 	attrs := make(map[string]sqstypes.MessageAttributeValue, len(carrier))
 	for k, v := range carrier {
 		attrs[k] = sqstypes.MessageAttributeValue{
-			DataType:    aws.String("String"),
-			StringValue: aws.String(v),
+			DataType:         aws.String("String"),
+			StringValue:      aws.String(v),
+			BinaryListValues: nil,
+			BinaryValue:      nil,
+			StringListValues: nil,
 		}
 	}
 
@@ -229,8 +245,11 @@ func withKey(
 	maps.Copy(out, attrs)
 
 	out[interfaces.PartitionKeyAttribute] = sqstypes.MessageAttributeValue{
-		DataType:    aws.String("String"),
-		StringValue: aws.String(key),
+		DataType:         aws.String("String"),
+		StringValue:      aws.String(key),
+		BinaryListValues: nil,
+		BinaryValue:      nil,
+		StringListValues: nil,
 	}
 
 	return out

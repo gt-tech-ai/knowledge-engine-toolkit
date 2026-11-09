@@ -53,24 +53,30 @@ type TestDatabase struct {
 // NewTestDatabase starts a PostgreSQL container and returns a TestDatabase whose
 // DSN points at an empty database (no schema applied).
 func NewTestDatabase(ctx context.Context) (*TestDatabase, error) {
-	req := testcontainers.ContainerRequest{
-		Image:        pgImage,
-		ExposedPorts: []string{"5432/tcp"},
-		Env: map[string]string{
-			"POSTGRES_USER":     dbUser,
-			"POSTGRES_PASSWORD": dbPassword,
-			"POSTGRES_DB":       dbName,
-		},
-		WaitingFor: wait.ForLog("database system is ready to accept connections").
-			WithOccurrence(readyLogOccurrences).
-			WithStartupTimeout(startupTimeout),
+	var containerRequest testcontainers.ContainerRequest
+
+	containerRequest.Image = pgImage
+	containerRequest.ExposedPorts = []string{"5432/tcp"}
+	containerRequest.Env = map[string]string{
+		"POSTGRES_USER":     dbUser,
+		"POSTGRES_PASSWORD": dbPassword,
+		"POSTGRES_DB":       dbName,
 	}
+	containerRequest.WaitingFor = wait.
+		ForLog("database system is ready to accept connections").
+		WithOccurrence(readyLogOccurrences).
+		WithStartupTimeout(startupTimeout)
+
+	req := containerRequest
 
 	container, err := testcontainers.GenericContainer(
 		ctx,
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: req,
 			Started:          true,
+			ProviderType:     0,
+			Logger:           nil,
+			Reuse:            false,
 		},
 	)
 	if err != nil {

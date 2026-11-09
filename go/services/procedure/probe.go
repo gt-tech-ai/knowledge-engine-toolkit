@@ -193,7 +193,7 @@ func probeStatusError(chk *check, status int) error {
 
 // probeTCP opens and closes a connection to addr.
 func (e *engine) probeTCP(ctx context.Context, addr string) error {
-	var dialer interfaces.Dialer = &net.Dialer{}
+	var dialer interfaces.Dialer = new(net.Dialer)
 
 	if e.deps.Dialer != nil {
 		dialer = e.deps.Dialer

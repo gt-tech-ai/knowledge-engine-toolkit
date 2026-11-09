@@ -56,6 +56,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.KubectlClient] {
 			},
 			KindExec: newExec,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

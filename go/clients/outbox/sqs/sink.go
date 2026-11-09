@@ -147,6 +147,7 @@ func NewFromCalls(cfg Config, api Calls) (*Sink, error) {
 		routes: routes,
 		fair:   fair,
 		urls:   map[string]string{},
+		mu:     sync.Mutex{},
 	}, nil
 }
 
@@ -394,9 +395,13 @@ func batchEntries(
 		rec := &recs[index]
 
 		entries[index] = sqstypes.SendMessageBatchRequestEntry{
-			Id:                aws.String(strconv.Itoa(index)),
-			MessageBody:       aws.String(string(rec.Payload)),
-			MessageAttributes: messageAttributes(rec),
+			Id:                      aws.String(strconv.Itoa(index)),
+			MessageBody:             aws.String(string(rec.Payload)),
+			MessageAttributes:       messageAttributes(rec),
+			DelaySeconds:            0,
+			MessageDeduplicationId:  nil,
+			MessageGroupId:          nil,
+			MessageSystemAttributes: nil,
 		}
 
 		if how.grouped {
@@ -439,7 +444,10 @@ func (s *Sink) queueURL(ctx context.Context, queue string) (string, error) {
 
 	out, err := s.api.GetQueueURL(
 		ctx,
-		&awssqs.GetQueueUrlInput{QueueName: aws.String(queue)},
+		&awssqs.GetQueueUrlInput{
+			QueueName:              aws.String(queue),
+			QueueOwnerAWSAccountId: nil,
+		},
 	)
 	if err != nil {
 		return "", apperr.Wrap(
@@ -504,8 +512,11 @@ func messageAttributes(
 // stringAttr is a String message attribute.
 func stringAttr(v string) sqstypes.MessageAttributeValue {
 	return sqstypes.MessageAttributeValue{
-		DataType:    aws.String("String"),
-		StringValue: aws.String(v),
+		DataType:         aws.String("String"),
+		StringValue:      aws.String(v),
+		BinaryListValues: nil,
+		BinaryValue:      nil,
+		StringListValues: nil,
 	}
 }
 

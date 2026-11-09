@@ -45,28 +45,14 @@ type TestCassandra struct {
 // (ForAll's WithStartupTimeoutDefault does not override it), which is shorter than
 // a cold start on a CI runner.
 func NewTestCassandra(ctx context.Context) (*TestCassandra, error) {
-	req := testcontainers.ContainerRequest{
-		Image:        cassandraImage,
-		ExposedPorts: []string{cqlPort},
-		Env: map[string]string{
-			"MAX_HEAP_SIZE":             "768M",
-			"HEAP_NEWSIZE":              "128M",
-			"CASSANDRA_DC":              LocalDC,
-			"CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
-		},
-		WaitingFor: wait.ForAll(
-			wait.ForListeningPort(cqlPort).WithStartupTimeout(startupTimeout),
-			wait.ForExec([]string{"cqlsh", "-e", "SELECT release_version FROM system.local"}).
-				WithExitCodeMatcher(func(code int) bool { return code == 0 }).
-				WithStartupTimeout(startupTimeout),
-		).WithDeadline(startupTimeout),
-	}
-
 	container, err := testcontainers.GenericContainer(
 		ctx,
 		testcontainers.GenericContainerRequest{
-			ContainerRequest: req,
+			ContainerRequest: cassandraRequest(),
 			Started:          true,
+			ProviderType:     0,
+			Logger:           nil,
+			Reuse:            false,
 		},
 	)
 	if err != nil {
@@ -135,4 +121,26 @@ func (c *TestCassandra) Close(ctx context.Context) {
 	if c != nil && c.container != nil {
 		_ = c.container.Terminate(ctx) // best-effort cleanup on teardown
 	}
+}
+
+// cassandraRequest describes the single-node container and how to tell it is ready.
+func cassandraRequest() testcontainers.ContainerRequest {
+	var containerRequest testcontainers.ContainerRequest
+
+	containerRequest.Image = cassandraImage
+	containerRequest.ExposedPorts = []string{cqlPort}
+	containerRequest.Env = map[string]string{
+		"MAX_HEAP_SIZE":             "768M",
+		"HEAP_NEWSIZE":              "128M",
+		"CASSANDRA_DC":              LocalDC,
+		"CASSANDRA_ENDPOINT_SNITCH": "GossipingPropertyFileSnitch",
+	}
+	containerRequest.WaitingFor = wait.ForAll(
+		wait.ForListeningPort(cqlPort).WithStartupTimeout(startupTimeout),
+		wait.ForExec([]string{"cqlsh", "-e", "SELECT release_version FROM system.local"}).
+			WithExitCodeMatcher(func(code int) bool { return code == 0 }).
+			WithStartupTimeout(startupTimeout),
+	).WithDeadline(startupTimeout)
+
+	return containerRequest
 }

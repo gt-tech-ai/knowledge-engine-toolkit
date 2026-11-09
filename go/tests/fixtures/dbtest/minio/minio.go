@@ -67,24 +67,29 @@ func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
 		opt(&currentOptions)
 	}
 
-	req := testcontainers.ContainerRequest{
-		Image:        currentOptions.image,
-		ExposedPorts: []string{minioAPIPort},
-		Env: map[string]string{
-			"MINIO_ROOT_USER":     RootUser,
-			"MINIO_ROOT_PASSWORD": RootPassword,
-		},
-		Cmd: []string{"server", "/data"},
-		WaitingFor: wait.ForHTTP("/minio/health/ready").
-			WithPort(minioAPIPort).
-			WithStartupTimeout(startupTimeout),
+	var containerRequest testcontainers.ContainerRequest
+
+	containerRequest.Image = currentOptions.image
+	containerRequest.ExposedPorts = []string{minioAPIPort}
+	containerRequest.Env = map[string]string{
+		"MINIO_ROOT_USER":     RootUser,
+		"MINIO_ROOT_PASSWORD": RootPassword,
 	}
+	containerRequest.Cmd = []string{"server", "/data"}
+	containerRequest.WaitingFor = wait.ForHTTP("/minio/health/ready").
+		WithPort(minioAPIPort).
+		WithStartupTimeout(startupTimeout)
+
+	req := containerRequest
 
 	container, err := testcontainers.GenericContainer(
 		ctx,
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: req,
 			Started:          true,
+			ProviderType:     0,
+			Logger:           nil,
+			Reuse:            false,
 		},
 	)
 	if err != nil {

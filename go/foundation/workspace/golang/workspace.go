@@ -94,7 +94,11 @@ func ScopedWork(fsys fs.FS, root string, moduleDirs ...string) ([]byte, error) {
 		)
 	}
 
-	scoped := &modfile.WorkFile{Syntax: &modfile.FileSyntax{}}
+	var workFile modfile.WorkFile
+
+	workFile.Syntax = new(modfile.FileSyntax)
+
+	scoped := &workFile
 
 	err = scopeDirectives(scoped, work, root)
 	if err != nil {

@@ -1,6 +1,9 @@
 package listquery
 
-import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+import (
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+)
 
 // The domain-agnostic list-query schema descriptor types. These hand-written types are
 // the stable contract that the GENERATED per-resource accessors populate — but the
@@ -83,7 +86,7 @@ func (s ResourceSchema) Field(name string) (FieldSchema, bool) {
 		}
 	}
 
-	return FieldSchema{}, false
+	return stdx.Zero[FieldSchema](), false
 }
 
 // FieldSchema is the full generated schema for one filterable/sortable field —

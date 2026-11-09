@@ -21,9 +21,9 @@ type AlgebraExpr struct {
 
 // MarshalJSON renders the flattened wire form of the expression.
 func (e AlgebraExpr) MarshalJSON() ([]byte, error) {
-	w := algebraWire{Op: e.Op, Args: e.Args}
+	w := algebraWire{Op: e.Op, Args: e.Args, Field: "", Agg: ""}
 	if e.Field != nil {
-		w = algebraWire{Field: e.Field.Name, Agg: e.Field.Agg}
+		w = algebraWire{Field: e.Field.Name, Agg: e.Field.Agg, Op: "", Args: nil}
 	}
 
 	out, err := json.Marshal(w)
@@ -53,9 +53,15 @@ func (e *AlgebraExpr) UnmarshalJSON(b []byte) error {
 		len(currentAlgebraWire.Args) == 0:
 		*e = AlgebraExpr{
 			Field: &FieldRef{Name: currentAlgebraWire.Field, Agg: currentAlgebraWire.Agg},
+			Op:    "",
+			Args:  nil,
 		}
 	case currentAlgebraWire.Field == "" && currentAlgebraWire.Op != "":
-		*e = AlgebraExpr{Op: currentAlgebraWire.Op, Args: currentAlgebraWire.Args}
+		*e = AlgebraExpr{
+			Op:    currentAlgebraWire.Op,
+			Args:  currentAlgebraWire.Args,
+			Field: nil,
+		}
 	default:
 		return apperr.New(
 			apperr.CodeInvalidInput,
@@ -147,6 +153,7 @@ func (s *ChartSpec) Wire() ([]byte, error) {
 		Mark:      s.Mark,
 		Filter:    s.FilterTree,
 		Detail:    s.Detail,
+		Sort:      nil,
 	}
 	for _, o := range s.Sort {
 		currentChartSpecWire.Sort = append(
@@ -183,9 +190,20 @@ func (s *ChartSpec) UnmarshalJSON(b []byte) error {
 		Mark:       currentChartSpecWire.Mark,
 		FilterTree: currentChartSpecWire.Filter,
 		Detail:     currentChartSpecWire.Detail,
+		Filter:     nil,
+		Sort:       nil,
 	}
 	for _, o := range currentChartSpecWire.Sort {
-		s.Sort = append(s.Sort, OrderField{Field: o.Field, Desc: o.Desc})
+		s.Sort = append(
+			s.Sort,
+			OrderField{
+				Field:   o.Field,
+				Desc:    o.Desc,
+				Join:    nil,
+				Derived: nil,
+				Ordinal: nil,
+			},
+		)
 	}
 
 	return nil

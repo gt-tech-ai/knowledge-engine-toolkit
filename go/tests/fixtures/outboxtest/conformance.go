@@ -14,6 +14,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // largeBatchRows is the rows of the large-batch scenario.
@@ -90,7 +91,9 @@ func seed(
 
 		rec := types.OutboxRecord{
 			ID: ids[i], Lane: lane, Tenant: "org-1", Key: "k", Payload: []byte(`{"n":1}`),
-			CreatedAt: oldest.Add(time.Duration(i) * time.Second),
+			CreatedAt:  oldest.Add(time.Duration(i) * time.Second),
+			Attributes: nil,
+			Attempts:   0,
 		}
 		require.NoError(t, harness.Enqueue(context.Background(), &rec))
 	}
@@ -265,7 +268,7 @@ func (h Harness) statsCountsPendingAndParked(t *testing.T) {
 
 	empty, err := h.Store.Stats(ctx, newLane())
 	require.NoError(t, err)
-	require.Equal(t, types.OutboxStats{}, empty)
+	require.Equal(t, stdx.Zero[types.OutboxStats](), empty)
 }
 
 const (

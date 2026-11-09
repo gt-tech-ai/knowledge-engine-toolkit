@@ -80,10 +80,14 @@ func ResolveFilter(resolve ColumnFn, joinOf JoinFn, filter types.Filter) types.F
 		if len(filterClause.And) > 0 {
 			return types.CompositeFilter{
 				And: resolveEach(resolve, joinOf, filterClause.And),
+				Or:  nil,
 			}
 		}
 
-		return types.CompositeFilter{Or: resolveEach(resolve, joinOf, filterClause.Or)}
+		return types.CompositeFilter{
+			Or:  resolveEach(resolve, joinOf, filterClause.Or),
+			And: nil,
+		}
 	default:
 		return filter
 	}
@@ -242,13 +246,37 @@ func KeysetColumns(
 		if !currentKeysetBuilder.addOrdinal(ordinalOf, orderField, col) {
 			currentKeysetBuilder.add(
 				col,
-				KeysetColumn{Column: col, Desc: orderField.Desc},
+				KeysetColumn{
+					Column:  col,
+					Desc:    orderField.Desc,
+					Join:    nil,
+					Derived: nil,
+					Ordinal: nil,
+				},
 			)
 		}
 	}
 
-	currentKeysetBuilder.add(tiebreaker, KeysetColumn{Column: tiebreaker, Desc: true})
-	currentKeysetBuilder.add(tiebreakerID, KeysetColumn{Column: tiebreakerID, Desc: true})
+	currentKeysetBuilder.add(
+		tiebreaker,
+		KeysetColumn{
+			Column:  tiebreaker,
+			Desc:    true,
+			Join:    nil,
+			Derived: nil,
+			Ordinal: nil,
+		},
+	)
+	currentKeysetBuilder.add(
+		tiebreakerID,
+		KeysetColumn{
+			Column:  tiebreakerID,
+			Desc:    true,
+			Join:    nil,
+			Derived: nil,
+			Ordinal: nil,
+		},
+	)
 
 	return currentKeysetBuilder.out
 }
@@ -290,7 +318,16 @@ func (b *keysetBuilder) addJoin(joinOf JoinFn, orderField types.OrderField) bool
 		joinTarget.Columns,
 		",",
 	)
-	b.add(key, KeysetColumn{Join: joinTarget, Desc: orderField.Desc})
+	b.add(
+		key,
+		KeysetColumn{
+			Join:    joinTarget,
+			Desc:    orderField.Desc,
+			Column:  "",
+			Derived: nil,
+			Ordinal: nil,
+		},
+	)
 
 	return true
 }
@@ -313,7 +350,13 @@ func (b *keysetBuilder) addDerived(
 
 	b.add(
 		"\x00derived\x00"+orderField.Field,
-		KeysetColumn{Derived: derivedSort, Desc: orderField.Desc},
+		KeysetColumn{
+			Derived: derivedSort,
+			Desc:    orderField.Desc,
+			Column:  "",
+			Join:    nil,
+			Ordinal: nil,
+		},
 	)
 
 	return true
@@ -335,7 +378,16 @@ func (b *keysetBuilder) addOrdinal(
 		return false
 	}
 
-	b.add(col, KeysetColumn{Column: col, Ordinal: ord, Desc: orderField.Desc})
+	b.add(
+		col,
+		KeysetColumn{
+			Column:  col,
+			Ordinal: ord,
+			Desc:    orderField.Desc,
+			Join:    nil,
+			Derived: nil,
+		},
+	)
 
 	return true
 }

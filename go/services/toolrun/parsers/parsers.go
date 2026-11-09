@@ -74,7 +74,12 @@ func (emptyOutput) Parse(res *interfaces.CmdResult) types.Verdict {
 // verdict applies the shared exit-code rule to res and the findings parsed from it.
 // The detail is the tool's output, stdout then stderr, trimmed.
 func verdict(res *interfaces.CmdResult, findings []types.Finding) types.Verdict {
-	currentVerdict := types.Verdict{Findings: findings, Detail: output(res)}
+	currentVerdict := types.Verdict{
+		Findings:  findings,
+		Detail:    output(res),
+		Status:    0,
+		Transient: false,
+	}
 	switch {
 	case res.Err != nil || res.ExitCode != 0:
 		currentVerdict.Status = types.StatusFail

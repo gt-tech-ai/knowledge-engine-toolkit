@@ -59,6 +59,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.PlanStore] {
 			},
 			KindObject: newObject,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

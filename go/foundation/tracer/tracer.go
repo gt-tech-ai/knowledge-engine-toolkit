@@ -93,6 +93,7 @@ func ContextWithForcedSample(ctx context.Context) context.Context {
 		SpanID:     sid,
 		TraceFlags: oteltrace.FlagsSampled,
 		Remote:     true,
+		TraceState: oteltrace.TraceState{},
 	})
 
 	return oteltrace.ContextWithRemoteSpanContext(ctx, spanContext)

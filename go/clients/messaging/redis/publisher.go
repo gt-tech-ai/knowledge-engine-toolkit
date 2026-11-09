@@ -42,7 +42,7 @@ func NewPublisher(cfg *Config) (*Publisher, error) {
 		return nil, apperr.New(apperr.CodeInvalidInput, "redis messaging: nil client")
 	}
 
-	return &Publisher{client: cfg.Client}, nil
+	return &Publisher{client: cfg.Client, NoOp: lifecycle.NoOp{}}, nil
 }
 
 // Publish sends payload to the channel named topic via PUBLISH. Delivery is

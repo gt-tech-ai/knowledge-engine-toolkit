@@ -40,23 +40,29 @@ func JSONAPIAnnotations(tb testing.TB) protoreflect.FileDescriptor {
 	tb.Helper()
 
 	str := func(name string, num int32) *descriptorpb.FieldDescriptorProto {
-		return &descriptorpb.FieldDescriptorProto{
-			Name:     new(name),
-			Number:   new(num),
-			Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
-			Type:     descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
-			JsonName: new(name),
-		}
+		var fieldDescriptorProto descriptorpb.FieldDescriptorProto
+
+		fieldDescriptorProto.Name = new(name)
+		fieldDescriptorProto.Number = new(num)
+		fieldDescriptorProto.Label = descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum()
+		fieldDescriptorProto.Type = descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
+		fieldDescriptorProto.JsonName = new(name)
+
+		return &fieldDescriptorProto
 	}
 	ext := func(name, extendee, typeName string) *descriptorpb.FieldDescriptorProto {
 		return &descriptorpb.FieldDescriptorProto{
-			Name:     new(name),
-			Number:   new(int32(extensionFieldNumber)),
-			Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
-			Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
-			TypeName: new(typeName),
-			Extendee: new(extendee),
-			JsonName: new(name),
+			Name:           new(name),
+			Number:         new(int32(extensionFieldNumber)),
+			Label:          descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+			Type:           descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
+			TypeName:       new(typeName),
+			Extendee:       new(extendee),
+			JsonName:       new(name),
+			DefaultValue:   nil,
+			OneofIndex:     nil,
+			Options:        nil,
+			Proto3Optional: nil,
 		}
 	}
 	fdp := jSONAPIAnnotationsTable(str, ext)
@@ -71,43 +77,45 @@ func jSONAPIAnnotationsTable(
 	str func(name string, num int32) *descriptorpb.FieldDescriptorProto,
 	ext func(name, extendee, typeName string) *descriptorpb.FieldDescriptorProto,
 ) *descriptorpb.FileDescriptorProto {
-	return &descriptorpb.FileDescriptorProto{
-		Name:       new("jsonapi/v1/annotations.proto"),
-		Package:    new("jsonapi.v1"),
-		Syntax:     new("proto3"),
-		Dependency: []string{"google/protobuf/descriptor.proto"},
-		MessageType: []*descriptorpb.DescriptorProto{
-			{Name: new("JsonApiService"), Field: []*descriptorpb.FieldDescriptorProto{
-				str("name", 1), str("base_path", fieldTwo),
-			}},
-			{Name: new("JsonApiResource"), Field: []*descriptorpb.FieldDescriptorProto{
-				str("type", 1), str("single_key", fieldTwo),
-				str("collection_key", fieldThree), str("pagination_key", fieldFour),
-			}},
-			{Name: new("JsonApiOperation"), Field: []*descriptorpb.FieldDescriptorProto{
-				{
-					Name:     new(textAction),
-					Number:   new(int32(1)),
-					Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
-					Type:     descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum(),
-					JsonName: new(textAction),
-				},
-			}},
-		},
-		Extension: []*descriptorpb.FieldDescriptorProto{
-			ext("service", ".google.protobuf.FileOptions", ".jsonapi.v1.JsonApiService"),
-			ext(
-				"resource",
-				".google.protobuf.MessageOptions",
-				".jsonapi.v1.JsonApiResource",
-			),
-			ext(
-				"operation",
-				".google.protobuf.MethodOptions",
-				".jsonapi.v1.JsonApiOperation",
-			),
-		},
+	var fileDescriptorProto descriptorpb.FileDescriptorProto
+
+	fileDescriptorProto.Name = new("jsonapi/v1/annotations.proto")
+	fileDescriptorProto.Package = new("jsonapi.v1")
+	fileDescriptorProto.Syntax = new("proto3")
+	fileDescriptorProto.Dependency = []string{"google/protobuf/descriptor.proto"}
+	fileDescriptorProto.MessageType = []*descriptorpb.DescriptorProto{
+		{Name: new("JsonApiService"), Field: []*descriptorpb.FieldDescriptorProto{
+			str("name", 1), str("base_path", fieldTwo),
+		}},
+		{Name: new("JsonApiResource"), Field: []*descriptorpb.FieldDescriptorProto{
+			str("type", 1), str("single_key", fieldTwo),
+			str("collection_key", fieldThree), str("pagination_key", fieldFour),
+		}},
+		{Name: new("JsonApiOperation"), Field: []*descriptorpb.FieldDescriptorProto{
+			{
+				Name:     new(textAction),
+				Number:   new(int32(1)),
+				Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+				Type:     descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum(),
+				JsonName: new(textAction),
+			},
+		}},
 	}
+	fileDescriptorProto.Extension = []*descriptorpb.FieldDescriptorProto{
+		ext("service", ".google.protobuf.FileOptions", ".jsonapi.v1.JsonApiService"),
+		ext(
+			"resource",
+			".google.protobuf.MessageOptions",
+			".jsonapi.v1.JsonApiResource",
+		),
+		ext(
+			"operation",
+			".google.protobuf.MethodOptions",
+			".jsonapi.v1.JsonApiOperation",
+		),
+	}
+
+	return &fileDescriptorProto
 }
 
 // JSONAPISetter carries the dynamic extension types + message descriptors decoded from
@@ -147,7 +155,7 @@ func (s *JSONAPISetter) FileOptsWithService() *descriptorpb.FileOptions {
 	m.Set(s.svcMsg.Fields().ByName("name"), protoreflect.ValueOfString("testsvc"))
 	m.Set(s.svcMsg.Fields().ByName("base_path"), protoreflect.ValueOfString("/api/v1"))
 
-	opts := &descriptorpb.FileOptions{}
+	opts := new(descriptorpb.FileOptions)
 	proto.SetExtension(opts, s.svcExt, m)
 
 	return opts
@@ -175,7 +183,7 @@ func (s *JSONAPISetter) MsgOptsWithResource(
 		)
 	}
 
-	opts := &descriptorpb.MessageOptions{}
+	opts := new(descriptorpb.MessageOptions)
 	proto.SetExtension(opts, s.resExt, message)
 
 	return opts
@@ -204,7 +212,7 @@ func (*JSONAPISetter) MethodOpts(
 		rule.AdditionalBindings = append(rule.AdditionalBindings, httpRule(ab[0], ab[1]))
 	}
 
-	opts := &descriptorpb.MethodOptions{}
+	opts := new(descriptorpb.MethodOptions)
 	proto.SetExtension(opts, annotations.E_Http, rule)
 
 	return opts
@@ -216,36 +224,76 @@ func (*JSONAPISetter) MethodOpts(
 func httpRule(verb, path string) *annotations.HttpRule {
 	switch verb {
 	case "GET":
-		return &annotations.HttpRule{Pattern: &annotations.HttpRule_Get{Get: path}}
+		return &annotations.HttpRule{
+			Pattern:            &annotations.HttpRule_Get{Get: path},
+			Selector:           "",
+			Body:               "",
+			ResponseBody:       "",
+			AdditionalBindings: nil,
+		}
 	case "PUT":
-		return &annotations.HttpRule{Pattern: &annotations.HttpRule_Put{Put: path}}
+		return &annotations.HttpRule{
+			Pattern:            &annotations.HttpRule_Put{Put: path},
+			Selector:           "",
+			Body:               "",
+			ResponseBody:       "",
+			AdditionalBindings: nil,
+		}
 	case "POST":
-		return &annotations.HttpRule{Pattern: &annotations.HttpRule_Post{Post: path}}
+		return &annotations.HttpRule{
+			Pattern:            &annotations.HttpRule_Post{Post: path},
+			Selector:           "",
+			Body:               "",
+			ResponseBody:       "",
+			AdditionalBindings: nil,
+		}
 	case "PATCH":
-		return &annotations.HttpRule{Pattern: &annotations.HttpRule_Patch{Patch: path}}
+		return &annotations.HttpRule{
+			Pattern:            &annotations.HttpRule_Patch{Patch: path},
+			Selector:           "",
+			Body:               "",
+			ResponseBody:       "",
+			AdditionalBindings: nil,
+		}
 	case "DELETE":
-		return &annotations.HttpRule{Pattern: &annotations.HttpRule_Delete{Delete: path}}
+		return &annotations.HttpRule{
+			Pattern:            &annotations.HttpRule_Delete{Delete: path},
+			Selector:           "",
+			Body:               "",
+			ResponseBody:       "",
+			AdditionalBindings: nil,
+		}
 	default:
-		return &annotations.HttpRule{}
+		return new(annotations.HttpRule)
 	}
 }
 
 // EmptyMessage is a no-field response message (e.g. a delete response) carrying no
 // (jsonapi.v1.resource) option.
 func EmptyMessage(name string) *descriptorpb.DescriptorProto {
-	return &descriptorpb.DescriptorProto{Name: new(name)}
+	var descriptorProto descriptorpb.DescriptorProto
+
+	descriptorProto.Name = new(name)
+
+	return &descriptorProto
 }
 
 // ResourceMessage is a response message carrying a (jsonapi.v1.resource) option.
 // s must not be nil.
 func ResourceMessage(
-	s *JSONAPISetter,
+	jsonapiSetter *JSONAPISetter,
 	name, resType, single, collection string,
 ) *descriptorpb.DescriptorProto {
-	return &descriptorpb.DescriptorProto{
-		Name:    new(name),
-		Options: s.MsgOptsWithResource(resType, single, collection),
-	}
+	var descriptorProto descriptorpb.DescriptorProto
+
+	descriptorProto.Name = new(name)
+	descriptorProto.Options = jsonapiSetter.MsgOptsWithResource(
+		resType,
+		single,
+		collection,
+	)
+
+	return &descriptorProto
 }
 
 // Method builds a MethodDescriptorProto wiring input/output messages (by
@@ -255,10 +303,12 @@ func Method(
 	opts *descriptorpb.MethodOptions,
 ) *descriptorpb.MethodDescriptorProto {
 	return &descriptorpb.MethodDescriptorProto{
-		Name:       new(name),
-		InputType:  new(".test.v1." + input),
-		OutputType: new(".test.v1." + output),
-		Options:    opts,
+		Name:            new(name),
+		InputType:       new(".test.v1." + input),
+		OutputType:      new(".test.v1." + output),
+		Options:         opts,
+		ClientStreaming: nil,
+		ServerStreaming: nil,
 	}
 }
 
@@ -315,21 +365,24 @@ func BuildRouteFDS(
 		annotations.File_google_api_annotations_proto,
 		jaFD,
 	)
-	svcFile := &descriptorpb.FileDescriptorProto{
-		Name:    new("test/v1/test.proto"),
-		Package: new("test.v1"),
-		Syntax:  new("proto3"),
-		Dependency: []string{
-			"google/api/annotations.proto",
-			"jsonapi/v1/annotations.proto",
-		},
-		Options:     fileOpts,
-		MessageType: messages,
-		Service: []*descriptorpb.ServiceDescriptorProto{{
-			Name:   new("TestService"),
-			Method: methods,
-		}},
+
+	var fileDescriptorProto descriptorpb.FileDescriptorProto
+
+	fileDescriptorProto.Name = new("test/v1/test.proto")
+	fileDescriptorProto.Package = new("test.v1")
+	fileDescriptorProto.Syntax = new("proto3")
+	fileDescriptorProto.Dependency = []string{
+		"google/api/annotations.proto",
+		"jsonapi/v1/annotations.proto",
 	}
+	fileDescriptorProto.Options = fileOpts
+	fileDescriptorProto.MessageType = messages
+	fileDescriptorProto.Service = []*descriptorpb.ServiceDescriptorProto{{
+		Name:   new("TestService"),
+		Method: methods,
+	}}
+
+	svcFile := &fileDescriptorProto
 	fds := &descriptorpb.FileDescriptorSet{File: append(deps, svcFile)}
 	raw, err := proto.Marshal(fds)
 	require.NoError(tb, err, "marshal synthetic FileDescriptorSet")

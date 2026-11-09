@@ -41,7 +41,7 @@ type RecordingStore[T any, P any, ID comparable] struct {
 
 // NewRecordingStore creates a RecordingStore with default behaviors.
 func NewRecordingStore[T, P any, ID comparable]() *RecordingStore[T, P, ID] {
-	return &RecordingStore[T, P, ID]{}
+	return new(RecordingStore[T, P, ID])
 }
 
 // CallCount returns the total number of calls across all methods.
@@ -116,7 +116,7 @@ func (s *RecordingStore[T, P, ID]) List(
 		return s.ListFn(ctx, params, page)
 	}
 
-	return &types.Page[T]{}, nil
+	return new(types.Page[T]), nil
 }
 
 // Create returns the configured result or the zero value of T.

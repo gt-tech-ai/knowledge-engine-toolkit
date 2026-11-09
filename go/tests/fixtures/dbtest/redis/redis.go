@@ -51,21 +51,26 @@ type TestRedis struct {
 // address (container is nil, so Close is a no-op).
 func NewTestRedis(ctx context.Context) (*TestRedis, error) {
 	if addr := os.Getenv(redisAddrEnv); addr != "" {
-		return &TestRedis{addr: addr}, nil
+		return &TestRedis{addr: addr, container: nil}, nil
 	}
 
-	req := testcontainers.ContainerRequest{
-		Image:        redisImage,
-		ExposedPorts: []string{redisPort},
-		WaitingFor: wait.ForListeningPort(redisPort).
-			WithStartupTimeout(startupTimeout),
-	}
+	var containerRequest testcontainers.ContainerRequest
+
+	containerRequest.Image = redisImage
+	containerRequest.ExposedPorts = []string{redisPort}
+	containerRequest.WaitingFor = wait.ForListeningPort(redisPort).
+		WithStartupTimeout(startupTimeout)
+
+	req := containerRequest
 
 	container, err := testcontainers.GenericContainer(
 		ctx,
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: req,
 			Started:          true,
+			ProviderType:     0,
+			Logger:           nil,
+			Reuse:            false,
 		},
 	)
 	if err != nil {

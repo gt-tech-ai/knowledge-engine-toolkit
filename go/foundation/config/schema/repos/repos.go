@@ -34,7 +34,9 @@ type Config struct {
 
 // DefaultConfig returns the repository defaults: a 5m cache TTL and cache version 1.
 func DefaultConfig() Config {
-	return Config{Caching: CachingConfig{TTL: defaultCachingTTL, Version: 1}}
+	return Config{
+		Caching: CachingConfig{TTL: defaultCachingTTL, Version: 1, KeyPrefix: ""},
+	}
 }
 
 // Validate rejects a negative cache TTL or version.

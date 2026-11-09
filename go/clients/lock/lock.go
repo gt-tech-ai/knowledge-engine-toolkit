@@ -97,6 +97,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.DistributedLock] {
 				return lockredis.New(deps.Redis, cfg.TTL), nil
 			},
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

@@ -43,6 +43,7 @@ func New(maxSize int, ttl time.Duration) *Buffer {
 		keys:    make(map[string]*keyBuffer),
 		maxSize: maxSize,
 		ttl:     ttl,
+		mu:      sync.Mutex{},
 	}
 }
 
@@ -57,7 +58,7 @@ func (b *Buffer) Append(_ context.Context, key, msgID string, payload []byte) er
 
 	currentKeyBuffer := b.live(key)
 	if currentKeyBuffer == nil {
-		currentKeyBuffer = &keyBuffer{}
+		currentKeyBuffer = new(keyBuffer)
 		b.keys[key] = currentKeyBuffer
 	}
 

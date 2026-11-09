@@ -96,11 +96,13 @@ func NewRuntime(ctx context.Context, cfg *RuntimeConfig) (*Runtime, error) {
 	queues := buildQueues(cfg.QueueName, cfg.MaxWorkers)
 	maps.Copy(queues, cfg.ExtraQueues)
 
-	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
-		Queues:       queues,
-		Workers:      cfg.Workers,
-		PeriodicJobs: cfg.PeriodicJobs,
-	})
+	var riverConfig river.Config
+
+	riverConfig.Queues = queues
+	riverConfig.Workers = cfg.Workers
+	riverConfig.PeriodicJobs = cfg.PeriodicJobs
+
+	client, err := river.NewClient(riverpgxv5.New(pool), &riverConfig)
 	if err != nil {
 		pool.Close()
 
@@ -124,7 +126,9 @@ func buildQueues(queueName string, maxWorkers int) map[string]river.QueueConfig 
 		maxWorkers = defaultMaxWorkers
 	}
 
-	return map[string]river.QueueConfig{queueName: {MaxWorkers: maxWorkers}}
+	return map[string]river.QueueConfig{
+		queueName: {MaxWorkers: maxWorkers, FetchCooldown: 0, FetchPollInterval: 0},
+	}
 }
 
 // Start begins fetching and working jobs (and scheduling periodics on the leader).

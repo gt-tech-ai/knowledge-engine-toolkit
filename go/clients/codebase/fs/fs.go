@@ -92,7 +92,10 @@ func (s *Source) visit(
 		return apperr.Wrap(err, apperr.CodeInternal, "relative path of "+text)
 	}
 
-	*out = append(*out, types.File{Path: filepath.ToSlash(rel)})
+	*out = append(
+		*out,
+		types.File{Path: filepath.ToSlash(rel), Untracked: false, Ignored: false},
+	)
 
 	return nil
 }

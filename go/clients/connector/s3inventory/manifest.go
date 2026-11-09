@@ -10,6 +10,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // maxManifestBytes bounds the manifest read; a report's manifest lists its data files
@@ -130,7 +131,7 @@ func (s schema) object(
 	if s.field(row, colBucket) != bucket ||
 		s.field(row, colIsLatest) == "false" ||
 		s.field(row, colIsDeleteMarker) == "true" {
-		return interfaces.StorageObject{}, false, nil
+		return stdx.Zero[interfaces.StorageObject](), false, nil
 	}
 
 	key, err := url.QueryUnescape(s.field(row, colKey))
@@ -141,7 +142,7 @@ func (s schema) object(
 	}
 
 	if !strings.HasPrefix(key, prefix) {
-		return interfaces.StorageObject{}, false, nil
+		return stdx.Zero[interfaces.StorageObject](), false, nil
 	}
 
 	obj, err := s.storageObject(row, key)
@@ -157,6 +158,9 @@ func (s schema) storageObject(
 	obj := interfaces.StorageObject{
 		Key:          key,
 		LastModified: rfc3339(s.field(row, colLastModified)),
+		ContentType:  "",
+		ETag:         "",
+		Size:         0,
 	}
 	if etag := s.field(row, colETag); etag != "" {
 		obj.ETag = `"` + etag + `"`

@@ -134,6 +134,9 @@ func kinds() client.Kinds[Config, Deps, Resolver] {
 			KindStub: func(context.Context, Config, Deps) (Resolver, error) { return Stub{}, nil },
 			KindSDK:  newSDK,
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -157,7 +160,13 @@ func newSDK(_ context.Context, cfg Config, deps Deps) (Resolver, error) {
 		deps.Getenv = func(string) string { return "" }
 	}
 
-	return &sdkResolver{cfg: cfg, deps: deps, cache: map[string]Session{}}, nil
+	return &sdkResolver{
+		cfg:   cfg,
+		deps:  deps,
+		cache: map[string]Session{},
+		group: singleflight.Group{},
+		mu:    sync.Mutex{},
+	}, nil
 }
 
 // sdkResolver verifies sessions through STS and caches them until they near expiry.
@@ -214,14 +223,14 @@ func (r *sdkResolver) cached(key string) (Session, bool) {
 
 	currentSession, ok := r.cache[key]
 	if !ok {
-		return Session{}, false
+		return stdx.Zero[Session](), false
 	}
 
 	if at := currentSession.ExpiresAt(); !at.IsZero() &&
 		at.Before(time.Now().Add(session.ExpirySkew)) {
 		delete(r.cache, key)
 
-		return Session{}, false
+		return stdx.Zero[Session](), false
 	}
 
 	return currentSession, true
@@ -254,7 +263,7 @@ func (r *sdkResolver) resolveAccount(
 
 	// Pin the snapshot so the STS call, and every later use, acts on exactly the
 	// credentials verified here.
-	awscfg.Credentials = credentials.StaticCredentialsProvider{Value: creds}
+	awscfg.Credentials = credentials.StaticCredentialsProvider{Value: creds, Source: nil}
 
 	api, err := r.stsFor(ctx, &awscfg)
 	if err != nil {
@@ -297,7 +306,7 @@ func (r *sdkResolver) stsFor(ctx context.Context, awscfg *aws.Config) (sts.API, 
 
 	return sts.NewFromConfig(ctx,
 		sts.Config{Kind: sts.KindSDK, Name: r.cfg.Name},
-		sts.Deps{Decorations: r.deps.Decorations, AWS: awscfg})
+		sts.Deps{Decorations: r.deps.Decorations, AWS: awscfg, API: nil})
 }
 
 // ambient reports whether an ambient credential chain is configured: a static key, a

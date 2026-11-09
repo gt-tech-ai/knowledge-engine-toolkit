@@ -56,7 +56,7 @@ func NewGroup(logger interfaces.Logger) *Group {
 		panic("loop: logger must not be nil")
 	}
 
-	return &Group{logger: logger}
+	return &Group{logger: logger, cancel: nil, done: nil, runners: nil, mu: sync.Mutex{}}
 }
 
 // Add registers r under name. Add after Start panics, as a wiring bug.

@@ -57,6 +57,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.DockerClient] {
 			},
 			KindExec: newExec,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

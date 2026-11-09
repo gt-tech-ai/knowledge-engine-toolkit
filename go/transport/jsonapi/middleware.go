@@ -86,7 +86,11 @@ func serveRoute(
 	// body we can parse and transform.
 	request.Header.Del("Accept-Encoding")
 
-	currentCaptureWriter := &captureWriter{w: writer, status: http.StatusOK}
+	currentCaptureWriter := &captureWriter{
+		w:      writer,
+		status: http.StatusOK,
+		body:   bytes.Buffer{},
+	}
 	inner.ServeHTTP(currentCaptureWriter, request)
 
 	// Error responses (4xx/5xx) — includes a handler-side protovalidate 400.

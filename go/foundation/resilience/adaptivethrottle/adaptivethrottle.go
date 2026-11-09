@@ -46,7 +46,7 @@ type Config struct {
 
 // DefaultConfig returns SRE-typical throttler defaults.
 func DefaultConfig() Config {
-	return Config{K: defaultK, Decay: defaultDecay}
+	return Config{K: defaultK, Decay: defaultDecay, Rand: nil}
 }
 
 // Throttler is the SRE client-side adaptive throttler.
@@ -95,12 +95,19 @@ func New(cfg Config) *Throttler {
 		decay = defaultDecay
 	}
 
-	r := cfg.Rand
-	if r == nil {
-		r = rand.Float64
+	callback := cfg.Rand
+	if callback == nil {
+		callback = rand.Float64
 	}
 
-	return &Throttler{k: amount, decay: decay, rand: r}
+	return &Throttler{
+		k:        amount,
+		decay:    decay,
+		rand:     callback,
+		requests: 0,
+		accepts:  0,
+		mu:       sync.Mutex{},
+	}
 }
 
 // Do runs op unless the throttler sheds it locally, in which case it returns ErrThrottled

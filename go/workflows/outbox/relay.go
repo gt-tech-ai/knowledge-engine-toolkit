@@ -84,13 +84,17 @@ type RelayConfig struct {
 // to 5m.
 func DefaultRelayConfig(lane string) RelayConfig {
 	return RelayConfig{
-		Lane:        lane,
-		BatchSize:   defaultBatchSize,
-		SendBatch:   defaultSendBatch,
-		Concurrency: defaultConcurrency,
-		MaxAttempts: defaultMaxAttempts,
-		BaseBackoff: time.Second,
-		MaxBackoff:  defaultMaxBackoff,
+		Lane:            lane,
+		BatchSize:       defaultBatchSize,
+		SendBatch:       defaultSendBatch,
+		Concurrency:     defaultConcurrency,
+		MaxAttempts:     defaultMaxAttempts,
+		BaseBackoff:     time.Second,
+		MaxBackoff:      defaultMaxBackoff,
+		ParkOnPermanent: false,
+		DrainBudget:     0,
+		Partitions:      0,
+		Partition:       0,
 	}
 }
 
@@ -219,17 +223,10 @@ func NewRelay(
 		panic(err)
 	}
 
-	if transactionManager == nil || store == nil || sink == nil {
-		panic(
-			apperr.New(
-				apperr.CodeInvalidInput,
-				"outbox relay: tx, store and sink are required",
-			),
-		)
-	}
+	requireCollaborators(transactionManager, store, sink)
 
 	base, err := workflow.NewBase[relayContract](
-		decorate.Fixed(&decorate.Deps{}), "outbox relay "+cfg.Lane, transactionManager,
+		decorate.Fixed(new(decorate.Deps)), "outbox relay "+cfg.Lane, transactionManager,
 	)
 	if err != nil {
 		panic(err)
@@ -239,6 +236,12 @@ func NewRelay(
 		tx:  base,
 		cfg: *cfg, store: store, sink: sink, logger: logger, tracer: tracer,
 		now: time.Now, jitter: retry.FullJitter,
+		sent:    nil,
+		retried: nil,
+		parked:  nil,
+		depth:   nil,
+		lag:     nil,
+		passes:  nil,
 	}
 	if metrics != nil {
 		relay.registerMetrics(metrics)
@@ -548,4 +551,19 @@ func (r *Relay) refreshGauges(ctx context.Context) {
 
 	r.depth.Set(float64(stats.Pending), r.cfg.Lane)
 	r.lag.Set(lag, r.cfg.Lane)
+}
+
+// requireCollaborators panics when the relay lacks one of the collaborators it cannot run
+// without.
+func requireCollaborators(
+	transactionManager interfaces.TransactionManager,
+	store interfaces.OutboxRepository,
+	sink interfaces.OutboxSink,
+) {
+	if transactionManager == nil || store == nil || sink == nil {
+		panic(apperr.New(
+			apperr.CodeInvalidInput,
+			"outbox relay: tx, store and sink are required",
+		))
+	}
 }

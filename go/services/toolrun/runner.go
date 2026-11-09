@@ -92,7 +92,7 @@ func NewFromConfig(cfg Config, depsRef *Deps) (interfaces.ToolRunner, error) {
 
 	keyed := !stepcache.IsOff(deps.Cache)
 	if deps.Cache == nil {
-		off, err := stepcache.NewFromConfig(&stepcache.Config{})
+		off, err := stepcache.NewFromConfig(new(stepcache.Config))
 		if err != nil {
 			return nil, err
 		}
@@ -187,7 +187,11 @@ func (r *runner) dispatch(
 	if len(targets) == 0 && (run.Targets.Kind != "" || run.Each == types.EachTarget) {
 		return types.StepResults{{
 			Name: run.Name, Group: group(&run), Status: types.StatusSkip,
-			Detail: []byte("no targets"),
+			Detail:   []byte("no targets"),
+			Error:    "",
+			Children: nil,
+			Duration: 0,
+			Tests:    0,
 		}}
 	}
 
@@ -240,7 +244,7 @@ func validCwd(cwd string) bool {
 func substitute(runRef *types.ToolRun, vars map[string]string) (types.ToolRun, error) {
 	run := *runRef
 
-	currentSubstitution := &substitution{vars: vars}
+	currentSubstitution := &substitution{vars: vars, missing: ""}
 
 	run.Args, run.FixArgs, run.Env = currentSubstitution.args(
 		run.Args,
@@ -315,7 +319,11 @@ func missing(
 
 	return types.StepResult{
 		Name: run.Name, Group: group(run), Status: status,
-		Error: spec.Binary() + " is not installed: " + spec.InstallHint(),
+		Error:    spec.Binary() + " is not installed: " + spec.InstallHint(),
+		Detail:   nil,
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
 	}
 }
 
@@ -376,14 +384,22 @@ func (r *runner) invoke(
 	if err != nil {
 		return types.StepResult{
 			Name: name, Group: group(&run), Status: types.StatusFail,
-			Error: err.Error(),
+			Error:    err.Error(),
+			Detail:   nil,
+			Children: nil,
+			Duration: 0,
+			Tests:    0,
 		}
 	}
 
 	if r.cached(ctx, key) {
 		return types.StepResult{
 			Name: name, Group: group(&run), Status: types.StatusSkip,
-			Detail: []byte(types.CachedDetail),
+			Detail:   []byte(types.CachedDetail),
+			Error:    "",
+			Children: nil,
+			Duration: 0,
+			Tests:    0,
 		}
 	}
 

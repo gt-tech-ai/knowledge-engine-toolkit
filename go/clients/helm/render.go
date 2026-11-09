@@ -84,12 +84,19 @@ func Parse(manifest []byte) ([]types.Object, error) {
 		}
 
 		meta := stdx.As[map[string]any](doc["metadata"])
-		o := types.Object{Doc: doc, Index: len(out), Source: sourceOf(chunk)}
+		object := types.Object{
+			Doc:       doc,
+			Index:     len(out),
+			Source:    sourceOf(chunk),
+			Kind:      "",
+			Name:      "",
+			Namespace: "",
+		}
 
-		o.Kind = stdx.As[string](doc["kind"])
-		o.Name = stdx.As[string](meta["name"])
-		o.Namespace = stdx.As[string](meta["namespace"])
-		out = append(out, o)
+		object.Kind = stdx.As[string](doc["kind"])
+		object.Name = stdx.As[string](meta["name"])
+		object.Namespace = stdx.As[string](meta["namespace"])
+		out = append(out, object)
 	}
 
 	return out, nil

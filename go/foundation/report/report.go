@@ -94,7 +94,7 @@ func NewFromConfig(
 	case KindTable:
 		return &table{p: secondPrinter}, nil
 	case KindGHActions:
-		return &ghActions{w: streams.Out}, nil
+		return &ghActions{w: streams.Out, pending: nil}, nil
 	case KindJSON:
 		return &jsonReport{w: streams.Out}, nil
 	default:

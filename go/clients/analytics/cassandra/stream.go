@@ -113,7 +113,7 @@ func (p *readPlan) fetch(ctx context.Context, bucket time.Time, state []byte) pa
 			" WHERE org_id = ? AND cube = ? AND bucket = ? AND ts >= ? AND ts < ?",
 		p.org, p.cube, bucket, p.lo, p.hi,
 	).WithContext(ctx).PageSize(p.pageSize).PageState(state).Idempotent(true).Iter()
-	out := page{bucket: bucket}
+	out := page{bucket: bucket, err: nil, rows: nil, next: nil}
 
 	var (
 		instant  time.Time
@@ -203,7 +203,21 @@ func newStream(
 	window int,
 ) *stream {
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	currentStream := &stream{ctx: sctx, cancel: cancel, plan: plan, window: window}
+	currentStream := &stream{
+		ctx:     sctx,
+		cancel:  cancel,
+		plan:    plan,
+		window:  window,
+		chans:   nil,
+		buckets: nil,
+		err:     nil,
+		token:   nil,
+		first:   nil,
+		wg:      sync.WaitGroup{},
+		cur:     0,
+		started: 0,
+		closed:  false,
+	}
 
 	for index, b := range buckets {
 		if resume != nil && b.UnixMilli() < *resume.Bucket {
@@ -351,7 +365,11 @@ func (s *stream) position(currentPage *page) []byte {
 
 		nextMs := s.buckets[s.cur+1].UnixMilli()
 
-		currentResumeToken = resumeToken{Bucket: &nextMs, Query: s.plan.fingerprint}
+		currentResumeToken = resumeToken{
+			Bucket: &nextMs,
+			Query:  s.plan.fingerprint,
+			Page:   nil,
+		}
 	}
 
 	//nolint:errchkjson // a string and a byte slice always marshal

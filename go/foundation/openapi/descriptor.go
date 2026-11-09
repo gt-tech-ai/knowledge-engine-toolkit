@@ -505,7 +505,14 @@ func extensionMessage(
 
 	message := dynamicpb.NewMessage(opts.ProtoReflect().Descriptor())
 
-	err = (proto.UnmarshalOptions{Resolver: types}).Unmarshal(raw, message)
+	var unmarshalOptions proto.UnmarshalOptions
+
+	unmarshalOptions.Resolver = types
+
+	err = unmarshalOptions.Unmarshal(
+		raw,
+		message,
+	)
 	if err != nil {
 		return nil, false, apperr.Wrap(err, apperr.CodeInternal, "decode options")
 	}

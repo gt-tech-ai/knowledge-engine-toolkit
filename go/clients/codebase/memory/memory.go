@@ -31,7 +31,7 @@ func New(files map[string]string) *Source {
 func (s *Source) List(context.Context) ([]types.File, error) {
 	out := make([]types.File, 0, len(s.files))
 	for _, p := range slices.Sorted(maps.Keys(s.files)) {
-		out = append(out, types.File{Path: p})
+		out = append(out, types.File{Path: p, Untracked: false, Ignored: false})
 	}
 
 	return out, nil

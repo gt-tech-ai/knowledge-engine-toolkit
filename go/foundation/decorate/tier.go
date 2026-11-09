@@ -227,7 +227,7 @@ func when[C comparable](collaborator C, build func() OpMiddleware) OpMiddleware 
 // named where it is built.
 // d must not be nil.
 func (t Tier) Subject(name string, d *Deps) Subject {
-	return Subject{all: t.chains(name, d), name: name}
+	return Subject{all: t.chains(name, d), name: name, ops: nil, view: 0}
 }
 
 // observabilityMiddleware builds the recovery, tracing, metrics or logging layer.
@@ -276,9 +276,23 @@ func (t Tier) chains(name string, deps *Deps) chains {
 	streaming.Timeout = 0
 
 	return chains{
-		full:      t.Chain(name, deps),
-		once:      t.Chain(name, new(deps.WithoutRetry())),
-		observed:  t.Chain(name, &Deps{Observability: deps.Observability}),
+		full: t.Chain(name, deps),
+		once: t.Chain(name, new(deps.WithoutRetry())),
+		observed: t.Chain(
+			name,
+			&Deps{
+				Observability: deps.Observability,
+				Auth:          nil,
+				Retrier:       nil,
+				Breaker:       nil,
+				Bulkhead:      nil,
+				RateLimiter:   nil,
+				PanicLogger:   nil,
+				Timeout:       0,
+				SkipRecovery:  false,
+				ShedLoad:      false,
+			},
+		),
 		streaming: t.Chain(name, &streaming),
 		timeout:   deps.Timeout,
 	}

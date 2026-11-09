@@ -105,6 +105,9 @@ func New(cfg Config) *Breaker {
 				counts.Requests >= cfg.MinRequests &&
 				float64(counts.TotalFailures)/float64(counts.Requests) >= cfg.FailureRatio
 		},
+		BucketPeriod:  0,
+		OnStateChange: nil,
+		IsExcluded:    nil,
 	})
 
 	return &Breaker{inner: circuitBreaker}

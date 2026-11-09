@@ -220,6 +220,14 @@ func New(value *sql.DB, cfg *Config) (*Store, error) {
 		db: value, lease: cfg.Lease, maxErrorLen: cfg.MaxErrorLen,
 		tenantColumn: cfg.TenantColumn != "", partitions: cfg.partitions(),
 		partitionColumn: cfg.PartitionColumn != "",
+		claimSQL:        "",
+		statsSQL:        "",
+		sentSQL:         "",
+		retrySQL:        "",
+		parkSQL:         "",
+		purgeSQL:        "",
+		enqueueSQL:      "",
+		attrKeys:        nil,
 	}
 
 	var attrCols strings.Builder
@@ -230,27 +238,7 @@ func New(value *sql.DB, cfg *Config) (*Store, error) {
 		_, _ = attrCols.WriteString(", " + col + "::text")
 	}
 
-	text := cfg.Table
-
-	currentStore.claimSQL = claimSQL(cfg, attrCols.String())
-	currentStore.statsSQL = statsSQL(cfg)
-	currentStore.sentSQL = fmt.Sprintf(
-		`UPDATE %s SET status = 'sent', sent_at = now(), last_error = ''
-WHERE id = $1 AND status = 'pending'`,
-		text,
-	)
-	currentStore.retrySQL = fmt.Sprintf(
-		`UPDATE %s SET next_attempt_at = $2, last_error = $3
-WHERE id = $1 AND status = 'pending'`,
-		text,
-	)
-	currentStore.parkSQL = fmt.Sprintf(`UPDATE %s SET status = 'parked', last_error = $2
-WHERE id = $1 AND status = 'pending'`, text)
-	currentStore.purgeSQL = fmt.Sprintf(
-		`DELETE FROM %s WHERE status = 'sent' AND sent_at < $1`,
-		text,
-	)
-	currentStore.enqueueSQL = enqueueSQL(cfg, currentStore.attrKeys)
+	currentStore.prepareStatements(cfg, attrCols.String())
 
 	return currentStore, nil
 }
@@ -629,4 +617,30 @@ func (s *Store) truncate(lastErr string) string {
 	}
 
 	return strings.ToValidUTF8(lastErr[:s.maxErrorLen], "")
+}
+
+// prepareStatements renders every statement for cfg; attrCols selects the attribute
+// columns.
+func (s *Store) prepareStatements(cfg *Config, attrCols string) {
+	text := cfg.Table
+
+	s.claimSQL = claimSQL(cfg, attrCols)
+	s.statsSQL = statsSQL(cfg)
+	s.sentSQL = fmt.Sprintf(
+		`UPDATE %s SET status = 'sent', sent_at = now(), last_error = ''
+WHERE id = $1 AND status = 'pending'`,
+		text,
+	)
+	s.retrySQL = fmt.Sprintf(
+		`UPDATE %s SET next_attempt_at = $2, last_error = $3
+WHERE id = $1 AND status = 'pending'`,
+		text,
+	)
+	s.parkSQL = fmt.Sprintf(`UPDATE %s SET status = 'parked', last_error = $2
+WHERE id = $1 AND status = 'pending'`, text)
+	s.purgeSQL = fmt.Sprintf(
+		`DELETE FROM %s WHERE status = 'sent' AND sent_at < $1`,
+		text,
+	)
+	s.enqueueSQL = enqueueSQL(cfg, s.attrKeys)
 }

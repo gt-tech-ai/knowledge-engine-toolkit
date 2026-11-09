@@ -17,6 +17,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 const (
@@ -82,7 +83,20 @@ type Deps struct {
 }
 
 // DefaultConfig returns the memory kind in us-east-1.
-func DefaultConfig() Config { return Config{SQS: infra.SQSConfig{Region: "us-east-1"}} }
+func DefaultConfig() Config {
+	return Config{
+		SQS: infra.SQSConfig{
+			Region:          "us-east-1",
+			Queues:          nil,
+			Endpoint:        "",
+			AccessKeyID:     "",
+			SecretAccessKey: "",
+		},
+		Kind:    "",
+		Name:    "",
+		Receive: stdx.Zero[Receive](),
+	}
+}
 
 // name is the client name of cfg's publisher ("messaging" when unnamed); its handlers
 // are "<name>.handler".
@@ -109,6 +123,7 @@ func sqsConfig(cfg *Config, deps Deps, handlers *client.Base) sqs.Config {
 		Handlers:        *handlers,
 		API:             deps.SQSAPI,
 		Ready:           deps.Ready,
+		QueueURL:        "",
 	}
 }
 
@@ -148,12 +163,12 @@ func publishers() client.Kinds[Config, Deps, interfaces.MessagePublisher] {
 			KindSQS: func(
 				ctx context.Context, cfg Config, deps Deps,
 			) (interfaces.MessagePublisher, error) {
-				return sqs.NewPublisher(ctx, new(sqsConfig(&cfg, deps, &client.Base{})))
+				return sqs.NewPublisher(ctx, new(sqsConfig(&cfg, deps, new(client.Base))))
 			},
 			KindRedis: func(
 				_ context.Context, _ Config, deps Deps,
 			) (interfaces.MessagePublisher, error) {
-				return redis.NewPublisher(new(redisConfig(deps, &client.Base{})))
+				return redis.NewPublisher(new(redisConfig(deps, new(client.Base))))
 			},
 		},
 	}
@@ -185,6 +200,9 @@ func consumers(
 				return redis.NewSubscriber(new(redisConfig(deps, &handlers)))
 			},
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

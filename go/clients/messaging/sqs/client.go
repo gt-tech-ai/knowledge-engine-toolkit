@@ -146,7 +146,10 @@ func resolveAPI(ctx context.Context, cfg *Config) (API, error) {
 func ensureQueue(ctx context.Context, api API, queueName string) (string, error) {
 	out, err := api.GetQueueUrl(
 		ctx,
-		&awssqs.GetQueueUrlInput{QueueName: aws.String(queueName)},
+		&awssqs.GetQueueUrlInput{
+			QueueName:              aws.String(queueName),
+			QueueOwnerAWSAccountId: nil,
+		},
 	)
 	if err == nil {
 		return aws.ToString(out.QueueUrl), nil
@@ -160,7 +163,11 @@ func ensureQueue(ctx context.Context, api API, queueName string) (string, error)
 
 	created, cerr := api.CreateQueue(
 		ctx,
-		&awssqs.CreateQueueInput{QueueName: aws.String(queueName)},
+		&awssqs.CreateQueueInput{
+			QueueName:  aws.String(queueName),
+			Attributes: nil,
+			Tags:       nil,
+		},
 	)
 	if cerr != nil {
 		return "", apperr.Wrap(cerr, apperr.CodeUnavailable, "sqs create queue")

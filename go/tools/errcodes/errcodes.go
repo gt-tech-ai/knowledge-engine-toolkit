@@ -33,5 +33,14 @@ func (generator) Name() string { return "errcodes" }
 
 // Inputs selects the taxonomy source.
 func (generator) Inputs() types.FileSelector {
-	return types.FileSelector{Paths: []string{SourcePath}}
+	return types.FileSelector{
+		Paths:            []string{SourcePath},
+		Roots:            nil,
+		Globs:            nil,
+		Exts:             nil,
+		Exclude:          nil,
+		TrackedOnly:      false,
+		IncludeGenerated: false,
+		IncludeIgnored:   false,
+	}
 }

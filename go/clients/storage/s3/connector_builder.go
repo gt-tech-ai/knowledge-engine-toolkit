@@ -46,7 +46,19 @@ func NewConnectorClientBuilder(baseRef *infra.S3Config) ConnectorClientBuilder {
 			region = base.Region // per-connector region absent → the app-config region
 		}
 
-		cfg := infra.S3Config{Kind: "s3", Region: region}
+		cfg := infra.S3Config{
+			Kind:                   "s3",
+			Region:                 region,
+			Endpoint:               "",
+			PublicEndpoint:         "",
+			Bucket:                 "",
+			AccessKeyID:            "",
+			SecretAccessKey:        "",
+			SSEKMSKeyID:            "",
+			ForcePathStyle:         false,
+			PresignExpiry:          0,
+			MultipartPresignExpiry: 0,
+		}
 		if endpoint != "" {
 			cfg.Kind = kindMinIO
 			cfg.Endpoint = endpoint

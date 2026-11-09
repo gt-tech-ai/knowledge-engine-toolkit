@@ -141,6 +141,8 @@ func DefaultConfig() Config {
 			MaxMessageBytes:       defaultStreamMaxMessageBytes,
 			MaxConnections:        defaultConfigMaxConnections,
 			MaxConnectionsPerUser: defaultConfigMaxConnectionsPerUser,
+			AllowedOrigins:        nil,
+			AllowInsecureOrigins:  false,
 		},
 		GRPC: GRPCConfig{
 			KeepaliveTime:    defaultConfigKeepaliveTime,

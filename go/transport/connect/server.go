@@ -117,9 +117,10 @@ func NewServer(cfg ServerConfig, logger interfaces.Logger) *Server {
 	})
 
 	return &Server{
-		mux:    mux,
-		logger: logger,
-		cfg:    cfg,
+		mux:        mux,
+		logger:     logger,
+		cfg:        cfg,
+		httpServer: atomic.Pointer[http.Server]{},
 	}
 }
 
@@ -146,28 +147,27 @@ func (s *Server) Start(ctx context.Context) error {
 	protocols.SetUnencryptedHTTP2(true)
 
 	addr := fmt.Sprintf(":%d", s.cfg.Port)
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           s.mux,
-		Protocols:         protocols,
-		ReadTimeout:       s.cfg.ReadTimeout,
-		ReadHeaderTimeout: s.cfg.ReadHeaderTimeout,
-		WriteTimeout:      s.cfg.WriteTimeout,
-		IdleTimeout:       s.cfg.IdleTimeout,
-		MaxHeaderBytes:    s.cfg.MaxHeaderBytes,
-		// BaseContext deliberately roots request contexts in context.Background(), NOT the
-		// ctx passed to Start: on SIGTERM the caller cancels its ctx, and Shutdown already
-		// drains in-flight requests within ShutdownTimeout — inheriting the cancellable ctx
-		// would abort those in-flight requests immediately and defeat the graceful drain.
-		BaseContext: func(_ net.Listener) context.Context { return context.Background() },
-	}
+
+	var server http.Server
+
+	server.Addr = addr
+	server.Handler = s.mux
+	server.Protocols = protocols
+	server.ReadTimeout = s.cfg.ReadTimeout
+	server.ReadHeaderTimeout = s.cfg.ReadHeaderTimeout
+	server.WriteTimeout = s.cfg.WriteTimeout
+	server.IdleTimeout = s.cfg.IdleTimeout
+	server.MaxHeaderBytes = s.cfg.MaxHeaderBytes
+	server.BaseContext = func(_ net.Listener) context.Context { return context.Background() }
+
+	srv := &server
 
 	// Bind the listener synchronously so a bind failure (port already in use) surfaces from
 	// Start; publish the server (Store) only AFTER the bind succeeds so Readiness reports
 	// ready only once we are actually listening. Then serve in the background so Start
 	// returns once the server is listening (the interfaces.Lifecycle "return when ready"
 	// contract, so a lifecycle.Manager can start it in sequence without hanging).
-	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", addr)
+	listener, err := new(net.ListenConfig).Listen(ctx, "tcp", addr)
 	if err != nil {
 		return apperr.Wrap(
 			err,

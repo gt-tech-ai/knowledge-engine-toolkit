@@ -71,7 +71,7 @@ func Load(fsys fs.FS, dir string) (*Dataset, error) {
 // path is in skip (a template or scaffold tree holding YAML that is not data) is not
 // read. A missing dir is CodeNotFound.
 func LoadTree(fsys fs.FS, dir string, skip ...string) (*Dataset, error) {
-	currentYamlWalk := &yamlWalk{dir: dir, skip: skip}
+	currentYamlWalk := &yamlWalk{dir: dir, skip: skip, files: nil}
 
 	err := fs.WalkDir(fsys, dir, currentYamlWalk.visit)
 	if err != nil {

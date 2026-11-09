@@ -9,7 +9,11 @@
 // middleware that applies it lives in transport/jsonapi.
 package jsonapi
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+)
 
 // Role is the JSON:API operation role a REST route classifies into. The
 // consumer's route table (typically emitted by its code generator) tags each
@@ -114,7 +118,7 @@ type Config struct {
 // "/connectors/{id}"). Returns false when no route matches.
 func (c Config) MatchRoute(method, path string) (RouteEntry, bool) {
 	if c.BasePath != "" && !strings.HasPrefix(path, c.BasePath) {
-		return RouteEntry{}, false
+		return stdx.Zero[RouteEntry](), false
 	}
 
 	segs := splitPath(path)

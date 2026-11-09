@@ -24,7 +24,7 @@ func RunJobGroup(
 	jobs []interfaces.AnyJob,
 	obs interfaces.ExecutionObserver,
 ) (types.StepResults, error) {
-	group := &jobGroup{obs: obs}
+	group := &jobGroup{obs: obs, all: nil, mu: sync.Mutex{}, obsMu: sync.Mutex{}}
 
 	currentGroup, gctx := errgroup.WithContext(ctx)
 	for _, job := range jobs {
@@ -64,7 +64,7 @@ func (g *jobGroup) run(
 ) {
 	// Per-job emitter sharing the group observer mutex: FanOut inside this
 	// job delivers its units live (serialized) and counts them.
-	emitter := &stepEmitter{mu: &g.obsMu, obs: g.obs}
+	emitter := &stepEmitter{mu: &g.obsMu, obs: g.obs, count: 0}
 	start := time.Now()
 	stepResults, err := job.Execute(withEmitter(ctx, emitter), runner, root)
 	elapsed := time.Since(start)
@@ -73,9 +73,14 @@ func (g *jobGroup) run(
 		// Discoverer or pre-execution failure: surface as a single Fail result
 		// so the gate can detect the failure rather than seeing zero results.
 		stepResults = types.StepResults{{
-			Name:   job.Meta().Name,
-			Status: types.StatusFail,
-			Error:  err.Error(),
+			Name:     job.Meta().Name,
+			Status:   types.StatusFail,
+			Error:    err.Error(),
+			Group:    "",
+			Detail:   nil,
+			Children: nil,
+			Duration: 0,
+			Tests:    0,
 		}}
 	}
 

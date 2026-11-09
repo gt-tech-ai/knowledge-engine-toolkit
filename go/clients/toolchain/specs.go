@@ -63,14 +63,16 @@ func ProjectToolsByCategory(
 // per-platform install method to a concrete command.
 func projectTool(toolEntry *types.ToolEntry) (types.ToolDef, error) {
 	def := types.ToolDef{
-		Name:         toolEntry.Name,
-		Binary:       toolEntry.Binary,
-		Description:  toolEntry.Description,
-		VersionCmd:   toolEntry.VersionCmd,
-		VersionParse: resolveVersionParse(toolEntry.VersionParse),
-		Required:     toolEntry.Required,
-		FallbackURL:  toolEntry.FallbackURL,
-		CI:           toolEntry.CI,
+		Name:           toolEntry.Name,
+		Binary:         toolEntry.Binary,
+		Description:    toolEntry.Description,
+		VersionCmd:     toolEntry.VersionCmd,
+		VersionParse:   resolveVersionParse(toolEntry.VersionParse),
+		Required:       toolEntry.Required,
+		FallbackURL:    toolEntry.FallbackURL,
+		CI:             toolEntry.CI,
+		MinVersion:     nil,
+		InstallMethods: nil,
 	}
 
 	if toolEntry.MinVersion != "" {
@@ -131,8 +133,9 @@ func buildInstallMethod(
 	switch installMethodEntry.Kind {
 	case types.InstallKindGoInstall:
 		return types.InstallMethod{
-			Command: "go",
-			Args:    []string{"install", installMethodEntry.Package},
+			Command:  "go",
+			Args:     []string{"install", installMethodEntry.Package},
+			Download: nil,
 		}
 	case types.InstallKindGitHubRelease:
 		base := fmt.Sprintf(
@@ -142,26 +145,34 @@ func buildInstallMethod(
 			installMethodEntry.Tag,
 		)
 
-		return types.InstallMethod{Download: buildDownload(installMethodEntry, base)}
+		return types.InstallMethod{
+			Download: buildDownload(installMethodEntry, base),
+			Command:  "",
+			Args:     nil,
+		}
 	case types.InstallKindURL:
 		return types.InstallMethod{
 			Download: buildDownload(
 				installMethodEntry,
 				strings.TrimSuffix(installMethodEntry.URL, "/"),
 			),
+			Command: "",
+			Args:    nil,
 		}
 	case types.InstallKindCommand:
 		return types.InstallMethod{
-			Command: installMethodEntry.Command,
-			Args:    installMethodEntry.Args,
+			Command:  installMethodEntry.Command,
+			Args:     installMethodEntry.Args,
+			Download: nil,
 		}
 	default:
 		// Validation rejects any other kind, so this result is unreachable from config.
 	}
 
 	return types.InstallMethod{
-		Command: installMethodEntry.Command,
-		Args:    installMethodEntry.Args,
+		Command:  installMethodEntry.Command,
+		Args:     installMethodEntry.Args,
+		Download: nil,
 	}
 }
 

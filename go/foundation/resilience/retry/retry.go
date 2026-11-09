@@ -143,6 +143,7 @@ func NewFromConfig(cfg Config) (interfaces.Retrier, error) {
 			MaxInterval:     cfg.MaxInterval,
 			Multiplier:      cfg.Multiplier,
 			MaxElapsedTime:  cfg.MaxElapsedTime,
+			IsRetryable:     nil,
 		}
 
 		return exponential.New(expCfg), nil

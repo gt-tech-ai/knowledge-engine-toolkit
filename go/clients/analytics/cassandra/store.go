@@ -129,7 +129,13 @@ func newStore(cfgRef *Config) (*Store, error) {
 		}
 	}
 
-	return &Store{cfg: cfg}, nil
+	return &Store{
+		cfg:         cfg,
+		session:     nil,
+		dial:        nil,
+		mu:          sync.RWMutex{},
+		schemaReady: false,
+	}, nil
 }
 
 // applyStoreDefaults fills every unset tuning field.

@@ -31,6 +31,7 @@ func Tier() decorate.Tier {
 			decorate.LayerMetrics,
 			decorate.LayerLogging,
 		},
+		Edge: false,
 	}
 }
 
@@ -90,7 +91,7 @@ func AtMostOnce() Option {
 
 // newOptions applies opts over the plain client tier.
 func newOptions(opts []Option) options {
-	o := options{tier: Tier()}
+	o := options{tier: Tier(), adjust: nil}
 	for _, opt := range opts {
 		opt(&o)
 	}

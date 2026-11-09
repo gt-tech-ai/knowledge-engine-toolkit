@@ -129,7 +129,7 @@ func (s *Store) readPartition(
 	org string,
 	bucket time.Time,
 ) ([]*groupRows, error) {
-	collected := &partitionGroups{index: map[string]*groupRows{}}
+	collected := &partitionGroups{index: map[string]*groupRows{}, groups: nil}
 
 	var state []byte
 
@@ -196,12 +196,19 @@ func (p *partitionGroups) scan(iter interfaces.CQLIter) {
 func (p *partitionGroups) group(
 	instant time.Time, dimsKey string, dims map[string]string,
 ) *groupRows {
-	id := instant.Format(time.RFC3339Nano) + "|" + dimsKey
+	identifier2 := instant.Format(time.RFC3339Nano) + "|" + dimsKey
 
-	currentGroupRows, ok := p.index[id]
+	currentGroupRows, ok := p.index[identifier2]
 	if !ok {
-		currentGroupRows = &groupRows{ts: instant, dims: dims, dimsKey: dimsKey}
-		p.index[id] = currentGroupRows
+		currentGroupRows = &groupRows{
+			ts:        instant,
+			dims:      dims,
+			dimsKey:   dimsKey,
+			compacted: nil,
+			keys:      nil,
+			facts:     nil,
+		}
+		p.index[identifier2] = currentGroupRows
 		p.groups = append(p.groups, currentGroupRows)
 	}
 

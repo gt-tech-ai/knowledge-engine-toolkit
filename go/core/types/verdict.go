@@ -11,10 +11,14 @@ import (
 // each part present only when set, followed by the verdict's own detail.
 func (v Verdict) Step(name, group string) StepResult {
 	stepResult := StepResult{
-		Name:   name,
-		Group:  group,
-		Status: v.Status,
-		Detail: []byte(v.render()),
+		Name:     name,
+		Group:    group,
+		Status:   v.Status,
+		Detail:   []byte(v.render()),
+		Error:    "",
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
 	}
 	if v.Status == StatusFail || v.Status == StatusWarn {
 		stepResult.Error = v.summary()

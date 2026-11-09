@@ -132,7 +132,12 @@ func (o seededOp[T]) check() error {
 // with no $schema version (an MCP tool requires a top-level "type": "object"). Input
 // types are static structs, so a marshal failure is a programming error and panics.
 func ReflectInputSchema(value any) []byte {
-	r := &jsonschema.Reflector{DoNotReference: true, ExpandedStruct: true}
+	var reflector jsonschema.Reflector
+
+	reflector.DoNotReference = true
+	reflector.ExpandedStruct = true
+
+	r := &reflector
 	s := r.Reflect(value)
 
 	s.Version = ""

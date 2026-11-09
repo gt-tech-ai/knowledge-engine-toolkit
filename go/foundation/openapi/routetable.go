@@ -15,6 +15,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // publicDirMode is the mode of a directory anyone may read.
@@ -280,7 +281,12 @@ func (x *jsonAPIExtensions) methodRoutes(
 		return nil, err
 	}
 
-	routes := &methodRoutes{rpc: string(methodDescriptor.FullName()), bindings: bindings}
+	routes := &methodRoutes{
+		rpc:      string(methodDescriptor.FullName()),
+		bindings: bindings,
+		resource: stdx.Zero[resourceConfig](),
+		action:   false,
+	}
 	if len(bindings) == 0 {
 		return routes, nil // gRPC-only method — not a REST route
 	}

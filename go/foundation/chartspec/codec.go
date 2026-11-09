@@ -59,10 +59,11 @@ func DecodePartial(data []byte) (Partial, error) {
 		return math.Float64frombits(binary.BigEndian.Uint64(data[1+8*i:]))
 	}
 	partial := Partial{
-		Sum:   callback(0),
-		Count: callback(1),
-		Min:   callback(partialMinSlot),
-		Max:   callback(partialMaxSlot),
+		Sum:    callback(0),
+		Count:  callback(1),
+		Min:    callback(partialMinSlot),
+		Max:    callback(partialMaxSlot),
+		Sketch: nil,
 	}
 
 	if rest := data[partialHeaderLen:]; len(rest) > 0 {

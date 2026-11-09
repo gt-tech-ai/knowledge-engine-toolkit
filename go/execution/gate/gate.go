@@ -65,17 +65,29 @@ type Gate struct {
 // Tier is the gate tier's decoration: recovery, then logging, tracing, metrics and a
 // timeout around one run of a gate (the "Run" operation), outermost first.
 func Tier() decorate.Tier {
-	return decorate.Tier{Name: "gate", Order: []decorate.Layer{
-		decorate.LayerRecovery,
-		decorate.LayerLogging,
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerTimeout,
-	}}
+	return decorate.Tier{
+		Name: "gate", Order: []decorate.Layer{
+			decorate.LayerRecovery,
+			decorate.LayerLogging,
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}
 }
 
 // New returns an empty gate named name that reports to no observer.
-func New(name string) *Gate { return &Gate{name: name, obs: engine.NopObserver{}} }
+func New(name string) *Gate {
+	return &Gate{
+		name:          name,
+		obs:           engine.NopObserver{},
+		op:            decorate.Subject{},
+		phases:        nil,
+		stopOnFailure: false,
+	}
+}
 
 // Parallel adds a phase in which all jobs run concurrently.
 func (g *Gate) Parallel(name string, jobs ...interfaces.AnyJob) *Gate {

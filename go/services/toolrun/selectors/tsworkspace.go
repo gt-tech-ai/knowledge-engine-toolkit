@@ -10,6 +10,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // workspaceFile is pnpm's workspace manifest at the codebase root.
@@ -66,7 +67,7 @@ func packageSelector(workspace []byte) (types.FileSelector, error) {
 		)
 	}
 
-	sel := types.FileSelector{}
+	sel := stdx.Zero[types.FileSelector]()
 
 	for _, text := range item.Packages {
 		if neg, ok := strings.CutPrefix(text, "!"); ok {

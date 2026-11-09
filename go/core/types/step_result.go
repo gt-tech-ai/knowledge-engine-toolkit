@@ -117,18 +117,36 @@ func (rs StepResults) FailedNames() []string {
 // NewStep returns the result of the step name: status, and err's text as Error when
 // err is non-nil.
 func NewStep(name string, status StepStatus, err error) StepResult {
-	r := StepResult{Name: name, Status: status}
+	stepResult := StepResult{
+		Name:     name,
+		Status:   status,
+		Group:    "",
+		Error:    "",
+		Detail:   nil,
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
+	}
 	if err != nil {
-		r.Error = err.Error()
+		stepResult.Error = err.Error()
 	}
 
-	return r
+	return stepResult
 }
 
 // DetailStep returns the result of the step name: status, with detail as its detail
 // text and no error (a report row that explains itself rather than failing).
 func DetailStep(name string, status StepStatus, detail string) StepResult {
-	return StepResult{Name: name, Status: status, Detail: []byte(detail)}
+	return StepResult{
+		Name:     name,
+		Status:   status,
+		Detail:   []byte(detail),
+		Group:    "",
+		Error:    "",
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
+	}
 }
 
 // OneStep returns NewStep's result as a one-step StepResults.

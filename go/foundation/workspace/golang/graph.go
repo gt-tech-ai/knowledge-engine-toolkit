@@ -102,7 +102,7 @@ func ParseWorkspaceGraph(work []byte, goMods map[string][]byte) ([]Module, error
 
 		dirOf[file.Module.Mod.Path] = dir
 		parsed = append(parsed, file)
-		out = append(out, Module{Dir: dir, Path: file.Module.Mod.Path})
+		out = append(out, Module{Dir: dir, Path: file.Module.Mod.Path, Requires: nil})
 	}
 
 	for i, mf := range parsed {

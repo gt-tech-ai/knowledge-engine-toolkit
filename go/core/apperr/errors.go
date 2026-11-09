@@ -152,6 +152,8 @@ func New(code ErrorCode, message string) *AppError {
 		Code:    code,
 		Message: message,
 		stack:   callers(),
+		Err:     nil,
+		Details: nil,
 	}
 }
 
@@ -167,6 +169,7 @@ func Wrap(err error, code ErrorCode, message string) error {
 		Message: message,
 		Err:     err,
 		stack:   stackFromOrCapture(err),
+		Details: nil,
 	}
 }
 

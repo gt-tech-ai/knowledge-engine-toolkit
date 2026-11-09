@@ -26,7 +26,7 @@ type registry struct {
 
 // newRegistry returns an empty registry.
 func newRegistry() *registry {
-	return &registry{used: map[string]map[string]struct{}{}}
+	return &registry{used: map[string]map[string]struct{}{}, errs: nil, mu: sync.Mutex{}}
 }
 
 // use records name as resolved in tier; a nil registry records nothing.

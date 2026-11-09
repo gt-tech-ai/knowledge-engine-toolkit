@@ -247,7 +247,7 @@ type Gate struct {
 	Flags []string
 }
 
-var _ gate.Factory = &Gate{}
+var _ gate.Factory = new(Gate)
 
 // Gate builds the suite's gate: one job per selected entry, in phase order; a Serial
 // phase runs its jobs one at a time. A suite that cannot be planned is one failing job.
@@ -354,7 +354,7 @@ func Build(env Env, verb, name, group string, run job.Run) interfaces.AnyJob {
 
 	base, err := job.NewBase(env.Decs, job.Component(prefix, verb, name))
 	if err != nil {
-		return (&job.Base{}).Func(name, group, func(
+		return new(job.Base).Func(name, group, func(
 			context.Context, interfaces.CommandRunner, string,
 		) (types.StepResults, error) {
 			return nil, err
@@ -366,7 +366,7 @@ func Build(env Env, verb, name, group string, run job.Run) interfaces.AnyJob {
 
 // failed is the one-step job that fails with err.
 func failed(name string, err error) interfaces.AnyJob {
-	return (&job.Base{}).Check(name, name, func(context.Context) error { return err })
+	return new(job.Base).Check(name, name, func(context.Context) error { return err })
 }
 
 // matchesAny reports whether e matches one of sels.

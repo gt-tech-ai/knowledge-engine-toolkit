@@ -25,7 +25,7 @@ type Memory struct {
 
 // NewMemory builds an in-memory Deduplicator. ttl of zero remembers keys forever.
 func NewMemory(ttl time.Duration) *Memory {
-	return &Memory{seen: make(map[string]time.Time), ttl: ttl}
+	return &Memory{seen: make(map[string]time.Time), ttl: ttl, mu: sync.Mutex{}}
 }
 
 // compile-time check: Memory satisfies the Deduplicator contract.

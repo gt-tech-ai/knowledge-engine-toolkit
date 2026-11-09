@@ -18,11 +18,14 @@ type Tuple struct {
 // (nil) shelf normalizes to one empty tuple, the identity of the product.
 func Normalize(algebraExpr types.Shelf) []Tuple {
 	if algebraExpr == nil {
-		return []Tuple{{}}
+		return []Tuple{{
+			Fields: nil,
+			Nested: false,
+		}}
 	}
 
 	if algebraExpr.Field != nil {
-		return []Tuple{{Fields: []types.FieldRef{*algebraExpr.Field}}}
+		return []Tuple{{Fields: []types.FieldRef{*algebraExpr.Field}, Nested: false}}
 	}
 
 	switch algebraExpr.Op {
@@ -48,7 +51,10 @@ func concatArgs(args []*types.AlgebraExpr) []Tuple {
 
 // productArgs is the Cartesian product of the operands; nest flags it Nested.
 func productArgs(args []*types.AlgebraExpr, nest bool) []Tuple {
-	out := []Tuple{{}}
+	out := []Tuple{{
+		Fields: nil,
+		Nested: false,
+	}}
 	for _, arg := range args {
 		out = product(out, Normalize(arg), nest)
 	}

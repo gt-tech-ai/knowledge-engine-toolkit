@@ -154,7 +154,7 @@ func setList(node *Node, name string, hashs []Hash) {
 func (e *encoder) spec(sRef *types.ChartSpec) (Hash, error) {
 	chartSpec := *sRef
 
-	node := Node{Kind: kindSpec}
+	node := Node{Kind: kindSpec, Fields: nil, Children: nil, Lists: nil}
 	setField(&node, memberCube, chartSpec.Cube)
 	setField(&node, memberGrain, string(chartSpec.Grain))
 	setField(&node, memberMark, string(chartSpec.Mark))
@@ -225,7 +225,7 @@ func (e *encoder) sortList(sorts []types.OrderField) ([]Hash, error) {
 	out := make([]Hash, 0, len(sorts))
 
 	for _, o := range sorts {
-		sn := Node{Kind: kindSort}
+		sn := Node{Kind: kindSort, Fields: nil, Children: nil, Lists: nil}
 		setField(&sn, memberField, o.Field)
 		setField(&sn, memberDesc, o.Desc)
 
@@ -246,7 +246,7 @@ func (e *encoder) fieldRef(ref *types.FieldRef) (Hash, error) {
 		return Hash{}, nil
 	}
 
-	n := Node{Kind: kindFieldRef}
+	n := Node{Kind: kindFieldRef, Fields: nil, Children: nil, Lists: nil}
 	setField(&n, memberField, ref.Name)
 	setField(&n, memberAgg, string(ref.Agg))
 
@@ -264,7 +264,7 @@ func (e *encoder) shelf(algebraExpr *types.AlgebraExpr, path string) (Hash, erro
 		return e.fieldRef(algebraExpr.Field)
 	}
 
-	node := Node{Kind: kindShelf}
+	node := Node{Kind: kindShelf, Fields: nil, Children: nil, Lists: nil}
 	setField(&node, memberOp, string(algebraExpr.Op))
 
 	args := make([]Hash, 0, len(algebraExpr.Args))
@@ -290,7 +290,7 @@ func (e *encoder) shelf(algebraExpr *types.AlgebraExpr, path string) (Hash, erro
 
 // encodings encodes the encoding channels; all four unset is absent.
 func (e *encoder) encodings(enc types.Encodings) (Hash, error) {
-	node := Node{Kind: kindEncodings}
+	node := Node{Kind: kindEncodings, Fields: nil, Children: nil, Lists: nil}
 
 	for _, item := range []struct {
 		ref  *types.FieldRef
@@ -322,7 +322,7 @@ func (e *encoder) timeRange(currentTimeRange types.TimeRange) (Hash, error) {
 		return Hash{}, nil
 	}
 
-	node := Node{Kind: kindTimeRange}
+	node := Node{Kind: kindTimeRange, Fields: nil, Children: nil, Lists: nil}
 
 	for _, b := range []struct {
 		t    time.Time
@@ -356,7 +356,7 @@ func (e *encoder) filterNode(currentFilterNode types.FilterNode) (Hash, error) {
 		return e.filterClause(*c)
 	}
 
-	node := Node{Kind: kindFilterGroup}
+	node := Node{Kind: kindFilterGroup, Fields: nil, Children: nil, Lists: nil}
 	members := currentFilterNode.And
 
 	switch {
@@ -410,7 +410,12 @@ func (e *encoder) filterClause(filterNodeClause types.FilterNodeClause) (Hash, e
 		)
 	}
 
-	node := Node{Kind: kindFilterClause, Fields: map[string]any{}}
+	node := Node{
+		Kind:     kindFilterClause,
+		Fields:   map[string]any{},
+		Children: nil,
+		Lists:    nil,
+	}
 	setField(&node, memberField, filterNodeClause.Field)
 	setField(&node, memberOp, string(filterNodeClause.Op))
 

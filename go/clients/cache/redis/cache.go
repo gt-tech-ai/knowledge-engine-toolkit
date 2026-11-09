@@ -127,6 +127,10 @@ func DefaultConfig() Config {
 		DefaultTTL:   defaultConfigDefaultTTL,
 		OpTimeout:    defaultConfigOpTimeout,
 		FailureMode:  FailureModeBypass,
+		Logger:       nil,
+		Password:     "",
+		DB:           0,
+		TLS:          false,
 	}
 }
 
@@ -163,18 +167,25 @@ func New(cfg *Config) *Cache {
 		cfg.DefaultTTL = fallbackEntryTTL
 	}
 
-	opts := &redis.Options{
-		Addr:         cfg.Addr,
-		Password:     cfg.Password,
-		DB:           cfg.DB,
-		PoolSize:     cfg.PoolSize,
-		MinIdleConns: cfg.MinIdleConns,
-	}
+	var redisOptions redis.Options
+
+	redisOptions.Addr = cfg.Addr
+	redisOptions.Password = cfg.Password
+	redisOptions.DB = cfg.DB
+	redisOptions.PoolSize = cfg.PoolSize
+	redisOptions.MinIdleConns = cfg.MinIdleConns
+
+	opts := &redisOptions
+
 	if cfg.TLS {
 		// The TLS dialer fills ServerName from Addr's host, and ElastiCache's
 		// certificate chains to a public CA, so a zero-value config verifies
 		// correctly without a custom root or InsecureSkipVerify.
-		opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		var tlsConfig tls.Config
+
+		tlsConfig.MinVersion = tls.VersionTLS12
+
+		opts.TLSConfig = &tlsConfig
 	}
 
 	client := redis.NewClient(opts)
@@ -185,6 +196,7 @@ func New(cfg *Config) *Cache {
 		opTimeout:   cfg.OpTimeout,
 		failureMode: cfg.FailureMode,
 		logger:      cfg.Logger,
+		group:       singleflight.Group{},
 	}
 }
 

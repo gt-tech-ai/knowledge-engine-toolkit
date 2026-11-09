@@ -80,10 +80,16 @@ func (sarif) Parse(res *interfaces.CmdResult) types.Verdict {
 	var findings []types.Finding
 
 	for _, run := range log.Runs {
-		for _, r := range run.Results {
-			finding := types.Finding{Rule: r.RuleID, Message: r.Message.Text}
-			if len(r.Locations) > 0 {
-				loc := r.Locations[0].PhysicalLocation
+		for _, sarifLogResult2 := range run.Results {
+			finding := types.Finding{
+				Rule:    sarifLogResult2.RuleID,
+				Message: sarifLogResult2.Message.Text,
+				Check:   "",
+				File:    "",
+				Line:    0,
+			}
+			if len(sarifLogResult2.Locations) > 0 {
+				loc := sarifLogResult2.Locations[0].PhysicalLocation
 
 				finding.File, finding.Line = loc.ArtifactLocation.URI, loc.Region.StartLine
 			}

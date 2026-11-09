@@ -17,6 +17,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/workspace/python"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/docs"
 )
 
@@ -206,13 +207,15 @@ func (s *Server) ServeAPIDocs(ctx context.Context) (*http.Server, error) {
 		root.ServeHTTP(writer, request)
 	})
 
-	srv := &http.Server{
-		Addr:              ":" + s.cfg.APIPort,
-		Handler:           mux,
-		ReadHeaderTimeout: defaultServeAPIDocsReadHeaderTimeout,
-	}
+	var server http.Server
 
-	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", srv.Addr)
+	server.Addr = ":" + s.cfg.APIPort
+	server.Handler = mux
+	server.ReadHeaderTimeout = defaultServeAPIDocsReadHeaderTimeout
+
+	srv := &server
+
+	ln, err := new(net.ListenConfig).Listen(ctx, "tcp", srv.Addr)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "listen "+srv.Addr)
 	}
@@ -344,6 +347,8 @@ func (s *Server) start(
 	processHandle, err := s.d.Supervisor.Start(ctx, &types.ProcessSpec{
 		Name: name, Args: args, Dir: s.cfg.Root,
 		Stdout: s.d.Streams.Out, Stderr: s.d.Streams.Err,
+		LogFile: "",
+		Env:     nil,
 	}, nil)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "start "+name)
@@ -397,14 +402,14 @@ func (s *Server) readSpecs() ([]spec, error) {
 // readSpec reads one service directory's spec; false when it has none.
 func (s *Server) readSpec(dir string, dirEntry os.DirEntry) (spec, bool, error) {
 	if !dirEntry.IsDir() {
-		return spec{}, false, nil
+		return stdx.Zero[spec](), false, nil
 	}
 
 	text := filepath.Join(dir, dirEntry.Name(), filepath.FromSlash(s.cfg.OpenAPISpec))
 
 	data, err := os.ReadFile(filepath.Clean(text))
 	if os.IsNotExist(err) {
-		return spec{}, false, nil
+		return stdx.Zero[spec](), false, nil
 	}
 
 	if err != nil {

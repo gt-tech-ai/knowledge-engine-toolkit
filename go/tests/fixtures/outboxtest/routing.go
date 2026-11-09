@@ -62,6 +62,7 @@ func RunRouting(t *testing.T, harness Harness, routing Routing) {
 				Payload:    []byte(payload),
 				Attributes: map[string]string{types.OutboxRouteAttribute: route},
 				CreatedAt:  time.Now().Add(-time.Minute),
+				Attempts:   0,
 			}
 			require.NoError(t, harness.Enqueue(ctx, &rec))
 

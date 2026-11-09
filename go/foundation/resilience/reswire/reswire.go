@@ -99,6 +99,7 @@ func NewAdaptiveThrottle(
 			adaptivethrottle.Config{
 				K:     adaptiveThrottleConfig.K,
 				Decay: adaptiveThrottleConfig.Decay,
+				Rand:  nil,
 			},
 		), nil
 	default:

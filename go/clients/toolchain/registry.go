@@ -46,7 +46,7 @@ type Registry struct {
 
 // NewRegistry creates an empty Registry.
 func NewRegistry() *Registry {
-	return &Registry{tools: make(map[string]*Tool)}
+	return &Registry{tools: make(map[string]*Tool), mu: sync.RWMutex{}}
 }
 
 // NewRegistryFromDefs builds a Registry holding one [types.Tool] per Def. A

@@ -128,7 +128,7 @@ func drillShelf(
 	if algebraExpr.Field != nil {
 		ref := swap(*algebraExpr.Field)
 
-		return &types.AlgebraExpr{Field: &ref}
+		return &types.AlgebraExpr{Field: &ref, Op: "", Args: nil}
 	}
 
 	args := make([]*types.AlgebraExpr, len(algebraExpr.Args))
@@ -136,5 +136,5 @@ func drillShelf(
 		args[i] = drillShelf(arg, swap)
 	}
 
-	return &types.AlgebraExpr{Op: algebraExpr.Op, Args: args}
+	return &types.AlgebraExpr{Op: algebraExpr.Op, Args: args, Field: nil}
 }

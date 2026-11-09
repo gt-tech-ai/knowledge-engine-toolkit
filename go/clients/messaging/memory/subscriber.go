@@ -31,7 +31,12 @@ type Subscriber struct {
 // subscriber.
 // handlers must not be nil.
 func NewSubscriber(broker *Broker, handlers *client.Base) *Subscriber {
-	return &Subscriber{broker: broker, handlers: *handlers, done: make(chan struct{})}
+	return &Subscriber{
+		broker:   broker,
+		handlers: *handlers,
+		done:     make(chan struct{}),
+		once:     sync.Once{},
+	}
 }
 
 // Subscribe delivers each message on topic to handler until Close is called or ctx is

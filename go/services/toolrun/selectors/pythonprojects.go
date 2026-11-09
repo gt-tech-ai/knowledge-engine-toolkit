@@ -16,7 +16,19 @@ func (pythonProjects) Select(
 	cb interfaces.Codebase,
 	_ *types.TargetSpec,
 ) ([]string, error) {
-	found, err := cb.Files(ctx, &types.FileSelector{Globs: []string{"**/pyproject.toml"}})
+	found, err := cb.Files(
+		ctx,
+		&types.FileSelector{
+			Globs:            []string{"**/pyproject.toml"},
+			Roots:            nil,
+			Paths:            nil,
+			Exts:             nil,
+			Exclude:          nil,
+			TrackedOnly:      false,
+			IncludeGenerated: false,
+			IncludeIgnored:   false,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}

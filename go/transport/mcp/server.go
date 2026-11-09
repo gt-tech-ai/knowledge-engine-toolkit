@@ -93,7 +93,14 @@ func New(reg Registry, optsRef *Options) (*Server, error) {
 		settings: opts.Settings,
 		runs:     opts.RunDir,
 		srv: sdkmcp.NewServer(
-			&sdkmcp.Implementation{Name: opts.Name, Version: opts.Version},
+			&sdkmcp.Implementation{
+				Name:        opts.Name,
+				Version:     opts.Version,
+				Title:       "",
+				Description: "",
+				WebsiteURL:  "",
+				Icons:       nil,
+			},
 			nil,
 		),
 		table: runs.New(reg, opts.RunDir.NewRunID,
@@ -141,7 +148,10 @@ func (s *Server) ServeStdio(
 		return err
 	}
 
-	err = s.session(ctx, &sdkmcp.IOTransport{Reader: readCloser, Writer: out})
+	err = s.session(
+		ctx,
+		&sdkmcp.IOTransport{Reader: readCloser, Writer: out, MaxLineLength: 0},
+	)
 	if err == nil || isShutdown(err) {
 		return nil
 	}

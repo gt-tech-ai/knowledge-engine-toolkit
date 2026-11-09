@@ -80,7 +80,13 @@ func (r *scalarRewrite) apply(match Match, out []byte) ([]byte, error) {
 		return out, nil
 	}
 
-	replacement := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+	var node yaml.Node
+
+	node.Kind = yaml.ScalarNode
+	node.Tag = "!!str"
+	node.Value = value
+
+	replacement := &node
 	if match.Node.Style == yaml.DoubleQuotedStyle {
 		replacement.Style = yaml.DoubleQuotedStyle
 	}

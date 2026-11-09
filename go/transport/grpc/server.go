@@ -65,8 +65,11 @@ func NewServer(cfg ServerConfig, opts ...grpc.ServerOption) *grpc.Server {
 		grpc.MaxRecvMsgSize(cfg.MaxMessageSize),
 		grpc.MaxSendMsgSize(cfg.MaxMessageSize),
 		grpc.KeepaliveParams(keepalive.ServerParameters{
-			Time:    cfg.KeepaliveTime,
-			Timeout: cfg.KeepaliveTimeout,
+			Time:                  cfg.KeepaliveTime,
+			Timeout:               cfg.KeepaliveTimeout,
+			MaxConnectionIdle:     0,
+			MaxConnectionAge:      0,
+			MaxConnectionAgeGrace: 0,
 		}),
 		// Accept the client's keepalive cadence (client.go pings every minute, even
 		// with no active stream) instead of GoAway-ing it with ENHANCE_YOUR_CALM.
@@ -83,7 +86,7 @@ func NewServer(cfg ServerConfig, opts ...grpc.ServerOption) *grpc.Server {
 
 // RegisterHealthService registers the gRPC health check service.
 func RegisterHealthService(server *grpc.Server) {
-	grpc_health_v1.RegisterHealthServer(server, &healthServer{})
+	grpc_health_v1.RegisterHealthServer(server, new(healthServer))
 }
 
 // healthServer implements the gRPC health check protocol.

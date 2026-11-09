@@ -31,7 +31,7 @@ func (d Decorations) NewSubject(
 
 	comp = adjusted(&comp, adjust)
 
-	subject := Subject{name: name, all: tier.chains(name, &comp)}
+	subject := Subject{name: name, all: tier.chains(name, &comp), ops: nil, view: 0}
 
 	if ops == nil {
 		return subject, nil

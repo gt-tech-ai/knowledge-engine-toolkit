@@ -46,10 +46,12 @@ func SuggestPage(values []string, limit, pageNum int) *types.Page[string] {
 	}
 
 	return &types.Page[string]{
-		Items:      values,
-		NextCursor: next,
-		PageSize:   limit,
-		PageNumber: pageNum,
+		Items:           values,
+		NextCursor:      next,
+		PageSize:        limit,
+		PageNumber:      pageNum,
+		Total:           0,
+		TotalIsEstimate: false,
 	}
 }
 

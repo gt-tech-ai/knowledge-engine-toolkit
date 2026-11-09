@@ -141,15 +141,23 @@ func applyTuning(cluster *gocql.ClusterConfig, cfg *Config) {
 func applySecurity(cluster *gocql.ClusterConfig, cfg *Config) {
 	if cfg.Username != "" {
 		cluster.Authenticator = gocql.PasswordAuthenticator{
-			Username: cfg.Username,
-			Password: cfg.Password,
+			Username:              cfg.Username,
+			Password:              cfg.Password,
+			AllowedAuthenticators: nil,
 		}
 	}
 
 	if cfg.TLS {
+		var tlsConfig tls.Config
+
+		tlsConfig.MinVersion = tls.VersionTLS12
+
 		cluster.SslOpts = &gocql.SslOptions{
-			Config:                 &tls.Config{MinVersion: tls.VersionTLS12},
+			Config:                 &tlsConfig,
 			EnableHostVerification: true,
+			CertPath:               "",
+			KeyPath:                "",
+			CaPath:                 "",
 		}
 	}
 }

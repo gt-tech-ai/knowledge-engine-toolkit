@@ -8,6 +8,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // maxSafeInt is the largest integer every client can carry exactly (2^53 - 1, the
@@ -21,7 +22,7 @@ const maxSafeInt = 1<<53 - 1
 // CodeInvalidInput error (ARCHITECTURE.md#error-codes).
 func Parse(fieldMap *Map, jsonStr string) (types.Filter, error) {
 	if strings.TrimSpace(jsonStr) == "" {
-		return types.CompositeFilter{}, nil // no filter → IsEmpty
+		return stdx.Zero[types.CompositeFilter](), nil // no filter → IsEmpty
 	}
 
 	var node types.FilterNode
@@ -46,7 +47,7 @@ func Parse(fieldMap *Map, jsonStr string) (types.Filter, error) {
 // FilterClause for a single comparison and a CompositeFilter for $and/$or.
 func ParseFilter(m *Map, n types.FilterNode) (types.Filter, error) {
 	if n.Clause == nil && n.And == nil && n.Or == nil {
-		return types.CompositeFilter{}, nil // no filter → IsEmpty
+		return stdx.Zero[types.CompositeFilter](), nil // no filter → IsEmpty
 	}
 
 	return parseNode(m, n, 0)
@@ -119,10 +120,10 @@ func parseComposite(
 	}
 
 	if key == "$and" {
-		return types.CompositeFilter{And: subs}, nil
+		return types.CompositeFilter{And: subs, Or: nil}, nil
 	}
 
-	return types.CompositeFilter{Or: subs}, nil
+	return types.CompositeFilter{Or: subs, And: nil}, nil
 }
 
 // parseClause checks one comparison: the operator against the known set, the field
@@ -155,6 +156,7 @@ func parseClause(
 		Field:    field.Name,
 		Operator: filterNodeClause.Op,
 		Value:    value,
+		Join:     nil,
 	}, nil
 }
 

@@ -113,6 +113,7 @@ func DefaultConfig() Config {
 		MaxInterval:     defaultConfigMaxInterval,
 		Multiplier:      defaultConfigMultiplier,
 		MaxElapsedTime:  defaultConfigMaxElapsedTime,
+		IsRetryable:     nil,
 	}
 }
 

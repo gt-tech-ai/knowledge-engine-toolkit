@@ -124,9 +124,10 @@ func (b bounded[T]) Wrap(
 ) interfaces.Stream[T] {
 	ctx, cancel := context.WithCancel(ctx)
 	currentQueue := &queue[T]{
-		ch:   make(chan entry[T], b.maxItems),
-		sem:  semaphore.NewWeighted(int64(b.maxBytes)),
-		done: make(chan struct{}),
+		ch:      make(chan entry[T], b.maxItems),
+		sem:     semaphore.NewWeighted(int64(b.maxBytes)),
+		done:    make(chan struct{}),
+		exitErr: nil,
 	}
 
 	go currentQueue.produce(ctx, src, func(item T) int64 {
@@ -182,7 +183,7 @@ func (q *queue[T]) produce(
 	for {
 		item, ok, err := src.Next(ctx)
 		if err != nil || !ok {
-			q.send(ctx, entry[T]{end: true, err: err})
+			q.send(ctx, entry[T]{end: true, err: err, item: *new(T), n: 0})
 
 			return
 		}
@@ -202,7 +203,7 @@ func (q *queue[T]) enqueue(ctx context.Context, item T, count int64) bool {
 		return false
 	}
 
-	if !q.send(ctx, entry[T]{item: item, n: count}) {
+	if !q.send(ctx, entry[T]{item: item, n: count, err: nil, end: false}) {
 		q.sem.Release(count)
 
 		return false
@@ -287,7 +288,15 @@ func newLatched[T any](
 	next func(context.Context) (T, bool, error),
 	closeFn func() error,
 ) *latched[T] {
-	return &latched[T]{next: next, close: closeFn}
+	return &latched[T]{
+		next:     next,
+		close:    closeFn,
+		err:      nil,
+		closeErr: nil,
+		once:     sync.Once{},
+		closed:   atomic.Bool{},
+		ended:    false,
+	}
 }
 
 // Next implements interfaces.Stream.

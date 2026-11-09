@@ -10,6 +10,7 @@ import (
 	r53client "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/route53"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // DNS checks that an apex domain has a Route 53 hosted zone and that public DNS
@@ -26,7 +27,7 @@ type DNS struct {
 }
 
 // Compile-time assertion that DNS is a readiness probe.
-var _ interfaces.Probe[Target] = DNS{}
+var _ interfaces.Probe[Target] = stdx.Zero[DNS]()
 
 // Name is "dns".
 func (DNS) Name() string { return "dns" }
@@ -63,7 +64,9 @@ func (p DNS) hostedZoneExists(ctx context.Context) (bool, error) {
 	want := strings.TrimSuffix(p.ApexDomain, ".") + "."
 
 	out, err := p.Route53.ListHostedZonesByName(ctx, &route53.ListHostedZonesByNameInput{
-		DNSName: aws.String(want),
+		DNSName:      aws.String(want),
+		HostedZoneId: nil,
+		MaxItems:     nil,
 	})
 	if err != nil {
 		return false, err

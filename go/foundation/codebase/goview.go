@@ -108,7 +108,19 @@ func (g *goView) loadModules(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 
-	mods, err := g.parent.Files(ctx, &types.FileSelector{Globs: []string{"**/go.mod"}})
+	mods, err := g.parent.Files(
+		ctx,
+		&types.FileSelector{
+			Globs:            []string{"**/go.mod"},
+			Roots:            nil,
+			Paths:            nil,
+			Exts:             nil,
+			Exclude:          nil,
+			TrackedOnly:      false,
+			IncludeGenerated: false,
+			IncludeIgnored:   false,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -394,19 +394,30 @@ func (g *guard) verdict(slots []expansionSlot) types.Verdict {
 	}
 
 	if cached {
-		return types.Verdict{Status: types.StatusSkip, Detail: types.CachedDetail}
+		return types.Verdict{
+			Status:    types.StatusSkip,
+			Detail:    types.CachedDetail,
+			Findings:  nil,
+			Transient: false,
+		}
 	}
 
 	if len(findings) == 0 {
-		return types.Verdict{Status: types.StatusPass}
+		return types.Verdict{
+			Status:    types.StatusPass,
+			Detail:    "",
+			Findings:  nil,
+			Transient: false,
+		}
 	}
 
 	g.stamp(findings)
 
 	return types.Verdict{
-		Status:   types.StatusFail,
-		Findings: findings,
-		Detail:   render(findings),
+		Status:    types.StatusFail,
+		Findings:  findings,
+		Detail:    render(findings),
+		Transient: false,
 	}
 }
 
@@ -430,9 +441,14 @@ func (g *guard) tick(
 	}
 
 	stepResult := types.StepResult{
-		Name:   name,
-		Group:  g.row.Group,
-		Status: types.StatusPass,
+		Name:     name,
+		Group:    g.row.Group,
+		Status:   types.StatusPass,
+		Error:    "",
+		Detail:   nil,
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
 	}
 
 	switch {
@@ -571,7 +587,13 @@ func files(
 
 	if len(currentFiles) == 0 && !guardRow.Optional {
 		return nil, []types.Finding{
-			{Message: "no file matches " + describe(&guardRow.Files)},
+			{
+				Message: "no file matches " + describe(&guardRow.Files),
+				Check:   "",
+				File:    "",
+				Rule:    "",
+				Line:    0,
+			},
 		}, nil
 	}
 
@@ -640,10 +662,20 @@ func compileAll(patterns []string) ([]*regexp.Regexp, error) {
 // guard's tool is not installed) skips, as a tool-run row does; anything else fails.
 func failed(err error) types.Verdict {
 	if apperr.Code(err) == apperr.CodeUnavailable {
-		return types.Verdict{Status: types.StatusSkip, Detail: err.Error()}
+		return types.Verdict{
+			Status:    types.StatusSkip,
+			Detail:    err.Error(),
+			Findings:  nil,
+			Transient: false,
+		}
 	}
 
-	return types.Verdict{Status: types.StatusFail, Detail: err.Error()}
+	return types.Verdict{
+		Status:    types.StatusFail,
+		Detail:    err.Error(),
+		Findings:  nil,
+		Transient: false,
+	}
 }
 
 // render formats findings one per line as file:line: message.

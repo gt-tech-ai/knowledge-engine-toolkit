@@ -65,6 +65,8 @@ func DefaultConfig() Config {
 		Cubes:                map[string][]types.Grain{},
 		TTL:                  map[types.Grain]time.Duration{},
 		MaxConcurrentBuckets: defaultConfigMaxConcurrentBuckets,
+		Name:                 "",
+		EnsureSchema:         false,
 	}
 }
 
@@ -93,6 +95,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.AnalyticsStore] {
 			},
 			KindCassandra: client.RefConfig(newCassandra),
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -135,6 +139,8 @@ func newCassandra(
 			MaxConcurrentBuckets: cfg.MaxConcurrentBuckets,
 			EnsureSchema:         cfg.EnsureSchema,
 			AwaitActive:          cfg.CQL.Kind == cql.KindKeyspaces,
+			SchemaPollInterval:   0,
+			SchemaTimeout:        0,
 		},
 	)
 }

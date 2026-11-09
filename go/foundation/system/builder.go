@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // LogFunc is a callback for logging command execution details.
@@ -38,7 +39,7 @@ type Builder struct {
 
 // NewBuilder creates a new Builder wrapping the given base CommandRunner.
 func NewBuilder(base CommandRunner) *Builder {
-	return &Builder{base: base}
+	return &Builder{base: base, hook: nil, logf: nil, env: nil, timeout: 0, dryRun: false}
 }
 
 // WithLogging adds a logging decorator that logs command name, args,
@@ -422,7 +423,7 @@ func (d *dryRunRunner) RunBuffered(
 ) CmdResult {
 	d.log(name, args...)
 
-	return CmdResult{}
+	return stdx.Zero[CmdResult]()
 }
 
 // RunBufferedWithEnv logs the command instead of executing it and returns a zero
@@ -436,7 +437,7 @@ func (d *dryRunRunner) RunBufferedWithEnv(
 ) CmdResult {
 	d.log(name, args...)
 
-	return CmdResult{}
+	return stdx.Zero[CmdResult]()
 }
 
 // RunBufferedWithInput logs the command instead of executing it (the input is never
@@ -451,7 +452,7 @@ func (d *dryRunRunner) RunBufferedWithInput(
 ) CmdResult {
 	d.log(name, args...)
 
-	return CmdResult{}
+	return stdx.Zero[CmdResult]()
 }
 
 // Exists delegates to the inner runner (read-only check).

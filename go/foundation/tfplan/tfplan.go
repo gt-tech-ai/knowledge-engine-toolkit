@@ -66,7 +66,7 @@ func (p *UnitPlan) HasChanges() bool { return len(p.Changes) > 0 || p.Outputs }
 // ReadUnits reads every unit's JSONFile under dir, sorted by unit path. A missing dir
 // reads as no units.
 func ReadUnits(dir string) ([]UnitPlan, error) {
-	currentUnitWalk := &unitWalk{dir: dir}
+	currentUnitWalk := &unitWalk{dir: dir, plans: nil}
 
 	err := filepath.WalkDir(dir, currentUnitWalk.visit)
 	if err != nil && !apperr.StdIs(err, fs.ErrNotExist) {
@@ -129,7 +129,14 @@ func readUnit(path, unit string) (UnitPlan, error) {
 		return UnitPlan{}, apperr.Wrap(err, apperr.CodeInternal, "parse "+path)
 	}
 
-	unitPlan := UnitPlan{Unit: unit, Outputs: outputsChange(&doc)}
+	unitPlan := UnitPlan{
+		Unit:    unit,
+		Outputs: outputsChange(&doc),
+		Changes: nil,
+		Add:     0,
+		Change:  0,
+		Destroy: 0,
+	}
 
 	unitPlan.addChanges(&doc)
 

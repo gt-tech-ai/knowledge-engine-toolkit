@@ -44,18 +44,23 @@ type TestElasticMQ struct {
 // NewTestElasticMQ creates an ElasticMQ container and waits up to 60 seconds for
 // the SQS port to be reachable.
 func NewTestElasticMQ(ctx context.Context) (*TestElasticMQ, error) {
-	req := testcontainers.ContainerRequest{
-		Image:        elasticmqImage,
-		ExposedPorts: []string{elasticmqPort},
-		WaitingFor: wait.ForListeningPort(elasticmqPort).
-			WithStartupTimeout(startupTimeout),
-	}
+	var containerRequest testcontainers.ContainerRequest
+
+	containerRequest.Image = elasticmqImage
+	containerRequest.ExposedPorts = []string{elasticmqPort}
+	containerRequest.WaitingFor = wait.ForListeningPort(elasticmqPort).
+		WithStartupTimeout(startupTimeout)
+
+	req := containerRequest
 
 	container, err := testcontainers.GenericContainer(
 		ctx,
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: req,
 			Started:          true,
+			ProviderType:     0,
+			Logger:           nil,
+			Reuse:            false,
 		},
 	)
 	if err != nil {

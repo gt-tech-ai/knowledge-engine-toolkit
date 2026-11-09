@@ -54,6 +54,9 @@ func NewMetrics[T any](
 		wait: metrics.Histogram("stream_buffer_producer_wait_seconds",
 			"Producer wait between handing an item on and pulling the next, in seconds",
 			[]float64{.001, .005, .01, .05, .1, .5, 1, 5, 10}, textBuffer),
+		mu:        sync.Mutex{},
+		heldItems: 0,
+		heldBytes: 0,
 	}
 }
 
@@ -62,9 +65,9 @@ func (b *metricsBuffer[T]) Wrap(
 	ctx context.Context,
 	src interfaces.Stream[T],
 ) interfaces.Stream[T] {
-	s := &meteredStream[T]{buf: b}
+	s := &meteredStream[T]{buf: b, out: nil, items: atomic.Int64{}, bytes: atomic.Int64{}}
 
-	s.out = b.inner.Wrap(ctx, &meteredSource[T]{Stream: src, s: s})
+	s.out = b.inner.Wrap(ctx, &meteredSource[T]{Stream: src, s: s, handed: time.Time{}})
 
 	return s
 }

@@ -25,7 +25,7 @@ func Decorate(
 		return nil, err
 	}
 
-	currentDecorated := &decorated{base: base, Base: &b}
+	currentDecorated := &decorated{base: base, Base: &b, hits: nil, misses: nil}
 	if m := decs.Observability().Metrics; m != nil {
 		currentDecorated.hits = m.Counter("cache_hits_total", "Total cache hits", "cache")
 		currentDecorated.misses = m.Counter(

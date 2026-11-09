@@ -45,7 +45,9 @@ type Supervisor struct {
 var _ interfaces.Supervisor = (*Supervisor)(nil)
 
 // New returns a Supervisor with no processes.
-func New() *Supervisor { return &Supervisor{} }
+func New() *Supervisor {
+	return new(Supervisor)
+}
 
 // command builds spec's command, and the release of the log file it opened (call it
 // once the command has started: the child holds its own descriptor).
@@ -225,7 +227,7 @@ type handle struct {
 
 // newHandle starts reaping cmd.
 func newHandle(name string, cmd *osexec.Cmd) *handle {
-	currentHandle := &handle{cmd: cmd, name: name, done: make(chan struct{})}
+	currentHandle := &handle{cmd: cmd, name: name, done: make(chan struct{}), err: nil}
 	go func() {
 		currentHandle.err = cmd.Wait()
 		close(currentHandle.done)

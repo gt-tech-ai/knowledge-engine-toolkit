@@ -37,12 +37,22 @@ type BufferingRunner struct {
 
 // NewBufferingRunner wraps inner and replays command output to the terminal.
 func NewBufferingRunner(inner CommandRunner) *BufferingRunner {
-	return &BufferingRunner{inner: inner}
+	return &BufferingRunner{
+		inner: inner,
+		buf:   bytes.Buffer{},
+		mu:    sync.Mutex{},
+		quiet: false,
+	}
 }
 
 // NewQuietBufferingRunner wraps inner and captures output without terminal replay.
 func NewQuietBufferingRunner(inner CommandRunner) *BufferingRunner {
-	return &BufferingRunner{inner: inner, quiet: true}
+	return &BufferingRunner{
+		inner: inner,
+		quiet: true,
+		buf:   bytes.Buffer{},
+		mu:    sync.Mutex{},
+	}
 }
 
 // Run executes a command via RunBuffered, replays output to the terminal, and

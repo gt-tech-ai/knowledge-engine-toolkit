@@ -100,6 +100,8 @@ func (s *matchSet) requireFindings(
 				File:    file,
 				Rule:    "require",
 				Message: file + " does not contain " + form.show(pattern),
+				Check:   "",
+				Line:    0,
 			})
 		}
 	}
@@ -133,6 +135,7 @@ func (s *matchSet) forbiddenLines(
 			out = append(out, types.Finding{
 				File: file, Line: l.n, Rule: "forbid",
 				Message: "contains " + form.show(pattern),
+				Check:   "",
 			})
 		}
 	}

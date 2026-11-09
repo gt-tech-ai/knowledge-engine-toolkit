@@ -3,6 +3,7 @@ package toolchain
 import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Catalog is the projected, in-memory set of lifecycle tool specs, grouped by category.
@@ -113,5 +114,5 @@ func (c *Catalog) Find(binary string) (types.ToolDef, bool) {
 		}
 	}
 
-	return types.ToolDef{}, false
+	return stdx.Zero[types.ToolDef](), false
 }

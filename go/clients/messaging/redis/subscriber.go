@@ -82,6 +82,12 @@ func NewSubscriber(cfg *Config) (*Subscriber, error) {
 		handlers: cfg.Handlers,
 		channels: make(map[string]interfaces.MessageHandler),
 		patterns: make(map[string]interfaces.MessageHandler),
+		NoOp:     lifecycle.NoOp{},
+		pubsub:   nil,
+		cancel:   nil,
+		wg:       sync.WaitGroup{},
+		mu:       sync.RWMutex{},
+		closed:   false,
 	}, nil
 }
 
@@ -305,7 +311,13 @@ func (s *Subscriber) handlerFor(msg *goredis.Message) (interfaces.MessageHandler
 func (s *Subscriber) deliver(
 	ctx context.Context, msg *goredis.Message, handler interfaces.MessageHandler,
 ) {
-	message := &interfaces.Message{Topic: msg.Channel, Payload: []byte(msg.Payload)}
+	message := &interfaces.Message{
+		Topic:     msg.Channel,
+		Payload:   []byte(msg.Payload),
+		Metadata:  nil,
+		ID:        "",
+		Timestamp: 0,
+	}
 
 	err := s.handlers.DoOnce(ctx, message.Topic, func(ctx context.Context) error {
 		return handler(ctx, message)

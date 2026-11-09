@@ -69,6 +69,8 @@ func kinds() client.Kinds[Config, Deps, API] {
 			KindStub: func(context.Context, Config, Deps) (API, error) { return Stub{}, nil },
 			KindSDK:  newSDK,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -141,5 +143,5 @@ func (Stub) Converse(
 	_ *bedrockruntime.ConverseInput,
 	_ ...func(*bedrockruntime.Options),
 ) (*bedrockruntime.ConverseOutput, error) {
-	return &bedrockruntime.ConverseOutput{}, nil
+	return new(bedrockruntime.ConverseOutput), nil
 }

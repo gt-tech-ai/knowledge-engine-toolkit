@@ -86,10 +86,14 @@ func Command(reg *ops.Registry, name string, opts Options) (*spf.Command, error)
 		use = desc.Name
 	}
 
-	cmd := &spf.Command{
-		Use: use, Short: desc.Summary, SilenceUsage: true,
-		Annotations: map[string]string{OperationAnnotation: name},
-	}
+	var sdkCommand spf.Command
+
+	sdkCommand.Use = use
+	sdkCommand.Short = desc.Summary
+	sdkCommand.SilenceUsage = true
+	sdkCommand.Annotations = map[string]string{OperationAnnotation: name}
+
+	cmd := &sdkCommand
 	flags := operation.NewInput()
 
 	secondBinding, err := bind(cmd, flags)

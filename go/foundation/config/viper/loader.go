@@ -64,8 +64,11 @@ type Config struct {
 // DefaultConfig returns sensible defaults for a Viper loader.
 func DefaultConfig() Config {
 	return Config{
-		BaseDir: textDot,
-		Env:     ResolveEnv(),
+		BaseDir:  textDot,
+		Env:      ResolveEnv(),
+		Schema:   nil,
+		ExtraEnv: nil,
+		Prefix:   "",
 	}
 }
 
@@ -192,16 +195,18 @@ func (l *Loader) UnmarshalKey(key string, target any) error {
 		}
 	}
 
-	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		DecodeHook: mapstructure.ComposeDecodeHookFunc(
-			mapstructure.StringToTimeDurationHookFunc(),
-			mapstructure.StringToSliceHookFunc(textComma),
-			StringToStringMapHookFunc(),
-		),
-		TagName:          "mapstructure",
-		Result:           target,
-		WeaklyTypedInput: true,
-	})
+	var decoderConfig mapstructure.DecoderConfig
+
+	decoderConfig.DecodeHook = mapstructure.ComposeDecodeHookFunc(
+		mapstructure.StringToTimeDurationHookFunc(),
+		mapstructure.StringToSliceHookFunc(textComma),
+		StringToStringMapHookFunc(),
+	)
+	decoderConfig.TagName = "mapstructure"
+	decoderConfig.Result = target
+	decoderConfig.WeaklyTypedInput = true
+
+	decoder, err := mapstructure.NewDecoder(&decoderConfig)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create decoder")
 	}

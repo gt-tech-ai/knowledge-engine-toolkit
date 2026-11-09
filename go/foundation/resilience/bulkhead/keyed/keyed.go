@@ -45,7 +45,7 @@ func New(cfg Config) (*Limiter, error) {
 		return nil, err
 	}
 
-	return &Limiter{held: map[string]int{}, limit: cfg.MaxPerKey}, nil
+	return &Limiter{held: map[string]int{}, limit: cfg.MaxPerKey, mu: sync.Mutex{}}, nil
 }
 
 // TryAcquire takes one of key's slots, or reports false when key holds its cap. The

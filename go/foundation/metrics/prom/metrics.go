@@ -10,6 +10,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // sizeBucketStart, sizeBucketFactor and sizeBucketCount lay out the exponential size
@@ -62,12 +63,16 @@ func NewFromRegistry(reg *prometheus.Registry) *Metrics {
 // same name is already registered, the existing one is reused rather than
 // duplicated; any other registration error panics.
 func (m *Metrics) Counter(name, help string, labels ...string) interfaces.Counter {
-	c := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: name,
-		Help: help,
+	counterVec := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name:        name,
+		Help:        help,
+		Namespace:   "",
+		Subsystem:   "",
+		Unit:        "",
+		ConstLabels: nil,
 	}, labels)
 
-	return &counter{inner: registerOrReuse(m.reg, c)}
+	return &counter{inner: registerOrReuse(m.reg, counterVec)}
 }
 
 // Histogram registers and returns a labelled histogram with the given buckets.
@@ -78,11 +83,13 @@ func (m *Metrics) Histogram(
 	buckets []float64,
 	labels ...string,
 ) interfaces.Histogram {
-	histogramVec := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    name,
-		Help:    help,
-		Buckets: buckets,
-	}, labels)
+	var histogramOpts prometheus.HistogramOpts
+
+	histogramOpts.Name = name
+	histogramOpts.Help = help
+	histogramOpts.Buckets = buckets
+
+	histogramVec := prometheus.NewHistogramVec(histogramOpts, labels)
 
 	return &histogram{inner: registerOrReuse(m.reg, histogramVec)}
 }
@@ -91,12 +98,16 @@ func (m *Metrics) Histogram(
 // name is already registered, the existing one is reused rather than
 // duplicated; any other registration error panics.
 func (m *Metrics) Gauge(name, help string, labels ...string) interfaces.Gauge {
-	g := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: name,
-		Help: help,
+	gaugeVec := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name:        name,
+		Help:        help,
+		Namespace:   "",
+		Subsystem:   "",
+		Unit:        "",
+		ConstLabels: nil,
 	}, labels)
 
-	return &gauge{inner: registerOrReuse(m.reg, g)}
+	return &gauge{inner: registerOrReuse(m.reg, gaugeVec)}
 }
 
 // registerOrReuse registers the collector, returning the already registered one of the
@@ -124,9 +135,11 @@ func registerOrReuse[C prometheus.Collector](reg *prometheus.Registry, c C) C {
 // Handler returns an HTTP handler that exposes the registry in the Prometheus
 // exposition format, with OpenMetrics output enabled.
 func (m *Metrics) Handler() http.Handler {
-	return promhttp.HandlerFor(m.reg, promhttp.HandlerOpts{
-		EnableOpenMetrics: true,
-	})
+	var handlerOpts promhttp.HandlerOpts
+
+	handlerOpts.EnableOpenMetrics = true
+
+	return promhttp.HandlerFor(m.reg, handlerOpts)
 }
 
 // Registry returns the underlying Prometheus registry for advanced usage.
@@ -139,7 +152,7 @@ func newRegistry() *prometheus.Registry {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(
 		collectors.NewGoCollector(),
-		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+		collectors.NewProcessCollector(stdx.Zero[collectors.ProcessCollectorOpts]()),
 	)
 
 	return reg
@@ -215,25 +228,39 @@ const (
 
 // NewHTTPServerMetrics creates and registers HTTP server metrics.
 func NewHTTPServerMetrics(reg prometheus.Registerer) *HTTPServerMetrics {
+	var sdkHistogramOpts prometheus.HistogramOpts
+
+	sdkHistogramOpts.Name = "http_server_response_size_bytes"
+	sdkHistogramOpts.Help = "HTTP response size in bytes"
+	sdkHistogramOpts.Buckets = prometheus.ExponentialBuckets(
+		sizeBucketStart,
+		sizeBucketFactor,
+		sizeBucketCount,
+	)
+
+	var histogramOpts prometheus.HistogramOpts
+
+	histogramOpts.Name = "http_server_request_duration_seconds"
+	histogramOpts.Help = "HTTP request duration in seconds"
+	histogramOpts.Buckets = prometheus.DefBuckets
+
 	httpServerMetrics := &HTTPServerMetrics{
 		RequestsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "http_server_requests_total",
-			Help: "Total HTTP requests processed",
+			Name:        "http_server_requests_total",
+			Help:        "Total HTTP requests processed",
+			Namespace:   "",
+			Subsystem:   "",
+			Unit:        "",
+			ConstLabels: nil,
 		}, []string{labelMethod, labelPath, "status"}),
-		RequestDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "http_server_request_duration_seconds",
-			Help:    "HTTP request duration in seconds",
-			Buckets: prometheus.DefBuckets,
-		}, []string{labelMethod, labelPath}),
-		ResponseSize: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name: "http_server_response_size_bytes",
-			Help: "HTTP response size in bytes",
-			Buckets: prometheus.ExponentialBuckets(
-				sizeBucketStart,
-				sizeBucketFactor,
-				sizeBucketCount,
-			),
-		}, []string{labelMethod, labelPath}),
+		RequestDuration: prometheus.NewHistogramVec(
+			histogramOpts,
+			[]string{labelMethod, labelPath},
+		),
+		ResponseSize: prometheus.NewHistogramVec(
+			sdkHistogramOpts,
+			[]string{labelMethod, labelPath},
+		),
 	}
 
 	reg.MustRegister(

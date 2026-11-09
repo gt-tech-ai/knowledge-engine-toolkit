@@ -34,7 +34,7 @@ type Budget struct {
 
 // NewBudget creates a new retry budget with the given max retries.
 func NewBudget(maxRetries int32) *Budget {
-	b := &Budget{}
+	b := new(Budget)
 	b.remaining.Store(maxRetries)
 
 	return b

@@ -29,7 +29,7 @@ var _ interfaces.Client = (*Client)(nil)
 // NewLifecycleClient builds a lifecycle-managed gRPC client. The connection is not
 // dialed until Start.
 func NewLifecycleClient(cfg ClientConfig, opts ...grpc.DialOption) *Client {
-	return &Client{cfg: cfg, opts: opts}
+	return &Client{cfg: cfg, opts: opts, conn: nil}
 }
 
 // Start dials the target. grpc.NewClient is lazy, so this does not block on the

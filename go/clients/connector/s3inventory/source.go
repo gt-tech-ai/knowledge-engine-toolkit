@@ -23,6 +23,7 @@ import (
 	connectors3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // defaultPageSize is the page a non-positive limit gets (the s3 kind's listing page).
@@ -109,6 +110,11 @@ func NewSource(
 		reportBucket: reportBucket,
 		manifestKey:  cfg.InventoryManifestKey,
 		folder:       folderOf(cfg),
+		report:       nil,
+		cols:         nil,
+		open:         nil,
+		stamp:        "",
+		mu:           sync.Mutex{},
 	}, nil
 }
 
@@ -284,7 +290,11 @@ func (s *Source) nextObject(cur *cursor) (inventoryRow, error) {
 	if apperr.StdIs(err, io.EOF) {
 		s.release()
 
-		return inventoryRow{done: true}, nil
+		return inventoryRow{
+			done:   true,
+			object: stdx.Zero[interfaces.StorageObject](),
+			keep:   false,
+		}, nil
 	}
 
 	if err != nil {
@@ -295,7 +305,7 @@ func (s *Source) nextObject(cur *cursor) (inventoryRow, error) {
 
 	obj, keep, err := s.cols.object(record, s.bucket, s.prefix)
 
-	return inventoryRow{object: obj, keep: keep}, err
+	return inventoryRow{object: obj, keep: keep, done: false}, err
 }
 
 // readAhead peeks one row so a page ending at the file's end releases it. Any other
@@ -387,7 +397,7 @@ func (s *Source) cursorAt(ctx context.Context, file, row int) (*cursor, error) {
 	rows.FieldsPerRecord = -1
 	rows.ReuseRecord = false
 
-	cur := &cursor{file: file, body: body, rows: rows}
+	cur := &cursor{file: file, body: body, rows: rows, pending: nil, row: 0}
 
 	s.open = cur
 

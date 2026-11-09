@@ -27,7 +27,7 @@ type Publisher struct {
 // NewPublisher publishes onto broker; a Subscriber built from the same broker receives
 // the messages.
 func NewPublisher(broker *Broker) *Publisher {
-	return &Publisher{broker: broker}
+	return &Publisher{broker: broker, seq: atomic.Int64{}}
 }
 
 // Publish enqueues payload on topic as a Message, or returns ctx's error if it is
@@ -94,10 +94,11 @@ func (p *Publisher) enqueue(
 	payload []byte,
 ) error {
 	msg := &interfaces.Message{
-		ID:       fmt.Sprintf("mem-%d", p.seq.Add(1)),
-		Topic:    topic,
-		Payload:  payload,
-		Metadata: metadata,
+		ID:        fmt.Sprintf("mem-%d", p.seq.Add(1)),
+		Topic:     topic,
+		Payload:   payload,
+		Metadata:  metadata,
+		Timestamp: 0,
 	}
 	tracer.Inject(ctx, msg.Metadata)
 

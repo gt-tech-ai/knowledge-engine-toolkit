@@ -69,6 +69,8 @@ func kinds() client.Kinds[Config, Deps, API] {
 			KindStub: func(context.Context, Config, Deps) (API, error) { return Stub{}, nil },
 			KindSDK:  newSDK,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -147,5 +149,5 @@ func (Stub) ListHostedZonesByName(
 	_ *route53.ListHostedZonesByNameInput,
 	_ ...func(*route53.Options),
 ) (*route53.ListHostedZonesByNameOutput, error) {
-	return &route53.ListHostedZonesByNameOutput{}, nil
+	return new(route53.ListHostedZonesByNameOutput), nil
 }

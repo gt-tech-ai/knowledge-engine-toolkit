@@ -6,6 +6,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // OIDC checks that an OpenID Connect tenant (an Auth0 or other identity-provider
@@ -19,7 +20,7 @@ type OIDC struct {
 }
 
 // Compile-time assertion that OIDC is a readiness probe.
-var _ interfaces.Probe[Target] = OIDC{}
+var _ interfaces.Probe[Target] = stdx.Zero[OIDC]()
 
 // Name is "oidc".
 func (OIDC) Name() string { return "oidc" }

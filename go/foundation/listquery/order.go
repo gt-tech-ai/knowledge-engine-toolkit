@@ -65,7 +65,13 @@ func parseSortToken(fieldMap *Map, tok string) (types.OrderField, error) {
 		)
 	}
 
-	orderField := types.OrderField{Field: field}
+	orderField := types.OrderField{
+		Field:   field,
+		Join:    nil,
+		Derived: nil,
+		Ordinal: nil,
+		Desc:    false,
+	}
 	if !hasDir {
 		return orderField, nil
 	}

@@ -3,6 +3,8 @@ package decoration
 import (
 	"maps"
 	"reflect"
+
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Tier is one tier's decoration: the Defaults every component gets and the Overrides
@@ -63,7 +65,7 @@ func (t *Tier) Sources(name string) []string {
 func (t *Tier) overlay(over *Tier) Tier {
 	tCopy := *t
 
-	out := Tier{Defaults: Merge(&tCopy.Defaults, &over.Defaults)}
+	out := Tier{Defaults: Merge(&tCopy.Defaults, &over.Defaults), Overrides: nil}
 	if tCopy.Overrides == nil && over.Overrides == nil {
 		return out
 	}
@@ -147,7 +149,7 @@ func (c *Config) Tier(name string) (Tier, bool) {
 		}
 	}
 
-	return Tier{}, false
+	return stdx.Zero[Tier](), false
 }
 
 // Overlay lays over on c, tier by tier (see Tier.overlay).

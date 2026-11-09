@@ -5,6 +5,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
 // Warn makes j advisory: it keeps j's metadata and downgrades each Fail step j reports
@@ -27,5 +28,6 @@ func Warn(anyJob interfaces.AnyJob) interfaces.AnyJob {
 
 			return results, err
 		},
+		op: decorate.Subject{},
 	}
 }

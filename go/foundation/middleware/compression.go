@@ -49,6 +49,9 @@ func Compression() Middleware {
 					ResponseWriter: writer,
 					request:        currentRequest,
 					pool:           pool,
+					gzWriter:       nil,
+					buf:            nil,
+					headerSent:     false,
 				}
 				defer currentCompressWriter.Close()
 

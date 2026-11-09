@@ -33,11 +33,13 @@ func toolFor(op interfaces.Operation) (*sdkmcp.Tool, error) {
 		))
 	}
 
-	return &sdkmcp.Tool{
-		Name:        operationDescriptor.Name,
-		Description: operationDescriptor.Summary,
-		InputSchema: json.RawMessage(schema),
-	}, nil
+	var tool sdkmcp.Tool
+
+	tool.Name = operationDescriptor.Name
+	tool.Description = operationDescriptor.Summary
+	tool.InputSchema = json.RawMessage(schema)
+
+	return &tool, nil
 }
 
 // handler runs a bounded op for one tools/call: it decodes the arguments into a fresh

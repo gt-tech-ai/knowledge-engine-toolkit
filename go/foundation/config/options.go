@@ -27,8 +27,11 @@ func DefaultConfig() Config {
 	return Config{
 		Kind: KindViper,
 		Viper: ViperConfig{
-			BaseDir: ".",
-			Env:     viperloader.ResolveEnv(),
+			BaseDir:  ".",
+			Env:      viperloader.ResolveEnv(),
+			Schema:   nil,
+			ExtraEnv: nil,
+			Prefix:   "",
 		},
 	}
 }

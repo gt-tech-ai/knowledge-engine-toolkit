@@ -69,6 +69,8 @@ func kinds() client.Kinds[Config, Deps, API] {
 			KindStub: func(context.Context, Config, Deps) (API, error) { return Stub{}, nil },
 			KindSDK:  newSDK,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -141,5 +143,5 @@ func (Stub) GetAccount(
 	_ *sesv2.GetAccountInput,
 	_ ...func(*sesv2.Options),
 ) (*sesv2.GetAccountOutput, error) {
-	return &sesv2.GetAccountOutput{}, nil
+	return new(sesv2.GetAccountOutput), nil
 }

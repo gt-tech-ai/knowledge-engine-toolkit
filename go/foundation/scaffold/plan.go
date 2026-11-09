@@ -148,7 +148,13 @@ func decide(
 	content []byte,
 	policy types.FilePolicy,
 ) (types.FileEntry, error) {
-	fileEntry := types.FileEntry{Path: path, Content: content, Policy: policy}
+	fileEntry := types.FileEntry{
+		Path:    path,
+		Content: content,
+		Policy:  policy,
+		Reason:  "",
+		Action:  0,
+	}
 	text, err := codebase.Text(ctx, path)
 
 	switch {

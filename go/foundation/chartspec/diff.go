@@ -51,10 +51,10 @@ func Diff(digest, hash Hash, get NodeGetter) ([]Change, error) {
 	}
 
 	if digest.IsZero() || hash.IsZero() {
-		return []Change{{Before: digest, After: hash}}, nil
+		return []Change{{Before: digest, After: hash, Path: ""}}, nil
 	}
 
-	currentDiffer := differ{dec: decoder{get: get}}
+	currentDiffer := differ{dec: decoder{get: get}, changes: nil}
 
 	err := currentDiffer.node(digest, hash, "", 0)
 	if err != nil {

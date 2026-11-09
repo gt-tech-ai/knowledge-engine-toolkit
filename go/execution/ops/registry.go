@@ -110,7 +110,13 @@ func (r *Registry) Reserve(name, holder string) (interfaces.Reservation, error) 
 
 	r.holder = holder
 
-	return &Reservation{reg: r, name: name}, nil
+	return &Reservation{
+		reg:  r,
+		name: name,
+		once: sync.Once{},
+		mu:   sync.Mutex{},
+		done: false,
+	}, nil
 }
 
 // Run runs the reserved operation under its decorator chain and then releases the

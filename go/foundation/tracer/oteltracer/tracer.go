@@ -92,7 +92,7 @@ func (t *Tracer) Start(
 	name string,
 	opts ...interfaces.SpanOption,
 ) (context.Context, interfaces.Span) {
-	cfg := &interfaces.SpanConfig{}
+	cfg := new(interfaces.SpanConfig)
 	for _, opt := range opts {
 		opt(cfg)
 	}

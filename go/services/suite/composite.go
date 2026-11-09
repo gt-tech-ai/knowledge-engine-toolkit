@@ -36,7 +36,7 @@ type Composite struct {
 	Spec types.Composite
 }
 
-var _ gate.Factory = &Composite{}
+var _ gate.Factory = new(Composite)
 
 // Gate builds the composite's gate: one phase per spec phase that builds a job, serial
 // or parallel as the phase says.

@@ -57,7 +57,7 @@ func WithOutput(stdout, stderr io.Writer) RunnerOption {
 
 // NewRunner creates a Runner for real command execution, configured by opts.
 func NewRunner(opts ...RunnerOption) *Runner {
-	r := &Runner{}
+	r := new(Runner)
 	for _, opt := range opts {
 		opt(r)
 	}

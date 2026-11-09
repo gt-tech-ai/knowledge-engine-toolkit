@@ -71,6 +71,9 @@ func kinds() client.Kinds[interfaces.SourceConfig, Deps, interfaces.ConnectorSou
 				return s3inventory.NewSource(ctx, &cfg, deps.STS, deps.BuildS3Client)
 			},
 		},
+		Options:    nil,
+		Default:    "",
+		AtMostOnce: nil,
 	}
 }
 

@@ -115,6 +115,10 @@ func NewSubscriber(ctx context.Context, cfg *Config) (*Subscriber, error) {
 		nackDelay:       cfg.NackDelay,
 		baseBackoff:     baseBackoff,
 		waitTimeSeconds: wait,
+		NoOp:            lifecycle.NoOp{},
+		cancels:         nil,
+		wg:              sync.WaitGroup{},
+		mu:              sync.Mutex{},
 	}, nil
 }
 
@@ -190,12 +194,14 @@ func (s *Subscriber) pollOnce(
 		return ok
 	}
 
-	out, err := s.api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
-		QueueUrl:              aws.String(*queueURL),
-		MaxNumberOfMessages:   maxMessagesPerReceive,
-		WaitTimeSeconds:       s.waitTimeSeconds,
-		MessageAttributeNames: []string{"All"},
-	})
+	var receiveMessageInput awssqs.ReceiveMessageInput
+
+	receiveMessageInput.QueueUrl = aws.String(*queueURL)
+	receiveMessageInput.MaxNumberOfMessages = maxMessagesPerReceive
+	receiveMessageInput.WaitTimeSeconds = s.waitTimeSeconds
+	receiveMessageInput.MessageAttributeNames = []string{"All"}
+
+	out, err := s.api.ReceiveMessage(ctx, &receiveMessageInput)
 	if err != nil {
 		return s.backoffOrDone(ctx, "receive", topic, err, backoff)
 	}
@@ -327,10 +333,11 @@ func (s *Subscriber) runHandler(
 	defer cancel()
 
 	msg := &interfaces.Message{
-		ID:       aws.ToString(message.MessageId),
-		Topic:    topic,
-		Payload:  []byte(aws.ToString(message.Body)),
-		Metadata: stringAttributes(message.MessageAttributes),
+		ID:        aws.ToString(message.MessageId),
+		Topic:     topic,
+		Payload:   []byte(aws.ToString(message.Body)),
+		Metadata:  stringAttributes(message.MessageAttributes),
+		Timestamp: 0,
 	}
 
 	hctx = tracer.Extract(hctx, msg.Metadata)

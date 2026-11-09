@@ -28,7 +28,7 @@ type Registry struct {
 
 // NewRegistry returns an empty Registry.
 func NewRegistry() *Registry {
-	return &Registry{factories: make(map[EventType]Factory)}
+	return &Registry{factories: make(map[EventType]Factory), mu: sync.RWMutex{}}
 }
 
 // Register adds the factory for eventType. It returns a CodeInvalidInput error,

@@ -112,10 +112,21 @@ func DefaultConfig() Config {
 		PageSize:       defaultConfigPageSize,
 		NumConns:       defaultConfigNumConns,
 		Cassandra: CassandraConfig{
-			Hosts: []string{"localhost"},
-			Port:  defaultCassandraPort,
+			Hosts:                []string{"localhost"},
+			Port:                 defaultCassandraPort,
+			LocalDC:              "",
+			Username:             "",
+			Password:             "",
+			TLS:                  false,
+			DisableHostDiscovery: false,
+			ReconnectInterval:    0,
 		},
-		Keyspaces: KeyspacesConfig{Port: keyspaces.DefaultPort},
+		Keyspaces: KeyspacesConfig{
+			Port:       keyspaces.DefaultPort,
+			Region:     "",
+			CACertPath: "",
+		},
+		Keyspace: "",
 	}
 }
 
@@ -131,6 +142,9 @@ func kinds() client.Kinds[Config, Deps, interfaces.CQLSession] {
 			KindCassandra: client.RefConfig(newCassandra),
 			KindKeyspaces: client.RefConfig(newKeyspaces),
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -181,5 +195,6 @@ func newKeyspaces(_ context.Context, cfg *Config, _ Deps) (interfaces.CQLSession
 		Port:           cfg.Keyspaces.Port,
 		PageSize:       cfg.PageSize,
 		NumConns:       cfg.NumConns,
+		Credentials:    nil,
 	})
 }

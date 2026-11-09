@@ -136,7 +136,7 @@ func (c *Console) Observer() interfaces.ExecutionObserver {
 	case c.p.at(LevelVerbose):
 		obs = &table{p: c.p}
 	case c.cfg.CI:
-		obs = Composite(newLine(c.p), &ghActions{w: c.p.w})
+		obs = Composite(newLine(c.p), &ghActions{w: c.p.w, pending: nil})
 	default:
 		obs = newLine(c.p)
 	}
@@ -225,7 +225,7 @@ func (h hook) print(s style, format, cmd string) {
 // Logger returns an interfaces.Logger that prints through the console: Debug at the
 // verbose level, Info and Warn at the normal level, Error always. Key-value pairs are
 // appended to the message as " key=value".
-func (c *Console) Logger() interfaces.Logger { return &consoleLogger{c: c} }
+func (c *Console) Logger() interfaces.Logger { return &consoleLogger{c: c, kvs: nil} }
 
 // consoleLogger is the console's Logger.
 type consoleLogger struct {

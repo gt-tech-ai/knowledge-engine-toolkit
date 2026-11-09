@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 const (
@@ -52,7 +53,9 @@ type Deps struct {
 }
 
 // DefaultConfig returns the memory kind.
-func DefaultConfig() Config { return Config{} }
+func DefaultConfig() Config {
+	return stdx.Zero[Config]()
+}
 
 // kinds is the storage backend table.
 func kinds() client.Kinds[Config, Deps, interfaces.StorageClient] {
@@ -66,6 +69,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.StorageClient] {
 			},
 			KindS3: client.RefConfig(newS3),
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

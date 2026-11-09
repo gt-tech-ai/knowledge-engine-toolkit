@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // mapping is the domain code and fixed message a wire status maps back to.
@@ -62,7 +63,7 @@ func callerFault(c connect.Code) (mapping, bool) {
 	case connect.CodePermissionDenied:
 		return mapping{code: apperr.CodeForbidden, msg: "permission denied"}, true
 	default:
-		return mapping{}, false
+		return stdx.Zero[mapping](), false
 	}
 }
 

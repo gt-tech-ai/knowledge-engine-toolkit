@@ -29,7 +29,7 @@ type Lock struct {
 
 // New returns an empty in-process DistributedLock.
 func New() *Lock {
-	return &Lock{held: make(map[string]string)}
+	return &Lock{held: make(map[string]string), mu: sync.Mutex{}}
 }
 
 // compile-time assertion that *Lock satisfies the seam.

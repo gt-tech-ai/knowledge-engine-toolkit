@@ -8,6 +8,7 @@ import (
 	sesclient "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/ses"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // SES checks that the account's SES is out of the sandbox, so mail reaches any
@@ -18,7 +19,7 @@ type SES struct {
 }
 
 // Compile-time assertion that SES is a readiness probe.
-var _ interfaces.Probe[Target] = SES{}
+var _ interfaces.Probe[Target] = stdx.Zero[SES]()
 
 // Name is "ses".
 func (SES) Name() string { return "ses" }

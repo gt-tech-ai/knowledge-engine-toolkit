@@ -141,13 +141,15 @@ func NewInstaller(
 	opts ...Option,
 ) *Installer {
 	installer := &Installer{
-		runner:     runner,
-		downloader: newHTTPDownloader(),
-		paths:      execPathResolver{},
-		log:        log,
-		platform:   platform,
-		arch:       runtime.GOARCH,
-		prompter:   prompter,
+		runner:        runner,
+		downloader:    newHTTPDownloader(),
+		paths:         execPathResolver{},
+		log:           log,
+		platform:      platform,
+		arch:          runtime.GOARCH,
+		prompter:      prompter,
+		reinstallHint: nil,
+		force:         false,
 	}
 	for _, opt := range opts {
 		opt(installer)
@@ -598,7 +600,11 @@ func isGoInstall(m types.InstallMethod) bool {
 // gains non-interactive flags, and go-install pins the local toolchain (with a
 // Windows-ARM64 amd64 cross-compile rewrite). Pure — no execution or host I/O.
 func (i *Installer) buildInvocation(method types.InstallMethod) invocation {
-	inv := invocation{command: method.Command, args: append([]string{}, method.Args...)}
+	inv := invocation{
+		command: method.Command,
+		args:    append([]string{}, method.Args...),
+		env:     nil,
+	}
 	switch {
 	case method.Command == textWinget:
 		inv.args = append(

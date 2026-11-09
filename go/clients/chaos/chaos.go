@@ -61,6 +61,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.FaultInjector] {
 			},
 			KindChaosMesh: newChaosMesh,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

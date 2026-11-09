@@ -18,13 +18,17 @@ import (
 // Tier is the pipeline tier's decoration: recovery → logging → tracing → metrics →
 // timeout, outermost first.
 func Tier() decorate.Tier {
-	return decorate.Tier{Name: "pipeline", Order: []decorate.Layer{
-		decorate.LayerRecovery,
-		decorate.LayerLogging,
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerTimeout,
-	}}
+	return decorate.Tier{
+		Name: "pipeline", Order: []decorate.Layer{
+			decorate.LayerRecovery,
+			decorate.LayerLogging,
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}
 }
 
 // Compile-time interface compliance check.

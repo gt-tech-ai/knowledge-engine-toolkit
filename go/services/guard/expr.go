@@ -67,7 +67,11 @@ type Programs struct {
 
 // NewPrograms returns an empty expression cache.
 func NewPrograms() *Programs {
-	return &Programs{env: sync.OnceValues(newEnv), byExpr: map[string]*program{}}
+	return &Programs{
+		env:    sync.OnceValues(newEnv),
+		byExpr: map[string]*program{},
+		mu:     sync.Mutex{},
+	}
 }
 
 // newEnv builds the guard environment: the CEL standard library plus optional types, the
@@ -426,7 +430,9 @@ func results(v ref.Val, message string) ([]types.Finding, error) {
 			return nil, nil
 		}
 
-		return []types.Finding{{Message: message}}, nil
+		return []types.Finding{
+			{Message: message, Check: "", File: "", Rule: "", Line: 0},
+		}, nil
 	case []any:
 		return listFindings(enabled)
 	}
@@ -455,9 +461,9 @@ func listFindings(list []any) ([]types.Finding, error) {
 func finding(value any) (types.Finding, error) {
 	switch text := value.(type) {
 	case string:
-		return types.Finding{Message: text}, nil
+		return types.Finding{Message: text, Check: "", File: "", Rule: "", Line: 0}, nil
 	case map[string]any:
-		currentFinding := types.Finding{}
+		currentFinding := stdx.Zero[types.Finding]()
 
 		currentFinding.File = stdx.As[string](text[textFile])
 		currentFinding.Message = stdx.As[string](text["message"])

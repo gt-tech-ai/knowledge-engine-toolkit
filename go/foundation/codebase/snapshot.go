@@ -42,7 +42,7 @@ type entry struct {
 
 // NewSnapshot returns an empty snapshot identified by key.
 func NewSnapshot(key string) *Snapshot {
-	return &Snapshot{key: key, entries: map[string]*entry{}}
+	return &Snapshot{key: key, entries: map[string]*entry{}, mu: sync.Mutex{}}
 }
 
 // Key returns the snapshot's identity.
@@ -98,7 +98,7 @@ func (s *Snapshot) claim(key string) (*entry, bool) {
 		return e, false
 	}
 
-	e := &entry{done: make(chan struct{})}
+	e := &entry{done: make(chan struct{}), val: nil, err: nil, cancelled: false}
 	s.entries[key] = e
 
 	return e, true

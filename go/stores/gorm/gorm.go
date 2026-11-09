@@ -53,7 +53,7 @@ func NewFromConfig(cfg *Config) (*Client, error) {
 		)
 	}
 
-	return &Client{cfg: *cfg}, nil
+	return &Client{cfg: *cfg, db: nil}, nil
 }
 
 // DB returns the underlying *gorm.DB for repositories to query through. It is nil
@@ -80,9 +80,13 @@ var _ interfaces.Client = (*Client)(nil)
 // is closed here and DB/Liveness keep reporting not started. GORM's own automatic
 // ping is disabled so the reachability check honours ctx.
 func (c *Client) Start(ctx context.Context) error {
+	var gormConfig gorm.Config
+
+	gormConfig.DisableAutomaticPing = true
+
 	value, err := gorm.Open(
 		postgres.Open(c.cfg.Database.DSN()),
-		&gorm.Config{DisableAutomaticPing: true},
+		&gormConfig,
 	)
 	if err != nil {
 		if value != nil {

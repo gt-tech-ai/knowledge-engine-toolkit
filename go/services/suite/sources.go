@@ -190,7 +190,16 @@ func guardStep(
 		verdict.Status = types.StatusFail
 	}
 
-	step := types.StepResult{Name: name, Group: group, Status: verdict.Status}
+	step := types.StepResult{
+		Name:     name,
+		Group:    group,
+		Status:   verdict.Status,
+		Error:    "",
+		Detail:   nil,
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
+	}
 	if verdict.Status != types.StatusFail {
 		step.Detail = []byte(verdict.Detail)
 	} else if step.Error = strings.TrimSpace(verdict.Detail); step.Error == "" {
@@ -229,6 +238,8 @@ func Procedures(
 					return eng.Run(ctx, procedure.Name, input, env.Opts)
 				})
 			},
+			Tags:  nil,
+			Tools: nil,
 		})
 	}
 

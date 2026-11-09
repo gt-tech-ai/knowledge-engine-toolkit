@@ -15,6 +15,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Registry is the slice of the operations registry the table needs: reserving the
@@ -82,6 +83,10 @@ func New(
 		onDone: onDone,
 		keep:   keep,
 		runs:   map[string]*run{},
+		order:  nil,
+		wg:     sync.WaitGroup{},
+		mu:     sync.Mutex{},
+		closed: false,
 	}
 }
 
@@ -101,11 +106,15 @@ func (t *Table) Start(ctx context.Context, name string, input any) (string, erro
 
 	rctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	currentRun := &run{
-		id:      identifier,
-		op:      name,
-		state:   StateRunning,
-		started: time.Now(),
-		cancel:  cancel,
+		id:       identifier,
+		op:       name,
+		state:    StateRunning,
+		started:  time.Now(),
+		cancel:   cancel,
+		ended:    time.Time{},
+		err:      nil,
+		logPaths: nil,
+		obs:      stdx.Zero[Collector](),
 	}
 
 	t.mu.Lock()

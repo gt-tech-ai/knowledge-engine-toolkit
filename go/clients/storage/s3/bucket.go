@@ -19,14 +19,19 @@ import (
 // surfacing NoSuchBucket only on the first write.
 func (c *s3Client) EnsureBucket(ctx context.Context, bucket string) error {
 	_, err := c.api.HeadBucket(
-		ctx, &s3.HeadBucketInput{Bucket: aws.String(bucket)},
+		ctx, &s3.HeadBucketInput{Bucket: aws.String(bucket), ExpectedBucketOwner: nil},
 	)
 	if err == nil {
 		return nil // already exists and reachable
 	}
 
+	var createBucketInput s3.CreateBucketInput
+
+	createBucketInput.Bucket = aws.String(bucket)
+
 	_, err = c.api.CreateBucket(
-		ctx, &s3.CreateBucketInput{Bucket: aws.String(bucket)},
+		ctx,
+		&createBucketInput,
 	)
 	if err != nil {
 		var (

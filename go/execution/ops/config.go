@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -56,6 +57,9 @@ func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
 		known:  known,
 		ops:    map[string]interfaces.Operation{},
 		chains: map[string]decorate.OpMiddleware{},
+		holder: "",
+		list:   nil,
+		mu:     sync.Mutex{},
 	}
 
 	err = addAdmitted(reg, &cfg)

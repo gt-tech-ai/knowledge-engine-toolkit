@@ -42,6 +42,7 @@ func (d *Detector) Check(
 			Tool:    tool,
 			Status:  types.StatusToolMissing,
 			Message: tool.Name + ": not found",
+			Found:   "",
 		}
 	}
 

@@ -61,6 +61,9 @@ func kinds() client.Kinds[Config, Deps, interfaces.OutboxStore] {
 			},
 			KindPostgres: client.RefConfig(newPostgres),
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

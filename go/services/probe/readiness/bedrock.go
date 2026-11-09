@@ -13,6 +13,7 @@ import (
 	bedrockclient "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/bedrock"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Bedrock checks that each distinct model id is invokable, with a one-token Converse.
@@ -26,7 +27,7 @@ type Bedrock struct {
 }
 
 // Compile-time assertion that Bedrock is a readiness probe.
-var _ interfaces.Probe[Target] = Bedrock{}
+var _ interfaces.Probe[Target] = stdx.Zero[Bedrock]()
 
 // Name is "bedrock".
 func (Bedrock) Name() string { return "bedrock" }
@@ -41,9 +42,13 @@ func (p Bedrock) Run(ctx context.Context, target Target) types.Verdict {
 
 	list := strconv.Itoa(len(ids)) + " model id(s)"
 	if target.NoInvoke {
-		return types.Verdict{Status: types.StatusWarn, Detail: Unverified +
-			"--no-invoke: skipped the billed Converse for " + list + ": " +
-			strings.Join(ids, ", ")}
+		return types.Verdict{
+			Status: types.StatusWarn, Detail: Unverified +
+				"--no-invoke: skipped the billed Converse for " + list + ": " +
+				strings.Join(ids, ", "),
+			Findings:  nil,
+			Transient: false,
+		}
 	}
 
 	for _, id := range ids {
@@ -74,16 +79,23 @@ func uniqueIDs(modelIDs []string) []string {
 func converseInput(modelID string) *bedrockruntime.ConverseInput {
 	maxTokens := int32(1)
 
-	return &bedrockruntime.ConverseInput{
-		ModelId: aws.String(modelID),
-		Messages: []brtypes.Message{
-			{
-				Role: brtypes.ConversationRoleUser,
-				Content: []brtypes.ContentBlock{
-					&brtypes.ContentBlockMemberText{Value: "ping"},
-				},
+	var sdkConverseInput bedrockruntime.ConverseInput
+
+	sdkConverseInput.ModelId = aws.String(modelID)
+	sdkConverseInput.Messages = []brtypes.Message{
+		{
+			Role: brtypes.ConversationRoleUser,
+			Content: []brtypes.ContentBlock{
+				&brtypes.ContentBlockMemberText{Value: "ping"},
 			},
 		},
-		InferenceConfig: &brtypes.InferenceConfiguration{MaxTokens: &maxTokens},
 	}
+	sdkConverseInput.InferenceConfig = &brtypes.InferenceConfiguration{
+		MaxTokens:     &maxTokens,
+		StopSequences: nil,
+		Temperature:   nil,
+		TopP:          nil,
+	}
+
+	return &sdkConverseInput
 }

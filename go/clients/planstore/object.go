@@ -77,7 +77,7 @@ func (st objectStore) Save(ctx context.Context, set *types.PlanSet) error {
 		return err
 	}
 
-	currentManifest := manifest{Owner: set.Owner}
+	currentManifest := manifest{Owner: set.Owner, Units: nil}
 
 	for _, f := range files {
 		unit, opErr := st.saveUnit(ctx, set, f)

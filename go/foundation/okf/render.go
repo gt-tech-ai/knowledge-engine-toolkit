@@ -21,7 +21,11 @@ const yamlIndent = 2
 // attributions are flow style; a single verifier is a bare mapping.
 // fm must not be nil.
 func RenderFrontmatter(frontmatter *Frontmatter) []byte {
-	node := &yaml.Node{Kind: yaml.MappingNode}
+	var sdkNode yaml.Node
+
+	sdkNode.Kind = yaml.MappingNode
+
+	node := &sdkNode
 
 	addScalars(node, [][2]string{
 		{keyOKFVersion, frontmatter.OKFVersion},
@@ -83,7 +87,12 @@ func addTags(node *yaml.Node, tags []string) {
 		return
 	}
 
-	list := &yaml.Node{Kind: yaml.SequenceNode, Style: yaml.FlowStyle}
+	var sdkNode yaml.Node
+
+	sdkNode.Kind = yaml.SequenceNode
+	sdkNode.Style = yaml.FlowStyle
+
+	list := &sdkNode
 	for _, t := range tags {
 		list.Content = append(list.Content, scalar(t))
 	}
@@ -98,7 +107,11 @@ func addVerified(node *yaml.Node, verified []Attribution) {
 	case 1:
 		addEntry(node, "verified", attribution(verified[0]))
 	default:
-		list := &yaml.Node{Kind: yaml.SequenceNode}
+		var sdkNode yaml.Node
+
+		sdkNode.Kind = yaml.SequenceNode
+
+		list := &sdkNode
 		for _, a := range verified {
 			list.Content = append(list.Content, attribution(a))
 		}
@@ -129,12 +142,23 @@ func addExtra(node *yaml.Node, extra map[string]any) {
 // scalar is a string node that the encoder quotes whenever the plain form would read
 // back as another type.
 func scalar(v string) *yaml.Node {
-	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: v}
+	var node yaml.Node
+
+	node.Kind = yaml.ScalarNode
+	node.Tag = "!!str"
+	node.Value = v
+
+	return &node
 }
 
 // attribution is a flow-style {by, at} mapping.
 func attribution(currentAttribution Attribution) *yaml.Node {
-	node := &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle}
+	var sdkNode yaml.Node
+
+	sdkNode.Kind = yaml.MappingNode
+	sdkNode.Style = yaml.FlowStyle
+
+	node := &sdkNode
 
 	node.Content = append(node.Content, scalar("by"), scalar(currentAttribution.By))
 
@@ -244,7 +268,21 @@ func entryLine(e IndexEntry) string {
 // RenderRootIndex writes the bundle-root index.md: an okf_version-only frontmatter
 // block, a blank line, then the RenderIndex body.
 func RenderRootIndex(okfVersion string, entries []IndexEntry) []byte {
-	head := RenderFrontmatter(&Frontmatter{OKFVersion: okfVersion})
+	head := RenderFrontmatter(
+		&Frontmatter{
+			OKFVersion:  okfVersion,
+			Type:        "",
+			Title:       "",
+			Description: "",
+			Resource:    "",
+			Status:      "",
+			StaleAfter:  "",
+			Generated:   nil,
+			Extra:       nil,
+			Tags:        nil,
+			Verified:    nil,
+		},
+	)
 
 	return append(append(head, '\n'), RenderIndex(entries)...)
 }

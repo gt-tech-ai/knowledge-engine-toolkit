@@ -12,6 +12,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/stub"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 const (
@@ -56,7 +57,12 @@ type Deps struct {
 
 // DefaultConfig returns the stub kind and the default S3 key template.
 func DefaultConfig() Config {
-	return Config{S3: outboxs3.Config{KeyTemplate: outboxs3.DefaultKeyTemplate}}
+	return Config{
+		S3:   outboxs3.Config{KeyTemplate: outboxs3.DefaultKeyTemplate, Bucket: ""},
+		Kind: "",
+		Name: "",
+		SQS:  stdx.Zero[outboxsqs.Config](),
+	}
 }
 
 // tier builds the client tier for the SDK client kind of the sink cfg names, one
@@ -83,6 +89,9 @@ func kinds() client.Kinds[Config, Deps, interfaces.OutboxSink] {
 			KindSQS: client.RefConfig(newSQSSink),
 			KindS3:  client.RefConfig(newS3Sink),
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

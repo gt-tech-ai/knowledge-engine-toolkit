@@ -29,7 +29,7 @@ type loggingMW struct {
 
 // NewLogging returns the logging middleware for the subject name in tier.
 func NewLogging(logger interfaces.Logger, tier, name string) OpMiddleware {
-	return loggingMW{logger: logger, tier: tier, name: name}
+	return loggingMW{logger: logger, tier: tier, name: name, edge: false}
 }
 
 // WrapOp logs op before running next and again if it fails.

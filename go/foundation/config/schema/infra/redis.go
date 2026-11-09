@@ -51,6 +51,7 @@ func DefaultRedisConfig() RedisConfig {
 		DB:           0,
 		PoolSize:     defaultRedisConfigPoolSize,
 		MinIdleConns: defaultRedisConfigMinIdleConns,
+		TLS:          false,
 	}
 }
 

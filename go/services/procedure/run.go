@@ -316,7 +316,7 @@ func (e *engine) eachConcurrent(
 			if err != nil {
 				errs[currentSlot.i] = err
 
-				return types.StepResult{Status: types.StatusFail}
+				return statusOnly(types.StatusFail)
 			}
 
 			res[currentSlot.i], _, errs[currentSlot.i] = e.once(
@@ -328,7 +328,7 @@ func (e *engine) eachConcurrent(
 				opts,
 			)
 
-			return types.StepResult{Status: types.StatusPass}
+			return statusOnly(types.StatusPass)
 		})
 
 	var out types.StepResults
@@ -652,7 +652,11 @@ func (e *engine) runInvocation(
 
 	if st.Stream {
 		return interfaces.CmdResult{
-			Err: e.deps.Runner.RunWithEnv(ctx, dir, inv.env, inv.exe, inv.args...),
+			Err:      e.deps.Runner.RunWithEnv(ctx, dir, inv.env, inv.exe, inv.args...),
+			Stdout:   nil,
+			Stderr:   nil,
+			Duration: 0,
+			ExitCode: 0,
 		}
 	}
 
@@ -776,7 +780,16 @@ func (c *compiled) result(
 	status types.StepStatus,
 	msg string,
 ) types.StepResult {
-	return types.StepResult{Name: name, Group: c.group, Status: status, Error: msg}
+	return types.StepResult{
+		Name:     name,
+		Group:    c.group,
+		Status:   status,
+		Error:    msg,
+		Detail:   nil,
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
+	}
 }
 
 // grouped puts res in c's group where a result names none.
@@ -880,4 +893,19 @@ func (c *compiled) execArgv(
 	}
 
 	return argv, nil
+}
+
+// statusOnly is a step result carrying only its status, for a fan-out whose slots hold
+// the real results.
+func statusOnly(status types.StepStatus) types.StepResult {
+	return types.StepResult{
+		Status:   status,
+		Name:     "",
+		Group:    "",
+		Error:    "",
+		Detail:   nil,
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
+	}
 }

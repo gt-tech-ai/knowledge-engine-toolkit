@@ -31,7 +31,7 @@ var _ interfaces.DatabasePool = (*Client)(nil)
 // until Start. It is the PostgreSQL backend constructor the database tier's
 // NewFromConfig selects for KindPostgres.
 func New(cfg *infra.DatabaseConfig) *Client {
-	return &Client{cfg: cfg}
+	return &Client{cfg: cfg, db: nil}
 }
 
 // Start opens the pool from config, applies the pool sizing, and pings to fail fast

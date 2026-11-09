@@ -29,12 +29,14 @@ func (f doerFunc) Do(r *http.Request) (*http.Response, error) { return f(r) }
 
 // jsonResponse builds a canned *http.Response with the given status and body.
 func jsonResponse(status int, body string) *http.Response {
-	return &http.Response{
-		StatusCode: status,
-		Status:     http.StatusText(status),
-		Body:       io.NopCloser(strings.NewReader(body)),
-		Header:     make(http.Header),
-	}
+	var response http.Response
+
+	response.StatusCode = status
+	response.Status = http.StatusText(status)
+	response.Body = io.NopCloser(strings.NewReader(body))
+	response.Header = make(http.Header)
+
+	return &response
 }
 
 // TestTraceIDFromHeader tests extraction of the trace id from a traceresponse header.

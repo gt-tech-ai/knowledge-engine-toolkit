@@ -11,6 +11,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Store is the empty outbox store.
@@ -41,7 +42,7 @@ func (Store) Park(context.Context, uuid.UUID, string) error { return nil }
 
 // Stats reports an empty lane.
 func (Store) Stats(context.Context, string) (types.OutboxStats, error) {
-	return types.OutboxStats{}, nil
+	return stdx.Zero[types.OutboxStats](), nil
 }
 
 // DeleteSentBefore removes nothing.

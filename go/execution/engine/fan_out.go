@@ -71,8 +71,14 @@ func (p Pool) FanOut[T any](
 	// pre-acquire-before-spawn shape).
 	for ; index < len(items); index++ {
 		results[index] = types.StepResult{
-			Status: types.StatusFail,
-			Error:  gctx.Err().Error(),
+			Status:   types.StatusFail,
+			Error:    gctx.Err().Error(),
+			Name:     "",
+			Group:    "",
+			Detail:   nil,
+			Children: nil,
+			Duration: 0,
+			Tests:    0,
 		}
 		emitter.complete(&results[index])
 	}
@@ -112,6 +118,10 @@ func runUnit[T any](
 				Error:    "panic recovered",
 				Detail:   debug.Stack(),
 				Duration: time.Since(start),
+				Name:     "",
+				Group:    "",
+				Children: nil,
+				Tests:    0,
 			}
 			emitter.complete(slot)
 		}

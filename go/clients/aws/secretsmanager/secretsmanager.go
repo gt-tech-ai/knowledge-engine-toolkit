@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/smithy-go/middleware"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
@@ -90,6 +91,8 @@ func kinds() client.Kinds[Config, Deps, API] {
 			KindStub: func(context.Context, Config, Deps) (API, error) { return Stub{}, nil },
 			KindSDK:  newSDK,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -232,7 +235,13 @@ func (Stub) PutSecretValue(
 	in *secretsmanager.PutSecretValueInput,
 	_ ...func(*secretsmanager.Options),
 ) (*secretsmanager.PutSecretValueOutput, error) {
-	return &secretsmanager.PutSecretValueOutput{Name: in.SecretId}, nil
+	return &secretsmanager.PutSecretValueOutput{
+		Name:           in.SecretId,
+		ARN:            nil,
+		VersionId:      nil,
+		VersionStages:  nil,
+		ResultMetadata: middleware.Metadata{},
+	}, nil
 }
 
 // ListSecrets lists no secrets.
@@ -241,5 +250,5 @@ func (Stub) ListSecrets(
 	_ *secretsmanager.ListSecretsInput,
 	_ ...func(*secretsmanager.Options),
 ) (*secretsmanager.ListSecretsOutput, error) {
-	return &secretsmanager.ListSecretsOutput{}, nil
+	return new(secretsmanager.ListSecretsOutput), nil
 }

@@ -63,6 +63,9 @@ func New(doer interfaces.HTTPDoer, domain, clientID, clientSecret string) *Clien
 		domain:       domain,
 		clientID:     clientID,
 		clientSecret: clientSecret,
+		expires:      time.Time{},
+		token:        "",
+		mu:           sync.Mutex{},
 	}
 }
 
@@ -311,5 +314,7 @@ func x5cToPEM(x5c string) (string, error) {
 		return "", apperr.Wrap(err, apperr.CodeUpstream, "auth0: marshal the public key")
 	}
 
-	return string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pub})), nil
+	return string(
+		pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pub, Headers: nil}),
+	), nil
 }

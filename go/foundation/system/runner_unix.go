@@ -34,7 +34,7 @@ const processGroupGrace = 5 * time.Second
 // process tree and are torn down separately by an explicit `compose down`.
 func configureProcessGroup(cmd *exec.Cmd) {
 	if cmd.SysProcAttr == nil {
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
+		cmd.SysProcAttr = new(syscall.SysProcAttr)
 	}
 
 	cmd.SysProcAttr.Setpgid = true

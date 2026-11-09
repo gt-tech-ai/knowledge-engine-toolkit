@@ -72,6 +72,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.Auth0Management] {
 			},
 			KindManagement: client.RefDeps(newManagement),
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -93,7 +95,12 @@ func newManagement(
 			timeout = DefaultTimeout
 		}
 
-		doer = &http.Client{Timeout: timeout}
+		doer = &http.Client{
+			Timeout:       timeout,
+			Transport:     nil,
+			CheckRedirect: nil,
+			Jar:           nil,
+		}
 	}
 
 	return management.New(doer, cfg.Domain, deps.ClientID, deps.ClientSecret), nil

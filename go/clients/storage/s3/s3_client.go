@@ -199,6 +199,7 @@ func NewClient(
 		presignEndpoint: presignEndpoint,
 		threshold:       defaultMultipartThreshold,
 		sseKMSKeyID:     sseKMSKeyID,
+		NoOp:            lifecycle.NoOp{},
 	}
 }
 
@@ -249,9 +250,12 @@ func NewClientFromAPI(
 	}
 
 	return &s3Client{
-		api:         api,
-		threshold:   threshold,
-		sseKMSKeyID: sseKMSKeyID,
+		api:             api,
+		threshold:       threshold,
+		sseKMSKeyID:     sseKMSKeyID,
+		NoOp:            lifecycle.NoOp{},
+		presign:         nil,
+		presignEndpoint: "",
 	}
 }
 
@@ -260,10 +264,12 @@ func (c *s3Client) Download(
 	ctx context.Context,
 	bucket, key string,
 ) (io.ReadCloser, error) {
-	out, err := c.api.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	})
+	var getObjectInput s3.GetObjectInput
+
+	getObjectInput.Bucket = aws.String(bucket)
+	getObjectInput.Key = aws.String(key)
+
+	out, err := c.api.GetObject(ctx, &getObjectInput)
 	if err != nil {
 		if isNotFound(err) {
 			return nil, apperr.NotFound(fmt.Sprintf("object %s/%s", bucket, key))
@@ -310,10 +316,12 @@ func classifyBody(
 
 // Delete removes a single object. S3 delete is idempotent (no error if absent).
 func (c *s3Client) Delete(ctx context.Context, bucket, key string) error {
-	_, err := c.api.DeleteObject(ctx, &s3.DeleteObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	})
+	var deleteObjectInput s3.DeleteObjectInput
+
+	deleteObjectInput.Bucket = aws.String(bucket)
+	deleteObjectInput.Key = aws.String(key)
+
+	_, err := c.api.DeleteObject(ctx, &deleteObjectInput)
 	if err != nil {
 		return apperr.Wrap(
 			err,
@@ -359,10 +367,12 @@ func sortParts(parts []types.CompletedPart) {
 
 // Exists reports whether an object is present.
 func (c *s3Client) Exists(ctx context.Context, bucket, key string) (bool, error) {
-	_, err := c.api.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	})
+	var headObjectInput s3.HeadObjectInput
+
+	headObjectInput.Bucket = aws.String(bucket)
+	headObjectInput.Key = aws.String(key)
+
+	_, err := c.api.HeadObject(ctx, &headObjectInput)
 	if err != nil {
 		if isNotFound(err) {
 			return false, nil
@@ -383,10 +393,12 @@ func (c *s3Client) Stat(
 	ctx context.Context,
 	bucket, key string,
 ) (interfaces.StorageObject, error) {
-	out, err := c.api.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	})
+	var headObjectInput s3.HeadObjectInput
+
+	headObjectInput.Bucket = aws.String(bucket)
+	headObjectInput.Key = aws.String(key)
+
+	out, err := c.api.HeadObject(ctx, &headObjectInput)
 	if err != nil {
 		if isNotFound(err) {
 			return interfaces.StorageObject{}, apperr.NotFound(
@@ -419,7 +431,12 @@ func (c *s3Client) PresignURL(
 	expirySeconds int,
 	displayFilename string,
 ) (string, error) {
-	getObjectInput := &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)}
+	var sdkGetObjectInput s3.GetObjectInput
+
+	sdkGetObjectInput.Bucket = aws.String(bucket)
+	sdkGetObjectInput.Key = aws.String(key)
+
+	getObjectInput := &sdkGetObjectInput
 	if displayFilename != "" {
 		getObjectInput.ResponseContentDisposition = aws.String(
 			contentDispositionAttachment(displayFilename),
@@ -450,13 +467,15 @@ func (c *s3Client) PresignPutURL(
 	expirySeconds int,
 	contentType string,
 ) (string, error) {
+	var putObjectInput s3.PutObjectInput
+
+	putObjectInput.Bucket = aws.String(bucket)
+	putObjectInput.Key = aws.String(key)
+	putObjectInput.ContentType = aws.String(contentType)
+
 	req, err := c.presign.PresignPutObject(
 		ctx,
-		&s3.PutObjectInput{
-			Bucket:      aws.String(bucket),
-			Key:         aws.String(key),
-			ContentType: aws.String(contentType),
-		},
+		&putObjectInput,
 		c.presignOpts(expirySeconds),
 	)
 	if err != nil {
@@ -476,11 +495,13 @@ func (c *s3Client) CreateMultipartUpload(
 	ctx context.Context,
 	bucket, key, contentType string,
 ) (string, error) {
-	out, err := c.api.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(key),
-		ContentType: aws.String(contentType),
-	})
+	var createMultipartUploadInput s3.CreateMultipartUploadInput
+
+	createMultipartUploadInput.Bucket = aws.String(bucket)
+	createMultipartUploadInput.Key = aws.String(key)
+	createMultipartUploadInput.ContentType = aws.String(contentType)
+
+	out, err := c.api.CreateMultipartUpload(ctx, &createMultipartUploadInput)
 	if err != nil {
 		return "", apperr.Wrap(
 			err,
@@ -500,14 +521,16 @@ func (c *s3Client) PresignUploadPart(
 	partNumber int32,
 	expirySeconds int,
 ) (string, error) {
+	var uploadPartInput s3.UploadPartInput
+
+	uploadPartInput.Bucket = aws.String(bucket)
+	uploadPartInput.Key = aws.String(key)
+	uploadPartInput.UploadId = aws.String(uploadID)
+	uploadPartInput.PartNumber = aws.Int32(partNumber)
+
 	req, err := c.presign.PresignUploadPart(
 		ctx,
-		&s3.UploadPartInput{
-			Bucket:     aws.String(bucket),
-			Key:        aws.String(key),
-			UploadId:   aws.String(uploadID),
-			PartNumber: aws.Int32(partNumber),
-		},
+		&uploadPartInput,
 		c.presignOpts(expirySeconds),
 	)
 	if err != nil {
@@ -529,11 +552,13 @@ func (c *s3Client) CompleteMultipartUpload(
 	parts []interfaces.CompletedPart,
 ) error {
 	completed := make([]types.CompletedPart, len(parts))
-	for i, p := range parts {
-		completed[i] = types.CompletedPart{
-			ETag:       aws.String(p.ETag),
-			PartNumber: aws.Int32(p.PartNumber),
-		}
+	for index, p := range parts {
+		var completedPart types.CompletedPart
+
+		completedPart.ETag = aws.String(p.ETag)
+		completedPart.PartNumber = aws.Int32(p.PartNumber)
+
+		completed[index] = completedPart
 	}
 
 	// S3 requires the completed parts in ascending part-number order and rejects an
@@ -544,12 +569,16 @@ func (c *s3Client) CompleteMultipartUpload(
 		return cmp.Compare(aws.ToInt32(a.PartNumber), aws.ToInt32(b.PartNumber))
 	})
 
-	_, err := c.api.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
-		Bucket:          aws.String(bucket),
-		Key:             aws.String(key),
-		UploadId:        aws.String(uploadID),
-		MultipartUpload: &types.CompletedMultipartUpload{Parts: completed},
-	})
+	var completeMultipartUploadInput s3.CompleteMultipartUploadInput
+
+	completeMultipartUploadInput.Bucket = aws.String(bucket)
+	completeMultipartUploadInput.Key = aws.String(key)
+	completeMultipartUploadInput.UploadId = aws.String(uploadID)
+	completeMultipartUploadInput.MultipartUpload = &types.CompletedMultipartUpload{
+		Parts: completed,
+	}
+
+	_, err := c.api.CompleteMultipartUpload(ctx, &completeMultipartUploadInput)
 	if err != nil {
 		return apperr.Wrap(
 			err,
@@ -567,9 +596,12 @@ func (c *s3Client) AbortMultipartUpload(
 	bucket, key, uploadID string,
 ) error {
 	_, err := c.api.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
-		Bucket:   aws.String(bucket),
-		Key:      aws.String(key),
-		UploadId: aws.String(uploadID),
+		Bucket:               aws.String(bucket),
+		Key:                  aws.String(key),
+		UploadId:             aws.String(uploadID),
+		ExpectedBucketOwner:  nil,
+		IfMatchInitiatedTime: nil,
+		RequestPayer:         "",
 	})
 	if err != nil {
 		return apperr.Wrap(
@@ -609,9 +641,11 @@ func (c *s3Client) ListMultipartUploads(
 	ctx context.Context,
 	bucket string,
 ) ([]interfaces.MultipartUpload, error) {
-	pager := s3.NewListMultipartUploadsPaginator(c.api, &s3.ListMultipartUploadsInput{
-		Bucket: aws.String(bucket),
-	})
+	var listMultipartUploadsInput s3.ListMultipartUploadsInput
+
+	listMultipartUploadsInput.Bucket = aws.String(bucket)
+
+	pager := s3.NewListMultipartUploadsPaginator(c.api, &listMultipartUploadsInput)
 
 	var uploads []interfaces.MultipartUpload
 
@@ -643,10 +677,12 @@ func (c *s3Client) ListObjects(
 	ctx context.Context,
 	bucket, prefix string,
 ) ([]interfaces.StorageObject, error) {
-	pager := s3.NewListObjectsV2Paginator(c.api, &s3.ListObjectsV2Input{
-		Bucket: aws.String(bucket),
-		Prefix: aws.String(prefix),
-	})
+	var listObjectsV2Input s3.ListObjectsV2Input
+
+	listObjectsV2Input.Bucket = aws.String(bucket)
+	listObjectsV2Input.Prefix = aws.String(prefix)
+
+	pager := s3.NewListObjectsV2Paginator(c.api, &listObjectsV2Input)
 
 	var objs []interfaces.StorageObject
 
@@ -668,6 +704,7 @@ func (c *s3Client) ListObjects(
 				ETag:         aws.ToString(o.ETag),
 				Size:         aws.ToInt64(o.Size),
 				LastModified: formatTime(o.LastModified),
+				ContentType:  "",
 			})
 		}
 	}
@@ -684,10 +721,12 @@ func (c *s3Client) ListObjectsPage(
 	bucket, prefix string,
 	limit int,
 ) ([]interfaces.StorageObject, error) {
-	listObjectsV2Input := &s3.ListObjectsV2Input{
-		Bucket: aws.String(bucket),
-		Prefix: aws.String(prefix),
-	}
+	var sdkListObjectsV2Input s3.ListObjectsV2Input
+
+	sdkListObjectsV2Input.Bucket = aws.String(bucket)
+	sdkListObjectsV2Input.Prefix = aws.String(prefix)
+
+	listObjectsV2Input := &sdkListObjectsV2Input
 
 	if limit > 0 {
 		n := min(limit, math.MaxInt32)
@@ -711,6 +750,7 @@ func (c *s3Client) ListObjectsPage(
 			ETag:         aws.ToString(o.ETag),
 			Size:         aws.ToInt64(o.Size),
 			LastModified: formatTime(o.LastModified),
+			ContentType:  "",
 		})
 	}
 
@@ -728,10 +768,12 @@ func (c *s3Client) ListObjectsPageToken(
 	bucket, prefix, continuationToken string,
 	limit int,
 ) ([]interfaces.StorageObject, string, error) {
-	listObjectsV2Input := &s3.ListObjectsV2Input{
-		Bucket: aws.String(bucket),
-		Prefix: aws.String(prefix),
-	}
+	var sdkListObjectsV2Input s3.ListObjectsV2Input
+
+	sdkListObjectsV2Input.Bucket = aws.String(bucket)
+	sdkListObjectsV2Input.Prefix = aws.String(prefix)
+
+	listObjectsV2Input := &sdkListObjectsV2Input
 	if continuationToken != "" {
 		listObjectsV2Input.ContinuationToken = aws.String(continuationToken)
 	}
@@ -758,6 +800,7 @@ func (c *s3Client) ListObjectsPageToken(
 			ETag:         aws.ToString(o.ETag),
 			Size:         aws.ToInt64(o.Size),
 			LastModified: formatTime(o.LastModified),
+			ContentType:  "",
 		})
 	}
 
@@ -804,12 +847,14 @@ func (c *s3Client) putSingle(
 	body io.Reader,
 	contentType string,
 ) error {
-	putObjectInput := &s3.PutObjectInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(key),
-		Body:        body,
-		ContentType: aws.String(contentType),
-	}
+	var sdkPutObjectInput s3.PutObjectInput
+
+	sdkPutObjectInput.Bucket = aws.String(bucket)
+	sdkPutObjectInput.Key = aws.String(key)
+	sdkPutObjectInput.Body = body
+	sdkPutObjectInput.ContentType = aws.String(contentType)
+
+	putObjectInput := &sdkPutObjectInput
 
 	putObjectInput.ServerSideEncryption, putObjectInput.SSEKMSKeyId = c.sseKMS()
 
@@ -838,11 +883,13 @@ func (c *s3Client) putMultipart(
 	body io.Reader,
 	contentType string,
 ) error {
-	createIn := &s3.CreateMultipartUploadInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(key),
-		ContentType: aws.String(contentType),
-	}
+	var createMultipartUploadInput s3.CreateMultipartUploadInput
+
+	createMultipartUploadInput.Bucket = aws.String(bucket)
+	createMultipartUploadInput.Key = aws.String(key)
+	createMultipartUploadInput.ContentType = aws.String(contentType)
+
+	createIn := &createMultipartUploadInput
 
 	createIn.ServerSideEncryption, createIn.SSEKMSKeyId = c.sseKMS()
 
@@ -860,6 +907,8 @@ func (c *s3Client) putMultipart(
 		uploadID: created.UploadId,
 		bucket:   bucket,
 		key:      key,
+		parts:    nil,
+		mu:       sync.Mutex{},
 	}
 
 	err = currentMultipartUpload.uploadParts(ctx, body)
@@ -871,25 +920,7 @@ func (c *s3Client) putMultipart(
 
 	sortParts(currentMultipartUpload.parts)
 
-	_, err = c.api.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
-		Bucket:   aws.String(bucket),
-		Key:      aws.String(key),
-		UploadId: currentMultipartUpload.uploadID,
-		MultipartUpload: &types.CompletedMultipartUpload{
-			Parts: currentMultipartUpload.parts,
-		},
-	})
-	if err != nil {
-		currentMultipartUpload.abort(ctx)
-
-		return apperr.Wrap(
-			err,
-			apperr.CodeInternal,
-			fmt.Sprintf("s3 complete multipart %s/%s", bucket, key),
-		)
-	}
-
-	return nil
+	return currentMultipartUpload.complete(ctx)
 }
 
 // multipartUpload is one in-progress S3 multipart upload.
@@ -913,6 +944,31 @@ type multipartUpload struct {
 	mu sync.Mutex
 }
 
+// complete finishes the upload from its sorted parts, aborting it when the store refuses.
+func (u *multipartUpload) complete(ctx context.Context) error {
+	var completeMultipartUploadInput s3.CompleteMultipartUploadInput
+
+	completeMultipartUploadInput.Bucket = aws.String(u.bucket)
+	completeMultipartUploadInput.Key = aws.String(u.key)
+	completeMultipartUploadInput.UploadId = u.uploadID
+	completeMultipartUploadInput.MultipartUpload = &types.CompletedMultipartUpload{
+		Parts: u.parts,
+	}
+
+	_, err := u.c.api.CompleteMultipartUpload(ctx, &completeMultipartUploadInput)
+	if err != nil {
+		u.abort(ctx)
+
+		return apperr.Wrap(
+			err,
+			apperr.CodeInternal,
+			fmt.Sprintf("s3 complete multipart %s/%s", u.bucket, u.key),
+		)
+	}
+
+	return nil
+}
+
 // abort discards the in-progress upload on any failure so no incomplete multipart upload
 // lingers (and accrues storage cost until a lifecycle rule reaps it). It detaches from
 // ctx's cancellation: when a part fails *because* the operation ctx was cancelled or
@@ -923,6 +979,9 @@ func (u *multipartUpload) abort(ctx context.Context) {
 		context.WithoutCancel(ctx),
 		&s3.AbortMultipartUploadInput{
 			Bucket: aws.String(u.bucket), Key: aws.String(u.key), UploadId: u.uploadID,
+			ExpectedBucketOwner:  nil,
+			IfMatchInitiatedTime: nil,
+			RequestPayer:         "",
 		},
 	)
 }
@@ -978,13 +1037,15 @@ func (u *multipartUpload) dispatchPart(
 
 // uploadPart sends one part and records it.
 func (u *multipartUpload) uploadPart(ctx context.Context, part int32, data []byte) error {
-	out, err := u.c.api.UploadPart(ctx, &s3.UploadPartInput{
-		Bucket:     aws.String(u.bucket),
-		Key:        aws.String(u.key),
-		UploadId:   u.uploadID,
-		PartNumber: aws.Int32(part),
-		Body:       bytes.NewReader(data),
-	})
+	var uploadPartInput s3.UploadPartInput
+
+	uploadPartInput.Bucket = aws.String(u.bucket)
+	uploadPartInput.Key = aws.String(u.key)
+	uploadPartInput.UploadId = u.uploadID
+	uploadPartInput.PartNumber = aws.Int32(part)
+	uploadPartInput.Body = bytes.NewReader(data)
+
+	out, err := u.c.api.UploadPart(ctx, &uploadPartInput)
 	if err != nil {
 		return apperr.Wrap(
 			err,
@@ -996,9 +1057,14 @@ func (u *multipartUpload) uploadPart(ctx context.Context, part int32, data []byt
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
+	var completedPart types.CompletedPart
+
+	completedPart.ETag = out.ETag
+	completedPart.PartNumber = aws.Int32(part)
+
 	u.parts = append(
 		u.parts,
-		types.CompletedPart{ETag: out.ETag, PartNumber: aws.Int32(part)},
+		completedPart,
 	)
 
 	return nil
@@ -1009,13 +1075,21 @@ func (u *multipartUpload) uploadPart(ctx context.Context, part int32, data []byt
 func (c *s3Client) deleteChunk(ctx context.Context, bucket string, keys []string) error {
 	objs := make([]types.ObjectIdentifier, len(keys))
 	for i, k := range keys {
-		objs[i] = types.ObjectIdentifier{Key: aws.String(k)}
+		objs[i] = types.ObjectIdentifier{
+			Key:              aws.String(k),
+			ETag:             nil,
+			LastModifiedTime: nil,
+			Size:             nil,
+			VersionId:        nil,
+		}
 	}
 
-	out, err := c.api.DeleteObjects(ctx, &s3.DeleteObjectsInput{
-		Bucket: aws.String(bucket),
-		Delete: &types.Delete{Objects: objs, Quiet: aws.Bool(true)},
-	})
+	var deleteObjectsInput s3.DeleteObjectsInput
+
+	deleteObjectsInput.Bucket = aws.String(bucket)
+	deleteObjectsInput.Delete = &types.Delete{Objects: objs, Quiet: aws.Bool(true)}
+
+	out, err := c.api.DeleteObjects(ctx, &deleteObjectsInput)
 	if err != nil {
 		return apperr.Wrap(
 			err,

@@ -54,7 +54,11 @@ func Compile(specRef *types.ChartSpec, cube listquery.Schema) (Plan, error) {
 		return Plan{}, err
 	}
 
-	plan := Plan{Query: query, Marks: make(map[PaneKey]types.Mark, len(rows)*len(cols))}
+	plan := Plan{
+		Query: query,
+		Marks: make(map[PaneKey]types.Mark, len(rows)*len(cols)),
+		Panes: nil,
+	}
 	for _, r := range rows {
 		addRowPanes(&plan, r, cols, spec.Mark, cube.Fields)
 	}
@@ -108,11 +112,16 @@ func aggregateQuery(
 
 	currentQueryBuilder := queryBuilder{
 		query: types.AggregateQuery{
-			Cube:      spec.Cube,
-			Filter:    spec.Filter,
-			TimeRange: spec.TimeRange,
-			Grain:     spec.Grain,
-			Sort:      spec.Sort,
+			Cube:        spec.Cube,
+			Filter:      spec.Filter,
+			TimeRange:   spec.TimeRange,
+			Grain:       spec.Grain,
+			Sort:        spec.Sort,
+			OrgID:       "",
+			GroupBy:     nil,
+			Measures:    nil,
+			ResumeToken: nil,
+			Limit:       0,
 		},
 		seenMeasure: map[string]bool{},
 	}

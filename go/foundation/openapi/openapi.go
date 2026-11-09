@@ -95,7 +95,7 @@ func Convert(
 	}
 
 	if len(swaggerFiles) == 0 {
-		return Result{}, nil
+		return stdx.Zero[Result](), nil
 	}
 
 	fdsBytes, err := fsys.ReadFile(descriptorPath)

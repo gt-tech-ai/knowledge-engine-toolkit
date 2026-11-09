@@ -11,6 +11,7 @@ import (
 	quotasclient "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/servicequotas"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Quotas checks that each required service quota meets its minimum.
@@ -23,7 +24,7 @@ type Quotas struct {
 }
 
 // Compile-time assertion that Quotas is a readiness probe.
-var _ interfaces.Probe[Target] = Quotas{}
+var _ interfaces.Probe[Target] = stdx.Zero[Quotas]()
 
 // Name is "quotas".
 func (Quotas) Name() string { return "quotas" }
@@ -70,6 +71,7 @@ func (p Quotas) shortfall(ctx context.Context, key string, minimum int) string {
 	out, err := p.Quotas.GetServiceQuota(ctx, &servicequotas.GetServiceQuotaInput{
 		ServiceCode: &serviceCode,
 		QuotaCode:   &quotaCode,
+		ContextId:   nil,
 	})
 	if err != nil {
 		return key + " (unreadable: " + err.Error() + ")"

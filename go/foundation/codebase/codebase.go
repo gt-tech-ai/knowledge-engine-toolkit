@@ -48,7 +48,7 @@ func New(
 	snap *Snapshot,
 	renderer interfaces.Renderer,
 ) interfaces.Codebase {
-	v := &view{src: src, snap: snap, renderer: renderer}
+	v := &view{src: src, snap: snap, renderer: renderer, goView: nil, yamlView: nil}
 
 	v.goView = newGoView(v)
 	v.yamlView = &yamlView{parent: v}

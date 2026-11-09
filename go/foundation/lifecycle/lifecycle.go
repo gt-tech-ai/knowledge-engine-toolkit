@@ -42,7 +42,9 @@ type Manager struct {
 }
 
 // New returns an empty lifecycle Manager.
-func New() *Manager { return &Manager{} }
+func New() *Manager {
+	return new(Manager)
+}
 
 // Register adds a lifecycle-managed client under a name. Registration order is the
 // start order; the reverse is the stop order.

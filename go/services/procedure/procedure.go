@@ -126,12 +126,19 @@ func NewFromConfig(cfg Config, deps *Deps) (interfaces.ProcedureRunner, error) {
 	currentEngine := &engine{deps: *deps, procs: map[string]*compiled{}}
 
 	for i := range cfg.Procedures {
-		p := cfg.Procedures[i]
-		if _, dup := currentEngine.procs[p.Name]; dup {
-			return nil, apperr.New(apperr.CodeInvalidInput, "duplicate procedure "+p.Name)
+		procedure := cfg.Procedures[i]
+		if _, dup := currentEngine.procs[procedure.Name]; dup {
+			return nil, apperr.New(
+				apperr.CodeInvalidInput,
+				"duplicate procedure "+procedure.Name,
+			)
 		}
 
-		currentEngine.procs[p.Name] = &compiled{proc: p, group: cmp(p.Group, p.Name)}
+		currentEngine.procs[procedure.Name] = &compiled{
+			proc:  procedure,
+			group: cmp(procedure.Group, procedure.Name),
+			progs: nil,
+		}
 	}
 
 	for _, currentCompiled := range currentEngine.procs {

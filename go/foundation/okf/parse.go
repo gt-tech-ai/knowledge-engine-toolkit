@@ -7,6 +7,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // maxFenceIndent is the most spaces a code fence may be indented.
@@ -26,7 +27,14 @@ const bom = "\ufeff"
 // non-mapping frontmatter is CodeInvalidInput naming path.
 func Parse(path string, data []byte) (Doc, error) {
 	src := string(data)
-	doc := Doc{Path: path, Body: src, BodyStartLine: 1}
+	doc := Doc{
+		Path:           path,
+		Body:           src,
+		BodyStartLine:  1,
+		Frontmatter:    stdx.Zero[Frontmatter](),
+		Links:          nil,
+		HasFrontmatter: false,
+	}
 	text := strings.TrimPrefix(src, bom)
 	first, rest, _ := strings.Cut(text, textNewline)
 
@@ -79,7 +87,7 @@ func splitFrontmatter(rest string) (split frontmatterSplit, ok bool) {
 		offset += len(line) + 1
 	}
 
-	return frontmatterSplit{}, false
+	return stdx.Zero[frontmatterSplit](), false
 }
 
 // invalid is the coded error for a malformed file.
@@ -101,7 +109,7 @@ func decodeFrontmatter(path, block string) (Frontmatter, error) {
 	}
 
 	if len(root.Content) == 0 {
-		return Frontmatter{}, nil
+		return stdx.Zero[Frontmatter](), nil
 	}
 
 	node := root.Content[0]
@@ -156,7 +164,7 @@ func decodeKey(frontmatter *Frontmatter, key string, value *yaml.Node) error {
 	case "tags":
 		return decode(value, &frontmatter.Tags)
 	case "generated":
-		frontmatter.Generated = &Attribution{}
+		frontmatter.Generated = new(Attribution)
 
 		return decode(value, frontmatter.Generated)
 	case "verified":
@@ -316,7 +324,7 @@ func appendLink(links []Link, raw string, line int) []Link {
 		return links
 	}
 
-	link := Link{Target: target, Fragment: fragment, Line: line}
+	link := Link{Target: target, Fragment: fragment, Line: line, Kind: 0}
 	switch {
 	case target == "":
 		link.Kind = LinkAnchor

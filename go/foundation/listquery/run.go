@@ -328,6 +328,7 @@ func keysetPage[T, D any](
 		Filters: append(nonEmpty(userF), SeekFilter(cols, values)),
 		Order:   order,
 		Limit:   limit + 1,
+		Offset:  0,
 	})
 	if err != nil {
 		return nil, reader.MapErr(err)
@@ -350,9 +351,12 @@ func keysetPage[T, D any](
 	}
 
 	return &types.Page[D]{
-		Items:      items,
-		NextCursor: next,
-		PageSize:   limit,
+		Items:           items,
+		NextCursor:      next,
+		PageSize:        limit,
+		Total:           0,
+		PageNumber:      0,
+		TotalIsEstimate: false,
 	}, nil
 }
 
@@ -462,11 +466,14 @@ func mintKeysetCursor[T any](
 		sortValues = append(sortValues, value)
 	}
 
-	return EncodeToken(types.PageToken{Keyset: &types.KeysetCursor{
-		SortValues:  sortValues,
-		ID:          identifier,
-		Fingerprint: types.Fingerprint(sort, filter),
-	}})
+	return EncodeToken(types.PageToken{
+		Keyset: &types.KeysetCursor{
+			SortValues:  sortValues,
+			ID:          identifier,
+			Fingerprint: types.Fingerprint(sort, filter),
+		},
+		OffsetPage: 0,
+	})
 }
 
 // cursorRowValue reads a column from the row in its cursor form: the id as a string, a
@@ -539,7 +546,7 @@ func offsetNextCursor[T, D any](
 		next = math.MaxInt32
 	}
 
-	return EncodeToken(types.PageToken{OffsetPage: int32(next)})
+	return EncodeToken(types.PageToken{OffsetPage: int32(next), Keyset: nil})
 }
 
 // parseID converts a cursor id string to its bound value via the reader's ParseID (nil →

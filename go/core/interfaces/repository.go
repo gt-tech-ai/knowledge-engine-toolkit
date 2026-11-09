@@ -82,7 +82,7 @@ type afterCommitReg struct {
 // RunAfterCommit once the commit succeeds. Code running inside the transaction
 // schedules post-commit side effects via RegisterAfterCommit.
 func WithAfterCommit(ctx context.Context) context.Context {
-	return context.WithValue(ctx, afterCommitKey{}, &afterCommitReg{})
+	return context.WithValue(ctx, afterCommitKey{}, new(afterCommitReg))
 }
 
 // RegisterAfterCommit schedules fn to run AFTER the enclosing transaction commits

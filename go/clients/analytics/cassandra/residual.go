@@ -211,7 +211,7 @@ func pushdown(f types.Filter, laterTime, instant time.Time) (from, to time.Time)
 func timeClause(c types.Filter) (types.FilterClause, time.Time, bool) {
 	clause, found := c.(types.FilterClause)
 	if !found || clause.Field != TimeField {
-		return types.FilterClause{}, time.Time{}, false
+		return stdx.Zero[types.FilterClause](), time.Time{}, false
 	}
 
 	at, found := clause.Value.(time.Time)

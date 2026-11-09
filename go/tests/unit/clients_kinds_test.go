@@ -205,7 +205,8 @@ func unknownKindBuilders1() map[string]func(ctx context.Context) error {
 	}
 }
 
-// unknownKindCoordinationBuilders builds one group of client families with the bogus kind.
+// unknownKindCoordinationBuilders builds one group of client families with the bogus
+// kind.
 func unknownKindCoordinationBuilders() map[string]func(ctx context.Context) error {
 	return map[string]func(ctx context.Context) error{
 		"lock": func(ctx context.Context) error {

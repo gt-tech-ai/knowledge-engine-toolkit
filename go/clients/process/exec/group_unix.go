@@ -9,12 +9,20 @@ import (
 
 // ownGroup starts cmd in its own process group, so Stop reaches the children it starts.
 func ownGroup(cmd *osexec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	var sysProcAttr syscall.SysProcAttr
+
+	sysProcAttr.Setpgid = true
+
+	cmd.SysProcAttr = &sysProcAttr
 }
 
 // ownSession starts cmd in a new session, so it outlives the caller's terminal.
 func ownSession(cmd *osexec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	var sysProcAttr syscall.SysProcAttr
+
+	sysProcAttr.Setsid = true
+
+	cmd.SysProcAttr = &sysProcAttr
 }
 
 // terminate sends SIGTERM to cmd's process group; a group already gone is ignored.

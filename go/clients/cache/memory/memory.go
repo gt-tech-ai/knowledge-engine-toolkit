@@ -66,6 +66,7 @@ func New(maxEntries int, defaultTTL time.Duration, now func() time.Time) *Cache 
 		order: list.New(),
 		max:   maxEntries,
 		ttl:   defaultTTL,
+		mu:    sync.Mutex{},
 	}
 }
 

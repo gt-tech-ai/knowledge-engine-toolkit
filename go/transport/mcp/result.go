@@ -46,7 +46,7 @@ func buildResult(
 	logs []string,
 	err error,
 ) ToolResult {
-	res := ToolResult{Steps: summarize(steps, logs)}
+	res := ToolResult{Steps: summarize(steps, logs), FailedTails: nil, Error: ""}
 	for _, stepResult := range steps {
 		if stepResult.Status != types.StatusFail {
 			continue
@@ -75,6 +75,7 @@ func summarize(steps []types.StepResult, logs []string) []StepSummary {
 			Step:     s.Name,
 			Status:   s.Status.String(),
 			Duration: s.Duration.String(),
+			Log:      "",
 		}
 		if index < len(logs) {
 			sum.Log = logs[index]
@@ -92,7 +93,7 @@ func summarize(steps []types.StepResult, logs []string) []StepSummary {
 // " #<n>" suffix, so every entry — and so every failed tail and log — is distinct even
 // when several modules report a same-named package.
 func flatten(steps []types.StepResult) []types.StepResult {
-	f := &stepFlattener{seen: map[string]int{}}
+	f := &stepFlattener{seen: map[string]int{}, out: nil}
 
 	f.walk("", steps)
 

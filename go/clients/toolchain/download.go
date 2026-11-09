@@ -71,7 +71,14 @@ type httpDownloader struct {
 
 // newHTTPDownloader returns the default Downloader.
 func newHTTPDownloader() Downloader {
-	return httpDownloader{client: &http.Client{Timeout: downloadTimeout}}
+	return httpDownloader{
+		client: &http.Client{
+			Timeout:       downloadTimeout,
+			Transport:     nil,
+			CheckRedirect: nil,
+			Jar:           nil,
+		},
+	}
 }
 
 // Fetch GETs url and returns the body, failing on any non-200 status so an

@@ -64,6 +64,8 @@ func NewProvider[Cred any](
 	return &Provider[Cred]{
 		src: src, parse: parse, verify: verify, project: project,
 		cache: map[types.Ref]Cred{},
+		group: singleflight.Group{},
+		mu:    sync.Mutex{},
 	}
 }
 

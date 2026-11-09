@@ -60,7 +60,9 @@ func (*BaseController) WriteJSON(writer http.ResponseWriter, status int, data an
 func (c *BaseController) WriteError(writer http.ResponseWriter, err error) {
 	status := MapErrorToHTTPStatus(err)
 	response := ErrorResponse{
-		Error: "internal server error",
+		Error:   "internal server error",
+		Code:    "",
+		Details: "",
 	}
 
 	var appErr *apperr.AppError

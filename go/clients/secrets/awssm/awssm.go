@@ -94,7 +94,9 @@ func (s source) Get(ctx context.Context, ref types.Ref) (types.Secret, error) {
 	}
 
 	out, err := s.api.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(loc.SecretID),
+		SecretId:     aws.String(loc.SecretID),
+		VersionId:    nil,
+		VersionStage: nil,
 	})
 	if err != nil {
 		return types.Secret{}, apperr.Wrap(

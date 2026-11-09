@@ -181,11 +181,13 @@ func (a *authInterceptor) withClaims(
 	}
 
 	claims := &AuthClaims{
-		Sub:      sub,
-		Email:    header.Get(a.headers.Email),
-		Name:     header.Get(a.headers.Name),
-		NickName: header.Get(a.headers.NickName),
-		TenantID: header.Get(a.headers.Tenant),
+		Sub:       sub,
+		Email:     header.Get(a.headers.Email),
+		Name:      header.Get(a.headers.Name),
+		NickName:  header.Get(a.headers.NickName),
+		TenantID:  header.Get(a.headers.Tenant),
+		Roles:     nil,
+		Synthetic: false,
 	}
 	if roles := header.Get(a.headers.Roles); roles != "" {
 		claims.Roles = splitRoles(roles)

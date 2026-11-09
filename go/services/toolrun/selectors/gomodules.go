@@ -27,6 +27,12 @@ func (goModules) Select(
 
 	gofiles, err := codebase.Files(ctx, &types.FileSelector{
 		Exts: []string{".go"}, IncludeGenerated: true,
+		Roots:          nil,
+		Paths:          nil,
+		Globs:          nil,
+		Exclude:        nil,
+		TrackedOnly:    false,
+		IncludeIgnored: false,
 	})
 	if err != nil {
 		return nil, err

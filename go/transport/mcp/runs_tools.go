@@ -113,11 +113,14 @@ func (s *Server) addRunsTools() {
 		s.runResult)
 	s.addRunTool("runs.cancel", "Cancel a background run (a no-op once it has ended)",
 		s.runCancel)
-	s.srv.AddTool(&sdkmcp.Tool{
-		Name:        "runs.list",
-		Description: "List the background runs this server started, oldest first",
-		InputSchema: json.RawMessage(emptySchema),
-	}, s.runList)
+
+	var tool sdkmcp.Tool
+
+	tool.Name = "runs.list"
+	tool.Description = "List the background runs this server started, oldest first"
+	tool.InputSchema = json.RawMessage(emptySchema)
+
+	s.srv.AddTool(&tool, s.runList)
 }
 
 // runStatus answers runs.status.
@@ -180,28 +183,33 @@ func (s *Server) addRunTool(
 	name, description string,
 	callback func(id string) (*sdkmcp.CallToolResult, error),
 ) {
-	s.srv.AddTool(&sdkmcp.Tool{
-		Name:        name,
-		Description: description,
-		InputSchema: json.RawMessage(runIDSchema),
-	}, func(_ context.Context, req *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
-		var currentRunIDInput runIDInput
+	var tool sdkmcp.Tool
 
-		err := decodeArgs(req.Params.Arguments, &currentRunIDInput)
-		if err != nil {
-			return replyErr(
-				apperr.Wrap(err, apperr.CodeInvalidInput, name+": decode arguments"),
-			)
-		}
+	tool.Name = name
+	tool.Description = description
+	tool.InputSchema = json.RawMessage(runIDSchema)
 
-		if currentRunIDInput.RunID == "" {
-			return replyErr(
-				apperr.New(apperr.CodeInvalidInput, name+": run_id is required"),
-			)
-		}
+	s.srv.AddTool(
+		&tool,
+		func(_ context.Context, req *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
+			var currentRunIDInput runIDInput
 
-		return callback(currentRunIDInput.RunID)
-	})
+			err := decodeArgs(req.Params.Arguments, &currentRunIDInput)
+			if err != nil {
+				return replyErr(
+					apperr.Wrap(err, apperr.CodeInvalidInput, name+": decode arguments"),
+				)
+			}
+
+			if currentRunIDInput.RunID == "" {
+				return replyErr(
+					apperr.New(apperr.CodeInvalidInput, name+": run_id is required"),
+				)
+			}
+
+			return callback(currentRunIDInput.RunID)
+		},
+	)
 }
 
 // entry is snap as runs.list reports it.
@@ -217,9 +225,14 @@ func reply(value any, failed bool) (*sdkmcp.CallToolResult, error) {
 	}
 
 	return &sdkmcp.CallToolResult{
-		Content:           []sdkmcp.Content{&sdkmcp.TextContent{Text: string(text)}},
+		Content: []sdkmcp.Content{
+			&sdkmcp.TextContent{Text: string(text), Meta: nil, Annotations: nil},
+		},
 		StructuredContent: value,
 		IsError:           failed,
+		Meta:              nil,
+		InputRequests:     nil,
+		RequestState:      "",
 	}, nil
 }
 

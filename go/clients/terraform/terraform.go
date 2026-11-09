@@ -53,6 +53,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.TerraformClient] {
 			},
 			KindExec: newExec,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

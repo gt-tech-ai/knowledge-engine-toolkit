@@ -46,7 +46,13 @@ func yamlDocFindings(
 ) []types.Finding {
 	if len(yamlMatchs) == 0 {
 		return []types.Finding{
-			{File: doc, Rule: keyPath, Message: doc + " has no " + guardRow.Path},
+			{
+				File:    doc,
+				Rule:    keyPath,
+				Message: doc + " has no " + guardRow.Path,
+				Check:   "",
+				Line:    0,
+			},
 		}
 	}
 
@@ -63,6 +69,7 @@ func yamlDocFindings(
 				) + ", want " + quote(
 					guardRow.Expect,
 				),
+				Check: "",
 			})
 		}
 	}

@@ -1,6 +1,9 @@
 package listquery
 
-import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+import (
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+)
 
 // SeekFilter builds the forward keyset SEEK predicate as a plain types.Filter: the
 // lexicographic OR-expansion selecting exactly the rows strictly after the cursor row in
@@ -24,7 +27,7 @@ import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 // NULL terms.
 func SeekFilter(cols []KeysetColumn, values []any) types.Filter {
 	if len(cols) == 0 {
-		return types.CompositeFilter{}
+		return stdx.Zero[types.CompositeFilter]()
 	}
 
 	return seekFrom(cols, values, 0)
@@ -43,12 +46,14 @@ func seekFrom(cols []KeysetColumn, values []any, index int) types.Filter {
 		Field:    cols[index].Column,
 		Operator: types.OpEq,
 		Value:    values[index],
+		Join:     nil,
 	}
 	tail := types.CompositeFilter{
 		And: []types.Filter{filterClause, seekFrom(cols, values, index+1)},
+		Or:  nil,
 	}
 
-	return types.CompositeFilter{Or: []types.Filter{strict, tail}}
+	return types.CompositeFilter{Or: []types.Filter{strict, tail}, And: nil}
 }
 
 // strictClause builds the "strictly after the cursor at this column" comparison: `col >
@@ -56,10 +61,15 @@ func seekFrom(cols []KeysetColumn, values []any, index int) types.Filter {
 // already-resolved storage column, so a store compiles the seek with an identity
 // resolver.
 func strictClause(keysetColumn KeysetColumn, value any) types.FilterClause {
-	op := types.OpGt
+	operation := types.OpGt
 	if keysetColumn.Desc {
-		op = types.OpLt
+		operation = types.OpLt
 	}
 
-	return types.FilterClause{Field: keysetColumn.Column, Operator: op, Value: value}
+	return types.FilterClause{
+		Field:    keysetColumn.Column,
+		Operator: operation,
+		Value:    value,
+		Join:     nil,
+	}
 }

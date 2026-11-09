@@ -91,26 +91,18 @@ func (i *Installer) checkPin(
 
 	path, err := i.paths.LookPath(tool.Binary)
 	if err != nil {
-		return types.StepResult{
-			Name:   name,
-			Status: types.StatusSkip,
-			Error:  "not on PATH",
-		}
+		return pinStep(name, types.StatusSkip, "not on PATH")
 	}
 
 	res := i.runner.RunBuffered(ctx, root, "go", "version", "-m", path)
 	gotPkg, got := buildInfo(string(res.Stdout))
 
 	if res.Err != nil || got == "" {
-		return types.StepResult{
-			Name:   name,
-			Status: types.StatusSkip,
-			Error:  path + " carries no Go build info to check",
-		}
+		return pinStep(name, types.StatusSkip, path+" carries no Go build info to check")
 	}
 
 	if gotPkg == pkg && got == want {
-		return types.StepResult{Name: name, Status: types.StatusPass}
+		return pinStep(name, types.StatusPass, "")
 	}
 
 	fix := "go install " + pkg + textAt + want
@@ -118,20 +110,16 @@ func (i *Installer) checkPin(
 		fix = i.reinstallHint(tool.Binary, pkg+textAt+want)
 	}
 
-	return types.StepResult{
-		Name:   name,
-		Status: types.StatusFail,
-		Error: fmt.Sprintf(
-			"%s is %s@%s but the catalog pins %s@%s "+
-				"(CI runs the pin, so its output differs): run %#q",
-			path,
-			gotPkg,
-			got,
-			pkg,
-			want,
-			fix,
-		),
-	}
+	return pinStep(name, types.StatusFail, fmt.Sprintf(
+		"%s is %s@%s but the catalog pins %s@%s "+
+			"(CI runs the pin, so its output differs): run %#q",
+		path,
+		gotPkg,
+		got,
+		pkg,
+		want,
+		fix,
+	))
 }
 
 // buildInfo extracts the main package path and its module version from `go version -m`
@@ -183,4 +171,18 @@ func (i *Installer) InstalledVersion(
 	}
 
 	return strings.TrimSpace(string(out.Stdout))
+}
+
+// pinStep is the result of one pin check.
+func pinStep(name string, status types.StepStatus, errText string) types.StepResult {
+	return types.StepResult{
+		Name:     name,
+		Status:   status,
+		Error:    errText,
+		Group:    "",
+		Detail:   nil,
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
+	}
 }

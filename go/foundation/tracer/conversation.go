@@ -121,7 +121,10 @@ func ConversationStartOptions(conversation *Conversation) []trace.SpanStartOptio
 		attribute.Int(AttrTurnIndex, conversation.TurnIndex),
 	)}
 	if conversation.Prev.IsValid() {
-		opts = append(opts, trace.WithLinks(trace.Link{SpanContext: conversation.Prev}))
+		opts = append(
+			opts,
+			trace.WithLinks(trace.Link{SpanContext: conversation.Prev, Attributes: nil}),
+		)
 	}
 
 	return opts

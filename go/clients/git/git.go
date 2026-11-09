@@ -52,6 +52,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.GitClient] {
 			},
 			KindExec: newExec,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

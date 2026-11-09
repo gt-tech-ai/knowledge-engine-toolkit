@@ -68,6 +68,8 @@ func kinds() client.Kinds[Config, Deps, API] {
 			KindStub: func(context.Context, Config, Deps) (API, error) { return Stub{}, nil },
 			KindSDK:  newSDK,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -146,5 +148,5 @@ func (Stub) SimulatePrincipalPolicy(
 	_ *iam.SimulatePrincipalPolicyInput,
 	_ ...func(*iam.Options),
 ) (*iam.SimulatePrincipalPolicyOutput, error) {
-	return &iam.SimulatePrincipalPolicyOutput{}, nil
+	return new(iam.SimulatePrincipalPolicyOutput), nil
 }

@@ -66,6 +66,8 @@ func New() *Client {
 	return &Client{
 		buckets: make(map[string]map[string]object),
 		uploads: make(map[string]*multipart),
+		seq:     0,
+		mu:      sync.Mutex{},
 	}
 }
 
@@ -272,7 +274,7 @@ func (c *Client) ListMultipartUploads(
 		if up.bucket == bucket {
 			uploads = append(
 				uploads,
-				interfaces.MultipartUpload{Key: up.key, UploadID: id},
+				interfaces.MultipartUpload{Key: up.key, UploadID: id, Initiated: ""},
 			)
 		}
 	}

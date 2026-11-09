@@ -6,6 +6,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Cluster checks that the operator's kubeconfig reaches the target's cluster, by
@@ -16,7 +17,7 @@ type Cluster struct {
 }
 
 // Compile-time assertion that Cluster is a readiness probe.
-var _ interfaces.Probe[Target] = Cluster{}
+var _ interfaces.Probe[Target] = stdx.Zero[Cluster]()
 
 // Name is "cluster-access".
 func (Cluster) Name() string { return "cluster-access" }

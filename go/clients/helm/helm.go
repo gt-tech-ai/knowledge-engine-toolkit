@@ -65,6 +65,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.HelmClient] {
 				return exec.New(deps.Runner, deps.Root), nil
 			},
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

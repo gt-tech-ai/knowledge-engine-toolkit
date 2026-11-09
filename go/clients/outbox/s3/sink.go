@@ -104,13 +104,18 @@ func (s *Sink) Send(ctx context.Context, recs []types.OutboxRecord) []error {
 // input builds the PutObject request for rec.
 func (s *Sink) input(rec *types.OutboxRecord) *awss3.PutObjectInput {
 	sum := sha256.Sum256(rec.Payload)
-	putObjectInput := &awss3.PutObjectInput{
-		Bucket:            aws.String(s.bucket),
-		Key:               aws.String(s.key(rec)),
-		Body:              bytes.NewReader(rec.Payload),
-		ChecksumAlgorithm: s3types.ChecksumAlgorithmSha256,
-		ChecksumSHA256:    aws.String(base64.StdEncoding.EncodeToString(sum[:])),
-	}
+
+	var sdkPutObjectInput awss3.PutObjectInput
+
+	sdkPutObjectInput.Bucket = aws.String(s.bucket)
+	sdkPutObjectInput.Key = aws.String(s.key(rec))
+	sdkPutObjectInput.Body = bytes.NewReader(rec.Payload)
+	sdkPutObjectInput.ChecksumAlgorithm = s3types.ChecksumAlgorithmSha256
+	sdkPutObjectInput.ChecksumSHA256 = aws.String(
+		base64.StdEncoding.EncodeToString(sum[:]),
+	)
+
+	putObjectInput := &sdkPutObjectInput
 
 	if kms := rec.Attributes[KMSKeyAttribute]; kms != "" {
 		putObjectInput.ServerSideEncryption = s3types.ServerSideEncryptionAwsKms

@@ -55,6 +55,9 @@ func kinds() client.Kinds[Config, Deps, interfaces.Prompter] {
 			},
 			KindTTY: newTTY,
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

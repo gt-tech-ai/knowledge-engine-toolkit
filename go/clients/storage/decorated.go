@@ -69,7 +69,11 @@ func (d *decorator) Download(
 		return nil, err
 	}
 
-	return &cleanupReadCloser{ReadCloser: readCloser, cleanup: cleanup}, nil
+	return &cleanupReadCloser{
+		ReadCloser: readCloser,
+		cleanup:    cleanup,
+		once:       sync.Once{},
+	}, nil
 }
 
 // cleanupReadCloser runs cleanup exactly once when the wrapped stream is closed,

@@ -20,6 +20,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // defaultLayerTimeout is the timeout layer's default deadline.
@@ -171,9 +172,23 @@ func DefaultConfig() Config {
 
 	guarded := func() Layers {
 		return Layers{
-			Timeout:        new(defaultLayerTimeout),
-			Bulkhead:       Bulkhead{Enabled: new(true)},
-			CircuitBreaker: CircuitBreaker{Enabled: new(true)},
+			Timeout: new(defaultLayerTimeout),
+			Bulkhead: Bulkhead{
+				Enabled:        new(true),
+				Shed:           nil,
+				BulkheadConfig: stdx.Zero[resilience.BulkheadConfig](),
+			},
+			CircuitBreaker: CircuitBreaker{
+				Enabled:       new(true),
+				BreakerConfig: stdx.Zero[resilience.BreakerConfig](),
+			},
+			Recovery:  nil,
+			Tracing:   nil,
+			Metrics:   nil,
+			Logging:   nil,
+			Auth:      nil,
+			Retry:     stdx.Zero[Retry](),
+			RateLimit: stdx.Zero[RateLimit](),
 		}
 	}
 
@@ -184,14 +199,14 @@ func DefaultConfig() Config {
 			"outbox.s3":  guarded(),
 			"prometheus": guarded(),
 		}},
-		Controllers:  Tier{Defaults: controllers},
-		Workflows:    Tier{Defaults: base(true)},
-		Pipelines:    Tier{Defaults: base(false)},
-		Services:     Tier{Defaults: base(false)},
-		Repositories: Tier{Defaults: repos},
-		Stores:       Tier{Defaults: base(false)},
-		Jobs:         Tier{Defaults: base(true)},
-		Gates:        Tier{Defaults: base(true)},
+		Controllers:  Tier{Defaults: controllers, Overrides: nil},
+		Workflows:    Tier{Defaults: base(true), Overrides: nil},
+		Pipelines:    Tier{Defaults: base(false), Overrides: nil},
+		Services:     Tier{Defaults: base(false), Overrides: nil},
+		Repositories: Tier{Defaults: repos, Overrides: nil},
+		Stores:       Tier{Defaults: base(false), Overrides: nil},
+		Jobs:         Tier{Defaults: base(true), Overrides: nil},
+		Gates:        Tier{Defaults: base(true), Overrides: nil},
 	}
 }
 

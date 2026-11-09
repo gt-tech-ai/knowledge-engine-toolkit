@@ -10,6 +10,7 @@ import (
 	smclient "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/secretsmanager"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Secrets checks that every bootstrap secret a deployment needs exists in Secrets
@@ -23,7 +24,7 @@ type Secrets struct {
 }
 
 // Compile-time assertion that Secrets is a readiness probe.
-var _ interfaces.Probe[Target] = Secrets{}
+var _ interfaces.Probe[Target] = stdx.Zero[Secrets]()
 
 // Name is "secrets".
 func (Secrets) Name() string { return "secrets" }

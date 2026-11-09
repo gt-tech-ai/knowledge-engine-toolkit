@@ -16,13 +16,17 @@ import (
 // Tier is the workflow tier's decoration: recovery → logging → tracing → metrics →
 // timeout, outermost first.
 func Tier() decorate.Tier {
-	return decorate.Tier{Name: "workflow", Order: []decorate.Layer{
-		decorate.LayerRecovery,
-		decorate.LayerLogging,
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerTimeout,
-	}}
+	return decorate.Tier{
+		Name: "workflow", Order: []decorate.Layer{
+			decorate.LayerRecovery,
+			decorate.LayerLogging,
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}
 }
 
 // Base is the embeddable core of a workflow named by its Subject: Name and Exec (a read

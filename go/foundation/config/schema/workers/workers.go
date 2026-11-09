@@ -104,10 +104,11 @@ func DefaultConfig() Config {
 		// keep a week of sent rows for audit/debug
 		RetentionTTL: daysPerWeek * hoursPerDay * time.Hour,
 		// > the 60m multipart part-URL expiry
-		OrphanGrace:   defaultOrphanGrace,
-		Port:          0,
-		BatchSize:     defaultConfigBatchSize,
-		FanOutWorkers: defaultConfigFanOutWorkers,
+		OrphanGrace:      defaultOrphanGrace,
+		Port:             0,
+		BatchSize:        defaultConfigBatchSize,
+		FanOutWorkers:    defaultConfigFanOutWorkers,
+		RelayDrainBudget: 0,
 	}
 }
 

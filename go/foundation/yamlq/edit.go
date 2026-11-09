@@ -134,7 +134,12 @@ func (e *upsert) advance(
 			return nil, spliced, nil
 		}
 
-		*next = yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
+		var sdkNode yaml.Node
+
+		sdkNode.Kind = yaml.MappingNode
+		sdkNode.Tag = mapTag
+
+		*next = sdkNode
 	default:
 		// No other value changes the outcome.
 	}
@@ -272,11 +277,13 @@ func dashAt(lines []string, line, dash int) bool {
 
 // encodeItem renders item as a one-item block sequence whose lines start with indent.
 func encodeItem(item *yaml.Node, indent string) ([]string, bool) {
-	block := &yaml.Node{
-		Kind:    yaml.SequenceNode,
-		Tag:     "!!seq",
-		Content: []*yaml.Node{item},
-	}
+	var node yaml.Node
+
+	node.Kind = yaml.SequenceNode
+	node.Tag = "!!seq"
+	node.Content = []*yaml.Node{item}
+
+	block := &node
 
 	return encodeIndented(block, indent)
 }
@@ -697,7 +704,12 @@ func stripNullToken(tail string) string {
 // encodeBlock renders steps' keys, ending in value, as a two-space block mapping whose
 // lines each start with indent; false when the steps cannot form one.
 func encodeBlock(steps []step, value *yaml.Node, indent string) ([]string, bool) {
-	block := &yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
+	var node yaml.Node
+
+	node.Kind = yaml.MappingNode
+	node.Tag = mapTag
+
+	block := &node
 	if build(block, steps, value) != nil {
 		return nil, false
 	}
@@ -718,7 +730,12 @@ func build(node *yaml.Node, steps []step, value *yaml.Node) error {
 			return nil
 		}
 
-		next := &yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
+		var sdkNode yaml.Node
+
+		sdkNode.Kind = yaml.MappingNode
+		sdkNode.Tag = mapTag
+
+		next := &sdkNode
 
 		node.Content = append(node.Content, keyNode(currentStep.key), next)
 		node = next
@@ -755,7 +772,13 @@ func keepComments(replacement, old *yaml.Node) {
 
 // keyNode is a plain string mapping key.
 func keyNode(key string) *yaml.Node {
-	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}
+	var node yaml.Node
+
+	node.Kind = yaml.ScalarNode
+	node.Tag = "!!str"
+	node.Value = key
+
+	return &node
 }
 
 // splitLines splits src into lines without terminators; a final newline adds no line.

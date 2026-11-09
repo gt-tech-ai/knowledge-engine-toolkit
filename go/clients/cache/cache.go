@@ -13,6 +13,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // defaultEntryTTL is how long an entry lives when the caller names no TTL.
@@ -93,7 +94,14 @@ type Deps struct {
 
 // DefaultConfig returns the stub kind, a 5-minute default TTL and a 500ms op timeout.
 func DefaultConfig() Config {
-	return Config{DefaultTTL: defaultEntryTTL, OpTimeout: defaultOpTimeout}
+	return Config{
+		DefaultTTL: defaultEntryTTL,
+		OpTimeout:  defaultOpTimeout,
+		Kind:       "",
+		Name:       "",
+		Redis:      stdx.Zero[RedisConfig](),
+		Memory:     stdx.Zero[MemoryConfig](),
+	}
 }
 
 // kinds is the cache's backend table.
@@ -128,6 +136,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.ByteCache] {
 				return memory.New(cfg.Memory.MaxEntries, cfg.DefaultTTL, time.Now), nil
 			},
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

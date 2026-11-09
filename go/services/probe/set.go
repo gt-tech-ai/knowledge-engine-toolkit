@@ -143,6 +143,7 @@ func (s *set[T]) once(
 			Status:    types.StatusFail,
 			Detail:    err.Error(),
 			Transient: true,
+			Findings:  nil,
 		}
 	}
 }
@@ -162,8 +163,12 @@ func safeRun[T any](
 				Findings: []types.Finding{{
 					Check:   probe.Name(),
 					Message: fmt.Sprintf("probe %s panicked: %v", probe.Name(), r),
+					File:    "",
+					Rule:    "",
+					Line:    0,
 				}},
-				Detail: string(debug.Stack()),
+				Detail:    string(debug.Stack()),
+				Transient: false,
 			}
 		}
 	}()

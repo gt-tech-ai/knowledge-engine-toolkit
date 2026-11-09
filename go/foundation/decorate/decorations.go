@@ -11,6 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/circuitbreaker"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/ratelimiter"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Observability carries the collaborators the observability layers use. A nil one
@@ -64,6 +65,7 @@ func Fixed(dRef *Deps) Decorations {
 		reg:    newRegistry(),
 		fixed:  &d,
 		collab: &Collaborators{Observability: d.Observability, Auth: nil},
+		cfg:    nil,
 	}
 }
 
@@ -71,12 +73,17 @@ func Fixed(dRef *Deps) Decorations {
 // nil cfg decorates nothing.
 func NewDecorations(cfg *decoration.Config, collaborators Collaborators) Decorations {
 	if cfg == nil {
-		return Decorations{collab: &collaborators, reg: newRegistry()}
+		return Decorations{
+			collab: &collaborators,
+			reg:    newRegistry(),
+			cfg:    nil,
+			fixed:  nil,
+		}
 	}
 
 	own := *cfg
 
-	return Decorations{cfg: &own, collab: &collaborators, reg: newRegistry()}
+	return Decorations{cfg: &own, collab: &collaborators, reg: newRegistry(), fixed: nil}
 }
 
 // LoadDecorations reads the decoration section from loader, laid over
@@ -113,7 +120,7 @@ func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 
 	cfg := d.cfg
 	if cfg == nil {
-		cfg = &decoration.Config{}
+		cfg = new(decoration.Config)
 	}
 
 	testCase, ok := cfg.Tier(tier.Name)
@@ -139,11 +146,20 @@ func (d Decorations) Inventory() []Resolved {
 	comps := d.Components()
 	out := make([]Resolved, 0, len(comps))
 
-	for _, c := range comps {
-		resolved := Resolved{Tier: c.Tier, Name: c.Name}
+	for _, component := range comps {
+		resolved := Resolved{
+			Tier:    component.Tier,
+			Name:    component.Name,
+			Sources: nil,
+			Layers:  stdx.Zero[decoration.Layers](),
+		}
 		if d.cfg != nil && d.fixed == nil {
-			if tc, ok := d.cfg.Tier(c.Tier); ok {
-				resolved.Layers, resolved.Sources = tc.For(c.Name), tc.Sources(c.Name)
+			if tc, ok := d.cfg.Tier(component.Tier); ok {
+				resolved.Layers, resolved.Sources = tc.For(
+					component.Name,
+				), tc.Sources(
+					component.Name,
+				)
 			}
 		}
 
@@ -162,7 +178,7 @@ func (d Decorations) Subject(tier Tier, name string) Subject {
 	if err != nil {
 		d.reg.fail(err)
 
-		return tier.Subject(name, &Deps{})
+		return tier.Subject(name, new(Deps))
 	}
 
 	return tier.Subject(name, &deps)
@@ -189,7 +205,7 @@ type Resolved struct {
 // collaborators returns the collaborators d was built over: none on the zero Decorations.
 func (d Decorations) collaborators() Collaborators {
 	if d.collab == nil {
-		return Collaborators{}
+		return stdx.Zero[Collaborators]()
 	}
 
 	return *d.collab
@@ -199,12 +215,12 @@ func (d Decorations) collaborators() Collaborators {
 // or a Fixed Decorations.
 func (d Decorations) ownOverride(tier Tier, name string) decoration.Layers {
 	if d.cfg == nil || d.fixed != nil {
-		return decoration.Layers{}
+		return stdx.Zero[decoration.Layers]()
 	}
 
 	tc, ok := d.cfg.Tier(tier.Name)
 	if !ok {
-		return decoration.Layers{}
+		return stdx.Zero[decoration.Layers]()
 	}
 
 	return tc.Overrides[name]
@@ -234,7 +250,18 @@ func Build(name string, lRef *decoration.Layers, c Collaborators) (Deps, error) 
 
 // observabilityDeps selects the collaborators of the enabled observability layers.
 func observabilityDeps(layers *decoration.Layers, collaborators Collaborators) Deps {
-	deps := Deps{SkipRecovery: !decoration.On(layers.Recovery)}
+	deps := Deps{
+		SkipRecovery:  !decoration.On(layers.Recovery),
+		Observability: stdx.Zero[Observability](),
+		Auth:          nil,
+		Retrier:       nil,
+		Breaker:       nil,
+		Bulkhead:      nil,
+		RateLimiter:   nil,
+		PanicLogger:   nil,
+		Timeout:       0,
+		ShedLoad:      false,
+	}
 	if !deps.SkipRecovery {
 		deps.PanicLogger = collaborators.Logger
 	}

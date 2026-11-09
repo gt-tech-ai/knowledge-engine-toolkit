@@ -118,14 +118,8 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 	}
 
 	cluster.DisableInitialHostLookup = true
-	cluster.SslOpts = &gocql.SslOptions{
-		Config: &tls.Config{
-			ServerName: host,
-			MinVersion: tls.VersionTLS12,
-		},
-		CaPath:                 cfg.CACertPath,
-		EnableHostVerification: true,
-	}
+
+	cluster.SslOpts = sslOptions(host, cfg.CACertPath)
 	cluster.Authenticator = sigv4.NewAwsAuthenticatorWithCredentialCallback(
 		cfg.Region,
 		credentialsCallback(provider),
@@ -197,4 +191,20 @@ func defaultChain(region string) aws.CredentialsProvider {
 			return chain.Retrieve(ctx)
 		},
 	)
+}
+
+// sslOptions verifies the endpoint host over TLS 1.2 or later, trusting caPath.
+func sslOptions(host, caPath string) *gocql.SslOptions {
+	var tlsConfig tls.Config
+
+	tlsConfig.ServerName = host
+	tlsConfig.MinVersion = tls.VersionTLS12
+
+	return &gocql.SslOptions{
+		Config:                 &tlsConfig,
+		CaPath:                 caPath,
+		EnableHostVerification: true,
+		CertPath:               "",
+		KeyPath:                "",
+	}
 }

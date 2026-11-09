@@ -134,10 +134,12 @@ func leafOrGroup(
 	opts Options,
 ) (*spf.Command, error) {
 	if spec.Op == "" {
-		return &spf.Command{
-			Args: spf.NoArgs,
-			RunE: func(c *spf.Command, _ []string) error { return c.Help() },
-		}, nil
+		var command spf.Command
+
+		command.Args = spf.NoArgs
+		command.RunE = func(c *spf.Command, _ []string) error { return c.Help() }
+
+		return &command, nil
 	}
 
 	if isBareSpec(spec) && !hasHooks(&opts) {
@@ -151,11 +153,18 @@ func leafOrGroup(
 		}
 	}
 
-	return &spf.Command{
-		Args:        argsRule(spec.Args),
-		Annotations: map[string]string{OperationAnnotation: spec.Op},
-		RunE:        hookedRun(spec, slices.Concat(inherited, spec.Flags), reg, opts),
-	}, nil
+	var sdkCommand spf.Command
+
+	sdkCommand.Args = argsRule(spec.Args)
+	sdkCommand.Annotations = map[string]string{OperationAnnotation: spec.Op}
+	sdkCommand.RunE = hookedRun(
+		spec,
+		slices.Concat(inherited, spec.Flags),
+		reg,
+		opts,
+	)
+
+	return &sdkCommand, nil
 }
 
 // isBareSpec reports a command that declares no flags or arguments.

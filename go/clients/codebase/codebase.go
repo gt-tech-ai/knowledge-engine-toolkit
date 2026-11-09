@@ -15,6 +15,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	views "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 const (
@@ -62,7 +63,9 @@ type Deps struct {
 }
 
 // DefaultConfig returns the memory kind.
-func DefaultConfig() Config { return Config{} }
+func DefaultConfig() Config {
+	return stdx.Zero[Config]()
+}
 
 // kinds is the codebase source table.
 func kinds() client.Kinds[Config, Deps, interfaces.Codebase] {
@@ -75,6 +78,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.Codebase] {
 			KindFS:     client.RefDeps(newFS),
 			KindGit:    client.RefDeps(newGit),
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

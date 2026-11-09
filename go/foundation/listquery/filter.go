@@ -165,23 +165,87 @@ func (f *Field) WithOrdinal(values []string) Field {
 func String(
 	name string,
 ) Field {
-	return Field{Name: name, Column: name, Type: FieldString}
+	return Field{
+		Name:       name,
+		Column:     name,
+		Type:       FieldString,
+		Join:       nil,
+		Ordinal:    nil,
+		Aggregates: nil,
+		Role:       0,
+		Orderable:  false,
+	}
 }
 
 // Int declares an allow-listed integer field named name.
-func Int(name string) Field { return Field{Name: name, Column: name, Type: FieldInt} }
+func Int(name string) Field {
+	return Field{
+		Name:       name,
+		Column:     name,
+		Type:       FieldInt,
+		Join:       nil,
+		Ordinal:    nil,
+		Aggregates: nil,
+		Role:       0,
+		Orderable:  false,
+	}
+}
 
 // Float declares an allow-listed floating-point field named name.
-func Float(name string) Field { return Field{Name: name, Column: name, Type: FieldFloat} }
+func Float(name string) Field {
+	return Field{
+		Name:       name,
+		Column:     name,
+		Type:       FieldFloat,
+		Join:       nil,
+		Ordinal:    nil,
+		Aggregates: nil,
+		Role:       0,
+		Orderable:  false,
+	}
+}
 
 // Bool declares an allow-listed boolean field named name.
-func Bool(name string) Field { return Field{Name: name, Column: name, Type: FieldBool} }
+func Bool(name string) Field {
+	return Field{
+		Name:       name,
+		Column:     name,
+		Type:       FieldBool,
+		Join:       nil,
+		Ordinal:    nil,
+		Aggregates: nil,
+		Role:       0,
+		Orderable:  false,
+	}
+}
 
 // Time declares an allow-listed timestamp field named name (RFC3339 on the wire).
-func Time(name string) Field { return Field{Name: name, Column: name, Type: FieldTime} }
+func Time(name string) Field {
+	return Field{
+		Name:       name,
+		Column:     name,
+		Type:       FieldTime,
+		Join:       nil,
+		Ordinal:    nil,
+		Aggregates: nil,
+		Role:       0,
+		Orderable:  false,
+	}
+}
 
 // ID declares an allow-listed identifier (UUID) field named name.
-func ID(name string) Field { return Field{Name: name, Column: name, Type: FieldID} }
+func ID(name string) Field {
+	return Field{
+		Name:       name,
+		Column:     name,
+		Type:       FieldID,
+		Join:       nil,
+		Ordinal:    nil,
+		Aggregates: nil,
+		Role:       0,
+		Orderable:  false,
+	}
+}
 
 // Map is a per-resource allow-list of filterable fields, keyed by DTO Name. Only fields
 // added to the Map may be filtered, and only its Sortable fields may be sorted; a filter

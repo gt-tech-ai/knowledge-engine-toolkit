@@ -49,6 +49,10 @@ func toolCheck(
 
 	return []types.Finding{{
 		Message: subject + ": " + string(res.Stdout) + string(res.Stderr),
+		Check:   "",
+		File:    "",
+		Rule:    "",
+		Line:    0,
 	}}, nil
 }
 
@@ -69,7 +73,13 @@ func renderToolInput(
 	}
 
 	return nil, []types.Finding{
-		{Message: "render " + guardRow.Render.ChartDir + ": " + err.Error()},
+		{
+			Message: "render " + guardRow.Render.ChartDir + ": " + err.Error(),
+			Check:   "",
+			File:    "",
+			Rule:    "",
+			Line:    0,
+		},
 	}, nil
 }
 

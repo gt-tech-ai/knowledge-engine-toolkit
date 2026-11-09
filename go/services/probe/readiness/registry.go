@@ -11,6 +11,7 @@ import (
 	iamclient "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/iam"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // ecrPullActions are the ECR actions a workload must be allowed to pull images.
@@ -34,17 +35,19 @@ type Registry struct {
 }
 
 // Compile-time assertion that Registry is a readiness probe.
-var _ interfaces.Probe[Target] = Registry{}
+var _ interfaces.Probe[Target] = stdx.Zero[Registry]()
 
 // Name is "registry-pull".
 func (Registry) Name() string { return "registry-pull" }
 
 // Run passes when every pull action is allowed; the failure names each denied one.
 func (p Registry) Run(ctx context.Context, _ Target) types.Verdict {
-	out, err := p.IAM.SimulatePrincipalPolicy(ctx, &iam.SimulatePrincipalPolicyInput{
-		PolicySourceArn: aws.String(p.RoleARN),
-		ActionNames:     ecrPullActions(),
-	})
+	var simulatePrincipalPolicyInput iam.SimulatePrincipalPolicyInput
+
+	simulatePrincipalPolicyInput.PolicySourceArn = aws.String(p.RoleARN)
+	simulatePrincipalPolicyInput.ActionNames = ecrPullActions()
+
+	out, err := p.IAM.SimulatePrincipalPolicy(ctx, &simulatePrincipalPolicyInput)
 	if err != nil {
 		return fail(p.Name(), "IAM SimulatePrincipalPolicy failed: "+err.Error())
 	}

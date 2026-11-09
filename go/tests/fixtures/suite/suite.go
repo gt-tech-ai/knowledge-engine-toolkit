@@ -28,7 +28,9 @@ type UnitSuite struct {
 
 // NewUnitSuite returns a UnitSuite with its base suite set; suite.Run needs it, since the
 // base is embedded by pointer.
-func NewUnitSuite() UnitSuite { return UnitSuite{TestSuite: &base.TestSuite{}} }
+func NewUnitSuite() UnitSuite {
+	return UnitSuite{TestSuite: new(base.TestSuite), Ctrl: nil}
+}
 
 // SetupTest creates a fresh gomock controller for each parent test.
 func (s *UnitSuite) SetupTest() {

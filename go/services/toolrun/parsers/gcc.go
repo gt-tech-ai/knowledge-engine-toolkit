@@ -27,11 +27,17 @@ func (gcc) Parse(res *interfaces.CmdResult) types.Verdict {
 				continue
 			}
 
-			n, _ := strconv.Atoi(items[2])
+			count, _ := strconv.Atoi(items[2])
 
 			findings = append(
 				findings,
-				types.Finding{File: items[1], Line: n, Message: items[3]},
+				types.Finding{
+					File:    items[1],
+					Line:    count,
+					Message: items[3],
+					Check:   "",
+					Rule:    "",
+				},
 			)
 		}
 	}

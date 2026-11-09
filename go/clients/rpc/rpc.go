@@ -66,6 +66,9 @@ func kinds() client.Kinds[Config, Deps, Client] {
 		Backends: map[client.Kind]client.Backend[Config, Deps, Client]{
 			KindGRPC: client.RefConfig(newGRPC),
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

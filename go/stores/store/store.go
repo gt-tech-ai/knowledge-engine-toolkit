@@ -32,12 +32,16 @@ const (
 // metrics and log line, then its deadline. Retry and the breaker belong to the
 // repository above, which knows whether the statement runs in a transaction.
 func Tier() decorate.Tier {
-	return decorate.Tier{Name: "store", Order: []decorate.Layer{
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerLogging,
-		decorate.LayerTimeout,
-	}}
+	return decorate.Tier{
+		Name: "store", Order: []decorate.Layer{
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerLogging,
+			decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}
 }
 
 // clientKey is the context key a client of type C is bound under; each C gets its own.

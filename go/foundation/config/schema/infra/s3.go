@@ -93,6 +93,9 @@ func DefaultS3Config() S3Config {
 		ForcePathStyle:         true,
 		PresignExpiry:          defaultS3ConfigPresignExpiry,
 		MultipartPresignExpiry: defaultS3ConfigMultipartPresignExpiry,
+		PublicEndpoint:         "",
+		Bucket:                 "",
+		SSEKMSKeyID:            "",
 	}
 }
 

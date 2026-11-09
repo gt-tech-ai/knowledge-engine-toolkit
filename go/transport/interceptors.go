@@ -30,7 +30,12 @@ func Interceptors[I any](
 
 	streamDeps.Timeout = 0
 
-	currentInterceptorRun := &interceptorRun[I]{adapt: adapt}
+	currentInterceptorRun := &interceptorRun[I]{
+		adapt:  adapt,
+		out:    nil,
+		unary:  nil,
+		stream: nil,
+	}
 
 	for _, layer := range tier.Order {
 		if layer == decorate.LayerAuth {

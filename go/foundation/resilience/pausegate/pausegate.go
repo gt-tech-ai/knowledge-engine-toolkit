@@ -54,7 +54,14 @@ func New(cfg Config, paused interfaces.Gauge, now func() time.Time) (*Gate, erro
 		codes = []apperr.ErrorCode{apperr.CodeUnavailable}
 	}
 
-	return &Gate{pause: cfg.Pause, codes: codes, paused: paused, now: now}, nil
+	return &Gate{
+		pause:  cfg.Pause,
+		codes:  codes,
+		paused: paused,
+		now:    now,
+		until:  time.Time{},
+		mu:     sync.Mutex{},
+	}, nil
 }
 
 // Observe closes the gate for the pause when err carries one of the gate's codes; any

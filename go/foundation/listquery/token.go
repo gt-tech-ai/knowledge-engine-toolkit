@@ -71,7 +71,7 @@ func EncodeToken(tok types.PageToken) (string, error) {
 // compiling the seek.
 func DecodeToken(token string) (types.PageToken, error) {
 	if token == "" {
-		return types.PageToken{OffsetPage: 1}, nil
+		return types.PageToken{OffsetPage: 1, Keyset: nil}, nil
 	}
 
 	raw, err := base64.RawURLEncoding.DecodeString(token)
@@ -87,12 +87,15 @@ func DecodeToken(token string) (types.PageToken, error) {
 	}
 
 	if currentTokenWire.Keyset != nil {
-		return types.PageToken{Keyset: &types.KeysetCursor{
-			SortValues:  currentTokenWire.Keyset.SortValues,
-			ID:          currentTokenWire.Keyset.ID,
-			Fingerprint: currentTokenWire.Keyset.Fingerprint,
-		}}, nil
+		return types.PageToken{
+			Keyset: &types.KeysetCursor{
+				SortValues:  currentTokenWire.Keyset.SortValues,
+				ID:          currentTokenWire.Keyset.ID,
+				Fingerprint: currentTokenWire.Keyset.Fingerprint,
+			},
+			OffsetPage: 0,
+		}, nil
 	}
 
-	return types.PageToken{OffsetPage: currentTokenWire.OffsetPage}, nil
+	return types.PageToken{OffsetPage: currentTokenWire.OffsetPage, Keyset: nil}, nil
 }

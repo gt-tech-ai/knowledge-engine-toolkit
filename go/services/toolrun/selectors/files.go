@@ -22,7 +22,16 @@ func (files) Select(
 	codebase interfaces.Codebase,
 	spec *types.TargetSpec,
 ) ([]string, error) {
-	sel := types.FileSelector{IncludeGenerated: true, Globs: globs(spec)}
+	sel := types.FileSelector{
+		IncludeGenerated: true,
+		Globs:            globs(spec),
+		Roots:            nil,
+		Paths:            nil,
+		Exts:             nil,
+		Exclude:          nil,
+		TrackedOnly:      false,
+		IncludeIgnored:   false,
+	}
 
 	found, err := codebase.Files(ctx, &sel)
 	if err != nil {

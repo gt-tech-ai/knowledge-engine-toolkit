@@ -92,6 +92,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.Source] {
 				return awssm.NewClient(ctx, cfg.Region, cfg.Secrets)
 			},
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

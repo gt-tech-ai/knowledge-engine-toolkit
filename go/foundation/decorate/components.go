@@ -69,7 +69,7 @@ func (d Decorations) VerifyExplicit(prefixes ...string) error {
 func (d Decorations) missingEntries(prefixes []string) []string {
 	cfg := d.cfg
 	if cfg == nil {
-		cfg = &decoration.Config{}
+		cfg = new(decoration.Config)
 	}
 
 	keys := map[string]string{}

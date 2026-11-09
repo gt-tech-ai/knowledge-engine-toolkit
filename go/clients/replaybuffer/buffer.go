@@ -87,6 +87,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.ReplayBuffer] {
 				}), nil
 			},
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 

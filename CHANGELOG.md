@@ -414,6 +414,7 @@ Python: `techai-webutils` 0.9.5.
   `imagescan.ScanImageStrict`); `scaffold.Apply` takes no dry-run flag (use `scaffold.Conflicts`);
   `toolchain.Installer.Provision` takes `*types.InstallToolsOptions`, which gains `CheckOnly`.
 - Go `types.DefaultDurationBuckets` is the one set of duration histogram boundaries.
+- Go `stdx.Zero[T]` returns the zero value of a type.
 - Python: the s3db checkpoint store compresses new objects with zstd by default. Reads detect the
   frame, so gzip objects already stored stay readable.
 - Go, breaking: parameters and receivers of 80 bytes and up go by pointer. This covers exported factories and constructors taking `Config` or `Deps` (`NewFromConfig` families take `*Config` where the backend needs it; `client.RefConfig` and `client.RefDeps` adapt a pointer backend to a `Kinds` table), interface methods carrying heavy values (for example `ExecutionObserver.OnStepComplete(*types.StepResult)`), and methods on `client.Base`, `job.Base`, `decorate.Subject`, `decorate.Deps`, `decorate.Tier`, `decorate.Outbox`, `listquery.Field` and `types.Suite`. A value of those types no longer satisfies an interface; pass its address. `types.ChartSpec` and `types.Fact` drop `MarshalJSON` for a `Wire()` encoder, the only way to get their wire form.

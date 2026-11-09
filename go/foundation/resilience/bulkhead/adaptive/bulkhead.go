@@ -108,6 +108,8 @@ func New(cfg Config) *Bulkhead {
 		rttThreshold: cfg.RTTThreshold,
 		backoffRatio: ratio,
 		notify:       make(chan struct{}),
+		inFlight:     0,
+		mu:           sync.Mutex{},
 	}
 }
 

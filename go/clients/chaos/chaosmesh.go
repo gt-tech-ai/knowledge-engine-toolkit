@@ -294,6 +294,7 @@ func chaosMeshResourceFor(
 			Namespace: text,
 			Labels:    map[string]string{managedByLabel: managedBy},
 		},
+		Spec: nil,
 	}
 	source := podsOf(text, fault.Target.Service)
 

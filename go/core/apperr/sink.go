@@ -16,7 +16,7 @@ type sink struct {
 // WithSink returns a context carrying a fresh error sink. The request-logging
 // interceptor installs one at the start of every request.
 func WithSink(ctx context.Context) context.Context {
-	return context.WithValue(ctx, sinkKey{}, &sink{})
+	return context.WithValue(ctx, sinkKey{}, new(sink))
 }
 
 // Capture records err as the real error for the current request when a sink is

@@ -182,7 +182,7 @@ func stubServiceWithGet(
 		},
 	).AnyTimes()
 	service.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&types.Page[TestEntity]{}, nil).AnyTimes()
+		Return(new(types.Page[TestEntity]), nil).AnyTimes()
 	service.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, e *TestEntity) (*TestEntity, error) { return e, nil },
 	).AnyTimes()
@@ -401,12 +401,7 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 			_ TestParams,
 			_ types.PageRequest,
 		) (*types.Page[TestEntity], error) {
-			out := make([]TestEntity, 0, len(items))
-			for _, e := range items {
-				out = append(out, *e)
-			}
-
-			return &types.Page[TestEntity]{Items: out, Total: int64(len(out))}, nil
+			return storedPage(items), nil
 		},
 	).
 		AnyTimes()
@@ -462,6 +457,15 @@ func NewSpyLogger() *SpyLogger {
 		ChildInfoCalls:  &[]string{},
 		ChildWarnCalls:  &[]string{},
 		ChildErrorCalls: &[]string{},
+		parentDebugRef:  nil,
+		parentInfoRef:   nil,
+		parentWarnRef:   nil,
+		parentErrorRef:  nil,
+		DebugCalls:      nil,
+		InfoCalls:       nil,
+		WarnCalls:       nil,
+		ErrorCalls:      nil,
+		ContextUsed:     false,
 	}
 	configureSpyLogger(spyLogger)
 
@@ -495,6 +499,10 @@ func configureSpyLogger(spyLogger *SpyLogger) {
 				ChildInfoCalls:  &[]string{},
 				ChildWarnCalls:  &[]string{},
 				ChildErrorCalls: &[]string{},
+				DebugCalls:      nil,
+				InfoCalls:       nil,
+				WarnCalls:       nil,
+				ErrorCalls:      nil,
 			}
 			configureSpyLogger(child)
 
@@ -511,5 +519,22 @@ func spyRecorder(calls, parent *[]string) func(string, ...any) {
 		if parent != nil {
 			*parent = append(*parent, msg)
 		}
+	}
+}
+
+// storedPage is one page holding every item.
+func storedPage(items map[string]*TestEntity) *types.Page[TestEntity] {
+	out := make([]TestEntity, 0, len(items))
+	for _, e := range items {
+		out = append(out, *e)
+	}
+
+	return &types.Page[TestEntity]{
+		Items:           out,
+		Total:           int64(len(out)),
+		NextCursor:      "",
+		PageSize:        0,
+		PageNumber:      0,
+		TotalIsEstimate: false,
 	}
 }

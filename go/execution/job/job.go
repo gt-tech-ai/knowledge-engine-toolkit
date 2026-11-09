@@ -14,13 +14,17 @@ import (
 // Tier is the job decoration tier: recovery outermost, then logging, tracing,
 // metrics, and the per-job timeout. A job runs as the operation "execute".
 func Tier() decorate.Tier {
-	return decorate.Tier{Name: "job", Order: []decorate.Layer{
-		decorate.LayerRecovery,
-		decorate.LayerLogging,
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerTimeout,
-	}}
+	return decorate.Tier{
+		Name: "job", Order: []decorate.Layer{
+			decorate.LayerRecovery,
+			decorate.LayerLogging,
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}
 }
 
 // Run is a job's work: it executes against runner under root and returns the
@@ -54,7 +58,7 @@ func NewBase(decs decorate.Decorations, name string) (Base, error) {
 
 // Func builds the job name in group that runs run.
 func (b *Base) Func(name, group string, run Run) interfaces.AnyJob {
-	return b.job(types.JobMeta{Name: name, Group: group}, run)
+	return b.job(types.JobMeta{Name: name, Group: group, Tool: "", WarnOnly: false}, run)
 }
 
 // Local builds the job name in group that runs fn, in-process work (a seeder, a
@@ -78,7 +82,16 @@ func (b *Base) Check(
 	run func(context.Context) error,
 ) interfaces.AnyJob {
 	return b.Local(name, group, func(ctx context.Context) (types.StepResults, error) {
-		stepResult := types.StepResult{Name: name, Status: types.StatusPass}
+		stepResult := types.StepResult{
+			Name:     name,
+			Status:   types.StatusPass,
+			Group:    "",
+			Error:    "",
+			Detail:   nil,
+			Children: nil,
+			Duration: 0,
+			Tests:    0,
+		}
 
 		err := run(ctx)
 		if err != nil {
@@ -111,7 +124,7 @@ type decorated struct {
 	meta types.JobMeta
 }
 
-var _ interfaces.AnyJob = &decorated{}
+var _ interfaces.AnyJob = new(decorated)
 
 // Meta returns the job's identity.
 func (d *decorated) Meta() types.JobMeta { return d.meta }

@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // schemaURL is the Renovate JSON-schema URL written as $schema.
@@ -207,11 +208,17 @@ func managerRule(manager Manager) (PackageRule, bool) {
 	switch {
 	case manager == ManagerGithubActions:
 		return PackageRule{
-			MatchManagers:    []string{string(manager)},
-			MatchUpdateTypes: []string{"minor", "patch"},
-			GroupName:        "GitHub Actions",
-			Automerge:        new(true),
-			AutomergeType:    "pr",
+			MatchManagers:     []string{string(manager)},
+			MatchUpdateTypes:  []string{"minor", "patch"},
+			GroupName:         "GitHub Actions",
+			Automerge:         new(true),
+			AutomergeType:     "pr",
+			MatchPackageNames: nil,
+			MatchDatasources:  nil,
+			AllowedVersions:   "",
+			PostUpdateOptions: nil,
+			Enabled:           nil,
+			Labels:            nil,
 		}, true
 	case manager == ManagerGomod:
 		return PackageRule{
@@ -219,16 +226,31 @@ func managerRule(manager Manager) (PackageRule, bool) {
 			GroupName:         group[manager],
 			PostUpdateOptions: []string{"gomodTidy"},
 			Automerge:         new(false),
+			MatchUpdateTypes:  nil,
+			MatchPackageNames: nil,
+			MatchDatasources:  nil,
+			AllowedVersions:   "",
+			Enabled:           nil,
+			AutomergeType:     "",
+			Labels:            nil,
 		}, true
 	case group[manager] != "":
 		return PackageRule{
-			MatchManagers: []string{string(manager)},
-			GroupName:     group[manager],
-			Automerge:     new(false),
+			MatchManagers:     []string{string(manager)},
+			GroupName:         group[manager],
+			Automerge:         new(false),
+			MatchUpdateTypes:  nil,
+			MatchPackageNames: nil,
+			MatchDatasources:  nil,
+			AllowedVersions:   "",
+			PostUpdateOptions: nil,
+			Enabled:           nil,
+			AutomergeType:     "",
+			Labels:            nil,
 		}, true
 	}
 
-	return PackageRule{}, false
+	return stdx.Zero[PackageRule](), false
 }
 
 // globalMajorRule labels every major update and never auto-merges it.
@@ -238,6 +260,13 @@ func globalMajorRule() PackageRule {
 		MatchUpdateTypes:  []string{"major"},
 		Automerge:         new(false),
 		Labels:            []string{"dependencies", "major"},
+		MatchManagers:     nil,
+		MatchDatasources:  nil,
+		AllowedVersions:   "",
+		GroupName:         "",
+		PostUpdateOptions: nil,
+		Enabled:           nil,
+		AutomergeType:     "",
 	}
 }
 
@@ -254,6 +283,14 @@ func workspaceModuleRules(ecosystemSet EcosystemSet) []PackageRule {
 		MatchManagers:     []string{string(ManagerGomod)},
 		MatchPackageNames: []string{ecosystemSet.GoModule + "/**"},
 		Enabled:           new(false),
+		MatchUpdateTypes:  nil,
+		MatchDatasources:  nil,
+		AllowedVersions:   "",
+		GroupName:         "",
+		PostUpdateOptions: nil,
+		Automerge:         nil,
+		AutomergeType:     "",
+		Labels:            nil,
 	}}
 }
 

@@ -36,6 +36,10 @@ func (s Step) Execute(ctx context.Context) types.StepResult {
 		Group:    s.Group,
 		Status:   types.StatusPass,
 		Duration: time.Since(start),
+		Error:    "",
+		Detail:   nil,
+		Children: nil,
+		Tests:    0,
 	}
 
 	if err == nil {

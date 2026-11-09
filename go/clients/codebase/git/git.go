@@ -59,12 +59,12 @@ func (s *Source) List(ctx context.Context) ([]types.File, error) {
 		// A tracked path deleted from the working tree is not a file to read.
 		_, err := os.Lstat(filepath.Join(s.root, filepath.FromSlash(p)))
 		if err == nil {
-			out = append(out, types.File{Path: p})
+			out = append(out, types.File{Path: p, Untracked: false, Ignored: false})
 		}
 	}
 
 	for _, p := range untracked {
-		out = append(out, types.File{Path: p, Untracked: true})
+		out = append(out, types.File{Path: p, Untracked: true, Ignored: false})
 	}
 
 	slices.SortFunc(

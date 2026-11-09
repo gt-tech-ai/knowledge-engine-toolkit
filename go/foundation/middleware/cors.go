@@ -50,6 +50,7 @@ func CORS(cfg *CORSConfig) Middleware {
 	// Build a set for O(1) origin lookup
 	policy := originPolicy{
 		allowAll: len(cfg.AllowOrigins) == 1 && cfg.AllowOrigins[0] == textStar,
+		allowed:  nil,
 	}
 	originSet := make(map[string]struct{}, len(cfg.AllowOrigins))
 

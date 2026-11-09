@@ -147,4 +147,4 @@ func (r *Outbox) do(
 	return err
 }
 
-var _ interfaces.OutboxStore = &Outbox{}
+var _ interfaces.OutboxStore = new(Outbox)

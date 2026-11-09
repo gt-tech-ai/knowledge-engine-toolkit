@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // MaxFilterDepth bounds $and/$or nesting in a filter tree, so a crafted deeply nested
@@ -129,7 +130,7 @@ func decodeFilterNode(data []byte, depth int) (FilterNode, error) {
 	}
 
 	if len(obj) == 0 {
-		return FilterNode{}, nil
+		return stdx.Zero[FilterNode](), nil
 	}
 
 	if len(obj) != 1 {
@@ -141,7 +142,7 @@ func decodeFilterNode(data []byte, depth int) (FilterNode, error) {
 		return decodeFilterEntry(key, raw, depth)
 	}
 
-	return FilterNode{}, nil // unreachable: obj has exactly one key
+	return stdx.Zero[FilterNode](), nil // unreachable: obj has exactly one key
 }
 
 // decodeFilterEntry decodes a node's single operator: a group or a clause.
@@ -174,10 +175,10 @@ func decodeFilterGroup(key string, raw json.RawMessage, depth int) (FilterNode, 
 	}
 
 	if key == filterAndKey {
-		return FilterNode{And: members}, nil
+		return FilterNode{And: members, Clause: nil, Or: nil}, nil
 	}
 
-	return FilterNode{Or: members}, nil
+	return FilterNode{Or: members, Clause: nil, And: nil}, nil
 }
 
 // decodeFilterClause decodes a {"<field>": value} operator body for the operator token.
@@ -215,8 +216,10 @@ func decodeFilterClause(token string, raw json.RawMessage) (FilterNode, error) {
 
 		return FilterNode{
 			Clause: &FilterNodeClause{Field: field, Op: operation, Value: value},
+			And:    nil,
+			Or:     nil,
 		}, nil
 	}
 
-	return FilterNode{}, nil // unreachable: body has exactly one field
+	return stdx.Zero[FilterNode](), nil // unreachable: body has exactly one field
 }

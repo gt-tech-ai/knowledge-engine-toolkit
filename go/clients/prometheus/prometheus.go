@@ -60,7 +60,10 @@ func DefaultConfig() Config {
 		HTTP: promhttp.Config{
 			Timeout:      defaultConfigTimeout,
 			MaxBodyBytes: DefaultMaxBodyBytes,
+			BaseURL:      "",
 		},
+		Kind: "",
+		Name: "",
 	}
 }
 
@@ -75,6 +78,9 @@ func kinds() client.Kinds[Config, Deps, interfaces.MetricsQuerier] {
 			},
 			KindHTTP: newHTTP,
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -103,7 +109,12 @@ func newHTTP(
 
 	doer := deps.Doer
 	if doer == nil {
-		doer = &nethttp.Client{Timeout: cfg.HTTP.Timeout}
+		doer = &nethttp.Client{
+			Timeout:       cfg.HTTP.Timeout,
+			Transport:     nil,
+			CheckRedirect: nil,
+			Jar:           nil,
+		}
 	}
 
 	return promhttp.New(cfg.HTTP.BaseURL, promhttp.DecorateDoer(

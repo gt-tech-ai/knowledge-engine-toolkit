@@ -84,7 +84,11 @@ func parseStep(path, rest string) (step, string, error) {
 	case strings.HasPrefix(rest, ".."):
 		return parseKeyStep(path, rest[2:], stepDeep, "`..` needs a key")
 	case strings.HasPrefix(rest, ".*"):
-		return step{kind: stepAllValues}, rest[allValuesPrefixLen:], nil
+		return step{
+			kind:  stepAllValues,
+			key:   "",
+			index: 0,
+		}, rest[allValuesPrefixLen:], nil
 	case strings.HasPrefix(rest, "."):
 		return parseKeyStep(path, rest[1:], stepKey, "`.` needs a key")
 	case strings.HasPrefix(rest, "["):
@@ -101,7 +105,7 @@ func parseKeyStep(path, rest string, kind stepKind, why string) (step, string, e
 		return step{}, "", invalid(path, why)
 	}
 
-	return step{kind: kind, key: key}, tail, nil
+	return step{kind: kind, key: key, index: 0}, tail, nil
 }
 
 // parseBracketStep reads a `[*]` or `[n]` step.
@@ -113,7 +117,7 @@ func parseBracketStep(path, rest string) (step, string, error) {
 
 	inner, tail := rest[1:end], rest[end+1:]
 	if inner == "*" {
-		return step{kind: stepAllItems}, tail, nil
+		return step{kind: stepAllItems, key: "", index: 0}, tail, nil
 	}
 
 	n, err := strconv.Atoi(inner)
@@ -121,7 +125,7 @@ func parseBracketStep(path, rest string) (step, string, error) {
 		return step{}, "", invalid(path, "an index is * or a non-negative integer")
 	}
 
-	return step{kind: stepIndex, index: n}, tail, nil
+	return step{kind: stepIndex, index: n, key: ""}, tail, nil
 }
 
 // splitKey returns the key at the start of s and the rest of s.
@@ -303,7 +307,7 @@ func deepMapping(node *yaml.Node, key string) []*yaml.Node {
 
 // matchOf describes one node.
 func matchOf(n *yaml.Node) Match {
-	match := Match{Node: n, Line: n.Line}
+	match := Match{Node: n, Line: n.Line, Value: "", Kind: ""}
 	switch n.Kind {
 	case yaml.ScalarNode:
 		match.Kind, match.Value = "scalar", n.Value

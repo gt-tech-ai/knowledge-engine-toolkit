@@ -75,10 +75,11 @@ func (l *lockedWriter) Write(b []byte) (int, error) {
 // newPrinter returns a printer over w at level; writes are serialized (lockedWriter).
 func newPrinter(w io.Writer, level Level, rich, color bool, hints []Hint) *printer {
 	currentPrinter := &printer{
-		w:     &lockedWriter{w: w},
+		w:     &lockedWriter{w: w, mu: sync.Mutex{}},
 		rich:  rich,
 		pal:   newPalette(color),
 		hints: hints,
+		level: atomic.Int32{},
 	}
 	currentPrinter.level.Store(int32(level))
 

@@ -177,7 +177,10 @@ func parseSections(inner string) []iniSection {
 		trimmed := strings.TrimSpace(line)
 		switch {
 		case strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]"):
-			sections = append(sections, iniSection{header: trimmed[1 : len(trimmed)-1]})
+			sections = append(
+				sections,
+				iniSection{header: trimmed[1 : len(trimmed)-1], body: nil},
+			)
 		case trimmed == "" || len(sections) == 0:
 		default:
 			last := &sections[len(sections)-1]
