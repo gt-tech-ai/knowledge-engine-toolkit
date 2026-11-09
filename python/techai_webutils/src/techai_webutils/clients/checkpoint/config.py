@@ -41,5 +41,5 @@ class CheckpointConfig:
     """The file-name prefix of a stage's parts."""
     max_artifact_bytes: int = DEFAULT_MAX_ARTIFACT_BYTES
     """Payloads larger than this are written as segments of at most this size."""
-    compression: CheckpointCompression = CheckpointCompression.GZIP
+    compression: CheckpointCompression = CheckpointCompression.ZSTD
     """How new objects are compressed (``s3db``); objects already stored stay readable."""

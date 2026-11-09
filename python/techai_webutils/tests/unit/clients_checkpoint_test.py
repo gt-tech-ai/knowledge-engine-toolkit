@@ -548,3 +548,16 @@ def test_layout_recovers_a_key_from_its_reference() -> None:
 
     assert (key.stage, key.content_hash) == (Stage.PARSE, "c0ffee")
     assert _LAYOUT.base(key) == _BASE
+
+
+def test_new_objects_default_to_zstd() -> None:
+    """Keep the cheaper codec the default.
+
+    Why this test is important:
+        Compressing every checkpoint with gzip costs several times the CPU for the same size.
+
+    What it tests:
+        A config that names no compression selects zstd.
+
+    """
+    assert CheckpointConfig().compression is CheckpointCompression.ZSTD
