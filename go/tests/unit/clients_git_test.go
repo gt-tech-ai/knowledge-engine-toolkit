@@ -53,7 +53,7 @@ func TestClientsGit_Exec(t *testing.T) {
 	assert.Equal(t, []string{textAGo, textBCGo}, files)
 
 	commandRunner.EXPECT().RunBuffered(gomock.Any(), "/x", "git", "ls-files", "-z", "--").
-		Return(exitWith(code128, "not a git repository"))
+		Return(exitWith(exitWithInput, "not a git repository"))
 
 	files, err = gitClient.LsFiles(ctx, "/x", nil)
 	require.NoError(t, err)
@@ -72,11 +72,12 @@ func TestClientsGit_Exec(t *testing.T) {
 			"--diff-filter=ACM", "--").
 		Return(interfaces.CmdResult{Stdout: []byte("s.go\x00")})
 
-	testClientsGitExecRest(ctx, t, commandRunner, gitClient)
+	testClientsGitExecStagedAndFailures(ctx, t, commandRunner, gitClient)
 }
 
-// testClientsGitExecRest continues TestClientsGit_Exec with its remaining steps.
-func testClientsGitExecRest(
+// testClientsGitExecStagedAndFailures continues TestClientsGit_Exec: staged and
+// failures.
+func testClientsGitExecStagedAndFailures(
 	ctx context.Context,
 	t *testing.T,
 	commandRunner *mocks.MockCommandRunner,
@@ -93,7 +94,7 @@ func testClientsGitExecRest(
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textR, "git", "diff", "--name-only", "-z",
 			"--merge-base", textMain).
-		Return(exitWith(code129, "fatal: bad revision"))
+		Return(exitWith(exitWithInputFailures, "fatal: bad revision"))
 
 	_, err = gitClient.ChangedSince(ctx, textR, textMain)
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
@@ -109,7 +110,7 @@ func testClientsGitExecRest(
 	commandRunner.EXPECT().
 		RunBuffered(gomock.Any(), textR, "git", "describe", "--tags", "--exact-match",
 			"HEAD").
-		Return(exitWith(code128, "no tag exactly matches"))
+		Return(exitWith(exitWithInput, "no tag exactly matches"))
 
 	tag, err := gitClient.Tag(ctx, textR)
 	require.NoError(t, err)
@@ -155,13 +156,13 @@ func TestClientsGit_RemoteHasRef(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, found)
 
-	probe(textNope).Return(exitWith(code2, ""))
+	probe(textNope).Return(exitWith(exitWithInputRef, ""))
 
 	found, err = gitClient.RemoteHasRef(ctx, textR, textOrigin, textNope)
 	require.NoError(t, err)
 	assert.False(t, found)
 
-	probe("v2").Return(exitWith(code128, "fatal: could not read Username"))
+	probe("v2").Return(exitWith(exitWithInput, "fatal: could not read Username"))
 
 	found, err = gitClient.RemoteHasRef(ctx, textR, textOrigin, "v2")
 	assert.False(t, found)
@@ -247,10 +248,10 @@ func TestClientsGit_HistoryAndWorktree(t *testing.T) {
 	assert.Equal(t, "abc\n", string(out))
 
 	commandRunner.EXPECT().
-		RunBuffered(gomock.Any(), textR, "git", textStatus, "--porcelain", "--", textDocs2).
+		RunBuffered(gomock.Any(), textR, "git", textStatus, "--porcelain", "--", textDocsLower).
 		Return(interfaces.CmdResult{Stdout: []byte(" M docs/a.md\n")})
 
-	out, err = gitClient.Status(ctx, textR, []string{textDocs2})
+	out, err = gitClient.Status(ctx, textR, []string{textDocsLower})
 	require.NoError(t, err)
 	assert.Equal(t, " M docs/a.md\n", string(out))
 
@@ -263,12 +264,12 @@ func TestClientsGit_HistoryAndWorktree(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"new.md", "d/n.md"}, files)
 
-	testClientsGitHistoryAndWorktreeRest(ctx, t, commandRunner, gitClient)
+	testClientsGitHistoryAndWorktreeDiffsAndWorktrees(ctx, t, commandRunner, gitClient)
 }
 
-// testClientsGitHistoryAndWorktreeRest continues TestClientsGit_HistoryAndWorktree with
-// its remaining steps.
-func testClientsGitHistoryAndWorktreeRest(
+// testClientsGitHistoryAndWorktreeDiffsAndWorktrees continues
+// TestClientsGit_HistoryAndWorktree: diffs and worktrees.
+func testClientsGitHistoryAndWorktreeDiffsAndWorktrees(
 	ctx context.Context,
 	t *testing.T,
 	commandRunner *mocks.MockCommandRunner,
@@ -283,7 +284,7 @@ func testClientsGitHistoryAndWorktreeRest(
 	grep := func(needle string) *gomock.Call {
 		return commandRunner.EXPECT().
 			RunBuffered(gomock.Any(), textR, "git", "grep", "-l", "-z", "-I",
-				"-F", textE2, needle)
+				"-F", textEKebab, needle)
 	}
 	grep(textDocsA).Return(interfaces.CmdResult{Stdout: []byte("x.md\x00y.go\x00")})
 
@@ -295,7 +296,7 @@ func testClientsGitHistoryAndWorktreeRest(
 	files, err = gitClient.Grep(ctx, textR, "nothing")
 	require.NoError(t, err)
 	assert.Empty(t, files)
-	grep(textBroken).Return(exitWith(code128, "fatal: bad pattern"))
+	grep(textBroken).Return(exitWith(exitWithInput, "fatal: bad pattern"))
 
 	_, err = gitClient.Grep(ctx, textR, textBroken)
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
@@ -328,3 +329,14 @@ func testClientsGitHistoryAndWorktreeRest(
 	require.NoError(t, stub.Move(ctx, textR, textA, textB))
 	require.NoError(t, stub.Remove(ctx, textR, []string{textA}))
 }
+
+const (
+	// exitWithInput is the exit with input the tests use.
+	exitWithInput = 128
+
+	// exitWithInputFailures is the exit with input failures the tests use.
+	exitWithInputFailures = 129
+
+	// exitWithInputRef is the exit with input ref the tests use.
+	exitWithInputRef = 2
+)

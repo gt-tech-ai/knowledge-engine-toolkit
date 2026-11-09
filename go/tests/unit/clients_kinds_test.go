@@ -45,19 +45,19 @@ import (
 func TestClientFamilies_RejectAnUnknownKind(t *testing.T) {
 	t.Parallel()
 
-	testClientFamiliesRejectAnUnknownKindRest5(t)
+	testClientFamiliesRejectAnUnknownKindEachFamily(t)
 }
 
-// testClientFamiliesRejectAnUnknownKindRest5 continues
-// testClientFamiliesRejectAnUnknownKindRest4 with its remaining steps.
-func testClientFamiliesRejectAnUnknownKindRest5(t *testing.T) {
+// testClientFamiliesRejectAnUnknownKindEachFamily continues
+// testClientFamiliesRejectAnUnknownKind: each family.
+func testClientFamiliesRejectAnUnknownKindEachFamily(t *testing.T) {
 	t.Helper()
 
 	families := map[string]func(ctx context.Context) error{}
 
 	maps.Copy(families, unknownKindBuilders1())
-	maps.Copy(families, unknownKindBuilders2())
-	maps.Copy(families, unknownKindBuilders3())
+	maps.Copy(families, unknownKindCoordinationBuilders())
+	maps.Copy(families, unknownKindStreamingBuilders())
 
 	for family, build := range families {
 		t.Run(family, func(t *testing.T) {
@@ -100,14 +100,14 @@ func TestKindsBuild_NeverRetriesAnAtMostOnceKind(t *testing.T) {
 		Decorate: func(
 			base toyClient, decs decorate.Decorations, name string, opts ...client.Option,
 		) (toyClient, error) {
-			baseValue, err := client.NewBase[toyClient](decs, name, opts...)
+			currentBase, err := client.NewBase[toyClient](decs, name, opts...)
 			if err != nil {
 				return nil, err
 			}
 
 			count := 0
 
-			_, _ = baseValue.Exec(
+			_, _ = currentBase.Exec(
 				t.Context(),
 				"ping",
 				func(context.Context) (struct{}, error) {
@@ -136,7 +136,7 @@ func TestKindsBuild_NeverRetriesAnAtMostOnceKind(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	require.Len(t, attempts, wantAttemptsLen3)
+	require.Len(t, attempts, wantAttemptsLen)
 	assert.Greater(t, attempts[0], 1)
 	assert.Equal(t, 1, attempts[1])
 	assert.Equal(t, 1, attempts[2])
@@ -205,8 +205,8 @@ func unknownKindBuilders1() map[string]func(ctx context.Context) error {
 	}
 }
 
-// unknownKindBuilders2 builds one group of client families with the bogus kind.
-func unknownKindBuilders2() map[string]func(ctx context.Context) error {
+// unknownKindCoordinationBuilders builds one group of client families with the bogus kind.
+func unknownKindCoordinationBuilders() map[string]func(ctx context.Context) error {
 	return map[string]func(ctx context.Context) error{
 		"lock": func(ctx context.Context) error {
 			_, err := lock.NewFromConfig(ctx, lock.Config{
@@ -255,8 +255,8 @@ func unknownKindBuilders2() map[string]func(ctx context.Context) error {
 	}
 }
 
-// unknownKindBuilders3 builds one group of client families with the bogus kind.
-func unknownKindBuilders3() map[string]func(ctx context.Context) error {
+// unknownKindStreamingBuilders builds one group of client families with the bogus kind.
+func unknownKindStreamingBuilders() map[string]func(ctx context.Context) error {
 	return map[string]func(ctx context.Context) error{
 		"replaybuffer": func(ctx context.Context) error {
 			_, err := replaybuffer.NewFromConfig(
@@ -303,3 +303,8 @@ func unknownKindBuilders3() map[string]func(ctx context.Context) error {
 		},
 	}
 }
+
+const (
+	// wantAttemptsLen is the expected attempts len.
+	wantAttemptsLen = 3
+)

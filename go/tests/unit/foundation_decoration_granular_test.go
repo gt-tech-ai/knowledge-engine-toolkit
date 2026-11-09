@@ -51,7 +51,7 @@ func TestDecorationTierFor_CascadesOverridesAlongTheNamesDots(t *testing.T) {
 	t.Parallel()
 
 	enabled, off := true, false
-	two, five := seconds2*time.Second, seconds5*time.Second
+	two, five := seconds*time.Second, secondsDots*time.Second
 	tier := decoration.Tier{
 		Defaults: decoration.Layers{Logging: &off, Tracing: &off},
 		Overrides: map[string]decoration.Layers{
@@ -267,3 +267,19 @@ func TestConfiguredBases_ResolveEachStageJobAndGateByItsOwnName(t *testing.T) {
 	require.NoError(t, decs.Verify(textAPI, "events"))
 	assert.Equal(t, textGate, gate.Tier().Name)
 }
+
+const (
+	// secondsDots is the seconds dots the tests use.
+	secondsDots = 5
+)
+
+const (
+	// textAPIAsk is the literal "api.ask".
+	textAPIAsk = "api.ask"
+
+	// textAPIDocuments is the literal "api.documents".
+	textAPIDocuments = "api.documents"
+
+	// textAPIDocumentsCreate is the literal "api.documents.create".
+	textAPIDocumentsCreate = "api.documents.create"
+)

@@ -1,11 +1,11 @@
 package errcodes
 
 const (
-	// http100 is the http value 100.
-	http100 = 100
+	// minHTTPStatus is the named value used where min httpstatus applies.
+	minHTTPStatus = 100
 )
 
 const (
-	// http599 is the http value 599.
-	http599 = 599
+	// maxHTTPStatus is the named value used where max httpstatus applies.
+	maxHTTPStatus = 599
 )

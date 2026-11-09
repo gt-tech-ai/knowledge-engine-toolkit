@@ -68,11 +68,12 @@ func TestClientsDocker_Exec(t *testing.T) {
 
 	_, err = dockerClient.Inspect(ctx, "gone:1")
 
-	testClientsDockerExecRest(ctx, t, commandRunner, dockerClient, err)
+	testClientsDockerExecComposeCommands(ctx, t, commandRunner, dockerClient, err)
 }
 
-// testClientsDockerExecRest continues TestClientsDocker_Exec with its remaining steps.
-func testClientsDockerExecRest(
+// testClientsDockerExecComposeCommands continues TestClientsDocker_Exec: compose
+// commands.
+func testClientsDockerExecComposeCommands(
 	ctx context.Context,
 	t *testing.T,
 	commandRunner *mocks.MockCommandRunner,
@@ -122,3 +123,8 @@ func testClientsDockerExecRest(
 	_, err = stub.Inspect(ctx, textX)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }
+
+const (
+	// textX1 is the literal "X=1".
+	textX1 = "X=1"
+)

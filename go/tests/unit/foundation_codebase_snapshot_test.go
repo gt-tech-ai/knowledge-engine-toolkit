@@ -35,7 +35,7 @@ func TestCodebaseSnapshot_MemoComputesOncePerKey(t *testing.T) {
 		group sync.WaitGroup
 	)
 
-	errs := make([]error, size100)
+	errs := make([]error, makeInputKey)
 
 	for index := range errs {
 		group.Go(func() {
@@ -122,7 +122,7 @@ func TestCodebaseSnapshot_MemoErrors(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, wantGot7, got)
+	assert.Equal(t, wantGotErrors, got)
 
 	_, err = snapshot.Memo(
 		t.Context(),
@@ -159,7 +159,7 @@ func TestCodebaseSnapshot_MemoPanickingBuild(t *testing.T) {
 		<-release
 		panic("parser bug")
 	}
-	errs := make(chan error, size2)
+	errs := make(chan error, makeInput)
 
 	go func() {
 		_, err := snapshot.Memo(t.Context(), textK, boom)
@@ -175,7 +175,7 @@ func TestCodebaseSnapshot_MemoPanickingBuild(t *testing.T) {
 
 	close(release)
 
-	for range iterations2 {
+	for range iterations {
 		err := <-errs
 		assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 		assert.Contains(t, err.Error(), "parser bug")
@@ -196,7 +196,7 @@ func TestCodebaseSnapshot_MemoPanickingBuild(t *testing.T) {
 		return 3, nil
 	})
 	require.NoError(t, err)
-	assert.Equal(t, wantGot3, got)
+	assert.Equal(t, wantGotBuild, got)
 }
 
 // TestCodebaseSnapshot_KeysListsWhatWasBuilt tests that Keys reports the memoized keys.
@@ -254,3 +254,19 @@ func TestCodebaseSnapshot_KeysListsWhatWasBuilt(t *testing.T) {
 		snapshot.Keys(),
 	)
 }
+
+const (
+	// makeInputKey is the make input key the tests use.
+	makeInputKey = 100
+
+	// wantGotBuild is the expected got build.
+	wantGotBuild = 3
+
+	// wantGotErrors is the expected got errors.
+	wantGotErrors = 7
+)
+
+const (
+	// textCancel is the literal "cancel".
+	textCancel = "cancel"
+)

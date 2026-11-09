@@ -37,9 +37,9 @@ func TestStartPoolStatsCollector_PublishesGauges(t *testing.T) {
 	value, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = value.Close() })
-	value.SetMaxOpenConns(setMaxOpenConnsArg17)
+	value.SetMaxOpenConns(setMaxOpenConnsInput)
 
-	metricsValue, err := metrics.New(metrics.KindPrometheus)
+	currentMetrics, err := metrics.New(metrics.KindPrometheus)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -47,7 +47,7 @@ func TestStartPoolStatsCollector_PublishesGauges(t *testing.T) {
 	postgres.StartStatsCollector(
 		ctx,
 		value,
-		metricsValue,
+		currentMetrics,
 		time.Hour,
 	) // publishes once synchronously
 
@@ -58,7 +58,7 @@ func TestStartPoolStatsCollector_PublishesGauges(t *testing.T) {
 		"/metrics",
 		http.NoBody,
 	)
-	metricsValue.Handler().ServeHTTP(rec, req)
+	currentMetrics.Handler().ServeHTTP(rec, req)
 
 	body, err := io.ReadAll(rec.Result().Body)
 	require.NoError(t, err)
@@ -129,3 +129,8 @@ func TestPingDB_BadDSNFailsFast(t *testing.T) {
 		"an unreachable DB is transient",
 	)
 }
+
+const (
+	// setMaxOpenConnsInput is the set max open conns input the tests use.
+	setMaxOpenConnsInput = 17
+)

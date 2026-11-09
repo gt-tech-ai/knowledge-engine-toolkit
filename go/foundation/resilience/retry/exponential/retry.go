@@ -197,7 +197,7 @@ func (r *Retrier) retryOpts() []backoff.RetryOption {
 	exponentialBackOff.InitialInterval = r.cfg.InitialInterval
 	exponentialBackOff.MaxInterval = r.cfg.MaxInterval
 	exponentialBackOff.Multiplier = r.cfg.Multiplier
-	exponentialBackOff.RandomizationFactor = randomizationFactor0p5 // jitter
+	exponentialBackOff.RandomizationFactor = defaultRandomizationFactor // jitter
 
 	opts := []backoff.RetryOption{
 		backoff.WithBackOff(exponentialBackOff),

@@ -38,7 +38,7 @@ func TestToHTTPStatus_UnknownCode(t *testing.T) {
 	t.Parallel()
 
 	status := apperr.ToHTTPStatus(apperr.ErrorCode("CUSTOM_CODE"))
-	assert.Equal(t, wantStatus500, status)
+	assert.Equal(t, wantStatus, status)
 }
 
 // ---------------------------------------------------------------------------
@@ -302,13 +302,13 @@ func TestCombine(t *testing.T) {
 	t.Parallel()
 
 	err1 := apperr.Sentinel("err1")
-	err2 := apperr.Sentinel("err2")
+	secondErr := apperr.Sentinel("err2")
 
-	combined := apperr.Combine(err1, err2)
+	combined := apperr.Combine(err1, secondErr)
 	require.Error(t, combined)
 
 	errs := apperr.Errors(combined)
-	require.Len(t, errs, wantErrsLen2)
+	require.Len(t, errs, wantErrsLen)
 }
 
 // TestCombine_AllNils tests that Combine returns nil when all inputs are nil,
@@ -345,7 +345,7 @@ func TestAppend(t *testing.T) {
 	result = apperr.Append(result, apperr.Sentinel("second"))
 
 	errs := apperr.Errors(result)
-	require.Len(t, errs, wantErrsLen2)
+	require.Len(t, errs, wantErrsLen)
 }
 
 // TestErrors_SingleError tests that Errors wraps a single non-combined error
@@ -388,7 +388,7 @@ func TestLogErrors_MultiError(t *testing.T) {
 
 	apperr.LogErrors(logger, "batch failed", combined)
 
-	require.Len(t, observed.All(), wantAllLen2)
+	require.Len(t, observed.All(), wantAllLenError)
 }
 
 // TestLogErrors_SingleError tests that LogErrors handles a single
@@ -453,10 +453,10 @@ func TestPageRequest(t *testing.T) {
 	t.Parallel()
 
 	pr := types.PageRequest{
-		PageSize:   pageSize10,
+		PageSize:   pageSize,
 		PageNumber: 1,
 	}
-	assert.Equal(t, wantPageSize10, pr.PageSize)
+	assert.Equal(t, wantPageSizeRequest, pr.PageSize)
 }
 
 // TestPage tests that the generic Page type correctly stores items and total
@@ -473,9 +473,9 @@ func TestPage(t *testing.T) {
 
 	page := types.Page[string]{
 		Items: []string{textA, textB},
-		Total: total2,
+		Total: total,
 	}
-	assert.Len(t, page.Items, wantItemsLen2)
+	assert.Len(t, page.Items, wantItemsLen)
 }
 
 // TestID_StringAndIsEmpty tests that the ID type helpers String and IsEmpty
@@ -512,8 +512,8 @@ func TestID_StringAndIsEmpty(t *testing.T) {
 func TestOption_UnwrapOr(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, wantUnwrapOr42, types.Some(42).UnwrapOr(0))
-	assert.Equal(t, wantUnwrapOr99, types.None[int]().UnwrapOr(fallback99))
+	assert.Equal(t, wantUnwrapOr, types.Some(42).UnwrapOr(0))
+	assert.Equal(t, wantUnwrapOrOr, types.None[int]().UnwrapOr(unwrapOrInput))
 }
 
 // TestPage_HasMore tests that HasMore returns true when more pages of results
@@ -531,9 +531,9 @@ func TestPage_HasMore(t *testing.T) {
 
 	page := types.Page[string]{
 		Items:      []string{textA, textB},
-		Total:      total10,
+		Total:      totalMore,
 		PageNumber: 1,
-		PageSize:   pageSize2,
+		PageSize:   pageSizeMore,
 	}
 	assert.True(t, page.HasMore())
 
@@ -541,7 +541,7 @@ func TestPage_HasMore(t *testing.T) {
 		Items:      []string{textA},
 		Total:      1,
 		PageNumber: 1,
-		PageSize:   pageSize10,
+		PageSize:   pageSize,
 	}
 	assert.False(t, full.HasMore())
 }
@@ -787,7 +787,7 @@ func TestStepResults_CountByStatus(t *testing.T) {
 	}
 	counts := stepResults.CountByStatus()
 
-	assert.Equal(t, wantCounts2, counts[types.StatusPass])
+	assert.Equal(t, wantCounts, counts[types.StatusPass])
 	assert.Equal(t, 1, counts[types.StatusFail])
 	assert.Equal(t, 1, counts[types.StatusSkip])
 	assert.Equal(t, 0, counts[types.StatusWarn], "missing status defaults to 0")
@@ -838,10 +838,10 @@ func TestStepResults_FailedNames(t *testing.T) {
 func TestOptionFromPtr_NonNil(t *testing.T) {
 	t.Parallel()
 
-	v := value42
+	v := initialV
 	opt := types.OptionFromPtr(&v)
 	assert.True(t, opt.Valid)
-	assert.Equal(t, wantValue42, opt.Value)
+	assert.Equal(t, wantValue, opt.Value)
 }
 
 // TestOptionFromPtr_Nil tests that OptionFromPtr wraps a nil pointer into a
@@ -874,10 +874,10 @@ func TestOptionFromPtr_Nil(t *testing.T) {
 func TestOption_ToPtr_Some(t *testing.T) {
 	t.Parallel()
 
-	opt := types.Some(someArg99)
+	opt := types.Some(someInput)
 	ptr := opt.ToPtr()
 	require.NotNil(t, ptr)
-	assert.Equal(t, wantPtr99, *ptr)
+	assert.Equal(t, wantPtr, *ptr)
 }
 
 // TestOption_ToPtr_None tests that ToPtr returns nil for a None Option,
@@ -895,3 +895,41 @@ func TestOption_ToPtr_None(t *testing.T) {
 	opt := types.None[int]()
 	assert.Nil(t, opt.ToPtr())
 }
+
+const (
+	// initialV is the initial v the tests use.
+	initialV = 42
+
+	// pageSizeMore is the page size more the tests use.
+	pageSizeMore = 2
+
+	// someInput is the some input the tests use.
+	someInput = 99
+
+	// totalMore is the total more the tests use.
+	totalMore = 10
+
+	// wantAllLenError is the expected all len error.
+	wantAllLenError = 2
+
+	// wantCounts is the expected counts.
+	wantCounts = 2
+
+	// wantItemsLen is the expected items len.
+	wantItemsLen = 2
+
+	// wantPageSizeRequest is the expected page size request.
+	wantPageSizeRequest = 10
+
+	// wantPtr is the expected ptr.
+	wantPtr = 99
+
+	// wantStatus is the expected status.
+	wantStatus = 500
+
+	// wantUnwrapOr is the expected unwrap or.
+	wantUnwrapOr = 42
+
+	// wantUnwrapOrOr is the expected unwrap or or.
+	wantUnwrapOrOr = 99
+)

@@ -16,7 +16,7 @@ import (
 // yields nil: the deterministic default order then comes from CompileOrder's keyset
 // tiebreaker (resource-appropriate — created_at, joined_at, …), not a fixed column the
 // resource may not have. Client input is never string-concatenated into SQL.
-func ParseSort(mapValue *Map, spec string) ([]types.OrderField, error) {
+func ParseSort(fieldMap *Map, spec string) ([]types.OrderField, error) {
 	if strings.TrimSpace(spec) == "" {
 		return nil, nil
 	}
@@ -26,7 +26,7 @@ func ParseSort(mapValue *Map, spec string) ([]types.OrderField, error) {
 	seen := make(map[string]bool)
 
 	for tok := range strings.SplitSeq(spec, ",") {
-		orderField, err := parseSortToken(mapValue, tok)
+		orderField, err := parseSortToken(fieldMap, tok)
 		if err != nil {
 			return nil, err
 		}
@@ -46,7 +46,7 @@ func ParseSort(mapValue *Map, spec string) ([]types.OrderField, error) {
 }
 
 // parseSortToken parses one `field[:dir]` token against the sortable allow-list.
-func parseSortToken(mapValue *Map, tok string) (types.OrderField, error) {
+func parseSortToken(fieldMap *Map, tok string) (types.OrderField, error) {
 	field, dir, hasDir := strings.Cut(tok, ":")
 
 	field = strings.TrimSpace(field)
@@ -58,7 +58,7 @@ func parseSortToken(mapValue *Map, tok string) (types.OrderField, error) {
 		)
 	}
 
-	if !mapValue.Sortable(field) {
+	if !fieldMap.Sortable(field) {
 		return types.OrderField{}, apperr.New(
 			apperr.CodeInvalidInput,
 			"sort: field not sortable: "+field,

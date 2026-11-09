@@ -79,14 +79,14 @@ func TestBudgetInterceptor_AttachesSharedBudget(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(
 		t,
-		int32(int32Arg7),
+		int32(wantWithBudget),
 		withBudget,
 		"the request context must carry the attached budget",
 	)
 
 	var disabled int32 = -99
 
-	unaryFuncValue := interceptors.BudgetInterceptor(0).WrapUnary(
+	currentUnaryFunc := interceptors.BudgetInterceptor(0).WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			disabled = budget.Remaining(ctx)
 
@@ -94,7 +94,7 @@ func TestBudgetInterceptor_AttachesSharedBudget(t *testing.T) {
 		},
 	)
 
-	_, err = unaryFuncValue(context.Background(), newTestRequest())
+	_, err = currentUnaryFunc(context.Background(), newTestRequest())
 	require.NoError(t, err)
 	assert.Equal(
 		t,
@@ -134,7 +134,7 @@ func TestWithAuthClaims_GetAuthClaims_RoundTrip(t *testing.T) {
 	require.True(t, ok, textExpectedClaimsInContext)
 	assert.Equal(t, textUser1, got.Sub)
 	assert.Equal(t, textOrg1, got.TenantID)
-	assert.Len(t, got.Roles, wantRolesLen2)
+	assert.Len(t, got.Roles, wantRolesLen)
 }
 
 // TestGetAuthClaims_Missing tests that GetAuthClaims returns false when no
@@ -207,7 +207,7 @@ func TestAuthInterceptor_WithAllHeaders(t *testing.T) {
 	require.True(t, found, textExpectedClaimsInContext)
 	assert.Equal(t, "user-42", claims.Sub)
 	assert.Equal(t, "org-99", claims.TenantID)
-	assert.Len(t, claims.Roles, wantRolesLen3)
+	assert.Len(t, claims.Roles, wantRolesLenHeaders)
 }
 
 // TestAuthInterceptor_NoSub tests that the auth interceptor skips storing
@@ -361,7 +361,7 @@ func TestAuthInterceptor_RolesWithTrailingComma(t *testing.T) {
 
 	require.True(t, found, "expected claims")
 	// splitRoles should discard empty segments
-	assert.Len(t, claims.Roles, wantRolesLen2)
+	assert.Len(t, claims.Roles, wantRolesLen)
 }
 
 // TestAuthInterceptor_StubMode_SynthesizesDevClaims tests that stub mode
@@ -1103,3 +1103,28 @@ func logFailedCall(code connect.Code) *fixtures.SpyLogger {
 
 	return spy
 }
+
+const (
+	// wantRolesLen is the expected roles len.
+	wantRolesLen = 2
+
+	// wantRolesLenHeaders is the expected roles len headers.
+	wantRolesLenHeaders = 3
+
+	// wantWithBudget is the expected with budget.
+	wantWithBudget = 7
+)
+
+const (
+	// textExpected0Calls is the literal "expected 0 calls".
+	textExpected0Calls = "expected 0 calls"
+
+	// textExpectedClaimsInContext is the literal "expected claims in context".
+	textExpectedClaimsInContext = "expected claims in context"
+
+	// textUser1 is the literal "user-1".
+	textUser1 = "user-1"
+
+	// textEditor is the literal "editor".
+	textEditor = "editor"
+)

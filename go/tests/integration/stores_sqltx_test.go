@@ -74,24 +74,31 @@ func TestSQLTx_CommitsRollsBackAndRefusesNesting(t *testing.T) {
 		return nil
 	}
 	count := func() int {
-		var countValue int
+		var currentCount int
 
 		require.NoError(
 			t,
-			value.QueryRowContext(ctx, `SELECT count(*) FROM notes`).Scan(&countValue),
+			value.QueryRowContext(ctx, `SELECT count(*) FROM notes`).Scan(&currentCount),
 		)
 
-		return countValue
+		return currentCount
 	}
 
 	hooks := 0
 
-	testSQLTxCommitsRollsBackAndRefusesNestingRest(ctx, t, mgr, insert, count, hooks)
+	testSQLTxCommitsRollsBackAndRefusesNestingAfterCommitHooks(
+		ctx,
+		t,
+		mgr,
+		insert,
+		count,
+		hooks,
+	)
 }
 
-// testSQLTxCommitsRollsBackAndRefusesNestingRest continues
-// TestSQLTx_CommitsRollsBackAndRefusesNesting with its remaining steps.
-func testSQLTxCommitsRollsBackAndRefusesNestingRest(
+// testSQLTxCommitsRollsBackAndRefusesNestingAfterCommitHooks continues
+// TestSQLTx_CommitsRollsBackAndRefusesNesting: after commit hooks.
+func testSQLTxCommitsRollsBackAndRefusesNestingAfterCommitHooks(
 	ctx context.Context,
 	t *testing.T,
 	mgr *sqltx.Manager,
@@ -139,5 +146,10 @@ func testSQLTxCommitsRollsBackAndRefusesNestingRest(
 	_, _, err = mgr.Begin(txCtx)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	require.NoError(t, transaction.Commit())
-	require.Equal(t, wantCount2, count())
+	require.Equal(t, wantCount, count())
 }
+
+const (
+	// wantCount is the expected count.
+	wantCount = 2
+)

@@ -246,11 +246,11 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	principalValue, _ := coreprincipal.From[principal](got)
+	currentPrincipal, _ := coreprincipal.From[principal](got)
 	assert.Equal(
 		t,
 		textStub,
-		principalValue.Tenant,
+		currentPrincipal.Tenant,
 		"synthetic claims take the stub principal",
 	)
 
@@ -262,11 +262,11 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	principalValue, _ = coreprincipal.From[principal](got)
+	currentPrincipal, _ = coreprincipal.From[principal](got)
 	assert.Equal(
 		t,
 		textResolved,
-		principalValue.Tenant,
+		currentPrincipal.Tenant,
 		"real claims resolve even with a stub set",
 	)
 
@@ -276,20 +276,20 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	principalValue, _ = coreprincipal.From[principal](got)
+	currentPrincipal, _ = coreprincipal.From[principal](got)
 	assert.Equal(
 		t,
 		textResolved,
-		principalValue.Tenant,
+		currentPrincipal.Tenant,
 		"without a stub, synthetic claims resolve",
 	)
 
-	testPrincipalInterceptorStubAndErrorsRest(t)
+	testPrincipalInterceptorStubAndErrorsErrorCases(t)
 }
 
-// testPrincipalInterceptorStubAndErrorsRest continues
-// TestPrincipalInterceptor_StubAndErrors with its remaining steps.
-func testPrincipalInterceptorStubAndErrorsRest(t *testing.T) {
+// testPrincipalInterceptorStubAndErrorsErrorCases continues
+// TestPrincipalInterceptor_StubAndErrors: error cases.
+func testPrincipalInterceptorStubAndErrorsErrorCases(t *testing.T) {
 	t.Helper()
 
 	const leakedDetail = "pq: host db-7.internal password auth failed"
@@ -328,15 +328,17 @@ func testPrincipalInterceptorStubAndErrorsRest(t *testing.T) {
 		},
 	}
 
-	testPrincipalInterceptorStubAndErrorsRest2(t, cases)
+	testPrincipalInterceptorStubAndErrorsChecksRejection(t, cases)
 }
 
-// testPrincipalInterceptorStubAndErrorsRest2 continues
-// testPrincipalInterceptorStubAndErrorsRest with its remaining steps.
-func testPrincipalInterceptorStubAndErrorsRest2(t *testing.T, cases map[string]struct {
-	err  error
-	want connect.Code
-},
+// testPrincipalInterceptorStubAndErrorsChecksRejection continues
+// testPrincipalInterceptorStubAndErrorsErrorCases: checks rejection.
+func testPrincipalInterceptorStubAndErrorsChecksRejection(
+	t *testing.T,
+	cases map[string]struct {
+		err  error
+		want connect.Code
+	},
 ) {
 	t.Helper()
 
@@ -667,3 +669,14 @@ func invokeStreaming(
 
 	return observed(seen), err
 }
+
+const (
+	// textAppTenant is the literal "app.tenant".
+	textAppTenant = "app.tenant"
+
+	// textXSub is the literal "X-Sub".
+	textXSub = "X-Sub"
+
+	// textXTenant is the literal "X-Tenant".
+	textXTenant = "X-Tenant"
+)

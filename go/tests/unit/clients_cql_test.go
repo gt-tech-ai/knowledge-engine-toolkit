@@ -47,10 +47,10 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 	assert.Equal(t, "LOCAL_QUORUM", cfg.Consistency)
 	assert.Equal(t, 5*time.Second, cfg.Timeout)
 	assert.Equal(t, 5*time.Second, cfg.ConnectTimeout)
-	assert.Equal(t, wantPageSize500, cfg.PageSize)
-	assert.Equal(t, wantNumConns2, cfg.NumConns)
-	assert.Equal(t, wantPort9042, cfg.Cassandra.Port)
-	assert.Equal(t, wantPort9142, cfg.Keyspaces.Port)
+	assert.Equal(t, wantPageSize, cfg.PageSize)
+	assert.Equal(t, wantNumConns, cfg.NumConns)
+	assert.Equal(t, wantPortQuorum, cfg.Cassandra.Port)
+	assert.Equal(t, wantPortLocalQuorum, cfg.Keyspaces.Port)
 
 	cluster, err := cassandrabackend.Cluster(&cassandrabackend.Config{
 		Hosts:          []string{"c1", "c2"},
@@ -67,7 +67,7 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 	assert.Equal(t, []string{"c1", "c2"}, cluster.Hosts)
 	assert.Equal(t, gocql.LocalQuorum, cluster.Consistency)
 	assert.Equal(t, textAnalytics, cluster.Keyspace)
-	assert.Equal(t, wantPageSize500, cluster.PageSize)
+	assert.Equal(t, wantPageSize, cluster.PageSize)
 	assert.NotNil(t, cluster.PoolConfig.HostSelectionPolicy)
 	// gocql exports neither policy type, so its dynamic type name is the observable.
 	assert.Equal(t, "*gocql.tokenAwareHostPolicy",
@@ -75,12 +75,12 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 		"a discovering cluster routes token-aware")
 	assert.Nil(t, cluster.Authenticator)
 
-	testDefaultConfigIsLocalQuorumRest(t, &cfg, cluster)
+	testDefaultConfigIsLocalQuorumProxiedCluster(t, &cfg, cluster)
 }
 
-// testDefaultConfigIsLocalQuorumRest continues TestDefaultConfig_IsLocalQuorum with its
-// remaining steps.
-func testDefaultConfigIsLocalQuorumRest(
+// testDefaultConfigIsLocalQuorumProxiedCluster continues
+// TestDefaultConfig_IsLocalQuorum: proxied cluster.
+func testDefaultConfigIsLocalQuorumProxiedCluster(
 	t *testing.T,
 	cfg *cql.Config,
 	cluster *gocql.ClusterConfig,
@@ -103,9 +103,12 @@ func testDefaultConfigIsLocalQuorumRest(
 	assert.Equal(t, 2*time.Second, proxied.ReconnectInterval)
 	require.NotNil(t, proxied.AddressTranslator)
 
-	ip, port := proxied.AddressTranslator.Translate(net.ParseIP("172.17.0.4"), port9042)
+	ip, port := proxied.AddressTranslator.Translate(
+		net.ParseIP("172.17.0.4"),
+		translateInput,
+	)
 	assert.Equal(t, "127.0.0.1", ip.String())
-	assert.Equal(t, wantPort19042, port)
+	assert.Equal(t, wantPortCluster, port)
 	assert.Equal(t, "*gocql.dcAwareRR",
 		fmt.Sprintf("%T", proxied.PoolConfig.HostSelectionPolicy),
 		"a pinned cluster routes DC-aware round robin, not token-aware")
@@ -154,7 +157,7 @@ func TestKeyspacesConfig_UsesTLSAndSigV4(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"cassandra.us-east-1.amazonaws.com"}, cluster.Hosts)
-	assert.Equal(t, wantPort9142, cluster.Port)
+	assert.Equal(t, wantCQLPort, cluster.Port)
 	require.NotNil(t, cluster.SslOpts)
 	assert.True(t, cluster.SslOpts.EnableHostVerification)
 	assert.Equal(
@@ -219,8 +222,34 @@ func TestClusterConfig_ZeroValuesKeepDriverDefaults(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, want.Timeout, clusterConfig.Timeout)
 	assert.Equal(t, want.ConnectTimeout, clusterConfig.ConnectTimeout)
-	assert.Equal(t, wantPort9142, clusterConfig.Port)
+	assert.Equal(t, wantPortDefaults, clusterConfig.Port)
 
 	_, ok := clusterConfig.Authenticator.(sigv4.AwsAuthenticator)
 	assert.True(t, ok)
 }
+
+const (
+	// translateInput is the translate input the tests use.
+	translateInput = 9042
+
+	// wantNumConns is the expected num conns.
+	wantNumConns = 2
+
+	// wantPageSize is the expected page size.
+	wantPageSize = 500
+
+	// wantPortCluster is the expected port cluster.
+	wantPortCluster = 19042
+
+	// wantPortDefaults is the expected port defaults.
+	wantPortDefaults = 9142
+
+	// wantPortLocalQuorum is the expected port local quorum.
+	wantPortLocalQuorum = 9142
+
+	// wantPortQuorum is the expected port quorum.
+	wantPortQuorum = 9042
+
+	// wantCQLPort is the expected port v4.
+	wantCQLPort = 9142
+)

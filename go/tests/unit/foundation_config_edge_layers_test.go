@@ -93,17 +93,17 @@ func hasMultipartPartsField(t reflect.Type) bool {
 func TestWorkersConfig_ValidatesSweepTimings(t *testing.T) {
 	t.Parallel()
 
-	expiry := minutes60 * time.Minute
+	expiry := initialExpiry * time.Minute
 	good := workers.Config{
-		Port:        port8085,
-		ReaperTTL:   minutes90 * time.Minute,
-		OrphanGrace: hours2 * time.Hour,
+		Port:        port,
+		ReaperTTL:   reaperTTL * time.Minute,
+		OrphanGrace: orphanGrace * time.Hour,
 	}
 	require.NoError(t, good.Validate(expiry))
 
 	bad := good
 
-	bad.ReaperTTL = minutes30 * time.Minute // <= expiry
+	bad.ReaperTTL = initialReaperTTL * time.Minute // <= expiry
 	require.Error(
 		t,
 		bad.Validate(expiry),
@@ -176,10 +176,10 @@ workers:
 	cfg := workers.DefaultConfig()
 	require.NoError(t, loader.UnmarshalKey("workers", &cfg))
 
-	assert.Equal(t, wantPort9000, cfg.Port, "workers.port overlay must be parsed")
+	assert.Equal(t, wantPortParsed, cfg.Port, "workers.port overlay must be parsed")
 	assert.Equal(
 		t,
-		wantFanOutWorkers16,
+		wantFanOutWorkers,
 		cfg.FanOutWorkers,
 		"workers.fan_out_workers overlay must be parsed",
 	)
@@ -191,8 +191,25 @@ workers:
 	)
 	assert.Equal(
 		t,
-		wantBatchSize100,
+		wantBatchSize,
 		cfg.BatchSize,
 		"an unspecified field keeps the seeded default",
 	)
 }
+
+const (
+	// initialReaperTTL is the initial reaper ttl the tests use.
+	initialReaperTTL = 30
+
+	// orphanGrace is the orphan grace the tests use.
+	orphanGrace = 2
+
+	// wantBatchSize is the expected batch size.
+	wantBatchSize = 100
+
+	// wantFanOutWorkers is the expected fan out workers.
+	wantFanOutWorkers = 16
+
+	// wantPortParsed is the expected port parsed.
+	wantPortParsed = 9000
+)

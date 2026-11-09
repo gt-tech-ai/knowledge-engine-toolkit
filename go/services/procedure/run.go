@@ -28,26 +28,32 @@ func (e *engine) Run(
 	input map[string]any,
 	opts types.RunOptions,
 ) (types.StepResults, error) {
-	compiled2 := e.procs[name]
-	if compiled2 == nil {
+	secondCompiled := e.procs[name]
+	if secondCompiled == nil {
 		return nil, apperr.New(apperr.CodeNotFound, "no procedure "+name)
 	}
 
 	vars := seedVars(input)
 
-	err := compiled2.bindVars(ctx, name, vars)
+	err := secondCompiled.bindVars(ctx, name, vars)
 	if err != nil {
 		return nil, err
 	}
 
-	out, err := e.steps(ctx, compiled2, vars, opts)
+	out, err := e.steps(ctx, secondCompiled, vars, opts)
 	if err != nil {
 		err = apperr.Wrap(err, apperr.Code(err), "procedure "+name)
 	}
 
 	return append(
 			out,
-			e.finally(ctx, compiled2, vars, opts, out.HasFailures() || err != nil)...),
+			e.finally(
+				ctx,
+				secondCompiled,
+				vars,
+				opts,
+				out.HasFailures() || err != nil,
+			)...),
 		err
 }
 
@@ -91,15 +97,15 @@ func (c *compiled) bindVars(ctx context.Context, name string, vars Vars) error {
 // errors.
 func (e *engine) steps(
 	ctx context.Context,
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	vars Vars,
 	opts types.RunOptions,
 ) (types.StepResults, error) {
 	var out types.StepResults
 
-	for i := range compiledValue.proc.Steps {
-		procStep := &compiledValue.proc.Steps[i]
-		res, set, err := e.step(ctx, compiledValue, procStep, vars, opts)
+	for i := range currentCompiled.proc.Steps {
+		procStep := &currentCompiled.proc.Steps[i]
+		res, set, err := e.step(ctx, currentCompiled, procStep, vars, opts)
 
 		out = append(out, res...)
 
@@ -122,24 +128,24 @@ func (e *engine) steps(
 // that errors is a failed row, and never stops the steps after it.
 func (e *engine) finally(
 	ctx context.Context,
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	vars Vars,
 	opts types.RunOptions,
 	failed bool,
 ) types.StepResults {
-	if len(compiledValue.proc.Finally) == 0 {
+	if len(currentCompiled.proc.Finally) == 0 {
 		return nil
 	}
 
-	timeout := compiledValue.proc.FinallyTimeout
+	timeout := currentCompiled.proc.FinallyTimeout
 	if timeout <= 0 {
 		timeout = DefaultFinallyTimeout
 	}
 
-	varsValue := maps.Clone(vars)
+	currentVars := maps.Clone(vars)
 
-	varsValue[VarFailed] = failed
-	varsValue[VarCanceled] = ctx.Err() != nil
+	currentVars[VarFailed] = failed
+	currentVars[VarCanceled] = ctx.Err() != nil
 
 	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 
@@ -147,20 +153,20 @@ func (e *engine) finally(
 
 	var out types.StepResults
 
-	for i := range compiledValue.proc.Finally {
-		procStep := &compiledValue.proc.Finally[i]
+	for i := range currentCompiled.proc.Finally {
+		procStep := &currentCompiled.proc.Finally[i]
 
-		res, set, err := e.step(fctx, compiledValue, procStep, varsValue, opts)
+		res, set, err := e.step(fctx, currentCompiled, procStep, currentVars, opts)
 		if err != nil {
 			res = append(
 				res,
-				compiledValue.result(procStep.Name, types.StatusFail, err.Error()),
+				currentCompiled.result(procStep.Name, types.StatusFail, err.Error()),
 			)
 		}
 
 		out = append(out, res...)
 
-		maps.Copy(varsValue, set)
+		maps.Copy(currentVars, set)
 	}
 
 	return out
@@ -170,54 +176,54 @@ func (e *engine) finally(
 // it sets.
 func (e *engine) step(
 	ctx context.Context,
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	procStep *types.ProcStep,
 	vars Vars,
 	opts types.RunOptions,
 ) (types.StepResults, Vars, error) {
-	skipped, err := whenSkip(ctx, compiledValue, procStep, vars)
+	skipped, err := whenSkip(ctx, currentCompiled, procStep, vars)
 	if err != nil || skipped != nil {
 		return skipped, nil, err
 	}
 
 	if procStep.Each == "" {
-		return e.single(ctx, compiledValue, procStep, vars, opts)
+		return e.single(ctx, currentCompiled, procStep, vars, opts)
 	}
 
-	items, err := compiledValue.evalList(ctx, procStep.Each, vars)
+	items, err := currentCompiled.evalList(ctx, procStep.Each, vars)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	if procStep.Concurrent {
-		return e.eachConcurrent(ctx, compiledValue, procStep, items, vars, opts)
+		return e.eachConcurrent(ctx, currentCompiled, procStep, items, vars, opts)
 	}
 
-	return e.eachSerial(ctx, compiledValue, procStep, items, vars, opts)
+	return e.eachSerial(ctx, currentCompiled, procStep, items, vars, opts)
 }
 
 // whenSkip evaluates the step's guard, returning its skip row when the guard is false.
 func whenSkip(
-	ctx context.Context, compiledValue *compiled, procStep *types.ProcStep, vars Vars,
+	ctx context.Context, currentCompiled *compiled, procStep *types.ProcStep, vars Vars,
 ) (types.StepResults, error) {
 	if procStep.When == "" {
 		return nil, nil
 	}
 
-	ok, err := compiledValue.evalBool(ctx, procStep.When, vars)
+	ok, err := currentCompiled.evalBool(ctx, procStep.When, vars)
 	if err != nil || ok {
 		return nil, err
 	}
 
 	return types.StepResults{
-		compiledValue.result(procStep.Name, types.StatusSkip, "when "+procStep.When),
+		currentCompiled.result(procStep.Name, types.StatusSkip, "when "+procStep.When),
 	}, nil
 }
 
 // single runs a step without an each.
 func (e *engine) single(
 	ctx context.Context,
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	procStep *types.ProcStep,
 	vars Vars,
 	opts types.RunOptions,
@@ -227,7 +233,7 @@ func (e *engine) single(
 		return nil, nil, err
 	}
 
-	res, set, err := e.once(ctx, compiledValue, procStep, name, vars, opts)
+	res, set, err := e.once(ctx, currentCompiled, procStep, name, vars, opts)
 
 	return advised(procStep, res), set, err
 }
@@ -235,7 +241,7 @@ func (e *engine) single(
 // eachSerial runs a step for each item in order, stopping at the first failure.
 func (e *engine) eachSerial(
 	ctx context.Context,
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	procStep *types.ProcStep,
 	items []any,
 	vars Vars,
@@ -246,14 +252,21 @@ func (e *engine) eachSerial(
 	set := Vars{}
 
 	for _, item := range items {
-		varsValue := itemVars(procStep, vars, item)
+		currentVars := itemVars(procStep, vars, item)
 
-		name, err := itemName(procStep, varsValue, item)
+		name, err := itemName(procStep, currentVars, item)
 		if err != nil {
 			return out, nil, err
 		}
 
-		res, vars2, err := e.once(ctx, compiledValue, procStep, name, varsValue, opts)
+		res, secondVars, err := e.once(
+			ctx,
+			currentCompiled,
+			procStep,
+			name,
+			currentVars,
+			opts,
+		)
 
 		out = append(out, advised(procStep, res)...)
 
@@ -261,7 +274,7 @@ func (e *engine) eachSerial(
 			return out, nil, err
 		}
 
-		maps.Copy(set, vars2)
+		maps.Copy(set, secondVars)
 
 		if res.HasFailures() {
 			break
@@ -276,7 +289,7 @@ func (e *engine) eachSerial(
 // not propagate (as in a parallel block); the first item error ends the step.
 func (e *engine) eachConcurrent(
 	ctx context.Context,
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	procStep *types.ProcStep,
 	items []any,
 	vars Vars,
@@ -296,22 +309,22 @@ func (e *engine) eachConcurrent(
 	}
 
 	_ = keengine.Pool(0).
-		FanOut(ctx, slots, func(ctx context.Context, slotValue slot) types.StepResult {
-			varsValue := itemVars(procStep, vars, items[slotValue.i])
+		FanOut(ctx, slots, func(ctx context.Context, currentSlot slot) types.StepResult {
+			currentVars := itemVars(procStep, vars, items[currentSlot.i])
 
-			name, err := itemName(procStep, varsValue, items[slotValue.i])
+			name, err := itemName(procStep, currentVars, items[currentSlot.i])
 			if err != nil {
-				errs[slotValue.i] = err
+				errs[currentSlot.i] = err
 
 				return types.StepResult{Status: types.StatusFail}
 			}
 
-			res[slotValue.i], _, errs[slotValue.i] = e.once(
+			res[currentSlot.i], _, errs[currentSlot.i] = e.once(
 				ctx,
-				compiledValue,
+				currentCompiled,
 				procStep,
 				name,
-				varsValue,
+				currentVars,
 				opts,
 			)
 
@@ -373,7 +386,7 @@ func advised(st *types.ProcStep, res types.StepResults) types.StepResults {
 // once runs st one time, after its confirmation.
 func (e *engine) once(
 	ctx context.Context,
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	procStep *types.ProcStep,
 	name string,
 	vars Vars,
@@ -386,41 +399,43 @@ func (e *engine) once(
 
 	switch {
 	case procStep.Fail != "":
-		return failStep(compiledValue, procStep, name, vars)
+		return failStep(currentCompiled, procStep, name, vars)
 	case len(procStep.Parallel) > 0:
-		return e.parallel(ctx, compiledValue, procStep.Parallel, vars, opts)
+		return e.parallel(ctx, currentCompiled, procStep.Parallel, vars, opts)
 	case procStep.Call != "":
 		res, err := e.Run(ctx, procStep.Call, vars, opts)
 
 		return res, nil, err
 	case procStep.Probe != nil:
 		return types.StepResults{
-			e.probe(ctx, compiledValue, procStep.Probe, name, vars),
+			e.probe(ctx, currentCompiled, procStep.Probe, name, vars),
 		}, nil, nil
 	case procStep.File != nil:
-		return e.fileStep(compiledValue, procStep, name, vars, opts)
+		return e.fileStep(currentCompiled, procStep, name, vars, opts)
 	case procStep.Step != "":
-		return e.registeredStep(ctx, compiledValue, procStep, name, vars, opts)
+		return e.registeredStep(ctx, currentCompiled, procStep, name, vars, opts)
 	default:
-		return e.tool(ctx, compiledValue, procStep, name, vars, opts)
+		return e.tool(ctx, currentCompiled, procStep, name, vars, opts)
 	}
 }
 
 // failStep reports the step's expanded fail message as a failed row.
 func failStep(
-	compiledValue *compiled, st *types.ProcStep, name string, vars Vars,
+	currentCompiled *compiled, st *types.ProcStep, name string, vars Vars,
 ) (types.StepResults, Vars, error) {
 	msg, err := text(st.Fail, vars)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return types.StepResults{compiledValue.result(name, types.StatusFail, msg)}, nil, nil
+	return types.StepResults{
+		currentCompiled.result(name, types.StatusFail, msg),
+	}, nil, nil
 }
 
 // fileStep applies a file operation, or reports it skipped on a dry run.
 func (e *engine) fileStep(
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	procStep *types.ProcStep,
 	name string,
 	vars Vars,
@@ -428,7 +443,7 @@ func (e *engine) fileStep(
 ) (types.StepResults, Vars, error) {
 	if opts.DryRun {
 		return types.StepResults{
-			compiledValue.result(
+			currentCompiled.result(
 				name,
 				types.StatusSkip,
 				"dry-run: file "+procStep.File.Op,
@@ -436,13 +451,13 @@ func (e *engine) fileStep(
 		}, nil, nil
 	}
 
-	return types.StepResults{e.file(compiledValue, procStep.File, name, vars)}, nil, nil
+	return types.StepResults{e.file(currentCompiled, procStep.File, name, vars)}, nil, nil
 }
 
 // registeredStep runs a Go step, turning an unreported error into a failed row.
 func (e *engine) registeredStep(
 	ctx context.Context,
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	procStep *types.ProcStep,
 	name string,
 	vars Vars,
@@ -450,16 +465,20 @@ func (e *engine) registeredStep(
 ) (types.StepResults, Vars, error) {
 	if procStep.Mutating && opts.DryRun {
 		return types.StepResults{
-			compiledValue.result(name, types.StatusSkip, "dry-run: step "+procStep.Step),
+			currentCompiled.result(
+				name,
+				types.StatusSkip,
+				"dry-run: step "+procStep.Step,
+			),
 		}, nil, nil
 	}
 
-	res, set, err := e.goStep(ctx, compiledValue, procStep, vars, opts)
+	res, set, err := e.goStep(ctx, currentCompiled, procStep, vars, opts)
 	if err != nil && !res.HasFailures() {
-		res = append(res, compiledValue.result(name, types.StatusFail, err.Error()))
+		res = append(res, currentCompiled.result(name, types.StatusFail, err.Error()))
 	}
 
-	return compiledValue.grouped(res), set, nil
+	return currentCompiled.grouped(res), set, nil
 }
 
 // goStep runs st's registered Go step under the recovery decorator, so a panic is the
@@ -496,14 +515,14 @@ func (e *engine) confirm(
 		return nil
 	}
 
-	textValue, err := text(procStep.Confirm, vars)
+	fileText, err := text(procStep.Confirm, vars)
 	if err != nil {
 		return err
 	}
 
 	found := false
 	if e.deps.Prompter != nil {
-		found, err = e.deps.Prompter.Confirm(ctx, textValue)
+		found, err = e.deps.Prompter.Confirm(ctx, fileText)
 		if err != nil {
 			return err
 		}
@@ -512,7 +531,7 @@ func (e *engine) confirm(
 	if !found {
 		return apperr.New(
 			apperr.CodeCanceled,
-			textValue+" declined (pass --yes to skip the question)",
+			fileText+" declined (pass --yes to skip the question)",
 		)
 	}
 
@@ -523,7 +542,7 @@ func (e *engine) confirm(
 // set merge in step order.
 func (e *engine) parallel(
 	ctx context.Context,
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	steps []types.ProcStep,
 	vars Vars,
 	opts types.RunOptions,
@@ -538,7 +557,7 @@ func (e *engine) parallel(
 		group.Go(func() {
 			res[i], sets[i], errs[i] = e.step(
 				ctx,
-				compiledValue,
+				currentCompiled,
 				&steps[i],
 				maps.Clone(vars),
 				opts,
@@ -570,7 +589,7 @@ func (e *engine) parallel(
 // fails the step.
 func (e *engine) tool(
 	ctx context.Context,
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	procStep *types.ProcStep,
 	name string,
 	vars Vars,
@@ -582,30 +601,30 @@ func (e *engine) tool(
 		spec, _ = e.deps.Tools(procStep.Tool)
 	}
 
-	inv, err := compiledValue.invocation(ctx, procStep, vars, spec)
+	inv, err := currentCompiled.invocation(ctx, procStep, vars, spec)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	if !e.deps.Runner.Exists(inv.exe) {
-		return types.StepResults{compiledValue.missingTool(name, &inv, spec)}, nil, nil
+		return types.StepResults{currentCompiled.missingTool(name, &inv, spec)}, nil, nil
 	}
 
 	if procStep.Mutating && opts.DryRun {
 		cmd := strings.Join(append([]string{inv.exe}, inv.args...), " ")
 
 		return types.StepResults{
-			compiledValue.result(name, types.StatusSkip, "dry-run: "+cmd),
+			currentCompiled.result(name, types.StatusSkip, "dry-run: "+cmd),
 		}, nil, nil
 	}
 
 	cmdResult := e.runInvocation(ctx, procStep, &inv)
 
 	if procStep.Capture != nil && procStep.Capture.As == types.CaptureExit {
-		return compiledValue.exitOutcome(name, procStep, &cmdResult)
+		return currentCompiled.exitOutcome(name, procStep, &cmdResult)
 	}
 
-	return compiledValue.toolOutcome(name, procStep, &cmdResult)
+	return currentCompiled.toolOutcome(name, procStep, &cmdResult)
 }
 
 // missingTool is the row for an executable that is not installed: a skip when the step

@@ -98,11 +98,11 @@ func (stringBackend) OrderOrdinal(col string, values []string, desc bool) string
 // exercised backend-agnostically (a nil-armed spec degrades to a no-op, mirroring the Ent
 // backend).
 func (stringBackend) OrderDerived(d types.DerivedSort, desc bool) string {
-	return orderDerivedRest(d, nullsOrder(desc))
+	return orderDerivedExpression(d, nullsOrder(desc))
 }
 
-// orderDerivedRest continues OrderDerived with its remaining steps.
-func orderDerivedRest(derivedSort types.DerivedSort, dir string) string {
+// orderDerivedExpression continues OrderDerived: expression.
+func orderDerivedExpression(derivedSort types.DerivedSort, dir string) string {
 	switch {
 	case derivedSort.Aggregate != nil:
 		aggregateSpec := derivedSort.Aggregate
@@ -182,7 +182,7 @@ func resolveNameToTitle(field string) string {
 func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 	t.Parallel()
 
-	stringBackendValue := stringBackend{}
+	currentStringBackend := stringBackend{}
 
 	t.Run("nil filter is a no-op", func(t *testing.T) {
 		t.Parallel()
@@ -190,7 +190,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 			t,
 			"TRUE",
 			listquery.Compile[string, string](
-				stringBackendValue,
+				currentStringBackend,
 				resolveNameToTitle,
 				nil,
 			),
@@ -203,19 +203,22 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 			t,
 			"TRUE",
 			listquery.Compile[string, string](
-				stringBackendValue,
+				currentStringBackend,
 				resolveNameToTitle,
 				types.CompositeFilter{},
 			),
 		)
 	})
 
-	testCompileFoldViaStringAlgebraRest(t, stringBackendValue)
+	testCompileFoldViaStringAlgebraLeavesAndComposites(t, currentStringBackend)
 }
 
-// testCompileFoldViaStringAlgebraRest continues TestCompile_FoldViaStringAlgebra with
-// its remaining steps.
-func testCompileFoldViaStringAlgebraRest(t *testing.T, stringBackendValue stringBackend) {
+// testCompileFoldViaStringAlgebraLeavesAndComposites continues
+// TestCompile_FoldViaStringAlgebra: leaves and composites.
+func testCompileFoldViaStringAlgebraLeavesAndComposites(
+	t *testing.T,
+	currentStringBackend stringBackend,
+) {
 	t.Helper()
 
 	t.Run("leaf clause resolves column and renders op/value", func(t *testing.T) {
@@ -230,7 +233,7 @@ func testCompileFoldViaStringAlgebraRest(t *testing.T, stringBackendValue string
 			t,
 			"title like rep",
 			listquery.Compile[string, string](
-				stringBackendValue,
+				currentStringBackend,
 				resolveNameToTitle,
 				clause,
 			),
@@ -252,21 +255,21 @@ func testCompileFoldViaStringAlgebraRest(t *testing.T, stringBackendValue string
 			t,
 			"(status eq indexed AND title like rep)",
 			listquery.Compile[string, string](
-				stringBackendValue,
+				currentStringBackend,
 				resolveNameToTitle,
 				compositeFilter,
 			),
 		)
 	})
 
-	testCompileFoldViaStringAlgebraRest4(t, stringBackendValue)
+	testCompileFoldViaStringAlgebraJoinedExists(t, currentStringBackend)
 }
 
-// testCompileFoldViaStringAlgebraRest4 continues TestCompile_FoldViaStringAlgebra with
-// its remaining steps.
-func testCompileFoldViaStringAlgebraRest4(
+// testCompileFoldViaStringAlgebraJoinedExists continues TestCompile_FoldViaStringAlgebra:
+// fold stage4.
+func testCompileFoldViaStringAlgebraJoinedExists(
 	t *testing.T,
-	stringBackendValue stringBackend,
+	currentStringBackend stringBackend,
 ) {
 	t.Helper()
 
@@ -290,7 +293,7 @@ func testCompileFoldViaStringAlgebraRest4(
 				"EXISTS(users WHERE users.id=<base>.user_id AND "+
 					"(users.first_name like smith OR users.last_name like smith))",
 				listquery.Compile[string, string](
-					stringBackendValue,
+					currentStringBackend,
 					resolveNameToTitle,
 					clause,
 				),
@@ -312,7 +315,7 @@ func testCompileFoldViaStringAlgebraRest4(
 				"(EXISTS(users WHERE users.id=<base>.user_id AND users.first_name like smith) AND "+
 					"EXISTS(users WHERE users.id=<base>.user_id AND users.email like corp))",
 				listquery.Compile[string, string](
-					stringBackendValue,
+					currentStringBackend,
 					resolveNameToTitle,
 					compositeFilter,
 				),
@@ -320,7 +323,7 @@ func testCompileFoldViaStringAlgebraRest4(
 		},
 	)
 
-	testCompileFoldViaStringAlgebraRest2(t, stringBackendValue)
+	testCompileFoldViaStringAlgebraResolveFilterJoins(t, currentStringBackend)
 }
 
 // testCompileFoldViaStringAlgebraTable builds the table TestCompile_FoldViaStringAlgebra
@@ -352,11 +355,11 @@ func testCompileFoldViaStringAlgebraTable() types.CompositeFilter {
 	}}
 }
 
-// testCompileFoldViaStringAlgebraRest2 continues TestCompile_FoldViaStringAlgebra with
-// its remaining steps.
-func testCompileFoldViaStringAlgebraRest2(
+// testCompileFoldViaStringAlgebraResolveFilterJoins continues
+// TestCompile_FoldViaStringAlgebra: resolve filter joins.
+func testCompileFoldViaStringAlgebraResolveFilterJoins(
 	t *testing.T,
-	stringBackendValue stringBackend,
+	currentStringBackend stringBackend,
 ) {
 	t.Helper()
 
@@ -399,15 +402,14 @@ func testCompileFoldViaStringAlgebraRest2(
 		assert.Equal(t, textStatus, plain.Field)
 	})
 
-	testCompileFoldViaStringAlgebraRest7(t, stringBackendValue)
+	testCompileFoldViaStringAlgebraNestedAndTiebreakers(t, currentStringBackend)
 }
 
-// testCompileFoldViaStringAlgebraRest7 continues testCompileFoldViaStringAlgebraRest2
-// with
-// its remaining steps.
-func testCompileFoldViaStringAlgebraRest7(
+// testCompileFoldViaStringAlgebraNestedAndTiebreakers continues
+// testCompileFoldViaStringAlgebraResolveFilterJoins: nested and tiebreakers.
+func testCompileFoldViaStringAlgebraNestedAndTiebreakers(
 	t *testing.T,
-	stringBackendValue stringBackend,
+	currentStringBackend stringBackend,
 ) {
 	t.Helper()
 
@@ -433,7 +435,7 @@ func testCompileFoldViaStringAlgebraRest7(
 			t,
 			"(status eq indexed AND (title like rep OR format eq pdf))",
 			listquery.Compile[string, string](
-				stringBackendValue,
+				currentStringBackend,
 				resolveNameToTitle,
 				compositeFilter,
 			),
@@ -446,7 +448,7 @@ func testCompileFoldViaStringAlgebraRest7(
 			t.Parallel()
 
 			got := listquery.CompileOrder[string, string](
-				stringBackendValue,
+				currentStringBackend,
 				resolveNameToTitle,
 				nil,
 				nil,
@@ -458,14 +460,14 @@ func testCompileFoldViaStringAlgebraRest7(
 		},
 	)
 
-	testCompileFoldViaStringAlgebraDedup(t, stringBackendValue)
+	testCompileFoldViaStringAlgebraDedup(t, currentStringBackend)
 }
 
 // testCompileFoldViaStringAlgebraDedup continues TestCompile_FoldViaStringAlgebra with
 // its remaining steps.
 func testCompileFoldViaStringAlgebraDedup(
 	t *testing.T,
-	stringBackendValue stringBackend,
+	currentStringBackend stringBackend,
 ) {
 	t.Helper()
 
@@ -473,7 +475,7 @@ func testCompileFoldViaStringAlgebraDedup(
 		t.Parallel()
 
 		got := listquery.CompileOrder[string, string](
-			stringBackendValue,
+			currentStringBackend,
 			resolveNameToTitle,
 			nil,
 			nil,
@@ -488,7 +490,7 @@ func testCompileFoldViaStringAlgebraDedup(
 		t.Parallel()
 
 		got := listquery.CompileOrder[string, string](
-			stringBackendValue,
+			currentStringBackend,
 			resolveNameToTitle,
 			nil,
 			nil,
@@ -508,7 +510,7 @@ func testCompileFoldViaStringAlgebraDedup(
 			// keyset column, so the compiled ORDER BY never references a non-existent
 			// created_at column.
 			got := listquery.CompileOrder[string, string](
-				stringBackendValue,
+				currentStringBackend,
 				resolveNameToTitle,
 				nil,
 				nil,
@@ -520,14 +522,14 @@ func testCompileFoldViaStringAlgebraDedup(
 		},
 	)
 
-	testCompileFoldViaStringAlgebraRest6(t, stringBackendValue)
+	testCompileFoldViaStringAlgebraKeysetDedup(t, currentStringBackend)
 }
 
-// testCompileFoldViaStringAlgebraRest6 continues testCompileFoldViaStringAlgebraRest
-// with its remaining steps.
-func testCompileFoldViaStringAlgebraRest6(
+// testCompileFoldViaStringAlgebraKeysetDedup continues
+// testCompileFoldViaStringAlgebraLeavesAndComposites: keyset dedup.
+func testCompileFoldViaStringAlgebraKeysetDedup(
 	t *testing.T,
-	stringBackendValue stringBackend,
+	currentStringBackend stringBackend,
 ) {
 	t.Helper()
 
@@ -535,7 +537,7 @@ func testCompileFoldViaStringAlgebraRest6(
 		t.Parallel()
 
 		got := listquery.CompileOrder[string, string](
-			stringBackendValue,
+			currentStringBackend,
 			resolveNameToTitle,
 			nil,
 			nil,
@@ -566,7 +568,7 @@ func testCompileFoldViaStringAlgebraRest6(
 				return nil
 			}
 			got := listquery.CompileOrder[string, string](
-				stringBackendValue,
+				currentStringBackend,
 				resolveNameToTitle,
 				joinOf,
 				nil,
@@ -583,14 +585,14 @@ func testCompileFoldViaStringAlgebraRest6(
 		},
 	)
 
-	testCompileFoldViaStringAlgebraRest3(t, stringBackendValue)
+	testCompileFoldViaStringAlgebraOrdinalSort(t, currentStringBackend)
 }
 
-// testCompileFoldViaStringAlgebraRest3 continues testCompileFoldViaStringAlgebraRest
-// with its remaining steps.
-func testCompileFoldViaStringAlgebraRest3(
+// testCompileFoldViaStringAlgebraOrdinalSort continues
+// testCompileFoldViaStringAlgebraLeavesAndComposites: ordinal sort.
+func testCompileFoldViaStringAlgebraOrdinalSort(
 	t *testing.T,
-	stringBackendValue stringBackend,
+	currentStringBackend stringBackend,
 ) {
 	t.Helper()
 
@@ -610,7 +612,7 @@ func testCompileFoldViaStringAlgebraRest3(
 				return nil
 			}
 			got := listquery.CompileOrder[string, string](
-				stringBackendValue,
+				currentStringBackend,
 				resolveNameToTitle,
 				nil,
 				ordinalOf,
@@ -626,14 +628,14 @@ func testCompileFoldViaStringAlgebraRest3(
 		},
 	)
 
-	testCompileFoldViaStringAlgebraRest5(t, stringBackendValue)
+	testCompileFoldViaStringAlgebraDerivedSort(t, currentStringBackend)
 }
 
-// testCompileFoldViaStringAlgebraRest5 continues testCompileFoldViaStringAlgebraRest3
-// with its remaining steps.
-func testCompileFoldViaStringAlgebraRest5(
+// testCompileFoldViaStringAlgebraDerivedSort continues
+// testCompileFoldViaStringAlgebraOrdinalSort: derived sort.
+func testCompileFoldViaStringAlgebraDerivedSort(
 	t *testing.T,
-	stringBackendValue stringBackend,
+	currentStringBackend stringBackend,
 ) {
 	t.Helper()
 
@@ -644,14 +646,17 @@ func testCompileFoldViaStringAlgebraRest5(
 	t.Run(
 		"derived sort field renders OrderDerived before the tiebreakers",
 		func(t *testing.T) {
-			testCompileFoldViaStringAlgebraCase(t, stringBackendValue)
+			testCompileFoldViaStringAlgebraCase(t, currentStringBackend)
 		},
 	)
 }
 
 // testCompileFoldViaStringAlgebraCase is the body of a closure in
-// testCompileFoldViaStringAlgebraRest5.
-func testCompileFoldViaStringAlgebraCase(t *testing.T, stringBackendValue stringBackend) {
+// testCompileFoldViaStringAlgebraDerivedSort.
+func testCompileFoldViaStringAlgebraCase(
+	t *testing.T,
+	currentStringBackend stringBackend,
+) {
 	t.Helper()
 
 	t.Parallel()
@@ -668,8 +673,8 @@ func testCompileFoldViaStringAlgebraCase(t *testing.T, stringBackendValue string
 				BaseColumn:          "last_sync_at",
 				DiscriminatorColumn: "schedule",
 				Cases: []types.IntervalCase{
-					{Value: "hourly", Seconds: seconds3600},
-					{Value: "daily", Seconds: seconds86400},
+					{Value: "hourly", Seconds: secondsCase},
+					{Value: "daily", Seconds: secondsAlgebraCase},
 				},
 			}}
 		}
@@ -678,7 +683,7 @@ func testCompileFoldViaStringAlgebraCase(t *testing.T, stringBackendValue string
 	}
 
 	gotAgg := listquery.CompileOrder[string, string](
-		stringBackendValue,
+		currentStringBackend,
 		resolveNameToTitle,
 		nil,
 		nil,
@@ -694,7 +699,7 @@ func testCompileFoldViaStringAlgebraCase(t *testing.T, stringBackendValue string
 	}, gotAgg)
 
 	gotInterval := listquery.CompileOrder[string, string](
-		stringBackendValue,
+		currentStringBackend,
 		resolveNameToTitle,
 		nil,
 		nil,
@@ -708,3 +713,25 @@ func testCompileFoldViaStringAlgebraCase(t *testing.T, stringBackendValue string
 		textIDDesc,
 	}, gotInterval)
 }
+
+const (
+	// secondsAlgebraCase is the seconds algebra case the tests use.
+	secondsAlgebraCase = 86400
+
+	// secondsCase is the seconds case the tests use.
+	secondsCase = 3600
+)
+
+const (
+	// textCreatedAtDesc is the literal "created_at DESC".
+	textCreatedAtDesc = "created_at DESC"
+
+	// textSmith is the literal "smith".
+	textSmith = "smith"
+
+	// textClose is the literal ")".
+	textClose = ")"
+
+	// textIDDesc is the literal "id DESC".
+	textIDDesc = "id DESC"
+)

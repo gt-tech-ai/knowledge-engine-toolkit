@@ -96,7 +96,7 @@ func TestBases_EachContractMethodTakesItsOwnDecoration(t *testing.T) {
 	_, err = base.Exec(
 		t.Context(),
 		"find",
-		func(context.Context) (string, error) { return textD2, nil },
+		func(context.Context) (string, error) { return textDLower, nil },
 	)
 	require.NoError(t, err)
 
@@ -366,3 +366,17 @@ func TestDecorations_ObservabilityIsTheCollaboratorsOrNone(t *testing.T) {
 
 	assert.Equal(t, decorate.Observability{}, zero.Observability())
 }
+
+const (
+	// textAPIDocs is the literal "api.docs".
+	textAPIDocs = "api.docs"
+
+	// textAPIDocsCount is the literal "api.docs.count".
+	textAPIDocsCount = "api.docs.count"
+
+	// textAPIDocsFind is the literal "api.docs.find".
+	textAPIDocsFind = "api.docs.find"
+
+	// textAPIUsers is the literal "api.users".
+	textAPIUsers = "api.users"
+)

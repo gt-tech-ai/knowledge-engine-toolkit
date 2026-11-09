@@ -80,7 +80,7 @@ func TestCheckGrypeReport(t *testing.T) {
 
 	dir := t.TempDir()
 	bad := filepath.Join(dir, "bad.json")
-	require.NoError(t, os.WriteFile(bad, []byte(grypeReport), perm0o600))
+	require.NoError(t, os.WriteFile(bad, []byte(grypeReport), writeFileInput))
 
 	err := imagescan.CheckGrypeReport(bad)
 	require.Error(t, err)
@@ -90,7 +90,7 @@ func TestCheckGrypeReport(t *testing.T) {
 	require.NoError(t, os.WriteFile(clean, []byte(`{"matches":[
 	 {"vulnerability":{"id":"GO-2026-6604","severity":"Critical",
 	   "fix":{"versions":["1.27.3"],"state":"fixed"}},
-	  "artifact":{"name":"stdlib","version":"go1.27.0"}}]}`), perm0o600))
+	  "artifact":{"name":"stdlib","version":"go1.27.0"}}]}`), writeFileInput))
 	require.NoError(t, imagescan.CheckGrypeReport(clean))
 
 	require.Error(t, imagescan.CheckGrypeReport(filepath.Join(dir, "missing.json")))
@@ -135,10 +135,10 @@ func TestScanImage(t *testing.T) {
 		runner.EXPECT().Run(gomock.Any(), textRepo, textTrivy, toAny(want)...).
 			Return(assert.AnError)
 
-		ok := imagescan.ScanImage(t.Context(), runner, textRepo, scanPolicy(), ref, true)
+		ok := imagescan.ScanImageStrict(t.Context(), runner, textRepo, scanPolicy(), ref)
 		assert.Equal(t, types.StatusPass, ok[0].Status)
 
-		bad := imagescan.ScanImage(t.Context(), runner, textRepo, scanPolicy(), ref, true)
+		bad := imagescan.ScanImageStrict(t.Context(), runner, textRepo, scanPolicy(), ref)
 		assert.Equal(t, types.StatusFail, bad[0].Status)
 		assert.Contains(t, bad[0].Error, ref)
 	})
@@ -176,32 +176,28 @@ func assertScanWithoutTrivy(t *testing.T, ref string) {
 	t.Helper()
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
-	runner.EXPECT().Exists(textTrivy).Return(false).Times(timesArg2)
+	runner.EXPECT().Exists(textTrivy).Return(false).Times(wantCalls)
 
 	skip := imagescan.ScanImage(
 		t.Context(),
 		runner,
 		textRepo,
 		scanPolicy(),
-		ref,
-		false,
-	)
+		ref)
 	assert.Equal(t, types.StatusSkip, skip[0].Status)
 
-	strict := imagescan.ScanImage(
+	strict := imagescan.ScanImageStrict(
 		t.Context(),
 		runner,
 		textRepo,
 		scanPolicy(),
-		ref,
-		true,
-	)
+		ref)
 	assert.Equal(t, types.StatusFail, strict[0].Status)
 
 	present := mocks.NewMockCommandRunner(gomock.NewController(t))
 	present.EXPECT().Exists(textTrivy).Return(true)
 
-	empty := imagescan.ScanImage(t.Context(), present, textRepo,
-		imagescan.TrivyPolicy{}, ref, true)
+	empty := imagescan.ScanImageStrict(t.Context(), present, textRepo,
+		imagescan.TrivyPolicy{}, ref)
 	assert.Equal(t, types.StatusFail, empty[0].Status)
 }

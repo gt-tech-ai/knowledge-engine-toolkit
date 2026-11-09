@@ -51,7 +51,7 @@ func TestYamlq_Path(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, textAPI, got[0].Value)
-	assert.Equal(t, wantLine3, got[0].Line)
+	assert.Equal(t, wantLinePath, got[0].Line)
 
 	got, err = yamlq.Path(&root, "$.spec.template.spec.containers[*].image")
 	require.NoError(t, err)
@@ -200,7 +200,7 @@ func TestYamlq_UpsertFlowAndMultiline(t *testing.T) {
 		path string
 	}
 
-	for name, checkValue := range map[string]check{
+	for name, currentCheck := range map[string]check{
 		"flow mapping": {
 			src:  "region: {primary: us-east-1, rows: [a]}\n",
 			path: "$.region.primary",
@@ -222,14 +222,14 @@ func TestYamlq_UpsertFlowAndMultiline(t *testing.T) {
 			want: map[string]string{textNote: textEuWest1, "$.next": textX},
 		},
 	} {
-		out, err := yamlq.Upsert([]byte(checkValue.src), checkValue.path, textEuWest1)
+		out, err := yamlq.Upsert([]byte(currentCheck.src), currentCheck.path, textEuWest1)
 		require.NoError(t, err, name)
 
 		var doc yaml.Node
 
 		require.NoError(t, yaml.Unmarshal(out, &doc), name+": %s", out)
 
-		for path, want := range checkValue.want {
+		for path, want := range currentCheck.want {
 			got, err := yamlq.Path(&doc, path)
 			require.NoError(t, err, name)
 			require.Len(t, got, 1, name+" "+path)
@@ -455,3 +455,16 @@ func TestYamlq_UpsertEmptyDocument(t *testing.T) {
 	_, err = yamlq.Upsert(nil, "$.shelf[0]", textV)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err)
 }
+
+const (
+	// wantLinePath is the expected line path.
+	wantLinePath = 3
+)
+
+const (
+	// textNote is the literal "$.note".
+	textNote = "$.note"
+
+	// textShelfTitle is the literal "$.shelf.title".
+	textShelfTitle = "$.shelf.title"
+)

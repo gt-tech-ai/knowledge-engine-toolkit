@@ -96,12 +96,15 @@ func TestS3ConnectorSource_TestConnection(t *testing.T) {
 		require.Equal(t, 2, n)
 	})
 
-	testS3ConnectorSourceTestConnectionRest(ctx, t)
+	testS3ConnectorSourceTestConnectionClassifiesFailures(ctx, t)
 }
 
-// testS3ConnectorSourceTestConnectionRest continues TestS3ConnectorSource_TestConnection
-// with its remaining steps.
-func testS3ConnectorSourceTestConnectionRest(ctx context.Context, t *testing.T) {
+// testS3ConnectorSourceTestConnectionClassifiesFailures continues
+// TestS3ConnectorSource_TestConnection: classifies failures.
+func testS3ConnectorSourceTestConnectionClassifiesFailures(
+	ctx context.Context,
+	t *testing.T,
+) {
 	t.Helper()
 
 	t.Run("a client-fault API error → InvalidInput", func(t *testing.T) {
@@ -131,8 +134,8 @@ func testS3ConnectorSourceTestConnectionRest(ctx context.Context, t *testing.T) 
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
-		storageClientValue := mocks.NewMockStorageClient(ctrl)
-		storageClientValue.EXPECT().
+		currentStorageClient := mocks.NewMockStorageClient(ctrl)
+		currentStorageClient.EXPECT().
 			ListObjectsPage(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(nil, apperr.Sentinel("dial tcp: connection refused"))
 
@@ -140,7 +143,7 @@ func testS3ConnectorSourceTestConnectionRest(ctx context.Context, t *testing.T) 
 			ctx,
 			new(s3Cfg(textAccessKey)),
 			nil,
-			stubBuilder(storageClientValue, nil),
+			stubBuilder(currentStorageClient, nil),
 		)
 		_, err := src.TestConnection(ctx)
 		require.True(
@@ -195,12 +198,12 @@ func TestS3ConnectorSource_ListPage(t *testing.T) {
 		require.Equal(t, "tok2", next, "the resume token is surfaced for checkpointing")
 	})
 
-	testS3ConnectorSourceListPageRest(ctx, t)
+	testS3ConnectorSourceListPageClassifiesFailures(ctx, t)
 }
 
-// testS3ConnectorSourceListPageRest continues TestS3ConnectorSource_ListPage with its
-// remaining steps.
-func testS3ConnectorSourceListPageRest(ctx context.Context, t *testing.T) {
+// testS3ConnectorSourceListPageClassifiesFailures continues
+// TestS3ConnectorSource_ListPage: classifies failures.
+func testS3ConnectorSourceListPageClassifiesFailures(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("a client-fault API error → InvalidInput (terminal)", func(t *testing.T) {
@@ -230,8 +233,8 @@ func testS3ConnectorSourceListPageRest(ctx context.Context, t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
-		storageClientValue := mocks.NewMockStorageClient(ctrl)
-		storageClientValue.EXPECT().
+		currentStorageClient := mocks.NewMockStorageClient(ctrl)
+		currentStorageClient.EXPECT().
 			ListObjectsPageToken(
 				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 			).
@@ -241,7 +244,7 @@ func testS3ConnectorSourceListPageRest(ctx context.Context, t *testing.T) {
 			ctx,
 			new(s3Cfg(textAccessKey)),
 			nil,
-			stubBuilder(storageClientValue, nil),
+			stubBuilder(currentStorageClient, nil),
 		)
 		_, _, err := src.ListPage(ctx, "", 1000)
 		require.True(t, apperr.Is(err, apperr.CodeUnavailable))
@@ -359,7 +362,7 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 			STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
 		})
 		_, err := b.Build(ctx, &cfg)
-		require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)
+		require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textVLowerAlt, err)
 	})
 }
 
@@ -517,14 +520,14 @@ func TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures(t *testing.T) {
 
 	credCases := s3APIFailureTable()
 
-	testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest(
+	testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRunsCase(
 		ctx, t, listViaCredentials, credCases,
 	)
 }
 
-// testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest continues
-// TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures with its remaining steps.
-func testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest(
+// testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRunsCase continues
+// TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures: runs case.
+func testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRunsCase(
 	ctx context.Context,
 	t *testing.T,
 	listViaCredentials func(captured *aws.CredentialsProvider) func(context.Context,
@@ -562,7 +565,7 @@ func testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest(
 			require.NoError(t, err)
 
 			_, err = src.TestConnection(ctx)
-			require.Equal(t, testCase.want, apperr.Code(err), textV2, err)
+			require.Equal(t, testCase.want, apperr.Code(err), textVLowerAlt, err)
 		})
 	}
 
@@ -602,7 +605,7 @@ func s3APIFailureTable() []s3APIFailureRow {
 }
 
 // testS3ConnectorSourceClassifiesStatusFailures continues
-// TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures with its remaining steps.
+// TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures.
 func testS3ConnectorSourceClassifiesStatusFailures(
 	ctx context.Context, t *testing.T,
 ) {
@@ -656,7 +659,7 @@ func testS3ConnectorSourceClassifiesStatusFailures(
 			require.NoError(t, err)
 
 			_, err = src.TestConnection(ctx)
-			require.Equal(t, testCase.want, apperr.Code(err), textV2, err)
+			require.Equal(t, testCase.want, apperr.Code(err), textVLowerAlt, err)
 		})
 	}
 }
@@ -761,3 +764,8 @@ func TestS3ConnectorSource_IAMRoleSendsExternalID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "ASIA", creds.AccessKeyID)
 }
+
+const (
+	// textIamRole is the literal "iam_role".
+	textIamRole = "iam_role"
+)

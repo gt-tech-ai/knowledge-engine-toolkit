@@ -53,7 +53,7 @@ func (s *RedisLockSuite) SetupTest() {
 	cfg := rediscache.DefaultConfig()
 
 	cfg.Addr = s.RedisAddr
-	cfg.OpTimeout = seconds2 * time.Second
+	cfg.OpTimeout = initialOpTimeout * time.Second
 	s.cache = rediscache.New(&cfg)
 }
 
@@ -83,15 +83,15 @@ func (s *RedisLockSuite) TestAcquire_SingleWinner() {
 	s.Require().True(ok, "first Acquire should win")
 	s.Require().NotEmpty(tok)
 
-	_, ok2, err := distributedLock.Acquire(ctx, text)
+	_, secondOk, err := distributedLock.Acquire(ctx, text)
 	s.Require().NoError(err)
-	s.False(ok2, "second Acquire on a held key must lose")
+	s.False(secondOk, "second Acquire on a held key must lose")
 
 	s.Require().NoError(distributedLock.Release(ctx, text, tok))
 
-	_, ok3, err := distributedLock.Acquire(ctx, text)
+	_, thirdOk, err := distributedLock.Acquire(ctx, text)
 	s.Require().NoError(err)
-	s.True(ok3, "after Release the key is free again")
+	s.True(thirdOk, "after Release the key is free again")
 }
 
 // TestAcquire_ConcurrentSingleWinner tests that under N goroutines racing one
@@ -182,15 +182,15 @@ func (s *RedisLockSuite) TestRelease_TokenFencedOnLiveKey() {
 
 	s.Require().NoError(distributedLock.Release(ctx, text, "someone-elses-token"))
 
-	_, ok2, err := distributedLock.Acquire(ctx, text)
+	_, secondOk, err := distributedLock.Acquire(ctx, text)
 	s.Require().NoError(err)
-	s.False(ok2, "foreign-token Release must not free a live lock")
+	s.False(secondOk, "foreign-token Release must not free a live lock")
 
 	s.Require().NoError(distributedLock.Release(ctx, text, tok))
 
-	_, ok3, err := distributedLock.Acquire(ctx, text)
+	_, thirdOk, err := distributedLock.Acquire(ctx, text)
 	s.Require().NoError(err)
-	s.True(ok3, "holder-token Release frees the lock")
+	s.True(thirdOk, "holder-token Release frees the lock")
 }
 
 // TestRelease_StaleTokenAfterExpiry_ABA tests the compare-then-DEL guard: a
@@ -232,9 +232,9 @@ func (s *RedisLockSuite) TestRelease_StaleTokenAfterExpiry_ABA() {
 	// A's stale Release must not free B's live lock.
 	s.Require().NoError(distributedLock.Release(ctx, text, tokA))
 
-	_, ok3, err := distributedLock.Acquire(ctx, text)
+	_, thirdOk, err := distributedLock.Acquire(ctx, text)
 	s.Require().NoError(err)
-	s.False(ok3, "A's stale Release must not delete B's live lock")
+	s.False(thirdOk, "A's stale Release must not delete B's live lock")
 
 	held, err := distributedLock.Renew(ctx, text, tokB)
 	s.Require().NoError(err)
@@ -253,7 +253,7 @@ func (s *RedisLockSuite) TestRelease_StaleTokenAfterExpiry_ABA() {
 //   - After the lease expires, Renew with the original token returns held=false, nil.
 func (s *RedisLockSuite) TestRenew_AfterExpiryReportsLost() {
 	ctx := context.Background()
-	ttl := millis120 * time.Millisecond
+	ttl := initialTTL * time.Millisecond
 	distributedLock := s.newLock(ttl)
 	text := s.key("renew-lost")
 
@@ -285,7 +285,7 @@ func (s *RedisLockSuite) TestRenew_AfterExpiryReportsLost() {
 //     contender still loses), and a final Renew still reports held=true.
 func (s *RedisLockSuite) TestRenew_KeepsHoldAlive() {
 	ctx := context.Background()
-	ttl := millis300 * time.Millisecond
+	ttl := initialTTLAlive * time.Millisecond
 	distributedLock := s.newLock(ttl)
 	text := s.key("renew-alive")
 
@@ -294,7 +294,7 @@ func (s *RedisLockSuite) TestRenew_KeepsHoldAlive() {
 	s.Require().True(ok)
 
 	// Renew before expiry, twice, spanning more than the base TTL in total.
-	for range iterations2 {
+	for range iterationsAlive {
 		time.Sleep(ttl * 2 / 3)
 
 		held, opErr := distributedLock.Renew(ctx, text, tok)
@@ -335,9 +335,9 @@ func (s *RedisLockSuite) TestNewFromConfig_RedisBackend() {
 	s.Require().NoError(err)
 	s.Require().True(ok)
 
-	_, ok2, err := locker.Acquire(ctx, text)
+	_, secondOk, err := locker.Acquire(ctx, text)
 	s.Require().NoError(err)
-	s.False(ok2, "a second Acquire via the factory-built lock must lose")
+	s.False(secondOk, "a second Acquire via the factory-built lock must lose")
 
 	s.Require().NoError(locker.Release(ctx, text, tok))
 
@@ -357,3 +357,14 @@ func (s *RedisLockSuite) newLock(ttl time.Duration) interfaces.DistributedLock {
 func (s *RedisLockSuite) key(label string) string {
 	return "test:" + s.T().Name() + ":" + label
 }
+
+const (
+	// initialTTL is the initial ttl the tests use.
+	initialTTL = 120
+
+	// initialTTLAlive is the initial ttl alive the tests use.
+	initialTTLAlive = 300
+
+	// iterationsAlive is the iterations alive the tests use.
+	iterationsAlive = 2
+)

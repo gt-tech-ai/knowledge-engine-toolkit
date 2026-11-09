@@ -1,6 +1,6 @@
 package oteltracer
 
 const (
-	// rate1p0 is the rate value 1.0.
-	rate1p0 = 1.0
+	// alwaysSampleRate is the named value used where always sample rate applies.
+	alwaysSampleRate = 1.0
 )

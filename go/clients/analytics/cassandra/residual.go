@@ -185,7 +185,7 @@ func compareTime(got time.Time, operation types.FilterOperator, v any) bool {
 // pushdown narrows [lo, hi) by the top-level AND clauses on TimeField. The
 // bounds are widened to whole milliseconds (CQL timestamp precision) so the range
 // is always a superset of the matching rows; the residual predicate is exact.
-func pushdown(f types.Filter, time2, timeValue time.Time) (from, to time.Time) {
+func pushdown(f types.Filter, laterTime, instant time.Time) (from, to time.Time) {
 	var clauses []types.Filter
 
 	switch v := f.(type) {
@@ -200,11 +200,11 @@ func pushdown(f types.Filter, time2, timeValue time.Time) (from, to time.Time) {
 	for _, c := range clauses {
 		clause, at, ok := timeClause(c)
 		if ok {
-			time2, timeValue = narrowWindow(clause.Operator, at, time2, timeValue)
+			laterTime, instant = narrowWindow(clause.Operator, at, laterTime, instant)
 		}
 	}
 
-	return time2, timeValue
+	return laterTime, instant
 }
 
 // timeClause unpacks a clause that compares the time field with a time value.
@@ -222,26 +222,26 @@ func timeClause(c types.Filter) (types.FilterClause, time.Time, bool) {
 // narrowWindow tightens [lo, hi) by one time comparison, at millisecond precision.
 func narrowWindow(
 	operation types.FilterOperator,
-	at, time3, timeValue time.Time,
+	at, latestTime, instant time.Time,
 ) (from, to time.Time) {
 	down := at.Truncate(time.Millisecond)
-	time2 := down.Add(time.Millisecond)
+	laterTime := down.Add(time.Millisecond)
 
 	switch operation {
 	case types.OpGt, types.OpGte:
-		return maxTime(time3, down), timeValue
+		return maxTime(latestTime, down), instant
 	case types.OpLt, types.OpLte:
-		return time3, minTime(timeValue, time2)
+		return latestTime, minTime(instant, laterTime)
 	case types.OpEq:
-		return maxTime(time3, down), minTime(timeValue, time2)
+		return maxTime(latestTime, down), minTime(instant, laterTime)
 	case types.OpNe, types.OpIn, types.OpNotIn, types.OpLike:
 		// These do not bound the range; the residual predicate applies them.
-		return time3, timeValue
+		return latestTime, instant
 	default:
 		// No other value changes the outcome.
 	}
 
-	return time3, timeValue
+	return latestTime, instant
 }
 
 // maxTime returns the later of a and b.

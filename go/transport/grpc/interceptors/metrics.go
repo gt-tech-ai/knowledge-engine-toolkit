@@ -9,28 +9,11 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
 // minMethodParts is the path segments of a full method: service and method.
 const minMethodParts = 2
-
-// defaultDurationBuckets returns the default histogram bucket boundaries for RPC
-// durations (in seconds). Matches Prometheus DefBuckets.
-func defaultDurationBuckets() []float64 {
-	return []float64{
-		defaultDurationBucketsResup005,
-		defaultDurationBucketsResup01,
-		defaultDurationBucketsResup025,
-		defaultDurationBucketsResup05,
-		defaultDurationBucketsResup1,
-		defaultDurationBucketsResup25,
-		defaultDurationBucketsResup5,
-		1,
-		defaultDurationBucketsResu2p5,
-		defaultDurationBucketsResu5,
-		defaultDurationBucketsResu10,
-	}
-}
 
 // MetricsServerInterceptor returns a server-side interceptor that records
 // request count (with service, method, code labels) and request duration
@@ -46,16 +29,16 @@ func MetricsStreamServerInterceptor(m interfaces.Metrics) grpc.StreamServerInter
 }
 
 // metrics counts an RPC by its final status and observes its duration.
-func metrics(metricsValue interfaces.Metrics) around {
-	requestsTotal := metricsValue.Counter(
+func metrics(currentMetrics interfaces.Metrics) around {
+	requestsTotal := currentMetrics.Counter(
 		"grpc_server_requests_total",
 		"Total number of gRPC server requests",
 		"service", "method", "code",
 	)
-	requestDuration := metricsValue.Histogram(
+	requestDuration := currentMetrics.Histogram(
 		"grpc_server_duration_seconds",
 		"gRPC server request duration in seconds",
-		defaultDurationBuckets(),
+		types.DefaultDurationBuckets(),
 		"service", "method",
 	)
 

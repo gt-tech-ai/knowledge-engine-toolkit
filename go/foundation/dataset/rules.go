@@ -188,7 +188,7 @@ func (d *Dataset) values() (map[string]any, error) {
 func (d *Dataset) decoded(need map[string]bool) (map[string]any, error) {
 	out := make(map[string]any, len(need))
 	for _, key := range slices.Sorted(maps.Keys(need)) {
-		nodeValue, ok, err := d.node(key)
+		currentNode, ok, err := d.node(key)
 		if err != nil {
 			return nil, err
 		}
@@ -199,7 +199,7 @@ func (d *Dataset) decoded(need map[string]bool) (map[string]any, error) {
 
 		var value any
 
-		err = nodeValue.Decode(&value)
+		err = currentNode.Decode(&value)
 		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
 				"decode section "+key+" from "+d.sourceOf(key))

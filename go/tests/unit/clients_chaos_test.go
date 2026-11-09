@@ -102,12 +102,12 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase(
 			Service:   textAPI,
 		},
 		Spec:     testCase.fault,
-		Duration: minutes2 * time.Minute,
+		Duration: duration * time.Minute,
 	}
 
 	var chaosManifest []byte
 
-	testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRest(
+	testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRunsCreateAndDelete(
 		t,
 		testCase,
 		runner,
@@ -116,9 +116,9 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase(
 	)
 }
 
-// testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRest continues
-// testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase with its remaining steps.
-func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRest(
+// testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRunsCreateAndDelete continues
+// testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase: runs create and delete.
+func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRunsCreateAndDelete(
 	t *testing.T,
 	testCase *chaosFaultResourceRow,
 	runner *mocks.MockCommandRunner,
@@ -202,7 +202,7 @@ func chaosFaultResourceTable() []chaosFaultResourceRow {
 			fault: types.FaultSpec{
 				Type:    types.FaultNetworkLatency,
 				Toward:  textRetrieval,
-				Latency: millis300 * time.Millisecond,
+				Latency: latency * time.Millisecond,
 			},
 			kind:     "NetworkChaos",
 			resource: "networkchaos.chaos-mesh.org",
@@ -223,7 +223,7 @@ func chaosFaultResourceTable() []chaosFaultResourceRow {
 			fault: types.FaultSpec{
 				Type:        types.FaultNetworkLoss,
 				Toward:      textRetrieval,
-				LossPercent: lossPercent10,
+				LossPercent: lossPercent,
 			},
 			kind:     "NetworkChaos",
 			resource: "networkchaos.chaos-mesh.org",
@@ -349,12 +349,12 @@ func TestChaosMeshInjector_CleansUpAndFailsLoudly(t *testing.T) {
 
 	_, err := os.Stat(appliedManifest)
 
-	testChaosMeshInjectorCleansUpAndFailsLoudlyRest(t, &fault, newInj, inj, err)
+	testChaosMeshInjectorCleansUpAndFailsLoudlyFailureCases(t, &fault, newInj, inj, err)
 }
 
-// testChaosMeshInjectorCleansUpAndFailsLoudlyRest continues
-// TestChaosMeshInjector_CleansUpAndFailsLoudly with its remaining steps.
-func testChaosMeshInjectorCleansUpAndFailsLoudlyRest(
+// testChaosMeshInjectorCleansUpAndFailsLoudlyFailureCases continues
+// TestChaosMeshInjector_CleansUpAndFailsLoudly: failure cases.
+func testChaosMeshInjectorCleansUpAndFailsLoudlyFailureCases(
 	t *testing.T,
 	fault *types.Fault,
 	newInj func(r interfaces.CommandRunner) interfaces.FaultInjector,
@@ -388,6 +388,34 @@ func testChaosMeshInjectorCleansUpAndFailsLoudlyRest(
 		strict.Inject(t.Context(), &unknown), strict.Revert(t.Context(), &unknown),
 	} {
 		require.Error(t, err)
-		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)
+		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textVLowerAlt, err)
 	}
 }
+
+const (
+	// latency is the latency the tests use.
+	latency = 300
+
+	// lossPercent is the loss percent the tests use.
+	lossPercent = 10
+)
+
+const (
+	// textAcmeApp is the literal "acme-app".
+	textAcmeApp = "acme-app"
+
+	// textAcmeChaos is the literal "acme-chaos".
+	textAcmeChaos = "acme-chaos"
+
+	// textAction is the literal "action".
+	textAction = "action"
+
+	// textDuration is the literal "duration".
+	textDuration = "duration"
+
+	// textLoss is the literal "loss".
+	textLoss = "loss"
+
+	// textSelector is the literal "selector".
+	textSelector = "selector"
+)

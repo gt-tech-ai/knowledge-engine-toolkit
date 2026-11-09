@@ -85,7 +85,7 @@ func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, wantGot4, got)
+	assert.Equal(t, wantGotChain, got)
 
 	_, err = base.Exec(t.Context(), textSlow, func(ctx context.Context) (int, error) {
 		<-ctx.Done()
@@ -161,3 +161,8 @@ func TestRepositoryEntity_NarrowContracts(t *testing.T) {
 	](decs, textWidgets, appends, nil))
 	require.ErrorIs(t, ar.Insert(t.Context(), &te{ID: textW1}), conflict)
 }
+
+const (
+	// wantGotChain is the expected got chain.
+	wantGotChain = 4
+)

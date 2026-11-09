@@ -119,15 +119,15 @@ func TestClientsHelm_Renderer(t *testing.T) {
 			templates.Add(1)
 
 			return []byte(helmManifest), nil
-		}).Times(timesArg2)
+		}).Times(wantCalls)
 
 	renderer := helm.NewRenderer(helmClient, codebase.NewSnapshot(textT))
 	spec := types.RenderSpec{ChartDir: textChartsAPI}
 
 	var group sync.WaitGroup
 
-	results := make([][]types.Object, size8)
-	errs := make([]error, size8)
+	results := make([][]types.Object, makeInputRenderer)
+	errs := make([]error, makeInputRenderer)
 
 	for i := range results {
 		group.Go(func() { results[i], errs[i] = renderer.Render(t.Context(), &spec) })
@@ -142,7 +142,7 @@ func TestClientsHelm_Renderer(t *testing.T) {
 	assert.Equal(t, int32(1), templates.Load())
 
 	objs := results[0]
-	require.Len(t, objs, wantObjsLen2)
+	require.Len(t, objs, wantObjsLen)
 	assert.Equal(t, types.Object{
 		Doc: objs[0].Doc, Kind: textDeployment, Name: textAPI, Namespace: textApp,
 		Source: "api/templates/deploy.yaml", Index: 0,
@@ -156,3 +156,8 @@ func TestClientsHelm_Renderer(t *testing.T) {
 	)
 	require.NoError(t, err)
 }
+
+const (
+	// makeInputRenderer is the make input renderer the tests use.
+	makeInputRenderer = 8
+)

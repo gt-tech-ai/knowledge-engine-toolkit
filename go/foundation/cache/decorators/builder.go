@@ -6,28 +6,11 @@ import (
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
 // Compile-time interface assertion.
 var _ interfaces.ByteCache = (*metricsDecorator)(nil)
-
-// defaultBuckets returns the default histogram bucket boundaries for cache
-// operation durations (in seconds). Matches Prometheus DefBuckets.
-func defaultBuckets() []float64 {
-	return []float64{
-		defaultBucketsResultp005,
-		defaultBucketsResultp01,
-		defaultBucketsResultp025,
-		defaultBucketsResultp05,
-		defaultBucketsResultp1,
-		defaultBucketsResultp25,
-		defaultBucketsResultp5,
-		1,
-		defaultBucketsResult2p5,
-		defaultBucketsResult5,
-		defaultBucketsResult10,
-	}
-}
 
 // Builder composes decorators around a base ByteCache.
 type Builder struct {
@@ -73,7 +56,7 @@ func (b *Builder) Build() interfaces.ByteCache {
 			duration: b.metrics.Histogram(
 				"cache_operation_duration_seconds",
 				"Cache operation duration",
-				defaultBuckets(),
+				types.DefaultDurationBuckets(),
 				textCache,
 			),
 		}

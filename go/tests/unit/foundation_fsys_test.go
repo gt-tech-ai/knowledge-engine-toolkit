@@ -33,7 +33,7 @@ func TestOSFS_RoundTrips(t *testing.T) {
 	dir := t.TempDir()
 
 	sub := filepath.Join(dir, textA, textB)
-	require.NoError(t, osfs.MkdirAll(sub, perm0o755))
+	require.NoError(t, osfs.MkdirAll(sub, mkdirAllInputTrips))
 
 	info, err := osfs.Stat(sub)
 	require.NoError(t, err)
@@ -41,7 +41,7 @@ func TestOSFS_RoundTrips(t *testing.T) {
 
 	file := filepath.Join(sub, "f.txt")
 	want := []byte("hello fsys")
-	require.NoError(t, osfs.WriteFile(file, want, perm0o644))
+	require.NoError(t, osfs.WriteFile(file, want, writeFileInputTrips))
 
 	got, err := osfs.ReadFile(file)
 	require.NoError(t, err)
@@ -96,3 +96,11 @@ func TestOSFS_Constructors(t *testing.T) {
 		assert.NoError(t, err, name)
 	}
 }
+
+const (
+	// mkdirAllInputTrips is the mkdir all input trips the tests use.
+	mkdirAllInputTrips = 0o755
+
+	// writeFileInputTrips is the write file input trips the tests use.
+	writeFileInputTrips = 0o644
+)

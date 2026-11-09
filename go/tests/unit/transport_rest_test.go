@@ -291,3 +291,8 @@ func TestAdaptNoContent_HandlerError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
+
+const (
+	// textUsers123 is the literal "/users/123".
+	textUsers123 = "/users/123"
+)

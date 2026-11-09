@@ -206,10 +206,10 @@ func TestFoundationSchemagen_ParseAndKinds(t *testing.T) {
 	)
 	assert.Equal(t, []schemagen.Field{
 		{
-			Name: textTimeout2, Type: textInt, Key: textTimeout, Default: "5",
+			Name: textTimeoutTitle, Type: textInt, Key: textTimeout, Default: "5",
 			Description: "Timeout bounds a call | in seconds.",
 		},
-		{Name: textName2, Type: textString, Key: textName},
+		{Name: textNameTitle, Type: textString, Key: textName},
 		{
 			Name:        "Tags",
 			Type:        "map[string]string",
@@ -230,7 +230,7 @@ func TestFoundationSchemagen_ParseAndKinds(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []schemagen.KindEntry{{
-		Label: "Store", Key: "store.kind", Source: textGo2,
+		Label: "Store", Key: "store.kind", Source: textGoLower,
 		Values: []string{"memory", "postgres"},
 	}}, kinds)
 

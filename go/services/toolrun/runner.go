@@ -162,7 +162,7 @@ func (r *runner) runTool(
 	// A prefixed tool (`uv run ruff`) runs through its prefix, so the prefix is what
 	// must be installed.
 	if exe, _ := spec.Cmd(); !r.deps.Runner.Exists(exe) {
-		return types.StepResults{missing(&run, spec, strictFlag(opts.Strict))}, nil
+		return types.StepResults{missing(&run, spec, &opts)}, nil
 	}
 
 	targets, err := r.targets(ctx, codebase, &run.Targets)
@@ -240,19 +240,19 @@ func validCwd(cwd string) bool {
 func substitute(runRef *types.ToolRun, vars map[string]string) (types.ToolRun, error) {
 	run := *runRef
 
-	substitutionValue := &substitution{vars: vars}
+	currentSubstitution := &substitution{vars: vars}
 
-	run.Args, run.FixArgs, run.Env = substitutionValue.args(
+	run.Args, run.FixArgs, run.Env = currentSubstitution.args(
 		run.Args,
-	), substitutionValue.args(
+	), currentSubstitution.args(
 		run.FixArgs,
-	), substitutionValue.args(
+	), currentSubstitution.args(
 		run.Env,
 	)
 
-	if substitutionValue.missing != "" {
+	if currentSubstitution.missing != "" {
 		return run, apperr.New(apperr.CodeInvalidInput,
-			"tool run "+run.Name+": no value for {"+substitutionValue.missing+"}")
+			"tool run "+run.Name+": no value for {"+currentSubstitution.missing+"}")
 	}
 
 	return run, nil
@@ -302,17 +302,14 @@ func group(run *types.ToolRun) string {
 	return run.Verb
 }
 
-// strictFlag names the strict option in a signature.
-type strictFlag bool
-
 // missing is the one step of a run whose tool is not installed; strict fails it.
 func missing(
 	run *types.ToolRun,
 	spec interfaces.ToolSpec,
-	strict strictFlag,
+	opts *types.RunOptions,
 ) types.StepResult {
 	status := types.StatusSkip
-	if bool(strict) || run.Missing == types.MissingFail {
+	if opts.Strict || run.Missing == types.MissingFail {
 		status = types.StatusFail
 	}
 

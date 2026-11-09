@@ -180,12 +180,12 @@ func TestAccountResolver_AuthFailuresNameTheLogin(t *testing.T) {
 		},
 	}
 
-	testAccountResolverAuthFailuresNameTheLoginRest(t, callback, cases)
+	testAccountResolverAuthFailuresNameTheLoginCases(t, callback, cases)
 }
 
-// testAccountResolverAuthFailuresNameTheLoginRest continues
-// TestAccountResolver_AuthFailuresNameTheLogin with its remaining steps.
-func testAccountResolverAuthFailuresNameTheLoginRest(
+// testAccountResolverAuthFailuresNameTheLoginCases continues
+// TestAccountResolver_AuthFailuresNameTheLogin: cases.
+func testAccountResolverAuthFailuresNameTheLoginCases(
 	t *testing.T,
 	callback func(context.Context, string, string) (aws.Config, error),
 	cases []struct {
@@ -238,7 +238,7 @@ func TestAccountResolver_CachesUntilExpiry(t *testing.T) {
 		calls int
 	}{
 		{time.Now().Add(time.Hour), "far future is cached", 1},
-		{time.Now().Add(time.Minute), "inside the skew re-resolves", cases2},
+		{time.Now().Add(time.Minute), "inside the skew re-resolves", casesExpiry},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -292,7 +292,7 @@ func TestAccountResolver_AmbientChain(t *testing.T) {
 	}
 	api := mocks.NewMockAWSSTSAPI(gomock.NewController(t))
 	api.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).
-		Return(identity(text111122223333), nil).Times(timesArg2)
+		Return(identity(text111122223333), nil).Times(wantCalls)
 
 	r := newAccountResolver(t, api, load, getenv)
 
@@ -365,10 +365,14 @@ func TestUpsertProfile(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "aws", textConfig)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), perm0o700))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), mkdirAllInput))
 	require.NoError(
 		t,
-		os.WriteFile(path, []byte("[profile other]\nregion = eu-west-1\n"), perm0o600),
+		os.WriteFile(
+			path,
+			[]byte("[profile other]\nregion = eu-west-1\n"),
+			writeFileInput,
+		),
 	)
 
 	require.NoError(t, account.UpsertProfile(path, textAcme, new(stgProfile())))
@@ -390,11 +394,11 @@ func TestUpsertProfile(t *testing.T) {
 
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(fileModeArg0o600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(fileModeInput), info.Mode().Perm())
 
 	dup := filepath.Join(t.TempDir(), textConfig)
 	original := "[sso-session acme]\nsso_region = eu-west-1\n"
-	require.NoError(t, os.WriteFile(dup, []byte(original), perm0o600))
+	require.NoError(t, os.WriteFile(dup, []byte(original), writeFileInput))
 
 	err = account.UpsertProfile(dup, textAcme, new(stgProfile()))
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
@@ -430,3 +434,16 @@ func TestConfigPath(t *testing.T) {
 	assert.Equal(t, filepath.Join(".aws", textConfig),
 		filepath.Join(filepath.Base(filepath.Dir(got)), filepath.Base(got)))
 }
+
+const (
+	// casesExpiry is the cases expiry the tests use.
+	casesExpiry = 2
+)
+
+const (
+	// text111122223333 is the literal "111122223333".
+	text111122223333 = "111122223333"
+
+	// textAcmeStg is the literal "acme-stg".
+	textAcmeStg = "acme-stg"
+)

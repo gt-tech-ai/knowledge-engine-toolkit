@@ -177,8 +177,15 @@ func NewEntity[C, T, P any, ID comparable](
 	return Entity[T, P, ID]{roles: roles, run: run, validate: validate}, nil
 }
 
-// presentFlag names the present option in a signature.
-type presentFlag bool
+// roleOp is one operation of an entity's contract.
+type roleOp struct {
+	// name is the operation's name.
+	name string
+	// kind is the role the operation needs.
+	kind RoleKind
+	// present reports whether this component has the role.
+	present bool
+}
 
 // call runs fn as op through run, returning fn's result. A role that is not present is
 // one the contract does not have, refused as CodeInternal; a nil run (the zero Entity)
@@ -186,17 +193,15 @@ type presentFlag bool
 func call[R any](
 	ctx context.Context,
 	run RoleRunner,
-	operation string,
-	kind RoleKind,
-	present presentFlag,
+	operation roleOp,
 	callback func(context.Context) (R, error),
 ) (R, error) {
 	var out R
 
-	if !present {
+	if !operation.present {
 		return out, apperr.New(
 			apperr.CodeInternal,
-			operation+" is not a role of this component",
+			operation.name+" is not a role of this component",
 		)
 	}
 
@@ -204,7 +209,7 @@ func call[R any](
 		return callback(ctx)
 	}
 
-	err := run(ctx, operation, kind, func(ctx context.Context) error {
+	err := run(ctx, operation.name, operation.kind, func(ctx context.Context) error {
 		var err error
 
 		out, err = callback(ctx)
@@ -226,12 +231,7 @@ func (e Entity[T, P, ID]) checkEntity(v *T) error {
 
 // Delete removes the entity identified by id.
 func (e Entity[T, P, ID]) Delete(ctx context.Context, identifier ID) error {
-	_, err := call(
-		ctx,
-		e.run,
-		"delete",
-		RoleWrite,
-		e.roles.Delete != nil,
+	_, err := call(ctx, e.run, roleOp{"delete", RoleWrite, e.roles.Delete != nil},
 		func(ctx context.Context) (struct{}, error) {
 			return struct{}{}, e.roles.Delete(ctx, identifier)
 		},
@@ -242,13 +242,13 @@ func (e Entity[T, P, ID]) Delete(ctx context.Context, identifier ID) error {
 
 // Exists reports whether the entity identified by id exists.
 func (e Entity[T, P, ID]) Exists(ctx context.Context, id ID) (bool, error) {
-	return call(ctx, e.run, "exists", RoleRead, e.roles.Exists != nil,
+	return call(ctx, e.run, roleOp{"exists", RoleRead, e.roles.Exists != nil},
 		func(ctx context.Context) (bool, error) { return e.roles.Exists(ctx, id) })
 }
 
 // Insert appends entity.
 func (e Entity[T, P, ID]) Insert(ctx context.Context, entity *T) error {
-	_, err := call(ctx, e.run, "insert", RoleAppend, e.roles.Insert != nil,
+	_, err := call(ctx, e.run, roleOp{"insert", RoleAppend, e.roles.Insert != nil},
 		func(ctx context.Context) (struct{}, error) {
 			return struct{}{}, e.roles.Insert(ctx, entity)
 		})
@@ -258,7 +258,7 @@ func (e Entity[T, P, ID]) Insert(ctx context.Context, entity *T) error {
 
 // Upsert inserts entity or replaces the one with its key, after the validator accepts it.
 func (e Entity[T, P, ID]) Upsert(ctx context.Context, entity *T) error {
-	_, err := call(ctx, e.run, "upsert", RoleAppend, e.roles.Upsert != nil,
+	_, err := call(ctx, e.run, roleOp{"upsert", RoleAppend, e.roles.Upsert != nil},
 		func(ctx context.Context) (struct{}, error) {
 			err := e.checkEntity(entity)
 			if err != nil {
@@ -279,16 +279,14 @@ func (e Entity[T, P, ID]) PurgeBefore(
 	return call(
 		ctx,
 		e.run,
-		"purge_before",
-		RoleWrite,
-		e.roles.PurgeBefore != nil,
+		roleOp{"purge_before", RoleWrite, e.roles.PurgeBefore != nil},
 		func(ctx context.Context) (int, error) { return e.roles.PurgeBefore(ctx, cutoff) },
 	)
 }
 
 // Get returns the entity identified by id.
 func (e Entity[T, P, ID]) Get(ctx context.Context, id ID) (*T, error) {
-	return call(ctx, e.run, "get", RoleRead, e.roles.Get != nil,
+	return call(ctx, e.run, roleOp{"get", RoleRead, e.roles.Get != nil},
 		func(ctx context.Context) (*T, error) { return e.roles.Get(ctx, id) })
 }
 
@@ -298,7 +296,7 @@ func (e Entity[T, P, ID]) List(
 	params P,
 	page types.PageRequest,
 ) (*types.Page[T], error) {
-	return call(ctx, e.run, "list", RoleRead, e.roles.List != nil,
+	return call(ctx, e.run, roleOp{"list", RoleRead, e.roles.List != nil},
 		func(ctx context.Context) (*types.Page[T], error) {
 			return e.roles.List(ctx, params, page)
 		})
@@ -306,7 +304,7 @@ func (e Entity[T, P, ID]) List(
 
 // Create persists entity, after the validator accepts it.
 func (e Entity[T, P, ID]) Create(ctx context.Context, entity *T) (*T, error) {
-	return call(ctx, e.run, "create", RoleCreate, e.roles.Create != nil,
+	return call(ctx, e.run, roleOp{"create", RoleCreate, e.roles.Create != nil},
 		func(ctx context.Context) (*T, error) {
 			err := e.checkEntity(entity)
 			if err != nil {
@@ -323,7 +321,7 @@ func (e Entity[T, P, ID]) Update(
 	identifier ID,
 	entity *T,
 ) (*T, error) {
-	return call(ctx, e.run, "update", RoleWrite, e.roles.Update != nil,
+	return call(ctx, e.run, roleOp{"update", RoleWrite, e.roles.Update != nil},
 		func(ctx context.Context) (*T, error) {
 			err := e.checkEntity(entity)
 			if err != nil {

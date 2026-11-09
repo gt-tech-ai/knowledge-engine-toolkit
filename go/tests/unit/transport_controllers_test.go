@@ -122,14 +122,14 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 
 	limited := fixtures.Must(
 		transport.NewBase[opController](decorate.Fixed(&decorate.Deps{
-			RateLimiter: fixtures.StubRateLimiter(false),
+			RateLimiter: fixtures.DenyingRateLimiter(),
 		}), textC),
 	)
 	_, err := limited.Handler(textOp, handler)(t.Context(), "")
 	assert.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	assert.False(t, ran)
 
-	bulkheadValue, err := bulkhead.New(
+	currentBulkhead, err := bulkhead.New(
 		bulkhead.KindChannel,
 		bulkhead.WithMaxConcurrent(1),
 	)
@@ -138,7 +138,7 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 	held, release := make(chan struct{}), make(chan struct{})
 
 	go func() {
-		_ = bulkheadValue.Execute(context.Background(), func() error {
+		_ = currentBulkhead.Execute(context.Background(), func() error {
 			close(held)
 			<-release
 
@@ -152,7 +152,7 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 
 	shedding := fixtures.Must(
 		transport.NewBase[opController](
-			decorate.Fixed(&decorate.Deps{Bulkhead: bulkheadValue, ShedLoad: true}),
+			decorate.Fixed(&decorate.Deps{Bulkhead: currentBulkhead, ShedLoad: true}),
 			textC,
 		),
 	)
@@ -161,12 +161,12 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 	assert.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	assert.False(t, ran)
 
-	testControllerBaseRejectsBeforeTheHandlerRest(t)
+	testControllerBaseRejectsBeforeTheHandlerInternalAndTimeout(t)
 }
 
-// testControllerBaseRejectsBeforeTheHandlerRest continues
-// TestControllerBase_RejectsBeforeTheHandler with its remaining steps.
-func testControllerBaseRejectsBeforeTheHandlerRest(t *testing.T) {
+// testControllerBaseRejectsBeforeTheHandlerInternalAndTimeout continues
+// TestControllerBase_RejectsBeforeTheHandler: internal and timeout.
+func testControllerBaseRejectsBeforeTheHandlerInternalAndTimeout(t *testing.T) {
 	t.Helper()
 
 	var err error

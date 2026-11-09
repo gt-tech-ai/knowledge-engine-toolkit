@@ -322,13 +322,13 @@ func processSpec(
 	headers map[string]string,
 ) (string, error) {
 	// Convert Swagger 2.0 → OpenAPI 3.
-	oas3, err := convertToOAS3(swagger, cfg, headers)
+	thirdOas, err := convertToOAS3(swagger, cfg, headers)
 	if err != nil {
 		return "", err
 	}
 
 	// Rewrite response schemas for JSON:API.
-	rewriteForJSONAPI(oas3, cfg, routes)
+	rewriteForJSONAPI(thirdOas, cfg, routes)
 
 	// Write output.
 	outputDir := filepath.Join(outDir, cfg.service, "docs")
@@ -344,7 +344,7 @@ func processSpec(
 
 	outputPath := filepath.Join(outputDir, "openapi.json")
 
-	out, err := json.MarshalIndent(oas3, "", "  ")
+	out, err := json.MarshalIndent(thirdOas, "", "  ")
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "marshal output")
 	}

@@ -104,7 +104,7 @@ func serveAuth0Orgs(orgs []string) http.HandlerFunc {
 		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 		out := []map[string]string{}
 
-		for i := page * page2; i < len(orgs) && i < page*page2+value2; i++ {
+		for i := page * initialI; i < len(orgs) && i < page*wantI+wantI; i++ {
 			out = append(out, map[string]string{textID: orgs[i]})
 		}
 
@@ -167,7 +167,7 @@ func (a *auth0Tenant) client(
 func auth0Cert(t *testing.T) (x5c string, key *rsa.PrivateKey) {
 	t.Helper()
 
-	key, err := rsa.GenerateKey(rand.Reader, bits2048)
+	key, err := rsa.GenerateKey(rand.Reader, generateKeyInput)
 	require.NoError(t, err)
 
 	tmpl := &x509.Certificate{
@@ -267,3 +267,8 @@ func TestClientsAuth0_Kinds(t *testing.T) {
 		&auth0.Deps{Decorations: fixtures.Decorations()})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// generateKeyInput is the generate key input the tests use.
+	generateKeyInput = 2048
+)

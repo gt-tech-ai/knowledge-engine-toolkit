@@ -55,11 +55,11 @@ func TestServicesSuite_Tools(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	testServicesSuiteToolsRest(t, guards)
+	testServicesSuiteToolsSelects(t, guards)
 }
 
-// testServicesSuiteToolsRest continues TestServicesSuite_Tools with its remaining steps.
-func testServicesSuiteToolsRest(t *testing.T, guards []interfaces.Guard) {
+// testServicesSuiteToolsSelects continues TestServicesSuite_Tools: selects.
+func testServicesSuiteToolsSelects(t *testing.T, guards []interfaces.Guard) {
 	t.Helper()
 
 	var err error
@@ -68,7 +68,7 @@ func testServicesSuiteToolsRest(t *testing.T, guards []interfaces.Guard) {
 		{
 			Name: textGolangciLint,
 			Verb: textLint,
-			Tags: []string{textGo2},
+			Tags: []string{textGoLower},
 			Tool: textGolangciLint,
 		},
 		{
@@ -80,31 +80,31 @@ func testServicesSuiteToolsRest(t *testing.T, guards []interfaces.Guard) {
 		{Name: textTflint, Verb: textLint, Tags: []string{textInfra}, Tool: textTflint},
 	}), suite.Steps(map[string]suite.Step{
 		"lint.kube-linter": {
-			Group: textLint2, Tags: []string{textInfra},
+			Group: textLintTitle, Tags: []string{textInfra},
 			Tools: []string{"kube-linter", textHelm},
 		},
 	})...), suite.Guards(guards, nil)...)
-	suiteValue := types.Suite{
-		Title:  textLint2,
-		Select: types.Selection{Verbs: []string{textLint}, Tags: []string{textGo2}},
-		Phases: []types.Phase{{Group: textLint}, {Group: textLint2}},
+	currentSuite := types.Suite{
+		Title:  textLintTitle,
+		Select: types.Selection{Verbs: []string{textLint}, Tags: []string{textGoLower}},
+		Phases: []types.Phase{{Group: textLint}, {Group: textLintTitle}},
 		Selectors: map[string]types.Selection{
-			textGo2:   {Verbs: []string{textLint}, Tags: []string{textGo2}},
-			textInfra: {Verbs: []string{textLint}, Tags: []string{textInfra}},
+			textGoLower: {Verbs: []string{textLint}, Tags: []string{textGoLower}},
+			textInfra:   {Verbs: []string{textLint}, Tags: []string{textInfra}},
 		},
 		Steps: []string{"lint.kube-linter"},
 	}
 
-	got, err := suite.Tools(&suiteValue, catalog, nil)
+	got, err := suite.Tools(&currentSuite, catalog, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{textGolangciLint}, got)
 
-	got, err = suite.Tools(&suiteValue, catalog, []string{textInfra})
+	got, err = suite.Tools(&currentSuite, catalog, []string{textInfra})
 	require.NoError(t, err)
 	assert.Equal(t,
 		[]string{textHadolint, textHelm, "kube-linter", textTerraform, textTflint}, got)
 
-	_, err = suite.Tools(&suiteValue, catalog, []string{textRust})
+	_, err = suite.Tools(&currentSuite, catalog, []string{textRust})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -175,3 +175,8 @@ func TestServicesSuite_StrictFailsSkippedGuard(t *testing.T) {
 	assert.Equal(t, types.StatusSkip, cached.Status, "a cached pass is no strict failure")
 	assert.Equal(t, types.CachedDetail, string(cached.Detail))
 }
+
+const (
+	// textTflint is the literal "tflint".
+	textTflint = "tflint"
+)

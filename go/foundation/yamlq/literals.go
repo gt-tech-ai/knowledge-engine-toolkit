@@ -1,11 +1,11 @@
 package yamlq
 
 const (
-	// dash2 is the dash value 2.
-	dash2 = 2
+	// listDashWidth is the named value used where list dash width applies.
+	listDashWidth = 2
 
-	// offset2 is the offset value 2.
-	offset2 = 2
+	// allValuesPrefixLen is the named value used where all values prefix len applies.
+	allValuesPrefixLen = 2
 
 	// textNewline is the literal "\n".
 	textNewline = "\n"

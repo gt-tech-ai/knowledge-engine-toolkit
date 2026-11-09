@@ -86,24 +86,24 @@ func decodeToken(data []byte, fingerprint string) (*resumeToken, error) {
 		return nil, nil //nolint:nilnil // no token is a valid "start from the beginning"
 	}
 
-	var resumeTokenValue resumeToken
+	var currentResumeToken resumeToken
 
-	err := json.Unmarshal(data, &resumeTokenValue)
-	if err != nil || resumeTokenValue.Bucket == nil {
+	err := json.Unmarshal(data, &currentResumeToken)
+	if err != nil || currentResumeToken.Bucket == nil {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"analytics: malformed resume token",
 		)
 	}
 
-	if resumeTokenValue.Query != fingerprint {
+	if currentResumeToken.Query != fingerprint {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"analytics: resume token belongs to a different query",
 		)
 	}
 
-	return &resumeTokenValue, nil
+	return &currentResumeToken, nil
 }
 
 // fetch reads one page of bucket starting at state.
@@ -116,17 +116,17 @@ func (p *readPlan) fetch(ctx context.Context, bucket time.Time, state []byte) pa
 	out := page{bucket: bucket}
 
 	var (
-		timeValue time.Time
-		dims      map[string]string
-		partials  map[string][]byte
+		instant  time.Time
+		dims     map[string]string
+		partials map[string][]byte
 	)
 
-	for iter.Scan(&timeValue, &dims, &partials) {
-		if p.keep(stored{ts: timeValue.UTC(), dims: dims}) {
-			out.rows = append(out.rows, p.project(timeValue, dims, partials))
+	for iter.Scan(&instant, &dims, &partials) {
+		if p.keep(stored{ts: instant.UTC(), dims: dims}) {
+			out.rows = append(out.rows, p.project(instant, dims, partials))
 		}
 
-		timeValue, dims, partials = time.Time{}, nil, nil
+		instant, dims, partials = time.Time{}, nil, nil
 	}
 
 	out.next = iter.PageState()
@@ -203,7 +203,7 @@ func newStream(
 	window int,
 ) *stream {
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	streamValue := &stream{ctx: sctx, cancel: cancel, plan: plan, window: window}
+	currentStream := &stream{ctx: sctx, cancel: cancel, plan: plan, window: window}
 
 	for index, b := range buckets {
 		if resume != nil && b.UnixMilli() < *resume.Bucket {
@@ -211,18 +211,18 @@ func newStream(
 		}
 
 		if resume != nil && b.UnixMilli() == *resume.Bucket {
-			streamValue.first = resume.Page
+			currentStream.first = resume.Page
 		}
 
-		streamValue.buckets = buckets[index:]
+		currentStream.buckets = buckets[index:]
 
 		break
 	}
 
-	streamValue.chans = make([]chan page, len(streamValue.buckets))
-	streamValue.fill()
+	currentStream.chans = make([]chan page, len(currentStream.buckets))
+	currentStream.fill()
 
-	return streamValue
+	return currentStream
 }
 
 // Next returns the next page in bucket order. After a read error it returns
@@ -233,7 +233,7 @@ func (s *stream) Next(ctx context.Context) ([]types.Row, bool, error) {
 	}
 
 	for s.cur < len(s.buckets) {
-		page2, ok, err := s.receive(ctx)
+		secondPage, ok, err := s.receive(ctx)
 		if err != nil {
 			return nil, false, err
 		}
@@ -245,9 +245,9 @@ func (s *stream) Next(ctx context.Context) ([]types.Row, bool, error) {
 			continue
 		}
 
-		s.token = s.position(&page2)
+		s.token = s.position(&secondPage)
 
-		return page2.rows, len(page2.next) > 0 || s.cur+1 < len(s.buckets), nil
+		return secondPage.rows, len(secondPage.next) > 0 || s.cur+1 < len(s.buckets), nil
 	}
 
 	return nil, false, nil
@@ -274,14 +274,14 @@ func (s *stream) Close() error {
 // A page's error sticks to the stream; a canceled wait does not.
 func (s *stream) receive(ctx context.Context) (page, bool, error) {
 	select {
-	case pageValue, found := <-s.chans[s.cur]:
-		if found && pageValue.err != nil {
-			s.err = pageValue.err
+	case currentPage, found := <-s.chans[s.cur]:
+		if found && currentPage.err != nil {
+			s.err = currentPage.err
 
 			return page{}, false, s.err
 		}
 
-		return pageValue, found, nil
+		return currentPage, found, nil
 	case <-ctx.Done():
 		return page{}, false, apperr.Wrap(
 			ctx.Err(),
@@ -319,43 +319,43 @@ func (s *stream) read(bucket time.Time, state []byte, channel chan<- page) {
 	defer close(channel)
 
 	for {
-		pageValue := s.plan.fetch(s.ctx, bucket, state)
+		currentPage := s.plan.fetch(s.ctx, bucket, state)
 		select {
-		case channel <- pageValue:
+		case channel <- currentPage:
 		case <-s.ctx.Done():
 			return
 		}
 
-		if pageValue.err != nil || len(pageValue.next) == 0 {
+		if currentPage.err != nil || len(currentPage.next) == 0 {
 			return
 		}
 
-		state = pageValue.next
+		state = currentPage.next
 	}
 }
 
 // position encodes the token after page p: the same bucket's next page, or the
 // following bucket's start.
-func (s *stream) position(pageValue *page) []byte {
-	atMs := pageValue.bucket.UnixMilli()
-	resumeTokenValue := resumeToken{
+func (s *stream) position(currentPage *page) []byte {
+	atMs := currentPage.bucket.UnixMilli()
+	currentResumeToken := resumeToken{
 		Bucket: &atMs,
 		Query:  s.plan.fingerprint,
-		Page:   pageValue.next,
+		Page:   currentPage.next,
 	}
 
-	if len(pageValue.next) == 0 {
+	if len(currentPage.next) == 0 {
 		if s.cur+1 >= len(s.buckets) {
 			return nil
 		}
 
 		nextMs := s.buckets[s.cur+1].UnixMilli()
 
-		resumeTokenValue = resumeToken{Bucket: &nextMs, Query: s.plan.fingerprint}
+		currentResumeToken = resumeToken{Bucket: &nextMs, Query: s.plan.fingerprint}
 	}
 
 	//nolint:errchkjson // a string and a byte slice always marshal
-	b, _ := json.Marshal(resumeTokenValue)
+	b, _ := json.Marshal(currentResumeToken)
 
 	return b
 }

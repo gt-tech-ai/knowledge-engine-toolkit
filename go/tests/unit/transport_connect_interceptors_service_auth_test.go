@@ -171,12 +171,15 @@ func TestServiceAuthInterceptor_Unary(t *testing.T) {
 		assert.Equal(t, textOrders, gotCaller)
 	})
 
-	testServiceAuthInterceptorUnaryRest(t, interceptor)
+	testServiceAuthInterceptorUnaryRejectCases(t, interceptor)
 }
 
-// testServiceAuthInterceptorUnaryRest continues TestServiceAuthInterceptor_Unary with
-// its remaining steps.
-func testServiceAuthInterceptorUnaryRest(t *testing.T, interceptor connect.Interceptor) {
+// testServiceAuthInterceptorUnaryRejectCases continues TestServiceAuthInterceptor_Unary:
+// reject cases.
+func testServiceAuthInterceptorUnaryRejectCases(
+	t *testing.T,
+	interceptor connect.Interceptor,
+) {
 	t.Helper()
 
 	for _, testCase := range []struct {
@@ -315,12 +318,12 @@ func TestServiceAuthInterceptor_Streaming(t *testing.T) {
 		return conn
 	}
 
-	testServiceAuthInterceptorStreamingRest(t, interceptor, newConn)
+	testServiceAuthInterceptorStreamingRejections(t, interceptor, newConn)
 }
 
-// testServiceAuthInterceptorStreamingRest continues TestServiceAuthInterceptor_Streaming
-// with its remaining steps.
-func testServiceAuthInterceptorStreamingRest(
+// testServiceAuthInterceptorStreamingRejections continues
+// TestServiceAuthInterceptor_Streaming: rejections.
+func testServiceAuthInterceptorStreamingRejections(
 	t *testing.T,
 	interceptor connect.Interceptor,
 	newConn func(token string) *mocks.MockStreamingHandlerConn,
@@ -362,3 +365,8 @@ func testServiceAuthInterceptorStreamingRest(
 		assert.Equal(t, textOrders, caller)
 	})
 }
+
+const (
+	// textTokOrders is the literal "tok-orders".
+	textTokOrders = "tok-orders"
+)

@@ -124,17 +124,17 @@ func (ps *Programs) compile(expr string) (*program, error) {
 		return nil, err
 	}
 
-	programValue, err := compileIn(env, expr)
+	currentProgram, err := compileIn(env, expr)
 	if err != nil {
 		return nil, err
 	}
 
 	ps.mu.Lock()
 
-	ps.byExpr[expr] = programValue
+	ps.byExpr[expr] = currentProgram
 	ps.mu.Unlock()
 
-	return programValue, nil
+	return currentProgram, nil
 }
 
 // compileIn type-checks expr in env and records the activation variables it references.
@@ -169,13 +169,13 @@ func compileIn(env *cel.Env, expr string) (*program, error) {
 // time clock reads (nil is time.Now).
 func exprCheck(
 	ctx context.Context,
-	codebaseValue interfaces.Codebase,
+	currentCodebase interfaces.Codebase,
 	guardRow *types.GuardRow,
-	programValue *program,
+	currentProgram *program,
 	vars map[string]string,
 	clock func() time.Time,
 ) ([]types.Finding, error) {
-	act, missing, err := activation(ctx, codebaseValue, guardRow, programValue, vars)
+	act, missing, err := activation(ctx, currentCodebase, guardRow, currentProgram, vars)
 
 	if clock == nil {
 		clock = time.Now
@@ -189,7 +189,7 @@ func exprCheck(
 		return missing, err
 	}
 
-	out, _, err := programValue.prg.ContextEval(ctx, act)
+	out, _, err := currentProgram.prg.ContextEval(ctx, act)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, textExpr)
 	}
@@ -204,14 +204,14 @@ func decodeFunc() cel.EnvOption {
 		cel.Overload("decode_string_string", []*cel.Type{cel.StringType, cel.StringType},
 			cel.DynType,
 			cel.BinaryBinding(func(format, text ref.Val) ref.Val {
-				textValue, ok1 := format.Value().(string)
-				text2, ok2 := text.Value().(string)
+				fileText, ok1 := format.Value().(string)
+				otherText, secondOk := text.Value().(string)
 
-				if !ok1 || !ok2 {
+				if !ok1 || !secondOk {
 					return celtypes.NewErr("decode: format and text must be strings")
 				}
 
-				doc, err := codebase.Decode(textValue, "<embedded>", []byte(text2))
+				doc, err := codebase.Decode(fileText, "<embedded>", []byte(otherText))
 				if err != nil {
 					return celtypes.WrapErr(err)
 				}
@@ -240,19 +240,19 @@ func sha256Func() cel.EnvOption {
 // activation reads what p uses.
 func activation(
 	ctx context.Context,
-	codebaseValue interfaces.Codebase,
+	currentCodebase interfaces.Codebase,
 	guardRow *types.GuardRow,
-	programValue *program,
+	currentProgram *program,
 	vars map[string]string,
 ) (map[string]any, []types.Finding, error) {
 	act := baseActivation(vars, guardRow.Data)
 
-	missing, err := addFileVars(ctx, codebaseValue, guardRow, programValue, act)
+	missing, err := addFileVars(ctx, currentCodebase, guardRow, currentProgram, act)
 	if err != nil || missing != nil {
 		return nil, missing, err
 	}
 
-	err = addParsedVars(ctx, codebaseValue, guardRow, programValue, act)
+	err = addParsedVars(ctx, currentCodebase, guardRow, currentProgram, act)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -263,13 +263,13 @@ func activation(
 // addParsedVars sets the `docs` and `objects` variables the program uses.
 func addParsedVars(
 	ctx context.Context,
-	codebaseValue interfaces.Codebase,
+	currentCodebase interfaces.Codebase,
 	guardRow *types.GuardRow,
-	programValue *program,
+	currentProgram *program,
 	act map[string]any,
 ) error {
-	if programValue.uses[textDocs] {
-		docs, err := decodeDocs(ctx, codebaseValue, &guardRow.Files)
+	if currentProgram.uses[textDocs] {
+		docs, err := decodeDocs(ctx, currentCodebase, &guardRow.Files)
 		if err != nil {
 			return err
 		}
@@ -277,8 +277,8 @@ func addParsedVars(
 		act[textDocs] = docs
 	}
 
-	if programValue.uses[textObjects] && guardRow.Render.ChartDir != "" {
-		list, err := renderedObjects(ctx, codebaseValue, guardRow)
+	if currentProgram.uses[textObjects] && guardRow.Render.ChartDir != "" {
+		list, err := renderedObjects(ctx, currentCodebase, guardRow)
 		if err != nil {
 			return err
 		}
@@ -292,30 +292,30 @@ func addParsedVars(
 // addFileVars sets the `files` paths and, when used, the `file` contents map.
 func addFileVars(
 	ctx context.Context,
-	codebaseValue interfaces.Codebase,
+	currentCodebase interfaces.Codebase,
 	guardRow *types.GuardRow,
-	programValue *program,
+	currentProgram *program,
 	act map[string]any,
 ) ([]types.Finding, error) {
-	if !programValue.uses[textFiles] && !programValue.uses[textFile] {
+	if !currentProgram.uses[textFiles] && !currentProgram.uses[textFile] {
 		return nil, nil
 	}
 
-	filesValue, missing, err := files(ctx, codebaseValue, guardRow)
+	currentFiles, missing, err := files(ctx, currentCodebase, guardRow)
 	if err != nil || missing != nil {
 		return missing, err
 	}
 
-	paths := make([]string, len(filesValue))
-	for i, f := range filesValue {
+	paths := make([]string, len(currentFiles))
+	for i, f := range currentFiles {
 		paths[i] = f.Path
 	}
 
 	texts, err := wantedTexts(
 		ctx,
-		codebaseValue,
+		currentCodebase,
 		paths,
-		wantedFlag(programValue.uses[textFile]),
+		currentProgram,
 	)
 	if err != nil {
 		return nil, err
@@ -326,21 +326,18 @@ func addFileVars(
 	return nil, nil
 }
 
-// wantedFlag names the wanted option in a signature.
-type wantedFlag bool
-
-// wantedTexts reads the files' texts when the program uses them.
+// wantedTexts reads the files' texts when programValue uses them.
 func wantedTexts(
 	ctx context.Context,
-	codebaseValue interfaces.Codebase,
+	currentCodebase interfaces.Codebase,
 	paths []string,
-	wanted wantedFlag,
+	currentProgram *program,
 ) (map[string]any, error) {
-	if !wanted {
+	if !currentProgram.uses[textFile] {
 		return map[string]any{}, nil
 	}
 
-	return fileTexts(ctx, codebaseValue, paths)
+	return fileTexts(ctx, currentCodebase, paths)
 }
 
 // fileTexts reads each path into the map the `file` variable exposes.
@@ -350,15 +347,15 @@ func fileTexts(
 	texts := make(map[string]any, len(paths))
 
 	for _, text := range paths {
-		textValue, err := cb.Text(ctx, text)
+		fileText, err := cb.Text(ctx, text)
 		if err != nil {
 			return nil, err
 		}
 
 		texts[text] = map[string]any{
 			keyPath: text,
-			"text":  string(textValue.Bytes),
-			"lines": textValue.Lines(),
+			"text":  string(fileText.Bytes),
+			"lines": fileText.Lines(),
 		}
 	}
 
@@ -460,17 +457,17 @@ func finding(value any) (types.Finding, error) {
 	case string:
 		return types.Finding{Message: text}, nil
 	case map[string]any:
-		findingValue := types.Finding{}
+		currentFinding := types.Finding{}
 
-		findingValue.File = stdx.As[string](text[textFile])
-		findingValue.Message = stdx.As[string](text["message"])
-		findingValue.Rule = stdx.As[string](text["rule"])
+		currentFinding.File = stdx.As[string](text[textFile])
+		currentFinding.Message = stdx.As[string](text["message"])
+		currentFinding.Rule = stdx.As[string](text["rule"])
 
 		if n, ok := text["line"].(float64); ok {
-			findingValue.Line = int(n)
+			currentFinding.Line = int(n)
 		}
 
-		return findingValue, nil
+		return currentFinding, nil
 	}
 
 	return types.Finding{}, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(

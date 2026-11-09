@@ -133,3 +133,8 @@ func TestAWSSMSource_PutIsUnsupported(t *testing.T) {
 	err := src.Put(context.Background(), ref, types.NewSecret(textV))
 	require.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }
+
+const (
+	// textE2e is the literal "e2e".
+	textE2e = "e2e"
+)

@@ -42,21 +42,21 @@ func TestFoundationDataset_LoadAndSection(t *testing.T) {
 		"data/notes.md":    {Data: []byte("tools: ignored\n")},
 		"other/tools.yaml": {Data: []byte("tools: []\n")},
 	}
-	datasetValue, err := dataset.Load(fsys, textData)
+	currentDataset, err := dataset.Load(fsys, textData)
 	require.NoError(t, err)
 
-	tools, err := datasetValue.Section[[]datasetTool](textTools)
+	tools, err := currentDataset.Section[[]datasetTool](textTools)
 	require.NoError(t, err)
 	assert.Equal(t, []datasetTool{{Name: textBuf, Pin: "v1.73.0"}}, tools)
 
-	limits, err := datasetValue.Section[map[string]int]("limits")
+	limits, err := currentDataset.Section[map[string]int]("limits")
 	require.NoError(t, err)
 	assert.Equal(t, map[string]int{textMax: 3}, limits)
 
-	_, err = datasetValue.Section[map[string]int](textNope)
+	_, err = currentDataset.Section[map[string]int](textNope)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
-	_, err = datasetValue.Section[struct {
+	_, err = currentDataset.Section[struct {
 		Root string `yaml:"rooot"`
 	}](textPaths)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -98,17 +98,17 @@ func TestFoundationDataset_MergesAcrossFiles(t *testing.T) {
 		"d/b.yaml": {Data: []byte("check:\n  ratchet: {hard: x}\n  docs: {on: true}\n" +
 			"tools:\n  - name: helm\n    pin: v3\n  - name: helm\n    pin: v3\n")},
 	}
-	datasetValue, err := dataset.Load(fsys, textD2)
+	currentDataset, err := dataset.Load(fsys, textDLower)
 	require.NoError(t, err)
 
-	check, err := datasetValue.Section[map[string]map[string]any](textCheck)
+	check, err := currentDataset.Section[map[string]map[string]any](textCheck)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]map[string]any{
-		"ratchet": {"root": "cli", "hard": textX},
-		textDocs2: {"on": true},
+		"ratchet":     {"root": "cli", "hard": textX},
+		textDocsLower: {"on": true},
 	}, check)
 
-	tools, err := datasetValue.Section[[]datasetTool](textTools)
+	tools, err := currentDataset.Section[[]datasetTool](textTools)
 	require.NoError(t, err)
 	assert.Equal(t, []datasetTool{
 		{
@@ -132,7 +132,7 @@ func TestFoundationDataset_MergesAcrossFiles(t *testing.T) {
 				"d/a.yaml": fsys["d/a.yaml"], "d/b.yaml": fsys["d/b.yaml"],
 				"d/c.yaml": {Data: []byte(testCase.c)},
 			}
-			_, err := dataset.Load(fs, textD2)
+			_, err := dataset.Load(fs, textDLower)
 			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 			assert.Contains(t, err.Error(), testCase.path)
 			assert.Contains(t, err.Error(), "d/c.yaml")
@@ -173,3 +173,8 @@ func TestFoundationDataset_LoadTree(t *testing.T) {
 	_, err = dataset.LoadTree(fsys, textNope)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }
+
+const (
+	// textDataMoreYaml is the literal "data/more.yaml".
+	textDataMoreYaml = "data/more.yaml"
+)

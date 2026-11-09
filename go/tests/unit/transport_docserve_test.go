@@ -63,10 +63,10 @@ func freePort(t *testing.T) string {
 func writeSpec(t *testing.T, root, svc string) {
 	t.Helper()
 
-	dir := filepath.Join(root, textServices, svc, textDocs2)
-	require.NoError(t, os.MkdirAll(dir, perm0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, textOpenapiJSON2),
-		[]byte(`{"openapi":"3.0.0","svc":"`+svc+`"}`), perm0o600))
+	dir := filepath.Join(root, textServices, svc, textDocsLower)
+	require.NoError(t, os.MkdirAll(dir, mkdirAllInputSpec))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, textOpenapiJSONLower),
+		[]byte(`{"openapi":"3.0.0","svc":"`+svc+`"}`), writeFileInput))
 }
 
 // getBody GETs the API server's path and returns its status and body.
@@ -101,7 +101,7 @@ func serveAPI(t *testing.T, root string) string {
 		err  error
 	)
 
-	for range iterations5 {
+	for range iterationsAPI {
 		port = freePort(t)
 		srv, err = docserve.New(new(docserveCfg(root, port)), new(docserveDeps(nil, nil))).
 			ServeAPIDocs(t.Context())
@@ -194,13 +194,16 @@ func TestDocserve_PythonDocs(t *testing.T) {
 	server := docserve.New(new(docserveCfg(root, text0)), new(docserveDeps(nil, sup)))
 
 	_, err := server.ServePythonDocs(t.Context())
-	require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)
+	require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textVLowerAlt, err)
 
 	pkg := filepath.Join(root, textPython, "demo")
-	require.NoError(t, os.MkdirAll(filepath.Join(pkg, textSrc, "demo_mod"), perm0o750))
 	require.NoError(
 		t,
-		os.WriteFile(filepath.Join(pkg, textPyprojectToml), nil, perm0o600),
+		os.MkdirAll(filepath.Join(pkg, textSrc, "demo_mod"), mkdirAllInputDocs),
+	)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(pkg, textPyprojectToml), nil, writeFileInput),
 	)
 
 	var spec types.ProcessSpec
@@ -248,7 +251,7 @@ func TestDocserve_APIDocsSingleSpec(t *testing.T) {
 	writeSpec(t, root, textAPI)
 	require.NoError(
 		t,
-		os.WriteFile(filepath.Join(root, textServices, "README.md"), nil, perm0o600),
+		os.WriteFile(filepath.Join(root, textServices, "README.md"), nil, writeFileInput),
 	)
 
 	port := serveAPI(t, root)
@@ -316,16 +319,16 @@ func TestDocserve_APIDocsFailures(t *testing.T) {
 	}
 
 	err := serve(t.TempDir(), text0)
-	assert.True(t, apperr.Is(err, apperr.CodeInternal), textV2, err)
+	assert.True(t, apperr.Is(err, apperr.CodeInternal), textVLowerAlt, err)
 
 	empty := t.TempDir()
 	require.NoError(
 		t,
-		os.MkdirAll(filepath.Join(empty, textServices, textAPI), perm0o750),
+		os.MkdirAll(filepath.Join(empty, textServices, textAPI), mkdirAllInputFailures),
 	)
 
 	err = serve(empty, text0)
-	assert.True(t, apperr.Is(err, apperr.CodeNotFound), textV2, err)
+	assert.True(t, apperr.Is(err, apperr.CodeNotFound), textVLowerAlt, err)
 
 	unreadable := t.TempDir()
 	require.NoError(t, os.MkdirAll(
@@ -333,15 +336,19 @@ func TestDocserve_APIDocsFailures(t *testing.T) {
 			unreadable,
 			textServices,
 			textAPI,
-			textDocs2,
-			textOpenapiJSON2,
+			textDocsLower,
+			textOpenapiJSONLower,
 		),
-		perm0o750,
+		mkdirAllInputFailures,
 	))
 
 	err = serve(unreadable, text0)
-	assert.True(t, apperr.Is(err, apperr.CodeInternal), textV2, err)
-	assert.Contains(t, err.Error(), filepath.Join(textAPI, textDocs2, textOpenapiJSON2))
+	assert.True(t, apperr.Is(err, apperr.CodeInternal), textVLowerAlt, err)
+	assert.Contains(
+		t,
+		err.Error(),
+		filepath.Join(textAPI, textDocsLower, textOpenapiJSONLower),
+	)
 
 	busy := t.TempDir()
 	writeSpec(t, busy, textAPI)
@@ -376,7 +383,7 @@ func TestDocserve_ServeRunsUntilCancelled(t *testing.T) {
 
 	err := docserve.New(&cfg, &docserve.Deps{Log: fixtures.NopLogger()}).
 		Serve(t.Context(), docserve.Targets{API: true})
-	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)
+	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textVLowerAlt, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
@@ -411,3 +418,22 @@ func TestDocserve_ServeRunsUntilCancelled(t *testing.T) {
 		Serve(t.Context(), docserve.Targets{API: true})
 	assert.Error(t, err)
 }
+
+const (
+	// iterationsAPI is the iterations api the tests use.
+	iterationsAPI = 5
+
+	// mkdirAllInputDocs is the mkdir all input docs the tests use.
+	mkdirAllInputDocs = 0o750
+
+	// mkdirAllInputFailures is the mkdir all input failures the tests use.
+	mkdirAllInputFailures = 0o750
+
+	// mkdirAllInputSpec is the mkdir all input spec the tests use.
+	mkdirAllInputSpec = 0o750
+)
+
+const (
+	// textOpenapiJSONLower is the literal "openapi.json".
+	textOpenapiJSONLower = "openapi.json"
+)

@@ -185,22 +185,22 @@ func (s *Server) addRunTool(
 		Description: description,
 		InputSchema: json.RawMessage(runIDSchema),
 	}, func(_ context.Context, req *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
-		var runIDInputValue runIDInput
+		var currentRunIDInput runIDInput
 
-		err := decodeArgs(req.Params.Arguments, &runIDInputValue)
+		err := decodeArgs(req.Params.Arguments, &currentRunIDInput)
 		if err != nil {
 			return replyErr(
 				apperr.Wrap(err, apperr.CodeInvalidInput, name+": decode arguments"),
 			)
 		}
 
-		if runIDInputValue.RunID == "" {
+		if currentRunIDInput.RunID == "" {
 			return replyErr(
 				apperr.New(apperr.CodeInvalidInput, name+": run_id is required"),
 			)
 		}
 
-		return callback(runIDInputValue.RunID)
+		return callback(currentRunIDInput.RunID)
 	})
 }
 

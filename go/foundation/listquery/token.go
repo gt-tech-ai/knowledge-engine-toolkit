@@ -43,19 +43,19 @@ type keysetWire struct {
 // int64); the caller (Run) converts a time.Time before minting, so this never sees an
 // unencodable value.
 func EncodeToken(tok types.PageToken) (string, error) {
-	var tokenWireValue tokenWire
+	var currentTokenWire tokenWire
 
 	if tok.Keyset != nil {
-		tokenWireValue.Keyset = &keysetWire{
+		currentTokenWire.Keyset = &keysetWire{
 			SortValues:  tok.Keyset.SortValues,
 			ID:          tok.Keyset.ID,
 			Fingerprint: tok.Keyset.Fingerprint,
 		}
 	} else {
-		tokenWireValue.OffsetPage = tok.OffsetPage
+		currentTokenWire.OffsetPage = tok.OffsetPage
 	}
 
-	raw, err := json.Marshal(tokenWireValue)
+	raw, err := json.Marshal(currentTokenWire)
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "marshal page token")
 	}
@@ -79,20 +79,20 @@ func DecodeToken(token string) (types.PageToken, error) {
 		return types.PageToken{}, apperr.InvalidInput("malformed page token")
 	}
 
-	var tokenWireValue tokenWire
+	var currentTokenWire tokenWire
 
-	err = json.Unmarshal(raw, &tokenWireValue)
+	err = json.Unmarshal(raw, &currentTokenWire)
 	if err != nil {
 		return types.PageToken{}, apperr.InvalidInput("malformed page token")
 	}
 
-	if tokenWireValue.Keyset != nil {
+	if currentTokenWire.Keyset != nil {
 		return types.PageToken{Keyset: &types.KeysetCursor{
-			SortValues:  tokenWireValue.Keyset.SortValues,
-			ID:          tokenWireValue.Keyset.ID,
-			Fingerprint: tokenWireValue.Keyset.Fingerprint,
+			SortValues:  currentTokenWire.Keyset.SortValues,
+			ID:          currentTokenWire.Keyset.ID,
+			Fingerprint: currentTokenWire.Keyset.Fingerprint,
 		}}, nil
 	}
 
-	return types.PageToken{OffsetPage: tokenWireValue.OffsetPage}, nil
+	return types.PageToken{OffsetPage: currentTokenWire.OffsetPage}, nil
 }

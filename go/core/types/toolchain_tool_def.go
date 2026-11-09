@@ -42,6 +42,8 @@ type InstallToolsOptions struct {
 
 	// AutoYes skips the confirmation prompt when true.
 	AutoYes bool
+	// CheckOnly reports what is missing and installs nothing.
+	CheckOnly bool
 
 	// Force reinstalls every targeted tool even when it is already present at a
 	// satisfying version — the rebuild path after a Go-toolchain bump, where the

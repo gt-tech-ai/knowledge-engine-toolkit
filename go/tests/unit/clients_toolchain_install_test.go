@@ -23,7 +23,7 @@ func provisionCatalog(t *testing.T) *toolchain.Catalog {
 	cat, err := toolchain.NewCatalog([]types.ToolEntry{
 		{
 			Name:     "Go",
-			Binary:   textGo2,
+			Binary:   textGoLower,
 			Category: types.CategoryPrerequisite,
 			Required: true,
 		},
@@ -63,7 +63,7 @@ func TestClientsToolchainInstaller_Install_RoutesExactCommand(t *testing.T) {
 			gomock.Any(),
 			textRoot,
 			[]string{textGotoolchainLocal},
-			textGo2,
+			textGoLower,
 			textInstall,
 			textPkgV1,
 		).
@@ -72,7 +72,7 @@ func TestClientsToolchainInstaller_Install_RoutesExactCommand(t *testing.T) {
 	tool := &types.ToolDef{
 		Name: textGrpcurl, Binary: textGrpcurl,
 		InstallMethods: map[string]types.InstallMethod{
-			textAll: {Command: textGo2, Args: []string{textInstall, textPkgV1}},
+			textAll: {Command: textGoLower, Args: []string{textInstall, textPkgV1}},
 		},
 	}
 
@@ -113,7 +113,10 @@ func TestClientsToolchainInstaller_InstallSet_SkipsInstalled(t *testing.T) {
 			Name:   textGrpcurl,
 			Binary: textGrpcurl,
 			InstallMethods: map[string]types.InstallMethod{
-				textAll: {Command: textGo2, Args: []string{textInstall, textGrpcurlV1}},
+				textAll: {
+					Command: textGoLower,
+					Args:    []string{textInstall, textGrpcurlV1},
+				},
 			},
 		},
 	}
@@ -126,7 +129,7 @@ func TestClientsToolchainInstaller_InstallSet_SkipsInstalled(t *testing.T) {
 			gomock.Any(),
 			textRoot,
 			[]string{textGotoolchainLocal},
-			textGo2,
+			textGoLower,
 			textInstall,
 			textGrpcurlV1,
 		).
@@ -161,16 +164,15 @@ func TestClientsToolchainInstaller_Provision_CheckOnly(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists(textGo2).Return(true)   // prerequisite present
-	r.EXPECT().Exists(textWire).Return(false) // required tool missing
+	r.EXPECT().Exists(textGoLower).Return(true) // prerequisite present
+	r.EXPECT().Exists(textWire).Return(false)   // required tool missing
 
 	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
 	err := inst.Provision(
 		context.Background(),
 		textRoot,
 		provisionCatalog(t),
-		false,
-		true,
+		&types.InstallToolsOptions{AutoYes: false, CheckOnly: true},
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), textWire)
@@ -192,7 +194,7 @@ func TestClientsToolchainInstaller_Provision_InstallsMissing(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	commandRunner := mocks.NewMockCommandRunner(ctrl)
-	commandRunner.EXPECT().Exists(textGo2).Return(true)
+	commandRunner.EXPECT().Exists(textGoLower).Return(true)
 	gomock.InOrder(
 		commandRunner.EXPECT().Exists(textWire).Return(false), // scan: missing
 		commandRunner.EXPECT().
@@ -200,7 +202,7 @@ func TestClientsToolchainInstaller_Provision_InstallsMissing(t *testing.T) {
 				gomock.Any(),
 				textRoot,
 				[]string{textGotoolchainLocal},
-				textGo2,
+				textGoLower,
 				textInstall,
 				"x/wire@v1",
 			).
@@ -218,8 +220,7 @@ func TestClientsToolchainInstaller_Provision_InstallsMissing(t *testing.T) {
 		context.Background(),
 		textRoot,
 		provisionCatalog(t),
-		true,
-		false,
+		&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
 	)
 	require.NoError(t, err)
 }
@@ -284,7 +285,7 @@ func TestClientsToolchainInstaller_Provision_ForceReinstallsPresent(t *testing.T
 
 	ctrl := gomock.NewController(t)
 	commandRunner := mocks.NewMockCommandRunner(ctrl)
-	commandRunner.EXPECT().Exists(textGo2).Return(true) // prerequisite present
+	commandRunner.EXPECT().Exists(textGoLower).Return(true) // prerequisite present
 	gomock.InOrder(
 		commandRunner.EXPECT().Exists(textWire).Return(true), // scan: present + OK
 		commandRunner.EXPECT().
@@ -292,7 +293,7 @@ func TestClientsToolchainInstaller_Provision_ForceReinstallsPresent(t *testing.T
 				gomock.Any(),
 				textRoot,
 				[]string{textGotoolchainLocal},
-				textGo2,
+				textGoLower,
 				textInstall,
 				"x/wire@v1",
 			).
@@ -311,8 +312,7 @@ func TestClientsToolchainInstaller_Provision_ForceReinstallsPresent(t *testing.T
 		context.Background(),
 		textRoot,
 		provisionCatalog(t),
-		true,
-		false,
+		&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
 	)
 	require.NoError(t, err)
 }
@@ -429,7 +429,7 @@ func TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet(t *testing.T) {
 	for _, bin := range []string{"req-ci", "opt-ci"} {
 		commandRunner.EXPECT().
 			RunWithEnv(gomock.Any(), textRoot, []string{textGotoolchainLocal},
-				textGo2, textInstall, "x/"+bin+"@v1.0.0").
+				textGoLower, textInstall, "x/"+bin+"@v1.0.0").
 			Return(nil)
 	}
 
@@ -460,12 +460,12 @@ func TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet(t *testing.T) {
 		},
 	)
 
-	testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRest(t, cat, err)
+	testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRefusesAndRuns(t, cat, err)
 }
 
-// testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRest continues
-// TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet with its remaining steps.
-func testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRest(
+// testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRefusesAndRuns continues
+// TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet: refuses and runs.
+func testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRefusesAndRuns(
 	t *testing.T,
 	cat *toolchain.Catalog,
 	err error,
@@ -487,7 +487,7 @@ func testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRest(
 				for _, bin := range []string{"req-ci", "opt-ci"} {
 					commandRunner.EXPECT().
 						RunWithEnv(gomock.Any(), textRoot, []string{textGotoolchainLocal},
-							textGo2, textInstall, "x/"+bin+"@v1.0.0").
+							textGoLower, textInstall, "x/"+bin+"@v1.0.0").
 						Return(nil)
 				}
 
@@ -528,7 +528,7 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		commandRunner := mocks.NewMockCommandRunner(ctrl)
-		commandRunner.EXPECT().Exists(textGo2).Return(true)
+		commandRunner.EXPECT().Exists(textGoLower).Return(true)
 		commandRunner.EXPECT().Exists(textWire).Return(false)
 
 		prompter := mocks.NewMockPrompter(ctrl)
@@ -543,8 +543,7 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 			context.Background(),
 			textRoot,
 			provisionCatalog(t),
-			false,
-			false,
+			&types.InstallToolsOptions{AutoYes: false, CheckOnly: false},
 		)
 		require.Error(t, err)
 		assert.True(t, apperr.Is(err, apperr.CodeUnavailable), err.Error())
@@ -554,16 +553,17 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
-		commandRunnerValue := mocks.NewMockCommandRunner(ctrl)
-		commandRunnerValue.EXPECT().Exists(textGrpcurl).Return(false)
-		commandRunnerValue.EXPECT().
-			RunWithEnv(gomock.Any(), textRoot, gomock.Any(), textGo2, textInstall, textGrpcurlV1).
+		currentCommandRunner := mocks.NewMockCommandRunner(ctrl)
+		currentCommandRunner.EXPECT().Exists(textGrpcurl).Return(false)
+		currentCommandRunner.EXPECT().
+			RunWithEnv(gomock.Any(), textRoot, gomock.Any(), textGoLower, textInstall,
+				textGrpcurlV1).
 			Return(nil)
 
 		p := mocks.NewMockPrompter(ctrl) // no EXPECT: any Confirm call fails the test
 
 		inst := toolchain.NewInstaller(
-			commandRunnerValue, fixtures.NopLogger(), textLinuxApt, p,
+			currentCommandRunner, fixtures.NopLogger(), textLinuxApt, p,
 		)
 		require.NoError(t, inst.InstallSet(
 			context.Background(), textRoot,
@@ -571,7 +571,7 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 				Name: textGrpcurl, Binary: textGrpcurl,
 				InstallMethods: map[string]types.InstallMethod{
 					textAll: {
-						Command: textGo2,
+						Command: textGoLower,
 						Args:    []string{textInstall, textGrpcurlV1},
 					},
 				},
@@ -596,7 +596,7 @@ func TestClientsToolchainInstaller_DenyPrompterRefuses(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	// No RunWithEnv EXPECT: an install fails the test.
 	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists(textGo2).Return(true)
+	r.EXPECT().Exists(textGoLower).Return(true)
 	r.EXPECT().Exists(textWire).Return(false)
 
 	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
@@ -604,8 +604,7 @@ func TestClientsToolchainInstaller_DenyPrompterRefuses(t *testing.T) {
 		context.Background(),
 		textRoot,
 		provisionCatalog(t),
-		false,
-		false,
+		&types.InstallToolsOptions{AutoYes: false, CheckOnly: false},
 	)
 	require.Error(t, err)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err.Error())
@@ -629,7 +628,7 @@ func TestClientsToolchainInstaller_NilPrompterFailsLoudly(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	// No RunWithEnv EXPECT: an install fails the test.
 	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists(textGo2).Return(true)
+	r.EXPECT().Exists(textGoLower).Return(true)
 	r.EXPECT().Exists(textWire).Return(false)
 
 	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, nil)
@@ -637,8 +636,7 @@ func TestClientsToolchainInstaller_NilPrompterFailsLoudly(t *testing.T) {
 		context.Background(),
 		textRoot,
 		provisionCatalog(t),
-		false,
-		false,
+		&types.InstallToolsOptions{AutoYes: false, CheckOnly: false},
 	)
 	require.Error(t, err)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err.Error())

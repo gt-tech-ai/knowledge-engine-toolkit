@@ -149,9 +149,9 @@ func (i loggingInterceptor) WrapStreamingHandler(
 func (i loggingInterceptor) logAccess(
 	ctx context.Context, procedure string, duration time.Duration, err error,
 ) {
-	loggerValue := i.logger.WithContext(ctx)
+	currentLogger := i.logger.WithContext(ctx)
 	if err == nil {
-		loggerValue.Info(
+		currentLogger.Info(
 			"request",
 			"procedure",
 			procedure,
@@ -189,8 +189,8 @@ func (i loggingInterceptor) logAccess(
 		"error", logErr,
 	}
 	if is4xxConnectCode(code) {
-		loggerValue.Warn("request failed", fields...)
+		currentLogger.Warn("request failed", fields...)
 	} else {
-		loggerValue.Error("request failed", fields...)
+		currentLogger.Error("request failed", fields...)
 	}
 }

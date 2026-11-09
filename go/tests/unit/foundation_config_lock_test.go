@@ -69,10 +69,15 @@ func TestLockConfigValidate(t *testing.T) {
 
 	tooFast := infra.DefaultLockConfig()
 
-	tooFast.RenewInterval = seconds20 * time.Second // > ttl/3 (30s/3 = 10s)
+	tooFast.RenewInterval = initialRenewInterval * time.Second // > ttl/3 (30s/3 = 10s)
 	assert.Error(
 		t,
 		tooFast.Validate(),
 		"a renew_interval greater than ttl/3 must be rejected",
 	)
 }
+
+const (
+	// initialRenewInterval is the initial renew interval the tests use.
+	initialRenewInterval = 20
+)

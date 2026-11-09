@@ -51,13 +51,13 @@ func committedTaxonomy(t *testing.T) map[string]string {
 func TestErrcodes_CommittedOutputsMatchTaxonomy(t *testing.T) {
 	t.Parallel()
 
-	codebaseValue := codebase.New(
+	currentCodebase := codebase.New(
 		fscodebase.New(filepath.FromSlash(repoRoot)),
 		codebase.NewSnapshot("errcodes"),
 		nil,
 	)
 
-	out, err := errcodes.New().Render(t.Context(), codebaseValue)
+	out, err := errcodes.New().Render(t.Context(), currentCodebase)
 	require.NoError(t, err)
 	require.ElementsMatch(
 		t,
@@ -65,7 +65,7 @@ func TestErrcodes_CommittedOutputsMatchTaxonomy(t *testing.T) {
 		slices.Collect(maps.Keys(out)),
 	)
 
-	d, err := gen.Check(t.Context(), codebaseValue, errcodes.New())
+	d, err := gen.Check(t.Context(), currentCodebase, errcodes.New())
 
 	require.NoError(t, err)
 	require.True(t, d.InSync, "run `go generate ./go/core/apperr/...`:\n%s", d.Diff)

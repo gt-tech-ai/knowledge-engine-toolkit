@@ -54,20 +54,20 @@ func TestMetricsBuilder_DisabledReturnsNoop(t *testing.T) {
 		Enabled: false,
 	}
 
-	metricsValue, err := metrics.NewFromConfig(cfg)
+	currentMetrics, err := metrics.NewFromConfig(cfg)
 	require.NoError(t, err, "NewFromConfig with Enabled=false must not return error")
-	require.NotNil(t, metricsValue, "expected non-nil metrics even when disabled")
+	require.NotNil(t, currentMetrics, "expected non-nil metrics even when disabled")
 
 	// Verify no-op metrics operations don't panic
-	counter := metricsValue.Counter("test_noop_counter", "test counter", textMethod)
-	counter.Inc(textGet3)
-	counter.Add(addArg5, textPost)
+	counter := currentMetrics.Counter("test_noop_counter", "test counter", textMethod)
+	counter.Inc(textGetUpper)
+	counter.Add(addInputNoop, textPost)
 
-	hist := metricsValue.Histogram("test_noop_hist", "test histogram", nil, textMethod)
-	hist.Observe(observeArg0p5, textGet3)
+	hist := currentMetrics.Histogram("test_noop_hist", "test histogram", nil, textMethod)
+	hist.Observe(observeInputNoop, textGetUpper)
 
-	gauge := metricsValue.Gauge("test_noop_gauge", "test gauge")
-	gauge.Set(setArg42p0)
+	gauge := currentMetrics.Gauge("test_noop_gauge", "test gauge")
+	gauge.Set(gaugeReadingNoop)
 	gauge.Inc()
 	gauge.Dec()
 }
@@ -84,7 +84,7 @@ func TestMetricsBuilder_DisabledReturnsNoop(t *testing.T) {
 func TestMetricsBuilder_UnknownKindReturnsError(t *testing.T) {
 	t.Parallel()
 
-	_, err := metrics.New(metrics.Kind(kindArg999))
+	_, err := metrics.New(metrics.Kind(kindInputError))
 	require.Error(t, err, textExpectedErrorForUnknown)
 }
 
@@ -170,7 +170,7 @@ func TestMetricsBuilder_KindString(t *testing.T) {
 		kind metrics.Kind
 	}{
 		{textPrometheus, metrics.KindPrometheus},
-		{textKind99, metrics.Kind(kindArg99)},
+		{textKind99, metrics.Kind(kindInput)},
 	}
 
 	for _, tt := range tests {
@@ -245,8 +245,8 @@ func TestMetricsBuilder_PromHistogramBuckets(t *testing.T) {
 	h := m.Histogram("prom_test_histogram_buckets", "test histogram",
 		[]float64{0.001, 0.01, 0.1, 0.5, 1.0, 5.0}, textMethod)
 
-	h.Observe(observeArg0p05, textGet3)
-	h.Observe(observeArg2p5, textPost)
+	h.Observe(observeInput, textGetUpper)
+	h.Observe(observeInputBuckets, textPost)
 }
 
 // TestMetricsBuilder_PromCounterAdd tests that Prometheus Counter.Add with
@@ -265,9 +265,9 @@ func TestMetricsBuilder_PromCounterAdd(t *testing.T) {
 	require.NoError(t, err, textMetricsNewMustNot)
 
 	c := m.Counter("prom_test_counter_add", "test counter", textMethod, textStatus)
-	c.Inc(textGet3, text200)
-	c.Add(addArg10p0, textPost, "201")
-	c.Add(addArg0p5, textDelete2, "204")
+	c.Inc(textGetUpper, text200)
+	c.Add(addInput, textPost, "201")
+	c.Add(addInputAdd, textDeleteUpper, "204")
 }
 
 // TestMetricsBuilder_PromGaugeIncDec tests that Prometheus Gauge Inc/Dec
@@ -286,7 +286,7 @@ func TestMetricsBuilder_PromGaugeIncDec(t *testing.T) {
 	require.NoError(t, err, textMetricsNewMustNot)
 
 	g := m.Gauge("prom_test_gauge_incdec", "test gauge", textService)
-	g.Set(setArg100p0, textAPI)
+	g.Set(gaugeReading, textAPI)
 	g.Inc(textAPI)
 	g.Dec(textAPI)
 }
@@ -304,39 +304,39 @@ func TestMetricsBuilder_PromGaugeIncDec(t *testing.T) {
 func TestMetricsBuilder_PromAlreadyRegistered(t *testing.T) {
 	t.Parallel()
 
-	metricsValue, err := metrics.New(metrics.KindPrometheus)
+	currentMetrics, err := metrics.New(metrics.KindPrometheus)
 	require.NoError(t, err, textMetricsNewMustNot)
 
 	// Counter: register twice with same name and identical descriptor.
-	c1 := metricsValue.Counter("prom_dup_counter", "duplicate counter", textMethod)
-	c2 := metricsValue.Counter("prom_dup_counter", "duplicate counter", textMethod)
+	c1 := currentMetrics.Counter("prom_dup_counter", "duplicate counter", textMethod)
+	secondC := currentMetrics.Counter("prom_dup_counter", "duplicate counter", textMethod)
 
-	c1.Inc(textGet3)
-	c2.Inc(textPost)
+	c1.Inc(textGetUpper)
+	secondC.Inc(textPost)
 
 	// Histogram: register twice with same name and identical descriptor.
-	histogram := metricsValue.Histogram(
+	histogram := currentMetrics.Histogram(
 		"prom_dup_histogram",
 		"duplicate histogram",
 		nil,
 		textMethod,
 	)
-	histogramValue := metricsValue.Histogram(
+	currentHistogram := currentMetrics.Histogram(
 		"prom_dup_histogram",
 		"duplicate histogram",
 		nil,
 		textMethod,
 	)
 
-	histogram.Observe(observeArg0p1, textGet3)
-	histogramValue.Observe(observeArg0p2, textPost)
+	histogram.Observe(observeInputRegistered, textGetUpper)
+	currentHistogram.Observe(observeInputAlreadyRegistered, textPost)
 
 	// Gauge: register twice with same name and identical descriptor.
-	g1 := metricsValue.Gauge("prom_dup_gauge", "duplicate gauge", textService)
-	g2 := metricsValue.Gauge("prom_dup_gauge", "duplicate gauge", textService)
+	g1 := currentMetrics.Gauge("prom_dup_gauge", "duplicate gauge", textService)
+	secondG := currentMetrics.Gauge("prom_dup_gauge", "duplicate gauge", textService)
 
-	g1.Set(setArg1p0, textAPI)
-	g2.Set(setArg2p0, textAPI)
+	g1.Set(gaugeReadingRegistered, textAPI)
+	secondG.Set(gaugeReadingAlreadyRegistered, textAPI)
 }
 
 // TestMetrics_MockAsConsumerDependency tests that MockMetrics satisfies
@@ -369,23 +369,63 @@ func TestMetrics_MockAsConsumerDependency(t *testing.T) {
 		Gauge("active_connections", "Active connections").
 		Return(mockGauge)
 
-	mockCounter.EXPECT().Inc(textGet3)
-	mockHist.EXPECT().Observe(observeArg0p5, textGet3)
-	mockGauge.EXPECT().Set(setArg42p0)
+	mockCounter.EXPECT().Inc(textGetUpper)
+	mockHist.EXPECT().Observe(observeInputDependency, textGetUpper)
+	mockGauge.EXPECT().Set(gaugeReadingDependency)
 
-	var metricsValue interfaces.Metrics = mockMetrics
+	var currentMetrics interfaces.Metrics = mockMetrics
 
-	c := metricsValue.Counter("http_requests_total", "Total HTTP requests", textMethod)
-	c.Inc(textGet3)
+	c := currentMetrics.Counter("http_requests_total", "Total HTTP requests", textMethod)
+	c.Inc(textGetUpper)
 
-	histogram := metricsValue.Histogram(
+	histogram := currentMetrics.Histogram(
 		"request_duration_seconds",
 		"Request duration",
 		nil,
 		textMethod,
 	)
-	histogram.Observe(observeArg0p5, textGet3)
+	histogram.Observe(observeInputDependency, textGetUpper)
 
-	g := metricsValue.Gauge("active_connections", "Active connections")
-	g.Set(setArg42p0)
+	g := currentMetrics.Gauge("active_connections", "Active connections")
+	g.Set(gaugeReadingDependency)
 }
+
+const (
+	// addInputAdd is the add input add the tests use.
+	addInputAdd = 0.5
+
+	// addInputNoop is the add input noop the tests use.
+	addInputNoop = 5
+
+	// gaugeReadingAlreadyRegistered is the gauge reading already registered the tests use.
+	gaugeReadingAlreadyRegistered = 2.0
+
+	// gaugeReadingDependency is the gauge reading dependency the tests use.
+	gaugeReadingDependency = 42.0
+
+	// gaugeReadingNoop is the gauge reading noop the tests use.
+	gaugeReadingNoop = 42.0
+
+	// gaugeReadingRegistered is the gauge reading registered the tests use.
+	gaugeReadingRegistered = 1.0
+
+	// observeInputAlreadyRegistered is the observe input already registered the tests use.
+	observeInputAlreadyRegistered = 0.2
+
+	// observeInputBuckets is the observe input buckets the tests use.
+	observeInputBuckets = 2.5
+
+	// observeInputDependency is the observe input dependency the tests use.
+	observeInputDependency = 0.5
+
+	// observeInputNoop is the observe input noop the tests use.
+	observeInputNoop = 0.5
+
+	// observeInputRegistered is the observe input registered the tests use.
+	observeInputRegistered = 0.1
+)
+
+const (
+	// textMetricsNewMustNot is the literal "metrics.New must not return error".
+	textMetricsNewMustNot = "metrics.New must not return error"
+)

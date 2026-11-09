@@ -1,17 +1,17 @@
 package report
 
 const (
-	// lineLen2 is the lineLen value 2.
-	lineLen2 = 2
+	// minPrefixedLineLen is the named value used where min prefixed line len applies.
+	minPrefixedLineLen = 2
 
-	// lineLen20 is the lineLen value 20.
-	lineLen20 = 20
+	// minTimestampLineLen is the named value used where min timestamp line len applies.
+	minTimestampLineLen = 20
 
-	// summaryErrorWidth3 is the summaryErrorWidth value 3.
-	summaryErrorWidth3 = 3
+	// errorEllipsisLen is the named value used where error ellipsis len applies.
+	errorEllipsisLen = 3
 
-	// summaryWidth3 is the summaryWidth value 3.
-	summaryWidth3 = 3
+	// ellipsisLen is the named value used where ellipsis len applies.
+	ellipsisLen = 3
 
 	// textS is the literal "%s".
 	textS = "%s"
@@ -24,19 +24,19 @@ const (
 )
 
 const (
-	// index4 is the index value 4.
-	index4 = 4
+	// timestampYearDash is the named value used where timestamp year dash applies.
+	timestampYearDash = 4
 
 	// textM is the literal "m".
 	textM = "m"
 )
 
 const (
-	// index7 is the index value 7.
-	index7 = 7
+	// timestampMonthDash is the named value used where timestamp month dash applies.
+	timestampMonthDash = 7
 )
 
 const (
-	// index10 is the index value 10.
-	index10 = 10
+	// timestampDateSeparator is the named value used where timestamp date separator applies.
+	timestampDateSeparator = 10
 )

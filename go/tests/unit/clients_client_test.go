@@ -154,7 +154,7 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 	bulkhead := mocks.NewMockBulkhead(ctrl)
 	bulkhead.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, fn func() error) error { return fn() },
-	).Times(timesArg4)
+	).Times(wantCallsOperations)
 
 	reg := promclient.NewRegistry()
 	base := wireBase(textSvc, &decorate.Deps{
@@ -166,12 +166,18 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 
 	calls := 0
 
-	testClientBaseRetriesOnlyIdempotentOperationsRest(t, reg, &base, transient, calls)
+	testClientBaseRetriesOnlyIdempotentOperationsChecksRetries(
+		t,
+		reg,
+		&base,
+		transient,
+		calls,
+	)
 }
 
-// testClientBaseRetriesOnlyIdempotentOperationsRest continues
-// TestClientBase_RetriesOnlyIdempotentOperations with its remaining steps.
-func testClientBaseRetriesOnlyIdempotentOperationsRest(
+// testClientBaseRetriesOnlyIdempotentOperationsChecksRetries continues
+// TestClientBase_RetriesOnlyIdempotentOperations: checks retries.
+func testClientBaseRetriesOnlyIdempotentOperationsChecksRetries(
 	t *testing.T,
 	reg *promclient.Registry,
 	base *client.Base,
@@ -189,8 +195,8 @@ func testClientBaseRetriesOnlyIdempotentOperationsRest(
 		return 42, nil
 	})
 	require.NoError(t, err)
-	assert.Equal(t, wantGot42, got)
-	assert.InDelta(t, wantClientOpCounter2p0, clientOpCounter(t, reg, textGet), 0)
+	assert.Equal(t, wantGot, got)
+	assert.InDelta(t, wantClientOpCounterRetries, clientOpCounter(t, reg, textGet), 0)
 
 	calls = 0
 
@@ -202,7 +208,7 @@ func testClientBaseRetriesOnlyIdempotentOperationsRest(
 
 		return nil
 	}))
-	assert.Equal(t, wantCalls3, calls)
+	assert.Equal(t, wantCallsRetries, calls)
 
 	calls = 0
 	_, err = base.ExecOnce(t.Context(), textCreate, func(context.Context) (int, error) {
@@ -319,12 +325,18 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 
 	tail := []interfaces.BufferedMessage{{ID: "m2"}}
 
-	testClientDecorateFamiliesCarryEveryResultRest2(ctx, t, ctrl, &deps, tail)
+	testClientDecorateFamiliesCarryEveryResultReplayBufferFamily(
+		ctx,
+		t,
+		ctrl,
+		&deps,
+		tail,
+	)
 }
 
-// testClientDecorateFamiliesCarryEveryResultRest2 continues
-// TestClientDecorate_FamiliesCarryEveryResult with its remaining steps.
-func testClientDecorateFamiliesCarryEveryResultRest2(
+// testClientDecorateFamiliesCarryEveryResultReplayBufferFamily continues
+// TestClientDecorate_FamiliesCarryEveryResult: replay buffer family.
+func testClientDecorateFamiliesCarryEveryResultReplayBufferFamily(
 	ctx context.Context,
 	t *testing.T,
 	ctrl *gomock.Controller,
@@ -353,20 +365,20 @@ func testClientDecorateFamiliesCarryEveryResultRest2(
 	objects := []interfaces.StorageObject{{Key: textA}}
 	baseSrc := mocks.NewMockConnectorSource(ctrl)
 	baseSrc.EXPECT().ListPage(gomock.Any(), "t1", 10).Return(objects, "t2", nil)
-	baseSrc.EXPECT().TestConnection(gomock.Any()).Return(rets7, nil)
+	baseSrc.EXPECT().TestConnection(gomock.Any()).Return(returnInput, nil)
 
 	src := fixtures.Must(connector.Decorate(baseSrc, decorate.Fixed(deps), "connector"))
-	page, next, err := src.ListPage(ctx, "t1", limit10)
+	page, next, err := src.ListPage(ctx, "t1", listPageInput)
 	require.NoError(t, err)
 	assert.Equal(t, objects, page)
 	assert.Equal(t, "t2", next)
 
-	testClientDecorateFamiliesCarryEveryResultRest(ctx, t, ctrl, deps, src)
+	testClientDecorateFamiliesCarryEveryResultPublisherFamily(ctx, t, ctrl, deps, src)
 }
 
-// testClientDecorateFamiliesCarryEveryResultRest continues
-// TestClientDecorate_FamiliesCarryEveryResult with its remaining steps.
-func testClientDecorateFamiliesCarryEveryResultRest(
+// testClientDecorateFamiliesCarryEveryResultPublisherFamily continues
+// TestClientDecorate_FamiliesCarryEveryResult: publisher family.
+func testClientDecorateFamiliesCarryEveryResultPublisherFamily(
 	ctx context.Context,
 	t *testing.T,
 	ctrl *gomock.Controller,
@@ -379,7 +391,7 @@ func testClientDecorateFamiliesCarryEveryResultRest(
 
 	n, err := src.TestConnection(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, equalArg7, n)
+	assert.Equal(t, wantN, n)
 
 	boom := apperr.New(apperr.CodeUnavailable, textDown)
 	basePub := mocks.NewMockMessagePublisher(ctrl)
@@ -478,13 +490,13 @@ func TestClientDecorate_CacheIsFailOpenAndCountsHits(t *testing.T) {
 	assert.False(t, hit)
 	assert.InDelta(
 		t,
-		wantClientCounter1p0,
+		wantClientCounter,
 		clientCounter(t, reg, "cache_hits_total", "cache", textAuthz),
 		0,
 	)
 	assert.InDelta(
 		t,
-		wantClientCounter1p0,
+		wantClientCounter,
 		clientCounter(t, reg, "cache_misses_total", "cache", textAuthz),
 		0,
 	)
@@ -492,12 +504,12 @@ func TestClientDecorate_CacheIsFailOpenAndCountsHits(t *testing.T) {
 	_, ok := byteCache.(interfaces.CacheInvalidator)
 	assert.False(t, ok, "a backend without invalidation stays without it")
 
-	testClientDecorateCacheIsFailOpenAndCountsHitsRest(ctx, t, ctrl)
+	testClientDecorateCacheIsFailOpenAndCountsHitsInvalidatorFailsOpen(ctx, t, ctrl)
 }
 
-// testClientDecorateCacheIsFailOpenAndCountsHitsRest continues
-// TestClientDecorate_CacheIsFailOpenAndCountsHits with its remaining steps.
-func testClientDecorateCacheIsFailOpenAndCountsHitsRest(
+// testClientDecorateCacheIsFailOpenAndCountsHitsInvalidatorFailsOpen continues
+// TestClientDecorate_CacheIsFailOpenAndCountsHits: invalidator fails open.
+func testClientDecorateCacheIsFailOpenAndCountsHitsInvalidatorFailsOpen(
 	ctx context.Context, t *testing.T, ctrl *gomock.Controller,
 ) {
 	t.Helper()
@@ -508,7 +520,7 @@ func testClientDecorateCacheIsFailOpenAndCountsHitsRest(
 
 	open := mocks.NewMockCircuitBreaker(ctrl)
 	open.EXPECT().Execute(gomock.Any()).
-		Return(apperr.New(apperr.CodeUnavailable, "breaker open")).Times(timesArg2)
+		Return(apperr.New(apperr.CodeUnavailable, "breaker open")).Times(wantCalls)
 
 	refused := fixtures.Must(
 		cache.Decorate(mocks.NewMockByteCache(ctrl), decorate.Fixed(&decorate.Deps{
@@ -577,8 +589,8 @@ func TestClientDecorate_SecretsAndHandlersAreObserved(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "s3cr3t", got.Reveal())
 	require.ErrorIs(t, src.Put(ctx, ref, types.NewSecret(textX)), boom)
-	assert.InDelta(t, wantClientOpCounter1p0, clientOpCounter(t, reg, textGet), 0)
-	assert.InDelta(t, wantClientOpCounter1p0, clientOpCounter(t, reg, textPut), 0)
+	assert.InDelta(t, wantClientOpCounter, clientOpCounter(t, reg, textGet), 0)
+	assert.InDelta(t, wantClientOpCounter, clientOpCounter(t, reg, textPut), 0)
 
 	calls := 0
 	handlers := wireBase("messaging.handler", &decorate.Deps{
@@ -594,7 +606,7 @@ func TestClientDecorate_SecretsAndHandlersAreObserved(t *testing.T) {
 	})
 	require.ErrorIs(t, err, boom)
 	assert.Equal(t, 1, calls)
-	assert.InDelta(t, wantClientOpCounter1p0, clientOpCounter(t, reg, textOrders), 0)
+	assert.InDelta(t, wantClientOpCounter, clientOpCounter(t, reg, textOrders), 0)
 }
 
 // TestClientBase_MessagingSpansCarryTheirRole tests the span kinds of the messaging
@@ -615,7 +627,7 @@ func TestClientBase_MessagingSpansCarryTheirRole(t *testing.T) {
 	tracer := mocks.NewMockTracer(ctrl)
 	span := mocks.NewMockSpan(ctrl)
 	span.EXPECT().SetAttribute(gomock.Any(), gomock.Any()).AnyTimes()
-	span.EXPECT().End().Times(timesArg3)
+	span.EXPECT().End().Times(wantCallsRole)
 
 	kinds := map[string]interfaces.SpanKind{}
 
@@ -737,3 +749,28 @@ func TestClientBase_OpenBoundsOnlyTheOpen(t *testing.T) {
 func wireBase(name string, deps *decorate.Deps, opts ...client.Option) client.Base {
 	return fixtures.Must(client.NewWireBase(decorate.Fixed(deps), name, opts...))
 }
+
+const (
+	// wantCallsOperations is the expected calls operations.
+	wantCallsOperations = 4
+
+	// wantCallsRetries is the expected calls retries.
+	wantCallsRetries = 3
+
+	// wantCallsRole is the expected calls role.
+	wantCallsRole = 3
+
+	// wantClientCounter is the expected client counter.
+	wantClientCounter = 1.0
+
+	// wantClientOpCounterRetries is the expected client op counter retries.
+	wantClientOpCounterRetries = 2.0
+)
+
+const (
+	// textAuthz is the literal "authz".
+	textAuthz = "authz"
+
+	// textPut is the literal "put".
+	textPut = "put"
+)

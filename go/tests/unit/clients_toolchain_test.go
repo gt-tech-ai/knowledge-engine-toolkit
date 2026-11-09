@@ -29,7 +29,7 @@ func TestClientsToolchainRegistry_GetAndCmd(t *testing.T) {
 	registry.Register(
 		toolchain.NewTool(textRuff, textRuff, "", []string{textUv, textRun}),
 	)
-	assert.Equal(t, wantLen2, registry.Len())
+	assert.Equal(t, wantLen, registry.Len())
 
 	got := registry.Get(textGolangciLint)
 	assert.Equal(t, textGolangciLint, got.Name())

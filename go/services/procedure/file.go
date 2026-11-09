@@ -43,16 +43,16 @@ func validFile(procFile *types.ProcFile) error {
 }
 
 // mode parses an octal permission; empty is def.
-func mode(text2 string, def fs.FileMode) (fs.FileMode, error) {
-	if text2 == "" {
+func mode(otherText string, def fs.FileMode) (fs.FileMode, error) {
+	if otherText == "" {
 		return def, nil
 	}
 
-	count, err := strconv.ParseUint(text2, base8, bitSize32)
+	count, err := strconv.ParseUint(otherText, base8, bitSize32)
 	if err != nil || count > uint64(fs.ModePerm) {
 		return 0, apperr.New(
 			apperr.CodeInvalidInput,
-			"file mode "+text2+" is not octal 0-0777",
+			"file mode "+otherText+" is not octal 0-0777",
 		)
 	}
 
@@ -62,17 +62,17 @@ func mode(text2 string, def fs.FileMode) (fs.FileMode, error) {
 // file applies f under the root and returns its row: a pass naming what it did, or a
 // failure naming the path.
 func (e *engine) file(
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	f *types.ProcFile,
 	name string,
 	vars Vars,
 ) types.StepResult {
 	msg, err := e.applyFile(f, vars)
 	if err != nil {
-		return compiledValue.result(name, types.StatusFail, err.Error())
+		return currentCompiled.result(name, types.StatusFail, err.Error())
 	}
 
-	res := compiledValue.result(name, types.StatusPass, "")
+	res := currentCompiled.result(name, types.StatusPass, "")
 
 	res.Detail = []byte(msg)
 
@@ -139,16 +139,16 @@ func (e *engine) fs() interfaces.FS {
 // rooted expands rel and joins it to the root; a path that leaves the root is
 // CodeInvalidInput.
 func (e *engine) rooted(rel string, vars Vars) (string, error) {
-	textValue, err := text(rel, vars)
+	fileText, err := text(rel, vars)
 	if err != nil {
 		return "", err
 	}
 
-	if !filepath.IsLocal(textValue) {
-		return "", apperr.New(apperr.CodeInvalidInput, textValue+" is outside the root")
+	if !filepath.IsLocal(fileText) {
+		return "", apperr.New(apperr.CodeInvalidInput, fileText+" is outside the root")
 	}
 
-	return filepath.Join(e.deps.Root, textValue), nil
+	return filepath.Join(e.deps.Root, fileText), nil
 }
 
 // ensureFile creates path as an empty file when missing, replacing an empty directory

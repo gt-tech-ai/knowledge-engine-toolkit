@@ -194,7 +194,7 @@ func TestStorageClient_Stat_ReturnsMetadata(t *testing.T) {
 	obj, err := c.Stat(context.Background(), textB, "doc.pdf")
 	require.NoError(t, err)
 	assert.Equal(t, "application/pdf", obj.ContentType)
-	assert.Equal(t, int64(int64Arg1234), obj.Size)
+	assert.Equal(t, int64(wantSize), obj.Size)
 	assert.Equal(t, "doc.pdf", obj.Key)
 }
 
@@ -337,9 +337,9 @@ func TestStorageClient_ListObjects_MapsContents(t *testing.T) {
 
 	objs, err := c.ListObjects(context.Background(), textB, "")
 	require.NoError(t, err)
-	require.Len(t, objs, wantObjsLen2)
+	require.Len(t, objs, wantObjsLen)
 	assert.Equal(t, "a.txt", objs[0].Key)
-	assert.Equal(t, int64(int64Arg10), objs[0].Size)
+	assert.Equal(t, int64(wantSizeContents), objs[0].Size)
 	assert.Equal(t, `"e2"`, objs[1].ETag)
 }
 
@@ -392,7 +392,7 @@ func TestStorageClient_ListObjectsPageToken_StreamsWithToken(t *testing.T) {
 		textB,
 		textDocs,
 		"tok1",
-		limit100,
+		listObjectsPageTokenInput,
 	)
 	require.NoError(t, err)
 	require.Len(t, objs, 1)
@@ -413,7 +413,7 @@ func TestStorageClient_ListObjectsPageToken_StreamsWithToken(t *testing.T) {
 		textB,
 		textDocs,
 		"tok2",
-		limit100,
+		listObjectsPageTokenInput,
 	)
 	require.NoError(t, err)
 	assert.Empty(t, next, "exhausted listing → empty token")
@@ -496,9 +496,9 @@ func TestStorageClient_DeleteBatch_ChunksOverLimit(t *testing.T) {
 
 			return &awss3.DeleteObjectsOutput{}, nil
 		}).
-		Times(timesArg3)
+		Times(wantCallsLimit)
 
-	keys := make([]string, size2500)
+	keys := make([]string, makeInputLimit)
 	for i := range keys {
 		keys[i] = fmt.Sprintf("k%d", i)
 	}
@@ -506,8 +506,8 @@ func TestStorageClient_DeleteBatch_ChunksOverLimit(t *testing.T) {
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 	require.NoError(t, c.DeleteBatch(context.Background(), textB, keys))
 
-	assert.Equal(t, wantCalls3, calls, "2500 keys → ceil(2500/1000) = 3 requests")
-	assert.Len(t, seen, wantSeenLen2500, "every key deleted exactly once")
+	assert.Equal(t, wantCallsLimit, calls, "2500 keys → ceil(2500/1000) = 3 requests")
+	assert.Len(t, seen, wantSeenLen, "every key deleted exactly once")
 }
 
 // TestStorageClient_DeleteBatch_BuildsIdentifiers tests that batch delete maps keys
@@ -552,7 +552,7 @@ func TestStorageClient_DeleteBatch_BuildsIdentifiers(t *testing.T) {
 		),
 	)
 	require.NotNil(t, got)
-	assert.Len(t, got.Delete.Objects, wantObjectsLen3)
+	assert.Len(t, got.Delete.Objects, wantObjectsLen)
 
 	require.NoError(t, storageClient.DeleteBatch(context.Background(), textB, nil))
 }
@@ -600,7 +600,7 @@ func TestStorageClient_Multipart_AbortsWithLiveContextOnCancel(t *testing.T) {
 	)
 
 	// A 4-byte threshold forces the multipart path for a small body.
-	c := newStorageClientWithMock(t.Context(), t, api, threshold4)
+	c := newStorageClientWithMock(t.Context(), t, api, newStorageClientWithMockInput)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // operation context already cancelled before the part fails
@@ -733,7 +733,7 @@ func TestStorageClient_Presign_BuildsSignedURLs(t *testing.T) {
 		context.Background(),
 		textBucket,
 		textObjKeyTxt,
-		expirySeconds900,
+		presignURLInput,
 		"report.pdf",
 	)
 	require.NoError(t, err)
@@ -749,7 +749,7 @@ func TestStorageClient_Presign_BuildsSignedURLs(t *testing.T) {
 		context.Background(),
 		textBucket,
 		textObjKeyTxt,
-		expirySeconds900,
+		presignPutURLInput,
 		textTextPlain,
 	)
 	require.NoError(t, err)
@@ -789,7 +789,7 @@ func TestStorageClient_Presign_UsesPublicEndpoint(t *testing.T) {
 		context.Background(),
 		textBucket,
 		textObjKeyTxt,
-		expirySeconds900,
+		presignURLInput,
 		textTextPlain,
 	)
 	require.NoError(t, err)
@@ -806,12 +806,12 @@ func TestStorageClient_Presign_UsesPublicEndpoint(t *testing.T) {
 		"GET presign must not bake in the in-cluster host",
 	)
 
-	testStorageClientPresignUsesPublicEndpointRest(t, storageClient)
+	testStorageClientPresignUsesPublicEndpointGetURL(t, storageClient)
 }
 
-// testStorageClientPresignUsesPublicEndpointRest continues
-// TestStorageClient_Presign_UsesPublicEndpoint with its remaining steps.
-func testStorageClientPresignUsesPublicEndpointRest(
+// testStorageClientPresignUsesPublicEndpointGetURL continues
+// TestStorageClient_Presign_UsesPublicEndpoint: get url.
+func testStorageClientPresignUsesPublicEndpointGetURL(
 	t *testing.T,
 	storageClient interfaces.StorageClient,
 ) {
@@ -823,7 +823,7 @@ func testStorageClientPresignUsesPublicEndpointRest(
 		context.Background(),
 		textBucket,
 		textObjKeyTxt,
-		expirySeconds900,
+		presignPutURLInput,
 		textTextPlain,
 	)
 	require.NoError(t, err)
@@ -842,7 +842,7 @@ func testStorageClientPresignUsesPublicEndpointRest(
 		textObjKeyTxt,
 		uploadID,
 		1,
-		expirySeconds900,
+		presignUploadPartInput,
 	)
 	require.NoError(t, err)
 	assert.Contains(
@@ -884,7 +884,7 @@ func TestStorageClient_Presign_EmptyPublicEndpointFallsBack(t *testing.T) {
 		context.Background(),
 		textBucket,
 		"k.txt",
-		expirySeconds900,
+		presignPutURLInput,
 		textTextPlain,
 	)
 	require.NoError(t, err)
@@ -934,7 +934,7 @@ func TestStorageClient_PresignPutURL_SignsContentTypeAndHost(t *testing.T) {
 			context.Background(),
 			textB,
 			"k.pdf",
-			expirySeconds300,
+			presignPutURLInputHost,
 			text,
 		)
 		require.NoError(t, err)
@@ -968,13 +968,12 @@ func TestStorageClient_PresignPutURL_SignsContentTypeAndHost(t *testing.T) {
 func TestStorageClient_EnsureBucket(t *testing.T) {
 	t.Parallel()
 
-	testStorageClientEnsureBucketRest6(t)
+	testStorageClientEnsureBucketExistingAndCreate(t)
 }
 
-// testStorageClientEnsureBucketRest6 continues testStorageClientEnsureBucketRest4 with
-// its
-// remaining steps.
-func testStorageClientEnsureBucketRest6(t *testing.T) {
+// testStorageClientEnsureBucketExistingAndCreate continues
+// testStorageClientEnsureBucket: existing and create.
+func testStorageClientEnsureBucketExistingAndCreate(t *testing.T) {
 	t.Helper()
 
 	const bucket = "documents"
@@ -1042,3 +1041,46 @@ func expectBucketAbsent(api *mocks.MockS3API) {
 		HeadBucket(gomock.Any(), gomock.Any()).
 		Return(nil, &s3types.NotFound{})
 }
+
+const (
+	// listObjectsPageTokenInput is the list objects page token input the tests use.
+	listObjectsPageTokenInput = 100
+
+	// makeInputLimit is the make input limit the tests use.
+	makeInputLimit = 2500
+
+	// newStorageClientWithMockInput is the new storage client with mock input the tests use.
+	newStorageClientWithMockInput = 4
+
+	// presignPutURLInput is the presign put urlinput the tests use.
+	presignPutURLInput = 900
+
+	// presignPutURLInputHost is the presign put urlinput host the tests use.
+	presignPutURLInputHost = 300
+
+	// presignUploadPartInput is the presign upload part input the tests use.
+	presignUploadPartInput = 900
+
+	// wantCallsLimit is the expected calls limit.
+	wantCallsLimit = 3
+
+	// wantObjectsLen is the expected objects len.
+	wantObjectsLen = 3
+
+	// wantSeenLen is the expected seen len.
+	wantSeenLen = 2500
+
+	// wantSize is the expected size.
+	wantSize = 1234
+
+	// wantSizeContents is the expected size contents.
+	wantSizeContents = 10
+)
+
+const (
+	// textLocalhost9000 is the literal "localhost:9000".
+	textLocalhost9000 = "localhost:9000"
+
+	// textMinio9000 is the literal "minio:9000".
+	textMinio9000 = "minio:9000"
+)

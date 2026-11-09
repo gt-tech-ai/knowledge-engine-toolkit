@@ -33,13 +33,13 @@ func TestCursorCodec_RoundTripAndUTCNormalization(t *testing.T) {
 
 	loc := time.FixedZone("UTC+5", 5*60*60)
 	created := time.Date(
-		year2026,
-		month7,
-		day24,
-		hour12,
-		min30,
-		sec45,
-		nsec123456789,
+		dateInput,
+		dateInputUTCNormalization,
+		dateInputAndUTCNormalization,
+		dateInputTripAndUTCNormalization,
+		dateInputRoundTripAndUTCNormalization,
+		dateInputCodecRoundTripAndUTCNormalization,
+		dateInputCursorCodecRoundTripAndUTCNormalization,
 		loc,
 	)
 
@@ -70,7 +70,7 @@ func TestCursorCodec_EmptyID(t *testing.T) {
 	t.Parallel()
 
 	codec := repository.NewCursorCodec()
-	created := time.Date(year2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	created := time.Date(dateInput, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	got, err := codec.Decode(codec.Encode(created, ""))
 	require.NoError(t, err)
@@ -127,3 +127,27 @@ func TestCursorCodec_DecodeInvalid(t *testing.T) {
 		})
 	}
 }
+
+const (
+	// dateInputAndUTCNormalization is the date input and utcnormalization the tests use.
+	dateInputAndUTCNormalization = 24
+
+	// dateInputCodecRoundTripAndUTCNormalization is the date input codec round trip and
+	// utcnormalization the tests use.
+	dateInputCodecRoundTripAndUTCNormalization = 45
+
+	// dateInputCursorCodecRoundTripAndUTCNormalization is the date input cursor codec
+	// round trip and utcnormalization the tests use.
+	dateInputCursorCodecRoundTripAndUTCNormalization = 123456789
+
+	// dateInputRoundTripAndUTCNormalization is the date input round trip and
+	// utcnormalization the tests use.
+	dateInputRoundTripAndUTCNormalization = 30
+
+	// dateInputTripAndUTCNormalization is the date input trip and utcnormalization the
+	// tests use.
+	dateInputTripAndUTCNormalization = 12
+
+	// dateInputUTCNormalization is the date input utcnormalization the tests use.
+	dateInputUTCNormalization = 7
+)

@@ -141,12 +141,23 @@ func TestPythonModuleName(t *testing.T) {
 	for _, d := range []string{"__pycache__", "shelf.egg-info", "shelf_core"} {
 		require.NoError(
 			t,
-			os.MkdirAll(filepath.Join(root, textLibs, "shelf", textSrc, d), perm0o750),
+			os.MkdirAll(
+				filepath.Join(root, textLibs, "shelf", textSrc, d),
+				mkdirAllInputName,
+			),
 		)
 	}
 
-	require.NoError(t, os.MkdirAll(filepath.Join(root, textLibs, "flat"), perm0o750))
+	require.NoError(
+		t,
+		os.MkdirAll(filepath.Join(root, textLibs, "flat"), mkdirAllInputName),
+	)
 
 	assert.Equal(t, "shelf_core", python.ModuleName(os.DirFS(root), "libs/shelf"))
 	assert.Equal(t, "flat", python.ModuleName(os.DirFS(root), "libs/flat"))
 }
+
+const (
+	// mkdirAllInputName is the mkdir all input name the tests use.
+	mkdirAllInputName = 0o750
+)

@@ -65,7 +65,7 @@ func (libs) ProgramOptions() []cel.ProgramOption { return nil }
 // exprArg reports whether arg is exactly `${expr}`, returning expr.
 func exprArg(arg string) (string, bool) {
 	if strings.HasPrefix(arg, "${") && strings.HasSuffix(arg, "}") {
-		return arg[offset2 : len(arg)-1], true
+		return arg[bracePrefixLen : len(arg)-1], true
 	}
 
 	return "", false
@@ -130,14 +130,14 @@ func (c *compiled) evalList(ctx context.Context, src string, vars Vars) ([]any, 
 func text(s string, vars Vars) (string, error) {
 	var missing string
 
-	out := placeholder.ReplaceAllStringFunc(s, func(textValue string) string {
-		name := textValue[1 : len(textValue)-1]
+	out := placeholder.ReplaceAllStringFunc(s, func(fileText string) string {
+		name := fileText[1 : len(fileText)-1]
 		value, ok := lookup(vars, name)
 
 		if !ok {
 			missing = name
 
-			return textValue
+			return fileText
 		}
 
 		return scalar(value)
@@ -173,10 +173,10 @@ func (c *compiled) args(ctx context.Context, in []string, vars Vars) ([]string, 
 // expandArg expands one argument: a splat variable, an expression, or plain text.
 func (c *compiled) expandArg(
 	ctx context.Context,
-	textValue string,
+	fileText string,
 	vars Vars,
 ) ([]string, error) {
-	if m := splat.FindStringSubmatch(textValue); m != nil {
+	if m := splat.FindStringSubmatch(fileText); m != nil {
 		value, ok := lookup(vars, m[1])
 		if !ok {
 			return nil, apperr.New(
@@ -188,9 +188,9 @@ func (c *compiled) expandArg(
 		return list(value), nil
 	}
 
-	text2, isExpr := exprArg(textValue)
+	otherText, isExpr := exprArg(fileText)
 	if !isExpr {
-		t, err := text(textValue, vars)
+		t, err := text(fileText, vars)
 		if err != nil {
 			return nil, err
 		}
@@ -198,7 +198,7 @@ func (c *compiled) expandArg(
 		return []string{t}, nil
 	}
 
-	v, err := c.eval(ctx, text2, vars)
+	v, err := c.eval(ctx, otherText, vars)
 	if err != nil {
 		return nil, err
 	}

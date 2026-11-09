@@ -80,3 +80,8 @@ func TestRedisCache_ClientAccessor(t *testing.T) {
 	client := c.Client()
 	require.NotNil(t, client, "expected non-nil redis.Client from Client()")
 }
+
+const (
+	// textExample6379 is the literal "example:6379".
+	textExample6379 = "example:6379"
+)

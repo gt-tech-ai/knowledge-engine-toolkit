@@ -514,7 +514,7 @@ func (r *Relay) record(
 func (r *Relay) backoff(attempts int) time.Duration {
 	duration := r.cfg.BaseBackoff
 	for range attempts {
-		if duration >= r.cfg.MaxBackoff/maxBackoff2 {
+		if duration >= r.cfg.MaxBackoff/backoffHalfDivisor {
 			return r.cfg.MaxBackoff
 		}
 
@@ -541,7 +541,7 @@ func (r *Relay) refreshGauges(ctx context.Context) {
 		return
 	}
 
-	lag := lag0p0
+	lag := noLag
 	if !stats.OldestPending.IsZero() {
 		lag = max(r.now().Sub(stats.OldestPending).Seconds(), 0)
 	}

@@ -177,5 +177,5 @@ func matchTemplate(tmpl, path []string) (literals int, ok bool) {
 
 // isParam reports whether a template segment is a "{name}" parameter capture.
 func isParam(seg string) bool {
-	return len(seg) >= segLen2 && seg[0] == '{' && seg[len(seg)-1] == '}'
+	return len(seg) >= minParamSegmentLen && seg[0] == '{' && seg[len(seg)-1] == '}'
 }

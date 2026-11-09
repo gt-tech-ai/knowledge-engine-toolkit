@@ -60,3 +60,8 @@ func TestKeyedLimiter_RejectsANonPositiveCap(t *testing.T) {
 	_, err := keyed.New(keyed.Config{})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// textOrgA is the literal "org-a".
+	textOrgA = "org-a"
+)

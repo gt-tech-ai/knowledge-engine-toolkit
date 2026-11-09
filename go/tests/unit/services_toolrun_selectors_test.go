@@ -93,12 +93,12 @@ func TestToolrunSelectors_Kinds(t *testing.T) {
 		),
 	)
 
-	testToolrunSelectorsKindsRest(t, codebase, none)
+	testToolrunSelectorsKindsEachSelector(t, codebase, none)
 }
 
-// testToolrunSelectorsKindsRest continues TestToolrunSelectors_Kinds with its remaining
-// steps.
-func testToolrunSelectorsKindsRest(
+// testToolrunSelectorsKindsEachSelector continues TestToolrunSelectors_Kinds: each
+// selector.
+func testToolrunSelectorsKindsEachSelector(
 	t *testing.T,
 	codebase interfaces.Codebase,
 	none selectors.Deps,

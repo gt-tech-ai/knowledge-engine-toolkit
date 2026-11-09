@@ -58,36 +58,36 @@ func cached[T, P any, ID comparable](
 
 // cacheReads serves Get and Exists from the cache where it can.
 func cacheReads[T, P any, ID comparable](
-	roles *decorate.Roles[T, P, ID], roleCacheValue *roleCache[T, ID],
+	roles *decorate.Roles[T, P, ID], currentRoleCache *roleCache[T, ID],
 ) {
 	if get := roles.Get; get != nil {
 		roles.Get = func(ctx context.Context, id ID) (*T,
 			error,
 		) {
-			return roleCacheValue.get(ctx, id, get)
+			return currentRoleCache.get(ctx, id, get)
 		}
 	}
 
 	if exists := roles.Exists; exists != nil {
 		roles.Exists = func(ctx context.Context, id ID) (bool, error) {
-			return roleCacheValue.exists(ctx, id, exists)
+			return currentRoleCache.exists(ctx, id, exists)
 		}
 	}
 }
 
 // cacheWrites primes the cache on Create and evicts on Update and Delete.
 func cacheWrites[T, P any, ID comparable](
-	roles *decorate.Roles[T, P, ID], roleCacheValue *roleCache[T, ID],
+	roles *decorate.Roles[T, P, ID], currentRoleCache *roleCache[T, ID],
 ) {
-	if create := roles.Create; create != nil && roleCacheValue.cache.IDOf != nil {
+	if create := roles.Create; create != nil && currentRoleCache.cache.IDOf != nil {
 		roles.Create = func(ctx context.Context, entity *T) (*T, error) {
-			return roleCacheValue.create(ctx, entity, create)
+			return currentRoleCache.create(ctx, entity, create)
 		}
 	}
 
 	if update := roles.Update; update != nil {
 		roles.Update = func(ctx context.Context, id ID, entity *T) (*T, error) {
-			return roleCacheValue.update(ctx, id, entity, update)
+			return currentRoleCache.update(ctx, id, entity, update)
 		}
 	}
 
@@ -95,7 +95,7 @@ func cacheWrites[T, P any, ID comparable](
 		roles.Delete = func(ctx context.Context,
 			id ID,
 		) error {
-			return roleCacheValue.remove(ctx, id, del)
+			return currentRoleCache.remove(ctx, id, del)
 		}
 	}
 }

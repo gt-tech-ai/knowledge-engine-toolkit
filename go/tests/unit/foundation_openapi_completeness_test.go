@@ -38,16 +38,15 @@ func TestCheckCompleteness_FlagsUnannotatedRESTRPC(t *testing.T) {
 	fds := fixtures.BuildRouteFDS(
 		t,
 		jsonapiSetter.FileOptsWithService(),
-		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmpty2)},
+		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmptyTitle)},
 		[]*descriptorpb.MethodDescriptorProto{
 			fixtures.Method(
 				"MarkRead",
-				textEmpty2,
-				textEmpty2,
+				textEmptyTitle,
+				textEmptyTitle,
 				jsonapiSetter.MethodOpts(
 					textPost,
 					"/api/v1/notifications/mark-read",
-					false,
 				),
 			),
 		},
@@ -77,16 +76,15 @@ func TestCheckCompleteness_RespectsExemptMethods(t *testing.T) {
 	fds := fixtures.BuildRouteFDS(
 		t,
 		jsonapiSetter.FileOptsWithService(),
-		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmpty2)},
+		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmptyTitle)},
 		[]*descriptorpb.MethodDescriptorProto{
 			fixtures.Method(
 				"MarkRead",
-				textEmpty2,
-				textEmpty2,
+				textEmptyTitle,
+				textEmptyTitle,
 				jsonapiSetter.MethodOpts(
 					textPost,
 					"/api/v1/notifications/mark-read",
-					false,
 				),
 			),
 		},
@@ -149,20 +147,20 @@ func TestCheckCompleteness_SurfaceParityWithRouteTable(t *testing.T) {
 		[]*descriptorpb.DescriptorProto{
 			fixtures.ResourceMessage(
 				&jsonapiSetter,
-				textDocument2,
+				textDocumentTitle,
 				textDocuments,
 				textDocument,
 				"",
 			),
-			fixtures.EmptyMessage(textEmpty2),
+			fixtures.EmptyMessage(textEmptyTitle),
 		},
 		[]*descriptorpb.MethodDescriptorProto{
-			fixtures.Method(textGetdocument, textEmpty2, textDocument2,
-				jsonapiSetter.MethodOpts(textGet3, textAPIV1DocumentsDocument, false)),
+			fixtures.Method(textGetdocument, textEmptyTitle, textDocumentTitle,
+				jsonapiSetter.MethodOpts(textGetUpper, textAPIV1DocumentsDocument)),
 			fixtures.Method(
 				"InternalPing",
-				textEmpty2,
-				textEmpty2,
+				textEmptyTitle,
+				textEmptyTitle,
 				nil,
 			), // gRPC-only → off-surface
 		},
@@ -174,10 +172,10 @@ func TestCheckCompleteness_SurfaceParityWithRouteTable(t *testing.T) {
 	offFDS := fixtures.BuildRouteFDS(
 		t,
 		nil, // no (jsonapi.v1.service) file option
-		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmpty2)},
+		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmptyTitle)},
 		[]*descriptorpb.MethodDescriptorProto{
-			fixtures.Method("MarkRead", textEmpty2, textEmpty2,
-				jsonapiSetter.MethodOpts(textPost, "/api/v1/x/mark-read", false)),
+			fixtures.Method("MarkRead", textEmptyTitle, textEmptyTitle,
+				jsonapiSetter.MethodOpts(textPost, "/api/v1/x/mark-read")),
 		},
 	)
 	offSurface, err := openapi.CheckCompleteness(offFDS, nil)

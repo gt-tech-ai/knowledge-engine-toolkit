@@ -32,9 +32,9 @@ func shelfLeaves() []types.FieldRef {
 }
 
 // genShelf builds a random expression at most depth levels deep.
-func genShelf(randValue *rand.Rand, depth int) *types.AlgebraExpr {
-	if depth <= 1 || randValue.Intn(intnArg3) == 0 {
-		leaf := shelfLeaves()[randValue.Intn(len(shelfLeaves()))]
+func genShelf(randSource *rand.Rand, depth int) *types.AlgebraExpr {
+	if depth <= 1 || randSource.Intn(upperBound) == 0 {
+		leaf := shelfLeaves()[randSource.Intn(len(shelfLeaves()))]
 
 		return &types.AlgebraExpr{Field: &leaf}
 	}
@@ -44,14 +44,14 @@ func genShelf(randValue *rand.Rand, depth int) *types.AlgebraExpr {
 		types.AlgebraConcat,
 		types.AlgebraNest,
 	}
-	n := 1 + randValue.Intn(intnArg3)
+	n := 1 + randSource.Intn(upperBound)
 	args := make([]*types.AlgebraExpr, n)
 
 	for i := range args {
-		args[i] = genShelf(randValue, depth-1)
+		args[i] = genShelf(randSource, depth-1)
 	}
 
-	return &types.AlgebraExpr{Op: opsList[randValue.Intn(len(opsList))], Args: args}
+	return &types.AlgebraExpr{Op: opsList[randSource.Intn(len(opsList))], Args: args}
 }
 
 // Generate implements quick.Generator.
@@ -95,19 +95,19 @@ func op(o types.AlgebraOp, args ...*types.AlgebraExpr) *types.AlgebraExpr {
 func TestAlgebra_CrossDistributesOverConcat(t *testing.T) {
 	t.Parallel()
 
-	law := func(randShelf3, randShelfValue, randShelf2 randShelf) bool {
+	law := func(thirdRandShelf, currentRandShelf, secondRandShelf randShelf) bool {
 		left := chartspec.Normalize(
 			op(
 				types.AlgebraCross,
-				randShelf3.E,
-				op(types.AlgebraConcat, randShelfValue.E, randShelf2.E),
+				thirdRandShelf.E,
+				op(types.AlgebraConcat, currentRandShelf.E, secondRandShelf.E),
 			),
 		)
 		right := chartspec.Normalize(
 			op(
 				types.AlgebraConcat,
-				op(types.AlgebraCross, randShelf3.E, randShelfValue.E),
-				op(types.AlgebraCross, randShelf3.E, randShelf2.E),
+				op(types.AlgebraCross, thirdRandShelf.E, currentRandShelf.E),
+				op(types.AlgebraCross, thirdRandShelf.E, secondRandShelf.E),
 			),
 		)
 
@@ -152,7 +152,7 @@ func TestAlgebra_CrossDistributesOverConcat(t *testing.T) {
 func TestAlgebra_NestIsSubsetOfCross(t *testing.T) {
 	t.Parallel()
 
-	testAlgebraNestIsSubsetOfCrossRest5(t)
+	testAlgebraNestIsSubsetOfCrossRunsProperty(t)
 }
 
 // nestIsSubsetOfCross is the law that every tuple of a nest of a and b is marked nested
@@ -171,9 +171,9 @@ func nestIsSubsetOfCross(a, b randShelf) bool {
 	return true
 }
 
-// testAlgebraNestIsSubsetOfCrossRest5 continues testAlgebraNestIsSubsetOfCrossRest4
-// with its remaining steps.
-func testAlgebraNestIsSubsetOfCrossRest5(t *testing.T) {
+// testAlgebraNestIsSubsetOfCrossRunsProperty continues
+// testAlgebraNestIsSubsetOfCross: runs property.
+func testAlgebraNestIsSubsetOfCrossRunsProperty(t *testing.T) {
 	t.Helper()
 
 	require.NoError(t, quick.Check(nestIsSubsetOfCross, &quick.Config{MaxCount: 300}))
@@ -187,3 +187,8 @@ func testAlgebraNestIsSubsetOfCrossRest5(t *testing.T) {
 		assert.False(t, tuple.Nested)
 	}
 }
+
+const (
+	// upperBound is the upper bound the tests use.
+	upperBound = 3
+)

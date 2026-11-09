@@ -29,15 +29,15 @@ func dottedOverrides(loader interfaces.ConfigLoader, section any, over *Config) 
 		}
 
 		key := SectionKey + "." + name + ".overrides"
-		tierValue, found := reflect.TypeAssert[*Tier](cfg.Field(index).Addr())
+		currentTier, found := reflect.TypeAssert[*Tier](cfg.Field(index).Addr())
 
 		if !found {
 			return apperr.New(apperr.CodeInternal, "decoration: "+name+" is not a tier")
 		}
 
-		tierValue.Overrides = make(map[string]Layers, len(raw))
+		currentTier.Overrides = make(map[string]Layers, len(raw))
 
-		err := tierValue.readOverrides(loader, key, "", raw)
+		err := currentTier.readOverrides(loader, key, "", raw)
 		if err != nil {
 			return err
 		}

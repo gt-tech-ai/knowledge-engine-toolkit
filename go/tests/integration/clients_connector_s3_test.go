@@ -111,12 +111,17 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 		SecretAccessKey: miniofix.RootPassword,
 	}
 
-	testConnectorS3SourceTestConnectionRealMinIORest(ctx, t, builder, &cfg)
+	testConnectorS3SourceTestConnectionRealMinIOListsOnlyDocsObjects(
+		ctx,
+		t,
+		builder,
+		&cfg,
+	)
 }
 
-// testConnectorS3SourceTestConnectionRealMinIORest continues
-// TestConnectorS3Source_TestConnection_RealMinIO with its remaining steps.
-func testConnectorS3SourceTestConnectionRealMinIORest(
+// testConnectorS3SourceTestConnectionRealMinIOListsOnlyDocsObjects continues
+// TestConnectorS3Source_TestConnection_RealMinIO: lists only docs objects.
+func testConnectorS3SourceTestConnectionRealMinIOListsOnlyDocsObjects(
 	ctx context.Context,
 	t *testing.T,
 	builder interfaces.SourceBuilder,
@@ -131,7 +136,7 @@ func testConnectorS3SourceTestConnectionRealMinIORest(
 
 	n, err := src.TestConnection(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, equalArg2, n, "only the two docs/ objects are under the prefix")
+	assert.Equal(t, wantN, n, "only the two docs/ objects are under the prefix")
 
 	// A nonexistent bucket is a client-fault error → CodeInvalidInput (not a transport
 	// error).
@@ -150,3 +155,8 @@ func testConnectorS3SourceTestConnectionRealMinIORest(
 		"a missing bucket is InvalidInput",
 	)
 }
+
+const (
+	// wantN is the expected n.
+	wantN = 2
+)

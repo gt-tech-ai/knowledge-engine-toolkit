@@ -75,14 +75,21 @@ func (*mapOp[E]) NewInput() any { return &map[string]any{} }
 // InputSchema returns the schema derived from the flags.
 func (o *mapOp[E]) InputSchema() []byte { return o.schema }
 
-// localFlag names the local option in a signature.
-type localFlag bool
+// flagAccess says which of an operation's flags a caller may set.
+type flagAccess int
+
+const (
+	// publicFlags admits every flag except the secret ones (a remote caller).
+	publicFlags flagAccess = iota
+	// allFlags admits the secret flags too (a local caller).
+	allFlags
+)
 
 // undeclared returns the first key of in, in sorted order, that no argument and no flag
 // declares — a secret flag counting only when local — or "".
-func (o *mapOp[E]) undeclared(in map[string]any, local localFlag) string {
+func (o *mapOp[E]) undeclared(in map[string]any, access flagAccess) string {
 	for _, k := range slices.Sorted(maps.Keys(in)) {
-		if !o.declares(k, bool(local)) {
+		if !o.declares(k, access) {
 			return k
 		}
 	}
@@ -92,14 +99,14 @@ func (o *mapOp[E]) undeclared(in map[string]any, local localFlag) string {
 
 // declares reports whether key names one of the op's arguments, or a flag (a secret one
 // only when local).
-func (o *mapOp[E]) declares(key string, local bool) bool {
+func (o *mapOp[E]) declares(key string, access flagAccess) bool {
 	if key == o.args.Rest && key != "" || slices.Contains(o.args.Names, key) {
 		return true
 	}
 
 	for i := range o.flags {
 		if o.flags[i].FlagField() == key {
-			return local || !o.flags[i].Secret
+			return access == allFlags || !o.flags[i].Secret
 		}
 	}
 

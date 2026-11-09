@@ -1,17 +1,17 @@
 package tracer
 
 const (
-	// offset3 is the offset value 3.
-	offset3 = 3
+	// schemeSeparatorLen is the offset value 3.
+	schemeSeparatorLen = 3
 
-	// partsLen2 is the partsLen value 2.
-	partsLen2 = 2
+	// minTraceparentParts is the named value used where min traceparent parts applies.
+	minTraceparentParts = 2
 
-	// sampleRate1p0 is the sampleRate value 1.0.
-	sampleRate1p0 = 1.0
+	// fullSampleRate is the named value used where full sample rate applies.
+	fullSampleRate = 1.0
 )
 
 const (
-	// partsLen32 is the partsLen value 32.
-	partsLen32 = 32
+	// traceIDHexLen is the named value used where trace idhex len applies.
+	traceIDHexLen = 32
 )

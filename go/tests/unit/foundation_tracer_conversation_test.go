@@ -100,7 +100,7 @@ func TestConversationStartOptions_FirstTurnHasNoLink(t *testing.T) {
 	cfg := trace.NewSpanStartConfig(
 		tracer.ConversationStartOptions(&tracer.Conversation{ID: "c1", TurnIndex: 0})...)
 
-	assert.Len(t, cfg.Attributes(), wantAttributesLen2)
+	assert.Len(t, cfg.Attributes(), wantAttributesLen)
 	assert.Empty(t, cfg.Links())
 }
 
@@ -123,7 +123,7 @@ func TestConversationStartOptions_RejectsInvalidConversation(t *testing.T) {
 
 	for _, conversation := range []tracer.Conversation{
 		{ID: "user@example.com", TurnIndex: 1, Prev: prev},
-		{ID: strings.Repeat(textA, count65), TurnIndex: 1, Prev: prev},
+		{ID: strings.Repeat(textA, repeatInputConversation), TurnIndex: 1, Prev: prev},
 		{ID: "c1", TurnIndex: -1, Prev: prev},
 	} {
 		opts := tracer.ConversationStartOptions(&conversation)
@@ -136,3 +136,11 @@ func TestConversationStartOptions_RejectsInvalidConversation(t *testing.T) {
 		)
 	}
 }
+
+const (
+	// repeatInputConversation is the repeat input conversation the tests use.
+	repeatInputConversation = 65
+
+	// wantAttributesLen is the expected attributes len.
+	wantAttributesLen = 2
+)

@@ -51,12 +51,12 @@ func TestDataset_Decode(t *testing.T) {
 		"data/tools.yaml": {Data: []byte("tools:\n  - name: buf\n    pin: v1.73.0\n")},
 		textDataPathsYaml: {Data: []byte("paths:\n  root: .\nlimits: {max: 3}\n")},
 	}
-	datasetValue, err := dataset.Load(good, textData)
+	currentDataset, err := dataset.Load(good, textData)
 	require.NoError(t, err)
 
 	var out decodedData
 
-	require.NoError(t, datasetValue.Decode(&out))
+	require.NoError(t, currentDataset.Decode(&out))
 	assert.Equal(t, []datasetTool{{Name: textBuf, Pin: "v1.73.0"}}, out.Tools)
 	assert.Equal(t, ".", out.Paths.Root)
 	assert.Equal(t, map[string]int{textMax: 3}, out.Limits)
@@ -84,17 +84,21 @@ func TestDataset_Decode(t *testing.T) {
 	assert.Equal(
 		t,
 		apperr.CodeInvalidInput,
-		apperr.Code(datasetValue.Decode(decodedData{})),
+		apperr.Code(currentDataset.Decode(decodedData{})),
 	)
 	assert.Equal(
 		t,
 		apperr.CodeInvalidInput,
-		apperr.Code(datasetValue.Decode((*decodedData)(nil))),
+		apperr.Code(currentDataset.Decode((*decodedData)(nil))),
 	)
 
 	var notStruct map[string]any
 
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(datasetValue.Decode(&notStruct)))
+	assert.Equal(
+		t,
+		apperr.CodeInvalidInput,
+		apperr.Code(currentDataset.Decode(&notStruct)),
+	)
 }
 
 // TestDataset_DecodeKeepsBlockScalars tests that a section decodes to the same values a
@@ -130,13 +134,13 @@ func TestDataset_DecodeKeepsBlockScalars(t *testing.T) {
 
 	require.NoError(t, yaml.Unmarshal([]byte(src), &want))
 
-	datasetValue, err := dataset.Load(
+	currentDataset, err := dataset.Load(
 		fstest.MapFS{"data/q.yaml": {Data: []byte(src)}},
 		textData,
 	)
 	require.NoError(t, err)
 
-	got, err := datasetValue.Section[queries](textQ)
+	got, err := currentDataset.Section[queries](textQ)
 	require.NoError(t, err)
 	assert.Equal(t, want.Q, got)
 
@@ -144,6 +148,6 @@ func TestDataset_DecodeKeepsBlockScalars(t *testing.T) {
 		Q queries `yaml:"q"`
 	}
 
-	require.NoError(t, datasetValue.Decode(&all))
+	require.NoError(t, currentDataset.Decode(&all))
 	assert.Equal(t, want.Q, all.Q)
 }

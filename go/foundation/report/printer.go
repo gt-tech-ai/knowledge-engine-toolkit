@@ -74,15 +74,15 @@ func (l *lockedWriter) Write(b []byte) (int, error) {
 
 // newPrinter returns a printer over w at level; writes are serialized (lockedWriter).
 func newPrinter(w io.Writer, level Level, rich, color bool, hints []Hint) *printer {
-	printerValue := &printer{
+	currentPrinter := &printer{
 		w:     &lockedWriter{w: w},
 		rich:  rich,
 		pal:   newPalette(color),
 		hints: hints,
 	}
-	printerValue.level.Store(int32(level))
+	currentPrinter.level.Store(int32(level))
 
-	return printerValue
+	return currentPrinter
 }
 
 // at reports whether the printer's verbosity is at least l.

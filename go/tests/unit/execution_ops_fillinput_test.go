@@ -26,26 +26,34 @@ func TestOps_FillInput(t *testing.T) {
 	t.Parallel()
 
 	flags := []types.FlagSpec{
-		{Name: "coverage-threshold", Type: types.FlagInt, Default: default80},
-		{Name: textGo2, Type: types.FlagBool},
+		{Name: "coverage-threshold", Type: types.FlagInt, Default: defaultNumber},
+		{Name: textGoLower, Type: types.FlagBool},
 		{Name: textChanged, Type: types.FlagStrings},
 		{Name: textEnv, Type: types.FlagString},
 	}
 	args := types.ArgSpec{Names: []string{"overlay"}, Rest: textPaths}
 
-	lookup2 := map[string]any{
-		textGo2:              true,
+	statusByName := map[string]any{
+		textGoLower:          true,
 		textEnv:              textStaging,
-		"coverage_threshold": coverageThreshold40p0,
+		"coverage_threshold": wantCoverageThreshold,
 	}
-	ops.FillInput(flags, args, lookup2)
+	ops.FillInput(flags, args, statusByName)
 
 	assert.Equal(t, map[string]any{
 		"coverage_threshold": 40,
-		textGo2:              true,
+		textGoLower:          true,
 		textChanged:          []string{},
 		textEnv:              textStaging,
 		"overlay":            "",
 		textPaths:            []string{},
-	}, lookup2)
+	}, statusByName)
 }
+
+const (
+	// wantCoverageThreshold is the coverage threshold40 the tests use.
+	wantCoverageThreshold = 40.0
+
+	// defaultNumber is the default number the tests use.
+	defaultNumber = 80
+)

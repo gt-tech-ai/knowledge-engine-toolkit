@@ -43,15 +43,26 @@ type recorder struct {
 	mu sync.Mutex
 }
 
-// streamFlag names the stream option in a signature.
-type streamFlag bool
+// recordStreamed is record for an invocation that streams its output.
+func (r *recorder) recordStreamed(
+	env []string,
+	exe string,
+	args []string,
+) (string, bool) {
+	line := strings.Join(append([]string{exe}, args...), " ")
+
+	r.mu.Lock()
+	r.streamed = append(r.streamed, line)
+	r.mu.Unlock()
+
+	return r.record(env, exe, args)
+}
 
 // record notes one invocation and answers it from out.
 func (r *recorder) record(
 	env []string,
 	exe string,
 	args []string,
-	stream streamFlag,
 ) (string, bool) {
 	line := strings.Join(append([]string{exe}, args...), " ")
 
@@ -59,9 +70,6 @@ func (r *recorder) record(
 	defer r.mu.Unlock()
 
 	r.calls = append(r.calls, line)
-	if stream {
-		r.streamed = append(r.streamed, line)
-	}
 
 	if r.envs == nil {
 		r.envs = map[string][]string{}
@@ -87,7 +95,7 @@ func (r *recorder) runner(ctrl *gomock.Controller) *mocks.MockCommandRunner {
 		DoAndReturn(func(_ context.Context, _ string, env []string, exe string,
 			args ...string,
 		) interfaces.CmdResult {
-			out, failed := r.record(env, exe, args, false)
+			out, failed := r.record(env, exe, args)
 			if failed {
 				return interfaces.CmdResult{
 					Err:    apperr.Sentinel("exit 1"),
@@ -104,7 +112,7 @@ func (r *recorder) runner(ctrl *gomock.Controller) *mocks.MockCommandRunner {
 		DoAndReturn(func(_ context.Context, _ string, env []string, exe string,
 			args ...string,
 		) error {
-			if _, failed := r.record(env, exe, args, true); failed {
+			if _, failed := r.recordStreamed(env, exe, args); failed {
 				return apperr.Sentinel("exit 1")
 			}
 
@@ -177,7 +185,7 @@ func statuses(res types.StepResults) map[string]types.StepStatus {
 func TestServicesProcedure_Prune(t *testing.T) {
 	t.Parallel()
 
-	lookup2 := map[string]any{
+	statusByName := map[string]any{
 		"project": textApp, "compose_files": []string{"-f", "c.yaml"},
 		"remove_all": false,
 	}
@@ -193,7 +201,7 @@ func TestServicesProcedure_Prune(t *testing.T) {
 	eng := procEngine(t, rec, []types.Procedure{pruneProcedure(t)},
 		&procedure.Deps{Prompter: prompter})
 
-	res, err := eng.Run(t.Context(), textPrune, lookup2, types.RunOptions{})
+	res, err := eng.Run(t.Context(), textPrune, statusByName, types.RunOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"docker compose -f c.yaml --profile gateway --profile observability down " +
@@ -209,7 +217,12 @@ func TestServicesProcedure_Prune(t *testing.T) {
 	dry := &recorder{out: listings}
 
 	eng = procEngine(t, dry, []types.Procedure{pruneProcedure(t)}, &procedure.Deps{})
-	res, err = eng.Run(t.Context(), textPrune, lookup2, types.RunOptions{DryRun: true})
+	res, err = eng.Run(
+		t.Context(),
+		textPrune,
+		statusByName,
+		types.RunOptions{DryRun: true},
+	)
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		textDockerImagesFilter,
@@ -236,12 +249,12 @@ func TestServicesProcedure_ControlFlow(t *testing.T) {
 
 	rec := &recorder{out: map[string]string{
 		"kubectl get -o json": `{"items":["x"]}`,
-		textFalse:             textBoom2,
+		textFalse:             textBoomFailure,
 		textProbe:             textBang,
 	}}
 	setter := func(_ context.Context, vars procedure.Vars, _ types.RunOptions,
 	) (types.StepResults, procedure.Vars, error) {
-		return types.StepResults{{Name: textGo2, Status: types.StatusPass}},
+		return types.StepResults{{Name: textGoLower, Status: types.StatusPass}},
 			procedure.Vars{
 				textTag:  asType[string](t, vars[textEnv]) + "-1",
 				"policy": textSkip,
@@ -274,13 +287,13 @@ func TestServicesProcedure_ControlFlow(t *testing.T) {
 		rec.calls[4:],
 	)
 
-	lookup2 := statuses(res)
-	assert.Equal(t, types.StatusPass, lookup2["deploy web"])
-	assert.Equal(t, types.StatusSkip, lookup2[textAbsent])
-	assert.Equal(t, types.StatusSkip, lookup2["absent-var"])
-	assert.Equal(t, types.StatusWarn, lookup2[textSoft])
-	assert.Equal(t, types.StatusFail, lookup2["hard"])
-	assert.NotContains(t, lookup2, textNever)
+	statusByName := statuses(res)
+	assert.Equal(t, types.StatusPass, statusByName["deploy web"])
+	assert.Equal(t, types.StatusSkip, statusByName[textAbsent])
+	assert.Equal(t, types.StatusSkip, statusByName["absent-var"])
+	assert.Equal(t, types.StatusWarn, statusByName[textSoft])
+	assert.Equal(t, types.StatusFail, statusByName["hard"])
+	assert.NotContains(t, statusByName, textNever)
 }
 
 // testServicesProcedureControlFlowTable builds the table
@@ -417,7 +430,7 @@ func TestServicesProcedure_FinallyAndFail(t *testing.T) {
 		}}},
 	}
 	rec := &recorder{
-		out: map[string]string{textFalse: textBoom2, "cat": textNotStructured},
+		out: map[string]string{textFalse: textBoomFailure, "cat": textNotStructured},
 	}
 	eng := procEngine(t, rec, procs, &procedure.Deps{})
 
@@ -434,16 +447,16 @@ func TestServicesProcedure_FinallyAndFail(t *testing.T) {
 	st := statuses(res)
 	assert.Equal(t, types.StatusSkip, st[textName])
 
-	testServicesProcedureFinallyAndFailRest(t, rec, eng, st)
+	testServicesProcedureFinallyAndFailStatuses(t, rec, eng, st)
 }
 
-// testServicesProcedureFinallyAndFailRest continues TestServicesProcedure_FinallyAndFail
-// with its remaining steps.
-func testServicesProcedureFinallyAndFailRest(
+// testServicesProcedureFinallyAndFailStatuses continues
+// TestServicesProcedure_FinallyAndFail: statuses.
+func testServicesProcedureFinallyAndFailStatuses(
 	t *testing.T,
 	rec *recorder,
 	eng interfaces.ProcedureRunner,
-	lookup2 map[string]types.StepStatus,
+	statusByName map[string]types.StepStatus,
 ) {
 	t.Helper()
 
@@ -451,12 +464,12 @@ func testServicesProcedureFinallyAndFailRest(
 
 	var res types.StepResults
 
-	assert.Equal(t, types.StatusWarn, lookup2[textSoft])
-	assert.Equal(t, types.StatusFail, lookup2["work"])
-	assert.NotContains(t, lookup2, textNever)
-	assert.Equal(t, types.StatusSkip, lookup2[textInterrupted])
-	assert.Equal(t, types.StatusFail, lookup2[textBroken])
-	assert.Equal(t, types.StatusPass, lookup2[textDown])
+	assert.Equal(t, types.StatusWarn, statusByName[textSoft])
+	assert.Equal(t, types.StatusFail, statusByName["work"])
+	assert.NotContains(t, statusByName, textNever)
+	assert.Equal(t, types.StatusSkip, statusByName[textInterrupted])
+	assert.Equal(t, types.StatusFail, statusByName[textBroken])
+	assert.Equal(t, types.StatusPass, statusByName[textDown])
 
 	rec.calls = nil
 	res, err = eng.Run(
@@ -479,8 +492,8 @@ func testServicesProcedureFinallyAndFailRest(
 	require.NoError(t, err)
 	assert.Contains(t, rec.calls, "docker compose down true")
 
-	lookup2 = statuses(res)
-	assert.Equal(t, types.StatusFail, lookup2[textInterrupted])
+	statusByName = statuses(res)
+	assert.Equal(t, types.StatusFail, statusByName[textInterrupted])
 	assert.Equal(t, textInterrupted, res[len(res)-3].Error)
 
 	res, err = eng.Run(t.Context(), "parse", nil, types.RunOptions{})
@@ -603,10 +616,10 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 			return nil, procedure.Vars{"marked": true}, nil
 		},
 	}})
-	lookup2 := map[string]any{
+	statusByName := map[string]any{
 		textExtra: []string{textDBHostLocalhost, textDBPort5432}, textProfile: "small",
 	}
-	res, err := eng.Run(t.Context(), textRun, lookup2, types.RunOptions{})
+	res, err := eng.Run(t.Context(), textRun, statusByName, types.RunOptions{})
 	require.NoError(t, err)
 	assert.Equal(
 		t,
@@ -620,29 +633,34 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 	)
 	assert.Equal(t, []string{"A=small"}, rec.envs["uv run"])
 
-	lookup3 := statuses(res)
-	assert.Equal(t, types.StatusPass, lookup3["streamed"])
-	assert.Equal(t, types.StatusFail, lookup3[textBroken])
-	assert.Equal(t, types.StatusWarn, lookup3[textProbe], "an exit capture never fails")
+	statusOf := statuses(res)
+	assert.Equal(t, types.StatusPass, statusOf["streamed"])
+	assert.Equal(t, types.StatusFail, statusOf[textBroken])
+	assert.Equal(t, types.StatusWarn, statusOf[textProbe], "an exit capture never fails")
 	assert.Equal(
 		t,
 		types.StatusPass,
-		lookup3[textAfter],
+		statusOf[textAfter],
 		"the condition read the exit and set",
 	)
 
-	lookup2[textProfile] = ""
-	_, err = eng.Run(t.Context(), textRun, lookup2, types.RunOptions{})
+	statusByName[textProfile] = ""
+	_, err = eng.Run(t.Context(), textRun, statusByName, types.RunOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, []string{textDBHostLocalhost, textDBPort5432, textSearchEnvDev},
 		rec.envs["go run ./job"])
 
 	_, err = procedure.NewFromConfig(procedure.Config{Procedures: []types.Procedure{{
-		Name: textX, Steps: []types.ProcStep{{
-			Name: textS, Tool: textGo2, Stream: true, Capture: &types.Capture{Var: textV},
-		}},
+		Name: textX, Steps: []types.ProcStep{
+			{
+				Name:    textS,
+				Tool:    textGoLower,
+				Stream:  true,
+				Capture: &types.Capture{Var: textV},
+			},
+		},
 	}}}, &procedure.Deps{Tools: func(string) (interfaces.ToolSpec, bool) {
-		return toolOf(gomock.NewController(t), textGo2), true
+		return toolOf(gomock.NewController(t), textGoLower), true
 	}})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "stream")
@@ -656,7 +674,7 @@ func testServicesProcedureEnvAndStreamTable() []types.Procedure {
 		Steps: []types.ProcStep{
 			{
 				Name: "buffered",
-				Tool: textGo2,
+				Tool: textGoLower,
 				Args: []string{textRun, "./job"},
 				Env: []string{
 					"{extra...}",
@@ -710,12 +728,12 @@ func TestServicesProcedure_VarsAccessors(t *testing.T) {
 		textEnv:     textStaging,
 		textYes:     true,
 		textOnly:    []string{textAPI},
-		"units":     []any{textA, units2},
-		"code":      code3,
-		"exit":      int64(int64Arg4),
-		textN:       float64(float64Arg5),
+		"units":     []any{textA, units},
+		"code":      code,
+		"exit":      int64(int64Accessors),
+		textN:       float64(textNAccessors),
 		"odd":       struct{}{},
-		textWait:    seconds3 * time.Second,
+		textWait:    textWaitAccessors * time.Second,
 		"wait_text": "1m30s",
 		"wait_bad":  "soon",
 	}
@@ -732,9 +750,9 @@ func TestServicesProcedure_VarsAccessors(t *testing.T) {
 		"a JSON list is converted",
 	)
 	assert.Nil(t, vars.Strings(textEnv))
-	assert.Equal(t, wantInt3, vars.Int("code"))
-	assert.Equal(t, wantInt4, vars.Int("exit"))
-	assert.Equal(t, wantInt5, vars.Int(textN))
+	assert.Equal(t, wantIntAccessors, vars.Int("code"))
+	assert.Equal(t, wantIntVarsAccessors, vars.Int("exit"))
+	assert.Equal(t, wantIntProcedureVarsAccessors, vars.Int(textN))
 	assert.Zero(t, vars.Int("odd"))
 	assert.Equal(t, 3*time.Second, vars.Duration(textWait))
 	assert.Equal(
@@ -765,7 +783,7 @@ func TestServicesProcedure_VarsAccessors(t *testing.T) {
 func TestServicesProcedure_ConcurrentEachOverObjects(t *testing.T) {
 	t.Parallel()
 
-	rec := &recorder{out: map[string]string{"go build -o bin/b .": textBoom2}}
+	rec := &recorder{out: map[string]string{"go build -o bin/b .": textBoomFailure}}
 	targets := []any{
 		map[string]any{
 			textName:  textA,
@@ -790,7 +808,7 @@ func TestServicesProcedure_ConcurrentEachOverObjects(t *testing.T) {
 		{Name: textMain, Inputs: []string{textTargets}, Steps: []types.ProcStep{
 			{
 				Name: "{t.name}: build", Each: textTargets, As: textT, Concurrent: true,
-				Tool: textGo2, Cwd: "{t.dir}",
+				Tool: textGoLower, Cwd: "{t.dir}",
 				Args: []string{textBuild, "{t.extra...}", "-o", "{t.bin}", "."},
 			},
 			{Name: textNever, Tool: textEcho},
@@ -800,12 +818,12 @@ func TestServicesProcedure_ConcurrentEachOverObjects(t *testing.T) {
 		}},
 	}, &procedure.Deps{})
 
-	testServicesProcedureConcurrentEachOverObjectsRest(t, rec, targets, eng)
+	testServicesProcedureConcurrentEachOverObjectsChecksResults(t, rec, targets, eng)
 }
 
-// testServicesProcedureConcurrentEachOverObjectsRest continues
-// TestServicesProcedure_ConcurrentEachOverObjects with its remaining steps.
-func testServicesProcedureConcurrentEachOverObjectsRest(
+// testServicesProcedureConcurrentEachOverObjectsChecksResults continues
+// TestServicesProcedure_ConcurrentEachOverObjects: checks results.
+func testServicesProcedureConcurrentEachOverObjectsChecksResults(
 	t *testing.T,
 	rec *recorder,
 	targets []any,
@@ -819,7 +837,7 @@ func testServicesProcedureConcurrentEachOverObjectsRest(
 	assert.ElementsMatch(t, []string{
 		"go build -race -o bin/a .", "go build -o bin/b .", "go build -o bin/c .",
 	}, rec.calls, "every item runs, the failing one's siblings included")
-	require.Len(t, res, wantResLen3, "no step after the failing fan-out")
+	require.Len(t, res, wantResLen, "no step after the failing fan-out")
 	assert.Equal(t, []string{"a: build", "b: build", "c: build"},
 		[]string{res[0].Name, res[1].Name, res[2].Name}, "results keep item order")
 	assert.Equal(t, types.StatusFail, res[1].Status)
@@ -950,3 +968,76 @@ func TestServicesProcedure_ExecRunsTheCallersArgv(t *testing.T) {
 	}})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// code is the code the tests use.
+	code = 3
+
+	// int64Accessors is the int64 accessors the tests use.
+	int64Accessors = 4
+
+	// textNAccessors is the text naccessors the tests use.
+	textNAccessors = 5
+
+	// textWaitAccessors is the text wait accessors the tests use.
+	textWaitAccessors = 3
+
+	// units is the units the tests use.
+	units = 2
+
+	// wantIntAccessors is the expected int accessors.
+	wantIntAccessors = 3
+
+	// wantIntProcedureVarsAccessors is the expected int procedure vars accessors.
+	wantIntProcedureVarsAccessors = 5
+
+	// wantIntVarsAccessors is the expected int vars accessors.
+	wantIntVarsAccessors = 4
+)
+
+const (
+	// textBoomFailure is the literal "!boom".
+	textBoomFailure = "!boom"
+
+	// textDBHostLocalhost is the literal "DB_HOST=localhost".
+	textDBHostLocalhost = "DB_HOST=localhost"
+
+	// textDockerImagesFilter is the literal shown below.
+	textDockerImagesFilter = "docker images --filter reference=app-* --format {{.ID}}"
+
+	// textFalse is the literal "false".
+	textFalse = "false"
+
+	// textInterrupted is the literal "interrupted".
+	textInterrupted = "interrupted"
+
+	// textMark is the literal "mark".
+	textMark = "mark"
+
+	// textPrune is the literal "prune".
+	textPrune = "prune"
+
+	// textSearchEnvDev is the literal "SEARCH_ENV=dev".
+	textSearchEnvDev = "SEARCH_ENV=dev"
+
+	// textSkip is the literal "skip".
+	textSkip = "skip"
+
+	// textSoft is the literal "soft".
+	textSoft = "soft"
+
+	// textTargets is the literal "targets".
+	textTargets = "targets"
+
+	// textUvFail is the literal "uv fail".
+	textUvFail = "uv fail"
+
+	// textYes is the literal "yes".
+	textYes = "yes"
+
+	// textBang is the literal "!".
+	textBang = "!"
+
+	// textDBPort5432 is the literal "DB_PORT=5432".
+	textDBPort5432 = "DB_PORT=5432"
+)

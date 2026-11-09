@@ -122,14 +122,14 @@ func scriptedReceive(
 			return &awssqs.ReceiveMessageOutput{}, nil
 		}
 
-		receiveResultValue := results[index]
+		currentReceiveResult := results[index]
 		index++
 
-		if receiveResultValue.err != nil {
-			return nil, receiveResultValue.err
+		if currentReceiveResult.err != nil {
+			return nil, currentReceiveResult.err
 		}
 
-		return &awssqs.ReceiveMessageOutput{Messages: receiveResultValue.batch}, nil
+		return &awssqs.ReceiveMessageOutput{Messages: currentReceiveResult.batch}, nil
 	}
 }
 
@@ -398,7 +398,7 @@ func TestPublisher_ResolvesExistingQueueAndCaches(t *testing.T) {
 			return &awssqs.SendMessageOutput{}, nil
 		},
 	).
-		Times(timesArg2)
+		Times(wantCalls)
 
 	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
 	require.NoError(t, err)
@@ -610,7 +610,7 @@ func TestSubscriber_ReadyErrorPausesReceive(t *testing.T) {
 	// Times(0): a paused subscriber must never receive.
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).Times(0)
 
-	probes := make(chan struct{}, size8)
+	probes := make(chan struct{}, makeInputReceive)
 	sub, err := sqs.NewSubscriber(t.Context(), &sqs.Config{
 		API:         api,
 		BaseBackoff: time.Millisecond,
@@ -690,8 +690,8 @@ func TestSubscriber_NackDelaysVisibility(t *testing.T) {
 	in := recv(t, changed, "nacked message's visibility to change")
 	require.Equal(t, textRh1, aws.ToString(in.ReceiptHandle))
 	require.Equal(t, "http://q", aws.ToString(in.QueueUrl))
-	require.GreaterOrEqual(t, in.VisibilityTimeout, int32(int32Arg5))
-	require.LessOrEqual(t, in.VisibilityTimeout, int32(int32Arg30))
+	require.GreaterOrEqual(t, in.VisibilityTimeout, int32(minVisibilityTimeout))
+	require.LessOrEqual(t, in.VisibilityTimeout, int32(maxVisibilityTimeout))
 	require.NoError(t, sub.Close())
 }
 
@@ -735,7 +735,7 @@ func TestSubscriber_UsesConfiguredWaitTime(t *testing.T) {
 	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(context.Context, *interfaces.Message) error { return nil }))
 
-	require.Equal(t, int32(int32Arg20), recv(t, waits, "a receive"))
+	require.Equal(t, int32(wantRecv), recv(t, waits, "a receive"))
 	require.NoError(t, sub.Close())
 }
 
@@ -754,11 +754,11 @@ func TestNewSubscriber_RejectsInvalidPollConfig(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]sqs.Config{
-		"wait over 20s": {WaitTimeSeconds: waitTimeSeconds21},
+		"wait over 20s": {WaitTimeSeconds: waitTimeSeconds},
 		"negative wait": {WaitTimeSeconds: -1},
 		"negative min":  {NackDelay: sqs.NackDelay{Min: -time.Second, Max: time.Second}},
 		"min above max": {NackDelay: sqs.NackDelay{Min: time.Minute, Max: time.Second}},
-		"max above 12h": {NackDelay: sqs.NackDelay{Max: hours13 * time.Hour}},
+		"max above 12h": {NackDelay: sqs.NackDelay{Max: maxVisibilityRange * time.Hour}},
 	}
 	for name, cfg := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -893,12 +893,12 @@ func TestPublisher_PublishBatch_ChunksInto10s(t *testing.T) {
 			return &awssqs.SendMessageBatchOutput{}, nil
 		},
 	).
-		Times(timesArg3)
+		Times(wantCallsInto10s)
 
 	pub, err := sqs.NewPublisher(t.Context(), &sqs.Config{API: api})
 	require.NoError(t, err)
 
-	payloads := make([][]byte, size25)
+	payloads := make([][]byte, makeInputInto10s)
 	for i := range payloads {
 		payloads[i] = []byte(fmt.Sprintf("m%d", i))
 	}
@@ -964,12 +964,15 @@ func TestSubscriber_FansOutBatchAndBatchDeletes(t *testing.T) {
 		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
 		AnyTimes()
 
-	testSubscriberFansOutBatchAndBatchDeletesRest6(t, api)
+	testSubscriberFansOutBatchAndBatchDeletesDeletesInBatches(t, api)
 }
 
-// testSubscriberFansOutBatchAndBatchDeletesRest6 continues
-// testSubscriberFansOutBatchAndBatchDeletesRest4 with its remaining steps.
-func testSubscriberFansOutBatchAndBatchDeletesRest6(t *testing.T, api *mocks.MockAPI) {
+// testSubscriberFansOutBatchAndBatchDeletesDeletesInBatches continues
+// testSubscriberFansOutBatchAndBatchDeletes: deletes in batches.
+func testSubscriberFansOutBatchAndBatchDeletesDeletesInBatches(
+	t *testing.T,
+	api *mocks.MockAPI,
+) {
 	t.Helper()
 
 	const messages = 10
@@ -1145,3 +1148,37 @@ func expectBatchDeleteCount(api *mocks.MockAPI) chan int {
 
 	return deletedCount
 }
+
+const (
+	// makeInputInto10s is the make input into10s the tests use.
+	makeInputInto10s = 25
+
+	// makeInputReceive is the make input receive the tests use.
+	makeInputReceive = 8
+
+	// maxVisibilityRange bounds the generated visibility values.
+	maxVisibilityRange = 13
+
+	// maxVisibilityTimeout is the max visibility timeout the tests use.
+	maxVisibilityTimeout = 30
+
+	// minVisibilityTimeout is the min visibility timeout the tests use.
+	minVisibilityTimeout = 5
+
+	// waitTimeSeconds is the wait time seconds the tests use.
+	waitTimeSeconds = 21
+
+	// wantCallsInto10s is the expected calls into10s.
+	wantCallsInto10s = 3
+
+	// wantRecv is the expected recv.
+	wantRecv = 20
+)
+
+const (
+	// textHandlerToBeCalled is the literal "handler to be called".
+	textHandlerToBeCalled = "handler to be called"
+
+	// textRh1 is the literal "rh-1".
+	textRh1 = "rh-1"
+)

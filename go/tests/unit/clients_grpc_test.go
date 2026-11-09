@@ -36,7 +36,7 @@ func TestGRPCServerFactory(t *testing.T) {
 	t.Parallel()
 
 	cfg := grpcserver.ServerConfig{
-		MaxMessageSize: maxMessageSize16 * maxMessageSize161024 * maxMessageSize1024, // 16MB
+		MaxMessageSize: maxMessageSize * maxMessageSizeFactory * maxMessageSizeFactory, // 16MB
 	}
 
 	server := grpcserver.NewServer(cfg)
@@ -158,3 +158,11 @@ func TestRPCNewFromConfig_DecoratesEveryCall(t *testing.T) {
 	assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.GetStatus())
 	assert.InDelta(t, 1, clientOpCounter(t, reg, "grpc.health.v1.Health/Check"), 0)
 }
+
+const (
+	// maxMessageSize is the max message size the tests use.
+	maxMessageSize = 16
+
+	// maxMessageSizeFactory is the max message size factory the tests use.
+	maxMessageSizeFactory = 1024
+)

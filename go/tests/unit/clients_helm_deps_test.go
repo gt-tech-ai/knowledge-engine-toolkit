@@ -37,7 +37,7 @@ func TestBuildDeps_OncePerChartPerSnapshot(t *testing.T) {
 
 	var group sync.WaitGroup
 
-	for range iterations8 {
+	for range iterationsSnapshot {
 		group.Go(
 			func() { assert.NoError(t, helm.BuildDeps(ctx, helmClient, snap, textChartsAPI)) },
 		)
@@ -59,8 +59,13 @@ func TestBuildDeps_OncePerChartPerSnapshot(t *testing.T) {
 	helmClient.EXPECT().DependencyBuild(gomock.Any(), "charts/bad").
 		Return(apperr.New(apperr.CodeUpstream, textBoom)).Times(1)
 
-	for range iterations2 {
+	for range iterations {
 		err := helm.BuildDeps(ctx, helmClient, bad, "charts/bad")
 		assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
 	}
 }
+
+const (
+	// iterationsSnapshot is the iterations snapshot the tests use.
+	iterationsSnapshot = 8
+)

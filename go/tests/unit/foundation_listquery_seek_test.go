@@ -54,12 +54,11 @@ func TestSeekFilter_Expansion(t *testing.T) {
 		assert.Equal(t, types.OpLt, clause.Operator)
 	})
 
-	testSeekFilterExpansionRest(t)
+	testSeekFilterExpansionCompositeOr(t)
 }
 
-// testSeekFilterExpansionRest continues TestSeekFilter_Expansion with its remaining
-// steps.
-func testSeekFilterExpansionRest(t *testing.T) {
+// testSeekFilterExpansionCompositeOr continues TestSeekFilter_Expansion: composite or.
+func testSeekFilterExpansionCompositeOr(t *testing.T) {
 	t.Helper()
 
 	t.Run(
@@ -67,13 +66,13 @@ func testSeekFilterExpansionRest(t *testing.T) {
 		func(t *testing.T) {
 			t.Parallel()
 
-			timeValue := time.UnixMicro(2000).UTC()
+			instant := time.UnixMicro(2000).UTC()
 			filter := listquery.SeekFilter(
 				[]listquery.KeysetColumn{
 					{Column: textCreatedAt, Desc: true},
 					{Column: textID, Desc: true},
 				},
-				[]any{timeValue, "the-id"},
+				[]any{instant, "the-id"},
 			)
 			top, found := filter.(types.CompositeFilter)
 			require.True(t, found, "a multi-column seek is a composite OR")
@@ -84,7 +83,7 @@ func testSeekFilterExpansionRest(t *testing.T) {
 			require.True(t, found)
 			assert.Equal(t, textCreatedAt, strict.Field)
 			assert.Equal(t, types.OpLt, strict.Operator)
-			assert.Equal(t, timeValue, strict.Value)
+			assert.Equal(t, instant, strict.Value)
 
 			// Arm 2: eq on the leading column AND the strict tie on the id column.
 			tail, found := top.Or[1].(types.CompositeFilter)

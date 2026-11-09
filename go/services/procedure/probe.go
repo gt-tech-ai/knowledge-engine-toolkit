@@ -64,19 +64,19 @@ type check struct {
 // probe that does not expand to exactly one kind fails without an attempt.
 func (e *engine) probe(
 	ctx context.Context,
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	procProbe *types.ProcProbe,
 	name string,
 	vars Vars,
 ) types.StepResult {
 	start := time.Now()
 
-	chk, err := compiledValue.check(ctx, procProbe, vars)
+	chk, err := currentCompiled.check(ctx, procProbe, vars)
 	if err == nil {
 		err = e.retry(ctx, &chk)
 	}
 
-	res := compiledValue.result(name, types.StatusPass, "")
+	res := currentCompiled.result(name, types.StatusPass, "")
 
 	if err != nil {
 		msg := err.Error()
@@ -84,7 +84,7 @@ func (e *engine) probe(
 			msg += " (hint: " + chk.hint + ")"
 		}
 
-		res = compiledValue.result(name, types.StatusFail, msg)
+		res = currentCompiled.result(name, types.StatusFail, msg)
 	}
 
 	res.Duration = time.Since(start)
@@ -336,18 +336,18 @@ func probeSchedule(chk *check, procProbe *types.ProcProbe, vars Vars) error {
 
 // probeDuration expands and parses a duration; an empty value is def.
 func probeDuration(src string, def time.Duration, vars Vars) (time.Duration, error) {
-	textValue, err := text(src, vars)
+	fileText, err := text(src, vars)
 	if err != nil {
 		return def, err
 	}
 
-	if textValue == "" {
+	if fileText == "" {
 		return def, nil
 	}
 
-	d, err := time.ParseDuration(textValue)
+	d, err := time.ParseDuration(fileText)
 	if err != nil {
-		return def, apperr.Wrap(err, apperr.CodeInvalidInput, "probe duration "+textValue)
+		return def, apperr.Wrap(err, apperr.CodeInvalidInput, "probe duration "+fileText)
 	}
 
 	return d, nil

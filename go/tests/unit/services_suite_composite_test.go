@@ -56,7 +56,7 @@ func TestServicesSuite_Composite(t *testing.T) {
 			{Group: "Toolchain", Jobs: []string{"toolchain"}, Serial: true},
 			{Group: textFormat, Suites: []types.SuiteRef{{Name: textFmt}}, Serial: true},
 			{Group: "Lint & Type Check", Suites: []types.SuiteRef{
-				{Name: textLint, Flags: []string{textGo2, textOffline}},
+				{Name: textLint, Flags: []string{textGoLower, textOffline}},
 				{Name: textCheck, Select: &types.Selection{Tags: []string{"mocks"}}},
 			}, Jobs: []string{textTrivy}},
 			{Group: textUnitTests, Jobs: []string{"go-unit", "ts-unit"}},
@@ -76,9 +76,9 @@ func TestServicesSuite_Composite(t *testing.T) {
 			"ts-unit":   func() interfaces.AnyJob { return namedJob("TypeScript tests", textX) },
 		},
 	}
-	gateValue := composite.Gate()
-	phases := gateValue.Phases()
-	require.Len(t, phases, wantPhasesLen3, "the empty Toolchain phase is dropped")
+	currentGate := composite.Gate()
+	phases := currentGate.Phases()
+	require.Len(t, phases, wantPhasesLenComposite, "the empty Toolchain phase is dropped")
 
 	names := func(i int) []string {
 		out := make([]string, 0, len(phases[i].Jobs))
@@ -95,19 +95,18 @@ func TestServicesSuite_Composite(t *testing.T) {
 	assert.Equal(t, []string{"lint a", "lint b", "check a", "check b", "trivy license"},
 		names(1))
 	assert.Equal(t, textUnitTests, phases[2].Name)
-	assert.Equal(t, []string{"Go tests", "TypeScript tests"}, names(namesArg2))
+	assert.Equal(t, []string{"Go tests", "TypeScript tests"}, names(namesInput))
 	assert.Equal(t, []types.SuiteRef{
 		{Name: textFmt},
-		{Name: textLint, Flags: []string{textGo2, textOffline}},
+		{Name: textLint, Flags: []string{textGoLower, textOffline}},
 		{Name: textCheck, Select: &types.Selection{Tags: []string{"mocks"}}},
 	}, refs)
 
-	testServicesSuiteCompositeRest(t, gateValue)
+	testServicesSuiteCompositeFailures(t, currentGate)
 }
 
-// testServicesSuiteCompositeRest continues TestServicesSuite_Composite with its
-// remaining steps.
-func testServicesSuiteCompositeRest(t *testing.T, g *gate.Gate) {
+// testServicesSuiteCompositeFailures continues TestServicesSuite_Composite: failures.
+func testServicesSuiteCompositeFailures(t *testing.T, g *gate.Gate) {
 	t.Helper()
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
@@ -121,7 +120,7 @@ func testServicesSuiteCompositeRest(t *testing.T, g *gate.Gate) {
 		}},
 	}
 	bg := bad.Gate()
-	require.Len(t, bg.Phases(), wantPhasesLen2)
+	require.Len(t, bg.Phases(), wantPhasesLen)
 
 	err := bg.Run(t.Context(), runner, textR)
 	require.Error(t, err)
@@ -129,3 +128,11 @@ func testServicesSuiteCompositeRest(t *testing.T, g *gate.Gate) {
 	assert.Contains(t, err.Error(), `Preflight: no job "rust-unit"`)
 	assert.Contains(t, err.Error(), `Preflight: no suites for "fmt"`)
 }
+
+const (
+	// namesInput is the names input the tests use.
+	namesInput = 2
+
+	// wantPhasesLenComposite is the expected phases len composite.
+	wantPhasesLenComposite = 3
+)

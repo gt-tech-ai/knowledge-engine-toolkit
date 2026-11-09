@@ -48,9 +48,9 @@ func denyPrompter(t *testing.T) interfaces.Prompter {
 func registerToolScanMock(commandRunner *mocks.MockCommandRunner) {
 	commandRunner.EXPECT().Exists(gomock.Any()).Return(true).AnyTimes()
 
-	for i := range iterations9 {
+	for i := range iterationsMock {
 		args := make([]any, 0, 3+i)
-		for range iterations3 + i {
+		for range iterationsScanMock + i {
 			args = append(args, gomock.Any())
 		}
 
@@ -58,3 +58,11 @@ func registerToolScanMock(commandRunner *mocks.MockCommandRunner) {
 			Return(interfaces.CmdResult{}).AnyTimes()
 	}
 }
+
+const (
+	// iterationsMock is the iterations mock the tests use.
+	iterationsMock = 9
+
+	// iterationsScanMock is the iterations scan mock the tests use.
+	iterationsScanMock = 3
+)

@@ -252,27 +252,27 @@ var _ gate.Factory = &Gate{}
 // Gate builds the suite's gate: one job per selected entry, in phase order; a Serial
 // phase runs its jobs one at a time. A suite that cannot be planned is one failing job.
 func (g *Gate) Gate() *gate.Gate {
-	gateValue := gate.New(g.Suite.Title)
+	currentGate := gate.New(g.Suite.Title)
 	if g.Obs != nil {
-		gateValue.Observe(g.Obs)
+		currentGate.Observe(g.Obs)
 	}
 
 	phases, err := g.phases()
 	if err != nil {
-		gateValue.Serial(g.Suite.Title, failed(g.Suite.Title, err))
+		currentGate.Serial(g.Suite.Title, failed(g.Suite.Title, err))
 
-		return gateValue.Decorate(g.Env.Decs)
+		return currentGate.Decorate(g.Env.Decs)
 	}
 
 	for _, p := range phases {
 		if p.serial {
-			gateValue.Serial(p.group, p.jobs...)
+			currentGate.Serial(p.group, p.jobs...)
 		} else {
-			gateValue.Parallel(p.group, p.jobs...)
+			currentGate.Parallel(p.group, p.jobs...)
 		}
 	}
 
-	return gateValue.Decorate(g.Env.Decs)
+	return currentGate.Decorate(g.Env.Decs)
 }
 
 // Jobs returns every job of the suite's gate in phase order, for a caller that folds the

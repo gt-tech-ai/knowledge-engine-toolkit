@@ -27,19 +27,22 @@ func newRecordingLifecycle(
 	log *[]string,
 	startErr, stopErr error,
 ) *mocks.MockLifecycle {
-	lifecycleValue := mocks.NewMockLifecycle(ctrl)
-	lifecycleValue.EXPECT().Start(gomock.Any()).DoAndReturn(func(context.Context) error {
-		*log = append(*log, "start:"+name)
+	currentLifecycle := mocks.NewMockLifecycle(ctrl)
+	currentLifecycle.EXPECT().
+		Start(gomock.Any()).
+		DoAndReturn(func(context.Context) error {
+			*log = append(*log, "start:"+name)
 
-		return startErr
-	}).AnyTimes()
-	lifecycleValue.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) error {
+			return startErr
+		}).
+		AnyTimes()
+	currentLifecycle.EXPECT().Stop(gomock.Any()).DoAndReturn(func(context.Context) error {
 		*log = append(*log, "stop:"+name)
 
 		return stopErr
 	}).AnyTimes()
 
-	return lifecycleValue
+	return currentLifecycle
 }
 
 // TestLifecycleManager_StartsInOrderStopsInReverse tests that the Manager starts
@@ -136,3 +139,8 @@ func TestLifecycleManager_StopContinuesPastFailure(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, []string{"stop:c", "stop:b", textStopA}, log)
 }
+
+const (
+	// textStopA is the literal "stop:a".
+	textStopA = "stop:a"
+)

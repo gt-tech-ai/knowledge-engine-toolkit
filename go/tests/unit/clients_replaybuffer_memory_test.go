@@ -38,7 +38,7 @@ func itoa(index int) string {
 
 		buf[pos] = byte('0' + index%10)
 
-		index /= value10
+		index /= initialIndex
 	}
 
 	return string(buf[pos:])
@@ -71,8 +71,8 @@ func ids(msgs []interfaces.BufferedMessage) []string {
 func TestReplayBufferMemory_ReplayAfter(t *testing.T) {
 	t.Parallel()
 
-	buffer := memory.New(maxSize100, time.Minute)
-	appendSeq(t, buffer, appendSeqArg5)
+	buffer := memory.New(newInputAfter, time.Minute)
+	appendSeq(t, buffer, appendSeqInput)
 
 	tail, complete, err := buffer.ReplayAfter(context.Background(), textK, "msg-2")
 	require.NoError(t, err)
@@ -110,8 +110,8 @@ func TestReplayBufferMemory_ReplayAfter(t *testing.T) {
 func TestReplayBufferMemory_Prune(t *testing.T) {
 	t.Parallel()
 
-	buffer := memory.New(maxSize100, time.Minute)
-	appendSeq(t, buffer, appendSeqArg5)
+	buffer := memory.New(newInputPrune, time.Minute)
+	appendSeq(t, buffer, appendSeqInput)
 
 	require.NoError(t, buffer.Prune(context.Background(), textK, textMsg3))
 
@@ -141,8 +141,8 @@ func TestReplayBufferMemory_Prune(t *testing.T) {
 func TestReplayBufferMemory_NBoundEvictsOldest(t *testing.T) {
 	t.Parallel()
 
-	buffer := memory.New(maxSize3, time.Minute)
-	appendSeq(t, buffer, appendSeqArg5)
+	buffer := memory.New(newInputOldest, time.Minute)
+	appendSeq(t, buffer, appendSeqInput)
 
 	_, complete, err := buffer.ReplayAfter(context.Background(), textK, textMsg1)
 	require.NoError(t, err)
@@ -168,8 +168,8 @@ func TestReplayBufferMemory_NBoundEvictsOldest(t *testing.T) {
 func TestReplayBufferMemory_TTLExpires(t *testing.T) {
 	t.Parallel()
 
-	b := memory.New(maxSize100, 20*time.Millisecond)
-	appendSeq(t, b, appendSeqArg3)
+	b := memory.New(newInputTTLExpires, 20*time.Millisecond)
+	appendSeq(t, b, appendSeqInputTTLExpires)
 
 	assert.Eventually(t, func() bool {
 		_, complete, err := b.ReplayAfter(context.Background(), textK, textMsg1)
@@ -193,7 +193,7 @@ func TestReplayBufferMemory_TTLExpires(t *testing.T) {
 func TestReplayBufferMemory_ReplayAfterProperty(t *testing.T) {
 	t.Parallel()
 
-	testReplayBufferMemoryReplayAfterPropertyRest5(t)
+	testReplayBufferMemoryReplayAfterPropertyRunsProperty(t)
 }
 
 // replayTailMatches reports whether replaying after message j of an n-message buffer
@@ -201,7 +201,7 @@ func TestReplayBufferMemory_ReplayAfterProperty(t *testing.T) {
 func replayTailMatches(t *testing.T, count, index int) bool {
 	t.Helper()
 
-	b := memory.New(maxSize100, time.Minute)
+	b := memory.New(newInputMatches, time.Minute)
 	appendSeq(t, b, count)
 
 	tail, complete, err := b.ReplayAfter(context.Background(), textK, "msg-"+itoa(index))
@@ -217,9 +217,9 @@ func replayTailMatches(t *testing.T, count, index int) bool {
 	return slices.Equal(ids(tail), want)
 }
 
-// testReplayBufferMemoryReplayAfterPropertyRest5 continues
-// testReplayBufferMemoryReplayAfterPropertyRest4 with its remaining steps.
-func testReplayBufferMemoryReplayAfterPropertyRest5(t *testing.T) {
+// testReplayBufferMemoryReplayAfterPropertyRunsProperty continues
+// testReplayBufferMemoryReplayAfterProperty: runs property.
+func testReplayBufferMemoryReplayAfterPropertyRunsProperty(t *testing.T) {
 	t.Helper()
 
 	property := func(nRaw, jRaw uint8) bool {
@@ -230,3 +230,40 @@ func testReplayBufferMemoryReplayAfterPropertyRest5(t *testing.T) {
 	}
 	require.NoError(t, quick.Check(property, &quick.Config{MaxCount: 200}))
 }
+
+const (
+	// appendSeqInput is the append seq input the tests use.
+	appendSeqInput = 5
+
+	// appendSeqInputTTLExpires is the append seq input ttlexpires the tests use.
+	appendSeqInputTTLExpires = 3
+
+	// initialIndex is the initial index the tests use.
+	initialIndex = 10
+
+	// newInputAfter is the new input after the tests use.
+	newInputAfter = 100
+
+	// newInputMatches is the new input matches the tests use.
+	newInputMatches = 100
+
+	// newInputOldest is the new input oldest the tests use.
+	newInputOldest = 3
+
+	// newInputPrune is the new input prune the tests use.
+	newInputPrune = 100
+
+	// newInputTTLExpires is the new input ttlexpires the tests use.
+	newInputTTLExpires = 100
+)
+
+const (
+	// textMsg3 is the literal "msg-3".
+	textMsg3 = "msg-3"
+
+	// textMsg4 is the literal "msg-4".
+	textMsg4 = "msg-4"
+
+	// textMsg5 is the literal "msg-5".
+	textMsg5 = "msg-5"
+)

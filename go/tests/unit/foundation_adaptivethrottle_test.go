@@ -32,7 +32,7 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	for range iterations10 { // healthy: accepts keep pace with requests → no rejection
+	for range iterationsRecovery { // healthy: accepts keep pace with requests → no rejection
 		require.NoError(t, throttler.Do(ctx, func() error { return nil }))
 	}
 
@@ -43,7 +43,7 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 	)
 
 	// backend down: accepts frozen while requests climb → rejection rises
-	for range iterations20 {
+	for range iterationsOnRecovery {
 		require.Error(
 			t,
 			throttler.Do(ctx, func() error { return apperr.Sentinel("backend down") }),
@@ -57,7 +57,7 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 		"sustained failure must raise the rejection probability",
 	)
 
-	for range iterations40 { // recovery: accepts climb again → rejection eases
+	for range iterationsEasesOnRecovery { // recovery: accepts climb again → rejection eases
 		require.NoError(t, throttler.Do(ctx, func() error { return nil }))
 	}
 
@@ -132,3 +132,14 @@ func TestThrottler_DefaultsCoerceInvalidConfig(t *testing.T) {
 		"a healthy backend under coerced defaults is not throttled",
 	)
 }
+
+const (
+	// iterationsEasesOnRecovery is the iterations eases on recovery the tests use.
+	iterationsEasesOnRecovery = 40
+
+	// iterationsOnRecovery is the iterations on recovery the tests use.
+	iterationsOnRecovery = 20
+
+	// iterationsRecovery is the iterations recovery the tests use.
+	iterationsRecovery = 10
+)

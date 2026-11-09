@@ -127,14 +127,14 @@ func TestGate_StopOnFailureSkipsLaterPhases(t *testing.T) {
 		func() { phase2Ran = true },
 	)
 
-	gateValue := gate.New(textPreflight).
+	currentGate := gate.New(textPreflight).
 		Serial("phase1", failing).
 		Serial("phase2", skipped).
 		StopOnFailure()
 
 	require.Error(
 		t,
-		gateValue.Run(context.Background(), gateNopRunner(t), textSlash),
+		currentGate.Run(context.Background(), gateNopRunner(t), textSlash),
 		"expected error from failed phase",
 	)
 	assert.False(t, phase2Ran, "phase2 should have been skipped after phase1 failure")
@@ -258,7 +258,7 @@ func TestGate_Phases_ReturnsOrderedPhases(t *testing.T) {
 		Serial("beta", jobB)
 
 	phases := g.Phases()
-	require.Len(t, phases, wantPhasesLen2)
+	require.Len(t, phases, wantPhasesLen)
 	assert.Equal(t, "alpha", phases[0].Name)
 	assert.Equal(t, "beta", phases[1].Name)
 }

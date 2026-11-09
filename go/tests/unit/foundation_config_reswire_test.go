@@ -135,7 +135,7 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 	// backup fired — proves the delay kind was read (blocks forever if it never fires)
 	<-backup
 	require.NoError(t, <-done)
-	assert.Equal(t, int32(int32Arg2), calls.Load(),
+	assert.Equal(t, int32(wantCalls), calls.Load(),
 		"the configured delay hedger fires a backup attempt")
 	close(release)
 }
@@ -168,7 +168,7 @@ func TestReswire_AdaptiveThrottleDefault_NeverSheds(t *testing.T) {
 	boom := apperr.Sentinel(textBoom)
 	calls := 0
 
-	for range iterations100 {
+	for range iterationsSheds {
 		_ = adaptiveThrottler.Do(context.Background(), func() error {
 			calls++
 
@@ -178,7 +178,7 @@ func TestReswire_AdaptiveThrottleDefault_NeverSheds(t *testing.T) {
 
 	assert.Equal(
 		t,
-		wantCalls100,
+		wantCallsSheds,
 		calls,
 		"the disabled throttler runs every op (never sheds), even under sustained failure",
 	)
@@ -238,3 +238,11 @@ func TestReswire_AdaptiveThrottleReadsOverlay_Sheds(t *testing.T) {
 			"attempts)",
 	)
 }
+
+const (
+	// iterationsSheds is the iterations sheds the tests use.
+	iterationsSheds = 100
+
+	// wantCallsSheds is the expected calls sheds.
+	wantCallsSheds = 100
+)

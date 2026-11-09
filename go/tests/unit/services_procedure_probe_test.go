@@ -89,24 +89,27 @@ func TestServicesProcedure_ProbeKinds(t *testing.T) {
 	}}
 	eng := procEngine(t, rec, procs, &procedure.Deps{HTTP: doer, Dialer: dialer})
 
-	testServicesProcedureProbeKindsRest(t, eng)
+	testServicesProcedureProbeKindsStatuses(t, eng)
 }
 
-// testServicesProcedureProbeKindsRest continues TestServicesProcedure_ProbeKinds with
-// its remaining steps.
-func testServicesProcedureProbeKindsRest(t *testing.T, eng interfaces.ProcedureRunner) {
+// testServicesProcedureProbeKindsStatuses continues TestServicesProcedure_ProbeKinds:
+// statuses.
+func testServicesProcedureProbeKindsStatuses(
+	t *testing.T,
+	eng interfaces.ProcedureRunner,
+) {
 	t.Helper()
 
 	check := func(name string, items ...any) map[string]any {
-		lookup2 := map[string]any{
+		statusByName := map[string]any{
 			textName: name, "http": "", textTCP: "", "exec": []any{},
 			textStatus: "", "contains": "", "hint": "",
 		}
-		for i := 0; i+1 < len(items); i += value2 {
-			lookup2[asType[string](t, items[i])] = items[i+1]
+		for i := 0; i+1 < len(items); i += initialI {
+			statusByName[asType[string](t, items[i])] = items[i+1]
 		}
 
-		return lookup2
+		return statusByName
 	}
 
 	res, err := eng.Run(t.Context(), "smoke", procedure.Vars{textChecks: []any{
@@ -123,6 +126,19 @@ func testServicesProcedureProbeKindsRest(t *testing.T, eng interfaces.ProcedureR
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(res))
+
+	testServicesProcedureProbeKindsChecksStatuses(t, res, names)
+}
+
+// testServicesProcedureProbeKindsChecksStatuses continues
+// testServicesProcedureProbeKindsStatuses.
+func testServicesProcedureProbeKindsChecksStatuses(
+	t *testing.T,
+	res types.StepResults,
+	names []string,
+) {
+	t.Helper()
+
 	for i := range res {
 		names = append(names, res[i].Name)
 	}
@@ -142,13 +158,13 @@ func testServicesProcedureProbeKindsRest(t *testing.T, eng interfaces.ProcedureR
 		names,
 	)
 
-	lookup3 := statuses(res)
+	statusOf := statuses(res)
 	for _, pass := range []string{textAPI, "kong", textDB, textSeed} {
-		assert.Equal(t, types.StatusPass, lookup3[pass], pass)
+		assert.Equal(t, types.StatusPass, statusOf[pass], pass)
 	}
 
 	for _, fail := range []string{textDown, textBody, textRedis, textEmpty} {
-		assert.Equal(t, types.StatusFail, lookup3[fail], fail)
+		assert.Equal(t, types.StatusFail, statusOf[fail], fail)
 	}
 
 	assert.Contains(t, res[2].Error, "status 503")
@@ -209,7 +225,7 @@ func TestServicesProcedure_ProbeRetriesUntilTimeout(t *testing.T) {
 	res, err := eng.Run(t.Context(), textLate, nil, types.RunOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusPass, statuses(res)[textLate])
-	assert.Equal(t, int32(int32Arg3), attempts.Load())
+	assert.Equal(t, int32(wantAttempts), attempts.Load())
 
 	res, err = eng.Run(t.Context(), textDead, nil, types.RunOptions{})
 	require.NoError(t, err)
@@ -252,3 +268,11 @@ func TestServicesProcedure_ProbeIsAStepKind(t *testing.T) {
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), name)
 	}
 }
+
+const (
+	// textDead is the literal "dead".
+	textDead = "dead"
+
+	// textLate is the literal "late".
+	textLate = "late"
+)

@@ -35,10 +35,10 @@ func TestLocalLock_Acquire_Contention(t *testing.T) {
 	require.True(t, ok, "first Acquire should win")
 	require.NotEmpty(t, tok, "winner should receive a fencing token")
 
-	tok2, ok2, err := lock.Acquire(ctx, "resource:1:lock")
+	secondTok, secondOk, err := lock.Acquire(ctx, "resource:1:lock")
 	require.NoError(t, err)
-	assert.False(t, ok2, "second Acquire on a held key must lose")
-	assert.Empty(t, tok2, "loser must not receive a token")
+	assert.False(t, secondOk, "second Acquire on a held key must lose")
+	assert.Empty(t, secondTok, "loser must not receive a token")
 }
 
 // TestLocalLock_Release_TokenFenced tests that only the holder's token frees a
@@ -64,15 +64,15 @@ func TestLocalLock_Release_TokenFenced(t *testing.T) {
 
 	require.NoError(t, lock.Release(ctx, textK, "not-the-token"))
 
-	_, ok2, err := lock.Acquire(ctx, textK)
+	_, secondOk, err := lock.Acquire(ctx, textK)
 	require.NoError(t, err)
-	assert.False(t, ok2, "foreign-token Release must not free the lock")
+	assert.False(t, secondOk, "foreign-token Release must not free the lock")
 
 	require.NoError(t, lock.Release(ctx, textK, tok))
 
-	_, ok3, err := lock.Acquire(ctx, textK)
+	_, thirdOk, err := lock.Acquire(ctx, textK)
 	require.NoError(t, err)
-	assert.True(t, ok3, "holder-token Release frees the lock")
+	assert.True(t, thirdOk, "holder-token Release frees the lock")
 }
 
 // TestLocalLock_Renew tests the Renew contract: held iff the token still owns

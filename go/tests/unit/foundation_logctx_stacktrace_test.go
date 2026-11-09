@@ -62,13 +62,13 @@ func stackAttrValue(record *slog.Record) (string, bool) {
 func TestStacktraceHandler_SkipsLoggingPlumbing(t *testing.T) {
 	t.Parallel()
 
-	stackCaptureHandlerValue := &stackCaptureHandler{}
-	h := logctx.NewStacktraceHandler(stackCaptureHandlerValue, slog.LevelError)
+	currentStackCaptureHandler := &stackCaptureHandler{}
+	h := logctx.NewStacktraceHandler(currentStackCaptureHandler, slog.LevelError)
 
 	rec := slog.NewRecord(time.Now(), slog.LevelError, textBoom, 0)
 	require.NoError(t, h.Handle(context.Background(), rec))
 
-	stack, ok := stackAttrValue(&stackCaptureHandlerValue.rec)
+	stack, ok := stackAttrValue(&currentStackCaptureHandler.rec)
 	require.True(t, ok, "expected a stacktrace attribute on the error record")
 	require.NotEmpty(
 		t,
@@ -104,8 +104,8 @@ func TestStacktraceHandler_SkipsLoggingPlumbing(t *testing.T) {
 func TestStacktraceHandler_PrefersOriginStack(t *testing.T) {
 	t.Parallel()
 
-	stackCaptureHandlerValue := &stackCaptureHandler{}
-	handler := logctx.NewStacktraceHandler(stackCaptureHandlerValue, slog.LevelError)
+	currentStackCaptureHandler := &stackCaptureHandler{}
+	handler := logctx.NewStacktraceHandler(currentStackCaptureHandler, slog.LevelError)
 
 	err := apperr.Wrap(
 		apperr.Sentinel("query failed"),
@@ -117,7 +117,7 @@ func TestStacktraceHandler_PrefersOriginStack(t *testing.T) {
 
 	require.NoError(t, handler.Handle(context.Background(), rec))
 
-	stack, ok := stackAttrValue(&stackCaptureHandlerValue.rec)
+	stack, ok := stackAttrValue(&currentStackCaptureHandler.rec)
 	require.True(t, ok, "expected a stacktrace attribute")
 	assert.Contains(t, stack, "logctx_stacktrace_test.go",
 		"expected origin stack to point at the error creation site in the test file")
@@ -136,12 +136,12 @@ func TestStacktraceHandler_PrefersOriginStack(t *testing.T) {
 func TestStacktraceHandler_BelowThresholdNoStack(t *testing.T) {
 	t.Parallel()
 
-	stackCaptureHandlerValue := &stackCaptureHandler{}
-	h := logctx.NewStacktraceHandler(stackCaptureHandlerValue, slog.LevelError)
+	currentStackCaptureHandler := &stackCaptureHandler{}
+	h := logctx.NewStacktraceHandler(currentStackCaptureHandler, slog.LevelError)
 
 	rec := slog.NewRecord(time.Now(), slog.LevelInfo, "fyi", 0)
 	require.NoError(t, h.Handle(context.Background(), rec))
 
-	_, ok := stackAttrValue(&stackCaptureHandlerValue.rec)
+	_, ok := stackAttrValue(&currentStackCaptureHandler.rec)
 	assert.False(t, ok, "info-level record should NOT carry a stacktrace attribute")
 }

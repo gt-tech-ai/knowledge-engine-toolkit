@@ -28,8 +28,8 @@ import (
 func TestConnectServer_DefaultServerConfig(t *testing.T) {
 	t.Parallel()
 
-	cfg := connectpkg.DefaultServerConfig(port8090)
-	assert.Equal(t, wantPort8090, cfg.Port)
+	cfg := connectpkg.DefaultServerConfig(defaultServerConfigInput)
+	assert.Equal(t, wantPort, cfg.Port)
 	assert.Equal(t, 30*time.Second, cfg.ReadTimeout)
 	assert.Equal(t, 30*time.Second, cfg.WriteTimeout)
 	assert.Equal(t, 10*time.Second, cfg.ShutdownTimeout)
@@ -228,7 +228,7 @@ func TestConnectServer_StartBindError(t *testing.T) {
 
 	// 999999 is outside the valid TCP port range, so net.Listen fails.
 	srv := connectpkg.NewServer(
-		connectpkg.DefaultServerConfig(port999999),
+		connectpkg.DefaultServerConfig(defaultServerConfigInputError),
 		fixtures.NopLogger(),
 	)
 	require.Error(t, srv.Start(context.Background()), "an invalid port must fail Start")
@@ -258,3 +258,11 @@ func assertProbeOK(t *testing.T, path string) {
 	body, _ := io.ReadAll(rec.Body)
 	assert.Equal(t, textOk, string(body))
 }
+
+const (
+	// defaultServerConfigInput is the default server config input the tests use.
+	defaultServerConfigInput = 8090
+
+	// defaultServerConfigInputError is the default server config input error the tests use.
+	defaultServerConfigInputError = 999999
+)

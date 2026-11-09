@@ -1,6 +1,6 @@
 package ghactions
 
 const (
-	// count2 is the count value 2.
-	count2 = 2
+	// fencePairSize is the named value used where fence pair size applies.
+	fencePairSize = 2
 )

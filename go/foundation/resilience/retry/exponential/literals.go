@@ -1,6 +1,7 @@
 package exponential
 
 const (
-	// randomizationFactor0p5 is the randomizationFactor value 0.5.
-	randomizationFactor0p5 = 0.5
+	// defaultRandomizationFactor is the named value used where default randomization
+	// factor applies.
+	defaultRandomizationFactor = 0.5
 )

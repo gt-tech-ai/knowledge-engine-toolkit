@@ -79,7 +79,7 @@ func TestPgstore_RefusesWritesOutsideATransaction(t *testing.T) {
 
 	ctx, identifier := t.Context(), uuid.New()
 
-	_, err = store.Claim(ctx, textLane, 0, limit10)
+	_, err = store.Claim(ctx, textLane, 0, claimInput)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	require.Equal(t, apperr.CodeInternal, apperr.Code(store.MarkSent(ctx, identifier)))
 	require.Equal(
@@ -112,22 +112,22 @@ func TestPgstore_ValidatesPartitions(t *testing.T) {
 
 	base := outboxpg.Config{Table: textT, Lease: time.Minute}
 	for _, cfg := range []outboxpg.Config{
-		{Table: textT, Lease: time.Minute, Partitions: partitions2},
-		{Table: textT, Lease: time.Minute, PartitionColumn: "Part", Partitions: partitions2},
+		{Table: textT, Lease: time.Minute, Partitions: partitions},
+		{Table: textT, Lease: time.Minute, PartitionColumn: "Part", Partitions: partitions},
 		{Table: textT, Lease: time.Minute, PartitionColumn: "part", Partitions: -1},
 	} {
 		_, opErr := outboxpg.New(value, &cfg)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(opErr), "%+v", cfg)
 	}
 
-	base.PartitionColumn, base.Partitions = "part", partitions3
+	base.PartitionColumn, base.Partitions = "part", relayPartitionCount
 
 	store, err := outboxpg.New(value, &base)
 	require.NoError(t, err)
 
 	ctx := interfaces.WithInTx(context.Background())
-	for _, partition := range []int{iterations3, -1} {
-		_, err := store.Claim(ctx, textLane, partition, limit10)
+	for _, partition := range []int{iterationsPartitions, -1} {
+		_, err := store.Claim(ctx, textLane, partition, claimInput)
 		assert.Equal(
 			t,
 			apperr.CodeInvalidInput,
@@ -137,3 +137,8 @@ func TestPgstore_ValidatesPartitions(t *testing.T) {
 		)
 	}
 }
+
+const (
+	// partitions is the partitions the tests use.
+	partitions = 2
+)

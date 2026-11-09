@@ -116,8 +116,8 @@ func TestTransportCobra_Command(t *testing.T) {
 	assert.Equal(t, textCheck, cmd.Name())
 	assert.Equal(t, textCheck, cmd.Short)
 
-	require.NoError(t, execCobra(t, reg, textE2, textStaging, textFix2, "-w", "3",
-		"--wait", "2s", textOnly2, "a,b", textAPI, textX, "y"))
+	require.NoError(t, execCobra(t, reg, textEKebab, textStaging, textFixFlag, "-w", "3",
+		"--wait", "2s", textOnlyFlag, "a,b", textAPI, textX, "y"))
 	assert.Equal(t, cobraInput{
 		Env: textStaging, Fix: true, Workers: 3, Wait: 2 * time.Second,
 		Only: []string{textA, textB}, Target: textAPI, Rest: []string{textX, "y"},
@@ -125,7 +125,7 @@ func TestTransportCobra_Command(t *testing.T) {
 
 	got = cobraInput{}
 
-	require.Error(t, execCobra(t, reg, textFix2))
+	require.Error(t, execCobra(t, reg, textFixFlag))
 	assert.Equal(t, cobraInput{}, got, "nothing ran")
 
 	_, err = opscobra.Command(reg, textBad, opscobra.Options{})
@@ -165,8 +165,8 @@ func TestTransportCobra_FreshInputPerRun(t *testing.T) {
 	cmd.SetErr(io.Discard)
 
 	for _, args := range [][]string{
-		{textE2, textS, "--json", textAPI, textX, "y"},
-		{textE2, textS, "--json", textWeb},
+		{textEKebab, textS, "--json", textAPI, textX, "y"},
+		{textEKebab, textS, "--json", textWeb},
 	} {
 		cmd.SetArgs(args)
 		require.NoError(t, cmd.ExecuteContext(t.Context()))
@@ -177,8 +177,8 @@ func TestTransportCobra_FreshInputPerRun(t *testing.T) {
 
 	require.NoError(
 		t,
-		execCobra(t, reg, textE2, textS, textFix2, textOnly2, textA, textAPI),
+		execCobra(t, reg, textEKebab, textS, textFixFlag, textOnlyFlag, textA, textAPI),
 	)
-	require.NoError(t, execCobra(t, reg, textE2, textS, textOnly2, textB, textWeb))
+	require.NoError(t, execCobra(t, reg, textEKebab, textS, textOnlyFlag, textB, textWeb))
 	assert.Equal(t, cobraInput{Env: textS, Only: []string{textB}, Target: textWeb}, got)
 }

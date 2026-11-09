@@ -49,13 +49,13 @@ func (d *decorated) Acquire(
 	ctx context.Context,
 	key string,
 ) (token string, acquired bool, err error) {
-	leaseValue, err := d.Exec(ctx, "acquire", func(ctx context.Context) (lease, error) {
+	currentLease, err := d.Exec(ctx, "acquire", func(ctx context.Context) (lease, error) {
 		t, ok, opErr := d.base.Acquire(ctx, key)
 
 		return lease{token: t, acquired: ok}, opErr
 	})
 
-	return leaseValue.token, leaseValue.acquired, err
+	return currentLease.token, currentLease.acquired, err
 }
 
 // Renew extends the lease on key as the operation "renew".

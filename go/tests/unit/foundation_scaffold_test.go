@@ -55,7 +55,7 @@ func TestFoundationScaffold_PlanAndApply(t *testing.T) {
 		textSvcReadmeMd: "# hand written\n",
 		textSvcWireGo:   "// old header\n// scaffold:preserve\nfunc custom() {}\n",
 	}
-	data := map[string]string{textName2: textSvc}
+	data := map[string]string{textNameTitle: textSvc}
 	plan, err := scaffold.Plan(ctx, scaffoldTemplates(), data, scaffoldPolicy,
 		memoryCodebase(t, files))
 	require.NoError(t, err)
@@ -76,9 +76,10 @@ func TestFoundationScaffold_PlanAndApply(t *testing.T) {
 
 		return nil
 	}
-	require.NoError(t, scaffold.Apply(ctx, write, plan, true))
+
+	require.NoError(t, scaffold.Conflicts(plan))
 	assert.Empty(t, written)
-	require.NoError(t, scaffold.Apply(ctx, write, plan, false))
+	require.NoError(t, scaffold.Apply(ctx, write, plan))
 	assert.Equal(t, map[string]string{
 		"svc/main.go": "package svc\n",
 		textSvcWireGo: "// generated svc\n// scaffold:preserve\nfunc custom() {}\n",
@@ -90,7 +91,7 @@ func TestFoundationScaffold_PlanAndApply(t *testing.T) {
 		memoryCodebase(t, files))
 	require.NoError(t, err)
 	clear(written)
-	require.NoError(t, scaffold.Apply(ctx, write, again, false))
+	require.NoError(t, scaffold.Apply(ctx, write, again))
 	assert.Empty(t, written)
 }
 
@@ -110,7 +111,7 @@ func TestFoundationScaffold_Conflicts(t *testing.T) {
 	plan, err := scaffold.Plan(
 		ctx,
 		scaffoldTemplates(),
-		map[string]string{textName2: textSvc},
+		map[string]string{textNameTitle: textSvc},
 		scaffoldPolicy,
 		memoryCodebase(t, map[string]string{textSvcWireGo: "no marker\n"}),
 	)
@@ -126,7 +127,6 @@ func TestFoundationScaffold_Conflicts(t *testing.T) {
 			return nil
 		},
 		plan,
-		false,
 	)
 	assert.Equal(t, apperr.CodeConflict, apperr.Code(err))
 	assert.Contains(t, err.Error(), textSvcWireGo)
@@ -207,3 +207,26 @@ func TestFoundationScaffold_PlanFiles(t *testing.T) {
 		textAKeepGo:   types.FileConflict,
 	}, got)
 }
+
+const (
+	// textAGenHcl is the literal "a/gen.hcl".
+	textAGenHcl = "a/gen.hcl"
+
+	// textAHandYaml is the literal "a/hand.yaml".
+	textAHandYaml = "a/hand.yaml"
+
+	// textAKeepGo is the literal "a/keep.go".
+	textAKeepGo = "a/keep.go"
+
+	// textANewMd is the literal "a/new.md".
+	textANewMd = "a/new.md"
+
+	// textASameHcl is the literal "a/same.hcl".
+	textASameHcl = "a/same.hcl"
+
+	// textSvcReadmeMd is the literal "svc/README.md".
+	textSvcReadmeMd = "svc/README.md"
+
+	// textSvcWireGo is the literal "svc/wire.go".
+	textSvcWireGo = "svc/wire.go"
+)

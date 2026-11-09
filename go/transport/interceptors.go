@@ -30,28 +30,28 @@ func Interceptors[I any](
 
 	streamDeps.Timeout = 0
 
-	interceptorRunValue := &interceptorRun[I]{adapt: adapt}
+	currentInterceptorRun := &interceptorRun[I]{adapt: adapt}
 
 	for _, layer := range tier.Order {
 		if layer == decorate.LayerAuth {
-			interceptorRunValue.place(authn)
+			currentInterceptorRun.place(authn)
 		}
 
 		if ics, ok := native(layer); ok {
-			interceptorRunValue.place(ics)
+			currentInterceptorRun.place(ics)
 
 			continue
 		}
 
-		interceptorRunValue.add(
+		currentInterceptorRun.add(
 			tier.Middleware(layer, name, deps),
 			tier.Middleware(layer, name, &streamDeps),
 		)
 	}
 
-	interceptorRunValue.flush()
+	currentInterceptorRun.flush()
 
-	return interceptorRunValue.out
+	return currentInterceptorRun.out
 }
 
 // interceptorRun lays middleware out as interceptors, merging each run of adjacent

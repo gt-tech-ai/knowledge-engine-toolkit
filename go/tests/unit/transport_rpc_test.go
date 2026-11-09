@@ -42,7 +42,7 @@ import (
 func TestToConnectError_AllCodes(t *testing.T) {
 	t.Parallel()
 
-	tests := testToConnectErrorAllCodesTable8()
+	tests := testToConnectErrorAllCodes()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -61,19 +61,19 @@ type testToConnectErrorAllCodesRow struct {
 	wantCode connect.Code
 }
 
-// testToConnectErrorAllCodesTable8 builds the table testToConnectErrorAllCodesTable7
+// testToConnectErrorAllCodes builds the table testToConnectErrorAllCodes
 // runs.
-func testToConnectErrorAllCodesTable8() []testToConnectErrorAllCodesRow {
+func testToConnectErrorAllCodes() []testToConnectErrorAllCodesRow {
 	return slices.Concat(
-		testToConnectErrorAllCodesTable8Part1(),
-		testToConnectErrorAllCodesTable8Part2(),
+		testToConnectErrorClientCodes(),
+		testToConnectErrorServerCodes(),
 	)
 }
 
-// testToConnectErrorAllCodesTable8Part1 lists part of the
-// testToConnectErrorAllCodesTable8
+// testToConnectErrorClientCodes lists part of the
+// testToConnectErrorAllCodes
 // rows.
-func testToConnectErrorAllCodesTable8Part1() []testToConnectErrorAllCodesRow {
+func testToConnectErrorClientCodes() []testToConnectErrorAllCodesRow {
 	return []testToConnectErrorAllCodesRow{
 		{
 			appErr:   apperr.NotFound(textNotFound),
@@ -118,10 +118,10 @@ func testToConnectErrorAllCodesTable8Part1() []testToConnectErrorAllCodesRow {
 	}
 }
 
-// testToConnectErrorAllCodesTable8Part2 lists part of the
-// testToConnectErrorAllCodesTable8
+// testToConnectErrorServerCodes lists part of the
+// testToConnectErrorAllCodes
 // rows.
-func testToConnectErrorAllCodesTable8Part2() []testToConnectErrorAllCodesRow {
+func testToConnectErrorServerCodes() []testToConnectErrorAllCodesRow {
 	return []testToConnectErrorAllCodesRow{
 		{
 			appErr:   apperr.New(apperr.CodeResourceExhausted, "budget spent"),
@@ -130,7 +130,7 @@ func testToConnectErrorAllCodesTable8Part2() []testToConnectErrorAllCodesRow {
 		},
 		{
 			appErr:   apperr.Timeout("deadline exceeded"),
-			name:     textTimeout2,
+			name:     textTimeoutTitle,
 			wantCode: connect.CodeDeadlineExceeded,
 		},
 		{
@@ -171,7 +171,7 @@ func TestToConnectError_CapturesRealError(t *testing.T) {
 		appErr error
 		name   string
 	}{
-		{appErr: apperr.Internal("db connection failed"), name: textInternal2},
+		{appErr: apperr.Internal("db connection failed"), name: textInternalTitle},
 		{appErr: apperr.Conflict("team member already exists"), name: textConflict},
 	}
 
@@ -217,7 +217,7 @@ func TestToConnectError_ClientSafeMessages(t *testing.T) {
 		{appErr: apperr.Unauthorized(sensitiveMsg), name: textUnauthorized},
 		{appErr: apperr.Forbidden(sensitiveMsg), name: textForbidden},
 		{appErr: apperr.Upstream(sensitiveMsg), name: textUpstream},
-		{appErr: apperr.Internal(sensitiveMsg), name: textInternal2},
+		{appErr: apperr.Internal(sensitiveMsg), name: textInternalTitle},
 		{appErr: apperr.Sentinel(sensitiveMsg), name: "Unknown"},
 	}
 
@@ -250,11 +250,11 @@ type fromRPCCase struct {
 
 // fromRPCCases returns the shared code table for Connect and gRPC FromRPCError tests.
 func fromRPCCases() []fromRPCCase {
-	return slices.Concat(fromRPCCasesTable5(), fromRPCCasesTable6())
+	return slices.Concat(fromRPCClientFaultCases(), fromRPCServerFaultCases())
 }
 
-// fromRPCCasesTable5 builds the table fromRPCCasesTable4 runs.
-func fromRPCCasesTable5() []fromRPCCase {
+// fromRPCClientFaultCases builds the table fromRPCCases runs.
+func fromRPCClientFaultCases() []fromRPCCase {
 	return []fromRPCCase{
 		fromRPCRow(
 			textNotfound,
@@ -289,8 +289,8 @@ func fromRPCCasesTable5() []fromRPCCase {
 	}
 }
 
-// fromRPCCasesTable6 holds the remaining fromRPCCase rows.
-func fromRPCCasesTable6() []fromRPCCase {
+// fromRPCServerFaultCases holds the remaining fromRPCCase rows.
+func fromRPCServerFaultCases() []fromRPCCase {
 	return []fromRPCCase{
 		fromRPCRow(
 			"Unavailable",
@@ -311,7 +311,7 @@ func fromRPCCasesTable6() []fromRPCCase {
 			apperr.CodeCanceled,
 		),
 		fromRPCRow(
-			textInternal2,
+			textInternalTitle,
 			connect.CodeInternal,
 			codes.Internal,
 			apperr.CodeInternal,
@@ -451,8 +451,8 @@ func TestFromRPCError_RoundTrip(t *testing.T) {
 		{name: textForbidden, appErr: apperr.Forbidden(textX)},
 		{name: textUpstream, appErr: apperr.Upstream(textX)},
 		{name: textCanceled, appErr: apperr.New(apperr.CodeCanceled, textX)},
-		{name: textTimeout2, appErr: apperr.Timeout(textX)},
-		{name: textInternal2, appErr: apperr.Internal(textX)},
+		{name: textTimeoutTitle, appErr: apperr.Timeout(textX)},
+		{name: textInternalTitle, appErr: apperr.Internal(textX)},
 	}
 
 	for _, tt := range tests {
@@ -466,3 +466,26 @@ func TestFromRPCError_RoundTrip(t *testing.T) {
 		})
 	}
 }
+
+const (
+	// textCanceled is the literal "Canceled".
+	textCanceled = "Canceled"
+
+	// textConflict is the literal "Conflict".
+	textConflict = "Conflict"
+
+	// textForbidden is the literal "Forbidden".
+	textForbidden = "Forbidden"
+
+	// textInternalTitle is the literal "Internal".
+	textInternalTitle = "Internal"
+
+	// textNotfound is the literal "NotFound".
+	textNotfound = "NotFound"
+
+	// textUnauthorized is the literal "Unauthorized".
+	textUnauthorized = "Unauthorized"
+
+	// textUpstream is the literal "Upstream".
+	textUpstream = "Upstream"
+)

@@ -33,11 +33,11 @@ func TestRun_SkipCount(t *testing.T) {
 	t.Run("flag skips the count entirely", func(t *testing.T) {
 		t.Parallel()
 
-		countStubRunnerValue := &countStubRunner{rows: []int{1, 2}, total: 500}
+		currentCountStubRunner := &countStubRunner{rows: []int{1, 2}, total: 500}
 		page, err := listquery.Run(
 			listquery.WithSkipCount(context.Background()),
 			types.PageRequest{},
-			runCountReader(countStubRunnerValue, 10),
+			runCountReader(currentCountStubRunner, 10),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), page.Total, "skip-count leaves Total 0")
@@ -45,7 +45,7 @@ func TestRun_SkipCount(t *testing.T) {
 		assert.Equal(
 			t,
 			0,
-			countStubRunnerValue.gotBound,
+			currentCountStubRunner.gotBound,
 			"the runner's Count was never called",
 		)
 	})
@@ -53,22 +53,22 @@ func TestRun_SkipCount(t *testing.T) {
 	t.Run("without the flag the bounded total is computed", func(t *testing.T) {
 		t.Parallel()
 
-		countStubRunner2 := &countStubRunner{rows: []int{1, 2}, total: 3}
+		secondCountStubRunner := &countStubRunner{rows: []int{1, 2}, total: 3}
 		page, err := listquery.Run(
 			context.Background(),
 			types.PageRequest{},
-			runCountReader(countStubRunner2, 10),
+			runCountReader(secondCountStubRunner, 10),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, int64(3), page.Total)
-		assert.Equal(t, 11, countStubRunner2.gotBound, "Count was called with cap+1")
+		assert.Equal(t, 11, secondCountStubRunner.gotBound, "Count was called with cap+1")
 	})
 
-	testRunSkipCountRest(t)
+	testRunSkipCountSkipsTotal(t)
 }
 
-// testRunSkipCountRest continues TestRun_SkipCount with its remaining steps.
-func testRunSkipCountRest(t *testing.T) {
+// testRunSkipCountSkipsTotal continues TestRun_SkipCount: skips total.
+func testRunSkipCountSkipsTotal(t *testing.T) {
 	t.Helper()
 
 	t.Run(

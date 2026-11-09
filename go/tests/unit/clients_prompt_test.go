@@ -190,3 +190,8 @@ func TestPrompt_UnknownKindFails(t *testing.T) {
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// textInstallPkgsite is the literal "Install pkgsite?".
+	textInstallPkgsite = "Install pkgsite?"
+)

@@ -25,7 +25,7 @@ import (
 func TestFoundationImpact_Affected(t *testing.T) {
 	t.Parallel()
 
-	mapValue := impact.Map[string]{
+	fieldMap := impact.Map[string]{
 		Owned: map[string][]string{
 			textStaging: {"envs/staging"}, textPartner: {"envs/partner"},
 			"global": {"envs/global"}, textEdge: {"envs/staging/edge"},
@@ -36,17 +36,17 @@ func TestFoundationImpact_Affected(t *testing.T) {
 	assert.Equal(
 		t,
 		[]string{textPartner},
-		mapValue.Affected([]string{"envs/partner/main.tf"}),
+		fieldMap.Affected([]string{"envs/partner/main.tf"}),
 	)
 	assert.Equal(t, []string{textEdge, textPartner, textStaging},
-		mapValue.Affected([]string{"modules/vpc/main.tf"}))
+		fieldMap.Affected([]string{"modules/vpc/main.tf"}))
 	assert.Equal(
 		t,
 		[]string{textEdge, textStaging},
-		mapValue.Affected([]string{"envs/staging/edge/x"}),
+		fieldMap.Affected([]string{"envs/staging/edge/x"}),
 	)
-	assert.Empty(t, mapValue.Affected([]string{"envs/staging-old/x", "envs/global/a.tf"}))
-	assert.Empty(t, mapValue.Affected(nil))
+	assert.Empty(t, fieldMap.Affected([]string{"envs/staging-old/x", "envs/global/a.tf"}))
+	assert.Empty(t, fieldMap.Affected(nil))
 }
 
 // TestFoundationImpact_Classify tests changed-path classification by named pattern sets.
@@ -65,8 +65,8 @@ func TestFoundationImpact_Classify(t *testing.T) {
 	t.Parallel()
 
 	classes := []impact.Class{
-		{Name: textGo2, Patterns: []string{`^shared/`, `\.go$`}},
-		{Name: textDocs2, Patterns: []string{`^shared/`, `^docs/`}},
+		{Name: textGoLower, Patterns: []string{`^shared/`, `\.go$`}},
+		{Name: textDocsLower, Patterns: []string{`^shared/`, `^docs/`}},
 		{Name: "charts", Patterns: []string{`^charts/`}},
 	}
 
@@ -90,6 +90,14 @@ func TestFoundationImpact_Classify(t *testing.T) {
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err)
 	assert.Contains(t, err.Error(), textBad)
 
-	assert.Equal(t, []string{textAGo, textBCGo, textD2},
+	assert.Equal(t, []string{textAGo, textBCGo, textDLower},
 		impact.SplitPaths("a.go\x00b/c.go\x00\nd\n"))
 }
+
+const (
+	// textEdge is the literal "edge".
+	textEdge = "edge"
+
+	// textPartner is the literal "partner".
+	textPartner = "partner"
+)

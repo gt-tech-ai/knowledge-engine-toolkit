@@ -136,7 +136,7 @@ func (h Harness) concurrentClaimsAreDisjoint(t *testing.T) {
 		group sync.WaitGroup
 	)
 
-	for range iterations5 {
+	for range iterations {
 		group.Go(func() {
 			recs, err := h.claim(ctx, lane)
 
@@ -267,3 +267,8 @@ func (h Harness) statsCountsPendingAndParked(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.OutboxStats{}, empty)
 }
+
+const (
+	// iterations is the iterations the tests use.
+	iterations = 5
+)

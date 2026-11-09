@@ -463,7 +463,7 @@ func TestEnsurePythonInitFiles_DeeplyNested(t *testing.T) {
 		textSrc,
 		protogenPkg,
 	)
-	deepDir := filepath.Join(base, textA, textB, textC, textD2)
+	deepDir := filepath.Join(base, textA, textB, textC, textDLower)
 	require.NoError(t, os.MkdirAll(deepDir, 0o755))
 
 	err := protogen.EnsurePythonInitFiles(
@@ -478,7 +478,7 @@ func TestEnsurePythonInitFiles_DeeplyNested(t *testing.T) {
 		filepath.Join(base, textA),
 		filepath.Join(base, textA, textB),
 		filepath.Join(base, textA, textB, textC),
-		filepath.Join(base, textA, textB, textC, textD2),
+		filepath.Join(base, textA, textB, textC, textDLower),
 	} {
 		_, err := os.Stat(filepath.Join(dir, "__init__.py"))
 		require.NoError(t, err, "missing __init__.py in %s", dir)

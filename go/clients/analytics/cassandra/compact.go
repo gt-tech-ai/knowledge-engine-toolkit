@@ -172,40 +172,40 @@ type partitionGroups struct {
 // scan files every row of one page.
 func (p *partitionGroups) scan(iter interfaces.CQLIter) {
 	var (
-		timeValue    time.Time
+		instant      time.Time
 		dimsKey, key string
 		dims         map[string]string
 		partials     map[string][]byte
 	)
 
-	for iter.Scan(&timeValue, &dimsKey, &key, &dims, &partials) {
-		groupRows2 := p.group(timeValue.UTC(), dimsKey, dims)
+	for iter.Scan(&instant, &dimsKey, &key, &dims, &partials) {
+		secondGroupRows := p.group(instant.UTC(), dimsKey, dims)
 
 		if key == "" {
-			groupRows2.compacted = partials
+			secondGroupRows.compacted = partials
 		} else {
-			groupRows2.keys = append(groupRows2.keys, key)
-			groupRows2.facts = append(groupRows2.facts, partials)
+			secondGroupRows.keys = append(secondGroupRows.keys, key)
+			secondGroupRows.facts = append(secondGroupRows.facts, partials)
 		}
 
-		timeValue, dimsKey, key, dims, partials = time.Time{}, "", "", nil, nil
+		instant, dimsKey, key, dims, partials = time.Time{}, "", "", nil, nil
 	}
 }
 
 // group returns the (ts, dims_key) group, creating it on first sight.
 func (p *partitionGroups) group(
-	timeValue time.Time, dimsKey string, dims map[string]string,
+	instant time.Time, dimsKey string, dims map[string]string,
 ) *groupRows {
-	id := timeValue.Format(time.RFC3339Nano) + "|" + dimsKey
+	id := instant.Format(time.RFC3339Nano) + "|" + dimsKey
 
-	groupRowsValue, ok := p.index[id]
+	currentGroupRows, ok := p.index[id]
 	if !ok {
-		groupRowsValue = &groupRows{ts: timeValue, dims: dims, dimsKey: dimsKey}
-		p.index[id] = groupRowsValue
-		p.groups = append(p.groups, groupRowsValue)
+		currentGroupRows = &groupRows{ts: instant, dims: dims, dimsKey: dimsKey}
+		p.index[id] = currentGroupRows
+		p.groups = append(p.groups, currentGroupRows)
 	}
 
-	return groupRowsValue
+	return currentGroupRows
 }
 
 // compactGroup folds a group's per-fact rows into its compacted row, a chunk per
@@ -218,17 +218,17 @@ func compactGroup(
 	org string,
 	bucket time.Time,
 	ttlSeconds int,
-	groupRowsValue *groupRows,
+	currentGroupRows *groupRows,
 ) error {
 	table := TableName(cube, grain)
-	dimsKey := groupRowsValue.dimsKey
+	dimsKey := currentGroupRows.dimsKey
 	upsert, ttlArgs := compactUpsert(table, ttlSeconds)
 
-	merged := groupRowsValue.compacted
-	for start := 0; start < len(groupRowsValue.keys); start += compactChunk {
-		end := min(start+compactChunk, len(groupRowsValue.keys))
+	merged := currentGroupRows.compacted
+	for start := 0; start < len(currentGroupRows.keys); start += compactChunk {
+		end := min(start+compactChunk, len(currentGroupRows.keys))
 
-		next, err := mergePartials(merged, groupRowsValue.facts[start:end])
+		next, err := mergePartials(merged, currentGroupRows.facts[start:end])
 		if err != nil {
 			return err
 		}
@@ -241,18 +241,18 @@ func compactGroup(
 					org,
 					cube,
 					bucket,
-					groupRowsValue.ts,
+					currentGroupRows.ts,
 					dimsKey,
-					groupRowsValue.dims,
+					currentGroupRows.dims,
 					next,
 				},
 				ttlArgs...)...)
 
-		for _, key := range groupRowsValue.keys[start:end] {
+		for _, key := range currentGroupRows.keys[start:end] {
 			batch.Query("DELETE FROM "+table+
 				" WHERE org_id = ? AND cube = ? AND bucket = ? AND ts = ?"+
 				" AND dims_key = ? AND idempotency_key = ?",
-				org, cube, bucket, groupRowsValue.ts, dimsKey, key)
+				org, cube, bucket, currentGroupRows.ts, dimsKey, key)
 		}
 
 		err = session.ExecuteBatch(batch)

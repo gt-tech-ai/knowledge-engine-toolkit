@@ -91,7 +91,7 @@ func TestFoundationGen_TemplateRow(t *testing.T) {
 	for _, r := range []types.GenRow{
 		{Name: textK, Kind: "copy"},
 		{Name: "r", Kind: types.GenRun},
-		{Name: textD2, Kind: types.GenTemplate, Template: "t/list.tmpl", Data: textNope},
+		{Name: textDLower, Kind: types.GenTemplate, Template: "t/list.tmpl", Data: textNope},
 	} {
 		_, err := gen.NewFromRow(r, gen.Deps{Data: data})
 		require.Error(t, err, r.Name)
@@ -127,16 +127,16 @@ func TestFoundationGen_TemplateRowEach(t *testing.T) {
 		return g.Render(t.Context(), cb)
 	}
 
-	out, err := render([]svc{{textAPI, textGo2}, {"ingest", "py"}})
+	out, err := render([]svc{{textAPI, textGoLower}, {"ingest", "py"}})
 	require.NoError(t, err)
 	assert.Equal(t, types.Artifacts{
 		textDockerAPIDockerfile:    []byte("go api\n"),
 		"docker/ingest/Dockerfile": []byte("py ingest\n"),
 	}, out)
 
-	_, err = render(svc{textAPI, textGo2})
+	_, err = render(svc{textAPI, textGoLower})
 	require.Error(t, err, "not a list")
-	_, err = render([]svc{{textAPI, textGo2}, {textAPI, "py"}})
+	_, err = render([]svc{{textAPI, textGoLower}, {textAPI, "py"}})
 	require.Error(t, err, "one output twice")
 }
 

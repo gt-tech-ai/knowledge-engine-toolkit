@@ -66,9 +66,9 @@ func (p *UnitPlan) HasChanges() bool { return len(p.Changes) > 0 || p.Outputs }
 // ReadUnits reads every unit's JSONFile under dir, sorted by unit path. A missing dir
 // reads as no units.
 func ReadUnits(dir string) ([]UnitPlan, error) {
-	unitWalkValue := &unitWalk{dir: dir}
+	currentUnitWalk := &unitWalk{dir: dir}
 
-	err := filepath.WalkDir(dir, unitWalkValue.visit)
+	err := filepath.WalkDir(dir, currentUnitWalk.visit)
 	if err != nil && !apperr.StdIs(err, fs.ErrNotExist) {
 		return nil, apperr.Wrap(
 			err,
@@ -78,11 +78,11 @@ func ReadUnits(dir string) ([]UnitPlan, error) {
 	}
 
 	slices.SortFunc(
-		unitWalkValue.plans,
+		currentUnitWalk.plans,
 		func(a, b UnitPlan) int { return cmp.Compare(a.Unit, b.Unit) },
 	)
 
-	return unitWalkValue.plans, nil
+	return currentUnitWalk.plans, nil
 }
 
 // unitWalk collects the plan of every unit under dir.
@@ -147,10 +147,7 @@ func (p *UnitPlan) addChanges(doc *tfjson.Plan) {
 			continue
 		}
 
-		action := changeAction(
-			resourceChange.Change.Actions,
-			resourceChange.Change.Importing != nil,
-		)
+		action := changeAction(resourceChange.Change)
 		if action == "" {
 			continue
 		}
@@ -175,12 +172,11 @@ func outputsChange(doc *tfjson.Plan) bool {
 	return false
 }
 
-// importingFlag names the importing option in a signature.
-type importingFlag bool
-
 // changeAction labels a resource's planned action list, or returns "" for no change
 // (no-op, or a data source read).
-func changeAction(actions tfjson.Actions, importing importingFlag) string {
+func changeAction(change *tfjson.Change) string {
+	actions := change.Actions
+
 	switch {
 	case actions.Replace():
 		return ActionReplace
@@ -191,7 +187,7 @@ func changeAction(actions tfjson.Actions, importing importingFlag) string {
 	case actions.Delete():
 		return ActionDelete
 	case actions.NoOp(), actions.Read():
-		if importing {
+		if change.Importing != nil {
 			return ActionImport
 		}
 

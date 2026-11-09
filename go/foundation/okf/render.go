@@ -133,13 +133,13 @@ func scalar(v string) *yaml.Node {
 }
 
 // attribution is a flow-style {by, at} mapping.
-func attribution(attributionValue Attribution) *yaml.Node {
+func attribution(currentAttribution Attribution) *yaml.Node {
 	node := &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle}
 
-	node.Content = append(node.Content, scalar("by"), scalar(attributionValue.By))
+	node.Content = append(node.Content, scalar("by"), scalar(currentAttribution.By))
 
-	if attributionValue.At != "" {
-		node.Content = append(node.Content, scalar("at"), scalar(attributionValue.At))
+	if currentAttribution.At != "" {
+		node.Content = append(node.Content, scalar("at"), scalar(currentAttribution.At))
 	}
 
 	return node
@@ -153,9 +153,9 @@ func (f *Frontmatter) Stale(now time.Time) (bool, error) {
 		return false, nil
 	}
 
-	timeValue, err := time.Parse(time.RFC3339, f.StaleAfter)
+	instant, err := time.Parse(time.RFC3339, f.StaleAfter)
 	if err != nil {
-		timeValue, err = time.Parse(time.DateOnly, f.StaleAfter)
+		instant, err = time.Parse(time.DateOnly, f.StaleAfter)
 	}
 
 	if err != nil {
@@ -166,7 +166,7 @@ func (f *Frontmatter) Stale(now time.Time) (bool, error) {
 		)
 	}
 
-	return !now.Before(timeValue), nil
+	return !now.Before(instant), nil
 }
 
 // RenderIndex writes an index.md body (OKF §8): entries with no section first, then

@@ -21,7 +21,7 @@ func unreachableDB() string { return poolURL("127.0.0.1:1", "sslmode=disable") }
 // poolURL returns a postgres URL with throwaway credentials for host and query, built
 // from parts so no credential-bearing literal sits in the source.
 func poolURL(host, query string) string {
-	urlValue := url.URL{
+	address := url.URL{
 		Scheme:   "postgres",
 		User:     url.UserPassword(textU, textP),
 		Host:     host,
@@ -29,7 +29,7 @@ func poolURL(host, query string) string {
 		RawQuery: query,
 	}
 
-	return urlValue.String()
+	return address.String()
 }
 
 // TestRiverRuntime_NewRuntime_ConfigParsing tests that NewRuntime parses the pool

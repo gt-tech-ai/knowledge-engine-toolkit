@@ -58,20 +58,20 @@ func TestServicesGuard_ExprData(t *testing.T) {
 	require.NoError(t, err)
 
 	cb := memoryCodebase(t, guardFiles())
-	lookup2 := map[string]types.Verdict{}
+	statusByName := map[string]types.Verdict{}
 
 	for _, g := range guards {
-		lookup2[g.Name()] = g.Run(t.Context(), cb)
+		statusByName[g.Name()] = g.Run(t.Context(), cb)
 	}
 
-	set := lookup2["{set} admits only its callers"]
+	set := statusByName["{set} admits only its callers"]
 	require.Equal(t, types.StatusFail, set.Status, set.Detail)
 	assert.Equal(t, "policy/p.yaml: api is not admitted\n", set.Detail)
 	assert.Equal(
 		t,
 		types.StatusPass,
-		lookup2["no data"].Status,
-		lookup2["no data"].Detail,
+		statusByName["no data"].Status,
+		statusByName["no data"].Detail,
 	)
 }
 
@@ -123,20 +123,20 @@ func TestServicesGuard_For(t *testing.T) {
 	require.NoError(t, err)
 
 	cb := memoryCodebase(t, guardFiles())
-	lookup2 := map[string]types.Verdict{}
+	statusByName := map[string]types.Verdict{}
 
 	for _, g := range guards {
-		lookup2[g.Name()] = g.Run(t.Context(), cb)
+		statusByName[g.Name()] = g.Run(t.Context(), cb)
 	}
 
-	assert.Equal(t, "port 9090 of closed\n", lookup2["{set} has port {port}"].Detail)
+	assert.Equal(t, "port 9090 of closed\n", statusByName["{set} has port {port}"].Detail)
 	assert.Equal(
 		t,
 		"ran dev/open\nran prod/open\nran prod/closed\n",
-		lookup2["{env}/{set}"].Detail,
+		statusByName["{env}/{set}"].Detail,
 	)
-	assert.Equal(t, types.StatusFail, lookup2["bad for"].Status)
-	assert.Contains(t, lookup2["bad for"].Detail, "for")
+	assert.Equal(t, types.StatusFail, statusByName["bad for"].Status)
+	assert.Contains(t, statusByName["bad for"].Detail, "for")
 
 	_, err = guard.NewFromConfig([]types.GuardRow{
 		{Name: textX, Kind: types.GuardExpr, Expr: textTrue, For: "data.("},

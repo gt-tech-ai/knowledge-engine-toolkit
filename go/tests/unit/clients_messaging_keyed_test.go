@@ -79,9 +79,9 @@ func TestMemoryPublisher_KeyedKeepsOrderAndKey(t *testing.T) {
 		{Key: "doc-2", Payload: []byte(textB)},
 		{Key: textDoc1, Payload: []byte(textC)},
 	}))
-	require.NoError(t, pub.PublishKeyed(ctx, textT, textDoc1, []byte(textD2)))
+	require.NoError(t, pub.PublishKeyed(ctx, textT, textDoc1, []byte(textDLower)))
 
-	msgs := receiveKeyed(t, broker, textT, receiveKeyedArg4)
+	msgs := receiveKeyed(t, broker, textT, receiveKeyedInput)
 	bodies := make([]string, len(msgs))
 	keys := make([]string, len(msgs))
 
@@ -90,7 +90,7 @@ func TestMemoryPublisher_KeyedKeepsOrderAndKey(t *testing.T) {
 		keys[i] = msg.Metadata[interfaces.PartitionKeyAttribute]
 	}
 
-	assert.Equal(t, []string{textA, textB, textC, textD2}, bodies)
+	assert.Equal(t, []string{textA, textB, textC, textDLower}, bodies)
 	assert.Equal(t, []string{textDoc1, "doc-2", textDoc1, textDoc1}, keys)
 	assert.True(t, pub.OrderedPerKey())
 }
@@ -142,12 +142,12 @@ func TestSQSPublisher_KeyedSendsThePartitionKeyAttribute(t *testing.T) {
 
 	var keys []string
 
-	testSQSPublisherKeyedSendsThePartitionKeyAttributeRest(t, api, sizes, ids, keys)
+	testSQSPublisherKeyedSendsThePartitionKeyAttributeBatches(t, api, sizes, ids, keys)
 }
 
-// testSQSPublisherKeyedSendsThePartitionKeyAttributeRest continues
-// TestSQSPublisher_KeyedSendsThePartitionKeyAttribute with its remaining steps.
-func testSQSPublisherKeyedSendsThePartitionKeyAttributeRest(
+// testSQSPublisherKeyedSendsThePartitionKeyAttributeBatches continues
+// TestSQSPublisher_KeyedSendsThePartitionKeyAttribute: batches.
+func testSQSPublisherKeyedSendsThePartitionKeyAttributeBatches(
 	t *testing.T,
 	api *mocks.MockAPI,
 	sizes []int,
@@ -181,18 +181,18 @@ func testSQSPublisherKeyedSendsThePartitionKeyAttributeRest(
 
 	require.NoError(t, pub.PublishKeyed(ctx, textQ, "doc-9", []byte(textX)))
 
-	items := make([]interfaces.KeyedPayload, size12)
-	want := make([]string, size12)
+	items := make([]interfaces.KeyedPayload, makeInputBatches)
+	want := make([]string, makeInputBatches)
 
 	for i := range items {
-		want[i] = []string{"even", "odd"}[i%index2]
+		want[i] = []string{"even", "odd"}[i%wantI]
 		items[i] = interfaces.KeyedPayload{Key: want[i], Payload: []byte(textP)}
 	}
 
 	require.NoError(t, pub.PublishBatchKeyed(ctx, textQ, items))
 
 	assert.Equal(t, []int{10, 2}, sizes)
-	assert.Len(t, ids, wantIDsLen12)
+	assert.Len(t, ids, wantIDsLen)
 	assert.Equal(t, want, keys)
 	assert.False(t, pub.OrderedPerKey())
 }
@@ -224,7 +224,7 @@ func TestDecorate_KeepsTheKeyedCapability(t *testing.T) {
 	require.NoError(t, keyed.PublishBatchKeyed(ctx, textT,
 		[]interfaces.KeyedPayload{{Key: "k2", Payload: []byte(textB)}}))
 
-	msgs := receiveKeyed(t, broker, textT, receiveKeyedArg2)
+	msgs := receiveKeyed(t, broker, textT, receiveKeyedInputCapability)
 	assert.Equal(t, "k1", msgs[0].Metadata[interfaces.PartitionKeyAttribute])
 	assert.Equal(t, "k2", msgs[1].Metadata[interfaces.PartitionKeyAttribute])
 	assert.True(t, keyed.OrderedPerKey())
@@ -237,3 +237,17 @@ func TestDecorate_KeepsTheKeyedCapability(t *testing.T) {
 	_, found = plain.(interfaces.KeyedPublisher)
 	assert.False(t, found)
 }
+
+const (
+	// makeInputBatches is the make input batches the tests use.
+	makeInputBatches = 12
+
+	// receiveKeyedInput is the receive keyed input the tests use.
+	receiveKeyedInput = 4
+
+	// receiveKeyedInputCapability is the receive keyed input capability the tests use.
+	receiveKeyedInputCapability = 2
+
+	// wantIDsLen is the expected ids len.
+	wantIDsLen = 12
+)

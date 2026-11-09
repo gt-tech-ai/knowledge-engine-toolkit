@@ -173,7 +173,7 @@ func anyColumnPredicate(
 	preds := make([]*entsql.Predicate, 0, len(join.Columns))
 
 	for _, col := range join.Columns {
-		if p := colPredicate(target.C(col), op, v, join.CaseInsensitive); p != nil {
+		if p := colPredicate(target.C(col), op, v, join); p != nil {
 			preds = append(preds, p)
 		}
 	}
@@ -192,20 +192,20 @@ func anyColumnPredicate(
 // operator + value — used inside the correlated EXISTS subquery. It mirrors Clause's
 // operator set with the value-level entsql helpers (so multiple target columns can be
 // OR-composed) and returns nil for a value whose Go type does not fit the operator, so
-// the caller degrades to match-all rather than panic. For $like, caseInsensitive selects
+// the caller degrades to match-all rather than panic. For $like, join selects
 // case-folding matching (ILIKE via ContainsFold) vs case-sensitive (Contains), honoring
 // the join's CaseInsensitive flag.
 func colPredicate(
 	col string,
 	operation types.FilterOperator,
 	value any,
-	caseInsensitive bool,
+	join *types.JoinTarget,
 ) *entsql.Predicate {
 	switch operation {
 	case types.OpEq, types.OpNe, types.OpGt, types.OpGte, types.OpLt, types.OpLte:
 		return comparePredicate(col, operation, value)
 	case types.OpLike:
-		return likePredicate(col, value, caseInsensitiveFlag(caseInsensitive))
+		return likePredicate(col, value, join)
 	case types.OpIn, types.OpNotIn:
 		return listPredicate(col, operation, value)
 	default:
@@ -242,21 +242,18 @@ func comparePredicate(
 	return entsql.LTE(col, value)
 }
 
-// caseInsensitiveFlag names the caseInsensitive option in a signature.
-type caseInsensitiveFlag bool
-
 // likePredicate matches a substring; a non-string value yields nil.
 func likePredicate(
 	col string,
 	v any,
-	caseInsensitive caseInsensitiveFlag,
+	join *types.JoinTarget,
 ) *entsql.Predicate {
 	text, ok := v.(string)
 	if !ok {
 		return nil
 	}
 
-	if caseInsensitive {
+	if join.CaseInsensitive {
 		return entsql.ContainsFold(col, text)
 	}
 
@@ -320,7 +317,7 @@ func (Backend) Order(col string, desc bool) Predicate {
 func (Backend) OrderJoin(joinRef *types.JoinTarget, desc bool) Predicate {
 	join := *joinRef
 
-	tail := nullsLastTail(descFlag(desc))
+	tail := nullsLastTail(desc)
 
 	return func(s *entsql.Selector) {
 		for _, col := range join.Columns {
@@ -331,12 +328,8 @@ func (Backend) OrderJoin(joinRef *types.JoinTarget, desc bool) Predicate {
 
 // nullsLastTail is the direction with explicit NULLS placement: NULLS LAST ascending,
 // NULLS FIRST descending, so a NULL sorts predictably regardless of dialect defaults.
-func nullsLastTail(desc descFlag) string {
-	if desc {
-		return " DESC NULLS FIRST"
-	}
-
-	return " ASC NULLS LAST"
+func nullsLastTail(desc bool) string {
+	return map[bool]string{false: " ASC NULLS LAST", true: " DESC NULLS FIRST"}[desc]
 }
 
 // orderByJoinColumn orders by a correlated subquery over one target column. A
@@ -392,20 +385,17 @@ func (Backend) OrderOrdinal(col string, values []string, desc bool) Predicate {
 
 	return func(s *entsql.Selector) {
 		s.OrderExprFunc(
-			func(b *entsql.Builder) { writeOrdinalCase(b, s.C(col), values, descFlag(desc)) },
+			func(b *entsql.Builder) { writeOrdinalCase(b, s.C(col), values, desc) },
 		)
 	}
 }
-
-// descFlag names the desc option in a signature.
-type descFlag bool
 
 // writeOrdinalCase writes a CASE ranking col by its position in values.
 func writeOrdinalCase(
 	builder *entsql.Builder,
 	col string,
 	values []string,
-	desc descFlag,
+	desc bool,
 ) {
 	builder.WriteString("CASE ")
 	builder.WriteString(col)
@@ -421,11 +411,7 @@ func writeOrdinalCase(
 	builder.WriteString(strconv.Itoa(len(values)))
 	builder.WriteString(" END")
 
-	if desc {
-		builder.WriteString(" DESC")
-	} else {
-		builder.WriteString(" ASC")
-	}
+	builder.WriteString(map[bool]string{false: " ASC", true: " DESC"}[desc])
 }
 
 // OrderDerived interprets a COMPUTED / CORRELATED sort directive into an ORDER BY over an
@@ -448,7 +434,7 @@ func writeOrdinalCase(
 // a column name), so they are inlined as SQL literals — the same safety argument as
 // OrderOrdinal. A malformed spec (neither arm set) degrades to a no-op sort node.
 func (Backend) OrderDerived(derivedSort types.DerivedSort, desc bool) Predicate {
-	tail := nullsLastTail(descFlag(desc))
+	tail := nullsLastTail(desc)
 
 	switch {
 	case derivedSort.Aggregate != nil:

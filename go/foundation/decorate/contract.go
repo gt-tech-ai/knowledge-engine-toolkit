@@ -104,17 +104,17 @@ func (d Decorations) shareStateful(tier Tier, key string, opRef, comp *Deps) Dep
 // OpsOf returns the operations of the contract C: its methods' names in snake case. C
 // that is not an interface, or has no methods, is CodeInternal.
 func OpsOf[C any]() ([]string, error) {
-	typeValue := reflect.TypeFor[C]()
-	if typeValue.Kind() != reflect.Interface || typeValue.NumMethod() == 0 {
+	kind := reflect.TypeFor[C]()
+	if kind.Kind() != reflect.Interface || kind.NumMethod() == 0 {
 		return nil, apperr.New(
 			apperr.CodeInternal,
-			"decorate: contract "+typeValue.String()+" is not an interface with methods",
+			"decorate: contract "+kind.String()+" is not an interface with methods",
 		)
 	}
 
-	ops := make([]string, typeValue.NumMethod())
+	ops := make([]string, kind.NumMethod())
 	for i := range ops {
-		ops[i] = OpName(typeValue.Method(i).Name)
+		ops[i] = OpName(kind.Method(i).Name)
 	}
 
 	return ops, nil

@@ -37,7 +37,7 @@ func TestNoopCounter_IncAndAdd(t *testing.T) {
 	c := m.Counter("test_total", textHelp, textLabel)
 
 	c.Inc(textVal)
-	c.Add(addArg5p0, textVal)
+	c.Add(addInputAndAdd, textVal)
 }
 
 // TestNoopHistogram_Observe tests that the noop histogram's Observe method can
@@ -55,7 +55,7 @@ func TestNoopHistogram_Observe(t *testing.T) {
 	m := noop.New()
 	h := m.Histogram("test_duration", textHelp, nil, textLabel)
 
-	h.Observe(observeArg0p5, textVal)
+	h.Observe(observeInputObserve, textVal)
 }
 
 // TestNoopGauge_SetIncDec tests that the noop gauge's Set, Inc, and Dec
@@ -73,7 +73,7 @@ func TestNoopGauge_SetIncDec(t *testing.T) {
 	m := noop.New()
 	g := m.Gauge("test_gauge", textHelp, textLabel)
 
-	g.Set(setArg42p0, textVal)
+	g.Set(gaugeReadingDec, textVal)
 	g.Inc(textVal)
 	g.Dec(textVal)
 }
@@ -124,9 +124,9 @@ func TestCoreErrors_Join(t *testing.T) {
 	t.Parallel()
 
 	e1 := apperr.Sentinel("first")
-	e2 := apperr.Sentinel("second")
+	secondE := apperr.Sentinel("second")
 
-	joined := apperr.Join(e1, e2)
+	joined := apperr.Join(e1, secondE)
 	require.Error(t, joined, "Join of two errors must not return nil")
 }
 
@@ -252,3 +252,14 @@ func TestFoundationCacheDecorator_BuilderWithMetrics(t *testing.T) {
 	_, found = decorated.Get(ctx, textKey)
 	assert.False(t, found, "Get after Delete must return ok=false")
 }
+
+const (
+	// addInputAndAdd is the add input and add the tests use.
+	addInputAndAdd = 5.0
+
+	// gaugeReadingDec is the gauge reading dec the tests use.
+	gaugeReadingDec = 42.0
+
+	// observeInputObserve is the observe input observe the tests use.
+	observeInputObserve = 0.5
+)

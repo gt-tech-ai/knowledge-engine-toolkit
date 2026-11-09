@@ -67,7 +67,7 @@ func (s *RedisMessagingSuite) TestPublisher_PublishesToChannel() {
 	probe := s.newClient()
 
 	ctx := context.Background()
-	got := make(chan string, size8)
+	got := make(chan string, makeInputChannel)
 	s.Require().NoError(sub.Subscribe(ctx, textEvents, chanHandler(got)))
 	s.waitSubscribed(probe, textEvents)
 
@@ -139,8 +139,8 @@ func (s *RedisMessagingSuite) TestSubscriber_DynamicSubscribeUnsubscribe() {
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	ctx := context.Background()
-	chA := make(chan string, size4)
-	chB := make(chan string, size4)
+	chA := make(chan string, makeInputUnsubscribe)
+	chB := make(chan string, makeInputUnsubscribe)
 
 	s.Require().NoError(sub.Subscribe(ctx, textChanA, chanHandler(chA)))
 	s.waitSubscribed(probe, textChanA)
@@ -180,7 +180,7 @@ func (s *RedisMessagingSuite) TestSubscriber_PatternSubscribeReceivesMatching() 
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	ctx := context.Background()
-	chP := make(chan string, size4)
+	chP := make(chan string, makeInputMatching)
 
 	s.Require().NoError(sub.PSubscribe(ctx, "news.*", chanHandler(chP)))
 	s.waitPatterns(probe, 1)
@@ -246,8 +246,8 @@ func (s *RedisMessagingSuite) TestSubscriber_FirstCallerCancel_KeepsDelivering()
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	firstCtx, cancel := context.WithCancel(context.Background())
-	got := make(chan string, size4)
-	alive := make(chan bool, size4)
+	got := make(chan string, makeInputDelivering)
+	alive := make(chan bool, makeInputDelivering)
 	handler := func(hctx context.Context, msg *coreiface.Message) error {
 		alive <- hctx.Err() == nil
 
@@ -289,7 +289,7 @@ func (s *RedisMessagingSuite) TestSubscriber_HandlerError_LoggedNotRequeued() {
 	s.Require().NoError(err)
 
 	ctx := context.Background()
-	received := make(chan string, size8)
+	received := make(chan string, makeInputRequeued)
 	failing := func(_ context.Context, msg *coreiface.Message) error {
 		received <- string(msg.Payload)
 
@@ -360,7 +360,7 @@ func (s *RedisMessagingSuite) TestNewFromConfig_ReusesSharedClient() {
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	ctx := context.Background()
-	got := make(chan string, size4)
+	got := make(chan string, makeInputClient)
 	s.Require().NoError(sub.Subscribe(ctx, textRtChan, chanHandler(got)))
 	s.waitSubscribed(s.newClient(), textRtChan)
 	s.Require().NoError(pub.Publish(ctx, textRtChan, []byte("via-shared-client")))
@@ -396,7 +396,7 @@ func (s *RedisMessagingSuite) TestNewPublisher_KindRedis() {
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	ctx := context.Background()
-	got := make(chan string, size4)
+	got := make(chan string, makeInputRedis)
 	s.Require().NoError(sub.Subscribe(ctx, textKrChan, chanHandler(got)))
 	s.waitSubscribed(s.newClient(), textKrChan)
 	s.Require().NoError(pub.Publish(ctx, textKrChan, []byte("kind-redis")))
@@ -449,3 +449,26 @@ func (s *RedisMessagingSuite) waitPatterns(probe *goredis.Client, count int64) {
 		return err == nil && got >= count
 	}, 5*time.Second, 10*time.Millisecond, "pattern subscription not active")
 }
+
+const (
+	// makeInputChannel is the make input channel the tests use.
+	makeInputChannel = 8
+
+	// makeInputClient is the make input client the tests use.
+	makeInputClient = 4
+
+	// makeInputDelivering is the make input delivering the tests use.
+	makeInputDelivering = 4
+
+	// makeInputMatching is the make input matching the tests use.
+	makeInputMatching = 4
+
+	// makeInputRedis is the make input redis the tests use.
+	makeInputRedis = 4
+
+	// makeInputRequeued is the make input requeued the tests use.
+	makeInputRequeued = 8
+
+	// makeInputUnsubscribe is the make input unsubscribe the tests use.
+	makeInputUnsubscribe = 4
+)

@@ -48,28 +48,28 @@ func positives(raw []float64) []float64 {
 // sameAnswers reports whether two partials finalize to the same answer for every
 // aggregate: count/min/max exactly, sum/avg within float rounding, quantiles exactly
 // (sketch merges add bin counts, which is exact).
-func sameAnswers(partialValue, partial chartspec.Partial) bool {
+func sameAnswers(currentPartial, partial chartspec.Partial) bool {
 	for _, agg := range []types.Aggregate{
 		types.AggCount, types.AggMin, types.AggMax, types.AggP50, types.AggP95, types.AggP99,
 	} {
-		x, y := chartspec.Finalize(partialValue, agg), chartspec.Finalize(partial, agg)
+		x, y := chartspec.Finalize(currentPartial, agg), chartspec.Finalize(partial, agg)
 		if x != y && !(math.IsNaN(x) && math.IsNaN(y)) {
 			return false
 		}
 	}
 
-	return sameAnswersRest(partialValue, partial)
+	return sameAnswersFinalized(currentPartial, partial)
 }
 
-// sameAnswersRest continues sameAnswers with its remaining steps.
-func sameAnswersRest(a, b chartspec.Partial) bool {
+// sameAnswersFinalized continues sameAnswers: finalized.
+func sameAnswersFinalized(a, b chartspec.Partial) bool {
 	for _, agg := range []types.Aggregate{types.AggSum, types.AggAvg} {
 		x, y := chartspec.Finalize(a, agg), chartspec.Finalize(b, agg)
 		if math.IsNaN(x) && math.IsNaN(y) {
 			continue
 		}
 
-		if math.Abs(x-y) > max1em9*math.Max(1, math.Abs(x)) {
+		if math.Abs(x-y) > wantAbs*math.Max(1, math.Abs(x)) {
 			return false
 		}
 	}
@@ -102,34 +102,39 @@ func merged(x, y chartspec.Partial) chartspec.Partial {
 func TestPartial_MergeIsAssociativeAndCommutative(t *testing.T) {
 	t.Parallel()
 
-	law := func(ra, amountsValue, amounts []float64) bool {
-		partial2, partial, partialValue := partialOf(
+	law := func(ra, currentAmounts, amounts []float64) bool {
+		secondPartial, partial, currentPartial := partialOf(
 			t,
 			positives(ra),
 		), partialOf(
 			t,
-			positives(amountsValue),
+			positives(currentAmounts),
 		), partialOf(
 			t,
 			positives(amounts),
 		)
 		before := chartspec.Finalize(partial, types.AggP95)
-		left := merged(merged(partial2, partial), partialValue)
-		right := merged(partial2, merged(partial, partialValue))
+		left := merged(merged(secondPartial, partial), currentPartial)
+		right := merged(secondPartial, merged(partial, currentPartial))
 		after := chartspec.Finalize(partial, types.AggP95)
 		unchanged := before == after || (math.IsNaN(before) && math.IsNaN(after))
 
 		return sameAnswers(left, right) &&
-			sameAnswers(merged(partial2, partial), merged(partial, partial2)) &&
+			sameAnswers(merged(secondPartial, partial), merged(partial, secondPartial)) &&
 			unchanged
 	}
 	require.NoError(t, quick.Check(law, &quick.Config{MaxCount: 200}))
 
 	a := partialOf(t, []float64{3, 1, 7})
 	self := merged(a, a)
-	assert.InDelta(t, wantFinalize1p0, chartspec.Finalize(self, types.AggMin), 0)
-	assert.InDelta(t, wantFinalize7p0, chartspec.Finalize(self, types.AggMax), 0)
-	assert.InDelta(t, wantFinalize6p0, chartspec.Finalize(self, types.AggCount), 0)
+	assert.InDelta(t, wantFinalize, chartspec.Finalize(self, types.AggMin), 0)
+	assert.InDelta(t, wantFinalizeCommutative, chartspec.Finalize(self, types.AggMax), 0)
+	assert.InDelta(
+		t,
+		wantFinalizeAndCommutative,
+		chartspec.Finalize(self, types.AggCount),
+		0,
+	)
 }
 
 // TestFinalize_ComputesEachAggregate tests the value each aggregate finalizes to.
@@ -144,22 +149,47 @@ func TestFinalize_ComputesEachAggregate(t *testing.T) {
 	t.Parallel()
 
 	partial := partialOf(t, []float64{1, 2, 3, 4})
-	assert.InDelta(t, wantFinalize10p0, chartspec.Finalize(partial, types.AggSum), 0)
-	assert.InDelta(t, wantFinalize4p0, chartspec.Finalize(partial, types.AggCount), 0)
-	assert.InDelta(t, wantFinalize2p5, chartspec.Finalize(partial, types.AggAvg), 0)
-	assert.InDelta(t, wantFinalize1p0, chartspec.Finalize(partial, types.AggMin), 0)
-	assert.InDelta(t, wantFinalize4p0, chartspec.Finalize(partial, types.AggMax), 0)
+	assert.InDelta(t, wantFinalizeAggregate, chartspec.Finalize(partial, types.AggSum), 0)
+	assert.InDelta(
+		t,
+		wantFinalizeEachAggregate,
+		chartspec.Finalize(partial, types.AggCount),
+		0,
+	)
+	assert.InDelta(
+		t,
+		wantFinalizeComputesEachAggregate,
+		chartspec.Finalize(partial, types.AggAvg),
+		0,
+	)
+	assert.InDelta(t, wantFinalize, chartspec.Finalize(partial, types.AggMin), 0)
+	assert.InDelta(
+		t,
+		wantFinalizeEachAggregate,
+		chartspec.Finalize(partial, types.AggMax),
+		0,
+	)
 	assert.InEpsilon(
 		t,
-		inEpsilonArg2p0,
+		inEpsilonInput,
 		chartspec.Finalize(partial, types.AggP50),
-		epsilon0p01,
+		inEpsilonInputAggregate,
 	)
 
 	var empty chartspec.Partial
 
-	assert.InDelta(t, wantFinalize0p0, chartspec.Finalize(empty, types.AggSum), 0)
-	assert.InDelta(t, wantFinalize0p0, chartspec.Finalize(empty, types.AggCount), 0)
+	assert.InDelta(
+		t,
+		wantFinalizeZeroCount,
+		chartspec.Finalize(empty, types.AggSum),
+		0,
+	)
+	assert.InDelta(
+		t,
+		wantFinalizeZeroCount,
+		chartspec.Finalize(empty, types.AggCount),
+		0,
+	)
 
 	for _, agg := range []types.Aggregate{
 		types.AggAvg, types.AggMin, types.AggMax, types.AggP95,
@@ -186,9 +216,9 @@ func TestFinalize_ComputesEachAggregate(t *testing.T) {
 func TestSketch_MergePreservesQuantilesWithin1Pct(t *testing.T) {
 	t.Parallel()
 
-	r := fixtures.NewSequence(seed7)
+	r := fixtures.NewSequence(newSequenceInput)
 
-	testSketchMergePreservesQuantilesWithin1PctRest5(t, r)
+	testSketchMergePreservesQuantilesWithin1PctRunsTrials(t, r)
 }
 
 // mergedShards splits values round-robin into the given number of shards and merges
@@ -226,9 +256,9 @@ func assertQuantilesWithin1Pct(
 	for _, item := range []struct {
 		agg types.Aggregate
 		q   float64
-	}{{types.AggP50, iterations0p5}, {types.AggP95, iterations0p95}, {
+	}{{types.AggP50, medianQuantile}, {types.AggP95, iterations0Pct}, {
 		types.AggP99,
-		iterations0p99,
+		iterations0Within1Pct,
 	}} {
 		exact := sorted[int(item.q*float64(len(values)-1))]
 		got := chartspec.Finalize(total, item.agg)
@@ -243,23 +273,23 @@ func assertQuantilesWithin1Pct(
 	}
 }
 
-// testSketchMergePreservesQuantilesWithin1PctRest5 continues
-// testSketchMergePreservesQuantilesWithin1PctRest4 with its remaining steps.
-func testSketchMergePreservesQuantilesWithin1PctRest5(
+// testSketchMergePreservesQuantilesWithin1PctRunsTrials continues
+// testSketchMergePreservesQuantilesWithin1Pct: runs trials.
+func testSketchMergePreservesQuantilesWithin1PctRunsTrials(
 	t *testing.T,
 	sequence *fixtures.Sequence,
 ) {
 	t.Helper()
 
-	for trial := range iterations50 {
-		n := intN50 + sequence.IntN(intNArg2000)
+	for trial := range iterationsTrials {
+		n := initialN + sequence.IntN(upperBoundTrials)
 		values := make([]float64, n)
 
 		for i := range values {
 			values[i] = math.Exp(sequence.Float64()*14 - 7) // 1e-3 … 1e3, log-spread
 		}
 
-		shards := 1 + sequence.IntN(intNArg8)
+		shards := 1 + sequence.IntN(upperBoundRunsTrials)
 
 		total := mergedShards(t, values, shards)
 
@@ -288,3 +318,59 @@ func FuzzChartSpecParse(f *testing.F) {
 		}
 	})
 }
+
+const (
+	// inEpsilonInput is the in epsilon input the tests use.
+	inEpsilonInput = 2.0
+
+	// inEpsilonInputAggregate is the in epsilon input aggregate the tests use.
+	inEpsilonInputAggregate = 0.01
+
+	// initialN is the initial n the tests use.
+	initialN = 50
+
+	// medianQuantile is the medianQuantile the tests use.
+	medianQuantile = 0.5
+
+	// iterations0Pct is the medianQuantile pct the tests use.
+	iterations0Pct = 0.95
+
+	// iterations0Within1Pct is the medianQuantile within1 pct the tests use.
+	iterations0Within1Pct = 0.99
+
+	// iterationsTrials is the iterations trials the tests use.
+	iterationsTrials = 50
+
+	// newSequenceInput is the new sequence input the tests use.
+	newSequenceInput = 7
+
+	// upperBoundRunsTrials is the upper bound runs trials the tests use.
+	upperBoundRunsTrials = 8
+
+	// upperBoundTrials is the upper bound trials the tests use.
+	upperBoundTrials = 2000
+
+	// wantAbs is the expected abs.
+	wantAbs = 1e-9
+
+	// wantFinalize is the expected finalize.
+	wantFinalize = 1.0
+
+	// wantFinalizeAggregate is the expected finalize aggregate.
+	wantFinalizeAggregate = 10.0
+
+	// wantFinalizeAndCommutative is the expected finalize and commutative.
+	wantFinalizeAndCommutative = 6.0
+
+	// wantFinalizeCommutative is the expected finalize commutative.
+	wantFinalizeCommutative = 7.0
+
+	// wantFinalizeComputesEachAggregate is the expected finalize computes each aggregate.
+	wantFinalizeComputesEachAggregate = 2.5
+
+	// wantFinalizeEachAggregate is the expected finalize each aggregate.
+	wantFinalizeEachAggregate = 4.0
+
+	// wantFinalizeZeroCount is the expected finalize of an empty aggregate.
+	wantFinalizeZeroCount = 0.0
+)

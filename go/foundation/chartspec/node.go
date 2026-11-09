@@ -101,14 +101,14 @@ type nodeWire struct {
 // section left empty).
 // Canonical is the hashed form of the same object.
 func (n Node) MarshalJSON() ([]byte, error) {
-	nodeWireValue := nodeWire{
+	currentNodeWire := nodeWire{
 		Kind:     n.Kind,
 		Fields:   wireFields(n.Fields),
 		Children: wireChildren(n.Children),
 		Lists:    wireLists(n.Lists),
 	}
 
-	out, err := json.Marshal(nodeWireValue)
+	out, err := json.Marshal(currentNodeWire)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: encode node")
 	}
@@ -189,30 +189,30 @@ func (n *Node) UnmarshalJSON(data []byte) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 
-	var nodeWireValue nodeWire
+	var currentNodeWire nodeWire
 
-	err := dec.Decode(&nodeWireValue)
+	err := dec.Decode(&currentNodeWire)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: invalid node JSON")
 	}
 
-	if nodeWireValue.Kind == "" {
+	if currentNodeWire.Kind == "" {
 		return apperr.New(apperr.CodeInvalidInput, "chartspec: a node needs a kind")
 	}
 
-	children, err := parseChildren(nodeWireValue.Children)
+	children, err := parseChildren(currentNodeWire.Children)
 	if err != nil {
 		return err
 	}
 
-	lists, err := parseLists(nodeWireValue.Lists)
+	lists, err := parseLists(currentNodeWire.Lists)
 	if err != nil {
 		return err
 	}
 
 	*n = Node{
-		Kind:     nodeWireValue.Kind,
-		Fields:   nodeWireValue.Fields,
+		Kind:     currentNodeWire.Kind,
+		Fields:   currentNodeWire.Fields,
 		Children: children,
 		Lists:    lists,
 	}

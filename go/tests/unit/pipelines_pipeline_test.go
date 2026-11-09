@@ -104,7 +104,7 @@ func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 	tracer := mocks.NewMockTracer(ctrl)
 	span := mocks.NewMockSpan(ctrl)
 	span.EXPECT().SetAttribute(gomock.Any(), gomock.Any()).AnyTimes()
-	span.EXPECT().End().Times(timesArg2)
+	span.EXPECT().End().Times(wantCalls)
 
 	start := func(
 		ctx context.Context, _ string, _ ...interfaces.SpanOption,
@@ -151,7 +151,7 @@ func TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
 	t.Parallel()
 
 	stages := pipeline.Base{}
-	started := make(chan struct{}, size3)
+	started := make(chan struct{}, makeInputOrder)
 	all := make(chan struct{})
 
 	go func() {
@@ -176,7 +176,7 @@ func TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
 	}
 
 	got, err := stages.FanOut("multiply", times(1), times(2), times(3)).
-		Execute(t.Context(), executeArg7)
+		Execute(t.Context(), executeInput)
 	require.NoError(t, err)
 	assert.Equal(t, []int{7, 14, 21}, got)
 
@@ -212,3 +212,11 @@ type boomPipeline interface {
 	// Boom panics.
 	Boom(ctx context.Context, n int) (int, error)
 }
+
+const (
+	// executeInput is the execute input the tests use.
+	executeInput = 7
+
+	// makeInputOrder is the make input order the tests use.
+	makeInputOrder = 3
+)

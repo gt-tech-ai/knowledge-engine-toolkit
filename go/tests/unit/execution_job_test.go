@@ -58,7 +58,7 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 	span.EXPECT().SetAttribute(gomock.Any(), gomock.Any()).AnyTimes()
 	span.EXPECT().RecordError(gomock.Any()).AnyTimes()
 	span.EXPECT().SetStatus(gomock.Any(), gomock.Any()).AnyTimes()
-	span.EXPECT().End().Times(timesArg2)
+	span.EXPECT().End().Times(wantCalls)
 	tracer.EXPECT().
 		Start(gomock.Any(), "lint.execute", gomock.Any()).
 		Times(2).

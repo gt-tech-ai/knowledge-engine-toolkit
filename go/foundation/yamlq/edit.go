@@ -88,13 +88,13 @@ type upsert struct {
 func (e *upsert) run(steps []step) ([]byte, error) {
 	cur := root(e.docs[e.index])
 
-	for indexValue := range steps {
+	for currentIndex := range steps {
 		var (
 			out []byte
 			err error
 		)
 
-		cur, out, err = e.advance(deref(cur), steps, indexValue)
+		cur, out, err = e.advance(deref(cur), steps, currentIndex)
 		if err != nil || cur == nil {
 			return out, err
 		}
@@ -108,27 +108,27 @@ func (e *upsert) run(steps []step) ([]byte, error) {
 func (e *upsert) advance(
 	cur *yaml.Node,
 	steps []step,
-	indexValue int,
+	currentIndex int,
 ) (*yaml.Node, []byte, error) {
-	stepValue := steps[indexValue]
+	currentStep := steps[currentIndex]
 
-	next, err := child(cur, stepValue)
+	next, err := child(cur, currentStep)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	switch {
 	case next == nil:
-		out, err := e.missing(cur, steps[indexValue:])
+		out, err := e.missing(cur, steps[currentIndex:])
 
 		return nil, out, err
-	case indexValue == len(steps)-1:
+	case currentIndex == len(steps)-1:
 		out, err := e.leaf(cur, next)
 
 		return nil, out, err
 	case isNull(next):
 		spliced, found := spliceUnderNull(
-			e.lines, cur, stepValue, steps[indexValue+1:], e.node,
+			e.lines, cur, currentStep, steps[currentIndex+1:], e.node,
 		)
 		if found && holds(spliced, e.index, e.path, e.node) {
 			return nil, spliced, nil
@@ -262,7 +262,8 @@ func appendItem(lines []string, seq, item *yaml.Node) ([]byte, bool) {
 
 // dashAt reports whether 1-based line carries a sequence dash at column dash.
 func dashAt(lines []string, line, dash int) bool {
-	if dash < 0 || line < 1 || line > len(lines) || len(lines[line-1]) < dash+dash2 {
+	if dash < 0 || line < 1 || line > len(lines) ||
+		len(lines[line-1]) < dash+listDashWidth {
 		return false
 	}
 
@@ -405,21 +406,24 @@ func editSteps(path string) ([]step, error) {
 
 // child returns n's node for st: nil for a missing mapping key, CodeInvalidInput for a
 // missing sequence item or a step that does not fit n.
-func child(node *yaml.Node, stepValue step) (*yaml.Node, error) {
-	if stepValue.kind == stepIndex {
-		if node.Kind != yaml.SequenceNode || stepValue.index >= len(node.Content) {
+func child(node *yaml.Node, currentStep step) (*yaml.Node, error) {
+	if currentStep.kind == stepIndex {
+		if node.Kind != yaml.SequenceNode || currentStep.index >= len(node.Content) {
 			return nil, apperr.New(apperr.CodeInvalidInput,
-				fmt.Sprintf("no sequence item %d", stepValue.index))
+				fmt.Sprintf("no sequence item %d", currentStep.index))
 		}
 
-		return node.Content[stepValue.index], nil
+		return node.Content[currentStep.index], nil
 	}
 
 	if node.Kind != yaml.MappingNode {
-		return nil, apperr.New(apperr.CodeInvalidInput, "not a mapping at "+stepValue.key)
+		return nil, apperr.New(
+			apperr.CodeInvalidInput,
+			"not a mapping at "+currentStep.key,
+		)
 	}
 
-	return valueOf(node, stepValue.key), nil
+	return valueOf(node, currentStep.key), nil
 }
 
 // entryOf returns the node that starts last's entry in parent (the key, or the item),
@@ -703,20 +707,20 @@ func encodeBlock(steps []step, value *yaml.Node, indent string) ([]string, bool)
 
 // build adds steps' missing keys under n, ending in value.
 func build(node *yaml.Node, steps []step, value *yaml.Node) error {
-	for i, stepValue := range steps {
-		if stepValue.kind != stepKey || node.Kind != yaml.MappingNode {
+	for i, currentStep := range steps {
+		if currentStep.kind != stepKey || node.Kind != yaml.MappingNode {
 			return apperr.New(apperr.CodeInvalidInput, "cannot create a sequence item")
 		}
 
 		if i == len(steps)-1 {
-			node.Content = append(node.Content, keyNode(stepValue.key), value)
+			node.Content = append(node.Content, keyNode(currentStep.key), value)
 
 			return nil
 		}
 
 		next := &yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
 
-		node.Content = append(node.Content, keyNode(stepValue.key), next)
+		node.Content = append(node.Content, keyNode(currentStep.key), next)
 		node = next
 	}
 

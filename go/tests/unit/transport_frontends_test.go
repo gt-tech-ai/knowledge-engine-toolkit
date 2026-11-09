@@ -75,7 +75,7 @@ func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 
 	cmd, err := opscobra.Command(reg, "sync", opscobra.Options{})
 	require.NoError(t, err)
-	cmd.SetArgs([]string{textE2, textStaging, textFix2, textAPI})
+	cmd.SetArgs([]string{textEKebab, textStaging, textFixFlag, textAPI})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	require.NoError(t, cmd.ExecuteContext(t.Context()))

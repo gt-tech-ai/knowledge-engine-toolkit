@@ -12,6 +12,7 @@ import (
 
 	analyticscassandra "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/analytics/cassandra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
@@ -30,7 +31,7 @@ func day(
 	month time.Month,
 	d int,
 ) time.Time {
-	return time.Date(year2026, month, d, 0, 0, 0, 0, time.UTC)
+	return time.Date(dateInput, month, d, 0, 0, 0, 0, time.UTC)
 }
 
 // newCassandraStore builds the store over a mock session with the genai_calls cube
@@ -62,7 +63,7 @@ func expectPage(
 	tb testing.TB,
 	ctrl *gomock.Controller,
 	session *mocks.MockCQLSession,
-	bucket, timeValue, time2 time.Time,
+	bucket, instant, laterTime time.Time,
 	rows []storedRow,
 ) {
 	tb.Helper()
@@ -71,7 +72,7 @@ func expectPage(
 	iter := mocks.NewMockCQLIter(ctrl)
 
 	session.EXPECT().
-		Query(gomock.Any(), textOrg1, textGenaiCalls, bucket, timeValue, time2).
+		Query(gomock.Any(), textOrg1, textGenaiCalls, bucket, instant, laterTime).
 		Return(query)
 	query.EXPECT().WithContext(gomock.Any()).Return(query)
 	query.EXPECT().PageSize(100).Return(query)
@@ -128,15 +129,18 @@ func TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
-	from, timeValue := day(time.September, dayArg15), day(time.November, dayArg2)
+	from, instant := day(time.September, dayInput), day(time.November, dayInputOrder)
 
-	for _, time2 := range []time.Time{
+	for _, laterTime := range []time.Time{
 		day(time.September, 1), day(time.October, 1), day(time.November, 1),
 	} {
-		expectPage(t, ctrl, session, time2, from, timeValue, []storedRow{
+		expectPage(t, ctrl, session, laterTime, from, instant, []storedRow{
 			{
-				ts:   time2.AddDate(0, 0, 1),
-				dims: map[string]string{textTeam: time2.Month().String(), textModel: "m"},
+				ts: laterTime.AddDate(0, 0, 1),
+				dims: map[string]string{
+					textTeam:  laterTime.Month().String(),
+					textModel: "m",
+				},
 				partials: map[string][]byte{
 					textTokensIn: encoded(t, 1),
 					"duration_s": encoded(t, 2),
@@ -151,8 +155,21 @@ func TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder(t *testing.T) {
 		Grain:     types.GrainDay,
 		GroupBy:   []string{textTeam},
 		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
-		TimeRange: types.TimeRange{From: from, To: timeValue},
+		TimeRange: types.TimeRange{From: from, To: instant},
 	})
+
+	testCassandraStoreReadsEveryBucketChecksReads(t, stream, err)
+}
+
+// testCassandraStoreReadsEveryBucketChecksReads continues
+// TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder.
+func testCassandraStoreReadsEveryBucketChecksReads(
+	t *testing.T,
+	stream interfaces.RowStream,
+	err error,
+) {
+	t.Helper()
+
 	require.NoError(t, err)
 
 	defer func() { require.NoError(t, stream.Close()) }()
@@ -212,7 +229,7 @@ func TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual(t *testing.T) {
 		ctrl,
 		session,
 		day(time.October, 1),
-		day(time.October, dayArg5),
+		day(time.October, dayInputResidual),
 		day(time.November, 1),
 		[]storedRow{
 			{
@@ -246,7 +263,7 @@ func TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual(t *testing.T) {
 	assert.False(t, more)
 	require.Len(t, rows, 1)
 	assert.Equal(t, map[string]string{textTeam: textT1}, rows[0].Group)
-	assert.Equal(t, day(time.October, dayArg6), rows[0].TS)
+	assert.Equal(t, day(time.October, dayInputFiltersResidual), rows[0].TS)
 }
 
 // TestCassandraStore_ReadsTheWindowsPartialFirstBucket tests a window that starts
@@ -267,14 +284,14 @@ func TestCassandraStore_ReadsTheWindowsPartialFirstBucket(t *testing.T) {
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
 	from := day(time.October, 9).Add(2*time.Hour + 54*time.Minute)
-	timeValue := from.Add(24 * time.Hour)
+	instant := from.Add(24 * time.Hour)
 	expectPage(
 		t,
 		ctrl,
 		session,
 		day(time.October, 1),
-		day(time.October, dayArg9),
-		timeValue,
+		day(time.October, dayInputBucket),
+		instant,
 		[]storedRow{{
 			ts:       day(time.October, 9),
 			dims:     map[string]string{textTeam: textT1},
@@ -288,7 +305,7 @@ func TestCassandraStore_ReadsTheWindowsPartialFirstBucket(t *testing.T) {
 		Grain:     types.GrainDay,
 		GroupBy:   []string{textTeam},
 		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
-		TimeRange: types.TimeRange{From: from, To: timeValue},
+		TimeRange: types.TimeRange{From: from, To: instant},
 	})
 	require.NoError(t, err)
 
@@ -298,7 +315,7 @@ func TestCassandraStore_ReadsTheWindowsPartialFirstBucket(t *testing.T) {
 
 	assert.False(t, more)
 	require.Len(t, rows, 1)
-	assert.Equal(t, day(time.October, dayArg9), rows[0].TS)
+	assert.Equal(t, day(time.October, dayInputBucket), rows[0].TS)
 }
 
 // TestCassandraStore_WriteUpsertsOnePartialRowPerGrain tests the idempotent write
@@ -318,17 +335,51 @@ func TestCassandraStore_WriteUpsertsOnePartialRowPerGrain(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
-	timeValue := time.Date(year2026, month10, day9, hour12, min34, sec56, 0, time.UTC)
+	instant := time.Date(
+		dateInput,
+		dateInputGrain,
+		dateInputPerGrain,
+		dateInputRowPerGrain,
+		dateInputPartialRowPerGrain,
+		dateInputOnePartialRowPerGrain,
+		0,
+		time.UTC,
+	)
 	dims := map[string]string{textTeam: textT1, textModel: "m"}
 	insert := "INSERT INTO %s (org_id, cube, bucket, ts, dims_key, idempotency_key, " +
 		"dims, partials) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
 
-	for table, keys := range map[string][iterations2]time.Time{
+	testCassandraStoreWriteUpsertsChecksRows(
+		t,
+		ctrl,
+		session,
+		store,
+		instant,
+		dims,
+		insert,
+	)
+}
+
+// testCassandraStoreWriteUpsertsChecksRows continues
+// TestCassandraStore_WriteUpsertsOnePartialRowPerGrain.
+func testCassandraStoreWriteUpsertsChecksRows(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	session *mocks.MockCQLSession,
+	store *analyticscassandra.Store,
+	instant time.Time,
+	dims map[string]string,
+	insert string,
+) {
+	t.Helper()
+
+	for table, keys := range map[string][iterations]time.Time{
 		"genai_calls_hour": {
-			day(time.October, dayArg9), time.Date(year2026, month10, day9, hour12, 0, 0, 0,
+			day(time.October, dayInputGrain), time.Date(dateInput, dateInputGrain,
+				dateInputPerGrain, dateInputRowPerGrain, 0, 0, 0,
 				time.UTC),
 		},
-		textGenaiCallsDay: {day(time.October, 1), day(time.October, dayArg9)},
+		textGenaiCallsDay: {day(time.October, 1), day(time.October, dayInputGrain)},
 	} {
 		query := mocks.NewMockCQLQuery(ctrl)
 
@@ -362,7 +413,7 @@ func TestCassandraStore_WriteUpsertsOnePartialRowPerGrain(t *testing.T) {
 		{
 			Cube:           textGenaiCalls,
 			OrgID:          textOrg1,
-			TS:             timeValue,
+			TS:             instant,
 			Dims:           dims,
 			Measures:       map[string]float64{textTokensIn: 42},
 			IdempotencyKey: "k-1",
@@ -388,7 +439,10 @@ func TestCassandraStore_RejectsInvalidQueriesAndFacts(t *testing.T) {
 
 	store := newCassandraStore(t, mocks.NewMockCQLSession(gomock.NewController(t)))
 	ctx := context.Background()
-	rng := types.TimeRange{From: day(time.October, 1), To: day(time.October, dayArg2)}
+	rng := types.TimeRange{
+		From: day(time.October, 1),
+		To:   day(time.October, dayInputFacts),
+	}
 
 	for name, aggregateQuery := range map[string]types.AggregateQuery{
 		"cube": {Cube: textOther, OrgID: textO, TimeRange: rng},
@@ -460,12 +514,12 @@ func TestCassandraStore_PageErrorIsTerminal(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
-	from, timeValue := day(time.September, dayArg15), day(time.October, dayArg15)
+	from, instant := day(time.September, dayInput), day(time.October, dayInput)
 	query := mocks.NewMockCQLQuery(ctrl)
 	iter := mocks.NewMockCQLIter(ctrl)
 
 	session.EXPECT().
-		Query(gomock.Any(), textOrg1, textGenaiCalls, day(time.September, 1), from, timeValue).
+		Query(gomock.Any(), textOrg1, textGenaiCalls, day(time.September, 1), from, instant).
 		Return(query)
 	query.EXPECT().WithContext(gomock.Any()).Return(query)
 	query.EXPECT().PageSize(100).Return(query)
@@ -475,7 +529,7 @@ func TestCassandraStore_PageErrorIsTerminal(t *testing.T) {
 	iter.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any()).Return(false)
 	iter.EXPECT().PageState().Return(nil)
 	iter.EXPECT().Close().Return(apperr.New(apperr.CodeUnavailable, "read timed out"))
-	expectPage(t, ctrl, session, day(time.October, 1), from, timeValue, []storedRow{{
+	expectPage(t, ctrl, session, day(time.October, 1), from, instant, []storedRow{{
 		ts: day(time.October, 2), dims: map[string]string{textTeam: textT1},
 		partials: map[string][]byte{textTokensIn: encoded(t, 1)},
 	}})
@@ -483,13 +537,13 @@ func TestCassandraStore_PageErrorIsTerminal(t *testing.T) {
 	stream, err := store.Aggregate(context.Background(), &types.AggregateQuery{
 		Cube: textGenaiCalls, OrgID: textOrg1, Grain: types.GrainDay,
 		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
-		TimeRange: types.TimeRange{From: from, To: timeValue},
+		TimeRange: types.TimeRange{From: from, To: instant},
 	})
 	require.NoError(t, err)
 
 	defer func() { require.NoError(t, stream.Close()) }()
 
-	for range iterations2 {
+	for range iterations {
 		rows, more, err := stream.Next(context.Background())
 		assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 		assert.Nil(t, rows)
@@ -513,16 +567,16 @@ func TestCassandraStore_ResumeTokenIsBoundToItsQuery(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
-	from, timeValue := day(time.September, dayArg15), day(time.October, dayArg15)
+	from, instant := day(time.September, dayInput), day(time.October, dayInput)
 
 	for _, b := range []time.Time{day(time.September, 1), day(time.October, 1)} {
-		expectPage(t, ctrl, session, b, from, timeValue, nil)
+		expectPage(t, ctrl, session, b, from, instant, nil)
 	}
 
 	aggregateQuery := types.AggregateQuery{
 		Cube: textGenaiCalls, OrgID: textOrg1, Grain: types.GrainDay,
 		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
-		TimeRange: types.TimeRange{From: from, To: timeValue},
+		TimeRange: types.TimeRange{From: from, To: instant},
 	}
 	stream, err := store.Aggregate(context.Background(), &aggregateQuery)
 	require.NoError(t, err)
@@ -576,7 +630,7 @@ func newTTLStore(
 func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 	t.Parallel()
 
-	ttl := hours10 * hours1024 * time.Hour
+	ttl := initialTTL * initialTTLRetention * time.Hour
 	today := time.Now().UTC().Truncate(24 * time.Hour)
 
 	t.Run("within retention", func(t *testing.T) {
@@ -615,7 +669,7 @@ func testCassandraStoreCompactionKeepsTheBucketsRetentionCase(
 	session := mocks.NewMockCQLSession(ctrl)
 	query := mocks.NewMockCQLQuery(ctrl)
 
-	testCassandraStoreCompactionKeepsTheBucketsRetentionRest5(
+	testCassandraStoreCompactionKeepsTheBucketsRetentionExpectsRead(
 		t,
 		ttl,
 		today,
@@ -625,9 +679,9 @@ func testCassandraStoreCompactionKeepsTheBucketsRetentionCase(
 	)
 }
 
-// testCassandraStoreCompactionKeepsTheBucketsRetentionRest5 continues
-// testCassandraStoreCompactionKeepsTheBucketsRetentionRest3 with its remaining steps.
-func testCassandraStoreCompactionKeepsTheBucketsRetentionRest5(
+// testCassandraStoreCompactionKeepsTheBucketsRetentionExpectsRead continues
+// testCassandraStoreCompactionKeepsTheBucketsRetention: expects read.
+func testCassandraStoreCompactionKeepsTheBucketsRetentionExpectsRead(
 	t *testing.T,
 	ttl time.Duration,
 	today time.Time,
@@ -640,7 +694,7 @@ func testCassandraStoreCompactionKeepsTheBucketsRetentionRest5(
 	iter := mocks.NewMockCQLIter(ctrl)
 	batch := mocks.NewMockCQLBatch(ctrl)
 	bucket := today.AddDate(0, 0, -2)
-	timeValue := bucket.Add(9 * time.Hour)
+	instant := bucket.Add(9 * time.Hour)
 	dims := map[string]string{textTeam: textT1}
 
 	session.EXPECT().Query(gomock.Any(), textOrg1, textGenaiCalls, bucket).Return(query)
@@ -660,7 +714,7 @@ func testCassandraStoreCompactionKeepsTheBucketsRetentionRest5(
 			}
 
 			served = true
-			*asType[*time.Time](t, dest[0]) = timeValue
+			*asType[*time.Time](t, dest[0]) = instant
 			*asType[*string](t, dest[1]) = "team=t-1"
 			*asType[*string](t, dest[2]) = "k-1"
 			*asType[*map[string]string](t, dest[3]) = dims
@@ -670,29 +724,29 @@ func testCassandraStoreCompactionKeepsTheBucketsRetentionRest5(
 
 			return true
 		}).
-		Times(timesArg2)
+		Times(wantCalls)
 
-	testCassandraStoreCompactionKeepsTheBucketsRetentionRest6(
+	testCassandraStoreCompactionKeepsTheBucketsRetentionExpectsBatch(
 		t,
 		ttl,
 		session,
 		iter,
 		batch,
 		bucket,
-		timeValue,
+		instant,
 		dims,
 	)
 }
 
-// testCassandraStoreCompactionKeepsTheBucketsRetentionRest6 continues
-// testCassandraStoreCompactionKeepsTheBucketsRetentionRest5 with its remaining steps.
-func testCassandraStoreCompactionKeepsTheBucketsRetentionRest6(
+// testCassandraStoreCompactionKeepsTheBucketsRetentionExpectsBatch continues
+// testCassandraStoreCompactionKeepsTheBucketsRetentionExpectsRead: expects batch.
+func testCassandraStoreCompactionKeepsTheBucketsRetentionExpectsBatch(
 	t *testing.T,
 	ttl time.Duration,
 	session *mocks.MockCQLSession,
 	iter *mocks.MockCQLIter,
 	batch *mocks.MockCQLBatch,
-	bucket, timeValue time.Time,
+	bucket, instant time.Time,
 	dims map[string]string,
 ) {
 	t.Helper()
@@ -707,7 +761,7 @@ func testCassandraStoreCompactionKeepsTheBucketsRetentionRest6(
 	batch.EXPECT().Query(
 		"INSERT INTO genai_calls_hour (org_id, cube, bucket, ts, dims_key, "+
 			"idempotency_key, dims, partials) VALUES (?, ?, ?, ?, ?, '', ?, ?) USING TTL ?",
-		textOrg1, textGenaiCalls, bucket, timeValue, "team=t-1", dims, gomock.Any(),
+		textOrg1, textGenaiCalls, bucket, instant, "team=t-1", dims, gomock.Any(),
 		gomock.Any(),
 	).
 		Do(func(_ string, values ...any) {
@@ -716,31 +770,31 @@ func testCassandraStoreCompactionKeepsTheBucketsRetentionRest6(
 			assert.GreaterOrEqual(t, got, want-5)
 		})
 
-	testCassandraStoreCompactionKeepsTheBucketsRetentionRest(
+	testCassandraStoreCompactionKeepsTheBucketsRetentionExpectsWriteAndCompacts(
 		t,
 		ttl,
 		session,
 		batch,
 		bucket,
-		timeValue,
+		instant,
 	)
 }
 
-// testCassandraStoreCompactionKeepsTheBucketsRetentionRest continues
-// testCassandraStoreCompactionKeepsTheBucketsRetentionCase with its remaining steps.
-func testCassandraStoreCompactionKeepsTheBucketsRetentionRest(
+// testCassandraStoreCompactionKeepsTheBucketsRetentionExpectsWriteAndCompacts continues
+// testCassandraStoreCompactionKeepsTheBucketsRetentionCase: expects write and compacts.
+func testCassandraStoreCompactionKeepsTheBucketsRetentionExpectsWriteAndCompacts(
 	t *testing.T,
 	ttl time.Duration,
 	session *mocks.MockCQLSession,
 	batch *mocks.MockCQLBatch,
-	bucket, timeValue time.Time,
+	bucket, instant time.Time,
 ) {
 	t.Helper()
 
 	batch.EXPECT().Query(
 		"DELETE FROM genai_calls_hour WHERE org_id = ? AND cube = ? AND bucket = ? AND ts "+
 			"= ? AND dims_key = ? AND idempotency_key = ?",
-		textOrg1, textGenaiCalls, bucket, timeValue, "team=t-1", "k-1",
+		textOrg1, textGenaiCalls, bucket, instant, "team=t-1", "k-1",
 	)
 	session.EXPECT().ExecuteBatch(batch).Return(nil)
 
@@ -816,3 +870,48 @@ func TestCassandraStore_ReadinessQueriesTheCoordinator(t *testing.T) {
 		assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 	})
 }
+
+const (
+	// dateInputGrain is the date input grain the tests use.
+	dateInputGrain = 10
+
+	// dateInputOnePartialRowPerGrain is the date input one partial row per grain the tests
+	// use.
+	dateInputOnePartialRowPerGrain = 56
+
+	// dateInputPartialRowPerGrain is the date input partial row per grain the tests use.
+	dateInputPartialRowPerGrain = 34
+
+	// dateInputPerGrain is the date input per grain the tests use.
+	dateInputPerGrain = 9
+
+	// dateInputRowPerGrain is the date input row per grain the tests use.
+	dateInputRowPerGrain = 12
+
+	// dayInput is the day input the tests use.
+	dayInput = 15
+
+	// dayInputBucket is the day input bucket the tests use.
+	dayInputBucket = 9
+
+	// dayInputFacts is the day input facts the tests use.
+	dayInputFacts = 2
+
+	// dayInputFiltersResidual is the day input filters residual the tests use.
+	dayInputFiltersResidual = 6
+
+	// dayInputGrain is the day input grain the tests use.
+	dayInputGrain = 9
+
+	// dayInputOrder is the day input order the tests use.
+	dayInputOrder = 2
+
+	// dayInputResidual is the day input residual the tests use.
+	dayInputResidual = 5
+
+	// initialTTL is the initial ttl the tests use.
+	initialTTL = 10
+
+	// initialTTLRetention is the initial ttl retention the tests use.
+	initialTTLRetention = 24
+)

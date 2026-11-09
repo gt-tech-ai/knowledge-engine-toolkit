@@ -47,7 +47,11 @@ func TestCodebaseSelector_Matches(t *testing.T) {
 		},
 		{"ext keeps", "a/b.yml", S{Exts: []string{textYaml, ".yml"}}, true},
 		{"ext drops", textABGo, S{Exts: []string{textYaml}}, false},
-		{"and of fields", textBCGo, S{Roots: []string{textA}, Exts: []string{textGo3}}, false},
+		{
+			"and of fields", textBCGo,
+			S{Roots: []string{textA}, Exts: []string{textGoExt}},
+			false,
+		},
 		{
 			"exclude dir beats glob", "a/gen/x.go",
 			S{Globs: []string{"**/*.go"}, Exclude: []string{"a/gen"}},
@@ -88,3 +92,8 @@ func TestCodebaseSelector_Generated(t *testing.T) {
 
 	assert.False(t, codebase.GeneratedName("a/generator.go"))
 }
+
+const (
+	// textABGo is the literal "a/b.go".
+	textABGo = "a/b.go"
+)

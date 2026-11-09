@@ -1,11 +1,11 @@
 package dtovalidate
 
 const (
-	// isControlRuneResult0x20 is the isControlRuneResult value 0x20.
-	isControlRuneResult0x20 = 0x20
+	// firstPrintableRune is the named value used where first printable rune applies.
+	firstPrintableRune = 0x20
 )
 
 const (
-	// isControlRuneResult0x7f is the isControlRuneResult value 0x7f.
-	isControlRuneResult0x7f = 0x7f
+	// deleteRune is the named value used where delete rune applies.
+	deleteRune = 0x7f
 )

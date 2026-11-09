@@ -99,7 +99,7 @@ func TestHedger_Disabled_RunsOnce(t *testing.T) {
 func TestHedger_UnknownKind_Errors(t *testing.T) {
 	t.Parallel()
 
-	_, err := hedge.New(hedge.Kind(kindArg99))
+	_, err := hedge.New(hedge.Kind(kindInput))
 	require.Error(t, err)
 }
 

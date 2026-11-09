@@ -181,14 +181,23 @@ func (s *JSONAPISetter) MsgOptsWithResource(
 	return opts
 }
 
-// Action names the action option in a signature.
-type Action bool
+// ActionMethodOpts returns MethodOpts plus the (jsonapi.v1.operation){action:true}
+// marker.
+func (s *JSONAPISetter) ActionMethodOpts(
+	verb, path string, additional ...[value]string,
+) *descriptorpb.MethodOptions {
+	opts := s.MethodOpts(verb, path, additional...)
+	m := dynamicpb.NewMessage(s.opMsg)
+	m.Set(s.opMsg.Fields().ByName(textAction), protoreflect.ValueOfBool(true))
+	proto.SetExtension(opts, s.opExt, m)
 
-// MethodOpts returns MethodOptions carrying the google.api.http binding (verb +
-// path, plus any additional bindings) and, when action is true, the
-// (jsonapi.v1.operation){action:true} marker.
-func (s *JSONAPISetter) MethodOpts(
-	verb, path string, action Action, additional ...[value2]string,
+	return opts
+}
+
+// MethodOpts returns MethodOptions carrying the google.api.http binding (verb + path,
+// plus any additional bindings).
+func (*JSONAPISetter) MethodOpts(
+	verb, path string, additional ...[value]string,
 ) *descriptorpb.MethodOptions {
 	rule := httpRule(verb, path)
 	for _, ab := range additional {
@@ -197,12 +206,6 @@ func (s *JSONAPISetter) MethodOpts(
 
 	opts := &descriptorpb.MethodOptions{}
 	proto.SetExtension(opts, annotations.E_Http, rule)
-
-	if action {
-		m := dynamicpb.NewMessage(s.opMsg)
-		m.Set(s.opMsg.Fields().ByName(textAction), protoreflect.ValueOfBool(true))
-		proto.SetExtension(opts, s.opExt, m)
-	}
 
 	return opts
 }
@@ -333,3 +336,8 @@ func BuildRouteFDS(
 
 	return raw
 }
+
+const (
+	// value is the value the tests use.
+	value = 2
+)

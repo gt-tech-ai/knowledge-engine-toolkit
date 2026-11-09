@@ -122,9 +122,11 @@ func TestChartSpecParse_RejectsWithCodedInvalidInput(t *testing.T) {
 			`p99"}}`,
 		"aggregate on dimension": `{"cube":"genai_calls","rows":{"field":"team","agg":"sum"}}`,
 		"measure without agg":    `{"cube":"genai_calls","rows":{"field":"tokens_in"}}`,
-		"over-deep nesting":      `{"cube":"genai_calls","rows":` + nested(depth9) + `}`,
-		"undeclared group-by":    `{"cube":"genai_calls","detail":[{"field":"region"}]}`,
-		"group-by on a measure":  `{"cube":"genai_calls","detail":[{"field":"tokens_in"}]}`,
+		"over-deep nesting": `{"cube":"genai_calls","rows":` + nested(
+			nestedInput,
+		) + `}`,
+		"undeclared group-by":   `{"cube":"genai_calls","detail":[{"field":"region"}]}`,
+		"group-by on a measure": `{"cube":"genai_calls","detail":[{"field":"tokens_in"}]}`,
 		textUnknownOperator: `{"cube":"genai_calls","rows":{"op":"join","args":[{"field` +
 			`":"team"}]}}`,
 		"operator without args": `{"cube":"genai_calls","rows":{"op":"cross","args":[]}}`,
@@ -241,3 +243,8 @@ func TestChartSpecValidate_MatchesParse(t *testing.T) {
 	_, err = chartspec.Validate(&decoded, chartCubeMap())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// nestedInput is the nested input the tests use.
+	nestedInput = 9
+)

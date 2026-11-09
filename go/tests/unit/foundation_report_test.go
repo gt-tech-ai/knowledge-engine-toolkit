@@ -22,13 +22,13 @@ func reportSteps() types.StepResults {
 			Name:     textGofmt,
 			Group:    textLint,
 			Status:   types.StatusPass,
-			Duration: millis1500 * time.Millisecond,
+			Duration: durationSteps * time.Millisecond,
 		},
 		{
 			Name:     textVet,
 			Group:    textLint,
 			Status:   types.StatusFail,
-			Duration: seconds2 * time.Second,
+			Duration: duration * time.Second,
 			Error:    "1 finding",
 			Detail:   []byte("a.go:3: shadowed\n"),
 		},
@@ -55,13 +55,16 @@ func drive(obs interfaces.ExecutionObserver) {
 func reportOf(t *testing.T, cfg report.Config) (out, errOut string) {
 	t.Helper()
 
-	var buffer, bufferValue bytes.Buffer
+	var buffer, currentBuffer bytes.Buffer
 
-	obs, err := report.NewFromConfig(cfg, types.Streams{Out: &buffer, Err: &bufferValue})
+	obs, err := report.NewFromConfig(
+		cfg,
+		types.Streams{Out: &buffer, Err: &currentBuffer},
+	)
 	require.NoError(t, err)
 	drive(obs)
 
-	return buffer.String(), bufferValue.String()
+	return buffer.String(), currentBuffer.String()
 }
 
 // TestFoundationReport_LineAndTable tests the terminal reporters NewFromConfig builds.
@@ -158,20 +161,20 @@ func TestFoundationReport_MachineKinds(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &doc))
 	assert.Equal(t, textPreflight, doc.Gate)
 	assert.False(t, doc.Passed)
-	assert.Equal(t, int64(int64Arg4000), doc.ElapsedMS)
+	assert.Equal(t, int64(wantElapsedMS), doc.ElapsedMS)
 	assert.Equal(t, map[string]int{"PASS": 1, "FAIL": 1}, doc.Counts)
-	require.Len(t, doc.Steps, wantStepsLen2)
+	require.Len(t, doc.Steps, wantStepsLen)
 	assert.Equal(t, "FAIL", doc.Steps[1].Status)
-	assert.Equal(t, int64(int64Arg1500), doc.Steps[0].DurationMS)
+	assert.Equal(t, int64(wantDurationMS), doc.Steps[0].DurationMS)
 
 	out, errOut = reportOf(t, report.Config{})
 	assert.Empty(t, out+errOut)
 
-	var bufferValue, buffer bytes.Buffer
+	var currentBuffer, buffer bytes.Buffer
 
 	executionObserver, err := report.NewFromConfig(
 		report.Config{Kind: report.KindGHActions},
-		types.Streams{Out: &bufferValue, Err: &bufferValue},
+		types.Streams{Out: &currentBuffer, Err: &currentBuffer},
 	)
 	require.NoError(t, err)
 
@@ -179,16 +182,16 @@ func TestFoundationReport_MachineKinds(t *testing.T) {
 		types.Streams{Out: &buffer, Err: &buffer})
 	require.NoError(t, err)
 	drive(report.Composite(executionObserver, js))
-	assert.Contains(t, bufferValue.String(), "::group::lint")
+	assert.Contains(t, currentBuffer.String(), "::group::lint")
 	assert.Contains(t, buffer.String(), `"gate": "preflight"`)
 
 	_, err = report.NewFromConfig(
 		report.Config{Kind: "html"},
-		types.Streams{Out: &bufferValue, Err: &bufferValue},
+		types.Streams{Out: &currentBuffer, Err: &currentBuffer},
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = report.NewFromConfig(report.Config{}, types.Streams{Out: &bufferValue})
+	_, err = report.NewFromConfig(report.Config{}, types.Streams{Out: &currentBuffer})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -221,3 +224,14 @@ func TestFoundationReport_GHActionsEscapes(t *testing.T) {
 	assert.Contains(t, out.String(),
 		"::error title=lint%3Ago%2Cx::a.go:3: 100%25 bad,%0Asee above\n")
 }
+
+const (
+	// durationSteps is the duration steps the tests use.
+	durationSteps = 1500
+
+	// wantDurationMS is the expected duration ms.
+	wantDurationMS = 1500
+
+	// wantElapsedMS is the expected elapsed ms.
+	wantElapsedMS = 4000
+)

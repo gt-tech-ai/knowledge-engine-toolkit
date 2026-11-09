@@ -84,7 +84,7 @@ func TestNewTestMinIO_WithImageOverridesTheDefault(t *testing.T) {
 
 	ctx := context.Background()
 
-	digest := strings.SplitN(miniodb.DefaultImage, "@", splitNArg2)[1]
+	digest := strings.SplitN(miniodb.DefaultImage, "@", splitNInput)[1]
 	digestOnly := "cgr.dev/chainguard/minio@" + digest
 	started, err := miniodb.NewTestMinIO(ctx, miniodb.WithImage(digestOnly))
 
@@ -181,7 +181,7 @@ func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 		ctx,
 		testBucket,
 		"presigned.md",
-		expirySeconds300,
+		presignPutURLInput,
 		contentType,
 	)
 	s.Require().NoError(err)
@@ -204,7 +204,7 @@ func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 		ctx,
 		testBucket,
 		"presigned.md",
-		expirySeconds300,
+		presignURLInput,
 		"My Report.md",
 	)
 	s.Require().NoError(err)
@@ -254,7 +254,7 @@ func (s *StorageMinIOSuite) TestStat_And_List() {
 
 	objs, err := s.client.ListObjects(ctx, testBucket, "docs/")
 	s.Require().NoError(err)
-	s.Len(objs, length2, "only docs/ prefix objects")
+	s.Len(objs, wantLength2Len, "only docs/ prefix objects")
 }
 
 // TestListObjectsPageToken_PagesToExhaustion verifies the resumable, token-paginated
@@ -293,15 +293,16 @@ func (s *StorageMinIOSuite) TestListObjectsPageToken_PagesToExhaustion() {
 			testBucket,
 			"page/",
 			token,
-			limit2,
+			listObjectsPageTokenInput,
 		)
 		s.Require().NoError(err)
 
 		pages++
 		s.Require().
-			Less(pages, lessArg10,
+			Less(pages, maxPagesListed,
 				"the crawl must terminate (guard against a non-empty-token loop)")
-		s.Require().LessOrEqual(len(objs), lessOrEqualArg2, "each page honors the limit")
+		s.Require().
+			LessOrEqual(len(objs), maxObjectsPerPage, "each page honors the limit")
 
 		for _, o := range objs {
 			got = append(got, o.Key)
@@ -314,7 +315,7 @@ func (s *StorageMinIOSuite) TestListObjectsPageToken_PagesToExhaustion() {
 		token = next
 	}
 
-	s.Equal(equalArg3, pages, "5 objects at limit=2 => 3 pages (2+2+1)")
+	s.Equal(wantResultExhaustion, pages, "5 objects at limit=2 => 3 pages (2+2+1)")
 	s.ElementsMatch(
 		want,
 		got,
@@ -418,3 +419,29 @@ func (s *StorageMinIOSuite) download(ctx context.Context, key string) []byte {
 
 	return data
 }
+
+const (
+	// listObjectsPageTokenInput is the list objects page token input the tests use.
+	listObjectsPageTokenInput = 2
+
+	// maxPagesListed is the max less arg10 the tests use.
+	maxPagesListed = 10
+
+	// maxObjectsPerPage is the max less or equal arg2 the tests use.
+	maxObjectsPerPage = 2
+
+	// presignPutURLInput is the presign put urlinput the tests use.
+	presignPutURLInput = 300
+
+	// presignURLInput is the presign urlinput the tests use.
+	presignURLInput = 300
+
+	// splitNInput is the split ninput the tests use.
+	splitNInput = 2
+
+	// wantLength2Len is the expected length2 len.
+	wantLength2Len = 2
+
+	// wantResultExhaustion is the expected result exhaustion.
+	wantResultExhaustion = 3
+)

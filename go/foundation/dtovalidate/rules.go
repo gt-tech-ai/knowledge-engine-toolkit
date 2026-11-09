@@ -102,7 +102,7 @@ func Filename(field, text string, maxBytes int) error {
 func isControlRune(
 	r rune,
 ) bool {
-	return r < isControlRuneResult0x20 || r == isControlRuneResult0x7f
+	return r < firstPrintableRune || r == deleteRune
 }
 
 // HTTPSURL checks that v parses as an http/https URL WITH a host (reuses net/url) —

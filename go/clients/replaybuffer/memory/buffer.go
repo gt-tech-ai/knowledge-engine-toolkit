@@ -55,24 +55,24 @@ func (b *Buffer) Append(_ context.Context, key, msgID string, payload []byte) er
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	keyBufferValue := b.live(key)
-	if keyBufferValue == nil {
-		keyBufferValue = &keyBuffer{}
-		b.keys[key] = keyBufferValue
+	currentKeyBuffer := b.live(key)
+	if currentKeyBuffer == nil {
+		currentKeyBuffer = &keyBuffer{}
+		b.keys[key] = currentKeyBuffer
 	}
 
-	keyBufferValue.msgs = append(
-		keyBufferValue.msgs,
+	currentKeyBuffer.msgs = append(
+		currentKeyBuffer.msgs,
 		interfaces.BufferedMessage{ID: msgID, Payload: payload},
 	)
-	if len(keyBufferValue.msgs) > b.maxSize {
+	if len(currentKeyBuffer.msgs) > b.maxSize {
 		// Evict the oldest to stay bounded. Eviction does NOT advance lowWater (that is the
 		// ack/prune boundary only): a client whose last-received id was evicted is a gap →
 		// full-refresh. This keeps the Redis backend to one pipelined round-trip per Append.
-		keyBufferValue.msgs = keyBufferValue.msgs[len(keyBufferValue.msgs)-b.maxSize:]
+		currentKeyBuffer.msgs = currentKeyBuffer.msgs[len(currentKeyBuffer.msgs)-b.maxSize:]
 	}
 
-	keyBufferValue.expiry = time.Now().Add(b.ttl)
+	currentKeyBuffer.expiry = time.Now().Add(b.ttl)
 
 	return nil
 }
@@ -86,8 +86,8 @@ func (b *Buffer) ReplayAfter(
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	keyBuffer2 := b.live(key)
-	if keyBuffer2 == nil {
+	secondKeyBuffer := b.live(key)
+	if secondKeyBuffer == nil {
 		return nil, false, nil // absent or expired → gap
 	}
 
@@ -99,13 +99,13 @@ func (b *Buffer) ReplayAfter(
 
 	// afterMsgID == the pruned low-water mark: the client acked exactly up to it, so the
 	// whole retained tail is a gapless replay.
-	if afterMsgID == keyBuffer2.lowWater {
-		return clone(keyBuffer2.msgs), true, nil
+	if afterMsgID == secondKeyBuffer.lowWater {
+		return clone(secondKeyBuffer.msgs), true, nil
 	}
 
-	for i, m := range keyBuffer2.msgs {
+	for i, m := range secondKeyBuffer.msgs {
 		if m.ID == afterMsgID {
-			return clone(keyBuffer2.msgs[i+1:]), true, nil
+			return clone(secondKeyBuffer.msgs[i+1:]), true, nil
 		}
 	}
 
@@ -117,15 +117,15 @@ func (b *Buffer) Prune(_ context.Context, key, upToMsgID string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	keyBuffer2 := b.live(key)
-	if keyBuffer2 == nil {
+	secondKeyBuffer := b.live(key)
+	if secondKeyBuffer == nil {
 		return nil
 	}
 
-	for i, m := range keyBuffer2.msgs {
+	for i, m := range secondKeyBuffer.msgs {
 		if m.ID == upToMsgID {
-			keyBuffer2.lowWater = upToMsgID
-			keyBuffer2.msgs = clone(keyBuffer2.msgs[i+1:])
+			secondKeyBuffer.lowWater = upToMsgID
+			secondKeyBuffer.msgs = clone(secondKeyBuffer.msgs[i+1:])
 
 			return nil
 		}
@@ -147,18 +147,18 @@ func (b *Buffer) Delete(_ context.Context, key string) error {
 // live returns key's buffer if it exists and has not expired, else nil (lazily deleting
 // an expired one). Callers hold b.mu.
 func (b *Buffer) live(key string) *keyBuffer {
-	keyBufferValue, ok := b.keys[key]
+	currentKeyBuffer, ok := b.keys[key]
 	if !ok {
 		return nil
 	}
 
-	if time.Now().After(keyBufferValue.expiry) {
+	if time.Now().After(currentKeyBuffer.expiry) {
 		delete(b.keys, key)
 
 		return nil
 	}
 
-	return keyBufferValue
+	return currentKeyBuffer
 }
 
 // clone copies a message slice so callers never alias the buffer's backing array.

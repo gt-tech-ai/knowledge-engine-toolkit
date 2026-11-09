@@ -60,7 +60,7 @@ func TestEnumMapper(t *testing.T) {
 		enumMapper.ToProtoValue(enumD(textAbsent)),
 	) // unmapped → protoZero fallback
 
-	_, err := enumMapper.ToDomainOrError(enumP(enumPArg99))
+	_, err := enumMapper.ToDomainOrError(enumP(enumPInput))
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
@@ -71,7 +71,7 @@ func TestEnumMapper(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, dOne, fd)
 
-	assert.Len(t, enumMapper.ToDomainEntries(), wantToDomainEntriesLen2)
+	assert.Len(t, enumMapper.ToDomainEntries(), wantToDomainEntriesLen)
 }
 
 // TestNewEnumMapper_ReverseCollisionPanics tests the loud-at-init guard against a
@@ -93,3 +93,11 @@ func TestNewEnumMapper_ReverseCollisionPanics(t *testing.T) {
 			map[enumP]enumD{pOne: dOne, pTwo: dOne}) // both → dOne
 	})
 }
+
+const (
+	// enumPInput is the enum pinput the tests use.
+	enumPInput = 99
+
+	// wantToDomainEntriesLen is the expected to domain entries len.
+	wantToDomainEntriesLen = 2
+)

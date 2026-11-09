@@ -95,26 +95,28 @@ func sourceOf(t *testing.T) (*mocks.MockCodebaseSource, map[string]int, *sync.Mu
 func TestCodebase_FilesTextAndMatch(t *testing.T) {
 	t.Parallel()
 
-	testCodebaseFilesTextAndMatchRest5(t)
+	testCodebaseFilesTextAndMatchListsFiles(t)
 }
 
-// testCodebaseFilesTextAndMatchRest5 continues testCodebaseFilesTextAndMatchRest4 with
-// its
-// remaining steps.
-func testCodebaseFilesTextAndMatchRest5(t *testing.T) {
+// testCodebaseFilesTextAndMatchListsFiles continues testCodebaseFilesTextAndMatch:
+// lists files.
+func testCodebaseFilesTextAndMatchListsFiles(t *testing.T) {
 	t.Helper()
 
 	src, reads, lock := sourceOf(t)
-	codebaseValue := codebase.New(src, codebase.NewSnapshot(textT), nil)
+	currentCodebase := codebase.New(src, codebase.NewSnapshot(textT), nil)
 	ctx := t.Context()
 
-	files, err := codebaseValue.Files(ctx, &types.FileSelector{Exts: []string{textGo3}})
+	files, err := currentCodebase.Files(
+		ctx,
+		&types.FileSelector{Exts: []string{textGoExt}},
+	)
 	require.NoError(t, err)
 	assert.Equal(t, []string{textSvcAMainGo, textSvcBBGo}, paths(files))
 
-	files, err = codebaseValue.Files(
+	files, err = currentCodebase.Files(
 		ctx,
-		&types.FileSelector{Exts: []string{textGo3}, IncludeGenerated: true},
+		&types.FileSelector{Exts: []string{textGoExt}, IncludeGenerated: true},
 	)
 	require.NoError(t, err)
 	assert.Equal(
@@ -123,36 +125,36 @@ func testCodebaseFilesTextAndMatchRest5(t *testing.T) {
 		paths(files),
 	)
 
-	files, err = codebaseValue.Files(
+	files, err = currentCodebase.Files(
 		ctx,
 		&types.FileSelector{Roots: []string{"notes"}, TrackedOnly: true},
 	)
 	require.NoError(t, err)
 	assert.Empty(t, files)
 
-	testCodebaseFilesTextAndMatchRest(ctx, t, reads, lock, codebaseValue)
+	testCodebaseFilesTextAndMatchChecksMatches(ctx, t, reads, lock, currentCodebase)
 }
 
-// testCodebaseFilesTextAndMatchRest continues testCodebaseFilesTextAndMatchRest5 with its
-// remaining steps.
-func testCodebaseFilesTextAndMatchRest(
+// testCodebaseFilesTextAndMatchChecksMatches continues
+// testCodebaseFilesTextAndMatchListsFiles: checks matches.
+func testCodebaseFilesTextAndMatchChecksMatches(
 	ctx context.Context,
 	t *testing.T,
 	reads map[string]int,
 	lock *sync.Mutex,
-	codebaseValue interfaces.Codebase,
+	currentCodebase interfaces.Codebase,
 ) {
 	t.Helper()
 
 	var err error
 
-	hits, err := codebaseValue.Match(
+	hits, err := currentCodebase.Match(
 		ctx,
 		&types.FileSelector{},
 		[]*regexp.Regexp{regexp.MustCompile(`TODO-\d`)},
 	)
 	require.NoError(t, err)
-	require.Len(t, hits, wantHitsLen2)
+	require.Len(t, hits, wantHitsLen)
 	assert.Equal(
 		t,
 		types.Hit{
@@ -165,16 +167,16 @@ func testCodebaseFilesTextAndMatchRest(
 		hits[0],
 	)
 	assert.Equal(t, textSvcAMainGo, hits[1].File)
-	assert.Equal(t, wantLine5, hits[1].Line)
+	assert.Equal(t, wantLine, hits[1].Line)
 
-	_, err = codebaseValue.Match(
+	_, err = currentCodebase.Match(
 		ctx,
 		&types.FileSelector{},
 		[]*regexp.Regexp{regexp.MustCompile(`PNG`)},
 	)
 	require.NoError(t, err)
 
-	text, err := codebaseValue.Text(ctx, "assets/logo.png")
+	text, err := currentCodebase.Text(ctx, "assets/logo.png")
 	require.NoError(t, err)
 	assert.True(t, text.Binary)
 
@@ -186,7 +188,7 @@ func testCodebaseFilesTextAndMatchRest(
 
 	lock.Unlock()
 
-	_, err = codebaseValue.Rendered(ctx, &types.RenderSpec{ChartDir: textChartsAPI})
+	_, err = currentCodebase.Rendered(ctx, &types.RenderSpec{ChartDir: textChartsAPI})
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }
 
@@ -204,25 +206,25 @@ func TestCodebase_GoAndYAMLViews(t *testing.T) {
 	t.Parallel()
 
 	src, _, _ := sourceOf(t)
-	codebaseValue := codebase.New(src, codebase.NewSnapshot(textT), nil)
+	currentCodebase := codebase.New(src, codebase.NewSnapshot(textT), nil)
 	ctx := t.Context()
 
-	mods, err := codebaseValue.Go().Modules(ctx)
+	mods, err := currentCodebase.Go().Modules(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"svc/a", "svc/b"}, mods)
 
 	sel := types.FileSelector{Roots: []string{textSvc}}
-	gofiles, err := codebaseValue.Go().Parse(ctx, &sel, types.ParseImports)
+	gofiles, err := currentCodebase.Go().Parse(ctx, &sel, types.ParseImports)
 	require.NoError(t, err)
-	require.Len(t, gofiles, wantGofilesLen2)
+	require.Len(t, gofiles, wantGofilesLen)
 	assert.Equal(t, textSvcBBGo, gofiles[1].Path)
-	assert.Len(t, gofiles[1].AST.Imports, wantImportsLen2)
+	assert.Len(t, gofiles[1].AST.Imports, wantImportsLen)
 
-	again, err := codebaseValue.Go().Parse(ctx, &sel, types.ParseImports)
+	again, err := currentCodebase.Go().Parse(ctx, &sel, types.ParseImports)
 	require.NoError(t, err)
 	assert.Same(t, gofiles[0].AST, again[0].AST)
 
-	docs, err := codebaseValue.YAML().
+	docs, err := currentCodebase.YAML().
 		Docs(ctx, &types.FileSelector{Exts: []string{textYaml}})
 	require.NoError(t, err)
 	assert.Equal(
@@ -234,7 +236,7 @@ func TestCodebase_GoAndYAMLViews(t *testing.T) {
 		docs,
 	)
 
-	got, err := codebaseValue.YAML().Query(ctx, docs[1], "$.metadata.name")
+	got, err := currentCodebase.YAML().Query(ctx, docs[1], "$.metadata.name")
 	require.NoError(t, err)
 	assert.Equal(t, []types.YAMLMatch{{Value: "api-svc", Kind: textScalar, Line: 7}}, got)
 
@@ -242,7 +244,7 @@ func TestCodebase_GoAndYAMLViews(t *testing.T) {
 		Kind string `yaml:"kind"`
 	}
 
-	require.NoError(t, codebaseValue.YAML().Decode(ctx, docs[0], &obj))
+	require.NoError(t, currentCodebase.YAML().Decode(ctx, docs[0], &obj))
 	assert.Equal(t, textDeployment, obj.Kind)
 }
 
@@ -263,7 +265,7 @@ func TestCodebase_RenderedIsMemoized(t *testing.T) {
 		Return([]types.Object{{Kind: textDeployment, Name: textAPI}}, nil).Times(1)
 
 	r := codebase.New(src, codebase.NewSnapshot(textT), renderer)
-	for range iterations2 {
+	for range iterations {
 		objs, err := r.Rendered(t.Context(), &spec)
 		require.NoError(t, err)
 		assert.Equal(t, textAPI, objs[0].Name)
@@ -279,3 +281,31 @@ func paths(files []types.File) []string {
 
 	return out
 }
+
+const (
+	// wantGofilesLen is the expected gofiles len.
+	wantGofilesLen = 2
+
+	// wantHitsLen is the expected hits len.
+	wantHitsLen = 2
+
+	// wantImportsLen is the expected imports len.
+	wantImportsLen = 2
+
+	// wantLine is the expected line.
+	wantLine = 5
+)
+
+const (
+	// textK8sAppYaml is the literal "k8s/app.yaml".
+	textK8sAppYaml = "k8s/app.yaml"
+
+	// textNotesUntrackedMd is the literal "notes/untracked.md".
+	textNotesUntrackedMd = "notes/untracked.md"
+
+	// textSvcAMainGo is the literal "svc/a/main.go".
+	textSvcAMainGo = "svc/a/main.go"
+
+	// textSvcBBGo is the literal "svc/b/b.go".
+	textSvcBBGo = "svc/b/b.go"
+)

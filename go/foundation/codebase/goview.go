@@ -124,14 +124,14 @@ func (g *goView) loadModules(ctx context.Context) ([]string, error) {
 // parseFile parses one file in mode, once per snapshot.
 func (g *goView) parseFile(
 	ctx context.Context,
-	textValue string,
+	fileText string,
 	mode types.ParseMode,
 	fset *token.FileSet,
 ) (types.GoFile, error) {
-	key := "go|parse|" + strconv.Itoa(int(mode)) + "|" + textValue
+	key := "go|parse|" + strconv.Itoa(int(mode)) + "|" + fileText
 
 	return g.parent.snap.Memo(ctx, key, func(ctx context.Context) (types.GoFile, error) {
-		text, err := g.parent.Text(ctx, textValue)
+		text, err := g.parent.Text(ctx, fileText)
 		if err != nil {
 			return types.GoFile{}, err
 		}
@@ -141,15 +141,15 @@ func (g *goView) parseFile(
 			flags = parser.ImportsOnly | parser.ParseComments
 		}
 
-		file, err := parser.ParseFile(fset, textValue, text.Bytes, flags)
+		file, err := parser.ParseFile(fset, fileText, text.Bytes, flags)
 		if err != nil {
 			return types.GoFile{}, apperr.Wrap(
 				err,
 				apperr.CodeInvalidInput,
-				"parse "+textValue,
+				"parse "+fileText,
 			)
 		}
 
-		return types.GoFile{Path: textValue, FileSet: fset, AST: file}, nil
+		return types.GoFile{Path: fileText, FileSet: fset, AST: file}, nil
 	})
 }

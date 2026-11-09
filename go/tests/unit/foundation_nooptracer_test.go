@@ -27,16 +27,16 @@ import (
 func TestNoopTracer_SpanIsInert(t *testing.T) {
 	t.Parallel()
 
-	tracerValue, err := nooptracer.New()
+	currentTracer, err := nooptracer.New()
 	require.NoError(t, err)
 
-	_, span := tracerValue.Start(context.Background(), textOp)
+	_, span := currentTracer.Start(context.Background(), textOp)
 	span.SetAttribute(textKey, textValue)
 	span.RecordError(apperr.Sentinel(textBoom))
 	span.SetStatus(interfaces.SpanStatusError, textFailed)
 	span.End()
 
-	require.NoError(t, tracerValue.Shutdown(context.Background()))
+	require.NoError(t, currentTracer.Shutdown(context.Background()))
 }
 
 // TestTraceParentFromContext_EmptyWithoutSpan verifies traceparent extraction

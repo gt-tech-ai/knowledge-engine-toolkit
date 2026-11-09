@@ -39,7 +39,7 @@ func TestFileSource_PutThenGetRoundTripsOnIgnoredPath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), textSecretsEnv)
 	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	src := file.New(
-		map[types.Ref]file.Location{ref: {Path: path, Key: textClientSecret2}},
+		map[types.Ref]file.Location{ref: {Path: path, Key: textClientSecretUpper}},
 		runner,
 	)
 
@@ -74,7 +74,7 @@ func TestFileSource_PutRefusesNonIgnoredPath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tracked.env")
 	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	src := file.New(
-		map[types.Ref]file.Location{ref: {Path: path, Key: textClientSecret2}},
+		map[types.Ref]file.Location{ref: {Path: path, Key: textClientSecretUpper}},
 		runner,
 	)
 
@@ -103,13 +103,13 @@ func TestFileSource_GetMissingKeyIsNotFound(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), textSecretsEnv)
-	require.NoError(t, os.WriteFile(path, []byte("OTHER=x\n"), perm0o600))
+	require.NoError(t, os.WriteFile(path, []byte("OTHER=x\n"), writeFileInput))
 
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl) // Get must not call the runner.
 	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	src := file.New(
-		map[types.Ref]file.Location{ref: {Path: path, Key: textClientSecret2}},
+		map[types.Ref]file.Location{ref: {Path: path, Key: textClientSecretUpper}},
 		runner,
 	)
 
@@ -139,7 +139,7 @@ func TestFileSource_ReadsExportAndQuotedDotenv(t *testing.T) {
 		"export CLIENT_SECRET=\"the-secret\"\n"+
 			"export DOMAIN='dev.example.com'\n"+
 			"PLAIN=bare-value\n",
-	), perm0o600))
+	), writeFileInput))
 
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl) // Get must not call the runner.
@@ -147,7 +147,7 @@ func TestFileSource_ReadsExportAndQuotedDotenv(t *testing.T) {
 	dom := types.Ref{Env: textDev, Class: textBootstrap, Field: "domain"}
 	plain := types.Ref{Env: textDev, Class: textBootstrap, Field: textPlain}
 	src := file.New(map[types.Ref]file.Location{
-		sec:   {Path: path, Key: textClientSecret2},
+		sec:   {Path: path, Key: textClientSecretUpper},
 		dom:   {Path: path, Key: "DOMAIN"},
 		plain: {Path: path, Key: "PLAIN"},
 	}, runner)
@@ -175,3 +175,11 @@ func TestFileSource_ReadsExportAndQuotedDotenv(t *testing.T) {
 	assert.Contains(t, string(data), "export CLIENT_SECRET=rotated",
 		"a rotated export-format key keeps its export prefix")
 }
+
+const (
+	// textClientSecretUpper is the literal "CLIENT_SECRET".
+	textClientSecretUpper = "CLIENT_SECRET"
+
+	// textSecretsEnv is the literal ".secrets.env".
+	textSecretsEnv = ".secrets.env"
+)

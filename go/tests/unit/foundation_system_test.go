@@ -37,10 +37,10 @@ func TestRunner_RealCommands(t *testing.T) {
 	runner := system.NewRunner()
 	ctx := context.Background()
 
-	require.NoError(t, runner.Run(ctx, "", textGo2, textVersion))
+	require.NoError(t, runner.Run(ctx, "", textGoLower, textVersion))
 	require.Error(t, runner.Run(ctx, "", textDefinitelyNotAReal))
 
-	res := runner.RunBuffered(ctx, "", textGo2, textVersion)
+	res := runner.RunBuffered(ctx, "", textGoLower, textVersion)
 	require.NoError(t, res.Err)
 	assert.Equal(t, 0, res.ExitCode)
 	assert.Contains(t, string(res.Stdout), "go version")
@@ -51,14 +51,14 @@ func TestRunner_RealCommands(t *testing.T) {
 
 	require.NoError(
 		t,
-		runner.RunWithEnv(ctx, "", []string{textFooBar}, textGo2, textVersion),
+		runner.RunWithEnv(ctx, "", []string{textFooBar}, textGoLower, textVersion),
 	)
 
 	envRes := runner.RunBufferedWithEnv(
 		ctx,
 		"",
 		[]string{textFooBar},
-		textGo2,
+		textGoLower,
 		textVersion,
 	)
 	assert.NoError(t, envRes.Err)
@@ -77,10 +77,10 @@ func TestRunner_ExistsAndRequireTool(t *testing.T) {
 	t.Parallel()
 
 	runner := system.NewRunner()
-	assert.True(t, runner.Exists(textGo2))
+	assert.True(t, runner.Exists(textGoLower))
 	assert.False(t, runner.Exists(textDefinitelyNotAReal))
 
-	require.NoError(t, runner.RequireTool(textGo2, "install go"))
+	require.NoError(t, runner.RequireTool(textGoLower, "install go"))
 
 	err := runner.RequireTool(textDefinitelyNotAReal, "brew install xyz")
 	require.Error(t, err)
@@ -101,7 +101,11 @@ func TestRunner_ContextCancelled(t *testing.T) {
 	r := system.NewRunner()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	require.Error(t, r.Run(ctx, "", textGo2, textVersion), "cancelled context -> error")
+	require.Error(
+		t,
+		r.Run(ctx, "", textGoLower, textVersion),
+		"cancelled context -> error",
+	)
 }
 
 // TestBufferingRunner tests that BufferingRunner captures inner output, wraps
@@ -171,11 +175,11 @@ func TestBufferingRunner(t *testing.T) {
 	// Run (no env) success path.
 	okInner := mocks.NewMockCommandRunner(ctrl)
 
-	testBufferingRunnerRest(t, ctrl, okInner)
+	testBufferingRunnerCommands(t, ctrl, okInner)
 }
 
-// testBufferingRunnerRest continues TestBufferingRunner with its remaining steps.
-func testBufferingRunnerRest(
+// testBufferingRunnerCommands continues TestBufferingRunner: commands.
+func testBufferingRunnerCommands(
 	t *testing.T,
 	ctrl *gomock.Controller,
 	okInner *mocks.MockCommandRunner,
@@ -298,19 +302,19 @@ func TestRunner_WritesChildOutputToInjectedWriters(t *testing.T) {
 		Build()
 	stop := captureProcessStdio(t)
 
-	require.NoError(t, runner.Run(ctx, "", textGo2, textEnv, textGoversion))
+	require.NoError(t, runner.Run(ctx, "", textGoLower, textEnv, textGoversion))
 
 	direct := out.String()
 
-	require.Error(t, runner.Run(ctx, "", textGo2, "definitely-not-a-subcommand"))
-	require.NoError(t, decorated.Run(ctx, "", textGo2, textEnv, textGoversion))
+	require.Error(t, runner.Run(ctx, "", textGoLower, "definitely-not-a-subcommand"))
+	require.NoError(t, decorated.Run(ctx, "", textGoLower, textEnv, textGoversion))
 
 	procOut, procErr := stop()
 
 	assert.Contains(t, direct, textGo1)
 	assert.Equal(
 		t,
-		wantCount2,
+		wantCountWriters,
 		strings.Count(out.String(), textGo1),
 		"decorated run reaches the injected stdout",
 	)
@@ -341,9 +345,28 @@ func TestRunner_DefaultsToProcessStdio(t *testing.T) {
 	r := system.NewRunner()
 	stop := captureProcessStdio(t)
 
-	require.NoError(t, r.Run(context.Background(), "", textGo2, textEnv, textGoversion))
+	require.NoError(
+		t,
+		r.Run(context.Background(), "", textGoLower, textEnv, textGoversion),
+	)
 
 	procOut, _ := stop()
 
 	assert.Contains(t, procOut, textGo1)
 }
+
+const (
+	// wantCountWriters is the expected count writers.
+	wantCountWriters = 2
+)
+
+const (
+	// textDefinitelyNotAReal is the literal "definitely-not-a-real-binary-xyz".
+	textDefinitelyNotAReal = "definitely-not-a-real-binary-xyz"
+
+	// textGo1 is the literal "go1.".
+	textGo1 = "go1."
+
+	// textGoversion is the literal "GOVERSION".
+	textGoversion = "GOVERSION"
+)

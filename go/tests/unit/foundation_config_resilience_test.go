@@ -115,6 +115,11 @@ func TestResilienceValidate_RejectsBadValues(t *testing.T) {
 
 	badRatio := resilience.DefaultBreakerConfig()
 
-	badRatio.FailureRatio = failureRatio2
+	badRatio.FailureRatio = initialFailureRatio
 	assert.Error(t, badRatio.Validate(), "failure_ratio > 1 must be rejected")
 }
+
+const (
+	// initialFailureRatio is the initial failure ratio the tests use.
+	initialFailureRatio = 2
+)

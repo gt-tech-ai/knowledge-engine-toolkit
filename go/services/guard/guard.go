@@ -132,7 +132,7 @@ func guardsForRow(row *types.GuardRow, deps *Deps) ([]interfaces.Guard, error) {
 	out := make([]interfaces.Guard, 0, len(names))
 
 	for index, n := range names {
-		guardValue := &guard{
+		currentGuard := &guard{
 			row:    guardRow,
 			name:   n,
 			deps:   *deps,
@@ -141,10 +141,10 @@ func guardsForRow(row *types.GuardRow, deps *Deps) ([]interfaces.Guard, error) {
 			only:   -1,
 		}
 		if len(names) > 1 {
-			guardValue.only = index
+			currentGuard.only = index
 		}
 
-		out = append(out, guardValue)
+		out = append(out, currentGuard)
 	}
 
 	return out, nil
@@ -236,7 +236,7 @@ func validateMatch(guardRow *types.GuardRow) error {
 	all := append(
 		append(slices.Clone(guardRow.Require), guardRow.Forbid...),
 		guardRow.Allow...)
-	_, err := patterns(all, literalFlag(guardRow.Literal))
+	_, err := patterns(all, formOf(guardRow))
 
 	return err
 }
@@ -564,18 +564,18 @@ func files(
 	cb interfaces.Codebase,
 	guardRow *types.GuardRow,
 ) ([]types.File, []types.Finding, error) {
-	filesValue, err := cb.Files(ctx, &guardRow.Files)
+	currentFiles, err := cb.Files(ctx, &guardRow.Files)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if len(filesValue) == 0 && !guardRow.Optional {
+	if len(currentFiles) == 0 && !guardRow.Optional {
 		return nil, []types.Finding{
 			{Message: "no file matches " + describe(&guardRow.Files)},
 		}, nil
 	}
 
-	return filesValue, nil, nil
+	return currentFiles, nil, nil
 }
 
 // expand returns a copy of r with every `{key}` of vars replaced in its text fields.
@@ -650,20 +650,20 @@ func failed(err error) types.Verdict {
 func render(fs []types.Finding) string {
 	var builder strings.Builder
 
-	for _, finding2 := range fs {
+	for _, secondFinding := range fs {
 		switch {
-		case finding2.File != "" && finding2.Line > 0:
+		case secondFinding.File != "" && secondFinding.Line > 0:
 			fmt.Fprintf(
 				&builder,
 				"%s:%d: %s\n",
-				finding2.File,
-				finding2.Line,
-				finding2.Message,
+				secondFinding.File,
+				secondFinding.Line,
+				secondFinding.Message,
 			)
-		case finding2.File != "":
-			fmt.Fprintf(&builder, "%s: %s\n", finding2.File, finding2.Message)
+		case secondFinding.File != "":
+			fmt.Fprintf(&builder, "%s: %s\n", secondFinding.File, secondFinding.Message)
 		default:
-			_, _ = builder.WriteString(finding2.Message + "\n")
+			_, _ = builder.WriteString(secondFinding.Message + "\n")
 		}
 	}
 

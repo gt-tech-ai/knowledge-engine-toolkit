@@ -153,7 +153,7 @@ func testGRPCClientOptionsStampEveryAttemptCase(
 	_, err := conn.NewStream(ctx, &grpc.StreamDesc{}, "/test.Service/Stream")
 	require.Equal(t, codes.Aborted, status.Code(err))
 
-	require.Len(t, unary, wantUnaryLen3, "the transient failure is retried")
+	require.Len(t, unary, wantUnaryLen, "the transient failure is retried")
 	require.Len(t, stream, 1, "a stream open is never retried")
 
 	for i, md := range append(unary, stream...) {
@@ -213,12 +213,16 @@ func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 		assert.Equal(t, 1, calls)
 	})
 
-	testGRPCClientOptionsClassifyByTheSharedPolicyRest(t, noStream, answers)
+	testGRPCClientOptionsClassifyByTheSharedPolicyTransientAndOpenBreaker(
+		t,
+		noStream,
+		answers,
+	)
 }
 
-// testGRPCClientOptionsClassifyByTheSharedPolicyRest continues
-// TestGRPCClientOptions_ClassifyByTheSharedPolicy with its remaining steps.
-func testGRPCClientOptionsClassifyByTheSharedPolicyRest(
+// testGRPCClientOptionsClassifyByTheSharedPolicyTransientAndOpenBreaker continues
+// TestGRPCClientOptions_ClassifyByTheSharedPolicy: transient and open breaker.
+func testGRPCClientOptionsClassifyByTheSharedPolicyTransientAndOpenBreaker(
 	t *testing.T,
 	noStream func(
 		context.Context, *grpc.StreamDesc, *grpc.ClientConn, string,
@@ -250,7 +254,7 @@ func testGRPCClientOptionsClassifyByTheSharedPolicyRest(
 			t,
 			new(wireBase(
 				textProbe,
-				&decorate.Deps{Breaker: fixtures.StubCircuitBreaker(true)},
+				&decorate.Deps{Breaker: fixtures.OpenCircuitBreaker()},
 			)),
 			"",
 			answers(&calls),
@@ -275,3 +279,13 @@ func sampledSpanContext() oteltrace.SpanContext {
 		Remote:     true,
 	})
 }
+
+const (
+	// wantUnaryLen is the expected unary len.
+	wantUnaryLen = 3
+)
+
+const (
+	// textCallD is the literal "call %d".
+	textCallD = "call %d"
+)

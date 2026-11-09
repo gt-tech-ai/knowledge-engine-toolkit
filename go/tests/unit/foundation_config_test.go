@@ -49,7 +49,7 @@ database:
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err, textNew)
 
-	assert.Equal(t, wantGetInt8080, cfg.GetInt(textServerPort))
+	assert.Equal(t, wantGetInt, cfg.GetInt(textServerPort))
 	assert.Equal(t, "localhost", cfg.GetString("database.host"))
 }
 
@@ -95,7 +95,7 @@ log:
 	require.NoError(t, err, textNew)
 
 	assert.Equal(t, textWarn, cfg.GetString("log.level"))
-	assert.Equal(t, wantGetInt8080, cfg.GetInt(textServerPort))
+	assert.Equal(t, wantGetInt, cfg.GetInt(textServerPort))
 }
 
 // TestConfig_EnvVarsOverride tests that prefixed environment variables
@@ -119,7 +119,7 @@ func TestConfig_EnvVarsOverride(t *testing.T) {
 
 	cfg := loadWithSchema(t, dir)
 
-	assert.Equal(t, wantGetInt9090, cfg.GetInt(textServerPort), "env override failed")
+	assert.Equal(t, wantGetIntOverride, cfg.GetInt(textServerPort), "env override failed")
 }
 
 // TestConfig_StoragePublicEndpointEnvOverride tests that MYAPP_STORAGE_S3_PUBLIC_ENDPOINT
@@ -180,7 +180,7 @@ func TestConfig_MissingBaseConfig(t *testing.T) {
 func TestConfig_UnknownKindReturnsError(t *testing.T) {
 	t.Parallel()
 
-	_, err := config.New(config.Kind(kindArg99))
+	_, err := config.New(config.Kind(kindInput))
 	require.Error(t, err, textExpectedErrorForUnknown)
 }
 
@@ -287,7 +287,7 @@ server:
 	}
 
 	require.NoError(t, cfg.Unmarshal(&target), "Unmarshal")
-	assert.Equal(t, wantPort8080, target.Server.Port)
+	assert.Equal(t, wantPortUnmarshal, target.Server.Port)
 	assert.Equal(t, text0000, target.Server.Host)
 }
 
@@ -375,14 +375,14 @@ func TestConfig_MockAsConsumerDependency(t *testing.T) {
 	mock := mocks.NewMockConfigLoader(ctrl)
 
 	mock.EXPECT().GetString("server.host").Return(text0000)
-	mock.EXPECT().GetInt(textServerPort).Return(rets8080)
+	mock.EXPECT().GetInt(textServerPort).Return(returnInputDependency)
 	mock.EXPECT().GetBool(textDebug).Return(false)
 	mock.EXPECT().Get(textAppName).Return(textTestService)
 
 	var cfg interfaces.ConfigLoader = mock
 
 	assert.Equal(t, text0000, cfg.GetString("server.host"))
-	assert.Equal(t, wantGetInt8080, cfg.GetInt(textServerPort))
+	assert.Equal(t, wantGetInt, cfg.GetInt(textServerPort))
 	assert.False(t, cfg.GetBool(textDebug), "expected debug = false")
 	assert.Equal(t, textTestService, cfg.Get(textAppName))
 }
@@ -432,7 +432,7 @@ database:
 	require.NoError(t, cfg.UnmarshalKey(textDatabase, &dbCfg), textUnmarshalkey)
 
 	assert.Equal(t, "localhost", dbCfg.Host)
-	assert.Equal(t, wantPort5432, dbCfg.Port)
+	assert.Equal(t, wantPortKey, dbCfg.Port)
 	assert.Equal(t, textApp, dbCfg.User)
 	assert.Equal(t, textDevPassword, dbCfg.Password)
 	assert.Equal(t, "knowledge_engine", dbCfg.Database)
@@ -590,7 +590,7 @@ func TestConfigBuilder_KindString(t *testing.T) {
 		kind config.Kind
 	}{
 		{"viper", config.KindViper},
-		{textKind99, config.Kind(kindArg99)},
+		{textKind99, config.Kind(kindInput)},
 	}
 
 	for _, tt := range tests {
@@ -761,7 +761,7 @@ func TestConfigBuilder_NewFromConfigUnknownKind(t *testing.T) {
 
 	cfg := config.DefaultConfig()
 
-	cfg.Kind = config.Kind(kindArg99)
+	cfg.Kind = config.Kind(kindInput)
 
 	_, err := config.NewFromConfig(&cfg)
 	require.Error(t, err, "expected error for unknown kind in NewFromConfig")
@@ -922,7 +922,7 @@ func TestConfig_ConsumerSchemaAndExtraEnv(t *testing.T) {
 	require.NoError(t, cfg.Unmarshal(&root), "Unmarshal")
 	assert.Equal(
 		t,
-		wantSize7,
+		wantSizeEnv,
 		root.Widget.Size,
 		"the consumer schema's envalias must bind",
 	)
@@ -959,6 +959,31 @@ func TestConfig_ResolveEnvFrom(t *testing.T) {
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 
-	err := os.WriteFile(path, []byte(content), perm0o600)
+	err := os.WriteFile(path, []byte(content), writeFileInput)
 	require.NoErrorf(t, err, "write %s", path)
 }
+
+const (
+	// returnInputDependency is the return input dependency the tests use.
+	returnInputDependency = 8080
+
+	// wantGetIntOverride is the expected get int override.
+	wantGetIntOverride = 9090
+
+	// wantPortKey is the expected port key.
+	wantPortKey = 5432
+
+	// wantPortUnmarshal is the expected port unmarshal.
+	wantPortUnmarshal = 8080
+
+	// wantSizeEnv is the expected size env.
+	wantSizeEnv = 7
+)
+
+const (
+	// textMyappEnv is the literal "MYAPP_ENV".
+	textMyappEnv = "MYAPP_ENV"
+
+	// textProduction is the literal "production".
+	textProduction = "production"
+)

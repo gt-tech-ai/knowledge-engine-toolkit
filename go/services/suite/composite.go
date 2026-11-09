@@ -41,9 +41,9 @@ var _ gate.Factory = &Composite{}
 // Gate builds the composite's gate: one phase per spec phase that builds a job, serial
 // or parallel as the phase says.
 func (c *Composite) Gate() *gate.Gate {
-	gateValue := gate.New(c.Spec.Title)
+	currentGate := gate.New(c.Spec.Title)
 	if c.Obs != nil {
-		gateValue.Observe(c.Obs)
+		currentGate.Observe(c.Obs)
 	}
 
 	for _, compositePhase := range c.Spec.Phases {
@@ -53,13 +53,13 @@ func (c *Composite) Gate() *gate.Gate {
 		}
 
 		if compositePhase.Serial {
-			gateValue.Serial(compositePhase.Group, jobs...)
+			currentGate.Serial(compositePhase.Group, jobs...)
 		} else {
-			gateValue.Parallel(compositePhase.Group, jobs...)
+			currentGate.Parallel(compositePhase.Group, jobs...)
 		}
 	}
 
-	return gateValue.Decorate(c.Decs)
+	return currentGate.Decorate(c.Decs)
 }
 
 // phase builds one phase's jobs: the suites' then the named ones.

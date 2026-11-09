@@ -26,59 +26,38 @@ import (
 func TestNewGroupFromSpecs_DecoratesAndRunsEverySpec(t *testing.T) {
 	t.Parallel()
 
-	for _, decorated := range []bool{true, false} {
-		synctest.Test(t, func(t *testing.T) {
-			testNewGroupFromSpecsDecoratesAndRunsEverySpecCase(
-				t,
-				decoratedFlag(decorated),
-			)
-		})
-	}
-}
+	synctest.Test(t, func(t *testing.T) {
+		var ops []string
 
-// decoratedFlag names the decorated option in a signature.
-type decoratedFlag bool
-
-// testNewGroupFromSpecsDecoratesAndRunsEverySpecCase is the body of a closure in
-// TestNewGroupFromSpecs_DecoratesAndRunsEverySpec.
-func testNewGroupFromSpecsDecoratesAndRunsEverySpecCase(
-	t *testing.T,
-	decorated decoratedFlag,
-) {
-	t.Helper()
-
-	var (
-		int643, int64Value atomic.Int64
-		ops                []string
-		decorate           loop.Decorator
-	)
-
-	if decorated {
-		decorate = func(op string, pass passWorkflow) passWorkflow {
+		testGroupRunsBothSpecs(t, func(op string, pass passWorkflow) passWorkflow {
 			ops = append(ops, op)
 
 			return pass
-		}
-	}
+		})
+		require.Equal(t, []string{"loop.a", "loop.b"}, ops)
+	})
+	synctest.Test(t, func(t *testing.T) { testGroupRunsBothSpecs(t, nil) })
+}
+
+// testGroupRunsBothSpecs starts a group of two specs under decorate and checks each
+// runs once.
+func testGroupRunsBothSpecs(t *testing.T, decorate loop.Decorator) {
+	t.Helper()
+
+	var int643, secondCount atomic.Int64
 
 	schedule := loop.Config{Interval: time.Minute, RunAtStart: true}
 	group, err := loop.NewGroupFromSpecs([]loop.Spec{
 		{Run: countPass(&int643), Name: textA, Op: "loop.a", Schedule: schedule},
-		{Run: countPass(&int64Value), Name: textB, Op: "loop.b", Schedule: schedule},
+		{Run: countPass(&secondCount), Name: textB, Op: "loop.b", Schedule: schedule},
 	}, decorate, quietLogger(t))
 	require.NoError(t, err)
 
 	require.NoError(t, group.Start(t.Context()))
 	synctest.Wait()
 	require.Equal(t, int64(1), int643.Load())
-	require.Equal(t, int64(1), int64Value.Load())
+	require.Equal(t, int64(1), secondCount.Load())
 	require.NoError(t, group.Stop(t.Context()))
-
-	if decorated {
-		require.Equal(t, []string{"loop.a", "loop.b"}, ops)
-	} else {
-		require.Empty(t, ops)
-	}
 }
 
 // TestNewGroupFromSpecs_RejectsAnInvalidSchedule tests schedule validation.

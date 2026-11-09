@@ -30,7 +30,7 @@ func docRoutes() codec.Config {
 		BasePath: "/api/v1",
 		Routes: []codec.RouteEntry{
 			{
-				Method:        textGet3,
+				Method:        textGetUpper,
 				PathTemplate:  textAPIV1Documents,
 				Role:          codec.RoleList,
 				ResourceType:  textDocuments,
@@ -46,7 +46,7 @@ func docRoutes() codec.Config {
 				RequestEnvelope: true,
 			},
 			{
-				Method:       textGet3,
+				Method:       textGetUpper,
 				PathTemplate: textAPIV1DocumentsDocument,
 				Role:         codec.RoleGetOne,
 				ResourceType: textDocuments,
@@ -61,13 +61,13 @@ func docRoutes() codec.Config {
 				RequestEnvelope: true,
 			},
 			{
-				Method:       textDelete2,
+				Method:       textDeleteUpper,
 				PathTemplate: textAPIV1DocumentsDocument,
 				Role:         codec.RoleDelete,
 			},
 			{
 				Method:       textPost,
-				PathTemplate: textAPIV1DocumentsDocument2,
+				PathTemplate: textAPIV1DocumentsDocumentPath,
 				Role:         codec.RoleAction,
 				ResourceType: textDocuments,
 				SingleKey:    textDocument,
@@ -128,7 +128,7 @@ func TestJSONAPIMatchRoute_MethodPathAndPrecedence(t *testing.T) {
 
 	cfg := docRoutes()
 
-	get, found := cfg.MatchRoute(textGet3, textAPIV1Documents)
+	get, found := cfg.MatchRoute(textGetUpper, textAPIV1Documents)
 	require.True(t, found)
 	assert.Equal(t, codec.RoleList, get.Role)
 
@@ -141,16 +141,16 @@ func TestJSONAPIMatchRoute_MethodPathAndPrecedence(t *testing.T) {
 		"same path, different method → different role",
 	)
 
-	one, found := cfg.MatchRoute(textGet3, textAPIV1DocumentsD1)
+	one, found := cfg.MatchRoute(textGetUpper, textAPIV1DocumentsD1)
 	require.True(t, found)
 	assert.Equal(t, codec.RoleGetOne, one.Role)
 
 	// Literal "confirm" beats the {document_id} instance route for the same POST.
-	confirm, found := cfg.MatchRoute(textPost, textAPIV1DocumentsD12)
+	confirm, found := cfg.MatchRoute(textPost, textAPIV1DocumentsDPath)
 	require.True(t, found)
 	assert.Equal(t, codec.RoleAction, confirm.Role, "literal segment beats {param}")
 
-	_, found = cfg.MatchRoute(textGet3, "/api/v1/unknown")
+	_, found = cfg.MatchRoute(textGetUpper, "/api/v1/unknown")
 	assert.False(t, found, "unknown path does not match")
 }
 
@@ -196,7 +196,7 @@ func TestJSONAPI_ActionIsMetaOnly200(t *testing.T) {
 		docRoutes(),
 		jsonHandler(http.StatusOK, `{"document":{"id":"d1"},"processed":true}`),
 		http.MethodPost,
-		textAPIV1DocumentsD12,
+		textAPIV1DocumentsDPath,
 		"",
 	)
 
@@ -383,7 +383,7 @@ func TestJSONAPI_CreateRequestValidEnvelopeUnwrapped(t *testing.T) {
 		docRoutes(),
 		capture(&gotAction),
 		http.MethodPost,
-		textAPIV1DocumentsD12,
+		textAPIV1DocumentsDPath,
 		`{"reason":"looks good"}`,
 	)
 	assert.Equal(
@@ -540,3 +540,14 @@ func TestJSONAPI_GetOneMissingResourceReturns500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	assert.Contains(t, rec.Body.String(), textErrors)
 }
+
+const (
+	// textAPIV1DocumentsD1 is the literal "/api/v1/documents/d1".
+	textAPIV1DocumentsD1 = "/api/v1/documents/d1"
+
+	// textAPIV1DocumentsDPath is the literal "/api/v1/documents/d1/confirm".
+	textAPIV1DocumentsDPath = "/api/v1/documents/d1/confirm"
+
+	// textRawTrue is the literal "{\"raw\":true}".
+	textRawTrue = "{\"raw\":true}"
+)

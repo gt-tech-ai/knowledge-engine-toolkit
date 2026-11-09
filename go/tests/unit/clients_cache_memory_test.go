@@ -52,34 +52,34 @@ func TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound(t *testing.T) {
 		t.Parallel()
 
 		now := time.Unix(1_700_000_000, 0)
-		cacheValue := memory.New(10, time.Hour, func() time.Time { return now })
-		cacheValue.Set(ctx, "short", []byte(textA), time.Minute)
-		cacheValue.Set(ctx, "default", []byte(textB), 0)
-		cacheValue.Set(ctx, textGone, []byte(textC), time.Hour)
-		cacheValue.Delete(ctx, textGone)
+		currentCache := memory.New(10, time.Hour, func() time.Time { return now })
+		currentCache.Set(ctx, "short", []byte(textA), time.Minute)
+		currentCache.Set(ctx, "default", []byte(textB), 0)
+		currentCache.Set(ctx, textGone, []byte(textC), time.Hour)
+		currentCache.Delete(ctx, textGone)
 
 		now = now.Add(time.Minute)
 
-		_, hit := cacheValue.Get(ctx, "short")
+		_, hit := currentCache.Get(ctx, "short")
 		assert.False(t, hit, "a value expires at its ttl")
 
-		_, hit = cacheValue.Get(ctx, "default")
+		_, hit = currentCache.Get(ctx, "default")
 		assert.True(t, hit, "a zero ttl uses the default")
 
-		_, hit = cacheValue.Get(ctx, textGone)
+		_, hit = currentCache.Get(ctx, textGone)
 		assert.False(t, hit, "a deleted value is gone")
 
 		now = now.Add(time.Hour)
-		_, hit = cacheValue.Get(ctx, "default")
+		_, hit = currentCache.Get(ctx, "default")
 		assert.False(t, hit, "the default ttl expires too")
 	})
 
-	testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest(ctx, t)
+	testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundBoundedLRU(ctx, t)
 }
 
-// testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest continues
-// TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound with its remaining steps.
-func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest(
+// testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundBoundedLRU continues
+// TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound: bounded lru.
+func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundBoundedLRU(
 	ctx context.Context, t *testing.T,
 ) {
 	t.Helper()
@@ -87,16 +87,16 @@ func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest(
 	t.Run("bounded least recently used", func(t *testing.T) {
 		t.Parallel()
 
-		cacheValue := memory.New(2, time.Hour, time.Now)
-		cacheValue.Set(ctx, textA, []byte("1"), 0)
-		cacheValue.Set(ctx, textB, []byte("2"), 0)
+		currentCache := memory.New(2, time.Hour, time.Now)
+		currentCache.Set(ctx, textA, []byte("1"), 0)
+		currentCache.Set(ctx, textB, []byte("2"), 0)
 
-		_, _ = cacheValue.Get(ctx, textA)
-		cacheValue.Set(ctx, textC, []byte("3"), 0)
+		_, _ = currentCache.Get(ctx, textA)
+		currentCache.Set(ctx, textC, []byte("3"), 0)
 
-		_, hitA := cacheValue.Get(ctx, textA)
-		_, hitB := cacheValue.Get(ctx, textB)
-		_, hitC := cacheValue.Get(ctx, textC)
+		_, hitA := currentCache.Get(ctx, textA)
+		_, hitB := currentCache.Get(ctx, textB)
+		_, hitC := currentCache.Get(ctx, textC)
 
 		assert.True(t, hitA)
 		assert.False(t, hitB, "the least recently used key is evicted")
@@ -111,26 +111,34 @@ func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest(
 }
 
 // testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase is the body of a closure in
-// testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest2.
+// testCacheMemoryHoldsValuesForTheirTTLWithinItsBound.
 func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase(
 	ctx context.Context, t *testing.T,
 ) {
 	t.Helper()
 
-	cacheValue := memory.New(maxEntries64, time.Hour, time.Now)
+	currentCache := memory.New(newInput, time.Hour, time.Now)
 
 	var group sync.WaitGroup
 
-	for i := range iterations16 {
+	for i := range iterationsCase {
 		group.Go(func() {
 			for j := range 100 {
 				key := fmt.Sprintf("k%d", (i*100+j)%128)
-				cacheValue.Set(ctx, key, []byte(textV), 0)
+				currentCache.Set(ctx, key, []byte(textV), 0)
 
-				_, _ = cacheValue.Get(ctx, key)
+				_, _ = currentCache.Get(ctx, key)
 			}
 		})
 	}
 
 	group.Wait()
 }
+
+const (
+	// iterationsCase is the iterations case the tests use.
+	iterationsCase = 16
+
+	// newInput is the new input the tests use.
+	newInput = 64
+)

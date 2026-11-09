@@ -87,14 +87,14 @@ type encoder struct {
 // arm set is CodeInvalidInput.
 // spec must not be nil.
 func Encode(spec *types.ChartSpec) (Tree, error) {
-	encoderValue := encoder{nodes: map[Hash]Node{}}
+	currentEncoder := encoder{nodes: map[Hash]Node{}}
 
-	root, err := encoderValue.spec(spec)
+	root, err := currentEncoder.spec(spec)
 	if err != nil {
 		return Tree{}, err
 	}
 
-	return Tree{Nodes: encoderValue.nodes, Root: root}, nil
+	return Tree{Nodes: currentEncoder.nodes, Root: root}, nil
 }
 
 // put hashes n and records it.
@@ -317,8 +317,8 @@ func (e *encoder) encodings(enc types.Encodings) (Hash, error) {
 }
 
 // timeRange encodes the window as UTC RFC 3339 strings; both bounds zero is absent.
-func (e *encoder) timeRange(timeRangeValue types.TimeRange) (Hash, error) {
-	if timeRangeValue.From.IsZero() && timeRangeValue.To.IsZero() {
+func (e *encoder) timeRange(currentTimeRange types.TimeRange) (Hash, error) {
+	if currentTimeRange.From.IsZero() && currentTimeRange.To.IsZero() {
 		return Hash{}, nil
 	}
 
@@ -327,7 +327,7 @@ func (e *encoder) timeRange(timeRangeValue types.TimeRange) (Hash, error) {
 	for _, b := range []struct {
 		t    time.Time
 		name string
-	}{{timeRangeValue.From, memberFrom}, {timeRangeValue.To, memberTo}} {
+	}{{currentTimeRange.From, memberFrom}, {currentTimeRange.To, memberTo}} {
 		if !b.t.IsZero() {
 			setField(&node, b.name, b.t.UTC().Format(time.RFC3339Nano))
 		}
@@ -346,26 +346,26 @@ func (e *encoder) filter(f *types.FilterNode) (Hash, error) {
 }
 
 // filterNode encodes one filter node and its members.
-func (e *encoder) filterNode(filterNodeValue types.FilterNode) (Hash, error) {
-	if filterArmsSet(&filterNodeValue) > 1 {
+func (e *encoder) filterNode(currentFilterNode types.FilterNode) (Hash, error) {
+	if filterArmsSet(&currentFilterNode) > 1 {
 		return Hash{}, apperr.New(apperr.CodeInvalidInput,
 			"chartspec: a filter node must set at most one of clause, and, or")
 	}
 
-	if c := filterNodeValue.Clause; c != nil {
+	if c := currentFilterNode.Clause; c != nil {
 		return e.filterClause(*c)
 	}
 
 	node := Node{Kind: kindFilterGroup}
-	members := filterNodeValue.And
+	members := currentFilterNode.And
 
 	switch {
-	case filterNodeValue.And != nil:
+	case currentFilterNode.And != nil:
 		setField(&node, memberOp, groupAnd)
-	case filterNodeValue.Or != nil:
+	case currentFilterNode.Or != nil:
 		setField(&node, memberOp, groupOr)
 
-		members = filterNodeValue.Or
+		members = currentFilterNode.Or
 	default:
 		// No other value changes the outcome.
 	}

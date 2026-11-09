@@ -38,8 +38,8 @@ func (m loggingMW) WrapOp(
 	operation string,
 	next func(context.Context) error,
 ) error {
-	loggerValue := m.logger.WithContext(ctx)
-	loggerValue.Debug(m.tier+"."+operation, m.tier, m.name, textOperation, operation)
+	currentLogger := m.logger.WithContext(ctx)
+	currentLogger.Debug(m.tier+"."+operation, m.tier, m.name, textOperation, operation)
 
 	err := next(ctx)
 	if err == nil {
@@ -56,11 +56,11 @@ func (m loggingMW) WrapOp(
 	}
 	switch {
 	case !m.edge:
-		loggerValue.Debug(msg, fields...)
+		currentLogger.Debug(msg, fields...)
 	case apperr.ToHTTPStatus(apperr.Code(err)) < http.StatusInternalServerError:
-		loggerValue.Warn(msg, fields...)
+		currentLogger.Warn(msg, fields...)
 	default:
-		loggerValue.Error(msg, fields...)
+		currentLogger.Error(msg, fields...)
 	}
 
 	return err

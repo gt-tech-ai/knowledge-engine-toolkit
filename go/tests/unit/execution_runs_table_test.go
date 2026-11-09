@@ -328,9 +328,9 @@ func TestExecutionRunsRetention_ForgetsOldestFinishedRuns(t *testing.T) {
 	t.Parallel()
 
 	reg, _, _ := heldRegistry(t, time.Minute)
-	table := runs.New(reg, seqIDs(), nil, keep2)
+	table := runs.New(reg, seqIDs(), nil, newInputRuns)
 
-	for range iterations3 {
+	for range iterationsRuns {
 		_, err := table.Start(context.Background(), textOk, nil)
 		require.NoError(t, err)
 		table.Wait()
@@ -371,3 +371,11 @@ func TestExecutionRunsStart_DuplicateRunIDFailsInternal(t *testing.T) {
 	assert.Len(t, table.List(), 1)
 	require.NoError(t, reg.Run(context.Background(), textOk, nil, nil))
 }
+
+const (
+	// iterationsRuns is the iterations runs the tests use.
+	iterationsRuns = 3
+
+	// newInputRuns is the new input runs the tests use.
+	newInputRuns = 2
+)

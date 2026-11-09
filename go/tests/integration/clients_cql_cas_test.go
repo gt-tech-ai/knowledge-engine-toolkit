@@ -62,7 +62,7 @@ func (s *CQLCASSuite) SetupSuite() {
 
 	cfg.Cassandra.Hosts, cfg.Cassandra.Port = []string{s.CassandraHost}, s.CassandraPort
 	cfg.Cassandra.LocalDC = cassandradb.LocalDC
-	cfg.Keyspace, cfg.Timeout = casKeyspace, seconds20*time.Second
+	cfg.Keyspace, cfg.Timeout = casKeyspace, seconds*time.Second
 
 	session, err := cql.NewFromConfig(ctx, &cfg, cql.Deps{})
 	s.Require().NoError(err)
@@ -116,5 +116,10 @@ func (s *CQLCASSuite) TestApplyCAS_ReportsWhetherTheConditionHeld() {
 
 	s.Require().True(s.session.Query("SELECT v FROM kv WHERE k = ?", "a").
 		WithContext(ctx).Iter().Scan(&v))
-	s.Equal(equalArg3, v)
+	s.Equal(equalInputHeld, v)
 }
+
+const (
+	// equalInputHeld is the equal input held the tests use.
+	equalInputHeld = 3
+)

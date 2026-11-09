@@ -93,7 +93,7 @@ func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 
 	got, err := (&countingService{Base: base, count: 3}).Count(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, wantGot3, got)
+	assert.Equal(t, wantGotOperations, got)
 
 	_, err = base.Exec(t.Context(), textSlow, func(ctx context.Context) (int, error) {
 		<-ctx.Done()
@@ -109,7 +109,7 @@ func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 
 	got, err = (&countingService{count: 5}).Count(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, wantGot5, got)
+	assert.Equal(t, wantGotServicesOperations, got)
 }
 
 // TestServiceEntity_DelegatesValidatesAndAuthorizes tests the decorated CRUD
@@ -140,7 +140,7 @@ func TestServiceEntity_DelegatesValidatesAndAuthorizes(t *testing.T) {
 	}
 	denied := apperr.New(apperr.CodeForbidden, "denied")
 
-	testServiceEntityDelegatesValidatesAndAuthorizesRest3(
+	testServiceEntityDelegatesValidatesAndAuthorizesExpectsRepo(
 		t,
 		ctrl,
 		repo,
@@ -150,9 +150,9 @@ func TestServiceEntity_DelegatesValidatesAndAuthorizes(t *testing.T) {
 	)
 }
 
-// testServiceEntityDelegatesValidatesAndAuthorizesRest3 continues
-// testServiceEntityDelegatesValidatesAndAuthorizesRest2 with its remaining steps.
-func testServiceEntityDelegatesValidatesAndAuthorizesRest3(
+// testServiceEntityDelegatesValidatesAndAuthorizesExpectsRepo continues
+// testServiceEntityDelegatesValidatesAndAuthorizes: expects repo.
+func testServiceEntityDelegatesValidatesAndAuthorizesExpectsRepo(
 	t *testing.T,
 	ctrl *gomock.Controller,
 	repo *mocks.MockRepository[te, tp, string],
@@ -185,7 +185,7 @@ func testServiceEntityDelegatesValidatesAndAuthorizesRest3(
 	repo.EXPECT().Create(gomock.Any(), testEntity).Return(testEntity, nil)
 	repo.EXPECT().Update(gomock.Any(), textW1, testEntity).Return(testEntity, nil)
 
-	testServiceEntityDelegatesValidatesAndAuthorizesRest4(
+	testServiceEntityDelegatesValidatesAndAuthorizesChecksCalls(
 		t,
 		ctrl,
 		invalid,
@@ -197,9 +197,9 @@ func testServiceEntityDelegatesValidatesAndAuthorizesRest3(
 	)
 }
 
-// testServiceEntityDelegatesValidatesAndAuthorizesRest4 continues
-// testServiceEntityDelegatesValidatesAndAuthorizesRest3 with its remaining steps.
-func testServiceEntityDelegatesValidatesAndAuthorizesRest4(
+// testServiceEntityDelegatesValidatesAndAuthorizesChecksCalls continues
+// testServiceEntityDelegatesValidatesAndAuthorizesExpectsRepo: checks calls.
+func testServiceEntityDelegatesValidatesAndAuthorizesChecksCalls(
 	t *testing.T,
 	ctrl *gomock.Controller,
 	invalid *apperr.AppError,
@@ -244,3 +244,11 @@ func testServiceEntityDelegatesValidatesAndAuthorizesRest4(
 	_, err = noList.Update(t.Context(), textW1, &te{})
 	require.ErrorIs(t, err, invalid)
 }
+
+const (
+	// wantGotOperations is the expected got operations.
+	wantGotOperations = 3
+
+	// wantGotServicesOperations is the expected got services operations.
+	wantGotServicesOperations = 5
+)

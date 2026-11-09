@@ -63,35 +63,38 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	var gotKey string
 
 	spy := fixtures.SpyTracer(func(k string, _ any) { gotKey = k })
-	_, s2 := spy.Start(ctx, "op")
-	s2.SetAttribute("attr", 1)
+	_, secondS := spy.Start(ctx, "op")
+	secondS.SetAttribute("attr", 1)
 
 	if gotKey != "attr" {
 		t.Fatalf("SpyTracer: got key %q, want attr", gotKey)
 	}
 
 	// Service: canned entity, error, and panic paths.
-	got, _ := fixtures.StubService(nil, false).Get(ctx, "1")
+	got, _ := fixtures.StubService(nil).Get(ctx, "1")
 	if got == nil || got.Name != "mock" {
 		t.Fatalf("StubService.Get: %+v, want Name=mock", got)
 	}
 
-	testFactoriesExerciseEveryDoubleRest3(ctx, t)
+	testFactoriesExerciseEveryDoubleServiceAndPipeline(ctx, t)
 }
 
-// testFactoriesExerciseEveryDoubleRest3 continues TestFactories_ExerciseEveryDouble with
-// its remaining steps.
-func testFactoriesExerciseEveryDoubleRest3(ctx context.Context, t *testing.T) {
+// testFactoriesExerciseEveryDoubleServiceAndPipeline continues
+// TestFactories_ExerciseEveryDouble: service and pipeline.
+func testFactoriesExerciseEveryDoubleServiceAndPipeline(
+	ctx context.Context,
+	t *testing.T,
+) {
 	t.Helper()
 
 	boom := apperr.Sentinel("boom")
-	_, err := fixtures.StubService(boom, false).Get(ctx, "1")
+	_, err := fixtures.StubService(boom).Get(ctx, "1")
 
 	if !errors.Is(err, boom) {
 		t.Fatalf("StubService(err).Get: %v, want boom", err)
 	}
 
-	assertPanics(t, func() { _, _ = fixtures.StubService(nil, true).Get(ctx, "1") })
+	assertPanics(t, func() { _, _ = fixtures.StubServicePanickingOnGet().Get(ctx, "1") })
 
 	// Pipeline: pass/err/panic.
 	if got, _ := fixtures.PassPipeline().Execute(ctx, "x"); got != "mock-output-x" {
@@ -106,7 +109,7 @@ func testFactoriesExerciseEveryDoubleRest3(ctx context.Context, t *testing.T) {
 	assertPanics(t, func() { _, _ = fixtures.PanicPipeline().Execute(ctx, "x") })
 
 	// Must: the value through, a constructor error as a panic.
-	if got := fixtures.Must(mustArg7, nil); got != got7 {
+	if got := fixtures.Must(mustInput, nil); got != wantGot {
 		t.Errorf("Must = %d, want 7", got)
 	}
 
@@ -116,7 +119,7 @@ func testFactoriesExerciseEveryDoubleRest3(ctx context.Context, t *testing.T) {
 	)
 
 	// Retrier: fails twice then succeeds → 3 attempts.
-	retrier, attempts := fixtures.StubRetrier(failUntil2, false)
+	retrier, attempts := fixtures.StubRetrier(stubRetrierInput)
 	calls := 0
 
 	_ = retrier.Retry(ctx, func() error {
@@ -128,24 +131,24 @@ func testFactoriesExerciseEveryDoubleRest3(ctx context.Context, t *testing.T) {
 		return nil
 	})
 
-	testFactoriesExerciseEveryDoubleRest(ctx, t, boom, attempts)
+	testFactoriesExerciseEveryDoubleResilienceDoubles(ctx, t, boom, attempts)
 }
 
-// testFactoriesExerciseEveryDoubleRest continues TestFactories_ExerciseEveryDouble with
-// its remaining steps.
-func testFactoriesExerciseEveryDoubleRest(
+// testFactoriesExerciseEveryDoubleResilienceDoubles continues
+// TestFactories_ExerciseEveryDouble: resilience doubles.
+func testFactoriesExerciseEveryDoubleResilienceDoubles(
 	ctx context.Context, t *testing.T, boom error, attempts func() int,
 ) {
 	t.Helper()
 
 	var err error
 
-	if attempts() != attempts3 {
+	if attempts() != wantAttempts {
 		t.Fatalf("StubRetrier attempts: %d, want 3", attempts())
 	}
 
 	// Circuit breaker: open rejects, closed runs.
-	err = fixtures.StubCircuitBreaker(true).
+	err = fixtures.OpenCircuitBreaker().
 		Execute(func() error { return nil })
 	if err == nil {
 		t.Fatal("open circuit breaker should reject")
@@ -153,7 +156,7 @@ func testFactoriesExerciseEveryDoubleRest(
 
 	ran := false
 
-	_ = fixtures.StubCircuitBreaker(false).
+	_ = fixtures.ClosedCircuitBreaker().
 		Execute(func() error {
 			ran = true
 
@@ -165,11 +168,11 @@ func testFactoriesExerciseEveryDoubleRest(
 	}
 
 	// Rate limiter.
-	if !fixtures.StubRateLimiter(true).Allow() {
+	if !fixtures.AllowingRateLimiter().Allow() {
 		t.Fatal("allowed rate limiter should allow")
 	}
 
-	if fixtures.StubRateLimiter(false).Allow() {
+	if fixtures.DenyingRateLimiter().Allow() {
 		t.Fatal("denied rate limiter should deny")
 	}
 
@@ -184,12 +187,12 @@ func testFactoriesExerciseEveryDoubleRest(
 		t.Fatalf("RecvMsg #1: %v, want boom", err)
 	}
 
-	testFactoriesExerciseEveryDoubleRest2(ctx, t, clientStream)
+	testFactoriesExerciseEveryDoubleClientStreamAndStore(ctx, t, clientStream)
 }
 
-// testFactoriesExerciseEveryDoubleRest2 continues testFactoriesExerciseEveryDoubleRest
-// with its remaining steps.
-func testFactoriesExerciseEveryDoubleRest2(
+// testFactoriesExerciseEveryDoubleClientStreamAndStore continues
+// testFactoriesExerciseEveryDoubleResilienceDoubles: client stream and store.
+func testFactoriesExerciseEveryDoubleClientStreamAndStore(
 	ctx context.Context, t *testing.T, clientStream grpc.ClientStream,
 ) {
 	t.Helper()
@@ -217,12 +220,12 @@ func testFactoriesExerciseEveryDoubleRest2(
 		t.Fatal("StubStore.Exists after Create should be true")
 	}
 
-	testFactoriesExerciseEveryDoubleRest4(ctx, t, store)
+	testFactoriesExerciseEveryDoubleStoreDeleteAndSpyLogger(ctx, t, store)
 }
 
-// testFactoriesExerciseEveryDoubleRest4 continues testFactoriesExerciseEveryDoubleRest2
-// with its remaining steps.
-func testFactoriesExerciseEveryDoubleRest4(
+// testFactoriesExerciseEveryDoubleStoreDeleteAndSpyLogger continues
+// testFactoriesExerciseEveryDoubleClientStreamAndStore: store delete and spy logger.
+func testFactoriesExerciseEveryDoubleStoreDeleteAndSpyLogger(
 	ctx context.Context,
 	t *testing.T,
 	store *mocks.MockStore[fixtures.TestEntity, fixtures.TestParams, string],
@@ -267,3 +270,17 @@ func assertPanics(t *testing.T, callback func()) {
 
 	callback()
 }
+
+const (
+	// mustInput is the must input the tests use.
+	mustInput = 7
+
+	// stubRetrierInput is the stub retrier input the tests use.
+	stubRetrierInput = 2
+
+	// wantAttempts is the expected attempts.
+	wantAttempts = 3
+
+	// wantGot is the expected got.
+	wantGot = 7
+)

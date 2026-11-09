@@ -190,17 +190,17 @@ func (r *sdkResolver) Resolve(
 	}
 
 	value, err, _ := r.group.Do(key, func() (any, error) {
-		sessionValue, err := r.resolveAccount(ctx, env, forceProfile)
+		currentSession, err := r.resolveAccount(ctx, env, forceProfile)
 		if err != nil {
 			return Session{}, err
 		}
 
 		r.mu.Lock()
 
-		r.cache[key] = sessionValue
+		r.cache[key] = currentSession
 		r.mu.Unlock()
 
-		return sessionValue, nil
+		return currentSession, nil
 	})
 	s := stdx.As[Session](value)
 
@@ -212,19 +212,19 @@ func (r *sdkResolver) cached(key string) (Session, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	sessionValue, ok := r.cache[key]
+	currentSession, ok := r.cache[key]
 	if !ok {
 		return Session{}, false
 	}
 
-	if at := sessionValue.ExpiresAt(); !at.IsZero() &&
+	if at := currentSession.ExpiresAt(); !at.IsZero() &&
 		at.Before(time.Now().Add(session.ExpirySkew)) {
 		delete(r.cache, key)
 
 		return Session{}, false
 	}
 
-	return sessionValue, true
+	return currentSession, true
 }
 
 // resolveAccount loads the config, pins the credentials and asserts the account.
@@ -238,7 +238,7 @@ func (r *sdkResolver) resolveAccount(
 		return Session{}, err
 	}
 
-	profile := r.profileFor(forceFlag(forceProfile), target.Profile)
+	profile := r.profileFor(forceProfile, target.Profile)
 
 	awscfg, err := r.deps.LoadAWS(ctx, profile, target.Region)
 	if err != nil {
@@ -278,12 +278,11 @@ func (r *sdkResolver) resolveAccount(
 	}, nil
 }
 
-// forceFlag names the force option in a signature.
-type forceFlag bool
-
 // profileFor is the profile to load: none when ambient credentials serve, unless forced.
-func (r *sdkResolver) profileFor(force forceFlag, profile string) string {
-	if bool(force) || !r.ambient() {
+func (r *sdkResolver) profileFor(forceProfile bool, profile string) string {
+	useProfile := forceProfile || !r.ambient()
+
+	if useProfile {
 		return profile
 	}
 

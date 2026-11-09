@@ -59,13 +59,13 @@ func WorkspaceGraph(fsys fs.FS) ([]Module, error) {
 // the repository root ("." for the root), in file order. A go.work that does not parse
 // is CodeInvalidInput.
 func WorkUses(work []byte) ([]string, error) {
-	workFileValue, err := modfile.ParseWork(workFile, work, nil)
+	currentWorkFile, err := modfile.ParseWork(workFile, work, nil)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse go.work")
 	}
 
-	dirs := make([]string, 0, len(workFileValue.Use))
-	for _, use := range workFileValue.Use {
+	dirs := make([]string, 0, len(currentWorkFile.Use))
+	for _, use := range currentWorkFile.Use {
 		dirs = append(
 			dirs,
 			path.Clean(strings.TrimPrefix(filepath.ToSlash(use.Path), "./")),

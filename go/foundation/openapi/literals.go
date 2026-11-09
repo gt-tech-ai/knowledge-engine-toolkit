@@ -1,8 +1,8 @@
 package openapi
 
 const (
-	// sLen2 is the sLen value 2.
-	sLen2 = 2
+	// minPathParamLen is the named value used where min path param len applies.
+	minPathParamLen = 2
 
 	// text404 is the literal "404".
 	text404 = "404"

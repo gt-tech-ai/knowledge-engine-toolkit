@@ -81,9 +81,14 @@ func TestGate_SerialPhaseFiresPhaseCompleteOnceWithElapsed(t *testing.T) {
 	assert.Len(
 		t,
 		phaseResults,
-		wantPhaseResultsLen3,
+		wantPhaseResultsLen,
 		"expected the single phase-complete to carry all 3 results",
 	)
 	assert.Positive(t, phaseElapsed, "expected positive phase elapsed")
 	assert.Positive(t, gateElapsed, "expected positive gate elapsed")
 }
+
+const (
+	// wantPhaseResultsLen is the expected phase results len.
+	wantPhaseResultsLen = 3
+)

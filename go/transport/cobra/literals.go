@@ -1,6 +1,6 @@
 package cobra
 
 const (
-	// index2 is the index value 2.
-	index2 = 2
+	// usageFieldIndex is the named value used where usage field index applies.
+	usageFieldIndex = 2
 )

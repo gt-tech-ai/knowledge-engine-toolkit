@@ -60,8 +60,8 @@ func NewGroup(logger interfaces.Logger) *Group {
 }
 
 // Add registers r under name. Add after Start panics, as a wiring bug.
-func (g *Group) Add(name string, runnerValue Runner) {
-	if runnerValue == nil {
+func (g *Group) Add(name string, currentRunner Runner) {
+	if currentRunner == nil {
 		panic("loop: runner must not be nil")
 	}
 
@@ -72,7 +72,7 @@ func (g *Group) Add(name string, runnerValue Runner) {
 		panic("loop: Add after Start")
 	}
 
-	g.runners = append(g.runners, namedRunner{runner: runnerValue, name: name})
+	g.runners = append(g.runners, namedRunner{runner: currentRunner, name: name})
 }
 
 // Start runs every runner on its own goroutine under a context derived from ctx and
@@ -95,18 +95,24 @@ func (g *Group) Start(ctx context.Context) error {
 
 	var group sync.WaitGroup
 
-	for _, namedRunner2 := range g.runners {
+	for _, secondNamedRunner := range g.runners {
 		group.Go(func() {
-			err := namedRunner2.runner.Run(runCtx)
+			err := secondNamedRunner.runner.Run(runCtx)
 			switch {
 			case err == nil:
 			case runCtx.Err() == nil:
-				g.logger.Error("loop stopped", "loop", namedRunner2.name, "error", err)
+				g.logger.Error(
+					"loop stopped",
+					"loop",
+					secondNamedRunner.name,
+					"error",
+					err,
+				)
 			default:
 				logShutdownError(
 					g.logger,
 					"loop stopped during shutdown",
-					namedRunner2.name,
+					secondNamedRunner.name,
 					err,
 				)
 			}

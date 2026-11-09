@@ -19,7 +19,7 @@ func pinnedGoTool(name, pkgAtVersion string) types.ToolDef {
 	return types.ToolDef{
 		Name: name, Binary: name, CI: true,
 		InstallMethods: map[string]types.InstallMethod{
-			textAll: {Command: textGo2, Args: []string{textInstall, pkgAtVersion}},
+			textAll: {Command: textGoLower, Args: []string{textInstall, pkgAtVersion}},
 		},
 	}
 }
@@ -42,6 +42,46 @@ func pinnedGoTool(name, pkgAtVersion string) types.ToolDef {
 func TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin(t *testing.T) {
 	t.Parallel()
 
+	testClientsToolchainCheckPinsRunsCases(t)
+}
+
+// checkGofumptPin runs CheckPins over tools with path resolving gofumpt and res as its
+// `go version -m` output.
+func checkGofumptPin(
+	t *testing.T,
+	path string,
+	tools []types.ToolDef,
+	res *interfaces.CmdResult,
+) types.StepResults {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), textRoot, textGoLower, textVersion, "-m", path).
+		Return(*res)
+
+	paths := mocks.NewMockPathResolver(ctrl)
+	paths.EXPECT().LookPath(textGofumpt).Return(path, nil)
+
+	return toolchain.NewInstaller(
+		commandRunner,
+		fixtures.NopLogger(),
+		textLinuxApt,
+		denyPrompter(t),
+		toolchain.WithPathResolver(paths),
+		toolchain.WithReinstallHint(func(binary, _ string) string {
+			return "tools install " + binary + " --force"
+		}),
+	).
+		CheckPins(t.Context(), textRoot, tools)
+}
+
+// testClientsToolchainCheckPinsRunsCases continues
+// TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin.
+func testClientsToolchainCheckPinsRunsCases(t *testing.T) {
+	t.Helper()
+
 	const path = "/usr/local/bin/gofumpt"
 
 	info := func(pkg, ver string) interfaces.CmdResult {
@@ -55,26 +95,7 @@ func TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin(t *testin
 	check := func(res interfaces.CmdResult) types.StepResults {
 		t.Helper()
 
-		ctrl := gomock.NewController(t)
-		commandRunner := mocks.NewMockCommandRunner(ctrl)
-		commandRunner.EXPECT().
-			RunBuffered(gomock.Any(), textRoot, textGo2, textVersion, "-m", path).
-			Return(res)
-
-		paths := mocks.NewMockPathResolver(ctrl)
-		paths.EXPECT().LookPath(textGofumpt).Return(path, nil)
-
-		return toolchain.NewInstaller(
-			commandRunner,
-			fixtures.NopLogger(),
-			textLinuxApt,
-			denyPrompter(t),
-			toolchain.WithPathResolver(paths),
-			toolchain.WithReinstallHint(func(binary, _ string) string {
-				return "tools install " + binary + " --force"
-			}),
-		).
-			CheckPins(t.Context(), textRoot, tools)
+		return checkGofumptPin(t, path, tools, &res)
 	}
 
 	got := check(info("mvdan.cc/gofumpt", "v0.10.0"))
@@ -99,13 +120,17 @@ func TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin(t *testin
 
 	got = check(interfaces.CmdResult{Stdout: []byte(path + ": not a Go binary\n")})
 
-	testClientsToolchainCheckPinsFailsWhenTheBinaryOnPathIsNotThePinRest(t, tools, got)
+	testClientsToolchainCheckPinsFailsWhenTheBinaryOnPathIsNotThePinSkipsWhenUnresolved(
+		t,
+		tools,
+		got,
+	)
 }
 
-// testClientsToolchainCheckPinsFailsWhenTheBinaryOnPathIsNotThePinRest continues
-// TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin with its remaining
-// steps.
-func testClientsToolchainCheckPinsFailsWhenTheBinaryOnPathIsNotThePinRest(
+// testClientsToolchainCheckPinsFailsWhenTheBinaryOnPathIsNotThePinSkipsWhenUnresolved
+// continues TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin: skips
+// when unresolved.
+func testClientsToolchainCheckPinsFailsWhenTheBinaryOnPathIsNotThePinSkipsWhenUnresolved(
 	t *testing.T,
 	tools []types.ToolDef,
 	got types.StepResults,
@@ -155,7 +180,7 @@ func TestClientsToolchainInstalledVersion_ReadsTheBinaryOnPath(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		commandRunner := mocks.NewMockCommandRunner(ctrl)
 		commandRunner.EXPECT().
-			RunBuffered(gomock.Any(), textRoot, textGo2, textVersion, "-m", path).
+			RunBuffered(gomock.Any(), textRoot, textGoLower, textVersion, "-m", path).
 			Return(info)
 
 		if len(tool.VersionCmd) > 0 && version != "" {
@@ -184,7 +209,7 @@ func TestClientsToolchainInstalledVersion_ReadsTheBinaryOnPath(t *testing.T) {
 	shellcheck := types.ToolDef{
 		Name:       textTool,
 		Binary:     textTool,
-		VersionCmd: []string{textTool, textVersion2},
+		VersionCmd: []string{textTool, textVersionFlag},
 	}
 	assert.Equal(t, "ShellCheck 0.10.0", probe(shellcheck, notGo, "ShellCheck 0.10.0"))
 	assert.Empty(t, probe(types.ToolDef{Name: textTool, Binary: textTool}, notGo, ""))

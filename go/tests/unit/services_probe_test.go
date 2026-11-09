@@ -24,12 +24,12 @@ func probeOf(
 	name string,
 	verdicts ...types.Verdict,
 ) *mocks.MockProbe[string] {
-	probeValue := mocks.NewMockProbe[string](ctrl)
-	probeValue.EXPECT().Name().Return(name).AnyTimes()
+	currentProbe := mocks.NewMockProbe[string](ctrl)
+	currentProbe.EXPECT().Name().Return(name).AnyTimes()
 
 	calls := 0
 
-	probeValue.EXPECT().Run(gomock.Any(), textTarget).DoAndReturn(
+	currentProbe.EXPECT().Run(gomock.Any(), textTarget).DoAndReturn(
 		func(context.Context, string) types.Verdict {
 			v := verdicts[min(calls, len(verdicts)-1)]
 			calls++
@@ -37,7 +37,7 @@ func probeOf(
 			return v
 		}).AnyTimes()
 
-	return probeValue
+	return currentProbe
 }
 
 // newSet builds a probe set over probes with opts.
@@ -91,7 +91,7 @@ func TestServicesProbe_OneStepPerProbeInOrder(t *testing.T) {
 	)
 	res, err := set.Run(t.Context(), textTarget)
 	require.NoError(t, err)
-	require.Len(t, res, wantResLen3)
+	require.Len(t, res, wantResLen)
 	assert.Equal(
 		t,
 		[]string{textA, textB, textC},
@@ -281,7 +281,7 @@ func TestServicesProbe_PanickingProbe(t *testing.T) {
 			probeOf(ctrl, textOk, types.Verdict{Status: types.StatusPass})).
 			Run(t.Context(), textTarget)
 		require.NoError(t, err)
-		require.Len(t, res, wantResLen2)
+		require.Len(t, res, wantResLenProbe)
 		assert.Equal(t, types.StatusFail, res[0].Status)
 		assert.Equal(t, "1 finding", res[0].Error)
 		assert.Contains(t, string(res[0].Detail), "probe bad panicked: nil map")
@@ -290,3 +290,8 @@ func TestServicesProbe_PanickingProbe(t *testing.T) {
 		assert.Equal(t, types.StatusPass, res[1].Status)
 	}
 }
+
+const (
+	// wantResLenProbe is the expected res len probe.
+	wantResLenProbe = 2
+)

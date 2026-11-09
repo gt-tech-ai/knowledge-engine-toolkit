@@ -128,7 +128,7 @@ func readServiceConfigs(
 		)
 	}
 
-	configCollectorValue := &configCollector{
+	currentConfigCollector := &configCollector{
 		configs:      map[string]serviceConfig{},
 		pkgToService: map[string]string{},
 		svcExt:       svcExt,
@@ -139,7 +139,7 @@ func readServiceConfigs(
 	var walkErr error
 
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		walkErr = configCollectorValue.addFile(fd)
+		walkErr = currentConfigCollector.addFile(fd)
 
 		return walkErr == nil
 	})
@@ -153,14 +153,14 @@ func readServiceConfigs(
 	// would make a response match more than one resource — an ambiguity the
 	// (now deterministic) converter would resolve silently. Failing here surfaces
 	// it loudly at config-build time.
-	for svcName, cfg := range configCollectorValue.configs {
+	for svcName, cfg := range currentConfigCollector.configs {
 		err := validateResourceKeys(svcName, cfg.resources)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 
-	return configCollectorValue.configs, configCollectorValue.pkgToService, nil
+	return currentConfigCollector.configs, currentConfigCollector.pkgToService, nil
 }
 
 // configCollector accumulates per-service configs across a descriptor walk.
@@ -271,13 +271,13 @@ func validateResourceKeys(svcName string, resources map[string]resourceConfig) e
 	slices.Sort(types)
 
 	for _, t := range types {
-		resourceConfigValue := resources[t]
+		currentResourceConfig := resources[t]
 
 		err := claimResourceKey(
 			owner,
 			svcName,
-			resourceConfigValue.singleKey,
-			resourceConfigValue.resourceType,
+			currentResourceConfig.singleKey,
+			currentResourceConfig.resourceType,
 		)
 		if err != nil {
 			return err
@@ -286,8 +286,8 @@ func validateResourceKeys(svcName string, resources map[string]resourceConfig) e
 		err = claimResourceKey(
 			owner,
 			svcName,
-			resourceConfigValue.collectionKey,
-			resourceConfigValue.resourceType,
+			currentResourceConfig.collectionKey,
+			currentResourceConfig.resourceType,
 		)
 		if err != nil {
 			return err
@@ -387,7 +387,7 @@ func (c *configCollector) mergeMessageResource(
 	svcName string,
 	resources map[string]resourceConfig,
 ) error {
-	resourceConfigValue, found, err := readResourceOption(
+	currentResourceConfig, found, err := readResourceOption(
 		messageDescriptor,
 		c.resExt,
 		c.types,
@@ -400,7 +400,7 @@ func (c *configCollector) mergeMessageResource(
 		return nil
 	}
 
-	if resourceConfigValue.resourceType == "" {
+	if currentResourceConfig.resourceType == "" {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf(
@@ -412,8 +412,8 @@ func (c *configCollector) mergeMessageResource(
 	}
 
 	merged, err := mergeResource(
-		resources[resourceConfigValue.resourceType],
-		resourceConfigValue,
+		resources[currentResourceConfig.resourceType],
+		currentResourceConfig,
 	)
 	if err != nil {
 		return apperr.Wrap(
@@ -423,7 +423,7 @@ func (c *configCollector) mergeMessageResource(
 		)
 	}
 
-	resources[resourceConfigValue.resourceType] = merged
+	resources[currentResourceConfig.resourceType] = merged
 
 	return nil
 }
@@ -588,18 +588,18 @@ func mergeResource(existing, incoming resourceConfig) (resourceConfig, error) {
 }
 
 // mergeKey returns the single non-empty value, erroring on a conflict.
-func mergeKey(field, resourceType, text, textValue string) (string, error) {
+func mergeKey(field, resourceType, text, fileText string) (string, error) {
 	switch {
 	case text == "":
-		return textValue, nil
-	case textValue == "", text == textValue:
+		return fileText, nil
+	case fileText == "", text == fileText:
 		return text, nil
 	default:
 		return "", apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf(
 				"resource %q declares conflicting %s: %q vs %q",
-				resourceType, field, text, textValue,
+				resourceType, field, text, fileText,
 			),
 		)
 	}

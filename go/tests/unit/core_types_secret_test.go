@@ -33,7 +33,7 @@ func TestSecret_MasksEverywhereAndRevealsExplicitly(t *testing.T) {
 	require.Equal(t, raw, secret.Reveal(), "Reveal must return the raw value")
 	assert.Equal(t, textStarStarStar, secret.String(), "String must mask")
 
-	for _, verb := range []string{textS2, textV2, "%q", "%#v", "%+v"} {
+	for _, verb := range []string{textSLower, textVLowerAlt, "%q", "%#v", "%+v"} {
 		out := fmt.Sprintf(verb, secret)
 		assert.NotContainsf(t, out, raw, "verb %s leaked the value", verb)
 		assert.Containsf(
@@ -92,3 +92,8 @@ func TestRef_String(t *testing.T) {
 	r := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	assert.Equal(t, "dev/bootstrap/client_secret", r.String())
 }
+
+const (
+	// textStarStarStar is the literal "***".
+	textStarStarStar = "***"
+)

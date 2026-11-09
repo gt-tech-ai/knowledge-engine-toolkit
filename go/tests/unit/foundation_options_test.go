@@ -89,11 +89,11 @@ func TestApplyOptions(t *testing.T) {
 		assert.Equal(t, textTest, cfg.Name)
 	})
 
-	testApplyOptionsRest(t)
+	testApplyOptionsOverrideAndEmpty(t)
 }
 
-// testApplyOptionsRest continues TestApplyOptions with its remaining steps.
-func testApplyOptionsRest(t *testing.T) {
+// testApplyOptionsOverrideAndEmpty continues TestApplyOptions: override and empty.
+func testApplyOptionsOverrideAndEmpty(t *testing.T) {
 	t.Helper()
 
 	t.Run("later options override earlier ones", func(t *testing.T) {
@@ -204,5 +204,10 @@ func TestOptionTypeAlias(t *testing.T) {
 	cfg := &testConfig{}
 	opt(cfg)
 
-	assert.Equal(t, wantMaxRetries99, cfg.MaxRetries)
+	assert.Equal(t, wantMaxRetriesAlias, cfg.MaxRetries)
 }
+
+const (
+	// wantMaxRetriesAlias is the expected max retries alias.
+	wantMaxRetriesAlias = 99
+)

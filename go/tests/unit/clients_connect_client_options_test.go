@@ -140,12 +140,15 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 		assert.EqualValues(t, 1, calls.Load())
 	})
 
-	testConnectClientOptionsDecorateEveryCallRest(ctx, t)
+	testConnectClientOptionsDecorateEveryCallPermanentError(ctx, t)
 }
 
-// testConnectClientOptionsDecorateEveryCallRest continues
-// TestConnectClientOptions_DecorateEveryCall with its remaining steps.
-func testConnectClientOptionsDecorateEveryCallRest(ctx context.Context, t *testing.T) {
+// testConnectClientOptionsDecorateEveryCallPermanentError continues
+// TestConnectClientOptions_DecorateEveryCall: permanent error.
+func testConnectClientOptionsDecorateEveryCallPermanentError(
+	ctx context.Context,
+	t *testing.T,
+) {
 	t.Helper()
 
 	t.Run("permanent", func(t *testing.T) {
@@ -176,7 +179,7 @@ func testConnectClientOptionsDecorateEveryCallRest(ctx context.Context, t *testi
 		url := probeServer(t, &calls, &tp)
 		base := wireBase(
 			textProbe,
-			&decorate.Deps{Breaker: fixtures.StubCircuitBreaker(true)},
+			&decorate.Deps{Breaker: fixtures.OpenCircuitBreaker()},
 		)
 		_, err := probeClient(
 			url,

@@ -1,9 +1,9 @@
 package postgres
 
 const (
-	// index3 is the index value 3.
-	index3 = 3
+	// enqueuedAtColumn is the index value 3.
+	enqueuedAtColumn = 3
 
-	// nLen63 is the nLen value 63.
-	nLen63 = 63
+	// maxIdentifierLen is the named value used where max identifier len applies.
+	maxIdentifierLen = 63
 )

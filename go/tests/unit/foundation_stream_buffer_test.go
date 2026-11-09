@@ -54,13 +54,13 @@ func TestBuffer_BoundedBlocksProducerAtCapacity(t *testing.T) {
 	cases := map[string]stream.Config{
 		"item bound": {
 			Kind:     stream.KindBounded,
-			MaxItems: maxItems2,
-			MaxBytes: 1 << maxBytes20,
+			MaxItems: maxItems,
+			MaxBytes: 1 << wantResultCapacity,
 		},
 		"byte bound": {
 			Kind:     stream.KindBounded,
-			MaxItems: maxItems10,
-			MaxBytes: maxBytes4,
+			MaxItems: maxItemsCapacity,
+			MaxBytes: maxBytes,
 		},
 	}
 	for name, cfg := range cases {
@@ -377,12 +377,18 @@ func TestBuffer_MetricsRecordDepthAndBlockedTime(t *testing.T) {
 		}
 	}).AnyTimes()
 
-	testBufferMetricsRecordDepthAndBlockedTimeRest(t, metrics, &items, &bytes, &waited)
+	testBufferMetricsRecordDepthAndBlockedTimeBlockedTime(
+		t,
+		metrics,
+		&items,
+		&bytes,
+		&waited,
+	)
 }
 
-// testBufferMetricsRecordDepthAndBlockedTimeRest continues
-// TestBuffer_MetricsRecordDepthAndBlockedTime with its remaining steps.
-func testBufferMetricsRecordDepthAndBlockedTimeRest(
+// testBufferMetricsRecordDepthAndBlockedTimeBlockedTime continues
+// TestBuffer_MetricsRecordDepthAndBlockedTime: blocked time.
+func testBufferMetricsRecordDepthAndBlockedTimeBlockedTime(
 	t *testing.T,
 	metrics *mocks.MockMetrics,
 	items, bytes *atomic.Int64,
@@ -471,7 +477,7 @@ func TestBuffer_MetricsOverDirectHoldNothing(t *testing.T) {
 			stream.FromSlice([]string{"ab", "cd"}),
 		),
 		streamSize,
-		maxBytes8,
+		collectInput,
 	)
 	require.NoError(t, err)
 	require.Equal(t, []string{"ab", "cd"}, got)
@@ -528,8 +534,25 @@ func TestBuffer_UnknownKindFailsLoudly(t *testing.T) {
 			stream.FromSlice([]string{textA, textB}),
 		),
 		streamSize,
-		maxBytes8,
+		collectInput,
 	)
 	require.NoError(t, err)
 	require.Equal(t, []string{textA, textB}, got)
 }
+
+const (
+	// collectInput is the collect input the tests use.
+	collectInput = 8
+
+	// maxBytes is the max bytes the tests use.
+	maxBytes = 4
+
+	// maxItems is the max items the tests use.
+	maxItems = 2
+
+	// maxItemsCapacity is the max items capacity the tests use.
+	maxItemsCapacity = 10
+
+	// wantResultCapacity is the expected result capacity.
+	wantResultCapacity = 20
+)

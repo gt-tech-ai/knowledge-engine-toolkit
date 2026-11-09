@@ -39,10 +39,10 @@ func TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest(t *testing.T
 	}
 
 	// Prerequisite: version detection, no install methods (manual only).
-	goDef := find(textGo2)
+	goDef := find(textGoLower)
 	require.NotNil(t, goDef.MinVersion)
 	assert.Equal(t, "1.27", goDef.MinVersion.String())
-	assert.Equal(t, []string{textGo2, textVersion}, goDef.VersionCmd)
+	assert.Equal(t, []string{textGoLower, textVersion}, goDef.VersionCmd)
 	assert.Empty(t, goDef.InstallMethods)
 
 	// Required, command kind: uv's darwin method is a brew install.
@@ -57,7 +57,7 @@ func TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest(t *testing.T
 	buf := find(textBuf)
 	assert.Equal(
 		t, types.InstallMethod{
-			Command: textGo2,
+			Command: textGoLower,
 			Args:    []string{textInstall, manifestInstall(t, textBuf, textAll).Package},
 		}, buf.InstallMethods[textAll],
 	)
@@ -69,7 +69,7 @@ func TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest(t *testing.T
 	lintEntry := manifestInstall(t, textGolangciLint, textWindows)
 	lint := find(textGolangciLint)
 
-	testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestRest(
+	testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestWindowsDownload(
 		t,
 		cat,
 		find,
@@ -78,10 +78,9 @@ func TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest(t *testing.T
 	)
 }
 
-// testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestRest continues
-// TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest with its remaining
-// steps.
-func testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestRest(
+// testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestWindowsDownload continues
+// TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest: windows download.
+func testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestWindowsDownload(
 	t *testing.T,
 	cat *toolchain.Catalog,
 	find func(binary string) types.ToolDef,
@@ -151,7 +150,7 @@ func TestClientsToolchainResolveVersionParse_Behavior(t *testing.T) {
 	cat, err := toolchain.NewCatalog(toolEntries(t))
 	require.NoError(t, err)
 
-	goDef, ok := cat.Find(textGo2)
+	goDef, ok := cat.Find(textGoLower)
 	require.True(t, ok)
 	assert.Equal(t, "1.26.0", goDef.VersionParse("go version go1.26.0 darwin/arm64"))
 

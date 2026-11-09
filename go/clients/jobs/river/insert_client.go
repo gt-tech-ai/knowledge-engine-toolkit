@@ -79,7 +79,7 @@ func NewInsertClient(
 		)
 	}
 
-	clientValue, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
+	currentClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
 	if err != nil {
 		pool.Close()
 
@@ -92,7 +92,7 @@ func NewInsertClient(
 
 	return &InsertClient{
 		pool:   pool,
-		client: clientValue,
+		client: currentClient,
 		ops:    ops,
 	}, nil
 }

@@ -201,8 +201,8 @@ func decodeFilterClause(token string, raw json.RawMessage) (FilterNode, error) {
 			"filter: operator body must carry exactly one field")
 	}
 
-	for field, rawValue := range body {
-		dec := json.NewDecoder(bytes.NewReader(rawValue))
+	for field, currentRaw := range body {
+		dec := json.NewDecoder(bytes.NewReader(currentRaw))
 		dec.UseNumber()
 
 		var value any

@@ -34,25 +34,34 @@ func TestMergeSwaggerFiles_OrderIndependent(t *testing.T) {
 
 	dir := t.TempDir()
 	text := filepath.Join(dir, "a.swagger.json")
-	text2 := filepath.Join(dir, "b.swagger.json")
+	otherText := filepath.Join(dir, "b.swagger.json")
 
 	require.NoError(t, os.WriteFile(
 		text,
 		[]byte(`{"info":{"title":"a"},"paths":{"/a":{}}}`),
-		perm0o600,
+		writeFileInput,
 	))
 	require.NoError(t, os.WriteFile(
-		text2,
+		otherText,
 		[]byte(`{"info":{"title":"b"},"paths":{"/b":{}}}`),
-		perm0o600,
+		writeFileInput,
 	))
 
-	lookup2, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{text, text2})
+	statusByName, err := openapi.MergeSwaggerFiles(
+		fsys.NewOSFS(),
+		[]string{text, otherText},
+	)
 	require.NoError(t, err)
 
-	m2, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{text2, text})
+	secondM, err := openapi.MergeSwaggerFiles(fsys.NewOSFS(), []string{otherText, text})
 	require.NoError(t, err)
 
-	require.Equal(t, fmt.Sprint(lookup2[textInfo]), fmt.Sprint(m2[textInfo]),
-		"merge base/info is order-dependent: %v vs %v", lookup2[textInfo], m2[textInfo])
+	require.Equal(
+		t,
+		fmt.Sprint(statusByName[textInfo]),
+		fmt.Sprint(secondM[textInfo]),
+		"merge base/info is order-dependent: %v vs %v",
+		statusByName[textInfo],
+		secondM[textInfo],
+	)
 }

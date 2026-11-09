@@ -151,24 +151,28 @@ func ReflectInputSchema(value any) []byte {
 // A bad argument is CodeInvalidInput naming the operation. It is the decode for a caller
 // that is not a human at the terminal (an MCP tool call, a CronJob's arguments).
 func Decode(op interfaces.Operation, raw []byte) (any, error) {
-	return decodeInput(op, raw, false)
+	return decodeInput(op, raw, publicFlags)
 }
 
 // DecodeLocal is Decode for a front-end where a human typed the arguments (the CLI): it
 // also admits the operation's secret flags.
 func DecodeLocal(op interfaces.Operation, raw []byte) (any, error) {
-	return decodeInput(op, raw, true)
+	return decodeInput(op, raw, allFlags)
 }
 
 // keyChecker is an input whose keys an operation checks itself (a map input): undeclared
 // returns the first key in that neither its flags (their secret ones only when local)
 // nor its arguments declare, or "" when every key is declared.
 type keyChecker interface {
-	undeclared(in map[string]any, local localFlag) string
+	undeclared(in map[string]any, access flagAccess) string
 }
 
 // decodeInput is Decode, admitting a map input's secret flags when local.
-func decodeInput(operation interfaces.Operation, raw []byte, local bool) (any, error) {
+func decodeInput(
+	operation interfaces.Operation,
+	raw []byte,
+	access flagAccess,
+) (any, error) {
 	input := operation.NewInput()
 	trimmed := bytes.TrimSpace(raw)
 
@@ -187,14 +191,14 @@ func decodeInput(operation interfaces.Operation, raw []byte, local bool) (any, e
 		))
 	}
 
-	keyCheckerValue, checks := operation.(keyChecker)
+	currentKeyChecker, checks := operation.(keyChecker)
 	lookup, isMap := input.(*map[string]any)
 
 	if !checks || !isMap || lookup == nil {
 		return input, nil
 	}
 
-	if key := keyCheckerValue.undeclared(*lookup, localFlag(local)); key != "" {
+	if key := currentKeyChecker.undeclared(*lookup, access); key != "" {
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: unknown argument %q", name, key,
 		))

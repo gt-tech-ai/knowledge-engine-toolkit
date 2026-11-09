@@ -69,18 +69,40 @@ func expectCreate(ctrl *gomock.Controller, session *mocks.MockCQLSession, table 
 	query.EXPECT().Exec().Return(nil)
 }
 
-// repeatFlag names the repeat option in a signature.
-type repeatFlag bool
-
-// expectStatus expects one read of table's status from system_schema_mcs.tables
-// (any number of reads when repeat is set), answering status.
+// expectStatus expects one read of table's status from system_schema_mcs.tables,
+// answering status.
 func expectStatus(
 	tb testing.TB,
 	ctrl *gomock.Controller,
 	session *mocks.MockCQLSession,
 	table, status string,
-	repeat repeatFlag,
 ) *gomock.Call {
+	tb.Helper()
+
+	return statusCalls(tb, ctrl, session, table, status)[0]
+}
+
+// expectStatusRepeatedly is expectStatus for any number of reads.
+func expectStatusRepeatedly(
+	tb testing.TB,
+	ctrl *gomock.Controller,
+	session *mocks.MockCQLSession,
+	table, status string,
+) {
+	tb.Helper()
+
+	for _, c := range statusCalls(tb, ctrl, session, table, status) {
+		c.AnyTimes()
+	}
+}
+
+// statusCalls sets up the calls of one status read; the first is the Query.
+func statusCalls(
+	tb testing.TB,
+	ctrl *gomock.Controller,
+	session *mocks.MockCQLSession,
+	table, status string,
+) []*gomock.Call {
 	tb.Helper()
 
 	query := mocks.NewMockCQLQuery(ctrl)
@@ -92,7 +114,8 @@ func expectStatus(
 			return strings.Contains(s, "FROM system_schema_mcs.tables")
 		}), textAnalytics, table).
 		Return(query)
-	calls := []*gomock.Call{
+
+	return []*gomock.Call{
 		call,
 		query.EXPECT().WithContext(gomock.Any()).Return(query),
 		query.EXPECT().Idempotent(true).Return(query),
@@ -104,14 +127,6 @@ func expectStatus(
 		}),
 		iter.EXPECT().Close().Return(nil),
 	}
-
-	if repeat {
-		for _, c := range calls {
-			c.AnyTimes()
-		}
-	}
-
-	return call
 }
 
 // TestCassandraStore_EnsureSchemaCreatesEveryDeclaredTable tests that Start creates
@@ -162,10 +177,10 @@ func TestCassandraStore_EnsureSchemaWaitsForKeyspacesActive(t *testing.T) {
 	}
 
 	gomock.InOrder(
-		expectStatus(t, ctrl, session, textGenaiCallsDay, "CREATING", false),
-		expectStatus(t, ctrl, session, textGenaiCallsDay, textActive, false),
+		expectStatus(t, ctrl, session, textGenaiCallsDay, "CREATING"),
+		expectStatus(t, ctrl, session, textGenaiCallsDay, textActive),
 	)
-	expectStatus(t, ctrl, session, "genai_calls_hour", textActive, false)
+	expectStatus(t, ctrl, session, "genai_calls_hour", textActive)
 
 	require.NoError(t, store.Start(context.Background()))
 }
@@ -212,7 +227,7 @@ func TestNewFromConfig_EnsureSchemaAwaitsActiveOnKeyspaces(t *testing.T) {
 
 	for _, table := range schemaTables() {
 		expectCreate(ctrl, keyspaces, table)
-		expectStatus(t, ctrl, keyspaces, table, textActive, false)
+		expectStatus(t, ctrl, keyspaces, table, textActive)
 	}
 
 	require.NoError(t, build(keyspaces, cql.KindKeyspaces, true))
@@ -248,8 +263,13 @@ func TestCassandraStore_EnsureSchemaTimesOutUnavailable(t *testing.T) {
 		expectCreate(ctrl, session, table)
 	}
 
-	expectStatus(t, ctrl, session, textGenaiCallsDay, "CREATING", true)
+	expectStatusRepeatedly(t, ctrl, session, textGenaiCallsDay, "CREATING")
 
 	err := store.Start(context.Background())
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }
+
+const (
+	// textActive is the literal "ACTIVE".
+	textActive = "ACTIVE"
+)

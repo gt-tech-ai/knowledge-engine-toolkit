@@ -411,3 +411,8 @@ func TestWriteError_ConflictAppError(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &resp))
 	assert.Equal(t, "duplicate key", resp.Error)
 }
+
+const (
+	// textInternalServerError is the literal "internal server error".
+	textInternalServerError = "internal server error"
+)

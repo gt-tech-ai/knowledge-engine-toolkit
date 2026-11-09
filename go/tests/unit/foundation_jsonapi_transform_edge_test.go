@@ -46,17 +46,17 @@ func TestTransformError_BodyFallbacks(t *testing.T) {
 			require.True(t, ok)
 			require.Len(t, errs, 1)
 
-			lookup2 := asType[map[string]any](t, errs[0])
-			assert.Equal(t, testCase.wantCode, lookup2["code"])
-			assert.Equal(t, testCase.wantStatus, lookup2[textStatus])
+			statusByName := asType[map[string]any](t, errs[0])
+			assert.Equal(t, testCase.wantCode, statusByName["code"])
+			assert.Equal(t, testCase.wantStatus, statusByName[textStatus])
 
 			if testCase.wantDetail == "" {
-				assert.NotContains(t, lookup2, "detail")
+				assert.NotContains(t, statusByName, "detail")
 			} else {
-				assert.Equal(t, testCase.wantDetail, lookup2["detail"])
+				assert.Equal(t, testCase.wantDetail, statusByName["detail"])
 			}
 
-			assert.NotContains(t, lookup2, textTitle)
+			assert.NotContains(t, statusByName, textTitle)
 		})
 	}
 }
@@ -77,33 +77,33 @@ func testTransformErrorBodyFallbacksTable() []testTransformErrorBodyFallbacksRow
 	return []testTransformErrorBodyFallbacksRow{
 		{
 			name:       "uncurated status still stringifies",
-			status:     status418,
+			status:     statusTable,
 			wantCode:   textUnknown,
 			wantStatus: "418",
 		},
 		{
 			name:       "status with no http.StatusText still stringifies",
-			status:     status599,
+			status:     statusFallbacksTable,
 			wantCode:   textUnknown,
 			wantStatus: "599",
 		},
 		{
 			name:       "unparseable body keeps defaults",
-			status:     status400,
+			status:     statusBodyFallbacksTable,
 			body:       []byte(textNotStructured),
 			wantCode:   textUnknown,
 			wantStatus: text400,
 		},
 		{
 			name:       "body with empty message omits detail",
-			status:     status500,
+			status:     statusErrorBodyFallbacksTable,
 			body:       []byte(`{"code":"internal","message":""}`),
 			wantCode:   textInternal,
 			wantStatus: "500",
 		},
 		{
 			name:       "parsed body overrides code+detail",
-			status:     status404,
+			status:     statusTransformErrorBodyFallbacksTable,
 			body:       []byte(`{"code":"not_found","message":"gone"}`),
 			wantCode:   "not_found",
 			wantStatus: text404,
@@ -164,3 +164,21 @@ func TestTransformResource_Fallbacks(t *testing.T) {
 	assert.Equal(t, textUsers, data[textType])
 	assert.Equal(t, "1", data[textID])
 }
+
+const (
+	// statusBodyFallbacksTable is the status body fallbacks table the tests use.
+	statusBodyFallbacksTable = 400
+
+	// statusErrorBodyFallbacksTable is the status error body fallbacks table the tests use.
+	statusErrorBodyFallbacksTable = 500
+
+	// statusFallbacksTable is the status fallbacks table the tests use.
+	statusFallbacksTable = 599
+
+	// statusTable is the status table the tests use.
+	statusTable = 418
+
+	// statusTransformErrorBodyFallbacksTable is the status transform error body fallbacks
+	// table the tests use.
+	statusTransformErrorBodyFallbacksTable = 404
+)

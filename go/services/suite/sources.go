@@ -169,7 +169,7 @@ func guardEntry(guard interfaces.Guard, codebase interfaces.Codebase) Entry {
 					guard.Run(ctx, codebase),
 					entryMeta.Name,
 					entryMeta.Group,
-					strictFlag(env.Opts.Strict),
+					&env.Opts,
 				)
 
 				return types.StepResults{step}, nil
@@ -178,17 +178,14 @@ func guardEntry(guard interfaces.Guard, codebase interfaces.Codebase) Entry {
 	}
 }
 
-// strictFlag names the strict option in a signature.
-type strictFlag bool
-
 // guardStep turns a verdict into a step. Strict mode fails a skip unless it came from
 // the cache; a failure always carries an error text.
 func guardStep(
 	verdict types.Verdict,
 	name, group string,
-	strict strictFlag,
+	opts *types.RunOptions,
 ) types.StepResult {
-	if bool(strict) && verdict.Status == types.StatusSkip &&
+	if opts.Strict && verdict.Status == types.StatusSkip &&
 		verdict.Detail != types.CachedDetail {
 		verdict.Status = types.StatusFail
 	}

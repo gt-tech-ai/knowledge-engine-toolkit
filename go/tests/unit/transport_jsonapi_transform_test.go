@@ -45,10 +45,10 @@ func TestTransformSingleResource(t *testing.T) {
 
 		body := map[string]any{
 			textUser: map[string]any{
-				textID:        "123",
-				textEmail:     "test@example.com",
-				"displayName": "Test User",
-				textActive2:   true,
+				textID:          "123",
+				textEmail:       "test@example.com",
+				"displayName":   "Test User",
+				textActiveLower: true,
 			},
 		}
 
@@ -63,7 +63,7 @@ func TestTransformSingleResource(t *testing.T) {
 		require.True(t, found, "expected attributes")
 		assert.Equal(t, "test@example.com", attrs[textEmail])
 		assert.Equal(t, "Test User", attrs["displayName"])
-		assert.Equal(t, true, attrs[textActive2])
+		assert.Equal(t, true, attrs[textActiveLower])
 		assert.Nil(t, attrs[textID], "id must not appear in attributes")
 
 		links, found := result["links"].(map[string]any)
@@ -71,12 +71,11 @@ func TestTransformSingleResource(t *testing.T) {
 		assert.Equal(t, "/api/v1/demo/users/123", links["self"])
 	})
 
-	testTransformSingleResourceRest(t, cfg)
+	testTransformSingleResourceIDOnly(t, cfg)
 }
 
-// testTransformSingleResourceRest continues TestTransformSingleResource with its
-// remaining steps.
-func testTransformSingleResourceRest(t *testing.T, cfg codec.ResourceConfig) {
+// testTransformSingleResourceIDOnly continues TestTransformSingleResource: idonly.
+func testTransformSingleResourceIDOnly(t *testing.T, cfg codec.ResourceConfig) {
 	t.Helper()
 
 	t.Run("id-only resource still carries attributes", func(t *testing.T) {
@@ -181,11 +180,11 @@ func TestTransformCollection(t *testing.T) {
 		assert.False(t, hasEstimate, "an exact total must not advertise an estimate")
 	})
 
-	testTransformCollectionRest(t, cfg)
+	testTransformCollectionOverCap(t, cfg)
 }
 
-// testTransformCollectionRest continues TestTransformCollection with its remaining steps.
-func testTransformCollectionRest(t *testing.T, cfg codec.ResourceConfig) {
+// testTransformCollectionOverCap continues TestTransformCollection: over cap.
+func testTransformCollectionOverCap(t *testing.T, cfg codec.ResourceConfig) {
 	t.Helper()
 
 	t.Run("over-cap total forwards the estimate flag", func(t *testing.T) {
@@ -212,12 +211,11 @@ func testTransformCollectionRest(t *testing.T, cfg codec.ResourceConfig) {
 		)
 	})
 
-	testTransformCollectionRest2(t, cfg)
+	testTransformCollectionEmpty(t, cfg)
 }
 
-// testTransformCollectionRest2 continues testTransformCollectionRest with its remaining
-// steps.
-func testTransformCollectionRest2(t *testing.T, cfg codec.ResourceConfig) {
+// testTransformCollectionEmpty continues testTransformCollectionOverCap: empty.
+func testTransformCollectionEmpty(t *testing.T, cfg codec.ResourceConfig) {
 	t.Helper()
 
 	t.Run("empty collection", func(t *testing.T) {
@@ -318,11 +316,11 @@ func TestTransformError(t *testing.T) {
 		assert.Equal(t, "email is required", errObj["detail"])
 	})
 
-	testTransformErrorRest2(t)
+	testTransformErrorNumericCode(t)
 }
 
-// testTransformErrorRest2 continues TestTransformError with its remaining steps.
-func testTransformErrorRest2(t *testing.T) {
+// testTransformErrorNumericCode continues TestTransformError: numeric code.
+func testTransformErrorNumericCode(t *testing.T) {
 	t.Helper()
 
 	// The live path: Vanguard renders a transcoded Connect/gRPC error as a
@@ -350,11 +348,11 @@ func testTransformErrorRest2(t *testing.T) {
 		assert.Equal(t, "resource not found", errObj["detail"])
 	})
 
-	testTransformErrorRest(t)
+	testTransformErrorOutOfRange(t)
 }
 
-// testTransformErrorRest continues TestTransformError with its remaining steps.
-func testTransformErrorRest(t *testing.T) {
+// testTransformErrorOutOfRange continues TestTransformError: out of range.
+func testTransformErrorOutOfRange(t *testing.T) {
 	t.Helper()
 
 	// An out-of-range numeric code has no canonical name, so it keeps the "unknown"

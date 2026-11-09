@@ -43,7 +43,7 @@ func sizeViolations(t *testing.T, cb interfaces.Codebase, roots []string) []stri
 
 	files, err := cb.Go().Parse(t.Context(), &types.FileSelector{
 		Roots:   roots,
-		Exts:    []string{textGo3},
+		Exts:    []string{textGoExt},
 		Exclude: []string{"**/*_test.go"},
 	}, types.ParseComments)
 	require.NoError(t, err)
@@ -159,25 +159,25 @@ func TestCodeSizeBudget_FlagsAnOverBudgetFunction(t *testing.T) {
 
 	long := "func Long() {\n" + strings.Repeat(
 		"\t_ = 1\n",
-		count49,
+		repeatInputFunction,
 	) + textBraceCloseNewline
 	fits := "func Fits() {\n" + strings.Repeat(
 		"\t_ = 1\n",
-		count48,
+		repeatInputBudgetFunction,
 	) + textBraceCloseNewline
 	deep := "func Deep() {\n" + strings.Repeat(
 		"if true {\n",
-		count5,
+		repeatInputOverBudgetFunction,
 	) + strings.Repeat(
 		textBraceCloseNewline,
-		count5,
+		repeatInputOverBudgetFunction,
 	) + textBraceCloseNewline
 	four := "func Four() {\n" + strings.Repeat(
 		"if true {\n",
-		count4,
+		repeatInputAnOverBudgetFunction,
 	) + strings.Repeat(
 		textBraceCloseNewline,
-		count4,
+		repeatInputAnOverBudgetFunction,
 	) + textBraceCloseNewline
 	codebase, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
 		&clientcodebase.Deps{Files: map[string]string{
@@ -192,3 +192,18 @@ func TestCodeSizeBudget_FlagsAnOverBudgetFunction(t *testing.T) {
 		"budget/a.go: func Deep nests 5 deep (max 4)",
 	}, got)
 }
+
+const (
+	// repeatInputAnOverBudgetFunction is the repeat input an over budget function the
+	// tests use.
+	repeatInputAnOverBudgetFunction = 4
+
+	// repeatInputBudgetFunction is the repeat input budget function the tests use.
+	repeatInputBudgetFunction = 48
+
+	// repeatInputFunction is the repeat input function the tests use.
+	repeatInputFunction = 49
+
+	// repeatInputOverBudgetFunction is the repeat input over budget function the tests use.
+	repeatInputOverBudgetFunction = 5
+)

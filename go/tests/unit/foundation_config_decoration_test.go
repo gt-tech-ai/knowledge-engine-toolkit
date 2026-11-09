@@ -121,7 +121,7 @@ func TestLoadDecorationConfig_KeepsDottedComponentNames(t *testing.T) {
 	write := func(name, body string) {
 		require.NoError(
 			t,
-			os.WriteFile(filepath.Join(dir, name), []byte(body), perm0o600),
+			os.WriteFile(filepath.Join(dir, name), []byte(body), writeFileInput),
 		)
 	}
 	write(textBaseYaml, `decoration:
@@ -234,12 +234,18 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	assert.Nil(t, api.Bulkhead)
 	assert.Nil(t, api.RateLimiter)
 
-	testDecorationsBuildEachComponentsLayersFromConfigRest(t, collab, decs, deps, &svc)
+	testDecorationsBuildEachComponentsLayersFromConfigChecksOverrides(
+		t,
+		collab,
+		decs,
+		deps,
+		&svc,
+	)
 }
 
-// testDecorationsBuildEachComponentsLayersFromConfigRest continues
-// TestDecorations_BuildEachComponentsLayersFromConfig with its remaining steps.
-func testDecorationsBuildEachComponentsLayersFromConfigRest(
+// testDecorationsBuildEachComponentsLayersFromConfigChecksOverrides continues
+// TestDecorations_BuildEachComponentsLayersFromConfig: checks overrides.
+func testDecorationsBuildEachComponentsLayersFromConfigChecksOverrides(
 	t *testing.T,
 	collab decorate.Collaborators,
 	decs decorate.Decorations,
@@ -252,7 +258,7 @@ func testDecorationsBuildEachComponentsLayersFromConfigRest(
 	assert.NotNil(t, repo.Retrier)
 	assert.NotNil(t, repo.Breaker)
 
-	off, enabled, timeout := false, true, seconds2*time.Second
+	off, enabled, timeout := false, true, seconds*time.Second
 	cfg := decoration.DefaultConfig()
 
 	cfg.Services.Overrides = map[string]decoration.Layers{

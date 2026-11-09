@@ -28,9 +28,9 @@ func TestClientsToolchainCatalog_ProjectsManifestByCategory(t *testing.T) {
 
 	tools := []types.ToolEntry{
 		{
-			Name: "Go", Binary: textGo2, Category: types.CategoryPrerequisite,
+			Name: "Go", Binary: textGoLower, Category: types.CategoryPrerequisite,
 			Required: true, MinVersion: "1.26",
-			VersionCmd: []string{textGo2, textVersion}, VersionParse: "go-version",
+			VersionCmd: []string{textGoLower, textVersion}, VersionParse: "go-version",
 		},
 		{
 			Name: textBuf, Binary: textBuf, Category: types.CategoryRequired,
@@ -59,19 +59,19 @@ func TestClientsToolchainCatalog_ProjectsManifestByCategory(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, cat.Prerequisites(), 1)
-	assert.Equal(t, textGo2, cat.Prerequisites()[0].Binary)
+	assert.Equal(t, textGoLower, cat.Prerequisites()[0].Binary)
 	require.Len(t, cat.Required(), 1)
 	assert.Equal(t, textBuf, cat.Required()[0].Binary)
 	require.Len(t, cat.Optional(), 1)
 	assert.Equal(t, textGrpcurl, cat.Optional()[0].Binary)
 
 	// All() concatenates prereq + required + optional; ruff (registry-only) is out.
-	require.Len(t, cat.All(), wantAllLen3)
+	require.Len(t, cat.All(), wantAllLen)
 
 	// Find resolves a lifecycle spec across categories, with its projected method.
 	buf, found := cat.Find(textBuf)
 	require.True(t, found)
-	assert.Equal(t, textGo2, buf.InstallMethods[textAll].Command)
+	assert.Equal(t, textGoLower, buf.InstallMethods[textAll].Command)
 
 	_, found = cat.Find(textRuff)
 	assert.False(t, found, "registry-only tool is not a lifecycle spec")

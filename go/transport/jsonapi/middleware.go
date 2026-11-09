@@ -86,20 +86,20 @@ func serveRoute(
 	// body we can parse and transform.
 	request.Header.Del("Accept-Encoding")
 
-	captureWriterValue := &captureWriter{w: writer, status: http.StatusOK}
-	inner.ServeHTTP(captureWriterValue, request)
+	currentCaptureWriter := &captureWriter{w: writer, status: http.StatusOK}
+	inner.ServeHTTP(currentCaptureWriter, request)
 
 	// Error responses (4xx/5xx) — includes a handler-side protovalidate 400.
-	if captureWriterValue.status >= http.StatusBadRequest {
+	if currentCaptureWriter.status >= http.StatusBadRequest {
 		status := reclassifyBindingError(
-			captureWriterValue.status,
-			captureWriterValue.body.Bytes(),
+			currentCaptureWriter.status,
+			currentCaptureWriter.body.Bytes(),
 		)
 
 		writeJSONAPI(
 			writer,
 			status,
-			codec.TransformError(status, captureWriterValue.body.Bytes()),
+			codec.TransformError(status, currentCaptureWriter.body.Bytes()),
 		)
 
 		return
@@ -112,7 +112,7 @@ func serveRoute(
 		return
 	}
 
-	writeResource(writer, captureWriterValue, route, selfLink)
+	writeResource(writer, currentCaptureWriter, route, selfLink)
 }
 
 // unwrapRequest validates a write op's envelope (CREATE/UPDATE). A malformed, absent, or
@@ -172,21 +172,21 @@ func passThrough(w http.ResponseWriter, cw *captureWriter) {
 // that does not round-trip as JSON, passes through unchanged.
 func writeResource(
 	writer http.ResponseWriter,
-	captureWriterValue *captureWriter,
+	currentCaptureWriter *captureWriter,
 	route *codec.RouteEntry,
 	selfLink string,
 ) {
-	if captureWriterValue.body.Len() > maxBodySize {
-		passThrough(writer, captureWriterValue)
+	if currentCaptureWriter.body.Len() > maxBodySize {
+		passThrough(writer, currentCaptureWriter)
 
 		return
 	}
 
 	var parsed map[string]any
 
-	err := json.Unmarshal(captureWriterValue.body.Bytes(), &parsed)
+	err := json.Unmarshal(currentCaptureWriter.body.Bytes(), &parsed)
 	if err != nil {
-		passThrough(writer, captureWriterValue)
+		passThrough(writer, currentCaptureWriter)
 
 		return
 	}
@@ -199,7 +199,7 @@ func writeResource(
 
 	out, err := json.Marshal(result)
 	if err != nil {
-		passThrough(writer, captureWriterValue)
+		passThrough(writer, currentCaptureWriter)
 
 		return
 	}

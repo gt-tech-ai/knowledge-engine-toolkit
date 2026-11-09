@@ -20,10 +20,39 @@ import (
 //     "doc-2" mod 8 = 6; fewer than two partitions always give 0
 func TestOutboxPartition_IsFnv32aModPartitions(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, 1, types.OutboxPartition("", partitions4))
-	assert.Equal(t, wantOutboxPartition4, types.OutboxPartition(textA, partitions8))
-	assert.Equal(t, wantOutboxPartition3, types.OutboxPartition(textDoc1, partitions4))
-	assert.Equal(t, wantOutboxPartition6, types.OutboxPartition("doc-2", partitions8))
+	assert.Equal(t, 1, types.OutboxPartition("", outboxPartitionInput))
+	assert.Equal(
+		t,
+		wantOutboxPartition,
+		types.OutboxPartition(textA, outboxPartitionInputPartitions),
+	)
+	assert.Equal(
+		t,
+		wantOutboxPartitionPartitions,
+		types.OutboxPartition(textDoc1, outboxPartitionInput),
+	)
+	assert.Equal(
+		t,
+		wantOutboxPartitionModPartitions,
+		types.OutboxPartition("doc-2", outboxPartitionInputPartitions),
+	)
 	assert.Equal(t, 0, types.OutboxPartition(textDoc1, 1))
 	assert.Equal(t, 0, types.OutboxPartition(textDoc1, 0))
 }
+
+const (
+	// outboxPartitionInput is the outbox partition input the tests use.
+	outboxPartitionInput = 4
+
+	// outboxPartitionInputPartitions is the outbox partition input partitions the tests use.
+	outboxPartitionInputPartitions = 8
+
+	// wantOutboxPartition is the expected outbox partition.
+	wantOutboxPartition = 4
+
+	// wantOutboxPartitionModPartitions is the expected outbox partition mod partitions.
+	wantOutboxPartitionModPartitions = 6
+
+	// wantOutboxPartitionPartitions is the expected outbox partition partitions.
+	wantOutboxPartitionPartitions = 3
+)

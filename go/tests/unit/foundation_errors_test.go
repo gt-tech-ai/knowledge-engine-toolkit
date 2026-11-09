@@ -38,8 +38,12 @@ func TestErrorClassification(t *testing.T) {
 		apperr.IsPermanent(notFoundErr),
 		"not-found error should be permanent",
 	)
-	assert.Equal(t, wantToHTTPStatus404, apperr.ToHTTPStatus(apperr.CodeNotFound))
-	assert.Equal(t, wantToHTTPStatus401, apperr.ToHTTPStatus(apperr.CodeUnauthorized))
+	assert.Equal(t, wantToHTTPStatus, apperr.ToHTTPStatus(apperr.CodeNotFound))
+	assert.Equal(
+		t,
+		wantToHTTPStatusClassification,
+		apperr.ToHTTPStatus(apperr.CodeUnauthorized),
+	)
 }
 
 // TestDBErrorMapping tests that PostgreSQL error codes are correctly mapped to
@@ -146,3 +150,11 @@ func testDBErrorMappingTable() []testDBErrorMappingRow {
 		},
 	}
 }
+
+const (
+	// wantToHTTPStatus is the expected to httpstatus.
+	wantToHTTPStatus = 404
+
+	// wantToHTTPStatusClassification is the expected to httpstatus classification.
+	wantToHTTPStatusClassification = 401
+)

@@ -32,7 +32,7 @@ func TestDatabaseConfig_Defaults(t *testing.T) {
 
 	cfg := infra.DefaultDatabaseConfig()
 	assert.Equal(t, "localhost", cfg.Host)
-	assert.Equal(t, wantPort5432, cfg.Port)
+	assert.Equal(t, wantPortConfigDefaults, cfg.Port)
 	assert.Equal(t, textApp, cfg.User)
 	assert.Equal(t, textDevPassword, cfg.Password)
 	assert.Equal(t, "knowledge_engine", cfg.Database)
@@ -71,7 +71,7 @@ func TestDatabaseConfig_DSN(t *testing.T) {
 			name: "custom config with sslmode=require",
 			cfg: infra.DatabaseConfig{
 				Host:     "prod-db.example.com",
-				Port:     port5432,
+				Port:     portDSN,
 				User:     "prod_user",
 				Password: "prod_pass",
 				Database: "prod_db",
@@ -173,9 +173,9 @@ func dsnHosts() []string {
 //     parsed by pgx.ParseConfig (the driver's own parser) yields the configured user,
 //     password, database and port, and the host without brackets.
 func FuzzDatabaseConfig_DSNRoundTrip(f *testing.F) {
-	f.Add(textSvc, "p@ss:w/rd?x#y%z[0] ", textApp, uint8(uint8Arg2))
-	f.Add(textSvcAcct, "pw", "my db/x?y#z%", uint8(uint8Arg3))
-	f.Add(textU, "", textD2, uint8(uint8Arg5))
+	f.Add(textSvc, "p@ss:w/rd?x#y%z[0] ", textApp, uint8(uint8Input))
+	f.Add(textSvcAcct, "pw", "my db/x?y#z%", uint8(uint8InputTrip))
+	f.Add(textU, "", textDLower, uint8(uint8InputDSNRoundTrip))
 
 	f.Fuzz(func(t *testing.T, user, password, database string, hostIdx uint8) {
 		if user == "" || database == "" {
@@ -230,7 +230,7 @@ func TestDatabaseConfig_Validate(t *testing.T) {
 			name: "empty host",
 			cfg: infra.DatabaseConfig{
 				Host:     "",
-				Port:     port5432,
+				Port:     portValidate,
 				User:     textApp,
 				Password: textDevPassword,
 				Database: "knowledge_engine",
@@ -268,7 +268,7 @@ func TestRedisConfig_Defaults(t *testing.T) {
 
 	cfg := infra.DefaultRedisConfig()
 	assert.Equal(t, "localhost", cfg.Host)
-	assert.Equal(t, wantPort6379, cfg.Port)
+	assert.Equal(t, wantPortRedisConfigDefaults, cfg.Port)
 	assert.Equal(t, 0, cfg.DB)
 }
 
@@ -298,7 +298,7 @@ func TestRedisConfig_Addr(t *testing.T) {
 			name: "custom config",
 			cfg: infra.RedisConfig{
 				Host: "redis.example.com",
-				Port: port6380,
+				Port: portAddr,
 			},
 			want: "redis.example.com:6380",
 		},
@@ -355,7 +355,7 @@ func TestServerConfig_Validate(t *testing.T) {
 			name: "valid config",
 			cfg: infra.ServerConfig{
 				Host: text0000,
-				Port: port8090,
+				Port: portConfigValidate,
 			},
 			wantErr: false,
 		},
@@ -464,9 +464,9 @@ func TestObservabilityConfig_Defaults(t *testing.T) {
 	cfg := infra.DefaultObservabilityConfig()
 	assert.True(t, cfg.Tracing.Enabled, "Tracing.Enabled must default to true")
 	assert.Equal(t, textLocalhost4317, cfg.Tracing.Endpoint)
-	assert.InDelta(t, wantSampleRate0p1, cfg.Tracing.SampleRate, 0)
+	assert.InDelta(t, wantSampleRate, cfg.Tracing.SampleRate, 0)
 	assert.True(t, cfg.Metrics.Enabled, "Metrics.Enabled must default to true")
-	assert.Equal(t, wantPort9090, cfg.Metrics.Port)
+	assert.Equal(t, wantPortObservabilityConfigDefaults, cfg.Metrics.Port)
 }
 
 // ---------------------------------------------------------------------------
@@ -795,7 +795,7 @@ func TestS3Config_Validate_MultipartExpiry(t *testing.T) {
 	base := infra.S3Config{
 		Kind:          "s3",
 		Bucket:        textB,
-		PresignExpiry: minutes15 * time.Minute,
+		PresignExpiry: presignExpiry * time.Minute,
 	}
 
 	tooShort := base
@@ -835,3 +835,53 @@ func TestSQSConfig_Validate(t *testing.T) {
 	cfg := infra.DefaultSQSConfig()
 	require.NoError(t, cfg.Validate())
 }
+
+const (
+	// portAddr is the port addr the tests use.
+	portAddr = 6380
+
+	// portConfigValidate is the port config validate the tests use.
+	portConfigValidate = 8090
+
+	// portDSN is the port dsn the tests use.
+	portDSN = 5432
+
+	// portValidate is the port validate the tests use.
+	portValidate = 5432
+
+	// presignExpiry is the presign expiry the tests use.
+	presignExpiry = 15
+
+	// uint8Input is the uint8 input the tests use.
+	uint8Input = 2
+
+	// uint8InputDSNRoundTrip is the uint8 input dsnround trip the tests use.
+	uint8InputDSNRoundTrip = 5
+
+	// uint8InputTrip is the uint8 input trip the tests use.
+	uint8InputTrip = 3
+
+	// wantPortConfigDefaults is the expected port config defaults.
+	wantPortConfigDefaults = 5432
+
+	// wantPortObservabilityConfigDefaults is the expected port observability config
+	// defaults.
+	wantPortObservabilityConfigDefaults = 9090
+
+	// wantPortRedisConfigDefaults is the expected port redis config defaults.
+	wantPortRedisConfigDefaults = 6379
+
+	// wantSampleRate is the expected sample rate.
+	wantSampleRate = 0.1
+)
+
+const (
+	// textHTTPSAPIDevExample is the literal "https://api.dev.example.com".
+	textHTTPSAPIDevExample = "https://api.dev.example.com"
+
+	// textHTTPSIdpExampleCom is the literal "https://idp.example.com/".
+	textHTTPSIdpExampleCom = "https://idp.example.com/"
+
+	// textSvcAcct is the literal "svc@acct".
+	textSvcAcct = "svc@acct"
+)

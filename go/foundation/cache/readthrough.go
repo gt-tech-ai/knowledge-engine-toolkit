@@ -69,10 +69,10 @@ func ReadThrough[T any](
 	load func() (T, error),
 	opts ...ReadThroughOption[T],
 ) (T, error) {
-	var readThroughOptionsValue readThroughOptions[T]
+	var currentReadThroughOptions readThroughOptions[T]
 
 	for _, opt := range opts {
-		opt(&readThroughOptionsValue)
+		opt(&currentReadThroughOptions)
 	}
 
 	var zero T
@@ -100,7 +100,7 @@ func ReadThrough[T any](
 			ttl,
 			version,
 			result,
-			readThroughOptionsValue.cacheable,
+			currentReadThroughOptions.cacheable,
 		)
 
 		return result, nil

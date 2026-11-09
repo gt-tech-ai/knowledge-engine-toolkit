@@ -36,13 +36,18 @@ func TestGateRunLocal_RunsLocalJobs(t *testing.T) {
 			return types.StepResults{{Name: name, Status: types.StatusPass}}, nil
 		}
 	}
-	gateValue := gate.New("Seed").
+	currentGate := gate.New("Seed").
 		Serial(
-			textPhase2,
-			(&job.Base{}).Local(textA, textPhase2, local(textA)),
-			(&job.Base{}).Local(textB, textPhase2, local(textB)),
+			textPhaseTitle,
+			(&job.Base{}).Local(textA, textPhaseTitle, local(textA)),
+			(&job.Base{}).Local(textB, textPhaseTitle, local(textB)),
 		)
 
-	require.NoError(t, gateValue.RunLocal(context.Background()))
+	require.NoError(t, currentGate.RunLocal(context.Background()))
 	assert.Equal(t, []string{textA, textB}, ran)
 }
+
+const (
+	// textPhaseTitle is the literal "Phase".
+	textPhaseTitle = "Phase"
+)

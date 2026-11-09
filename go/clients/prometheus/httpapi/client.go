@@ -326,7 +326,7 @@ func parseSample(pair [samplePairLen]json.RawMessage) (Sample, error) {
 		)
 	}
 
-	amountValue, err := strconv.ParseFloat(raw, bitSize64)
+	currentAmount, err := strconv.ParseFloat(raw, bitSize64)
 	if err != nil {
 		return Sample{}, apperr.Wrap(
 			err,
@@ -335,7 +335,7 @@ func parseSample(pair [samplePairLen]json.RawMessage) (Sample, error) {
 		)
 	}
 
-	if math.IsNaN(amountValue) || math.IsInf(amountValue, 0) {
+	if math.IsNaN(currentAmount) || math.IsInf(currentAmount, 0) {
 		return Sample{}, apperr.New(
 			apperr.CodeNotFound,
 			"query returned "+raw+" (no data)",
@@ -346,6 +346,6 @@ func parseSample(pair [samplePairLen]json.RawMessage) (Sample, error) {
 
 	return Sample{
 		Time:  time.Unix(int64(sec), int64(frac*nanosPerSecond)).UTC(),
-		Value: amountValue,
+		Value: currentAmount,
 	}, nil
 }

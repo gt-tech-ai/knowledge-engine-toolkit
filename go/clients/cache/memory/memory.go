@@ -80,8 +80,8 @@ func (c *Cache) Get(_ context.Context, key string) ([]byte, bool) {
 		return nil, false
 	}
 
-	entryValue := stdx.As[*entry](element.Value)
-	if !c.now().Before(entryValue.expires) {
+	currentEntry := stdx.As[*entry](element.Value)
+	if !c.now().Before(currentEntry.expires) {
 		c.remove(element)
 
 		return nil, false
@@ -89,7 +89,7 @@ func (c *Cache) Get(_ context.Context, key string) ([]byte, bool) {
 
 	c.order.MoveToFront(element)
 
-	return append([]byte(nil), entryValue.value...), true
+	return append([]byte(nil), currentEntry.value...), true
 }
 
 // Set stores a copy of value under key for ttl (the default TTL when zero), evicting
@@ -104,7 +104,7 @@ func (c *Cache) Set(_ context.Context, key string, value []byte, ttl time.Durati
 		return
 	}
 
-	entryValue := &entry{
+	currentEntry := &entry{
 		key:     key,
 		value:   append([]byte(nil), value...),
 		expires: c.now().Add(ttl),
@@ -113,13 +113,13 @@ func (c *Cache) Set(_ context.Context, key string, value []byte, ttl time.Durati
 	defer c.mu.Unlock()
 
 	if el, ok := c.items[key]; ok {
-		el.Value = entryValue
+		el.Value = currentEntry
 		c.order.MoveToFront(el)
 
 		return
 	}
 
-	c.items[key] = c.order.PushFront(entryValue)
+	c.items[key] = c.order.PushFront(currentEntry)
 	for c.order.Len() > c.max {
 		c.remove(c.order.Back())
 	}

@@ -75,12 +75,12 @@ func TestStorageClient_MultipartSurface(t *testing.T) {
 		assert.Equal(t, "tenant/doc/file.pdf", aws.ToString(got.Key))
 	})
 
-	testStorageClientMultipartSurfaceRest3(t)
+	testStorageClientMultipartSurfaceCompletesOrdered(t)
 }
 
-// testStorageClientMultipartSurfaceRest3 continues TestStorageClient_MultipartSurface
-// with its remaining steps.
-func testStorageClientMultipartSurfaceRest3(t *testing.T) {
+// testStorageClientMultipartSurfaceCompletesOrdered continues
+// TestStorageClient_MultipartSurface: completes ordered.
+func testStorageClientMultipartSurfaceCompletesOrdered(t *testing.T) {
 	t.Helper()
 
 	t.Run("complete forwards ordered parts", func(t *testing.T) {
@@ -124,12 +124,12 @@ func testStorageClientMultipartSurfaceRest3(t *testing.T) {
 		assert.Equal(t, `"etag-2"`, aws.ToString(got.MultipartUpload.Parts[1].ETag))
 	})
 
-	testStorageClientMultipartSurfaceRest2(t)
+	testStorageClientMultipartSurfaceCompletesSorted(t)
 }
 
-// testStorageClientMultipartSurfaceRest2 continues TestStorageClient_MultipartSurface
-// with its remaining steps.
-func testStorageClientMultipartSurfaceRest2(t *testing.T) {
+// testStorageClientMultipartSurfaceCompletesSorted continues
+// TestStorageClient_MultipartSurface: completes sorted.
+func testStorageClientMultipartSurfaceCompletesSorted(t *testing.T) {
 	t.Helper()
 
 	t.Run("complete sorts out-of-order parts", func(t *testing.T) {
@@ -173,12 +173,12 @@ func testStorageClientMultipartSurfaceRest2(t *testing.T) {
 		assert.Equal(t, `"e3"`, aws.ToString(got.MultipartUpload.Parts[2].ETag))
 	})
 
-	testStorageClientMultipartSurfaceRest(t)
+	testStorageClientMultipartSurfaceAbortsAndLists(t)
 }
 
-// testStorageClientMultipartSurfaceRest continues TestStorageClient_MultipartSurface
-// with its remaining steps.
-func testStorageClientMultipartSurfaceRest(t *testing.T) {
+// testStorageClientMultipartSurfaceAbortsAndLists continues
+// TestStorageClient_MultipartSurface: aborts and lists.
+func testStorageClientMultipartSurfaceAbortsAndLists(t *testing.T) {
 	t.Helper()
 
 	t.Run("abort targets upload id", func(t *testing.T) {
@@ -235,12 +235,12 @@ func testStorageClientMultipartSurfaceRest(t *testing.T) {
 		assert.Equal(t, initiated.Format(time.RFC3339), ups[0].Initiated)
 	})
 
-	testStorageClientMultipartSurfaceRest4(t)
+	testStorageClientMultipartSurfaceSurfacesErrors(t)
 }
 
-// testStorageClientMultipartSurfaceRest4 continues testStorageClientMultipartSurfaceRest
-// with its remaining steps.
-func testStorageClientMultipartSurfaceRest4(t *testing.T) {
+// testStorageClientMultipartSurfaceSurfacesErrors continues
+// testStorageClientMultipartSurfaceAbortsAndLists: surfaces errors.
+func testStorageClientMultipartSurfaceSurfacesErrors(t *testing.T) {
 	t.Helper()
 
 	// An S3 control-plane failure must surface to the caller (wrapped, errors.Is-able),
@@ -255,7 +255,7 @@ func testStorageClientMultipartSurfaceRest4(t *testing.T) {
 }
 
 // testStorageClientMultipartSurfaceCase is the body of a closure in
-// testStorageClientMultipartSurfaceRest4.
+// testStorageClientMultipartSurfaceSurfacesErrors.
 func testStorageClientMultipartSurfaceCase(t *testing.T) {
 	t.Helper()
 
@@ -297,12 +297,12 @@ func testStorageClientMultipartSurfaceCase(t *testing.T) {
 		require.ErrorIs(t, err, apiErr)
 	})
 
-	testStorageClientMultipartSurfaceRest5(t, apiErr)
+	testStorageClientMultipartSurfaceErrorCases(t, apiErr)
 }
 
-// testStorageClientMultipartSurfaceRest5 continues testStorageClientMultipartSurfaceCase
-// with its remaining steps.
-func testStorageClientMultipartSurfaceRest5(t *testing.T, apiErr error) {
+// testStorageClientMultipartSurfaceErrorCases continues
+// testStorageClientMultipartSurfaceCase: error cases.
+func testStorageClientMultipartSurfaceErrorCases(t *testing.T, apiErr error) {
 	t.Helper()
 
 	t.Run("abort", func(t *testing.T) {

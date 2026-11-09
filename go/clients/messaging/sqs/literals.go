@@ -1,6 +1,6 @@
 package sqs
 
 const (
-	// backoff2 is the backoff value 2.
-	backoff2 = 2
+	// backoffMultiplier is the named value used where backoff multiplier applies.
+	backoffMultiplier = 2
 )

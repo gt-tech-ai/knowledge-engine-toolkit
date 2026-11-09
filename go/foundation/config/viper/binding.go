@@ -45,7 +45,7 @@ func checkSchema(schema any) error {
 // alias is a tag, not a code edit. Leaves whose path is a key of skip are left
 // unbound (the caller binds them itself). cfg must pass checkSchema.
 func deriveEnvBindings(
-	viperValue *viper.Viper,
+	currentViper *viper.Viper,
 	cfg any,
 	envPrefix string,
 	skip map[string][]string,
@@ -55,7 +55,7 @@ func deriveEnvBindings(
 		skipped[strings.ToLower(key)] = true
 	}
 
-	walkEnvBindings(viperValue, reflect.TypeOf(cfg), "", envPrefix, skipped)
+	walkEnvBindings(currentViper, reflect.TypeOf(cfg), "", envPrefix, skipped)
 }
 
 // walkEnvBindings recurses t's struct fields, accumulating the mapstructure
@@ -63,28 +63,28 @@ func deriveEnvBindings(
 // struct recurses without adding a path segment; scalars (including time.Duration,
 // whose Kind is Int64) are leaves.
 func walkEnvBindings(
-	viperValue *viper.Viper,
-	typeValue reflect.Type,
+	currentViper *viper.Viper,
+	kind reflect.Type,
 	prefix, envPrefix string,
 	skipped map[string]bool,
 ) {
-	if typeValue.Kind() == reflect.Pointer {
-		typeValue = typeValue.Elem()
+	if kind.Kind() == reflect.Pointer {
+		kind = kind.Elem()
 	}
 
-	if typeValue.Kind() != reflect.Struct {
+	if kind.Kind() != reflect.Struct {
 		return
 	}
 
-	for f := range typeValue.Fields() {
-		bindField(viperValue, &f, prefix, envPrefix, skipped)
+	for f := range kind.Fields() {
+		bindField(currentViper, &f, prefix, envPrefix, skipped)
 	}
 }
 
 // bindField binds one field: a squashed struct at this level, a nested struct under its
 // own path, and a leaf unless its path is skipped.
 func bindField(
-	viperValue *viper.Viper,
+	currentViper *viper.Viper,
 	structField *reflect.StructField,
 	prefix, envPrefix string,
 	skipped map[string]bool,
@@ -94,13 +94,13 @@ func bindField(
 		return
 	}
 
-	typeValue := structField.Type
-	if typeValue.Kind() == reflect.Pointer {
-		typeValue = typeValue.Elem()
+	kind := structField.Type
+	if kind.Kind() == reflect.Pointer {
+		kind = kind.Elem()
 	}
 
-	if squash && typeValue.Kind() == reflect.Struct {
-		walkEnvBindings(viperValue, typeValue, prefix, envPrefix, skipped)
+	if squash && kind.Kind() == reflect.Struct {
+		walkEnvBindings(currentViper, kind, prefix, envPrefix, skipped)
 
 		return
 	}
@@ -110,14 +110,14 @@ func bindField(
 		path = prefix + textDot + path
 	}
 
-	if typeValue.Kind() == reflect.Struct {
-		walkEnvBindings(viperValue, typeValue, path, envPrefix, skipped)
+	if kind.Kind() == reflect.Struct {
+		walkEnvBindings(currentViper, kind, path, envPrefix, skipped)
 
 		return
 	}
 
 	if !skipped[path] {
-		bindLeaf(viperValue, path, envPrefix, structField.Tag.Get("envalias"))
+		bindLeaf(currentViper, path, envPrefix, structField.Tag.Get("envalias"))
 	}
 }
 
@@ -156,7 +156,7 @@ func fieldKey(structField *reflect.StructField) (name string, squash, ok bool) {
 // bindLeaf binds path to the canonical <envPrefix>_<PATH> env var plus the
 // comma-separated aliases. Passing explicit names disables Viper's auto-prefix for
 // the binding, so the prefixed name is listed explicitly.
-func bindLeaf(viperValue *viper.Viper, path, envPrefix, aliases string) {
+func bindLeaf(currentViper *viper.Viper, path, envPrefix, aliases string) {
 	envName := strings.ToUpper(envReplacer().Replace(path))
 	if envPrefix != "" {
 		envName = strings.ToUpper(envPrefix) + textUnderscore + envName
@@ -167,5 +167,5 @@ func bindLeaf(viperValue *viper.Viper, path, envPrefix, aliases string) {
 		names = append(names, strings.Split(aliases, textComma)...)
 	}
 
-	_ = viperValue.BindEnv(names...)
+	_ = currentViper.BindEnv(names...)
 }

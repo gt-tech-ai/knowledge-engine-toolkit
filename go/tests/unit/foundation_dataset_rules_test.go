@@ -16,7 +16,7 @@ import (
 func rulesData(t *testing.T) *dataset.Dataset {
 	t.Helper()
 
-	datasetValue, err := dataset.Load(fstest.MapFS{
+	currentDataset, err := dataset.Load(fstest.MapFS{
 		"data/ci.yaml": {Data: []byte(
 			"ci:\n  must_succeed: [build, test, build]\n  max_chars: 70000\n",
 		)},
@@ -26,7 +26,7 @@ func rulesData(t *testing.T) *dataset.Dataset {
 	}, textData)
 	require.NoError(t, err)
 
-	return datasetValue
+	return currentDataset
 }
 
 // TestFoundationDataset_Check tests the CEL rules a front-end runs over its merged data.
@@ -48,16 +48,16 @@ func rulesData(t *testing.T) *dataset.Dataset {
 func TestFoundationDataset_Check(t *testing.T) {
 	t.Parallel()
 
-	datasetValue := rulesData(t)
+	currentDataset := rulesData(t)
 
-	require.NoError(t, datasetValue.Check(nil))
-	require.NoError(t, datasetValue.Check([]dataset.Rule{
+	require.NoError(t, currentDataset.Check(nil))
+	require.NoError(t, currentDataset.Check([]dataset.Rule{
 		{Name: "listed", Expr: "size(ci.must_succeed) > 0", Message: "list the jobs"},
 		{Name: "whole", Expr: "data.ci.max_chars > 0", Message: "positive"},
 		{Name: textNone, Expr: "procedures.filter(p, p.name == 'x').map(p, p.name)"},
 	}))
 
-	err := datasetValue.Check([]dataset.Rule{
+	err := currentDataset.Check([]dataset.Rule{
 		{
 			Name:    "distinct",
 			Expr:    "ci.must_succeed.distinct().size() == ci.must_succeed.size()",
@@ -88,7 +88,7 @@ func TestFoundationDataset_Check(t *testing.T) {
 		"wrong type":   "'a string'",
 		"mixed list":   "[1, 'a']",
 	} {
-		err := datasetValue.Check([]dataset.Rule{{Name: name, Expr: expr}})
+		err := currentDataset.Check([]dataset.Rule{{Name: name, Expr: expr}})
 		require.Errorf(t, err, "%s must fail", name)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 		assert.Contains(t, err.Error(), name)
@@ -109,20 +109,20 @@ func TestFoundationDataset_Check(t *testing.T) {
 func TestFoundationDataset_Validate(t *testing.T) {
 	t.Parallel()
 
-	datasetValue := rulesData(t)
+	currentDataset := rulesData(t)
 
 	ok := []byte(`{"type": "object", "properties": {"ci": {"type": "object",
 		"properties": {"max_chars": {"type": "integer", "minimum": 1}}}}}`)
-	require.NoError(t, datasetValue.Validate(ok))
+	require.NoError(t, currentDataset.Validate(ok))
 
 	bad := []byte(`{"type": "object", "properties": {"ci": {"type": "object",
 		"properties": {"max_chars": {"type": "integer", "maximum": 65536}}}}}`)
-	err := datasetValue.Validate(bad)
+	err := currentDataset.Validate(bad)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "/ci/max_chars")
 
-	err = datasetValue.Validate([]byte(`{"type": 12}`))
+	err = currentDataset.Validate([]byte(`{"type": 12}`))
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
@@ -145,23 +145,28 @@ func TestFoundationDataset_FromValue(t *testing.T) {
 		MustSucceed []string `yaml:"must_succeed"`
 	}
 
-	datasetValue, err := dataset.FromValue("inline", struct {
+	currentDataset, err := dataset.FromValue("inline", struct {
 		CI ci `yaml:"ci"`
 	}{CI: ci{MustSucceed: []string{textA, textA}}})
 	require.NoError(t, err)
 
-	jobs, err := datasetValue.Section[map[string][]string]("ci")
+	jobs, err := currentDataset.Section[map[string][]string]("ci")
 	require.NoError(t, err)
 	assert.Equal(t, []string{textA, textA}, jobs["must_succeed"])
 
-	err = datasetValue.Check([]dataset.Rule{{
+	err = currentDataset.Check([]dataset.Rule{{
 		Name: "distinct", Expr: "ci.must_succeed.distinct() == ci.must_succeed",
 		Message: "duplicate job",
 	}})
 	require.ErrorContains(t, err, "distinct: duplicate job")
 
-	_, err = dataset.FromValue(textScalar, fromValueArg3)
+	_, err = dataset.FromValue(textScalar, fromValueInput)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), textScalar)
 }
+
+const (
+	// fromValueInput is the from value input the tests use.
+	fromValueInput = 3
+)

@@ -88,7 +88,7 @@ func TestDecorateExec_ReturnsResultUnmodifiedOnError(t *testing.T) {
 	got, err := decorate.Exec(context.Background(), decorate.Chain(), "X",
 		func(context.Context) (int, error) { return 42, want })
 	require.ErrorIs(t, err, want)
-	assert.Equal(t, wantGot42, got, "Exec must not zero the result on error")
+	assert.Equal(t, wantGot, got, "Exec must not zero the result on error")
 }
 
 // TestDecorateChain_OutermostFirst tests that Chain composes middlewares
@@ -187,8 +187,8 @@ func TestMetricsMW_RecordsCountAndError(t *testing.T) {
 
 	opMiddleware := decorate.NewMetrics(metrics, textRepository, textDocuments)
 
-	ops.EXPECT().Inc(textDocuments, textUpdatestatus).Times(timesArg2)
-	dur.EXPECT().Observe(gomock.Any(), textDocuments, textUpdatestatus).Times(timesArg2)
+	ops.EXPECT().Inc(textDocuments, textUpdatestatus).Times(wantCalls)
+	dur.EXPECT().Observe(gomock.Any(), textDocuments, textUpdatestatus).Times(wantCalls)
 	errs.EXPECT().Inc(textDocuments, textUpdatestatus).Times(1) // only the failing call
 
 	_, err := decorate.Exec(context.Background(), opMiddleware, textUpdatestatus,
@@ -235,7 +235,7 @@ func TestLoggingMW_LogsOnEntryAndFailure(t *testing.T) {
 	assert.Len(
 		t,
 		*spy.ChildDebugCalls,
-		wantChildDebugCallsLen2,
+		wantChildDebugCallsLen,
 		"entry + failure Debug lines on the context logger",
 	)
 }
@@ -360,7 +360,7 @@ func TestCircuitBreakerMW_ShortCircuitsWhenOpen(t *testing.T) {
 	_, err := decorate.Exec(
 		context.Background(),
 		decorate.NewCircuitBreaker(circuitBreaker),
-		textGet2,
+		textGetTitle,
 		func(context.Context) (struct{}, error) {
 			ran = true
 
@@ -465,7 +465,7 @@ func TestTierChain_AppliesTheTiersLayersInOrderAndSkipsMissingOnes(t *testing.T)
 	span.EXPECT().SetAttribute(gomock.Any(), gomock.Any()).AnyTimes()
 	span.EXPECT().End()
 
-	testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest5(
+	testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesExpectsLayers(
 		t,
 		ctrl,
 		calls,
@@ -474,10 +474,9 @@ func TestTierChain_AppliesTheTiersLayersInOrderAndSkipsMissingOnes(t *testing.T)
 	)
 }
 
-// testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest5 continues
-// testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest4 with its remaining
-// steps.
-func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest5(
+// testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesExpectsLayers continues
+// testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnes: expects layers.
+func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesExpectsLayers(
 	t *testing.T,
 	ctrl *gomock.Controller,
 	calls []string,
@@ -516,7 +515,7 @@ func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest5(
 			return op()
 		})
 
-	testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest(
+	testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesChecksOrder(
 		t,
 		&calls,
 		tracer,
@@ -526,10 +525,10 @@ func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest5(
 	)
 }
 
-// testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest continues
-// testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest5 with its remaining
-// steps.
-func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest(
+// testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesChecksOrder continues
+// testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesExpectsLayers: checks
+// order.
+func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesChecksOrder(
 	t *testing.T,
 	calls *[]string,
 	tracer *mocks.MockTracer,
@@ -562,7 +561,7 @@ func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest(
 		return 7, nil
 	})
 	require.NoError(t, err)
-	assert.Equal(t, wantGot7, got)
+	assert.Equal(t, wantGotOrder, got)
 	assert.Equal(
 		t,
 		[]string{
@@ -597,7 +596,7 @@ func TestLoggingMW_EdgeTierLogsFailuresAtWarnOrError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	logger := mocks.NewMockLogger(ctrl)
 	logger.EXPECT().WithContext(gomock.Any()).Return(logger).AnyTimes()
-	logger.EXPECT().Debug("controller.Get", gomock.Any()).Times(timesArg2)
+	logger.EXPECT().Debug("controller.Get", gomock.Any()).Times(wantCalls)
 	logger.EXPECT().Warn("controller.Get failed", gomock.Any())
 	logger.EXPECT().Error("controller.Get failed", gomock.Any())
 	logger.EXPECT().Debug("service.Get", gomock.Any())
@@ -612,13 +611,26 @@ func TestLoggingMW_EdgeTierLogsFailuresAtWarnOrError(t *testing.T) {
 	}
 
 	edge := transport.Tier().Subject(textUsers, &deps)
-	_, err := edge.Exec(t.Context(), textGet2, fail(apperr.CodeNotFound))
+	_, err := edge.Exec(t.Context(), textGetTitle, fail(apperr.CodeNotFound))
 	require.Error(t, err)
 
-	_, err = edge.Exec(t.Context(), textGet2, fail(apperr.CodeInternal))
+	_, err = edge.Exec(t.Context(), textGetTitle, fail(apperr.CodeInternal))
 	require.Error(t, err)
 
 	_, err = new(service.Tier().Subject(textUsers, &deps)).
-		Exec(t.Context(), textGet2, fail(apperr.CodeInternal))
+		Exec(t.Context(), textGetTitle, fail(apperr.CodeInternal))
 	require.Error(t, err)
 }
+
+const (
+	// wantChildDebugCallsLen is the expected child debug calls len.
+	wantChildDebugCallsLen = 2
+
+	// wantGotOrder is the expected got order.
+	wantGotOrder = 7
+)
+
+const (
+	// textUpdatestatus is the literal "UpdateStatus".
+	textUpdatestatus = "UpdateStatus"
+)

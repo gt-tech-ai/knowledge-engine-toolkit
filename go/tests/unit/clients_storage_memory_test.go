@@ -51,7 +51,7 @@ func TestStorageMemory_RoundTrip(t *testing.T) {
 
 	obj, err := client.Stat(ctx, textB, textK)
 	require.NoError(t, err)
-	require.Equal(t, int64(int64Arg5), obj.Size)
+	require.Equal(t, int64(wantSizeTrip), obj.Size)
 	require.Equal(t, textTextPlain, obj.ContentType)
 
 	objs, err := client.ListObjects(ctx, textB, "")
@@ -59,14 +59,13 @@ func TestStorageMemory_RoundTrip(t *testing.T) {
 	require.Len(t, objs, 1)
 	require.Equal(t, textK, objs[0].Key)
 
-	getURL, err := client.PresignURL(ctx, textB, textK, presignURLArg60, "")
+	getURL, err := client.PresignURL(ctx, textB, textK, presignURLInputTrip, "")
 
-	testStorageMemoryRoundTripRest(ctx, t, client, err, getURL)
+	testStorageMemoryRoundTripPresign(ctx, t, client, err, getURL)
 }
 
-// testStorageMemoryRoundTripRest continues TestStorageMemory_RoundTrip with its
-// remaining steps.
-func testStorageMemoryRoundTripRest(
+// testStorageMemoryRoundTripPresign continues TestStorageMemory_RoundTrip: presign.
+func testStorageMemoryRoundTripPresign(
 	ctx context.Context, t *testing.T, client *memory.Client, err error, getURL string,
 ) {
 	t.Helper()
@@ -84,7 +83,7 @@ func testStorageMemoryRoundTripRest(
 		ctx,
 		textB,
 		"k2",
-		presignPutURLArg60,
+		presignPutURLInputPresign,
 		textTextPlain,
 	)
 	require.NoError(t, err)
@@ -143,9 +142,9 @@ func TestStorageMemory_ListObjectsPage(t *testing.T) {
 		)
 	}
 
-	capped, err := client.ListObjectsPage(ctx, textB, textDocs, limit2)
+	capped, err := client.ListObjectsPage(ctx, textB, textDocs, listObjectsPageInput)
 	require.NoError(t, err)
-	require.Len(t, capped, wantCappedLen2, "the limit caps the result")
+	require.Len(t, capped, wantCappedLen, "the limit caps the result")
 
 	for _, o := range capped {
 		require.True(
@@ -155,12 +154,12 @@ func TestStorageMemory_ListObjectsPage(t *testing.T) {
 		)
 	}
 
-	all, err := client.ListObjectsPage(ctx, textB, textDocs, limit10)
+	all, err := client.ListObjectsPage(ctx, textB, textDocs, listObjectsPageInputPage)
 	require.NoError(t, err)
 	require.Len(
 		t,
 		all,
-		wantAllLen3,
+		wantAllLen,
 		"a limit at/above the match count returns all matches",
 	)
 }
@@ -193,14 +192,26 @@ func TestStorageMemory_ListObjectsPageToken(t *testing.T) {
 		)
 	}
 
-	first, next, err := client.ListObjectsPageToken(ctx, textB, textDocs, "", limit2)
+	first, next, err := client.ListObjectsPageToken(
+		ctx,
+		textB,
+		textDocs,
+		"",
+		listObjectsPageTokenInputToken,
+	)
 	require.NoError(t, err)
-	require.Len(t, first, wantFirstLen2)
+	require.Len(t, first, wantFirstLen)
 	require.Equal(t, textDocsA, first[0].Key, "key order")
 	require.Equal(t, textDocsB, first[1].Key)
 	require.Equal(t, textDocsB, next, "resume after the last returned key")
 
-	second, next, err := client.ListObjectsPageToken(ctx, textB, textDocs, next, limit2)
+	second, next, err := client.ListObjectsPageToken(
+		ctx,
+		textB,
+		textDocs,
+		next,
+		listObjectsPageTokenInputToken,
+	)
 	require.NoError(t, err)
 	require.Len(t, second, 1, "only the third prefixed object remains (other/x excluded)")
 	require.Equal(t, textDocsC, second[0].Key)
@@ -243,7 +254,7 @@ func TestStorageMemory_MultipartLifecycle(t *testing.T) {
 		textBig,
 		identifier,
 		1,
-		presignUploadPartArg60,
+		presignUploadPartInputLifecycle,
 	)
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(partURL, textMemory))
@@ -314,3 +325,45 @@ func TestStorageFactory_KindMemory_Selected(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, exists, "the memory-backed client round-trips with no S3")
 }
+
+const (
+	// listObjectsPageInput is the list objects page input the tests use.
+	listObjectsPageInput = 2
+
+	// listObjectsPageInputPage is the list objects page input page the tests use.
+	listObjectsPageInputPage = 10
+
+	// listObjectsPageTokenInputToken is the list objects page token input token the tests
+	// use.
+	listObjectsPageTokenInputToken = 2
+
+	// presignPutURLInputPresign is the presign put urlinput presign the tests use.
+	presignPutURLInputPresign = 60
+
+	// presignURLInputTrip is the presign urlinput trip the tests use.
+	presignURLInputTrip = 60
+
+	// presignUploadPartInputLifecycle is the presign upload part input lifecycle the tests
+	// use.
+	presignUploadPartInputLifecycle = 60
+
+	// wantCappedLen is the expected capped len.
+	wantCappedLen = 2
+
+	// wantFirstLen is the expected first len.
+	wantFirstLen = 2
+
+	// wantSizeTrip is the expected size trip.
+	wantSizeTrip = 5
+)
+
+const (
+	// textBig is the literal "big".
+	textBig = "big"
+
+	// textDocsC is the literal "docs/c".
+	textDocsC = "docs/c"
+
+	// textMemory is the literal "memory://".
+	textMemory = "memory://"
+)

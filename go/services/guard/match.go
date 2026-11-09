@@ -25,22 +25,22 @@ func matchCheck(
 		return nil, err
 	}
 
-	filesValue, missing, err := files(ctx, codebase, guardRow)
+	currentFiles, missing, err := files(ctx, codebase, guardRow)
 	if err != nil || missing != nil {
 		return missing, err
 	}
 
 	var out []types.Finding
 
-	for _, file := range filesValue {
+	for _, file := range currentFiles {
 		text, err := codebase.Text(ctx, file.Path)
 		if err != nil {
 			return nil, err
 		}
 
-		lines := active(file.Path, text.Lines(), skipFlag(guardRow.SkipComments))
-		out = append(out, set.requireFindings(file.Path, lines, guardRow.Literal)...)
-		out = append(out, set.forbidFindings(file.Path, lines, guardRow.Literal)...)
+		lines := active(text.Lines(), skippedPrefixes(guardRow, file.Path))
+		out = append(out, set.requireFindings(file.Path, lines, formOf(guardRow))...)
+		out = append(out, set.forbidFindings(file.Path, lines, formOf(guardRow))...)
 	}
 
 	return out, nil
@@ -60,7 +60,7 @@ type matchSet struct {
 
 // compileMatchSet compiles the row's patterns; only >= 0 narrows require to that one.
 func compileMatchSet(guardRow *types.GuardRow, only int) (*matchSet, error) {
-	require, err := patterns(guardRow.Require, literalFlag(guardRow.Literal))
+	require, err := patterns(guardRow.Require, formOf(guardRow))
 	if err != nil {
 		return nil, err
 	}
@@ -69,12 +69,12 @@ func compileMatchSet(guardRow *types.GuardRow, only int) (*matchSet, error) {
 		require = require[only : only+1]
 	}
 
-	forbid, err := patterns(guardRow.Forbid, literalFlag(guardRow.Literal))
+	forbid, err := patterns(guardRow.Forbid, formOf(guardRow))
 	if err != nil {
 		return nil, err
 	}
 
-	allow, err := patterns(guardRow.Allow, literalFlag(guardRow.Literal))
+	allow, err := patterns(guardRow.Allow, formOf(guardRow))
 	if err != nil {
 		return nil, err
 	}
@@ -86,23 +86,20 @@ func compileMatchSet(guardRow *types.GuardRow, only int) (*matchSet, error) {
 func (s *matchSet) requireFindings(
 	file string,
 	lines []line,
-	literal bool,
+	form patternForm,
 ) []types.Finding {
 	var out []types.Finding
 
-	for _, regexpValue := range s.require {
+	for _, pattern := range s.require {
 		found := slices.ContainsFunc(
 			lines,
-			func(l line) bool { return regexpValue.MatchString(l.text) },
+			func(l line) bool { return pattern.MatchString(l.text) },
 		)
 		if !found {
 			out = append(out, types.Finding{
-				File: file,
-				Rule: "require",
-				Message: file + " does not contain " + show(
-					regexpValue,
-					literalFlag(literal),
-				),
+				File:    file,
+				Rule:    "require",
+				Message: file + " does not contain " + form.show(pattern),
 			})
 		}
 	}
@@ -114,12 +111,12 @@ func (s *matchSet) requireFindings(
 func (s *matchSet) forbidFindings(
 	file string,
 	lines []line,
-	literal bool,
+	form patternForm,
 ) []types.Finding {
 	out := make([]types.Finding, 0, len(s.forbid))
 
 	for _, re := range s.forbid {
-		out = append(out, s.forbiddenLines(re, file, lines, literal)...)
+		out = append(out, s.forbiddenLines(re, file, lines, form)...)
 	}
 
 	return out
@@ -127,15 +124,15 @@ func (s *matchSet) forbidFindings(
 
 // forbiddenLines reports the lines one forbidden pattern hits.
 func (s *matchSet) forbiddenLines(
-	regexpValue *regexp.Regexp, file string, lines []line, literal bool,
+	pattern *regexp.Regexp, file string, lines []line, form patternForm,
 ) []types.Finding {
 	var out []types.Finding
 
 	for _, l := range lines {
-		if regexpValue.MatchString(l.text) && !matchesAny(s.allow, l.text) {
+		if pattern.MatchString(l.text) && !matchesAny(s.allow, l.text) {
 			out = append(out, types.Finding{
 				File: file, Line: l.n, Rule: "forbid",
-				Message: "contains " + show(regexpValue, literalFlag(literal)),
+				Message: "contains " + form.show(pattern),
 			})
 		}
 	}
@@ -160,24 +157,30 @@ type line struct {
 	n int
 }
 
-// skipFlag names the skip option in a signature.
-type skipFlag bool
+// skippedPrefixes is the comment markers whose lines the row ignores in file, or none
+// when the row reads comments too.
+func skippedPrefixes(guardRow *types.GuardRow, file string) []string {
+	if !guardRow.SkipComments {
+		return nil
+	}
 
-// active returns text's lines, without full-line comments when skip is set.
-func active(file string, text []string, skip skipFlag) []line {
-	prefixes := commentPrefixes(file)
+	return commentPrefixes(file)
+}
+
+// active returns text's lines, without the full-line comments that start with a prefix.
+func active(text, prefixes []string) []line {
 	out := make([]line, 0, len(text))
 
-	for index, textValue := range text {
-		trimmed := strings.TrimSpace(textValue)
+	for index, fileText := range text {
+		trimmed := strings.TrimSpace(fileText)
 
-		if bool(skip) && slices.ContainsFunc(prefixes, func(p string) bool {
+		if slices.ContainsFunc(prefixes, func(p string) bool {
 			return strings.HasPrefix(trimmed, p)
 		}) {
 			continue
 		}
 
-		out = append(out, line{text: textValue, n: index + 1})
+		out = append(out, line{text: fileText, n: index + 1})
 	}
 
 	return out
@@ -202,28 +205,34 @@ func commentPrefixes(file string) []string {
 	return nil
 }
 
-// patterns compiles ps, quoting each first when literal.
-func patterns(items []string, literal literalFlag) ([]*regexp.Regexp, error) {
-	if !literal {
-		return compileAll(items)
+// patternForm is how a row's patterns are written: as regular expressions or literally.
+type patternForm struct {
+	// quote prepares one pattern for compiling.
+	quote func(string) string
+	// show names a compiled pattern in a finding.
+	show func(*regexp.Regexp) string
+}
+
+// formOf returns the form guardRow writes its patterns in.
+func formOf(guardRow *types.GuardRow) patternForm {
+	if guardRow.Literal {
+		return patternForm{quote: regexp.QuoteMeta, show: func(re *regexp.Regexp) string {
+			return `"` + strings.ReplaceAll(re.String(), `\`, "") + `"`
+		}}
 	}
 
+	return patternForm{
+		quote: func(pattern string) string { return pattern },
+		show:  func(re *regexp.Regexp) string { return "/" + re.String() + "/" },
+	}
+}
+
+// patterns compiles items in form.
+func patterns(items []string, form patternForm) ([]*regexp.Regexp, error) {
 	quoted := make([]string, len(items))
-	for i, p := range items {
-		quoted[i] = regexp.QuoteMeta(p)
+	for i, item := range items {
+		quoted[i] = form.quote(item)
 	}
 
 	return compileAll(quoted)
-}
-
-// literalFlag names the literal option in a signature.
-type literalFlag bool
-
-// show names a pattern in a finding.
-func show(re *regexp.Regexp, literal literalFlag) string {
-	if literal {
-		return `"` + strings.ReplaceAll(re.String(), `\`, "") + `"`
-	}
-
-	return "/" + re.String() + "/"
 }

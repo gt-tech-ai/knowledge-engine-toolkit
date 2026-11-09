@@ -191,13 +191,13 @@ func FuzzRegistryRoundTrip(f *testing.F) {
 	reg := newWidgetRegistry(f)
 
 	f.Fuzz(func(t *testing.T, eventID, tenantID, widgetID string) {
-		widgetCreatedValue := &widgetCreated{
+		currentWidgetCreated := &widgetCreated{
 			EventID:   eventID,
 			EventType: textWidgetCreated,
 			TenantID:  tenantID,
 			WidgetID:  widgetID,
 		}
-		data, err := json.Marshal(widgetCreatedValue)
+		data, err := json.Marshal(currentWidgetCreated)
 		require.NoError(t, err)
 
 		out, err := reg.Parse(data)
@@ -210,3 +210,8 @@ func FuzzRegistryRoundTrip(f *testing.F) {
 		assert.Equal(t, &want, out)
 	})
 }
+
+const (
+	// textWidgetCreated is the literal "widget.created".
+	textWidgetCreated = "widget.created"
+)

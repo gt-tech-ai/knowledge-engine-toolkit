@@ -95,7 +95,7 @@ func inTx(ctx context.Context) (bool, error) { return interfaces.InTx(ctx), nil 
 func TestWorkflowBase_ReadCommandAndSagaShapes(t *testing.T) {
 	t.Parallel()
 
-	flows := testWorkflow(txManager(t, txManagerArg2, nil))
+	flows := testWorkflow(txManager(t, txManagerInputShapes, nil))
 	assert.Equal(t, textTest, flows.Name())
 
 	got, err := flows.Exec(t.Context(), textRead, inTx)
@@ -253,3 +253,8 @@ func TestWorkflowBase_AppliesTimeoutAndRecovery(t *testing.T) {
 		})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }
+
+const (
+	// txManagerInputShapes is the tx manager input shapes the tests use.
+	txManagerInputShapes = 2
+)

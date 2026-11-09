@@ -82,8 +82,12 @@ func TestMiddleware_ReclassifiesVanguardBindingError(t *testing.T) {
 		code int
 		want int
 	}{
-		{"vanguard binding error (code 2) is a 400", cases2, http.StatusBadRequest},
-		{"real handler 500 (code 13) stays 500", cases13, http.StatusInternalServerError},
+		{"vanguard binding error (code 2) is a 400", casesError, http.StatusBadRequest},
+		{
+			"real handler 500 (code 13) stays 500",
+			casesBindingError,
+			http.StatusInternalServerError,
+		},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -177,7 +181,7 @@ func TestTransformCollection_PreservesNonObjectItems(t *testing.T) {
 
 	data, found := result[textData].([]any)
 	require.True(t, found)
-	require.Len(t, data, wantDataLen2)
+	require.Len(t, data, wantDataLen)
 	assert.Equal(t, "scalar-item", data[0], "a non-object item is preserved verbatim")
 
 	obj, found := data[1].(map[string]any)
@@ -185,3 +189,14 @@ func TestTransformCollection_PreservesNonObjectItems(t *testing.T) {
 	assert.Equal(t, textUsers, obj[textType])
 	assert.Equal(t, "1", obj[textID])
 }
+
+const (
+	// casesBindingError is the cases binding error the tests use.
+	casesBindingError = 13
+
+	// casesError is the cases error the tests use.
+	casesError = 2
+
+	// wantDataLen is the expected data len.
+	wantDataLen = 2
+)

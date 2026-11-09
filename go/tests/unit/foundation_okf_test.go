@@ -76,7 +76,7 @@ func TestOKFParse_FrontmatterAndBody(t *testing.T) {
 		"\n# Add an endpoint\n\nSee [the contract](../contract.md#rules).\n",
 		doc.Body,
 	)
-	assert.Equal(t, wantBodyStartLine13, doc.BodyStartLine)
+	assert.Equal(t, wantBodyStartLine, doc.BodyStartLine)
 	assert.True(t, strings.HasSuffix(okfConcept, doc.Body))
 }
 
@@ -162,7 +162,7 @@ func TestOKFParse_CRLFAndBOM(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, textGuide, doc.Frontmatter.Type)
 	assert.Equal(t, "# T\r\n", doc.Body)
-	assert.Equal(t, wantBodyStartLine4, doc.BodyStartLine)
+	assert.Equal(t, wantBodyStartLineBOM, doc.BodyStartLine)
 }
 
 // TestOKFParse_LinksClassified tests link extraction and classification.
@@ -260,22 +260,22 @@ zeta: z
 func TestOKFFrontmatter_Stale(t *testing.T) {
 	t.Parallel()
 
-	timeValue := time.Date(year2026, month6, 1, 0, 0, 0, 0, time.UTC)
+	instant := time.Date(dateInput, dateInputStale, 1, 0, 0, 0, 0, time.UTC)
 	frontmatter := okf.Frontmatter{StaleAfter: "2026-06-01T00:00:00Z"}
 
-	stale, err := frontmatter.Stale(timeValue)
+	stale, err := frontmatter.Stale(instant)
 	require.NoError(t, err)
 	assert.True(t, stale)
 
-	stale, err = frontmatter.Stale(timeValue.Add(-time.Second))
+	stale, err = frontmatter.Stale(instant.Add(-time.Second))
 	require.NoError(t, err)
 	assert.False(t, stale)
 
-	stale, err = (&okf.Frontmatter{}).Stale(timeValue)
+	stale, err = (&okf.Frontmatter{}).Stale(instant)
 	require.NoError(t, err)
 	assert.False(t, stale)
 
-	_, err = (&okf.Frontmatter{StaleAfter: "soon"}).Stale(timeValue)
+	_, err = (&okf.Frontmatter{StaleAfter: "soon"}).Stale(instant)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }
 
@@ -311,7 +311,12 @@ func TestOKFRenderIndex_GroupsAndSorts(t *testing.T) {
 `
 	assert.Equal(t, want, string(okf.RenderIndex(entries)))
 
-	shuffled := []okf.IndexEntry{entries[index3], entries[1], entries[index2], entries[0]}
+	shuffled := []okf.IndexEntry{
+		entries[indexSorts],
+		entries[1],
+		entries[indexAndSorts],
+		entries[0],
+	}
 	assert.Equal(t, want, string(okf.RenderIndex(shuffled)))
 }
 
@@ -503,7 +508,7 @@ func TestOKFConformLog(t *testing.T) {
 
 	f := okf.ConformLog("l.md", []byte("## 2026-10-01\n\n## 2026-10-03\n"))
 	require.Len(t, f, 1)
-	assert.Equal(t, wantLine3, f[0].Line)
+	assert.Equal(t, wantLineLog, f[0].Line)
 }
 
 // FuzzOKFParse tests that Parse never panics and keeps the body a suffix.
@@ -519,7 +524,7 @@ func FuzzOKFParse(f *testing.F) {
 	for _, seed := range []string{
 		"", textDashDashDash, "---\n", "---\n---\n", "---\ntype: x\n", okfConcept,
 		"\ufeff---\r\ntype: G\r\n---\r\n[a](b)\r\n", "```\n[a](b)\n",
-		strings.Repeat(textX, count4096),
+		strings.Repeat(textX, repeatInputOKFParse),
 		"[a](<b c>) [d]: e\n`x` [f](g",
 	} {
 		f.Add(seed)
@@ -582,3 +587,52 @@ func TestOKFHasKey(t *testing.T) {
 		okf.HasKey(&okf.Frontmatter{Generated: &okf.Attribution{}}, "generated"),
 	)
 }
+
+const (
+	// dateInputStale is the date input stale the tests use.
+	dateInputStale = 6
+
+	// indexAndSorts is the index and sorts the tests use.
+	indexAndSorts = 2
+
+	// indexSorts is the index sorts the tests use.
+	indexSorts = 3
+
+	// repeatInputOKFParse is the repeat input okfparse the tests use.
+	repeatInputOKFParse = 4096
+
+	// wantBodyStartLine is the expected body start line.
+	wantBodyStartLine = 13
+
+	// wantBodyStartLineBOM is the expected body start line bom.
+	wantBodyStartLineBOM = 4
+
+	// wantLineLog is the expected line log.
+	wantLineLog = 3
+)
+
+const (
+	// textDashDashDash is the literal "---".
+	textDashDashDash = "---"
+
+	// textDocsAIndexMd is the literal "docs/a/index.md".
+	textDocsAIndexMd = "docs/a/index.md"
+
+	// textDocsGMd is the literal "docs/g.md".
+	textDocsGMd = "docs/g.md"
+
+	// textDocsIndexMd is the literal "docs/index.md".
+	textDocsIndexMd = "docs/index.md"
+
+	// textGuides is the literal "Guides".
+	textGuides = "Guides"
+
+	// textHumanAda is the literal "human:ada".
+	textHumanAda = "human:ada"
+
+	// textLinear is the literal "linear".
+	textLinear = "linear"
+
+	// textGuide is the literal "Guide".
+	textGuide = "Guide"
+)

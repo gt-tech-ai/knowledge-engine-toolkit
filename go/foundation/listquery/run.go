@@ -182,7 +182,7 @@ func pageLimit(page types.PageRequest, bounds Bounds) int {
 	if limit <= 0 {
 		limit = bounds.DefaultSize
 		if limit <= 0 {
-			limit = limit10
+			limit = defaultLimit
 		}
 	}
 
@@ -229,7 +229,12 @@ func offsetPage[T, D any](
 		return nil, err
 	}
 
-	next, err := offsetNextCursor(hasMoreFlag(hasMore), pageNum, cols, rows, reader)
+	next, err := offsetNextCursor(
+		probedPage[T]{rows: rows, hasMore: hasMore},
+		pageNum,
+		cols,
+		reader,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +335,11 @@ func keysetPage[T, D any](
 
 	rows, hasMore := trimProbeRow(rows, limit)
 
-	next, err := keysetNextCursor(hasMoreFlag(hasMore), cols, rows, reader)
+	next, err := keysetNextCursor(
+		probedPage[T]{rows: rows, hasMore: hasMore},
+		cols,
+		reader,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -349,16 +358,16 @@ func keysetPage[T, D any](
 
 // keysetNextCursor mints the next page's cursor from the last row, "" on the last page.
 func keysetNextCursor[T, D any](
-	hasMore hasMoreFlag, cols []KeysetColumn, rows []T, reader Reader[T, D],
+	page probedPage[T], cols []KeysetColumn, reader Reader[T, D],
 ) (string, error) {
-	if !bool(hasMore) || len(rows) == 0 {
+	if !page.hasMore || len(page.rows) == 0 {
 		return "", nil
 	}
 
 	return mintKeysetCursor(
 		reader.Keyset,
 		cols,
-		rows[len(rows)-1],
+		page.rows[len(page.rows)-1],
 		reader.Sort,
 		reader.Filter,
 	)
@@ -488,8 +497,13 @@ func cursorRowValue[T any](keyset *Keyset[T], row T, column string) (any, error)
 	return t.UnixMicro(), nil
 }
 
-// hasMoreFlag names the hasMore option in a signature.
-type hasMoreFlag bool
+// probedPage is one page of rows read with an extra probe row.
+type probedPage[T any] struct {
+	// rows holds the page, without the probe row.
+	rows []T
+	// hasMore reports whether the probe row came back, so another page follows.
+	hasMore bool
+}
 
 // offsetNextCursor returns the next-page token for an offset page. A keyset-wired reader
 // ON ITS DEFAULT ORDERING mints a forward KEYSET cursor from the page's last row — so
@@ -499,21 +513,20 @@ type hasMoreFlag bool
 // sorted list pages by navigation, not an un-indexed seek (curated set = default only).
 // It is empty when no further rows remain.
 func offsetNextCursor[T, D any](
-	hasMore hasMoreFlag,
+	page probedPage[T],
 	pageNum int,
 	cols []KeysetColumn,
-	rows []T,
 	reader Reader[T, D],
 ) (string, error) {
-	if !hasMore {
+	if !page.hasMore {
 		return "", nil
 	}
 
-	if defaultOrdering(reader) && len(rows) > 0 {
+	if defaultOrdering(reader) && len(page.rows) > 0 {
 		return mintKeysetCursor(
 			reader.Keyset,
 			cols,
-			rows[len(rows)-1],
+			page.rows[len(page.rows)-1],
 			reader.Sort,
 			reader.Filter,
 		)

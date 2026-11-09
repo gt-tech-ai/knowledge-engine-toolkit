@@ -38,7 +38,7 @@ func TestNewFromConfig_DefaultsToStub(t *testing.T) {
 		types.GrainMinute: types.GrainHour, types.GrainHour: types.GrainDay,
 		types.GrainDay: types.GrainMonth, types.GrainMonth: types.GrainMonth,
 	}, cfg.BucketWidth)
-	assert.Equal(t, wantMaxConcurrentBuckets8, cfg.MaxConcurrentBuckets)
+	assert.Equal(t, wantMaxConcurrentBuckets, cfg.MaxConcurrentBuckets)
 
 	ctx := context.Background()
 	store, err := analytics.NewFromConfig(ctx, &analytics.Config{}, analytics.Deps{})
@@ -138,3 +138,8 @@ func TestNewFromConfig_CassandraKindDialsNestedConfigAtStart(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(failing.Start(ctx)))
 }
+
+const (
+	// wantMaxConcurrentBuckets is the expected max concurrent buckets.
+	wantMaxConcurrentBuckets = 8
+)

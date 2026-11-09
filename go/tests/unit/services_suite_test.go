@@ -27,22 +27,27 @@ func suiteRuns() []types.ToolRun {
 		{
 			Name:  textGolangciLint,
 			Verb:  textLint,
-			Group: textLint2,
-			Tags:  []string{textGo2},
+			Group: textLintTitle,
+			Tags:  []string{textGoLower},
 		},
 		{
 			Name:  textRuff,
 			Verb:  textLint,
-			Group: textLint2,
+			Group: textLintTitle,
 			Tags:  []string{textPython, textSlow},
 		},
 		{
 			Name:  textLychee,
 			Verb:  textLint,
 			Group: textDocsLint,
-			Tags:  []string{textDocs2, textOnline},
+			Tags:  []string{textDocsLower, textOnline},
 		},
-		{Name: textGofumpt, Verb: textFmt, Group: textFormat, Tags: []string{textGo2}},
+		{
+			Name:  textGofumpt,
+			Verb:  textFmt,
+			Group: textFormat,
+			Tags:  []string{textGoLower},
+		},
 	}
 }
 
@@ -53,18 +58,18 @@ func lintSuite() types.Suite {
 	}
 
 	return types.Suite{
-		Title: textLint2,
+		Title: textLintTitle,
 		Select: types.Selection{
 			Verbs:   []string{textLint},
-			AnyTags: []string{textGo2, textPython},
+			AnyTags: []string{textGoLower, textPython},
 		},
-		Phases: []types.Phase{{Group: textDocsLint}, {Group: textLint2}},
+		Phases: []types.Phase{{Group: textDocsLint}, {Group: textLintTitle}},
 		Selectors: map[string]types.Selection{
-			textGo2: lint(
-				textGo2,
+			textGoLower: lint(
+				textGoLower,
 			),
-			textPython: lint(textPython),
-			textDocs2:  lint(textDocs2),
+			textPython:    lint(textPython),
+			textDocsLower: lint(textDocsLower),
 		},
 		Modifiers: map[string]types.Selection{
 			textFast:    {ExcludeTags: []string{textSlow}},
@@ -99,7 +104,7 @@ func entryNames(es []suite.Entry) []string {
 func TestServicesSuite_SelectComposesFlags(t *testing.T) {
 	t.Parallel()
 
-	suiteValue := lintSuite()
+	currentSuite := lintSuite()
 	catalog := suite.Runs(nil, nil, suiteRuns())
 	names := func(s types.Suite, cat []suite.Entry, flags ...string) []string {
 		got, err := suite.Select(&s, cat, flags)
@@ -107,36 +112,36 @@ func TestServicesSuite_SelectComposesFlags(t *testing.T) {
 
 		return entryNames(got)
 	}
-	assert.Equal(t, []string{textGolangciLint, textRuff}, names(suiteValue, catalog))
+	assert.Equal(t, []string{textGolangciLint, textRuff}, names(currentSuite, catalog))
 	assert.Equal(
 		t,
 		[]string{textGolangciLint, textRuff},
-		names(suiteValue, catalog, textPython, textGo2),
+		names(currentSuite, catalog, textPython, textGoLower),
 	)
 	assert.Equal(
 		t,
 		[]string{textGolangciLint},
-		names(suiteValue, catalog, textGo2, textFast),
+		names(currentSuite, catalog, textGoLower, textFast),
 	)
-	assert.Equal(t, []string{textLychee}, names(suiteValue, catalog, textDocs2))
-	assert.Empty(t, names(suiteValue, catalog, textDocs2, textOffline))
+	assert.Equal(t, []string{textLychee}, names(currentSuite, catalog, textDocsLower))
+	assert.Empty(t, names(currentSuite, catalog, textDocsLower, textOffline))
 
-	_, err := suite.Select(&suiteValue, catalog, []string{textRust})
+	_, err := suite.Select(&currentSuite, catalog, []string{textRust})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, textRust)
 
-	gated := suiteValue
+	gated := currentSuite
 
 	gated.Gated = map[string]string{textOffline: textOffline}
 
-	testServicesSuiteSelectComposesFlagsRest(t, &suiteValue, catalog, names, &gated)
+	testServicesSuiteSelectComposesFlagsOffline(t, &currentSuite, catalog, names, &gated)
 }
 
-// testServicesSuiteSelectComposesFlagsRest continues
-// TestServicesSuite_SelectComposesFlags with its remaining steps.
-func testServicesSuiteSelectComposesFlagsRest(
+// testServicesSuiteSelectComposesFlagsOffline continues
+// TestServicesSuite_SelectComposesFlags: offline.
+func testServicesSuiteSelectComposesFlagsOffline(
 	t *testing.T,
-	suiteValue *types.Suite,
+	currentSuite *types.Suite,
 	catalog []suite.Entry,
 	names func(s types.Suite, cat []suite.Entry, flags ...string) []string,
 	gated *types.Suite,
@@ -150,27 +155,27 @@ func testServicesSuiteSelectComposesFlagsRest(
 			Name:  textLychee,
 			Verb:  textLint,
 			Group: textDocsLint,
-			Tags:  []string{textDocs2, textOnline},
+			Tags:  []string{textDocsLower, textOnline},
 		},
 		{
 			Name:  "lychee offline",
 			Verb:  textLint,
 			Group: textDocsLint,
-			Tags:  []string{textDocs2, textOffline},
+			Tags:  []string{textDocsLower, textOffline},
 		},
 	})
-	assert.Equal(t, []string{textLychee}, names(*gated, offline, textDocs2))
+	assert.Equal(t, []string{textLychee}, names(*gated, offline, textDocsLower))
 	assert.Equal(
 		t,
 		[]string{"lychee offline"},
-		names(*gated, offline, textDocs2, textOffline),
+		names(*gated, offline, textDocsLower, textOffline),
 	)
 
 	steps := suite.Steps(map[string]suite.Step{
-		textLintVet: {Group: textLint2, Tags: []string{textGo2}},
-		"lint.off":  {Group: textLint2, Tags: []string{textGo2}},
+		textLintVet: {Group: textLintTitle, Tags: []string{textGoLower}},
+		"lint.off":  {Group: textLintTitle, Tags: []string{textGoLower}},
 	})
-	withSteps := *suiteValue
+	withSteps := *currentSuite
 
 	withSteps.Steps = []string{textLintVet}
 
@@ -178,7 +183,7 @@ func testServicesSuiteSelectComposesFlagsRest(
 	assert.Equal(
 		t,
 		[]string{textGolangciLint, textLintVet},
-		names(withSteps, all, textGo2),
+		names(withSteps, all, textGoLower),
 	)
 
 	withSteps.Steps = []string{"lint.nope"}
@@ -200,27 +205,27 @@ func testServicesSuiteSelectComposesFlagsRest(
 func TestServicesSuite_PlanOrdersPhases(t *testing.T) {
 	t.Parallel()
 
-	suiteValue := lintSuite()
+	currentSuite := lintSuite()
 
-	suiteValue.Phases[1].Serial = true
+	currentSuite.Phases[1].Serial = true
 
 	selected, err := suite.Select(
-		&suiteValue,
+		&currentSuite,
 		suite.Runs(nil, nil, suiteRuns()),
-		[]string{textGo2, textDocs2},
+		[]string{textGoLower, textDocsLower},
 	)
 	require.NoError(t, err)
 
-	plan, err := suite.Plan(&suiteValue, selected)
+	plan, err := suite.Plan(&currentSuite, selected)
 	require.NoError(t, err)
-	require.Len(t, plan, wantPlanLen2)
+	require.Len(t, plan, wantPlanLen)
 	assert.Equal(t, textDocsLint, plan[0].Group)
 	assert.False(t, plan[0].Serial)
 	assert.Equal(t, textLychee, plan[0].Entries[0].Name)
-	assert.Equal(t, textLint2, plan[1].Group)
+	assert.Equal(t, textLintTitle, plan[1].Group)
 	assert.True(t, plan[1].Serial)
 
-	_, err = suite.Plan(&suiteValue, suite.Runs(nil, nil, suiteRuns()[3:]))
+	_, err = suite.Plan(&currentSuite, suite.Runs(nil, nil, suiteRuns()[3:]))
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, textGofumpt)
 	assert.ErrorContains(t, err, textFormat)
@@ -246,12 +251,12 @@ func TestServicesSuite_Gate(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	tr := mocks.NewMockToolRunner(ctrl)
 
-	testServicesSuiteGateRest6(t, ctrl, tr)
+	testServicesSuiteGateRunsConcurrently(t, ctrl, tr)
 }
 
-// testServicesSuiteGateRest6 continues testServicesSuiteGateRest5 with its remaining
-// steps.
-func testServicesSuiteGateRest6(
+// testServicesSuiteGateRunsConcurrently continues testServicesSuiteGate: runs
+// concurrently.
+func testServicesSuiteGateRunsConcurrently(
 	t *testing.T,
 	ctrl *gomock.Controller,
 	toolRunner *mocks.MockToolRunner,
@@ -287,12 +292,12 @@ func testServicesSuiteGateRest6(
 
 	runner := mocks.NewMockCommandRunner(ctrl)
 
-	testServicesSuiteGateRest2(t, toolRunner, &peak, &lock, &ran, runner)
+	testServicesSuiteGateChecksPhases(t, toolRunner, &peak, &lock, &ran, runner)
 }
 
-// testServicesSuiteGateRest2 continues testServicesSuiteGateRest6 with its remaining
-// steps.
-func testServicesSuiteGateRest2(
+// testServicesSuiteGateChecksPhases continues testServicesSuiteGateRunsConcurrently:
+// checks phases.
+func testServicesSuiteGateChecksPhases(
 	t *testing.T,
 	toolRunner *mocks.MockToolRunner,
 	peak *atomic.Int32,
@@ -302,22 +307,58 @@ func testServicesSuiteGateRest2(
 ) {
 	t.Helper()
 
-	suiteValue := types.Suite{
-		Title:  textLint2,
+	currentSuite := types.Suite{
+		Title:  textLintTitle,
 		Select: types.Selection{Verbs: []string{textLint}},
-		Phases: []types.Phase{{Group: textFormat, Serial: true}, {Group: textLint2}},
+		Phases: []types.Phase{{Group: textFormat, Serial: true}, {Group: textLintTitle}},
 		Selectors: map[string]types.Selection{
-			textGo2:    {Verbs: []string{textLint}, Tags: []string{textGo2}},
-			textPython: {Verbs: []string{textLint}, Tags: []string{textPython}},
+			textGoLower: {Verbs: []string{textLint}, Tags: []string{textGoLower}},
+			textPython:  {Verbs: []string{textLint}, Tags: []string{textPython}},
 		},
 		Steps: []string{textLintVet},
 	}
+
+	testServicesSuiteGateChecksTools(
+		t,
+		toolRunner,
+		peak,
+		lock,
+		ran,
+		runner,
+		&currentSuite,
+	)
+}
+
+// testServicesSuiteGateChecksTools continues testServicesSuiteGateChecksPhases.
+func testServicesSuiteGateChecksTools(
+	t *testing.T,
+	toolRunner *mocks.MockToolRunner,
+	peak *atomic.Int32,
+	lock *sync.Mutex,
+	ran *[]string,
+	runner *mocks.MockCommandRunner,
+	currentSuiteRef *types.Suite,
+) {
+	t.Helper()
+
+	currentSuite := *currentSuiteRef
+
 	catalog := append(suite.Runs(toolRunner, nil, []types.ToolRun{
-		{Name: textGofumpt, Verb: textLint, Group: textFormat, Tags: []string{textGo2}},
-		{Name: "golines", Verb: textLint, Group: textFormat, Tags: []string{textGo2}},
-		{Name: textRuff, Verb: textLint, Group: textLint2, Tags: []string{textPython}},
+		{
+			Name:  textGofumpt,
+			Verb:  textLint,
+			Group: textFormat,
+			Tags:  []string{textGoLower},
+		},
+		{Name: "golines", Verb: textLint, Group: textFormat, Tags: []string{textGoLower}},
+		{
+			Name:  textRuff,
+			Verb:  textLint,
+			Group: textLintTitle,
+			Tags:  []string{textPython},
+		},
 	}), suite.Steps(map[string]suite.Step{textLintVet: {
-		Group: textLint2, Tags: []string{textGo2},
+		Group: textLintTitle, Tags: []string{textGoLower},
 		Run: func(_ context.Context, env *suite.StepEnv) (types.StepResults, error) {
 			assert.Same(t, runner, asType[*mocks.MockCommandRunner](t, env.Runner))
 			lock.Lock()
@@ -330,29 +371,29 @@ func testServicesSuiteGateRest2(
 	}})...)
 	env := suite.Env{Decs: fixtures.Decorations()}
 	gate := (&suite.Gate{
-		Env: env, Suite: suiteValue, Catalog: catalog,
-		Flags: []string{textGo2},
+		Env: env, Suite: currentSuite, Catalog: catalog,
+		Flags: []string{textGoLower},
 	}).Gate()
-	phases := make([]string, 0, capacity2)
+	phases := make([]string, 0, makeInput)
 
 	for _, p := range gate.Phases() {
 		phases = append(phases, p.Name)
 	}
 
-	assert.Equal(t, []string{textFormat, textLint2}, phases)
+	assert.Equal(t, []string{textFormat, textLintTitle}, phases)
 	require.NoError(t, gate.Run(t.Context(), runner, textR))
 	assert.Equal(t, []string{textGofumpt, "golines", "lint.vet@/r"}, (*ran))
 	assert.Equal(t, int32(1), peak.Load(), "a serial phase runs one row at a time")
 
-	testServicesSuiteGateRest(t, toolRunner, runner, &suiteValue, catalog, env)
+	testServicesSuiteGateChecksSingle(t, toolRunner, runner, &currentSuite, catalog, env)
 }
 
-// testServicesSuiteGateRest continues TestServicesSuite_Gate with its remaining steps.
-func testServicesSuiteGateRest(
+// testServicesSuiteGateChecksSingle continues TestServicesSuite_Gate: checks single.
+func testServicesSuiteGateChecksSingle(
 	t *testing.T,
 	toolRunner *mocks.MockToolRunner,
 	runner *mocks.MockCommandRunner,
-	suiteValue *types.Suite,
+	currentSuite *types.Suite,
 	catalog []suite.Entry,
 	env suite.Env,
 ) {
@@ -375,7 +416,7 @@ func testServicesSuiteGateRest(
 
 	bad := suite.Gate{
 		Env:     env,
-		Suite:   *suiteValue,
+		Suite:   *currentSuite,
 		Catalog: catalog,
 		Flags:   []string{textRust},
 	}
@@ -398,3 +439,22 @@ func recordPeak(peak *atomic.Int32, n int32) {
 		}
 	}
 }
+
+const (
+	// wantPlanLen is the expected plan len.
+	wantPlanLen = 2
+)
+
+const (
+	// textDocsLint is the literal "Docs Lint".
+	textDocsLint = "Docs Lint"
+
+	// textLintVet is the literal "lint.vet".
+	textLintVet = "lint.vet"
+
+	// textLychee is the literal "lychee".
+	textLychee = "lychee"
+
+	// textOnline is the literal "online".
+	textOnline = "online"
+)

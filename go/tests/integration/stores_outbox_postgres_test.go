@@ -136,7 +136,7 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 	})
 	require.ErrorIs(t, err, rolledBack)
 
-	for range iterations2 {
+	for range iterationsTransaction {
 		require.NoError(t, manager.WithTransaction(ctx, func(ctx context.Context) error {
 			return store.Enqueue(ctx, &rec)
 		}))
@@ -225,7 +225,7 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 
 		return err
 	}))
-	require.Len(t, recs, wantRecsLen2)
+	require.Len(t, recs, wantRecsLen)
 	require.Equal(t, textOrg1, recs[0].Tenant)
 	require.Equal(t, key.String(), recs[0].Key)
 	require.Equal(t, map[string]string{textEventType: "fact.v1"}, recs[0].Attributes)
@@ -239,12 +239,19 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 		return store.Park(ctx, parked, strings.Repeat("x", 40))
 	}))
 
-	testPgstoreMapsColumnsAndPurgesSentRowsRest(ctx, t, store, value, parked, inTx)
+	testPgstoreMapsColumnsAndPurgesSentRowsChecksColumnsAndPurge(
+		ctx,
+		t,
+		store,
+		value,
+		parked,
+		inTx,
+	)
 }
 
-// testPgstoreMapsColumnsAndPurgesSentRowsRest continues
-// TestPgstore_MapsColumnsAndPurgesSentRows with its remaining steps.
-func testPgstoreMapsColumnsAndPurgesSentRowsRest(
+// testPgstoreMapsColumnsAndPurgesSentRowsChecksColumnsAndPurge continues
+// TestPgstore_MapsColumnsAndPurgesSentRows: checks columns and purge.
+func testPgstoreMapsColumnsAndPurgesSentRowsChecksColumnsAndPurge(
 	ctx context.Context,
 	t *testing.T,
 	store *outboxpg.Store,
@@ -258,7 +265,7 @@ func testPgstoreMapsColumnsAndPurgesSentRowsRest(
 
 	require.NoError(t, value.QueryRowContext(ctx,
 		`SELECT last_error FROM product_outbox WHERE id = $1`, parked).Scan(&lastErr))
-	require.Len(t, lastErr, wantLastErrLen16)
+	require.Len(t, lastErr, wantLastErrLen)
 
 	purge := func(cutoff time.Time) int {
 		var count int
@@ -281,3 +288,14 @@ func testPgstoreMapsColumnsAndPurgesSentRowsRest(
 	require.Equal(t, 1, purge(time.Now().Add(time.Hour)),
 		"only the sent row is purged; the parked row stays")
 }
+
+const (
+	// iterationsTransaction is the iterations transaction the tests use.
+	iterationsTransaction = 2
+
+	// wantLastErrLen is the expected last err len.
+	wantLastErrLen = 16
+
+	// wantRecsLen is the expected recs len.
+	wantRecsLen = 2
+)

@@ -154,28 +154,31 @@ func SpyTracer(onSetAttribute func(key string, value any)) interfaces.Tracer {
 // Service double (generic MockService[TestEntity, TestParams, string])
 // ---------------------------------------------------------------------------
 
-// PanicOnGet names the panicOnGet option in a signature.
-type PanicOnGet bool
+// StubService returns a generated MockService whose Get returns getErr, and otherwise
+// echoes a canned entity; List/Create/Update/Delete succeed.
+func StubService(getErr error) *mocks.MockService[TestEntity, TestParams, string] {
+	return stubServiceWithGet(func(identifier string) (*TestEntity, error) {
+		if getErr != nil {
+			return nil, getErr
+		}
 
-// StubService returns a generated MockService whose Get returns getErr (or panics
-// when panicOnGet), and otherwise echoes a canned entity; List/Create/Update/Delete
-// succeed. It replaces the former CustomMockService.
-func StubService(
-	getErr error,
-	panicOnGet PanicOnGet,
+		return &TestEntity{ID: identifier, Name: "mock"}, nil
+	})
+}
+
+// StubServicePanickingOnGet returns a StubService whose Get panics.
+func StubServicePanickingOnGet() *mocks.MockService[TestEntity, TestParams, string] {
+	return stubServiceWithGet(func(string) (*TestEntity, error) { panic("test panic") })
+}
+
+// stubServiceWithGet returns the generated MockService answering Get with get.
+func stubServiceWithGet(
+	get func(identifier string) (*TestEntity, error),
 ) *mocks.MockService[TestEntity, TestParams, string] {
 	service := mocks.NewMockService[TestEntity, TestParams, string](newCtrl())
 	service.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, identifier string) (*TestEntity, error) {
-			if panicOnGet {
-				panic("test panic")
-			}
-
-			if getErr != nil {
-				return nil, getErr
-			}
-
-			return &TestEntity{ID: identifier, Name: "mock"}, nil
+			return get(identifier)
 		},
 	).AnyTimes()
 	service.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -262,29 +265,19 @@ func PanicWorkflow() *mocks.MockWorkflow[string, string] {
 // Resilience doubles (MockRetrier / MockCircuitBreaker / MockRateLimiter)
 // ---------------------------------------------------------------------------
 
-// AlwaysFail names the alwaysFail option in a signature.
-type AlwaysFail bool
-
-// StubRetrier returns a generated MockRetrier that fails the operation the first
-// failUntil attempts (or always, capped at 3, when alwaysFail), plus a getter for
-// the number of attempts made. It replaces the former FakeRetrier.
+// StubRetrier returns a generated MockRetrier that retries the operation up to
+// failUntil times, plus a getter for the number of attempts made.
 func StubRetrier(
 	failUntil int,
-	alwaysFail AlwaysFail,
 ) (retrier *mocks.MockRetrier, attempts func() int) {
 	var count int
 
 	retrier = mocks.NewMockRetrier(newCtrl())
 	retrier.EXPECT().Retry(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, operation func() error) error {
-			maxAttempts := failUntil + 1
-			if alwaysFail {
-				maxAttempts = 3
-			}
-
 			var lastErr error
 
-			for range maxAttempts {
+			for range failUntil + 1 {
 				count++
 
 				lastErr = operation()
@@ -302,39 +295,48 @@ func StubRetrier(
 	return retrier, attempts
 }
 
-// BreakerOpen names the open option in a signature.
-type BreakerOpen bool
-
-// StubCircuitBreaker returns a generated MockCircuitBreaker: when open, Execute
-// rejects without invoking the function; otherwise it runs the function.
-func StubCircuitBreaker(open BreakerOpen) *mocks.MockCircuitBreaker {
+// OpenCircuitBreaker returns a generated MockCircuitBreaker whose Execute rejects
+// without invoking the function.
+func OpenCircuitBreaker() *mocks.MockCircuitBreaker {
 	circuitBreaker := mocks.NewMockCircuitBreaker(newCtrl())
 	circuitBreaker.EXPECT().
 		Execute(gomock.Any()).
-		DoAndReturn(func(fn func() error) error {
-			if open {
-				return apperr.New(apperr.CodeUnavailable, "circuit breaker is bool(open)")
-			}
-
-			return fn()
-		}).
+		Return(apperr.New(apperr.CodeUnavailable, "circuit breaker is open")).
 		AnyTimes()
 
 	return circuitBreaker
 }
 
-// StubRateLimiter returns a generated MockRateLimiter: Allow reports allowed, and
-// Wait returns an error when not allowed.
-func StubRateLimiter(allowed Allowed) *mocks.MockRateLimiter {
-	rateLimiter := mocks.NewMockRateLimiter(newCtrl())
-	rateLimiter.EXPECT().Allow().Return(bool(allowed)).AnyTimes()
-	rateLimiter.EXPECT().Wait(gomock.Any()).DoAndReturn(func(context.Context) error {
-		if !allowed {
-			return apperr.Sentinel("rate limit exceeded")
-		}
+// ClosedCircuitBreaker returns a generated MockCircuitBreaker whose Execute runs the
+// function.
+func ClosedCircuitBreaker() *mocks.MockCircuitBreaker {
+	circuitBreaker := mocks.NewMockCircuitBreaker(newCtrl())
+	circuitBreaker.EXPECT().
+		Execute(gomock.Any()).
+		DoAndReturn(func(fn func() error) error { return fn() }).
+		AnyTimes()
 
-		return nil
-	}).AnyTimes()
+	return circuitBreaker
+}
+
+// AllowingRateLimiter returns a generated MockRateLimiter that admits every request.
+func AllowingRateLimiter() *mocks.MockRateLimiter {
+	rateLimiter := mocks.NewMockRateLimiter(newCtrl())
+	rateLimiter.EXPECT().Allow().Return(true).AnyTimes()
+	rateLimiter.EXPECT().Wait(gomock.Any()).Return(nil).AnyTimes()
+
+	return rateLimiter
+}
+
+// DenyingRateLimiter returns a generated MockRateLimiter that refuses every request:
+// Allow is false and Wait returns an error.
+func DenyingRateLimiter() *mocks.MockRateLimiter {
+	rateLimiter := mocks.NewMockRateLimiter(newCtrl())
+	rateLimiter.EXPECT().Allow().Return(false).AnyTimes()
+	rateLimiter.EXPECT().
+		Wait(gomock.Any()).
+		Return(apperr.Sentinel("rate limit exceeded")).
+		AnyTimes()
 
 	return rateLimiter
 }

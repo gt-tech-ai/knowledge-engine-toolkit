@@ -201,7 +201,7 @@ func TestPostgresBackend_StartUnreachable(t *testing.T) {
 		Port:     5432,
 		User:     textU,
 		Password: textP,
-		Database: textD2,
+		Database: textDLower,
 		SSLMode:  textDisable,
 	})
 	assert.Error(t, client.Start(context.Background()))

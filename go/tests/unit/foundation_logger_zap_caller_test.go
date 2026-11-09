@@ -22,18 +22,18 @@ import (
 func zapCaptureStdout(t *testing.T, callback func()) string {
 	t.Helper()
 
-	file, fileValue, err := os.Pipe()
+	file, currentFile, err := os.Pipe()
 	require.NoError(t, err)
 
 	orig := os.Stdout
 
-	os.Stdout = fileValue
+	os.Stdout = currentFile
 
 	defer func() { os.Stdout = orig }()
 
 	callback()
 
-	_ = fileValue.Close()
+	_ = currentFile.Close()
 
 	out, _ := io.ReadAll(file)
 
@@ -187,3 +187,8 @@ func TestZapLogger_LevelAndMessage(t *testing.T) {
 	assert.Equal(t, textWarn, rec["level"])
 	assert.Equal(t, "careful", rec["message"])
 }
+
+const (
+	// textLoggerZapCallerTest is the literal "logger_zap_caller_test.go".
+	textLoggerZapCallerTest = "logger_zap_caller_test.go"
+)

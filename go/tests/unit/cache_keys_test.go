@@ -78,7 +78,7 @@ func TestFilterHash_StableAndDiscriminating(t *testing.T) {
 		Operator: types.OpEq,
 		Value:    textIndexed,
 	}
-	filterClauseValue := types.FilterClause{
+	currentFilterClause := types.FilterClause{
 		Field:    textStatus,
 		Operator: types.OpEq,
 		Value:    textFailed,
@@ -97,7 +97,7 @@ func TestFilterHash_StableAndDiscriminating(t *testing.T) {
 	assert.NotEqual(
 		t,
 		cache.FilterHash(filterClause),
-		cache.FilterHash(filterClauseValue),
+		cache.FilterHash(currentFilterClause),
 		"a different filter → a different hash",
 	)
 	assert.NotEmpty(t, cache.FilterHash(nil), "a nil (match-all) filter hashes stably")
@@ -122,29 +122,29 @@ func TestCountKey_GenerationRotationChangesKey(t *testing.T) {
 	t.Parallel()
 
 	text := cache.AccessFingerprint(textOrg1)
-	text2 := cache.FilterHash(nil)
-	text3 := cache.CountKey(textTenant1, textConnectorInfo, textGenA, text, text2)
+	otherText := cache.FilterHash(nil)
+	thirdText := cache.CountKey(textTenant1, textConnectorInfo, textGenA, text, otherText)
 	assert.Equal(
 		t,
-		text3,
-		cache.CountKey(textTenant1, textConnectorInfo, textGenA, text, text2),
+		thirdText,
+		cache.CountKey(textTenant1, textConnectorInfo, textGenA, text, otherText),
 		"stable inputs → stable key",
 	)
 	assert.NotEqual(
 		t,
-		text3,
-		cache.CountKey(textTenant1, textConnectorInfo, "gen-b", text, text2),
+		thirdText,
+		cache.CountKey(textTenant1, textConnectorInfo, "gen-b", text, otherText),
 		"a new generation orphans the old key",
 	)
 	assert.NotEqual(
 		t,
-		text3,
+		thirdText,
 		cache.CountKey(
 			textTenant1,
 			textConnectorInfo,
 			textGenA,
 			cache.AccessFingerprint("org-2"),
-			text2,
+			otherText,
 		),
 		"a different access_fp is a different key",
 	)
@@ -179,25 +179,55 @@ func TestSuggestKey_DiscriminatesFieldAccessPrefix(t *testing.T) {
 		textStatus,
 		text,
 		textInd,
-		limit10,
+		suggestKeyInput,
 	)
 	assert.Equal(
 		t,
 		base,
-		cache.SuggestKey(textTenant1, textDocument, textStatus, text, textInd, limit10),
+		cache.SuggestKey(
+			textTenant1,
+			textDocument,
+			textStatus,
+			text,
+			textInd,
+			suggestKeyInput,
+		),
 	)
 	assert.NotEqual(
 		t,
 		base,
-		cache.SuggestKey(textTenant1, textDocument, textTitle, text, textInd, limit10),
+		cache.SuggestKey(
+			textTenant1,
+			textDocument,
+			textTitle,
+			text,
+			textInd,
+			suggestKeyInput,
+		),
 		"field varies the key",
 	)
 	assert.NotEqual(
 		t,
 		base,
-		cache.SuggestKey(textTenant1, textDocument, textStatus, text, "fai", limit10),
+		cache.SuggestKey(
+			textTenant1,
+			textDocument,
+			textStatus,
+			text,
+			"fai",
+			suggestKeyInput,
+		),
 		"prefix varies the key",
 	)
+
+	testSuggestKeyDiscriminatesFieldAccessPrefixCases(t, text, base)
+}
+
+// testSuggestKeyDiscriminatesFieldAccessPrefixCases continues
+// TestSuggestKey_DiscriminatesFieldAccessPrefix.
+func testSuggestKeyDiscriminatesFieldAccessPrefixCases(t *testing.T, text, base string) {
+	t.Helper()
+
 	assert.NotEqual(t, base, cache.SuggestKey(
 		textTenant1,
 		textDocument,
@@ -207,16 +237,67 @@ func TestSuggestKey_DiscriminatesFieldAccessPrefix(t *testing.T) {
 			textRestricted,
 		),
 		textInd,
-		limit10,
+		suggestKeyInput,
 	), "access varies the key")
 	assert.NotEqual(
 		t,
 		base,
-		cache.SuggestKey(textTenant1, textDocument, textStatus, text, textInd, limit25),
+		cache.SuggestKey(
+			textTenant1,
+			textDocument,
+			textStatus,
+			text,
+			textInd,
+			suggestKeyInputPrefix,
+		),
 		"limit varies the key (a limit-bounded page must not be shared across limits)",
 	)
-	assert.NotEqual(t,
-		cache.SuggestKey(textTenant1, textDocument, textStatus, text, "a:b", limit10),
-		cache.SuggestKey(textTenant1, textDocument, "status:a", text, textB, limit10),
-		"a delimiter-bearing prefix cannot collide with a different field/prefix split")
+	assert.NotEqual(
+		t,
+		cache.SuggestKey(
+			textTenant1,
+			textDocument,
+			textStatus,
+			text,
+			"a:b",
+			suggestKeyInput,
+		),
+		cache.SuggestKey(
+			textTenant1,
+			textDocument,
+			"status:a",
+			text,
+			textB,
+			suggestKeyInput,
+		),
+		"a delimiter-bearing prefix cannot collide with a different field/prefix split",
+	)
 }
+
+const (
+	// suggestKeyInput is the suggest key input the tests use.
+	suggestKeyInput = 10
+
+	// suggestKeyInputPrefix is the suggest key input prefix the tests use.
+	suggestKeyInputPrefix = 25
+)
+
+const (
+	// textGenA is the literal "gen-a".
+	textGenA = "gen-a"
+
+	// textInd is the literal "ind".
+	textInd = "ind"
+
+	// textScopeB is the literal "scope-b".
+	textScopeB = "scope-b"
+
+	// textConnectorInfo is the literal "connector_info".
+	textConnectorInfo = "connector_info"
+
+	// textScopeA is the literal "scope-a".
+	textScopeA = "scope-a"
+
+	// textRestricted is the literal "restricted".
+	textRestricted = "restricted"
+)

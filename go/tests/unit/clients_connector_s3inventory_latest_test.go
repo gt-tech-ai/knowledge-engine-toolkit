@@ -89,18 +89,23 @@ func TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix(t *testing.T) {
 		return src
 	}
 
-	_, afterThree, err := source(reportKeys).ListPage(ctx, "", limit3)
+	_, afterThree, err := source(reportKeys).ListPage(ctx, "", listPageInputAPrefix)
 	require.NoError(t, err)
 
-	all := drain(t, source(reportKeys), "", limit2)
-	rest := drain(t, source(func(*mocks.MockStorageClient) {}), afterThree, limit3)
+	all := drain(t, source(reportKeys), "", drainInput)
+	rest := drain(
+		t,
+		source(func(*mocks.MockStorageClient) {}),
+		afterThree,
+		drainInputAPrefix,
+	)
 	_, _, emptyErr := source(func(sc *mocks.MockStorageClient) {
 		sc.EXPECT().
 			ListObjectsPageToken(gomock.Any(), textReports, inventoryPrefix, "", gomock.Any()).
 			Return([]interfaces.StorageObject{
 				{Key: inventoryPrefix + "2026-11-06T00-00Z/manifest.json"},
 			}, "", nil)
-	}).ListPage(ctx, "", limit2)
+	}).ListPage(ctx, "", listPageInputUnderAPrefix)
 	neither := prefixCfg()
 
 	neither.InventoryPrefix = ""
@@ -113,3 +118,14 @@ func TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix(t *testing.T) {
 	require.True(t, apperr.Is(emptyErr, apperr.CodeNotFound), emptyErr)
 	require.True(t, apperr.Is(buildErr, apperr.CodeInvalidInput))
 }
+
+const (
+	// drainInputAPrefix is the drain input aprefix the tests use.
+	drainInputAPrefix = 3
+
+	// listPageInputAPrefix is the list page input aprefix the tests use.
+	listPageInputAPrefix = 3
+
+	// listPageInputUnderAPrefix is the list page input under aprefix the tests use.
+	listPageInputUnderAPrefix = 2
+)

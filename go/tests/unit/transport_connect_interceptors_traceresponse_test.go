@@ -132,13 +132,13 @@ func TestTracingInterceptor_UnaryNilResponseNoPanic(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	spanCtx, _ := validSpanCtx(t)
 
-	tracerValue := mocks.NewMockTracer(ctrl)
-	tracerValue.EXPECT().
+	currentTracer := mocks.NewMockTracer(ctrl)
+	currentTracer.EXPECT().
 		Start(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(spanCtx, anySpan(ctrl))
 
 	wantErr := apperr.Sentinel(textBoom)
-	handler := interceptors.TracingInterceptor(tracerValue).WrapUnary(
+	handler := interceptors.TracingInterceptor(currentTracer).WrapUnary(
 		func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
 			return nil, wantErr
 		},
@@ -167,8 +167,8 @@ func TestTracingInterceptor_StreamingSetsTraceResponseBeforeHandler(t *testing.T
 	ctrl := gomock.NewController(t)
 	spanCtx, wantTraceParent := validSpanCtx(t)
 
-	tracerValue := mocks.NewMockTracer(ctrl)
-	tracerValue.EXPECT().
+	currentTracer := mocks.NewMockTracer(ctrl)
+	currentTracer.EXPECT().
 		Start(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(spanCtx, anySpan(ctrl))
 
@@ -183,7 +183,7 @@ func TestTracingInterceptor_StreamingSetsTraceResponseBeforeHandler(t *testing.T
 
 	var headerAtHandler string
 
-	handler := interceptors.TracingInterceptor(tracerValue).WrapStreamingHandler(
+	handler := interceptors.TracingInterceptor(currentTracer).WrapStreamingHandler(
 		func(context.Context, connect.StreamingHandlerConn) error {
 			headerAtHandler = respHeader.Get("Traceresponse") // captured before any Send
 

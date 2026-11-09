@@ -22,16 +22,13 @@ type planChange struct {
 	importing bool
 }
 
-// outputsFlag names the outputs option in a signature.
-type outputsFlag bool
-
 // writeUnitPlan writes what terragrunt's --json-out-dir leaves for one unit: its
-// `terraform show -json` rendering carrying changes (and, when outputs is set, a changed
-// root output).
+// `terraform show -json` rendering carrying changes (and, when outputActions is
+// non-empty, a changed root output).
 func writeUnitPlan(
 	t *testing.T,
 	dir, unit string,
-	outputs outputsFlag,
+	outputActions []string,
 	changes ...planChange,
 ) {
 	t.Helper()
@@ -52,30 +49,30 @@ func writeUnitPlan(
 		ResourceChanges []resource        `json:"resource_changes"`
 	}{FormatVersion: "1.2"}
 
-	for _, planChangeValue := range changes {
-		changeValue := change{Actions: planChangeValue.actions}
-		if planChangeValue.importing {
-			changeValue.Importing = map[string]string{textID: "adopted"}
+	for _, currentPlanChange := range changes {
+		currentChange := change{Actions: currentPlanChange.actions}
+		if currentPlanChange.importing {
+			currentChange.Importing = map[string]string{textID: "adopted"}
 		}
 
 		doc.ResourceChanges = append(
 			doc.ResourceChanges,
-			resource{Address: planChangeValue.address, Change: changeValue},
+			resource{Address: currentPlanChange.address, Change: currentChange},
 		)
 	}
 
-	if outputs {
-		doc.OutputChanges = map[string]change{textURL: {Actions: []string{"update"}}}
+	if len(outputActions) > 0 {
+		doc.OutputChanges = map[string]change{textURL: {Actions: outputActions}}
 	}
 
 	data, err := json.Marshal(doc)
 	require.NoError(t, err)
 
 	unitDir := filepath.Join(dir, unit)
-	require.NoError(t, os.MkdirAll(unitDir, perm0o750))
+	require.NoError(t, os.MkdirAll(unitDir, mkdirAllInputPlan))
 	require.NoError(
 		t,
-		os.WriteFile(filepath.Join(unitDir, tfplan.JSONFile), data, perm0o600),
+		os.WriteFile(filepath.Join(unitDir, tfplan.JSONFile), data, writeFileInput),
 	)
 }
 
@@ -104,21 +101,21 @@ func TestFoundationTfplan(t *testing.T) {
 		t,
 		dir,
 		textVpc,
-		true,
+		[]string{"update"},
 		planChange{address: "aws_vpc.main", actions: []string{"update"}},
 	)
 	writeUnitPlan(
 		t,
 		dir,
 		"rds",
-		false,
+		nil,
 		planChange{address: "aws_db_instance.db", actions: []string{"no-op"}},
 	)
 	writeUnitPlan(
 		t,
 		dir,
 		"eks",
-		false,
+		nil,
 		planChange{address: "aws_eks_cluster.main", actions: []string{textCreate}},
 		planChange{
 			address: "aws_eks_node_group.ng",
@@ -129,7 +126,7 @@ func TestFoundationTfplan(t *testing.T) {
 		t,
 		dir,
 		"iam",
-		false,
+		nil,
 		planChange{address: "aws_iam_role.old", actions: []string{textDelete}},
 		planChange{address: "data.aws_iam_policy.p", actions: []string{textRead}},
 		planChange{
@@ -151,11 +148,11 @@ func TestFoundationTfplan(t *testing.T) {
 	assert.Equal(t, []string{"eks", "iam", "rds", textVpc}, units)
 	assert.True(t, plans[3].HasChanges() && plans[3].Outputs, "vpc changes an output")
 
-	testFoundationTfplanRest(t, dir, plans)
+	testFoundationTfplanRendering(t, dir, plans)
 }
 
-// testFoundationTfplanRest continues TestFoundationTfplan with its remaining steps.
-func testFoundationTfplanRest(t *testing.T, dir string, plans []tfplan.UnitPlan) {
+// testFoundationTfplanRendering continues TestFoundationTfplan: rendering.
+func testFoundationTfplanRendering(t *testing.T, dir string, plans []tfplan.UnitPlan) {
 	t.Helper()
 
 	var err error
@@ -201,8 +198,8 @@ func testFoundationTfplanRest(t *testing.T, dir string, plans []tfplan.UnitPlan)
 	assert.Contains(t, tfplan.Summary(textT, none), "No unit has pending changes.")
 
 	broken := filepath.Join(dir, textBroken, tfplan.JSONFile)
-	require.NoError(t, os.MkdirAll(filepath.Dir(broken), perm0o750))
-	require.NoError(t, os.WriteFile(broken, []byte("{"), perm0o600))
+	require.NoError(t, os.MkdirAll(filepath.Dir(broken), mkdirAllInputRendering))
+	require.NoError(t, os.WriteFile(broken, []byte("{"), writeFileInput))
 
 	_, err = tfplan.ReadUnits(dir)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
@@ -213,3 +210,11 @@ func testFoundationTfplanRest(t *testing.T, dir string, plans []tfplan.UnitPlan)
 	assert.Contains(t, failed, "### Terraform plan: `staging` (failed)")
 	assert.Contains(t, failed, "exit status 1")
 }
+
+const (
+	// mkdirAllInputPlan is the mkdir all input plan the tests use.
+	mkdirAllInputPlan = 0o750
+
+	// mkdirAllInputRendering is the mkdir all input rendering the tests use.
+	mkdirAllInputRendering = 0o750
+)

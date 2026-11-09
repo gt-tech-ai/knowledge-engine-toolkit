@@ -52,20 +52,25 @@ func TestNodeHash_GoldenCorpus(t *testing.T) {
 	}
 
 	require.NoError(t, json.Unmarshal(raw, &corpus))
-	require.GreaterOrEqual(t, len(corpus.Cases), wantCasesLen6)
+	require.GreaterOrEqual(t, len(corpus.Cases), minCasesLen)
 
-	for _, shapeCasesValue := range corpus.Cases {
-		canonical, err := shapeCasesValue.Node.Canonical()
-		require.NoError(t, err, shapeCasesValue.Name)
+	for _, currentShapeCases := range corpus.Cases {
+		canonical, err := currentShapeCases.Node.Canonical()
+		require.NoError(t, err, currentShapeCases.Name)
 		assert.Equal(
 			t,
-			shapeCasesValue.Canonical,
+			currentShapeCases.Canonical,
 			string(canonical),
-			shapeCasesValue.Name,
+			currentShapeCases.Name,
 		)
 
-		h, err := shapeCasesValue.Node.Hash()
-		require.NoError(t, err, shapeCasesValue.Name)
-		assert.Equal(t, shapeCasesValue.Hash, h.String(), shapeCasesValue.Name)
+		h, err := currentShapeCases.Node.Hash()
+		require.NoError(t, err, currentShapeCases.Name)
+		assert.Equal(t, currentShapeCases.Hash, h.String(), currentShapeCases.Name)
 	}
 }
+
+const (
+	// minCasesLen is the min cases len the tests use.
+	minCasesLen = 6
+)

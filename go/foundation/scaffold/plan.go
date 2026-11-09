@@ -125,14 +125,14 @@ func PlanFiles(
 
 // render executes text as the template named name over data.
 func render(name, text string, data any) ([]byte, error) {
-	templateValue, err := template.New(name).Option("missingkey=error").Parse(text)
+	currentTemplate, err := template.New(name).Option("missingkey=error").Parse(text)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse template "+name)
 	}
 
 	var buffer bytes.Buffer
 
-	err = templateValue.Execute(&buffer, data)
+	err = currentTemplate.Execute(&buffer, data)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "render template "+name)
 	}

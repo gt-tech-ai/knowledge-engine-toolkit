@@ -31,13 +31,13 @@ func goldenFact() types.Fact {
 		Cube:  textGenaiCalls,
 		OrgID: textOrg1,
 		TS: time.Date(
-			year2026,
-			month10,
-			day9,
-			hour12,
-			min34,
-			sec56,
-			nsec789000000,
+			dateInput,
+			dateInputFact,
+			dateInputGoldenFact,
+			goldenFactHour,
+			goldenFactMinute,
+			goldenFactSecond,
+			goldenFactNanosecond,
 			time.UTC,
 		),
 		Dims: map[string]string{
@@ -48,9 +48,9 @@ func goldenFact() types.Fact {
 			textTeam:   textT1,
 		},
 		Measures: map[string]float64{
-			textTokensIn: textTokensIn42,
-			"tokens_out": tokensOut7,
-			"duration_s": durationS1p25,
+			textTokensIn: textTokensInFact,
+			"tokens_out": tokensOut,
+			"duration_s": factDurationSeconds,
 		},
 		IdempotencyKey: "4bf92f3577b34da6a3ce929d0e0e4736:00f067aa0ba902b7:generate",
 		Schema:         types.FactSchemaVersion,
@@ -114,8 +114,20 @@ func TestFact_MarshalEscapesLikePython(t *testing.T) {
 	t.Parallel()
 
 	fact := types.Fact{
-		Cube: textC, OrgID: textO, IdempotencyKey: textK, Schema: types.FactSchemaVersion,
-		TS:   time.Date(year2026, month10, day9, 0, 0, 0, 0, time.UTC),
+		Cube:           textC,
+		OrgID:          textO,
+		IdempotencyKey: textK,
+		Schema:         types.FactSchemaVersion,
+		TS: time.Date(
+			dateInput,
+			dateInputPython,
+			dateInputLikePython,
+			0,
+			0,
+			0,
+			0,
+			time.UTC,
+		),
 		Dims: map[string]string{textTeam: "a<b>&c\u2028\u2029\u00e9"},
 	}
 
@@ -155,3 +167,38 @@ func TestFact_UnmarshalRejectsUnknownSchema(t *testing.T) {
 		)
 	}
 }
+
+const (
+	// dateInputFact is the date input fact the tests use.
+	dateInputFact = 10
+
+	// dateInputGoldenFact is the date input golden fact the tests use.
+	dateInputGoldenFact = 9
+
+	// goldenFactHour is the date input golden fact13 the tests use.
+	goldenFactHour = 12
+
+	// goldenFactMinute is the date input golden fact14 the tests use.
+	goldenFactMinute = 34
+
+	// goldenFactSecond is the date input golden fact15 the tests use.
+	goldenFactSecond = 56
+
+	// goldenFactNanosecond is the date input golden fact16 the tests use.
+	goldenFactNanosecond = 789000000
+
+	// dateInputLikePython is the date input like python the tests use.
+	dateInputLikePython = 9
+
+	// dateInputPython is the date input python the tests use.
+	dateInputPython = 10
+
+	// factDurationSeconds is the duration s1 the tests use.
+	factDurationSeconds = 1.25
+
+	// textTokensInFact is the text tokens in fact the tests use.
+	textTokensInFact = 42
+
+	// tokensOut is the tokens out the tests use.
+	tokensOut = 7
+)

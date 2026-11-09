@@ -60,10 +60,10 @@ func (h *stacktraceHandler) Handle(ctx context.Context, record slog.Record) erro
 		stack = captureStack()
 	}
 
-	r2 := record.Clone()
-	r2.AddAttrs(slog.String(StacktraceKey, stack))
+	secondR := record.Clone()
+	secondR.AddAttrs(slog.String(StacktraceKey, stack))
 
-	return h.inner.Handle(ctx, r2)
+	return h.inner.Handle(ctx, secondR)
 }
 
 // stackTracer is implemented by errors that carry an origin stack trace

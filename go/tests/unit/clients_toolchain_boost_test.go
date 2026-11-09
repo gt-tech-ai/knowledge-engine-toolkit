@@ -32,7 +32,7 @@ func catalogFromEntries(t *testing.T, entries ...types.ToolEntry) *toolchain.Cat
 func goPrereqEntry() types.ToolEntry {
 	return types.ToolEntry{
 		Name:     "Go",
-		Binary:   textGo2,
+		Binary:   textGoLower,
 		Category: types.CategoryPrerequisite,
 		Required: true,
 	}
@@ -153,16 +153,16 @@ func TestClientsToolchainDetector_CheckPrerequisites_Outdated(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	commandRunner := mocks.NewMockCommandRunner(ctrl)
-	commandRunner.EXPECT().Exists(textGo2).Return(true)
+	commandRunner.EXPECT().Exists(textGoLower).Return(true)
 	commandRunner.EXPECT().
-		RunBuffered(gomock.Any(), gomock.Any(), textGo2, textVersion).
+		RunBuffered(gomock.Any(), gomock.Any(), textGoLower, textVersion).
 		Return(interfaces.CmdResult{Stdout: []byte("1.26.0")})
 
 	det := toolchain.NewDetector(commandRunner, fixtures.NopLogger())
 	err := det.CheckPrerequisites(context.Background(), textRoot, []types.ToolDef{{
-		Name: "Go", Binary: textGo2,
+		Name: "Go", Binary: textGoLower,
 		MinVersion:   &types.Version{Major: 1, Minor: 30},
-		VersionCmd:   []string{textGo2, textVersion},
+		VersionCmd:   []string{textGoLower, textVersion},
 		VersionParse: types.ParseFirstVersion,
 		FallbackURL:  "https://go.dev/dl/",
 	}})
@@ -187,7 +187,7 @@ func TestClientsToolchainGoVersionParse_Fallback(t *testing.T) {
 	cat, err := toolchain.NewCatalog(toolEntries(t))
 	require.NoError(t, err)
 
-	goDef, ok := cat.Find(textGo2)
+	goDef, ok := cat.Find(textGoLower)
 	require.True(t, ok)
 	assert.Equal(t, "1.26.0", goDef.VersionParse("1.26.0"))
 }
@@ -263,9 +263,15 @@ func TestClientsToolchainProvision_WindowsCheckOnly(t *testing.T) {
 		denyPrompter(t),
 		toolchain.WithArch("arm64"),
 	)
-	require.NoError(t, inst.Provision(
-		context.Background(), textRoot, provisionCatalog(t), false, true,
-	))
+	require.NoError(
+		t,
+		inst.Provision(
+			context.Background(),
+			textRoot,
+			provisionCatalog(t),
+			&types.InstallToolsOptions{AutoYes: false, CheckOnly: true},
+		),
+	)
 
 	assert.True(t, onPathBoost(filepath.Join(gobin, "windows_amd64")),
 		"windows_amd64 subdir must be on PATH, got %q", os.Getenv(textPath))
@@ -290,9 +296,15 @@ func TestClientsToolchainProvision_GoBinUnresolvable(t *testing.T) {
 	registerToolScanMock(r)
 
 	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
-	require.NoError(t, inst.Provision(
-		context.Background(), textRoot, provisionCatalog(t), false, true,
-	))
+	require.NoError(
+		t,
+		inst.Provision(
+			context.Background(),
+			textRoot,
+			provisionCatalog(t),
+			&types.InstallToolsOptions{AutoYes: false, CheckOnly: true},
+		),
+	)
 }
 
 // TestClientsToolchainProvision_UserDeclines tests that declining the install prompt
@@ -311,7 +323,7 @@ func TestClientsToolchainProvision_UserDeclines(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	commandRunner := mocks.NewMockCommandRunner(ctrl)
-	commandRunner.EXPECT().Exists(textGo2).Return(true)
+	commandRunner.EXPECT().Exists(textGoLower).Return(true)
 	commandRunner.EXPECT().Exists(textWire).Return(false)
 
 	prompter := mocks.NewMockPrompter(ctrl)
@@ -324,7 +336,12 @@ func TestClientsToolchainProvision_UserDeclines(t *testing.T) {
 		textLinuxApt,
 		prompter,
 	)
-	err := inst.Provision(context.Background(), textRoot, cat, false, false)
+	err := inst.Provision(
+		context.Background(),
+		textRoot,
+		cat,
+		&types.InstallToolsOptions{AutoYes: false, CheckOnly: false},
+	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), textMissing)
 }
@@ -343,12 +360,12 @@ func TestClientsToolchainProvision_InstallFailure(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	commandRunner := mocks.NewMockCommandRunner(ctrl)
-	commandRunner.EXPECT().Exists(textGo2).Return(true)
+	commandRunner.EXPECT().Exists(textGoLower).Return(true)
 	gomock.InOrder(
 		commandRunner.EXPECT().Exists(textWire).Return(false),
 		commandRunner.EXPECT().RunWithEnv(
 			gomock.Any(), textRoot, []string{textGotoolchainLocal},
-			textGo2, textInstall, "x/wire@v1",
+			textGoLower, textInstall, "x/wire@v1",
 		).Return(assert.AnError),
 	)
 
@@ -359,7 +376,12 @@ func TestClientsToolchainProvision_InstallFailure(t *testing.T) {
 		textLinuxApt,
 		denyPrompter(t),
 	)
-	err := inst.Provision(context.Background(), textRoot, cat, true, false)
+	err := inst.Provision(
+		context.Background(),
+		textRoot,
+		cat,
+		&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
+	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), textWire)
 }
@@ -379,12 +401,12 @@ func TestClientsToolchainProvision_VerifyFailure(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	commandRunner := mocks.NewMockCommandRunner(ctrl)
-	commandRunner.EXPECT().Exists(textGo2).Return(true)
+	commandRunner.EXPECT().Exists(textGoLower).Return(true)
 	gomock.InOrder(
 		commandRunner.EXPECT().Exists(textWire).Return(false),
 		commandRunner.EXPECT().RunWithEnv(
 			gomock.Any(), textRoot, []string{textGotoolchainLocal},
-			textGo2, textInstall, "x/wire@v1",
+			textGoLower, textInstall, "x/wire@v1",
 		).Return(nil),
 		commandRunner.EXPECT().
 			Exists(textWire).
@@ -401,8 +423,7 @@ func TestClientsToolchainProvision_VerifyFailure(t *testing.T) {
 		context.Background(),
 		textRoot,
 		provisionCatalog(t),
-		true,
-		false,
+		&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), textWire)
@@ -424,7 +445,7 @@ func TestClientsToolchainProvision_MissingToolNoMethodSkipped(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	commandRunner := mocks.NewMockCommandRunner(ctrl)
-	commandRunner.EXPECT().Exists(textGo2).Return(true)
+	commandRunner.EXPECT().Exists(textGoLower).Return(true)
 	commandRunner.EXPECT().
 		Exists(textGcc).
 		Return(false)
@@ -451,7 +472,15 @@ func TestClientsToolchainProvision_MissingToolNoMethodSkipped(t *testing.T) {
 		textLinuxApt,
 		denyPrompter(t),
 	)
-	require.NoError(t, inst.Provision(context.Background(), textRoot, cat, true, false))
+	require.NoError(
+		t,
+		inst.Provision(
+			context.Background(),
+			textRoot,
+			cat,
+			&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
+		),
+	)
 }
 
 // TestClientsToolchainProvision_DarwinNoBrew tests that a macOS setup without Homebrew
@@ -471,13 +500,19 @@ func TestClientsToolchainProvision_DarwinNoBrew(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().Exists("brew").Return(false)
-	r.EXPECT().Exists(textGo2).Return(true)
+	r.EXPECT().Exists(textGoLower).Return(true)
 	r.EXPECT().Exists(textWire).Return(true)
 
 	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "darwin", denyPrompter(t))
-	require.NoError(t, inst.Provision(
-		context.Background(), textRoot, provisionCatalog(t), false, true,
-	))
+	require.NoError(
+		t,
+		inst.Provision(
+			context.Background(),
+			textRoot,
+			provisionCatalog(t),
+			&types.InstallToolsOptions{AutoYes: false, CheckOnly: true},
+		),
+	)
 }
 
 // TestClientsToolchainInstallSet_AllAlreadyInstalled tests the no-op path when every
@@ -561,12 +596,12 @@ func TestClientsToolchainProvision_WindowsArm64InstallAddsAmd64Path(t *testing.T
 
 	ctrl := gomock.NewController(t)
 	commandRunner := mocks.NewMockCommandRunner(ctrl)
-	commandRunner.EXPECT().Exists(textGo2).Return(true)
+	commandRunner.EXPECT().Exists(textGoLower).Return(true)
 	gomock.InOrder(
 		commandRunner.EXPECT().Exists(textWire).Return(false),
 		commandRunner.EXPECT().RunWithEnv(
 			gomock.Any(), textRoot, gomock.Any(),
-			textGo2, textInstall, "-p", "1", "x/wire@v1",
+			textGoLower, textInstall, "-p", "1", "x/wire@v1",
 		).Return(nil),
 		commandRunner.EXPECT().Exists(textWire).Return(true),
 	)
@@ -578,9 +613,15 @@ func TestClientsToolchainProvision_WindowsArm64InstallAddsAmd64Path(t *testing.T
 		denyPrompter(t),
 		toolchain.WithArch("arm64"),
 	)
-	require.NoError(t, inst.Provision(
-		context.Background(), textRoot, provisionCatalog(t), true, false,
-	))
+	require.NoError(
+		t,
+		inst.Provision(
+			context.Background(),
+			textRoot,
+			provisionCatalog(t),
+			&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
+		),
+	)
 	assert.True(t, onPathBoost(filepath.Join(gobin, "windows_amd64")))
 }
 
@@ -603,7 +644,7 @@ func TestClientsToolchainProvision_WindowsPowershellTools(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	commandRunner := mocks.NewMockCommandRunner(ctrl)
-	commandRunner.EXPECT().Exists(textGo2).Return(true)
+	commandRunner.EXPECT().Exists(textGoLower).Return(true)
 	gomock.InOrder(
 		commandRunner.EXPECT().Exists(textGcc).Return(false),
 		commandRunner.EXPECT().Exists("mytool").Return(false),
@@ -616,6 +657,18 @@ func TestClientsToolchainProvision_WindowsPowershellTools(t *testing.T) {
 		).Return(nil),
 		commandRunner.EXPECT().Exists("mytool").Return(true),
 	)
+
+	testClientsToolchainProvisionWindowsChecksTools(t, appData, commandRunner)
+}
+
+// testClientsToolchainProvisionWindowsChecksTools continues
+// TestClientsToolchainProvision_WindowsPowershellTools.
+func testClientsToolchainProvisionWindowsChecksTools(
+	t *testing.T,
+	appData string,
+	commandRunner *mocks.MockCommandRunner,
+) {
+	t.Helper()
 
 	cat := catalogFromEntries(
 		t, goPrereqEntry(), types.ToolEntry{
@@ -652,7 +705,15 @@ func TestClientsToolchainProvision_WindowsPowershellTools(t *testing.T) {
 		denyPrompter(t),
 		toolchain.WithArch("amd64"),
 	)
-	require.NoError(t, inst.Provision(context.Background(), textRoot, cat, true, false))
+	require.NoError(
+		t,
+		inst.Provision(
+			context.Background(),
+			textRoot,
+			cat,
+			&types.InstallToolsOptions{AutoYes: true, CheckOnly: false},
+		),
+	)
 	assert.True(t, onPathBoost(filepath.Join(appData, "Programs", "mytool")),
 		"LOCALAPPDATA/Programs/mytool must be on PATH, got %q", os.Getenv(textPath))
 }
@@ -677,7 +738,7 @@ func TestClientsToolchainInstallSet_NamedSubsetFailure(t *testing.T) {
 	commandRunner.EXPECT().Exists(textGrpcurl).Return(false)
 	commandRunner.EXPECT().RunWithEnv(
 		gomock.Any(), textRoot, []string{textGotoolchainLocal},
-		textGo2, textInstall, textGrpcurlV1,
+		textGoLower, textInstall, textGrpcurlV1,
 	).Return(assert.AnError)
 
 	optional := []types.ToolDef{
@@ -686,7 +747,10 @@ func TestClientsToolchainInstallSet_NamedSubsetFailure(t *testing.T) {
 			Name:   textGrpcurl,
 			Binary: textGrpcurl,
 			InstallMethods: map[string]types.InstallMethod{
-				textAll: {Command: textGo2, Args: []string{textInstall, textGrpcurlV1}},
+				textAll: {
+					Command: textGoLower,
+					Args:    []string{textInstall, textGrpcurlV1},
+				},
 			},
 		},
 	}
@@ -731,7 +795,10 @@ func TestClientsToolchainInstallSet_UserDeclines(t *testing.T) {
 			Name:   textGrpcurl,
 			Binary: textGrpcurl,
 			InstallMethods: map[string]types.InstallMethod{
-				textAll: {Command: textGo2, Args: []string{textInstall, textGrpcurlV1}},
+				textAll: {
+					Command: textGoLower,
+					Args:    []string{textInstall, textGrpcurlV1},
+				},
 			},
 		},
 	}

@@ -93,14 +93,14 @@ func TestSQSMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 
 	sent := map[string]sqstypes.MessageAttributeValue{}
 
-	testSQSMessagingHandlerContinuesThePublishersTraceRest8(
+	testSQSMessagingHandlerContinuesThePublishersTraceExpectsSend(
 		ctx, consumer, t, spanContext, api, sent,
 	)
 }
 
-// testSQSMessagingHandlerContinuesThePublishersTraceRest8 continues
-// testSQSMessagingHandlerContinuesThePublishersTraceRest7 with its remaining steps.
-func testSQSMessagingHandlerContinuesThePublishersTraceRest8(
+// testSQSMessagingHandlerContinuesThePublishersTraceExpectsSend continues
+// testSQSMessagingHandlerContinuesThePublishersTrace: expects send.
+func testSQSMessagingHandlerContinuesThePublishersTraceExpectsSend(
 	ctx, consumer context.Context,
 	t *testing.T,
 	spanContext oteltrace.SpanContext,
@@ -117,14 +117,14 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest8(
 		return &awssqs.SendMessageOutput{}, nil
 	})
 
-	testSQSMessagingHandlerContinuesThePublishersTraceRest3(
+	testSQSMessagingHandlerContinuesThePublishersTraceExpectsBatchAndPublishes(
 		ctx, consumer, t, spanContext, api, sent,
 	)
 }
 
-// testSQSMessagingHandlerContinuesThePublishersTraceRest3 continues
-// testSQSMessagingHandlerContinuesThePublishersTraceRest with its remaining steps.
-func testSQSMessagingHandlerContinuesThePublishersTraceRest3(
+// testSQSMessagingHandlerContinuesThePublishersTraceExpectsBatchAndPublishes continues
+// testSQSMessagingHandlerContinuesThePublishersTraceRest: expects batch and publishes.
+func testSQSMessagingHandlerContinuesThePublishersTraceExpectsBatchAndPublishes(
 	ctx, consumer context.Context,
 	t *testing.T,
 	spanContext oteltrace.SpanContext,
@@ -158,14 +158,15 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest3(
 
 	var asked []string
 
-	testSQSMessagingHandlerContinuesThePublishersTraceRest4(
+	testSQSMessagingHandlerContinuesThePublishersTraceExpectsReceiveAndDelete(
 		ctx, consumer, t, spanContext, api, sent, asked,
 	)
 }
 
-// testSQSMessagingHandlerContinuesThePublishersTraceRest4 continues
-// testSQSMessagingHandlerContinuesThePublishersTraceRest3 with its remaining steps.
-func testSQSMessagingHandlerContinuesThePublishersTraceRest4(
+// testSQSMessagingHandlerContinuesThePublishersTraceExpectsReceiveAndDelete continues
+// testSQSMessagingHandlerContinuesThePublishersTraceExpectsBatchAndPublishes: expects
+// receive and delete.
+func testSQSMessagingHandlerContinuesThePublishersTraceExpectsReceiveAndDelete(
 	ctx, consumer context.Context,
 	t *testing.T,
 	spanContext oteltrace.SpanContext,
@@ -202,14 +203,14 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest4(
 	)
 	require.NoError(t, err)
 
-	testSQSMessagingHandlerContinuesThePublishersTraceRest2(
+	testSQSMessagingHandlerContinuesThePublishersTraceSubscribesAndChecksTrace(
 		consumer, t, spanContext, sent, &asked, sub,
 	)
 }
 
-// testSQSMessagingHandlerContinuesThePublishersTraceRest2 continues
-// testSQSMessagingHandlerContinuesThePublishersTraceRest with its remaining steps.
-func testSQSMessagingHandlerContinuesThePublishersTraceRest2(
+// testSQSMessagingHandlerContinuesThePublishersTraceSubscribesAndChecksTrace continues
+// testSQSMessagingHandlerContinuesThePublishersTraceRest: subscribes and checks trace.
+func testSQSMessagingHandlerContinuesThePublishersTraceSubscribesAndChecksTrace(
 	consumer context.Context,
 	t *testing.T,
 	spanContext oteltrace.SpanContext,
@@ -233,13 +234,13 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest2(
 			return nil
 		}))
 
-	deliveryValue := recv(t, got, "the handler to run")
+	currentDelivery := recv(t, got, "the handler to run")
 	require.NoError(t, sub.Close())
 	assert.Equal(t, []string{"All"}, (*asked))
-	assert.Equal(t, spanContext.TraceID(), deliveryValue.trace)
+	assert.Equal(t, spanContext.TraceID(), currentDelivery.trace)
 	assert.Equal(
 		t,
 		aws.ToString(sent["traceparent"].StringValue),
-		deliveryValue.metadata["traceparent"],
+		currentDelivery.metadata["traceparent"],
 	)
 }

@@ -68,11 +68,11 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 	sup, err := process.NewFromConfig(process.Config{Kind: process.KindExec})
 	require.NoError(t, err)
 
-	ready, runs := readyAfter(t, readyAfterArg3)
+	ready, runs := readyAfter(t, readyAfterInput)
 
 	processHandle, err := sup.Start(t.Context(), new(sleeper()), ready)
 	require.NoError(t, err)
-	assert.Equal(t, int32(int32Arg3), runs.Load())
+	assert.Equal(t, int32(wantRuns), runs.Load())
 
 	stopped := time.Now()
 
@@ -80,7 +80,7 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 	assert.Less(t, time.Since(stopped), 5*time.Second)
 	require.Error(t, processHandle.Wait())
 
-	never, _ := readyAfter(t, readyAfterArg1000)
+	never, _ := readyAfter(t, readyAfterInputStop)
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 
 	defer cancel()
@@ -124,7 +124,10 @@ func TestClientsProcess_DetachAndStub(t *testing.T) {
 	require.NoError(
 		t,
 		sup.Detach(
-			&types.ProcessSpec{Name: textD2, Args: []string{textBinSh, "-c", "exit 0"}},
+			&types.ProcessSpec{
+				Name: textDLower,
+				Args: []string{textBinSh, "-c", "exit 0"},
+			},
 		),
 	)
 
@@ -174,7 +177,7 @@ func TestClientsProcess_LogFile(t *testing.T) {
 
 	info, err := os.Stat(log)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(fileModeArg0o600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(fileModeInput), info.Mode().Perm())
 
 	err = sup.Detach(&types.ProcessSpec{
 		Name: "log", LogFile: filepath.Join(t.TempDir(), textMissing, "x.log"),
@@ -182,3 +185,11 @@ func TestClientsProcess_LogFile(t *testing.T) {
 	})
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }
+
+const (
+	// readyAfterInput is the ready after input the tests use.
+	readyAfterInput = 3
+
+	// readyAfterInputStop is the ready after input stop the tests use.
+	readyAfterInputStop = 1000
+)

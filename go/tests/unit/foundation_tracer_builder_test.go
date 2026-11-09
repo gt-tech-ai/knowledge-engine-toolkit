@@ -27,7 +27,7 @@ func TestTracerBuilder_UnknownKindReturnsError(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	_, err := tracer.New(ctx, tracer.Kind(kindArg999))
+	_, err := tracer.New(ctx, tracer.Kind(kindInputError))
 	require.Error(t, err, textExpectedErrorForUnknown)
 }
 
@@ -75,14 +75,14 @@ func TestTracer_MockAsConsumerDependency(t *testing.T) {
 	mockSpan.EXPECT().End()
 	mockTracer.EXPECT().Shutdown(gomock.Any()).Return(nil)
 
-	var tracerValue interfaces.Tracer = mockTracer
+	var currentTracer interfaces.Tracer = mockTracer
 
-	spanCtx, span := tracerValue.Start(ctx, "handleRequest")
+	spanCtx, span := currentTracer.Start(ctx, "handleRequest")
 	require.NotNil(t, spanCtx, "Start must return non-nil context")
 	span.SetAttribute("user.id", "abc-123")
 	span.End()
 
-	require.NoError(t, tracerValue.Shutdown(ctx))
+	require.NoError(t, currentTracer.Shutdown(ctx))
 }
 
 // TestTracer_MockShutdownError tests that the mock can simulate shutdown
@@ -193,7 +193,7 @@ func TestTracerBuilder_KindString(t *testing.T) {
 	}{
 		{"otel", tracer.KindOTel},
 		{"noop", tracer.KindNoop},
-		{textKind99, tracer.Kind(kindArg99)},
+		{textKind99, tracer.Kind(kindInput)},
 	}
 
 	for _, tt := range tests {

@@ -85,3 +85,8 @@ func TestTransportCron_Run(t *testing.T) {
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Empty(t, ran)
 }
+
+const (
+	// textWipe is the literal "wipe".
+	textWipe = "wipe"
+)

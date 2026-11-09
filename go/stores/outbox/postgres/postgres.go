@@ -147,7 +147,7 @@ func (c *Config) partitions() int {
 // underscore, then letters, digits or underscores, at most 63 bytes). The table and
 // column names are interpolated into the statements, so nothing else is accepted.
 func isIdentifier(n string) bool {
-	if n == "" || len(n) > nLen63 || isDigitRune(rune(n[0])) {
+	if n == "" || len(n) > maxIdentifierLen || isDigitRune(rune(n[0])) {
 		return false
 	}
 
@@ -216,7 +216,7 @@ func New(value *sql.DB, cfg *Config) (*Store, error) {
 		return nil, err
 	}
 
-	storeValue := &Store{
+	currentStore := &Store{
 		db: value, lease: cfg.Lease, maxErrorLen: cfg.MaxErrorLen,
 		tenantColumn: cfg.TenantColumn != "", partitions: cfg.partitions(),
 		partitionColumn: cfg.PartitionColumn != "",
@@ -225,31 +225,34 @@ func New(value *sql.DB, cfg *Config) (*Store, error) {
 	var attrCols strings.Builder
 
 	for key, col := range cfg.AttributeColumns {
-		storeValue.attrKeys = append(storeValue.attrKeys, key)
+		currentStore.attrKeys = append(currentStore.attrKeys, key)
 
 		_, _ = attrCols.WriteString(", " + col + "::text")
 	}
 
 	text := cfg.Table
 
-	storeValue.claimSQL = claimSQL(cfg, attrCols.String())
-	storeValue.statsSQL = statsSQL(cfg)
-	storeValue.sentSQL = fmt.Sprintf(
+	currentStore.claimSQL = claimSQL(cfg, attrCols.String())
+	currentStore.statsSQL = statsSQL(cfg)
+	currentStore.sentSQL = fmt.Sprintf(
 		`UPDATE %s SET status = 'sent', sent_at = now(), last_error = ''
 WHERE id = $1 AND status = 'pending'`,
 		text,
 	)
-	storeValue.retrySQL = fmt.Sprintf(`UPDATE %s SET next_attempt_at = $2, last_error = $3
+	currentStore.retrySQL = fmt.Sprintf(
+		`UPDATE %s SET next_attempt_at = $2, last_error = $3
+WHERE id = $1 AND status = 'pending'`,
+		text,
+	)
+	currentStore.parkSQL = fmt.Sprintf(`UPDATE %s SET status = 'parked', last_error = $2
 WHERE id = $1 AND status = 'pending'`, text)
-	storeValue.parkSQL = fmt.Sprintf(`UPDATE %s SET status = 'parked', last_error = $2
-WHERE id = $1 AND status = 'pending'`, text)
-	storeValue.purgeSQL = fmt.Sprintf(
+	currentStore.purgeSQL = fmt.Sprintf(
 		`DELETE FROM %s WHERE status = 'sent' AND sent_at < $1`,
 		text,
 	)
-	storeValue.enqueueSQL = enqueueSQL(cfg, storeValue.attrKeys)
+	currentStore.enqueueSQL = enqueueSQL(cfg, currentStore.attrKeys)
 
-	return storeValue, nil
+	return currentStore, nil
 }
 
 // claimSQL locks a batch of due rows (SKIP LOCKED keeps concurrent claims disjoint),
@@ -323,7 +326,7 @@ func enqueueSQL(cfg *Config, attrKeys []string) string {
 		vals[i] = fmt.Sprintf("$%d", i+1)
 	}
 
-	vals[index3] = "COALESCE($4, now())"
+	vals[enqueuedAtColumn] = "COALESCE($4, now())"
 
 	return fmt.Sprintf(`INSERT INTO %s
 	(%s, status, attempts, next_attempt_at, last_error)

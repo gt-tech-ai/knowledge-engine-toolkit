@@ -116,7 +116,7 @@ func newFanOutJob(
 func TestFanOut_AllUnitsCollected(t *testing.T) {
 	t.Parallel()
 
-	items := []int{0, 1, items2, items3, items4}
+	items := []int{0, 1, items, itemsCollected, itemsUnitsCollected}
 	results := engine.Pool(2).
 		FanOut(
 			context.Background(), items,
@@ -153,7 +153,7 @@ func TestFanOut_AllUnitsCollected(t *testing.T) {
 	}
 
 	assert.Equal(t, 1, failed, "expected 1 failed result")
-	assert.Equal(t, wantPassed4, passed, "expected 4 passed results")
+	assert.Equal(t, wantPassed, passed, "expected 4 passed results")
 }
 
 // TestFanOut_BoundedConcurrency tests that FanOut never runs more units in
@@ -235,7 +235,7 @@ func TestFanOut_PanicConvertsToFail(t *testing.T) {
 				return types.StepResult{Name: item, Status: types.StatusPass}
 			})
 
-	require.Len(t, results, wantResultsLen3)
+	require.Len(t, results, wantResultsLenFail)
 
 	for _, r := range results {
 		if r.Name == textPanicMe || (r.Name == "" && r.Status == types.StatusFail) {
@@ -270,7 +270,7 @@ func TestFanOut_CtxCancelStopsFeeding(t *testing.T) {
 
 	started := make(chan struct{})
 	released := make(chan struct{})
-	items := make([]int, size8)
+	items := make([]int, makeInputFeeding)
 
 	results := make(chan types.StepResults, 1)
 	go func() {
@@ -356,10 +356,10 @@ func TestRunJobGroup_CollectsAllResults(t *testing.T) {
 		obs,
 	)
 	require.NoError(t, err)
-	require.Len(t, results, wantResultsLen2)
+	require.Len(t, results, wantResultsLenResults)
 	// RunJobGroup forwards each result to OnStepComplete; phase aggregation is
 	// the gate's responsibility, so RunJobGroup no longer fires OnPhaseComplete.
-	assert.Len(t, steps, wantStepsLen2, "expected 2 OnStepComplete callbacks")
+	assert.Len(t, steps, wantStepsLen, "expected 2 OnStepComplete callbacks")
 }
 
 // TestObserverStartEvents tests the observer's lifecycle start hooks:
@@ -395,7 +395,7 @@ func TestObserverStartEvents(t *testing.T) {
 	obs.EXPECT().OnPhaseComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnGateComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	testObserverStartEventsRest(
+	testObserverStartEventsChecksGateAndStepStarts(
 		t,
 		gateStarts,
 		phaseStarts,
@@ -405,8 +405,9 @@ func TestObserverStartEvents(t *testing.T) {
 	)
 }
 
-// testObserverStartEventsRest continues TestObserverStartEvents with its remaining steps.
-func testObserverStartEventsRest(
+// testObserverStartEventsChecksGateAndStepStarts continues TestObserverStartEvents:
+// checks gate and step starts.
+func testObserverStartEventsChecksGateAndStepStarts(
 	t *testing.T,
 	gateStarts, phaseStarts, stepStarts []string,
 	gateStartPhases [][]string,
@@ -449,7 +450,7 @@ func testObserverStartEventsRest(
 	require.Len(
 		t,
 		gateStartPhases[0],
-		wantGateStartPhasesLen2,
+		wantGateStartPhasesLen,
 		"OnGateStart phases not recorded: %v",
 		gateStartPhases,
 	)
@@ -486,12 +487,12 @@ func TestRunJobGroup_FanOutEmitsLivePerUnit(t *testing.T) {
 
 	release := make(chan struct{})
 
-	testRunJobGroupFanOutEmitsLivePerUnitRest(t, release)
+	testRunJobGroupFanOutEmitsLivePerUnitRuns(t, release)
 }
 
-// testRunJobGroupFanOutEmitsLivePerUnitRest continues
-// TestRunJobGroup_FanOutEmitsLivePerUnit with its remaining steps.
-func testRunJobGroupFanOutEmitsLivePerUnitRest(t *testing.T, release chan struct{}) {
+// testRunJobGroupFanOutEmitsLivePerUnitRuns continues
+// TestRunJobGroup_FanOutEmitsLivePerUnit: runs.
+func testRunJobGroupFanOutEmitsLivePerUnitRuns(t *testing.T, release chan struct{}) {
 	t.Helper()
 
 	var (
@@ -529,12 +530,19 @@ func testRunJobGroupFanOutEmitsLivePerUnitRest(t *testing.T, release chan struct
 		close(done)
 	}()
 
-	testRunJobGroupFanOutEmitsLivePerUnitRest2(t, release, &lock, &names, seen, done)
+	testRunJobGroupFanOutEmitsLivePerUnitChecksLiveUnits(
+		t,
+		release,
+		&lock,
+		&names,
+		seen,
+		done,
+	)
 }
 
-// testRunJobGroupFanOutEmitsLivePerUnitRest2 continues
-// testRunJobGroupFanOutEmitsLivePerUnitRest with its remaining steps.
-func testRunJobGroupFanOutEmitsLivePerUnitRest2(
+// testRunJobGroupFanOutEmitsLivePerUnitChecksLiveUnits continues
+// testRunJobGroupFanOutEmitsLivePerUnitRuns: checks live units.
+func testRunJobGroupFanOutEmitsLivePerUnitChecksLiveUnits(
 	t *testing.T,
 	release chan struct{},
 	lock *sync.Mutex,
@@ -557,25 +565,25 @@ func testRunJobGroupFanOutEmitsLivePerUnitRest2(
 
 	lock.Lock()
 
-	lookup2 := map[string]int{}
+	statusByName := map[string]int{}
 	for _, n := range *names {
-		lookup2[n]++
+		statusByName[n]++
 	}
 
 	lock.Unlock()
 	require.Equal(
 		t,
 		1,
-		lookup2[textFast],
+		statusByName[textFast],
 		"expected each unit delivered exactly once, got %v",
-		lookup2,
+		statusByName,
 	)
 	require.Equal(
 		t,
 		1,
-		lookup2[textSlow],
+		statusByName[textSlow],
 		"expected each unit delivered exactly once, got %v",
-		lookup2,
+		statusByName,
 	)
 }
 
@@ -617,23 +625,23 @@ func TestRunJobGroup_FanOutPlusExtraStep_NoDoubleFire(t *testing.T) {
 		[]interfaces.AnyJob{job}, obs,
 	)
 
-	require.Len(t, all, wantAllLen3, "want 3 aggregate results")
+	require.Len(t, all, wantAllLen, "want 3 aggregate results")
 	lock.Lock()
 
-	lookup2 := map[string]int{}
+	statusByName := map[string]int{}
 	for _, n := range names {
-		lookup2[n]++
+		statusByName[n]++
 	}
 
 	lock.Unlock()
-	require.Equal(t, 1, lookup2[textA], textExpectedEachStepDelivered, lookup2)
-	require.Equal(t, 1, lookup2[textB], textExpectedEachStepDelivered, lookup2)
+	require.Equal(t, 1, statusByName[textA], textExpectedEachStepDelivered, statusByName)
+	require.Equal(t, 1, statusByName[textB], textExpectedEachStepDelivered, statusByName)
 	require.Equal(
 		t,
 		1,
-		lookup2["coverage"],
+		statusByName["coverage"],
 		textExpectedEachStepDelivered,
-		lookup2,
+		statusByName,
 	)
 }
 
@@ -776,7 +784,7 @@ func TestStepsSerial_RunsInOrder(t *testing.T) {
 	}.Serial(
 		context.Background(),
 	)
-	require.Len(t, results, wantResultsLen3)
+	require.Len(t, results, wantResultsLenOrder)
 
 	for _, r := range results {
 		assert.Equal(t, types.StatusPass, r.Status)
@@ -786,3 +794,43 @@ func TestStepsSerial_RunsInOrder(t *testing.T) {
 
 	assert.Nil(t, engine.Steps{}.Serial(context.Background()), "empty input returns nil")
 }
+
+const (
+	// itemsCollected is the items collected the tests use.
+	itemsCollected = 3
+
+	// itemsUnitsCollected is the items units collected the tests use.
+	itemsUnitsCollected = 4
+
+	// makeInputFeeding is the make input feeding the tests use.
+	makeInputFeeding = 8
+
+	// wantGateStartPhasesLen is the expected gate start phases len.
+	wantGateStartPhasesLen = 2
+
+	// wantPassed is the expected passed.
+	wantPassed = 4
+
+	// wantResultsLenFail is the expected results len fail.
+	wantResultsLenFail = 3
+
+	// wantResultsLenOrder is the expected results len order.
+	wantResultsLenOrder = 3
+
+	// wantResultsLenResults is the expected results len results.
+	wantResultsLenResults = 2
+)
+
+const (
+	// textExpectedEachStepDelivered is the literal shown below.
+	textExpectedEachStepDelivered = "expected each step delivered exactly once, got %v"
+
+	// textJob1 is the literal "job-1".
+	textJob1 = "job-1"
+
+	// textPanicMe is the literal "panic-me".
+	textPanicMe = "panic-me"
+
+	// textPhaseA is the literal "phase-a".
+	textPhaseA = "phase-a"
+)

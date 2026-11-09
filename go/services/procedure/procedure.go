@@ -123,42 +123,42 @@ type compiled struct {
 // procedure and step; the Finally steps are checked the same way. Building does no I/O.
 // deps must not be nil.
 func NewFromConfig(cfg Config, deps *Deps) (interfaces.ProcedureRunner, error) {
-	engineValue := &engine{deps: *deps, procs: map[string]*compiled{}}
+	currentEngine := &engine{deps: *deps, procs: map[string]*compiled{}}
 
 	for i := range cfg.Procedures {
 		p := cfg.Procedures[i]
-		if _, dup := engineValue.procs[p.Name]; dup {
+		if _, dup := currentEngine.procs[p.Name]; dup {
 			return nil, apperr.New(apperr.CodeInvalidInput, "duplicate procedure "+p.Name)
 		}
 
-		engineValue.procs[p.Name] = &compiled{proc: p, group: cmp(p.Group, p.Name)}
+		currentEngine.procs[p.Name] = &compiled{proc: p, group: cmp(p.Group, p.Name)}
 	}
 
-	for _, compiledValue := range engineValue.procs {
-		err := engineValue.compile(compiledValue)
+	for _, currentCompiled := range currentEngine.procs {
+		err := currentEngine.compile(currentCompiled)
 		if err != nil {
 			return nil, apperr.Wrap(
 				err,
 				apperr.CodeInvalidInput,
-				"procedure "+compiledValue.proc.Name,
+				"procedure "+currentCompiled.proc.Name,
 			)
 		}
 	}
 
-	return engineValue, nil
+	return currentEngine, nil
 }
 
 // compile validates c's steps and compiles its expressions over the variables it can
 // see: its inputs, vars, captures, the variables its Go steps declare, loop items, the
 // platform variables and, for the Finally steps, the outcome variables.
-func (e *engine) compile(compiledValue *compiled) error {
-	names := slices.Clone(compiledValue.proc.Inputs)
-	for _, v := range compiledValue.proc.Vars {
+func (e *engine) compile(currentCompiled *compiled) error {
+	names := slices.Clone(currentCompiled.proc.Inputs)
+	for _, v := range currentCompiled.proc.Vars {
 		names = append(names, v.Name)
 	}
 
-	names = append(names, stepNames(compiledValue.proc.Steps)...)
-	names = append(names, stepNames(compiledValue.proc.Finally)...)
+	names = append(names, stepNames(currentCompiled.proc.Steps)...)
+	names = append(names, stepNames(currentCompiled.proc.Finally)...)
 	names = append(names, VarOS, VarArch, VarFailed, VarCanceled)
 
 	opts := make([]cel.EnvOption, 0, len(names)+1)
@@ -174,26 +174,26 @@ func (e *engine) compile(compiledValue *compiled) error {
 		return apperr.Wrap(err, apperr.CodeInternal, "cel environment")
 	}
 
-	compiledValue.progs = map[string]cel.Program{}
-	for _, v := range compiledValue.proc.Vars {
-		opErr := compiledValue.program(env, v.Expr)
+	currentCompiled.progs = map[string]cel.Program{}
+	for _, v := range currentCompiled.proc.Vars {
+		opErr := currentCompiled.program(env, v.Expr)
 		if opErr != nil {
 			return apperr.Wrap(opErr, apperr.CodeInvalidInput, "var "+v.Name)
 		}
 	}
 
-	err = e.compileSteps(env, compiledValue, compiledValue.proc.Steps)
+	err = e.compileSteps(env, currentCompiled, currentCompiled.proc.Steps)
 	if err != nil {
 		return err
 	}
 
-	return e.compileSteps(env, compiledValue, compiledValue.proc.Finally)
+	return e.compileSteps(env, currentCompiled, currentCompiled.proc.Finally)
 }
 
 // compileSteps validates steps and compiles their expressions.
 func (e *engine) compileSteps(
 	env *cel.Env,
-	compiledValue *compiled,
+	currentCompiled *compiled,
 	steps []types.ProcStep,
 ) error {
 	for i := range steps {
@@ -204,12 +204,12 @@ func (e *engine) compileSteps(
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+procStep.Name)
 		}
 
-		err = compileStepExprs(env, compiledValue, procStep)
+		err = compileStepExprs(env, currentCompiled, procStep)
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+procStep.Name)
 		}
 
-		err = e.compileSteps(env, compiledValue, procStep.Parallel)
+		err = e.compileSteps(env, currentCompiled, procStep.Parallel)
 		if err != nil {
 			return err
 		}

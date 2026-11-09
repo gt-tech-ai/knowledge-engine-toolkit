@@ -80,11 +80,12 @@ func TestClientsKubectl_Exec(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "kind-dev", cur)
 
-	testClientsKubectlExecRest(ctx, t, commandRunner, kubectlClient)
+	testClientsKubectlExecAuthCheckAndCommands(ctx, t, commandRunner, kubectlClient)
 }
 
-// testClientsKubectlExecRest continues TestClientsKubectl_Exec with its remaining steps.
-func testClientsKubectlExecRest(
+// testClientsKubectlExecAuthCheckAndCommands continues TestClientsKubectl_Exec: auth
+// check and commands.
+func testClientsKubectlExecAuthCheckAndCommands(
 	ctx context.Context,
 	t *testing.T,
 	commandRunner *mocks.MockCommandRunner,

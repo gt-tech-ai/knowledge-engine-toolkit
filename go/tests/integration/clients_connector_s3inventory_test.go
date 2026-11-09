@@ -38,11 +38,11 @@ func writeInventory(
 ) string {
 	t.Helper()
 
-	return writeInventoryRest5(ctx, t, admin, bucket, reportBucket, perFile)
+	return writeInventoryReportFiles(ctx, t, admin, bucket, reportBucket, perFile)
 }
 
-// writeInventoryRest5 continues writeInventoryRest4 with its remaining steps.
-func writeInventoryRest5(
+// writeInventoryReportFiles continues writeInventory: report files.
+func writeInventoryReportFiles(
 	ctx context.Context,
 	t *testing.T,
 	admin *awss3.Client,
@@ -155,12 +155,17 @@ func TestS3Inventory_ListsAWrittenReportLikeTheBucket(t *testing.T) {
 	), textUsEast1)
 	require.NoError(t, err)
 
-	testS3InventoryListsAWrittenReportLikeTheBucketRest(ctx, t, testMinIO, admin)
+	testS3InventoryListsAWrittenReportLikeTheBucketComparesListings(
+		ctx,
+		t,
+		testMinIO,
+		admin,
+	)
 }
 
-// testS3InventoryListsAWrittenReportLikeTheBucketRest continues
-// TestS3Inventory_ListsAWrittenReportLikeTheBucket with its remaining steps.
-func testS3InventoryListsAWrittenReportLikeTheBucketRest(
+// testS3InventoryListsAWrittenReportLikeTheBucketComparesListings continues
+// TestS3Inventory_ListsAWrittenReportLikeTheBucket: compares listings.
+func testS3InventoryListsAWrittenReportLikeTheBucketComparesListings(
 	ctx context.Context, t *testing.T, testMinIO *miniofix.TestMinIO, admin *awss3.Client,
 ) {
 	t.Helper()
@@ -189,7 +194,7 @@ func testS3InventoryListsAWrittenReportLikeTheBucketRest(
 		require.NoError(t, err)
 	}
 
-	manifestKey := writeInventory(ctx, t, admin, bucket, reports, perFile3)
+	manifestKey := writeInventory(ctx, t, admin, bucket, reports, writeInventoryInput)
 	builder := connectorpkg.NewSourceBuilder(connectorpkg.Config{}, connectorpkg.Deps{
 		BuildS3Client: minioS3Client(testMinIO.Endpoint()),
 	})
@@ -212,10 +217,10 @@ func testS3InventoryListsAWrittenReportLikeTheBucketRest(
 	inventory, err := builder.Build(ctx, &cfg)
 	require.NoError(t, err)
 
-	want := crawl(ctx, t, listing, limit1000)
-	got := crawl(ctx, t, inventory, limit2)
+	want := crawl(ctx, t, listing, crawlInput)
+	got := crawl(ctx, t, inventory, crawlInputListings)
 
-	require.Len(t, want, wantWantLen5)
+	require.Len(t, want, wantWantLen)
 	require.Equal(t, want, got)
 }
 
@@ -249,3 +254,17 @@ func inventoryCSV(
 
 	return buf.Bytes()
 }
+
+const (
+	// crawlInput is the crawl input the tests use.
+	crawlInput = 1000
+
+	// crawlInputListings is the crawl input listings the tests use.
+	crawlInputListings = 2
+
+	// wantWantLen is the expected want len.
+	wantWantLen = 5
+
+	// writeInventoryInput is the write inventory input the tests use.
+	writeInventoryInput = 3
+)

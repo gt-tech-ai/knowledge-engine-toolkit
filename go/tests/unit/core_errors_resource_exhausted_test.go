@@ -40,7 +40,7 @@ func TestResourceExhausted_MapsGRPC8AndHTTP429(t *testing.T) {
 
 	code, msg := rpc.Sanitize(err)
 	assert.Equal(t, connect.CodeResourceExhausted, code)
-	assert.Equal(t, connect.Code(codeArg8), code)
+	assert.Equal(t, connect.Code(codeInput), code)
 	assert.Equal(t, "resource exhausted", msg)
 }
 
@@ -84,3 +84,8 @@ func TestClassify_GRPCResourceExhaustedIsQuotaNotTransient(t *testing.T) {
 	assert.False(t, apperr.IsTransient(err))
 	assert.False(t, exponential.IsRetryable(err))
 }
+
+const (
+	// codeInput is the code input the tests use.
+	codeInput = 8
+)

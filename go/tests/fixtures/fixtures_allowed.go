@@ -4,9 +4,6 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
-// Allowed names the allowed option in a signature.
-type Allowed bool
-
 // SpyLogger records log calls made through an embedded generated MockLogger, for
 // tests that assert which messages were logged — directly and through WithContext
 // child loggers. It replaces the former hand-rolled mocks.SpyLogger.

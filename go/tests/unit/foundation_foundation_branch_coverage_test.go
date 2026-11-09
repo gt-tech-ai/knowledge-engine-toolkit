@@ -30,8 +30,8 @@ func TestCircuitBreakerOptions_FailureRatioAndMinRequests(t *testing.T) {
 	circuitBreaker, err := circuitbreaker.New(
 		circuitbreaker.KindGoBreaker,
 		"branch-cov",
-		circuitbreaker.WithFailureRatio(withFailureRatioArg0p3),
-		circuitbreaker.WithMinRequests(withMinRequestsArg7),
+		circuitbreaker.WithFailureRatio(withFailureRatioInput),
+		circuitbreaker.WithMinRequests(withMinRequestsInput),
 	)
 	require.NoError(t, err, "New with failure-ratio options must not error")
 	require.NotNil(t, circuitBreaker, "New must return a non-nil breaker")
@@ -57,3 +57,11 @@ func TestLifecycleNoOp_StartStop(t *testing.T) {
 	assert.NoError(t, n.Start(ctx), "NoOp.Start must be a nil-returning no-op")
 	assert.NoError(t, n.Stop(ctx), "NoOp.Stop must be a nil-returning no-op")
 }
+
+const (
+	// withFailureRatioInput is the with failure ratio input the tests use.
+	withFailureRatioInput = 0.3
+
+	// withMinRequestsInput is the with min requests input the tests use.
+	withMinRequestsInput = 7
+)

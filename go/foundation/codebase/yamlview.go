@@ -124,16 +124,16 @@ func (y *yamlView) nodes(ctx context.Context, p string) ([]*yaml.Node, error) {
 // parseNodes reads and decodes p, dropping empty documents.
 func (y *yamlView) parseNodes(
 	ctx context.Context,
-	textValue string,
+	fileText string,
 ) ([]*yaml.Node, error) {
-	text, err := y.parent.Text(ctx, textValue)
+	text, err := y.parent.Text(ctx, fileText)
 	if err != nil {
 		return nil, err
 	}
 
 	docs, err := yamlq.DecodeAll(text.Bytes)
 	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+textValue)
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+fileText)
 	}
 
 	out := docs[:0]

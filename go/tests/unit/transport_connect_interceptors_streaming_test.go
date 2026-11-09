@@ -137,3 +137,8 @@ func TestLoggingInterceptor_Streaming_EmitsOneAccessLine(t *testing.T) {
 	)
 	assert.Empty(t, *spy.ChildErrorCalls, "a successful stream logs no error line")
 }
+
+const (
+	// textTestV1Streamservice is the literal "test.v1.StreamService".
+	textTestV1Streamservice = "test.v1.StreamService"
+)

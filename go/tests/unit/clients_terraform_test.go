@@ -65,12 +65,12 @@ func TestClientsTerraform_PlanAndApply(t *testing.T) {
 
 	plan, err := terraformClient.Plan(ctx, textEnvsStg, "tf.plan")
 	require.NoError(t, err)
-	assert.Equal(t, wantAdd2, plan.Add)
+	assert.Equal(t, wantAdd, plan.Add)
 	assert.Equal(t, 1, plan.Change)
-	assert.Equal(t, wantDestroy2, plan.Destroy)
-	require.Len(t, plan.Changes, wantChangesLen4)
+	assert.Equal(t, wantDestroy, plan.Destroy)
+	require.Len(t, plan.Changes, wantChangesLen)
 	assert.Equal(t, types.ResourceChange{
-		Address: "aws_db_instance.d", Type: "aws_db_instance", Name: textD2,
+		Address: "aws_db_instance.d", Type: "aws_db_instance", Name: textDLower,
 		Actions: []string{textDelete, textCreate},
 	}, plan.Changes[3])
 
@@ -91,7 +91,23 @@ func TestClientsTerraform_PlanAndApply(t *testing.T) {
 		terraform.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
 
-	plan, err = stub.Plan(ctx, textD2, textO)
+	plan, err = stub.Plan(ctx, textDLower, textO)
 	require.NoError(t, err)
 	assert.True(t, plan.Empty())
 }
+
+const (
+	// wantAdd is the expected add.
+	wantAdd = 2
+
+	// wantChangesLen is the expected changes len.
+	wantChangesLen = 4
+
+	// wantDestroy is the expected destroy.
+	wantDestroy = 2
+)
+
+const (
+	// textEnvsStg is the literal "envs/stg".
+	textEnvsStg = "envs/stg"
+)

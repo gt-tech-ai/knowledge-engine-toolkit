@@ -77,12 +77,12 @@ func TestStorageClient_ErrorPaths(t *testing.T) {
 		assert.Contains(t, err.Error(), "create multipart")
 	})
 
-	testStorageClientErrorPathsRest2(ctx, t)
+	testStorageClientErrorPathsMultipartAborts(ctx, t)
 }
 
-// testStorageClientErrorPathsRest2 continues TestStorageClient_ErrorPaths with its
-// remaining steps.
-func testStorageClientErrorPathsRest2(ctx context.Context, t *testing.T) {
+// testStorageClientErrorPathsMultipartAborts continues TestStorageClient_ErrorPaths:
+// multipart aborts.
+func testStorageClientErrorPathsMultipartAborts(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("multipart aborts on a mid-stream body read error", func(t *testing.T) {
@@ -125,12 +125,12 @@ func testStorageClientErrorPathsRest2(ctx context.Context, t *testing.T) {
 		assert.Contains(t, err.Error(), "complete multipart")
 	})
 
-	testStorageClientErrorPathsRest(ctx, t)
+	testStorageClientErrorPathsDownloadErrors(ctx, t)
 }
 
-// testStorageClientErrorPathsRest continues TestStorageClient_ErrorPaths with its
-// remaining steps.
-func testStorageClientErrorPathsRest(ctx context.Context, t *testing.T) {
+// testStorageClientErrorPathsDownloadErrors continues TestStorageClient_ErrorPaths:
+// download errors.
+func testStorageClientErrorPathsDownloadErrors(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("download wraps a generic backend error", func(t *testing.T) {
@@ -172,12 +172,12 @@ func testStorageClientErrorPathsRest(ctx context.Context, t *testing.T) {
 		assert.Contains(t, err.Error(), "delete batch")
 	})
 
-	testStorageClientErrorPathsRest3(ctx, t)
+	testStorageClientErrorPathsExistsAndStatErrors(ctx, t)
 }
 
-// testStorageClientErrorPathsRest3 continues testStorageClientErrorPathsRest with its
-// remaining steps.
-func testStorageClientErrorPathsRest3(ctx context.Context, t *testing.T) {
+// testStorageClientErrorPathsExistsAndStatErrors continues
+// testStorageClientErrorPathsDownloadErrors: exists and stat errors.
+func testStorageClientErrorPathsExistsAndStatErrors(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("exists wraps a generic backend error", func(t *testing.T) {
@@ -248,7 +248,7 @@ func TestStorageClient_Presign_EncodesUnsafeFilename(t *testing.T) {
 		context.Background(),
 		textBucket,
 		textObjKeyTxt,
-		expirySeconds900,
+		presignURLInput,
 		`ré"port.pdf`,
 	)
 	require.NoError(t, err)

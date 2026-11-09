@@ -31,7 +31,7 @@ func TestActionableLines(t *testing.T) {
 		"FAILED something broke\n"+
 		"main.go:10:2: undefined: Foo\n"+
 		"Vulnerability #1: GO-2024-0001\n"+
-		"diff --git a/old.go b/new.go\n"), limit10)
+		"diff --git a/old.go b/new.go\n"), actionableLinesInput)
 	assert.Equal(t, []string{
 		"--- FAIL: TestThing", "FAIL\tpkg/foo", "FAILED something broke",
 		"main.go:10:2: undefined: Foo", "Vulnerability #1: GO-2024-0001", "new.go",
@@ -40,17 +40,23 @@ func TestActionableLines(t *testing.T) {
 	got = report.ActionableLines(
 		[]byte("{\"level\":\"info\"}\n+added line\n-removed line\n"+
 			"More info: https://example.com\n$ echo hello\n=== RUN TestX\na meaningful message\n"),
-		limit10,
+		actionableLinesInput,
 	)
 	assert.Equal(t, []string{"a meaningful message"}, got)
 
 	assert.Len(
 		t,
-		report.ActionableLines([]byte("a.go:1:1: x\nb.go:2:1: y\nc.go:3:1: z\n"), limit2),
-		wantActionableLinesLen2,
+		report.ActionableLines(
+			[]byte("a.go:1:1: x\nb.go:2:1: y\nc.go:3:1: z\n"),
+			actionableLinesInputLines,
+		),
+		wantActionableLinesLen,
 	)
 
-	long := report.ActionableLines([]byte(strings.Repeat(textX, count300)), limit10)
+	long := report.ActionableLines(
+		[]byte(strings.Repeat(textX, repeatInputLines)),
+		actionableLinesInput,
+	)
 	assert.Equal(t, []string{strings.Repeat(textX, 197) + "..."}, long)
 
 	assert.True(t, report.IsNoiseLine("PASS"))
@@ -68,9 +74,9 @@ func TestActionableLines(t *testing.T) {
 //   - The result has at most limit lines, and every line is either a trimmed input
 //     line, its 200-character cut, or the b-side path of a diff header in the input.
 func FuzzActionableLines(f *testing.F) {
-	f.Add("--- FAIL: T\nmain.go:1:2: x\n", addArg3)
+	f.Add("--- FAIL: T\nmain.go:1:2: x\n", addInputLines)
 	f.Add("diff --git a/x b/y\n+z\n", 1)
-	f.Add("{\"a\":1}\nplain\n", addArg5)
+	f.Add("{\"a\":1}\nplain\n", addInputActionableLines)
 	f.Fuzz(func(t *testing.T, output string, limit int) {
 		fuzzActionableLinesCase(t, output, limit)
 	})
@@ -80,7 +86,7 @@ func FuzzActionableLines(f *testing.F) {
 func fuzzActionableLinesCase(t *testing.T, output string, limit int) {
 	t.Helper()
 
-	if limit < 1 || limit > limit50 {
+	if limit < 1 || limit > wantLimitCase {
 		return
 	}
 
@@ -105,6 +111,35 @@ func lineFromOutput(output, l string) bool {
 
 // derivesLine reports whether in yields l unchanged, truncated, or as a diff's b/ path.
 func derivesLine(in, l string) bool {
-	return in == l || (len(in) > inLen200 && l == in[:offset197]+"...") ||
+	return in == l || (len(in) > wantInLen && l == in[:offsetLine]+"...") ||
 		strings.HasPrefix(in, "diff --git ") && strings.HasSuffix(in, " b/"+l)
 }
+
+const (
+	// actionableLinesInput is the actionable lines input the tests use.
+	actionableLinesInput = 10
+
+	// actionableLinesInputLines is the actionable lines input lines the tests use.
+	actionableLinesInputLines = 2
+
+	// addInputActionableLines is the add input actionable lines the tests use.
+	addInputActionableLines = 5
+
+	// addInputLines is the add input lines the tests use.
+	addInputLines = 3
+
+	// offsetLine is the offset line the tests use.
+	offsetLine = 197
+
+	// repeatInputLines is the repeat input lines the tests use.
+	repeatInputLines = 300
+
+	// wantActionableLinesLen is the expected actionable lines len.
+	wantActionableLinesLen = 2
+
+	// wantInLen is the expected in len.
+	wantInLen = 200
+
+	// wantLimitCase is the expected limit case.
+	wantLimitCase = 50
+)

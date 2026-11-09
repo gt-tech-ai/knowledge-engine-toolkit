@@ -112,7 +112,7 @@ messaging:
 	var db infra.DatabaseConfig
 
 	require.NoError(t, cfg.UnmarshalKey(textDatabase, &db))
-	assert.Equal(t, wantMaxConnections77, db.MaxConnections,
+	assert.Equal(t, wantMaxConnections, db.MaxConnections,
 		"MYAPP_DATABASE_MAX_CONNECTIONS must bind database.max_connections")
 
 	var sqs infra.SQSConfig
@@ -198,7 +198,7 @@ func TestConfig_EmptyPrefix_BindsBarePath(t *testing.T) {
 	require.NoError(t, cfg.UnmarshalKey(textDatabase, &databaseConfig))
 	assert.Equal(
 		t,
-		wantMaxConnections33,
+		wantMaxConnectionsPath,
 		databaseConfig.MaxConnections,
 		"DATABASE_MAX_CONNECTIONS must bind with no prefix",
 	)
@@ -345,7 +345,7 @@ func TestConfig_SchemaTagForms_Bind(t *testing.T) {
 	)
 	assert.Equal(
 		t,
-		wantPort6543,
+		wantPortBind,
 		root.DatabaseConfig.Port,
 		"MYAPP_PORT must bind the squashed port",
 	)
@@ -358,7 +358,7 @@ func TestConfig_SchemaTagForms_Bind(t *testing.T) {
 	assert.Equal(t, "blue", root.Label, "the tag name before the comma names the key")
 	assert.Equal(
 		t,
-		wantReplicas3,
+		wantReplicas,
 		root.Replicas,
 		"an untagged field binds by its field name",
 	)
@@ -391,7 +391,7 @@ func TestConfig_InvalidSchemaRejected(t *testing.T) {
 
 	for name, schema := range map[string]any{
 		"map":                map[string]any{textDatabase: map[string]any{}},
-		textScalar:           textScalar42,
+		textScalar:           textScalarRejected,
 		"pointer to pointer": &root,
 	} {
 		_, err := config.New(
@@ -446,3 +446,25 @@ auth:
 			"rotation-pair ','",
 	)
 }
+
+const (
+	// textScalarRejected is the text scalar rejected the tests use.
+	textScalarRejected = 42
+
+	// wantMaxConnections is the expected max connections.
+	wantMaxConnections = 77
+
+	// wantMaxConnectionsPath is the expected max connections path.
+	wantMaxConnectionsPath = 33
+
+	// wantPortBind is the expected port bind.
+	wantPortBind = 6543
+
+	// wantReplicas is the expected replicas.
+	wantReplicas = 3
+)
+
+const (
+	// textDBInternal is the literal "db.internal".
+	textDBInternal = "db.internal"
+)

@@ -65,7 +65,7 @@ func TestLoggerBuilder_KindStdlib(t *testing.T) {
 func TestLoggerBuilder_UnknownKindReturnsError(t *testing.T) {
 	t.Parallel()
 
-	_, err := logger.New(logger.Kind(kindArg999))
+	_, err := logger.New(logger.Kind(kindInputError))
 	require.Error(t, err, textExpectedErrorForUnknown)
 }
 
@@ -166,15 +166,20 @@ func TestLogger_MockAsConsumerDependency(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mock := mocks.NewMockLogger(ctrl)
 
-	mock.EXPECT().Info("request handled", textStatus, keysAndValues200)
+	mock.EXPECT().Info("request handled", textStatus, infoInput)
 	mock.EXPECT().Error("request failed", textError, textTimeout)
 	mock.EXPECT().With(textService, textAPI).Return(mock)
 
 	var l interfaces.Logger = mock
 
-	l.Info("request handled", textStatus, keysAndValues200)
+	l.Info("request handled", textStatus, infoInput)
 	l.Error("request failed", textError, textTimeout)
 
 	child := l.With(textService, textAPI)
 	require.NotNil(t, child, "With must return non-nil child logger")
 }
+
+const (
+	// infoInput is the info input the tests use.
+	infoInput = 200
+)

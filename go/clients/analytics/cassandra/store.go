@@ -135,11 +135,11 @@ func newStore(cfgRef *Config) (*Store, error) {
 // applyStoreDefaults fills every unset tuning field.
 func applyStoreDefaults(cfg *Config) {
 	if cfg.PageSize <= 0 {
-		cfg.PageSize = pageSize500
+		cfg.PageSize = scanPageSize
 	}
 
 	if cfg.MaxConcurrentBuckets <= 0 {
-		cfg.MaxConcurrentBuckets = maxConcurrentBuckets8
+		cfg.MaxConcurrentBuckets = maxConcurrentBucketReads
 	}
 
 	if cfg.SchemaPollInterval <= 0 {
@@ -381,16 +381,16 @@ func (s *Store) Aggregate(
 	}
 
 	width := s.cfg.BucketWidth[grain]
-	time2, timeValue := pushdown(
+	laterTime, instant := pushdown(
 		aggregateQuery.Filter,
 		aggregateQuery.TimeRange.From.UTC(),
 		aggregateQuery.TimeRange.To.UTC(),
 	)
 	// A row is stamped at its grain bucket's start, so the read starts at the bucket
 	// lo falls in: a window starting mid-bucket counts that bucket rather than losing it.
-	time2 = chartspec.Truncate(time2, grain)
+	laterTime = chartspec.Truncate(laterTime, grain)
 
-	buckets := bucketsBetween(time2, timeValue, width)
+	buckets := bucketsBetween(laterTime, instant, width)
 
 	fingerprint, err := queryFingerprint(&aggregateQuery)
 	if err != nil {
@@ -413,8 +413,8 @@ func (s *Store) Aggregate(
 		table:       TableName(aggregateQuery.Cube, grain),
 		org:         aggregateQuery.OrgID,
 		cube:        aggregateQuery.Cube,
-		lo:          time2,
-		hi:          timeValue,
+		lo:          laterTime,
+		hi:          instant,
 		pageSize:    s.cfg.PageSize,
 		groupBy:     aggregateQuery.GroupBy,
 		measures:    measureNames(aggregateQuery.Measures),

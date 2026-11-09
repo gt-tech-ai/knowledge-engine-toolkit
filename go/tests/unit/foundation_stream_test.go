@@ -26,12 +26,12 @@ import (
 func TestStream_FromSliceYieldsInOrderThenEnds(t *testing.T) {
 	t.Parallel()
 
-	streamValue := stream.FromSlice([]string{textA, textB, textC})
+	currentStream := stream.FromSlice([]string{textA, textB, textC})
 
 	var got []string
 
 	for {
-		item, ok, err := streamValue.Next(t.Context())
+		item, ok, err := currentStream.Next(t.Context())
 		require.NoError(t, err)
 
 		if !ok {
@@ -43,12 +43,12 @@ func TestStream_FromSliceYieldsInOrderThenEnds(t *testing.T) {
 
 	require.Equal(t, []string{textA, textB, textC}, got)
 
-	item, ok, err := streamValue.Next(t.Context())
+	item, ok, err := currentStream.Next(t.Context())
 	require.NoError(t, err)
 	require.False(t, ok)
 	require.Empty(t, item)
-	require.NoError(t, streamValue.Close())
-	require.NoError(t, streamValue.Close())
+	require.NoError(t, currentStream.Close())
+	require.NoError(t, currentStream.Close())
 }
 
 // TestChunk_SplitsAtMaxBytesKeepingOrder tests the byte-bounded chunker as a property.
@@ -65,7 +65,7 @@ func TestStream_FromSliceYieldsInOrderThenEnds(t *testing.T) {
 func TestChunk_SplitsAtMaxBytesKeepingOrder(t *testing.T) {
 	t.Parallel()
 
-	testChunkSplitsAtMaxBytesKeepingOrderRest5(t)
+	testChunkSplitsAtMaxBytesKeepingOrderRunsLaw(t)
 }
 
 // chunksAreMaximal reports whether every chunk is non-empty, fits maxBytes, and could not
@@ -90,13 +90,13 @@ func chunksAreMaximal(chunks [][]int, maxBytes int) bool {
 	return true
 }
 
-// testChunkSplitsAtMaxBytesKeepingOrderRest5 continues
-// testChunkSplitsAtMaxBytesKeepingOrderRest4 with its remaining steps.
-func testChunkSplitsAtMaxBytesKeepingOrderRest5(t *testing.T) {
+// testChunkSplitsAtMaxBytesKeepingOrderRunsLaw continues
+// testChunkSplitsAtMaxBytesKeepingOrder: runs law.
+func testChunkSplitsAtMaxBytesKeepingOrderRunsLaw(t *testing.T) {
 	t.Helper()
 
 	law := func(raw []uint8, budget uint8) bool {
-		maxBytes := int(budget)%int642 + 1
+		maxBytes := int(budget)%wantInt + 1
 		items := make([]int, len(raw))
 
 		for i, r := range raw {
@@ -129,13 +129,13 @@ func TestChunk_OversizedItemIsResourceExhausted(t *testing.T) {
 
 	size := func(s string) int { return len(s) }
 
-	_, err := stream.Chunk([]string{"ab", "toolong"}, size, maxBytes4)
+	_, err := stream.Chunk([]string{"ab", "toolong"}, size, chunkInput)
 	require.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 
 	_, err = stream.Chunk([]string{textA}, size, 0)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	chunks, err := stream.Chunk(nil, size, maxBytes4)
+	chunks, err := stream.Chunk(nil, size, chunkInput)
 	require.NoError(t, err)
 	require.Empty(t, chunks)
 }
@@ -227,3 +227,11 @@ func scriptedStream(
 
 	return src
 }
+
+const (
+	// chunkInput is the chunk input the tests use.
+	chunkInput = 4
+
+	// wantInt is the expected int.
+	wantInt = 64
+)

@@ -45,7 +45,7 @@ func invalid(msg string) error {
 // encodings); a nil m is rejected; and the filter tree is compiled with
 // listquery.ParseFilter. Every
 // rejection is CodeInvalidInput.
-func Parse(b []byte, mapValue *listquery.Map) (types.ChartSpec, error) {
+func Parse(b []byte, fieldMap *listquery.Map) (types.ChartSpec, error) {
 	var spec types.ChartSpec
 
 	err := json.Unmarshal(b, &spec)
@@ -57,7 +57,7 @@ func Parse(b []byte, mapValue *listquery.Map) (types.ChartSpec, error) {
 		)
 	}
 
-	return Validate(&spec, mapValue)
+	return Validate(&spec, fieldMap)
 }
 
 // Validate checks an already-decoded spec exactly as Parse checks a JSON one, against
@@ -77,17 +77,17 @@ func Validate(specRef *types.ChartSpec, m *listquery.Map) (types.ChartSpec, erro
 }
 
 // validateSpec checks a decoded spec against m and compiles its filter in place.
-func validateSpec(spec *types.ChartSpec, mapValue *listquery.Map) error {
+func validateSpec(spec *types.ChartSpec, fieldMap *listquery.Map) error {
 	err := validateScalars(spec)
 	if err != nil {
 		return err
 	}
 
-	if mapValue == nil {
+	if fieldMap == nil {
 		return invalid("cube has no field allow-list")
 	}
 
-	keys, err := validateFields(spec, mapValue)
+	keys, err := validateFields(spec, fieldMap)
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func validateSpec(spec *types.ChartSpec, mapValue *listquery.Map) error {
 		}
 	}
 
-	return compileFilter(spec, mapValue)
+	return compileFilter(spec, fieldMap)
 }
 
 // validateScalars checks the cube, grain, mark and time range.
@@ -129,23 +129,23 @@ func validateScalars(spec *types.ChartSpec) error {
 // returns the set of their Keys, which sort directives may name.
 func validateFields(
 	spec *types.ChartSpec,
-	mapValue *listquery.Map,
+	fieldMap *listquery.Map,
 ) (map[string]bool, error) {
 	keys := map[string]bool{}
 	for _, shelf := range []types.Shelf{spec.Rows, spec.Columns} {
-		err := validateShelf(shelf, mapValue, 1, keys)
+		err := validateShelf(shelf, fieldMap, 1, keys)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	err := validateDetail(spec.Detail, mapValue, keys)
+	err := validateDetail(spec.Detail, fieldMap, keys)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, ref := range spec.Encodings.Fields() {
-		err := validateRef(ref, mapValue)
+		err := validateRef(ref, fieldMap)
 		if err != nil {
 			return nil, err
 		}
@@ -195,7 +195,7 @@ func compileFilter(spec *types.ChartSpec, m *listquery.Map) error {
 // each leaf; it records every leaf's Key in keys.
 func validateShelf(
 	algebraExpr *types.AlgebraExpr,
-	mapValue *listquery.Map,
+	fieldMap *listquery.Map,
 	depth int,
 	keys map[string]bool,
 ) error {
@@ -208,16 +208,16 @@ func validateShelf(
 	}
 
 	if algebraExpr.Field != nil {
-		return validateShelfLeaf(algebraExpr, mapValue, keys)
+		return validateShelfLeaf(algebraExpr, fieldMap, keys)
 	}
 
-	return validateShelfOperator(algebraExpr, mapValue, depth, keys)
+	return validateShelfOperator(algebraExpr, fieldMap, depth, keys)
 }
 
 // validateShelfOperator checks an operator node and walks its operands.
 func validateShelfOperator(
 	algebraExpr *types.AlgebraExpr,
-	mapValue *listquery.Map,
+	fieldMap *listquery.Map,
 	depth int,
 	keys map[string]bool,
 ) error {
@@ -234,7 +234,7 @@ func validateShelfOperator(
 			return invalid("null shelf operand")
 		}
 
-		err := validateShelf(arg, mapValue, depth+1, keys)
+		err := validateShelf(arg, fieldMap, depth+1, keys)
 		if err != nil {
 			return err
 		}
@@ -246,7 +246,7 @@ func validateShelfOperator(
 // validateShelfLeaf checks a field leaf carries no operator and records its Key.
 func validateShelfLeaf(
 	algebraExpr *types.AlgebraExpr,
-	mapValue *listquery.Map,
+	fieldMap *listquery.Map,
 	keys map[string]bool,
 ) error {
 	if algebraExpr.Op != "" || len(algebraExpr.Args) > 0 {
@@ -255,7 +255,7 @@ func validateShelfLeaf(
 
 	keys[algebraExpr.Field.Key()] = true
 
-	return validateRef(*algebraExpr.Field, mapValue)
+	return validateRef(*algebraExpr.Field, fieldMap)
 }
 
 // validateRef checks one field reference against m: allow-listed, and aggregated

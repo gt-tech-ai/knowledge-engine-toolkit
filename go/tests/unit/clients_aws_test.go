@@ -79,14 +79,14 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, textX, aws.ToString(put.Name))
 
-	apiValue, err := awsquotas.NewFromConfig(
+	currentAPI, err := awsquotas.NewFromConfig(
 		ctx,
 		awsquotas.Config{},
 		awsquotas.Deps{Decorations: decs},
 	)
 	require.NoError(t, err)
 
-	_, err = apiValue.GetServiceQuota(ctx, &servicequotas.GetServiceQuotaInput{})
+	_, err = currentAPI.GetServiceQuota(ctx, &servicequotas.GetServiceQuotaInput{})
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
 	sesc, err := ses.NewFromConfig(ctx, ses.Config{}, ses.Deps{Decorations: decs})
@@ -94,12 +94,12 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 
 	_, err = sesc.GetAccount(ctx, &sesv2.GetAccountInput{})
 
-	testClientsAwsStubsAreTheDefaultRest(ctx, t, decs, err)
+	testClientsAwsStubsAreTheDefaultBuildsEveryStub(ctx, t, decs, err)
 }
 
-// testClientsAwsStubsAreTheDefaultRest continues TestClientsAws_StubsAreTheDefault with
-// its remaining steps.
-func testClientsAwsStubsAreTheDefaultRest(
+// testClientsAwsStubsAreTheDefaultBuildsEveryStub continues
+// TestClientsAws_StubsAreTheDefault: builds every stub.
+func testClientsAwsStubsAreTheDefaultBuildsEveryStub(
 	ctx context.Context, t *testing.T, decs decorate.Decorations, err error,
 ) {
 	t.Helper()
@@ -170,7 +170,7 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 		Metrics: prom.NewFromRegistry(reg),
 	})
 	api := mocks.NewMockAWSSecretsManagerAPI(gomock.NewController(t))
-	apiValue, err := secretsmanager.NewFromConfig(ctx,
+	currentAPI, err := secretsmanager.NewFromConfig(ctx,
 		secretsmanager.Config{Kind: secretsmanager.KindSDK},
 		secretsmanager.Deps{Decorations: decs, API: api})
 	require.NoError(t, err)
@@ -178,7 +178,7 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 	api.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).
 		Return(&awssm.DescribeSecretOutput{Name: aws.String(textS)}, nil)
 
-	out, err := apiValue.DescribeSecret(
+	out, err := currentAPI.DescribeSecret(
 		ctx,
 		&awssm.DescribeSecretInput{SecretId: aws.String(textS)},
 	)
@@ -186,7 +186,7 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 	assert.Equal(t, textS, aws.ToString(out.Name))
 	assert.InDelta(
 		t,
-		wantClientOpCounter1p0,
+		wantClientOpCounter,
 		clientOpCounter(t, reg, "describe_secret"),
 		0,
 	)
@@ -203,7 +203,7 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 	require.NoError(t, err)
 	assert.InDelta(
 		t,
-		wantClientOpCounter1p0,
+		wantClientOpCounter,
 		clientOpCounter(t, reg, "get_data_source"),
 		0,
 	)
@@ -211,7 +211,7 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 	api.EXPECT().PutSecretValue(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.New(apperr.CodeUnavailable, "throttled")).Times(1)
 
-	_, err = apiValue.PutSecretValue(
+	_, err = currentAPI.PutSecretValue(
 		ctx,
 		&awssm.PutSecretValueInput{SecretId: aws.String(textS)},
 	)

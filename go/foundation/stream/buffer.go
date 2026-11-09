@@ -123,22 +123,22 @@ func (b bounded[T]) Wrap(
 	src interfaces.Stream[T],
 ) interfaces.Stream[T] {
 	ctx, cancel := context.WithCancel(ctx)
-	queueValue := &queue[T]{
+	currentQueue := &queue[T]{
 		ch:   make(chan entry[T], b.maxItems),
 		sem:  semaphore.NewWeighted(int64(b.maxBytes)),
 		done: make(chan struct{}),
 	}
 
-	go queueValue.produce(ctx, src, func(item T) int64 {
+	go currentQueue.produce(ctx, src, func(item T) int64 {
 		return int64(min(max(b.size(item), 0), b.maxBytes))
 	})
 
-	return newLatched(queueValue.next, func() error {
+	return newLatched(currentQueue.next, func() error {
 		cancel()
 
 		err := src.Close()
 
-		<-queueValue.done
+		<-currentQueue.done
 
 		return err
 	})
@@ -243,16 +243,16 @@ func (q *queue[T]) next(ctx context.Context) (item T, ok bool, err error) {
 }
 
 // take turns a dequeued entry into Next's result.
-func (q *queue[T]) take(entryValue entry[T]) (item T, ok bool, err error) {
-	if entryValue.end {
+func (q *queue[T]) take(currentEntry entry[T]) (item T, ok bool, err error) {
+	if currentEntry.end {
 		var zero T
 
-		return zero, false, entryValue.err
+		return zero, false, currentEntry.err
 	}
 
-	q.sem.Release(entryValue.n)
+	q.sem.Release(currentEntry.n)
 
-	return entryValue.item, true, nil
+	return currentEntry.item, true, nil
 }
 
 // canceled codes a context error ending a stream read: a deadline is CodeTimeout, a

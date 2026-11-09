@@ -141,10 +141,10 @@ func buildInfo(out string) (pkg, version string) {
 	for line := range strings.SplitSeq(out, "\n") {
 		fields := strings.Fields(line)
 		switch {
-		case len(fields) >= fieldsLen2 && fields[0] == "path":
+		case len(fields) >= pathLineFields && fields[0] == "path":
 			pkg = fields[1]
-		case len(fields) >= fieldsLen3 && fields[0] == "mod":
-			version = fields[index2]
+		case len(fields) >= modLineFields && fields[0] == "mod":
+			version = fields[goVersionDigitIndex]
 		default:
 			// No other value changes the outcome.
 		}

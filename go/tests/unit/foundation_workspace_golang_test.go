@@ -21,8 +21,8 @@ import (
 // wsWrite writes content to path, creating parent directories.
 func wsWrite(t *testing.T, path, content string) {
 	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), perm0o750))
-	require.NoError(t, os.WriteFile(path, []byte(content), perm0o600))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), mkdirAllInputWrite))
+	require.NoError(t, os.WriteFile(path, []byte(content), writeFileInput))
 }
 
 // wsGoMod seeds <dir>/go.mod so module discovery finds a module root there.
@@ -131,11 +131,11 @@ replace (
 	data, err := golang.ScopedWork(os.DirFS(root), root, textA)
 	require.NoError(t, err)
 
-	testScopedWorkRest(t, root, data)
+	testScopedWorkGoDirectives(t, root, data)
 }
 
-// testScopedWorkRest continues TestScopedWork with its remaining steps.
-func testScopedWorkRest(t *testing.T, root string, data []byte) {
+// testScopedWorkGoDirectives continues TestScopedWork: go directives.
+func testScopedWorkGoDirectives(t *testing.T, root string, data []byte) {
 	t.Helper()
 
 	var err error
@@ -218,7 +218,10 @@ func TestHasGeneratedPackages(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, textGen, textPb), perm0o750))
+	require.NoError(
+		t,
+		os.MkdirAll(filepath.Join(root, textGen, textPb), mkdirAllInputPackages),
+	)
 	assert.False(t, golang.HasGeneratedPackages(os.DirFS(root), "gen/pb"), "empty dir")
 	assert.False(t, golang.HasGeneratedPackages(os.DirFS(root), textNope), "missing dir")
 
@@ -301,11 +304,11 @@ func TestLister_GoListPackagesMemoizes(t *testing.T) {
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	runner.EXPECT().
-		RunBuffered(gomock.Any(), okDir, textGo2, textList, textDotSlashDotDotDot).
+		RunBuffered(gomock.Any(), okDir, textGoLower, textList, textDotSlashDotDotDot).
 		Return(goListOut("example.com/ok", "example.com/ok/sub")).
 		Times(1)
 	runner.EXPECT().
-		RunBuffered(gomock.Any(), badDir, textGo2, textList, textDotSlashDotDotDot).
+		RunBuffered(gomock.Any(), badDir, textGoLower, textList, textDotSlashDotDotDot).
 		Return(interfaces.CmdResult{
 			Err:    apperr.New(apperr.CodeInternal, "exit status 1"),
 			Stderr: []byte("no go.mod"),
@@ -362,7 +365,7 @@ func TestLister_FilterModulesWithGoPackages(t *testing.T) {
 
 	root := t.TempDir()
 	for _, mod := range []string{textA, textEmpty, textNotmod, textB} {
-		require.NoError(t, os.MkdirAll(filepath.Join(root, mod), perm0o750))
+		require.NoError(t, os.MkdirAll(filepath.Join(root, mod), mkdirAllInputPackages))
 	}
 
 	wsGoMod(t, filepath.Join(root, textBroken))
@@ -381,7 +384,7 @@ func TestLister_FilterModulesWithGoPackages(t *testing.T) {
 		textB:      goListOut("example.com/b", "example.com/b/x"),
 	} {
 		runner.EXPECT().
-			RunBuffered(gomock.Any(), filepath.Join(root, mod), textGo2, textList,
+			RunBuffered(gomock.Any(), filepath.Join(root, mod), textGoLower, textList,
 				textDotSlashDotDotDot).
 			Return(res)
 	}
@@ -408,7 +411,7 @@ func TestLister_HasGoPackagesWithTags(t *testing.T) {
 
 	root := t.TempDir()
 	module, notModule := filepath.Join(root, "m"), filepath.Join(root, textN)
-	require.NoError(t, os.MkdirAll(notModule, perm0o750))
+	require.NoError(t, os.MkdirAll(notModule, mkdirAllInputTags))
 	wsGoMod(t, module)
 
 	failed := interfaces.CmdResult{Err: apperr.New(apperr.CodeInternal, "exit status 1")}
@@ -427,7 +430,7 @@ func TestLister_HasGoPackagesWithTags(t *testing.T) {
 	for _, testCase := range cases {
 		runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 		runner.EXPECT().
-			RunBuffered(gomock.Any(), testCase.dir, textGo2, textList, "-tags=integration",
+			RunBuffered(gomock.Any(), testCase.dir, textGoLower, textList, "-tags=integration",
 				textDotSlashDotDotDot).
 			Return(testCase.res)
 		assert.Equal(t, testCase.want, golang.NewLister(os.DirFS(root), root).
@@ -503,3 +506,22 @@ func TestWorkspaceGraph(t *testing.T) {
 	_, err = golang.ParseWorkspaceGraph([]byte("use (\n"), nil)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// mkdirAllInputPackages is the mkdir all input packages the tests use.
+	mkdirAllInputPackages = 0o750
+
+	// mkdirAllInputTags is the mkdir all input tags the tests use.
+	mkdirAllInputTags = 0o750
+)
+
+const (
+	// textLibsCore is the literal "libs/core".
+	textLibsCore = "libs/core"
+
+	// textNotmod is the literal "notmod".
+	textNotmod = "notmod"
+
+	// textPb is the literal "pb".
+	textPb = "pb"
+)

@@ -73,7 +73,7 @@ func TestClientsToolchainInstaller_Install_WindowsArm64CrossCompiles(t *testing.
 	var gotEnv, gotArgs []string
 
 	commandRunner.EXPECT().
-		RunWithEnv(gomock.Any(), textRoot, gomock.Any(), textGo2, gomock.Any()).
+		RunWithEnv(gomock.Any(), textRoot, gomock.Any(), textGoLower, gomock.Any()).
 		DoAndReturn(func(
 			_ context.Context,
 			_ string,
@@ -89,7 +89,7 @@ func TestClientsToolchainInstaller_Install_WindowsArm64CrossCompiles(t *testing.
 	tool := &types.ToolDef{
 		Name: textX,
 		InstallMethods: map[string]types.InstallMethod{
-			textAll: {Command: textGo2, Args: []string{textInstall, textPkgV1}},
+			textAll: {Command: textGoLower, Args: []string{textInstall, textPkgV1}},
 		},
 	}
 	inst := toolchain.NewInstaller(
@@ -131,7 +131,7 @@ func TestClientsToolchainInstaller_Install_WindowsPrefersGoInstall(t *testing.T)
 			gomock.Any(),
 			textRoot,
 			[]string{textGotoolchainLocal},
-			textGo2,
+			textGoLower,
 			textInstall,
 			textPkgV1,
 		).
@@ -141,7 +141,7 @@ func TestClientsToolchainInstaller_Install_WindowsPrefersGoInstall(t *testing.T)
 		Name: textX,
 		InstallMethods: map[string]types.InstallMethod{
 			textWindows: {Command: textPowershell, Args: []string{"-c", textX}},
-			textAll:     {Command: textGo2, Args: []string{textInstall, textPkgV1}},
+			textAll:     {Command: textGoLower, Args: []string{textInstall, textPkgV1}},
 		},
 	}
 	inst := toolchain.NewInstaller(
@@ -169,7 +169,7 @@ func TestClientsToolchainClassifyWingetExit(t *testing.T) {
 
 	success := map[int]string{
 		int(uint32(uint32Arg0x8A15002B)): "already installed, no update available",
-		int(uint32(uint32Arg0x8A150061)): "package already installed",
+		int(uint32(uint32Arg0x8A)):       "package already installed",
 		int(uint32(uint32Arg0x8A15010D)): "another version already installed",
 		int(uint32(uint32Arg0x8A15004F)): "upgrade version not newer than installed",
 	}
@@ -180,10 +180,32 @@ func TestClientsToolchainClassifyWingetExit(t *testing.T) {
 	}
 
 	for _, code := range []int{
-		0, 1, int(uint32(uint32Arg0x8A150001)),
-		int(uint32(uint32Arg0x8A150008)),
+		0, 1, int(uint32(uint32Arg0x8AExit)),
+		int(uint32(uint32Arg0x8AWingetExit)),
 	} {
 		_, ok := toolchain.ClassifyWingetExit(code)
 		assert.Falsef(t, ok, "code %#x is not success-like", code)
 	}
 }
+
+const (
+	// uint32Arg0x8A is the uint32 arg0x8 a the tests use.
+	uint32Arg0x8A = 0x8A150061
+
+	// uint32Arg0x8AExit is the uint32 arg0x8 aexit the tests use.
+	uint32Arg0x8AExit = 0x8A150001
+
+	// uint32Arg0x8AWingetExit is the uint32 arg0x8 awinget exit the tests use.
+	uint32Arg0x8AWingetExit = 0x8A150008
+)
+
+const (
+	// uint32Arg0x8A15002B is the uint32Arg value 0x8A15002B.
+	uint32Arg0x8A15002B = 0x8A15002B
+
+	// uint32Arg0x8A15004F is the uint32Arg value 0x8A15004F.
+	uint32Arg0x8A15004F = 0x8A15004F
+
+	// uint32Arg0x8A15010D is the uint32Arg value 0x8A15010D.
+	uint32Arg0x8A15010D = 0x8A15010D
+)

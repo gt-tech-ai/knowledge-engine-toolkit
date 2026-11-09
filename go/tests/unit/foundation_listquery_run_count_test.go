@@ -47,7 +47,7 @@ func runCountReader(r *countStubRunner, limit int) listquery.Reader[int, int] {
 		Resolve:    listquery.IdentityColumn,
 		Sort:       []types.OrderField{{Field: textName, Desc: false}},
 		Tiebreaker: textID,
-		Bounds:     listquery.Bounds{DefaultSize: defaultSize50, CountCap: limit},
+		Bounds:     listquery.Bounds{DefaultSize: defaultSize, CountCap: limit},
 		MapErr:     func(err error) error { return err },
 		Count:      true,
 	}
@@ -73,11 +73,11 @@ func TestRun_OffsetTotalCount_BoundedExactVsEstimate(t *testing.T) {
 	t.Run("within cap is exact", func(t *testing.T) {
 		t.Parallel()
 
-		countStubRunnerValue := &countStubRunner{rows: []int{1, 2, 3}, total: 3}
+		currentCountStubRunner := &countStubRunner{rows: []int{1, 2, 3}, total: 3}
 		page, err := listquery.Run(
 			context.Background(),
 			types.PageRequest{},
-			runCountReader(countStubRunnerValue, 10),
+			runCountReader(currentCountStubRunner, 10),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, int64(3), page.Total)
@@ -85,7 +85,7 @@ func TestRun_OffsetTotalCount_BoundedExactVsEstimate(t *testing.T) {
 		assert.Equal(
 			t,
 			11,
-			countStubRunnerValue.gotBound,
+			currentCountStubRunner.gotBound,
 			"Run asks the runner for count_cap+1",
 		)
 	})
@@ -93,24 +93,24 @@ func TestRun_OffsetTotalCount_BoundedExactVsEstimate(t *testing.T) {
 	t.Run("over cap is a capped estimate", func(t *testing.T) {
 		t.Parallel()
 
-		countStubRunner2 := &countStubRunner{rows: []int{1, 2, 3}, total: 5000}
+		secondCountStubRunner := &countStubRunner{rows: []int{1, 2, 3}, total: 5000}
 		page, err := listquery.Run(
 			context.Background(),
 			types.PageRequest{},
-			runCountReader(countStubRunner2, 10),
+			runCountReader(secondCountStubRunner, 10),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, int64(10), page.Total, "an over-cap count is reported as the cap")
 		assert.True(t, page.TotalIsEstimate, "an over-cap count is flagged an estimate")
-		assert.Equal(t, 11, countStubRunner2.gotBound)
+		assert.Equal(t, 11, secondCountStubRunner.gotBound)
 	})
 
-	testRunOffsetTotalCountBoundedExactVsEstimateRest(t)
+	testRunOffsetTotalCountBoundedExactVsEstimateAtCap(t)
 }
 
-// testRunOffsetTotalCountBoundedExactVsEstimateRest continues
-// TestRun_OffsetTotalCount_BoundedExactVsEstimate with its remaining steps.
-func testRunOffsetTotalCountBoundedExactVsEstimateRest(t *testing.T) {
+// testRunOffsetTotalCountBoundedExactVsEstimateAtCap continues
+// TestRun_OffsetTotalCount_BoundedExactVsEstimate: at cap.
+func testRunOffsetTotalCountBoundedExactVsEstimateAtCap(t *testing.T) {
 	t.Helper()
 
 	// The exact boundary — total == cap and total == cap+1 — pins the `>` in boundedTotal
@@ -119,11 +119,11 @@ func testRunOffsetTotalCountBoundedExactVsEstimateRest(t *testing.T) {
 	t.Run("exactly at cap is exact", func(t *testing.T) {
 		t.Parallel()
 
-		countStubRunnerValue := &countStubRunner{rows: []int{1, 2, 3}, total: 10}
+		currentCountStubRunner := &countStubRunner{rows: []int{1, 2, 3}, total: 10}
 		page, err := listquery.Run(
 			context.Background(),
 			types.PageRequest{},
-			runCountReader(countStubRunnerValue, 10),
+			runCountReader(currentCountStubRunner, 10),
 		)
 		require.NoError(t, err)
 		assert.Equal(
@@ -133,22 +133,22 @@ func testRunOffsetTotalCountBoundedExactVsEstimateRest(t *testing.T) {
 			"a count equal to the cap is exact, not an estimate",
 		)
 		assert.False(t, page.TotalIsEstimate, "total == cap is exact")
-		assert.Equal(t, 11, countStubRunnerValue.gotBound)
+		assert.Equal(t, 11, currentCountStubRunner.gotBound)
 	})
 
 	t.Run("one over cap is a capped estimate", func(t *testing.T) {
 		t.Parallel()
 
-		countStubRunner2 := &countStubRunner{rows: []int{1, 2, 3}, total: 11}
+		secondCountStubRunner := &countStubRunner{rows: []int{1, 2, 3}, total: 11}
 		page, err := listquery.Run(
 			context.Background(),
 			types.PageRequest{},
-			runCountReader(countStubRunner2, 10),
+			runCountReader(secondCountStubRunner, 10),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, int64(10), page.Total, "total == cap+1 is reported as the cap")
 		assert.True(t, page.TotalIsEstimate, "total == cap+1 is flagged an estimate")
-		assert.Equal(t, 11, countStubRunner2.gotBound)
+		assert.Equal(t, 11, secondCountStubRunner.gotBound)
 	})
 }
 
@@ -166,13 +166,18 @@ func testRunOffsetTotalCountBoundedExactVsEstimateRest(t *testing.T) {
 func TestRun_OffsetTotalCount_DefaultCapFallback(t *testing.T) {
 	t.Parallel()
 
-	countStubRunnerValue := &countStubRunner{rows: []int{1}, total: 1}
+	currentCountStubRunner := &countStubRunner{rows: []int{1}, total: 1}
 	_, err := listquery.Run(
 		context.Background(),
 		types.PageRequest{},
-		runCountReader(countStubRunnerValue, 0),
+		runCountReader(currentCountStubRunner, 0),
 	)
 	require.NoError(t, err)
-	assert.Equal(t, listquery.DefaultCountCap+1, countStubRunnerValue.gotBound,
+	assert.Equal(t, listquery.DefaultCountCap+1, currentCountStubRunner.gotBound,
 		"an unset cap falls back to the foundation default")
 }
+
+const (
+	// defaultSize is the default size the tests use.
+	defaultSize = 50
+)

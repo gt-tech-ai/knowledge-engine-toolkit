@@ -44,10 +44,14 @@ func newObjectStore(t *testing.T, storage interfaces.StorageClient) interfaces.P
 // writePlan writes body as unit's plan under dir.
 func writePlan(t *testing.T, dir, unit, body string) {
 	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, unit), perm0o700))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, unit), mkdirAllInput))
 	require.NoError(
 		t,
-		os.WriteFile(filepath.Join(dir, unit, textTfplanTfplan), []byte(body), perm0o600),
+		os.WriteFile(
+			filepath.Join(dir, unit, textTfplanTfplan),
+			[]byte(body),
+			writeFileInput,
+		),
 	)
 }
 
@@ -79,11 +83,11 @@ func TestPlanStore_RoundTrip(t *testing.T) {
 
 			return apperr.Wrap(err, apperr.CodeInternal, "read the upload body")
 		}).
-		Times(timesArg2)
+		Times(wantCalls)
 	storage.EXPECT().Download(gomock.Any(), "state", gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, key string) (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(stored[key])), nil
-		}).Times(timesArg2)
+		}).Times(wantCalls)
 
 	planStore := newObjectStore(t, storage)
 
@@ -100,7 +104,7 @@ func TestPlanStore_RoundTrip(t *testing.T) {
 
 	defer func() { require.NoError(t, root.Close()) }()
 
-	require.NoError(t, root.WriteFile(textPlanManifestJSON, manifest, perm0o600))
+	require.NoError(t, root.WriteFile(textPlanManifestJSON, manifest, writeFileInput))
 	require.NoError(t, planStore.Load(t.Context(), new(planSet(dst))))
 
 	got, err := os.ReadFile(filepath.Clean(filepath.Join(dst, textVpc, textTfplanTfplan)))
@@ -109,15 +113,15 @@ func TestPlanStore_RoundTrip(t *testing.T) {
 
 	info, err := os.Stat(filepath.Join(dst, textVpc, textTfplanTfplan))
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(fileModeArg0o600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(fileModeInput), info.Mode().Perm())
 
 	dirInfo, err := os.Stat(filepath.Join(dst, textVpc))
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(fileModeArg0o700), dirInfo.Mode().Perm())
+	assert.Equal(t, os.FileMode(fileModeInputTrip), dirInfo.Mode().Perm())
 }
 
 // manifestFor writes a manifest for owner listing unit → key, sha256 into dir.
-func manifestFor(t *testing.T, dir, owner string, units ...[value3]string) {
+func manifestFor(t *testing.T, dir, owner string, units ...[value]string) {
 	t.Helper()
 
 	type unit struct {
@@ -139,7 +143,7 @@ func manifestFor(t *testing.T, dir, owner string, units ...[value3]string) {
 	require.NoError(t, err)
 	require.NoError(
 		t,
-		os.WriteFile(filepath.Join(dir, textPlanManifestJSON), data, perm0o600),
+		os.WriteFile(filepath.Join(dir, textPlanManifestJSON), data, writeFileInput),
 	)
 }
 
@@ -193,7 +197,7 @@ func TestPlanStore_LoadRefusesUntrustedPlans(t *testing.T) {
 		assert.Contains(t, err.Error(), key)
 	})
 
-	for name, units := range map[string][iterations3]string{
+	for name, units := range map[string][iterationsPlans]string{
 		"another owner":      {textVpc, key, "00"},
 		"key outside prefix": {textVpc, "plans/prod/42-1/vpc/tfplan.tfplan", "00"},
 	} {
@@ -252,3 +256,22 @@ func TestPlanStore_Kinds(t *testing.T) {
 		)
 	}
 }
+
+const (
+	// fileModeInputTrip is the file mode input trip the tests use.
+	fileModeInputTrip = 0o700
+
+	// iterationsPlans is the iterations plans the tests use.
+	iterationsPlans = 3
+
+	// value is the value the tests use.
+	value = 3
+)
+
+const (
+	// textPlanManifestJSON is the literal "plan-manifest.json".
+	textPlanManifestJSON = "plan-manifest.json"
+
+	// textTfplanTfplan is the literal "tfplan.tfplan".
+	textTfplanTfplan = "tfplan.tfplan"
+)

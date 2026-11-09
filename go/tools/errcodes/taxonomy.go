@@ -111,21 +111,21 @@ func parse(src []byte) ([]code, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(src))
 	dec.KnownFields(true)
 
-	var taxonomyValue taxonomy
+	var currentTaxonomy taxonomy
 
-	err := dec.Decode(&taxonomyValue)
+	err := dec.Decode(&currentTaxonomy)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "decode "+SourcePath)
 	}
 
-	if len(taxonomyValue.Codes) == 0 {
+	if len(currentTaxonomy.Codes) == 0 {
 		return nil, apperr.InvalidInput(SourcePath + ": no codes")
 	}
 
 	seen := map[string]bool{}
 
-	for i := range taxonomyValue.Codes {
-		c := &taxonomyValue.Codes[i]
+	for i := range currentTaxonomy.Codes {
+		c := &currentTaxonomy.Codes[i]
 
 		err := validate(c, seen)
 		if err != nil {
@@ -133,31 +133,31 @@ func parse(src []byte) ([]code, error) {
 		}
 	}
 
-	return taxonomyValue.Codes, nil
+	return currentTaxonomy.Codes, nil
 }
 
 // validate checks one row against the rules parse documents, resolves its gRPC number
 // and records its names in seen.
-func validate(codeValue *code, seen map[string]bool) error {
-	why := formatProblem(codeValue)
+func validate(errCode *code, seen map[string]bool) error {
+	why := formatProblem(errCode)
 	if why == "" {
-		why = policyProblem(codeValue, seen)
+		why = policyProblem(errCode, seen)
 	}
 
 	if why != "" {
-		return rowError(codeValue, why)
+		return rowError(errCode, why)
 	}
 
-	count, ok := grpcNumber(codeValue.GRPC)
+	count, ok := grpcNumber(errCode.GRPC)
 	if !ok {
 		return rowError(
-			codeValue,
-			"grpc "+strconv.Quote(codeValue.GRPC)+" is not a gRPC status",
+			errCode,
+			"grpc "+strconv.Quote(errCode.GRPC)+" is not a gRPC status",
 		)
 	}
 
-	codeValue.GRPCNumber = count
-	seen["code "+codeValue.Code], seen["go "+codeValue.Go] = true, true
+	errCode.GRPCNumber = count
+	seen["code "+errCode.Code], seen["go "+errCode.Go] = true, true
 
 	return nil
 }
@@ -170,15 +170,15 @@ func rowError(c *code, why string) error {
 }
 
 // formatProblem says which field is malformed, or "" when all are well formed.
-func formatProblem(codeValue *code) string {
+func formatProblem(errCode *code) string {
 	switch {
-	case !codeRE.MatchString(codeValue.Code):
+	case !codeRE.MatchString(errCode.Code):
 		return "the code is not upper snake case"
-	case !goRE.MatchString(codeValue.Go):
+	case !goRE.MatchString(errCode.Go):
 		return "go must be an exported Code<Name> constant"
-	case codeValue.Doc == "":
+	case errCode.Doc == "":
 		return "doc is empty"
-	case codeValue.HTTP < http100 || codeValue.HTTP > http599:
+	case errCode.HTTP < minHTTPStatus || errCode.HTTP > maxHTTPStatus:
 		return "http is not a status code"
 	default:
 		return ""
@@ -186,14 +186,14 @@ func formatProblem(codeValue *code) string {
 }
 
 // policyProblem says which cross-field rule the row breaks, or "" when none.
-func policyProblem(codeValue *code, seen map[string]bool) string {
+func policyProblem(errCode *code, seen map[string]bool) string {
 	switch {
-	case codeValue.Retry != retryTransient && codeValue.Retry != retryPermanent &&
-		codeValue.Retry != retryNone:
+	case errCode.Retry != retryTransient && errCode.Retry != retryPermanent &&
+		errCode.Retry != retryNone:
 		return "retry must be transient, permanent or none"
-	case codeValue.FixedClientMessage && codeValue.SafeMessage == "":
+	case errCode.FixedClientMessage && errCode.SafeMessage == "":
 		return "fixed_client_message needs a safe_message"
-	case seen["code "+codeValue.Code] || seen["go "+codeValue.Go]:
+	case seen["code "+errCode.Code] || seen["go "+errCode.Go]:
 		return "the code or its Go name is declared twice"
 	default:
 		return ""

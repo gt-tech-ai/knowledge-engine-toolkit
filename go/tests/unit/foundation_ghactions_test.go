@@ -77,12 +77,16 @@ func TestFoundationGhactions(t *testing.T) {
 func TestGhactions_TruncateComment(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "short", ghactions.TruncateComment("short", limit10))
-	assert.Equal(t, "exactly10!", ghactions.TruncateComment("exactly10!", limit10))
+	assert.Equal(t, "short", ghactions.TruncateComment("short", truncateCommentInput))
+	assert.Equal(
+		t,
+		"exactly10!",
+		ghactions.TruncateComment("exactly10!", truncateCommentInput),
+	)
 
-	long := "HEAD-" + strings.Repeat("é", count1000) + "-TAIL"
-	got := ghactions.TruncateComment(long, limit400)
-	assert.LessOrEqual(t, utf8.RuneCountInString(got), wantRuneCountInString400)
+	long := "HEAD-" + strings.Repeat("é", repeatInputComment) + "-TAIL"
+	got := ghactions.TruncateComment(long, truncateCommentInputComment)
+	assert.LessOrEqual(t, utf8.RuneCountInString(got), maxRuneCountInString)
 
 	head, rest, found := strings.Cut(got, "\n\n… ")
 	require.True(t, found, got)
@@ -99,17 +103,28 @@ func TestGhactions_TruncateComment(t *testing.T) {
 	assert.Greater(
 		t,
 		utf8.RuneCountInString(got),
-		wantRuneCountInString300,
+		minRuneCountInString,
 		"cut by characters, not bytes",
 	)
 	assert.True(t, strings.HasPrefix(got, "HEAD-é"), got)
+
+	testGhactionsChecksTruncation(t, long, got)
+}
+
+// testGhactionsChecksTruncation continues TestGhactions_TruncateComment.
+func testGhactionsChecksTruncation(t *testing.T, long, got string) {
+	t.Helper()
+
 	assert.True(t, strings.HasSuffix(got, "é-TAIL"), got)
 	assert.Contains(t, got, "characters cut to fit GitHub's comment limit")
 
-	fenced := "<details>\n```\n" + strings.Repeat(textX, count1000) + "\n```\n</details>"
+	fenced := "<details>\n```\n" + strings.Repeat(
+		textX,
+		repeatInputComment,
+	) + "\n```\n</details>"
 
-	got = ghactions.TruncateComment(fenced, limit400)
-	assert.LessOrEqual(t, utf8.RuneCountInString(got), wantRuneCountInString400)
+	got = ghactions.TruncateComment(fenced, truncateCommentInputComment)
+	assert.LessOrEqual(t, utf8.RuneCountInString(got), maxRuneCountInString)
 
 	before, after, found := strings.Cut(got, "characters cut")
 	require.True(t, found, got)
@@ -127,5 +142,30 @@ func TestGhactions_TruncateComment(t *testing.T) {
 	assert.Zero(t, strings.Count(after, "```")%2, "the tail's fence is reopened")
 	assert.Equal(t, strings.Count(after, "<details>"), strings.Count(after, "</details>"))
 
-	assert.Equal(t, "HEAD", ghactions.TruncateComment(long, limit4))
+	assert.Equal(
+		t,
+		"HEAD",
+		ghactions.TruncateComment(long, truncateCommentInputTruncateComment),
+	)
 }
+
+const (
+	// maxRuneCountInString is the max rune count in string the tests use.
+	maxRuneCountInString = 400
+
+	// minRuneCountInString is the min rune count in string the tests use.
+	minRuneCountInString = 300
+
+	// repeatInputComment is the repeat input comment the tests use.
+	repeatInputComment = 1000
+
+	// truncateCommentInput is the truncate comment input the tests use.
+	truncateCommentInput = 10
+
+	// truncateCommentInputComment is the truncate comment input comment the tests use.
+	truncateCommentInputComment = 400
+
+	// truncateCommentInputTruncateComment is the truncate comment input truncate comment
+	// the tests use.
+	truncateCommentInputTruncateComment = 4
+)

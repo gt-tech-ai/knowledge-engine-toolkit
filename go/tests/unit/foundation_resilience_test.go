@@ -88,7 +88,7 @@ func TestCircuitBreaker_OpensAfterConsecutiveFailures(t *testing.T) {
 
 	testErr := apperr.Sentinel("service unavailable")
 
-	for range iterations3 {
+	for range iterationsFailures {
 		_ = circuitBreaker.Execute(func() error {
 			return testErr
 		})
@@ -133,7 +133,7 @@ func TestCircuitBreaker_DomainErrorsDoNotTrip(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	for range iterations10 {
+	for range iterationsTrip {
 		_ = circuitBreaker.Execute(func() error { return apperr.NotFound(textGone) })
 	}
 
@@ -180,10 +180,10 @@ func TestCircuitBreaker_FailureRatioTrips(t *testing.T) {
 
 	opened := false
 
-	for i := range iterations60 {
+	for i := range iterationsTrips {
 		var opErr error
 
-		if i%value2 == 0 {
+		if i%wantI == 0 {
 			opErr = apperr.Sentinel("unavailable") // infra failure (retryable)
 		}
 
@@ -235,7 +235,7 @@ func TestCircuitBreaker_CallerCancellationDoesNotTrip(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	for range iterations10 {
+	for range iterationsTrip {
 		_ = circuitBreaker.Execute(func() error { return context.Canceled })
 	}
 
@@ -274,7 +274,7 @@ func TestCircuitBreaker_DefaultConfig(t *testing.T) {
 	assert.Equal(t, "my-breaker", cfg.Name)
 	assert.Equal(t, circuitbreaker.KindGoBreaker, cfg.Kind)
 	assert.Equal(t, uint32(1), cfg.MaxRequests)
-	assert.Equal(t, uint32(uint32Arg5), cfg.ConsecutiveFailures)
+	assert.Equal(t, uint32(wantConsecutiveFailuresConfig), cfg.ConsecutiveFailures)
 }
 
 // TestCircuitBreaker_UnknownKind tests that the factory rejects unsupported
@@ -289,7 +289,7 @@ func TestCircuitBreaker_DefaultConfig(t *testing.T) {
 func TestCircuitBreaker_UnknownKind(t *testing.T) {
 	t.Parallel()
 
-	_, err := circuitbreaker.New(circuitbreaker.Kind(kindArg999), textTest)
+	_, err := circuitbreaker.New(circuitbreaker.Kind(kindInputKind), textTest)
 	require.Error(t, err, textExpectedErrorForUnknown)
 }
 
@@ -360,7 +360,7 @@ func TestRetryBudget_BlocksWhenExhausted(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	b := budget.NewBudget(maxRetries2)
+	b := budget.NewBudget(newBudgetInput)
 
 	ctx = budget.WithRetryBudget(ctx, b)
 
@@ -388,7 +388,7 @@ func TestRetryBudget_UnlimitedWithoutBudget(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	for i := range iterations100 {
+	for i := range iterationsBudget {
 		assert.True(
 			t,
 			budget.ConsumeRetry(ctx),
@@ -413,14 +413,14 @@ func TestRetryBudget_Remaining(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	b := budget.NewBudget(maxRetries3)
+	b := budget.NewBudget(newBudgetInputRemaining)
 
 	ctx = budget.WithRetryBudget(ctx, b)
 
-	assert.Equal(t, int32(int32Arg3), budget.Remaining(ctx))
+	assert.Equal(t, int32(wantRemaining), budget.Remaining(ctx))
 
 	budget.ConsumeRetry(ctx)
-	assert.Equal(t, int32(int32Arg2), budget.Remaining(ctx))
+	assert.Equal(t, int32(wantRemainingRemaining), budget.Remaining(ctx))
 }
 
 // TestRetryBudget_ChargesRetriesNotFirstAttempts tests that a retrier charges the
@@ -600,7 +600,7 @@ func TestRetry_RetriesOnTransientError(t *testing.T) {
 
 		return nil
 	}), textUnexpectedError)
-	assert.Equal(t, int32(int32Arg3), attempts.Load(), "expected 3 total attempts")
+	assert.Equal(t, int32(wantAttempts), attempts.Load(), "expected 3 total attempts")
 }
 
 // TestRetry_DoesNotRetryPermanentError tests that permanent domain errors
@@ -667,9 +667,9 @@ func TestRetry_DefaultConfig(t *testing.T) {
 
 	cfg := retry.DefaultConfig()
 	assert.Equal(t, retry.KindExponential, cfg.Kind)
-	assert.Equal(t, wantMaxRetries3, cfg.MaxRetries)
+	assert.Equal(t, wantMaxRetriesConfig, cfg.MaxRetries)
 	assert.Equal(t, 100*time.Millisecond, cfg.InitialInterval)
-	assert.InDelta(t, wantMultiplier2p0, cfg.Multiplier, 0)
+	assert.InDelta(t, wantMultiplierConfig, cfg.Multiplier, 0)
 }
 
 // TestRetry_UnknownKind tests that the factory rejects unsupported retry
@@ -684,7 +684,7 @@ func TestRetry_DefaultConfig(t *testing.T) {
 func TestRetry_UnknownKind(t *testing.T) {
 	t.Parallel()
 
-	_, err := retry.New(retry.Kind(kindArg999))
+	_, err := retry.New(retry.Kind(kindInputKind))
 	require.Error(t, err, textExpectedErrorForUnknown)
 }
 
@@ -759,16 +759,16 @@ func TestBulkhead_FactoryReturnsInterface(t *testing.T) {
 	t.Parallel()
 
 	var (
-		bulkheadValue interfaces.Bulkhead
-		err           error
+		currentBulkhead interfaces.Bulkhead
+		err             error
 	)
 
-	bulkheadValue, err = bulkhead.New(bulkhead.KindChannel)
+	currentBulkhead, err = bulkhead.New(bulkhead.KindChannel)
 	require.NoError(t, err, textUnexpectedError)
 
 	require.NoError(
 		t,
-		bulkheadValue.Execute(context.Background(), func() error { return nil }),
+		currentBulkhead.Execute(context.Background(), func() error { return nil }),
 		textUnexpectedError,
 	)
 }
@@ -788,11 +788,11 @@ func TestBulkhead_LimitsConcurrency(t *testing.T) {
 	t.Parallel()
 
 	var (
-		bulkheadValue interfaces.Bulkhead
-		err           error
+		currentBulkhead interfaces.Bulkhead
+		err             error
 	)
 
-	bulkheadValue, err = bulkhead.NewFromConfig(bulkhead.Config{
+	currentBulkhead, err = bulkhead.NewFromConfig(bulkhead.Config{
 		Kind:          bulkhead.KindChannel,
 		MaxConcurrent: 2,
 	})
@@ -800,9 +800,9 @@ func TestBulkhead_LimitsConcurrency(t *testing.T) {
 
 	blocker := make(chan struct{})
 
-	for range iterations2 {
+	for range iterations {
 		go func() {
-			_ = bulkheadValue.Execute(context.Background(), func() error {
+			_ = currentBulkhead.Execute(context.Background(), func() error {
 				<-blocker
 
 				return nil
@@ -812,7 +812,7 @@ func TestBulkhead_LimitsConcurrency(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	err = bulkheadValue.TryExecute(func() error { return nil })
+	err = currentBulkhead.TryExecute(func() error { return nil })
 	require.ErrorIs(t, err, bulkhead.ErrBulkheadFull)
 
 	close(blocker)
@@ -834,7 +834,7 @@ func TestBulkhead_DefaultConfig(t *testing.T) {
 
 	cfg := bulkhead.DefaultConfig()
 	assert.Equal(t, bulkhead.KindChannel, cfg.Kind)
-	assert.Equal(t, wantMaxConcurrent10, cfg.MaxConcurrent)
+	assert.Equal(t, wantMaxConcurrentConfig, cfg.MaxConcurrent)
 }
 
 // TestBulkhead_UnknownKind tests that the factory rejects unsupported bulkhead
@@ -849,7 +849,7 @@ func TestBulkhead_DefaultConfig(t *testing.T) {
 func TestBulkhead_UnknownKind(t *testing.T) {
 	t.Parallel()
 
-	_, err := bulkhead.New(bulkhead.Kind(kindArg999))
+	_, err := bulkhead.New(bulkhead.Kind(kindInputKind))
 	require.Error(t, err, textExpectedErrorForUnknown)
 }
 
@@ -959,7 +959,7 @@ func TestRateLimiter_AllowsWithinRate(t *testing.T) {
 	})
 	require.NoError(t, err, textUnexpectedError)
 
-	for i := range iterations10 {
+	for i := range iterationsRate {
 		assert.True(
 			t,
 			lim.Allow(),
@@ -1051,8 +1051,8 @@ func TestRateLimiter_DefaultConfig(t *testing.T) {
 
 	cfg := ratelimiter.DefaultConfig()
 	assert.Equal(t, ratelimiter.KindToken, cfg.Kind)
-	assert.InDelta(t, float64(float64Arg100), cfg.Rate, 0)
-	assert.Equal(t, wantBurst10, cfg.Burst)
+	assert.InDelta(t, float64(wantRateConfig), cfg.Rate, 0)
+	assert.Equal(t, wantBurstConfig, cfg.Burst)
 }
 
 // TestRateLimiter_UnknownKind tests that the factory rejects unsupported rate
@@ -1067,7 +1067,7 @@ func TestRateLimiter_DefaultConfig(t *testing.T) {
 func TestRateLimiter_UnknownKind(t *testing.T) {
 	t.Parallel()
 
-	_, err := ratelimiter.New(ratelimiter.Kind(kindArg999))
+	_, err := ratelimiter.New(ratelimiter.Kind(kindInputKind))
 	require.Error(t, err, textExpectedErrorForUnknown)
 }
 
@@ -1118,3 +1118,41 @@ func TestRateLimiter_MockDeniesAccess(t *testing.T) {
 
 	require.False(t, lim.Allow(), "expected Allow() to return false")
 }
+
+const (
+	// iterationsBudget is the iterations budget the tests use.
+	iterationsBudget = 100
+
+	// iterationsFailures is the iterations failures the tests use.
+	iterationsFailures = 3
+
+	// iterationsRate is the iterations rate the tests use.
+	iterationsRate = 10
+
+	// iterationsTrip is the iterations trip the tests use.
+	iterationsTrip = 10
+
+	// iterationsTrips is the iterations trips the tests use.
+	iterationsTrips = 60
+
+	// kindInputKind is the kind input kind the tests use.
+	kindInputKind = 999
+
+	// newBudgetInputRemaining is the new budget input remaining the tests use.
+	newBudgetInputRemaining = 3
+
+	// wantBurstConfig is the expected burst config.
+	wantBurstConfig = 10
+
+	// wantConsecutiveFailuresConfig is the expected consecutive failures config.
+	wantConsecutiveFailuresConfig = 5
+
+	// wantRateConfig is the expected rate config.
+	wantRateConfig = 100
+
+	// wantRemaining is the expected remaining.
+	wantRemaining = 3
+
+	// wantRemainingRemaining is the expected remaining remaining.
+	wantRemainingRemaining = 2
+)

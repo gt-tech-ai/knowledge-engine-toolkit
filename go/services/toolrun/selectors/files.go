@@ -50,13 +50,13 @@ func keepFile(
 	ctx context.Context,
 	codebase interfaces.Codebase,
 	spec *types.TargetSpec,
-	textValue string,
+	fileText string,
 ) (bool, error) {
 	if !spec.SkipHeredoc {
 		return true, nil
 	}
 
-	text, err := codebase.Text(ctx, textValue)
+	text, err := codebase.Text(ctx, fileText)
 	if err != nil {
 		return false, err
 	}

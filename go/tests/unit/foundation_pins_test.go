@@ -36,8 +36,8 @@ func pinsPolicy() pins.Policy {
 		Extends:             []string{"config:recommended"},
 		Labels:              []string{"dependencies"},
 		Schedule:            []string{"before 6am on Monday"},
-		PRHourlyLimit:       prHourlyLimit2,
-		PRConcurrentLimit:   prConcurrentLimit5,
+		PRHourlyLimit:       prHourlyLimit,
+		PRConcurrentLimit:   prConcurrentLimit,
 		LockFileMaintenance: &pins.LockFileMaintenance{Enabled: true},
 		VulnerabilityAlerts: &pins.VulnerabilityAlerts{
 			Enabled: true, Labels: []string{textSecurity},
@@ -53,7 +53,7 @@ func pinsPolicy() pins.Policy {
 		CustomManagers: []pins.Gated[pins.CustomManager]{{
 			When: []pins.Manager{pins.ManagerGomod, pins.ManagerGithubActions},
 			Value: pins.CustomManager{
-				CustomType: textRegex, DatasourceTemplate: textGo2,
+				CustomType: textRegex, DatasourceTemplate: textGoLower,
 				ManagerFilePatterns: []string{"/(^|/)tools\\.yaml$/"},
 				MatchStrings: []string{
 					"package: (?<depName>\\S+)\\s+version: (?<currentValue>\\S+)",
@@ -249,7 +249,7 @@ func TestFoundationPins_Render(t *testing.T) {
 	require.Len(
 		t,
 		cfg.PackageRules,
-		wantPackageRulesLen4,
+		wantPackageRulesLen,
 		"two managers, the group rule, the major rule",
 	)
 	assert.Equal(t, "Base images", cfg.PackageRules[2].GroupName)
@@ -287,3 +287,14 @@ func TestFoundationPins_Generator(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{pins.ConfigFileName}, drift.Paths)
 }
+
+const (
+	// prConcurrentLimit is the pr concurrent limit the tests use.
+	prConcurrentLimit = 5
+
+	// prHourlyLimit is the pr hourly limit the tests use.
+	prHourlyLimit = 2
+
+	// wantPackageRulesLen is the expected package rules len.
+	wantPackageRulesLen = 4
+)

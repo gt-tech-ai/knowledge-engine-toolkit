@@ -100,14 +100,14 @@ func (s *Source) visit(
 // ReadFile reads the repository-relative path p under root through an os.Root; a
 // missing file is CodeNotFound and a path escaping the root CodeInvalidInput.
 func ReadFile(root, text string) ([]byte, error) {
-	rootValue, err := os.OpenRoot(root)
+	currentRoot, err := os.OpenRoot(root)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "open "+root)
 	}
 
-	defer func() { _ = rootValue.Close() }()
+	defer func() { _ = currentRoot.Close() }()
 
-	data, err := rootValue.ReadFile(filepath.FromSlash(text))
+	data, err := currentRoot.ReadFile(filepath.FromSlash(text))
 	switch {
 	case err == nil:
 		return data, nil

@@ -74,7 +74,7 @@ func writeSummaryRows(writer io.Writer, results types.StepResults) error {
 
 		msg := stepResult.Error
 		if len(msg) > summaryErrorWidth {
-			msg = msg[:summaryErrorWidth-summaryErrorWidth3] + "..."
+			msg = msg[:summaryErrorWidth-errorEllipsisLen] + "..."
 		}
 
 		err := writeSummary(

@@ -33,7 +33,7 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 
 	yamlOnly, err := codebase.Docs(ctx, &types.FileSelector{})
 	require.NoError(t, err)
-	require.Len(t, yamlOnly, wantYamlOnlyLen2)
+	require.Len(t, yamlOnly, wantYamlOnlyLen)
 	assert.Equal(t, "app/values.yaml", yamlOnly[1].Path)
 	assert.Equal(t, 1, yamlOnly[1].Index)
 	assert.Equal(t, "yaml", yamlOnly[1].Format)
@@ -57,25 +57,25 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 	alias := asType[map[string]any](t, asType[[]any](t, aliases["cosign"])[0])
 	assert.Equal(t, "alias/cosign", alias[textName])
 	assert.Equal(t, "${aws_kms_key.cosign.key_id}", alias["target_key_id"])
-	assert.InDelta(t, float64(float64Arg2), alias[textCount], 0,
+	assert.InDelta(t, float64(wantAlias), alias[textCount], 0,
 		"a literal-only expression is evaluated")
-	assert.Equal(t, map[string]any{textName2: textX}, alias[textTags])
+	assert.Equal(t, map[string]any{textNameTitle: textX}, alias[textTags])
 	assert.Len(
 		t,
 		alias["ingress"],
-		wantAliasLen2,
+		wantAliasLen,
 		"repeated unlabeled blocks are one list",
 	)
 
 	region := asType[map[string]any](t, asType[[]any](t,
 		asType[map[string]any](t, doc["variable"])["region"])[0])
 
-	testFoundationCodebaseDocsRest(ctx, t, codebase, region)
+	testFoundationCodebaseDocsAlloyAndFormats(ctx, t, codebase, region)
 }
 
-// testFoundationCodebaseDocsRest continues TestFoundationCodebase_Docs with its
-// remaining steps.
-func testFoundationCodebaseDocsRest(
+// testFoundationCodebaseDocsAlloyAndFormats continues TestFoundationCodebase_Docs: alloy
+// and formats.
+func testFoundationCodebaseDocsAlloyAndFormats(
 	ctx context.Context,
 	t *testing.T,
 	codebase interfaces.Codebase,
@@ -107,14 +107,14 @@ func testFoundationCodebaseDocsRest(
 		asType[[]any](t, asType[map[string]any](t, adoc["loki.process"])["redact"])[0],
 	)
 	stages := asType[[]any](t, proc["stage.replace"])
-	require.Len(t, stages, wantStagesLen2)
+	require.Len(t, stages, wantStagesLen)
 	assert.Equal(
 		t,
 		`(?i)(bearer )\S+`,
 		asType[map[string]any](t, stages[0])["expression"],
 	)
 	assert.Equal(t, "${1}REDACTED", asType[map[string]any](t, stages[0])["replace"])
-	assert.Equal(t, int64(int64Arg2), asType[map[string]any](t, stages[1])[textMax])
+	assert.Equal(t, int64(wantAsType), asType[map[string]any](t, stages[1])[textMax])
 	assert.Equal(t, true, asType[map[string]any](t, stages[1])["keep"])
 
 	_, err = codebase.Docs(
@@ -158,3 +158,20 @@ func testFoundationCodebaseDocsTable() map[string]string {
 		"bad/broken.tf":   "resource {\n",
 	}
 }
+
+const (
+	// wantAlias is the expected alias.
+	wantAlias = 2
+
+	// wantAliasLen is the expected alias len.
+	wantAliasLen = 2
+
+	// wantAsType is the expected as type.
+	wantAsType = 2
+
+	// wantStagesLen is the expected stages len.
+	wantStagesLen = 2
+
+	// wantYamlOnlyLen is the expected yaml only len.
+	wantYamlOnlyLen = 2
+)

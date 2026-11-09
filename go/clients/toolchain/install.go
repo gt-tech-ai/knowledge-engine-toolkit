@@ -193,12 +193,9 @@ func (i *Installer) Install(
 	return i.runner.RunWithEnv(ctx, root, inv.env, inv.command, inv.args...)
 }
 
-// CheckOnly names the checkOnly option in a signature.
-type CheckOnly bool
-
 // Provision runs the required-tool flow for setup: pin the local Go
 // toolchain, ensure the go-install bin dir is on PATH, check prerequisites, scan
-// the required toolchain, and — unless checkOnly — install the missing ones that
+// the required toolchain, and — unless opts.CheckOnly — install the missing ones that
 // have an applicable method, verifying each afterwards. A required tool with no
 // install method for this platform (e.g. gcc off Windows) is reported, not
 // force-installed.
@@ -206,7 +203,7 @@ func (i *Installer) Provision(
 	ctx context.Context,
 	root string,
 	cat *Catalog,
-	autoYes bool, checkOnly CheckOnly,
+	opts *types.InstallToolsOptions,
 ) error {
 	i.preparePlatform()
 
@@ -222,7 +219,7 @@ func (i *Installer) Provision(
 	required := cat.Required()
 	results := det.Scan(ctx, root, required)
 
-	if checkOnly {
+	if opts.CheckOnly {
 		return SummarizeMissing(prereqErr, results)
 	}
 
@@ -231,7 +228,7 @@ func (i *Installer) Provision(
 		return prereqErr
 	}
 
-	yes, err := i.confirmRequired(ctx, required, toInstall, autoYes)
+	yes, err := i.confirmRequired(ctx, required, toInstall, opts)
 	if err != nil {
 		return err
 	}
@@ -285,7 +282,7 @@ func (i *Installer) InstallSet(
 		return err
 	}
 
-	toInstall := i.pendingTargets(ctx, root, targets, forceFlag(opts.Force))
+	toInstall := i.pendingTargets(ctx, root, targets, &opts)
 	if len(toInstall) == 0 {
 		i.log.Info("All requested tools are already installed")
 
@@ -306,7 +303,7 @@ func (i *Installer) InstallSet(
 	yes, err := i.confirm(
 		ctx,
 		fmt.Sprintf("Install %d tool(s) (%s)?", len(toInstall), names),
-		autoYesFlag(opts.AutoYes),
+		&opts,
 	)
 	if err != nil {
 		return err
@@ -338,20 +335,20 @@ func (i *Installer) preparePlatform() {
 	}
 }
 
-// forceFlag names the force option in a signature.
-type forceFlag bool
-
 // pendingTargets keeps the targets to install: force rebuilds even an OK tool (the
 // post-Go-bump case: right version, stale build-Go); otherwise a current one is skipped.
 func (i *Installer) pendingTargets(
-	ctx context.Context, root string, targets []types.ToolDef, force forceFlag,
+	ctx context.Context,
+	root string,
+	targets []types.ToolDef,
+	opts *types.InstallToolsOptions,
 ) []types.ToolDef {
 	det := NewDetector(i.runner, i.log)
 
 	var pending []types.ToolDef
 
 	for j := range targets {
-		if bool(force) || det.Check(ctx, root, &targets[j]).Status != types.StatusToolOK {
+		if opts.Force || det.Check(ctx, root, &targets[j]).Status != types.StatusToolOK {
 			pending = append(pending, targets[j])
 		}
 	}
@@ -434,13 +431,13 @@ func reportSkipped(required []types.ToolDef, idxs []int, log interfaces.Logger) 
 }
 
 // confirmRequired asks the Prompter to install the selected required tools
-// (autoYes skips the question) and returns its error, e.g. the --yes guidance when
+// (opts.AutoYes skips the question) and returns its error, e.g. the --yes guidance when
 // there is no operator to answer.
 func (i *Installer) confirmRequired(
 	ctx context.Context,
 	required []types.ToolDef,
 	idxs []int,
-	autoYes bool,
+	opts *types.InstallToolsOptions,
 ) (bool, error) {
 	names := make([]string, len(idxs))
 	for k, idx := range idxs {
@@ -450,7 +447,7 @@ func (i *Installer) confirmRequired(
 	return i.confirm(
 		ctx,
 		fmt.Sprintf("Install missing tools (%s)?", strings.Join(names, textCommaSpace)),
-		autoYesFlag(autoYes),
+		opts,
 	)
 }
 
@@ -464,17 +461,14 @@ func toolError(tool *types.ToolDef, cause error) error {
 	return apperr.Internal(msg)
 }
 
-// autoYesFlag names the autoYes option in a signature.
-type autoYesFlag bool
-
-// confirm reports yes without asking when autoYes is set; otherwise it asks the
+// confirm reports yes without asking when opts.AutoYes is set; otherwise it asks the
 // injected Prompter, failing with a coded error when none was injected.
 func (i *Installer) confirm(
 	ctx context.Context,
 	question string,
-	autoYes autoYesFlag,
+	opts *types.InstallToolsOptions,
 ) (bool, error) {
-	if autoYes {
+	if opts.AutoYes {
 		return true, nil
 	}
 

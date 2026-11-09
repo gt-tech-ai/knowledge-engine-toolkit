@@ -157,21 +157,23 @@ func callMiddleware(layer Layer, name string, dRef *Deps) OpMiddleware {
 	deps := *dRef
 
 	if layer == LayerAuth {
-		return when(
-			deps.Auth != nil,
-			func() OpMiddleware { return NewAuth(name, deps.Auth) },
-		)
+		if deps.Auth == nil {
+			return nil
+		}
+
+		return NewAuth(name, deps.Auth)
 	}
 
 	if layer == LayerTimeout {
-		return when(
-			deps.Timeout > 0,
-			func() OpMiddleware { return NewTimeout(deps.Timeout) },
-		)
+		if deps.Timeout <= 0 {
+			return nil
+		}
+
+		return NewTimeout(deps.Timeout)
 	}
 
 	return when(
-		deps.Breaker != nil,
+		deps.Breaker,
 		func() OpMiddleware { return NewCircuitBreaker(deps.Breaker) },
 	)
 }
@@ -182,27 +184,38 @@ func loadMiddleware(layer Layer, dRef *Deps) OpMiddleware {
 
 	if layer == LayerRetry {
 		return when(
-			deps.Retrier != nil,
+			deps.Retrier,
 			func() OpMiddleware { return NewRetry(deps.Retrier) },
 		)
 	}
 
 	if layer == LayerBulkhead {
 		return when(
-			deps.Bulkhead != nil,
-			func() OpMiddleware { return NewBulkhead(deps.Bulkhead, Shed(deps.ShedLoad)) },
+			deps.Bulkhead,
+			func() OpMiddleware { return bulkheadLayer(&deps) },
 		)
 	}
 
 	return when(
-		deps.RateLimiter != nil,
+		deps.RateLimiter,
 		func() OpMiddleware { return NewRateLimit(deps.RateLimiter) },
 	)
 }
 
-// when builds the middleware only when its collaborator is present.
-func when(present presentFlag, build func() OpMiddleware) OpMiddleware {
-	if !present {
+// bulkheadLayer builds the bulkhead layer, shedding load when the config asks for it.
+func bulkheadLayer(deps *Deps) OpMiddleware {
+	if deps.ShedLoad {
+		return NewSheddingBulkhead(deps.Bulkhead)
+	}
+
+	return NewBulkhead(deps.Bulkhead)
+}
+
+// when builds the middleware only when its collaborator is set.
+func when[C comparable](collaborator C, build func() OpMiddleware) OpMiddleware {
+	var unset C
+
+	if collaborator == unset {
 		return nil
 	}
 
@@ -223,21 +236,21 @@ func (t Tier) observabilityMiddleware(layer Layer, name string, dRef *Deps) OpMi
 
 	if layer == LayerTracing {
 		return when(
-			deps.Tracer != nil,
+			deps.Tracer,
 			func() OpMiddleware { return NewTracing(deps.Tracer, t.Name, name, t.SpanKind) },
 		)
 	}
 
 	if layer == LayerMetrics {
 		return when(
-			deps.Metrics != nil,
+			deps.Metrics,
 			func() OpMiddleware { return NewMetrics(deps.Metrics, t.Name, name) },
 		)
 	}
 
 	if layer == LayerLogging {
 		return when(
-			deps.Logger != nil,
+			deps.Logger,
 			func() OpMiddleware {
 				return loggingMW{
 					logger: deps.Logger,
@@ -249,10 +262,11 @@ func (t Tier) observabilityMiddleware(layer Layer, name string, dRef *Deps) OpMi
 		)
 	}
 
-	return when(
-		presentFlag(!deps.SkipRecovery),
-		func() OpMiddleware { return NewRecovery(deps.panicLogger(), t.Name, name) },
-	)
+	if deps.SkipRecovery {
+		return nil
+	}
+
+	return NewRecovery(deps.panicLogger(), t.Name, name)
 }
 
 // chains builds the chains one operation can run on from d.
@@ -406,11 +420,11 @@ func (s *Subject) Exec[R any](
 	operation string,
 	callback func(context.Context) (R, error),
 ) (R, error) {
-	chains2 := s.all
+	secondChains := s.all
 	if s.ops != nil {
 		var ok bool
 
-		if chains2, ok = s.ops[operation]; !ok {
+		if secondChains, ok = s.ops[operation]; !ok {
 			var zero R
 
 			return zero, apperr.New(
@@ -420,7 +434,7 @@ func (s *Subject) Exec[R any](
 		}
 	}
 
-	mw := chains2.pick(s.view)
+	mw := secondChains.pick(s.view)
 	if mw == nil {
 		return callback(ctx)
 	}

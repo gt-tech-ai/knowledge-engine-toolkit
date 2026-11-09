@@ -123,30 +123,33 @@ func native[I any](
 func nativeTracing[I any](dRef *decorate.Deps, shape func(around) I) []I {
 	d := *dRef
 
-	return when(d.Tracer != nil, func() around { return tracing(d.Tracer) }, shape)
+	return when(d.Tracer, func() around { return tracing(d.Tracer) }, shape)
 }
 
 // nativeMetrics is the metrics interceptor, when a recorder is wired.
 func nativeMetrics[I any](dRef *decorate.Deps, shape func(around) I) []I {
 	d := *dRef
 
-	return when(d.Metrics != nil, func() around { return metrics(d.Metrics) }, shape)
+	return when(d.Metrics, func() around { return metrics(d.Metrics) }, shape)
 }
 
 // nativeLogging is the access-log interceptor, when a logger is wired.
 func nativeLogging[I any](dRef *decorate.Deps, shape func(around) I) []I {
 	d := *dRef
 
-	return when(d.Logger != nil, func() around { return logging(d.Logger) }, shape)
+	return when(d.Logger, func() around { return logging(d.Logger) }, shape)
 }
 
-// presentFlag names the present option in a signature.
-type presentFlag bool
-
 // when returns the interceptor shape makes from build's around, or none when its
-// collaborator is absent.
-func when[I any](present presentFlag, build func() around, shape func(around) I) []I {
-	if !present {
+// collaborator is unset.
+func when[C comparable, I any](
+	collaborator C,
+	build func() around,
+	shape func(around) I,
+) []I {
+	var unset C
+
+	if collaborator == unset {
 		return nil
 	}
 

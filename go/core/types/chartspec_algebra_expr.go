@@ -37,9 +37,9 @@ func (e AlgebraExpr) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON decodes the flattened wire form: an object with "field" is a
 // leaf, one with "op" an operator node; anything else is CodeInvalidInput.
 func (e *AlgebraExpr) UnmarshalJSON(b []byte) error {
-	var algebraWireValue algebraWire
+	var currentAlgebraWire algebraWire
 
-	err := json.Unmarshal(b, &algebraWireValue)
+	err := json.Unmarshal(b, &currentAlgebraWire)
 	if err != nil {
 		return apperr.Wrap(
 			err,
@@ -49,13 +49,13 @@ func (e *AlgebraExpr) UnmarshalJSON(b []byte) error {
 	}
 
 	switch {
-	case algebraWireValue.Field != "" && algebraWireValue.Op == "" &&
-		len(algebraWireValue.Args) == 0:
+	case currentAlgebraWire.Field != "" && currentAlgebraWire.Op == "" &&
+		len(currentAlgebraWire.Args) == 0:
 		*e = AlgebraExpr{
-			Field: &FieldRef{Name: algebraWireValue.Field, Agg: algebraWireValue.Agg},
+			Field: &FieldRef{Name: currentAlgebraWire.Field, Agg: currentAlgebraWire.Agg},
 		}
-	case algebraWireValue.Field == "" && algebraWireValue.Op != "":
-		*e = AlgebraExpr{Op: algebraWireValue.Op, Args: algebraWireValue.Args}
+	case currentAlgebraWire.Field == "" && currentAlgebraWire.Op != "":
+		*e = AlgebraExpr{Op: currentAlgebraWire.Op, Args: currentAlgebraWire.Args}
 	default:
 		return apperr.New(
 			apperr.CodeInvalidInput,
@@ -137,7 +137,7 @@ type ChartSpec struct {
 // Wire renders the ChartSpec wire form (the filter tree in the listquery grammar). It is
 // the only encoder: plain json.Marshal of a ChartSpec does not produce the wire form.
 func (s *ChartSpec) Wire() ([]byte, error) {
-	chartSpecWireValue := chartSpecWire{
+	currentChartSpecWire := chartSpecWire{
 		TimeRange: s.TimeRange,
 		Rows:      s.Rows,
 		Columns:   s.Columns,
@@ -149,13 +149,13 @@ func (s *ChartSpec) Wire() ([]byte, error) {
 		Detail:    s.Detail,
 	}
 	for _, o := range s.Sort {
-		chartSpecWireValue.Sort = append(
-			chartSpecWireValue.Sort,
+		currentChartSpecWire.Sort = append(
+			currentChartSpecWire.Sort,
 			sortWire{Field: o.Field, Desc: o.Desc},
 		)
 	}
 
-	out, err := json.Marshal(chartSpecWireValue)
+	out, err := json.Marshal(currentChartSpecWire)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: encode")
 	}
@@ -166,25 +166,25 @@ func (s *ChartSpec) Wire() ([]byte, error) {
 // UnmarshalJSON decodes the ChartSpec wire form. It decodes the filter into FilterTree;
 // chartspec.Parse validates the whole spec and compiles the filter.
 func (s *ChartSpec) UnmarshalJSON(b []byte) error {
-	var chartSpecWireValue chartSpecWire
+	var currentChartSpecWire chartSpecWire
 
-	err := json.Unmarshal(b, &chartSpecWireValue)
+	err := json.Unmarshal(b, &currentChartSpecWire)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: invalid JSON")
 	}
 
 	*s = ChartSpec{
-		TimeRange:  chartSpecWireValue.TimeRange,
-		Rows:       chartSpecWireValue.Rows,
-		Columns:    chartSpecWireValue.Columns,
-		Encodings:  chartSpecWireValue.Encodings,
-		Cube:       chartSpecWireValue.Cube,
-		Grain:      chartSpecWireValue.Grain,
-		Mark:       chartSpecWireValue.Mark,
-		FilterTree: chartSpecWireValue.Filter,
-		Detail:     chartSpecWireValue.Detail,
+		TimeRange:  currentChartSpecWire.TimeRange,
+		Rows:       currentChartSpecWire.Rows,
+		Columns:    currentChartSpecWire.Columns,
+		Encodings:  currentChartSpecWire.Encodings,
+		Cube:       currentChartSpecWire.Cube,
+		Grain:      currentChartSpecWire.Grain,
+		Mark:       currentChartSpecWire.Mark,
+		FilterTree: currentChartSpecWire.Filter,
+		Detail:     currentChartSpecWire.Detail,
 	}
-	for _, o := range chartSpecWireValue.Sort {
+	for _, o := range currentChartSpecWire.Sort {
 		s.Sort = append(s.Sort, OrderField{Field: o.Field, Desc: o.Desc})
 	}
 

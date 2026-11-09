@@ -92,19 +92,19 @@ func Command(reg *ops.Registry, name string, opts Options) (*spf.Command, error)
 	}
 	flags := operation.NewInput()
 
-	binding2, err := bind(cmd, flags)
+	secondBinding, err := bind(cmd, flags)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput,
 			fmt.Sprintf("operation %q", name))
 	}
 
-	cmd.Args = spf.RangeArgs(0, binding2.maxArgs())
+	cmd.Args = spf.RangeArgs(0, secondBinding.maxArgs())
 	cmd.RunE = func(command *spf.Command, args []string) error {
 		input := operation.NewInput()
 		dst := reflect.ValueOf(input).Elem()
-		binding2.setFlags(command, reflect.ValueOf(flags).Elem(), dst)
+		secondBinding.setFlags(command, reflect.ValueOf(flags).Elem(), dst)
 
-		err := binding2.positional(dst, args)
+		err := secondBinding.positional(dst, args)
 		if err != nil {
 			return err
 		}
@@ -174,22 +174,22 @@ func (b *binding) positional(dst reflect.Value, args []string) error {
 // bind registers a flag or positional slot for each tagged field of *input.
 func bind(cmd *spf.Command, input any) (*binding, error) {
 	v := reflect.ValueOf(input).Elem()
-	bindingValue := &binding{args: map[int]int{}, flags: map[string]int{}, rest: -1}
+	currentBinding := &binding{args: map[int]int{}, flags: map[string]int{}, rest: -1}
 
 	for i := range v.NumField() {
-		err := bindInputField(cmd, bindingValue, new(v.Type().Field(i)), v.Field(i), i)
+		err := bindInputField(cmd, currentBinding, new(v.Type().Field(i)), v.Field(i), i)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return bindingValue, nil
+	return currentBinding, nil
 }
 
 // bindInputField registers the flag and/or argument one input field declares.
 func bindInputField(
 	cmd *spf.Command,
-	bindingValue *binding,
+	currentBinding *binding,
 	structField *reflect.StructField,
 	value reflect.Value,
 	index int,
@@ -200,11 +200,11 @@ func bindInputField(
 			return err
 		}
 
-		bindingValue.flags[name] = index
+		currentBinding.flags[name] = index
 	}
 
 	if tag, ok := structField.Tag.Lookup("arg"); ok {
-		return addArg(bindingValue, structField, value, index, tag)
+		return addArg(currentBinding, structField, value, index, tag)
 	}
 
 	return nil
@@ -230,7 +230,7 @@ func addFlag(
 		)
 	}
 
-	name, short, usage := parts[0], parts[1], parts[index2]
+	name, short, usage := parts[0], parts[1], parts[usageFieldIndex]
 
 	if !registerFlagVar(cmd.Flags(), value, name, short, usage) {
 		return "", apperr.New(
@@ -277,7 +277,7 @@ func registerFlagVar(
 
 // addArg registers the positional slot an `arg:"n"` field (field index i) declares.
 func addArg(
-	bindingValue *binding,
+	currentBinding *binding,
 	structField *reflect.StructField,
 	value reflect.Value,
 	index int,
@@ -292,7 +292,7 @@ func addArg(
 	switch value.Interface().(type) {
 	case string:
 	case []string:
-		bindingValue.rest = count
+		currentBinding.rest = count
 	default:
 		return apperr.New(
 			apperr.CodeInvalidInput,
@@ -304,7 +304,7 @@ func addArg(
 		)
 	}
 
-	bindingValue.args[count] = index
+	currentBinding.args[count] = index
 
 	return nil
 }

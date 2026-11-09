@@ -168,3 +168,8 @@ func TestGRPCTracingServerInterceptor_ContinuesCallerTrace(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, traceID, got.TraceID().String())
 }
+
+const (
+	// textTestServiceMethod is the literal "/test.Service/Method".
+	textTestServiceMethod = "/test.Service/Method"
+)

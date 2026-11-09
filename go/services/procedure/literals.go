@@ -4,8 +4,8 @@ const (
 	// base8 is the base value 8.
 	base8 = 8
 
-	// offset2 is the offset value 2.
-	offset2 = 2
+	// bracePrefixLen is the named value used where brace prefix len applies.
+	bracePrefixLen = 2
 )
 
 const (

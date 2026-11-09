@@ -42,9 +42,9 @@ func TestEncryptor_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, plaintext, got)
 
-	ct2, err := enc.Encrypt(plaintext)
+	secondCt, err := enc.Encrypt(plaintext)
 	require.NoError(t, err)
-	assert.NotEqual(t, ct1, ct2, "a random nonce makes each ciphertext unique")
+	assert.NotEqual(t, ct1, secondCt, "a random nonce makes each ciphertext unique")
 }
 
 // TestEncryptor_WrongKeyFailsToDecrypt tests that a ciphertext sealed under one key
@@ -143,7 +143,7 @@ func TestNewFromConfig(t *testing.T) {
 func TestNew_RejectsWrongKeyLength(t *testing.T) {
 	t.Parallel()
 
-	_, err := crypto.New(bytes.Repeat([]byte{1}, count16))
+	_, err := crypto.New(bytes.Repeat([]byte{1}, repeatInputLength))
 	require.Error(t, err)
 
 	_, err = crypto.New(nil)
@@ -161,7 +161,7 @@ func TestNew_RejectsWrongKeyLength(t *testing.T) {
 func FuzzEncryptRoundtrip(f *testing.F) {
 	f.Add([]byte(""))
 	f.Add([]byte("access_key_id=AKIA...;secret=...."))
-	f.Add(make([]byte, size1024))
+	f.Add(make([]byte, makeInputRoundtrip))
 
 	enc, err := crypto.New(testKey())
 	require.NoError(f, err)
@@ -179,3 +179,16 @@ func FuzzEncryptRoundtrip(f *testing.F) {
 		require.True(t, bytes.Equal(plaintext, got), "roundtrip must preserve bytes")
 	})
 }
+
+const (
+	// makeInputRoundtrip is the make input roundtrip the tests use.
+	makeInputRoundtrip = 1024
+
+	// repeatInputLength is the repeat input length the tests use.
+	repeatInputLength = 16
+)
+
+const (
+	// value0xff is the number 0xff.
+	value0xff = 0xff
+)

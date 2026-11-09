@@ -87,14 +87,14 @@ func tarGz(t *testing.T, name string, body []byte) []byte {
 	var buf bytes.Buffer
 
 	writer := gzip.NewWriter(&buf)
-	writerValue := tar.NewWriter(writer)
-	require.NoError(t, writerValue.WriteHeader(&tar.Header{
+	currentWriter := tar.NewWriter(writer)
+	require.NoError(t, currentWriter.WriteHeader(&tar.Header{
 		Name: name, Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg,
 	}))
 
-	_, err := writerValue.Write(body)
+	_, err := currentWriter.Write(body)
 	require.NoError(t, err)
-	require.NoError(t, writerValue.Close())
+	require.NoError(t, currentWriter.Close())
 	require.NoError(t, writer.Close())
 
 	return buf.Bytes()

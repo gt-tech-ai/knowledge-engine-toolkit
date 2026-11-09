@@ -47,13 +47,13 @@ func TestStdlibLogger_AllLevels(t *testing.T) {
 	t.Parallel()
 
 	cfg := stdlib.Config{Level: textDebug, AddSource: false}
-	loggerValue := stdlib.New(cfg)
+	currentLogger := stdlib.New(cfg)
 
 	// Should not panic
-	loggerValue.Debug("debug message", textKey, textValue)
-	loggerValue.Info("info message", textKey, textValue)
-	loggerValue.Warn("warn message", textKey, textValue)
-	loggerValue.Error("error message", textKey, textValue)
+	currentLogger.Debug("debug message", textKey, textValue)
+	currentLogger.Info("info message", textKey, textValue)
+	currentLogger.Warn("warn message", textKey, textValue)
+	currentLogger.Error("error message", textKey, textValue)
 }
 
 // TestStdlibLogger_With tests that With returns a child logger with
@@ -97,17 +97,17 @@ func TestStdlibLogger_WithContext(t *testing.T) {
 	t.Parallel()
 
 	cfg := stdlib.Config{Level: textInfo}
-	loggerValue := stdlib.New(cfg)
+	currentLogger := stdlib.New(cfg)
 
 	// Without correlation ID, should return same logger
 	ctx := context.Background()
-	same := loggerValue.WithContext(ctx)
-	assert.Equal(t, loggerValue, same, "expected same logger when no correlation ID")
+	same := currentLogger.WithContext(ctx)
+	assert.Equal(t, currentLogger, same, "expected same logger when no correlation ID")
 
 	// With correlation ID, should return enriched logger
 	ctx = logctx.WithCorrelationID(ctx, "req-456")
 
-	enriched := loggerValue.WithContext(ctx)
+	enriched := currentLogger.WithContext(ctx)
 	require.NotNil(t, enriched, "expected non-nil enriched logger")
 	enriched.Info("message with correlation")
 }
@@ -234,15 +234,15 @@ func TestZapLogger_WithContext(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{Level: textInfo, Format: textStructuredFormat}
-	loggerValue := zaplogger.New(cfg)
+	currentLogger := zaplogger.New(cfg)
 
 	ctx := context.Background()
-	same := loggerValue.WithContext(ctx)
-	assert.Equal(t, loggerValue, same, "expected same logger when no correlation ID")
+	same := currentLogger.WithContext(ctx)
+	assert.Equal(t, currentLogger, same, "expected same logger when no correlation ID")
 
 	ctx = logctx.WithCorrelationID(ctx, "req-789")
 
-	enriched := loggerValue.WithContext(ctx)
+	enriched := currentLogger.WithContext(ctx)
 	require.NotNil(t, enriched, "expected non-nil enriched logger")
 	enriched.Info("message with correlation")
 }
@@ -423,7 +423,7 @@ func TestLoggerKind_String(t *testing.T) {
 	assert.Equal(t, "zap", logger.KindZap.String())
 	assert.Equal(t, "stdlib", logger.KindStdlib.String())
 
-	unknown := logger.Kind(kindArg99)
+	unknown := logger.Kind(kindInput)
 	assert.Contains(
 		t,
 		unknown.String(),
@@ -506,27 +506,27 @@ func TestLogctx_RedactPII(t *testing.T) {
 func TestNoopMetrics_AllOperations(t *testing.T) {
 	t.Parallel()
 
-	metricsValue := noop.New()
+	currentMetrics := noop.New()
 
-	var _ interfaces.Metrics = metricsValue
+	var _ interfaces.Metrics = currentMetrics
 
 	// Counter
-	c := metricsValue.Counter("test_counter", textHelp, textLabel)
+	c := currentMetrics.Counter("test_counter", textHelp, textLabel)
 	c.Inc(textVal)
-	c.Add(addArg5p0, textVal)
+	c.Add(addInputOperations, textVal)
 
 	// Histogram
-	h := metricsValue.Histogram("test_hist", textHelp, []float64{1, 5, 10}, textLabel)
-	h.Observe(observeArg3p5, textVal)
+	h := currentMetrics.Histogram("test_hist", textHelp, []float64{1, 5, 10}, textLabel)
+	h.Observe(observeInputOperations, textVal)
 
 	// Gauge
-	g := metricsValue.Gauge("test_gauge", textHelp, textLabel)
-	g.Set(setArg42p0, textVal)
+	g := currentMetrics.Gauge("test_gauge", textHelp, textLabel)
+	g.Set(gaugeReadingOperations, textVal)
 	g.Inc(textVal)
 	g.Dec(textVal)
 
 	// Handler
-	handler := metricsValue.Handler()
+	handler := currentMetrics.Handler()
 	require.NotNil(t, handler, "expected non-nil handler")
 }
 
@@ -550,8 +550,8 @@ func TestPromMetrics_CounterOps(t *testing.T) {
 	m := prom.New()
 
 	c := m.Counter("test_prom_counter", "test counter", textMethod)
-	c.Inc(textGet3)
-	c.Add(addArg5p0, textPost)
+	c.Inc(textGetUpper)
+	c.Add(addInputOps, textPost)
 }
 
 // TestPromMetrics_HistogramOps tests that Prometheus histogram observe works
@@ -568,9 +568,14 @@ func TestPromMetrics_HistogramOps(t *testing.T) {
 
 	m := prom.New()
 
-	h := m.Histogram("test_prom_hist", "test hist", []float64{0.1, 0.5, 1.0}, textPath2)
-	h.Observe(observeArg0p3, textAPI2)
-	h.Observe(observeArg0p8, textAPI2)
+	histogram := m.Histogram(
+		"test_prom_hist",
+		"test hist",
+		[]float64{0.1, 0.5, 1.0},
+		textPathLower,
+	)
+	histogram.Observe(observeInputOps, textAPIPath)
+	histogram.Observe(observeInputHistogramOps, textAPIPath)
 }
 
 // TestPromMetrics_GaugeOps tests that Prometheus gauge set, inc, and dec
@@ -588,7 +593,7 @@ func TestPromMetrics_GaugeOps(t *testing.T) {
 	m := prom.New()
 
 	g := m.Gauge("test_prom_gauge", "test gauge", textService)
-	g.Set(setArg100p0, textAPI)
+	g.Set(gaugeReading, textAPI)
 	g.Inc(textAPI)
 	g.Dec(textAPI)
 }
@@ -611,7 +616,12 @@ func TestPromMetrics_Handler(t *testing.T) {
 	require.NotNil(t, handler, "expected non-nil handler")
 
 	// Issue a request to verify handler serves content
-	req := httptest.NewRequestWithContext(t.Context(), textGet3, "/metrics", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		"/metrics",
+		http.NoBody,
+	)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -671,8 +681,8 @@ func TestPromMetrics_NewFromRegistry(t *testing.T) {
 	reg := m.Registry()
 	require.NotNil(t, reg, "expected non-nil registry")
 
-	m2 := prom.NewFromRegistry(reg)
-	require.NotNil(t, m2, "expected non-nil metrics from registry")
+	secondM := prom.NewFromRegistry(reg)
+	require.NotNil(t, secondM, "expected non-nil metrics from registry")
 }
 
 // TestPromMetrics_HTTPServerMetrics tests that HTTPServerMetrics creates
@@ -700,9 +710,11 @@ func TestPromMetrics_HTTPServerMetrics(t *testing.T) {
 	assert.NotNil(t, httpMetrics.ResponseSize, "expected non-nil ResponseSize")
 
 	// Verify they can record metrics
-	httpMetrics.RequestsTotal.WithLabelValues(textGet3, textAPI2, text200).Inc()
-	httpMetrics.RequestDuration.WithLabelValues(textGet3, textAPI2).Observe(observeArg0p1)
-	httpMetrics.ResponseSize.WithLabelValues(textGet3, textAPI2).Observe(observeArg1024)
+	httpMetrics.RequestsTotal.WithLabelValues(textGetUpper, textAPIPath, text200).Inc()
+	httpMetrics.RequestDuration.WithLabelValues(textGetUpper, textAPIPath).
+		Observe(observeInputMetrics)
+	httpMetrics.ResponseSize.WithLabelValues(textGetUpper, textAPIPath).
+		Observe(observeInputHTTPServerMetrics)
 }
 
 // ---------------------------------------------------------------------------
@@ -724,7 +736,7 @@ func TestMetricsKind_String(t *testing.T) {
 
 	assert.Equal(t, textPrometheus, metrics.KindPrometheus.String())
 
-	unknown := metrics.Kind(kindArg99)
+	unknown := metrics.Kind(kindInput)
 	assert.Contains(
 		t,
 		unknown.String(),
@@ -795,7 +807,7 @@ func TestNoopMetrics_CounterNoLabels(t *testing.T) {
 	m := noop.New()
 	c := m.Counter(textC, textHelp)
 	c.Inc()
-	c.Add(addArg1p0)
+	c.Add(addInputNoLabels)
 }
 
 // TestNoopMetrics_HistogramNoLabels tests that the noop histogram works without
@@ -812,7 +824,7 @@ func TestNoopMetrics_HistogramNoLabels(t *testing.T) {
 
 	m := noop.New()
 	h := m.Histogram("h", textHelp, nil)
-	h.Observe(observeArg1p0)
+	h.Observe(observeInputNoLabels)
 }
 
 // TestNoopMetrics_GaugeNoLabels tests that the noop gauge works without label
@@ -829,7 +841,42 @@ func TestNoopMetrics_GaugeNoLabels(t *testing.T) {
 
 	m := noop.New()
 	g := m.Gauge("g", textHelp)
-	g.Set(setArg1p0)
+	g.Set(gaugeReadingNoLabels)
 	g.Inc()
 	g.Dec()
 }
+
+const (
+	// addInputNoLabels is the add input no labels the tests use.
+	addInputNoLabels = 1.0
+
+	// addInputOperations is the add input operations the tests use.
+	addInputOperations = 5.0
+
+	// addInputOps is the add input ops the tests use.
+	addInputOps = 5.0
+
+	// gaugeReadingNoLabels is the gauge reading no labels the tests use.
+	gaugeReadingNoLabels = 1.0
+
+	// gaugeReadingOperations is the gauge reading operations the tests use.
+	gaugeReadingOperations = 42.0
+
+	// observeInputHTTPServerMetrics is the observe input httpserver metrics the tests use.
+	observeInputHTTPServerMetrics = 1024
+
+	// observeInputHistogramOps is the observe input histogram ops the tests use.
+	observeInputHistogramOps = 0.8
+
+	// observeInputMetrics is the observe input metrics the tests use.
+	observeInputMetrics = 0.1
+
+	// observeInputNoLabels is the observe input no labels the tests use.
+	observeInputNoLabels = 1.0
+
+	// observeInputOperations is the observe input operations the tests use.
+	observeInputOperations = 3.5
+
+	// observeInputOps is the observe input ops the tests use.
+	observeInputOps = 0.3
+)

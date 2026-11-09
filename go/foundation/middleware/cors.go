@@ -48,23 +48,22 @@ func CORS(cfg *CORSConfig) Middleware {
 	exposed := strings.Join(cfg.ExposedHeaders, textCommaSpace)
 
 	// Build a set for O(1) origin lookup
-	allowAll := len(cfg.AllowOrigins) == 1 && cfg.AllowOrigins[0] == textStar
+	policy := originPolicy{
+		allowAll: len(cfg.AllowOrigins) == 1 && cfg.AllowOrigins[0] == textStar,
+	}
 	originSet := make(map[string]struct{}, len(cfg.AllowOrigins))
 
 	for _, o := range cfg.AllowOrigins {
 		originSet[o] = struct{}{}
 	}
 
+	policy.allowed = originSet
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			header := writer.Header()
 
-			setAllowOrigin(
-				header,
-				request.Header.Get("Origin"),
-				allowAllFlag(allowAll),
-				originSet,
-			)
+			policy.apply(header, request.Header.Get("Origin"))
 			header.Set("Access-Control-Allow-Methods", methods)
 			header.Set("Access-Control-Allow-Headers", headers)
 			setExposeHeaders(header, exposed)
@@ -81,23 +80,23 @@ func CORS(cfg *CORSConfig) Middleware {
 	}
 }
 
-// allowAllFlag names the allowAll option in a signature.
-type allowAllFlag bool
+// originPolicy says which request origins may read a response.
+type originPolicy struct {
+	// allowed is the set of permitted origins.
+	allowed map[string]struct{}
+	// allowAll permits every origin, answering with a wildcard.
+	allowAll bool
+}
 
-// setAllowOrigin answers with a wildcard, or echoes an allowed request origin.
-func setAllowOrigin(
-	header http.Header,
-	origin string,
-	allowAll allowAllFlag,
-	set map[string]struct{},
-) {
-	if allowAll {
+// apply answers with a wildcard, or echoes an allowed request origin.
+func (p originPolicy) apply(header http.Header, origin string) {
+	if p.allowAll {
 		header.Set("Access-Control-Allow-Origin", textStar)
 
 		return
 	}
 
-	if _, ok := set[origin]; ok && origin != "" {
+	if _, ok := p.allowed[origin]; ok && origin != "" {
 		header.Set("Access-Control-Allow-Origin", origin)
 		header.Set("Vary", "Origin")
 	}

@@ -65,11 +65,11 @@ func TestBuilderWithLogging(t *testing.T) {
 
 	r := system.NewBuilder(base).WithLogging(logf).Build()
 
-	require.NoError(t, r.Run(context.Background(), textTmp, textGo2, textBuild))
+	require.NoError(t, r.Run(context.Background(), textTmp, textGoLower, textBuild))
 
 	require.Len(t, logs, 1, "expected 1 log entry")
 	assert.Contains(t, logs[0], "[runner]", "log should contain [runner] prefix")
-	assert.Contains(t, logs[0], textGo2, "log should contain command name")
+	assert.Contains(t, logs[0], textGoLower, "log should contain command name")
 }
 
 // TestBuilderWithLogging_RunBuffered tests that the logging decorator wraps the
@@ -98,7 +98,7 @@ func TestBuilderWithLogging_RunBuffered(t *testing.T) {
 	}
 
 	r := system.NewBuilder(base).WithLogging(logf).Build()
-	cr := r.RunBuffered(context.Background(), textTmp, textGo2, textTest)
+	cr := r.RunBuffered(context.Background(), textTmp, textGoLower, textTest)
 
 	assert.Equal(t, 42*time.Millisecond, cr.Duration, "expected 42ms duration")
 	require.Len(t, logs, 1, "expected 1 log entry")
@@ -133,7 +133,7 @@ func TestBuilderWithLogging_RunWithEnv(t *testing.T) {
 		context.Background(),
 		textTmp,
 		[]string{textFooBar},
-		textGo2,
+		textGoLower,
 		textBuild,
 	))
 
@@ -179,7 +179,7 @@ func TestBuilderWithDryRun(t *testing.T) {
 
 	assert.True(
 		t,
-		commandRunner.Exists(textGo2),
+		commandRunner.Exists(textGoLower),
 		"Exists should delegate to base even in dry-run",
 	)
 
@@ -212,7 +212,7 @@ func TestBuilderWithDryRun_RunBuffered(t *testing.T) {
 	base := mocks.NewMockCommandRunner(ctrl)
 
 	r := system.NewBuilder(base).WithDryRun(true).Build()
-	cr := r.RunBuffered(context.Background(), textTmp, textGo2, textTest)
+	cr := r.RunBuffered(context.Background(), textTmp, textGoLower, textTest)
 
 	assert.NoError(t, cr.Err, "dry-run RunBuffered should return nil error")
 }
@@ -283,3 +283,8 @@ func TestFoundationBuilderComposition(t *testing.T) {
 	require.NoError(t, r.Run(context.Background(), "", textEcho, "hello"))
 	require.Len(t, logs, 1, "expected 1 log")
 }
+
+const (
+	// textTmp is the literal "/tmp".
+	textTmp = "/tmp"
+)

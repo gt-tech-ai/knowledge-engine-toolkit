@@ -113,16 +113,16 @@ func Parse(out []byte) (types.Plan, error) {
 
 	var plan types.Plan
 
-	for _, showJSONResourceChanges2 := range doc.ResourceChanges {
-		if !countActions(&plan, showJSONResourceChanges2.Change.Actions) {
+	for _, secondShowJSONResourceChanges := range doc.ResourceChanges {
+		if !countActions(&plan, secondShowJSONResourceChanges.Change.Actions) {
 			continue
 		}
 
 		plan.Changes = append(plan.Changes, types.ResourceChange{
-			Address: showJSONResourceChanges2.Address,
-			Type:    showJSONResourceChanges2.Type,
-			Name:    showJSONResourceChanges2.Name,
-			Actions: showJSONResourceChanges2.Change.Actions,
+			Address: secondShowJSONResourceChanges.Address,
+			Type:    secondShowJSONResourceChanges.Type,
+			Name:    secondShowJSONResourceChanges.Name,
+			Actions: secondShowJSONResourceChanges.Change.Actions,
 		})
 	}
 

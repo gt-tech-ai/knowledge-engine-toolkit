@@ -57,7 +57,7 @@ func TestExecutionOps_MapInputDefaults(t *testing.T) {
 	require.NoError(t, operation.Run(t.Context(), &map[string]any{
 		textSeed: 7.0, textWait: 1.5e9, textOnly: []any{textA, textB}, textProfile: textX,
 	}, nil))
-	assert.Equal(t, wantGot7, got[textSeed])
+	assert.Equal(t, wantGotDefaults, got[textSeed])
 	assert.Equal(t, 1500*time.Millisecond, got[textWait])
 	assert.Equal(t, "1.5s", fmt.Sprint(got[textWait]))
 	assert.Equal(t, []string{textA, textB}, got[textOnly])
@@ -85,7 +85,7 @@ func TestExecutionOps_MapInputSecretFlag(t *testing.T) {
 
 	operation := ops.MapInput([]types.FlagSpec{
 		{Name: textClientID, Type: types.FlagString},
-		{Name: textClientSecret3, Type: types.FlagString, Secret: true},
+		{Name: textClientSecretKebab, Type: types.FlagString, Secret: true},
 	}, types.ArgSpec{Names: []string{textEnv}}, func(
 		context.Context, map[string]any, struct{}, interfaces.ExecutionObserver,
 	) error {
@@ -115,3 +115,13 @@ func TestExecutionOps_MapInputSecretFlag(t *testing.T) {
 	_, err = ops.DecodeLocal(operation, []byte(`{"bogus":1}`))
 	require.Error(t, err)
 }
+
+const (
+	// wantGotDefaults is the expected got defaults.
+	wantGotDefaults = 7
+)
+
+const (
+	// textClientSecretS is the literal "{\"client_secret\":\"s\"}".
+	textClientSecretS = "{\"client_secret\":\"s\"}"
+)

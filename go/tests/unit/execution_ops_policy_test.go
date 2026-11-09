@@ -34,9 +34,9 @@ func mockBuilders(
 	ctrl *gomock.Controller,
 	descs []types.OperationDescriptor,
 ) map[string]ops.Builder[opsEnv] {
-	lookup2 := make(map[string]ops.Builder[opsEnv], len(descs))
+	statusByName := make(map[string]ops.Builder[opsEnv], len(descs))
 	for _, d := range descs {
-		lookup2[d.Name] = func(
+		statusByName[d.Name] = func(
 			desc types.OperationDescriptor,
 			_ opsEnv,
 		) interfaces.Operation {
@@ -47,7 +47,7 @@ func mockBuilders(
 		}
 	}
 
-	return lookup2
+	return statusByName
 }
 
 // mixedDescs is one operation per safety class and lifecycle the policy tests filter on.
@@ -238,3 +238,8 @@ type opsEnv struct {
 	// Tag distinguishes environments.
 	Tag string
 }
+
+const (
+	// textLong is the literal "long".
+	textLong = "long"
+)

@@ -37,12 +37,12 @@ func consoleGolden(t *testing.T, name string) string {
 func consoleHints() []report.Hint {
 	return []report.Hint{
 		{
-			Group:  textLint2,
+			Group:  textLintTitle,
 			Substr: "golangci",
 			Text:   "Run: search lint --go --fix  (to auto-fix)",
 		},
 		{
-			Group:  textLint2,
+			Group:  textLintTitle,
 			Substr: textRuff,
 			Text:   "Run: search lint --python --fix  (to auto-fix)",
 		},
@@ -59,15 +59,15 @@ func consoleRun() (lint, unit types.StepResults) {
 	lint = types.StepResults{
 		{
 			Name:     "golangci (Go)",
-			Group:    textLint2,
+			Group:    textLintTitle,
 			Status:   types.StatusPass,
-			Duration: millis1200 * time.Millisecond,
+			Duration: durationRun * time.Millisecond,
 		},
 		{
 			Name:     "ruff (Python)",
-			Group:    textLint2,
+			Group:    textLintTitle,
 			Status:   types.StatusFail,
-			Duration: millis800 * time.Millisecond,
+			Duration: durationConsoleRun * time.Millisecond,
 			Error:    "INTERNAL: ruff found 2 issues",
 			Detail:   noisy,
 		},
@@ -77,26 +77,26 @@ func consoleRun() (lint, unit types.StepResults) {
 			Name:     "Go",
 			Group:    textUnitTests,
 			Status:   types.StatusPass,
-			Duration: seconds4 * time.Second,
-			Tests:    tests42,
+			Duration: consoleRunSeconds * time.Second,
+			Tests:    tests,
 			Children: types.StepResults{
 				{
 					Name:     "Go/apps/go/cli",
 					Status:   types.StatusPass,
-					Duration: seconds3 * time.Second,
-					Tests:    tests30,
+					Duration: consoleStepSeconds * time.Second,
+					Tests:    testsRun,
 				},
 				{
 					Name:     "Go/pkg/go",
 					Status:   types.StatusPass,
 					Duration: time.Second,
-					Tests:    tests12,
+					Tests:    testsConsoleRun,
 				},
 			},
 		},
 		{Name: "TypeScript", Group: textUnitTests, Status: types.StatusSkip},
 		{
-			Name:   textDocs2,
+			Name:   textDocsLower,
 			Group:  textUnitTests,
 			Status: types.StatusWarn,
 			Error:  "2 stale links",
@@ -110,15 +110,15 @@ func consoleRun() (lint, unit types.StepResults) {
 func replayConsoleRun(obs interfaces.ExecutionObserver) {
 	lint, unit := consoleRun()
 
-	obs.OnGateStart(textPreflight, []string{textLint2, textUnitTests})
+	obs.OnGateStart(textPreflight, []string{textLintTitle, textUnitTests})
 
 	for _, phase := range []struct {
 		name    string
 		results types.StepResults
 		elapsed time.Duration
-	}{{textLint2, lint, seconds2 * time.Second}, {
+	}{{textLintTitle, lint, seconds * time.Second}, {
 		textUnitTests, unit,
-		seconds4 * time.Second,
+		secondsRun * time.Second,
 	}} {
 		names := make([]string, 0, len(phase.results))
 		for _, r := range phase.results {
@@ -232,7 +232,7 @@ func testConsoleGoldenTable(
 			hook.OnFailure("ruff check .")
 
 			log := console.Logger().With("module", "cli")
-			log.Debug(textResolved, textTools, keysAndValues3)
+			log.Debug(textResolved, textTools, debugInput)
 			log.Info("installing")
 			log.Warn("slow mirror")
 			log.Error("install failed", textTool, textRuff)
@@ -279,9 +279,9 @@ func TestConsole_LevelsAndCodes(t *testing.T) {
 	assert.Equal(t, "Error: boom\n", errOut.String())
 
 	for code, want := range map[apperr.ErrorCode]int{
-		apperr.CodeInvalidInput: codeInvalidInput2, apperr.CodeNotFound: codeNotFound2,
-		apperr.CodeQualityFailed: codeQualityFailed2,
-		apperr.CodeUnavailable:   codeUnavailable3, apperr.CodeUpstream: 1,
+		apperr.CodeInvalidInput: codeInvalidInput, apperr.CodeNotFound: codeNotFound,
+		apperr.CodeQualityFailed: codeQualityFailed,
+		apperr.CodeUnavailable:   codeUnavailable, apperr.CodeUpstream: 1,
 		apperr.CodeInternal: 1,
 	} {
 		assert.Equal(t, want, report.ExitCode(code), code)
@@ -385,7 +385,7 @@ func TestFoundationReport_ConsoleConcurrentWrites(t *testing.T) {
 
 	var group sync.WaitGroup
 
-	for range iterations50 {
+	for range iterationsWrites {
 		group.Go(func() {
 			for range 20 {
 				console.Infof("line %s", textX)
@@ -396,9 +396,61 @@ func TestFoundationReport_ConsoleConcurrentWrites(t *testing.T) {
 	group.Wait()
 
 	lines := strings.Split(strings.TrimSuffix(errOut.String(), textNewline), textNewline)
-	require.Len(t, lines, wantLinesLen1000)
+	require.Len(t, lines, wantLinesLen)
 
 	for _, l := range lines {
 		assert.Equal(t, "line x", l)
 	}
 }
+
+const (
+	// codeInvalidInput is the code invalid input the tests use.
+	codeInvalidInput = 2
+
+	// codeNotFound is the code not found the tests use.
+	codeNotFound = 2
+
+	// codeQualityFailed is the code quality failed the tests use.
+	codeQualityFailed = 2
+
+	// codeUnavailable is the code unavailable the tests use.
+	codeUnavailable = 3
+
+	// debugInput is the debug input the tests use.
+	debugInput = 3
+
+	// durationConsoleRun is the duration console run the tests use.
+	durationConsoleRun = 800
+
+	// consoleRunSeconds is the duration console run13 the tests use.
+	consoleRunSeconds = 4
+
+	// consoleStepSeconds is the duration console run14 the tests use.
+	consoleStepSeconds = 3
+
+	// durationRun is the duration run the tests use.
+	durationRun = 1200
+
+	// iterationsWrites is the iterations writes the tests use.
+	iterationsWrites = 50
+
+	// secondsRun is the seconds run the tests use.
+	secondsRun = 4
+
+	// tests is the tests the tests use.
+	tests = 42
+
+	// testsConsoleRun is the tests console run the tests use.
+	testsConsoleRun = 12
+
+	// testsRun is the tests run the tests use.
+	testsRun = 30
+
+	// wantLinesLen is the expected lines len.
+	wantLinesLen = 1000
+)
+
+const (
+	// textHidden is the literal "hidden".
+	textHidden = "hidden"
+)

@@ -307,19 +307,19 @@ func addLoadGuards(deps *Deps, name string, layers *decoration.Layers) error {
 }
 
 // newRetrier builds the exponential-backoff retrier r tunes.
-func newRetrier(retryValue decoration.Retry) (interfaces.Retrier, error) {
-	err := retryValue.RetryConfig.Validate()
+func newRetrier(retrier decoration.Retry) (interfaces.Retrier, error) {
+	err := retrier.RetryConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
 
 	return retry.NewFromConfig(retry.Config{
 		Kind:            retry.KindExponential,
-		MaxRetries:      retryValue.RetryConfig.MaxRetries,
-		InitialInterval: retryValue.RetryConfig.InitialInterval,
-		MaxInterval:     retryValue.RetryConfig.MaxInterval,
-		Multiplier:      retryValue.RetryConfig.Multiplier,
-		MaxElapsedTime:  retryValue.RetryConfig.MaxElapsedTime,
+		MaxRetries:      retrier.RetryConfig.MaxRetries,
+		InitialInterval: retrier.RetryConfig.InitialInterval,
+		MaxInterval:     retrier.RetryConfig.MaxInterval,
+		Multiplier:      retrier.RetryConfig.Multiplier,
+		MaxElapsedTime:  retrier.RetryConfig.MaxElapsedTime,
 	})
 }
 
@@ -347,15 +347,17 @@ func newBreaker(
 
 // bulkheadFromConfig builds the bulkhead b tunes; its kind is "channel" (or empty) or
 // "adaptive".
-func bulkheadFromConfig(bulkheadValue decoration.Bulkhead) (interfaces.Bulkhead, error) {
-	err := bulkheadValue.BulkheadConfig.Validate()
+func bulkheadFromConfig(
+	currentBulkhead decoration.Bulkhead,
+) (interfaces.Bulkhead, error) {
+	err := currentBulkhead.BulkheadConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
 
 	var kind bulkhead.Kind
 
-	switch bulkheadValue.BulkheadConfig.Kind {
+	switch currentBulkhead.BulkheadConfig.Kind {
 	case "", "channel":
 		kind = bulkhead.KindChannel
 	case "adaptive":
@@ -363,17 +365,17 @@ func bulkheadFromConfig(bulkheadValue decoration.Bulkhead) (interfaces.Bulkhead,
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"unknown bulkhead kind %q (want channel|adaptive)",
-			bulkheadValue.BulkheadConfig.Kind,
+			currentBulkhead.BulkheadConfig.Kind,
 		))
 	}
 
 	return bulkhead.NewFromConfig(bulkhead.Config{
 		Kind:              kind,
-		MaxConcurrent:     bulkheadValue.BulkheadConfig.MaxConcurrent,
-		MinConcurrent:     bulkheadValue.BulkheadConfig.MinConcurrent,
-		InitialConcurrent: bulkheadValue.BulkheadConfig.InitialConcurrent,
-		RTTThreshold:      bulkheadValue.BulkheadConfig.RTTThreshold,
-		BackoffRatio:      bulkheadValue.BulkheadConfig.BackoffRatio,
+		MaxConcurrent:     currentBulkhead.BulkheadConfig.MaxConcurrent,
+		MinConcurrent:     currentBulkhead.BulkheadConfig.MinConcurrent,
+		InitialConcurrent: currentBulkhead.BulkheadConfig.InitialConcurrent,
+		RTTThreshold:      currentBulkhead.BulkheadConfig.RTTThreshold,
+		BackoffRatio:      currentBulkhead.BulkheadConfig.BackoffRatio,
 	})
 }
 

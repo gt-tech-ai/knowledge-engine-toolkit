@@ -5,25 +5,8 @@ import (
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
-
-// defaultBuckets returns the histogram bucket boundaries (seconds) for operation
-// latency.
-func defaultBuckets() []float64 {
-	return []float64{
-		defaultBucketsResultp005,
-		defaultBucketsResultp01,
-		defaultBucketsResultp025,
-		defaultBucketsResultp05,
-		defaultBucketsResultp1,
-		defaultBucketsResultp25,
-		defaultBucketsResultp5,
-		1,
-		defaultBucketsResult2p5,
-		defaultBucketsResult5,
-		defaultBucketsResult10,
-	}
-}
 
 // metricsMW records the RED series of a tier: <tier>_operations_total,
 // <tier>_errors_total and <tier>_operation_duration_seconds, labelled by the subject
@@ -55,7 +38,7 @@ func NewMetrics(metrics interfaces.Metrics, tier, name string) OpMiddleware {
 		),
 		dur: metrics.Histogram(
 			tier+"_operation_duration_seconds", tier+" operation duration",
-			defaultBuckets(), tier, textOperation,
+			types.DefaultDurationBuckets(), tier, textOperation,
 		),
 	}
 }

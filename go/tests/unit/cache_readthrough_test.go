@@ -40,7 +40,7 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockByteCache(ctrl)
 
-	testReadThroughSingleFlightCollapsesConcurrentRest7(t, m)
+	testReadThroughSingleFlightCollapsesConcurrentRunsConcurrentCallers(t, m)
 }
 
 // gatedLoad builds the load every concurrent caller shares: it counts each run, signals
@@ -54,13 +54,13 @@ func gatedLoad(count *atomic.Int32, started, release chan struct{}) func() (int,
 
 		<-release
 
-		return gatedLoadResult42, nil
+		return gatedLoadResult, nil
 	}
 }
 
-// testReadThroughSingleFlightCollapsesConcurrentRest7 continues
-// testReadThroughSingleFlightCollapsesConcurrentRest6 with its remaining steps.
-func testReadThroughSingleFlightCollapsesConcurrentRest7(
+// testReadThroughSingleFlightCollapsesConcurrentRunsConcurrentCallers continues
+// testReadThroughSingleFlightCollapsesConcurrent: runs concurrent callers.
+func testReadThroughSingleFlightCollapsesConcurrentRunsConcurrentCallers(
 	t *testing.T,
 	byteCache *mocks.MockByteCache,
 ) {
@@ -88,12 +88,12 @@ func testReadThroughSingleFlightCollapsesConcurrentRest7(
 		chan struct{},
 	) // the winner closes this once it is confirmed in-flight
 
-	var groupValue sync.WaitGroup
+	var currentGroup sync.WaitGroup
 
 	load := gatedLoad(&loadCount, started, release)
 
 	for range callers {
-		groupValue.Go(
+		currentGroup.Go(
 			func() { readThroughExpecting42(t, byteCache, &group, key, ttl, load) },
 		)
 	}
@@ -116,7 +116,7 @@ func testReadThroughSingleFlightCollapsesConcurrentRest7(
 	yieldScheduler()
 
 	close(release)
-	groupValue.Wait()
+	currentGroup.Wait()
 
 	assertCollapsed(t, loadCount.Load(), callers)
 }
@@ -139,7 +139,7 @@ func TestReadThrough_HitSkipsLoad(t *testing.T) {
 
 	const key = "k2"
 
-	encoded, err := cache.Encode(encodeArg99, 1)
+	encoded, err := cache.Encode(encodeInput, 1)
 	require.NoError(t, err)
 	byteCache.EXPECT().Get(gomock.Any(), key).Return(encoded, true)
 
@@ -160,7 +160,7 @@ func TestReadThrough_HitSkipsLoad(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, equalArg99, count, "the cached value is returned")
+	assert.Equal(t, wantCount, count, "the cached value is returned")
 	assert.False(t, loadCalled, "a hit does not call load")
 }
 
@@ -256,7 +256,7 @@ func TestReadThrough_StaleVersionReloads(t *testing.T) {
 	assert.True(t, loaded, "a stale-version hit re-runs load")
 	assert.Equal(
 		t,
-		equalArg77,
+		wantCountReloads,
 		count,
 		"the fresh value is returned, not the stale-version entry",
 	)
@@ -320,12 +320,12 @@ func readThroughExpecting42(
 		return
 	}
 
-	assert.Equal(t, equalArg42, count)
+	assert.Equal(t, wantCoalescedCount, count)
 }
 
 // yieldScheduler gives runnable goroutines many chances to run.
 func yieldScheduler() {
-	for range iterations100 {
+	for range iterationsScheduler {
 		runtime.Gosched()
 	}
 }
@@ -348,3 +348,23 @@ func assertCollapsed(t *testing.T, loads, callers int32) {
 	assert.Less(t, loads, callers,
 		"single-flight suppresses the stampede — far fewer loads than callers")
 }
+
+const (
+	// encodeInput is the encode input the tests use.
+	encodeInput = 99
+
+	// gatedLoadResult is the gated load result the tests use.
+	gatedLoadResult = 42
+
+	// iterationsScheduler is the iterations scheduler the tests use.
+	iterationsScheduler = 100
+
+	// wantCount is the expected count.
+	wantCount = 99
+
+	// wantCoalescedCount is the expected count expecting42.
+	wantCoalescedCount = 42
+
+	// wantCountReloads is the expected count reloads.
+	wantCountReloads = 77
+)

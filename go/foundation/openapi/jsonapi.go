@@ -125,7 +125,7 @@ func routeKey(method, path, basePath string) string {
 func canonicalizePathParams(path string) string {
 	segs := strings.Split(path, textSlash)
 	for i, s := range segs {
-		if len(s) >= sLen2 && s[0] == '{' && s[len(s)-1] == '}' {
+		if len(s) >= minPathParamLen && s[0] == '{' && s[len(s)-1] == '}' {
 			segs[i] = "{}"
 		}
 	}
@@ -330,7 +330,7 @@ func errorStatusDescription(status string) string {
 //   - ACTION                     → {meta: {...}} (never a data resource)
 //   - DELETE                     → an empty object (no resource body)
 func wrapByRole(operation, schemas map[string]any, entry *RouteEntry) map[string]any {
-	resourceConfigValue := resourceConfig{
+	currentResourceConfig := resourceConfig{
 		resourceType:  entry.ResourceType,
 		singleKey:     entry.SingleKey,
 		collectionKey: entry.CollectionKey,
@@ -345,28 +345,29 @@ func wrapByRole(operation, schemas map[string]any, entry *RouteEntry) map[string
 	case RoleAction:
 		return wrapMetaResponse(name, schemas)
 	case RoleList:
-		return wrapCollectionResponse(name, resourceConfigValue, schemas)
+		return wrapCollectionResponse(name, currentResourceConfig, schemas)
 	case RoleGetOne, RoleCreate, RoleUpdate:
-		return wrapResourceResponse(name, resourceConfigValue, schemas)
+		return wrapResourceResponse(name, currentResourceConfig, schemas)
 	default:
 		// Any other value takes the shared result below.
 	}
 
-	return wrapResourceResponse(name, resourceConfigValue, schemas)
+	return wrapResourceResponse(name, currentResourceConfig, schemas)
 }
 
 // wrapResourceResponse builds the envelope of a GET_ONE, CREATE or UPDATE response.
 func wrapResourceResponse(
 	name string,
-	resourceConfigValue resourceConfig,
+	currentResourceConfig resourceConfig,
 	schemas map[string]any,
 ) map[string]any {
 	props := stdx.GetMap(stdx.GetMap(schemas, name), keyProperties)
 
 	// A bulk create whose response carries only a collection key is still a
 	// collection envelope (the CREATE rule).
-	if resourceConfigValue.singleKey == "" && resourceConfigValue.collectionKey != "" {
-		return wrapCollectionResponse(name, resourceConfigValue, schemas)
+	if currentResourceConfig.singleKey == "" &&
+		currentResourceConfig.collectionKey != "" {
+		return wrapCollectionResponse(name, currentResourceConfig, schemas)
 	}
 
 	if len(props) == 0 {
@@ -376,14 +377,14 @@ func wrapResourceResponse(
 	// A resource-less GET_ONE/UPDATE (classified from verb/path, no resource
 	// key on its own response) wraps meta-only — matching the by-property
 	// fallback — rather than emitting a dangling attributes $ref.
-	if resourceConfigValue.singleKey == "" {
+	if currentResourceConfig.singleKey == "" {
 		return wrapMetaResponse(name, schemas)
 	}
 
 	return wrapSingleResponse(
 		name,
-		props[resourceConfigValue.singleKey],
-		resourceConfigValue,
+		props[currentResourceConfig.singleKey],
+		currentResourceConfig,
 		schemas,
 		props,
 	)
@@ -608,16 +609,22 @@ func wrapResponseSchema(
 	slices.Sort(resourceTypes)
 
 	for _, t := range resourceTypes {
-		resourceConfig2 := cfg.resources[t]
+		secondResourceConfig := cfg.resources[t]
 
 		// Check for collection response (has the collectionKey).
-		if _, hasCollection := props[resourceConfig2.collectionKey]; hasCollection {
-			return wrapCollectionResponse(name, resourceConfig2, schemas)
+		if _, hasCollection := props[secondResourceConfig.collectionKey]; hasCollection {
+			return wrapCollectionResponse(name, secondResourceConfig, schemas)
 		}
 
 		// Check for single resource response (has the singleKey).
-		if singleProp, hasSingle := props[resourceConfig2.singleKey]; hasSingle {
-			return wrapSingleResponse(name, singleProp, resourceConfig2, schemas, props)
+		if singleProp, hasSingle := props[secondResourceConfig.singleKey]; hasSingle {
+			return wrapSingleResponse(
+				name,
+				singleProp,
+				secondResourceConfig,
+				schemas,
+				props,
+			)
 		}
 	}
 
@@ -637,7 +644,7 @@ func wrapMetaResponse(responseName string, schemas map[string]any) map[string]an
 	// ACTION role reaches here directly (bypassing wrapResponseSchema's empty-props
 	// early return) — no named schema is emitted, so `meta` falls back to an inline
 	// open object rather than a dangling $ref (which breaks a generated client).
-	metaValue := map[string]any{keyType: typeObject}
+	meta := map[string]any{keyType: typeObject}
 	respSchema := stdx.GetMap(schemas, responseName)
 
 	if props := stdx.GetMap(respSchema, keyProperties); len(props) > 0 {
@@ -654,7 +661,7 @@ func wrapMetaResponse(responseName string, schemas map[string]any) map[string]an
 		}
 
 		schemas[metaSchemaName] = metaSchema
-		metaValue = map[string]any{keyRef: textComponentsSchemas + metaSchemaName}
+		meta = map[string]any{keyRef: textComponentsSchemas + metaSchemaName}
 	}
 
 	// `meta` is required: unlike a single-resource response (where meta only
@@ -666,7 +673,7 @@ func wrapMetaResponse(responseName string, schemas map[string]any) map[string]an
 		keyType:     typeObject,
 		keyRequired: []any{keyMeta},
 		keyProperties: map[string]any{
-			keyMeta: metaValue,
+			keyMeta: meta,
 		},
 	}
 }
@@ -678,7 +685,7 @@ func wrapMetaResponse(responseName string, schemas map[string]any) map[string]an
 func wrapSingleResponse(
 	responseName string,
 	singleProp any,
-	resourceConfigValue resourceConfig,
+	currentResourceConfig resourceConfig,
 	schemas map[string]any,
 	responseProps map[string]any,
 ) map[string]any {
@@ -695,7 +702,7 @@ func wrapSingleResponse(
 				keyProperties: map[string]any{
 					keyType: map[string]any{
 						keyType:    keyString,
-						keyExample: resourceConfigValue.resourceType,
+						keyExample: currentResourceConfig.resourceType,
 					},
 					textID: map[string]any{
 						keyType: keyString,
@@ -717,7 +724,7 @@ func wrapSingleResponse(
 	addSingleResponseMeta(
 		result,
 		responseName,
-		resourceConfigValue.singleKey,
+		currentResourceConfig.singleKey,
 		schemas,
 		responseProps,
 	)
@@ -783,12 +790,12 @@ func addSingleResponseMeta(
 // wrapCollectionResponse creates a JSON:API collection envelope schema.
 func wrapCollectionResponse(
 	responseName string,
-	resourceConfigValue resourceConfig,
+	currentResourceConfig resourceConfig,
 	schemas map[string]any,
 ) map[string]any {
 	attrsRef := collectionAttributesRef(
 		responseName,
-		resourceConfigValue.collectionKey,
+		currentResourceConfig.collectionKey,
 		schemas,
 	)
 
@@ -804,7 +811,7 @@ func wrapCollectionResponse(
 					keyProperties: map[string]any{
 						keyType: map[string]any{
 							keyType:    keyString,
-							keyExample: resourceConfigValue.resourceType,
+							keyExample: currentResourceConfig.resourceType,
 						},
 						textID: map[string]any{
 							keyType: keyString,

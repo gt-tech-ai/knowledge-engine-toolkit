@@ -88,7 +88,7 @@ func nativeTracing(dRef *decorate.Deps) []connect.Interceptor {
 	d := *dRef
 
 	return when(
-		d.Tracer != nil,
+		d.Tracer,
 		func() connect.Interceptor { return TracingInterceptor(d.Tracer) },
 	)
 }
@@ -98,7 +98,7 @@ func nativeMetrics(dRef *decorate.Deps) []connect.Interceptor {
 	d := *dRef
 
 	return when(
-		d.Metrics != nil,
+		d.Metrics,
 		func() connect.Interceptor { return MetricsInterceptor(d.Metrics) },
 	)
 }
@@ -108,17 +108,19 @@ func nativeLogging(dRef *decorate.Deps) []connect.Interceptor {
 	d := *dRef
 
 	return when(
-		d.Logger != nil,
+		d.Logger,
 		func() connect.Interceptor { return NewLoggingInterceptor(d.Logger) },
 	)
 }
 
-// presentFlag names the present option in a signature.
-type presentFlag bool
+// when returns the interceptor build makes, or none when its collaborator is unset.
+func when[C comparable](
+	collaborator C,
+	build func() connect.Interceptor,
+) []connect.Interceptor {
+	var unset C
 
-// when returns the interceptor build makes, or none when its collaborator is absent.
-func when(present presentFlag, build func() connect.Interceptor) []connect.Interceptor {
-	if !present {
+	if collaborator == unset {
 		return nil
 	}
 

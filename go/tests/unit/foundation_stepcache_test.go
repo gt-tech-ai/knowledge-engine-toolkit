@@ -30,7 +30,7 @@ func TestFoundationStepcache_Key(t *testing.T) {
 		textV1,
 		[]string{textRun, textDotSlashDotDotDot},
 	)
-	assert.Len(t, base, wantBaseLen64)
+	assert.Len(t, base, wantBaseLen)
 	assert.Equal(
 		t,
 		base,
@@ -164,7 +164,7 @@ func TestFoundationStepcache_SaltDirsAndBinary(t *testing.T) {
 	ctx := t.Context()
 	root, policy := t.TempDir(), t.TempDir()
 	file := filepath.Join(policy, "rules.yaml")
-	require.NoError(t, os.WriteFile(file, []byte("max: 1\n"), perm0o600))
+	require.NoError(t, os.WriteFile(file, []byte("max: 1\n"), writeFileInput))
 
 	key := stepcache.Key([]byte(textA), textV, nil)
 	open := func(dirs ...string) interfaces.StepCache {
@@ -181,7 +181,7 @@ func TestFoundationStepcache_SaltDirsAndBinary(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, hit, "unchanged salt dirs hit")
 
-	require.NoError(t, os.WriteFile(file, []byte("max: 2\n"), perm0o600))
+	require.NoError(t, os.WriteFile(file, []byte("max: 2\n"), writeFileInput))
 
 	hit, err = open(policy).Hit(ctx, key)
 	require.NoError(t, err)
@@ -192,3 +192,8 @@ func TestFoundationStepcache_SaltDirsAndBinary(t *testing.T) {
 	_, err = missing.Hit(ctx, key)
 	require.NoError(t, err, "a missing salt dir hashes empty")
 }
+
+const (
+	// wantBaseLen is the expected base len.
+	wantBaseLen = 64
+)

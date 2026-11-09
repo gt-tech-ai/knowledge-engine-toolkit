@@ -67,7 +67,7 @@ func TestGormAdapter_LifecycleUnreachable(t *testing.T) {
 			Port:     5432,
 			User:     textU,
 			Password: textP,
-			Database: textD2,
+			Database: textDLower,
 			SSLMode:  textDisable,
 		},
 	})

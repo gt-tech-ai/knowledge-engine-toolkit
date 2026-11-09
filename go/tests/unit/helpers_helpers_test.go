@@ -25,7 +25,7 @@ func TestFileExists(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file.txt")
 	require.False(t, stdx.FileExists(path), "expected false for non-existent file")
-	require.NoError(t, os.WriteFile(path, []byte(textX), perm0o600))
+	require.NoError(t, os.WriteFile(path, []byte(textX), writeFileInput))
 	require.True(t, stdx.FileExists(path), "expected true for existing file")
 	// directory should not count as a file
 	require.False(t, stdx.FileExists(dir), "expected false for directory path")
@@ -80,7 +80,7 @@ func TestUnique(t *testing.T) {
 	t.Parallel()
 
 	got := stdx.Unique([]string{textA, textB, textA, textC, textB})
-	require.Len(t, got, wantGotLen3)
+	require.Len(t, got, wantGotLen)
 }
 
 // TestUniqueDirs tests that UniqueDirs reduces a set of file paths to their
@@ -96,7 +96,7 @@ func TestUniqueDirs(t *testing.T) {
 	t.Parallel()
 
 	got := stdx.UniqueDirs([]string{"/a/b/c.go", "/a/b/d.go", "/x/y.go"})
-	require.Len(t, got, wantGotLen2)
+	require.Len(t, got, wantGotLenDirs)
 }
 
 // TestTruncate tests that Truncate caps a string at the rune limit and leaves
@@ -113,9 +113,9 @@ func TestUniqueDirs(t *testing.T) {
 func TestTruncate(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "hello", stdx.Truncate("hello world", limit5))
-	require.Equal(t, "hi", stdx.Truncate("hi", limit10))
-	require.Empty(t, stdx.Truncate("", limit5))
+	require.Equal(t, "hello", stdx.Truncate("hello world", truncateInput))
+	require.Equal(t, "hi", stdx.Truncate("hi", truncateInputTruncate))
+	require.Empty(t, stdx.Truncate("", truncateInput))
 }
 
 // TestIsAllDigits tests that IsAllDigits recognises non-empty all-ASCII-digit
@@ -201,3 +201,22 @@ func TestIsUUID(t *testing.T) {
 		require.Equal(t, c.want, stdx.IsUUID(c.in), "IsUUID(%q)", c.in)
 	}
 }
+
+const (
+	// truncateInput is the truncate input the tests use.
+	truncateInput = 5
+
+	// truncateInputTruncate is the truncate input truncate the tests use.
+	truncateInputTruncate = 10
+
+	// wantGotLen is the expected got len.
+	wantGotLen = 3
+
+	// wantGotLenDirs is the expected got len dirs.
+	wantGotLenDirs = 2
+)
+
+const (
+	// textFallback is the literal "fallback".
+	textFallback = "fallback"
+)

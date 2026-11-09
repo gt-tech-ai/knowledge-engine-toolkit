@@ -141,9 +141,9 @@ func TestTransportCobra_Tree(t *testing.T) {
 		[]string{
 			textDev,
 			"start",
-			textEnv2,
+			textEnvFlag,
 			textStaging,
-			textOnly2,
+			textOnlyFlag,
 			"api,web",
 			"--minimal",
 			textFull,
@@ -161,13 +161,13 @@ func TestTransportCobra_Tree(t *testing.T) {
 
 	root, err = opscobra.Tree(new(treeSpec()), reg, opscobra.Options{})
 	require.NoError(t, err)
-	root.SetArgs([]string{textCheck, textEnv2, textDev, "--workers", "3", textSvc})
+	root.SetArgs([]string{textCheck, textEnvFlag, textDev, "--workers", "3", textSvc})
 
-	testTransportCobraTreeRest(t, &got, reg, root)
+	testTransportCobraTreeFlags(t, &got, reg, root)
 }
 
-// testTransportCobraTreeRest continues TestTransportCobra_Tree with its remaining steps.
-func testTransportCobraTreeRest(
+// testTransportCobraTreeFlags continues TestTransportCobra_Tree: flags.
+func testTransportCobraTreeFlags(
 	t *testing.T,
 	got *treeGot,
 	reg *ops.Registry,
@@ -239,7 +239,7 @@ func TestTransportCobra_TreePassesASecretFlag(t *testing.T) {
 
 	flags := []types.FlagSpec{
 		{Name: textClientID, Type: types.FlagString},
-		{Name: textClientSecret3, Type: types.FlagString, Secret: true},
+		{Name: textClientSecretKebab, Type: types.FlagString, Secret: true},
 	}
 
 	var got map[string]any
@@ -336,18 +336,18 @@ func TestTransportCobra_TreeResolvesPerRun(t *testing.T) {
 
 	root, err := opscobra.Tree(&spec, nil, opts)
 	require.NoError(t, err)
-	root.SetArgs([]string{textDev, textUp, textEnv2, textStaging})
+	root.SetArgs([]string{textDev, textUp, textEnvFlag, textStaging})
 	require.NoError(t, root.ExecuteContext(t.Context()))
 	assert.Equal(t, []string{textDevUp}, resolved)
 	assert.Equal(t, map[string]any{textEnv: textStaging}, got.up)
 	assert.Same(t, obs, seen)
 
-	testTransportCobraTreeResolvesPerRunRest(t, opts, &spec, root)
+	testTransportCobraTreeResolvesPerRunAnnotations(t, opts, &spec, root)
 }
 
-// testTransportCobraTreeResolvesPerRunRest continues
-// TestTransportCobra_TreeResolvesPerRun with its remaining steps.
-func testTransportCobraTreeResolvesPerRunRest(
+// testTransportCobraTreeResolvesPerRunAnnotations continues
+// TestTransportCobra_TreeResolvesPerRun: annotations.
+func testTransportCobraTreeResolvesPerRunAnnotations(
 	t *testing.T,
 	opts opscobra.Options,
 	spec *types.CommandSpec,
@@ -441,12 +441,12 @@ func TestTransportCobra_TreeRunHooks(t *testing.T) {
 	flags := []types.FlagSpec{{Name: textFix}}
 	ran := map[string]map[string]any{}
 
-	testTransportCobraTreeRunHooksRest5(t, flags, ran)
+	testTransportCobraTreeRunHooksBuildsOps(t, flags, ran)
 }
 
-// testTransportCobraTreeRunHooksRest5 continues testTransportCobraTreeRunHooksRest4 with
-// its remaining steps.
-func testTransportCobraTreeRunHooksRest5(
+// testTransportCobraTreeRunHooksBuildsOps continues testTransportCobraTreeRunHooks:
+// builds ops.
+func testTransportCobraTreeRunHooksBuildsOps(
 	t *testing.T,
 	flags []types.FlagSpec,
 	ran map[string]map[string]any,
@@ -483,12 +483,12 @@ func testTransportCobraTreeRunHooksRest5(
 		},
 	})
 
-	testTransportCobraTreeRunHooksRest(t, flags, ran, reg, err)
+	testTransportCobraTreeRunHooksAfterHooks(t, flags, ran, reg, err)
 }
 
-// testTransportCobraTreeRunHooksRest continues testTransportCobraTreeRunHooksRest5 with
-// its remaining steps.
-func testTransportCobraTreeRunHooksRest(
+// testTransportCobraTreeRunHooksAfterHooks continues
+// testTransportCobraTreeRunHooksBuildsOps: after hooks.
+func testTransportCobraTreeRunHooksAfterHooks(
 	t *testing.T,
 	flags []types.FlagSpec,
 	ran map[string]map[string]any,
@@ -521,7 +521,7 @@ func testTransportCobraTreeRunHooksRest(
 		Commands: []types.CommandSpec{{Use: textLint, Op: textLint, Flags: flags}},
 	}, reg, opts)
 	require.NoError(t, err)
-	root.SetArgs([]string{textLint, textFix2})
+	root.SetArgs([]string{textLint, textFixFlag})
 
 	err = root.ExecuteContext(t.Context())
 
@@ -577,12 +577,12 @@ func TestTransportCobra_TreeRunOverride(t *testing.T) {
 
 	ran := &capturedRun{}
 
-	testTransportCobraTreeRunOverrideRest5(t, flags, ran)
+	testTransportCobraTreeRunOverrideRuns(t, flags, ran)
 }
 
-// testTransportCobraTreeRunOverrideRest5 continues testTransportCobraTreeRunOverrideRest4
-// with its remaining steps.
-func testTransportCobraTreeRunOverrideRest5(
+// testTransportCobraTreeRunOverrideRuns continues
+// testTransportCobraTreeRunOverride: runs.
+func testTransportCobraTreeRunOverrideRuns(
 	t *testing.T,
 	flags []types.FlagSpec,
 	ran *capturedRun,
@@ -613,12 +613,12 @@ func testTransportCobraTreeRunOverrideRest5(
 		Commands: []types.CommandSpec{{Use: textDrift, Op: textDrift, Flags: flags}},
 	}
 
-	testTransportCobraTreeRunOverrideRest(t, ran, reg, &spec)
+	testTransportCobraTreeRunOverrideSchedules(t, ran, reg, &spec)
 }
 
-// testTransportCobraTreeRunOverrideRest continues testTransportCobraTreeRunOverrideRest5
-// with its remaining steps.
-func testTransportCobraTreeRunOverrideRest(
+// testTransportCobraTreeRunOverrideSchedules continues
+// testTransportCobraTreeRunOverrideRuns: schedules.
+func testTransportCobraTreeRunOverrideSchedules(
 	t *testing.T,
 	ran *capturedRun,
 	reg *ops.Registry,
@@ -636,7 +636,7 @@ func testTransportCobraTreeRunOverrideRest(
 	) error {
 		root, opErr := opscobra.Tree(&spec, reg, opscobra.Options{Run: run})
 		require.NoError(t, opErr)
-		root.SetArgs([]string{textDrift, textEnv2, textStaging})
+		root.SetArgs([]string{textDrift, textEnvFlag, textStaging})
 
 		return root.ExecuteContext(t.Context())
 	}
@@ -671,3 +671,11 @@ type capturedRun struct {
 	// in is the operation input, nil until the override ran.
 	in map[string]any
 }
+
+const (
+	// textDevUp is the literal "dev.up".
+	textDevUp = "dev.up"
+
+	// textEnvFlag is the literal "--env".
+	textEnvFlag = "--env"
+)

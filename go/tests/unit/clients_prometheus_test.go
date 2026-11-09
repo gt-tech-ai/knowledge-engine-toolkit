@@ -129,24 +129,24 @@ func testClientQueryParsesVectorTable() []testClientQueryParsesVectorRow {
 	return []testClientQueryParsesVectorRow{
 		{
 			name: "one sample",
-			body: strings.Replace(promVector, textS2, promInstant("12.5"), 1),
-			want: want12p5,
+			body: strings.Replace(promVector, textSLower, promInstant("12.5"), 1),
+			want: wantTable,
 		},
 		{
 			name:     "no sample",
-			body:     strings.Replace(promVector, textS2, "", 1),
+			body:     strings.Replace(promVector, textSLower, "", 1),
 			wantCode: apperr.CodeNotFound,
 		},
 		{
 			name:     textNan,
-			body:     strings.Replace(promVector, textS2, promInstant(textNan), 1),
+			body:     strings.Replace(promVector, textSLower, promInstant(textNan), 1),
 			wantCode: apperr.CodeNotFound,
 		},
 		{
 			name: "two series",
 			body: strings.Replace(
 				promVector,
-				textS2,
+				textSLower,
 				promInstant("1")+","+promInstant("2"),
 				1,
 			),
@@ -154,7 +154,7 @@ func testClientQueryParsesVectorTable() []testClientQueryParsesVectorRow {
 		},
 		{
 			name:     "matrix",
-			body:     strings.Replace(promMatrix, textS2, "", 1),
+			body:     strings.Replace(promMatrix, textSLower, "", 1),
 			wantCode: apperr.CodeInvalidInput,
 		},
 	}
@@ -176,8 +176,8 @@ func testClientQueryParsesVectorTable() []testClientQueryParsesVectorRow {
 func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 	t.Parallel()
 
-	timeValue := time.Unix(1727260000, 0).UTC()
-	cases := testClientQueryRangeParsesMatrixTable(timeValue)
+	instant := time.Unix(1727260000, 0).UTC()
+	cases := testClientQueryRangeParsesMatrixTable(instant)
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -197,7 +197,7 @@ func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 
 			got, err := promhttp.New("http://prom.test:9090/", doer).QueryRange(
 				t.Context(),
-				`sum(increase(x[1h]))`, timeValue, timeValue.Add(time.Hour), time.Hour,
+				`sum(increase(x[1h]))`, instant, instant.Add(time.Hour), time.Hour,
 			)
 
 			require.NotNil(t, req)
@@ -235,27 +235,27 @@ type testClientQueryRangeParsesMatrixRow struct {
 // testClientQueryRangeParsesMatrixTable builds the table
 // TestClient_QueryRangeParsesMatrix runs.
 func testClientQueryRangeParsesMatrixTable(
-	timeValue time.Time,
+	instant time.Time,
 ) []testClientQueryRangeParsesMatrixRow {
 	return []testClientQueryRangeParsesMatrixRow{
 		{
 			name: "one series",
-			body: strings.Replace(promMatrix, textS2, promSeries("1.5", "2"), 1),
+			body: strings.Replace(promMatrix, textSLower, promSeries("1.5", "2"), 1),
 			want: []promhttp.Sample{
-				{Time: timeValue, Value: value1p5},
-				{Time: timeValue.Add(time.Hour), Value: value2},
+				{Time: instant, Value: valueTable},
+				{Time: instant.Add(time.Hour), Value: valueMatrixTable},
 			},
 		},
 		{
 			name: "no series",
-			body: strings.Replace(promMatrix, textS2, "", 1),
+			body: strings.Replace(promMatrix, textSLower, "", 1),
 			want: []promhttp.Sample{},
 		},
 		{
 			name: "two series",
 			body: strings.Replace(
 				promMatrix,
-				textS2,
+				textSLower,
 				promSeries("1")+","+promSeries("2"),
 				1,
 			),
@@ -263,7 +263,7 @@ func testClientQueryRangeParsesMatrixTable(
 		},
 		{
 			name:     textNan,
-			body:     strings.Replace(promMatrix, textS2, promSeries(textNan), 1),
+			body:     strings.Replace(promMatrix, textSLower, promSeries(textNan), 1),
 			wantCode: apperr.CodeNotFound,
 		},
 	}
@@ -292,7 +292,7 @@ func testClientQueryRangeParsesMatrixTable(
 func TestClient_ErrorStatusIsCoded(t *testing.T) {
 	t.Parallel()
 
-	cases := testClientErrorStatusIsCodedTable11()
+	cases := testClientErrorStatusIsCodedCases()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -318,24 +318,24 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 		doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
 		doer.EXPECT().Do(gomock.Any()).Times(0)
 
-		clientValue := promhttp.New("http://prom.test:9090", doer)
-		timeValue := time.Unix(1727260000, 0)
+		currentClient := promhttp.New("http://prom.test:9090", doer)
+		instant := time.Unix(1727260000, 0)
 
-		_, err := clientValue.QueryRange(
+		_, err := currentClient.QueryRange(
 			t.Context(),
 			textUp,
-			timeValue,
-			timeValue.Add(time.Hour),
+			instant,
+			instant.Add(time.Hour),
 			0,
 		)
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-		_, err = clientValue.QueryRange(
+		_, err = currentClient.QueryRange(
 			t.Context(),
 			textUp,
-			timeValue.Add(time.Hour),
-			timeValue,
+			instant.Add(time.Hour),
+			instant,
 			time.Minute,
 		)
 		require.Error(t, err)
@@ -382,19 +382,19 @@ type testClientErrorStatusIsCodedRow struct {
 	status   int
 }
 
-// testClientErrorStatusIsCodedTable11 builds the table
-// testClientErrorStatusIsCodedTable10
+// testClientErrorStatusIsCodedCases builds the table
+// testClientErrorStatusIsCoded
 // runs.
-func testClientErrorStatusIsCodedTable11() []testClientErrorStatusIsCodedRow {
+func testClientErrorStatusIsCodedCases() []testClientErrorStatusIsCodedRow {
 	return slices.Concat(
-		testClientErrorStatusIsCodedTable11Part1(),
-		testClientErrorStatusIsCodedTable11Part2(),
+		testClientErrorStatusIsCodedClientSideCases(),
+		testClientErrorStatusIsCodedServerSideCases(),
 	)
 }
 
-// testClientErrorStatusIsCodedTable11Part1 lists part of the
-// testClientErrorStatusIsCodedTable11 rows.
-func testClientErrorStatusIsCodedTable11Part1() []testClientErrorStatusIsCodedRow {
+// testClientErrorStatusIsCodedClientSideCases lists part of the
+// testClientErrorStatusIsCodedCases rows.
+func testClientErrorStatusIsCodedClientSideCases() []testClientErrorStatusIsCodedRow {
 	return []testClientErrorStatusIsCodedRow{
 		{
 			name:     "transport",
@@ -404,7 +404,7 @@ func testClientErrorStatusIsCodedTable11Part1() []testClientErrorStatusIsCodedRo
 		{
 			name: "caller canceled",
 			doErr: &url.Error{
-				Op:  textGet2,
+				Op:  textGetTitle,
 				URL: "http://prom.test:9090",
 				Err: context.Canceled,
 			},
@@ -413,7 +413,7 @@ func testClientErrorStatusIsCodedTable11Part1() []testClientErrorStatusIsCodedRo
 		{
 			name: "caller deadline",
 			doErr: &url.Error{
-				Op:  textGet2,
+				Op:  textGetTitle,
 				URL: "http://prom.test:9090",
 				Err: context.DeadlineExceeded,
 			},
@@ -441,9 +441,9 @@ func testClientErrorStatusIsCodedTable11Part1() []testClientErrorStatusIsCodedRo
 	}
 }
 
-// testClientErrorStatusIsCodedTable11Part2 lists part of the
-// testClientErrorStatusIsCodedTable11 rows.
-func testClientErrorStatusIsCodedTable11Part2() []testClientErrorStatusIsCodedRow {
+// testClientErrorStatusIsCodedServerSideCases lists part of the
+// testClientErrorStatusIsCodedCases rows.
+func testClientErrorStatusIsCodedServerSideCases() []testClientErrorStatusIsCodedRow {
 	return []testClientErrorStatusIsCodedRow{
 		{
 			name:     "HTTP 503",
@@ -474,7 +474,7 @@ func testClientErrorStatusIsCodedTable11Part2() []testClientErrorStatusIsCodedRo
 		{
 			name:     "bad sample",
 			status:   http.StatusOK,
-			body:     strings.Replace(promVector, textS2, promInstant("abc"), 1),
+			body:     strings.Replace(promVector, textSLower, promInstant("abc"), 1),
 			wantCode: apperr.CodeUpstream,
 		},
 	}
@@ -505,13 +505,13 @@ func TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL(t *testing.T) {
 
 	v, err := metricsQuerier.Query(t.Context(), textUp)
 	require.NoError(t, err)
-	assert.InDelta(t, inDeltaArg0p0, v, 0)
+	assert.InDelta(t, wantV, v, 0)
 
 	series, err := metricsQuerier.QueryRange(
 		t.Context(),
 		textUp,
 		time.Unix(0, 0),
-		time.Unix(sec60, 0),
+		time.Unix(unixInput, 0),
 		time.Minute,
 	)
 	require.NoError(t, err)
@@ -589,12 +589,12 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 			Return(&http.Response{StatusCode: http.StatusOK, Body: src}, nil),
 	)
 
-	testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest(t, reg, &stack, inner)
+	testDecorateDoerRetriesTransportErrorsAndBuffersBodyBuffersBody(t, reg, &stack, inner)
 }
 
-// testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest continues
-// TestDecorateDoer_RetriesTransportErrorsAndBuffersBody with its remaining steps.
-func testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest(
+// testDecorateDoerRetriesTransportErrorsAndBuffersBodyBuffersBody continues
+// TestDecorateDoer_RetriesTransportErrorsAndBuffersBody: buffers body.
+func testDecorateDoerRetriesTransportErrorsAndBuffersBodyBuffersBody(
 	t *testing.T,
 	reg *promclient.Registry,
 	stack *client.Base,
@@ -618,7 +618,7 @@ func testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest(
 	assert.Equal(t, "payload", string(body))
 	assert.InDelta(
 		t,
-		wantClientOpCounter3p0,
+		wantClientOpCounterBody,
 		clientOpCounter(t, reg, "prometheus.query_range"),
 		0,
 	)
@@ -638,7 +638,35 @@ func testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest(
 			return promResponse(http.StatusOK, strings.Repeat(textX, 9)), nil
 		})
 
-	err = doClosed(promhttp.DecorateDoer(large, &bare, maxBodyBytes8), req)
+	err = doClosed(promhttp.DecorateDoer(large, &bare, decorateDoerInput), req)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// decorateDoerInput is the decorate doer input the tests use.
+	decorateDoerInput = 8
+
+	// unixInput is the unix input the tests use.
+	unixInput = 60
+
+	// valueMatrixTable is the value matrix table the tests use.
+	valueMatrixTable = 2
+
+	// valueTable is the value table the tests use.
+	valueTable = 1.5
+
+	// wantClientOpCounterBody is the expected client op counter body.
+	wantClientOpCounterBody = 3.0
+
+	// wantTable is the expected table.
+	wantTable = 12.5
+
+	// wantV is the expected v.
+	wantV = 0.0
+)
+
+const (
+	// textNan is the literal "NaN".
+	textNan = "NaN"
+)

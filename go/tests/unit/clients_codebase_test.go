@@ -27,8 +27,8 @@ func writeFiles(t *testing.T, root string, files map[string]string) {
 
 	for p, body := range files {
 		full := filepath.Join(root, filepath.FromSlash(p))
-		require.NoError(t, os.MkdirAll(filepath.Dir(full), perm0o750))
-		require.NoError(t, os.WriteFile(full, []byte(body), perm0o600))
+		require.NoError(t, os.MkdirAll(filepath.Dir(full), mkdirAllInputFiles))
+		require.NoError(t, os.WriteFile(full, []byte(body), writeFileInput))
 	}
 }
 
@@ -215,5 +215,15 @@ func TestCodebaseClient_RunsThroughTheClientTier(t *testing.T) {
 
 	_, err = r.Files(t.Context(), &types.FileSelector{})
 	require.NoError(t, err)
-	assert.InDelta(t, wantClientOpCounter1p0, clientOpCounter(t, reg, textFiles), 0)
+	assert.InDelta(t, wantClientOpCounter, clientOpCounter(t, reg, textFiles), 0)
 }
+
+const (
+	// mkdirAllInputFiles is the mkdir all input files the tests use.
+	mkdirAllInputFiles = 0o750
+)
+
+const (
+	// textNewTxt is the literal "new.txt".
+	textNewTxt = "new.txt"
+)

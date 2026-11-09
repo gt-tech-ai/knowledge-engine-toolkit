@@ -20,19 +20,28 @@ import (
 
 // relayNow returns the fixed clock every relay test runs at.
 func relayNow() time.Time {
-	return time.Date(year2026, month10, day9, hour12, 0, 0, 0, time.UTC)
+	return time.Date(
+		dateInput,
+		dateInputRelayNow,
+		relayNowHour,
+		relayNowMinute,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
 }
 
 // relayConfig is a valid relay config for lane "audit" with the given batch shape.
 func relayConfig(sendBatch, concurrency, maxAttempts int) outbox.RelayConfig {
 	return outbox.RelayConfig{
 		Lane:        textAudit,
-		BatchSize:   batchSize100,
+		BatchSize:   batchSize,
 		SendBatch:   sendBatch,
 		Concurrency: concurrency,
 		MaxAttempts: maxAttempts,
 		BaseBackoff: time.Second,
-		MaxBackoff:  seconds10 * time.Second,
+		MaxBackoff:  maxBackoff * time.Second,
 	}
 }
 
@@ -89,7 +98,7 @@ func TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction(t *test
 	metrics := mocks.NewMockMetrics(ctrl)
 	counters := map[string]*mocks.MockCounter{}
 
-	testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest8(
+	testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionExpectsMetrics(
 		t,
 		ctrl,
 		store,
@@ -99,10 +108,10 @@ func TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction(t *test
 	)
 }
 
-// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest8 continues
-// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest7 with its
-// remaining steps.
-func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest8(
+// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionExpectsMetrics
+// continues testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransaction:
+// expects metrics.
+func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionExpectsMetrics(
 	t *testing.T,
 	ctrl *gomock.Controller,
 	store *mocks.MockOutboxStore,
@@ -122,16 +131,16 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest8(
 		})
 
 	gauge := mocks.NewMockGauge(ctrl)
-	gauge.EXPECT().Set(0.0, textAudit).Times(timesArg2) // depth and lag
+	gauge.EXPECT().Set(0.0, textAudit).Times(wantCalls) // depth and lag
 	metrics.EXPECT().Gauge(gomock.Any(), gomock.Any(), textLane).AnyTimes().Return(gauge)
 
 	passes := mocks.NewMockHistogram(ctrl)
-	passes.EXPECT().Observe(observeArg1p0, textAudit)
+	passes.EXPECT().Observe(observeInputExpectsMetrics, textAudit)
 	metrics.EXPECT().
 		Histogram("outbox_relay_passes", gomock.Any(), gomock.Any(), textLane).
 		Return(passes)
 
-	testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest3(
+	testRelayCommitsClaimAndFinalizeExpectsTransactions(
 		t,
 		ctrl,
 		store,
@@ -141,10 +150,10 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest8(
 	)
 }
 
-// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest3 continues
-// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest2 with its
-// remaining steps.
-func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest3(
+// testRelayCommitsClaimAndFinalizeExpectsTransactions
+// continues testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransaction:
+// expects transactions.
+func testRelayCommitsClaimAndFinalizeExpectsTransactions(
 	t *testing.T,
 	ctrl *gomock.Controller,
 	store *mocks.MockOutboxStore,
@@ -154,7 +163,7 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest3(
 ) {
 	t.Helper()
 
-	recs := outboxRecords(outboxRecordsArg2, 1)
+	recs := outboxRecords(outboxRecordsInput, 1)
 	commitErr := apperr.New(apperr.CodeUnavailable, "commit lost")
 	transactionManager := mocks.NewMockTransactionManager(ctrl)
 
@@ -179,7 +188,7 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest3(
 				return nil
 			})
 
-	testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest4(
+	testRelayCommitsClaimAndFinalizeExpectsClaimAndSend(
 		t,
 		store,
 		sink,
@@ -191,10 +200,11 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest3(
 	)
 }
 
-// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest4 continues
-// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest3 with its
-// remaining steps.
-func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest4(
+// testRelayCommitsClaimAndFinalizeExpectsClaimAndSend
+// continues
+// testRelayCommitsClaimAndFinalizeExpectsTransactions:
+// expects claim and send.
+func testRelayCommitsClaimAndFinalizeExpectsClaimAndSend(
 	t *testing.T,
 	store *mocks.MockOutboxStore,
 	sink *mocks.MockOutboxSink,
@@ -235,7 +245,7 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest4(
 	store.EXPECT().Stats(gomock.Any(), textAudit).Return(types.OutboxStats{}, nil)
 
 	relay := outbox.NewRelay(
-		new(relayConfig(sendBatch10, 1, maxAttempts5)),
+		new(relayConfig(relayConfigInputSend, 1, relayConfigInput)),
 		transactionManager,
 		store,
 		sink,
@@ -250,7 +260,7 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest4(
 	err := relay.RunOnce(context.Background())
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
-	assert.Equal(t, wantTxs3, (*txs))
+	assert.Equal(t, wantTxs, (*txs))
 }
 
 // fixedClock returns a relay option pinning the clock to relayNow.
@@ -275,14 +285,14 @@ func TestRelay_MarksSentOnSuccess(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockOutboxStore(ctrl)
 	sink := mocks.NewMockOutboxSink(ctrl)
-	recs := outboxRecords(outboxRecordsArg5, 1)
+	recs := outboxRecords(outboxRecordsInputSuccess, 1)
 	ctx := context.Background()
 
 	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 100).Return(recs, nil).Times(1)
 
 	for _, chunk := range [][]types.OutboxRecord{
-		recs[0:offset2], recs[offset2:offset4],
-		recs[offset4:offset5],
+		recs[0:offsetSuccess], recs[offsetSuccess:offsetOnSuccess],
+		recs[offsetOnSuccess:offsetSentOnSuccess],
 	} {
 		sink.EXPECT().Send(gomock.Any(), chunk).Return(make([]error, len(chunk))).Times(1)
 	}
@@ -292,7 +302,13 @@ func TestRelay_MarksSentOnSuccess(t *testing.T) {
 	}
 
 	relay := outbox.NewRelay(
-		new(relayConfig(sendBatch2, concurrency2, maxAttempts5)),
+		new(
+			relayConfig(
+				relayConfigInputSuccess,
+				relayConfigInputSuccess,
+				relayConfigInput,
+			),
+		),
 		relayTx(t),
 		store,
 		sink,
@@ -322,7 +338,7 @@ func TestRelay_PartialBatchFailureRetriesOnlyFailedRows(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockOutboxStore(ctrl)
 	sink := mocks.NewMockOutboxSink(ctrl)
-	recs := outboxRecords(outboxRecordsArg3, 1)
+	recs := outboxRecords(outboxRecordsInputRows, 1)
 	sendErr := apperr.New(apperr.CodeUnavailable, "queue throttled")
 	ctx := context.Background()
 	noJitter := outbox.WithJitter(func(d time.Duration) time.Duration { return d })
@@ -336,7 +352,7 @@ func TestRelay_PartialBatchFailureRetriesOnlyFailedRows(t *testing.T) {
 		Return(nil)
 
 	relay := outbox.NewRelay(
-		new(relayConfig(sendBatch10, 1, maxAttempts5)),
+		new(relayConfig(relayConfigInputRows, 1, relayConfigInput)),
 		relayTx(t),
 		store,
 		sink,
@@ -348,7 +364,7 @@ func TestRelay_PartialBatchFailureRetriesOnlyFailedRows(t *testing.T) {
 	)
 	require.NoError(t, relay.RunOnce(ctx))
 
-	short := outboxRecords(outboxRecordsArg2, 1)
+	short := outboxRecords(outboxRecordsInput, 1)
 	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 100).Return(short, nil)
 	sink.EXPECT().Send(gomock.Any(), short).Return([]error{nil})
 
@@ -383,18 +399,18 @@ func TestRelay_BackoffIsExponentialWithJitterAndCapped(t *testing.T) {
 
 	var recs []types.OutboxRecord
 
-	for attempts := 1; attempts <= attempts4; attempts++ {
+	for attempts := 1; attempts <= wantAttemptsCapped; attempts++ {
 		recs = append(recs, outboxRecords(1, attempts)...)
 	}
 
-	testRelayBackoffIsExponentialWithJitterAndCappedRest4(
+	testRelayBackoffIsExponentialWithJitterAndCappedExpectsRetry(
 		ctx, t, store, sink, sendErr, recs,
 	)
 }
 
-// testRelayBackoffIsExponentialWithJitterAndCappedRest4 continues
-// testRelayBackoffIsExponentialWithJitterAndCappedRest3 with its remaining steps.
-func testRelayBackoffIsExponentialWithJitterAndCappedRest4(
+// testRelayBackoffIsExponentialWithJitterAndCappedExpectsRetry continues
+// testRelayBackoffIsExponentialWithJitterAndCapped: expects retry.
+func testRelayBackoffIsExponentialWithJitterAndCappedExpectsRetry(
 	ctx context.Context,
 	t *testing.T,
 	store *mocks.MockOutboxStore,
@@ -423,14 +439,14 @@ func testRelayBackoffIsExponentialWithJitterAndCappedRest4(
 		Send(gomock.Any(), recs).
 		Return([]error{sendErr, sendErr, sendErr, sendErr})
 
-	testRelayBackoffIsExponentialWithJitterAndCappedRest5(
+	testRelayBackoffIsExponentialWithJitterAndCappedChecksBackoff(
 		ctx, t, store, sink, sendErr, recs, &caps, half,
 	)
 }
 
-// testRelayBackoffIsExponentialWithJitterAndCappedRest5 continues
-// testRelayBackoffIsExponentialWithJitterAndCappedRest4 with its remaining steps.
-func testRelayBackoffIsExponentialWithJitterAndCappedRest5(
+// testRelayBackoffIsExponentialWithJitterAndCappedChecksBackoff continues
+// testRelayBackoffIsExponentialWithJitterAndCappedExpectsRetry: checks backoff.
+func testRelayBackoffIsExponentialWithJitterAndCappedChecksBackoff(
 	ctx context.Context,
 	t *testing.T,
 	store *mocks.MockOutboxStore,
@@ -444,9 +460,9 @@ func testRelayBackoffIsExponentialWithJitterAndCappedRest5(
 
 	wantNext := []time.Duration{
 		time.Second,
-		seconds2 * time.Second,
-		seconds4 * time.Second,
-		seconds5 * time.Second,
+		seconds * time.Second,
+		secondsBackoff * time.Second,
+		secondsChecksBackoff * time.Second,
 	}
 
 	for i := range recs {
@@ -458,7 +474,7 @@ func testRelayBackoffIsExponentialWithJitterAndCappedRest5(
 	}
 
 	relay := outbox.NewRelay(
-		new(relayConfig(sendBatch10, 1, maxAttempts10)),
+		new(relayConfig(relayConfigInputBackoff, 1, relayConfigInputBackoff)),
 		relayTx(t),
 		store,
 		sink,
@@ -480,12 +496,18 @@ func testRelayBackoffIsExponentialWithJitterAndCappedRest5(
 		(*caps),
 	)
 
-	testRelayBackoffIsExponentialWithJitterAndCappedRest(ctx, t, store, sink, sendErr)
+	testRelayBackoffIsExponentialWithJitterAndCappedDefaultJitter(
+		ctx,
+		t,
+		store,
+		sink,
+		sendErr,
+	)
 }
 
-// testRelayBackoffIsExponentialWithJitterAndCappedRest continues
-// TestRelay_BackoffIsExponentialWithJitterAndCapped with its remaining steps.
-func testRelayBackoffIsExponentialWithJitterAndCappedRest(
+// testRelayBackoffIsExponentialWithJitterAndCappedDefaultJitter continues
+// TestRelay_BackoffIsExponentialWithJitterAndCapped: default jitter.
+func testRelayBackoffIsExponentialWithJitterAndCappedDefaultJitter(
 	ctx context.Context,
 	t *testing.T,
 	store *mocks.MockOutboxStore,
@@ -494,7 +516,7 @@ func testRelayBackoffIsExponentialWithJitterAndCappedRest(
 ) {
 	t.Helper()
 
-	one := outboxRecords(1, attempts3)
+	one := outboxRecords(1, outboxRecordsInputJitter)
 	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 100).Return(one, nil)
 	sink.EXPECT().Send(gomock.Any(), one).Return([]error{sendErr})
 
@@ -506,7 +528,7 @@ func testRelayBackoffIsExponentialWithJitterAndCappedRest(
 		Return(nil)
 
 	defaultJitter := outbox.NewRelay(
-		new(relayConfig(sendBatch10, 1, maxAttempts10)),
+		new(relayConfig(relayConfigInputJitter, 1, relayConfigInputJitter)),
 		relayTx(t),
 		store,
 		sink,
@@ -534,8 +556,8 @@ func TestRelay_ParksAfterMaxAttempts(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockOutboxStore(ctrl)
 	sink := mocks.NewMockOutboxSink(ctrl)
-	exhausted := outboxRecords(1, attempts3)[0]
-	young := outboxRecords(1, attempts2)[0]
+	exhausted := outboxRecords(1, outboxRecordsInputAttempts)[0]
+	young := outboxRecords(1, outboxRecordsInput)[0]
 	recs := []types.OutboxRecord{exhausted, young}
 	reject := apperr.New(apperr.CodeInvalidInput, "malformed payload")
 
@@ -548,7 +570,7 @@ func TestRelay_ParksAfterMaxAttempts(t *testing.T) {
 		Times(1)
 
 	relay := outbox.NewRelay(
-		new(relayConfig(sendBatch10, 1, maxAttempts3)),
+		new(relayConfig(relayConfigInputAttempts, 1, relayConfigInputMaxAttempts)),
 		relayTx(t),
 		store,
 		sink,
@@ -583,12 +605,12 @@ func TestRelay_ReportsDepthAndLag(t *testing.T) {
 	sink := mocks.NewMockOutboxSink(ctrl)
 	metrics := mocks.NewMockMetrics(ctrl)
 
-	testRelayReportsDepthAndLagRest3(t, ctrl, store, sink, metrics)
+	testRelayReportsDepthAndLagExpectsCounters(t, ctrl, store, sink, metrics)
 }
 
-// testRelayReportsDepthAndLagRest3 continues testRelayReportsDepthAndLagRest2 with its
-// remaining steps.
-func testRelayReportsDepthAndLagRest3(
+// testRelayReportsDepthAndLagExpectsCounters continues testRelayReportsDepthAndLag:
+// expects counters.
+func testRelayReportsDepthAndLagExpectsCounters(
 	t *testing.T,
 	ctrl *gomock.Controller,
 	store *mocks.MockOutboxStore,
@@ -621,12 +643,12 @@ func testRelayReportsDepthAndLagRest3(
 		Return(passes)
 	passes.EXPECT().
 		Observe(1.0, textAudit).
-		Times(timesArg2)
+		Times(wantCalls)
 		// one claim per run, two runs
 
 	outboxRecord, retry, park := outboxRecords(1, 1)[0], outboxRecords(1, 1)[0],
 		outboxRecords(1,
-			attempts2)[0]
+			outboxRecordsInput)[0]
 	recs := []types.OutboxRecord{outboxRecord, retry, park}
 	fail := apperr.New(apperr.CodeUnavailable, textDown)
 
@@ -638,12 +660,21 @@ func testRelayReportsDepthAndLagRest3(
 	sent.EXPECT().Inc(textAudit).Times(1)
 	retried.EXPECT().Inc(textAudit).Times(1)
 
-	testRelayReportsDepthAndLagRest4(ctx, t, store, sink, metrics, parked, depth, lag)
+	testRelayReportsDepthAndLagExpectsGauges(
+		ctx,
+		t,
+		store,
+		sink,
+		metrics,
+		parked,
+		depth,
+		lag,
+	)
 }
 
-// testRelayReportsDepthAndLagRest4 continues testRelayReportsDepthAndLagRest3 with its
-// remaining steps.
-func testRelayReportsDepthAndLagRest4(
+// testRelayReportsDepthAndLagExpectsGauges continues
+// testRelayReportsDepthAndLagExpectsCounters: expects gauges.
+func testRelayReportsDepthAndLagExpectsGauges(
 	ctx context.Context,
 	t *testing.T,
 	store *mocks.MockOutboxStore,
@@ -664,11 +695,11 @@ func testRelayReportsDepthAndLagRest4(
 			},
 			nil,
 		)
-	depth.EXPECT().Set(float64(float64Arg7), textAudit)
-	lag.EXPECT().Set(float64(float64Arg90), textAudit)
+	depth.EXPECT().Set(float64(gaugeReadingGauges), textAudit)
+	lag.EXPECT().Set(float64(gaugeReadingExpectsGauges), textAudit)
 
 	relay := outbox.NewRelay(
-		new(relayConfig(sendBatch10, 1, maxAttempts2)),
+		new(relayConfig(relayConfigInputGauges, 1, relayConfigInputExpectsGauges)),
 		relayTx(t),
 		store,
 		sink,
@@ -707,7 +738,7 @@ func TestRelay_ClaimErrorIsNotRetried(t *testing.T) {
 		Return(nil, apperr.New(apperr.CodeUnavailable, "db down")).Times(1)
 
 	relay := outbox.NewRelay(
-		new(relayConfig(sendBatch10, 1, maxAttempts3)),
+		new(relayConfig(relayConfigInputRetried, 1, relayConfigInputNotRetried)),
 		relayTx(t),
 		store,
 		sink,
@@ -738,7 +769,7 @@ func TestRelay_FinalizeErrorIsReturnedWithoutStoppingOtherRows(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockOutboxStore(ctrl)
 	sink := mocks.NewMockOutboxSink(ctrl)
-	recs := outboxRecords(outboxRecordsArg2, 1)
+	recs := outboxRecords(outboxRecordsInput, 1)
 
 	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 100).Return(recs, nil)
 	sink.EXPECT().Send(gomock.Any(), recs).Return([]error{nil, nil})
@@ -748,7 +779,7 @@ func TestRelay_FinalizeErrorIsReturnedWithoutStoppingOtherRows(t *testing.T) {
 	store.EXPECT().MarkSent(gomock.Any(), recs[1].ID).Return(nil)
 
 	relay := outbox.NewRelay(
-		new(relayConfig(sendBatch10, 1, maxAttempts3)),
+		new(relayConfig(relayConfigInputRows, 1, relayConfigInputOtherRows)),
 		relayTx(t),
 		store,
 		sink,
@@ -796,7 +827,7 @@ func TestRelayConfig_Validate(t *testing.T) {
 		textMax:         func(c *outbox.RelayConfig) { c.MaxBackoff = time.Millisecond },
 	}
 	for name, mutate := range broken {
-		cfg := relayConfig(sendBatch10, 1, maxAttempts3)
+		cfg := relayConfig(relayConfigInputValidate, 1, relayConfigInputConfigValidate)
 		mutate(&cfg)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(cfg.Validate()), name)
 	}
@@ -853,11 +884,11 @@ func TestRelay_SpansRunsAndLogsStatsFailure(t *testing.T) {
 	metrics.EXPECT().
 		Counter(gomock.Any(), gomock.Any(), textLane).
 		Return(mocks.NewMockCounter(ctrl)).
-		Times(timesArg3)
+		Times(wantCallsFailure)
 	metrics.EXPECT().
 		Gauge(gomock.Any(), gomock.Any(), textLane).
 		Return(gauge).
-		Times(timesArg2)
+		Times(wantCalls)
 
 	passes := mocks.NewMockHistogram(ctrl)
 	metrics.EXPECT().
@@ -873,15 +904,15 @@ func TestRelay_SpansRunsAndLogsStatsFailure(t *testing.T) {
 	tracer.EXPECT().
 		Start(gomock.Any(), "outbox.relay.run").
 		Return(ctx, span).
-		Times(timesArg2)
-	span.EXPECT().SetAttribute("outbox.lane", textAudit).Times(timesArg2)
+		Times(wantCalls)
+	span.EXPECT().SetAttribute("outbox.lane", textAudit).Times(wantCalls)
 	span.EXPECT().RecordError(gomock.Any()).Times(1)
 	span.EXPECT().SetStatus(interfaces.SpanStatusError, gomock.Any()).Times(1)
-	span.EXPECT().End().Times(timesArg2)
+	span.EXPECT().End().Times(wantCalls)
 	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 100).Return(nil, claimErr)
 
 	relay := outbox.NewRelay(
-		new(relayConfig(sendBatch10, 1, maxAttempts3)),
+		new(relayConfig(relayConfigInputFailure, 1, relayConfigInputStatsFailure)),
 		relayTx(t),
 		store,
 		sink,
@@ -919,7 +950,7 @@ func TestRelay_CancelledRunLeavesFailedRowsLeased(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockOutboxStore(ctrl)
 	sink := mocks.NewMockOutboxSink(ctrl)
-	recs := outboxRecords(outboxRecordsArg2, 1)
+	recs := outboxRecords(outboxRecordsInput, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	defer cancel()
@@ -937,7 +968,7 @@ func TestRelay_CancelledRunLeavesFailedRowsLeased(t *testing.T) {
 	store.EXPECT().MarkSent(gomock.Any(), recs[0].ID).Return(nil).Times(1)
 
 	relay := outbox.NewRelay(
-		new(relayConfig(sendBatch10, 1, 1)),
+		new(relayConfig(relayConfigInputLeased, 1, 1)),
 		relayTx(t),
 		store,
 		sink,
@@ -992,12 +1023,12 @@ func TestRelay_ParkOnPermanentParksAtFirstPermanentFailure(t *testing.T) {
 		)
 	})
 
-	testRelayParkOnPermanentParksAtFirstPermanentFailureRest(t, reject)
+	testRelayParkOnPermanentParksAtFirstPermanentFailureDisabled(t, reject)
 }
 
-// testRelayParkOnPermanentParksAtFirstPermanentFailureRest continues
-// TestRelay_ParkOnPermanentParksAtFirstPermanentFailure with its remaining steps.
-func testRelayParkOnPermanentParksAtFirstPermanentFailureRest(
+// testRelayParkOnPermanentParksAtFirstPermanentFailureDisabled continues
+// TestRelay_ParkOnPermanentParksAtFirstPermanentFailure: disabled.
+func testRelayParkOnPermanentParksAtFirstPermanentFailureDisabled(
 	t *testing.T,
 	reject *apperr.AppError,
 ) {
@@ -1090,12 +1121,12 @@ func TestLoadRelayConfig_OverlaysDefaultsAndRejectsInvalid(t *testing.T) {
 		assert.Equal(t, want, cfg)
 	})
 
-	testLoadRelayConfigOverlaysDefaultsAndRejectsInvalidRest(t, set)
+	testLoadRelayConfigOverlaysDefaultsAndRejectsInvalidInvalid(t, set)
 }
 
-// testLoadRelayConfigOverlaysDefaultsAndRejectsInvalidRest continues
-// TestLoadRelayConfig_OverlaysDefaultsAndRejectsInvalid with its remaining steps.
-func testLoadRelayConfigOverlaysDefaultsAndRejectsInvalidRest(
+// testLoadRelayConfigOverlaysDefaultsAndRejectsInvalidInvalid continues
+// TestLoadRelayConfig_OverlaysDefaultsAndRejectsInvalid: invalid.
+func testLoadRelayConfigOverlaysDefaultsAndRejectsInvalidInvalid(
 	t *testing.T,
 	set func(mut func(*outbox.RelayConfig)) func(string, any) error,
 ) {
@@ -1131,3 +1162,122 @@ func testLoadRelayConfigOverlaysDefaultsAndRejectsInvalidRest(
 		assert.Contains(t, err.Error(), "load outbox relay config")
 	})
 }
+
+const (
+	// batchSize is the batch size the tests use.
+	batchSize = 100
+
+	// dateInputRelayNow is the date input relay now the tests use.
+	dateInputRelayNow = 10
+
+	// relayNowHour is the date input relay now13 the tests use.
+	relayNowHour = 9
+
+	// relayNowMinute is the date input relay now14 the tests use.
+	relayNowMinute = 12
+
+	// gaugeReadingExpectsGauges is the gauge reading expects gauges the tests use.
+	gaugeReadingExpectsGauges = 90
+
+	// gaugeReadingGauges is the gauge reading gauges the tests use.
+	gaugeReadingGauges = 7
+
+	// maxBackoff is the max backoff the tests use.
+	maxBackoff = 10
+
+	// observeInputExpectsMetrics is the observe input expects metrics the tests use.
+	observeInputExpectsMetrics = 1.0
+
+	// offsetOnSuccess is the offset on success the tests use.
+	offsetOnSuccess = 4
+
+	// offsetSentOnSuccess is the offset sent on success the tests use.
+	offsetSentOnSuccess = 5
+
+	// offsetSuccess is the offset success the tests use.
+	offsetSuccess = 2
+
+	// outboxRecordsInputAttempts is the outbox records input attempts the tests use.
+	outboxRecordsInputAttempts = 3
+
+	// outboxRecordsInputJitter is the outbox records input jitter the tests use.
+	outboxRecordsInputJitter = 3
+
+	// outboxRecordsInputRows is the outbox records input rows the tests use.
+	outboxRecordsInputRows = 3
+
+	// outboxRecordsInputSuccess is the outbox records input success the tests use.
+	outboxRecordsInputSuccess = 5
+
+	// relayConfigInputAttempts is the relay config input attempts the tests use.
+	relayConfigInputAttempts = 10
+
+	// relayConfigInputBackoff is the relay config input backoff the tests use.
+	relayConfigInputBackoff = 10
+
+	// relayConfigInputConfigValidate is the relay config input config validate the tests
+	// use.
+	relayConfigInputConfigValidate = 3
+
+	// relayConfigInputExpectsGauges is the relay config input expects gauges the tests use.
+	relayConfigInputExpectsGauges = 2
+
+	// relayConfigInputFailure is the relay config input failure the tests use.
+	relayConfigInputFailure = 10
+
+	// relayConfigInputGauges is the relay config input gauges the tests use.
+	relayConfigInputGauges = 10
+
+	// relayConfigInputJitter is the relay config input jitter the tests use.
+	relayConfigInputJitter = 10
+
+	// relayConfigInputLeased is the relay config input leased the tests use.
+	relayConfigInputLeased = 10
+
+	// relayConfigInputMaxAttempts is the relay config input max attempts the tests use.
+	relayConfigInputMaxAttempts = 3
+
+	// relayConfigInputNotRetried is the relay config input not retried the tests use.
+	relayConfigInputNotRetried = 3
+
+	// relayConfigInputOtherRows is the relay config input other rows the tests use.
+	relayConfigInputOtherRows = 3
+
+	// relayConfigInputRetried is the relay config input retried the tests use.
+	relayConfigInputRetried = 10
+
+	// relayConfigInputRows is the relay config input rows the tests use.
+	relayConfigInputRows = 10
+
+	// relayConfigInputSend is the relay config input send the tests use.
+	relayConfigInputSend = 10
+
+	// relayConfigInputStatsFailure is the relay config input stats failure the tests use.
+	relayConfigInputStatsFailure = 3
+
+	// relayConfigInputSuccess is the relay config input success the tests use.
+	relayConfigInputSuccess = 2
+
+	// relayConfigInputValidate is the relay config input validate the tests use.
+	relayConfigInputValidate = 10
+
+	// secondsBackoff is the seconds backoff the tests use.
+	secondsBackoff = 4
+
+	// secondsChecksBackoff is the seconds checks backoff the tests use.
+	secondsChecksBackoff = 5
+
+	// wantAttemptsCapped is the expected attempts capped.
+	wantAttemptsCapped = 4
+
+	// wantCallsFailure is the expected calls failure.
+	wantCallsFailure = 3
+
+	// wantTxs is the expected txs.
+	wantTxs = 3
+)
+
+const (
+	// textConcurrency is the literal "concurrency".
+	textConcurrency = "concurrency"
+)

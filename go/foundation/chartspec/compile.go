@@ -106,7 +106,7 @@ func aggregateQuery(
 ) (types.AggregateQuery, error) {
 	spec := *specRef
 
-	queryBuilderValue := queryBuilder{
+	currentQueryBuilder := queryBuilder{
 		query: types.AggregateQuery{
 			Cube:      spec.Cube,
 			Filter:    spec.Filter,
@@ -118,22 +118,22 @@ func aggregateQuery(
 	}
 
 	for _, ref := range queryRefs(&spec, rows, cols) {
-		err := queryBuilderValue.add(ref)
+		err := currentQueryBuilder.add(ref)
 		if err != nil {
 			return types.AggregateQuery{}, err
 		}
 	}
 
 	for _, o := range spec.Sort {
-		if !slices.Contains(queryBuilderValue.query.GroupBy, o.Field) &&
-			!queryBuilderValue.seenMeasure[o.Field] {
+		if !slices.Contains(currentQueryBuilder.query.GroupBy, o.Field) &&
+			!currentQueryBuilder.seenMeasure[o.Field] {
 			return types.AggregateQuery{}, invalid(
 				"sort key " + o.Field + " is neither grouped by nor computed",
 			)
 		}
 	}
 
-	return queryBuilderValue.query, nil
+	return currentQueryBuilder.query, nil
 }
 
 // queryBuilder accumulates the group-by and measure lists of a query.

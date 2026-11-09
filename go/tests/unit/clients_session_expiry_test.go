@@ -71,7 +71,11 @@ func TestProvider_ExpiryAwareCache(t *testing.T) {
 		reads int
 	}{
 		{time.Now().Add(time.Hour), "far future is cached", 1},
-		{time.Now().Add(session.ExpirySkew / 2), "inside the skew is refetched", cases2},
+		{
+			time.Now().Add(session.ExpirySkew / 2),
+			"inside the skew is refetched",
+			casesCache,
+		},
 		{time.Time{}, "zero never expires", 1},
 	}
 	for _, testCase := range cases {
@@ -99,8 +103,13 @@ func TestProvider_ExpiryAwareCache(t *testing.T) {
 		Times(1)
 
 	p := expiryProvider[sessionCred](plain)
-	for range iterations2 {
+	for range iterations {
 		_, err := p.Resolve(ctx, ref)
 		require.NoError(t, err)
 	}
 }
+
+const (
+	// casesCache is the cases cache the tests use.
+	casesCache = 2
+)

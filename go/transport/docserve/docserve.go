@@ -376,13 +376,13 @@ func (s *Server) readSpecs() ([]spec, error) {
 	var out []spec
 
 	for _, e := range entries {
-		specValue, ok, err := s.readSpec(dir, e)
+		currentSpec, ok, err := s.readSpec(dir, e)
 		if err != nil {
 			return nil, err
 		}
 
 		if ok {
-			out = append(out, specValue)
+			out = append(out, currentSpec)
 		}
 	}
 

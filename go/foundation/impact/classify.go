@@ -39,13 +39,13 @@ func Classify(classes []Class, changed []string) ([]bool, error) {
 // compiling them only until the first hit.
 func classMatches(c Class, changed []string) (bool, error) {
 	for _, p := range c.Patterns {
-		regexpValue, err := regexp.Compile(p)
+		pattern, err := regexp.Compile(p)
 		if err != nil {
 			return false, apperr.Wrap(err, apperr.CodeInvalidInput,
 				"change class "+c.Name+": pattern "+p)
 		}
 
-		if slices.ContainsFunc(changed, regexpValue.MatchString) {
+		if slices.ContainsFunc(changed, pattern.MatchString) {
 			return true, nil
 		}
 	}

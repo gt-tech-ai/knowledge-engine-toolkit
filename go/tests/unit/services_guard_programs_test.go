@@ -14,7 +14,7 @@ import (
 
 // programRows are expr rows (one with a for) whose verdicts over guardFiles are known.
 func programRows() []types.GuardRow {
-	deploy := types.FileSelector{Globs: []string{textDeploy2}}
+	deploy := types.FileSelector{Globs: []string{textDeployGlob}}
 
 	return []types.GuardRow{
 		{
@@ -58,7 +58,7 @@ func TestServicesGuard_SharedPrograms(t *testing.T) {
 
 	var group sync.WaitGroup
 
-	got := make([]map[string]types.Verdict, size2)
+	got := make([]map[string]types.Verdict, makeInput)
 
 	for i := range got {
 		group.Go(
@@ -73,7 +73,7 @@ func TestServicesGuard_SharedPrograms(t *testing.T) {
 	}
 
 	bad := []types.GuardRow{{Name: textBad, Kind: types.GuardExpr, Expr: "files.("}}
-	for range iterations2 {
+	for range iterations {
 		_, err := guard.NewFromConfig(bad, &guard.Deps{Programs: progs})
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -95,12 +95,12 @@ func BenchmarkNewFromConfig_Programs(b *testing.B) {
 		}
 	})
 
-	benchmarkNewFromConfigProgramsRest(b, rows)
+	benchmarkNewFromConfigProgramsSharedAndFresh(b, rows)
 }
 
-// benchmarkNewFromConfigProgramsRest continues BenchmarkNewFromConfig_Programs with
-// its remaining steps.
-func benchmarkNewFromConfigProgramsRest(b *testing.B, rows []types.GuardRow) {
+// benchmarkNewFromConfigProgramsSharedAndFresh continues
+// BenchmarkNewFromConfig_Programs: shared and fresh.
+func benchmarkNewFromConfigProgramsSharedAndFresh(b *testing.B, rows []types.GuardRow) {
 	b.Helper()
 
 	b.Run(textShared, func(b *testing.B) {

@@ -154,9 +154,9 @@ func TestServicesToolrun_EachTargetFansOut(t *testing.T) {
 	runner := mocks.NewMockCommandRunner(ctrl)
 	runner.EXPECT().Exists(textGolangciLint).Return(true).AnyTimes()
 	runner.EXPECT().RunBuffered(gomock.Any(), filepath.Join(toolrunRoot, textA),
-		textGolangciLint, textRun, ".", textFix2).Return(interfaces.CmdResult{})
+		textGolangciLint, textRun, ".", textFixFlag).Return(interfaces.CmdResult{})
 	runner.EXPECT().RunBuffered(gomock.Any(), filepath.Join(toolrunRoot, textB),
-		textGolangciLint, textRun, ".", textFix2).Return(interfaces.CmdResult{
+		textGolangciLint, textRun, ".", textFixFlag).Return(interfaces.CmdResult{
 		ExitCode: 1,
 		Err:      apperr.New(apperr.CodeInternal, "exit 1"),
 		Stdout:   []byte(textBad),
@@ -165,12 +165,12 @@ func TestServicesToolrun_EachTargetFansOut(t *testing.T) {
 	tr := newToolRunner(t, runner, toolOf(ctrl, textGolangciLint), nil)
 	res, err := tr.Run(t.Context(), memoryCodebase(t, lintModules()), &types.ToolRun{
 		Name: textGolangciLint, Verb: textLint, Tool: textGolangciLint,
-		Args: []string{textRun, textTarget2}, FixArgs: []string{textFix2},
+		Args: []string{textRun, textTargetLower}, FixArgs: []string{textFixFlag},
 		Targets: types.TargetSpec{Kind: "go_modules"},
 		Each:    types.EachTarget, Cwd: types.CwdTarget,
 	}, types.RunOptions{Fix: true})
 	require.NoError(t, err)
-	require.Len(t, res, wantResLen2)
+	require.Len(t, res, wantResLenOut)
 	assert.Equal(t, "golangci-lint a", res[0].Name)
 	assert.Equal(t, textLint, res[0].Group)
 	assert.Equal(t, types.StatusPass, res[0].Status)
@@ -204,7 +204,7 @@ func TestServicesToolrun_EachRunAndParse(t *testing.T) {
 		memoryCodebase(t, map[string]string{"a.sh": "", "b/c.sh": "", "d.md": ""}),
 		&types.ToolRun{
 			Name: textShellcheck, Verb: textLint, Tool: textShellcheck, Parse: textGcc,
-			Args:    []string{"-f", textGcc, textTarget2},
+			Args:    []string{"-f", textGcc, textTargetLower},
 			Targets: types.TargetSpec{Kind: textFiles, Glob: "**/*.sh"},
 		}, types.RunOptions{})
 	require.NoError(t, err)
@@ -238,24 +238,30 @@ func TestServicesToolrun_Cache(t *testing.T) {
 	runner := mocks.NewMockCommandRunner(ctrl)
 	runner.EXPECT().Exists(textVet).Return(true).AnyTimes()
 	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), textVet, gomock.Any()).
-		Return(interfaces.CmdResult{}).Times(timesArg3)
+		Return(interfaces.CmdResult{}).Times(wantCallsCache)
 
 	toolRunner := newToolRunner(t, runner, toolOf(ctrl, textVet), cache)
 	run := types.ToolRun{
-		Name: textVet, Verb: textLint, Tool: textVet, Args: []string{textTarget2},
-		Targets: types.TargetSpec{Kind: "go_modules"}, Each: types.EachTarget,
-		Inputs: types.FileSelector{Roots: []string{textTarget2}, Exts: []string{textGo3}},
+		Name:    textVet,
+		Verb:    textLint,
+		Tool:    textVet,
+		Args:    []string{textTargetLower},
+		Targets: types.TargetSpec{Kind: "go_modules"},
+		Each:    types.EachTarget,
+		Inputs: types.FileSelector{
+			Roots: []string{textTargetLower},
+			Exts:  []string{textGoExt},
+		},
 	}
 
 	t.Helper()
 
-	testServicesToolrunCacheRest3(t, ctrl, runner, toolRunner, &run)
+	testServicesToolrunCacheHitsAndSkips(t, ctrl, runner, toolRunner, &run)
 }
 
-// testServicesToolrunCacheRest3 continues testServicesToolrunCacheRest2 with its
-// remaining
-// steps.
-func testServicesToolrunCacheRest3(
+// testServicesToolrunCacheHitsAndSkips continues testServicesToolrunCache: hits and
+// skips.
+func testServicesToolrunCacheHitsAndSkips(
 	t *testing.T,
 	ctrl *gomock.Controller,
 	runner *mocks.MockCommandRunner,
@@ -295,9 +301,9 @@ func testServicesToolrunCacheRest3(
 	uncached.Each = types.EachRun
 
 	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), textVet, textA, textB).
-		Return(interfaces.CmdResult{}).Times(timesArg2)
+		Return(interfaces.CmdResult{}).Times(wantCalls)
 
-	for range iterations2 {
+	for range iterations {
 		res, err = toolRunner.Run(
 			t.Context(),
 			memoryCodebase(t, files),
@@ -308,13 +314,12 @@ func testServicesToolrunCacheRest3(
 		assert.Equal(t, types.StatusPass, res[0].Status)
 	}
 
-	testServicesToolrunCacheRest4(t, ctrl, runner, run, files)
+	testServicesToolrunCacheOffCache(t, ctrl, runner, run, files)
 }
 
-// testServicesToolrunCacheRest4 continues testServicesToolrunCacheRest3 with its
-// remaining
-// steps.
-func testServicesToolrunCacheRest4(
+// testServicesToolrunCacheOffCache continues testServicesToolrunCacheHitsAndSkips: off
+// cache.
+func testServicesToolrunCacheOffCache(
 	t *testing.T,
 	ctrl *gomock.Controller,
 	runner *mocks.MockCommandRunner,
@@ -328,7 +333,7 @@ func testServicesToolrunCacheRest4(
 	var err error
 
 	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), textVet, gomock.Any()).
-		Return(interfaces.CmdResult{}).Times(timesArg4)
+		Return(interfaces.CmdResult{}).Times(wantCallsOffCache)
 
 	off, err := toolrun.NewFromConfig(toolrun.Config{}, &toolrun.Deps{
 		Decorations: fixtures.Decorations(),
@@ -345,7 +350,7 @@ func testServicesToolrunCacheRest4(
 	})
 	require.NoError(t, err)
 
-	for range iterations2 {
+	for range iterations {
 		res, err = off.Run(t.Context(), memoryCodebase(t, files), run, types.RunOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, types.StatusPass, res[0].Status, "the off cache never skips")
@@ -383,7 +388,7 @@ func TestServicesToolrun_RunEditMissesCache(t *testing.T) {
 	run := types.ToolRun{
 		Name: textVet, Verb: textLint, Tool: textVet, Args: []string{"."},
 		Each:   types.EachRun,
-		Inputs: types.FileSelector{Exts: []string{textGo3}},
+		Inputs: types.FileSelector{Exts: []string{textGoExt}},
 	}
 	edited := run
 
@@ -424,7 +429,7 @@ func TestServicesToolrun_NoTargetsSkips(t *testing.T) {
 		res, err := tr.Run(t.Context(), memoryCodebase(t, map[string]string{textAMd: ""}),
 			&types.ToolRun{
 				Name: textShellcheck, Verb: textLint, Tool: textShellcheck,
-				Args:    []string{textTarget2},
+				Args:    []string{textTargetLower},
 				Targets: types.TargetSpec{Kind: textFiles, Glob: "**/*.sh"},
 				Each:    each,
 			}, types.RunOptions{})
@@ -464,7 +469,7 @@ func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 		textBuf, "breaking").Return(interfaces.CmdResult{
 		ExitCode: 1, Err: apperr.New(apperr.CodeInternal, "exit 1"),
 		Stdout: []byte("removed field"),
-	}).Times(timesArg2)
+	}).Times(wantCalls)
 
 	toolRunner := newToolRunner(t, runner, toolOf(ctrl, textBuf), cache)
 	codebase := memoryCodebase(
@@ -477,7 +482,7 @@ func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 		Inputs: types.FileSelector{Roots: []string{"zarf/proto"}},
 	}
 
-	for range iterations2 {
+	for range iterations {
 		res, opErr := toolRunner.Run(t.Context(), codebase, &run, types.RunOptions{})
 		require.NoError(t, opErr)
 		require.Len(t, res, 1)
@@ -598,3 +603,19 @@ func TestServicesToolrun_Env(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusPass, res[0].Status)
 }
+
+const (
+	// wantCallsCache is the expected calls cache.
+	wantCallsCache = 3
+
+	// wantCallsOffCache is the expected calls off cache.
+	wantCallsOffCache = 4
+
+	// wantResLenOut is the expected res len out.
+	wantResLenOut = 2
+)
+
+const (
+	// textTargetLower is the literal "{target}".
+	textTargetLower = "{target}"
+)

@@ -84,13 +84,13 @@ func fieldOf[T any](node Node, name string) (T, error) {
 		return zero, nil
 	}
 
-	valueValue, found := value.(T)
+	item, found := value.(T)
 	if !found {
 		return zero, apperr.New(apperr.CodeInvalidInput,
 			"chartspec: field "+name+" of "+node.Kind+" has the wrong type")
 	}
 
-	return valueValue, nil
+	return item, nil
 }
 
 // spec decodes the root node.
@@ -376,13 +376,13 @@ func timeBound(n Node, name string) (time.Time, error) {
 		return time.Time{}, err
 	}
 
-	timeValue, err := time.Parse(time.RFC3339Nano, s)
+	instant, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
 		return time.Time{}, apperr.Wrap(err, apperr.CodeInvalidInput,
 			"chartspec: invalid time "+name)
 	}
 
-	return timeValue, nil
+	return instant, nil
 }
 
 // filterNode decodes a filter node at depth; a group's members come back non-nil even

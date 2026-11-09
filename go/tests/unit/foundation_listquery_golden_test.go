@@ -63,23 +63,23 @@ func loadFilterGolden(tb testing.TB) (filterGolden, *listquery.Map) {
 	)
 	require.NoError(tb, err)
 
-	var filterGoldenValue filterGolden
+	var currentFilterGolden filterGolden
 
-	require.NoError(tb, json.Unmarshal(raw, &filterGoldenValue))
+	require.NoError(tb, json.Unmarshal(raw, &currentFilterGolden))
 
 	ctors := map[string]func(string) listquery.Field{
 		textString: listquery.String, textID: listquery.ID, textInt: listquery.Int,
 		"float": listquery.Float, "bool": listquery.Bool, "time": listquery.Time,
 	}
-	mapValue := listquery.NewMap()
+	fieldMap := listquery.NewMap()
 
-	for name, typ := range filterGoldenValue.SchemaFields {
+	for name, typ := range currentFilterGolden.SchemaFields {
 		ctor, ok := ctors[typ]
 		require.True(tb, ok, "unknown field type %q", typ)
-		mapValue.Add(ctor(name))
+		fieldMap.Add(ctor(name))
 	}
 
-	return filterGoldenValue, mapValue
+	return currentFilterGolden, fieldMap
 }
 
 // filterWire renders a parsed filter in the corpus's wire shape: a clause as
@@ -167,29 +167,29 @@ func TestListQueryGolden_ParsesCorpus(t *testing.T) {
 	t.Parallel()
 
 	g, m := loadFilterGolden(t)
-	for _, filterGoldenCases2 := range g.Cases {
-		got, err := listquery.Parse(m, filterGoldenCases2.Input)
-		if filterGoldenCases2.Want.ErrorCode != "" {
-			require.Error(t, err, filterGoldenCases2.Name)
+	for _, secondFilterGoldenCases := range g.Cases {
+		got, err := listquery.Parse(m, secondFilterGoldenCases.Input)
+		if secondFilterGoldenCases.Want.ErrorCode != "" {
+			require.Error(t, err, secondFilterGoldenCases.Name)
 			assert.Equal(
 				t,
-				filterGoldenCases2.Want.ErrorCode,
+				secondFilterGoldenCases.Want.ErrorCode,
 				apperr.Code(err),
-				filterGoldenCases2.Name,
+				secondFilterGoldenCases.Name,
 			)
 
 			continue
 		}
 
-		require.NoError(t, err, filterGoldenCases2.Name)
+		require.NoError(t, err, secondFilterGoldenCases.Name)
 
 		gotJSON, err := json.Marshal(filterWire(got))
 		require.NoError(t, err)
 		assert.Equal(
 			t,
-			canonicalJSON(t, filterGoldenCases2.Want.Filter),
+			canonicalJSON(t, secondFilterGoldenCases.Want.Filter),
 			canonicalJSON(t, gotJSON),
-			filterGoldenCases2.Name,
+			secondFilterGoldenCases.Name,
 		)
 	}
 }
@@ -208,29 +208,29 @@ func TestListQueryGolden_ParsesCorpus(t *testing.T) {
 func TestParseFilter_MatchesParse(t *testing.T) {
 	t.Parallel()
 
-	g, mapValue := loadFilterGolden(t)
-	for _, filterGoldenCases2 := range g.Cases {
-		want, wantErr := listquery.Parse(mapValue, filterGoldenCases2.Input)
+	g, fieldMap := loadFilterGolden(t)
+	for _, secondFilterGoldenCases := range g.Cases {
+		want, wantErr := listquery.Parse(fieldMap, secondFilterGoldenCases.Input)
 
 		var filterNode types.FilterNode
 
 		got, gotErr := types.Filter(
 			nil,
 		), json.Unmarshal(
-			[]byte(filterGoldenCases2.Input),
+			[]byte(secondFilterGoldenCases.Input),
 			&filterNode,
 		)
 		if gotErr == nil {
-			got, gotErr = listquery.ParseFilter(mapValue, filterNode)
+			got, gotErr = listquery.ParseFilter(fieldMap, filterNode)
 		}
 
 		assert.Equal(
 			t,
 			apperr.Code(wantErr),
 			apperr.Code(gotErr),
-			filterGoldenCases2.Name,
+			secondFilterGoldenCases.Name,
 		)
-		assert.Equal(t, want, got, filterGoldenCases2.Name)
+		assert.Equal(t, want, got, secondFilterGoldenCases.Name)
 	}
 }
 
@@ -251,7 +251,7 @@ func TestParseFilter_MatchesParse(t *testing.T) {
 func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 	t.Parallel()
 
-	_, mapValue := loadFilterGolden(t)
+	_, fieldMap := loadFilterGolden(t)
 	clause := func(v any) types.FilterNode {
 		return types.FilterNode{
 			Clause: &types.FilterNodeClause{
@@ -262,7 +262,7 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 		}
 	}
 
-	filter, err := listquery.ParseFilter(mapValue, clause(float64(float64Arg3)))
+	filter, err := listquery.ParseFilter(fieldMap, clause(float64(clauseInput)))
 	require.NoError(t, err)
 	assert.Equal(
 		t,
@@ -270,7 +270,7 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 		filter,
 	)
 
-	filter, err = listquery.ParseFilter(mapValue, types.FilterNode{})
+	filter, err = listquery.ParseFilter(fieldMap, types.FilterNode{})
 	require.NoError(t, err)
 	assert.True(t, filter.IsEmpty())
 
@@ -281,7 +281,7 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 
 	twoArms := clause(float64(1))
 
-	twoArms.Or = []types.FilterNode{clause(float64(float64Arg2))}
+	twoArms.Or = []types.FilterNode{clause(float64(clauseInputTree))}
 
 	withOp := func(op types.FilterOperator) types.FilterNode {
 		n := clause(float64(1))
@@ -292,7 +292,7 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 	}
 
 	for name, filterNode := range map[string]types.FilterNode{
-		"fraction":          clause(clauseArg1p5),
+		"fraction":          clause(clauseInputStructuredTree),
 		"beyond 2^53":       clause(float64(1 << 53)),
 		"two arms":          twoArms,
 		"empty member":      {And: []types.FilterNode{{}}},
@@ -300,7 +300,7 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 		"empty operator":    withOp(""),
 		textUnknownOperator: withOp(textRegex),
 	} {
-		_, err := listquery.ParseFilter(mapValue, filterNode)
+		_, err := listquery.ParseFilter(fieldMap, filterNode)
 		require.Error(t, err, name)
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "%s: got %v", name, err)
 	}
@@ -317,7 +317,7 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 //     equal tree, and Parse over the string equals ParseFilter over the tree, error
 //     codes included.
 func FuzzFilterNode_RoundTrip(f *testing.F) {
-	g, mapValue := loadFilterGolden(f)
+	g, fieldMap := loadFilterGolden(f)
 	for _, c := range g.Cases {
 		f.Add(c.Input)
 	}
@@ -339,9 +339,20 @@ func FuzzFilterNode_RoundTrip(f *testing.F) {
 		require.NoError(t, json.Unmarshal(out, &again))
 		require.Equal(t, filterNode, again)
 
-		want, wantErr := listquery.Parse(mapValue, text)
-		got, gotErr := listquery.ParseFilter(mapValue, filterNode)
+		want, wantErr := listquery.Parse(fieldMap, text)
+		got, gotErr := listquery.ParseFilter(fieldMap, filterNode)
 		require.Equal(t, apperr.Code(wantErr), apperr.Code(gotErr))
 		require.Equal(t, want, got)
 	})
 }
+
+const (
+	// clauseInput is the clause input the tests use.
+	clauseInput = 3
+
+	// clauseInputStructuredTree is the clause input structured tree the tests use.
+	clauseInputStructuredTree = 1.5
+
+	// clauseInputTree is the clause input tree the tests use.
+	clauseInputTree = 2
+)

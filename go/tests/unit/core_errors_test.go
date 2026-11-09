@@ -270,14 +270,14 @@ func TestToHTTPStatus(t *testing.T) {
 		code   apperr.ErrorCode
 		status int
 	}{
-		{apperr.ErrNotFound, tests404},
-		{apperr.ErrInvalidInput, tests400},
-		{apperr.ErrUnauthorized, tests401},
-		{apperr.ErrForbidden, tests403},
-		{apperr.ErrConflict, tests409},
-		{apperr.ErrInternal, tests500},
-		{apperr.ErrTimeout, tests504},
-		{apperr.ErrUnavailable, tests503},
+		{apperr.ErrNotFound, testsHTTPStatus},
+		{apperr.ErrInvalidInput, testsToHTTPStatus},
+		{apperr.ErrUnauthorized, testsTestToHTTPStatus},
+		{apperr.ErrForbidden, wantStatusForbidden},
+		{apperr.ErrConflict, wantStatusConflict},
+		{apperr.ErrInternal, wantStatusInternal},
+		{apperr.ErrTimeout, wantStatusGatewayTimeout},
+		{apperr.ErrUnavailable, wantStatusUnavailable},
 	}
 
 	for _, tt := range tests {
@@ -472,3 +472,29 @@ func assertInternalZapFields(t *testing.T, appErr *apperr.AppError) {
 	require.True(t, ok, "expected error_message field")
 	assert.Equal(t, textDatabaseConnectionFailed, msgField.String)
 }
+
+const (
+	// testsHTTPStatus is the tests httpstatus the tests use.
+	testsHTTPStatus = 404
+
+	// testsTestToHTTPStatus is the tests test to httpstatus the tests use.
+	testsTestToHTTPStatus = 401
+
+	// wantStatusForbidden is the tests test to httpstatus13 the tests use.
+	wantStatusForbidden = 403
+
+	// wantStatusConflict is the tests test to httpstatus14 the tests use.
+	wantStatusConflict = 409
+
+	// wantStatusInternal is the tests test to httpstatus15 the tests use.
+	wantStatusInternal = 500
+
+	// wantStatusGatewayTimeout is the tests test to httpstatus16 the tests use.
+	wantStatusGatewayTimeout = 504
+
+	// wantStatusUnavailable is the tests test to httpstatus17 the tests use.
+	wantStatusUnavailable = 503
+
+	// testsToHTTPStatus is the tests to httpstatus the tests use.
+	testsToHTTPStatus = 400
+)

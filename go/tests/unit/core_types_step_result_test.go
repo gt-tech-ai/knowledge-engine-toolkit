@@ -29,9 +29,15 @@ func TestStepBuilders(t *testing.T) {
 		types.StepResult{Name: textX, Status: types.StatusWarn, Error: boom.Error()},
 		types.NewStep(textX, types.StatusWarn, boom))
 	assert.Empty(t, types.NewStep(textX, types.StatusPass, nil).Error)
-	assert.Equal(t,
-		types.StepResult{Name: textD2, Status: types.StatusWarn, Detail: []byte("a\nb")},
-		types.DetailStep(textD2, types.StatusWarn, "a\nb"))
+	assert.Equal(
+		t,
+		types.StepResult{
+			Name:   textDLower,
+			Status: types.StatusWarn,
+			Detail: []byte("a\nb"),
+		},
+		types.DetailStep(textDLower, types.StatusWarn, "a\nb"),
+	)
 	assert.Equal(t,
 		types.StepResults{{Name: "y", Status: types.StatusSkip}},
 		types.OneStep("y", types.StatusSkip, nil))

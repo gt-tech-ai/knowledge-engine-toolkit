@@ -142,21 +142,21 @@ func (v *view) yamlDocs(ctx context.Context, text string) ([]any, error) {
 // oneDoc decodes a single-document file once per snapshot.
 func (v *view) oneDoc(
 	ctx context.Context,
-	format, textValue string,
+	format, fileText string,
 	decode func(src []byte, p string) (any, error),
 ) ([]any, error) {
 	doc, err := v.snap.Memo(
 		ctx,
-		"doc|"+format+"|"+textValue,
+		"doc|"+format+"|"+fileText,
 		func(ctx context.Context) (any, error) {
-			text, err := v.Text(ctx, textValue)
+			text, err := v.Text(ctx, fileText)
 			if err != nil {
 				return nil, err
 			}
 
-			doc, err := decode(text.Bytes, textValue)
+			doc, err := decode(text.Bytes, fileText)
 			if err != nil {
-				return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+textValue)
+				return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+fileText)
 			}
 
 			return doc, nil

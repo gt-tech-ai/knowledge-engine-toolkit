@@ -36,3 +36,8 @@ func TestParseUUID(t *testing.T) {
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), textResourceID)
 }
+
+const (
+	// textResourceID is the literal "resource_id".
+	textResourceID = "resource_id"
+)

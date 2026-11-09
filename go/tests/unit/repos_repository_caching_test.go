@@ -39,31 +39,29 @@ const cacheVersion = 3
 //   - CacheKey namespaces the id under "repo:<name>:<id>".
 func TestCacheKey(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "repo:widgets:42", repository.CacheKey(textWidgets, cacheKeyArg42))
+	assert.Equal(t, "repo:widgets:42", repository.CacheKey(textWidgets, cacheKeyInput))
 }
 
-// withKeyFuncFlag names the withKeyFunc option in a signature.
-type withKeyFuncFlag bool
+// entityID is the id-extractor that enables warm-on-create.
+func entityID(e *te) string { return e.ID }
 
-// cachingRepo builds the read-through cache over store, optionally wiring the
-// id-extractor that enables warm-on-create.
+// cachingRepo builds the read-through cache over store with idOf as its id-extractor
+// (nil leaves warm-on-create off).
 func cachingRepo(
 	store interfaces.Store[te, tp, string],
 	cache interfaces.ByteCache,
-	withKeyFunc withKeyFuncFlag,
+	idOf func(*te) string,
 ) interfaces.Store[te, tp, string] {
-	cacheValue := repository.Cache[te, string]{
+	currentCache := repository.Cache[te, string]{
 		Store:   cache,
 		TTL:     time.Minute,
 		Version: cacheVersion,
-	}
-	if withKeyFunc {
-		cacheValue.IDOf = func(e *te) string { return e.ID }
+		IDOf:    idOf,
 	}
 
 	return fixtures.Must(
 		repository.NewEntity[interfaces.Repository[te, tp, string], te, tp, string](
-			fixtures.Decorations(), "repo", store, &cacheValue,
+			fixtures.Decorations(), "repo", store, &currentCache,
 		),
 	)
 }
@@ -102,7 +100,7 @@ func TestCached_Get(t *testing.T) {
 		require.NoError(t, err)
 		cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(enc, true)
 
-		got, err := cachingRepo(store, cache, true).Get(ctx, textID)
+		got, err := cachingRepo(store, cache, entityID).Get(ctx, textID)
 		require.NoError(t, err)
 		assert.Equal(t, textCached, got.Name)
 	})
@@ -119,17 +117,17 @@ func TestCached_Get(t *testing.T) {
 		store.EXPECT().Get(gomock.Any(), textID).Return(backend, nil)
 		cache.EXPECT().Set(gomock.Any(), "repo:repo:id", gomock.Any(), time.Minute)
 
-		got, err := cachingRepo(store, cache, true).Get(ctx, textID)
+		got, err := cachingRepo(store, cache, entityID).Get(ctx, textID)
 		require.NoError(t, err)
 		assert.Equal(t, "fresh", got.Name)
 		assert.NotSame(t, backend, got, "the caller gets an independent copy")
 	})
 
-	testCachedGetRest(ctx, t, stored)
+	testCachedGetMisses(ctx, t, stored)
 }
 
-// testCachedGetRest continues TestCached_Get with its remaining steps.
-func testCachedGetRest(ctx context.Context, t *testing.T, stored te) {
+// testCachedGetMisses continues TestCached_Get: misses.
+func testCachedGetMisses(ctx context.Context, t *testing.T, stored te) {
 	t.Helper()
 
 	for _, testCase := range []struct {
@@ -150,7 +148,7 @@ func testCachedGetRest(ctx context.Context, t *testing.T, stored te) {
 			store.EXPECT().Get(gomock.Any(), textID).Return(&te{ID: textID}, nil)
 			cache.EXPECT().Set(gomock.Any(), "repo:repo:id", gomock.Any(), gomock.Any())
 
-			_, err := cachingRepo(store, cache, true).Get(ctx, textID)
+			_, err := cachingRepo(store, cache, entityID).Get(ctx, textID)
 			require.NoError(t, err)
 		})
 	}
@@ -166,7 +164,7 @@ func testCachedGetRest(ctx context.Context, t *testing.T, stored te) {
 		cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(nil, false)
 		store.EXPECT().Get(gomock.Any(), textID).Return(nil, sentinel)
 
-		_, err := cachingRepo(store, cache, true).Get(ctx, textID)
+		_, err := cachingRepo(store, cache, entityID).Get(ctx, textID)
 		assert.ErrorIs(t, err, sentinel)
 	})
 }
@@ -210,7 +208,7 @@ func TestCached_Writes(t *testing.T) {
 			Return(&te{ID: textID, Name: "new"}, nil)
 		cache.EXPECT().Set(gomock.Any(), "repo:repo:id", gomock.Any(), time.Minute)
 
-		got, err := cachingRepo(store, cache, true).Create(ctx, &te{ID: textID})
+		got, err := cachingRepo(store, cache, entityID).Create(ctx, &te{ID: textID})
 		require.NoError(t, err)
 		assert.Equal(t, "new", got.Name)
 	})
@@ -223,7 +221,7 @@ func TestCached_Writes(t *testing.T) {
 		store := mocks.NewMockStore[te, tp, string](ctrl)
 		store.EXPECT().Create(gomock.Any(), gomock.Any()).Return(&te{ID: textID}, nil)
 
-		_, err := cachingRepo(store, cache, false).Create(ctx, &te{ID: textID})
+		_, err := cachingRepo(store, cache, nil).Create(ctx, &te{ID: textID})
 		require.NoError(t, err)
 	})
 
@@ -236,15 +234,15 @@ func TestCached_Writes(t *testing.T) {
 		sentinel := apperr.New(apperr.CodeConflict, "dup")
 		store.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, sentinel)
 
-		_, err := cachingRepo(store, cache, true).Create(ctx, &te{ID: textID})
+		_, err := cachingRepo(store, cache, entityID).Create(ctx, &te{ID: textID})
 		assert.ErrorIs(t, err, sentinel)
 	})
 
-	testCachedWritesRest(ctx, t)
+	testCachedWritesUpdateAndDelete(ctx, t)
 }
 
-// testCachedWritesRest continues TestCached_Writes with its remaining steps.
-func testCachedWritesRest(ctx context.Context, t *testing.T) {
+// testCachedWritesUpdateAndDelete continues TestCached_Writes: update and delete.
+func testCachedWritesUpdateAndDelete(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("update evicts on success, not on failure", func(t *testing.T) {
@@ -264,7 +262,7 @@ func testCachedWritesRest(ctx context.Context, t *testing.T) {
 		)
 		cache.EXPECT().Delete(gomock.Any(), "repo:repo:id") // exactly once (success only)
 
-		repo := cachingRepo(store, cache, true)
+		repo := cachingRepo(store, cache, entityID)
 		_, err := repo.Update(ctx, textID, &te{ID: textID})
 		require.NoError(t, err)
 
@@ -285,7 +283,7 @@ func testCachedWritesRest(ctx context.Context, t *testing.T) {
 		)
 		cache.EXPECT().Delete(gomock.Any(), "repo:repo:id") // exactly once (success only)
 
-		repo := cachingRepo(store, cache, true)
+		repo := cachingRepo(store, cache, entityID)
 		require.NoError(t, repo.Delete(ctx, textID))
 		assert.ErrorIs(t, repo.Delete(ctx, textID), sentinel)
 	})
@@ -321,7 +319,7 @@ func TestCached_ExistsAndList(t *testing.T) {
 			Get(gomock.Any(), "repo:repo:id").
 			Return(mustEncode(t, te{ID: textID}, cacheVersion), true)
 
-		ok, err := cachingRepo(store, cache, true).Exists(ctx, textID)
+		ok, err := cachingRepo(store, cache, entityID).Exists(ctx, textID)
 		require.NoError(t, err)
 		assert.True(t, ok)
 	})
@@ -336,7 +334,7 @@ func TestCached_ExistsAndList(t *testing.T) {
 		cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(nil, false)
 		store.EXPECT().Exists(gomock.Any(), textID).Return(true, nil)
 
-		ok, err := cachingRepo(store, cache, true).Exists(ctx, textID)
+		ok, err := cachingRepo(store, cache, entityID).Exists(ctx, textID)
 		require.NoError(t, err)
 		assert.True(t, ok)
 	})
@@ -351,7 +349,7 @@ func TestCached_ExistsAndList(t *testing.T) {
 			List(gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(&types.Page[te]{Total: 2}, nil)
 
-		repo := cachingRepo(store, cache, true)
+		repo := cachingRepo(store, cache, entityID)
 		page, err := repo.List(ctx, tp{}, types.PageRequest{})
 		require.NoError(t, err)
 		assert.Equal(t, int64(2), page.Total)
@@ -390,7 +388,7 @@ func TestCached_InTransaction(t *testing.T) {
 		store.EXPECT().Get(gomock.Any(), textID).Return(row, nil)
 		store.EXPECT().Exists(gomock.Any(), textID).Return(true, nil)
 
-		repo := cachingRepo(store, cache, true)
+		repo := cachingRepo(store, cache, entityID)
 		ctx := txCtx()
 
 		got, err := repo.Get(ctx, textID)
@@ -403,12 +401,15 @@ func TestCached_InTransaction(t *testing.T) {
 		interfaces.RunAfterCommit(ctx)
 	})
 
-	testCachedInTransactionRest(t, txCtx, row)
+	testCachedInTransactionAfterCommit(t, txCtx, row)
 }
 
-// testCachedInTransactionRest continues TestCached_InTransaction with its remaining
-// steps.
-func testCachedInTransactionRest(t *testing.T, txCtx func() context.Context, row *te) {
+// testCachedInTransactionAfterCommit continues TestCached_InTransaction: after commit.
+func testCachedInTransactionAfterCommit(
+	t *testing.T,
+	txCtx func() context.Context,
+	row *te,
+) {
 	t.Helper()
 
 	t.Run("create primes only after commit", func(t *testing.T) {
@@ -419,7 +420,7 @@ func testCachedInTransactionRest(t *testing.T, txCtx func() context.Context, row
 		store := mocks.NewMockStore[te, tp, string](ctrl)
 		store.EXPECT().Create(gomock.Any(), gomock.Any()).Return(row, nil).Times(2)
 
-		repo := cachingRepo(store, cache, true)
+		repo := cachingRepo(store, cache, entityID)
 
 		rolledBack := txCtx()
 		_, err := repo.Create(rolledBack, &te{Name: textUncommitted})
@@ -442,7 +443,7 @@ func testCachedInTransactionRest(t *testing.T, txCtx func() context.Context, row
 		store.EXPECT().Update(gomock.Any(), textID, gomock.Any()).Return(row, nil)
 		store.EXPECT().Delete(gomock.Any(), textID).Return(nil)
 
-		repo := cachingRepo(store, cache, true)
+		repo := cachingRepo(store, cache, entityID)
 		ctx := txCtx()
 
 		cache.EXPECT().Delete(gomock.Any(), "repo:repo:id").Times(2)
@@ -454,3 +455,13 @@ func testCachedInTransactionRest(t *testing.T, txCtx func() context.Context, row
 		interfaces.RunAfterCommit(ctx)
 	})
 }
+
+const (
+	// cacheKeyInput is the cache key input the tests use.
+	cacheKeyInput = 42
+)
+
+const (
+	// textUncommitted is the literal "uncommitted".
+	textUncommitted = "uncommitted"
+)

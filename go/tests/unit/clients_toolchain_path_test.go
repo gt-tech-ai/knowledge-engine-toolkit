@@ -12,6 +12,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -74,8 +75,7 @@ func TestClientsToolchainProvision_ResolveGoBin_EnvDriven(t *testing.T) {
 			context.Background(),
 			textRoot,
 			provisionCatalog(t),
-			false,
-			true,
+			&types.InstallToolsOptions{AutoYes: false, CheckOnly: true},
 		)
 	}
 
@@ -115,7 +115,12 @@ func TestClientsToolchainProvision_ResolveGoBin_EnvDriven(t *testing.T) {
 			t.Skip("home dir unresolvable on this host")
 		}
 
-		assert.True(t, onPath(filepath.Join(home, textGo2, textBin)),
+		assert.True(t, onPath(filepath.Join(home, textGoLower, textBin)),
 			"~/go/bin must be added to PATH, got %q", os.Getenv(textPath))
 	})
 }
+
+const (
+	// textOptToolBin is the literal "/opt/tool/bin".
+	textOptToolBin = "/opt/tool/bin"
+)

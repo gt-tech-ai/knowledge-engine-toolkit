@@ -79,15 +79,15 @@ func TestInterceptors_LaysOutTheControllerTier(t *testing.T) {
 		return textRun
 	}
 	deps := decorate.Deps{
-		RateLimiter: fixtures.StubRateLimiter(true),
+		RateLimiter: fixtures.AllowingRateLimiter(),
 		Auth:        func(context.Context, string) error { return nil },
-		Timeout:     millis5 * time.Millisecond,
+		Timeout:     timeout * time.Millisecond,
 	}
 
 	got := transport.Interceptors(textSvc, &deps, native, adapt, []string{"authn"})
 
 	assert.Equal(t, []string{textTracing, "metrics", textRun, "authn", textRun}, got)
-	require.Len(t, runs, wantRunsLen2)
+	require.Len(t, runs, wantRunsLen)
 
 	slow := func(ctx context.Context) error {
 		select {
@@ -194,7 +194,7 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 	))
 
 	limited := interceptors.ServerOptions(textProbe, &decorate.Deps{
-		RateLimiter: fixtures.StubRateLimiter(false),
+		RateLimiter: fixtures.DenyingRateLimiter(),
 	}, interceptors.Edge{})
 	assert.Equal(
 		t,
@@ -223,12 +223,15 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 	denied := serveStream(t.Context(), guarded, callback)
 	assert.Contains(t, denied, "permission denied")
 
-	testConnectServerOptionsDecoratesEveryRPCRest(t, denied)
+	testConnectServerOptionsDecoratesEveryRPCDeniedAndPanics(t, denied)
 }
 
-// testConnectServerOptionsDecoratesEveryRPCRest continues
-// TestConnectServerOptions_DecoratesEveryRPC with its remaining steps.
-func testConnectServerOptionsDecoratesEveryRPCRest(t *testing.T, denied string) {
+// testConnectServerOptionsDecoratesEveryRPCDeniedAndPanics continues
+// TestConnectServerOptions_DecoratesEveryRPC: denied and panics.
+func testConnectServerOptionsDecoratesEveryRPCDeniedAndPanics(
+	t *testing.T,
+	denied string,
+) {
 	t.Helper()
 
 	assert.NotContains(t, denied, "secret-action-detail")
@@ -314,12 +317,12 @@ func TestGRPCServerOptions_DecoratesEveryRPC(t *testing.T) {
 		return grpc_health_v1.NewHealthClient(conn)
 	}
 
-	testGRPCServerOptionsDecoratesEveryRPCRest(t, actions, serve)
+	testGRPCServerOptionsDecoratesEveryRPCChecksCalls(t, actions, serve)
 }
 
-// testGRPCServerOptionsDecoratesEveryRPCRest continues
-// TestGRPCServerOptions_DecoratesEveryRPC with its remaining steps.
-func testGRPCServerOptionsDecoratesEveryRPCRest(
+// testGRPCServerOptionsDecoratesEveryRPCChecksCalls continues
+// TestGRPCServerOptions_DecoratesEveryRPC: checks calls.
+func testGRPCServerOptionsDecoratesEveryRPCChecksCalls(
 	t *testing.T,
 	actions []string,
 	serve func(d decorate.Deps) grpc_health_v1.HealthClient,
@@ -347,7 +350,7 @@ func testGRPCServerOptionsDecoratesEveryRPCRest(
 	deny := decorate.Deps{Auth: func(context.Context, string) error {
 		return apperr.New(apperr.CodeForbidden, "denied: secret-action-detail")
 	}}
-	limited := decorate.Deps{RateLimiter: fixtures.StubRateLimiter(false)}
+	limited := decorate.Deps{RateLimiter: fixtures.DenyingRateLimiter()}
 
 	require.NoError(t, check(allow))
 	// The KE health server leaves Watch unimplemented; the stream still runs the tier.
@@ -365,3 +368,8 @@ func testGRPCServerOptionsDecoratesEveryRPCRest(
 		assert.Equal(t, "permission denied", denied.Message())
 	}
 }
+
+const (
+	// timeout is the timeout the tests use.
+	timeout = 5
+)

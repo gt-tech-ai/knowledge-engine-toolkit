@@ -169,9 +169,9 @@ func decodeKey(frontmatter *Frontmatter, key string, value *yaml.Node) error {
 		return decode(value, &frontmatter.Verified)
 	}
 
-	var valueValue any
+	var item any
 
-	err := decode(value, &valueValue)
+	err := decode(value, &item)
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func decodeKey(frontmatter *Frontmatter, key string, value *yaml.Node) error {
 		frontmatter.Extra = map[string]any{}
 	}
 
-	frontmatter.Extra[key] = valueValue
+	frontmatter.Extra[key] = item
 
 	return nil
 }

@@ -51,7 +51,16 @@ func requireIntegration(t *testing.T) {
 // enqueuedAt returns every enqueued record's creation time: fixed in the past, so
 // the record is due at once and its date-partitioned S3 key is deterministic.
 func enqueuedAt() time.Time {
-	return time.Date(year2026, 1, day2, hour3, min4, sec5, 0, time.UTC)
+	return time.Date(
+		dateInput,
+		1,
+		dateInputAt,
+		dateInputEnqueuedAt,
+		enqueuedAtHour,
+		enqueuedAtMinute,
+		0,
+		time.UTC,
+	)
 }
 
 // relaySchema is a product-shaped outbox table whose route column carries the record
@@ -172,7 +181,7 @@ func drain(t *testing.T, relay *outbox.Relay, store interfaces.OutboxStore, lane
 	t.Helper()
 
 	ctx := context.Background()
-	for range iterations10 {
+	for range iterationsDrain {
 		require.NoError(t, relay.RunOnce(ctx))
 
 		stats, err := store.Stats(ctx, lane)
@@ -202,12 +211,12 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 
 	requireIntegration(t)
 
-	testRelayEndToEndPostgresToSQSRest3(t)
+	testRelayEndToEndPostgresToSQSStartsElasticMQ(t)
 }
 
-// testRelayEndToEndPostgresToSQSRest3 continues testRelayEndToEndPostgresToSQSRest2 with
-// its remaining steps.
-func testRelayEndToEndPostgresToSQSRest3(t *testing.T) {
+// testRelayEndToEndPostgresToSQSStartsElasticMQ continues
+// testRelayEndToEndPostgresToSQS: starts elastic mq.
+func testRelayEndToEndPostgresToSQSStartsElasticMQ(t *testing.T) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -235,7 +244,7 @@ func testRelayEndToEndPostgresToSQSRest3(t *testing.T) {
 	sink, err := outboxclient.NewFromConfig(ctx, &cfg, outboxclient.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
-	ids := enqueueN(t, enqueue, textEvents, enqueueNArg25)
+	ids := enqueueN(t, enqueue, textEvents, enqueueNInput)
 	relay := outbox.NewRelay(
 		new(outbox.DefaultRelayConfig(textEvents)),
 		transactionManager,
@@ -246,12 +255,19 @@ func testRelayEndToEndPostgresToSQSRest3(t *testing.T) {
 		nil,
 	)
 
-	testRelayEndToEndPostgresToSQSRest4(t, store, api, created, ids, relay)
+	testRelayEndToEndPostgresToSQSDrainsQueueExactlyOnce(
+		t,
+		store,
+		api,
+		created,
+		ids,
+		relay,
+	)
 }
 
-// testRelayEndToEndPostgresToSQSRest4 continues testRelayEndToEndPostgresToSQSRest3 with
-// its remaining steps.
-func testRelayEndToEndPostgresToSQSRest4(
+// testRelayEndToEndPostgresToSQSDrainsQueueExactlyOnce continues
+// testRelayEndToEndPostgresToSQSStartsElasticMQ: drains queue exactly once.
+func testRelayEndToEndPostgresToSQSDrainsQueueExactlyOnce(
 	t *testing.T,
 	store interfaces.OutboxStore,
 	api *awssqs.Client,
@@ -322,8 +338,8 @@ func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 		outboxclient.Deps{},
 	)
 	require.NoError(t, err)
-	enqueueN(t, enqueue, textBurst, enqueueNArg1000)
-	enqueueN(t, enqueue, textSingle, enqueueNArg1000)
+	enqueueN(t, enqueue, textBurst, enqueueNInputRun)
+	enqueueN(t, enqueue, textSingle, enqueueNInputRun)
 
 	draining := outbox.DefaultRelayConfig(textBurst)
 
@@ -347,7 +363,7 @@ func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 
 	once, err := store.Stats(ctx, textSingle)
 	require.NoError(t, err)
-	require.Equal(t, wantPending900, once.Pending)
+	require.Equal(t, wantPending, once.Pending)
 }
 
 // TestRelay_EndToEnd_PostgresToS3ObjectLock drains a Postgres outbox into an
@@ -367,12 +383,12 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 
 	requireIntegration(t)
 
-	testRelayEndToEndPostgresToS3ObjectLockRest3(t)
+	testRelayEndToEndPostgresToS3ObjectLockStartsMinIO(t)
 }
 
-// testRelayEndToEndPostgresToS3ObjectLockRest3 continues
-// testRelayEndToEndPostgresToS3ObjectLockRest2 with its remaining steps.
-func testRelayEndToEndPostgresToS3ObjectLockRest3(t *testing.T) {
+// testRelayEndToEndPostgresToS3ObjectLockStartsMinIO continues
+// testRelayEndToEndPostgresToS3ObjectLock: starts min io.
+func testRelayEndToEndPostgresToS3ObjectLockStartsMinIO(t *testing.T) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -389,7 +405,7 @@ func testRelayEndToEndPostgresToS3ObjectLockRest3(t *testing.T) {
 		},
 	)
 
-	testRelayEndToEndPostgresToS3ObjectLockRest5(
+	testRelayEndToEndPostgresToS3ObjectLockChecksObjectKeys(
 		t,
 		store,
 		enqueue,
@@ -398,9 +414,9 @@ func testRelayEndToEndPostgresToS3ObjectLockRest3(t *testing.T) {
 	)
 }
 
-// testRelayEndToEndPostgresToS3ObjectLockRest5 continues
-// testRelayEndToEndPostgresToS3ObjectLockRest4 with its remaining steps.
-func testRelayEndToEndPostgresToS3ObjectLockRest5(
+// testRelayEndToEndPostgresToS3ObjectLockChecksObjectKeys continues
+// testRelayEndToEndPostgresToS3ObjectLock: checks object keys.
+func testRelayEndToEndPostgresToS3ObjectLockChecksObjectKeys(
 	t *testing.T,
 	store interfaces.OutboxStore,
 	enqueue func(context.Context, *types.OutboxRecord) error,
@@ -423,7 +439,7 @@ func testRelayEndToEndPostgresToS3ObjectLockRest5(
 	sink, err := outboxclient.NewFromConfig(ctx, &cfg, outboxclient.Deps{S3API: api})
 	require.NoError(t, err)
 
-	ids := enqueueN(t, enqueue, textAudit, enqueueNArg5)
+	ids := enqueueN(t, enqueue, textAudit, enqueueNInputKeys)
 	relay := outbox.NewRelay(
 		new(outbox.DefaultRelayConfig(textAudit)),
 		transactionManager,
@@ -475,12 +491,12 @@ func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 
 	requireIntegration(t)
 
-	testRelayEndToEndRoutesIsolateQueuesRest3(t)
+	testRelayEndToEndRoutesIsolateQueuesStartsElasticMQ(t)
 }
 
-// testRelayEndToEndRoutesIsolateQueuesRest3 continues
-// testRelayEndToEndRoutesIsolateQueuesRest2 with its remaining steps.
-func testRelayEndToEndRoutesIsolateQueuesRest3(t *testing.T) {
+// testRelayEndToEndRoutesIsolateQueuesStartsElasticMQ continues
+// testRelayEndToEndRoutesIsolateQueues: starts elastic mq.
+func testRelayEndToEndRoutesIsolateQueuesStartsElasticMQ(t *testing.T) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -529,7 +545,7 @@ func testRelayEndToEndRoutesIsolateQueuesRest3(t *testing.T) {
 	sink, err := outboxclient.NewFromConfig(ctx, &cfg, outboxclient.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
-	testRelayEndToEndRoutesIsolateQueuesRest5(
+	testRelayEndToEndRoutesIsolateQueuesRunsRouting(
 		t,
 		store,
 		enqueue,
@@ -541,9 +557,9 @@ func testRelayEndToEndRoutesIsolateQueuesRest3(t *testing.T) {
 	)
 }
 
-// testRelayEndToEndRoutesIsolateQueuesRest5 continues
-// testRelayEndToEndRoutesIsolateQueuesRest2 with its remaining steps.
-func testRelayEndToEndRoutesIsolateQueuesRest5(
+// testRelayEndToEndRoutesIsolateQueuesRunsRouting continues
+// testRelayEndToEndRoutesIsolateQueues: runs routing.
+func testRelayEndToEndRoutesIsolateQueuesRunsRouting(
 	t *testing.T,
 	store interfaces.OutboxStore,
 	enqueue func(context.Context, *types.OutboxRecord) error,
@@ -671,12 +687,12 @@ func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 
 	t.Helper()
 
-	testRelayPartitionsDrainIndependentlyRest3(t, value, store, tx)
+	testRelayPartitionsDrainIndependentlyEnqueuesPartitions(t, value, store, tx)
 }
 
-// testRelayPartitionsDrainIndependentlyRest3 continues
-// testRelayPartitionsDrainIndependentlyRest2 with its remaining steps.
-func testRelayPartitionsDrainIndependentlyRest3(
+// testRelayPartitionsDrainIndependentlyEnqueuesPartitions continues
+// testRelayPartitionsDrainIndependently: enqueues partitions.
+func testRelayPartitionsDrainIndependentlyEnqueuesPartitions(
 	t *testing.T,
 	value *sql.DB,
 	store interfaces.OutboxStore,
@@ -717,12 +733,19 @@ func testRelayPartitionsDrainIndependentlyRest3(
 	}, outboxstore.Deps{DB: value})
 	require.NoError(t, err)
 
-	testRelayPartitionsDrainIndependentlyRest4(t, value, store, manager, want, narrowed)
+	testRelayPartitionsDrainIndependentlyDrainsEachPartition(
+		t,
+		value,
+		store,
+		manager,
+		want,
+		narrowed,
+	)
 }
 
-// testRelayPartitionsDrainIndependentlyRest4 continues
-// testRelayPartitionsDrainIndependentlyRest3 with its remaining steps.
-func testRelayPartitionsDrainIndependentlyRest4(
+// testRelayPartitionsDrainIndependentlyDrainsEachPartition continues
+// testRelayPartitionsDrainIndependentlyEnqueuesPartitions: drains each partition.
+func testRelayPartitionsDrainIndependentlyDrainsEachPartition(
 	t *testing.T,
 	value *sql.DB,
 	store interfaces.OutboxStore,
@@ -755,7 +778,7 @@ func testRelayPartitionsDrainIndependentlyRest4(
 	relayFor := func(partition int) *outbox.Relay {
 		cfg := outbox.DefaultRelayConfig("split")
 
-		cfg.Partitions, cfg.Partition, cfg.DrainBudget = partitions2, partition, time.Minute
+		cfg.Partitions, cfg.Partition, cfg.DrainBudget = partitions, partition, time.Minute
 
 		return outbox.NewRelay(&cfg, manager, store, sink, nil, nil, nil)
 	}
@@ -765,9 +788,9 @@ func testRelayPartitionsDrainIndependentlyRest4(
 	sent, _ := partitionCounts(t, value)
 	require.Equal(t, map[int]int{0: 0, 1: want[1]}, sent)
 
-	done := make(chan error, size2)
+	done := make(chan error, makeInputPartition)
 
-	for partition := range iterations2 {
+	for partition := range iterationsPartition {
 		go func() { done <- relayFor(partition).RunOnce(ctx) }()
 	}
 
@@ -875,3 +898,41 @@ func receiveAll(ctx context.Context, api *awssqs.Client, url string) ([]string, 
 		}
 	}
 }
+
+const (
+	// dateInputAt is the date input at the tests use.
+	dateInputAt = 2
+
+	// dateInputEnqueuedAt is the date input enqueued at the tests use.
+	dateInputEnqueuedAt = 3
+
+	// enqueuedAtHour is the date input enqueued at13 the tests use.
+	enqueuedAtHour = 4
+
+	// enqueuedAtMinute is the date input enqueued at14 the tests use.
+	enqueuedAtMinute = 5
+
+	// enqueueNInput is the enqueue ninput the tests use.
+	enqueueNInput = 25
+
+	// enqueueNInputKeys is the enqueue ninput keys the tests use.
+	enqueueNInputKeys = 5
+
+	// enqueueNInputRun is the enqueue ninput run the tests use.
+	enqueueNInputRun = 1000
+
+	// iterationsDrain is the iterations drain the tests use.
+	iterationsDrain = 10
+
+	// iterationsPartition is the iterations partition the tests use.
+	iterationsPartition = 2
+
+	// makeInputPartition is the make input partition the tests use.
+	makeInputPartition = 2
+
+	// partitions is the partitions the tests use.
+	partitions = 2
+
+	// wantPending is the expected pending.
+	wantPending = 900
+)

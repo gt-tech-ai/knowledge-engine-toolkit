@@ -57,7 +57,7 @@ func TraceParentFromContext(ctx context.Context) string {
 // ("00-<trace-id>-<span-id>-<flags>").
 func TraceIDFromContext(ctx context.Context) string {
 	parts := strings.SplitN(TraceParentFromContext(ctx), "-", traceParentFields)
-	if len(parts) >= partsLen2 && len(parts[1]) == partsLen32 {
+	if len(parts) >= minTraceparentParts && len(parts[1]) == traceIDHexLen {
 		return parts[1]
 	}
 
@@ -104,7 +104,7 @@ func ContextWithForcedSample(ctx context.Context) context.Context {
 // otherwise produce a "too many colons in address" gRPC dial error.
 func normalizeEndpoint(endpoint string) string {
 	if i := strings.Index(endpoint, "://"); i != -1 {
-		endpoint = endpoint[i+offset3:]
+		endpoint = endpoint[i+schemeSeparatorLen:]
 	}
 
 	return strings.TrimSuffix(endpoint, "/")

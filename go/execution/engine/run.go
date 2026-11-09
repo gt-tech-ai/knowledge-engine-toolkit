@@ -26,16 +26,16 @@ func RunJobGroup(
 ) (types.StepResults, error) {
 	group := &jobGroup{obs: obs}
 
-	groupValue, gctx := errgroup.WithContext(ctx)
+	currentGroup, gctx := errgroup.WithContext(ctx)
 	for _, job := range jobs {
-		groupValue.Go(func() error {
+		currentGroup.Go(func() error {
 			group.run(gctx, runner, root, job)
 
 			return nil // never cancel siblings; collect all results
 		})
 	}
 
-	_ = groupValue.Wait()
+	_ = currentGroup.Wait()
 
 	return group.all, nil
 }

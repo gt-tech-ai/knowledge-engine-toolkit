@@ -30,7 +30,7 @@ func TestMessagingMemory_RespectsContextCancellation(t *testing.T) {
 
 	pub := memory.NewPublisher(memory.NewBroker())
 	// Fill the topic buffer (no subscriber drains it) so the next send would block.
-	for range iterations1024 {
+	for range iterationsCancellation {
 		require.NoError(t, pub.Publish(context.Background(), textFull, []byte(textX)))
 	}
 
@@ -61,7 +61,7 @@ func TestMessagingMemory_PublishBatchDelivers(t *testing.T) {
 	broker := memory.NewBroker()
 	pub := memory.NewPublisher(broker)
 	sub := memory.NewSubscriber(broker, &client.Base{})
-	got := make(chan []byte, size3)
+	got := make(chan []byte, makeInputDelivers)
 
 	go func() {
 		_ = sub.Subscribe(context.Background(), "batch",
@@ -117,3 +117,11 @@ func TestMessagingMemory_SubscribeStopsOnContextCancel(t *testing.T) {
 		t.Fatal("Subscribe did not return after context cancellation")
 	}
 }
+
+const (
+	// iterationsCancellation is the iterations cancellation the tests use.
+	iterationsCancellation = 1024
+
+	// makeInputDelivers is the make input delivers the tests use.
+	makeInputDelivers = 3
+)

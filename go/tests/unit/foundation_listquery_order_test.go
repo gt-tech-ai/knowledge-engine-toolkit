@@ -37,7 +37,7 @@ func sortMap() *listquery.Map {
 func TestParseSort_ParsesDirections(t *testing.T) {
 	t.Parallel()
 
-	mapValue := sortMap()
+	fieldMap := sortMap()
 
 	cases := []struct {
 		name string
@@ -68,7 +68,7 @@ func TestParseSort_ParsesDirections(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := listquery.ParseSort(mapValue, testCase.spec)
+			got, err := listquery.ParseSort(fieldMap, testCase.spec)
 			require.NoError(t, err)
 			assert.Equal(t, testCase.want, got)
 		})
@@ -89,7 +89,7 @@ func TestParseSort_ParsesDirections(t *testing.T) {
 func TestParseSort_RejectsUnknownUnsortableAndBadDirection(t *testing.T) {
 	t.Parallel()
 
-	mapValue := sortMap()
+	fieldMap := sortMap()
 
 	for name, spec := range map[string]string{
 		textUnknownField:  textBogus,
@@ -103,7 +103,7 @@ func TestParseSort_RejectsUnknownUnsortableAndBadDirection(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := listquery.ParseSort(mapValue, spec)
+			got, err := listquery.ParseSort(fieldMap, spec)
 			require.Error(t, err)
 			assert.Nil(t, got)
 			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -215,7 +215,7 @@ func testKeysetColumnsTable() []testKeysetColumnsRow {
 // sortable allow-list, and fails only with CodeInvalidInput, over arbitrary
 // comma/colon-split input — the properties that make it a safe transport-edge parser.
 func FuzzParseSort(f *testing.F) {
-	mapValue := sortMap()
+	fieldMap := sortMap()
 	sortable := map[string]bool{textCreatedAt: true, textName: true, textStatus: true}
 
 	for _, seed := range []string{
@@ -225,7 +225,7 @@ func FuzzParseSort(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, spec string) {
-		got, err := listquery.ParseSort(mapValue, spec)
+		got, err := listquery.ParseSort(fieldMap, spec)
 		if err != nil {
 			assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 			assert.Nil(t, got)
@@ -243,3 +243,8 @@ func FuzzParseSort(f *testing.F) {
 		}
 	})
 }
+
+const (
+	// textSecretNote is the literal "secret_note".
+	textSecretNote = "secret_note"
+)

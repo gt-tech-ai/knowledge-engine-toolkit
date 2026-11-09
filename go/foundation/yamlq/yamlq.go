@@ -84,7 +84,7 @@ func parseStep(path, rest string) (step, string, error) {
 	case strings.HasPrefix(rest, ".."):
 		return parseKeyStep(path, rest[2:], stepDeep, "`..` needs a key")
 	case strings.HasPrefix(rest, ".*"):
-		return step{kind: stepAllValues}, rest[offset2:], nil
+		return step{kind: stepAllValues}, rest[allValuesPrefixLen:], nil
 	case strings.HasPrefix(rest, "."):
 		return parseKeyStep(path, rest[1:], stepKey, "`.` needs a key")
 	case strings.HasPrefix(rest, "["):
@@ -191,16 +191,16 @@ func apply(cur []*yaml.Node, st step) []*yaml.Node {
 }
 
 // applyStep returns what one step selects in a dereferenced node.
-func applyStep(node *yaml.Node, stepValue step) []*yaml.Node {
-	switch stepValue.kind {
+func applyStep(node *yaml.Node, currentStep step) []*yaml.Node {
+	switch currentStep.kind {
 	case stepKey:
-		return oneNode(valueOf(node, stepValue.key))
+		return oneNode(valueOf(node, currentStep.key))
 	case stepDeep:
-		return deep(node, stepValue.key)
+		return deep(node, currentStep.key)
 	case stepAllValues:
 		return mappingValues(node)
 	case stepIndex:
-		return oneNode(sequenceItem(node, stepValue.index))
+		return oneNode(sequenceItem(node, currentStep.index))
 	case stepAllItems:
 		if node.Kind == yaml.SequenceNode {
 			return node.Content

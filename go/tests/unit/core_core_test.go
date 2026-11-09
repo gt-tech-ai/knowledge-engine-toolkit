@@ -108,9 +108,9 @@ func TestID_IsEmpty_False(t *testing.T) {
 func TestOption_Some(t *testing.T) {
 	t.Parallel()
 
-	opt := types.Some(someArg42)
+	opt := types.Some(someInputSome)
 	assert.True(t, opt.Valid, "Some should set Valid=true")
-	assert.Equal(t, wantValue42, opt.Value)
+	assert.Equal(t, wantValue, opt.Value)
 }
 
 // TestOption_Some_String tests that Some works correctly with string type
@@ -194,11 +194,11 @@ func TestOption_Get_None(t *testing.T) {
 func TestOption_UnwrapOr_Valid(t *testing.T) {
 	t.Parallel()
 
-	opt := types.Some(someArg10)
+	opt := types.Some(someInputValid)
 	assert.Equal(
 		t,
-		wantUnwrapOr10,
-		opt.UnwrapOr(fallback99),
+		wantUnwrapOrValid,
+		opt.UnwrapOr(unwrapOrInput),
 		"UnwrapOr should return actual value, not fallback",
 	)
 }
@@ -218,8 +218,8 @@ func TestOption_UnwrapOr_None(t *testing.T) {
 	opt := types.None[int]()
 	assert.Equal(
 		t,
-		wantUnwrapOr99,
-		opt.UnwrapOr(fallback99),
+		wantUnwrapOrNone,
+		opt.UnwrapOr(unwrapOrInput),
 		"UnwrapOr should return fallback for None",
 	)
 }
@@ -242,8 +242,8 @@ func TestPage_HasMore_True(t *testing.T) {
 
 	page := types.Page[string]{
 		Items:      []string{textA, textB},
-		Total:      total10,
-		PageSize:   pageSize2,
+		Total:      totalTrue,
+		PageSize:   pageSizeTrue,
 		PageNumber: 1,
 	}
 	assert.True(t, page.HasMore(), "HasMore should return true when more pages exist")
@@ -263,9 +263,9 @@ func TestPage_HasMore_False(t *testing.T) {
 
 	page := types.Page[string]{
 		Items:      []string{textA, textB},
-		Total:      total4,
-		PageSize:   pageSize2,
-		PageNumber: pageNumber2,
+		Total:      totalFalse,
+		PageSize:   pageSizeFalse,
+		PageNumber: pageNumber,
 	}
 	assert.False(t, page.HasMore(), "HasMore should return false when on the last page")
 }
@@ -284,8 +284,8 @@ func TestPage_HasMore_ExactlyFull(t *testing.T) {
 
 	page := types.Page[string]{
 		Items:      []string{textA},
-		Total:      total2,
-		PageSize:   pageSize2,
+		Total:      total,
+		PageSize:   pageSizeFull,
 		PageNumber: 1,
 	}
 	assert.False(
@@ -308,9 +308,9 @@ func TestPage_HasMore_SinglePage(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[int]{
-		Items:      []int{1, items2, items3},
-		Total:      total3,
-		PageSize:   pageSize10,
+		Items:      []int{1, items, itemsPage},
+		Total:      totalPage,
+		PageSize:   pageSize,
 		PageNumber: 1,
 	}
 	assert.False(
@@ -442,3 +442,41 @@ func TestZapFieldsMarshalLogObject(t *testing.T) {
 	assert.Contains(t, ctx, "error_code", "expected error_code in logged context")
 	assert.Contains(t, ctx, "error_message", "expected error_message in logged context")
 }
+
+const (
+	// itemsPage is the items page the tests use.
+	itemsPage = 3
+
+	// pageNumber is the page number the tests use.
+	pageNumber = 2
+
+	// pageSizeFalse is the page size false the tests use.
+	pageSizeFalse = 2
+
+	// pageSizeFull is the page size full the tests use.
+	pageSizeFull = 2
+
+	// pageSizeTrue is the page size true the tests use.
+	pageSizeTrue = 2
+
+	// someInputSome is the some input some the tests use.
+	someInputSome = 42
+
+	// someInputValid is the some input valid the tests use.
+	someInputValid = 10
+
+	// totalFalse is the total false the tests use.
+	totalFalse = 4
+
+	// totalPage is the total page the tests use.
+	totalPage = 3
+
+	// totalTrue is the total true the tests use.
+	totalTrue = 10
+
+	// wantUnwrapOrNone is the expected unwrap or none.
+	wantUnwrapOrNone = 99
+
+	// wantUnwrapOrValid is the expected unwrap or valid.
+	wantUnwrapOrValid = 10
+)

@@ -73,18 +73,18 @@ func (s *Snapshot) Memo[T any](
 	var zero T
 
 	for {
-		entry2, owner := s.claim(key)
+		secondEntry, owner := s.claim(key)
 		if owner {
-			return memoBuild(ctx, s, key, entry2, build)
+			return memoBuild(ctx, s, key, secondEntry, build)
 		}
 
-		err := memoAwait(ctx, key, entry2)
+		err := memoAwait(ctx, key, secondEntry)
 		if err != nil {
 			return zero, err
 		}
 
-		if !entry2.cancelled { // otherwise the builder's context ended; build again
-			return memoValue[T](key, entry2)
+		if !secondEntry.cancelled { // otherwise the builder's context ended; build again
+			return memoValue[T](key, secondEntry)
 		}
 	}
 }
@@ -110,21 +110,21 @@ func memoBuild[T any](
 	ctx context.Context,
 	snapshot *Snapshot,
 	key string,
-	entryValue *entry,
+	currentEntry *entry,
 	build func(context.Context) (T, error),
 ) (T, error) {
 	val, panicked, err := safeBuild(ctx, key, build)
 
-	entryValue.val, entryValue.err = val, err
-	entryValue.cancelled = err != nil && !panicked && ctx.Err() != nil
+	currentEntry.val, currentEntry.err = val, err
+	currentEntry.cancelled = err != nil && !panicked && ctx.Err() != nil
 
-	if panicked || entryValue.cancelled {
+	if panicked || currentEntry.cancelled {
 		snapshot.mu.Lock()
 		delete(snapshot.entries, key)
 		snapshot.mu.Unlock()
 	}
 
-	close(entryValue.done)
+	close(currentEntry.done)
 
 	return val, err
 }
@@ -141,17 +141,17 @@ func memoAwait(ctx context.Context, key string, e *entry) error {
 }
 
 // memoValue returns a finished entry's error, or its value as T.
-func memoValue[T any](key string, entryValue *entry) (T, error) {
+func memoValue[T any](key string, currentEntry *entry) (T, error) {
 	var zero T
 
-	if entryValue.err != nil {
-		return zero, entryValue.err
+	if currentEntry.err != nil {
+		return zero, currentEntry.err
 	}
 
-	value, ok := entryValue.val.(T)
+	value, ok := currentEntry.val.(T)
 	if !ok {
 		return zero, apperr.New(apperr.CodeInternal, fmt.Sprintf(
-			"memo %q holds %T, not the requested type", key, entryValue.val,
+			"memo %q holds %T, not the requested type", key, currentEntry.val,
 		))
 	}
 

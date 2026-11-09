@@ -134,14 +134,14 @@ func TestEncode_LeafChangeChangesOnlyPathHashes(t *testing.T) {
 
 	after.Columns.Args[0].Field.Agg = types.AggAvg
 
-	treeValue, tree := encodeSpec(t, &before), encodeSpec(t, &after)
+	currentTree, tree := encodeSpec(t, &before), encodeSpec(t, &after)
 
-	assert.NotEqual(t, treeValue.Root, tree.Root)
+	assert.NotEqual(t, currentTree.Root, tree.Root)
 
-	added := onlyIn(tree, treeValue)
-	assert.Len(t, added, wantAddedLen3)
+	added := onlyIn(tree, currentTree)
+	assert.Len(t, added, wantAddedLen)
 	assert.True(t, added[tree.Root])
-	assert.Len(t, onlyIn(treeValue, tree), wantOnlyInLen3)
+	assert.Len(t, onlyIn(currentTree, tree), wantOnlyInLen)
 }
 
 // TestEncode_ReorderChangesOnlyParent tests that reordering a shelf's operands
@@ -164,8 +164,8 @@ func TestEncode_ReorderChangesOnlyParent(t *testing.T) {
 
 	a, b := encodeSpec(t, &before), encodeSpec(t, &after)
 
-	assert.Len(t, onlyIn(b, a), wantOnlyInLen2)
-	assert.Len(t, onlyIn(a, b), wantOnlyInLen2)
+	assert.Len(t, onlyIn(b, a), wantOnlyInLenParent)
+	assert.Len(t, onlyIn(a, b), wantOnlyInLenParent)
 	assert.Len(t, b.Nodes, len(a.Nodes))
 }
 
@@ -183,7 +183,7 @@ func TestEncode_GoldenSpecRoots(t *testing.T) {
 	t.Parallel()
 
 	g := loadSpecGolden(t)
-	require.GreaterOrEqual(t, len(g.Cases), wantCasesLen3)
+	require.GreaterOrEqual(t, len(g.Cases), minCasesLenRoots)
 
 	for _, c := range g.Cases {
 		tree := encodeSpec(t, new(decodeSpec(t, string(c.Spec))))
@@ -279,14 +279,14 @@ func TestDiff_ReportsOnlyChangedPaths(t *testing.T) {
 
 	aggSpec.Columns.Args[0].Field.Agg = types.AggAvg
 
-	treeValue := encodeSpec(t, &aggSpec)
-	changes, err := chartspec.Diff(tree.Root, treeValue.Root, lookup(tree, treeValue))
+	currentTree := encodeSpec(t, &aggSpec)
+	changes, err := chartspec.Diff(tree.Root, currentTree.Root, lookup(tree, currentTree))
 	require.NoError(t, err)
 	require.Len(t, changes, 1)
 	assert.Equal(t, "columns.args[0].agg", changes[0].Path)
 	assert.NotEqual(t, changes[0].Before, changes[0].After)
 	assert.Contains(t, tree.Nodes, changes[0].Before)
-	assert.Contains(t, treeValue.Nodes, changes[0].After)
+	assert.Contains(t, currentTree.Nodes, changes[0].After)
 
 	filterSpec := decodeSpec(t, treeSpecJSON)
 
@@ -340,7 +340,7 @@ func FuzzEncode_RoundTrip(f *testing.F) {
 
 		tree, err := chartspec.Encode(&spec)
 		if err != nil {
-			require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)
+			require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textVLowerAlt, err)
 
 			return
 		}
@@ -408,7 +408,7 @@ func TestDiff_ZeroSideIsRootChange(t *testing.T) {
 		return chartspec.Node{}, false
 	}
 
-	for _, pair := range [][iterations2]chartspec.Hash{{{}, tree.Root}, {tree.Root, {}}} {
+	for _, pair := range [][iterations]chartspec.Hash{{{}, tree.Root}, {tree.Root, {}}} {
 		changes, err := chartspec.Diff(pair[0], pair[1], noFetch)
 		require.NoError(t, err)
 		assert.Equal(
@@ -463,3 +463,17 @@ func TestEncode_ChecksClauseOperands(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bare, typedNil)
 }
+
+const (
+	// minCasesLenRoots is the min cases len roots the tests use.
+	minCasesLenRoots = 3
+
+	// wantAddedLen is the expected added len.
+	wantAddedLen = 3
+
+	// wantOnlyInLen is the expected only in len.
+	wantOnlyInLen = 3
+
+	// wantOnlyInLenParent is the expected only in len parent.
+	wantOnlyInLenParent = 2
+)

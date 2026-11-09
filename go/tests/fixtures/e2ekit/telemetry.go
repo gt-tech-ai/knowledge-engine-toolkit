@@ -100,7 +100,7 @@ func (c *TelemetryClient) Ping(ctx context.Context) error {
 func TraceIDFromHeader(traceresponse string) string {
 	parts := strings.Split(traceresponse, "-")
 
-	if len(parts) < partsLen2 || len(parts[1]) != partsLen32 {
+	if len(parts) < wantPartsLen || len(parts[1]) != wantPartsLenHeader {
 		return ""
 	}
 
@@ -229,14 +229,14 @@ func (t *tempoTrace) namesService(service string) bool {
 	return false
 }
 
-// shapeResult2 is the Result element of this document.
-type shapeResult2 struct {
+// instantVectorSample is the Result element of this document.
+type instantVectorSample struct {
 	Value [2]json.RawMessage `json:"value"`
 }
 
-// shapeData2 is the Data element of this document.
-type shapeData2 struct {
-	Result []shapeResult2 `json:"result"`
+// instantVectorData is the Data element of this document.
+type instantVectorData struct {
+	Result []instantVectorSample `json:"result"`
 }
 
 // MetricValue returns the first instant-vector sample value for promQL, or 0 (nil error)
@@ -248,7 +248,7 @@ func (c *TelemetryClient) MetricValue(
 	endpoint := c.promURL + "/api/v1/query?query=" + url.QueryEscape(promQL)
 
 	var body struct {
-		Data shapeData2 `json:"data"`
+		Data instantVectorData `json:"data"`
 	}
 
 	err := c.getJSON(ctx, endpoint, &body)
@@ -269,7 +269,7 @@ func (c *TelemetryClient) MetricValue(
 		return 0, apperr.Wrap(err, apperr.CodeInternal, "parse prometheus sample")
 	}
 
-	value, err := strconv.ParseFloat(sample, bitSize64)
+	value, err := strconv.ParseFloat(sample, parseFloatInput)
 	if err != nil {
 		return 0, apperr.Wrap(err, apperr.CodeInternal, "parse prometheus value")
 	}
@@ -326,7 +326,7 @@ func (c *TelemetryClient) pingOne(ctx context.Context, text string) error {
 	}
 
 	_ = resp.Body.Close()
-	if resp.StatusCode < statusCode200 || resp.StatusCode >= statusCode300 {
+	if resp.StatusCode < wantStatusCode || resp.StatusCode >= wantStatusCodeOne {
 		return apperr.New(apperr.CodeUnavailable, "obs backend not ready: "+text)
 	}
 
@@ -374,7 +374,7 @@ func (c *TelemetryClient) getJSON(ctx context.Context, endpoint string, out any)
 		return nil
 	}
 
-	if resp.StatusCode < statusCode200 || resp.StatusCode >= statusCode300 {
+	if resp.StatusCode < wantStatusCode || resp.StatusCode >= wantStatusCodeJSON {
 		return apperr.New(apperr.CodeInternal, "telemetry query failed: "+resp.Status)
 	}
 
@@ -385,3 +385,23 @@ func (c *TelemetryClient) getJSON(ctx context.Context, endpoint string, out any)
 
 	return nil
 }
+
+const (
+	// parseFloatInput is the parse float input the tests use.
+	parseFloatInput = 64
+
+	// wantPartsLen is the expected parts len.
+	wantPartsLen = 2
+
+	// wantPartsLenHeader is the expected parts len header.
+	wantPartsLenHeader = 32
+
+	// wantStatusCode is the expected status code.
+	wantStatusCode = 200
+
+	// wantStatusCodeJSON is the expected status code json.
+	wantStatusCodeJSON = 300
+
+	// wantStatusCodeOne is the expected status code one.
+	wantStatusCodeOne = 300
+)

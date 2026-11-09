@@ -23,8 +23,12 @@ import (
 func TestInt32OrPanic(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, int32(int32Arg42), apprpc.Int32OrPanic(int32OrPanicArg42))
-	assert.Equal(t, int32(int32Arg42), apprpc.Int32OrPanic(int64(int64Arg42)))
+	assert.Equal(t, int32(wantInt32OrPanic), apprpc.Int32OrPanic(int32OrPanicInput))
+	assert.Equal(
+		t,
+		int32(wantInt32OrPanic),
+		apprpc.Int32OrPanic(int64(int32OrPanicInput)),
+	)
 	assert.Panics(t, func() { apprpc.Int32OrPanic(int64(math.MaxInt32) + 1) })
 }
 
@@ -44,5 +48,19 @@ func TestCountToInt32(t *testing.T) {
 
 	assert.Equal(t, int32(0), apprpc.CountToInt32(-5))
 	assert.Equal(t, int32(math.MaxInt32), apprpc.CountToInt32(int64(math.MaxInt32)+100))
-	assert.Equal(t, int32(int32Arg1234), apprpc.CountToInt32(countToInt32Arg1234))
+	assert.Equal(t, int32(wantCountConverted), apprpc.CountToInt32(countToInt32Input))
 }
+
+const (
+	// countToInt32Input is the count to int32 input the tests use.
+	countToInt32Input = 1234
+
+	// int32OrPanicInput is the int32 or panic input the tests use.
+	int32OrPanicInput = 42
+
+	// wantCountConverted is the expected count to int32.
+	wantCountConverted = 1234
+
+	// wantInt32OrPanic is the expected int32 or panic.
+	wantInt32OrPanic = 42
+)

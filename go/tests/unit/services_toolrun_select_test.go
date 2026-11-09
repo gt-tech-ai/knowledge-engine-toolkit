@@ -23,10 +23,10 @@ func TestSelect(t *testing.T) {
 	t.Parallel()
 
 	runs := []types.ToolRun{
-		{Name: textGolangciLint, Verb: textLint, Tags: []string{textGo2}},
+		{Name: textGolangciLint, Verb: textLint, Tags: []string{textGoLower}},
 		{Name: textRuff, Verb: textLint, Tags: []string{textPython, textFast}},
 		{Name: textHadolint, Verb: textLint, Tags: []string{textInfra, textFast}},
-		{Name: textGofumpt, Verb: textFmt, Tags: []string{textGo2, textFast}},
+		{Name: textGofumpt, Verb: textFmt, Tags: []string{textGoLower, textFast}},
 	}
 	names := func(rs []types.ToolRun) []string {
 		out := make([]string, 0, len(rs))
@@ -46,7 +46,7 @@ func TestSelect(t *testing.T) {
 		},
 		"verbs": {types.Selection{Verbs: []string{textFmt}}, []string{textGofumpt}},
 		"every tag": {
-			types.Selection{Tags: []string{textGo2, textFast}},
+			types.Selection{Tags: []string{textGoLower, textFast}},
 			[]string{textGofumpt},
 		},
 		"any tag": {
@@ -67,7 +67,7 @@ func TestSelect(t *testing.T) {
 		},
 		"intersection": {
 			types.Selection{
-				Verbs: []string{textLint}, AnyTags: []string{textGo2, textFast},
+				Verbs: []string{textLint}, AnyTags: []string{textGoLower, textFast},
 				ExcludeTags: []string{textInfra},
 			},
 			[]string{textGolangciLint, textRuff},

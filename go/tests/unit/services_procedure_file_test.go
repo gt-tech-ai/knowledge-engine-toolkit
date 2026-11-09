@@ -44,8 +44,8 @@ func write(t *testing.T, root, rel, data string) {
 	t.Helper()
 
 	path := filepath.Join(root, rel)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), perm0o750))
-	require.NoError(t, os.WriteFile(path, []byte(data), perm0o600))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), mkdirAllInputWrite))
+	require.NoError(t, os.WriteFile(path, []byte(data), writeFileInput))
 }
 
 // TestServicesProcedure_FileOps tests the file step's four operations under the root.
@@ -67,7 +67,10 @@ func TestServicesProcedure_FileOps(t *testing.T) {
 
 	root := t.TempDir()
 	write(t, root, textConfKeptYaml, "mine")
-	require.NoError(t, os.MkdirAll(filepath.Join(root, textConf, "dir.yaml"), perm0o750))
+	require.NoError(
+		t,
+		os.MkdirAll(filepath.Join(root, textConf, "dir.yaml"), mkdirAllInputOps),
+	)
 	write(t, root, "conf/secrets.yaml.example", "token: x")
 	write(t, root, "out/stale/a/b.txt", "old")
 
@@ -94,7 +97,7 @@ func TestServicesProcedure_FileOps(t *testing.T) {
 
 	info, err := os.Stat(filepath.Join(root, textConf, "secrets.yaml"))
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(fileModeArg0o600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(fileModeInput), info.Mode().Perm())
 
 	info, err = os.Stat(filepath.Join(root, textOut, "cache"))
 	require.NoError(t, err)
@@ -158,12 +161,12 @@ func TestServicesProcedure_FileRefusals(t *testing.T) {
 	assert.Contains(t, escape.Error, "outside the root")
 	assert.NoFileExists(t, filepath.Join(filepath.Dir(root), "escape.yaml"))
 
-	testServicesProcedureFileRefusalsRest(t)
+	testServicesProcedureFileRefusalsSkipsWithoutWriting(t)
 }
 
-// testServicesProcedureFileRefusalsRest continues TestServicesProcedure_FileRefusals
-// with its remaining steps.
-func testServicesProcedureFileRefusalsRest(t *testing.T) {
+// testServicesProcedureFileRefusalsSkipsWithoutWriting continues
+// TestServicesProcedure_FileRefusals: skips without writing.
+func testServicesProcedureFileRefusalsSkipsWithoutWriting(t *testing.T) {
 	t.Helper()
 
 	dry := t.TempDir()
@@ -184,11 +187,11 @@ func testServicesProcedureFileRefusalsRest(t *testing.T) {
 	assert.Empty(t, entries)
 
 	for name, procFile := range map[string]types.ProcFile{
-		textOp:    {Op: "chmod", Path: textA},
-		textFrom:  {Op: types.FileCopy, Path: textA},
-		textPath2: {Op: types.FileMkdir},
-		textMode:  {Op: types.FileMkdir, Path: textA, Mode: "rwx"},
-		"mixed":   {Op: types.FileRemove, Path: textA, From: textB},
+		textOp:        {Op: "chmod", Path: textA},
+		textFrom:      {Op: types.FileCopy, Path: textA},
+		textPathLower: {Op: types.FileMkdir},
+		textMode:      {Op: types.FileMkdir, Path: textA, Mode: "rwx"},
+		"mixed":       {Op: types.FileRemove, Path: textA, From: textB},
 	} {
 		_, err := procedure.NewFromConfig(procedure.Config{Procedures: []types.Procedure{{
 			Name: textBad, Steps: []types.ProcStep{{Name: textF, File: &procFile}},
@@ -196,3 +199,22 @@ func testServicesProcedureFileRefusalsRest(t *testing.T) {
 		require.Error(t, err, name)
 	}
 }
+
+const (
+	// mkdirAllInputOps is the mkdir all input ops the tests use.
+	mkdirAllInputOps = 0o750
+)
+
+const (
+	// textConf is the literal "conf".
+	textConf = "conf"
+
+	// textConfKeptYaml is the literal "conf/kept.yaml".
+	textConfKeptYaml = "conf/kept.yaml"
+
+	// textConfSecYaml is the literal "conf/secrets.yaml".
+	textConfSecYaml = "conf/secrets.yaml"
+
+	// textFrom is the literal "from".
+	textFrom = "from"
+)

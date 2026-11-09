@@ -46,7 +46,7 @@ func keysetReader(rows []int, sort []types.OrderField) listquery.Reader[int, int
 		Resolve:    listquery.IdentityColumn,
 		Sort:       sort,
 		Tiebreaker: textCreatedAt,
-		Bounds:     listquery.Bounds{DefaultSize: defaultSize2},
+		Bounds:     listquery.Bounds{DefaultSize: defaultSizeReader},
 		MapErr:     func(err error) error { return err },
 		Keyset: &listquery.Keyset[int]{
 			RowValue: func(row int, col string) (any, bool) {
@@ -122,12 +122,12 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 		assert.Equal(t, int32(2), decoded.OffsetPage, "the next offset page")
 	})
 
-	testRunKeysetOnlyDefaultOrderingRest(t)
+	testRunKeysetOnlyDefaultOrderingBridgesDefaultOrder(t)
 }
 
-// testRunKeysetOnlyDefaultOrderingRest continues TestRun_Keyset_OnlyDefaultOrdering with
-// its remaining steps.
-func testRunKeysetOnlyDefaultOrderingRest(t *testing.T) {
+// testRunKeysetOnlyDefaultOrderingBridgesDefaultOrder continues
+// TestRun_Keyset_OnlyDefaultOrdering: bridges default order.
+func testRunKeysetOnlyDefaultOrderingBridgesDefaultOrder(t *testing.T) {
 	t.Helper()
 
 	t.Run("default-order offset page bridges to a keyset next-token", func(t *testing.T) {
@@ -191,3 +191,8 @@ func testRunKeysetOnlyDefaultOrderingRest(t *testing.T) {
 		)
 	})
 }
+
+const (
+	// defaultSizeReader is the default size reader the tests use.
+	defaultSizeReader = 2
+)

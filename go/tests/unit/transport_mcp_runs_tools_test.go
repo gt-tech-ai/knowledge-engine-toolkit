@@ -33,8 +33,8 @@ type slowOp struct {
 // newSlowOp returns a slowOp whose channels hold a few signals without blocking.
 func newSlowOp() *slowOp {
 	return &slowOp{
-		started: make(chan struct{}, size4),
-		release: make(chan struct{}, size4),
+		started: make(chan struct{}, makeInputOp),
+		release: make(chan struct{}, makeInputOp),
 	}
 }
 
@@ -186,7 +186,7 @@ func TestTransportMcpRunsTools_StatusResultCancelList(t *testing.T) {
 
 	t.Helper()
 
-	testTransportMcpRunsToolsStatusResultCancelListRest5(
+	testTransportMcpRunsToolsStatusResultCancelListStatusAndErrors(
 		t,
 		operation,
 		root,
@@ -195,9 +195,9 @@ func TestTransportMcpRunsTools_StatusResultCancelList(t *testing.T) {
 	)
 }
 
-// testTransportMcpRunsToolsStatusResultCancelListRest5 continues
-// testTransportMcpRunsToolsStatusResultCancelListRest4 with its remaining steps.
-func testTransportMcpRunsToolsStatusResultCancelListRest5(
+// testTransportMcpRunsToolsStatusResultCancelListStatusAndErrors continues
+// testTransportMcpRunsToolsStatusResultCancelList: status and errors.
+func testTransportMcpRunsToolsStatusResultCancelListStatusAndErrors(
 	t *testing.T,
 	operation *slowOp,
 	root string,
@@ -239,7 +239,7 @@ func testTransportMcpRunsToolsStatusResultCancelListRest5(
 	require.NoError(t, err)
 	assert.Equal(t, "one\ntwo\n", string(body))
 
-	testTransportMcpRunsToolsStatusResultCancelListRest(
+	testTransportMcpRunsToolsStatusResultCancelListResultsAndList(
 		t,
 		operation,
 		clientSession,
@@ -247,9 +247,9 @@ func testTransportMcpRunsToolsStatusResultCancelListRest5(
 	)
 }
 
-// testTransportMcpRunsToolsStatusResultCancelListRest continues
-// testTransportMcpRunsToolsStatusResultCancelListRest5 with its remaining steps.
-func testTransportMcpRunsToolsStatusResultCancelListRest(
+// testTransportMcpRunsToolsStatusResultCancelListResultsAndList continues
+// testTransportMcpRunsToolsStatusResultCancelListStatusAndErrors: results and list.
+func testTransportMcpRunsToolsStatusResultCancelListResultsAndList(
 	t *testing.T,
 	operation *slowOp,
 	clientSession *sdkmcp.ClientSession,
@@ -448,3 +448,16 @@ func TestTransportMcpRunsTools_OnlyWithLongRunningOperation(t *testing.T) {
 	require.Len(t, res.Tools, 1)
 	assert.Equal(t, textStub, res.Tools[0].Name)
 }
+
+const (
+	// makeInputOp is the make input op the tests use.
+	makeInputOp = 4
+)
+
+const (
+	// textRunID is the literal "run_id".
+	textRunID = "run_id"
+
+	// textSucceeded is the literal "succeeded".
+	textSucceeded = "succeeded"
+)

@@ -83,19 +83,19 @@ func DecodePartial(data []byte) (Partial, error) {
 
 // Truncate returns t in UTC truncated to the start of its grain (minute, hour,
 // UTC day or UTC month); an unknown grain returns t in UTC unchanged.
-func Truncate(timeValue time.Time, g types.Grain) time.Time {
-	timeValue = timeValue.UTC()
+func Truncate(instant time.Time, g types.Grain) time.Time {
+	instant = instant.UTC()
 
 	switch g {
 	case types.GrainMinute:
-		return timeValue.Truncate(time.Minute)
+		return instant.Truncate(time.Minute)
 	case types.GrainHour:
-		return timeValue.Truncate(time.Hour)
+		return instant.Truncate(time.Hour)
 	case types.GrainDay:
 		return time.Date(
-			timeValue.Year(),
-			timeValue.Month(),
-			timeValue.Day(),
+			instant.Year(),
+			instant.Month(),
+			instant.Day(),
 			0,
 			0,
 			0,
@@ -103,9 +103,9 @@ func Truncate(timeValue time.Time, g types.Grain) time.Time {
 			time.UTC,
 		)
 	case types.GrainMonth:
-		return time.Date(timeValue.Year(), timeValue.Month(), 1, 0, 0, 0, 0, time.UTC)
+		return time.Date(instant.Year(), instant.Month(), 1, 0, 0, 0, 0, time.UTC)
 	default:
-		return timeValue
+		return instant
 	}
 }
 

@@ -134,31 +134,31 @@ func Compile[Q, S any](
 		return queryBackend.Empty()
 	}
 
-	switch filterValue := filter.(type) {
+	switch currentFilter := filter.(type) {
 	case types.FilterClause:
 		// A clause carrying a JoinTarget (stamped by ResolveFilter) compiles to a
 		// correlated EXISTS on the joined table; a same-table clause compiles to a column
 		// predicate as before.
-		if filterValue.Join != nil {
+		if currentFilter.Join != nil {
 			return queryBackend.ExistsClause(
-				filterValue.Join,
-				filterValue.Operator,
-				filterValue.Value,
+				currentFilter.Join,
+				currentFilter.Operator,
+				currentFilter.Value,
 			)
 		}
 
 		return queryBackend.Clause(
-			resolve(filterValue.Field),
-			filterValue.Operator,
-			filterValue.Value,
+			resolve(currentFilter.Field),
+			currentFilter.Operator,
+			currentFilter.Value,
 		)
 	case types.CompositeFilter:
 		// The parser populates exactly one arm ($and or $or); prefer And when present.
-		if len(filterValue.And) > 0 {
-			return queryBackend.And(compileEach(queryBackend, resolve, filterValue.And))
+		if len(currentFilter.And) > 0 {
+			return queryBackend.And(compileEach(queryBackend, resolve, currentFilter.And))
 		}
 
-		return queryBackend.Or(compileEach(queryBackend, resolve, filterValue.Or))
+		return queryBackend.Or(compileEach(queryBackend, resolve, currentFilter.Or))
 	default:
 		return queryBackend.Empty()
 	}
@@ -227,27 +227,30 @@ func KeysetColumns(
 		tiebreaker = tiebreakerCreatedAt
 	}
 
-	keysetBuilderValue := keysetBuilder{
+	currentKeysetBuilder := keysetBuilder{
 		out:  make([]KeysetColumn, 0, len(ofs)+keysetTieBreakColumns),
 		seen: make(map[string]bool, len(ofs)+keysetTieBreakColumns),
 	}
 
 	for _, orderField := range ofs {
-		if keysetBuilderValue.addJoin(joinOf, orderField) ||
-			keysetBuilderValue.addDerived(derivedOf, orderField) {
+		if currentKeysetBuilder.addJoin(joinOf, orderField) ||
+			currentKeysetBuilder.addDerived(derivedOf, orderField) {
 			continue
 		}
 
 		col := resolve(orderField.Field)
-		if !keysetBuilderValue.addOrdinal(ordinalOf, orderField, col) {
-			keysetBuilderValue.add(col, KeysetColumn{Column: col, Desc: orderField.Desc})
+		if !currentKeysetBuilder.addOrdinal(ordinalOf, orderField, col) {
+			currentKeysetBuilder.add(
+				col,
+				KeysetColumn{Column: col, Desc: orderField.Desc},
+			)
 		}
 	}
 
-	keysetBuilderValue.add(tiebreaker, KeysetColumn{Column: tiebreaker, Desc: true})
-	keysetBuilderValue.add(tiebreakerID, KeysetColumn{Column: tiebreakerID, Desc: true})
+	currentKeysetBuilder.add(tiebreaker, KeysetColumn{Column: tiebreaker, Desc: true})
+	currentKeysetBuilder.add(tiebreakerID, KeysetColumn{Column: tiebreakerID, Desc: true})
 
-	return keysetBuilderValue.out
+	return currentKeysetBuilder.out
 }
 
 // keysetBuilder accumulates keyset columns, keeping the first of each dedup key.

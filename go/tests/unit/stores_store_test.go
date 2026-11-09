@@ -54,22 +54,22 @@ type documentsReads interface {
 func TestStoreBase_UsesTheTransactionsClientWhenOneIsBound(t *testing.T) {
 	t.Parallel()
 
-	raw, storeClientValue := &storeClient{name: textRaw}, &storeClient{name: "tx"}
+	raw, currentStoreClient := &storeClient{name: textRaw}, &storeClient{name: "tx"}
 	base := fixtures.Must(
 		store.NewBase[documentsStore](fixtures.Decorations(), textDocuments, raw),
 	)
 
 	assert.Same(t, raw, base.Client(t.Context()))
 
-	inTx := store.WithClient(t.Context(), storeClientValue)
-	assert.Same(t, storeClientValue, base.Client(inTx))
+	inTx := store.WithClient(t.Context(), currentStoreClient)
+	assert.Same(t, currentStoreClient, base.Client(inTx))
 
 	other := store.WithClient(context.Background(), "not a storeClient")
 	assert.Same(t, raw, base.Client(other))
 
 	got, ok := store.ClientFrom[*storeClient](inTx)
 	assert.True(t, ok)
-	assert.Same(t, storeClientValue, got)
+	assert.Same(t, currentStoreClient, got)
 }
 
 // storeOpCounter returns store_operations_total for the operation op in reg.
@@ -179,8 +179,13 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, equalArg3, count)
+	assert.Equal(t, wantCountTier, count)
 
 	assert.InDelta(t, 1, storeOpCounter(t, reg, textGet), 0)
 	assert.InDelta(t, 1, storeOpCounter(t, reg, "count_by_workspace"), 0)
 }
+
+const (
+	// wantCountTier is the expected count tier.
+	wantCountTier = 3
+)

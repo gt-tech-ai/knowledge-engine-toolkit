@@ -211,7 +211,7 @@ func TestExecutionOpsRegistryRun_LogsTheMappedCode(t *testing.T) {
 
 	desc := opDesc(textSlow, types.SafetyReadOnly, types.OpLifecycleBounded)
 
-	desc.Timeout = millis10 * time.Millisecond
+	desc.Timeout = initialTimeout * time.Millisecond
 
 	operation := mocks.NewMockOperation(ctrl)
 	operation.EXPECT().Descriptor().Return(desc).AnyTimes()
@@ -241,3 +241,8 @@ func TestExecutionOpsRegistryRun_LogsTheMappedCode(t *testing.T) {
 	require.Error(t, logged)
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(logged))
 }
+
+const (
+	// initialTimeout is the initial timeout the tests use.
+	initialTimeout = 10
+)

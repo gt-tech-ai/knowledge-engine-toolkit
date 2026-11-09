@@ -85,11 +85,11 @@ func TestEntBackend_Clauses(t *testing.T) {
 		}
 	})
 
-	testEntBackendClausesRest(t, backend)
+	testEntBackendClausesLikeAndList(t, backend)
 }
 
-// testEntBackendClausesRest continues TestEntBackend_Clauses with its remaining steps.
-func testEntBackendClausesRest(t *testing.T, backend entcompiler.Backend) {
+// testEntBackendClausesLikeAndList continues TestEntBackend_Clauses: like and list.
+func testEntBackendClausesLikeAndList(t *testing.T, backend entcompiler.Backend) {
 	t.Helper()
 
 	t.Run(
@@ -209,12 +209,12 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 		},
 	)
 
-	testEntBackendCompositeAndOrderRest(t, backend)
+	testEntBackendCompositeAndOrderDedup(t, backend)
 }
 
-// testEntBackendCompositeAndOrderRest continues TestEntBackend_CompositeAndOrder with
-// its remaining steps.
-func testEntBackendCompositeAndOrderRest(t *testing.T, backend entcompiler.Backend) {
+// testEntBackendCompositeAndOrderDedup continues TestEntBackend_CompositeAndOrder:
+// dedup.
+func testEntBackendCompositeAndOrderDedup(t *testing.T, backend entcompiler.Backend) {
 	t.Helper()
 
 	t.Run("created_at primary sort dedups its tiebreaker", func(t *testing.T) {
@@ -317,10 +317,12 @@ func TestEntBackend_ExistsClauseHonorsCaseInsensitive(t *testing.T) {
 
 	sensitive.CaseInsensitive = false
 
-	q2, args2 := renderPred(backend.ExistsClause(&sensitive, types.OpLike, "ann"))
-	assert.NotContains(t, q2, "ILIKE", "case-sensitive $like must NOT fold")
-	assert.Contains(t, q2, "LIKE")
-	assert.Equal(t, []any{"%ann%"}, args2)
+	secondQ, secondArgs := renderPred(
+		backend.ExistsClause(&sensitive, types.OpLike, "ann"),
+	)
+	assert.NotContains(t, secondQ, "ILIKE", "case-sensitive $like must NOT fold")
+	assert.Contains(t, secondQ, "LIKE")
+	assert.Equal(t, []any{"%ann%"}, secondArgs)
 }
 
 // TestEntBackend_OrderJoin tests that a joined sort directive renders an ORDER BY over a
@@ -463,8 +465,8 @@ func TestEntBackend_OrderDerived(t *testing.T) {
 		BaseColumn:          "last_sync_at",
 		DiscriminatorColumn: "schedule",
 		Cases: []types.IntervalCase{
-			{Value: "hourly", Seconds: seconds3600},
-			{Value: "daily", Seconds: seconds86400},
+			{Value: "hourly", Seconds: secondsDerived},
+			{Value: "daily", Seconds: secondsOrderDerived},
 		},
 	}}
 	ivSQL := renderOrder(
@@ -493,3 +495,19 @@ func assertOrderedColumns(t *testing.T, text string, fragments ...string) {
 		prev = idx
 	}
 }
+
+const (
+	// secondsDerived is the seconds derived the tests use.
+	secondsDerived = 3600
+
+	// secondsOrderDerived is the seconds order derived the tests use.
+	secondsOrderDerived = 86400
+)
+
+const (
+	// textNullsFirst is the literal "NULLS FIRST".
+	textNullsFirst = "NULLS FIRST"
+
+	// textNullsLast is the literal "NULLS LAST".
+	textNullsLast = "NULLS LAST"
+)

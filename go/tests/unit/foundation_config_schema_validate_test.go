@@ -35,7 +35,7 @@ func TestResilienceExtraDefaults_BudgetAndTimeout(t *testing.T) {
 	budgetConfig := resilience.DefaultBudgetConfig()
 	assert.Equal(
 		t,
-		int32(int32Arg100),
+		int32(wantMaxRetries),
 		budgetConfig.MaxRetries,
 		"default retry budget must stay 100",
 	)
@@ -96,7 +96,7 @@ func TestResilienceValidate_RemainingBranches(t *testing.T) {
 
 	badRatio := resilience.DefaultBulkheadConfig()
 
-	badRatio.BackoffRatio = backoffRatio1p5
+	badRatio.BackoffRatio = initialBackoffRatio
 	require.Error(t, badRatio.Validate(), "backoff_ratio outside (0,1] must be rejected")
 
 	// Rate limit: default validates, then negative rate and burst are rejected.
@@ -104,12 +104,12 @@ func TestResilienceValidate_RemainingBranches(t *testing.T) {
 
 	badRate := resilience.DefaultRateLimitConfig()
 
-	testResilienceValidateRemainingBranchesRest(t, badRate)
+	testResilienceValidateRemainingBranchesRateAndBurst(t, badRate)
 }
 
-// testResilienceValidateRemainingBranchesRest continues
-// TestResilienceValidate_RemainingBranches with its remaining steps.
-func testResilienceValidateRemainingBranchesRest(
+// testResilienceValidateRemainingBranchesRateAndBurst continues
+// TestResilienceValidate_RemainingBranches: rate and burst.
+func testResilienceValidateRemainingBranchesRateAndBurst(
 	t *testing.T,
 	badRate resilience.RateLimitConfig,
 ) {
@@ -232,12 +232,12 @@ func TestLayerConfigValidate_RemainingBranches(t *testing.T) {
 	badCountCap.CountCap = -1
 	require.Error(t, badCountCap.Validate(), "a negative count_cap must be rejected")
 
-	testLayerConfigValidateRemainingBranchesRest(t)
+	testLayerConfigValidateRemainingBranchesCacheBounds(t)
 }
 
-// testLayerConfigValidateRemainingBranchesRest continues
-// TestLayerConfigValidate_RemainingBranches with its remaining steps.
-func testLayerConfigValidateRemainingBranchesRest(t *testing.T) {
+// testLayerConfigValidateRemainingBranchesCacheBounds continues
+// TestLayerConfigValidate_RemainingBranches: cache bounds.
+func testLayerConfigValidateRemainingBranchesCacheBounds(t *testing.T) {
 	t.Helper()
 
 	// the list-query cache TTLs must be non-negative, and the
@@ -276,23 +276,40 @@ func testLayerConfigValidateRemainingBranchesRest(t *testing.T) {
 	badDrain := workers.Config{RelayDrainBudget: -time.Second}
 	require.Error(t, badDrain.Validate(0), "a negative drain budget must be rejected")
 
-	interval := seconds10 * time.Second
+	interval := initialInterval * time.Second
 	overrun := workers.Config{RelayInterval: interval, RelayDrainBudget: interval}
 	require.Error(t, overrun.Validate(0),
 		"a drain budget at or above the relay interval must be rejected")
 
 	fits := workers.Config{
 		RelayInterval:    interval,
-		RelayDrainBudget: seconds8 * time.Second,
+		RelayDrainBudget: relayDrainBudget * time.Second,
 	}
 	require.NoError(t, fits.Validate(0), "a drain budget inside the interval is valid")
 
-	expiry := minutes60 * time.Minute
+	expiry := initialExpiry * time.Minute
 	badOrphan := workers.Config{
-		Port:        port8085,
-		ReaperTTL:   minutes90 * time.Minute, // above expiry (valid)
-		OrphanGrace: minutes30 * time.Minute, // <= expiry (invalid)
+		Port:        port,
+		ReaperTTL:   reaperTTL * time.Minute,         // above expiry (valid)
+		OrphanGrace: orphanGraceBounds * time.Minute, // <= expiry (invalid)
 	}
 	assert.Error(t, badOrphan.Validate(expiry),
 		"an orphan_grace within the multipart presign window must be rejected")
 }
+
+const (
+	// initialBackoffRatio is the initial backoff ratio the tests use.
+	initialBackoffRatio = 1.5
+
+	// initialInterval is the initial interval the tests use.
+	initialInterval = 10
+
+	// orphanGraceBounds is the orphan grace bounds the tests use.
+	orphanGraceBounds = 30
+
+	// relayDrainBudget is the relay drain budget the tests use.
+	relayDrainBudget = 8
+
+	// wantMaxRetries is the expected max retries.
+	wantMaxRetries = 100
+)

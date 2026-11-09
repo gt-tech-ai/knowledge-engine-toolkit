@@ -1,9 +1,10 @@
 package cassandra
 
 const (
-	// maxConcurrentBuckets8 is the maxConcurrentBuckets value 8.
-	maxConcurrentBuckets8 = 8
+	// maxConcurrentBucketReads is the named value used where max concurrent bucket reads
+	// applies.
+	maxConcurrentBucketReads = 8
 
-	// pageSize500 is the pageSize value 500.
-	pageSize500 = 500
+	// scanPageSize is the named value used where scan page size applies.
+	scanPageSize = 500
 )

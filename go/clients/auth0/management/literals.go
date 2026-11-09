@@ -1,11 +1,11 @@
 package management
 
 const (
-	// statusCode200 is the statusCode value 200.
-	statusCode200 = 200
+	// minSuccessStatus is the named value used where min success status applies.
+	minSuccessStatus = 200
 )
 
 const (
-	// statusCode300 is the statusCode value 300.
-	statusCode300 = 300
+	// successStatusEnd is the named value used where success status end applies.
+	successStatusEnd = 300
 )

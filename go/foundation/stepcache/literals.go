@@ -1,6 +1,6 @@
 package stepcache
 
 const (
-	// bLen32 is the bLen value 32.
-	bLen32 = 32
+	// sha256ByteLen is the named value used where sha256byte len applies.
+	sha256ByteLen = 32
 )

@@ -100,7 +100,7 @@ func (t *Table) Start(ctx context.Context, name string, input any) (string, erro
 	}
 
 	rctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	runValue := &run{
+	currentRun := &run{
 		id:      identifier,
 		op:      name,
 		state:   StateRunning,
@@ -130,12 +130,12 @@ func (t *Table) Start(ctx context.Context, name string, input any) (string, erro
 		))
 	}
 
-	t.runs[identifier] = runValue
+	t.runs[identifier] = currentRun
 	t.order = append(t.order, identifier)
 	t.wg.Add(1)
 	t.mu.Unlock()
 
-	go t.exec(rctx, runValue, res, input)
+	go t.exec(rctx, currentRun, res, input)
 
 	return identifier, nil
 }
@@ -234,15 +234,15 @@ func (t *Table) Wait() {
 // (failing a run that succeeded). It then forgets finished runs beyond keep.
 func (t *Table) exec(
 	ctx context.Context,
-	runValue *run,
+	currentRun *run,
 	res interfaces.Reservation,
 	input any,
 ) {
 	defer t.wg.Done()
-	defer runValue.cancel()
+	defer currentRun.cancel()
 
-	err := res.Run(ctx, input, &runValue.obs)
-	snap := runValue.snapshot()
+	err := res.Run(ctx, input, &currentRun.obs)
+	snap := currentRun.snapshot()
 
 	snap.State, snap.Err, snap.Ended = outcome(err), err, time.Now()
 
@@ -261,7 +261,8 @@ func (t *Table) exec(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	runValue.state, runValue.err, runValue.ended, runValue.logPaths = snap.State, err,
+	currentRun.state, currentRun.err, currentRun.ended,
+		currentRun.logPaths = snap.State, err,
 		snap.Ended, paths
 
 	t.trim()

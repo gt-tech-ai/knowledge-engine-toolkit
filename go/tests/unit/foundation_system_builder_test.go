@@ -88,41 +88,48 @@ func TestRunnerBuilder_DecoratesAndFiresHooks(t *testing.T) {
 
 	require.NoError(
 		t,
-		commandRunner.Run(context.Background(), textD2, textGo2, textVersion),
+		commandRunner.Run(context.Background(), textDLower, textGoLower, textVersion),
 	)
 
-	_ = commandRunner.RunBuffered(context.Background(), textD2, textGo2, textList)
+	_ = commandRunner.RunBuffered(context.Background(), textDLower, textGoLower, textList)
 	require.NoError(
 		t,
 		commandRunner.RunWithEnv(
 			context.Background(),
-			textD2,
+			textDLower,
 			[]string{textAB},
-			textGo2,
+			textGoLower,
 			textEnv,
 		),
 	)
 
 	_ = commandRunner.RunBufferedWithEnv(
 		context.Background(),
-		textD2,
+		textDLower,
 		nil,
-		textGo2,
+		textGoLower,
 		textX,
 	)
-	assert.True(t, commandRunner.Exists(textGo2), "Exists delegates through the chain")
-	require.NoError(t, commandRunner.RequireTool(textGo2, ""))
+	assert.True(
+		t,
+		commandRunner.Exists(textGoLower),
+		"Exists delegates through the chain",
+	)
+	require.NoError(t, commandRunner.RequireTool(textGoLower, ""))
 
 	assert.NotEmpty(t, logs, "logging decorator records each command")
 	assert.Contains(t, events, "start:go version")
 	assert.Contains(t, events, "ok:go version", "success fires OnSuccess")
 
-	testRunnerBuilderDecoratesAndFiresHooksRest(t, ctrl)
+	testRunnerBuilderDecoratesAndFiresHooksFailures(t, ctrl)
 }
 
-// testRunnerBuilderDecoratesAndFiresHooksRest continues
-// TestRunnerBuilder_DecoratesAndFiresHooks with its remaining steps.
-func testRunnerBuilderDecoratesAndFiresHooksRest(t *testing.T, ctrl *gomock.Controller) {
+// testRunnerBuilderDecoratesAndFiresHooksFailures continues
+// TestRunnerBuilder_DecoratesAndFiresHooks: failures.
+func testRunnerBuilderDecoratesAndFiresHooksFailures(
+	t *testing.T,
+	ctrl *gomock.Controller,
+) {
 	t.Helper()
 
 	// Failing inner fires OnFailure for both Run and RunBuffered.
@@ -210,7 +217,7 @@ func TestRunnerBuilder_DryRunSkipsExecution(t *testing.T) {
 	)
 
 	assert.True(t, commandRunner.Exists("anything"), "Exists still delegates (read-only)")
-	require.NoError(t, commandRunner.RequireTool(textGo2, ""))
+	require.NoError(t, commandRunner.RequireTool(textGoLower, ""))
 	assert.NotEmpty(t, logs, "dry-run logs what would execute")
 }
 
@@ -234,37 +241,43 @@ func TestRunnerBuilder_WithEnvAddsEnvToEveryRun(t *testing.T) {
 	ci := []string{"CI=true"}
 	both := []string{"CI=true", textCiFalse}
 
-	inner.EXPECT().RunWithEnv(ctx, textD2, ci, textGo2, textTest).Return(nil)
-	inner.EXPECT().RunWithEnv(ctx, textD2, both, textGo2, textTest).Return(nil)
-	inner.EXPECT().RunBufferedWithEnv(ctx, textD2, ci, textGo2, textVet).
+	inner.EXPECT().RunWithEnv(ctx, textDLower, ci, textGoLower, textTest).Return(nil)
+	inner.EXPECT().RunWithEnv(ctx, textDLower, both, textGoLower, textTest).Return(nil)
+	inner.EXPECT().RunBufferedWithEnv(ctx, textDLower, ci, textGoLower, textVet).
 		Return(system.CmdResult{Stdout: []byte(textA)})
-	inner.EXPECT().RunBufferedWithEnv(ctx, textD2, both, textGo2, textVet).
+	inner.EXPECT().RunBufferedWithEnv(ctx, textDLower, both, textGoLower, textVet).
 		Return(system.CmdResult{Stdout: []byte(textB)})
-	inner.EXPECT().Exists(textGo2).Return(true)
-	inner.EXPECT().RequireTool(textGo2, "brew install go").Return(nil)
+	inner.EXPECT().Exists(textGoLower).Return(true)
+	inner.EXPECT().RequireTool(textGoLower, "brew install go").Return(nil)
 
 	commandRunner := system.NewBuilder(inner).WithEnv("CI=true").Build()
-	require.NoError(t, commandRunner.Run(ctx, textD2, textGo2, textTest))
+	require.NoError(t, commandRunner.Run(ctx, textDLower, textGoLower, textTest))
 	require.NoError(
 		t,
-		commandRunner.RunWithEnv(ctx, textD2, []string{textCiFalse}, textGo2, textTest),
+		commandRunner.RunWithEnv(
+			ctx,
+			textDLower,
+			[]string{textCiFalse},
+			textGoLower,
+			textTest,
+		),
 	)
 	assert.Equal(
 		t,
 		textA,
-		string(commandRunner.RunBuffered(ctx, textD2, textGo2, textVet).Stdout),
+		string(commandRunner.RunBuffered(ctx, textDLower, textGoLower, textVet).Stdout),
 	)
 	assert.Equal(t, textB, string(
 		commandRunner.RunBufferedWithEnv(
 			ctx,
-			textD2,
+			textDLower,
 			[]string{textCiFalse},
-			textGo2,
+			textGoLower,
 			textVet,
 		).Stdout,
 	))
-	assert.True(t, commandRunner.Exists(textGo2))
-	require.NoError(t, commandRunner.RequireTool(textGo2, "brew install go"))
+	assert.True(t, commandRunner.Exists(textGoLower))
+	require.NoError(t, commandRunner.RequireTool(textGoLower, "brew install go"))
 }
 
 // TestRunner_RunBufferedWithInput tests a buffered run fed from stdin.
@@ -308,7 +321,7 @@ func TestBuilder_RunBufferedWithInput(t *testing.T) {
 	base.EXPECT().
 		RunBufferedWithInput(gomock.Any(), textD, []string{"E=1", textX2}, []byte(textIn),
 			textKubectl, "apply", "-f", "-").
-		Return(system.CmdResult{Stdout: []byte("applied\n")}).Times(timesArg2)
+		Return(system.CmdResult{Stdout: []byte("applied\n")}).Times(wantCalls)
 
 	var logs, events []string
 
@@ -347,3 +360,14 @@ func TestBuilder_RunBufferedWithInput(t *testing.T) {
 		textKubectl, "apply", "-f", "-")
 	assert.Equal(t, "applied\n", string(b.Captured()))
 }
+
+const (
+	// textCiFalse is the literal "CI=false".
+	textCiFalse = "CI=false"
+
+	// textD is the literal "/d".
+	textD = "/d"
+
+	// textX2 is the literal "X=2".
+	textX2 = "X=2"
+)

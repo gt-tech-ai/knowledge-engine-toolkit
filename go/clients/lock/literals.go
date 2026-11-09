@@ -1,6 +1,6 @@
 package lock
 
 const (
-	// renewInterval3 is the renewInterval value 3.
-	renewInterval3 = 3
+	// minRenewalsPerTTL is the named value used where min renewals per ttl applies.
+	minRenewalsPerTTL = 3
 )

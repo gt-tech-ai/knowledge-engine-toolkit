@@ -75,12 +75,12 @@ func cachedGuardDeps(
 func TestServicesGuard_GoCachedOnInputs(t *testing.T) {
 	t.Parallel()
 
-	testServicesGuardGoCachedOnInputsRest5(t)
+	testServicesGuardGoCachedOnInputsChecksRun(t)
 }
 
-// testServicesGuardGoCachedOnInputsRest5 continues testServicesGuardGoCachedOnInputsRest4
-// with its remaining steps.
-func testServicesGuardGoCachedOnInputsRest5(t *testing.T) {
+// testServicesGuardGoCachedOnInputsChecksRun continues
+// testServicesGuardGoCachedOnInputsFailuresRerun: checks run.
+func testServicesGuardGoCachedOnInputsChecksRun(t *testing.T) {
 	t.Helper()
 
 	var runs atomic.Int32
@@ -95,50 +95,58 @@ func testServicesGuardGoCachedOnInputsRest5(t *testing.T) {
 
 	g := gs[0]
 
-	testServicesGuardGoCachedOnInputsRest3(t, &runs, &deps, &row, g)
+	testServicesGuardGoCachedOnInputsCachesAndSkips(t, &runs, &deps, &row, g)
 }
 
-// testServicesGuardGoCachedOnInputsRest3 continues testServicesGuardGoCachedOnInputsRest2
-// with its remaining steps.
-func testServicesGuardGoCachedOnInputsRest3(
+// testServicesGuardGoCachedOnInputsCachesAndSkips continues
+// testServicesGuardGoCachedOnInputs: caches and skips.
+func testServicesGuardGoCachedOnInputsCachesAndSkips(
 	t *testing.T,
 	runs *atomic.Int32,
 	deps *guard.Deps,
 	row *types.GuardRow,
-	guardValue interfaces.Guard,
+	currentGuard interfaces.Guard,
 ) {
 	t.Helper()
 
 	files := guardFiles()
 
-	verdict := guardValue.Run(t.Context(), memoryCodebase(t, files))
+	verdict := currentGuard.Run(t.Context(), memoryCodebase(t, files))
 	assert.Equal(t, types.StatusPass, verdict.Status)
-	assert.Equal(t, int32(int32Arg2), runs.Load())
+	assert.Equal(t, int32(wantRunsSkips), runs.Load())
 
-	verdict = guardValue.Run(t.Context(), memoryCodebase(t, files))
+	verdict = currentGuard.Run(t.Context(), memoryCodebase(t, files))
 	assert.Equal(t, types.StatusSkip, verdict.Status)
 	assert.Equal(t, textCached, verdict.Detail)
-	assert.Equal(t, int32(int32Arg2), runs.Load(), "a cached pass runs nothing")
+	assert.Equal(t, int32(wantRunsSkips), runs.Load(), "a cached pass runs nothing")
 
 	files[textInfraMainTf] = "resource \"y\" {}\n"
-	verdict = guardValue.Run(t.Context(), memoryCodebase(t, files))
+	verdict = currentGuard.Run(t.Context(), memoryCodebase(t, files))
 	assert.Equal(t, types.StatusPass, verdict.Status)
 	assert.Empty(
 		t,
 		verdict.Detail,
 		"one expansion ran, so the *row is not reported cached",
 	)
-	assert.Equal(t, int32(int32Arg3), runs.Load(), "only the edited module runs")
+	assert.Equal(t, int32(wantRuns), runs.Load(), "only the edited module runs")
 
 	// A failure is not cached: the failing module runs again, the passing one does not.
 	var failing atomic.Int32
 
-	testServicesGuardGoCachedOnInputsRest4(t, runs, deps, row, files, verdict, &failing)
+	testServicesGuardGoCachedOnInputsFailuresRerun(
+		t,
+		runs,
+		deps,
+		row,
+		files,
+		verdict,
+		&failing,
+	)
 }
 
-// testServicesGuardGoCachedOnInputsRest4 continues testServicesGuardGoCachedOnInputsRest3
-// with its remaining steps.
-func testServicesGuardGoCachedOnInputsRest4(
+// testServicesGuardGoCachedOnInputsFailuresRerun continues
+// testServicesGuardGoCachedOnInputsCachesAndSkips: failures rerun.
+func testServicesGuardGoCachedOnInputsFailuresRerun(
 	t *testing.T,
 	runs *atomic.Int32,
 	depsRef *guard.Deps,
@@ -157,12 +165,12 @@ func testServicesGuardGoCachedOnInputsRest4(
 	fg, err := guard.NewFromConfig([]types.GuardRow{*row}, &fdeps)
 	require.NoError(t, err)
 
-	for range iterations2 {
+	for range iterations {
 		verdict = fg[0].Run(t.Context(), memoryCodebase(t, files))
 		assert.Equal(t, types.StatusFail, verdict.Status)
 	}
 
-	assert.Equal(t, int32(int32Arg3), failing.Load())
+	assert.Equal(t, int32(wantFailing), failing.Load())
 
 	// No inputs: never cached.
 	plain := *row
@@ -239,7 +247,7 @@ func TestServicesGuard_ExpansionsRunInParallel(t *testing.T) {
 
 	v := gs[0].Run(t.Context(), memoryCodebase(t, guardFiles()))
 	assert.Equal(t, types.StatusFail, v.Status)
-	require.Len(t, v.Findings, wantFindingsLen3)
+	require.Len(t, v.Findings, wantFindingsLen)
 	assert.Equal(t, []string{textA, textB, textC}, []string{
 		v.Findings[0].File, v.Findings[1].File, v.Findings[2].File,
 	})
@@ -281,3 +289,19 @@ func TestServicesGuard_RowEditMissesCache(t *testing.T) {
 		assert.Equal(t, []int32{2, 2, 4, 4}[i], runs.Load(), "run %d", i)
 	}
 }
+
+const (
+	// wantFailing is the expected failing.
+	wantFailing = 3
+
+	// wantFindingsLen is the expected findings len.
+	wantFindingsLen = 3
+
+	// wantRunsSkips is the expected runs skips.
+	wantRunsSkips = 2
+)
+
+const (
+	// textModules is the literal "modules".
+	textModules = "modules"
+)

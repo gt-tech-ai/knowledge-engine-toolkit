@@ -23,10 +23,10 @@ import (
 func TestOption_IsSomeIsNoneUnwrapOrElse(t *testing.T) {
 	t.Parallel()
 
-	some := types.Some(someArg42)
+	some := types.Some(someInputElse)
 	assert.True(t, some.IsSome())
 	assert.False(t, some.IsNone())
-	assert.Equal(t, wantUnwrapOrElse42, some.UnwrapOrElse(func() int {
+	assert.Equal(t, wantUnwrapOrElse, some.UnwrapOrElse(func() int {
 		t.Fatal("fallback must not be called when a value is present")
 
 		return -1
@@ -57,3 +57,11 @@ func TestSomeIfNotEmpty(t *testing.T) {
 	assert.True(t, got.IsSome())
 	assert.Equal(t, "hello", got.UnwrapOr(""))
 }
+
+const (
+	// someInputElse is the some input else the tests use.
+	someInputElse = 42
+
+	// wantUnwrapOrElse is the expected unwrap or else.
+	wantUnwrapOrElse = 42
+)

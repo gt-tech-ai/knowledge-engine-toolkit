@@ -62,13 +62,13 @@ func WithImage(image string) Option {
 // NewTestMinIO starts a MinIO container (DefaultImage unless WithImage overrides
 // it) and waits up to 60 seconds for its readiness endpoint to report healthy.
 func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
-	optionsValue := options{image: DefaultImage}
+	currentOptions := options{image: DefaultImage}
 	for _, opt := range opts {
-		opt(&optionsValue)
+		opt(&currentOptions)
 	}
 
 	req := testcontainers.ContainerRequest{
-		Image:        optionsValue.image,
+		Image:        currentOptions.image,
 		ExposedPorts: []string{minioAPIPort},
 		Env: map[string]string{
 			"MINIO_ROOT_USER":     RootUser,
@@ -95,7 +95,7 @@ func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
-			"failed to start MinIO container from "+optionsValue.image,
+			"failed to start MinIO container from "+currentOptions.image,
 		)
 	}
 

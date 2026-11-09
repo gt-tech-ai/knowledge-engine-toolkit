@@ -18,12 +18,12 @@ import (
 func convertToOAS3(
 	swagger map[string]any, cfg serviceConfig, headers map[string]string,
 ) (map[string]any, error) {
-	doc2, err := parseSwagger2(swagger)
+	secondDoc, err := parseSwagger2(swagger)
 	if err != nil {
 		return nil, err
 	}
 
-	oas, err := swagger2ToMap(doc2)
+	oas, err := swagger2ToMap(secondDoc)
 	if err != nil {
 		return nil, err
 	}
@@ -56,28 +56,28 @@ func parseSwagger2(swagger map[string]any) (*openapi2.T, error) {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "marshal swagger")
 	}
 
-	var doc2 openapi2.T
+	var secondDoc openapi2.T
 
-	err = json.Unmarshal(raw, &doc2)
+	err = json.Unmarshal(raw, &secondDoc)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse swagger")
 	}
 
-	if len(doc2.Consumes) == 0 {
-		doc2.Consumes = []string{mediaJSON}
+	if len(secondDoc.Consumes) == 0 {
+		secondDoc.Consumes = []string{mediaJSON}
 	}
 
-	if len(doc2.Produces) == 0 {
-		doc2.Produces = []string{mediaJSON}
+	if len(secondDoc.Produces) == 0 {
+		secondDoc.Produces = []string{mediaJSON}
 	}
 
-	return &doc2, nil
+	return &secondDoc, nil
 }
 
 // swagger2ToMap converts through openapi2conv and returns the result as a JSON map
 // for the JSON:API rewrite.
-func swagger2ToMap(doc2 *openapi2.T) (map[string]any, error) {
-	doc3, err := openapi2conv.ToV3(doc2)
+func swagger2ToMap(secondDoc *openapi2.T) (map[string]any, error) {
+	thirdDoc, err := openapi2conv.ToV3(secondDoc)
 	if err != nil {
 		return nil, apperr.Wrap(
 			err,
@@ -86,7 +86,7 @@ func swagger2ToMap(doc2 *openapi2.T) (map[string]any, error) {
 		)
 	}
 
-	raw, err := json.Marshal(doc3)
+	raw, err := json.Marshal(thirdDoc)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "marshal openapi 3")
 	}

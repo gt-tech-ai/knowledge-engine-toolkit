@@ -70,15 +70,15 @@ func (l *line) OnStepComplete(stepResult *types.StepResult) {
 	)
 
 	if len(stepResult.Children) > 1 {
-		for _, stepResultValue := range stepResult.Children {
-			name := strings.TrimPrefix(stepResultValue.Name, stepResult.Name+"/")
+		for _, currentStepResult := range stepResult.Children {
+			name := strings.TrimPrefix(currentStepResult.Name, stepResult.Name+"/")
 
 			_, _ = fmt.Fprintf(
 				l.p.w,
 				"      %s %s  %s\n",
-				l.icon(stepResultValue.Status),
+				l.icon(currentStepResult.Status),
 				name,
-				l.childMetric(&stepResultValue),
+				l.childMetric(&currentStepResult),
 			)
 		}
 	}

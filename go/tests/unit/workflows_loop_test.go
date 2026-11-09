@@ -51,19 +51,16 @@ func TestLoopConfig_RejectsNegativeDurations(t *testing.T) {
 func TestTicker_RunsAtStartThenEveryInterval(t *testing.T) {
 	t.Parallel()
 
-	for _, atStart := range []bool{true, false} {
+	for _, first := range []int64{1, 0} {
 		synctest.Test(t, func(t *testing.T) {
-			testTickerRunsAtStartThenEveryIntervalCase(t, atStartFlag(atStart))
+			testTickerPassesFromStart(t, first)
 		})
 	}
 }
 
-// atStartFlag names the atStart option in a signature.
-type atStartFlag bool
-
-// testTickerRunsAtStartThenEveryIntervalCase is the body of a closure in
-// TestTicker_RunsAtStartThenEveryInterval.
-func testTickerRunsAtStartThenEveryIntervalCase(t *testing.T, atStart atStartFlag) {
+// testTickerPassesFromStart checks a ticker that makes first passes at start (1 runs at
+// start, 0 waits one interval) and one more every interval after.
+func testTickerPassesFromStart(t *testing.T, first int64) {
 	t.Helper()
 
 	var passes atomic.Int64
@@ -72,7 +69,7 @@ func testTickerRunsAtStartThenEveryIntervalCase(t *testing.T, atStart atStartFla
 		passes.Add(1)
 
 		return nil
-	}), loop.Config{Interval: time.Minute, RunAtStart: bool(atStart)}, quietLogger(t))
+	}), loop.Config{Interval: time.Minute, RunAtStart: first > 0}, quietLogger(t))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -81,11 +78,6 @@ func testTickerRunsAtStartThenEveryIntervalCase(t *testing.T, atStart atStartFla
 	go func() { done <- ticker.Run(ctx) }()
 
 	synctest.Wait()
-
-	first := int64(0)
-	if atStart {
-		first = 1
-	}
 
 	require.Equal(t, first, passes.Load())
 	time.Sleep(3 * time.Minute)
@@ -172,7 +164,7 @@ func TestTicker_BackToBackWhenIntervalIsZero(t *testing.T) {
 	}), loop.Config{}, quietLogger(t))
 	require.NoError(t, err)
 	require.NoError(t, ticker.Run(ctx))
-	require.Equal(t, int64(int64Arg3), passes.Load())
+	require.Equal(t, int64(wantPasses), passes.Load())
 }
 
 // TestTicker_ReturnsNilWhenContextEnds tests shutdown during a pass.
@@ -243,16 +235,16 @@ func TestTicker_ReturnsNilWhenContextEnds(t *testing.T) {
 func TestGroup_RunsEveryRunnerUntilContextEnds(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
-		var int64Value, int644 atomic.Int64
+		var secondCount, int644 atomic.Int64
 
 		group := loop.NewGroup(quietLogger(t))
-		group.Add(textA, mustTicker(t, &int64Value))
+		group.Add(textA, mustTicker(t, &secondCount))
 		group.Add(textB, mustTicker(t, &int644))
 
 		ctx, cancel := context.WithCancel(t.Context())
 		require.NoError(t, group.Start(ctx))
 		synctest.Wait()
-		require.Equal(t, int64(1), int64Value.Load())
+		require.Equal(t, int64(1), secondCount.Load())
 		require.Equal(t, int64(1), int644.Load())
 
 		cancel()
@@ -422,3 +414,8 @@ func mustTicker(t *testing.T, n *atomic.Int64) *loop.Ticker {
 
 	return ticker
 }
+
+const (
+	// wantPasses is the expected passes.
+	wantPasses = 3
+)

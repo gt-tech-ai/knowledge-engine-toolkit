@@ -29,11 +29,11 @@ func TestStartStatsCollector_DefaultsNonPositiveInterval(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = value.Close() })
 
-	metricsValue, err := metrics.New(metrics.KindPrometheus)
+	currentMetrics, err := metrics.New(metrics.KindPrometheus)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	// interval 0 must fall back to the default cadence, not build a zero-tick ticker.
-	postgres.StartStatsCollector(ctx, value, metricsValue, 0)
+	postgres.StartStatsCollector(ctx, value, currentMetrics, 0)
 }

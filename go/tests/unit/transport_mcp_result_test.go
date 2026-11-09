@@ -162,7 +162,7 @@ func TestTransportMcpFailedStepTail_RespectsConfigN(t *testing.T) {
 	))
 	opts := mcpOpts(t)
 
-	opts.Settings.TailLines = tailLines3
+	opts.Settings.TailLines = initialTailLines
 
 	_, out := callStub(t, reg, &opts)
 
@@ -198,7 +198,7 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Len(t, logs, wantLogsLen5)
+	require.Len(t, logs, wantLogsLen)
 	assert.Empty(t, logs[1])
 
 	path := logs[0]
@@ -211,10 +211,10 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 	)
 
 	for index, want := range map[int]string{
-		0:           "ok\n",
-		iterations2: "literal\n",
-		iterations3: "second\n",
-		iterations4: "third\n",
+		0:                   "ok\n",
+		iterations2Returned: "literal\n",
+		iterations3Returned: "second\n",
+		iterations4Returned: "third\n",
 	} {
 		got, rerr := os.ReadFile(logs[index])
 		require.NoError(t, rerr)
@@ -223,7 +223,7 @@ func TestTransportMcpStepLog_WrittenAndPathReturned(t *testing.T) {
 
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(fileModeArg0o600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(fileModeInput), info.Mode().Perm())
 }
 
 // TestTransportMcpOldRuns_PrunedAtStartup tests that serving keeps only the newest
@@ -242,13 +242,22 @@ func TestTransportMcpOldRuns_PrunedAtStartup(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	clock := time.Date(year2026, month10, day4, hour12, 0, 0, 0, time.UTC)
+	clock := time.Date(
+		dateInput,
+		dateInputStartup,
+		dateInputAtStartup,
+		dateInputPrunedAtStartup,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
 	runDir := mcp.NewRunDir(root, func() time.Time { return clock })
-	ids := make([]string, 0, capacity25)
+	ids := make([]string, 0, makeInputStartup)
 
-	for range iterations25 {
+	for range iterationsStartup {
 		id := runDir.NewRunID()
-		require.NoError(t, os.MkdirAll(filepath.Join(root, id), perm0o750))
+		require.NoError(t, os.MkdirAll(filepath.Join(root, id), mkdirAllInputStartup))
 
 		ids = append(ids, id)
 		clock = clock.Add(time.Second)
@@ -327,7 +336,7 @@ func TestTransportMcpBoundedTool_ReturnsShapedResult(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &structured))
 	assert.Equal(t, out, structured)
 
-	require.Len(t, out.Steps, wantStepsLen2)
+	require.Len(t, out.Steps, wantStepsLen)
 
 	for i, want := range []string{"built\n", "careful\n"} {
 		got, err := os.ReadFile(out.Steps[i].Log)
@@ -379,7 +388,7 @@ func TestTransportMcpServe_PruneFailure(t *testing.T) {
 	t.Parallel()
 
 	root := filepath.Join(t.TempDir(), "runs")
-	require.NoError(t, os.WriteFile(root, []byte(textX), perm0o600))
+	require.NoError(t, os.WriteFile(root, []byte(textX), writeFileInput))
 
 	opts := mcpOpts(t)
 
@@ -395,3 +404,38 @@ func TestTransportMcpServe_PruneFailure(t *testing.T) {
 	require.ErrorContains(t, err, "run dir")
 	assert.NotContains(t, err.Error(), "transport")
 }
+
+const (
+	// dateInputAtStartup is the date input at startup the tests use.
+	dateInputAtStartup = 4
+
+	// dateInputPrunedAtStartup is the date input pruned at startup the tests use.
+	dateInputPrunedAtStartup = 12
+
+	// dateInputStartup is the date input startup the tests use.
+	dateInputStartup = 10
+
+	// initialTailLines is the initial tail lines the tests use.
+	initialTailLines = 3
+
+	// iterations2Returned is the iterations2 returned the tests use.
+	iterations2Returned = 2
+
+	// iterations3Returned is the iterations3 returned the tests use.
+	iterations3Returned = 3
+
+	// iterations4Returned is the iterations4 returned the tests use.
+	iterations4Returned = 4
+
+	// iterationsStartup is the iterations startup the tests use.
+	iterationsStartup = 25
+
+	// makeInputStartup is the make input startup the tests use.
+	makeInputStartup = 25
+
+	// mkdirAllInputStartup is the mkdir all input startup the tests use.
+	mkdirAllInputStartup = 0o750
+
+	// wantLogsLen is the expected logs len.
+	wantLogsLen = 5
+)

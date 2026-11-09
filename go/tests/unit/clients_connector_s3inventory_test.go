@@ -107,11 +107,11 @@ func newInventoryFixture(t *testing.T, format string) inventoryFixture {
 			textInvData2Csv: gzipped(t, second),
 		},
 		listed: []interfaces.StorageObject{
-			obj("docs/a.pdf", size10, "01", "e1"),
-			obj("docs/my report(2).pdf", size12, "02", "e2"),
-			obj("docs/c.pdf", size13, "03", "e3"),
-			obj("docs/d.pdf", size14, "04", "e4"),
-			obj("docs/e.pdf", size15, "05", "e5"),
+			obj("docs/a.pdf", objInput, "01", "e1"),
+			obj("docs/my report(2).pdf", objInputFixture, "02", "e2"),
+			obj("docs/c.pdf", objInputInventoryFixture, "03", "e3"),
+			obj("docs/d.pdf", objInputNewInventoryFixture, "04", "e4"),
+			obj("docs/e.pdf", inventoryObjectEBytes, "05", "e5"),
 		},
 	}
 }
@@ -188,10 +188,10 @@ func TestS3Inventory_PagesMatchTheS3Kind(t *testing.T) {
 	listing, err := sourceBuilder.Build(ctx, new(s3Cfg(textAccessKey)))
 	require.NoError(t, err)
 
-	listed, _, err := listing.ListPage(ctx, "", limit1000)
+	listed, _, err := listing.ListPage(ctx, "", listPageInputKind)
 	require.NoError(t, err)
 
-	got := drain(t, inventory, "", limit2)
+	got := drain(t, inventory, "", drainInput)
 
 	require.Equal(t, listed, got)
 	require.Equal(t, map[string]int{
@@ -234,11 +234,11 @@ func TestS3Inventory_ResumesFromACheckpoint(t *testing.T) {
 		return src
 	}
 
-	first, token, err := newSource().ListPage(ctx, "", limit2)
+	first, token, err := newSource().ListPage(ctx, "", listPageInputACheckpoint)
 	require.NoError(t, err)
 
-	rest := drain(t, newSource(), token, limit2)
-	_, afterThree, err := newSource().ListPage(ctx, "", limit3)
+	rest := drain(t, newSource(), token, drainInput)
+	_, afterThree, err := newSource().ListPage(ctx, "", listPageInputFromACheckpoint)
 	require.NoError(t, err)
 
 	require.Equal(t, fixture.listed[:2], first)
@@ -293,14 +293,14 @@ func TestS3Inventory_RefusesUnusableReportsAndTokens(t *testing.T) {
 
 	noKey.InventoryManifestKey = ""
 
-	testS3InventoryRefusesUnusableReportsAndTokensRest(
+	testS3InventoryRefusesUnusableReportsAndTokensBadParquetAndTokens(
 		ctx, t, source, otherBucket, &noKey,
 	)
 }
 
-// testS3InventoryRefusesUnusableReportsAndTokensRest continues
-// TestS3Inventory_RefusesUnusableReportsAndTokens with its remaining steps.
-func testS3InventoryRefusesUnusableReportsAndTokensRest(
+// testS3InventoryRefusesUnusableReportsAndTokensBadParquetAndTokens continues
+// TestS3Inventory_RefusesUnusableReportsAndTokens: bad parquet and tokens.
+func testS3InventoryRefusesUnusableReportsAndTokensBadParquetAndTokens(
 	ctx context.Context,
 	t *testing.T,
 	source func(manifest []byte, downloadErr error) *s3inventory.Source,
@@ -315,22 +315,22 @@ func testS3InventoryRefusesUnusableReportsAndTokensRest(
 	_, _, parquetErr := source(
 		newInventoryFixture(t, "Parquet").manifest,
 		nil,
-	).ListPage(ctx, "", limit2)
-	_, _, bucketErr := source(otherBucket, nil).ListPage(ctx, "", limit2)
+	).ListPage(ctx, "", listPageInputTokens)
+	_, _, bucketErr := source(otherBucket, nil).ListPage(ctx, "", listPageInputTokens)
 	_, _, tokenErr := source(
 		newInventoryFixture(t, textCsv).manifest,
 		nil,
-	).ListPage(ctx, "x:1", limit2)
+	).ListPage(ctx, "x:1", listPageInputTokens)
 	_, _, downErr := source(
 		nil,
 		apperr.Sentinel("dial tcp: connection refused"),
-	).ListPage(ctx, "", limit2)
+	).ListPage(ctx, "", listPageInputTokens)
 	without := func(column string) []byte {
 		return bytes.Replace(newInventoryFixture(t, textCsv).manifest,
 			[]byte(column+", "), nil, 1)
 	}
-	_, _, noETagErr := source(without("ETag"), nil).ListPage(ctx, "", limit2)
-	_, _, noSizeErr := source(without("Size"), nil).ListPage(ctx, "", limit2)
+	_, _, noETagErr := source(without("ETag"), nil).ListPage(ctx, "", listPageInputTokens)
+	_, _, noSizeErr := source(without("Size"), nil).ListPage(ctx, "", listPageInputTokens)
 
 	require.True(t, apperr.Is(buildErr, apperr.CodeInvalidInput))
 	require.True(t, apperr.Is(parquetErr, apperr.CodeInvalidInput))
@@ -446,13 +446,13 @@ func TestS3Inventory_RetriesADeadBodyOnce(t *testing.T) {
 	first, token, err := src.ListPage(ctx, "", 1)
 	require.NoError(t, err)
 
-	second, next, err := src.ListPage(ctx, token, limit2)
+	second, next, err := src.ListPage(ctx, token, listPageInputOnce)
 	require.NoError(t, err)
 
 	require.Equal(t, "docs/1", first[0].Key)
 	require.Equal(t, []string{"docs/2", "docs/3"}, []string{second[0].Key, second[1].Key})
 	require.Empty(t, next)
-	require.Equal(t, wantDownloads2, downloads)
+	require.Equal(t, wantDownloads, downloads)
 }
 
 // TestS3Inventory_RefusesMalformedDataFiles tests that a report the source cannot read
@@ -529,7 +529,59 @@ func testS3InventoryRefusesMalformedDataFilesCase(t *testing.T, testCase struct 
 	)
 	require.NoError(t, err)
 
-	_, _, err = src.ListPage(ctx, testCase.token, limit10)
+	_, _, err = src.ListPage(ctx, testCase.token, listPageInput)
 
 	require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 }
+
+const (
+	// listPageInputACheckpoint is the list page input acheckpoint the tests use.
+	listPageInputACheckpoint = 2
+
+	// listPageInputFromACheckpoint is the list page input from acheckpoint the tests use.
+	listPageInputFromACheckpoint = 3
+
+	// listPageInputKind is the list page input kind the tests use.
+	listPageInputKind = 1000
+
+	// listPageInputOnce is the list page input once the tests use.
+	listPageInputOnce = 2
+
+	// listPageInputTokens is the list page input tokens the tests use.
+	listPageInputTokens = 2
+
+	// objInput is the obj input the tests use.
+	objInput = 10
+
+	// objInputFixture is the obj input fixture the tests use.
+	objInputFixture = 12
+
+	// objInputInventoryFixture is the obj input inventory fixture the tests use.
+	objInputInventoryFixture = 13
+
+	// objInputNewInventoryFixture is the obj input new inventory fixture the tests use.
+	objInputNewInventoryFixture = 14
+
+	// inventoryObjectEBytes is the obj input new inventory fixture13 the tests use.
+	inventoryObjectEBytes = 15
+
+	// wantDownloads is the expected downloads.
+	wantDownloads = 2
+)
+
+const (
+	// textFileformat is the literal "fileFormat".
+	textFileformat = "fileFormat"
+
+	// textFileschema is the literal "fileSchema".
+	textFileschema = "fileSchema"
+
+	// textInvData1Csv is the literal "inv/data/1.csv.gz".
+	textInvData1Csv = "inv/data/1.csv.gz"
+
+	// textInvData2Csv is the literal "inv/data/2.csv.gz".
+	textInvData2Csv = "inv/data/2.csv.gz"
+
+	// textSourcebucket is the literal "sourceBucket".
+	textSourcebucket = "sourceBucket"
+)

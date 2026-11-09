@@ -32,13 +32,16 @@ func openAPIFixtureDirs(
 	t.Helper()
 
 	descPath = filepath.Join(t.TempDir(), textDBinpb)
-	require.NoError(t, os.WriteFile(descPath, fds, perm0o600))
+	require.NoError(t, os.WriteFile(descPath, fds, writeFileInput))
 
 	routes, err := openapi.BuildRouteTable(fds, nil)
 	require.NoError(t, err)
 
 	inDir = filepath.Join(t.TempDir(), textIn)
-	require.NoError(t, os.MkdirAll(filepath.Join(inDir, textTest, textV1), perm0o750))
+	require.NoError(
+		t,
+		os.MkdirAll(filepath.Join(inDir, textTest, textV1), mkdirAllInputDirs),
+	)
 
 	return descPath, routes, inDir
 }
@@ -60,7 +63,7 @@ func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
 
 	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	messages := []*descriptorpb.DescriptorProto{
-		fixtures.EmptyMessage(textEmpty2),
+		fixtures.EmptyMessage(textEmptyTitle),
 		fixtures.EmptyMessage(
 			"PauseResp",
 		), // empty action response — no (jsonapi.v1.resource), no fields
@@ -68,12 +71,11 @@ func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
 	methods := []*descriptorpb.MethodDescriptorProto{
 		fixtures.Method(
 			"PauseThing",
-			textEmpty2,
+			textEmptyTitle,
 			"PauseResp",
-			jsonapiSetter.MethodOpts(
+			jsonapiSetter.ActionMethodOpts(
 				textPost,
 				"/api/v1/things/{thing_id}/pause",
-				true,
 			),
 		), // action:true
 	}
@@ -90,12 +92,18 @@ func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
           "schema":{"$ref":"#/definitions/PauseThingResponse"}}}}}},
       "definitions":{"PauseThingResponse":{"type":"object"}}}`
 
-	testOpenAPIEmptyActionMetaHasNoDanglingRefRest(t, descPath, routes, inDir, swagger)
+	testOpenAPIEmptyActionMetaHasNoDanglingRefChecksSpec(
+		t,
+		descPath,
+		routes,
+		inDir,
+		swagger,
+	)
 }
 
-// testOpenAPIEmptyActionMetaHasNoDanglingRefRest continues
-// TestOpenAPI_EmptyActionMetaHasNoDanglingRef with its remaining steps.
-func testOpenAPIEmptyActionMetaHasNoDanglingRefRest(
+// testOpenAPIEmptyActionMetaHasNoDanglingRefChecksSpec continues
+// TestOpenAPI_EmptyActionMetaHasNoDanglingRef: checks spec.
+func testOpenAPIEmptyActionMetaHasNoDanglingRefChecksSpec(
 	t *testing.T,
 	descPath string,
 	routes map[string][]openapi.RouteEntry,
@@ -113,7 +121,7 @@ func testOpenAPIEmptyActionMetaHasNoDanglingRefRest(
 			textTestSwaggerJSON,
 		),
 		[]byte(swagger),
-		perm0o600,
+		writeFileInput,
 	))
 
 	res, err := openapi.Convert(
@@ -145,3 +153,8 @@ func testOpenAPIEmptyActionMetaHasNoDanglingRefRest(
 			"meta $ref must resolve to an emitted schema (no dangling ref)")
 	}
 }
+
+const (
+	// mkdirAllInputDirs is the mkdir all input dirs the tests use.
+	mkdirAllInputDirs = 0o750
+)

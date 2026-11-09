@@ -29,7 +29,7 @@ func DefaultConfig(serviceName string) Config {
 		Kind:        KindOTel,
 		ServiceName: serviceName,
 		Endpoint:    "localhost:4317",
-		SampleRate:  sampleRate1p0,
+		SampleRate:  fullSampleRate,
 		Insecure:    true,
 	}
 }

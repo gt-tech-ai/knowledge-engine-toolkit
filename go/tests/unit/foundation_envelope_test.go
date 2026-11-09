@@ -61,7 +61,7 @@ func TestEnvelope_VersionMismatch(t *testing.T) {
 	data, err := cache.Encode(payload{Value: 42}, 1)
 	require.NoError(t, err, textEncodeMustNotReturn)
 
-	val, ok, err := cache.Decode[payload](data, version2)
+	val, ok, err := cache.Decode[payload](data, decodeInput)
 	require.NoError(t, err, "Decode must not return error on version mismatch")
 	assert.False(t, ok, "Decode must return ok=false for version mismatch")
 	assert.Equal(t, 0, val.Value, "Decode must return zero value on version mismatch")
@@ -110,7 +110,7 @@ func TestEnvelope_ZeroValue(t *testing.T) {
 
 	var zero empty
 
-	version := version5
+	version := initialVersion
 
 	data, err := cache.Encode(zero, version)
 	require.NoError(t, err, "Encode must not return error for zero-value struct")
@@ -153,3 +153,16 @@ func TestEnvelope_CachedAtIsRecent(t *testing.T) {
 	assert.False(t, raw.CachedAt.After(after.Add(2*time.Second)),
 		"CachedAt %v should not be after encode returned %v", raw.CachedAt, after)
 }
+
+const (
+	// decodeInput is the decode input the tests use.
+	decodeInput = 2
+
+	// initialVersion is the initial version the tests use.
+	initialVersion = 5
+)
+
+const (
+	// textEncodeMustNotReturn is the literal "Encode must not return error".
+	textEncodeMustNotReturn = "Encode must not return error"
+)

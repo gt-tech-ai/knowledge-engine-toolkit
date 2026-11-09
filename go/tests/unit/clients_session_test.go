@@ -46,12 +46,12 @@ func TestClientsSession_ResolveVerifyCache(t *testing.T) {
 
 	verified := 0
 
-	testClientsSessionResolveVerifyCacheRest6(ctx, t, src, ref, verified)
+	testClientsSessionResolveVerifyCacheBuildsProvider(ctx, t, src, ref, verified)
 }
 
-// testClientsSessionResolveVerifyCacheRest6 continues
-// testClientsSessionResolveVerifyCacheRest5 with its remaining steps.
-func testClientsSessionResolveVerifyCacheRest6(
+// testClientsSessionResolveVerifyCacheBuildsProvider continues
+// testClientsSessionResolveVerifyCache: builds provider.
+func testClientsSessionResolveVerifyCacheBuildsProvider(
 	ctx context.Context, t *testing.T, src *mocks.MockSource, ref types.Ref, verified int,
 ) {
 	t.Helper()
@@ -60,26 +60,26 @@ func testClientsSessionResolveVerifyCacheRest6(
 
 	provider := session.NewProvider(src,
 		func(b []byte) (sessionCred, error) {
-			var sessionCredValue sessionCred
+			var currentSessionCred sessionCred
 
-			err := json.Unmarshal(b, &sessionCredValue)
+			err := json.Unmarshal(b, &currentSessionCred)
 			if err != nil {
-				return sessionCredValue, apperr.Wrap(
+				return currentSessionCred, apperr.Wrap(
 					err,
 					apperr.CodeInvalidInput,
 					"parse",
 				)
 			}
 
-			return sessionCredValue, nil
+			return currentSessionCred, nil
 		},
-		func(_ context.Context, sessionCred2 sessionCred) error {
+		func(_ context.Context, secondSessionCred sessionCred) error {
 			lock.Lock()
 			defer lock.Unlock()
 
 			verified++
 
-			if sessionCred2.Key == "BAD" {
+			if secondSessionCred.Key == "BAD" {
 				return apperr.New(apperr.CodeUpstream, "denied")
 			}
 
@@ -87,12 +87,19 @@ func testClientsSessionResolveVerifyCacheRest6(
 		},
 		func(c sessionCred) []string { return []string{"AWS_ACCESS_KEY_ID=" + c.Key} })
 
-	testClientsSessionResolveVerifyCacheRest2(ctx, t, src, ref, &verified, provider)
+	testClientsSessionResolveVerifyCacheCachesAndExports(
+		ctx,
+		t,
+		src,
+		ref,
+		&verified,
+		provider,
+	)
 }
 
-// testClientsSessionResolveVerifyCacheRest2 continues
-// testClientsSessionResolveVerifyCacheRest6 with its remaining steps.
-func testClientsSessionResolveVerifyCacheRest2(
+// testClientsSessionResolveVerifyCacheCachesAndExports continues
+// testClientsSessionResolveVerifyCacheBuildsProvider: caches and exports.
+func testClientsSessionResolveVerifyCacheCachesAndExports(
 	ctx context.Context,
 	t *testing.T,
 	src *mocks.MockSource,
@@ -104,7 +111,7 @@ func testClientsSessionResolveVerifyCacheRest2(
 
 	var group sync.WaitGroup
 
-	for range iterations8 {
+	for range iterationsExports {
 		group.Go(func() {
 			c, err := provider.Resolve(ctx, ref)
 			if assert.NoError(
@@ -123,12 +130,12 @@ func testClientsSessionResolveVerifyCacheRest2(
 	assert.Equal(t, []string{"AWS_ACCESS_KEY_ID=AK"}, env)
 	assert.Equal(t, 1, (*verified))
 
-	testClientsSessionResolveVerifyCacheRest(ctx, t, src, provider)
+	testClientsSessionResolveVerifyCacheRejectsBadCredentials(ctx, t, src, provider)
 }
 
-// testClientsSessionResolveVerifyCacheRest continues
-// TestClientsSession_ResolveVerifyCache with its remaining steps.
-func testClientsSessionResolveVerifyCacheRest(
+// testClientsSessionResolveVerifyCacheRejectsBadCredentials continues
+// TestClientsSession_ResolveVerifyCache: rejects bad credentials.
+func testClientsSessionResolveVerifyCacheRejectsBadCredentials(
 	ctx context.Context,
 	t *testing.T,
 	src *mocks.MockSource,
@@ -142,9 +149,9 @@ func testClientsSessionResolveVerifyCacheRest(
 	src.EXPECT().
 		Get(gomock.Any(), bad).
 		Return(types.NewSecret(`{"key":"BAD"}`), nil).
-		Times(timesArg2)
+		Times(wantCalls)
 
-	for range iterations2 {
+	for range iterations {
 		_, err = provider.Resolve(ctx, bad)
 		assert.Equal(t, apperr.CodeUnauthorized, apperr.Code(err))
 	}
@@ -155,3 +162,8 @@ func testClientsSessionResolveVerifyCacheRest(
 	_, err = provider.Resolve(ctx, junk)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// iterationsExports is the iterations exports the tests use.
+	iterationsExports = 8
+)

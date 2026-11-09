@@ -36,7 +36,7 @@ import (
 func TestClassify_DerivesEachRole(t *testing.T) {
 	t.Parallel()
 
-	cases := testClassifyDerivesEachRoleTable11()
+	cases := testClassifyDerivesEachRoleCases()
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -56,24 +56,24 @@ type testClassifyDerivesEachRoleRow struct {
 	in   openapi.Binding
 }
 
-// testClassifyDerivesEachRoleTable11 builds the table testClassifyDerivesEachRoleTable10
+// testClassifyDerivesEachRoleCases builds the table testClassifyDerivesEachRole
 // runs.
-func testClassifyDerivesEachRoleTable11() []testClassifyDerivesEachRoleRow {
+func testClassifyDerivesEachRoleCases() []testClassifyDerivesEachRoleRow {
 	return slices.Concat(
-		testClassifyDerivesEachRoleTable11Part1(),
-		testClassifyDerivesEachRoleTable11Part2(),
+		testClassifyDerivesEachRoleReadCases(),
+		testClassifyDerivesEachRoleWriteCases(),
 	)
 }
 
-// testClassifyDerivesEachRoleTable11Part1 lists part of the
-// testClassifyDerivesEachRoleTable11 rows.
-func testClassifyDerivesEachRoleTable11Part1() []testClassifyDerivesEachRoleRow {
+// testClassifyDerivesEachRoleReadCases lists part of the
+// testClassifyDerivesEachRoleCases rows.
+func testClassifyDerivesEachRoleReadCases() []testClassifyDerivesEachRoleRow {
 	return []testClassifyDerivesEachRoleRow{
 		{
 			name: "LIST — GET collection",
 			in: openapi.Binding{
 				RPC:           "workspace.v1.DocumentService.ListDocuments",
-				HTTPMethod:    textGet3,
+				HTTPMethod:    textGetUpper,
 				PathTemplate:  "/api/v1/workspaces/{workspace_id}/documents",
 				CollectionKey: textDocuments,
 			},
@@ -83,7 +83,7 @@ func testClassifyDerivesEachRoleTable11Part1() []testClassifyDerivesEachRoleRow 
 			name: "GET_ONE — GET with trailing {id}",
 			in: openapi.Binding{
 				RPC:          "workspace.v1.DocumentService.GetDocument",
-				HTTPMethod:   textGet3,
+				HTTPMethod:   textGetUpper,
 				PathTemplate: textAPIV1WorkspaceDoc,
 				SingleKey:    textDocument,
 			},
@@ -93,7 +93,7 @@ func testClassifyDerivesEachRoleTable11Part1() []testClassifyDerivesEachRoleRow 
 			name: "GET_ONE — singleton (no trailing {id})",
 			in: openapi.Binding{
 				RPC:          "identity.v1.IdentityService.GetMe",
-				HTTPMethod:   textGet3,
+				HTTPMethod:   textGetUpper,
 				PathTemplate: "/api/v1/identity/me",
 				SingleKey:    textUser,
 			},
@@ -112,9 +112,9 @@ func testClassifyDerivesEachRoleTable11Part1() []testClassifyDerivesEachRoleRow 
 	}
 }
 
-// testClassifyDerivesEachRoleTable11Part2 lists part of the
-// testClassifyDerivesEachRoleTable11 rows.
-func testClassifyDerivesEachRoleTable11Part2() []testClassifyDerivesEachRoleRow {
+// testClassifyDerivesEachRoleWriteCases lists part of the
+// testClassifyDerivesEachRoleCases rows.
+func testClassifyDerivesEachRoleWriteCases() []testClassifyDerivesEachRoleRow {
 	return []testClassifyDerivesEachRoleRow{
 		{
 			name: "CREATE — POST bulk, collection-key-only response",
@@ -147,10 +147,10 @@ func testClassifyDerivesEachRoleTable11Part2() []testClassifyDerivesEachRoleRow 
 			want: openapi.RoleUpdate,
 		},
 		{
-			name: textDelete2,
+			name: textDeleteUpper,
 			in: openapi.Binding{
 				RPC:          "workspace.v1.WorkspaceService.DeleteWorkspace",
-				HTTPMethod:   textDelete2,
+				HTTPMethod:   textDeleteUpper,
 				PathTemplate: "/api/v1/workspaces/{workspace_id}",
 			},
 			want: openapi.RoleDelete,
@@ -226,7 +226,7 @@ func TestClassify_UnclassifiableRestRpcErrors(t *testing.T) {
 			name: "GET, no resource keys, no trailing {id}",
 			in: openapi.Binding{
 				RPC:          "workspace.v1.DocumentService.Ping",
-				HTTPMethod:   textGet3,
+				HTTPMethod:   textGetUpper,
 				PathTemplate: "/api/v1/workspaces/{workspace_id}/ping",
 			},
 		},
@@ -256,3 +256,8 @@ func TestClassify_UnclassifiableRestRpcErrors(t *testing.T) {
 		})
 	}
 }
+
+const (
+	// textAPIV1WorkspaceDoc is the literal shown below.
+	textAPIV1WorkspaceDoc = "/api/v1/workspaces/{workspace_id}/documents/{document_id}"
+)

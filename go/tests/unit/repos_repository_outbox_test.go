@@ -49,7 +49,13 @@ func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 
 		return ok
 	})
-	identifier, next, cutoff := uuid.New(), time.Unix(sec100, 0), time.Unix(sec50, 0)
+	identifier, next, cutoff := uuid.New(), time.Unix(
+		unixInputRest,
+		0,
+	), time.Unix(
+		unixInputTheRest,
+		0,
+	)
 	claimed := []types.OutboxRecord{{ID: identifier, Lane: textFacts}}
 	conflict := apperr.New(apperr.CodeConflict, "not pending")
 
@@ -58,9 +64,9 @@ func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 	store.EXPECT().Retry(bounded, identifier, next, textBoom).Return(nil)
 	store.EXPECT().Park(bounded, identifier, textBoom).Return(nil)
 	store.EXPECT().Stats(bounded, textFacts).Return(types.OutboxStats{Pending: 3}, nil)
-	store.EXPECT().DeleteSentBefore(bounded, cutoff).Return(rets7, nil)
+	store.EXPECT().DeleteSentBefore(bounded, cutoff).Return(returnInput, nil)
 
-	got, err := repo.Claim(t.Context(), textFacts, 0, limit10)
+	got, err := repo.Claim(t.Context(), textFacts, 0, claimInput)
 	require.NoError(t, err)
 	assert.Equal(t, claimed, got)
 	assert.Equal(
@@ -77,5 +83,18 @@ func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 
 	n, err := repo.DeleteSentBefore(t.Context(), cutoff)
 	require.NoError(t, err)
-	assert.Equal(t, equalArg7, n)
+	assert.Equal(t, wantN, n)
 }
+
+const (
+	// unixInputRest is the unix input rest the tests use.
+	unixInputRest = 100
+
+	// unixInputTheRest is the unix input the rest the tests use.
+	unixInputTheRest = 50
+)
+
+const (
+	// textFacts is the literal "facts".
+	textFacts = "facts"
+)

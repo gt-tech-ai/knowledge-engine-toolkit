@@ -31,7 +31,7 @@ func mcpOpts(t *testing.T) mcp.Options {
 		Name:    textTools,
 		Version: textTest,
 		Settings: types.MCPSettings{
-			TailLines: tailLines40, RunRetention: runRetention20, RunDir: ".runs",
+			TailLines: tailLines, RunRetention: runRetention, RunDir: ".runs",
 		},
 		RunDir: mcp.NewRunDir(t.TempDir(), time.Now),
 	}
@@ -323,7 +323,7 @@ func TestTransportMcpCallTool_RunsOperation(t *testing.T) {
 	ctx := context.Background()
 
 	res, err := clientSession.CallTool(ctx, &sdkmcp.CallToolParams{
-		Name: textStub, Arguments: map[string]any{textGo2: true},
+		Name: textStub, Arguments: map[string]any{textGoLower: true},
 	})
 	require.NoError(t, err)
 	assert.False(t, res.IsError)
@@ -347,7 +347,7 @@ func TestTransportMcpCallTool_RunsOperation(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
 	assert.Contains(t, toolText(t, res), textBogus)
-	assert.Len(t, runs, wantRunsLen2)
+	assert.Len(t, runs, wantRunsLen)
 }
 
 // toolText returns the text of a tool result's single text content.
@@ -489,7 +489,7 @@ func TestTransportMcpCallTool_RefusesASecretArgument(t *testing.T) {
 		Descriptors: []types.OperationDescriptor{desc},
 		Builders: map[string]ops.Builder[opsEnv]{"kb": ops.MapInput([]types.FlagSpec{
 			{Name: textClientID, Type: types.FlagString},
-			{Name: textClientSecret3, Type: types.FlagString, Secret: true},
+			{Name: textClientSecretKebab, Type: types.FlagString, Secret: true},
 		}, types.ArgSpec{}, func(
 			context.Context, map[string]any, opsEnv, interfaces.ExecutionObserver,
 		) error {
@@ -532,3 +532,11 @@ func TestTransportMcpCallTool_RefusesASecretArgument(t *testing.T) {
 	assert.False(t, res.IsError, toolText(t, res))
 	assert.Equal(t, 1, ran)
 }
+
+const (
+	// runRetention is the run retention the tests use.
+	runRetention = 20
+
+	// tailLines is the tail lines the tests use.
+	tailLines = 40
+)

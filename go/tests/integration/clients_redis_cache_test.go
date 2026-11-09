@@ -159,9 +159,9 @@ func (s *RedisCacheSuite) TestGetOrLoad_PopulatesOnMiss() {
 	s.Equal(1, calls, "loader should be called exactly once on miss")
 
 	// Second call: hit, loader not invoked again.
-	got2, err := s.cache.GetOrLoad(ctx, key, loader, time.Minute)
+	secondGot, err := s.cache.GetOrLoad(ctx, key, loader, time.Minute)
 	s.Require().NoError(err)
-	s.Equal([]byte(textLoadedValue), got2)
+	s.Equal([]byte(textLoadedValue), secondGot)
 	s.Equal(1, calls, "loader should not be called again on cache hit")
 }
 
@@ -210,7 +210,7 @@ func (s *RedisCacheSuite) TestGetOrLoad_LoaderErrorAndNilValue() {
 func (s *RedisCacheSuite) TestTTLExpiry() {
 	ctx := context.Background()
 	key := s.uniqueKey("ttl")
-	ttl := millis60 * time.Millisecond
+	ttl := initialTTLExpiry * time.Millisecond
 
 	s.cache.Set(ctx, key, []byte("expires-soon"), ttl)
 
@@ -415,7 +415,11 @@ func (s *RedisCacheSuite) TestUnreachable_ByteCacheDegradesToMiss() {
 	s.Nil(val)
 	logged.Set(ctx, "key2", []byte("value2"), time.Minute)
 	logged.Delete(ctx, "key3")
-	s.Len(spy.ErrorCalls, length3, "error mode logs each failed Get/Set/Delete at Error")
+	s.Len(
+		spy.ErrorCalls,
+		wantLength3Len,
+		"error mode logs each failed Get/Set/Delete at Error",
+	)
 
 	silent := s.unreachableCache(func(cfg *rediscache.Config) {
 		cfg.FailureMode = rediscache.FailureModeError
@@ -481,7 +485,7 @@ func (s *RedisCacheSuite) newCache(mutate func(*rediscache.Config)) *rediscache.
 	cfg := rediscache.DefaultConfig()
 
 	cfg.Addr = s.RedisAddr
-	cfg.OpTimeout = seconds2 * time.Second
+	cfg.OpTimeout = initialOpTimeout * time.Second
 
 	if mutate != nil {
 		mutate(&cfg)
@@ -524,3 +528,11 @@ func (s *RedisCacheSuite) unreachableCache(
 func (s *RedisCacheSuite) uniqueKey(label string) string {
 	return fmt.Sprintf("%s:%s", s.T().Name(), label)
 }
+
+const (
+	// initialTTLExpiry is the initial ttl ttlexpiry the tests use.
+	initialTTLExpiry = 60
+
+	// wantLength3Len is the expected length3 len.
+	wantLength3Len = 3
+)

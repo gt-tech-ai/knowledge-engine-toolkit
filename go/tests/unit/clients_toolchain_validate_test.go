@@ -16,12 +16,12 @@ import (
 // pinnedRelease returns a well-formed, checksum-pinned github-release method.
 func pinnedRelease() types.InstallMethodEntry {
 	return types.InstallMethodEntry{
-		Kind: types.InstallKindGitHubRelease, Org: textO, Repo: "r", Tag: textV100,
-		Version: textV100, Binary: textX,
+		Kind: types.InstallKindGitHubRelease, Org: textO, Repo: "r", Tag: textVLower,
+		Version: textVLower, Binary: textX,
 		Assets: map[string]types.AssetEntry{
 			textLinuxAmd64: {
 				Name:   "x_linux_amd64.tar.gz",
-				SHA256: strings.Repeat(textA, count64),
+				SHA256: strings.Repeat(textA, repeatInput),
 			},
 		},
 	}
@@ -30,12 +30,12 @@ func pinnedRelease() types.InstallMethodEntry {
 // pinnedURL returns a well-formed, checksum-pinned url-kind method.
 func pinnedURL() types.InstallMethodEntry {
 	return types.InstallMethodEntry{
-		Kind: types.InstallKindURL, URL: "https://example.test/dl", Version: textV100,
+		Kind: types.InstallKindURL, URL: "https://example.test/dl", Version: textVLower,
 		Binary: textX,
 		Assets: map[string]types.AssetEntry{
 			textDarwinArm64: {
 				Name:   "x-darwin-arm64",
-				SHA256: strings.Repeat(textB, count64),
+				SHA256: strings.Repeat(textB, repeatInput),
 			},
 		},
 	}
@@ -77,7 +77,7 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 		},
 	}
 
-	cases := testClientsToolchainValidateToolEntriesTable5(&good)
+	cases := testClientsToolchainValidateToolEntriesRows(&good)
 
 	_, dup := toolchain.NewCatalog([]types.ToolEntry{good, good})
 	require.Error(t, dup)
@@ -110,9 +110,9 @@ type testClientsToolchainValidateToolEntriesRow struct {
 	tool    types.ToolEntry
 }
 
-// testClientsToolchainValidateToolEntriesTable5 builds the table
-// testClientsToolchainValidateToolEntriesTable4 runs.
-func testClientsToolchainValidateToolEntriesTable5(
+// testClientsToolchainValidateToolEntriesRows builds the table
+// testClientsToolchainValidateToolEntries runs.
+func testClientsToolchainValidateToolEntriesRows(
 	good *types.ToolEntry,
 ) []testClientsToolchainValidateToolEntriesRow {
 	return slices.Concat(
@@ -259,13 +259,13 @@ func validateAssetRows() []testClientsToolchainValidateToolEntriesRow {
 			name:    "asset for an unknown platform",
 			wantErr: "is not an os-arch key",
 			tool: toolWith(new(func() types.InstallMethodEntry {
-				installMethodEntryValue := pinnedURL()
+				currentInstallMethodEntry := pinnedURL()
 
-				installMethodEntryValue.Assets = map[string]types.AssetEntry{
+				currentInstallMethodEntry.Assets = map[string]types.AssetEntry{
 					"plan9-mips": {Name: textX, SHA256: strings.Repeat(textA, 64)},
 				}
 
-				return installMethodEntryValue
+				return currentInstallMethodEntry
 			}())),
 		},
 		{
@@ -318,11 +318,24 @@ func validateMarkerRows() []testClientsToolchainValidateToolEntriesRow {
 			name:    "ci marker on a prerequisite",
 			wantErr: "is ci but not a required/optional tool",
 			tool: types.ToolEntry{
-				Name:     textGo2,
-				Binary:   textGo2,
+				Name:     textGoLower,
+				Binary:   textGoLower,
 				CI:       true,
 				Category: types.CategoryPrerequisite,
 			},
 		},
 	}
 }
+
+const (
+	// repeatInput is the repeat input the tests use.
+	repeatInput = 64
+)
+
+const (
+	// textRequiresVersionBinaryAnd is the literal "requires version, binary, and assets".
+	textRequiresVersionBinaryAnd = "requires version, binary, and assets"
+
+	// textVLower is the literal "v1.0.0".
+	textVLower = "v1.0.0"
+)

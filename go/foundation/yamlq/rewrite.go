@@ -32,7 +32,7 @@ func Rewrite(
 		return nil, err
 	}
 
-	scalarRewriteValue := &scalarRewrite{
+	currentScalarRewrite := &scalarRewrite{
 		lines:   splitLines(src),
 		parents: parentsOf(root(docs[0]), nil, map[*yaml.Node]*yaml.Node{}),
 		top:     root(docs[0]),
@@ -42,7 +42,7 @@ func Rewrite(
 	out := src
 
 	for _, m := range matches {
-		out, err = scalarRewriteValue.apply(m, out)
+		out, err = currentScalarRewrite.apply(m, out)
 		if err != nil {
 			return nil, err
 		}

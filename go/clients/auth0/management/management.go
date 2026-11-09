@@ -139,14 +139,14 @@ func (c *Client) SigningKey(ctx context.Context) (types.SigningKey, error) {
 		return types.SigningKey{}, err
 	}
 
-	for _, shapeKeysValue := range jwks.Keys {
-		if shapeKeysValue.Use != "sig" || len(shapeKeysValue.X5C) == 0 {
+	for _, currentShapeKeys := range jwks.Keys {
+		if currentShapeKeys.Use != "sig" || len(currentShapeKeys.X5C) == 0 {
 			continue
 		}
 
-		pemKey, err := x5cToPEM(shapeKeysValue.X5C[0])
+		pemKey, err := x5cToPEM(currentShapeKeys.X5C[0])
 
-		return types.SigningKey{PublicKeyPEM: pemKey, KeyID: shapeKeysValue.Kid}, err
+		return types.SigningKey{PublicKeyPEM: pemKey, KeyID: currentShapeKeys.Kid}, err
 	}
 
 	return types.SigningKey{}, apperr.New(apperr.CodeUpstream,
@@ -269,7 +269,7 @@ func (c *Client) send(req *http.Request, out any) error {
 
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < statusCode200 || resp.StatusCode >= statusCode300 {
+	if resp.StatusCode < minSuccessStatus || resp.StatusCode >= successStatusEnd {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorSnippetBytes))
 		code := apperr.CodeUpstream
 

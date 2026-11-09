@@ -290,7 +290,7 @@ func (x *jsonAPIExtensions) methodRoutes(
 		return nil, apperr.Wrap(err, apperr.CodeInternal, routes.rpc)
 	}
 
-	resourceConfig2, hasRes, err := readResourceOption(
+	secondResourceConfig, hasRes, err := readResourceOption(
 		methodDescriptor.Output(),
 		x.res,
 		x.types,
@@ -299,7 +299,7 @@ func (x *jsonAPIExtensions) methodRoutes(
 		return nil, apperr.Wrap(err, apperr.CodeInternal, routes.rpc)
 	}
 
-	if hasRes && resourceConfig2.resourceType == "" {
+	if hasRes && secondResourceConfig.resourceType == "" {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf(
@@ -309,7 +309,7 @@ func (x *jsonAPIExtensions) methodRoutes(
 		)
 	}
 
-	routes.resource = resourceConfig2
+	routes.resource = secondResourceConfig
 
 	return routes, nil
 }
@@ -330,8 +330,8 @@ func routeEntriesForMethod(
 
 	var out []RouteEntry
 
-	for _, httpBinding2 := range routes.bindings {
-		role, err := Classify(new(routes.binding(httpBinding2)))
+	for _, secondHTTPBinding := range routes.bindings {
+		role, err := Classify(new(routes.binding(secondHTTPBinding)))
 		if err != nil && exempt[routes.rpc] {
 			continue // a genuine action/internal RPC — skipped, not fatal
 		}
@@ -340,7 +340,7 @@ func routeEntriesForMethod(
 			return nil, err
 		}
 
-		out = append(out, routes.entry(httpBinding2, role))
+		out = append(out, routes.entry(secondHTTPBinding, role))
 	}
 
 	return out, nil
@@ -557,13 +557,13 @@ func isASCIIDigit(r rune) bool {
 // sortRouteEntries orders entries by (PathTemplate, Method) in place, so the
 // emitted route table is deterministic regardless of file/method walk order.
 func sortRouteEntries(entries []RouteEntry) {
-	slices.SortFunc(entries, func(routeEntryValue, routeEntry RouteEntry) int {
+	slices.SortFunc(entries, func(currentRouteEntry, routeEntry RouteEntry) int {
 		// RPC tiebreaker: total order so the emitted table is deterministic even
 		// if two RPCs bind the same (path, method).
 		return cmp.Or(
-			cmp.Compare(routeEntryValue.PathTemplate, routeEntry.PathTemplate),
-			cmp.Compare(routeEntryValue.Method, routeEntry.Method),
-			cmp.Compare(routeEntryValue.RPC, routeEntry.RPC),
+			cmp.Compare(currentRouteEntry.PathTemplate, routeEntry.PathTemplate),
+			cmp.Compare(currentRouteEntry.Method, routeEntry.Method),
+			cmp.Compare(currentRouteEntry.RPC, routeEntry.RPC),
 		)
 	})
 }

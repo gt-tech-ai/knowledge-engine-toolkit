@@ -80,10 +80,15 @@ func TestForceSampledTraceparent(t *testing.T) {
 	require.NoError(t, err)
 
 	parts := strings.Split(header, "-")
-	require.Len(t, parts, wantPartsLen4, "traceparent has four dash-delimited fields")
+	require.Len(
+		t,
+		parts,
+		wantPartsLenTraceparent,
+		"traceparent has four dash-delimited fields",
+	)
 	assert.Equal(t, "00", parts[0], "version")
-	assert.Len(t, parts[1], wantPartsLen32, "trace id is 32 hex")
-	assert.Len(t, parts[2], wantPartsLen16, "span id is 16 hex")
+	assert.Len(t, parts[1], wantPartsLenSampledTraceparent, "trace id is 32 hex")
+	assert.Len(t, parts[2], wantPartsLenForceSampledTraceparent, "span id is 16 hex")
 	assert.Equal(t, "01", parts[3], "sampled flag must be set")
 	assert.Equal(
 		t,
@@ -124,7 +129,7 @@ func TestTelemetryClient_TraceInTempo(t *testing.T) {
 
 	n, err := telemetryClient.TraceInTempo(context.Background(), textAbc123)
 	require.NoError(t, err)
-	assert.Equal(t, equalArg2, n)
+	assert.Equal(t, wantN, n)
 	assert.Equal(t, "http://tempo:3200/api/traces/abc123", gotURL)
 }
 
@@ -247,7 +252,7 @@ func TestTelemetryClient_MetricValue(t *testing.T) {
 		`http_requests_total{code="200"}`,
 	)
 	require.NoError(t, err)
-	assert.InDelta(t, wantValue5p0, value, 0)
+	assert.InDelta(t, wantValue, value, 0)
 	assert.Contains(t, gotURL, "http://prom:9090/api/v1/query?query=")
 	assert.Contains(t, gotURL, url.QueryEscape(`http_requests_total{code="200"}`))
 }
@@ -276,7 +281,7 @@ func TestTelemetryClient_MetricValue_Empty(t *testing.T) {
 
 	value, err := telemetryClient.MetricValue(context.Background(), "up")
 	require.NoError(t, err)
-	assert.InDelta(t, wantValue0p0, value, 0)
+	assert.InDelta(t, wantValueEmpty, value, 0)
 }
 
 // TestTelemetryClient_LogHasTrace tests the Loki log lookup by trace id.
@@ -314,7 +319,7 @@ func TestTelemetryClient_LogHasTrace(t *testing.T) {
 		"traceid123",
 	)
 	require.NoError(t, err)
-	assert.Equal(t, equalArg2, count)
+	assert.Equal(t, wantCount, count)
 	assert.Contains(t, gotQuery, "traceid123")
 	assert.Contains(t, gotQuery, "|=")
 }
@@ -393,11 +398,12 @@ func TestPollHelpers(t *testing.T) {
 		assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 	})
 
-	testPollHelpersRest(ctx, t)
+	testPollHelpersUntilNamesMissAtDeadline(ctx, t)
 }
 
-// testPollHelpersRest continues TestPollHelpers with its remaining steps.
-func testPollHelpersRest(ctx context.Context, t *testing.T) {
+// testPollHelpersUntilNamesMissAtDeadline continues TestPollHelpers: until names miss at
+// deadline.
+func testPollHelpersUntilNamesMissAtDeadline(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("PollUntil names a miss at the deadline", func(t *testing.T) {
@@ -438,3 +444,27 @@ func testPollHelpersRest(ctx context.Context, t *testing.T) {
 		require.NoError(t, e2ekit.PollTraceInTempo(ctx, c, textAbc123))
 	})
 }
+
+const (
+	// wantCount is the expected count.
+	wantCount = 2
+
+	// wantN is the expected n.
+	wantN = 2
+
+	// wantPartsLenForceSampledTraceparent is the expected parts len force sampled
+	// traceparent.
+	wantPartsLenForceSampledTraceparent = 16
+
+	// wantPartsLenSampledTraceparent is the expected parts len sampled traceparent.
+	wantPartsLenSampledTraceparent = 32
+
+	// wantPartsLenTraceparent is the expected parts len traceparent.
+	wantPartsLenTraceparent = 4
+
+	// wantValue is the expected value.
+	wantValue = 5.0
+
+	// wantValueEmpty is the expected value empty.
+	wantValueEmpty = 0.0
+)

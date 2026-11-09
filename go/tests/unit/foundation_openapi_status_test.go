@@ -103,7 +103,7 @@ func TestOpenAPI_RoleSuccessAndErrorCodes(t *testing.T) {
 	}
 
 	// ACTION (POST /documents/{id}/confirm): 200, +400/401/403/404, no 409.
-	action := opResponses(t, spec, textAPIV1DocumentsDocument2, "post")
+	action := opResponses(t, spec, textAPIV1DocumentsDocumentPath, "post")
 	require.Contains(t, action, text200)
 
 	for _, c := range []string{text400, text401, text403, text404} {
@@ -126,10 +126,10 @@ func TestOpenAPI_DeleteEmits204NoBody(t *testing.T) {
 	t.Parallel()
 
 	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
-	messages := []*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmpty2)}
+	messages := []*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmptyTitle)}
 	methods := []*descriptorpb.MethodDescriptorProto{
-		fixtures.Method("DeleteThing", textEmpty2, textEmpty2,
-			jsonapiSetter.MethodOpts(textDelete2, "/api/v1/things/{thing_id}", false)),
+		fixtures.Method("DeleteThing", textEmptyTitle, textEmptyTitle,
+			jsonapiSetter.MethodOpts(textDeleteUpper, "/api/v1/things/{thing_id}")),
 	}
 	fds := fixtures.BuildRouteFDS(
 		t,
@@ -139,13 +139,16 @@ func TestOpenAPI_DeleteEmits204NoBody(t *testing.T) {
 	)
 
 	descPath := filepath.Join(t.TempDir(), textDBinpb)
-	require.NoError(t, os.WriteFile(descPath, fds, perm0o600))
+	require.NoError(t, os.WriteFile(descPath, fds, writeFileInput))
 
 	routes, err := openapi.BuildRouteTable(fds, nil)
 	require.NoError(t, err)
 
 	inDir := filepath.Join(t.TempDir(), textIn)
-	require.NoError(t, os.MkdirAll(filepath.Join(inDir, textTest, textV1), perm0o750))
+	require.NoError(
+		t,
+		os.MkdirAll(filepath.Join(inDir, textTest, textV1), mkdirAllInputBody),
+	)
 
 	swagger := `{"swagger":"2.0","info":{"title":"t"},
       "paths":{"/api/v1/things/{thing_id}":{"delete":{"operationId":"DeleteThing",
@@ -160,15 +163,15 @@ func TestOpenAPI_DeleteEmits204NoBody(t *testing.T) {
 			textTestSwaggerJSON,
 		),
 		[]byte(swagger),
-		perm0o600,
+		writeFileInput,
 	))
 
-	testOpenAPIDeleteEmits204NoBodyRest(t, descPath, routes, inDir)
+	testOpenAPIDeleteEmits204NoBodyChecksSpec(t, descPath, routes, inDir)
 }
 
-// testOpenAPIDeleteEmits204NoBodyRest continues TestOpenAPI_DeleteEmits204NoBody with
-// its remaining steps.
-func testOpenAPIDeleteEmits204NoBodyRest(
+// testOpenAPIDeleteEmits204NoBodyChecksSpec continues TestOpenAPI_DeleteEmits204NoBody:
+// checks spec.
+func testOpenAPIDeleteEmits204NoBodyChecksSpec(
 	t *testing.T,
 	descPath string,
 	routes map[string][]openapi.RouteEntry,
@@ -208,3 +211,16 @@ func testOpenAPIDeleteEmits204NoBodyRest(
 	require.NotContains(t, resp, text409)
 	require.NotContains(t, resp, "default")
 }
+
+const (
+	// mkdirAllInputBody is the mkdir all input body the tests use.
+	mkdirAllInputBody = 0o750
+)
+
+const (
+	// text409 is the literal "409".
+	text409 = "409"
+
+	// text403 is the literal "403".
+	text403 = "403"
+)

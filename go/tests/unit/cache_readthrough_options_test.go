@@ -116,12 +116,12 @@ func TestReadThrough_UncacheableResultSharedButNotStored(t *testing.T) {
 func TestReadThrough_NilCacheCoalescesWithoutCaching(t *testing.T) {
 	t.Parallel()
 
-	testReadThroughNilCacheCoalescesWithoutCachingRest5(t)
+	testReadThroughNilCacheCoalescesWithoutCachingCollapsesLoads(t)
 }
 
-// testReadThroughNilCacheCoalescesWithoutCachingRest5 continues
-// testReadThroughNilCacheCoalescesWithoutCachingRest4 with its remaining steps.
-func testReadThroughNilCacheCoalescesWithoutCachingRest5(t *testing.T) {
+// testReadThroughNilCacheCoalescesWithoutCachingCollapsesLoads continues
+// testReadThroughNilCacheCoalescesWithoutCaching: collapses loads.
+func testReadThroughNilCacheCoalescesWithoutCachingCollapsesLoads(t *testing.T) {
 	t.Helper()
 
 	const key = "nocache"
@@ -134,7 +134,7 @@ func testReadThroughNilCacheCoalescesWithoutCachingRest5(t *testing.T) {
 	started := make(chan struct{})
 	secondLoad := make(chan struct{})
 	release := make(chan struct{})
-	results := make(chan readThroughResult, size2)
+	results := make(chan readThroughResult, makeInput)
 
 	run := func(load func() (int, error)) {
 		count, err := cache.ReadThrough(
@@ -162,7 +162,7 @@ func testReadThroughNilCacheCoalescesWithoutCachingRest5(t *testing.T) {
 		t.Fatal("the first load never started")
 	}
 
-	testReadThroughNilCacheCoalescesWithoutCachingRest(
+	testReadThroughNilCacheCoalescesWithoutCachingChecksResults(
 		t,
 		&loads,
 		secondLoad,
@@ -172,9 +172,9 @@ func testReadThroughNilCacheCoalescesWithoutCachingRest5(t *testing.T) {
 	)
 }
 
-// testReadThroughNilCacheCoalescesWithoutCachingRest continues
-// testReadThroughNilCacheCoalescesWithoutCachingRest5 with its remaining steps.
-func testReadThroughNilCacheCoalescesWithoutCachingRest(
+// testReadThroughNilCacheCoalescesWithoutCachingChecksResults continues
+// testReadThroughNilCacheCoalescesWithoutCachingCollapsesLoads: checks results.
+func testReadThroughNilCacheCoalescesWithoutCachingChecksResults(
 	t *testing.T,
 	loads *atomic.Int32,
 	secondLoad, release chan struct{},
@@ -200,12 +200,12 @@ func testReadThroughNilCacheCoalescesWithoutCachingRest(
 
 	close(release)
 
-	for range iterations2 {
+	for range iterations {
 		r := <-results
 		require.NoError(t, r.err)
 		assert.Equal(
 			t,
-			wantValue42,
+			wantValue,
 			r.value,
 			"every caller receives the single shared load's value",
 		)
@@ -238,12 +238,12 @@ func TestReadThrough_FirstCallerCancelDoesNotFailOthers(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockByteCache(ctrl)
 
-	testReadThroughFirstCallerCancelDoesNotFailOthersRest7(t, m)
+	testReadThroughFirstCallerCancelDoesNotFailOthersRunsCallers(t, m)
 }
 
-// testReadThroughFirstCallerCancelDoesNotFailOthersRest7 continues
-// testReadThroughFirstCallerCancelDoesNotFailOthersRest5 with its remaining steps.
-func testReadThroughFirstCallerCancelDoesNotFailOthersRest7(
+// testReadThroughFirstCallerCancelDoesNotFailOthersRunsCallers continues
+// testReadThroughFirstCallerCancelDoesNotFailOthers: runs callers.
+func testReadThroughFirstCallerCancelDoesNotFailOthersRunsCallers(
 	t *testing.T,
 	byteCache *mocks.MockByteCache,
 ) {
@@ -251,7 +251,7 @@ func testReadThroughFirstCallerCancelDoesNotFailOthersRest7(
 
 	const key = "detached"
 
-	byteCache.EXPECT().Get(gomock.Any(), key).Return(nil, false).Times(timesArg2)
+	byteCache.EXPECT().Get(gomock.Any(), key).Return(nil, false).Times(wantCalls)
 
 	setCtxErr := expectSetContexts(byteCache, key)
 
@@ -288,7 +288,7 @@ func testReadThroughFirstCallerCancelDoesNotFailOthersRest7(
 		resB <- readThroughResult{value: count, err: err}
 	}()
 
-	testReadThroughFirstCallerCancelDoesNotFailOthersRest(
+	testReadThroughFirstCallerCancelDoesNotFailOthersChecksEachCaller(
 		t,
 		setCtxErr,
 		release,
@@ -298,9 +298,9 @@ func testReadThroughFirstCallerCancelDoesNotFailOthersRest7(
 	)
 }
 
-// testReadThroughFirstCallerCancelDoesNotFailOthersRest continues
-// TestReadThrough_FirstCallerCancelDoesNotFailOthers with its remaining steps.
-func testReadThroughFirstCallerCancelDoesNotFailOthersRest(
+// testReadThroughFirstCallerCancelDoesNotFailOthersChecksEachCaller continues
+// TestReadThrough_FirstCallerCancelDoesNotFailOthers: checks each caller.
+func testReadThroughFirstCallerCancelDoesNotFailOthersChecksEachCaller(
 	t *testing.T,
 	setCtxErr chan error,
 	release chan struct{},
@@ -309,7 +309,7 @@ func testReadThroughFirstCallerCancelDoesNotFailOthersRest(
 ) {
 	t.Helper()
 
-	for range iterations100 {
+	for range iterationsCaller {
 		runtime.Gosched()
 	}
 
@@ -327,7 +327,7 @@ func testReadThroughFirstCallerCancelDoesNotFailOthersRest(
 
 	r := <-resB
 	require.NoError(t, r.err)
-	assert.Equal(t, wantValue42, r.value)
+	assert.Equal(t, wantValue, r.value)
 	require.NoError(
 		t,
 		<-setCtxErr,
@@ -424,7 +424,7 @@ func TestReadThrough_DoneContextSkipsLoad(t *testing.T) {
 
 // expectSetContexts allows Set and reports the context error each call saw.
 func expectSetContexts(m *mocks.MockByteCache, key string) chan error {
-	setCtxErr := make(chan error, size2)
+	setCtxErr := make(chan error, makeInput)
 
 	m.EXPECT().Set(gomock.Any(), key, gomock.Any(), time.Minute).DoAndReturn(
 		func(ctx context.Context, _ string, _ []byte, _ time.Duration) {
@@ -450,6 +450,14 @@ func newBlockingLoader(started, release chan struct{}) blockingLoader {
 
 		<-release
 
-		return newBlockingLoaderResult42, nil
+		return newBlockingLoaderResult, nil
 	}
 }
+
+const (
+	// iterationsCaller is the iterations caller the tests use.
+	iterationsCaller = 100
+
+	// newBlockingLoaderResult is the new blocking loader result the tests use.
+	newBlockingLoaderResult = 42
+)

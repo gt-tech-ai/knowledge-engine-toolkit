@@ -25,10 +25,10 @@ func Decorate(
 		return nil, err
 	}
 
-	decoratedValue := &decorated{base: base, Base: &b}
+	currentDecorated := &decorated{base: base, Base: &b}
 	if m := decs.Observability().Metrics; m != nil {
-		decoratedValue.hits = m.Counter("cache_hits_total", "Total cache hits", "cache")
-		decoratedValue.misses = m.Counter(
+		currentDecorated.hits = m.Counter("cache_hits_total", "Total cache hits", "cache")
+		currentDecorated.misses = m.Counter(
 			"cache_misses_total",
 			"Total cache misses",
 			"cache",
@@ -36,10 +36,10 @@ func Decorate(
 	}
 
 	if inv, ok := base.(interfaces.CacheInvalidator); ok {
-		return &invalidating{decorated: decoratedValue, inv: inv}, nil
+		return &invalidating{decorated: currentDecorated, inv: inv}, nil
 	}
 
-	return decoratedValue, nil
+	return currentDecorated, nil
 }
 
 // cacheOps is the decorated cache's contract: the cache and its invalidation surface.

@@ -133,9 +133,9 @@ func TestToolrunParsers_Formats(t *testing.T) {
 		parseWith(t, parsers.KindJSONLines, &cmdResult).Findings,
 	)
 
-	cmdResultValue := fail
+	currentCmdResult := fail
 
-	cmdResultValue.Stdout = []byte(
+	currentCmdResult.Stdout = []byte(
 		`{"runs":[{"results":[{"ruleId":"R1","message":{"text":"m"},` +
 			`"locations":[{"physicalLocation":{"artifactLocation":{"uri":"f.go"},` +
 			`"region":{"startLine":7}}}]},{"ruleId":"R2","message":{"text":"n"}}]}]}`,
@@ -143,7 +143,7 @@ func TestToolrunParsers_Formats(t *testing.T) {
 	assert.Equal(t, []types.Finding{
 		{File: "f.go", Line: 7, Rule: "R1", Message: "m"},
 		{Rule: "R2", Message: textN},
-	}, parseWith(t, parsers.KindSARIF, &cmdResultValue).Findings)
+	}, parseWith(t, parsers.KindSARIF, &currentCmdResult).Findings)
 
 	bad := parseWith(t, parsers.KindSARIF, &interfaces.CmdResult{Stdout: []byte("oops")})
 	assert.Equal(t, types.StatusPass, bad.Status)

@@ -65,11 +65,11 @@ func TestServicesGuard_Tool(t *testing.T) {
 			Err:    apperr.Sentinel("exit status 1"),
 		}).Times(1)
 
-	testServicesGuardToolRest(t, &renderSpec, &bad, codebase, runner)
+	testServicesGuardToolVerdicts(t, &renderSpec, &bad, codebase, runner)
 }
 
-// testServicesGuardToolRest continues TestServicesGuard_Tool with its remaining steps.
-func testServicesGuardToolRest(
+// testServicesGuardToolVerdicts continues TestServicesGuard_Tool: verdicts.
+func testServicesGuardToolVerdicts(
 	t *testing.T,
 	okRef, bad *types.RenderSpec,
 	codebase interfaces.Codebase,
@@ -108,17 +108,17 @@ func testServicesGuardToolRest(
 	})
 	require.NoError(t, err)
 
-	lookup2 := map[string]types.Verdict{}
+	statusByName := map[string]types.Verdict{}
 	for _, g := range guards {
-		lookup2[g.Name()] = g.Run(t.Context(), codebase)
+		statusByName[g.Name()] = g.Run(t.Context(), codebase)
 	}
 
-	assert.Equal(t, types.StatusPass, lookup2["valid"].Status)
-	require.Equal(t, types.StatusFail, lookup2["invalid"].Status)
-	assert.Contains(t, lookup2["invalid"].Detail, "kubeconform rejected chart")
-	assert.Contains(t, lookup2["invalid"].Detail, "Deployment is invalid")
-	require.Equal(t, types.StatusFail, lookup2["unrendered"].Status)
-	assert.Contains(t, lookup2["unrendered"].Detail, "render chart: ")
+	assert.Equal(t, types.StatusPass, statusByName["valid"].Status)
+	require.Equal(t, types.StatusFail, statusByName["invalid"].Status)
+	assert.Contains(t, statusByName["invalid"].Detail, "kubeconform rejected chart")
+	assert.Contains(t, statusByName["invalid"].Detail, "Deployment is invalid")
+	require.Equal(t, types.StatusFail, statusByName["unrendered"].Status)
+	assert.Contains(t, statusByName["unrendered"].Detail, "render chart: ")
 
 	_, err = guard.NewFromConfig([]types.GuardRow{{Name: textT, Kind: types.GuardTool}},
 		&guard.Deps{})

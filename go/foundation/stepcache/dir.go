@@ -81,7 +81,7 @@ func appendSaltDirs(parts, roots []string) ([]string, error) {
 // parts. The walk reads through an os.Root, so a symlink inside root cannot lead a read
 // outside it. A root that does not exist contributes nothing.
 func appendSaltDir(parts []string, root string) ([]string, error) {
-	rootValue, err := os.OpenRoot(root)
+	currentRoot, err := os.OpenRoot(root)
 	if os.IsNotExist(err) {
 		return parts, nil
 	}
@@ -90,9 +90,9 @@ func appendSaltDir(parts []string, root string) ([]string, error) {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "stepcache: open "+root)
 	}
 
-	defer func() { _ = rootValue.Close() }()
+	defer func() { _ = currentRoot.Close() }()
 
-	fsys := rootValue.FS()
+	fsys := currentRoot.FS()
 
 	err = fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -173,7 +173,7 @@ func (d dir) Record(_ context.Context, key string) error {
 // is CodeInvalidInput, so a key can never name a path outside root.
 func (d dir) path(key string) (string, error) {
 	b, err := hex.DecodeString(key)
-	if err != nil || len(b) != bLen32 {
+	if err != nil || len(b) != sha256ByteLen {
 		return "", apperr.New(apperr.CodeInvalidInput, "stepcache: malformed key "+key)
 	}
 

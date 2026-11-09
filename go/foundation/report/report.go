@@ -85,14 +85,14 @@ func NewFromConfig(
 		level = LevelVerbose
 	}
 
-	printer2 := newPrinter(streams.Err, level, cfg.Interactive, cfg.Color, cfg.Hints)
+	secondPrinter := newPrinter(streams.Err, level, cfg.Interactive, cfg.Color, cfg.Hints)
 	switch cfg.Kind {
 	case "", KindQuiet:
 		return quiet{}, nil
 	case KindLine:
-		return newLine(printer2), nil
+		return newLine(secondPrinter), nil
 	case KindTable:
-		return &table{p: printer2}, nil
+		return &table{p: secondPrinter}, nil
 	case KindGHActions:
 		return &ghActions{w: streams.Out}, nil
 	case KindJSON:

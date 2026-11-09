@@ -137,28 +137,28 @@ func (s *Supervisor) Start(
 		return nil, apperr.Wrap(err, apperr.CodeUnavailable, "start "+spec.Name)
 	}
 
-	handle2 := newHandle(spec.Name, cmd)
+	secondHandle := newHandle(spec.Name, cmd)
 
 	s.mu.Lock()
 
-	s.started = append(s.started, handle2)
+	s.started = append(s.started, secondHandle)
 	s.mu.Unlock()
 
 	if ready == nil {
-		return handle2, nil
+		return secondHandle, nil
 	}
 
-	err = handle2.awaitReady(ctx, ready)
+	err = secondHandle.awaitReady(ctx, ready)
 	if err != nil {
 		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), maxBackoff)
 		defer cancel()
 
-		_ = handle2.Stop(stopCtx)
+		_ = secondHandle.Stop(stopCtx)
 
 		return nil, err
 	}
 
-	return handle2, nil
+	return secondHandle, nil
 }
 
 // Detach starts spec in a new session and releases it. Where sessions are not
@@ -225,13 +225,13 @@ type handle struct {
 
 // newHandle starts reaping cmd.
 func newHandle(name string, cmd *osexec.Cmd) *handle {
-	handleValue := &handle{cmd: cmd, name: name, done: make(chan struct{})}
+	currentHandle := &handle{cmd: cmd, name: name, done: make(chan struct{})}
 	go func() {
-		handleValue.err = cmd.Wait()
-		close(handleValue.done)
+		currentHandle.err = cmd.Wait()
+		close(currentHandle.done)
 	}()
 
-	return handleValue
+	return currentHandle
 }
 
 // Wait blocks until the process exits.

@@ -126,14 +126,14 @@ func TestCombineAppendErrors(t *testing.T) {
 	t.Parallel()
 
 	err1 := apperr.Sentinel(textErrorOne)
-	err2 := apperr.Sentinel("error two")
-	err3 := apperr.Sentinel("error three")
+	secondErr := apperr.Sentinel("error two")
+	thirdErr := apperr.Sentinel("error three")
 
-	combined := apperr.Combine(nil, err1, nil, err2)
+	combined := apperr.Combine(nil, err1, nil, secondErr)
 	require.Error(t, combined)
 
 	errs := apperr.Errors(combined)
-	require.Len(t, errs, wantErrsLen2)
+	require.Len(t, errs, wantErrsLen)
 	assert.Equal(t, textErrorOne, errs[0].Error())
 	assert.Equal(t, "error two", errs[1].Error())
 
@@ -141,9 +141,9 @@ func TestCombineAppendErrors(t *testing.T) {
 	require.Error(t, result)
 	assert.Equal(t, textErrorOne, result.Error())
 
-	combined = apperr.Append(combined, err3)
+	combined = apperr.Append(combined, thirdErr)
 	errs = apperr.Errors(combined)
-	require.Len(t, errs, wantErrsLen3)
+	require.Len(t, errs, wantErrsLenErrors)
 
 	assert.NoError(t, apperr.Combine(nil, nil))
 }
@@ -265,7 +265,7 @@ func TestLogErrorsMultiError(t *testing.T) {
 	apperr.LogErrors(logger, "batch operation failed", combined)
 
 	entries := observed.All()
-	require.Len(t, entries, wantEntriesLen2)
+	require.Len(t, entries, wantEntriesLenError)
 	assert.Equal(
 		t,
 		zap.WarnLevel,
@@ -454,3 +454,19 @@ func contextFieldMap(m map[string]any) map[string]string {
 
 	return result
 }
+
+const (
+	// wantEntriesLenError is the expected entries len error.
+	wantEntriesLenError = 2
+
+	// wantErrsLenErrors is the expected errs len errors.
+	wantErrsLenErrors = 3
+)
+
+const (
+	// textErrorOne is the literal "error one".
+	textErrorOne = "error one"
+
+	// textExpectedErrorFieldTo is the literal "expected error field to be map, got %T".
+	textExpectedErrorFieldTo = "expected error field to be map, got %T"
+)

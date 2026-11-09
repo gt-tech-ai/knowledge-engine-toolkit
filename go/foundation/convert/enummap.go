@@ -59,16 +59,16 @@ func NewEnumMapper[P, D comparable](
 	toDomain map[P]D,
 ) EnumMapper[P, D] {
 	toProto := make(map[D]P, len(toDomain))
-	for value, valueValue := range toDomain {
-		if existing, dup := toProto[valueValue]; dup {
+	for value, item := range toDomain {
+		if existing, dup := toProto[item]; dup {
 			panic(fmt.Sprintf(
 				"NewEnumMapper(%s): domain value %v maps from both %v and %v; "+
 					"the reverse table requires unique domain values",
-				label, valueValue, existing, value,
+				label, item, existing, value,
 			))
 		}
 
-		toProto[valueValue] = value
+		toProto[item] = value
 	}
 
 	return EnumMapper[P, D]{

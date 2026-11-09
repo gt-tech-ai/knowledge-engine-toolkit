@@ -25,7 +25,7 @@ func TestCoreTypesFileSelector_IsZero(t *testing.T) {
 		"roots":             {Roots: []string{textA}},
 		textPaths:           {Paths: []string{textAGo}},
 		"globs":             {Globs: []string{textGo}},
-		"exts":              {Exts: []string{textGo3}},
+		"exts":              {Exts: []string{textGoExt}},
 		"exclude":           {Exclude: []string{"vendor"}},
 		"tracked only":      {TrackedOnly: true},
 		"include generated": {IncludeGenerated: true},

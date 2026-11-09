@@ -25,8 +25,8 @@ func TestLayerConfigDefaults_MatchConsts(t *testing.T) {
 
 	s := stores.DefaultConfig()
 	assert.Equal(t, "ent", s.Kind)
-	assert.Equal(t, wantDefaultPageSize20, s.DefaultPageSize)
-	assert.Equal(t, wantMaxPageSize1000, s.MaxPageSize)
+	assert.Equal(t, wantDefaultPageSize, s.DefaultPageSize)
+	assert.Equal(t, wantMaxPageSize, s.MaxPageSize)
 
 	r := repos.DefaultConfig()
 	assert.Equal(t, 5*time.Minute, r.Caching.TTL)
@@ -57,6 +57,17 @@ func TestLayerConfigValidate_RejectsBadValues(t *testing.T) {
 
 	badMax := stores.DefaultConfig()
 
-	badMax.MaxPageSize = maxPageSize5 // below default_page_size 20
+	badMax.MaxPageSize = initialMaxPageSize // below default_page_size 20
 	assert.Error(t, badMax.Validate())
 }
+
+const (
+	// initialMaxPageSize is the initial max page size the tests use.
+	initialMaxPageSize = 5
+
+	// wantDefaultPageSize is the expected default page size.
+	wantDefaultPageSize = 20
+
+	// wantMaxPageSize is the expected max page size.
+	wantMaxPageSize = 1000
+)

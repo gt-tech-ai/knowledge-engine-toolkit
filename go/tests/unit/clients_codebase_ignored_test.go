@@ -87,3 +87,8 @@ func TestCodebaseClient_GitKindIncludeIgnored(t *testing.T) {
 	assert.Equal(t,
 		[]types.File{{Path: textOutZzGenGo, Untracked: true, Ignored: true}}, files)
 }
+
+const (
+	// textOutZzGenGo is the literal "out/zz_gen.go".
+	textOutZzGenGo = "out/zz_gen.go"
+)

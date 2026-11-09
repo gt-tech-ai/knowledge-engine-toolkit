@@ -54,10 +54,10 @@ func TestCircuitBreaker_OptionFunctions(t *testing.T) {
 	circuitbreaker.WithConsecutiveFailures(10)(&cfg)
 
 	assert.Equal(t, "custom", cfg.Name)
-	assert.Equal(t, uint32(uint32Arg5), cfg.MaxRequests)
+	assert.Equal(t, uint32(wantMaxRequests), cfg.MaxRequests)
 	assert.Equal(t, 30*time.Second, cfg.Interval)
 	assert.Equal(t, 10*time.Second, cfg.Timeout)
-	assert.Equal(t, uint32(uint32Arg10), cfg.ConsecutiveFailures)
+	assert.Equal(t, uint32(wantConsecutiveFailures), cfg.ConsecutiveFailures)
 }
 
 // TestCircuitBreaker_ToOptions tests that Config.ToOptions produces options
@@ -76,8 +76,8 @@ func TestCircuitBreaker_ToOptions(t *testing.T) {
 	src := circuitbreaker.Config{
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                textSrc,
-		MaxRequests:         maxRequests3,
-		ConsecutiveFailures: consecutiveFailures7,
+		MaxRequests:         maxRequests,
+		ConsecutiveFailures: consecutiveFailures,
 	}
 	opts := src.ToOptions()
 	require.Len(t, opts, 1, "expected 1 option from ToOptions")
@@ -106,7 +106,7 @@ func TestCircuitBreaker_KindString(t *testing.T) {
 
 	assert.Equal(t, "gobreaker", circuitbreaker.KindGoBreaker.String())
 
-	unknown := circuitbreaker.Kind(kindArg99)
+	unknown := circuitbreaker.Kind(kindInput)
 	assert.Contains(
 		t,
 		unknown.String(),
@@ -161,10 +161,10 @@ func TestRetry_OptionFunctions(t *testing.T) {
 	retry.WithMultiplier(3.0)(&cfg)
 	retry.WithMaxElapsedTime(2 * time.Minute)(&cfg)
 
-	assert.Equal(t, wantMaxRetries10, cfg.MaxRetries)
+	assert.Equal(t, wantMaxRetriesFunctions, cfg.MaxRetries)
 	assert.Equal(t, 500*time.Millisecond, cfg.InitialInterval)
 	assert.Equal(t, 30*time.Second, cfg.MaxInterval)
-	assert.InDelta(t, wantMultiplier3p0, cfg.Multiplier, 0)
+	assert.InDelta(t, wantMultiplier, cfg.Multiplier, 0)
 	assert.Equal(t, 2*time.Minute, cfg.MaxElapsedTime)
 }
 
@@ -180,7 +180,7 @@ func TestRetry_OptionFunctions(t *testing.T) {
 func TestRetry_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	src := retry.Config{Kind: retry.KindExponential, MaxRetries: maxRetries7}
+	src := retry.Config{Kind: retry.KindExponential, MaxRetries: maxRetries}
 	opts := src.ToOptions()
 	dst := retry.DefaultConfig()
 
@@ -188,7 +188,7 @@ func TestRetry_ToOptions(t *testing.T) {
 		opt(&dst)
 	}
 
-	assert.Equal(t, wantMaxRetries7, dst.MaxRetries)
+	assert.Equal(t, wantMaxRetriesOptions, dst.MaxRetries)
 }
 
 // TestRetry_KindString tests that Kind.String() returns readable labels for
@@ -207,7 +207,7 @@ func TestRetry_KindString(t *testing.T) {
 
 	assert.Equal(t, "exponential", retry.KindExponential.String())
 
-	unknown := retry.Kind(kindArg99)
+	unknown := retry.Kind(kindInput)
 	assert.Contains(
 		t,
 		unknown.String(),
@@ -230,8 +230,8 @@ func TestExponential_DefaultConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := exponential.DefaultConfig()
-	assert.Equal(t, wantMaxRetries3, cfg.MaxRetries)
-	assert.InDelta(t, wantMultiplier2p0, cfg.Multiplier, 0)
+	assert.Equal(t, wantMaxRetriesConfig, cfg.MaxRetries)
+	assert.InDelta(t, wantMultiplierConfig, cfg.Multiplier, 0)
 }
 
 // TestExponential_RetryWithResult tests that the generic RetryWithResult
@@ -303,8 +303,8 @@ func TestRateLimiter_OptionFunctions(t *testing.T) {
 	ratelimiter.WithRate(50.0)(&cfg)
 	ratelimiter.WithBurst(5)(&cfg)
 
-	assert.InDelta(t, wantRate50p0, cfg.Rate, 0)
-	assert.Equal(t, wantBurst5, cfg.Burst)
+	assert.InDelta(t, wantRate, cfg.Rate, 0)
+	assert.Equal(t, wantBurst, cfg.Burst)
 }
 
 // TestRateLimiter_ToOptions tests that Config.ToOptions produces options that
@@ -319,7 +319,7 @@ func TestRateLimiter_OptionFunctions(t *testing.T) {
 func TestRateLimiter_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	src := ratelimiter.Config{Kind: ratelimiter.KindToken, Rate: rate42p0, Burst: burst3}
+	src := ratelimiter.Config{Kind: ratelimiter.KindToken, Rate: rate, Burst: burst}
 	opts := src.ToOptions()
 	dst := ratelimiter.DefaultConfig()
 
@@ -327,7 +327,7 @@ func TestRateLimiter_ToOptions(t *testing.T) {
 		opt(&dst)
 	}
 
-	assert.InDelta(t, wantRate42p0, dst.Rate, 0)
+	assert.InDelta(t, wantRateOptions, dst.Rate, 0)
 }
 
 // TestRateLimiter_KindString tests that Kind.String() returns readable labels
@@ -346,7 +346,7 @@ func TestRateLimiter_KindString(t *testing.T) {
 
 	assert.Equal(t, "token", ratelimiter.KindToken.String())
 
-	unknown := ratelimiter.Kind(kindArg99)
+	unknown := ratelimiter.Kind(kindInput)
 	assert.Contains(
 		t,
 		unknown.String(),
@@ -392,7 +392,7 @@ func TestBulkhead_OptionFunctions(t *testing.T) {
 	cfg := bulkhead.DefaultConfig()
 	bulkhead.WithMaxConcurrent(20)(&cfg)
 
-	assert.Equal(t, wantMaxConcurrent20, cfg.MaxConcurrent)
+	assert.Equal(t, wantMaxConcurrent, cfg.MaxConcurrent)
 }
 
 // TestBulkhead_ToOptions tests that Config.ToOptions produces options that
@@ -407,7 +407,7 @@ func TestBulkhead_OptionFunctions(t *testing.T) {
 func TestBulkhead_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	src := bulkhead.Config{Kind: bulkhead.KindChannel, MaxConcurrent: maxConcurrent15}
+	src := bulkhead.Config{Kind: bulkhead.KindChannel, MaxConcurrent: maxConcurrent}
 	opts := src.ToOptions()
 	dst := bulkhead.DefaultConfig()
 
@@ -415,7 +415,7 @@ func TestBulkhead_ToOptions(t *testing.T) {
 		opt(&dst)
 	}
 
-	assert.Equal(t, wantMaxConcurrent15, dst.MaxConcurrent)
+	assert.Equal(t, wantMaxConcurrentOptions, dst.MaxConcurrent)
 }
 
 // TestBulkhead_KindString tests that Kind.String() returns readable labels for
@@ -434,7 +434,7 @@ func TestBulkhead_KindString(t *testing.T) {
 
 	assert.Equal(t, "channel", bulkhead.KindChannel.String())
 
-	unknown := bulkhead.Kind(kindArg99)
+	unknown := bulkhead.Kind(kindInput)
 	assert.Contains(
 		t,
 		unknown.String(),
@@ -456,7 +456,7 @@ func TestChannel_DefaultConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := channel.DefaultConfig()
-	assert.Equal(t, wantMaxConcurrent10, cfg.MaxConcurrent)
+	assert.Equal(t, wantMaxConcurrentConfig, cfg.MaxConcurrent)
 }
 
 // TestChannel_TryExecuteSuccess tests the TryExecute happy path when slots are
@@ -491,11 +491,11 @@ func TestChannel_ExecuteCancelledContext(t *testing.T) {
 	t.Parallel()
 
 	// Fill all slots
-	bulkheadValue := channel.New(channel.Config{MaxConcurrent: 1})
+	currentBulkhead := channel.New(channel.Config{MaxConcurrent: 1})
 	blocker := make(chan struct{})
 
 	go func() {
-		_ = bulkheadValue.Execute(context.Background(), func() error {
+		_ = currentBulkhead.Execute(context.Background(), func() error {
 			<-blocker
 
 			return nil
@@ -508,7 +508,7 @@ func TestChannel_ExecuteCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := bulkheadValue.Execute(ctx, func() error { return nil })
+	err := currentBulkhead.Execute(ctx, func() error { return nil })
 	require.Error(
 		t,
 		err,
@@ -548,7 +548,7 @@ func TestTracer_OptionFunctions(t *testing.T) {
 
 	assert.Equal(t, "custom-service", cfg.ServiceName)
 	assert.Equal(t, "otel.example.com:4317", cfg.Endpoint)
-	assert.InDelta(t, wantSampleRate0p5, cfg.SampleRate, 0)
+	assert.InDelta(t, wantSampleRateFunctions, cfg.SampleRate, 0)
 	assert.False(t, cfg.Insecure, "Insecure should be false")
 }
 
@@ -591,7 +591,7 @@ func TestTracer_KindString(t *testing.T) {
 
 	assert.Equal(t, "otel", tracer.KindOTel.String())
 
-	unknown := tracer.Kind(kindArg99)
+	unknown := tracer.Kind(kindInput)
 	assert.Contains(
 		t,
 		unknown.String(),
@@ -663,7 +663,7 @@ func TestConfig_KindString(t *testing.T) {
 
 	assert.Equal(t, "viper", config.KindViper.String())
 
-	unknown := config.Kind(kindArg99)
+	unknown := config.Kind(kindInput)
 	assert.Contains(
 		t,
 		unknown.String(),
@@ -671,3 +671,56 @@ func TestConfig_KindString(t *testing.T) {
 		textUnknownKindShouldContain,
 	)
 }
+
+const (
+	// burst is the burst the tests use.
+	burst = 3
+
+	// consecutiveFailures is the consecutive failures the tests use.
+	consecutiveFailures = 7
+
+	// maxConcurrent is the max concurrent the tests use.
+	maxConcurrent = 15
+
+	// maxRequests is the max requests the tests use.
+	maxRequests = 3
+
+	// maxRetries is the max retries the tests use.
+	maxRetries = 7
+
+	// rate is the rate the tests use.
+	rate = 42.0
+
+	// wantBurst is the expected burst.
+	wantBurst = 5
+
+	// wantConsecutiveFailures is the expected consecutive failures.
+	wantConsecutiveFailures = 10
+
+	// wantMaxConcurrent is the expected max concurrent.
+	wantMaxConcurrent = 20
+
+	// wantMaxConcurrentOptions is the expected max concurrent options.
+	wantMaxConcurrentOptions = 15
+
+	// wantMaxRequests is the expected max requests.
+	wantMaxRequests = 5
+
+	// wantMaxRetriesFunctions is the expected max retries functions.
+	wantMaxRetriesFunctions = 10
+
+	// wantMaxRetriesOptions is the expected max retries options.
+	wantMaxRetriesOptions = 7
+
+	// wantMultiplier is the expected multiplier.
+	wantMultiplier = 3.0
+
+	// wantRate is the expected rate.
+	wantRate = 50.0
+
+	// wantRateOptions is the expected rate options.
+	wantRateOptions = 42.0
+
+	// wantSampleRateFunctions is the expected sample rate functions.
+	wantSampleRateFunctions = 0.5
+)

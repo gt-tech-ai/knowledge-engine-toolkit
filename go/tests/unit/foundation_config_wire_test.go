@@ -48,7 +48,7 @@ server:
 
 	// Assert: Config loaded correctly
 	assert.Equal(t, text0000, serverCfg.Host)
-	assert.Equal(t, wantPort8090, serverCfg.Port)
+	assert.Equal(t, wantPort, serverCfg.Port)
 	assert.Equal(t, "30s", serverCfg.ReadTimeout.String())
 
 	// Validate should pass
@@ -146,7 +146,7 @@ redis:
 
 	// Assert
 	assert.Equal(t, "localhost", redisCfg.Host)
-	assert.Equal(t, wantPort6379, redisCfg.Port)
+	assert.Equal(t, wantPortConfig, redisCfg.Port)
 	assert.Equal(t, "localhost:6379", redisCfg.Addr())
 
 	// Validate should pass
@@ -169,3 +169,13 @@ func loadConfigKey[T any](t *testing.T, yamlText, key string) T {
 
 	return cfg
 }
+
+const (
+	// wantPortConfig is the expected port config.
+	wantPortConfig = 6379
+)
+
+const (
+	// textValidateMustPassFor is the literal "Validate must pass for valid config".
+	textValidateMustPassFor = "Validate must pass for valid config"
+)

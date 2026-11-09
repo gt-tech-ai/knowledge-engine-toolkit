@@ -37,14 +37,14 @@ func TestClientsToolchainDefsFromTools_ProjectsTools(t *testing.T) {
 		},
 		{Name: textRuff, Binary: textRuff, Cmd: []string{textUv, textRun}},
 	})
-	require.Len(t, defs, wantDefsLen2, "DefsFromTools should return 2 defs")
+	require.Len(t, defs, wantDefsLen, "DefsFromTools should return 2 defs")
 
 	assert.Equal(t, textGolangciLint, defs[0].Name)
 	assert.Equal(t, textGolangciLint, defs[0].Binary)
 	assert.Equal(t, "brew install golangci-lint", defs[0].InstallHint)
 
 	assert.Equal(t, textRuff, defs[1].Name)
-	require.Len(t, defs[1].Prefix, wantPrefixLen2, "expected 2-element prefix for ruff")
+	require.Len(t, defs[1].Prefix, wantPrefixLen, "expected 2-element prefix for ruff")
 	assert.Equal(t, textUv, defs[1].Prefix[0])
 }
 
@@ -84,9 +84,17 @@ func TestClientsToolchainRegistry_LenAfterMultipleRegistrations(t *testing.T) {
 		{Name: textBuf, Binary: textBuf},
 		{Name: textRuff, Binary: textRuff},
 	})
-	assert.Equal(t, wantLen2, reg.Len(), "Len() after 2 distinct registrations")
+	assert.Equal(t, wantLen, reg.Len(), "Len() after 2 distinct registrations")
 
 	// Re-register "buf" - should overwrite, not add.
 	reg.Register(toolchain.NewTool("buf-v2", textBuf, "", nil))
-	assert.Equal(t, wantLen2, reg.Len(), "Len() after overwrite should remain 2")
+	assert.Equal(t, wantLen, reg.Len(), "Len() after overwrite should remain 2")
 }
+
+const (
+	// wantDefsLen is the expected defs len.
+	wantDefsLen = 2
+
+	// wantPrefixLen is the expected prefix len.
+	wantPrefixLen = 2
+)

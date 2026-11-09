@@ -83,7 +83,7 @@ func (s *AnalyticsCassandraSuite) SetupSuite() {
 
 	cfg.Cassandra.Hosts, cfg.Cassandra.Port = []string{s.CassandraHost}, s.CassandraPort
 	cfg.Cassandra.LocalDC = cassandradb.LocalDC
-	cfg.Keyspace, cfg.Timeout = itKeyspace, seconds20*time.Second
+	cfg.Keyspace, cfg.Timeout = itKeyspace, seconds*time.Second
 
 	session, err := cql.NewFromConfig(ctx, &cfg, cql.Deps{})
 	s.Require().NoError(err)
@@ -122,13 +122,31 @@ func (s *AnalyticsCassandraSuite) TestCassandra_AggregatesAcrossBucketBoundaries
 		new(query(
 			org,
 			types.GrainHour,
-			time.Date(year2026, month10, day8, hour20, 0, 0, 0, time.UTC),
-			time.Date(year2026, month10, day9, hour2, 0, 0, 0, time.UTC),
+			time.Date(
+				dateInput,
+				dateInputBoundaries,
+				dateInputBucketBoundaries,
+				dateInputAcrossBucketBoundaries,
+				0,
+				0,
+				0,
+				time.UTC,
+			),
+			time.Date(
+				dateInput,
+				dateInputBoundaries,
+				dateInputAggregatesAcrossBucketBoundaries,
+				dateInputCassandraAggregatesAcrossBucketBoundaries,
+				0,
+				0,
+				0,
+				time.UTC,
+			),
 		)),
 	)
 
-	s.InDelta(inDeltaArg30p0, chartspec.Finalize(got[textT1], types.AggSum), 0)
-	s.InDelta(inDeltaArg2p0, chartspec.Finalize(got[textT1], types.AggCount), 0)
+	s.InDelta(wantResult, chartspec.Finalize(got[textT1], types.AggSum), 0)
+	s.InDelta(wantResultBoundaries, chartspec.Finalize(got[textT1], types.AggCount), 0)
 }
 
 // fact builds a genai_calls fact for org.
@@ -151,30 +169,39 @@ func fact(org, key string, at time.Time, team, model string, tokens float64) typ
 //   - 80 facts over Sep 25 – Oct 6 (two month buckets); for 30 random $and/$or
 //     filters on team, model and ts, the per-team sums equal the full scan's exactly
 func (s *AnalyticsCassandraSuite) TestCassandra_PushdownMatchesFullScan() {
-	store := s.newStore(s.session, pageSize7)
+	store := s.newStore(s.session, newStoreInput)
 	org := "org-pushdown"
-	sequence := fixtures.NewSequence(seed42)
+	sequence := fixtures.NewSequence(newSequenceInput)
 
 	var days []time.Time
 
-	first := time.Date(year2026, month9, day25, 0, 0, 0, 0, time.UTC)
-	end := time.Date(year2026, month10, day7, 0, 0, 0, 0, time.UTC)
+	first := time.Date(dateInput, dateInputScan, dateInputFullScan, 0, 0, 0, 0, time.UTC)
+	end := time.Date(
+		dateInput,
+		dateInputMatchesFullScan,
+		dateInputPushdownMatchesFullScan,
+		0,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
 
 	for d := first; d.Before(end); d = d.AddDate(0, 0, 1) {
 		days = append(days, d)
 	}
 
-	facts := make([]types.Fact, 0, capacity80)
+	facts := make([]types.Fact, 0, makeInput)
 
-	for index := range iterations80 {
-		timeValue := days[sequence.IntN(len(days))].Add(
+	for index := range iterations {
+		instant := days[sequence.IntN(len(days))].Add(
 			time.Duration(sequence.IntN(24*60)) * time.Minute,
 		)
 
 		facts = append(facts, fact(
 			org,
 			fmt.Sprintf("f-%d", index),
-			timeValue,
+			instant,
 			[]string{textT1, textT2, textT3}[sequence.IntN(3)],
 			[]string{"m-a", "m-b"}[sequence.IntN(2)],
 			float64(1+sequence.IntN(100)),
@@ -183,12 +210,19 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PushdownMatchesFullScan() {
 
 	s.Require().NoError(store.Write(context.Background(), facts))
 
-	testCassandraPushdownMatchesFullScanRest(s, store, org, sequence, days, facts)
+	testCassandraPushdownMatchesFullScanBuildsFilterMap(
+		s,
+		store,
+		org,
+		sequence,
+		days,
+		facts,
+	)
 }
 
-// testCassandraPushdownMatchesFullScanRest continues
-// TestCassandra_PushdownMatchesFullScan with its remaining steps.
-func testCassandraPushdownMatchesFullScanRest(
+// testCassandraPushdownMatchesFullScanBuildsFilterMap continues
+// TestCassandra_PushdownMatchesFullScan: builds filter map.
+func testCassandraPushdownMatchesFullScanBuildsFilterMap(
 	analyticsCassandraSuite *AnalyticsCassandraSuite,
 	store *analyticscassandra.Store,
 	org string,
@@ -196,24 +230,24 @@ func testCassandraPushdownMatchesFullScanRest(
 	days []time.Time,
 	facts []types.Fact,
 ) {
-	mapValue := listquery.NewMap().
+	fieldMap := listquery.NewMap().
 		Add(listquery.String(textTeam), listquery.String(textModel),
 			new(listquery.Time("ts")).AsTime())
 
-	testCassandraPushdownMatchesFullScanRest2(
+	testCassandraPushdownMatchesFullScanComparesRandomFilters(
 		analyticsCassandraSuite,
 		store,
 		org,
 		sequence,
 		days,
 		facts,
-		mapValue,
+		fieldMap,
 	)
 }
 
-// testCassandraPushdownMatchesFullScanRest2 continues
-// testCassandraPushdownMatchesFullScanRest with its remaining steps.
-func testCassandraPushdownMatchesFullScanRest2(
+// testCassandraPushdownMatchesFullScanComparesRandomFilters continues
+// testCassandraPushdownMatchesFullScanBuildsFilterMap: compares random filters.
+func testCassandraPushdownMatchesFullScanComparesRandomFilters(
 	analyticsCassandraSuite *AnalyticsCassandraSuite,
 	store *analyticscassandra.Store,
 	org string,
@@ -222,7 +256,7 @@ func testCassandraPushdownMatchesFullScanRest2(
 	facts []types.Fact,
 	m *listquery.Map,
 ) {
-	for range iterations30 {
+	for range iterationsFilters {
 		gen := genFilter(sequence, days)
 		filter, err := listquery.Parse(m, gen.json)
 		analyticsCassandraSuite.Require().NoError(err, gen.json)
@@ -261,16 +295,25 @@ func query(org string, grain types.Grain, from, to time.Time) types.AggregateQue
 func (s *AnalyticsCassandraSuite) TestCassandra_RedeliveredFactIsNoop() {
 	store := s.newStore(s.session, 0)
 	org := "org-redeliver"
-	factValue := fact(
+	currentFact := fact(
 		org,
 		"same",
-		time.Date(year2026, month10, day9, hour10, 0, 0, 0, time.UTC),
+		time.Date(
+			dateInput,
+			dateInputNoop,
+			dateInputIsNoop,
+			dateInputNoop,
+			0,
+			0,
+			0,
+			time.UTC,
+		),
 		textT1,
 		textM,
-		tokens17,
+		factInput,
 	)
-	s.Require().NoError(store.Write(context.Background(), []types.Fact{factValue}))
-	s.Require().NoError(store.Write(context.Background(), []types.Fact{factValue}))
+	s.Require().NoError(store.Write(context.Background(), []types.Fact{currentFact}))
+	s.Require().NoError(store.Write(context.Background(), []types.Fact{currentFact}))
 
 	for _, grain := range []types.Grain{types.GrainHour, types.GrainDay} {
 		got := s.totals(
@@ -278,13 +321,22 @@ func (s *AnalyticsCassandraSuite) TestCassandra_RedeliveredFactIsNoop() {
 			new(query(
 				org,
 				grain,
-				time.Date(year2026, month10, day9, 0, 0, 0, 0, time.UTC),
-				time.Date(year2026, month10, day10, 0, 0, 0, 0, time.UTC),
+				time.Date(
+					dateInput,
+					dateInputNoop,
+					dateInputIsNoop,
+					0,
+					0,
+					0,
+					0,
+					time.UTC,
+				),
+				time.Date(dateInput, dateInputNoop, dateInputNoop, 0, 0, 0, 0, time.UTC),
 			)),
 		)
-		s.InDelta(inDeltaArg17p0, chartspec.Finalize(got[textT1], types.AggSum), 0, grain)
+		s.InDelta(wantResultNoop, chartspec.Finalize(got[textT1], types.AggSum), 0, grain)
 		s.InDelta(
-			inDeltaArg1p0,
+			wantResultIsNoop,
 			chartspec.Finalize(got[textT1], types.AggCount),
 			0,
 			grain,
@@ -304,23 +356,23 @@ func genFilter(sequence *fixtures.Sequence, days []time.Time) randFilter {
 
 	leaf := func() randFilter { return genLeafFilter(sequence, days, teams, models) }
 
-	randFilter2, randFilterValue := leaf(), leaf()
+	secondRandFilter, currentRandFilter := leaf(), leaf()
 
-	if sequence.IntN(intNArg2) == 0 {
+	if sequence.IntN(upperBound) == 0 {
 		return randFilter{
-			json: `{"$and":[` + randFilter2.json + `,` + randFilterValue.json + `]}`,
+			json: `{"$and":[` + secondRandFilter.json + `,` + currentRandFilter.json + `]}`,
 			match: func(f types.Fact) bool {
-				return randFilter2.match(f) &&
-					randFilterValue.match(f)
+				return secondRandFilter.match(f) &&
+					currentRandFilter.match(f)
 			},
 		}
 	}
 
 	return randFilter{
-		json: `{"$or":[` + randFilter2.json + `,` + randFilterValue.json + `]}`,
+		json: `{"$or":[` + secondRandFilter.json + `,` + currentRandFilter.json + `]}`,
 		match: func(f types.Fact) bool {
-			return randFilter2.match(f) ||
-				randFilterValue.match(f)
+			return secondRandFilter.match(f) ||
+				currentRandFilter.match(f)
 		},
 	}
 }
@@ -331,7 +383,7 @@ func genLeafFilter(
 	days []time.Time,
 	teams, models []string,
 ) randFilter {
-	switch sequence.IntN(intNArg4) {
+	switch sequence.IntN(upperBoundFilter) {
 	case 0:
 		t := teams[sequence.IntN(len(teams))]
 
@@ -348,7 +400,7 @@ func genLeafFilter(
 				return f.Dims[textTeam] == a || f.Dims[textTeam] == b
 			},
 		}
-	case intN2:
+	case intN:
 		m := models[sequence.IntN(len(models))]
 
 		return randFilter{
@@ -378,17 +430,26 @@ func genLeafFilter(
 //   - with 2-row pages over 5 rows, the first page has 2 rows and a token; a new
 //     stream from that token yields the other 3, with no row twice
 func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
-	store := s.newStore(s.session, pageSize2)
+	store := s.newStore(s.session, newStoreInputToken)
 	org := "org-paging"
-	facts := make([]types.Fact, 0, capacity5)
+	facts := make([]types.Fact, 0, makeInputToken)
 
-	for index := range iterations5 {
+	for index := range iterationsToken {
 		facts = append(
 			facts,
 			fact(
 				org,
 				fmt.Sprintf("p-%d", index),
-				time.Date(year2026, month10, day9, index, 0, 0, 0, time.UTC),
+				time.Date(
+					dateInput,
+					dateInputToken,
+					dateInputResumeToken,
+					index,
+					0,
+					0,
+					0,
+					time.UTC,
+				),
 				fmt.Sprintf("t-%d", index),
 				textM,
 				1,
@@ -398,29 +459,38 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
 
 	s.Require().NoError(store.Write(context.Background(), facts))
 
+	testCassandraPagingResumeTokenResumes(s, store, org)
+}
+
+// testCassandraPagingResumeTokenResumes continues TestCassandra_PagingResumeToken.
+func testCassandraPagingResumeTokenResumes(
+	analyticsCassandraSuite *AnalyticsCassandraSuite,
+	store *analyticscassandra.Store,
+	org string,
+) {
 	aggregateQuery := query(
 		org,
 		types.GrainHour,
-		time.Date(year2026, month10, day9, 0, 0, 0, 0, time.UTC),
-		time.Date(year2026, month10, day10, 0, 0, 0, 0, time.UTC),
+		time.Date(dateInput, dateInputToken, dateInputResumeToken, 0, 0, 0, 0, time.UTC),
+		time.Date(dateInput, dateInputToken, dateInputToken, 0, 0, 0, 0, time.UTC),
 	)
 	ctx := context.Background()
 
 	first, err := store.Aggregate(ctx, &aggregateQuery)
-	s.Require().NoError(err)
+	analyticsCassandraSuite.Require().NoError(err)
 
 	page, more, err := first.Next(ctx)
-	s.Require().NoError(err)
-	s.True(more)
-	s.Len(page, length2)
+	analyticsCassandraSuite.Require().NoError(err)
+	analyticsCassandraSuite.True(more)
+	analyticsCassandraSuite.Len(page, lenInput)
 
 	token := first.ResumeToken()
-	s.NotEmpty(token)
-	s.Require().NoError(first.Close())
+	analyticsCassandraSuite.NotEmpty(token)
+	analyticsCassandraSuite.Require().NoError(first.Close())
 
 	aggregateQuery.ResumeToken = token
 
-	rest := s.totals(store, &aggregateQuery)
+	rest := analyticsCassandraSuite.totals(store, &aggregateQuery)
 	seen := map[string]int{}
 
 	for _, r := range page {
@@ -431,7 +501,10 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
 		seen[team]++
 	}
 
-	s.Equal(map[string]int{"t-0": 1, textT1: 1, textT2: 1, textT3: 1, "t-4": 1}, seen)
+	analyticsCassandraSuite.Equal(
+		map[string]int{"t-0": 1, textT1: 1, textT2: 1, textT3: 1, "t-4": 1},
+		seen,
+	)
 }
 
 // TestCassandra_CrashBetweenWritesDoesNotLoseMeasures tests that a write that
@@ -446,13 +519,22 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
 //     redelivered Write, hour and day totals are both exactly 25 with count 1
 func (s *AnalyticsCassandraSuite) TestCassandra_CrashBetweenWritesDoesNotLoseMeasures() {
 	org := "org-crash"
-	factValue := fact(
+	currentFact := fact(
 		org,
 		"c-1",
-		time.Date(year2026, month10, day9, hour14, 0, 0, 0, time.UTC),
+		time.Date(
+			dateInput,
+			dateInputMeasures,
+			dateInputLoseMeasures,
+			dateInputNotLoseMeasures,
+			0,
+			0,
+			0,
+			time.UTC,
+		),
 		textT1,
 		textM,
-		tokens25,
+		factInputMeasures,
 	)
 	crashing := s.newStore(
 		&crashingSession{
@@ -462,25 +544,58 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CrashBetweenWritesDoesNotLoseMea
 		0,
 	)
 
-	err := crashing.Write(context.Background(), []types.Fact{factValue})
+	err := crashing.Write(context.Background(), []types.Fact{currentFact})
 	s.Equal(apperr.CodeUnavailable, apperr.Code(err))
 
 	store := s.newStore(s.session, 0)
-	s.Require().NoError(store.Write(context.Background(), []types.Fact{factValue}))
+	s.Require().NoError(store.Write(context.Background(), []types.Fact{currentFact}))
 
+	testCassandraCrashBetweenWritesChecksMeasures(s, org, store)
+}
+
+// testCassandraCrashBetweenWritesChecksMeasures continues
+// TestCassandra_CrashBetweenWritesDoesNotLoseMeasures.
+func testCassandraCrashBetweenWritesChecksMeasures(
+	analyticsCassandraSuite *AnalyticsCassandraSuite,
+	org string,
+	store *analyticscassandra.Store,
+) {
 	for _, grain := range []types.Grain{types.GrainHour, types.GrainDay} {
-		got := s.totals(
+		got := analyticsCassandraSuite.totals(
 			store,
 			new(query(
 				org,
 				grain,
-				time.Date(year2026, month10, day9, 0, 0, 0, 0, time.UTC),
-				time.Date(year2026, month10, day10, 0, 0, 0, 0, time.UTC),
+				time.Date(
+					dateInput,
+					dateInputMeasures,
+					dateInputLoseMeasures,
+					0,
+					0,
+					0,
+					0,
+					time.UTC,
+				),
+				time.Date(
+					dateInput,
+					dateInputMeasures,
+					dateInputMeasures,
+					0,
+					0,
+					0,
+					0,
+					time.UTC,
+				),
 			)),
 		)
-		s.InDelta(inDeltaArg25p0, chartspec.Finalize(got[textT1], types.AggSum), 0, grain)
-		s.InDelta(
-			inDeltaArg1p0,
+		analyticsCassandraSuite.InDelta(
+			wantResultMeasures,
+			chartspec.Finalize(got[textT1], types.AggSum),
+			0,
+			grain,
+		)
+		analyticsCassandraSuite.InDelta(
+			wantResultLoseMeasures,
 			chartspec.Finalize(got[textT1], types.AggCount),
 			0,
 			grain,
@@ -502,16 +617,25 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CompactionPreservesTotals() {
 	org := "org-compact"
 	s.writeCompactionFacts(store, org)
 
-	bucket := time.Date(year2025, month3, day4, 0, 0, 0, 0, time.UTC)
+	bucket := time.Date(
+		dateInputTotals,
+		dateInputPreservesTotals,
+		dateInputCompactionPreservesTotals,
+		0,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
 	aggregateQuery := query(org, types.GrainHour, bucket, bucket.AddDate(0, 0, 1))
 	before := s.totals(store, &aggregateQuery)
-	s.Equal(equalArg43, s.partitionRows(org, types.GrainHour, bucket))
+	s.Equal(equalInput, s.partitionRows(org, types.GrainHour, bucket))
 
 	s.Require().
 		NoError(store.Compact(context.Background(), itCube, types.GrainHour, org, bucket))
 
 	after := s.totals(store, &aggregateQuery)
-	s.Equal(equalArg2, s.partitionRows(org, types.GrainHour, bucket))
+	s.Equal(equalInputTotals, s.partitionRows(org, types.GrainHour, bucket))
 
 	for _, team := range []string{textT1, textT2} {
 		for _, agg := range []types.Aggregate{
@@ -520,7 +644,7 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CompactionPreservesTotals() {
 			s.InDelta(
 				chartspec.Finalize(before[team], agg),
 				chartspec.Finalize(after[team], agg),
-				delta1em9,
+				floatTolerance,
 				"%s %s",
 				team,
 				agg,
@@ -587,9 +711,18 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CompactionIsIdempotent() {
 	store := s.newStore(s.session, 0)
 	org := "org-compact-twice"
 	values := s.writeCompactionFacts(store, org)
-	bucket := time.Date(year2025, month3, day4, 0, 0, 0, 0, time.UTC)
+	bucket := time.Date(
+		dateInputIdempotent,
+		dateInputIsIdempotent,
+		dateInputCompactionIsIdempotent,
+		0,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
 	aggregateQuery := query(org, types.GrainHour, bucket, bucket.AddDate(0, 0, 1))
-	want := want0p0
+	want := initialWant
 
 	for _, v := range values[textT1] {
 		want += v
@@ -604,15 +737,24 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CompactionIsIdempotent() {
 		0,
 	)
 
-	lateAt := time.Date(year2025, month3, day4, hour9, min5, 0, 0, time.UTC)
-	late := fact(org, "late", lateAt, textT1, textM, tokens100)
+	lateAt := time.Date(
+		dateInputIdempotent,
+		dateInputIsIdempotent,
+		dateInputCompactionIsIdempotent,
+		dateInputCassandraCompactionIsIdempotent,
+		dateInputTestCassandraCompactionIsIdempotent,
+		0,
+		0,
+		time.UTC,
+	)
+	late := fact(org, "late", lateAt, textT1, textM, factInputIdempotent)
 	s.Require().NoError(store.Write(ctx, []types.Fact{late}))
 	s.Require().NoError(store.Compact(ctx, itCube, types.GrainHour, org, bucket))
 
 	got := s.totals(store, &aggregateQuery)[textT1]
 	s.InDelta(want+100, chartspec.Finalize(got, types.AggSum), 0)
-	s.InDelta(inDeltaArg41p0, chartspec.Finalize(got, types.AggCount), 0)
-	s.Equal(equalArg2, s.partitionRows(org, types.GrainHour, bucket))
+	s.InDelta(wantResultIdempotent, chartspec.Finalize(got, types.AggCount), 0)
+	s.Equal(equalInputIdempotent, s.partitionRows(org, types.GrainHour, bucket))
 	s.False(math.IsNaN(chartspec.Finalize(got, types.AggP95)))
 }
 
@@ -708,11 +850,11 @@ func (s *AnalyticsCassandraSuite) writeCompactionFacts(
 	s.T().Helper()
 
 	values := map[string][]float64{}
-	facts := make([]types.Fact, 0, capacity43)
+	facts := make([]types.Fact, 0, makeInputFacts)
 
-	for index := range iterations43 {
+	for index := range iterationsFacts {
 		team := textT1
-		if index >= value40 {
+		if index >= wantIndex {
 			team = textT2
 		}
 
@@ -724,7 +866,16 @@ func (s *AnalyticsCassandraSuite) writeCompactionFacts(
 			fact(
 				org,
 				fmt.Sprintf("k-%d", index),
-				time.Date(year2025, month3, day4, hour9, index%60, 0, 0, time.UTC),
+				time.Date(
+					dateInputFacts,
+					dateInputCompactionFacts,
+					dateInputWriteCompactionFacts,
+					compactionFactsHour,
+					index%60,
+					0,
+					0,
+					time.UTC,
+				),
 				team,
 				textM,
 				amount,
@@ -760,3 +911,187 @@ func finalizedSums(got map[string]chartspec.Partial) map[string]float64 {
 
 	return sums
 }
+
+const (
+	// dateInputAcrossBucketBoundaries is the date input across bucket boundaries the tests
+	// use.
+	dateInputAcrossBucketBoundaries = 20
+
+	// dateInputAggregatesAcrossBucketBoundaries is the date input aggregates across bucket
+	// boundaries the tests use.
+	dateInputAggregatesAcrossBucketBoundaries = 9
+
+	// dateInputBoundaries is the date input boundaries the tests use.
+	dateInputBoundaries = 10
+
+	// dateInputBucketBoundaries is the date input bucket boundaries the tests use.
+	dateInputBucketBoundaries = 8
+
+	// dateInputCassandraAggregatesAcrossBucketBoundaries is the date input cassandra
+	// aggregates across bucket boundaries the tests use.
+	dateInputCassandraAggregatesAcrossBucketBoundaries = 2
+
+	// dateInputCassandraCompactionIsIdempotent is the date input cassandra compaction is
+	// idempotent the tests use.
+	dateInputCassandraCompactionIsIdempotent = 9
+
+	// dateInputCompactionFacts is the date input compaction facts the tests use.
+	dateInputCompactionFacts = 3
+
+	// dateInputCompactionIsIdempotent is the date input compaction is idempotent the tests
+	// use.
+	dateInputCompactionIsIdempotent = 4
+
+	// dateInputCompactionPreservesTotals is the date input compaction preserves totals the
+	// tests use.
+	dateInputCompactionPreservesTotals = 4
+
+	// dateInputFacts is the date input facts the tests use.
+	dateInputFacts = 2025
+
+	// dateInputFullScan is the date input full scan the tests use.
+	dateInputFullScan = 25
+
+	// dateInputIdempotent is the date input idempotent the tests use.
+	dateInputIdempotent = 2025
+
+	// dateInputIsIdempotent is the date input is idempotent the tests use.
+	dateInputIsIdempotent = 3
+
+	// dateInputIsNoop is the date input is noop the tests use.
+	dateInputIsNoop = 9
+
+	// dateInputLoseMeasures is the date input lose measures the tests use.
+	dateInputLoseMeasures = 9
+
+	// dateInputMatchesFullScan is the date input matches full scan the tests use.
+	dateInputMatchesFullScan = 10
+
+	// dateInputMeasures is the date input measures the tests use.
+	dateInputMeasures = 10
+
+	// dateInputNoop is the date input noop the tests use.
+	dateInputNoop = 10
+
+	// dateInputNotLoseMeasures is the date input not lose measures the tests use.
+	dateInputNotLoseMeasures = 14
+
+	// dateInputPreservesTotals is the date input preserves totals the tests use.
+	dateInputPreservesTotals = 3
+
+	// dateInputPushdownMatchesFullScan is the date input pushdown matches full scan the
+	// tests use.
+	dateInputPushdownMatchesFullScan = 7
+
+	// dateInputResumeToken is the date input resume token the tests use.
+	dateInputResumeToken = 9
+
+	// dateInputScan is the date input scan the tests use.
+	dateInputScan = 9
+
+	// dateInputTestCassandraCompactionIsIdempotent is the date input test cassandra
+	// compaction is idempotent the tests use.
+	dateInputTestCassandraCompactionIsIdempotent = 5
+
+	// dateInputToken is the date input token the tests use.
+	dateInputToken = 10
+
+	// dateInputTotals is the date input totals the tests use.
+	dateInputTotals = 2025
+
+	// dateInputWriteCompactionFacts is the date input write compaction facts the tests use.
+	dateInputWriteCompactionFacts = 4
+
+	// compactionFactsHour is the date input write compaction facts13 the tests use.
+	compactionFactsHour = 9
+
+	// equalInput is the equal input the tests use.
+	equalInput = 43
+
+	// equalInputIdempotent is the equal input idempotent the tests use.
+	equalInputIdempotent = 2
+
+	// equalInputTotals is the equal input totals the tests use.
+	equalInputTotals = 2
+
+	// factInput is the fact input the tests use.
+	factInput = 17
+
+	// factInputIdempotent is the fact input idempotent the tests use.
+	factInputIdempotent = 100
+
+	// factInputMeasures is the fact input measures the tests use.
+	factInputMeasures = 25
+
+	// initialWant is the initial want the tests use.
+	initialWant = 0.0
+
+	// intN is the int n the tests use.
+	intN = 2
+
+	// iterations is the iterations the tests use.
+	iterations = 80
+
+	// iterationsFacts is the iterations facts the tests use.
+	iterationsFacts = 43
+
+	// iterationsFilters is the iterations filters the tests use.
+	iterationsFilters = 30
+
+	// iterationsToken is the iterations token the tests use.
+	iterationsToken = 5
+
+	// lenInput is the len input the tests use.
+	lenInput = 2
+
+	// makeInput is the make input the tests use.
+	makeInput = 80
+
+	// makeInputFacts is the make input facts the tests use.
+	makeInputFacts = 43
+
+	// makeInputToken is the make input token the tests use.
+	makeInputToken = 5
+
+	// newSequenceInput is the new sequence input the tests use.
+	newSequenceInput = 42
+
+	// newStoreInput is the new store input the tests use.
+	newStoreInput = 7
+
+	// newStoreInputToken is the new store input token the tests use.
+	newStoreInputToken = 2
+
+	// upperBound is the upper bound the tests use.
+	upperBound = 2
+
+	// upperBoundFilter is the upper bound filter the tests use.
+	upperBoundFilter = 4
+
+	// floatTolerance is the named value used where float tolerance applies.
+	floatTolerance = 1e-9
+
+	// wantIndex is the expected index.
+	wantIndex = 40
+
+	// wantResult is the expected result.
+	wantResult = 30.0
+
+	// wantResultBoundaries is the expected result boundaries.
+	wantResultBoundaries = 2.0
+
+	// wantResultIdempotent is the expected result idempotent.
+	wantResultIdempotent = 41.0
+
+	// wantResultIsNoop is the expected result is noop.
+	wantResultIsNoop = 1.0
+
+	// wantResultLoseMeasures is the expected result lose measures.
+	wantResultLoseMeasures = 1.0
+
+	// wantResultMeasures is the expected result measures.
+	wantResultMeasures = 25.0
+
+	// wantResultNoop is the expected result noop.
+	wantResultNoop = 17.0
+)

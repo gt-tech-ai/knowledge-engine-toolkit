@@ -127,15 +127,15 @@ func mergeValue(dst, src reflect.Value) {
 }
 
 // mergeField recurses into a struct and copies any other value that is set.
-func mergeField(value, valueValue reflect.Value) {
-	if valueValue.Kind() == reflect.Struct {
-		mergeValue(value, valueValue)
+func mergeField(value, item reflect.Value) {
+	if item.Kind() == reflect.Struct {
+		mergeValue(value, item)
 
 		return
 	}
 
-	if !valueValue.IsZero() {
-		value.Set(valueValue)
+	if !item.IsZero() {
+		value.Set(item)
 	}
 }
 

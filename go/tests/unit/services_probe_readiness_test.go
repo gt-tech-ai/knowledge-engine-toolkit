@@ -156,11 +156,11 @@ func TestSecretsProbe(t *testing.T) {
 		assert.NotContains(t, got.Detail, "auth0-bootstrap present")
 	})
 
-	testSecretsProbeRest(t)
+	testSecretsProbePasses(t)
 }
 
-// testSecretsProbeRest continues TestSecretsProbe with its remaining steps.
-func testSecretsProbeRest(t *testing.T) {
+// testSecretsProbePasses continues TestSecretsProbe: passes.
+func testSecretsProbePasses(t *testing.T) {
 	t.Helper()
 
 	t.Run("pass_when_all_present", func(t *testing.T) {
@@ -476,8 +476,8 @@ func TestRegistryProbe(t *testing.T) {
 	t.Run("pass_when_all_allowed", func(t *testing.T) {
 		t.Parallel()
 
-		awsiamapiValue := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
-		awsiamapiValue.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
+		currentAwsiamapi := mocks.NewMockAWSIAMAPI(gomock.NewController(t))
+		currentAwsiamapi.EXPECT().SimulatePrincipalPolicy(gomock.Any(), gomock.Any()).
 			Return(&iam.SimulatePrincipalPolicyOutput{
 				EvaluationResults: []iamtypes.EvaluationResult{
 					{
@@ -488,7 +488,7 @@ func TestRegistryProbe(t *testing.T) {
 			}, nil)
 
 		got := readiness.Registry{
-			IAM:     awsiamapiValue,
+			IAM:     currentAwsiamapi,
 			RoleARN: "arn:aws:iam::111122223333:role/deploy",
 		}.
 			Run(
@@ -561,3 +561,14 @@ func TestClusterProbe(t *testing.T) {
 		)
 	})
 }
+
+const (
+	// textArgocdRepo is the literal "argocd-repo".
+	textArgocdRepo = "argocd-repo"
+
+	// textHaiku is the literal "haiku".
+	textHaiku = "haiku"
+
+	// textSonnet is the literal "sonnet".
+	textSonnet = "sonnet"
+)

@@ -855,32 +855,32 @@ func (c *s3Client) putMultipart(
 		)
 	}
 
-	multipartUploadValue := &multipartUpload{
+	currentMultipartUpload := &multipartUpload{
 		c:        c,
 		uploadID: created.UploadId,
 		bucket:   bucket,
 		key:      key,
 	}
 
-	err = multipartUploadValue.uploadParts(ctx, body)
+	err = currentMultipartUpload.uploadParts(ctx, body)
 	if err != nil {
-		multipartUploadValue.abort(ctx)
+		currentMultipartUpload.abort(ctx)
 
 		return err
 	}
 
-	sortParts(multipartUploadValue.parts)
+	sortParts(currentMultipartUpload.parts)
 
 	_, err = c.api.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
 		Bucket:   aws.String(bucket),
 		Key:      aws.String(key),
-		UploadId: multipartUploadValue.uploadID,
+		UploadId: currentMultipartUpload.uploadID,
 		MultipartUpload: &types.CompletedMultipartUpload{
-			Parts: multipartUploadValue.parts,
+			Parts: currentMultipartUpload.parts,
 		},
 	})
 	if err != nil {
-		multipartUploadValue.abort(ctx)
+		currentMultipartUpload.abort(ctx)
 
 		return apperr.Wrap(
 			err,

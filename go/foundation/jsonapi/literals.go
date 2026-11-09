@@ -1,8 +1,8 @@
 package jsonapi
 
 const (
-	// segLen2 is the segLen value 2.
-	segLen2 = 2
+	// minParamSegmentLen is the named value used where min param segment len applies.
+	minParamSegmentLen = 2
 
 	// textID is the literal "id".
 	textID = "id"

@@ -77,7 +77,7 @@ func (st objectStore) Save(ctx context.Context, set *types.PlanSet) error {
 		return err
 	}
 
-	manifestValue := manifest{Owner: set.Owner}
+	currentManifest := manifest{Owner: set.Owner}
 
 	for _, f := range files {
 		unit, opErr := st.saveUnit(ctx, set, f)
@@ -85,10 +85,10 @@ func (st objectStore) Save(ctx context.Context, set *types.PlanSet) error {
 			return opErr
 		}
 
-		manifestValue.Units = append(manifestValue.Units, unit)
+		currentManifest.Units = append(currentManifest.Units, unit)
 	}
 
-	data, err := json.MarshalIndent(manifestValue, "", "  ")
+	data, err := json.MarshalIndent(currentManifest, "", "  ")
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "encode the plan manifest")
 	}
@@ -111,7 +111,7 @@ func (st objectStore) Save(ctx context.Context, set *types.PlanSet) error {
 // removed, so nothing is applied.
 // set must not be nil.
 func (st objectStore) Load(ctx context.Context, set *types.PlanSet) error {
-	manifest2, err := readManifest(set)
+	secondManifest, err := readManifest(set)
 	if err != nil {
 		return err
 	}
@@ -128,12 +128,12 @@ func (st objectStore) Load(ctx context.Context, set *types.PlanSet) error {
 			set.Manifest))
 	}
 
-	err = checkEntries(set, manifest2.Units)
+	err = checkEntries(set, secondManifest.Units)
 	if err != nil {
 		return err
 	}
 
-	mismatched, err := st.fetchUnits(ctx, set, manifest2.Units)
+	mismatched, err := st.fetchUnits(ctx, set, secondManifest.Units)
 	if err != nil {
 		return err
 	}
@@ -200,22 +200,22 @@ func (st objectStore) fetchUnits(
 ) ([]string, error) {
 	var mismatched []string
 
-	for _, manifestUnitValue := range units {
+	for _, currentManifestUnit := range units {
 		dest := filepath.Join(
 			set.Dir,
-			filepath.FromSlash(manifestUnitValue.Unit),
+			filepath.FromSlash(currentManifestUnit.Unit),
 			set.File,
 		)
 
-		sum, err := st.fetch(ctx, set.Bucket, manifestUnitValue.Key, dest)
+		sum, err := st.fetch(ctx, set.Bucket, currentManifestUnit.Key, dest)
 		if err != nil {
 			return nil, err
 		}
 
-		if sum != manifestUnitValue.SHA256 {
+		if sum != currentManifestUnit.SHA256 {
 			_ = os.Remove(dest)
 
-			mismatched = append(mismatched, manifestUnitValue.Unit)
+			mismatched = append(mismatched, currentManifestUnit.Unit)
 
 			continue
 		}
@@ -223,11 +223,11 @@ func (st objectStore) fetchUnits(
 		st.logf(
 			"saved plan fetched",
 			"unit",
-			manifestUnitValue.Unit,
+			currentManifestUnit.Unit,
 			"bucket",
 			set.Bucket,
 			"key",
-			manifestUnitValue.Key,
+			currentManifestUnit.Key,
 		)
 	}
 
@@ -245,37 +245,37 @@ func readManifest(set *types.PlanSet) (manifest, error) {
 			": Load restores the plans a Save listed there")
 	}
 
-	var manifestValue manifest
+	var currentManifest manifest
 
-	err = json.Unmarshal(data, &manifestValue)
+	err = json.Unmarshal(data, &currentManifest)
 	if err != nil {
 		return manifest{}, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+path)
 	}
 
 	switch {
-	case manifestValue.Owner != set.Owner:
+	case currentManifest.Owner != set.Owner:
 		return manifest{}, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"%s lists plans for %q, not %q", path, manifestValue.Owner, set.Owner))
-	case len(manifestValue.Units) == 0:
+			"%s lists plans for %q, not %q", path, currentManifest.Owner, set.Owner))
+	case len(currentManifest.Units) == 0:
 		return manifest{}, apperr.New(apperr.CodeInvalidInput, path+" lists no plan")
 	}
 
-	return manifestValue, nil
+	return currentManifest, nil
 }
 
 // checkEntry refuses (CodeInvalidInput) an entry whose unit is not a local relative
 // path or whose key is not <Prefix>…/<unit>/<File>, so a manifest can neither write
 // outside Dir nor fetch another owner's object.
-func checkEntry(set *types.PlanSet, manifestUnitValue manifestUnit) error {
-	if !filepath.IsLocal(filepath.FromSlash(manifestUnitValue.Unit)) ||
-		!strings.HasPrefix(manifestUnitValue.Key, set.Prefix) ||
+func checkEntry(set *types.PlanSet, currentManifestUnit manifestUnit) error {
+	if !filepath.IsLocal(filepath.FromSlash(currentManifestUnit.Unit)) ||
+		!strings.HasPrefix(currentManifestUnit.Key, set.Prefix) ||
 		!strings.HasSuffix(
-			manifestUnitValue.Key,
-			"/"+manifestUnitValue.Unit+"/"+set.File,
+			currentManifestUnit.Key,
+			"/"+currentManifestUnit.Unit+"/"+set.File,
 		) {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"the plan manifest entry %q (key %q) is not a plan of %s under %s",
-			manifestUnitValue.Unit, manifestUnitValue.Key, set.Owner, set.Prefix))
+			currentManifestUnit.Unit, currentManifestUnit.Key, set.Owner, set.Prefix))
 	}
 
 	return nil

@@ -48,13 +48,13 @@ func TestDiscovererFunc_Discover(t *testing.T) {
 		t.Parallel()
 
 		sentinel := apperr.Sentinel("discover failed")
-		callbackValue := interfaces.DiscovererFunc[string](
+		currentCallback := interfaces.DiscovererFunc[string](
 			func(_ context.Context, _ string) ([]string, error) {
 				return nil, sentinel
 			},
 		)
 
-		_, err := callbackValue.Discover(context.Background(), textRepo)
+		_, err := currentCallback.Discover(context.Background(), textRepo)
 		require.ErrorIsf(t, err, sentinel, "expected sentinel error, got %v", err)
 	})
 }

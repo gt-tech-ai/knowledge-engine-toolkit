@@ -8,9 +8,6 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
-// DryRun names the dry-run option in a signature.
-type DryRun bool
-
 // writeEntry writes one entry if the plan creates or updates it, stopping when ctx ended.
 func writeEntry(
 	ctx context.Context,
@@ -29,17 +26,16 @@ func writeEntry(
 	return write(fileEntry.Path, fileEntry.Content)
 }
 
-// Apply writes plan's FileCreate and FileUpdate entries through write, or nothing
-// under dryRun. A plan with a FileConflict writes nothing and is CodeConflict, naming
+// Apply writes plan's FileCreate and FileUpdate entries through write.
+// A plan with a FileConflict writes nothing and is CodeConflict, naming
 // each conflicting file. Applying a plan made after a previous Apply writes nothing.
 func Apply(
 	ctx context.Context,
 	write func(path string, data []byte) error,
 	plan types.FilePlan,
-	dryRun DryRun,
 ) error {
-	err := conflictError(plan)
-	if err != nil || bool(dryRun) {
+	err := Conflicts(plan)
+	if err != nil {
 		return err
 	}
 
@@ -53,8 +49,9 @@ func Apply(
 	return nil
 }
 
-// conflictError names every conflicting entry, or is nil when the plan has none.
-func conflictError(plan types.FilePlan) error {
+// Conflicts names every conflicting entry as CodeConflict, or is nil when the plan has
+// none. It writes nothing, so it is the dry run of Apply.
+func Conflicts(plan types.FilePlan) error {
 	var conflicts []string
 
 	for _, e := range plan.Entries {

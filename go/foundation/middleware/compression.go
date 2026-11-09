@@ -35,21 +35,24 @@ func Compression() Middleware {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(
-			func(writer http.ResponseWriter, requestValue *http.Request) {
-				if !strings.Contains(requestValue.Header.Get("Accept-Encoding"), "gzip") {
-					next.ServeHTTP(writer, requestValue)
+			func(writer http.ResponseWriter, currentRequest *http.Request) {
+				if !strings.Contains(
+					currentRequest.Header.Get("Accept-Encoding"),
+					"gzip",
+				) {
+					next.ServeHTTP(writer, currentRequest)
 
 					return
 				}
 
-				compressWriterValue := &compressWriter{
+				currentCompressWriter := &compressWriter{
 					ResponseWriter: writer,
-					request:        requestValue,
+					request:        currentRequest,
 					pool:           pool,
 				}
-				defer compressWriterValue.Close()
+				defer currentCompressWriter.Close()
 
-				next.ServeHTTP(compressWriterValue, requestValue)
+				next.ServeHTTP(currentCompressWriter, currentRequest)
 			},
 		)
 	}

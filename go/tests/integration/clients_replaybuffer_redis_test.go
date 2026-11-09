@@ -71,13 +71,13 @@ func (s *ReplayBufferRedisSuite) TearDownTest() {
 //   - after appending msg-1..5, ReplayAfter(msg-2) returns msg-3,4,5 in order (complete)
 //     with their exact payloads.
 func (s *ReplayBufferRedisSuite) TestAppendReplayRoundtrip() {
-	b := s.newBuffer(maxSize100, time.Minute)
-	s.appendSeq(b, textK, appendSeqArg5)
+	b := s.newBuffer(newBufferInput, time.Minute)
+	s.appendSeq(b, textK, appendSeqInput)
 
 	tail, complete, err := b.ReplayAfter(context.Background(), textK, "msg-2")
 	s.Require().NoError(err)
 	s.True(complete)
-	s.Require().Len(tail, length3)
+	s.Require().Len(tail, lenInputRoundtrip)
 	s.Equal(textMsg3, tail[0].ID)
 	s.Equal([]byte("payload-msg-3"), tail[0].Payload)
 	s.Equal([]string{textMsg3, textMsg4, textMsg5}, idsI(tail))
@@ -95,8 +95,8 @@ func (s *ReplayBufferRedisSuite) TestAppendReplayRoundtrip() {
 //   - with MaxSize=3, appending msg-1..5 retains msg-3,4,5; ReplayAfter(msg-1) is a gap;
 //     ReplayAfter(msg-3) → msg-4,5.
 func (s *ReplayBufferRedisSuite) TestNBoundEvicts() {
-	replayBuffer := s.newBuffer(maxSize3, time.Minute)
-	s.appendSeq(replayBuffer, textK, appendSeqArg5)
+	replayBuffer := s.newBuffer(newBufferInputEvicts, time.Minute)
+	s.appendSeq(replayBuffer, textK, appendSeqInput)
 
 	_, complete, err := replayBuffer.ReplayAfter(context.Background(), textK, textMsg1)
 	s.Require().NoError(err)
@@ -120,8 +120,8 @@ func (s *ReplayBufferRedisSuite) TestNBoundEvicts() {
 //   - after Prune(msg-3), ReplayAfter(msg-3) returns msg-4,5 (complete) and
 //     ReplayAfter(msg-1) is a gap.
 func (s *ReplayBufferRedisSuite) TestPrune() {
-	replayBuffer := s.newBuffer(maxSize100, time.Minute)
-	s.appendSeq(replayBuffer, textK, appendSeqArg5)
+	replayBuffer := s.newBuffer(newBufferInput, time.Minute)
+	s.appendSeq(replayBuffer, textK, appendSeqInput)
 
 	s.Require().NoError(replayBuffer.Prune(context.Background(), textK, textMsg3))
 
@@ -148,19 +148,19 @@ func (s *ReplayBufferRedisSuite) TestPrune() {
 //   - with a 1s TTL, ReplayAfter eventually reports a gap; and after Delete, ReplayAfter
 //     is a gap.
 func (s *ReplayBufferRedisSuite) TestTTLExpiresAndDelete() {
-	b := s.newBuffer(maxSize100, time.Second)
-	s.appendSeq(b, textK, appendSeqArg3)
+	b := s.newBuffer(newBufferInput, time.Second)
+	s.appendSeq(b, textK, appendSeqInputDelete)
 	s.Eventually(func() bool {
 		_, complete, err := b.ReplayAfter(context.Background(), textK, textMsg1)
 
 		return err == nil && !complete
 	}, 4*time.Second, 100*time.Millisecond, "buffer must expire after its TTL")
 
-	b2 := s.newBuffer(maxSize100, time.Minute)
-	s.appendSeq(b2, textD, appendSeqArg3)
-	s.Require().NoError(b2.Delete(context.Background(), textD))
+	secondB := s.newBuffer(newBufferInput, time.Minute)
+	s.appendSeq(secondB, textD, appendSeqInputDelete)
+	s.Require().NoError(secondB.Delete(context.Background(), textD))
 
-	_, complete, err := b2.ReplayAfter(context.Background(), textD, textMsg1)
+	_, complete, err := secondB.ReplayAfter(context.Background(), textD, textMsg1)
 	s.Require().NoError(err)
 	s.False(complete, "deleted buffer → gap")
 }
@@ -180,11 +180,11 @@ func (s *ReplayBufferRedisSuite) TestTTLExpiresAndDelete() {
 //     entries for the same key.
 func (s *ReplayBufferRedisSuite) TestKeyPrefix() {
 	ctx := context.Background()
-	def := s.newBuffer(maxSize100, time.Minute)
+	def := s.newBuffer(newBufferInput, time.Minute)
 	custom := replayredis.New(s.client, replayredis.Config{
 		MaxSize: 100, TTL: time.Minute, KeyPrefix: "app:replay:",
 	})
-	s.appendSeq(def, textK, appendSeqArg3)
+	s.appendSeq(def, textK, appendSeqInputPrefix)
 	s.Require().NoError(custom.Append(ctx, textK, textMsg8, []byte("custom-8")))
 	s.Require().NoError(custom.Append(ctx, textK, "msg-9", []byte("custom-9")))
 	s.Require().NoError(def.Prune(ctx, textK, textMsg1))
@@ -238,7 +238,7 @@ func itoaI(index int) string {
 
 		buf[pos] = byte('0' + index%10)
 
-		index /= value10
+		index /= initialIndex
 	}
 
 	return string(buf[pos:])
@@ -252,3 +252,26 @@ func idsI(msgs []interfaces.BufferedMessage) []string {
 
 	return out
 }
+
+const (
+	// appendSeqInput is the append seq input the tests use.
+	appendSeqInput = 5
+
+	// appendSeqInputDelete is the append seq input delete the tests use.
+	appendSeqInputDelete = 3
+
+	// appendSeqInputPrefix is the append seq input prefix the tests use.
+	appendSeqInputPrefix = 3
+
+	// initialIndex is the initial index the tests use.
+	initialIndex = 10
+
+	// lenInputRoundtrip is the len input roundtrip the tests use.
+	lenInputRoundtrip = 3
+
+	// newBufferInput is the new buffer input the tests use.
+	newBufferInput = 100
+
+	// newBufferInputEvicts is the new buffer input evicts the tests use.
+	newBufferInputEvicts = 3
+)
