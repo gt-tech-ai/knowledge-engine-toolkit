@@ -3,14 +3,20 @@
 The ``SemanticCacheProxy`` wraps a single model method; a cache placed elsewhere (a whole query
 workflow, keyed before retrieval) needs the same three steps without the method wrapper:
 
-1. ``read`` — resets ``served_from_cache()``, looks the query up through the ``CacheLookup`` tier
-   chain inside a ``semantic_cache.lookup`` span (``hit``, ``path``, ``similarity``, ``tier``), counts
-   ``semantic_cache_lookups_total`` plus ``…_hits_total`` (labelled with the serving ``tier``,
-   with ``…_saving_usd_total``) or ``…_misses_total``, and publishes one ``cache_lookups`` fact;
+1. ``read`` — resets ``served_from_cache()`` and looks the query up through the ``CacheLookup``
+   tier chain inside a ``semantic_cache.lookup`` span (``hit``, ``path``, ``similarity``,
+   ``tier``). A miss is reported at once; a hit is reported only when its fate is known;
 2. ``serve`` — awaits ``on_hit`` with the call's arguments, the decoded answer and the hit (it may
-   return a replacement, and refuses the hit by raising a coded ``AppError``), then sets
-   ``served_from_cache()``;
-3. ``write`` — stores the encoded answer under the read's key, with a per-call TTL when given.
+   return a replacement, and refuses the hit by raising a coded ``AppError``), sets
+   ``served_from_cache()`` and reports the hit;
+3. ``refuse`` — reports a hit the caller will not serve (an undecodable entry, a check of its
+   own, or the hook's refusal) as a miss, so a hit that was never served counts no hit and no
+   saving;
+4. ``write`` — stores the encoded answer under the read's key, with a per-call TTL when given.
+
+Reporting counts ``semantic_cache_lookups_total`` plus ``…_hits_total`` (labelled with the
+serving ``tier``, with ``…_saving_usd_total``) or ``…_misses_total``, and publishes one
+``cache_lookups`` fact. Every hit a caller reads must end in ``serve`` or ``refuse``.
 
 Every failure but the hook's coded refusal is logged, counted
 (``semantic_cache_proxy_errors_total{op}``) and swallowed: the reader never fails a query. The
@@ -22,7 +28,7 @@ first lookup of a label set creates its hit (per tier), miss and saving series a
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -171,7 +177,10 @@ class SemanticCacheReader:
         *,
         min_similarity: float | None = None,
     ) -> CacheRead:
-        """Look ``query`` up, report it, and return what was found (a failure is a miss).
+        """Look ``query`` up and return what was found (a failure is a miss).
+
+        A miss is reported here; a hit is reported by ``serve`` or ``refuse``, once the caller
+        knows whether it is served.
 
         Args:
             query: The text to look up.
@@ -198,7 +207,8 @@ class SemanticCacheReader:
                 span.set_attribute("semantic_cache.similarity", hit.similarity)
                 span.set_attribute("semantic_cache.tier", hit.tier)
         found = CacheRead(query=query, namespace=namespace, hit=hit)
-        self._report(found)
+        if hit is None:
+            self._report(found)
         return found
 
     async def serve(
@@ -208,7 +218,7 @@ class SemanticCacheReader:
         kwargs: dict[str, object],
         answer: object,
     ) -> object:
-        """Run the hit hook, mark the call served from cache and return the answer to serve.
+        """Run the hit hook, mark the call served from cache, report the hit, return the answer.
 
         Args:
             read: The read whose hit is being served.
@@ -220,8 +230,8 @@ class SemanticCacheReader:
             The hook's replacement, or ``answer``.
 
         Raises:
-            AppError: any coded error from the hook, which refuses the hit. An uncoded failure
-                is swallowed and the hit served as is.
+            AppError: any coded error from the hook, which refuses the hit (reported as a
+                miss). An uncoded failure is swallowed and the hit served as is.
 
         """
         served = answer
@@ -229,13 +239,24 @@ class SemanticCacheReader:
             try:
                 replaced = await self._on_hit(args, kwargs, answer, read.hit)
             except AppError:
+                self.refuse(read)
                 raise
             except Exception as exc:
                 self.failed("on_hit", exc)
             else:
                 served = answer if replaced is None else replaced
         set_served_from_cache(value=True)
+        self._report(read)
         return served
+
+    def refuse(self, read: CacheRead) -> None:
+        """Report a hit the caller will not serve as a miss: no hit, no saving.
+
+        Args:
+            read: The read whose hit is refused.
+
+        """
+        self._report(replace(read, hit=None))
 
     async def write(
         self, read: CacheRead, payload: bytes, *, ttl_seconds: int | None = None

@@ -4,13 +4,19 @@ setup_observability() wires structured JSON logging (with OTel trace_id/span_id
 correlation and structured tracebacks) and OpenTelemetry tracing (OTLP gRPC
 export to a collector). Combine with the HTTP middleware in
 foundation.middleware.http_observability and the /metrics endpoint for full
-metrics + logs + traces coverage.
+metrics + logs + traces coverage. start_observability() is the same bootstrap driven by a
+service's settings (a log level and the ``TelemetrySettings`` slice).
 """
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from techai_webutils.foundation.logger.logger import configure_logging
 from techai_webutils.foundation.tracer.tracer import configure_tracer
+
+if TYPE_CHECKING:
+    from techai_webutils.foundation.config.settings import TelemetrySettings
 
 
 def parse_sample_rate(raw: str | None) -> float:
@@ -66,4 +72,30 @@ def setup_observability(
     # HTTP/gRPC middleware are exported to the OTLP collector and correlated into logs.
     _ = configure_tracer(
         service_name, otlp_endpoint=endpoint, insecure=True, sample_rate=trace_sample_rate
+    )
+
+
+def start_observability(
+    service: str,
+    *,
+    level: str,
+    telemetry: TelemetrySettings,
+    redact_pii: bool = False,
+) -> None:
+    """Configure logging and the OTel trace export for ``service`` from its settings.
+
+    Args:
+        service: The service name the logs and spans carry.
+        level: The log level, in any case (``logging_level``).
+        telemetry: The OTLP endpoint and the raw trace sample rate (parsed with
+            ``parse_sample_rate``).
+        redact_pii: Redact PII in every log line (pass the ``logging_redact_pii`` setting).
+
+    """
+    setup_observability(
+        service,
+        level=level.upper(),
+        otlp_endpoint=telemetry.otel_exporter_otlp_endpoint,
+        trace_sample_rate=parse_sample_rate(telemetry.trace_sample_rate),
+        redact_pii=redact_pii,
     )

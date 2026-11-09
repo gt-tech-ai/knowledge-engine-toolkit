@@ -28,6 +28,8 @@ class EvalOutput:
     """Ids of the sources the answer cites, in order."""
     trace_id: str
     """The OTel trace id of the run (links a result to its trace)."""
+    retrieved: tuple[str, ...] = ()
+    """Ids of the documents retrieval ranked for the case, best first (ranking graders)."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -39,6 +39,7 @@ from techai_webutils.clients.model_gateway.routed.policy_store import (
     routing_policy_store_from_config,
 )
 from techai_webutils.clients.model_gateway.routed.ranker import (
+    CandidateRankerKind,
     candidate_ranker_from_config,
 )
 from techai_webutils.clients.model_gateway.routed.shadow import ShadowRouter
@@ -238,8 +239,16 @@ class RoutedGateway(ModelGateway):
                 embedding=embedding,
             )
             classifiers.append(classifier)
+            ranker_raw = stages.get("ranker", config.ranker)
+            if (
+                ranker_raw.get("kind") == CandidateRankerKind.COST_AWARE
+                and prices is None
+            ):
+                # The gateway ranks with the one table it boots with; none fails the boot.
+                msg = "cost_aware ranker requires a price table"
+                raise AppError(ErrorCode.INVALID_INPUT, msg)
             ranker = candidate_ranker_from_config(
-                stages.get("ranker", config.ranker),
+                ranker_raw,
                 prices=prices,
                 ledger=ledger,
                 default_slo=config.default_slo,

@@ -291,3 +291,7 @@ class PlanRequest:
     """The tenant's routing policy."""
     conversation_id: str = ""
     """The conversation, for stickiness (empty until conversations are threaded)."""
+    team_id: str = ""
+    """The team the call is charged to (empty when the caller has none); attribution only."""
+    user_id: str = ""
+    """The end user making the call (empty for a system call); attribution only."""

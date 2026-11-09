@@ -1,19 +1,10 @@
-"""HTTP health and metrics surface of a gRPC service: ``/healthz``, ``/readyz`` and ``/metrics``.
+"""Health + metrics HTTP app for a gRPC server (its own port beside the gRPC one).
 
-A gRPC service still needs HTTP for its Kubernetes and Compose probes and its Prometheus scrape,
-so it serves this small aiohttp app on its own port beside the gRPC one:
-
-- ``/healthz`` (liveness) is 200 while the process runs, through a graceful drain too;
-- ``/readyz`` (readiness) is 503 with ``{"failed": ["draining"]}`` once ``ready()`` turns false
-  (flip it before stopping the gRPC server, so traffic drains away first), 503 with the failed
-  dependencies' names while ``readiness_probe()`` returns any (e.g. models still loading), and
-  200 otherwise;
-- ``/metrics`` is the default Prometheus registry: OpenMetrics, with the histograms' trace
-  exemplars, when the scraper asks for it (Prometheus does), else the text exposition format.
-
-Every request runs through the aiohttp observability middleware under the service's name.
-``controllers`` does not import this module, so aiohttp (installed with ``aiobotocore``) loads
-only in a service that serves it.
+Liveness/readiness (``/healthz``, ``/readyz``) and Prometheus metrics (``/metrics``), served by
+a small aiohttp app alongside the gRPC server so container and Kubernetes probes have an HTTP
+surface. Each service injects its own drain flag and dependency-readiness probe and names
+itself for the request metrics. ``controllers.grpc.serve.serve_until_signalled`` runs it beside
+a ``grpc.aio`` server and flips its drain flag on shutdown.
 """
 
 from __future__ import annotations
@@ -31,86 +22,104 @@ from techai_webutils.foundation.middleware.http_observability import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-type ReadinessProbe = Callable[[], Awaitable[list[str]]]
-"""Returns the names of the dependencies that are not ready (empty when all are)."""
+
+async def metrics_handler(request: web.Request) -> web.Response:
+    """Prometheus metrics endpoint (scraped by the ServiceMonitor).
+
+    The exposition is rendered on a worker thread, so a large registry never blocks the
+    event loop serving gRPC.
+
+    Args:
+        request: The scrape; its ``Accept`` header picks the format.
+
+    Returns:
+        The default registry in OpenMetrics (with trace exemplars) when the scraper asks for
+        it, else in the text exposition format.
+
+    """
+    body, content_type = await asyncio.to_thread(
+        render_metrics, request.headers.get("Accept", "")
+    )
+    return web.Response(body=body, headers={"Content-Type": content_type})
 
 
-class HealthRoutes:
-    """The probe and metrics handlers over a drain flag and a dependency probe."""
+def _probe(
+    ready: Callable[[], bool],
+    readiness_probe: Callable[[], Awaitable[list[str]]] | None,
+) -> Callable[[web.Request], Awaitable[web.Response]]:
+    """Return a probe handler: 503 when not ready or a dependency fails, else 200.
 
-    def __init__(
-        self,
-        ready: Callable[[], bool] | None = None,
-        readiness_probe: ReadinessProbe | None = None,
-    ) -> None:
-        """Gate ``/readyz`` on ``ready`` (always ready when None) and ``readiness_probe`` (none)."""
-        self._ready = ready
-        self._probe = readiness_probe
+    Liveness is the same probe with no conditions: always ready and no dependencies, so
+    it answers 200 for as long as the process serves requests, through a drain too.
 
-    @staticmethod
-    async def healthz(_request: web.Request) -> web.Response:
-        """Liveness: 200 while the process runs.
+    Args:
+        ready: The drain flag; False once draining.
+        readiness_probe: Returns the unready dependencies; None checks none.
 
-        Returns:
-            A 200 ``ok`` response.
+    Returns:
+        The handler.
 
-        """
-        return web.Response(text="ok")
+    """
 
-    async def readyz(self, _request: web.Request) -> web.Response:
-        """Readiness: 503 while draining or while a dependency is not ready, else 200.
-
-        Returns:
-            200 ``ok``, or 503 with a JSON ``{"failed": [...]}`` body.
-
-        """
-        if self._ready is not None and not self._ready():
-            return web.json_response({"failed": ["draining"]}, status=503)
-        failed = await self._probe() if self._probe is not None else []
-        if failed:
-            return web.json_response({"failed": failed}, status=503)
-        return web.Response(text="ok")
-
-    @staticmethod
-    async def metrics(request: web.Request) -> web.Response:
-        """Prometheus metrics, rendered off the event loop.
+    async def probe(_request: web.Request) -> web.Response:
+        """Answer the probe; a 503 body is the JSON failed list.
 
         Args:
-            request: The scrape; its ``Accept`` header picks the format.
+            _request: The incoming request (unused).
 
         Returns:
-            The default registry in OpenMetrics (with trace exemplars) when the scraper asks
-            for it, else in the text exposition format.
+            200 when ready, else 503 with the failed list.
 
         """
-        body, content_type = await asyncio.to_thread(
-            render_metrics, request.headers.get("Accept", "")
-        )
-        return web.Response(body=body, headers={"Content-Type": content_type})
+        if not ready():
+            return web.json_response({"failed": ["draining"]}, status=503)
+        failed = [] if readiness_probe is None else await readiness_probe()
+        if failed:
+            return web.json_response({"failed": failed}, status=503)
+        return web.Response(text="ok", status=200)
+
+    return probe
+
+
+def _always_ready() -> bool:
+    """Default readiness probe: always ready (used when no drain signal is wired).
+
+    Returns:
+        Always True.
+
+    """
+    return True
 
 
 def build_health_app(
     service: str,
-    *,
-    ready: Callable[[], bool] | None = None,
-    readiness_probe: ReadinessProbe | None = None,
+    ready: Callable[[], bool] = _always_ready,
+    readiness_probe: Callable[[], Awaitable[list[str]]] | None = None,
 ) -> web.Application:
-    """Build the health app of ``service`` (see the module docstring for the routes).
+    """Build the aiohttp health app: ``/healthz``, ``/readyz`` and ``/metrics``.
+
+    ``/healthz`` is liveness, ``/readyz`` readiness, ``/metrics`` the Prometheus scrape.
+
+    ``ready`` gates ``/readyz`` on the drain flag (503 once draining) so K8s stops routing
+    the moment a drain begins, before the gRPC server rejects new calls.
+    ``readiness_probe`` additionally checks the external dependencies (e.g. a knowledge
+    base's connectivity) and, when any fail, returns 503 with a JSON ``{"failed":
+    [...]}`` body so the pod is removed from Service endpoints without a restart.
+    ``/healthz`` (liveness) stays 200 throughout.
 
     Args:
-        service: The service name the observability middleware records requests under.
-        ready: The drain flag; False once draining. None is always ready.
-        readiness_probe: Returns the dependencies that are not ready. None checks none.
+        service: The service name the request metrics are labelled with.
+        ready: The drain flag; False once draining.
+        readiness_probe: Returns the unready dependencies; None checks none.
 
     Returns:
-        The aiohttp application.
+        The health app.
 
     """
-    routes = HealthRoutes(ready, readiness_probe)
     app = web.Application(middlewares=[aiohttp_observability_middleware(service)])
-    app.router.add_get("/healthz", routes.healthz)
-    app.router.add_get("/readyz", routes.readyz)
-    app.router.add_get("/metrics", routes.metrics)
+    _ = app.router.add_get("/healthz", _probe(_always_ready, None))
+    _ = app.router.add_get("/readyz", _probe(ready, readiness_probe))
+    _ = app.router.add_get("/metrics", metrics_handler)
     return app
 
 
@@ -119,24 +128,27 @@ async def start_health_server(
     host: str,
     port: int,
     *,
-    ready: Callable[[], bool] | None = None,
-    readiness_probe: ReadinessProbe | None = None,
+    ready: Callable[[], bool] = _always_ready,
+    readiness_probe: Callable[[], Awaitable[list[str]]] | None = None,
 ) -> web.AppRunner:
-    """Serve ``service``'s health app on ``host:port`` and return its runner (clean it up to stop).
+    """Start the aiohttp health/metrics server and return its runner.
+
+    The app is the one ``build_health_app`` builds.
 
     Args:
-        service: The service name the observability middleware records requests under.
+        service: The service name the request metrics are labelled with.
         host: The interface to listen on.
         port: The port to listen on.
-        ready: The drain flag; False once draining. None is always ready.
-        readiness_probe: Returns the dependencies that are not ready. None checks none.
+        ready: The drain flag; False once draining.
+        readiness_probe: Returns the unready dependencies; None checks none.
 
     Returns:
         The started runner.
 
     """
-    app = build_health_app(service, ready=ready, readiness_probe=readiness_probe)
-    runner = web.AppRunner(app, access_log=None)
+    runner = web.AppRunner(
+        build_health_app(service, ready, readiness_probe), access_log=None
+    )
     await runner.setup()
     await web.TCPSite(runner, host, port).start()
     return runner

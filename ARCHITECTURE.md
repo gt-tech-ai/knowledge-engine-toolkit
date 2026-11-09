@@ -149,6 +149,11 @@ decorators, and registers clients with `foundation/lifecycle.Manager` (start in 
 reverse). Lifecycle-managed clients connect in `Start`, not their constructors (`stores/gorm`,
 `clients/database/postgres`). Python backends are `ManagedResource` async context managers; the
 documented exception is logging, which structlog configures once and seams resolve by name.
+A Python gRPC server's `main` serves through `controllers/grpc/serve.serve_until_signalled`:
+it starts the `grpc.aio` server and the `controllers/health` app (`/healthz`, `/readyz` with an
+injected dependency probe, `/metrics`) on its own port, and on SIGINT or SIGTERM flips readiness
+to 503 before draining the server within its grace, as Go's `transport` server sheds readiness
+before it drains.
 
 ## Decorators
 
@@ -244,6 +249,11 @@ collaborator or zero timeout skips its layer; recovery needs none.
   custom ops through the base's `exec`. The retry layer's
   `ExponentialRetrier` (and `retry_transient_async`) wait out a server pushback
   (`details["retry_after_ms"]`, read by `retry_after_s`), capped by the max interval.
+- **Python — usage tap.** `clients/decorators/usage_tap.UsageTapProvider` (`tap_usage(inner,
+  record)`) is an `LLMProvider` decorator that hands each call's terminal `StreamUsage` to an
+  injected callback: a completion's at once, a stream's once it is exhausted (`stream` re-yields
+  only the text). The model is the route decision's catalog id when a gateway served the call.
+  It is for a caller that sees only the answer's text yet needs the model and tokens behind it.
 - **Python — token accounting.** `clients/decorators/token_accounting.TokenAccountingProxy` is the
   outermost AI-band decorator over an `LLMProvider`, `ModelGateway` or `EmbeddingProvider`: it reads
   the request's `UsageScope` from an injected `UsageScopeProvider` (no scope → passthrough), asks
@@ -281,7 +291,9 @@ collaborator or zero timeout skips its layer; recovery needs none.
   `semantic_cache_{lookups,hits,misses}_total` and `semantic_cache_saving_usd_total`, each
   labelled `{org_id,path,workspace}` (`org_id` from `fact_dimensions`, empty without it; hits
   add the serving `tier`), so a hit rate is hits over lookups per org; one `cache_lookups` fact
-  per lookup. The read, serve and write steps live in `clients/semantic_cache/reader.
+  per lookup. A hit is counted only when it is served: a hit the hook or the caller refuses, or
+  whose entry does not decode, counts as a miss with no saving. The read, serve, refuse and
+  write steps live in `clients/semantic_cache/reader.
   SemanticCacheReader`, which the proxy composes and a workflow-level cache drives by hand; an
   injected `CacheLookup` (`lookup=`) selects the match tiers, else the backend's own `lookup` at
   `min_similarity` is used.
@@ -487,7 +499,13 @@ prefix (given with or without its trailing `_`), and the consumer's settings cla
 matching `env_prefix`; `strict=True` raises on a missing directory, a missing `base.yaml` or bad
 YAML instead of warning. Overlay selection differs from Go: Python uses the first set selector's
 value as-is (not lowercased) and falls back to `dev` (`dev.yaml`) where Go loads `base.yaml`
-alone, so a mixed Go/Python stack should set the selector explicitly.
+alone, so a mixed Go/Python stack should set the selector explicitly. The scalar export skips
+lists and nested maps a field holds whole (a route table, a model catalog);
+`export_yaml_sections(loader, {field: dotted_key}, env_prefix=...)` exports each such section from
+a `ConfigLoader` as one JSON `<PREFIX>_<FIELD>` default, which an env var already set still
+overrides. `TelemetrySettings` reads the OTLP endpoint and trace sample rate under their standard
+OTel names whatever the class's prefix, and `foundation/observability.start_observability`
+configures logging and the trace export from it.
 
 Business logic never reads the environment. In `go/`, env reads are confined to the config loader,
 the `env` secrets backend, subprocess plumbing in `foundation/system`, `helpers.OrDefault`, and one
@@ -1138,7 +1156,8 @@ The AI call-path tiers are Python-only: the model call path runs in the Python r
 service, so no Go consumer exists yet. Each is recorded here until a Go consumer needs it:
 
 - **Evals:** `core/interfaces/{dataset,evaluator,grader}.py`, `clients/dataset`
-  (`stub`, `jsonl`, a supplied `aiops`), `clients/grader/stub` and `services/evaluator.py`
+  (`stub`, `jsonl`, a supplied `aiops`), `clients/grader` (`stub`; `parse`, parse quality
+  against golden blocks; `ranking`, recall@k, nDCG@k and reciprocal rank) and `services/evaluator.py`
   (`ThresholdEvaluator`). Go's `foundation/dataset` (the YAML data loader) is unrelated.
 - **Safety:** `core/interfaces/safety.py` (`SafetyCheck`, `SafetyResult`, `blocked_error` →
   `FORBIDDEN`) and `clients/safety` (`noop`, `regex`, and the lazily loaded `comprehend` and
@@ -1153,6 +1172,7 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
   tiers over them (`exact`, `semantic`, and `verified`, a band confirmed by a `CacheVerifier` from
   `clients/semantic_cache/verifier`). `clients/semantic_cache/admission` decides which queries
   are cached at all.
+- **Usage tap:** `clients/decorators/usage_tap.UsageTapProvider` (see Decorators).
 - **Model gateway:** `core/interfaces/model_gateway.py` (`ModelGateway` extends `LLMProvider`
   with `resolve(RouteContext)`; `RouteDecision` in a request-scoped slot read through
   `current_route_decision()`) and `clients/model_gateway` (`passthrough` wraps one provider built
@@ -1171,14 +1191,20 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
   classifier `stub` /
   `embedding` (exemplars embedded once at the gateway's `__aenter__`; an embedder outage at
   request time degrades to the step's route), ranker `static_order` / `cost_aware` (objective,
-  hard caps that drop, quality floor, budget bias from the injected `TokenLedger`), planner
-  `local` / `overlord` (a remote `RoutingPlan` through the product's injected `RouteTransport`,
-  with the service token, a deadline, one retry on `UNAVAILABLE` and a breaker; a timeout, an
-  error, an open breaker or a plan naming an unoffered model fails open to `local`, counted as
+  hard caps that drop, quality floor, budget bias from the injected `TokenLedger`; every
+  ranker is a `PricedCandidateRanker`, whose `rank_priced` costs from a table passed per call, so
+  a remote planner whose prices arrive with each request builds one ranker at boot), planner
+  `local` / `overlord` (a remote `RoutingPlan` through the product's injected `RouteTransport`;
+  the `PlanRequest` carries the context's team and user for attribution; with the service
+  token, a deadline, one retry on `UNAVAILABLE` and a breaker; a timeout, an error, an open
+  breaker or a plan naming an unoffered model fails open to `local`, counted as
   `routed_planner_fail_open_total{cause}`), decision sink `noop` / `analytics` (`route_decisions` facts). `ChainExecutor` runs the
   plan: bounded attempts, an `AsyncCircuitBreaker` per endpoint, failover on transient errors
   only, streams before their first item only. A `routed.shadow` block plans alongside the live
-  call in bounded background tasks and is never served. `clients/embedding/memo.MemoizedEmbedding`
+  call in bounded background tasks and is never served. `clients/model_gateway/routed/settings`
+  holds typed, frozen pydantic models of the catalog (`CatalogModelSetting`), routes (`RouteSetting`) and stage fields (`RoutedStagesSetting`,
+  whose `routed_config` assembles a `RoutedConfig`), so a consumer's settings load refuses a bad
+  entry naming its path. `clients/embedding/memo.MemoizedEmbedding`
   embeds a text once per request, so the classifier and the semantic cache share one call.
 
 ## Testing
