@@ -53,7 +53,12 @@ class SampledLogger(Logger):
         self._draw = draw if draw is not None else SystemRandom().random
 
     def _keep(self) -> bool:
-        """Return whether this success line is kept (always at rate 1.0, never at 0.0)."""
+        """Return whether this success line is kept (always at rate 1.0, never at 0.0).
+
+        Returns:
+            Whether this success line is kept (always at rate 1.0, never at 0.0).
+
+        """
         return self._rate >= 1.0 or self._draw() < self._rate
 
     def debug(self, msg: str, **kwargs: object) -> None:

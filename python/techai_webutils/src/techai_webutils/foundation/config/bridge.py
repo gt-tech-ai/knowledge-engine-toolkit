@@ -77,6 +77,10 @@ def _flatten_config(config: dict[str, Any], prefix: str = "") -> list[tuple[str,
     list/sequence leaves are skipped — they are not representable as a single env-var
     override through this bridge, and no settings field reads one. Returns a flat list
     (not a generator) so the traversal is eager and easy to reason about at the call site.
+
+    Returns:
+        The flattened pairs.
+
     """
     items: list[tuple[str, str]] = []
     for key, value in config.items():
@@ -102,6 +106,10 @@ def _normalize_prefix(prefix: str) -> str:
     """Drop the prefix's trailing underscores.
 
     So ``MYAPP`` and ``MYAPP_`` both export ``MYAPP_*``.
+
+    Returns:
+        The prefix without trailing underscores.
+
     """
     return prefix.rstrip("_")
 
@@ -139,6 +147,10 @@ def _resolve_environment(selectors: tuple[str, ...]) -> tuple[str, str | None]:
     Returns the first non-empty value among ``selectors`` (by default ``APP_ENV``, then
     ``ENVIRONMENT``) with that selector's name, or ``("dev", None)`` so local runs load
     ``base.yaml`` + ``dev.yaml``.
+
+    Returns:
+        The overlay environment name for ``{env}.yaml`` selection.
+
     """
     for name in selectors:
         if value := os.environ.get(name):
@@ -175,9 +187,11 @@ def initialize_config(
             the YAML cannot be loaded (default: warn and continue on env vars and code
             defaults).
 
-    Raises:
-        ValueError: The config was already initialized with different arguments.
-        FileNotFoundError: ``strict`` and the directory or ``base.yaml`` is missing.
+    A callee raises ``ValueError``: The config was already initialized with different
+    arguments.
+
+    A callee raises ``FileNotFoundError``: ``strict`` and the directory or ``base.yaml``
+    is missing.
 
     """
     global _initialized_with  # noqa: PLW0603
@@ -205,6 +219,11 @@ def _require_same_arguments(requested: tuple[str, str, tuple[str, ...]]) -> None
     """Raise ``ValueError`` if ``requested`` differs from the arguments.
 
     That initialized the config.
+
+    Raises:
+        AppValueError: Initialize_config was already called with different arguments: ``',
+            '.join(conflicts)``.
+
     """
     if _initialized_with is None or requested == _initialized_with:
         return
@@ -236,6 +255,11 @@ def _load_and_apply_config(
     every early return still marks the config initialized so a missing/broken config is
     not retried on every call; with ``strict`` the failure raises and the config stays
     uninitialized.
+
+    Raises:
+        AppFileNotFoundError: Config directory not found: ``config_path``; Config file not
+            found: ``config_file``.
+
     """
     global _initialized  # noqa: PLW0603
 

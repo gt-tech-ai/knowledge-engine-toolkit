@@ -13,7 +13,12 @@ from techai_webutils.foundation.resilience.aws_boundary import botocore_error_to
 
 
 def _client_error(code: str, status: int) -> ClientError:
-    """Build a botocore ClientError with the given error code and HTTP status."""
+    """Build a botocore ClientError with the given error code and HTTP status.
+
+    Returns:
+        A botocore ClientError with the given error code and HTTP status.
+
+    """
     return ClientError(
         {
             "Error": {"Code": code},

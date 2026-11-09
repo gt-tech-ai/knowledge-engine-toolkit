@@ -43,5 +43,9 @@ class StubRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         """Return copies of the corpus passages (with their own metadata dicts).
 
         Capped at ``top_k``.
+
+        Returns:
+            Copies of the corpus passages (with their own metadata dicts).
+
         """
         return [replace(p, metadata=dict(p.metadata)) for p in self._passages[:top_k]]

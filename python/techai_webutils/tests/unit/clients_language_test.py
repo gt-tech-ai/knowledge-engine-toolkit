@@ -25,7 +25,12 @@ _PARITY = Path(__file__).resolve().parents[1] / "fixtures" / "language" / "parit
 
 
 def _model(label: str, probability: float) -> MagicMock:
-    """Return a mocked fastText model predicting ``label`` with ``probability``."""
+    """Return a mocked fastText model predicting ``label`` with ``probability``.
+
+    Returns:
+        A mocked fastText model predicting ``label`` with ``probability``.
+
+    """
     model = MagicMock()
     model.predict.return_value = ((label,), (probability,))
     return model
@@ -151,6 +156,10 @@ def _lingua(code: str, confidence: float) -> MagicMock:
     """Return a mocked ``lingua`` module whose detector answers ``code``.
 
     At ``confidence``.
+
+    Returns:
+        A mocked ``lingua`` module whose detector answers ``code``.
+
     """
     value = MagicMock()
     value.language.iso_code_639_1.name = code.upper()

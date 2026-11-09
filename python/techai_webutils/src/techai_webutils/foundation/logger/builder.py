@@ -47,7 +47,12 @@ class LoggerConfig:
 
 
 def default_config() -> LoggerConfig:
-    """Return a default logger config (STRUCTLOG with INFO level)."""
+    """Return a default logger config (STRUCTLOG with INFO level).
+
+    Returns:
+        A default logger config (STRUCTLOG with INFO level).
+
+    """
     return LoggerConfig(kind=LoggerKind.STRUCTLOG, level="INFO")
 
 
@@ -60,8 +65,10 @@ def new_logger_from_config(config: LoggerConfig) -> Logger:
     Returns:
         A Logger implementation matching the requested kind.
 
+    A callee raises ``ValueError``: If the kind is unknown.
+
     Raises:
-        ValueError: If the kind is unknown.
+        AppValueError: Unknown logger kind: ``config.kind``.
 
     """
     if config.kind == LoggerKind.STRUCTLOG:

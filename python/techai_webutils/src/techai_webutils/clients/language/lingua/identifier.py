@@ -75,7 +75,12 @@ class LinguaIdentifier(LanguageIdentifier):
 
     @override
     def identify(self, text: str) -> LanguageGuess:
-        """Return Lingua's most confident language, or ``UNDETERMINED_GUESS``."""
+        """Return Lingua's most confident language, or ``UNDETERMINED_GUESS``.
+
+        Returns:
+            Lingua's most confident language, or ``UNDETERMINED_GUESS``.
+
+        """
         stripped = text.strip()
         if not stripped:
             return UNDETERMINED_GUESS
@@ -89,7 +94,12 @@ class LinguaIdentifier(LanguageIdentifier):
         )
 
     def _loaded(self) -> LinguaDetector:
-        """Return the detector, building it once."""
+        """Return the detector, building it once.
+
+        Returns:
+            The detector, building it once.
+
+        """
         with self._lock:
             detector = self._detector
             if detector is None:

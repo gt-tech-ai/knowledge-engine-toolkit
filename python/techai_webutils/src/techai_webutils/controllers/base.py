@@ -39,6 +39,10 @@ def map_error_to_http_status(err: Exception) -> int:
 
     AppError instances use their built-in http_status mapping.
     Unknown exceptions default to 500.
+
+    Returns:
+        The HTTP status code.
+
     """
     if isinstance(err, AppError):
         return err.http_status
@@ -74,6 +78,10 @@ class BaseController:
         """Format a JSON response with status code.
 
         Returns a dict with 'status' and 'data' for framework-agnostic use.
+
+        Returns:
+            A JSON response with status code.
+
         """
         return {"status": status, "data": data}
 
@@ -83,6 +91,10 @@ class BaseController:
 
         AppError instances use their error code and message.
         Internal errors hide their message from clients.
+
+        Returns:
+            An error response.
+
         """
         status = map_error_to_http_status(exc)
         response = ErrorResponse(error="internal server error")
@@ -103,14 +115,29 @@ class BaseController:
         }
 
     def write_success(self, data: object) -> dict[str, object]:
-        """Format a 200 OK response."""
+        """Format a 200 OK response.
+
+        Returns:
+            A 200 OK response.
+
+        """
         return self.write_json(200, data)
 
     def write_created(self, data: object) -> dict[str, object]:
-        """Format a 201 Created response."""
+        """Format a 201 Created response.
+
+        Returns:
+            A 201 Created response.
+
+        """
         return self.write_json(201, data)
 
     @staticmethod
     def write_no_content() -> dict[str, object]:
-        """Format a 204 No Content response."""
+        """Format a 204 No Content response.
+
+        Returns:
+            A 204 No Content response.
+
+        """
         return {"status": 204, "data": None}

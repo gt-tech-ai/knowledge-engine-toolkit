@@ -20,7 +20,12 @@ from techai_webutils.clients.lock.postgres import PostgresAdvisoryLock
 
 
 def _pair(dsn: str, key: str) -> tuple[PostgresAdvisoryLock, PostgresAdvisoryLock]:
-    """Build two locks over separate sessions that contend on the same key."""
+    """Build two locks over separate sessions that contend on the same key.
+
+    Returns:
+        The two contending locks.
+
+    """
     return (
         PostgresAdvisoryLock(dsn=dsn, key=key, namespace=1),
         PostgresAdvisoryLock(dsn=dsn, key=key, namespace=1),

@@ -44,7 +44,12 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
         self._objects[bucket, key] = (body, meta)
 
     async def download(self, bucket: str, key: str) -> bytes:
-        """Return the stored bytes, or raise ``NotFoundError`` if the key is absent."""
+        """Return the stored bytes, or raise ``NotFoundError`` if the key is absent.
+
+        Returns:
+            The stored bytes, or raise ``NotFoundError`` if the key is absent.
+
+        """
         return self._require(bucket, key)[0]
 
     async def delete(self, bucket: str, key: str) -> None:
@@ -57,7 +62,12 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
         await self.upload(bucket, dst_key, body, meta.content_type)
 
     async def exists(self, bucket: str, key: str) -> bool:
-        """Report whether an object exists at ``(bucket, key)``."""
+        """Report whether an object exists at ``(bucket, key)``.
+
+        Returns:
+            Whether the object exists.
+
+        """
         return (bucket, key) in self._objects
 
     @override
@@ -65,12 +75,21 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
         """Return a synthetic ``memory://`` URL.
 
         (no real signing; the expiry is ignored).
+
+        Returns:
+            A synthetic ``memory://`` URL.
+
         """
         del expiry_seconds  # a memory backend issues no time-bounded signature
         return f"memory://{bucket}/{key}"
 
     async def list_objects(self, bucket: str, prefix: str) -> list[StorageObject]:
-        """List the metadata of objects in ``bucket`` whose key starts with ``prefix``."""
+        """List the metadata of objects in ``bucket`` whose key starts with ``prefix``.
+
+        Returns:
+            The metadata of objects in ``bucket`` whose key starts with ``prefix``.
+
+        """
         return [
             meta
             for (obj_bucket, key), (_body, meta) in self._objects.items()
@@ -78,7 +97,12 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
         ]
 
     async def stat(self, bucket: str, key: str) -> StorageObject:
-        """Return the object's metadata, or raise ``NotFoundError`` if absent."""
+        """Return the object's metadata, or raise ``NotFoundError`` if absent.
+
+        Returns:
+            The object's metadata, or raise ``NotFoundError`` if absent.
+
+        """
         return self._require(bucket, key)[1]
 
     async def download_to_path(self, bucket: str, key: str, path: str) -> None:
@@ -90,7 +114,15 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
         await asyncio.to_thread(Path(path).write_bytes, body)
 
     def _require(self, bucket: str, key: str) -> tuple[bytes, StorageObject]:
-        """Return the stored ``(body, meta)`` or raise ``NotFoundError``."""
+        """Return the stored ``(body, meta)`` or raise ``NotFoundError``.
+
+        Returns:
+            The stored ``(body, meta)`` or raise ``NotFoundError``.
+
+        Raises:
+            NotFoundError: Object not found: ``bucket``/``key``.
+
+        """
         try:
             return self._objects[bucket, key]
         except KeyError as exc:

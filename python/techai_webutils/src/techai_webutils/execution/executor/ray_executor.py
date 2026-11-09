@@ -66,6 +66,10 @@ class RayExecutor:
         Never below 1, so a cluster scaled to zero workers still gets the pending task
         that makes its autoscaler add one. With no declared task CPU cost the cap is
         returned without asking the cluster.
+
+        Returns:
+            How many tasks a batch keeps in flight.
+
         """
         if self._task_num_cpus <= 0:
             return cap
@@ -95,8 +99,10 @@ class RayExecutor:
         error is raised to the caller, so a queue consumer redrives the batch instead of
         recording every item as failed.
 
-        Raises:
-            RayUnavailableError: When the Ray cluster cannot be reached.
+        A callee raises ``RayUnavailableError``: When the Ray cluster cannot be reached.
+
+        Returns:
+            The batch result.
 
         """
         await self._runtime.warm_up()

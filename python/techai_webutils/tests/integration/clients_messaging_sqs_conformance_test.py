@@ -31,7 +31,12 @@ _MAX_DELIVERIES = 2
 
 
 async def _arn(config: SQSConfig, queue_url: str) -> str:
-    """Return the ARN of the queue at ``queue_url``."""
+    """Return the ARN of the queue at ``queue_url``.
+
+    Returns:
+        The ARN of the queue at ``queue_url``.
+
+    """
     session = aiobotocore.session.get_session()
     async with session.create_client("sqs", **config.client_kwargs()) as client:
         resp = await client.get_queue_attributes(
@@ -44,7 +49,12 @@ async def _transport(
     sqs_config: SQSConfig,
     make_sqs_queue: Callable[[str, Mapping[str, str] | None], Awaitable[str]],
 ) -> Transport:
-    """Return the SQS Kind on a fresh source queue and dead-letter queue."""
+    """Return the SQS Kind on a fresh source queue and dead-letter queue.
+
+    Returns:
+        The SQS Kind on a fresh source queue and dead-letter queue.
+
+    """
     suffix = uuid.uuid4().hex[:10]
     topic, dlq_topic = f"conf-{suffix}", f"conf-{suffix}-dlq"
     dlq_url = await make_sqs_queue(dlq_topic, None)

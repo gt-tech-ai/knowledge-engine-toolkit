@@ -13,7 +13,12 @@ from techai_webutils.foundation.resilience.backoff import exponential_jitter_wai
 
 
 def _state(attempt: int) -> RetryCallState:
-    """Return a retry state at ``attempt`` (1-based)."""
+    """Return a retry state at ``attempt`` (1-based).
+
+    Returns:
+        A retry state at ``attempt`` (1-based).
+
+    """
     state = MagicMock(spec=RetryCallState)
     state.attempt_number = attempt
     return state

@@ -26,7 +26,12 @@ from techai_webutils.core.types.routing import Route
 
 
 def _catalog(raw: dict[str, Any]) -> dict[str, CatalogModelSetting]:
-    """Validate a raw catalog into its typed models."""
+    """Validate a raw catalog into its typed models.
+
+    Returns:
+        The models by key.
+
+    """
     return {k: CatalogModelSetting.model_validate(v) for k, v in raw.items()}
 
 

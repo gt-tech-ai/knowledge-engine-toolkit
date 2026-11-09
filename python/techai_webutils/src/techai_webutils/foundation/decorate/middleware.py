@@ -65,7 +65,12 @@ class _Chain:
         self._middlewares = middlewares
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run ``next_`` inside every middleware, the first one outermost."""
+        """Run ``next_`` inside every middleware, the first one outermost.
+
+        Returns:
+            What the operation returns.
+
+        """
         run = next_
         for mw in reversed(self._middlewares):
             run = _bind(mw, op, run)
@@ -73,7 +78,12 @@ class _Chain:
 
 
 def _bind(mw: OpMiddleware, op: str, next_: OpThunk) -> OpThunk:
-    """Return a thunk that runs ``next_`` under ``mw``."""
+    """Return a thunk that runs ``next_`` under ``mw``.
+
+    Returns:
+        A thunk that runs ``next_`` under ``mw``.
+
+    """
 
     async def run() -> object:
         return await mw.wrap_op(op, next_)
@@ -82,12 +92,22 @@ def _bind(mw: OpMiddleware, op: str, next_: OpThunk) -> OpThunk:
 
 
 def chain(*middlewares: OpMiddleware) -> OpMiddleware:
-    """Compose middlewares into one; the first argument is outermost."""
+    """Compose middlewares into one; the first argument is outermost.
+
+    Returns:
+        The composed middleware.
+
+    """
     return _Chain(middlewares)
 
 
 async def exec_op[R](mw: OpMiddleware, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-    """Run ``fn`` as the operation ``op`` under ``mw`` and return its result unchanged."""
+    """Run ``fn`` as the operation ``op`` under ``mw`` and return its result unchanged.
+
+    Returns:
+        What ``fn`` returns.
+
+    """
     return cast("R", await mw.wrap_op(op, fn))
 
 
@@ -101,7 +121,16 @@ class _Recovery:
         self._name = name
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run the op, coding any non-AppError failure."""
+        """Run the op, coding any non-AppError failure.
+
+        Returns:
+            What the operation returns.
+
+        Raises:
+            AppError: A failed run, without recovery.
+            InternalError: A non-``AppError`` failure, coded.
+
+        """
         try:
             return await next_()
         except AppError:
@@ -118,6 +147,10 @@ def new_recovery(logger: Logger | None, tier: str, name: str) -> OpMiddleware:
     """Return the recovery layer: an unexpected exception becomes INTERNAL.
 
     (logged when given).
+
+    Returns:
+        The recovery layer: an unexpected exception becomes INTERNAL.
+
     """
     return _Recovery(logger, tier, name)
 
@@ -135,7 +168,12 @@ class _Tracing:
         self._kind = kind
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run the op in a span, recording a failure on it."""
+        """Run the op in a span, recording a failure on it.
+
+        Returns:
+            What the operation returns.
+
+        """
         attrs = {f"{self._tier}.name": self._name, f"{self._tier}.operation": op}
         with self._tracer.span(f"{self._name}.{op}", kind=self._kind, **attrs) as span:
             try:
@@ -148,7 +186,12 @@ class _Tracing:
 def new_tracing(
     tracer: TracerProvider, tier: str, name: str, kind: SpanKind
 ) -> OpMiddleware:
-    """Return the tracing layer: a ``<name>.<op>`` span of ``kind`` per operation."""
+    """Return the tracing layer: a ``<name>.<op>`` span of ``kind`` per operation.
+
+    Returns:
+        The tracing layer: a ``<name>.<op>`` span of ``kind`` per operation.
+
+    """
     return _Tracing(tracer, tier, name, kind)
 
 
@@ -187,7 +230,12 @@ class _Metrics:
         self._name = name
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run the op, recording count, error and duration."""
+        """Run the op, recording count, error and duration.
+
+        Returns:
+            What the operation returns.
+
+        """
         labels = {self._tier: self._name, "operation": op}
         start = time.monotonic()
         try:
@@ -203,7 +251,12 @@ class _Metrics:
 
 
 def new_metrics(metrics: MetricsProvider, tier: str, name: str) -> OpMiddleware:
-    """Return the metrics layer: the tier's RED series for the subject ``name``."""
+    """Return the metrics layer: the tier's RED series for the subject ``name``.
+
+    Returns:
+        The metrics layer: the tier's RED series for the subject ``name``.
+
+    """
     return _Metrics(metrics, tier, name)
 
 
@@ -226,7 +279,12 @@ class _Logging:
         self._edge = edge
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run the op with an entry log and a failure log at the tier's level."""
+        """Run the op with an entry log and a failure log at the tier's level.
+
+        Returns:
+            What the operation returns.
+
+        """
         fields: dict[str, object] = {self._tier: self._name, "operation": op}
         entry = f"{self._tier}.{op}"
         self._logger.debug(entry, **fields)
@@ -254,7 +312,12 @@ Warning."""
 def new_logging(
     logger: Logger, tier: str, name: str, *, edge: bool = False
 ) -> OpMiddleware:
-    """Return the logging layer: Debug in an inner tier, Warning or Error at the edge."""
+    """Return the logging layer: Debug in an inner tier, Warning or Error at the edge.
+
+    Returns:
+        The logging layer: Debug in an inner tier, Warning or Error at the edge.
+
+    """
     return _Logging(logger, tier, name, edge=edge)
 
 
@@ -273,7 +336,15 @@ class _Auth:
         self._auth = auth
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Authorize, then run the op."""
+        """Authorize, then run the op.
+
+        Returns:
+            What the operation returns.
+
+        Raises:
+            ForbiddenError: ``action``: not allowed.
+
+        """
         action = f"{self._name}.{op}"
         if not await self._auth(action):
             msg = f"{action}: not allowed"
@@ -282,7 +353,12 @@ class _Auth:
 
 
 def new_auth(name: str, auth: Authorizer) -> OpMiddleware:
-    """Return the auth layer: ``auth`` must allow ``<name>.<op>``."""
+    """Return the auth layer: ``auth`` must allow ``<name>.<op>``.
+
+    Returns:
+        The auth layer: ``auth`` must allow ``<name>.<op>``.
+
+    """
     return _Auth(name, auth)
 
 
@@ -294,7 +370,15 @@ class _Timeout:
         self._seconds = seconds
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run the op under the deadline."""
+        """Run the op under the deadline.
+
+        Returns:
+            What the operation returns.
+
+        Raises:
+            AppTimeoutError: ``op`` timed out after ``self._seconds``s.
+
+        """
         try:
             return await asyncio.wait_for(next_(), timeout=self._seconds)
         except TimeoutError as exc:
@@ -306,6 +390,10 @@ def new_timeout(seconds: float) -> OpMiddleware:
     """Return the timeout layer: each operation.
 
     (each attempt, under retry) gets ``seconds``.
+
+    Returns:
+        The timeout layer: each operation.
+
     """
     return _Timeout(seconds)
 
@@ -318,12 +406,22 @@ class _Retry:
         self._retrier = retrier
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:  # noqa: ARG002 - the retrier owns the policy
-        """Run the op with the retrier's policy."""
+        """Run the op with the retrier's policy.
+
+        Returns:
+            What the operation returns.
+
+        """
         return await self._retrier.retry(next_)
 
 
 def new_retry(retrier: Retrier) -> OpMiddleware:
-    """Return the retry layer."""
+    """Return the retry layer.
+
+    Returns:
+        The retry layer.
+
+    """
     return _Retry(retrier)
 
 
@@ -339,7 +437,15 @@ class _CircuitBreaker:
         self._name = name
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:  # noqa: ARG002 - the breaker is per-subject
-        """Run the op through the breaker."""
+        """Run the op through the breaker.
+
+        Returns:
+            What the operation returns.
+
+        Raises:
+            UnavailableError: Circuit breaker ``self._name`` open.
+
+        """
         try:
             with self._cb:
                 return await next_()
@@ -349,7 +455,12 @@ class _CircuitBreaker:
 
 
 def new_circuit_breaker(cb: CircuitBreakerInterface, name: str) -> OpMiddleware:
-    """Return the circuit-breaker layer for the subject ``name``."""
+    """Return the circuit-breaker layer for the subject ``name``.
+
+    Returns:
+        The circuit-breaker layer for the subject ``name``.
+
+    """
     return _CircuitBreaker(cb, name)
 
 
@@ -362,7 +473,15 @@ class _Bulkhead:
         self._shed = shed
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run the op inside the bulkhead."""
+        """Run the op inside the bulkhead.
+
+        Returns:
+            What the operation returns.
+
+        Raises:
+            AppError: ``op``: concurrency limit reached.
+
+        """
         if not self._shed:
             return await self._bulkhead.execute(next_)
         try:
@@ -377,6 +496,10 @@ def new_bulkhead(bulkhead: Bulkhead, *, shed: bool) -> OpMiddleware:
     """Return the bulkhead layer.
 
     With ``shed`` a full bulkhead rejects (RESOURCE_EXHAUSTED).
+
+    Returns:
+        The bulkhead layer.
+
     """
     return _Bulkhead(bulkhead, shed=shed)
 
@@ -389,7 +512,15 @@ class _RateLimit:
         self._limiter = limiter
 
     async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run the op when the limiter allows it."""
+        """Run the op when the limiter allows it.
+
+        Returns:
+            What the operation returns.
+
+        Raises:
+            AppError: ``op``: rate limit exceeded.
+
+        """
         if not self._limiter.allow():
             raise AppError(ErrorCode.RESOURCE_EXHAUSTED, f"{op}: rate limit exceeded")
         return await next_()
@@ -399,5 +530,9 @@ def new_rate_limit(limiter: RateLimiter) -> OpMiddleware:
     """Return the rate-limit layer.
 
     An op over the rate fails RESOURCE_EXHAUSTED at once.
+
+    Returns:
+        The rate-limit layer.
+
     """
     return _RateLimit(limiter)

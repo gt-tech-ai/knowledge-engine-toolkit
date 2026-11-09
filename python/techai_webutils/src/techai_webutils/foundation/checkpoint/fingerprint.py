@@ -21,6 +21,10 @@ def fingerprint(stage: Stage, versions: Mapping[str, str], upstream: str | None)
     built in never matters, while any version change, or any change upstream, gives a new
     fingerprint. ``upstream`` is the previous stage's fingerprint, or the content hash for
     the first stage.
+
+    Returns:
+        The SHA-256 hex digest of the stage.
+
     """
     canonical = json.dumps(
         {"stage": str(stage), "versions": dict(versions), "upstream": upstream},

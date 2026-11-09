@@ -39,7 +39,12 @@ _ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 
 
 def _object(key: str) -> StorageObject:
-    """Return a listed object at ``key``."""
+    """Return a listed object at ``key``.
+
+    Returns:
+        A listed object at ``key``.
+
+    """
     return StorageObject(key=key, size=0, content_type="", last_modified="", etag="")
 
 
@@ -49,7 +54,12 @@ def _store(
     max_bytes: int = 1024,
     compression: CheckpointCompression = CheckpointCompression.GZIP,
 ) -> CheckpointStore:
-    """Build the s3db store over the mocked object store and state client."""
+    """Build the s3db store over the mocked object store and state client.
+
+    Returns:
+        The s3db store over the mocked object store and state client.
+
+    """
     config = CheckpointConfig(
         kind=CheckpointKind.S3DB,
         bucket="ckpt",

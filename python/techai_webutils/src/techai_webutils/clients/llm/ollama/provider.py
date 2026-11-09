@@ -46,6 +46,10 @@ def _finish_reason(done_reason: str | None) -> str:
     Ollama reports ``length`` when it hit ``num_predict`` and ``stop`` otherwise (or
     ``None`` on older servers); anything that isn't an explicit length cap is treated as a
     normal stop.
+
+    Returns:
+        The ``LLMResponse`` finish reason.
+
     """
     return "length" if done_reason == "length" else "stop"
 
@@ -57,6 +61,10 @@ def _to_app_error(exc: Exception) -> AppError:
 
     A timeout → ``TIMEOUT``; an unreachable server or a 5xx/429 → ``UNAVAILABLE``
     (transient, retryable); a 4xx or a malformed body → ``INTERNAL`` (terminal).
+
+    Returns:
+        The coded error.
+
     """
     return httpx_error_to_app_error(exc, "ollama chat")
 
@@ -66,6 +74,13 @@ async def _ndjson_chunks(response: httpx.Response) -> AsyncIterator[dict[str, An
 
     A transport or decode failure mid-stream is wrapped in a coded ``AppError``
     (``_to_app_error``).
+
+    Yields:
+        Each decoded chunk.
+
+    Raises:
+        _to_app_error: The coded error for a provider failure.
+
     """
     try:
         async for line in response.aiter_lines():
@@ -81,6 +96,10 @@ async def _tokens(
     """Yield each chunk's content delta until ``done``, then the ``done`` chunk's usage.
 
     ``model`` is the requested model, reported when the ``done`` chunk names none.
+
+    Yields:
+        Each chunk's content delta until ``done``, then the ``done`` chunk's usage.
+
     """
     async for chunk in chunks:
         message: dict[str, Any] = chunk.get("message") or {}
@@ -116,6 +135,10 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
         """Build the /api/chat request body from the messages + LLMConfig.
 
         (options mapping).
+
+        Returns:
+            The /api/chat request body from the messages + LLMConfig.
+
         """
         cfg = config or LLMConfig()
         options: dict[str, object] = {
@@ -141,6 +164,13 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
 
         Transport/decode failures are wrapped in a coded ``AppError`` (``_to_app_error``)
         so a raw ``httpx`` / JSON error never crosses the provider boundary.
+
+        Returns:
+            The completion.
+
+        Raises:
+            _to_app_error: The coded error for a provider failure.
+
         """
         try:
             response = await self._client.post(
@@ -165,6 +195,10 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
         """Stream a completion token-by-token.
 
         Awaited to obtain the iterator, then ``async for``.
+
+        Returns:
+            The stream of text deltas.
+
         """
         return text_only(await self.stream_with_usage(messages, config))
 
@@ -174,6 +208,10 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
         """Stream content deltas.
 
         Then the ``done`` chunk's token counts as a ``StreamUsage``.
+
+        Returns:
+            The stream of text deltas, ending with the usage when the provider reports it.
+
         """
         return self._stream_tokens(self._chat_payload(messages, config, stream=True))
 
@@ -192,6 +230,13 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
         The streamed response stays open across the yields: the ``finally`` releases it
             when the
         stream ends, fails, or the consumer closes this generator.
+
+        Yields:
+            Content deltas from the streamed /api/chat NDJSON until ``done``.
+
+        Raises:
+            _to_app_error: The coded error for a provider failure.
+
         """
         stack = AsyncExitStack()
         try:
@@ -209,5 +254,10 @@ class OllamaLlmProvider(NoOpAsyncResource, LLMProvider):
             await stack.aclose()
 
     def model_name(self) -> str:
-        """Return the Ollama chat model identifier."""
+        """Return the Ollama chat model identifier.
+
+        Returns:
+            The Ollama chat model identifier.
+
+        """
         return self._model

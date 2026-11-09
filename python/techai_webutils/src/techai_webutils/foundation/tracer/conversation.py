@@ -70,6 +70,10 @@ def _parse_traceparent(value: str) -> SpanContext | None:
     """Return the span context a W3C ``traceparent`` encodes.
 
     Or ``None`` when it is malformed.
+
+    Returns:
+        The span context a W3C ``traceparent`` encodes.
+
     """
     ctx = _PROPAGATOR.extract({"traceparent": value})
     span_context = trace.get_current_span(ctx).get_span_context()
@@ -80,6 +84,10 @@ def extract_conversation(ctx: Context | None = None) -> ConversationContext | No
     """Read the conversation from ``ctx``'s baggage (the current context when ``None``).
 
     Returns ``None`` when the id or the turn index is missing or malformed.
+
+    Returns:
+        The conversation from ``ctx``'s baggage (the current context when ``None``).
+
     """
     conversation_id = baggage.get_baggage(BAGGAGE_CONVERSATION_ID, ctx)
     raw_turn = baggage.get_baggage(BAGGAGE_TURN_INDEX, ctx)
@@ -106,5 +114,9 @@ def conversation_links(conv: ConversationContext) -> list[Link]:
     """Return the span links for a turn's root span: one to the previous turn.
 
     None on the first.
+
+    Returns:
+        The span links for a turn's root span: one to the previous turn.
+
     """
     return [] if conv.prev is None else [Link(conv.prev)]

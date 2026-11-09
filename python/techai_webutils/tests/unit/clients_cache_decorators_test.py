@@ -25,6 +25,10 @@ def _mock_cache(**returns: object) -> AsyncMock:
     ``_mock_cache(get=b"v")`` makes ``get`` a hit; ``_mock_cache(get=None)`` a miss.
     Delegation is recorded natively, so callers can also ``assert_awaited*`` /
     ``assert_not_awaited``.
+
+    Returns:
+        An ``AsyncMock`` bound to the ``Cache`` interface.
+
     """
     cache = AsyncMock(spec=Cache)
     for op, value in returns.items():
@@ -36,6 +40,10 @@ def _slow(delay: float, result: object = None) -> Callable[..., Awaitable[object
     """Return an async side_effect that sleeps ``delay`` seconds then returns ``result``.
 
     (to trip the timeout).
+
+    Returns:
+        An async side_effect that sleeps ``delay`` seconds then returns ``result``.
+
     """
 
     async def _op(*_args: object, **_kwargs: object) -> object:
@@ -49,6 +57,10 @@ def _open_breaker() -> MagicMock:
     """Return a ``CircuitBreakerInterface`` mock whose context entry raises.
 
     ``CircuitOpenError`` (open circuit).
+
+    Returns:
+        A ``CircuitBreakerInterface`` mock whose context entry raises.
+
     """
     cb = MagicMock(spec=CircuitBreakerInterface)
     cb.__enter__.side_effect = CircuitOpenError()
@@ -59,6 +71,10 @@ def _closed_breaker() -> MagicMock:
     """Return a ``CircuitBreakerInterface`` mock.
 
     That passes through without suppressing errors (closed circuit).
+
+    Returns:
+        A ``CircuitBreakerInterface`` mock.
+
     """
     cb = MagicMock(spec=CircuitBreakerInterface)
     cb.__exit__.return_value = False

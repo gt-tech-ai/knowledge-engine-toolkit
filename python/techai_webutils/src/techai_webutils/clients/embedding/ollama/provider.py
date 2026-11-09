@@ -46,7 +46,12 @@ class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     async def embed(
         self, text: str, *, input_type: InputType = "document"
     ) -> EmbeddingResult:
-        """Embed a single text (a one-element batch)."""
+        """Embed a single text (a one-element batch).
+
+        Returns:
+            The embedding of the text.
+
+        """
         return (await self.embed_batch([text], input_type=input_type))[0]
 
     @override
@@ -64,6 +69,15 @@ class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         or a dimension mismatch (a vector whose length differs from the configured
         ``dimension``), so a model/config mismatch fails here with a clear message rather
         than as a silent no-op far downstream at vector-store upsert or search time.
+
+        Returns:
+            One embedding per text, in input order.
+
+        Raises:
+            AppValueError: Ollama /api/embed response missing 'embeddings' key: ``body``;
+                Ollama model ``self._model`` returned a ``len(vector)``-d vector, expected
+                ``self._dimension`` (check embedding.dimension config).
+
         """
         response = await self._client.post(
             "/api/embed", json={"model": self._model, "input": texts}
@@ -90,9 +104,18 @@ class OllamaEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         """Return the model's embedding dimension.
 
         (configured; 768 for nomic-embed-text).
+
+        Returns:
+            The model's embedding dimension.
+
         """
         return self._dimension
 
     def model_name(self) -> str:
-        """Return the Ollama model identifier."""
+        """Return the Ollama model identifier.
+
+        Returns:
+            The Ollama model identifier.
+
+        """
         return self._model

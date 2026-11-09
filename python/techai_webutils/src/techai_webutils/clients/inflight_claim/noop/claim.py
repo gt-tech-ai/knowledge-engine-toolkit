@@ -12,7 +12,12 @@ class NoopInflightClaim(InflightClaim):
 
     @override
     async def claim(self, key: str, ttl_seconds: float) -> bool:
-        """Grant the claim."""
+        """Grant the claim.
+
+        Returns:
+            ``True``, always: the stub grants every claim.
+
+        """
         return True
 
     @override

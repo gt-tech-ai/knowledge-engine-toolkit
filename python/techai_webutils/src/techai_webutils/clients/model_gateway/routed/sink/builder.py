@@ -29,6 +29,9 @@ def route_decision_sink_from_config(
 ) -> RouteDecisionSink:
     """Build the sink ``raw["kind"]`` selects (``noop`` by default).
 
+    Returns:
+        The sink ``raw["kind"]`` selects (``noop`` by default).
+
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.
         AppError: ``INVALID_INPUT`` for ``analytics`` without a fact publisher.

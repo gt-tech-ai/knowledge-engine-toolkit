@@ -13,7 +13,12 @@ from techai_webutils.core.interfaces.vector_store import VectorEntry, VectorSear
 
 
 def _hot_instances() -> list[object]:
-    """One instance of each hot dataclass, constructed with valid fields."""
+    """One instance of each hot dataclass, constructed with valid fields.
+
+    Returns:
+        The instances.
+
+    """
     return [
         VectorSearchResult(
             document_id="d", chunk_id="c", content="x", score=1.0, metadata={}

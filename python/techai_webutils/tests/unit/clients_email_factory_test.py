@@ -17,7 +17,12 @@ from techai_webutils.core.interfaces.email import EmailSender
 
 
 def _sender(kind: EmailKind) -> EmailSender:
-    """Build a sender for ``kind`` with fixed, backend-agnostic config."""
+    """Build a sender for ``kind`` with fixed, backend-agnostic config.
+
+    Returns:
+        A sender for ``kind`` with fixed, backend-agnostic config.
+
+    """
     return new_email_from_config(
         EmailConfig(
             kind=kind,

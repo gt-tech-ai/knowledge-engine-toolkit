@@ -30,6 +30,10 @@ class StaticOrderRanker:
         """Return the candidates with the route's models first.
 
         The rest in catalog order.
+
+        Returns:
+            The candidates with the route's models first.
+
         """
         preference = list(dict.fromkeys((route.default_model, *route.preferred)))
         rank_of = {model_id: index for index, model_id in enumerate(preference)}
@@ -46,5 +50,10 @@ class StaticOrderRanker:
         route_input: PlanInput,
         prices: PriceTable,  # noqa: ARG003 - the static order ignores prices
     ) -> RankResult:
-        """Return ``rank``'s order; the static order never reads the call's prices."""
+        """Return ``rank``'s order; the static order never reads the call's prices.
+
+        Returns:
+            ``rank``'s order; the static order never reads the call's prices.
+
+        """
         return await cls.rank(ctx, route, candidates, route_input)

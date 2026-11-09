@@ -58,12 +58,21 @@ def _normalize_token(token: str) -> DocumentFormat:
     """Map a declared type or extension token.
 
     To a canonical format (UNKNOWN if unmapped).
+
+    Returns:
+        The detected format, or ``UNKNOWN``.
+
     """
     return _TOKEN_MAP.get(token.strip().lower().lstrip("."), DocumentFormat.UNKNOWN)
 
 
 def _ooxml_kind(content: bytes) -> DocumentFormat:
-    """Disambiguate a ZIP container into DOCX/PPTX/XLSX by inspecting its parts."""
+    """Disambiguate a ZIP container into DOCX/PPTX/XLSX by inspecting its parts.
+
+    Returns:
+        The detected format, or ``UNKNOWN``.
+
+    """
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             names = archive.namelist()
@@ -79,6 +88,10 @@ def _detect_by_magic(content: bytes) -> DocumentFormat:
     """Detect a format from leading magic bytes.
 
     UNKNOWN when there is no conclusive signature.
+
+    Returns:
+        The detected format, or ``UNKNOWN``.
+
     """
     if content.startswith(_PDF_MAGIC):
         return DocumentFormat.PDF
@@ -94,7 +107,12 @@ def _detect_by_magic(content: bytes) -> DocumentFormat:
 
 
 def _detect_by_extension(filename: str) -> DocumentFormat:
-    """Detect a format from the filename extension (UNKNOWN when absent/unmapped)."""
+    """Detect a format from the filename extension (UNKNOWN when absent/unmapped).
+
+    Returns:
+        The detected format, or ``UNKNOWN``.
+
+    """
     _, dot, ext = filename.rpartition(".")
     if not dot:
         return DocumentFormat.UNKNOWN
@@ -107,6 +125,10 @@ def detect_format(declared: str, filename: str, content: bytes) -> DocumentForma
     Order: conclusive magic bytes win; otherwise the declared (event) format; otherwise
         the
     filename extension; UNKNOWN if nothing resolves.
+
+    Returns:
+        A document's format from its bytes, declared type, and filename.
+
     """
     magic = _detect_by_magic(content)
     if magic is not DocumentFormat.UNKNOWN:

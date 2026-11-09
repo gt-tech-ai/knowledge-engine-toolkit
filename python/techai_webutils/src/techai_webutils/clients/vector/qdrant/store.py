@@ -101,6 +101,10 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
         """Whether ``collection`` exists.
 
         One this process ensured is known without a round-trip.
+
+        Returns:
+            Whether ``collection`` exists.
+
         """
         return collection in self._ensured or await self._client.collection_exists(
             collection
@@ -137,6 +141,10 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
         """Vector-search ``collection``; ``filters`` become an exact-match payload filter.
 
         (e.g. a tenant).
+
+        Returns:
+            The hits, best first.
+
         """
         query_filter = None
         if filters:
@@ -173,6 +181,10 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
         """Count the points belonging to ``document_id``.
 
         0 when the collection does not exist yet.
+
+        Returns:
+            The points belonging to ``document_id``.
+
         """
         if not await self._exists(collection):
             return 0
@@ -194,6 +206,10 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
         the incremental indexer skip the sub-batches already upserted with the same
         metadata on a redrive instead of re-embedding them (the expensive CPU step), while
         a chunk stored with other metadata is rewritten.
+
+        Returns:
+            ``{raw id: stored metadata}`` for the ``ids`` already stored.
+
         """
         if not ids or not await self._exists(collection):
             return {}
@@ -212,7 +228,12 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
 
 
 def _point_id(raw_id: str) -> str:
-    """Map an arbitrary VectorEntry id to a deterministic Qdrant point id (a UUID)."""
+    """Map an arbitrary VectorEntry id to a deterministic Qdrant point id (a UUID).
+
+    Returns:
+        The deterministic point id.
+
+    """
     return str(uuid.uuid5(_POINT_ID_NAMESPACE, raw_id))
 
 
@@ -220,6 +241,10 @@ def _document_filter(document_id: str) -> models.Filter:
     """Build a payload filter matching every point whose ``document_id`` equals.
 
     ``document_id``.
+
+    Returns:
+        A payload filter matching every point whose ``document_id`` equals.
+
     """
     return models.Filter(
         must=[
@@ -241,6 +266,10 @@ def _metadata(payload: Mapping[str, object]) -> dict[str, str]:
     """Return a point payload's metadata: every key not promoted to an entry field.
 
     Stringified.
+
+    Returns:
+        A point payload's metadata: every key not promoted to an entry field.
+
     """
     return {
         key: str(value)
@@ -253,6 +282,10 @@ def _to_result(point: models.ScoredPoint) -> VectorSearchResult:
     """Map a Qdrant hit into a VectorSearchResult.
 
     Payload keys not promoted to fields become metadata.
+
+    Returns:
+        The mapped result.
+
     """
     payload = point.payload or {}
     return VectorSearchResult(

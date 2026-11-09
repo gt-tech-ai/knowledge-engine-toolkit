@@ -80,8 +80,7 @@ class InMemoryPublisher(NoOpAsyncResource, KeyedPublisher):
     ) -> None:
         """Put ``payload`` on ``topic`` with ``metadata`` plus the current trace context.
 
-        Raises:
-            AppValueError: ``payload`` is over ``max_payload_bytes``.
+        A callee raises ``AppValueError``: ``payload`` is over ``max_payload_bytes``.
 
         """
         check_payload_size(payload, self._max_payload_bytes)

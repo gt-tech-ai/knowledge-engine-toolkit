@@ -32,13 +32,23 @@ _FP = "0123456789abcdef"
 def _key(
     document_id: str, org_id: str = "org-1", stage: Stage = Stage.PARSE
 ) -> CheckpointKey:
-    """Return the key of ``stage`` for a document whose bytes hash to ``c0ffee``."""
+    """Return the key of ``stage`` for a document whose bytes hash to ``c0ffee``.
+
+    Returns:
+        The key of ``stage`` for a document whose bytes hash to ``c0ffee``.
+
+    """
     return CheckpointKey(org_id, document_id, "c0ffee", stage, _FP)
 
 
 @pytest_asyncio.fixture
 async def storage(s3_config: S3Config) -> AsyncIterator[S3StorageClient]:
-    """Yield an open S3 client on the test's fresh MinIO bucket."""
+    """Yield an open S3 client on the test's fresh MinIO bucket.
+
+    Yields:
+        An open S3 client on the test's fresh MinIO bucket.
+
+    """
     async with S3StorageClient(s3_config) as client:
         yield client
 
@@ -46,7 +56,12 @@ async def storage(s3_config: S3Config) -> AsyncIterator[S3StorageClient]:
 def _store(
     storage: S3StorageClient, bucket: str, max_bytes: int = 1024
 ) -> CheckpointStore:
-    """Build the s3db store over real MinIO with a mocked state client."""
+    """Build the s3db store over real MinIO with a mocked state client.
+
+    Returns:
+        The s3db store over real MinIO with a mocked state client.
+
+    """
     config = CheckpointConfig(
         kind=CheckpointKind.S3DB, bucket=bucket, max_artifact_bytes=max_bytes
     )
@@ -56,7 +71,12 @@ def _store(
 
 
 async def _keys(storage: S3StorageClient, bucket: str) -> list[str]:
-    """Return every object key in ``bucket``."""
+    """Return every object key in ``bucket``.
+
+    Returns:
+        Every object key in ``bucket``.
+
+    """
     return [o.key for o in await storage.list_objects(bucket, "")]
 
 

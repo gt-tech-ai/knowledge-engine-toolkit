@@ -21,12 +21,22 @@ from techai_webutils.execution.gate import Gate, new_gate, run_gate
 
 
 def _ok(name: str) -> BatchResult:
-    """Return a single-item passing batch."""
+    """Return a single-item passing batch.
+
+    Returns:
+        A single-item passing batch.
+
+    """
     return BatchResult(results=[StepResult(name=name, status=StepStatus.PASS)])
 
 
 def _fail(name: str) -> BatchResult:
-    """Return a single-item failing batch."""
+    """Return a single-item failing batch.
+
+    Returns:
+        A single-item failing batch.
+
+    """
     return BatchResult(
         results=[StepResult(name=name, status=StepStatus.FAIL, error="boom")]
     )
@@ -43,11 +53,21 @@ class _RecordingJob:
         self._ran: list[str] | None = ran
 
     def meta(self) -> JobMeta:
-        """Identify the job."""
+        """Identify the job.
+
+        Returns:
+            The job metadata.
+
+        """
         return JobMeta(name=self._name, group="test")
 
     async def execute(self) -> BatchResult:
-        """Record execution and return the preset result."""
+        """Record execution and return the preset result.
+
+        Returns:
+            The preset result.
+
+        """
         await asyncio.sleep(0)
         if self._ran is not None:
             self._ran.append(self._name)
@@ -63,6 +83,10 @@ def _recording_observer() -> tuple[MagicMock, list[tuple[str, str]]]:
     gate's other (batch/step) callbacks stay silent no-op mocks, so ``events`` holds
     exactly the gate/phase lifecycle in the order the gate fired it — preserving the
     ordering assertion.
+
+    Returns:
+        A spec-bound ExecutionObserver mock that appends lifecycle events.
+
     """
     events: list[tuple[str, str]] = []
     obs = MagicMock(spec=ExecutionObserver)

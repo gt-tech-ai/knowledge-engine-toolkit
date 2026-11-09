@@ -36,7 +36,12 @@ _CONFIG = StartBudgetConfig(
 
 
 def _cm(value: object) -> MagicMock:
-    """Return an async context manager mock that yields ``value``."""
+    """Return an async context manager mock that yields ``value``.
+
+    Returns:
+        An async context manager mock that yields ``value``.
+
+    """
     cm = MagicMock()
     cm.__aenter__ = AsyncMock(return_value=value)
     cm.__aexit__ = AsyncMock(return_value=None)
@@ -47,6 +52,10 @@ def _pool(wait: float = 0.0) -> tuple[MagicMock, MagicMock]:
     """Return a mocked pool and its connection.
 
     The rate query reports ``wait`` seconds to go.
+
+    Returns:
+        A mocked pool and its connection.
+
     """
     conn = MagicMock()
     conn.execute = AsyncMock()
@@ -61,6 +70,10 @@ def _locks(wins: Sequence[bool] = ()) -> tuple[dict[str, MagicMock], MagicMock]:
     """Return the locks a factory hands out by key, each winning per ``wins``.
 
     And the factory.
+
+    Returns:
+        The locks a factory hands out by key, each winning per ``wins``.
+
     """
     made: dict[str, MagicMock] = {}
     results = iter(wins)
@@ -80,7 +93,12 @@ def _locks(wins: Sequence[bool] = ()) -> tuple[dict[str, MagicMock], MagicMock]:
 def _budget(
     pool: MagicMock, factory: MagicMock, config: StartBudgetConfig = _CONFIG
 ) -> PostgresStartBudget:
-    """Build the postgres budget through the factory."""
+    """Build the postgres budget through the factory.
+
+    Returns:
+        The postgres budget through the factory.
+
+    """
     budget = start_budget_from_config(config, pool=pool, new_lock=factory)
     assert isinstance(budget, PostgresStartBudget)
     return budget

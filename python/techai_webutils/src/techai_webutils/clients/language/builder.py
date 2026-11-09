@@ -67,6 +67,9 @@ def language_identifier_from_config(
 ) -> LanguageIdentifier:
     """Build the ``LanguageIdentifier`` ``config.kind`` selects.
 
+    Returns:
+        The ``LanguageIdentifier`` ``config.kind`` selects.
+
     Raises:
         AppValueError: An unknown kind, ``fasttext`` / ``glotlid`` without a model path, a
             ``short_text_kind`` without a positive ``short_text_chars``, or

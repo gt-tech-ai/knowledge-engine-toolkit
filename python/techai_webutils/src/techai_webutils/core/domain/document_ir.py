@@ -141,7 +141,12 @@ class DocumentBlock:
 
 
 def blocks_to_json(blocks: tuple[DocumentBlock, ...]) -> dict[str, object]:
-    """Return ``blocks`` as a JSON-ready dict tagged with ``FORMAT_VERSION``."""
+    """Return ``blocks`` as a JSON-ready dict tagged with ``FORMAT_VERSION``.
+
+    Returns:
+        ``blocks`` as a JSON-ready dict tagged with ``FORMAT_VERSION``.
+
+    """
     return {
         "format_version": FORMAT_VERSION,
         "blocks": [
@@ -170,6 +175,9 @@ def blocks_to_json(blocks: tuple[DocumentBlock, ...]) -> dict[str, object]:
 def blocks_from_json(payload: dict[str, object]) -> tuple[DocumentBlock, ...]:
     """Read blocks written by ``blocks_to_json`` at this version or the one before.
 
+    Returns:
+        The blocks.
+
     Raises:
         AppValueError: A ``format_version`` other than N or N-1 (``INVALID_INPUT``).
 
@@ -183,7 +191,12 @@ def blocks_from_json(payload: dict[str, object]) -> tuple[DocumentBlock, ...]:
 
 
 def _block(row: dict[str, object]) -> DocumentBlock:
-    """Build one block from its JSON dict."""
+    """Build one block from its JSON dict.
+
+    Returns:
+        One block from its JSON dict.
+
+    """
     cells = cast("list[list[object]]", row.get("cells", []))
     return DocumentBlock(
         type=BlockType(cast("str", row["type"])),
@@ -212,7 +225,12 @@ def _block(row: dict[str, object]) -> DocumentBlock:
 
 
 def _turn_to_json(turn: Turn | None) -> dict[str, object] | None:
-    """Return ``turn`` as a JSON-ready dict (``None`` stays ``None``)."""
+    """Return ``turn`` as a JSON-ready dict (``None`` stays ``None``).
+
+    Returns:
+        ``turn`` as a JSON-ready dict (``None`` stays ``None``).
+
+    """
     if turn is None:
         return None
     return {
@@ -229,7 +247,12 @@ def _turn_to_json(turn: Turn | None) -> dict[str, object] | None:
 
 
 def _turn_from_json(row: dict[str, object] | None) -> Turn | None:
-    """Build a turn from its JSON dict (``None`` stays ``None``)."""
+    """Build a turn from its JSON dict (``None`` stays ``None``).
+
+    Returns:
+        A turn from its JSON dict (``None`` stays ``None``).
+
+    """
     if row is None:
         return None
     return Turn(

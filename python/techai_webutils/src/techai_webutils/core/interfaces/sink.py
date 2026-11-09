@@ -32,6 +32,10 @@ def chunk_id(document_id: str, n: int) -> str:
     """Return the id of chunk ``n`` (0-based, in document order) of ``document_id``.
 
     ``<document>:<n>``.
+
+    Returns:
+        The id of chunk ``n`` (0-based, in document order) of ``document_id``.
+
     """
     return f"{document_id}:{n}"
 

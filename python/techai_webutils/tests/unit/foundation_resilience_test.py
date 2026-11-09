@@ -49,7 +49,12 @@ from techai_webutils.foundation.resilience.timeout import with_timeout
 
 
 def _raise_unavailable() -> NoReturn:
-    """Raise the transient error a failing protected call raises."""
+    """Raise the transient error a failing protected call raises.
+
+    Raises:
+        UnavailableError: Fail.
+
+    """
     msg = "fail"
     raise UnavailableError(msg)
 
@@ -287,7 +292,12 @@ _DOWN = UnavailableError("dependency down")
 
 
 def _sample(registry: CollectorRegistry, name: str, **labels: str) -> float:
-    """Return a metric sample's value, 0 when the series does not exist."""
+    """Return a metric sample's value, 0 when the series does not exist.
+
+    Returns:
+        A metric sample's value, 0 when the series does not exist.
+
+    """
     return registry.get_sample_value(name, labels) or 0.0
 
 

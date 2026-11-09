@@ -15,7 +15,12 @@ from techai_webutils.execution.engine.fan_out import fan_out
 
 
 async def _ok(item: int) -> StepResult:
-    """Map ``item`` to a passing step (the observer/empty tests' trivial mapper)."""
+    """Map ``item`` to a passing step (the observer/empty tests' trivial mapper).
+
+    Returns:
+        A passing step for the item.
+
+    """
     await asyncio.sleep(0)
     return StepResult(name=f"item-{item}")
 

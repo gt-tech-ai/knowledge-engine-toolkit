@@ -35,7 +35,12 @@ _SPAN_SOURCE = "techai_webutils.clients.decorators.ai_enricher.trace.get_current
 
 
 def _messages() -> list[LLMMessage]:
-    """Return a system + user message pair."""
+    """Return a system + user message pair.
+
+    Returns:
+        A system + user message pair.
+
+    """
     return [
         LLMMessage(role="system", content="be brief"),
         LLMMessage(role="user", content="hello"),
@@ -43,7 +48,12 @@ def _messages() -> list[LLMMessage]:
 
 
 def _attributes(span: MagicMock) -> dict[str, Any]:
-    """Collect every ``set_attribute(key, value)`` call on the mock span into a dict."""
+    """Collect every ``set_attribute(key, value)`` call on the mock span into a dict.
+
+    Returns:
+        The attributes by key.
+
+    """
     return {c.args[0]: c.args[1] for c in span.set_attribute.call_args_list}
 
 
@@ -51,6 +61,10 @@ def _llm(response: LLMResponse) -> MagicMock:
     """Return an ``LLMProvider`` mock.
 
     (spec-bound) whose ``complete`` returns ``response``.
+
+    Returns:
+        An ``LLMProvider`` mock.
+
     """
     inner = MagicMock(spec=LLMProvider)
     inner.complete = AsyncMock(return_value=response)
@@ -167,7 +181,12 @@ async def test_enricher_reports_wrapped_system_through_gateway() -> None:
 
 
 async def _usage_stream(*items: str | StreamUsage) -> AsyncIterator[str | StreamUsage]:
-    """Yield the given stream items in order."""
+    """Yield the given stream items in order.
+
+    Yields:
+        The given stream items in order.
+
+    """
     await asyncio.sleep(0)
     for item in items:
         yield item
@@ -299,7 +318,12 @@ async def test_ai_span_enricher_reports_requested_and_served_model() -> None:
 
 
 def _result(i: int) -> RetrievalResult:
-    """Return a retrieval result whose document id is ``doc-<i>``."""
+    """Return a retrieval result whose document id is ``doc-<i>``.
+
+    Returns:
+        A retrieval result whose document id is ``doc-<i>``.
+
+    """
     return RetrievalResult(
         document_id=f"doc-{i}",
         document_name=f"d{i}",

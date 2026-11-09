@@ -36,6 +36,10 @@ class SingleWriterRunner[T]:
         """Acquire the lock, run the operation, release.
 
         Return None if another writer holds it.
+
+        Returns:
+            What the operation returns, or ``None`` when the lock was not acquired.
+
         """
         if not await self._lock.acquire():
             return None

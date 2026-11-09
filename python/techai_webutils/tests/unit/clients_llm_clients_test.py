@@ -15,7 +15,12 @@ from techai_webutils.core.interfaces.llm import LLMConfig, LLMMessage
 
 
 def _messages(user: str) -> list[LLMMessage]:
-    """Return a system + user message pair."""
+    """Return a system + user message pair.
+
+    Returns:
+        A system + user message pair.
+
+    """
     return [
         LLMMessage(role="system", content="instruction"),
         LLMMessage(role="user", content=user),
@@ -28,6 +33,10 @@ async def _converse_args(
     """Run ``complete`` against a mocked bedrock-runtime client.
 
     Return the Converse kwargs sent.
+
+    Returns:
+        The call's keyword arguments.
+
     """
     runtime = MagicMock()
     runtime.converse = AsyncMock(return_value={})

@@ -31,7 +31,12 @@ _TEXT = (
 
 
 def _registry() -> TaskRegistry:
-    """Return a registry holding ``ENTITIES`` and ``PII``."""
+    """Return a registry holding ``ENTITIES`` and ``PII``.
+
+    Returns:
+        A registry holding ``ENTITIES`` and ``PII``.
+
+    """
     registry = TaskRegistry()
     registry.register(PII, PiiSpan)
     return registry

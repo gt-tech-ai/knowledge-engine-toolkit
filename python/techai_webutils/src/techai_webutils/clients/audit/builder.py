@@ -51,6 +51,10 @@ class AuditSinkConfig:
         """Reject an enforcement mode other than ``shadow`` / ``enforced``.
 
         (``INVALID_INPUT``).
+
+        Raises:
+            AppError: Unknown audit enforcement mode: ``self.enforcement``.
+
         """
         if self.enforcement not in _ENFORCEMENT_MODES:
             raise AppError(
@@ -70,6 +74,9 @@ def new_audit_sink_from_config(
         config: The sink configuration.
         backends: Factories for consumer-supplied kinds, keyed by kind; a built-in kind
             name is never looked up here.
+
+    Returns:
+        The ``AuditSink`` selected by ``config.kind``.
 
     Raises:
         AppError: ``INVALID_INPUT`` for an unknown kind.

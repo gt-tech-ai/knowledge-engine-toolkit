@@ -38,6 +38,10 @@ class S3Config:
         connector iam_role read path assumes the connector's role and signs with the
         returned token); empty collapses to ``None`` so the static/IRSA paths are
         unaffected.
+
+        Returns:
+            The keyword arguments.
+
         """
         return {
             "endpoint_url": self.endpoint or None,

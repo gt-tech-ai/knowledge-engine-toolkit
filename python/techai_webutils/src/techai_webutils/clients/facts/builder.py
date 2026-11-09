@@ -61,6 +61,9 @@ def new_fact_publisher_from_config(
         metrics: Provides ``gen_ai_fact_dropped_total{reason}`` for the ``messaging``
             kind.
 
+    Returns:
+        The ``FactPublisher`` selected by ``config.kind``.
+
     Raises:
         AppError: ``INVALID_INPUT`` for an unknown kind, or a ``messaging`` kind without a
             publisher or a queue.

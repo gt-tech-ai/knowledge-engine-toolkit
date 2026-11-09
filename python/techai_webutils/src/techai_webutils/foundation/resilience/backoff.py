@@ -38,12 +38,20 @@ def exponential_jitter_wait(
     Returns: A wait callable for tenacity's ``wait=`` (``n`` is the attempt number, from
         1).
 
+    Returns:
+        A tenacity wait: ``initial * exp_base**(n-1)`` plus up to ``jitter``.
+
     """
     spread = initial if jitter is None else jitter
     rng = random.SystemRandom()
 
     def wait(state: RetryCallState) -> float:
-        """Wait the capped exponential plus jitter for ``state``'s attempt."""
+        """Wait the capped exponential plus jitter for ``state``'s attempt.
+
+        Returns:
+            The seconds to wait.
+
+        """
         try:
             exponential = initial * exp_base ** (state.attempt_number - 1)
         except OverflowError:

@@ -28,6 +28,10 @@ def _is_transient(err: BaseException) -> bool:
     Returns ``True`` only for ``AppError`` instances whose
     ``is_transient`` flag is set (e.g., TIMEOUT, UNAVAILABLE).
     All other exception types are treated as non-transient.
+
+    Returns:
+        Whether the error is transient.
+
     """
     if isinstance(err, AppError):
         return err.is_transient
@@ -52,7 +56,12 @@ def retry_transient(
     """
 
     def decorator(func: F) -> F:
-        """Attach the tenacity retry policy to *func*, preserving its metadata."""
+        """Attach the tenacity retry policy to *func*, preserving its metadata.
+
+        Returns:
+            The decorated function.
+
+        """
 
         @retry(
             retry=retry_if_exception(_is_transient),
@@ -62,7 +71,12 @@ def retry_transient(
         )
         @functools.wraps(func)
         def wrapper(*args: object, **kwargs: object) -> object:
-            """Invoke the wrapped function under the configured retry policy."""
+            """Invoke the wrapped function under the configured retry policy.
+
+            Returns:
+                What the function returns.
+
+            """
             return func(*args, **kwargs)
 
         return wrapper  # type: ignore[return-value]

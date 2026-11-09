@@ -53,7 +53,12 @@ class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     async def embed(
         self, text: str, *, input_type: InputType = "document"
     ) -> EmbeddingResult:
-        """Embed a single text (a one-element batch)."""
+        """Embed a single text (a one-element batch).
+
+        Returns:
+            The embedding of the text.
+
+        """
         return (await self.embed_batch([text], input_type=input_type))[0]
 
     @override
@@ -65,7 +70,11 @@ class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         ``input_type`` is applied by the factory's ``PrefixedEmbedding`` decorator, not
         here.
 
+        Returns:
+            One embedding per text, in input order.
+
         Raises:
+            httpx_error_to_app_error: Openai-compatible embed.
             AppError: ``TIMEOUT`` on a timeout; ``UNAVAILABLE`` when the server is
                 unreachable or answers 429 / 5xx (transient); ``INTERNAL`` on another
                 status, a malformed body, a missing item or a vector of the wrong size.
@@ -100,6 +109,14 @@ class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         """Return the response's vectors ordered by ``index``.
 
         Each checked against the dimension.
+
+        Returns:
+            The response's vectors ordered by ``index``.
+
+        Raises:
+            AppError: Embedding model ``self._model`` returned a ``len(vector)``-d vector,
+                expected ``self._dimension`` (check the embedding dimension config).
+
         """
         ordered = sorted(data, key=lambda item: int(item.get("index", 0)))
         vectors: list[list[float]] = []
@@ -116,10 +133,20 @@ class OpenAICompatibleEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
 
     @override
     def dimension(self) -> int:
-        """Return the configured vector size."""
+        """Return the configured vector size.
+
+        Returns:
+            The configured vector size.
+
+        """
         return self._dimension
 
     @override
     def model_name(self) -> str:
-        """Return the served model's name."""
+        """Return the served model's name.
+
+        Returns:
+            The served model's name.
+
+        """
         return self._model

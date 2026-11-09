@@ -111,7 +111,12 @@ _PATTERNS: tuple[tuple[PiiKind, re.Pattern[str]], ...] = (
 
 
 def find_pii(text: str) -> list[PiiSpan]:
-    """Return the personal-data spans in ``text``, in text order, never overlapping."""
+    """Return the personal-data spans in ``text``, in text order, never overlapping.
+
+    Returns:
+        The personal-data spans in ``text``, in text order, never overlapping.
+
+    """
     spans: list[PiiSpan] = []
     for kind, pattern in _PATTERNS:
         for match in pattern.finditer(text):
@@ -124,7 +129,12 @@ def find_pii(text: str) -> list[PiiSpan]:
 
 
 def _valid(kind: PiiKind, found: str) -> bool:
-    """Apply the checks a pattern cannot express (card Luhn sum, phone digit count)."""
+    """Apply the checks a pattern cannot express (card Luhn sum, phone digit count).
+
+    Returns:
+        Whether the match passes the checks.
+
+    """
     digits = [int(c) for c in found if c.isdigit()]
     if kind == PiiKind.CARD:
         return len(digits) >= _CARD_MIN_DIGITS and _luhn(digits)
@@ -135,7 +145,12 @@ def _valid(kind: PiiKind, found: str) -> bool:
 
 
 def _luhn(digits: list[int]) -> bool:
-    """Whether ``digits`` pass the Luhn checksum."""
+    """Whether ``digits`` pass the Luhn checksum.
+
+    Returns:
+        Whether ``digits`` pass the Luhn checksum.
+
+    """
     total = 0
     for position, digit in enumerate(reversed(digits)):
         doubled = digit * 2 if position % 2 else digit
@@ -145,6 +160,9 @@ def _luhn(digits: list[int]) -> bool:
 
 def apply_pii(text: str, spans: Sequence[PiiSpan], mode: PiiMode) -> str:
     """Return ``text`` with every span redacted, masked, or (``keep``) left alone.
+
+    Returns:
+        ``text`` with every span redacted, masked, or (``keep``) left alone.
 
     Raises:
         AppValueError: An unknown mode (``INVALID_INPUT``).

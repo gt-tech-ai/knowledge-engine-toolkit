@@ -65,6 +65,9 @@ def new_knowledge_base_from_config(
 
     And store.
 
+    Returns:
+        The ``KnowledgeBase`` selected by ``config.kind`` over the injected embedder.
+
     Raises:
         AppError: ``INVALID_INPUT`` when the ``vector`` kind is selected without an
             embedder and a store.

@@ -30,7 +30,12 @@ class _Users(Repository[Any, Any, Any]):
 
 
 def _store() -> MagicMock:
-    """Return a Store mock answering every CRUD call."""
+    """Return a Store mock answering every CRUD call.
+
+    Returns:
+        A Store mock answering every CRUD call.
+
+    """
     store = MagicMock(spec=Store)
     store.get = AsyncMock(return_value="e1")
     store.list = AsyncMock(return_value=Page(items=["e1"], total=1))
@@ -42,7 +47,12 @@ def _store() -> MagicMock:
 
 
 def _retrier() -> MagicMock:
-    """Return a Retrier mock that runs the operation once, counting its calls."""
+    """Return a Retrier mock that runs the operation once, counting its calls.
+
+    Returns:
+        A Retrier mock that runs the operation once, counting its calls.
+
+    """
     retrier = MagicMock(spec=Retrier)
 
     async def retry(op: object) -> object:

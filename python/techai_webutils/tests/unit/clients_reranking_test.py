@@ -31,7 +31,12 @@ if TYPE_CHECKING:
 
 
 def _passage(n: int, score: float) -> RetrievalResult:
-    """Return passage ``n`` with text ``text n`` scoring ``score``."""
+    """Return passage ``n`` with text ``text n`` scoring ``score``.
+
+    Returns:
+        Passage ``n`` with text ``text n`` scoring ``score``.
+
+    """
     return RetrievalResult(
         document_id=f"d{n}",
         document_name=f"Doc {n}",
@@ -43,7 +48,12 @@ def _passage(n: int, score: float) -> RetrievalResult:
 
 
 def _client(scores: dict[str, float]) -> RerankClient:
-    """Return a mocked rerank transport scoring each passage text from ``scores``."""
+    """Return a mocked rerank transport scoring each passage text from ``scores``.
+
+    Returns:
+        A mocked rerank transport scoring each passage text from ``scores``.
+
+    """
 
     def score(_query: str, passages: Sequence[str]) -> list[float]:
         return [scores[p] for p in passages]

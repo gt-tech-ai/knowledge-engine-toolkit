@@ -54,7 +54,12 @@ class DisabledHedger(Hedger):
 
     @override
     async def hedge[T](self, op: Callable[[], Awaitable[T]]) -> T:
-        """Run ``op`` once, without a backup attempt."""
+        """Run ``op`` once, without a backup attempt.
+
+        Returns:
+            What ``op`` returns.
+
+        """
         return await op()
 
 
@@ -75,6 +80,10 @@ class DelayHedger(Hedger):
 
         The slower attempt is cancelled once the first responder returns, so the loser's
         work (e.g. an in-flight HTTP request) is actually stopped -- not merely abandoned.
+
+        Returns:
+            What ``op`` returns.
+
         """
         first = asyncio.ensure_future(op())
         done, _pending = await asyncio.wait({first}, timeout=self._delay)
@@ -95,7 +104,15 @@ class DelayHedger(Hedger):
 
 
 def hedger_from_config(config: HedgeConfig) -> Hedger:
-    """Create a ``Hedger`` from config; raise ``ValueError`` on an unknown kind."""
+    """Create a ``Hedger`` from config; raise ``ValueError`` on an unknown kind.
+
+    Returns:
+        A ``Hedger`` from config; raise ``ValueError`` on an unknown kind.
+
+    Raises:
+        ValueError: Unknown hedger kind: ``config.kind``.
+
+    """
     if config.kind == HedgeKind.DISABLED:
         return DisabledHedger()
     if config.kind == HedgeKind.DELAY:

@@ -63,8 +63,11 @@ class RefreshingPolicyStore:
             metrics: Counts ``routing_policy_refresh_total{outcome}`` when given.
             sleep: Waits between refreshes (injected so tests drive the loop).
 
+        A callee raises ``AppError``: ``INVALID_INPUT`` when ``interval_s`` is not
+        positive.
+
         Raises:
-            AppError: ``INVALID_INPUT`` when ``interval_s`` is not positive.
+            invalid: Routing policy refresh interval must be positive, got ``interval_s``.
 
         """
         if interval_s <= 0:
@@ -89,6 +92,10 @@ class RefreshingPolicyStore:
         """Return the stored workspace policy, else the stored tenant one.
 
         Else the fallback's.
+
+        Returns:
+            The stored workspace policy, else the stored tenant one.
+
         """
         snapshot = self._snapshot
         stored = snapshot.get((tenant_id, workspace_id))
@@ -110,7 +117,12 @@ class RefreshingPolicyStore:
         self._count("ok")
 
     async def __aenter__(self) -> Self:
-        """Refresh once, then start the refresh loop."""
+        """Refresh once, then start the refresh loop.
+
+        Returns:
+            This instance.
+
+        """
         await self.refresh()
         self._task = asyncio.create_task(self._run())
         return self

@@ -71,6 +71,10 @@ class ResponseGenerator(AnswerGenerator):
         """Stream the generated answer token-by-token.
 
         (history reaches the prompt as non-citable context).
+
+        Yields:
+            Each token.
+
         """
         iterator = await self._llm.stream(
             self._prompt.messages(query, passages, history or ()), self._config
@@ -87,6 +91,10 @@ class ResponseGenerator(AnswerGenerator):
         """Generate the full answer (non-streaming).
 
         History is non-citable context for the prompt.
+
+        Returns:
+            The answer text.
+
         """
         response = await self._llm.complete(
             self._prompt.messages(query, passages, history or ()), self._config

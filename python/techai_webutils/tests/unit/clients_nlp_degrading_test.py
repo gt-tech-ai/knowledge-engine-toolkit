@@ -29,7 +29,12 @@ _TASKS = frozenset({ENTITIES})
 
 
 def _primary(error: Exception) -> Annotator:
-    """Return a mocked annotator failing with ``error``."""
+    """Return a mocked annotator failing with ``error``.
+
+    Returns:
+        A mocked annotator failing with ``error``.
+
+    """
     primary = MagicMock(spec=Annotator)
     primary.annotate_batch = AsyncMock(side_effect=error)
     return primary

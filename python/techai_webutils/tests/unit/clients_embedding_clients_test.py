@@ -25,6 +25,10 @@ def _client_returning(embeddings: list[list[float]]) -> httpx.AsyncClient:
     """Return a mock httpx.AsyncClient whose post() returns an Ollama /api/embed.
 
     Response.
+
+    Returns:
+        A mock httpx.AsyncClient whose post() returns an Ollama /api/embed.
+
     """
     resp = MagicMock()
     resp.json.return_value = {"embeddings": embeddings}

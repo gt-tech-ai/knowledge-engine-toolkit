@@ -56,7 +56,12 @@ class _Flows(Protocol):
 
 
 def _tx_manager(events: list[str]) -> MagicMock:
-    """Return a TransactionManager mock recording begin/commit/rollback around ``fn``."""
+    """Return a TransactionManager mock recording begin/commit/rollback around ``fn``.
+
+    Returns:
+        A TransactionManager mock recording begin/commit/rollback around ``fn``.
+
+    """
     tx = MagicMock(spec=TransactionManager)
 
     async def with_transaction(fn: object) -> object:

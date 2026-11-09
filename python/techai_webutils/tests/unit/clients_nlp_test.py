@@ -42,7 +42,12 @@ _BLOCKS = [TextBlock("Acme opened in Berlin.", "c1"), TextBlock("Nothing here.",
 
 @Language.component("explode_if_run")
 def _explode_if_run(doc: Doc) -> Doc:
-    """Fail when run: proves the annotator disabled every component but ``ner``."""
+    """Fail when run: proves the annotator disabled every component but ``ner``.
+
+    Raises:
+        AssertionError: A disabled component ran on ``doc.text``.
+
+    """
     msg = f"a disabled component ran on {doc.text!r}"
     raise AssertionError(msg)
 
@@ -52,6 +57,10 @@ def pipeline(tmp_path: Path) -> str:
     """Save a small pipeline (a pattern ``ner`` and a component that must not run).
 
     Return its path.
+
+    Returns:
+        The pipeline directory.
+
     """
     nlp = spacy.blank("en")
     ruler = cast("EntityRuler", nlp.add_pipe("entity_ruler", name="ner"))

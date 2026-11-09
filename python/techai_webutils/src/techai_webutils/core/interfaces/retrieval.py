@@ -102,7 +102,12 @@ backend change. """
 
 
 def equals_all(fields: Mapping[str, str]) -> FilterExpr:
-    """Return the filter requiring every ``fields`` key to equal its value."""
+    """Return the filter requiring every ``fields`` key to equal its value.
+
+    Returns:
+        The filter requiring every ``fields`` key to equal its value.
+
+    """
     return FilterAnd(tuple(starmap(FilterEq, fields.items())))
 
 

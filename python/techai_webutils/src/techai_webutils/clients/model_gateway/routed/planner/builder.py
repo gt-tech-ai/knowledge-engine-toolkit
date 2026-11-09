@@ -51,6 +51,9 @@ def route_planner_from_config(
             product's ``RouteTransport``).
         metrics: Counts the overlord's fail-opens.
 
+    Returns:
+        The planner ``raw["kind"]`` selects (``local`` by default).
+
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.
         AppError: ``INVALID_INPUT`` for ``overlord`` without a target or a transport.

@@ -91,6 +91,10 @@ def _page_texts(doc: object) -> list[Page]:
     Iterates by index: pymupdf's ``Document`` has no typed ``__iter__``, and its
         ``page_count`` /
     ``load_page`` are untyped, so the document is read through the ``_PdfDocument`` view.
+
+    Returns:
+        The extracted pages.
+
     """
     pdf = cast("_PdfDocument", doc)
     return [
@@ -126,6 +130,10 @@ class MarkItDownParser:
         """Parse ``content`` into a ``ParsedDocument``.
 
         (never raises for a bad document).
+
+        Returns:
+            The parsed document.
+
         """
         fmt = detect_format(declared, filename, content)
         if fmt is DocumentFormat.UNKNOWN:
@@ -160,6 +168,10 @@ class MarkItDownParser:
         decodes instead of tripping MarkItDown's 'ascii' charset autodetect (guessed from
         the first 4 KiB), which failed such documents deep in the file. Genuinely-invalid
         bytes are sanitized (replaced) and retried.
+
+        Returns:
+            The Markdown.
+
         """
         from markitdown import StreamInfo  # noqa: PLC0415 — lazy: the parent never loads markitdown
 
@@ -173,7 +185,12 @@ class MarkItDownParser:
 
     @staticmethod
     def _pdf_pages(content: bytes) -> list[Page]:
-        """Extract per-page text from a PDF via pymupdf; return [] if extraction fails."""
+        """Extract per-page text from a PDF via pymupdf; return [] if extraction fails.
+
+        Returns:
+            The extracted pages; empty if extraction fails.
+
+        """
         import pymupdf  # noqa: PLC0415 — lazy so the parent process never loads pymupdf
 
         try:
@@ -196,6 +213,10 @@ class MarkItDownParser:
         streams from the open file (no in-memory copy), and PDF pages are extracted by
         opening the path. Never raises for a bad document — a failure is captured as
         ``error`` on the result.
+
+        Returns:
+            A document from a file ``path``.
+
         """
         fmt = detect_format(declared, filename, self._read_header(path))
         if fmt is DocumentFormat.UNKNOWN:
@@ -226,6 +247,10 @@ class MarkItDownParser:
         """Read a small prefix of the file for magic-byte format detection.
 
         (not the whole file).
+
+        Returns:
+            A small prefix of the file for magic-byte format detection.
+
         """
         with Path(path).open("rb") as f:
             return f.read(_HEADER_BYTES)
@@ -236,6 +261,13 @@ class MarkItDownParser:
         See _to_markdown. An invalid-byte failure is sanitized + retried only when the
         file fits _MAX_SANITIZE_BYTES, so the memory-bounded large lane never buffers a
         multi-GB file to recover a rare mis-encoding.
+
+        Returns:
+            A file to Markdown by streaming the open file, forcing UTF-8.
+
+        Raises:
+            UnicodeDecodeError: The converter could not decode the file as UTF-8.
+
         """
         from markitdown import StreamInfo  # noqa: PLC0415 — lazy: the parent never loads markitdown
 
@@ -261,6 +293,10 @@ class MarkItDownParser:
         """Extract per-page text from a PDF opened by path via pymupdf.
 
         Return [] on failure.
+
+        Returns:
+            The extracted pages; empty if extraction fails.
+
         """
         import pymupdf  # noqa: PLC0415 — lazy so the parent process never loads pymupdf
 

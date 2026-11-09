@@ -91,6 +91,10 @@ class PostgresStartBudget(StartBudget):
         """Take a free slot, then wait for the start interval.
 
         ``None`` once the wait times out.
+
+        Returns:
+            The slot, or ``None`` when none became available.
+
         """
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self._config.acquire_timeout_seconds
@@ -118,6 +122,10 @@ class PostgresStartBudget(StartBudget):
         """Enter the async context, opening the owned pacing pool.
 
         Lock sessions open on first use.
+
+        Returns:
+            This instance.
+
         """
         if self._owns_pool:
             self._pool = await self._stack.enter_async_context(
@@ -156,6 +164,10 @@ class PostgresStartBudget(StartBudget):
         The scan is serialized within the process: an advisory lock is re-entrant in its
             session, so
         two coroutines must never try the same slot's lock at once.
+
+        Returns:
+            The slot won, or ``None``.
+
         """
         async with self._scan:
             for index in range(self._config.slots):
@@ -167,7 +179,12 @@ class PostgresStartBudget(StartBudget):
         return None
 
     async def _lock(self, index: int) -> ManagedLock:
-        """Return slot ``index``'s lock, opening its session on first use."""
+        """Return slot ``index``'s lock, opening its session on first use.
+
+        Returns:
+            Slot ``index``'s lock, opening its session on first use.
+
+        """
         lock = self._locks.get(index)
         if lock is None:
             lock = self._new_lock(f"{self._config.account}:{index}")
@@ -184,6 +201,13 @@ class PostgresStartBudget(StartBudget):
         """Wait until a start is allowed and record it.
 
         ``False`` if that is past ``deadline``.
+
+        Returns:
+            Whether the start may proceed.
+
+        Raises:
+            InternalError: The postgres start budget paces only inside its async context.
+
         """
         account = self._config.account
         loop = asyncio.get_running_loop()

@@ -96,6 +96,10 @@ def in_transaction() -> bool:
     """Report whether the current task runs inside a workflow's transaction.
 
     (Go ``InTx``).
+
+    Returns:
+        Whether a transaction is active.
+
     """
     return _in_transaction.get()
 

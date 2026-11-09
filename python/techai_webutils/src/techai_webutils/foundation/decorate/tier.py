@@ -136,13 +136,22 @@ class Deps:
     sheds)."""
 
     def without_retry(self) -> Deps:
-        """Return these deps with no retrier, for an operation that is not idempotent."""
+        """Return these deps with no retrier, for an operation that is not idempotent.
+
+        Returns:
+            These deps with no retrier, for an operation that is not idempotent.
+
+        """
         return dataclasses.replace(self, retrier=None)
 
     def without_timeout(self) -> Deps:
         """Return these deps with no timeout.
 
         For a stream that outlives any call budget.
+
+        Returns:
+            These deps with no timeout.
+
         """
         return dataclasses.replace(self, timeout=0.0)
 
@@ -179,6 +188,10 @@ class Tier:
 
         A protocol adapter (a server's interceptors) walks ``order`` with it, standing in
         its own interceptor for a layer it implements natively.
+
+        Returns:
+            The middleware for one layer over the subject ``name``.
+
         """
         obs = deps.observability
         match layer:
@@ -215,7 +228,12 @@ class Tier:
                 return _when(deps.rate_limiter, new_rate_limit)
 
     def chain(self, name: str, deps: Deps) -> OpMiddleware:
-        """Build the tier's middleware chain for the subject ``name`` from ``deps``."""
+        """Build the tier's middleware chain for the subject ``name`` from ``deps``.
+
+        Returns:
+            The tier's middleware chain for the subject ``name`` from ``deps``.
+
+        """
         mws = (self.middleware(layer, name, deps) for layer in self.order)
         return chain(*(mw for mw in mws if mw is not None))
 
@@ -223,6 +241,10 @@ class Tier:
         """Build the chains one operation of the subject ``name`` can run on.
 
         From ``deps``.
+
+        Returns:
+            The chains one operation of the subject ``name`` can run on.
+
         """
         return Chains(
             full=self.chain(name, deps),
@@ -236,6 +258,10 @@ class Tier:
         """Build the Subject that runs any operation.
 
         Of ``name`` through the tier's chains.
+
+        Returns:
+            The Subject that runs any operation.
+
         """
         return Subject(name, self.chains(name, deps))
 
@@ -281,7 +307,12 @@ class View(IntEnum):
 def _when[C](
     collaborator: C | None, build: Callable[[C], OpMiddleware]
 ) -> OpMiddleware | None:
-    """Build the middleware only when its collaborator is present."""
+    """Build the middleware only when its collaborator is present.
+
+    Returns:
+        The middleware only when its collaborator is present.
+
+    """
     return None if collaborator is None else build(collaborator)
 
 
@@ -317,7 +348,12 @@ class Subject:
 
     @classmethod
     def plain(cls, name: str) -> Subject:
-        """Return the undecorated Subject named ``name``."""
+        """Return the undecorated Subject named ``name``.
+
+        Returns:
+            The undecorated Subject named ``name``.
+
+        """
         return cls(name, None)
 
     @property
@@ -329,17 +365,30 @@ class Subject:
         """Return this Subject on ``view``.
 
         ``ops=False`` drops the declared operations.
+
+        Returns:
+            This Subject on ``view``.
+
         """
         return Subject(self._name, self._all, self._ops if ops else None, view)
 
     def once(self) -> Subject:
-        """Return this Subject running every operation without its retry layer."""
+        """Return this Subject running every operation without its retry layer.
+
+        Returns:
+            This Subject running every operation without its retry layer.
+
+        """
         return self._with(View.ONCE)
 
     def observed(self) -> Subject:
         """Return this Subject running every operation.
 
         With its observability layers only.
+
+        Returns:
+            This Subject running every operation.
+
         """
         return self._with(View.OBSERVED)
 
@@ -347,6 +396,10 @@ class Subject:
         """Return this Subject running every operation without its retry.
 
         And timeout layers.
+
+        Returns:
+            This Subject running every operation without its retry.
+
         """
         return self._with(View.STREAMING)
 
@@ -355,6 +408,10 @@ class Subject:
 
         For an operation named outside the contract (a loop's pass, named by its loop),
         which the config tunes with the component.
+
+        Returns:
+            This Subject running any operation on the component's own chains.
+
         """
         return self._with(self._view, ops=False)
 
@@ -362,6 +419,10 @@ class Subject:
         """Return the deadline configured for ``op`` in seconds.
 
         (zero when none or undeclared).
+
+        Returns:
+            The deadline configured for ``op`` in seconds.
+
         """
         if self._ops is None:
             return self._all.timeout if self._all is not None else 0.0
@@ -372,6 +433,13 @@ class Subject:
         """Return the chain ``op`` runs on.
 
         An op the contract lacks raises ``AppRuntimeError``.
+
+        Returns:
+            The chain ``op`` runs on.
+
+        Raises:
+            AppRuntimeError: Decorate: ``self._name`` has no operation ``op``.
+
         """
         chains = self._all
         if self._ops is not None:
@@ -395,6 +463,10 @@ class Subject:
         """Run ``fn`` as the operation ``op`` through its chain.
 
         And return its result unchanged.
+
+        Returns:
+            What ``fn`` returns.
+
         """
         mw = self._chain(op)
         if mw is None:
@@ -402,5 +474,10 @@ class Subject:
         return await exec_op(mw, op, fn)
 
     async def exec_once[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run ``fn`` as the operation ``op`` without its retry layer."""
+        """Run ``fn`` as the operation ``op`` without its retry layer.
+
+        Returns:
+            What ``fn`` returns.
+
+        """
         return await self.once().exec(op, fn)

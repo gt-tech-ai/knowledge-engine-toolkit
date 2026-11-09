@@ -47,7 +47,12 @@ class RuledSplitter(SentenceSplitter):
 
     @override
     def split(self, text: str, *, language: str | None = None) -> list[TextSpan]:
-        """Return ``inner``'s spans with every matching span joined onto the next."""
+        """Return ``inner``'s spans with every matching span joined onto the next.
+
+        Returns:
+            ``inner``'s spans with every matching span joined onto the next.
+
+        """
         spans = self._inner.split(text, language=language)
         if not self._patterns:
             return spans
@@ -65,5 +70,10 @@ class RuledSplitter(SentenceSplitter):
         return joined
 
     def _joins(self, sentence: str) -> bool:
-        """Whether ``sentence`` fully matches a join pattern."""
+        """Whether ``sentence`` fully matches a join pattern.
+
+        Returns:
+            Whether ``sentence`` fully matches a join pattern.
+
+        """
         return any(p.fullmatch(sentence) for p in self._patterns)

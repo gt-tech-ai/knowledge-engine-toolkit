@@ -51,6 +51,9 @@ class RankingMetric(StrEnum):
 def _relevant(case: EvalCase) -> frozenset[str]:
     """Return the case's relevant ids.
 
+    Returns:
+        The case's relevant ids.
+
     Raises:
         AppError: ``INVALID_INPUT`` when the judgments are missing or not a JSON list of
             strings (the eval set is wrong, not the ranking).
@@ -70,12 +73,22 @@ def _relevant(case: EvalCase) -> frozenset[str]:
 
 
 def _ranked(retrieved: Sequence[str]) -> list[str]:
-    """Return ``retrieved`` with each id kept at its first rank only."""
+    """Return ``retrieved`` with each id kept at its first rank only.
+
+    Returns:
+        ``retrieved`` with each id kept at its first rank only.
+
+    """
     return list(dict.fromkeys(retrieved))
 
 
 def _gain(rank: int) -> float:
-    """Return the discounted gain of a relevant document at 1-based ``rank``."""
+    """Return the discounted gain of a relevant document at 1-based ``rank``.
+
+    Returns:
+        The discounted gain of a relevant document at 1-based ``rank``.
+
+    """
     return 1.0 / math.log2(rank + 1)
 
 
@@ -88,6 +101,10 @@ def _score(
 
     The ideal DCG ranks ``min(k, len(relevant))`` relevant documents first, however short
     ``top`` is, so a ranking that returns fewer than ``k`` documents is not rewarded.
+
+    Returns:
+        ``metric``.
+
     """
     hits = [rank for rank, doc in enumerate(top, start=1) if doc in relevant]
     if metric is RankingMetric.RECALL:
@@ -118,9 +135,11 @@ class RankingGrader(Grader):
     async def grade(self, case: EvalCase, output: EvalOutput) -> GradeResult:
         """Score ``output.retrieved`` against ``case.expected["relevant"]``.
 
-        Raises:
-            AppError: ``INVALID_INPUT`` when the case's relevance judgments are
-                unreadable.
+        A callee raises ``AppError``: ``INVALID_INPUT`` when the case's relevance
+        judgments are unreadable.
+
+        Returns:
+            The grade for this case.
 
         """
         name = f"{self._metric}@{self._k}"

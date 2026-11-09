@@ -49,7 +49,12 @@ _CONFIG = OpenSearchConfig(refresh_on_write=True, model="m1")
 
 @pytest_asyncio.fixture
 async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
-    """Yield a client on the first domain."""
+    """Yield a client on the first domain.
+
+    Yields:
+        A client on the first domain.
+
+    """
     client = AsyncOpenSearch(hosts=[opensearch_url])
     try:
         yield client
@@ -59,7 +64,12 @@ async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
 
 @pytest_asyncio.fixture
 async def client_b(opensearch_url_b: str) -> AsyncIterator[AsyncOpenSearch]:
-    """Yield a client on the second domain."""
+    """Yield a client on the second domain.
+
+    Yields:
+        A client on the second domain.
+
+    """
     client = AsyncOpenSearch(hosts=[opensearch_url_b])
     try:
         yield client
@@ -68,12 +78,22 @@ async def client_b(opensearch_url_b: str) -> AsyncIterator[AsyncOpenSearch]:
 
 
 def _collection() -> str:
-    """Return a collection name no other test uses."""
+    """Return a collection name no other test uses.
+
+    Returns:
+        A collection name no other test uses.
+
+    """
     return f"c{uuid.uuid4().hex[:10]}"
 
 
 def _entry(doc: str, n: int, org: str, vector: list[float], **extra: str) -> VectorEntry:
-    """Return chunk ``n`` of ``doc`` in ``org``."""
+    """Return chunk ``n`` of ``doc`` in ``org``.
+
+    Returns:
+        Chunk ``n`` of ``doc`` in ``org``.
+
+    """
     return VectorEntry(
         id=f"{doc}:{n}",
         document_id=doc,
@@ -86,7 +106,12 @@ def _entry(doc: str, n: int, org: str, vector: list[float], **extra: str) -> Vec
 def _store(
     client: AsyncOpenSearch, config: OpenSearchConfig = _CONFIG
 ) -> OpenSearchVectorStore:
-    """Build the single-domain store through the factory."""
+    """Build the single-domain store through the factory.
+
+    Returns:
+        The single-domain store through the factory.
+
+    """
     store = new_vector_store_from_config(
         VectorStoreConfig(
             kind=VectorStoreKind.OPENSEARCH, dimension=4, opensearch=config
@@ -234,7 +259,12 @@ async def test_calls_without_an_org_are_refused(client: AsyncOpenSearch) -> None
 
 
 async def _count(client: AsyncOpenSearch, index: str) -> int:
-    """Return the documents in ``index`` (refreshed first)."""
+    """Return the documents in ``index`` (refreshed first).
+
+    Returns:
+        The documents in ``index`` (refreshed first).
+
+    """
     await client.indices.refresh(index=index)
     response = cast("dict[str, int]", await client.count(index=index))
     return response["count"]
@@ -340,7 +370,12 @@ async def test_disk_mode_index_is_created_and_searchable(client: AsyncOpenSearch
 
 
 async def _vector_mapping(client: AsyncOpenSearch, index: str) -> dict[str, object]:
-    """Return the mapping of ``index``'s searched vector field."""
+    """Return the mapping of ``index``'s searched vector field.
+
+    Returns:
+        The mapping of ``index``'s searched vector field.
+
+    """
     mapping = cast(
         "dict[str, dict[str, dict[str, dict[str, dict[str, object]]]]]",
         await client.indices.get_mapping(index=index),
@@ -349,7 +384,12 @@ async def _vector_mapping(client: AsyncOpenSearch, index: str) -> dict[str, obje
 
 
 def _unit(*parts: tuple[int, float]) -> list[float]:
-    """Return a 16-component vector with the given ``(position, value)`` parts."""
+    """Return a 16-component vector with the given ``(position, value)`` parts.
+
+    Returns:
+        A 16-component vector with the given ``(position, value)`` parts.
+
+    """
     vector = [0.0] * 16
     for position, value in parts:
         vector[position] = value
@@ -416,7 +456,12 @@ async def test_truncated_dimension_index_rescored_with_full_vector(
 
 
 async def _settings(client: AsyncOpenSearch, index: str) -> dict[str, object]:
-    """Return ``index``'s index settings."""
+    """Return ``index``'s index settings.
+
+    Returns:
+        ``index``'s index settings.
+
+    """
     response = cast(
         "dict[str, dict[str, dict[str, dict[str, object]]]]",
         await client.indices.get_settings(index=index),
@@ -428,6 +473,10 @@ async def _failing_backfill(clients: list[AsyncOpenSearch], index: str) -> None:
     """Check bulk-ingest settings are in force everywhere.
 
     Then fail like a dead backfill.
+
+    Raises:
+        RuntimeError: Backfill failed.
+
     """
     for client in clients:
         during = await _settings(client, index)
@@ -548,7 +597,12 @@ async def test_two_domains_route_by_shard_and_search_fans_out(
 
 
 def _multi(clients: dict[str, AsyncOpenSearch], model: str) -> MultiDomainVectorStore:
-    """Build a dedicated-layout store over two domains (shard 0 on ``a``, 1 on ``b``)."""
+    """Build a dedicated-layout store over two domains (shard 0 on ``a``, 1 on ``b``).
+
+    Returns:
+        A dedicated-layout store over two domains (shard 0 on ``a``, 1 on ``b``).
+
+    """
     config = replace(
         _CONFIG,
         model=model,

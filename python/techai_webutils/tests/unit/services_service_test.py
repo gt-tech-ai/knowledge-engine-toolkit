@@ -38,7 +38,12 @@ class _Orders(CrudService[Any, Any, Any]):
 
 
 def _repo() -> MagicMock:
-    """Return a Repository mock answering every CRUD call."""
+    """Return a Repository mock answering every CRUD call.
+
+    Returns:
+        A Repository mock answering every CRUD call.
+
+    """
     repo = MagicMock(spec=Repository)
     repo.get = AsyncMock(return_value="e1")
     repo.list = AsyncMock(return_value=Page(items=["e1"], total=1))
@@ -49,7 +54,12 @@ def _repo() -> MagicMock:
 
 
 def _reject_blank(entity: str) -> None:
-    """Validate an entity: a blank one is invalid input."""
+    """Validate an entity: a blank one is invalid input.
+
+    Raises:
+        InvalidInputError: Entity must not be blank.
+
+    """
     if not entity:
         msg = "entity must not be blank"
         raise InvalidInputError(msg)

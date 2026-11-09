@@ -46,7 +46,15 @@ from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntime
 
 
 async def _pass_even(item: int) -> StepResult:
-    """Module-level mapper (picklable for Ray): pass even items, raise on odd ones."""
+    """Module-level mapper (picklable for Ray): pass even items, raise on odd ones.
+
+    Returns:
+        A passing step for the item.
+
+    Raises:
+        ValueError: Odd item ``item``.
+
+    """
     await asyncio.sleep(0)
     if item % 2 == 1:
         msg = f"odd item {item}"
@@ -58,7 +66,15 @@ class _EvenWorker:
     """PooledWorker (built inside a Ray actor): pass even items, raise on odd ones."""
 
     async def process(self, item: object) -> StepResult:
-        """Pass an even item; raise on an odd one (to prove real per-item isolation)."""
+        """Pass an even item; raise on an odd one (to prove real per-item isolation).
+
+        Returns:
+            A passing step for the item.
+
+        Raises:
+            ValueError: Odd item ``item``.
+
+        """
         if isinstance(item, int) and item % 2 == 1:
             msg = f"odd item {item}"
             raise ValueError(msg)
@@ -69,7 +85,12 @@ class _EvenWorker:
 
 
 async def _build_even_worker() -> PooledWorker[int]:
-    """Module-level WorkerFactory (picklable for Ray): build one _EvenWorker per actor."""
+    """Module-level WorkerFactory (picklable for Ray): build one _EvenWorker per actor.
+
+    Returns:
+        The worker.
+
+    """
     await asyncio.sleep(0)
     return _EvenWorker()
 
@@ -153,6 +174,10 @@ class _DiesOnceWorker:
         """Kill this actor's process on the first call ever.
 
         Pass every item afterwards.
+
+        Returns:
+            A passing step for the item.
+
         """
         await asyncio.to_thread(_die_once, self._marker)
         return StepResult(name=f"item-{item}")
@@ -165,6 +190,10 @@ async def _build_dies_once_worker(marker: str) -> PooledWorker[int]:
     """Module-level WorkerFactory body (bound with ``functools.partial``).
 
     One _DiesOnceWorker per actor.
+
+    Returns:
+        The worker.
+
     """
     await asyncio.sleep(0)
     return _DiesOnceWorker(marker)

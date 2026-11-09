@@ -47,6 +47,10 @@ def botocore_error_to_app_error(
     the resilience decorators
         and the
     transport status mapping derive their behaviour from the ``ErrorCode``.
+
+    Returns:
+        The coded error.
+
     """
     if isinstance(exc, ClientError):
         err = exc.response.get("Error", {})

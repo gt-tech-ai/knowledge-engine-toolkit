@@ -56,13 +56,22 @@ def client_interceptors(
     (``grpc_error_to_app_error``) and handed back to the caller unchanged; a failure the
     tier produced itself (an open breaker, a full bulkhead, a timeout) becomes an
     ``AioRpcError`` of its code.
+
+    Returns:
+        The interceptors that run every call on a channel through ``base``.
+
     """
     token = service_token or ""
     return [_UnaryClient(base, token), _StreamClient(token)]
 
 
 def operation(method: str | bytes) -> str:
-    """Name a call's operation by its method without the leading slash."""
+    """Name a call's operation by its method without the leading slash.
+
+    Returns:
+        The operation name.
+
+    """
     name = method.decode() if isinstance(method, bytes) else method
     return name.lstrip("/")
 
@@ -74,6 +83,10 @@ def outgoing(details: ClientCallDetails, token: str) -> ClientCallDetails:
 
     The token is not added when it is empty or an ``authorization`` value is already
     present.
+
+    Returns:
+        ``details`` carrying the active trace context and the service token.
+
     """
     metadata = Metadata(*(details.metadata or ()))
     carrier: dict[str, str] = {}
@@ -96,6 +109,10 @@ def to_rpc_error(err: AppError) -> AioRpcError:
 
     A server's own status (the error's cause) is returned unchanged; a failure the tier
     produced becomes the status of its code.
+
+    Returns:
+        The ``AioRpcError`` the caller sees for a coded failure.
+
     """
     if isinstance(err.cause, AioRpcError):
         return err.cause
@@ -120,7 +137,15 @@ class _UnaryClient(grpc.aio.UnaryUnaryClientInterceptor):
         client_call_details: ClientCallDetails,
         request: TRequest,
     ) -> TResponse | UnaryUnaryCall[TRequest, TResponse]:
-        """Run the call through the tier, awaiting each attempt inside it."""
+        """Run the call through the tier, awaiting each attempt inside it.
+
+        Returns:
+            The call's response, or the call object for a stream.
+
+        Raises:
+            to_rpc_error: The coded error for a failed attempt.
+
+        """
 
         async def attempt() -> UnaryUnaryCall[TRequest, TResponse]:
             call = await continuation(outgoing(client_call_details, self._token), request)
@@ -162,5 +187,10 @@ class _StreamClient(grpc.aio.UnaryStreamClientInterceptor):
         client_call_details: ClientCallDetails,
         request: TRequest,
     ) -> AsyncIterator[TResponse] | UnaryStreamCall[TRequest, TResponse]:
-        """Open the stream with the trace context and service token in its metadata."""
+        """Open the stream with the trace context and service token in its metadata.
+
+        Returns:
+            The stream with the trace context and service token in its metadata.
+
+        """
         return await continuation(outgoing(client_call_details, self._token), request)

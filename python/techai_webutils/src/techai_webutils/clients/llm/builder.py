@@ -29,12 +29,44 @@ _MODEL_KINDS = frozenset({LlmKind.OLLAMA, LlmKind.BEDROCK, LlmKind.OPENAI_COMPAT
 """The kinds that need ``LlmConfig.model`` (every kind but the stub)."""
 
 
+def _build_bedrock(config: LlmConfig) -> LLMProvider:
+    """Build the Bedrock provider, with a fallback chain when one is configured.
+
+    Returns:
+        The Bedrock provider, or a fallback pair when ``fallback_model`` is set.
+
+    """
+    # Lazy import: keep aiobotocore off the dev/stub path (loaded only in stage/prod).
+    from techai_webutils.clients.llm.bedrock import BedrockLlmProvider  # noqa: PLC0415
+
+    primary = BedrockLlmProvider(
+        region=config.region, model=config.model, endpoint=config.endpoint
+    )
+    if not config.fallback_model:
+        return primary
+    # Wrap with the throttle/5xx fallback chain; the decorator is only loaded here.
+    from techai_webutils.clients.llm.decorators import FallbackLlmProvider  # noqa: PLC0415
+
+    fallback = BedrockLlmProvider(
+        region=config.region, model=config.fallback_model, endpoint=config.endpoint
+    )
+    return FallbackLlmProvider(primary, fallback)
+
+
 def new_llm_from_config(config: LlmConfig) -> LLMProvider:
     """Build the stub, ollama, bedrock or openai_compatible LLMProvider.
 
     The ollama, bedrock and openai_compatible kinds require ``config.model``
     (``ValueError`` when empty): there is no built-in default, and a provider with no
     model would only fail on its first request.
+
+    Returns:
+        The stub, ollama, bedrock or openai_compatible LLMProvider.
+
+    Raises:
+        AppValueError: ``config.kind`` llm kind requires a model id, got empty; unknown
+            llm kind: ``config.kind``.
+
     """
     if config.kind is LlmKind.STUB:
         return StubLlmProvider()
@@ -61,20 +93,6 @@ def new_llm_from_config(config: LlmConfig) -> LLMProvider:
             client, config.model, stall_timeout_seconds=config.stall_timeout_seconds
         )
     if config.kind is LlmKind.BEDROCK:
-        # Lazy import: keep aiobotocore off the dev/stub path (loaded only in stage/prod).
-        from techai_webutils.clients.llm.bedrock import BedrockLlmProvider  # noqa: PLC0415
-
-        primary = BedrockLlmProvider(
-            region=config.region, model=config.model, endpoint=config.endpoint
-        )
-        if not config.fallback_model:
-            return primary
-        # Wrap with the throttle/5xx fallback chain; the decorator is only loaded here.
-        from techai_webutils.clients.llm.decorators import FallbackLlmProvider  # noqa: PLC0415
-
-        fallback = BedrockLlmProvider(
-            region=config.region, model=config.fallback_model, endpoint=config.endpoint
-        )
-        return FallbackLlmProvider(primary, fallback)
+        return _build_bedrock(config)
     msg = f"unknown llm kind: {config.kind!r}"
     raise AppValueError(msg)

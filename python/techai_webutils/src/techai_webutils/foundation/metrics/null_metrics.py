@@ -23,7 +23,12 @@ class NullMetricsProvider(MetricsProvider):
     def counter(
         self, name: str, help_text: str, labels: list[str] | None = None
     ) -> MetricCounter:
-        """Return a no-op counter."""
+        """Return a no-op counter.
+
+        Returns:
+            A no-op counter.
+
+        """
         return _NullCounter()
 
     @override
@@ -34,14 +39,24 @@ class NullMetricsProvider(MetricsProvider):
         labels: list[str] | None = None,
         buckets: list[float] | None = None,
     ) -> MetricHistogram:
-        """Return a no-op histogram."""
+        """Return a no-op histogram.
+
+        Returns:
+            A no-op histogram.
+
+        """
         return _NullHistogram()
 
     @override
     def gauge(
         self, name: str, help_text: str, labels: list[str] | None = None
     ) -> MetricGauge:
-        """Return a no-op gauge."""
+        """Return a no-op gauge.
+
+        Returns:
+            A no-op gauge.
+
+        """
         return _NullGauge()
 
 

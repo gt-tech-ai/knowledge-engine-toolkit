@@ -56,6 +56,9 @@ def sink_from_config(
     ``OpenSearchVectorStore``; the ``bedrock`` kind through ``storage``, an object-store
     client for the data source's bucket.
 
+    Returns:
+        The ``Sink`` ``config.kind`` selects.
+
     Raises:
         AppValueError: An unknown kind, ``opensearch`` without a store, or ``bedrock``
             without storage, a bucket or a positive concurrency (``INVALID_INPUT``).
@@ -76,6 +79,9 @@ def sink_from_config(
 
 def _bedrock_sink(config: SinkConfig, storage: StorageClient | None) -> Sink:
     """Build the ``bedrock`` sink, refusing a configuration that cannot write.
+
+    Returns:
+        The ``bedrock`` sink, refusing a configuration that cannot write.
 
     Raises:
         AppValueError: No storage, no bucket, or a concurrency below one

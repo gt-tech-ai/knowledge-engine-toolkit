@@ -21,7 +21,12 @@ _CASES = sorted(_GOLDEN.glob("*.json"))
 
 
 def _state(raw: dict[str, object]) -> StageState:
-    """Build a ``StageState`` from a golden case's JSON record."""
+    """Build a ``StageState`` from a golden case's JSON record.
+
+    Returns:
+        A ``StageState`` from a golden case's JSON record.
+
+    """
     return StageState(
         org_id=str(raw["org_id"]),
         document_id=str(raw["document_id"]),

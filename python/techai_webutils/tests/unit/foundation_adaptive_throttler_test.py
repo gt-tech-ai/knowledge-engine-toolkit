@@ -92,13 +92,23 @@ async def test_sheds_locally_without_calling_op() -> None:
 
 
 async def _ok() -> str:
-    """Succeed like a backend call (feeds the accept window)."""
+    """Succeed like a backend call (feeds the accept window).
+
+    Returns:
+        ``"ok"``.
+
+    """
     await asyncio.sleep(0)
     return "ok"
 
 
 async def _fail() -> str:
-    """Fail like a backend call (does not feed the accept window)."""
+    """Fail like a backend call (does not feed the accept window).
+
+    Raises:
+        RuntimeError: Backend down.
+
+    """
     await asyncio.sleep(0)
     msg = "backend down"
     raise RuntimeError(msg)

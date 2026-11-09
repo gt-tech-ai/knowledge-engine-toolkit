@@ -25,7 +25,12 @@ from techai_webutils.core.interfaces.retrieval import RetrievalEngine, Retrieval
 
 
 def _passage(n: int, score: float) -> RetrievalResult:
-    """Return passage ``n`` scoring ``score``."""
+    """Return passage ``n`` scoring ``score``.
+
+    Returns:
+        Passage ``n`` scoring ``score``.
+
+    """
     return RetrievalResult(
         document_id=f"d{n}",
         document_name=f"Doc {n}",
@@ -40,6 +45,10 @@ def _engine(passages: list[RetrievalResult]) -> RetrievalEngine:
     """Return a mocked backend engine.
 
     (e.g. Bedrock with its reranker) returning ``passages``.
+
+    Returns:
+        A mocked backend engine.
+
     """
     engine = MagicMock(spec=RetrievalEngine)
     engine.retrieve = AsyncMock(return_value=passages)

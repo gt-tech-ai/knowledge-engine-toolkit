@@ -203,6 +203,9 @@ class SemanticCacheReader:
 
         Returns: The read.
 
+        Returns:
+            What the lookup found.
+
         """
         set_served_from_cache(value=False)
         hit: CachedAnswer | None = None
@@ -241,6 +244,9 @@ class SemanticCacheReader:
             answer: The decoded cached answer.
 
         Returns: The hook's replacement, or ``answer``.
+
+        Returns:
+            The served value.
 
         Raises:
             AppError: any coded error from the hook, which refuses the hit (reported as a
@@ -320,6 +326,10 @@ class SemanticCacheReader:
         """Count the read and its hit (with the saving) or miss under ``org_id``.
 
         Return the saving.
+
+        Returns:
+            The read and its hit (with the saving) or miss under ``org_id``.
+
         """
         labels = {
             "org_id": org_id,
@@ -359,6 +369,10 @@ class SemanticCacheReader:
         """Return the lower edge of the bin ``similarity`` falls in.
 
         (``<edge`` below the first).
+
+        Returns:
+            The lower edge of the bin ``similarity`` falls in.
+
         """
         edges = [edge for edge in self._bins if similarity >= edge]
         return f"{max(edges):.2f}" if edges else f"<{self._bins[0]:.2f}"

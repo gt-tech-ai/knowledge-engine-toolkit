@@ -23,7 +23,12 @@ _INTERVENED = "GUARDRAIL_INTERVENED"
 
 
 def _assessment_flags(assessment: dict[str, Any]) -> list[str]:
-    """Return the flags one guardrail assessment raised."""
+    """Return the flags one guardrail assessment raised.
+
+    Returns:
+        The flags one guardrail assessment raised.
+
+    """
     content = assessment.get("contentPolicy", {}).get("filters", [])
     topics = assessment.get("topicPolicy", {}).get("topics", [])
     sensitive = assessment.get("sensitiveInformationPolicy", {})
@@ -59,7 +64,12 @@ class BedrockGuardrailsSafetyCheck(SafetyCheck):
 
     @override
     async def scan(self, text: str, *, kind: ScanKind) -> SafetyResult:
-        """Return the verdict for ``text`` from the guardrail's action and assessments."""
+        """Return the verdict for ``text`` from the guardrail's action and assessments.
+
+        Returns:
+            The verdict for ``text`` from the guardrail's action and assessments.
+
+        """
         response = await self._client.call(
             "apply_guardrail",
             guardrailIdentifier=self._guardrail_id,

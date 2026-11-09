@@ -105,8 +105,8 @@ class SnapshotAdmin:
     async def register(self, repo: SnapshotRepository) -> None:
         """Register (or re-register, unchanged) ``repo`` on the domain.
 
-        Raises:
-            AppValueError: The repository names no name, or misses its kind's location.
+        A callee raises ``AppValueError``: The repository names no name, or misses its
+        kind's location.
 
         """
         await self._client.snapshot.create_repository(
@@ -118,8 +118,8 @@ class SnapshotAdmin:
 
         Indices or retention changed.
 
-        Raises:
-            AppValueError: The schedule names no policy or cron, or a negative ``keep``.
+        A callee raises ``AppValueError``: The schedule names no policy or cron, or a
+        negative ``keep``.
 
         """
         body = _policy_body(schedule, repository)
@@ -153,6 +153,10 @@ class SnapshotAdmin:
         """Return the newest successful snapshot in ``repository`` holding ``index``.
 
         If any.
+
+        Returns:
+            The newest successful snapshot in ``repository`` holding ``index``.
+
         """
         response = cast(
             "dict[str, list[dict[str, object]]]",
@@ -225,7 +229,12 @@ class SnapshotAdmin:
             raise AppTimeoutError(msg)
 
     async def count(self, index: str, *, field: str, value: str) -> int:
-        """Return how many documents of ``index`` hold ``value`` in ``field``."""
+        """Return how many documents of ``index`` hold ``value`` in ``field``.
+
+        Returns:
+            How many documents of ``index`` hold ``value`` in ``field``.
+
+        """
         response = cast(
             "dict[str, int]",
             await self._client.count(
@@ -238,6 +247,10 @@ class SnapshotAdmin:
         """Return the id of one document of ``index`` holding ``value`` in ``field``.
 
         If any.
+
+        Returns:
+            The id of one document of ``index`` holding ``value`` in ``field``.
+
         """
         response = cast(
             "dict[str, dict[str, list[dict[str, object]]]]",
@@ -259,6 +272,9 @@ class SnapshotAdmin:
 
 def _repository_body(repo: SnapshotRepository) -> dict[str, object]:
     """Return the ``PUT _snapshot/<name>`` body for ``repo``.
+
+    Returns:
+        The ``PUT _snapshot/<name>`` body for ``repo``.
 
     Raises:
         AppValueError: As in ``SnapshotAdmin.register``.
@@ -292,6 +308,9 @@ def _repository_body(repo: SnapshotRepository) -> dict[str, object]:
 
 def _policy_body(schedule: SnapshotSchedule, repository: str) -> dict[str, object]:
     """Return the SM policy body for ``schedule`` writing to ``repository``.
+
+    Returns:
+        The SM policy body for ``schedule`` writing to ``repository``.
 
     Raises:
         AppValueError: As in ``SnapshotAdmin.ensure_schedule``.
@@ -328,6 +347,10 @@ def _matches(existing: dict[str, object], body: dict[str, object]) -> bool:
     """Report whether the stored policy already has ``body``'s schedule.
 
     Indices and retention.
+
+    Returns:
+        Whether the stored policy already matches.
+
     """
     want_config = cast("dict[str, object]", body["snapshot_config"])
     have_config = cast("dict[str, object]", existing.get("snapshot_config", {}))

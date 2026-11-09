@@ -84,6 +84,10 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         The engine has one collection, so an ``index_id`` other than ``None`` or the
         collection name cannot be routed; it is logged as a warning (a consumer isolating
         scopes by index must not rely on it here) and the collection is searched.
+
+        Returns:
+            The retrieved passages.
+
         """
         if index_id is not None and index_id != self._collection:
             logger.warning(
@@ -114,6 +118,10 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         """Fuse the k-NN and keyword hits by chunk id.
 
         Each result carries its fused score.
+
+        Returns:
+            The retrieved passages.
+
         """
         hits = {hit.chunk_id: hit for hit in (*keyword, *dense)}
         fused = fuse(
@@ -138,6 +146,10 @@ def _to_retrieval_result(hit: VectorSearchResult) -> RetrievalResult:
     hit) and ``hit`` is discarded right after this mapping, so the result carries it
     directly rather than copying it. The hit's chunk id is added as the ``chunk_id`` key
     when the payload lacks one, so a citation can name its chunk.
+
+    Returns:
+        The mapped result.
+
     """
     hit.metadata.setdefault(CHUNK_ID_KEY, hit.chunk_id)
     page_raw = hit.metadata.get("page_number", "")

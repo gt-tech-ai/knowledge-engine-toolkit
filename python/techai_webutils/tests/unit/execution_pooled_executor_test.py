@@ -50,7 +50,12 @@ class _CountingWorker:
         log.built += 1
 
     async def process(self, item: int) -> StepResult:
-        """Record the item and return a passing StepResult."""
+        """Record the item and return a passing StepResult.
+
+        Returns:
+            A passing step for the item.
+
+        """
         self._log.processed.append(item)
         return StepResult(name=f"item-{item}")
 
@@ -60,7 +65,12 @@ class _CountingWorker:
 
 
 def _counting_factory(log: _Log):  # noqa: ANN202
-    """Return a WorkerFactory that builds counting workers recording into ``log``."""
+    """Return a WorkerFactory that builds counting workers recording into ``log``.
+
+    Returns:
+        A WorkerFactory that builds counting workers recording into ``log``.
+
+    """
 
     async def build() -> PooledWorker[int]:
         await asyncio.sleep(0)

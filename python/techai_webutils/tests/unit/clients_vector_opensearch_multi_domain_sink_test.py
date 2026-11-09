@@ -21,6 +21,10 @@ def _domain(index: str | None, model: tuple[str, str] = ("m", "1")) -> MagicMock
     """Return a mocked domain client whose alias reads from ``index``.
 
     (none when ``None``).
+
+    Returns:
+        A mocked domain client whose alias reads from ``index``.
+
     """
     client = MagicMock()
     client.indices.exists_alias = AsyncMock(return_value=index is not None)
@@ -37,6 +41,10 @@ def _store(a: MagicMock, b: MagicMock) -> MultiDomainVectorStore:
     """Return a two-domain store.
 
     (shard 0 → ``a``, shard 1 → ``b``) built by the factory.
+
+    Returns:
+        A two-domain store.
+
     """
     config = VectorStoreConfig(
         kind=VectorStoreKind.OPENSEARCH,
@@ -51,7 +59,12 @@ def _store(a: MagicMock, b: MagicMock) -> MultiDomainVectorStore:
 
 
 def _document(model: str = "m") -> SinkDocument:
-    """Return a document embedded with ``model`` version ``1``."""
+    """Return a document embedded with ``model`` version ``1``.
+
+    Returns:
+        A document embedded with ``model`` version ``1``.
+
+    """
     return SinkDocument(
         org_id="o1",
         document_id="d",

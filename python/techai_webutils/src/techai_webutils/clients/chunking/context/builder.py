@@ -55,6 +55,9 @@ def contextualizer_from_config(
 
     ``llm`` is the ``llm`` kind's model.
 
+    Returns:
+        The ``ChunkContextualizer`` ``config.kind`` selects.
+
     Raises:
         AppValueError: An unknown kind, or ``llm`` without a model or with a limit below 1
             (``INVALID_INPUT``).

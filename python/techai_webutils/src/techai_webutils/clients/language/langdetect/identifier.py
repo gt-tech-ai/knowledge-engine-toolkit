@@ -30,7 +30,12 @@ class LangdetectIdentifier(LanguageIdentifier):
 
     @override
     def identify(self, text: str) -> LanguageGuess:
-        """Return langdetect's most probable language, or ``UNDETERMINED_GUESS``."""
+        """Return langdetect's most probable language, or ``UNDETERMINED_GUESS``.
+
+        Returns:
+            Langdetect's most probable language, or ``UNDETERMINED_GUESS``.
+
+        """
         stripped = text.strip()
         if not stripped:
             return UNDETERMINED_GUESS

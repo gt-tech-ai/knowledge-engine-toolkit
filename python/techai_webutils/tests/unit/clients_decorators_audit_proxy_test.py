@@ -73,21 +73,36 @@ _CLEAN = SafetyResult(flags=(), decision=SafetyDecision.ALLOW, redacted=None)
 
 
 def _check(*results: SafetyResult) -> MagicMock:
-    """Return a safety check answering ``results`` in turn."""
+    """Return a safety check answering ``results`` in turn.
+
+    Returns:
+        A safety check answering ``results`` in turn.
+
+    """
     check = MagicMock(spec=SafetyCheck)
     check.scan = AsyncMock(side_effect=list(results))
     return check
 
 
 def _sink(error: Exception | None = None) -> MagicMock:
-    """Return an audit sink that records (or raises ``error``)."""
+    """Return an audit sink that records (or raises ``error``).
+
+    Returns:
+        An audit sink that records (or raises ``error``).
+
+    """
     sink = MagicMock(spec=AuditSink)
     sink.record = AsyncMock(side_effect=error)
     return sink
 
 
 def _inner() -> MagicMock:
-    """Return a provider answering ``_RESPONSE``."""
+    """Return a provider answering ``_RESPONSE``.
+
+    Returns:
+        A provider answering ``_RESPONSE``.
+
+    """
     inner = MagicMock(spec=LLMProvider)
     inner.complete = AsyncMock(return_value=_RESPONSE)
     return inner
@@ -102,7 +117,12 @@ def _audit(
     enforcement: AuditEnforcement = AuditEnforcement.ENFORCED,
     metrics: MetricsProvider | None = None,
 ) -> AuditProxy:
-    """Wrap ``inner`` for the ``generate`` step with a fixed clock and context."""
+    """Wrap ``inner`` for the ``generate`` step with a fixed clock and context.
+
+    Returns:
+        The proxy.
+
+    """
     return AuditProxy(
         inner,
         sink=sink,
@@ -117,7 +137,12 @@ def _audit(
 
 
 def _recorded(sink: MagicMock) -> AuditRecord:
-    """Return the one record ``sink`` received."""
+    """Return the one record ``sink`` received.
+
+    Returns:
+        The one record ``sink`` received.
+
+    """
     sink.record.assert_awaited_once()
     return sink.record.await_args.args[0]
 
@@ -413,7 +438,12 @@ async def test_block_short_circuits_forbidden_and_still_audited() -> None:
 
 
 async def _items(*items: str | StreamUsage) -> AsyncIterator[str | StreamUsage]:
-    """Yield ``items``."""
+    """Yield ``items``.
+
+    Yields:
+        ``items``.
+
+    """
     for item in items:
         await asyncio.sleep(0)
         yield item

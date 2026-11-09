@@ -16,7 +16,12 @@ from techai_webutils.core.interfaces.embedding import EmbeddingProvider, Embeddi
 
 
 def _inner() -> MagicMock:
-    """Return a mocked provider whose vector for a text is ``[len(text)]``."""
+    """Return a mocked provider whose vector for a text is ``[len(text)]``.
+
+    Returns:
+        A mocked provider whose vector for a text is ``[len(text)]``.
+
+    """
     inner = MagicMock(spec=EmbeddingProvider)
 
     def batch(texts: list[str], *, input_type: str = "document") -> list[EmbeddingResult]:

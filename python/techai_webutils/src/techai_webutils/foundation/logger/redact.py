@@ -31,5 +31,9 @@ def redact_pii(text: str) -> str:
     """Replace PII (email, phone, SSN, IPv4.
 
     Auth tokens) in ``text`` with ``[REDACTED]`` in one pass.
+
+    Returns:
+        The redacted text.
+
     """
     return _PII_PATTERN.sub(REDACTED, text)

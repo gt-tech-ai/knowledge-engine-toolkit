@@ -89,7 +89,12 @@ def test_parsed_from_json_refuses_unknown_versions_and_malformed_payloads() -> N
 
 
 def _part(first: int, last: int, *, error: str = "") -> ParsedDocument:
-    """Return a PDF part covering pages ``first``..``last``, one block per page."""
+    """Return a PDF part covering pages ``first``..``last``, one block per page.
+
+    Returns:
+        A PDF part covering pages ``first``..``last``, one block per page.
+
+    """
     pages = [Page(n, f"page {n}") for n in range(first, last + 1)]
     blocks = tuple(
         DocumentBlock(BlockType.PARAGRAPH, f"page {n}", i, n)

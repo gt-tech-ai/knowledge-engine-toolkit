@@ -32,7 +32,12 @@ if TYPE_CHECKING:
 
 
 async def _stream(*tokens: str | StreamUsage) -> AsyncIterator[str | StreamUsage]:
-    """Yield the given items then complete (an async token stream)."""
+    """Yield the given items then complete (an async token stream).
+
+    Yields:
+        The given items then complete (an async token stream).
+
+    """
     await asyncio.sleep(0)
     for token in tokens:
         yield token
@@ -41,7 +46,12 @@ async def _stream(*tokens: str | StreamUsage) -> AsyncIterator[str | StreamUsage
 async def _stream_then_fail(
     exc: Exception, *tokens: str
 ) -> AsyncIterator[str | StreamUsage]:
-    """Yield the given tokens then raise exc (an async token stream)."""
+    """Yield the given tokens then raise exc (an async token stream).
+
+    Yields:
+        The given tokens then raise exc (an async token stream).
+
+    """
     await asyncio.sleep(0)
     for token in tokens:
         yield token
@@ -49,7 +59,12 @@ async def _stream_then_fail(
 
 
 def _client_error(code: str, status: int) -> ClientError:
-    """Build a botocore ClientError mimicking a Bedrock throttle/server response."""
+    """Build a botocore ClientError mimicking a Bedrock throttle/server response.
+
+    Returns:
+        A botocore ClientError mimicking a Bedrock throttle/server response.
+
+    """
     return ClientError(
         {
             "Error": {"Code": code, "Message": "boom"},
@@ -66,7 +81,12 @@ def _client_error(code: str, status: int) -> ClientError:
 
 
 def _response(model: str) -> LLMResponse:
-    """Return a minimal LLMResponse tagged with the model that produced it."""
+    """Return a minimal LLMResponse tagged with the model that produced it.
+
+    Returns:
+        A minimal LLMResponse tagged with the model that produced it.
+
+    """
     return LLMResponse(
         content="answer",
         model=model,
@@ -80,6 +100,10 @@ def _providers(primary_error: Exception, fallback_result: object) -> FallbackLlm
     """Wire a FallbackLlmProvider whose primary raises.
 
     And whose fallback returns/raises the given value.
+
+    Returns:
+        The provider.
+
     """
     return _providers_with_fallback(primary_error, fallback_result)[0]
 
@@ -90,6 +114,10 @@ def _providers_with_fallback(
     """Wire the provider as ``_providers`` does and also return the fallback mock.
 
     To assert on.
+
+    Returns:
+        The provider and the fallback mock.
+
     """
     primary = AsyncMock()
     primary.complete.side_effect = primary_error
@@ -154,6 +182,13 @@ def _coded_provider_error(code: str, status: int) -> AppError:
     """Return the coded AppError a real provider raises for a botocore failure.
 
     (``raise ... from exc``).
+
+    Returns:
+        The coded AppError a real provider raises for a botocore failure.
+
+    Raises:
+        botocore_error_to_app_error: Bedrock converse.
+
     """
     client_error = _client_error(code, status)
     try:

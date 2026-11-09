@@ -24,6 +24,10 @@ class _JSONFormatter(logging.Formatter):
         Emits the canonical cross-service fields (message, level, logger,
         timestamp) and merges any bound context stashed on the record's
         ``_extra`` attribute. Non-serialisable values fall back to ``str``.
+
+        Returns:
+            A log record as a single-line JSON string.
+
         """
         entry: dict[str, Any] = {
             "message": record.getMessage(),
@@ -105,7 +109,12 @@ class StdlibLogger(Logger):
         self._log(logging.ERROR, msg, **kwargs)
 
     def bind(self, **kwargs: object) -> Logger:
-        """Return a new StdlibLogger with merged bound context."""
+        """Return a new StdlibLogger with merged bound context.
+
+        Returns:
+            A new StdlibLogger with merged bound context.
+
+        """
         merged = {**self._bound_context, **kwargs}
         return StdlibLogger(
             level=self._level,

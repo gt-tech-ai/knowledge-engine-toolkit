@@ -55,7 +55,12 @@ class CacheConfig:
 
 
 def default_config() -> CacheConfig:
-    """Return a default cache config (LOCAL with 300s TTL)."""
+    """Return a default cache config (LOCAL with 300s TTL).
+
+    Returns:
+        A default cache config (LOCAL with 300s TTL).
+
+    """
     return CacheConfig(kind=CacheKind.LOCAL, default_ttl=300)
 
 
@@ -68,8 +73,12 @@ def new_cache_from_config(config: CacheConfig) -> Cache:
     Returns:
         A Cache implementation matching the requested kind.
 
+    A callee raises ``ValueError``: If the kind is unknown or required parameters are
+    missing.
+
     Raises:
-        ValueError: If the kind is unknown or required parameters are missing.
+        AppValueError: Redis_client is required when kind is REDIS; unknown cache kind:
+            ``config.kind``.
 
     """
     if config.kind == CacheKind.LOCAL:

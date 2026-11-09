@@ -93,7 +93,12 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         self._leases: dict[str, tuple[str, str]] = {}
 
     async def __aenter__(self) -> Self:
-        """Open the underlying aiobotocore SQS client and return self."""
+        """Open the underlying aiobotocore SQS client and return self.
+
+        Returns:
+            The underlying aiobotocore SQS client and return self.
+
+        """
         self._session = aiobotocore.session.get_session()
         self._client = await self._session.create_client(
             "sqs",
@@ -115,11 +120,12 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     async def subscribe(self, topic: str, handler: MessageHandler) -> None:
         """Start consuming ``topic``'s queue. Blocks until ``close()`` is called.
 
-        Raises:
-            AppRuntimeError: The subscriber is not open.
-            AppValueError: ``topic`` has no queue, or the queue's settings disagree with
-                the delivery config.
-            UnavailableError: The queue-settings check timed out.
+        A callee raises ``AppRuntimeError``: The subscriber is not open.
+
+        A callee raises ``AppValueError``: ``topic`` has no queue, or the queue's settings
+        disagree with the delivery config.
+
+        A callee raises ``UnavailableError``: The queue-settings check timed out.
 
         """
         client = self._require_client()
@@ -152,6 +158,10 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         """Build the receive call's arguments.
 
         The receive count is asked for only for backoff.
+
+        Returns:
+            The receive call's arguments.
+
         """
         request: ReceiveMessageRequestTypeDef = {
             "QueueUrl": queue_url,
@@ -168,8 +178,6 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     ) -> str | None:
         """Deliver one message to the handler and settle it on success.
 
-        (log + leave for redrive on error).
-
         With ``settle_batch`` the message is not deleted here: its receipt handle is
         returned for ``_settle``; otherwise it is deleted at once and ``None`` is
         returned, as is the handle of a message whose handler failed. A failed message is
@@ -179,6 +187,10 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         message; the SDK types mark them optional, so they are read with ``.get``. A
         message with no ``ReceiptHandle`` cannot be deleted, so it is logged and skipped
         rather than handled: handling it would only repeat the work on every redelivery.
+
+        Returns:
+            The receipt handle to settle in a batch, else ``None``.
+
         """
         receipt_handle = raw.get("ReceiptHandle")
         if not receipt_handle:
@@ -255,8 +267,12 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     async def backlog(self, topic: str) -> Backlog:
         """Return the messages waiting on ``topic``'s queue; the age is unknown on SQS.
 
+        Returns:
+            The messages waiting on ``topic``'s queue; the age is unknown on SQS.
+
+        A callee raises ``AppValueError``: ``topic`` has no queue.
+
         Raises:
-            AppValueError: ``topic`` has no queue.
             UnavailableError: ``GetQueueAttributes`` did not answer within
                 ``attributes_timeout_seconds``.
 
@@ -314,6 +330,9 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
     def _require_client(self) -> SQSClient:
         """Return the open SQS client.
 
+        Returns:
+            The open SQS client.
+
         Raises:
             AppRuntimeError: The subscriber is not open.
 
@@ -329,7 +348,12 @@ class SQSSubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
 
     @staticmethod
     def _extract_metadata(raw: MessageTypeDef) -> dict[str, str]:
-        """Extract string attributes from an SQS message."""
+        """Extract string attributes from an SQS message.
+
+        Returns:
+            The message's string attributes.
+
+        """
         attrs = raw.get("MessageAttributes", {})
         return {
             k: v.get("StringValue", "")

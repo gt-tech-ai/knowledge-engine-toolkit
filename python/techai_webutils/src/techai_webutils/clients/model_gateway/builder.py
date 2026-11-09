@@ -50,6 +50,10 @@ def _empty() -> Mapping[str, Any]:
     A plain ``dict``, not a ``MappingProxyType``: configs travel to Ray workers by pickle,
     and a mapping proxy cannot be pickled. The ``Mapping`` annotation keeps it read-only
     to callers.
+
+    Returns:
+        An empty mapping (a stage or store config left at its defaults).
+
     """
     return {}
 
@@ -142,6 +146,9 @@ def new_model_gateway_from_config(  # noqa: PLR0913 - the config plus each injec
             ``transport``).
         policy_store: The routing policy store to consult instead of the one
             ``routed.policy_store`` describes (``routed``; e.g. a refreshing store).
+
+    Returns:
+        The ``ModelGateway`` selected by ``config.kind``.
 
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.

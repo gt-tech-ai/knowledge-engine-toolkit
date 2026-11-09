@@ -65,8 +65,13 @@ def _validated_attributes(attributes: Mapping[str, str] | None) -> dict[str, str
 
     Refusing one named like a key the index writes.
 
+    Returns:
+        A copy of the consumer's chunk attributes.
+
+    A callee raises ``ValueError``: An attribute uses a reserved metadata key.
+
     Raises:
-        ValueError: An attribute uses a reserved metadata key.
+        AppValueError: Attributes may not use the reserved metadata keys ``reserved``.
 
     """
     metadata = dict(attributes or {})
@@ -95,8 +100,12 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         ``embed_concurrency`` is how many sub-batches are embedded and upserted at once
         (1: one at a time, as before).
 
+        A callee raises ``ValueError``: The dimensions disagree, or ``embed_concurrency``
+        is below 1.
+
         Raises:
-            ValueError: The dimensions disagree, or ``embed_concurrency`` is below 1.
+            AppValueError: Embed_concurrency must be at least 1, got
+                ``embed_concurrency``.
 
         """
         require_matching_dimension(embedder, store, collection)
@@ -126,10 +135,9 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         are stamped onto every chunk; ``document_name`` is stamped for citation display,
         falling back to ``document_id``.
 
-        Raises:
-            ValueError: An attribute is named like a key the index writes itself
-                (``document_id``, ``content``, ``entry_id``, ``document_name``,
-                ``chunk_index``).
+        A callee raises ``ValueError``: An attribute is named like a key the index writes
+        itself (``document_id``, ``content``, ``entry_id``, ``document_name``,
+        ``chunk_index``).
 
         """
         base_metadata = _validated_attributes(attributes)
@@ -150,6 +158,10 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         """Index ``chunks`` sub-batch by sub-batch, ``embed_concurrency`` at once.
 
         Return how many were skipped.
+
+        Returns:
+            The number of sub-batches that failed.
+
         """
         starts = range(0, len(chunks), _EMBED_SUB_BATCH)
         logger.info(
@@ -201,9 +213,11 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         Returns: True when the sub-batch was embedded and upserted; False when every chunk
             was already stored with exactly ``metadata`` (a resumed redrive skips it).
 
-        Raises:
-            ValueError: The embedder returned a different number of embeddings than
-                chunks.
+        A callee raises ``ValueError``: The embedder returned a different number of
+        embeddings than chunks.
+
+        Returns:
+            Whether the sub-batch was written.
 
         """
         ids = [f"{document_id}:{base + offset}" for offset in range(len(batch))]
@@ -226,10 +240,16 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
     ) -> list[VectorEntry]:
         """Embed ``batch`` and pair each chunk with its id, embedding and metadata.
 
+        A callee raises ``ValueError``: The embedder returned a different number of
+        embeddings than chunks; a short or over-long list would otherwise drop chunks
+        silently or corrupt the index.
+
+        Returns:
+            The entries to upsert.
+
         Raises:
-            ValueError: The embedder returned a different number of embeddings than
-                chunks; a short or over-long list would otherwise drop chunks silently or
-                corrupt the index.
+            AppValueError: Embedder returned ``len(embeddings)`` embeddings for
+                ``len(batch)`` chunks.
 
         """
         embeddings = await self._embedder.embed_batch(batch)
@@ -259,6 +279,10 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         """Report ``ready`` + the chunk count if the document has points, else ``None``.
 
         (not indexed).
+
+        Returns:
+            The document, or ``None`` when it has no points.
+
         """
         count = await self._store.count_by_document(self._collection, document_id)
         if count == 0:
@@ -276,6 +300,10 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         """No-op sync: upserts are synchronous in the vector store.
 
         So there is nothing to reconcile.
+
+        Returns:
+            A result reporting no change.
+
         """
         return KBSyncResult(
             documents_added=0,

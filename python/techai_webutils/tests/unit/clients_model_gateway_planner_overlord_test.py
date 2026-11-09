@@ -39,7 +39,12 @@ def _planner(
     raw: dict[str, Any] | None = None,
     metrics: MetricsProvider | None = None,
 ) -> tuple[RoutePlanner, ModelCatalog]:
-    """Build an overlord planner over the fixture catalog, failing open to ``local``."""
+    """Build an overlord planner over the fixture catalog, failing open to ``local``.
+
+    Returns:
+        An overlord planner over the fixture catalog, failing open to ``local``.
+
+    """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
     routes = parse_routes(routes_raw, catalog)
     config = raw or {
@@ -62,7 +67,12 @@ def _planner(
 def _transport(
     plan: RoutingPlan | Exception | None = None, *, delay: float = 0.0
 ) -> MagicMock:
-    """Return a transport answering ``plan`` (or raising it) after ``delay`` seconds."""
+    """Return a transport answering ``plan`` (or raising it) after ``delay`` seconds.
+
+    Returns:
+        A transport answering ``plan`` (or raising it) after ``delay`` seconds.
+
+    """
 
     async def route(request: PlanRequest, **_kwargs: object) -> RoutingPlan:
         await asyncio.sleep(delay)
@@ -77,7 +87,12 @@ def _transport(
 
 
 def _input(catalog: ModelCatalog) -> PlanInput:
-    """Return a plan input offering the whole catalog."""
+    """Return a plan input offering the whole catalog.
+
+    Returns:
+        A plan input offering the whole catalog.
+
+    """
     return PlanInput(query="how long is the refund window", candidates=catalog.refs)
 
 

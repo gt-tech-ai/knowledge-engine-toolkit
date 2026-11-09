@@ -62,7 +62,12 @@ class TokenSourceConfig:
     """Bounds each token request, body included."""
 
     def grant(self) -> dict[str, str]:
-        """Return the grant form: ``grant_type`` plus every non-empty credential field."""
+        """Return the grant form: ``grant_type`` plus every non-empty credential field.
+
+        Returns:
+            The grant form: ``grant_type`` plus every non-empty credential field.
+
+        """
         fields = {
             "client_id": self.client_id,
             "client_secret": self.client_secret,
@@ -82,6 +87,9 @@ def new_token_source_from_config(
 
     The ``oauth`` kind posts through ``client`` when given (tests, a shared pool), else
     through a new ``httpx.AsyncClient`` bounded by ``timeout_seconds``.
+
+    Returns:
+        The ``TokenSource`` ``config.kind`` selects.
 
     Raises:
         AppValueError: An unknown kind, or ``oauth`` without a ``token_url``

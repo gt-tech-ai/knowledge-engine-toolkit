@@ -40,6 +40,10 @@ def _trace_exemplar() -> dict[str, str] | None:
     Done transparently here so EVERY histogram observation carries an exemplar when it
     runs inside a span — no caller or interface change. The 32-hex trace id is well under
     Prometheus' 128-char exemplar-label budget.
+
+    Returns:
+        A ``{"trace_id": ...}`` exemplar for the active span, or None when untraced.
+
     """
     ctx = _otel_trace.get_current_span().get_span_context()
     if ctx.is_valid:
@@ -81,6 +85,13 @@ class PrometheusMetricsProvider(MetricsProvider):
         programming error prometheus_client raises on — that ValueError is re-raised
         rather than returning a mismatched collector that would misreport (or blow up) at
         record time.
+
+        Returns:
+            A metric, or reuse an already-registered one of the same name.
+
+        Raises:
+            ValueError: A metric of another type already holds the name.
+
         """
         try:
             return create()
@@ -106,6 +117,10 @@ class PrometheusMetricsProvider(MetricsProvider):
         These attribute names are an internal contract; a prometheus_client bump could
         rename them, which ``tests/unit/foundation_metrics_idempotent_test.py`` exercises
         against the pinned version.
+
+        Returns:
+            The collector already registered under ``name``, or None.
+
         """
         internals = vars(self._registry)
         names_to_collectors = cast("dict[str, object]", internals["_names_to_collectors"])
@@ -123,6 +138,10 @@ class PrometheusMetricsProvider(MetricsProvider):
         """Create a Prometheus counter metric.
 
         (idempotent on a repeated in-process init).
+
+        Returns:
+            A Prometheus counter metric.
+
         """
         c = self._get_or_create(
             name,
@@ -139,7 +158,12 @@ class PrometheusMetricsProvider(MetricsProvider):
         labels: list[str] | None = None,
         buckets: list[float] | None = None,
     ) -> MetricHistogram:
-        """Create a Prometheus histogram metric."""
+        """Create a Prometheus histogram metric.
+
+        Returns:
+            A Prometheus histogram metric.
+
+        """
         kwargs: dict[str, Any] = {"registry": self._registry}
         if buckets is not None:
             kwargs["buckets"] = buckets
@@ -154,7 +178,12 @@ class PrometheusMetricsProvider(MetricsProvider):
     def gauge(
         self, name: str, help_text: str, labels: list[str] | None = None
     ) -> MetricGauge:
-        """Create a Prometheus gauge metric (idempotent on a repeated in-process init)."""
+        """Create a Prometheus gauge metric (idempotent on a repeated in-process init).
+
+        Returns:
+            A Prometheus gauge metric (idempotent on a repeated in-process init).
+
+        """
         g = self._get_or_create(
             name,
             Gauge,

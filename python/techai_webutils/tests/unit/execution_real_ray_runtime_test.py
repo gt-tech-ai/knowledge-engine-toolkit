@@ -37,12 +37,21 @@ def _importlib_returning(registry: SimpleNamespace) -> MagicMock:
 
     Replaces only the module's own ``importlib`` name, so imports elsewhere
     (``mock.patch`` resolving its targets) are unaffected.
+
+    Returns:
+        An ``importlib`` stand-in.
+
     """
     return MagicMock(import_module=MagicMock(return_value=registry))
 
 
 async def _mapper(item: int) -> StepResult:
-    """Map nothing: the (mocked) Ray task never runs it here."""
+    """Map nothing: the (mocked) Ray task never runs it here.
+
+    Returns:
+        A passing step for the item.
+
+    """
     await asyncio.sleep(0)
     return StepResult(name=str(item))
 
@@ -63,6 +72,10 @@ def _ray_client_after_head_restart() -> tuple[MagicMock, SimpleNamespace]:
     One client context stays registered with no live connection. ``ray.init`` follows
     Ray's rule: it refuses while that stale registration exists and connects once it has
     been disconnected.
+
+    Returns:
+        A mocked ``ray`` and client registry.
+
     """
     state = {"registered": 1, "connected": False}
 
@@ -189,6 +202,10 @@ def _ray_client_with_a_dead_session() -> MagicMock:
         call to the
     cluster fails with a gRPC error until ``ray.shutdown`` drops the session and
     ``ray.init`` opens a new one.
+
+    Returns:
+        A mocked ``ray`` whose client session reports connected while its channel.
+
     """
     state = {"initialized": True, "alive": False}
 
@@ -212,7 +229,12 @@ def _ray_client_with_a_dead_session() -> MagicMock:
 
 
 def _healthy_registry() -> SimpleNamespace:
-    """Return a client registry with no stale registration."""
+    """Return a client registry with no stale registration.
+
+    Returns:
+        A client registry with no stale registration.
+
+    """
     return SimpleNamespace(ray=MagicMock(), num_connected_contexts=lambda: 0)
 
 
@@ -296,7 +318,12 @@ class TestRealRayRuntimeDeadSession:
 
 
 async def _completed(*_: object) -> StepResult:
-    """Stand in for an awaited Ray task that finished."""
+    """Stand in for an awaited Ray task that finished.
+
+    Returns:
+        A completed step.
+
+    """
     await asyncio.sleep(0)
     return StepResult(name="done")
 
@@ -312,6 +339,10 @@ def _ray_session_across_a_head_replacement() -> tuple[
     connect), and ``ray.put`` hands out a new reference per call. The registry's API keeps
     reporting ``is_connected()`` True however the channel fares, as Ray does after a head
     replacement.
+
+    Returns:
+        A mocked ``ray``.
+
     """
     context = SimpleNamespace(client_worker=object())
     state = {"initialized": True}

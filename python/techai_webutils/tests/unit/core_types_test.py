@@ -404,6 +404,10 @@ class TestSortField:
 
         **What it tests:**
           - Assigning to sf.field raises AttributeError (frozen dataclass)
+
+        Raises:
+            AssertionError: Should have raised FrozenInstanceError.
+
         """
         sf = SortField(field="name")
         try:

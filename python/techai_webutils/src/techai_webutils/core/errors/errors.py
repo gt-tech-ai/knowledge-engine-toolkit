@@ -77,7 +77,12 @@ class AppError(Exception):
         return self.code in PERMANENT
 
     def __repr__(self) -> str:
-        """Return an unambiguous representation including the code and message."""
+        """Return an unambiguous representation including the code and message.
+
+        Returns:
+            An unambiguous representation including the code and message.
+
+        """
         return f"AppError(code={self.code.value}, message={self.message!r})"
 
 

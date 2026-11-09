@@ -35,6 +35,10 @@ async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
     """Yield a ``decode_responses`` async client bound.
 
     To the session's Redis container.
+
+    Yields:
+        A ``decode_responses`` async client bound.
+
     """
     host = redis_container.get_container_host_ip()  # type: ignore[attr-defined]
     port = int(redis_container.get_exposed_port(redis_container.port))  # type: ignore[attr-defined]
@@ -48,7 +52,12 @@ async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
 def _record(
     ts: datetime, *, input_tokens: int = 100, output_tokens: int = 20
 ) -> UsageRecord:
-    """One generation for org-1 / w-1 at ``ts``."""
+    """One generation for org-1 / w-1 at ``ts``.
+
+    Returns:
+        The usage record.
+
+    """
     return UsageRecord(
         scope=UsageScope(
             org_id="org-1", team_id="t-1", workspace_id="w-1", user_id="u-1"

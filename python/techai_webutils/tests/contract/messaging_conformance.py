@@ -100,7 +100,12 @@ async def _consume(
 
 
 async def _collect(transport: Transport, topic: str, want: int) -> list[Message]:
-    """Receive ``want`` messages from ``topic`` with a plain subscriber."""
+    """Receive ``want`` messages from ``topic`` with a plain subscriber.
+
+    Returns:
+        The received messages.
+
+    """
     received: list[Message] = []
     done = asyncio.Event()
 

@@ -45,6 +45,13 @@ def new_storage_from_config(config: StorageConfig) -> StorageClient:
     """Build the ``StorageClient`` selected by ``config.kind``.
 
     (heavy backend imported lazily).
+
+    Returns:
+        The ``StorageClient`` selected by ``config.kind``.
+
+    Raises:
+        AppValueError: Unknown storage kind: ``config.kind``.
+
     """
     if config.kind is StorageKind.S3:
         # Lazy import: skip aiobotocore until selected.

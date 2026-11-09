@@ -30,6 +30,10 @@ class MemoryDeduplicator:
         """Return True if ``key`` is a live (un-expired) repeat.
 
         Else record it and return False.
+
+        Returns:
+            True if ``key`` is a live (un-expired) repeat.
+
         """
         now = time.monotonic()
         async with self._lock:

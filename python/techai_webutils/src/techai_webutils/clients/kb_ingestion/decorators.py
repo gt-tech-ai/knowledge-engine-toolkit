@@ -93,6 +93,10 @@ class PollingIngestor(
         ordering reattaching depends on. Converge the job with ``poll_ingestion_job``; run
         the whole start→poll thunk under ``SingleWriterRunner`` so the single-writer lock
         is held across both.
+
+        Returns:
+            A job and return the FRESH (non-terminal) handle.
+
         """
         return await self._inner.start_ingestion_job(
             knowledge_base_id=knowledge_base_id,
@@ -117,6 +121,10 @@ class PollingIngestor(
         started OR one whose ``job_id`` it recorded earlier, so a second
         ``StartIngestionJob`` (which Bedrock rejects with ConflictException) is never
         issued.
+
+        Returns:
+            The terminal job.
+
         """
         job = await self._inner.get_ingestion_job(
             knowledge_base_id=knowledge_base_id,
@@ -132,7 +140,12 @@ class PollingIngestor(
         data_source_id: str,
         job_id: str,
     ) -> IngestionJob:
-        """Delegate a single state fetch to the wrapped ingestor."""
+        """Delegate a single state fetch to the wrapped ingestor.
+
+        Returns:
+            The job in its latest state.
+
+        """
         return await self._inner.get_ingestion_job(
             knowledge_base_id=knowledge_base_id,
             data_source_id=data_source_id,
@@ -148,6 +161,10 @@ class PollingIngestor(
         """Delegate the per-document listing to the wrapped ingestor.
 
         (no polling involved).
+
+        Returns:
+            The documents the wrapped ingestor lists.
+
         """
         return await self._inner.list_documents(
             knowledge_base_id=knowledge_base_id,
@@ -161,7 +178,12 @@ class PollingIngestor(
         data_source_id: str,
         s3_uris: Collection[str],
     ) -> AsyncIterator[KnowledgeBaseDocument]:
-        """Delegate the cohort lookup to the wrapped ingestor (no polling involved)."""
+        """Delegate the cohort lookup to the wrapped ingestor (no polling involved).
+
+        Yields:
+            Each document in the cohort.
+
+        """
         async for doc in self._inner.iter_cohort(
             knowledge_base_id=knowledge_base_id,
             data_source_id=data_source_id,
@@ -179,6 +201,10 @@ class PollingIngestor(
         """Delegate a stop request to the wrapped ingestor.
 
         (no polling in the stop path).
+
+        Returns:
+            The job after the stop request.
+
         """
         return await self._inner.stop_ingestion_job(
             knowledge_base_id=knowledge_base_id,
@@ -192,7 +218,12 @@ class PollingIngestor(
         data_source_id: str,
         job: IngestionJob,
     ) -> IngestionJob:
-        """Poll ``get_ingestion_job`` until terminal or the max poll time is exceeded."""
+        """Poll ``get_ingestion_job`` until terminal or the max poll time is exceeded.
+
+        Returns:
+            The terminal job, or a failed job when the poll time runs out.
+
+        """
         clock = self._clock or asyncio.get_running_loop().time
         deadline = clock() + self._max_poll
         while not job.is_terminal:
@@ -252,7 +283,12 @@ class RetryingIngestor(
     async def start_ingestion_job(
         self, *, knowledge_base_id: str, data_source_id: str, round_id: str = ""
     ) -> IngestionJob:
-        """Start a job, retrying transient failures with backoff."""
+        """Start a job, retrying transient failures with backoff.
+
+        Returns:
+            A job, retrying transient failures with backoff.
+
+        """
 
         async def _op() -> IngestionJob:
             return await self._inner.start_ingestion_job(
@@ -270,7 +306,12 @@ class RetryingIngestor(
         data_source_id: str,
         job_id: str,
     ) -> IngestionJob:
-        """Fetch a job's state, retrying transient failures with backoff."""
+        """Fetch a job's state, retrying transient failures with backoff.
+
+        Returns:
+            A job's state, retrying transient failures with backoff.
+
+        """
 
         async def _op() -> IngestionJob:
             return await self._inner.get_ingestion_job(
@@ -287,7 +328,12 @@ class RetryingIngestor(
         knowledge_base_id: str,
         data_source_id: str,
     ) -> list[KnowledgeBaseDocument]:
-        """List the data source's documents, retrying transient failures with backoff."""
+        """List the data source's documents, retrying transient failures with backoff.
+
+        Returns:
+            The data source's documents, retrying transient failures with backoff.
+
+        """
 
         async def _op() -> list[KnowledgeBaseDocument]:
             return await self._inner.list_documents(
@@ -308,6 +354,10 @@ class RetryingIngestor(
 
         A partly consumed iterator cannot be replayed safely, so a transient failure
         surfaces to the caller, which re-runs the lookup for the URIs it has not resolved.
+
+        Yields:
+            Each document in the cohort.
+
         """
         async for doc in self._inner.iter_cohort(
             knowledge_base_id=knowledge_base_id,
@@ -331,6 +381,10 @@ class RetryingIngestor(
         pass-through so a transient stop failure surfaces to the caller (typically a
         supervisor that stops stuck jobs), whose own bounded backoff is the single source
         of stop-retry — nesting the two would compose multiplicatively.
+
+        Returns:
+            The job after the stop request.
+
         """
         return await self._inner.stop_ingestion_job(
             knowledge_base_id=knowledge_base_id,

@@ -45,8 +45,8 @@ async def bulk_ingest(store: BulkIngestible, index: str) -> AsyncGenerator[None]
     When the body and the restore both fail, the restore's error is raised with the body's
     as its context.
 
-    Raises:
-        AppValueError: The restored settings did not take (from ``end_bulk_ingest``).
+    A callee raises ``AppValueError``: The restored settings did not take (from
+    ``end_bulk_ingest``).
 
     """
     try:

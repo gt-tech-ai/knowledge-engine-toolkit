@@ -64,6 +64,10 @@ class AsyncCircuitBreaker:
         """Return the current state.
 
         Transitioning open -> half-open once recovery elapses.
+
+        Returns:
+            The current state.
+
         """
         async with self._lock:
             if (
@@ -77,6 +81,13 @@ class AsyncCircuitBreaker:
         """Enter the breaker.
 
         Raise ``CircuitOpenError`` immediately if the circuit is open.
+
+        Returns:
+            This instance.
+
+        Raises:
+            CircuitOpenError: The circuit is open.
+
         """
         if await self.current_state() == CircuitState.OPEN:
             raise CircuitOpenError
@@ -91,6 +102,10 @@ class AsyncCircuitBreaker:
         """Record the call outcome: success resets/closes.
 
         Failure counts toward opening.
+
+        Returns:
+            ``False``, so an exception propagates.
+
         """
         async with self._lock:
             if exc_type is None:

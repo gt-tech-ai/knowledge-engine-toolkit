@@ -59,7 +59,12 @@ class SqsDeadLetterBackend(DeadLetterBackend):
         self._session: AioSession | None = None
 
     async def __aenter__(self) -> Self:
-        """Open the underlying aiobotocore SQS client and return self."""
+        """Open the underlying aiobotocore SQS client and return self.
+
+        Returns:
+            The underlying aiobotocore SQS client and return self.
+
+        """
         self._session = aiobotocore.session.get_session()
         self._client = await self._session.create_client(
             "sqs",
@@ -84,6 +89,11 @@ class SqsDeadLetterBackend(DeadLetterBackend):
         thing being dead-lettered) may not be valid UTF-8 — the DLQ must never fail on the
         malformed messages it exists to capture. User ``metadata`` cannot overwrite the
         reserved ``reason``/``source_id`` attributes (colliding keys are dropped).
+
+        Raises:
+            AppRuntimeError: SqsDeadLetterBackend not initialized. Use as async context
+                manager.
+
         """
         if self._client is None:
             msg = "SqsDeadLetterBackend not initialized. Use as async context manager."

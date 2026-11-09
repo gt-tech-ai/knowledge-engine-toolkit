@@ -70,9 +70,8 @@ class SinkWriteGovernor(DelegatingAsyncResource[Sink], Sink):
     ) -> None:
         """Govern ``inner`` by the p99 ``querier`` reads for ``config.query``.
 
-        Raises:
-            AppValueError: An empty query, a floor below 1, a ceiling below the floor, or
-                a non-positive budget or interval (``INVALID_INPUT``).
+        A callee raises ``AppValueError``: An empty query, a floor below 1, a ceiling
+        below the floor, or a non-positive budget or interval (``INVALID_INPUT``).
 
         """
         _validate(config)

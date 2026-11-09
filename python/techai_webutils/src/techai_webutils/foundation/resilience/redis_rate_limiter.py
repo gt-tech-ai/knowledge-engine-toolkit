@@ -48,6 +48,9 @@ class RedisPerKeyRateLimiter(PerKeyRateLimiter):
     async def allow_key(self, key: str) -> bool:
         """Count one event for ``key`` in the current window; True while within the limit.
 
+        Returns:
+            One event for ``key`` in the current window; True while within the limit.
+
         Raises:
             AppError: ``UNAVAILABLE`` when Redis can't answer.
 

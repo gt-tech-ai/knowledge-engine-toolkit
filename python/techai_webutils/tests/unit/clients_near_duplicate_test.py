@@ -39,7 +39,12 @@ _REPORT = " ".join(
 
 
 def _cache() -> tuple[MagicMock, dict[str, bytes]]:
-    """Return a mocked ``Cache`` backed by a dict, and the dict."""
+    """Return a mocked ``Cache`` backed by a dict, and the dict.
+
+    Returns:
+        A mocked ``Cache`` backed by a dict, and the dict.
+
+    """
     data: dict[str, bytes] = {}
     cache = MagicMock(spec=Cache)
 

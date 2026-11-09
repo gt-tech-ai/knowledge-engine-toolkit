@@ -41,6 +41,10 @@ class RetryBudget:
         """Attempt to consume one retry token.
 
         Returns True if a token was consumed, False if budget is exhausted.
+
+        Returns:
+            Whether a token was consumed.
+
         """
         with self._lock:
             if self._remaining > 0:
@@ -49,7 +53,12 @@ class RetryBudget:
             return False
 
     def remaining(self) -> int:
-        """Return the number of remaining retry tokens."""
+        """Return the number of remaining retry tokens.
+
+        Returns:
+            The number of remaining retry tokens.
+
+        """
         with self._lock:
             return self._remaining
 

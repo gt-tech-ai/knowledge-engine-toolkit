@@ -82,7 +82,12 @@ class _Harness:
 
 
 async def _aiter(items: list[str]) -> AsyncGenerator[str]:
-    """Yield ``items`` as an async iterator (the shape of ``scan_iter``)."""
+    """Yield ``items`` as an async iterator (the shape of ``scan_iter``).
+
+    Yields:
+        ``items`` as an async iterator (the shape of ``scan_iter``).
+
+    """
     for item in items:
         await asyncio.sleep(0)
         yield item
@@ -92,6 +97,10 @@ def _array_reply(docs: list[SimpleNamespace]) -> list[object]:
     """Return ``docs`` as the RESP2 ``FT.SEARCH`` array.
 
     ``[total, id, [field, value, …], …]``.
+
+    Returns:
+        ``docs`` as the RESP2 ``FT.SEARCH`` array.
+
     """
     reply: list[object] = [len(docs)]
     for i, doc in enumerate(docs):
@@ -110,7 +119,12 @@ def _array_reply(docs: list[SimpleNamespace]) -> list[object]:
 
 
 def _map_reply(docs: list[SimpleNamespace]) -> dict[bytes, object]:
-    """Return ``docs`` as the RESP3 ``FT.SEARCH`` map Redis Stack returns."""
+    """Return ``docs`` as the RESP3 ``FT.SEARCH`` map Redis Stack returns.
+
+    Returns:
+        ``docs`` as the RESP3 ``FT.SEARCH`` map Redis Stack returns.
+
+    """
     return {
         b"total_results": len(docs),
         b"results": [
@@ -128,7 +142,12 @@ def _map_reply(docs: list[SimpleNamespace]) -> dict[bytes, object]:
 
 
 def _doc(distance: float) -> SimpleNamespace:
-    """Return a FT.SEARCH result document at cosine ``distance``."""
+    """Return a FT.SEARCH result document at cosine ``distance``.
+
+    Returns:
+        A FT.SEARCH result document at cosine ``distance``.
+
+    """
     return SimpleNamespace(
         key="sc:p:ws-1:k:abc", query="the cached question", dist=str(distance)
     )

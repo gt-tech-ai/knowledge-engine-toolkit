@@ -28,7 +28,12 @@ _GO_MESSAGING = Path(__file__).resolve().parents[4] / "go" / "core" / "interface
 
 
 def _metrics() -> tuple[MagicMock, dict[str, MagicMock]]:
-    """Return a metrics provider mock and the gauge it hands out per metric name."""
+    """Return a metrics provider mock and the gauge it hands out per metric name.
+
+    Returns:
+        A metrics provider mock and the gauge it hands out per metric name.
+
+    """
     gauges: dict[str, MagicMock] = {}
 
     def gauge(name: str, _help: str, _labels: list[str] | None = None) -> MagicMock:

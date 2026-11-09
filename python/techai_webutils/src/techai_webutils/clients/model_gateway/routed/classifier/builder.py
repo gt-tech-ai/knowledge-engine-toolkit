@@ -44,6 +44,9 @@ def route_classifier_from_config(
         routes: The parsed routes (``embedding``: their exemplars and thresholds).
         embedding: The embedder (``embedding``; pass the per-request memo).
 
+    Returns:
+        The classifier ``raw["kind"]`` selects (``stub`` by default).
+
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.
         AppError: ``INVALID_INPUT`` for ``embedding`` without routes or an embedder.

@@ -61,7 +61,12 @@ class BudgetPolicy:
     level, and every ledger error, still follow ``enforcement``."""
 
     def ledger_error_action(self) -> OnLedgerError:
-        """Return what a ledger error does under this policy."""
+        """Return what a ledger error does under this policy.
+
+        Returns:
+            What a ledger error does under this policy.
+
+        """
         if self.enforcement is Enforcement.SHADOW:
             return OnLedgerError.ALLOW
         if self.on_ledger_error is not None:
@@ -93,6 +98,10 @@ def decide(
     """Return the verdict for a budget check that answered ``decision``.
 
     Or raised ``error``.
+
+    Returns:
+        The verdict for a budget check that answered ``decision``.
+
     """
     if (
         error is not None

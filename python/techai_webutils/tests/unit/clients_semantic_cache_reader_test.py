@@ -36,7 +36,12 @@ _HIT = CachedAnswer(
 
 
 def _metrics() -> tuple[MagicMock, dict[str, MagicMock]]:
-    """Return a metrics provider and the counters it hands out, by name."""
+    """Return a metrics provider and the counters it hands out, by name.
+
+    Returns:
+        A metrics provider and the counters it hands out, by name.
+
+    """
     counters: dict[str, MagicMock] = {}
     metrics = MagicMock(spec=MetricsProvider)
     metrics.counter = MagicMock(
@@ -52,6 +57,10 @@ def _reader(
     """Return a reader over a lookup answering ``hit``.
 
     Plus the lookup and backend mocks.
+
+    Returns:
+        A reader over a lookup answering ``hit``.
+
     """
     lookup = MagicMock(spec=CacheLookup)
     lookup.lookup = AsyncMock(return_value=hit)

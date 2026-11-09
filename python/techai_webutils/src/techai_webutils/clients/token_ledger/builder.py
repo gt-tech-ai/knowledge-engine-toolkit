@@ -71,6 +71,9 @@ def token_ledger_from_config(
         backends: Factories for consumer-supplied kinds, keyed by kind; a built-in kind
             name is never looked up here.
 
+    Returns:
+        The ``TokenLedger`` selected by ``config.kind``.
+
     Raises:
         AppError: ``INVALID_INPUT`` for an unknown kind or a ``redis`` kind without a
             client.

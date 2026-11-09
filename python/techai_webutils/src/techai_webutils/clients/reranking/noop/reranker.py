@@ -19,6 +19,10 @@ class NoopReranker(NoOpAsyncResource, Reranker):
         """Return ``1.0`` for the first passage.
 
         Falling evenly towards ``0`` for the last.
+
+        Returns:
+            ``1.0`` for the first passage.
+
         """
         count = len(passages)
         return [(count - i) / count for i in range(count)]

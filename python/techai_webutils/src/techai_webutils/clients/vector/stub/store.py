@@ -22,6 +22,10 @@ def _cosine(a: list[float], b: list[float]) -> float:
     """Return the cosine similarity.
 
     Of two equal-length vectors (0.0 if either has zero norm).
+
+    Returns:
+        The cosine similarity.
+
     """
     dot = sum(x * y for x, y in zip(a, b, strict=False))
     norm_a = math.sqrt(sum(x * x for x in a))
@@ -32,7 +36,12 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 
 def _matches(entry: VectorEntry, filters: dict[str, str] | None) -> bool:
-    """Report whether ``entry``'s metadata satisfies every key/value in ``filters``."""
+    """Report whether ``entry``'s metadata satisfies every key/value in ``filters``.
+
+    Returns:
+        Whether the metadata matches every filter.
+
+    """
     if not filters:
         return True
     return all(entry.metadata.get(key) == value for key, value in filters.items())
@@ -71,6 +80,10 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
         """Return the ``top_k`` entries most similar to ``query_embedding`` (cosine).
 
         Filtered.
+
+        Returns:
+            The ``top_k`` entries most similar to ``query_embedding`` (cosine).
+
         """
         scored = [
             (_cosine(query_embedding, entry.embedding), entry)
@@ -104,14 +117,24 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
             del store[entry_id]
 
     async def count_by_document(self, collection: str, document_id: str) -> int:
-        """Count the entries belonging to ``document_id`` in ``collection``."""
+        """Count the entries belonging to ``document_id`` in ``collection``.
+
+        Returns:
+            The entries belonging to ``document_id`` in ``collection``.
+
+        """
         store = self._collections.get(collection, {})
         return sum(1 for entry in store.values() if entry.document_id == document_id)
 
     async def stored_metadata(
         self, collection: str, ids: list[str]
     ) -> dict[str, dict[str, str]]:
-        """Return ``{id: metadata}`` for the ``ids`` already stored in ``collection``."""
+        """Return ``{id: metadata}`` for the ``ids`` already stored in ``collection``.
+
+        Returns:
+            ``{id: metadata}`` for the ``ids`` already stored in ``collection``.
+
+        """
         store = self._collections.get(collection, {})
         return {
             entry_id: dict(store[entry_id].metadata)

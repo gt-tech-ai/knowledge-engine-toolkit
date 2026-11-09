@@ -22,7 +22,12 @@ from techai_webutils.core.interfaces.vector_store import VectorStore
 
 
 def _embedder(dimension: int = 3) -> EmbeddingProvider:
-    """Mock EmbeddingProvider: embed_batch returns one EmbeddingResult per input chunk."""
+    """Mock EmbeddingProvider: embed_batch returns one EmbeddingResult per input chunk.
+
+    Returns:
+        The mock embedder.
+
+    """
     embedder = MagicMock(spec=EmbeddingProvider)
     embedder.dimension.return_value = dimension
     embedder.embed_batch = AsyncMock(
@@ -43,6 +48,10 @@ def _store(
     metadata, default empty) restricted to the queried ids, so a test can pre-declare
     which chunk ids are already indexed, and with which metadata, to drive the resume
     path.
+
+    Returns:
+        The mock store.
+
     """
     already = stored or {}
     store = MagicMock(spec=VectorStore)
@@ -62,6 +71,10 @@ def _indexed(
     """Return the stored metadata of chunks ``indexes`` of a document indexed.
 
     With ``attributes`` and no name.
+
+    Returns:
+        The stored metadata of chunks ``indexes`` of a document indexed.
+
     """
     return {
         f"{document_id}:{i}": {

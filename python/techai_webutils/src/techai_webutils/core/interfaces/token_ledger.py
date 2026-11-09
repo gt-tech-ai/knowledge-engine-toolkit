@@ -55,7 +55,12 @@ class UsageScope:
     """The end user, when known."""
 
     def __post_init__(self) -> None:
-        """Reject a scope with no organization (``INVALID_INPUT``)."""
+        """Reject a scope with no organization (``INVALID_INPUT``).
+
+        Raises:
+            AppError: Usage scope requires an org_id.
+
+        """
         if not self.org_id:
             raise AppError(ErrorCode.INVALID_INPUT, "usage scope requires an org_id")
 

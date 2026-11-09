@@ -13,7 +13,12 @@ from abc import ABC, abstractmethod
 
 
 def inflight_key(org_id: str, content_hash: str, stage: str, fingerprint: str) -> str:
-    """Return the claim key of one stage of one content within an org."""
+    """Return the claim key of one stage of one content within an org.
+
+    Returns:
+        The claim key of one stage of one content within an org.
+
+    """
     return f"{org_id}:{content_hash}:{stage}:{fingerprint}"
 
 

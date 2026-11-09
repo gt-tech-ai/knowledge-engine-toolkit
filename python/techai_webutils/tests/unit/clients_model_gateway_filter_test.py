@@ -27,7 +27,12 @@ _SMALL_REQ = RouteRequirements(prompt_tokens=100, max_tokens=100)
 
 
 def _refs(catalog_raw: dict[str, Any]) -> tuple[CatalogEndpointRef, ...]:
-    """Return the fixture catalog's endpoint refs."""
+    """Return the fixture catalog's endpoint refs.
+
+    Returns:
+        The fixture catalog's endpoint refs.
+
+    """
     return ModelCatalog.from_mapping(catalog_raw, priced_ids=None).refs
 
 

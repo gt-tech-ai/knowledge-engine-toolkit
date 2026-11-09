@@ -19,5 +19,10 @@ class StaticTokenSource(TokenSource):
 
     @override
     async def token(self) -> str:
-        """Return the configured token."""
+        """Return the configured token.
+
+        Returns:
+            The configured token.
+
+        """
         return self._token

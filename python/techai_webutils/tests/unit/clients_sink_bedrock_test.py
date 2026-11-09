@@ -38,7 +38,12 @@ _CHUNKS = [
 
 
 def _storage(existing: list[str] | None = None) -> MagicMock:
-    """Return a mocked object store listing ``existing`` under any prefix."""
+    """Return a mocked object store listing ``existing`` under any prefix.
+
+    Returns:
+        A mocked object store listing ``existing`` under any prefix.
+
+    """
     storage = MagicMock(spec=StorageClient)
     storage.list_objects = AsyncMock(
         return_value=[StorageObject(k, 1, "", "", "") for k in existing or []]
@@ -50,7 +55,12 @@ def _storage(existing: list[str] | None = None) -> MagicMock:
 
 
 def _sink(storage: MagicMock, layout: BedrockLayout = BedrockLayout.CHUNK_FILES) -> Sink:
-    """Return the factory's bedrock sink over ``storage`` in bucket ``kb-bucket``."""
+    """Return the factory's bedrock sink over ``storage`` in bucket ``kb-bucket``.
+
+    Returns:
+        The factory's bedrock sink over ``storage`` in bucket ``kb-bucket``.
+
+    """
     return sink_from_config(
         SinkConfig(
             kind=SinkKind.BEDROCK,
@@ -63,7 +73,12 @@ def _sink(storage: MagicMock, layout: BedrockLayout = BedrockLayout.CHUNK_FILES)
 
 
 def _uploads(storage: MagicMock) -> dict[str, bytes]:
-    """Return each uploaded key and body."""
+    """Return each uploaded key and body.
+
+    Returns:
+        Each uploaded key and body.
+
+    """
     return {c.args[1]: c.args[2] for c in storage.upload.await_args_list}
 
 

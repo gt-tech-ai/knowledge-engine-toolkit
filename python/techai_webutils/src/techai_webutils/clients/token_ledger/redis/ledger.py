@@ -86,17 +86,32 @@ entry."""
 
 
 def _utcnow() -> datetime:
-    """Return the current UTC time (the window clock; patched in tests)."""
+    """Return the current UTC time (the window clock; patched in tests).
+
+    Returns:
+        The current UTC time (the window clock; patched in tests).
+
+    """
     return datetime.now(UTC)
 
 
 def _text(value: bytes | str | None) -> str | None:
-    """Decode a Redis reply value (bytes when ``decode_responses`` is off)."""
+    """Decode a Redis reply value (bytes when ``decode_responses`` is off).
+
+    Returns:
+        A Redis reply value (bytes when ``decode_responses`` is off).
+
+    """
     return value.decode() if isinstance(value, bytes) else value
 
 
 def _rfc3339(ts: datetime) -> str:
-    """Render ``ts`` in UTC as RFC 3339 with a ``Z`` suffix."""
+    """Render ``ts`` in UTC as RFC 3339 with a ``Z`` suffix.
+
+    Returns:
+        The RFC 3339 timestamp.
+
+    """
     return ts.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
@@ -149,28 +164,52 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
     @staticmethod
     def _workspace(scope: UsageScope) -> str:
-        """Return the key segment for ``scope``'s workspace."""
+        """Return the key segment for ``scope``'s workspace.
+
+        Returns:
+            The key segment for ``scope``'s workspace.
+
+        """
         return scope.workspace_id or _NO_WORKSPACE
 
     def _counter_key(self, scope: UsageScope, window: str) -> str:
-        """Return the counter hash key for ``scope`` and window id ``window``."""
+        """Return the counter hash key for ``scope`` and window id ``window``.
+
+        Returns:
+            The counter hash key for ``scope`` and window id ``window``.
+
+        """
         workspace = self._workspace(scope)
         return f"{self._config.redis_prefix}:{scope.org_id}:{workspace}:{window}"
 
     def _limits_key(self, scope: UsageScope) -> str:
-        """Return the limits hash key for ``scope``."""
+        """Return the limits hash key for ``scope``.
+
+        Returns:
+            The limits hash key for ``scope``.
+
+        """
         return (
             f"{self._config.redis_prefix}:limits:{scope.org_id}:{self._workspace(scope)}"
         )
 
     def _monthly(self) -> bool:
-        """Return True when counters are kept per month (else per day)."""
+        """Return True when counters are kept per month (else per day).
+
+        Returns:
+            True when counters are kept per month (else per day).
+
+        """
         return self._window == Period.MONTHLY
 
     def _bucket(self, ts: datetime) -> tuple[str, int]:
         """Return the window id ``ts`` falls in and that bucket's expiry.
 
         (epoch seconds).
+
+        Returns:
+            The window id ``ts`` falls in and that bucket's expiry.
+
         """
         utc = ts.astimezone(UTC)
         if self._monthly():
@@ -189,6 +228,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         """Return the counter keys the current window sums.
 
         (one, or 30 days for rolling).
+
+        Returns:
+            The counter keys the current window sums.
+
         """
         if self._window == Period.ROLLING_30D:
             return [
@@ -248,6 +291,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         """Read the counter hashes.
 
         (and the limits hash) in one non-transactional pipeline.
+
+        Returns:
+            The counter hashes.
+
         """
         async with self._redis.pipeline(transaction=False) as pipe:
             for key in keys:
@@ -261,6 +308,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         """Sum counter rows (``HMGET`` replies) field by field.
 
         A missing field counts as 0.
+
+        Returns:
+            The field-wise totals.
+
         """
         totals = [0, 0, 0, 0]
         for row in rows:
@@ -273,6 +324,10 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         """Compare the window's counters with the scope's limits.
 
         Fail open on a Redis or parse error.
+
+        Returns:
+            The budget decision.
+
         """
         keys = self._window_keys(scope, self._clock())
         try:
@@ -294,10 +349,14 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
 
         For the counter rows plus the trailing limits hash reply.
 
-        Raises:
-            ValueError: A counter or limit value is not a number (the caller fails open).
-            decimal.InvalidOperation: ``cost_usd`` is not a decimal (the caller fails
-                open).
+        Returns:
+            The budget decision.
+
+        A callee raises ``ValueError``: A counter or limit value is not a number (the
+        caller fails open).
+
+        A callee raises ``decimal.InvalidOperation``: ``cost_usd`` is not a decimal (the
+        caller fails open).
 
         """
         input_tokens, output_tokens, embed_tokens, cost_micros = self._sum(replies[:-1])
@@ -339,6 +398,14 @@ class RedisTokenLedger(NoOpAsyncResource, TokenLedger):
         Only ``period == config.window`` is answerable from the hot-path counters; any
         other period raises ``INVALID_INPUT`` (the authoritative aggregate is the durable
         ledger's). A Redis error raises ``UNAVAILABLE``.
+
+        Returns:
+            An approximate summary from the counters of the configured window.
+
+        Raises:
+            AppError: Redis token ledger keeps ``self._window`` counters; cannot answer
+                ``period``; token ledger counters unavailable.
+
         """
         if period != self._window:
             raise AppError(
@@ -367,6 +434,10 @@ def _enforcement(raw: str | None) -> Enforcement | None:
     """Return the budget's stored enforcement.
 
     Or ``None`` when it is missing or unknown.
+
+    Returns:
+        The budget's stored enforcement.
+
     """
     if raw is None:
         return None

@@ -28,6 +28,10 @@ def _cgroup(root: Path, *, cpu_max: str | None, memory_max: str | None) -> Path:
     """Write cgroup v2 ``cpu.max`` / ``memory.max`` files under ``root``.
 
     (``None`` omits a file).
+
+    Returns:
+        ``root``.
+
     """
     if cpu_max is not None:
         (root / "cpu.max").write_text(f"{cpu_max}\n")
@@ -37,7 +41,12 @@ def _cgroup(root: Path, *, cpu_max: str | None, memory_max: str | None) -> Path:
 
 
 def _cgroup_probe(root: Path, *, required: bool = False) -> ResourceProbe:
-    """Build a cgroup probe over ``root`` through the factory."""
+    """Build a cgroup probe over ``root`` through the factory.
+
+    Returns:
+        A cgroup probe over ``root`` through the factory.
+
+    """
     return resource_probe_from_config(
         ResourceProbeConfig(
             kind=ResourceProbeKind.CGROUP,
@@ -47,7 +56,12 @@ def _cgroup_probe(root: Path, *, required: bool = False) -> ResourceProbe:
 
 
 def _host_cpu() -> float:
-    """Return the host CPU count the cgroup probe falls back to."""
+    """Return the host CPU count the cgroup probe falls back to.
+
+    Returns:
+        The host CPU count the cgroup probe falls back to.
+
+    """
     return float(os.cpu_count() or 1)
 
 

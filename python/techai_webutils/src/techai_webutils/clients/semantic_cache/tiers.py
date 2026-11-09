@@ -85,14 +85,24 @@ class _Candidates(CacheCandidates):
 
     @override
     async def exact(self) -> CachedAnswer | None:
-        """Return the exact-repeat candidate, fetching it on first use."""
+        """Return the exact-repeat candidate, fetching it on first use.
+
+        Returns:
+            The exact-repeat candidate, fetching it on first use.
+
+        """
         if self._exact is None:
             self._exact = (await self._cache.exact(self._query, self._namespace),)
         return self._exact[0]
 
     @override
     async def nearest(self) -> CachedAnswer | None:
-        """Return the nearest-neighbour candidate, fetching it on first use."""
+        """Return the nearest-neighbour candidate, fetching it on first use.
+
+        Returns:
+            The nearest-neighbour candidate, fetching it on first use.
+
+        """
         if self._nearest is None:
             self._nearest = (await self._cache.nearest(self._query, self._namespace),)
         return self._nearest[0]
@@ -111,7 +121,12 @@ class ExactTier(CacheTier):
     async def match(
         self, query: str, candidates: CacheCandidates, *, min_similarity: float
     ) -> CachedAnswer | None:
-        """Return the exact candidate, whatever the threshold."""
+        """Return the exact candidate, whatever the threshold.
+
+        Returns:
+            The exact candidate, whatever the threshold.
+
+        """
         return await candidates.exact()
 
 
@@ -128,7 +143,12 @@ class SemanticTier(CacheTier):
     async def match(
         self, query: str, candidates: CacheCandidates, *, min_similarity: float
     ) -> CachedAnswer | None:
-        """Return the neighbour when its similarity reaches ``min_similarity``."""
+        """Return the neighbour when its similarity reaches ``min_similarity``.
+
+        Returns:
+            The neighbour when its similarity reaches ``min_similarity``.
+
+        """
         nearest = await candidates.nearest()
         if nearest is None or nearest.similarity < min_similarity:
             return None
@@ -160,6 +180,10 @@ class VerifiedTier(CacheTier):
         """Return a neighbour in ``[floor, min_similarity)`` the verifier confirms.
 
         In time.
+
+        Returns:
+            A neighbour in ``[floor, min_similarity)`` the verifier confirms.
+
         """
         nearest = await candidates.nearest()
         if nearest is None or not self._floor <= nearest.similarity < min_similarity:
@@ -201,6 +225,10 @@ class TieredLookup(CacheLookup):
         """Return the first tier's hit with ``tier`` set, else ``None``.
 
         Any error is a miss.
+
+        Returns:
+            The first tier's hit with ``tier`` set, else ``None``.
+
         """
         if not self._tiers:
             return None
@@ -219,7 +247,16 @@ class TieredLookup(CacheLookup):
 
 
 def _validate(configs: Sequence[CacheTierConfig], verifier: CacheVerifier | None) -> None:
-    """Raise ``AppValueError`` for a tier list the lookup cannot run."""
+    """Raise ``AppValueError`` for a tier list the lookup cannot run.
+
+    Raises:
+        AppValueError: Unknown semantic cache tier kind: ``config.kind``; tier
+            ``config.kind`` min_similarity must be in (0, 1]: ``config.min_similarity``;
+            semantic cache tier listed twice: ``kinds``; the verified tier requires a
+            cache verifier; verified tier floor ``config.floor`` must be below its ceiling
+            ``config.min_similarity``.
+
+    """
     kinds = [config.kind for config in configs]
     for config in configs:
         if config.kind not in CacheTierKind.__members__.values():
@@ -263,6 +300,9 @@ def cache_lookup_from_config(
             listed).
 
     Returns: The lookup.
+
+    Returns:
+        The tier chain ``tiers`` lists, in order, over ``cache``.
 
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown or duplicate kind, a similarity

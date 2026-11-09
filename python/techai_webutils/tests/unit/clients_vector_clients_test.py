@@ -30,6 +30,10 @@ def _mock_client(
     """Return a mock AsyncQdrantClient.
 
     Collection_exists/create/upsert/delete + query_points→.points + retrieve.
+
+    Returns:
+        A mock AsyncQdrantClient.
+
     """
     client = MagicMock(spec=AsyncQdrantClient)
     client.collection_exists = AsyncMock(return_value=exists)
@@ -53,6 +57,10 @@ def _retrieved_point(entry_id: str, **metadata: str) -> object:
 
     Its payload carries the store's own keys plus ``metadata``, as
     ``QdrantVectorStore.upsert`` writes it.
+
+    Returns:
+        A retrieved point whose ``id`` is the deterministic Qdrant point id.
+
     """
     point = MagicMock()
     point.id = str(uuid.uuid5(uuid.NAMESPACE_URL, entry_id))

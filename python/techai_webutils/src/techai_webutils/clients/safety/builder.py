@@ -59,7 +59,15 @@ class SafetyConfig:
 
 
 def _on_detect(value: str) -> OnDetect:
-    """Return the ``OnDetect`` policy named by ``value``, or raise ``AppValueError``."""
+    """Return the ``OnDetect`` policy named by ``value``, or raise ``AppValueError``.
+
+    Returns:
+        The ``OnDetect`` policy named by ``value``, or raise ``AppValueError``.
+
+    Raises:
+        AppValueError: Unknown safety on_detect policy: ``value``.
+
+    """
     try:
         return OnDetect(value)
     except ValueError:
@@ -76,6 +84,9 @@ def new_safety_check_from_config(
         config: The safety configuration.
         session: The aiobotocore session the managed kinds open their client from;
             ``None`` creates one (the dev/test kinds never touch it).
+
+    Returns:
+        The ``SafetyCheck`` selected by ``config.kind``.
 
     Raises:
         AppValueError: an unknown kind or policy, ``bedrock_guardrails`` without an id, or

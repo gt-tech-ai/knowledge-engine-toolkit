@@ -36,6 +36,10 @@ def _fact(i: int = 0) -> Fact:
     """Return the golden fact.
 
     (``i == 0``) or a variant with a distinct idempotency key.
+
+    Returns:
+        The golden fact.
+
     """
     return Fact(
         cube="genai_calls",
@@ -58,6 +62,10 @@ def _dropped_counter() -> tuple[MagicMock, MagicMock]:
     """Return a metrics provider whose only counter.
 
     (``gen_ai_fact_dropped_total``) is returned too.
+
+    Returns:
+        A metrics provider whose only counter.
+
     """
     counter = MagicMock(spec=MetricCounter)
     metrics = MagicMock(spec=MetricsProvider)
@@ -191,6 +199,10 @@ async def test_messaging_publisher_closes_when_the_sender_dies_and_after_aclose(
         """Create the task as asyncio does and keep the handle whose death is.
 
         Under test.
+
+        Returns:
+            The task as asyncio does and keep the handle whose death is.
+
         """
         task = create_task(coro)
         senders.append(task)

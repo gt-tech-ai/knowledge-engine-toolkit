@@ -39,7 +39,12 @@ type Baseline = dict[str, dict[str, object]]
 
 
 def _class_path(cls: type) -> str:
-    """Return ``module.QualName`` for ``cls``, the baseline's key."""
+    """Return ``module.QualName`` for ``cls``, the baseline's key.
+
+    Returns:
+        ``module.QualName`` for ``cls``, the baseline's key.
+
+    """
     return f"{cls.__module__}.{cls.__qualname__}"
 
 
@@ -48,6 +53,10 @@ def _discover_configs() -> dict[str, type[DataclassInstance]]:
     """Import every ``techai_webutils`` module and return its ``*Config`` dataclasses.
 
     By path.
+
+    Returns:
+        The config classes by module path.
+
     """
     found: dict[str, type[DataclassInstance]] = {}
     for info in pkgutil.walk_packages(techai_webutils.__path__, "techai_webutils."):
@@ -64,7 +73,12 @@ def _discover_configs() -> dict[str, type[DataclassInstance]]:
 
 
 def _load_baseline() -> Baseline:
-    """Read the required-fields baseline."""
+    """Read the required-fields baseline.
+
+    Returns:
+        The required-fields baseline.
+
+    """
     return cast("Baseline", json.loads(_BASELINE_PATH.read_text()))
 
 
@@ -72,6 +86,10 @@ def required_fields(cls: type[DataclassInstance]) -> set[str]:
     """Return the names of ``cls``'s init fields.
 
     That have neither a default nor a factory.
+
+    Returns:
+        The names of ``cls``'s init fields.
+
     """
     return {
         field.name
@@ -85,7 +103,12 @@ def required_fields(cls: type[DataclassInstance]) -> set[str]:
 def unbaselined_required(
     cls: type[DataclassInstance], baseline_entry: dict[str, object]
 ) -> list[str]:
-    """Return ``cls``'s required fields the baseline entry does not record, sorted."""
+    """Return ``cls``'s required fields the baseline entry does not record, sorted.
+
+    Returns:
+        ``cls``'s required fields the baseline entry does not record, sorted.
+
+    """
     return sorted(required_fields(cls) - baseline_entry.keys())
 
 
@@ -93,6 +116,10 @@ def build_config(path: str, baseline: Baseline) -> DataclassInstance:
     """Build the config at ``path`` from its baseline values.
 
     Resolving ``$config`` references.
+
+    Returns:
+        The config at ``path`` from its baseline values.
+
     """
     kwargs: dict[str, object] = {}
     for field_name, value in baseline[path].items():

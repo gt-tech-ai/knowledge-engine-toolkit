@@ -33,6 +33,10 @@ def _answer(similarity: float) -> CachedAnswer:
     """Return a candidate.
 
     At ``similarity`` whose cached question is "the cached question".
+
+    Returns:
+        A candidate.
+
     """
     return CachedAnswer(
         payload=b"a",
@@ -45,7 +49,12 @@ def _answer(similarity: float) -> CachedAnswer:
 def _backend(
     exact: CachedAnswer | None = None, nearest: CachedAnswer | None = None
 ) -> MagicMock:
-    """Return a ``SemanticCache`` mock whose primitives return the given candidates."""
+    """Return a ``SemanticCache`` mock whose primitives return the given candidates.
+
+    Returns:
+        A ``SemanticCache`` mock whose primitives return the given candidates.
+
+    """
     cache = MagicMock(spec=SemanticCache)
     cache.exact = AsyncMock(return_value=exact)
     cache.nearest = AsyncMock(return_value=nearest)
@@ -53,7 +62,12 @@ def _backend(
 
 
 def _verifier(*, same: bool = True, delay: float = 0.0) -> MagicMock:
-    """Return a ``CacheVerifier`` mock answering ``same`` after ``delay`` seconds."""
+    """Return a ``CacheVerifier`` mock answering ``same`` after ``delay`` seconds.
+
+    Returns:
+        A ``CacheVerifier`` mock answering ``same`` after ``delay`` seconds.
+
+    """
 
     async def same_question(_cached: str, _query: str) -> bool:
         await asyncio.sleep(delay)

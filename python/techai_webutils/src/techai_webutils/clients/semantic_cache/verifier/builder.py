@@ -56,6 +56,9 @@ def cache_verifier_from_config(
 
     Returns: The verifier.
 
+    Returns:
+        The verifier ``config.kind`` selects.
+
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind or ``llm`` without a
             provider.

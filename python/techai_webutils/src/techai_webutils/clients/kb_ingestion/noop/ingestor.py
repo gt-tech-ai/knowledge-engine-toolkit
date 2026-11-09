@@ -31,7 +31,12 @@ class StubKnowledgeBaseIngestor(NoOpAsyncResource, KnowledgeBaseIngestor):
     async def start_ingestion_job(
         self, *, knowledge_base_id: str, data_source_id: str, round_id: str = ""
     ) -> IngestionJob:
-        """Record and immediately complete a synthetic ingestion job."""
+        """Record and immediately complete a synthetic ingestion job.
+
+        Returns:
+            The completed job.
+
+        """
         self._counter += 1
         job_id = f"stub-job-{self._counter}"
         self.started.append((knowledge_base_id, data_source_id, job_id))
@@ -45,7 +50,12 @@ class StubKnowledgeBaseIngestor(NoOpAsyncResource, KnowledgeBaseIngestor):
         data_source_id: str,
         job_id: str,
     ) -> IngestionJob:
-        """Return a COMPLETE job for any id (stub jobs finish on start)."""
+        """Return a COMPLETE job for any id (stub jobs finish on start).
+
+        Returns:
+            A COMPLETE job for any id (stub jobs finish on start).
+
+        """
         return IngestionJob(job_id=job_id, state=IngestionJobState.COMPLETE)
 
     @override
@@ -55,7 +65,12 @@ class StubKnowledgeBaseIngestor(NoOpAsyncResource, KnowledgeBaseIngestor):
         knowledge_base_id: str,
         data_source_id: str,
     ) -> list[KnowledgeBaseDocument]:
-        """Return no documents — the stub has no real KB to list (dev/local)."""
+        """Return no documents — the stub has no real KB to list (dev/local).
+
+        Returns:
+            No documents — the stub has no real KB to list (dev/local).
+
+        """
         return []
 
     async def stop_ingestion_job(
@@ -68,6 +83,10 @@ class StubKnowledgeBaseIngestor(NoOpAsyncResource, KnowledgeBaseIngestor):
         """Record the stop request and return a STOPPING job.
 
         (dev/local; no real Bedrock).
+
+        Returns:
+            The job after the stop request.
+
         """
         self.stopped.append((knowledge_base_id, data_source_id, job_id))
         return IngestionJob(job_id=job_id, state=IngestionJobState.STOPPING)

@@ -29,6 +29,10 @@ def decorate(
         re-sent
     message is a duplicate an at-least-once consumer accepts. A ``KeyedPublisher`` base
     yields a ``KeyedPublisher``, so decoration never hides the keyed capability.
+
+    Returns:
+        ``base`` with every publish run through the client tier.
+
     """
     client = ClientBase.wire(decorations, name, producer(), *options)
     if isinstance(base, KeyedPublisher):
@@ -48,7 +52,12 @@ class _DecoratedPublisher(MessagePublisher):
         self._client = client
 
     async def __aenter__(self) -> Self:
-        """Open the wrapped publisher."""
+        """Open the wrapped publisher.
+
+        Returns:
+            The wrapped publisher.
+
+        """
         await self._base.__aenter__()
         return self
 

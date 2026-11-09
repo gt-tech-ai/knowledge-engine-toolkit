@@ -256,7 +256,12 @@ async def _hits(
 
 
 def _score(hit: Mapping[str, object]) -> float:
-    """Return a hit's score (0 when absent)."""
+    """Return a hit's score (0 when absent).
+
+    Returns:
+        A hit's score (0 when absent).
+
+    """
     score = hit.get("_score")
     return float(score) if isinstance(score, int | float) else 0.0
 

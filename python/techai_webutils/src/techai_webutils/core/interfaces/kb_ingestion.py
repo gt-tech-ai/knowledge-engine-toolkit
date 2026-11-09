@@ -156,6 +156,10 @@ class KnowledgeBaseIngestor(ManagedResource, ABC):
         This default lists the whole data source once and yields the cohort's documents; a
         Kind that can look documents up by URI overrides it. A URI the data source does
         not hold is not yielded.
+
+        Yields:
+            The KB documents of ``s3_uris``, the cohort a sync round started.
+
         """
         wanted = set(s3_uris)
         if not wanted:

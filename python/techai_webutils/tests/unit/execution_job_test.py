@@ -16,7 +16,12 @@ from techai_webutils.execution.job.job import JobBuilder
 
 
 async def _ok(item: int) -> StepResult:
-    """Process ``item`` into a passing step (a trivial always-passing processor)."""
+    """Process ``item`` into a passing step (a trivial always-passing processor).
+
+    Returns:
+        A passing step for the item.
+
+    """
     await asyncio.sleep(0)
     return StepResult(name=f"item-{item}")
 
@@ -27,6 +32,10 @@ def _discoverer(items: list[int]) -> Discoverer[int]:
     Configures the autospec's AsyncMock child in place (rather than replacing it) so the
     port's ``discover`` signature stays enforced — consistent with the processor-port
     mocks.
+
+    Returns:
+        The mock discoverer.
+
     """
     disc = create_autospec(Discoverer, instance=True)
     disc.discover.return_value = items

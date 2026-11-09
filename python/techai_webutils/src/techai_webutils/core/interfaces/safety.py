@@ -56,6 +56,10 @@ def blocked_error(result: SafetyResult) -> AppError:
     """Return the coded ``FORBIDDEN`` error a blocked scan surfaces as.
 
     Naming its flags.
+
+    Returns:
+        The coded ``FORBIDDEN`` error a blocked scan surfaces as.
+
     """
     return AppError(
         ErrorCode.FORBIDDEN,
@@ -80,7 +84,12 @@ class SafetyCheck(ManagedResource, ABC):
         """Release any owned client (infra-free checks own none)."""
 
     async def __aenter__(self) -> Self:
-        """Enter the async context; a managed client opens lazily on first scan."""
+        """Enter the async context; a managed client opens lazily on first scan.
+
+        Returns:
+            This instance.
+
+        """
         return self
 
     async def __aexit__(self, *exc: object) -> None:

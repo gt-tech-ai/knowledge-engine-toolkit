@@ -16,7 +16,12 @@ class NoopStartBudget(NoOpAsyncResource, StartBudget):
 
     @override
     async def acquire(self, binding: str) -> Slot | None:
-        """Return slot 0 at once."""
+        """Return slot 0 at once.
+
+        Returns:
+            Slot 0 at once.
+
+        """
         return Slot(binding=binding, index=0)
 
     @override

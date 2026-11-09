@@ -30,7 +30,12 @@ from techai_webutils.core.interfaces.token_ledger import (
 
 
 def _record() -> UsageRecord:
-    """Return a usage record for one generation."""
+    """Return a usage record for one generation.
+
+    Returns:
+        A usage record for one generation.
+
+    """
     return UsageRecord(
         scope=UsageScope(org_id="org-1", team_id="t-1"),
         model="nova-lite",

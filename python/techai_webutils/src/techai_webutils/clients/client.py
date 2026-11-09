@@ -26,6 +26,10 @@ def tier() -> Tier:
 
     The bulkhead bounds calls before a retry multiplies them; each retry attempt passes
     the breaker and gets its own deadline, client span, metrics and log line.
+
+    Returns:
+        The client tier, outermost first.
+
     """
     return Tier(
         "client",
@@ -54,7 +58,12 @@ class Option:
 
 
 def producer() -> Option:
-    """Decorate a message publisher: PRODUCER spans, since each call sends a message."""
+    """Decorate a message publisher: PRODUCER spans, since each call sends a message.
+
+    Returns:
+        The option to pass to the client base.
+
+    """
     return Option(span_kind=SpanKind.PRODUCER)
 
 
@@ -64,6 +73,10 @@ def handler() -> Option:
     Broken or bulkheaded.
 
     The broker's redelivery is the retry, and one poison message must not trip the others.
+
+    Returns:
+        The option to pass to the client base.
+
     """
     return Option(
         span_kind=SpanKind.CONSUMER,
@@ -74,7 +87,12 @@ def handler() -> Option:
 
 
 def at_most_once() -> Option:
-    """Never retry the client's calls, whatever the config says (a Redis PUBLISH)."""
+    """Never retry the client's calls, whatever the config says (a Redis PUBLISH).
+
+    Returns:
+        The option to pass to the client base.
+
+    """
     return Option(adjust=Deps.without_retry)
 
 
@@ -114,6 +132,10 @@ class ClientBase:
         An RPC procedure, an HTTP route: every operation runs on the client's own chain,
             labeled
         by its name, so the config tunes the client as a whole.
+
+        Returns:
+            The base of a client whose operations are wire-level names.
+
         """
         return cls(None, decorations, name, *options)
 
@@ -123,18 +145,33 @@ class ClientBase:
         return self._subject.name
 
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run the idempotent call ``fn`` as ``op``, retried when the tier retries."""
+        """Run the idempotent call ``fn`` as ``op``, retried when the tier retries.
+
+        Returns:
+            What ``fn`` returns.
+
+        """
         return await self._subject.exec(op, fn)
 
     async def exec_once[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run the call ``fn`` as ``op`` exactly once, never retried."""
+        """Run the call ``fn`` as ``op`` exactly once, never retried.
+
+        Returns:
+            What ``fn`` returns.
+
+        """
         return await self._subject.exec_once(op, fn)
 
 
 def _shape(
     options: tuple[Option, ...],
 ) -> tuple[Tier, tuple[Callable[[Deps], Deps], ...]]:
-    """Return the client tier and the Deps adjustments ``options`` select."""
+    """Return the client tier and the Deps adjustments ``options`` select.
+
+    Returns:
+        The client tier and the Deps adjustments ``options`` select.
+
+    """
     client_tier = tier()
     adjust: list[Callable[[Deps], Deps]] = []
     for o in options:

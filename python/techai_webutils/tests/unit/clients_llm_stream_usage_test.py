@@ -32,7 +32,12 @@ if TYPE_CHECKING:
 
 
 def _messages(user: str) -> list[LLMMessage]:
-    """Return a system + user message pair."""
+    """Return a system + user message pair.
+
+    Returns:
+        A system + user message pair.
+
+    """
     return [
         LLMMessage(role="system", content="be brief"),
         LLMMessage(role="user", content=user),
@@ -40,7 +45,12 @@ def _messages(user: str) -> list[LLMMessage]:
 
 
 async def _collect(iterator: AsyncIterator[Any]) -> list[Any]:
-    """Drain an async iterator into a list."""
+    """Drain an async iterator into a list.
+
+    Returns:
+        The drained items.
+
+    """
     return [item async for item in iterator]
 
 
@@ -48,6 +58,10 @@ async def _events(events: list[dict[str, Any]]) -> AsyncIterator[dict[str, Any]]
     """Yield Converse stream events in order.
 
     (the shape aiobotocore's EventStream yields).
+
+    Yields:
+        Converse stream events in order.
+
     """
     await asyncio.sleep(0)
     for event in events:
@@ -55,7 +69,12 @@ async def _events(events: list[dict[str, Any]]) -> AsyncIterator[dict[str, Any]]
 
 
 async def _lines(lines: list[str]) -> AsyncIterator[str]:
-    """Yield NDJSON lines in order (the shape ``httpx.Response.aiter_lines`` yields)."""
+    """Yield NDJSON lines in order (the shape ``httpx.Response.aiter_lines`` yields).
+
+    Yields:
+        NDJSON lines in order (the shape ``httpx.Response.aiter_lines`` yields).
+
+    """
     await asyncio.sleep(0)
     for line in lines:
         yield line
@@ -68,6 +87,10 @@ def _ollama_client(lines: list[str], *, status: int = 200) -> MagicMock:
 
     The response is a ``MagicMock(spec=httpx.Response)``; a non-2xx ``status`` makes its
     ``raise_for_status`` raise the real ``httpx.HTTPStatusError``.
+
+    Returns:
+        An ``httpx.AsyncClient`` mock whose ``stream()`` context yields the given.
+
     """
     response = MagicMock(spec=httpx.Response)
     response.status_code = status
@@ -210,7 +233,12 @@ async def test_ollama_stream_with_usage_codes_http_errors(
 
 
 async def _lines_then_fail(lines: list[str], exc: Exception) -> AsyncIterator[str]:
-    """Yield NDJSON lines in order, then raise ``exc`` as a dropped stream would."""
+    """Yield NDJSON lines in order, then raise ``exc`` as a dropped stream would.
+
+    Yields:
+        NDJSON lines in order, then raise ``exc`` as a dropped stream would.
+
+    """
     await asyncio.sleep(0)
     for line in lines:
         yield line
@@ -269,6 +297,10 @@ async def _events_then_fail(
     """Yield Converse stream events in order.
 
     Then raise ``exc`` as a failing EventStream would.
+
+    Yields:
+        Converse stream events in order.
+
     """
     await asyncio.sleep(0)
     for event in events:

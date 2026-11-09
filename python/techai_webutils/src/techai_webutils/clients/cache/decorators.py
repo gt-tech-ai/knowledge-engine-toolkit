@@ -33,7 +33,12 @@ class _CircuitBreakerCacheDecorator(Cache):
         self._cb = cb
 
     async def get(self, key: str) -> bytes | None:
-        """Read through the breaker, returning None when the circuit is open."""
+        """Read through the breaker, returning None when the circuit is open.
+
+        Returns:
+            The stored bytes, or ``None`` on a miss or an open circuit.
+
+        """
         try:
             with self._cb:
                 return await self._inner.get(key)
@@ -63,7 +68,12 @@ class _CircuitBreakerCacheDecorator(Cache):
             raise
 
     async def exists(self, key: str) -> bool:
-        """Probe through the breaker, reporting False when the circuit is open."""
+        """Probe through the breaker, reporting False when the circuit is open.
+
+        Returns:
+            Whether the key exists; ``False`` when the circuit is open.
+
+        """
         try:
             with self._cb:
                 return await self._inner.exists(key)
@@ -74,7 +84,12 @@ class _CircuitBreakerCacheDecorator(Cache):
 
     @staticmethod
     def _is_circuit_open(exc: Exception) -> bool:
-        """Report whether an exception is the breaker's open-circuit signal."""
+        """Report whether an exception is the breaker's open-circuit signal.
+
+        Returns:
+            Whether ``exc`` is the open-circuit signal.
+
+        """
         return isinstance(exc, CircuitOpenError)
 
 
@@ -88,6 +103,9 @@ class _TimeoutCacheDecorator(Cache):
 
     async def get(self, key: str) -> bytes | None:
         """Read with a deadline, raising AppTimeoutError when it elapses.
+
+        Returns:
+            The stored bytes, or ``None`` on a miss.
 
         Raises:
             AppTimeoutError: If the underlying get does not complete in time.
@@ -130,6 +148,9 @@ class _TimeoutCacheDecorator(Cache):
     async def exists(self, key: str) -> bool:
         """Probe with a deadline, raising AppTimeoutError when it elapses.
 
+        Returns:
+            Whether the key exists.
+
         Raises:
             AppTimeoutError: If the underlying exists does not complete in time.
 
@@ -150,7 +171,12 @@ class _LoggingCacheDecorator(Cache):
         self._logger = logger
 
     async def get(self, key: str) -> bytes | None:
-        """Read and log the lookup along with its hit/miss outcome."""
+        """Read and log the lookup along with its hit/miss outcome.
+
+        Returns:
+            The stored bytes, or ``None`` on a miss.
+
+        """
         self._logger.debug("cache.get", key=key)
         result = await self._inner.get(key)
         if result is None:
@@ -170,7 +196,12 @@ class _LoggingCacheDecorator(Cache):
         await self._inner.delete(key)
 
     async def exists(self, key: str) -> bool:
-        """Probe and log the key together with its existence result."""
+        """Probe and log the key together with its existence result.
+
+        Returns:
+            Whether the key exists.
+
+        """
         result = await self._inner.exists(key)
         self._logger.debug("cache.exists", key=key, result=result)
         return result
@@ -193,7 +224,12 @@ class _MetricsCacheDecorator(Cache):
         self._latency = latency
 
     async def get(self, key: str) -> bytes | None:
-        """Read while recording get latency and a hit-or-miss counter."""
+        """Read while recording get latency and a hit-or-miss counter.
+
+        Returns:
+            The stored bytes, or ``None`` on a miss.
+
+        """
         start = time.monotonic()
         result = await self._inner.get(key)
         self._latency.observe(time.monotonic() - start, operation="get")
@@ -216,7 +252,12 @@ class _MetricsCacheDecorator(Cache):
         self._latency.observe(time.monotonic() - start, operation="delete")
 
     async def exists(self, key: str) -> bool:
-        """Probe while recording exists latency."""
+        """Probe while recording exists latency.
+
+        Returns:
+            Whether the key exists.
+
+        """
         start = time.monotonic()
         result = await self._inner.exists(key)
         self._latency.observe(time.monotonic() - start, operation="exists")
@@ -243,7 +284,12 @@ class CacheBuilder:
         self._timeout: float | None = None
 
     def with_logging(self, logger: Logger) -> CacheBuilder:
-        """Add logging decorator."""
+        """Add logging decorator.
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._logger = logger
         return self
 
@@ -253,17 +299,32 @@ class CacheBuilder:
         misses: MetricCounter,
         latency: MetricHistogram,
     ) -> CacheBuilder:
-        """Add metrics decorator."""
+        """Add metrics decorator.
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._metrics = (hits, misses, latency)
         return self
 
     def with_circuit_breaker(self, cb: CircuitBreakerInterface) -> CacheBuilder:
-        """Add a circuit breaker decorator."""
+        """Add a circuit breaker decorator.
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._cb = cb
         return self
 
     def with_timeout(self, seconds: float) -> CacheBuilder:
-        """Add a timeout decorator."""
+        """Add a timeout decorator.
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._timeout = seconds
         return self
 
@@ -271,6 +332,10 @@ class CacheBuilder:
         """Build the decorated cache.
 
         Chain: base -> circuit_breaker -> timeout -> metrics -> logging.
+
+        Returns:
+            The decorated cache.
+
         """
         cache: Cache = self._inner
         if self._cb is not None:

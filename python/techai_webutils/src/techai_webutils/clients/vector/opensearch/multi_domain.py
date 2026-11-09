@@ -64,6 +64,11 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
         ``deadline_seconds`` (0: none) bounds each domain's share of a search; ``metrics``
         counts the domains cut at it.
+
+        Raises:
+            AppValueError: A multi-domain store needs at least one domain; shards map to
+                unknown domains: ``missing``.
+
         """
         if not domains:
             msg = "a multi-domain store needs at least one domain"
@@ -85,7 +90,12 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         )
 
     def for_org(self, org_id: str) -> MultiDomainVectorStore:
-        """Return a view whose every domain is scoped to ``org_id``."""
+        """Return a view whose every domain is scoped to ``org_id``.
+
+        Returns:
+            A view whose every domain is scoped to ``org_id``.
+
+        """
         return MultiDomainVectorStore(
             {name: store.for_org(org_id) for name, store in self._domains.items()},
             self._shard_domains,
@@ -95,7 +105,12 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         )
 
     def domain(self, name: str) -> OpenSearchVectorStore:
-        """Return one domain's store (for per-domain index administration and checks)."""
+        """Return one domain's store (for per-domain index administration and checks).
+
+        Returns:
+            One domain's store (for per-domain index administration and checks).
+
+        """
         return self._domains[name]
 
     @property
@@ -114,6 +129,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
         Every domain's alias follows the same model swap, so any domain holding the alias
         names the live index; ``None`` means no domain has been written yet.
+
+        Returns:
+            The index the scoped alias reads from on the first domain that has one.
+
         """
         found = await asyncio.gather(
             *(s.current_index(collection) for s in self._domains.values())
@@ -127,6 +146,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
         Every domain names it alike (the alias, model and version), so one name addresses
         the index on all of them.
+
+        Returns:
+            The configured model's index for the scoped alias on every domain.
+
         """
         names = await asyncio.gather(
             *(
@@ -144,6 +167,9 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
     async def index_model(self, index: str) -> tuple[str, str]:
         """Return the ``(model, version)`` of ``index``, read on a domain that holds it.
+
+        Returns:
+            The ``(model, version)`` of ``index``, read on a domain that holds it.
 
         Raises:
             AppValueError: No domain holds ``index`` (``INVALID_INPUT``).
@@ -185,8 +211,8 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
         Even when one domain fails.
 
-        Raises:
-            Exception: The first domain's failure, once every domain has been tried.
+        A callee raises ``Exception``: The first domain's failure, once every domain has
+        been tried.
 
         """
         results = await asyncio.gather(
@@ -220,6 +246,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         """Search every domain; return the global top ``top_k`` by score.
 
         (late domains cut).
+
+        Returns:
+            The hits, best first.
+
         """
         return await self._merged(
             lambda store: store.search(collection, query_embedding, top_k, filters), top_k
@@ -242,6 +272,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         """BM25-search every domain; return the global top ``top_k`` by score.
 
         (late domains cut).
+
+        Returns:
+            The hits, best first.
+
         """
         return await self._merged(
             lambda store: store.keyword_search(collection, query, top_k, filters), top_k
@@ -255,6 +289,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         """Run ``search`` on every domain, cut the late ones.
 
         And keep the top ``top_k`` by score.
+
+        Returns:
+            The hits, best first.
+
         """
         results = await asyncio.gather(
             *(self._bounded(name, search(store)) for name, store in self._domains.items())
@@ -268,6 +306,10 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         """Await one domain's search within the deadline.
 
         A late domain answers nothing.
+
+        Returns:
+            The domain's hits, or an empty list when cut at the deadline.
+
         """
         if not self._deadline:
             return await call
@@ -305,7 +347,12 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
     @override
     async def count_by_document(self, collection: str, document_id: str) -> int:
-        """Sum ``document_id``'s entries over every domain."""
+        """Sum ``document_id``'s entries over every domain.
+
+        Returns:
+            The total entry count.
+
+        """
         counts = await asyncio.gather(
             *(
                 s.count_by_document(collection, document_id)
@@ -318,7 +365,12 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
     async def stored_metadata(
         self, collection: str, ids: Sequence[str]
     ) -> dict[str, dict[str, str]]:
-        """Merge every domain's stored metadata for ``ids``."""
+        """Merge every domain's stored metadata for ``ids``.
+
+        Returns:
+            The stored metadata by id.
+
+        """
         found = await asyncio.gather(
             *(s.stored_metadata(collection, ids) for s in self._domains.values())
         )
@@ -331,6 +383,14 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         """Return the domain of ``entry``'s shard.
 
         (a hash of its document id when it has none).
+
+        Returns:
+            The domain of ``entry``'s shard.
+
+        Raises:
+            AppValueError: Entry ``entry.id`` has a non-integer ``self._shard_field``:
+                ``raw``; shard ``shard`` of entry ``entry.id`` maps to no domain.
+
         """
         raw = entry.metadata.get(self._shard_field)
         if raw is None:

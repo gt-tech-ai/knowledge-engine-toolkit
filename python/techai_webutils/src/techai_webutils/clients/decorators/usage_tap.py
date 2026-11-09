@@ -180,6 +180,9 @@ class UsageTapProvider(LLMProvider):
 
         Yields: The text deltas, then the usage when ``with_usage``.
 
+        Yields:
+            Each text item, then the usage when ``with_usage``.
+
         """
         usage: StreamUsage | None = None
         try:

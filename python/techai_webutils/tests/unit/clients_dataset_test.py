@@ -35,7 +35,12 @@ _LINES = (
 
 
 async def _collect(dataset: Dataset) -> list[EvalCase]:
-    """Return every case the dataset yields."""
+    """Return every case the dataset yields.
+
+    Returns:
+        Every case the dataset yields.
+
+    """
     return [case async for case in dataset.cases()]
 
 

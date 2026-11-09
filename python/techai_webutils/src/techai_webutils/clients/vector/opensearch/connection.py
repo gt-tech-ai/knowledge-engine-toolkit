@@ -59,10 +59,12 @@ def opensearch_clients_from_config(
 
     The caller owns the clients and closes each (``await client.close()``) on shutdown.
 
-    Raises:
-        AppValueError: No domain, a duplicate or empty name or endpoint, a non-positive
-            timeout, or ``sigv4`` without a region or with no AWS credentials available
-            (``INVALID_INPUT``).
+    Returns:
+        One client per configured domain, keyed by domain name.
+
+    A callee raises ``AppValueError``: No domain, a duplicate or empty name or endpoint, a
+    non-positive timeout, or ``sigv4`` without a region or with no AWS credentials
+    available (``INVALID_INPUT``).
 
     """
     _validate(conn)
@@ -108,6 +110,9 @@ def _validate(conn: OpenSearchConnection) -> None:
 
 def _sigv4_auth(conn: OpenSearchConnection) -> AWSV4SignerAsyncAuth:
     """Return the SigV4 signer over the ambient (refreshing) AWS credentials.
+
+    Returns:
+        The SigV4 signer over the ambient (refreshing) AWS credentials.
 
     Raises:
         AppValueError: No AWS credentials are available (``INVALID_INPUT``).

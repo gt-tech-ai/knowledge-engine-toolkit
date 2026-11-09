@@ -14,7 +14,12 @@ from techai_webutils.foundation.logger import SampledLogger
 
 
 def _fail() -> NoReturn:
-    """Raise the error whose handler logs ``exception``."""
+    """Raise the error whose handler logs ``exception``.
+
+    Raises:
+        RuntimeError: Boom.
+
+    """
     msg = "boom"
     raise RuntimeError(msg)
 

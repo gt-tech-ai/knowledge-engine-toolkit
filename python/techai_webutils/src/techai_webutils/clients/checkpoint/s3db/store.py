@@ -81,6 +81,9 @@ class S3DbCheckpointStore(CheckpointStore):
     async def get(self, key: CheckpointKey) -> StageArtifact | None:
         """Return the artifact at ``key``; a missing or corrupt one is ``None``.
 
+        Returns:
+            The artifact at ``key``; a missing or corrupt one is ``None``.
+
         Raises:
             ConflictError: The envelope was written by a newer release (``CONFLICT``).
 
@@ -159,7 +162,12 @@ class S3DbCheckpointStore(CheckpointStore):
 
     @override
     async def get_part(self, key: CheckpointKey, n: int) -> bytes | None:
-        """Return part ``n`` at ``key``, or ``None`` when it is absent."""
+        """Return part ``n`` at ``key``, or ``None`` when it is absent.
+
+        Returns:
+            Part ``n`` at ``key``, or ``None`` when it is absent.
+
+        """
         name = self._layout.part(key, n)
         if not await self._objects.exists(self._bucket, name):
             return None
@@ -168,7 +176,12 @@ class S3DbCheckpointStore(CheckpointStore):
 
     @override
     async def parts(self, key: CheckpointKey) -> frozenset[int]:
-        """Return the part numbers stored at ``key``."""
+        """Return the part numbers stored at ``key``.
+
+        Returns:
+            The part numbers stored at ``key``.
+
+        """
         prefix = self._layout.parts_prefix(key)
         found = await self._objects.list_objects(self._bucket, prefix)
         return frozenset(
@@ -223,7 +236,12 @@ class S3DbCheckpointStore(CheckpointStore):
         await self._objects.upload(self._bucket, name, envelope, self._content_type)
 
     async def _segment(self, key: CheckpointKey, n: int) -> bytes:
-        """Return segment ``n`` of the artifact at ``key``."""
+        """Return segment ``n`` of the artifact at ``key``.
+
+        Returns:
+            Segment ``n`` of the artifact at ``key``.
+
+        """
         body = await self._objects.download(self._bucket, self._layout.segment(key, n))
         return await asyncio.to_thread(decompress, body)
 
@@ -249,10 +267,20 @@ class S3DbCheckpointStore(CheckpointStore):
 
 
 def _as_list(value: object) -> list[object]:
-    """Return ``value`` as a list (an absent or non-list header field is empty)."""
+    """Return ``value`` as a list (an absent or non-list header field is empty).
+
+    Returns:
+        ``value`` as a list (an absent or non-list header field is empty).
+
+    """
     return list(cast("list[object]", value)) if isinstance(value, list) else []
 
 
 def _as_dict(value: object) -> dict[object, object]:
-    """Return ``value`` as a dict (an absent or non-dict header field is empty)."""
+    """Return ``value`` as a dict (an absent or non-dict header field is empty).
+
+    Returns:
+        ``value`` as a dict (an absent or non-dict header field is empty).
+
+    """
     return dict(cast("dict[object, object]", value)) if isinstance(value, dict) else {}

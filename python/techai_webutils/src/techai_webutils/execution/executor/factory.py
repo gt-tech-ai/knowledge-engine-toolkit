@@ -95,6 +95,13 @@ def executor_from_config(
 
     ``metrics`` reaches the ray kind's ``ResilientRayRuntime``
     (``ray_connect_failures_total``).
+
+    Returns:
+        The Executor selected by ``config.kind``.
+
+    Raises:
+        AppValueError: Unknown executor kind: ``config.kind``.
+
     """
     try:
         kind = ExecutorKind(config.kind)
@@ -125,6 +132,10 @@ def ray_runtime_from_config(
     Shared by ``executor_from_config`` (per-batch dispatch) and a caller's startup
     warm-up, so both connect through the one resilient path. The concrete
     ``RealRayRuntime`` is imported here so the asyncio path never loads ``ray``.
+
+    Returns:
+        The resilience-decorated ``RealRayRuntime`` for the ray kind.
+
     """
     from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntime  # noqa: PLC0415
     from techai_webutils.execution.executor.resilient_ray_runtime import (  # noqa: PLC0415

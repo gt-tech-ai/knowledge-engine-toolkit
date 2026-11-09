@@ -16,7 +16,12 @@ from techai_webutils.core.interfaces.metrics import MetricCounter, MetricsProvid
 
 
 def _inner(model: str = "m") -> MagicMock:
-    """Return a mocked provider whose vector for a text is ``[len(text), 0.5]``."""
+    """Return a mocked provider whose vector for a text is ``[len(text), 0.5]``.
+
+    Returns:
+        A mocked provider whose vector for a text is ``[len(text), 0.5]``.
+
+    """
     inner = MagicMock(spec=EmbeddingProvider)
 
     def batch(texts: list[str], *, input_type: str = "document") -> list[EmbeddingResult]:
@@ -30,7 +35,12 @@ def _inner(model: str = "m") -> MagicMock:
 
 
 def _cache() -> MagicMock:
-    """Return a mocked cache backed by a dict, so a stored value reads back."""
+    """Return a mocked cache backed by a dict, so a stored value reads back.
+
+    Returns:
+        A mocked cache backed by a dict, so a stored value reads back.
+
+    """
     store: dict[str, bytes] = {}
     cache = MagicMock(spec=Cache)
 

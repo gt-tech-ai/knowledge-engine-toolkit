@@ -34,7 +34,12 @@ from techai_webutils.workflows.workflow import tier as workflow_tier
 def _with(
     config: decoration.DecorationConfig, **tiers: dict[str, decoration.Layers]
 ) -> decoration.DecorationConfig:
-    """Return ``config`` with each named tier's overrides replaced."""
+    """Return ``config`` with each named tier's overrides replaced.
+
+    Returns:
+        ``config`` with each named tier's overrides replaced.
+
+    """
     return dataclasses.replace(
         config,
         **{

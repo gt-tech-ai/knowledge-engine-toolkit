@@ -55,6 +55,10 @@ def _finish_reason(reason: object) -> str:
     """Map OpenAI's ``finish_reason`` to the ``LLMResponse`` vocabulary.
 
     (``length`` or ``stop``).
+
+    Returns:
+        The ``LLMResponse`` finish reason.
+
     """
     return "length" if reason == "length" else "stop"
 
@@ -81,7 +85,12 @@ class _Usage:
                 self.finish_reason = _finish_reason(choice["finish_reason"])
 
     def report(self) -> StreamUsage:
-        """Return the accumulated ``StreamUsage``."""
+        """Return the accumulated ``StreamUsage``.
+
+        Returns:
+            The accumulated ``StreamUsage``.
+
+        """
         return StreamUsage(
             model=self.model,
             input_tokens=self.input_tokens,
@@ -107,7 +116,12 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
     def _payload(
         self, messages: list[LLMMessage], config: LLMConfig | None, *, stream: bool
     ) -> dict[str, object]:
-        """Build the chat request body from the messages and the ``LLMConfig``."""
+        """Build the chat request body from the messages and the ``LLMConfig``.
+
+        Returns:
+            The chat request body from the messages and the ``LLMConfig``.
+
+        """
         cfg = config or LLMConfig()
         payload: dict[str, object] = {
             "model": cfg.model or self._model,
@@ -129,9 +143,14 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
     ) -> LLMResponse:
         """Generate one completion (a non-streaming chat call).
 
+        A callee raises ``AppError``: ``TIMEOUT``, ``UNAVAILABLE`` (unreachable, 429, 5xx)
+        or ``INTERNAL`` (another status, an undecodable body).
+
+        Returns:
+            The completion.
+
         Raises:
-            AppError: ``TIMEOUT``, ``UNAVAILABLE`` (unreachable, 429, 5xx) or ``INTERNAL``
-                (another status, an undecodable body).
+            httpx_error_to_app_error: The coded error for a transport failure.
 
         """
         payload = self._payload(messages, config, stream=False)
@@ -159,6 +178,10 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
         """Stream a completion's text deltas.
 
         Awaited to obtain the iterator, then ``async for``.
+
+        Returns:
+            The stream of text deltas.
+
         """
         return text_only(await self.stream_with_usage(messages, config))
 
@@ -166,7 +189,12 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
     async def stream_with_usage(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
-        """Stream the text deltas in order, then the usage as a ``StreamUsage``."""
+        """Stream the text deltas in order, then the usage as a ``StreamUsage``.
+
+        Returns:
+            The stream of text deltas, ending with the usage when the provider reports it.
+
+        """
         return self._stream(self._payload(messages, config, stream=True))
 
     async def _stream(
@@ -179,9 +207,14 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
         The response stays open across the yields; the ``finally`` releases it when the
         stream ends, fails, or the consumer closes this generator.
 
+        Yields:
+            Each chunk's delta until ``[DONE]`` (or the stream's end).
+
+        A callee raises ``AppError``: As ``complete``; ``TIMEOUT`` when no line arrives
+        within the stall timeout.
+
         Raises:
-            AppError: As ``complete``; ``TIMEOUT`` when no line arrives within the stall
-                timeout.
+            httpx_error_to_app_error: The coded error for a transport failure.
 
         """
         stack = AsyncExitStack()
@@ -209,6 +242,14 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
         """Decode each ``data:`` event until ``[DONE]``.
 
         Waiting at most the stall timeout per line.
+
+        Yields:
+            Each decoded event.
+
+        Raises:
+            httpx_error_to_app_error: The coded error for a transport failure.
+            AppError: ``_OPERATION`` stream stalled for ``self._stall_timeout``s.
+
         """
         lines = response.aiter_lines()
         while True:
@@ -235,5 +276,10 @@ class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
 
     @override
     def model_name(self) -> str:
-        """Return the default served model."""
+        """Return the default served model.
+
+        Returns:
+            The default served model.
+
+        """
         return self._model

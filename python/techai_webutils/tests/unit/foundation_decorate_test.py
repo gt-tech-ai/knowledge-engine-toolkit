@@ -60,12 +60,22 @@ if TYPE_CHECKING:
 
 
 async def _run(op: object) -> object:
-    """Run ``op`` once (a retrier's or bulkhead's pass-through)."""
+    """Run ``op`` once (a retrier's or bulkhead's pass-through).
+
+    Returns:
+        What ``op`` returns.
+
+    """
     return await op()  # type: ignore[operator]
 
 
 def _recorder(calls: list[str], label: str) -> object:
-    """Return a middleware that records ``label`` on entry, then runs the operation."""
+    """Return a middleware that records ``label`` on entry, then runs the operation.
+
+    Returns:
+        A middleware that records ``label`` on entry, then runs the operation.
+
+    """
 
     class _Mw:
         async def wrap_op(self, op: str, next_: object) -> object:  # noqa: ARG002

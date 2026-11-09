@@ -28,6 +28,10 @@ def tier() -> Tier:
     """Return the pipeline tier, outermost first: recovery, logging, tracing, metrics.
 
     Timeout.
+
+    Returns:
+        The pipeline tier, outermost first: recovery, logging, tracing, metrics.
+
     """
     return Tier(
         "pipeline",
@@ -46,7 +50,12 @@ class Stage[In, Out](AsyncPipeline[In, Out]):
 
     @override
     async def execute(self, input_data: In) -> Out:
-        """Run the stage."""
+        """Run the stage.
+
+        Returns:
+            The stage's output.
+
+        """
         return await self._fn(input_data)
 
     def then[C](self, next_: AsyncPipeline[Out, C]) -> Stage[In, C]:
@@ -55,6 +64,13 @@ class Stage[In, Out](AsyncPipeline[In, Out]):
         An error from this stage propagates unchanged and ``next_`` does not run; each
         stage keeps its own decorators. A None stage is a wiring bug and raises
         ``AppValueError``.
+
+        Returns:
+            The pipeline that feeds this stage's output to ``next_``.
+
+        Raises:
+            AppValueError: Pipeline: then stage must not be None.
+
         """
         if next_ is None:  # pyright: ignore[reportUnnecessaryComparison]
             msg = "pipeline: then stage must not be None"
@@ -88,7 +104,12 @@ class PipelineBase:
         return self._subject.name
 
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run ``fn`` as the operation ``op`` through the tier."""
+        """Run ``fn`` as the operation ``op`` through the tier.
+
+        Returns:
+            What ``fn`` returns.
+
+        """
         return await self._subject.exec(op, fn)
 
     def stage[In, Out](
@@ -99,6 +120,13 @@ class PipelineBase:
         A stage that composes with ``then``.
 
         A None function is a wiring bug and raises ``AppValueError``.
+
+        Returns:
+            ``fn`` as the decorated operation ``op``.
+
+        Raises:
+            AppValueError: Pipeline: stage fn must not be None.
+
         """
         if fn is None:  # pyright: ignore[reportUnnecessaryComparison]
             msg = "pipeline: stage fn must not be None"
@@ -119,6 +147,10 @@ class PipelineBase:
 
         The outputs keep the stages' order; the first failure cancels the rest and is
         raised.
+
+        Returns:
+            The decorated operation ``op``.
+
         """
 
         async def run(input_data: In) -> list[Out]:
@@ -139,6 +171,10 @@ class PipelineBase:
         Of its operations.
 
         The pipeline's contract declares the roles (it subclasses ``CrudService``).
+
+        Returns:
+            The pipeline running each of ``svc``'s five roles as one.
+
         """
         return _CrudPipeline(svc, self._subject)
 

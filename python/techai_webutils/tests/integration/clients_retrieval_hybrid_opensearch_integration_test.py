@@ -35,7 +35,12 @@ pytestmark = pytest.mark.integration
 
 @pytest_asyncio.fixture
 async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
-    """Yield a client on the session's OpenSearch."""
+    """Yield a client on the session's OpenSearch.
+
+    Yields:
+        A client on the session's OpenSearch.
+
+    """
     client = AsyncOpenSearch(hosts=[opensearch_url])
     try:
         yield client
@@ -44,7 +49,12 @@ async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
 
 
 def _embedder(vector: list[float]) -> EmbeddingProvider:
-    """Return an embedder whose every query embeds to ``vector``."""
+    """Return an embedder whose every query embeds to ``vector``.
+
+    Returns:
+        An embedder whose every query embeds to ``vector``.
+
+    """
     embedder = MagicMock(spec=EmbeddingProvider)
     embedder.dimension.return_value = len(vector)
     embedder.embed = AsyncMock(

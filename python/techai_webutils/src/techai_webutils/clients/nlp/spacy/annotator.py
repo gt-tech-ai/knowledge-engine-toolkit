@@ -61,6 +61,10 @@ class SpacyAnnotator(NoOpAsyncResource, Annotator):
         """Return each block's entities, in text order.
 
         (``profile`` does not change them).
+
+        Returns:
+            Each block's entities, in text order.
+
         """
         require_entities_only(self._registry, tasks, "spacy")
         async with self._lock:
@@ -72,7 +76,12 @@ class SpacyAnnotator(NoOpAsyncResource, Annotator):
         return check_annotations(blocks, annotations, self._registry)
 
     def _annotate(self, nlp: Language, blocks: Sequence[TextBlock]) -> list[Annotation]:
-        """Run the pipeline over the blocks' texts (in the worker thread)."""
+        """Run the pipeline over the blocks' texts (in the worker thread).
+
+        Returns:
+            One annotation per block.
+
+        """
         version = str(nlp.meta.get("version", ""))
         return [
             Annotation(

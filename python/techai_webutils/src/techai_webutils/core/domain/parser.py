@@ -135,6 +135,9 @@ def join_parsed(parts: Sequence[ParsedDocument]) -> ParsedDocument:
 
     Returns: The joined document.
 
+    Returns:
+        The joined document.
+
     Raises:
         AppValueError: ``parts`` is empty.
 
@@ -165,6 +168,10 @@ def _first_page(part: ParsedDocument) -> int:
     """Return a part's first page number.
 
     (its first page, else its first paged block, else 0).
+
+    Returns:
+        A part's first page number.
+
     """
     if part.pages:
         return part.pages[0].page_number
@@ -172,7 +179,12 @@ def _first_page(part: ParsedDocument) -> int:
 
 
 def parsed_to_json(doc: ParsedDocument) -> dict[str, object]:
-    """Return ``doc`` as a JSON-ready dict tagged with ``PARSED_FORMAT_VERSION``."""
+    """Return ``doc`` as a JSON-ready dict tagged with ``PARSED_FORMAT_VERSION``.
+
+    Returns:
+        ``doc`` as a JSON-ready dict tagged with ``PARSED_FORMAT_VERSION``.
+
+    """
     return {
         "format_version": PARSED_FORMAT_VERSION,
         "markdown_content": doc.markdown_content,
@@ -188,6 +200,9 @@ def parsed_to_json(doc: ParsedDocument) -> dict[str, object]:
 
 def parsed_from_json(payload: dict[str, object]) -> ParsedDocument:
     """Read a document written by ``parsed_to_json`` at this version or the one before.
+
+    Returns:
+        A document written by ``parsed_to_json`` at this version or the one before.
 
     Raises:
         AppValueError: A ``format_version`` other than N or N-1, or a field of the wrong
@@ -221,7 +236,12 @@ def parsed_from_json(payload: dict[str, object]) -> ParsedDocument:
 
 
 def _blocks(raw: object) -> tuple[DocumentBlock, ...]:
-    """Return the blocks of a ``parsed_to_json`` payload; an absent field is no blocks."""
+    """Return the blocks of a ``parsed_to_json`` payload; an absent field is no blocks.
+
+    Returns:
+        The blocks of a ``parsed_to_json`` payload; an absent field is no blocks.
+
+    """
     if raw is None:
         return ()
     return blocks_from_json(cast("dict[str, object]", raw))

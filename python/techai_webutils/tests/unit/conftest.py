@@ -76,6 +76,10 @@ def _config_env_names() -> list[str]:
     """Return the set env vars a config test may read or write.
 
     MYAPP_* plus the bare mixin names.
+
+    Returns:
+        The set env vars a config test may read or write.
+
     """
     return [
         key
@@ -112,13 +116,23 @@ def isolate_config_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 @pytest.fixture
 def mock_redis() -> AsyncMock:
-    """Provide a mock async Redis client for cache tests."""
+    """Provide a mock async Redis client for cache tests.
+
+    Returns:
+        The mock client.
+
+    """
     return AsyncMock()
 
 
 @pytest.fixture
 def s3_config() -> S3Config:
-    """Provide an S3 config pointed at the local MinIO defaults."""
+    """Provide an S3 config pointed at the local MinIO defaults.
+
+    Returns:
+        The config.
+
+    """
     return S3Config(
         endpoint="http://localhost:9000",
         bucket="test-bucket",
@@ -130,7 +144,12 @@ def s3_config() -> S3Config:
 
 @pytest.fixture
 def sqs_config() -> SQSConfig:
-    """Provide an SQS config pointed at the local ElasticMQ defaults."""
+    """Provide an SQS config pointed at the local ElasticMQ defaults.
+
+    Returns:
+        The config.
+
+    """
     return SQSConfig(
         endpoint="http://localhost:9324",
         region="us-east-1",
@@ -147,6 +166,10 @@ def aws_client() -> Iterator[AsyncMock]:
     Every ``session.create_client(...)`` entered while the test runs yields this one mock,
     so a test opens the real S3/SQS client through its async context and drives the AWS
     API mock.
+
+    Yields:
+        The mock client.
+
     """
     client = AsyncMock()
     opened = MagicMock()
@@ -167,6 +190,10 @@ def metrics_mock() -> tuple[MagicMock, dict[str, MagicMock]]:
     declaration of a name returns a new ``MagicMock(spec=MetricCounter)`` /
     ``MagicMock(spec=MetricHistogram)`` stored under it, and every later declaration of
     that name returns the same one.
+
+    Returns:
+        A ``MetricsProvider`` mock plus its instruments.
+
     """
     instruments: dict[str, MagicMock] = {}
 
@@ -212,6 +239,10 @@ def observed(metrics_mock: tuple[MagicMock, dict[str, MagicMock]]) -> Observed:
     """Return mocked observability collaborators that record the spans.
 
     Series and log lines.
+
+    Returns:
+        Mocked observability collaborators that record the spans.
+
     """
     provider, instruments = metrics_mock
     tracer = MagicMock(spec=TracerProvider)
@@ -237,7 +268,12 @@ def observed(metrics_mock: tuple[MagicMock, dict[str, MagicMock]]) -> Observed:
 
 
 def _stub_llm(model: str) -> dict[str, str]:
-    """Return a ``stub`` LLM config fragment naming ``model``."""
+    """Return a ``stub`` LLM config fragment naming ``model``.
+
+    Returns:
+        A ``stub`` LLM config fragment naming ``model``.
+
+    """
     return {"kind": "stub", "model": model}
 
 
@@ -246,6 +282,10 @@ def catalog_raw() -> dict[str, object]:
     """Return a catalog: Sonnet (two regions), Haiku.
 
     And a small off-cloud 8k-window model.
+
+    Returns:
+        A catalog: Sonnet (two regions), Haiku.
+
     """
     return {
         "anthropic/sonnet": {
@@ -306,6 +346,10 @@ def routes_raw() -> dict[str, object]:
     """Return routes named for the steps: generate → Sonnet (then Haiku).
 
     Rewrite → Haiku.
+
+    Returns:
+        Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     return {
         "generate": {

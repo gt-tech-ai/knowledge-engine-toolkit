@@ -179,7 +179,12 @@ class TestYamlConfigLoader:
 
     @staticmethod
     def _make_loader(data: dict) -> YamlConfigLoader:  # type: ignore[type-arg]
-        """Create a YamlConfigLoader from a dict by writing a temp YAML file."""
+        """Create a YamlConfigLoader from a dict by writing a temp YAML file.
+
+        Returns:
+            A YamlConfigLoader from a dict by writing a temp YAML file.
+
+        """
         import yaml
 
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -43,6 +43,9 @@ def reranker_from_config(
     The ``cross_encoder`` kind scores through ``client``, the composition root's transport
     to the model server (e.g. the NLP service's gRPC stub).
 
+    Returns:
+        The ``Reranker`` ``config.kind`` selects.
+
     Raises:
         AppValueError: An unknown kind, ``cross_encoder`` without a client, or a batch
             size below one (``INVALID_INPUT``).

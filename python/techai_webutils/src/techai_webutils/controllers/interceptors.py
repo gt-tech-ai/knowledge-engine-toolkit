@@ -39,6 +39,10 @@ def lay_out[I](
       layers all lack their collaborators adds nothing.
     - ``authn``, the framework's interceptors that authenticate the caller, run just
       before the auth layer, so it authorizes an authenticated principal.
+
+    Returns:
+        A framework's interceptors (type ``I``) for the controller ``name``.
+
     """
     controller = tier()
     stream_deps = deps.without_timeout()

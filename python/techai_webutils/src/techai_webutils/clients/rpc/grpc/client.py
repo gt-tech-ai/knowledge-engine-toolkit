@@ -44,6 +44,10 @@ def create_channel(
     ``target`` overrides ``config.target`` when provided; ``config`` defaults to
     ``ChannelConfig()``. Returns an insecure channel carrying the message-size +
     concurrent-stream options, every call run through ``interceptors`` (first outermost).
+
+    Returns:
+        A configured async ``grpc.aio`` channel.
+
     """
     cfg = config or ChannelConfig()
     addr = target or cfg.target

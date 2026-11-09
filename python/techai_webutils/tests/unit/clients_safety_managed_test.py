@@ -31,7 +31,12 @@ _TEXT = "SSN 123-45-6789 and jane@example.com"
 
 
 def _session(client: Any) -> MagicMock:  # noqa: ANN401 - the mocked SDK client
-    """Return a mocked aiobotocore session whose ``create_client`` yields ``client``."""
+    """Return a mocked aiobotocore session whose ``create_client`` yields ``client``.
+
+    Returns:
+        A mocked aiobotocore session whose ``create_client`` yields ``client``.
+
+    """
 
     @asynccontextmanager
     async def _open(*_args: object, **_kwargs: object) -> AsyncGenerator[Any]:

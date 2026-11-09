@@ -84,6 +84,9 @@ def annotator_from_config(
     ``gliner_model`` and ``client`` are the ``gliner`` and ``grpc`` kinds' injected
     backends; ``metrics`` counts degraded blocks.
 
+    Returns:
+        The ``Annotator`` ``config.kind`` selects.
+
     Raises:
         AppValueError: An unknown kind or ``on_unavailable``, or a kind missing what it
             needs (``INVALID_INPUT``).
@@ -105,7 +108,17 @@ def _backend(
     gliner_model: GlinerModel | None,
     client: AnnotateClient | None,
 ) -> Annotator:
-    """Build the bare backend ``config.kind`` selects."""
+    """Build the bare backend ``config.kind`` selects.
+
+    Returns:
+        The bare backend ``config.kind`` selects.
+
+    Raises:
+        AppValueError: The gliner annotator needs an injected model and at least one
+            label; the grpc annotator needs an annotate client; unknown annotator kind:
+            ``config.kind``.
+
+    """
     if config.kind == AnnotatorKind.NOOP:
         return NoopAnnotator(registry)
     if config.kind == AnnotatorKind.SPACY:
@@ -131,7 +144,15 @@ def _backend(
 
 
 def _spacy(config: AnnotatorConfig, registry: TaskRegistry) -> Annotator:
-    """Build the spacy annotator; spaCy is imported only on this path."""
+    """Build the spacy annotator; spaCy is imported only on this path.
+
+    Returns:
+        The spacy annotator; spaCy is imported only on this path.
+
+    Raises:
+        AppValueError: The spacy annotator needs a pipeline (AnnotatorConfig.model).
+
+    """
     if not config.model:
         msg = "the spacy annotator needs a pipeline (AnnotatorConfig.model)"
         raise AppValueError(msg)

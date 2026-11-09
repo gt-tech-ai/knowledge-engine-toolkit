@@ -45,12 +45,22 @@ _GEN = Route("generate", "anthropic/sonnet")
 
 
 def _catalog(catalog_raw: dict[str, Any]) -> ModelCatalog:
-    """Return the fixture catalog."""
+    """Return the fixture catalog.
+
+    Returns:
+        The fixture catalog.
+
+    """
     return ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
 
 
 def _ledger(spent: str, remaining: str) -> MagicMock:
-    """Return a ledger mock reporting ``spent`` dollars used and ``remaining`` left."""
+    """Return a ledger mock reporting ``spent`` dollars used and ``remaining`` left.
+
+    Returns:
+        A ledger mock reporting ``spent`` dollars used and ``remaining`` left.
+
+    """
     ledger = MagicMock(spec=TokenLedger)
     scope = UsageScope(org_id="org-1")
     ledger.usage = AsyncMock(
@@ -77,7 +87,12 @@ async def _rank(
     route: Route = _GEN,
     ledger: MagicMock | None = None,
 ) -> tuple[list[str], dict[str, str]]:
-    """Rank the catalog and return the ordered keys and the rejections."""
+    """Rank the catalog and return the ordered keys and the rejections.
+
+    Returns:
+        The ordered keys and the rejections.
+
+    """
     ranker = candidate_ranker_from_config(
         {"kind": "cost_aware"}, prices=_PRICES, ledger=ledger
     )

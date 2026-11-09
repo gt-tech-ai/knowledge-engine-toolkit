@@ -87,6 +87,10 @@ def safe_name(value: str) -> str:
     """Lowercase ``value`` and replace every character an index name may not hold.
 
     With ``-``.
+
+    Returns:
+        The safe index-name fragment.
+
     """
     return _NAME_UNSAFE.sub("-", value.lower()).strip("-")
 
@@ -96,6 +100,10 @@ def doc_id(org_id: str, entry_id: str) -> str:
 
     Two orgs may use the same entry ids; in a shared index the org prefix keeps them two
     documents instead of one overwriting the other.
+
+    Returns:
+        The document ``_id`` of ``entry_id`` in ``org_id``.
+
     """
     return f"{org_id}/{entry_id}"
 
@@ -104,6 +112,10 @@ def index_name(collection: str, model: str, version: str) -> str:
     """Return the versioned index of ``collection`` for one embedding model.
 
     And version.
+
+    Returns:
+        The versioned index of ``collection`` for one embedding model.
+
     """
     return safe_name(f"{collection}-{model}-v{version}")
 
@@ -112,6 +124,10 @@ def alias_name(collection: str, org_id: str | None) -> str:
     """Return the read alias: the collection.
 
     Or with ``org_id`` the org's own alias of it.
+
+    Returns:
+        The read alias: the collection.
+
     """
     if org_id is None:
         return safe_name(collection)
@@ -142,6 +158,10 @@ def index_body(
     most of the meaning) the searched field holds only that many components, and the full
     vector is kept in ``_source`` only, to rescore the candidates; ``_meta`` records the
     truncation.
+
+    Returns:
+        The settings and mappings of a new index.
+
     """
     meta: dict[str, object] = {"model": model, "version": version}
     vectors: dict[str, object] = {
@@ -191,6 +211,10 @@ def _text_property(
     ``index_options: offsets`` stores each term's positions and character offsets in the
     postings, so the highlighter finds a keyword in its context without re-analyzing
     ``_source``.
+
+    Returns:
+        The text field with its analyzed subfields and offsets.
+
     """
     if not analyzers and not offsets:
         return {}
@@ -211,6 +235,10 @@ def text_match(query: str, analyzers: Sequence[tuple[str, str]]) -> dict[str, ob
 
     The query's language is unknown, so each analyzed subfield is searched and the best
     wins.
+
+    Returns:
+        The BM25 clause: ``match`` on the text.
+
     """
     if not analyzers:
         return {"match": {TEXT_FIELD: query}}
@@ -224,6 +252,10 @@ def _vector_mapping(
     """Return the searched vector field: an HNSW graph in memory.
 
     Or ``on_disk`` compressed.
+
+    Returns:
+        The searched vector field: an HNSW graph in memory.
+
     """
     vector: dict[str, object] = {
         "type": "knn_vector",
@@ -247,6 +279,10 @@ def entry_source(
     ``truncated_dimension`` the searched field gets the vector's leading components and
     the full vector goes to ``FULL_EMBEDDING_FIELD`` (cosine space, so the prefix needs no
     renormalizing).
+
+    Returns:
+        The document stored for ``entry``: its metadata, entity lists split.
+
     """
     source: dict[str, object] = {org_field: org_id}
     for key, value in entry.metadata.items():
@@ -275,6 +311,10 @@ def source_metadata(source: Mapping[str, object]) -> dict[str, str]:
     """Return the metadata an entry was stored with: every non-entry field.
 
     Entity lists joined.
+
+    Returns:
+        The metadata an entry was stored with: every non-entry field.
+
     """
     metadata: dict[str, str] = {}
     for key, value in source.items():
@@ -290,7 +330,12 @@ def source_metadata(source: Mapping[str, object]) -> dict[str, str]:
 
 
 def term_filters(fields: Mapping[str, str]) -> list[dict[str, object]]:
-    """Return one exact-match ``term`` clause per field."""
+    """Return one exact-match ``term`` clause per field.
+
+    Returns:
+        One exact-match ``term`` clause per field.
+
+    """
     return filter_clauses(equals_all(fields))
 
 
@@ -299,6 +344,9 @@ def filter_clauses(expr: FilterExpr) -> list[dict[str, object]]:
 
     An ``and`` contributes each of its clauses (a ``bool.filter`` list is already a
     conjunction).
+
+    Returns:
+        ``expr`` as ``bool.filter`` clauses: ``eq`` → ``term``, ``in`` → ``terms``.
 
     Raises:
         AppValueError: An ``in`` with no values (``INVALID_INPUT``).
@@ -335,6 +383,10 @@ def knn_query(
     oversample_factor)`` candidates (at least ``k``), which a Painless cosine over the
     full vector in ``_source`` reorders, so the full vector decides the ranking and the
     score (on the k-NN search's own ``(1 + cosine) / 2`` scale).
+
+    Returns:
+        A k-NN search body restricted to documents matching every field exactly.
+
     """
     knn: dict[str, object] = {
         "vector": list(vector[:truncated_dimension] if truncated_dimension else vector),
@@ -357,7 +409,12 @@ def knn_query(
 
 
 def no_vectors_source() -> dict[str, object]:
-    """Return the ``_source`` filter that leaves both vector fields out of every hit."""
+    """Return the ``_source`` filter that leaves both vector fields out of every hit.
+
+    Returns:
+        The ``_source`` filter that leaves both vector fields out of every hit.
+
+    """
     return {"excludes": [EMBEDDING_FIELD, FULL_EMBEDDING_FIELD]}
 
 
@@ -365,6 +422,10 @@ def _full_vector_rescore(vector: Sequence[float], window: int) -> dict[str, obje
     """Return the rescore that reorders the top ``window`` hits by cosine.
 
     On the full vector.
+
+    Returns:
+        The rescore that reorders the top ``window`` hits by cosine.
+
     """
     return {
         "window_size": window,
@@ -388,7 +449,12 @@ def _full_vector_rescore(vector: Sequence[float], window: int) -> dict[str, obje
 
 
 def hit_result(hit: Mapping[str, object]) -> VectorSearchResult:
-    """Map a search hit to a ``VectorSearchResult``."""
+    """Map a search hit to a ``VectorSearchResult``.
+
+    Returns:
+        The mapped result.
+
+    """
     source = cast("dict[str, object]", hit.get("_source", {}))
     return VectorSearchResult(
         document_id=str(source.get("document_id", "")),
@@ -408,6 +474,10 @@ def bulk_error(response: Mapping[str, object]) -> AppError | None:
     retried); a 429 (the domain rejecting for capacity) is a ``ThrottledError``, so the
     client tier counts it as a throttle. Otherwise it is ``INTERNAL``. Bulk writes are
     idempotent by id, so a retry rewrites the rest.
+
+    Returns:
+        The error of a bulk response with failed items.
+
     """
     if not response.get("errors"):
         return None
@@ -432,7 +502,15 @@ def bulk_error(response: Mapping[str, object]) -> AppError | None:
 
 
 def require(value: str | None, what: str) -> str:
-    """Return ``value``, or raise ``INVALID_INPUT`` naming ``what`` when it is missing."""
+    """Return ``value``, or raise ``INVALID_INPUT`` naming ``what`` when it is missing.
+
+    Returns:
+        ``value``, or raise ``INVALID_INPUT`` naming ``what`` when it is missing.
+
+    Raises:
+        AppValueError: The opensearch store needs ``what``.
+
+    """
     if not value:
         msg = f"the opensearch store needs {what}"
         raise AppValueError(msg)

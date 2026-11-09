@@ -86,7 +86,12 @@ class EntityRulerAnnotator(DelegatingAsyncResource[Annotator], Annotator):
     async def annotate_batch(
         self, blocks: Sequence[TextBlock], tasks: frozenset[str], profile: str
     ) -> list[Annotation]:
-        """Annotate through ``inner``, then put the ruler's entities first."""
+        """Annotate through ``inner``, then put the ruler's entities first.
+
+        Returns:
+            One annotation per block.
+
+        """
         annotations = await self._inner.annotate_batch(blocks, tasks, profile)
         regex = self._regex
         if regex is None or ENTITIES not in tasks:
@@ -98,7 +103,12 @@ class EntityRulerAnnotator(DelegatingAsyncResource[Annotator], Annotator):
 
 
 def _match(regex: re.Pattern[str], labels: dict[str, str], text: str) -> list[Entity]:
-    """Return the patterns' matches in ``text``, labelled by their phrase."""
+    """Return the patterns' matches in ``text``, labelled by their phrase.
+
+    Returns:
+        The patterns' matches in ``text``, labelled by their phrase.
+
+    """
     return [
         Entity(labels[m.group(0).casefold()], m.start(), m.end(), m.group(0))
         for m in regex.finditer(text)
@@ -109,6 +119,10 @@ def _merge(annotation: Annotation, ruled: list[Entity]) -> Annotation:
     """Return ``annotation`` with ``ruled`` added.
 
     And the statistical spans they overlap dropped.
+
+    Returns:
+        ``annotation`` with ``ruled`` added.
+
     """
     if not ruled:
         return annotation

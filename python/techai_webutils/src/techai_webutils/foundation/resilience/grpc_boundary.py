@@ -60,6 +60,10 @@ def _retry_pushback_ms(exc: AioRpcError) -> int | None:
     """Return the server's retry delay in milliseconds from the trailers.
 
     Or None when absent/invalid.
+
+    Returns:
+        The server's retry delay in milliseconds from the trailers.
+
     """
     trailers = exc.trailing_metadata() or ()
     for key, value in trailers:
@@ -88,6 +92,10 @@ def grpc_error_to_app_error(exc: AioRpcError) -> AppError:
     which case it is a transient ``UNAVAILABLE`` with ``details["retry_after_ms"]``. Every
     other status becomes a terminal ``INTERNAL`` error carrying the gRPC cause. Without
     this, the SDK error escapes the retry loop on the first attempt.
+
+    Returns:
+        The coded error.
+
     """
     status = exc.code()
     detail = exc.details() or str(exc)
@@ -123,6 +131,10 @@ def wrap_grpc_errors[**P, R](
     the resiliency stack can classify + retry, instead of a raw SDK error that escapes the
     retry loop. The ``ParamSpec`` preserves the method's exact signature so the decorated
     client still satisfies its port Protocol.
+
+    Returns:
+        The wrapped function.
+
     """
 
     @functools.wraps(fn)

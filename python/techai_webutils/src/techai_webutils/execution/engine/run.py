@@ -20,7 +20,12 @@ if TYPE_CHECKING:
 
 
 def merge_batches(batches: Sequence[BatchResult]) -> BatchResult:
-    """Concatenate several BatchResults' per-item results into one aggregate, in order."""
+    """Concatenate several BatchResults' per-item results into one aggregate, in order.
+
+    Returns:
+        The batch result.
+
+    """
     merged: list[StepResult] = []
     for batch in batches:
         merged.extend(batch.results)
@@ -39,6 +44,10 @@ async def run_job_group(jobs: Sequence[AnyJob], *, parallel: bool) -> BatchResul
     siblings running detached (orphaned tasks whose I/O would commit after the group
     "failed"); once every job has settled, the first exception is re-raised so the
     caller's error handling (e.g. the consumer loop's backoff) still fires.
+
+    Returns:
+        The batch result.
+
     """
     if not jobs:
         return BatchResult()

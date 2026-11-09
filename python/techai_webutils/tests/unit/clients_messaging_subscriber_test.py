@@ -23,6 +23,10 @@ async def _metadata_of(
     """Deliver ``raw`` through ``subscribe`` once.
 
     Return the metadata the handler received.
+
+    Returns:
+        The delivered message's metadata.
+
     """
     aws_client.receive_message.return_value = {"Messages": [raw]}
     received: list[Message] = []
@@ -179,7 +183,12 @@ class TestSQSSubscriber:
 
 
 def _raw(n: int) -> dict[str, object]:
-    """Return received SQS message ``n`` with its receipt handle."""
+    """Return received SQS message ``n`` with its receipt handle.
+
+    Returns:
+        Received SQS message ``n`` with its receipt handle.
+
+    """
     return {"MessageId": f"m-{n}", "Body": "{}", "ReceiptHandle": f"r-{n}"}
 
 

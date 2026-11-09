@@ -61,6 +61,9 @@ class RerankingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
 
         Each result keeps its score.
 
+        Returns:
+            The retrieved passages.
+
         Raises:
             InternalError: The reranker returned a different number of scores than
                 passages.

@@ -11,7 +11,12 @@ from techai_webutils.core.interfaces.checkpoint import CheckpointKey, Stage, Sta
 
 
 def _key(stage: Stage = Stage.PARSE) -> CheckpointKey:
-    """Return a checkpoint key for ``stage`` of one document."""
+    """Return a checkpoint key for ``stage`` of one document.
+
+    Returns:
+        A checkpoint key for ``stage`` of one document.
+
+    """
     return CheckpointKey("org-1", "doc-1", "c0ffee", stage, "fp")
 
 

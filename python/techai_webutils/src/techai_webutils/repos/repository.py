@@ -29,6 +29,10 @@ def tier() -> Tier:
     bounds each attempt; the breaker sheds calls while the database keeps failing; and
     retry, innermost, retries a transient failure through the breaker and a fresh
     deadline.
+
+    Returns:
+        The repository tier, outermost first.
+
     """
     return Tier(
         "repository",
@@ -61,17 +65,31 @@ class RepositoryBase:
         return self._subject.name
 
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run a custom query ``fn`` as the operation ``op`` through the tier."""
+        """Run a custom query ``fn`` as the operation ``op`` through the tier.
+
+        Returns:
+            What ``fn`` returns.
+
+        """
         return await self._subject.exec(op, fn)
 
     async def exec_once[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run a non-idempotent write ``fn`` as ``op`` through the tier, without retry."""
+        """Run a non-idempotent write ``fn`` as ``op`` through the tier, without retry.
+
+        Returns:
+            What ``fn`` returns.
+
+        """
         return await self._subject.exec_once(op, fn)
 
     def crud[T, P, ID](self, store: Store[T, P, ID]) -> Repository[T, P, ID]:
         """Return the repository serving ``store``'s CRUD through the tier.
 
         Create is never retried: a create whose commit landed must not run twice.
+
+        Returns:
+            The repository serving ``store``'s CRUD through the tier.
+
         """
         return _DecoratedRepository(store, self._subject, self._subject.once())
 
@@ -85,7 +103,12 @@ class _DecoratedRepository[T, P, ID](CrudOps[T, P, ID], Repository[T, P, ID]):
         self._store = store
 
     async def exists(self, entity_id: ID) -> bool:
-        """Run Exists through the tier."""
+        """Run Exists through the tier.
+
+        Returns:
+            Whether the entity exists.
+
+        """
         return await exists(self._op, self._store, entity_id)
 
 
@@ -103,19 +126,39 @@ class DelegatingRepository[T, P, ID](Repository[T, P, ID]):
         self._crud = crud
 
     async def get(self, entity_id: ID) -> T:
-        """Delegate to the decorated repository."""
+        """Delegate to the decorated repository.
+
+        Returns:
+            The entity.
+
+        """
         return await self._crud.get(entity_id)
 
     async def list(self, params: P, page: PageRequest) -> Page[T]:
-        """Delegate to the decorated repository."""
+        """Delegate to the decorated repository.
+
+        Returns:
+            The page.
+
+        """
         return await self._crud.list(params, page)
 
     async def create(self, entity: T) -> T:
-        """Delegate to the decorated repository."""
+        """Delegate to the decorated repository.
+
+        Returns:
+            The entity.
+
+        """
         return await self._crud.create(entity)
 
     async def update(self, entity_id: ID, entity: T) -> T:
-        """Delegate to the decorated repository."""
+        """Delegate to the decorated repository.
+
+        Returns:
+            The entity.
+
+        """
         return await self._crud.update(entity_id, entity)
 
     async def delete(self, entity_id: ID) -> None:
@@ -123,5 +166,10 @@ class DelegatingRepository[T, P, ID](Repository[T, P, ID]):
         await self._crud.delete(entity_id)
 
     async def exists(self, entity_id: ID) -> bool:
-        """Delegate to the decorated repository."""
+        """Delegate to the decorated repository.
+
+        Returns:
+            Whether the entity exists.
+
+        """
         return await self._crud.exists(entity_id)

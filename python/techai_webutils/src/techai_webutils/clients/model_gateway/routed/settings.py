@@ -86,7 +86,12 @@ class EndpointLlmSetting(BaseModel):
     """The per-request HTTP timeout of an Ollama endpoint, in seconds."""
 
     def fragment(self) -> dict[str, Any]:
-        """Return the fields this endpoint sets, as the catalog's ``llm`` mapping."""
+        """Return the fields this endpoint sets, as the catalog's ``llm`` mapping.
+
+        Returns:
+            The fields this endpoint sets, as the catalog's ``llm`` mapping.
+
+        """
         return self.model_dump(mode="json", exclude_unset=True)
 
 
@@ -131,6 +136,10 @@ class CatalogModelSetting(BaseModel):
 
         A provider reports usage under these ids, not the catalog id, so a price keyed by
         the catalog id is also indexed under them.
+
+        Returns:
+            The provider model id each endpoint sets (``llm.model``).
+
         """
         return tuple(e.llm.model for e in self.endpoints if e.llm.model is not None)
 
@@ -142,6 +151,10 @@ class CatalogModelSetting(BaseModel):
         A consumer passes its own LLM tier's connection fields (kind, region, host), so
         the catalog names only models and one config change moves every endpoint with the
         rest of its LLM tier. A field an endpoint sets wins.
+
+        Returns:
+            This model with each endpoint's unset ``llm`` fields taken.
+
         """
         base = defaults.fragment()
         endpoints = tuple(
@@ -153,7 +166,12 @@ class CatalogModelSetting(BaseModel):
         return self.model_copy(update={"endpoints": endpoints})
 
     def as_mapping(self) -> dict[str, Any]:
-        """Return the model as the raw mapping ``ModelCatalog.from_mapping`` parses."""
+        """Return the model as the raw mapping ``ModelCatalog.from_mapping`` parses.
+
+        Returns:
+            The model as the raw mapping ``ModelCatalog.from_mapping`` parses.
+
+        """
         raw = self.model_dump(mode="json", by_alias=True, exclude={"endpoints"})
         raw["endpoints"] = [
             e.model_dump(mode="json", exclude={"llm"}) | {"llm": e.llm.fragment()}
@@ -182,6 +200,10 @@ class RouteSetting(BaseModel):
         """Return the route this entry describes under ``name``.
 
         (the key it sits under).
+
+        Returns:
+            The route this entry describes under ``name``.
+
         """
         return Route(
             name=name,
@@ -231,6 +253,10 @@ class RoutedStagesSetting(BaseModel):
 
         Cross-entry checks (a route naming a model outside the catalog, an unpriced model,
         an unknown stage kind) stay with the gateway, which runs them at boot.
+
+        Returns:
+            The ``RoutedConfig`` of ``catalog``, ``routes`` and these stages.
+
         """
         return RoutedConfig(
             catalog={model_id: m.as_mapping() for model_id, m in catalog.items()},

@@ -39,7 +39,12 @@ def adapt[Req, Resp](
     """
 
     async def framework_handler(raw_request: object) -> dict[str, Any]:
-        """Parse, dispatch, and serialize one request, converting errors to responses."""
+        """Parse, dispatch, and serialize one request, converting errors to responses.
+
+        Returns:
+            The response body.
+
+        """
         try:
             req = await parse(raw_request)
             result = await handler(req)
@@ -58,10 +63,19 @@ def adapt_no_content[Req, Resp](
     """Bridge a typed handler that returns no content (204).
 
     Same as ``adapt`` but always returns 204 No Content on success.
+
+    Returns:
+        The framework handler.
+
     """
 
     async def framework_handler(raw_request: object) -> dict[str, Any]:
-        """Parse and dispatch one request, returning 204 or an error response."""
+        """Parse and dispatch one request, returning 204 or an error response.
+
+        Returns:
+            The response body.
+
+        """
         try:
             req = await parse(raw_request)
             await handler(req)

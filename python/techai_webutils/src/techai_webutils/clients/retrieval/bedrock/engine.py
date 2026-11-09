@@ -105,6 +105,10 @@ class BedrockRetrievalEngine(RetrievalEngine):
         """Return the shared bedrock-agent-runtime client, opening.
 
         (and caching) it on first use.
+
+        Returns:
+            The shared bedrock-agent-runtime client, opening.
+
         """
         if self._client is None:
             self._stack = stack = AsyncExitStack()
@@ -126,7 +130,12 @@ class BedrockRetrievalEngine(RetrievalEngine):
             self._client = None
 
     async def __aenter__(self) -> Self:
-        """Enter the async context; the shared client opens lazily on first call."""
+        """Enter the async context; the shared client opens lazily on first call.
+
+        Returns:
+            This instance.
+
+        """
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -155,6 +164,13 @@ class BedrockRetrievalEngine(RetrievalEngine):
         one, overrideSearchType for hybrid search, and a Cohere rerankingConfiguration
         when a reranker is configured. A botocore failure raises a coded ``AppError``
         (throttling / 5xx → transient ``UNAVAILABLE``).
+
+        Returns:
+            The retrieved passages.
+
+        Raises:
+            botocore_error_to_app_error: Bedrock retrieve.
+
         """
         kb_id = self._knowledge_base_id(index_id)
         client = await self._runtime_client()
@@ -178,6 +194,9 @@ class BedrockRetrievalEngine(RetrievalEngine):
         """Return the knowledge base to query: the per-call id.
 
         Else the configured default.
+
+        Returns:
+            The knowledge base to query: the per-call id.
 
         Raises:
             InternalError: The per-call id is empty, or there is neither a per-call id nor
@@ -204,6 +223,10 @@ class BedrockRetrievalEngine(RetrievalEngine):
         """Build Retrieve's ``vectorSearchConfiguration``: pool size, filter, search type.
 
         Reranker.
+
+        Returns:
+            The ``vectorSearchConfiguration`` value.
+
         """
         vector_config: dict[str, object] = {"numberOfResults": top_k}
         if (
@@ -228,7 +251,12 @@ class BedrockRetrievalEngine(RetrievalEngine):
 
 
 def _to_float(value: object) -> float:
-    """Coerce a JSON number to float, defaulting to 0.0."""
+    """Coerce a JSON number to float, defaulting to 0.0.
+
+    Returns:
+        The float, or ``0.0``.
+
+    """
     return float(value) if isinstance(value, (int, float)) else 0.0
 
 
@@ -240,6 +268,10 @@ def metadata_document_id(metadata: Mapping[str, str], filters: Mapping[str, str]
     Standard Bedrock KB chunks carry no ``document_id``, but every Retrieve result carries
     the source document's URI (``x-amz-bedrock-kb-source-uri``) — a stable per-document id
     that assumes nothing about the consumer's object-key layout.
+
+    Returns:
+        The chunk's ``document_id`` metadata, else its source URI, else ``""``.
+
     """
     return metadata.get("document_id") or metadata.get(SOURCE_URI_KEY, "")
 
@@ -254,6 +286,10 @@ def _to_result(
     The chunk metadata is carried as-is, so a passage missing a scope key stays missing it
     and a ``MetadataEquals`` policy drops it (fail closed) instead of trusting the request
     for it.
+
+    Returns:
+        The mapped result.
+
     """
     metadata_raw = item.get("metadata", {})
     metadata = (

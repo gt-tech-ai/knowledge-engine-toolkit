@@ -62,7 +62,12 @@ query."""
 
 
 def _text(value: object) -> str:
-    """Return a Redis reply value as ``str`` (decoded when the client returns bytes)."""
+    """Return a Redis reply value as ``str`` (decoded when the client returns bytes).
+
+    Returns:
+        A Redis reply value as ``str`` (decoded when the client returns bytes).
+
+    """
     return value.decode() if isinstance(value, bytes) else str(value)
 
 
@@ -74,6 +79,10 @@ def _first_document(reply: object) -> dict[str, str] | None:
     Reads both reply shapes: the RESP3 map (``{results: [{extra_attributes: {…}}]}``,
         RediSearch)
     and the RESP2 array (``[total, id, [field, value, …], …]``, Valkey Search).
+
+    Returns:
+        The first ``FT.SEARCH`` document's fields as text.
+
     """
     if isinstance(reply, dict):
         results = cast(
@@ -94,6 +103,10 @@ def _field(mapping: dict[Any, Any], name: str) -> object:
     """Return ``mapping[name]`` whether the client decoded keys to ``str``.
 
     Or left them ``bytes``.
+
+    Returns:
+        ``mapping[name]`` whether the client decoded keys to ``str``.
+
     """
     return mapping.get(name, mapping.get(name.encode()))
 
@@ -135,6 +148,10 @@ class RedisSemanticCache(SemanticCache):
 
         Lower-cased and whitespace-collapsed when ``normalize`` is on; trailing
         punctuation removed when ``strip_trailing_punctuation`` is on.
+
+        Returns:
+            ``query`` normalized for keying.
+
         """
         text = " ".join(query.lower().split()) if self._config.normalize else query
         if self._config.strip_trailing_punctuation:
@@ -145,12 +162,21 @@ class RedisSemanticCache(SemanticCache):
         """Return the ``<ws>:<tag>:<h>`` key suffix shared by a payload.
 
         And its document.
+
+        Returns:
+            The ``<ws>:<tag>:<h>`` key suffix shared by a payload.
+
         """
         digest = hashlib.sha256(self._normalize(query).encode()).hexdigest()
         return f"{namespace.workspace_id}:{namespace.tag()}:{digest}"
 
     def _search(self) -> Any:  # noqa: ANN401 - redis-py's search handle is loosely typed
-        """Return the search handle for this cache's index (index create and drop)."""
+        """Return the search handle for this cache's index (index create and drop).
+
+        Returns:
+            The search handle for this cache's index (index create and drop).
+
+        """
         return self._redis.ft(self._index)
 
     def _failed(self, op: str, exc: Exception) -> None:
@@ -163,7 +189,13 @@ class RedisSemanticCache(SemanticCache):
             self._errors.inc(op=op)
 
     async def _ensure_index(self) -> None:
-        """Create the KNN index once; an existing index counts as created."""
+        """Create the KNN index once; an existing index counts as created.
+
+        Raises:
+            ResponseError: Redis rejected the index creation for a reason other than
+                existing.
+
+        """
         if self._index_ready:
             return
         vector = VectorField(
@@ -188,13 +220,23 @@ class RedisSemanticCache(SemanticCache):
         self._index_ready = True
 
     async def _vector(self, query: str) -> bytes:
-        """Return ``query``'s embedding (as a query) packed as little-endian float32."""
+        """Return ``query``'s embedding (as a query) packed as little-endian float32.
+
+        Returns:
+            ``query``'s embedding (as a query) packed as little-endian float32.
+
+        """
         values = (await self._embedding.embed(query, input_type="query")).embedding
         return struct.pack(f"<{len(values)}f", *values)
 
     @override
     async def exact(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
-        """Return the normalized repeat's payload without embedding; fail-open."""
+        """Return the normalized repeat's payload without embedding; fail-open.
+
+        Returns:
+            The normalized repeat's payload without embedding; fail-open.
+
+        """
         try:
             payload = await self._cache.get(
                 f"{self._prefix}:p:{self._suffix(query, namespace)}"
@@ -216,6 +258,10 @@ class RedisSemanticCache(SemanticCache):
         """Return the namespace's closest neighbour with its similarity, unthresholded.
 
         Fail-open.
+
+        Returns:
+            The namespace's closest neighbour with its similarity, unthresholded.
+
         """
         try:
             return await self._nearest(query, namespace)
@@ -226,7 +272,12 @@ class RedisSemanticCache(SemanticCache):
     async def _nearest(
         self, query: str, namespace: CacheNamespace
     ) -> CachedAnswer | None:
-        """Run the namespace-scoped top-1 KNN and read the neighbour's payload."""
+        """Run the namespace-scoped top-1 KNN and read the neighbour's payload.
+
+        Returns:
+            The nearest answer, or ``None``.
+
+        """
         model = self._embedding.model_name()
         await self._ensure_index()
         # Raw FT.SEARCH: redis-py's parser expects the RESP3 map, which Valkey Search

@@ -97,6 +97,10 @@ def _isolated_context():  # noqa: ANN202 — inferred SpawnContext|ForkServerCon
     markitdown/pymupdf re-import, while every parse still gets its own killable,
     memory-capped child. spawn is the fallback where forkserver is unsupported (e.g.
     Windows); it re-imports per child as before.
+
+    Returns:
+        The mp context for isolated parses: forkserver (preloaded) where available.
+
     """
     if "forkserver" in mp.get_all_start_methods():
         ctx = mp.get_context("forkserver")
@@ -139,6 +143,10 @@ def isolation_error_tag(exc: IsolationError) -> str:
     """Return the ``ParsedDocument.error`` for an isolated parse that failed.
 
     With ``exc``.
+
+    Returns:
+        The ``ParsedDocument.error`` for an isolated parse that failed.
+
     """
     if isinstance(exc, IsolationMemoryError):
         return MEMORY_EXCEEDED
@@ -201,6 +209,14 @@ def run_isolated[T](
     ``IsolationMemoryError`` if the task ran out of memory, or ``IsolationError`` if the
     child dies without producing a result or the task itself raised. ``context`` picks how
     the child starts (default: the preloaded forkserver where available).
+
+    Returns:
+        What ``fn`` returns.
+
+    Raises:
+        IsolationError: The worker crashed or exceeded its limits.
+        IsolationMemoryError: Isolated task ran out of memory.
+
     """
     ctx = context or _MP_CONTEXT
     result_queue: Queue[tuple[str, object]] = ctx.Queue()
@@ -237,6 +253,15 @@ def _await_result(
 
     Raises ``TimeoutError`` if the child is still running at the deadline (after killing
     it), or ``IsolationError`` if the child exits without ever producing a result.
+
+    Returns:
+        The status and the payload.
+
+    Raises:
+        TimeoutError: Isolated task exceeded ``timeout_seconds``s.
+        IsolationError: Isolated worker died without a result
+            (exitcode=``proc.exitcode``).
+
     """
     deadline = time.monotonic() + timeout_seconds
     while True:
@@ -259,7 +284,12 @@ def _await_result(
 
 
 def _parse_document(content: bytes, declared: str, filename: str) -> ParsedDocument:
-    """Module-level parse entry (picklable for the spawned worker)."""
+    """Module-level parse entry (picklable for the spawned worker).
+
+    Returns:
+        The parsed document.
+
+    """
     return MarkItDownParser().parse(content, declared=declared, filename=filename)
 
 
@@ -267,6 +297,10 @@ def _parse_document_path(path: str, declared: str, filename: str) -> ParsedDocum
     """Module-level path parse entry.
 
     (picklable for the spawned worker; reads bytes off disk).
+
+    Returns:
+        The parsed document.
+
     """
     return MarkItDownParser().parse_path(path, declared=declared, filename=filename)
 
@@ -293,6 +327,10 @@ def _read_scratch(path: str) -> ParsedDocument:
     """Read back the document ``_write_scratch`` wrote.
 
     (the parent's half of the hand-back).
+
+    Returns:
+        The parsed document.
+
     """
     with Path(path).open(encoding="utf-8") as handle:
         payload = cast("dict[str, object]", json.load(handle))
@@ -352,6 +390,10 @@ class IsolatedParser:
         """Return one parse's cost: the per-parse memory cap and one CPU.
 
         (one child process).
+
+        Returns:
+            One parse's cost: the per-parse memory cap and one CPU.
+
         """
         return ParseCost(memory_bytes=self._memory_bytes, cpu=1.0)
 
@@ -362,9 +404,12 @@ class IsolatedParser:
 
         (blocking).
 
-        Raises:
-            TimeoutError: The child overran the timeout.
-            IsolationError: The child raised or died without a result.
+        A callee raises ``TimeoutError``: The child overran the timeout.
+
+        A callee raises ``IsolationError``: The child raised or died without a result.
+
+        Returns:
+            The parsed document.
 
         """
         fd, scratch = tempfile.mkstemp(suffix=".parsed.json")
@@ -386,7 +431,12 @@ class IsolatedParser:
     async def _isolated(
         self, parse: Callable[..., ParsedDocument], *args: object
     ) -> ParsedDocument:
-        """Run ``_run_to_document`` on the parser's executor."""
+        """Run ``_run_to_document`` on the parser's executor.
+
+        Returns:
+            The parsed document.
+
+        """
         loop = asyncio.get_running_loop()
         call = functools.partial(self._run_to_document, parse, *args)
         return await loop.run_in_executor(self._executor, call)
@@ -397,6 +447,10 @@ class IsolatedParser:
         """Parse in a subprocess.
 
         A timeout or worker death becomes a failed ParsedDocument.
+
+        Returns:
+            The parsed document.
+
         """
         try:
             return await self._isolated(_parse_document, content, declared, filename)
@@ -412,6 +466,10 @@ class IsolatedParser:
         """Build a failed ParsedDocument tagged.
 
         With the detected format + error reason.
+
+        Returns:
+            A failed ParsedDocument tagged.
+
         """
         return ParsedDocument(
             markdown_content="",
@@ -429,6 +487,10 @@ class IsolatedParser:
         The path (not the bytes) is pickled to the child, so a multi-GB document never
         crosses the process boundary in memory. A timeout or worker death becomes a failed
         ParsedDocument.
+
+        Returns:
+            A document from a file ``path`` in a subprocess.
+
         """
         try:
             return await self._isolated(_parse_document_path, path, declared, filename)
@@ -442,6 +504,10 @@ class IsolatedParser:
         """Build a failed ParsedDocument for the path lane.
 
         (format from the declared type/filename).
+
+        Returns:
+            A failed ParsedDocument for the path lane.
+
         """
         return ParsedDocument(
             markdown_content="",

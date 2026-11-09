@@ -51,6 +51,10 @@ def _nesting(node: ast.AST, depth: int = 0) -> int:
     """Return the deepest control-block nesting under ``node``.
 
     A nested function counts on its own.
+
+    Returns:
+        The deepest control-block nesting under ``node``.
+
     """
     deepest = depth
     for child in ast.iter_child_nodes(node):
@@ -65,6 +69,10 @@ def size_violations(path: str, source: str) -> list[str]:
     """Return one line per function.
 
     Nesting depth or file length in ``source`` over budget.
+
+    Returns:
+        One line per function.
+
     """
     out: list[str] = []
     lines = len(source.splitlines())

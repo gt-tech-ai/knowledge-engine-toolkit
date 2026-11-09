@@ -32,7 +32,12 @@ class DeadLetterQueue:
         self._backend = backend
 
     async def send(self, letter: DeadLetter) -> bool:
-        """Send a dead letter; return True on success, False if the backend failed."""
+        """Send a dead letter; return True on success, False if the backend failed.
+
+        Returns:
+            Whether the letter was sent.
+
+        """
         try:
             await self._backend.send(letter)
         except Exception:

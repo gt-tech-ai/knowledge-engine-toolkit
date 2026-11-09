@@ -65,12 +65,22 @@ MISSING_PRICING = "missing"
 
 
 def _utcnow() -> datetime:
-    """Return the current UTC time."""
+    """Return the current UTC time.
+
+    Returns:
+        The current UTC time.
+
+    """
     return datetime.now(UTC)
 
 
 def _trace_id() -> str:
-    """Return the current span's trace id (hex), or ``""`` outside a recorded span."""
+    """Return the current span's trace id (hex), or ``""`` outside a recorded span.
+
+    Returns:
+        The current span's trace id (hex), or ``""`` outside a recorded span.
+
+    """
     ctx = trace.get_current_span().get_span_context()
     return f"{ctx.trace_id:032x}" if ctx.is_valid else ""
 
@@ -89,6 +99,10 @@ def usage_from_llm(
     A completion or stream reports input and output tokens; a list of embeddings reports
     their summed ``token_count`` as ``embed_tokens``. An unpriced model costs ``0`` under
     ``pricing_version="missing"``.
+
+    Returns:
+        The ``UsageRecord`` for one model call's result.
+
     """
     if isinstance(result, list):
         model = result[0].model if result else ""
@@ -182,7 +196,12 @@ class TokenAccountingProxy:
                 self._counters[name] = metrics.counter(name, help_text, labels)
 
     def __getattr__(self, name: str) -> object:
-        """Return the inner attribute, accounted when it is a model call."""
+        """Return the inner attribute, accounted when it is a model call.
+
+        Returns:
+            The inner attribute, accounted when it is a model call.
+
+        """
         attr = getattr(self._inner, name)
         if not callable(attr):
             return attr
@@ -205,6 +224,9 @@ class TokenAccountingProxy:
         """Return the scope to charge (``None``: unaccounted).
 
         Rejecting what the policy rejects.
+
+        Returns:
+            The scope to charge (``None``: unaccounted).
 
         Raises:
             QuotaExceededError: the policy rejects the call (an exhausted budget under
@@ -242,6 +264,10 @@ class TokenAccountingProxy:
         """Return the call's usage: priced tokens.
 
         Or one zero-token record for a cache hit.
+
+        Returns:
+            The call's usage: priced tokens.
+
         """
         if not served_from_cache():
             return usage_from_llm(
@@ -302,6 +328,10 @@ class TokenAccountingProxy:
         """Wrap a unary call (``complete``, ``embed``, ``embed_batch``): gate, call.
 
         Record.
+
+        Returns:
+            The wrapped unary call.
+
         """
 
         @functools.wraps(attr)
@@ -327,6 +357,10 @@ class TokenAccountingProxy:
         """Wrap a stream: gate, open ``source``.
 
         Relay and record at its terminal usage.
+
+        Returns:
+            The wrapped streaming call.
+
         """
 
         @functools.wraps(attr)
@@ -355,6 +389,10 @@ class TokenAccountingProxy:
 
         A stream abandoned before its terminal usage records nothing (there are no
         counts).
+
+        Yields:
+            Each text item, then the usage when ``keep_usage``.
+
         """
         usage: StreamUsage | None = None
         async for item in items:

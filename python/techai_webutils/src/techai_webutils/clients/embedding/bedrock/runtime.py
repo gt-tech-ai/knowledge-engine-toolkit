@@ -47,6 +47,10 @@ class LazyBedrockRuntime:
         """Call bedrock-runtime ``InvokeModel``.
 
         Opening the shared client first if needed.
+
+        Returns:
+            The decoded ``InvokeModel`` response.
+
         """
         if self._client is None:
             self._stack = stack = AsyncExitStack()

@@ -55,6 +55,9 @@ def per_key_rate_limiter_from_config(
         clock: Epoch seconds the ``redis`` window index is computed from (injected for
             tests).
 
+    Returns:
+        The per-key limiter ``config.kind`` selects.
+
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.
         AppError: ``INVALID_INPUT`` for ``redis`` without a client.

@@ -46,7 +46,12 @@ _END = object()
 
 
 def _code(exc: BaseException) -> str:
-    """Return ``exc``'s error code (``UNKNOWN`` for an uncoded error)."""
+    """Return ``exc``'s error code (``UNKNOWN`` for an uncoded error).
+
+    Returns:
+        ``exc``'s error code (``UNKNOWN`` for an uncoded error).
+
+    """
     return str(exc.code) if isinstance(exc, AppError) else str(ErrorCode.UNKNOWN)
 
 
@@ -84,7 +89,12 @@ class ChainExecutor:
             )
 
     def _breaker(self, ref: CatalogEndpointRef) -> AsyncCircuitBreaker:
-        """Return ``ref``'s breaker, created on first use."""
+        """Return ``ref``'s breaker, created on first use.
+
+        Returns:
+            ``ref``'s breaker, created on first use.
+
+        """
         breaker = self._breakers.get(ref.key)
         if breaker is None:
             breaker = AsyncCircuitBreaker(self._failure_threshold, self._recovery_timeout)
@@ -107,8 +117,15 @@ class ChainExecutor:
 
         A permanent error leaves wrapped in ``_Permanent``.
 
+        A callee raises ``CircuitOpenError``: ``ref``'s breaker is open (no call was
+        made).
+
+        Returns:
+            What ``call`` returns.
+
         Raises:
-            CircuitOpenError: ``ref``'s breaker is open (no call was made).
+            _Permanent: A non-retriable failure, re-raised to stop the chain.
+            AppError: Circuit breaker suppressed a call's outcome.
 
         """
         permanent: Exception | None = None
@@ -135,6 +152,13 @@ class ChainExecutor:
         """Return the first endpoint's result the bound reaches.
 
         Else raise ``UNAVAILABLE``.
+
+        Returns:
+            The first endpoint's result the bound reaches.
+
+        Raises:
+            UnavailableError: Every routed endpoint failed (``tried`` attempted).
+
         """
         attempts: list[RouteAttempt] = []
         tried = 0
@@ -172,9 +196,11 @@ class ChainExecutor:
 
         The attempts and the served endpoint.
 
-        Raises:
-            AppError: the first permanent error, or ``UNAVAILABLE`` when the chain is
-                exhausted.
+        A callee raises ``AppError``: the first permanent error, or ``UNAVAILABLE`` when
+        the chain is exhausted.
+
+        Returns:
+            The response, the attempts made and the endpoint that served it.
 
         """
         return await self._run(ordered, provider_for, call)
@@ -187,9 +213,11 @@ class ChainExecutor:
     ) -> tuple[StreamItems, tuple[RouteAttempt, ...], CatalogEndpointRef]:
         """Open a stream down the chain, failing over only until its first item arrives.
 
-        Raises:
-            AppError: the first permanent error, or ``UNAVAILABLE`` when the chain is
-                exhausted.
+        Returns:
+            A stream down the chain, failing over only until its first item arrives.
+
+        A callee raises ``AppError``: the first permanent error, or ``UNAVAILABLE`` when
+        the chain is exhausted.
 
         """
 

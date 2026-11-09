@@ -49,6 +49,9 @@ async def count_org_documents(
 
     Returns: The number of distinct documents.
 
+    Returns:
+        The distinct document count.
+
     """
     counts = await asyncio.gather(
         *(_count(client, index, {org_field: org_id}) for client in clients.values())
@@ -60,6 +63,10 @@ async def _count(client: AsyncOpenSearch, index: str, fields: dict[str, str]) ->
     """Count the distinct ``document_id`` values matching ``fields`` in ``index``.
 
     On one domain.
+
+    Returns:
+        The distinct ``document_id`` values matching ``fields`` in ``index``.
+
     """
     query = {"bool": {"filter": term_filters(fields)}}
     after: object = None
@@ -113,7 +120,12 @@ async def delete_unaliased_index(
 
 
 async def _aliases_of(client: AsyncOpenSearch, index: str) -> list[str]:
-    """Return the aliases naming ``index`` on one domain (none when it is absent)."""
+    """Return the aliases naming ``index`` on one domain (none when it is absent).
+
+    Returns:
+        The aliases naming ``index`` on one domain (none when it is absent).
+
+    """
     if not await client.indices.exists(index=index):
         return []
     found = await client.indices.get_alias(index=index)

@@ -33,7 +33,12 @@ pytestmark = pytest.mark.integration
 
 @pytest_asyncio.fixture
 async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
-    """Yield a client on the domain."""
+    """Yield a client on the domain.
+
+    Yields:
+        A client on the domain.
+
+    """
     client = AsyncOpenSearch(hosts=[opensearch_url])
     try:
         yield client

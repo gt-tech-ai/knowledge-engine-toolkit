@@ -21,7 +21,12 @@ _JOB = {"ingestionJob": {"ingestionJobId": "j1", "status": "STARTING"}}
 
 
 def _ingestor(client: AsyncMock) -> BedrockKnowledgeBaseIngestor:
-    """Build the ingestor whose bedrock-agent client is ``client``."""
+    """Build the ingestor whose bedrock-agent client is ``client``.
+
+    Returns:
+        The ingestor whose bedrock-agent client is ``client``.
+
+    """
     session = MagicMock()
     session.create_client.return_value.__aenter__.return_value = client
     with patch("aiobotocore.session.get_session", return_value=session):
@@ -32,6 +37,10 @@ def _client_error(code: str) -> ClientError:
     """Return the ``ClientError`` botocore raises for ``code``.
 
     On ``StartIngestionJob``.
+
+    Returns:
+        The ``ClientError`` botocore raises for ``code``.
+
     """
     return ClientError({"Error": {"Code": code, "Message": "m"}}, "StartIngestionJob")
 

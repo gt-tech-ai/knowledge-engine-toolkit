@@ -30,7 +30,12 @@ class NoOpAsyncResource:
     """Mixin: an async context manager that owns no resource (no-op enter/exit)."""
 
     async def __aenter__(self) -> Self:
-        """Enter the async context; there is no resource to acquire."""
+        """Enter the async context; there is no resource to acquire.
+
+        Returns:
+            This instance.
+
+        """
         return self
 
     async def __aexit__(
@@ -63,7 +68,12 @@ class DelegatingAsyncResource[ResourceT: ManagedResource]:
     """The wrapped ``ManagedResource`` whose enter/exit this mixin delegates to."""
 
     async def __aenter__(self) -> Self:
-        """Enter the wrapped resource's async context, then return self."""
+        """Enter the wrapped resource's async context, then return self.
+
+        Returns:
+            This instance.
+
+        """
         await self._inner.__aenter__()
         return self
 
@@ -76,5 +86,9 @@ class DelegatingAsyncResource[ResourceT: ManagedResource]:
         """Exit the wrapped resource's async context.
 
         Propagating its suppression decision.
+
+        Returns:
+            Whether the wrapped context suppresses the exception.
+
         """
         return await self._inner.__aexit__(exc_type, exc_val, exc_tb)

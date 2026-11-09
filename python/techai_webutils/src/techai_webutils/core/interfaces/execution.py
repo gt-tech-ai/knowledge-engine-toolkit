@@ -127,6 +127,10 @@ class BatchResult:
         """Return the names of the failed items.
 
         (mirrors Go ``StepResults.FailedNames``).
+
+        Returns:
+            The names of the failed items.
+
         """
         return [r.name for r in self.results if r.status is StepStatus.FAIL]
 

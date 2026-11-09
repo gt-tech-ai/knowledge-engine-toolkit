@@ -50,6 +50,13 @@ def splitter_from_config(config: SplitterConfig) -> DocumentSplitter:
     """Build the ``DocumentSplitter`` selected by ``config.kind`` (kb_unit).
 
     Unknown kinds fail loudly.
+
+    Returns:
+        The ``DocumentSplitter`` selected by ``config.kind`` (kb_unit).
+
+    Raises:
+        AppValueError: Unknown splitter kind: ``config.kind``.
+
     """
     if config.kind is SplitterKind.KB_UNIT:
         from techai_webutils.clients.splitting.kb_unit import KbUnitSplitter  # noqa: PLC0415 — lazy backend

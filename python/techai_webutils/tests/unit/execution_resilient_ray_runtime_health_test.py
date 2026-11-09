@@ -41,12 +41,22 @@ class _GrpcFailure(grpc.RpcError):
         self._code = code
 
     def code(self) -> grpc.StatusCode:
-        """Return the status code."""
+        """Return the status code.
+
+        Returns:
+            The status code.
+
+        """
         return self._code
 
 
 def _inner() -> MagicMock:
-    """Return a generated-mock inner ``RayRuntime``."""
+    """Return a generated-mock inner ``RayRuntime``.
+
+    Returns:
+        A generated-mock inner ``RayRuntime``.
+
+    """
     runtime = create_autospec(RayRuntime, instance=True)
     runtime.warm_up = AsyncMock()
     runtime.submit = AsyncMock(return_value=StepResult(name="ok"))
@@ -54,7 +64,12 @@ def _inner() -> MagicMock:
 
 
 def _metrics() -> tuple[MetricsProvider, MagicMock]:
-    """Return a mocked metrics provider and the counter it hands out."""
+    """Return a mocked metrics provider and the counter it hands out.
+
+    Returns:
+        A mocked metrics provider and the counter it hands out.
+
+    """
     counter = create_autospec(MetricCounter, instance=True)
     metrics = create_autospec(MetricsProvider, instance=True)
     metrics.counter.return_value = counter
@@ -62,7 +77,12 @@ def _metrics() -> tuple[MetricsProvider, MagicMock]:
 
 
 async def _mapper(item: int) -> StepResult:
-    """Map nothing; the inner runtime is mocked."""
+    """Map nothing; the inner runtime is mocked.
+
+    Returns:
+        A passing step for the item.
+
+    """
     await asyncio.sleep(0)
     return StepResult(name=str(item))
 
@@ -164,7 +184,12 @@ class TestConnectFailures:
 
 @pytest_asyncio.fixture
 async def open_port() -> AsyncIterator[int]:
-    """Serve a TCP listener on a loopback port for the test, yielding the port."""
+    """Serve a TCP listener on a loopback port for the test, yielding the port.
+
+    Yields:
+        The port.
+
+    """
     server = await asyncio.start_server(lambda _r, w: w.close(), "127.0.0.1", 0)
     port = server.sockets[0].getsockname()[1]
     try:
@@ -175,7 +200,12 @@ async def open_port() -> AsyncIterator[int]:
 
 
 def _closed_port() -> int:
-    """Return a loopback port nothing listens on."""
+    """Return a loopback port nothing listens on.
+
+    Returns:
+        A loopback port nothing listens on.
+
+    """
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]

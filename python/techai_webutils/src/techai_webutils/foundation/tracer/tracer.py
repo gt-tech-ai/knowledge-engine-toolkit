@@ -48,7 +48,12 @@ class OTelTracerProvider(TracerProvider):
         kind: SpanKind = SpanKind.INTERNAL,
         **attributes: str | float | bool,
     ) -> Generator[TracerSpan, None, None]:
-        """Start a new trace span of ``kind`` as a context manager."""
+        """Start a new trace span of ``kind`` as a context manager.
+
+        Yields:
+            A new trace span of ``kind`` as a context manager.
+
+        """
         with self._inner.start_as_current_span(name, kind=_OTEL_KINDS[kind]) as otel_span:
             wrapped = _OTelSpan(otel_span)
             for key, value in attributes.items():

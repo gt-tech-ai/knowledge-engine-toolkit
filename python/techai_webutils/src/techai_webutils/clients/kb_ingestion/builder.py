@@ -48,7 +48,15 @@ class KbConfig:
 
 
 def new_kb_ingestor_from_config(config: KbConfig) -> KnowledgeBaseIngestor:
-    """Build the KnowledgeBaseIngestor selected by ``config.kind`` (stub or bedrock)."""
+    """Build the KnowledgeBaseIngestor selected by ``config.kind`` (stub or bedrock).
+
+    Returns:
+        The KnowledgeBaseIngestor selected by ``config.kind`` (stub or bedrock).
+
+    Raises:
+        AppValueError: Unknown knowledge-base kind: ``config.kind``.
+
+    """
     if config.kind is KbKind.STUB:
         return StubKnowledgeBaseIngestor()
     if config.kind is KbKind.BEDROCK:

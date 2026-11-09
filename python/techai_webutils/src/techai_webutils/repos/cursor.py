@@ -31,7 +31,12 @@ class CursorCodec:
 
     @staticmethod
     def encode(payload: CursorPayload) -> str:
-        """Encode a CursorPayload into an opaque cursor string."""
+        """Encode a CursorPayload into an opaque cursor string.
+
+        Returns:
+            A CursorPayload into an opaque cursor string.
+
+        """
         data = json.dumps({"id": payload.last_id, "v": payload.last_value})
         return base64.urlsafe_b64encode(data.encode("utf-8")).decode("ascii")
 
@@ -40,6 +45,13 @@ class CursorCodec:
         """Decode an opaque cursor string into a CursorPayload.
 
         Raises ValueError if the cursor is malformed.
+
+        Returns:
+            An opaque cursor string into a CursorPayload.
+
+        Raises:
+            AppValueError: Invalid cursor: ``cursor``.
+
         """
         try:
             data = json.loads(base64.urlsafe_b64decode(cursor.encode("ascii")))

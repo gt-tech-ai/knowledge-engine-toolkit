@@ -76,6 +76,9 @@ def semantic_cache_from_config(
         redis: The app's async Redis client, hosting the KNN index (``redis`` kind).
         metrics: Counts backend errors for the ``redis`` kind.
 
+    Returns:
+        The ``SemanticCache`` selected by ``config.kind``.
+
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.
         AppError: ``INVALID_INPUT`` for ``redis`` with a collaborator missing.

@@ -40,7 +40,12 @@ _INTERVAL = 0.3
 
 @pytest_asyncio.fixture
 async def pool(postgres_dsn: str) -> AsyncIterator[asyncpg.Pool]:
-    """Yield a pool on a database holding an empty ``bedrock_start_rate``."""
+    """Yield a pool on a database holding an empty ``bedrock_start_rate``.
+
+    Yields:
+        A pool on a database holding an empty ``bedrock_start_rate``.
+
+    """
     pool = await asyncpg.create_pool(postgres_dsn, min_size=1, max_size=8)
     await pool.execute(_DDL)
     await pool.execute("TRUNCATE bedrock_start_rate")
@@ -54,6 +59,10 @@ def _budget(pool: asyncpg.Pool, dsn: str, timeout: float) -> StartBudget:
     """Build one pod's postgres budget: 5 slots, a 0.3 s interval.
 
     ``timeout`` to acquire.
+
+    Returns:
+        One pod's postgres budget: 5 slots, a 0.3 s interval.
+
     """
     config = StartBudgetConfig(
         kind=StartBudgetKind.POSTGRES,

@@ -41,7 +41,12 @@ _FAST: _RetryOptions = {"max_attempts": 5, "base_delay": 0.0, "max_delay": 0.0}
 
 
 async def _ok(item: int) -> StepResult:
-    """Map ``item`` to a passing step (a trivial always-passing mapper)."""
+    """Map ``item`` to a passing step (a trivial always-passing mapper).
+
+    Returns:
+        A passing step for the item.
+
+    """
     await asyncio.sleep(0)
     return StepResult(name=f"item-{item}")
 

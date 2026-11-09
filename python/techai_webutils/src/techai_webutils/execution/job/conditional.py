@@ -33,13 +33,22 @@ class Conditional:
         self._condition: Callable[[], bool] = condition
 
     def meta(self) -> JobMeta:
-        """Return the wrapped job's identity unchanged."""
+        """Return the wrapped job's identity unchanged.
+
+        Returns:
+            The wrapped job's identity unchanged.
+
+        """
         return self._inner.meta()
 
     async def execute(self) -> BatchResult:
         """Run the inner job when the condition holds.
 
         Else return a single SKIP result.
+
+        Returns:
+            The batch result.
+
         """
         if not self._condition():
             meta = self._inner.meta()
@@ -55,5 +64,9 @@ def when(job: AnyJob, condition: Callable[[], bool]) -> Conditional:
     """Wrap ``job`` with ``condition``; it runs only when the condition returns True.
 
     (mirrors Go ``When``).
+
+    Returns:
+        The conditional job.
+
     """
     return Conditional(job, condition)

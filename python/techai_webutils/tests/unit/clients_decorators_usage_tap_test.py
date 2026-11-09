@@ -24,7 +24,12 @@ if TYPE_CHECKING:
 
 
 def _recorded(record: MagicMock) -> list[StreamUsage]:
-    """Return every usage handed to the ``record`` callback, in order."""
+    """Return every usage handed to the ``record`` callback, in order.
+
+    Returns:
+        Every usage handed to the ``record`` callback, in order.
+
+    """
     return [call.args[0] for call in record.call_args_list]
 
 

@@ -60,6 +60,9 @@ def inflight_claim_from_config(
     closes. ``metrics`` counts the Redis errors the claim absorbs
     (``inflight_claim_errors_total{op}``).
 
+    Returns:
+        The ``InflightClaim`` ``config.kind`` selects.
+
     Raises:
         AppValueError: An unknown kind, or ``redis`` with neither a client nor a host
             (``INVALID_INPUT``).

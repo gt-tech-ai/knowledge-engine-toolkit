@@ -61,6 +61,10 @@ async def text_only(items: AsyncIterator[str | StreamUsage]) -> AsyncIterator[st
 
     A provider that implements ``stream_with_usage`` natively implements ``stream()`` as
     this filter, so the text-only API and the usage-aware API share one transport path.
+
+    Yields:
+        Each text delta.
+
     """
     async for item in items:
         if isinstance(item, str):
@@ -68,7 +72,12 @@ async def text_only(items: AsyncIterator[str | StreamUsage]) -> AsyncIterator[st
 
 
 async def _without_usage(text: AsyncIterator[str]) -> AsyncIterator[str | StreamUsage]:
-    """Re-yield a text stream as a ``stream_with_usage`` stream that reports no usage."""
+    """Re-yield a text stream as a ``stream_with_usage`` stream that reports no usage.
+
+    Yields:
+        Each text delta, with no usage item.
+
+    """
     async for delta in text:
         yield delta
 
@@ -125,6 +134,10 @@ class LLMProvider(ManagedResource, ABC):
         predates this method stays valid; providers that know their streamed usage
         override it and implement ``stream()`` as ``text_only(await
         self.stream_with_usage(...))``.
+
+        Returns:
+            The stream, ending with the usage when reported.
+
         """
         return _without_usage(await self.stream(messages, config))
 

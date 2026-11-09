@@ -59,10 +59,18 @@ def _axis_embedding() -> AsyncMock:
 
     Returns: An ``EmbeddingProvider`` mock (model ``axes``, dimension 3).
 
+    Returns:
+        A mock of the embedding boundary over ``_VECTORS``.
+
     """
 
     async def embed(text: str) -> EmbeddingResult:  # noqa: RUF029 - the port is async
-        """Return the hand-placed vector for ``text``."""
+        """Return the hand-placed vector for ``text``.
+
+        Returns:
+            The hand-placed vector for ``text``.
+
+        """
         return EmbeddingResult(embedding=_VECTORS[text], model="axes", token_count=0)
 
     embedding = AsyncMock(spec=EmbeddingProvider)
@@ -74,7 +82,12 @@ def _axis_embedding() -> AsyncMock:
 
 @pytest.fixture(scope="module", params=_IMAGES)
 def stack_container(request: pytest.FixtureRequest) -> Iterator[object]:
-    """Start one search-capable server per image for the module."""
+    """Start one search-capable server per image for the module.
+
+    Yields:
+        One search-capable server per image for the module.
+
+    """
     from testcontainers.redis import RedisContainer
 
     with RedisContainer(request.param) as container:
@@ -83,7 +96,12 @@ def stack_container(request: pytest.FixtureRequest) -> Iterator[object]:
 
 @pytest_asyncio.fixture
 async def semantic_cache(stack_container: object) -> AsyncIterator[SemanticCache]:
-    """Yield a fresh redis-kind cache on the container (flushed before each test)."""
+    """Yield a fresh redis-kind cache on the container (flushed before each test).
+
+    Yields:
+        A fresh redis-kind cache on the container (flushed before each test).
+
+    """
     host = stack_container.get_container_host_ip()  # type: ignore[attr-defined]
     port = int(stack_container.get_exposed_port(stack_container.port))  # type: ignore[attr-defined]
     client = Redis(host=host, port=port)

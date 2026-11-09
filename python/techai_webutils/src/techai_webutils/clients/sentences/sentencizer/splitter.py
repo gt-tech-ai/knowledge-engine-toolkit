@@ -70,6 +70,9 @@ class SentencizerSplitter(SentenceSplitter):
     def split(self, text: str, *, language: str | None = None) -> list[TextSpan]:
         """Return ``text``'s sentences as spans that tile it.
 
+        Returns:
+            ``text``'s sentences as spans that tile it.
+
         Raises:
             AppValueError: ``text`` is longer than ``max_chars`` (``INVALID_INPUT``).
 
@@ -88,7 +91,12 @@ class SentencizerSplitter(SentenceSplitter):
         return list(starmap(TextSpan, pairwise(bounds)))
 
     def _pipeline(self, language: str) -> tuple[Language, threading.Lock]:
-        """Return ``language``'s pipeline and its lock, building them on first use."""
+        """Return ``language``'s pipeline and its lock, building them on first use.
+
+        Returns:
+            ``language``'s pipeline and its lock, building them on first use.
+
+        """
         with self._build_lock:
             found = self._pipelines.get(language)
             if found is None:
@@ -97,7 +105,12 @@ class SentencizerSplitter(SentenceSplitter):
             return found
 
     def _build(self, language: str) -> Language:
-        """Build a blank pipeline with a sentencizer, falling back to ``xx``."""
+        """Build a blank pipeline with a sentencizer, falling back to ``xx``.
+
+        Returns:
+            A blank pipeline with a sentencizer, falling back to ``xx``.
+
+        """
         try:
             nlp = spacy.blank(language)
         except ImportError:

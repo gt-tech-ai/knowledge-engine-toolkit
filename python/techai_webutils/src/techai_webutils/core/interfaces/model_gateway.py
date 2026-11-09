@@ -121,6 +121,10 @@ def current_route_decision() -> RouteDecision | None:
     """Return the route decision of the last call a gateway served in this context.
 
     If any.
+
+    Returns:
+        The route decision of the last call a gateway served in this context.
+
     """
     return _DECISION.get()
 

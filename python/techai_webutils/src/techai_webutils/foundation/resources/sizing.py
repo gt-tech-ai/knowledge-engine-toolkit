@@ -31,6 +31,9 @@ def lane_concurrency(
         reserve_bytes: Memory held back for the process itself (runtime, buffers, the
             other lanes).
 
+    Returns:
+        How many items a lane may hold in flight.
+
     Raises:
         AppValueError: ``per_item_bytes`` or ``cap`` is below 1, or ``reserve_bytes`` is
             negative.

@@ -23,5 +23,10 @@ class NoopSafetyCheck(SafetyCheck):
 
     @override
     async def scan(self, text: str, *, kind: ScanKind) -> SafetyResult:
-        """Return ``allow`` with no flags."""
+        """Return ``allow`` with no flags.
+
+        Returns:
+            ``allow`` with no flags.
+
+        """
         return _ALLOW

@@ -39,7 +39,12 @@ from techai_webutils.foundation.logger.logger import (
 
 
 def _raise_boom() -> NoReturn:
-    """Raise the error whose traceback ``exception`` logs."""
+    """Raise the error whose traceback ``exception`` logs.
+
+    Raises:
+        ValueError: Boom.
+
+    """
     msg = "boom"
     raise ValueError(msg)
 

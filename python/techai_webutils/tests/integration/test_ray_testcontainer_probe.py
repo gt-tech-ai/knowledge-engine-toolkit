@@ -46,6 +46,10 @@ def _ray_image_present() -> bool:
     """Return True if Docker is reachable AND the Ray image is already pulled.
 
     Skip otherwise: never hang on a cold pull or a missing daemon.
+
+    Returns:
+        True if Docker is reachable AND the Ray image is already pulled.
+
     """
     try:
         from testcontainers.core.docker_client import DockerClient
@@ -75,6 +79,13 @@ def submit_ray_job(
 
     The head's job agent starts a few seconds after the dashboard API. Bounded — never an
     unbounded hang.
+
+    Returns:
+        The submission id.
+
+    Raises:
+        RuntimeError: Ray job submission never succeeded within ``timeout_s``s.
+
     """
     deadline = time.monotonic() + timeout_s
     last_exc: Exception | None = None
@@ -96,7 +107,16 @@ def submit_ray_job(
 def await_terminal(
     client: JobSubmissionClient, job_id: str, timeout_s: int = 180
 ) -> JobStatus:
-    """Poll a submitted job to a terminal status, bounded — never an unbounded hang."""
+    """Poll a submitted job to a terminal status, bounded — never an unbounded hang.
+
+    Returns:
+        The terminal status.
+
+    Raises:
+        TimeoutError: Ray job ``job_id`` did not reach a terminal status within
+            ``timeout_s``s.
+
+    """
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         status = client.get_job_status(job_id)
@@ -112,6 +132,13 @@ def ray_jobs_client() -> Iterator[JobSubmissionClient]:
     """Start a Ray head container and yield a ``JobSubmissionClient`` bound.
 
     To its jobs API (HTTP 8265).
+
+    Yields:
+        A Ray head container and yield a ``JobSubmissionClient`` bound.
+
+    Raises:
+        RuntimeError: Ray jobs API at ``address`` never became ready.
+
     """
     container = (
         DockerContainer(_RAY_IMAGE)

@@ -23,7 +23,12 @@ from techai_webutils.pipelines.citations import (
 def _source(
     doc: str, page: int | None, score: float = 0.9, chunk: str = "chunk"
 ) -> RetrievalResult:
-    """Build a RetrievalResult for the given document/page/score/chunk text."""
+    """Build a RetrievalResult for the given document/page/score/chunk text.
+
+    Returns:
+        A RetrievalResult for the given document/page/score/chunk text.
+
+    """
     return RetrievalResult(
         document_id=doc,
         document_name=f"{doc} name",
@@ -146,7 +151,12 @@ _ANSWER = "Revenue grew 3% in the third quarter [1, 2]. Headcount rose to 410.\n
 
 
 def _nli(scores: list[float]) -> MagicMock:
-    """Return a mocked entailment scorer answering ``scores``."""
+    """Return a mocked entailment scorer answering ``scores``.
+
+    Returns:
+        A mocked entailment scorer answering ``scores``.
+
+    """
     scorer = MagicMock(spec=CitationScorer)
     scorer.score = AsyncMock(return_value=scores)
     return scorer

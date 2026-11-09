@@ -123,6 +123,10 @@ def _session_token() -> object | None:
     Each Ray Client connect builds a new client worker, so its identity changes with every
     reconnect. An object reference is only valid in the session that created it, so a
     cached reference is reused only while this token is unchanged. Never raises.
+
+    Returns:
+        An object that identifies the current Ray Client connection.
+
     """
     with contextlib.suppress(Exception):
         client = cast("_ClientRegistry", importlib.import_module("ray.util.client"))
@@ -137,6 +141,10 @@ def _run_mapper(fn: Callable[..., Awaitable[StepResult]], item: object) -> StepR
     """Ray task body: run the async mapper to completion on a worker.
 
     And return its StepResult.
+
+    Returns:
+        The step result for the item.
+
     """
 
     async def _call() -> StepResult:
@@ -163,7 +171,12 @@ class _RemoteTask(Protocol):
 def _ray_init_options(
     worker_setup_hook: str | None, log_encoding: str | None
 ) -> dict[str, object]:
-    """Return the ``ray.init`` options for the hook and log encoding that are set."""
+    """Return the ``ray.init`` options for the hook and log encoding that are set.
+
+    Returns:
+        The ``ray.init`` options for the hook and log encoding that are set.
+
+    """
     options: dict[str, object] = {}
     if worker_setup_hook:
         options["runtime_env"] = {"worker_process_setup_hook": worker_setup_hook}
@@ -175,7 +188,12 @@ def _ray_init_options(
 
 
 def _ray_task_options(memory_bytes: int, num_cpus: float) -> dict[str, object]:
-    """Return the Ray task options for the memory and CPUs that are declared."""
+    """Return the Ray task options for the memory and CPUs that are declared.
+
+    Returns:
+        The Ray task options for the memory and CPUs that are declared.
+
+    """
     options: dict[str, object] = {}
     if memory_bytes > 0:
         options["memory"] = memory_bytes
@@ -274,7 +292,12 @@ class RealRayRuntime:
             raise
 
     async def cluster_cpus(self) -> float:
-        """Return the CPUs Ray reports for the cluster (``0.0`` when it reports none)."""
+        """Return the CPUs Ray reports for the cluster (``0.0`` when it reports none).
+
+        Returns:
+            The CPUs Ray reports for the cluster (``0.0`` when it reports none).
+
+        """
         await self._ensure_started()
         resources = await asyncio.to_thread(
             cast("Callable[[], dict[str, float]]", ray.cluster_resources)
@@ -332,7 +355,11 @@ class RealRayRuntime:
         the client is reset and ``RayUnavailableError`` is raised, so the caller redrives
         the batch instead of failing each item.
 
+        Returns:
+            The step result for the item.
+
         Raises:
+            RayTaskError: A task failure that is not recoverable as a result.
             RayUnavailableError: When the connection to the cluster is lost.
 
         """
@@ -352,6 +379,10 @@ class RealRayRuntime:
         """Put the mapper (once per mapper).
 
         Schedule one task for ``item`` and await its result.
+
+        Returns:
+            The step result for the item.
+
         """
         # Put the mapper into the object store ONCE and pass the shared ObjectRef to every
         # task, instead of re-pickling the (identical) mapper per item. fan_out drives the

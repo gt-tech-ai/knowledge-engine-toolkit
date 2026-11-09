@@ -8,7 +8,12 @@ from techai_webutils.core.domain import DocumentFormat
 
 
 def _ooxml(kind_dir: str) -> bytes:
-    """Build a minimal OOXML (ZIP) container whose part prefix identifies the kind."""
+    """Build a minimal OOXML (ZIP) container whose part prefix identifies the kind.
+
+    Returns:
+        A minimal OOXML (ZIP) container whose part prefix identifies the kind.
+
+    """
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as archive:
         archive.writestr("[Content_Types].xml", "<Types/>")

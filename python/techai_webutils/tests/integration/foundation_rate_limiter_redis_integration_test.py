@@ -23,7 +23,12 @@ if TYPE_CHECKING:
 
 @pytest_asyncio.fixture
 async def redis_pair(redis_container: object) -> AsyncIterator[tuple[Redis, Redis]]:
-    """Yield two independent clients (two "replicas") on the session's Redis."""
+    """Yield two independent clients (two "replicas") on the session's Redis.
+
+    Yields:
+        Two independent clients (two "replicas") on the session's Redis.
+
+    """
     host = redis_container.get_container_host_ip()  # type: ignore[attr-defined]
     port = int(redis_container.get_exposed_port(redis_container.port))  # type: ignore[attr-defined]
     first, second = Redis(host=host, port=port), Redis(host=host, port=port)

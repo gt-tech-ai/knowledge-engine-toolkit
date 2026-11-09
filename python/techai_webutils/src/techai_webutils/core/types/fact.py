@@ -39,6 +39,13 @@ def _rfc3339_nano(ts: datetime) -> str:
     """Render ``ts`` in UTC as Go's ``time.RFC3339Nano``: fractional zeros trimmed.
 
     ``Z`` suffix.
+
+    Returns:
+        The formatted timestamp.
+
+    Raises:
+        AppValueError: Fact ts must be timezone-aware.
+
     """
     if ts.tzinfo is None:
         msg = "fact ts must be timezone-aware"
@@ -54,6 +61,10 @@ def _number(value: float) -> float | int:
     An integral float renders as an int (``42`` not ``42.0``, matching Go's encoding), and
     a ``bool`` (which Python accepts wherever a ``float`` is typed) renders as ``1`` /
     ``0``, never ``true``.
+
+    Returns:
+        A measure as a JSON number the Go ``float64`` decoder accepts.
+
     """
     if isinstance(value, bool):
         return int(value)
@@ -88,7 +99,12 @@ class Fact:
     """Wire-shape version (``FACT_SCHEMA_VERSION``)."""
 
     def to_json(self) -> bytes:
-        """Serialize to the compact, key-sorted UTF-8 JSON the Go consumer decodes."""
+        """Serialize to the compact, key-sorted UTF-8 JSON the Go consumer decodes.
+
+        Returns:
+            The JSON bytes.
+
+        """
         body = {
             "cube": self.cube,
             "dims": dict(self.dims),

@@ -112,7 +112,12 @@ class MessagingFactPublisher(FactPublisher):
                 self._drop(1, "buffer_full")
 
     async def __aenter__(self) -> Self:
-        """Start the sender task."""
+        """Start the sender task.
+
+        Returns:
+            The sender task.
+
+        """
         self._closing.clear()
         self._sender = asyncio.create_task(self._run())
         self._sender.add_done_callback(self._on_sender_done)
@@ -174,6 +179,10 @@ class MessagingFactPublisher(FactPublisher):
         """Wait for one fact.
 
         Then gather up to ``BATCH_SIZE`` within ``flush_interval_s``.
+
+        Returns:
+            The next batch of facts; never empty.
+
         """
         batch = [await self._buffer.get()]
         loop = asyncio.get_running_loop()

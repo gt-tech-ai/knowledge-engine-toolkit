@@ -108,11 +108,21 @@ class _StubJob:
         self._result: BatchResult = result
 
     def meta(self) -> JobMeta:
-        """Return a fixed identity for the stub."""
+        """Return a fixed identity for the stub.
+
+        Returns:
+            A fixed identity for the stub.
+
+        """
         return JobMeta(name="stub", group="test")
 
     async def execute(self) -> BatchResult:
-        """Return the preset BatchResult."""
+        """Return the preset BatchResult.
+
+        Returns:
+            The preset BatchResult.
+
+        """
         return self._result
 
 

@@ -24,6 +24,10 @@ def _rpc_error(
     """Build a raw AioRpcError for a status code.
 
     (matching the SDK's positional constructor).
+
+    Returns:
+        A raw AioRpcError for a status code.
+
     """
     return AioRpcError(
         code, Metadata(), trailing if trailing is not None else Metadata(), detail

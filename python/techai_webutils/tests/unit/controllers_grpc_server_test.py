@@ -30,7 +30,12 @@ if TYPE_CHECKING:
 async def _echo(
     request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
 ) -> bytes:
-    """Answer with the request."""
+    """Answer with the request.
+
+    Returns:
+        The request.
+
+    """
     await asyncio.sleep(0)
     return request
 
@@ -38,7 +43,12 @@ async def _echo(
 async def _slow(
     request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
 ) -> bytes:
-    """Answer after a pause longer than the tests' timeout."""
+    """Answer after a pause longer than the tests' timeout.
+
+    Returns:
+        The request.
+
+    """
     await asyncio.sleep(0.2)
     return request
 
@@ -46,7 +56,12 @@ async def _slow(
 async def _abort(
     _request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
 ) -> bytes:
-    """Abort NOT_FOUND with the handler's own message."""
+    """Abort NOT_FOUND with the handler's own message.
+
+    Returns:
+        Empty bytes, after the abort.
+
+    """
     await context.abort(grpc.StatusCode.NOT_FOUND, "no such thing")
     return b""  # pragma: no cover - abort raises
 
@@ -54,7 +69,12 @@ async def _abort(
 async def _coded(
     _request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
 ) -> bytes:
-    """Raise a coded NOT_FOUND."""
+    """Raise a coded NOT_FOUND.
+
+    Raises:
+        NotFoundError: Thing.
+
+    """
     await asyncio.sleep(0)
     entity = "thing"
     raise NotFoundError(entity, id="t-1")
@@ -63,7 +83,12 @@ async def _coded(
 async def _crash(
     _request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
 ) -> bytes:
-    """Raise an unexpected exception carrying internal detail."""
+    """Raise an unexpected exception carrying internal detail.
+
+    Raises:
+        RuntimeError: Db password=hunter2.
+
+    """
     await asyncio.sleep(0)
     msg = "db password=hunter2"
     raise RuntimeError(msg)
@@ -72,7 +97,12 @@ async def _crash(
 async def _stream(
     request: bytes, _context: grpc.aio.ServicerContext[bytes, bytes]
 ) -> AsyncIterator[bytes]:
-    """Stream three chunks, slower in total than the tests' timeout."""
+    """Stream three chunks, slower in total than the tests' timeout.
+
+    Yields:
+        Each chunk.
+
+    """
     for index in range(3):
         await asyncio.sleep(0.04)
         yield request + str(index).encode()
@@ -98,6 +128,10 @@ async def _call(
     """Serve the test service through ``interceptors`` and call ``method`` once.
 
     Returns the call's status, details and responses.
+
+    Returns:
+        The status, details and received chunks.
+
     """
     server = grpc.aio.server(interceptors=list(interceptors))
     server.add_generic_rpc_handlers((
@@ -120,7 +154,12 @@ async def _call(
 
 
 def _limiter(*, allow: bool) -> RateLimiter:
-    """Return a rate limiter that admits every call, or none."""
+    """Return a rate limiter that admits every call, or none.
+
+    Returns:
+        A rate limiter that admits every call, or none.
+
+    """
     limiter = MagicMock(spec=RateLimiter)
     limiter.allow.return_value = allow
     return limiter

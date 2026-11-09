@@ -80,6 +80,10 @@ def new_messaging_from_config(
     from ``decorations`` (None decorates nothing). ``broker`` connects a memory publisher
     to a memory subscriber; None gives the publisher its own. The SQS backend is imported
     lazily.
+
+    Returns:
+        The ``MessagePublisher`` selected by ``config.kind``.
+
     """
     decorations = decorations or Decorations()
     return decorate(_publisher(config, broker), decorations, config.name)
@@ -99,6 +103,13 @@ def new_messaging_subscriber_from_config(
     as ``<config.name>.handler`` (observed and bounded, never retried or broken), its
     layers resolved from ``decorations``. ``broker`` connects a memory subscriber to a
     memory publisher.
+
+    Returns:
+        The ``MessageConsumer`` selected by ``config.kind``.
+
+    Raises:
+        AppValueError: Unknown messaging kind: ``config.kind``.
+
     """
     decorations = decorations or Decorations()
     handlers = ClientBase.wire(decorations, f"{config.name}.handler", handler())
@@ -118,7 +129,15 @@ def new_messaging_subscriber_from_config(
 def _publisher(
     config: MessagingConfig, broker: InMemoryBroker | None
 ) -> MessagePublisher:
-    """Build the undecorated publisher ``config.kind`` selects."""
+    """Build the undecorated publisher ``config.kind`` selects.
+
+    Returns:
+        The undecorated publisher ``config.kind`` selects.
+
+    Raises:
+        AppValueError: Unknown messaging kind: ``config.kind``.
+
+    """
     if config.kind is MessagingKind.SQS:
         # Lazy import: skip aiobotocore until selected.
         from techai_webutils.clients.messaging.sqs.sqs_publisher import SQSPublisher  # noqa: PLC0415

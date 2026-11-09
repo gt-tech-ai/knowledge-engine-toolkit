@@ -39,7 +39,12 @@ _TRACER_PATH = (
 
 
 def _real_span_tracer() -> tuple[Tracer, InMemorySpanExporter]:
-    """Return a real OTel tracer backed by an in-memory exporter."""
+    """Return a real OTel tracer backed by an in-memory exporter.
+
+    Returns:
+        A real OTel tracer backed by an in-memory exporter.
+
+    """
     provider = TracerProvider()
     exporter = InMemorySpanExporter()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
@@ -47,7 +52,12 @@ def _real_span_tracer() -> tuple[Tracer, InMemorySpanExporter]:
 
 
 def _details(method: str = "/test.TestService/Do") -> grpc.HandlerCallDetails:
-    """Handler-call-details for ``method`` with no metadata."""
+    """Handler-call-details for ``method`` with no metadata.
+
+    Returns:
+        The call details.
+
+    """
     details = MagicMock(spec=grpc.HandlerCallDetails)
     details.method = method
     details.invocation_metadata = []
@@ -58,6 +68,10 @@ def _context(code: grpc.StatusCode | None = None) -> MagicMock:
     """Return a servicer context whose final status is ``code``.
 
     And whose ``write`` is awaitable.
+
+    Returns:
+        A servicer context whose final status is ``code``.
+
     """
     context = MagicMock()
     context.code.return_value = code
@@ -69,7 +83,12 @@ async def _wrap(
     interceptor: grpc.aio.ServerInterceptor,
     handler: grpc.RpcMethodHandler[object, object],
 ) -> grpc.RpcMethodHandler[object, object]:
-    """Run ``handler`` through ``interceptor`` and return the rebuilt handler."""
+    """Run ``handler`` through ``interceptor`` and return the rebuilt handler.
+
+    Returns:
+        The rebuilt handler.
+
+    """
     wrapped = await interceptor.intercept_service(
         AsyncMock(return_value=handler), _details()
     )
@@ -80,7 +99,12 @@ async def _wrap(
 def _behavior(
     handler: grpc.RpcMethodHandler[object, object], *, stream: bool = False
 ) -> Callable[[object, object], Awaitable[object]]:
-    """Return a rebuilt handler's behavior; grpc's stubs type it as synchronous."""
+    """Return a rebuilt handler's behavior; grpc's stubs type it as synchronous.
+
+    Returns:
+        A rebuilt handler's behavior; grpc's stubs type it as synchronous.
+
+    """
     fn = handler.unary_stream if stream else handler.unary_unary
     return cast("Callable[[object, object], Awaitable[object]]", fn)
 

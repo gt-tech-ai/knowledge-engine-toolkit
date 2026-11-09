@@ -27,7 +27,12 @@ _MICRO = Decimal("0.000001")
 def _record(
     model: str, input_tokens: int, output_tokens: int, embed_tokens: int
 ) -> UsageRecord:
-    """Return a usage record for ``model`` with the given token counts."""
+    """Return a usage record for ``model`` with the given token counts.
+
+    Returns:
+        A usage record for ``model`` with the given token counts.
+
+    """
     return UsageRecord(
         scope=UsageScope(org_id="org-1"),
         model=model,

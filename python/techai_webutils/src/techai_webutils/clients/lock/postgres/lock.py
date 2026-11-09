@@ -71,6 +71,10 @@ def _to_signed_int32(value: int) -> int:
     """Reinterpret a 32-bit unsigned value.
 
     (e.g. a crc32) as the signed int32 advisory locks require.
+
+    Returns:
+        The value as a signed 32-bit integer.
+
     """
     return struct.unpack("i", struct.pack("I", value))[0]
 
@@ -101,6 +105,11 @@ class PostgresAdvisoryLock:
         int)``). ``application_name`` tags the session in ``pg_stat_activity``; the lock's
         log lines carry its key and namespace, so a process holding several locks can tell
         them apart.
+
+        Raises:
+            AppValueError: PostgresAdvisoryLock requires a non-empty key;
+                PostgresAdvisoryLock namespace ``namespace`` does not fit a signed int32.
+
         """
         if not key:
             msg = "PostgresAdvisoryLock requires a non-empty key"
@@ -121,7 +130,12 @@ class PostgresAdvisoryLock:
         self._conn: asyncpg.Connection | None = None
 
     async def __aenter__(self) -> Self:
-        """Enter the async context; the session is opened lazily on first ``acquire``."""
+        """Enter the async context; the session is opened lazily on first ``acquire``.
+
+        Returns:
+            This instance.
+
+        """
         return self
 
     async def __aexit__(
@@ -168,6 +182,10 @@ class PostgresAdvisoryLock:
         Lazily connects on first use, and reconnects when a previously-opened session has
         been closed (idle-reaped or crashed) so a dead socket cannot wedge the guarded
         work until a restart.
+
+        Returns:
+            The pinned session, opening (or reopening) it as needed.
+
         """
         conn = self._conn
         if conn is None or conn.is_closed():
@@ -187,6 +205,14 @@ class PostgresAdvisoryLock:
         A connection-loss failure is surfaced as a transient ``UnavailableError`` (and the
         broken session dropped so the next round reconnects), letting the composition-root
         retry / circuit-breaker decorators act on it.
+
+        Returns:
+            Whether the lock was acquired.
+
+        Raises:
+            UnavailableError: Advisory-lock acquire failed (broken or unreachable Postgres
+                session): ``err``.
+
         """
         try:
             conn = await self._ensure_connection()

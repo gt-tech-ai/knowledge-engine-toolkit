@@ -190,6 +190,9 @@ def wrap_retrieval_engine(
     with its own engine (a custom corpus, a test double of the backend) calls it directly
     so that engine is scoped exactly like the factory's.
 
+    Returns:
+        The wrapped engine.
+
     Raises:
         AppValueError: ``cross_encoder`` without a ``reranker`` (``INVALID_INPUT``).
 
@@ -211,6 +214,34 @@ def wrap_retrieval_engine(
     if config.passage_order == PassageOrder.RANK:
         return scoped
     return OrderingRetrievalEngine(scoped, config.passage_order)
+
+
+def _inner_engine(
+    config: RetrievalConfig,
+    filter_builder: FilterBuilder | None,
+    document_id_resolver: DocumentIdResolver | None,
+    store_filter_keys: Sequence[str],
+    stub_passages: Sequence[RetrievalResult],
+    embedder: EmbeddingProvider | None,
+    store: VectorStore | None,
+) -> RetrievalEngine:
+    """Build the unwrapped engine ``config.kind`` selects.
+
+    Returns:
+        The engine for the selected kind.
+
+    Raises:
+        AppValueError: The kind is unknown.
+
+    """
+    if config.kind is RetrievalKind.STUB:
+        return StubRetrievalEngine(stub_passages)
+    if config.kind is RetrievalKind.BEDROCK:
+        return _build_bedrock_engine(config, filter_builder, document_id_resolver)
+    if config.kind in _VECTOR_KINDS:
+        return _build_vector_engine(config, store_filter_keys, embedder, store)
+    msg = f"unknown retrieval kind: {config.kind!r}"
+    raise AppValueError(msg)
 
 
 def new_retrieval_engine_from_config(
@@ -236,11 +267,11 @@ def new_retrieval_engine_from_config(
     ``clients.vector``; a client family never imports a sibling). ``reranker``
     (``clients.reranking``) reorders any kind's passages when ``reranking_kind`` is
     ``cross_encoder``. A ``MetadataEquals`` scope with no push-down seam for the selected
-    kind is logged as a warning; a seam the selected kind ignores is logged at info.
+    kind is logged as a warning; a seam the selected kind ignores is logged at info. A
+    callee raises ``INVALID_INPUT`` on a bad kind or reranker pairing.
 
-    Raises:
-        AppValueError: An unknown kind, ``bedrock_rerank`` on a kind other than
-            ``bedrock``, or ``cross_encoder`` without a reranker (``INVALID_INPUT``).
+    Returns:
+        The retrieval engine ``config.kind`` selects, wrapped for policy and order.
 
     """
     _refuse_bedrock_rerank_off_bedrock(config)
@@ -252,16 +283,15 @@ def new_retrieval_engine_from_config(
         store_filter_keys=store_filter_keys,
         stub_passages=stub_passages,
     )
-    inner: RetrievalEngine
-    if config.kind is RetrievalKind.STUB:
-        inner = StubRetrievalEngine(stub_passages)
-    elif config.kind is RetrievalKind.BEDROCK:
-        inner = _build_bedrock_engine(config, filter_builder, document_id_resolver)
-    elif config.kind in _VECTOR_KINDS:
-        inner = _build_vector_engine(config, store_filter_keys, embedder, store)
-    else:
-        msg = f"unknown retrieval kind: {config.kind!r}"
-        raise AppValueError(msg)
+    inner = _inner_engine(
+        config,
+        filter_builder,
+        document_id_resolver,
+        store_filter_keys,
+        stub_passages,
+        embedder,
+        store,
+    )
     return wrap_retrieval_engine(inner, config, policies=policies, reranker=reranker)
 
 
@@ -293,6 +323,10 @@ def _build_bedrock_engine(
     """Build the Bedrock Knowledge Base engine.
 
     Aiobotocore is loaded only on this path.
+
+    Returns:
+        The Bedrock Knowledge Base engine.
+
     """
     bedrock = importlib.import_module("techai_webutils.clients.retrieval.bedrock")
     engine = cast("type[BedrockRetrievalEngine]", bedrock.BedrockRetrievalEngine)
@@ -383,6 +417,9 @@ def _build_vector_engine(
     """Build the vector engine over the caller's embedder and store.
 
     It checks their dimensions agree.
+
+    Returns:
+        The vector engine over the caller's embedder and store.
 
     Raises:
         AppError: ``INVALID_INPUT`` when the embedder or the store is missing.

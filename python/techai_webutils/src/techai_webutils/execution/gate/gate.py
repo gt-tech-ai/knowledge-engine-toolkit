@@ -29,6 +29,10 @@ def tier() -> Tier:
     Timeout.
 
     It decorates one run of a gate (the ``Run`` operation), mirroring Go ``gate.Tier``.
+
+    Returns:
+        The gate tier, outermost first: recovery, logging, tracing, metrics.
+
     """
     return Tier(
         "gate",
@@ -88,22 +92,42 @@ class GateBuilder:
         self._op: Subject | None = None
 
     def parallel(self, name: str, *jobs: AnyJob) -> Self:
-        """Add a phase whose jobs all run concurrently."""
+        """Add a phase whose jobs all run concurrently.
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._phases.append(Phase(name=name, jobs=jobs, parallel=True))
         return self
 
     def serial(self, name: str, *jobs: AnyJob) -> Self:
-        """Add a phase whose jobs run one after another, stopping at the first failure."""
+        """Add a phase whose jobs run one after another, stopping at the first failure.
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._phases.append(Phase(name=name, jobs=jobs, parallel=False))
         return self
 
     def stop_on_failure(self) -> Self:
-        """Configure the gate to skip remaining phases after any phase fails."""
+        """Configure the gate to skip remaining phases after any phase fails.
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._stop_on_failure = True
         return self
 
     def with_observer(self, observer: ExecutionObserver) -> Self:
-        """Set the ExecutionObserver for the built gate (defaults to NopObserver)."""
+        """Set the ExecutionObserver for the built gate (defaults to NopObserver).
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._observer = observer
         return self
 
@@ -111,12 +135,21 @@ class GateBuilder:
         """Run the built gate through the gate tier.
 
         Decorated as ``decorations`` resolves its name.
+
+        Returns:
+            This builder, for chaining.
+
         """
         self._op = decorations.subject(tier(), self._name)
         return self
 
     def build(self) -> Gate:
-        """Return the configured Gate, defaulting the observer to a NopObserver."""
+        """Return the configured Gate, defaulting the observer to a NopObserver.
+
+        Returns:
+            The configured Gate, defaulting the observer to a NopObserver.
+
+        """
         observer: ExecutionObserver = (
             self._observer if self._observer is not None else NopObserver()
         )
@@ -130,7 +163,12 @@ class GateBuilder:
 
 
 def new_gate(name: str) -> GateBuilder:
-    """Return a GateBuilder for a named gate (mirrors Go ``gate.NewGate``)."""
+    """Return a GateBuilder for a named gate (mirrors Go ``gate.NewGate``).
+
+    Returns:
+        A GateBuilder for a named gate (mirrors Go ``gate.NewGate``).
+
+    """
     return GateBuilder(name)
 
 
@@ -163,6 +201,10 @@ async def run_gate(gate: Gate) -> BatchResult:
     resource cleanup without leaking on a raised job.
 
     A gate built with ``decorate`` runs through the gate tier as its ``Run`` operation.
+
+    Returns:
+        The batch result.
+
     """
     if gate.op is not None:
         return await gate.op.exec("run", lambda: _run(gate))
@@ -170,7 +212,12 @@ async def run_gate(gate: Gate) -> BatchResult:
 
 
 async def _run(gate: Gate) -> BatchResult:
-    """Run ``gate``'s phases; ``run_gate`` decorates it."""
+    """Run ``gate``'s phases; ``run_gate`` decorates it.
+
+    Returns:
+        The batch result.
+
+    """
     loop = asyncio.get_running_loop()
     start = loop.time()
     observer = gate.observer

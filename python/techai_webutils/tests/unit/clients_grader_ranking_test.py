@@ -19,7 +19,12 @@ from techai_webutils.core.interfaces.evaluator import EvalOutput
 
 
 def _case(relevant: list[str]) -> EvalCase:
-    """Return a case whose relevant documents are ``relevant``."""
+    """Return a case whose relevant documents are ``relevant``.
+
+    Returns:
+        A case whose relevant documents are ``relevant``.
+
+    """
     return EvalCase(
         id="q-1",
         inputs={"query": "which document?"},
@@ -31,7 +36,12 @@ def _case(relevant: list[str]) -> EvalCase:
 async def _score(
     metric: str, k: int, relevant: list[str], retrieved: tuple[str, ...]
 ) -> float:
-    """Grade ``retrieved`` for ``relevant`` with the ``metric@k`` ranking grader."""
+    """Grade ``retrieved`` for ``relevant`` with the ``metric@k`` ranking grader.
+
+    Returns:
+        The score.
+
+    """
     grader = grader_from_config(GraderConfig(kind=GraderKind.RANKING, metric=metric, k=k))
     result = await grader.grade(
         _case(relevant), EvalOutput("", (), "", retrieved=retrieved)

@@ -48,7 +48,12 @@ from techai_webutils.foundation.resilience.classify import is_throttled
 
 
 def _client(*, alias_exists: bool = True) -> MagicMock:
-    """Return a mocked ``AsyncOpenSearch`` whose alias exists and whose writes succeed."""
+    """Return a mocked ``AsyncOpenSearch`` whose alias exists and whose writes succeed.
+
+    Returns:
+        A mocked ``AsyncOpenSearch`` whose alias exists and whose writes succeed.
+
+    """
     client = MagicMock()
     client.indices.exists_alias = AsyncMock(return_value=alias_exists)
     client.indices.exists = AsyncMock(return_value=False)
@@ -62,7 +67,12 @@ def _client(*, alias_exists: bool = True) -> MagicMock:
 
 
 def _entry(org: str | None = "o1", **metadata: str) -> VectorEntry:
-    """Return one entry, in ``org`` unless ``None``."""
+    """Return one entry, in ``org`` unless ``None``.
+
+    Returns:
+        One entry, in ``org`` unless ``None``.
+
+    """
     meta = dict(metadata) | ({"org_id": org} if org else {})
     return VectorEntry(
         id="d:0", document_id="d", content="t", embedding=[1.0], metadata=meta
@@ -70,7 +80,12 @@ def _entry(org: str | None = "o1", **metadata: str) -> VectorEntry:
 
 
 def _vector_mapping(body: dict[str, object]) -> dict[str, object]:
-    """Return the ``embedding`` field mapping of an index body."""
+    """Return the ``embedding`` field mapping of an index body.
+
+    Returns:
+        The ``embedding`` field mapping of an index body.
+
+    """
     mappings = cast("dict[str, dict[str, dict[str, object]]]", body["mappings"])
     return mappings["properties"]["embedding"]
 
@@ -555,7 +570,12 @@ async def test_keyword_search_returns_no_vectors() -> None:
 
 
 def _hit(chunk: str, score: float) -> VectorSearchResult:
-    """Return one search hit."""
+    """Return one search hit.
+
+    Returns:
+        One search hit.
+
+    """
     return VectorSearchResult(
         chunk_id=chunk, document_id=chunk, content="t", score=score, metadata={}
     )
@@ -565,6 +585,10 @@ def _domain_store(hits: list[VectorSearchResult], delay: float = 0.0) -> MagicMo
     """Return a mocked domain store whose searches answer ``hits``.
 
     After ``delay`` seconds.
+
+    Returns:
+        A mocked domain store whose searches answer ``hits``.
+
     """
 
     async def answer(*_: object) -> list[VectorSearchResult]:

@@ -67,6 +67,10 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
         """Return True and count one allowance if ``key`` is under its limit.
 
         (``0``: unlimited).
+
+        Returns:
+            True and count one allowance if ``key`` is under its limit.
+
         """
         if self._max == 0:
             return True
@@ -78,6 +82,10 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
         Else False.
 
         ``0`` allows nothing (an operator pauses the guarded action this way).
+
+        Returns:
+            True and count one allowance if ``key`` is under its window limit.
+
         """
         now = self._clock()
         async with self._lock:

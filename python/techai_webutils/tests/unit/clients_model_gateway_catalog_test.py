@@ -21,7 +21,12 @@ _PRICED = frozenset({"anthropic/sonnet", "anthropic/haiku", "meta/small"})
 
 
 def _break(raw: dict[str, Any], case: str) -> dict[str, Any]:
-    """Return a copy of ``raw`` with one boot-time defect named by ``case``."""
+    """Return a copy of ``raw`` with one boot-time defect named by ``case``.
+
+    Returns:
+        A copy of ``raw`` with one boot-time defect named by ``case``.
+
+    """
     broken = copy.deepcopy(raw)
     sonnet = broken["anthropic/sonnet"]
     if case == "unknown_kind":

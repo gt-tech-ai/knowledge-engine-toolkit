@@ -94,6 +94,10 @@ def new_embedding_from_config(config: EmbeddingConfig) -> EmbeddingProvider:
     on exit. For ``bedrock`` the bedrock-runtime client opens lazily on the first embed
     (no I/O here) and ``aclose`` on the provider releases it. A configured prefix wraps
     the provider in ``PrefixedEmbedding``.
+
+    Returns:
+        The ``EmbeddingProvider`` selected by ``config.kind``.
+
     """
     provider = _provider(config)
     if not (config.query_prefix or config.document_prefix):
@@ -106,7 +110,15 @@ def new_embedding_from_config(config: EmbeddingConfig) -> EmbeddingProvider:
 
 
 def _provider(config: EmbeddingConfig) -> EmbeddingProvider:
-    """Build the bare provider ``config.kind`` selects."""
+    """Build the bare provider ``config.kind`` selects.
+
+    Returns:
+        The bare provider ``config.kind`` selects.
+
+    Raises:
+        AppValueError: Unknown embedding kind: ``config.kind``.
+
+    """
     if config.kind is EmbeddingKind.OLLAMA:
         client = httpx.AsyncClient(base_url=config.host, timeout=config.timeout_seconds)
         return OllamaEmbeddingProvider(

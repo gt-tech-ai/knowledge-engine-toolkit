@@ -46,7 +46,12 @@ class MetricsConfig:
 
 
 def default_config() -> MetricsConfig:
-    """Return a default metrics config (PROMETHEUS)."""
+    """Return a default metrics config (PROMETHEUS).
+
+    Returns:
+        A default metrics config (PROMETHEUS).
+
+    """
     return MetricsConfig(kind=MetricsKind.PROMETHEUS)
 
 
@@ -59,8 +64,10 @@ def new_metrics_from_config(config: MetricsConfig) -> MetricsProvider:
     Returns:
         A MetricsProvider implementation matching the requested kind.
 
+    A callee raises ``ValueError``: If the kind is unknown.
+
     Raises:
-        ValueError: If the kind is unknown.
+        AppValueError: Unknown metrics kind: ``config.kind``.
 
     """
     if config.kind == MetricsKind.PROMETHEUS:

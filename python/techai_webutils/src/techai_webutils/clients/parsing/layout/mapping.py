@@ -45,6 +45,10 @@ def parsed_from_docling(doc: DoclingDocument) -> ParsedDocument:
     """Return ``doc`` as a PDF ``ParsedDocument`` with markdown.
 
     Per-page text and blocks.
+
+    Returns:
+        ``doc`` as a PDF ``ParsedDocument`` with markdown.
+
     """
     blocks = _blocks(doc)
     markdown = doc.export_to_markdown()
@@ -64,7 +68,12 @@ def parsed_from_docling(doc: DoclingDocument) -> ParsedDocument:
 
 
 def _blocks(doc: DoclingDocument) -> list[DocumentBlock]:
-    """Map ``doc``'s items, in reading order, onto blocks."""
+    """Map ``doc``'s items, in reading order, onto blocks.
+
+    Returns:
+        The blocks in reading order.
+
+    """
     attached = {
         ref.cref for item in [*doc.tables, *doc.pictures] for ref in item.captions
     }
@@ -87,6 +96,10 @@ def _block(
     """Map one item; update ``path`` for a title or heading.
 
     ``None`` for an empty item.
+
+    Returns:
+        The block, or ``None`` for an item with no block.
+
     """
     page = item.prov[0].page_no if item.prov else None
     if isinstance(item, TitleItem | SectionHeaderItem):
@@ -112,7 +125,12 @@ def _block(
 
 
 def _text_type(item: TextItem | CodeItem | FormulaItem) -> BlockType:
-    """Return the block type of a text-bearing item."""
+    """Return the block type of a text-bearing item.
+
+    Returns:
+        The block type of a text-bearing item.
+
+    """
     if isinstance(item, ListItem):
         return BlockType.LIST_ITEM
     if isinstance(item, CodeItem):
@@ -131,7 +149,12 @@ def _table(
     page: int | None,
     section_path: tuple[str, ...],
 ) -> DocumentBlock:
-    """Map a table: its cells, size, markdown rendering and caption."""
+    """Map a table: its cells, size, markdown rendering and caption.
+
+    Returns:
+        The table block.
+
+    """
     data = item.data
     cells = tuple(
         TableCell(
@@ -158,5 +181,10 @@ def _table(
 
 
 def _path(path: list[tuple[int, str]]) -> tuple[str, ...]:
-    """Return the heading texts of ``path``, outermost first."""
+    """Return the heading texts of ``path``, outermost first.
+
+    Returns:
+        The heading texts of ``path``, outermost first.
+
+    """
     return tuple(text for _, text in path)

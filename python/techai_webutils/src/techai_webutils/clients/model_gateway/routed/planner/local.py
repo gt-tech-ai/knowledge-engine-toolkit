@@ -32,7 +32,12 @@ class LocalPlanner:
         self._routes = routes
 
     async def plan(self, ctx: RouteContext, route_input: PlanInput) -> Plan:
-        """Classify the query into a route, then rank the candidates for it."""
+        """Classify the query into a route, then rank the candidates for it.
+
+        Returns:
+            The plan.
+
+        """
         classified = await self._classifier.classify(ctx, route_input.query)
         ranked = await self._ranker.rank(
             ctx, self._routes[classified.route], route_input.candidates, route_input

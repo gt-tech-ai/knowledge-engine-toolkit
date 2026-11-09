@@ -24,6 +24,10 @@ def _http_status_error(status: int) -> httpx.HTTPStatusError:
     """Build an httpx.HTTPStatusError carrying the given response status.
 
     (as raise_for_status does).
+
+    Returns:
+        An httpx.HTTPStatusError carrying the given response status.
+
     """
     request = httpx.Request("POST", "http://ollama:11434/api/embed")
     response = httpx.Response(status, request=request)
@@ -31,7 +35,12 @@ def _http_status_error(status: int) -> httpx.HTTPStatusError:
 
 
 def _client_error(code: str, status: int) -> ClientError:
-    """Build a botocore ClientError with the given error code + HTTP status."""
+    """Build a botocore ClientError with the given error code + HTTP status.
+
+    Returns:
+        A botocore ClientError with the given error code + HTTP status.
+
+    """
     return ClientError(
         {
             "Error": {"Code": code},
@@ -54,6 +63,10 @@ def _rpc_error(code: grpc.StatusCode) -> MagicMock:
     ``code()`` — so the classifier's ``isinstance(err, grpc.RpcError)`` + ``err.code()``
     checks see a faithful surface (real calls raise ``grpc.Call`` subclasses, which the
     base ``grpc.RpcError`` lacks ``code()`` on).
+
+    Returns:
+        A mock standing in for a grpc RpcError carrying the given StatusCode.
+
     """
     err = MagicMock(spec=grpc.aio.AioRpcError)
     err.code.return_value = code

@@ -116,6 +116,10 @@ class IngestionErrors(ExceptionGroup[IngestionError]):
 
         Required by ``ExceptionGroup`` to support ``except*`` filtering,
         which creates subgroups that preserve the original group type.
+
+        Returns:
+            The derived group.
+
         """
         return IngestionErrors(self.message, excs)  # type: ignore[arg-type]
 
@@ -136,9 +140,18 @@ class MultiError:
         """Return a summary string showing the count and messages.
 
         Of all contained errors.
+
+        Returns:
+            A summary string showing the count and messages.
+
         """
         return f"{len(self.errors)} errors: {[str(e) for e in self.errors]}"
 
     def __repr__(self) -> str:
-        """Return a compact debug representation showing only the error count."""
+        """Return a compact debug representation showing only the error count.
+
+        Returns:
+            A compact debug representation showing only the error count.
+
+        """
         return f"MultiError({len(self.errors)} errors)"

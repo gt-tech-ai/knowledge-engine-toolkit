@@ -72,6 +72,10 @@ def _botocore_response(exc: BaseException) -> dict[str, Any] | None:
     Providers translate SDK failures into a coded ``AppError`` at their boundary (``raise
     ... from exc``, with the SDK error also kept as ``AppError.cause``), so the
     ``response`` usually sits on a cause, not on the raised exception itself.
+
+    Returns:
+        The botocore-shaped ``response`` dict on ``exc`` or along its cause chain.
+
     """
     seen: set[int] = set()
     current: BaseException | None = exc
@@ -94,6 +98,10 @@ def _classify(exc: Exception) -> str | None:
     wraps (``_botocore_response``), so the decorator neither imports botocore at module
     load nor couples tests to it. An error with no such response in its chain is not a
     Bedrock transient error and is re-raised.
+
+    Returns:
+        ``"throttle"`` or ``"error"`` when the error should fall back, else ``None``.
+
     """
     response = _botocore_response(exc)
     if response is None:
@@ -127,6 +135,10 @@ class FallbackLlmProvider(LLMProvider):
         If entering the fallback raises after the primary was already entered, __aenter__
         propagates the exception and Python will NOT call __aexit__, so roll the stack
         back here (closing the entered primary) to avoid leaking a half-opened composite.
+
+        Returns:
+            This instance.
+
         """
         try:
             await self._stack.enter_async_context(self._primary)
@@ -145,6 +157,10 @@ class FallbackLlmProvider(LLMProvider):
         """Exit both wrapped providers (fallback, then primary).
 
         Propagating any suppression decision.
+
+        Returns:
+            Whether the wrapped context suppresses the exception.
+
         """
         return await self._stack.__aexit__(exc_type, exc_val, exc_tb)
 
@@ -154,6 +170,13 @@ class FallbackLlmProvider(LLMProvider):
         """Complete on the primary; on a throttle/5xx, retry on the fallback.
 
         (else re-raise / 503).
+
+        Returns:
+            The completion.
+
+        Raises:
+            UnavailableError: Both the primary and the fallback failed.
+
         """
         try:
             return await self._primary.complete(messages, config)
@@ -173,6 +196,10 @@ class FallbackLlmProvider(LLMProvider):
         """Stream from the primary; if it fails before any token, retry the fallback.
 
         (else re-raise / 503).
+
+        Returns:
+            The stream of text deltas.
+
         """
         return text_only(await self.stream_with_usage(messages, config))
 
@@ -182,6 +209,10 @@ class FallbackLlmProvider(LLMProvider):
         """Stream (with the serving model's usage last) from the primary.
 
         Falling back before any token.
+
+        Returns:
+            The stream of text deltas, ending with the usage when the provider reports it.
+
         """
         return self._stream_with_fallback(messages, config)
 
@@ -193,6 +224,13 @@ class FallbackLlmProvider(LLMProvider):
         """Yield the primary stream.
 
         Fall back only if it fails before emitting a token.
+
+        Yields:
+            The primary stream.
+
+        Raises:
+            UnavailableError: Both the primary and the fallback failed.
+
         """
         yielded = False
         try:
@@ -217,5 +255,9 @@ class FallbackLlmProvider(LLMProvider):
         """Return the primary model id.
 
         (the model a caller expects unless a fallback occurs).
+
+        Returns:
+            The primary model id.
+
         """
         return self._primary.model_name()

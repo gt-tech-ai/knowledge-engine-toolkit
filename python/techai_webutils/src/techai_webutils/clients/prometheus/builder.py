@@ -53,6 +53,9 @@ def new_metrics_querier_from_config(
     The ``http`` kind sends through ``client`` when given (tests, a shared pool), else
     through a new ``httpx.AsyncClient`` bounded by ``timeout_seconds``.
 
+    Returns:
+        The ``MetricsQuerier`` ``config.kind`` selects.
+
     Raises:
         AppValueError: An unknown kind, or ``http`` without a ``base_url``
             (``INVALID_INPUT``).

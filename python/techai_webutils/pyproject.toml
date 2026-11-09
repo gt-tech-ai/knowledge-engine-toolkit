@@ -250,7 +250,6 @@ ignore = [
     "blank-line-after-function", # No blank lines allowed after function docstring
     "incorrect-blank-line-before-class", # 1 blank line before class docstring (conflicts with D211; ruff keeps D211)
     "multi-line-summary-second-line", # Multi-line summary on second line (conflicts with D212; ruff keeps D212)
-    "DOC", # pydoclint family (preview): listed as "Consider", not adopted
     "line-contains-todo", # Line contains TODO, consider resolving the issue
     "FURB", # refurb family (preview): listed as "Consider", not adopted
     "invalid-function-name", # Function name `xxx` should be lowercase

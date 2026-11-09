@@ -27,6 +27,10 @@ def parse_sample_rate(raw: str | None) -> float:
     exposed so the composition-root entrypoints — the sanctioned place to read the
     environment (ARCHITECTURE.md#configuration) — can parse the raw TRACE_SAMPLE_RATE they
     read.
+
+    Returns:
+        A TRACE_SAMPLE_RATE string into a 0.0-1.0 fraction, defaulting to 1.0.
+
     """
     if not raw:
         return 1.0

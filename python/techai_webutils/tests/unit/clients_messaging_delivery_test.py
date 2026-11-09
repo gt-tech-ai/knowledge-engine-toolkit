@@ -43,7 +43,12 @@ _DLQ_ARN = "arn:aws:sqs:us-east-1:000000000000:events-dlq"
 
 
 def _raw(n: int, receives: int = 1) -> dict[str, object]:
-    """Return received SQS message ``n`` on its ``receives``-th delivery."""
+    """Return received SQS message ``n`` on its ``receives``-th delivery.
+
+    Returns:
+        Received SQS message ``n`` on its ``receives``-th delivery.
+
+    """
     return {
         "MessageId": f"m-{n}",
         "Body": "{}",
@@ -77,7 +82,12 @@ async def _consume(
 def _queue(
     redrive: dict[str, object] | None, visibility: str = "300"
 ) -> dict[str, object]:
-    """Return a ``GetQueueAttributes`` response with ``redrive`` and ``visibility``."""
+    """Return a ``GetQueueAttributes`` response with ``redrive`` and ``visibility``.
+
+    Returns:
+        A ``GetQueueAttributes`` response with ``redrive`` and ``visibility``.
+
+    """
     attributes = {"VisibilityTimeout": visibility}
     if redrive is not None:
         attributes["RedrivePolicy"] = json.dumps(redrive)
@@ -85,7 +95,12 @@ def _queue(
 
 
 async def _failing(_message: Message) -> None:
-    """Fail every message, after yielding to the loop as a real handler would."""
+    """Fail every message, after yielding to the loop as a real handler would.
+
+    Raises:
+        AppRuntimeError: Boom.
+
+    """
     await asyncio.sleep(0)
     msg = "boom"
     raise AppRuntimeError(msg)

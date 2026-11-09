@@ -31,6 +31,10 @@ async def _fail_inside(cb: AsyncCircuitBreaker) -> None:
 
     Typed ``None``, not ``NoReturn``: the breaker is a context manager, so the type
     checker cannot rule out that it suppresses the error.
+
+    Raises:
+        ValueError: Fail.
+
     """
     async with cb:
         msg = "fail"

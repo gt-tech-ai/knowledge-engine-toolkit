@@ -70,7 +70,12 @@ def word_shingles(text: str, size: int) -> frozenset[int]:
 
 
 def _hash61(data: bytes) -> int:
-    """Return ``data``'s 61-bit hash (BLAKE2b, reduced modulo ``MERSENNE_61``)."""
+    """Return ``data``'s 61-bit hash (BLAKE2b, reduced modulo ``MERSENNE_61``).
+
+    Returns:
+        ``data``'s 61-bit hash (BLAKE2b, reduced modulo ``MERSENNE_61``).
+
+    """
     digest = hashlib.blake2b(data, digest_size=8).digest()
     return int.from_bytes(digest, "big") % MERSENNE_61
 
@@ -125,6 +130,9 @@ class MinHasher:
             shingles: The shingle hashes (``word_shingles``).
 
         Returns: One minimum per hash function.
+
+        Returns:
+            The signature of ``shingles``.
 
         """
         kept = sorted(set(shingles))
@@ -184,6 +192,9 @@ def lsh_partition(num_perm: int, threshold: float) -> tuple[int, int]:
         threshold: The similarity a near-duplicate reaches, in ``(0, 1)``.
 
     Returns: Bands and rows per band.
+
+    Returns:
+        The ``(bands, rows)`` split of a ``num_perm`` signature for ``threshold``.
 
     Raises:
         AppValueError: ``num_perm`` is below 1 or ``threshold`` is outside ``(0, 1)``

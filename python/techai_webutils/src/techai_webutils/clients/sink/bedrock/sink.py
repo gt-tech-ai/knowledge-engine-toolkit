@@ -120,6 +120,10 @@ class BedrockSink(NoOpAsyncResource, Sink):
         """Return each object to write (key → body and content type).
 
         Units and their sidecars.
+
+        Returns:
+            Each object to write (key → body and content type).
+
         """
         files: dict[str, tuple[bytes, str]] = {}
         made = units(
@@ -147,7 +151,12 @@ class BedrockSink(NoOpAsyncResource, Sink):
         )
 
     async def _keys(self, doc_prefix: str) -> set[str]:
-        """Return the keys of every object under the document's prefix."""
+        """Return the keys of every object under the document's prefix.
+
+        Returns:
+            The keys of every object under the document's prefix.
+
+        """
         listed = await self._storage.list_objects(self._config.bucket, doc_prefix)
         return {o.key for o in listed}
 

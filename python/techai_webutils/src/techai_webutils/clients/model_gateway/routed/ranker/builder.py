@@ -81,6 +81,9 @@ def candidate_ranker_from_config(
         ledger: The token ledger the budget bias reads (``cost_aware``; optional).
         default_slo: The objective when neither the request nor the policy names one.
 
+    Returns:
+        The ranker ``raw["kind"]`` selects (``static_order`` by default).
+
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.
 

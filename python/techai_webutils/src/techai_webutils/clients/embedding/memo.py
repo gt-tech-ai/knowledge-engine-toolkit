@@ -34,7 +34,12 @@ def reset_embedding_memo() -> None:
 
 
 def _memo() -> dict[tuple[str, str, str], EmbeddingResult]:
-    """Return the current request's memo, creating it in this context when absent."""
+    """Return the current request's memo, creating it in this context when absent.
+
+    Returns:
+        The current request's memo, creating it in this context when absent.
+
+    """
     memo = _MEMO.get()
     if memo is None:
         fresh: dict[tuple[str, str, str], EmbeddingResult] = {}
@@ -57,6 +62,10 @@ class MemoizedEmbedding(EmbeddingProvider):
         """Return ``text``'s embedding as ``input_type``.
 
         From this request's memo when present.
+
+        Returns:
+            ``text``'s embedding as ``input_type``.
+
         """
         memo = _memo()
         key = (self._inner.model_name(), input_type, text)
@@ -72,21 +81,41 @@ class MemoizedEmbedding(EmbeddingProvider):
     async def embed_batch(
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
-        """Embed ``texts`` through the inner provider (batches are not memoized)."""
+        """Embed ``texts`` through the inner provider (batches are not memoized).
+
+        Returns:
+            One embedding per text, in input order.
+
+        """
         return await self._inner.embed_batch(texts, input_type=input_type)
 
     @override
     def dimension(self) -> int:
-        """Return the inner provider's dimension."""
+        """Return the inner provider's dimension.
+
+        Returns:
+            The inner provider's dimension.
+
+        """
         return self._inner.dimension()
 
     @override
     def model_name(self) -> str:
-        """Return the inner provider's model."""
+        """Return the inner provider's model.
+
+        Returns:
+            The inner provider's model.
+
+        """
         return self._inner.model_name()
 
     async def __aenter__(self) -> Self:
-        """Enter the inner provider's context."""
+        """Enter the inner provider's context.
+
+        Returns:
+            This instance.
+
+        """
         await self._inner.__aenter__()
         return self
 

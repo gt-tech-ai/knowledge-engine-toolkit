@@ -35,6 +35,9 @@ class CrossEncoderReranker(NoOpAsyncResource, Reranker):
     async def rerank(self, query: str, passages: Sequence[str]) -> list[float]:
         """Return the client's score for each passage, in order.
 
+        Returns:
+            The client's score for each passage, in order.
+
         Raises:
             InternalError: The client returned a different number of scores than passages.
 

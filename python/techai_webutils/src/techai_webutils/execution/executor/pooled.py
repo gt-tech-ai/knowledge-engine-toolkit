@@ -98,6 +98,10 @@ class LazyWorker[T]:
         """Return the worker, building it exactly once.
 
         (double-checked under the lock) on first call.
+
+        Returns:
+            The worker, building it exactly once.
+
         """
         worker = self._worker
         if worker is None:
@@ -156,9 +160,11 @@ class PooledExecutor[T]:
         idle workers, and every worker actually built is closed on the way out (even if
         ``fan_out`` raises), so no client or actor is leaked.
 
-        Raises:
-            Exception: The first ``abort_on`` exception a worker raised; the remaining
-                items were not dispatched.
+        A callee raises ``Exception``: The first ``abort_on`` exception a worker raised;
+        the remaining items were not dispatched.
+
+        Returns:
+            The batch result.
 
         """
         size = min(self._pool_size, len(items)) or 1

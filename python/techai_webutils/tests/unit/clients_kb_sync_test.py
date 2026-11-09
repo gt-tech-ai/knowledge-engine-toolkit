@@ -42,6 +42,10 @@ def _ingestor_mock() -> MagicMock:
     effects to reproduce the transitioning/stuck/flaky/always-failing scenarios the old
     subclass fakes encoded, and asserts against ``await_count`` where the fakes tracked a
     call counter.
+
+    Returns:
+        A ``create_autospec(KnowledgeBaseIngestor)``.
+
     """
     mock = create_autospec(KnowledgeBaseIngestor, instance=True)
     mock.list_documents.return_value = []
@@ -49,7 +53,12 @@ def _ingestor_mock() -> MagicMock:
 
 
 def _job(state: IngestionJobState, job_id: str = "job-1") -> IngestionJob:
-    """Return an ``IngestionJob`` in ``state`` (canned return for the ingestor mocks)."""
+    """Return an ``IngestionJob`` in ``state`` (canned return for the ingestor mocks).
+
+    Returns:
+        An ``IngestionJob`` in ``state`` (canned return for the ingestor mocks).
+
+    """
     return IngestionJob(job_id=job_id, state=state)
 
 
@@ -63,7 +72,12 @@ class _PollingOptions(TypedDict, total=False):
 def _polling(
     inner: KnowledgeBaseIngestor, **kwargs: Unpack[_PollingOptions]
 ) -> PollingIngestor:
-    """Build a PollingIngestor with a no-op sleep + zero interval (instant poll tests)."""
+    """Build a PollingIngestor with a no-op sleep + zero interval (instant poll tests).
+
+    Returns:
+        A PollingIngestor with a no-op sleep + zero interval (instant poll tests).
+
+    """
     return PollingIngestor(inner, poll_interval_seconds=0.0, sleep=_noop_sleep, **kwargs)
 
 

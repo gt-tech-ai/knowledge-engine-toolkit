@@ -34,9 +34,10 @@ async def check_queue(
 
     Does nothing (and makes no call) unless ``delivery.checks_queue``.
 
+    A callee raises ``AppValueError``: The queue's settings disagree with ``delivery``
+    (``INVALID_INPUT``).
+
     Raises:
-        AppValueError: The queue's settings disagree with ``delivery``
-            (``INVALID_INPUT``).
         UnavailableError: ``GetQueueAttributes`` did not answer within ``wait_seconds``.
 
     """
@@ -59,6 +60,12 @@ def _check_redrive(queue_url: str, raw_policy: str, delivery: DeliveryConfig) ->
     """Check the redrive policy's count.
 
     And target against ``max_deliveries`` / the DLQ topic.
+
+    Raises:
+        AppValueError: Queue ``queue_url`` redrives after ``count`` receives, but
+            max_deliveries is ``delivery.max_deliveries``; queue ``queue_url``
+            dead-letters to ``target``, not ``topic``.
+
     """
     if delivery.max_deliveries is None:
         return
@@ -78,7 +85,13 @@ def _check_redrive(queue_url: str, raw_policy: str, delivery: DeliveryConfig) ->
 
 
 def _check_lease(queue_url: str, raw_visibility: str, delivery: DeliveryConfig) -> None:
-    """Check ``max_processing_seconds`` is below the queue's visibility timeout."""
+    """Check ``max_processing_seconds`` is below the queue's visibility timeout.
+
+    Raises:
+        AppValueError: Max_processing_seconds ``limit`` is not below queue ``queue_url``'s
+            ``lease``s visibility timeout.
+
+    """
     limit = delivery.max_processing_seconds
     if limit is None:
         return

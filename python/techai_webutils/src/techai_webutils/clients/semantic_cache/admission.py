@@ -46,6 +46,10 @@ def _contains_any(question: str, phrases: Iterable[str]) -> bool:
     """Return whether ``question`` contains any non-blank phrase as whole words.
 
     (literal match).
+
+    Returns:
+        Whether ``question`` contains any non-blank phrase as whole words.
+
     """
     for phrase in phrases:
         text = phrase.strip()
@@ -61,7 +65,12 @@ class AllowAllAdmission(CacheAdmission):
 
     @override
     def admits(self, query: str, extra_phrases: Sequence[str] = ()) -> bool:
-        """Return ``False`` only when ``query`` contains an extra phrase."""
+        """Return ``False`` only when ``query`` contains an extra phrase.
+
+        Returns:
+            ``False`` only when ``query`` contains an extra phrase.
+
+        """
         return not _contains_any(query, extra_phrases)
 
 
@@ -74,12 +83,20 @@ class RulesAdmission(CacheAdmission):
 
     @override
     def admits(self, query: str, extra_phrases: Sequence[str] = ()) -> bool:
-        """Return ``False`` when ``query`` contains a configured or an extra phrase."""
+        """Return ``False`` when ``query`` contains a configured or an extra phrase.
+
+        Returns:
+            ``False`` when ``query`` contains a configured or an extra phrase.
+
+        """
         return not _contains_any(query, (*self._phrases, *extra_phrases))
 
 
 def cache_admission_from_config(config: CacheAdmissionConfig) -> CacheAdmission:
     """Build the admission ``config.kind`` selects.
+
+    Returns:
+        The admission ``config.kind`` selects.
 
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.

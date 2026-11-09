@@ -39,7 +39,12 @@ _T0 = datetime(2026, 11, 5, tzinfo=UTC)
 def _querier(
     handler: Callable[[httpx.Request], httpx.Response], *, max_body_bytes: int = 0
 ) -> MetricsQuerier:
-    """Build the http querier over a mocked transport answering with ``handler``."""
+    """Build the http querier over a mocked transport answering with ``handler``.
+
+    Returns:
+        The http querier over a mocked transport answering with ``handler``.
+
+    """
     transport = httpx.MockTransport(handler)
     client = httpx.AsyncClient(transport=transport)
     return new_metrics_querier_from_config(
@@ -53,7 +58,12 @@ def _querier(
 
 
 def _ok(result_type: str, result: list[object]) -> httpx.Response:
-    """Return a successful query-API envelope."""
+    """Return a successful query-API envelope.
+
+    Returns:
+        A successful query-API envelope.
+
+    """
     return httpx.Response(
         200,
         json={"status": "success", "data": {"resultType": result_type, "result": result}},

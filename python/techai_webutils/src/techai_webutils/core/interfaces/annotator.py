@@ -123,6 +123,9 @@ class TaskRegistry:
     def get(self, name: str) -> type[TaskResult]:
         """Return task ``name``'s result type.
 
+        Returns:
+            Task ``name``'s result type.
+
         Raises:
             AppValueError: The task is not registered (``INVALID_INPUT``).
 
@@ -174,6 +177,9 @@ def check_annotations(
     registry: TaskRegistry,
 ) -> list[Annotation]:
     """Return ``annotations`` after checking them against ``blocks`` and ``registry``.
+
+    Returns:
+        ``annotations`` after checking them against ``blocks`` and ``registry``.
 
     Raises:
         InternalError: Not one annotation per block, an entity span outside its block or

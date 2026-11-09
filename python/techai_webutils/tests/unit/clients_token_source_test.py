@@ -37,7 +37,12 @@ def _source(
     handler: Callable[[httpx.Request], Coroutine[None, None, httpx.Response]],
     clock: _Clock,
 ) -> OAuthTokenSource:
-    """Build an oauth source over a mocked transport answering with ``handler``."""
+    """Build an oauth source over a mocked transport answering with ``handler``.
+
+    Returns:
+        An oauth source over a mocked transport answering with ``handler``.
+
+    """
     config = TokenSourceConfig(
         kind=TokenSourceKind.OAUTH,
         token_url=_URL,

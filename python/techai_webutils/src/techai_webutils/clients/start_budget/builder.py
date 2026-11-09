@@ -33,6 +33,9 @@ def start_budget_from_config(
     slot key; the composition root passes the postgres ``LockConfig`` with that key to
     ``new_lock_from_config``.
 
+    Returns:
+        The ``StartBudget`` ``config.kind`` selects.
+
     Raises:
         AppValueError: An unknown kind, a missing ``pool`` and ``dsn``, ``new_lock`` or
             ``account``, or a non-positive ``slots`` or timeout, or a negative interval
@@ -52,7 +55,15 @@ def start_budget_from_config(
 
 
 def _validate(config: StartBudgetConfig) -> None:
-    """Reject a postgres config whose limits cannot work."""
+    """Reject a postgres config whose limits cannot work.
+
+    Raises:
+        AppValueError: The postgres start budget needs an account; start budget slots must
+            be at least 1, got ``config.slots``; start budget acquire timeout and poll
+            interval must be positive; start budget minimum start interval must not be
+            negative.
+
+    """
     if not config.account:
         msg = "the postgres start budget needs an account"
         raise AppValueError(msg)

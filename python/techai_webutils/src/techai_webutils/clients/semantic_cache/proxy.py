@@ -119,7 +119,12 @@ class _BackendLookup(CacheLookup):
         *,
         min_similarity: float | None = None,
     ) -> CachedAnswer | None:
-        """Return the backend's hit, its ``tier`` set from its similarity when blank."""
+        """Return the backend's hit, its ``tier`` set from its similarity when blank.
+
+        Returns:
+            The backend's hit, its ``tier`` set from its similarity when blank.
+
+        """
         hit = await self._cache.lookup(
             query,
             namespace,
@@ -196,7 +201,12 @@ class SemanticCacheProxy:
         )
 
     def __getattr__(self, name: str) -> object:
-        """Return the inner attribute, cached when it is a bound method."""
+        """Return the inner attribute, cached when it is a bound method.
+
+        Returns:
+            The inner attribute, cached when it is a bound method.
+
+        """
         attr = getattr(self._inner, name)
         if not callable(attr) or not self._active:
             return attr
@@ -211,7 +221,12 @@ class SemanticCacheProxy:
     async def _lookup(
         self, args: tuple[object, ...], kwargs: dict[str, object]
     ) -> CacheRead | None:
-        """Return the call's read; ``None`` when the call isn't cacheable."""
+        """Return the call's read; ``None`` when the call isn't cacheable.
+
+        Returns:
+            The call's read; ``None`` when the call isn't cacheable.
+
+        """
         set_served_from_cache(value=False)
         try:
             namespace = self._binding.make_namespace(args, kwargs)
@@ -226,10 +241,12 @@ class SemanticCacheProxy:
     async def _hit(self, call: CallArgs, answer: object, found: CacheRead) -> object:
         """Serve ``found``'s hit through the reader's hook and return the answer to serve.
 
-        Raises:
-            AppError: any coded error from the hook: its verdict on the hit (``FORBIDDEN``
-                for a blocked answer; under enforced audit, the scan or record failure).
-                An uncoded failure is swallowed and the hit served as is.
+        A callee raises ``AppError``: any coded error from the hook: its verdict on the
+        hit (``FORBIDDEN`` for a blocked answer; under enforced audit, the scan or record
+        failure). An uncoded failure is swallowed and the hit served as is.
+
+        Returns:
+            The served answer.
 
         """
         return await self._reader.serve(found, call[0], call[1], answer)
@@ -247,6 +264,10 @@ class SemanticCacheProxy:
         """Wrap the unary bound method: hit → decoded answer; miss → inner.
 
         Then write through.
+
+        Returns:
+            The wrapped unary call.
+
         """
 
         @functools.wraps(attr)
@@ -277,6 +298,10 @@ class SemanticCacheProxy:
         """Wrap a streamed bound method: hit → replay; miss → tee the inner stream.
 
         Store at the end.
+
+        Returns:
+            The wrapped streaming call.
+
         """
 
         @functools.wraps(attr)
@@ -322,6 +347,10 @@ class SemanticCacheProxy:
         """Return a hit's cached text and model.
 
         Or ``None`` for a miss or an undecodable entry.
+
+        Returns:
+            A hit's cached text and model.
+
         """
         decode_text = self._binding.decode_text
         if found is None or found.hit is None or decode_text is None:
@@ -340,6 +369,10 @@ class SemanticCacheProxy:
         """Return ``text`` replayed as a stream.
 
         Ending in a zero-token usage when kept.
+
+        Returns:
+            ``text`` replayed as a stream.
+
         """
 
         async def items() -> AsyncIterator[str | StreamUsage]:  # noqa: RUF029 - the stream port is async
@@ -365,6 +398,10 @@ class SemanticCacheProxy:
         """Re-yield ``items``; once fully consumed without error.
 
         Write the answer through.
+
+        Yields:
+            Each item of ``items``.
+
         """
         parts: list[str] = []
         usage: StreamUsage | None = None

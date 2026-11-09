@@ -32,7 +32,12 @@ _DIMENSION = 3
 def _provider(
     handler: Callable[[httpx.Request], httpx.Response],
 ) -> OpenAICompatibleEmbeddingProvider:
-    """Return a provider whose server is ``handler``."""
+    """Return a provider whose server is ``handler``.
+
+    Returns:
+        A provider whose server is ``handler``.
+
+    """
     client = httpx.AsyncClient(
         base_url="http://embedder:8000", transport=httpx.MockTransport(handler)
     )
@@ -40,7 +45,12 @@ def _provider(
 
 
 def _vector(i: int) -> list[float]:
-    """Return a distinct 3-d vector for input ``i``."""
+    """Return a distinct 3-d vector for input ``i``.
+
+    Returns:
+        A distinct 3-d vector for input ``i``.
+
+    """
     return [float(i), 0.5, 0.25]
 
 
@@ -48,6 +58,10 @@ def _echo(sent: list[dict[str, object]]) -> Callable[[httpx.Request], httpx.Resp
     """Return a server that records each body and embeds every input.
 
     Answering out of order.
+
+    Returns:
+        A server that records each body and embeds every input.
+
     """
 
     def handler(request: httpx.Request) -> httpx.Response:

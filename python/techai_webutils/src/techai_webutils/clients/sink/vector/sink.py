@@ -72,9 +72,11 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
 
         Drop the rest.
 
+        A callee raises ``ConflictError``: The vectors come from another model than the
+        index's.
+
         Raises:
             AppValueError: The vectors do not pair one-to-one with the chunks.
-            ConflictError: The vectors come from another model than the index's.
 
         """
         if vectors is None or len(vectors) != len(chunks):
@@ -118,6 +120,11 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
         """Raise ``CONFLICT``.
 
         When the vectors' model is not the one the index is built for.
+
+        Raises:
+            ConflictError: Vectors of ``document.document_id`` come from ``actual``, but
+                the index is built for ``expected``.
+
         """
         index = await store.current_index(self._collection)
         expected = (
@@ -140,7 +147,12 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
         n: int,
         vector: Sequence[float],
     ) -> VectorEntry:
-        """Return chunk ``n``'s entry: its stable id, text, vector and stored metadata."""
+        """Return chunk ``n``'s entry: its stable id, text, vector and stored metadata.
+
+        Returns:
+            Chunk ``n``'s entry: its stable id, text, vector and stored metadata.
+
+        """
         return VectorEntry(
             id=chunk_id(document.document_id, n),
             document_id=document.document_id,
@@ -152,7 +164,12 @@ class VectorStoreSink(NoOpAsyncResource, Sink):
     def _metadata(
         self, document: SinkDocument, chunk: ChunkPayload, n: int
     ) -> dict[str, str]:
-        """Return the metadata stored on chunk ``n``."""
+        """Return the metadata stored on chunk ``n``.
+
+        Returns:
+            The metadata stored on chunk ``n``.
+
+        """
         metadata = {
             **document.metadata,
             **chunk.metadata,

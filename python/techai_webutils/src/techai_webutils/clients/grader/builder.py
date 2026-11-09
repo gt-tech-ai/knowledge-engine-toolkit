@@ -50,7 +50,12 @@ class GraderConfig:
     """The score in ``[0, 1]`` a graded output must reach to pass."""
 
     def __post_init__(self) -> None:
-        """Reject a pass score outside ``[0, 1]`` (``INVALID_INPUT``)."""
+        """Reject a pass score outside ``[0, 1]`` (``INVALID_INPUT``).
+
+        Raises:
+            AppError: Grader pass_score ``self.pass_score`` is outside [0, 1].
+
+        """
         if not 0.0 <= self.pass_score <= 1.0:
             msg = f"grader pass_score {self.pass_score} is outside [0, 1]"
             raise AppError(ErrorCode.INVALID_INPUT, msg)
@@ -63,6 +68,9 @@ def grader_from_config(config: GraderConfig) -> Grader:
         config: The grader configuration.
 
     Returns: The grader.
+
+    Returns:
+        The ``Grader`` selected by ``config.kind``.
 
     Raises:
         AppError: ``INVALID_INPUT`` for an unknown kind, a ``parse`` kind with no or an
@@ -84,6 +92,9 @@ def grader_from_config(config: GraderConfig) -> Grader:
 
 def _ranking(config: GraderConfig) -> Grader:
     """Build the ``ranking`` grader ``config`` names.
+
+    Returns:
+        The ``ranking`` grader ``config`` names.
 
     Raises:
         AppError: ``INVALID_INPUT`` for an unknown metric or a cutoff below 1.

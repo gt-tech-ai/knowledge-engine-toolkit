@@ -59,12 +59,21 @@ class LexicalCitationScorer(CitationScorer):
         """Return each claim's content-word overlap with its passage (0.
 
         For an empty claim).
+
+        Returns:
+            Each claim's content-word overlap with its passage (0.
+
         """
         return [_overlap(pair.claim, pair.passage) for pair in pairs]
 
 
 def _overlap(claim: str, passage: str) -> float:
-    """Return the share of ``claim``'s content words that ``passage`` contains."""
+    """Return the share of ``claim``'s content words that ``passage`` contains.
+
+    Returns:
+        The share of ``claim``'s content words that ``passage`` contains.
+
+    """
     words = _content_words(claim)
     if not words:
         return 0.0
@@ -72,5 +81,10 @@ def _overlap(claim: str, passage: str) -> float:
 
 
 def _content_words(text: str) -> set[str]:
-    """Return ``text``'s lower-cased word tokens, without function words."""
+    """Return ``text``'s lower-cased word tokens, without function words.
+
+    Returns:
+        ``text``'s lower-cased word tokens, without function words.
+
+    """
     return {w for w in _WORD.findall(text.casefold()) if w not in _FUNCTION_WORDS}

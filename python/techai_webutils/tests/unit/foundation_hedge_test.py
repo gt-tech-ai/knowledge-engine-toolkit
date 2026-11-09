@@ -33,7 +33,12 @@ class _SlowThenFast:
         self.calls: int = 0
 
     async def read(self) -> str:
-        """Sleep on the first call (slow tail), return immediately on the backup."""
+        """Sleep on the first call (slow tail), return immediately on the backup.
+
+        Returns:
+            ``"fast"`` or ``"slow"``.
+
+        """
         self.calls += 1
         if self.calls == 1:
             await asyncio.sleep(0.5)

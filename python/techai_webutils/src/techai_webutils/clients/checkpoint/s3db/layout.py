@@ -56,6 +56,10 @@ class Layout:
         """Return the artifact's key stem, shared by its envelope, segments.
 
         Parts and holders.
+
+        Returns:
+            The artifact's key stem, shared by its envelope, segments.
+
         """
         hash2 = key.content_hash[:2]
         return (
@@ -64,31 +68,66 @@ class Layout:
         )
 
     def artifact(self, key: CheckpointKey) -> str:
-        """Return the envelope's key."""
+        """Return the envelope's key.
+
+        Returns:
+            The envelope's key.
+
+        """
         return f"{self.base(key)}.json.gz"
 
     def segment(self, key: CheckpointKey, n: int) -> str:
-        """Return segment ``n``'s key."""
+        """Return segment ``n``'s key.
+
+        Returns:
+            Segment ``n``'s key.
+
+        """
         return f"{self.base(key)}.seg-{n}.gz"
 
     def part(self, key: CheckpointKey, n: int) -> str:
-        """Return part ``n``'s key."""
+        """Return part ``n``'s key.
+
+        Returns:
+            Part ``n``'s key.
+
+        """
         return f"{self.base(key)}/{self.part_prefix}-{n}.json.gz"
 
     def parts_prefix(self, key: CheckpointKey) -> str:
-        """Return the prefix every part of the artifact shares."""
+        """Return the prefix every part of the artifact shares.
+
+        Returns:
+            The prefix every part of the artifact shares.
+
+        """
         return f"{self.base(key)}/{self.part_prefix}-"
 
     def holders(self, key: CheckpointKey) -> str:
-        """Return the prefix of the artifact's holder markers."""
+        """Return the prefix of the artifact's holder markers.
+
+        Returns:
+            The prefix of the artifact's holder markers.
+
+        """
         return f"{self.base(key)}.refs/"
 
     def references(self, org_id: str, document_id: str) -> str:
-        """Return the prefix of a document's reference markers."""
+        """Return the prefix of a document's reference markers.
+
+        Returns:
+            The prefix of a document's reference markers.
+
+        """
         return f"{self.prefix}/refs/{org_id}/{document_id}/"
 
     def reference(self, key: CheckpointKey) -> str:
-        """Return the document's reference marker for the artifact."""
+        """Return the document's reference marker for the artifact.
+
+        Returns:
+            The document's reference marker for the artifact.
+
+        """
         name = f"{key.content_hash}-{key.stage}-{key.fingerprint[:12]}"
         return f"{self.references(key.org_id, key.document_id)}{name}"
 
@@ -97,6 +136,10 @@ def key_of(reference: str, org_id: str, document_id: str) -> CheckpointKey:
     """Recover the checkpoint key.
 
     (with a 12-character fingerprint) a reference marker names.
+
+    Returns:
+        The checkpoint key encoded in the object key.
+
     """
     content_hash, stage, fp12 = reference.rsplit("/", 1)[-1].rsplit("-", 2)
     return CheckpointKey(org_id, document_id, content_hash, Stage(stage), fp12)
@@ -105,7 +148,12 @@ def key_of(reference: str, org_id: str, document_id: str) -> CheckpointKey:
 def compress(
     data: bytes, compression: CheckpointCompression = CheckpointCompression.GZIP
 ) -> bytes:
-    """Return ``data`` compressed as ``compression`` selects."""
+    """Return ``data`` compressed as ``compression`` selects.
+
+    Returns:
+        ``data`` compressed as ``compression`` selects.
+
+    """
     if compression == CheckpointCompression.ZSTD:
         return zstandard.compress(data, level=_ZSTD_LEVEL)
     return gzip.compress(data)
@@ -114,9 +162,13 @@ def compress(
 def decompress(body: bytes) -> bytes:
     """Return ``body`` decompressed, detecting gzip or zstd from its first bytes.
 
+    Returns:
+        ``body`` decompressed, detecting gzip or zstd from its first bytes.
+
+    A callee raises ``OSError``: A gzip stream is corrupt.
+
     Raises:
         ValueError: A zstd frame is corrupt.
-        OSError: A gzip stream is corrupt.
 
     """
     if body.startswith(_ZSTD_MAGIC):
@@ -133,7 +185,12 @@ def encode(
     payload: bytes,
     compression: CheckpointCompression = CheckpointCompression.GZIP,
 ) -> bytes:
-    """Return the compressed envelope of ``header`` and ``payload``."""
+    """Return the compressed envelope of ``header`` and ``payload``.
+
+    Returns:
+        The compressed envelope of ``header`` and ``payload``.
+
+    """
     line = json.dumps(header, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return compress(line + b"\n" + payload, compression)
 
@@ -141,11 +198,15 @@ def encode(
 def decode(body: bytes) -> tuple[dict[str, object], bytes]:
     """Split an envelope into its header and payload.
 
+    A callee raises ``OSError``: The gzip stream is corrupt.
+
+    Returns:
+        The header fields and the payload bytes.
+
     Raises:
         ValueError: The body has no header line, the header is not JSON, or a zstd frame
             is corrupt.
         TypeError: The header is not a JSON object.
-        OSError: The gzip stream is corrupt.
 
     """
     raw = decompress(body)

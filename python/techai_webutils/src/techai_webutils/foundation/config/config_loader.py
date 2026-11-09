@@ -35,16 +35,31 @@ class YamlConfigLoader(ConfigLoader):
         self._data = load_config(config_dir, environment)
 
     def get(self, key: str) -> object | None:
-        """Return the raw value for a dotted key, or None if not set."""
+        """Return the raw value for a dotted key, or None if not set.
+
+        Returns:
+            The raw value for a dotted key, or None if not set.
+
+        """
         return self._resolve(key)
 
     def get_string(self, key: str) -> str:
-        """Return the string value for a key."""
+        """Return the string value for a key.
+
+        Returns:
+            The string value for a key.
+
+        """
         val = self._resolve(key)
         return str(val) if val is not None else ""
 
     def get_int(self, key: str) -> int:
-        """Return the int value for a key."""
+        """Return the int value for a key.
+
+        Returns:
+            The int value for a key.
+
+        """
         val = self._resolve(key)
         if val is None:
             return 0
@@ -53,7 +68,12 @@ class YamlConfigLoader(ConfigLoader):
         return int(str(val))
 
     def get_bool(self, key: str) -> bool:
-        """Return the bool value for a key."""
+        """Return the bool value for a key.
+
+        Returns:
+            The bool value for a key.
+
+        """
         val = self._resolve(key)
         if val is None:
             return False
@@ -67,11 +87,20 @@ class YamlConfigLoader(ConfigLoader):
         """Decode the full configuration into the target type.
 
         Works with Pydantic models and dataclasses that accept ``**kwargs``.
+
+        Returns:
+            The full configuration into the target type.
+
         """
         return target_type(**self._data)
 
     def _resolve(self, key: str) -> object | None:
-        """Walk dotted key path through nested dicts."""
+        """Walk dotted key path through nested dicts.
+
+        Returns:
+            The value at the path, or ``None``.
+
+        """
         parts = key.split(".")
         current: object = self._data
         for part in parts:

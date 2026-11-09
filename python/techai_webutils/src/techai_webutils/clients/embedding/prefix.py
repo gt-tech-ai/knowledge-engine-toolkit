@@ -48,7 +48,12 @@ class PrefixedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingPro
     async def embed(
         self, text: str, *, input_type: InputType = "document"
     ) -> EmbeddingResult:
-        """Embed ``text`` behind the prefix for ``input_type``."""
+        """Embed ``text`` behind the prefix for ``input_type``.
+
+        Returns:
+            The embedding of the text.
+
+        """
         return await self._inner.embed(
             self._prefixes[input_type] + text, input_type=input_type
         )
@@ -57,7 +62,12 @@ class PrefixedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingPro
     async def embed_batch(
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
-        """Embed each text behind the prefix for ``input_type``, in one inner batch."""
+        """Embed each text behind the prefix for ``input_type``, in one inner batch.
+
+        Returns:
+            One embedding per text, in input order.
+
+        """
         prefix = self._prefixes[input_type]
         return await self._inner.embed_batch(
             [prefix + text for text in texts], input_type=input_type
@@ -65,10 +75,20 @@ class PrefixedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingPro
 
     @override
     def dimension(self) -> int:
-        """Return the inner provider's dimension."""
+        """Return the inner provider's dimension.
+
+        Returns:
+            The inner provider's dimension.
+
+        """
         return self._inner.dimension()
 
     @override
     def model_name(self) -> str:
-        """Return the inner provider's model."""
+        """Return the inner provider's model.
+
+        Returns:
+            The inner provider's model.
+
+        """
         return self._inner.model_name()

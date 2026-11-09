@@ -48,7 +48,12 @@ class FilterResult:
 
 
 def _fits(ref: CatalogEndpointRef, req: RouteRequirements) -> bool:
-    """Return whether ``ref``'s model can technically serve ``req``."""
+    """Return whether ``ref``'s model can technically serve ``req``.
+
+    Returns:
+        Whether ``ref``'s model can technically serve ``req``.
+
+    """
     caps = ref.capabilities
     return (
         caps.context_tokens >= req.prompt_tokens + req.max_tokens
@@ -58,7 +63,12 @@ def _fits(ref: CatalogEndpointRef, req: RouteRequirements) -> bool:
 
 
 def _data_policy_ok(ref: CatalogEndpointRef, policy: RoutingPolicy) -> bool:
-    """Return whether ``ref`` satisfies residency, retention and the off-cloud rule."""
+    """Return whether ``ref`` satisfies residency, retention and the off-cloud rule.
+
+    Returns:
+        Whether ``ref`` satisfies residency, retention and the off-cloud rule.
+
+    """
     return (
         (not policy.region or ref.region == policy.region)
         and (ref.zero_retention or not policy.zero_retention)
@@ -69,7 +79,12 @@ def _data_policy_ok(ref: CatalogEndpointRef, policy: RoutingPolicy) -> bool:
 def _rejection(
     ref: CatalogEndpointRef, policy: RoutingPolicy, step: str, req: RouteRequirements
 ) -> str | None:
-    """Return why ``ref`` may not serve this request, or ``None`` when it may."""
+    """Return why ``ref`` may not serve this request, or ``None`` when it may.
+
+    Returns:
+        Why ``ref`` may not serve this request, or ``None`` when it may.
+
+    """
     if not _fits(ref, req):
         return "capability"
     if not _data_policy_ok(ref, policy):
@@ -83,7 +98,12 @@ def _rejection(
 
 
 def _direct_choice(policy: RoutingPolicy, ctx: RouteContext) -> tuple[str | None, str]:
-    """Return the explicitly chosen model and who chose it, or ``(None, "local")``."""
+    """Return the explicitly chosen model and who chose it, or ``(None, "local")``.
+
+    Returns:
+        The explicitly chosen model and who chose it, or ``(None, "local")``.
+
+    """
     honours_user = policy.mode == "user" or policy.user_override
     if ctx.model_preference and honours_user:
         return ctx.model_preference, "user"
@@ -100,6 +120,9 @@ def filter_candidates(
     req: RouteRequirements,
 ) -> FilterResult:
     """Return the endpoints that may serve ``ctx``'s request under ``policy``.
+
+    Returns:
+        The endpoints that may serve ``ctx``'s request under ``policy``.
 
     Raises:
         AppError: ``FORBIDDEN`` when policy leaves nothing; ``INVALID_INPUT`` when no

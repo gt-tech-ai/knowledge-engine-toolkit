@@ -106,6 +106,10 @@ class _WorkerActor:
         """Build the worker once (on the actor's persistent loop).
 
         Then process the item on it.
+
+        Returns:
+            The worker once (on the actor's persistent loop).
+
         """
         worker = await self._lazy.get()
         return await worker.process(item)
@@ -131,6 +135,10 @@ class _ActorProxy:
         """Dispatch one item to the actor.
 
         And await its StepResult (Ray ObjectRefs are awaitable).
+
+        Returns:
+            The step result for the item.
+
         """
         return await self._actor.process.remote(item)
 
@@ -159,8 +167,6 @@ def ray_worker_factory[T](
 ) -> WorkerFactory[T]:
     """Wrap ``inner`` so each ``PooledExecutor`` slot is a Ray actor.
 
-    (built once, reused per item).
-
     The returned factory connects through a ``RayRuntime`` before spawning each actor — by
     default the same resilience-decorated runtime ``executor_from_config`` builds for
     ``address``/``namespace`` (``ray_runtime_from_config``), so the actor pool shares the
@@ -172,6 +178,10 @@ def ray_worker_factory[T](
     pool slot, each of which lazily builds ``inner``'s worker on its own event loop.
     ``memory_bytes`` is the memory Ray reserves for each actor (its ``memory`` resource);
     ``0`` reserves none.
+
+    Returns:
+        The factory whose slots are Ray actors.
+
     """
     connector = runtime or ray_runtime_from_config(
         ExecutorConfig(

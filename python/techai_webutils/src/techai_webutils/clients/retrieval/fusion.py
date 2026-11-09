@@ -67,6 +67,10 @@ def reciprocal_rank_fusion(
 
     Each id scores ``Σ 1 / (k + rank)`` over the rankings that hold it (rank from 1). Ties
     keep the order in which ids first appear, scanning the rankings in order.
+
+    Returns:
+        The ``(id, score)`` pairs, best first.
+
     """
     scores: dict[str, float] = {}
     for ranking in rankings:
@@ -83,6 +87,9 @@ def fuse(
     """Fuse a k-NN and a BM25 ranking of ``(id, score)`` pairs.
 
     (best first) as ``config`` selects.
+
+    Returns:
+        The ``(id, score)`` pairs, best first.
 
     Raises:
         AppValueError: An unknown kind, or a ``dense_weight`` outside ``[0, 1]``
@@ -116,6 +123,10 @@ def merge_by_score(
 
     The shards of one index score on one scale, so their union is ranked by score as is.
     An id found on several shards keeps its best score; ties keep shard order.
+
+    Returns:
+        The global top ``k`` of the shards' ``(id, score)`` results, best first.
+
     """
     best: dict[str, float] = {}
     for results in shard_results:
@@ -129,7 +140,12 @@ def merge_by_score(
 def _normalize(
     ranking: Sequence[tuple[str, float]], how: Normalization
 ) -> list[tuple[str, float]]:
-    """Put one ranking's scores on a common scale (a constant ranking maps to 1)."""
+    """Put one ranking's scores on a common scale (a constant ranking maps to 1).
+
+    Returns:
+        The rescaled pairs; empty for an empty ranking.
+
+    """
     if not ranking:
         return []
     values = [score for _, score in ranking]
@@ -142,6 +158,11 @@ def _normalize(
 
 
 def _best_first(scores: dict[str, float]) -> list[tuple[str, float]]:
-    """Sort ``(id, score)`` by score descending, ties by insertion order."""
+    """Sort ``(id, score)`` by score descending, ties by insertion order.
+
+    Returns:
+        The ``(id, score)`` pairs, best first.
+
+    """
     order = {item: n for n, item in enumerate(scores)}
     return sorted(scores.items(), key=lambda pair: (-pair[1], order[pair[0]]))

@@ -58,7 +58,12 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
     async def embed(
         self, text: str, *, input_type: InputType = "document"
     ) -> EmbeddingResult:
-        """Return ``text``'s cached vector, or embed and cache it."""
+        """Return ``text``'s cached vector, or embed and cache it.
+
+        Returns:
+            ``text``'s cached vector, or embed and cache it.
+
+        """
         (result,) = await self.embed_batch([text], input_type=input_type)
         return result
 
@@ -66,7 +71,12 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
     async def embed_batch(
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
-        """Return each text's vector, embedding each distinct uncached text once."""
+        """Return each text's vector, embedding each distinct uncached text once.
+
+        Returns:
+            Each text's vector, embedding each distinct uncached text once.
+
+        """
         keys = [self._key(text, input_type) for text in texts]
         unique = list(dict.fromkeys(keys))
         stored = await asyncio.gather(*(self._cache.get(k) for k in unique))
@@ -94,28 +104,53 @@ class CachedEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingProvi
 
     @override
     def dimension(self) -> int:
-        """Return the inner provider's dimension."""
+        """Return the inner provider's dimension.
+
+        Returns:
+            The inner provider's dimension.
+
+        """
         return self._inner.dimension()
 
     @override
     def model_name(self) -> str:
-        """Return the inner provider's model."""
+        """Return the inner provider's model.
+
+        Returns:
+            The inner provider's model.
+
+        """
         return self._inner.model_name()
 
     def _key(self, text: str, input_type: InputType) -> str:
-        """Return the cache key of ``text`` embedded as ``input_type``."""
+        """Return the cache key of ``text`` embedded as ``input_type``.
+
+        Returns:
+            The cache key of ``text`` embedded as ``input_type``.
+
+        """
         digest = hashlib.sha256(text.encode()).hexdigest()
         return f"emb:{self._inner.model_name()}:{self._version}:{input_type}:{digest}"
 
     def _decode(self, value: bytes) -> EmbeddingResult:
-        """Return the cached vector as a result (a hit costs no tokens)."""
+        """Return the cached vector as a result (a hit costs no tokens).
+
+        Returns:
+            The cached vector as a result (a hit costs no tokens).
+
+        """
         vector = array("f")
         vector.frombytes(value)
         return EmbeddingResult(vector.tolist(), self._inner.model_name(), 0)
 
     @staticmethod
     def _encode(result: EmbeddingResult) -> bytes:
-        """Return ``result``'s vector as float32 bytes."""
+        """Return ``result``'s vector as float32 bytes.
+
+        Returns:
+            ``result``'s vector as float32 bytes.
+
+        """
         return array("f", result.embedding).tobytes()
 
     def _count(self, result: str, amount: int) -> None:

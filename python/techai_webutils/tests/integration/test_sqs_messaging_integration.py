@@ -25,7 +25,12 @@ if TYPE_CHECKING:
 async def _drain(
     config: SQSConfig, topic: str, want: int, within_s: float = 20.0
 ) -> list[Message]:
-    """Subscribe and collect ``want`` messages, then stop the consumer loop."""
+    """Subscribe and collect ``want`` messages, then stop the consumer loop.
+
+    Returns:
+        The received messages.
+
+    """
     received: list[Message] = []
     async with SQSSubscriber(config) as subscriber:
 
@@ -121,7 +126,12 @@ async def test_acked_message_is_not_redelivered(sqs_config: SQSConfig) -> None:
 
 
 async def _queue_depth(config: SQSConfig) -> tuple[int, int]:
-    """Return the queue's (visible, in-flight) message counts."""
+    """Return the queue's (visible, in-flight) message counts.
+
+    Returns:
+        The queue's (visible, in-flight) message counts.
+
+    """
     session = aiobotocore.session.get_session()
     async with session.create_client("sqs", **config.client_kwargs()) as client:
         attrs = await client.get_queue_attributes(

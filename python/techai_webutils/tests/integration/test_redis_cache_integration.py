@@ -18,7 +18,12 @@ if TYPE_CHECKING:
 
 
 def _unique_key(request: pytest.FixtureRequest, label: str) -> str:
-    """Test-scoped key so tests sharing one Redis instance never collide."""
+    """Test-scoped key so tests sharing one Redis instance never collide.
+
+    Returns:
+        The key.
+
+    """
     return f"{request.node.name}:{label}"
 
 

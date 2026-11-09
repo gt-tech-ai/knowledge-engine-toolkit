@@ -26,12 +26,25 @@ _LLM_FIELDS = frozenset(f.name for f in fields(LlmConfig))
 
 
 def invalid(message: str) -> AppError:
-    """Return the coded error every catalog, route and policy defect raises."""
+    """Return the coded error every catalog, route and policy defect raises.
+
+    Returns:
+        The coded error every catalog, route and policy defect raises.
+
+    """
     return AppError(ErrorCode.INVALID_INPUT, message)
 
 
 def as_mapping(raw: object, what: str) -> Mapping[str, Any]:
-    """Return ``raw`` as a mapping, or raise ``INVALID_INPUT`` naming ``what``."""
+    """Return ``raw`` as a mapping, or raise ``INVALID_INPUT`` naming ``what``.
+
+    Returns:
+        ``raw`` as a mapping, or raise ``INVALID_INPUT`` naming ``what``.
+
+    Raises:
+        invalid: ``what`` must be a mapping.
+
+    """
     if not isinstance(raw, Mapping):
         msg = f"{what} must be a mapping"
         raise invalid(msg)
@@ -39,7 +52,15 @@ def as_mapping(raw: object, what: str) -> Mapping[str, Any]:
 
 
 def as_strings(raw: object, what: str) -> tuple[str, ...]:
-    """Return ``raw`` (a list of strings) as a tuple, or raise ``INVALID_INPUT``."""
+    """Return ``raw`` (a list of strings) as a tuple, or raise ``INVALID_INPUT``.
+
+    Returns:
+        ``raw`` (a list of strings) as a tuple, or raise ``INVALID_INPUT``.
+
+    Raises:
+        invalid: ``what`` must be a list.
+
+    """
     if isinstance(raw, str) or not isinstance(raw, Sequence):
         msg = f"{what} must be a list"
         raise invalid(msg)
@@ -51,6 +72,14 @@ def _llm_config(raw: object, key: str) -> LlmConfig:
 
     The routed chain fails over across endpoints itself, so an endpoint never also carries
     the LLM tier's own fallback (the two would stack).
+
+    Returns:
+        An endpoint's ``LlmConfig`` from its fragment, stripping ``fallback_model``.
+
+    Raises:
+        invalid: Catalog endpoint ``key`` llm has unknown fields ``sorted(unknown)``;
+            catalog endpoint ``key`` has unknown llm kind ``spec.get('kind')``.
+
     """
     spec = as_mapping(raw, f"catalog endpoint {key} llm")
     unknown = set(spec) - _LLM_FIELDS
@@ -79,7 +108,12 @@ class ModelCatalog:
     """Endpoint key → the provider config it is built from."""
 
     def llm_config(self, ref: CatalogEndpointRef) -> LlmConfig:
-        """Return the provider config of ``ref``."""
+        """Return the provider config of ``ref``.
+
+        Returns:
+            The provider config of ``ref``.
+
+        """
         return self.llm_configs[ref.key]
 
     @property
@@ -93,8 +127,14 @@ class ModelCatalog:
     ) -> ModelCatalog:
         """Parse and validate ``raw`` (model id → spec).
 
+        A callee raises ``AppError``: ``INVALID_INPUT`` naming the first defective entry.
+
+        Returns:
+            The validated catalog.
+
         Raises:
-            AppError: ``INVALID_INPUT`` naming the first defective entry.
+            invalid: Catalog model ``model_id`` has no price in the price table; catalog
+                has no endpoints.
 
         """
         refs: list[CatalogEndpointRef] = []
@@ -113,7 +153,17 @@ class ModelCatalog:
 def _parse_model(
     model_id: str, spec: Mapping[str, Any], configs: dict[str, LlmConfig]
 ) -> list[CatalogEndpointRef]:
-    """Parse one model's endpoints into refs, recording each endpoint's config."""
+    """Parse one model's endpoints into refs, recording each endpoint's config.
+
+    Returns:
+        One model's endpoints into refs, recording each endpoint's config.
+
+    Raises:
+        invalid: Catalog model ``model_id`` is malformed: ``exc``; catalog endpoint
+            ``key`` is listed twice; catalog endpoint ``key`` has no llm config; catalog
+            model ``model_id`` has no endpoints.
+
+    """
     try:
         capabilities = Capabilities(**as_mapping(spec.get("capabilities"), model_id))
         quality, ttft_ms = float(spec["quality"]), int(spec["ttft_ms"])
@@ -152,8 +202,14 @@ def _parse_model(
 def parse_routes(raw: Mapping[str, Any], catalog: ModelCatalog) -> dict[str, Route]:
     """Parse ``raw`` (route name → spec) into routes whose models are all in ``catalog``.
 
+    A callee raises ``AppError``: ``INVALID_INPUT`` for a malformed route or an unknown
+    model id.
+
+    Returns:
+        The routes by name.
+
     Raises:
-        AppError: ``INVALID_INPUT`` for a malformed route or an unknown model id.
+        invalid: Route ``name`` names models not in the catalog: ``sorted(unknown)``.
 
     """
     routes: dict[str, Route] = {}

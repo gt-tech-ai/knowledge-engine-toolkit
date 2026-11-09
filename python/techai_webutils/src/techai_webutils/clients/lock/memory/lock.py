@@ -24,7 +24,12 @@ class InMemoryLock:
         self._held = False
 
     async def acquire(self) -> bool:
-        """Acquire the lock unless already held in this process."""
+        """Acquire the lock unless already held in this process.
+
+        Returns:
+            Whether the lock was acquired.
+
+        """
         if self._held:
             return False
         self._held = True
@@ -35,7 +40,12 @@ class InMemoryLock:
         self._held = False
 
     async def __aenter__(self) -> Self:
-        """Enter the async context (no resource to open); return self."""
+        """Enter the async context (no resource to open); return self.
+
+        Returns:
+            This instance.
+
+        """
         return self
 
     async def __aexit__(

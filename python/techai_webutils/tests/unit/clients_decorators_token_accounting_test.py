@@ -52,7 +52,12 @@ _SPENT = BudgetDecision(
 
 
 def _ledger(decision: BudgetDecision | Exception = _OK) -> MagicMock:
-    """Return a ledger whose ``check_budget`` answers ``decision`` (or raises it)."""
+    """Return a ledger whose ``check_budget`` answers ``decision`` (or raises it).
+
+    Returns:
+        A ledger whose ``check_budget`` answers ``decision`` (or raises it).
+
+    """
     ledger = MagicMock(spec=TokenLedger)
     if isinstance(decision, Exception):
         ledger.check_budget = AsyncMock(side_effect=decision)
@@ -63,7 +68,12 @@ def _ledger(decision: BudgetDecision | Exception = _OK) -> MagicMock:
 
 
 def _llm() -> MagicMock:
-    """Return a provider answering 10 in / 20 out on ``sonnet``."""
+    """Return a provider answering 10 in / 20 out on ``sonnet``.
+
+    Returns:
+        A provider answering 10 in / 20 out on ``sonnet``.
+
+    """
     llm = MagicMock(spec=LLMProvider)
     llm.complete = AsyncMock(
         return_value=LLMResponse(
@@ -87,6 +97,10 @@ def _proxy(
     """Wrap ``inner`` for the ``generate`` step with a fixed clock.
 
     (typed as the wrapped port).
+
+    Returns:
+        The provider proxy.
+
     """
     proxy = TokenAccountingProxy(
         inner,
@@ -101,7 +115,12 @@ def _proxy(
 
 
 def _recorded(ledger: MagicMock) -> UsageRecord:
-    """Return the one usage ``ledger`` recorded."""
+    """Return the one usage ``ledger`` recorded.
+
+    Returns:
+        The one usage ``ledger`` recorded.
+
+    """
     ledger.record.assert_awaited_once()
     return ledger.record.await_args.args[0]
 
@@ -160,7 +179,12 @@ async def test_records_usage_after_success_from_llm_response() -> None:
 
 
 async def _items(*items: str | StreamUsage) -> AsyncIterator[str | StreamUsage]:
-    """Yield ``items``."""
+    """Yield ``items``.
+
+    Yields:
+        ``items``.
+
+    """
     for item in items:
         await asyncio.sleep(0)
         yield item

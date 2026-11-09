@@ -27,7 +27,12 @@ class NullTracerProvider(TracerProvider):
         kind: SpanKind = SpanKind.INTERNAL,
         **attributes: str | float | bool,
     ) -> Generator[TracerSpan, None, None]:
-        """Yield a no-op span."""
+        """Yield a no-op span.
+
+        Yields:
+            A no-op span.
+
+        """
         yield _NullSpan()
 
     def shutdown(self) -> None:

@@ -52,6 +52,9 @@ def sentence_splitter_from_config(
 
     A non-empty ``config.join_patterns`` wraps the splitter in a ``RuledSplitter``.
 
+    Returns:
+        The ``SentenceSplitter`` ``config.kind`` selects.
+
     Raises:
         AppValueError: An unknown kind, an empty default language, a ``max_chars`` below
             one or an invalid join pattern (``INVALID_INPUT``).

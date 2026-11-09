@@ -27,7 +27,12 @@ from techai_webutils.core.interfaces.vector_store import VectorSearchResult, Vec
 
 
 def _embedder(dimension: int = 3) -> EmbeddingProvider:
-    """Mock EmbeddingProvider returning a fixed vector of the given dimension."""
+    """Mock EmbeddingProvider returning a fixed vector of the given dimension.
+
+    Returns:
+        The mock embedder.
+
+    """
     embedder = MagicMock(spec=EmbeddingProvider)
     embedder.dimension.return_value = dimension
     embedder.embed = AsyncMock(
@@ -44,6 +49,10 @@ def _store(
     """Mock VectorStore returning fixed hits.
 
     With ``keyword_hits`` it also has keyword search.
+
+    Returns:
+        The mock store.
+
     """
     store = MagicMock(spec=VectorStore)
     store.dimension = dimension
@@ -54,7 +63,12 @@ def _store(
 
 
 def _hit_of(chunk_id: str, score: float, **metadata: str) -> VectorSearchResult:
-    """Return a hit on chunk ``chunk_id`` with ``score``."""
+    """Return a hit on chunk ``chunk_id`` with ``score``.
+
+    Returns:
+        A hit on chunk ``chunk_id`` with ``score``.
+
+    """
     return VectorSearchResult(
         document_id=chunk_id.split(":", maxsplit=1)[0],
         chunk_id=chunk_id,
@@ -123,7 +137,12 @@ async def test_opensearch_kind_builds_the_hybrid_engine_with_abstention_off() ->
 
 
 def _hit() -> VectorSearchResult:
-    """Return a search hit carrying a scope key, a document name and a page."""
+    """Return a search hit carrying a scope key, a document name and a page.
+
+    Returns:
+        A search hit carrying a scope key, a document name and a page.
+
+    """
     return VectorSearchResult(
         document_id="doc-1",
         chunk_id="doc-1:0",

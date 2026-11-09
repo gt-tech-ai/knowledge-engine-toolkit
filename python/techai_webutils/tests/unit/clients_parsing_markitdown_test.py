@@ -13,7 +13,12 @@ from techai_webutils.core.domain import DocumentFormat
 
 
 def _make_pdf(*lines: str) -> bytes:
-    """Build an in-memory PDF with one page per line of text."""
+    """Build an in-memory PDF with one page per line of text.
+
+    Returns:
+        An in-memory PDF with one page per line of text.
+
+    """
     doc = pymupdf.open()
     for line in lines:
         page = doc.new_page()

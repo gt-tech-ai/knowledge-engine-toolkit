@@ -36,6 +36,9 @@ async def metrics_handler(request: web.Request) -> web.Response:
     Returns: The default registry in OpenMetrics (with trace exemplars) when the scraper
         asks for it, else in the text exposition format.
 
+    Returns:
+        The metrics response.
+
     """
     body, content_type = await asyncio.to_thread(
         render_metrics, request.headers.get("Accept", "")

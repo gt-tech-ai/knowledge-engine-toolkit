@@ -75,6 +75,10 @@ def postgres_dsn(config: LockConfig) -> str:
     query string; credentials are percent-encoded to survive special characters. A caller
     that opens a pool on the lock's database (the postgres ``StartBudget``'s start-rate
     row) uses it too, so both connect the same way.
+
+    Returns:
+        A libpq DSN URI for ``config``'s database: the lock's connection.
+
     """
     user = quote(config.user, safe="")
     password = quote(config.password, safe="")
@@ -90,6 +94,14 @@ def new_lock_from_config(config: LockConfig) -> ManagedLock:
     The postgres kind requires ``config.namespace`` (``ValueError`` when unset) and a
     non-empty ``config.key``: both make up the advisory-lock identity, so neither may
     silently default.
+
+    Returns:
+        The ``DistributedLock`` backend selected by ``config.kind``.
+
+    Raises:
+        AppValueError: Postgres lock kind requires LockConfig.namespace (it is half of the
+            lock identity); unknown lock kind: ``config.kind``.
+
     """
     if config.kind is LockKind.MEMORY:
         return InMemoryLock()

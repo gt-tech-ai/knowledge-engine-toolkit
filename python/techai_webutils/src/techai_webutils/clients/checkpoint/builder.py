@@ -25,7 +25,12 @@ if TYPE_CHECKING:
 
 
 def _utc_now() -> datetime:
-    """Return the current UTC time (the default stage-record clock)."""
+    """Return the current UTC time (the default stage-record clock).
+
+    Returns:
+        The current UTC time (the default stage-record clock).
+
+    """
     return datetime.now(UTC)
 
 
@@ -52,6 +57,9 @@ def checkpoint_store_from_config(
 
     ``noop`` (the default) needs nothing. ``s3db`` needs the app's ``object_store``, the
     ``state_client`` that writes stage records, and a ``bucket``.
+
+    Returns:
+        The ``CheckpointStore`` ``config.kind`` selects.
 
     Raises:
         AppValueError: An unknown kind, or ``s3db`` without a bucket, object store or

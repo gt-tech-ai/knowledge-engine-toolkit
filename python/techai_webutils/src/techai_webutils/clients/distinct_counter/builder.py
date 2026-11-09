@@ -63,7 +63,12 @@ class NoopDistinctCounter(DistinctCounter):
 
     @override
     async def observe(self, keys: Sequence[str], member: str) -> list[int]:
-        """Return a zero per key."""
+        """Return a zero per key.
+
+        Returns:
+            A zero per key.
+
+        """
         del member
         return [0] * len(keys)
 
@@ -101,6 +106,10 @@ class RedisDistinctCounter(DistinctCounter):
         """Add ``member`` to each key's HyperLogLog and return the counts.
 
         Zeros on a Redis error.
+
+        Returns:
+            The distinct count for each key, in key order.
+
         """
         if not keys:
             return []
@@ -143,6 +152,9 @@ def distinct_counter_from_config(
     ``config.host`` (bounded by ``config.timeout_seconds``), which ``aclose`` closes.
     ``metrics`` counts the Redis errors the counter absorbs
     (``distinct_counter_errors_total{op}``).
+
+    Returns:
+        The ``DistinctCounter`` ``config.kind`` selects.
 
     Raises:
         AppValueError: An unknown kind, or ``redis`` with neither a client nor a host, or

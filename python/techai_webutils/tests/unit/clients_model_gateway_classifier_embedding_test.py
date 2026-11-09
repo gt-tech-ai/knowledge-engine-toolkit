@@ -43,6 +43,10 @@ def _embedding() -> MagicMock:
     """Return a mocked embedder answering the controlled vectors.
 
     (queries and exemplars embed as queries).
+
+    Returns:
+        A mocked embedder answering the controlled vectors.
+
     """
 
     def result(text: str) -> EmbeddingResult:
@@ -65,7 +69,12 @@ def _embedding() -> MagicMock:
 
 
 async def _classifier(embedding: MagicMock) -> RouteClassifier:
-    """Build and warm an embedding classifier over ``_ROUTES``."""
+    """Build and warm an embedding classifier over ``_ROUTES``.
+
+    Returns:
+        The classifier.
+
+    """
     classifier = route_classifier_from_config(
         {"kind": "embedding", "top_k": 2},
         route_names=frozenset(_ROUTES),

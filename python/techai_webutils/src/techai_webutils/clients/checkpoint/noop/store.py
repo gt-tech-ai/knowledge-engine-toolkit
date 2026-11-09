@@ -24,7 +24,12 @@ class NoopCheckpointStore(CheckpointStore):
 
     @override
     async def get(self, key: CheckpointKey) -> StageArtifact | None:
-        """Miss: return ``None``."""
+        """Miss: return ``None``.
+
+        Returns:
+            ``None``, always: this store holds nothing.
+
+        """
         return None
 
     @override
@@ -37,12 +42,22 @@ class NoopCheckpointStore(CheckpointStore):
 
     @override
     async def get_part(self, key: CheckpointKey, n: int) -> bytes | None:
-        """Miss: return ``None``."""
+        """Miss: return ``None``.
+
+        Returns:
+            ``None``, always: this store holds nothing.
+
+        """
         return None
 
     @override
     async def parts(self, key: CheckpointKey) -> frozenset[int]:
-        """Return no parts."""
+        """Return no parts.
+
+        Returns:
+            No parts.
+
+        """
         return frozenset()
 
     @override

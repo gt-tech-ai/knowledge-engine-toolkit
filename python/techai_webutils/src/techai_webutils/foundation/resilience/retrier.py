@@ -62,7 +62,12 @@ class ExponentialRetrier(Retrier):
 
     @override
     async def retry(self, op: Callable[[], Awaitable[object]]) -> object:
-        """Run ``op``, retrying a transient failure; the last failure is raised."""
+        """Run ``op``, retrying a transient failure; the last failure is raised.
+
+        Returns:
+            What ``op`` returns.
+
+        """
         cfg = self._config
         stop = stop_after_attempt(cfg.max_retries + 1)
         if cfg.max_elapsed_time > 0:
@@ -77,6 +82,10 @@ class ExponentialRetrier(Retrier):
             """Wait the backoff, or the server's pushback when longer.
 
             (capped at max_interval).
+
+            Returns:
+                The seconds to wait.
+
             """
             delay = backoff(state)
             err = state.outcome.exception() if state.outcome is not None else None

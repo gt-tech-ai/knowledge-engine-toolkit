@@ -27,6 +27,9 @@ def render_metrics(accept: str) -> tuple[bytes, str]:
         ``accept`` names it, else the Prometheus text format (prometheus_client's own
         negotiation).
 
+    Returns:
+        The default registry's exposition and its content type.
+
     """
     encoder, content_type = choose_encoder(accept)
     return encoder(REGISTRY), content_type

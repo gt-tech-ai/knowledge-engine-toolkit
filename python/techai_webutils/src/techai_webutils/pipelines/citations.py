@@ -119,6 +119,9 @@ class PassageCitationExtractor(CitationExtractor):
         chunk (``span`` ``None``). Verifying, the result is in marker order, one citation
         per cited passage; a marker outside ``1..len(sources)`` is ignored.
 
+        Returns:
+            The citations: every passage in order (``off``).
+
         Raises:
             InternalError: The scorer returned a different number of scores than pairs.
 
@@ -158,7 +161,12 @@ class PassageCitationExtractor(CitationExtractor):
         return verified
 
     def _citation(self, source: RetrievalResult) -> Citation:
-        """Return ``source`` as a citation with the retrieval score as its confidence."""
+        """Return ``source`` as a citation with the retrieval score as its confidence.
+
+        Returns:
+            ``source`` as a citation with the retrieval score as its confidence.
+
+        """
         return Citation(
             document_id=source.document_id,
             document_name=source.document_name,
@@ -178,6 +186,10 @@ def _claims(answer: str, count: int) -> dict[int, list[str]]:
     """Map each marker in ``1..count`` to the distinct answer sentences that cite it.
 
     A marker in a sentence of its own (``... grew 3%. [1]``) cites the sentence before it.
+
+    Returns:
+        The cited sentences by marker.
+
     """
     claims: dict[int, list[str]] = {}
     previous = ""
@@ -199,6 +211,10 @@ def keep_markers(answer: str, keep: Collection[int]) -> str:
 
     ``[1, 3]`` with ``keep={1}`` becomes ``[1]``; a marker left empty is removed with the
     space before it. Pass the ``marker`` of each citation a ``strip`` extractor returned.
+
+    Returns:
+        ``answer`` with every citation marker number not in ``keep`` removed.
+
     """
     kept = set(keep)
 

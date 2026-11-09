@@ -52,6 +52,10 @@ class LazyAwsClient:
         """Return the client, opening it once.
 
         (concurrent first calls share one client).
+
+        Returns:
+            The client, opening it once.
+
         """
         async with self._opening:
             if self._client is None:
@@ -66,7 +70,11 @@ class LazyAwsClient:
     async def call(self, operation: str, **kwargs: object) -> dict[str, Any]:
         """Invoke ``operation`` on the client, opening it on first use.
 
+        Returns:
+            What the operation returns.
+
         Raises:
+            botocore_error_to_app_error: ``self._service`` ``operation``.
             AppError: the call failed (``UNAVAILABLE`` when transient or past the
                 deadline, else ``INTERNAL``).
 

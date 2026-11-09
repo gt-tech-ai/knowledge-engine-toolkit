@@ -56,6 +56,9 @@ class DegradingAnnotator(DelegatingAsyncResource[Annotator], Annotator):
 
         Return degraded annotations.
 
+        Returns:
+            One annotation per block; degraded annotations on a transient error.
+
         Raises:
             AppError: A permanent error from the primary, unchanged.
 

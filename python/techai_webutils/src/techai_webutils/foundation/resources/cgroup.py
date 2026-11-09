@@ -25,20 +25,33 @@ _UNLIMITED = "max"
 
 
 def _host_cpu() -> float:
-    """Return the host's CPU count (at least 1)."""
+    """Return the host's CPU count (at least 1).
+
+    Returns:
+        The host's CPU count (at least 1).
+
+    """
     return float(os.cpu_count() or 1)
 
 
 def _host_memory_bytes() -> int:
-    """Return the host's physical memory in bytes."""
+    """Return the host's physical memory in bytes.
+
+    Returns:
+        The host's physical memory in bytes.
+
+    """
     return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
 
 
 def _parse_cpu_max(text: str) -> float | None:
     """Return the CPUs ``cpu.max`` allows, or ``None`` for no quota.
 
-    Raises:
-        ValueError: The text is not ``"<quota> <period>"`` or ``"max <period>"``.
+    Returns:
+        The CPUs ``cpu.max`` allows, or ``None`` for no quota.
+
+    A callee raises ``ValueError``: The text is not ``"<quota> <period>"`` or ``"max
+    <period>"``.
 
     """
     quota, period = text.split()
@@ -50,8 +63,10 @@ def _parse_cpu_max(text: str) -> float | None:
 def _parse_memory_max(text: str) -> int | None:
     """Return the bytes ``memory.max`` allows, or ``None`` for no limit.
 
-    Raises:
-        ValueError: The text is neither a byte count nor ``"max"``.
+    Returns:
+        The bytes ``memory.max`` allows, or ``None`` for no limit.
+
+    A callee raises ``ValueError``: The text is neither a byte count nor ``"max"``.
 
     """
     value = text.strip()
@@ -73,6 +88,9 @@ class CgroupResourceProbe:
         """Return the cgroup's CPU and memory limits.
 
         Falling back to the host for ``max``.
+
+        Returns:
+            The cgroup's CPU and memory limits.
 
         Raises:
             UnavailableError: A file is missing or malformed and the probe is required.

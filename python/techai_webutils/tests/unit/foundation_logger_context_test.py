@@ -18,7 +18,12 @@ from techai_webutils.foundation.logger.logger import (
 
 
 def _lines(out: StringIO) -> list[dict[str, object]]:
-    """Return the JSON lines written to ``out``."""
+    """Return the JSON lines written to ``out``.
+
+    Returns:
+        The JSON lines written to ``out``.
+
+    """
     return [json.loads(line) for line in out.getvalue().splitlines() if line]
 
 

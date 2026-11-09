@@ -27,6 +27,10 @@ def tier() -> Tier:
 
     Recovery codes an unexpected exception; each operation gets its span, metrics and log
     line; auth authorizes ``<service>.<op>``; and the timeout bounds the operation.
+
+    Returns:
+        The service tier, outermost first.
+
     """
     return Tier(
         "service",
@@ -59,7 +63,12 @@ class ServiceBase:
         return self._subject.name
 
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run a domain operation ``fn`` as ``op`` through the tier."""
+        """Run a domain operation ``fn`` as ``op`` through the tier.
+
+        Returns:
+            What ``fn`` returns.
+
+        """
         return await self._subject.exec(op, fn)
 
     def crud[T, P, ID](
@@ -71,6 +80,10 @@ class ServiceBase:
 
         ``validate`` (optional) checks the entity inside Create and Update, raising a
         coded error (``InvalidInputError``) on a violation.
+
+        Returns:
+            The service serving ``repo``'s CRUD through the tier.
+
         """
         return _DecoratedService(repo, self._subject, validate)
 
@@ -100,19 +113,39 @@ class DelegatingCrudService[T, P, ID](CrudService[T, P, ID]):
         self._crud = crud
 
     async def get(self, entity_id: ID) -> T:
-        """Delegate to the decorated service."""
+        """Delegate to the decorated service.
+
+        Returns:
+            The entity.
+
+        """
         return await self._crud.get(entity_id)
 
     async def list(self, params: P, page: PageRequest) -> Page[T]:
-        """Delegate to the decorated service."""
+        """Delegate to the decorated service.
+
+        Returns:
+            The page.
+
+        """
         return await self._crud.list(params, page)
 
     async def create(self, entity: T) -> T:
-        """Delegate to the decorated service."""
+        """Delegate to the decorated service.
+
+        Returns:
+            The entity.
+
+        """
         return await self._crud.create(entity)
 
     async def update(self, entity_id: ID, entity: T) -> T:
-        """Delegate to the decorated service."""
+        """Delegate to the decorated service.
+
+        Returns:
+            The entity.
+
+        """
         return await self._crud.update(entity_id, entity)
 
     async def delete(self, entity_id: ID) -> None:

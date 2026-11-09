@@ -26,7 +26,12 @@ def chain[T](*middlewares: Middleware[T]) -> Middleware[T]:
     """
 
     def composed(handler: T) -> T:
-        """Wrap *handler* with every middleware, applying them inside-out."""
+        """Wrap *handler* with every middleware, applying them inside-out.
+
+        Returns:
+            The composed handler.
+
+        """
         result = handler
         for mw in reversed(middlewares):
             result = mw(result)

@@ -31,7 +31,12 @@ class EvalCase:
     """Free-form labels (slice, source, difficulty) for per-slice reporting."""
 
     def __post_init__(self) -> None:
-        """Reject a case with no id (``INVALID_INPUT``)."""
+        """Reject a case with no id (``INVALID_INPUT``).
+
+        Raises:
+            AppError: Eval case requires an id.
+
+        """
         if not self.id:
             raise AppError(ErrorCode.INVALID_INPUT, "eval case requires an id")
 

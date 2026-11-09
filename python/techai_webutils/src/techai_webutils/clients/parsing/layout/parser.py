@@ -86,6 +86,10 @@ def convert_with_docling(path: str, options: LayoutOptions) -> DoclingDocument:
     """Convert the PDF at ``path`` with Docling.
 
     (runs in the parse child; imports Docling there).
+
+    Returns:
+        The PDF at ``path`` with Docling.
+
     """
     converter_module = importlib.import_module("docling.document_converter")
     base_models = importlib.import_module("docling.datamodel.base_models")
@@ -111,7 +115,12 @@ def convert_with_docling(path: str, options: LayoutOptions) -> DoclingDocument:
 
 
 def _write_scratch_pdf(content: bytes) -> str:
-    """Write ``content`` to a new temporary ``.pdf`` file and return its path."""
+    """Write ``content`` to a new temporary ``.pdf`` file and return its path.
+
+    Returns:
+        The path of the scratch file.
+
+    """
     fd, scratch = tempfile.mkstemp(suffix=".pdf")
     with os.fdopen(fd, "wb") as handle:
         handle.write(content)
@@ -126,6 +135,10 @@ def _parse_layout(
     """Child entry: convert the PDF and map it to a ``ParsedDocument``.
 
     (module-level: picklable).
+
+    Returns:
+        The parsed document.
+
     """
     return parsed_from_docling(convert(path, options))
 
@@ -134,6 +147,10 @@ def _count_pages(path: str) -> ParsedDocument:
     """Child entry: a document whose ``total_pages`` is the PDF's page count.
 
     (0 if unreadable).
+
+    Returns:
+        A document carrying only the page count.
+
     """
     pymupdf = importlib.import_module("pymupdf")
     try:
@@ -148,6 +165,10 @@ def _page_texts(path: str) -> ParsedDocument:
     """Child entry: a document whose pages hold each page's text layer.
 
     (none if unreadable).
+
+    Returns:
+        A document carrying each page's text.
+
     """
     pymupdf = importlib.import_module("pymupdf")
     try:
@@ -170,6 +191,10 @@ def _page_text(page: int, text: str) -> PageText:
     """Return ``text``'s counts.
 
     Its non-whitespace characters and the unreadable ones among them.
+
+    Returns:
+        ``text``'s counts.
+
     """
     chars = [c for c in text if not c.isspace()]
     unreadable = sum(
@@ -213,6 +238,10 @@ class LayoutParser(IsolatedParser):
         """Parse ``content``: a PDF through Docling (via a scratch file).
 
         Else ``isolated``.
+
+        Returns:
+            The parsed document.
+
         """
         if detect_format(declared, filename, content) != DocumentFormat.PDF:
             return await super().parse(content, declared=declared, filename=filename)
@@ -225,7 +254,12 @@ class LayoutParser(IsolatedParser):
     async def parse_path(
         self, path: str, *, declared: str = "", filename: str = ""
     ) -> ParsedDocument:
-        """Parse the file at ``path``: a PDF through Docling, else ``isolated``."""
+        """Parse the file at ``path``: a PDF through Docling, else ``isolated``.
+
+        Returns:
+            The file at ``path``: a PDF through Docling, else ``isolated``.
+
+        """
         if detect_format(declared, filename or path, b"") != DocumentFormat.PDF:
             return await super().parse_path(path, declared=declared, filename=filename)
         return await self._layout(path, self._options, declared, filename)
@@ -236,6 +270,10 @@ class LayoutParser(IsolatedParser):
         """Parse pages ``first_page``..``last_page`` (1-based.
 
         Inclusive) of the PDF at ``path``.
+
+        Returns:
+            The parsed document.
+
         """
         options = LayoutOptions(
             self._options.artifacts_path, self._options.ocr, first_page, last_page
@@ -248,6 +286,10 @@ class LayoutParser(IsolatedParser):
         """Parse pages ``first_page``..``last_page`` of the PDF at ``path``.
 
         With full-page OCR.
+
+        Returns:
+            The parsed document.
+
         """
         options = LayoutOptions(
             self._options.artifacts_path,
@@ -265,6 +307,10 @@ class LayoutParser(IsolatedParser):
         non-PDF, an unreadable file, or a child that fails returns no pages: the caller
         parses as
             usual.
+
+        Returns:
+            One entry per page; empty if the text layer cannot be read.
+
         """
         if detect_format("", path, b"") != DocumentFormat.PDF:
             return ()
@@ -281,6 +327,10 @@ class LayoutParser(IsolatedParser):
 
         The file is untrusted, so pymupdf opens it in the same bounded child as a parse,
         not in this process. A count of 0 tells the caller to parse the document whole.
+
+        Returns:
+            The pages of the PDF at ``path`` in the bounded child.
+
         """
         if detect_format("", path, b"") != DocumentFormat.PDF:
             return 0
@@ -296,6 +346,10 @@ class LayoutParser(IsolatedParser):
         """Run the Docling conversion in the bounded child.
 
         A failure becomes a failed document.
+
+        Returns:
+            The parsed document.
+
         """
         try:
             return await self._isolated(_parse_layout, path, options, self._convert)

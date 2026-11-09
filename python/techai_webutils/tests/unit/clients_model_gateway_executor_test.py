@@ -24,21 +24,36 @@ _CAPS = Capabilities(context_tokens=10_000, max_output=1000)
 
 
 def _ref(name: str) -> CatalogEndpointRef:
-    """Return an endpoint ref named ``m/<name>@e``."""
+    """Return an endpoint ref named ``m/<name>@e``.
+
+    Returns:
+        An endpoint ref named ``m/<name>@e``.
+
+    """
     return CatalogEndpointRef(
         f"m/{name}", "e", _CAPS, 0.5, 100, "us-east-1", zero_retention=True
     )
 
 
 def _response(model: str) -> LLMResponse:
-    """Return a completion attributed to ``model``."""
+    """Return a completion attributed to ``model``.
+
+    Returns:
+        A completion attributed to ``model``.
+
+    """
     return LLMResponse(
         content="ok", model=model, input_tokens=3, output_tokens=2, finish_reason="stop"
     )
 
 
 def _provider(model: str, error: Exception | None = None) -> MagicMock:
-    """Return a provider that answers ``model`` or raises ``error``."""
+    """Return a provider that answers ``model`` or raises ``error``.
+
+    Returns:
+        A provider that answers ``model`` or raises ``error``.
+
+    """
     provider = MagicMock(spec=LLMProvider)
     provider.complete = AsyncMock(side_effect=error, return_value=_response(model))
     return provider
@@ -53,7 +68,12 @@ async def _trip(executor: ChainExecutor, ref: CatalogEndpointRef) -> None:
 
 
 async def _call(provider: LLMProvider) -> LLMResponse:
-    """Complete on ``provider`` with an empty prompt."""
+    """Complete on ``provider`` with an empty prompt.
+
+    Returns:
+        The response.
+
+    """
     return await provider.complete([])
 
 
@@ -199,7 +219,15 @@ async def test_chain_exhaustion_raises_coded_unavailable_error() -> None:
 async def _items(
     *items: str | StreamUsage, fail_after: int | None = None
 ) -> AsyncIterator[str | StreamUsage]:
-    """Yield ``items``, raising ``UNAVAILABLE`` after ``fail_after`` of them."""
+    """Yield ``items``, raising ``UNAVAILABLE`` after ``fail_after`` of them.
+
+    Yields:
+        ``items``, raising ``UNAVAILABLE`` after ``fail_after`` of them.
+
+    Raises:
+        UnavailableError: Dropped.
+
+    """
     for index, item in enumerate(items):
         if fail_after is not None and index == fail_after:
             msg = "dropped"

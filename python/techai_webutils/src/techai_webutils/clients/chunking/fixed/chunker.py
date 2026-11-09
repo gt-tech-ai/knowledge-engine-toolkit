@@ -28,6 +28,10 @@ def chunk_text(text: str, max_chars: int = _DEFAULT_MAX_CHARS) -> list[str]:
     Paragraphs (blank-line separated) are packed together up to the size bound; a
     paragraph longer than the bound is hard-split. Deterministic — the same text always
     yields the same chunks.
+
+    Returns:
+        The non-empty chunks, in order.
+
     """
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
     chunks: list[str] = []
@@ -50,6 +54,10 @@ def _hard_split(paragraph: str, max_chars: int) -> list[str]:
     """Split an over-long paragraph into <= max_chars pieces on word boundaries.
 
     (fallback: hard cut).
+
+    Returns:
+        The pieces, each within ``max_chars`` unless a single word exceeds it.
+
     """
     if len(paragraph) <= max_chars:
         return [paragraph]
@@ -83,5 +91,9 @@ class FixedChunker:
         """Return the deterministic, size-bounded chunks of ``text``.
 
         (delegates to ``chunk_text``).
+
+        Returns:
+            The deterministic, size-bounded chunks of ``text``.
+
         """
         return chunk_text(text, self._max_chars)

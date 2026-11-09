@@ -45,10 +45,15 @@ class GrpcAnnotator(NoOpAsyncResource, Annotator):
     ) -> list[Annotation]:
         """Return the service's annotations, checked against the blocks and the registry.
 
+        Returns:
+            The service's annotations, checked against the blocks and the registry.
+
+        A callee raises ``AppError``: ``UNAVAILABLE`` / ``TIMEOUT`` (transient) or another
+        code from the gRPC status; ``INVALID_INPUT`` for an unregistered task;
+        ``INTERNAL`` for a reply that does not match the blocks.
+
         Raises:
-            AppError: ``UNAVAILABLE`` / ``TIMEOUT`` (transient) or another code from the
-                gRPC status; ``INVALID_INPUT`` for an unregistered task; ``INTERNAL`` for
-                a reply that does not match the blocks.
+            grpc_error_to_app_error: The coded error for a failed RPC.
 
         """
         self._registry.require(tasks)

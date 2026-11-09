@@ -49,7 +49,12 @@ DEFAULT_WEIGHTS: Mapping[str, float] = MappingProxyType({
 
 
 def _normalised(values: Sequence[float], *, higher_is_better: bool) -> list[float]:
-    """Scale ``values`` to ``[0, 1]`` with 1 the best (all equal → all 1)."""
+    """Scale ``values`` to ``[0, 1]`` with 1 the best (all equal → all 1).
+
+    Returns:
+        The scaled values.
+
+    """
     low, high = min(values), max(values)
     if high == low:
         return [1.0] * len(values)
@@ -81,7 +86,12 @@ class CostAwareRanker:
         self._weights = weights
 
     async def _near_budget(self, ctx: RouteContext) -> bool:
-        """Return whether the tenant has used ``near_budget_ratio`` of its cost budget."""
+        """Return whether the tenant has used ``near_budget_ratio`` of its cost budget.
+
+        Returns:
+            Whether the tenant has used ``near_budget_ratio`` of its cost budget.
+
+        """
         if self._ledger is None or not ctx.tenant_id:
             return False
         scope = UsageScope(org_id=ctx.tenant_id, workspace_id=ctx.workspace_id or None)
@@ -108,6 +118,10 @@ class CostAwareRanker:
         ``floor`` raises each token count to at least that many, so a request whose size
         is unknown (no ``max_tokens``, a tiny prompt) still ranks by relative price
         instead of tying at zero.
+
+        Returns:
+            ``ref``'s estimated cost for this request (``None`` when unpriced).
+
         """
         req = route_input.requirements
         return estimate_cost(
@@ -127,6 +141,10 @@ class CostAwareRanker:
         """Return why ``ref`` is dropped (``over_cap``, ``quality_floor``).
 
         Or ``None``.
+
+        Returns:
+            Why ``ref`` is dropped (``over_cap``, ``quality_floor``).
+
         """
         policy = route_input.policy
         estimate = self._estimate(ref, route_input, prices)
@@ -147,7 +165,12 @@ class CostAwareRanker:
         route_input: PlanInput,
         prices: PriceTable,
     ) -> list[float]:
-        """Return each candidate's score under ``objective`` (higher is better)."""
+        """Return each candidate's score under ``objective`` (higher is better).
+
+        Returns:
+            Each candidate's score under ``objective`` (higher is better).
+
+        """
         estimates = [
             self._estimate(ref, route_input, prices, floor=_RANK_TOKEN_FLOOR)
             for ref in kept
@@ -178,6 +201,9 @@ class CostAwareRanker:
     ) -> RankResult:
         """Return the candidates within the caps, best first, under the bound price table.
 
+        Returns:
+            The candidates within the caps, best first, under the bound price table.
+
         Raises:
             AppError: ``INVALID_INPUT`` when the ranker was built without a price table;
                 ``FORBIDDEN`` when the caps and floor drop every candidate.
@@ -199,6 +225,9 @@ class CostAwareRanker:
         prices: PriceTable,
     ) -> RankResult:
         """Return the candidates within the caps, best first, costed from ``prices``.
+
+        Returns:
+            The candidates within the caps, best first, costed from ``prices``.
 
         Raises:
             AppError: ``FORBIDDEN`` when the caps and floor drop every candidate.

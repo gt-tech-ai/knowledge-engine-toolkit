@@ -24,7 +24,12 @@ pytestmark = pytest.mark.integration
 
 @pytest_asyncio.fixture
 async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
-    """Yield an async client on the session's Redis container, flushed first."""
+    """Yield an async client on the session's Redis container, flushed first.
+
+    Yields:
+        An async client on the session's Redis container, flushed first.
+
+    """
     container = cast("RedisContainer", redis_container)
     host = container.get_container_host_ip()
     port = int(container.get_exposed_port(container.port))

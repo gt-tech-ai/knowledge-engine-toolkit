@@ -68,14 +68,24 @@ class GlinerAnnotator(NoOpAsyncResource, Annotator):
     async def annotate_batch(
         self, blocks: Sequence[TextBlock], tasks: frozenset[str], profile: str
     ) -> list[Annotation]:
-        """Return each block's entities of the configured labels, in text order."""
+        """Return each block's entities of the configured labels, in text order.
+
+        Returns:
+            Each block's entities of the configured labels, in text order.
+
+        """
         require_entities_only(self._registry, tasks, "gliner")
         async with self._lock:
             annotations = await asyncio.to_thread(self._annotate, blocks)
         return check_annotations(blocks, annotations, self._registry)
 
     def _annotate(self, blocks: Sequence[TextBlock]) -> list[Annotation]:
-        """Run the model over each block (in the worker thread)."""
+        """Run the model over each block (in the worker thread).
+
+        Returns:
+            One annotation per block.
+
+        """
         return [
             Annotation(
                 entities=tuple(
@@ -96,7 +106,12 @@ class GlinerAnnotator(NoOpAsyncResource, Annotator):
 
 
 def _entity(found: dict[str, object]) -> Entity:
-    """Map one GLiNER prediction to an ``Entity``."""
+    """Map one GLiNER prediction to an ``Entity``.
+
+    Returns:
+        The entity.
+
+    """
     return Entity(
         label=str(found["label"]),
         start=cast("int", found["start"]),

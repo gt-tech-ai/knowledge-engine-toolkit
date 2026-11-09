@@ -62,6 +62,10 @@ class RedisInflightClaim(InflightClaim):
         """Set the key if absent, expiring after ``ttl_seconds``.
 
         A Redis error grants the claim.
+
+        Returns:
+            Whether this caller won the claim.
+
         """
         token = uuid.uuid4().hex
         try:
@@ -107,5 +111,10 @@ class RedisInflightClaim(InflightClaim):
             self._errors.inc(op=op)
 
     def _name(self, key: str) -> str:
-        """Return the Redis key of claim ``key``."""
+        """Return the Redis key of claim ``key``.
+
+        Returns:
+            The Redis key of claim ``key``.
+
+        """
         return f"{self._prefix}:{key}"

@@ -34,6 +34,13 @@ def parse_duration(value: object) -> float:
     A string is a signed sequence of ``<number><unit>`` terms (``"1h30m"``, ``"-1.5s"``),
     or ``"0"``. A malformed string, or a value of any other type, raises
     ``AppValueError``.
+
+    Returns:
+        ``value`` in seconds: a Go duration string, or a number of seconds.
+
+    Raises:
+        AppValueError: Invalid duration ``value``.
+
     """
     if isinstance(value, bool):
         msg = f"invalid duration {value!r}"

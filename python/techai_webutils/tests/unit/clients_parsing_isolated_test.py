@@ -23,18 +23,33 @@ from techai_webutils.core.domain import DocumentFormat
 
 
 def _double(value: int) -> int:
-    """Return twice the input (fast, well-behaved task)."""
+    """Return twice the input (fast, well-behaved task).
+
+    Returns:
+        Twice the input (fast, well-behaved task).
+
+    """
     return value * 2
 
 
 def _boom() -> None:
-    """Raise inside the worker to exercise error propagation."""
+    """Raise inside the worker to exercise error propagation.
+
+    Raises:
+        ValueError: Kaboom.
+
+    """
     msg = "kaboom"
     raise ValueError(msg)
 
 
 def _sleep_forever() -> str:
-    """Overrun any short timeout so the parent must kill the worker."""
+    """Overrun any short timeout so the parent must kill the worker.
+
+    Returns:
+        Never returns in practice.
+
+    """
     time.sleep(30)
     return "never"
 
@@ -43,6 +58,10 @@ def _large_result() -> str:
     """Return a payload well over the ~64KB IPC pipe buffer.
 
     (exercises get-before-join).
+
+    Returns:
+        A payload well over the ~64KB IPC pipe buffer.
+
     """
     return "x" * (256 * 1024)  # 256 KiB
 
@@ -53,12 +72,22 @@ def _exit_without_result() -> None:
 
 
 def _address_space_limit() -> tuple[int, int]:
-    """Return the worker's own RLIMIT_AS (soft, hard) pair."""
+    """Return the worker's own RLIMIT_AS (soft, hard) pair.
+
+    Returns:
+        The worker's own RLIMIT_AS (soft, hard) pair.
+
+    """
     return resource.getrlimit(resource.RLIMIT_AS)
 
 
 def _make_pdf(text: str) -> bytes:
-    """Build a one-page PDF containing ``text``."""
+    """Build a one-page PDF containing ``text``.
+
+    Returns:
+        A one-page PDF containing ``text``.
+
+    """
     doc = pymupdf.open()
     doc.new_page().insert_text((72, 72), text)
     return doc.tobytes()

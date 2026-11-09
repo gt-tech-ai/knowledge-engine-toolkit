@@ -36,6 +36,10 @@ def split_tokens(expected_token: str) -> tuple[str, ...]:
     """Split a ``current[,previous]`` expected token into its non-blank tokens.
 
     (a rotation window).
+
+    Returns:
+        The non-blank tokens.
+
     """
     return tuple(token for part in expected_token.split(",") if (token := part.strip()))
 
@@ -52,6 +56,14 @@ def service_auth(
     with no non-blank entry raises ``AppValueError`` — a blank secret must never silently
     leave the service open — unless ``allow_unauthenticated`` (local dev), which returns
     no interceptor and logs a warning.
+
+    Returns:
+        The service-to-service token check.
+
+    Raises:
+        AppValueError: Service auth requires a non-empty service token (pass
+            allow_unauthenticated=True for local dev).
+
     """
     tokens = split_tokens(expected_token)
     if tokens:
@@ -80,7 +92,12 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[
         self._accepted = tuple(token.encode() for token in tokens)
 
     def _authorized(self, header: str) -> bool:
-        """Return True iff ``header`` is ``Bearer <token>`` for an accepted token."""
+        """Return True iff ``header`` is ``Bearer <token>`` for an accepted token.
+
+        Returns:
+            True iff ``header`` is ``Bearer <token>`` for an accepted token.
+
+        """
         if not header.startswith(_BEARER_PREFIX):
             return False
         presented = header.removeprefix(_BEARER_PREFIX).encode()
@@ -97,6 +114,10 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[
         """Return the handler for an authorized caller.
 
         Else one that aborts UNAUTHENTICATED.
+
+        Returns:
+            The handler for an authorized caller.
+
         """
         handler = await continuation(handler_call_details)
         if handler is None:
@@ -134,7 +155,12 @@ class ValidatingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[m
         continuation: Continuation[TRequest, TResponse],
         handler_call_details: grpc.HandlerCallDetails,
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
-        """Wrap the handler so an invalid request aborts INVALID_ARGUMENT."""
+        """Wrap the handler so an invalid request aborts INVALID_ARGUMENT.
+
+        Returns:
+            The handler to serve the call, or ``None`` when the method is unknown.
+
+        """
         handler = await continuation(handler_call_details)
         if handler is None:
             return handler

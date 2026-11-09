@@ -42,7 +42,12 @@ _PRICES = PriceTable(
 
 
 def _client(container: object) -> Redis:
-    """Return a client for ``container`` that fails fast once it is gone."""
+    """Return a client for ``container`` that fails fast once it is gone.
+
+    Returns:
+        A client for ``container`` that fails fast once it is gone.
+
+    """
     host = container.get_container_host_ip()  # type: ignore[attr-defined]
     port = int(container.get_exposed_port(container.port))  # type: ignore[attr-defined]
     return Redis(host=host, port=port, socket_timeout=1, socket_connect_timeout=1)
@@ -50,7 +55,12 @@ def _client(container: object) -> Redis:
 
 @pytest_asyncio.fixture
 async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
-    """Yield a client bound to the session's Redis."""
+    """Yield a client bound to the session's Redis.
+
+    Yields:
+        A client bound to the session's Redis.
+
+    """
     client = _client(redis_container)
     try:
         yield client
@@ -64,7 +74,12 @@ def _ledger(
     clock: Callable[[], datetime],
     metrics: MetricsProvider | None = None,
 ) -> RedisTokenLedger:
-    """Return a daily-window ledger under ``prefix`` reading the window at ``clock``."""
+    """Return a daily-window ledger under ``prefix`` reading the window at ``clock``.
+
+    Returns:
+        A daily-window ledger under ``prefix`` reading the window at ``clock``.
+
+    """
     return RedisTokenLedger(
         client,
         TokenLedgerConfig(
@@ -79,7 +94,12 @@ def _ledger(
 
 
 def _usage(ts: datetime, tokens: int) -> UsageRecord:
-    """Return a usage of ``tokens`` input tokens for ``_SCOPE`` at ``ts``."""
+    """Return a usage of ``tokens`` input tokens for ``_SCOPE`` at ``ts``.
+
+    Returns:
+        A usage of ``tokens`` input tokens for ``_SCOPE`` at ``ts``.
+
+    """
     return UsageRecord(
         scope=_SCOPE,
         model="m",

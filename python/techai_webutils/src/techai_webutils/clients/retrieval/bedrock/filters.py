@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 def bedrock_filter(expr: FilterExpr) -> dict[str, object]:
     """Return ``expr`` as a Bedrock ``RetrievalFilter``.
 
+    Returns:
+        ``expr`` as a Bedrock ``RetrievalFilter``.
+
     Raises:
         AppValueError: An empty ``and`` or ``in`` (``INVALID_INPUT``).
 
@@ -47,6 +50,10 @@ def expr_filter_builder(
     """Return a ``filter_builder`` that translates ``build``'s neutral filter.
 
     For Bedrock.
+
+    Returns:
+        A ``filter_builder`` that translates ``build``'s neutral filter.
+
     """
 
     def builder(request: Mapping[str, str]) -> dict[str, object] | None:

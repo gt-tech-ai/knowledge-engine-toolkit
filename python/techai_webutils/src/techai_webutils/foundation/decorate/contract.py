@@ -17,6 +17,13 @@ def ops_of(contract: type) -> list[str]:
 
     A contract with no public method raises ``AppRuntimeError``: every call on its base
     would fail.
+
+    Returns:
+        The operations of ``contract``: its public methods' names, sorted.
+
+    Raises:
+        AppRuntimeError: Decorate: contract ``contract.__qualname__`` has no methods.
+
     """
     ops = sorted(
         name

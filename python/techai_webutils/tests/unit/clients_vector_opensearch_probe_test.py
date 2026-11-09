@@ -26,7 +26,12 @@ _NEW = "chunks-new"
 
 
 def _hit(document: str, score: float, *, vector: bool = False) -> dict[str, object]:
-    """Return a search hit for ``document`` with a text and, when asked, a vector."""
+    """Return a search hit for ``document`` with a text and, when asked, a vector.
+
+    Returns:
+        A search hit for ``document`` with a text and, when asked, a vector.
+
+    """
     source: dict[str, object] = {
         "document_id": document,
         "text": f"text of {document} " * 3,
@@ -37,12 +42,22 @@ def _hit(document: str, score: float, *, vector: bool = False) -> dict[str, obje
 
 
 def _reply(hits: list[dict[str, object]]) -> dict[str, object]:
-    """Return a search response holding ``hits``."""
+    """Return a search response holding ``hits``.
+
+    Returns:
+        A search response holding ``hits``.
+
+    """
     return {"hits": {"hits": hits}}
 
 
 def _client(indices: dict[str, dict[str, list[dict[str, object]]]]) -> MagicMock:
-    """Return a mocked client answering by index and query kind (sample, match, knn)."""
+    """Return a mocked client answering by index and query kind (sample, match, knn).
+
+    Returns:
+        A mocked client answering by index and query kind (sample, match, knn).
+
+    """
 
     async def search(*, index: str, body: dict[str, object], params: object) -> object:
         del params

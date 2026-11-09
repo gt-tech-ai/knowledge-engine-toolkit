@@ -33,6 +33,32 @@ _DEFAULT_CONCURRENCY = 8
 0."""
 
 
+async def _run_workers[T](
+    work: list[T],
+    limit: int,
+    fn: Callable[[T], Awaitable[StepResult]],
+    results: list[StepResult | None],
+    name: str,
+    obs: ExecutionObserver,
+) -> None:
+    """Drain ``work`` through at most ``limit`` workers, filling ``results`` in place."""
+    # A fixed pool of `limit` workers pulls from one shared iterator, so at most `limit`
+    # coroutine frames exist at once: driver memory is O(concurrency), not O(batch).
+    # Results stay index-ordered and each item is isolated and observed exactly once.
+    pending = iter(enumerate(work))
+    workers = [
+        asyncio.create_task(_drain(pending, fn, results, name, obs))
+        for _ in range(min(limit, len(work)))
+    ]
+    outcomes = await asyncio.gather(*workers, return_exceptions=True)
+    for outcome in outcomes:
+        # Normal Exceptions were isolated into FAIL results inside the worker; only a
+        # BaseException (CancelledError, KeyboardInterrupt, ...) can reach here --
+        # re-raise it so cancellation/interrupt is never swallowed.
+        if isinstance(outcome, BaseException):
+            raise outcome
+
+
 async def fan_out[T](
     items: Sequence[T],
     concurrency: int,
@@ -49,6 +75,10 @@ async def fan_out[T](
     ``asyncio.CancelledError`` is re-raised so cancellation is not swallowed. The observer
     receives ``on_batch_start`` once, ``on_step_complete`` exactly once per item, and
     ``on_batch_complete`` once unless cancelled.
+
+    Returns:
+        The batch result.
+
     """
     obs = observer or NopObserver()
     work = list(items)
@@ -64,21 +94,7 @@ async def fan_out[T](
     limit = concurrency if concurrency > 0 else _DEFAULT_CONCURRENCY
     results: list[StepResult | None] = [None] * len(work)
 
-    # A fixed pool of `limit` workers pulls from one shared iterator, so at most `limit`
-    # coroutine frames exist at once: driver memory is O(concurrency), not O(batch).
-    # Results stay index-ordered and each item is isolated and observed exactly once.
-    pending = iter(enumerate(work))
-    workers = [
-        asyncio.create_task(_drain(pending, fn, results, name, obs))
-        for _ in range(min(limit, len(work)))
-    ]
-    outcomes = await asyncio.gather(*workers, return_exceptions=True)
-    for outcome in outcomes:
-        # Normal Exceptions were isolated into FAIL results inside the worker; only a
-        # BaseException (CancelledError, KeyboardInterrupt, ...) can reach here --
-        # re-raise it so cancellation/interrupt is never swallowed.
-        if isinstance(outcome, BaseException):
-            raise outcome
+    await _run_workers(work, limit, fn, results, name, obs)
 
     batch = BatchResult(results=tuple(r for r in results if r is not None))
     obs.on_batch_complete(name, batch, loop.time() - start)
@@ -114,6 +130,13 @@ async def _run_one[T](
 
     ``asyncio.CancelledError`` propagates: cancellation is never converted to a FAIL
     result.
+
+    Returns:
+        The step result for the item.
+
+    Raises:
+        CancelledError: The run was cancelled; never isolated.
+
     """
     loop = asyncio.get_running_loop()
     began = loop.time()

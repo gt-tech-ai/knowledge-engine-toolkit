@@ -18,14 +18,24 @@ from techai_webutils.pipelines.generator import GenerationPrompt, ResponseGenera
 
 
 async def _aiter(items: list[str]) -> AsyncIterator[str]:
-    """Yield the items as an async iterator."""
+    """Yield the items as an async iterator.
+
+    Yields:
+        The items as an async iterator.
+
+    """
     await asyncio.sleep(0)
     for item in items:
         yield item
 
 
 def _passage(text: str) -> RetrievalResult:
-    """Return a retrieval result carrying ``text`` as its chunk."""
+    """Return a retrieval result carrying ``text`` as its chunk.
+
+    Returns:
+        A retrieval result carrying ``text`` as its chunk.
+
+    """
     return RetrievalResult(
         document_id="d1",
         document_name="Doc",

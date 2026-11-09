@@ -17,7 +17,12 @@ _OUTPUT = EvalOutput(answer="a", citations=("doc-1",), trace_id="trace-1")
 
 
 def _grader(name: str, score: float, *, passed: bool) -> Grader:
-    """Return a mocked grader that answers one fixed verdict."""
+    """Return a mocked grader that answers one fixed verdict.
+
+    Returns:
+        A mocked grader that answers one fixed verdict.
+
+    """
     grader = MagicMock(spec=Grader)
     grader.grade = AsyncMock(
         return_value=GradeResult(grader=name, score=score, passed=passed, rationale="r")

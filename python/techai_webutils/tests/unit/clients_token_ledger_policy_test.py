@@ -233,5 +233,10 @@ def test_per_budget_leaves_ledger_errors_to_the_policy() -> None:
 
 
 def _with(decision: BudgetDecision, level: Enforcement | None) -> BudgetDecision:
-    """Return ``decision`` carrying the budget's own ``level``."""
+    """Return ``decision`` carrying the budget's own ``level``.
+
+    Returns:
+        ``decision`` carrying the budget's own ``level``.
+
+    """
     return dataclasses.replace(decision, enforcement=level)

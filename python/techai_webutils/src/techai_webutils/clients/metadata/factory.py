@@ -44,6 +44,13 @@ def metadata_extractor_from_config(config: MetadataConfig) -> MetadataExtractor:
     The ``langdetect`` backend subpackage (and its ``langdetect`` import + profile warmup)
     is loaded lazily here, so a deployable that never extracts metadata never pays the
     import.
+
+    Returns:
+        The ``MetadataExtractor`` selected by ``config.kind`` (langdetect).
+
+    Raises:
+        AppValueError: Unknown metadata extractor kind: ``config.kind``.
+
     """
     if config.kind is MetadataKind.LANGDETECT:
         from techai_webutils.clients.metadata.langdetect import (  # noqa: PLC0415 — lazy backend

@@ -41,6 +41,9 @@ def collapse_duplicates(
     Returns: One passage per group, best score first; a kept passage with collapsed
         members carries their document ids under ``also_in``.
 
+    Returns:
+        ``passages`` with each duplicate group reduced to its best-scored member.
+
     """
     kept: list[RetrievalResult] = []
     also: list[list[str]] = []
@@ -68,6 +71,10 @@ def _keys(passage: RetrievalResult, cluster_key: str) -> list[str]:
     """Return the keys ``passage`` is grouped by.
 
     Its normalized text hash and its cluster id.
+
+    Returns:
+        The keys ``passage`` is grouped by.
+
     """
     text = " ".join(passage.chunk_content.lower().split())
     keys = ["t:" + hashlib.sha256(text.encode()).hexdigest()]
@@ -97,7 +104,12 @@ class CollapsingRetrievalEngine(
         filters: dict[str, str] | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
-        """Retrieve from the inner engine and collapse its duplicates."""
+        """Retrieve from the inner engine and collapse its duplicates.
+
+        Returns:
+            The retrieved passages.
+
+        """
         results = await self._inner.retrieve(
             query, top_k=top_k, filters=filters, index_id=index_id
         )

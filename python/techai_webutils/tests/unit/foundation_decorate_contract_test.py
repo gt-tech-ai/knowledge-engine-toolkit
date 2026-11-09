@@ -40,7 +40,12 @@ class _Docs(Protocol):
 def _with_repositories(
     overrides: dict[str, decoration.Layers],
 ) -> decoration.DecorationConfig:
-    """Return the default config with the repository tier's overrides replaced."""
+    """Return the default config with the repository tier's overrides replaced.
+
+    Returns:
+        The default config with the repository tier's overrides replaced.
+
+    """
     config = decoration.default_config()
     return dataclasses.replace(
         config,

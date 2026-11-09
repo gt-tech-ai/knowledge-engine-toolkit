@@ -30,6 +30,10 @@ def tier() -> Tier:
     Warning for a client fault and at Error otherwise); recovery codes an unexpected
     exception; the rate limit and the shedding bulkhead reject excess load before any
     work; auth authorizes ``<controller>.<op>``; and the timeout bounds the handler.
+
+    Returns:
+        The controller tier, outermost first.
+
     """
     return Tier(
         "controller",
@@ -66,13 +70,23 @@ class ControllerBase:
         return self._subject.name
 
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run one operation ``fn`` as ``op`` through the tier."""
+        """Run one operation ``fn`` as ``op`` through the tier.
+
+        Returns:
+            What ``fn`` returns.
+
+        """
         return await self._subject.exec(op, fn)
 
     def handler[Req, Resp](
         self, op: str, fn: HandlerFunc[Req, Resp]
     ) -> HandlerFunc[Req, Resp]:
-        """Return ``fn`` run through the tier as the operation ``op``."""
+        """Return ``fn`` run through the tier as the operation ``op``.
+
+        Returns:
+            ``fn`` run through the tier as the operation ``op``.
+
+        """
 
         async def run(req: Req) -> Resp:
             return await self._subject.exec(op, lambda: fn(req))

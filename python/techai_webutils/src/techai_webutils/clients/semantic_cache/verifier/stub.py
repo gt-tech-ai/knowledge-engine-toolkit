@@ -18,7 +18,12 @@ class StubCacheVerifier(CacheVerifier):
 
     @override
     async def same_question(self, cached_query: str, query: str) -> bool:
-        """Return ``False``."""
+        """Return ``False``.
+
+        Returns:
+            ``False``.
+
+        """
         return False
 
 

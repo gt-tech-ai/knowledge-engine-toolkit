@@ -52,6 +52,9 @@ class PriceTable:
 def cost_of(record: UsageRecord, table: PriceTable) -> Decimal:
     """Return ``record``'s cost in US dollars, quantized to ``MICRO_DOLLAR`` (half-even).
 
+    Returns:
+        ``record``'s cost in US dollars, quantized to ``MICRO_DOLLAR`` (half-even).
+
     Raises:
         AppError: ``INVALID_INPUT`` when ``record.model`` has no price in ``table``.
 
@@ -84,6 +87,10 @@ def estimate_cost(
 
     ``None`` when ``model`` has no price: a router estimating a candidate's cost treats an
     unpriced model as unknown rather than failing.
+
+    Returns:
+        The cost of the given tokens on ``model`` (micro-dollar, half-even).
+
     """
     price = table.prices.get(model)
     if price is None:

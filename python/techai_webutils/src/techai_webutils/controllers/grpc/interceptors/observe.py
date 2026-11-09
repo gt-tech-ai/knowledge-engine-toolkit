@@ -39,13 +39,23 @@ _DURATION_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]
 
 
 def parse_method(method: str) -> tuple[str, str]:
-    """Split ``/pkg.Service/Method`` into its service and method."""
+    """Split ``/pkg.Service/Method`` into its service and method.
+
+    Returns:
+        The service and the method.
+
+    """
     service, _, name = method.lstrip("/").partition("/")
     return (service, name) if name else ("", method)
 
 
 def status_name(context: Context, err: BaseException | None) -> str:
-    """Return the RPC's final status as Go names it (``OK``, ``ResourceExhausted``, …)."""
+    """Return the RPC's final status as Go names it (``OK``, ``ResourceExhausted``, …).
+
+    Returns:
+        The RPC's final status as Go names it (``OK``, ``ResourceExhausted``, …).
+
+    """
     if err is None:
         return "OK"
     # The status an abort set; an uncaught exception set none, and gRPC returns UNKNOWN.
@@ -78,7 +88,12 @@ class TracingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc
         continuation: Continuation[TRequest, TResponse],
         handler_call_details: grpc.HandlerCallDetails,
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
-        """Wrap the handler in a SERVER span parented on the inbound context."""
+        """Wrap the handler in a SERVER span parented on the inbound context.
+
+        Returns:
+            The handler to serve the call, or ``None`` when the method is unknown.
+
+        """
         handler = await continuation(handler_call_details)
         if handler is None:
             return handler
@@ -161,7 +176,12 @@ class MetricsServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc
         continuation: Continuation[TRequest, TResponse],
         handler_call_details: grpc.HandlerCallDetails,
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
-        """Wrap the handler to count and time it."""
+        """Wrap the handler to count and time it.
+
+        Returns:
+            The handler to serve the call, or ``None`` when the method is unknown.
+
+        """
         handler = await continuation(handler_call_details)
         if handler is None:
             return handler
@@ -205,7 +225,12 @@ class LoggingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc
         continuation: Continuation[TRequest, TResponse],
         handler_call_details: grpc.HandlerCallDetails,
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
-        """Wrap the handler to log its outcome."""
+        """Wrap the handler to log its outcome.
+
+        Returns:
+            The handler to serve the call, or ``None`` when the method is unknown.
+
+        """
         handler = await continuation(handler_call_details)
         if handler is None:
             return handler

@@ -58,7 +58,12 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
     async def embed(
         self, text: str, *, input_type: InputType = "document"
     ) -> EmbeddingResult:
-        """Embed ``text`` in the next shared batch."""
+        """Embed ``text`` in the next shared batch.
+
+        Returns:
+            The embedding of the text.
+
+        """
         (result,) = await self.embed_batch([text], input_type=input_type)
         return result
 
@@ -66,7 +71,12 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
     async def embed_batch(
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
-        """Queue ``texts`` into shared batches and return their results, in order."""
+        """Queue ``texts`` into shared batches and return their results, in order.
+
+        Returns:
+            One embedding per text, in input order.
+
+        """
         if not texts:
             return []
         loop = asyncio.get_running_loop()
@@ -76,12 +86,22 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
 
     @override
     def dimension(self) -> int:
-        """Return the inner provider's dimension."""
+        """Return the inner provider's dimension.
+
+        Returns:
+            The inner provider's dimension.
+
+        """
         return self._inner.dimension()
 
     @override
     def model_name(self) -> str:
-        """Return the inner provider's model."""
+        """Return the inner provider's model.
+
+        Returns:
+            The inner provider's model.
+
+        """
         return self._inner.model_name()
 
     def _enqueue(self, input_type: InputType, items: list[_Item]) -> None:

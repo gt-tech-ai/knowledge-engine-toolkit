@@ -62,7 +62,12 @@ class CacheNamespace:
             raise AppValueError(msg)
 
     def tag(self) -> str:
-        """Return the namespace's stable tag: sha256 hex (16 chars) of the four fields."""
+        """Return the namespace's stable tag: sha256 hex (16 chars) of the four fields.
+
+        Returns:
+            The namespace's stable tag: sha256 hex (16 chars) of the four fields.
+
+        """
         sep = "\x1f"
         joined = (
             f"{self.workspace_id}{sep}{self.embedding_model}{sep}"
@@ -119,6 +124,10 @@ class SemanticCache(CacheInvalidator):
         Else the nearest answer at or above ``min_similarity``.
 
         Fail-open through the primitives: a backend error is a miss, never an exception.
+
+        Returns:
+            The exact repeat.
+
         """
         hit = await self.exact(query, namespace)
         if hit is not None:
@@ -224,6 +233,10 @@ def served_from_cache() -> bool:
     The cache decorator sets it per bound call; an outer decorator (token accounting)
     reads it after the call returns, so a hit is recorded as a zero-token usage rather
     than billed.
+
+    Returns:
+        Whether the current call was answered from the semantic cache.
+
     """
     return _SERVED_FROM_CACHE.get()
 

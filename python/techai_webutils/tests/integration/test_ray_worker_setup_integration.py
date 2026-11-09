@@ -35,7 +35,12 @@ from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntime
 
 
 def _root_handler_count() -> int:
-    """Return how many handlers the worker process's root logger has."""
+    """Return how many handlers the worker process's root logger has.
+
+    Returns:
+        How many handlers the worker process's root logger has.
+
+    """
     return len(logging.getLogger().handlers)
 
 
@@ -43,6 +48,10 @@ async def _handlers_in_a_worker(hook: str | None) -> int:
     """Start a local cluster through a runtime with ``hook``.
 
     And count a worker's root handlers.
+
+    Returns:
+        A local cluster through a runtime with ``hook``.
+
     """
     await RealRayRuntime(worker_setup_hook=hook, log_encoding="JSON").warm_up()
     # A worker cannot import this test module by name, so its task function ships by

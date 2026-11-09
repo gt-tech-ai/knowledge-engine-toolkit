@@ -44,7 +44,12 @@ def _gateway(
     policies: dict[str, Any] | None = None,
     factory: Any = None,  # noqa: ANN401 - the provider factory under test
 ) -> RoutedGateway:
-    """Build a routed gateway over the fixture catalog whose context is always ``ctx``."""
+    """Build a routed gateway over the fixture catalog whose context is always ``ctx``.
+
+    Returns:
+        A routed gateway over the fixture catalog whose context is always ``ctx``.
+
+    """
     config = GatewayConfig(
         kind=GatewayKind.ROUTED,
         routed=RoutedConfig(

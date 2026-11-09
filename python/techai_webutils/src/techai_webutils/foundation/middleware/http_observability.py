@@ -118,6 +118,10 @@ def aiohttp_observability_middleware(service_name: str) -> Any:  # noqa: ANN401 
     """Return an aiohttp @middleware that records metrics + a SERVER span.
 
     aiohttp is imported lazily so techai_webutils does not hard-depend on it.
+
+    Returns:
+        An aiohttp @middleware that records metrics + a SERVER span.
+
     """
     from aiohttp import web  # noqa: PLC0415  (lazy: aiohttp is a caller dependency)
 
@@ -133,6 +137,13 @@ def aiohttp_observability_middleware(service_name: str) -> Any:  # noqa: ANN401 
         Resolves the route template for low-cardinality metric labels, records
         the outcome for success, ``HTTPException``, and unexpected crashes, and
         re-raises so the framework's normal error handling still runs.
+
+        Returns:
+            The response.
+
+        Raises:
+            HTTPException: The handler raised an HTTP error, re-raised after recording.
+
         """
         route = request.path
         if request.match_info.route.resource is not None:
@@ -182,6 +193,10 @@ async def fastapi_observability_middleware(
     """FastAPI/Starlette HTTP middleware: register via app.middleware('http').
 
     Records metrics + a SERVER span, propagating inbound W3C trace context.
+
+    Returns:
+        The response.
+
     """
     tracer = otel_trace.get_tracer(request.app.title or "fastapi")
     route = request.url.path

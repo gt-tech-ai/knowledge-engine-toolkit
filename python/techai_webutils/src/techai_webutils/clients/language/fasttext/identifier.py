@@ -65,8 +65,11 @@ class FastTextIdentifier(LanguageIdentifier):
     def identify(self, text: str) -> LanguageGuess:
         """Return the model's most probable language, or ``UNDETERMINED_GUESS``.
 
-        Raises:
-            AppValueError: The model file cannot be loaded (``INVALID_INPUT``).
+        Returns:
+            The model's most probable language, or ``UNDETERMINED_GUESS``.
+
+        A callee raises ``AppValueError``: The model file cannot be loaded
+        (``INVALID_INPUT``).
 
         """
         line = " ".join(text.split())
@@ -82,6 +85,13 @@ class FastTextIdentifier(LanguageIdentifier):
         """Return the model, loading it once.
 
         (under a lock: concurrent first calls load once).
+
+        Returns:
+            The model, loading it once.
+
+        Raises:
+            AppValueError: Cannot load the language-ID model at ``self._model_path``.
+
         """
         with self._lock:
             if self._model is None:
@@ -95,7 +105,12 @@ class FastTextIdentifier(LanguageIdentifier):
             return self._model
 
     def _parse(self, label: str) -> tuple[str, str]:
-        """Split a label into the language code and the script (empty where none)."""
+        """Split a label into the language code and the script (empty where none).
+
+        Returns:
+            The language code and the script.
+
+        """
         name = label.removeprefix(_LABEL_PREFIX)
         if self._scheme == LabelScheme.GLOTLID:
             code, _, script = name.partition("_")

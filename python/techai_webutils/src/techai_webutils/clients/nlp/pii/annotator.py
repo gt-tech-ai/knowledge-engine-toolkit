@@ -42,8 +42,10 @@ class PiiAnnotator(DelegatingAsyncResource[Annotator], Annotator):
 
         When asked.
 
-        Raises:
-            AppValueError: A task is not registered (``INVALID_INPUT``).
+        Returns:
+            ``inner``'s annotations with each block's ``pii`` spans added.
+
+        A callee raises ``AppValueError``: A task is not registered (``INVALID_INPUT``).
 
         """
         self._registry.require(tasks)

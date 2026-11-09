@@ -21,12 +21,22 @@ class StubSemanticCache(SemanticCache):
 
     @override
     async def exact(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
-        """Miss."""
+        """Miss.
+
+        Returns:
+            ``None``, always: this cache holds nothing.
+
+        """
         return None
 
     @override
     async def nearest(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
-        """Miss."""
+        """Miss.
+
+        Returns:
+            ``None``, always: this cache holds nothing.
+
+        """
         return None
 
     @override

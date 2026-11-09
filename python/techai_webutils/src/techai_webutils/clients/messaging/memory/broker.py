@@ -24,7 +24,12 @@ class InMemoryBroker:
         self._queues: dict[str, asyncio.Queue[Message]] = {}
 
     def queue(self, topic: str) -> asyncio.Queue[Message]:
-        """Return the queue for ``topic``, creating it on first use."""
+        """Return the queue for ``topic``, creating it on first use.
+
+        Returns:
+            The queue for ``topic``, creating it on first use.
+
+        """
         existing = self._queues.get(topic)
         if existing is not None:
             return existing

@@ -39,6 +39,10 @@ def split_into_chunks(parsed: ParsedDocument, *, max_bytes: int) -> list[ChunkPa
     PDFs (``parsed.pages`` populated) split on page boundaries, carrying the source page
     range; other formats split ``parsed.markdown_content`` on paragraph boundaries with no
     page range.
+
+    Returns:
+        The chunks, each within ``max_bytes`` unless one unit exceeds it.
+
     """
     if parsed.pages:
         return _split_pages(parsed.pages, max_bytes)
@@ -49,6 +53,10 @@ def _split_pages(pages: list[Page], max_bytes: int) -> list[ChunkPayload]:
     """Pack contiguous pages into chunks within ``max_bytes``.
 
     Emitting an oversized page alone.
+
+    Returns:
+        The chunks, each within ``max_bytes`` unless one unit exceeds it.
+
     """
     chunks: list[ChunkPayload] = []
     buffer: list[str] = []
@@ -95,7 +103,12 @@ def _split_pages(pages: list[Page], max_bytes: int) -> list[ChunkPayload]:
 def _page_chunk(
     index: int, texts: list[str], start_page: int | None, end_page: int | None
 ) -> ChunkPayload:
-    """Build a page-range chunk from its accumulated page texts."""
+    """Build a page-range chunk from its accumulated page texts.
+
+    Returns:
+        A page-range chunk from its accumulated page texts.
+
+    """
     return ChunkPayload(
         chunk_index=index,
         text=_SEPARATOR.join(texts),
@@ -105,7 +118,12 @@ def _page_chunk(
 
 
 def _split_markdown(markdown: str, max_bytes: int) -> list[ChunkPayload]:
-    """Pack contiguous paragraphs into chunks within ``max_bytes`` (no page range)."""
+    """Pack contiguous paragraphs into chunks within ``max_bytes`` (no page range).
+
+    Returns:
+        The chunks, each within ``max_bytes`` unless one unit exceeds it.
+
+    """
     chunks: list[ChunkPayload] = []
     buffer: list[str] = []
     buffer_bytes = 0
@@ -141,7 +159,12 @@ def _split_markdown(markdown: str, max_bytes: int) -> list[ChunkPayload]:
 
 
 def _markdown_chunk(index: int, paragraphs: list[str]) -> ChunkPayload:
-    """Build a non-paginated chunk from its accumulated paragraphs."""
+    """Build a non-paginated chunk from its accumulated paragraphs.
+
+    Returns:
+        A non-paginated chunk from its accumulated paragraphs.
+
+    """
     return ChunkPayload(
         chunk_index=index,
         text=_SEPARATOR.join(paragraphs),
@@ -169,5 +192,9 @@ class KbUnitSplitter:
         """Return the parse's index units (>= 1).
 
         Each within the configured ``max_bytes`` ceiling.
+
+        Returns:
+            The parse's index units (>= 1).
+
         """
         return split_into_chunks(parsed, max_bytes=self._max_bytes)

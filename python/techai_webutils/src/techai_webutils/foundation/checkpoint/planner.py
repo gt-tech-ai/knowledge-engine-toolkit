@@ -46,6 +46,10 @@ class ResumePlanner:
         holds each stage's fingerprint for today's versions; a stage it omits is never
         done. For a sink in ``embedding_sinks`` (Bedrock by default) ``Stage.EMBED`` is
         skipped.
+
+        Returns:
+            The first stage whose record is missing or stale.
+
         """
         done = {(state.stage, state.fingerprint) for state in states}
         for stage in Stage:

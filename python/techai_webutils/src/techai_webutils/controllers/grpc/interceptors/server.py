@@ -73,6 +73,10 @@ def server_interceptors(
     raised becomes the status of its code (``to_grpc_status``), and a rejection the tier
     produced itself (a shed request, a denial, a timeout) the status of its code carrying
     only that code's client-safe message (``safe_status``, Go ``wire.SanitizeGRPC``).
+
+    Returns:
+        The interceptors that run every RPC through the controller tier as ``name``.
+
     """
     edge = edge or Edge()
     obs = deps.observability
@@ -115,7 +119,12 @@ class _TierServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
         continuation: Continuation[TRequest, TResponse],
         handler_call_details: grpc.HandlerCallDetails,
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
-        """Wrap the handler in the middleware matching its response shape."""
+        """Wrap the handler in the middleware matching its response shape.
+
+        Returns:
+            The handler to serve the call, or ``None`` when the method is unknown.
+
+        """
         handler = await continuation(handler_call_details)
         if handler is None:
             return handler

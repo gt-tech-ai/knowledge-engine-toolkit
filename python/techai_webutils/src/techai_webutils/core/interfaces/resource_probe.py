@@ -29,6 +29,10 @@ class ResourceLimits:
         """Return limits that constrain nothing.
 
         So a lane sized from them runs at its cap.
+
+        Returns:
+            Limits that constrain nothing.
+
         """
         return cls(cpu=math.inf, memory_bytes=sys.maxsize)
 

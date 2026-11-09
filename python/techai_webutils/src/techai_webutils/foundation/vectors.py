@@ -21,6 +21,11 @@ def require_matching_dimension(
     the stored vectors have different lengths, so cosine search silently returns nothing.
     Catch it at wiring time rather than as an empty (and inexplicable) result set at query
     time.
+
+    Raises:
+        AppValueError: Embedding dimension ``embedder.dimension()`` != vector store
+            dimension ``store.dimension`` (collection ``collection``).
+
     """
     if embedder.dimension() != store.dimension:
         msg = (

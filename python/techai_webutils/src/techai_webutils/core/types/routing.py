@@ -117,15 +117,29 @@ class RoutingPolicy:
         """Return the ids allowed for ``step`` (its own list plus ``*``).
 
         Empty allows all.
+
+        Returns:
+            The ids allowed for ``step`` (its own list plus ``*``).
+
         """
         return (*self.allow.get("*", ()), *self.allow.get(step, ()))
 
     def denied(self, step: str) -> tuple[str, ...]:
-        """Return the ids denied for ``step`` (its own list plus ``*``)."""
+        """Return the ids denied for ``step`` (its own list plus ``*``).
+
+        Returns:
+            The ids denied for ``step`` (its own list plus ``*``).
+
+        """
         return (*self.deny.get("*", ()), *self.deny.get(step, ()))
 
     def pin(self, step: str) -> str | None:
-        """Return the catalog id pinned for ``step`` (a step pin beats ``*``), if any."""
+        """Return the catalog id pinned for ``step`` (a step pin beats ``*``), if any.
+
+        Returns:
+            The catalog id pinned for ``step`` (a step pin beats ``*``), if any.
+
+        """
         return self.pins.get(step) or self.pins.get("*")
 
 

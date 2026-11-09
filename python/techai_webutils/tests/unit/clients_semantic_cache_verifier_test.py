@@ -20,6 +20,10 @@ def _llm(reply: str | None = None, error: Exception | None = None) -> MagicMock:
     """Return an ``LLMProvider`` mock whose ``complete`` answers ``reply``.
 
     Or raises ``error``.
+
+    Returns:
+        An ``LLMProvider`` mock whose ``complete`` answers ``reply``.
+
     """
     llm = MagicMock(spec=LLMProvider)
     llm.complete = AsyncMock(

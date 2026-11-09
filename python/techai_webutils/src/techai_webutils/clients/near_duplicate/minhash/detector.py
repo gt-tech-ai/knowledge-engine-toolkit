@@ -80,6 +80,10 @@ class MinHashDetector(NearDuplicateDetector):
         """Return ``text``'s signature; pure-Python CPU work.
 
         So ``check`` runs it on a thread.
+
+        Returns:
+            ``text``'s signature; pure-Python CPU work.
+
         """
         return self._hasher.signature(word_shingles(text, self._shingle_size))
 
@@ -129,6 +133,10 @@ class MinHashDetector(NearDuplicateDetector):
         """Return the most similar verified candidate's cluster for ``document_id``.
 
         If any.
+
+        Returns:
+            The most similar verified candidate's cluster for ``document_id``.
+
         """
         best: NearDuplicate | None = None
         for candidate in dict.fromkeys(h.decode() for h in holders if h is not None):
@@ -150,6 +158,10 @@ class MinHashDetector(NearDuplicateDetector):
         """Return the recorded cluster of ``document_id``.
 
         Or None when it was never recorded.
+
+        Returns:
+            The recorded cluster of ``document_id``.
+
         """
         raw = await self._cache.get(self._document(scope, document_id))
         if raw is None:
@@ -182,10 +194,20 @@ class MinHashDetector(NearDuplicateDetector):
 
     @staticmethod
     def _document(scope: str, document_id: str) -> str:
-        """Return the key of ``document_id``'s entry."""
+        """Return the key of ``document_id``'s entry.
+
+        Returns:
+            The key of ``document_id``'s entry.
+
+        """
         return f"nd:{scope}:d:{document_id}"
 
     @staticmethod
     def _bucket(scope: str, band: int, key: str) -> str:
-        """Return the key of band ``band``'s bucket ``key``."""
+        """Return the key of band ``band``'s bucket ``key``.
+
+        Returns:
+            The key of band ``band``'s bucket ``key``.
+
+        """
         return f"nd:{scope}:b:{band}:{key}"

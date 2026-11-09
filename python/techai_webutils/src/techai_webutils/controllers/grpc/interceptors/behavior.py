@@ -39,6 +39,10 @@ def rebuild[TRequest, TResponse](
     """Return ``handler`` with its behavior wrapped by ``wrap``.
 
     Keeping its streaming shape.
+
+    Returns:
+        ``handler`` with its behavior wrapped by ``wrap``.
+
     """
     deserializer = handler.request_deserializer
     serializer = handler.response_serializer
@@ -65,6 +69,10 @@ def _as_writer(fn: Callable[..., object]) -> Behavior:
     """Return a streaming behavior as one coroutine.
 
     That writes each response it yields.
+
+    Returns:
+        A streaming behavior as one coroutine.
+
     """
 
     async def run(request: object, context: Context) -> object:

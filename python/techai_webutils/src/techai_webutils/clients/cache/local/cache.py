@@ -34,7 +34,12 @@ class LocalCache(Cache):
         self._lock = asyncio.Lock()
 
     async def get(self, key: str) -> bytes | None:
-        """Get a value by key. Returns None on miss or if the key has expired."""
+        """Get a value by key. Returns None on miss or if the key has expired.
+
+        Returns:
+            A value by key. Returns None on miss or if the key has expired.
+
+        """
         async with self._lock:
             entry = self._store.get(key)
             if entry is None:
@@ -58,7 +63,12 @@ class LocalCache(Cache):
             self._store.pop(key, None)
 
     async def exists(self, key: str) -> bool:
-        """Check if a key exists and is not expired."""
+        """Check if a key exists and is not expired.
+
+        Returns:
+            Whether the key exists.
+
+        """
         async with self._lock:
             entry = self._store.get(key)
             if entry is None:

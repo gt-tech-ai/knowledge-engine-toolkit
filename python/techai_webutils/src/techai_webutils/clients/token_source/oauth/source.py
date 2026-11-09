@@ -72,6 +72,10 @@ class OAuthTokenSource(TokenSource):
         """Return the cached token.
 
         Minting a new one when it is within the margin of expiry.
+
+        Returns:
+            The cached token.
+
         """
         if self._fresh():
             return self._token
@@ -81,17 +85,25 @@ class OAuthTokenSource(TokenSource):
             return self._token
 
     def _fresh(self) -> bool:
-        """Report whether the cached token outlives the refresh margin."""
+        """Report whether the cached token outlives the refresh margin.
+
+        Returns:
+            Whether the cached token is still fresh.
+
+        """
         return bool(self._token) and self._clock() < self._expires_at - self._margin
 
     async def _mint(self) -> None:
         """Request a new token and cache it with its expiry.
 
+        A callee raises ``UnauthorizedError``: The endpoint refused the grant.
+
+        A callee raises ``AppError``: Any other status, or a reply without a token
+        (``UPSTREAM``).
+
         Raises:
             AppTimeoutError: The request timed out.
             UnavailableError: The endpoint was unreachable, throttled, or failed (5xx).
-            UnauthorizedError: The endpoint refused the grant.
-            AppError: Any other status, or a reply without a token (``UPSTREAM``).
 
         """
         started = self._clock()
@@ -130,6 +142,9 @@ def _check_status(status: int) -> None:
 
 def _parse(resp: httpx.Response) -> tuple[str, float]:
     """Return the ``access_token`` and its positive ``expires_in`` from a token response.
+
+    Returns:
+        The ``access_token`` and its positive ``expires_in`` from a token response.
 
     Raises:
         AppError: The body is not JSON or lacks a token or a positive lifetime

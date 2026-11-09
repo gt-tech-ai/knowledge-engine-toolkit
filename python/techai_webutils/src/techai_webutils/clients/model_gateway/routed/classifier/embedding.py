@@ -29,7 +29,12 @@ if TYPE_CHECKING:
 
 
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
-    """Return the cosine similarity of ``a`` and ``b`` (0.0 for a zero vector)."""
+    """Return the cosine similarity of ``a`` and ``b`` (0.0 for a zero vector).
+
+    Returns:
+        The cosine similarity of ``a`` and ``b`` (0.0 for a zero vector).
+
+    """
     dot = sum(x * y for x, y in zip(a, b, strict=False))
     norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
     return dot / norm if norm else 0.0
@@ -79,7 +84,12 @@ class EmbeddingRouteClassifier:
         self._exemplars = exemplars
 
     def _scores(self, query: Sequence[float]) -> dict[str, float]:
-        """Return each route's mean top-k exemplar similarity to ``query``."""
+        """Return each route's mean top-k exemplar similarity to ``query``.
+
+        Returns:
+            Each route's mean top-k exemplar similarity to ``query``.
+
+        """
         scores: dict[str, float] = {}
         for name, vectors in (self._exemplars or {}).items():
             best = sorted((_cosine(query, v) for v in vectors), reverse=True)[
@@ -89,7 +99,12 @@ class EmbeddingRouteClassifier:
         return scores
 
     async def classify(self, ctx: RouteContext, query: str) -> Classification:
-        """Return the most similar route above its threshold, else the step's route."""
+        """Return the most similar route above its threshold, else the step's route.
+
+        Returns:
+            The most similar route above its threshold, else the step's route.
+
+        """
         fallback = await self._fallback.classify(ctx, query)
         try:
             if self._exemplars is None:

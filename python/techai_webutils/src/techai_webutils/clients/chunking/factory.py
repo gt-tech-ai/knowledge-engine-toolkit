@@ -70,6 +70,9 @@ def chunker_from_config(
     ``sentence`` needs ``splitter`` (a ``SentenceSplitter``) and ``tokenizer`` (the
     embedding model's token count for a text); ``fixed`` ignores both.
 
+    Returns:
+        The ``Chunker`` selected by ``config.kind``. Unknown kinds fail loudly.
+
     Raises:
         AppValueError: An unknown kind, ``sentence`` without a splitter or tokenizer, or
             bad ``sentence`` limits (``INVALID_INPUT``).

@@ -26,7 +26,12 @@ from techai_webutils.foundation.metrics.metrics import new_metrics
 
 
 def _client(*, set_result: object = True) -> tuple[MagicMock, AsyncMock]:
-    """Return a mocked async Redis client and the release script it registers."""
+    """Return a mocked async Redis client and the release script it registers.
+
+    Returns:
+        A mocked async Redis client and the release script it registers.
+
+    """
     script = AsyncMock(return_value=1)
     client = MagicMock(spec=Redis)
     client.register_script.return_value = script
@@ -35,7 +40,12 @@ def _client(*, set_result: object = True) -> tuple[MagicMock, AsyncMock]:
 
 
 def _redis_claim(client: MagicMock) -> RedisInflightClaim:
-    """Build the redis claim through the factory, prefix ``inflight``."""
+    """Build the redis claim through the factory, prefix ``inflight``.
+
+    Returns:
+        The redis claim through the factory, prefix ``inflight``.
+
+    """
     claim = inflight_claim_from_config(
         InflightClaimConfig(kind=InflightClaimKind.REDIS), redis=client
     )

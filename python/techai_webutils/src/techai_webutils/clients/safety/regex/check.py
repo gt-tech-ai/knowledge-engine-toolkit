@@ -39,7 +39,12 @@ class RegexPiiSafetyCheck(SafetyCheck):
 
     @override
     async def scan(self, text: str, *, kind: ScanKind) -> SafetyResult:
-        """Return the verdict for ``text`` (``kind`` does not change the patterns)."""
+        """Return the verdict for ``text`` (``kind`` does not change the patterns).
+
+        Returns:
+            The verdict for ``text`` (``kind`` does not change the patterns).
+
+        """
         flags: list[str] = []
         redacted = text
         for name, pattern in _PATTERNS:

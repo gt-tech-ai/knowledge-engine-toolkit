@@ -20,7 +20,15 @@ if TYPE_CHECKING:
 
 
 def _str_map(value: Any, field: str, line_no: int) -> dict[str, str]:  # noqa: ANN401 - parsed JSON
-    """Return ``value`` as a ``str → str`` mapping, or raise ``INVALID_INPUT``."""
+    """Return ``value`` as a ``str → str`` mapping, or raise ``INVALID_INPUT``.
+
+    Returns:
+        ``value`` as a ``str → str`` mapping, or raise ``INVALID_INPUT``.
+
+    Raises:
+        AppError: Dataset line ``line_no``: ``field`` must be an object.
+
+    """
     if value is None:
         return {}
     if not isinstance(value, dict):
@@ -30,7 +38,16 @@ def _str_map(value: Any, field: str, line_no: int) -> dict[str, str]:  # noqa: A
 
 
 def _parse_line(text: str, line_no: int) -> EvalCase:
-    """Parse one non-blank line into an ``EvalCase``, or raise ``INVALID_INPUT``."""
+    """Parse one non-blank line into an ``EvalCase``, or raise ``INVALID_INPUT``.
+
+    Returns:
+        One non-blank line into an ``EvalCase``, or raise ``INVALID_INPUT``.
+
+    Raises:
+        AppError: Dataset line ``line_no`` is not JSON; dataset line ``line_no`` must be
+            an object.
+
+    """
     try:
         row = json.loads(text)
     except json.JSONDecodeError as exc:
@@ -61,7 +78,15 @@ class JsonlDataset(Dataset):
         self._path = Path(path)
 
     def _read(self) -> bytes:
-        """Return the file bytes, or raise ``UNAVAILABLE`` when the file can't be read."""
+        """Return the file bytes, or raise ``UNAVAILABLE`` when the file can't be read.
+
+        Returns:
+            The file bytes, or raise ``UNAVAILABLE`` when the file can't be read.
+
+        Raises:
+            AppError: Dataset file unreadable: ``self._path``.
+
+        """
         try:
             return self._path.read_bytes()
         except OSError as exc:
@@ -70,12 +95,22 @@ class JsonlDataset(Dataset):
 
     @override
     async def cases(self) -> AsyncIterator[EvalCase]:
-        """Yield each line's case in file order."""
+        """Yield each line's case in file order.
+
+        Yields:
+            Each line's case in file order.
+
+        """
         for line_no, text in enumerate(self._read().decode().splitlines(), start=1):
             if text.strip():
                 yield _parse_line(text, line_no)
 
     @override
     def version(self) -> str:
-        """Return the sha256 hex of the file bytes."""
+        """Return the sha256 hex of the file bytes.
+
+        Returns:
+            The sha256 hex of the file bytes.
+
+        """
         return hashlib.sha256(self._read()).hexdigest()

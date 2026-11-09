@@ -44,6 +44,9 @@ def abstention_policies(kind: AbstainerKind, min_score: float) -> list[PassagePo
     ``top_score`` judges the pool, not each passage, so it adds none here
     (``TopScoreAbstainer`` wraps the engine instead).
 
+    Returns:
+        The per-passage policies ``kind`` applies before the consumer's own.
+
     Raises:
         AppValueError: An unknown kind (``INVALID_INPUT``).
 
@@ -78,6 +81,10 @@ class TopScoreAbstainer(DelegatingAsyncResource[RetrievalEngine], RetrievalEngin
         """Retrieve from the inner engine; abstain.
 
         (empty) unless its best passage clears the bar.
+
+        Returns:
+            The passages, or an empty list on abstention.
+
         """
         results = await self._inner.retrieve(
             query, top_k=top_k, filters=filters, index_id=index_id

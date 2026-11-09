@@ -59,6 +59,11 @@ class HeaderClaimMapping:
         """Normalise every key to its lowercase, trimmed metadata form.
 
         Reject an empty or blank one.
+
+        Raises:
+            ValueError: HeaderClaimMapping.``claim.name`` must name a metadata key, got
+                ``raw``.
+
         """
         for claim in fields(self):
             raw = getattr(self, claim.name)
@@ -79,17 +84,32 @@ _auth_claims_var: contextvars.ContextVar[AuthClaims | None] = contextvars.Contex
 
 
 def set_auth_claims(claims: AuthClaims) -> contextvars.Token[AuthClaims | None]:
-    """Store auth claims in the current context."""
+    """Store auth claims in the current context.
+
+    Returns:
+        The token that restores the prior claims.
+
+    """
     return _auth_claims_var.set(claims)
 
 
 def get_auth_claims() -> AuthClaims | None:
-    """Retrieve auth claims from the current context."""
+    """Retrieve auth claims from the current context.
+
+    Returns:
+        The claims, or ``None``.
+
+    """
     return _auth_claims_var.get()
 
 
 def _split_roles(raw: str) -> frozenset[str]:
-    """Parse comma-separated roles, discarding empty segments."""
+    """Parse comma-separated roles, discarding empty segments.
+
+    Returns:
+        The roles.
+
+    """
     if not raw:
         return frozenset()
     return frozenset(r.strip() for r in raw.split(",") if r.strip())
@@ -115,7 +135,12 @@ class AuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
         ],
         handler_call_details: grpc.HandlerCallDetails,
     ) -> grpc.RpcMethodHandler[TRequest, TResponse] | None:
-        """Extract auth headers and store as AuthClaims in contextvars."""
+        """Extract auth headers and store as AuthClaims in contextvars.
+
+        Returns:
+            The handler to serve the call, or ``None`` when the method is unknown.
+
+        """
         # The gRPC Python API for server interceptors passes metadata via
         # handler_call_details.invocation_metadata
         metadata = dict(handler_call_details.invocation_metadata or [])

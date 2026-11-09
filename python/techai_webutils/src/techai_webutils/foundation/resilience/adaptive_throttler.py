@@ -81,7 +81,12 @@ class AdaptiveThrottler:
         return self._rejection_probability()
 
     def _rejection_probability(self) -> float:
-        """Compute the SRE rejection probability from the current window."""
+        """Compute the SRE rejection probability from the current window.
+
+        Returns:
+            The SRE rejection probability from the current window.
+
+        """
         return max(0.0, (self._requests - self._k * self._accepts) / (self._requests + 1))
 
     async def do[T](self, op: Callable[[], Awaitable[T]]) -> T:
@@ -90,6 +95,13 @@ class AdaptiveThrottler:
         A success feeds the accept window; every attempt (shed or allowed) feeds the
         request window, so a sustained failure raises the rejection probability and a
         recovery lowers it.
+
+        Returns:
+            What ``op`` returns.
+
+        Raises:
+            ThrottledError: The throttler shed the call.
+
         """
         async with self._lock:
             # Age the window, then decide from the pre-attempt ratio so a cold start never

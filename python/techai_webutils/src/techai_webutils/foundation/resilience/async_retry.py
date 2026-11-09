@@ -34,6 +34,10 @@ def retry_after_s(err: BaseException) -> float | None:
 
     None when ``err`` is not an ``AppError`` or carries no ``retry_after_ms`` detail, or
     the detail is not a non-negative integer.
+
+    Returns:
+        The server's retry delay in seconds from an ``AppError``'s details, or None.
+
     """
     if not isinstance(err, AppError):
         return None
@@ -48,7 +52,12 @@ def retry_after_s(err: BaseException) -> float | None:
 
 
 def _is_transient(err: BaseException) -> bool:
-    """Return True only for ``AppError`` instances whose ``is_transient`` flag is set."""
+    """Return True only for ``AppError`` instances whose ``is_transient`` flag is set.
+
+    Returns:
+        True only for ``AppError`` instances whose ``is_transient`` flag is set.
+
+    """
     return isinstance(err, AppError) and err.is_transient
 
 
@@ -68,10 +77,19 @@ def retry_transient_async(
     recorder in tests / callers (e.g. a supervisor retrying a job stop) that need to
     control or record the backoff schedule; the default is tenacity's normal async sleep,
     so the behavior is unchanged when it is omitted.
+
+    Returns:
+        A decorator that retries a coroutine on transient ``AppError``s.
+
     """
 
     def decorator(func: F) -> F:
-        """Attach the tenacity async retry policy to *func*, preserving its metadata."""
+        """Attach the tenacity async retry policy to *func*, preserving its metadata.
+
+        Returns:
+            The decorated function.
+
+        """
         retry_cond = retry_if_exception(_is_transient)
         stop_cond = stop_after_attempt(max_attempts)
         backoff = exponential_jitter_wait(initial=base_delay, max_delay=max_delay)
@@ -83,6 +101,10 @@ def retry_transient_async(
 
             The backoff is ``base_delay * 2**(n-1)`` plus up to ``base_delay`` of jitter,
             capped at ``max_delay`` (the shared ``exponential_jitter_wait``).
+
+            Returns:
+                The seconds to wait.
+
             """
             delay = backoff(state)
             err = state.outcome.exception() if state.outcome is not None else None
@@ -103,7 +125,12 @@ def retry_transient_async(
 
         @functools.wraps(func)
         async def wrapper(*args: object, **kwargs: object) -> object:
-            """Invoke the wrapped coroutine under the configured retry policy."""
+            """Invoke the wrapped coroutine under the configured retry policy.
+
+            Returns:
+                What the function returns.
+
+            """
             return await func(*args, **kwargs)
 
         return cast("F", retrying(wrapper))

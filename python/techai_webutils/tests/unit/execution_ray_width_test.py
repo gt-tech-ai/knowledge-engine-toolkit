@@ -27,6 +27,10 @@ def _runtime(cluster_cpus: float) -> MagicMock:
     """Return a generated-mock ``RayRuntime`` reporting ``cluster_cpus``.
 
     And running items in-process.
+
+    Returns:
+        A generated-mock ``RayRuntime`` reporting ``cluster_cpus``.
+
     """
     runtime = create_autospec(RayRuntime, instance=True)
     runtime.warm_up = AsyncMock()
@@ -35,7 +39,12 @@ def _runtime(cluster_cpus: float) -> MagicMock:
 
 
 async def _mapper(item: int) -> StepResult:
-    """Map an item to a named StepResult."""
+    """Map an item to a named StepResult.
+
+    Returns:
+        A passing step for the item.
+
+    """
     await asyncio.sleep(0)
     return StepResult(name=str(item))
 

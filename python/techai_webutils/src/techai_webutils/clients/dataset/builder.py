@@ -55,6 +55,9 @@ def new_dataset_from_config(
         config: The dataset configuration.
         backends: Factories for consumer-supplied kinds (``aiops``), keyed by kind.
 
+    Returns:
+        The ``Dataset`` selected by ``config.kind``.
+
     Raises:
         AppValueError: ``INVALID_INPUT`` for an unknown kind.
         AppError: ``INVALID_INPUT`` for the ``aiops`` kind with no injected backend.

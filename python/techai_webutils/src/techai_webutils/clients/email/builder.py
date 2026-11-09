@@ -60,6 +60,13 @@ def new_email_from_config(config: EmailConfig) -> EmailSender:
     ``NewFromConfig`` default case (and the sibling ``new_lock_from_config``): a
     newly-added ``EmailKind`` that this factory forgets to handle fails loudly here
     instead of silently degrading to the no-op sender.
+
+    Returns:
+        The ``EmailSender`` selected by ``config.kind`` (ses/smtp imported lazily).
+
+    Raises:
+        AppValueError: Unknown email kind: ``config.kind``.
+
     """
     if config.kind is EmailKind.SES:
         # Lazy import: skip aiobotocore off the SES path.

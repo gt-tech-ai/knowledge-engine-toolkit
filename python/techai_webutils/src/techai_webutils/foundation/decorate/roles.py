@@ -76,15 +76,30 @@ class CrudOps[T, P, ID]:
         self._validate = validate
 
     async def get(self, entity_id: ID) -> T:
-        """Run Get through the subject."""
+        """Run Get through the subject.
+
+        Returns:
+            The entity.
+
+        """
         return await self._op.exec("get", lambda: self._inner.get(entity_id))
 
     async def list(self, params: P, page: PageRequest) -> Page[T]:
-        """Run List through the subject."""
+        """Run List through the subject.
+
+        Returns:
+            The page.
+
+        """
         return await self._op.exec("list", lambda: self._inner.list(params, page))
 
     async def create(self, entity: T) -> T:
-        """Run Create (validated) through Create's subject."""
+        """Run Create (validated) through Create's subject.
+
+        Returns:
+            The entity.
+
+        """
 
         async def run() -> T:
             self._check(entity)
@@ -93,7 +108,12 @@ class CrudOps[T, P, ID]:
         return await self._create.exec("create", run)
 
     async def update(self, entity_id: ID, entity: T) -> T:
-        """Run Update (validated) through the subject."""
+        """Run Update (validated) through the subject.
+
+        Returns:
+            The entity.
+
+        """
 
         async def run() -> T:
             self._check(entity)
@@ -112,5 +132,10 @@ class CrudOps[T, P, ID]:
 
 
 async def exists[ID](op: Subject, inner: ExistsBackend[ID], entity_id: ID) -> bool:
-    """Run Exists through ``op``."""
+    """Run Exists through ``op``.
+
+    Returns:
+        Whether the entity exists.
+
+    """
     return await op.exec("exists", lambda: inner.exists(entity_id))

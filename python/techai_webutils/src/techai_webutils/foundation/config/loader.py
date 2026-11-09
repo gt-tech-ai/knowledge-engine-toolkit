@@ -27,6 +27,10 @@ def _substitute_env_vars(value: object) -> object:
 
     Walks dicts, lists, and strings. Non-string leaves are returned unchanged.
     Environment variables that are not set and have no default are left as-is.
+
+    Returns:
+        The value with variables substituted.
+
     """
     if isinstance(value, str):
         return _ENV_VAR_PATTERN.sub(_resolve_var, value)
@@ -46,6 +50,10 @@ def _resolve_var(match: re.Match[str]) -> str:
     If the expression contains ``:-``, the text after it is used as a
     fallback when the environment variable is unset. Without a default,
     an unset variable is left as the original ``${VAR}`` literal.
+
+    Returns:
+        A single ``${VAR}`` or ``${VAR:-default}`` regex match.
+
     """
     expr = match.group(1)
     if ":-" in expr:
@@ -59,6 +67,10 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
     Nested dicts are merged recursively. For all other types the
     *override* value wins. Neither input dict is mutated.
+
+    Returns:
+        The merged dict.
+
     """
     result = base.copy()
     for key, value in override.items():
@@ -82,8 +94,10 @@ def load_config(
     Returns:
         Merged configuration dictionary with env vars substituted.
 
+    A callee raises ``FileNotFoundError``: If config_dir doesn't exist.
+
     Raises:
-        FileNotFoundError: If config_dir doesn't exist.
+        AppFileNotFoundError: Config directory not found: ``config_dir``.
 
     """
     config_path = Path(config_dir)

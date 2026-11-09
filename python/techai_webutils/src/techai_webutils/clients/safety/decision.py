@@ -26,6 +26,10 @@ def decide(flags: tuple[str, ...], on_detect: OnDetect, redacted: str) -> Safety
     """Return the verdict for ``flags`` under ``on_detect``.
 
     ``redacted`` is used for ``redact``.
+
+    Returns:
+        The verdict for ``flags`` under ``on_detect``.
+
     """
     if not flags:
         return _CLEAN

@@ -24,6 +24,10 @@ def _deterministic_vector(text: str, dimension: int) -> list[float]:
     """Expand ``text`` into a deterministic ``dimension``-length vector in [-1.
 
     1] via SHA-256.
+
+    Returns:
+        The deterministic vector.
+
     """
     values: list[float] = []
     counter = 0
@@ -55,6 +59,10 @@ class StubEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
         """Return a deterministic embedding for a single text.
 
         (``input_type`` does not change it).
+
+        Returns:
+            A deterministic embedding for a single text.
+
         """
         return EmbeddingResult(
             embedding=_deterministic_vector(text, self._dimension),
@@ -66,13 +74,28 @@ class StubEmbeddingProvider(NoOpAsyncResource, EmbeddingProvider):
     async def embed_batch(
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[EmbeddingResult]:
-        """Return deterministic embeddings for multiple texts, preserving order."""
+        """Return deterministic embeddings for multiple texts, preserving order.
+
+        Returns:
+            Deterministic embeddings for multiple texts, preserving order.
+
+        """
         return [await self.embed(text, input_type=input_type) for text in texts]
 
     def dimension(self) -> int:
-        """Return the configured embedding dimension."""
+        """Return the configured embedding dimension.
+
+        Returns:
+            The configured embedding dimension.
+
+        """
         return self._dimension
 
     def model_name(self) -> str:
-        """Return the stub model identifier."""
+        """Return the stub model identifier.
+
+        Returns:
+            The stub model identifier.
+
+        """
         return self._model

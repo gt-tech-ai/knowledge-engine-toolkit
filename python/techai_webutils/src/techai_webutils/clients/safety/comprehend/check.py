@@ -20,6 +20,10 @@ def _redact(text: str, entities: list[dict[str, Any]]) -> str:
     """Return ``text`` with every entity span replaced.
 
     Right to left so offsets stay valid.
+
+    Returns:
+        ``text`` with every entity span replaced.
+
     """
     for entity in sorted(entities, key=lambda e: int(e["BeginOffset"]), reverse=True):
         begin, end = int(entity["BeginOffset"]), int(entity["EndOffset"])
@@ -43,7 +47,12 @@ class ComprehendSafetyCheck(SafetyCheck):
 
     @override
     async def scan(self, text: str, *, kind: ScanKind) -> SafetyResult:
-        """Return the verdict for ``text`` from Comprehend's detected PII entities."""
+        """Return the verdict for ``text`` from Comprehend's detected PII entities.
+
+        Returns:
+            The verdict for ``text`` from Comprehend's detected PII entities.
+
+        """
         response = await self._client.call(
             "detect_pii_entities", Text=text, LanguageCode=self._language
         )

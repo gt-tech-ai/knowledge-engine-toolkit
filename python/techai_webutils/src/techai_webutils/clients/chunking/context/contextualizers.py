@@ -40,7 +40,12 @@ class NoContextualizer(ChunkContextualizer):
     async def contextualize(
         self, document: ContextDocument, chunks: Sequence[StructuredChunk]
     ) -> list[str]:
-        """Return the chunk texts."""
+        """Return the chunk texts.
+
+        Returns:
+            The chunk texts.
+
+        """
         return [chunk.text for chunk in chunks]
 
 
@@ -54,6 +59,10 @@ class HeaderContextualizer(ChunkContextualizer):
         """Return each chunk's text after its header lines.
 
         (none when there is nothing to say).
+
+        Returns:
+            Each chunk's text after its header lines.
+
         """
         return [_with_header(document.name, chunk) for chunk in chunks]
 
@@ -79,7 +88,12 @@ class LlmContextualizer(ChunkContextualizer):
     async def contextualize(
         self, document: ContextDocument, chunks: Sequence[StructuredChunk]
     ) -> list[str]:
-        """Return each chunk's text after the model's context for it."""
+        """Return each chunk's text after the model's context for it.
+
+        Returns:
+            Each chunk's text after the model's context for it.
+
+        """
         excerpt = document.text[: self._max_document_chars]
         return list(
             await asyncio.gather(*(self._one(document, excerpt, c) for c in chunks))
@@ -88,7 +102,13 @@ class LlmContextualizer(ChunkContextualizer):
     async def _one(
         self, document: ContextDocument, excerpt: str, chunk: StructuredChunk
     ) -> str:
-        """Ask the model for one chunk's context."""
+        """Ask the model for one chunk's context.
+
+        Returns:
+            The context followed by the chunk's text, or the chunk's text when the model
+            gives none.
+
+        """
         prompt = (
             f"<document name={document.name!r}>\n{excerpt}\n</document>\n"
             f"<chunk>\n{chunk.text}\n</chunk>"
@@ -106,6 +126,10 @@ def _with_header(name: str, chunk: StructuredChunk) -> str:
     """Return ``chunk.text`` after its ``name > section`` line and caption.
 
     When there are any.
+
+    Returns:
+        ``chunk.text`` after its ``name > section`` line and caption.
+
     """
     lines = [_SEPARATOR.join(part for part in (name, *chunk.section_path) if part)]
     if chunk.caption:

@@ -43,6 +43,10 @@ def _add_trace_context(
 
     Enables log<->trace correlation in the log and trace backends. No-op when there
     is no active, recording span.
+
+    Returns:
+        The event dict.
+
     """
     ctx = otel_trace.get_current_span().get_span_context()
     if ctx.is_valid:
@@ -66,7 +70,12 @@ def _add_git_sha(
     _method_name: str,
     event_dict: EventDict,
 ) -> EventDict:
-    """Inject the deployed commit (GIT_SHA env = image tag) for GitHub deep-links."""
+    """Inject the deployed commit (GIT_SHA env = image tag) for GitHub deep-links.
+
+    Returns:
+        The event dict.
+
+    """
     if _GIT_SHA:
         event_dict["git_sha"] = _GIT_SHA
     return event_dict
@@ -82,6 +91,10 @@ def _redact_value(value: object) -> object:
 
     Dict keys are kept as they are; a tuple becomes a list (as JSON would render it);
     every other value passes through unchanged.
+
+    Returns:
+        The redacted value.
+
     """
     if isinstance(value, str):
         return redact_pii(value)
@@ -108,6 +121,10 @@ def _redact_pii_fields(
     Installed only when ``configure_logging(redact_pii=True)`` (the ``logging_redact_pii``
     setting). Pipeline-stamped structural fields are skipped; strings nested in dicts,
     lists and tuples are redacted too; other values pass through.
+
+    Returns:
+        The event dict.
+
     """
     for key, value in event_dict.items():
         if key not in _STRUCTURAL_KEYS:
@@ -153,7 +170,12 @@ class StructlogLogger(Logger):
         self._inner.exception(msg, **kwargs)
 
     def bind(self, **kwargs: object) -> Logger:
-        """Return a new logger with the given key-value pairs bound."""
+        """Return a new logger with the given key-value pairs bound.
+
+        Returns:
+            A new logger with the given key-value pairs bound.
+
+        """
         return StructlogLogger(self._inner.bind(**kwargs))
 
 
@@ -198,6 +220,10 @@ def _parse_level(level: str) -> int:
 
     An unknown name warns and defaults to INFO rather than silently swallowing a typo
     (the prior getattr(logging, ..., INFO) fallback hid mistakes).
+
+    Returns:
+        The numeric level, or ``logging.INFO``.
+
     """
     numeric = getattr(logging, level.upper(), None)
     if not isinstance(numeric, int):
@@ -227,6 +253,9 @@ def configure_logging(
             (``foundation.logger.redact.redact_pii``).
 
     Returns: A configured structlog bound logger.
+
+    Returns:
+        The configured logger.
 
     """
     target_stream: TextIO = cast("TextIO", stream or sys.stdout)

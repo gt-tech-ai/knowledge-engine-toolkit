@@ -137,6 +137,10 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         """Return the shared bedrock-agent client, opening.
 
         (and caching) it on first use.
+
+        Returns:
+            The shared bedrock-agent client, opening.
+
         """
         if self._client is None:
             self._stack = stack = AsyncExitStack()
@@ -158,7 +162,12 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
             self._client = None
 
     async def __aenter__(self) -> Self:
-        """Enter the async context; the shared client opens lazily on first call."""
+        """Enter the async context; the shared client opens lazily on first call.
+
+        Returns:
+            This instance.
+
+        """
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -179,6 +188,13 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         stack backs off. Other ``ClientError``s (``ValidationException`` included)
         propagate unchanged. A non-empty ``round_id`` sends a ``clientToken`` derived from
         the knowledge base, data source and round, so a retried start is idempotent.
+
+        Returns:
+            A Bedrock ingestion job for the KB data source.
+
+        Raises:
+            ClientError: A Bedrock error ``start_error`` does not map.
+
         """
         client = await self._agent_client()
         kwargs: dict[str, str] = {
@@ -206,7 +222,12 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         data_source_id: str,
         job_id: str,
     ) -> IngestionJob:
-        """Fetch the current state of a Bedrock ingestion job."""
+        """Fetch the current state of a Bedrock ingestion job.
+
+        Returns:
+            The current state of a Bedrock ingestion job.
+
+        """
         client = await self._agent_client()
         resp = await client.get_ingestion_job(
             knowledgeBaseId=knowledge_base_id,
@@ -224,6 +245,15 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         landed — is mapped to ``core/errors.ConflictError`` (consistent with ``start``) so
         the caller treats it as "already stopped/finished" rather than a raw SDK error;
         other ``ClientError``s propagate.
+
+        Returns:
+            The job after the stop request.
+
+        Raises:
+            ClientError: A Bedrock error ``start_error`` does not map.
+            ConflictError: Bedrock ingestion job ``job_id`` already terminal; nothing to
+                stop.
+
         """
         client = await self._agent_client()
         try:
@@ -248,6 +278,10 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         """List every document in the KB data source.
 
         Following ``nextToken`` across all pages.
+
+        Returns:
+            Every document in the KB data source.
+
         """
         client = await self._agent_client()
         docs: list[KnowledgeBaseDocument] = []
@@ -284,6 +318,10 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
 
         Calls are at least ``cohort_request_interval_seconds`` apart, and the lookup ends
         once every URI has been asked for, instead of paging the whole data source.
+
+        Yields:
+            Each document in the cohort.
+
         """
         client = await self._agent_client()
         for n, batch in enumerate(cohort_batches(sorted(set(s3_uris)))):

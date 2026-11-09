@@ -30,6 +30,10 @@ def _llm() -> MagicMock:
     """Return an ``LLMProvider`` mock returning a fixed response.
 
     With 42 input / 7 output tokens.
+
+    Returns:
+        An ``LLMProvider`` mock returning a fixed response.
+
     """
     inner = MagicMock(spec=LLMProvider)
     inner.complete = AsyncMock(
@@ -176,6 +180,10 @@ def _span(trace_id: int, span_id: int) -> MagicMock:
     """Return a mock current span whose context carries the given.
 
     (valid) trace and span ids.
+
+    Returns:
+        A mock current span whose context carries the given.
+
     """
     span = MagicMock()
     span.get_span_context.return_value = SpanContext(

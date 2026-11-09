@@ -22,7 +22,12 @@ if TYPE_CHECKING:
 
 
 def _transport() -> Transport:
-    """Return the memory Kind on a fresh broker, retrying twice with a 10 ms backoff."""
+    """Return the memory Kind on a fresh broker, retrying twice with a 10 ms backoff.
+
+    Returns:
+        The memory Kind on a fresh broker, retrying twice with a 10 ms backoff.
+
+    """
     broker = InMemoryBroker()
     return Transport(
         publisher=lambda limit: InMemoryPublisher(broker, max_payload_bytes=limit),

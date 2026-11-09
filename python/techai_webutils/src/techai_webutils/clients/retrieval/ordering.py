@@ -34,6 +34,9 @@ class PassageOrder(StrEnum):
 def order_passages[T](passages: Sequence[T], order: PassageOrder) -> list[T]:
     """Return ``passages`` (best first) in ``order``.
 
+    Returns:
+        ``passages`` (best first) in ``order``.
+
     Raises:
         AppValueError: An unknown order (``INVALID_INPUT``).
 
@@ -62,7 +65,12 @@ class OrderingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retrieva
         filters: dict[str, str] | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
-        """Retrieve from the inner engine and reorder the passages."""
+        """Retrieve from the inner engine and reorder the passages.
+
+        Returns:
+            The retrieved passages.
+
+        """
         results = await self._inner.retrieve(
             query, top_k=top_k, filters=filters, index_id=index_id
         )
@@ -76,6 +84,10 @@ def passage_header(number: int, passage: RetrievalResult) -> str:
 
     The section is the passage's ``section_path`` metadata; parts a passage lacks are left
     out.
+
+    Returns:
+        A prompt header for passage ``number``.
+
     """
     parts = [passage.document_name or passage.document_id]
     if section := passage.metadata.get("section_path"):

@@ -30,7 +30,12 @@ _DOC = SinkDocument(
 def _store(
     index: str | None = "idx", model: tuple[str, str] = ("m", "2")
 ) -> tuple[MagicMock, MagicMock]:
-    """Return a mocked store and the org-scoped view its ``for_org`` hands out."""
+    """Return a mocked store and the org-scoped view its ``for_org`` hands out.
+
+    Returns:
+        A mocked store and the org-scoped view its ``for_org`` hands out.
+
+    """
     scoped = MagicMock(spec=OpenSearchVectorStore)
     scoped.current_index = AsyncMock(return_value=index)
     scoped.index_model = AsyncMock(return_value=model)
@@ -46,7 +51,12 @@ def _store(
 
 
 def _sink(store: MagicMock) -> VectorStoreSink:
-    """Build the opensearch sink through the factory over ``store``."""
+    """Build the opensearch sink through the factory over ``store``.
+
+    Returns:
+        The opensearch sink through the factory over ``store``.
+
+    """
     sink = sink_from_config(
         SinkConfig(kind=SinkKind.OPENSEARCH, collection="docs"), store=store
     )

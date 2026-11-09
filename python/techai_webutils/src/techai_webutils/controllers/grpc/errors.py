@@ -47,6 +47,10 @@ def safe_status(err: AppError) -> tuple[grpc.StatusCode, str]:
 
     A rejection the controller tier made (a denial, a rate limit, a timeout) answers with
     this, so its own text never reaches the caller (Go ``wire.SanitizeGRPC``).
+
+    Returns:
+        The status of ``err``'s code carrying only that code's client-safe message.
+
     """
     code = _CODE_MAP.get(err.code, grpc.StatusCode.INTERNAL)
     return code, SAFE_MESSAGE.get(err.code, "internal error")

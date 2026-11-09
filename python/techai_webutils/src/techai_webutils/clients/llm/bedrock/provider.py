@@ -71,6 +71,10 @@ def _converse_args(
     from its own config); otherwise the conservative provider defaults apply. ``topP`` is
     deliberately not sent: Claude on Converse rejects ``temperature`` and ``topP``
     together, and the retrieval path tunes temperature.
+
+    Returns:
+        The model-agnostic Converse request from messages + config.
+
     """
     system = [{"text": m.content} for m in messages if m.role == "system"]
     turns = [
@@ -104,6 +108,10 @@ def _to_app_error(exc: ClientError | BotoCoreError) -> AppError:
     5xx / model-timeout → transient ``UNAVAILABLE``; access-denied, ``ResourceNotFound``,
     validation → terminal ``INTERNAL``). An unwrapped ``ClientError`` would also escape
     structlog as a multi-KB frame-locals dump.
+
+    Returns:
+        The coded error.
+
     """
     return botocore_error_to_app_error(exc, "bedrock converse")
 
@@ -115,6 +123,13 @@ async def _coded_events(
 
     A ``ClientError`` / ``BotoCoreError`` raised while iterating becomes a coded
     ``AppError`` (``_to_app_error``), so the stream never leaks a raw botocore exception.
+
+    Yields:
+        Each ConverseStream event.
+
+    Raises:
+        _to_app_error: The coded error for a provider failure.
+
     """
     try:
         async for event in stream:
@@ -150,6 +165,10 @@ class BedrockLlmProvider(LLMProvider):
         """Return the shared bedrock-runtime client, opening.
 
         (and caching) it on first use.
+
+        Returns:
+            The shared bedrock-runtime client, opening.
+
         """
         if self._client is None:
             self._stack = stack = AsyncExitStack()
@@ -171,7 +190,12 @@ class BedrockLlmProvider(LLMProvider):
             self._client = None
 
     async def __aenter__(self) -> Self:
-        """Enter the async context; the shared client opens lazily on first call."""
+        """Enter the async context; the shared client opens lazily on first call.
+
+        Returns:
+            This instance.
+
+        """
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -185,6 +209,13 @@ class BedrockLlmProvider(LLMProvider):
 
         Bedrock/botocore failures are wrapped in a coded ``AppError`` (``_to_app_error``)
         so a raw ``ClientError`` never crosses the provider boundary.
+
+        Returns:
+            The completion.
+
+        Raises:
+            _to_app_error: The coded error for a provider failure.
+
         """
         client = await self._runtime_client()
         try:
@@ -213,6 +244,10 @@ class BedrockLlmProvider(LLMProvider):
         """Return an async iterator of text deltas.
 
         From a streaming Converse invocation.
+
+        Returns:
+            An async iterator of text deltas.
+
         """
         return text_only(await self.stream_with_usage(messages, config))
 
@@ -224,6 +259,10 @@ class BedrockLlmProvider(LLMProvider):
         """Return text deltas from a streaming Converse invocation.
 
         Then its ``metadata`` usage.
+
+        Returns:
+            Text deltas from a streaming Converse invocation.
+
         """
         return self._stream_deltas(messages, config)
 
@@ -241,6 +280,13 @@ class BedrockLlmProvider(LLMProvider):
         sent no ``metadata``). Bedrock/botocore failures (on open or mid-stream) are
         wrapped in a coded ``AppError`` (``_to_app_error``); a ``GeneratorExit`` from
         client cancellation propagates untouched.
+
+        Yields:
+            A streaming Converse invocation and yield contentBlockDelta text deltas.
+
+        Raises:
+            _to_app_error: The coded error for a provider failure.
+
         """
         client = await self._runtime_client()
         try:
@@ -269,5 +315,10 @@ class BedrockLlmProvider(LLMProvider):
             )
 
     def model_name(self) -> str:
-        """Return the configured Bedrock model id."""
+        """Return the configured Bedrock model id.
+
+        Returns:
+            The configured Bedrock model id.
+
+        """
         return self._model

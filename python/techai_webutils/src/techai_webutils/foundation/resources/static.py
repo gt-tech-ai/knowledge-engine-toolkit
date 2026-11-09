@@ -16,5 +16,10 @@ class StaticResourceProbe:
         self._limits = limits
 
     def limits(self) -> ResourceLimits:
-        """Return the configured limits."""
+        """Return the configured limits.
+
+        Returns:
+            The configured limits.
+
+        """
         return self._limits

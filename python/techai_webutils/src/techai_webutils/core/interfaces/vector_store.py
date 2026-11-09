@@ -122,6 +122,10 @@ class VectorStore(ManagedResource, ABC):
 
         Derived from ``stored_metadata``, so a store answers both probes by implementing
         that one.
+
+        Returns:
+            The subset of ``ids`` already stored in ``collection``.
+
         """
         return set(await self.stored_metadata(collection, ids))
 

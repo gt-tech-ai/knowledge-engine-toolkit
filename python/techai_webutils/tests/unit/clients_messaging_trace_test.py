@@ -45,7 +45,12 @@ _TRACER = TracerProvider().get_tracer("test")
 
 
 def _trace_id() -> str:
-    """Return the current span's trace id as 32 hex digits."""
+    """Return the current span's trace id as 32 hex digits.
+
+    Returns:
+        The current span's trace id as 32 hex digits.
+
+    """
     return format(trace.get_current_span().get_span_context().trace_id, "032x")
 
 

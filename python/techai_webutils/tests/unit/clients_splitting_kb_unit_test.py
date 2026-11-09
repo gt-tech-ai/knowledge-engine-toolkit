@@ -20,7 +20,12 @@ from techai_webutils.core.interfaces.splitter import DocumentSplitter
 
 
 def _page(number: int, size: int) -> Page:
-    """Return a page whose UTF-8 text is exactly ``size`` bytes."""
+    """Return a page whose UTF-8 text is exactly ``size`` bytes.
+
+    Returns:
+        A page whose UTF-8 text is exactly ``size`` bytes.
+
+    """
     return Page(page_number=number, text="x" * size)
 
 

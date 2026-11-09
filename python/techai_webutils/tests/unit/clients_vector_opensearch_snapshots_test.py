@@ -36,6 +36,10 @@ def _client(stored: Mapping[str, object] | None = None) -> MagicMock:
     """Return a mocked client whose SM lookup answers ``stored``.
 
     (a 404 body when ``None``).
+
+    Returns:
+        A mocked client whose SM lookup answers ``stored``.
+
     """
     client = MagicMock()
     lookup = stored if stored is not None else {"status": 404, "error": "not found"}
@@ -46,7 +50,12 @@ def _client(stored: Mapping[str, object] | None = None) -> MagicMock:
 
 
 def _calls(client: MagicMock) -> list[tuple[str, str, dict[str, object]]]:
-    """Return each SM request as ``(method, path, params)``."""
+    """Return each SM request as ``(method, path, params)``.
+
+    Returns:
+        Each SM request as ``(method, path, params)``.
+
+    """
     perform = cast("AsyncMock", client.transport.perform_request)
     return [(c.args[0], c.args[1], c.kwargs["params"]) for c in perform.call_args_list]
 

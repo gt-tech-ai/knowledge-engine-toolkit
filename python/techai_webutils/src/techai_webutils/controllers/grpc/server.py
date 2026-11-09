@@ -51,7 +51,12 @@ class ServerConfig:
 
 
 def _options(cfg: ServerConfig) -> list[tuple[str, Any]]:
-    """Build the gRPC channel-arg options (message-size limits) from the config."""
+    """Build the gRPC channel-arg options (message-size limits) from the config.
+
+    Returns:
+        The gRPC channel-arg options (message-size limits) from the config.
+
+    """
     return [
         ("grpc.max_send_message_length", cfg.max_send_message_length),
         ("grpc.max_receive_message_length", cfg.max_receive_message_length),
@@ -91,6 +96,10 @@ class GracefulServer:
 
         The default service is marked SERVING in ``start()`` (the aio health ``set`` is a
         coroutine).
+
+        Returns:
+            The async gRPC server.
+
         """
         server = grpc.aio.server(
             interceptors=self._cfg.interceptors or None,
@@ -180,6 +189,9 @@ def create_server(config: ServerConfig | None = None) -> grpc.aio.Server:
         config: Server configuration. Uses defaults if None.
 
     Returns: Configured but not-yet-started async gRPC server.
+
+    Returns:
+        A configured async gRPC server with the health service registered.
 
     """
     cfg = config or ServerConfig()

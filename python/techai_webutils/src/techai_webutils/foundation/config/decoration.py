@@ -206,7 +206,12 @@ class Layers:
 
 
 def on(switch: bool | None) -> bool:  # noqa: FBT001 - a switch value, not a flag
-    """Report whether a layer switch is on (None is off)."""
+    """Report whether a layer switch is on (None is off).
+
+    Returns:
+        Whether the switch is on.
+
+    """
     return switch is True
 
 
@@ -216,6 +221,10 @@ def merge[T](base: T, over: T) -> T:
     A set switch or timeout (a field whose unset value is None, so zero still wins — a
     timeout of zero turns it off) and a non-zero tuning value win; anything else keeps
     ``base``.
+
+    Returns:
+        ``base`` with every value ``over`` sets laid on top.
+
     """
     changes: dict[str, object] = {}
     for f in dataclasses.fields(typing.cast("typing.Any", base)):
@@ -247,6 +256,10 @@ class Tier:
         shortest, then ``name``'s own: ``api.documents.create`` gets the defaults,
         ``api``, ``api.documents``, then its own, so one key covers a group and a deeper
         key one component.
+
+        Returns:
+            The layers of the component named ``name`` (Go ``Tier.For``).
+
         """
         return merge(self.defaults, self.overriding(name))
 
@@ -257,6 +270,10 @@ class Tier:
 
         ``defaults`` when the tier has any, then each override of a dotted prefix of
         ``name`` from the shortest, then ``name``'s own.
+
+        Returns:
+            The config keys ``layers_for(name)`` merges.
+
         """
         out = ["defaults"] if self.defaults != Layers() else []
         parts = name.split(".")
@@ -270,6 +287,10 @@ class Tier:
         """Return the layers the overrides lay over the defaults.
 
         For ``name`` (Go ``Overriding``).
+
+        Returns:
+            The layers the overrides lay over the defaults.
+
         """
         layers = Layers()
         parts = name.split(".")
@@ -283,6 +304,10 @@ class Tier:
         """Lay ``over`` on this tier: its defaults over these.
 
         Each override over the same name's.
+
+        Returns:
+            The merged tier.
+
         """
         overrides = dict(self.overrides)
         for name, layers in over.overrides.items():
@@ -325,12 +350,21 @@ class DecorationConfig:
         """Return the decoration of the tier named ``name`` ("controller", "client", …).
 
         Or None.
+
+        Returns:
+            The decoration of the tier named ``name`` ("controller", "client", …).
+
         """
         attr = _TIER_FIELDS.get(name)
         return None if attr is None else typing.cast("Tier", getattr(self, attr))
 
     def overlay(self, over: DecorationConfig) -> DecorationConfig:
-        """Lay ``over`` on this config, tier by tier (see ``Tier.overlay``)."""
+        """Lay ``over`` on this config, tier by tier (see ``Tier.overlay``).
+
+        Returns:
+            The merged config.
+
+        """
         return DecorationConfig(**{
             attr: getattr(self, attr).overlay(getattr(over, attr))
             for attr in _TIER_FIELDS.values()
@@ -355,6 +389,10 @@ def sections(config: DecorationConfig) -> list[tuple[str, str, Tier]]:
     """Return every tier's decoration as (config key, tier name, tier).
 
     In config order (Go ``Sections``).
+
+    Returns:
+        Every tier's decoration as (config key, tier name, tier).
+
     """
     return [(attr, name, getattr(config, attr)) for name, attr in _TIER_FIELDS.items()]
 
@@ -368,6 +406,10 @@ def default_config() -> DecorationConfig:
     breaker around the storage, outbox and Prometheus clients. Every other resilience
     layer, the controllers' rate limit and bulkhead included, is off; a controller's
     bulkhead, once enabled, sheds.
+
+    Returns:
+        Today's decoration (the same as Go's ``DefaultConfig``).
+
     """
     repos = _base(observe=False)
     repos = dataclasses.replace(
@@ -411,6 +453,10 @@ def _base(*, observe: bool) -> Layers:
     """Return a tier's default layers: recovery and auth on.
 
     Observability as ``observe`` says.
+
+    Returns:
+        A tier's default layers: recovery and auth on.
+
     """
     return Layers(
         recovery=True,
@@ -455,6 +501,10 @@ def from_mapping(section: object) -> DecorationConfig:
 
     A malformed section (a non-mapping, a switch that is not a bool, a bad duration or
     number) raises ``AppValueError``.
+
+    Returns:
+        A ``decoration`` section and lay it over ``default_config()``.
+
     """
     return default_config().overlay(_decode(DecorationConfig, section, SECTION_KEY))
 
@@ -463,13 +513,25 @@ def load(loader: ConfigLoader) -> DecorationConfig:
     """Read the decoration section from ``loader`` over ``default_config()``.
 
     An absent section keeps the default and a partial one changes only what it sets.
+
+    Returns:
+        The decoration section from ``loader`` over ``default_config()``.
+
     """
     section = loader.get(SECTION_KEY)
     return default_config() if section is None else from_mapping(section)
 
 
 def _decode[T](cls: type[T], raw: object, path: str) -> T:
-    """Decode the mapping ``raw`` into the dataclass ``cls``, field by field."""
+    """Decode the mapping ``raw`` into the dataclass ``cls``, field by field.
+
+    Returns:
+        The mapping ``raw`` into the dataclass ``cls``, field by field.
+
+    Raises:
+        AppValueError: ``path``: expected a mapping, got ``type(raw).__name__``.
+
+    """
     if not isinstance(raw, Mapping):
         msg = f"{path}: expected a mapping, got {type(raw).__name__}"
         raise AppValueError(msg)
@@ -488,7 +550,15 @@ def _decode[T](cls: type[T], raw: object, path: str) -> T:
 def _decode_value(
     hint: object, f: dataclasses.Field[object], raw: object, path: str
 ) -> object:
-    """Decode one field's raw value by its type hint."""
+    """Decode one field's raw value by its type hint.
+
+    Returns:
+        One field's raw value by its type hint.
+
+    Raises:
+        AppValueError: ``path``: expected a bool, got ``raw``.
+
+    """
     if raw is None:
         if f.default is not dataclasses.MISSING:
             return f.default
@@ -510,7 +580,12 @@ def _decode_value(
 
 
 def _decode_tier(raw: object, path: str) -> Tier:
-    """Decode a tier: its defaults and its overrides, each a Layers."""
+    """Decode a tier: its defaults and its overrides, each a Layers.
+
+    Returns:
+        A tier: its defaults and its overrides, each a Layers.
+
+    """
     tier = _decode(
         Tier, {k: v for k, v in _mapping(raw, path).items() if k == "defaults"}, path
     )
@@ -525,6 +600,10 @@ def _decode_overrides(raw: object, path: str, prefix: str) -> dict[str, Layers]:
 
     Components are named with dots (``outbox.sqs``); an override may be written as one
     dotted key or nested by segment, and a segment that sets no layer is no override.
+
+    Returns:
+        The overrides beneath ``prefix`` by full name.
+
     """
     out: dict[str, Layers] = {}
     for key, value in _mapping(raw, path).items():
@@ -544,7 +623,15 @@ _LAYER_KEYS = frozenset(f.name for f in dataclasses.fields(Layers))
 
 
 def _mapping(raw: object, path: str) -> Mapping[str, object]:
-    """Return ``raw`` as a mapping, or raise ``AppValueError``."""
+    """Return ``raw`` as a mapping, or raise ``AppValueError``.
+
+    Returns:
+        ``raw`` as a mapping, or raise ``AppValueError``.
+
+    Raises:
+        AppValueError: ``path``: expected a mapping, got ``type(raw).__name__``.
+
+    """
     if not isinstance(raw, Mapping):
         msg = f"{path}: expected a mapping, got {type(raw).__name__}"
         raise AppValueError(msg)
@@ -552,7 +639,15 @@ def _mapping(raw: object, path: str) -> Mapping[str, object]:
 
 
 def _decode_scalar(hint: object, raw: object, path: str) -> object:
-    """Decode an int, float or str field."""
+    """Decode an int, float or str field.
+
+    Returns:
+        An int, float or str field.
+
+    Raises:
+        AppValueError: ``path``: invalid value ``raw``.
+
+    """
     try:
         if hint is int and not isinstance(raw, bool):
             return int(typing.cast("int", raw))
@@ -568,6 +663,11 @@ def _decode_scalar(hint: object, raw: object, path: str) -> object:
 
 
 def _require(ok: bool, msg: str) -> None:  # noqa: FBT001 - a predicate, not a flag
-    """Raise ``AppValueError(msg)`` unless ``ok``."""
+    """Raise ``AppValueError(msg)`` unless ``ok``.
+
+    Raises:
+        AppValueError: The check failed.
+
+    """
     if not ok:
         raise AppValueError(msg)

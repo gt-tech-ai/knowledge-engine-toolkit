@@ -94,6 +94,10 @@ class DeliveryConfig:
         Or ``None``.
 
         With ``jitter`` the delay is drawn uniformly from ``[0, delay]`` (full jitter).
+
+        Returns:
+            The retry delay after failed delivery ``delivery`` (1-based).
+
         """
         if self.retry_backoff is None:
             return None
@@ -136,6 +140,9 @@ class SQSConfig:
     def queue_url_for(self, topic: str) -> str:
         """Return the queue URL ``topic`` is sent to and received from.
 
+        Returns:
+            The queue URL ``topic`` is sent to and received from.
+
         Raises:
             AppValueError: ``topic_queue_urls`` is set and does not map ``topic``.
 
@@ -161,6 +168,10 @@ class SQSConfig:
         client (publisher, subscriber, DLQ backend, per-app adapters) on one normalization
         — a new client that forgets the ``or None`` guard cannot reintroduce the bug.
         Mirrors the Go SQS client and the S3 client's kind gate.
+
+        Returns:
+            The keyword arguments.
+
         """
         return {
             "endpoint_url": self.endpoint or None,

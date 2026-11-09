@@ -47,7 +47,12 @@ def _serve(path: str, status: int = 200) -> None:
 
 
 def _http_logs(raw: str) -> list[dict[str, object]]:
-    """Return the rendered 'http request' log entries in ``raw``."""
+    """Return the rendered 'http request' log entries in ``raw``.
+
+    Returns:
+        The rendered 'http request' log entries in ``raw``.
+
+    """
     entries = [json.loads(line) for line in raw.strip().split("\n") if line]
     return [e for e in entries if e.get("message") == "http request"]
 

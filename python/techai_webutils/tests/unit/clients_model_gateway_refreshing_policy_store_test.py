@@ -28,12 +28,22 @@ _FALLBACK = routing_policy_store_from_config({
 
 
 def _pinned(model: str) -> RoutingPolicy:
-    """Return a policy pinning ``generate`` to ``model``."""
+    """Return a policy pinning ``generate`` to ``model``.
+
+    Returns:
+        A policy pinning ``generate`` to ``model``.
+
+    """
     return RoutingPolicy(pins={"generate": model})
 
 
 def _metrics() -> tuple[MagicMock, MagicMock]:
-    """Return a mocked metrics provider and the counter it hands out."""
+    """Return a mocked metrics provider and the counter it hands out.
+
+    Returns:
+        A mocked metrics provider and the counter it hands out.
+
+    """
     counter = MagicMock(spec=MetricCounter)
     metrics = MagicMock(spec=MetricsProvider)
     metrics.counter.return_value = counter

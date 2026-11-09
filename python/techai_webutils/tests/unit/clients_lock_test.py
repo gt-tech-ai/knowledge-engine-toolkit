@@ -27,6 +27,10 @@ def _mock_conn(*, lock_result: bool = True) -> AsyncMock:
     """Build a mocked asyncpg connection: ``fetchval`` returns ``lock_result``.
 
     Close/terminate/is_closed stubbed.
+
+    Returns:
+        A mocked asyncpg connection: ``fetchval`` returns ``lock_result``.
+
     """
     conn = AsyncMock()
     conn.fetchval = AsyncMock(return_value=lock_result)

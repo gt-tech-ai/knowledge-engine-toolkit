@@ -37,6 +37,10 @@ class CacheVerifierPrompt:
         """Return the messages asking whether ``query`` asks what ``cached_query``.
 
         Asked.
+
+        Returns:
+            The messages asking whether ``query`` asks what ``cached_query``.
+
         """
         return [
             LLMMessage(role="system", content=self.instruction),
@@ -62,7 +66,12 @@ class LlmCacheVerifier(CacheVerifier):
 
     @override
     async def same_question(self, cached_query: str, query: str) -> bool:
-        """Return whether the model answers yes; a raising call counts as no."""
+        """Return whether the model answers yes; a raising call counts as no.
+
+        Returns:
+            Whether the model answers yes; a raising call counts as no.
+
+        """
         try:
             response = await self._llm.complete(
                 self._prompt.messages(cached_query, query)

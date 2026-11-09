@@ -96,6 +96,15 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         ``botocore_error_to_app_error`` (throttling / 5xx / connection → ``UNAVAILABLE``,
         otherwise ``INTERNAL``), and a vector whose length differs from the configured
         dimension is ``INTERNAL``.
+
+        Returns:
+            The embedding of the text.
+
+        Raises:
+            AppError: Bedrock model ``self._model`` returned a ``len(vector)``-d vector,
+                expected ``self._dimension`` (check the embedding dimension config).
+            botocore_error_to_app_error: Bedrock embed.
+
         """
         body = json.dumps({
             "inputText": text,
@@ -132,17 +141,31 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         """Embed each text with its own call (Titan v2 has no batch body), concurrently.
 
         In input order.
+
+        Returns:
+            One embedding per text, in input order.
+
         """
         return list(
             await asyncio.gather(*(self.embed(t, input_type=input_type) for t in texts))
         )
 
     def dimension(self) -> int:
-        """Return the configured vector size (Titan v2 supports 256, 512 or 1024)."""
+        """Return the configured vector size (Titan v2 supports 256, 512 or 1024).
+
+        Returns:
+            The configured vector size (Titan v2 supports 256, 512 or 1024).
+
+        """
         return self._dimension
 
     def model_name(self) -> str:
-        """Return the Bedrock model id."""
+        """Return the Bedrock model id.
+
+        Returns:
+            The Bedrock model id.
+
+        """
         return self._model
 
     async def aclose(self) -> None:
@@ -150,7 +173,12 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         await self._client.aclose()
 
     async def __aenter__(self) -> Self:
-        """Enter the async context; the client opens lazily on first call."""
+        """Enter the async context; the client opens lazily on first call.
+
+        Returns:
+            This instance.
+
+        """
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -162,6 +190,10 @@ async def _read(stream: _Readable) -> bytes:
     """Read an InvokeModel response body.
 
     Aiobotocore's async ``StreamingBody`` or a sync stream.
+
+    Returns:
+        An InvokeModel response body.
+
     """
     data = stream.read()
     if isinstance(data, bytes):

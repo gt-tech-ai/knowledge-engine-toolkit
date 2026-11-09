@@ -51,6 +51,10 @@ class SemaphoreBulkhead(Bulkhead):
         """Run fn within the concurrency limit.
 
         Blocks until a slot is available.
+
+        Returns:
+            What ``fn`` returns.
+
         """
         async with self._semaphore:
             return await fn()
@@ -59,6 +63,13 @@ class SemaphoreBulkhead(Bulkhead):
         """Attempt to run fn without blocking.
 
         Raises ``BulkheadFullError`` if no slots are available.
+
+        Returns:
+            What ``fn`` returns.
+
+        Raises:
+            BulkheadFullError: No slot is free.
+
         """
         if not self._semaphore._value:  # noqa: SLF001
             raise BulkheadFullError
@@ -148,7 +159,12 @@ class AdaptiveBulkhead(Bulkhead):
         return int(self._limit)
 
     async def execute(self, fn: Callable[[], Awaitable[object]]) -> object:
-        """Run fn within the current adaptive limit, blocking until a slot frees."""
+        """Run fn within the current adaptive limit, blocking until a slot frees.
+
+        Returns:
+            What ``fn`` returns.
+
+        """
         async with self._cond:
             while self._in_flight >= int(self._limit):
                 await self._cond.wait()
@@ -159,6 +175,13 @@ class AdaptiveBulkhead(Bulkhead):
         """Run fn only if a slot is immediately available.
 
         Else raise ``BulkheadFullError``.
+
+        Returns:
+            What ``fn`` returns.
+
+        Raises:
+            BulkheadFullError: No slot is free.
+
         """
         async with self._cond:
             if self._in_flight >= int(self._limit):
@@ -170,6 +193,10 @@ class AdaptiveBulkhead(Bulkhead):
         """Run the acquired op.
 
         Then release the slot and adjust the limit from its sample.
+
+        Returns:
+            What ``fn`` returns.
+
         """
         start = time.monotonic()
         op_err = False
@@ -200,7 +227,15 @@ class AdaptiveBulkhead(Bulkhead):
 
 
 def bulkhead_from_config(config: BulkheadConfig) -> Bulkhead:
-    """Create a ``Bulkhead`` from config; raise ``ValueError`` on an unknown kind."""
+    """Create a ``Bulkhead`` from config; raise ``ValueError`` on an unknown kind.
+
+    Returns:
+        A ``Bulkhead`` from config; raise ``ValueError`` on an unknown kind.
+
+    Raises:
+        AppValueError: Unknown bulkhead kind: ``config.kind``.
+
+    """
     if config.kind == BulkheadKind.SEMAPHORE:
         return SemaphoreBulkhead(config.max_concurrent)
     if config.kind == BulkheadKind.ADAPTIVE:

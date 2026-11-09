@@ -77,6 +77,13 @@ def new_vector_store_from_config(
     — i.e. the process, since the store is wired once at startup (a server) or in a
     short-lived script. There is no separate teardown seam; the OS reclaims the connection
     on exit.
+
+    Returns:
+        The ``VectorStore`` selected by ``config.kind``.
+
+    Raises:
+        AppValueError: Unknown vector store kind: ``config.kind``.
+
     """
     if config.kind is VectorStoreKind.QDRANT:
         from qdrant_client import AsyncQdrantClient  # noqa: PLC0415
@@ -113,6 +120,9 @@ def opensearch_store_from_config(
     concrete stores are also ``SinkStore``s (index model, alias and metadata-update
     calls). ``metrics`` counts the domains a multi-domain search cuts at
     ``domain_deadline_seconds``.
+
+    Returns:
+        The single- or multi-domain OpenSearch store over the injected clients.
 
     Raises:
         AppValueError: No injected client, or a shard mapped to an unknown domain

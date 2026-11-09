@@ -59,13 +59,23 @@ _RESPONSE = LLMResponse(
 
 
 def _encode(result: object) -> bytes:
-    """Encode a response as JSON (the app's binding)."""
+    """Encode a response as JSON (the app's binding).
+
+    Returns:
+        A response as JSON (the app's binding).
+
+    """
     response = cast("LLMResponse", result)
     return json.dumps({"text": response.content, "model": response.model}).encode()
 
 
 def _decode(payload: bytes) -> object:
-    """Decode a cached payload into a zero-token response."""
+    """Decode a cached payload into a zero-token response.
+
+    Returns:
+        A cached payload into a zero-token response.
+
+    """
     body = json.loads(payload)
     return LLMResponse(
         content=body["text"],
@@ -77,12 +87,22 @@ def _decode(payload: bytes) -> object:
 
 
 def _encode_text(text: str, usage: StreamUsage | None) -> bytes:
-    """Encode a streamed answer in the unary format."""
+    """Encode a streamed answer in the unary format.
+
+    Returns:
+        A streamed answer in the unary format.
+
+    """
     return json.dumps({"text": text, "model": usage.model if usage else ""}).encode()
 
 
 def _decode_text(payload: bytes) -> tuple[str, str]:
-    """Return the cached text and model."""
+    """Return the cached text and model.
+
+    Returns:
+        The cached text and model.
+
+    """
     body = json.loads(payload)
     return body["text"], body["model"]
 
@@ -106,7 +126,12 @@ _HIT = CachedAnswer(
 
 
 def _cache(hit: CachedAnswer | None = None, error: Exception | None = None) -> MagicMock:
-    """Return a cache whose ``lookup`` answers ``hit`` (or raises ``error``)."""
+    """Return a cache whose ``lookup`` answers ``hit`` (or raises ``error``).
+
+    Returns:
+        A cache whose ``lookup`` answers ``hit`` (or raises ``error``).
+
+    """
     cache = MagicMock(spec=SemanticCache)
     cache.lookup = AsyncMock(side_effect=error, return_value=hit)
     cache.store = AsyncMock()
@@ -114,14 +139,24 @@ def _cache(hit: CachedAnswer | None = None, error: Exception | None = None) -> M
 
 
 def _inner() -> MagicMock:
-    """Return a provider answering ``_RESPONSE``."""
+    """Return a provider answering ``_RESPONSE``.
+
+    Returns:
+        A provider answering ``_RESPONSE``.
+
+    """
     inner = MagicMock(spec=LLMProvider)
     inner.complete = AsyncMock(return_value=_RESPONSE)
     return inner
 
 
 def _proxy(inner: MagicMock, cache: SemanticCache, **kwargs: Any) -> LLMProvider:  # noqa: ANN401
-    """Wrap ``inner`` on the generation path."""
+    """Wrap ``inner`` on the generation path.
+
+    Returns:
+        The proxy.
+
+    """
     options: dict[str, Any] = {
         "min_similarity": 0.95,
         "ttl_seconds": 600,
@@ -133,7 +168,12 @@ def _proxy(inner: MagicMock, cache: SemanticCache, **kwargs: Any) -> LLMProvider
 
 
 def _metrics() -> tuple[MagicMock, dict[str, MagicMock]]:
-    """Return a metrics provider and the counters it hands out, by name."""
+    """Return a metrics provider and the counters it hands out, by name.
+
+    Returns:
+        A metrics provider and the counters it hands out, by name.
+
+    """
     counters: dict[str, MagicMock] = {}
     metrics = MagicMock(spec=MetricsProvider)
     metrics.counter = MagicMock(
@@ -146,6 +186,10 @@ def _increments(counter: MagicMock) -> list[Any]:
     """Return ``counter``'s non-zero ``inc`` calls.
 
     (dropping the 0 that creates a series).
+
+    Returns:
+        ``counter``'s non-zero ``inc`` calls.
+
     """
     return [c for c in counter.inc.call_args_list if c.args[0]]
 
@@ -423,7 +467,15 @@ async def test_fact_publisher_error_never_turns_hit_into_miss() -> None:
 async def _items(
     *items: str | StreamUsage, fail: bool = False
 ) -> AsyncIterator[str | StreamUsage]:
-    """Yield ``items``, then raise when ``fail``."""
+    """Yield ``items``, then raise when ``fail``.
+
+    Yields:
+        ``items``, then raise when ``fail``.
+
+    Raises:
+        RuntimeError: Dropped.
+
+    """
     for item in items:
         await asyncio.sleep(0)
         yield item

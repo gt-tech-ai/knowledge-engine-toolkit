@@ -122,6 +122,10 @@ def _cap(text: str) -> str:
     """Redact PII in ``text`` and truncate it to ``_MAX_CONTENT_BYTES`` UTF-8 bytes.
 
     (never mid-character).
+
+    Returns:
+        The redacted text, within the byte cap.
+
     """
     encoded = redact_pii(text).encode("utf-8")[:_MAX_CONTENT_BYTES]
     return encoded.decode("utf-8", errors="ignore")
@@ -131,6 +135,10 @@ def _utcnow() -> datetime:
     """Return the current UTC time.
 
     (the fact timestamp; patched in tests as the clock boundary).
+
+    Returns:
+        The current UTC time.
+
     """
     return datetime.now(UTC)
 
@@ -139,6 +147,10 @@ def _idempotency_key(span: Span, step: str) -> str:
     """Return ``<trace_id>:<span_id>:<step>`` for a valid span, else a random key.
 
     (never collides).
+
+    Returns:
+        ``<trace_id>:<span_id>:<step>`` for a valid span, else a random key.
+
     """
     ctx = span.get_span_context()
     if not ctx.is_valid:
@@ -152,6 +164,10 @@ def _messages_arg(
     """Return the ``messages`` argument of an ``LLMProvider`` call.
 
     (positional or keyword).
+
+    Returns:
+        The ``messages`` argument of an ``LLMProvider`` call.
+
     """
     return cast("list[LLMMessage]", args[0] if args else kwargs.get("messages", []))
 
@@ -184,6 +200,10 @@ def _requested_model(args: tuple[object, ...], kwargs: dict[str, object]) -> str
     """Return the ``LLMConfig.model`` of an ``LLMProvider`` call.
 
     Or ``""`` when none was given.
+
+    Returns:
+        The ``LLMConfig.model`` of an ``LLMProvider`` call.
+
     """
     config = cast("LLMConfig | None", args[1] if len(args) > 1 else kwargs.get("config"))
     return config.model if config is not None and config.model else ""
@@ -272,6 +292,10 @@ class AiSpanEnricher:
         """Return the inner attribute.
 
         Enriched when it is a model call or ``retrieve``.
+
+        Returns:
+            The inner attribute.
+
         """
         attr = getattr(self._inner, name)
         if not callable(attr):
@@ -387,6 +411,10 @@ class AiSpanEnricher:
         """Wrap ``complete``: await it, then report the response's model.
 
         Usage and finish reason.
+
+        Returns:
+            The wrapped ``complete``.
+
         """
 
         @functools.wraps(attr)
@@ -420,6 +448,10 @@ class AiSpanEnricher:
         """Wrap ``stream``: consume ``stream_with_usage``, re-yield text.
 
         Report usage at exhaustion.
+
+        Returns:
+            The wrapped streaming call.
+
         """
         source = cast(
             "Callable[..., object]", getattr(self._inner, "stream_with_usage", attr)
@@ -430,6 +462,10 @@ class AiSpanEnricher:
         """Wrap ``stream_with_usage``: re-yield every item, ``StreamUsage`` included.
 
         And report it.
+
+        Returns:
+            The wrapped streaming call.
+
         """
         return self._wrap_streamed(attr, attr, keep_usage=True)
 
@@ -443,6 +479,10 @@ class AiSpanEnricher:
         """Wrap a streamed call: open ``source`` now.
 
         Relay its items and report at exhaustion.
+
+        Returns:
+            The wrapped streaming call.
+
         """
 
         @functools.wraps(attr)
@@ -481,6 +521,10 @@ class AiSpanEnricher:
         ``stream_with_usage`` path). The completion text is accumulated only when content
         capture is on. A provider that reports no usage (the ``stream_with_usage``
         default) is reported as nothing: there are no counts to stamp or count.
+
+        Yields:
+            The items of ``items``.
+
         """
         parts: list[str] = []
         usage: StreamUsage | None = None
@@ -512,6 +556,10 @@ class AiSpanEnricher:
         """Wrap ``retrieve``: await it, then stamp top_k.
 
         The result count and the first 20 document ids.
+
+        Returns:
+            The wrapped ``retrieve``.
+
         """
 
         @functools.wraps(attr)

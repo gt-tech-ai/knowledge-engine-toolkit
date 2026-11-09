@@ -30,6 +30,10 @@ async def _in_fresh_context[T](body: Coroutine[object, object, T]) -> T:
     """Await ``body`` in an empty context.
 
     No claims are visible to it and none leak out.
+
+    Returns:
+        What ``body`` returns.
+
     """
     return await asyncio.create_task(body, context=contextvars.Context())
 
@@ -40,6 +44,10 @@ async def _claims_after(
     """Run ``interceptor`` over ``metadata`` in a fresh context.
 
     Return the claims it stored.
+
+    Returns:
+        The claims left in context, or ``None``.
+
     """
 
     async def run() -> AuthClaims | None:
@@ -52,7 +60,12 @@ async def _claims_after(
 
 
 async def _roles(raw: str) -> frozenset[str]:
-    """Return the roles the interceptor parses from an ``x-roles`` header of ``raw``."""
+    """Return the roles the interceptor parses from an ``x-roles`` header of ``raw``.
+
+    Returns:
+        The roles the interceptor parses from an ``x-roles`` header of ``raw``.
+
+    """
     claims = await _claims_after(
         AuthServerInterceptor(_HEADERS), [("x-user-id", "u-1"), ("x-roles", raw)]
     )
@@ -259,7 +272,12 @@ class TestAuthServerInterceptor:
 
     @staticmethod
     def _details(metadata: list[tuple[str, str]]) -> MagicMock:
-        """Build minimal HandlerCallDetails-shaped data carrying invocation metadata."""
+        """Build minimal HandlerCallDetails-shaped data carrying invocation metadata.
+
+        Returns:
+            The call details.
+
+        """
         return MagicMock(invocation_metadata=metadata)
 
     @pytest.mark.asyncio

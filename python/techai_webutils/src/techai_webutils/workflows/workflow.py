@@ -29,6 +29,10 @@ def tier() -> Tier:
     """Return the workflow tier, outermost first: recovery, logging, tracing, metrics.
 
     Timeout.
+
+    Returns:
+        The workflow tier, outermost first: recovery, logging, tracing, metrics.
+
     """
     return Tier(
         "workflow",
@@ -70,6 +74,10 @@ class WorkflowBase:
         (a read).
 
         A saga is an ``exec`` whose ``fn`` commits each local step with ``in_tx``.
+
+        Returns:
+            What ``fn`` returns.
+
         """
         return await self._subject.exec(op, fn)
 
@@ -79,6 +87,10 @@ class WorkflowBase:
         Every repository call ``fn`` makes joins the transaction, which commits when
         ``fn`` returns and rolls back when it raises; the error reaches the caller
         unchanged.
+
+        Returns:
+            What ``fn`` returns.
+
         """
         return await self.exec(op, lambda: self.in_tx(fn))
 
@@ -88,6 +100,14 @@ class WorkflowBase:
         Inside a transaction, or on a base with no transaction manager, it raises
         ``InternalError`` without running ``fn``: a transaction never opens inside
         another.
+
+        Returns:
+            What ``fn`` returns.
+
+        Raises:
+            InternalError: Workflow ``self.name``: a transaction is already open; workflow
+                ``self.name``: no transaction manager.
+
         """
         if in_transaction():
             msg = f"workflow {self.name}: a transaction is already open"
@@ -109,6 +129,10 @@ class WorkflowBase:
         Each write a command.
 
         The workflow's contract declares the roles (it subclasses ``CrudService``).
+
+        Returns:
+            The CRUD workflow over ``pipes``: Get and List as reads.
+
         """
         return _CrudWorkflow(pipes, self)
 
@@ -122,19 +146,39 @@ class _CrudWorkflow[T, P, ID](CrudService[T, P, ID]):
         self._flows = flows
 
     async def get(self, entity_id: ID) -> T:
-        """Return the entity identified by ``entity_id``, a read."""
+        """Return the entity identified by ``entity_id``, a read.
+
+        Returns:
+            The entity identified by ``entity_id``, a read.
+
+        """
         return await self._flows.exec("get", lambda: self._pipes.get(entity_id))
 
     async def list(self, params: P, page: PageRequest) -> Page[T]:
-        """Return the page of entities ``params`` and ``page`` select, a read."""
+        """Return the page of entities ``params`` and ``page`` select, a read.
+
+        Returns:
+            The page of entities ``params`` and ``page`` select, a read.
+
+        """
         return await self._flows.exec("list", lambda: self._pipes.list(params, page))
 
     async def create(self, entity: T) -> T:
-        """Persist ``entity``, a command."""
+        """Persist ``entity``, a command.
+
+        Returns:
+            The entity.
+
+        """
         return await self._flows.exec_tx("create", lambda: self._pipes.create(entity))
 
     async def update(self, entity_id: ID, entity: T) -> T:
-        """Replace the entity identified by ``entity_id`` with ``entity``, a command."""
+        """Replace the entity identified by ``entity_id`` with ``entity``, a command.
+
+        Returns:
+            The entity.
+
+        """
         return await self._flows.exec_tx(
             "update", lambda: self._pipes.update(entity_id, entity)
         )

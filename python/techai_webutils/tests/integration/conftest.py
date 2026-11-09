@@ -60,6 +60,10 @@ def _docker_available() -> bool:
 
     Checked lazily (only when an integration test actually runs) so the default
     unit run, which deselects this directory, never pays the probe cost.
+
+    Returns:
+        True if a reachable Docker daemon is present.
+
     """
     try:
         from testcontainers.core.docker_client import DockerClient
@@ -85,7 +89,12 @@ def _require_docker() -> None:
 
 @pytest.fixture(scope="session")
 def redis_container() -> Iterator[object]:
-    """Start a real Redis server for the session."""
+    """Start a real Redis server for the session.
+
+    Yields:
+        A real Redis server for the session.
+
+    """
     from testcontainers.redis import RedisContainer
 
     with RedisContainer(_REDIS_IMAGE) as container:
@@ -94,7 +103,12 @@ def redis_container() -> Iterator[object]:
 
 @pytest.fixture(scope="session")
 def sqs_endpoint() -> Iterator[str]:
-    """Start ElasticMQ (SQS-compatible) and yield its mapped HTTP endpoint."""
+    """Start ElasticMQ (SQS-compatible) and yield its mapped HTTP endpoint.
+
+    Yields:
+        The mapped endpoint.
+
+    """
     from testcontainers.core.container import DockerContainer
     from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
@@ -116,7 +130,12 @@ def sqs_endpoint() -> Iterator[str]:
 
 @pytest.fixture(scope="session")
 def minio_endpoint() -> Iterator[str]:
-    """Start MinIO (S3-compatible) and yield its mapped HTTP endpoint."""
+    """Start MinIO (S3-compatible) and yield its mapped HTTP endpoint.
+
+    Yields:
+        The mapped endpoint.
+
+    """
     from testcontainers.core.container import DockerContainer
     from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
@@ -144,7 +163,12 @@ def minio_endpoint() -> Iterator[str]:
 
 @pytest_asyncio.fixture
 async def redis_cache(redis_container: object) -> AsyncIterator[RedisCache]:
-    """Yield a RedisCache bound to the live container, in ERROR mode (no masking)."""
+    """Yield a RedisCache bound to the live container, in ERROR mode (no masking).
+
+    Yields:
+        A RedisCache bound to the live container, in ERROR mode (no masking).
+
+    """
     from redis.asyncio import Redis
 
     host = redis_container.get_container_host_ip()  # type: ignore[attr-defined]
@@ -167,6 +191,10 @@ async def _create_sqs_queue(
     ElasticMQ echoes its internal node-address host in the returned QueueUrl, which
     does not match the randomly-mapped host port; rewrite the host/port to the test
     endpoint while preserving the queue path so aiobotocore targets the container.
+
+    Returns:
+        A queue (with ``attributes``, e.g. a redrive policy) and return its URL.
+
     """
     session = aiobotocore.session.get_session()
     async with session.create_client(
@@ -192,7 +220,12 @@ async def _create_sqs_queue(
 
 @pytest_asyncio.fixture
 async def sqs_config(sqs_endpoint: str) -> SQSConfig:
-    """Return a fresh SQS queue (unique per test) wrapped in an SQSConfig."""
+    """Return a fresh SQS queue (unique per test) wrapped in an SQSConfig.
+
+    Returns:
+        A fresh SQS queue (unique per test) wrapped in an SQSConfig.
+
+    """
     queue_url = await _create_sqs_queue(sqs_endpoint, f"it-{uuid.uuid4().hex[:12]}")
     return SQSConfig(
         endpoint=sqs_endpoint,
@@ -216,6 +249,10 @@ def make_sqs_queue(
 
     Callers pass unique names; a test needing a dead-letter queue creates it first, then
     the source queue with a ``RedrivePolicy`` naming it.
+
+    Returns:
+        A coroutine that creates queue ``name`` with ``attributes``.
+
     """
 
     async def make(name: str, attributes: Mapping[str, str] | None = None) -> str:
@@ -226,7 +263,12 @@ def make_sqs_queue(
 
 @pytest_asyncio.fixture
 async def s3_config(minio_endpoint: str) -> S3Config:
-    """Return a fresh MinIO bucket (unique per test) wrapped in an S3Config."""
+    """Return a fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
+    Returns:
+        A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
+    """
     bucket = f"it-{uuid.uuid4().hex[:12]}"
     session = aiobotocore.session.get_session()
     async with session.create_client(
@@ -258,6 +300,10 @@ async def _await_pg_ready(dsn: str) -> None:
     """Poll until a real TCP connection succeeds.
 
     (postgres logs 'ready' during init before TCP is up).
+
+    Raises:
+        RuntimeError: Postgres did not become ready in time.
+
     """
     for _ in range(60):
         try:
@@ -272,7 +318,12 @@ async def _await_pg_ready(dsn: str) -> None:
 
 @pytest.fixture(scope="module")
 def postgres_dsn() -> Iterator[str]:
-    """Start a real Postgres for the module and yield a libpq DSN for it."""
+    """Start a real Postgres for the module and yield a libpq DSN for it.
+
+    Yields:
+        A real Postgres for the module and yield a libpq DSN for it.
+
+    """
     from testcontainers.core.container import DockerContainer
     from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
@@ -326,6 +377,10 @@ def ray_cluster(request: pytest.FixtureRequest) -> object:
     ``request.module`` is the requesting test module (where the picklable mappers/workers
     are defined), so registering it — rather than this conftest — reproduces the original
     per-module pickle-by-value behaviour now that the fixture lives centrally.
+
+    Yields:
+        A small local Ray cluster ONCE for the module and pickle its mappers/workers.
+
     """
     import ray
 
@@ -356,6 +411,10 @@ def _await_opensearch(url: str) -> None:
     """Poll ``/_cluster/health`` until the node answers.
 
     (it logs readiness before HTTP is up).
+
+    Raises:
+        RuntimeError: Opensearch did not become ready in time.
+
     """
     import time
     import urllib.request
@@ -372,7 +431,12 @@ def _await_opensearch(url: str) -> None:
 
 
 def _opensearch() -> Iterator[str]:
-    """Start one single-node OpenSearch and yield its HTTP URL."""
+    """Start one single-node OpenSearch and yield its HTTP URL.
+
+    Yields:
+        One single-node OpenSearch and yield its HTTP URL.
+
+    """
     from testcontainers.core.container import DockerContainer
 
     container = (
@@ -395,13 +459,23 @@ def _opensearch() -> Iterator[str]:
 
 @pytest.fixture(scope="session")
 def opensearch_url() -> Iterator[str]:
-    """Start the first OpenSearch domain for the session and yield its URL."""
+    """Start the first OpenSearch domain for the session and yield its URL.
+
+    Yields:
+        The first OpenSearch domain for the session and yield its URL.
+
+    """
     yield from _opensearch()
 
 
 @pytest.fixture(scope="session")
 def opensearch_url_b() -> Iterator[str]:
-    """Start a second, independent OpenSearch domain for the session and yield its URL."""
+    """Start a second, independent OpenSearch domain for the session and yield its URL.
+
+    Yields:
+        A second, independent OpenSearch domain for the session and yield its URL.
+
+    """
     yield from _opensearch()
 
 
@@ -410,5 +484,9 @@ def opensearch_snapshot_path() -> str:
     """Return the path every OpenSearch container accepts ``fs`` snapshot repositories.
 
     Under.
+
+    Returns:
+        The path every OpenSearch container accepts ``fs`` snapshot repositories.
+
     """
     return _OPENSEARCH_SNAPSHOT_PATH

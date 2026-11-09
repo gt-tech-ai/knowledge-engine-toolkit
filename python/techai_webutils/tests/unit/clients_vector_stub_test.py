@@ -21,7 +21,12 @@ from techai_webutils.core.interfaces.vector_store import VectorEntry
 def _entry(
     entry_id: str, doc_id: str, content: str, embedding: list[float]
 ) -> VectorEntry:
-    """Build a minimal ``VectorEntry`` for the stub-store tests."""
+    """Build a minimal ``VectorEntry`` for the stub-store tests.
+
+    Returns:
+        A minimal ``VectorEntry`` for the stub-store tests.
+
+    """
     return VectorEntry(
         id=entry_id,
         document_id=doc_id,

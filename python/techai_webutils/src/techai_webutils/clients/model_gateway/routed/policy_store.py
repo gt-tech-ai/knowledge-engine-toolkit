@@ -40,7 +40,12 @@ class RoutingPolicyStoreKind(StrEnum):
 
 
 def _rules(raw: object, what: str) -> Mapping[str, tuple[str, ...]]:
-    """Return a step → ids mapping with tuple values."""
+    """Return a step → ids mapping with tuple values.
+
+    Returns:
+        A step → ids mapping with tuple values.
+
+    """
     return MappingProxyType({
         step: as_strings(ids, f"{what} {step}")
         for step, ids in as_mapping(raw, what).items()
@@ -50,8 +55,15 @@ def _rules(raw: object, what: str) -> Mapping[str, tuple[str, ...]]:
 def routing_policy_from_mapping(raw: Mapping[str, Any]) -> RoutingPolicy:
     """Return the ``RoutingPolicy`` a configuration mapping describes.
 
+    Returns:
+        The ``RoutingPolicy`` a configuration mapping describes.
+
+    A callee raises ``AppError``: ``INVALID_INPUT`` for an unknown field or a malformed
+    value.
+
     Raises:
-        AppError: ``INVALID_INPUT`` for an unknown field or a malformed value.
+        invalid: Routing policy has unknown fields ``sorted(unknown)``; routing policy
+            max_cost_per_request must be a decimal.
 
     """
     unknown = set(raw) - _POLICY_FIELDS
@@ -86,7 +98,12 @@ class ConfigPolicyStore:
     """(tenant id, workspace id) → a policy replacing the tenant's."""
 
     def policy(self, tenant_id: str, workspace_id: str) -> RoutingPolicy:
-        """Return the workspace's policy, else the tenant's, else the default."""
+        """Return the workspace's policy, else the tenant's, else the default.
+
+        Returns:
+            The workspace's policy, else the tenant's, else the default.
+
+        """
         override = self.workspace_overrides.get((tenant_id, workspace_id))
         if override is not None:
             return override
@@ -99,8 +116,15 @@ def routing_policy_store_from_config(raw: Mapping[str, Any]) -> RoutingPolicySto
     ``raw`` carries ``policies`` (tenant → policy) and ``workspaces``
     (``tenant/workspace`` → policy).
 
+    Returns:
+        The policy store ``raw["kind"]`` selects (``config`` by default).
+
+    A callee raises ``AppError``: ``INVALID_INPUT`` for an unknown kind or a malformed
+    policy.
+
     Raises:
-        AppError: ``INVALID_INPUT`` for an unknown kind or a malformed policy.
+        invalid: Unknown routing policy store kind: ``kind``; workspace policy key ``key``
+            must be tenant/workspace.
 
     """
     kind = str(raw.get("kind", RoutingPolicyStoreKind.CONFIG))

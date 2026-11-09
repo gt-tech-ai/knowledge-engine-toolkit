@@ -35,7 +35,12 @@ _GO_MESSAGING = (
 
 
 async def _drain(broker: InMemoryBroker, topic: str, n: int) -> list[Message]:
-    """Return the first ``n`` messages queued on ``topic``."""
+    """Return the first ``n`` messages queued on ``topic``.
+
+    Returns:
+        The first ``n`` messages queued on ``topic``.
+
+    """
     queue = broker.queue(topic)
     return [await queue.get() for _ in range(n)]
 

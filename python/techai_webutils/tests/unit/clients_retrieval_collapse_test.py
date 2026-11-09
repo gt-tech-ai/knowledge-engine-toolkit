@@ -16,7 +16,12 @@ from techai_webutils.core.interfaces.retrieval import RetrievalEngine, Retrieval
 
 
 def _passage(doc: str, text: str, score: float, **metadata: str) -> RetrievalResult:
-    """Return a passage of ``doc`` holding ``text``."""
+    """Return a passage of ``doc`` holding ``text``.
+
+    Returns:
+        A passage of ``doc`` holding ``text``.
+
+    """
     return RetrievalResult(
         document_id=doc,
         document_name=doc.upper(),
@@ -28,7 +33,12 @@ def _passage(doc: str, text: str, score: float, **metadata: str) -> RetrievalRes
 
 
 def _engine(passages: list[RetrievalResult]) -> RetrievalEngine:
-    """Return a mocked backend engine answering ``passages``."""
+    """Return a mocked backend engine answering ``passages``.
+
+    Returns:
+        A mocked backend engine answering ``passages``.
+
+    """
     engine = MagicMock(spec=RetrievalEngine)
     engine.retrieve = AsyncMock(return_value=passages)
     return engine

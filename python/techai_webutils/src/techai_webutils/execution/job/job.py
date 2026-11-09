@@ -77,6 +77,10 @@ class Job[T]:
         """Return the job's identity so a built Job satisfies ``AnyJob``.
 
         (mirrors Go ``Job.Meta``).
+
+        Returns:
+            The job's identity so a built Job satisfies ``AnyJob``.
+
         """
         return JobMeta(name=self._name, group=self._group)
 
@@ -87,6 +91,10 @@ class Job[T]:
         so it deliberately bypasses the per-item observer — a SKIP marker is not a
         completed work item and must not increment the observer's completed/inflight
         series. Only a real fan-out (>= 1 item) drives the observer.
+
+        Returns:
+            The batch result.
+
         """
         items = list(await self._discoverer.discover())
         if not items:
@@ -115,6 +123,10 @@ class Job[T]:
         The retry fires only on a *raised* exception (mirroring Go's retry-on-error); a
         processor that instead *returns* ``StepResult(FAIL)`` — the value fan_out isolates
         raised errors into — is treated as a terminal outcome and is NOT retried.
+
+        Returns:
+            The processor, wrapped with an internal async retry when retries > 0.
+
         """
         if self._retries <= 0:
             return self._processor
@@ -127,6 +139,13 @@ class Job[T]:
             """Re-run processor up to ``retries`` extra times on failure.
 
             (mirrors Go retryDo).
+
+            Returns:
+                The step result for the item.
+
+            Raises:
+                CancelledError: The run was cancelled; never isolated.
+
             """
             attempt = 0
             while True:
@@ -145,7 +164,12 @@ class Job[T]:
 
 
 def _downgrade_failures(batch: BatchResult) -> BatchResult:
-    """Downgrade every FAIL result to WARN (mirrors Go WarnOnly)."""
+    """Downgrade every FAIL result to WARN (mirrors Go WarnOnly).
+
+    Returns:
+        The batch result.
+
+    """
     return BatchResult(
         results=tuple(
             replace(r, status=StepStatus.WARN) if r.status is StepStatus.FAIL else r
@@ -170,22 +194,42 @@ class JobBuilder[T]:
         self._observer: ExecutionObserver | None = None
 
     def grouped(self, group: str) -> Self:
-        """Set the job's group label (phase/category) carried in its JobMeta."""
+        """Set the job's group label (phase/category) carried in its JobMeta.
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._group = group
         return self
 
     def with_discoverer(self, discoverer: Discoverer[T]) -> Self:
-        """Set the discoverer that yields work items."""
+        """Set the discoverer that yields work items.
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._discoverer = discoverer
         return self
 
     def with_processor(self, processor: Processor[T]) -> Self:
-        """Set the async processor applied to each discovered item."""
+        """Set the async processor applied to each discovered item.
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._processor = processor
         return self
 
     def with_concurrency(self, n: int) -> Self:
-        """Set the maximum number of items processed concurrently."""
+        """Set the maximum number of items processed concurrently.
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._concurrency = n
         return self
 
@@ -193,18 +237,32 @@ class JobBuilder[T]:
         """Set the number of extra retry attempts on failure.
 
         And the pause between them.
+
+        Returns:
+            This builder, for chaining.
+
         """
         self._retries = retries
         self._retry_delay = delay
         return self
 
     def warn_only(self, *, enabled: bool = True) -> Self:
-        """Mark the job non-blocking: FAIL results are downgraded to WARN."""
+        """Mark the job non-blocking: FAIL results are downgraded to WARN.
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._warn_only = enabled
         return self
 
     def with_observer(self, observer: ExecutionObserver) -> Self:
-        """Set the execution observer that receives lifecycle events."""
+        """Set the execution observer that receives lifecycle events.
+
+        Returns:
+            This builder, for chaining.
+
+        """
         self._observer = observer
         return self
 
@@ -212,6 +270,13 @@ class JobBuilder[T]:
         """Construct the Job[T].
 
         Raises ValueError if a discoverer or processor is missing.
+
+        Returns:
+            The Job[T].
+
+        Raises:
+            AppValueError: JobBuilder requires both a discoverer and a processor.
+
         """
         if self._discoverer is None or self._processor is None:
             msg = "JobBuilder requires both a discoverer and a processor"

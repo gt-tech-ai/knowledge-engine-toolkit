@@ -24,7 +24,12 @@ _TEXT = (
 
 
 def _tiles(text: str, spans: list[TextSpan]) -> bool:
-    """Return whether ``spans`` cover ``text`` end to end with no gap or overlap."""
+    """Return whether ``spans`` cover ``text`` end to end with no gap or overlap.
+
+    Returns:
+        Whether ``spans`` cover ``text`` end to end with no gap or overlap.
+
+    """
     ends = [0, *(s.end for s in spans)]
     return ends[-1] == len(text) and all(
         span.start == end for span, end in zip(spans, ends, strict=False)

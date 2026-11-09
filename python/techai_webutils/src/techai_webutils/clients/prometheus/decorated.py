@@ -34,6 +34,9 @@ def decorate(
 
     Returns: The decorated querier.
 
+    Returns:
+        ``querier`` with every read run through the client tier.
+
     """
     return _DecoratedQuerier(querier, ClientBase(MetricsQuerier, decorations, name))
 

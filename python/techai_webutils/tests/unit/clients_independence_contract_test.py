@@ -16,7 +16,12 @@ _CONTRACT = "Client families are independent"
 
 
 def _contract_modules() -> set[str]:
-    """Return the modules the independence contract in ``pyproject.toml`` names."""
+    """Return the modules the independence contract in ``pyproject.toml`` names.
+
+    Returns:
+        The modules the independence contract in ``pyproject.toml`` names.
+
+    """
     data = tomllib.loads(_PYPROJECT.read_text(encoding="utf-8"))
     contracts = cast("list[dict[str, object]]", data["tool"]["importlinter"]["contracts"])
     contract = next(c for c in contracts if c["name"] == _CONTRACT)
@@ -24,7 +29,12 @@ def _contract_modules() -> set[str]:
 
 
 def _client_packages() -> set[str]:
-    """Return every subpackage of ``techai_webutils.clients`` on disk."""
+    """Return every subpackage of ``techai_webutils.clients`` on disk.
+
+    Returns:
+        Every subpackage of ``techai_webutils.clients`` on disk.
+
+    """
     root = Path(next(iter(clients_pkg.__path__)))
     return {
         f"techai_webutils.clients.{p.name}"

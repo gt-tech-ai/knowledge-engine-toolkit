@@ -68,7 +68,12 @@ class ApproxTokenCounter(TokenCounter):
 
     @override
     def count(self, text: str) -> int:
-        """Return ``text``'s length over ``chars_per_token``, rounded up."""
+        """Return ``text``'s length over ``chars_per_token``, rounded up.
+
+        Returns:
+            ``text``'s length over ``chars_per_token``, rounded up.
+
+        """
         return math.ceil(len(text) / self._per)
 
 
@@ -81,12 +86,20 @@ class HuggingFaceTokenCounter(TokenCounter):
 
     @override
     def count(self, text: str) -> int:
-        """Return the number of ids ``text`` encodes to, without special tokens."""
+        """Return the number of ids ``text`` encodes to, without special tokens.
+
+        Returns:
+            The number of ids ``text`` encodes to, without special tokens.
+
+        """
         return len(self._tokenizer.encode(text, add_special_tokens=False).ids)
 
 
 def token_counter_from_config(config: TokenCounterConfig) -> TokenCounter:
     """Build the ``TokenCounter`` ``config.kind`` selects.
+
+    Returns:
+        The ``TokenCounter`` ``config.kind`` selects.
 
     Raises:
         AppValueError: An unknown kind, ``approx`` with ``chars_per_token`` not above 0,

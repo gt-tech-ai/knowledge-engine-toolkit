@@ -65,7 +65,12 @@ class SQSPublisher(KeyedPublisher):
         self._session: AioSession | None = None
 
     async def __aenter__(self) -> Self:
-        """Open the underlying aiobotocore SQS client and return self."""
+        """Open the underlying aiobotocore SQS client and return self.
+
+        Returns:
+            The underlying aiobotocore SQS client and return self.
+
+        """
         self._session = aiobotocore.session.get_session()
         self._client = await self._session.create_client(
             "sqs",
@@ -99,8 +104,8 @@ class SQSPublisher(KeyedPublisher):
 
         Bounded in flight.
 
-        Raises:
-            UnavailableError: Some entries were rejected twice; the rest were sent.
+        A callee raises ``UnavailableError``: Some entries were rejected twice; the rest
+        were sent.
 
         """
         await self._publish_entries(topic, [(p, _attributes(topic)) for p in payloads])
@@ -112,8 +117,8 @@ class SQSPublisher(KeyedPublisher):
 
         Each with its key attribute.
 
-        Raises:
-            UnavailableError: Some entries were rejected twice; the rest were sent.
+        A callee raises ``UnavailableError``: Some entries were rejected twice; the rest
+        were sent.
 
         """
         await self._publish_entries(
@@ -133,8 +138,8 @@ class SQSPublisher(KeyedPublisher):
     ) -> None:
         """Send one message with ``attributes`` to ``topic``'s queue.
 
-        Raises:
-            AppValueError: ``payload`` is too large, or ``topic`` has no queue.
+        A callee raises ``AppValueError``: ``payload`` is too large, or ``topic`` has no
+        queue.
 
         """
         check_payload_size(payload, self._max_payload_bytes)
@@ -156,8 +161,10 @@ class SQSPublisher(KeyedPublisher):
         Every payload is size-checked before the first send, so an oversized one sends
         nothing.
 
+        A callee raises ``AppValueError``: A payload is too large, or ``topic`` has no
+        queue.
+
         Raises:
-            AppValueError: A payload is too large, or ``topic`` has no queue.
             UnavailableError: Some entries were rejected twice; the rest were sent.
 
         """
@@ -193,6 +200,10 @@ class SQSPublisher(KeyedPublisher):
         """Send one batch, resend its rejected entries once.
 
         And return how many were rejected twice.
+
+        Returns:
+            The number of entries still rejected after the resend.
+
         """
         async with gate:
             failed = await self._send(queue_url, entries)
@@ -209,6 +220,10 @@ class SQSPublisher(KeyedPublisher):
         """Send ``entries`` to ``queue_url`` in one call.
 
         And return the ids SQS rejected.
+
+        Returns:
+            The ids SQS rejected.
+
         """
         resp = await self._require_client().send_message_batch(
             QueueUrl=queue_url, Entries=entries
@@ -217,6 +232,9 @@ class SQSPublisher(KeyedPublisher):
 
     def _require_client(self) -> SQSClient:
         """Return the open SQS client.
+
+        Returns:
+            The open SQS client.
 
         Raises:
             AppRuntimeError: The publisher is not open.
@@ -234,6 +252,10 @@ def _attributes(
     """Return a message's string attributes: its topic, its key if any.
 
     And the trace context.
+
+    Returns:
+        A message's string attributes: its topic, its key if any.
+
     """
     carrier: dict[str, str] = {}
     inject(carrier)

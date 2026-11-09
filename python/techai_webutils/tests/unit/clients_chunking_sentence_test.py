@@ -35,14 +35,24 @@ _SPLITTER = sentence_splitter_from_config(SentenceSplitterConfig())
 
 
 def _words(text: str) -> int:
-    """Count whitespace-separated words: a subadditive stand-in for a model tokenizer."""
+    """Count whitespace-separated words: a subadditive stand-in for a model tokenizer.
+
+    Returns:
+        The word count.
+
+    """
     return len(text.split())
 
 
 def _chunker(
     max_tokens: int, overlap_tokens: int = 0, tokenizer: Callable[[str], int] = _words
 ) -> StructuredChunker:
-    """Build a sentence chunker through the factory."""
+    """Build a sentence chunker through the factory.
+
+    Returns:
+        A sentence chunker through the factory.
+
+    """
     chunker = chunker_from_config(
         ChunkerConfig(
             kind=ChunkerKind.SENTENCE,
@@ -220,7 +230,12 @@ def test_five_megabytes_of_unbroken_text_chunks_in_linear_time() -> None:
     text = "x" * 5_000_000
 
     def per_four(chunk: str) -> int:
-        """Count one token per four characters."""
+        """Count one token per four characters.
+
+        Returns:
+            One token per four characters.
+
+        """
         return (len(chunk) + 3) // 4
 
     started = time.perf_counter()

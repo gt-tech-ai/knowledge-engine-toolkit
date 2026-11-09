@@ -41,6 +41,10 @@ def _create_for_write(path: str) -> int:
     """Open ``path`` for writing.
 
     (created or truncated, mode 0o644) and return its descriptor.
+
+    Returns:
+        The open file descriptor.
+
     """
     return os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
 
@@ -57,6 +61,13 @@ def _required(value: str | None, field: str) -> str:
 
     A missing or empty value means a malformed response, so it raises a coded
     ``AppRuntimeError`` naming the field instead of passing an empty string on.
+
+    Returns:
+        A response field S3 always sets but the SDK types mark optional.
+
+    Raises:
+        AppRuntimeError: S3 response is missing ``field``.
+
     """
     if not value:
         msg = f"S3 response is missing {field}"
@@ -80,7 +91,12 @@ class S3StorageClient(StorageClient):
         self._session: AioSession | None = None
 
     async def __aenter__(self) -> Self:
-        """Open the underlying aiobotocore S3 client and return self."""
+        """Open the underlying aiobotocore S3 client and return self.
+
+        Returns:
+            The underlying aiobotocore S3 client and return self.
+
+        """
         self._session = aiobotocore.session.get_session()
         self._client = await self._session.create_client(
             "s3",
@@ -99,7 +115,13 @@ class S3StorageClient(StorageClient):
             await self._client.__aexit__(exc_type, exc_val, exc_tb)
 
     async def upload(self, bucket: str, key: str, body: bytes, content_type: str) -> None:
-        """Upload an object to S3."""
+        """Upload an object to S3.
+
+        Raises:
+            AppRuntimeError: S3StorageClient not initialized. Use as async context
+                manager.
+
+        """
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
@@ -111,7 +133,16 @@ class S3StorageClient(StorageClient):
         )
 
     async def download(self, bucket: str, key: str) -> bytes:
-        """Download an object from S3."""
+        """Download an object from S3.
+
+        Returns:
+            The object's bytes.
+
+        Raises:
+            AppRuntimeError: S3StorageClient not initialized. Use as async context
+                manager.
+
+        """
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
@@ -120,7 +151,13 @@ class S3StorageClient(StorageClient):
             return await stream.read()
 
     async def delete(self, bucket: str, key: str) -> None:
-        """Delete an object from S3."""
+        """Delete an object from S3.
+
+        Raises:
+            AppRuntimeError: S3StorageClient not initialized. Use as async context
+                manager.
+
+        """
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
@@ -134,6 +171,11 @@ class S3StorageClient(StorageClient):
         above 5 GiB and it is far more reliable than a single multi-GB copy (which is slow
         + timeout-prone). The source size drives the choice; a failed multipart copy
         aborts the upload so no partial object is left behind.
+
+        Raises:
+            AppRuntimeError: S3StorageClient not initialized. Use as async context
+                manager.
+
         """
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
@@ -152,6 +194,11 @@ class S3StorageClient(StorageClient):
         """Server-side copy a large object via multipart UploadPartCopy.
 
         Aborting on any failure.
+
+        Raises:
+            AppRuntimeError: S3StorageClient not initialized. Use as async context
+                manager.
+
         """
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
@@ -187,7 +234,16 @@ class S3StorageClient(StorageClient):
             raise
 
     async def exists(self, bucket: str, key: str) -> bool:
-        """Check if an object exists in S3."""
+        """Check if an object exists in S3.
+
+        Returns:
+            Whether the object exists.
+
+        Raises:
+            AppRuntimeError: S3StorageClient not initialized. Use as async context
+                manager.
+
+        """
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
@@ -198,7 +254,16 @@ class S3StorageClient(StorageClient):
             return False
 
     async def presign_url(self, bucket: str, key: str, expiry_seconds: int) -> str:
-        """Generate a pre-signed URL for temporary access."""
+        """Generate a pre-signed URL for temporary access.
+
+        Returns:
+            The signed URL.
+
+        Raises:
+            AppRuntimeError: S3StorageClient not initialized. Use as async context
+                manager.
+
+        """
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
@@ -210,7 +275,16 @@ class S3StorageClient(StorageClient):
         return url
 
     async def list_objects(self, bucket: str, prefix: str) -> list[StorageObject]:
-        """List objects in a bucket with the given prefix."""
+        """List objects in a bucket with the given prefix.
+
+        Returns:
+            The matching objects.
+
+        Raises:
+            AppRuntimeError: S3StorageClient not initialized. Use as async context
+                manager.
+
+        """
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
@@ -228,7 +302,16 @@ class S3StorageClient(StorageClient):
         return objects
 
     async def stat(self, bucket: str, key: str) -> StorageObject:
-        """HEAD an object and map its metadata; ``size`` is the real ``ContentLength``."""
+        """HEAD an object and map its metadata; ``size`` is the real ``ContentLength``.
+
+        Returns:
+            The object's metadata.
+
+        Raises:
+            AppRuntimeError: S3StorageClient not initialized. Use as async context
+                manager.
+
+        """
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
@@ -245,6 +328,11 @@ class S3StorageClient(StorageClient):
         """Stream an object's body to ``path`` chunk-by-chunk.
 
         (never materialized as one bytes).
+
+        Raises:
+            AppRuntimeError: S3StorageClient not initialized. Use as async context
+                manager.
+
         """
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."

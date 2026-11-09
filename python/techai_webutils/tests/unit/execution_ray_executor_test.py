@@ -26,7 +26,12 @@ from techai_webutils.execution.executor.ray_runtime import RayRuntime, RayUnavai
 
 
 async def _ok(item: int) -> StepResult:
-    """Map ``item`` to a passing step (a trivial always-passing mapper)."""
+    """Map ``item`` to a passing step (a trivial always-passing mapper).
+
+    Returns:
+        A passing step for the item.
+
+    """
     await asyncio.sleep(0)
     return StepResult(name=f"item-{item}")
 
@@ -35,6 +40,10 @@ def _local_runtime() -> RayRuntime:
     """Generated-mock RayRuntime whose submit runs the mapper in-process.
 
     (as Ray would remotely).
+
+    Returns:
+        The mock runtime.
+
     """
     runtime = create_autospec(RayRuntime, instance=True)
 

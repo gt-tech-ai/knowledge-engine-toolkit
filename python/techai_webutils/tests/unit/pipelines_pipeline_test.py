@@ -176,7 +176,12 @@ def test_wiring_bugs_fail_loud() -> None:
 
 
 def _service() -> MagicMock:
-    """Return a CrudService mock answering every CRUD call."""
+    """Return a CrudService mock answering every CRUD call.
+
+    Returns:
+        A CrudService mock answering every CRUD call.
+
+    """
     svc = MagicMock(spec=CrudService)
     svc.get = AsyncMock(return_value="e1")
     svc.list = AsyncMock(return_value=Page(items=["e1"], total=1))

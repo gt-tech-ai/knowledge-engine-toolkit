@@ -82,39 +82,69 @@ class AuditEnforcement(StrEnum):
 
 
 def _utcnow() -> datetime:
-    """Return the current UTC time."""
+    """Return the current UTC time.
+
+    Returns:
+        The current UTC time.
+
+    """
     return datetime.now(UTC)
 
 
 def _trace_id() -> str:
-    """Return the current span's trace id (hex), or ``""`` outside a recorded span."""
+    """Return the current span's trace id (hex), or ``""`` outside a recorded span.
+
+    Returns:
+        The current span's trace id (hex), or ``""`` outside a recorded span.
+
+    """
     ctx = trace.get_current_span().get_span_context()
     return f"{ctx.trace_id:032x}" if ctx.is_valid else ""
 
 
 def _messages(args: tuple[object, ...], kwargs: dict[str, object]) -> list[LLMMessage]:
-    """Return a model call's ``messages`` argument."""
+    """Return a model call's ``messages`` argument.
+
+    Returns:
+        A model call's ``messages`` argument.
+
+    """
     return cast("list[LLMMessage]", args[0] if args else kwargs.get("messages", []))
 
 
 def _with_messages(
     args: tuple[object, ...], kwargs: dict[str, object], messages: list[LLMMessage]
 ) -> tuple[tuple[object, ...], dict[str, object]]:
-    """Return the call's arguments with ``messages`` in place of the original."""
+    """Return the call's arguments with ``messages`` in place of the original.
+
+    Returns:
+        The call's arguments with ``messages`` in place of the original.
+
+    """
     if args:
         return (messages, *args[1:]), kwargs
     return args, {**kwargs, "messages": messages}
 
 
 def _last_user(messages: list[LLMMessage]) -> int | None:
-    """Return the index of the last user message (what the input chain scans)."""
+    """Return the index of the last user message (what the input chain scans).
+
+    Returns:
+        The index of the last user message (what the input chain scans).
+
+    """
     return next(
         (i for i in range(len(messages) - 1, -1, -1) if messages[i].role == "user"), None
     )
 
 
 def _decision(results: tuple[SafetyResult, ...], *, block_label: str = "blocked") -> str:
-    """Return the record's decision for the scans' verdicts."""
+    """Return the record's decision for the scans' verdicts.
+
+    Returns:
+        The record's decision for the scans' verdicts.
+
+    """
     decisions = {result.decision for result in results}
     if SafetyDecision.BLOCK in decisions:
         return block_label
@@ -171,7 +201,12 @@ class AuditProxy:
             )
 
     def __getattr__(self, name: str) -> object:
-        """Return the inner attribute, audited when it is a model call."""
+        """Return the inner attribute, audited when it is a model call.
+
+        Returns:
+            The inner attribute, audited when it is a model call.
+
+        """
         attr = getattr(self._inner, name)
         if not callable(attr):
             return attr
@@ -202,6 +237,10 @@ class AuditProxy:
         """Scan ``text``; a failed scan raises under enforcement and is flagged.
 
         Under shadow.
+
+        Returns:
+            The scan result, or the failed-check result under shadow.
+
         """
         try:
             return await check.scan(text, kind=kind)
@@ -236,6 +275,10 @@ class AuditProxy:
         ``routed`` is the route decision the audited call itself set (``_routed_since``);
         its model, when set, is the record's model. A decision a previous step left behind
         is never passed, so it can't name a model that did not produce this answer.
+
+        Returns:
+            The audit record for one answer under the current request context.
+
         """
         ctx = self._context()
         flags = tuple(flag for result in results for flag in result.flags)
@@ -267,8 +310,14 @@ class AuditProxy:
 
         Prompt and verdict.
 
+        A callee raises ``AppError``: ``FORBIDDEN`` when the input check blocks (after
+        auditing it).
+
+        Returns:
+            The possibly redacted arguments, the prompt and the scan result.
+
         Raises:
-            AppError: ``FORBIDDEN`` when the input check blocks (after auditing it).
+            blocked_error: The error built for a blocked prompt or answer, when enforcing.
 
         """
         messages = _messages(args, kwargs)
@@ -303,7 +352,12 @@ class AuditProxy:
         return args, kwargs, prompt, result
 
     def _wrap_complete(self, attr: Callable[..., object]) -> object:
-        """Wrap ``complete``: input chain, call, output chain, audit."""
+        """Wrap ``complete``: input chain, call, output chain, audit.
+
+        Returns:
+            The wrapped ``complete``.
+
+        """
 
         @functools.wraps(attr)
         async def complete(*args: object, **kwargs: object) -> LLMResponse:
@@ -344,6 +398,10 @@ class AuditProxy:
         """Wrap a stream: input chain before opening.
 
         Output chain and audit at exhaustion.
+
+        Returns:
+            The wrapped streaming call.
+
         """
 
         @functools.wraps(attr)
@@ -373,6 +431,10 @@ class AuditProxy:
 
         ``prior`` is the route decision before the stream opened, so only a decision the
         stream itself set names the record's model.
+
+        Yields:
+            Each item of ``items``.
+
         """
         parts: list[str] = []
         usage: StreamUsage | None = None
@@ -413,11 +475,17 @@ class AuditProxy:
         Returns: The redacted answer when the output check redacts, else ``None`` (serve
             as is).
 
+        A callee raises ``AppError``: ``FORBIDDEN`` when either check blocks (after
+        auditing it ``blocked``); under ``enforced``, a failed safety scan or record (a
+        coded error keeps its code, any other is ``INTERNAL``), which the semantic cache
+        treats as a refusal of the hit.
+
+        Returns:
+            The hit, redacted if the output chain requires it, or ``None`` when redaction
+            empties it.
+
         Raises:
-            AppError: ``FORBIDDEN`` when either check blocks (after auditing it
-                ``blocked``); under ``enforced``, a failed safety scan or record (a coded
-                error keeps its code, any other is ``INTERNAL``), which the semantic cache
-                treats as a refusal of the hit.
+            blocked_error: The error built for a blocked prompt or answer, when enforcing.
 
         """
         messages = _messages(args, kwargs)
@@ -459,6 +527,10 @@ def _routed_since(prior: RouteDecision | None) -> RouteDecision | None:
     A gateway sets a fresh decision per call, so identity tells this call's decision from
     one a previous step left in the context, whatever decorators sit between the proxy and
     it.
+
+    Returns:
+        The route decision set since ``prior`` was read, or ``None`` when none was.
+
     """
     current = current_route_decision()
     return current if current is not None and current is not prior else None

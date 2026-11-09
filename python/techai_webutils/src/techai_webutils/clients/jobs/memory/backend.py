@@ -33,7 +33,12 @@ class InMemoryWorkerRegistry(WorkerRegistry):
         self._workers[kind] = worker
 
     def get(self, kind: str) -> Worker | None:
-        """Retrieve the worker registered for the given kind."""
+        """Retrieve the worker registered for the given kind.
+
+        Returns:
+            The worker for ``kind``, or ``None``.
+
+        """
         return self._workers.get(kind)
 
 

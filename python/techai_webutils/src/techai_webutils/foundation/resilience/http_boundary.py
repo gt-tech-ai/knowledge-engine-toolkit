@@ -24,6 +24,10 @@ def httpx_error_to_app_error(exc: Exception, operation: str) -> AppError:
     A timeout → ``TIMEOUT``; an unreachable server or a 5xx/429 → ``UNAVAILABLE``
     (transient, retryable); any other status or an undecodable body → ``INTERNAL``
     (terminal). ``operation`` names the call in the message (e.g. ``"ollama chat"``).
+
+    Returns:
+        The coded error.
+
     """
     if isinstance(exc, httpx.TimeoutException):
         return AppError(ErrorCode.TIMEOUT, f"{operation} timed out: {exc}", cause=exc)

@@ -25,6 +25,11 @@ class NoopAnnotator(NoOpAsyncResource, Annotator):
     async def annotate_batch(
         self, blocks: Sequence[TextBlock], tasks: frozenset[str], profile: str
     ) -> list[Annotation]:
-        """Return one empty annotation per block (after refusing unknown tasks)."""
+        """Return one empty annotation per block (after refusing unknown tasks).
+
+        Returns:
+            One empty annotation per block (after refusing unknown tasks).
+
+        """
         require_entities_only(self._registry, tasks, "noop")
         return [Annotation(model="noop") for _ in blocks]

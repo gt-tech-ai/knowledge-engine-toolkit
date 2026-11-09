@@ -60,6 +60,9 @@ class Unit:
 def document_prefix(prefix: str, org_id: str, document_id: str) -> str:
     """Return the key prefix every object of the document lives under (ends with ``/``).
 
+    Returns:
+        The key prefix every object of the document lives under (ends with ``/``).
+
     Raises:
         AppValueError: An empty org or document id, or one containing ``/``.
 
@@ -73,12 +76,22 @@ def document_prefix(prefix: str, org_id: str, document_id: str) -> str:
 
 
 def unit_key(doc_prefix: str, content_hash: str, n: int) -> str:
-    """Return the key of unit ``n`` of the document's ``content_hash`` version."""
+    """Return the key of unit ``n`` of the document's ``content_hash`` version.
+
+    Returns:
+        The key of unit ``n`` of the document's ``content_hash`` version.
+
+    """
     return f"{doc_prefix}{content_hash[:_VERSION_CHARS]}/{n}.txt"
 
 
 def sidecar(attributes: dict[str, object]) -> bytes:
-    """Return a sidecar body: ``{"metadataAttributes": attributes}``, keys sorted."""
+    """Return a sidecar body: ``{"metadataAttributes": attributes}``, keys sorted.
+
+    Returns:
+        A sidecar body: ``{"metadataAttributes": attributes}``, keys sorted.
+
+    """
     return json.dumps(
         {"metadataAttributes": attributes}, sort_keys=True, separators=(",", ":")
     ).encode()
@@ -93,6 +106,9 @@ def units(
     max_unit_bytes: int,
 ) -> list[Unit]:
     """Return the files ``layout`` makes of the chunks, in order.
+
+    Returns:
+        The files ``layout`` makes of the chunks, in order.
 
     Raises:
         AppValueError: An unknown layout (``INVALID_INPUT``).
@@ -124,6 +140,10 @@ def _pack(chunks: Sequence[ChunkPayload], max_bytes: int) -> list[str]:
     """Pack contiguous chunk texts into units of at most ``max_bytes``.
 
     (a bigger chunk alone).
+
+    Returns:
+        The packed units, in order.
+
     """
     packed: list[str] = []
     current: list[str] = []
@@ -141,7 +161,12 @@ def _pack(chunks: Sequence[ChunkPayload], max_bytes: int) -> list[str]:
 
 
 def _document_attributes(document: SinkDocument, org_field: str) -> dict[str, object]:
-    """Return the attributes every file of the document carries."""
+    """Return the attributes every file of the document carries.
+
+    Returns:
+        The attributes every file of the document carries.
+
+    """
     return {
         **document.metadata,
         org_field: document.org_id,
@@ -163,6 +188,10 @@ def _chunk_attributes(
     passage cites the same chunk an OpenSearch one would; a ``kb_units`` file has none
     (Bedrock chunks it). Entities become string lists (``entities.<label>``), which
     Bedrock filters with ``listContains``.
+
+    Returns:
+        Chunk ``n``'s attributes: the document's, the chunk's own.
+
     """
     attributes: dict[str, object] = {
         **_document_attributes(document, org_field),

@@ -58,6 +58,13 @@ def new_rpc_channel_from_config(
     ``client_interceptors``), its layers resolved from ``decorations``. Without
     ``decorations`` the tier has no layers: each call is undecorated but still carries the
     trace context and ``config.service_token``.
+
+    Returns:
+        The ``grpc.aio.Channel`` selected by ``config.kind`` (gRPC today).
+
+    Raises:
+        AppValueError: Unknown rpc kind: ``config.kind``.
+
     """
     if config.kind is RpcKind.GRPC:
         base = ClientBase.wire(decorations or Decorations(), config.name or "rpc")

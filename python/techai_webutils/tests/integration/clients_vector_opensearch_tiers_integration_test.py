@@ -29,7 +29,12 @@ pytestmark = pytest.mark.integration
 
 @pytest_asyncio.fixture
 async def client(opensearch_url: str) -> AsyncIterator[AsyncOpenSearch]:
-    """Yield a client on the domain."""
+    """Yield a client on the domain.
+
+    Yields:
+        A client on the domain.
+
+    """
     client = AsyncOpenSearch(hosts=[opensearch_url])
     try:
         yield client
@@ -99,6 +104,10 @@ async def _eventually_managed(admin: TierAdmin, index: str) -> str | None:
     """Return ``managed_by(index)`` once ISM records the attachment.
 
     (it is asynchronous).
+
+    Returns:
+        ``managed_by(index)`` once ISM records the attachment.
+
     """
     for _ in range(40):
         if policy := await admin.managed_by(index):

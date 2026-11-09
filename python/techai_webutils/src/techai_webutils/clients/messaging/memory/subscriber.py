@@ -59,7 +59,12 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
         self._closed = asyncio.Event()
 
     async def __aenter__(self) -> Self:
-        """No resource to acquire; return self."""
+        """No resource to acquire; return self.
+
+        Returns:
+            This instance.
+
+        """
         return self
 
     async def __aexit__(
@@ -93,7 +98,12 @@ class InMemorySubscriber(MessageConsumer, LeaseExtender, BacklogProbe):
                 self._deliveries.pop(id(message), None)
 
     async def backlog(self, topic: str) -> Backlog:
-        """Return the number of messages queued on ``topic``; the age is not tracked."""
+        """Return the number of messages queued on ``topic``; the age is not tracked.
+
+        Returns:
+            The number of messages queued on ``topic``; the age is not tracked.
+
+        """
         return Backlog(
             messages=self._broker.queue(topic).qsize(), oldest_age_seconds=None
         )

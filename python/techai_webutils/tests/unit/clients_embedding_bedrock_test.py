@@ -31,6 +31,10 @@ def _invoker_returning(*vectors: list[float], tokens: int = 4) -> MagicMock:
     """Return a mock invoker whose ``invoke_model`` yields one Titan v2 response per call.
 
     In order.
+
+    Returns:
+        A mock invoker whose ``invoke_model`` yields one Titan v2 response per call.
+
     """
     responses = [
         {
@@ -46,7 +50,12 @@ def _invoker_returning(*vectors: list[float], tokens: int = 4) -> MagicMock:
 
 
 def _client_error(code: str, status: int) -> ClientError:
-    """Build a botocore ``ClientError`` carrying ``code`` and HTTP ``status``."""
+    """Build a botocore ``ClientError`` carrying ``code`` and HTTP ``status``.
+
+    Returns:
+        A botocore ``ClientError`` carrying ``code`` and HTTP ``status``.
+
+    """
     return ClientError(
         {
             "Error": {"Code": code, "Message": "x"},

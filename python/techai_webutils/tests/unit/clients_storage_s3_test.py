@@ -25,6 +25,10 @@ async def _open(config: S3Config) -> S3StorageClient:
     """Open a client on the ``aws_client`` session; it stays open.
 
     As the session is a mock.
+
+    Returns:
+        A client on the ``aws_client`` session; it stays open.
+
     """
     return await AsyncExitStack().enter_async_context(S3StorageClient(config))
 

@@ -40,7 +40,12 @@ class _Clock:
         self.now = 100.0
 
     def __call__(self) -> float:
-        """Return the current time."""
+        """Return the current time.
+
+        Returns:
+            The current time.
+
+        """
         return self.now
 
 
@@ -48,6 +53,10 @@ async def _peak_writes(inner: MagicMock, governor: Sink, count: int) -> int:
     """Start ``count`` writes at once, let them reach ``inner``.
 
     And return the peak in flight.
+
+    Returns:
+        The peak concurrent writes.
+
     """
     active, peak, gate = 0, 0, asyncio.Event()
 

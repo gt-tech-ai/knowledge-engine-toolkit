@@ -85,9 +85,8 @@ class TierAdmin:
 
         Unchanged is a no-op.
 
-        Raises:
-            AppValueError: The policy names no id or no tier, or managed cold has no
-                timestamp.
+        A callee raises ``AppValueError``: The policy names no id or no tier, or managed
+        cold has no timestamp.
 
         """
         body = render_policy(policy)
@@ -138,6 +137,10 @@ class TierAdmin:
         """Run the ISM ``verb`` (``add`` or ``change_policy``) on ``index``.
 
         Return the response.
+
+        Returns:
+            The ISM response.
+
         """
         return cast(
             "dict[str, object]",
@@ -155,6 +158,10 @@ class TierAdmin:
         ISM records a new attachment asynchronously (about a second on a test container),
         so this reads ``None`` right after an ``attach``; it is a check for operators and
         tests, never a guard before ``attach``.
+
+        Returns:
+            The id of the ISM policy managing ``index``, or ``None``.
+
         """
         response = cast(
             "dict[str, dict[str, object]]",
@@ -168,6 +175,9 @@ class TierAdmin:
 
 def render_policy(policy: TierPolicy) -> dict[str, object]:
     """Return the ISM policy body (the value under ``policy``) for ``policy``.
+
+    Returns:
+        The ISM policy body (the value under ``policy``) for ``policy``.
 
     Raises:
         AppValueError: As in ``TierAdmin.ensure_policy``.
@@ -208,6 +218,9 @@ def render_policy(policy: TierPolicy) -> dict[str, object]:
 def _actions(policy: TierPolicy, tier: str) -> list[dict[str, object]]:
     """Return the ISM actions entering ``tier`` runs under ``policy.mode``.
 
+    Returns:
+        The ISM actions entering ``tier`` runs under ``policy.mode``.
+
     Raises:
         AppValueError: A managed cold tier has no ``timestamp_field``.
 
@@ -231,6 +244,10 @@ def _matches(existing: dict[str, object], body: dict[str, object]) -> bool:
 
     The domain adds retry settings to each stored action, so actions compare by their type
     and its own settings only.
+
+    Returns:
+        Whether the stored policy already matches.
+
     """
     if existing.get("default_state") != body["default_state"]:
         return False
@@ -245,6 +262,10 @@ def _state_key(state: dict[str, object]) -> tuple[object, ...]:
     """Return a state's name, its actions without the domain's defaults.
 
     And its transitions.
+
+    Returns:
+        A state's name, its actions without the domain's defaults.
+
     """
     actions = cast("list[dict[str, object]]", state.get("actions", []))
     stripped = [

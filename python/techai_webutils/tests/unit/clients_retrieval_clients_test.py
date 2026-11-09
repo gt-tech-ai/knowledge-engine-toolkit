@@ -38,7 +38,12 @@ class _EngineOptions(TypedDict, total=False):
 
 
 def _passage(doc: str, score: float = 0.9, **metadata: str) -> RetrievalResult:
-    """Build a RetrievalResult with the given score and metadata."""
+    """Build a RetrievalResult with the given score and metadata.
+
+    Returns:
+        A RetrievalResult with the given score and metadata.
+
+    """
     return RetrievalResult(
         document_id=doc,
         document_name=doc,
@@ -63,7 +68,12 @@ def _bedrock_client(client: AsyncMock) -> Generator[None]:
 
 
 def _inner_returning(*passages: RetrievalResult) -> RetrievalEngine:
-    """Return a mocked inner RetrievalEngine whose ``retrieve`` returns ``passages``."""
+    """Return a mocked inner RetrievalEngine whose ``retrieve`` returns ``passages``.
+
+    Returns:
+        A mocked inner RetrievalEngine whose ``retrieve`` returns ``passages``.
+
+    """
     inner = create_autospec(RetrievalEngine, instance=True)
     inner.retrieve = AsyncMock(return_value=list(passages))
     return inner
@@ -110,6 +120,10 @@ class TestBedrockIndexRouting:
         """Return a BedrockRetrievalEngine.
 
         And the mock client its lazy aiobotocore open yields.
+
+        Returns:
+            A BedrockRetrievalEngine.
+
         """
         from techai_webutils.clients.retrieval.bedrock.engine import (
             BedrockRetrievalEngine,
@@ -649,6 +663,10 @@ class TestRetrievalFactory:
         """Build a Bedrock engine through the factory.
 
         And return the vectorSearchConfiguration it sends.
+
+        Returns:
+            A Bedrock engine through the factory.
+
         """
         client = AsyncMock()
         client.retrieve.return_value = {"retrievalResults": []}
@@ -763,6 +781,10 @@ class TestBedrockRetrievalEngineRequest:
         """Drive engine.retrieve against a mocked client.
 
         And return the vectorSearchConfiguration sent.
+
+        Returns:
+            The vector search configuration sent.
+
         """
         from techai_webutils.clients.retrieval.bedrock.engine import (
             BedrockRetrievalEngine,
@@ -865,6 +887,10 @@ class TestBedrockRetrieveContract:
         """Return a `Retrieve` response shaped like Bedrock's: text content, S3 location.
 
         Chunk metadata.
+
+        Returns:
+            A `Retrieve` response shaped like Bedrock's: text content, S3 location.
+
         """
         return {
             "retrievalResults": [
@@ -893,6 +919,10 @@ class TestBedrockRetrieveContract:
         """Run the Bedrock engine over one Retrieve payload.
 
         (mocked client) and return its results.
+
+        Returns:
+            The results.
+
         """
         from techai_webutils.clients.retrieval.bedrock.engine import (
             BedrockRetrievalEngine,

@@ -19,5 +19,10 @@ class StubGrader(Grader):
 
     @override
     async def grade(self, case: EvalCase, output: EvalOutput) -> GradeResult:
-        """Return a perfect, passing verdict."""
+        """Return a perfect, passing verdict.
+
+        Returns:
+            A perfect, passing verdict.
+
+        """
         return GradeResult(grader="stub", score=1.0, passed=True, rationale="stub grader")

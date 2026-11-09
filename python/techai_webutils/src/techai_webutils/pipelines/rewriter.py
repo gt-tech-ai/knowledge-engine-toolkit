@@ -63,6 +63,10 @@ class LlmQueryRewriter(QueryRewriter):
         """Return a standalone query.
 
         Passthrough when there is no conversation history.
+
+        Returns:
+            A standalone query.
+
         """
         if not history:
             return [query]

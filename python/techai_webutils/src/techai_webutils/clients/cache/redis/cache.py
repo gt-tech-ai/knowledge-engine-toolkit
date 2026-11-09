@@ -54,6 +54,10 @@ class RedisCache(Cache):
         """Get a value from cache.
 
         Returns None on cache miss. In BYPASS mode, also returns None on connection error.
+
+        Returns:
+            A value from cache.
+
         """
         try:
             result = await self._client.get(key)
@@ -91,7 +95,12 @@ class RedisCache(Cache):
             )
 
     async def exists(self, key: str) -> bool:
-        """Check if a key exists in Redis."""
+        """Check if a key exists in Redis.
+
+        Returns:
+            Whether the key exists.
+
+        """
         try:
             return bool(await self._client.exists(key))
         except _CLIENT_ERRORS as e:

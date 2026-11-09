@@ -37,14 +37,24 @@ _PDF = b"%PDF-1.7\n%probe\n"
 
 
 def _prov(page: int) -> ProvenanceItem:
-    """Return a provenance on ``page``."""
+    """Return a provenance on ``page``.
+
+    Returns:
+        A provenance on ``page``.
+
+    """
     return ProvenanceItem(
         page_no=page, bbox=BoundingBox(l=0, t=0, r=1, b=1), charspan=(0, 1)
     )
 
 
 def _cell(row: int, col: int, text: str, *, header: bool = False) -> TableCell:
-    """Return a one-by-one table cell."""
+    """Return a one-by-one table cell.
+
+    Returns:
+        A one-by-one table cell.
+
+    """
     return TableCell(
         text=text,
         start_row_offset_idx=row,
@@ -59,6 +69,10 @@ def _report(note: str = "") -> DoclingDocument:
     """Build a two-page report: title, heading, text, list, code, captioned table.
 
     Furniture.
+
+    Returns:
+        A two-page report: title, heading, text, list, code, captioned table.
+
     """
     doc = DoclingDocument(name="report")
     for page in (1, 2):
@@ -92,6 +106,10 @@ def convert_report(path: str, options: LayoutOptions) -> DoclingDocument:
     """Stand in for Docling in the child.
 
     A report noting the page range and the file's size.
+
+    Returns:
+        The report document.
+
     """
     size = Path(path).stat().st_size
     return _report(f"Pages {options.first_page}-{options.last_page} of {size} bytes.")
@@ -101,6 +119,10 @@ def convert_noting_ocr(path: str, options: LayoutOptions) -> DoclingDocument:
     """Stand in for Docling in the child.
 
     A report noting the page range and whether OCR was forced.
+
+    Returns:
+        The report document.
+
     """
     del path
     return _report(
@@ -109,19 +131,34 @@ def convert_noting_ocr(path: str, options: LayoutOptions) -> DoclingDocument:
 
 
 def convert_out_of_memory(path: str, options: LayoutOptions) -> DoclingDocument:
-    """Stand in for a conversion that runs out of memory in the child."""
+    """Stand in for a conversion that runs out of memory in the child.
+
+    Raises:
+        MemoryError: Out of memory converting ``path`` (``options.first_page``).
+
+    """
     msg = f"out of memory converting {path} ({options.first_page})"
     raise MemoryError(msg)
 
 
 def _allocate_too_much() -> None:
-    """Raise ``MemoryError`` as an over-cap allocation would."""
+    """Raise ``MemoryError`` as an over-cap allocation would.
+
+    Raises:
+        MemoryError: Over the address-space cap.
+
+    """
     msg = "over the address-space cap"
     raise MemoryError(msg)
 
 
 def _layout(convert: Callable[[str, LayoutOptions], DoclingDocument]) -> LayoutParser:
-    """Build the layout parser through the factory with an injected converter."""
+    """Build the layout parser through the factory with an injected converter.
+
+    Returns:
+        The layout parser through the factory with an injected converter.
+
+    """
     parser = parser_from_config(
         ParserConfig(kind=ParserKind.LAYOUT, timeout_seconds=60), convert=convert
     )

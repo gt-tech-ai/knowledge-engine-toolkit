@@ -31,7 +31,12 @@ _MESSAGES = [
 def _provider(
     handler: Callable[[httpx.Request], httpx.Response], *, stall: float = 5.0
 ) -> OpenAICompatibleLlmProvider:
-    """Return a provider whose server is ``handler``."""
+    """Return a provider whose server is ``handler``.
+
+    Returns:
+        A provider whose server is ``handler``.
+
+    """
     client = httpx.AsyncClient(
         base_url="http://llm:8000", transport=httpx.MockTransport(handler)
     )
@@ -39,13 +44,23 @@ def _provider(
 
 
 def _sse(*chunks: dict[str, object]) -> bytes:
-    """Encode ``chunks`` as server-sent events ending in ``[DONE]``."""
+    """Encode ``chunks`` as server-sent events ending in ``[DONE]``.
+
+    Returns:
+        The encoded events.
+
+    """
     events = [f"data: {json.dumps(chunk)}\n\n" for chunk in chunks]
     return ("".join(events) + "data: [DONE]\n\n").encode()
 
 
 def _delta(text: str, finish: str | None = None) -> dict[str, object]:
-    """Return one streamed chunk carrying ``text``."""
+    """Return one streamed chunk carrying ``text``.
+
+    Returns:
+        One streamed chunk carrying ``text``.
+
+    """
     return {"choices": [{"delta": {"content": text}, "finish_reason": finish}]}
 
 
@@ -66,7 +81,12 @@ async def _drain_into(
 
 
 async def _collect(items: AsyncIterator[str | StreamUsage]) -> list[str | StreamUsage]:
-    """Drain a stream into a list."""
+    """Drain a stream into a list.
+
+    Returns:
+        The drained items.
+
+    """
     return [item async for item in items]
 
 

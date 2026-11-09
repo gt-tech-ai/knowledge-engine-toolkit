@@ -19,7 +19,12 @@ if TYPE_CHECKING:
 
 
 def _retrier() -> MagicMock:
-    """Return a Retrier mock that retries one transient failure."""
+    """Return a Retrier mock that retries one transient failure.
+
+    Returns:
+        A Retrier mock that retries one transient failure.
+
+    """
     retrier = MagicMock(spec=Retrier)
 
     async def retry(op: object) -> object:

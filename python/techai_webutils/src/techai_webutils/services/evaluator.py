@@ -33,7 +33,12 @@ class ThresholdEvaluator(Evaluator):
     async def evaluate(
         self, case: EvalCase, output: EvalOutput, graders: Sequence[Grader]
     ) -> EvalResult:
-        """Run every grader concurrently and aggregate their verdicts."""
+        """Run every grader concurrently and aggregate their verdicts.
+
+        Returns:
+            The aggregate evaluation.
+
+        """
         grades = tuple(
             await asyncio.gather(*(grader.grade(case, output) for grader in graders))
         )

@@ -38,7 +38,12 @@ _SCOPE = UsageScope(org_id="org-1", team_id="t-1", workspace_id="w-1", user_id="
 
 
 def _record() -> UsageRecord:
-    """One costed generation for ``_SCOPE`` at ``_NOW``."""
+    """One costed generation for ``_SCOPE`` at ``_NOW``.
+
+    Returns:
+        The usage record.
+
+    """
     return UsageRecord(
         scope=_SCOPE,
         model="nova-lite",
@@ -57,6 +62,10 @@ def _client() -> tuple[MagicMock, AsyncMock]:
     """Return a mocked async Redis client.
 
     And the registered record script it hands out.
+
+    Returns:
+        A mocked async Redis client.
+
     """
     script = AsyncMock(return_value=b"1-0")
     client = MagicMock(spec=Redis)
@@ -68,6 +77,10 @@ def _pipeline(client: MagicMock, results: list[object]) -> MagicMock:
     """Attach a non-transactional pipeline mock.
 
     To ``client`` whose ``execute`` returns ``results``.
+
+    Returns:
+        The pipeline mock.
+
     """
     pipe = MagicMock(spec=Pipeline)
     pipe.__aenter__ = AsyncMock(return_value=pipe)

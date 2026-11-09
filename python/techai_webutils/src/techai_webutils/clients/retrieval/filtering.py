@@ -53,7 +53,12 @@ class MinScore:
     """The lowest admitted score."""
 
     def admits(self, passage: RetrievalResult, request: Mapping[str, str]) -> bool:  # noqa: ARG002
-        """Return True iff the passage scores at or above the floor."""
+        """Return True iff the passage scores at or above the floor.
+
+        Returns:
+            True iff the passage scores at or above the floor.
+
+        """
         return passage.score >= self.floor
 
 
@@ -74,7 +79,12 @@ class MetadataEquals:
     """The request key holding the required value; empty means ``key``."""
 
     def admits(self, passage: RetrievalResult, request: Mapping[str, str]) -> bool:
-        """Return True iff the passage's metadata value equals the request's."""
+        """Return True iff the passage's metadata value equals the request's.
+
+        Returns:
+            True iff the passage's metadata value equals the request's.
+
+        """
         wanted = request.get(self.request_key or self.key)
         return bool(wanted) and passage.metadata.get(self.key) == wanted
 
@@ -105,6 +115,11 @@ class OrdinalCeiling:
         """Reject an empty ladder.
 
         Then index ``ranks`` once so ``admits`` is a dict lookup per passage.
+
+        Raises:
+            AppValueError: OrdinalCeiling requires at least one label in ranks (an empty
+                ladder admits everything).
+
         """
         if not self.ranks:
             msg = (
@@ -117,7 +132,12 @@ class OrdinalCeiling:
         )
 
     def admits(self, passage: RetrievalResult, request: Mapping[str, str]) -> bool:
-        """Return True iff the passage's label ranks at or below the caller's level."""
+        """Return True iff the passage's label ranks at or below the caller's level.
+
+        Returns:
+            True iff the passage's label ranks at or below the caller's level.
+
+        """
         passage_rank = self._order.get(
             passage.metadata.get(self.key, ""), len(self.ranks)
         )
@@ -149,6 +169,10 @@ class FilteringRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
 
         ``index_id`` is forwarded to the inner engine unchanged; the policies see the
         call's filters, whichever index was queried.
+
+        Returns:
+            The retrieved passages.
+
         """
         results = await self._inner.retrieve(
             query, top_k=top_k, filters=filters, index_id=index_id

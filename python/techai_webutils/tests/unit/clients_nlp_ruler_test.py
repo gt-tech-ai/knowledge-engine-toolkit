@@ -27,6 +27,10 @@ def _inner() -> MagicMock:
     """Return a mocked statistical annotator that finds ``_STATISTICAL``.
 
     In every block.
+
+    Returns:
+        A mocked statistical annotator that finds ``_STATISTICAL``.
+
     """
     inner = MagicMock(spec=Annotator)
     inner.annotate_batch = AsyncMock(return_value=[Annotation(entities=_STATISTICAL)])

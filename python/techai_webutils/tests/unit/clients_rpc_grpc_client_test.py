@@ -44,6 +44,13 @@ def _decode(data: bytes) -> bytes:
     """Deserialize a reply.
 
     Rejecting ``_UNDECODABLE`` the way a protobuf parse rejects corrupt bytes.
+
+    Returns:
+        The reply.
+
+    Raises:
+        ValueError: Wire format was corrupt.
+
     """
     if data == _UNDECODABLE:
         msg = "Wire format was corrupt"
@@ -68,7 +75,12 @@ class _Service:
     async def flaky(
         self, request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
     ) -> bytes:
-        """Answer the request after ``failures`` UNAVAILABLE aborts."""
+        """Answer the request after ``failures`` UNAVAILABLE aborts.
+
+        Returns:
+            The request.
+
+        """
         self._record(context)
         if self.calls <= self.failures:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "try again")
@@ -77,14 +89,24 @@ class _Service:
     async def garbled(
         self, request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
     ) -> bytes:
-        """Answer an undecodable reply on the first call, then echo the request."""
+        """Answer an undecodable reply on the first call, then echo the request.
+
+        Returns:
+            The undecodable reply on the first call, then the request.
+
+        """
         self._record(context)
         return _UNDECODABLE if self.calls == 1 else request
 
     async def missing(
         self, _request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
     ) -> bytes:
-        """Abort NOT_FOUND."""
+        """Abort NOT_FOUND.
+
+        Returns:
+            Empty bytes, after the abort.
+
+        """
         self._record(context)
         await context.abort(grpc.StatusCode.NOT_FOUND, "no such thing")
         return b""  # pragma: no cover - abort raises
@@ -92,7 +114,12 @@ class _Service:
     async def stream(
         self, request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
     ) -> AsyncIterator[bytes]:
-        """Stream two chunks."""
+        """Stream two chunks.
+
+        Yields:
+            Each chunk.
+
+        """
         self._record(context)
         await asyncio.sleep(0)
         yield request
@@ -108,6 +135,10 @@ async def _serve(
     """Serve ``service``.
 
     Open a channel through the client tier and return ``run``'s result.
+
+    Returns:
+        What ``run`` returns.
+
     """
     server = grpc.aio.server()
     handlers = {
@@ -132,7 +163,12 @@ async def _serve(
 
 
 def _retrying() -> ClientBase:
-    """Return a client base that retries transient failures without waiting."""
+    """Return a client base that retries transient failures without waiting.
+
+    Returns:
+        A client base that retries transient failures without waiting.
+
+    """
     retrier = ExponentialRetrier(
         ExponentialRetrierConfig(initial_interval=0.0, max_interval=0.0)
     )

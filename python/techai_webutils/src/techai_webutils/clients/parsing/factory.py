@@ -84,6 +84,9 @@ def parser_from_config(
     backend module (and its import graph) is loaded lazily here, so a composition root
     never pays for an unselected kind.
 
+    Returns:
+        The ``DocumentParser`` selected by ``config.kind``.
+
     Raises:
         AppValueError: An unknown kind, or ``layout`` with neither Docling installed (the
             ``layout`` extra) nor an injected ``convert`` (``INVALID_INPUT``).
@@ -111,6 +114,13 @@ def _layout(
     """Build the ``layout`` parser.
 
     Refusing it when Docling is missing and nothing is injected.
+
+    Returns:
+        The ``layout`` parser.
+
+    Raises:
+        AppValueError: The layout parser needs Docling: install techai-webutils[layout].
+
     """
     if convert is None and importlib.util.find_spec("docling") is None:
         msg = "the layout parser needs Docling: install techai-webutils[layout]"

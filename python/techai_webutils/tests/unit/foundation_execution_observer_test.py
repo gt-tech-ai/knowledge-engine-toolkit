@@ -29,6 +29,10 @@ def _recording_metrics() -> tuple[MagicMock, SimpleNamespace]:
     values (net inflight gauge, summed counters, observation list), never on call spies,
     so the original gauge-nets-to-zero / summed-counter / one-observation assertions are
     preserved.
+
+    Returns:
+        A spec-bound MetricsProvider mock whose instruments accumulate.
+
     """
     acc = SimpleNamespace(inflight=0.0, completed=0.0, failed=0.0, durations=[])
 

@@ -58,6 +58,15 @@ class HttpMetricsQuerier(MetricsQuerier):
         """Return the single sample of an instant query.
 
         No sample or several series is an error.
+
+        Returns:
+            The single sample of an instant query.
+
+        Raises:
+            AppValueError: Query returned ``len(result)`` series, want one (aggregate it,
+                e.g. with sum or max).
+            NotFoundError: Query returned no sample (no data).
+
         """
         data = await self._get("/api/v1/query", {"query": query})
         result = _result(data, "vector")
@@ -76,7 +85,17 @@ class HttpMetricsQuerier(MetricsQuerier):
     async def query_range(
         self, query: str, start: datetime, end: datetime, step: timedelta
     ) -> list[MetricSample]:
-        """Return the one series of a range query; no series is an empty list."""
+        """Return the one series of a range query; no series is an empty list.
+
+        Returns:
+            The one series of a range query; no series is an empty list.
+
+        Raises:
+            AppValueError: Range query needs a positive step and end >= start (step
+                ``step``, ``start``..``end``); query returned ``len(result)`` series, want
+                one (aggregate it, e.g. with sum).
+
+        """
         if step.total_seconds() <= 0 or end < start:
             msg = (
                 f"range query needs a positive step and end >= start (step {step}, "
@@ -107,6 +126,18 @@ class HttpMetricsQuerier(MetricsQuerier):
         """Send one query and return its ``data``.
 
         Raising a coded error on any failure.
+
+        Returns:
+            The response's ``data``.
+
+        Raises:
+            _status_error: The coded error for an error status.
+            AppError: Prometheus query failed: ``body.get('error', '')``.
+            AppTimeoutError: Prometheus query timed out.
+            AppValueError: Prometheus response is ``len(response.content)`` bytes, over
+                ``self._max_body_bytes``.
+            UnavailableError: Query prometheus: ``exc``.
+
         """
         try:
             response = await self._client.get(self._base_url + path, params=params)
@@ -132,7 +163,12 @@ class HttpMetricsQuerier(MetricsQuerier):
 
 
 def _json(response: httpx.Response) -> dict[str, object]:
-    """Decode the response envelope; an undecodable one is an empty envelope."""
+    """Decode the response envelope; an undecodable one is an empty envelope.
+
+    Returns:
+        The response envelope; an undecodable one is an empty envelope.
+
+    """
     try:
         body = response.json()
     except ValueError:
@@ -141,7 +177,12 @@ def _json(response: httpx.Response) -> dict[str, object]:
 
 
 def _status_error(status: int, detail: str) -> AppError:
-    """Map an error status to its coded error, quoting the server's message."""
+    """Map an error status to its coded error, quoting the server's message.
+
+    Returns:
+        The coded error.
+
+    """
     msg = f"prometheus query failed (HTTP {status})" + (f": {detail}" if detail else "")
     if status in _TRANSIENT_STATUSES:
         return UnavailableError(msg)
@@ -154,6 +195,13 @@ def _result(data: dict[str, object], want: str) -> list[dict[str, object]]:
     """Return ``data.result``, checking its type is ``want``.
 
     (``vector`` or ``matrix``).
+
+    Returns:
+        ``data.result``, checking its type is ``want``.
+
+    Raises:
+        AppValueError: Query returned a ``kind``, want a ``want``.
+
     """
     kind = data.get("resultType")
     if kind != want:
@@ -163,7 +211,16 @@ def _result(data: dict[str, object], want: str) -> list[dict[str, object]]:
 
 
 def _sample(pair: list[object]) -> MetricSample:
-    """Decode one ``[<unix time>, "<value>"]`` pair; NaN or infinity is no data."""
+    """Decode one ``[<unix time>, "<value>"]`` pair; NaN or infinity is no data.
+
+    Returns:
+        One ``[<unix time>, "<value>"]`` pair; NaN or infinity is no data.
+
+    Raises:
+        AppError: Unparseable prometheus sample ``pair``.
+        NotFoundError: Query returned ``pair[1]`` (no data).
+
+    """
     try:
         when = float(cast("float", pair[0]))
         value = float(cast("str", pair[1]))

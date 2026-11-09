@@ -68,6 +68,10 @@ def _grpc_status_name(exc: BaseException) -> str:
     A ``grpc.RpcError`` exposes ``code()`` returning a ``grpc.StatusCode``; it is read
     duck-typed so this module imports no gRPC. The walk follows ``__cause__``, then
     ``__context__``.
+
+    Returns:
+        The gRPC status name carried by ``exc`` or an exception in its chain.
+
     """
     seen: set[int] = set()
     current: BaseException | None = exc
@@ -86,6 +90,10 @@ def _failure_counter(metrics: MetricsProvider | None) -> MetricCounter | None:
     """Return the ``ray_connect_failures_total{reason}`` counter.
 
     Or ``None`` without metrics.
+
+    Returns:
+        The ``ray_connect_failures_total{reason}`` counter.
+
     """
     if metrics is None:
         return None
@@ -98,6 +106,9 @@ def _failure_counter(metrics: MetricsProvider | None) -> MetricCounter | None:
 
 def _split_address(address: str) -> tuple[str, int]:
     """Split ``host:port`` into its host and port.
+
+    Returns:
+        The host and the port.
 
     Raises:
         AppValueError: The address has no port, or the port is not a number.
@@ -181,9 +192,8 @@ class ResilientRayRuntime(RayRuntime):
 
         Retrying a transient cold-connect failure with backoff.
 
-        Raises:
-            RayUnavailableError: When the connect retries are spent, or when the sequence
-                this call waited on was spent.
+        A callee raises ``RayUnavailableError``: When the connect retries are spent, or
+        when the sequence this call waited on was spent.
 
         """
         seen = self._completed
@@ -217,6 +227,9 @@ class ResilientRayRuntime(RayRuntime):
         disconnected, not per item. A connection the inner runtime reports lost marks this
         runtime disconnected, so the next batch's ``warm_up`` reconnects.
 
+        Returns:
+            The step result for the item.
+
         Raises:
             RayUnavailableError: When the connect retries are spent or the connection is
                 lost.
@@ -231,7 +244,12 @@ class ResilientRayRuntime(RayRuntime):
             raise
 
     def consecutive_connect_failures(self) -> int:
-        """Return the connect attempts that failed since the last successful connect."""
+        """Return the connect attempts that failed since the last successful connect.
+
+        Returns:
+            The connect attempts that failed since the last successful connect.
+
+        """
         return self._failures
 
     async def head_reachable(self) -> bool:
@@ -240,6 +258,9 @@ class ResilientRayRuntime(RayRuntime):
         Independent of the Ray Client: True while the client keeps failing means the
             client is
         stuck and the head is up; False means the head itself is down or unreachable.
+
+        Returns:
+            Whether the head accepts a TCP connection on ``head_probe_address``.
 
         Raises:
             AppValueError: No ``head_probe_address`` is configured, or it is not
@@ -262,8 +283,10 @@ class ResilientRayRuntime(RayRuntime):
     async def cluster_cpus(self) -> float:
         """Ensure the connection (retried), then return the inner runtime's cluster CPUs.
 
-        Raises:
-            RayUnavailableError: When the connect retries are spent.
+        A callee raises ``RayUnavailableError``: When the connect retries are spent.
+
+        Returns:
+            The cluster CPU count.
 
         """
         if not self._connected:
@@ -280,6 +303,10 @@ class ResilientRayRuntime(RayRuntime):
         transient ``AppError``s) would ignore them — translate to a transient
         ``UnavailableError`` so the backoff policy retries, and log the attempt for
         observability.
+
+        Raises:
+            UnavailableError: Ray cluster connect failed: ``exc``.
+
         """
         try:
             await self._inner.warm_up()

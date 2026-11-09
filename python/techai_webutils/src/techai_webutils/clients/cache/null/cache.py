@@ -16,7 +16,12 @@ class NullCache(Cache):
 
     @override
     async def get(self, key: str) -> bytes | None:
-        """Return None (cache miss) for every key."""
+        """Return None (cache miss) for every key.
+
+        Returns:
+            None (cache miss) for every key.
+
+        """
         return None
 
     async def set(self, key: str, value: bytes, ttl_seconds: int = 300) -> None:
@@ -27,5 +32,10 @@ class NullCache(Cache):
 
     @override
     async def exists(self, key: str) -> bool:
-        """Return False (key never exists) for every key."""
+        """Return False (key never exists) for every key.
+
+        Returns:
+            False (key never exists) for every key.
+
+        """
         return False

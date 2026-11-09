@@ -68,7 +68,12 @@ class _Line:
 
 
 def _lines(text: str) -> list[_Line]:
-    """Return ``text``'s lines (line endings kept in the offsets, not in ``text``)."""
+    """Return ``text``'s lines (line endings kept in the offsets, not in ``text``).
+
+    Returns:
+        ``text``'s lines (line endings kept in the offsets, not in ``text``).
+
+    """
     lines: list[_Line] = []
     offset = 0
     for raw in text.splitlines(keepends=True):
@@ -78,7 +83,12 @@ def _lines(text: str) -> list[_Line]:
 
 
 def split_blocks(text: str) -> list[Block]:
-    """Return ``text``'s blocks in order; they tile it (none for empty text)."""
+    """Return ``text``'s blocks in order; they tile it (none for empty text).
+
+    Returns:
+        ``text``'s blocks in order; they tile it (none for empty text).
+
+    """
     lines = _lines(text)
     found: list[tuple[BlockKind, int, int, tuple[str, ...], int]] = []
     path: list[tuple[int, str]] = []
@@ -112,6 +122,10 @@ def _block_at(lines: list[_Line], i: int) -> tuple[BlockKind, int, int]:
     """Classify the block starting at line ``i``; return its kind.
 
     Last line and header end.
+
+    Returns:
+        The block's kind, its last line, and a table's header-row end offset (else 0).
+
     """
     line = lines[i].text
     if _HEADING.match(line):
@@ -138,6 +152,10 @@ def _is_table_start(lines: list[_Line], i: int) -> bool:
     """Whether line ``i`` starts a pipe table.
 
     (a ``|`` row followed by a separator row).
+
+    Returns:
+        Whether line ``i`` starts a pipe table.
+
     """
     return (
         lines[i].text.lstrip().startswith("|")
@@ -147,7 +165,12 @@ def _is_table_start(lines: list[_Line], i: int) -> bool:
 
 
 def _continues_paragraph(lines: list[_Line], i: int) -> bool:
-    """Whether line ``i`` continues the paragraph above it."""
+    """Whether line ``i`` continues the paragraph above it.
+
+    Returns:
+        Whether line ``i`` continues the paragraph above it.
+
+    """
     text = lines[i].text
     return bool(
         text.strip()
@@ -160,7 +183,12 @@ def _continues_paragraph(lines: list[_Line], i: int) -> bool:
 def _tile(
     text: str, found: list[tuple[BlockKind, int, int, tuple[str, ...], int]]
 ) -> list[Block]:
-    """Stretch the found blocks so they tile ``text``, and attach each table's caption."""
+    """Stretch the found blocks so they tile ``text``, and attach each table's caption.
+
+    Returns:
+        The blocks, stretched to tile ``text``.
+
+    """
     blocks: list[Block] = []
     for n, (kind, start, _end, section_path, header_end) in enumerate(found):
         end = found[n + 1][1] if n + 1 < len(found) else len(text)

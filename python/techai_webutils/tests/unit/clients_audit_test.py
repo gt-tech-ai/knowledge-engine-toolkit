@@ -22,7 +22,12 @@ from techai_webutils.core.interfaces.audit import AuditedSource, AuditRecord, Au
 
 
 def _record() -> AuditRecord:
-    """One audited answer with one cited source."""
+    """One audited answer with one cited source.
+
+    Returns:
+        The audit record.
+
+    """
     return AuditRecord(
         request_id="req-1",
         trace_id="4bf92f3577b34da6a3ce929d0e0e4736",

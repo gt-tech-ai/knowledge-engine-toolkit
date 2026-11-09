@@ -21,7 +21,12 @@ class ID(str):
     __slots__ = ()
 
     def is_empty(self) -> bool:
-        """Return True if the ID is empty."""
+        """Return True if the ID is empty.
+
+        Returns:
+            True if the ID is empty.
+
+        """
         return not self
 
 
@@ -39,11 +44,21 @@ class Option[T]:
     """True when the Option holds a value, False when it is empty."""
 
     def get(self) -> tuple[T | None, bool]:
-        """Return the value and whether it exists."""
+        """Return the value and whether it exists.
+
+        Returns:
+            The value and whether it exists.
+
+        """
         return self._value, self._valid
 
     def or_else(self, fallback: T) -> T:
-        """Return the value if present, otherwise the fallback."""
+        """Return the value if present, otherwise the fallback.
+
+        Returns:
+            The value if present, otherwise the fallback.
+
+        """
         if self._valid and self._value is not None:
             return self._value
         return fallback
@@ -55,12 +70,22 @@ class Option[T]:
 
 
 def some[T](value: T) -> Option[T]:
-    """Create an Option containing a value."""
+    """Create an Option containing a value.
+
+    Returns:
+        An Option containing a value.
+
+    """
     return Option(_value=value, _valid=True)
 
 
 def none() -> Option[T]:
-    """Create an empty Option."""
+    """Create an empty Option.
+
+    Returns:
+        An empty Option.
+
+    """
     return Option(_value=None, _valid=False)
 
 
@@ -80,7 +105,12 @@ class Page[T]:
     """Opaque cursor locating the next page, empty when there is none."""
 
     def has_more(self) -> bool:
-        """Return True if there are more pages available."""
+        """Return True if there are more pages available.
+
+        Returns:
+            True if there are more pages available.
+
+        """
         return (self.page_number * self.page_size) < self.total
 
 

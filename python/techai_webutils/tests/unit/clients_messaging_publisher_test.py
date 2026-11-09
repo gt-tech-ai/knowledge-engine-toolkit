@@ -21,6 +21,10 @@ async def _open(config: SQSConfig) -> SQSPublisher:
     """Open a publisher on the ``aws_client`` session; it stays open.
 
     As the session is a mock.
+
+    Returns:
+        A publisher on the ``aws_client`` session; it stays open.
+
     """
     return await AsyncExitStack().enter_async_context(SQSPublisher(config))
 

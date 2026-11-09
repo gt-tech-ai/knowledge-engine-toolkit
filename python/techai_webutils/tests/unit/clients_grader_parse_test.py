@@ -30,6 +30,10 @@ def _table(*, header: bool, total: str, grid: int = 2) -> DocumentBlock:
     """Return the sales table: a header row over one EMEA row whose total is ``total``.
 
     ``grid`` is the row and column count the table claims (2 is right).
+
+    Returns:
+        The sales table: a header row over one EMEA row whose total is ``total``.
+
     """
     return DocumentBlock(
         BlockType.TABLE,
@@ -81,7 +85,12 @@ _ASPECTS = ("table_structure", "cell_text", "reading_order", "heading_path")
 
 
 def _case() -> EvalCase:
-    """Return the eval case whose expected blocks are the golden ones."""
+    """Return the eval case whose expected blocks are the golden ones.
+
+    Returns:
+        The eval case whose expected blocks are the golden ones.
+
+    """
     return EvalCase(
         id="golden-pdf",
         inputs={"path": "report.pdf"},
@@ -96,6 +105,10 @@ async def _scores(
     """Grade ``blocks`` (or a raw answer) on every aspect.
 
     Return each score and verdict.
+
+    Returns:
+        The score and pass flag by aspect.
+
     """
     answer = blocks if isinstance(blocks, str) else json.dumps(blocks_to_json(blocks))
     out: dict[str, tuple[float, bool]] = {}

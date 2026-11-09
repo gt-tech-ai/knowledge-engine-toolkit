@@ -96,7 +96,12 @@ _TRACER = trace.get_tracer(__name__)
 def _requirements(
     messages: list[LLMMessage], config: LLMConfig | None, *, streaming: bool
 ) -> RouteRequirements:
-    """Estimate what a call needs from its messages and per-call config."""
+    """Estimate what a call needs from its messages and per-call config.
+
+    Returns:
+        The requirements of the call.
+
+    """
     chars = sum(len(message.content) for message in messages)
     return RouteRequirements(
         prompt_tokens=chars // _CHARS_PER_TOKEN,
@@ -106,14 +111,24 @@ def _requirements(
 
 
 def _query(messages: list[LLMMessage]) -> str:
-    """Return the last user message (what a classifier reads)."""
+    """Return the last user message (what a classifier reads).
+
+    Returns:
+        The last user message (what a classifier reads).
+
+    """
     return next((m.content for m in reversed(messages) if m.role == "user"), "")
 
 
 def _plan_decision(
     plan: Plan, rejections: Mapping[str, str], mode: str
 ) -> RouteDecision | None:
-    """Return the (unserved) decision ``plan`` describes; ``None`` for an empty plan."""
+    """Return the (unserved) decision ``plan`` describes; ``None`` for an empty plan.
+
+    Returns:
+        The (unserved) decision ``plan`` describes; ``None`` for an empty plan.
+
+    """
     if not plan.ordered:
         return None
     first = plan.ordered[0]
@@ -134,6 +149,10 @@ def _shadow_decision(plan: Plan, rejections: Mapping[str, str]) -> RouteDecision
     """Return ``plan``'s decision flagged ``shadow``.
 
     (never served; ``None`` for an empty plan).
+
+    Returns:
+        ``plan``'s decision flagged ``shadow``.
+
     """
     decision = _plan_decision(plan, rejections, mode="user")
     return None if decision is None else replace(decision, shadow=True)
@@ -148,6 +167,10 @@ async def _recorded(
     """Re-yield ``items`` (text only when ``text_only``).
 
     Call ``finish(usage)`` once exhausted.
+
+    Yields:
+        Each item, text only when ``text_only``.
+
     """
     usage = (0, 0)
     async for item in items:
@@ -223,10 +246,14 @@ class RoutedGateway(ModelGateway):
         A given ``policy_store`` (e.g. one refreshed from a database) replaces the store
         ``config.policy_store`` describes.
 
+        A callee raises ``AppValueError``: ``INVALID_INPUT`` for an unknown stage kind.
+
+        Returns:
+            The gateway.
+
         Raises:
             AppError: ``INVALID_INPUT`` for a defective catalog, route or policy, or a
                 stage missing a collaborator it needs.
-            AppValueError: ``INVALID_INPUT`` for an unknown stage kind.
 
         """
         catalog = ModelCatalog.from_mapping(config.catalog, priced_ids=priced_ids)
@@ -293,7 +320,12 @@ class RoutedGateway(ModelGateway):
         )
 
     def _provider(self, ref: CatalogEndpointRef) -> LLMProvider:
-        """Return ``ref``'s provider, building it on first use."""
+        """Return ``ref``'s provider, building it on first use.
+
+        Returns:
+            ``ref``'s provider, building it on first use.
+
+        """
         provider = self._providers.get(ref.key)
         if provider is None:
             provider = self._provider_factory(self._catalog.llm_config(ref))
@@ -314,6 +346,10 @@ class RoutedGateway(ModelGateway):
         """Return the priced cost of the tokens on ``model_id``.
 
         (``None`` when unpriced).
+
+        Returns:
+            The priced cost of the tokens on ``model_id``.
+
         """
         if self._prices is None:
             return None
@@ -327,6 +363,13 @@ class RoutedGateway(ModelGateway):
         """Filter and plan ``ctx``'s request.
 
         Return the endpoints to try and the decision.
+
+        Returns:
+            The ordered endpoints and the routing decision.
+
+        Raises:
+            AppError: Routing plan left no endpoint.
+
         """
         policy = self._policies.policy(ctx.tenant_id, ctx.workspace_id)
         filtered = filter_candidates(self._catalog.refs, policy, ctx, req)
@@ -406,7 +449,12 @@ class RoutedGateway(ModelGateway):
     async def _plan_call(
         self, messages: list[LLMMessage], config: LLMConfig | None, *, streaming: bool
     ) -> tuple[RouteContext, tuple[CatalogEndpointRef, ...], RouteDecision]:
-        """Return the request context, the endpoints to try and the pending decision."""
+        """Return the request context, the endpoints to try and the pending decision.
+
+        Returns:
+            The request context, the endpoints to try and the pending decision.
+
+        """
         ctx = self._context()
         req = _requirements(messages, config, streaming=streaming)
         ordered, decision = await self._decide(ctx, _query(messages), req)
@@ -414,7 +462,12 @@ class RoutedGateway(ModelGateway):
 
     @override
     async def resolve(self, ctx: RouteContext) -> LLMProvider:
-        """Return the provider the first endpoint of ``ctx``'s plan uses."""
+        """Return the provider the first endpoint of ``ctx``'s plan uses.
+
+        Returns:
+            The provider the first endpoint of ``ctx``'s plan uses.
+
+        """
         ordered, _ = await self._decide(ctx, "", RouteRequirements())
         return self._provider(ordered[0])
 
@@ -422,7 +475,12 @@ class RoutedGateway(ModelGateway):
     async def complete(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> LLMResponse:
-        """Route, then complete down the planned chain."""
+        """Route, then complete down the planned chain.
+
+        Returns:
+            The completion.
+
+        """
         ctx, ordered, decision = await self._plan_call(messages, config, streaming=False)
         response, attempts, served = await self._executor.complete(
             ordered, self._provider, lambda provider: provider.complete(messages, config)
@@ -434,7 +492,12 @@ class RoutedGateway(ModelGateway):
     async def _stream(
         self, messages: list[LLMMessage], config: LLMConfig | None, *, text_only: bool
     ) -> AsyncIterator[str | StreamUsage]:
-        """Route, open a stream down the chain, and finalize once it is consumed."""
+        """Route, open a stream down the chain, and finalize once it is consumed.
+
+        Returns:
+            The stream, finalized once consumed.
+
+        """
         ctx, ordered, decision = await self._plan_call(messages, config, streaming=True)
         items, attempts, served = await self._executor.stream(
             ordered,
@@ -451,14 +514,24 @@ class RoutedGateway(ModelGateway):
     async def stream(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str]:
-        """Route, then stream text from the planned chain."""
+        """Route, then stream text from the planned chain.
+
+        Returns:
+            The stream of text deltas.
+
+        """
         return await self._stream(messages, config, text_only=True)  # type: ignore[return-value]
 
     @override
     async def stream_with_usage(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
-        """Route, then stream with usage from the planned chain."""
+        """Route, then stream with usage from the planned chain.
+
+        Returns:
+            The stream of text deltas, ending with the usage when the provider reports it.
+
+        """
         return await self._stream(messages, config, text_only=False)
 
     @override
@@ -466,6 +539,10 @@ class RoutedGateway(ModelGateway):
         """Return the current step's default model.
 
         (policy and planning are not consulted).
+
+        Returns:
+            The current step's default model.
+
         """
         step = self._context().step
         route = self._routes.get(step) or self._routes.get(self._default_route)
@@ -477,8 +554,11 @@ class RoutedGateway(ModelGateway):
     async def __aenter__(self) -> Self:
         """Warm the classifiers (embed their exemplars); providers open lazily as built.
 
-        Raises:
-            AppError: ``UNAVAILABLE`` when a classifier's exemplars can't be embedded.
+        A callee raises ``AppError``: ``UNAVAILABLE`` when a classifier's exemplars can't
+        be embedded.
+
+        Returns:
+            This instance.
 
         """
         for classifier in self._classifiers:

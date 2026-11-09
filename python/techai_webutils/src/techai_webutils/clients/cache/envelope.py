@@ -25,7 +25,12 @@ class CacheEnvelope[T]:
 
 
 def encode(value: object, version: int) -> bytes:
-    """Serialize value into a versioned envelope as JSON bytes."""
+    """Serialize value into a versioned envelope as JSON bytes.
+
+    Returns:
+        The envelope as JSON bytes.
+
+    """
     envelope = {
         "data": value,
         "cached_at": time.time(),
@@ -43,6 +48,9 @@ def decode(data: bytes, version: int) -> tuple[object | None, bool]:
     Args:
         data: JSON bytes produced by :func:`encode`.
         version: Expected schema version. Mismatch → ``(None, False)``.
+
+    Returns:
+        The value and ``True``, or ``None`` and ``False`` for an invalid envelope.
 
     """
     envelope = json.loads(data)

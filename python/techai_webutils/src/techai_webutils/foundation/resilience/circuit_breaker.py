@@ -99,6 +99,10 @@ class CircuitBreaker(CircuitBreakerInterface):
         """Return the state, moving open to half-open once recovery elapsed.
 
         (caller holds the lock).
+
+        Returns:
+            The state, moving open to half-open once recovery elapsed.
+
         """
         if (
             self._state == CircuitState.OPEN
@@ -122,6 +126,10 @@ class CircuitBreaker(CircuitBreakerInterface):
 
         Raises ``CircuitOpenError`` without calling ``fn`` while the circuit is open;
         otherwise returns ``fn``'s result and records its outcome.
+
+        Returns:
+            What ``fn`` returns.
+
         """
         with self:
             return fn()
@@ -133,6 +141,13 @@ class CircuitBreaker(CircuitBreakerInterface):
         Raises ``CircuitOpenError`` immediately if the circuit is open, or half-open with
         ``half_open_max_calls`` trials already in flight, preventing the wrapped operation
         from executing. Otherwise the call is allowed through (half-open: as a trial).
+
+        Returns:
+            This breaker.
+
+        Raises:
+            CircuitOpenError: The circuit is open.
+
         """
         with self._lock:
             current = self._current()

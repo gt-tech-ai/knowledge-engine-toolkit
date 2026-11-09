@@ -22,6 +22,10 @@ def _redis(counts: list[int] | Exception) -> MagicMock:
     """Return a Redis client whose pipeline's ``INCR`` answers ``counts`` in turn.
 
     (or raises).
+
+    Returns:
+        A Redis client whose pipeline's ``INCR`` answers ``counts`` in turn.
+
     """
     pipe = MagicMock()
     pipe.__aenter__ = AsyncMock(return_value=pipe)

@@ -34,6 +34,10 @@ class BacklogGauges:
         And return the reading.
 
         The age gauge is left unchanged when the broker cannot report an age.
+
+        Returns:
+            The backlog read from the probe.
+
         """
         backlog = await probe.backlog(topic)
         self._messages.set(backlog.messages, topic=topic)

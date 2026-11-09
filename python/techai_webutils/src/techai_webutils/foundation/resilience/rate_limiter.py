@@ -44,7 +44,12 @@ class TokenBucketRateLimiter(RateLimiter):
         self._last_refill = now
 
     def allow(self) -> bool:
-        """Report whether an event may happen now (non-blocking)."""
+        """Report whether an event may happen now (non-blocking).
+
+        Returns:
+            Whether the event may happen now.
+
+        """
         self._refill()
         if self._tokens >= 1.0:
             self._tokens -= 1.0

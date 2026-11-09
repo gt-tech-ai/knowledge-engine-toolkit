@@ -32,6 +32,10 @@ def tier() -> Tier:
     """Return the job tier, outermost first: recovery, logging, tracing, metrics.
 
     Timeout.
+
+    Returns:
+        The job tier, outermost first: recovery, logging, tracing, metrics.
+
     """
     return Tier(
         "job",
@@ -61,11 +65,21 @@ class JobBase:
         return self._subject.name
 
     def wrap(self, job: AnyJob) -> AnyJob:
-        """Return ``job`` run through the tier."""
+        """Return ``job`` run through the tier.
+
+        Returns:
+            ``job`` run through the tier.
+
+        """
         return self.func(job.meta(), job.execute)
 
     def func(self, meta: JobMeta, run: Callable[[], Awaitable[BatchResult]]) -> AnyJob:
-        """Return the job ``meta`` whose ``run`` runs through the tier."""
+        """Return the job ``meta`` whose ``run`` runs through the tier.
+
+        Returns:
+            The job ``meta`` whose ``run`` runs through the tier.
+
+        """
         return _DecoratedJob(meta, run, self._subject, recover=self._recover)
 
 
@@ -92,11 +106,24 @@ class _DecoratedJob:
         self._recover = recover
 
     def meta(self) -> JobMeta:
-        """Return the job's identity."""
+        """Return the job's identity.
+
+        Returns:
+            The job's identity.
+
+        """
         return self._meta
 
     async def execute(self) -> BatchResult:
-        """Run the job through the tier; with recovery a failed run is one FAIL result."""
+        """Run the job through the tier; with recovery a failed run is one FAIL result.
+
+        Returns:
+            The batch result.
+
+        Raises:
+            AppError: A failed run, without recovery.
+
+        """
         try:
             return await self._op.exec("execute", self._run)
         except AppError as exc:

@@ -45,6 +45,10 @@ def _detect_language(text: str) -> str:
     """Detect the dominant language of ``text`` (ISO 639-1).
 
     Or ``"und"`` if undetectable.
+
+    Returns:
+        The ISO 639-1 code, or the undetermined code.
+
     """
     stripped = text.strip()
     if not stripped:
@@ -59,6 +63,10 @@ def extract_metadata(parsed: ParsedDocument, *, extracted_at: str) -> DocumentMe
     """Build a ``DocumentMetadata`` from a parsed document and an extraction timestamp.
 
     (pure).
+
+    Returns:
+        A ``DocumentMetadata`` from a parsed document and an extraction timestamp.
+
     """
     return DocumentMetadata(
         document_format=str(parsed.document_format),
@@ -80,5 +88,9 @@ class LangdetectMetadataExtractor(MetadataExtractor):
         """Return the metadata for ``parsed`` with ``extracted_at`` stamped.
 
         (via ``extract_metadata``).
+
+        Returns:
+            The metadata for ``parsed`` with ``extracted_at`` stamped.
+
         """
         return extract_metadata(parsed, extracted_at=extracted_at)

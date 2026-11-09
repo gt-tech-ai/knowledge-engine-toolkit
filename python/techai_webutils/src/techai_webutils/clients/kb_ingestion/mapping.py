@@ -27,6 +27,10 @@ def job_from_payload(job: dict[str, object]) -> IngestionJob:
     terminal state). ``failureReasons`` is flattened into the ``error`` string — see
     ``_flatten_reasons`` for the shape handling. ``statistics.numberOfDocumentsScanned``
     becomes ``documents_scanned`` (0 when absent).
+
+    Returns:
+        The mapped job.
+
     """
     status = str(job.get("status", IngestionJobState.FAILED.value))
     try:
@@ -50,6 +54,10 @@ def kb_document_from_payload(detail: dict[str, object]) -> KnowledgeBaseDocument
     ``statusReason``. A non-S3 (``custom``) or missing identifier degrades to an empty
     ``s3_uri`` — never raises — so the caller can skip it rather than crash on an
     unexpected identifier shape.
+
+    Returns:
+        The mapped document.
+
     """
     identifier = detail.get("identifier")
     s3 = (
@@ -75,6 +83,10 @@ def _flatten_reasons(reasons: object) -> str:
         reasons
     (joined), a bare scalar (coerced to its ``str``, not silently discarded), or
     absent/falsy (``""``).
+
+    Returns:
+        The joined reasons; empty when there are none.
+
     """
     if not reasons:
         return ""
@@ -87,6 +99,10 @@ def _documents_scanned(statistics: object) -> int:
     """Return ``numberOfDocumentsScanned`` from a job's ``statistics``.
 
     Or 0 when it is absent or not a number.
+
+    Returns:
+        ``numberOfDocumentsScanned`` from a job's ``statistics``.
+
     """
     if not isinstance(statistics, dict):
         return 0
@@ -111,6 +127,10 @@ def start_error(code: str, data_source_id: str) -> AppError | None:
     callers rely on to reattach. A quota or throttling error is ``UNAVAILABLE``, so the
     retry stack backs off and the round is retried later. Every other code
     (``ValidationException`` included) is left as the SDK raised it.
+
+    Returns:
+        The coded error, or ``None`` for an unrecognized code.
+
     """
     if code == "ConflictException":
         msg = f"bedrock ingestion job already running for data source {data_source_id}"
@@ -132,6 +152,10 @@ def start_client_token(
     The token is the SHA-256 hex of the knowledge base, data source and round (64
     characters, inside Bedrock's 33-256 alphanumeric bounds), so a retried start of the
     same round reuses it.
+
+    Returns:
+        The ``clientToken`` of one start round, or ``None`` when no round is named.
+
     """
     if not round_id:
         return None
@@ -147,6 +171,10 @@ def cohort_batches(s3_uris: list[str]) -> list[list[dict[str, object]]]:
     """Split ``s3_uris`` into ``GetKnowledgeBaseDocuments`` identifier batches of.
 
     At most ten.
+
+    Returns:
+        The identifier batches.
+
     """
     return [
         [
