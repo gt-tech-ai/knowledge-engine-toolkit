@@ -10,15 +10,19 @@ never loads asyncpg.
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from urllib.parse import quote
 
 from techai_webutils.clients.lock.memory import InMemoryLock
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from techai_webutils.clients.lock.postgres import (
+        PostgresAdvisoryLock as _LazyPostgresAdvisoryLock,
+    )
     from techai_webutils.core.interfaces.lock import ManagedLock
 
 
@@ -113,9 +117,14 @@ def new_lock_from_config(config: LockConfig) -> ManagedLock:
             )
             raise AppValueError(msg)
         # Lazy import: keep asyncpg off the dev/memory path (loaded only in stage/prod).
-        from techai_webutils.clients.lock.postgres import PostgresAdvisoryLock  # noqa: PLC0415
+        postgres_advisory_lock_cls = cast(
+            "type[_LazyPostgresAdvisoryLock]",
+            importlib.import_module(
+                "techai_webutils.clients.lock.postgres"
+            ).PostgresAdvisoryLock,
+        )
 
-        return PostgresAdvisoryLock(
+        return postgres_advisory_lock_cls(
             dsn=postgres_dsn(config),
             key=config.key,
             namespace=config.namespace,

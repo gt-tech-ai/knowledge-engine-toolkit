@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,10 +15,14 @@ from techai_webutils.clients.model_gateway import (
     RoutedConfig,
     new_model_gateway_from_config,
 )
+from techai_webutils.clients.model_gateway.builder import ModelGatewayDependencies
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
 from techai_webutils.core.interfaces.llm import LLMMessage
 from techai_webutils.core.interfaces.model_gateway import RouteContext
 from techai_webutils.foundation.tokens.cost import ModelPrice, PriceTable
+
+if TYPE_CHECKING:
+    from techai_webutils.core.types.llm import LlmConfig
 
 _PRICES = PriceTable(
     prices={
@@ -53,7 +57,7 @@ async def test_shadow_run_makes_no_model_call_and_emits_shadow_fact(
     facts = MagicMock(spec=FactPublisher)
     built: list[StubLlmProvider] = []
 
-    def factory(llm: Any) -> StubLlmProvider:  # noqa: ANN401 - LlmConfig
+    def factory(llm: LlmConfig) -> StubLlmProvider:
         provider = StubLlmProvider(llm.model)
         built.append(provider)
         return provider
@@ -70,10 +74,12 @@ async def test_shadow_run_makes_no_model_call_and_emits_shadow_fact(
                 policy_store={"policies": {"org-1": {"allow_off_cloud": True}}},
             ),
         ),
-        provider_factory=factory,
-        context_provider=lambda: ctx,
-        prices=_PRICES,
-        facts=facts,
+        options=ModelGatewayDependencies(
+            provider_factory=factory,
+            context_provider=lambda: ctx,
+            prices=_PRICES,
+            facts=facts,
+        ),
     )
 
     async with gateway:

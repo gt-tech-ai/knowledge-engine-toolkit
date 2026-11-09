@@ -21,7 +21,10 @@ import pytest
 from techai_webutils.core.errors.errors import ErrorCode, UnavailableError
 from techai_webutils.core.interfaces.execution import StepResult
 from techai_webutils.execution.executor.ray_runtime import RayRuntime, RayUnavailableError
-from techai_webutils.execution.executor.resilient_ray_runtime import ResilientRayRuntime
+from techai_webutils.execution.executor.resilient_ray_runtime import (
+    ResilientRayRuntime,
+    ResilientRayRuntimeOptions,
+)
 
 _EXPECTED_AWAIT_COUNT = 3
 _EXPECTED_AWAIT_COUNT_2 = 2
@@ -78,7 +81,7 @@ class TestResilientRayRuntime:
             RuntimeError("Starting Ray client server failed"),
             None,
         ]
-        runtime = ResilientRayRuntime(inner, **_FAST)
+        runtime = ResilientRayRuntime(inner, options=ResilientRayRuntimeOptions(**_FAST))
 
         await runtime.warm_up()
 
@@ -101,7 +104,10 @@ class TestResilientRayRuntime:
         inner = create_autospec(RayRuntime, instance=True)
         inner.warm_up.side_effect = RuntimeError("Starting Ray client server failed")
         runtime = ResilientRayRuntime(
-            inner, max_attempts=3, base_delay=0.0, max_delay=0.0
+            inner,
+            options=ResilientRayRuntimeOptions(
+                max_attempts=3, base_delay=0.0, max_delay=0.0
+            ),
         )
 
         with pytest.raises(UnavailableError) as excinfo:
@@ -137,7 +143,7 @@ class TestResilientRayRuntime:
             return await fn(item)
 
         inner.submit.side_effect = submit
-        runtime = ResilientRayRuntime(inner, **_FAST)
+        runtime = ResilientRayRuntime(inner, options=ResilientRayRuntimeOptions(**_FAST))
 
         result = await runtime.submit(_ok, 5)
 
@@ -166,7 +172,10 @@ class TestResilientRayRuntime:
         inner = create_autospec(RayRuntime, instance=True)
         inner.warm_up.side_effect = RuntimeError("Ray head unreachable")
         runtime = ResilientRayRuntime(
-            inner, max_attempts=3, base_delay=0.0, max_delay=0.0
+            inner,
+            options=ResilientRayRuntimeOptions(
+                max_attempts=3, base_delay=0.0, max_delay=0.0
+            ),
         )
 
         outcomes = await asyncio.gather(
@@ -196,7 +205,7 @@ class TestResilientRayRuntime:
         """
         inner = create_autospec(RayRuntime, instance=True)
         inner.submit.return_value = StepResult(name="item")
-        runtime = ResilientRayRuntime(inner, **_FAST)
+        runtime = ResilientRayRuntime(inner, options=ResilientRayRuntimeOptions(**_FAST))
 
         async def mapper(item: int) -> StepResult:
             await asyncio.sleep(0)

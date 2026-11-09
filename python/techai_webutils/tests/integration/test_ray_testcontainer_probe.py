@@ -16,10 +16,12 @@ cluster head INSIDE the Linux container (where local ``ray.init`` is reliable). 
 from __future__ import annotations
 
 import importlib
+import logging
 import time
 from typing import TYPE_CHECKING
 
 import pytest
+from docker.errors import DockerException
 
 pytest.importorskip("ray")
 
@@ -57,7 +59,7 @@ def _ray_image_present() -> bool:
             "testcontainers.core.docker_client"
         ).DockerClient
         docker_client().client.images.get(_RAY_IMAGE)
-    except Exception:
+    except (OSError, DockerException):
         return False
     return True
 
@@ -163,6 +165,7 @@ def ray_jobs_client() -> Iterator[JobSubmissionClient]:
                 client = candidate
                 break
             except Exception as exc:
+                logging.getLogger(__name__).exception("Ray jobs API not ready yet")
                 last_exc = exc
                 time.sleep(2)
         if client is None:

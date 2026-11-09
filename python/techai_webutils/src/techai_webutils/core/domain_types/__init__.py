@@ -1,7 +1,6 @@
 """Shared domain types for the Tech AI Knowledge Engine."""
 
 from techai_webutils.core.domain_types.types import (
-    ID,
     Option,
     Page,
     PageRequest,
@@ -13,7 +12,6 @@ from techai_webutils.core.domain_types.types import (
 )
 
 __all__ = [
-    "ID",
     "Option",
     "Page",
     "PageRequest",

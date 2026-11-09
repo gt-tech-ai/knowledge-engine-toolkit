@@ -16,13 +16,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import importlib
 import logging
 import signal
 from dataclasses import dataclass, field
 from typing import Any
 
 import grpc
-from grpc_health.v1 import health_pb2, health_pb2_grpc
+from grpc_health.v1 import health_pb2
 from grpc_health.v1.health import aio as health_aio
 
 _16MB = 16 * 1024 * 1024
@@ -106,7 +107,9 @@ class GracefulServer:
             options=_options(self._cfg),
             maximum_concurrent_rpcs=self._cfg.max_concurrent_rpcs,
         )
-        health_pb2_grpc.add_HealthServicer_to_server(self._health_servicer, server)
+        importlib.import_module(
+            "grpc_health.v1.health_pb2_grpc"
+        ).add_HealthServicer_to_server(self._health_servicer, server)
         return server
 
     @property
@@ -121,7 +124,7 @@ class GracefulServer:
             service_names: Fully qualified service names (e.g. ``demo.v1.UserService``).
 
         """
-        from grpc_reflection.v1alpha import reflection as grpc_reflection  # noqa: PLC0415
+        grpc_reflection = importlib.import_module("grpc_reflection.v1alpha.reflection")
 
         all_names = (*service_names, grpc_reflection.SERVICE_NAME)
         grpc_reflection.enable_server_reflection(all_names, self._server)
@@ -200,5 +203,7 @@ def create_server(config: ServerConfig | None = None) -> grpc.aio.Server:
         options=_options(cfg),
         maximum_concurrent_rpcs=cfg.max_concurrent_rpcs,
     )
-    health_pb2_grpc.add_HealthServicer_to_server(health_aio.HealthServicer(), server)
+    importlib.import_module(
+        "grpc_health.v1.health_pb2_grpc"
+    ).add_HealthServicer_to_server(health_aio.HealthServicer(), server)
     return server

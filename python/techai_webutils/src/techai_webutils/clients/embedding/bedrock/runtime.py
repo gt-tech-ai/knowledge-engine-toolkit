@@ -8,10 +8,13 @@ exercised against real Bedrock, not by unit tests.
 from __future__ import annotations
 
 from contextlib import AsyncExitStack
-from typing import Any
+from typing import TYPE_CHECKING, Any, Unpack
 
 import aiobotocore.session  # type: ignore[import-untyped]
 from aiobotocore.config import AioConfig  # type: ignore[import-untyped]
+
+if TYPE_CHECKING:
+    from techai_webutils.clients.embedding.bedrock.provider import InvokeModelRequest
 
 
 class LazyBedrockRuntime:
@@ -41,9 +44,7 @@ class LazyBedrockRuntime:
         self._stack: AsyncExitStack | None = None
         self._client: Any = None
 
-    async def invoke_model(
-        self, *, modelId: str, body: str, contentType: str, accept: str
-    ) -> dict[str, Any]:
+    async def invoke_model(self, **kwargs: Unpack[InvokeModelRequest]) -> dict[str, Any]:
         """Call bedrock-runtime ``InvokeModel``.
 
         Opening the shared client first if needed.
@@ -61,9 +62,7 @@ class LazyBedrockRuntime:
                     endpoint_url=self._endpoint,
                 )
             )
-        return await self._client.invoke_model(
-            modelId=modelId, body=body, contentType=contentType, accept=accept
-        )
+        return await self._client.invoke_model(**kwargs)
 
     async def aclose(self) -> None:
         """Close the shared client if one was opened (idempotent)."""

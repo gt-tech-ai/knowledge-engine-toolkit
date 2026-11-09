@@ -15,6 +15,7 @@ from techai_webutils.clients.model_gateway import (
     RoutedConfig,
     new_model_gateway_from_config,
 )
+from techai_webutils.clients.model_gateway.builder import ModelGatewayDependencies
 from techai_webutils.clients.model_gateway.routed.sink import (
     route_decision_sink_from_config,
 )
@@ -140,10 +141,12 @@ async def test_decision_carries_actual_tokens_and_cost(
                 catalog=catalog_raw, routes=routes_raw, sink={"kind": "analytics"}
             ),
         ),
-        provider_factory=lambda llm: StubLlmProvider(llm.model),
-        context_provider=lambda: _CTX,
-        prices=_PRICES,
-        facts=facts,
+        options=ModelGatewayDependencies(
+            provider_factory=lambda llm: StubLlmProvider(llm.model),
+            context_provider=lambda: _CTX,
+            prices=_PRICES,
+            facts=facts,
+        ),
     )
 
     response = await gateway.complete([
@@ -188,10 +191,12 @@ async def test_sink_failure_never_fails_the_answer(
                 catalog=catalog_raw, routes=routes_raw, sink={"kind": "analytics"}
             ),
         ),
-        provider_factory=lambda llm: StubLlmProvider(llm.model),
-        context_provider=lambda: _CTX,
-        facts=facts,
-        metrics=metrics,
+        options=ModelGatewayDependencies(
+            provider_factory=lambda llm: StubLlmProvider(llm.model),
+            context_provider=lambda: _CTX,
+            facts=facts,
+            metrics=metrics,
+        ),
     )
 
     response = await gateway.complete([LLMMessage(role="user", content="q")])

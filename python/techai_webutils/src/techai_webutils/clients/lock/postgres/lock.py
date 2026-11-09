@@ -170,7 +170,7 @@ class PostgresAdvisoryLock:
             try:
                 conn.terminate()
             except Exception:  # best-effort teardown must never mask the caller's error
-                logger.warning(
+                logger.exception(
                     "advisory-lock session terminate failed (ignored)",
                     key=self._key,
                     namespace=self._classid,

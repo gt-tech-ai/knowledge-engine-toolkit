@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.token_ledger import Period, UsageScope
 from techai_webutils.core.types.routing import RankResult
+from techai_webutils.foundation.logger import get_logger
 from techai_webutils.foundation.tokens.cost import estimate_cost
 
 if TYPE_CHECKING:
@@ -35,6 +36,8 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.token_ledger import TokenLedger
     from techai_webutils.core.types.routing import CatalogEndpointRef, PlanInput, Route
     from techai_webutils.foundation.tokens.cost import PriceTable
+
+logger = get_logger(__name__)
 
 _RANK_TOKEN_FLOOR = 1_000
 """Token count the cost score assumes at least, per direction (caps use the real
@@ -99,6 +102,7 @@ class CostAwareRanker:
             decision = await self._ledger.check_budget(scope)
             used = (await self._ledger.usage(scope, Period.MONTHLY)).cost_usd
         except Exception:
+            logger.exception("near_budget failed")
             return False
         if decision.remaining_cost_usd is None:
             return False

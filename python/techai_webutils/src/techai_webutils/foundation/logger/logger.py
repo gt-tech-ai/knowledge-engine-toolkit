@@ -13,6 +13,7 @@ import logging
 import os
 import sys
 import threading
+from dataclasses import dataclass
 from typing import IO, TYPE_CHECKING, TextIO, cast
 
 import structlog
@@ -31,7 +32,18 @@ if TYPE_CHECKING:
 # off-thread-startup-race risk. configure_logging() itself stays un-guarded so
 # setup_observability and the tests can (re)configure with an explicit stream/level.
 _configure_lock = threading.Lock()
-_configured = False
+
+
+@dataclass
+class _LoggerState:
+    """Whether this process's logging has been configured."""
+
+    configured: bool = False
+    """True once ``configure_logging`` has run."""
+
+
+_STATE = _LoggerState()
+"""The process's one logging-configuration record."""
 
 
 def _add_trace_context(
@@ -208,9 +220,9 @@ def new_logger(
     # Configure exactly once (self-configure on first use if setup_observability has not
     # run), then only wrap the already-configured structlog logger — no per-call
     # reconfigure/handler teardown.
-    if not _configured:
+    if not _STATE.configured:
         with _configure_lock:
-            if not _configured:
+            if not _STATE.configured:
                 configure_logging(level=level, stream=stream)
     return StructlogLogger(structlog.get_logger())
 
@@ -335,8 +347,7 @@ def configure_logging(
     # Mark configured so new_logger() self-configures at most once; configure_logging
     # itself stays un-guarded, so setup_observability + the tests may (re)configure with
     # an explicit stream.
-    global _configured  # noqa: PLW0603
-    _configured = True
+    _STATE.configured = True
     return structlog.get_logger()
 
 

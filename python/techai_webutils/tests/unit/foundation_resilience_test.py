@@ -112,7 +112,6 @@ class TestRetry:
           - NotFoundError is raised without retry
           - Function is called exactly once (no retries)
         """
-
         attempts: list[int] = []
 
         @retry_transient(max_attempts=3, base_delay=0.01)

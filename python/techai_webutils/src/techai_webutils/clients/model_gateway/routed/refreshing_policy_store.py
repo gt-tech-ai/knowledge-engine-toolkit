@@ -110,7 +110,7 @@ class RefreshingPolicyStore:
         try:
             loaded = await self._loader()
         except Exception as exc:
-            self._logger.warning("routing policy refresh failed", error=str(exc))
+            self._logger.exception("routing policy refresh failed", error=str(exc))
             self._count("failed")
             return
         self._snapshot = MappingProxyType(dict(loaded))

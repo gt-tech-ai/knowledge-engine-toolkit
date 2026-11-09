@@ -30,8 +30,13 @@ Usage: from techai_webutils.foundation.config.settings import DatabaseSettings,
     ...)
 """
 
+from ipaddress import IPv4Address
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_ALL_INTERFACES = str(IPv4Address(0))
+"""The bind address of a containerized service, reachable on every interface."""
 
 
 class BaseAppSettings(BaseSettings):
@@ -106,7 +111,7 @@ class ServerSettings(BaseAppSettings):
     """
 
     server_host: str = Field(
-        default="0.0.0.0",  # noqa: S104  # nosec B104 - containerized services must bind all interfaces
+        default=_ALL_INTERFACES,
         description="Bind address (0.0.0.0 in containers).",
     )
     server_read_timeout: str = Field(

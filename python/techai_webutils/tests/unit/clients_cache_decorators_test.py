@@ -360,7 +360,6 @@ class TestCacheTimeoutDecorator:
         **What it tests:**
           - AppTimeoutError is raised when the cache operation exceeds the timeout
         """
-
         inner = AsyncMock(spec=Cache)
         inner.get.side_effect = _slow(2.0)
         cache = CacheBuilder(inner).with_timeout(0.01).build()
@@ -442,7 +441,6 @@ class TestCacheDecoratorGapCoverage:
         **What it tests:**
           - The timeout protects writes and probes, not just get.
         """
-
         set_cache = AsyncMock(spec=Cache)
         set_cache.set.side_effect = _slow(2.0)
         delete_cache = AsyncMock(spec=Cache)

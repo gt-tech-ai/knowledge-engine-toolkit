@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING, Any, Protocol, Self, cast
+from typing import TYPE_CHECKING, Any, Protocol, Self, TypedDict, Unpack, cast
 
 import aiobotocore.session  # type: ignore[import-untyped]
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
@@ -36,6 +36,71 @@ COHORT_REQUEST_INTERVAL_SECONDS = 0.2
 """The least time between two cohort lookups: at most 5 requests per second."""
 
 
+class _StartIngestionJobRequest(TypedDict):
+    """The keyword arguments of the AWS ``start_ingestion_job`` call."""
+
+    knowledgeBaseId: str
+    """The AWS ``knowledgeBaseId`` request field."""
+
+    dataSourceId: str
+    """The AWS ``dataSourceId`` request field."""
+
+    clientToken: str
+    """The AWS ``clientToken`` request field."""
+
+
+class _GetIngestionJobRequest(TypedDict):
+    """The keyword arguments of the AWS ``get_ingestion_job`` call."""
+
+    knowledgeBaseId: str
+    """The AWS ``knowledgeBaseId`` request field."""
+
+    dataSourceId: str
+    """The AWS ``dataSourceId`` request field."""
+
+    ingestionJobId: str
+    """The AWS ``ingestionJobId`` request field."""
+
+
+class _StopIngestionJobRequest(TypedDict):
+    """The keyword arguments of the AWS ``stop_ingestion_job`` call."""
+
+    knowledgeBaseId: str
+    """The AWS ``knowledgeBaseId`` request field."""
+
+    dataSourceId: str
+    """The AWS ``dataSourceId`` request field."""
+
+    ingestionJobId: str
+    """The AWS ``ingestionJobId`` request field."""
+
+
+class _ListKnowledgeBaseDocumentsRequest(TypedDict):
+    """The keyword arguments of the AWS ``list_knowledge_base_documents`` call."""
+
+    knowledgeBaseId: str
+    """The AWS ``knowledgeBaseId`` request field."""
+
+    dataSourceId: str
+    """The AWS ``dataSourceId`` request field."""
+
+    nextToken: str
+    """The AWS ``nextToken`` request field."""
+
+
+class _GetKnowledgeBaseDocumentsRequest(TypedDict):
+    """The keyword arguments of the AWS ``get_knowledge_base_documents`` call."""
+
+    knowledgeBaseId: str
+    """The AWS ``knowledgeBaseId`` request field."""
+
+    dataSourceId: str
+    """The AWS ``dataSourceId`` request field."""
+
+    documentIdentifiers: list[dict[str, object]]
+    """The AWS ``documentIdentifiers`` request field."""
+
+
 class _BedrockAgentClient(Protocol):
     """The bedrock-agent client slice this ingestor calls.
 
@@ -45,31 +110,19 @@ class _BedrockAgentClient(Protocol):
     """
 
     async def start_ingestion_job(
-        self,
-        *,
-        knowledgeBaseId: str,
-        dataSourceId: str,
-        clientToken: str = ...,
+        self, **kwargs: Unpack[_StartIngestionJobRequest]
     ) -> dict[str, object]:
         """Start an ingestion job; returns a payload carrying ``ingestionJob``."""
         ...
 
     async def get_ingestion_job(
-        self,
-        *,
-        knowledgeBaseId: str,
-        dataSourceId: str,
-        ingestionJobId: str,
+        self, **kwargs: Unpack[_GetIngestionJobRequest]
     ) -> dict[str, object]:
         """Fetch an ingestion job's state; returns a payload carrying ``ingestionJob``."""
         ...
 
     async def stop_ingestion_job(
-        self,
-        *,
-        knowledgeBaseId: str,
-        dataSourceId: str,
-        ingestionJobId: str,
+        self, **kwargs: Unpack[_StopIngestionJobRequest]
     ) -> dict[str, object]:
         """Request a stop of an ingestion job.
 
@@ -78,11 +131,7 @@ class _BedrockAgentClient(Protocol):
         ...
 
     async def list_knowledge_base_documents(
-        self,
-        *,
-        knowledgeBaseId: str,
-        dataSourceId: str,
-        nextToken: str = ...,
+        self, **kwargs: Unpack[_ListKnowledgeBaseDocumentsRequest]
     ) -> dict[str, object]:
         """List a data source's documents (one page).
 
@@ -91,11 +140,7 @@ class _BedrockAgentClient(Protocol):
         ...
 
     async def get_knowledge_base_documents(
-        self,
-        *,
-        knowledgeBaseId: str,
-        dataSourceId: str,
-        documentIdentifiers: list[dict[str, object]],
+        self, **kwargs: Unpack[_GetKnowledgeBaseDocumentsRequest]
     ) -> dict[str, object]:
         """Look up to ten documents by identifier; returns ``documentDetails``."""
         ...

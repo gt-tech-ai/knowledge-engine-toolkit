@@ -22,7 +22,10 @@ from techai_webutils.execution.executor.factory import (
     ray_runtime_from_config,
 )
 from techai_webutils.execution.executor.ray_runtime import RayRuntime, RayUnavailableError
-from techai_webutils.execution.executor.resilient_ray_runtime import ResilientRayRuntime
+from techai_webutils.execution.executor.resilient_ray_runtime import (
+    ResilientRayRuntime,
+    ResilientRayRuntimeOptions,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -118,7 +121,10 @@ class TestConnectFailures:
         ]
         metrics, counter = _metrics()
         runtime = ResilientRayRuntime(
-            inner, max_attempts=3, base_delay=0, max_delay=0, metrics=metrics
+            inner,
+            options=ResilientRayRuntimeOptions(
+                max_attempts=3, base_delay=0, max_delay=0, metrics=metrics
+            ),
         )
 
         with pytest.raises(RayUnavailableError):
@@ -153,7 +159,10 @@ class TestConnectFailures:
         inner.warm_up.side_effect = ConnectionError("refused")
         metrics, counter = _metrics()
         runtime = ResilientRayRuntime(
-            inner, max_attempts=1, base_delay=0, max_delay=0, metrics=metrics
+            inner,
+            options=ResilientRayRuntimeOptions(
+                max_attempts=1, base_delay=0, max_delay=0, metrics=metrics
+            ),
         )
 
         with pytest.raises(RayUnavailableError):
@@ -180,7 +189,7 @@ class TestConnectFailures:
         inner.submit.side_effect = RayUnavailableError("lost")
         applications = MagicMock(side_effect=lambda fn: fn)
         with patch(f"{_MODULE}.retry_transient_async", return_value=applications):
-            runtime = ResilientRayRuntime(inner)
+            runtime = ResilientRayRuntime(inner, options=ResilientRayRuntimeOptions())
         for item in range(100):
             with pytest.raises(RayUnavailableError):
                 await runtime.submit(_mapper, item)
@@ -241,10 +250,12 @@ class TestHeadReachable:
         inner.warm_up.side_effect = ConnectionError("stuck")
         runtime = ResilientRayRuntime(
             inner,
-            max_attempts=1,
-            base_delay=0,
-            max_delay=0,
-            head_probe_address=f"127.0.0.1:{open_port}",
+            options=ResilientRayRuntimeOptions(
+                max_attempts=1,
+                base_delay=0,
+                max_delay=0,
+                head_probe_address=f"127.0.0.1:{open_port}",
+            ),
         )
         with pytest.raises(RayUnavailableError):
             await runtime.warm_up()
@@ -263,7 +274,10 @@ class TestHeadReachable:
           - ``head_reachable()`` is False for a loopback port nothing listens on.
         """
         runtime = ResilientRayRuntime(
-            _inner(), head_probe_address=f"127.0.0.1:{_closed_port()}"
+            _inner(),
+            options=ResilientRayRuntimeOptions(
+                head_probe_address=f"127.0.0.1:{_closed_port()}"
+            ),
         )
 
         assert await runtime.head_reachable() is False
@@ -281,7 +295,9 @@ class TestHeadReachable:
           - ``head_reachable()`` with no ``head_probe_address`` raises ``AppValueError``.
         """
         with pytest.raises(AppValueError, match="head_probe_address"):
-            await ResilientRayRuntime(_inner()).head_reachable()
+            await ResilientRayRuntime(
+                _inner(), options=ResilientRayRuntimeOptions()
+            ).head_reachable()
 
     @staticmethod
     @pytest.mark.asyncio

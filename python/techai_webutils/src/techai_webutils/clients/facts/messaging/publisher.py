@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
@@ -37,6 +38,23 @@ BATCH_SIZE = 10
 """Most facts per ``publish_batch`` call (the SQS ``SendMessageBatch`` limit)."""
 
 
+@dataclass(frozen=True, kw_only=True)
+class MessagingFactPublisherOptions:
+    """What ``MessagingFactPublisher`` takes, grouped into one value."""
+
+    max_buffer: int
+    """Most facts held in memory before new ones are dropped."""
+
+    flush_interval_s: float
+    """Longest wait to fill a batch once its first fact arrived."""
+
+    drain_timeout_s: float
+    """Longest wait on context exit for buffered facts to be sent."""
+
+    metrics: MetricsProvider | None = None
+    """Provides ``gen_ai_fact_dropped_total{reason}``; ``None`` counts nothing."""
+
+
 class MessagingFactPublisher(FactPublisher):
     """Delivers facts through a ``MessagePublisher`` from a bounded in-process buffer."""
 
@@ -44,11 +62,7 @@ class MessagingFactPublisher(FactPublisher):
         self,
         publisher: MessagePublisher,
         queue: str,
-        *,
-        max_buffer: int,
-        flush_interval_s: float,
-        drain_timeout_s: float,
-        metrics: MetricsProvider | None = None,
+        options: MessagingFactPublisherOptions,
     ) -> None:
         """Bind the transport, the destination queue.
 
@@ -58,24 +72,20 @@ class MessagingFactPublisher(FactPublisher):
             publisher: The message transport (its lifecycle is owned by the composition
                 root).
             queue: The topic/queue name passed to ``publish_batch``.
-            max_buffer: Most facts held in memory before new ones are dropped.
-            flush_interval_s: Longest wait to fill a batch once its first fact arrived.
-            drain_timeout_s: Longest wait on context exit for buffered facts to be sent.
-            metrics: Provides ``gen_ai_fact_dropped_total{reason}``; ``None`` counts
-                nothing.
+            options: The settings and collaborators, grouped.
 
         """
         self._publisher = publisher
         self._queue_name = queue
-        self._flush_interval_s = flush_interval_s
-        self._drain_timeout_s = drain_timeout_s
-        self._buffer: asyncio.Queue[bytes] = asyncio.Queue(maxsize=max_buffer)
+        self._flush_interval_s = options.flush_interval_s
+        self._drain_timeout_s = options.drain_timeout_s
+        self._buffer: asyncio.Queue[bytes] = asyncio.Queue(maxsize=options.max_buffer)
         self._closing = asyncio.Event()
         self._sender: asyncio.Task[None] | None = None
         self._logger = get_logger("fact_publisher")
         self._dropped: MetricCounter | None = None
-        if metrics is not None:
-            self._dropped = metrics.counter(
+        if options.metrics is not None:
+            self._dropped = options.metrics.counter(
                 "gen_ai_fact_dropped_total",
                 "Analytics facts dropped before publish, by reason.",
                 ["reason"],
@@ -106,8 +116,9 @@ class MessagingFactPublisher(FactPublisher):
                 self._drop(len(facts), "closed")
             return
         for fact in facts:
+            payload = fact.to_json()
             try:
-                self._buffer.put_nowait(fact.to_json())
+                self._buffer.put_nowait(payload)
             except asyncio.QueueFull:
                 self._drop(1, "buffer_full")
 

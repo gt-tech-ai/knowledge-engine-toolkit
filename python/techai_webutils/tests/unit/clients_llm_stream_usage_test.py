@@ -129,7 +129,6 @@ async def test_bedrock_stream_with_usage_yields_usage_last() -> None:
       - the last item is ``StreamUsage(model, 12, 3, "end_turn")`` from ``metadata.usage``
         and ``messageStop.stopReason``
     """
-
     runtime = MagicMock()
     runtime.converse_stream = AsyncMock(
         return_value={
@@ -324,7 +323,6 @@ async def test_bedrock_stream_codes_mid_stream_client_errors() -> None:
       - the text delta before the failure is yielded first
       - a mid-stream ``ThrottlingException`` raises ``AppError(UNAVAILABLE)``
     """
-
     throttled = ClientError(
         {"Error": {"Code": "ThrottlingException", "Message": "slow down"}},
         "ConverseStream",

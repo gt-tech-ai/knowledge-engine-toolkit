@@ -17,6 +17,7 @@ from opensearchpy import AsyncOpenSearch
 from techai_webutils.clients.retrieval.abstain import AbstainerKind
 from techai_webutils.clients.retrieval.builder import (
     RetrievalConfig,
+    RetrievalEngineDependencies,
     RetrievalKind,
     new_retrieval_engine_from_config,
 )
@@ -111,10 +112,12 @@ async def test_hybrid_returns_the_lexical_and_the_semantic_match(
             vector_collection=collection,
             abstainer=AbstainerKind.NONE,
         ),
-        policies=[],
-        store_filter_keys=["org_id"],
-        embedder=_embedder([1.0, 0.0, 0.0, 0.0]),
-        store=store,
+        options=RetrievalEngineDependencies(
+            policies=[],
+            store_filter_keys=["org_id"],
+            embedder=_embedder([1.0, 0.0, 0.0, 0.0]),
+            store=store,
+        ),
     )
 
     results = await engine.retrieve("zephyrine", top_k=3, filters={"org_id": "o"})

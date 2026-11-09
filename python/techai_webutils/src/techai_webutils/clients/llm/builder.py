@@ -8,7 +8,8 @@ lazily so the stub path never loads the AWS SDK.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import importlib
+from typing import TYPE_CHECKING, cast
 
 import httpx
 
@@ -18,6 +19,15 @@ from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.types.llm import LlmConfig, LlmKind
 
 if TYPE_CHECKING:
+    from techai_webutils.clients.llm.bedrock import (
+        BedrockLlmProvider as _LazyBedrockLlmProvider,
+    )
+    from techai_webutils.clients.llm.decorators import (
+        FallbackLlmProvider as _LazyFallbackLlmProvider,
+    )
+    from techai_webutils.clients.llm.ollama import (
+        OllamaLlmProvider as _LazyOllamaLlmProvider,
+    )
     from techai_webutils.core.interfaces.llm import LLMProvider
 
 
@@ -37,20 +47,28 @@ def _build_bedrock(config: LlmConfig) -> LLMProvider:
 
     """
     # Lazy import: keep aiobotocore off the dev/stub path (loaded only in stage/prod).
-    from techai_webutils.clients.llm.bedrock import BedrockLlmProvider  # noqa: PLC0415
+    bedrock_llm_provider_cls = cast(
+        "type[_LazyBedrockLlmProvider]",
+        importlib.import_module("techai_webutils.clients.llm.bedrock").BedrockLlmProvider,
+    )
 
-    primary = BedrockLlmProvider(
+    primary = bedrock_llm_provider_cls(
         region=config.region, model=config.model, endpoint=config.endpoint
     )
     if not config.fallback_model:
         return primary
     # Wrap with the throttle/5xx fallback chain; the decorator is only loaded here.
-    from techai_webutils.clients.llm.decorators import FallbackLlmProvider  # noqa: PLC0415
+    fallback_llm_provider_cls = cast(
+        "type[_LazyFallbackLlmProvider]",
+        importlib.import_module(
+            "techai_webutils.clients.llm.decorators"
+        ).FallbackLlmProvider,
+    )
 
-    fallback = BedrockLlmProvider(
+    fallback = bedrock_llm_provider_cls(
         region=config.region, model=config.fallback_model, endpoint=config.endpoint
     )
-    return FallbackLlmProvider(primary, fallback)
+    return fallback_llm_provider_cls(primary, fallback)
 
 
 def new_llm_from_config(config: LlmConfig) -> LLMProvider:
@@ -80,10 +98,15 @@ def new_llm_from_config(config: LlmConfig) -> LLMProvider:
     if config.kind is LlmKind.OLLAMA:
         # Lazy import: the provider is only built for the local Ollama path. The model
         # must be an Ollama chat model (e.g. "llama3.2") — config sets it.
-        from techai_webutils.clients.llm.ollama import OllamaLlmProvider  # noqa: PLC0415
+        ollama_llm_provider_cls = cast(
+            "type[_LazyOllamaLlmProvider]",
+            importlib.import_module(
+                "techai_webutils.clients.llm.ollama"
+            ).OllamaLlmProvider,
+        )
 
         client = httpx.AsyncClient(base_url=config.host, timeout=config.timeout_seconds)
-        return OllamaLlmProvider(client, config.model)
+        return ollama_llm_provider_cls(client, config.model)
     if config.kind is LlmKind.OPENAI_COMPATIBLE:
         headers = {"Authorization": f"Bearer {config.api_key}"} if config.api_key else {}
         client = httpx.AsyncClient(

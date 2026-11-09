@@ -9,6 +9,7 @@ similarity, so the retrieval path can build and unit-test with no Qdrant. Determ
 from __future__ import annotations
 
 import math
+from operator import itemgetter
 
 from techai_webutils.core.interfaces.vector_store import (
     VectorEntry,
@@ -90,7 +91,7 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
             for entry in self._collections.get(collection, {}).values()
             if _matches(entry, filters)
         ]
-        scored.sort(key=lambda pair: pair[0], reverse=True)
+        scored.sort(key=itemgetter(0), reverse=True)
         return [
             VectorSearchResult(
                 document_id=entry.document_id,

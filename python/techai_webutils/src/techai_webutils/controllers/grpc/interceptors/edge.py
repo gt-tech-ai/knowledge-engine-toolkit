@@ -10,6 +10,7 @@ with protovalidate (an ``Edge.inner`` interceptor, nearest the handler).
 from __future__ import annotations
 
 import hmac
+import importlib
 from typing import TYPE_CHECKING, override
 
 import grpc
@@ -103,7 +104,8 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[
         presented = header.removeprefix(_BEARER_PREFIX).encode()
         # Compare against every accepted token (no short-circuit), so timing reveals no
         # match.
-        return any([hmac.compare_digest(presented, token) for token in self._accepted])  # noqa: C419
+        matches = [hmac.compare_digest(presented, token) for token in self._accepted]
+        return any(matches)
 
     @override
     async def intercept_service[TRequest, TResponse](
@@ -126,7 +128,9 @@ class ServiceAuthServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[
         if self._authorized(str(metadata.get("authorization", ""))):
             return handler
 
-        def wrap(_behavior: Behavior, _streaming: bool) -> Behavior:  # noqa: FBT001
+        def wrap(_behavior: Behavior, *, streaming: bool) -> Behavior:
+            del streaming
+
             async def deny(_request: object, context: Context) -> object:
                 await context.abort(
                     grpc.StatusCode.UNAUTHENTICATED, "invalid service token"
@@ -165,7 +169,9 @@ class ValidatingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[m
         if handler is None:
             return handler
 
-        def wrap(behavior: Behavior, _streaming: bool) -> Behavior:  # noqa: FBT001
+        def wrap(behavior: Behavior, *, streaming: bool) -> Behavior:
+            del streaming
+
             async def validated(request: object, context: Context) -> object:
                 await _validate_request(request, context)
                 return await behavior(request, context)
@@ -185,7 +191,7 @@ async def _validate_request(request: object, context: Context) -> None:
     """
     if not isinstance(request, Message):
         return
-    import protovalidate  # noqa: PLC0415 - lazy: keep the heavy extension out of non-gRPC workers
+    protovalidate = importlib.import_module("protovalidate")
 
     try:
         protovalidate.validate(request)

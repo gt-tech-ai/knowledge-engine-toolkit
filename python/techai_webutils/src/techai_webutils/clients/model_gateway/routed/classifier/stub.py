@@ -22,7 +22,7 @@ class StubRouteClassifier:
         self._route_names = route_names
         self._default_route = default_route
 
-    async def classify(self, ctx: RouteContext, query: str) -> Classification:  # noqa: ARG002 - the stub reads only the step
+    async def classify(self, ctx: RouteContext, query: str) -> Classification:
         """Return the step's route, else the default route.
 
         Returns:
@@ -32,6 +32,7 @@ class StubRouteClassifier:
             AppError: ``INVALID_INPUT`` when the step has no route and no default is set.
 
         """
+        del query
         if ctx.step in self._route_names:
             return Classification(route=ctx.step, confidence=1.0)
         if self._default_route:

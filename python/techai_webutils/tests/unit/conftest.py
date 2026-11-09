@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -91,7 +92,15 @@ def _config_env_names() -> list[str]:
     ]
 
 
-@pytest.fixture(autouse=True)
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Run ``isolate_config_env`` around every test in this directory."""
+    here = Path(__file__).parent
+    for item in items:
+        if here in item.path.parents and isinstance(item, pytest.Function):
+            item.fixturenames.insert(0, "isolate_config_env")
+
+
+@pytest.fixture
 def isolate_config_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Isolate every test from ambient and leaked config env vars.
 

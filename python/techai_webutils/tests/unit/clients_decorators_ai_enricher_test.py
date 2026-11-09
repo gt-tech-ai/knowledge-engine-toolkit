@@ -15,6 +15,7 @@ import pytest
 from techai_webutils.clients.decorators.ai_enricher import (
     GEN_AI_SYSTEM_BY_PROVIDER,
     AiSpanEnricher,
+    AiSpanEnricherOptions,
 )
 from techai_webutils.clients.llm.stub import StubLlmProvider
 from techai_webutils.clients.model_gateway.passthrough import PassthroughGateway
@@ -102,7 +103,10 @@ async def test_ai_span_enricher_stamps_gen_ai_usage_from_llm_response() -> None:
     inner = _llm(response)
     span = MagicMock()
     enricher = cast(
-        "LLMProvider", AiSpanEnricher(inner, step="generate", capture_content=False)
+        "LLMProvider",
+        AiSpanEnricher(
+            inner, options=AiSpanEnricherOptions(step="generate", capture_content=False)
+        ),
     )
 
     with patch(_SPAN_SOURCE, return_value=span):
@@ -139,7 +143,10 @@ async def test_ai_span_enricher_maps_provider_class_to_gen_ai_system() -> None:
     span = MagicMock()
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(StubLlmProvider(), step="rewrite", capture_content=False),
+        AiSpanEnricher(
+            StubLlmProvider(),
+            options=AiSpanEnricherOptions(step="rewrite", capture_content=False),
+        ),
     )
 
     with patch(_SPAN_SOURCE, return_value=span):
@@ -172,7 +179,8 @@ async def test_enricher_reports_wrapped_system_through_gateway() -> None:
     enricher = cast(
         "LLMProvider",
         AiSpanEnricher(
-            PassthroughGateway(StubLlmProvider()), step="generate", capture_content=False
+            PassthroughGateway(StubLlmProvider()),
+            options=AiSpanEnricherOptions(step="generate", capture_content=False),
         ),
     )
 
@@ -217,7 +225,10 @@ async def test_ai_span_enricher_stream_stamps_usage_at_exhaustion() -> None:
     inner.stream_with_usage = AsyncMock(return_value=_usage_stream("Hel", "lo", usage))
     span = MagicMock()
     enricher = cast(
-        "LLMProvider", AiSpanEnricher(inner, step="generate", capture_content=False)
+        "LLMProvider",
+        AiSpanEnricher(
+            inner, options=AiSpanEnricherOptions(step="generate", capture_content=False)
+        ),
     )
 
     with patch(_SPAN_SOURCE, return_value=span):
@@ -260,7 +271,10 @@ async def test_ai_span_enricher_stream_with_usage_keeps_usage_and_stamps() -> No
     inner.stream_with_usage = AsyncMock(return_value=_usage_stream("Hel", "lo", usage))
     span = MagicMock()
     enricher = cast(
-        "LLMProvider", AiSpanEnricher(inner, step="generate", capture_content=False)
+        "LLMProvider",
+        AiSpanEnricher(
+            inner, options=AiSpanEnricherOptions(step="generate", capture_content=False)
+        ),
     )
 
     with patch(_SPAN_SOURCE, return_value=span):
@@ -305,7 +319,10 @@ async def test_ai_span_enricher_reports_requested_and_served_model() -> None:
     aliased, plain = MagicMock(), MagicMock()
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(_llm(response), step="generate", capture_content=False),
+        AiSpanEnricher(
+            _llm(response),
+            options=AiSpanEnricherOptions(step="generate", capture_content=False),
+        ),
     )
 
     with patch(_SPAN_SOURCE, return_value=aliased):
@@ -356,7 +373,10 @@ async def test_ai_span_enricher_stamps_retrieval_shape() -> None:
     inner.retrieve = AsyncMock(return_value=results)
     span = MagicMock()
     enricher = cast(
-        "RetrievalEngine", AiSpanEnricher(inner, step="retrieve", capture_content=False)
+        "RetrievalEngine",
+        AiSpanEnricher(
+            inner, options=AiSpanEnricherOptions(step="retrieve", capture_content=False)
+        ),
     )
 
     with patch(_SPAN_SOURCE, return_value=span):
@@ -393,7 +413,10 @@ async def test_ai_span_enricher_capture_content_false_records_no_text() -> None:
     inner.stream_with_usage = AsyncMock(return_value=_usage_stream("secret"))
     span = MagicMock()
     enricher = cast(
-        "LLMProvider", AiSpanEnricher(inner, step="generate", capture_content=False)
+        "LLMProvider",
+        AiSpanEnricher(
+            inner, options=AiSpanEnricherOptions(step="generate", capture_content=False)
+        ),
     )
 
     with patch(_SPAN_SOURCE, return_value=span):
@@ -436,7 +459,10 @@ async def test_ai_span_enricher_capture_content_true_redacts_pii() -> None:
     )
     span = MagicMock()
     enricher = cast(
-        "LLMProvider", AiSpanEnricher(inner, step="generate", capture_content=True)
+        "LLMProvider",
+        AiSpanEnricher(
+            inner, options=AiSpanEnricherOptions(step="generate", capture_content=True)
+        ),
     )
 
     with patch(_SPAN_SOURCE, return_value=span):
@@ -489,10 +515,16 @@ async def test_ai_span_enricher_enrichment_error_does_not_propagate() -> None:
     span.set_attribute.side_effect = RuntimeError("exporter down")
 
     llm_enricher = cast(
-        "LLMProvider", AiSpanEnricher(llm, step="generate", capture_content=True)
+        "LLMProvider",
+        AiSpanEnricher(
+            llm, options=AiSpanEnricherOptions(step="generate", capture_content=True)
+        ),
     )
     engine_enricher = cast(
-        "RetrievalEngine", AiSpanEnricher(engine, step="retrieve", capture_content=False)
+        "RetrievalEngine",
+        AiSpanEnricher(
+            engine, options=AiSpanEnricherOptions(step="retrieve", capture_content=False)
+        ),
     )
     with patch(_SPAN_SOURCE, return_value=span):
         got_response = await llm_enricher.complete(_messages())

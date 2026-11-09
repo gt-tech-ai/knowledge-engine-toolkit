@@ -8,13 +8,17 @@ contract.
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from techai_webutils.clients.splitting.kb_unit import (
+        KbUnitSplitter as _LazyKbUnitSplitter,
+    )
     from techai_webutils.core.interfaces.splitter import DocumentSplitter
 
 # Default per-index-unit byte ceiling (25 MiB); the composition root overrides it from
@@ -59,8 +63,13 @@ def splitter_from_config(config: SplitterConfig) -> DocumentSplitter:
 
     """
     if config.kind is SplitterKind.KB_UNIT:
-        from techai_webutils.clients.splitting.kb_unit import KbUnitSplitter  # noqa: PLC0415 — lazy backend
+        kb_unit_splitter_cls = cast(
+            "type[_LazyKbUnitSplitter]",
+            importlib.import_module(
+                "techai_webutils.clients.splitting.kb_unit"
+            ).KbUnitSplitter,
+        )
 
-        return KbUnitSplitter(max_bytes=config.max_bytes)
+        return kb_unit_splitter_cls(max_bytes=config.max_bytes)
     msg = f"unknown splitter kind: {config.kind!r}"
     raise AppValueError(msg)

@@ -405,13 +405,14 @@ class _Retry:
         """Bind the retrier."""
         self._retrier = retrier
 
-    async def wrap_op(self, op: str, next_: OpThunk) -> object:  # noqa: ARG002 - the retrier owns the policy
+    async def wrap_op(self, op: str, next_: OpThunk) -> object:
         """Run the op with the retrier's policy.
 
         Returns:
             What the operation returns.
 
         """
+        del op
         return await self._retrier.retry(next_)
 
 
@@ -436,7 +437,7 @@ class _CircuitBreaker:
         self._cb = cb
         self._name = name
 
-    async def wrap_op(self, op: str, next_: OpThunk) -> object:  # noqa: ARG002 - the breaker is per-subject
+    async def wrap_op(self, op: str, next_: OpThunk) -> object:
         """Run the op through the breaker.
 
         Returns:
@@ -446,6 +447,7 @@ class _CircuitBreaker:
             UnavailableError: Circuit breaker ``self._name`` open.
 
         """
+        del op
         try:
             with self._cb:
                 return await next_()

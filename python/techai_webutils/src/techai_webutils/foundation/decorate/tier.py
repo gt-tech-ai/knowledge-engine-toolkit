@@ -194,38 +194,35 @@ class Tier:
 
         """
         obs = deps.observability
-        match layer:
-            case Layer.RECOVERY:
-                return (
-                    None
-                    if deps.skip_recovery
-                    else new_recovery(deps.panic_logger or obs.logger, self.name, name)
-                )
-            case Layer.TRACING:
-                return _when(
-                    obs.tracer, lambda t: new_tracing(t, self.name, name, self.span_kind)
-                )
-            case Layer.METRICS:
-                return _when(obs.metrics, lambda m: new_metrics(m, self.name, name))
-            case Layer.LOGGING:
-                return _when(
-                    obs.logger,
-                    lambda lg: new_logging(lg, self.name, name, edge=self.edge),
-                )
-            case Layer.AUTH:
-                return _when(deps.auth, lambda a: new_auth(name, a))
-            case Layer.TIMEOUT:
-                return new_timeout(deps.timeout) if deps.timeout > 0 else None
-            case Layer.CIRCUIT_BREAKER:
-                return _when(deps.breaker, lambda cb: new_circuit_breaker(cb, name))
-            case Layer.RETRY:
-                return _when(deps.retrier, new_retry)
-            case Layer.BULKHEAD:
-                return _when(
-                    deps.bulkhead, lambda b: new_bulkhead(b, shed=deps.shed_load)
-                )
-            case Layer.RATE_LIMIT:
-                return _when(deps.rate_limiter, new_rate_limit)
+        builders: dict[Layer, Callable[[], OpMiddleware | None]] = {
+            Layer.RECOVERY: lambda: (
+                None
+                if deps.skip_recovery
+                else new_recovery(deps.panic_logger or obs.logger, self.name, name)
+            ),
+            Layer.TRACING: lambda: _when(
+                obs.tracer, lambda t: new_tracing(t, self.name, name, self.span_kind)
+            ),
+            Layer.METRICS: lambda: _when(
+                obs.metrics, lambda m: new_metrics(m, self.name, name)
+            ),
+            Layer.LOGGING: lambda: _when(
+                obs.logger, lambda lg: new_logging(lg, self.name, name, edge=self.edge)
+            ),
+            Layer.AUTH: lambda: _when(deps.auth, lambda a: new_auth(name, a)),
+            Layer.TIMEOUT: lambda: (
+                new_timeout(deps.timeout) if deps.timeout > 0 else None
+            ),
+            Layer.CIRCUIT_BREAKER: lambda: _when(
+                deps.breaker, lambda cb: new_circuit_breaker(cb, name)
+            ),
+            Layer.RETRY: lambda: _when(deps.retrier, new_retry),
+            Layer.BULKHEAD: lambda: _when(
+                deps.bulkhead, lambda b: new_bulkhead(b, shed=deps.shed_load)
+            ),
+            Layer.RATE_LIMIT: lambda: _when(deps.rate_limiter, new_rate_limit),
+        }
+        return builders[layer]()
 
     def chain(self, name: str, deps: Deps) -> OpMiddleware:
         """Build the tier's middleware chain for the subject ``name`` from ``deps``.

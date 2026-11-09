@@ -232,11 +232,12 @@ class _PrometheusHistogram(MetricHistogram):
         if exemplar is not None:
             try:
                 target.observe(value, exemplar=exemplar)
-                return
             except (ValueError, TypeError):
                 # registry without exemplar support -> record the value without the
                 # exemplar
                 pass
+            else:
+                return
         target.observe(value)
 
 

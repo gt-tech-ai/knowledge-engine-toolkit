@@ -63,7 +63,6 @@ class RedisCache(Cache):
             result = await self._client.get(key)
             if isinstance(result, str):
                 return result.encode()
-            return result
         except _CLIENT_ERRORS as e:
             if self._failure_mode == FailureMode.ERROR:
                 raise
@@ -71,6 +70,8 @@ class RedisCache(Cache):
                 "redis get failed (bypass mode)", extra={"key": key, "error": str(e)}
             )
             return None
+        else:
+            return result
 
     async def set(self, key: str, value: bytes, ttl_seconds: int = 300) -> None:
         """Set a value in cache with TTL."""

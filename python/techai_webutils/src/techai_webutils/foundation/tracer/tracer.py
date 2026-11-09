@@ -25,6 +25,8 @@ from techai_webutils.core.interfaces.tracer import SpanKind, TracerProvider, Tra
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from techai_webutils.core.interfaces.tracer import AttributeValue
+
 
 class OTelTracerProvider(TracerProvider):
     """TracerProvider backed by OpenTelemetry.
@@ -82,7 +84,7 @@ class _OTelSpan(TracerSpan):
         """Wrap the underlying OTel span."""
         self._inner = inner
 
-    def set_attribute(self, key: str, value: str | float | bool) -> None:  # noqa: FBT001
+    def set_attribute(self, key: str, value: AttributeValue) -> None:
         """Attach a key/value attribute to the span."""
         self._inner.set_attribute(key, value)
 

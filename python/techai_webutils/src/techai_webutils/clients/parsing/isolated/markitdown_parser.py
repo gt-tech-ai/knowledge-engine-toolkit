@@ -9,13 +9,21 @@ poison document fails alone.
 
 from __future__ import annotations
 
+import importlib
 import io
 import re
 from pathlib import Path
-from typing import BinaryIO, Protocol, cast
+from typing import TYPE_CHECKING, BinaryIO, Protocol, cast
 
 from techai_webutils.clients.parsing.isolated.detect import detect_format
 from techai_webutils.core.domain import DocumentFormat, Page, ParsedDocument
+from techai_webutils.foundation.logger import get_logger
+
+if TYPE_CHECKING:
+    from markitdown import MarkItDown as _LazyMarkItDown
+    from markitdown import StreamInfo as _LazyStreamInfo
+
+logger = get_logger(__name__)
 
 # _HEADER_BYTES is how much of a file's prefix is read for magic-byte format detection on
 # the path (streaming) lane — enough for the format sniffers, far less than the whole
@@ -120,9 +128,11 @@ class MarkItDownParser:
         # not pay the import. MarkItDown's convert_stream keyword params
         # (stream_info/file_extension) are narrower than the Protocol's **kwargs, so it is
         # not *structurally* assignable — cast the concrete default.
-        from markitdown import MarkItDown  # noqa: PLC0415 — lazy: the parent never loads markitdown
+        mark_it_down_cls = cast(
+            "type[_LazyMarkItDown]", importlib.import_module("markitdown").MarkItDown
+        )
 
-        self._converter = cast("_Converter", MarkItDown())
+        self._converter = cast("_Converter", mark_it_down_cls())
 
     def parse(
         self, content: bytes, *, declared: str = "", filename: str = ""
@@ -146,6 +156,7 @@ class MarkItDownParser:
         try:
             markdown = self._to_markdown(content, fmt)
         except Exception as exc:  # isolate one document's failure as error metadata
+            logger.exception("parse failed")
             return ParsedDocument(
                 markdown_content="",
                 document_format=fmt,
@@ -173,9 +184,11 @@ class MarkItDownParser:
             The Markdown.
 
         """
-        from markitdown import StreamInfo  # noqa: PLC0415 — lazy: the parent never loads markitdown
+        stream_info_cls = cast(
+            "type[_LazyStreamInfo]", importlib.import_module("markitdown").StreamInfo
+        )
 
-        info = StreamInfo(extension=f".{fmt.value}", charset="utf-8")
+        info = stream_info_cls(extension=f".{fmt.value}", charset="utf-8")
         try:
             result = self._converter.convert_stream(io.BytesIO(content), stream_info=info)
         except UnicodeDecodeError:
@@ -191,12 +204,13 @@ class MarkItDownParser:
             The extracted pages; empty if extraction fails.
 
         """
-        import pymupdf  # noqa: PLC0415 — lazy so the parent process never loads pymupdf
+        pymupdf = importlib.import_module("pymupdf")
 
         try:
             with pymupdf.open(stream=content, filetype="pdf") as doc:
                 return _page_texts(doc)
         except Exception:  # PDF page extraction is best-effort supplementary data
+            logger.exception("pdf_pages failed")
             return []
 
     def parse_path(
@@ -227,6 +241,7 @@ class MarkItDownParser:
         try:
             markdown = self._to_markdown_path(path, fmt)
         except Exception as exc:  # isolate one document's failure as error metadata
+            logger.exception("parse_path failed")
             return ParsedDocument(
                 markdown_content="",
                 document_format=fmt,
@@ -269,9 +284,11 @@ class MarkItDownParser:
             UnicodeDecodeError: The converter could not decode the file as UTF-8.
 
         """
-        from markitdown import StreamInfo  # noqa: PLC0415 — lazy: the parent never loads markitdown
+        stream_info_cls = cast(
+            "type[_LazyStreamInfo]", importlib.import_module("markitdown").StreamInfo
+        )
 
-        info = StreamInfo(extension=f".{fmt.value}", charset="utf-8")
+        info = stream_info_cls(extension=f".{fmt.value}", charset="utf-8")
         with Path(path).open("rb") as f:
             try:
                 return str(
@@ -298,10 +315,11 @@ class MarkItDownParser:
             The extracted pages; empty if extraction fails.
 
         """
-        import pymupdf  # noqa: PLC0415 — lazy so the parent process never loads pymupdf
+        pymupdf = importlib.import_module("pymupdf")
 
         try:
             with pymupdf.open(path, filetype="pdf") as doc:
                 return _page_texts(doc)
         except Exception:  # PDF page extraction is best-effort supplementary data
+            logger.exception("pdf_pages_path failed")
             return []

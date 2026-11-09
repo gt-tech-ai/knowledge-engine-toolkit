@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import TYPE_CHECKING, Any, Protocol, Self, cast, override
+from typing import TYPE_CHECKING, Any, Protocol, Self, TypedDict, Unpack, cast, override
 
 from botocore.exceptions import BotoCoreError, ClientError  # type: ignore[import-untyped]
 
@@ -40,15 +40,29 @@ class _Readable(Protocol):
         ...
 
 
+class InvokeModelRequest(TypedDict):
+    """The keyword arguments of the AWS ``invoke_model`` call."""
+
+    modelId: str
+    """The AWS ``modelId`` request field."""
+
+    body: str
+    """The AWS ``body`` request field."""
+
+    contentType: str
+    """The AWS ``contentType`` request field."""
+
+    accept: str
+    """The AWS ``accept`` request field."""
+
+
 class BedrockRuntimeInvoker(Protocol):
     """The bedrock-runtime ``InvokeModel`` slice the embedding provider calls.
 
     (aiobotocore is unstubbed).
     """
 
-    async def invoke_model(
-        self, *, modelId: str, body: str, contentType: str, accept: str
-    ) -> dict[str, Any]:
+    async def invoke_model(self, **kwargs: Unpack[InvokeModelRequest]) -> dict[str, Any]:
         """Invoke a model with a JSON body.
 
         The response's ``body`` is a readable stream.

@@ -18,6 +18,7 @@ from techai_webutils.clients.reranking import (
 from techai_webutils.clients.retrieval.abstain import AbstainerKind
 from techai_webutils.clients.retrieval.builder import (
     RetrievalConfig,
+    RetrievalEngineDependencies,
     RetrievalKind,
     new_retrieval_engine_from_config,
 )
@@ -85,15 +86,19 @@ async def test_cross_encoder_reorders_passages_by_the_mocked_scores() -> None:
     )
     engine = new_retrieval_engine_from_config(
         RetrievalConfig(reranking_kind=RerankingKind.CROSS_ENCODER, min_score=0.0),
-        policies=[],
-        stub_passages=[_passage(1, 0.9), _passage(2, 0.8), _passage(3, 0.7)],
-        reranker=reranker,
+        options=RetrievalEngineDependencies(
+            policies=[],
+            stub_passages=[_passage(1, 0.9), _passage(2, 0.8), _passage(3, 0.7)],
+            reranker=reranker,
+        ),
     )
     thresholded = new_retrieval_engine_from_config(
         RetrievalConfig(reranking_kind="cross_encoder"),
-        policies=[],
-        stub_passages=[_passage(1, 0.9), _passage(2, 0.8), _passage(3, 0.7)],
-        reranker=reranker,
+        options=RetrievalEngineDependencies(
+            policies=[],
+            stub_passages=[_passage(1, 0.9), _passage(2, 0.8), _passage(3, 0.7)],
+            reranker=reranker,
+        ),
     )
 
     results = await engine.retrieve("text")
@@ -127,8 +132,7 @@ async def test_noop_reranker_keeps_order_and_empty_results_skip_the_reranker() -
     unused.rerank = AsyncMock()
     engine = new_retrieval_engine_from_config(
         RetrievalConfig(reranking_kind="cross_encoder", abstainer=AbstainerKind.NONE),
-        policies=[],
-        reranker=unused,
+        options=RetrievalEngineDependencies(policies=[], reranker=unused),
     )
 
     scores = await noop.rerank("q", ["a", "b", "c"])
@@ -183,11 +187,12 @@ def test_misconfigured_reranking_is_refused() -> None:
             RetrievalConfig(
                 kind=RetrievalKind.OPENSEARCH, reranking_kind="bedrock_rerank"
             ),
-            policies=[],
+            options=RetrievalEngineDependencies(policies=[]),
         )
     with pytest.raises(AppValueError, match="reranker"):
         new_retrieval_engine_from_config(
-            RetrievalConfig(reranking_kind="cross_encoder"), policies=[]
+            RetrievalConfig(reranking_kind="cross_encoder"),
+            options=RetrievalEngineDependencies(policies=[]),
         )
     with pytest.raises(AppValueError, match="unknown reranking kind"):
         RetrievalConfig(reranking_kind="cohere")

@@ -34,11 +34,11 @@ class StubRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
 
     async def retrieve(
         self,
-        query: str,  # noqa: ARG002
+        query: str,
         *,
         top_k: int = 10,
-        filters: dict[str, str] | None = None,  # noqa: ARG002 - scope is enforced by the decorator
-        index_id: str | None = None,  # noqa: ARG002 - one corpus regardless of index
+        filters: dict[str, str] | None = None,
+        index_id: str | None = None,
     ) -> list[RetrievalResult]:
         """Return copies of the corpus passages (with their own metadata dicts).
 
@@ -48,4 +48,5 @@ class StubRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
             Copies of the corpus passages (with their own metadata dicts).
 
         """
+        del query, filters, index_id
         return [replace(p, metadata=dict(p.metadata)) for p in self._passages[:top_k]]

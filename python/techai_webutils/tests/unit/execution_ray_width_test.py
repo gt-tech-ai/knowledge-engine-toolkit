@@ -17,8 +17,14 @@ from techai_webutils.execution.executor.factory import (
 )
 from techai_webutils.execution.executor.ray_executor import RayExecutor
 from techai_webutils.execution.executor.ray_runtime import RayRuntime
-from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntime
-from techai_webutils.execution.executor.resilient_ray_runtime import ResilientRayRuntime
+from techai_webutils.execution.executor.real_ray_runtime import (
+    RealRayRuntime,
+    RealRayRuntimeOptions,
+)
+from techai_webutils.execution.executor.resilient_ray_runtime import (
+    ResilientRayRuntime,
+    ResilientRayRuntimeOptions,
+)
 
 _EXPECTED_WIDTH = 16
 _EXPECTED_WIDTH_64 = 64
@@ -164,7 +170,11 @@ class TestRuntimeClusterCpus:
         mapper = MagicMock()
         mapper.options.return_value.remote.side_effect = lambda *_: _mapper(1)
         with patch(f"{_MODULE}.ray", ray), patch(f"{_MODULE}._run_mapper", mapper):
-            runtime = RealRayRuntime(task_memory_bytes=2 << 30, task_num_cpus=2.0)
+            runtime = RealRayRuntime(
+                options=RealRayRuntimeOptions(
+                    task_memory_bytes=2 << 30, task_num_cpus=2.0
+                )
+            )
             cpus = [await runtime.cluster_cpus(), await runtime.cluster_cpus()]
             await runtime.submit(_mapper, 1)
 
@@ -188,7 +198,9 @@ class TestRuntimeClusterCpus:
         """
         inner = _runtime(12.0)
 
-        assert await ResilientRayRuntime(inner).cluster_cpus() == pytest.approx(12.0)
+        assert await ResilientRayRuntime(
+            inner, options=ResilientRayRuntimeOptions()
+        ).cluster_cpus() == pytest.approx(12.0)
         inner.warm_up.assert_awaited_once()
 
     @staticmethod

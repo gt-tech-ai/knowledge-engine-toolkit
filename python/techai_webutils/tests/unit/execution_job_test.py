@@ -171,7 +171,8 @@ class TestJob:
           - Two always-failing items produce zero FAILs and two WARNs.
         """
 
-        async def boom(item: int) -> StepResult:  # noqa: ARG001
+        async def boom(item: int) -> StepResult:
+            del item
             await asyncio.sleep(0)
             msg = "nope"
             raise ValueError(msg)

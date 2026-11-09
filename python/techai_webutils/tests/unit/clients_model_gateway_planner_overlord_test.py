@@ -19,6 +19,9 @@ from techai_webutils.clients.model_gateway.routed.classifier import (
     route_classifier_from_config,
 )
 from techai_webutils.clients.model_gateway.routed.planner import route_planner_from_config
+from techai_webutils.clients.model_gateway.routed.planner.builder import (
+    RoutePlannerDependencies,
+)
 from techai_webutils.clients.model_gateway.routed.ranker import (
     candidate_ranker_from_config,
 )
@@ -36,7 +39,7 @@ _CTX = RouteContext(tenant_id="org-1", workspace_id="ws-1", step="generate")
 def _planner(
     catalog_raw: dict[str, Any],
     routes_raw: dict[str, Any],
-    transport: Any,  # noqa: ANN401 - a RouteTransport mock (or None)
+    transport: object,
     *,
     raw: dict[str, Any] | None = None,
     metrics: MetricsProvider | None = None,
@@ -55,13 +58,15 @@ def _planner(
     }
     planner = route_planner_from_config(
         config,
-        classifier=route_classifier_from_config(
-            {}, route_names=frozenset(routes), default_route=""
+        options=RoutePlannerDependencies(
+            classifier=route_classifier_from_config(
+                {}, route_names=frozenset(routes), default_route=""
+            ),
+            ranker=candidate_ranker_from_config({}),
+            routes=routes,
+            planner_deps={"transport": transport},
+            metrics=metrics,
         ),
-        ranker=candidate_ranker_from_config({}),
-        routes=routes,
-        planner_deps={"transport": transport},
-        metrics=metrics,
     )
     return planner, catalog
 

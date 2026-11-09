@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import importlib
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, cast
 
 import grpc
@@ -202,6 +203,30 @@ def _ray_task_options(memory_bytes: int, num_cpus: float) -> dict[str, object]:
     return options
 
 
+@dataclass(frozen=True, kw_only=True)
+class RealRayRuntimeOptions:
+    """What ``RealRayRuntime`` takes, grouped into one value."""
+
+    worker_setup_hook: str | None = None
+    """Dotted path of a no-argument callable Ray runs in every worker process before it
+    runs a task or actor (``worker_process_setup_hook``) — where a consumer configures
+    logging, since a worker never runs the consumer's entrypoint. ``None`` runs none.
+    """
+
+    log_encoding: str | None = None
+    """Encoding of Ray's own task and actor logs (``ray.LoggingConfig``: ``TEXT`` or
+    ``JSON``); ``None`` keeps Ray's default.
+    """
+
+    task_memory_bytes: int = 0
+    """Memory Ray reserves for each task (its ``memory`` resource), so it places tasks by
+    memory as well as CPU; ``0`` reserves none.
+    """
+
+    task_num_cpus: float = 0.0
+    """CPUs each task declares (its ``num_cpus``); ``0`` keeps Ray's default of 1."""
+
+
 class RealRayRuntime:
     """RayRuntime backed by a real Ray cluster (connects on first ``submit``)."""
 
@@ -210,34 +235,24 @@ class RealRayRuntime:
         address: str | None = None,
         namespace: str | None = None,
         *,
-        worker_setup_hook: str | None = None,
-        log_encoding: str | None = None,
-        task_memory_bytes: int = 0,
-        task_num_cpus: float = 0.0,
+        options: RealRayRuntimeOptions,
     ) -> None:
         """Store the connect settings; connection is deferred to the first submit/warm_up.
 
         Args:
             address: The cluster address; ``None`` starts or joins a local cluster.
             namespace: The Ray namespace; ``None`` uses Ray's default.
-            worker_setup_hook: Dotted path of a no-argument callable Ray runs in every
-                worker process before it runs a task or actor
-                (``worker_process_setup_hook``) — where a consumer configures logging,
-                since a worker never runs the consumer's entrypoint. ``None`` runs none.
-            log_encoding: Encoding of Ray's own task and actor logs
-                (``ray.LoggingConfig``: ``TEXT`` or ``JSON``); ``None`` keeps Ray's
-                default.
-            task_memory_bytes: Memory Ray reserves for each task (its ``memory``
-                resource), so it places tasks by memory as well as CPU; ``0`` reserves
-                none.
-            task_num_cpus: CPUs each task declares (its ``num_cpus``); ``0`` keeps Ray's
-                default of 1.
+            options: The settings and collaborators, grouped.
 
         """
         self._address = address
         self._namespace = namespace
-        self._init_options = _ray_init_options(worker_setup_hook, log_encoding)
-        self._task_options = _ray_task_options(task_memory_bytes, task_num_cpus)
+        self._init_options = _ray_init_options(
+            options.worker_setup_hook, options.log_encoding
+        )
+        self._task_options = _ray_task_options(
+            options.task_memory_bytes, options.task_num_cpus
+        )
         """Ray ``.options`` for every task: the declared memory and CPUs that are set."""
         self._started = False
         # The mapper is put into the object store ONCE per session and reused across a

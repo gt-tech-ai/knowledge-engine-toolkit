@@ -27,6 +27,7 @@ untouched.
 from __future__ import annotations
 
 import functools
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, cast
@@ -85,14 +86,23 @@ def _trace_id() -> str:
     return f"{ctx.trace_id:032x}" if ctx.is_valid else ""
 
 
+@dataclass(frozen=True, kw_only=True)
+class UsageStamp:
+    """What ``usage_from_llm`` takes, grouped into one value."""
+
+    trace_id: str
+    """The ``trace_id`` value of ``usage_from_llm``."""
+
+    ts: datetime
+    """The ``ts`` value of ``usage_from_llm``."""
+
+
 def usage_from_llm(
     scope: UsageScope,
     step: str,
     result: LLMResponse | StreamUsage | list[EmbeddingResult],
     prices: PriceTable,
-    *,
-    trace_id: str,
-    ts: datetime,
+    options: UsageStamp,
 ) -> UsageRecord:
     """Return the ``UsageRecord`` for one model call's result.
 
@@ -124,52 +134,60 @@ def usage_from_llm(
         input_tokens=counts[0],
         output_tokens=counts[1],
         embed_tokens=counts[2],
-        ts=ts,
+        ts=options.ts,
         cost_usd=cost if cost is not None else Decimal(0),
         pricing_version=prices.version if cost is not None else MISSING_PRICING,
-        trace_id=trace_id,
+        trace_id=options.trace_id,
     )
+
+
+@dataclass(frozen=True, kw_only=True)
+class TokenAccountingOptions:
+    """What ``TokenAccountingProxy`` takes, grouped into one value."""
+
+    ledger: TokenLedger
+    """Answers budget checks and records usage."""
+
+    scope: UsageScopeProvider
+    """Returns the current request's ``UsageScope`` (``None`` outside a request)."""
+
+    prices: PriceTable
+    """Prices each recorded usage."""
+
+    policy: BudgetPolicy
+    """How an exhausted budget is enforced."""
+
+    step: str
+    """The pipeline step, recorded as the usage's ``operation``."""
+
+    metrics: MetricsProvider | None = None
+    """Emits token, cost and budget counters; ``None`` emits nothing."""
+
+    clock: Callable[[], datetime] = _utcnow
+    """Returns the usage timestamp (injected for tests)."""
 
 
 class TokenAccountingProxy:
     """Gates each model call on the tenant's budget and records what it used."""
 
-    def __init__(
-        self,
-        inner: object,
-        *,
-        ledger: TokenLedger,
-        scope: UsageScopeProvider,
-        prices: PriceTable,
-        policy: BudgetPolicy,
-        step: str,
-        metrics: MetricsProvider | None = None,
-        clock: Callable[[], datetime] = _utcnow,
-    ) -> None:
+    def __init__(self, inner: object, options: TokenAccountingOptions) -> None:
         """Wrap ``inner`` for the pipeline step ``step``.
 
         Args:
             inner: The provider, gateway or embedder to account.
-            ledger: Answers budget checks and records usage.
-            scope: Returns the current request's ``UsageScope`` (``None`` outside a
-                request).
-            prices: Prices each recorded usage.
-            policy: How an exhausted budget is enforced.
-            step: The pipeline step, recorded as the usage's ``operation``.
-            metrics: Emits token, cost and budget counters; ``None`` emits nothing.
-            clock: Returns the usage timestamp (injected for tests).
+            options: The settings and collaborators, grouped.
 
         """
         self._inner = inner
-        self._ledger = ledger
-        self._scope = scope
-        self._prices = prices
-        self._policy = policy
-        self._step = step
-        self._clock = clock
+        self._ledger = options.ledger
+        self._scope = options.scope
+        self._prices = options.prices
+        self._policy = options.policy
+        self._step = options.step
+        self._clock = options.clock
         self._logger = get_logger("token_accounting")
         self._counters: dict[str, MetricCounter] = {}
-        if metrics is not None:
+        if options.metrics is not None:
             for name, help_text, labels in (
                 (
                     "ai_tokens_total",
@@ -193,7 +211,7 @@ class TokenAccountingProxy:
                     ["model"],
                 ),
             ):
-                self._counters[name] = metrics.counter(name, help_text, labels)
+                self._counters[name] = options.metrics.counter(name, help_text, labels)
 
     def __getattr__(self, name: str) -> object:
         """Return the inner attribute, accounted when it is a model call.
@@ -275,8 +293,7 @@ class TokenAccountingProxy:
                 self._step,
                 result,
                 self._prices,
-                trace_id=_trace_id(),
-                ts=self._clock(),
+                options=UsageStamp(trace_id=_trace_id(), ts=self._clock()),
             )
         if isinstance(result, list):
             model = result[0].model if result else ""

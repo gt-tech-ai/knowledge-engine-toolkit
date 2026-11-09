@@ -216,15 +216,30 @@ def wrap_retrieval_engine(
     return OrderingRetrievalEngine(scoped, config.passage_order)
 
 
-def _inner_engine(
-    config: RetrievalConfig,
-    filter_builder: FilterBuilder | None,
-    document_id_resolver: DocumentIdResolver | None,
-    store_filter_keys: Sequence[str],
-    stub_passages: Sequence[RetrievalResult],
-    embedder: EmbeddingProvider | None,
-    store: VectorStore | None,
-) -> RetrievalEngine:
+@dataclass(frozen=True, kw_only=True)
+class _InnerEngineSeams:
+    """What ``_inner_engine`` takes, grouped into one value."""
+
+    filter_builder: FilterBuilder | None
+    """The ``filter_builder`` value of ``_inner_engine``."""
+
+    document_id_resolver: DocumentIdResolver | None
+    """The ``document_id_resolver`` value of ``_inner_engine``."""
+
+    store_filter_keys: Sequence[str]
+    """The ``store_filter_keys`` value of ``_inner_engine``."""
+
+    stub_passages: Sequence[RetrievalResult]
+    """The ``stub_passages`` value of ``_inner_engine``."""
+
+    embedder: EmbeddingProvider | None
+    """The ``embedder`` value of ``_inner_engine``."""
+
+    store: VectorStore | None
+    """The ``store`` value of ``_inner_engine``."""
+
+
+def _inner_engine(config: RetrievalConfig, options: _InnerEngineSeams) -> RetrievalEngine:
     """Build the unwrapped engine ``config.kind`` selects.
 
     Returns:
@@ -235,26 +250,50 @@ def _inner_engine(
 
     """
     if config.kind is RetrievalKind.STUB:
-        return StubRetrievalEngine(stub_passages)
+        return StubRetrievalEngine(options.stub_passages)
     if config.kind is RetrievalKind.BEDROCK:
-        return _build_bedrock_engine(config, filter_builder, document_id_resolver)
+        return _build_bedrock_engine(
+            config, options.filter_builder, options.document_id_resolver
+        )
     if config.kind in _VECTOR_KINDS:
-        return _build_vector_engine(config, store_filter_keys, embedder, store)
+        return _build_vector_engine(
+            config, options.store_filter_keys, options.embedder, options.store
+        )
     msg = f"unknown retrieval kind: {config.kind!r}"
     raise AppValueError(msg)
 
 
+@dataclass(frozen=True, kw_only=True)
+class RetrievalEngineDependencies:
+    """What ``new_retrieval_engine_from_config`` takes, grouped into one value."""
+
+    policies: Sequence[PassagePolicy]
+    """The ``policies`` value of ``new_retrieval_engine_from_config``."""
+
+    filter_builder: FilterBuilder | None = None
+    """The ``filter_builder`` value of ``new_retrieval_engine_from_config``."""
+
+    document_id_resolver: DocumentIdResolver | None = None
+    """The ``document_id_resolver`` value of ``new_retrieval_engine_from_config``."""
+
+    store_filter_keys: Sequence[str] = ()
+    """The ``store_filter_keys`` value of ``new_retrieval_engine_from_config``."""
+
+    stub_passages: Sequence[RetrievalResult] = ()
+    """The ``stub_passages`` value of ``new_retrieval_engine_from_config``."""
+
+    embedder: EmbeddingProvider | None = None
+    """The ``embedder`` value of ``new_retrieval_engine_from_config``."""
+
+    store: VectorStore | None = None
+    """The ``store`` value of ``new_retrieval_engine_from_config``."""
+
+    reranker: Reranker | None = None
+    """The ``reranker`` value of ``new_retrieval_engine_from_config``."""
+
+
 def new_retrieval_engine_from_config(
-    config: RetrievalConfig,
-    *,
-    policies: Sequence[PassagePolicy],
-    filter_builder: FilterBuilder | None = None,
-    document_id_resolver: DocumentIdResolver | None = None,
-    store_filter_keys: Sequence[str] = (),
-    stub_passages: Sequence[RetrievalResult] = (),
-    embedder: EmbeddingProvider | None = None,
-    store: VectorStore | None = None,
-    reranker: Reranker | None = None,
+    config: RetrievalConfig, options: RetrievalEngineDependencies
 ) -> RetrievalEngine:
     """Build the retrieval engine ``config.kind`` selects, wrapped for policy and order.
 
@@ -277,22 +316,28 @@ def new_retrieval_engine_from_config(
     _refuse_bedrock_rerank_off_bedrock(config)
     _warn_about_seams(
         config.kind,
-        policies,
-        filter_builder=filter_builder,
-        document_id_resolver=document_id_resolver,
-        store_filter_keys=store_filter_keys,
-        stub_passages=stub_passages,
+        options.policies,
+        options=_SeamWarnings(
+            filter_builder=options.filter_builder,
+            document_id_resolver=options.document_id_resolver,
+            store_filter_keys=options.store_filter_keys,
+            stub_passages=options.stub_passages,
+        ),
     )
     inner = _inner_engine(
         config,
-        filter_builder,
-        document_id_resolver,
-        store_filter_keys,
-        stub_passages,
-        embedder,
-        store,
+        options=_InnerEngineSeams(
+            filter_builder=options.filter_builder,
+            document_id_resolver=options.document_id_resolver,
+            store_filter_keys=options.store_filter_keys,
+            stub_passages=options.stub_passages,
+            embedder=options.embedder,
+            store=options.store,
+        ),
     )
-    return wrap_retrieval_engine(inner, config, policies=policies, reranker=reranker)
+    return wrap_retrieval_engine(
+        inner, config, policies=options.policies, reranker=options.reranker
+    )
 
 
 def _refuse_bedrock_rerank_off_bedrock(config: RetrievalConfig) -> None:
@@ -328,20 +373,24 @@ def _build_bedrock_engine(
         The Bedrock Knowledge Base engine.
 
     """
-    bedrock = importlib.import_module("techai_webutils.clients.retrieval.bedrock")
+    bedrock = importlib.import_module("techai_webutils.clients.retrieval.bedrock.engine")
     engine = cast("type[BedrockRetrievalEngine]", bedrock.BedrockRetrievalEngine)
     return engine(
-        region=config.region,
-        knowledge_base_id=config.knowledge_base_id,
-        endpoint=config.endpoint,
-        search_type=config.search_type,
-        # The reranker model is passed only when the kind selects it, so kind=none
-        # disables reranking regardless of a stray model id.
-        reranking_model=(
-            config.reranking_model if config.reranking_kind == "bedrock_rerank" else ""
-        ),
-        filter_builder=filter_builder,
-        document_id_resolver=document_id_resolver,
+        options=bedrock.BedrockRetrievalOptions(
+            region=config.region,
+            knowledge_base_id=config.knowledge_base_id,
+            endpoint=config.endpoint,
+            search_type=config.search_type,
+            # The reranker model is passed only when the kind selects it, so kind=none
+            # disables reranking regardless of a stray model id.
+            reranking_model=(
+                config.reranking_model
+                if config.reranking_kind == "bedrock_rerank"
+                else ""
+            ),
+            filter_builder=filter_builder,
+            document_id_resolver=document_id_resolver,
+        )
     )
 
 
@@ -357,14 +406,25 @@ _SEAM_KINDS = {
 """The kinds each factory seam reaches."""
 
 
+@dataclass(frozen=True, kw_only=True)
+class _SeamWarnings:
+    """What ``_warn_about_seams`` takes, grouped into one value."""
+
+    filter_builder: FilterBuilder | None
+    """The ``filter_builder`` value of ``_warn_about_seams``."""
+
+    document_id_resolver: DocumentIdResolver | None
+    """The ``document_id_resolver`` value of ``_warn_about_seams``."""
+
+    store_filter_keys: Sequence[str]
+    """The ``store_filter_keys`` value of ``_warn_about_seams``."""
+
+    stub_passages: Sequence[RetrievalResult]
+    """The ``stub_passages`` value of ``_warn_about_seams``."""
+
+
 def _warn_about_seams(
-    kind: RetrievalKind,
-    policies: Sequence[PassagePolicy],
-    *,
-    filter_builder: FilterBuilder | None,
-    document_id_resolver: DocumentIdResolver | None,
-    store_filter_keys: Sequence[str],
-    stub_passages: Sequence[RetrievalResult],
+    kind: RetrievalKind, policies: Sequence[PassagePolicy], options: _SeamWarnings
 ) -> None:
     """Log seams the selected kind ignores and warn about a scope not pushed down.
 
@@ -374,10 +434,10 @@ def _warn_about_seams(
     others, starving a scope of passages.
     """
     supplied = {
-        "filter_builder": filter_builder is not None,
-        "document_id_resolver": document_id_resolver is not None,
-        "store_filter_keys": bool(store_filter_keys),
-        "stub_passages": bool(stub_passages),
+        "filter_builder": options.filter_builder is not None,
+        "document_id_resolver": options.document_id_resolver is not None,
+        "store_filter_keys": bool(options.store_filter_keys),
+        "stub_passages": bool(options.stub_passages),
     }
     unused = [
         name
@@ -395,8 +455,8 @@ def _warn_about_seams(
     if kind in _VECTOR_KINDS:
         # The vector engine pushes {k: request[k]} for each store filter key, so a scope
         # is pushed down only when its metadata key is one of them.
-        scope_keys = [key for key in scope_keys if key not in store_filter_keys]
-    elif kind is not RetrievalKind.BEDROCK or filter_builder is not None:
+        scope_keys = [key for key in scope_keys if key not in options.store_filter_keys]
+    elif kind is not RetrievalKind.BEDROCK or options.filter_builder is not None:
         # The stub has no backend top_k to starve; a Bedrock filter_builder is the
         # consumer's push-down.
         scope_keys = []

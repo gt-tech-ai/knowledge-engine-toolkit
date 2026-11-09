@@ -14,8 +14,10 @@ mounting both adapters) never double-registers with the Prometheus registry.
 
 from __future__ import annotations
 
+import importlib
 import time
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from opentelemetry import trace as otel_trace
 from opentelemetry.propagate import extract
@@ -25,8 +27,9 @@ from prometheus_client import Counter, Histogram
 from techai_webutils.foundation.logger.logger import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Coroutine
 
+    from aiohttp import web
     from starlette.requests import Request
     from starlette.responses import Response
 
@@ -77,14 +80,19 @@ _SUPPRESSED_ACCESS_LOG_PATHS = frozenset({"/healthz", "/readyz", "/metrics"})
 """Probe/scrape paths whose access-log line is dropped (RED metrics still recorded)."""
 
 
+@dataclass(frozen=True, kw_only=True)
+class _HttpLogDetails:
+    """What ``_log_http`` takes, grouped into one value."""
+
+    route: str | None = None
+    """The ``route`` value of ``_log_http``."""
+
+    exc_info: bool = False
+    """The ``exc_info`` value of ``_log_http``."""
+
+
 def _log_http(
-    method: str,
-    path: str,
-    status: int,
-    started: float,
-    *,
-    route: str | None = None,
-    exc_info: bool = False,
+    method: str, path: str, status: int, started: float, options: _HttpLogDetails
 ) -> None:
     """Emit the canonical 'http request' log at a status-appropriate level.
 
@@ -101,10 +109,10 @@ def _log_http(
         "status": status,
         "duration_ms": round((time.perf_counter() - started) * 1000, 2),
     }
-    if route is not None:
-        fields["route"] = route
+    if options.route is not None:
+        fields["route"] = options.route
     if status >= _SERVER_ERROR_STATUS:
-        if exc_info:
+        if options.exc_info:
             _log.error("http request", exc_info=True, **fields)
         else:
             _log.error("http request", **fields)
@@ -114,7 +122,9 @@ def _log_http(
         _log.info("http request", **fields)
 
 
-def aiohttp_observability_middleware(service_name: str) -> Any:  # noqa: ANN401  (aiohttp middleware type)
+def aiohttp_observability_middleware(
+    service_name: str,
+) -> Callable[..., Coroutine[object, object, web.StreamResponse]]:
     """Return an aiohttp @middleware that records metrics + a SERVER span.
 
     aiohttp is imported lazily so techai_webutils does not hard-depend on it.
@@ -123,11 +133,11 @@ def aiohttp_observability_middleware(service_name: str) -> Any:  # noqa: ANN401 
         An aiohttp @middleware that records metrics + a SERVER span.
 
     """
-    from aiohttp import web  # noqa: PLC0415  (lazy: aiohttp is a caller dependency)
+    runtime_web = importlib.import_module("aiohttp.web")
 
     tracer = otel_trace.get_tracer(service_name)
 
-    @web.middleware
+    @runtime_web.middleware
     async def middleware(
         request: web.Request,
         handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
@@ -141,8 +151,7 @@ def aiohttp_observability_middleware(service_name: str) -> Any:  # noqa: ANN401 
         Returns:
             The response.
 
-        Raises:
-            HTTPException: The handler raised an HTTP error, re-raised after recording.
+        A callee raises ``HTTPException``: re-raised after recording.
 
         """
         route = request.path
@@ -158,12 +167,18 @@ def aiohttp_observability_middleware(service_name: str) -> Any:  # noqa: ANN401 
             span.set_attribute("url.path", request.path)
             try:
                 resp = await handler(request)
-            except web.HTTPException as exc:
+            except runtime_web.HTTPException as exc:
                 span.set_attribute("http.response.status_code", exc.status)
                 if exc.status >= _SERVER_ERROR_STATUS:
                     span.set_status(Status(StatusCode.ERROR))
                 _record(request.method, route, exc.status, started)
-                _log_http(request.method, request.path, exc.status, started, route=route)
+                _log_http(
+                    request.method,
+                    request.path,
+                    exc.status,
+                    started,
+                    options=_HttpLogDetails(route=route),
+                )
                 raise
             except Exception as exc:
                 span.record_exception(exc)
@@ -174,13 +189,18 @@ def aiohttp_observability_middleware(service_name: str) -> Any:  # noqa: ANN401 
                     request.path,
                     _SERVER_ERROR_STATUS,
                     started,
-                    route=route,
-                    exc_info=True,
+                    options=_HttpLogDetails(route=route, exc_info=True),
                 )
                 raise
             span.set_attribute("http.response.status_code", resp.status)
             _record(request.method, route, resp.status, started)
-            _log_http(request.method, request.path, resp.status, started, route=route)
+            _log_http(
+                request.method,
+                request.path,
+                resp.status,
+                started,
+                options=_HttpLogDetails(route=route),
+            )
             return resp
 
     return middleware
@@ -214,11 +234,23 @@ async def fastapi_observability_middleware(
             span.record_exception(exc)
             span.set_status(Status(StatusCode.ERROR))
             _record(request.method, route, _SERVER_ERROR_STATUS, started)
-            _log_http(request.method, route, _SERVER_ERROR_STATUS, started, exc_info=True)
+            _log_http(
+                request.method,
+                route,
+                _SERVER_ERROR_STATUS,
+                started,
+                options=_HttpLogDetails(exc_info=True),
+            )
             raise
         span.set_attribute("http.response.status_code", response.status_code)
         if response.status_code >= _SERVER_ERROR_STATUS:
             span.set_status(Status(StatusCode.ERROR))
         _record(request.method, route, response.status_code, started)
-        _log_http(request.method, route, response.status_code, started)
+        _log_http(
+            request.method,
+            route,
+            response.status_code,
+            started,
+            options=_HttpLogDetails(),
+        )
         return response

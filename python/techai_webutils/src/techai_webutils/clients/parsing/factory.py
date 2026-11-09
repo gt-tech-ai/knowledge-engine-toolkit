@@ -21,6 +21,9 @@ from techai_webutils.core.errors import AppValueError
 if TYPE_CHECKING:
     from concurrent.futures import Executor
 
+    from techai_webutils.clients.parsing.isolated import (
+        IsolatedParser as _LazyIsolatedParser,
+    )
     from techai_webutils.clients.parsing.layout.parser import (
         LayoutConverter,
         LayoutParser,
@@ -95,9 +98,14 @@ def parser_from_config(
     if config.kind is ParserKind.LAYOUT:
         return _layout(config, executor, convert)
     if config.kind is ParserKind.ISOLATED:
-        from techai_webutils.clients.parsing.isolated import IsolatedParser  # noqa: PLC0415 — lazy backend
+        isolated_parser_cls = cast(
+            "type[_LazyIsolatedParser]",
+            importlib.import_module(
+                "techai_webutils.clients.parsing.isolated"
+            ).IsolatedParser,
+        )
 
-        return IsolatedParser(
+        return isolated_parser_cls(
             memory_bytes=config.memory_bytes,
             timeout_seconds=config.timeout_seconds,
             executor=executor,
@@ -128,10 +136,12 @@ def _layout(
     module = importlib.import_module("techai_webutils.clients.parsing.layout.parser")
     parser = cast("type[LayoutParser]", module.LayoutParser)
     return parser(
-        memory_bytes=config.memory_bytes,
-        timeout_seconds=config.timeout_seconds,
-        executor=executor,
-        artifacts_path=config.artifacts_path,
-        ocr=config.ocr,
-        convert=convert or cast("LayoutConverter", module.convert_with_docling),
+        options=module.LayoutParserOptions(
+            memory_bytes=config.memory_bytes,
+            timeout_seconds=config.timeout_seconds,
+            executor=executor,
+            artifacts_path=config.artifacts_path,
+            ocr=config.ocr,
+            convert=convert or cast("LayoutConverter", module.convert_with_docling),
+        )
     )

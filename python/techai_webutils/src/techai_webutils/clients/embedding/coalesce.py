@@ -18,9 +18,12 @@ from typing import TYPE_CHECKING, override
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider
 from techai_webutils.foundation.lifecycle import DelegatingAsyncResource
+from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.embedding import EmbeddingResult, InputType
+
+logger = get_logger(__name__)
 
 _Item = tuple[str, "asyncio.Future[EmbeddingResult]"]
 """One queued text and the future its caller awaits."""
@@ -144,6 +147,7 @@ class CoalescingEmbedding(DelegatingAsyncResource[EmbeddingProvider], EmbeddingP
                 [text for text, _ in items], input_type=input_type
             )
         except Exception as exc:
+            logger.exception("run failed")
             for _, future in items:
                 if not future.done():
                     future.set_exception(exc)

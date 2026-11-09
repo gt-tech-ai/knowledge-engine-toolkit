@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, cast
 
@@ -11,6 +13,12 @@ from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from techai_webutils.clients.model_gateway.routed.planner.overlord import (
+        OverlordPlanner as _LazyOverlordPlanner,
+    )
+    from techai_webutils.clients.model_gateway.routed.planner.overlord import (
+        OverlordPlannerConfig as _LazyOverlordPlannerConfig,
+    )
     from techai_webutils.core.interfaces.metrics import MetricsProvider
     from techai_webutils.core.interfaces.routing import (
         CandidateRanker,
@@ -30,26 +38,37 @@ class RoutePlannerKind(StrEnum):
     """Ask the remote overlord planner; fail open to ``local``."""
 
 
+@dataclass(frozen=True, kw_only=True)
+class RoutePlannerDependencies:
+    """What ``route_planner_from_config`` takes, grouped into one value."""
+
+    classifier: RouteClassifier
+    """The local classifier."""
+
+    ranker: CandidateRanker
+    """The local ranker."""
+
+    routes: Mapping[str, Route]
+    """The parsed routes."""
+
+    planner_deps: Mapping[str, object] | None = None
+    """Collaborators a remote kind needs (``overlord``: ``transport``, the product's
+    ``RouteTransport``).
+    """
+
+    metrics: MetricsProvider | None = None
+    """Counts the overlord's fail-opens."""
+
+
 def route_planner_from_config(
-    raw: Mapping[str, Any],
-    *,
-    classifier: RouteClassifier,
-    ranker: CandidateRanker,
-    routes: Mapping[str, Route],
-    planner_deps: Mapping[str, object] | None = None,
-    metrics: MetricsProvider | None = None,
+    raw: Mapping[str, Any], options: RoutePlannerDependencies
 ) -> RoutePlanner:
     """Build the planner ``raw["kind"]`` selects (``local`` by default).
 
     Args:
         raw: The planner config (``kind``; ``overlord: {target, timeout_ms,
             service_token}``).
-        classifier: The local classifier.
-        ranker: The local ranker.
-        routes: The parsed routes.
-        planner_deps: Collaborators a remote kind needs (``overlord``: ``transport``, the
-            product's ``RouteTransport``).
-        metrics: Counts the overlord's fail-opens.
+        options: The settings and collaborators, grouped.
 
     Returns:
         The planner ``raw["kind"]`` selects (``local`` by default).
@@ -60,23 +79,31 @@ def route_planner_from_config(
 
     """
     kind = str(raw.get("kind", RoutePlannerKind.LOCAL))
-    local = LocalPlanner(classifier, ranker, routes)
+    local = LocalPlanner(options.classifier, options.ranker, options.routes)
     if kind == RoutePlannerKind.LOCAL:
         return local
     if kind == RoutePlannerKind.OVERLORD:
-        from techai_webutils.clients.model_gateway.routed.planner.overlord import (  # noqa: PLC0415
-            OverlordPlanner,
-            OverlordPlannerConfig,
+        overlord_planner_cls = cast(
+            "type[_LazyOverlordPlanner]",
+            importlib.import_module(
+                "techai_webutils.clients.model_gateway.routed.planner.overlord"
+            ).OverlordPlanner,
+        )
+        overlord_planner_config_cls = cast(
+            "type[_LazyOverlordPlannerConfig]",
+            importlib.import_module(
+                "techai_webutils.clients.model_gateway.routed.planner.overlord"
+            ).OverlordPlannerConfig,
         )
 
-        config = OverlordPlannerConfig.from_mapping(raw.get("overlord", {}))
-        transport = (planner_deps or {}).get("transport")
+        config = overlord_planner_config_cls.from_mapping(raw.get("overlord", {}))
+        transport = (options.planner_deps or {}).get("transport")
         if transport is None:
             raise AppError(
                 ErrorCode.INVALID_INPUT, "overlord planner requires a transport"
             )
-        return OverlordPlanner(
-            cast("RouteTransport", transport), local, config, metrics=metrics
+        return overlord_planner_cls(
+            cast("RouteTransport", transport), local, config, metrics=options.metrics
         )
     msg = f"unknown route planner kind: {kind!r}"
     raise AppValueError(msg)

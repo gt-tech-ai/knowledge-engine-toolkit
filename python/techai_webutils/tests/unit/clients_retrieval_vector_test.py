@@ -12,6 +12,7 @@ import pytest
 from techai_webutils.clients.retrieval.abstain import AbstainerKind
 from techai_webutils.clients.retrieval.builder import (
     RetrievalConfig,
+    RetrievalEngineDependencies,
     RetrievalKind,
     new_retrieval_engine_from_config,
 )
@@ -126,13 +127,16 @@ async def test_opensearch_kind_builds_the_hybrid_engine_with_abstention_off() ->
     config = RetrievalConfig(kind=RetrievalKind.OPENSEARCH, abstainer=AbstainerKind.NONE)
 
     kept = await new_retrieval_engine_from_config(
-        config, policies=[], embedder=_embedder(), store=store
+        config,
+        options=RetrievalEngineDependencies(
+            policies=[], embedder=_embedder(), store=store
+        ),
     ).retrieve("q")
     dropped = await new_retrieval_engine_from_config(
         RetrievalConfig(kind=RetrievalKind.OPENSEARCH),
-        policies=[],
-        embedder=_embedder(),
-        store=store,
+        options=RetrievalEngineDependencies(
+            policies=[], embedder=_embedder(), store=store
+        ),
     ).retrieve("q")
 
     assert [r.document_id for r in kept] == ["a", "b"]
@@ -304,10 +308,12 @@ class TestQdrantFactoryBranch:
         )
         engine = new_retrieval_engine_from_config(
             config,
-            policies=[MetadataEquals("tenant")],
-            store_filter_keys=("tenant",),
-            embedder=embedder,
-            store=store,
+            options=RetrievalEngineDependencies(
+                policies=[MetadataEquals("tenant")],
+                store_filter_keys=("tenant",),
+                embedder=embedder,
+                store=store,
+            ),
         )
 
         results = await engine.retrieve(
@@ -340,8 +346,8 @@ class TestQdrantFactoryBranch:
         with pytest.raises(AppError) as raised:
             new_retrieval_engine_from_config(
                 RetrievalConfig(kind=RetrievalKind.QDRANT),
-                policies=[],
-                embedder=embedder,
-                store=store,
+                options=RetrievalEngineDependencies(
+                    policies=[], embedder=embedder, store=store
+                ),
             )
         assert raised.value.code is ErrorCode.INVALID_INPUT

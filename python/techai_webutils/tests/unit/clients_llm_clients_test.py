@@ -216,7 +216,6 @@ class TestLlmFactory:
           - new_llm_from_config(kind=OLLAMA, host, model) returns an OllamaLlmProvider
             bound to the model.
         """
-
         provider = new_llm_from_config(
             LlmConfig(kind=LlmKind.OLLAMA, host="http://ollama:11434", model="llama3.2")
         )
@@ -234,7 +233,6 @@ class TestLlmFactory:
         **What it tests:**
           - new_llm_from_config(kind=BEDROCK) returns a BedrockLlmProvider.
         """
-
         assert isinstance(
             new_llm_from_config(LlmConfig(kind=LlmKind.BEDROCK, model="model-x")),
             BedrockLlmProvider,
@@ -255,7 +253,6 @@ class TestLlmFactory:
           - kind=bedrock + fallback_model -> FallbackLlmProvider reporting the primary
             model; no fallback_model -> a bare BedrockLlmProvider.
         """
-
         bare = new_llm_from_config(LlmConfig(kind=LlmKind.BEDROCK, model="primary"))
         assert isinstance(bare, BedrockLlmProvider)
         wrapped = new_llm_from_config(

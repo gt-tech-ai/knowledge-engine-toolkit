@@ -179,10 +179,10 @@ def apply_pii(text: str, spans: Sequence[PiiSpan], mode: PiiMode) -> str:
         start = max(span.start, position)
         if start >= span.end:
             continue
-        parts.append(text[position:start])
-        parts.append(
-            f"[{span.kind}]" if mode == PiiMode.REDACT else "*" * (span.end - start)
-        )
+        parts.extend((
+            text[position:start],
+            f"[{span.kind}]" if mode == PiiMode.REDACT else "*" * (span.end - start),
+        ))
         position = span.end
     parts.append(text[position:])
     return "".join(parts)

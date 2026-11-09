@@ -10,11 +10,13 @@ from botocore.exceptions import ClientError
 
 from techai_webutils.clients.retrieval.bedrock.engine import (
     BedrockRetrievalEngine,
+    BedrockRetrievalOptions,
     DocumentIdResolver,
     FilterBuilder,
 )
 from techai_webutils.clients.retrieval.builder import (
     RetrievalConfig,
+    RetrievalEngineDependencies,
     RetrievalKind,
     new_retrieval_engine_from_config,
     wrap_retrieval_engine,
@@ -132,12 +134,13 @@ class TestBedrockIndexRouting:
             A BedrockRetrievalEngine.
 
         """
-
         client = AsyncMock()
         client.retrieve = AsyncMock(return_value={"retrievalResults": []})
         with _bedrock_client(client):
             engine = BedrockRetrievalEngine(
-                region="us-east-1", knowledge_base_id=kb_default
+                options=BedrockRetrievalOptions(
+                    region="us-east-1", knowledge_base_id=kb_default
+                )
             )
         return engine, client
 
@@ -191,7 +194,6 @@ class TestBedrockIndexRouting:
           - ``retrieve(..., index_id=None)`` on a no-default engine raises
             ``InternalError`` and never issues the Retrieve call.
         """
-
         engine, client = self._engine("")
 
         with pytest.raises(InternalError):
@@ -213,7 +215,6 @@ class TestBedrockIndexRouting:
           - ``retrieve(..., index_id="")`` on an engine with a default raises
             ``InternalError`` and never issues the Retrieve call.
         """
-
         engine, client = self._engine("kb-default")
 
         with pytest.raises(InternalError, match="empty"):
@@ -235,7 +236,6 @@ class TestBedrockIndexRouting:
           - A ThrottlingException from the client's retrieve raises an AppError with code
             UNAVAILABLE, is_transient True, and the ClientError as its cause.
         """
-
         engine, client = self._engine("kb-default")
         throttle = ClientError(
             {
@@ -569,7 +569,9 @@ class TestRetrievalFactory:
             the unused seam.
         """
         with patch("techai_webutils.clients.retrieval.builder.logger") as mock_logger:
-            new_retrieval_engine_from_config(config, policies=[], **seams)
+            new_retrieval_engine_from_config(
+                config, options=RetrievalEngineDependencies(policies=[], **seams)
+            )
 
         mock_logger.info.assert_any_call(
             "retrieval seams unused by the selected kind",
@@ -595,7 +597,7 @@ class TestRetrievalFactory:
         with patch("techai_webutils.clients.retrieval.builder.logger") as mock_logger:
             new_retrieval_engine_from_config(
                 RetrievalConfig(kind=RetrievalKind.BEDROCK, knowledge_base_id="kb"),
-                policies=[MetadataEquals("tenant")],
+                options=RetrievalEngineDependencies(policies=[MetadataEquals("tenant")]),
             )
 
         mock_logger.warning.assert_any_call(
@@ -622,7 +624,7 @@ class TestRetrievalFactory:
         with _bedrock_client(client):
             engine = new_retrieval_engine_from_config(
                 RetrievalConfig(kind=RetrievalKind.BEDROCK, knowledge_base_id="kb"),
-                policies=[],
+                options=RetrievalEngineDependencies(policies=[]),
             )
 
         assert isinstance(engine, FilteringRetrievalEngine)
@@ -641,7 +643,10 @@ class TestRetrievalFactory:
           - A bogus kind raises ValueError naming the kind.
         """
         with pytest.raises(ValueError, match="retrieval kind"):
-            new_retrieval_engine_from_config(RetrievalConfig(kind="bogus"), policies=[])  # type: ignore[arg-type]
+            new_retrieval_engine_from_config(
+                RetrievalConfig(kind="bogus"),  # type: ignore[arg-type]
+                options=RetrievalEngineDependencies(policies=[]),
+            )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -660,12 +665,14 @@ class TestRetrievalFactory:
         """
         engine = new_retrieval_engine_from_config(
             RetrievalConfig(kind=RetrievalKind.STUB, min_score=0.5),
-            policies=[MetadataEquals("tenant")],
-            stub_passages=[
-                _passage("keep", 0.9, tenant="t1"),
-                _passage("weak", 0.3, tenant="t1"),
-                _passage("other", 0.9, tenant="t2"),
-            ],
+            options=RetrievalEngineDependencies(
+                policies=[MetadataEquals("tenant")],
+                stub_passages=[
+                    _passage("keep", 0.9, tenant="t1"),
+                    _passage("weak", 0.3, tenant="t1"),
+                    _passage("other", 0.9, tenant="t2"),
+                ],
+            ),
         )
 
         results = await engine.retrieve("q", filters={"tenant": "t1"})
@@ -685,7 +692,9 @@ class TestRetrievalFactory:
         client = AsyncMock()
         client.retrieve.return_value = {"retrievalResults": []}
         with _bedrock_client(client):
-            engine = new_retrieval_engine_from_config(config, policies=[])
+            engine = new_retrieval_engine_from_config(
+                config, options=RetrievalEngineDependencies(policies=[])
+            )
         await engine.retrieve("q")
         return client.retrieve.call_args.kwargs["retrievalConfiguration"][
             "vectorSearchConfiguration"
@@ -769,11 +778,13 @@ class TestRetrievalFactory:
                 RetrievalConfig(
                     kind=RetrievalKind.BEDROCK, knowledge_base_id="kb-1", min_score=0.0
                 ),
-                policies=[],
-                filter_builder=lambda f: {
-                    "equals": {"key": "tenant", "value": f["tenant"]}
-                },
-                document_id_resolver=lambda metadata, _filters: metadata["doc"],
+                options=RetrievalEngineDependencies(
+                    policies=[],
+                    filter_builder=lambda f: {
+                        "equals": {"key": "tenant", "value": f["tenant"]}
+                    },
+                    document_id_resolver=lambda metadata, _filters: metadata["doc"],
+                ),
             )
 
         results = await engine.retrieve("q", filters={"tenant": "t1"})
@@ -801,12 +812,13 @@ class TestBedrockRetrievalEngineRequest:
             The vector search configuration sent.
 
         """
-
         client = AsyncMock()
         client.retrieve.return_value = {"retrievalResults": []}
         with _bedrock_client(client):
             engine = BedrockRetrievalEngine(
-                region="us-east-1", knowledge_base_id="kb-1", **engine_kwargs
+                options=BedrockRetrievalOptions(
+                    region="us-east-1", knowledge_base_id="kb-1", **engine_kwargs
+                )
             )
         await engine.retrieve("q", top_k=25, filters={"tenant": "t1"})
         config = client.retrieve.call_args.kwargs["retrievalConfiguration"]
@@ -936,12 +948,13 @@ class TestBedrockRetrieveContract:
             The results.
 
         """
-
         client = AsyncMock()
         client.retrieve.return_value = self._retrieve_payload(*metadatas)
         with _bedrock_client(client):
             engine = BedrockRetrievalEngine(
-                region="us-east-1", knowledge_base_id="kb-1", **engine_kwargs
+                options=BedrockRetrievalOptions(
+                    region="us-east-1", knowledge_base_id="kb-1", **engine_kwargs
+                )
             )
         return await engine.retrieve("q", filters={"tenant": "t1"})
 
@@ -1016,17 +1029,21 @@ class TestBedrockRetrieveContract:
           - With MetadataEquals("tenant"), the unlabelled chunk is dropped and the
             labelled one kept.
         """
-        engine = new_retrieval_engine_from_config(
-            RetrievalConfig(
-                kind=RetrievalKind.BEDROCK, knowledge_base_id="kb-1", min_score=0.0
-            ),
-            policies=[MetadataEquals("tenant")],
-        )
         client = AsyncMock()
         client.retrieve.return_value = self._retrieve_payload(
             {}, {"tenant": "t1", "document_id": "d2"}
         )
-        engine._inner._client = client  # type: ignore[attr-defined]  # noqa: SLF001
+        opened = MagicMock()
+        opened.__aenter__ = AsyncMock(return_value=client)
+        session = MagicMock()
+        session.create_client.return_value = opened
+        with patch("aiobotocore.session.get_session", return_value=session):
+            engine = new_retrieval_engine_from_config(
+                RetrievalConfig(
+                    kind=RetrievalKind.BEDROCK, knowledge_base_id="kb-1", min_score=0.0
+                ),
+                options=RetrievalEngineDependencies(policies=[MetadataEquals("tenant")]),
+            )
 
         results = await engine.retrieve("q", filters={"tenant": "t1"})
 

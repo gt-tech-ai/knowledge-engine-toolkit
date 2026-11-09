@@ -11,9 +11,10 @@ kind raises ``AppValueError``; ``redis`` without its collaborators raises
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.semantic_cache.stub import StubSemanticCache
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
@@ -21,6 +22,9 @@ from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 if TYPE_CHECKING:
     from redis.asyncio import Redis
 
+    from techai_webutils.clients.semantic_cache.redis import (
+        RedisSemanticCache as _LazyRedisSemanticCache,
+    )
     from techai_webutils.core.interfaces.cache import Cache
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
     from techai_webutils.core.interfaces.metrics import MetricsProvider
@@ -94,8 +98,11 @@ def semantic_cache_from_config(
             ErrorCode.INVALID_INPUT,
             "redis semantic cache requires cache, embedding and redis",
         )
-    from techai_webutils.clients.semantic_cache.redis import (  # noqa: PLC0415
-        RedisSemanticCache,
+    redis_semantic_cache_cls = cast(
+        "type[_LazyRedisSemanticCache]",
+        importlib.import_module(
+            "techai_webutils.clients.semantic_cache.redis"
+        ).RedisSemanticCache,
     )
 
-    return RedisSemanticCache(cache, embedding, redis, config, metrics=metrics)
+    return redis_semantic_cache_cls(cache, embedding, redis, config, metrics=metrics)

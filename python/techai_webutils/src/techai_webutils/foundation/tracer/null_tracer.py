@@ -14,6 +14,8 @@ from techai_webutils.core.interfaces.tracer import SpanKind, TracerProvider, Tra
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from techai_webutils.core.interfaces.tracer import AttributeValue
+
 
 class NullTracerProvider(TracerProvider):
     """No-op tracer provider that produces null spans."""
@@ -42,7 +44,7 @@ class NullTracerProvider(TracerProvider):
 class _NullSpan(TracerSpan):
     """No-op span that silently accepts all operations."""
 
-    def set_attribute(self, key: str, value: str | float | bool) -> None:  # noqa: FBT001
+    def set_attribute(self, key: str, value: AttributeValue) -> None:
         """No-op."""
 
     def record_error(self, error: BaseException) -> None:

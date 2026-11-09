@@ -12,9 +12,10 @@ every handler call through the handler tier as ``<name>.handler``.
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.client import ClientBase, handler
 from techai_webutils.clients.messaging.config import (
@@ -32,6 +33,12 @@ from techai_webutils.foundation.decorate import Decorations
 
 if TYPE_CHECKING:
     from techai_webutils.clients.messaging.config import SQSConfig
+    from techai_webutils.clients.messaging.sqs.sqs_publisher import (
+        SQSPublisher as _LazySQSPublisher,
+    )
+    from techai_webutils.clients.messaging.sqs.sqs_subscriber import (
+        SQSSubscriber as _LazySQSSubscriber,
+    )
     from techai_webutils.core.interfaces.messaging import (
         MessageConsumer,
         MessagePublisher,
@@ -115,9 +122,14 @@ def new_messaging_subscriber_from_config(
     handlers = ClientBase.wire(decorations, f"{config.name}.handler", handler())
     if config.kind is MessagingKind.SQS:
         # Lazy import: skip aiobotocore until selected.
-        from techai_webutils.clients.messaging.sqs.sqs_subscriber import SQSSubscriber  # noqa: PLC0415
+        sqs_subscriber_cls = cast(
+            "type[_LazySQSSubscriber]",
+            importlib.import_module(
+                "techai_webutils.clients.messaging.sqs.sqs_subscriber"
+            ).SQSSubscriber,
+        )
 
-        return SQSSubscriber(config.sqs, handlers, delivery=config.delivery)
+        return sqs_subscriber_cls(config.sqs, handlers, delivery=config.delivery)
     if config.kind is MessagingKind.MEMORY:
         return InMemorySubscriber(
             broker or InMemoryBroker(), handlers, delivery=config.delivery
@@ -140,9 +152,14 @@ def _publisher(
     """
     if config.kind is MessagingKind.SQS:
         # Lazy import: skip aiobotocore until selected.
-        from techai_webutils.clients.messaging.sqs.sqs_publisher import SQSPublisher  # noqa: PLC0415
+        sqs_publisher_cls = cast(
+            "type[_LazySQSPublisher]",
+            importlib.import_module(
+                "techai_webutils.clients.messaging.sqs.sqs_publisher"
+            ).SQSPublisher,
+        )
 
-        return SQSPublisher(config.sqs, max_payload_bytes=config.max_payload_bytes)
+        return sqs_publisher_cls(config.sqs, max_payload_bytes=config.max_payload_bytes)
     if config.kind is MessagingKind.MEMORY:
         return InMemoryPublisher(
             broker or InMemoryBroker(), max_payload_bytes=config.max_payload_bytes

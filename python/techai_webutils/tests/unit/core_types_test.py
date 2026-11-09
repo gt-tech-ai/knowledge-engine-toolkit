@@ -1,6 +1,6 @@
 """Unit tests for Python core domain types.
 
-Tests all shared types for correctness and Go parity: ID, Option, Page,
+Tests all shared types for correctness and Go parity: Option, Page,
 PageRequest, SortOrder, SortField, and Timestamps.
 """
 
@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 import pytest
 
 from techai_webutils.core.domain_types.types import (
-    ID,
     Option,
     Page,
     PageRequest,
@@ -25,70 +24,6 @@ _EXPECTED_VALUE = 42
 _EXPECTED_PAGE_SIZE = 20
 _EXPECTED_PAGE_SIZE_50 = 50
 _EXPECTED_PAGE_NUMBER = 3
-
-
-class TestID:
-    """Test suite for ID typed string."""
-
-    @staticmethod
-    def test_is_empty_when_empty() -> None:
-        """Test that is_empty reports True for a zero-value ID.
-
-        **Why this test is important:**
-          - An empty ID is the library's "unset/missing entity" sentinel; code branches
-            on it instead of comparing against magic strings scattered across services
-          - If is_empty mis-reported an empty ID as populated, downstream lookups would
-            run against an absent key and silently return wrong-tenant or no data
-
-        **What it tests:**
-          - ID("").is_empty() returns True for the empty-string identifier
-        """
-        assert ID("").is_empty() is True
-
-    @staticmethod
-    def test_is_empty_when_populated() -> None:
-        """Test that is_empty reports False for a populated ID.
-
-        **Why this test is important:**
-          - A real identifier must never be mistaken for "unset", or valid entities would
-            be skipped as if they did not exist
-          - Guards the inverse of the empty case so the sentinel check is correct in both
-            directions
-
-        **What it tests:**
-          - ID("abc-123").is_empty() returns False for a non-empty identifier
-        """
-        assert ID("abc-123").is_empty() is False
-
-    @staticmethod
-    def test_string_representation() -> None:
-        """Test that an ID renders as its underlying string value.
-
-        **Why this test is important:**
-          - IDs travel through logs, URLs, gRPC metadata, and SQL parameters as plain
-            strings; any wrapping/prefix in str() would corrupt every serialized form
-          - Confirms the typed wrapper adds compile-time safety without changing the wire
-            representation it shares with its Go counterpart
-
-        **What it tests:**
-          - str(ID("user-1")) equals the raw "user-1" with no decoration
-        """
-        assert str(ID("user-1")) == "user-1"
-
-    @staticmethod
-    def test_is_subclass_of_str() -> None:
-        """Test that ID is a genuine str subclass.
-
-        **Why this test is important:**
-          - ID is a str subclass precisely so it can be passed anywhere a plain string is
-            expected (dict keys, format strings, DB drivers) with zero conversion
-          - If it were not an instance of str, isinstance-based and duck-typed string code
-            paths across the stack would reject valid identifiers
-
-        **What it tests:**
-          - isinstance(ID("x"), str) is True, proving ID transparently behaves as a string
-        """
-        assert isinstance(ID("x"), str)
 
 
 class TestOption:

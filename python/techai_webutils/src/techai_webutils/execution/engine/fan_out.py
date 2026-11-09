@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import traceback
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from techai_webutils.core.interfaces.execution import (
@@ -20,11 +20,14 @@ from techai_webutils.core.interfaces.execution import (
     StepResult,
     StepStatus,
 )
+from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterator, Sequence
 
     from techai_webutils.core.interfaces.execution import ExecutionObserver
+
+logger = get_logger(__name__)
 
 # Fallback concurrency when the caller passes <= 0. Tuned for I/O-bound async work
 # (the ingestion mapper is download + parse-offload + network), not CPU parallelism.
@@ -33,22 +36,40 @@ _DEFAULT_CONCURRENCY = 8
 0."""
 
 
-async def _run_workers[T](
-    work: list[T],
-    limit: int,
-    fn: Callable[[T], Awaitable[StepResult]],
-    results: list[StepResult | None],
-    name: str,
-    obs: ExecutionObserver,
-) -> None:
+@dataclass(frozen=True, kw_only=True)
+class _WorkerPool[T]:
+    """What ``_run_workers`` takes, grouped into one value."""
+
+    work: list[T]
+    """The ``work`` value of ``_run_workers``."""
+
+    limit: int
+    """The ``limit`` value of ``_run_workers``."""
+
+    fn: Callable[[T], Awaitable[StepResult]]
+    """The ``fn`` value of ``_run_workers``."""
+
+    results: list[StepResult | None]
+    """The ``results`` value of ``_run_workers``."""
+
+    name: str
+    """The ``name`` value of ``_run_workers``."""
+
+    obs: ExecutionObserver
+    """The ``obs`` value of ``_run_workers``."""
+
+
+async def _run_workers[T](options: _WorkerPool[T]) -> None:
     """Drain ``work`` through at most ``limit`` workers, filling ``results`` in place."""
     # A fixed pool of `limit` workers pulls from one shared iterator, so at most `limit`
     # coroutine frames exist at once: driver memory is O(concurrency), not O(batch).
     # Results stay index-ordered and each item is isolated and observed exactly once.
-    pending = iter(enumerate(work))
+    pending = iter(enumerate(options.work))
     workers = [
-        asyncio.create_task(_drain(pending, fn, results, name, obs))
-        for _ in range(min(limit, len(work)))
+        asyncio.create_task(
+            _drain(pending, options.fn, options.results, options.name, options.obs)
+        )
+        for _ in range(min(options.limit, len(options.work)))
     ]
     outcomes = await asyncio.gather(*workers, return_exceptions=True)
     for outcome in outcomes:
@@ -94,7 +115,11 @@ async def fan_out[T](
     limit = concurrency if concurrency > 0 else _DEFAULT_CONCURRENCY
     results: list[StepResult | None] = [None] * len(work)
 
-    await _run_workers(work, limit, fn, results, name, obs)
+    await _run_workers(
+        options=_WorkerPool(
+            work=work, limit=limit, fn=fn, results=results, name=name, obs=obs
+        )
+    )
 
     batch = BatchResult(results=tuple(r for r in results if r is not None))
     obs.on_batch_complete(name, batch, loop.time() - start)
@@ -145,6 +170,7 @@ async def _run_one[T](
     except asyncio.CancelledError:
         raise
     except Exception as exc:
+        logger.exception("run_one failed")
         return StepResult(
             name=step_name,
             status=StepStatus.FAIL,

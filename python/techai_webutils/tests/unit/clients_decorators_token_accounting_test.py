@@ -11,7 +11,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from techai_webutils.clients.decorators.token_accounting import TokenAccountingProxy
+from techai_webutils.clients.decorators.token_accounting import (
+    TokenAccountingOptions,
+    TokenAccountingProxy,
+)
 from techai_webutils.core.errors import ErrorCode, QuotaExceededError
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
 from techai_webutils.core.interfaces.llm import (
@@ -104,12 +107,14 @@ def _proxy(
     """
     proxy = TokenAccountingProxy(
         inner,
-        ledger=ledger,
-        scope=lambda: scope,
-        prices=_PRICES,
-        policy=BudgetPolicy(enforcement=enforcement),
-        step="generate",
-        clock=lambda: _NOW,
+        options=TokenAccountingOptions(
+            ledger=ledger,
+            scope=lambda: scope,
+            prices=_PRICES,
+            policy=BudgetPolicy(enforcement=enforcement),
+            step="generate",
+            clock=lambda: _NOW,
+        ),
     )
     return cast("LLMProvider", proxy)
 
@@ -242,13 +247,15 @@ async def test_shadow_mode_serves_and_records_but_never_rejects() -> None:
         "LLMProvider",
         TokenAccountingProxy(
             inner,
-            ledger=ledger,
-            scope=lambda: _SCOPE,
-            prices=_PRICES,
-            policy=BudgetPolicy(enforcement=Enforcement.SHADOW),
-            step="generate",
-            metrics=metrics,
-            clock=lambda: _NOW,
+            options=TokenAccountingOptions(
+                ledger=ledger,
+                scope=lambda: _SCOPE,
+                prices=_PRICES,
+                policy=BudgetPolicy(enforcement=Enforcement.SHADOW),
+                step="generate",
+                metrics=metrics,
+                clock=lambda: _NOW,
+            ),
         ),
     )
 
@@ -429,12 +436,14 @@ async def test_per_budget_enforces_the_budget_level_under_a_shadow_policy() -> N
         policy = BudgetPolicy(enforcement=Enforcement.SHADOW, per_budget=per_budget)
         proxy = TokenAccountingProxy(
             inner,
-            ledger=ledger,
-            scope=lambda: _SCOPE,
-            prices=_PRICES,
-            policy=policy,
-            step="generate",
-            clock=lambda: _NOW,
+            options=TokenAccountingOptions(
+                ledger=ledger,
+                scope=lambda: _SCOPE,
+                prices=_PRICES,
+                policy=policy,
+                step="generate",
+                clock=lambda: _NOW,
+            ),
         )
         return cast("LLMProvider", proxy)
 

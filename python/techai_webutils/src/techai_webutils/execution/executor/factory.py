@@ -9,9 +9,10 @@ loudly (mirroring ``logger.NewFromConfig``).
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.execution.executor.asyncio_executor import AsyncioExecutor
@@ -20,8 +21,11 @@ from techai_webutils.execution.executor.ray_executor import RayExecutor
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.execution import ExecutionObserver, Executor
     from techai_webutils.core.interfaces.metrics import MetricsProvider
+    from techai_webutils.execution.executor.real_ray_runtime import (
+        RealRayRuntime as _LazyRealRayRuntime,
+    )
     from techai_webutils.execution.executor.resilient_ray_runtime import (
-        ResilientRayRuntime,
+        ResilientRayRuntime as _LazyResilientRayRuntime,
     )
 
 
@@ -122,7 +126,7 @@ def executor_from_config(
 
 def ray_runtime_from_config(
     config: ExecutorConfig, *, metrics: MetricsProvider | None = None
-) -> ResilientRayRuntime:
+) -> _LazyResilientRayRuntime:
     """Build the resilience-decorated ``RealRayRuntime`` for the ray kind.
 
     (lazy ``ray`` import).
@@ -137,22 +141,30 @@ def ray_runtime_from_config(
         The resilience-decorated ``RealRayRuntime`` for the ray kind.
 
     """
-    from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntime  # noqa: PLC0415
-    from techai_webutils.execution.executor.resilient_ray_runtime import (  # noqa: PLC0415
-        ResilientRayRuntime,
+    real = importlib.import_module("techai_webutils.execution.executor.real_ray_runtime")
+    resilient = importlib.import_module(
+        "techai_webutils.execution.executor.resilient_ray_runtime"
+    )
+    real_ray_runtime_cls = cast("type[_LazyRealRayRuntime]", real.RealRayRuntime)
+    resilient_ray_runtime_cls = cast(
+        "type[_LazyResilientRayRuntime]", resilient.ResilientRayRuntime
     )
 
-    inner = RealRayRuntime(
+    inner = real_ray_runtime_cls(
         address=config.ray_address or None,
         namespace=config.ray_namespace or None,
-        worker_setup_hook=config.ray_worker_setup_hook or None,
-        log_encoding=config.ray_log_encoding or None,
-        task_memory_bytes=config.ray_task_memory_bytes,
-        task_num_cpus=config.ray_task_num_cpus,
+        options=real.RealRayRuntimeOptions(
+            worker_setup_hook=config.ray_worker_setup_hook or None,
+            log_encoding=config.ray_log_encoding or None,
+            task_memory_bytes=config.ray_task_memory_bytes,
+            task_num_cpus=config.ray_task_num_cpus,
+        ),
     )
-    return ResilientRayRuntime(
+    return resilient_ray_runtime_cls(
         inner,
-        metrics=metrics,
-        head_probe_address=config.ray_head_probe_address or None,
-        head_probe_timeout_seconds=config.ray_head_probe_timeout_seconds,
+        options=resilient.ResilientRayRuntimeOptions(
+            metrics=metrics,
+            head_probe_address=config.ray_head_probe_address or None,
+            head_probe_timeout_seconds=config.ray_head_probe_timeout_seconds,
+        ),
     )

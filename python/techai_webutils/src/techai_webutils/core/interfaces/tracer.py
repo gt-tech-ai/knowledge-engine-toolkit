@@ -15,6 +15,10 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
 
+type AttributeValue = str | float | bool
+"""A span attribute's value."""
+
+
 class SpanKind(StrEnum):
     """The role of a span's operation in a trace (mirrors Go ``interfaces.SpanKind``)."""
 
@@ -69,7 +73,7 @@ class TracerSpan(ABC):
     """Abstract span within a trace."""
 
     @abstractmethod
-    def set_attribute(self, key: str, value: str | float | bool) -> None:  # noqa: FBT001
+    def set_attribute(self, key: str, value: AttributeValue) -> None:
         """Add a key-value attribute to the span."""
         ...
 

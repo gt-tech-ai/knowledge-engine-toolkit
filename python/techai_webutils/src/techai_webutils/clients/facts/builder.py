@@ -9,14 +9,21 @@ path never loads it.
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from techai_webutils.clients.facts.messaging.publisher import (
+    MessagingFactPublisherOptions,
+)
 from techai_webutils.clients.facts.stub import StubFactPublisher
 from techai_webutils.core.errors import AppError, ErrorCode
 
 if TYPE_CHECKING:
+    from techai_webutils.clients.facts.messaging import (
+        MessagingFactPublisher as _LazyMessagingFactPublisher,
+    )
     from techai_webutils.core.interfaces.fact_publisher import FactPublisher
     from techai_webutils.core.interfaces.messaging import MessagePublisher
     from techai_webutils.core.interfaces.metrics import MetricsProvider
@@ -81,15 +88,22 @@ def new_fact_publisher_from_config(
             raise AppError(
                 ErrorCode.INVALID_INPUT, "messaging fact publisher requires a queue"
             )
-        from techai_webutils.clients.facts.messaging import MessagingFactPublisher  # noqa: PLC0415
+        messaging_fact_publisher_cls = cast(
+            "type[_LazyMessagingFactPublisher]",
+            importlib.import_module(
+                "techai_webutils.clients.facts.messaging"
+            ).MessagingFactPublisher,
+        )
 
-        return MessagingFactPublisher(
+        return messaging_fact_publisher_cls(
             publisher,
             config.queue,
-            max_buffer=config.max_buffer,
-            flush_interval_s=config.flush_interval_s,
-            drain_timeout_s=config.drain_timeout_s,
-            metrics=metrics,
+            options=MessagingFactPublisherOptions(
+                max_buffer=config.max_buffer,
+                flush_interval_s=config.flush_interval_s,
+                drain_timeout_s=config.drain_timeout_s,
+                metrics=metrics,
+            ),
         )
     raise AppError(
         ErrorCode.INVALID_INPUT, f"unknown fact publisher kind: {config.kind!r}"

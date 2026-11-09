@@ -19,12 +19,14 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from prometheus_client import CollectorRegistry
 
 from techai_webutils.clients.decorators.token_accounting import (
+    TokenAccountingOptions,
     TokenAccountingProxy,
 )
 from techai_webutils.clients.semantic_cache import reader as reader_module
 from techai_webutils.clients.semantic_cache.proxy import (
     SemanticCacheBinding,
     SemanticCacheProxy,
+    SemanticCacheProxyOptions,
 )
 from techai_webutils.clients.semantic_cache.stub import StubSemanticCache
 from techai_webutils.core.errors import AppError, ErrorCode
@@ -162,7 +164,7 @@ def _inner() -> MagicMock:
     return inner
 
 
-def _proxy(inner: MagicMock, cache: SemanticCache, **kwargs: Any) -> LLMProvider:  # noqa: ANN401
+def _proxy(inner: MagicMock, cache: SemanticCache, **kwargs: object) -> LLMProvider:
     """Wrap ``inner`` on the generation path.
 
     Returns:
@@ -176,7 +178,12 @@ def _proxy(inner: MagicMock, cache: SemanticCache, **kwargs: Any) -> LLMProvider
         "path": "generation",
     }
     options.update(kwargs)
-    return cast("LLMProvider", SemanticCacheProxy(inner, cache, _BINDING, **options))
+    return cast(
+        "LLMProvider",
+        SemanticCacheProxy(
+            inner, cache, _BINDING, options=SemanticCacheProxyOptions(**options)
+        ),
+    )
 
 
 def _metrics() -> tuple[MagicMock, dict[str, MagicMock]]:
@@ -733,7 +740,6 @@ async def test_accounting_over_cache_records_a_hit_as_zero_tokens() -> None:
       - a hit records one usage with ``operation="generate.cache_hit"`` and zero tokens
       - a following miss records the model's real tokens
     """
-
     ledger = MagicMock(spec=TokenLedger)
     ledger.check_budget = AsyncMock(
         return_value=BudgetDecision(
@@ -751,11 +757,13 @@ async def test_accounting_over_cache_records_a_hit_as_zero_tokens() -> None:
             "LLMProvider",
             TokenAccountingProxy(
                 _proxy(_inner(), cache),
-                ledger=ledger,
-                scope=lambda: UsageScope(org_id="org-1"),
-                prices=PriceTable(prices={}, version="v1"),
-                policy=BudgetPolicy(),
-                step="generate",
+                options=TokenAccountingOptions(
+                    ledger=ledger,
+                    scope=lambda: UsageScope(org_id="org-1"),
+                    prices=PriceTable(prices={}, version="v1"),
+                    policy=BudgetPolicy(),
+                    step="generate",
+                ),
             ),
         )
 

@@ -18,6 +18,8 @@ import sys
 
 import pytest
 
+from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntimeOptions
+
 pytest.importorskip("ray")
 
 # Opt-in gate, as in test_ray_executor_integration: a real local Ray cluster can hang on
@@ -53,7 +55,9 @@ async def _handlers_in_a_worker(hook: str | None) -> int:
         A local cluster through a runtime with ``hook``.
 
     """
-    await RealRayRuntime(worker_setup_hook=hook, log_encoding="JSON").warm_up()
+    await RealRayRuntime(
+        options=RealRayRuntimeOptions(worker_setup_hook=hook, log_encoding="JSON")
+    ).warm_up()
     # A worker cannot import this test module by name, so its task function ships by
     # value.
     module = sys.modules[__name__]

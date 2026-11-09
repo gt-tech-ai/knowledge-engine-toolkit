@@ -83,7 +83,6 @@ class TestTraceContextProcessor:
         **What it tests:**
           - With no recording span, a rendered log line carries no trace_id/span_id
         """
-
         output = StringIO()
         configure_logging(level="INFO", stream=output)
         structlog.get_logger("t").info("hi")
@@ -132,7 +131,6 @@ class TestTraceContextProcessor:
         **What it tests:**
           - At level INFO, a .debug() call produces no output while .info() does.
         """
-
         output = StringIO()
         configure_logging(level="INFO", stream=output)
         log = structlog.get_logger("t")
@@ -165,7 +163,6 @@ class TestHTTPMetrics:
           - Serving GET /healthz with 200 raises the counter sample for that
             method/route/status label combination by exactly 1
         """
-
         labels = {"method": "GET", "route": "/healthz", "status": "200"}
         before = REGISTRY.get_sample_value("http_server_requests_total", labels) or 0.0
         _serve("/healthz")
@@ -189,7 +186,6 @@ class TestHTTPMetrics:
           - The Prometheus exposition text contains both http_server_requests_total and
             http_server_request_duration_seconds
         """
-
         _serve("/does-not-exist")
         exposed = generate_latest().decode()
         assert "http_server_requests_total" in exposed
@@ -288,7 +284,6 @@ class TestHTTPRequestLogging:
           - A handler raising HTTPNotFound produces a final "http request" log with
             status==404 and level=="warning"
         """
-
         out = StringIO()
         configure_logging(level="INFO", stream=out)
         middleware = http_observability.aiohttp_observability_middleware("test-svc")
@@ -321,7 +316,6 @@ class TestHTTPRequestLogging:
           - A handler raising ValueError yields a final "http request" log with
             status==500, level=="error", and an "exception" field present
         """
-
         out = StringIO()
         configure_logging(level="INFO", stream=out)
         middleware = http_observability.aiohttp_observability_middleware("test-svc")
@@ -355,7 +349,6 @@ class TestHTTPRequestLogging:
           - A call_next returning a 404 response produces a final "http request" log
             with status==404 and level=="warning"
         """
-
         out = StringIO()
         configure_logging(level="INFO", stream=out)
 
@@ -395,7 +388,6 @@ def test_start_observability_passes_the_telemetry_settings_through() -> None:
       - ``setup_observability`` receives the service name, the upper-cased level, the
         endpoint, the rate parsed to a float and the redaction flag
     """
-
     telemetry = TelemetrySettings.model_validate({
         "OTEL_EXPORTER_OTLP_ENDPOINT": "collector:4317",
         "TRACE_SAMPLE_RATE": "0.5",

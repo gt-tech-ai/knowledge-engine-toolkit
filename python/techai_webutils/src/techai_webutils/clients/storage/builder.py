@@ -11,14 +11,21 @@ Unknown kinds fail loudly, matching the Go ``NewFromConfig`` contract.
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
     from techai_webutils.clients.storage.config import S3Config
+    from techai_webutils.clients.storage.memory import (
+        InMemoryStorageClient as _LazyInMemoryStorageClient,
+    )
+    from techai_webutils.clients.storage.s3.s3_client import (
+        S3StorageClient as _LazyS3StorageClient,
+    )
     from techai_webutils.core.interfaces.storage import StorageClient
 
 
@@ -55,13 +62,23 @@ def new_storage_from_config(config: StorageConfig) -> StorageClient:
     """
     if config.kind is StorageKind.S3:
         # Lazy import: skip aiobotocore until selected.
-        from techai_webutils.clients.storage.s3.s3_client import S3StorageClient  # noqa: PLC0415
+        s3_storage_client_cls = cast(
+            "type[_LazyS3StorageClient]",
+            importlib.import_module(
+                "techai_webutils.clients.storage.s3.s3_client"
+            ).S3StorageClient,
+        )
 
-        return S3StorageClient(config.s3)
+        return s3_storage_client_cls(config.s3)
     if config.kind is StorageKind.MEMORY:
         # Lazy import (and no SDK to load).
-        from techai_webutils.clients.storage.memory import InMemoryStorageClient  # noqa: PLC0415
+        in_memory_storage_client_cls = cast(
+            "type[_LazyInMemoryStorageClient]",
+            importlib.import_module(
+                "techai_webutils.clients.storage.memory"
+            ).InMemoryStorageClient,
+        )
 
-        return InMemoryStorageClient()
+        return in_memory_storage_client_cls()
     msg = f"unknown storage kind: {config.kind!r}"
     raise AppValueError(msg)

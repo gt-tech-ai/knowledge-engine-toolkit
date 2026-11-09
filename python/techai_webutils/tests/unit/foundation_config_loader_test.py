@@ -191,7 +191,6 @@ class TestYamlConfigLoader:
             A YamlConfigLoader from a dict by writing a temp YAML file.
 
         """
-
         with tempfile.TemporaryDirectory() as tmpdir:
             config_file = Path(tmpdir) / "base.yaml"
             config_file.write_text(yaml.dump(data))

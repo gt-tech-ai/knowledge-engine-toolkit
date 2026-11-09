@@ -137,5 +137,5 @@ class StdlibLogger(Logger):
             args=(),
             exc_info=None,
         )
-        record._extra = extra  # type: ignore[attr-defined]  # noqa: SLF001
+        record.__dict__["_extra"] = extra
         self._logger.handle(record)

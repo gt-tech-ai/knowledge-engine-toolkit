@@ -14,6 +14,7 @@ from techai_webutils.clients.model_gateway import (
     GatewayKind,
     new_model_gateway_from_config,
 )
+from techai_webutils.clients.model_gateway.builder import ModelGatewayDependencies
 from techai_webutils.clients.model_gateway.routed import RoutedGateway
 from techai_webutils.clients.model_gateway.routed.catalog import ModelCatalog
 from techai_webutils.clients.model_gateway.routed.settings import (
@@ -62,8 +63,9 @@ def test_typed_config_builds_the_same_gateway_as_the_raw_mappings(
     config = stages.routed_config(_catalog(catalog_raw), routes)
     gateway = new_model_gateway_from_config(
         GatewayConfig(kind=GatewayKind.ROUTED, routed=config),
-        provider_factory=lambda llm: StubLlmProvider(llm.model),
-        priced_ids=None,
+        options=ModelGatewayDependencies(
+            provider_factory=lambda llm: StubLlmProvider(llm.model), priced_ids=None
+        ),
     )
 
     assert isinstance(gateway, RoutedGateway)

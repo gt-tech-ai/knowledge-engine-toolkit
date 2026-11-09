@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from operator import itemgetter
 from unittest.mock import MagicMock
 
 import pytest
@@ -103,10 +104,10 @@ def test_merge_by_score_is_the_global_top_k(
 
 @given(
     st.lists(
-        st.tuples(st.sampled_from("abcdef"), st.floats(0, 1)), unique_by=lambda p: p[0]
+        st.tuples(st.sampled_from("abcdef"), st.floats(0, 1)), unique_by=itemgetter(0)
     ),
     st.lists(
-        st.tuples(st.sampled_from("ghijkl"), st.floats(0, 50)), unique_by=lambda p: p[0]
+        st.tuples(st.sampled_from("ghijkl"), st.floats(0, 50)), unique_by=itemgetter(0)
     ),
 )
 def test_convex_with_weight_one_is_the_dense_ranking(

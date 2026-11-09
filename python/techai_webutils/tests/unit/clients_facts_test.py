@@ -19,6 +19,9 @@ from techai_webutils.clients.facts import (
     new_fact_publisher_from_config,
 )
 from techai_webutils.clients.facts.messaging import MessagingFactPublisher
+from techai_webutils.clients.facts.messaging.publisher import (
+    MessagingFactPublisherOptions,
+)
 from techai_webutils.clients.facts.stub import StubFactPublisher
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
@@ -186,10 +189,9 @@ async def test_messaging_publisher_closes_when_the_sender_dies_and_after_aclose(
     publisher = MessagingFactPublisher(
         transport,
         "facts",
-        max_buffer=10,
-        flush_interval_s=0.0,
-        drain_timeout_s=0.5,
-        metrics=metrics,
+        options=MessagingFactPublisherOptions(
+            max_buffer=10, flush_interval_s=0.0, drain_timeout_s=0.5, metrics=metrics
+        ),
     )
 
     senders: list[asyncio.Task[None]] = []
@@ -328,20 +330,17 @@ _MEASURE = st.one_of(
 
 
 @given(
-    cube=_TEXT,
-    org_id=_TEXT,
-    micros=st.integers(min_value=0, max_value=10**15),
-    dims=st.dictionaries(_TEXT, _TEXT, max_size=4),
-    measures=st.dictionaries(_TEXT, _MEASURE, max_size=4),
-    key=_TEXT,
+    parts=st.tuples(
+        _TEXT,
+        _TEXT,
+        st.integers(min_value=0, max_value=10**15),
+        st.dictionaries(_TEXT, _TEXT, max_size=4),
+        st.dictionaries(_TEXT, _MEASURE, max_size=4),
+        _TEXT,
+    )
 )
 def test_fact_json_round_trips(
-    cube: str,
-    org_id: str,
-    micros: int,
-    dims: dict[str, str],
-    measures: dict[str, float],
-    key: str,
+    parts: tuple[str, str, int, dict[str, str], dict[str, float], str],
 ) -> None:
     """Test, over generated facts, that ``to_json`` decodes back to the fact's own values.
 
@@ -358,6 +357,7 @@ def test_fact_json_round_trips(
       - ``ts`` decodes to the same instant, in UTC with a ``Z`` suffix
       - none of ``<``, ``>``, ``&`` appears raw in the bytes (Go's HTML-safe escaping)
     """
+    cube, org_id, micros, dims, measures, key = parts
     ts = datetime(2020, 1, 1, tzinfo=UTC) + timedelta(microseconds=micros)
     fact = Fact(
         cube=cube, org_id=org_id, ts=ts, dims=dims, measures=measures, idempotency_key=key

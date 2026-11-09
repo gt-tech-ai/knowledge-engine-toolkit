@@ -203,6 +203,29 @@ def _page_text(page: int, text: str) -> PageText:
     return PageText(page=page, chars=len(chars), unreadable=unreadable)
 
 
+@dataclass(frozen=True, kw_only=True)
+class LayoutParserOptions:
+    """What ``LayoutParser`` takes, grouped into one value."""
+
+    memory_bytes: int
+    """The ``memory_bytes`` value of ``LayoutParser``."""
+
+    timeout_seconds: float
+    """The ``timeout_seconds`` value of ``LayoutParser``."""
+
+    executor: Executor | None = None
+    """The ``executor`` value of ``LayoutParser``."""
+
+    artifacts_path: str = ""
+    """The ``artifacts_path`` value of ``LayoutParser``."""
+
+    ocr: bool = True
+    """The ``ocr`` value of ``LayoutParser``."""
+
+    convert: LayoutConverter = convert_with_docling
+    """The ``convert`` value of ``LayoutParser``."""
+
+
 class LayoutParser(IsolatedParser):
     """Parses PDFs with Docling in a bounded child.
 
@@ -212,25 +235,20 @@ class LayoutParser(IsolatedParser):
     _context = SPAWN_CONTEXT
     """Docling runs in a spawned child (see the module docs)."""
 
-    def __init__(
-        self,
-        *,
-        memory_bytes: int,
-        timeout_seconds: float,
-        executor: Executor | None = None,
-        artifacts_path: str = "",
-        ocr: bool = True,
-        convert: LayoutConverter = convert_with_docling,
-    ) -> None:
+    def __init__(self, options: LayoutParserOptions) -> None:
         """Bound each parse like ``IsolatedParser``; ``convert`` runs in the child.
 
         (picklable).
         """
         super().__init__(
-            memory_bytes=memory_bytes, timeout_seconds=timeout_seconds, executor=executor
+            memory_bytes=options.memory_bytes,
+            timeout_seconds=options.timeout_seconds,
+            executor=options.executor,
         )
-        self._options = LayoutOptions(artifacts_path=artifacts_path, ocr=ocr)
-        self._convert = convert
+        self._options = LayoutOptions(
+            artifacts_path=options.artifacts_path, ocr=options.ocr
+        )
+        self._convert = options.convert
 
     async def parse(
         self, content: bytes, *, declared: str = "", filename: str = ""

@@ -22,8 +22,14 @@ from techai_webutils.core.interfaces.execution import StepResult
 from techai_webutils.execution.executor.pooled import PooledWorker
 from techai_webutils.execution.executor.ray_runtime import RayUnavailableError
 from techai_webutils.execution.executor.real_ray_pool import ray_worker_factory
-from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntime
-from techai_webutils.execution.executor.resilient_ray_runtime import ResilientRayRuntime
+from techai_webutils.execution.executor.real_ray_runtime import (
+    RealRayRuntime,
+    RealRayRuntimeOptions,
+)
+from techai_webutils.execution.executor.resilient_ray_runtime import (
+    ResilientRayRuntime,
+    ResilientRayRuntimeOptions,
+)
 
 _EXPECTED_CALL_COUNT = 2
 
@@ -131,7 +137,9 @@ class TestRealRayRuntimeReconnect:
             patch(f"{_MODULE}.ray", ray),
             patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
         ):
-            await RealRayRuntime(address=_ADDRESS).warm_up()
+            await RealRayRuntime(
+                address=_ADDRESS, options=RealRayRuntimeOptions()
+            ).warm_up()
 
         registry.ray.disconnect.assert_called_once_with()
         ray.init.assert_called_once()
@@ -157,7 +165,7 @@ class TestRealRayRuntimeReconnect:
             patch(f"{_MODULE}.ray", ray),
             patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
         ):
-            runtime = RealRayRuntime(address=_ADDRESS)
+            runtime = RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions())
             await runtime.warm_up()
             ray.is_initialized.side_effect = lambda: False  # the head restarted
             ray.init.side_effect = None
@@ -269,7 +277,8 @@ class TestRealRayRuntimeDeadSession:
             patch(f"{_MODULE}.importlib", _importlib_returning(_healthy_registry())),
         ):
             runtime = ResilientRayRuntime(
-                RealRayRuntime(address=_ADDRESS), base_delay=0.0, max_delay=0.0
+                RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions()),
+                options=ResilientRayRuntimeOptions(base_delay=0.0, max_delay=0.0),
             )
             await runtime.warm_up()
 
@@ -308,7 +317,7 @@ class TestRealRayRuntimeDeadSession:
             patch(f"{_MODULE}.ray", ray),
             patch(f"{_MODULE}._run_mapper", mapper),
         ):
-            runtime = RealRayRuntime(address=_ADDRESS)
+            runtime = RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions())
             mapper.remote.side_effect = grpc.RpcError
             with pytest.raises(RayUnavailableError):
                 await runtime.submit(_mapper, 1)
@@ -406,7 +415,7 @@ class TestRealRayRuntimeHeadReplacement:
             patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
             patch(f"{_MODULE}._run_mapper", mapper),
         ):
-            runtime = RealRayRuntime(address=_ADDRESS)
+            runtime = RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions())
             await runtime.submit(_mapper, 1)
             mapper.remote.side_effect = ConnectionError("data channel closed")
             with pytest.raises(RayUnavailableError):
@@ -442,7 +451,9 @@ class TestRealRayRuntimeHeadReplacement:
             patch(f"{_MODULE}._run_mapper", mapper),
             pytest.raises(RayUnavailableError),
         ):
-            await RealRayRuntime(address=_ADDRESS).submit(_mapper, 1)
+            await RealRayRuntime(
+                address=_ADDRESS, options=RealRayRuntimeOptions()
+            ).submit(_mapper, 1)
 
         registry.ray.disconnect.assert_called_once_with()
 
@@ -468,7 +479,7 @@ class TestRealRayRuntimeHeadReplacement:
             patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
             patch(f"{_MODULE}._run_mapper", mapper),
         ):
-            runtime = RealRayRuntime(address=_ADDRESS)
+            runtime = RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions())
             await runtime.submit(_mapper, 1)
             await runtime.submit(_mapper, 2)
             assert ray.put.call_count == 1
@@ -507,10 +518,13 @@ class TestRealRayRuntimeWorkerLogging:
         ):
             await RealRayRuntime(
                 address=_ADDRESS,
-                worker_setup_hook="consumer.logging.configure",
-                log_encoding="JSON",
+                options=RealRayRuntimeOptions(
+                    worker_setup_hook="consumer.logging.configure", log_encoding="JSON"
+                ),
             ).warm_up()
-            await RealRayRuntime(address=_ADDRESS).warm_up()
+            await RealRayRuntime(
+                address=_ADDRESS, options=RealRayRuntimeOptions()
+            ).warm_up()
 
         configured, default = (c.kwargs for c in ray.init.call_args_list)
         assert configured["runtime_env"] == {
@@ -550,9 +564,11 @@ class TestRealRayRuntimeMemory:
             patch(f"{_MODULE}._run_mapper", mapper),
         ):
             reserved = await RealRayRuntime(
-                address=_ADDRESS, task_memory_bytes=2 << 30
+                address=_ADDRESS, options=RealRayRuntimeOptions(task_memory_bytes=2 << 30)
             ).submit(_mapper, 1)
-            unreserved = await RealRayRuntime(address=_ADDRESS).submit(_mapper, 2)
+            unreserved = await RealRayRuntime(
+                address=_ADDRESS, options=RealRayRuntimeOptions()
+            ).submit(_mapper, 2)
 
         mapper.options.assert_called_once_with(memory=2 << 30)
         assert (reserved.name, unreserved.name) == ("1", "2")

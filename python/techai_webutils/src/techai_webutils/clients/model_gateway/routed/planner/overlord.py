@@ -206,6 +206,7 @@ class OverlordPlanner:
         except TimeoutError:
             return await self._failed_open(ctx, route_input, "timeout")
         except Exception as exc:
+            self._logger.exception("plan failed")
             cause = (
                 str(exc.code).lower() if isinstance(exc, AppError) else "transport_error"
             )

@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 
 from techai_webutils.core.errors import AppError, ErrorCode, UnavailableError
 from techai_webutils.core.interfaces.model_gateway import RouteAttempt
+from techai_webutils.foundation.logger import get_logger
 from techai_webutils.foundation.resilience.async_circuit_breaker import (
     AsyncCircuitBreaker,
 )
@@ -41,6 +42,8 @@ if TYPE_CHECKING:
     type StreamItems = AsyncIterator[str | StreamUsage]
     """A provider's stream of text chunks and its trailing usage."""
 
+logger = get_logger(__name__)
+
 _END = object()
 """The sentinel ``anext`` returns for a stream that ends before its first item."""
 
@@ -55,7 +58,7 @@ def _code(exc: BaseException) -> str:
     return str(exc.code) if isinstance(exc, AppError) else str(ErrorCode.UNKNOWN)
 
 
-class _Permanent(Exception):  # noqa: N818 - a carrier, never raised past this module
+class _PermanentError(Exception):
     """Carries a permanent error out of the breaker without counting it as an outage."""
 
     def __init__(self, error: BaseException) -> None:
@@ -115,7 +118,7 @@ class ChainExecutor:
     ) -> T:
         """Call ``ref`` behind its breaker.
 
-        A permanent error leaves wrapped in ``_Permanent``.
+        A permanent error leaves wrapped in ``_PermanentError``.
 
         A callee raises ``CircuitOpenError``: ``ref``'s breaker is open (no call was
         made).
@@ -124,7 +127,7 @@ class ChainExecutor:
             What ``call`` returns.
 
         Raises:
-            _Permanent: A non-retriable failure, re-raised to stop the chain.
+            _PermanentError: A non-retriable failure, re-raised to stop the chain.
             AppError: Circuit breaker suppressed a call's outcome.
 
         """
@@ -139,7 +142,7 @@ class ChainExecutor:
                 # the breaker as a success so it never opens a healthy endpoint.
                 permanent = exc
         if permanent is not None:
-            raise _Permanent(permanent) from permanent
+            raise _PermanentError(permanent) from permanent
         # The breaker never suppresses an exception, so this is unreachable.
         raise AppError(ErrorCode.INTERNAL, "circuit breaker suppressed a call's outcome")
 
@@ -171,12 +174,13 @@ class ChainExecutor:
             except CircuitOpenError:
                 self._record(attempts, RouteAttempt(ref.key, "breaker_open"))
                 continue
-            except _Permanent as carrier:
+            except _PermanentError as carrier:
                 self._record(
                     attempts, RouteAttempt(ref.key, "failed", _code(carrier.error))
                 )
                 raise carrier.error from None
             except Exception as exc:
+                logger.exception("run failed")
                 tried += 1
                 self._record(attempts, RouteAttempt(ref.key, "failed", _code(exc)))
                 last = exc

@@ -239,52 +239,18 @@ preview = true
 select = ["ALL"]
 
 ignore = [
-    "missing-type-args", # Missing type annotation for `*args`
-    "missing-type-kwargs", # Missing type annotation for `**kwargs`
-    "blind-except", # Do not catch blind exception: `Exception`
-    "missing-trailing-comma", # Trailing comma missing
-    "missing-copyright-notice", # flake8-copyright: repo does not use file copyright headers
-    "undocumented-magic-method", # Missing docstring in magic method
-    "undocumented-public-init", # Missing docstring in `__init__` method
-    "blank-line-after-function", # No blank lines allowed after function docstring
-    "incorrect-blank-line-before-class", # 1 blank line before class docstring (conflicts with D211; ruff keeps D211)
-    "multi-line-summary-second-line", # Multi-line summary on second line (conflicts with D212; ruff keeps D212)
-    "line-contains-todo", # Line contains TODO, consider resolving the issue
-    "FURB", # refurb family (preview): listed as "Consider", not adopted
-    "invalid-function-name", # Function name `xxx` should be lowercase
-    "invalid-module-name", # Invalid module name
-    "pytest-fixture-autouse", # flake8-pytest-style (preview, no assigned rule code so it cannot be suppressed per-line via `# noqa`): autouse is a deliberate cross-cutting test pattern here — per-test env isolation and the integration-suite Docker gate — so this opinionated preview rule is deferred like DOC/FURB.
-    "unnecessary-paren-on-raise-exception", # Unnecessary parentheses on raise exception
-    "noqa-comments", # noqa-comments (preview): opinionated/stylistic rule preferring `# ruff: ignore[...]` over `# noqa`; ruff itself sanctions disabling it. We keep the universal, tool-agnostic `# noqa: <CODE>` form.
-    "runtime-cast-value", # Add quotes to type expression in `typing.cast()`
-    "missing-todo-author", # Missing author in TODO
-    "missing-todo-link", # Missing issue link for this TODO
-    "raise-vanilla-class", # Create your own exception
-    "try-consider-else", # Consider moving this statement to an `else` block
-    "f-string", # Use f-string instead of `format` call
+    "missing-trailing-comma", # conflicts with `ruff format`
+    "missing-copyright-notice", # the repo carries no per-file copyright headers
+    "incorrect-blank-line-before-class", # mutually exclusive with D211
+    "multi-line-summary-second-line", # mutually exclusive with D212
 ]
 
 [tool.ruff.lint.isort]
 known-first-party = ["techai_webutils"]
 
 [tool.ruff.lint.per-file-ignores]
-# The bedrock clients mirror the AWS bedrock-runtime / bedrock-agent-runtime / bedrock-agent APIs, whose
-# keyword params are camelCase (knowledgeBaseId, modelId, retrievalQuery, dataSourceId, …) — N803 does
-# not apply to a wire mirror.
-"src/techai_webutils/clients/llm/bedrock/*.py" = ["invalid-argument-name"]
-"src/techai_webutils/clients/retrieval/bedrock/*.py" = ["invalid-argument-name"]
-"src/techai_webutils/clients/kb_ingestion/bedrock/*.py" = ["invalid-argument-name"]
-"src/techai_webutils/clients/embedding/bedrock/*.py" = ["invalid-argument-name"]
 # Pytest asserts are the one rule wrong-by-design for the test tree.
 "**/tests/**" = ["assert"]
-
-[tool.ruff.lint.mccabe]
-max-complexity = 15
-
-[tool.ruff.lint.pylint]
-max-args = 10
-max-branches = 20
-max-returns = 20
 
 # Layer and family boundaries (`uv run lint-imports`, run in CI). Layers import downward only, and
 # one client family never imports another (a family needing a sibling's object takes it injected).

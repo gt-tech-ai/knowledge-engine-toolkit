@@ -58,7 +58,7 @@ def request_id_middleware(
 
     """
 
-    async def wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+    async def wrapper(*args: object, **kwargs: object) -> object:
         """Bind a request ID for the duration of the wrapped call, then restore.
 
         Consumes a ``request_id`` kwarg if present (otherwise mints a UUID),
@@ -69,7 +69,7 @@ def request_id_middleware(
             What the handler returns.
 
         """
-        request_id = kwargs.pop("request_id", None) or str(uuid.uuid4())
+        request_id = str(kwargs.pop("request_id", None) or uuid.uuid4())
         token = set_request_id(request_id)
         try:
             return await handler(*args, **kwargs)

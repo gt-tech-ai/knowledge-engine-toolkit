@@ -22,10 +22,10 @@ class StaticOrderRanker:
 
     @staticmethod
     async def rank(
-        ctx: RouteContext,  # noqa: ARG004 - the static order ignores the request
+        ctx: RouteContext,
         route: Route,
         candidates: Sequence[CatalogEndpointRef],
-        route_input: PlanInput,  # noqa: ARG004 - the static order ignores the request
+        route_input: PlanInput,
     ) -> RankResult:
         """Return the candidates with the route's models first.
 
@@ -35,6 +35,7 @@ class StaticOrderRanker:
             The candidates with the route's models first.
 
         """
+        del ctx, route_input
         preference = list(dict.fromkeys((route.default_model, *route.preferred)))
         rank_of = {model_id: index for index, model_id in enumerate(preference)}
         last = len(preference)
@@ -48,7 +49,7 @@ class StaticOrderRanker:
         route: Route,
         candidates: Sequence[CatalogEndpointRef],
         route_input: PlanInput,
-        prices: PriceTable,  # noqa: ARG003 - the static order ignores prices
+        prices: PriceTable,
     ) -> RankResult:
         """Return ``rank``'s order; the static order never reads the call's prices.
 
@@ -56,4 +57,5 @@ class StaticOrderRanker:
             ``rank``'s order; the static order never reads the call's prices.
 
         """
+        del prices
         return await cls.rank(ctx, route, candidates, route_input)

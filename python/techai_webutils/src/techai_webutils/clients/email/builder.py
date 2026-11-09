@@ -12,14 +12,17 @@ silently degrading to noop.
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.email.noop import NoopEmailSender
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from techai_webutils.clients.email.ses import SesEmailSender as _LazySesEmailSender
+    from techai_webutils.clients.email.smtp import SmtpEmailSender as _LazySmtpEmailSender
     from techai_webutils.core.interfaces.email import EmailSender
 
 
@@ -70,14 +73,22 @@ def new_email_from_config(config: EmailConfig) -> EmailSender:
     """
     if config.kind is EmailKind.SES:
         # Lazy import: skip aiobotocore off the SES path.
-        from techai_webutils.clients.email.ses import SesEmailSender  # noqa: PLC0415
+        ses_email_sender_cls = cast(
+            "type[_LazySesEmailSender]",
+            importlib.import_module("techai_webutils.clients.email.ses").SesEmailSender,
+        )
 
-        return SesEmailSender(region=config.region, from_address=config.from_address)
+        return ses_email_sender_cls(
+            region=config.region, from_address=config.from_address
+        )
     if config.kind is EmailKind.SMTP:
         # Lazy import: skip aiosmtplib off the SMTP path.
-        from techai_webutils.clients.email.smtp import SmtpEmailSender  # noqa: PLC0415
+        smtp_email_sender_cls = cast(
+            "type[_LazySmtpEmailSender]",
+            importlib.import_module("techai_webutils.clients.email.smtp").SmtpEmailSender,
+        )
 
-        return SmtpEmailSender(
+        return smtp_email_sender_cls(
             host=config.smtp_host, port=config.smtp_port, from_address=config.from_address
         )
     if config.kind is EmailKind.NOOP:

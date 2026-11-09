@@ -13,10 +13,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from techai_webutils.core.errors import AppError
+from techai_webutils.foundation.logger import get_logger
+
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from techai_webutils.controllers.base import BaseController
+
+logger = get_logger(__name__)
 
 
 def adapt[Req, Resp](
@@ -49,7 +54,10 @@ def adapt[Req, Resp](
             req = await parse(raw_request)
             result = await handler(req)
             return controller.write_json(status, result)
+        except AppError as exc:
+            return controller.write_error(exc)
         except Exception as exc:
+            logger.exception("framework_handler failed")
             return controller.write_error(exc)
 
     return framework_handler
@@ -80,7 +88,10 @@ def adapt_no_content[Req, Resp](
             req = await parse(raw_request)
             await handler(req)
             return controller.write_no_content()
+        except AppError as exc:
+            return controller.write_error(exc)
         except Exception as exc:
+            logger.exception("framework_handler failed")
             return controller.write_error(exc)
 
     return framework_handler

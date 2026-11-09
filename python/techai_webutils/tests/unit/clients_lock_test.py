@@ -401,7 +401,6 @@ class TestLockFromConfig:
         **What it tests:**
           - ``new_lock_from_config`` with kind=memory returns an ``InMemoryLock``.
         """
-
         lock = new_lock_from_config(LockConfig(kind=LockKind.MEMORY))
         assert isinstance(lock, InMemoryLock)
 
@@ -423,7 +422,6 @@ class TestLockFromConfig:
             that acquires ``pg_try_advisory_lock(namespace, signed crc32(key))`` on a
             session tagged with the configured ``application_name``.
         """
-
         conn = _mock_conn()
         with patch("asyncpg.connect", AsyncMock(return_value=conn)) as connect:
             lock = new_lock_from_config(
@@ -462,7 +460,6 @@ class TestLockFromConfig:
             ``new_lock_from_config`` raise ``ValueError`` naming the namespace; the memory
             kind still needs none.
         """
-
         with pytest.raises(ValueError, match="namespace"):
             new_lock_from_config(LockConfig(kind=LockKind.POSTGRES, key="kb:ds"))
         assert isinstance(
@@ -480,7 +477,6 @@ class TestLockFromConfig:
         **What it tests:**
           - ``new_lock_from_config`` with an unknown kind raises ``ValueError``.
         """
-
         # Deliberately bypass the LockKind enum with a bogus value to exercise the
         # defensive ``raise``.
         with pytest.raises(ValueError, match="unknown lock kind"):
@@ -505,7 +501,6 @@ class TestLockFromConfig:
           - The public ``postgres_dsn`` returns that same DSN, so a pool opened beside the
             lock (the postgres start budget's) connects the same way.
         """
-
         config = LockConfig(
             kind=LockKind.POSTGRES,
             host="db",

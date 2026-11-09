@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
 import time
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.foundation.resilience.per_key_rate_limiter import InMemoryRateLimiter
@@ -16,6 +17,9 @@ if TYPE_CHECKING:
     from redis.asyncio import Redis
 
     from techai_webutils.core.interfaces.rate_limiter import PerKeyRateLimiter
+    from techai_webutils.foundation.resilience.redis_rate_limiter import (
+        RedisPerKeyRateLimiter as _LazyRedisPerKeyRateLimiter,
+    )
 
 
 class PerKeyRateLimiterKind(StrEnum):
@@ -72,11 +76,14 @@ def per_key_rate_limiter_from_config(
             raise AppError(
                 ErrorCode.INVALID_INPUT, "redis rate limiter requires a client"
             )
-        from techai_webutils.foundation.resilience.redis_rate_limiter import (  # noqa: PLC0415
-            RedisPerKeyRateLimiter,
+        redis_per_key_rate_limiter_cls = cast(
+            "type[_LazyRedisPerKeyRateLimiter]",
+            importlib.import_module(
+                "techai_webutils.foundation.resilience.redis_rate_limiter"
+            ).RedisPerKeyRateLimiter,
         )
 
-        return RedisPerKeyRateLimiter(
+        return redis_per_key_rate_limiter_cls(
             redis,
             max_per_window=config.max_per_window,
             window_seconds=config.window_seconds,

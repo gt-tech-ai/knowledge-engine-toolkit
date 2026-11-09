@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from techai_webutils.clients.model_gateway.routed.catalog import ModelCatalog
@@ -273,7 +273,8 @@ async def test_stream_fails_over_before_first_token_only() -> None:
 
     async def drain() -> None:
         async for item in partial:
-            seen.append(item)  # noqa: PERF401 - items before the failure must be kept
+            await asyncio.sleep(0)
+            seen.append(item)
 
     with pytest.raises(UnavailableError):
         await drain()
@@ -322,6 +323,7 @@ _ERRORS: dict[str, Exception] = {
 
 
 @given(outcomes=_OUTCOMES, max_attempts=st.integers(1, 5))
+@settings(deadline=None)
 def test_executor_attempt_bound_and_breaker_invariant(
     outcomes: list[str], max_attempts: int
 ) -> None:

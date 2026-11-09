@@ -67,6 +67,19 @@ def status_name(context: Context, err: BaseException | None) -> str:
     return "".join(word.capitalize() for word in code.name.split("_"))
 
 
+def _log_rpc_failure(
+    logger: Logger, method: str, start: float, context: Context, exc: Exception
+) -> None:
+    """Log a failed RPC with its status; a failure is not a crash, so no traceback."""
+    logger.error(
+        "gRPC request failed",
+        method=method,
+        duration=time.perf_counter() - start,
+        code=status_name(context, exc),
+        error=str(exc),
+    )
+
+
 class TracingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
     """Continues the caller's trace in one SERVER span per RPC.
 
@@ -102,7 +115,9 @@ class TracingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc
         service, name = parse_method(method)
         tracer = self._tracer
 
-        def wrap(behavior: Behavior, _streaming: bool) -> Behavior:  # noqa: FBT001
+        def wrap(behavior: Behavior, *, streaming: bool) -> Behavior:
+            del streaming
+
             async def traced(request: object, context: Context) -> object:
                 # Attach the inbound context (baggage included) for the whole call; the
                 # span below parents on it. Detached in finally, so an error leaves no
@@ -188,7 +203,9 @@ class MetricsServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc
         service, name = parse_method(handler_call_details.method or "unknown")
         requests, duration = self._requests, self._duration
 
-        def wrap(behavior: Behavior, _streaming: bool) -> Behavior:  # noqa: FBT001
+        def wrap(behavior: Behavior, *, streaming: bool) -> Behavior:
+            del streaming
+
             async def measured(request: object, context: Context) -> object:
                 start = time.perf_counter()
                 err: BaseException | None = None
@@ -237,19 +254,15 @@ class LoggingServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc
         method = handler_call_details.method or "unknown"
         logger = self._logger
 
-        def wrap(behavior: Behavior, _streaming: bool) -> Behavior:  # noqa: FBT001
+        def wrap(behavior: Behavior, *, streaming: bool) -> Behavior:
+            del streaming
+
             async def logged(request: object, context: Context) -> object:
                 start = time.perf_counter()
                 try:
                     result = await behavior(request, context)
                 except Exception as exc:
-                    logger.error(  # noqa: TRY400 - an RPC failure is not a crash
-                        "gRPC request failed",
-                        method=method,
-                        duration=time.perf_counter() - start,
-                        code=status_name(context, exc),
-                        error=str(exc),
-                    )
+                    _log_rpc_failure(logger, method, start, context, exc)
                     raise
                 logger.info(
                     "gRPC request completed",

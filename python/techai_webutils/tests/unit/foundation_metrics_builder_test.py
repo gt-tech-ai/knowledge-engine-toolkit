@@ -230,7 +230,6 @@ class TestPrometheusMetricsLabels:
           - ServiceMetrics.request_count, request_duration, in_flight are accessible
           - Metric operations do not raise
         """
-
         registry = CollectorRegistry()
         sm = create_metrics("test_svc", registry=registry)
         assert sm.request_count is not None
@@ -255,7 +254,6 @@ class TestPrometheusMetricsLabels:
           - new_metrics() with a custom registry returns a PrometheusMetricsProvider
           - The returned provider can create counters, histograms, and gauges
         """
-
         registry = CollectorRegistry()
         provider = new_metrics(registry)
         assert isinstance(provider, PrometheusMetricsProvider)

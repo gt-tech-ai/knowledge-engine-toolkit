@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.types.routing import Classification
+from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -26,6 +27,8 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
     from techai_webutils.core.interfaces.model_gateway import RouteContext
     from techai_webutils.core.types.routing import Route
+
+logger = get_logger(__name__)
 
 
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
@@ -111,6 +114,7 @@ class EmbeddingRouteClassifier:
                 await self.warm()
             vector = (await self._embedding.embed(query, input_type="query")).embedding
         except Exception:
+            logger.exception("classify failed")
             return Classification(route=fallback.route, confidence=0.0, degraded=True)
         scores = self._scores(vector)
         if not scores:

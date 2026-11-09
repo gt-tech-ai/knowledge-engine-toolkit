@@ -8,7 +8,7 @@ Every RPC shape is run as one coroutine: a streaming response is written with
 from __future__ import annotations
 
 import inspect
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 import grpc
 
@@ -28,8 +28,13 @@ type Continuation[TRequest, TResponse] = Callable[
 ]
 """The next interceptor (or the server) resolving a call to its method handler."""
 
-type Wrap = Callable[[Behavior, bool], Behavior]
-"""Wraps a behavior; the flag reports whether the response is streamed."""
+
+class Wrap(Protocol):
+    """Wraps a behavior; ``streaming`` reports whether the response is streamed."""
+
+    def __call__(self, behavior: Behavior, /, *, streaming: bool) -> Behavior:
+        """Return ``behavior`` wrapped."""
+        ...
 
 
 def rebuild[TRequest, TResponse](
@@ -48,7 +53,7 @@ def rebuild[TRequest, TResponse](
     serializer = handler.response_serializer
     if handler.response_streaming:
         fn = handler.stream_stream if handler.request_streaming else handler.unary_stream
-        behavior = wrap(_as_writer(cast("Callable[..., object]", fn)), True)  # noqa: FBT003
+        behavior = wrap(_as_writer(cast("Callable[..., object]", fn)), streaming=True)
         build = (
             grpc.stream_stream_rpc_method_handler
             if handler.request_streaming
@@ -56,7 +61,7 @@ def rebuild[TRequest, TResponse](
         )
         return build(behavior, deserializer, serializer)  # pyright: ignore[reportArgumentType]
     fn = handler.stream_unary if handler.request_streaming else handler.unary_unary
-    behavior = wrap(cast("Behavior", fn), False)  # noqa: FBT003
+    behavior = wrap(cast("Behavior", fn), streaming=False)
     build = (
         grpc.stream_unary_rpc_method_handler
         if handler.request_streaming

@@ -138,7 +138,6 @@ class TestAuthClaims:
         **What it tests:**
           - Assigning to user_id on an existing instance raises AttributeError
         """
-
         claims = AuthClaims(user_id="u-1")
         with pytest.raises(AttributeError):
             claims.user_id = "u-2"  # type: ignore[misc]
@@ -408,7 +407,6 @@ class TestHeaderClaimMapping:
             lowercase, trimmed names, and an interceptor built from it (imported from the
             interceptors package) extracts claims from lowercase metadata.
         """
-
         mapping = PackageMapping(
             user_id=" X-User-Sub ", tenant_id="X-Tenant", roles="X-Roles"
         )

@@ -63,10 +63,10 @@ class Retry:
 
     def validate(self) -> None:
         """Raise ``AppValueError`` on an out-of-range tuning."""
-        _require(self.max_retries >= 0, "retry.max_retries must be >= 0")
-        _require(self.initial_interval >= 0, "retry.initial_interval must be >= 0")
-        _require(self.max_interval >= 0, "retry.max_interval must be >= 0")
-        _require(self.multiplier >= 1, "retry.multiplier must be >= 1")
+        _require(ok=self.max_retries >= 0, msg="retry.max_retries must be >= 0")
+        _require(ok=self.initial_interval >= 0, msg="retry.initial_interval must be >= 0")
+        _require(ok=self.max_interval >= 0, msg="retry.max_interval must be >= 0")
+        _require(ok=self.multiplier >= 1, msg="retry.multiplier must be >= 1")
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,12 +100,14 @@ class CircuitBreaker:
     def validate(self) -> None:
         """Raise ``AppValueError`` on an out-of-range tuning."""
         _require(
-            0 <= self.failure_ratio <= 1,
-            "circuit_breaker.failure_ratio must be in [0, 1]",
+            ok=0 <= self.failure_ratio <= 1,
+            msg="circuit_breaker.failure_ratio must be in [0, 1]",
         )
-        _require(self.interval >= 0, "circuit_breaker.interval must be >= 0")
-        _require(self.timeout >= 0, "circuit_breaker.timeout must be >= 0")
-        _require(self.max_requests >= 0, "circuit_breaker.max_requests must be >= 0")
+        _require(ok=self.interval >= 0, msg="circuit_breaker.interval must be >= 0")
+        _require(ok=self.timeout >= 0, msg="circuit_breaker.timeout must be >= 0")
+        _require(
+            ok=self.max_requests >= 0, msg="circuit_breaker.max_requests must be >= 0"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,9 +142,11 @@ class Bulkhead:
 
     def validate(self) -> None:
         """Raise ``AppValueError`` on an out-of-range tuning."""
-        _require(self.max_concurrent >= 1, "bulkhead.max_concurrent must be >= 1")
-        _require(self.min_concurrent >= 0, "bulkhead.min_concurrent must be >= 0")
-        _require(0 < self.backoff_ratio <= 1, "bulkhead.backoff_ratio must be in (0, 1]")
+        _require(ok=self.max_concurrent >= 1, msg="bulkhead.max_concurrent must be >= 1")
+        _require(ok=self.min_concurrent >= 0, msg="bulkhead.min_concurrent must be >= 0")
+        _require(
+            ok=0 < self.backoff_ratio <= 1, msg="bulkhead.backoff_ratio must be in (0, 1]"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,8 +164,8 @@ class RateLimit:
 
     def validate(self) -> None:
         """Raise ``AppValueError`` on an out-of-range tuning."""
-        _require(self.rate >= 0, "rate_limit.rate must be >= 0")
-        _require(self.burst >= 0, "rate_limit.burst must be >= 0")
+        _require(ok=self.rate >= 0, msg="rate_limit.rate must be >= 0")
+        _require(ok=self.burst >= 0, msg="rate_limit.burst must be >= 0")
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,7 +209,7 @@ class Layers:
     """Bounds the operations in flight."""
 
 
-def on(switch: bool | None) -> bool:  # noqa: FBT001 - a switch value, not a flag
+def on(*, switch: bool | None) -> bool:
     """Report whether a layer switch is on (None is off).
 
     Returns:
@@ -547,6 +551,20 @@ def _decode[T](cls: type[T], raw: object, path: str) -> T:
     return cls(**values)
 
 
+def _field_default(f: dataclasses.Field[object]) -> object:
+    """Return the value a field takes when its config is absent.
+
+    Returns:
+        The field's default, its factory's product, or ``None`` when it has neither.
+
+    """
+    if f.default is not dataclasses.MISSING:
+        return f.default
+    if f.default_factory is not dataclasses.MISSING:
+        return f.default_factory()
+    return None
+
+
 def _decode_value(
     hint: object, f: dataclasses.Field[object], raw: object, path: str
 ) -> object:
@@ -560,11 +578,7 @@ def _decode_value(
 
     """
     if raw is None:
-        if f.default is not dataclasses.MISSING:
-            return f.default
-        if f.default_factory is not dataclasses.MISSING:
-            return f.default_factory()
-        return None
+        return _field_default(f)
     if f.metadata.get("duration"):
         return parse_duration(raw)
     if hint is Tier:
@@ -662,7 +676,7 @@ def _decode_scalar(hint: object, raw: object, path: str) -> object:
     raise AppValueError(msg)
 
 
-def _require(ok: bool, msg: str) -> None:  # noqa: FBT001 - a predicate, not a flag
+def _require(*, ok: bool, msg: str) -> None:
     """Raise ``AppValueError(msg)`` unless ``ok``.
 
     Raises:

@@ -37,6 +37,7 @@ from techai_webutils.clients.vector.opensearch.config import (
     VectorMode,
 )
 from techai_webutils.clients.vector.opensearch.mapping import (
+    IndexBodyOptions,
     alias_name,
     bulk_error,
     doc_id,
@@ -162,15 +163,15 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             body: list[dict[str, object]] = []
             for index in targets:
                 for entry in group:
-                    body.append({"index": self._action(index, entry.id, org)})
-                    body.append(
+                    body.extend((
+                        {"index": self._action(index, entry.id, org)},
                         entry_source(
                             entry,
                             self._config.org_field,
                             org,
                             truncated_dimension=self._config.truncated_dimension,
-                        )
-                    )
+                        ),
+                    ))
             await self._bulk(body)
 
     @override
@@ -419,11 +420,13 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
                 self._dimension,
                 cfg.model,
                 cfg.model_version,
-                on_disk=on_disk,
-                compression_level=cfg.disk_compression_level,
-                truncated_dimension=cfg.truncated_dimension,
-                language_analyzers=cfg.language_analyzers,
-                text_offsets=cfg.text_offsets,
+                options=IndexBodyOptions(
+                    on_disk=on_disk,
+                    compression_level=cfg.disk_compression_level,
+                    truncated_dimension=cfg.truncated_dimension,
+                    language_analyzers=cfg.language_analyzers,
+                    text_offsets=cfg.text_offsets,
+                ),
             )
             await self._client.indices.create(index=index, body=body, params=self._params)
         return index
@@ -441,7 +444,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         if not await self._alias_exists(alias):
             return None
         response = await self._client.indices.get_alias(name=alias, params=self._params)
-        return sorted(cast("dict[str, object]", response))[0]
+        return min(cast("dict[str, object]", response))
 
     async def index_model(self, index: str) -> tuple[str, str]:
         """Return the ``(model, version)`` ``index`` was created for.

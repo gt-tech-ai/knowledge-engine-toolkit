@@ -5,12 +5,13 @@ from __future__ import annotations
 import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, cast
 
 import aiobotocore.session
 
 from techai_webutils.core.errors import AppRuntimeError
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
+from techai_webutils.foundation.logger import get_logger
 
 _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 """Read size for streamed downloads, in bytes (1 MiB) — keeps peak RAM O(chunk), not
@@ -35,6 +36,19 @@ if TYPE_CHECKING:
     from types_aiobotocore_s3.type_defs import CompletedPartTypeDef, CopySourceTypeDef
 
     from techai_webutils.clients.storage.config import S3Config
+
+logger = get_logger(__name__)
+
+
+def _is_missing_key(exc: Exception) -> bool:
+    """Report whether a head_object failure means the key does not exist.
+
+    Returns:
+        True for a 404 response.
+
+    """
+    response = cast("dict[str, dict[str, str]]", getattr(exc, "response", {}))
+    return response.get("Error", {}).get("Code") in {"404", "NoSuchKey"}
 
 
 def _create_for_write(path: str) -> int:
@@ -249,9 +263,12 @@ class S3StorageClient(StorageClient):
             raise AppRuntimeError(msg)
         try:
             await self._client.head_object(Bucket=bucket, Key=key)
-            return True
-        except Exception:
+        except Exception as exc:
+            if not _is_missing_key(exc):
+                logger.exception("s3 head_object failed; reporting the key as absent")
             return False
+        else:
+            return True
 
     async def presign_url(self, bucket: str, key: str, expiry_seconds: int) -> str:
         """Generate a pre-signed URL for temporary access.

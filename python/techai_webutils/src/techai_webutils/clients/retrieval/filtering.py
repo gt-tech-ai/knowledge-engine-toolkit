@@ -52,13 +52,14 @@ class MinScore:
     floor: float
     """The lowest admitted score."""
 
-    def admits(self, passage: RetrievalResult, request: Mapping[str, str]) -> bool:  # noqa: ARG002
+    def admits(self, passage: RetrievalResult, request: Mapping[str, str]) -> bool:
         """Return True iff the passage scores at or above the floor.
 
         Returns:
             True iff the passage scores at or above the floor.
 
         """
+        del request
         return passage.score >= self.floor
 
 

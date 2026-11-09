@@ -82,14 +82,24 @@ class _Chunk:
     vector: list[float]
 
 
+@dataclass(frozen=True, kw_only=True)
+class ProbeIndexOptions:
+    """What ``probe_index`` takes, grouped into one value."""
+
+    org_field: str = "org_id"
+    """The field the org is stored in (``OpenSearchConfig.org_field``)."""
+
+    settings: ProbeSettings | None = None
+    """The sample size, depth, query length and seed (the defaults when None)."""
+
+
 async def probe_index(
     clients: Mapping[str, AsyncOpenSearch],
     org_id: str,
     current: str,
     previous: str = "",
     *,
-    org_field: str = "org_id",
-    settings: ProbeSettings | None = None,
+    options: ProbeIndexOptions,
 ) -> IndexProbe:
     """Probe ``current`` for ``org_id``, against ``previous`` when one is given.
 
@@ -99,15 +109,14 @@ async def probe_index(
         current: The index the org now reads.
         previous: The index it read before; empty when there is none (a first index or a
             sink flip into a shared index).
-        org_field: The field the org is stored in (``OpenSearchConfig.org_field``).
-        settings: The sample size, depth, query length and seed (the defaults when None).
+        options: The settings and collaborators, grouped.
 
     Returns:
         The probe's three shares and its sample count.
 
     """
-    s = settings or ProbeSettings()
-    fields = {org_field: org_id}
+    s = options.settings or ProbeSettings()
+    fields = {options.org_field: org_id}
     source = previous or current
     queries = await _sample(clients, source, fields, s, with_vector=False)
     current_chunks = await _sample(clients, current, fields, s, with_vector=True)

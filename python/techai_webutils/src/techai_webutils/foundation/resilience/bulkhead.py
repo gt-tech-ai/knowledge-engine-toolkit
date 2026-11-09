@@ -71,7 +71,7 @@ class SemaphoreBulkhead(Bulkhead):
             BulkheadFullError: No slot is free.
 
         """
-        if not self._semaphore._value:  # noqa: SLF001
+        if self._semaphore.locked():
             raise BulkheadFullError
         async with self._semaphore:
             return await fn()

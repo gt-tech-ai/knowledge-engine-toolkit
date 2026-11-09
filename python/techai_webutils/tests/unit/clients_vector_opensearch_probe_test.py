@@ -13,6 +13,7 @@ import pytest
 
 from techai_webutils.clients.vector.opensearch.index_probe import (
     IndexProbe,
+    ProbeIndexOptions,
     ProbeSettings,
     probe_index,
 )
@@ -109,7 +110,7 @@ async def test_probe_index_scores_a_healthy_and_a_broken_swap() -> None:
         },
     })
     clients = cast("dict[str, AsyncOpenSearch]", {"a": healthy})
-    probe = await probe_index(clients, _ORG, _NEW, _OLD)
+    probe = await probe_index(clients, _ORG, _NEW, _OLD, options=ProbeIndexOptions())
     assert probe == IndexProbe(
         samples=2, known_answer_recall=1.0, overlap=1.0, self_recall=1.0
     )
@@ -123,7 +124,9 @@ async def test_probe_index_scores_a_healthy_and_a_broken_swap() -> None:
         },
     })
     clients = cast("dict[str, AsyncOpenSearch]", {"a": broken})
-    probe = await probe_index(clients, _ORG, _NEW, _OLD, settings=ProbeSettings(k=1))
+    probe = await probe_index(
+        clients, _ORG, _NEW, _OLD, options=ProbeIndexOptions(settings=ProbeSettings(k=1))
+    )
     assert probe == IndexProbe(
         samples=2, known_answer_recall=0.0, overlap=0.0, self_recall=0.0
     )
@@ -138,7 +141,9 @@ async def test_probe_index_scores_a_healthy_and_a_broken_swap() -> None:
         _OLD: {"sample": [_hit("d1", 1.0)]},
     })
     clients = cast("dict[str, AsyncOpenSearch]", {"far": far, "near": near})
-    probe = await probe_index(clients, _ORG, _NEW, _OLD, settings=ProbeSettings(k=1))
+    probe = await probe_index(
+        clients, _ORG, _NEW, _OLD, options=ProbeIndexOptions(settings=ProbeSettings(k=1))
+    )
     assert (probe.known_answer_recall, probe.self_recall) == (1.0, 1.0)
 
 
@@ -169,7 +174,9 @@ async def test_probe_index_without_previous_or_chunks() -> None:
     })
     clients = cast("dict[str, AsyncOpenSearch]", {"a": new})
     settings = ProbeSettings(query_words=5, seed=7)
-    probe = await probe_index(clients, _ORG, _NEW, settings=settings)
+    probe = await probe_index(
+        clients, _ORG, _NEW, options=ProbeIndexOptions(settings=settings)
+    )
     assert probe == IndexProbe(
         samples=1, known_answer_recall=1.0, overlap=1.0, self_recall=1.0
     )
@@ -181,7 +188,7 @@ async def test_probe_index_without_previous_or_chunks() -> None:
     assert match["query"]["bool"]["must"] == [{"match": {"text": "w0 w1 w2 w3 w4"}}]
 
     empty = cast("dict[str, AsyncOpenSearch]", {"a": _client({})})
-    probe = await probe_index(empty, _ORG, _NEW, _OLD)
+    probe = await probe_index(empty, _ORG, _NEW, _OLD, options=ProbeIndexOptions())
     assert probe == IndexProbe(
         samples=0, known_answer_recall=1.0, overlap=1.0, self_recall=1.0
     )

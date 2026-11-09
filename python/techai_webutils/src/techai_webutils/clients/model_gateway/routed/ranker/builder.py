@@ -7,8 +7,9 @@ caller whose prices arrive with each request (a remote planner) builds one ranke
 
 from __future__ import annotations
 
+import importlib
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from techai_webutils.clients.model_gateway.routed.ranker.static_order import (
     StaticOrderRanker,
@@ -19,6 +20,9 @@ from techai_webutils.core.interfaces.routing import CandidateRanker
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from techai_webutils.clients.model_gateway.routed.ranker.cost_aware import (
+        CostAwareRanker as _CostAwareRanker,
+    )
     from techai_webutils.core.interfaces.model_gateway import RouteContext
     from techai_webutils.core.interfaces.token_ledger import TokenLedger
     from techai_webutils.core.types.routing import (
@@ -92,17 +96,18 @@ def candidate_ranker_from_config(
     if kind == CandidateRankerKind.STATIC_ORDER:
         return StaticOrderRanker()
     if kind == CandidateRankerKind.COST_AWARE:
-        from techai_webutils.clients.model_gateway.routed.ranker.cost_aware import (  # noqa: PLC0415
-            DEFAULT_WEIGHTS,
-            CostAwareRanker,
+        cost_aware = importlib.import_module(
+            "techai_webutils.clients.model_gateway.routed.ranker.cost_aware"
         )
+        default_weights = cast("Mapping[str, float]", cost_aware.DEFAULT_WEIGHTS)
+        cost_aware_ranker_cls = cast("type[_CostAwareRanker]", cost_aware.CostAwareRanker)
 
-        return CostAwareRanker(
+        return cost_aware_ranker_cls(
             prices,
             ledger=ledger,
             default_slo=default_slo,
             near_budget_ratio=float(raw.get("near_budget_ratio", 0.8)),
-            weights=raw.get("weights", DEFAULT_WEIGHTS),
+            weights=raw.get("weights", default_weights),
         )
     msg = f"unknown candidate ranker kind: {kind!r}"
     raise AppValueError(msg)

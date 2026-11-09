@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,23 +15,31 @@ from techai_webutils.clients.model_gateway import (
     RoutedConfig,
     new_model_gateway_from_config,
 )
+from techai_webutils.clients.model_gateway.builder import ModelGatewayDependencies
 from techai_webutils.clients.model_gateway.routed import RoutedGateway
 from techai_webutils.clients.model_gateway.routed.catalog import (
     ModelCatalog,
     parse_routes,
 )
+from techai_webutils.clients.model_gateway.routed.gateway import RoutedGatewayDependencies
 from techai_webutils.clients.model_gateway.routed.policy_store import (
     routing_policy_store_from_config,
 )
 from techai_webutils.core.errors import AppError, ErrorCode, UnavailableError
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
-from techai_webutils.core.interfaces.llm import LLMMessage
+from techai_webutils.core.interfaces.llm import LLMMessage, LLMProvider
 from techai_webutils.core.interfaces.model_gateway import (
+    ModelGateway,
     RouteContext,
     current_route_decision,
 )
 from techai_webutils.core.interfaces.routing import RoutePlanner, RoutingPolicyStore
 from techai_webutils.core.types.routing import RoutingPolicy
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from techai_webutils.core.types.llm import LlmConfig
 
 _MESSAGES = [LLMMessage(role="user", content="what is the refund window")]
 
@@ -42,7 +50,7 @@ def _gateway(
     ctx: RouteContext,
     *,
     policies: dict[str, Any] | None = None,
-    factory: Any = None,  # noqa: ANN401 - the provider factory under test
+    factory: Callable[[LlmConfig], LLMProvider] | None = None,
 ) -> RoutedGateway:
     """Build a routed gateway over the fixture catalog whose context is always ``ctx``.
 
@@ -60,9 +68,11 @@ def _gateway(
     )
     gateway = new_model_gateway_from_config(
         config,
-        provider_factory=factory or (lambda llm: StubLlmProvider(llm.model)),
-        context_provider=lambda: ctx,
-        priced_ids=None,
+        options=ModelGatewayDependencies(
+            provider_factory=factory or (lambda llm: StubLlmProvider(llm.model)),
+            context_provider=lambda: ctx,
+            priced_ids=None,
+        ),
     )
     assert isinstance(gateway, RoutedGateway)
     return gateway
@@ -129,15 +139,17 @@ async def test_pin_resolves_model_and_skips_classify_and_rank(
     planner = MagicMock(spec=RoutePlanner)
     planner.plan = AsyncMock()
     gateway = RoutedGateway(
-        catalog=catalog,
-        routes=parse_routes(routes_raw, catalog),
-        default_route="",
-        policy_store=routing_policy_store_from_config({
-            "policies": {"org-1": {"pins": {"generate": "anthropic/haiku"}}}
-        }),
-        planner=planner,
-        provider_factory=lambda llm: StubLlmProvider(llm.model),
-        context_provider=lambda: RouteContext(tenant_id="org-1", step="generate"),
+        options=RoutedGatewayDependencies(
+            catalog=catalog,
+            routes=parse_routes(routes_raw, catalog),
+            default_route="",
+            policy_store=routing_policy_store_from_config({
+                "policies": {"org-1": {"pins": {"generate": "anthropic/haiku"}}}
+            }),
+            planner=planner,
+            provider_factory=lambda llm: StubLlmProvider(llm.model),
+            context_provider=lambda: RouteContext(tenant_id="org-1", step="generate"),
+        )
     )
 
     response = await gateway.complete(_MESSAGES)
@@ -165,7 +177,7 @@ async def test_routed_reuses_endpoint_instances(
     """
     built: list[StubLlmProvider] = []
 
-    def factory(llm: Any) -> StubLlmProvider:  # noqa: ANN401 - LlmConfig
+    def factory(llm: LlmConfig) -> StubLlmProvider:
         provider = StubLlmProvider(llm.model)
         provider.__aexit__ = AsyncMock(return_value=None)  # type: ignore[method-assign]
         built.append(provider)
@@ -217,8 +229,10 @@ async def test_route_context_defaults_when_provider_returns_empty_context(
     )
     gateway = new_model_gateway_from_config(
         config,
-        provider_factory=lambda llm: StubLlmProvider(llm.model),
-        context_provider=RouteContext,
+        options=ModelGatewayDependencies(
+            provider_factory=lambda llm: StubLlmProvider(llm.model),
+            context_provider=RouteContext,
+        ),
     )
 
     response = await gateway.complete(_MESSAGES)
@@ -254,7 +268,7 @@ async def test_gateway_warms_embedding_classifier_on_enter(
     broken = MagicMock(spec=EmbeddingProvider)
     broken.embed_batch = AsyncMock(side_effect=RuntimeError("embedder down"))
 
-    def build(embedder: MagicMock) -> Any:  # noqa: ANN401 - the gateway under test
+    def build(embedder: MagicMock) -> ModelGateway:
         return new_model_gateway_from_config(
             GatewayConfig(
                 kind=GatewayKind.ROUTED,
@@ -262,8 +276,10 @@ async def test_gateway_warms_embedding_classifier_on_enter(
                     catalog=catalog_raw, routes=routes, classifier={"kind": "embedding"}
                 ),
             ),
-            provider_factory=lambda llm: StubLlmProvider(llm.model),
-            embedding=embedder,
+            options=ModelGatewayDependencies(
+                provider_factory=lambda llm: StubLlmProvider(llm.model),
+                embedding=embedder,
+            ),
         )
 
     async with build(embedding):
@@ -291,7 +307,7 @@ async def test_transient_failure_fails_over_and_records_reason(
       - the decision's reason is ``failover`` with attempts ``failed`` then ``ok``
     """
 
-    def factory(llm: Any) -> StubLlmProvider:  # noqa: ANN401 - LlmConfig
+    def factory(llm: LlmConfig) -> StubLlmProvider:
         provider = StubLlmProvider(llm.model)
         if llm.model == "sonnet-use1":
             provider.complete = AsyncMock(side_effect=UnavailableError("throttled"))  # type: ignore[method-assign]
@@ -338,9 +354,11 @@ async def test_injected_policy_store_replaces_the_configured_one(
     )
     injected = new_model_gateway_from_config(
         config,
-        provider_factory=lambda llm: StubLlmProvider(llm.model),
-        context_provider=lambda: ctx,
-        policy_store=store,
+        options=ModelGatewayDependencies(
+            provider_factory=lambda llm: StubLlmProvider(llm.model),
+            context_provider=lambda: ctx,
+            policy_store=store,
+        ),
     )
     configured = _gateway(
         catalog_raw,
@@ -376,8 +394,9 @@ def test_cost_aware_gateway_without_prices_fails_at_boot(
     with pytest.raises(AppError) as excinfo:
         _ = new_model_gateway_from_config(
             config,
-            provider_factory=lambda llm: StubLlmProvider(llm.model),
-            priced_ids=None,
+            options=ModelGatewayDependencies(
+                provider_factory=lambda llm: StubLlmProvider(llm.model), priced_ids=None
+            ),
         )
 
     assert excinfo.value.code == ErrorCode.INVALID_INPUT

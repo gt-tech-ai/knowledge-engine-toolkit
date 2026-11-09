@@ -34,6 +34,7 @@ one ``cache_lookups`` fact (outcome, similarity bin, model, workspace; lookups, 
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import functools
 from dataclasses import dataclass
@@ -43,15 +44,16 @@ from techai_webutils.clients.semantic_cache.reader import (
     CACHE_LOOKUPS_CUBE,
     CacheRead,
     SemanticCacheReader,
+    SemanticCacheReaderOptions,
 )
 from techai_webutils.clients.semantic_cache.stub import StubSemanticCache
 from techai_webutils.clients.semantic_cache.tiers import CacheTierKind
-from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.llm import LLMResponse, StreamUsage
 from techai_webutils.core.interfaces.semantic_cache import (
     CacheLookup,
     set_served_from_cache,
 )
+from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
@@ -68,6 +70,8 @@ if TYPE_CHECKING:
 
     type CallArgs = tuple[tuple[object, ...], dict[str, object]]
     """A bound call's positional and keyword arguments."""
+
+logger = get_logger(__name__)
 
 __all__ = ["CACHE_LOOKUPS_CUBE", "SemanticCacheBinding", "SemanticCacheProxy"]
 
@@ -138,26 +142,60 @@ class _BackendLookup(CacheLookup):
         return dataclasses.replace(hit, tier=tier.value)
 
 
+@dataclass(frozen=True, kw_only=True)
+class SemanticCacheProxyOptions:
+    """What ``SemanticCacheProxy`` takes, grouped into one value."""
+
+    min_similarity: float
+    """The lowest similarity that counts as a hit when no ``lookup`` is given (a tier
+    chain carries its own thresholds).
+    """
+
+    ttl_seconds: int
+    """How long a stored answer lives."""
+
+    enabled: bool
+    """``False`` makes the proxy a passthrough."""
+
+    path: str
+    """The metric label for this placement (``generation``, ``retrieval``)."""
+
+    metrics: MetricsProvider | None = None
+    """Emits hit / miss / saving / error counters; ``None`` emits nothing."""
+
+    facts: FactPublisher | None = None
+    """Receives one ``cache_lookups`` fact per lookup; ``None`` publishes nothing."""
+
+    fact_dimensions: Callable[[], Mapping[str, str]] | None = None
+    """Returns the product dimensions (must include ``org_id``)."""
+
+    saving: Callable[[CachedAnswer], Decimal] | None = None
+    """Returns the US dollars a hit avoided (``0`` without it)."""
+
+    on_hit: HitHook | None = None
+    """Awaited before each hit is served (e.g. the audit); it may return a replacement
+    answer. Any coded ``AppError`` it raises refuses the hit; an uncoded failure is
+    swallowed and counted.
+    """
+
+    similarity_bins: tuple[float, ...] = (0.9, 0.95, 0.98, 1.0)
+    """The ascending lower edges a hit's similarity is binned by."""
+
+    lookup: CacheLookup | None = None
+    """The tier chain answers are read through (``cache_lookup_from_config``); ``None``
+    reads through ``cache.lookup`` at ``min_similarity``.
+    """
+
+
 class SemanticCacheProxy:
     """Serves repeat model calls from a semantic cache; fail-open."""
 
-    def __init__(  # noqa: PLR0913 - the decorator's settings and collaborators, each injected
+    def __init__(
         self,
         inner: object,
         cache: SemanticCache,
         binding: SemanticCacheBinding,
-        *,
-        min_similarity: float,
-        ttl_seconds: int,
-        enabled: bool,
-        path: str,
-        metrics: MetricsProvider | None = None,
-        facts: FactPublisher | None = None,
-        fact_dimensions: Callable[[], Mapping[str, str]] | None = None,
-        saving: Callable[[CachedAnswer], Decimal] | None = None,
-        on_hit: HitHook | None = None,
-        similarity_bins: tuple[float, ...] = (0.9, 0.95, 0.98, 1.0),
-        lookup: CacheLookup | None = None,
+        options: SemanticCacheProxyOptions,
     ) -> None:
         """Wrap ``inner``'s bound methods with ``cache``.
 
@@ -165,39 +203,27 @@ class SemanticCacheProxy:
             inner: The provider or generator whose calls are cached.
             cache: The semantic cache answers are written to.
             binding: Which methods are cached and how.
-            min_similarity: The lowest similarity that counts as a hit when no ``lookup``
-                is given (a tier chain carries its own thresholds).
-            ttl_seconds: How long a stored answer lives.
-            enabled: ``False`` makes the proxy a passthrough.
-            path: The metric label for this placement (``generation``, ``retrieval``).
-            metrics: Emits hit / miss / saving / error counters; ``None`` emits nothing.
-            facts: Receives one ``cache_lookups`` fact per lookup; ``None`` publishes
-                nothing.
-            fact_dimensions: Returns the product dimensions (must include ``org_id``).
-            saving: Returns the US dollars a hit avoided (``0`` without it).
-            on_hit: Awaited before each hit is served (e.g. the audit); it may return a
-                replacement answer. Any coded ``AppError`` it raises refuses the hit; an
-                uncoded failure is swallowed and counted.
-            similarity_bins: The ascending lower edges a hit's similarity is binned by.
-            lookup: The tier chain answers are read through
-                (``cache_lookup_from_config``); ``None`` reads through ``cache.lookup`` at
-                ``min_similarity``.
+            options: The settings and collaborators, grouped.
 
         """
         self._inner = inner
         self._binding = binding
-        self._active = enabled and not isinstance(cache, StubSemanticCache)
+        self._active = options.enabled and not isinstance(cache, StubSemanticCache)
         self._reader = SemanticCacheReader(
             cache,
-            lookup if lookup is not None else _BackendLookup(cache, min_similarity),
-            ttl_seconds=ttl_seconds,
-            path=path,
-            metrics=metrics,
-            facts=facts,
-            fact_dimensions=fact_dimensions,
-            saving=saving,
-            on_hit=on_hit,
-            similarity_bins=similarity_bins,
+            options.lookup
+            if options.lookup is not None
+            else _BackendLookup(cache, options.min_similarity),
+            options=SemanticCacheReaderOptions(
+                ttl_seconds=options.ttl_seconds,
+                path=options.path,
+                metrics=options.metrics,
+                facts=options.facts,
+                fact_dimensions=options.fact_dimensions,
+                saving=options.saving,
+                on_hit=options.on_hit,
+                similarity_bins=options.similarity_bins,
+            ),
         )
 
     def __getattr__(self, name: str) -> object:
@@ -233,8 +259,9 @@ class SemanticCacheProxy:
             if namespace is None:
                 return None
             query = self._binding.make_query(args, kwargs)
-        except Exception as exc:
-            self._reader.failed("key", exc)
+        except Exception:
+            logger.exception("lookup failed")
+            self._reader.failed("key")
             return None
         return await self._reader.read(query, namespace)
 
@@ -255,8 +282,9 @@ class SemanticCacheProxy:
         """Encode with ``payload()`` and write it through; swallow any failure."""
         try:
             encoded = payload()
-        except Exception as exc:
-            self._reader.failed("store", exc)
+        except Exception:
+            logger.exception("store failed")
+            self._reader.failed("store")
             return
         await self._reader.write(found, encoded)
 
@@ -276,8 +304,9 @@ class SemanticCacheProxy:
             if found is not None and found.hit is not None:
                 try:
                     answer = self._binding.decode(found.hit.payload)
-                except Exception as exc:
-                    self._reader.failed("decode", exc)
+                except Exception:
+                    logger.exception("call failed")
+                    self._reader.failed("decode")
                     self._reader.refuse(found)
                 else:
                     return await self._hit((args, kwargs), answer, found)
@@ -326,14 +355,11 @@ class SemanticCacheProxy:
                 if isinstance(served, LLMResponse):
                     text = served.content
                 else:
-                    self._reader.failed(
-                        "on_hit",
-                        AppError(
-                            ErrorCode.INTERNAL,
-                            f"stream hit replacement is {type(served).__name__}, "
-                            "not an LLMResponse",
-                        ),
+                    logger.warning(
+                        "stream hit replacement is not an LLMResponse",
+                        served_type=type(served).__name__,
                     )
+                    self._reader.failed("on_hit")
                 return self._replay(text, model, keep_usage=keep_usage)
             opener = cast(
                 "Callable[..., Awaitable[AsyncIterator[str | StreamUsage]]]", source
@@ -357,8 +383,9 @@ class SemanticCacheProxy:
             return None
         try:
             return decode_text(found.hit.payload)
-        except Exception as exc:
-            self._reader.failed("decode", exc)
+        except Exception:
+            logger.exception("decode_text failed")
+            self._reader.failed("decode")
             self._reader.refuse(found)
             return None
 
@@ -375,8 +402,9 @@ class SemanticCacheProxy:
 
         """
 
-        async def items() -> AsyncIterator[str | StreamUsage]:  # noqa: RUF029 - the stream port is async
+        async def items() -> AsyncIterator[str | StreamUsage]:
             for start in range(0, len(text), _REPLAY_CHUNK_CHARS):
+                await asyncio.sleep(0)
                 yield text[start : start + _REPLAY_CHUNK_CHARS]
             if keep_usage:
                 yield StreamUsage(

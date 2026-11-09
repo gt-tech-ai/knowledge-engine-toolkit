@@ -10,14 +10,18 @@ lazily so the dev (stub) path never loads the AWS client.
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.kb_ingestion.noop import StubKnowledgeBaseIngestor
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from techai_webutils.clients.kb_ingestion.bedrock import (
+        BedrockKnowledgeBaseIngestor as _LazyBedrockKnowledgeBaseIngestor,
+    )
     from techai_webutils.core.interfaces.kb_ingestion import KnowledgeBaseIngestor
 
 
@@ -61,11 +65,14 @@ def new_kb_ingestor_from_config(config: KbConfig) -> KnowledgeBaseIngestor:
         return StubKnowledgeBaseIngestor()
     if config.kind is KbKind.BEDROCK:
         # Lazy import: keep aiobotocore off the dev/stub path (loaded only in stage/prod).
-        from techai_webutils.clients.kb_ingestion.bedrock import (  # noqa: PLC0415
-            BedrockKnowledgeBaseIngestor,
+        bedrock_knowledge_base_ingestor_cls = cast(
+            "type[_LazyBedrockKnowledgeBaseIngestor]",
+            importlib.import_module(
+                "techai_webutils.clients.kb_ingestion.bedrock"
+            ).BedrockKnowledgeBaseIngestor,
         )
 
-        return BedrockKnowledgeBaseIngestor(
+        return bedrock_knowledge_base_ingestor_cls(
             region=config.region, endpoint=config.endpoint
         )
     msg = f"unknown knowledge-base kind: {config.kind!r}"

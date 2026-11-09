@@ -72,20 +72,20 @@ def test_defaults_match_go() -> None:
     """
     config = decoration.default_config()
 
-    assert decoration.on(config.controllers.layers_for("api").tracing)
-    assert not decoration.on(config.pipelines.layers_for("p").tracing)
+    assert decoration.on(switch=config.controllers.layers_for("api").tracing)
+    assert not decoration.on(switch=config.pipelines.layers_for("p").tracing)
     repo = config.repositories.layers_for("users")
-    assert decoration.on(repo.retry.enabled)
-    assert decoration.on(repo.circuit_breaker.enabled)
+    assert decoration.on(switch=repo.retry.enabled)
+    assert decoration.on(switch=repo.circuit_breaker.enabled)
     storage = config.clients.layers_for("storage")
     assert storage.timeout == pytest.approx(30.0)
-    assert decoration.on(storage.bulkhead.enabled)
-    assert decoration.on(storage.tracing)
+    assert decoration.on(switch=storage.bulkhead.enabled)
+    assert decoration.on(switch=storage.tracing)
     api = config.controllers.layers_for("api")
-    assert not decoration.on(api.rate_limit.enabled)
-    assert not decoration.on(api.bulkhead.enabled)
-    assert decoration.on(api.bulkhead.shed)
-    assert not decoration.on(storage.bulkhead.shed)
+    assert not decoration.on(switch=api.rate_limit.enabled)
+    assert not decoration.on(switch=api.bulkhead.enabled)
+    assert decoration.on(switch=api.bulkhead.shed)
+    assert not decoration.on(switch=storage.bulkhead.shed)
     assert config.tier("job") is config.jobs
     assert config.tier("gateway") is None
 

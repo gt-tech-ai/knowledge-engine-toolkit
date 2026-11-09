@@ -221,6 +221,31 @@ class _Opened:
     """The ``LLMConfig.model`` asked for, or ``""`` when none was given."""
 
 
+@dataclass(frozen=True, kw_only=True)
+class AiSpanEnricherOptions:
+    """What ``AiSpanEnricher`` takes, grouped into one value."""
+
+    step: str
+    """The pipeline step name stamped as ``gen_ai.step`` (``rewrite``, ``generate``, …).
+    """
+
+    capture_content: bool
+    """Whether prompt and completion text are recorded as span events."""
+
+    metrics: MetricsProvider | None = None
+    """Emits the GenAI token counter and duration histogram; ``None`` emits nothing. The
+    instruments are created once here, never per call.
+    """
+
+    facts: FactPublisher | None = None
+    """Receives one ``genai_calls`` fact per model call; ``None`` publishes nothing."""
+
+    fact_dimensions: Callable[[], Mapping[str, str]] | None = None
+    """Returns the product dimensions for the current call (must include ``org_id``);
+    called once per model call, so it may read request context.
+    """
+
+
 class AiSpanEnricher:
     """Proxy that stamps GenAI attributes on the current span around an LLM.
 
@@ -232,56 +257,37 @@ class AiSpanEnricher:
     is logged at warning (with the step) and the call's own result is returned untouched.
     """
 
-    def __init__(
-        self,
-        inner: object,
-        *,
-        step: str,
-        capture_content: bool,
-        metrics: MetricsProvider | None = None,
-        facts: FactPublisher | None = None,
-        fact_dimensions: Callable[[], Mapping[str, str]] | None = None,
-    ) -> None:
+    def __init__(self, inner: object, options: AiSpanEnricherOptions) -> None:
         """Wrap ``inner`` (an ``LLMProvider`` or ``RetrievalEngine``).
 
         For the pipeline step ``step``.
 
         Args:
             inner: The provider or engine to wrap.
-            step: The pipeline step name stamped as ``gen_ai.step`` (``rewrite``,
-                ``generate``, …).
-            capture_content: Whether prompt and completion text are recorded as span
-                events.
-            metrics: Emits the GenAI token counter and duration histogram; ``None`` emits
-                nothing. The instruments are created once here, never per call.
-            facts: Receives one ``genai_calls`` fact per model call; ``None`` publishes
-                nothing.
-            fact_dimensions: Returns the product dimensions for the current call (must
-                include ``org_id``); called once per model call, so it may read request
-                context.
+            options: The settings and collaborators, grouped.
 
         """
         self._inner = inner
-        self._step = step
-        self._capture_content = capture_content
+        self._step = options.step
+        self._capture_content = options.capture_content
         # A model gateway reports the system of the provider it wraps, not its own class.
         served = getattr(inner, "wrapped_provider", inner)
         self._system = GEN_AI_SYSTEM_BY_PROVIDER.get(
             type(served).__name__, _UNKNOWN_SYSTEM
         )
-        self._facts = facts
-        self._fact_dimensions = fact_dimensions
+        self._facts = options.facts
+        self._fact_dimensions = options.fact_dimensions
         # Resolved by name: structlog is configured once at the process root.
         self._logger = get_logger("ai_enricher")
         self._tokens = None
         self._duration = None
-        if metrics is not None:
-            self._tokens = metrics.counter(
+        if options.metrics is not None:
+            self._tokens = options.metrics.counter(
                 "gen_ai_tokens_total",
                 "GenAI tokens by step, model and type.",
                 ["step", "model", "type"],
             )
-            self._duration = metrics.histogram(
+            self._duration = options.metrics.histogram(
                 "gen_ai_request_duration_seconds",
                 "GenAI request duration in seconds by step and model.",
                 ["step", "model"],

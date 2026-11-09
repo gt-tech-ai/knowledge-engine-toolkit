@@ -8,13 +8,17 @@ backend subpackage is imported only when the ``langdetect`` kind is selected.
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from techai_webutils.clients.metadata.langdetect import (
+        LangdetectMetadataExtractor as _LazyLangdetectMetadataExtractor,
+    )
     from techai_webutils.core.interfaces.metadata import MetadataExtractor
 
 
@@ -53,10 +57,13 @@ def metadata_extractor_from_config(config: MetadataConfig) -> MetadataExtractor:
 
     """
     if config.kind is MetadataKind.LANGDETECT:
-        from techai_webutils.clients.metadata.langdetect import (  # noqa: PLC0415 — lazy backend
-            LangdetectMetadataExtractor,
+        langdetect_metadata_extractor_cls = cast(
+            "type[_LazyLangdetectMetadataExtractor]",
+            importlib.import_module(
+                "techai_webutils.clients.metadata.langdetect"
+            ).LangdetectMetadataExtractor,
         )
 
-        return LangdetectMetadataExtractor()
+        return langdetect_metadata_extractor_cls()
     msg = f"unknown metadata extractor kind: {config.kind!r}"
     raise AppValueError(msg)

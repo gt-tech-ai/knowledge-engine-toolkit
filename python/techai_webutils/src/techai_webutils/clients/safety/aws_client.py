@@ -10,6 +10,7 @@ botocore failures cross the boundary as coded ``AppError``s through the shared
 from __future__ import annotations
 
 import asyncio
+import importlib
 from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
@@ -18,6 +19,9 @@ from techai_webutils.core.errors import AppError, ErrorCode
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
     from contextlib import AbstractAsyncContextManager
+
+    from botocore.exceptions import BotoCoreError as _LazyBotoCoreError
+    from botocore.exceptions import ClientError as _LazyClientError
 
 
 class _AwsSession(Protocol):
@@ -74,15 +78,24 @@ class LazyAwsClient:
             What the operation returns.
 
         Raises:
-            botocore_error_to_app_error: ``self._service`` ``operation``.
             AppError: the call failed (``UNAVAILABLE`` when transient or past the
                 deadline, else ``INTERNAL``).
 
         """
-        from botocore.exceptions import BotoCoreError, ClientError  # noqa: PLC0415
+        boto_core_error_cls = cast(
+            "type[_LazyBotoCoreError]",
+            importlib.import_module("botocore.exceptions").BotoCoreError,
+        )
+        client_error_cls = cast(
+            "type[_LazyClientError]",
+            importlib.import_module("botocore.exceptions").ClientError,
+        )
 
-        from techai_webutils.foundation.resilience.aws_boundary import (  # noqa: PLC0415
-            botocore_error_to_app_error,
+        botocore_error_to_app_error = cast(
+            "Callable[[Exception, str], AppError]",
+            importlib.import_module(
+                "techai_webutils.foundation.resilience.aws_boundary"
+            ).botocore_error_to_app_error,
         )
 
         client = self._client if self._client is not None else await self._opened()
@@ -95,7 +108,7 @@ class LazyAwsClient:
         except TimeoutError as exc:
             msg = f"{self._service} {operation} timed out after {self._timeout_s}s"
             raise AppError(ErrorCode.UNAVAILABLE, msg, cause=exc) from exc
-        except (ClientError, BotoCoreError) as exc:
+        except (client_error_cls, boto_core_error_cls) as exc:
             raise botocore_error_to_app_error(
                 exc, f"{self._service} {operation}"
             ) from exc

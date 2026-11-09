@@ -20,7 +20,7 @@ is counted (``route_decision_sink_failures_total``), never raised.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Self, override
 
 from opentelemetry import trace
@@ -35,6 +35,9 @@ from techai_webutils.clients.model_gateway.routed.classifier import (
 from techai_webutils.clients.model_gateway.routed.executor import ChainExecutor
 from techai_webutils.clients.model_gateway.routed.filter import filter_candidates
 from techai_webutils.clients.model_gateway.routed.planner import route_planner_from_config
+from techai_webutils.clients.model_gateway.routed.planner.builder import (
+    RoutePlannerDependencies,
+)
 from techai_webutils.clients.model_gateway.routed.policy_store import (
     routing_policy_store_from_config,
 )
@@ -53,6 +56,7 @@ from techai_webutils.core.interfaces.model_gateway import (
     set_route_decision,
 )
 from techai_webutils.core.types.routing import PlanInput, RouteRequirements
+from techai_webutils.foundation.logger import get_logger
 from techai_webutils.foundation.tokens.cost import estimate_cost
 
 if TYPE_CHECKING:
@@ -85,6 +89,8 @@ if TYPE_CHECKING:
     from techai_webutils.core.types.llm import LlmConfig
     from techai_webutils.core.types.routing import CatalogEndpointRef, Plan, Route
     from techai_webutils.foundation.tokens.cost import PriceTable
+
+logger = get_logger(__name__)
 
 _CHARS_PER_TOKEN = 4
 """The prompt-size estimate's characters per token (a documented approximation)."""
@@ -182,64 +188,117 @@ async def _recorded(
     finish(usage)
 
 
+@dataclass(frozen=True, kw_only=True)
+class RoutedGatewayDependencies:
+    """What ``RoutedGateway`` takes, grouped into one value."""
+
+    catalog: ModelCatalog
+    """The ``catalog`` value of ``RoutedGateway``."""
+
+    routes: Mapping[str, Route]
+    """The ``routes`` value of ``RoutedGateway``."""
+
+    default_route: str
+    """The ``default_route`` value of ``RoutedGateway``."""
+
+    policy_store: RoutingPolicyStore
+    """The ``policy_store`` value of ``RoutedGateway``."""
+
+    planner: RoutePlanner
+    """The ``planner`` value of ``RoutedGateway``."""
+
+    provider_factory: Callable[[LlmConfig], LLMProvider]
+    """The ``provider_factory`` value of ``RoutedGateway``."""
+
+    context_provider: RouteContextProvider
+    """The ``context_provider`` value of ``RoutedGateway``."""
+
+    executor: ChainExecutor | None = None
+    """The ``executor`` value of ``RoutedGateway``."""
+
+    sink: RouteDecisionSink | None = None
+    """The ``sink`` value of ``RoutedGateway``."""
+
+    prices: PriceTable | None = None
+    """The ``prices`` value of ``RoutedGateway``."""
+
+    shadow_planner: RoutePlanner | None = None
+    """The ``shadow_planner`` value of ``RoutedGateway``."""
+
+    classifiers: Sequence[RouteClassifier] = ()
+    """The ``classifiers`` value of ``RoutedGateway``."""
+
+    metrics: MetricsProvider | None = None
+    """The ``metrics`` value of ``RoutedGateway``."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class RoutedGatewayConfigDependencies:
+    """What ``RoutedGateway`` takes, grouped into one value."""
+
+    provider_factory: Callable[[LlmConfig], LLMProvider]
+    """The ``provider_factory`` value of ``RoutedGateway``."""
+
+    context_provider: RouteContextProvider
+    """The ``context_provider`` value of ``RoutedGateway``."""
+
+    priced_ids: frozenset[str] | None
+    """The ``priced_ids`` value of ``RoutedGateway``."""
+
+    embedding: EmbeddingProvider | None = None
+    """The ``embedding`` value of ``RoutedGateway``."""
+
+    ledger: TokenLedger | None = None
+    """The ``ledger`` value of ``RoutedGateway``."""
+
+    prices: PriceTable | None = None
+    """The ``prices`` value of ``RoutedGateway``."""
+
+    facts: FactPublisher | None = None
+    """The ``facts`` value of ``RoutedGateway``."""
+
+    metrics: MetricsProvider | None = None
+    """The ``metrics`` value of ``RoutedGateway``."""
+
+    planner_deps: Mapping[str, object] | None = None
+    """The ``planner_deps`` value of ``RoutedGateway``."""
+
+    policy_store: RoutingPolicyStore | None = None
+    """The ``policy_store`` value of ``RoutedGateway``."""
+
+
 class RoutedGateway(ModelGateway):
     """A gateway that chooses, per request, which catalog endpoint serves."""
 
-    def __init__(  # noqa: PLR0913 - the gateway's collaborators, each injected
-        self,
-        *,
-        catalog: ModelCatalog,
-        routes: Mapping[str, Route],
-        default_route: str,
-        policy_store: RoutingPolicyStore,
-        planner: RoutePlanner,
-        provider_factory: Callable[[LlmConfig], LLMProvider],
-        context_provider: RouteContextProvider,
-        executor: ChainExecutor | None = None,
-        sink: RouteDecisionSink | None = None,
-        prices: PriceTable | None = None,
-        shadow_planner: RoutePlanner | None = None,
-        classifiers: Sequence[RouteClassifier] = (),
-        metrics: MetricsProvider | None = None,
-    ) -> None:
+    def __init__(self, options: RoutedGatewayDependencies) -> None:
         """Bind the parsed catalog, routes, stages and collaborators."""
-        self._catalog = catalog
-        self._routes = routes
-        self._default_route = default_route
-        self._policies = policy_store
-        self._planner = planner
-        self._provider_factory = provider_factory
-        self._context = context_provider
-        self._executor = executor or ChainExecutor(metrics=metrics)
-        self._sink = sink or route_decision_sink_from_config({})
-        self._prices = prices
-        self._classifiers = tuple(classifiers)
+        self._catalog = options.catalog
+        self._routes = options.routes
+        self._default_route = options.default_route
+        self._policies = options.policy_store
+        self._planner = options.planner
+        self._provider_factory = options.provider_factory
+        self._context = options.context_provider
+        self._executor = options.executor or ChainExecutor(metrics=options.metrics)
+        self._sink = options.sink or route_decision_sink_from_config({})
+        self._prices = options.prices
+        self._classifiers = tuple(options.classifiers)
         self._providers: dict[str, LLMProvider] = {}
         self._sink_failures: MetricCounter | None = None
-        if metrics is not None:
-            self._sink_failures = metrics.counter(
+        if options.metrics is not None:
+            self._sink_failures = options.metrics.counter(
                 "route_decision_sink_failures_total",
                 "Route decisions the sink failed to take (counted, never raised).",
             )
         self._shadow: ShadowRouter | None = None
-        if shadow_planner is not None:
-            self._shadow = ShadowRouter(shadow_planner, _shadow_decision, self._publish)
+        if options.shadow_planner is not None:
+            self._shadow = ShadowRouter(
+                options.shadow_planner, _shadow_decision, self._publish
+            )
 
     @classmethod
-    def from_config(  # noqa: PLR0913 - the config plus each injected collaborator
-        cls,
-        config: RoutedConfig,
-        *,
-        provider_factory: Callable[[LlmConfig], LLMProvider],
-        context_provider: RouteContextProvider,
-        priced_ids: frozenset[str] | None,
-        embedding: EmbeddingProvider | None = None,
-        ledger: TokenLedger | None = None,
-        prices: PriceTable | None = None,
-        facts: FactPublisher | None = None,
-        metrics: MetricsProvider | None = None,
-        planner_deps: Mapping[str, object] | None = None,
-        policy_store: RoutingPolicyStore | None = None,
+    def from_config(
+        cls, config: RoutedConfig, options: RoutedGatewayConfigDependencies
     ) -> RoutedGateway:
         """Parse and validate ``config`` and build its stages (no provider is built yet).
 
@@ -256,7 +315,7 @@ class RoutedGateway(ModelGateway):
                 stage missing a collaborator it needs.
 
         """
-        catalog = ModelCatalog.from_mapping(config.catalog, priced_ids=priced_ids)
+        catalog = ModelCatalog.from_mapping(config.catalog, priced_ids=options.priced_ids)
         routes = parse_routes(config.routes, catalog)
         if config.default_route and config.default_route not in routes:
             msg = f"default route {config.default_route!r} is not a configured route"
@@ -269,54 +328,58 @@ class RoutedGateway(ModelGateway):
                 route_names=frozenset(routes),
                 default_route=config.default_route,
                 routes=routes,
-                embedding=embedding,
+                embedding=options.embedding,
             )
             classifiers.append(classifier)
             ranker_raw = stages.get("ranker", config.ranker)
             if (
                 ranker_raw.get("kind") == CandidateRankerKind.COST_AWARE
-                and prices is None
+                and options.prices is None
             ):
                 # The gateway ranks with the one table it boots with; none fails the boot.
                 msg = "cost_aware ranker requires a price table"
                 raise AppError(ErrorCode.INVALID_INPUT, msg)
             ranker = candidate_ranker_from_config(
                 ranker_raw,
-                prices=prices,
-                ledger=ledger,
+                prices=options.prices,
+                ledger=options.ledger,
                 default_slo=config.default_slo,
             )
             return route_planner_from_config(
                 stages.get("planner", config.planner),
-                classifier=classifier,
-                ranker=ranker,
-                routes=routes,
-                planner_deps=planner_deps,
-                metrics=metrics,
+                options=RoutePlannerDependencies(
+                    classifier=classifier,
+                    ranker=ranker,
+                    routes=routes,
+                    planner_deps=options.planner_deps,
+                    metrics=options.metrics,
+                ),
             )
 
         planner = planner_for({})
         shadow = planner_for(config.shadow) if config.shadow is not None else None
         return cls(
-            catalog=catalog,
-            routes=routes,
-            default_route=config.default_route,
-            policy_store=policy_store
-            or routing_policy_store_from_config(config.policy_store),
-            planner=planner,
-            provider_factory=provider_factory,
-            context_provider=context_provider,
-            executor=ChainExecutor(
-                config.max_attempts,
-                failure_threshold=config.breaker_failures,
-                recovery_timeout=config.breaker_recovery_s,
-                metrics=metrics,
-            ),
-            sink=route_decision_sink_from_config(config.sink, facts=facts),
-            prices=prices,
-            shadow_planner=shadow,
-            classifiers=classifiers,
-            metrics=metrics,
+            options=RoutedGatewayDependencies(
+                catalog=catalog,
+                routes=routes,
+                default_route=config.default_route,
+                policy_store=options.policy_store
+                or routing_policy_store_from_config(config.policy_store),
+                planner=planner,
+                provider_factory=options.provider_factory,
+                context_provider=options.context_provider,
+                executor=ChainExecutor(
+                    config.max_attempts,
+                    failure_threshold=config.breaker_failures,
+                    recovery_timeout=config.breaker_recovery_s,
+                    metrics=options.metrics,
+                ),
+                sink=route_decision_sink_from_config(config.sink, facts=options.facts),
+                prices=options.prices,
+                shadow_planner=shadow,
+                classifiers=classifiers,
+                metrics=options.metrics,
+            )
         )
 
     def _provider(self, ref: CatalogEndpointRef) -> LLMProvider:
@@ -408,6 +471,7 @@ class RoutedGateway(ModelGateway):
         try:
             self._sink.record(decision, ctx)
         except Exception:
+            logger.exception("publish failed")
             if self._sink_failures is not None:
                 self._sink_failures.inc()
 

@@ -12,7 +12,10 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 import pytest
 from opentelemetry.trace import SpanContext
 
-from techai_webutils.clients.decorators.ai_enricher import AiSpanEnricher
+from techai_webutils.clients.decorators.ai_enricher import (
+    AiSpanEnricher,
+    AiSpanEnricherOptions,
+)
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
 from techai_webutils.core.interfaces.llm import (
     LLMConfig,
@@ -66,7 +69,12 @@ async def test_enricher_emits_gen_ai_tokens_total_from_response(
     provider, instruments = metrics_mock
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(_llm(), step="generate", capture_content=False, metrics=provider),
+        AiSpanEnricher(
+            _llm(),
+            options=AiSpanEnricherOptions(
+                step="generate", capture_content=False, metrics=provider
+            ),
+        ),
     )
 
     with patch(f"{_MODULE}.trace.get_current_span", return_value=MagicMock()):
@@ -103,7 +111,12 @@ async def test_enricher_observes_request_duration(
     provider, instruments = metrics_mock
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(_llm(), step="generate", capture_content=False, metrics=provider),
+        AiSpanEnricher(
+            _llm(),
+            options=AiSpanEnricherOptions(
+                step="generate", capture_content=False, metrics=provider
+            ),
+        ),
     )
 
     with (
@@ -151,11 +164,13 @@ async def test_enricher_reports_metrics_and_fact_under_the_served_model(
         "LLMProvider",
         AiSpanEnricher(
             _llm(),
-            step="generate",
-            capture_content=False,
-            metrics=provider,
-            facts=facts,
-            fact_dimensions=lambda: {"org_id": "org-1"},
+            options=AiSpanEnricherOptions(
+                step="generate",
+                capture_content=False,
+                metrics=provider,
+                facts=facts,
+                fact_dimensions=lambda: {"org_id": "org-1"},
+            ),
         ),
     )
 
@@ -220,15 +235,17 @@ async def test_enricher_emits_one_fact_per_call_with_configured_dims(
         "LLMProvider",
         AiSpanEnricher(
             _llm(),
-            step="generate",
-            capture_content=False,
-            metrics=provider,
-            facts=facts,
-            fact_dimensions=lambda: {
-                "org_id": "org-1",
-                "team": "t-1",
-                "workspace": "w-1",
-            },
+            options=AiSpanEnricherOptions(
+                step="generate",
+                capture_content=False,
+                metrics=provider,
+                facts=facts,
+                fact_dimensions=lambda: {
+                    "org_id": "org-1",
+                    "team": "t-1",
+                    "workspace": "w-1",
+                },
+            ),
         ),
     )
 
@@ -297,10 +314,12 @@ async def test_enricher_fact_publish_error_never_fails_call() -> None:
                 "LLMProvider",
                 AiSpanEnricher(
                     inner,
-                    step="generate",
-                    capture_content=False,
-                    facts=publisher,
-                    fact_dimensions=dims,
+                    options=AiSpanEnricherOptions(
+                        step="generate",
+                        capture_content=False,
+                        facts=publisher,
+                        fact_dimensions=dims,
+                    ),
                 ),
             )
             assert (

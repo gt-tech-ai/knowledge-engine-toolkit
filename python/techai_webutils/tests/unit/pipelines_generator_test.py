@@ -138,7 +138,6 @@ class TestResponseGenerator:
           - stream() and complete() invoke the LLM with the injected config as the second
             argument.
         """
-
         cfg = LLMConfig(max_tokens=4096, temperature=0.1)
         llm = create_autospec(LLMProvider, instance=True)
         llm.stream.return_value = _aiter(["x"])

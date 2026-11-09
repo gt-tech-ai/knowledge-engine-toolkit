@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import math
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.errors import (
@@ -134,16 +135,28 @@ def alias_name(collection: str, org_id: str | None) -> str:
     return safe_name(f"{collection}--{org_id}")
 
 
+@dataclass(frozen=True, kw_only=True)
+class IndexBodyOptions:
+    """What ``index_body`` takes, grouped into one value."""
+
+    on_disk: bool
+    """The ``on_disk`` value of ``index_body``."""
+
+    compression_level: str
+    """The ``compression_level`` value of ``index_body``."""
+
+    truncated_dimension: int = 0
+    """The ``truncated_dimension`` value of ``index_body``."""
+
+    language_analyzers: Sequence[tuple[str, str]] = ()
+    """The ``language_analyzers`` value of ``index_body``."""
+
+    text_offsets: bool = False
+    """The ``text_offsets`` value of ``index_body``."""
+
+
 def index_body(
-    dimension: int,
-    model: str,
-    version: str,
-    *,
-    on_disk: bool,
-    compression_level: str,
-    truncated_dimension: int = 0,
-    language_analyzers: Sequence[tuple[str, str]] = (),
-    text_offsets: bool = False,
+    dimension: int, model: str, version: str, options: IndexBodyOptions
 ) -> dict[str, object]:
     """Return the settings and mappings of a new index.
 
@@ -166,13 +179,13 @@ def index_body(
     meta: dict[str, object] = {"model": model, "version": version}
     vectors: dict[str, object] = {
         EMBEDDING_FIELD: _vector_mapping(
-            truncated_dimension or dimension,
-            on_disk=on_disk,
-            compression_level=compression_level,
+            options.truncated_dimension or dimension,
+            on_disk=options.on_disk,
+            compression_level=options.compression_level,
         )
     }
-    if truncated_dimension:
-        meta["truncated_dimension"] = truncated_dimension
+    if options.truncated_dimension:
+        meta["truncated_dimension"] = options.truncated_dimension
         vectors[FULL_EMBEDDING_FIELD] = dict(_FULL_VECTOR_MAPPING)
     return {
         "settings": {"index": {"knn": True}},
@@ -181,7 +194,7 @@ def index_body(
             "dynamic_templates": [_STRINGS_AS_KEYWORDS],
             "properties": vectors
             | _ENTRY_PROPERTIES
-            | _text_property(language_analyzers, offsets=text_offsets),
+            | _text_property(options.language_analyzers, offsets=options.text_offsets),
         },
     }
 

@@ -29,6 +29,7 @@ from techai_webutils.clients.vector.opensearch import (
 )
 from techai_webutils.clients.vector.opensearch.mapping import (
     TEXT_FIELD,
+    IndexBodyOptions,
     bulk_error,
     doc_id,
     entry_source,
@@ -376,9 +377,15 @@ def test_mapping_helpers() -> None:
         prefixes the org; ``on_disk`` sets ``mode`` and compression, otherwise HNSW; a
         source maps back to exactly the entry's metadata
     """
-    disk = _vector_mapping(index_body(4, "m", "1", on_disk=True, compression_level="16x"))
+    disk = _vector_mapping(
+        index_body(
+            4, "m", "1", options=IndexBodyOptions(on_disk=True, compression_level="16x")
+        )
+    )
     memory = _vector_mapping(
-        index_body(4, "m", "1", on_disk=False, compression_level="16x")
+        index_body(
+            4, "m", "1", options=IndexBodyOptions(on_disk=False, compression_level="16x")
+        )
     )
     entry = _entry(**{"entities.person": "A|B", "tag": "x"})
 
@@ -666,10 +673,12 @@ def test_transcript_text_mapping_keeps_positions_and_offsets() -> None:
             8,
             "m",
             "1",
-            on_disk=False,
-            compression_level="16x",
-            language_analyzers=analyzers,
-            text_offsets=offsets,
+            options=IndexBodyOptions(
+                on_disk=False,
+                compression_level="16x",
+                language_analyzers=analyzers,
+                text_offsets=offsets,
+            ),
         )
         properties = cast("dict[str, Any]", body["mappings"])["properties"]
         return cast("dict[str, Any]", properties[TEXT_FIELD])
@@ -694,9 +703,16 @@ def test_language_analyzers_add_subfields_and_search_them() -> None:
     """
     pairs = (("de", "german"),)
     body = index_body(
-        8, "m", "1", on_disk=False, compression_level="16x", language_analyzers=pairs
+        8,
+        "m",
+        "1",
+        options=IndexBodyOptions(
+            on_disk=False, compression_level="16x", language_analyzers=pairs
+        ),
     )
-    plain = index_body(8, "m", "1", on_disk=False, compression_level="16x")
+    plain = index_body(
+        8, "m", "1", options=IndexBodyOptions(on_disk=False, compression_level="16x")
+    )
     properties = cast(
         "dict[str, dict[str, Any]]",
         cast("dict[str, Any]", body["mappings"])["properties"],

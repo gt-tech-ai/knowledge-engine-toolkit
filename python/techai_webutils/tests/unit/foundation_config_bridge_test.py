@@ -45,7 +45,6 @@ def test_initialize_config_sets_env_vars_from_yaml(
       - Dotted paths like database.host become MYAPP_DATABASE_HOST, with both
         host and port from the database and redis sections exported
     """
-
     # Arrange: Create temp config directory with YAML
     with TemporaryDirectory() as tmpdir:
         config_file = Path(tmpdir) / "base.yaml"
@@ -91,7 +90,6 @@ def test_initialize_config_merges_environment_overlay(
       - With APP_ENV set, base.yaml + {env}.yaml deep-merge (overlay wins on conflict).
       - A base-only key survives; a deeply nested key is exported.
     """
-
     with TemporaryDirectory() as tmpdir:
         (Path(tmpdir) / "base.yaml").write_text("""
 retrieval:
@@ -137,7 +135,6 @@ def test_initialize_config_env_var_precedence(monkeypatch: pytest.MonkeyPatch) -
       - Keys absent from the environment (database.port) are still populated
         from YAML
     """
-
     # Arrange
     with TemporaryDirectory() as tmpdir:
         config_file = Path(tmpdir) / "base.yaml"
@@ -178,7 +175,6 @@ def test_initialize_config_missing_directory_graceful_fallback(
       - initialize_config does not raise for a nonexistent directory
       - A "config directory not found" warning is emitted
     """
-
     # Arrange: Use a directory that doesn't exist
     nonexistent_dir = "/nonexistent/config/path"
 
@@ -205,7 +201,6 @@ def test_initialize_config_idempotency(monkeypatch: pytest.MonkeyPatch) -> None:
       - After the first call set the value, a value modified between calls
         survives the second call (the second call does not re-apply YAML)
     """
-
     # Arrange
     with TemporaryDirectory() as tmpdir:
         config_file = Path(tmpdir) / "base.yaml"
@@ -246,7 +241,6 @@ def test_reset_config_clears_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:
       - After reset_config, a second initialize_config picks up newly-written
         YAML (second-run value), proving re-initialization occurred
     """
-
     # Arrange
     with TemporaryDirectory() as tmpdir:
         config_file = Path(tmpdir) / "base.yaml"
@@ -294,7 +288,6 @@ def test_apply_yaml_defaults_stringifies_bool(monkeypatch: pytest.MonkeyPatch) -
     **What it tests:**
       - apply_yaml_defaults({"flag": True}, "MYAPP") exports MYAPP_FLAG="True".
     """
-
     monkeypatch.delenv("MYAPP_FLAG", raising=False)
     apply_yaml_defaults({"flag": True}, "MYAPP")
     assert os.environ["MYAPP_FLAG"] == "True"
@@ -310,7 +303,6 @@ def test_initialize_config_missing_base_yaml_is_graceful() -> None:
     **What it tests:**
       - initialize_config against an empty dir returns without error and marks init.
     """
-
     reset_config()
     with TemporaryDirectory() as empty:
         initialize_config(
@@ -335,7 +327,6 @@ def test_initialize_config_uses_consumer_prefix_and_env_selector(
       - With env_prefix="MYAPP" and env_selectors=("MYAPP_ENV",), base + the MYAPP_ENV
         overlay export as MYAPP_* (overlay wins) and nothing is exported unprefixed.
     """
-
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.setenv("MYAPP_ENV", "staging")
     with TemporaryDirectory() as tmpdir:
@@ -419,7 +410,6 @@ def test_initialize_config_rejects_a_second_call_with_different_arguments() -> N
         repeating the same arguments (including the "MYAPP_" spelling of the same prefix)
         stays a no-op.
     """
-
     with TemporaryDirectory() as tmpdir, TemporaryDirectory() as other_dir:
         _write_widget_config(tmpdir)
         initialize_config(tmpdir, env_prefix="MYAPP")
@@ -452,7 +442,6 @@ def test_initialize_config_defaults_export_unprefixed_names_from_the_app_env_ove
       - With APP_ENV=staging (and ENVIRONMENT=prod, which APP_ENV outranks), base +
         staging.yaml export as KEBRIDGE_SIZE=7 / KEBRIDGE_COLOR=red.
     """
-
     monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.setenv("ENVIRONMENT", "prod")
     with TemporaryDirectory() as tmpdir:
@@ -491,7 +480,6 @@ def test_initialize_config_falls_back_to_environment_then_dev(
       - APP_ENV unset + ENVIRONMENT=prod loads prod.yaml (size 9); neither set loads
         dev.yaml (size 5).
     """
-
     monkeypatch.delenv("APP_ENV", raising=False)
     if environment is None:
         monkeypatch.delenv("ENVIRONMENT", raising=False)
@@ -526,7 +514,6 @@ def test_initialize_config_logs_the_selected_overlay_and_warns_when_it_is_missin
       - With ENVIRONMENT=production and no production.yaml, a warning names the missing
         overlay file and the ENVIRONMENT selector; the base values are still exported.
     """
-
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.setenv("ENVIRONMENT", "production")
     caplog.set_level(logging.INFO, logger="techai_webutils.foundation.config.bridge")
@@ -563,7 +550,6 @@ def test_initialize_config_strict_raises_on_malformed_yaml_instead_of_continuing
         on a missing directory raises FileNotFoundError; the default (strict=False)
         returns without raising.
     """
-
     with TemporaryDirectory() as tmpdir:
         (Path(tmpdir) / "base.yaml").write_text("kebridge: [unclosed\n")
 
@@ -595,7 +581,6 @@ def test_export_yaml_sections_exports_structured_sections_as_json(
       - an env var already set is left alone and wins
       - a section absent from the YAML exports nothing
     """
-
     _ = (tmp_path / "base.yaml").write_text("app:\n  routes:\n    a: {threshold: 0.1}\n")
     _ = (tmp_path / "staging.yaml").write_text(
         "app:\n  routes:\n    b: {threshold: 0.2}\n"

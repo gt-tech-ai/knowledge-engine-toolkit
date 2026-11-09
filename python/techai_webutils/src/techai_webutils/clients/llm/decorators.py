@@ -237,7 +237,6 @@ class FallbackLlmProvider(LLMProvider):
             async for delta in await self._primary.stream_with_usage(messages, config):
                 yielded = True
                 yield delta
-            return
         except Exception as exc:
             reason = _classify(exc)
             # A mid-stream failure (tokens already sent) or a non-transient error can't be
@@ -245,6 +244,8 @@ class FallbackLlmProvider(LLMProvider):
             if yielded or reason is None:
                 raise
             _FALLBACK_ACTIVATIONS.labels(reason=reason).inc()
+        else:
+            return
         try:
             async for delta in await self._fallback.stream_with_usage(messages, config):
                 yield delta

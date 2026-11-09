@@ -11,6 +11,7 @@ once and closing every built worker at the end.
 """
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 import pytest
@@ -73,7 +74,7 @@ class _CountingWorker:
         self._log.closed += 1
 
 
-def _counting_factory(log: _Log):  # noqa: ANN202
+def _counting_factory(log: _Log) -> Callable[[], Awaitable[PooledWorker[int]]]:
     """Return a WorkerFactory that builds counting workers recording into ``log``.
 
     Returns:

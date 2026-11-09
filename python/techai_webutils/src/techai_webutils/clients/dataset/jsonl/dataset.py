@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, cast, override
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.dataset import Dataset, EvalCase
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 
-def _str_map(value: Any, field: str, line_no: int) -> dict[str, str]:  # noqa: ANN401 - parsed JSON
+def _str_map(value: object, field: str, line_no: int) -> dict[str, str]:
     """Return ``value`` as a ``str → str`` mapping, or raise ``INVALID_INPUT``.
 
     Returns:
@@ -34,7 +34,9 @@ def _str_map(value: Any, field: str, line_no: int) -> dict[str, str]:  # noqa: A
     if not isinstance(value, dict):
         msg = f"dataset line {line_no}: {field} must be an object"
         raise AppError(ErrorCode.INVALID_INPUT, msg)
-    return {str(key): str(item) for key, item in value.items()}  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+    return {
+        str(key): str(item) for key, item in cast("dict[object, object]", value).items()
+    }
 
 
 def _parse_line(text: str, line_no: int) -> EvalCase:
@@ -56,11 +58,12 @@ def _parse_line(text: str, line_no: int) -> EvalCase:
     if not isinstance(row, dict):
         msg = f"dataset line {line_no} must be an object"
         raise AppError(ErrorCode.INVALID_INPUT, msg)
+    fields = cast("dict[str, object]", row)
     return EvalCase(
-        id=str(row.get("id") or ""),  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
-        inputs=_str_map(row.get("inputs"), "inputs", line_no),  # pyright: ignore[reportUnknownMemberType]
-        expected=_str_map(row.get("expected"), "expected", line_no),  # pyright: ignore[reportUnknownMemberType]
-        metadata=_str_map(row.get("metadata"), "metadata", line_no),  # pyright: ignore[reportUnknownMemberType]
+        id=str(fields.get("id") or ""),
+        inputs=_str_map(fields.get("inputs"), "inputs", line_no),
+        expected=_str_map(fields.get("expected"), "expected", line_no),
+        metadata=_str_map(fields.get("metadata"), "metadata", line_no),
     )
 
 

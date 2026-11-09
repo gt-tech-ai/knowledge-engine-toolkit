@@ -240,7 +240,7 @@ class TieredLookup(CacheLookup):
                 if hit is not None:
                     return dataclasses.replace(hit, tier=tier.name)
         except Exception as exc:
-            self._logger.warning(
+            self._logger.exception(
                 "semantic cache tier lookup failed (fail-open)", extra={"error": str(exc)}
             )
         return None

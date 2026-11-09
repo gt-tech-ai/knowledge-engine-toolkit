@@ -52,7 +52,6 @@ class TestLlmQueryRewriter:
           - rewrite() (history present) invokes the LLM complete with the injected config
             as the second argument.
         """
-
         cfg = LLMConfig(temperature=0.1)
         llm = create_autospec(LLMProvider, instance=True)
         llm.complete.return_value = LLMResponse(

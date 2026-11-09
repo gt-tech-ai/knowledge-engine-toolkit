@@ -9,10 +9,11 @@ lazily.
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.token_ledger.stub import StubTokenLedger
 from techai_webutils.core.errors import AppError, ErrorCode
@@ -23,6 +24,9 @@ if TYPE_CHECKING:
 
     from redis.asyncio import Redis
 
+    from techai_webutils.clients.token_ledger.redis import (
+        RedisTokenLedger as _LazyRedisTokenLedger,
+    )
     from techai_webutils.core.interfaces.metrics import MetricsProvider
     from techai_webutils.core.interfaces.token_ledger import TokenLedger
 
@@ -86,9 +90,14 @@ def token_ledger_from_config(
             raise AppError(
                 ErrorCode.INVALID_INPUT, "redis token ledger requires a Redis client"
             )
-        from techai_webutils.clients.token_ledger.redis import RedisTokenLedger  # noqa: PLC0415
+        redis_token_ledger_cls = cast(
+            "type[_LazyRedisTokenLedger]",
+            importlib.import_module(
+                "techai_webutils.clients.token_ledger.redis"
+            ).RedisTokenLedger,
+        )
 
-        return RedisTokenLedger(redis, config, metrics=metrics)
+        return redis_token_ledger_cls(redis, config, metrics=metrics)
     factory = backends.get(config.kind)
     if factory is None:
         raise AppError(

@@ -9,10 +9,11 @@ owns). An unknown kind raises ``AppValueError`` (a ``ValueError`` coded
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.dataset.stub import StubDataset
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
@@ -20,6 +21,7 @@ from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
+    from techai_webutils.clients.dataset.jsonl import JsonlDataset as _LazyJsonlDataset
     from techai_webutils.core.interfaces.dataset import Dataset
 
 
@@ -66,9 +68,12 @@ def new_dataset_from_config(
     if config.kind == DatasetKind.STUB:
         return StubDataset()
     if config.kind == DatasetKind.JSONL:
-        from techai_webutils.clients.dataset.jsonl import JsonlDataset  # noqa: PLC0415
+        jsonl_dataset_cls = cast(
+            "type[_LazyJsonlDataset]",
+            importlib.import_module("techai_webutils.clients.dataset.jsonl").JsonlDataset,
+        )
 
-        return JsonlDataset(config.path)
+        return jsonl_dataset_cls(config.path)
     factory = backends.get(config.kind)
     if factory is not None:
         return factory(config)

@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from contextlib import AsyncExitStack
-from typing import Protocol, Self, cast
+from dataclasses import dataclass
+from typing import Protocol, Self, TypedDict, Unpack, cast
 
 import aiobotocore.session  # type: ignore[import-untyped]
 from botocore.exceptions import BotoCoreError, ClientError
@@ -35,6 +36,19 @@ SOURCE_URI_KEY = "x-amz-bedrock-kb-source-uri"
 URI."""
 
 
+class _RetrieveRequest(TypedDict):
+    """The keyword arguments of the AWS ``retrieve`` call."""
+
+    knowledgeBaseId: str
+    """The AWS ``knowledgeBaseId`` request field."""
+
+    retrievalQuery: dict[str, str]
+    """The AWS ``retrievalQuery`` request field."""
+
+    retrievalConfiguration: dict[str, object]
+    """The AWS ``retrievalConfiguration`` request field."""
+
+
 class _BedrockAgentRuntimeClient(Protocol):
     """The bedrock-agent-runtime client slice this engine calls.
 
@@ -45,15 +59,35 @@ class _BedrockAgentRuntimeClient(Protocol):
     ``retrieve`` call we make.
     """
 
-    async def retrieve(
-        self,
-        *,
-        knowledgeBaseId: str,
-        retrievalQuery: dict[str, str],
-        retrievalConfiguration: dict[str, object],
-    ) -> dict[str, object]:
+    async def retrieve(self, **kwargs: Unpack[_RetrieveRequest]) -> dict[str, object]:
         """Retrieve passages; returns a payload carrying ``retrievalResults``."""
         ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class BedrockRetrievalOptions:
+    """What ``BedrockRetrievalEngine`` takes, grouped into one value."""
+
+    region: str
+    """The ``region`` value of ``BedrockRetrievalEngine``."""
+
+    knowledge_base_id: str
+    """The ``knowledge_base_id`` value of ``BedrockRetrievalEngine``."""
+
+    endpoint: str | None = None
+    """The ``endpoint`` value of ``BedrockRetrievalEngine``."""
+
+    search_type: str = "semantic"
+    """The ``search_type`` value of ``BedrockRetrievalEngine``."""
+
+    reranking_model: str = ""
+    """The ``reranking_model`` value of ``BedrockRetrievalEngine``."""
+
+    filter_builder: FilterBuilder | None = None
+    """The ``filter_builder`` value of ``BedrockRetrievalEngine``."""
+
+    document_id_resolver: DocumentIdResolver | None = None
+    """The ``document_id_resolver`` value of ``BedrockRetrievalEngine``."""
 
 
 class BedrockRetrievalEngine(RetrievalEngine):
@@ -64,17 +98,7 @@ class BedrockRetrievalEngine(RetrievalEngine):
     on the hot query path); call ``aclose`` on shutdown to release it.
     """
 
-    def __init__(
-        self,
-        *,
-        region: str,
-        knowledge_base_id: str,
-        endpoint: str | None = None,
-        search_type: str = "semantic",
-        reranking_model: str = "",
-        filter_builder: FilterBuilder | None = None,
-        document_id_resolver: DocumentIdResolver | None = None,
-    ) -> None:
+    def __init__(self, options: BedrockRetrievalOptions) -> None:
         """Store the region, KB id, endpoint, and search strategy.
 
         The client opens lazily on first use.
@@ -88,13 +112,13 @@ class BedrockRetrievalEngine(RetrievalEngine):
         ``metadata_document_id`` — the chunk's ``document_id`` metadata, else its source
         URI), so a consumer's metadata keys and object-key layout are its own.
         """
-        self._region = region
-        self._kb_id = knowledge_base_id
-        self._endpoint = endpoint
-        self._search_type = search_type
-        self._reranking_model = reranking_model
-        self._build_filter = filter_builder
-        self._resolve_document_id = document_id_resolver or metadata_document_id
+        self._region = options.region
+        self._kb_id = options.knowledge_base_id
+        self._endpoint = options.endpoint
+        self._search_type = options.search_type
+        self._reranking_model = options.reranking_model
+        self._build_filter = options.filter_builder
+        self._resolve_document_id = options.document_id_resolver or metadata_document_id
         self._session = aiobotocore.session.get_session()
         # The exit stack that owns the opened client's async context (entered on first
         # use).
@@ -260,7 +284,7 @@ def _to_float(value: object) -> float:
     return float(value) if isinstance(value, (int, float)) else 0.0
 
 
-def metadata_document_id(metadata: Mapping[str, str], filters: Mapping[str, str]) -> str:  # noqa: ARG001
+def metadata_document_id(metadata: Mapping[str, str], filters: Mapping[str, str]) -> str:
     """Return the chunk's ``document_id`` metadata, else its source URI, else ``""``.
 
     (the default resolver).
@@ -273,6 +297,7 @@ def metadata_document_id(metadata: Mapping[str, str], filters: Mapping[str, str]
         The chunk's ``document_id`` metadata, else its source URI, else ``""``.
 
     """
+    del filters
     return metadata.get("document_id") or metadata.get(SOURCE_URI_KEY, "")
 
 

@@ -131,7 +131,7 @@ class _TierServerInterceptor(grpc.aio.ServerInterceptor):  # type: ignore[misc]
         op = (handler_call_details.method or "unknown").lstrip("/")
         logger = self._logger
 
-        def wrap(behavior: Behavior, streaming: bool) -> Behavior:  # noqa: FBT001
+        def wrap(behavior: Behavior, *, streaming: bool) -> Behavior:
             mw = self._stream if streaming else self._unary
 
             async def run(request: object, context: Context) -> object:

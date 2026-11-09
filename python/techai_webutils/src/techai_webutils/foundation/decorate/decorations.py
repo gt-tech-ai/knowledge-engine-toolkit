@@ -438,16 +438,20 @@ def _check(tier: Tier, name: str, layers: decoration.Layers) -> None:
 
     """
     switched = (
-        ("recovery", Layer.RECOVERY, on(layers.recovery)),
-        ("tracing", Layer.TRACING, on(layers.tracing)),
-        ("metrics", Layer.METRICS, on(layers.metrics)),
-        ("logging", Layer.LOGGING, on(layers.logging)),
-        ("auth", Layer.AUTH, on(layers.auth)),
+        ("recovery", Layer.RECOVERY, on(switch=layers.recovery)),
+        ("tracing", Layer.TRACING, on(switch=layers.tracing)),
+        ("metrics", Layer.METRICS, on(switch=layers.metrics)),
+        ("logging", Layer.LOGGING, on(switch=layers.logging)),
+        ("auth", Layer.AUTH, on(switch=layers.auth)),
         ("timeout", Layer.TIMEOUT, bool(layers.timeout)),
-        ("retry", Layer.RETRY, on(layers.retry.enabled)),
-        ("circuit_breaker", Layer.CIRCUIT_BREAKER, on(layers.circuit_breaker.enabled)),
-        ("bulkhead", Layer.BULKHEAD, on(layers.bulkhead.enabled)),
-        ("rate_limit", Layer.RATE_LIMIT, on(layers.rate_limit.enabled)),
+        ("retry", Layer.RETRY, on(switch=layers.retry.enabled)),
+        (
+            "circuit_breaker",
+            Layer.CIRCUIT_BREAKER,
+            on(switch=layers.circuit_breaker.enabled),
+        ),
+        ("bulkhead", Layer.BULKHEAD, on(switch=layers.bulkhead.enabled)),
+        ("rate_limit", Layer.RATE_LIMIT, on(switch=layers.rate_limit.enabled)),
     )
     for key, layer, enabled in switched:
         if enabled and layer not in tier.order:
@@ -472,40 +476,43 @@ def build(name: str, layers: decoration.Layers, collab: Collaborators) -> Deps:
     obs = collab.observability
     return Deps(
         observability=Observability(
-            logger=obs.logger if on(layers.logging) else None,
-            metrics=obs.metrics if on(layers.metrics) else None,
-            tracer=obs.tracer if on(layers.tracing) else None,
+            logger=obs.logger if on(switch=layers.logging) else None,
+            metrics=obs.metrics if on(switch=layers.metrics) else None,
+            tracer=obs.tracer if on(switch=layers.tracing) else None,
         ),
-        auth=collab.auth if on(layers.auth) else None,
+        auth=collab.auth if on(switch=layers.auth) else None,
         timeout=layers.timeout or 0.0,
-        skip_recovery=not on(layers.recovery),
-        panic_logger=obs.logger if on(layers.recovery) else None,
+        skip_recovery=not on(switch=layers.recovery),
+        panic_logger=obs.logger if on(switch=layers.recovery) else None,
         retrier=_layer(
-            name, "retry", on(layers.retry.enabled), lambda: _retrier(layers.retry)
+            name,
+            "retry",
+            enabled=on(switch=layers.retry.enabled),
+            make=lambda: _retrier(layers.retry),
         ),
         breaker=_layer(
             name,
             "circuit_breaker",
-            on(layers.circuit_breaker.enabled),
-            lambda: _breaker(layers.circuit_breaker, name, obs.metrics),
+            enabled=on(switch=layers.circuit_breaker.enabled),
+            make=lambda: _breaker(layers.circuit_breaker, name, obs.metrics),
         ),
         bulkhead=_layer(
             name,
             "bulkhead",
-            on(layers.bulkhead.enabled),
-            lambda: _bulkhead(layers.bulkhead),
+            enabled=on(switch=layers.bulkhead.enabled),
+            make=lambda: _bulkhead(layers.bulkhead),
         ),
-        shed_load=on(layers.bulkhead.enabled) and on(layers.bulkhead.shed),
+        shed_load=on(switch=layers.bulkhead.enabled) and on(switch=layers.bulkhead.shed),
         rate_limiter=_layer(
             name,
             "rate_limit",
-            on(layers.rate_limit.enabled),
-            lambda: _rate_limiter(layers.rate_limit),
+            enabled=on(switch=layers.rate_limit.enabled),
+            make=lambda: _rate_limiter(layers.rate_limit),
         ),
     )
 
 
-def _layer[C](name: str, layer: str, enabled: bool, make: Callable[[], C]) -> C | None:  # noqa: FBT001 - the layer's switch
+def _layer[C](name: str, layer: str, *, enabled: bool, make: Callable[[], C]) -> C | None:
     """Build a layer's primitive when it is on.
 
     Naming the component and layer on a bad tuning.

@@ -15,21 +15,6 @@ from typing import TypeVar
 T = TypeVar("T")
 
 
-class ID(str):
-    """Typed identifier for domain entities."""
-
-    __slots__ = ()
-
-    def is_empty(self) -> bool:
-        """Return True if the ID is empty.
-
-        Returns:
-            True if the ID is empty.
-
-        """
-        return not self
-
-
 @dataclass(frozen=True)
 class Option[T]:
     """Optional value container.

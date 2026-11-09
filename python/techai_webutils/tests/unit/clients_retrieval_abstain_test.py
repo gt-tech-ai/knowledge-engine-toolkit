@@ -11,6 +11,7 @@ import pytest
 from techai_webutils.clients.retrieval.abstain import AbstainerKind, abstention_policies
 from techai_webutils.clients.retrieval.builder import (
     RetrievalConfig,
+    RetrievalEngineDependencies,
     RetrievalKind,
     new_retrieval_engine_from_config,
     wrap_retrieval_engine,
@@ -72,8 +73,10 @@ async def test_default_abstainer_is_score_threshold_0_5() -> None:
     config = RetrievalConfig()
     engine = new_retrieval_engine_from_config(
         config,
-        policies=[],
-        stub_passages=[_passage(1, 0.9), _passage(2, 0.49), _passage(3, 0.5)],
+        options=RetrievalEngineDependencies(
+            policies=[],
+            stub_passages=[_passage(1, 0.9), _passage(2, 0.49), _passage(3, 0.5)],
+        ),
     )
 
     results = await engine.retrieve("text")
@@ -182,7 +185,8 @@ def test_unknown_abstainer_and_order_are_refused() -> None:
         order_passages([], cast("PassageOrder", "bogus"))
     with pytest.raises(Exception, match="opensearch"):
         new_retrieval_engine_from_config(
-            RetrievalConfig(kind=RetrievalKind.OPENSEARCH), policies=[]
+            RetrievalConfig(kind=RetrievalKind.OPENSEARCH),
+            options=RetrievalEngineDependencies(policies=[]),
         )
 
 

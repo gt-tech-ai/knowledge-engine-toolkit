@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
 
     from redis.asyncio import Redis
+    from redis.commands.search import Search
 
     from techai_webutils.clients.semantic_cache.builder import SemanticCacheConfig
     from techai_webutils.core.interfaces.cache import Cache
@@ -55,6 +56,9 @@ if TYPE_CHECKING:
 
 _GLOB = re.compile(r"([*?\[\]\\])")
 """Characters escaped in a ``SCAN MATCH`` pattern built from a caller's prefix."""
+
+_MIN_REPLY_WITH_HIT = 3
+"""``[total, id, fields]`` is the shortest search reply with a hit."""
 
 _TRAILING_PUNCTUATION = ".?!"
 """Characters ``strip_trailing_punctuation`` removes from the end of a normalized
@@ -93,7 +97,7 @@ def _first_document(reply: object) -> dict[str, str] | None:
         attributes = cast("dict[Any, Any]", _field(results[0], "extra_attributes") or {})
         return {_text(k): _text(v) for k, v in attributes.items()}
     items = cast("list[Any]", reply)
-    if len(items) < 3:  # noqa: PLR2004 - [total, id, fields] is the shortest reply with a hit
+    if len(items) < _MIN_REPLY_WITH_HIT:
         return None
     fields = cast("list[Any]", items[2])
     return {_text(fields[i]): _text(fields[i + 1]) for i in range(0, len(fields) - 1, 2)}
@@ -170,7 +174,7 @@ class RedisSemanticCache(SemanticCache):
         digest = hashlib.sha256(self._normalize(query).encode()).hexdigest()
         return f"{namespace.workspace_id}:{namespace.tag()}:{digest}"
 
-    def _search(self) -> Any:  # noqa: ANN401 - redis-py's search handle is loosely typed
+    def _search(self) -> Search:
         """Return the search handle for this cache's index (index create and drop).
 
         Returns:
@@ -179,12 +183,8 @@ class RedisSemanticCache(SemanticCache):
         """
         return self._redis.ft(self._index)
 
-    def _failed(self, op: str, exc: Exception) -> None:
+    def _failed(self, op: str) -> None:
         """Log and count a swallowed backend error."""
-        self._logger.warning(
-            "semantic cache backend error (fail-open)",
-            extra={"op": op, "error": str(exc)},
-        )
         if self._errors is not None:
             self._errors.inc(op=op)
 
@@ -211,9 +211,10 @@ class RedisSemanticCache(SemanticCache):
             prefix=[f"{self._prefix}:d:"], index_type=IndexType.HASH
         )
         try:
-            await self._search().create_index(
-                [TagField("ns"), vector], definition=definition
+            create_index = cast(
+                "Callable[..., Awaitable[object]]", self._search().create_index
             )
+            await create_index([TagField("ns"), vector], definition=definition)
         except ResponseError as exc:
             if "already exists" not in str(exc).lower():
                 raise
@@ -241,8 +242,9 @@ class RedisSemanticCache(SemanticCache):
             payload = await self._cache.get(
                 f"{self._prefix}:p:{self._suffix(query, namespace)}"
             )
-        except Exception as exc:
-            self._failed("lookup", exc)
+        except Exception:
+            self._logger.exception("exact failed")
+            self._failed("lookup")
             return None
         if payload is None:
             return None
@@ -265,8 +267,9 @@ class RedisSemanticCache(SemanticCache):
         """
         try:
             return await self._nearest(query, namespace)
-        except Exception as exc:
-            self._failed("lookup", exc)
+        except Exception:
+            self._logger.exception("nearest failed")
+            self._failed("lookup")
             return None
 
     async def _nearest(
@@ -321,8 +324,9 @@ class RedisSemanticCache(SemanticCache):
         """Write the payload with its TTL and index the query's vector; fail-open."""
         try:
             await self._store(query, payload, namespace, ttl_seconds)
-        except Exception as exc:
-            self._failed("store", exc)
+        except Exception:
+            self._logger.exception("store failed")
+            self._failed("store")
 
     async def _store(
         self, query: str, payload: bytes, namespace: CacheNamespace, ttl_seconds: int
@@ -362,8 +366,9 @@ class RedisSemanticCache(SemanticCache):
         try:
             await self._unlink_matching(f"{self._prefix}:p:{escaped}:*")
             await self._unlink_matching(f"{self._prefix}:d:{escaped}:*")
-        except Exception as exc:
-            self._failed("invalidate", exc)
+        except Exception:
+            self._logger.exception("invalidate_prefix failed")
+            self._failed("invalidate")
 
     @override
     async def invalidate_all(self) -> None:
@@ -377,8 +382,9 @@ class RedisSemanticCache(SemanticCache):
             self._index_ready = False
             await self._unlink_matching(f"{self._prefix}:d:*")
             await self._unlink_matching(f"{self._prefix}:p:*")
-        except Exception as exc:
-            self._failed("invalidate", exc)
+        except Exception:
+            self._logger.exception("invalidate_all failed")
+            self._failed("invalidate")
 
 
 _INTERFACE_CHECK: type[SemanticCache] = RedisSemanticCache

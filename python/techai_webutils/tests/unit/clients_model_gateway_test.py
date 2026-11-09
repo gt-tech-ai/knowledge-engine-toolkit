@@ -17,6 +17,7 @@ from techai_webutils.clients.model_gateway import (
     GatewayKind,
     new_model_gateway_from_config,
 )
+from techai_webutils.clients.model_gateway.builder import ModelGatewayDependencies
 from techai_webutils.clients.model_gateway.passthrough import PassthroughGateway
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.llm import LLMMessage, StreamUsage
@@ -100,7 +101,7 @@ def test_new_model_gateway_from_config_passthrough_fronts_llm_factory() -> None:
     factory = MagicMock(return_value=provider)
 
     gateway = new_model_gateway_from_config(
-        GatewayConfig(llm=llm), provider_factory=factory
+        GatewayConfig(llm=llm), options=ModelGatewayDependencies(provider_factory=factory)
     )
 
     assert isinstance(gateway, PassthroughGateway)
@@ -120,7 +121,8 @@ def test_new_model_gateway_from_config_unknown_kind_raises() -> None:
     """
     with pytest.raises(ValueError, match="unknown model gateway kind") as caught:
         new_model_gateway_from_config(
-            GatewayConfig(kind="magic"), provider_factory=new_llm_from_config
+            GatewayConfig(kind="magic"),
+            options=ModelGatewayDependencies(provider_factory=new_llm_from_config),
         )
 
     assert isinstance(caught.value, AppError)

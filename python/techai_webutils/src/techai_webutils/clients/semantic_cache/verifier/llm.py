@@ -77,7 +77,7 @@ class LlmCacheVerifier(CacheVerifier):
                 self._prompt.messages(cached_query, query)
             )
         except Exception as exc:
-            self._logger.warning(
+            self._logger.exception(
                 "semantic cache verifier call failed (treated as no)",
                 extra={"error": str(exc)},
             )

@@ -63,13 +63,14 @@ def _axis_embedding() -> AsyncMock:
 
     """
 
-    async def embed(text: str, **_: object) -> EmbeddingResult:  # noqa: RUF029 - the port is async
+    async def embed(text: str, **_: object) -> EmbeddingResult:
         """Return the hand-placed vector for ``text``.
 
         Returns:
             The hand-placed vector for ``text``.
 
         """
+        await asyncio.sleep(0)
         return EmbeddingResult(embedding=_VECTORS[text], model="axes", token_count=0)
 
     embedding = AsyncMock(spec=EmbeddingProvider)
@@ -87,7 +88,6 @@ def stack_container(request: pytest.FixtureRequest) -> Iterator[object]:
         One search-capable server per image for the module.
 
     """
-
     with RedisContainer(request.param) as container:
         yield container
 

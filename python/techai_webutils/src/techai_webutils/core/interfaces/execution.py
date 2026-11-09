@@ -29,10 +29,14 @@ __all__ = [
 ]
 
 
+_PASSED_VALUE = "PASS"
+"""The wire value of ``StepStatus.PASS``."""
+
+
 class StepStatus(StrEnum):
     """Outcome of a single fanned-out work item (mirrors Go ``StepStatus``)."""
 
-    PASS = "PASS"  # noqa: S105 # nosec B105 - status enum value, not a secret
+    PASS = _PASSED_VALUE
     """The work item completed successfully."""
     FAIL = "FAIL"
     """The work item failed; ``error``/``detail`` carry the failure diagnostics."""

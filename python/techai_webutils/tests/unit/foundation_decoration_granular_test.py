@@ -8,6 +8,7 @@ bases.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 from typing import Protocol
 from unittest.mock import MagicMock
@@ -71,12 +72,12 @@ def test_layers_for_cascades_overrides_along_the_names_dots() -> None:
     )
 
     create = tier.layers_for("api.documents.create")
-    assert decoration.on(create.logging)
-    assert decoration.on(create.tracing)
+    assert decoration.on(switch=create.logging)
+    assert decoration.on(switch=create.tracing)
     assert create.timeout == pytest.approx(2.0)
     sibling = tier.layers_for("api.users.create")
-    assert decoration.on(sibling.logging)
-    assert not decoration.on(sibling.tracing)
+    assert decoration.on(switch=sibling.logging)
+    assert not decoration.on(switch=sibling.tracing)
     assert sibling.timeout == pytest.approx(5.0)
 
 
@@ -198,14 +199,16 @@ async def test_configured_bases_resolve_each_stage_job_and_gate_by_its_own_name(
         config, Collaborators(observability=Observability(logger=logger))
     )
 
-    async def identity(value: str) -> str:  # noqa: RUF029 - a stage is an async function
+    async def identity(value: str) -> str:
+        await asyncio.sleep(0)
         return value
 
     pipes = PipelineBase(_Documents, decorations, "app.documents")
     assert await pipes.stage("create", identity).execute("x") == "x"
     assert await pipes.stage("delete", identity).execute("x") == "x"
 
-    async def sweep() -> BatchResult:  # noqa: RUF029 - a job's run is an async function
+    async def sweep() -> BatchResult:
+        await asyncio.sleep(0)
         return BatchResult()
 
     job = JobBase(decorations, "events.sweep").func(

@@ -7,9 +7,10 @@ imports the heavy backend (``qdrant-client``) only for the kind actually request
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.vector.opensearch import (
     MultiDomainVectorStore,
@@ -22,7 +23,14 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from opensearchpy import AsyncOpenSearch
+    from qdrant_client import AsyncQdrantClient as _LazyAsyncQdrantClient
 
+    from techai_webutils.clients.vector.qdrant import (
+        QdrantVectorStore as _LazyQdrantVectorStore,
+    )
+    from techai_webutils.clients.vector.stub import (
+        StubVectorStore as _LazyStubVectorStore,
+    )
     from techai_webutils.core.interfaces.metrics import MetricsProvider
     from techai_webutils.core.interfaces.vector_store import VectorStore
 
@@ -59,6 +67,49 @@ class VectorStoreConfig:
     """Layout, model stamp, disk mode and shard routing of the ``opensearch`` kind."""
 
 
+def _qdrant_store(config: VectorStoreConfig) -> VectorStore:
+    """Build the Qdrant store, loading ``qdrant-client`` only now.
+
+    Returns:
+        The store over a client for ``config.url``.
+
+    """
+    async_qdrant_client_cls = cast(
+        "type[_LazyAsyncQdrantClient]",
+        importlib.import_module("qdrant_client").AsyncQdrantClient,
+    )
+
+    qdrant_vector_store_cls = cast(
+        "type[_LazyQdrantVectorStore]",
+        importlib.import_module(
+            "techai_webutils.clients.vector.qdrant"
+        ).QdrantVectorStore,
+    )
+
+    # check_compatibility=False skips the best-effort server-version probe on
+    # construction: the dev stack pins both client and server, and the probe otherwise
+    # makes a network call (and warns) even when no server is up yet (e.g. at
+    # unit-test/wiring time).
+    client = async_qdrant_client_cls(url=config.url, check_compatibility=False)
+    return qdrant_vector_store_cls(client, dimension=config.dimension)
+
+
+def _stub_store(config: VectorStoreConfig) -> VectorStore:
+    """Build the in-process stub store, which needs no ``qdrant-client``.
+
+    Returns:
+        The stub store of ``config.dimension``.
+
+    """
+    # Lazy import (no qdrant-client to load).
+    stub_vector_store_cls = cast(
+        "type[_LazyStubVectorStore]",
+        importlib.import_module("techai_webutils.clients.vector.stub").StubVectorStore,
+    )
+
+    return stub_vector_store_cls(dimension=config.dimension)
+
+
 def new_vector_store_from_config(
     config: VectorStoreConfig,
     *,
@@ -86,21 +137,9 @@ def new_vector_store_from_config(
 
     """
     if config.kind is VectorStoreKind.QDRANT:
-        from qdrant_client import AsyncQdrantClient  # noqa: PLC0415
-
-        from techai_webutils.clients.vector.qdrant import QdrantVectorStore  # noqa: PLC0415
-
-        # check_compatibility=False skips the best-effort server-version probe on
-        # construction: the dev stack pins both client and server, and the probe otherwise
-        # makes a network call (and warns) even when no server is up yet (e.g. at
-        # unit-test/wiring time).
-        client = AsyncQdrantClient(url=config.url, check_compatibility=False)
-        return QdrantVectorStore(client, dimension=config.dimension)
+        return _qdrant_store(config)
     if config.kind is VectorStoreKind.STUB:
-        # Lazy import (no qdrant-client to load).
-        from techai_webutils.clients.vector.stub import StubVectorStore  # noqa: PLC0415
-
-        return StubVectorStore(dimension=config.dimension)
+        return _stub_store(config)
     if config.kind is VectorStoreKind.OPENSEARCH:
         return opensearch_store_from_config(config, opensearch_clients)
     msg = f"unknown vector store kind: {config.kind!r}"

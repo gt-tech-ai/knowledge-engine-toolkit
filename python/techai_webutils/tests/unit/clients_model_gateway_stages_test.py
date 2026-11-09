@@ -14,6 +14,9 @@ from techai_webutils.clients.model_gateway.routed.classifier import (
     route_classifier_from_config,
 )
 from techai_webutils.clients.model_gateway.routed.planner import route_planner_from_config
+from techai_webutils.clients.model_gateway.routed.planner.builder import (
+    RoutePlannerDependencies,
+)
 from techai_webutils.clients.model_gateway.routed.ranker import (
     candidate_ranker_from_config,
 )
@@ -136,11 +139,13 @@ async def test_local_planner_classifies_then_ranks(
     routes = parse_routes(routes_raw, catalog)
     planner = route_planner_from_config(
         {"kind": "local"},
-        classifier=route_classifier_from_config(
-            {}, route_names=frozenset(routes), default_route=""
+        options=RoutePlannerDependencies(
+            classifier=route_classifier_from_config(
+                {}, route_names=frozenset(routes), default_route=""
+            ),
+            ranker=candidate_ranker_from_config({}),
+            routes=routes,
         ),
-        ranker=candidate_ranker_from_config({}),
-        routes=routes,
     )
 
     plan = await planner.plan(
@@ -167,7 +172,10 @@ def test_planner_kind_unknown_raises(routes_raw: dict[str, Any]) -> None:
     ranker = candidate_ranker_from_config({})
     builds = (
         lambda: route_planner_from_config(
-            {"kind": "psychic"}, classifier=classifier, ranker=ranker, routes={}
+            {"kind": "psychic"},
+            options=RoutePlannerDependencies(
+                classifier=classifier, ranker=ranker, routes={}
+            ),
         ),
         lambda: route_classifier_from_config(
             {"kind": "psychic"}, route_names=frozenset(routes_raw), default_route=""

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from techai_webutils.clients.model_gateway.routed.sink.noop import NoopRouteDecisionSink
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
@@ -11,6 +12,9 @@ from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from techai_webutils.clients.model_gateway.routed.sink.analytics import (
+        AnalyticsRouteDecisionSink as _LazyAnalyticsRouteDecisionSink,
+    )
     from techai_webutils.core.interfaces.fact_publisher import FactPublisher
     from techai_webutils.core.interfaces.routing import RouteDecisionSink
 
@@ -45,10 +49,13 @@ def route_decision_sink_from_config(
             raise AppError(
                 ErrorCode.INVALID_INPUT, "analytics sink requires a fact publisher"
             )
-        from techai_webutils.clients.model_gateway.routed.sink.analytics import (  # noqa: PLC0415
-            AnalyticsRouteDecisionSink,
+        analytics_route_decision_sink_cls = cast(
+            "type[_LazyAnalyticsRouteDecisionSink]",
+            importlib.import_module(
+                "techai_webutils.clients.model_gateway.routed.sink.analytics"
+            ).AnalyticsRouteDecisionSink,
         )
 
-        return AnalyticsRouteDecisionSink(facts)
+        return analytics_route_decision_sink_cls(facts)
     msg = f"unknown route decision sink kind: {kind!r}"
     raise AppValueError(msg)

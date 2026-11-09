@@ -68,6 +68,7 @@ from techai_webutils.clients.model_gateway import (
     GatewayConfig,
     new_model_gateway_from_config,
 )
+from techai_webutils.clients.model_gateway.builder import ModelGatewayDependencies
 from techai_webutils.clients.model_gateway.passthrough import PassthroughGateway
 from techai_webutils.clients.retrieval import (
     FilteringRetrievalEngine,
@@ -75,6 +76,7 @@ from techai_webutils.clients.retrieval import (
     RetrievalKind,
     new_retrieval_engine_from_config,
 )
+from techai_webutils.clients.retrieval.builder import RetrievalEngineDependencies
 from techai_webutils.clients.safety import SafetyConfig, new_safety_check_from_config
 from techai_webutils.clients.safety.noop import NoopSafetyCheck
 from techai_webutils.clients.semantic_cache import (
@@ -222,7 +224,8 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
         (new_llm_from_config(LlmConfig(kind=LlmKind.STUB)), StubLlmProvider),
         (
             new_retrieval_engine_from_config(
-                RetrievalConfig(kind=RetrievalKind.STUB), policies=[]
+                RetrievalConfig(kind=RetrievalKind.STUB),
+                options=RetrievalEngineDependencies(policies=[]),
             ),
             FilteringRetrievalEngine,
         ),
@@ -254,7 +257,8 @@ def test_service_builds_all_stubs_no_network(monkeypatch: pytest.MonkeyPatch) ->
         (semantic_cache_from_config(SemanticCacheConfig()), StubSemanticCache),
         (
             new_model_gateway_from_config(
-                GatewayConfig(), provider_factory=new_llm_from_config
+                GatewayConfig(),
+                options=ModelGatewayDependencies(provider_factory=new_llm_from_config),
             ),
             PassthroughGateway,
         ),

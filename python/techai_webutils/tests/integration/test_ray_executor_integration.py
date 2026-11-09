@@ -23,6 +23,8 @@ from pathlib import Path
 
 import pytest
 
+from techai_webutils.execution.executor.real_ray_runtime import RealRayRuntimeOptions
+
 pytest.importorskip("ray")
 
 # Opt-in gate: ray is importable wherever the dev dependency group is installed (including
@@ -118,7 +120,7 @@ async def test_ray_executor_runs_on_real_cluster() -> None:
       - Four items (two even, two odd) yield a BatchResult of two PASS + two FAIL, with
         the odd items' worker-side ValueError isolated (batch not aborted).
     """
-    ex = RayExecutor(RealRayRuntime())
+    ex = RayExecutor(RealRayRuntime(options=RealRayRuntimeOptions()))
     batch = await ex.run(_pass_even, [0, 1, 2, 3], concurrency=2)
     assert batch.total == _EXPECTED_TOTAL
     assert batch.succeeded == _EXPECTED_SUCCEEDED

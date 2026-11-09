@@ -409,6 +409,19 @@ Python: `techai-webutils` 0.9.5.
 
 ### Changed
 
+- Python: **breaking.** Constructors and functions with more than five parameters take one frozen
+  options dataclass as `options=` (`JobOptions`, `AuditProxyOptions`, `TokenAccountingOptions`,
+  `SemanticCacheProxyOptions`, `SemanticCacheReaderOptions`, `RoutedGatewayDependencies`,
+  `ModelGatewayDependencies`, `RetrievalEngineDependencies`, `RoutePlannerDependencies`,
+  `BedrockRetrievalOptions`, `LayoutParserOptions`, `RealRayRuntimeOptions`,
+  `ResilientRayRuntimeOptions`, `MessagingFactPublisherOptions`, `AiSpanEnricherOptions`,
+  `IndexBodyOptions`, `ProbeIndexOptions`, `UsageStamp`).
+- Python: **breaking.** The unused `core.domain_types.ID` type is removed. `decoration.on` takes
+  `switch=` by keyword, and a gRPC `Wrap` takes `streaming=` by keyword.
+- Python: every fail-open handler logs its swallowed failure with a traceback at `ERROR`; some
+  logged at `WARNING` or not at all. An S3 `exists` on a missing key stays silent.
+- Python ruff runs every rule at default limits; only the formatter conflict, the copyright rule
+  and the two mutually exclusive docstring rules are off, and no `noqa` or `nosec` remains.
 - Python tests: `tests` is a package and meets the strict ruff rules; only `assert` is exempt.
 - Python: every callable documents its returns, yields and raises; ruff enforces the `DOC` rules.
 - Python: every source line, docstring and comment fits 90 columns; ruff enforces `line-too-long`.

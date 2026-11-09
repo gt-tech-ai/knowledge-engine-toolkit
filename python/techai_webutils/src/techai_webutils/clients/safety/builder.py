@@ -10,9 +10,10 @@ raises ``AppValueError`` (a ``ValueError`` coded ``INVALID_INPUT``).
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.clients.safety.decision import OnDetect
 from techai_webutils.clients.safety.noop import NoopSafetyCheck
@@ -20,6 +21,15 @@ from techai_webutils.clients.safety.regex import RegexPiiSafetyCheck
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from techai_webutils.clients.safety.aws_client import (
+        LazyAwsClient as _LazyLazyAwsClient,
+    )
+    from techai_webutils.clients.safety.bedrock_guardrails import (
+        BedrockGuardrailsSafetyCheck as _LazyBedrockGuardrailsSafetyCheck,
+    )
+    from techai_webutils.clients.safety.comprehend import (
+        ComprehendSafetyCheck as _LazyComprehendSafetyCheck,
+    )
     from techai_webutils.core.interfaces.safety import SafetyCheck
 
 
@@ -111,29 +121,40 @@ def new_safety_check_from_config(
         )
         raise AppValueError(msg)
     # Lazy imports: aiobotocore loads only when a managed kind is selected.
-    import aiobotocore.session  # type: ignore[import-untyped]  # noqa: PLC0415
+    aiobotocore_session = importlib.import_module("aiobotocore.session")
 
-    from techai_webutils.clients.safety.aws_client import LazyAwsClient  # noqa: PLC0415
+    lazy_aws_client_cls = cast(
+        "type[_LazyLazyAwsClient]",
+        importlib.import_module(
+            "techai_webutils.clients.safety.aws_client"
+        ).LazyAwsClient,
+    )
 
     aws_session: object = (
-        session if session is not None else aiobotocore.session.get_session()
+        session if session is not None else aiobotocore_session.get_session()
     )
     if config.kind == SafetyKind.COMPREHEND:
-        from techai_webutils.clients.safety.comprehend import (  # noqa: PLC0415
-            ComprehendSafetyCheck,
+        comprehend_safety_check_cls = cast(
+            "type[_LazyComprehendSafetyCheck]",
+            importlib.import_module(
+                "techai_webutils.clients.safety.comprehend"
+            ).ComprehendSafetyCheck,
         )
 
-        client = LazyAwsClient(
+        client = lazy_aws_client_cls(
             aws_session, "comprehend", config.region, timeout_s=config.timeout_seconds
         )
-        return ComprehendSafetyCheck(client, on_detect)
-    from techai_webutils.clients.safety.bedrock_guardrails import (  # noqa: PLC0415
-        BedrockGuardrailsSafetyCheck,
+        return comprehend_safety_check_cls(client, on_detect)
+    bedrock_guardrails_safety_check_cls = cast(
+        "type[_LazyBedrockGuardrailsSafetyCheck]",
+        importlib.import_module(
+            "techai_webutils.clients.safety.bedrock_guardrails"
+        ).BedrockGuardrailsSafetyCheck,
     )
 
-    client = LazyAwsClient(
+    client = lazy_aws_client_cls(
         aws_session, "bedrock-runtime", config.region, timeout_s=config.timeout_seconds
     )
-    return BedrockGuardrailsSafetyCheck(
+    return bedrock_guardrails_safety_check_cls(
         client, config.guardrail_id, config.guardrail_version, on_detect
     )

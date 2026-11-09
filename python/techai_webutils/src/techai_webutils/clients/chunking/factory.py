@@ -19,6 +19,7 @@ from techai_webutils.core.errors import AppValueError
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from techai_webutils.clients.chunking.fixed import FixedChunker as _LazyFixedChunker
     from techai_webutils.clients.chunking.sentence.chunker import SentenceChunker
     from techai_webutils.core.interfaces.chunker import Chunker
     from techai_webutils.core.interfaces.sentence_splitter import SentenceSplitter
@@ -79,9 +80,14 @@ def chunker_from_config(
 
     """
     if config.kind is ChunkerKind.FIXED:
-        from techai_webutils.clients.chunking.fixed import FixedChunker  # noqa: PLC0415 — lazy backend
+        fixed_chunker_cls = cast(
+            "type[_LazyFixedChunker]",
+            importlib.import_module(
+                "techai_webutils.clients.chunking.fixed"
+            ).FixedChunker,
+        )
 
-        return FixedChunker(max_chars=config.max_chars)
+        return fixed_chunker_cls(max_chars=config.max_chars)
     if config.kind is ChunkerKind.SENTENCE:
         if splitter is None or tokenizer is None:
             msg = "the sentence chunker needs a sentence splitter and a tokenizer"

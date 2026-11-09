@@ -12,7 +12,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from techai_webutils.clients.decorators.audit_proxy import AuditEnforcement, AuditProxy
+from techai_webutils.clients.decorators.audit_proxy import (
+    AuditEnforcement,
+    AuditProxy,
+    AuditProxyOptions,
+)
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.audit import (
     AuditContext,
@@ -112,8 +116,7 @@ def _audit(
     inner: MagicMock,
     sink: MagicMock,
     *,
-    input_check: MagicMock | None = None,
-    output_check: MagicMock | None = None,
+    checks: tuple[MagicMock | None, MagicMock | None] = (None, None),
     enforcement: AuditEnforcement = AuditEnforcement.ENFORCED,
     metrics: MetricsProvider | None = None,
 ) -> AuditProxy:
@@ -123,16 +126,19 @@ def _audit(
         The proxy.
 
     """
+    input_check, output_check = checks
     return AuditProxy(
         inner,
-        sink=sink,
-        input_check=input_check or _check(_CLEAN),
-        output_check=output_check or _check(_CLEAN),
-        enforcement=enforcement,
-        step="generate",
-        record_context=lambda: _CTX,
-        metrics=metrics,
-        clock=lambda: _NOW,
+        options=AuditProxyOptions(
+            sink=sink,
+            input_check=input_check or _check(_CLEAN),
+            output_check=output_check or _check(_CLEAN),
+            enforcement=enforcement,
+            step="generate",
+            record_context=lambda: _CTX,
+            metrics=metrics,
+            clock=lambda: _NOW,
+        ),
     )
 
 
@@ -168,7 +174,7 @@ async def test_audit_proxy_captures_provenance_flags_traceid_decision() -> None:
     )
 
     response = await cast(
-        "LLMProvider", _audit(inner, sink, input_check=_check(redacted))
+        "LLMProvider", _audit(inner, sink, checks=(_check(redacted), None))
     ).complete(_MESSAGES)
 
     assert response is _RESPONSE
@@ -265,11 +271,11 @@ async def test_cache_hit_is_blocked_or_redacted_before_it_is_served() -> None:
     blocked_sink, redacted_sink = _sink(), _sink()
 
     with pytest.raises(AppError) as caught:
-        await _audit(_inner(), blocked_sink, output_check=_check(block)).audit_cached(
+        await _audit(_inner(), blocked_sink, checks=(None, _check(block))).audit_cached(
             (_MESSAGES,), {}, _CACHED, _HIT
         )
     served = await _audit(
-        _inner(), redacted_sink, output_check=_check(redact)
+        _inner(), redacted_sink, checks=(None, _check(redact))
     ).audit_cached((_MESSAGES,), {}, _CACHED, _HIT)
 
     assert caught.value.code is ErrorCode.FORBIDDEN
@@ -299,7 +305,7 @@ async def test_cache_hit_records_the_redacted_prompt() -> None:
     )
     sink = _sink()
 
-    await _audit(_inner(), sink, input_check=_check(redact)).audit_cached(
+    await _audit(_inner(), sink, checks=(_check(redact), None)).audit_cached(
         (_MESSAGES,), {}, _CACHED, _HIT
     )
 
@@ -323,7 +329,8 @@ async def test_record_takes_the_route_model_only_when_the_call_routed() -> None:
     set_route_decision(RouteDecision(model_id="anthropic/claude-haiku-4-5"))
     hit_sink, plain_sink, routed_sink = _sink(), _sink(), _sink()
 
-    async def routed_complete(*_args: object, **_kwargs: object) -> LLMResponse:  # noqa: RUF029 - the LLM port is async
+    async def routed_complete(*_args: object, **_kwargs: object) -> LLMResponse:
+        await asyncio.sleep(0)
         set_route_decision(RouteDecision(model_id="anthropic/claude-sonnet-4-6"))
         return _RESPONSE
 
@@ -415,14 +422,14 @@ async def test_block_short_circuits_forbidden_and_still_audited() -> None:
 
     with pytest.raises(AppError) as before:
         await cast(
-            "LLMProvider", _audit(inner, sink, input_check=_check(blocked))
+            "LLMProvider", _audit(inner, sink, checks=(_check(blocked), None))
         ).complete(_MESSAGES)
     inner.complete.assert_not_awaited()
     first = _recorded(sink)
     sink.record.reset_mock()
     with pytest.raises(AppError) as after:
         await cast(
-            "LLMProvider", _audit(inner, sink, output_check=_check(blocked))
+            "LLMProvider", _audit(inner, sink, checks=(None, _check(blocked)))
         ).complete(_MESSAGES)
 
     assert (before.value.code, after.value.code) == (
@@ -471,7 +478,7 @@ async def test_stream_is_audited_on_exhaustion() -> None:
     inner.stream_with_usage = AsyncMock(
         side_effect=lambda *_a, **_k: _items("the ", "answer", usage)
     )
-    proxy = cast("Any", _audit(inner, sink, output_check=_check(blocked)))
+    proxy = cast("Any", _audit(inner, sink, checks=(None, _check(blocked))))
 
     items = [item async for item in await proxy.stream_with_usage(_MESSAGES)]
 
@@ -505,12 +512,12 @@ async def test_failed_safety_scan_is_flagged_in_shadow_and_raised_when_enforced(
 
     served = await cast(
         "LLMProvider",
-        _audit(inner, sink, input_check=down, enforcement=AuditEnforcement.SHADOW),
+        _audit(inner, sink, enforcement=AuditEnforcement.SHADOW, checks=(down, None)),
     ).complete(_MESSAGES)
     flags = _recorded(sink).safety_flags
     inner.complete.reset_mock()
     with pytest.raises(AppError) as caught:
-        await cast("LLMProvider", _audit(inner, _sink(), input_check=down)).complete(
+        await cast("LLMProvider", _audit(inner, _sink(), checks=(down, None))).complete(
             _MESSAGES
         )
 

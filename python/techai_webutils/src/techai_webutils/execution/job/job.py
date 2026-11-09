@@ -9,7 +9,7 @@ package never depends on ``foundation`` and stays core-only.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Self
 
 from techai_webutils.core.errors import AppValueError
@@ -31,6 +31,29 @@ if TYPE_CHECKING:
 type Processor[T] = Callable[[T], Awaitable[StepResult]]
 
 
+@dataclass(frozen=True, kw_only=True)
+class JobOptions:
+    """What ``Job`` takes, grouped into one value."""
+
+    group: str = ""
+    """The ``group`` value of ``Job``."""
+
+    concurrency: int = 0
+    """The ``concurrency`` value of ``Job``."""
+
+    retries: int = 0
+    """The ``retries`` value of ``Job``."""
+
+    retry_delay: float = 0.0
+    """The ``retry_delay`` value of ``Job``."""
+
+    warn_only: bool = False
+    """The ``warn_only`` value of ``Job``."""
+
+    observer: ExecutionObserver | None = None
+    """The ``observer`` value of ``Job``."""
+
+
 class Job[T]:
     """Discovers items of type T, maps each through a processor, and fans them out.
 
@@ -44,34 +67,28 @@ class Job[T]:
         name: str,
         discoverer: Discoverer[T],
         processor: Processor[T],
-        *,
-        group: str = "",
-        concurrency: int = 0,
-        retries: int = 0,
-        retry_delay: float = 0.0,
-        warn_only: bool = False,
-        observer: ExecutionObserver | None = None,
+        options: JobOptions,
     ) -> None:
         """Store the job configuration; prefer ``JobBuilder`` for construction."""
         # name labels the job in results/logs and names the empty-discovery SKIP.
         self._name = name
         # group buckets the job under a phase/category label in gate output + metrics.
-        self._group = group
+        self._group = options.group
         # discoverer yields the work items to fan out.
         self._discoverer = discoverer
         # processor maps one item to a StepResult (may raise to signal a retriable
         # failure).
         self._processor = processor
         # concurrency caps simultaneous items (<= 0 falls back to the engine default).
-        self._concurrency = concurrency
+        self._concurrency = options.concurrency
         # retries is the number of extra attempts on a raised failure (0 = no retry).
-        self._retries = retries
+        self._retries = options.retries
         # retry_delay is the pause (seconds) between retry attempts.
-        self._retry_delay = retry_delay
+        self._retry_delay = options.retry_delay
         # warn_only downgrades FAIL results to WARN so the job is advisory/non-blocking.
-        self._warn_only = warn_only
+        self._warn_only = options.warn_only
         # observer receives the fan-out lifecycle events (None = unobserved).
-        self._observer = observer
+        self._observer = options.observer
 
     def meta(self) -> JobMeta:
         """Return the job's identity so a built Job satisfies ``AnyJob``.
@@ -147,8 +164,9 @@ class Job[T]:
                 CancelledError: The run was cancelled; never isolated.
 
             """
-            attempt = 0
+            attempt = -1
             while True:
+                attempt += 1
                 try:
                     return await processor(item)
                 except asyncio.CancelledError:
@@ -156,7 +174,6 @@ class Job[T]:
                 except Exception:
                     if attempt >= retries:
                         raise
-                    attempt += 1
                     if delay > 0:
                         await asyncio.sleep(delay)
 
@@ -285,10 +302,12 @@ class JobBuilder[T]:
             self._name,
             self._discoverer,
             self._processor,
-            group=self._group,
-            concurrency=self._concurrency,
-            retries=self._retries,
-            retry_delay=self._retry_delay,
-            warn_only=self._warn_only,
-            observer=self._observer,
+            options=JobOptions(
+                group=self._group,
+                concurrency=self._concurrency,
+                retries=self._retries,
+                retry_delay=self._retry_delay,
+                warn_only=self._warn_only,
+                observer=self._observer,
+            ),
         )

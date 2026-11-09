@@ -13,9 +13,10 @@ bare, as before.
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import httpx
 
@@ -28,6 +29,12 @@ from techai_webutils.clients.embedding.stub import StubEmbeddingProvider
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from techai_webutils.clients.embedding.bedrock import (
+        BedrockEmbeddingProvider as _LazyBedrockEmbeddingProvider,
+    )
+    from techai_webutils.clients.embedding.bedrock import (
+        LazyBedrockRuntime as _LazyLazyBedrockRuntime,
+    )
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
 
 
@@ -133,13 +140,21 @@ def _provider(config: EmbeddingConfig) -> EmbeddingProvider:
             client, model=config.model, dimension=config.dimension
         )
     if config.kind is EmbeddingKind.BEDROCK:
-        from techai_webutils.clients.embedding.bedrock import (  # noqa: PLC0415
-            BedrockEmbeddingProvider,
-            LazyBedrockRuntime,
+        bedrock_embedding_provider_cls = cast(
+            "type[_LazyBedrockEmbeddingProvider]",
+            importlib.import_module(
+                "techai_webutils.clients.embedding.bedrock"
+            ).BedrockEmbeddingProvider,
+        )
+        lazy_bedrock_runtime_cls = cast(
+            "type[_LazyLazyBedrockRuntime]",
+            importlib.import_module(
+                "techai_webutils.clients.embedding.bedrock"
+            ).LazyBedrockRuntime,
         )
 
-        return BedrockEmbeddingProvider(
-            LazyBedrockRuntime(
+        return bedrock_embedding_provider_cls(
+            lazy_bedrock_runtime_cls(
                 region=config.region, timeout_seconds=config.timeout_seconds
             ),
             model=config.model,

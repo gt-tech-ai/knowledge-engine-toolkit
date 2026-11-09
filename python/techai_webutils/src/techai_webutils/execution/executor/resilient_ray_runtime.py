@@ -29,6 +29,7 @@ connect is retried.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from techai_webutils.core.errors import AppValueError
@@ -121,6 +122,31 @@ def _split_address(address: str) -> tuple[str, int]:
     return host, int(port)
 
 
+@dataclass(frozen=True, kw_only=True)
+class ResilientRayRuntimeOptions:
+    """What ``ResilientRayRuntime`` takes, grouped into one value."""
+
+    max_attempts: int = _DEFAULT_MAX_ATTEMPTS
+    """Connect attempts per sequence."""
+
+    base_delay: float = _DEFAULT_BASE_DELAY_SECONDS
+    """Initial backoff in seconds."""
+
+    max_delay: float = _DEFAULT_MAX_DELAY_SECONDS
+    """Ceiling on the backoff in seconds."""
+
+    metrics: MetricsProvider | None = None
+    """Emits ``ray_connect_failures_total{reason}``; ``None`` emits nothing."""
+
+    head_probe_address: str | None = None
+    """The head's ``host:port`` that ``head_reachable`` probes; ``None`` makes the probe
+    refuse, since a guessed address would report the wrong host.
+    """
+
+    head_probe_timeout_seconds: float = _DEFAULT_HEAD_PROBE_TIMEOUT_SECONDS
+    """Ceiling on one probe."""
+
+
 class ResilientRayRuntime(RayRuntime):
     """Wraps a ``RayRuntime``.
 
@@ -138,46 +164,29 @@ class ResilientRayRuntime(RayRuntime):
     ``RetryingIngestor``: same seam in, same seam out.
     """
 
-    def __init__(
-        self,
-        inner: RayRuntime,
-        *,
-        max_attempts: int = _DEFAULT_MAX_ATTEMPTS,
-        base_delay: float = _DEFAULT_BASE_DELAY_SECONDS,
-        max_delay: float = _DEFAULT_MAX_DELAY_SECONDS,
-        metrics: MetricsProvider | None = None,
-        head_probe_address: str | None = None,
-        head_probe_timeout_seconds: float = _DEFAULT_HEAD_PROBE_TIMEOUT_SECONDS,
-    ) -> None:
+    def __init__(self, inner: RayRuntime, options: ResilientRayRuntimeOptions) -> None:
         """Wrap ``inner`` and build the retried connect once.
 
         (exponential backoff + jitter).
 
         Args:
             inner: The runtime whose connect is retried.
-            max_attempts: Connect attempts per sequence.
-            base_delay: Initial backoff in seconds.
-            max_delay: Ceiling on the backoff in seconds.
-            metrics: Emits ``ray_connect_failures_total{reason}``; ``None`` emits nothing.
-            head_probe_address: The head's ``host:port`` that ``head_reachable`` probes;
-                ``None`` makes the probe refuse, since a guessed address would report the
-                wrong host.
-            head_probe_timeout_seconds: Ceiling on one probe.
+            options: The settings and collaborators, grouped.
 
         """
         self._inner: RayRuntime = inner
         # Built once per runtime: the tenacity wrapper is stateless and applies a fresh
         # retry state per call, so rebuilding it on every reconnect would only add work.
         self._connect_with_retry: Callable[[], Awaitable[None]] = retry_transient_async(
-            max_attempts=max_attempts,
-            base_delay=base_delay,
-            max_delay=max_delay,
+            max_attempts=options.max_attempts,
+            base_delay=options.base_delay,
+            max_delay=options.max_delay,
         )(self._connect)
         self._failures: int = 0
         """Connect attempts that failed since the last successful one."""
-        self._failure_counter = _failure_counter(metrics)
-        self._head_probe_address = head_probe_address
-        self._head_probe_timeout_seconds = head_probe_timeout_seconds
+        self._failure_counter = _failure_counter(options.metrics)
+        self._head_probe_address = options.head_probe_address
+        self._head_probe_timeout_seconds = options.head_probe_timeout_seconds
         self._connected: bool = False
         self._lock: asyncio.Lock = asyncio.Lock()
         """Serializes connect sequences so concurrent callers share one."""

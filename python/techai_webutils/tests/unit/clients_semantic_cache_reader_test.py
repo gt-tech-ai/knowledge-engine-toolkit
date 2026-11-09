@@ -16,7 +16,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from techai_webutils.clients.semantic_cache.reader import CacheRead, SemanticCacheReader
+from techai_webutils.clients.semantic_cache.reader import (
+    CacheRead,
+    SemanticCacheReader,
+    SemanticCacheReaderOptions,
+)
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
 from techai_webutils.core.interfaces.metrics import MetricsProvider
@@ -52,7 +56,7 @@ def _metrics() -> tuple[MagicMock, dict[str, MagicMock]]:
 
 def _reader(
     hit: CachedAnswer | None,
-    **kwargs: Any,  # noqa: ANN401
+    **kwargs: object,
 ) -> tuple[SemanticCacheReader, MagicMock, MagicMock]:
     """Return a reader over a lookup answering ``hit``.
 
@@ -68,7 +72,11 @@ def _reader(
     cache.store = AsyncMock()
     options: dict[str, Any] = {"ttl_seconds": 600, "path": "answer"}
     options.update(kwargs)
-    return SemanticCacheReader(cache, lookup, **options), lookup, cache
+    return (
+        SemanticCacheReader(cache, lookup, options=SemanticCacheReaderOptions(**options)),
+        lookup,
+        cache,
+    )
 
 
 @pytest.mark.asyncio

@@ -20,6 +20,7 @@ optional local check).
 from __future__ import annotations
 
 import asyncio
+import functools
 import importlib
 import logging
 import time
@@ -34,6 +35,7 @@ import httpx
 import pytest
 import pytest_asyncio
 import ray
+from docker.errors import DockerException
 from redis.asyncio import Redis
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
@@ -68,6 +70,7 @@ _MINIO_USER = "minioadmin"
 _MINIO_ROOT_CRED = "minioadmin"
 
 
+@functools.cache
 def _docker_available() -> bool:
     """Return True if a reachable Docker daemon is present.
 
@@ -83,14 +86,13 @@ def _docker_available() -> bool:
             "testcontainers.core.docker_client"
         ).DockerClient
         docker_client().client.ping()
-    except Exception:
+    except (OSError, DockerException):
         return False
     return True
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _require_docker() -> None:
-    """Skip the entire integration suite when no Docker daemon is reachable."""
+def pytest_runtest_setup() -> None:
+    """Skip each integration test when no Docker daemon is reachable."""
     if not _docker_available():
         pytest.skip("Docker daemon not available — integration tests skipped")
 
@@ -109,7 +111,6 @@ def redis_container() -> Iterator[object]:
         A real Redis server for the session.
 
     """
-
     with RedisContainer(_REDIS_IMAGE) as container:
         yield container
 
@@ -122,7 +123,6 @@ def sqs_endpoint() -> Iterator[str]:
         The mapped endpoint.
 
     """
-
     container = (
         DockerContainer(_ELASTICMQ_IMAGE)
         .with_exposed_ports(9324)
@@ -147,7 +147,6 @@ def minio_endpoint() -> Iterator[str]:
         The mapped endpoint.
 
     """
-
     container = (
         DockerContainer(_MINIO_IMAGE)
         .with_env("MINIO_ROOT_USER", _MINIO_USER)
@@ -178,7 +177,6 @@ async def redis_cache(redis_container: object) -> AsyncIterator[RedisCache]:
         A RedisCache bound to the live container, in ERROR mode (no masking).
 
     """
-
     host = redis_container.get_container_host_ip()  # type: ignore[attr-defined]
     port = int(redis_container.get_exposed_port(redis_container.port))  # type: ignore[attr-defined]
     client = Redis(host=host, port=port)
@@ -317,9 +315,10 @@ async def _await_pg_ready(dsn: str) -> None:
         try:
             conn = await asyncpg.connect(dsn)
             await conn.close()
-            return
         except (OSError, asyncpg.PostgresError):
             await asyncio.sleep(0.5)
+        else:
+            return
     msg = "postgres did not become ready in time"
     raise RuntimeError(msg)
 
@@ -332,7 +331,6 @@ def postgres_dsn() -> Iterator[str]:
         A real Postgres for the module and yield a libpq DSN for it.
 
     """
-
     container = (
         DockerContainer(_POSTGRES_IMAGE)
         .with_env("POSTGRES_USER", "app")
@@ -388,7 +386,6 @@ def ray_cluster(request: pytest.FixtureRequest) -> object:
         A small local Ray cluster ONCE for the module and pickle its mappers/workers.
 
     """
-
     ray.init(
         num_cpus=2,
         ignore_reinit_error=True,
@@ -421,7 +418,6 @@ def _await_opensearch(url: str) -> None:
         RuntimeError: Opensearch did not become ready in time.
 
     """
-
     for _ in range(120):
         try:
             if (
@@ -442,7 +438,6 @@ def _opensearch() -> Iterator[str]:
         One single-node OpenSearch and yield its HTTP URL.
 
     """
-
     container = (
         DockerContainer(_OPENSEARCH_IMAGE)
         .with_env("discovery.type", "single-node")

@@ -42,7 +42,6 @@ def test_database_settings_defaults() -> None:
       - database_host, database_port, database_user, database_password, and
         database_database resolve to their documented localhost/5432/app defaults
     """
-
     # Act
     settings = DatabaseSettings()
 
@@ -67,7 +66,6 @@ def test_database_settings_reads_from_env(monkeypatch: pytest.MonkeyPatch) -> No
       - DATABASE_HOST overrides the default host
       - DATABASE_PORT is parsed from its string env value into an int
     """
-
     # Arrange
     monkeypatch.setenv("DATABASE_HOST", "prod-db.example.com")
     monkeypatch.setenv("DATABASE_PORT", "5433")
@@ -92,7 +90,6 @@ def test_database_settings_constructor_override() -> None:
       - Passing database_host and database_port to the constructor sets those
         exact values on the instance
     """
-
     # Act
     settings = DatabaseSettings(database_host="custom-host", database_port=9999)
 
@@ -115,7 +112,6 @@ def test_database_settings_frozen() -> None:
       - Assigning to database_host post-construction raises ValidationError with
         the "Instance is frozen" message
     """
-
     # Arrange
     settings = DatabaseSettings()
 
@@ -136,7 +132,6 @@ def test_redis_settings_defaults() -> None:
     **What it tests:**
       - redis_host defaults to "localhost", redis_port to 6379, redis_db to 0
     """
-
     # Act
     settings = RedisSettings()
 
@@ -159,7 +154,6 @@ def test_server_settings_defaults() -> None:
     **What it tests:**
       - server_host defaults to "0.0.0.0"
     """
-
     # Act
     settings = ServerSettings()
 
@@ -181,7 +175,6 @@ def test_logging_settings_defaults() -> None:
       - logging_level defaults to "info", logging_format to "json", and
         logging_redact_pii to True
     """
-
     # Act
     settings = LoggingSettings()
 
@@ -234,7 +227,6 @@ def test_mixin_composition_with_env_vars(monkeypatch: pytest.MonkeyPatch) -> Non
       - DATABASE_HOST sets only database_host
       - REDIS_HOST sets only redis_host (no cross-contamination)
     """
-
     # Arrange
     monkeypatch.setenv("DATABASE_HOST", "db-override")
     monkeypatch.setenv("REDIS_HOST", "redis-override")
@@ -265,7 +257,6 @@ def test_base_app_settings_has_correct_model_config() -> None:
       - model_config sets env_prefix to "" (unprefixed), frozen to True, and extra to
         "ignore"
     """
-
     # Assert
     assert not BaseAppSettings.model_config.get("env_prefix")
     assert BaseAppSettings.model_config.get("frozen") is True

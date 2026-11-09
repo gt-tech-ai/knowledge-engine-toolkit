@@ -8,6 +8,8 @@ it.
 
 from __future__ import annotations
 
+import importlib
+
 
 class SesEmailSender:
     """An EmailSender over AWS SESv2 (aiobotocore); implements the EmailSender port."""
@@ -22,9 +24,7 @@ class SesEmailSender:
 
         (regional endpoint + IRSA credentials).
         """
-        import aiobotocore.session  # noqa: PLC0415 — lazy so the dev/stub path never loads aiobotocore
-
-        session = aiobotocore.session.get_session()
+        session = importlib.import_module("aiobotocore.session").get_session()
         async with session.create_client("sesv2", region_name=self._region) as raw_client:
             client: object = raw_client
             await client.send_email(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]

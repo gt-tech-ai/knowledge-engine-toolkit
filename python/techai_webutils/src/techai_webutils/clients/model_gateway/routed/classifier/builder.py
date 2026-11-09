@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from techai_webutils.clients.model_gateway.routed.classifier.stub import (
     StubRouteClassifier,
@@ -13,6 +14,9 @@ from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from techai_webutils.clients.model_gateway.routed.classifier.embedding import (
+        EmbeddingRouteClassifier as _LazyEmbeddingRouteClassifier,
+    )
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
     from techai_webutils.core.interfaces.routing import RouteClassifier
     from techai_webutils.core.types.routing import Route
@@ -60,11 +64,14 @@ def route_classifier_from_config(
         if routes is None or embedding is None:
             msg = "embedding route classifier requires routes and an embedder"
             raise AppError(ErrorCode.INVALID_INPUT, msg)
-        from techai_webutils.clients.model_gateway.routed.classifier.embedding import (  # noqa: PLC0415
-            EmbeddingRouteClassifier,
+        embedding_route_classifier_cls = cast(
+            "type[_LazyEmbeddingRouteClassifier]",
+            importlib.import_module(
+                "techai_webutils.clients.model_gateway.routed.classifier.embedding"
+            ).EmbeddingRouteClassifier,
         )
 
-        return EmbeddingRouteClassifier(
+        return embedding_route_classifier_cls(
             routes, embedding, stub, top_k=int(raw.get("top_k", 3))
         )
     msg = f"unknown route classifier kind: {kind!r}"

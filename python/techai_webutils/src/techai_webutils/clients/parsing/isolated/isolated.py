@@ -49,6 +49,7 @@ from techai_webutils.core.domain import (
     blocks_to_json,
 )
 from techai_webutils.core.interfaces.parser import ParseCost
+from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -56,6 +57,8 @@ if TYPE_CHECKING:
     from multiprocessing.context import ForkServerContext, SpawnContext
     from multiprocessing.process import BaseProcess
     from multiprocessing.queues import Queue
+
+logger = get_logger(__name__)
 
 # _DEFAULT_MEMORY_BYTES is the per-parse address-space cap (512 MiB, sized under the 1Gi
 # pod limit so several parses can run concurrently without tripping the container
@@ -87,7 +90,7 @@ _FORKSERVER_PRELOAD = ["markitdown", "pymupdf"]
 re-import)."""
 
 
-def _isolated_context():  # noqa: ANN202 — inferred SpawnContext|ForkServerContext keeps .Process/.Queue
+def _isolated_context() -> SpawnContext | ForkServerContext:
     """Return the mp context for isolated parses: forkserver (preloaded) where available.
 
     Else spawn.
@@ -179,6 +182,7 @@ def _worker[T](
         # Carry the full traceback (not just repr) so an IsolationError in the parent is
         # diagnosable — the child's stack is otherwise invisible (mirrors fan_out's
         # detail).
+        logger.exception("worker failed")
         result_queue.put(("err", f"{exc!r}\n{traceback.format_exc()}"))
 
 
@@ -265,11 +269,12 @@ def _await_result(
     """
     deadline = time.monotonic() + timeout_seconds
     while True:
+        expired = time.monotonic() >= deadline
         try:
             return result_queue.get(timeout=_POLL_INTERVAL_SECONDS)
         except Empty:
             if proc.is_alive():
-                if time.monotonic() >= deadline:
+                if expired:
                     _kill(proc)
                     msg = f"isolated task exceeded {timeout_seconds}s"
                     raise TimeoutError(msg) from None

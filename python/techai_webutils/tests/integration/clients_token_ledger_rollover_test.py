@@ -15,7 +15,10 @@ import pytest_asyncio
 from redis.asyncio import Redis
 from testcontainers.redis import RedisContainer
 
-from techai_webutils.clients.decorators.token_accounting import TokenAccountingProxy
+from techai_webutils.clients.decorators.token_accounting import (
+    TokenAccountingOptions,
+    TokenAccountingProxy,
+)
 from techai_webutils.clients.token_ledger import TokenLedgerConfig, TokenLedgerKind
 from techai_webutils.clients.token_ledger.redis import RedisTokenLedger
 from techai_webutils.core.errors import QuotaExceededError
@@ -174,11 +177,13 @@ async def test_redis_outage_soft_serves_hard_rejects_and_counts_lost_records() -
             "LLMProvider",
             TokenAccountingProxy(
                 inner,
-                ledger=ledger,
-                scope=lambda: _SCOPE,
-                prices=_PRICES,
-                policy=BudgetPolicy(enforcement=enforcement),
-                step="generate",
+                options=TokenAccountingOptions(
+                    ledger=ledger,
+                    scope=lambda: _SCOPE,
+                    prices=_PRICES,
+                    policy=BudgetPolicy(enforcement=enforcement),
+                    step="generate",
+                ),
             ),
         )
 

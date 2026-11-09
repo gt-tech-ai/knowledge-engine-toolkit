@@ -87,7 +87,6 @@ class TestCursorCodec:
           - Base64-encoded non-JSON payload raises ValueError with 'invalid cursor'
             message
         """
-
         bad = base64.urlsafe_b64encode(b"not json").decode()
         with pytest.raises(ValueError, match="invalid cursor"):
             CursorCodec.decode(bad)
@@ -106,7 +105,6 @@ class TestCursorCodec:
         **What it tests:**
           - JSON without 'id' key raises ValueError with 'invalid cursor' message
         """
-
         bad = base64.urlsafe_b64encode(json.dumps({"v": "x"}).encode()).decode()
         with pytest.raises(ValueError, match="invalid cursor"):
             CursorCodec.decode(bad)

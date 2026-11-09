@@ -49,6 +49,7 @@ import logging
 import os
 import threading
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -61,11 +62,23 @@ logger = logging.getLogger(__name__)
 # Sentinel flag + lock ensuring initialize_config() loads the YAML exactly once,
 # thread-safely (the former unlocked check-then-set was safe only if init preceded any
 # thread spawn).
-_initialized = False
 _init_lock = threading.Lock()
-_initialized_with: tuple[str, str, tuple[str, ...]] | None = None
 """The normalised ``(config_dir, env_prefix, env_selectors)`` of the call that initialized
 the config."""
+
+
+@dataclass
+class _BridgeState:
+    """What this process has initialized, so a repeat with other arguments can fail."""
+
+    initialized: bool = False
+    """Whether the config has been loaded."""
+    initialized_with: tuple[str, str, tuple[str, ...]] | None = None
+    """The resolved arguments of the first initialization."""
+
+
+_STATE = _BridgeState()
+"""The process's one initialization record."""
 
 
 def _flatten_config(config: dict[str, Any], prefix: str = "") -> list[tuple[str, str]]:
@@ -194,7 +207,6 @@ def initialize_config(
     is missing.
 
     """
-    global _initialized_with  # noqa: PLW0603
     requested = (
         str(Path(config_dir).resolve()),
         _normalize_prefix(env_prefix),
@@ -202,17 +214,17 @@ def initialize_config(
     )
     # Idempotency + thread-safety: a fast-path read, then a double-check under the lock,
     # so concurrent initialize_config() calls (multi-module imports, off-thread wiring)
-    # load the YAML exactly once. (Only reads _initialized here; the write happens in
+    # load the YAML exactly once. (Only reads the state here; the write happens in
     # _load_and_apply_config under the lock.)
-    if _initialized:
+    if _STATE.initialized:
         _require_same_arguments(requested)
         return
     with _init_lock:
-        if _initialized:
+        if _STATE.initialized:
             _require_same_arguments(requested)
             return
         _load_and_apply_config(config_dir, env_prefix, env_selectors, strict=strict)
-        _initialized_with = requested
+        _STATE.initialized_with = requested
 
 
 def _require_same_arguments(requested: tuple[str, str, tuple[str, ...]]) -> None:
@@ -225,12 +237,12 @@ def _require_same_arguments(requested: tuple[str, str, tuple[str, ...]]) -> None
             '.join(conflicts)``.
 
     """
-    if _initialized_with is None or requested == _initialized_with:
+    if _STATE.initialized_with is None or requested == _STATE.initialized_with:
         return
     names = ("config_dir", "env_prefix", "env_selectors")
     conflicts = [
         f"{name}={new!r} (initialized with {old!r})"
-        for name, old, new in zip(names, _initialized_with, requested, strict=True)
+        for name, old, new in zip(names, _STATE.initialized_with, requested, strict=True)
         if old != new
     ]
     msg = (
@@ -261,8 +273,6 @@ def _load_and_apply_config(
             found: ``config_file``.
 
     """
-    global _initialized  # noqa: PLW0603
-
     config_path = Path(config_dir)
 
     # Graceful fallback for missing config directory (Docker/K8s deployments)
@@ -274,7 +284,7 @@ def _load_and_apply_config(
             "Config directory not found: %s. Proceeding with environment variables only.",
             config_path,
         )
-        _initialized = True
+        _STATE.initialized = True
         return
 
     config_file = config_path / "base.yaml"
@@ -286,7 +296,7 @@ def _load_and_apply_config(
             "Config file not found: %s. Proceeding with environment variables only.",
             config_file,
         )
-        _initialized = True
+        _STATE.initialized = True
         return
 
     # Load and deep-merge base.yaml + {env}.yaml + secrets.yaml (env vars still win
@@ -299,13 +309,13 @@ def _load_and_apply_config(
         if strict:
             raise
         logger.warning("Failed to load config from %s", config_dir, exc_info=True)
-        _initialized = True
+        _STATE.initialized = True
         return
 
     # Apply YAML values to env vars (respecting existing env vars)
     apply_yaml_defaults(config, env_prefix)
 
-    _initialized = True
+    _STATE.initialized = True
 
 
 def _log_overlay(config_path: Path, environment: str, selector: str | None) -> None:
@@ -344,9 +354,8 @@ def reset_config() -> None:
     This is for testing only. It allows tests to call initialize_config()
     multiple times with different configurations.
     """
-    global _initialized, _initialized_with  # noqa: PLW0603
-    _initialized = False
-    _initialized_with = None
+    _STATE.initialized = False
+    _STATE.initialized_with = None
 
 
 def export_yaml_sections(
