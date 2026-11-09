@@ -14,7 +14,9 @@ worker-side exception surfaces as an isolated FAIL (real RayTaskError), not a ba
 from __future__ import annotations
 
 import asyncio
+import functools
 import os
+from pathlib import Path
 
 import pytest
 
@@ -112,3 +114,60 @@ async def test_pooled_executor_runs_on_real_cluster() -> None:
     assert batch.total == 4
     assert batch.succeeded == 2
     assert batch.failed == 2
+
+
+def _die_once(marker: str) -> None:
+    """Exit this process the first time it is called for ``marker``; return on every later call."""
+    path = Path(marker)
+    if not path.exists():
+        path.touch()
+        os._exit(1)
+
+
+class _DiesOnceWorker:
+    """PooledWorker whose first ``process`` call kills its actor process (a reclaimed node, an OOM kill).
+
+    The marker file lives on the host's filesystem, which the local cluster's actors share, so the
+    restarted actor sees that the crash already happened and processes normally.
+    """
+
+    def __init__(self, marker: str) -> None:
+        """Bind the marker path that records the one crash."""
+        self._marker = marker
+
+    async def process(self, item: object) -> StepResult:
+        """Kill this actor's process on the first call ever; pass every item afterwards."""
+        await asyncio.to_thread(_die_once, self._marker)
+        return StepResult(name=f"item-{item}")
+
+    async def aclose(self) -> None:
+        """No resources to release in this fixture worker."""
+
+
+async def _build_dies_once_worker(marker: str) -> PooledWorker[int]:
+    """Module-level WorkerFactory body (bound with ``functools.partial``): one _DiesOnceWorker per actor."""
+    await asyncio.sleep(0)
+    return _DiesOnceWorker(marker)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("ray_cluster")
+async def test_pooled_executor_survives_an_actor_process_death(tmp_path: Path) -> None:
+    """Test that a pool actor whose process dies is restarted and its in-flight item re-run.
+
+    **Why this test is important:**
+      - Pool actors run on spot / consolidatable nodes; when an actor died it stayed dead, and every
+        later item routed to its slot failed. Only a real cluster restarts an actor.
+
+    **What it tests:**
+      - A one-actor pool whose worker kills its own process on the first item still finishes all three
+        items as PASS: Ray restarted the actor and re-ran the lost call.
+    """
+    factory = functools.partial(_build_dies_once_worker, str(tmp_path / "died"))
+    ex = PooledExecutor(ray_worker_factory(factory), pool_size=1)
+
+    batch = await ex.run([0, 1, 2], concurrency=1)
+
+    assert batch.succeeded == 3
+    assert (tmp_path / "died").exists()

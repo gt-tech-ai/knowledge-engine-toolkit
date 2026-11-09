@@ -1,8 +1,8 @@
 """Unit tests for ``RedisSemanticCache`` over a mocked Redis client and KV cache.
 
-The KNN ranking itself needs a real RediSearch server and is proven in the integration suite;
+The KNN ranking itself needs a real search server and is proven in the integration suite;
 these tests pin the backend's decisions: the exact-repeat fast path, the similarity threshold,
-the write layout, namespace scoping and fail-open.
+the write layout, namespace scoping, both ``FT.SEARCH`` reply shapes and fail-open.
 """
 
 from __future__ import annotations
@@ -37,13 +37,21 @@ _OTHER = CacheNamespace("ws-2", "stub-embed", "8")
 class _Harness:
     """The mocked collaborators of one cache under test."""
 
-    def __init__(self, *, docs: list[SimpleNamespace] | None = None) -> None:
-        """Mock Redis (with an ``ft()`` search handle), the KV cache and metrics."""
+    def __init__(
+        self,
+        *,
+        docs: list[SimpleNamespace] | None = None,
+        strip_trailing_punctuation: bool = False,
+    ) -> None:
+        """Mock Redis (raw ``FT.SEARCH`` plus an ``ft()`` handle), the KV cache and metrics.
+
+        ``FT.SEARCH`` answers in the RESP2 array shape Valkey Search returns.
+        """
+        self.redis = MagicMock(spec=Redis)
+        self.redis.execute_command = AsyncMock(return_value=_array_reply(docs or []))
         self.search = MagicMock()
-        self.search.search = AsyncMock(return_value=SimpleNamespace(docs=docs or []))
         self.search.create_index = AsyncMock()
         self.search.dropindex = AsyncMock()
-        self.redis = MagicMock(spec=Redis)
         self.redis.ft = MagicMock(return_value=self.search)
         self.redis.hset = AsyncMock()
         self.redis.expire = AsyncMock()
@@ -58,7 +66,11 @@ class _Harness:
         metrics = MagicMock(spec=MetricsProvider)
         metrics.counter = MagicMock(return_value=self.errors)
         self.cache = semantic_cache_from_config(
-            SemanticCacheConfig(kind=SemanticCacheKind.REDIS, index_prefix="sc"),
+            SemanticCacheConfig(
+                kind=SemanticCacheKind.REDIS,
+                index_prefix="sc",
+                strip_trailing_punctuation=strip_trailing_punctuation,
+            ),
             cache=self.kv,
             embedding=self.embedding,
             redis=self.redis,
@@ -71,6 +83,42 @@ async def _aiter(items: list[str]) -> AsyncGenerator[str]:
     for item in items:
         await asyncio.sleep(0)
         yield item
+
+
+def _array_reply(docs: list[SimpleNamespace]) -> list[object]:
+    """Return ``docs`` as the RESP2 ``FT.SEARCH`` array: ``[total, id, [field, value, …], …]``."""
+    reply: list[object] = [len(docs)]
+    for i, doc in enumerate(docs):
+        reply += [
+            f"sc:d:{i}".encode(),
+            [
+                b"key",
+                doc.key.encode(),
+                b"query",
+                doc.query.encode(),
+                b"dist",
+                doc.dist.encode(),
+            ],
+        ]
+    return reply
+
+
+def _map_reply(docs: list[SimpleNamespace]) -> dict[bytes, object]:
+    """Return ``docs`` as the RESP3 ``FT.SEARCH`` map Redis Stack returns."""
+    return {
+        b"total_results": len(docs),
+        b"results": [
+            {
+                b"id": f"sc:d:{i}".encode(),
+                b"extra_attributes": {
+                    b"key": doc.key.encode(),
+                    b"query": doc.query.encode(),
+                    b"dist": doc.dist.encode(),
+                },
+            }
+            for i, doc in enumerate(docs)
+        ],
+    }
 
 
 def _doc(distance: float) -> SimpleNamespace:
@@ -104,7 +152,7 @@ async def test_redis_semantic_cache_exact_hit_skips_embedding() -> None:
         embedding_model="stub-embed",
     )
     harness.embedding.embed.assert_not_awaited()
-    harness.search.search.assert_not_awaited()
+    harness.redis.execute_command.assert_not_awaited()
     assert harness.kv.get.await_args.args[0].startswith(f"sc:p:ws-1:{_NS.tag()}:")
 
 
@@ -132,6 +180,33 @@ async def test_redis_semantic_cache_knn_hit_above_threshold() -> None:
 
 
 @pytest.mark.asyncio
+async def test_redis_semantic_cache_reads_the_resp3_map_reply() -> None:
+    """Test that a KNN hit is read from the RESP3 map reply as well as the RESP2 array.
+
+    **Why this test is important:**
+      - Redis Stack answers ``FT.SEARCH`` as a RESP3 map and Valkey Search as the RESP2 array on
+        the same connection; reading only one shape turns every lookup on the other engine into
+        a silent miss.
+
+    **What it tests:**
+      - a map reply with a neighbour at distance 0.03 returns its payload at similarity 0.97
+      - an empty map reply is a miss
+    """
+    harness = _Harness()
+    harness.redis.execute_command = AsyncMock(return_value=_map_reply([_doc(0.03)]))
+    harness.kv.get = AsyncMock(side_effect=[None, b"cached answer"])
+    empty = _Harness()
+    empty.redis.execute_command = AsyncMock(return_value=_map_reply([]))
+
+    hit = await harness.cache.lookup("what's x", _NS, min_similarity=0.95)
+
+    assert hit is not None
+    assert hit.payload == b"cached answer"
+    assert hit.similarity == pytest.approx(0.97)
+    assert await empty.cache.lookup("q", _NS, min_similarity=0.95) is None
+
+
+@pytest.mark.asyncio
 async def test_redis_semantic_cache_knn_miss_below_threshold() -> None:
     """Test that a neighbour below the threshold, or with an expired payload, is a miss.
 
@@ -140,14 +215,16 @@ async def test_redis_semantic_cache_knn_miss_below_threshold() -> None:
         payload expired must not resurrect a stale hit.
 
     **What it tests:**
-      - distance 0.2 (similarity 0.8 < 0.95) → ``None`` without reading the payload
+      - distance 0.2 (similarity 0.8 < 0.95) → ``None`` (``nearest`` reads the neighbour's
+        payload whatever its similarity, since a verifier band may serve it; ``lookup``
+        applies the threshold)
       - distance 0.01 but the payload is gone → ``None``
     """
     far = _Harness(docs=[_doc(0.2)])
     stale = _Harness(docs=[_doc(0.01)])
 
     assert await far.cache.lookup("q", _NS, min_similarity=0.95) is None
-    assert far.kv.get.await_count == 1
+    assert far.kv.get.await_count == 2
     assert await stale.cache.lookup("q", _NS, min_similarity=0.95) is None
 
 
@@ -201,7 +278,9 @@ async def test_redis_semantic_cache_lookup_fails_open() -> None:
     kv_down = _Harness()
     kv_down.kv.get = AsyncMock(side_effect=RedisConnectionError("down"))
     search_down = _Harness()
-    search_down.search.search = AsyncMock(side_effect=RedisConnectionError("down"))
+    search_down.redis.execute_command = AsyncMock(
+        side_effect=RedisConnectionError("down")
+    )
     embed_down = _Harness()
     embed_down.embedding.embed = AsyncMock(side_effect=RuntimeError("ollama down"))  # type: ignore[method-assign]
 
@@ -255,7 +334,7 @@ async def test_redis_semantic_cache_namespace_isolation() -> None:
     await harness.cache.lookup("q", _OTHER, min_similarity=0.9)
 
     first, second = (
-        call.args[0].query_string() for call in harness.search.search.await_args_list
+        call.args[2] for call in harness.redis.execute_command.await_args_list
     )
     assert f"@ns:{{{_NS.tag()}}}" in first
     assert f"@ns:{{{_OTHER.tag()}}}" in second
@@ -272,7 +351,8 @@ async def test_redis_semantic_cache_invalidation() -> None:
       - ``invalidate_prefix("ws-1")`` scans ``sc:p:ws-1:*`` and ``sc:d:ws-1:*`` (never ``ws-10``)
         and unlinks hits
       - glob characters in the prefix are escaped
-      - ``invalidate_all`` drops the index with its documents and unlinks every payload key
+      - ``invalidate_all`` drops the index (no ``DD``: Valkey Search rejects it), then unlinks
+        every index document and payload key itself
       - a failing scan or drop is counted as ``op="invalidate"`` and never raised
     """
     harness = _Harness()
@@ -290,10 +370,11 @@ async def test_redis_semantic_cache_invalidation() -> None:
         "sc:d:ws-1:*",
         "sc:p:w\\*:*",
         "sc:d:w\\*:*",
+        "sc:d:*",
         "sc:p:*",
     ]
     harness.redis.unlink.assert_any_await("sc:p:ws-1:x")
-    harness.search.dropindex.assert_awaited_once_with(delete_documents=True)
+    harness.search.dropindex.assert_awaited_once_with(delete_documents=False)
     assert isinstance(harness.cache, RedisSemanticCache)
 
     down = _Harness()
@@ -303,3 +384,76 @@ async def test_redis_semantic_cache_invalidation() -> None:
     await down.cache.invalidate_all()
     assert down.errors.inc.call_count == 2
     down.errors.inc.assert_called_with(op="invalidate")
+
+
+@pytest.mark.asyncio
+async def test_redis_semantic_cache_primitives_split_exact_and_nearest() -> None:
+    """Test that ``exact`` never embeds and ``nearest`` returns any neighbour unthresholded.
+
+    **Why this test is important:**
+      - The match tiers apply their own thresholds (a per-workspace similarity, a verifier
+        band); a backend that thresholded inside ``nearest`` would hide the band's candidates.
+
+    **What it tests:**
+      - ``exact`` misses without embedding or searching when no payload is stored
+      - ``nearest`` returns a neighbour at similarity 0.80 with its payload and cached query
+    """
+    harness = _Harness(docs=[_doc(0.2)])
+
+    assert await harness.cache.exact("what's x", _NS) is None
+    harness.embedding.embed.assert_not_awaited()
+    harness.redis.execute_command.assert_not_awaited()
+
+    harness.kv.get = AsyncMock(return_value=b"near answer")
+    near = await harness.cache.nearest("what's x", _NS)
+
+    assert near is not None
+    assert near.payload == b"near answer"
+    assert near.similarity == pytest.approx(0.8)
+    assert near.source_query == "the cached question"
+
+
+@pytest.mark.asyncio
+async def test_redis_semantic_cache_strips_trailing_punctuation_when_configured() -> None:
+    """Test that the optional normalization makes "What is X?" and "what is x" one key.
+
+    **Why this test is important:**
+      - The exact tier hashes the normalized question; with the flag on, a repeat that differs
+        only by a trailing question mark is served without an embedding.
+
+    **What it tests:**
+      - with the flag on, both phrasings read the same payload key
+      - with it off (the default), they read different keys
+    """
+    on = _Harness(strip_trailing_punctuation=True)
+    await on.cache.exact("What is X?", _NS)
+    await on.cache.exact("what is x", _NS)
+    keys_on = [c.args[0] for c in on.kv.get.await_args_list]
+
+    off = _Harness()
+    await off.cache.exact("What is X?", _NS)
+    await off.cache.exact("what is x", _NS)
+    keys_off = [c.args[0] for c in off.kv.get.await_args_list]
+
+    assert keys_on[0] == keys_on[1]
+    assert keys_off[0] != keys_off[1]
+
+
+@pytest.mark.asyncio
+async def test_redis_semantic_cache_primitives_fail_open() -> None:
+    """Test that a backend error in either primitive is a miss and is counted.
+
+    **Why this test is important:**
+      - A Redis outage must look exactly like an uncached query, whichever tier asked.
+
+    **What it tests:**
+      - a raising KV read makes ``exact`` and a raising search makes ``nearest`` return ``None``
+      - ``semantic_cache_errors_total{op="lookup"}`` increments for each
+    """
+    harness = _Harness()
+    harness.kv.get = AsyncMock(side_effect=RedisConnectionError("down"))
+    harness.redis.execute_command = AsyncMock(side_effect=RedisConnectionError("down"))
+
+    assert await harness.cache.exact("q", _NS) is None
+    assert await harness.cache.nearest("q", _NS) is None
+    assert harness.errors.inc.call_count == 2

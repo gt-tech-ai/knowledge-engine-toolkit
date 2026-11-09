@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from prometheus_client import CollectorRegistry
 
 from techai_webutils.clients.decorators.semantic_cache_proxy import (
     SemanticCacheBinding,
     SemanticCacheProxy,
 )
+from techai_webutils.clients.semantic_cache import reader as reader_module
 from techai_webutils.clients.semantic_cache.stub import StubSemanticCache
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
@@ -26,10 +32,12 @@ from techai_webutils.core.interfaces.llm import (
 from techai_webutils.core.interfaces.metrics import MetricsProvider
 from techai_webutils.core.interfaces.semantic_cache import (
     CachedAnswer,
+    CacheLookup,
     CacheNamespace,
     SemanticCache,
     served_from_cache,
 )
+from techai_webutils.foundation.metrics.metrics import PrometheusMetricsProvider
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -131,6 +139,11 @@ def _metrics() -> tuple[MagicMock, dict[str, MagicMock]]:
     return metrics, counters
 
 
+def _increments(counter: MagicMock) -> list[Any]:
+    """Return ``counter``'s non-zero ``inc`` calls (dropping the 0 that creates a series)."""
+    return [c for c in counter.inc.call_args_list if c.args[0]]
+
+
 @pytest.mark.asyncio
 async def test_semantic_cache_proxy_hit_short_circuits_wrapped() -> None:
     """Test that a hit returns the decoded answer without calling the model.
@@ -140,7 +153,8 @@ async def test_semantic_cache_proxy_hit_short_circuits_wrapped() -> None:
 
     **What it tests:**
       - the decoded cached answer is returned; the inner ``complete`` is never awaited
-      - ``served_from_cache()`` is set and ``on_hit`` receives the hit
+      - ``served_from_cache()`` is set and ``on_hit`` receives the hit, its ``tier`` stamped
+        from its similarity (``semantic`` below 1.0) when the backend left it blank
     """
     inner, on_hit = _inner(), AsyncMock(return_value=None)
 
@@ -154,7 +168,7 @@ async def test_semantic_cache_proxy_hit_short_circuits_wrapped() -> None:
     inner.complete.assert_not_awaited()
     assert served_from_cache()
     assert on_hit.await_args is not None
-    assert on_hit.await_args.args[3] is _HIT
+    assert on_hit.await_args.args[3] == dataclasses.replace(_HIT, tier="semantic")
 
 
 @pytest.mark.asyncio
@@ -220,31 +234,116 @@ async def test_semantic_cache_proxy_passthrough_for_non_bound_methods() -> None:
 
 @pytest.mark.asyncio
 async def test_semantic_cache_proxy_emits_hit_and_saving_metrics() -> None:
-    """Test that hits, misses and savings are counted per path and workspace.
+    """Test that lookups, hits, misses and savings are counted per org, path and workspace.
 
     **Why this test is important:**
-      - The saving is the number the cache is judged by.
+      - The saving is the number the cache is judged by, and a dashboard's hit rate is hits over
+        lookups, read per org: a counter without ``org_id`` can't be shown to a tenant.
 
     **What it tests:**
-      - a hit increments ``semantic_cache_hits_total`` and adds the ``saving`` to
-        ``semantic_cache_saving_usd_total``; a miss increments ``semantic_cache_misses_total``
+      - a hit increments ``semantic_cache_lookups_total`` and ``semantic_cache_hits_total`` and adds
+        the ``saving`` to ``semantic_cache_saving_usd_total``; a miss increments lookups and
+        ``semantic_cache_misses_total`` — each labelled with the ``org_id`` ``fact_dimensions``
+        returns
+      - every cache counter is registered with the ``org_id``, ``path`` and ``workspace`` labels;
+        the hit counter adds the serving ``tier``
+    """
+    metrics, counters = _metrics()
+    org = {"fact_dimensions": lambda: {"org_id": "o1", "team": "t1"}}
+
+    await _proxy(
+        _inner(),
+        _cache(_HIT),
+        metrics=metrics,
+        saving=lambda _hit: Decimal("0.002"),
+        **org,
+    ).complete(_MESSAGES)
+    await _proxy(_inner(), _cache(), metrics=metrics, **org).complete(_MESSAGES)
+
+    labels = {"org_id": "o1", "path": "generation", "workspace": "ws-1"}
+    assert _increments(counters["semantic_cache_hits_total"]) == [
+        call(1.0, **labels, tier="semantic")
+    ]
+    assert _increments(counters["semantic_cache_saving_usd_total"]) == [
+        call(0.002, **labels)
+    ]
+    assert _increments(counters["semantic_cache_misses_total"]) == [call(1.0, **labels)]
+    assert counters["semantic_cache_lookups_total"].inc.call_count == 2
+    counters["semantic_cache_lookups_total"].inc.assert_called_with(1.0, **labels)
+    registered = {call.args[0]: call.args[2] for call in metrics.counter.call_args_list}
+    for name in (
+        "semantic_cache_lookups_total",
+        "semantic_cache_misses_total",
+        "semantic_cache_saving_usd_total",
+    ):
+        assert registered[name] == ["org_id", "path", "workspace"]
+    assert registered["semantic_cache_hits_total"] == [
+        "org_id",
+        "path",
+        "workspace",
+        "tier",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_semantic_cache_proxy_counts_without_an_org() -> None:
+    """Test that a lookup with no ``fact_dimensions`` is still counted, under an empty ``org_id``.
+
+    **Why this test is important:**
+      - A caller that never wired fact dimensions must not lose its cache metrics.
+
+    **What it tests:**
+      - a miss with no ``fact_dimensions`` increments lookups and misses with ``org_id=""``
     """
     metrics, counters = _metrics()
 
-    await _proxy(
-        _inner(), _cache(_HIT), metrics=metrics, saving=lambda _hit: Decimal("0.002")
-    ).complete(_MESSAGES)
     await _proxy(_inner(), _cache(), metrics=metrics).complete(_MESSAGES)
 
-    counters["semantic_cache_hits_total"].inc.assert_called_once_with(
-        1.0, path="generation", workspace="ws-1"
-    )
-    counters["semantic_cache_saving_usd_total"].inc.assert_called_once_with(
-        0.002, path="generation", workspace="ws-1"
-    )
-    counters["semantic_cache_misses_total"].inc.assert_called_once_with(
-        1.0, path="generation", workspace="ws-1"
-    )
+    labels = {"org_id": "", "path": "generation", "workspace": "ws-1"}
+    assert _increments(counters["semantic_cache_misses_total"]) == [call(1.0, **labels)]
+    counters["semantic_cache_lookups_total"].inc.assert_called_once_with(1.0, **labels)
+
+
+@pytest.mark.asyncio
+async def test_semantic_cache_proxy_creates_the_hit_series_on_the_first_miss() -> None:
+    """Test that a label set's first miss leaves its hit series in the registry at 0.
+
+    **Why this test is important:**
+      - Prometheus' ``increase()`` measures growth between samples, so a counter series whose
+        first sample is already 1 reads as no change: without a 0 sample the first cache hit of
+        a workspace never reaches a hit-rate panel.
+
+    **What it tests:**
+      - after one miss, ``semantic_cache_hits_total`` (for every tier) and
+        ``semantic_cache_saving_usd_total`` exist at 0 for the lookup's
+        ``org_id``/``path``/``workspace``; misses read 1
+      - a later hit through the same proxy raises the hit series to 1
+    """
+    registry = CollectorRegistry()
+    org = {"fact_dimensions": lambda: {"org_id": "o1"}}
+    cache = _cache()
+    proxy = _proxy(_inner(), cache, metrics=PrometheusMetricsProvider(registry), **org)
+    labels = {"org_id": "o1", "path": "generation", "workspace": "ws-1"}
+
+    await proxy.complete(_MESSAGES)
+
+    for tier in ("exact", "semantic", "verified"):
+        assert registry.get_sample_value(
+            "semantic_cache_hits_total", {**labels, "tier": tier}
+        ) == pytest.approx(0.0)
+    assert registry.get_sample_value(
+        "semantic_cache_saving_usd_total", labels
+    ) == pytest.approx(0.0)
+    assert registry.get_sample_value(
+        "semantic_cache_misses_total", labels
+    ) == pytest.approx(1.0)
+
+    cache.lookup = AsyncMock(return_value=_HIT)
+    await proxy.complete(_MESSAGES)
+
+    assert registry.get_sample_value(
+        "semantic_cache_hits_total", {**labels, "tier": "semantic"}
+    ) == pytest.approx(1.0)
 
 
 @pytest.mark.asyncio
@@ -586,3 +685,41 @@ async def test_accounting_over_cache_records_a_hit_as_zero_tokens() -> None:
         0,
     )
     assert (miss.operation, miss.input_tokens, miss.output_tokens) == ("generate", 9, 3)
+
+
+@pytest.mark.asyncio
+async def test_semantic_cache_proxy_reads_through_an_injected_tier_chain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that a proxy given a ``CacheLookup`` reads through it and reports the serving tier.
+
+    **Why this test is important:**
+      - The tier list is configuration; a proxy that ignored it would keep serving by one
+        threshold, and the Cache screen reads hits and spans by tier.
+
+    **What it tests:**
+      - the injected lookup is awaited (the backend's ``lookup`` is not) and its exact hit is
+        served without calling the model
+      - ``semantic_cache_hits_total`` increments with ``tier="exact"`` and the
+        ``semantic_cache.lookup`` span carries ``semantic_cache.tier="exact"``
+    """
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(reader_module, "_TRACER", provider.get_tracer("test"))
+    metrics, counters = _metrics()
+    lookup = MagicMock(spec=CacheLookup)
+    lookup.lookup = AsyncMock(
+        return_value=dataclasses.replace(_HIT, similarity=1.0, tier="exact")
+    )
+    inner, cache = _inner(), _cache()
+
+    await _proxy(inner, cache, metrics=metrics, lookup=lookup).complete(_MESSAGES)
+
+    inner.complete.assert_not_awaited()
+    cache.lookup.assert_not_awaited()
+    hits = _increments(counters["semantic_cache_hits_total"])
+    assert [c.kwargs["tier"] for c in hits] == ["exact"]
+    (span,) = exporter.get_finished_spans()
+    assert span.attributes is not None
+    assert span.attributes["semantic_cache.tier"] == "exact"

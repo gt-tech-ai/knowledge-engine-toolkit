@@ -41,6 +41,281 @@ All notable changes to this project are recorded here. The format follows
 - Go `clients/outbox` and `clients/prometheus/http` code their errors through
   `foundation/awserr` and `foundation/httperr` instead of private copies; behavior is unchanged.
 
+## [0.0.49] - 2026-11-08
+
+Python: `techai-webutils` 0.9.4. The Go module is unchanged.
+
+### Added
+
+- `PlanRequest.team_id` / `PlanRequest.user_id`: the team and end user a planned call is charged
+  to. The `overlord` planner copies them from the `RouteContext`, so a remote planner can
+  attribute its routing decisions below the tenant. Both default to empty.
+- `PricedCandidateRanker` (`clients/model_gateway/routed/ranker`): a `CandidateRanker` with
+  `rank_priced(ctx, route, candidates, route_input, prices)`, which costs from the price table
+  passed with the call. `candidate_ranker_from_config` returns one for every kind
+  (`static_order` ignores the table), so a caller whose prices arrive with each request builds
+  one ranker at boot instead of one per request.
+
+- `clients/model_gateway/routed/settings`: typed, frozen pydantic models of the routed gateway's
+  config. `CatalogModelSetting` (with `CapabilitiesSetting`, `CatalogEndpointSetting` and the
+  all-optional `EndpointLlmSetting`), `RouteSetting` and `RoutedStagesSetting` refuse unknown
+  keys and out-of-range values, so a settings load fails naming the path.
+  `RoutedStagesSetting.routed_config(catalog, routes)` assembles the `RoutedConfig`;
+  `CatalogModelSetting.with_llm_defaults` fills each endpoint's unset `llm` fields from the
+  consumer's LLM defaults, and `served_models` lists the endpoints' provider model ids.
+
+- `controllers/grpc/serve.serve_until_signalled` (with `GrpcServing`): serves a `grpc.aio`
+  server beside the `controllers/health` app (`/healthz`, `/readyz` with an injected dependency
+  probe, `/metrics`; `build_health_app`, `start_health_server`) and, on SIGINT or SIGTERM, flips
+  readiness to 503 before draining the server within its grace.
+- `foundation/config/settings.TelemetrySettings`: the OTLP endpoint and trace sample rate, read
+  under their standard OTel names whatever the settings class's prefix;
+  `foundation/observability.start_observability(service, level=, telemetry=, redact_pii=)`
+  configures logging and the trace export from it.
+- `foundation/config/bridge.export_yaml_sections(loader, sections, env_prefix=)`: exports the
+  structured YAML sections a settings field holds whole (lists, nested maps) as JSON
+  `<PREFIX>_<FIELD>` env defaults; an env var already set wins.
+- `clients/decorators/usage_tap.UsageTapProvider` (`tap_usage(inner, record)`): an `LLMProvider`
+  decorator that hands each call's terminal `StreamUsage` to an injected callback (a stream's
+  once it is exhausted; `stream` re-yields only the text), named by the route decision's catalog
+  id when a gateway served the call.
+- `aiohttp` is a declared dependency (it was already installed through `aiobotocore`).
+
+### Changed
+
+- `candidate_ranker_from_config` builds a `cost_aware` ranker without a price table; such a
+  ranker ranks only through `rank_priced`, and its `rank` raises `INVALID_INPUT`. A routed
+  gateway whose ranker is `cost_aware` still fails at boot without `prices`.
+
+## [0.0.48] - 2026-11-06
+
+Python: `techai-webutils` 0.9.3.
+
+### Added
+
+- `SemanticCacheReader.refuse(read)`: reports a hit the caller will not serve (its own check
+  failed, or the entry did not decode) as a miss, with no hit and no saving.
+
+### Changed
+
+- `SemanticCacheReader` reports a hit only once its fate is known. `read` reports a miss at
+  once but no longer reports a hit; `serve` reports the hit after the hook accepts it, and a
+  coded refusal from the hook is reported as a miss. Before, a hit refused after the read (a
+  passage above the caller's clearance, a blocked answer) still counted as a hit with a saving,
+  overstating the hit rate and savings. A caller that reads a hit must now end it in `serve` or
+  `refuse`. `SemanticCacheProxy` does so, and counts an undecodable entry as a miss.
+
+### Security
+
+- Go: `github.com/klauspost/compress` 1.19.1 → 1.20.2 for GO-2026-6865 (a panic on two-block
+  frames), reachable through the CQL driver's gocql session.
+
+## [0.0.47] - 2026-11-05
+
+Go only; `techai-webutils` is unchanged at 0.9.2.
+
+### Changed
+
+- Breaking: `services/suite.Step.Run` takes `*StepEnv` instead of `StepEnv`. A `StepEnv` carries
+  the whole suite environment (152 bytes), so a step copied it on every call and a consumer
+  linting with gocritic's `hugeParam` at its default threshold could not satisfy the check, since
+  the signature was fixed here. Migrate each registered step from
+  `func(ctx context.Context, env suite.StepEnv)` to `func(ctx context.Context, env *suite.StepEnv)`;
+  field access is unchanged.
+- `foundation/decorate.Decorations` holds its collaborators by pointer, so the value shrinks from
+  80 to 32 bytes and stays cheap to pass by value through `client.NewBase`, `Kinds.Build` and
+  every `Decorate`. No signature changes; copies still share one registry, and the zero
+  `Decorations` still decorates nothing (its `Observability()` is the zero `Observability`).
+
+## [0.0.46] - 2026-11-04
+
+Python: `techai-webutils` 0.9.2.
+
+### Added
+
+- Go `clients/outbox/sqs.Config.FairQueues`: the standard queues that are SQS fair queues. Each
+  message sent to one carries the group id a FIFO message would (`Key`, else `Tenant`, else `Lane`)
+  and no deduplication id, so SQS serves other groups ahead of one group's backlog. A queue not
+  listed is sent to as before.
+- `ExecutorConfig.ray_task_memory_bytes` (and `RealRayRuntime(task_memory_bytes=…)`,
+  `ray_worker_factory(memory_bytes=…)`): the memory Ray reserves for each task or pool actor (its
+  `memory` resource). Without it Ray placed tasks by CPU alone, so memory-heavy tasks could share
+  a worker and get it killed together. The default `0` reserves none, as before.
+- `IngestionJob.documents_scanned`: how many source documents a knowledge-base ingestion job has
+  scanned, from Bedrock's `statistics.numberOfDocumentsScanned` (0 when absent). A poll-timeout
+  result keeps the last count, so a caller can tell a slow job from a wedged one.
+
+## [0.0.45] - 2026-11-04
+
+Python: `techai-webutils` 0.9.1.
+
+### Added
+
+- `execution/executor/ray_runtime.RayUnavailableError` (an `UnavailableError`, so still transient):
+  the Ray cluster connection itself is down. `ResilientRayRuntime` raises it once its connect
+  retries are spent.
+- `PooledExecutor(abort_on=…)`: exception types that abort the whole batch. The first one a worker
+  build or `process` raises stops dispatch and is raised from `run` instead of being isolated into
+  one FAIL per item. The default (empty) keeps today's behavior. A caller running it over the
+  Ray actor pool passes `abort_on=(RayUnavailableError,)`.
+- `ExecutorConfig.ray_worker_setup_hook` and `ray_log_encoding` (and the matching `RealRayRuntime`
+  arguments). The hook is the dotted path of a no-argument callable that Ray runs in every worker
+  process before it runs a task or actor (`worker_process_setup_hook`). It is where a consumer
+  configures logging, since a worker never runs the consumer's entrypoint and otherwise logs plain
+  text. The encoding (`TEXT` or `JSON`) sets Ray's own task and actor log format. Both default to
+  blank, which keeps Ray's defaults.
+
+### Fixed
+
+- A unary gRPC call whose reply cannot be deserialized is retried as a transient `UNAVAILABLE`
+  (naming the method) instead of resolving to `None`. grpc-python only logs "Exception
+  deserializing message!" and hands back `None`, so the caller failed later on `None.<field>`,
+  with no retry and no sign of which RPC broke.
+- A Ray Client driver recovers after the Ray head restarts. The dead session stayed in Ray's
+  client registry, so every later `ray.init("ray://…")` in the process was refused ("already
+  connected to the cluster with allow_multiple=True") until the process restarted.
+  `RealRayRuntime` now clears a registered context that has no live connection before connecting,
+  and re-checks a session it established earlier instead of trusting it. Ray can also keep reporting
+  the dead session as initialized and connected, so `warm_up` proves it live with one round trip to
+  the cluster and replaces it when that fails.
+- A Ray Client connection lost while a batch runs fails the batch, not each item. `RealRayRuntime.submit`
+  raises `RayUnavailableError` (and resets the client) on a gRPC or connection error; a task's own
+  failure (`RayTaskError`) is still the item's. `ResilientRayRuntime` connects once per batch rather
+  than per item, and reconnects after a lost connection.
+- `RayExecutor.run` no longer turns an unreachable cluster into one FAIL per item, which let a
+  queue consumer acknowledge and drop the batch. It connects before the first item, and a
+  `RayUnavailableError` (at that connect or mid-batch) stops dispatch and is raised, so the
+  consumer redrives the batch. An item's own `UnavailableError` (a downstream outage) is still a
+  per-item FAIL.
+- `ResilientRayRuntime`'s connect is single-flight. Concurrent `submit`s share one retry sequence,
+  and callers waiting on a sequence that failed share its error, instead of each item running its
+  own: a batch against a down cluster made items x attempts connects.
+- The Ray actor pool (`real_ray_pool.ray_worker_factory`) connects through the same
+  resilience-decorated runtime as the task path (an injectable `RayRuntime`, by default
+  `ray_runtime_from_config`) instead of its own unretried `ray.init`, so it gets the retry,
+  stale-client recovery and `RayUnavailableError` too.
+- Ray actor-pool actors restart (`max_restarts=3`) and re-run lost calls (`max_task_retries=3`)
+  when their process dies, instead of failing every later item routed to their slot.
+  `PooledWorker.process` must tolerate a re-run of the same item.
+
+## [0.0.44] - 2026-11-04
+
+Python: `techai-webutils` 0.9.0.
+
+### Added
+
+- Python semantic cache match tiers. `clients/semantic_cache/tiers.cache_lookup_from_config`
+  builds an ordered `CacheLookup` from `CacheTierConfig` rows (`exact`, `semantic`,
+  `verified`). The first tier that serves wins and stamps `CachedAnswer.tier`. `semantic` and
+  `verified` share one neighbour search per lookup. A per-call `min_similarity` replaces each
+  tier's threshold, so 1.0 means exact repeats only. The `verified` band `[floor, threshold)`
+  serves only what a `CacheVerifier` confirms within `timeout_seconds`. The factory rejects an
+  unknown or duplicate kind, a similarity outside (0, 1], `verified` without a verifier, and a
+  floor at or above its ceiling.
+- `clients/semantic_cache/verifier`: the `stub` verifier (confirms nothing; the default) and
+  `llm` (`LlmCacheVerifier`, which confirms only on a reply starting with "yes"; a failed call
+  confirms nothing), built by `cache_verifier_from_config`.
+- `clients/semantic_cache/admission`: `allow_all` and `rules` (`CacheAdmission.admits(query,
+  extra_phrases)` refuses a query containing a listed phrase as a whole word, case-insensitive),
+  built by `cache_admission_from_config`.
+- `clients/semantic_cache/reader.SemanticCacheReader`: the proxy's read, serve and write steps,
+  callable by hand from a workflow-level cache (`read` → `CacheRead`, `serve`, `write` with a
+  per-call TTL). Telemetry and fail-open behaviour are the same as the proxy's.
+- `SemanticCacheProxy(..., lookup=)` reads through an injected tier chain. Without one it reads
+  `cache.lookup` at `min_similarity`, as before.
+- `SemanticCacheConfig.strip_trailing_punctuation` drops trailing `.?!` before the exact key, so
+  "refund window?" repeats "refund window".
+- The `semantic_cache.lookup` span carries `semantic_cache.tier` on a hit.
+
+### Changed
+
+- **Breaking:** `SemanticCache` gains the abstract primitives `exact(query, namespace)` (the
+  normalized repeat, no embedding) and `nearest(query, namespace)` (the nearest neighbour, no
+  threshold). `lookup` is now concrete: `exact`, then `nearest` at or above `min_similarity`. A
+  custom backend must implement both primitives.
+- `semantic_cache_hits_total` gains the label `tier`, and the first lookup of a label set creates
+  a zero hit series for every tier. Hit-rate queries summing over the counter are unaffected; a
+  query matching the old label set exactly must add `tier` or sum it away.
+- The redis backend's below-threshold miss reads the payload once more (`nearest` returns the
+  neighbour; the threshold is applied by the caller).
+
+## [0.0.43] - 2026-11-03
+
+Python: `techai-webutils` 0.8.3.
+
+### Fixed
+
+- Go Cassandra analytics `Store.Aggregate` starts its read at the start of the grain
+  bucket the window (or a pushed-down `ts` clause) begins in. A row is stamped at its
+  bucket's start, so filtering rows on `ts >= from` dropped the bucket a window starts
+  in: a "last 24h" query of a day table lost the whole current day, and an hourly trend
+  its first hour. A bucket the window only partly covers is now counted whole.
+
+- Python `SemanticCacheProxy` creates the `semantic_cache_hits_total`, `…_misses_total` and
+  `…_saving_usd_total` series of an `org_id`/`path`/`workspace` label set at 0 on its first
+  lookup. Before, each series appeared only on its first increment, already at 1, so
+  Prometheus' `increase()` read it as no change and a workspace's first hit never reached a hit
+  rate. A hit always follows the miss that stored its answer, so the first hit now counts.
+
+## [0.0.42] - 2026-11-03
+
+Python: `techai-webutils` 0.8.2.
+
+### Added
+
+- Go `cache.KindMemory`: an in-process `ByteCache` (`clients/cache/memory`) — bounded, least
+  recently used, each entry expiring at its TTL (`Config.DefaultTTL` for a zero TTL).
+  `Config.Memory.MaxEntries` bounds it (`memory.DefaultMaxEntries`, 10,000, when zero). Each
+  replica holds its own copy, so it suits a value read often that rarely changes, where no
+  shared cache is deployed.
+
+### Fixed
+
+- Go `exponential.Retrier.Retry` and `RetryWithResult` charge the context's retry budget only
+  for the attempts after the first. Before, every first attempt consumed a unit, so a request
+  making more calls than its budget (e.g. `DefaultRetryBudget`, 10) failed with
+  `ErrRetryBudgetExhausted` though no call had failed. A budget of N now allows N retries.
+- Python `TracingServerInterceptor` attaches the inbound context (W3C trace context and
+  baggage) for the whole server call. Before, it only parented the server span on it, so a
+  handler, and the spans and logs it made, could not read the caller's baggage.
+
+## [0.0.41] - 2026-11-03
+
+Python: `techai-webutils` 0.8.1.
+
+### Added
+
+- Python `EmbeddingKind.BEDROCK`: `BedrockEmbeddingProvider` embeds with an Amazon Titan text
+  model (`amazon.titan-embed-text-v2:0`) through bedrock-runtime `InvokeModel`, one call per text,
+  with the configured `dimension` and normalized vectors. `token_count` is Titan's
+  `inputTextTokenCount`. A vector of the wrong length is `INTERNAL`, and botocore failures map
+  through `botocore_error_to_app_error`. The client opens on the first embed and is bounded by
+  `EmbeddingConfig.timeout_seconds`; `EmbeddingConfig.region` names its region. A deployment with
+  no local Ollama can now run the semantic cache.
+- Python `RouteContext.team_id` and `RouteContext.user_id`: who a call is charged to. The
+  `analytics` route-decision sink adds them to each `route_decisions` fact as the `team` and
+  `user` dims when set.
+
+### Changed
+
+- Python `SemanticCacheProxy` counters carry an `org_id` label (from `fact_dimensions`; empty
+  without one): `semantic_cache_{hits,misses}_total` and `semantic_cache_saving_usd_total` are now
+  labelled `{org_id,path,workspace}`, and the new `semantic_cache_lookups_total` counts every lookup,
+  so a dashboard reads one org's hit rate as hits over lookups. Dashboards that sum the counters are
+  unaffected; a query that matched on the exact label set needs the new label.
+- Python `route_decisions` facts name the workspace in a `workspace` dim (was `workspace_id`),
+  matching the other cubes.
+
+### Fixed
+
+- Python `RedisSemanticCache` runs on Valkey Search (Valkey 9 with the `search` module, as
+  ElastiCache serves it) as well as RediSearch. Before, every lookup on Valkey failed open into a
+  miss: the KNN query sorted on its score alias, which Valkey Search rejects, and redis-py could
+  not parse Valkey's `FT.SEARCH` reply. `invalidate_all` evicted nothing there, because
+  `FT.DROPINDEX … DD` is rejected. The lookup now issues `FT.SEARCH` directly and reads either
+  reply shape; `invalidate_all` drops the index and unlinks the index documents itself. The
+  integration suite runs on `redis/redis-stack-server:7.4.0-v1` and `valkey/valkey-bundle:9.1.4`.
+
 ## [0.0.40] - 2026-11-01
 
 Python: `techai-webutils` 0.8.0.

@@ -17,9 +17,12 @@ class StubSemanticCache(SemanticCache):
     """Always misses, so the default graph behaves exactly as an uncached one and needs no infra."""
 
     @override
-    async def lookup(
-        self, query: str, namespace: CacheNamespace, *, min_similarity: float
-    ) -> CachedAnswer | None:
+    async def exact(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
+        """Miss."""
+        return None
+
+    @override
+    async def nearest(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
         """Miss."""
         return None
 

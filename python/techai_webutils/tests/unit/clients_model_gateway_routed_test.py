@@ -342,3 +342,32 @@ async def test_injected_policy_store_replaces_the_configured_one(
     assert (await injected.complete(_MESSAGES)).model == "haiku-use1"
     store.policy.assert_called_with("org-1", "")
     assert (await configured.complete(_MESSAGES)).model == "haiku-use1"
+
+
+def test_cost_aware_gateway_without_prices_fails_at_boot(
+    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+) -> None:
+    """Test that a routed gateway ranking by cost refuses to boot with no price table.
+
+    **Why this test is important:**
+      - The gateway ranks with the one table it is given at boot; without it every request
+        would fail, so the defect must stop the boot instead of the first call.
+
+    **What it tests:**
+      - ``ranker.kind: cost_aware`` with no ``prices`` raises ``AppError(INVALID_INPUT)``
+    """
+    config = GatewayConfig(
+        kind=GatewayKind.ROUTED,
+        routed=RoutedConfig(
+            catalog=catalog_raw, routes=routes_raw, ranker={"kind": "cost_aware"}
+        ),
+    )
+
+    with pytest.raises(AppError) as excinfo:
+        _ = new_model_gateway_from_config(
+            config,
+            provider_factory=lambda llm: StubLlmProvider(llm.model),
+            priced_ids=None,
+        )
+
+    assert excinfo.value.code == ErrorCode.INVALID_INPUT

@@ -77,6 +77,43 @@ def test_analytics_sink_publishes_a_route_decisions_fact() -> None:
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
+def test_analytics_sink_attributes_the_decision_to_workspace_team_and_user() -> None:
+    """Test that a ``route_decisions`` fact names the workspace, and the team and user when known.
+
+    **Why this test is important:**
+      - Cost per team and per user is read from these facts, and a dashboard filters every cube
+        by the same ``workspace`` dim; a fact without them can't be charged to anyone.
+
+    **What it tests:**
+      - a context with ``team_id`` and ``user_id`` yields dims ``workspace``, ``team`` and ``user``
+      - a context without them yields ``workspace`` and no ``team`` or ``user`` dim
+    """
+    facts = MagicMock(spec=FactPublisher)
+    sink = route_decision_sink_from_config({"kind": "analytics"}, facts=facts)
+    decision = RouteDecision(route="generate", model_id="anthropic/sonnet")
+    who = RouteContext(
+        tenant_id="org-1",
+        workspace_id="ws-1",
+        step="generate",
+        team_id="t1",
+        user_id="u1",
+    )
+
+    sink.record(decision, who)
+    sink.record(decision, _CTX)
+
+    named, anonymous = (call.args[0][0] for call in facts.publish.call_args_list)
+    assert (named.dims["workspace"], named.dims["team"], named.dims["user"]) == (
+        "ws-1",
+        "t1",
+        "u1",
+    )
+    assert anonymous.dims["workspace"] == "ws-1"
+    assert "team" not in anonymous.dims
+    assert "user" not in anonymous.dims
+    assert "workspace_id" not in named.dims
+
+
 @pytest.mark.asyncio
 async def test_decision_carries_actual_tokens_and_cost(
     catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
@@ -119,7 +156,7 @@ async def test_decision_carries_actual_tokens_and_cost(
     assert decision.actual_cost == expected.quantize(Decimal("0.000001"))
     assert decision.estimated_cost is not None
     (fact,) = facts.publish.call_args.args[0]
-    assert fact.dims["workspace_id"] == "ws-1"
+    assert fact.dims["workspace"] == "ws-1"
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,7 @@ from techai_webutils.execution.executor.pooled import (
     PooledExecutor,
     PooledWorker,
 )
+from techai_webutils.execution.executor.ray_runtime import RayUnavailableError
 
 
 @dataclass
@@ -149,6 +150,36 @@ class TestPooledExecutor:
 
         assert batch.failed == 1
         assert batch.succeeded == 3
+
+    @pytest.mark.asyncio
+    async def test_abort_on_error_raises_for_the_batch_and_stops_dispatch(
+        self,
+    ) -> None:
+        """Test that an ``abort_on`` error from a worker build aborts the batch instead of failing items.
+
+        **Why this test is important:**
+          - On the Ray actor-pool path a cluster that cannot be reached fails every worker build alike;
+            isolating that into one FAIL per item let a queue consumer acknowledge (and so drop) the
+            whole batch instead of redriving it.
+
+        **What it tests:**
+          - With ``abort_on=(RayUnavailableError,)`` and a factory that raises it, ``run`` raises
+            ``RayUnavailableError`` after a single build attempt — the other items are not dispatched.
+        """
+        builds = 0
+
+        async def unreachable() -> PooledWorker[int]:
+            nonlocal builds
+            builds += 1
+            await asyncio.sleep(0)
+            msg = "ray cluster connect failed"
+            raise RayUnavailableError(msg)
+
+        ex = PooledExecutor(unreachable, pool_size=1, abort_on=(RayUnavailableError,))
+
+        with pytest.raises(RayUnavailableError):
+            await ex.run([0, 1, 2, 3], concurrency=1)
+        assert builds == 1
 
     @pytest.mark.asyncio
     async def test_bounds_concurrency(self) -> None:

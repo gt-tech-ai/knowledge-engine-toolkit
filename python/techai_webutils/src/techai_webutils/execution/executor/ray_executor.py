@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from techai_webutils.execution.engine.fan_out import fan_out
+from techai_webutils.execution.executor.ray_runtime import RayUnavailableError
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Sequence
@@ -52,11 +53,31 @@ class RayExecutor:
         ``fan_out``'s semaphore bounds how many ``submit`` coroutines (in-flight Ray tasks) run at
         once, so the cluster is never flooded; per-item isolation and the exactly-once observer are
         inherited unchanged, so a RayTaskError becomes a single FAIL rather than aborting the batch.
+
+        An unreachable cluster is NOT a per-item failure: the connection is established before the
+        first item, and a ``RayUnavailableError`` (from that connect or from one mid-batch) aborts the
+        batch — the remaining items are not dispatched and the error is raised to the caller, so a
+        queue consumer redrives the batch instead of recording every item as failed.
+
+        Raises:
+            RayUnavailableError: When the Ray cluster cannot be reached.
+
         """
+        await self._runtime.warm_up()
+        unavailable: list[RayUnavailableError] = []
 
         async def dispatch(item: T) -> StepResult:
-            return await self._runtime.submit(fn, item)
+            if unavailable:
+                raise unavailable[0]
+            try:
+                return await self._runtime.submit(fn, item)
+            except RayUnavailableError as exc:
+                unavailable.append(exc)
+                raise
 
-        return await fan_out(
+        batch = await fan_out(
             items, concurrency, dispatch, self._observer, name=self._name
         )
+        if unavailable:
+            raise unavailable[0]
+        return batch

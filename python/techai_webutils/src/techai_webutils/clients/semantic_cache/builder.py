@@ -1,7 +1,7 @@
 """Config-selected ``SemanticCache`` factory (the ``clients/token_ledger/builder.py`` pattern).
 
 ``SemanticCacheConfig.kind`` selects ``stub`` (always miss, the default) or ``redis`` (the injected
-KV ``Cache`` for payloads + the ``EmbeddingProvider`` + a RediSearch KNN index on the app's Redis).
+KV ``Cache`` for payloads + the ``EmbeddingProvider`` + a search-module KNN index on the app's Redis or Valkey).
 Collaborators are injected, never built here. An unknown kind raises ``AppValueError``; ``redis``
 without its collaborators raises ``AppError(INVALID_INPUT)``. The Redis backend is imported lazily.
 """
@@ -30,8 +30,8 @@ class SemanticCacheKind(StrEnum):
     STUB = "stub"
     """Always miss (the default; zero infrastructure)."""
     REDIS = "redis"
-    """KV payloads + a RediSearch cosine KNN index on the same Redis."""
-    # QDRANT reserved: a vector-store-backed index, when a deployment has no RediSearch.
+    """KV payloads + a cosine KNN index on the same server (RediSearch or Valkey Search)."""
+    # QDRANT reserved: a vector-store-backed index, when a deployment has no search module.
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,7 +47,10 @@ class SemanticCacheConfig:
     index_prefix: str = "sc"
     """Key prefix for the payload keys, index documents and the index name."""
     normalize: bool = True
-    """Lower-case and whitespace-collapse queries before the exact-repeat fast path."""
+    """Lower-case and whitespace-collapse queries before keying them (store and ``exact`` agree)."""
+    strip_trailing_punctuation: bool = False
+    """Also drop trailing punctuation (``?``, ``.``, ``!``) when normalizing, so "What is X?" and
+    "what is x" are one exact repeat."""
 
 
 def semantic_cache_from_config(

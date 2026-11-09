@@ -163,6 +163,7 @@ class PollingIngestor(
                     job_id=job.job_id,
                     state=IngestionJobState.FAILED,
                     error=POLL_TIMEOUT_ERROR,
+                    documents_scanned=job.documents_scanned,
                 )
             await self._sleep(self._poll_interval)
             job = await self._inner.get_ingestion_job(

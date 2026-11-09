@@ -1,6 +1,7 @@
 """The ``analytics`` route-decision sink: one ``route_decisions`` fact per decision.
 
-Dims carry who and what (route, model, endpoint, decider, mode, reason, shadow, workspace, step);
+Dims carry who and what (route, model, endpoint, decider, mode, reason, shadow, step, and the
+``workspace`` — plus ``team`` and ``user`` when the context names them, for cost attribution);
 measures carry how much (attempts, tokens, confidence and the estimated and actual cost when
 known). Publishing goes through the injected ``FactPublisher``, which never blocks.
 """
@@ -40,21 +41,26 @@ class AnalyticsRouteDecisionSink:
             measures["estimated_cost"] = float(decision.estimated_cost)
         if decision.actual_cost is not None:
             measures["actual_cost"] = float(decision.actual_cost)
+        dims = {
+            "route": decision.route,
+            "model_id": decision.model_id,
+            "endpoint": decision.endpoint,
+            "decider": decision.decider,
+            "mode": decision.mode,
+            "reason": decision.reason,
+            "shadow": "true" if decision.shadow else "false",
+            "workspace": ctx.workspace_id,
+            "step": ctx.step,
+        }
+        if ctx.team_id:
+            dims["team"] = ctx.team_id
+        if ctx.user_id:
+            dims["user"] = ctx.user_id
         fact = Fact(
             cube=CUBE,
             org_id=ctx.tenant_id,
             ts=datetime.now(UTC),
-            dims={
-                "route": decision.route,
-                "model_id": decision.model_id,
-                "endpoint": decision.endpoint,
-                "decider": decision.decider,
-                "mode": decision.mode,
-                "reason": decision.reason,
-                "shadow": "true" if decision.shadow else "false",
-                "workspace_id": ctx.workspace_id,
-                "step": ctx.step,
-            },
+            dims=dims,
             measures=measures,
             idempotency_key=str(uuid.uuid4()),
         )

@@ -189,3 +189,30 @@ class ObservabilitySettings(BaseAppSettings):
     observability_metrics_enabled: bool = Field(
         default=True, description="Emit Prometheus metrics."
     )
+
+
+class TelemetrySettings(BaseSettings):
+    """OpenTelemetry export settings, read under the standard OTel variable names.
+
+    A service's settings class mixes it in; each field's ``validation_alias`` is the standard
+    variable, so it is read unprefixed whatever the class's ``env_prefix``. It derives from
+    ``BaseSettings`` rather than ``BaseAppSettings`` and sets no ``env_prefix``, so mixing it in
+    never resets the service's own prefix. ``foundation.observability.start_observability``
+    reads it.
+    """
+
+    model_config = SettingsConfigDict(frozen=True, extra="ignore")
+
+    otel_exporter_otlp_endpoint: str = Field(
+        default="localhost:4317",
+        validation_alias="OTEL_EXPORTER_OTLP_ENDPOINT",
+        description="OTLP collector endpoint (OTEL_EXPORTER_OTLP_ENDPOINT).",
+    )
+    trace_sample_rate: str = Field(
+        default="",
+        validation_alias="TRACE_SAMPLE_RATE",
+        description=(
+            "Fraction of traces sampled, 0.0-1.0 (TRACE_SAMPLE_RATE); empty or invalid "
+            "samples every trace."
+        ),
+    )

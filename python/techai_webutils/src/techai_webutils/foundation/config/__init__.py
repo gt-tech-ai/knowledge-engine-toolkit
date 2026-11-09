@@ -2,6 +2,7 @@
 
 from techai_webutils.foundation.config.bridge import (
     apply_yaml_defaults,
+    export_yaml_sections,
     initialize_config,
     reset_config,
 )
@@ -16,6 +17,7 @@ from techai_webutils.foundation.config.settings import (
     S3Settings,
     ServerSettings,
     SQSSettings,
+    TelemetrySettings,
 )
 
 __all__ = [
@@ -27,8 +29,10 @@ __all__ = [
     "S3Settings",
     "SQSSettings",
     "ServerSettings",
+    "TelemetrySettings",
     "YamlConfigLoader",
     "apply_yaml_defaults",
+    "export_yaml_sections",
     "initialize_config",
     "load_config",
     "reset_config",

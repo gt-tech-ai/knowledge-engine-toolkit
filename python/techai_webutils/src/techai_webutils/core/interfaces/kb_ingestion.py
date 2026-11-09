@@ -49,6 +49,9 @@ class IngestionJob:
     """Current lifecycle state; ``is_terminal`` tells the poller when to stop."""
     error: str = ""
     """Failure detail when ``state is FAILED`` (empty on success or when no reason was reported)."""
+    documents_scanned: int = 0
+    """How many source documents the job has scanned so far (0 when the provider reports none); a
+    count that moves between polls tells a slow job from a wedged one."""
 
     @property
     def is_terminal(self) -> bool:

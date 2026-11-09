@@ -215,9 +215,6 @@ async def test_cost_aware_drops_below_quality_floor_unless_degrade_on_budget(
     assert "meta/small@local" not in strict
     assert rejections["meta/small@local"] == "quality_floor"
     assert "meta/small@local" in lenient
-    with pytest.raises(AppError) as caught:
-        candidate_ranker_from_config({"kind": "cost_aware"})
-    assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
 def test_routes_share_the_catalog(
@@ -234,3 +231,71 @@ def test_routes_share_the_catalog(
     assert parse_routes(routes_raw, _catalog(catalog_raw))["generate"].default_model == (
         "anthropic/sonnet"
     )
+
+
+@pytest.mark.asyncio
+async def test_cost_aware_ranks_under_each_requests_own_prices(
+    catalog_raw: dict[str, Any],
+) -> None:
+    """Test that one ranker ranks each request under the price table that request carries.
+
+    **Why this test is important:**
+      - A remote planner receives its candidates' prices with every request; building a new
+        ranker per request to bind them re-reads the config on the hot path, and binding one
+        table at boot would rank every tenant under the wrong prices.
+
+    **What it tests:**
+      - a ``cost_aware`` ranker built with no table orders by cost under the table passed to
+        ``rank_priced``: the small model first under the fixture prices, Haiku first once a
+        second table makes Haiku the cheapest, from the same ranker instance
+    """
+    catalog = _catalog(catalog_raw)
+    ranker = candidate_ranker_from_config({"kind": "cost_aware"})
+    cheap_haiku = PriceTable(
+        prices={
+            "anthropic/sonnet": ModelPrice(
+                Decimal("0.003"), Decimal("0.015"), Decimal(0)
+            ),
+            "anthropic/haiku": ModelPrice(
+                Decimal("0.00001"), Decimal("0.00001"), Decimal(0)
+            ),
+            "meta/small": ModelPrice(Decimal("0.01"), Decimal("0.02"), Decimal(0)),
+        },
+        version="request",
+    )
+    route_input = PlanInput(query="q", candidates=catalog.refs, requirements=_REQ)
+    ctx = RouteContext(tenant_id="org-1", slo="cost")
+
+    first = await ranker.rank_priced(ctx, _GEN, catalog.refs, route_input, _PRICES)
+    second = await ranker.rank_priced(ctx, _GEN, catalog.refs, route_input, cheap_haiku)
+
+    assert first.ordered[0].key == "meta/small@local"
+    assert second.ordered[0].key == "anthropic/haiku@use1"
+
+
+@pytest.mark.asyncio
+async def test_cost_aware_without_a_table_refuses_an_unpriced_rank(
+    catalog_raw: dict[str, Any],
+) -> None:
+    """Test that a ranker built without prices refuses ``rank``, which has none to rank by.
+
+    **Why this test is important:**
+      - Ranking by cost with no prices would silently treat every model as unpriced and
+        order them by accident; the caller must learn it forgot the table.
+
+    **What it tests:**
+      - ``rank`` on a ``cost_aware`` ranker with no construction table raises
+        ``AppError(INVALID_INPUT)``
+    """
+    catalog = _catalog(catalog_raw)
+    ranker = candidate_ranker_from_config({"kind": "cost_aware"})
+
+    with pytest.raises(AppError) as excinfo:
+        _ = await ranker.rank(
+            RouteContext(),
+            _GEN,
+            catalog.refs,
+            PlanInput(query="q", candidates=catalog.refs),
+        )
+
+    assert excinfo.value.code == ErrorCode.INVALID_INPUT

@@ -17,6 +17,7 @@ from techai_webutils.clients.model_gateway.routed.planner import route_planner_f
 from techai_webutils.clients.model_gateway.routed.ranker import (
     candidate_ranker_from_config,
 )
+from techai_webutils.clients.token_ledger.cost import PriceTable
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.model_gateway import RouteContext
 from techai_webutils.core.types.routing import Classification, PlanInput
@@ -82,6 +83,38 @@ async def test_static_order_follows_route_preference_then_catalog(
         "meta/small@local",
     ]
     assert result.rejections == {}
+
+
+@pytest.mark.asyncio
+async def test_static_order_ignores_the_requests_prices(
+    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+) -> None:
+    """Test that the static ranker's per-request entry point ranks exactly as ``rank``.
+
+    **Why this test is important:**
+      - A caller that ranks with each request's prices may select ``static_order`` by
+        config; it must keep the route's model order, never fail for the unused table.
+
+    **What it tests:**
+      - ``rank_priced`` with a price table returns the same order as ``rank``
+    """
+    catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
+    routes = parse_routes(routes_raw, catalog)
+    ranker = candidate_ranker_from_config({"kind": "static_order"})
+    route_input = PlanInput(query="q", candidates=catalog.refs)
+
+    plain = await ranker.rank(
+        RouteContext(), routes["rewrite"], catalog.refs, route_input
+    )
+    priced = await ranker.rank_priced(
+        RouteContext(),
+        routes["rewrite"],
+        catalog.refs,
+        route_input,
+        PriceTable(prices={}, version="empty"),
+    )
+
+    assert priced.ordered == plain.ordered
 
 
 @pytest.mark.asyncio

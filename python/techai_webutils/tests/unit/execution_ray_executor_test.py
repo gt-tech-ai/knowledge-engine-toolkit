@@ -12,6 +12,7 @@ from unittest.mock import create_autospec
 
 import pytest
 
+from techai_webutils.core.errors.errors import UnavailableError
 from techai_webutils.core.interfaces.execution import BatchResult, Executor, StepResult
 from techai_webutils.execution.executor.asyncio_executor import AsyncioExecutor
 from techai_webutils.execution.executor.factory import (
@@ -20,7 +21,7 @@ from techai_webutils.execution.executor.factory import (
     executor_from_config,
 )
 from techai_webutils.execution.executor.ray_executor import RayExecutor
-from techai_webutils.execution.executor.ray_runtime import RayRuntime
+from techai_webutils.execution.executor.ray_runtime import RayRuntime, RayUnavailableError
 
 
 async def _ok(item: int) -> StepResult:
@@ -86,6 +87,83 @@ class TestRayExecutor:
         runtime.submit.side_effect = submit
         ex = RayExecutor(runtime)
         batch = await ex.run(_ok, [0, 1, 2], concurrency=3)
+        assert batch.failed == 1
+        assert batch.succeeded == 2
+
+    @pytest.mark.asyncio
+    async def test_unreachable_cluster_raises_instead_of_failing_every_item(
+        self,
+    ) -> None:
+        """Test that a cluster that cannot be reached aborts the batch rather than failing each item.
+
+        **Why this test is important:**
+          - When the connect failed per item, the batch "completed" with every item FAILed and its queue
+            message was acknowledged — the work was silently dropped instead of redriven.
+
+        **What it tests:**
+          - With ``warm_up`` raising ``RayUnavailableError``, ``run`` raises it and dispatches no item.
+        """
+        runtime = _local_runtime()
+        runtime.warm_up.side_effect = RayUnavailableError("ray cluster connect failed")
+        ex = RayExecutor(runtime)
+
+        with pytest.raises(RayUnavailableError):
+            await ex.run(_ok, [0, 1, 2], concurrency=3)
+        runtime.submit.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_cluster_lost_mid_batch_stops_dispatch_and_raises(self) -> None:
+        """Test that losing the cluster mid-batch stops dispatching and raises for the whole batch.
+
+        **Why this test is important:**
+          - A head that dies mid-batch makes every later item fail the same way; dispatching them all
+            just to record N identical FAILs wastes the retry budget and still drops the batch.
+
+        **What it tests:**
+          - Serially over five items, item 1's submit raises ``RayUnavailableError``: ``run`` raises it
+            and items 2-4 are never submitted.
+        """
+        runtime = _local_runtime()
+
+        async def submit(
+            fn: Callable[[int], Awaitable[StepResult]], item: int
+        ) -> StepResult:
+            if item == 1:
+                msg = "ray cluster connect failed"
+                raise RayUnavailableError(msg)
+            return await fn(item)
+
+        runtime.submit.side_effect = submit
+        ex = RayExecutor(runtime)
+
+        with pytest.raises(RayUnavailableError):
+            await ex.run(_ok, [0, 1, 2, 3, 4], concurrency=1)
+        assert runtime.submit.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_a_mapper_unavailable_error_stays_a_per_item_failure(self) -> None:
+        """Test that an item's own UnavailableError (a downstream outage) is still isolated to that item.
+
+        **Why this test is important:**
+          - A mapper's dependency outage reaches the driver as an ``UnavailableError``; treating it as a
+            cluster outage would abort and redrive whole batches for one item's flaky S3 read.
+
+        **What it tests:**
+          - A plain ``UnavailableError`` from one item's submit yields one FAIL and two PASS; no raise.
+        """
+        runtime = _local_runtime()
+
+        async def submit(
+            fn: Callable[[int], Awaitable[StepResult]], item: int
+        ) -> StepResult:
+            if item == 1:
+                msg = "s3 unavailable"
+                raise UnavailableError(msg)
+            return await fn(item)
+
+        runtime.submit.side_effect = submit
+        batch = await RayExecutor(runtime).run(_ok, [0, 1, 2], concurrency=3)
+
         assert batch.failed == 1
         assert batch.succeeded == 2
 

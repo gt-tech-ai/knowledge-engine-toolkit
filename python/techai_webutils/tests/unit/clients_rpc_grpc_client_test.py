@@ -36,6 +36,18 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
 
+_UNDECODABLE = b"\xff"
+"""A reply ``_decode`` rejects, standing in for a corrupt protobuf message on the wire."""
+
+
+def _decode(data: bytes) -> bytes:
+    """Deserialize a reply, rejecting ``_UNDECODABLE`` the way a protobuf parse rejects corrupt bytes."""
+    if data == _UNDECODABLE:
+        msg = "Wire format was corrupt"
+        raise ValueError(msg)
+    return data
+
+
 class _Service:
     """A generic test service recording the metadata of every call."""
 
@@ -58,6 +70,13 @@ class _Service:
         if self.calls <= self.failures:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "try again")
         return request
+
+    async def garbled(
+        self, request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
+    ) -> bytes:
+        """Answer an undecodable reply on the first call, then echo the request."""
+        self._record(context)
+        return _UNDECODABLE if self.calls == 1 else request
 
     async def missing(
         self, _request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
@@ -87,6 +106,7 @@ async def _serve(
     server = grpc.aio.server()
     handlers = {
         "Flaky": grpc.unary_unary_rpc_method_handler(service.flaky),
+        "Garbled": grpc.unary_unary_rpc_method_handler(service.garbled),
         "Missing": grpc.unary_unary_rpc_method_handler(service.missing),
         "Stream": grpc.unary_stream_rpc_method_handler(service.stream),
     }
@@ -131,6 +151,28 @@ async def test_a_transient_status_is_retried_through_the_tier() -> None:
 
     assert await _serve(service, run, _retrying()) == b"hi"
     assert service.calls == 3
+
+
+@pytest.mark.asyncio
+async def test_an_undecodable_reply_is_retried_instead_of_returning_none() -> None:
+    """A reply grpc-python cannot deserialize is retried, never handed to the caller as None.
+
+    Why this test is important:
+      - grpc-python logs "Exception deserializing message!" and resolves the call to None when a
+        reply does not parse; the caller then fails on ``None.<field>`` with no retry and no
+        sign of which RPC broke.
+
+    What it tests:
+      - With one undecodable reply, the call is attempted twice and returns the second reply.
+    """
+    service = _Service()
+
+    async def run(channel: grpc.aio.Channel) -> bytes:
+        call = channel.unary_unary("/test.Svc/Garbled", response_deserializer=_decode)
+        return await call(b"hi")
+
+    assert await _serve(service, run, _retrying()) == b"hi"
+    assert service.calls == 2
 
 
 @pytest.mark.asyncio
