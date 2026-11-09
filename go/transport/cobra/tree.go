@@ -11,10 +11,11 @@ import (
 	spf "github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Tree returns the command tree root describes. A group (no Op) prints its help; a leaf
@@ -314,10 +315,10 @@ func defineSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 
 	switch f.Type {
 	case types.FlagString:
-		s, _ := def.(string)
+		s := stdx.As[string](def)
 		fs.StringP(f.Name, f.Short, s, f.Usage)
 	case types.FlagInt:
-		n, _ := def.(int)
+		n := stdx.As[int](def)
 		fs.IntP(f.Name, f.Short, n, f.Usage)
 	case types.FlagStrings:
 		fs.StringSliceP(f.Name, f.Short, strs(def), f.Usage)
@@ -331,7 +332,7 @@ func defineSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 
 		fs.DurationP(f.Name, f.Short, d, f.Usage)
 	case "", types.FlagBool:
-		b, _ := def.(bool)
+		b := stdx.As[bool](def)
 		fs.BoolP(f.Name, f.Short, b, f.Usage)
 	default:
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(

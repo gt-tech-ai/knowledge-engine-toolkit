@@ -7,7 +7,7 @@ package process
 import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/process/exec"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/process/stub"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 

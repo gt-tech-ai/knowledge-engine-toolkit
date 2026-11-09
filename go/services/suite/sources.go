@@ -155,7 +155,12 @@ func guardEntry(g interfaces.Guard, cb interfaces.Codebase) Entry {
 			return Build(env, m.Verb, m.Name, m.Group, func(
 				ctx context.Context, _ interfaces.CommandRunner, _ string,
 			) (types.StepResults, error) {
-				step := guardStep(g.Run(ctx, cb), m.Name, m.Group, env.Opts.Strict)
+				step := guardStep(
+					g.Run(ctx, cb),
+					m.Name,
+					m.Group,
+					strictFlag(env.Opts.Strict),
+				)
 
 				return types.StepResults{step}, nil
 			})
@@ -163,10 +168,13 @@ func guardEntry(g interfaces.Guard, cb interfaces.Codebase) Entry {
 	}
 }
 
+// strictFlag names the strict option in a signature.
+type strictFlag bool
+
 // guardStep turns a verdict into a step. Strict mode fails a skip unless it came from
 // the cache; a failure always carries an error text.
-func guardStep(v types.Verdict, name, group string, strict bool) types.StepResult {
-	if strict && v.Status == types.StatusSkip && v.Detail != types.CachedDetail {
+func guardStep(v types.Verdict, name, group string, strict strictFlag) types.StepResult {
+	if bool(strict) && v.Status == types.StatusSkip && v.Detail != types.CachedDetail {
 		v.Status = types.StatusFail
 	}
 

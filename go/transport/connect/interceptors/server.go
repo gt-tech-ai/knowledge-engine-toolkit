@@ -7,7 +7,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc/wire"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
 )
@@ -73,8 +73,10 @@ func native(d decorate.Deps) func(decorate.Layer) ([]connect.Interceptor, bool) 
 			decorate.LayerRateLimit:
 			return nil, false
 		default:
-			return nil, false
+			// Any other value takes the shared result below.
 		}
+
+		return nil, false
 	}
 }
 
@@ -102,8 +104,11 @@ func nativeLogging(d decorate.Deps) []connect.Interceptor {
 	)
 }
 
+// presentFlag names the present option in a signature.
+type presentFlag bool
+
 // when returns the interceptor build makes, or none when its collaborator is absent.
-func when(present bool, build func() connect.Interceptor) []connect.Interceptor {
+func when(present presentFlag, build func() connect.Interceptor) []connect.Interceptor {
 	if !present {
 		return nil
 	}
@@ -148,7 +153,7 @@ func (i tierInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 }
 
 // WrapStreamingClient is a no-op — this is a server-side interceptor.
-func (i tierInterceptor) WrapStreamingClient(
+func (tierInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next
@@ -177,7 +182,7 @@ func (i tierInterceptor) WrapStreamingHandler(
 
 // connectError returns the handler's own error unchanged, and an error the tier
 // produced (or rewrapped) as a sanitized *connect.Error of its code; the real error is
-// captured for the request log (core/errors.Capture).
+// captured for the request log (core/apperr.Capture).
 func connectError(ctx context.Context, err, handlerErr error) error {
 	if err == nil || apperr.Identical(err, handlerErr) {
 		return err

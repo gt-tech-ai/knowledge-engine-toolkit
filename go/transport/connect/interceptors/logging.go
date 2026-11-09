@@ -7,7 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -82,7 +82,7 @@ func clientFaultStatus(code connect.Code) (int, bool) {
 }
 
 // loggingInterceptor emits the single per-request access log for Connect RPCs — unary and
-// server-streaming. It installs a request error sink (core/errors.WithSink) so the
+// server-streaming. It installs a request error sink (core/apperr.WithSink) so the
 // handler's error mapper can record the real domain error; on failure it logs exactly one
 // line carrying that real error (not the sanitized client message) plus the procedure,
 // duration, and HTTP status.
@@ -95,7 +95,7 @@ type loggingInterceptor struct {
 }
 
 // NewLoggingInterceptor returns the single per-request access log for Connect RPCs (unary
-// and server-streaming). It installs a request error sink (core/errors.WithSink) so the
+// and server-streaming). It installs a request error sink (core/apperr.WithSink) so the
 // handler's error mapper can record the real domain error; on failure this interceptor
 // logs exactly one line carrying that real error (not the sanitized client message) plus
 // the procedure, duration, and HTTP status.
@@ -123,7 +123,7 @@ func (i loggingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc 
 }
 
 // WrapStreamingClient is a no-op — this is a server-side interceptor.
-func (i loggingInterceptor) WrapStreamingClient(
+func (loggingInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next
@@ -145,7 +145,7 @@ func (i loggingInterceptor) WrapStreamingHandler(
 }
 
 // logAccess emits the one access line for a completed RPC (unary or stream). Shared by
-// both wrap paths; ctx must already carry the request error sink (core/errors.WithSink).
+// both wrap paths; ctx must already carry the request error sink (core/apperr.WithSink).
 func (i loggingInterceptor) logAccess(
 	ctx context.Context, procedure string, duration time.Duration, err error,
 ) {

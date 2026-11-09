@@ -2,13 +2,14 @@ package okf
 
 import (
 	"bytes"
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 	"time"
 
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // yamlIndent is the indent of rendered YAML.
@@ -40,7 +41,7 @@ func RenderFrontmatter(fm Frontmatter) []byte {
 
 	var buf bytes.Buffer
 
-	buf.WriteString(fence + "\n")
+	_, _ = buf.WriteString(fence + "\n")
 
 	if len(node.Content) > 0 {
 		enc := yaml.NewEncoder(&buf)
@@ -50,7 +51,7 @@ func RenderFrontmatter(fm Frontmatter) []byte {
 		_ = enc.Close()
 	}
 
-	buf.WriteString(fence + "\n")
+	_, _ = buf.WriteString(fence + "\n")
 
 	return buf.Bytes()
 }
@@ -106,7 +107,7 @@ func addExtra(node *yaml.Node, extra map[string]any) {
 		keys = append(keys, k)
 	}
 
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	for _, k := range keys {
 		var value yaml.Node
@@ -167,10 +168,7 @@ func (f Frontmatter) Stale(now time.Time) (bool, error) {
 // link, so the output does not depend on input order.
 func RenderIndex(entries []IndexEntry) []byte {
 	sorted := append([]IndexEntry(nil), entries...)
-	sort.SliceStable(
-		sorted,
-		func(i, j int) bool { return indexEntryLess(&sorted[i], &sorted[j]) },
-	)
+	slices.SortStableFunc(sorted, compareIndexEntries)
 
 	var (
 		blocks []string
@@ -187,7 +185,7 @@ func RenderIndex(entries []IndexEntry) []byte {
 			writeSectionHeading(&block, section)
 		}
 
-		block.WriteString(entryLine(e))
+		_, _ = block.WriteString(entryLine(e))
 	}
 
 	blocks = flushIndexBlock(blocks, &block)
@@ -195,17 +193,13 @@ func RenderIndex(entries []IndexEntry) []byte {
 	return []byte(strings.Join(blocks, "\n"))
 }
 
-// indexEntryLess orders by section, then title ignoring case, then link.
-func indexEntryLess(a, b *IndexEntry) bool {
-	if a.Section != b.Section {
-		return a.Section < b.Section
-	}
-
-	if ta, tb := strings.ToLower(a.Title), strings.ToLower(b.Title); ta != tb {
-		return ta < tb
-	}
-
-	return a.Link < b.Link
+// compareIndexEntries orders by section, then title ignoring case, then link.
+func compareIndexEntries(a, b IndexEntry) int {
+	return cmp.Or(
+		cmp.Compare(a.Section, b.Section),
+		cmp.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title)),
+		cmp.Compare(a.Link, b.Link),
+	)
 }
 
 // flushIndexBlock moves a non-empty block into blocks.
@@ -223,7 +217,7 @@ func flushIndexBlock(blocks []string, block *strings.Builder) []string {
 // writeSectionHeading writes a named section's heading.
 func writeSectionHeading(block *strings.Builder, section string) {
 	if section != "" {
-		block.WriteString("# " + section + "\n\n")
+		_, _ = block.WriteString("# " + section + "\n\n")
 	}
 }
 

@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
@@ -146,6 +146,8 @@ func TestFanOut_AllUnitsCollected(t *testing.T) {
 			passed++
 		case types.StatusSkip, types.StatusWarn:
 			t.Errorf("unexpected status %v", r.Status)
+		default:
+			// No other value changes the outcome.
 		}
 	}
 

@@ -51,7 +51,7 @@ linters:
     # Architecture enforcement
     - depguard
     # Error-theory enforcement (ARCHITECTURE.md#error-codes): ban code-less fmt.Errorf
-    # and stdlib errors.New so every error carries an ErrorCode via core/errors
+    # and stdlib errors.New so every error carries an ErrorCode via core/apperr
     # Wrap/New. Configured in settings.forbidigo; it runs on tests too.
     - forbidigo
     # Documentation completeness and parameter hygiene: revive's `exported` and
@@ -87,12 +87,10 @@ linters:
     - usetesting
     - thelper
     - tparallel
-    # Architecture enforcement: no globals/inits (explicit DI), banned modules, and the
-    # import alias the codebase standardises on (apperr for core/errors).
+    # Architecture enforcement: no globals/inits (explicit DI), banned modules.
     - gochecknoglobals
     - gochecknoinits
     - gomodguard_v2
-    - importas
     - nolintlint
     # Correctness set: net.JoinHostPort for host:port, canonical HTTP header spelling,
     # and the Go-version modernisations.
@@ -131,7 +129,7 @@ linters:
           - pkg: go/clients/connector/s3inventory
             rules: {json: camel}
           # Prometheus's HTTP API responses are camelCase JSON.
-          - pkg: go/clients/prometheus/http
+          - pkg: go/clients/prometheus/httpapi
             rules: {json: camel}
           # Chaos Mesh resources are Kubernetes-style camelCase JSON.
           - pkg: go/clients/chaos
@@ -152,14 +150,6 @@ linters:
       # removed; a bare `//nolint` or an unexplained one is a finding.
       require-explanation: true
       require-specific: true
-    importas:
-      # Every import of the coded-errors package uses the apperr alias, and
-      # no-unaliased forbids importing it unaliased, so the codebase reads the same
-      # everywhere (and the same as its consumers).
-      alias:
-        - pkg: github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors
-          alias: apperr
-      no-unaliased: true
     gomodguard_v2:
       # Block modules this module must not depend on, each with the sanctioned
       # replacement.
@@ -169,7 +159,7 @@ linters:
             - google.golang.org/protobuf
           reason: "use google.golang.org/protobuf"
         - module: github.com/pkg/errors
-          reason: "use knowledge-engine-toolkit/go/core/errors (coded errors)"
+          reason: "use knowledge-engine-toolkit/go/core/apperr (coded errors)"
         - module: golang.org/x/exp
           reason: "promoted APIs live in the stdlib or golang.org/x/*"
         - module: github.com/satori/go.uuid
@@ -238,19 +228,25 @@ linters:
     gocyclo:
       min-complexity: 15
     revive:
-      # Run ONLY the exported-doc rule and unused-parameter (specifying rules overrides
-      # revive's default set), so this enforces "every exported symbol has a doc comment
-      # starting with its name" and "every parameter is used or named `_`" without
-      # revive's other opinionated checks. disableStutteringCheck scopes the doc rule to
-      # completeness only — its naming-stutter check (e.g. s3.S3API "stutters") is a
-      # separate concern, not this gate's job.
+      # Every rule on. line-length-limit is off because lll enforces the 90 columns and
+      # skips the single tokens Go cannot wrap; add-constant is held off until the
+      # repeated literals are named.
+      enable-all-rules: true
       rules:
-        - name: exported
+        - name: line-length-limit
+          disabled: true
+        - name: add-constant
+          disabled: true
           arguments:
-            - disableStutteringCheck
-        - name: unused-parameter
+            - allowInts: "0,1"
+              allowStrs: '""'
+        - name: package-naming
+          arguments:
+            - skipDefaultBadNameCheck: true
+              userDefinedBadNames: [common, interface, misc, type, util, utils]
+              checkExtraBadName: true
     forbidigo:
-      # Every error carries an ErrorCode via core/errors Wrap/New. Code-less
+      # Every error carries an ErrorCode via core/apperr Wrap/New. Code-less
       # fmt.Errorf and stdlib errors.New are forbidden in production code and in
       # tests (a test that needs an uncoded error uses apperr.Sentinel).
       # Specifying `forbid` REPLACES forbidigo's default fmt.Print* patterns, so
@@ -258,12 +254,12 @@ linters:
       analyze-types: true
       forbid:
         - pattern: ^fmt\.Errorf$
-          msg: use core/errors Wrap/New — no code-less fmt.Errorf
+          msg: use core/apperr Wrap/New — no code-less fmt.Errorf
         # Stdlib errors.New carries no ErrorCode. analyze-types scopes this to the
-        # stdlib package, so core/errors New(code, msg) (alias apperr) passes.
+        # stdlib package, so core/apperr New(code, msg) passes.
         - pattern: ^errors\.New$
           pkg: ^errors$
-          msg: use core/errors New — no stdlib errors.New
+          msg: use core/apperr New — no stdlib errors.New
     govet:
       enable:
         - fieldalignment
@@ -286,7 +282,7 @@ linters:
       context: all
       key-naming-case: snake
     wrapcheck:
-      # Errors from this module's own packages already carry an ErrorCode (core/errors,
+      # Errors from this module's own packages already carry an ErrorCode (core/apperr,
       # enforced by enforce-core-errors); re-wrapping them at every hop only renames the
       # code. wrapcheck guards the errors that do not: third-party SDK, stdlib and
       # interface errors, which must be wrapped with one.
@@ -435,16 +431,16 @@ linters:
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
               desc: "workflows/ must not import transport/ (layer violation)"
 
-        # ── Enforce core/errors: no stdlib "errors" in production code (core/errors wraps it) ──
+        # ── Enforce core/errors: no stdlib "errors" in production code (core/apperr wraps it) ──
         enforce-core-errors:
           files:
             - "**/go/**/*.go"
             - "!**/go/**/*_test.go"
-            - "!**/go/core/errors/*.go"
-            - "!**/go/core/errors/**/*.go"
+            - "!**/go/core/apperr/*.go"
+            - "!**/go/core/apperr/**/*.go"
           deny:
             - pkg: "errors"
-              desc: "use github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors instead of stdlib errors"
+              desc: "use github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr instead of stdlib errors"
 
         # ── Enforce foundation/logger: no log/slog outside the logger implementation ──
         enforce-foundation-logger:
@@ -459,32 +455,32 @@ linters:
             - pkg: "log$"
               desc: "use interfaces.Logger (core/interfaces) instead of stdlib log"
 
-        # ── go/helpers is a leaf utility: must not import other layers ──
-        helpers-is-leaf:
+        # ── go/stdx is a leaf utility: must not import other layers ──
+        stdx-is-leaf:
           files:
-            - "**/go/helpers/*.go"
-            - "**/go/helpers/**/*.go"
+            - "**/go/stdx/*.go"
+            - "**/go/stdx/**/*.go"
           deny:
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/services"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
             - pkg: "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
-              desc: "go/helpers/ is a leaf utility; must not import other layers"
+              desc: "go/stdx/ is a leaf utility; must not import other layers"
 
   exclusions:
     generated: lax
@@ -518,12 +514,6 @@ linters:
         linters:
           - gosec
         text: G204
-      # The method names mirror the AWS SDK's SQS client interface, which this decorator
-      # implements: GetQueueUrl cannot be spelled GetQueueURL.
-      - path: ^go/clients/outbox/decorated\.go$
-        linters:
-          - staticcheck
-        text: ST1003
       # A struct tag is a single string literal that Go cannot wrap, so a field whose
       # tag pushes it past the column limit has no compliant spelling.
       - linters:

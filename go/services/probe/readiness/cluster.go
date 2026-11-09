@@ -40,6 +40,8 @@ func (p Cluster) Run(ctx context.Context, t Target) types.Verdict {
 		detail += " returned " + answer
 	case res.Err != nil:
 		detail += " failed: " + res.Err.Error()
+	default:
+		// No other value changes the outcome.
 	}
 
 	return fail(p.Name(), detail)

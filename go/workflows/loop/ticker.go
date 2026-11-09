@@ -4,14 +4,17 @@ import (
 	"context"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
+
+// none is the input and output type of a pass, which carries no data.
+type none = struct{}
 
 // Ticker runs one workflow pass on a schedule until its context ends.
 type Ticker struct {
 	// pass is the decorated workflow one iteration executes.
-	pass interfaces.Workflow[struct{}, struct{}]
+	pass interfaces.Workflow[none, none]
 	// logger records failed passes.
 	logger interfaces.Logger
 	// name labels the loop in logs.
@@ -25,7 +28,7 @@ type Ticker struct {
 // as a wiring bug.
 func NewTicker(
 	name string,
-	pass interfaces.Workflow[struct{}, struct{}],
+	pass interfaces.Workflow[none, none],
 	cfg Config,
 	logger interfaces.Logger,
 ) (*Ticker, error) {

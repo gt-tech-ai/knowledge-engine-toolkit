@@ -3,7 +3,7 @@ package suite
 import (
 	"fmt"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/gate"
@@ -36,7 +36,7 @@ type Composite struct {
 	Spec types.Composite
 }
 
-var _ gate.GateFactory = Composite{}
+var _ gate.Factory = Composite{}
 
 // Gate builds the composite's gate: one phase per spec phase that builds a job, serial
 // or parallel as the phase says.

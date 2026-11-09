@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/helpers"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestGetMap tests that GetMap returns the nested map for a present map-typed
@@ -25,10 +25,10 @@ func TestGetMap(t *testing.T) {
 	nested := map[string]any{"a": 1}
 	m := map[string]any{"obj": nested, "str": "x"}
 
-	require.Equal(t, nested, helpers.GetMap(m, "obj"), "present map key returns the map")
-	require.Nil(t, helpers.GetMap(m, "missing"), "absent key returns nil")
-	require.Nil(t, helpers.GetMap(m, "str"), "non-map value returns nil")
-	require.Nil(t, helpers.GetMap(nil, "obj"), "nil map returns nil")
+	require.Equal(t, nested, stdx.GetMap(m, "obj"), "present map key returns the map")
+	require.Nil(t, stdx.GetMap(m, "missing"), "absent key returns nil")
+	require.Nil(t, stdx.GetMap(m, "str"), "non-map value returns nil")
+	require.Nil(t, stdx.GetMap(nil, "obj"), "nil map returns nil")
 }
 
 // TestGetSlice tests that GetSlice returns the slice for a present []any key and
@@ -49,12 +49,12 @@ func TestGetSlice(t *testing.T) {
 	require.Equal(
 		t,
 		items,
-		helpers.GetSlice(m, "list"),
+		stdx.GetSlice(m, "list"),
 		"present slice key returns the slice",
 	)
-	require.Nil(t, helpers.GetSlice(m, "missing"), "absent key returns nil")
-	require.Nil(t, helpers.GetSlice(m, "obj"), "non-slice value returns nil")
-	require.Nil(t, helpers.GetSlice(nil, "list"), "nil map returns nil")
+	require.Nil(t, stdx.GetSlice(m, "missing"), "absent key returns nil")
+	require.Nil(t, stdx.GetSlice(m, "obj"), "non-slice value returns nil")
+	require.Nil(t, stdx.GetSlice(nil, "list"), "nil map returns nil")
 }
 
 // TestGetString tests that GetString returns the string for a present
@@ -76,16 +76,16 @@ func TestGetString(t *testing.T) {
 	require.Equal(
 		t,
 		"user",
-		helpers.GetString(m, "name"),
+		stdx.GetString(m, "name"),
 		"present string key returns the string",
 	)
-	require.Empty(t, helpers.GetString(m, "missing"), "absent key returns empty string")
+	require.Empty(t, stdx.GetString(m, "missing"), "absent key returns empty string")
 	require.Empty(
 		t,
-		helpers.GetString(m, "count"),
+		stdx.GetString(m, "count"),
 		"non-string value returns empty string",
 	)
-	require.Empty(t, helpers.GetString(nil, "name"), "nil map returns empty string")
+	require.Empty(t, stdx.GetString(nil, "name"), "nil map returns empty string")
 }
 
 // TestAsMap tests that AsMap asserts an arbitrary value to map[string]any,
@@ -103,7 +103,7 @@ func TestAsMap(t *testing.T) {
 
 	inner := map[string]any{"k": "v"}
 
-	require.Equal(t, inner, helpers.AsMap(any(inner)), "map value returns the map")
-	require.Nil(t, helpers.AsMap(any("x")), "non-map value returns nil")
-	require.Nil(t, helpers.AsMap(nil), "nil value returns nil")
+	require.Equal(t, inner, stdx.AsMap(any(inner)), "map value returns the map")
+	require.Nil(t, stdx.AsMap(any("x")), "non-map value returns nil")
+	require.Nil(t, stdx.AsMap(nil), "nil value returns nil")
 }

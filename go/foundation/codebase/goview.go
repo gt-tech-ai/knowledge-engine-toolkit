@@ -13,7 +13,7 @@ import (
 	"golang.org/x/mod/modfile"
 	"golang.org/x/sync/errgroup"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -40,7 +40,7 @@ func newGoView(r *view) *goView {
 
 // Modules returns the go.work `use` directories, else every go.mod's directory.
 func (g *goView) Modules(ctx context.Context) ([]string, error) {
-	return g.parent.snap.Memo(ctx, "go|modules", g.modules)
+	return g.parent.snap.Memo(ctx, "go|modules", g.loadModules)
 }
 
 // Parse parses the Go files sel selects, concurrently, each once per mode.
@@ -69,7 +69,7 @@ func (g *goView) Parse(
 
 	for i, f := range files {
 		eg.Go(func() error {
-			parsed, err := g.parse(gctx, f.Path, mode, fset)
+			parsed, err := g.parseFile(gctx, f.Path, mode, fset)
 
 			out[i] = parsed
 
@@ -85,8 +85,8 @@ func (g *goView) Parse(
 	return out, nil
 }
 
-// modules computes Modules.
-func (g *goView) modules(ctx context.Context) ([]string, error) {
+// loadModules computes Modules.
+func (g *goView) loadModules(ctx context.Context) ([]string, error) {
 	work, err := g.parent.Text(ctx, "go.work")
 	switch {
 	case err == nil:
@@ -120,8 +120,8 @@ func (g *goView) modules(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
-// parse parses one file in mode, once per snapshot.
-func (g *goView) parse(
+// parseFile parses one file in mode, once per snapshot.
+func (g *goView) parseFile(
 	ctx context.Context,
 	p string,
 	mode types.ParseMode,

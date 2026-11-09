@@ -52,6 +52,6 @@ func DefaultObservabilityConfig() ObservabilityConfig {
 }
 
 // Validate returns an error if the configuration is invalid.
-func (c ObservabilityConfig) Validate() error {
+func (ObservabilityConfig) Validate() error {
 	return nil
 }

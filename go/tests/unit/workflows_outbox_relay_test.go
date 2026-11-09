@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
@@ -366,22 +366,17 @@ func TestRelay_BackoffIsExponentialWithJitterAndCapped(t *testing.T) {
 	}
 
 	testRelayBackoffIsExponentialWithJitterAndCappedRest4(
-		t,
-		store,
-		sink,
-		ctx,
-		sendErr,
-		recs,
+		ctx, t, store, sink, sendErr, recs,
 	)
 }
 
 // testRelayBackoffIsExponentialWithJitterAndCappedRest4 continues
 // testRelayBackoffIsExponentialWithJitterAndCappedRest3 with its remaining steps.
 func testRelayBackoffIsExponentialWithJitterAndCappedRest4(
+	ctx context.Context,
 	t *testing.T,
 	store *mocks.MockOutboxStore,
 	sink *mocks.MockOutboxSink,
-	ctx context.Context,
 	sendErr *apperr.AppError,
 	recs []types.OutboxRecord,
 ) {
@@ -407,24 +402,17 @@ func testRelayBackoffIsExponentialWithJitterAndCappedRest4(
 		Return([]error{sendErr, sendErr, sendErr, sendErr})
 
 	testRelayBackoffIsExponentialWithJitterAndCappedRest5(
-		t,
-		store,
-		sink,
-		ctx,
-		sendErr,
-		recs,
-		&caps,
-		half,
+		ctx, t, store, sink, sendErr, recs, &caps, half,
 	)
 }
 
 // testRelayBackoffIsExponentialWithJitterAndCappedRest5 continues
 // testRelayBackoffIsExponentialWithJitterAndCappedRest4 with its remaining steps.
 func testRelayBackoffIsExponentialWithJitterAndCappedRest5(
+	ctx context.Context,
 	t *testing.T,
 	store *mocks.MockOutboxStore,
 	sink *mocks.MockOutboxSink,
-	ctx context.Context,
 	sendErr *apperr.AppError,
 	recs []types.OutboxRecord,
 	caps *[]time.Duration,
@@ -470,16 +458,16 @@ func testRelayBackoffIsExponentialWithJitterAndCappedRest5(
 		(*caps),
 	)
 
-	testRelayBackoffIsExponentialWithJitterAndCappedRest(t, store, sink, ctx, sendErr)
+	testRelayBackoffIsExponentialWithJitterAndCappedRest(ctx, t, store, sink, sendErr)
 }
 
 // testRelayBackoffIsExponentialWithJitterAndCappedRest continues
 // TestRelay_BackoffIsExponentialWithJitterAndCapped with its remaining steps.
 func testRelayBackoffIsExponentialWithJitterAndCappedRest(
+	ctx context.Context,
 	t *testing.T,
 	store *mocks.MockOutboxStore,
 	sink *mocks.MockOutboxSink,
-	ctx context.Context,
 	sendErr *apperr.AppError,
 ) {
 	t.Helper()
@@ -621,19 +609,19 @@ func testRelayReportsDepthAndLagRest3(
 	sent.EXPECT().Inc("audit").Times(1)
 	retried.EXPECT().Inc("audit").Times(1)
 
-	testRelayReportsDepthAndLagRest4(t, store, sink, metrics, parked, depth, lag, ctx)
+	testRelayReportsDepthAndLagRest4(ctx, t, store, sink, metrics, parked, depth, lag)
 }
 
 // testRelayReportsDepthAndLagRest4 continues testRelayReportsDepthAndLagRest3 with its
 // remaining steps.
 func testRelayReportsDepthAndLagRest4(
+	ctx context.Context,
 	t *testing.T,
 	store *mocks.MockOutboxStore,
 	sink *mocks.MockOutboxSink,
 	metrics *mocks.MockMetrics,
 	parked *mocks.MockCounter,
 	depth, lag *mocks.MockGauge,
-	ctx context.Context,
 ) {
 	t.Helper()
 

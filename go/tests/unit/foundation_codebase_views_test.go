@@ -1,9 +1,10 @@
 package unit_test
 
 import (
+	"cmp"
 	"context"
 	"regexp"
-	"sort"
+	"slices"
 	"sync"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
@@ -51,7 +52,10 @@ func sourceOf(t *testing.T) (*mocks.MockCodebaseSource, map[string]int, *sync.Mu
 		list = append(list, types.File{Path: p, Untracked: p == "notes/untracked.md"})
 	}
 
-	sort.Slice(list, func(i, j int) bool { return list[i].Path < list[j].Path })
+	slices.SortFunc(
+		list,
+		func(a, b types.File) int { return cmp.Compare(a.Path, b.Path) },
+	)
 	src.EXPECT().List(gomock.Any()).Return(list, nil).AnyTimes()
 
 	reads := map[string]int{}
@@ -126,17 +130,17 @@ func testCodebaseFilesTextAndMatchRest5(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, files)
 
-	testCodebaseFilesTextAndMatchRest(t, reads, mu, r, ctx)
+	testCodebaseFilesTextAndMatchRest(ctx, t, reads, mu, r)
 }
 
 // testCodebaseFilesTextAndMatchRest continues testCodebaseFilesTextAndMatchRest5 with its
 // remaining steps.
 func testCodebaseFilesTextAndMatchRest(
+	ctx context.Context,
 	t *testing.T,
 	reads map[string]int,
 	mu *sync.Mutex,
 	r interfaces.Codebase,
-	ctx context.Context,
 ) {
 	t.Helper()
 

@@ -17,8 +17,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	codec "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/jsonapi"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // contentTypeJSONAPI is the JSON:API media type set on all transformed
@@ -216,14 +217,24 @@ func transformByRole(
 	case codec.RoleCreate:
 		return transformCreate(w, rc, parsed, selfLink)
 
-	// The single-resource roles are listed so the exhaustive linter sees every declared
-	// codec.Role handled; they and an undeclared role share the single-resource read below.
 	case codec.RoleGetOne, codec.RoleUpdate, codec.RoleDelete:
+		return transformSingle(w, rc, parsed, selfLink)
 	default:
+		// An undeclared role shares the single-resource read below.
 	}
 
-	// Single-resource read: require the declared single resource key. (DELETE is
-	// answered with 204 before the transform; it reaches here only if that changes.)
+	return transformSingle(w, rc, parsed, selfLink)
+}
+
+// transformSingle envelopes a single-resource read, requiring the declared single
+// resource key. (DELETE is answered with 204 before the transform; it reaches here only
+// if that changes.)
+func transformSingle(
+	w http.ResponseWriter,
+	rc codec.ResourceConfig,
+	parsed map[string]any,
+	selfLink string,
+) (document map[string]any, code int, handled bool) {
 	if !requireKey(w, parsed, rc.SingleKey) {
 		return nil, 0, false
 	}
@@ -264,7 +275,7 @@ func transformCreate(
 
 	result := codec.TransformSingleResource(parsed, rc, selfLink)
 
-	data, _ := result["data"].(map[string]any)
+	data := stdx.As[map[string]any](result["data"])
 	if id, ok := data["id"].(string); ok && id != "" {
 		w.Header().Set("Location", selfLink+"/"+id)
 	}
@@ -296,7 +307,7 @@ func unwrapAndValidate(body []byte, resourceType string) (unwrapped []byte, msg 
 		return nil, msg
 	}
 
-	if typ, _ := data["type"].(string); typ != resourceType {
+	if typ := stdx.As[string](data["type"]); typ != resourceType {
 		return nil, "request data.type must be " + resourceType
 	}
 
@@ -456,7 +467,7 @@ func (c *captureWriter) Write(b []byte) (int, error) {
 
 // Flush is a no-op that prevents the inner handler from flushing the buffered
 // response before the middleware has transformed it.
-func (c *captureWriter) Flush() {} // no-op; prevents premature flush
+func (*captureWriter) Flush() {} // no-op; prevents premature flush
 
 // IsRESTRequest returns true if the request appears to be a REST request
 // (not Connect, gRPC, or gRPC-Web).

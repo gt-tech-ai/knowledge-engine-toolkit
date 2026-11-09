@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // traceWaitTimeout bounds the wait for a trace to reach the backend.
@@ -190,19 +190,25 @@ func (c *TelemetryClient) TraceSpansService(
 	return body.namesService(service), nil
 }
 
+// tempoAttributeValue is the Value element of tempoAttribute.
+type tempoAttributeValue struct {
+	StringValue string `json:"stringValue"`
+}
+
 // tempoAttribute is one resource attribute of a Tempo batch.
 type tempoAttribute struct {
-	Key   string `json:"key"`
-	Value struct {
-		StringValue string `json:"stringValue"`
-	} `json:"value"`
+	Key   string              `json:"key"`
+	Value tempoAttributeValue `json:"value"`
+}
+
+// tempoBatchResource is the Resource element of tempoBatch.
+type tempoBatchResource struct {
+	Attributes []tempoAttribute `json:"attributes"`
 }
 
 // tempoBatch is one resource batch of a Tempo trace.
 type tempoBatch struct {
-	Resource struct {
-		Attributes []tempoAttribute `json:"attributes"`
-	} `json:"resource"`
+	Resource tempoBatchResource `json:"resource"`
 }
 
 // tempoTrace is the part of Tempo's trace response that names the services.
@@ -223,6 +229,16 @@ func (t *tempoTrace) namesService(service string) bool {
 	return false
 }
 
+// shapeResult2 is the Result element of this document.
+type shapeResult2 struct {
+	Value [2]json.RawMessage `json:"value"`
+}
+
+// shapeData2 is the Data element of this document.
+type shapeData2 struct {
+	Result []shapeResult2 `json:"result"`
+}
+
 // MetricValue returns the first instant-vector sample value for promQL, or 0 (nil error)
 // when the vector is empty (metric not yet scraped). Callers poll on 0.
 func (c *TelemetryClient) MetricValue(
@@ -232,11 +248,7 @@ func (c *TelemetryClient) MetricValue(
 	endpoint := c.promURL + "/api/v1/query?query=" + url.QueryEscape(promQL)
 
 	var body struct {
-		Data struct {
-			Result []struct {
-				Value [2]json.RawMessage `json:"value"`
-			} `json:"result"`
-		} `json:"data"`
+		Data shapeData2 `json:"data"`
 	}
 
 	err := c.getJSON(ctx, endpoint, &body)
@@ -265,6 +277,16 @@ func (c *TelemetryClient) MetricValue(
 	return value, nil
 }
 
+// shapeResult is the Result element of this document.
+type shapeResult struct {
+	Values [][]json.RawMessage `json:"values"`
+}
+
+// shapeData is the Data element of this document.
+type shapeData struct {
+	Result []shapeResult `json:"result"`
+}
+
 // LogHasTrace returns the number of Loki log lines matching selector that carry traceID,
 // or 0 (nil error) when none yet. Callers poll on 0.
 func (c *TelemetryClient) LogHasTrace(
@@ -275,11 +297,7 @@ func (c *TelemetryClient) LogHasTrace(
 	endpoint := c.lokiURL + "/loki/api/v1/query_range?query=" + url.QueryEscape(query)
 
 	var body struct {
-		Data struct {
-			Result []struct {
-				Values [][]json.RawMessage `json:"values"`
-			} `json:"result"`
-		} `json:"data"`
+		Data shapeData `json:"data"`
 	}
 
 	err := c.getJSON(ctx, endpoint, &body)

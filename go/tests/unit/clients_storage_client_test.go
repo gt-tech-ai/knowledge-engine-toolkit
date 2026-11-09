@@ -18,8 +18,8 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage"
-	s3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
@@ -110,7 +110,7 @@ func TestStorageClient_NewFromConfig_RejectsInvalidConfig(t *testing.T) {
 func newStorageClientWithMock(
 	ctx context.Context,
 	t *testing.T,
-	api s3.S3API,
+	api s3.API,
 	threshold int64,
 ) interfaces.StorageClient {
 	t.Helper()
@@ -960,7 +960,7 @@ func testStorageClientEnsureBucketRest6(t *testing.T) {
 
 	const bucket = "documents"
 
-	newClient := func(t *testing.T, api s3.S3API) interfaces.StorageClient {
+	newClient := func(t *testing.T, api s3.API) interfaces.StorageClient {
 		t.Helper()
 
 		c, err := storage.NewFromConfig(

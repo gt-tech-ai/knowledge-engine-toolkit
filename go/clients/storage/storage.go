@@ -9,7 +9,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/memory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
@@ -48,7 +48,7 @@ type Deps struct {
 
 	// API replaces the S3 SDK client KindS3 builds from Config.S3 (presigning is
 	// unavailable through it).
-	API s3.S3API
+	API s3.API
 }
 
 // DefaultConfig returns the memory kind.

@@ -1,7 +1,7 @@
 // Package dtovalidate is the leaf rule library the generated DTO Validate() methods
 // compose Each rule is a small, hand-written check that REUSES the standard library
 // (google/uuid, net/url, path/filepath, net/mail) rather than a hand-rolled regex, and
-// returns a core/errors CodeInvalidInput AppError on violation so the failure classifies
+// returns a core/apperr CodeInvalidInput AppError on violation so the failure classifies
 // to 400 / InvalidArgument at the boundary. It depends only on core (foundation-tier), so
 // the generated per-DTO methods — which live in the app domain packages — can import it
 // without a cycle.
@@ -19,7 +19,7 @@ import (
 
 	"github.com/google/uuid"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // NoLowerBound / NoUpperBound are the IntRange sentinels for an absent bound — the

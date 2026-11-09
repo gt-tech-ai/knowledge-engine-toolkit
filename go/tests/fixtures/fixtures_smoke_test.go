@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -71,18 +71,17 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	}
 
 	// Service: canned entity, error, and panic paths.
-	if got, _ := fixtures.StubService(nil, false).
-		Get(ctx, "1"); got == nil ||
-		got.Name != "mock" {
+	got, _ := fixtures.StubService(nil, false).Get(ctx, "1")
+	if got == nil || got.Name != "mock" {
 		t.Fatalf("StubService.Get: %+v, want Name=mock", got)
 	}
 
-	testFactoriesExerciseEveryDoubleRest3(t, ctx)
+	testFactoriesExerciseEveryDoubleRest3(ctx, t)
 }
 
 // testFactoriesExerciseEveryDoubleRest3 continues TestFactories_ExerciseEveryDouble with
 // its remaining steps.
-func testFactoriesExerciseEveryDoubleRest3(t *testing.T, ctx context.Context) {
+func testFactoriesExerciseEveryDoubleRest3(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	boom := apperr.Sentinel("boom")
@@ -129,16 +128,13 @@ func testFactoriesExerciseEveryDoubleRest3(t *testing.T, ctx context.Context) {
 		return nil
 	})
 
-	testFactoriesExerciseEveryDoubleRest(t, ctx, boom, attempts)
+	testFactoriesExerciseEveryDoubleRest(ctx, t, boom, attempts)
 }
 
 // testFactoriesExerciseEveryDoubleRest continues TestFactories_ExerciseEveryDouble with
 // its remaining steps.
 func testFactoriesExerciseEveryDoubleRest(
-	t *testing.T,
-	ctx context.Context,
-	boom error,
-	attempts func() int,
+	ctx context.Context, t *testing.T, boom error, attempts func() int,
 ) {
 	t.Helper()
 
@@ -188,15 +184,13 @@ func testFactoriesExerciseEveryDoubleRest(
 		t.Fatalf("RecvMsg #1: %v, want boom", err)
 	}
 
-	testFactoriesExerciseEveryDoubleRest2(t, ctx, cs)
+	testFactoriesExerciseEveryDoubleRest2(ctx, t, cs)
 }
 
 // testFactoriesExerciseEveryDoubleRest2 continues testFactoriesExerciseEveryDoubleRest
 // with its remaining steps.
 func testFactoriesExerciseEveryDoubleRest2(
-	t *testing.T,
-	ctx context.Context,
-	cs grpc.ClientStream,
+	ctx context.Context, t *testing.T, cs grpc.ClientStream,
 ) {
 	t.Helper()
 
@@ -223,14 +217,14 @@ func testFactoriesExerciseEveryDoubleRest2(
 		t.Fatal("StubStore.Exists after Create should be true")
 	}
 
-	testFactoriesExerciseEveryDoubleRest4(t, ctx, store)
+	testFactoriesExerciseEveryDoubleRest4(ctx, t, store)
 }
 
 // testFactoriesExerciseEveryDoubleRest4 continues testFactoriesExerciseEveryDoubleRest2
 // with its remaining steps.
 func testFactoriesExerciseEveryDoubleRest4(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	store *mocks.MockStore[fixtures.TestEntity, fixtures.TestParams, string],
 ) {
 	t.Helper()

@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect/interceptors"

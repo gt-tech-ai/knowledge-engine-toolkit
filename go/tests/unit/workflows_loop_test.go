@@ -11,7 +11,7 @@ import (
 	"go.uber.org/goleak"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/loop"
@@ -53,14 +53,17 @@ func TestTicker_RunsAtStartThenEveryInterval(t *testing.T) {
 
 	for _, atStart := range []bool{true, false} {
 		synctest.Test(t, func(t *testing.T) {
-			testTickerRunsAtStartThenEveryIntervalCase(t, atStart)
+			testTickerRunsAtStartThenEveryIntervalCase(t, atStartFlag(atStart))
 		})
 	}
 }
 
+// atStartFlag names the atStart option in a signature.
+type atStartFlag bool
+
 // testTickerRunsAtStartThenEveryIntervalCase is the body of a closure in
 // TestTicker_RunsAtStartThenEveryInterval.
-func testTickerRunsAtStartThenEveryIntervalCase(t *testing.T, atStart bool) {
+func testTickerRunsAtStartThenEveryIntervalCase(t *testing.T, atStart atStartFlag) {
 	t.Helper()
 
 	var passes atomic.Int64
@@ -69,7 +72,7 @@ func testTickerRunsAtStartThenEveryIntervalCase(t *testing.T, atStart bool) {
 		passes.Add(1)
 
 		return nil
-	}), loop.Config{Interval: time.Minute, RunAtStart: atStart}, quietLogger(t))
+	}), loop.Config{Interval: time.Minute, RunAtStart: bool(atStart)}, quietLogger(t))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())

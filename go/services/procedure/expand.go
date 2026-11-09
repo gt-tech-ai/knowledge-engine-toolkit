@@ -11,7 +11,7 @@ import (
 	"cel.dev/cel-go/ext"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // placeholder matches `{name}` or a `{name.key}` path in step text; splat matches an

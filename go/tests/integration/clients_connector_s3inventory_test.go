@@ -38,13 +38,13 @@ func writeInventory(
 ) string {
 	t.Helper()
 
-	return writeInventoryRest5(t, ctx, admin, bucket, reportBucket, perFile)
+	return writeInventoryRest5(ctx, t, admin, bucket, reportBucket, perFile)
 }
 
 // writeInventoryRest5 continues writeInventoryRest4 with its remaining steps.
 func writeInventoryRest5(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	admin *awss3.Client,
 	bucket, reportBucket string,
 	perFile int,
@@ -152,16 +152,13 @@ func TestS3Inventory_ListsAWrittenReportLikeTheBucket(t *testing.T) {
 	), "us-east-1")
 	require.NoError(t, err)
 
-	testS3InventoryListsAWrittenReportLikeTheBucketRest(t, ctx, m, admin)
+	testS3InventoryListsAWrittenReportLikeTheBucketRest(ctx, t, m, admin)
 }
 
 // testS3InventoryListsAWrittenReportLikeTheBucketRest continues
 // TestS3Inventory_ListsAWrittenReportLikeTheBucket with its remaining steps.
 func testS3InventoryListsAWrittenReportLikeTheBucketRest(
-	t *testing.T,
-	ctx context.Context,
-	m *miniofix.TestMinIO,
-	admin *awss3.Client,
+	ctx context.Context, t *testing.T, m *miniofix.TestMinIO, admin *awss3.Client,
 ) {
 	t.Helper()
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -182,15 +182,19 @@ func decodeScalar(v any, ft FieldType) (any, error) {
 	case FieldString, FieldID:
 		s, ok := v.(string)
 
-		return scalarOrMismatch(s, ok)
+		return scalarOrMismatch(s, okFlag(ok))
 	case FieldInt:
-		return scalarOrMismatch(safeInt(v))
+		n, ok := safeInt(v)
+
+		return scalarOrMismatch(n, okFlag(ok))
 	case FieldFloat:
-		return scalarOrMismatch(number(v))
+		n, ok := number(v)
+
+		return scalarOrMismatch(n, okFlag(ok))
 	case FieldBool:
 		b, ok := v.(bool)
 
-		return scalarOrMismatch(b, ok)
+		return scalarOrMismatch(b, okFlag(ok))
 	case FieldTime:
 		return decodeTimeScalar(v)
 	}
@@ -206,8 +210,11 @@ func scalarMismatch() error {
 	)
 }
 
+// okFlag names the ok option in a signature.
+type okFlag bool
+
 // scalarOrMismatch returns val when the conversion succeeded.
-func scalarOrMismatch[T any](val T, ok bool) (any, error) {
+func scalarOrMismatch[T any](val T, ok okFlag) (any, error) {
 	if !ok {
 		return nil, scalarMismatch()
 	}

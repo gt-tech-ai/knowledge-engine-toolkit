@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/suite"
@@ -131,7 +132,7 @@ func TestServicesSuite_SelectComposesFlags(t *testing.T) {
 
 	withSteps.Steps = []string{"lint.vet"}
 
-	all := append(append([]suite.Entry{}, catalog...), steps...)
+	all := slices.Concat(catalog, steps)
 	assert.Equal(t, []string{"golangci-lint", "lint.vet"}, names(withSteps, all, "go"))
 
 	withSteps.Steps = []string{"lint.nope"}
@@ -222,8 +223,7 @@ func testServicesSuiteGateRest6(
 			_ context.Context, _ interfaces.Codebase, r types.ToolRun, _ types.RunOptions,
 		) (types.StepResults, error) {
 			n := inFlight.Add(1)
-			for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
-			}
+			recordPeak(&peak, n)
 
 			time.Sleep(10 * time.Millisecond)
 			inFlight.Add(-1)
@@ -329,4 +329,14 @@ func testServicesSuiteGateRest(
 	res, _ := jobs[0].Execute(t.Context(), runner, "/r")
 	require.Len(t, res, 1)
 	assert.Contains(t, res[0].Error, "rust")
+}
+
+// recordPeak raises peak to n unless a concurrent caller already raised it further.
+func recordPeak(peak *atomic.Int32, n int32) {
+	for {
+		seen := peak.Load()
+		if n <= seen || peak.CompareAndSwap(seen, n) {
+			return
+		}
+	}
 }

@@ -18,7 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	codec "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/jsonapi"
-	jsonapi "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/jsonapi"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/jsonapi"
 )
 
 // docRoutes is the synthetic /api/v1 route table exercised by the role tests: a
@@ -415,7 +416,7 @@ func TestJSONAPI_ProtovalidateRunsPostUnwrap(t *testing.T) {
 
 		_ = json.Unmarshal(b, &m)
 
-		if title, _ := m["title"].(string); title == "" {
+		if title := stdx.As[string](m["title"]); title == "" {
 			w.WriteHeader(http.StatusBadRequest)
 
 			_, _ = w.Write(

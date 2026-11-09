@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -145,6 +145,8 @@ func buildInfo(out string) (pkg, version string) {
 			pkg = fields[1]
 		case len(fields) >= 3 && fields[0] == "mod":
 			version = fields[2]
+		default:
+			// No other value changes the outcome.
 		}
 	}
 

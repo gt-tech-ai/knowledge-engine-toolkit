@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Class is a named set of path patterns: a change touches the class when a changed path

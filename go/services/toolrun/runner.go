@@ -14,7 +14,7 @@ import (
 	"slices"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
@@ -118,13 +118,13 @@ func (r *runner) Run(
 	opts types.RunOptions,
 ) (types.StepResults, error) {
 	return r.Exec(ctx, "run", func(ctx context.Context) (types.StepResults, error) {
-		return r.run(ctx, cb, run, opts)
+		return r.runTool(ctx, cb, run, opts)
 	})
 }
 
-// run resolves the run's tool, targets and parser, then executes it. A selector that
-// picks nothing is one skipped step; a run with no selector under each: run runs once.
-func (r *runner) run(
+// runTool resolves the step's tool, targets and parser, then executes it. A selector
+// that picks nothing is one skipped step; a step with no selector under each: runs once.
+func (r *runner) runTool(
 	ctx context.Context,
 	cb interfaces.Codebase,
 	run types.ToolRun,
@@ -154,7 +154,7 @@ func (r *runner) run(
 	// A prefixed tool (`uv run ruff`) runs through its prefix, so the prefix is what
 	// must be installed.
 	if exe, _ := spec.Cmd(); !r.deps.Runner.Exists(exe) {
-		return types.StepResults{missing(run, spec, opts.Strict)}, nil
+		return types.StepResults{missing(run, spec, strictFlag(opts.Strict))}, nil
 	}
 
 	targets, err := r.targets(ctx, cb, run.Targets)
@@ -292,10 +292,17 @@ func group(run types.ToolRun) string {
 	return run.Verb
 }
 
+// strictFlag names the strict option in a signature.
+type strictFlag bool
+
 // missing is the one step of a run whose tool is not installed; strict fails it.
-func missing(run types.ToolRun, spec interfaces.ToolSpec, strict bool) types.StepResult {
+func missing(
+	run types.ToolRun,
+	spec interfaces.ToolSpec,
+	strict strictFlag,
+) types.StepResult {
 	status := types.StatusSkip
-	if strict || run.Missing == types.MissingFail {
+	if bool(strict) || run.Missing == types.MissingFail {
 		status = types.StatusFail
 	}
 

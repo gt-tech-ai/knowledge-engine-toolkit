@@ -8,7 +8,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // sequenceDashOffset is the columns between a sequence dash and its item.
@@ -129,6 +129,8 @@ func (e upsert) advance(cur *yaml.Node, steps []step, i int) (*yaml.Node, []byte
 		}
 
 		*next = yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
+	default:
+		// No other value changes the outcome.
 	}
 
 	return next, nil, nil
@@ -424,6 +426,8 @@ func entryOf(parent *yaml.Node, last step) (first, value *yaml.Node, pos int) {
 		}
 	case last.kind == stepKey && parent.Kind == yaml.MappingNode:
 		return mappingEntry(parent, last.key)
+	default:
+		// No other value changes the outcome.
 	}
 
 	return nil, nil, 0
@@ -559,6 +563,8 @@ func quotedTokenLen(s string) int {
 			i++
 		case s[i] == q:
 			return i + 1
+		default:
+			// No other value changes the outcome.
 		}
 	}
 

@@ -11,7 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/session"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -46,17 +46,13 @@ func TestClientsSession_ResolveVerifyCache(t *testing.T) {
 
 	verified := 0
 
-	testClientsSessionResolveVerifyCacheRest6(t, ctx, src, ok, verified)
+	testClientsSessionResolveVerifyCacheRest6(ctx, t, src, ok, verified)
 }
 
 // testClientsSessionResolveVerifyCacheRest6 continues
 // testClientsSessionResolveVerifyCacheRest5 with its remaining steps.
 func testClientsSessionResolveVerifyCacheRest6(
-	t *testing.T,
-	ctx context.Context,
-	src *mocks.MockSource,
-	ok types.Ref,
-	verified int,
+	ctx context.Context, t *testing.T, src *mocks.MockSource, ok types.Ref, verified int,
 ) {
 	t.Helper()
 
@@ -87,14 +83,14 @@ func testClientsSessionResolveVerifyCacheRest6(
 		},
 		func(c sessionCred) []string { return []string{"AWS_ACCESS_KEY_ID=" + c.Key} })
 
-	testClientsSessionResolveVerifyCacheRest2(t, ctx, src, ok, &verified, p)
+	testClientsSessionResolveVerifyCacheRest2(ctx, t, src, ok, &verified, p)
 }
 
 // testClientsSessionResolveVerifyCacheRest2 continues
 // testClientsSessionResolveVerifyCacheRest6 with its remaining steps.
 func testClientsSessionResolveVerifyCacheRest2(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	src *mocks.MockSource,
 	ok types.Ref,
 	verified *int,
@@ -123,14 +119,14 @@ func testClientsSessionResolveVerifyCacheRest2(
 	assert.Equal(t, []string{"AWS_ACCESS_KEY_ID=AK"}, env)
 	assert.Equal(t, 1, (*verified))
 
-	testClientsSessionResolveVerifyCacheRest(t, ctx, src, p)
+	testClientsSessionResolveVerifyCacheRest(ctx, t, src, p)
 }
 
 // testClientsSessionResolveVerifyCacheRest continues
 // TestClientsSession_ResolveVerifyCache with its remaining steps.
 func testClientsSessionResolveVerifyCacheRest(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	src *mocks.MockSource,
 	p *session.Provider[sessionCred],
 ) {

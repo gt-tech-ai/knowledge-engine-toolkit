@@ -2,10 +2,10 @@ package openapi
 
 import (
 	"maps"
-	"sort"
+	"slices"
 	"strings"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/helpers"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // rewriteForJSONAPI modifies the OpenAPI 3.0 spec in-place to reflect the
@@ -31,7 +31,7 @@ func rewriteForJSONAPI(oas map[string]any, cfg serviceConfig, routes []RouteEntr
 	addJSONAPISchemas(schemas)
 
 	// Rewrite response schemas in paths.
-	paths := helpers.GetMap(oas, "paths")
+	paths := stdx.GetMap(oas, "paths")
 	if paths == nil {
 		return
 	}
@@ -39,7 +39,7 @@ func rewriteForJSONAPI(oas map[string]any, cfg serviceConfig, routes []RouteEntr
 	lookup := buildRouteLookup(routes, cfg.basePath)
 
 	for pathKey, pathItem := range paths {
-		rewritePathItem(pathKey, helpers.AsMap(pathItem), schemas, cfg, lookup)
+		rewritePathItem(pathKey, stdx.AsMap(pathItem), schemas, cfg, lookup)
 	}
 }
 
@@ -51,7 +51,7 @@ func rewritePathItem(
 	lookup map[string]RouteEntry,
 ) {
 	for method, operation := range item {
-		if op := helpers.AsMap(operation); op != nil {
+		if op := stdx.AsMap(operation); op != nil {
 			rewriteOperation(
 				op,
 				schemas,
@@ -145,7 +145,7 @@ func canonicalizePathParams(path string) string {
 // (2)+(3) the generated spec (and the clients built from it) reported the wrong status
 // and no coded errors.
 func rewriteOperationByRole(op, schemas map[string]any, entry RouteEntry) {
-	responses := helpers.GetMap(op, "responses")
+	responses := stdx.GetMap(op, "responses")
 	if responses == nil {
 		return
 	}
@@ -182,7 +182,7 @@ func findSuccessResponse(
 	responses map[string]any,
 ) (status string, response map[string]any) {
 	for code, resp := range responses {
-		if r := helpers.AsMap(resp); isSuccessStatus(code) && r != nil {
+		if r := stdx.AsMap(resp); isSuccessStatus(code) && r != nil {
 			return code, r
 		}
 	}
@@ -224,8 +224,8 @@ func rewriteSuccessResponse(responses, op, schemas map[string]any, entry RouteEn
 // reshapeSuccessBody replaces a JSON body with the role's envelope under the JSON:API
 // content type, leaving a response with no JSON body or no envelope untouched.
 func reshapeSuccessBody(resp, op, schemas map[string]any, entry RouteEntry) {
-	content := helpers.GetMap(resp, "content")
-	if content == nil || helpers.GetMap(content, mediaJSON) == nil {
+	content := stdx.GetMap(resp, "content")
+	if content == nil || stdx.GetMap(content, mediaJSON) == nil {
 		return
 	}
 
@@ -250,8 +250,10 @@ func successStatusForRole(role Role) string {
 	case RoleList, RoleGetOne, RoleUpdate, RoleAction:
 		return "200"
 	default:
-		return "200"
+		// Any other value takes the shared result below.
 	}
+
+	return "200"
 }
 
 // errorStatusesForRole is the set of coded error statuses an operation of the given
@@ -271,7 +273,7 @@ func errorStatusesForRole(role Role, pathTemplate string) []string {
 		codes = append(codes, "409")
 	}
 
-	sort.Strings(codes)
+	slices.Sort(codes)
 
 	return codes
 }
@@ -344,8 +346,10 @@ func wrapByRole(op, schemas map[string]any, entry RouteEntry) map[string]any {
 	case RoleGetOne, RoleCreate, RoleUpdate:
 		return wrapResourceResponse(name, rc, schemas)
 	default:
-		return wrapResourceResponse(name, rc, schemas)
+		// Any other value takes the shared result below.
 	}
+
+	return wrapResourceResponse(name, rc, schemas)
 }
 
 // wrapResourceResponse builds the envelope of a GET_ONE, CREATE or UPDATE response.
@@ -354,7 +358,7 @@ func wrapResourceResponse(
 	rc resourceConfig,
 	schemas map[string]any,
 ) map[string]any {
-	props := helpers.GetMap(helpers.GetMap(schemas, name), keyProperties)
+	props := stdx.GetMap(stdx.GetMap(schemas, name), keyProperties)
 
 	// A bulk create whose response carries only a collection key is still a
 	// collection envelope (the CREATE rule).
@@ -379,15 +383,15 @@ func wrapResourceResponse(
 // responseSchemaName resolves the schema name of an operation's success (2xx)
 // response body, or "" when none is present.
 func responseSchemaName(op map[string]any) string {
-	responses := helpers.GetMap(op, "responses")
+	responses := stdx.GetMap(op, "responses")
 	for code, resp := range responses {
 		if !isSuccessStatus(code) {
 			continue
 		}
 
-		schema := helpers.GetMap(
-			helpers.GetMap(
-				helpers.GetMap(helpers.AsMap(resp), "content"),
+		schema := stdx.GetMap(
+			stdx.GetMap(
+				stdx.GetMap(stdx.AsMap(resp), "content"),
 				mediaJSON,
 			),
 			keySchema,
@@ -409,12 +413,12 @@ func envelopeRequestBody(op, schemas map[string]any, entry RouteEntry) {
 		return
 	}
 
-	content := helpers.GetMap(helpers.GetMap(op, "requestBody"), "content")
+	content := stdx.GetMap(stdx.GetMap(op, "requestBody"), "content")
 	if content == nil {
 		return
 	}
 
-	schema := helpers.GetMap(helpers.GetMap(content, mediaJSON), keySchema)
+	schema := stdx.GetMap(stdx.GetMap(content, mediaJSON), keySchema)
 	reqName := resolveSchemaName(schema)
 
 	if reqName == "" {
@@ -422,7 +426,7 @@ func envelopeRequestBody(op, schemas map[string]any, entry RouteEntry) {
 	}
 
 	attrsName := reqName + "Attributes"
-	if reqSchema := helpers.GetMap(schemas, reqName); reqSchema != nil {
+	if reqSchema := stdx.GetMap(schemas, reqName); reqSchema != nil {
 		schemas[attrsName] = buildAttributesSchema(reqSchema)
 	}
 
@@ -453,12 +457,12 @@ func envelopeRequestBody(op, schemas map[string]any, entry RouteEntry) {
 
 // getSchemas returns the components/schemas map, creating it if necessary.
 func getSchemas(oas map[string]any) map[string]any {
-	components := helpers.GetMap(oas, "components")
+	components := stdx.GetMap(oas, "components")
 	if components == nil {
 		return nil
 	}
 
-	schemas := helpers.GetMap(components, "schemas")
+	schemas := stdx.GetMap(components, "schemas")
 	if schemas == nil {
 		schemas = map[string]any{}
 		components["schemas"] = schemas
@@ -511,10 +515,10 @@ func addJSONAPISchemas(schemas map[string]any) {
 
 // rewriteOperationResponses rewrites response content types and schemas for JSON:API.
 func rewriteOperationResponses(op, schemas map[string]any, cfg serviceConfig) {
-	for code, resp := range helpers.GetMap(op, "responses") {
-		content := helpers.GetMap(helpers.AsMap(resp), "content")
+	for code, resp := range stdx.GetMap(op, "responses") {
+		content := stdx.GetMap(stdx.AsMap(resp), "content")
 
-		jsonContent := helpers.GetMap(content, mediaJSON)
+		jsonContent := stdx.GetMap(content, mediaJSON)
 		if jsonContent == nil {
 			continue
 		}
@@ -540,12 +544,12 @@ func responseEnvelope(
 		return map[string]any{keyRef: "#/components/schemas/JsonApiErrorResponse"}
 	}
 
-	schemaName := resolveSchemaName(helpers.GetMap(jsonContent, keySchema))
+	schemaName := resolveSchemaName(stdx.GetMap(jsonContent, keySchema))
 	if schemaName == "" {
 		return nil
 	}
 
-	actualSchema := helpers.GetMap(schemas, schemaName)
+	actualSchema := stdx.GetMap(schemas, schemaName)
 	if actualSchema == nil {
 		return nil
 	}
@@ -555,7 +559,7 @@ func responseEnvelope(
 
 // resolveSchemaName extracts the schema name from a $ref or returns empty.
 func resolveSchemaName(schema map[string]any) string {
-	ref := helpers.GetString(schema, keyRef)
+	ref := stdx.GetString(schema, keyRef)
 	if ref == "" {
 		return ""
 	}
@@ -572,7 +576,7 @@ func wrapResponseSchema(
 	schemas map[string]any,
 	cfg serviceConfig,
 ) map[string]any {
-	props := helpers.GetMap(schema, keyProperties)
+	props := stdx.GetMap(schema, keyProperties)
 
 	// Empty response (e.g. DeleteUserResponse) — no properties key or empty map.
 	if len(props) == 0 {
@@ -592,7 +596,7 @@ func wrapResponseSchema(
 		resourceTypes = append(resourceTypes, t)
 	}
 
-	sort.Strings(resourceTypes)
+	slices.Sort(resourceTypes)
 
 	for _, t := range resourceTypes {
 		rc := cfg.resources[t]
@@ -625,9 +629,9 @@ func wrapMetaResponse(responseName string, schemas map[string]any) map[string]an
 	// early return) — no named schema is emitted, so `meta` falls back to an inline
 	// open object rather than a dangling $ref (which breaks a generated client).
 	metaValue := map[string]any{keyType: typeObject}
-	respSchema := helpers.GetMap(schemas, responseName)
+	respSchema := stdx.GetMap(schemas, responseName)
 
-	if props := helpers.GetMap(respSchema, keyProperties); len(props) > 0 {
+	if props := stdx.GetMap(respSchema, keyProperties); len(props) > 0 {
 		metaProps := make(map[string]any, len(props))
 		maps.Copy(metaProps, props)
 
@@ -636,7 +640,7 @@ func wrapMetaResponse(responseName string, schemas map[string]any) map[string]an
 			keyProperties: metaProps,
 		}
 		// Preserve `required` array from the original response schema.
-		if req := helpers.GetSlice(respSchema, keyRequired); len(req) > 0 {
+		if req := stdx.GetSlice(respSchema, keyRequired); len(req) > 0 {
 			metaSchema[keyRequired] = req
 		}
 
@@ -754,7 +758,7 @@ func addSingleResponseMeta(
 		keyProperties: metaProps,
 	}
 
-	resultProps := helpers.GetMap(result, keyProperties)
+	resultProps := stdx.GetMap(result, keyProperties)
 
 	resultProps[keyMeta] = map[string]any{
 		keyRef: "#/components/schemas/" + metaSchemaName,
@@ -816,14 +820,14 @@ func wrapCollectionResponse(
 func collectionAttributesRef(
 	responseName, collectionKey string, schemas map[string]any,
 ) map[string]any {
-	collProp := helpers.GetMap(
-		helpers.GetMap(helpers.GetMap(schemas, responseName), keyProperties),
+	collProp := stdx.GetMap(
+		stdx.GetMap(stdx.GetMap(schemas, responseName), keyProperties),
 		collectionKey,
 	)
 
-	itemSchema := helpers.GetMap(
+	itemSchema := stdx.GetMap(
 		schemas,
-		resolveSchemaName(helpers.GetMap(collProp, "items")),
+		resolveSchemaName(stdx.GetMap(collProp, "items")),
 	)
 	if itemSchema == nil {
 		return map[string]any{keyType: typeObject, keyDescription: "Resource attributes"}
@@ -841,7 +845,7 @@ func buildAttributesSchema(resourceSchema map[string]any) map[string]any {
 		keyType: typeObject,
 	}
 
-	props := helpers.GetMap(resourceSchema, keyProperties)
+	props := stdx.GetMap(resourceSchema, keyProperties)
 	if props == nil {
 		return attrs
 	}
@@ -867,7 +871,7 @@ func buildAttributesSchema(resourceSchema map[string]any) map[string]any {
 
 // requiredWithoutID returns the schema's required names, minus "id" and non-strings.
 func requiredWithoutID(resourceSchema map[string]any) []any {
-	req, _ := resourceSchema[keyRequired].([]any)
+	req := stdx.As[[]any](resourceSchema[keyRequired])
 
 	var filtered []any
 

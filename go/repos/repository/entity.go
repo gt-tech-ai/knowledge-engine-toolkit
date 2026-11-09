@@ -59,6 +59,9 @@ func NewEntity[R, T, P any, ID comparable, N any](
 		case decorate.RoleAppend:
 			s = b.Observed()
 		case decorate.RoleRead, decorate.RoleWrite:
+			s = b.Subject
+		default:
+			// An unlisted role keeps the base subject chosen above.
 		}
 
 		_, err := s.Exec(ctx, op, func(ctx context.Context) (struct{}, error) {

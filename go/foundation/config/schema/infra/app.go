@@ -18,6 +18,6 @@ func DefaultAppConfig() AppConfig {
 }
 
 // Validate returns an error if the configuration is invalid.
-func (c AppConfig) Validate() error {
+func (AppConfig) Validate() error {
 	return nil
 }

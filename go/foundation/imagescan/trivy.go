@@ -7,7 +7,7 @@ package imagescan
 import (
 	"context"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -61,6 +61,9 @@ func (p TrivyPolicy) Args(ref string) []string {
 	return append(args, "--ignorefile", p.IgnoreFile, "--exit-code", exit, ref)
 }
 
+// Strict names the strict option in a signature.
+type Strict bool
+
 // ScanImage scans the container image ref (a local tag or a pushed `<repo>@sha256:…`
 // digest) with Trivy under policy, run through runner in dir. A remaining finding fails
 // the row, unless the policy is ReportOnly. A missing trivy is a Skip, or a Fail
@@ -72,7 +75,7 @@ func ScanImage(
 	dir string,
 	policy TrivyPolicy,
 	ref string,
-	strict bool,
+	strict Strict,
 ) types.StepResults {
 	if !runner.Exists("trivy") {
 		if !strict {
@@ -80,7 +83,9 @@ func ScanImage(
 		}
 
 		return types.OneStep(trivyStep, types.StatusFail, apperr.New(
-			apperr.CodeNotFound, "trivy not found on PATH; a strict scan can't run"))
+			apperr.CodeNotFound,
+			"trivy not found on PATH; a bool(strict) scan can't run",
+		))
 	}
 
 	err := policy.Validate()

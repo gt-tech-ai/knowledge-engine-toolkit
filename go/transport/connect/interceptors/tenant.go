@@ -14,7 +14,7 @@ import (
 // resolved (a public or unauthenticated request). The nil UUID also counts as no
 // tenant.
 //
-// Read the tenant from the resolved principal (core/principal.PrincipalFrom) and register
+// Read the tenant from the resolved principal (core/principal.From) and register
 // the tenant-scope interceptor after the principal interceptor: the principal interceptor
 // clears the raw AuthClaims, so an extractor reading GetAuthClaims after it never sees a
 // tenant.
@@ -109,7 +109,7 @@ func (i tenantScopeInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 }
 
 // WrapStreamingClient is a no-op — this is a server-side propagation interceptor.
-func (i tenantScopeInterceptor) WrapStreamingClient(
+func (tenantScopeInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next

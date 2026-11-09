@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // privateDirMode is the mode of a directory only its owner enters.
@@ -101,11 +101,11 @@ func UpsertProfile(path, owner string, p Profile) error {
 
 	var b strings.Builder
 
-	b.WriteString(pre)
-	b.WriteString(begin + "\n")
-	b.WriteString(renderSections(sections))
-	b.WriteString(end + "\n")
-	b.WriteString(post)
+	_, _ = b.WriteString(pre)
+	_, _ = b.WriteString(begin + "\n")
+	_, _ = b.WriteString(renderSections(sections))
+	_, _ = b.WriteString(end + "\n")
+	_, _ = b.WriteString(post)
 
 	return writeFileAtomic(path, []byte(b.String()))
 }
@@ -205,10 +205,10 @@ func renderSections(sections []iniSection) string {
 	var b strings.Builder
 
 	for _, s := range sections {
-		b.WriteString("[" + s.header + "]\n")
+		_, _ = b.WriteString("[" + s.header + "]\n")
 
 		for _, line := range s.body {
-			b.WriteString(line + "\n")
+			_, _ = b.WriteString(line + "\n")
 		}
 	}
 

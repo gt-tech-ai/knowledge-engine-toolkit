@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
@@ -79,7 +79,7 @@ func expectEveryWidgetRole(n widgetNext) {
 
 // callEveryWidgetRole calls each of r's nine roles once on ctx, requiring each to
 // succeed and return what the next tier returned.
-func callEveryWidgetRole(t *testing.T, ctx context.Context, r interface {
+func callEveryWidgetRole(ctx context.Context, t *testing.T, r interface {
 	interfaces.Store[te, tp, string]
 	interfaces.Inserter[te]
 	interfaces.Upserter[te]
@@ -215,7 +215,7 @@ func TestStoreEntity_ServesEveryRoleOnTheStatementsClientAndWritesOnlyInATransac
 	var _ widgetStore = s
 
 	inTx := store.WithClient(interfaces.WithInTx(t.Context()), &storeClient{name: "tx"})
-	callEveryWidgetRole(t, inTx, s)
+	callEveryWidgetRole(inTx, t, s)
 
 	n, err := s.CountByOwner(inTx, "ann")
 	require.NoError(t, err)
@@ -326,7 +326,7 @@ func TestRepositoryEntity_RetriesReadsAndIdempotentWritesOnly(t *testing.T) {
 		next,
 		nil,
 	))
-	callEveryWidgetRole(t, t.Context(), repo)
+	callEveryWidgetRole(t.Context(), t, repo)
 	assert.Equal(t, next, repo.Next())
 }
 
@@ -357,7 +357,7 @@ func TestServiceEntity_ValidatesWritesBeforeTheRepository(t *testing.T) {
 	svc := fixtures.Must(service.NewEntity[widgetStore, te, tp, string](
 		fixtures.Decorations(), "widgets", next, rejectEmpty,
 	))
-	callEveryWidgetRole(t, t.Context(), svc)
+	callEveryWidgetRole(t.Context(), t, svc)
 
 	_, err := svc.Create(t.Context(), &te{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))

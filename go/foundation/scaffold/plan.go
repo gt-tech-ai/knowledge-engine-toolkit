@@ -13,7 +13,7 @@ import (
 	// The templates render source and config files, never HTML, so text/template is correct.
 	"text/template" // nosemgrep: import-text-template
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -177,6 +177,9 @@ func decide(
 
 		e.Content = merged
 	case types.PolicyRegenerate:
+		e.Content = content
+	default:
+		// An unlisted policy regenerates too: e.Content already holds content.
 	}
 
 	e.Action = types.FileUpdate

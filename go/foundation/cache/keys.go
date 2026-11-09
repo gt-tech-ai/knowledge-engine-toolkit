@@ -3,7 +3,7 @@ package cache
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -35,7 +35,7 @@ func hashParts(parts ...string) string {
 // can never be spoofed narrower than the real access boundary.
 func AccessFingerprint(scope ...string) string {
 	sorted := append([]string(nil), scope...)
-	sort.Strings(sorted)
+	slices.Sort(sorted)
 
 	return hashParts(sorted...)
 }

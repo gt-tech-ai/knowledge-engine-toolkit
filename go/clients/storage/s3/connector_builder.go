@@ -5,14 +5,14 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 )
 
 // ConnectorClientBuilder builds a connector-scoped StorageClient signing with a
 // connector's OWN credentials + region. It is an UNNAMED func type (an alias, not a
-// defined type) so a value of it is assignable to connector/s3.S3ClientBuilder at the
+// defined type) so a value of it is assignable to connector/s3.ClientBuilder at the
 // composition root — this package therefore never imports go/clients/connector, so there
 // is no lateral same-layer clients import.
 type ConnectorClientBuilder = func(

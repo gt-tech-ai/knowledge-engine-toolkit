@@ -8,7 +8,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc/wire"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Sanitize maps a domain AppError to a client-safe Connect code and a generic
@@ -29,7 +29,7 @@ func Sanitize(err error) (code connect.Code, message string) {
 // ToConnectError maps a domain AppError to a Connect error code and returns a
 // client-safe error.
 //
-// The real error is captured into the request's error sink (core/errors.Capture) so the
+// The real error is captured into the request's error sink (core/apperr.Capture) so the
 // request-logging interceptor can record the true cause once, while the value
 // returned to the client carries only a sanitized message. This prevents
 // leaking stack traces, SQL errors, or other implementation details to API

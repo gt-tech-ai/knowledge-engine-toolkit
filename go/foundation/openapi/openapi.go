@@ -17,12 +17,12 @@ import (
 	"io/fs"
 	"maps"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/helpers"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // serviceConfig maps a target service to its JSON:API resource metadata.
@@ -122,8 +122,8 @@ func Convert(
 		return Result{}, err
 	}
 
-	sort.Strings(written)
-	sort.Strings(skipped)
+	slices.Sort(written)
+	slices.Sort(skipped)
 
 	return Result{Written: written, Skipped: skipped}, nil
 }
@@ -253,7 +253,7 @@ func swaggerFilesAt(fsys interfaces.FS, p string, e fs.DirEntry) ([]string, erro
 // definitions. The files are read through fsys.
 func MergeSwaggerFiles(fsys interfaces.FS, files []string) (map[string]any, error) {
 	files = append([]string(nil), files...)
-	sort.Strings(files)
+	slices.Sort(files)
 
 	var merged map[string]any
 
@@ -295,12 +295,12 @@ func readSwaggerSpec(fsys interfaces.FS, file string) (map[string]any, error) {
 
 // mergeSpecSection copies spec's named section into merged, creating it when absent.
 func mergeSpecSection(merged, spec map[string]any, section string) {
-	from := helpers.GetMap(spec, section)
+	from := stdx.GetMap(spec, section)
 	if from == nil {
 		return
 	}
 
-	into := helpers.GetMap(merged, section)
+	into := stdx.GetMap(merged, section)
 	if into == nil {
 		into = make(map[string]any)
 		merged[section] = into

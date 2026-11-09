@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -67,7 +67,7 @@ func NewRunner(opts ...RunnerOption) *Runner {
 
 // Run executes a command, streaming its stdout/stderr to the runner's writers.
 func (d *Runner) Run(ctx context.Context, dir, name string, args ...string) error {
-	return d.runWithEnv(ctx, dir, nil, name, args...)
+	return d.execWithEnv(ctx, dir, nil, name, args...)
 }
 
 // RunWithEnv executes a command with extra environment variables appended.
@@ -78,7 +78,7 @@ func (d *Runner) RunWithEnv(
 	name string,
 	args ...string,
 ) error {
-	return d.runWithEnv(ctx, dir, extraEnv, name, args...)
+	return d.execWithEnv(ctx, dir, extraEnv, name, args...)
 }
 
 // RunBuffered executes a command with stdout/stderr captured into buffers.
@@ -87,7 +87,7 @@ func (d *Runner) RunBuffered(
 	dir, name string,
 	args ...string,
 ) interfaces.CmdResult {
-	return d.runBuffered(ctx, dir, nil, nil, name, args...)
+	return d.execBuffered(ctx, dir, nil, nil, name, args...)
 }
 
 // RunBufferedWithEnv executes a command with extra environment variables
@@ -99,7 +99,7 @@ func (d *Runner) RunBufferedWithEnv(
 	name string,
 	args ...string,
 ) interfaces.CmdResult {
-	return d.runBuffered(ctx, dir, extraEnv, nil, name, args...)
+	return d.execBuffered(ctx, dir, extraEnv, nil, name, args...)
 }
 
 // RunBufferedWithInput executes a command with extra environment variables appended,
@@ -112,11 +112,11 @@ func (d *Runner) RunBufferedWithInput(
 	name string,
 	args ...string,
 ) interfaces.CmdResult {
-	return d.runBuffered(ctx, dir, extraEnv, input, name, args...)
+	return d.execBuffered(ctx, dir, extraEnv, input, name, args...)
 }
 
 // Exists checks whether a binary is available on PATH.
-func (d *Runner) Exists(name string) bool {
+func (*Runner) Exists(name string) bool {
 	_, err := exec.LookPath(name)
 
 	return err == nil
@@ -136,9 +136,9 @@ func (d *Runner) RequireTool(name, installHint string) error {
 	return apperr.NotFound(msg)
 }
 
-// runBuffered is the shared implementation for RunBuffered, RunBufferedWithEnv and
+// execBuffered is the shared implementation for RunBuffered, RunBufferedWithEnv and
 // RunBufferedWithInput; a nil input leaves stdin unset.
-func (d *Runner) runBuffered(
+func (*Runner) execBuffered(
 	ctx context.Context,
 	dir string,
 	extraEnv []string,
@@ -210,8 +210,8 @@ func (d *Runner) stderrWriter() io.Writer {
 	return os.Stderr
 }
 
-// runWithEnv is the shared implementation for Run and RunWithEnv.
-func (d *Runner) runWithEnv(
+// execWithEnv is the shared implementation for Run and RunWithEnv.
+func (d *Runner) execWithEnv(
 	ctx context.Context,
 	dir string,
 	extraEnv []string,

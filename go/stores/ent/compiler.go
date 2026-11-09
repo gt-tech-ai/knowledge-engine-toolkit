@@ -17,11 +17,11 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
-// EntPredicate is the Ent query-node type: a function that mutates a *sql.Selector to add
+// Predicate is the Ent query-node type: a function that mutates a *sql.Selector to add
 // a WHERE predicate or an ORDER BY term. Ent unifies filter and sort as this one shape,
 // so the backend uses it for both the predicate type Q and the sort type S of the
 // QueryBackend algebra.
-type EntPredicate = func(*entsql.Selector)
+type Predicate = func(*entsql.Selector)
 
 // Backend interprets the list-query IR into parameterized Ent predicates and order
 // options. It is stateless — construct it with New — and satisfies
@@ -29,7 +29,7 @@ type EntPredicate = func(*entsql.Selector)
 type Backend struct{}
 
 // Ensure Backend implements the query-compiler algebra for the Ent/SQL target.
-var _ interfaces.QueryBackend[EntPredicate, EntPredicate] = Backend{}
+var _ interfaces.QueryBackend[Predicate, Predicate] = Backend{}
 
 // New returns the Ent query-compiler backend.
 func New() Backend { return Backend{} }
@@ -38,7 +38,7 @@ func New() Backend { return Backend{} }
 func noop(*entsql.Selector) {}
 
 // Empty is the no-op (match-all) predicate for an absent or empty filter.
-func (Backend) Empty() EntPredicate { return noop }
+func (Backend) Empty() Predicate { return noop }
 
 // Clause interprets a single leaf comparison into a parameterized Ent predicate. The
 // column comes only from the allow-list (never client input) and the value is always a
@@ -46,7 +46,7 @@ func (Backend) Empty() EntPredicate { return noop }
 // by the listquery parser; a value whose Go type does not fit the operator (only
 // reachable from a hand-built clause) degrades to a no-op predicate rather than
 // panicking.
-func (Backend) Clause(col string, op types.FilterOperator, v any) EntPredicate {
+func (Backend) Clause(col string, op types.FilterOperator, v any) Predicate {
 	switch op {
 	case types.OpEq, types.OpNe, types.OpGt, types.OpGte, types.OpLt, types.OpLte:
 		return compareClause(col, op, v)
@@ -62,7 +62,7 @@ func (Backend) Clause(col string, op types.FilterOperator, v any) EntPredicate {
 }
 
 // compareClause builds a comparison predicate on a base column.
-func compareClause(col string, op types.FilterOperator, v any) EntPredicate {
+func compareClause(col string, op types.FilterOperator, v any) Predicate {
 	if op == types.OpEq {
 		return entsql.FieldEQ(col, v)
 	}
@@ -87,7 +87,7 @@ func compareClause(col string, op types.FilterOperator, v any) EntPredicate {
 }
 
 // likeClause matches a substring, case-insensitively; a non-string value matches all.
-func likeClause(col string, v any) EntPredicate {
+func likeClause(col string, v any) Predicate {
 	s, ok := v.(string)
 	if !ok {
 		return noop
@@ -97,7 +97,7 @@ func likeClause(col string, v any) EntPredicate {
 }
 
 // inClause matches a list; a non-list value matches all.
-func inClause(col string, v any) EntPredicate {
+func inClause(col string, v any) Predicate {
 	vs, ok := v.([]any)
 	if !ok {
 		return noop
@@ -107,7 +107,7 @@ func inClause(col string, v any) EntPredicate {
 }
 
 // notInClause excludes a list; a non-list value matches all.
-func notInClause(col string, v any) EntPredicate {
+func notInClause(col string, v any) Predicate {
 	vs, ok := v.([]any)
 	if !ok {
 		return noop
@@ -129,7 +129,7 @@ func (Backend) ExistsClause(
 	join types.JoinTarget,
 	op types.FilterOperator,
 	v any,
-) EntPredicate {
+) Predicate {
 	return func(s *entsql.Selector) { applyExists(s, &join, op, v) }
 }
 
@@ -202,7 +202,7 @@ func colPredicate(
 	case types.OpEq, types.OpNe, types.OpGt, types.OpGte, types.OpLt, types.OpLte:
 		return comparePredicate(col, op, v)
 	case types.OpLike:
-		return likePredicate(col, v, caseInsensitive)
+		return likePredicate(col, v, caseInsensitiveFlag(caseInsensitive))
 	case types.OpIn, types.OpNotIn:
 		return listPredicate(col, op, v)
 	default:
@@ -235,8 +235,15 @@ func comparePredicate(col string, op types.FilterOperator, v any) *entsql.Predic
 	return entsql.LTE(col, v)
 }
 
+// caseInsensitiveFlag names the caseInsensitive option in a signature.
+type caseInsensitiveFlag bool
+
 // likePredicate matches a substring; a non-string value yields nil.
-func likePredicate(col string, v any, caseInsensitive bool) *entsql.Predicate {
+func likePredicate(
+	col string,
+	v any,
+	caseInsensitive caseInsensitiveFlag,
+) *entsql.Predicate {
 	s, ok := v.(string)
 	if !ok {
 		return nil
@@ -267,25 +274,25 @@ func listPredicate(col string, op types.FilterOperator, v any) *entsql.Predicate
 // combinator over the func(*sql.Selector) predicate shape (sql.And operates on
 // *sql.Predicate, a different type, so it cannot compose these).
 func (Backend) And(
-	subs []EntPredicate,
-) EntPredicate {
+	subs []Predicate,
+) Predicate {
 	return entsql.AndPredicates(subs...)
 }
 
 // Or combines sub-predicates so that at least one must match, via sql.OrPredicates.
 func (Backend) Or(
-	subs []EntPredicate,
-) EntPredicate {
+	subs []Predicate,
+) Predicate {
 	return entsql.OrPredicates(subs...)
 }
 
 // Order interprets one sort directive into an Ent order option (ORDER BY col ASC/DESC) as
 // a func(*sql.Selector), the shape query.Order accepts.
-func (Backend) Order(col string, desc bool) EntPredicate {
-	dir := entsql.OrderAsc()
-	if desc {
-		dir = entsql.OrderDesc()
-	}
+func (Backend) Order(col string, desc bool) Predicate {
+	dir := map[bool]entsql.OrderTermOption{
+		false: entsql.OrderAsc(),
+		true:  entsql.OrderDesc(),
+	}[desc]
 
 	return entsql.OrderByField(col, dir).ToFunc()
 }
@@ -302,8 +309,8 @@ func (Backend) Order(col string, desc bool) EntPredicate {
 // one ORDER BY term per column (first_name, then last_name); the correlated PK lookup is
 // cheap (EXPLAIN evidence), so the doubled lookup is acceptable and a single LATERAL is
 // not required. It never joins the base query.
-func (Backend) OrderJoin(join types.JoinTarget, desc bool) EntPredicate {
-	tail := nullsLastTail(desc)
+func (Backend) OrderJoin(join types.JoinTarget, desc bool) Predicate {
+	tail := nullsLastTail(descFlag(desc))
 
 	return func(s *entsql.Selector) {
 		for _, col := range join.Columns {
@@ -314,7 +321,7 @@ func (Backend) OrderJoin(join types.JoinTarget, desc bool) EntPredicate {
 
 // nullsLastTail is the direction with explicit NULLS placement: NULLS LAST ascending,
 // NULLS FIRST descending, so a NULL sorts predictably regardless of dialect defaults.
-func nullsLastTail(desc bool) string {
+func nullsLastTail(desc descFlag) string {
 	if desc {
 		return " DESC NULLS FIRST"
 	}
@@ -364,20 +371,23 @@ func orderBySubquery(s, sub *entsql.Selector, tail string) {
 // never client input, exactly like the column name — so inlining is safe, and it avoids
 // the placeholder-numbering collision that arises when an ORDER BY expression's bound
 // args interleave with the WHERE clause's args.
-func (Backend) OrderOrdinal(col string, values []string, desc bool) EntPredicate {
+func (Backend) OrderOrdinal(col string, values []string, desc bool) Predicate {
 	if len(values) == 0 {
 		return (Backend{}).Order(col, desc)
 	}
 
 	return func(s *entsql.Selector) {
 		s.OrderExprFunc(
-			func(b *entsql.Builder) { writeOrdinalCase(b, s.C(col), values, desc) },
+			func(b *entsql.Builder) { writeOrdinalCase(b, s.C(col), values, descFlag(desc)) },
 		)
 	}
 }
 
+// descFlag names the desc option in a signature.
+type descFlag bool
+
 // writeOrdinalCase writes a CASE ranking col by its position in values.
-func writeOrdinalCase(b *entsql.Builder, col string, values []string, desc bool) {
+func writeOrdinalCase(b *entsql.Builder, col string, values []string, desc descFlag) {
 	b.WriteString("CASE ")
 	b.WriteString(col)
 
@@ -418,8 +428,8 @@ func writeOrdinalCase(b *entsql.Builder, col string, values []string, desc bool)
 // are TRUSTED spec DATA (from the store's derived-sort resolver, never client input, like
 // a column name), so they are inlined as SQL literals — the same safety argument as
 // OrderOrdinal. A malformed spec (neither arm set) degrades to a no-op sort node.
-func (Backend) OrderDerived(d types.DerivedSort, desc bool) EntPredicate {
-	tail := nullsLastTail(desc)
+func (Backend) OrderDerived(d types.DerivedSort, desc bool) Predicate {
+	tail := nullsLastTail(descFlag(desc))
 
 	switch {
 	case d.Aggregate != nil:
@@ -432,7 +442,7 @@ func (Backend) OrderDerived(d types.DerivedSort, desc bool) EntPredicate {
 }
 
 // orderByAggregate orders by a correlated aggregate over the target table.
-func orderByAggregate(agg types.AggregateSpec, tail string) EntPredicate {
+func orderByAggregate(agg types.AggregateSpec, tail string) Predicate {
 	target := entsql.Table(agg.Table)
 	selExpr := aggregateExpr(target, &agg)
 
@@ -465,7 +475,7 @@ func aggregateExpr(target *entsql.SelectTable, agg *types.AggregateSpec) string 
 }
 
 // orderByInterval orders by a base column plus a per-discriminator interval.
-func orderByInterval(iv types.IntervalSpec, tail string) EntPredicate {
+func orderByInterval(iv types.IntervalSpec, tail string) Predicate {
 	return func(s *entsql.Selector) {
 		s.OrderExprFunc(func(b *entsql.Builder) { writeIntervalCase(b, s, &iv, tail) })
 	}

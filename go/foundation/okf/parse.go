@@ -6,7 +6,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // maxFenceIndent is the most spaces a code fence may be indented.
@@ -31,18 +31,18 @@ func Parse(path string, data []byte) (Doc, error) {
 	first, rest, _ := strings.Cut(text, "\n")
 
 	if strings.TrimSuffix(first, "\r") == fence {
-		block, body, line, ok := splitFrontmatter(rest)
+		split, ok := splitFrontmatter(rest)
 		if !ok {
 			return Doc{}, invalid(path, "the frontmatter block has no closing `---` line")
 		}
 
-		fm, err := decodeFrontmatter(path, block)
+		fm, err := decodeFrontmatter(path, split.block)
 		if err != nil {
 			return Doc{}, err
 		}
 
 		doc.HasFrontmatter, doc.Frontmatter = true, fm
-		doc.Body, doc.BodyStartLine = body, line
+		doc.Body, doc.BodyStartLine = split.body, split.bodyLine
 	}
 
 	doc.Links = extractLinks(doc.Body, doc.BodyStartLine)
@@ -50,16 +50,26 @@ func Parse(path string, data []byte) (Doc, error) {
 	return doc, nil
 }
 
+// frontmatterSplit is a document cut at its closing frontmatter fence.
+type frontmatterSplit struct {
+	// block is the YAML between the fences.
+	block string
+	// body is the text after the closing fence.
+	body string
+	// bodyLine is the body's 1-based line in the file.
+	bodyLine int
+}
+
 // splitFrontmatter finds the closing fence in rest (the text after the opening fence)
-// and returns the YAML between, the body after, and the body's 1-based file line.
-func splitFrontmatter(rest string) (block, body string, bodyLine int, ok bool) {
+// and returns the parts around it; ok is false when there is no closing fence.
+func splitFrontmatter(rest string) (split frontmatterSplit, ok bool) {
 	offset := 0
 	for n := 2; offset <= len(rest); n++ {
 		line, _, more := strings.Cut(rest[offset:], "\n")
 		if strings.TrimSuffix(line, "\r") == fence {
 			end := min(offset+len(line)+1, len(rest))
 
-			return rest[:offset], rest[end:], n + 1, true
+			return frontmatterSplit{rest[:offset], rest[end:], n + 1}, true
 		}
 
 		if !more {
@@ -69,7 +79,7 @@ func splitFrontmatter(rest string) (block, body string, bodyLine int, ok bool) {
 		offset += len(line) + 1
 	}
 
-	return "", "", 0, false
+	return frontmatterSplit{}, false
 }
 
 // invalid is the coded error for a malformed file.

@@ -16,7 +16,7 @@ import (
 
 	tfjson "github.com/hashicorp/terraform-json"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // JSONFile is the name terragrunt gives each unit's `terraform show -json` rendering of
@@ -169,9 +169,12 @@ func outputsChange(doc *tfjson.Plan) bool {
 	return false
 }
 
+// importingFlag names the importing option in a signature.
+type importingFlag bool
+
 // changeAction labels a resource's planned action list, or returns "" for no change
 // (no-op, or a data source read).
-func changeAction(actions tfjson.Actions, importing bool) string {
+func changeAction(actions tfjson.Actions, importing importingFlag) string {
 	switch {
 	case actions.Replace():
 		return ActionReplace
@@ -210,6 +213,8 @@ func (p *UnitPlan) count(action string) {
 		p.Add++
 
 		p.Destroy++
+	default:
+		// No other value changes the outcome.
 	}
 }
 
@@ -241,7 +246,7 @@ func Summary(title string, plans []UnitPlan) string {
 	fmt.Fprintf(&b, "### %s\n\n", title)
 
 	if len(plans) == 0 {
-		b.WriteString("No unit has pending changes.\n")
+		_, _ = b.WriteString("No unit has pending changes.\n")
 
 		return b.String()
 	}
@@ -269,7 +274,7 @@ func comparePlans(a, b UnitPlan) int {
 
 // writeUnitTable writes one row per unit.
 func writeUnitTable(b *strings.Builder, plans []UnitPlan) {
-	b.WriteString("| Unit | Add | Change | Destroy |\n|---|---:|---:|---:|\n")
+	_, _ = b.WriteString("| Unit | Add | Change | Destroy |\n|---|---:|---:|---:|\n")
 
 	for _, p := range plans {
 		unit := p.Unit
@@ -308,9 +313,9 @@ func writeDestroys(b *strings.Builder, plans []UnitPlan) {
 		return
 	}
 
-	b.WriteString("#### Destroys\n\n| Unit | Resource | Action |\n|---|---|---|\n")
-	b.WriteString(strings.Join(rows, "\n"))
-	b.WriteString("\n\n")
+	_, _ = b.WriteString("#### Destroys\n\n| Unit | Resource | Action |\n|---|---|---|\n")
+	_, _ = b.WriteString(strings.Join(rows, "\n"))
+	_, _ = b.WriteString("\n\n")
 }
 
 // writeUnitChanges writes one unit's changed resources as a collapsed list.
@@ -326,7 +331,7 @@ func writeUnitChanges(b *strings.Builder, p UnitPlan) {
 		fmt.Fprintf(b, "- %s `%s`\n", c.Action, c.Address)
 	}
 
-	b.WriteString("\n</details>\n")
+	_, _ = b.WriteString("\n</details>\n")
 }
 
 // FailedSummary is the summary a failed plan leaves in place of the unit tables, so a

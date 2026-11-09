@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Packages discovers Python packages by walking each of roots (repository-relative

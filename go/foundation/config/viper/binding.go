@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // envReplacer returns the replacer that maps a mapstructure dotted path to the
@@ -138,6 +138,8 @@ func fieldKey(f reflect.StructField) (name string, squash, ok bool) {
 			squash = true
 		case "remain":
 			return "", false, false
+		default:
+			// No other value changes the outcome.
 		}
 	}
 

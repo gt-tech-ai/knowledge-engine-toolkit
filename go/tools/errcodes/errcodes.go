@@ -13,7 +13,7 @@ const (
 	SourcePath = "taxonomy/error-codes.yaml"
 
 	// GoPath is the rendered Go file.
-	GoPath = "go/core/errors/codes.go"
+	GoPath = "go/core/apperr/codes.go"
 
 	// PythonPath is the rendered Python module.
 	PythonPath = "python/techai_webutils/src/techai_webutils/core/errors/codes.py"

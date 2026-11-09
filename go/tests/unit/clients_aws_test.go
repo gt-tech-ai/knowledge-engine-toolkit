@@ -26,7 +26,7 @@ import (
 	awsquotas "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/servicequotas"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/ses"
 	awssts "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/sts"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
@@ -91,16 +91,13 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 
 	_, err = sesc.GetAccount(ctx, &sesv2.GetAccountInput{})
 
-	testClientsAwsStubsAreTheDefaultRest(t, ctx, decs, err)
+	testClientsAwsStubsAreTheDefaultRest(ctx, t, decs, err)
 }
 
 // testClientsAwsStubsAreTheDefaultRest continues TestClientsAws_StubsAreTheDefault with
 // its remaining steps.
 func testClientsAwsStubsAreTheDefaultRest(
-	t *testing.T,
-	ctx context.Context,
-	decs decorate.Decorations,
-	err error,
+	ctx context.Context, t *testing.T, decs decorate.Decorations, err error,
 ) {
 	t.Helper()
 

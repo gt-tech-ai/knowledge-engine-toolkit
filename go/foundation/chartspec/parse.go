@@ -3,7 +3,7 @@ package chartspec
 import (
 	"encoding/json"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
 )
@@ -65,7 +65,7 @@ func Parse(b []byte, m *listquery.Map) (types.ChartSpec, error) {
 // holds a typed spec (mapped from a proto, say) validates it here rather than encoding
 // it to JSON for Parse. Every rejection is CodeInvalidInput.
 func Validate(spec types.ChartSpec, m *listquery.Map) (types.ChartSpec, error) {
-	err := validate(&spec, m)
+	err := validateSpec(&spec, m)
 	if err != nil {
 		return types.ChartSpec{}, err
 	}
@@ -73,8 +73,8 @@ func Validate(spec types.ChartSpec, m *listquery.Map) (types.ChartSpec, error) {
 	return spec, nil
 }
 
-// validate checks a decoded spec against m and compiles its filter in place.
-func validate(spec *types.ChartSpec, m *listquery.Map) error {
+// validateSpec checks a decoded spec against m and compiles its filter in place.
+func validateSpec(spec *types.ChartSpec, m *listquery.Map) error {
 	err := validateScalars(spec)
 	if err != nil {
 		return err

@@ -1,12 +1,5 @@
 package types
 
-import (
-	"encoding/json"
-	"time"
-
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
-)
-
 // AlgebraOp is a table-algebra operator combining shelf expressions.
 type AlgebraOp string
 
@@ -94,18 +87,6 @@ func (r FieldRef) Key() string {
 	return string(r.Agg) + "(" + r.Name + ")"
 }
 
-// AlgebraExpr is one node of a shelf's table-algebra expression: a leaf Field, or
-// an Op over Args. Wire form: a leaf is a FieldRef object; an operator node is
-// {"op":"cross"|"concat"|"nest","args":[…]}.
-type AlgebraExpr struct {
-	// Field is the leaf field reference; nil for an operator node.
-	Field *FieldRef
-	// Op is the operator of an operator node; empty for a leaf.
-	Op AlgebraOp
-	// Args are the operator's operands, in order.
-	Args []*AlgebraExpr
-}
-
 // algebraWire is the JSON shape of an AlgebraExpr (leaf and operator fields flattened).
 type algebraWire struct {
 	// Op is the operator of an operator node.
@@ -116,118 +97,6 @@ type algebraWire struct {
 	Agg Aggregate `json:"agg,omitempty"`
 	// Args are the operator's operands.
 	Args []*AlgebraExpr `json:"args,omitempty"`
-}
-
-// MarshalJSON renders the flattened wire form of the expression.
-func (e *AlgebraExpr) MarshalJSON() ([]byte, error) {
-	w := algebraWire{Op: e.Op, Args: e.Args}
-	if e.Field != nil {
-		w = algebraWire{Field: e.Field.Name, Agg: e.Field.Agg}
-	}
-
-	out, err := json.Marshal(w)
-	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: encode shelf")
-	}
-
-	return out, nil
-}
-
-// UnmarshalJSON decodes the flattened wire form: an object with "field" is a
-// leaf, one with "op" an operator node; anything else is CodeInvalidInput.
-func (e *AlgebraExpr) UnmarshalJSON(b []byte) error {
-	var w algebraWire
-
-	err := json.Unmarshal(b, &w)
-	if err != nil {
-		return apperr.Wrap(
-			err,
-			apperr.CodeInvalidInput,
-			"chartspec: invalid shelf expression",
-		)
-	}
-
-	switch {
-	case w.Field != "" && w.Op == "" && len(w.Args) == 0:
-		*e = AlgebraExpr{Field: &FieldRef{Name: w.Field, Agg: w.Agg}}
-	case w.Field == "" && w.Op != "":
-		*e = AlgebraExpr{Op: w.Op, Args: w.Args}
-	default:
-		return apperr.New(
-			apperr.CodeInvalidInput,
-			"chartspec: a shelf node is either a field or an operator",
-		)
-	}
-
-	return nil
-}
-
-// Shelf is a Rows or Columns shelf: a table-algebra expression (nil = empty shelf).
-type Shelf = *AlgebraExpr
-
-// Encodings maps a field to each visual channel of the marks.
-type Encodings struct {
-	// Color colors marks by a field.
-	Color *FieldRef `json:"color,omitempty"`
-	// Size sizes marks by a field.
-	Size *FieldRef `json:"size,omitempty"`
-	// Shape shapes marks by a field.
-	Shape *FieldRef `json:"shape,omitempty"`
-	// Label labels marks with a field.
-	Label *FieldRef `json:"label,omitempty"`
-}
-
-// Fields returns the encoded field references in channel order (color, size, shape,
-// label).
-func (e Encodings) Fields() []FieldRef {
-	var out []FieldRef
-
-	for _, ref := range []*FieldRef{e.Color, e.Size, e.Shape, e.Label} {
-		if ref != nil {
-			out = append(out, *ref)
-		}
-	}
-
-	return out
-}
-
-// TimeRange bounds the observations a query reads: From inclusive, To exclusive.
-type TimeRange struct {
-	// From is the inclusive lower bound.
-	From time.Time `json:"from"`
-	// To is the exclusive upper bound.
-	To time.Time `json:"to"`
-}
-
-// ChartSpec is a declarative visualization: shelves of table-algebra expressions
-// over one cube's fields, plus detail, encodings, filter, sort, time range, grain
-// and an optional explicit mark. foundation/chartspec parses it (gated by the cube's
-// allow-list) and compiles it into one AggregateQuery, the pane table and a mark
-// per pane.
-type ChartSpec struct {
-	// TimeRange bounds the observations read.
-	TimeRange TimeRange
-	// Filter is the parsed listquery predicate (set by chartspec.Parse; nil = no filter).
-	Filter Filter
-	// Rows is the rows shelf.
-	Rows Shelf
-	// Columns is the columns shelf.
-	Columns Shelf
-	// Encodings maps fields to the marks' visual channels.
-	Encodings Encodings
-	// Cube names the cube queried.
-	Cube string
-	// Grain is the time-axis resolution.
-	Grain Grain
-	// Mark, when set, overrides the inferred mark of every pane.
-	Mark Mark
-	// FilterTree is the filter as a structured tree (wire key "filter", the listquery
-	// grammar); chartspec.Parse compiles it into Filter. Nil means no filter.
-	FilterTree *FilterNode
-	// Detail adds group-by fields that are not on a shelf.
-	Detail []FieldRef
-	// Sort orders the result rows.
-	Sort []OrderField
 }
 
 // sortWire is the JSON shape of one sort directive.
@@ -260,93 +129,4 @@ type chartSpecWire struct {
 	Detail []FieldRef `json:"detail,omitempty"`
 	// Sort orders the rows.
 	Sort []sortWire `json:"sort,omitempty"`
-}
-
-// MarshalJSON renders the ChartSpec wire form (the filter tree in the listquery grammar).
-func (s ChartSpec) MarshalJSON() ([]byte, error) {
-	w := chartSpecWire{
-		TimeRange: s.TimeRange,
-		Rows:      s.Rows,
-		Columns:   s.Columns,
-		Encodings: s.Encodings,
-		Cube:      s.Cube,
-		Grain:     s.Grain,
-		Mark:      s.Mark,
-		Filter:    s.FilterTree,
-		Detail:    s.Detail,
-	}
-	for _, o := range s.Sort {
-		w.Sort = append(w.Sort, sortWire{Field: o.Field, Desc: o.Desc})
-	}
-
-	out, err := json.Marshal(w)
-	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: encode")
-	}
-
-	return out, nil
-}
-
-// UnmarshalJSON decodes the ChartSpec wire form. It decodes the filter into FilterTree;
-// chartspec.Parse validates the whole spec and compiles the filter.
-func (s *ChartSpec) UnmarshalJSON(b []byte) error {
-	var w chartSpecWire
-
-	err := json.Unmarshal(b, &w)
-	if err != nil {
-		return apperr.Wrap(err, apperr.CodeInvalidInput, "chartspec: invalid JSON")
-	}
-
-	*s = ChartSpec{
-		TimeRange:  w.TimeRange,
-		Rows:       w.Rows,
-		Columns:    w.Columns,
-		Encodings:  w.Encodings,
-		Cube:       w.Cube,
-		Grain:      w.Grain,
-		Mark:       w.Mark,
-		FilterTree: w.Filter,
-		Detail:     w.Detail,
-	}
-	for _, o := range w.Sort {
-		s.Sort = append(s.Sort, OrderField{Field: o.Field, Desc: o.Desc})
-	}
-
-	return nil
-}
-
-// MeasureRef is one measure an aggregate query computes: Name aggregated by Agg.
-type MeasureRef struct {
-	// Name is the measure field.
-	Name string
-	// Agg is the aggregation applied.
-	Agg Aggregate
-}
-
-// AggregateQuery is the single store query a ChartSpec compiles to: group the
-// cube's facts for OrgID in TimeRange by GroupBy (and the Grain time bucket),
-// compute Measures, apply Filter, order by Sort, and return at most Limit rows
-// (0 = unbounded).
-type AggregateQuery struct {
-	// TimeRange bounds the observations read.
-	TimeRange TimeRange
-	// Filter is the predicate applied (nil = none).
-	Filter Filter
-	// Cube names the cube.
-	Cube string
-	// OrgID is the tenant; always the leading partition key.
-	OrgID string
-	// Grain is the time-bucket resolution.
-	Grain Grain
-	// GroupBy are the dimension fields grouped by, in order.
-	GroupBy []string
-	// Measures are the aggregates computed, in order.
-	Measures []MeasureRef
-	// Sort orders the result rows.
-	Sort []OrderField
-	// ResumeToken, when set, resumes a previous stream after its last delivered
-	// page (RowStream.ResumeToken).
-	ResumeToken []byte
-	// Limit caps the rows returned (0 = no cap).
-	Limit int
 }

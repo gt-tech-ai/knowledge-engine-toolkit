@@ -117,19 +117,15 @@ func (s *RedisLockSuite) TestAcquire_ConcurrentSingleWinner() {
 
 	start := make(chan struct{})
 
-	wg.Add(n)
-
 	for range n {
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			<-start
 
 			_, ok, err := lk.Acquire(ctx, k)
 			if err == nil && ok {
 				wins.Add(1)
 			}
-		}()
+		})
 	}
 
 	close(start)
@@ -346,9 +342,8 @@ func (s *RedisLockSuite) TestNewFromConfig_RedisBackend() {
 	s.Require().NoError(l.Release(ctx, k, tok))
 
 	// Hold (the Locker method) acquires + manages a distinct key over real Redis.
-	heldCtx, release, held, err := l.Hold(ctx, s.key("factory-hold"))
-	s.Require().NoError(err)
-	s.Require().True(held, "Hold on a free key should acquire")
+	heldCtx, release, err := l.Hold(ctx, s.key("factory-hold"))
+	s.Require().NoError(err, "Hold on a free key should acquire")
 	s.Require().NoError(heldCtx.Err(), "held context is live while held")
 	release()
 }

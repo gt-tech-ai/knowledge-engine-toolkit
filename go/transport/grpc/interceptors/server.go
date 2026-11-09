@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc/wire"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
 )
@@ -103,8 +103,10 @@ func native[I any](
 			decorate.LayerRateLimit:
 			return nil, false
 		default:
-			return nil, false
+			// Any other value takes the shared result below.
 		}
+
+		return nil, false
 	}
 }
 
@@ -123,9 +125,12 @@ func nativeLogging[I any](d decorate.Deps, shape func(around) I) []I {
 	return when(d.Logger != nil, func() around { return logging(d.Logger) }, shape)
 }
 
+// presentFlag names the present option in a signature.
+type presentFlag bool
+
 // when returns the interceptor shape makes from build's around, or none when its
 // collaborator is absent.
-func when[I any](present bool, build func() around, shape func(around) I) []I {
+func when[I any](present presentFlag, build func() around, shape func(around) I) []I {
 	if !present {
 		return nil
 	}
@@ -167,7 +172,7 @@ func tier(mw decorate.OpMiddleware) around {
 
 // statusError returns the handler's own error unchanged, and an error the tier produced
 // (or rewrapped) as a sanitized status of its code; the real error is captured for the
-// request log (core/errors.Capture).
+// request log (core/apperr.Capture).
 func statusError(ctx context.Context, err, handlerErr error) error {
 	if err == nil || apperr.Identical(err, handlerErr) {
 		return err

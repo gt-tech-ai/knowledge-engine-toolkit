@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/workspace/golang"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
@@ -36,7 +36,7 @@ func goListOut(pkgs ...string) interfaces.CmdResult {
 	var out strings.Builder
 
 	for _, p := range pkgs {
-		out.WriteString(p + "\n")
+		_, _ = out.WriteString(p + "\n")
 	}
 
 	return interfaces.CmdResult{Stdout: []byte(out.String())}

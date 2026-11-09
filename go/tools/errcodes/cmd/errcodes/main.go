@@ -1,5 +1,5 @@
 // Command errcodes renders the error-code taxonomy into its Go and Python outputs:
-// `go generate ./go/core/errors/...` runs it from that package with -root at the
+// `go generate ./go/core/apperr/...` runs it from that package with -root at the
 // repository root.
 package main
 
@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 
 	fscodebase "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase/fs"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/gen"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tools/errcodes"

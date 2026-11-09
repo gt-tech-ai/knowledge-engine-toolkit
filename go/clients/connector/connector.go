@@ -4,7 +4,7 @@
 // (ARCHITECTURE.md#the-one-idea). Unlike the other client families, a source is built
 // per request, from the tenant's SourceConfig, so NewSourceBuilder returns the
 // SourceBuilder that runs the kinds table. It imports only the storage INTERFACE — via
-// the injected S3ClientBuilder — never go/clients/storage, so there is no lateral
+// the injected ClientBuilder — never go/clients/storage, so there is no lateral
 // same-layer import.
 package connector
 
@@ -41,7 +41,7 @@ type Deps struct {
 
 	// BuildS3Client constructs a connector-scoped StorageClient; injected by the app
 	// root so this package never imports go/clients/storage.
-	BuildS3Client connectors3.S3ClientBuilder
+	BuildS3Client connectors3.ClientBuilder
 	// STS is the AssumeRole client used only by the iam_role strategy, which refuses
 	// to build without one.
 	STS stscreds.AssumeRoleAPIClient

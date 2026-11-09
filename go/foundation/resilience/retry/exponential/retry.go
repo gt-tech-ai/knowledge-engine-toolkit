@@ -7,7 +7,7 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/budget"
 )
@@ -89,8 +89,10 @@ func defaultIsRetryable(err error) bool {
 		apperr.CodeUpstream:
 		return true
 	default:
-		return true
+		// Any other value takes the shared result below.
 	}
+
+	return true
 }
 
 // IsRetryable reports whether an error is worth retrying under the package's

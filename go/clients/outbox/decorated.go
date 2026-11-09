@@ -12,15 +12,20 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	outboxs3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/s3"
 	outboxsqs "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/sqs"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // decorateSQS runs every SQS call through the client tier and codes its errors, so
 // only transient failures are retried. Both calls are retryable: a queue
 // lookup is a read, and a re-sent batch only risks a duplicate the outbox's
 // at-least-once contract already allows.
-func decorateSQS(inner outboxsqs.API, c client.Base) outboxsqs.API {
-	return &sqsAPI{inner: inner, Base: &c}
+func decorateSQS(inner outboxsqs.API, c client.Base) outboxsqs.Calls {
+	api := &sqsAPI{inner: inner, Base: &c}
+
+	return outboxsqs.Calls{
+		GetQueueURL:      api.getQueueURL,
+		SendMessageBatch: api.SendMessageBatch,
+	}
 }
 
 // sqsAPI is the decorated SQS seam.
@@ -30,21 +35,6 @@ type sqsAPI struct {
 
 	// inner is the wrapped client.
 	inner outboxsqs.API
-}
-
-// GetQueueUrl resolves the queue URL through the client tier.
-func (a *sqsAPI) GetQueueUrl(
-	ctx context.Context, in *awssqs.GetQueueUrlInput, optFns ...func(*awssqs.Options),
-) (*awssqs.GetQueueUrlOutput, error) {
-	return a.Exec(
-		ctx,
-		"get_queue_url",
-		func(cctx context.Context) (*awssqs.GetQueueUrlOutput, error) {
-			out, err := a.inner.GetQueueUrl(cctx, in, optFns...)
-
-			return out, classify(err)
-		},
-	)
 }
 
 // SendMessageBatch sends one batch through the client tier.
@@ -58,6 +48,21 @@ func (a *sqsAPI) SendMessageBatch(
 		"send_message_batch",
 		func(cctx context.Context) (*awssqs.SendMessageBatchOutput, error) {
 			out, err := a.inner.SendMessageBatch(cctx, in, optFns...)
+
+			return out, classify(err)
+		},
+	)
+}
+
+// getQueueURL resolves the queue URL through the client tier.
+func (a *sqsAPI) getQueueURL(
+	ctx context.Context, in *awssqs.GetQueueUrlInput, optFns ...func(*awssqs.Options),
+) (*awssqs.GetQueueUrlOutput, error) {
+	return a.Exec(
+		ctx,
+		"get_queue_url",
+		func(cctx context.Context) (*awssqs.GetQueueUrlOutput, error) {
+			out, err := a.inner.GetQueueUrl(cctx, in, optFns...)
 
 			return out, classify(err)
 		},

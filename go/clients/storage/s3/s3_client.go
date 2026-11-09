@@ -19,7 +19,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 	"golang.org/x/sync/errgroup"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/lifecycle"
 )
@@ -40,23 +40,23 @@ const maxDeleteConcurrency = 8
 // large document's part PUTs overlap instead of running strictly serially.
 const maxUploadConcurrency = 5
 
-// S3API is the subset of the aws-sdk-go-v2 S3 client used by s3Client. It is an
+// API is the subset of the aws-sdk-go-v2 S3 client used by s3Client. It is an
 // exported, injectable seam (Config.API) so unit tests can drive it with a generated
 // mock without network access — mirroring the SQS client's API seam. *s3.Client and
 // the ListObjectsV2 paginator client both satisfy it.
 //
 // SDK seam — mocks the AWS S3 SDK client (aws-sdk-go-v2/service/s3), cannot compose with
 // a core port.
-type S3API interface {
-	S3Objects
-	S3Multipart
-	S3Buckets
+type API interface {
+	Objects
+	Multipart
+	Buckets
 }
 
-// S3Objects is the single-object and listing subset of the S3 SDK.
+// Objects is the single-object and listing subset of the S3 SDK.
 //
 // SDK seam
-type S3Objects interface {
+type Objects interface {
 	// PutObject stores a single object in one request.
 	PutObject(
 		ctx context.Context,
@@ -100,10 +100,10 @@ type S3Objects interface {
 	) (*s3.ListObjectsV2Output, error)
 }
 
-// S3Multipart is the multipart-upload subset of the S3 SDK.
+// Multipart is the multipart-upload subset of the S3 SDK.
 //
 // SDK seam
-type S3Multipart interface {
+type Multipart interface {
 	// CreateMultipartUpload begins a multipart upload and returns its upload ID.
 	CreateMultipartUpload(
 		ctx context.Context,
@@ -141,10 +141,10 @@ type S3Multipart interface {
 	) (*s3.ListMultipartUploadsOutput, error)
 }
 
-// S3Buckets is the bucket-management subset of the S3 SDK.
+// Buckets is the bucket-management subset of the S3 SDK.
 //
 // SDK seam
-type S3Buckets interface {
+type Buckets interface {
 	// HeadBucket probes whether a bucket exists and is reachable.
 	HeadBucket(
 		ctx context.Context,
@@ -168,7 +168,7 @@ type s3Client struct {
 	lifecycle.NoOp
 
 	// api is the underlying S3 API (a real *s3.Client in production, a mock in tests).
-	api S3API
+	api API
 
 	// presign generates time-limited GET/PUT URLs for direct browser access.
 	presign *s3.PresignClient
@@ -233,14 +233,14 @@ func (c *s3Client) Upload(
 	)
 }
 
-// NewClientFromAPI wraps an injected S3API seam (a generated mock in unit tests)
+// NewClientFromAPI wraps an injected API seam (a generated mock in unit tests)
 // as a StorageClient. presign is nil: presigning needs the concrete *s3.Client, so
 // PresignURL/PresignPutURL are not reachable on the mock path — they are unit-tested
 // offline through the real newS3Client path (NewFromConfig) and live against MinIO in
 // the integration suite. A non-positive threshold falls back to the default threshold.
 // sseKMSKeyID (may be empty) is the KMS key every write encrypts with.
 func NewClientFromAPI(
-	api S3API,
+	api API,
 	threshold int64,
 	sseKMSKeyID string,
 ) interfaces.StorageClient {

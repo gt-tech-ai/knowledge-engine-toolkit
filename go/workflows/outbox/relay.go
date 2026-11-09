@@ -22,7 +22,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
@@ -269,7 +269,7 @@ func (r *Relay) RunOnce(ctx context.Context) error {
 
 		span.SetAttribute("outbox.lane", r.cfg.Lane)
 
-		err := r.runOnce(ctx)
+		err := r.runIteration(ctx)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(interfaces.SpanStatusError, err.Error())
@@ -278,7 +278,7 @@ func (r *Relay) RunOnce(ctx context.Context) error {
 		return err
 	}
 
-	return r.runOnce(ctx)
+	return r.runIteration(ctx)
 }
 
 // registerMetrics registers the relay's outcome counters and backlog gauges, by lane.
@@ -309,8 +309,8 @@ func (r *Relay) registerMetrics(metrics interfaces.Metrics) {
 	)
 }
 
-// runOnce is RunOnce without the span.
-func (r *Relay) runOnce(ctx context.Context) error {
+// runIteration is RunOnce without the span.
+func (r *Relay) runIteration(ctx context.Context) error {
 	passes, err := r.drain(ctx)
 
 	if passes > 0 {

@@ -1,6 +1,10 @@
 package listquery
 
-import "context"
+import (
+	"context"
+
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+)
 
 // skipCountKeyType is the private context-key type for the skip-count flag (a distinct
 // unexported type so no other package can collide with or read the key). Its zero value,
@@ -25,7 +29,7 @@ func WithSkipCount(ctx context.Context) context.Context {
 // decorator passes the flag to its inner List) can check it without depending on the
 // private context key.
 func CountSkipped(ctx context.Context) bool {
-	skip, _ := ctx.Value(skipCountKeyType{}).(bool)
+	skip := stdx.As[bool](ctx.Value(skipCountKeyType{}))
 
 	return skip
 }

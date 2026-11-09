@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -30,7 +30,7 @@ func goldenFact() types.Fact {
 	return types.Fact{
 		Cube:  "genai_calls",
 		OrgID: "org-1",
-		TS:    time.Date(2026, 10, 9, 12, 34, 56, 789_000_000, time.UTC),
+		TS:    time.Date(2026, 10, 9, 12, 34, 56, 789000000, time.UTC),
 		Dims: map[string]string{
 			"label":    "a<b>&c\u2028",
 			"provider": "aws.bedrock",

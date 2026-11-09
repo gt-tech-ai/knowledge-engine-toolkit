@@ -8,7 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -146,7 +146,7 @@ func (s serviceAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 }
 
 // WrapStreamingClient is a no-op — this is a server-side authentication interceptor.
-func (s serviceAuthInterceptor) WrapStreamingClient(
+func (serviceAuthInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next

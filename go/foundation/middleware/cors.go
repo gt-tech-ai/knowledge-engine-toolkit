@@ -59,7 +59,7 @@ func CORS(cfg *CORSConfig) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h := w.Header()
 
-			setAllowOrigin(h, r.Header.Get("Origin"), allowAll, originSet)
+			setAllowOrigin(h, r.Header.Get("Origin"), allowAllFlag(allowAll), originSet)
 			h.Set("Access-Control-Allow-Methods", methods)
 			h.Set("Access-Control-Allow-Headers", headers)
 			setExposeHeaders(h, exposed)
@@ -76,11 +76,14 @@ func CORS(cfg *CORSConfig) Middleware {
 	}
 }
 
+// allowAllFlag names the allowAll option in a signature.
+type allowAllFlag bool
+
 // setAllowOrigin answers with a wildcard, or echoes an allowed request origin.
 func setAllowOrigin(
 	h http.Header,
 	origin string,
-	allowAll bool,
+	allowAll allowAllFlag,
 	set map[string]struct{},
 ) {
 	if allowAll {

@@ -15,9 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	connector "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector"
 	connectors3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -28,7 +28,7 @@ import (
 func stubBuilder(
 	sc interfaces.StorageClient,
 	capture func(aws.CredentialsProvider),
-) connectors3.S3ClientBuilder {
+) connectors3.ClientBuilder {
 	return func(
 		_ context.Context,
 		creds aws.CredentialsProvider,
@@ -95,12 +95,12 @@ func TestS3ConnectorSource_TestConnection(t *testing.T) {
 		require.Equal(t, 2, n)
 	})
 
-	testS3ConnectorSourceTestConnectionRest(t, ctx)
+	testS3ConnectorSourceTestConnectionRest(ctx, t)
 }
 
 // testS3ConnectorSourceTestConnectionRest continues TestS3ConnectorSource_TestConnection
 // with its remaining steps.
-func testS3ConnectorSourceTestConnectionRest(t *testing.T, ctx context.Context) {
+func testS3ConnectorSourceTestConnectionRest(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("a client-fault API error → InvalidInput", func(t *testing.T) {
@@ -194,12 +194,12 @@ func TestS3ConnectorSource_ListPage(t *testing.T) {
 		require.Equal(t, "tok2", next, "the resume token is surfaced for checkpointing")
 	})
 
-	testS3ConnectorSourceListPageRest(t, ctx)
+	testS3ConnectorSourceListPageRest(ctx, t)
 }
 
 // testS3ConnectorSourceListPageRest continues TestS3ConnectorSource_ListPage with its
 // remaining steps.
-func testS3ConnectorSourceListPageRest(t *testing.T, ctx context.Context) {
+func testS3ConnectorSourceListPageRest(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("a client-fault API error → InvalidInput (terminal)", func(t *testing.T) {
@@ -336,7 +336,7 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			testS3ConnectorSourceRejectsInvalidAuthConfigCase(t, ctx, tc)
+			testS3ConnectorSourceRejectsInvalidAuthConfigCase(ctx, t, tc)
 		})
 	}
 
@@ -360,9 +360,7 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 // testS3ConnectorSourceRejectsInvalidAuthConfigCase is the body of a closure in
 // TestS3ConnectorSource_RejectsInvalidAuthConfig.
 func testS3ConnectorSourceRejectsInvalidAuthConfigCase(
-	t *testing.T,
-	ctx context.Context,
-	tc s3InvalidAuthConfigRow,
+	ctx context.Context, t *testing.T, tc s3InvalidAuthConfigRow,
 ) {
 	t.Helper()
 
@@ -542,7 +540,7 @@ func TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures(t *testing.T) {
 		})
 	}
 
-	testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest(t, ctx)
+	testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest(ctx, t)
 }
 
 // s3APIFailureRow is one row of
@@ -580,8 +578,7 @@ func s3APIFailureTable() []s3APIFailureRow {
 // testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest continues
 // TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures with its remaining steps.
 func testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest(
-	t *testing.T,
-	ctx context.Context,
+	ctx context.Context, t *testing.T,
 ) {
 	t.Helper()
 

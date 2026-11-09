@@ -3,7 +3,7 @@ package convert
 import (
 	"github.com/google/uuid"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // ParseUUID parses a UUID request field, returning CodeInvalidInput when it is

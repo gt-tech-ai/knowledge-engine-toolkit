@@ -13,7 +13,7 @@ import (
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -50,6 +50,28 @@ type API interface {
 	) (*awssqs.SendMessageBatchOutput, error)
 }
 
+// Calls holds the two SDK operations the sink makes, as functions, so a decorator can
+// wrap each one without re-declaring the SDK's method set.
+type Calls struct {
+	// GetQueueURL resolves an existing queue's URL by name.
+	GetQueueURL func(
+		ctx context.Context,
+		in *awssqs.GetQueueUrlInput,
+		optFns ...func(*awssqs.Options),
+	) (*awssqs.GetQueueUrlOutput, error)
+	// SendMessageBatch enqueues up to 10 messages, reporting each entry's outcome.
+	SendMessageBatch func(
+		ctx context.Context,
+		in *awssqs.SendMessageBatchInput,
+		optFns ...func(*awssqs.Options),
+	) (*awssqs.SendMessageBatchOutput, error)
+}
+
+// CallsOf returns api's operations as Calls.
+func CallsOf(api API) Calls {
+	return Calls{GetQueueURL: api.GetQueueUrl, SendMessageBatch: api.SendMessageBatch}
+}
+
 // Config configures the SQS sink. At least one of Queue and Routes is required.
 type Config struct {
 	// Routes maps a record's route (its types.OutboxRouteAttribute attribute) to
@@ -73,7 +95,7 @@ type Config struct {
 // deduplicate an at-least-once redelivery by outbox_id.
 type Sink struct {
 	// api is the (decorated) SQS client.
-	api API
+	api Calls
 	// routes maps a route to its queue name.
 	routes map[string]string
 	// urls caches resolved queue URLs by queue name.
@@ -87,10 +109,22 @@ type Sink struct {
 }
 
 // New builds the sink over api, the SDK client the composition root injects; a
-// missing API, no queue and no routes, or a route mapped to an empty queue name is
-// CodeInvalidInput.
+// missing API is CodeInvalidInput, as is anything NewFromCalls rejects.
 func New(cfg Config, api API) (*Sink, error) {
-	if api == nil || (cfg.Queue == "" && len(cfg.Routes) == 0) {
+	if api == nil {
+		return nil, apperr.New(
+			apperr.CodeInvalidInput,
+			"outbox sqs sink: api and a queue or routes are required",
+		)
+	}
+
+	return NewFromCalls(cfg, CallsOf(api))
+}
+
+// NewFromCalls builds the sink over api's operations; no queue and no routes, or a
+// route mapped to an empty queue name, is CodeInvalidInput.
+func NewFromCalls(cfg Config, api Calls) (*Sink, error) {
+	if cfg.Queue == "" && len(cfg.Routes) == 0 {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"outbox sqs sink: api and a queue or routes are required",
@@ -403,7 +437,7 @@ func (s *Sink) queueURL(ctx context.Context, queue string) (string, error) {
 		return url, nil
 	}
 
-	out, err := s.api.GetQueueUrl(
+	out, err := s.api.GetQueueURL(
 		ctx,
 		&awssqs.GetQueueUrlInput{QueueName: aws.String(queue)},
 	)

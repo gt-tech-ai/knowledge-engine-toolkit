@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/helpers"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // httpDurationBuckets returns the default histogram bucket boundaries for HTTP
@@ -173,13 +173,15 @@ func (w *routeWriter) segment(path string, start, end int) {
 	switch {
 	case looksLikeID(seg):
 		w.begin(path, start)
-		w.b.WriteString("{id}")
+		_, _ = w.b.WriteString("{id}")
 	case w.rewritten:
-		w.b.WriteString(seg)
+		_, _ = w.b.WriteString(seg)
+	default:
+		// No other value changes the outcome.
 	}
 
 	if w.rewritten && end < len(path) {
-		w.b.WriteByte('/')
+		_ = w.b.WriteByte('/')
 	}
 }
 
@@ -190,7 +192,7 @@ func (w *routeWriter) begin(path string, start int) {
 	}
 
 	w.b.Grow(len(path) + len("{id}"))
-	w.b.WriteString(path[:start])
+	_, _ = w.b.WriteString(path[:start])
 
 	w.rewritten = true
 }
@@ -199,16 +201,16 @@ func (w *routeWriter) begin(path string, start int) {
 // must be collapsed to "{id}" in the route label: an all-digits numeric id, a
 // canonical UUID, or a long (>=16) hex token (object keys / hashes). Each of these
 // contains a digit, matching normalizeRoute's fast-path guard. The primitive
-// classifiers live in the shared go/helpers leaf utility.
+// classifiers live in the shared go/stdx leaf utility.
 func looksLikeID(seg string) bool {
 	switch {
 	case seg == "":
 		return false
-	case helpers.IsAllDigits(seg):
+	case stdx.IsAllDigits(seg):
 		return true
-	case helpers.IsUUID(seg):
+	case stdx.IsUUID(seg):
 		return true
-	case len(seg) >= 16 && helpers.IsHex(seg):
+	case len(seg) >= 16 && stdx.IsHex(seg):
 		return true
 	default:
 		return false

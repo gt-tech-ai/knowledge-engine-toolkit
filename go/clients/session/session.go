@@ -10,9 +10,10 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // ExpirySkew is how long before its expiry a cached credential stops being served: a
@@ -76,7 +77,7 @@ func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, erro
 	}
 
 	v, err, _ := p.group.Do(ref.String(), func() (any, error) {
-		return p.resolve(ctx, ref)
+		return p.resolveSession(ctx, ref)
 	})
 	if err != nil {
 		var zero Cred
@@ -84,7 +85,7 @@ func (p *Provider[Cred]) Resolve(ctx context.Context, ref types.Ref) (Cred, erro
 		return zero, err
 	}
 
-	cred, _ := v.(Cred)
+	cred := stdx.As[Cred](v)
 
 	return cred, nil
 }
@@ -119,10 +120,13 @@ func expired(cred any) bool {
 	return !at.IsZero() && at.Before(time.Now().Add(ExpirySkew))
 }
 
-// resolve reads, parses and verifies ref's credential, then caches it. It first
+// resolveSession reads, parses and verifies ref's credential, then caches it. It first
 // re-checks the cache: a caller that missed it may start its flight only after an
 // earlier flight for ref has finished and cached the credential.
-func (p *Provider[Cred]) resolve(ctx context.Context, ref types.Ref) (Cred, error) {
+func (p *Provider[Cred]) resolveSession(
+	ctx context.Context,
+	ref types.Ref,
+) (Cred, error) {
 	if cred, ok := p.cached(ref); ok {
 		return cred, nil
 	}

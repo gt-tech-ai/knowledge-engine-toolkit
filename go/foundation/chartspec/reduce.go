@@ -5,7 +5,7 @@ import (
 
 	"github.com/DataDog/sketches-go/ddsketch"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -139,8 +139,10 @@ func Finalize(p Partial, agg types.Aggregate) float64 {
 		types.AggP99:
 		return finalizeValue(p, agg)
 	default:
-		return math.NaN()
+		// Any other value takes the shared result below.
 	}
+
+	return math.NaN()
 }
 
 // finalizeValue finalizes a value-dependent aggregate, NaN for an empty summary.
@@ -165,8 +167,10 @@ func finalizeValue(p Partial, agg types.Aggregate) float64 {
 	case types.AggNone, types.AggSum, types.AggCount, types.AggCountDistinct:
 		return math.NaN()
 	default:
-		return math.NaN()
+		// Any other value takes the shared result below.
 	}
+
+	return math.NaN()
 }
 
 // quantile reads q from s, NaN when the sketch is missing or empty.

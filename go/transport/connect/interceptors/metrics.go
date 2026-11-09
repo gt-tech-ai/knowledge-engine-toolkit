@@ -60,7 +60,7 @@ func (i metricsInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc 
 }
 
 // WrapStreamingClient is a no-op — this is a server-side interceptor.
-func (i metricsInterceptor) WrapStreamingClient(
+func (metricsInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next

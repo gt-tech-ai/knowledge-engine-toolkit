@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	fcache "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/cache"
@@ -42,12 +42,15 @@ func TestCacheKey(t *testing.T) {
 	assert.Equal(t, "repo:widgets:42", repository.CacheKey("widgets", 42))
 }
 
+// withKeyFuncFlag names the withKeyFunc option in a signature.
+type withKeyFuncFlag bool
+
 // cachingRepo builds the read-through cache over store, optionally wiring the
 // id-extractor that enables warm-on-create.
 func cachingRepo(
 	store interfaces.Store[te, tp, string],
 	cache interfaces.ByteCache,
-	withKeyFunc bool,
+	withKeyFunc withKeyFuncFlag,
 ) interfaces.Store[te, tp, string] {
 	c := repository.Cache[te, string]{
 		Store:   cache,
@@ -122,11 +125,11 @@ func TestCached_Get(t *testing.T) {
 		assert.NotSame(t, backend, got, "the caller gets an independent copy")
 	})
 
-	testCachedGetRest(t, ctx, stored)
+	testCachedGetRest(ctx, t, stored)
 }
 
 // testCachedGetRest continues TestCached_Get with its remaining steps.
-func testCachedGetRest(t *testing.T, ctx context.Context, stored te) {
+func testCachedGetRest(ctx context.Context, t *testing.T, stored te) {
 	t.Helper()
 
 	for _, tc := range []struct {
@@ -237,11 +240,11 @@ func TestCached_Writes(t *testing.T) {
 		assert.ErrorIs(t, err, sentinel)
 	})
 
-	testCachedWritesRest(t, ctx)
+	testCachedWritesRest(ctx, t)
 }
 
 // testCachedWritesRest continues TestCached_Writes with its remaining steps.
-func testCachedWritesRest(t *testing.T, ctx context.Context) {
+func testCachedWritesRest(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("update evicts on success, not on failure", func(t *testing.T) {

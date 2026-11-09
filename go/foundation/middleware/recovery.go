@@ -11,21 +11,25 @@ import (
 func Recovery(logger interfaces.Logger) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			defer recoverPanic(logger, w, r)
+			defer func() {
+				if rec := recover(); rec != nil {
+					respondToPanic(logger, w, r, rec)
+				}
+			}()
 
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-// recoverPanic is deferred by Recovery: when the handler panicked it logs the panic
-// value and stack under the request's context and writes a 500.
-func recoverPanic(logger interfaces.Logger, w http.ResponseWriter, r *http.Request) {
-	rec := recover()
-	if rec == nil {
-		return
-	}
-
+// respondToPanic logs the recovered panic value and its stack under the request's
+// context and writes a 500.
+func respondToPanic(
+	logger interfaces.Logger,
+	w http.ResponseWriter,
+	r *http.Request,
+	rec any,
+) {
 	logger.WithContext(r.Context()).Error(
 		"panic recovered",
 		"panic", rec,

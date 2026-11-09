@@ -10,10 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -203,7 +204,7 @@ func TestExecutionOpsRegistryRun_LogsTheMappedCode(t *testing.T) {
 		Do(func(_ string, kv ...any) {
 			for i := 0; i+1 < len(kv); i += 2 {
 				if kv[i] == "error" {
-					logged, _ = kv[i+1].(error)
+					logged = stdx.As[error](kv[i+1])
 				}
 			}
 		})

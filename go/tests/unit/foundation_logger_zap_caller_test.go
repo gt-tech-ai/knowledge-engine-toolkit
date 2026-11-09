@@ -10,8 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	zaplogger "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/logger/zap"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
@@ -85,7 +86,7 @@ func TestZapLogger_CallerIsCallSite(t *testing.T) {
 	})
 	rec := zapLastJSONLine(t, out)
 
-	caller, _ := rec["caller"].(string)
+	caller := stdx.As[string](rec["caller"])
 	require.NotEmpty(t, caller, "expected a caller field in the log output")
 	assert.NotContains(t, caller, "zap/logger.go",
 		"caller still points at the logger wrapper instead of the call site")
@@ -133,17 +134,17 @@ func TestZapLogger_AppErrorSurfacesCauseAndStack(t *testing.T) {
 		rec["error"],
 	)
 
-	cause, _ := errObj["cause"].(string)
+	cause := stdx.As[string](errObj["cause"])
 	assert.Contains(t, cause, "deleted_at",
 		"expected cause to surface the underlying DB error")
 
-	stack, _ := errObj["stack"].(string)
+	stack := stdx.As[string](errObj["stack"])
 	assert.Contains(t, stack, "logger_zap_caller_test.go",
 		"expected origin stack rooted at the caller")
 
 	// The single top-level "stacktrace" must be the error's origin stack (rooted
 	// at the caller that created it), not the logger's own call site.
-	topStack, _ := rec["stacktrace"].(string)
+	topStack := stdx.As[string](rec["stacktrace"])
 	assert.Contains(t, topStack, "logger_zap_caller_test.go",
 		"expected top-level stacktrace rooted at the caller")
 	assert.NotContains(t, topStack, "logger/zap/logger.go",

@@ -11,10 +11,31 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
 )
+
+// filterGoldenWant is the Want element of filterGolden.
+type filterGoldenWant struct {
+	// ErrorCode is the coded error parsing returns.
+	ErrorCode apperr.ErrorCode `json:"error_code"`
+
+	// Filter is the parsed filter in its wire shape (see filterWire).
+	Filter json.RawMessage `json:"filter"`
+}
+
+// filterGoldenCases is the Cases element of filterGolden.
+type filterGoldenCases struct {
+	// Name labels the case.
+	Name string `json:"name"`
+
+	// Input is the filter in the JSON grammar.
+	Input string `json:"input"`
+
+	// Want is the parsed filter, or the error code parsing returns.
+	Want filterGoldenWant `json:"want"`
+}
 
 // filterGolden is testdata/listquery/filters.golden.json: one field schema and the
 // filter cases every filter codec and parser must agree on.
@@ -23,22 +44,7 @@ type filterGolden struct {
 	SchemaFields map[string]string `json:"schema_fields"`
 
 	// Cases are the filter strings and their expected outcomes.
-	Cases []struct {
-		// Name labels the case.
-		Name string `json:"name"`
-
-		// Input is the filter in the JSON grammar.
-		Input string `json:"input"`
-
-		// Want is the parsed filter, or the error code parsing returns.
-		Want struct {
-			// ErrorCode is the coded error parsing returns.
-			ErrorCode apperr.ErrorCode `json:"error_code"`
-
-			// Filter is the parsed filter in its wire shape (see filterWire).
-			Filter json.RawMessage `json:"filter"`
-		} `json:"want"`
-	} `json:"cases"`
+	Cases []filterGoldenCases `json:"cases"`
 }
 
 // loadFilterGolden reads the shared filter corpus and builds its allow-list.

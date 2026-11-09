@@ -52,7 +52,7 @@ type Logger struct {
 
 // New creates a zap-backed logger from the given config.
 func New(cfg Config) *Logger {
-	l := newSlog(cfg)
+	l := slogBridge(cfg)
 	// Bind the deployed commit (GIT_SHA env = image tag) so every log line carries
 	// git_sha, letting Grafana deep-link errors to GitHub source at that revision.
 	// This is the one sanctioned bootstrap env read in the logger: it is a deploy-time
@@ -68,7 +68,7 @@ func New(cfg Config) *Logger {
 
 // NewSlog returns a raw *slog.Logger backed by zap for stdlib compatibility.
 func NewSlog(cfg Config) *slog.Logger {
-	return newSlog(cfg)
+	return slogBridge(cfg)
 }
 
 // Debug logs a message at debug level with the given key/value attribute pairs.
@@ -162,8 +162,8 @@ func (l *Logger) log(level slog.Level, msg string, keysAndValues []any) {
 	_ = l.inner.Handler().Handle(ctx, r)
 }
 
-// newSlog creates the underlying *slog.Logger from config.
-func newSlog(cfg Config) *slog.Logger {
+// slogBridge creates the underlying *slog.Logger from config.
+func slogBridge(cfg Config) *slog.Logger {
 	level := parseLevel(cfg.Level)
 
 	var encoder zapcore.Encoder
@@ -219,8 +219,10 @@ func parseLevel(s string) zapcore.Level {
 	case "error":
 		return zapcore.ErrorLevel
 	default:
-		return zapcore.InfoLevel
+		// Any other value takes the shared result below.
 	}
+
+	return zapcore.InfoLevel
 }
 
 // redactingHandler wraps an slog.Handler and redacts PII from string values.

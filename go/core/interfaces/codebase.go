@@ -102,9 +102,3 @@ type IgnoredLister interface {
 	// directories; empty is the whole tree), sorted, each marked Untracked and Ignored.
 	ListIgnored(ctx context.Context, scope []string) ([]types.File, error)
 }
-
-// Renderer renders a chart to its manifest objects.
-type Renderer interface {
-	// Render renders spec and decodes its documents, in output order.
-	Render(ctx context.Context, spec types.RenderSpec) ([]types.Object, error)
-}

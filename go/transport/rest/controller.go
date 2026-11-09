@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // BaseController provides common HTTP response methods.
@@ -39,7 +39,7 @@ func MapErrorToHTTPStatus(err error) int {
 }
 
 // WriteJSON writes a JSON response.
-func (c *BaseController) WriteJSON(w http.ResponseWriter, status int, data any) {
+func (*BaseController) WriteJSON(w http.ResponseWriter, status int, data any) {
 	body, err := json.Marshal(data)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -88,6 +88,6 @@ func (c *BaseController) WriteCreated(w http.ResponseWriter, data any) {
 }
 
 // WriteNoContent writes a no content response with 204 No Content.
-func (c *BaseController) WriteNoContent(w http.ResponseWriter) {
+func (*BaseController) WriteNoContent(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }

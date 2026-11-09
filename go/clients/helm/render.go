@@ -7,10 +7,11 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // sourcePrefix starts the comment helm writes above each rendered document.
@@ -79,12 +80,12 @@ func Parse(manifest []byte) ([]types.Object, error) {
 			continue
 		}
 
-		meta, _ := doc["metadata"].(map[string]any)
+		meta := stdx.As[map[string]any](doc["metadata"])
 		o := types.Object{Doc: doc, Index: len(out), Source: sourceOf(chunk)}
 
-		o.Kind, _ = doc["kind"].(string)
-		o.Name, _ = meta["name"].(string)
-		o.Namespace, _ = meta["namespace"].(string)
+		o.Kind = stdx.As[string](doc["kind"])
+		o.Name = stdx.As[string](meta["name"])
+		o.Namespace = stdx.As[string](meta["namespace"])
 		out = append(out, o)
 	}
 
@@ -106,7 +107,7 @@ func documents(manifest string) []string {
 			continue
 		}
 
-		cur.WriteString(line + "\n")
+		_, _ = cur.WriteString(line + "\n")
 	}
 
 	return append(out, cur.String())

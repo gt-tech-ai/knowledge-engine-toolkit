@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
-	"sort"
+	"slices"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -268,7 +268,7 @@ func validateResourceKeys(svcName string, resources map[string]resourceConfig) e
 		types = append(types, t)
 	}
 
-	sort.Strings(types)
+	slices.Sort(types)
 
 	for _, t := range types {
 		rc := resources[t]

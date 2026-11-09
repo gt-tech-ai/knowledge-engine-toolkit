@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/logger/logctx"
 )
 
@@ -17,7 +17,7 @@ import (
 // the attributes the stacktrace handler injected.
 type stackCaptureHandler struct{ rec slog.Record }
 
-func (c *stackCaptureHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (*stackCaptureHandler) Enabled(context.Context, slog.Level) bool { return true }
 
 func (c *stackCaptureHandler) Handle(_ context.Context, r slog.Record) error {
 	c.rec = r

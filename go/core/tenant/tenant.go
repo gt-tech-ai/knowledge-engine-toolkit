@@ -23,10 +23,10 @@ func WithTenant(ctx context.Context, tenant uuid.UUID) context.Context {
 	return context.WithValue(ctx, tenantKey{}, tenant)
 }
 
-// TenantFromContext extracts the tenant (organization) id from context.
+// FromContext extracts the tenant (organization) id from context.
 // The bool is false (and the uuid is uuid.Nil) when the context is nil or no
 // tenant is set — the signal data-access layers use to fail closed.
-func TenantFromContext(ctx context.Context) (uuid.UUID, bool) {
+func FromContext(ctx context.Context) (uuid.UUID, bool) {
 	if ctx == nil {
 		return uuid.Nil, false
 	}

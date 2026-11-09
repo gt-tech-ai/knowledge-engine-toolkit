@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tfplan"
 )
 
@@ -22,10 +22,18 @@ type planChange struct {
 	importing bool
 }
 
+// outputsFlag names the outputs option in a signature.
+type outputsFlag bool
+
 // writeUnitPlan writes what terragrunt's --json-out-dir leaves for one unit: its
 // `terraform show -json` rendering carrying changes (and, when outputs is set, a changed
 // root output).
-func writeUnitPlan(t *testing.T, dir, unit string, outputs bool, changes ...planChange) {
+func writeUnitPlan(
+	t *testing.T,
+	dir, unit string,
+	outputs outputsFlag,
+	changes ...planChange,
+) {
 	t.Helper()
 
 	type change struct {

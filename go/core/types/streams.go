@@ -3,7 +3,7 @@ package types
 import (
 	"io"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Streams are the writers a command reports to: results on Out, progress and

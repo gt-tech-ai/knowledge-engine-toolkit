@@ -26,10 +26,10 @@ func snake(s string) string {
 		}
 
 		if sep && b.Len() > 0 {
-			b.WriteByte('_')
+			_ = b.WriteByte('_')
 		}
 
-		b.WriteRune(r)
+		_, _ = b.WriteRune(r)
 
 		sep = false
 	}

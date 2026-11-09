@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -217,8 +217,10 @@ func (p *printer) countStyle(s types.StepStatus) style {
 	case types.StatusSkip:
 		return p.pal.muted
 	default:
-		return p.pal.muted
+		// Any other value takes the shared result below.
 	}
+
+	return p.pal.muted
 }
 
 // lineSummary prints the line reporter's closing "n ok, … (elapsed)" line (normal

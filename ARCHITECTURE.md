@@ -23,12 +23,12 @@ over an ORM) → `go/repos` → `go/services` →
 `go/pipelines` → `go/workflows` → `go/transport` (REST/RPC edges).
 
 Outside the ladder: `go/execution` (batch fan-out and the operations registry; imports `core`
-and `foundation`), `go/helpers` (leaf utilities), and `go/tests` (may import anything). No
+and `foundation`), `go/stdx` (leaf utilities), and `go/tests` (may import anything). No
 package imports a higher layer. Integration
 families in a tier don't import each other (`clients/connector` is handed a storage builder rather
 than importing `clients/storage`); the shared clients-tier pieces are `clients/client` (the
 client tier and kind registry) and `clients/rpc/wire` (the RPC-status ↔ domain-code codec).
-`.golangci.yml` enforces the layer order and the `go/helpers` leaf rule
+`.golangci.yml` enforces the layer order and the `go/stdx` leaf rule
 with `depguard`; the `go/execution` and same-tier rules have no lint rule, so review holds them.
 
 Python mirrors the tiers: `core` → `foundation` (+ `execution`) → `clients` → `repos` →
@@ -76,7 +76,7 @@ Python imports heavy or optional dependencies lazily in the selected branch, so 
 Role compositions live in `core` too (`ReadListExistStore` embeds `Reader`/`Lister`/`Exister`;
 `CRUDNoListStore`, `CRUDNoListRepository`, `InsertOnlyStore`), with generated mocks in
 `go/tests/mocks`. An interface declared **outside** `core` embeds a core interface
-(`clients/rpc.RPCClient` embeds `interfaces.Client`). Opt-in
+(`clients/rpc.Client` embeds `interfaces.Client`). Opt-in
 capabilities compose rather than widen (`DynamicConsumer` embeds `MessageConsumer`); Python
 Protocols do the same (`StorageClient` composes `ManagedResource`).
 
@@ -508,7 +508,7 @@ OTel names whatever the class's prefix, and `foundation/observability.start_obse
 configures logging and the trace export from it.
 
 Business logic never reads the environment. In `go/`, env reads are confined to the config loader,
-the `env` secrets backend, subprocess plumbing in `foundation/system`, `helpers.OrDefault`, and one
+the `env` secrets backend, subprocess plumbing in `foundation/system`, `stdx.OrDefault`, and one
 documented exception: the logger's deploy-time `GIT_SHA` (mirrored in Python).
 
 ## Error codes
@@ -517,8 +517,8 @@ Every error crossing a package boundary carries an `ErrorCode`. The codes (`NOT_
 `INVALID_INPUT`, `UNAUTHORIZED`, `FORBIDDEN`, `CONFLICT`, `TIMEOUT`, `UNAVAILABLE`, `UPSTREAM`,
 `RESOURCE_EXHAUSTED`, `INTERNAL`, …) and every fact derived from one — its HTTP status, gRPC
 status, retry class, client-safe message and whether an edge hides its message — have one source,
-`taxonomy/error-codes.yaml`. `go generate ./go/core/errors/...` (`go/tools/errcodes`) renders it
-into Go `go/core/errors/codes.go` (the constants, `Codes()` and the lookup behind `IsTransient`,
+`taxonomy/error-codes.yaml`. `go generate ./go/core/apperr/...` (`go/tools/errcodes`) renders it
+into Go `go/core/apperr/codes.go` (the constants, `Codes()` and the lookup behind `IsTransient`,
 `ToHTTPStatus`, `GRPCStatus`, `SafeMessage` and `HidesMessage`) and Python
 `core/errors/codes.py` (the `ErrorCode` enum and its maps and sets); the Go unit suite fails when
 either committed output differs from a fresh render. `New(code, msg)` / `Wrap(err, code, msg)` build an

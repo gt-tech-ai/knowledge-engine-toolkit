@@ -9,9 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // testFilterMap is the shared allow-list the parser tests exercise: a string, a second
@@ -107,7 +108,7 @@ func TestParse_BasicAndComposite(t *testing.T) {
 	f, err = listquery.Parse(m, `{"$like": {"name": "report"}}`)
 	require.NoError(t, err)
 
-	clause, _ = f.(types.FilterClause)
+	clause = stdx.As[types.FilterClause](f)
 	assert.Equal(t, types.OpLike, clause.Operator)
 	assert.Equal(t, "report", clause.Value)
 
@@ -121,7 +122,7 @@ func TestParse_BasicAndComposite(t *testing.T) {
 	require.Len(t, comp.And, 2)
 	assert.Empty(t, comp.Or)
 
-	first, _ := comp.And[0].(types.FilterClause)
+	first := stdx.As[types.FilterClause](comp.And[0])
 	assert.Equal(t, "status", first.Field)
 
 	// $or composite.

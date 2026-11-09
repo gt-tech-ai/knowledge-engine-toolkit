@@ -55,22 +55,22 @@ func (s Secret) IsZero() bool {
 
 // String returns the mask so a Secret printed through its Stringer never reveals its
 // value.
-func (s Secret) String() string {
+func (Secret) String() string {
 	return secretMask
 }
 
 // Format renders the mask for every fmt verb (%s, %v, %q, %#v, …), so no format
 // directive can print the underlying value.
-func (s Secret) Format(f fmt.State, _ rune) {
+func (Secret) Format(f fmt.State, _ rune) {
 	_, _ = io.WriteString(f, secretMask)
 }
 
 // MarshalText masks the value for text encoders (YAML, encoding.TextMarshaler consumers).
-func (s Secret) MarshalText() ([]byte, error) {
+func (Secret) MarshalText() ([]byte, error) {
 	return []byte(secretMask), nil
 }
 
 // MarshalJSON masks the value for JSON encoders.
-func (s Secret) MarshalJSON() ([]byte, error) {
+func (Secret) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + secretMask + `"`), nil
 }

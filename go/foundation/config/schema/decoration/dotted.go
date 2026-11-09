@@ -3,8 +3,9 @@ package decoration
 import (
 	"reflect"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // dottedOverrides re-reads the overrides of each tier in over by name, finding them in
@@ -15,12 +16,12 @@ import (
 // dotted key or nested by segment — and a segment that only nests others is no
 // override.
 func dottedOverrides(loader interfaces.ConfigLoader, section any, over *Config) error {
-	tiers, _ := section.(map[string]any)
+	tiers := stdx.As[map[string]any](section)
 	cfg := reflect.ValueOf(over).Elem()
 
 	for i := range cfg.NumField() {
 		name := cfg.Type().Field(i).Tag.Get("mapstructure")
-		tier, _ := tiers[name].(map[string]any)
+		tier := stdx.As[map[string]any](tiers[name])
 		raw, ok := tier["overrides"].(map[string]any)
 
 		if !ok {

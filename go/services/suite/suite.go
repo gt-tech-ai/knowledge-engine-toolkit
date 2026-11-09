@@ -8,10 +8,9 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"sort"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/gate"
@@ -238,7 +237,7 @@ type Gate struct {
 	Flags []string
 }
 
-var _ gate.GateFactory = Gate{}
+var _ gate.Factory = Gate{}
 
 // Gate builds the suite's gate: one job per selected entry, in phase order; a Serial
 // phase runs its jobs one at a time. A suite that cannot be planned is one failing job.
@@ -389,7 +388,7 @@ func flagNames(s types.Suite) string {
 		names = append(names, k)
 	}
 
-	sort.Strings(names)
+	slices.Sort(names)
 
 	return strings.Join(names, ", ")
 }

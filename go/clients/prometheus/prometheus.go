@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	promhttp "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/http"
+	promhttp "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/httpapi"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/stub"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
@@ -50,7 +50,7 @@ type Deps struct {
 	decorate.Decorations
 
 	// Doer replaces the http.Client KindHTTP builds from Config.HTTP.Timeout.
-	Doer promhttp.HTTPDoer
+	Doer promhttp.Doer
 }
 
 // DefaultConfig returns the stub kind, a 30-second request timeout and a 32 MiB body

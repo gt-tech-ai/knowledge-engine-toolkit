@@ -81,7 +81,7 @@ func finishSpan(span interfaces.Span, err error) {
 }
 
 // WrapStreamingClient is a no-op — the client trace path is ClientTracingInterceptor.
-func (i tracingInterceptor) WrapStreamingClient(
+func (tracingInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next

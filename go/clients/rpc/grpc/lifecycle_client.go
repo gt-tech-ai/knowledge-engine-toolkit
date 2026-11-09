@@ -6,7 +6,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -83,7 +83,7 @@ func (c *Client) Readiness(_ context.Context) error {
 
 // Conn returns the underlying connection for building generated stubs. The return
 // type is grpc.ClientConnInterface — the type generated stub constructors accept —
-// so the rpc.RPCClient contract does not leak the concrete *grpc.ClientConn.
+// so the rpc.Client contract does not leak the concrete *grpc.ClientConn.
 func (c *Client) Conn() grpc.ClientConnInterface {
 	return c.conn
 }

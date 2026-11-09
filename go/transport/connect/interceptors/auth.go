@@ -141,7 +141,7 @@ func (a authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 }
 
 // WrapStreamingClient is a no-op — this is a server-side header-extraction interceptor.
-func (a authInterceptor) WrapStreamingClient(
+func (authInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next

@@ -60,19 +60,19 @@ func balanceCut(head, tail string) (closing, opening string) {
 	var c, o strings.Builder
 
 	if strings.Count(head, codeFence)%2 == 1 {
-		c.WriteString("\n" + codeFence)
+		_, _ = c.WriteString("\n" + codeFence)
 	}
 
 	for range strings.Count(head, "<details>") - strings.Count(head, "</details>") {
-		c.WriteString("\n</details>")
+		_, _ = c.WriteString("\n</details>")
 	}
 
 	for range strings.Count(tail, "</details>") - strings.Count(tail, "<details>") {
-		o.WriteString("<details>\n")
+		_, _ = o.WriteString("<details>\n")
 	}
 
 	if strings.Count(tail, codeFence)%2 == 1 {
-		o.WriteString(codeFence + "\n")
+		_, _ = o.WriteString(codeFence + "\n")
 	}
 
 	return c.String(), o.String()

@@ -10,7 +10,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/kubectl"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
@@ -71,13 +71,13 @@ func TestClientsKubectl_Exec(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "kind-dev", cur)
 
-	testClientsKubectlExecRest(t, ctx, r, c)
+	testClientsKubectlExecRest(ctx, t, r, c)
 }
 
 // testClientsKubectlExecRest continues TestClientsKubectl_Exec with its remaining steps.
 func testClientsKubectlExecRest(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	r *mocks.MockCommandRunner,
 	c interfaces.KubectlClient,
 ) {

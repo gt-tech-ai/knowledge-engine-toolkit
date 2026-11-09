@@ -17,7 +17,7 @@ import (
 
 	"golang.org/x/mod/modfile"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // workFile is the workspace file's name at the repository root.

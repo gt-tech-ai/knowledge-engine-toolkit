@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	fscodebase "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase/fs"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/gen"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tools/errcodes"
@@ -68,7 +68,7 @@ func TestErrcodes_CommittedOutputsMatchTaxonomy(t *testing.T) {
 	d, err := gen.Check(t.Context(), cb, errcodes.New())
 
 	require.NoError(t, err)
-	require.True(t, d.InSync, "run `go generate ./go/core/errors/...`:\n%s", d.Diff)
+	require.True(t, d.InSync, "run `go generate ./go/core/apperr/...`:\n%s", d.Diff)
 }
 
 // TestErrcodes_HandEditIsDrift tests that editing a generated output by hand is drift.

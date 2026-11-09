@@ -10,7 +10,7 @@ import (
 	"context"
 	"database/sql"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/store"
 )
@@ -44,7 +44,7 @@ func Tx(ctx context.Context) (*sql.Tx, bool) {
 func (m *Manager) Begin(
 	ctx context.Context,
 ) (context.Context, interfaces.Transaction, error) {
-	tx, err := m.begin(ctx)
+	tx, err := m.beginTx(ctx)
 	if err != nil {
 		return ctx, nil, err
 	}
@@ -59,7 +59,7 @@ func (m *Manager) WithTransaction(
 	ctx context.Context,
 	fn func(context.Context) error,
 ) error {
-	tx, err := m.begin(ctx)
+	tx, err := m.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -88,8 +88,8 @@ func (m *Manager) WithTransaction(
 	return nil
 }
 
-// begin opens a transaction, refusing one on a context already in a transaction.
-func (m *Manager) begin(ctx context.Context) (*sql.Tx, error) {
+// beginTx opens a transaction, refusing one on a context already in a transaction.
+func (m *Manager) beginTx(ctx context.Context) (*sql.Tx, error) {
 	if interfaces.InTx(ctx) {
 		return nil, apperr.New(
 			apperr.CodeInternal,

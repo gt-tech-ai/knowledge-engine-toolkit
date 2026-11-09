@@ -17,7 +17,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc/connect/interceptors"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
@@ -140,12 +140,12 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 		assert.EqualValues(t, 1, calls.Load())
 	})
 
-	testConnectClientOptionsDecorateEveryCallRest(t, ctx)
+	testConnectClientOptionsDecorateEveryCallRest(ctx, t)
 }
 
 // testConnectClientOptionsDecorateEveryCallRest continues
 // TestConnectClientOptions_DecorateEveryCall with its remaining steps.
-func testConnectClientOptionsDecorateEveryCallRest(t *testing.T, ctx context.Context) {
+func testConnectClientOptionsDecorateEveryCallRest(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("permanent", func(t *testing.T) {

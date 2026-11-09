@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
@@ -87,13 +88,29 @@ func getBody(t *testing.T, port, path string) (code int, body string) {
 	return resp.StatusCode, string(raw)
 }
 
-// serveAPI starts the API server over root on a free port and stops it at cleanup.
+// serveAPI starts the API server over root on a free port and stops it at cleanup,
+// retrying when a parallel test took the port first.
 func serveAPI(t *testing.T, root string) string {
 	t.Helper()
 
-	port := freePort(t)
-	srv, err := docserve.New(docserveCfg(root, port), docserveDeps(nil, nil)).
-		ServeAPIDocs(t.Context())
+	// freePort can only report a port free when it asks, and tests run in parallel, so
+	// another test may bind it first: a bind failure takes a fresh port.
+	var (
+		port string
+		srv  *http.Server
+		err  error
+	)
+
+	for range 5 {
+		port = freePort(t)
+		srv, err = docserve.New(docserveCfg(root, port), docserveDeps(nil, nil)).
+			ServeAPIDocs(t.Context())
+
+		if err == nil || !strings.Contains(err.Error(), "address already in use") {
+			break
+		}
+	}
+
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
 

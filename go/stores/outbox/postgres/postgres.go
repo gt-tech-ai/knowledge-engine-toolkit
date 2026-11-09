@@ -37,7 +37,7 @@ import (
 
 	"github.com/google/uuid"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/store"
@@ -226,7 +226,7 @@ func New(db *sql.DB, cfg Config) (*Store, error) {
 	for key, col := range cfg.AttributeColumns {
 		s.attrKeys = append(s.attrKeys, key)
 
-		attrCols.WriteString(", " + col + "::text")
+		_, _ = attrCols.WriteString(", " + col + "::text")
 	}
 
 	t := cfg.Table
@@ -575,7 +575,7 @@ func (s *Store) scanClaimed(rows *sql.Rows) (types.OutboxRecord, error) {
 
 // exec runs one guarded single-row update. A row that is no longer pending is left
 // unchanged and is not an error: another relay already finalized it.
-func (s *Store) exec(
+func (*Store) exec(
 	ctx context.Context,
 	op string,
 	id uuid.UUID,

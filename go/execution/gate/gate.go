@@ -7,14 +7,14 @@ import (
 	"fmt"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
-// GateFactory is a typed producer of a *Gate. CLI workflow types that compose
+// Factory is a typed producer of a *Gate. CLI workflow types that compose
 // a gate implement it so a workflow is a modeled value (parameters as fields)
 // rather than a bare builder function. It is a structural contract: callers use
 // the concrete workflow type directly; future gate-producing workflows implement
@@ -23,7 +23,7 @@ import (
 // interface-composition exemption — execution-engine primitive: a single
 // Gate() → *Gate producer contract, not an id-CRUD data-access surface, so it
 // embeds no foundation generic.
-type GateFactory interface {
+type Factory interface {
 	// Gate builds and returns the composed *Gate.
 	Gate() *Gate
 }
@@ -138,14 +138,14 @@ func (g *Gate) Run(
 	root string,
 ) error {
 	_, err := g.op.Exec(ctx, "run", func(ctx context.Context) (struct{}, error) {
-		return struct{}{}, g.run(ctx, runner, root)
+		return struct{}{}, g.runGate(ctx, runner, root)
 	})
 
 	return err
 }
 
-// run executes g's phases; Run decorates it.
-func (g *Gate) run(
+// runGate executes g's phases; Run decorates it.
+func (g *Gate) runGate(
 	ctx context.Context,
 	runner interfaces.CommandRunner,
 	root string,

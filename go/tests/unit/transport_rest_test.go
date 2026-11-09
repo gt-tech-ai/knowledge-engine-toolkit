@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/rest"
 )
 
@@ -32,21 +32,21 @@ import (
 func TestAdapt_Success(t *testing.T) {
 	t.Parallel()
 
-	type Req struct{ ID string }
+	type reqBody struct{ ID string }
 
-	type Resp struct {
+	type respBody struct {
 		Name string `json:"name"`
 	}
 
 	bc := &rest.BaseController{}
 	handler := rest.Adapt(
 		bc,
-		func(_ context.Context, req Req) (Resp, error) {
-			return Resp{Name: "user-" + req.ID}, nil
+		func(_ context.Context, req reqBody) (respBody, error) {
+			return respBody{Name: "user-" + req.ID}, nil
 		},
 		http.StatusOK,
-		func(r *http.Request) (Req, error) {
-			return Req{ID: r.PathValue("id")}, nil
+		func(r *http.Request) (reqBody, error) {
+			return reqBody{ID: r.PathValue("id")}, nil
 		},
 	)
 
@@ -63,7 +63,7 @@ func TestAdapt_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
-	var body Resp
+	var body respBody
 
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Equal(t, "user-", body.Name) // PathValue returns "" without mux routing
@@ -83,9 +83,9 @@ func TestAdapt_Success(t *testing.T) {
 func TestAdapt_ParseError(t *testing.T) {
 	t.Parallel()
 
-	type Req struct{ ID string }
+	type reqBody struct{ ID string }
 
-	type Resp struct {
+	type respBody struct {
 		Name string `json:"name"`
 	}
 
@@ -93,14 +93,14 @@ func TestAdapt_ParseError(t *testing.T) {
 	bc := &rest.BaseController{}
 	handler := rest.Adapt(
 		bc,
-		func(_ context.Context, _ Req) (Resp, error) {
+		func(_ context.Context, _ reqBody) (respBody, error) {
 			handlerCalled = true
 
-			return Resp{}, nil
+			return respBody{}, nil
 		},
 		http.StatusOK,
-		func(_ *http.Request) (Req, error) {
-			return Req{}, apperr.InvalidInput("missing id")
+		func(_ *http.Request) (reqBody, error) {
+			return reqBody{}, apperr.InvalidInput("missing id")
 		},
 	)
 
@@ -132,21 +132,21 @@ func TestAdapt_ParseError(t *testing.T) {
 func TestAdapt_HandlerError(t *testing.T) {
 	t.Parallel()
 
-	type Req struct{ ID string }
+	type reqBody struct{ ID string }
 
-	type Resp struct {
+	type respBody struct {
 		Name string `json:"name"`
 	}
 
 	bc := &rest.BaseController{}
 	handler := rest.Adapt(
 		bc,
-		func(_ context.Context, _ Req) (Resp, error) {
-			return Resp{}, apperr.NotFound("user not found")
+		func(_ context.Context, _ reqBody) (respBody, error) {
+			return respBody{}, apperr.NotFound("user not found")
 		},
 		http.StatusOK,
-		func(_ *http.Request) (Req, error) {
-			return Req{ID: "123"}, nil
+		func(_ *http.Request) (reqBody, error) {
+			return reqBody{ID: "123"}, nil
 		},
 	)
 
@@ -180,18 +180,18 @@ func TestAdapt_HandlerError(t *testing.T) {
 func TestAdaptNoContent_Success(t *testing.T) {
 	t.Parallel()
 
-	type Req struct{ ID string }
+	type reqBody struct{ ID string }
 
-	type Resp struct{}
+	type respBody struct{}
 
 	bc := &rest.BaseController{}
 	handler := rest.AdaptNoContent(
 		bc,
-		func(_ context.Context, _ Req) (Resp, error) {
-			return Resp{}, nil
+		func(_ context.Context, _ reqBody) (respBody, error) {
+			return respBody{}, nil
 		},
-		func(_ *http.Request) (Req, error) {
-			return Req{ID: "123"}, nil
+		func(_ *http.Request) (reqBody, error) {
+			return reqBody{ID: "123"}, nil
 		},
 	)
 
@@ -223,18 +223,18 @@ func TestAdaptNoContent_Success(t *testing.T) {
 func TestAdaptNoContent_ParseError(t *testing.T) {
 	t.Parallel()
 
-	type Req struct{ ID string }
+	type reqBody struct{ ID string }
 
-	type Resp struct{}
+	type respBody struct{}
 
 	bc := &rest.BaseController{}
 	handler := rest.AdaptNoContent(
 		bc,
-		func(_ context.Context, _ Req) (Resp, error) {
-			return Resp{}, nil
+		func(_ context.Context, _ reqBody) (respBody, error) {
+			return respBody{}, nil
 		},
-		func(_ *http.Request) (Req, error) {
-			return Req{}, apperr.InvalidInput("bad request")
+		func(_ *http.Request) (reqBody, error) {
+			return reqBody{}, apperr.InvalidInput("bad request")
 		},
 	)
 
@@ -264,18 +264,18 @@ func TestAdaptNoContent_ParseError(t *testing.T) {
 func TestAdaptNoContent_HandlerError(t *testing.T) {
 	t.Parallel()
 
-	type Req struct{ ID string }
+	type reqBody struct{ ID string }
 
-	type Resp struct{}
+	type respBody struct{}
 
 	bc := &rest.BaseController{}
 	handler := rest.AdaptNoContent(
 		bc,
-		func(_ context.Context, _ Req) (Resp, error) {
-			return Resp{}, apperr.Sentinel("database error")
+		func(_ context.Context, _ reqBody) (respBody, error) {
+			return respBody{}, apperr.Sentinel("database error")
 		},
-		func(_ *http.Request) (Req, error) {
-			return Req{ID: "123"}, nil
+		func(_ *http.Request) (reqBody, error) {
+			return reqBody{ID: "123"}, nil
 		},
 	)
 

@@ -13,7 +13,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"golang.org/x/sync/singleflight"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/cache"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )

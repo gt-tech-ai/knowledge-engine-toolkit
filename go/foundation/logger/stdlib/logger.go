@@ -39,12 +39,12 @@ type Logger struct {
 
 // New creates a stdlib slog-backed logger from the given config.
 func New(cfg Config) *Logger {
-	return &Logger{inner: newSlog(cfg)}
+	return &Logger{inner: slogBridge(cfg)}
 }
 
 // NewSlog returns a raw *slog.Logger for stdlib compatibility.
 func NewSlog(cfg Config) *slog.Logger {
-	return newSlog(cfg)
+	return slogBridge(cfg)
 }
 
 // Debug logs a message at debug level with the given key/value attribute pairs.
@@ -105,8 +105,8 @@ func (l *Logger) WithContext(ctx context.Context) interfaces.Logger {
 	return &Logger{inner: l.inner.With(fields...)}
 }
 
-// newSlog creates the underlying *slog.Logger from config.
-func newSlog(cfg Config) *slog.Logger {
+// slogBridge creates the underlying *slog.Logger from config.
+func slogBridge(cfg Config) *slog.Logger {
 	level := parseLevel(cfg.Level)
 
 	opts := &slog.HandlerOptions{
@@ -142,6 +142,8 @@ func canonicalAttr(groups []string, a slog.Attr) slog.Attr {
 		if lvl, ok := a.Value.Any().(slog.Level); ok {
 			a.Value = slog.StringValue(strings.ToLower(lvl.String()))
 		}
+	default:
+		// No other value changes the outcome.
 	}
 
 	return a
@@ -160,6 +162,8 @@ func parseLevel(s string) slog.Level {
 	case "error":
 		return slog.LevelError
 	default:
-		return slog.LevelInfo
+		// Any other value takes the shared result below.
 	}
+
+	return slog.LevelInfo
 }

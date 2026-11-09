@@ -16,7 +16,7 @@ import (
 	connectorpkg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector"
 	connectors3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3"
 	storages3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 	miniofix "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/minio"
@@ -25,7 +25,7 @@ import (
 // minioS3Client builds a connector-scoped StorageClient against the MinIO endpoint — the
 // test's S3ClientBuilder, mirroring the app composition root's closure (the seam that
 // keeps go/clients/connector free of a lateral storage import).
-func minioS3Client(endpoint string) connectors3.S3ClientBuilder {
+func minioS3Client(endpoint string) connectors3.ClientBuilder {
 	return func(
 		ctx context.Context,
 		creds aws.CredentialsProvider,
@@ -111,14 +111,14 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 		SecretAccessKey: miniofix.RootPassword,
 	}
 
-	testConnectorS3SourceTestConnectionRealMinIORest(t, ctx, builder, cfg)
+	testConnectorS3SourceTestConnectionRealMinIORest(ctx, t, builder, cfg)
 }
 
 // testConnectorS3SourceTestConnectionRealMinIORest continues
 // TestConnectorS3Source_TestConnection_RealMinIO with its remaining steps.
 func testConnectorS3SourceTestConnectionRealMinIORest(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	builder interfaces.SourceBuilder,
 	cfg interfaces.SourceConfig,
 ) {

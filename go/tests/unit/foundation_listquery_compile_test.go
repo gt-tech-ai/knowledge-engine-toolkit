@@ -54,6 +54,11 @@ func (stringBackend) And(
 	return "(" + strings.Join(subs, " AND ") + ")"
 }
 
+// nullsOrder is the sort suffix of a direction, nulls last on ascending.
+func nullsOrder(desc bool) string {
+	return map[bool]string{false: "ASC NULLS LAST", true: "DESC NULLS FIRST"}[desc]
+}
+
 func (stringBackend) Or(
 	subs []string,
 ) string {
@@ -61,20 +66,13 @@ func (stringBackend) Or(
 }
 func (stringBackend) Empty() string { return "TRUE" }
 func (stringBackend) Order(col string, desc bool) string {
-	if desc {
-		return col + " DESC"
-	}
-
-	return col + " ASC"
+	return col + map[bool]string{false: " ASC", true: " DESC"}[desc]
 }
 
 // OrderJoin renders a joined ORDER BY as a readable correlated-subquery string, one term
 // per join column, so CompileOrder's joined branch is exercised backend-agnostically.
 func (stringBackend) OrderJoin(join types.JoinTarget, desc bool) string {
-	dir := "ASC NULLS LAST"
-	if desc {
-		dir = "DESC NULLS FIRST"
-	}
+	dir := nullsOrder(desc)
 
 	terms := make([]string, len(join.Columns))
 	for i, col := range join.Columns {
@@ -88,10 +86,7 @@ func (stringBackend) OrderJoin(join types.JoinTarget, desc bool) string {
 // OrderOrdinal renders a value-ordinal ORDER BY as a readable CASE string, so
 // CompileOrder's ordinal branch is exercised backend-agnostically.
 func (stringBackend) OrderOrdinal(col string, values []string, desc bool) string {
-	dir := "ASC"
-	if desc {
-		dir = "DESC"
-	}
+	dir := map[bool]string{false: "ASC", true: "DESC"}[desc]
 
 	return fmt.Sprintf("CASE(%s;%s) %s", col, strings.Join(values, ","), dir)
 }
@@ -101,12 +96,7 @@ func (stringBackend) OrderOrdinal(col string, values []string, desc bool) string
 // exercised backend-agnostically (a nil-armed spec degrades to a no-op, mirroring the Ent
 // backend).
 func (stringBackend) OrderDerived(d types.DerivedSort, desc bool) string {
-	dir := "ASC NULLS LAST"
-	if desc {
-		dir = "DESC NULLS FIRST"
-	}
-
-	return orderDerivedRest(d, dir)
+	return orderDerivedRest(d, nullsOrder(desc))
 }
 
 // orderDerivedRest continues OrderDerived with its remaining steps.

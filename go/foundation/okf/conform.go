@@ -220,6 +220,8 @@ func (f *fenceTracker) consume(line string) bool {
 		f.open = marker
 	case strings.HasPrefix(marker, f.open[:1]):
 		f.open = ""
+	default:
+		// No other value changes the outcome.
 	}
 
 	return true

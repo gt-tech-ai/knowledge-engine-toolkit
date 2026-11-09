@@ -9,7 +9,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/git"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
@@ -71,15 +71,12 @@ func TestClientsGit_Exec(t *testing.T) {
 			"--diff-filter=ACM", "--").
 		Return(interfaces.CmdResult{Stdout: []byte("s.go\x00")})
 
-	testClientsGitExecRest(t, ctx, r, c)
+	testClientsGitExecRest(ctx, t, r, c)
 }
 
 // testClientsGitExecRest continues TestClientsGit_Exec with its remaining steps.
 func testClientsGitExecRest(
-	t *testing.T,
-	ctx context.Context,
-	r *mocks.MockCommandRunner,
-	c interfaces.GitClient,
+	ctx context.Context, t *testing.T, r *mocks.MockCommandRunner, c interfaces.GitClient,
 ) {
 	t.Helper()
 
@@ -258,16 +255,13 @@ func TestClientsGit_HistoryAndWorktree(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"new.md", "d/n.md"}, files)
 
-	testClientsGitHistoryAndWorktreeRest(t, ctx, r, c)
+	testClientsGitHistoryAndWorktreeRest(ctx, t, r, c)
 }
 
 // testClientsGitHistoryAndWorktreeRest continues TestClientsGit_HistoryAndWorktree with
 // its remaining steps.
 func testClientsGitHistoryAndWorktreeRest(
-	t *testing.T,
-	ctx context.Context,
-	r *mocks.MockCommandRunner,
-	c interfaces.GitClient,
+	ctx context.Context, t *testing.T, r *mocks.MockCommandRunner, c interfaces.GitClient,
 ) {
 	t.Helper()
 

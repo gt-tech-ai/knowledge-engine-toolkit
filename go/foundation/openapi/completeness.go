@@ -1,7 +1,8 @@
 package openapi
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -67,9 +68,10 @@ func CheckCompleteness(
 		return nil, err
 	}
 
-	sort.Slice(violations, func(i, j int) bool {
-		return violations[i].RPC < violations[j].RPC
-	})
+	slices.SortFunc(
+		violations,
+		func(a, b Violation) int { return cmp.Compare(a.RPC, b.RPC) },
+	)
 
 	return violations, nil
 }

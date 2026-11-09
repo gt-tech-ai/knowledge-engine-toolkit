@@ -5,7 +5,7 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // decodeTOML decodes a TOML file into maps and lists. An offset date-time is a

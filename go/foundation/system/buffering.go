@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Compile-time assertion: BufferingRunner must satisfy CommandRunner.
@@ -74,8 +74,8 @@ func (b *BufferingRunner) RunBuffered(
 ) CmdResult {
 	result := b.inner.RunBuffered(ctx, dir, name, args...)
 	b.mu.Lock()
-	b.buf.Write(result.Stdout)
-	b.buf.Write(result.Stderr)
+	_, _ = b.buf.Write(result.Stdout)
+	_, _ = b.buf.Write(result.Stderr)
 	b.mu.Unlock()
 
 	return result
@@ -92,8 +92,8 @@ func (b *BufferingRunner) RunBufferedWithEnv(
 ) CmdResult {
 	result := b.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
 	b.mu.Lock()
-	b.buf.Write(result.Stdout)
-	b.buf.Write(result.Stderr)
+	_, _ = b.buf.Write(result.Stdout)
+	_, _ = b.buf.Write(result.Stderr)
 	b.mu.Unlock()
 
 	return result
@@ -111,8 +111,8 @@ func (b *BufferingRunner) RunBufferedWithInput(
 ) CmdResult {
 	result := b.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
 	b.mu.Lock()
-	b.buf.Write(result.Stdout)
-	b.buf.Write(result.Stderr)
+	_, _ = b.buf.Write(result.Stdout)
+	_, _ = b.buf.Write(result.Stderr)
 	b.mu.Unlock()
 
 	return result
@@ -162,8 +162,8 @@ func (b *BufferingRunner) runBufferedAndReplay(
 	b.replay(result.Stdout, result.Stderr)
 
 	b.mu.Lock()
-	b.buf.Write(result.Stdout)
-	b.buf.Write(result.Stderr)
+	_, _ = b.buf.Write(result.Stdout)
+	_, _ = b.buf.Write(result.Stderr)
 	b.mu.Unlock()
 
 	if result.Err != nil {
@@ -180,7 +180,7 @@ func (b *BufferingRunner) runBufferedAndReplay(
 // note prints one progress line unless the runner is quiet.
 func (b *BufferingRunner) note(verb, cmd string) {
 	if !b.quiet {
-		fmt.Fprintf(os.Stderr, "%s %s\n", verb, cmd)
+		_, _ = fmt.Fprintf(os.Stderr, "%s %s\n", verb, cmd)
 	}
 }
 

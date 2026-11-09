@@ -67,7 +67,7 @@ func (h *stacktraceHandler) Handle(ctx context.Context, r slog.Record) error {
 }
 
 // stackTracer is implemented by errors that carry an origin stack trace
-// (notably core/errors.AppError). It is matched structurally so this package
+// (notably core/apperr.AppError). It is matched structurally so this package
 // stays free of a dependency on the errors package.
 //
 // SDK seam — mirrors pkg/errors' unexported stackTracer interface (StackTrace() string),
@@ -125,12 +125,12 @@ func captureStack() string {
 		// Drop logging plumbing frames wherever they appear so the trace shows
 		// only application code.
 		if !isInternalFrame(frame.Function, frame.File) {
-			b.WriteString(frame.Function)
-			b.WriteString("\n\t")
-			b.WriteString(frame.File)
-			b.WriteByte(':')
-			b.WriteString(strconv.Itoa(frame.Line))
-			b.WriteByte('\n')
+			_, _ = b.WriteString(frame.Function)
+			_, _ = b.WriteString("\n\t")
+			_, _ = b.WriteString(frame.File)
+			_ = b.WriteByte(':')
+			_, _ = b.WriteString(strconv.Itoa(frame.Line))
+			_ = b.WriteByte('\n')
 		}
 
 		if !more {

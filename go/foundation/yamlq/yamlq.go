@@ -14,7 +14,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Match is one node a path selected.
@@ -205,6 +205,8 @@ func applyStep(n *yaml.Node, st step) []*yaml.Node {
 		if n.Kind == yaml.SequenceNode {
 			return n.Content
 		}
+	default:
+		// No other value changes the outcome.
 	}
 
 	return nil
@@ -276,6 +278,9 @@ func deep(n *yaml.Node, key string) []*yaml.Node {
 		}
 	case yaml.ScalarNode, yaml.AliasNode:
 		// A scalar has no keys; deref already resolved an alias.
+		return nil
+	default:
+		// No other value changes the outcome.
 	}
 
 	return out
@@ -310,6 +315,8 @@ func matchOf(n *yaml.Node) Match {
 		m.Kind = "alias"
 	case yaml.DocumentNode:
 		m.Kind = "document"
+	default:
+		// No other value changes the outcome.
 	}
 
 	return m

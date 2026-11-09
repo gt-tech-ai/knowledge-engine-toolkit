@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
+
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // mapEntrySeparator separates the "key=value" entries of a flat map string, and
@@ -40,7 +42,7 @@ func StringToStringMapHookFunc() mapstructure.DecodeHookFuncType {
 			return data, nil
 		}
 
-		raw, _ := data.(string)
+		raw := stdx.As[string](data)
 
 		return parseStringMap(raw), nil
 	}

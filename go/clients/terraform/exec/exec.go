@@ -8,7 +8,7 @@ import (
 	"slices"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -69,25 +69,31 @@ func (c *Client) terraform(
 		"terraform "+args[0])
 }
 
+// showJSONChange is the Change element of showJSON.
+type showJSONChange struct {
+	// Actions are the planned actions.
+	Actions []string `json:"actions"`
+}
+
+// showJSONResourceChanges is the ResourceChanges element of showJSON.
+type showJSONResourceChanges struct {
+	// Address is the resource address.
+	Address string `json:"address"`
+
+	// Type is the resource type.
+	Type string `json:"type"`
+
+	// Name is the resource name.
+	Name string `json:"name"`
+
+	// Change holds the planned actions.
+	Change showJSONChange `json:"change"`
+}
+
 // showJSON is the part of `terraform show -json` a plan is read from.
 type showJSON struct {
 	// ResourceChanges are the plan's per-resource changes.
-	ResourceChanges []struct {
-		// Address is the resource address.
-		Address string `json:"address"`
-
-		// Type is the resource type.
-		Type string `json:"type"`
-
-		// Name is the resource name.
-		Name string `json:"name"`
-
-		// Change holds the planned actions.
-		Change struct {
-			// Actions are the planned actions.
-			Actions []string `json:"actions"`
-		} `json:"change"`
-	} `json:"resource_changes"`
+	ResourceChanges []showJSONResourceChanges `json:"resource_changes"`
 }
 
 // Parse reads `terraform show -json` output into a Plan: no-op and read actions are

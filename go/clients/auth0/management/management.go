@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -118,12 +118,15 @@ func (c *Client) OrganizationID(ctx context.Context, name string) (string, error
 // SigningKey reads the tenant's JWKS and returns its first "sig" key that carries an
 // x5c certificate, the certificate's public key re-encoded as PEM.
 func (c *Client) SigningKey(ctx context.Context) (types.SigningKey, error) {
+	// shapeKeys is the Keys element of this document.
+	type shapeKeys struct {
+		Use string   `json:"use"`
+		Kid string   `json:"kid"`
+		X5C []string `json:"x5c"`
+	}
+
 	var jwks struct {
-		Keys []struct {
-			Use string   `json:"use"`
-			Kid string   `json:"kid"`
-			X5C []string `json:"x5c"`
-		} `json:"keys"`
+		Keys []shapeKeys `json:"keys"`
 	}
 
 	err := c.getJSON(

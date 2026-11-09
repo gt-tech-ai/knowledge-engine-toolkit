@@ -110,6 +110,8 @@ func (d *decorated) count(hit bool) {
 		d.hits.Inc(d.Name())
 	case !hit && d.misses != nil:
 		d.misses.Inc(d.Name())
+	default:
+		// No other value changes the outcome.
 	}
 }
 

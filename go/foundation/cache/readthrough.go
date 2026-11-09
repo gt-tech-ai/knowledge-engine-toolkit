@@ -8,8 +8,9 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // ReadThroughOption tunes one ReadThrough call.
@@ -161,7 +162,7 @@ func awaitFlight[T any](
 
 		// The flight returns the exact value our load closure produced (a T), so the
 		// assertion is total.
-		result, _ := res.Val.(T)
+		result := stdx.As[T](res.Val)
 
 		return result, nil
 	}

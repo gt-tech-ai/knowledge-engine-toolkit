@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/fsys"
@@ -163,6 +163,8 @@ func ensureFile(files interfaces.FS, path, perm string) (string, error) {
 		}
 	case !apperr.StdIs(err, fs.ErrNotExist):
 		return "", apperr.Wrap(err, apperr.CodeInternal, "stat "+path)
+	default:
+		// No other value changes the outcome.
 	}
 
 	return "created " + path, write(files, path, nil, perm)

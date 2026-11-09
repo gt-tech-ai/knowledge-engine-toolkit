@@ -8,7 +8,7 @@ package listquery
 import (
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // defaultConfigRowThreshold is the default RowThreshold of Config.

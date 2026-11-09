@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -300,6 +300,8 @@ func chaosMeshResourceFor(f types.Fault, managedBy string) (chaosMeshResource, e
 	case types.FaultNetworkLoss:
 		res.Spec = networkSpec(f, source, "loss",
 			nil, &networkChaosLoss{Loss: strconv.Itoa(f.Spec.LossPercent)})
+	default:
+		// No other value changes the outcome.
 	}
 
 	return res, nil

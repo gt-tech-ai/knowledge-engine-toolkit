@@ -6,9 +6,10 @@ import (
 	"math"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // DefaultCountCap is the fallback total_count cap when a reader leaves Bounds.CountCap
@@ -228,7 +229,7 @@ func offsetPage[T, D any](
 		return nil, err
 	}
 
-	next, err := offsetNextCursor(hasMore, pageNum, cols, rows, r)
+	next, err := offsetNextCursor(hasMoreFlag(hasMore), pageNum, cols, rows, r)
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +330,7 @@ func keysetPage[T, D any](
 
 	rows, hasMore := trimProbeRow(rows, limit)
 
-	next, err := keysetNextCursor(hasMore, cols, rows, r)
+	next, err := keysetNextCursor(hasMoreFlag(hasMore), cols, rows, r)
 	if err != nil {
 		return nil, err
 	}
@@ -348,9 +349,9 @@ func keysetPage[T, D any](
 
 // keysetNextCursor mints the next page's cursor from the last row, "" on the last page.
 func keysetNextCursor[T, D any](
-	hasMore bool, cols []KeysetColumn, rows []T, r Reader[T, D],
+	hasMore hasMoreFlag, cols []KeysetColumn, rows []T, r Reader[T, D],
 ) (string, error) {
-	if !hasMore || len(rows) == 0 {
+	if !bool(hasMore) || len(rows) == 0 {
 		return "", nil
 	}
 
@@ -438,7 +439,7 @@ func mintKeysetCursor[T any](
 		}
 
 		if c.Column == KeysetIDColumn {
-			id, _ = v.(string) // cursorRowValue checked it
+			id = stdx.As[string](v) // cursorRowValue checked it
 
 			continue
 		}
@@ -481,6 +482,9 @@ func cursorRowValue[T any](ks *Keyset[T], row T, column string) (any, error) {
 	return t.UnixMicro(), nil
 }
 
+// hasMoreFlag names the hasMore option in a signature.
+type hasMoreFlag bool
+
 // offsetNextCursor returns the next-page token for an offset page. A keyset-wired reader
 // ON ITS DEFAULT ORDERING mints a forward KEYSET cursor from the page's last row — so
 // infinite scroll can bridge off the first (default-ordered) offset page (the numeric
@@ -489,7 +493,7 @@ func cursorRowValue[T any](ks *Keyset[T], row T, column string) (any, error) {
 // sorted list pages by navigation, not an un-indexed seek (curated set = default only).
 // It is empty when no further rows remain.
 func offsetNextCursor[T, D any](
-	hasMore bool,
+	hasMore hasMoreFlag,
 	pageNum int,
 	cols []KeysetColumn,
 	rows []T,

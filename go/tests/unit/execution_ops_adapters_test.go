@@ -9,10 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // adapterInput is the input of the adapter tests' operation.
@@ -96,7 +97,7 @@ func TestExecutionOpsAdapters_FuncDecodeAndDefaults(t *testing.T) {
 
 // keys returns the sorted keys of a decoded JSON object.
 func keys(v any) []string {
-	m, _ := v.(map[string]any)
+	m := stdx.As[map[string]any](v)
 	out := make([]string, 0, len(m))
 
 	for k := range m {

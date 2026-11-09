@@ -15,14 +15,14 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
 // SecretsManagerAPI is the subset of the aws-sdk-go-v2 Secrets Manager client used by the
 // source. It is an exported, injectable seam so unit tests drive it with a generated mock
-// without network access, mirroring the S3 client's S3API seam. *secretsmanager.Client
+// without network access, mirroring the S3 client's API seam. *secretsmanager.Client
 // satisfies it. The name is distinct (not a bare API) so its generated mock does not
 // collide with the SQS client's API seam in the shared mocks package.
 //
@@ -138,7 +138,7 @@ func (s source) Get(ctx context.Context, ref types.Ref) (types.Secret, error) {
 
 // Put is unsupported: Secrets Manager secrets are written out-of-band by IaC. It returns
 // a coded error so a caller routing a write to this backend fails loudly.
-func (s source) Put(_ context.Context, ref types.Ref, _ types.Secret) error {
+func (source) Put(_ context.Context, ref types.Ref, _ types.Secret) error {
 	return apperr.New(
 		apperr.CodeInvalidInput,
 		fmt.Sprintf(

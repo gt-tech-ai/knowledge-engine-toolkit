@@ -6,7 +6,7 @@ package convert
 import (
 	"fmt"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // EnumMapper bidirectionally maps a proto enum P to a domain enum D from a single

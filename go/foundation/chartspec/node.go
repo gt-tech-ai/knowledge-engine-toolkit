@@ -9,7 +9,7 @@ import (
 
 	"github.com/gowebpki/jcs"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // hashDomain prefixes every hashed node, so a node hash can never collide with a hash
@@ -298,8 +298,8 @@ func (n Node) Hash() (Hash, error) {
 	}
 
 	h := sha256.New()
-	h.Write([]byte(hashDomain))
-	h.Write(canonical)
+	_, _ = h.Write([]byte(hashDomain))
+	_, _ = h.Write(canonical)
 
 	var out Hash
 

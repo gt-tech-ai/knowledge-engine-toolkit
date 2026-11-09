@@ -7,7 +7,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Decode decodes every section of d into the matching field of the struct out points
@@ -83,6 +83,8 @@ func fieldsByKey(t reflect.Type) map[string]int {
 			continue
 		case "":
 			name = strings.ToLower(f.Name)
+		default:
+			// No other value changes the outcome.
 		}
 
 		out[name] = i

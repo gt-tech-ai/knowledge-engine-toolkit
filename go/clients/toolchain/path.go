@@ -86,6 +86,8 @@ func (i *Installer) addInstallDirToPath(tool *types.ToolDef) {
 		i.addGoBinToPath()
 	case method.Command == "powershell" && i.platform == osWindows:
 		i.addPowershellToolDir(tool)
+	default:
+		// No other value changes the outcome.
 	}
 }
 

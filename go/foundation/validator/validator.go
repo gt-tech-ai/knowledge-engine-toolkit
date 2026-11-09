@@ -6,7 +6,7 @@
 package validator
 
 // Rule validates one aspect of a *T, returning a non-nil error on violation and
-// nil when satisfied. Rules should return a core/errors.AppError carrying
+// nil when satisfied. Rules should return a core/apperr.AppError carrying
 // CodeInvalidInput (ARCHITECTURE.md#error-codes) so the failure classifies and maps to a
 // 400 / InvalidArgument at the transport edge.
 type Rule[T any] func(*T) error

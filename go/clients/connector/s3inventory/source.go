@@ -21,7 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 
 	connectors3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -82,7 +82,7 @@ func NewSource(
 	ctx context.Context,
 	cfg interfaces.SourceConfig,
 	stsClient stscreds.AssumeRoleAPIClient,
-	build connectors3.S3ClientBuilder,
+	build connectors3.ClientBuilder,
 ) (*Source, error) {
 	if cfg.InventoryManifestKey == "" && cfg.InventoryPrefix == "" {
 		return nil, apperr.New(
@@ -248,17 +248,17 @@ func (s *Source) fill(
 	limit int,
 ) ([]interfaces.StorageObject, error) {
 	for len(page) < limit {
-		obj, ok, done, err := s.nextObject(cur)
+		row, err := s.nextObject(cur)
 		if err != nil {
 			return nil, err
 		}
 
-		if done {
+		if row.done {
 			return page, nil
 		}
 
-		if ok {
-			page = append(page, obj)
+		if row.keep {
+			page = append(page, row.object)
 		}
 	}
 
@@ -267,26 +267,34 @@ func (s *Source) fill(
 	return page, nil
 }
 
-// nextObject reads one row. done reports the file's end, ok a row the listing keeps.
-func (s *Source) nextObject(
-	cur *cursor,
-) (obj interfaces.StorageObject, ok, done bool, err error) {
+// inventoryRow is the outcome of reading one inventory row.
+type inventoryRow struct {
+	// object is the row's object, meaningful only when keep is true.
+	object interfaces.StorageObject
+	// keep reports a row the listing keeps.
+	keep bool
+	// done reports the file's end, in which case no row was read.
+	done bool
+}
+
+// nextObject reads one row and reports what it held.
+func (s *Source) nextObject(cur *cursor) (inventoryRow, error) {
 	record, err := next(cur)
 	if apperr.StdIs(err, io.EOF) {
 		s.release()
 
-		return obj, false, true, nil
+		return inventoryRow{done: true}, nil
 	}
 
 	if err != nil {
-		return obj, false, false, err
+		return inventoryRow{}, err
 	}
 
 	cur.row++
 
-	obj, ok, err = s.cols.object(record, s.bucket, s.prefix)
+	obj, keep, err := s.cols.object(record, s.bucket, s.prefix)
 
-	return obj, ok, false, err
+	return inventoryRow{object: obj, keep: keep}, err
 }
 
 // readAhead peeks one row so a page ending at the file's end releases it. Any other
@@ -299,6 +307,8 @@ func (s *Source) readAhead(cur *cursor) {
 		s.release()
 	case err == nil:
 		cur.pending = ahead
+	default:
+		// No other value changes the outcome.
 	}
 }
 

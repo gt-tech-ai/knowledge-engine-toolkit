@@ -9,6 +9,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TimeField is the filter field naming a fact's (grain-aligned) time; clauses on
@@ -126,7 +127,7 @@ func compareString(got string, op types.FilterOperator, v any) bool {
 
 // stringInList reports whether got equals an item of the list v; a non-list is empty.
 func stringInList(got string, v any) bool {
-	list, _ := v.([]any)
+	list := stdx.As[[]any](v)
 
 	return slices.ContainsFunc(
 		list,
@@ -175,8 +176,10 @@ func compareTime(got time.Time, op types.FilterOperator, v any) bool {
 		// A set or pattern operator has no meaning against one timestamp.
 		return false
 	default:
-		return false
+		// Any other value takes the shared result below.
 	}
+
+	return false
 }
 
 // pushdown narrows [lo, hi) by the top-level AND clauses on TimeField. The
@@ -190,6 +193,8 @@ func pushdown(f types.Filter, lo, hi time.Time) (from, to time.Time) {
 		clauses = []types.Filter{v}
 	case types.CompositeFilter:
 		clauses = v.And
+	default:
+		// No other value changes the outcome.
 	}
 
 	for _, c := range clauses {
@@ -228,6 +233,9 @@ func narrowWindow(op types.FilterOperator, at, lo, hi time.Time) (from, to time.
 		return maxTime(lo, down), minTime(hi, up)
 	case types.OpNe, types.OpIn, types.OpNotIn, types.OpLike:
 		// These do not bound the range; the residual predicate applies them.
+		return lo, hi
+	default:
+		// No other value changes the outcome.
 	}
 
 	return lo, hi

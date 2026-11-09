@@ -10,20 +10,20 @@ package unit_test
 // unit_test package buildable on a fresh checkout.
 
 import (
+	"cmp"
 	"encoding/json"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/fsys"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/openapi"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
@@ -35,12 +35,11 @@ import (
 // Method) for a stable comparison.
 func sortedEntries(entries []openapi.RouteEntry) []openapi.RouteEntry {
 	out := append([]openapi.RouteEntry(nil), entries...)
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].PathTemplate != out[j].PathTemplate {
-			return out[i].PathTemplate < out[j].PathTemplate
-		}
-
-		return out[i].Method < out[j].Method
+	slices.SortFunc(out, func(a, b openapi.RouteEntry) int {
+		return cmp.Or(
+			cmp.Compare(a.PathTemplate, b.PathTemplate),
+			cmp.Compare(a.Method, b.Method),
+		)
 	})
 
 	return out

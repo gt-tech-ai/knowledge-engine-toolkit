@@ -1,4 +1,4 @@
-// Package core_test provides tests for the core/types and core/errors packages
+// Package core_test provides tests for the core/types and core/apperr packages
 // to bring coverage above 90%.
 //
 // This file covers:
@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 

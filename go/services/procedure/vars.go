@@ -3,18 +3,20 @@ package procedure
 import (
 	"fmt"
 	"time"
+
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Text returns key's string value; a missing or non-string value is "".
 func (v Vars) Text(key string) string {
-	s, _ := v[key].(string)
+	s := stdx.As[string](v[key])
 
 	return s
 }
 
 // Bool returns key's boolean value; a missing or non-boolean value is false.
 func (v Vars) Bool(key string) bool {
-	b, _ := v[key].(bool)
+	b := stdx.As[bool](v[key])
 
 	return b
 }

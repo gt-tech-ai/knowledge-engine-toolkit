@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prompt"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // requireNonInteractive asserts err is the Prompter's coded "pass --yes" error.

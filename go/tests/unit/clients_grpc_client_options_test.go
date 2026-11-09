@@ -102,7 +102,7 @@ func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			testGRPCClientOptionsStampEveryAttemptCase(t, sc, ctx, tc)
+			testGRPCClientOptionsStampEveryAttemptCase(ctx, t, sc, tc)
 		})
 	}
 }
@@ -110,10 +110,7 @@ func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
 // testGRPCClientOptionsStampEveryAttemptCase is the body of a closure in
 // TestGRPCClientOptions_StampEveryAttempt.
 func testGRPCClientOptionsStampEveryAttemptCase(
-	t *testing.T,
-	sc oteltrace.SpanContext,
-	ctx context.Context,
-	tc struct {
+	ctx context.Context, t *testing.T, sc oteltrace.SpanContext, tc struct {
 		name  string
 		token string
 		want  []string

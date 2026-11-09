@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/helpers"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestFileExists tests that FileExists is true only for an existing regular
@@ -24,11 +24,11 @@ func TestFileExists(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file.txt")
-	require.False(t, helpers.FileExists(path), "expected false for non-existent file")
+	require.False(t, stdx.FileExists(path), "expected false for non-existent file")
 	require.NoError(t, os.WriteFile(path, []byte("x"), 0o600))
-	require.True(t, helpers.FileExists(path), "expected true for existing file")
+	require.True(t, stdx.FileExists(path), "expected true for existing file")
 	// directory should not count as a file
-	require.False(t, helpers.FileExists(dir), "expected false for directory path")
+	require.False(t, stdx.FileExists(dir), "expected false for directory path")
 }
 
 // TestDirExists tests that DirExists is true for an existing directory and false
@@ -44,10 +44,10 @@ func TestDirExists(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	require.True(t, helpers.DirExists(dir), "expected true for existing dir")
+	require.True(t, stdx.DirExists(dir), "expected true for existing dir")
 	require.False(
 		t,
-		helpers.DirExists(filepath.Join(dir, "nope")),
+		stdx.DirExists(filepath.Join(dir, "nope")),
 		"expected false for non-existent dir",
 	)
 }
@@ -63,8 +63,8 @@ func TestDirExists(t *testing.T) {
 //   - A set key returns its value; an unset key returns the fallback.
 func TestOrDefault(t *testing.T) {
 	t.Setenv("HELPERS_TEST_KEY", "set-value")
-	require.Equal(t, "set-value", helpers.OrDefault("HELPERS_TEST_KEY", "fallback"))
-	require.Equal(t, "fallback", helpers.OrDefault("HELPERS_TEST_UNSET", "fallback"))
+	require.Equal(t, "set-value", stdx.OrDefault("HELPERS_TEST_KEY", "fallback"))
+	require.Equal(t, "fallback", stdx.OrDefault("HELPERS_TEST_UNSET", "fallback"))
 }
 
 // TestUnique tests that Unique collapses duplicate elements to their first
@@ -79,7 +79,7 @@ func TestOrDefault(t *testing.T) {
 func TestUnique(t *testing.T) {
 	t.Parallel()
 
-	got := helpers.Unique([]string{"a", "b", "a", "c", "b"})
+	got := stdx.Unique([]string{"a", "b", "a", "c", "b"})
 	require.Len(t, got, 3)
 }
 
@@ -95,7 +95,7 @@ func TestUnique(t *testing.T) {
 func TestUniqueDirs(t *testing.T) {
 	t.Parallel()
 
-	got := helpers.UniqueDirs([]string{"/a/b/c.go", "/a/b/d.go", "/x/y.go"})
+	got := stdx.UniqueDirs([]string{"/a/b/c.go", "/a/b/d.go", "/x/y.go"})
 	require.Len(t, got, 2)
 }
 
@@ -113,9 +113,9 @@ func TestUniqueDirs(t *testing.T) {
 func TestTruncate(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "hello", helpers.Truncate("hello world", 5))
-	require.Equal(t, "hi", helpers.Truncate("hi", 10))
-	require.Empty(t, helpers.Truncate("", 5))
+	require.Equal(t, "hello", stdx.Truncate("hello world", 5))
+	require.Equal(t, "hi", stdx.Truncate("hi", 10))
+	require.Empty(t, stdx.Truncate("", 5))
 }
 
 // TestIsAllDigits tests that IsAllDigits recognises non-empty all-ASCII-digit
@@ -143,7 +143,7 @@ func TestIsAllDigits(t *testing.T) {
 		{"-3", false},
 	}
 	for _, c := range cases {
-		require.Equal(t, c.want, helpers.IsAllDigits(c.in), "IsAllDigits(%q)", c.in)
+		require.Equal(t, c.want, stdx.IsAllDigits(c.in), "IsAllDigits(%q)", c.in)
 	}
 }
 
@@ -170,7 +170,7 @@ func TestIsHex(t *testing.T) {
 		{"deadbeeg", false},
 	}
 	for _, c := range cases {
-		require.Equal(t, c.want, helpers.IsHex(c.in), "IsHex(%q)", c.in)
+		require.Equal(t, c.want, stdx.IsHex(c.in), "IsHex(%q)", c.in)
 	}
 }
 
@@ -198,6 +198,6 @@ func TestIsUUID(t *testing.T) {
 		{"gggggggg-gggg-gggg-gggg-gggggggggggg", false}, // non-hex
 	}
 	for _, c := range cases {
-		require.Equal(t, c.want, helpers.IsUUID(c.in), "IsUUID(%q)", c.in)
+		require.Equal(t, c.want, stdx.IsUUID(c.in), "IsUUID(%q)", c.in)
 	}
 }

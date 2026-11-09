@@ -14,9 +14,10 @@ import (
 	analyticscassandra "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/analytics/cassandra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -56,7 +57,7 @@ func expectCreate(ctrl *gomock.Controller, session *mocks.MockCQLSession, table 
 	query := mocks.NewMockCQLQuery(ctrl)
 	session.EXPECT().
 		Query(gomock.Cond(func(stmt any) bool {
-			s, _ := stmt.(string)
+			s := stdx.As[string](stmt)
 
 			return strings.HasPrefix(
 				s,
@@ -68,6 +69,9 @@ func expectCreate(ctrl *gomock.Controller, session *mocks.MockCQLSession, table 
 	query.EXPECT().Exec().Return(nil)
 }
 
+// repeatFlag names the repeat option in a signature.
+type repeatFlag bool
+
 // expectStatus expects one read of table's status from system_schema_mcs.tables
 // (any number of reads when repeat is set), answering status.
 func expectStatus(
@@ -75,7 +79,7 @@ func expectStatus(
 	ctrl *gomock.Controller,
 	session *mocks.MockCQLSession,
 	table, status string,
-	repeat bool,
+	repeat repeatFlag,
 ) *gomock.Call {
 	tb.Helper()
 
@@ -83,7 +87,7 @@ func expectStatus(
 	iter := mocks.NewMockCQLIter(ctrl)
 	call := session.EXPECT().
 		Query(gomock.Cond(func(stmt any) bool {
-			s, _ := stmt.(string)
+			s := stdx.As[string](stmt)
 
 			return strings.Contains(s, "FROM system_schema_mcs.tables")
 		}), "analytics", table).

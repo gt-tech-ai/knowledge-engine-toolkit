@@ -409,6 +409,12 @@ Python: `techai-webutils` 0.9.5.
 
 ### Changed
 
+- Go, breaking, to satisfy the strict `revive` rules: `core/errors` is now `core/apperr` (package `apperr`), `helpers` is `stdx`, `stores/errors` is `stores/storeerr`, and `clients/prometheus/http` is `clients/prometheus/httpapi`. The role decorators (`decorate.Reader`, `Lister`, `Creator` and the rest, except `Outbox`) moved to `foundation/decorate/role`.
+- Go, breaking: `Locker.Hold` returns `(held, release, err)` and reports a contended key as a `CONFLICT` error instead of a fourth `acquired` result.
+- Go, breaking, renames that drop stutter: `rpc.RPCClient` to `rpc.Client`, `storage/s3.S3API` to `API` (with `Objects`, `Multipart`, `Buckets`), `connector/s3.S3ClientBuilder` to `ClientBuilder`, `httpapi.HTTPDoer` to `Doer`, `principal.PrincipalFrom` to `From`, `tenant.TenantFromContext` to `FromContext`, `gate.GateFactory` to `Factory`, `options.OptionsProvider` to `Provider`, `ent.EntPredicate` to `Predicate`; `ops.InputSchema` is `ReflectInputSchema`.
+- Go, breaking: boolean options on exported functions take named types (`scaffold.DryRun`, `toolchain.AutoYes` and `CheckOnly`, `imagescan.Strict`, `decorate.Shed`); a literal `true` or `false` still compiles.
+- Go: `outbox/sqs.NewFromCalls` builds the sink from `Calls`, the two SDK operations as functions.
+
 - Go **breaking**: `decoration.Retry`, `CircuitBreaker`, `Bulkhead` and `RateLimit` hold their
   tuning in a named field (`RetryConfig`, `BreakerConfig`, `BulkheadConfig`, `RateLimitConfig`), so
   `r.MaxRetries` is `r.RetryConfig.MaxRetries`. The YAML keys do not change.

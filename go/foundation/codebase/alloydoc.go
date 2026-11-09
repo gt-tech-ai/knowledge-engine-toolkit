@@ -9,7 +9,8 @@ import (
 	"github.com/grafana/alloy/syntax/printer"
 	"github.com/grafana/alloy/syntax/token"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // decodeAlloy decodes an Alloy (River) file into the shape decodeHCL produces: a block
@@ -35,6 +36,8 @@ func alloyBody(body ast.Body) map[string]any {
 			out[s.Name.Name] = alloyExpr(s.Value)
 		case *ast.BlockStmt:
 			addAlloyBlock(out, s)
+		default:
+			// No other value changes the outcome.
 		}
 	}
 
@@ -47,7 +50,7 @@ func addAlloyBlock(out map[string]any, s *ast.BlockStmt) {
 	holder := out
 
 	if s.Label != "" {
-		labelled, _ := out[name].(map[string]any)
+		labelled := stdx.As[map[string]any](out[name])
 		if labelled == nil {
 			labelled = map[string]any{}
 			out[name] = labelled
@@ -56,7 +59,7 @@ func addAlloyBlock(out map[string]any, s *ast.BlockStmt) {
 		holder, name = labelled, s.Label
 	}
 
-	bodies, _ := holder[name].([]any)
+	bodies := stdx.As[[]any](holder[name])
 
 	holder[name] = append(bodies, alloyBody(s.Body))
 }
@@ -126,6 +129,8 @@ func alloyLiteral(e *ast.LiteralExpr) any {
 		return e.Value == "true"
 	case token.NULL:
 		return nil
+	default:
+		// No other value changes the outcome.
 	}
 
 	return e.Value

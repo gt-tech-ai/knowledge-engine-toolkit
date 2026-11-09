@@ -12,7 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -77,8 +77,8 @@ func Key(inputs []byte, toolVersion string, args []string) string {
 		var n [8]byte
 
 		binary.BigEndian.PutUint64(n[:], uint64(len(b)))
-		h.Write(n[:])
-		h.Write(b)
+		_, _ = h.Write(n[:])
+		_, _ = h.Write(b)
 	}
 	field(inputs)
 	field([]byte(toolVersion))
@@ -110,10 +110,10 @@ func Digest(
 			return nil, err
 		}
 
-		h.Write([]byte(f.Path))
-		h.Write([]byte{0})
-		h.Write(text.Bytes)
-		h.Write([]byte{0})
+		_, _ = h.Write([]byte(f.Path))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(text.Bytes)
+		_, _ = h.Write([]byte{0})
 	}
 
 	return h.Sum(nil), nil

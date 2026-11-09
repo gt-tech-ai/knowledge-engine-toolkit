@@ -1,4 +1,4 @@
-// Package core_test verifies the go/core/errors package: AppError construction,
+// Package core_test verifies the go/core/apperr package: AppError construction,
 // error wrapping, code classification, HTTP status mapping, Zap integration, and
 // structured logging. No external dependencies are used -- all tests run in-process.
 
@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // TestNewError tests that New constructs an AppError with the correct code and

@@ -2,7 +2,7 @@
 
 ``ErrorCode`` and its gRPC, HTTP and retry facts are rendered from
 ``taxonomy/error-codes.yaml`` into ``codes.py``, the same source as Go's
-``go/core/errors/codes.go``, so both languages classify every code alike.
+``go/core/apperr/codes.go``, so both languages classify every code alike.
 """
 
 from techai_webutils.core.errors.codes import (

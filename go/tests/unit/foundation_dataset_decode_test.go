@@ -8,9 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/dataset"
 )
+
+// decodedDataPaths is the Paths element of decodedData.
+type decodedDataPaths struct {
+	// Root is the repository root.
+	Root string `yaml:"root"`
+}
 
 // decodedData is the whole-dataset target of the Decode tests.
 type decodedData struct {
@@ -18,10 +24,7 @@ type decodedData struct {
 	Tools []datasetTool `yaml:"tools"`
 
 	// Paths is the paths section.
-	Paths struct {
-		// Root is the repository root.
-		Root string `yaml:"root"`
-	} `yaml:"paths"`
+	Paths decodedDataPaths `yaml:"paths"`
 
 	// Limits is the untagged limits section, matched by its lower-cased name.
 	Limits map[string]int

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // DefaultMaxEntries bounds the cache when the configured bound is not positive.
@@ -79,7 +80,7 @@ func (c *Cache) Get(_ context.Context, key string) ([]byte, bool) {
 		return nil, false
 	}
 
-	e, _ := el.Value.(*entry)
+	e := stdx.As[*entry](el.Value)
 	if !c.now().Before(e.expires) {
 		c.remove(el)
 
@@ -132,6 +133,6 @@ func (c *Cache) Delete(_ context.Context, key string) {
 
 // remove drops el from both the order and the map; the caller holds mu.
 func (c *Cache) remove(el *list.Element) {
-	e, _ := c.order.Remove(el).(*entry)
+	e := stdx.As[*entry](c.order.Remove(el))
 	delete(c.items, e.key)
 }

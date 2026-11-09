@@ -13,7 +13,7 @@ import (
 	"math/rand/v2"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -115,7 +115,7 @@ func (t *Throttler) Do(_ context.Context, op func() error) error {
 	t.requests *= t.decay
 	t.accepts *= t.decay
 
-	shed := t.rand() < t.rejectionProbability()
+	shed := t.rand() < t.rejectionChance()
 	t.requests++ // this attempt counts as a request whether shed or allowed
 	t.mu.Unlock()
 
@@ -140,11 +140,11 @@ func (t *Throttler) RejectionProbability() float64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	return t.rejectionProbability()
+	return t.rejectionChance()
 }
 
-// rejectionProbability is the SRE formula max(0, (requests − K·accepts) / (requests +
+// rejectionChance is the SRE formula max(0, (requests − K·accepts) / (requests +
 // 1)); the caller holds t.mu.
-func (t *Throttler) rejectionProbability() float64 {
+func (t *Throttler) rejectionChance() float64 {
 	return math.Max(0, (t.requests-t.k*t.accepts)/(t.requests+1))
 }

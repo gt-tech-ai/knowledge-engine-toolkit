@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/sqltx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/postgres"
@@ -83,15 +83,15 @@ func TestSQLTx_CommitsRollsBackAndRefusesNesting(t *testing.T) {
 
 	hooks := 0
 
-	testSQLTxCommitsRollsBackAndRefusesNestingRest(t, mgr, ctx, insert, count, hooks)
+	testSQLTxCommitsRollsBackAndRefusesNestingRest(ctx, t, mgr, insert, count, hooks)
 }
 
 // testSQLTxCommitsRollsBackAndRefusesNestingRest continues
 // TestSQLTx_CommitsRollsBackAndRefusesNesting with its remaining steps.
 func testSQLTxCommitsRollsBackAndRefusesNestingRest(
+	ctx context.Context,
 	t *testing.T,
 	mgr *sqltx.Manager,
-	ctx context.Context,
 	insert func(ctx context.Context, body string) error,
 	count func() int,
 	hooks int,

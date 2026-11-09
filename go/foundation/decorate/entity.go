@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -177,6 +177,9 @@ func NewEntity[C, T, P any, ID comparable](
 	return Entity[T, P, ID]{roles: roles, run: run, validate: validate}, nil
 }
 
+// presentFlag names the present option in a signature.
+type presentFlag bool
+
 // call runs fn as op through run, returning fn's result. A role that is not present is
 // one the contract does not have, refused as CodeInternal; a nil run (the zero Entity)
 // runs fn undecorated.
@@ -185,7 +188,7 @@ func call[R any](
 	run RoleRunner,
 	op string,
 	kind RoleKind,
-	present bool,
+	present presentFlag,
 	fn func(context.Context) (R, error),
 ) (R, error) {
 	var out R
@@ -209,57 +212,13 @@ func call[R any](
 	return out, err
 }
 
-// check validates v when a validator is set.
-func (e Entity[T, P, ID]) check(v *T) error {
+// checkEntity validates v when a validator is set.
+func (e Entity[T, P, ID]) checkEntity(v *T) error {
 	if e.validate == nil {
 		return nil
 	}
 
 	return e.validate(v)
-}
-
-// Get returns the entity identified by id.
-func (e Entity[T, P, ID]) Get(ctx context.Context, id ID) (*T, error) {
-	return call(ctx, e.run, "get", RoleRead, e.roles.Get != nil,
-		func(ctx context.Context) (*T, error) { return e.roles.Get(ctx, id) })
-}
-
-// List returns the page of entities params and page select.
-func (e Entity[T, P, ID]) List(
-	ctx context.Context,
-	params P,
-	page types.PageRequest,
-) (*types.Page[T], error) {
-	return call(ctx, e.run, "list", RoleRead, e.roles.List != nil,
-		func(ctx context.Context) (*types.Page[T], error) {
-			return e.roles.List(ctx, params, page)
-		})
-}
-
-// Create persists entity, after the validator accepts it.
-func (e Entity[T, P, ID]) Create(ctx context.Context, entity *T) (*T, error) {
-	return call(ctx, e.run, "create", RoleCreate, e.roles.Create != nil,
-		func(ctx context.Context) (*T, error) {
-			err := e.check(entity)
-			if err != nil {
-				return nil, err
-			}
-
-			return e.roles.Create(ctx, entity)
-		})
-}
-
-// Update replaces the entity identified by id, after the validator accepts entity.
-func (e Entity[T, P, ID]) Update(ctx context.Context, id ID, entity *T) (*T, error) {
-	return call(ctx, e.run, "update", RoleWrite, e.roles.Update != nil,
-		func(ctx context.Context) (*T, error) {
-			err := e.check(entity)
-			if err != nil {
-				return nil, err
-			}
-
-			return e.roles.Update(ctx, id, entity)
-		})
 }
 
 // Delete removes the entity identified by id.
@@ -298,7 +257,7 @@ func (e Entity[T, P, ID]) Insert(ctx context.Context, entity *T) error {
 func (e Entity[T, P, ID]) Upsert(ctx context.Context, entity *T) error {
 	_, err := call(ctx, e.run, "upsert", RoleAppend, e.roles.Upsert != nil,
 		func(ctx context.Context) (struct{}, error) {
-			err := e.check(entity)
+			err := e.checkEntity(entity)
 			if err != nil {
 				return struct{}{}, err
 			}
@@ -322,4 +281,48 @@ func (e Entity[T, P, ID]) PurgeBefore(
 		e.roles.PurgeBefore != nil,
 		func(ctx context.Context) (int, error) { return e.roles.PurgeBefore(ctx, cutoff) },
 	)
+}
+
+// Get returns the entity identified by id.
+func (e Entity[T, P, ID]) Get(ctx context.Context, id ID) (*T, error) {
+	return call(ctx, e.run, "get", RoleRead, e.roles.Get != nil,
+		func(ctx context.Context) (*T, error) { return e.roles.Get(ctx, id) })
+}
+
+// List returns the page of entities params and page select.
+func (e Entity[T, P, ID]) List(
+	ctx context.Context,
+	params P,
+	page types.PageRequest,
+) (*types.Page[T], error) {
+	return call(ctx, e.run, "list", RoleRead, e.roles.List != nil,
+		func(ctx context.Context) (*types.Page[T], error) {
+			return e.roles.List(ctx, params, page)
+		})
+}
+
+// Create persists entity, after the validator accepts it.
+func (e Entity[T, P, ID]) Create(ctx context.Context, entity *T) (*T, error) {
+	return call(ctx, e.run, "create", RoleCreate, e.roles.Create != nil,
+		func(ctx context.Context) (*T, error) {
+			err := e.checkEntity(entity)
+			if err != nil {
+				return nil, err
+			}
+
+			return e.roles.Create(ctx, entity)
+		})
+}
+
+// Update replaces the entity identified by id, after the validator accepts entity.
+func (e Entity[T, P, ID]) Update(ctx context.Context, id ID, entity *T) (*T, error) {
+	return call(ctx, e.run, "update", RoleWrite, e.roles.Update != nil,
+		func(ctx context.Context) (*T, error) {
+			err := e.checkEntity(entity)
+			if err != nil {
+				return nil, err
+			}
+
+			return e.roles.Update(ctx, id, entity)
+		})
 }

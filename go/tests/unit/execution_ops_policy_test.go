@@ -1,7 +1,7 @@
 package unit_test
 
 import (
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
@@ -69,7 +69,7 @@ func listedNames(reg *ops.Registry) []string {
 		names = append(names, op.Descriptor().Name)
 	}
 
-	sort.Strings(names)
+	slices.Sort(names)
 
 	return names
 }

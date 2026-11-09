@@ -58,17 +58,13 @@ func TestStorageMemory_RoundTrip(t *testing.T) {
 
 	getURL, err := c.PresignURL(ctx, "b", "k", 60, "")
 
-	testStorageMemoryRoundTripRest(t, c, ctx, err, getURL)
+	testStorageMemoryRoundTripRest(ctx, t, c, err, getURL)
 }
 
 // testStorageMemoryRoundTripRest continues TestStorageMemory_RoundTrip with its
 // remaining steps.
 func testStorageMemoryRoundTripRest(
-	t *testing.T,
-	c *memory.Client,
-	ctx context.Context,
-	err error,
-	getURL string,
+	ctx context.Context, t *testing.T, c *memory.Client, err error, getURL string,
 ) {
 	t.Helper()
 

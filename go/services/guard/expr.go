@@ -19,10 +19,11 @@ import (
 	"cel.dev/cel-go/ext"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // exprEnvBaseOptions sizes the CEL options every expression environment starts with.
@@ -310,7 +311,7 @@ func addFileVars(
 		paths[i] = f.Path
 	}
 
-	texts, err := wantedTexts(ctx, cb, paths, p.uses["file"])
+	texts, err := wantedTexts(ctx, cb, paths, wantedFlag(p.uses["file"]))
 	if err != nil {
 		return nil, err
 	}
@@ -320,9 +321,12 @@ func addFileVars(
 	return nil, nil
 }
 
+// wantedFlag names the wanted option in a signature.
+type wantedFlag bool
+
 // wantedTexts reads the files' texts when the program uses them.
 func wantedTexts(
-	ctx context.Context, cb interfaces.Codebase, paths []string, wanted bool,
+	ctx context.Context, cb interfaces.Codebase, paths []string, wanted wantedFlag,
 ) (map[string]any, error) {
 	if !wanted {
 		return map[string]any{}, nil
@@ -446,9 +450,9 @@ func finding(e any) (types.Finding, error) {
 	case map[string]any:
 		f := types.Finding{}
 
-		f.File, _ = x["file"].(string)
-		f.Message, _ = x["message"].(string)
-		f.Rule, _ = x["rule"].(string)
+		f.File = stdx.As[string](x["file"])
+		f.Message = stdx.As[string](x["message"])
+		f.Rule = stdx.As[string](x["rule"])
 
 		if n, ok := x["line"].(float64); ok {
 			f.Line = int(n)

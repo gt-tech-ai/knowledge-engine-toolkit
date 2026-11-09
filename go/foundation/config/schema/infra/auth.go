@@ -1,6 +1,6 @@
 package infra
 
-import apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 
 // OIDCConfig holds the OpenID Connect provider parameters a service validates end-user
 // tokens against (all non-secret).

@@ -11,7 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase/fs"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase/git"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase/memory"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	views "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"

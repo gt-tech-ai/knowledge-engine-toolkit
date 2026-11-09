@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
@@ -218,7 +218,7 @@ func validateMatch(r *types.GuardRow) error {
 	}
 
 	all := append(append(slices.Clone(r.Require), r.Forbid...), r.Allow...)
-	_, err := patterns(all, r.Literal)
+	_, err := patterns(all, literalFlag(r.Literal))
 
 	return err
 }
@@ -420,6 +420,8 @@ func (g *guard) tick(
 		t.Status, t.Detail = types.StatusSkip, []byte(types.CachedDetail)
 	case len(findings) > 0:
 		t.Status, t.Error = types.StatusFail, fmt.Sprintf("%d findings", len(findings))
+	default:
+		// No other value changes the outcome.
 	}
 
 	return t
@@ -621,7 +623,7 @@ func render(fs []types.Finding) string {
 		case f.File != "":
 			fmt.Fprintf(&b, "%s: %s\n", f.File, f.Message)
 		default:
-			b.WriteString(f.Message + "\n")
+			_, _ = b.WriteString(f.Message + "\n")
 		}
 	}
 

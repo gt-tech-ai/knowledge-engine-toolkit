@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -157,7 +157,7 @@ func (s *Supervisor) Start(
 // Detach starts spec in a new session and releases it. Where sessions are not
 // available (Windows) it starts spec without one, so the process may still end with
 // the caller's console.
-func (s *Supervisor) Detach(spec types.ProcessSpec) error {
+func (*Supervisor) Detach(spec types.ProcessSpec) error {
 	cmd, release, err := command(spec)
 	if err != nil {
 		return err

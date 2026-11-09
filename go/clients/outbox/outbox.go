@@ -89,17 +89,16 @@ func kinds() client.Kinds[Config, Deps, interfaces.OutboxSink] {
 // newSQSSink builds the SQS sink, decorating the API when one is injected; the sink
 // reports a missing API.
 func newSQSSink(_ context.Context, cfg Config, deps Deps) (interfaces.OutboxSink, error) {
-	api := deps.SQSAPI
-	if api != nil {
-		b, err := tier[outboxsqs.API]("sqs", cfg, deps)
-		if err != nil {
-			return nil, err
-		}
-
-		api = decorateSQS(api, b)
+	if deps.SQSAPI == nil {
+		return outboxsqs.New(cfg.SQS, nil)
 	}
 
-	return outboxsqs.New(cfg.SQS, api)
+	b, err := tier[outboxsqs.API]("sqs", cfg, deps)
+	if err != nil {
+		return nil, err
+	}
+
+	return outboxsqs.NewFromCalls(cfg.SQS, decorateSQS(deps.SQSAPI, b))
 }
 
 // newS3Sink builds the S3 sink, decorating the API when one is injected; the sink

@@ -67,7 +67,7 @@ func (i clientInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 }
 
 // WrapStreamingClient carries the trace context on a stream's request headers.
-func (i clientInterceptor) WrapStreamingClient(
+func (clientInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
@@ -79,7 +79,7 @@ func (i clientInterceptor) WrapStreamingClient(
 }
 
 // WrapStreamingHandler is a no-op — this is a client-side interceptor.
-func (i clientInterceptor) WrapStreamingHandler(
+func (clientInterceptor) WrapStreamingHandler(
 	next connect.StreamingHandlerFunc,
 ) connect.StreamingHandlerFunc {
 	return next

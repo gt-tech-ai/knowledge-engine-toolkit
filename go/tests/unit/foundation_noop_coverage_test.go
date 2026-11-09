@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	foundcache "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/cache/decorators"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/noop"
-	nooptracer "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer/nooptracer"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer/nooptracer"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 

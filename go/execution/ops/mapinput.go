@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -70,16 +70,19 @@ func MapInput[E any](
 func (o *mapOp[E]) Descriptor() types.OperationDescriptor { return o.desc }
 
 // NewInput returns a fresh empty input.
-func (o *mapOp[E]) NewInput() any { return &map[string]any{} }
+func (*mapOp[E]) NewInput() any { return &map[string]any{} }
 
 // InputSchema returns the schema derived from the flags.
 func (o *mapOp[E]) InputSchema() []byte { return o.schema }
 
+// localFlag names the local option in a signature.
+type localFlag bool
+
 // undeclared returns the first key of in, in sorted order, that no argument and no flag
 // declares — a secret flag counting only when local — or "".
-func (o *mapOp[E]) undeclared(in map[string]any, local bool) string {
+func (o *mapOp[E]) undeclared(in map[string]any, local localFlag) string {
 	for _, k := range slices.Sorted(maps.Keys(in)) {
-		if !o.declares(k, local) {
+		if !o.declares(k, bool(local)) {
 			return k
 		}
 	}
@@ -180,6 +183,8 @@ func coerce(flagType string, v any) any {
 		if types.IsListFlag(flagType) {
 			return stringItems(x)
 		}
+	default:
+		// No other value changes the outcome.
 	}
 
 	return v
@@ -230,6 +235,8 @@ func duration(v any) any {
 		if err == nil {
 			return d
 		}
+	default:
+		// No other value changes the outcome.
 	}
 
 	return v

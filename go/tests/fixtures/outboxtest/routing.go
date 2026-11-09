@@ -2,7 +2,7 @@ package outboxtest
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -80,7 +80,7 @@ func RunRouting(t *testing.T, h Harness, r Routing) {
 	for _, route := range r.Healthy {
 		got, err := r.Delivered(ctx, route)
 		require.NoError(t, err)
-		sort.Strings(got)
+		slices.Sort(got)
 		require.Equalf(t, want[route], got, "route %s", route)
 	}
 

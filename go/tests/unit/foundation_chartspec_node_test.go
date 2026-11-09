@@ -32,13 +32,16 @@ func TestNodeHash_GoldenCorpus(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	// shapeCases is the Cases element of this document.
+	type shapeCases struct {
+		Node      chartspec.Node `json:"node"`
+		Name      string         `json:"name"`
+		Canonical string         `json:"canonical"`
+		Hash      string         `json:"hash"`
+	}
+
 	var corpus struct {
-		Cases []struct {
-			Node      chartspec.Node `json:"node"`
-			Name      string         `json:"name"`
-			Canonical string         `json:"canonical"`
-			Hash      string         `json:"hash"`
-		} `json:"cases"`
+		Cases []shapeCases `json:"cases"`
 	}
 
 	require.NoError(t, json.Unmarshal(raw, &corpus))

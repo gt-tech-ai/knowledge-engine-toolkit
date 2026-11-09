@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
@@ -151,12 +151,15 @@ func SpyTracer(onSetAttribute func(key string, value any)) interfaces.Tracer {
 // Service double (generic MockService[TestEntity, TestParams, string])
 // ---------------------------------------------------------------------------
 
+// PanicOnGet names the panicOnGet option in a signature.
+type PanicOnGet bool
+
 // StubService returns a generated MockService whose Get returns getErr (or panics
 // when panicOnGet), and otherwise echoes a canned entity; List/Create/Update/Delete
 // succeed. It replaces the former CustomMockService.
 func StubService(
 	getErr error,
-	panicOnGet bool,
+	panicOnGet PanicOnGet,
 ) *mocks.MockService[TestEntity, TestParams, string] {
 	m := mocks.NewMockService[TestEntity, TestParams, string](newCtrl())
 	m.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -256,12 +259,15 @@ func PanicWorkflow() *mocks.MockWorkflow[string, string] {
 // Resilience doubles (MockRetrier / MockCircuitBreaker / MockRateLimiter)
 // ---------------------------------------------------------------------------
 
+// AlwaysFail names the alwaysFail option in a signature.
+type AlwaysFail bool
+
 // StubRetrier returns a generated MockRetrier that fails the operation the first
 // failUntil attempts (or always, capped at 3, when alwaysFail), plus a getter for
 // the number of attempts made. It replaces the former FakeRetrier.
 func StubRetrier(
 	failUntil int,
-	alwaysFail bool,
+	alwaysFail AlwaysFail,
 ) (retrier *mocks.MockRetrier, attempts func() int) {
 	var count int
 
@@ -293,13 +299,16 @@ func StubRetrier(
 	return retrier, attempts
 }
 
+// BreakerOpen names the open option in a signature.
+type BreakerOpen bool
+
 // StubCircuitBreaker returns a generated MockCircuitBreaker: when open, Execute
 // rejects without invoking the function; otherwise it runs the function.
-func StubCircuitBreaker(open bool) *mocks.MockCircuitBreaker {
+func StubCircuitBreaker(open BreakerOpen) *mocks.MockCircuitBreaker {
 	cb := mocks.NewMockCircuitBreaker(newCtrl())
 	cb.EXPECT().Execute(gomock.Any()).DoAndReturn(func(fn func() error) error {
 		if open {
-			return apperr.New(apperr.CodeUnavailable, "circuit breaker is open")
+			return apperr.New(apperr.CodeUnavailable, "circuit breaker is bool(open)")
 		}
 
 		return fn()
@@ -310,9 +319,9 @@ func StubCircuitBreaker(open bool) *mocks.MockCircuitBreaker {
 
 // StubRateLimiter returns a generated MockRateLimiter: Allow reports allowed, and
 // Wait returns an error when not allowed.
-func StubRateLimiter(allowed bool) *mocks.MockRateLimiter {
+func StubRateLimiter(allowed Allowed) *mocks.MockRateLimiter {
 	rl := mocks.NewMockRateLimiter(newCtrl())
-	rl.EXPECT().Allow().Return(allowed).AnyTimes()
+	rl.EXPECT().Allow().Return(bool(allowed)).AnyTimes()
 	rl.EXPECT().Wait(gomock.Any()).DoAndReturn(func(context.Context) error {
 		if !allowed {
 			return apperr.Sentinel("rate limit exceeded")
@@ -432,47 +441,6 @@ func StubStore() *mocks.MockStore[TestEntity, TestParams, string] {
 // ---------------------------------------------------------------------------
 // SpyLogger (call-recording logger backed by a generated MockLogger)
 // ---------------------------------------------------------------------------
-
-// SpyLogger records log calls made through an embedded generated MockLogger, for
-// tests that assert which messages were logged — directly and through WithContext
-// child loggers. It replaces the former hand-rolled mocks.SpyLogger.
-type SpyLogger struct {
-	// MockLogger is the embedded generated mock whose expectations back the spy.
-	*mocks.MockLogger
-
-	// ChildDebugCalls records Debug messages logged on the WithContext child loggers,
-	// so a test can assert the child actually logged (e.g. an observability decorator
-	// that binds WithContext(ctx) for trace correlation and logs at Debug).
-	ChildDebugCalls *[]string
-	// ChildInfoCalls records Info messages logged on the WithContext child loggers.
-	ChildInfoCalls *[]string
-	// ChildWarnCalls records Warn messages logged on the WithContext child loggers.
-	ChildWarnCalls *[]string
-	// ChildErrorCalls records Error messages logged on the WithContext child loggers.
-	ChildErrorCalls *[]string
-	// parentDebugRef is non-nil on a child logger; the child's Debug calls also append
-	// to the parent's ChildDebugCalls slice through it.
-	parentDebugRef *[]string
-	// parentInfoRef is non-nil on a child logger; the child's Info calls also append
-	// to the parent's ChildInfoCalls slice through it.
-	parentInfoRef *[]string
-	// parentWarnRef is non-nil on a child logger; the child's Warn calls also append
-	// to the parent's ChildWarnCalls slice through it.
-	parentWarnRef *[]string
-	// parentErrorRef is non-nil on a child logger; the child's Error calls also append
-	// to the parent's ChildErrorCalls slice through it.
-	parentErrorRef *[]string
-	// DebugCalls records Debug messages logged directly on this logger.
-	DebugCalls []string
-	// InfoCalls records Info messages logged directly on this logger.
-	InfoCalls []string
-	// WarnCalls records Warn messages logged directly on this logger.
-	WarnCalls []string
-	// ErrorCalls records Error messages logged directly on this logger.
-	ErrorCalls []string
-	// ContextUsed is true when this logger was created by a WithContext call.
-	ContextUsed bool
-}
 
 // Compile-time assertion that *SpyLogger satisfies interfaces.Logger.
 var _ interfaces.Logger = (*SpyLogger)(nil)

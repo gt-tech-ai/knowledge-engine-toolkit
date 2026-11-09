@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -58,7 +58,7 @@ func (s *Source) Read(_ context.Context, p string) ([]byte, error) {
 }
 
 // Changed returns an empty set: the source has no version control.
-func (s *Source) Changed(context.Context, string) (map[string]bool, error) {
+func (*Source) Changed(context.Context, string) (map[string]bool, error) {
 	return map[string]bool{}, nil
 }
 

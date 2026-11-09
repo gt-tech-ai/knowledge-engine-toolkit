@@ -16,7 +16,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // ErrRetryBudgetExhausted is returned when the retry budget is exhausted.

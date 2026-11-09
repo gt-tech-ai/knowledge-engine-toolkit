@@ -265,14 +265,11 @@ func (s *Subscriber) handleBatch(
 		// goroutines are live at once (bounded fan-out).
 		sem <- struct{}{}
 
-		wg.Add(1)
-
-		go func(m sqstypes.Message) {
-			defer wg.Done()
+		wg.Go(func() {
 			defer func() { <-sem }()
 
 			s.handleOne(ctx, topic, queueURL, handler, m, &handled)
-		}(m)
+		})
 	}
 
 	wg.Wait()

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // groupDirMode is the mode of a directory its group may read.

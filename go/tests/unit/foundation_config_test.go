@@ -279,11 +279,14 @@ server:
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err, "New")
 
+	// shapeServer is the Server element of this document.
+	type shapeServer struct {
+		Host string `mapstructure:"host"`
+		Port int    `mapstructure:"port"`
+	}
+
 	var target struct {
-		Server struct {
-			Host string `mapstructure:"host"`
-			Port int    `mapstructure:"port"`
-		} `mapstructure:"server"`
+		Server shapeServer `mapstructure:"server"`
 	}
 
 	require.NoError(t, cfg.Unmarshal(&target), "Unmarshal")
@@ -511,13 +514,16 @@ server:
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err, "New")
 
+	// shapeHTTP is the HTTP element of this document.
+	type shapeHTTP struct {
+		Host         string        `mapstructure:"host"`
+		Port         int           `mapstructure:"port"`
+		ReadTimeout  time.Duration `mapstructure:"read_timeout"`
+		WriteTimeout time.Duration `mapstructure:"write_timeout"`
+	}
+
 	var serverCfg struct {
-		HTTP struct {
-			Host         string        `mapstructure:"host"`
-			Port         int           `mapstructure:"port"`
-			ReadTimeout  time.Duration `mapstructure:"read_timeout"`
-			WriteTimeout time.Duration `mapstructure:"write_timeout"`
-		} `mapstructure:"http"`
+		HTTP shapeHTTP `mapstructure:"http"`
 	}
 
 	require.NoError(t, cfg.UnmarshalKey("server", &serverCfg), "UnmarshalKey")
@@ -886,12 +892,15 @@ messaging:
 	)
 }
 
+// consumerRootWidget is the Widget element of consumerRoot.
+type consumerRootWidget struct {
+	Size int `mapstructure:"size" envalias:"WIDGET_SIZE"`
+}
+
 // consumerRoot is a consumer-owned config root, standing in for an application's own
 // schema.
 type consumerRoot struct {
-	Widget struct {
-		Size int `mapstructure:"size" envalias:"WIDGET_SIZE"`
-	} `mapstructure:"widget"`
+	Widget consumerRootWidget `mapstructure:"widget"`
 }
 
 // TestConfig_ConsumerSchemaAndExtraEnv tests that a consumer can bring its own config

@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // FactSchemaVersion is the analytics-fact wire version; a consumer rejects a

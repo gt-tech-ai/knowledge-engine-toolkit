@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	rediscache "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cache/redis"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	testsuite "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/suite"

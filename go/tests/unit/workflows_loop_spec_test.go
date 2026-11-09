@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/loop"
 )
@@ -28,14 +28,23 @@ func TestNewGroupFromSpecs_DecoratesAndRunsEverySpec(t *testing.T) {
 
 	for _, decorated := range []bool{true, false} {
 		synctest.Test(t, func(t *testing.T) {
-			testNewGroupFromSpecsDecoratesAndRunsEverySpecCase(t, decorated)
+			testNewGroupFromSpecsDecoratesAndRunsEverySpecCase(
+				t,
+				decoratedFlag(decorated),
+			)
 		})
 	}
 }
 
+// decoratedFlag names the decorated option in a signature.
+type decoratedFlag bool
+
 // testNewGroupFromSpecsDecoratesAndRunsEverySpecCase is the body of a closure in
 // TestNewGroupFromSpecs_DecoratesAndRunsEverySpec.
-func testNewGroupFromSpecsDecoratesAndRunsEverySpecCase(t *testing.T, decorated bool) {
+func testNewGroupFromSpecsDecoratesAndRunsEverySpecCase(
+	t *testing.T,
+	decorated decoratedFlag,
+) {
 	t.Helper()
 
 	var (

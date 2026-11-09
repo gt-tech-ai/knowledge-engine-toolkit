@@ -171,11 +171,14 @@ func (s JSONAPISetter) MsgOptsWithResource(
 	return opts
 }
 
+// Action names the action option in a signature.
+type Action bool
+
 // MethodOpts returns MethodOptions carrying the google.api.http binding (verb +
 // path, plus any additional bindings) and, when action is true, the
 // (jsonapi.v1.operation){action:true} marker.
 func (s JSONAPISetter) MethodOpts(
-	verb, path string, action bool, additional ...[2]string,
+	verb, path string, action Action, additional ...[2]string,
 ) *descriptorpb.MethodOptions {
 	rule := httpRule(verb, path)
 	for _, ab := range additional {

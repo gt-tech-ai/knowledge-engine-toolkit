@@ -7,7 +7,7 @@ package stores
 import (
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // defaultConfigMaxPageSize is the default MaxPageSize of Config.

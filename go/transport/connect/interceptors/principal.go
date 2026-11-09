@@ -6,7 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	coreprincipal "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/principal"
 )
 
@@ -18,7 +18,7 @@ const errPrincipalResolution = "principal resolution failed"
 
 // PrincipalResolver resolves an authenticated caller's claims into the consumer's
 // principal type P — its own authorization model (roles, memberships, grants). An
-// error should carry a core/errors code (or be a *connect.Error); a nil principal
+// error should carry a core/apperr code (or be a *connect.Error); a nil principal
 // with a nil error rejects the caller as unauthenticated.
 type PrincipalResolver[P any] func(ctx context.Context, claims *AuthClaims) (P, error)
 
@@ -36,16 +36,16 @@ type principalInterceptor[P any] struct {
 
 // NewPrincipalInterceptor returns an interceptor that resolves each authenticated
 // request's claims into the consumer's principal type P and stores it with
-// core/principal.WithPrincipal (read it with core/principal.PrincipalFrom). Per RPC:
+// core/principal.WithPrincipal (read it with core/principal.From). Per RPC:
 //   - no AuthClaims (unauthenticated/public request) → pass through
 //   - synthetic claims and a non-nil stub → the stub principal, no resolve call; real
 //     claims always resolve, so a caller behind the gateway never gets the stub identity
 //   - otherwise → resolve; an error fails the request CLOSED. A *connect.Error keeps its
-//     code, a core/errors code maps to its Connect code (FORBIDDEN → PermissionDenied,
+//     code, a core/apperr code maps to its Connect code (FORBIDDEN → PermissionDenied,
 //     UNAUTHORIZED → Unauthenticated, NOT_FOUND → NotFound, …), and an uncoded error
 //     becomes Unavailable, so a transient outage stays retryable. The client sees only a
 //     generic message; the real error is captured for the request log
-//     (core/errors.Capture).
+//     (core/apperr.Capture).
 //   - a nil principal (from resolve or the stub) → CodeUnauthenticated
 //
 // The raw AuthClaims are cleared from the context handed downstream (GetAuthClaims then
@@ -75,7 +75,7 @@ func (i principalInterceptor[P]) WrapUnary(next connect.UnaryFunc) connect.Unary
 }
 
 // WrapStreamingClient is a no-op — this is a server-side resolution interceptor.
-func (i principalInterceptor[P]) WrapStreamingClient(
+func (principalInterceptor[P]) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next
@@ -140,7 +140,7 @@ func resolveError(ctx context.Context, err error, code connect.Code) error {
 }
 
 // resolveErrorCode classifies a resolver error from its code, never its message: a
-// *connect.Error keeps its code, a core/errors code maps to the matching Connect code,
+// *connect.Error keeps its code, a core/apperr code maps to the matching Connect code,
 // and an uncoded error is Unavailable (treated as transient).
 func resolveErrorCode(err error) connect.Code {
 	var connectErr *connect.Error

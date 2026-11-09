@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -252,8 +252,10 @@ func toOTelSpanKind(k interfaces.SpanKind) trace.SpanKind {
 	case interfaces.SpanKindInternal:
 		return trace.SpanKindInternal
 	default:
-		return trace.SpanKindInternal
+		// Any other value takes the shared result below.
 	}
+
+	return trace.SpanKindInternal
 }
 
 // toOTelStatusCode maps a foundation SpanStatusCode to its OTel equivalent,
@@ -267,8 +269,10 @@ func toOTelStatusCode(c interfaces.SpanStatusCode) codes.Code {
 	case interfaces.SpanStatusUnset:
 		return codes.Unset
 	default:
-		return codes.Unset
+		// Any other value takes the shared result below.
 	}
+
+	return codes.Unset
 }
 
 // toOTelAttribute builds an OTel attribute.KeyValue for key from value, choosing

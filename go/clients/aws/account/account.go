@@ -25,8 +25,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/sts"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/session"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 const (
@@ -189,7 +190,7 @@ func (r *sdkResolver) Resolve(
 	}
 
 	v, err, _ := r.group.Do(key, func() (any, error) {
-		s, err := r.resolve(ctx, env, forceProfile)
+		s, err := r.resolveAccount(ctx, env, forceProfile)
 		if err != nil {
 			return Session{}, err
 		}
@@ -201,7 +202,7 @@ func (r *sdkResolver) Resolve(
 
 		return s, nil
 	})
-	s, _ := v.(Session)
+	s := stdx.As[Session](v)
 
 	return s, err
 }
@@ -226,8 +227,8 @@ func (r *sdkResolver) cached(key string) (Session, bool) {
 	return s, true
 }
 
-// resolve loads the config, pins the retrieved credentials and asserts the account.
-func (r *sdkResolver) resolve(
+// resolveAccount loads the config, pins the credentials and asserts the account.
+func (r *sdkResolver) resolveAccount(
 	ctx context.Context,
 	env string,
 	forceProfile bool,
@@ -237,7 +238,7 @@ func (r *sdkResolver) resolve(
 		return Session{}, err
 	}
 
-	profile := r.profileFor(forceProfile, t.Profile)
+	profile := r.profileFor(forceFlag(forceProfile), t.Profile)
 
 	awscfg, err := r.deps.LoadAWS(ctx, profile, t.Region)
 	if err != nil {
@@ -277,9 +278,12 @@ func (r *sdkResolver) resolve(
 	}, nil
 }
 
+// forceFlag names the force option in a signature.
+type forceFlag bool
+
 // profileFor is the profile to load: none when ambient credentials serve, unless forced.
-func (r *sdkResolver) profileFor(force bool, profile string) string {
-	if force || !r.ambient() {
+func (r *sdkResolver) profileFor(force forceFlag, profile string) string {
+	if bool(force) || !r.ambient() {
 		return profile
 	}
 
@@ -345,13 +349,5 @@ func loadDefault(ctx context.Context, profile, region string) (aws.Config, error
 	return cfg, apperr.Wrap(err, apperr.CodeInternal, "config.LoadDefaultConfig")
 }
 
-// Stub is the resolver that does no I/O.
-type Stub struct{}
-
 // Compile-time assertion that Stub satisfies Resolver.
 var _ Resolver = Stub{}
-
-// Resolve returns a never-expiring session in sts.StubAccount.
-func (Stub) Resolve(context.Context, string, bool) (Session, error) {
-	return Session{Account: sts.StubAccount}, nil
-}

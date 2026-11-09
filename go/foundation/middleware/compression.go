@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // compressionThreshold is the minimum buffered response size (bytes) before

@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/smithy-go"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -16,13 +16,13 @@ import (
 // full inventory (the exhaustive crawl is ListPage).
 const testConnectionMaxKeys = 1000
 
-// S3ClientBuilder builds a connector-scoped StorageClient that signs with the
+// ClientBuilder builds a connector-scoped StorageClient that signs with the
 // given credentials in the given region. The APP composition root supplies it
 // (a closure over the storage tier's client construction, capturing the
 // app-infra endpoint — MinIO in dev, none in prod), so
 // go/clients/connector NEVER imports go/clients/storage — the layering
 // seam that avoids a lateral same-layer import.
-type S3ClientBuilder func(
+type ClientBuilder func(
 	ctx context.Context,
 	creds aws.CredentialsProvider,
 	region string,
@@ -57,7 +57,7 @@ func NewSource(
 	ctx context.Context,
 	cfg interfaces.SourceConfig,
 	stsClient stscreds.AssumeRoleAPIClient,
-	build S3ClientBuilder,
+	build ClientBuilder,
 ) (*Source, error) {
 	client, err := NewStorage(ctx, cfg, stsClient, build)
 	if err != nil {
@@ -75,7 +75,7 @@ func NewStorage(
 	ctx context.Context,
 	cfg interfaces.SourceConfig,
 	stsClient stscreds.AssumeRoleAPIClient,
-	build S3ClientBuilder,
+	build ClientBuilder,
 ) (interfaces.StorageClient, error) {
 	creds, err := credentialsFromConfig(
 		cfg.AuthMethod,

@@ -138,8 +138,10 @@ func (l *line) icon(s types.StepStatus) string {
 	case types.StatusPass:
 		return l.p.pal.success.Sprint("✓")
 	default:
-		return l.p.pal.success.Sprint("✓")
+		// Any other value takes the shared result below.
 	}
+
+	return l.p.pal.success.Sprint("✓")
 }
 
 // metric is a step's test count and duration, or its duration in parentheses.

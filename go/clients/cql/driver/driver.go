@@ -9,7 +9,7 @@ import (
 
 	"github.com/gocql/gocql"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -101,7 +101,9 @@ func (q *gocqlQuery) PageState(state []byte) interfaces.CQLQuery {
 // Idempotent marks the statement idempotent and enables speculative execution.
 func (q *gocqlQuery) Idempotent(idempotent bool) interfaces.CQLQuery {
 	q.query = q.query.Idempotent(idempotent)
-	if idempotent && q.speculative != nil {
+
+	speculates := idempotent && q.speculative != nil
+	if speculates {
 		q.query = q.query.SetSpeculativeExecutionPolicy(q.speculative)
 	}
 

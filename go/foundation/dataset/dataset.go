@@ -17,7 +17,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Dataset is the merged top-level sections of a set of YAML files.
@@ -379,6 +379,8 @@ func (d *Dataset) claim(n *yaml.Node, at, p string) {
 		d.claimItems(n, at, p)
 	case yaml.DocumentNode, yaml.ScalarNode, yaml.AliasNode:
 		d.origin[at] = p
+	default:
+		// No other value changes the outcome.
 	}
 }
 

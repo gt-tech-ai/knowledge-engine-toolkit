@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -190,8 +190,10 @@ func ExitCode(code apperr.ErrorCode) int {
 		apperr.CodeResourceExhausted:
 		return 1
 	default:
-		return 1
+		// Any other value takes the shared result below.
 	}
+
+	return 1
 }
 
 // CommandHook returns a CmdHook that echoes each command the runner starts, and its
@@ -287,7 +289,7 @@ func (l *consoleLogger) format(msg string, kvs []any) string {
 
 	var sb strings.Builder
 
-	sb.WriteString(msg)
+	_, _ = sb.WriteString(msg)
 
 	for _, list := range [][]any{l.kvs, kvs} {
 		for i := 0; i+1 < len(list); i += 2 {

@@ -7,7 +7,7 @@ import (
 	"slices"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Snapshot memoizes a run's views of one repository: every keyed value is computed once

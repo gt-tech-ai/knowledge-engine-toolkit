@@ -15,7 +15,8 @@ import (
 	"cel.dev/cel-go/ext"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // ruleEnvBaseOptions sizes the CEL options every rule environment starts with.
@@ -325,7 +326,7 @@ func ruleResult(v ref.Val, message string) []string {
 			)}
 		}
 
-		msgs, _ := native.([]string)
+		msgs := stdx.As[[]string](native)
 
 		return msgs
 	}

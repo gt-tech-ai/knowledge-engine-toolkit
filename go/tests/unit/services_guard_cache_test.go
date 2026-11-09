@@ -210,8 +210,7 @@ func TestServicesGuard_ExpansionsRunInParallel(t *testing.T) {
 				vars map[string]string,
 			) ([]types.Finding, error) {
 				n := inFlight.Add(1)
-				for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
-				}
+				recordPeak(&peak, n)
 
 				time.Sleep(20 * time.Millisecond)
 				inFlight.Add(-1)

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -173,7 +173,7 @@ func loadMiddleware(layer Layer, d Deps) OpMiddleware {
 	if layer == LayerBulkhead {
 		return when(
 			d.Bulkhead != nil,
-			func() OpMiddleware { return NewBulkhead(d.Bulkhead, d.ShedLoad) },
+			func() OpMiddleware { return NewBulkhead(d.Bulkhead, Shed(d.ShedLoad)) },
 		)
 	}
 
@@ -184,7 +184,7 @@ func loadMiddleware(layer Layer, d Deps) OpMiddleware {
 }
 
 // when builds the middleware only when its collaborator is present.
-func when(present bool, build func() OpMiddleware) OpMiddleware {
+func when(present presentFlag, build func() OpMiddleware) OpMiddleware {
 	if !present {
 		return nil
 	}
@@ -225,7 +225,7 @@ func (t Tier) observabilityMiddleware(layer Layer, name string, d Deps) OpMiddle
 	}
 
 	return when(
-		!d.SkipRecovery,
+		presentFlag(!d.SkipRecovery),
 		func() OpMiddleware { return NewRecovery(d.panicLogger(), t.Name, name) },
 	)
 }

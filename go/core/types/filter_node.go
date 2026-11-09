@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // MaxFilterDepth bounds $and/$or nesting in a filter tree, so a crafted deeply nested

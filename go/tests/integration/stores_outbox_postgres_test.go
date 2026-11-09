@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	outboxpg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/sqltx"
@@ -233,14 +233,14 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 		return store.Park(ctx, parked, strings.Repeat("x", 40))
 	}))
 
-	testPgstoreMapsColumnsAndPurgesSentRowsRest(t, ctx, store, db, parked, inTx)
+	testPgstoreMapsColumnsAndPurgesSentRowsRest(ctx, t, store, db, parked, inTx)
 }
 
 // testPgstoreMapsColumnsAndPurgesSentRowsRest continues
 // TestPgstore_MapsColumnsAndPurgesSentRows with its remaining steps.
 func testPgstoreMapsColumnsAndPurgesSentRowsRest(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	store *outboxpg.Store,
 	db *sql.DB,
 	parked uuid.UUID,

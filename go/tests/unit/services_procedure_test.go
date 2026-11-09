@@ -15,7 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/procedure"
@@ -43,12 +43,15 @@ type recorder struct {
 	mu sync.Mutex
 }
 
+// streamFlag names the stream option in a signature.
+type streamFlag bool
+
 // record notes one invocation and answers it from out.
 func (r *recorder) record(
 	env []string,
 	exe string,
 	args []string,
-	stream bool,
+	stream streamFlag,
 ) (string, bool) {
 	line := strings.Join(append([]string{exe}, args...), " ")
 

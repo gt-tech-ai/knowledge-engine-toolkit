@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
@@ -204,7 +204,7 @@ func TestTransportMcpServe_ListsOnlyMCPPolicyOperations(t *testing.T) {
 		"runs.result",
 		"runs.status",
 	)
-	sort.Strings(wantNames)
+	slices.Sort(wantNames)
 
 	got := make([]string, 0, len(res.Tools))
 	for _, tool := range res.Tools {
@@ -214,7 +214,7 @@ func TestTransportMcpServe_ListsOnlyMCPPolicyOperations(t *testing.T) {
 		}
 	}
 
-	sort.Strings(got)
+	slices.Sort(got)
 	assert.Equal(t, wantNames, got)
 }
 

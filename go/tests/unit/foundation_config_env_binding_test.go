@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
@@ -35,23 +35,29 @@ storage:
 	return dir
 }
 
+// bindingSchemaStorage is the Storage element of bindingSchema.
+type bindingSchemaStorage struct {
+	// S3 is the object-store section (storage.s3.*).
+	S3 infra.S3Config `mapstructure:"s3"`
+}
+
+// bindingSchemaMessaging is the Messaging element of bindingSchema.
+type bindingSchemaMessaging struct {
+	// SQS is the queue section (messaging.sqs.*).
+	SQS infra.SQSConfig `mapstructure:"sqs"`
+}
+
 // bindingSchema is a consumer root config: the loader derives an env binding for
 // every leaf, under the consumer's prefix, from these mapstructure/envalias tags.
 type bindingSchema struct {
 	// Messaging groups the queue backend under messaging.sqs.
-	Messaging struct {
-		// SQS is the queue section (messaging.sqs.*).
-		SQS infra.SQSConfig `mapstructure:"sqs"`
-	} `mapstructure:"messaging"`
+	Messaging bindingSchemaMessaging `mapstructure:"messaging"`
 	// Auth is the auth section (auth.*).
 	Auth infra.AuthConfig `mapstructure:"auth"`
 	// Tracing is the tracing section (tracing.*).
 	Tracing infra.TracingConfig `mapstructure:"tracing"`
 	// Storage groups the object store under storage.s3.
-	Storage struct {
-		// S3 is the object-store section (storage.s3.*).
-		S3 infra.S3Config `mapstructure:"s3"`
-	} `mapstructure:"storage"`
+	Storage bindingSchemaStorage `mapstructure:"storage"`
 	// Database is the database section (database.*).
 	Database infra.DatabaseConfig `mapstructure:"database"`
 	// Redis is the cache section (redis.*).

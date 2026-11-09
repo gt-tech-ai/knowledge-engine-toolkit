@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -65,16 +65,13 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 	region := asType[map[string]any](t, asType[[]any](t,
 		asType[map[string]any](t, doc["variable"])["region"])[0])
 
-	testFoundationCodebaseDocsRest(t, cb, ctx, region)
+	testFoundationCodebaseDocsRest(ctx, t, cb, region)
 }
 
 // testFoundationCodebaseDocsRest continues TestFoundationCodebase_Docs with its
 // remaining steps.
 func testFoundationCodebaseDocsRest(
-	t *testing.T,
-	cb interfaces.Codebase,
-	ctx context.Context,
-	region map[string]any,
+	ctx context.Context, t *testing.T, cb interfaces.Codebase, region map[string]any,
 ) {
 	t.Helper()
 

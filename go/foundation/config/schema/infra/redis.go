@@ -60,6 +60,6 @@ func (c *RedisConfig) Addr() string {
 }
 
 // Validate returns an error if the configuration is invalid.
-func (c *RedisConfig) Validate() error {
+func (*RedisConfig) Validate() error {
 	return nil
 }

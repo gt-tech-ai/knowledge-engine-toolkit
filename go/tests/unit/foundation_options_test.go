@@ -167,7 +167,7 @@ func TestOptionsProvider(t *testing.T) {
 	t.Run("component implements OptionsProvider", func(t *testing.T) {
 		t.Parallel()
 
-		var _ options.OptionsProvider[testComponent] = (*testComponent)(nil)
+		var _ options.Provider[testComponent] = (*testComponent)(nil)
 
 		original := &testComponent{
 			maxRetries: 5,

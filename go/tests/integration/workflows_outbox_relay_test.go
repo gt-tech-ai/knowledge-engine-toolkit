@@ -7,7 +7,7 @@ import (
 	"database/sql"
 	"io"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -23,7 +23,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 
 	outboxclient "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	outboxstore "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox"
@@ -405,7 +405,7 @@ func testRelayEndToEndPostgresToS3ObjectLockRest5(
 
 	const bucket = "audit-worm"
 
-	createLockedBucket(t, ctx, api, bucket)
+	createLockedBucket(ctx, t, api, bucket)
 
 	cfg := outboxclient.DefaultConfig()
 
@@ -427,7 +427,7 @@ func testRelayEndToEndPostgresToS3ObjectLockRest5(
 	)
 	drain(t, relay, store, "audit")
 
-	keys := bucketKeys(t, ctx, api, bucket)
+	keys := bucketKeys(ctx, t, api, bucket)
 
 	day := enqueuedAt().Format("2006/01/02")
 	want := make([]string, len(ids))
@@ -436,12 +436,12 @@ func testRelayEndToEndPostgresToS3ObjectLockRest5(
 		want[i] = "org-1/" + day + "/" + id.String()
 	}
 
-	sort.Strings(keys)
-	sort.Strings(want)
+	slices.Sort(keys)
+	slices.Sort(want)
 	require.Equal(t, want, keys)
 
 	for i, id := range ids {
-		assertLockedObject(t, ctx, api, bucket, "org-1/"+day+"/"+id.String(), i)
+		assertLockedObject(ctx, t, api, bucket, "org-1/"+day+"/"+id.String(), i)
 	}
 
 	stats, err := store.Stats(ctx, "audit")
@@ -765,10 +765,7 @@ func testRelayPartitionsDrainIndependentlyRest4(
 
 // createLockedBucket creates a bucket with default compliance-mode object lock.
 func createLockedBucket(
-	t *testing.T,
-	ctx context.Context,
-	api *awss3.Client,
-	bucket string,
+	ctx context.Context, t *testing.T, api *awss3.Client, bucket string,
 ) {
 	t.Helper()
 
@@ -797,10 +794,7 @@ func createLockedBucket(
 
 // bucketKeys lists the bucket's object keys.
 func bucketKeys(
-	t *testing.T,
-	ctx context.Context,
-	api *awss3.Client,
-	bucket string,
+	ctx context.Context, t *testing.T, api *awss3.Client, bucket string,
 ) []string {
 	t.Helper()
 
@@ -820,7 +814,7 @@ func bucketKeys(
 
 // assertLockedObject requires the object to be compliance-locked and to hold record seq.
 func assertLockedObject(
-	t *testing.T, ctx context.Context, api *awss3.Client, bucket, name string, seq int,
+	ctx context.Context, t *testing.T, api *awss3.Client, bucket, name string, seq int,
 ) {
 	t.Helper()
 

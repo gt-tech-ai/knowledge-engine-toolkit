@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // NewTimeout returns a middleware that bounds each operation with a per-op deadline and

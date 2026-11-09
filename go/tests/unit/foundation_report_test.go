@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/report"
@@ -140,16 +140,19 @@ func TestFoundationReport_MachineKinds(t *testing.T) {
 
 	out, _ = reportOf(t, report.Config{Kind: report.KindJSON})
 
+	// shapeSteps is the Steps element of this document.
+	type shapeSteps struct {
+		Name       string `json:"name"`
+		Status     string `json:"status"`
+		DurationMS int64  `json:"duration_ms"`
+	}
+
 	var doc struct {
-		Counts map[string]int `json:"counts"`
-		Gate   string         `json:"gate"`
-		Steps  []struct {
-			Name       string `json:"name"`
-			Status     string `json:"status"`
-			DurationMS int64  `json:"duration_ms"`
-		} `json:"steps"`
-		ElapsedMS int64 `json:"elapsed_ms"`
-		Passed    bool  `json:"passed"`
+		Counts    map[string]int `json:"counts"`
+		Gate      string         `json:"gate"`
+		Steps     []shapeSteps   `json:"steps"`
+		ElapsedMS int64          `json:"elapsed_ms"`
+		Passed    bool           `json:"passed"`
 	}
 
 	require.NoError(t, json.Unmarshal([]byte(out), &doc))

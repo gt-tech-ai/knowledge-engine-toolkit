@@ -59,11 +59,11 @@ type Locker interface {
 	//   - release: stops the watchdog, cancels held, and frees the lock
 	//     (token-fenced); idempotent, safe to defer, and frees the key even if ctx
 	//     is already cancelled.
-	//   - acquired: false if the key was already held by someone else (held is then
-	//     a cancelled context and release a no-op — the caller should reject the
-	//     request); err is returned only for a backend failure on Acquire.
+	//   - err: code CONFLICT if the key was already held by someone else (held is
+	//     then a cancelled context and release a no-op — the caller should reject the
+	//     request), or the backend's failure on Acquire.
 	Hold(
 		ctx context.Context,
 		key string,
-	) (held context.Context, release func(), acquired bool, err error)
+	) (held context.Context, release func(), err error)
 }

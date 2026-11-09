@@ -9,7 +9,7 @@ package transport
 import (
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // defaultStreamMaxMessageBytes is the 64 KiB default message limit.

@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
-	repoerrors "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	repoerrors "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/storeerr"
 )
 
 // TestErrorClassification tests that errors are correctly classified as

@@ -94,21 +94,16 @@ func TestSQSMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 	sent := map[string]sqstypes.MessageAttributeValue{}
 
 	testSQSMessagingHandlerContinuesThePublishersTraceRest8(
-		t,
-		sc,
-		ctx,
-		consumer,
-		api,
-		sent,
+		ctx, consumer, t, sc, api, sent,
 	)
 }
 
 // testSQSMessagingHandlerContinuesThePublishersTraceRest8 continues
 // testSQSMessagingHandlerContinuesThePublishersTraceRest7 with its remaining steps.
 func testSQSMessagingHandlerContinuesThePublishersTraceRest8(
+	ctx, consumer context.Context,
 	t *testing.T,
 	sc oteltrace.SpanContext,
-	ctx, consumer context.Context,
 	api *mocks.MockAPI,
 	sent map[string]sqstypes.MessageAttributeValue,
 ) {
@@ -123,21 +118,16 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest8(
 	})
 
 	testSQSMessagingHandlerContinuesThePublishersTraceRest3(
-		t,
-		sc,
-		ctx,
-		consumer,
-		api,
-		sent,
+		ctx, consumer, t, sc, api, sent,
 	)
 }
 
 // testSQSMessagingHandlerContinuesThePublishersTraceRest3 continues
 // testSQSMessagingHandlerContinuesThePublishersTraceRest with its remaining steps.
 func testSQSMessagingHandlerContinuesThePublishersTraceRest3(
+	ctx, consumer context.Context,
 	t *testing.T,
 	sc oteltrace.SpanContext,
-	ctx, consumer context.Context,
 	api *mocks.MockAPI,
 	sent map[string]sqstypes.MessageAttributeValue,
 ) {
@@ -169,22 +159,16 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest3(
 	var asked []string
 
 	testSQSMessagingHandlerContinuesThePublishersTraceRest4(
-		t,
-		sc,
-		ctx,
-		consumer,
-		api,
-		sent,
-		asked,
+		ctx, consumer, t, sc, api, sent, asked,
 	)
 }
 
 // testSQSMessagingHandlerContinuesThePublishersTraceRest4 continues
 // testSQSMessagingHandlerContinuesThePublishersTraceRest3 with its remaining steps.
 func testSQSMessagingHandlerContinuesThePublishersTraceRest4(
+	ctx, consumer context.Context,
 	t *testing.T,
 	sc oteltrace.SpanContext,
-	ctx, consumer context.Context,
 	api *mocks.MockAPI,
 	sent map[string]sqstypes.MessageAttributeValue,
 	asked []string,
@@ -219,21 +203,16 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest4(
 	require.NoError(t, err)
 
 	testSQSMessagingHandlerContinuesThePublishersTraceRest2(
-		t,
-		sc,
-		consumer,
-		sent,
-		&asked,
-		sub,
+		consumer, t, sc, sent, &asked, sub,
 	)
 }
 
 // testSQSMessagingHandlerContinuesThePublishersTraceRest2 continues
 // testSQSMessagingHandlerContinuesThePublishersTraceRest with its remaining steps.
 func testSQSMessagingHandlerContinuesThePublishersTraceRest2(
+	consumer context.Context,
 	t *testing.T,
 	sc oteltrace.SpanContext,
-	consumer context.Context,
 	sent map[string]sqstypes.MessageAttributeValue,
 	asked *[]string,
 	sub *sqs.Subscriber,

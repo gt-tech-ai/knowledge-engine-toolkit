@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -100,6 +100,8 @@ func (d *Detector) CheckPrerequisites(
 			d.log.Error(result.Message)
 
 			missing = append(missing, prereqHint(&prereqs[i], "not found on PATH"))
+		default:
+			// No other value changes the outcome.
 		}
 	}
 
@@ -226,6 +228,8 @@ func (d *Detector) logResult(result types.ToolCheckResult) {
 		d.log.Warn(result.Message)
 	case types.StatusToolMissing:
 		d.log.Error(result.Message)
+	default:
+		// No other value changes the outcome.
 	}
 }
 

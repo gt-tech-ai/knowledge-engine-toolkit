@@ -16,12 +16,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -162,7 +162,7 @@ func (c *Client) Stat(
 
 // PresignURL returns a synthetic memory:// GET URL (no real signing; expiry/filename
 // ignored).
-func (c *Client) PresignURL(
+func (*Client) PresignURL(
 	_ context.Context,
 	bucket, key string,
 	_ int,
@@ -173,7 +173,7 @@ func (c *Client) PresignURL(
 
 // PresignPutURL returns a synthetic memory:// PUT URL (no real signing;
 // expiry/content-type ignored).
-func (c *Client) PresignPutURL(
+func (*Client) PresignPutURL(
 	_ context.Context,
 	bucket, key string,
 	_ int,
@@ -200,7 +200,7 @@ func (c *Client) CreateMultipartUpload(
 }
 
 // PresignUploadPart returns a synthetic memory:// URL for one part of a multipart upload.
-func (c *Client) PresignUploadPart(
+func (*Client) PresignUploadPart(
 	_ context.Context,
 	bucket, key, uploadID string,
 	partNumber int32,
@@ -365,7 +365,7 @@ func (c *Client) keysAfter(bucket, prefix, token string) []string {
 		}
 	}
 
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	return keys
 }

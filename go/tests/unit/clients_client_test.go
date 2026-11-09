@@ -20,7 +20,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/replaybuffer"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/secrets"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
@@ -312,15 +312,15 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 
 	tail := []interfaces.BufferedMessage{{ID: "m2"}}
 
-	testClientDecorateFamiliesCarryEveryResultRest2(t, ctrl, ctx, deps, tail)
+	testClientDecorateFamiliesCarryEveryResultRest2(ctx, t, ctrl, deps, tail)
 }
 
 // testClientDecorateFamiliesCarryEveryResultRest2 continues
 // TestClientDecorate_FamiliesCarryEveryResult with its remaining steps.
 func testClientDecorateFamiliesCarryEveryResultRest2(
+	ctx context.Context,
 	t *testing.T,
 	ctrl *gomock.Controller,
-	ctx context.Context,
 	deps decorate.Deps,
 	tail []interfaces.BufferedMessage,
 ) {
@@ -354,15 +354,15 @@ func testClientDecorateFamiliesCarryEveryResultRest2(
 	assert.Equal(t, objects, page)
 	assert.Equal(t, "t2", next)
 
-	testClientDecorateFamiliesCarryEveryResultRest(t, ctrl, ctx, deps, src)
+	testClientDecorateFamiliesCarryEveryResultRest(ctx, t, ctrl, deps, src)
 }
 
 // testClientDecorateFamiliesCarryEveryResultRest continues
 // TestClientDecorate_FamiliesCarryEveryResult with its remaining steps.
 func testClientDecorateFamiliesCarryEveryResultRest(
+	ctx context.Context,
 	t *testing.T,
 	ctrl *gomock.Controller,
-	ctx context.Context,
 	deps decorate.Deps,
 	src interfaces.ConnectorSource,
 ) {
@@ -476,15 +476,13 @@ func TestClientDecorate_CacheIsFailOpenAndCountsHits(t *testing.T) {
 	_, ok := c.(interfaces.CacheInvalidator)
 	assert.False(t, ok, "a backend without invalidation stays without it")
 
-	testClientDecorateCacheIsFailOpenAndCountsHitsRest(t, ctrl, ctx)
+	testClientDecorateCacheIsFailOpenAndCountsHitsRest(ctx, t, ctrl)
 }
 
 // testClientDecorateCacheIsFailOpenAndCountsHitsRest continues
 // TestClientDecorate_CacheIsFailOpenAndCountsHits with its remaining steps.
 func testClientDecorateCacheIsFailOpenAndCountsHitsRest(
-	t *testing.T,
-	ctrl *gomock.Controller,
-	ctx context.Context,
+	ctx context.Context, t *testing.T, ctrl *gomock.Controller,
 ) {
 	t.Helper()
 

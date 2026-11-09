@@ -17,8 +17,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus"
-	promhttp "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/http"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	promhttp "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/httpapi"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
@@ -37,7 +37,7 @@ func promResponse(status int, body string) *http.Response {
 }
 
 // doClosed sends req through doer, closes any response body, and returns the error.
-func doClosed(doer promhttp.HTTPDoer, req *http.Request) error {
+func doClosed(doer promhttp.Doer, req *http.Request) error {
 	resp, err := doer.Do(req)
 	if resp != nil {
 		_ = resp.Body.Close()

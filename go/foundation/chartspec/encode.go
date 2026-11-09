@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -354,6 +354,8 @@ func (e *encoder) filterNode(f types.FilterNode) (Hash, error) {
 		setField(&n, memberOp, groupOr)
 
 		members = f.Or
+	default:
+		// No other value changes the outcome.
 	}
 
 	hs := make([]Hash, 0, len(members))

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
 )
@@ -27,20 +27,23 @@ const treeSpecJSON = `{
   "grain": "hour"
 }`
 
+// specGoldenCases is the Cases element of specGolden.
+type specGoldenCases struct {
+	// Name labels the case.
+	Name string `json:"name"`
+	// Root is the expected root hash in hex.
+	Root string `json:"root"`
+	// Spec is the spec in its wire form.
+	Spec json.RawMessage `json:"spec"`
+	// Nodes is the expected number of distinct nodes.
+	Nodes int `json:"nodes"`
+}
+
 // specGolden is testdata/chartspec/specs.golden.json: full specs with their pinned root
 // hash and node count.
 type specGolden struct {
 	// Cases are the specs and their expected trees.
-	Cases []struct {
-		// Name labels the case.
-		Name string `json:"name"`
-		// Root is the expected root hash in hex.
-		Root string `json:"root"`
-		// Spec is the spec in its wire form.
-		Spec json.RawMessage `json:"spec"`
-		// Nodes is the expected number of distinct nodes.
-		Nodes int `json:"nodes"`
-	} `json:"cases"`
+	Cases []specGoldenCases `json:"cases"`
 }
 
 // loadSpecGolden reads the spec corpus.

@@ -61,9 +61,9 @@ func WithInTx(ctx context.Context) context.Context {
 // transaction: once any statement fails the transaction is aborted and every
 // subsequent command fails until it ends, so retrying only masks the real error.
 func InTx(ctx context.Context) bool {
-	v, _ := ctx.Value(inTxKey{}).(bool)
+	inTx, ok := ctx.Value(inTxKey{}).(bool)
 
-	return v
+	return ok && inTx
 }
 
 // afterCommitKey is the unexported context key holding the after-commit hook registry.

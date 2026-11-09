@@ -10,7 +10,7 @@ import (
 
 	"github.com/invopop/jsonschema"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -42,7 +42,7 @@ func Func[T, E any](
 	return func(desc types.OperationDescriptor, env E) interfaces.Operation {
 		return &funcOp[T, E]{
 			desc: desc, env: env, run: run,
-			schema: sync.OnceValue(func() []byte { return InputSchema(new(T)) }),
+			schema: sync.OnceValue(func() []byte { return ReflectInputSchema(new(T)) }),
 		}
 	}
 }
@@ -51,7 +51,7 @@ func Func[T, E any](
 func (o *funcOp[T, E]) Descriptor() types.OperationDescriptor { return o.desc }
 
 // NewInput returns a fresh *T for a front-end to decode arguments into.
-func (o *funcOp[T, E]) NewInput() any { return new(T) }
+func (*funcOp[T, E]) NewInput() any { return new(T) }
 
 // InputSchema returns T's JSON Schema.
 func (o *funcOp[T, E]) InputSchema() []byte { return o.schema() }
@@ -128,10 +128,10 @@ func (o seededOp[T]) check() error {
 	return nil
 }
 
-// InputSchema reflects v's json-tagged fields into an inlined, closed object schema
+// ReflectInputSchema reflects v's json-tagged fields into an inlined, closed schema
 // with no $schema version (an MCP tool requires a top-level "type": "object"). Input
 // types are static structs, so a marshal failure is a programming error and panics.
-func InputSchema(v any) []byte {
+func ReflectInputSchema(v any) []byte {
 	r := &jsonschema.Reflector{DoNotReference: true, ExpandedStruct: true}
 	s := r.Reflect(v)
 
@@ -151,24 +151,24 @@ func InputSchema(v any) []byte {
 // A bad argument is CodeInvalidInput naming the operation. It is the decode for a caller
 // that is not a human at the terminal (an MCP tool call, a CronJob's arguments).
 func Decode(op interfaces.Operation, raw []byte) (any, error) {
-	return decode(op, raw, false)
+	return decodeInput(op, raw, false)
 }
 
 // DecodeLocal is Decode for a front-end where a human typed the arguments (the CLI): it
 // also admits the operation's secret flags.
 func DecodeLocal(op interfaces.Operation, raw []byte) (any, error) {
-	return decode(op, raw, true)
+	return decodeInput(op, raw, true)
 }
 
 // keyChecker is an input whose keys an operation checks itself (a map input): undeclared
 // returns the first key in that neither its flags (their secret ones only when local)
 // nor its arguments declare, or "" when every key is declared.
 type keyChecker interface {
-	undeclared(in map[string]any, local bool) string
+	undeclared(in map[string]any, local localFlag) string
 }
 
-// decode is Decode, admitting a map input's secret flags when local.
-func decode(op interfaces.Operation, raw []byte, local bool) (any, error) {
+// decodeInput is Decode, admitting a map input's secret flags when local.
+func decodeInput(op interfaces.Operation, raw []byte, local bool) (any, error) {
 	input := op.NewInput()
 	trimmed := bytes.TrimSpace(raw)
 
@@ -194,7 +194,7 @@ func decode(op interfaces.Operation, raw []byte, local bool) (any, error) {
 		return input, nil
 	}
 
-	if key := kc.undeclared(*m, local); key != "" {
+	if key := kc.undeclared(*m, localFlag(local)); key != "" {
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"operation %q: unknown argument %q", name, key,
 		))

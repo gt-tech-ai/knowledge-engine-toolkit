@@ -1,6 +1,6 @@
 package resilience
 
-import apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 
 // defaultRateLimitConfigRate is the default Rate of RateLimitConfig.
 const defaultRateLimitConfigRate = 100

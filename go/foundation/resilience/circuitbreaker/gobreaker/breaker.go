@@ -6,7 +6,7 @@ import (
 
 	gb "github.com/sony/gobreaker/v2"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
 )
@@ -70,15 +70,18 @@ func DefaultConfig(name string) Config {
 	}
 }
 
+// noResult is the value type of a breaker whose operations return only an error.
+type noResult = struct{}
+
 // Breaker implements interfaces.CircuitBreaker backed by sony/gobreaker.
 type Breaker struct {
 	// inner is the underlying gobreaker circuit breaker.
-	inner *gb.CircuitBreaker[struct{}]
+	inner *gb.CircuitBreaker[noResult]
 }
 
 // New creates a circuit breaker from the given config.
 func New(cfg Config) *Breaker {
-	cb := gb.NewCircuitBreaker[struct{}](gb.Settings{
+	cb := gb.NewCircuitBreaker[noResult](gb.Settings{
 		Name:        cfg.Name,
 		MaxRequests: cfg.MaxRequests,
 		Interval:    cfg.Interval,

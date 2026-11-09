@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/e2ekit"
 )
 
@@ -378,11 +378,11 @@ func TestPollHelpers(t *testing.T) {
 		assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 	})
 
-	testPollHelpersRest(t, ctx)
+	testPollHelpersRest(ctx, t)
 }
 
 // testPollHelpersRest continues TestPollHelpers with its remaining steps.
-func testPollHelpersRest(t *testing.T, ctx context.Context) {
+func testPollHelpersRest(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("PollUntil names a miss at the deadline", func(t *testing.T) {

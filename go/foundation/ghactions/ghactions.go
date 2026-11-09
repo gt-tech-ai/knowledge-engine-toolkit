@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // summaryMode is the job summary file's mode: the runner's own file, world-readable.

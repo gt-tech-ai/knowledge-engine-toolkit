@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -193,6 +193,9 @@ func (i *Installer) Install(
 	return i.runner.RunWithEnv(ctx, root, inv.env, inv.command, inv.args...)
 }
 
+// CheckOnly names the checkOnly option in a signature.
+type CheckOnly bool
+
 // Provision runs the required-tool flow for setup: pin the local Go
 // toolchain, ensure the go-install bin dir is on PATH, check prerequisites, scan
 // the required toolchain, and — unless checkOnly — install the missing ones that
@@ -203,7 +206,7 @@ func (i *Installer) Provision(
 	ctx context.Context,
 	root string,
 	cat *Catalog,
-	autoYes, checkOnly bool,
+	autoYes bool, checkOnly CheckOnly,
 ) error {
 	i.preparePlatform()
 
@@ -282,7 +285,7 @@ func (i *Installer) InstallSet(
 		return err
 	}
 
-	toInstall := i.pendingTargets(ctx, root, targets, opts.Force)
+	toInstall := i.pendingTargets(ctx, root, targets, forceFlag(opts.Force))
 	if len(toInstall) == 0 {
 		i.log.Info("All requested tools are already installed")
 
@@ -303,7 +306,7 @@ func (i *Installer) InstallSet(
 	yes, err := i.confirm(
 		ctx,
 		fmt.Sprintf("Install %d tool(s) (%s)?", len(toInstall), names),
-		opts.AutoYes,
+		autoYesFlag(opts.AutoYes),
 	)
 	if err != nil {
 		return err
@@ -335,17 +338,20 @@ func (i *Installer) preparePlatform() {
 	}
 }
 
+// forceFlag names the force option in a signature.
+type forceFlag bool
+
 // pendingTargets keeps the targets to install: force rebuilds even an OK tool (the
 // post-Go-bump case: right version, stale build-Go); otherwise a current one is skipped.
 func (i *Installer) pendingTargets(
-	ctx context.Context, root string, targets []types.ToolDef, force bool,
+	ctx context.Context, root string, targets []types.ToolDef, force forceFlag,
 ) []types.ToolDef {
 	det := NewDetector(i.runner, i.log)
 
 	var pending []types.ToolDef
 
 	for j := range targets {
-		if force || det.Check(ctx, root, &targets[j]).Status != types.StatusToolOK {
+		if bool(force) || det.Check(ctx, root, &targets[j]).Status != types.StatusToolOK {
 			pending = append(pending, targets[j])
 		}
 	}
@@ -442,7 +448,7 @@ func (i *Installer) confirmRequired(
 	return i.confirm(
 		ctx,
 		fmt.Sprintf("Install missing tools (%s)?", strings.Join(names, ", ")),
-		autoYes,
+		autoYesFlag(autoYes),
 	)
 }
 
@@ -456,12 +462,15 @@ func toolError(tool *types.ToolDef, cause error) error {
 	return apperr.Internal(msg)
 }
 
+// autoYesFlag names the autoYes option in a signature.
+type autoYesFlag bool
+
 // confirm reports yes without asking when autoYes is set; otherwise it asks the
 // injected Prompter, failing with a coded error when none was injected.
 func (i *Installer) confirm(
 	ctx context.Context,
 	question string,
-	autoYes bool,
+	autoYes autoYesFlag,
 ) (bool, error) {
 	if autoYes {
 		return true, nil
@@ -610,6 +619,8 @@ func (i *Installer) buildInvocation(method types.InstallMethod) invocation {
 			)
 			inv.args = append([]string{inv.args[0], "-p", "1"}, inv.args[1:]...)
 		}
+	default:
+		// No other value changes the outcome.
 	}
 
 	return inv

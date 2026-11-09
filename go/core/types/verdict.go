@@ -48,7 +48,7 @@ func (v Verdict) render() string {
 	}
 
 	if v.Detail != "" {
-		b.WriteString(v.Detail + "\n")
+		_, _ = b.WriteString(v.Detail + "\n")
 	}
 
 	return b.String()
@@ -60,12 +60,14 @@ func writeFinding(b *strings.Builder, f *Finding) {
 	case f.File != "" && f.Line > 0:
 		fmt.Fprintf(b, "%s:%d: ", f.File, f.Line)
 	case f.File != "":
-		b.WriteString(f.File + ": ")
+		_, _ = b.WriteString(f.File + ": ")
+	default:
+		// No other value changes the outcome.
 	}
 
 	if f.Rule != "" {
-		b.WriteString(f.Rule + ": ")
+		_, _ = b.WriteString(f.Rule + ": ")
 	}
 
-	b.WriteString(f.Message + "\n")
+	_, _ = b.WriteString(f.Message + "\n")
 }

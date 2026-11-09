@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/events"
 )
 
@@ -25,7 +25,7 @@ type widgetCreated struct {
 	WidgetID string `json:"widget_id"`
 }
 
-func (e *widgetCreated) Type() events.EventType         { return "widget.created" }
+func (*widgetCreated) Type() events.EventType           { return "widget.created" }
 func (e *widgetCreated) Metadata() events.EventMetadata { return e.EventMetadata }
 
 // widgetValue implements Event with value receivers, so a factory can return it by value

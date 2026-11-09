@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // ParseUUIDCursor converts a keyset cursor's id string to a uuid.UUID for the seek
@@ -47,7 +47,7 @@ func NewCursorCodec() *CursorCodec {
 
 // Encode creates an opaque cursor token from a (created_at, id) tuple.
 // The timestamp is normalized to UTC before encoding.
-func (c *CursorCodec) Encode(createdAt time.Time, id string) string {
+func (*CursorCodec) Encode(createdAt time.Time, id string) string {
 	// Hand-encode "RFC3339Nano|id" instead of json.Marshal (reflection) on this
 	// per-page hot path. RFC3339Nano contains no '|' and ids are UUIDs, so
 	// the first '|' is an unambiguous separator.
@@ -58,7 +58,7 @@ func (c *CursorCodec) Encode(createdAt time.Time, id string) string {
 
 // Decode extracts the (created_at, id) tuple from an opaque cursor token.
 // Returns CodeInvalidInput if the token cannot be decoded.
-func (c *CursorCodec) Decode(cursor string) (CursorPayload, error) {
+func (*CursorCodec) Decode(cursor string) (CursorPayload, error) {
 	data, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil {
 		return CursorPayload{}, apperr.Wrap(

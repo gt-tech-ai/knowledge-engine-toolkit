@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -182,7 +183,7 @@ func (d *envRunner) RequireTool(name, installHint string) error {
 
 // with returns env followed by extra, so a command's own entries win.
 func (d *envRunner) with(extra []string) []string {
-	return append(append([]string{}, d.env...), extra...)
+	return slices.Concat(d.env, extra)
 }
 
 // ---------------------------------------------------------------------------
@@ -599,7 +600,7 @@ func (h *hookRunner) RequireTool(
 }
 
 // cmdStr renders a command and its args as a single display string for the hook.
-func (h *hookRunner) cmdStr(name string, args []string) string {
+func (*hookRunner) cmdStr(name string, args []string) string {
 	if len(args) == 0 {
 		return name
 	}

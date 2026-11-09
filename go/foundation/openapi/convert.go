@@ -6,8 +6,8 @@ import (
 	"github.com/getkin/kin-openapi/openapi2"
 	"github.com/getkin/kin-openapi/openapi2conv"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/helpers"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // convertToOAS3 converts a merged Swagger 2.0 spec to OpenAPI 3 through kin-openapi's
@@ -29,7 +29,7 @@ func convertToOAS3(
 	}
 
 	if defs, ok := swagger["definitions"].(map[string]any); ok {
-		schemas, _ := helpers.GetMap(oas, "components")["schemas"].(map[string]any)
+		schemas := stdx.As[map[string]any](stdx.GetMap(oas, "components")["schemas"])
 		for name, def := range defs {
 			graftRefSiblings(def, schemas[name])
 		}
@@ -108,7 +108,7 @@ func addSecuritySchemes(oas map[string]any, headers map[string]string) {
 		return
 	}
 
-	components, _ := oas["components"].(map[string]any)
+	components := stdx.As[map[string]any](oas["components"])
 	if components == nil {
 		components = map[string]any{}
 		oas["components"] = components
@@ -141,6 +141,8 @@ func graftRefSiblings(from, to any) {
 		graftMapSiblings(f, to)
 	case []any:
 		graftListSiblings(f, to)
+	default:
+		// No other value changes the outcome.
 	}
 }
 

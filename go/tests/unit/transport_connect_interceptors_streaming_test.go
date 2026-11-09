@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect/interceptors"
@@ -94,7 +95,7 @@ func TestTracingInterceptor_Streaming_CreatesSpan(t *testing.T) {
 
 	tracer := fixtures.SpyTracer(func(k string, v any) {
 		if k == "rpc.service" {
-			gotService, _ = v.(string)
+			gotService = stdx.As[string](v)
 		}
 	})
 	interceptor := interceptors.TracingInterceptor(tracer)

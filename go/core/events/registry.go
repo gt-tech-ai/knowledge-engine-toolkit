@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Factory returns a new, zero-valued event of one type, for Registry.Parse to

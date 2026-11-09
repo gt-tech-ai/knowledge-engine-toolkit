@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/cache"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
@@ -158,13 +158,13 @@ func (rc *roleCache[T, ID]) remove(
 }
 
 // read returns the cached entity under key, if a current one is there.
-func (c *roleCache[T, ID]) read(ctx context.Context, key string) (*T, bool) {
-	data, hit := c.cache.Store.Get(ctx, key)
+func (rc *roleCache[T, ID]) read(ctx context.Context, key string) (*T, bool) {
+	data, hit := rc.cache.Store.Get(ctx, key)
 	if !hit {
 		return nil, false
 	}
 
-	val, ok, err := cache.Decode[T](data, c.cache.Version)
+	val, ok, err := cache.Decode[T](data, rc.cache.Version)
 	if err != nil || !ok {
 		return nil, false
 	}
@@ -173,38 +173,38 @@ func (c *roleCache[T, ID]) read(ctx context.Context, key string) (*T, bool) {
 }
 
 // write caches entity under key, best effort.
-func (c *roleCache[T, ID]) write(ctx context.Context, key string, entity *T) {
-	encoded, err := cache.Encode(*entity, c.cache.Version)
+func (rc *roleCache[T, ID]) write(ctx context.Context, key string, entity *T) {
+	encoded, err := cache.Encode(*entity, rc.cache.Version)
 	if err == nil {
-		c.cache.Store.Set(ctx, key, encoded, c.cache.TTL)
+		rc.cache.Store.Set(ctx, key, encoded, rc.cache.TTL)
 	}
 }
 
 // prime caches a created entity: now outside a transaction, after the commit inside one.
 // It encodes now, so a caller that edits entity afterwards cannot change the entry.
-func (c *roleCache[T, ID]) prime(ctx context.Context, key string, entity *T) {
-	encoded, err := cache.Encode(*entity, c.cache.Version)
+func (rc *roleCache[T, ID]) prime(ctx context.Context, key string, entity *T) {
+	encoded, err := cache.Encode(*entity, rc.cache.Version)
 	if err != nil {
 		return
 	}
 
 	interfaces.RegisterAfterCommit(ctx, func() {
-		c.cache.Store.Set(ctx, key, encoded, c.cache.TTL)
+		rc.cache.Store.Set(ctx, key, encoded, rc.cache.TTL)
 	})
 }
 
 // evict drops key now and, inside a transaction, again after the commit.
-func (c *roleCache[T, ID]) evict(ctx context.Context, key string) {
-	c.cache.Store.Delete(ctx, key)
+func (rc *roleCache[T, ID]) evict(ctx context.Context, key string) {
+	rc.cache.Store.Delete(ctx, key)
 
 	if interfaces.InTx(ctx) {
-		interfaces.RegisterAfterCommit(ctx, func() { c.cache.Store.Delete(ctx, key) })
+		interfaces.RegisterAfterCommit(ctx, func() { rc.cache.Store.Delete(ctx, key) })
 	}
 }
 
 // get reads the entity from the cache, or through get on a miss, returning a copy.
 // Inside a transaction it reads the store and leaves the cache alone.
-func (c *roleCache[T, ID]) get(
+func (rc *roleCache[T, ID]) get(
 	ctx context.Context,
 	id ID,
 	get func(context.Context, ID) (*T, error),
@@ -213,18 +213,18 @@ func (c *roleCache[T, ID]) get(
 		return get(ctx, id)
 	}
 
-	key := CacheKey(c.name, id)
-	if val, ok := c.read(ctx, key); ok {
+	key := CacheKey(rc.name, id)
+	if val, ok := rc.read(ctx, key); ok {
 		return val, nil
 	}
 
-	v, err, _ := c.sf.Do(key, func() (any, error) {
+	v, err, _ := rc.sf.Do(key, func() (any, error) {
 		result, err := get(ctx, id)
 		if err != nil {
 			return nil, err
 		}
 
-		c.write(ctx, key, result)
+		rc.write(ctx, key, result)
 
 		return result, nil
 	})

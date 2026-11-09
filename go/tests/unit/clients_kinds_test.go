@@ -23,7 +23,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/secrets"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	coreprincipal "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/principal"
 	coretenant "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/tenant"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
@@ -46,7 +46,7 @@ func customHeaders() interceptors.HeaderMap {
 
 // serverPath invokes an interceptor on one server path (unary or streaming) and
 // returns the context the handler saw.
-type serverPath func(connect.Interceptor, context.Context) (context.Context, error)
+type serverPath func(context.Context, connect.Interceptor) (context.Context, error)
 
 // serverPaths returns both server paths of an interceptor, so each seam test covers
 // unary and streaming RPCs alike.
@@ -77,9 +77,7 @@ func TestAuthInterceptor_HeaderMap(t *testing.T) {
 	ic := interceptors.NewAuthInterceptor(false, customHeaders())
 
 	ctx, err := invokeUnaryWith(
-		ic,
-		context.Background(),
-		newTestRequestWithHeaders(map[string]string{
+		context.Background(), ic, newTestRequestWithHeaders(map[string]string{
 			"X-Sub": "u1", "X-Tenant": "t1", "X-Mail": "u1@example.com",
 			"X-Full-Name": "User One", "X-Nick": "u1", "X-Groups": "a, b ,",
 		}),
@@ -98,9 +96,7 @@ func TestAuthInterceptor_HeaderMap(t *testing.T) {
 	}, *claims)
 
 	ctx, err = invokeUnaryWith(
-		ic,
-		context.Background(),
-		newTestRequestWithHeaders(map[string]string{
+		context.Background(), ic, newTestRequestWithHeaders(map[string]string{
 			testHeaders().Sub: "u1",
 		}),
 	)
@@ -162,8 +158,8 @@ func TestInterceptorWiring_FailsLoudlyOnMisconfiguration(t *testing.T) {
 //
 // What it tests:
 //   - On both paths, claims are resolved into the consumer's principal, readable via
-//     core/principal.PrincipalFrom, and GetAuthClaims then reports no claims.
-//   - A principal of one type is invisible to PrincipalFrom of another type.
+//     core/principal.From, and GetAuthClaims then reports no claims.
+//   - A principal of one type is invisible to From of another type.
 //   - A request without claims passes through with no principal and no resolver call.
 func TestPrincipalInterceptor_ResolvesConsumerPrincipal(t *testing.T) {
 	t.Parallel()
@@ -182,10 +178,10 @@ func TestPrincipalInterceptor_ResolvesConsumerPrincipal(t *testing.T) {
 
 			ctx := interceptors.WithAuthClaims(context.Background(),
 				&interceptors.AuthClaims{Sub: "u1", TenantID: "t1"})
-			got, err := invoke(ic, ctx)
+			got, err := invoke(ctx, ic)
 			require.NoError(t, err)
 
-			p, ok := coreprincipal.PrincipalFrom[principal](got)
+			p, ok := coreprincipal.From[principal](got)
 			require.True(t, ok)
 			assert.Equal(t, principal{Sub: "u1", Tenant: "t1"}, p)
 
@@ -193,13 +189,13 @@ func TestPrincipalInterceptor_ResolvesConsumerPrincipal(t *testing.T) {
 			assert.False(t, ok, "cleared claims must read as absent")
 			assert.Nil(t, claims, "raw claims must be cleared once resolved")
 
-			_, ok = coreprincipal.PrincipalFrom[otherPrincipal](got)
+			_, ok = coreprincipal.From[otherPrincipal](got)
 			assert.False(t, ok, "a principal of another type must not be visible")
 
-			got, err = invoke(ic, context.Background())
+			got, err = invoke(context.Background(), ic)
 			require.NoError(t, err)
 
-			_, ok = coreprincipal.PrincipalFrom[principal](got)
+			_, ok = coreprincipal.From[principal](got)
 			assert.False(t, ok, "no claims → no principal")
 			assert.Equal(t, 1, calls, "no claims → no resolver call")
 		})
@@ -221,7 +217,7 @@ func TestPrincipalInterceptor_ResolvesConsumerPrincipal(t *testing.T) {
 // What it tests:
 //   - Synthetic claims get the stub principal without a resolver call; real claims
 //     resolve; with no stub, synthetic claims resolve too.
-//   - On both paths a resolver error fails closed: a Connect code is kept, a core/errors
+//   - On both paths a resolver error fails closed: a Connect code is kept, a core/apperr
 //     code maps to its Connect code (RESOURCE_EXHAUSTED stays ResourceExhausted so a
 //     quota rejection is not reported as Internal), and an uncoded error becomes
 //     Unavailable.
@@ -239,31 +235,35 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 	synthetic := &interceptors.AuthClaims{Sub: "dev", Synthetic: true}
 
 	got, err := invokeUnary(
+		interceptors.WithAuthClaims(
+			context.Background(),
+			synthetic,
+		),
 		interceptors.NewPrincipalInterceptor[principal](resolve, stub),
-		interceptors.WithAuthClaims(context.Background(), synthetic),
 	)
 	require.NoError(t, err)
 
-	p, _ := coreprincipal.PrincipalFrom[principal](got)
+	p, _ := coreprincipal.From[principal](got)
 	assert.Equal(t, "stub", p.Tenant, "synthetic claims take the stub principal")
 
 	got, err = invokeUnary(
-		interceptors.NewPrincipalInterceptor[principal](resolve, stub),
 		interceptors.WithAuthClaims(
 			context.Background(),
 			&interceptors.AuthClaims{Sub: "real"},
-		),
+		), interceptors.NewPrincipalInterceptor[principal](resolve, stub),
 	)
 	require.NoError(t, err)
 
-	p, _ = coreprincipal.PrincipalFrom[principal](got)
+	p, _ = coreprincipal.From[principal](got)
 	assert.Equal(t, "resolved", p.Tenant, "real claims resolve even with a stub set")
 
-	got, err = invokeUnary(interceptors.NewPrincipalInterceptor[principal](resolve, nil),
-		interceptors.WithAuthClaims(context.Background(), synthetic))
+	got, err = invokeUnary(
+		interceptors.WithAuthClaims(context.Background(), synthetic),
+		interceptors.NewPrincipalInterceptor[principal](resolve, nil),
+	)
 	require.NoError(t, err)
 
-	p, _ = coreprincipal.PrincipalFrom[principal](got)
+	p, _ = coreprincipal.From[principal](got)
 	assert.Equal(t, "resolved", p.Tenant, "without a stub, synthetic claims resolve")
 
 	testPrincipalInterceptorStubAndErrorsRest(t)
@@ -330,8 +330,8 @@ func testPrincipalInterceptorStubAndErrorsRest2(t *testing.T, cases map[string]s
 			ctx := apperr.WithSink(interceptors.WithAuthClaims(context.Background(),
 				&interceptors.AuthClaims{Sub: "u"}))
 			handled, err := invoke(
-				interceptors.NewPrincipalInterceptor[principal](failing, nil),
 				ctx,
+				interceptors.NewPrincipalInterceptor[principal](failing, nil),
 			)
 			label := path + "/" + name
 			assert.Nil(t, handled, "%s: the handler must not run", label)
@@ -389,8 +389,8 @@ func TestPrincipalInterceptor_RejectsNilPrincipal(t *testing.T) {
 			"stub":     {Sub: "dev", Synthetic: true},
 		} {
 			handled, err := invoke(
-				ic,
 				interceptors.WithAuthClaims(context.Background(), claims),
+				ic,
 			)
 			assert.Equal(
 				t,
@@ -452,10 +452,10 @@ func testTenantScopeInterceptorStampsExtractedTenantCase(
 
 	stampers[0] = func(ctx context.Context, _ uuid.UUID) context.Context { return ctx }
 
-	got, err := invoke(ic, context.Background())
+	got, err := invoke(context.Background(), ic)
 	require.NoError(t, err)
 
-	id, ok := coretenant.TenantFromContext(got)
+	id, ok := coretenant.FromContext(got)
 	assert.True(t, ok, "the core tenant context must be stamped")
 	assert.Equal(t, tenant, id)
 
@@ -469,10 +469,10 @@ func testTenantScopeInterceptorStampsExtractedTenantCase(
 	} {
 		set()
 
-		unstamped, err := invoke(ic, context.Background())
+		unstamped, err := invoke(context.Background(), ic)
 		require.NoError(t, err)
 
-		_, ok = coretenant.TenantFromContext(unstamped)
+		_, ok = coretenant.FromContext(unstamped)
 		assert.False(t, ok, "%s: no tenant context may be stamped", label)
 
 		_, ok = entsql.VarFromContext(unstamped, "app.tenant")
@@ -598,14 +598,14 @@ func serveProbe(
 
 // invokeUnary runs ic's unary path on a minimal request against a pass-through handler
 // and returns the context the handler observed (nil when it never ran) plus the error.
-func invokeUnary(ic connect.Interceptor, ctx context.Context) (context.Context, error) {
-	return invokeUnaryWith(ic, ctx, newTestRequest())
+func invokeUnary(ctx context.Context, ic connect.Interceptor) (context.Context, error) {
+	return invokeUnaryWith(ctx, ic, newTestRequest())
 }
 
 // invokeUnaryWith runs ic's unary path on req against a pass-through handler and returns
 // the context the handler observed (nil when it never ran) plus the error.
 func invokeUnaryWith(
-	ic connect.Interceptor, ctx context.Context, req connect.AnyRequest,
+	ctx context.Context, ic connect.Interceptor, req connect.AnyRequest,
 ) (context.Context, error) {
 	seen := make(chan context.Context, 1)
 	next := func(c context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
@@ -633,8 +633,7 @@ func observed(seen <-chan context.Context) context.Context {
 // returns the context the handler observed (nil when it never ran) plus the error. The
 // seam interceptors never touch the conn, so none is passed.
 func invokeStreaming(
-	ic connect.Interceptor,
-	ctx context.Context,
+	ctx context.Context, ic connect.Interceptor,
 ) (context.Context, error) {
 	seen := make(chan context.Context, 1)
 	err := ic.WrapStreamingHandler(

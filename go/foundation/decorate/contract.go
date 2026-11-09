@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // NewSubject returns the Subject of the component named name in tier whose operations
@@ -126,10 +126,10 @@ func OpName(method string) string {
 
 	for i, c := range r {
 		if startsWord(r, i) {
-			b.WriteByte('_')
+			_ = b.WriteByte('_')
 		}
 
-		b.WriteRune(unicode.ToLower(c))
+		_, _ = b.WriteRune(unicode.ToLower(c))
 	}
 
 	return b.String()

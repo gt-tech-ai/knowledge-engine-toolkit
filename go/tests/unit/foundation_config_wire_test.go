@@ -75,7 +75,7 @@ func TestProvideServerConfig_ValidationFailure(t *testing.T) {
 	// Act & Assert: Validation should fail
 	err := serverCfg.Validate()
 	require.Error(t, err, "Validate() must return error for Port == 0")
-	// Validate() now returns a coded core/errors value (ARCHITECTURE.md#error-codes), so
+	// Validate() now returns a coded core/apperr value (ARCHITECTURE.md#error-codes), so
 	// Error() carries an "INVALID_INPUT: " prefix; assert the meaningful message as a
 	// substring rather than pinning the exact rendered (code-prefixed) string.
 	assert.ErrorContains(t, err, "server.port is required (got 0)")

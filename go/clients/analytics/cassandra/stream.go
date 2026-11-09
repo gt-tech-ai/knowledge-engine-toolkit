@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -335,17 +335,17 @@ func (s *stream) read(bucket time.Time, state []byte, ch chan<- page) {
 // position encodes the token after page p: the same bucket's next page, or the
 // following bucket's start.
 func (s *stream) position(p page) []byte {
-	at := p.bucket.UnixMilli()
-	t := resumeToken{Bucket: &at, Query: s.plan.fingerprint, Page: p.next}
+	atMs := p.bucket.UnixMilli()
+	t := resumeToken{Bucket: &atMs, Query: s.plan.fingerprint, Page: p.next}
 
 	if len(p.next) == 0 {
 		if s.cur+1 >= len(s.buckets) {
 			return nil
 		}
 
-		next := s.buckets[s.cur+1].UnixMilli()
+		nextMs := s.buckets[s.cur+1].UnixMilli()
 
-		t = resumeToken{Bucket: &next, Query: s.plan.fingerprint}
+		t = resumeToken{Bucket: &nextMs, Query: s.plan.fingerprint}
 	}
 
 	//nolint:errchkjson // a string and a byte slice always marshal

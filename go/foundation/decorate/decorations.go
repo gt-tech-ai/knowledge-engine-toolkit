@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead"
@@ -282,7 +282,7 @@ func addLoadGuards(deps *Deps, name string, l *decoration.Layers) error {
 	var err error
 
 	if decoration.On(l.Bulkhead.Enabled) {
-		deps.Bulkhead, err = newBulkhead(l.Bulkhead)
+		deps.Bulkhead, err = bulkheadFromConfig(l.Bulkhead)
 		if err != nil {
 			return wrapLayer(err, name, "bulkhead")
 		}
@@ -339,9 +339,9 @@ func newBreaker(
 	})
 }
 
-// newBulkhead builds the bulkhead b tunes; its kind is "channel" (or empty) or
+// bulkheadFromConfig builds the bulkhead b tunes; its kind is "channel" (or empty) or
 // "adaptive".
-func newBulkhead(b decoration.Bulkhead) (interfaces.Bulkhead, error) {
+func bulkheadFromConfig(b decoration.Bulkhead) (interfaces.Bulkhead, error) {
 	err := b.BulkheadConfig.Validate()
 	if err != nil {
 		return nil, err

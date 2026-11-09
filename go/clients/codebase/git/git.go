@@ -12,7 +12,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase/fs"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -106,8 +106,9 @@ func (s *Source) Read(_ context.Context, p string) ([]byte, error) {
 // Changed returns the paths changed since the merge base with base plus the
 // untracked files; an unresolvable base is CodeNotFound.
 func (s *Source) Changed(ctx context.Context, base string) (map[string]bool, error) {
-	if res := s.runner.RunBuffered(ctx, s.root, "git", "rev-parse", "--verify",
-		"--quiet", base+"^{commit}"); res.Err != nil {
+	res := s.runner.RunBuffered(ctx, s.root, "git", "rev-parse", "--verify",
+		"--quiet", base+"^{commit}")
+	if res.Err != nil {
 		return nil, apperr.Wrap(res.Err, apperr.CodeNotFound, "unknown base "+base)
 	}
 

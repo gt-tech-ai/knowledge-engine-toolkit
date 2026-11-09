@@ -74,14 +74,13 @@ func TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound(t *testing.T) {
 		assert.False(t, hit, "the default ttl expires too")
 	})
 
-	testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest(t, ctx)
+	testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest(ctx, t)
 }
 
 // testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest continues
 // TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound with its remaining steps.
 func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest(
-	t *testing.T,
-	ctx context.Context,
+	ctx context.Context, t *testing.T,
 ) {
 	t.Helper()
 
@@ -107,15 +106,14 @@ func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest(
 	t.Run("concurrent use", func(t *testing.T) {
 		t.Parallel()
 
-		testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase(t, ctx)
+		testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase(ctx, t)
 	})
 }
 
 // testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase is the body of a closure in
 // testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest2.
 func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase(
-	t *testing.T,
-	ctx context.Context,
+	ctx context.Context, t *testing.T,
 ) {
 	t.Helper()
 

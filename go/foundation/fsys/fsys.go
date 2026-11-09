@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -50,14 +50,14 @@ func wrap(err error, op, name string) error {
 }
 
 // Stat returns file information, delegating to os.Stat.
-func (f *OSFS) Stat(name string) (fs.FileInfo, error) {
+func (*OSFS) Stat(name string) (fs.FileInfo, error) {
 	info, err := os.Stat(name)
 
 	return info, wrap(err, "stat", name)
 }
 
 // MkdirAll creates a directory tree, delegating to os.MkdirAll.
-func (f *OSFS) MkdirAll(
+func (*OSFS) MkdirAll(
 	path string,
 	perm fs.FileMode,
 ) error {
@@ -65,7 +65,7 @@ func (f *OSFS) MkdirAll(
 }
 
 // ReadFile reads an entire file, delegating to os.ReadFile.
-func (f *OSFS) ReadFile(
+func (*OSFS) ReadFile(
 	name string,
 ) ([]byte, error) {
 	data, err := os.ReadFile(filepath.Clean(name))
@@ -74,24 +74,24 @@ func (f *OSFS) ReadFile(
 }
 
 // WriteFile writes data to a file, delegating to os.WriteFile.
-func (f *OSFS) WriteFile(name string, data []byte, perm fs.FileMode) error {
+func (*OSFS) WriteFile(name string, data []byte, perm fs.FileMode) error {
 	return wrap(os.WriteFile(name, data, perm), "write", name)
 }
 
 // RemoveAll removes a path and its children, delegating to os.RemoveAll.
-func (f *OSFS) RemoveAll(path string) error {
+func (*OSFS) RemoveAll(path string) error {
 	return wrap(os.RemoveAll(path), "remove", path)
 }
 
 // Rename renames a file or directory, delegating to os.Rename.
-func (f *OSFS) Rename(
+func (*OSFS) Rename(
 	oldpath, newpath string,
 ) error {
 	return wrap(os.Rename(oldpath, newpath), "rename", oldpath)
 }
 
 // ReadDir reads a directory's entries, delegating to os.ReadDir.
-func (f *OSFS) ReadDir(name string) ([]fs.DirEntry, error) {
+func (*OSFS) ReadDir(name string) ([]fs.DirEntry, error) {
 	entries, err := os.ReadDir(name)
 
 	return entries, wrap(err, "read directory", name)

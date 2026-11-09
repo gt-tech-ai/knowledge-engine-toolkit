@@ -12,7 +12,7 @@ import (
 	"github.com/gocql/gocql"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql/driver"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 

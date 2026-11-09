@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -142,9 +142,11 @@ func buildInstallMethod(m types.InstallMethodEntry) types.InstallMethod {
 			Download: buildDownload(m, strings.TrimSuffix(m.URL, "/")),
 		}
 	case types.InstallKindCommand:
+		return types.InstallMethod{Command: m.Command, Args: m.Args}
+	default:
+		// Validation rejects any other kind, so this result is unreachable from config.
 	}
 
-	// types.InstallKindCommand; validation rejects any other kind.
 	return types.InstallMethod{Command: m.Command, Args: m.Args}
 }
 

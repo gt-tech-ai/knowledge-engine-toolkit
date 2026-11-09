@@ -6,6 +6,8 @@ import (
 	"strconv"
 
 	"connectrpc.com/connect"
+
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TransformSingleResource converts a Vanguard single-resource response to
@@ -127,7 +129,7 @@ func collectionLinks(
 ) map[string]any {
 	links := map[string]any{"self": selfLink}
 
-	pg, _ := body[paginationKey].(map[string]any)
+	pg := stdx.As[map[string]any](body[paginationKey])
 	if paginationKey == "" || pg == nil {
 		return links
 	}
@@ -253,7 +255,7 @@ func parseErrorBody(body []byte) (code, detail string) {
 		code = c
 	}
 
-	detail, _ = parsed["message"].(string)
+	detail = stdx.As[string](parsed["message"])
 
 	return code, detail
 }
@@ -281,6 +283,8 @@ func normalizeErrorCode(raw any) string {
 		if n >= int(connect.CodeCanceled) && n <= int(connect.CodeUnauthenticated) {
 			return connect.Code(n).String()
 		}
+	default:
+		// No other value changes the outcome.
 	}
 
 	return ""

@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
@@ -68,8 +68,10 @@ func TestInterceptors_LaysOutTheControllerTier(t *testing.T) {
 			decorate.LayerRateLimit:
 			return nil, false
 		default:
-			return nil, false
+			// Any other value takes the shared result below.
 		}
+
+		return nil, false
 	}
 	adapt := func(unary, stream decorate.OpMiddleware) string {
 		runs = append(runs, runGroup{unary: unary, stream: stream})

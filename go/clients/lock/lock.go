@@ -31,7 +31,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/lock/local"
 	lockredis "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/lock/redis"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
@@ -169,14 +169,16 @@ func NewLocker(
 func (l *locker) Hold(
 	ctx context.Context,
 	key string,
-) (held context.Context, release func(), acquired bool, err error) {
+) (held context.Context, release func(), err error) {
 	token, ok, err := l.Acquire(ctx, key)
 	if err != nil {
-		return canceledContext(ctx), func() {}, false, err
+		return canceledContext(ctx), func() {}, err
 	}
 
 	if !ok {
-		return canceledContext(ctx), func() {}, false, nil
+		return canceledContext(ctx), func() {}, apperr.New(
+			apperr.CodeConflict, "lock "+key+" is already held",
+		)
 	}
 
 	heldCtx, cancel := context.WithCancel(ctx)
@@ -197,7 +199,7 @@ func (l *locker) Hold(
 
 	go l.keepRenewed(heldCtx, stop, cancel, key, token)
 
-	return heldCtx, releaseFn, true, nil
+	return heldCtx, releaseFn, nil
 }
 
 // keepRenewed renews the lease each interval until stopped or the lease is lost. On a

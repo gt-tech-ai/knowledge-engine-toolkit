@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Envelope wraps a cached value with metadata for version-aware caching.

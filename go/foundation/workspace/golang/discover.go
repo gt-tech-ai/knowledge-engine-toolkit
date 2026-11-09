@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/mod/modfile"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // modFile is a module's go.mod file name.

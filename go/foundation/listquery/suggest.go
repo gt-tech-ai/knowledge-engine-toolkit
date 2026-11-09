@@ -2,7 +2,6 @@ package listquery
 
 import (
 	"slices"
-	"sort"
 	"strconv"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
@@ -68,7 +67,7 @@ func MergeDistinct(columns [][]string, limit, pageNum int) *types.Page[string] {
 
 	merged := distinctValues(columns)
 
-	sort.Strings(merged)
+	slices.Sort(merged)
 
 	offset := (pageNum - 1) * limit
 	if offset >= len(merged) {

@@ -16,7 +16,7 @@ import (
 // renderPred applies a compiled Ent predicate to a fresh Postgres selector over
 // "documents" and returns the rendered SQL + bound args, so a test can assert the
 // predicate is parameterized (values as $N placeholders, never inlined).
-func renderPred(pred entcompiler.EntPredicate) (query string, args []any) {
+func renderPred(pred entcompiler.Predicate) (query string, args []any) {
 	sel := entsql.Dialect(dialect.Postgres).Select("*").From(entsql.Table("documents"))
 	pred(sel)
 
@@ -25,7 +25,7 @@ func renderPred(pred entcompiler.EntPredicate) (query string, args []any) {
 
 // renderOrder applies compiled order options to a fresh Postgres selector and returns the
 // SQL, so a test can assert the ORDER BY column list + tiebreakers.
-func renderOrder(orders []entcompiler.EntPredicate) string {
+func renderOrder(orders []entcompiler.Predicate) string {
 	sel := entsql.Dialect(dialect.Postgres).Select("*").From(entsql.Table("documents"))
 	for _, o := range orders {
 		o(sel)
@@ -164,7 +164,7 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 				},
 			}},
 		}}
-		pred := listquery.Compile[entcompiler.EntPredicate, entcompiler.EntPredicate](
+		pred := listquery.Compile[entcompiler.Predicate, entcompiler.Predicate](
 			b,
 			resolveNameToTitle,
 			f,
@@ -181,7 +181,7 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 		func(t *testing.T) {
 			t.Parallel()
 
-			orders := listquery.CompileOrder[entcompiler.EntPredicate, entcompiler.EntPredicate](
+			orders := listquery.CompileOrder[entcompiler.Predicate, entcompiler.Predicate](
 				b,
 				resolveNameToTitle,
 				nil,
@@ -207,7 +207,7 @@ func testEntBackendCompositeAndOrderRest(t *testing.T, b entcompiler.Backend) {
 	t.Run("created_at primary sort dedups its tiebreaker", func(t *testing.T) {
 		t.Parallel()
 
-		orders := listquery.CompileOrder[entcompiler.EntPredicate, entcompiler.EntPredicate](
+		orders := listquery.CompileOrder[entcompiler.Predicate, entcompiler.Predicate](
 			b,
 			resolveNameToTitle,
 			nil,
@@ -224,7 +224,7 @@ func testEntBackendCompositeAndOrderRest(t *testing.T, b entcompiler.Backend) {
 	t.Run("id primary sort dedups its tiebreaker", func(t *testing.T) {
 		t.Parallel()
 
-		orders := listquery.CompileOrder[entcompiler.EntPredicate, entcompiler.EntPredicate](
+		orders := listquery.CompileOrder[entcompiler.Predicate, entcompiler.Predicate](
 			b,
 			resolveNameToTitle,
 			nil,
@@ -246,7 +246,7 @@ func testEntBackendCompositeAndOrderRest(t *testing.T, b entcompiler.Backend) {
 			// A membership join table keyed on joined_at passes its keyset column so the
 			// ORDER BY never references a non-existent created_at column — the fix that
 			// unblocks org_member/team_member.
-			orders := listquery.CompileOrder[entcompiler.EntPredicate, entcompiler.EntPredicate](
+			orders := listquery.CompileOrder[entcompiler.Predicate, entcompiler.Predicate](
 				b,
 				resolveNameToTitle,
 				nil,
@@ -336,7 +336,7 @@ func TestEntBackend_OrderJoin(t *testing.T) {
 		Columns: []string{"first_name", "last_name"},
 	}
 
-	asc := renderOrder([]entcompiler.EntPredicate{b.OrderJoin(join, false)})
+	asc := renderOrder([]entcompiler.Predicate{b.OrderJoin(join, false)})
 	// One correlated subquery per column, correlated to the base documents.user_id,
 	// ascending → NULLS LAST.
 	assert.Contains(t, asc, `"users"."first_name"`)
@@ -350,7 +350,7 @@ func TestEntBackend_OrderJoin(t *testing.T) {
 	// A live-target join (no TargetSoftDeletes) emits no soft-delete guard.
 	assert.NotContains(t, asc, "deleted_at")
 
-	desc := renderOrder([]entcompiler.EntPredicate{b.OrderJoin(join, true)})
+	desc := renderOrder([]entcompiler.Predicate{b.OrderJoin(join, true)})
 	assert.Contains(t, desc, "NULLS FIRST")
 	assert.NotContains(t, desc, "NULLS LAST")
 
@@ -361,7 +361,7 @@ func TestEntBackend_OrderJoin(t *testing.T) {
 		Table: "connectors", LocalKey: "connector_id", TargetKey: "id",
 		Columns: []string{"name"}, TargetSoftDeletes: true,
 	}
-	guarded := renderOrder([]entcompiler.EntPredicate{b.OrderJoin(softDel, false)})
+	guarded := renderOrder([]entcompiler.Predicate{b.OrderJoin(softDel, false)})
 	assert.Contains(t, guarded, `"connectors"."deleted_at" IS NULL`)
 }
 
@@ -387,7 +387,7 @@ func TestEntBackend_OrderOrdinal(t *testing.T) {
 	values := []string{"admin", "write", "read"}
 
 	asc := renderOrder(
-		[]entcompiler.EntPredicate{b.OrderOrdinal("access_level", values, false)},
+		[]entcompiler.Predicate{b.OrderOrdinal("access_level", values, false)},
 	)
 	assert.Contains(t, asc, "CASE")
 	assert.Contains(t, asc, `"access_level"`)
@@ -399,7 +399,7 @@ func TestEntBackend_OrderOrdinal(t *testing.T) {
 	assert.Contains(t, asc, "END ASC")
 
 	desc := renderOrder(
-		[]entcompiler.EntPredicate{b.OrderOrdinal("access_level", values, true)},
+		[]entcompiler.Predicate{b.OrderOrdinal("access_level", values, true)},
 	)
 	assert.Contains(t, desc, "END DESC")
 }
@@ -431,7 +431,7 @@ func TestEntBackend_OrderDerived(t *testing.T) {
 		Table: "team_members", LocalKey: "id", TargetKey: "team_id",
 		Func: "count", TargetSoftDeletes: true,
 	}}
-	asc := renderOrder([]entcompiler.EntPredicate{b.OrderDerived(agg, false)})
+	asc := renderOrder([]entcompiler.Predicate{b.OrderDerived(agg, false)})
 	assert.Contains(t, asc, "COUNT(*)")
 	assert.Contains(t, asc, `FROM "team_members"`)
 	assert.Contains(t, asc, `"team_members"."team_id"`)
@@ -442,7 +442,7 @@ func TestEntBackend_OrderDerived(t *testing.T) {
 	assert.Contains(t, asc, "NULLS LAST")
 	assert.NotContains(t, asc, "JOIN")
 
-	desc := renderOrder([]entcompiler.EntPredicate{b.OrderDerived(agg, true)})
+	desc := renderOrder([]entcompiler.Predicate{b.OrderDerived(agg, true)})
 	assert.Contains(t, desc, "NULLS FIRST")
 	assert.NotContains(t, desc, "NULLS LAST")
 
@@ -454,7 +454,7 @@ func TestEntBackend_OrderDerived(t *testing.T) {
 			{Value: "daily", Seconds: 86400},
 		},
 	}}
-	ivSQL := renderOrder([]entcompiler.EntPredicate{b.OrderDerived(iv, false)})
+	ivSQL := renderOrder([]entcompiler.Predicate{b.OrderDerived(iv, false)})
 	assert.Contains(t, ivSQL, `"documents"."last_sync_at"`)
 	assert.Contains(t, ivSQL, "CASE")
 	assert.Contains(t, ivSQL, "WHEN 'hourly' THEN make_interval(secs => 3600)")

@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -583,9 +583,9 @@ func TestTimestamps_SoftDeleteAndIsDeleted(t *testing.T) {
 func TestStdlib_Sentinel(t *testing.T) {
 	t.Parallel()
 
-	ErrFoo := apperr.Sentinel("foo error")
-	require.Error(t, ErrFoo)
-	assert.Equal(t, "foo error", ErrFoo.Error())
+	errFoo := apperr.Sentinel("foo error")
+	require.Error(t, errFoo)
+	assert.Equal(t, "foo error", errFoo.Error())
 }
 
 // TestStdlib_StdIs tests that StdIs correctly delegates to errors.Is for

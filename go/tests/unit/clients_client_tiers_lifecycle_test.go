@@ -59,7 +59,7 @@ func TestDatabaseTier_NewFromConfig(t *testing.T) {
 //     Ready before Start, or never exposes a Conn, cannot build working stubs.
 //
 // What it tests:
-//   - KindGRPC returns a non-nil RPCClient.
+//   - KindGRPC returns a non-nil rpc.Client.
 //   - Before Start: Conn is nil and Liveness/Readiness report not-started.
 //   - After Start: Conn is non-nil, Readiness passes (idle is not a failure state),
 //     and Stop closes cleanly.

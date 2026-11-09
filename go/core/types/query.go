@@ -118,159 +118,6 @@ type IntervalCase struct {
 	Seconds int64
 }
 
-// IntervalSpec describes a computed timestamp-plus-interval ORDER BY: the base row sorts
-// by `BaseColumn + CASE DiscriminatorColumn WHEN v0 THEN interval0 … ELSE NULL END`, so a
-// value derived at read time from (timestamp, category) — e.g. a next-run time =
-// last_run_at + the schedule's interval — is sortable WITHOUT denormalizing it (the value
-// is a pure function of two columns, so a computed expression can never drift, unlike a
-// stored copy). A row whose discriminator matches no case, or whose BaseColumn is NULL,
-// sorts as NULL. Always a custom sort → the offset pager.
-type IntervalSpec struct {
-	// BaseColumn is the base timestamp column the interval is added to, e.g. "last_sync_at".
-	BaseColumn string
-	// DiscriminatorColumn is the category column selecting which interval to add, e.g.
-	// "schedule".
-	DiscriminatorColumn string
-	// Cases maps each discriminator value to its interval (seconds); an unmatched value
-	// yields NULL.
-	Cases []IntervalCase
-}
-
-// DerivedSort is a computed / correlated ORDER BY that is NOT a base column: exactly one
-// of Aggregate | Interval is set. It is the sort analogue of a JoinTarget — a store
-// stamps it onto a sort field via its derived-sort resolver, KeysetColumns carries it
-// (never into the keyset seek — a derived sort is always a custom sort → the offset
-// pager), and the backend renders it (QueryBackend.OrderDerived).
-type DerivedSort struct {
-	// Aggregate, when non-nil, sorts by a correlated aggregate over a child table
-	// (counts/extrema).
-	Aggregate *AggregateSpec
-	// Interval, when non-nil, sorts by a base timestamp plus a category-selected interval.
-	Interval *IntervalSpec
-}
-
-// FilterClause is a single field comparison: Field <Operator> Value. For OpIn/OpNotIn,
-// Value is a slice of the field's element type; otherwise it is a scalar. (Field order
-// is govet fieldalignment-optimal, not the semantic Field/Operator/Value reading.)
-type FilterClause struct {
-	// Field is the DTO field name (allow-listed + mapped to a storage column by listquery).
-	Field string
-	// Value is the comparison operand — a scalar, or a slice for OpIn/OpNotIn.
-	Value any
-	// Join, when non-nil, compiles this clause to a correlated EXISTS on a joined table
-	// instead of a same-table predicate on Field; the operator + value still apply,
-	// against Join.Columns.
-	Join *JoinTarget
-	// Operator is the comparison to apply.
-	Operator FilterOperator
-}
-
-// IsEmpty reports whether the clause carries no field to constrain on.
-func (c FilterClause) IsEmpty() bool { return c.Field == "" }
-
-// CompositeFilter is a boolean combination of sub-filters: And requires every member to
-// match, Or requires at least one. A composite may nest other composites.
-type CompositeFilter struct {
-	// And holds sub-filters combined with logical AND.
-	And []Filter
-	// Or holds sub-filters combined with logical OR.
-	Or []Filter
-}
-
-// IsEmpty reports whether the composite holds no sub-filters in either arm.
-func (c CompositeFilter) IsEmpty() bool { return len(c.And) == 0 && len(c.Or) == 0 }
-
-// OrderField is a validated, allow-listed sort directive: sort by Field, descending when
-// Desc. The listquery order allow-list yields it (defaulting to created_at for a
-// non-allow-listed field); the repos-tier compiler renders it to an Ent order option.
-type OrderField struct {
-	// Field is the allow-listed field name to sort by.
-	Field string
-	// Join, when non-nil, sorts by a column on a JOINED table instead of Field on the
-	// base table: the backend renders ORDER BY over a correlated subquery. Only set for a
-	// joined sort field (always a custom sort → the offset pager; keyset stays
-	// same-table), stamped by KeysetColumns from the resource's join resolver.
-	Join *JoinTarget
-	// Derived, when non-nil, sorts by a COMPUTED / CORRELATED expression that is not a
-	// base column a correlated aggregate over a child table (a child or member count) or
-	// a timestamp-plus-interval (a next-run time). Like Join it is stamped by
-	// KeysetColumns from the resource's derived-sort resolver and rendered by the backend
-	// (OrderDerived); always a custom sort → the offset pager (keyset stays same-table
-	// default order).
-	Derived *DerivedSort
-	// Ordinal, when non-empty, sorts Field's (same-table) column by a value ORDINAL: the
-	// backend renders `ORDER BY CASE Field WHEN v0 THEN 0 … END` so an enum column sorts
-	// by meaning, not alphabetically. The values are the column's DB values in ascending
-	// order. A custom sort → the offset pager (keyset stays the default order).
-	Ordinal []string
-	// Desc sorts descending when true, ascending when false.
-	Desc bool
-}
-
-// ListSpec is a fully-RESOLVED list query command: the WHERE predicates, the ORDER BY,
-// and the window, all expressed over STORAGE COLUMNS (not DTO field names). It is the
-// interface between the pagination template (foundation/listquery.Run) and a datastore's
-// ListRunner: Run composes it (user filter resolved + the keyset seek, the keyset-column
-// order, the limit/offset) and the runner folds it into the concrete query and executes.
-// Because every field is already resolved, a runner folds it with an identity resolver —
-// it never needs the resource's allow-list.
-type ListSpec struct {
-	// Filters are the resolved-column predicates AND-ed into the query (the user filter,
-	// plus the keyset seek on the keyset arm). An empty slice is match-all.
-	Filters []Filter
-
-	// Order is the resolved-column ORDER BY sequence (the caller's sort columns, then the
-	// resource tiebreaker column, then id) — Field carries the storage column, not a DTO
-	// field name.
-	Order []OrderField
-
-	// Limit is the maximum number of rows to fetch (the caller passes limit+1 to detect
-	// has-more).
-	Limit int
-
-	// Offset is the row offset (offset arm); it is 0 on the keyset arm, whose window is
-	// the seek.
-	Offset int
-}
-
-// PageToken is the decoded pagination cursor: a tagged union of a 1-based offset page and
-// a keyset seek cursor. When Keyset is non-nil the token is a keyset cursor (infinite
-// scroll); otherwise OffsetPage selects the numeric pager. It is the semantic form of the
-// opaque base64 token carried in the pagination page_token string — foundation/listquery
-// encodes/decodes the two (a JSON payload, base64-wrapped), keeping core/ free of any
-// transport dependency.
-type PageToken struct {
-	// Keyset is the keyset seek cursor when non-nil (infinite scroll).
-	Keyset *KeysetCursor
-	// OffsetPage is the 1-based page number for the numeric pager (used when Keyset is nil).
-	OffsetPage int32
-}
-
-// KeysetCursor carries the previous page's last-row ordering values for a keyset seek
-// The seek predicate pairs these with the resource's ordered keyset columns
-// (the caller's sort fields, then the resource tiebreaker column, then id).
-//
-// A cursor is bound to the ACCESS SCOPE it was minted in (the tenant and access
-// restrictions the store's base query applies). The Fingerprint binds only (sort ⊕
-// filter), NOT that scope — the scope lives in the store's base query, outside the user
-// filter — so a cursor replayed against a different scope (or after the caller's access
-// changed) is not rejected; it just seeks from a boundary row that may not belong to the
-// new scope, which can dup/skip rows within that scope (never a cross-scope leak: the
-// base query still constrains the results). Callers MUST mint a fresh cursor when the
-// access scope changes rather than carrying one across scopes.
-type KeysetCursor struct {
-	// SortValues are the last row's values for each NON-id keyset column, in ORDER BY order
-	// (the caller's sort fields then the resource's tiebreaker column, e.g. created_at).
-	SortValues []any
-	// ID is the last row's id — the always-present final tiebreaker column's value.
-	ID string
-	// Fingerprint binds the cursor to the (sort ⊕ filter) it was minted under; a mismatch
-	// against the current request is rejected so a cursor can't seek an incompatible
-	// order. It does NOT bind the access scope (see the type doc) — cursors are
-	// scope-bound by contract.
-	Fingerprint []byte
-}
-
 // Fingerprint returns a stable hash binding a keyset page cursor to the (sort ⊕ filter)
 // it was minted under. A keyset cursor carries this fingerprint; on the next request it
 // is recomputed and compared, and a mismatch is rejected — so a cursor can never seek
@@ -286,19 +133,19 @@ type KeysetCursor struct {
 func Fingerprint(sort []OrderField, filter Filter) []byte {
 	var b strings.Builder
 
-	b.WriteString("sort:")
+	_, _ = b.WriteString("sort:")
 
 	for _, of := range sort {
-		b.WriteString(of.Field)
+		_, _ = b.WriteString(of.Field)
 
 		if of.Desc {
-			b.WriteString("|desc;")
+			_, _ = b.WriteString("|desc;")
 		} else {
-			b.WriteString("|asc;")
+			_, _ = b.WriteString("|asc;")
 		}
 	}
 
-	b.WriteString("|filter:")
+	_, _ = b.WriteString("|filter:")
 	encodeFilterFingerprint(&b, filter)
 
 	sum := sha256.Sum256([]byte(b.String()))
@@ -311,20 +158,20 @@ func Fingerprint(sort []OrderField, filter Filter) []byte {
 // with each arm encoded in order. An empty/nil filter encodes to `()`.
 func encodeFilterFingerprint(b *strings.Builder, f Filter) {
 	if f == nil || f.IsEmpty() {
-		b.WriteString("()")
+		_, _ = b.WriteString("()")
 
 		return
 	}
 
 	switch v := f.(type) {
 	case FilterClause:
-		b.WriteString("clause(")
-		b.WriteString(v.Field)
-		b.WriteByte('|')
-		b.WriteString(string(v.Operator))
-		b.WriteByte('|')
+		_, _ = b.WriteString("clause(")
+		_, _ = b.WriteString(v.Field)
+		_ = b.WriteByte('|')
+		_, _ = b.WriteString(string(v.Operator))
+		_ = b.WriteByte('|')
 		encodeValueFingerprint(b, v.Value)
-		b.WriteByte(')')
+		_ = b.WriteByte(')')
 	case CompositeFilter:
 		if len(v.And) > 0 {
 			encodeGroupFingerprint(b, "and(", v.And)
@@ -334,20 +181,20 @@ func encodeFilterFingerprint(b *strings.Builder, f Filter) {
 
 		encodeGroupFingerprint(b, "or(", v.Or)
 	default:
-		b.WriteString("()")
+		_, _ = b.WriteString("()")
 	}
 }
 
 // encodeGroupFingerprint writes a composite's opening token and its members.
 func encodeGroupFingerprint(b *strings.Builder, open string, members []Filter) {
-	b.WriteString(open)
+	_, _ = b.WriteString(open)
 
 	for _, sub := range members {
 		encodeFilterFingerprint(b, sub)
-		b.WriteByte(',')
+		_ = b.WriteByte(',')
 	}
 
-	b.WriteByte(')')
+	_ = b.WriteByte(')')
 }
 
 // encodeValueFingerprint writes a type-tagged, deterministic encoding of a filter value,
@@ -356,22 +203,22 @@ func encodeGroupFingerprint(b *strings.Builder, open string, members []Filter) {
 func encodeValueFingerprint(b *strings.Builder, v any) {
 	switch x := v.(type) {
 	case nil:
-		b.WriteString("nil:")
+		_, _ = b.WriteString("nil:")
 	case string:
-		b.WriteString("str:")
-		b.WriteString(x)
+		_, _ = b.WriteString("str:")
+		_, _ = b.WriteString(x)
 	case bool:
-		b.WriteString("bool:")
-		b.WriteString(strconv.FormatBool(x))
+		_, _ = b.WriteString("bool:")
+		_, _ = b.WriteString(strconv.FormatBool(x))
 	case []any:
-		b.WriteString("list:[")
+		_, _ = b.WriteString("list:[")
 
 		for _, e := range x {
 			encodeValueFingerprint(b, e)
-			b.WriteByte(',')
+			_ = b.WriteByte(',')
 		}
 
-		b.WriteByte(']')
+		_ = b.WriteByte(']')
 	default:
 		// int/int64/float64/time.Time and other scalars the listquery parser emits: the Go
 		// type (%T) tags the value (%v), both deterministic for these scalar types.

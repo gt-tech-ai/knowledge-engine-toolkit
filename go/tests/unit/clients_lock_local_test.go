@@ -168,19 +168,15 @@ func TestLocalLock_Acquire_ConcurrentSingleWinner(t *testing.T) {
 
 	start := make(chan struct{})
 
-	wg.Add(n)
-
 	for range n {
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			<-start
 
 			_, ok, err := l.Acquire(ctx, "hot")
 			if err == nil && ok {
 				wins.Add(1)
 			}
-		}()
+		})
 	}
 
 	close(start)

@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/budget"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
@@ -42,7 +42,7 @@ func newTestRequest() connect.AnyRequest {
 // emptyMessage is a minimal type satisfying proto.Message for test requests.
 type emptyMessage struct{}
 
-func (f *emptyMessage) ProtoReflect() {}
+func (*emptyMessage) ProtoReflect() {}
 
 // newTestResponse returns a minimal AnyResponse for testing.
 func newTestResponse() connect.AnyResponse {

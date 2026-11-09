@@ -15,7 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -77,12 +77,12 @@ func TestStorageClient_ErrorPaths(t *testing.T) {
 		assert.Contains(t, err.Error(), "create multipart")
 	})
 
-	testStorageClientErrorPathsRest2(t, ctx)
+	testStorageClientErrorPathsRest2(ctx, t)
 }
 
 // testStorageClientErrorPathsRest2 continues TestStorageClient_ErrorPaths with its
 // remaining steps.
-func testStorageClientErrorPathsRest2(t *testing.T, ctx context.Context) {
+func testStorageClientErrorPathsRest2(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("multipart aborts on a mid-stream body read error", func(t *testing.T) {
@@ -125,12 +125,12 @@ func testStorageClientErrorPathsRest2(t *testing.T, ctx context.Context) {
 		assert.Contains(t, err.Error(), "complete multipart")
 	})
 
-	testStorageClientErrorPathsRest(t, ctx)
+	testStorageClientErrorPathsRest(ctx, t)
 }
 
 // testStorageClientErrorPathsRest continues TestStorageClient_ErrorPaths with its
 // remaining steps.
-func testStorageClientErrorPathsRest(t *testing.T, ctx context.Context) {
+func testStorageClientErrorPathsRest(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("download wraps a generic backend error", func(t *testing.T) {
@@ -172,12 +172,12 @@ func testStorageClientErrorPathsRest(t *testing.T, ctx context.Context) {
 		assert.Contains(t, err.Error(), "delete batch")
 	})
 
-	testStorageClientErrorPathsRest3(t, ctx)
+	testStorageClientErrorPathsRest3(ctx, t)
 }
 
 // testStorageClientErrorPathsRest3 continues testStorageClientErrorPathsRest with its
 // remaining steps.
-func testStorageClientErrorPathsRest3(t *testing.T, ctx context.Context) {
+func testStorageClientErrorPathsRest3(ctx context.Context, t *testing.T) {
 	t.Helper()
 
 	t.Run("exists wraps a generic backend error", func(t *testing.T) {
