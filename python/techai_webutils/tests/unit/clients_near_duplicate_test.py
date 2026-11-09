@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
@@ -14,6 +15,7 @@ from techai_webutils.clients.near_duplicate import (
     NearDuplicateKind,
     near_duplicate_detector_from_config,
 )
+from techai_webutils.clients.near_duplicate.minhash.detector import MinHashDetector
 from techai_webutils.clients.near_duplicate.minhash.signature import (
     MinHasher,
     jaccard,
@@ -179,3 +181,52 @@ async def test_noop_detects_nothing_and_a_bad_config_is_refused() -> None:
     ):
         with pytest.raises(AppValueError):
             near_duplicate_detector_from_config(config, cache=given_cache)
+
+
+@pytest.mark.asyncio
+async def test_check_computes_the_signature_off_the_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that shingling and signing a document run on a worker thread.
+
+    **Why this test is important:**
+      - A signature over a large document is pure-Python work taking hundreds of milliseconds;
+        on the event loop it stalls every other task in the process, including lease heartbeats
+        and health checks.
+
+    **What it tests:**
+      - ``check`` runs ``word_shingles`` and ``MinHasher.signature`` away from the thread running
+        the loop, and still returns the signature they produce.
+    """
+    loop_thread = threading.get_ident()
+    threads: list[int] = []
+    real = MinHasher(num_perm=64)
+
+    def shingles(text: str, size: int) -> frozenset[int]:
+        threads.append(threading.get_ident())
+        return word_shingles(text, size)
+
+    def signature(values: frozenset[int]) -> tuple[int, ...]:
+        threads.append(threading.get_ident())
+        return real.signature(values)
+
+    monkeypatch.setattr(
+        "techai_webutils.clients.near_duplicate.minhash.detector.word_shingles", shingles
+    )
+    hasher = MagicMock(spec=MinHasher)
+    hasher.num_perm = 64
+    hasher.signature.side_effect = signature
+    cache, _ = _cache()
+    detector = MinHashDetector(
+        cast("Cache", cache),
+        cast("MinHasher", hasher),
+        threshold=0.8,
+        shingle_size=5,
+        ttl_seconds=3600,
+    )
+
+    found = await detector.check("scope", "doc-1", _REPORT)
+
+    assert found.signature == real.signature(word_shingles(_REPORT, 5))
+    assert len(threads) == 2
+    assert loop_thread not in threads

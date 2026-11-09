@@ -19,6 +19,7 @@ missed pairing costs only a missed collapse.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import struct
@@ -71,6 +72,10 @@ class MinHashDetector(NearDuplicateDetector):
         self._ttl = ttl_seconds
         self._bands, self._rows = lsh_partition(hasher.num_perm, threshold)
 
+    def _signature(self, text: str) -> tuple[int, ...]:
+        """Return ``text``'s signature; pure-Python CPU work, so ``check`` runs it on a thread."""
+        return self._hasher.signature(word_shingles(text, self._shingle_size))
+
     @override
     async def check(
         self, scope: str, document_id: str, text: str, *, ref: str = ""
@@ -90,7 +95,7 @@ class MinHashDetector(NearDuplicateDetector):
         own = await self._entry(scope, document_id)
         if own is not None:
             return own
-        signature = self._hasher.signature(word_shingles(text, self._shingle_size))
+        signature = await asyncio.to_thread(self._signature, text)
         keys = band_keys(signature, self._bands, self._rows)
         holders = [
             await self._cache.get(self._bucket(scope, i, k)) for i, k in enumerate(keys)
