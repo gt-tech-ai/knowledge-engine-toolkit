@@ -31,7 +31,7 @@ func (t *table) OnPhaseComplete(
 	results types.StepResults,
 	elapsed time.Duration,
 ) {
-	t.p.headerf("%s", name)
+	t.p.headerf(textS, name)
 	t.p.resultsTable(results)
 	t.p.total(results, elapsed)
 }

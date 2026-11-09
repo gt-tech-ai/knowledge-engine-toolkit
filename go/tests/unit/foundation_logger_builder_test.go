@@ -27,10 +27,10 @@ func TestLoggerBuilder_KindZap(t *testing.T) {
 
 	l, err := logger.New(logger.KindZap)
 	require.NoError(t, err, "logger.New(KindZap) must not return error")
-	require.NotNil(t, l, "expected non-nil logger")
+	require.NotNil(t, l, textExpectedNonNilLogger)
 
 	// Verify basic logging works through the interface.
-	l.Info("test message", "key", "value")
+	l.Info("test message", textKey, textValue)
 }
 
 // TestLoggerBuilder_KindStdlib tests that the logger factory produces a
@@ -48,9 +48,9 @@ func TestLoggerBuilder_KindStdlib(t *testing.T) {
 
 	l, err := logger.New(logger.KindStdlib)
 	require.NoError(t, err, "logger.New(KindStdlib) must not return error")
-	require.NotNil(t, l, "expected non-nil logger")
+	require.NotNil(t, l, textExpectedNonNilLogger)
 
-	l.Info("test message from stdlib", "key", "value")
+	l.Info("test message from stdlib", textKey, textValue)
 }
 
 // TestLoggerBuilder_UnknownKindReturnsError tests that the logger factory
@@ -65,8 +65,8 @@ func TestLoggerBuilder_KindStdlib(t *testing.T) {
 func TestLoggerBuilder_UnknownKindReturnsError(t *testing.T) {
 	t.Parallel()
 
-	_, err := logger.New(logger.Kind(999))
-	require.Error(t, err, "expected error for unknown kind")
+	_, err := logger.New(logger.Kind(kindArg999))
+	require.Error(t, err, textExpectedErrorForUnknown)
 }
 
 // TestLoggerBuilder_NewFromConfig tests that NewFromConfig creates a logger
@@ -83,12 +83,12 @@ func TestLoggerBuilder_NewFromConfig(t *testing.T) {
 
 	cfg := logger.Config{
 		Kind:  logger.KindZap,
-		Level: "info",
+		Level: textInfo,
 	}
 
 	l, err := logger.NewFromConfig(cfg)
 	require.NoError(t, err, "NewFromConfig must not return error")
-	require.NotNil(t, l, "expected non-nil logger")
+	require.NotNil(t, l, textExpectedNonNilLogger)
 }
 
 // TestLoggerBuilder_DefaultConfig tests that the default logger config
@@ -121,9 +121,9 @@ func TestLoggerBuilder_DefaultConfig(t *testing.T) {
 func TestLoggerBuilder_WithOptions(t *testing.T) {
 	t.Parallel()
 
-	l, err := logger.New(logger.KindZap, logger.WithLevel("debug"))
+	l, err := logger.New(logger.KindZap, logger.WithLevel(textDebug))
 	require.NoError(t, err, "logger.New with WithLevel must not return error")
-	require.NotNil(t, l, "expected non-nil logger")
+	require.NotNil(t, l, textExpectedNonNilLogger)
 }
 
 // TestLogger_SharedUtilitiesStillWork tests that shared logger utilities like
@@ -143,7 +143,7 @@ func TestLogger_SharedUtilitiesStillWork(t *testing.T) {
 	assert.NotEqual(t, "my email is test@example.com", redacted, "PII must be redacted")
 	assert.Contains(
 		t,
-		redacted, "[REDACTED]",
+		redacted, textRedacted,
 		"expected [REDACTED] in output, got %s",
 		redacted,
 	)
@@ -166,15 +166,15 @@ func TestLogger_MockAsConsumerDependency(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mock := mocks.NewMockLogger(ctrl)
 
-	mock.EXPECT().Info("request handled", "status", 200)
-	mock.EXPECT().Error("request failed", "error", "timeout")
-	mock.EXPECT().With("service", "api").Return(mock)
+	mock.EXPECT().Info("request handled", textStatus, keysAndValues200)
+	mock.EXPECT().Error("request failed", textError, textTimeout)
+	mock.EXPECT().With(textService, textAPI).Return(mock)
 
 	var l interfaces.Logger = mock
 
-	l.Info("request handled", "status", 200)
-	l.Error("request failed", "error", "timeout")
+	l.Info("request handled", textStatus, keysAndValues200)
+	l.Error("request failed", textError, textTimeout)
 
-	child := l.With("service", "api")
+	child := l.With(textService, textAPI)
 	require.NotNil(t, child, "With must return non-nil child logger")
 }

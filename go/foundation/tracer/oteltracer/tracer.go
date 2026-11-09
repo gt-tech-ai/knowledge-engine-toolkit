@@ -223,7 +223,7 @@ func exporterOptions(cfg Config) []otlptracegrpc.Option {
 // newSampler picks the sampler for the configured rate.
 func newSampler(rate float64) sdktrace.Sampler {
 	switch {
-	case rate >= 1.0:
+	case rate >= rate1p0:
 		return sdktrace.AlwaysSample()
 	case rate <= 0:
 		return sdktrace.NeverSample()

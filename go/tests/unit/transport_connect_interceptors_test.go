@@ -79,7 +79,7 @@ func TestBudgetInterceptor_AttachesSharedBudget(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(
 		t,
-		int32(7),
+		int32(int32Arg7),
 		withBudget,
 		"the request context must carry the attached budget",
 	)
@@ -124,17 +124,17 @@ func TestWithAuthClaims_GetAuthClaims_RoundTrip(t *testing.T) {
 	t.Parallel()
 
 	claims := &interceptors.AuthClaims{
-		Sub:      "user-1",
-		TenantID: "org-1",
-		Roles:    []string{"admin", "editor"},
+		Sub:      textUser1,
+		TenantID: textOrg1,
+		Roles:    []string{textAdmin, textEditor},
 	}
 	ctx := interceptors.WithAuthClaims(context.Background(), claims)
 
 	got, ok := interceptors.GetAuthClaims(ctx)
-	require.True(t, ok, "expected claims in context")
-	assert.Equal(t, "user-1", got.Sub)
-	assert.Equal(t, "org-1", got.TenantID)
-	assert.Len(t, got.Roles, 2)
+	require.True(t, ok, textExpectedClaimsInContext)
+	assert.Equal(t, textUser1, got.Sub)
+	assert.Equal(t, textOrg1, got.TenantID)
+	assert.Len(t, got.Roles, wantRolesLen2)
 }
 
 // TestGetAuthClaims_Missing tests that GetAuthClaims returns false when no
@@ -201,13 +201,13 @@ func TestAuthInterceptor_WithAllHeaders(t *testing.T) {
 	})
 
 	resp, err := handler(context.Background(), req)
-	require.NoError(t, err, "unexpected error")
+	require.NoError(t, err, textUnexpectedError)
 	require.NotNil(t, resp, "expected non-nil response")
 
-	require.True(t, ok, "expected claims in context")
+	require.True(t, ok, textExpectedClaimsInContext)
 	assert.Equal(t, "user-42", claims.Sub)
 	assert.Equal(t, "org-99", claims.TenantID)
-	assert.Len(t, claims.Roles, 3)
+	assert.Len(t, claims.Roles, wantRolesLen3)
 }
 
 // TestAuthInterceptor_NoSub tests that the auth interceptor skips storing
@@ -239,7 +239,7 @@ func TestAuthInterceptor_NoSub(t *testing.T) {
 
 	// No headers → no claims stored
 	_, err := handler(context.Background(), newTestRequest())
-	require.NoError(t, err, "unexpected error")
+	require.NoError(t, err, textUnexpectedError)
 
 	assert.False(t, ok, "expected no claims when X-User-Sub is absent")
 }
@@ -273,14 +273,14 @@ func TestAuthInterceptor_SubOnly_NoRoles(t *testing.T) {
 	)
 
 	req := newTestRequestWithHeaders(map[string]string{
-		testHeaders().Sub: "user-1",
+		testHeaders().Sub: textUser1,
 	})
 
 	_, err := handler(context.Background(), req)
-	require.NoError(t, err, "unexpected error")
+	require.NoError(t, err, textUnexpectedError)
 
-	require.True(t, ok, "expected claims in context")
-	assert.Equal(t, "user-1", claims.Sub)
+	require.True(t, ok, textExpectedClaimsInContext)
+	assert.Equal(t, textUser1, claims.Sub)
 	assert.Nil(t, claims.Roles)
 }
 
@@ -313,7 +313,7 @@ func TestAuthInterceptor_EmptyRoles(t *testing.T) {
 	)
 
 	req := newTestRequestWithHeaders(map[string]string{
-		testHeaders().Sub:   "user-1",
+		testHeaders().Sub:   textUser1,
 		testHeaders().Roles: "",
 	})
 
@@ -353,7 +353,7 @@ func TestAuthInterceptor_RolesWithTrailingComma(t *testing.T) {
 	)
 
 	req := newTestRequestWithHeaders(map[string]string{
-		testHeaders().Sub:   "user-1",
+		testHeaders().Sub:   textUser1,
 		testHeaders().Roles: "admin,,editor,",
 	})
 
@@ -361,7 +361,7 @@ func TestAuthInterceptor_RolesWithTrailingComma(t *testing.T) {
 
 	require.True(t, ok, "expected claims")
 	// splitRoles should discard empty segments
-	assert.Len(t, claims.Roles, 2)
+	assert.Len(t, claims.Roles, wantRolesLen2)
 }
 
 // TestAuthInterceptor_StubMode_SynthesizesDevClaims tests that stub mode
@@ -451,9 +451,9 @@ func TestAuthInterceptor_StubMode_RealHeadersWin(t *testing.T) {
 	})
 
 	_, err := handler(context.Background(), req)
-	require.NoError(t, err, "unexpected error")
+	require.NoError(t, err, textUnexpectedError)
 
-	require.True(t, ok, "expected claims in context")
+	require.True(t, ok, textExpectedClaimsInContext)
 	assert.Equal(t, "real-user-from-gateway", claims.Sub)
 	assert.Equal(t, "real-org-from-gateway", claims.TenantID)
 	assert.False(
@@ -490,8 +490,8 @@ func TestLoggingInterceptor_Success(t *testing.T) {
 	)
 
 	resp, err := handler(context.Background(), newTestRequest())
-	require.NoError(t, err, "unexpected error")
-	assert.Equal(t, expected, resp, "expected response to pass through")
+	require.NoError(t, err, textUnexpectedError)
+	assert.Equal(t, expected, resp, textExpectedResponseToPass)
 }
 
 // TestLoggingInterceptor_Error tests that the logging interceptor propagates
@@ -539,11 +539,11 @@ func TestLoggingInterceptor_UsesWithContext_Success(t *testing.T) {
 	)
 
 	_, err := handler(context.Background(), newTestRequest())
-	require.NoError(t, err, "unexpected error")
+	require.NoError(t, err, textUnexpectedError)
 
 	// The bare logger should have zero Info calls — all logging should go
 	// through the child returned by WithContext.
-	assert.Empty(t, spy.InfoCalls, "expected 0 calls")
+	assert.Empty(t, spy.InfoCalls, textExpected0Calls)
 
 	// The child logger (created by WithContext) should have received the Info call.
 	assert.Len(t, *spy.ChildInfoCalls, 1)
@@ -567,7 +567,7 @@ func TestLoggingInterceptor_UsesWithContext_Error(t *testing.T) {
 
 	handler := interceptor.WrapUnary(
 		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			return nil, connect.NewError(connect.CodeInternal, apperr.Sentinel("boom"))
+			return nil, connect.NewError(connect.CodeInternal, apperr.Sentinel(textBoom))
 		},
 	)
 
@@ -575,7 +575,7 @@ func TestLoggingInterceptor_UsesWithContext_Error(t *testing.T) {
 
 	// The bare logger should have zero Error calls — all logging should go
 	// through the child returned by WithContext.
-	assert.Empty(t, spy.ErrorCalls, "expected 0 calls")
+	assert.Empty(t, spy.ErrorCalls, textExpected0Calls)
 
 	// The child logger (created by WithContext) should have received the Error call.
 	assert.Len(t, *spy.ChildErrorCalls, 1)
@@ -598,7 +598,7 @@ func TestLoggingInterceptor_4xxCodeLogsAtWarn(t *testing.T) {
 	spy := logFailedCall(connect.CodeInvalidArgument)
 
 	assert.Len(t, *spy.ChildWarnCalls, 1)
-	assert.Empty(t, *spy.ChildErrorCalls, "expected 0 calls")
+	assert.Empty(t, *spy.ChildErrorCalls, textExpected0Calls)
 }
 
 // TestLoggingInterceptor_5xxCodeLogsAtError verifies that Connect errors with
@@ -617,7 +617,7 @@ func TestLoggingInterceptor_5xxCodeLogsAtError(t *testing.T) {
 	spy := logFailedCall(connect.CodeInternal)
 
 	assert.Len(t, *spy.ChildErrorCalls, 1)
-	assert.Empty(t, *spy.ChildWarnCalls, "expected 0 calls")
+	assert.Empty(t, *spy.ChildWarnCalls, textExpected0Calls)
 }
 
 // TestLoggingInterceptor_CanceledLogsAtWarn verifies that a client cancellation
@@ -666,8 +666,8 @@ func TestMetricsInterceptor_Success(t *testing.T) {
 	)
 
 	resp, err := handler(context.Background(), newTestRequest())
-	require.NoError(t, err, "unexpected error")
-	assert.Equal(t, expected, resp, "expected response to pass through")
+	require.NoError(t, err, textUnexpectedError)
+	assert.Equal(t, expected, resp, textExpectedResponseToPass)
 }
 
 // TestMetricsInterceptor_Error tests that the metrics interceptor propagates
@@ -686,7 +686,7 @@ func TestMetricsInterceptor_Error(t *testing.T) {
 	metrics := fixtures.NopMetrics()
 	interceptor := interceptors.MetricsInterceptor(metrics)
 
-	innerErr := connect.NewError(connect.CodeInternal, apperr.Sentinel("boom"))
+	innerErr := connect.NewError(connect.CodeInternal, apperr.Sentinel(textBoom))
 	handler := interceptor.WrapUnary(
 		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			return nil, innerErr
@@ -723,7 +723,7 @@ func TestMetricsInterceptor_WithProcedure(t *testing.T) {
 	)
 
 	_, err := handler(context.Background(), newTestRequest())
-	require.NoError(t, err, "unexpected error")
+	require.NoError(t, err, textUnexpectedError)
 }
 
 // ---------------------------------------------------------------------------
@@ -753,8 +753,8 @@ func TestTracingInterceptor_Success(t *testing.T) {
 	)
 
 	resp, err := handler(context.Background(), newTestRequest())
-	require.NoError(t, err, "unexpected error")
-	assert.Equal(t, expected, resp, "expected response to pass through")
+	require.NoError(t, err, textUnexpectedError)
+	assert.Equal(t, expected, resp, textExpectedResponseToPass)
 }
 
 // TestTracingInterceptor_Error tests that the tracing interceptor propagates
@@ -800,8 +800,8 @@ func TestTracingInterceptor_ExtractsTraceContext(t *testing.T) {
 	t.Cleanup(func() { otel.SetTextMapPropagator(prev) })
 
 	// Create a test span context with a known trace ID
-	traceID, _ := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
-	spanID, _ := trace.SpanIDFromHex("00f067aa0ba902b7")
+	traceID, _ := trace.TraceIDFromHex(text4bf92f3577b34da6a3ce929d0e)
+	spanID, _ := trace.SpanIDFromHex(text00f067aa0ba902b7)
 	spanCtx := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    traceID,
 		SpanID:     spanID,
@@ -842,7 +842,7 @@ func TestTracingInterceptor_ExtractsTraceContext(t *testing.T) {
 	)
 
 	_, err := handler(context.Background(), req)
-	require.NoError(t, err, "unexpected error")
+	require.NoError(t, err, textUnexpectedError)
 
 	// Verify the trace context was extracted from headers into the Go context.
 	require.True(
@@ -850,7 +850,7 @@ func TestTracingInterceptor_ExtractsTraceContext(t *testing.T) {
 		extracted.IsValid(),
 		"expected valid span context after extraction, got invalid",
 	)
-	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", extracted.TraceID().String())
+	assert.Equal(t, text4bf92f3577b34da6a3ce929d0e, extracted.TraceID().String())
 }
 
 // TestTracingInterceptor_RecordsRequestID tests that the tracing interceptor
@@ -869,7 +869,7 @@ func TestTracingInterceptor_RecordsRequestID(t *testing.T) {
 	t.Parallel()
 
 	req := connect.NewRequest[*emptyMessage](nil)
-	req.Header().Set("X-Request-ID", "gw-abc123")
+	req.Header().Set(textXRequestID, "gw-abc123")
 
 	// Use a spy tracer to capture span attributes
 	var recordedAttrs map[string]any
@@ -890,7 +890,7 @@ func TestTracingInterceptor_RecordsRequestID(t *testing.T) {
 	)
 
 	_, err := handler(context.Background(), req)
-	require.NoError(t, err, "unexpected error")
+	require.NoError(t, err, textUnexpectedError)
 
 	requestID, ok := recordedAttrs["http.request_id"]
 	assert.True(t, ok, "expected http.request_id span attribute")
@@ -917,15 +917,15 @@ func TestGetAuthClaims_Roundtrip(t *testing.T) {
 	original := &interceptors.AuthClaims{
 		Sub:      "user-abc-123",
 		TenantID: "org-xyz-789",
-		Roles:    []string{"admin", "editor"},
+		Roles:    []string{textAdmin, textEditor},
 	}
 
 	ctx := interceptors.WithAuthClaims(context.Background(), original)
 	claims, ok := interceptors.GetAuthClaims(ctx)
-	require.True(t, ok, "expected claims in context")
+	require.True(t, ok, textExpectedClaimsInContext)
 	assert.Equal(t, original.Sub, claims.Sub)
 	assert.Equal(t, original.TenantID, claims.TenantID)
-	assert.Equal(t, []string{"admin", "editor"}, claims.Roles)
+	assert.Equal(t, []string{textAdmin, textEditor}, claims.Roles)
 }
 
 // TestGetAuthClaims_MissingReturnsNil tests that GetAuthClaims returns false
@@ -965,7 +965,7 @@ func TestAuthInterceptor_SplitRoles_DoubleComma(t *testing.T) {
 	handler := interceptor.WrapUnary(
 		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			claims, ok := interceptors.GetAuthClaims(ctx)
-			assert.True(t, ok, "expected claims in context")
+			assert.True(t, ok, textExpectedClaimsInContext)
 
 			if !ok {
 				return newTestResponse(), nil
@@ -978,7 +978,7 @@ func TestAuthInterceptor_SplitRoles_DoubleComma(t *testing.T) {
 	)
 
 	req := newTestRequest()
-	req.Header().Set(testHeaders().Sub, "user-1")
+	req.Header().Set(testHeaders().Sub, textUser1)
 	req.Header().Set(testHeaders().Roles, "admin,,editor")
 
 	_, _ = handler(context.Background(), req)
@@ -1014,7 +1014,7 @@ func TestAuthInterceptor_SingleRole(t *testing.T) {
 	)
 
 	req := newTestRequest()
-	req.Header().Set(testHeaders().Sub, "user-1")
+	req.Header().Set(testHeaders().Sub, textUser1)
 	req.Header().Set(testHeaders().Roles, "viewer")
 
 	_, _ = handler(context.Background(), req)

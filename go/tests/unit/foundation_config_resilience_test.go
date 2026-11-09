@@ -39,7 +39,7 @@ func TestResilienceDefaults_MatchPrimitives(t *testing.T) {
 	assert.Equal(t, pr.MaxElapsedTime, r.MaxElapsedTime)
 
 	b := resilience.DefaultBreakerConfig()
-	pb := circuitbreaker.DefaultConfig("x")
+	pb := circuitbreaker.DefaultConfig(textX)
 	assert.Equal(t, pb.MaxRequests, b.MaxRequests)
 	assert.Equal(t, pb.Interval, b.Interval)
 	assert.Equal(t, pb.Timeout, b.Timeout)
@@ -115,6 +115,6 @@ func TestResilienceValidate_RejectsBadValues(t *testing.T) {
 
 	badRatio := resilience.DefaultBreakerConfig()
 
-	badRatio.FailureRatio = 2
+	badRatio.FailureRatio = failureRatio2
 	assert.Error(t, badRatio.Validate(), "failure_ratio > 1 must be rejected")
 }

@@ -65,7 +65,7 @@ func TestReswire_HedgeDefault_RunsOnce(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), "database:\n  host: localhost\n")
+	writeFile(t, filepath.Join(dir, textBaseYaml), "database:\n  host: localhost\n")
 
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
@@ -100,7 +100,7 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"),
+	writeFile(t, filepath.Join(dir, textBaseYaml),
 		"resilience:\n  hedge:\n    kind: delay\n    delay: 1ms\n")
 
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
@@ -135,7 +135,7 @@ func TestReswire_HedgeReadsOverlay_FiresBackup(t *testing.T) {
 	// backup fired — proves the delay kind was read (blocks forever if it never fires)
 	<-backup
 	require.NoError(t, <-done)
-	assert.Equal(t, int32(2), calls.Load(),
+	assert.Equal(t, int32(int32Arg2), calls.Load(),
 		"the configured delay hedger fires a backup attempt")
 	close(release)
 }
@@ -157,7 +157,7 @@ func TestReswire_AdaptiveThrottleDefault_NeverSheds(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), "database:\n  host: localhost\n")
+	writeFile(t, filepath.Join(dir, textBaseYaml), "database:\n  host: localhost\n")
 
 	loader, err := config.New(config.KindViper, config.WithBaseDir(dir))
 	require.NoError(t, err)
@@ -165,10 +165,10 @@ func TestReswire_AdaptiveThrottleDefault_NeverSheds(t *testing.T) {
 	th, err := reswire.NewAdaptiveThrottle(loader)
 	require.NoError(t, err)
 
-	boom := apperr.Sentinel("boom")
+	boom := apperr.Sentinel(textBoom)
 	calls := 0
 
-	for range 100 {
+	for range iterations100 {
 		_ = th.Do(context.Background(), func() error {
 			calls++
 
@@ -178,7 +178,7 @@ func TestReswire_AdaptiveThrottleDefault_NeverSheds(t *testing.T) {
 
 	assert.Equal(
 		t,
-		100,
+		wantCalls100,
 		calls,
 		"the disabled throttler runs every op (never sheds), even under sustained failure",
 	)
@@ -206,7 +206,7 @@ func TestReswire_AdaptiveThrottleReadsOverlay_Sheds(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(
 		t,
-		filepath.Join(dir, "base.yaml"),
+		filepath.Join(dir, textBaseYaml),
 		"resilience:\n  adaptive_throttle:\n    kind: enabled\n    k: 2.0\n    decay: 0.98\n",
 	)
 
@@ -216,7 +216,7 @@ func TestReswire_AdaptiveThrottleReadsOverlay_Sheds(t *testing.T) {
 	th, err := reswire.NewAdaptiveThrottle(loader)
 	require.NoError(t, err)
 
-	boom := apperr.Sentinel("boom")
+	boom := apperr.Sentinel(textBoom)
 
 	const attempts = 100
 

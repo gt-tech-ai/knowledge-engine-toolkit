@@ -37,21 +37,21 @@ func TestRunner_RealCommands(t *testing.T) {
 	r := system.NewRunner()
 	ctx := context.Background()
 
-	require.NoError(t, r.Run(ctx, "", "go", "version"))
-	require.Error(t, r.Run(ctx, "", "definitely-not-a-real-binary-xyz"))
+	require.NoError(t, r.Run(ctx, "", textGo2, textVersion))
+	require.Error(t, r.Run(ctx, "", textDefinitelyNotAReal))
 
-	res := r.RunBuffered(ctx, "", "go", "version")
+	res := r.RunBuffered(ctx, "", textGo2, textVersion)
 	require.NoError(t, res.Err)
 	assert.Equal(t, 0, res.ExitCode)
 	assert.Contains(t, string(res.Stdout), "go version")
 
-	bad := r.RunBuffered(ctx, "", "definitely-not-a-real-binary-xyz")
+	bad := r.RunBuffered(ctx, "", textDefinitelyNotAReal)
 	require.Error(t, bad.Err)
 	assert.Equal(t, -1, bad.ExitCode, "missing binary never starts -> exit -1")
 
-	require.NoError(t, r.RunWithEnv(ctx, "", []string{"FOO=bar"}, "go", "version"))
+	require.NoError(t, r.RunWithEnv(ctx, "", []string{textFooBar}, textGo2, textVersion))
 
-	envRes := r.RunBufferedWithEnv(ctx, "", []string{"FOO=bar"}, "go", "version")
+	envRes := r.RunBufferedWithEnv(ctx, "", []string{textFooBar}, textGo2, textVersion)
 	assert.NoError(t, envRes.Err)
 }
 
@@ -68,12 +68,12 @@ func TestRunner_ExistsAndRequireTool(t *testing.T) {
 	t.Parallel()
 
 	r := system.NewRunner()
-	assert.True(t, r.Exists("go"))
-	assert.False(t, r.Exists("definitely-not-a-real-binary-xyz"))
+	assert.True(t, r.Exists(textGo2))
+	assert.False(t, r.Exists(textDefinitelyNotAReal))
 
-	require.NoError(t, r.RequireTool("go", "install go"))
+	require.NoError(t, r.RequireTool(textGo2, "install go"))
 
-	err := r.RequireTool("definitely-not-a-real-binary-xyz", "brew install xyz")
+	err := r.RequireTool(textDefinitelyNotAReal, "brew install xyz")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "brew install xyz", "install hint surfaced")
 }
@@ -92,7 +92,7 @@ func TestRunner_ContextCancelled(t *testing.T) {
 	r := system.NewRunner()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	require.Error(t, r.Run(ctx, "", "go", "version"), "cancelled context -> error")
+	require.Error(t, r.Run(ctx, "", textGo2, textVersion), "cancelled context -> error")
 }
 
 // TestBufferingRunner tests that BufferingRunner captures inner output, wraps
@@ -117,17 +117,17 @@ func TestBufferingRunner(t *testing.T) {
 
 	inner := mocks.NewMockCommandRunner(ctrl)
 	inner.EXPECT().
-		RunBuffered(gomock.Any(), "", "x").
+		RunBuffered(gomock.Any(), "", textX).
 		Return(system.CmdResult{Stdout: []byte("out-"), Stderr: []byte("err")})
 	inner.EXPECT().
-		RunBufferedWithEnv(gomock.Any(), "", []string{"A=b"}, "x").
+		RunBufferedWithEnv(gomock.Any(), "", []string{textAB}, textX).
 		Return(system.CmdResult{Stdout: []byte("out-"), Stderr: []byte("err")})
 	inner.EXPECT().Exists("anything").Return(true)
-	inner.EXPECT().RequireTool("x", "").Return(nil)
+	inner.EXPECT().RequireTool(textX, "").Return(nil)
 
 	b := system.NewQuietBufferingRunner(inner)
 
-	res := b.RunBuffered(context.Background(), "", "x")
+	res := b.RunBuffered(context.Background(), "", textX)
 	assert.Equal(t, "out-", string(res.Stdout))
 	assert.Equal(
 		t,
@@ -136,23 +136,23 @@ func TestBufferingRunner(t *testing.T) {
 		"RunBuffered accumulates stdout+stderr",
 	)
 
-	_ = b.RunBufferedWithEnv(context.Background(), "", []string{"A=b"}, "x")
+	_ = b.RunBufferedWithEnv(context.Background(), "", []string{textAB}, textX)
 	assert.Equal(t, "out-errout-err", string(b.Captured()))
 
 	assert.True(t, b.Exists("anything"), "Exists delegates")
-	require.NoError(t, b.RequireTool("x", ""), "RequireTool delegates")
+	require.NoError(t, b.RequireTool(textX, ""), "RequireTool delegates")
 
 	// Run (no env) wraps a failing inner result and still captures its output.
 	failingInner := mocks.NewMockCommandRunner(ctrl)
 	failingInner.EXPECT().
-		RunBuffered(gomock.Any(), "", "tool", "arg").
-		Return(system.CmdResult{Stderr: []byte("boom"), Err: apperr.Sentinel("exit 1")})
+		RunBuffered(gomock.Any(), "", textTool, "arg").
+		Return(system.CmdResult{Stderr: []byte(textBoom), Err: apperr.Sentinel("exit 1")})
 
 	failing := system.NewQuietBufferingRunner(failingInner)
-	err := failing.Run(context.Background(), "", "tool", "arg")
+	err := failing.Run(context.Background(), "", textTool, "arg")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tool arg", "wrapped error names the command")
-	assert.Equal(t, "boom", string(failing.Captured()))
+	assert.Equal(t, textBoom, string(failing.Captured()))
 
 	// Run (no env) success path.
 	okInner := mocks.NewMockCommandRunner(ctrl)
@@ -169,50 +169,50 @@ func testBufferingRunnerRest(
 	t.Helper()
 
 	okInner.EXPECT().
-		RunBuffered(gomock.Any(), "", "x").
+		RunBuffered(gomock.Any(), "", textX).
 		Return(system.CmdResult{Stdout: []byte("hi")})
 
 	okRunner := system.NewQuietBufferingRunner(okInner)
-	require.NoError(t, okRunner.Run(context.Background(), "", "x"))
+	require.NoError(t, okRunner.Run(context.Background(), "", textX))
 
 	// RunWithEnv delegates to the inner env path.
 	envInner := mocks.NewMockCommandRunner(ctrl)
 	envInner.EXPECT().
-		RunWithEnv(gomock.Any(), "", []string{"A=b"}, "x").
+		RunWithEnv(gomock.Any(), "", []string{textAB}, textX).
 		Return(nil)
 
 	envRunner := system.NewQuietBufferingRunner(envInner)
 	require.NoError(
 		t,
-		envRunner.RunWithEnv(context.Background(), "", []string{"A=b"}, "x"),
+		envRunner.RunWithEnv(context.Background(), "", []string{textAB}, textX),
 	)
 
 	// Non-quiet (replay) constructor exercises the terminal-replay branches.
 	replayInner := mocks.NewMockCommandRunner(ctrl)
 	replayInner.EXPECT().
-		RunBuffered(gomock.Any(), "", "x").
-		Return(system.CmdResult{Stdout: []byte("o"), Stderr: []byte("e")})
+		RunBuffered(gomock.Any(), "", textX).
+		Return(system.CmdResult{Stdout: []byte(textO), Stderr: []byte(textE)})
 
 	replay := system.NewBufferingRunner(replayInner)
-	require.NoError(t, replay.Run(context.Background(), "", "x"))
+	require.NoError(t, replay.Run(context.Background(), "", textX))
 
 	replayFailInner := mocks.NewMockCommandRunner(ctrl)
 	replayFailInner.EXPECT().
-		RunBuffered(gomock.Any(), "", "x").
-		Return(system.CmdResult{Err: apperr.Sentinel("x")})
+		RunBuffered(gomock.Any(), "", textX).
+		Return(system.CmdResult{Err: apperr.Sentinel(textX)})
 
 	replayFail := system.NewBufferingRunner(replayFailInner)
-	require.Error(t, replayFail.Run(context.Background(), "", "x"))
+	require.Error(t, replayFail.Run(context.Background(), "", textX))
 
 	replayEnvInner := mocks.NewMockCommandRunner(ctrl)
 	replayEnvInner.EXPECT().
-		RunWithEnv(gomock.Any(), "", []string{"A=b"}, "x").
+		RunWithEnv(gomock.Any(), "", []string{textAB}, textX).
 		Return(nil)
 
 	replayEnv := system.NewBufferingRunner(replayEnvInner)
 	require.NoError(
 		t,
-		replayEnv.RunWithEnv(context.Background(), "", []string{"A=b"}, "x"),
+		replayEnv.RunWithEnv(context.Background(), "", []string{textAB}, textX),
 	)
 }
 
@@ -284,20 +284,20 @@ func TestRunner_WritesChildOutputToInjectedWriters(t *testing.T) {
 		Build()
 	stop := captureProcessStdio(t)
 
-	require.NoError(t, r.Run(ctx, "", "go", "env", "GOVERSION"))
+	require.NoError(t, r.Run(ctx, "", textGo2, textEnv, textGoversion))
 
 	direct := out.String()
 
-	require.Error(t, r.Run(ctx, "", "go", "definitely-not-a-subcommand"))
-	require.NoError(t, decorated.Run(ctx, "", "go", "env", "GOVERSION"))
+	require.Error(t, r.Run(ctx, "", textGo2, "definitely-not-a-subcommand"))
+	require.NoError(t, decorated.Run(ctx, "", textGo2, textEnv, textGoversion))
 
 	procOut, procErr := stop()
 
-	assert.Contains(t, direct, "go1.")
+	assert.Contains(t, direct, textGo1)
 	assert.Equal(
 		t,
-		2,
-		strings.Count(out.String(), "go1."),
+		wantCount2,
+		strings.Count(out.String(), textGo1),
 		"decorated run reaches the injected stdout",
 	)
 	assert.NotEmpty(t, errOut.String())
@@ -327,9 +327,9 @@ func TestRunner_DefaultsToProcessStdio(t *testing.T) {
 	r := system.NewRunner()
 	stop := captureProcessStdio(t)
 
-	require.NoError(t, r.Run(context.Background(), "", "go", "env", "GOVERSION"))
+	require.NoError(t, r.Run(context.Background(), "", textGo2, textEnv, textGoversion))
 
 	procOut, _ := stop()
 
-	assert.Contains(t, procOut, "go1.")
+	assert.Contains(t, procOut, textGo1)
 }

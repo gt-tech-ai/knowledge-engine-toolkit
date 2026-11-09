@@ -175,7 +175,7 @@ func formatProblem(c *code) string {
 		return "go must be an exported Code<Name> constant"
 	case c.Doc == "":
 		return "doc is empty"
-	case c.HTTP < 100 || c.HTTP > 599:
+	case c.HTTP < http100 || c.HTTP > http599:
 		return "http is not a status code"
 	default:
 		return ""

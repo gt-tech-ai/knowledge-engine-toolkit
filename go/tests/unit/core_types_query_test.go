@@ -23,7 +23,7 @@ func TestFilterClause_IsEmpty(t *testing.T) {
 	assert.False(
 		t,
 		types.FilterClause{
-			Field:    "name",
+			Field:    textName,
 			Operator: types.OpEq,
 			Value:    "report",
 		}.IsEmpty(),
@@ -48,7 +48,7 @@ func TestCompositeFilter_IsEmpty(t *testing.T) {
 	assert.True(t, types.CompositeFilter{}.IsEmpty(), "no sub-filters → empty")
 	assert.False(t,
 		types.CompositeFilter{And: []types.Filter{
-			types.FilterClause{Field: "name", Operator: types.OpEq, Value: "report"},
+			types.FilterClause{Field: textName, Operator: types.OpEq, Value: "report"},
 		}}.IsEmpty(),
 		"a composite with a sub-clause is not empty")
 }

@@ -26,13 +26,13 @@ func TestParseUUID(t *testing.T) {
 	t.Parallel()
 
 	want := uuid.New()
-	got, err := apprpc.ParseUUID(want.String(), "resource_id")
+	got, err := apprpc.ParseUUID(want.String(), textResourceID)
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
 
-	bad, err := apprpc.ParseUUID("not-a-uuid", "resource_id")
+	bad, err := apprpc.ParseUUID("not-a-uuid", textResourceID)
 	require.Error(t, err)
 	assert.Equal(t, uuid.Nil, bad)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	assert.Contains(t, err.Error(), "resource_id")
+	assert.Contains(t, err.Error(), textResourceID)
 }

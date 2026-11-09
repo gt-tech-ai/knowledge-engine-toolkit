@@ -129,24 +129,24 @@ func testClientQueryParsesVectorTable() []testClientQueryParsesVectorRow {
 	return []testClientQueryParsesVectorRow{
 		{
 			name: "one sample",
-			body: strings.Replace(promVector, "%s", promInstant("12.5"), 1),
-			want: 12.5,
+			body: strings.Replace(promVector, textS2, promInstant("12.5"), 1),
+			want: want12p5,
 		},
 		{
 			name:     "no sample",
-			body:     strings.Replace(promVector, "%s", "", 1),
+			body:     strings.Replace(promVector, textS2, "", 1),
 			wantCode: apperr.CodeNotFound,
 		},
 		{
-			name:     "NaN",
-			body:     strings.Replace(promVector, "%s", promInstant("NaN"), 1),
+			name:     textNan,
+			body:     strings.Replace(promVector, textS2, promInstant(textNan), 1),
 			wantCode: apperr.CodeNotFound,
 		},
 		{
 			name: "two series",
 			body: strings.Replace(
 				promVector,
-				"%s",
+				textS2,
 				promInstant("1")+","+promInstant("2"),
 				1,
 			),
@@ -154,7 +154,7 @@ func testClientQueryParsesVectorTable() []testClientQueryParsesVectorRow {
 		},
 		{
 			name:     "matrix",
-			body:     strings.Replace(promMatrix, "%s", "", 1),
+			body:     strings.Replace(promMatrix, textS2, "", 1),
 			wantCode: apperr.CodeInvalidInput,
 		},
 	}
@@ -207,7 +207,7 @@ func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 			assert.Equal(t, `sum(increase(x[1h]))`, q.Get("query"))
 			assert.Equal(t, "1727260000", q.Get("start"))
 			assert.Equal(t, "1727263600", q.Get("end"))
-			assert.Equal(t, "3600", q.Get("step"))
+			assert.Equal(t, text3600, q.Get("step"))
 
 			if tc.wantCode != "" {
 				require.Error(t, err)
@@ -239,30 +239,30 @@ func testClientQueryRangeParsesMatrixTable(
 	return []testClientQueryRangeParsesMatrixRow{
 		{
 			name: "one series",
-			body: strings.Replace(promMatrix, "%s", promSeries("1.5", "2"), 1),
+			body: strings.Replace(promMatrix, textS2, promSeries("1.5", "2"), 1),
 			want: []promhttp.Sample{
-				{Time: t0, Value: 1.5},
-				{Time: t0.Add(time.Hour), Value: 2},
+				{Time: t0, Value: value1p5},
+				{Time: t0.Add(time.Hour), Value: value2},
 			},
 		},
 		{
 			name: "no series",
-			body: strings.Replace(promMatrix, "%s", "", 1),
+			body: strings.Replace(promMatrix, textS2, "", 1),
 			want: []promhttp.Sample{},
 		},
 		{
 			name: "two series",
 			body: strings.Replace(
 				promMatrix,
-				"%s",
+				textS2,
 				promSeries("1")+","+promSeries("2"),
 				1,
 			),
 			wantCode: apperr.CodeInvalidInput,
 		},
 		{
-			name:     "NaN",
-			body:     strings.Replace(promMatrix, "%s", promSeries("NaN"), 1),
+			name:     textNan,
+			body:     strings.Replace(promMatrix, textS2, promSeries(textNan), 1),
 			wantCode: apperr.CodeNotFound,
 		},
 	}
@@ -306,7 +306,7 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 		doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
 		doer.EXPECT().Do(gomock.Any()).Times(0)
 
-		_, err := promhttp.New("http://[::1", doer).Query(t.Context(), `up`)
+		_, err := promhttp.New("http://[::1", doer).Query(t.Context(), textUp)
 
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -320,11 +320,11 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 		c := promhttp.New("http://prom.test:9090", doer)
 		t0 := time.Unix(1727260000, 0)
 
-		_, err := c.QueryRange(t.Context(), `up`, t0, t0.Add(time.Hour), 0)
+		_, err := c.QueryRange(t.Context(), textUp, t0, t0.Add(time.Hour), 0)
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-		_, err = c.QueryRange(t.Context(), `up`, t0.Add(time.Hour), t0, time.Minute)
+		_, err = c.QueryRange(t.Context(), textUp, t0.Add(time.Hour), t0, time.Minute)
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	})
@@ -350,7 +350,7 @@ func testClientErrorStatusIsCodedCase(
 		})
 
 	_, err := promhttp.New("http://prom.test:9090", doer).
-		Query(t.Context(), `up`)
+		Query(t.Context(), textUp)
 
 	require.Error(t, err)
 	assert.Equal(t, tc.wantCode, apperr.Code(err))
@@ -389,7 +389,7 @@ func testClientErrorStatusIsCodedTable11Part1() []testClientErrorStatusIsCodedRo
 		{
 			name: "caller canceled",
 			doErr: &url.Error{
-				Op:  "Get",
+				Op:  textGet2,
 				URL: "http://prom.test:9090",
 				Err: context.Canceled,
 			},
@@ -398,7 +398,7 @@ func testClientErrorStatusIsCodedTable11Part1() []testClientErrorStatusIsCodedRo
 		{
 			name: "caller deadline",
 			doErr: &url.Error{
-				Op:  "Get",
+				Op:  textGet2,
 				URL: "http://prom.test:9090",
 				Err: context.DeadlineExceeded,
 			},
@@ -459,7 +459,7 @@ func testClientErrorStatusIsCodedTable11Part2() []testClientErrorStatusIsCodedRo
 		{
 			name:     "bad sample",
 			status:   http.StatusOK,
-			body:     strings.Replace(promVector, "%s", promInstant("abc"), 1),
+			body:     strings.Replace(promVector, textS2, promInstant("abc"), 1),
 			wantCode: apperr.CodeUpstream,
 		},
 	}
@@ -488,15 +488,15 @@ func TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	v, err := q.Query(t.Context(), `up`)
+	v, err := q.Query(t.Context(), textUp)
 	require.NoError(t, err)
-	assert.InDelta(t, 0.0, v, 0)
+	assert.InDelta(t, inDeltaArg0p0, v, 0)
 
 	series, err := q.QueryRange(
 		t.Context(),
-		`up`,
+		textUp,
 		time.Unix(0, 0),
-		time.Unix(60, 0),
+		time.Unix(sec60, 0),
 		time.Minute,
 	)
 	require.NoError(t, err)
@@ -535,7 +535,7 @@ func TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL(t *testing.T) {
 func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 	t.Parallel()
 
-	layers := decoration.DefaultConfig().Clients.For("prometheus")
+	layers := decoration.DefaultConfig().Clients.For(textPrometheus)
 	on := true
 
 	layers.Retry.Enabled = &on
@@ -543,12 +543,12 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 	layers.Retry.RetryConfig.MaxInterval = time.Millisecond
 
 	reg := promclient.NewRegistry()
-	deps, err := decorate.Build("prometheus", layers, decorate.Collaborators{
+	deps, err := decorate.Build(textPrometheus, layers, decorate.Collaborators{
 		Metrics: prom.NewFromRegistry(reg),
 	})
 	require.NoError(t, err)
 
-	stack := wireBase("prometheus", deps)
+	stack := wireBase(textPrometheus, deps)
 	ctrl := gomock.NewController(t)
 	inner := mocks.NewMockPrometheusHTTPDoer(ctrl)
 	// The transport body is closed by the wrapper before Do returns; the caller still
@@ -597,7 +597,12 @@ func testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest(
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, "payload", string(body))
-	assert.InDelta(t, 3.0, clientOpCounter(t, reg, "prometheus.query_range"), 0)
+	assert.InDelta(
+		t,
+		wantClientOpCounter3p0,
+		clientOpCounter(t, reg, "prometheus.query_range"),
+		0,
+	)
 
 	bare := client.Base{}
 	failing := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
@@ -611,10 +616,10 @@ func testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest(
 	large.EXPECT().
 		Do(gomock.Any()).
 		DoAndReturn(func(*http.Request) (*http.Response, error) {
-			return promResponse(http.StatusOK, strings.Repeat("x", 9)), nil
+			return promResponse(http.StatusOK, strings.Repeat(textX, 9)), nil
 		})
 
-	err = doClosed(promhttp.DecorateDoer(large, bare, 8), req)
+	err = doClosed(promhttp.DecorateDoer(large, bare, maxBodyBytes8), req)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

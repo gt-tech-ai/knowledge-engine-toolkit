@@ -56,18 +56,18 @@ func cobraRegistry(t *testing.T, got *cobraInput) *ops.Registry {
 			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
 		},
 		Descriptors: []types.OperationDescriptor{
-			opDesc("check", types.SafetyReadOnly, types.OpLifecycleBounded),
-			opDesc("bad", types.SafetyReadOnly, types.OpLifecycleBounded),
+			opDesc(textCheck, types.SafetyReadOnly, types.OpLifecycleBounded),
+			opDesc(textBad, types.SafetyReadOnly, types.OpLifecycleBounded),
 		},
 		Builders: map[string]ops.Builder[opsEnv]{
-			"check": ops.Func(func(
+			textCheck: ops.Func(func(
 				_ context.Context, in *cobraInput, _ opsEnv, _ interfaces.ExecutionObserver,
 			) error {
 				*got = *in
 
 				return nil
 			}),
-			"bad": ops.Func(func(
+			textBad: ops.Func(func(
 				context.Context, *cobraBadInput, opsEnv, interfaces.ExecutionObserver,
 			) error {
 				return nil
@@ -83,7 +83,7 @@ func cobraRegistry(t *testing.T, got *cobraInput) *ops.Registry {
 func execCobra(t *testing.T, reg *ops.Registry, args ...string) error {
 	t.Helper()
 
-	cmd, err := opscobra.Command(reg, "check", opscobra.Options{})
+	cmd, err := opscobra.Command(reg, textCheck, opscobra.Options{})
 	require.NoError(t, err)
 	cmd.SetArgs(args)
 	cmd.SetOut(io.Discard)
@@ -111,28 +111,28 @@ func TestTransportCobra_Command(t *testing.T) {
 	var got cobraInput
 
 	reg := cobraRegistry(t, &got)
-	cmd, err := opscobra.Command(reg, "check", opscobra.Options{})
+	cmd, err := opscobra.Command(reg, textCheck, opscobra.Options{})
 	require.NoError(t, err)
-	assert.Equal(t, "check", cmd.Name())
-	assert.Equal(t, "check", cmd.Short)
+	assert.Equal(t, textCheck, cmd.Name())
+	assert.Equal(t, textCheck, cmd.Short)
 
-	require.NoError(t, execCobra(t, reg, "-e", "staging", "--fix", "-w", "3",
-		"--wait", "2s", "--only", "a,b", "api", "x", "y"))
+	require.NoError(t, execCobra(t, reg, textE2, textStaging, textFix2, "-w", "3",
+		"--wait", "2s", textOnly2, "a,b", textAPI, textX, "y"))
 	assert.Equal(t, cobraInput{
-		Env: "staging", Fix: true, Workers: 3, Wait: 2 * time.Second,
-		Only: []string{"a", "b"}, Target: "api", Rest: []string{"x", "y"},
+		Env: textStaging, Fix: true, Workers: 3, Wait: 2 * time.Second,
+		Only: []string{textA, textB}, Target: textAPI, Rest: []string{textX, "y"},
 	}, got)
 
 	got = cobraInput{}
 
-	require.Error(t, execCobra(t, reg, "--fix"))
+	require.Error(t, execCobra(t, reg, textFix2))
 	assert.Equal(t, cobraInput{}, got, "nothing ran")
 
-	_, err = opscobra.Command(reg, "bad", opscobra.Options{})
+	_, err = opscobra.Command(reg, textBad, opscobra.Options{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "Ratio")
 
-	_, err = opscobra.Command(reg, "nope", opscobra.Options{})
+	_, err = opscobra.Command(reg, textNope, opscobra.Options{})
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }
 
@@ -155,27 +155,30 @@ func TestTransportCobra_FreshInputPerRun(t *testing.T) {
 	var got cobraInput
 
 	reg := cobraRegistry(t, &got)
-	cmd, err := opscobra.Command(reg, "check", opscobra.Options{})
+	cmd, err := opscobra.Command(reg, textCheck, opscobra.Options{})
 	require.NoError(t, err)
 
 	var jsonOut bool
 
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "print JSON")
+	cmd.Flags().BoolVar(&jsonOut, textStructuredFormat, false, "print JSON")
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 
 	for _, args := range [][]string{
-		{"-e", "s", "--json", "api", "x", "y"},
-		{"-e", "s", "--json", "web"},
+		{textE2, textS, "--json", textAPI, textX, "y"},
+		{textE2, textS, "--json", textWeb},
 	} {
 		cmd.SetArgs(args)
 		require.NoError(t, cmd.ExecuteContext(t.Context()))
 	}
 
 	assert.True(t, jsonOut)
-	assert.Equal(t, cobraInput{Env: "s", Target: "web"}, got)
+	assert.Equal(t, cobraInput{Env: textS, Target: textWeb}, got)
 
-	require.NoError(t, execCobra(t, reg, "-e", "s", "--fix", "--only", "a", "api"))
-	require.NoError(t, execCobra(t, reg, "-e", "s", "--only", "b", "web"))
-	assert.Equal(t, cobraInput{Env: "s", Only: []string{"b"}, Target: "web"}, got)
+	require.NoError(
+		t,
+		execCobra(t, reg, textE2, textS, textFix2, textOnly2, textA, textAPI),
+	)
+	require.NoError(t, execCobra(t, reg, textE2, textS, textOnly2, textB, textWeb))
+	assert.Equal(t, cobraInput{Env: textS, Only: []string{textB}, Target: textWeb}, got)
 }

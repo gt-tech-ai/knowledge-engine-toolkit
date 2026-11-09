@@ -64,7 +64,7 @@ func TestStorageClient_MultipartSurface(t *testing.T) {
 		c := newStorageClientWithMock(t.Context(), t, api, 0)
 		id, err := c.CreateMultipartUpload(
 			context.Background(),
-			"b",
+			textB,
 			"tenant/doc/file.pdf",
 			"application/pdf",
 		)
@@ -106,8 +106,8 @@ func testStorageClientMultipartSurfaceRest3(t *testing.T) {
 		c := newStorageClientWithMock(t.Context(), t, api, 0)
 		err := c.CompleteMultipartUpload(
 			context.Background(),
-			"b",
-			"k",
+			textB,
+			textK,
 			"upload-123",
 			[]interfaces.CompletedPart{
 				{PartNumber: 1, ETag: `"etag-1"`},
@@ -156,7 +156,7 @@ func testStorageClientMultipartSurfaceRest2(t *testing.T) {
 		// Parts reported out of order (parallel uploads finish in any order); S3 rejects
 		// an unordered list, so the client must sort them ascending before completing.
 		err := c.CompleteMultipartUpload(
-			context.Background(), "b", "k", "u",
+			context.Background(), textB, textK, textU,
 			[]interfaces.CompletedPart{
 				{PartNumber: 3, ETag: `"e3"`},
 				{PartNumber: 1, ETag: `"e1"`},
@@ -204,7 +204,7 @@ func testStorageClientMultipartSurfaceRest(t *testing.T) {
 		c := newStorageClientWithMock(t.Context(), t, api, 0)
 		require.NoError(
 			t,
-			c.AbortMultipartUpload(context.Background(), "b", "k", "upload-xyz"),
+			c.AbortMultipartUpload(context.Background(), textB, textK, "upload-xyz"),
 		)
 		require.NotNil(t, got)
 		assert.Equal(t, "upload-xyz", aws.ToString(got.UploadId))
@@ -227,7 +227,7 @@ func testStorageClientMultipartSurfaceRest(t *testing.T) {
 		)
 
 		c := newStorageClientWithMock(t.Context(), t, api, 0)
-		ups, err := c.ListMultipartUploads(context.Background(), "b")
+		ups, err := c.ListMultipartUploads(context.Background(), textB)
 		require.NoError(t, err)
 		require.Len(t, ups, 1)
 		assert.Equal(t, "tenant/doc/file.pdf", ups[0].Key)
@@ -261,7 +261,7 @@ func testStorageClientMultipartSurfaceCase(t *testing.T) {
 
 	apiErr := apperr.Sentinel("s3 unavailable")
 
-	t.Run("create", func(t *testing.T) {
+	t.Run(textCreate, func(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
@@ -273,9 +273,9 @@ func testStorageClientMultipartSurfaceCase(t *testing.T) {
 		c := newStorageClientWithMock(t.Context(), t, api, 0)
 		_, err := c.CreateMultipartUpload(
 			context.Background(),
-			"b",
-			"k",
-			"text/plain",
+			textB,
+			textK,
+			textTextPlain,
 		)
 		require.ErrorIs(t, err, apiErr)
 	})
@@ -291,7 +291,7 @@ func testStorageClientMultipartSurfaceCase(t *testing.T) {
 
 		c := newStorageClientWithMock(t.Context(), t, api, 0)
 		err := c.CompleteMultipartUpload(
-			context.Background(), "b", "k", "u",
+			context.Background(), textB, textK, textU,
 			[]interfaces.CompletedPart{{PartNumber: 1, ETag: `"e1"`}},
 		)
 		require.ErrorIs(t, err, apiErr)
@@ -317,12 +317,12 @@ func testStorageClientMultipartSurfaceRest5(t *testing.T, apiErr error) {
 		c := newStorageClientWithMock(t.Context(), t, api, 0)
 		require.ErrorIs(
 			t,
-			c.AbortMultipartUpload(context.Background(), "b", "k", "u"),
+			c.AbortMultipartUpload(context.Background(), textB, textK, textU),
 			apiErr,
 		)
 	})
 
-	t.Run("list", func(t *testing.T) {
+	t.Run(textList, func(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
@@ -332,7 +332,7 @@ func testStorageClientMultipartSurfaceRest5(t *testing.T, apiErr error) {
 			Return(nil, apiErr)
 
 		c := newStorageClientWithMock(t.Context(), t, api, 0)
-		_, err := c.ListMultipartUploads(context.Background(), "b")
+		_, err := c.ListMultipartUploads(context.Background(), textB)
 		require.ErrorIs(t, err, apiErr)
 	})
 }

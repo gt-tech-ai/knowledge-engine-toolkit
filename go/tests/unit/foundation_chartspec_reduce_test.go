@@ -69,7 +69,7 @@ func sameAnswersRest(a, b chartspec.Partial) bool {
 			continue
 		}
 
-		if math.Abs(x-y) > 1e-9*math.Max(1, math.Abs(x)) {
+		if math.Abs(x-y) > max1em9*math.Max(1, math.Abs(x)) {
 			return false
 		}
 	}
@@ -126,9 +126,9 @@ func TestPartial_MergeIsAssociativeAndCommutative(t *testing.T) {
 
 	a := partialOf(t, []float64{3, 1, 7})
 	self := merged(a, a)
-	assert.InDelta(t, 1.0, chartspec.Finalize(self, types.AggMin), 0)
-	assert.InDelta(t, 7.0, chartspec.Finalize(self, types.AggMax), 0)
-	assert.InDelta(t, 6.0, chartspec.Finalize(self, types.AggCount), 0)
+	assert.InDelta(t, wantFinalize1p0, chartspec.Finalize(self, types.AggMin), 0)
+	assert.InDelta(t, wantFinalize7p0, chartspec.Finalize(self, types.AggMax), 0)
+	assert.InDelta(t, wantFinalize6p0, chartspec.Finalize(self, types.AggCount), 0)
 }
 
 // TestFinalize_ComputesEachAggregate tests the value each aggregate finalizes to.
@@ -143,17 +143,17 @@ func TestFinalize_ComputesEachAggregate(t *testing.T) {
 	t.Parallel()
 
 	p := partialOf(t, []float64{1, 2, 3, 4})
-	assert.InDelta(t, 10.0, chartspec.Finalize(p, types.AggSum), 0)
-	assert.InDelta(t, 4.0, chartspec.Finalize(p, types.AggCount), 0)
-	assert.InDelta(t, 2.5, chartspec.Finalize(p, types.AggAvg), 0)
-	assert.InDelta(t, 1.0, chartspec.Finalize(p, types.AggMin), 0)
-	assert.InDelta(t, 4.0, chartspec.Finalize(p, types.AggMax), 0)
-	assert.InEpsilon(t, 2.0, chartspec.Finalize(p, types.AggP50), 0.01)
+	assert.InDelta(t, wantFinalize10p0, chartspec.Finalize(p, types.AggSum), 0)
+	assert.InDelta(t, wantFinalize4p0, chartspec.Finalize(p, types.AggCount), 0)
+	assert.InDelta(t, wantFinalize2p5, chartspec.Finalize(p, types.AggAvg), 0)
+	assert.InDelta(t, wantFinalize1p0, chartspec.Finalize(p, types.AggMin), 0)
+	assert.InDelta(t, wantFinalize4p0, chartspec.Finalize(p, types.AggMax), 0)
+	assert.InEpsilon(t, inEpsilonArg2p0, chartspec.Finalize(p, types.AggP50), epsilon0p01)
 
 	var empty chartspec.Partial
 
-	assert.InDelta(t, 0.0, chartspec.Finalize(empty, types.AggSum), 0)
-	assert.InDelta(t, 0.0, chartspec.Finalize(empty, types.AggCount), 0)
+	assert.InDelta(t, wantFinalize0p0, chartspec.Finalize(empty, types.AggSum), 0)
+	assert.InDelta(t, wantFinalize0p0, chartspec.Finalize(empty, types.AggCount), 0)
 
 	for _, agg := range []types.Aggregate{
 		types.AggAvg, types.AggMin, types.AggMax, types.AggP95,
@@ -180,7 +180,7 @@ func TestFinalize_ComputesEachAggregate(t *testing.T) {
 func TestSketch_MergePreservesQuantilesWithin1Pct(t *testing.T) {
 	t.Parallel()
 
-	r := fixtures.NewSequence(7)
+	r := fixtures.NewSequence(seed7)
 
 	testSketchMergePreservesQuantilesWithin1PctRest5(t, r)
 }
@@ -220,7 +220,10 @@ func assertQuantilesWithin1Pct(
 	for _, q := range []struct {
 		agg types.Aggregate
 		q   float64
-	}{{types.AggP50, 0.5}, {types.AggP95, 0.95}, {types.AggP99, 0.99}} {
+	}{{types.AggP50, iterations0p5}, {types.AggP95, iterations0p95}, {
+		types.AggP99,
+		iterations0p99,
+	}} {
 		exact := sorted[int(q.q*float64(len(values)-1))]
 		got := chartspec.Finalize(total, q.agg)
 		assert.LessOrEqual(
@@ -242,15 +245,15 @@ func testSketchMergePreservesQuantilesWithin1PctRest5(
 ) {
 	t.Helper()
 
-	for trial := range 50 {
-		n := 50 + r.IntN(2000)
+	for trial := range iterations50 {
+		n := intN50 + r.IntN(intNArg2000)
 		values := make([]float64, n)
 
 		for i := range values {
 			values[i] = math.Exp(r.Float64()*14 - 7) // 1e-3 … 1e3, log-spread
 		}
 
-		shards := 1 + r.IntN(8)
+		shards := 1 + r.IntN(intNArg8)
 
 		total := mergedShards(t, values, shards)
 

@@ -137,7 +137,7 @@ func TestTracingInterceptor_UnaryNilResponseNoPanic(t *testing.T) {
 		Start(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(spanCtx, anySpan(ctrl))
 
-	wantErr := apperr.Sentinel("boom")
+	wantErr := apperr.Sentinel(textBoom)
 	handler := interceptors.TracingInterceptor(tr).WrapUnary(
 		func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
 			return nil, wantErr

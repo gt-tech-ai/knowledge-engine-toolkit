@@ -38,12 +38,12 @@ func mockgenHeader(argv string) string {
 // writeMockDir writes root/gen/generate.go holding directives and returns the dir.
 func writeMockDir(t *testing.T, root string, directives ...string) string {
 	t.Helper()
-	dir := filepath.Join(root, "gen")
+	dir := filepath.Join(root, textGen)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	var b strings.Builder
 	b.WriteString("package gen\n\n")
 	for _, d := range directives {
-		b.WriteString("//go:generate " + d + "\n")
+		b.WriteString("//go:generate " + d + textNewline)
 	}
 	src := b.String()
 	require.NoError(
@@ -85,7 +85,7 @@ func TestMockgenGenerator_RendersDirectivesIntoMemory(t *testing.T) {
 			Stdout: []byte(mockgenHeader("-source=iface.go -package=gen")),
 		})
 
-	out, err := mockgen.NewGenerator([]string{"gen"}, runner, root).
+	out, err := mockgen.NewGenerator([]string{textGen}, runner, root).
 		Render(t.Context(), fsCodebase(t, root))
 
 	require.NoError(t, err)
@@ -122,7 +122,7 @@ func TestMockgenGenerator_RejectsForeignDirective(t *testing.T) {
 			runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 			runner.EXPECT().RequireTool("mockgen", gomock.Any()).Return(nil)
 
-			_, err := mockgen.NewGenerator([]string{"gen"}, runner, root).
+			_, err := mockgen.NewGenerator([]string{textGen}, runner, root).
 				Render(t.Context(), fsCodebase(t, root))
 
 			require.Error(t, err)
@@ -154,7 +154,7 @@ func TestMockgenGenerator_FailsOnToolErrors(t *testing.T) {
 	missing := mocks.NewMockCommandRunner(gomock.NewController(t))
 	missing.EXPECT().RequireTool("mockgen", gomock.Any()).
 		Return(apperr.NotFound("mockgen not found on PATH"))
-	_, err := mockgen.NewGenerator([]string{"gen"}, missing, root).
+	_, err := mockgen.NewGenerator([]string{textGen}, missing, root).
 		Render(t.Context(), fsCodebase(t, root))
 	require.Error(t, err)
 	assert.True(t, apperr.Is(err, apperr.CodeNotFound), err)
@@ -168,7 +168,7 @@ func TestMockgenGenerator_FailsOnToolErrors(t *testing.T) {
 			ExitCode: 1,
 			Stderr:   []byte("cannot load example.com/x\n"),
 		})
-	_, err = mockgen.NewGenerator([]string{"gen"}, failing, root).
+	_, err = mockgen.NewGenerator([]string{textGen}, failing, root).
 		Render(t.Context(), fsCodebase(t, root))
 	require.Error(t, err)
 	assert.True(t, apperr.Is(err, apperr.CodeInternal), err)

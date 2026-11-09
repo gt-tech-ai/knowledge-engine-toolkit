@@ -23,17 +23,17 @@ func provisionCatalog(t *testing.T) *toolchain.Catalog {
 	cat, err := toolchain.NewCatalog([]types.ToolEntry{
 		{
 			Name:     "Go",
-			Binary:   "go",
+			Binary:   textGo2,
 			Category: types.CategoryPrerequisite,
 			Required: true,
 		},
 		{
-			Name:     "wire",
-			Binary:   "wire",
+			Name:     textWire,
+			Binary:   textWire,
 			Category: types.CategoryRequired,
 			Required: true,
 			Install: map[string]types.InstallMethodEntry{
-				"all": {Kind: types.InstallKindGoInstall, Package: "x/wire@v1"},
+				textAll: {Kind: types.InstallKindGoInstall, Package: "x/wire@v1"},
 			},
 		},
 	})
@@ -61,23 +61,23 @@ func TestClientsToolchainInstaller_Install_RoutesExactCommand(t *testing.T) {
 	r.EXPECT().
 		RunWithEnv(
 			gomock.Any(),
-			"/root",
-			[]string{"GOTOOLCHAIN=local"},
-			"go",
-			"install",
-			"pkg@v1",
+			textRoot,
+			[]string{textGotoolchainLocal},
+			textGo2,
+			textInstall,
+			textPkgV1,
 		).
 		Return(nil)
 
 	tool := &types.ToolDef{
-		Name: "grpcurl", Binary: "grpcurl",
+		Name: textGrpcurl, Binary: textGrpcurl,
 		InstallMethods: map[string]types.InstallMethod{
-			"all": {Command: "go", Args: []string{"install", "pkg@v1"}},
+			textAll: {Command: textGo2, Args: []string{textInstall, textPkgV1}},
 		},
 	}
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "linux-apt", denyPrompter(t))
-	require.NoError(t, inst.Install(context.Background(), "/root", tool))
+	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
+	require.NoError(t, inst.Install(context.Background(), textRoot, tool))
 }
 
 // TestClientsToolchainInstaller_InstallSet_SkipsInstalled verifies the dev-tool
@@ -98,39 +98,39 @@ func TestClientsToolchainInstaller_InstallSet_SkipsInstalled(t *testing.T) {
 
 	optional := []types.ToolDef{
 		{
-			Name:   "pgcli",
-			Binary: "pgcli",
+			Name:   textPgcli,
+			Binary: textPgcli,
 			InstallMethods: map[string]types.InstallMethod{
-				"all": {Command: "pip", Args: []string{"install", "pgcli"}},
+				textAll: {Command: textPip, Args: []string{textInstall, textPgcli}},
 			},
 		},
 		{
-			Name:   "grpcurl",
-			Binary: "grpcurl",
+			Name:   textGrpcurl,
+			Binary: textGrpcurl,
 			InstallMethods: map[string]types.InstallMethod{
-				"all": {Command: "go", Args: []string{"install", "grpcurl@v1"}},
+				textAll: {Command: textGo2, Args: []string{textInstall, textGrpcurlV1}},
 			},
 		},
 	}
 
 	// pgcli already present (skip); grpcurl missing -> installed.
-	r.EXPECT().Exists("pgcli").Return(true)
-	r.EXPECT().Exists("grpcurl").Return(false)
+	r.EXPECT().Exists(textPgcli).Return(true)
+	r.EXPECT().Exists(textGrpcurl).Return(false)
 	r.EXPECT().
 		RunWithEnv(
 			gomock.Any(),
-			"/root",
-			[]string{"GOTOOLCHAIN=local"},
-			"go",
-			"install",
-			"grpcurl@v1",
+			textRoot,
+			[]string{textGotoolchainLocal},
+			textGo2,
+			textInstall,
+			textGrpcurlV1,
 		).
 		Return(nil)
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "linux-apt", denyPrompter(t))
+	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
 	err := inst.InstallSet(
 		context.Background(),
-		"/root",
+		textRoot,
 		optional,
 		types.InstallToolsOptions{AutoYes: true},
 	)
@@ -151,13 +151,19 @@ func TestClientsToolchainInstaller_Provision_CheckOnly(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists("go").Return(true)    // prerequisite present
-	r.EXPECT().Exists("wire").Return(false) // required tool missing
+	r.EXPECT().Exists(textGo2).Return(true)   // prerequisite present
+	r.EXPECT().Exists(textWire).Return(false) // required tool missing
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "linux-apt", denyPrompter(t))
-	err := inst.Provision(context.Background(), "/root", provisionCatalog(t), false, true)
+	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
+	err := inst.Provision(
+		context.Background(),
+		textRoot,
+		provisionCatalog(t),
+		false,
+		true,
+	)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "wire")
+	assert.Contains(t, err.Error(), textWire)
 }
 
 // TestClientsToolchainInstaller_Provision_InstallsMissing covers the full setup install
@@ -176,24 +182,30 @@ func TestClientsToolchainInstaller_Provision_InstallsMissing(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists("go").Return(true)
+	r.EXPECT().Exists(textGo2).Return(true)
 	gomock.InOrder(
-		r.EXPECT().Exists("wire").Return(false), // scan: missing
+		r.EXPECT().Exists(textWire).Return(false), // scan: missing
 		r.EXPECT().
 			RunWithEnv(
 				gomock.Any(),
-				"/root",
-				[]string{"GOTOOLCHAIN=local"},
-				"go",
-				"install",
+				textRoot,
+				[]string{textGotoolchainLocal},
+				textGo2,
+				textInstall,
 				"x/wire@v1",
 			).
 			Return(nil),
-		r.EXPECT().Exists("wire").Return(true), // verify: now present
+		r.EXPECT().Exists(textWire).Return(true), // verify: now present
 	)
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "linux-apt", denyPrompter(t))
-	err := inst.Provision(context.Background(), "/root", provisionCatalog(t), true, false)
+	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
+	err := inst.Provision(
+		context.Background(),
+		textRoot,
+		provisionCatalog(t),
+		true,
+		false,
+	)
 	require.NoError(t, err)
 }
 
@@ -214,22 +226,22 @@ func TestClientsToolchainInstaller_InstallSet_ForceReinstalls(t *testing.T) {
 	r := mocks.NewMockCommandRunner(ctrl)
 	optional := []types.ToolDef{
 		{
-			Name:   "pgcli",
-			Binary: "pgcli",
+			Name:   textPgcli,
+			Binary: textPgcli,
 			InstallMethods: map[string]types.InstallMethod{
-				"all": {Command: "pip", Args: []string{"install", "pgcli"}},
+				textAll: {Command: textPip, Args: []string{textInstall, textPgcli}},
 			},
 		},
 	}
 	// No Exists("pgcli"): Force short-circuits the presence check; install runs.
 	r.EXPECT().
-		RunWithEnv(gomock.Any(), "/root", gomock.Any(), "pip", "install", "pgcli").
+		RunWithEnv(gomock.Any(), textRoot, gomock.Any(), textPip, textInstall, textPgcli).
 		Return(nil)
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "linux-apt", denyPrompter(t))
+	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
 	err := inst.InstallSet(
 		context.Background(),
-		"/root",
+		textRoot,
 		optional,
 		types.InstallToolsOptions{AutoYes: true, Force: true},
 	)
@@ -252,26 +264,32 @@ func TestClientsToolchainInstaller_Provision_ForceReinstallsPresent(t *testing.T
 
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists("go").Return(true) // prerequisite present
+	r.EXPECT().Exists(textGo2).Return(true) // prerequisite present
 	gomock.InOrder(
-		r.EXPECT().Exists("wire").Return(true), // scan: present + OK
+		r.EXPECT().Exists(textWire).Return(true), // scan: present + OK
 		r.EXPECT().
 			RunWithEnv(
 				gomock.Any(),
-				"/root",
-				[]string{"GOTOOLCHAIN=local"},
-				"go",
-				"install",
+				textRoot,
+				[]string{textGotoolchainLocal},
+				textGo2,
+				textInstall,
 				"x/wire@v1",
 			).
 			Return(nil), // force → rebuild anyway
-		r.EXPECT().Exists("wire").Return(true), // verify: present
+		r.EXPECT().Exists(textWire).Return(true), // verify: present
 	)
 
 	inst := toolchain.NewInstaller(
-		r, fixtures.NopLogger(), "linux-apt", denyPrompter(t), toolchain.WithForce(true),
+		r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t), toolchain.WithForce(true),
 	)
-	err := inst.Provision(context.Background(), "/root", provisionCatalog(t), true, false)
+	err := inst.Provision(
+		context.Background(),
+		textRoot,
+		provisionCatalog(t),
+		true,
+		false,
+	)
 	require.NoError(t, err)
 }
 
@@ -290,8 +308,8 @@ func TestClientsToolchainInstaller_Install_NoMethod(t *testing.T) {
 	r := mocks.NewMockCommandRunner(ctrl) // strict: no runner calls
 
 	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "darwin", denyPrompter(t))
-	err := inst.Install(context.Background(), "/root",
-		&types.ToolDef{Name: "gcc", Binary: "gcc"})
+	err := inst.Install(context.Background(), textRoot,
+		&types.ToolDef{Name: textGcc, Binary: textGcc})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no install method")
 }
@@ -325,14 +343,14 @@ func TestClientsToolchainInstaller_InstallSet_UnknownName(t *testing.T) {
 	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "darwin", denyPrompter(t))
 	err := inst.InstallSet(
 		context.Background(),
-		"/root",
+		textRoot,
 		[]types.ToolDef{
-			{Name: "pgcli", Binary: "pgcli"},
+			{Name: textPgcli, Binary: textPgcli},
 		},
-		types.InstallToolsOptions{Names: []string{"bogus"}, AutoYes: true},
+		types.InstallToolsOptions{Names: []string{textBogus}, AutoYes: true},
 	)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "bogus")
+	assert.Contains(t, err.Error(), textBogus)
 }
 
 // goInstallEntry is a go-install lifecycle tool in the given category, marked
@@ -345,7 +363,7 @@ func goInstallEntry(
 	return types.ToolEntry{
 		Name: binary, Binary: binary, Category: cat, CI: inCI,
 		Install: map[string]types.InstallMethodEntry{
-			"all": {
+			textAll: {
 				Kind:    types.InstallKindGoInstall,
 				Package: "x/" + binary + "@v1.0.0",
 			},
@@ -386,17 +404,17 @@ func TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet(t *testing.T) {
 
 	for _, bin := range []string{"req-ci", "opt-ci"} {
 		r.EXPECT().
-			RunWithEnv(gomock.Any(), "/root", []string{"GOTOOLCHAIN=local"},
-				"go", "install", "x/"+bin+"@v1.0.0").
+			RunWithEnv(gomock.Any(), textRoot, []string{textGotoolchainLocal},
+				textGo2, textInstall, "x/"+bin+"@v1.0.0").
 			Return(nil)
 	}
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "linux-apt", denyPrompter(t))
+	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
 	require.NoError(
 		t,
 		inst.InstallTools(
 			context.Background(),
-			"/root",
+			textRoot,
 			cat,
 			types.InstallToolsOptions{CI: true, AutoYes: true},
 		),
@@ -404,7 +422,7 @@ func TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet(t *testing.T) {
 
 	err := inst.InstallTools(
 		context.Background(),
-		"/root",
+		textRoot,
 		cat,
 		types.InstallToolsOptions{
 			CI:      true,
@@ -439,15 +457,15 @@ func testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRest(
 
 				for _, bin := range []string{"req-ci", "opt-ci"} {
 					r.EXPECT().
-						RunWithEnv(gomock.Any(), "/root", []string{"GOTOOLCHAIN=local"},
-							"go", "install", "x/"+bin+"@v1.0.0").
+						RunWithEnv(gomock.Any(), textRoot, []string{textGotoolchainLocal},
+							textGo2, textInstall, "x/"+bin+"@v1.0.0").
 						Return(nil)
 				}
 
 				require.NoError(
 					t,
-					toolchain.NewInstaller(r, fixtures.NopLogger(), "linux-apt", denyPrompter(t)).
-						InstallTools(context.Background(), "/root", cat, types.InstallToolsOptions{
+					toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t)).
+						InstallTools(context.Background(), textRoot, cat, types.InstallToolsOptions{
 							CI:      true,
 							Force:   force,
 							AutoYes: true,
@@ -480,8 +498,8 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		r := mocks.NewMockCommandRunner(ctrl)
-		r.EXPECT().Exists("go").Return(true)
-		r.EXPECT().Exists("wire").Return(false)
+		r.EXPECT().Exists(textGo2).Return(true)
+		r.EXPECT().Exists(textWire).Return(false)
 
 		p := mocks.NewMockPrompter(ctrl)
 		p.EXPECT().
@@ -489,11 +507,11 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 			Return(false, nil)
 
 		inst := toolchain.NewInstaller(
-			r, fixtures.NopLogger(), "linux-apt", p,
+			r, fixtures.NopLogger(), textLinuxApt, p,
 		)
 		err := inst.Provision(
 			context.Background(),
-			"/root",
+			textRoot,
 			provisionCatalog(t),
 			false,
 			false,
@@ -507,22 +525,25 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		r := mocks.NewMockCommandRunner(ctrl)
-		r.EXPECT().Exists("grpcurl").Return(false)
+		r.EXPECT().Exists(textGrpcurl).Return(false)
 		r.EXPECT().
-			RunWithEnv(gomock.Any(), "/root", gomock.Any(), "go", "install", "grpcurl@v1").
+			RunWithEnv(gomock.Any(), textRoot, gomock.Any(), textGo2, textInstall, textGrpcurlV1).
 			Return(nil)
 
 		p := mocks.NewMockPrompter(ctrl) // no EXPECT: any Confirm call fails the test
 
 		inst := toolchain.NewInstaller(
-			r, fixtures.NopLogger(), "linux-apt", p,
+			r, fixtures.NopLogger(), textLinuxApt, p,
 		)
 		require.NoError(t, inst.InstallSet(
-			context.Background(), "/root",
+			context.Background(), textRoot,
 			[]types.ToolDef{{
-				Name: "grpcurl", Binary: "grpcurl",
+				Name: textGrpcurl, Binary: textGrpcurl,
 				InstallMethods: map[string]types.InstallMethod{
-					"all": {Command: "go", Args: []string{"install", "grpcurl@v1"}},
+					textAll: {
+						Command: textGo2,
+						Args:    []string{textInstall, textGrpcurlV1},
+					},
 				},
 			}}, types.InstallToolsOptions{AutoYes: true},
 		))
@@ -545,13 +566,13 @@ func TestClientsToolchainInstaller_DenyPrompterRefuses(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	// No RunWithEnv EXPECT: an install fails the test.
 	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists("go").Return(true)
-	r.EXPECT().Exists("wire").Return(false)
+	r.EXPECT().Exists(textGo2).Return(true)
+	r.EXPECT().Exists(textWire).Return(false)
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "linux-apt", denyPrompter(t))
+	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
 	err := inst.Provision(
 		context.Background(),
-		"/root",
+		textRoot,
 		provisionCatalog(t),
 		false,
 		false,
@@ -578,13 +599,13 @@ func TestClientsToolchainInstaller_NilPrompterFailsLoudly(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	// No RunWithEnv EXPECT: an install fails the test.
 	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists("go").Return(true)
-	r.EXPECT().Exists("wire").Return(false)
+	r.EXPECT().Exists(textGo2).Return(true)
+	r.EXPECT().Exists(textWire).Return(false)
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "linux-apt", nil)
+	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, nil)
 	err := inst.Provision(
 		context.Background(),
-		"/root",
+		textRoot,
 		provisionCatalog(t),
 		false,
 		false,

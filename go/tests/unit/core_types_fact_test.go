@@ -17,9 +17,9 @@ import (
 // goldenFactPath returns the analytics-fact wire fixture shared with the Python suite.
 func goldenFactPath() string {
 	return filepath.Join(
-		"..",
-		"..",
-		"..",
+		textDotDot,
+		textDotDot,
+		textDotDot,
 		"testdata",
 		"analytics_fact.golden.json",
 	)
@@ -28,20 +28,29 @@ func goldenFactPath() string {
 // goldenFact is the value the golden fixture encodes.
 func goldenFact() types.Fact {
 	return types.Fact{
-		Cube:  "genai_calls",
-		OrgID: "org-1",
-		TS:    time.Date(2026, 10, 9, 12, 34, 56, 789000000, time.UTC),
+		Cube:  textGenaiCalls,
+		OrgID: textOrg1,
+		TS: time.Date(
+			year2026,
+			month10,
+			day9,
+			hour12,
+			min34,
+			sec56,
+			nsec789000000,
+			time.UTC,
+		),
 		Dims: map[string]string{
-			"label":    "a<b>&c\u2028",
+			textLabel:  "a<b>&c\u2028",
 			"provider": "aws.bedrock",
-			"model":    "nova-lite",
+			textModel:  "nova-lite",
 			"step":     "generate",
-			"team":     "t-1",
+			textTeam:   textT1,
 		},
 		Measures: map[string]float64{
-			"tokens_in":  42,
-			"tokens_out": 7,
-			"duration_s": 1.25,
+			textTokensIn: textTokensIn42,
+			"tokens_out": tokensOut7,
+			"duration_s": durationS1p25,
 		},
 		IdempotencyKey: "4bf92f3577b34da6a3ce929d0e0e4736:00f067aa0ba902b7:generate",
 		Schema:         types.FactSchemaVersion,
@@ -105,9 +114,9 @@ func TestFact_MarshalEscapesLikePython(t *testing.T) {
 	t.Parallel()
 
 	fact := types.Fact{
-		Cube: "c", OrgID: "o", IdempotencyKey: "k", Schema: types.FactSchemaVersion,
-		TS:   time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC),
-		Dims: map[string]string{"team": "a<b>&c\u2028\u2029\u00e9"},
+		Cube: textC, OrgID: textO, IdempotencyKey: textK, Schema: types.FactSchemaVersion,
+		TS:   time.Date(year2026, month10, day9, 0, 0, 0, 0, time.UTC),
+		Dims: map[string]string{textTeam: "a<b>&c\u2028\u2029\u00e9"},
 	}
 
 	via, err := json.Marshal(fact)

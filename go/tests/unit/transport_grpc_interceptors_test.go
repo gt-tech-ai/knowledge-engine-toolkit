@@ -36,13 +36,13 @@ func TestGRPCLoggingServerInterceptor_LogsSuccess(t *testing.T) {
 	resp, err := interceptor(
 		context.Background(),
 		nil,
-		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod},
 		func(_ context.Context, _ any) (any, error) {
-			return "ok", nil
+			return textOk, nil
 		},
 	)
-	require.NoError(t, err, "unexpected error")
-	assert.Equal(t, "ok", resp, "expected response to pass through")
+	require.NoError(t, err, textUnexpectedError)
+	assert.Equal(t, textOk, resp, textExpectedResponseToPass)
 }
 
 // TestGRPCLoggingServerInterceptor_LogsError tests that the server logging
@@ -65,9 +65,9 @@ func TestGRPCLoggingServerInterceptor_LogsError(t *testing.T) {
 	_, err := interceptor(
 		context.Background(),
 		nil,
-		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod},
 		func(_ context.Context, _ any) (any, error) {
-			return nil, status.Errorf(codes.Internal, "boom")
+			return nil, status.Errorf(codes.Internal, textBoom)
 		},
 	)
 	require.Error(t, err, "expected error to pass through")
@@ -91,13 +91,13 @@ func TestGRPCMetricsServerInterceptor_RecordsMetrics(t *testing.T) {
 	resp, err := interceptor(
 		context.Background(),
 		nil,
-		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod},
 		func(_ context.Context, _ any) (any, error) {
-			return "ok", nil
+			return textOk, nil
 		},
 	)
-	require.NoError(t, err, "unexpected error")
-	assert.Equal(t, "ok", resp, "expected response to pass through")
+	require.NoError(t, err, textUnexpectedError)
+	assert.Equal(t, textOk, resp, textExpectedResponseToPass)
 }
 
 // TestGRPCTracingServerInterceptor_CreatesSpan tests that the server tracing
@@ -118,13 +118,13 @@ func TestGRPCTracingServerInterceptor_CreatesSpan(t *testing.T) {
 	resp, err := interceptor(
 		context.Background(),
 		nil,
-		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod},
 		func(_ context.Context, _ any) (any, error) {
-			return "ok", nil
+			return textOk, nil
 		},
 	)
-	require.NoError(t, err, "unexpected error")
-	assert.Equal(t, "ok", resp, "expected response to pass through")
+	require.NoError(t, err, textUnexpectedError)
+	assert.Equal(t, textOk, resp, textExpectedResponseToPass)
 }
 
 // TestGRPCTracingServerInterceptor_ContinuesCallerTrace tests that the gRPC server
@@ -158,7 +158,7 @@ func TestGRPCTracingServerInterceptor_ContinuesCallerTrace(t *testing.T) {
 	_, err := grpcinterceptors.TracingServerInterceptor(fixtures.NopTracer())(
 		ctx,
 		nil,
-		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		&grpc.UnaryServerInfo{FullMethod: textTestServiceMethod},
 		func(ctx context.Context, _ any) (any, error) {
 			got = oteltrace.SpanContextFromContext(ctx)
 

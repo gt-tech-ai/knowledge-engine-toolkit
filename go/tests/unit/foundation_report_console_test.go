@@ -24,7 +24,9 @@ func consoleGolden(t *testing.T, name string) string {
 	t.Helper()
 
 	data, err := os.ReadFile(
-		filepath.Clean(filepath.Join("..", "..", "..", "testdata", "report", name)),
+		filepath.Clean(
+			filepath.Join(textDotDot, textDotDot, textDotDot, "testdata", "report", name),
+		),
 	)
 	require.NoError(t, err)
 
@@ -35,13 +37,13 @@ func consoleGolden(t *testing.T, name string) string {
 func consoleHints() []report.Hint {
 	return []report.Hint{
 		{
-			Group:  "Lint",
+			Group:  textLint2,
 			Substr: "golangci",
 			Text:   "Run: search lint --go --fix  (to auto-fix)",
 		},
 		{
-			Group:  "Lint",
-			Substr: "ruff",
+			Group:  textLint2,
+			Substr: textRuff,
 			Text:   "Run: search lint --python --fix  (to auto-fix)",
 		},
 	}
@@ -57,15 +59,15 @@ func consoleRun() (lint, unit types.StepResults) {
 	lint = types.StepResults{
 		{
 			Name:     "golangci (Go)",
-			Group:    "Lint",
+			Group:    textLint2,
 			Status:   types.StatusPass,
-			Duration: 1200 * time.Millisecond,
+			Duration: millis1200 * time.Millisecond,
 		},
 		{
 			Name:     "ruff (Python)",
-			Group:    "Lint",
+			Group:    textLint2,
 			Status:   types.StatusFail,
-			Duration: 800 * time.Millisecond,
+			Duration: millis800 * time.Millisecond,
 			Error:    "INTERNAL: ruff found 2 issues",
 			Detail:   noisy,
 		},
@@ -73,29 +75,29 @@ func consoleRun() (lint, unit types.StepResults) {
 	unit = types.StepResults{
 		{
 			Name:     "Go",
-			Group:    "Unit Tests",
+			Group:    textUnitTests,
 			Status:   types.StatusPass,
-			Duration: 4 * time.Second,
-			Tests:    42,
+			Duration: seconds4 * time.Second,
+			Tests:    tests42,
 			Children: types.StepResults{
 				{
 					Name:     "Go/apps/go/cli",
 					Status:   types.StatusPass,
-					Duration: 3 * time.Second,
-					Tests:    30,
+					Duration: seconds3 * time.Second,
+					Tests:    tests30,
 				},
 				{
 					Name:     "Go/pkg/go",
 					Status:   types.StatusPass,
 					Duration: time.Second,
-					Tests:    12,
+					Tests:    tests12,
 				},
 			},
 		},
-		{Name: "TypeScript", Group: "Unit Tests", Status: types.StatusSkip},
+		{Name: "TypeScript", Group: textUnitTests, Status: types.StatusSkip},
 		{
-			Name:   "docs",
-			Group:  "Unit Tests",
+			Name:   textDocs2,
+			Group:  textUnitTests,
 			Status: types.StatusWarn,
 			Error:  "2 stale links",
 		},
@@ -108,13 +110,16 @@ func consoleRun() (lint, unit types.StepResults) {
 func replayConsoleRun(obs interfaces.ExecutionObserver) {
 	lint, unit := consoleRun()
 
-	obs.OnGateStart("preflight", []string{"Lint", "Unit Tests"})
+	obs.OnGateStart(textPreflight, []string{textLint2, textUnitTests})
 
 	for _, phase := range []struct {
 		name    string
 		results types.StepResults
 		elapsed time.Duration
-	}{{"Lint", lint, 2 * time.Second}, {"Unit Tests", unit, 4 * time.Second}} {
+	}{{textLint2, lint, seconds2 * time.Second}, {
+		textUnitTests, unit,
+		seconds4 * time.Second,
+	}} {
 		names := make([]string, 0, len(phase.results))
 		for _, r := range phase.results {
 			names = append(names, r.Name)
@@ -131,7 +136,7 @@ func replayConsoleRun(obs interfaces.ExecutionObserver) {
 	}
 
 	all := append(append(types.StepResults{}, lint...), unit...)
-	obs.OnGateComplete("preflight", all, 6*time.Second)
+	obs.OnGateComplete(textPreflight, all, 6*time.Second)
 }
 
 // newTestConsole returns a console at level over a fresh error buffer.
@@ -241,10 +246,10 @@ func testConsoleGoldenTable(
 				hook.OnFailure("ruff check .")
 
 				log := c.Logger().With("module", "cli")
-				log.Debug("resolved", "tools", 3)
+				log.Debug(textResolved, textTools, keysAndValues3)
 				log.Info("installing")
 				log.Warn("slow mirror")
-				log.Error("install failed", "tool", "ruff")
+				log.Error("install failed", textTool, textRuff)
 			},
 		},
 	}
@@ -267,11 +272,11 @@ func TestConsole_LevelsAndCodes(t *testing.T) {
 	t.Parallel()
 
 	c, errOut := newTestConsole(t, report.ConsoleConfig{}, report.LevelQuiet)
-	c.Logger().Info("hidden")
-	c.CommandHook().OnStart("hidden")
-	c.Successf("hidden")
-	c.Warnf("hidden")
-	c.Infof("hidden")
+	c.Logger().Info(textHidden)
+	c.CommandHook().OnStart(textHidden)
+	c.Successf(textHidden)
+	c.Warnf(textHidden)
+	c.Infof(textHidden)
 	c.Logger().Error("shown")
 	c.Errorf("also %s", "shown")
 	assert.Equal(t, "shown\nalso shown\n", errOut.String())
@@ -285,12 +290,14 @@ func TestConsole_LevelsAndCodes(t *testing.T) {
 	assert.Equal(t, report.LevelQuiet, c.Level())
 
 	errOut.Reset()
-	assert.Equal(t, 1, c.FormatError(apperr.Sentinel("boom")))
+	assert.Equal(t, 1, c.FormatError(apperr.Sentinel(textBoom)))
 	assert.Equal(t, "Error: boom\n", errOut.String())
 
 	for code, want := range map[apperr.ErrorCode]int{
-		apperr.CodeInvalidInput: 2, apperr.CodeNotFound: 2, apperr.CodeQualityFailed: 2,
-		apperr.CodeUnavailable: 3, apperr.CodeUpstream: 1, apperr.CodeInternal: 1,
+		apperr.CodeInvalidInput: codeInvalidInput2, apperr.CodeNotFound: codeNotFound2,
+		apperr.CodeQualityFailed: codeQualityFailed2,
+		apperr.CodeUnavailable:   codeUnavailable3, apperr.CodeUpstream: 1,
+		apperr.CodeInternal: 1,
 	} {
 		assert.Equal(t, want, report.ExitCode(code), code)
 	}
@@ -362,12 +369,12 @@ func TestConsole_Groups(t *testing.T) {
 	assert.Equal(t, "::group::Unit Tests\n::endgroup::\n", out.String())
 
 	plain, out := newTestConsole(t, report.ConsoleConfig{}, report.LevelNormal)
-	plain.Groupf("Unit Tests")
+	plain.Groupf(textUnitTests)
 	plain.EndGroup()
 	assert.Empty(t, out.String())
 
 	plain.SetLevel(report.LevelVerbose)
-	plain.Groupf("Unit Tests")
+	plain.Groupf(textUnitTests)
 	assert.Equal(t, "\n-- Unit Tests --\n\n", out.String())
 }
 
@@ -393,18 +400,18 @@ func TestFoundationReport_ConsoleConcurrentWrites(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	for range 50 {
+	for range iterations50 {
 		wg.Go(func() {
 			for range 20 {
-				c.Infof("line %s", "x")
+				c.Infof("line %s", textX)
 			}
 		})
 	}
 
 	wg.Wait()
 
-	lines := strings.Split(strings.TrimSuffix(errOut.String(), "\n"), "\n")
-	require.Len(t, lines, 1000)
+	lines := strings.Split(strings.TrimSuffix(errOut.String(), textNewline), textNewline)
+	require.Len(t, lines, wantLinesLen1000)
 
 	for _, l := range lines {
 		assert.Equal(t, "line x", l)

@@ -75,7 +75,7 @@ func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 
 	cmd, err := opscobra.Command(reg, "sync", opscobra.Options{})
 	require.NoError(t, err)
-	cmd.SetArgs([]string{"-e", "staging", "--fix", "api"})
+	cmd.SetArgs([]string{textE2, textStaging, textFix2, textAPI})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	require.NoError(t, cmd.ExecuteContext(t.Context()))
@@ -84,8 +84,12 @@ func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 	require.NoError(t, err)
 
 	res, err := connectMCP(t, srv).CallTool(t.Context(), &sdkmcp.CallToolParams{
-		Name:      "sync",
-		Arguments: map[string]any{"env": "staging", "fix": true, "target": "api"},
+		Name: "sync",
+		Arguments: map[string]any{
+			textEnv:    textStaging,
+			textFix:    true,
+			textTarget: textAPI,
+		},
 	})
 	require.NoError(t, err)
 	assert.False(t, res.IsError, toolText(t, res))
@@ -93,6 +97,6 @@ func TestTransportFrontends_OneOperationThreeWays(t *testing.T) {
 	require.NoError(t, cron.Run(t.Context(), reg, "sync",
 		[]byte(`{"env":"staging","fix":true,"target":"api"}`), nil))
 
-	want := syncInput{Env: "staging", Target: "api", Fix: true}
+	want := syncInput{Env: textStaging, Target: textAPI, Fix: true}
 	assert.Equal(t, []syncInput{want, want, want}, seen)
 }

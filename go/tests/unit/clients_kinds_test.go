@@ -91,11 +91,11 @@ func TestKindsBuild_NeverRetriesAnAtMostOnceKind(t *testing.T) {
 
 	kinds := client.Kinds[struct{}, struct{}, toyClient]{
 		Family:     "toy",
-		Default:    "once",
-		AtMostOnce: []client.Kind{"once"},
+		Default:    textOnce,
+		AtMostOnce: []client.Kind{textOnce},
 		Backends: map[client.Kind]client.Backend[struct{}, struct{}, toyClient]{
-			"any":  backend,
-			"once": backend,
+			"any":    backend,
+			textOnce: backend,
 		},
 		Decorate: func(
 			base toyClient, decs decorate.Decorations, name string, opts ...client.Option,
@@ -110,7 +110,7 @@ func TestKindsBuild_NeverRetriesAnAtMostOnceKind(t *testing.T) {
 			_, _ = b.Exec(t.Context(), "ping", func(context.Context) (struct{}, error) {
 				n++
 
-				return struct{}{}, apperr.New(apperr.CodeUnavailable, "down")
+				return struct{}{}, apperr.New(apperr.CodeUnavailable, textDown)
 			})
 
 			attempts = append(attempts, n)
@@ -127,12 +127,12 @@ func TestKindsBuild_NeverRetriesAnAtMostOnceKind(t *testing.T) {
 
 	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
 
-	for _, kind := range []client.Kind{"any", "once", ""} {
+	for _, kind := range []client.Kind{"any", textOnce, ""} {
 		_, err := kinds.Build(t.Context(), kind, struct{}{}, struct{}{}, decs, "")
 		require.NoError(t, err)
 	}
 
-	require.Len(t, attempts, 3)
+	require.Len(t, attempts, wantAttemptsLen3)
 	assert.Greater(t, attempts[0], 1)
 	assert.Equal(t, 1, attempts[1])
 	assert.Equal(t, 1, attempts[2])
@@ -156,7 +156,7 @@ const bogusClientKind client.Kind = "bogus"
 // unknownKindBuilders1 builds one group of client families with the bogus kind.
 func unknownKindBuilders1() map[string]func(ctx context.Context) error {
 	return map[string]func(ctx context.Context) error{
-		"analytics": func(ctx context.Context) error {
+		textAnalytics: func(ctx context.Context) error {
 			_, err := analytics.NewFromConfig(
 				ctx,
 				analytics.Config{Kind: bogusClientKind},
@@ -189,7 +189,7 @@ func unknownKindBuilders1() map[string]func(ctx context.Context) error {
 
 			return err
 		},
-		"database": func(ctx context.Context) error {
+		textDatabase: func(ctx context.Context) error {
 			_, err := database.NewFromConfig(
 				ctx,
 				database.Config{Kind: bogusClientKind},
@@ -241,7 +241,7 @@ func unknownKindBuilders2() map[string]func(ctx context.Context) error {
 
 			return err
 		},
-		"prometheus": func(ctx context.Context) error {
+		textPrometheus: func(ctx context.Context) error {
 			_, err := prometheus.NewFromConfig(
 				ctx, prometheus.Config{Kind: bogusClientKind}, prometheus.Deps{},
 			)

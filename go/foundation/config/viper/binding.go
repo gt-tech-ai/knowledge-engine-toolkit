@@ -14,7 +14,7 @@ import (
 // <PREFIX>_<PATH> env-var form (dots and dashes → underscores); the loader's
 // SetEnvKeyReplacer uses the same one.
 func envReplacer() *strings.Replacer {
-	return strings.NewReplacer(".", "_", "-", "_")
+	return strings.NewReplacer(textDot, textUnderscore, "-", textUnderscore)
 }
 
 // checkSchema returns a CodeInvalidInput error unless schema is nil, a struct, or a
@@ -104,7 +104,7 @@ func bindField(
 
 	path := strings.ToLower(name)
 	if prefix != "" {
-		path = prefix + "." + path
+		path = prefix + textDot + path
 	}
 
 	if ft.Kind() == reflect.Struct {
@@ -127,12 +127,12 @@ func fieldKey(f reflect.StructField) (name string, squash, ok bool) {
 		return "", false, false
 	}
 
-	name, opts, _ := strings.Cut(f.Tag.Get("mapstructure"), ",")
+	name, opts, _ := strings.Cut(f.Tag.Get("mapstructure"), textComma)
 	if name == "-" {
 		return "", false, false
 	}
 
-	for opt := range strings.SplitSeq(opts, ",") {
+	for opt := range strings.SplitSeq(opts, textComma) {
 		switch strings.TrimSpace(opt) {
 		case "squash":
 			squash = true
@@ -156,12 +156,12 @@ func fieldKey(f reflect.StructField) (name string, squash, ok bool) {
 func bindLeaf(v *viper.Viper, path, envPrefix, aliases string) {
 	envName := strings.ToUpper(envReplacer().Replace(path))
 	if envPrefix != "" {
-		envName = strings.ToUpper(envPrefix) + "_" + envName
+		envName = strings.ToUpper(envPrefix) + textUnderscore + envName
 	}
 
 	names := []string{path, envName}
 	if aliases != "" {
-		names = append(names, strings.Split(aliases, ",")...)
+		names = append(names, strings.Split(aliases, textComma)...)
 	}
 
 	_ = v.BindEnv(names...)

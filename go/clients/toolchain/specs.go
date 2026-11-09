@@ -111,9 +111,10 @@ func resolveVersionParse(strategy string) func(string) string {
 // parseGoVersion extracts the version from `go version go1.26.0 darwin/arm64`.
 func parseGoVersion(s string) string {
 	for part := range strings.FieldsSeq(s) {
-		if len(part) > 2 && part[0] == 'g' && part[1] == 'o' && part[2] >= '0' &&
-			part[2] <= '9' {
-			return part[2:]
+		if len(part) > partLen2 && part[0] == 'g' && part[1] == 'o' &&
+			part[index2] >= '0' &&
+			part[index2] <= '9' {
+			return part[offset2:]
 		}
 	}
 

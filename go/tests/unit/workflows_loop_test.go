@@ -34,7 +34,7 @@ func TestLoopConfig_RejectsNegativeDurations(t *testing.T) {
 	for _, cfg := range invalid {
 		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(cfg.Validate()))
 
-		_, err := loop.NewTicker("bad", loop.Pass(okPass), cfg, quietLogger(t))
+		_, err := loop.NewTicker(textBad, loop.Pass(okPass), cfg, quietLogger(t))
 		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	}
 }
@@ -110,7 +110,9 @@ func TestTicker_FailedPassIsLoggedAndRetried(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		boom := apperr.New(apperr.CodeUnavailable, "store down")
 		logger := mocks.NewMockLogger(gomock.NewController(t))
-		logger.EXPECT().Warn("loop pass failed", "loop", "drain", "error", boom).Times(2)
+		logger.EXPECT().
+			Warn("loop pass failed", "loop", "drain", textError, boom).
+			Times(2)
 
 		var passes atomic.Int64
 
@@ -170,7 +172,7 @@ func TestTicker_BackToBackWhenIntervalIsZero(t *testing.T) {
 	}), loop.Config{}, quietLogger(t))
 	require.NoError(t, err)
 	require.NoError(t, tk.Run(ctx))
-	require.Equal(t, int64(3), passes.Load())
+	require.Equal(t, int64(int64Arg3), passes.Load())
 }
 
 // TestTicker_ReturnsNilWhenContextEnds tests shutdown during a pass.
@@ -199,7 +201,7 @@ func TestTicker_ReturnsNilWhenContextEnds(t *testing.T) {
 	boom := apperr.New(apperr.CodeUnavailable, "flush failed")
 	debugged := mocks.NewMockLogger(gomock.NewController(t))
 	debugged.EXPECT().
-		Debug("loop pass failed during shutdown", "loop", "relay", "error", boom)
+		Debug("loop pass failed during shutdown", "loop", "relay", textError, boom)
 
 	cases := []struct {
 		logger *mocks.MockLogger
@@ -244,8 +246,8 @@ func TestGroup_RunsEveryRunnerUntilContextEnds(t *testing.T) {
 		var a, b atomic.Int64
 
 		g := loop.NewGroup(quietLogger(t))
-		g.Add("a", mustTicker(t, &a))
-		g.Add("b", mustTicker(t, &b))
+		g.Add(textA, mustTicker(t, &a))
+		g.Add(textB, mustTicker(t, &b))
 
 		ctx, cancel := context.WithCancel(t.Context())
 		require.NoError(t, g.Start(ctx))
@@ -261,7 +263,7 @@ func TestGroup_RunsEveryRunnerUntilContextEnds(t *testing.T) {
 		var a atomic.Int64
 
 		g := loop.NewGroup(quietLogger(t))
-		g.Add("a", mustTicker(t, &a))
+		g.Add(textA, mustTicker(t, &a))
 		require.NoError(t, g.Start(t.Context()))
 		synctest.Wait()
 		require.NoError(t, g.Stop(t.Context()))
@@ -283,7 +285,9 @@ func TestGroup_OneFailingRunnerDoesNotStopTheOthers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		boom := apperr.New(apperr.CodeNotFound, "queue gone")
 		logger := mocks.NewMockLogger(gomock.NewController(t))
-		logger.EXPECT().Error("loop stopped", "loop", "consumer", "error", boom).Times(1)
+		logger.EXPECT().
+			Error("loop stopped", "loop", "consumer", textError, boom).
+			Times(1)
 
 		var ticks atomic.Int64
 
@@ -317,7 +321,7 @@ func TestGroup_ShutdownIsNotAFailure(t *testing.T) {
 		boom := apperr.New(apperr.CodeUnavailable, "ack failed")
 		logger := mocks.NewMockLogger(gomock.NewController(t))
 		logger.EXPECT().
-			Debug("loop stopped during shutdown", "loop", "consumer", "error", boom)
+			Debug("loop stopped during shutdown", "loop", "consumer", textError, boom)
 
 		g := loop.NewGroup(logger)
 		g.Add("drainer", loop.RunnerFunc(func(ctx context.Context) error {
@@ -406,7 +410,7 @@ func quietLogger(t *testing.T) *mocks.MockLogger {
 func mustTicker(t *testing.T, n *atomic.Int64) *loop.Ticker {
 	t.Helper()
 
-	tk, err := loop.NewTicker("count", loop.Pass(func(context.Context) error {
+	tk, err := loop.NewTicker(textCount, loop.Pass(func(context.Context) error {
 		n.Add(1)
 
 		return nil

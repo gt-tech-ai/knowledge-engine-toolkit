@@ -147,7 +147,7 @@ func (c Config) partitions() int {
 // underscore, then letters, digits or underscores, at most 63 bytes). The table and
 // column names are interpolated into the statements, so nothing else is accepted.
 func isIdentifier(n string) bool {
-	if n == "" || len(n) > 63 || isDigitRune(rune(n[0])) {
+	if n == "" || len(n) > nLen63 || isDigitRune(rune(n[0])) {
 		return false
 	}
 
@@ -319,7 +319,7 @@ func enqueueSQL(cfg Config, attrKeys []string) string {
 		vals[i] = fmt.Sprintf("$%d", i+1)
 	}
 
-	vals[3] = "COALESCE($4, now())"
+	vals[index3] = "COALESCE($4, now())"
 
 	return fmt.Sprintf(`INSERT INTO %s
 	(%s, status, attempts, next_attempt_at, last_error)

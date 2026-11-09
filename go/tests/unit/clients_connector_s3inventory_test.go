@@ -29,10 +29,10 @@ const inventoryManifestKey = "inv/b/cfg/2026-11-05T00-00Z/manifest.json"
 // inventoryCfg is an s3_inventory SourceConfig over bucket "b", prefix "docs/", with the
 // report in bucket "reports".
 func inventoryCfg() interfaces.SourceConfig {
-	cfg := s3Cfg("access_key")
+	cfg := s3Cfg(textAccessKey)
 
 	cfg.Kind = interfaces.ConnectorKindS3Inventory
-	cfg.InventoryBucket = "reports"
+	cfg.InventoryBucket = textReports
 	cfg.InventoryManifestKey = inventoryManifestKey
 
 	return cfg
@@ -73,20 +73,20 @@ func newInventoryFixture(t *testing.T, format string) inventoryFixture {
 		`"b","other/x.pdf","11","2026-11-01T10:00:00.000Z","e9","true","false"`,
 		`"b","docs/my+report%282%29.pdf","12","2026-11-02T10:00:00.000Z","e2","true","false"`,
 		`"b","docs/gone.pdf","0","2026-11-02T10:00:00.000Z","","true","true"`,
-	}, "\n") + "\n"
+	}, textNewline) + textNewline
 	second := strings.Join([]string{
 		`"b","docs/c.pdf","13","2026-11-03T10:00:00.000Z","e3","true","false"`,
 		`"b","docs/c.pdf","9","2026-10-03T10:00:00.000Z","e0","false","false"`,
 		`"b","docs/d.pdf","14","2026-11-04T10:00:00.000Z","e4","true","false"`,
 		`"b","docs/e.pdf","15","2026-11-05T10:00:00.000Z","e5","true","false"`,
-	}, "\n") + "\n"
+	}, textNewline) + textNewline
 	manifest, err := json.Marshal(map[string]any{
-		"sourceBucket": "b",
-		"fileFormat":   format,
-		"fileSchema":   inventorySchema,
-		"files": []map[string]any{
-			{"key": "inv/data/1.csv.gz"},
-			{"key": "inv/data/2.csv.gz"},
+		textSourcebucket: textB,
+		textFileformat:   format,
+		textFileschema:   inventorySchema,
+		textFiles: []map[string]any{
+			{textKey: textInvData1Csv},
+			{textKey: textInvData2Csv},
 		},
 	})
 	require.NoError(t, err)
@@ -103,22 +103,22 @@ func newInventoryFixture(t *testing.T, format string) inventoryFixture {
 	return inventoryFixture{
 		manifest: manifest,
 		files: map[string][]byte{
-			"inv/data/1.csv.gz": gzipped(t, first),
-			"inv/data/2.csv.gz": gzipped(t, second),
+			textInvData1Csv: gzipped(t, first),
+			textInvData2Csv: gzipped(t, second),
 		},
 		listed: []interfaces.StorageObject{
-			obj("docs/a.pdf", 10, "01", "e1"),
-			obj("docs/my report(2).pdf", 12, "02", "e2"),
-			obj("docs/c.pdf", 13, "03", "e3"),
-			obj("docs/d.pdf", 14, "04", "e4"),
-			obj("docs/e.pdf", 15, "05", "e5"),
+			obj("docs/a.pdf", size10, "01", "e1"),
+			obj("docs/my report(2).pdf", size12, "02", "e2"),
+			obj("docs/c.pdf", size13, "03", "e3"),
+			obj("docs/d.pdf", size14, "04", "e4"),
+			obj("docs/e.pdf", size15, "05", "e5"),
 		},
 	}
 }
 
 // serve makes sc answer Downloads from the fixture's report bucket, counting each key.
 func (f inventoryFixture) serve(sc *mocks.MockStorageClient, downloads map[string]int) {
-	sc.EXPECT().Download(gomock.Any(), "reports", gomock.Any()).
+	sc.EXPECT().Download(gomock.Any(), textReports, gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, key string) (io.ReadCloser, error) {
 			downloads[key]++
 			if key == inventoryManifestKey {
@@ -171,12 +171,12 @@ func TestS3Inventory_PagesMatchTheS3Kind(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	fixture := newInventoryFixture(t, "CSV")
+	fixture := newInventoryFixture(t, textCsv)
 	ctrl := gomock.NewController(t)
 	sc := mocks.NewMockStorageClient(ctrl)
 	downloads := map[string]int{}
 	fixture.serve(sc, downloads)
-	sc.EXPECT().ListObjectsPageToken(gomock.Any(), "b", "docs/", "", 1000).
+	sc.EXPECT().ListObjectsPageToken(gomock.Any(), textB, textDocs, "", 1000).
 		Return(fixture.listed, "", nil)
 
 	b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
@@ -185,17 +185,17 @@ func TestS3Inventory_PagesMatchTheS3Kind(t *testing.T) {
 	inventory, err := b.Build(ctx, inventoryCfg())
 	require.NoError(t, err)
 
-	listing, err := b.Build(ctx, s3Cfg("access_key"))
+	listing, err := b.Build(ctx, s3Cfg(textAccessKey))
 	require.NoError(t, err)
 
-	listed, _, err := listing.ListPage(ctx, "", 1000)
+	listed, _, err := listing.ListPage(ctx, "", limit1000)
 	require.NoError(t, err)
 
-	got := drain(t, inventory, "", 2)
+	got := drain(t, inventory, "", limit2)
 
 	require.Equal(t, listed, got)
 	require.Equal(t, map[string]int{
-		inventoryManifestKey: 1, "inv/data/1.csv.gz": 1, "inv/data/2.csv.gz": 1,
+		inventoryManifestKey: 1, textInvData1Csv: 1, textInvData2Csv: 1,
 	}, downloads)
 
 	n, err := inventory.TestConnection(ctx)
@@ -218,7 +218,7 @@ func TestS3Inventory_ResumesFromACheckpoint(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	fixture := newInventoryFixture(t, "CSV")
+	fixture := newInventoryFixture(t, textCsv)
 	newSource := func() *s3inventory.Source {
 		sc := mocks.NewMockStorageClient(gomock.NewController(t))
 		fixture.serve(sc, map[string]int{})
@@ -229,11 +229,11 @@ func TestS3Inventory_ResumesFromACheckpoint(t *testing.T) {
 		return src
 	}
 
-	first, token, err := newSource().ListPage(ctx, "", 2)
+	first, token, err := newSource().ListPage(ctx, "", limit2)
 	require.NoError(t, err)
 
-	rest := drain(t, newSource(), token, 2)
-	_, afterThree, err := newSource().ListPage(ctx, "", 3)
+	rest := drain(t, newSource(), token, limit2)
+	_, afterThree, err := newSource().ListPage(ctx, "", limit3)
 	require.NoError(t, err)
 
 	require.Equal(t, fixture.listed[:2], first)
@@ -262,7 +262,7 @@ func TestS3Inventory_RefusesUnusableReportsAndTokens(t *testing.T) {
 	ctx := context.Background()
 	source := func(manifest []byte, downloadErr error) *s3inventory.Source {
 		sc := mocks.NewMockStorageClient(gomock.NewController(t))
-		sc.EXPECT().Download(gomock.Any(), "reports", inventoryManifestKey).
+		sc.EXPECT().Download(gomock.Any(), textReports, inventoryManifestKey).
 			Return(io.NopCloser(bytes.NewReader(manifest)), downloadErr).AnyTimes()
 
 		src, err := s3inventory.NewSource(ctx, inventoryCfg(), nil, stubBuilder(sc, nil))
@@ -270,7 +270,7 @@ func TestS3Inventory_RefusesUnusableReportsAndTokens(t *testing.T) {
 
 		return src
 	}
-	otherBucket := newInventoryFixture(t, "CSV").manifest
+	otherBucket := newInventoryFixture(t, textCsv).manifest
 
 	otherBucket = bytes.Replace(
 		otherBucket,
@@ -287,26 +287,26 @@ func TestS3Inventory_RefusesUnusableReportsAndTokens(t *testing.T) {
 	_, _, parquetErr := source(
 		newInventoryFixture(t, "Parquet").manifest,
 		nil,
-	).ListPage(ctx, "", 2)
-	_, _, bucketErr := source(otherBucket, nil).ListPage(ctx, "", 2)
+	).ListPage(ctx, "", limit2)
+	_, _, bucketErr := source(otherBucket, nil).ListPage(ctx, "", limit2)
 	_, _, tokenErr := source(
-		newInventoryFixture(t, "CSV").manifest,
+		newInventoryFixture(t, textCsv).manifest,
 		nil,
-	).ListPage(ctx, "x:1", 2)
+	).ListPage(ctx, "x:1", limit2)
 	_, _, downErr := source(
 		nil,
 		apperr.Sentinel("dial tcp: connection refused"),
-	).ListPage(ctx, "", 2)
+	).ListPage(ctx, "", limit2)
 	without := func(column string) []byte {
-		return bytes.Replace(newInventoryFixture(t, "CSV").manifest,
+		return bytes.Replace(newInventoryFixture(t, textCsv).manifest,
 			[]byte(column+", "), nil, 1)
 	}
-	_, _, noETagErr := source(without("ETag"), nil).ListPage(ctx, "", 2)
-	_, _, noSizeErr := source(without("Size"), nil).ListPage(ctx, "", 2)
+	_, _, noETagErr := source(without("ETag"), nil).ListPage(ctx, "", limit2)
+	_, _, noSizeErr := source(without("Size"), nil).ListPage(ctx, "", limit2)
 
 	require.True(t, apperr.Is(buildErr, apperr.CodeInvalidInput))
 	require.True(t, apperr.Is(parquetErr, apperr.CodeInvalidInput))
-	require.ErrorContains(t, parquetErr, "CSV")
+	require.ErrorContains(t, parquetErr, textCsv)
 	require.True(t, apperr.Is(bucketErr, apperr.CodeInvalidInput))
 	require.True(t, apperr.Is(tokenErr, apperr.CodeInvalidInput))
 	require.True(t, apperr.Is(downErr, apperr.CodeUnavailable))
@@ -332,15 +332,15 @@ func TestConnectorKind_S3StaysTheDefault(t *testing.T) {
 
 	ctx := context.Background()
 	sc := mocks.NewMockStorageClient(gomock.NewController(t))
-	sc.EXPECT().ListObjectsPage(gomock.Any(), "b", "docs/", gomock.Any()).
-		Return([]interfaces.StorageObject{{Key: "docs/a"}}, nil)
+	sc.EXPECT().ListObjectsPage(gomock.Any(), textB, textDocs, gomock.Any()).
+		Return([]interfaces.StorageObject{{Key: textDocsA}}, nil)
 	sc.EXPECT().Download(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 	b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
 		BuildS3Client: stubBuilder(sc, nil),
 	})
 
-	src, err := b.Build(ctx, s3Cfg("access_key"))
+	src, err := b.Build(ctx, s3Cfg(textAccessKey))
 	require.NoError(t, err)
 
 	n, err := src.TestConnection(ctx)
@@ -379,18 +379,19 @@ func TestS3Inventory_RetriesADeadBodyOnce(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	rows := `"b","docs/1","1","2026-11-01T10:00:00.000Z","e1","true","false"` + "\n" +
-		`"b","docs/2","2","2026-11-01T10:00:00.000Z","e2","true","false"` + "\n"
-	full := rows + `"b","docs/3","3","2026-11-01T10:00:00.000Z","e3","true","false"` + "\n"
+	rows := `"b","docs/1","1","2026-11-01T10:00:00.000Z","e1","true","false"` + textNewline +
+		`"b","docs/2","2","2026-11-01T10:00:00.000Z","e2","true","false"` + textNewline
+	full := rows + `"b","docs/3","3","2026-11-01T10:00:00.000Z","e3","true","false"` +
+		textNewline
 	manifest, err := json.Marshal(map[string]any{
-		"sourceBucket": "b", "fileFormat": "CSV", "fileSchema": inventorySchema,
-		"files": []map[string]any{{"key": "inv/data/plain.csv"}},
+		textSourcebucket: textB, textFileformat: textCsv, textFileschema: inventorySchema,
+		textFiles: []map[string]any{{textKey: "inv/data/plain.csv"}},
 	})
 	require.NoError(t, err)
 
 	downloads := 0
 	sc := mocks.NewMockStorageClient(gomock.NewController(t))
-	sc.EXPECT().Download(gomock.Any(), "reports", gomock.Any()).
+	sc.EXPECT().Download(gomock.Any(), textReports, gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, key string) (io.ReadCloser, error) {
 			if key == inventoryManifestKey {
 				return io.NopCloser(bytes.NewReader(manifest)), nil
@@ -412,13 +413,13 @@ func TestS3Inventory_RetriesADeadBodyOnce(t *testing.T) {
 	first, token, err := src.ListPage(ctx, "", 1)
 	require.NoError(t, err)
 
-	second, next, err := src.ListPage(ctx, token, 2)
+	second, next, err := src.ListPage(ctx, token, limit2)
 	require.NoError(t, err)
 
 	require.Equal(t, "docs/1", first[0].Key)
 	require.Equal(t, []string{"docs/2", "docs/3"}, []string{second[0].Key, second[1].Key})
 	require.Empty(t, next)
-	require.Equal(t, 2, downloads)
+	require.Equal(t, wantDownloads2, downloads)
 }
 
 // TestS3Inventory_RefusesMalformedDataFiles tests that a report the source cannot read
@@ -434,19 +435,19 @@ func TestS3Inventory_RetriesADeadBodyOnce(t *testing.T) {
 func TestS3Inventory_RefusesMalformedDataFiles(t *testing.T) {
 	t.Parallel()
 
-	good := `"b","docs/1","1","2026-11-01T10:00:00.000Z","e1","true","false"` + "\n"
+	good := `"b","docs/1","1","2026-11-01T10:00:00.000Z","e1","true","false"` + textNewline
 	cases := []struct {
 		name, schema, data, token string
 	}{
-		{"unbalanced quote", inventorySchema, `"b","docs/1` + "\n", ""},
+		{"unbalanced quote", inventorySchema, `"b","docs/1` + textNewline, ""},
 		{
 			"non-numeric size",
 			inventorySchema,
-			`"b","docs/1","ten","","","true","false"` + "\n",
+			`"b","docs/1","ten","","","true","false"` + textNewline,
 			"",
 		},
 		{"token past the end", inventorySchema, good, "0:5"},
-		{"no key column", "Bucket, Size", `"b","1"` + "\n", ""},
+		{"no key column", "Bucket, Size", `"b","1"` + textNewline, ""},
 	}
 
 	for _, tc := range cases {
@@ -471,13 +472,13 @@ func testS3InventoryRefusesMalformedDataFilesCase(t *testing.T, tc struct {
 
 	ctx := context.Background()
 	manifest, err := json.Marshal(map[string]any{
-		"sourceBucket": "b", "fileFormat": "CSV", "fileSchema": tc.schema,
-		"files": []map[string]any{{"key": "inv/data/plain.csv"}},
+		textSourcebucket: textB, textFileformat: textCsv, textFileschema: tc.schema,
+		textFiles: []map[string]any{{textKey: "inv/data/plain.csv"}},
 	})
 	require.NoError(t, err)
 
 	sc := mocks.NewMockStorageClient(gomock.NewController(t))
-	sc.EXPECT().Download(gomock.Any(), "reports", gomock.Any()).
+	sc.EXPECT().Download(gomock.Any(), textReports, gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, key string) (io.ReadCloser, error) {
 			if key == inventoryManifestKey {
 				return io.NopCloser(bytes.NewReader(manifest)), nil
@@ -495,7 +496,7 @@ func testS3InventoryRefusesMalformedDataFilesCase(t *testing.T, tc struct {
 	)
 	require.NoError(t, err)
 
-	_, _, err = src.ListPage(ctx, tc.token, 10)
+	_, _, err = src.ListPage(ctx, tc.token, limit10)
 
-	require.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+	require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 }

@@ -98,7 +98,11 @@ func Filename(field, v string, maxBytes int) error {
 }
 
 // isControlRune reports an ASCII control character.
-func isControlRune(r rune) bool { return r < 0x20 || r == 0x7f }
+func isControlRune(
+	r rune,
+) bool {
+	return r < isControlRuneResult0x20 || r == isControlRuneResult0x7f
+}
 
 // HTTPSURL checks that v parses as an http/https URL WITH a host (reuses net/url) —
 // rejecting the javascript:, data:, file: URIs a bare URI check admits, and the

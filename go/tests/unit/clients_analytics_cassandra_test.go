@@ -30,7 +30,7 @@ func day(
 	month time.Month,
 	d int,
 ) time.Time {
-	return time.Date(2026, month, d, 0, 0, 0, 0, time.UTC)
+	return time.Date(year2026, month, d, 0, 0, 0, 0, time.UTC)
 }
 
 // newCassandraStore builds the store over a mock session with the genai_calls cube
@@ -42,7 +42,9 @@ func newCassandraStore(
 	t.Helper()
 
 	store, err := analyticscassandra.New(session, analyticscassandra.Config{
-		Cubes: map[string][]types.Grain{"genai_calls": {types.GrainHour, types.GrainDay}},
+		Cubes: map[string][]types.Grain{
+			textGenaiCalls: {types.GrainHour, types.GrainDay},
+		},
 		BucketWidth: map[types.Grain]types.Grain{
 			types.GrainHour: types.GrainDay, types.GrainDay: types.GrainMonth,
 		},
@@ -69,7 +71,7 @@ func expectPage(
 	iter := mocks.NewMockCQLIter(ctrl)
 
 	session.EXPECT().
-		Query(gomock.Any(), "org-1", "genai_calls", bucket, lo, hi).
+		Query(gomock.Any(), textOrg1, textGenaiCalls, bucket, lo, hi).
 		Return(query)
 	query.EXPECT().WithContext(gomock.Any()).Return(query)
 	query.EXPECT().PageSize(100).Return(query)
@@ -126,7 +128,7 @@ func TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
-	from, to := day(time.September, 15), day(time.November, 2)
+	from, to := day(time.September, dayArg15), day(time.November, dayArg2)
 
 	for _, b := range []time.Time{
 		day(time.September, 1), day(time.October, 1), day(time.November, 1),
@@ -134,9 +136,9 @@ func TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder(t *testing.T) {
 		expectPage(t, ctrl, session, b, from, to, []storedRow{
 			{
 				ts:   b.AddDate(0, 0, 1),
-				dims: map[string]string{"team": b.Month().String(), "model": "m"},
+				dims: map[string]string{textTeam: b.Month().String(), textModel: "m"},
 				partials: map[string][]byte{
-					"tokens_in":  encoded(t, 1),
+					textTokensIn: encoded(t, 1),
 					"duration_s": encoded(t, 2),
 				},
 			},
@@ -144,11 +146,11 @@ func TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder(t *testing.T) {
 	}
 
 	stream, err := store.Aggregate(context.Background(), types.AggregateQuery{
-		Cube:      "genai_calls",
-		OrgID:     "org-1",
+		Cube:      textGenaiCalls,
+		OrgID:     textOrg1,
 		Grain:     types.GrainDay,
-		GroupBy:   []string{"team"},
-		Measures:  []types.MeasureRef{{Name: "tokens_in", Agg: types.AggSum}},
+		GroupBy:   []string{textTeam},
+		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
 		TimeRange: types.TimeRange{From: from, To: to},
 	})
 	require.NoError(t, err)
@@ -165,8 +167,8 @@ func TestCassandraStore_ReadsEveryBucketOfTheRangeInOrder(t *testing.T) {
 		require.NoError(t, err)
 
 		for _, r := range rows {
-			teams = append(teams, r.Group["team"])
-			assert.Equal(t, map[string]string{"team": r.Group["team"]}, r.Group)
+			teams = append(teams, r.Group[textTeam])
+			assert.Equal(t, map[string]string{textTeam: r.Group[textTeam]}, r.Group)
 			assert.Len(t, r.Partials, 1)
 		}
 
@@ -198,7 +200,7 @@ func TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
-	m := listquery.NewMap().Add(listquery.Time("ts").AsTime(), listquery.String("team"))
+	m := listquery.NewMap().Add(listquery.Time("ts").AsTime(), listquery.String(textTeam))
 	filter, err := listquery.Parse(
 		m,
 		`{"$and":[{"$gte":{"ts":"2026-10-05T00:00:00Z"}},{"$eq":{"team":"t-1"}}]}`,
@@ -209,29 +211,29 @@ func TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual(t *testing.T) {
 		ctrl,
 		session,
 		day(time.October, 1),
-		day(time.October, 5),
+		day(time.October, dayArg5),
 		day(time.November, 1),
 		[]storedRow{
 			{
 				ts:       day(time.October, 6),
-				dims:     map[string]string{"team": "t-1"},
-				partials: map[string][]byte{"tokens_in": encoded(t, 5)},
+				dims:     map[string]string{textTeam: textT1},
+				partials: map[string][]byte{textTokensIn: encoded(t, 5)},
 			},
 			{
 				ts:       day(time.October, 7),
-				dims:     map[string]string{"team": "t-2"},
-				partials: map[string][]byte{"tokens_in": encoded(t, 9)},
+				dims:     map[string]string{textTeam: "t-2"},
+				partials: map[string][]byte{textTokensIn: encoded(t, 9)},
 			},
 		},
 	)
 
 	stream, err := store.Aggregate(context.Background(), types.AggregateQuery{
-		Cube:      "genai_calls",
-		OrgID:     "org-1",
+		Cube:      textGenaiCalls,
+		OrgID:     textOrg1,
 		Grain:     types.GrainDay,
-		GroupBy:   []string{"team"},
+		GroupBy:   []string{textTeam},
 		Filter:    filter,
-		Measures:  []types.MeasureRef{{Name: "tokens_in", Agg: types.AggSum}},
+		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
 		TimeRange: types.TimeRange{From: day(time.October, 1), To: day(time.November, 1)},
 	})
 	require.NoError(t, err)
@@ -242,8 +244,8 @@ func TestCassandraStore_PushdownNarrowsRangeAndFiltersResidual(t *testing.T) {
 
 	assert.False(t, more)
 	require.Len(t, rows, 1)
-	assert.Equal(t, map[string]string{"team": "t-1"}, rows[0].Group)
-	assert.Equal(t, day(time.October, 6), rows[0].TS)
+	assert.Equal(t, map[string]string{textTeam: textT1}, rows[0].Group)
+	assert.Equal(t, day(time.October, dayArg6), rows[0].TS)
 }
 
 // TestCassandraStore_ReadsTheWindowsPartialFirstBucket tests a window that starts
@@ -265,19 +267,19 @@ func TestCassandraStore_ReadsTheWindowsPartialFirstBucket(t *testing.T) {
 	store := newCassandraStore(t, session)
 	from := day(time.October, 9).Add(2*time.Hour + 54*time.Minute)
 	to := from.Add(24 * time.Hour)
-	expectPage(t, ctrl, session, day(time.October, 1), day(time.October, 9), to,
+	expectPage(t, ctrl, session, day(time.October, 1), day(time.October, dayArg9), to,
 		[]storedRow{{
 			ts:       day(time.October, 9),
-			dims:     map[string]string{"team": "t-1"},
-			partials: map[string][]byte{"tokens_in": encoded(t, 3)},
+			dims:     map[string]string{textTeam: textT1},
+			partials: map[string][]byte{textTokensIn: encoded(t, 3)},
 		}})
 
 	stream, err := store.Aggregate(context.Background(), types.AggregateQuery{
-		Cube:      "genai_calls",
-		OrgID:     "org-1",
+		Cube:      textGenaiCalls,
+		OrgID:     textOrg1,
 		Grain:     types.GrainDay,
-		GroupBy:   []string{"team"},
-		Measures:  []types.MeasureRef{{Name: "tokens_in", Agg: types.AggSum}},
+		GroupBy:   []string{textTeam},
+		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
 		TimeRange: types.TimeRange{From: from, To: to},
 	})
 	require.NoError(t, err)
@@ -288,7 +290,7 @@ func TestCassandraStore_ReadsTheWindowsPartialFirstBucket(t *testing.T) {
 
 	assert.False(t, more)
 	require.Len(t, rows, 1)
-	assert.Equal(t, day(time.October, 9), rows[0].TS)
+	assert.Equal(t, day(time.October, dayArg9), rows[0].TS)
 }
 
 // TestCassandraStore_WriteUpsertsOnePartialRowPerGrain tests the idempotent write
@@ -308,24 +310,25 @@ func TestCassandraStore_WriteUpsertsOnePartialRowPerGrain(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
-	at := time.Date(2026, 10, 9, 12, 34, 56, 0, time.UTC)
-	dims := map[string]string{"team": "t-1", "model": "m"}
+	at := time.Date(year2026, month10, day9, hour12, min34, sec56, 0, time.UTC)
+	dims := map[string]string{textTeam: textT1, textModel: "m"}
 	insert := "INSERT INTO %s (org_id, cube, bucket, ts, dims_key, idempotency_key, " +
 		"dims, partials) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
 
-	for table, keys := range map[string][2]time.Time{
+	for table, keys := range map[string][iterations2]time.Time{
 		"genai_calls_hour": {
-			day(time.October, 9), time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC),
+			day(time.October, dayArg9), time.Date(year2026, month10, day9, hour12, 0, 0, 0,
+				time.UTC),
 		},
-		"genai_calls_day": {day(time.October, 1), day(time.October, 9)},
+		textGenaiCallsDay: {day(time.October, 1), day(time.October, dayArg9)},
 	} {
 		query := mocks.NewMockCQLQuery(ctrl)
 
 		session.EXPECT().
 			Query(
 				fmt.Sprintf(insert, table),
-				"org-1",
-				"genai_calls",
+				textOrg1,
+				textGenaiCalls,
 				keys[0],
 				keys[1],
 				"model=m&team=t-1",
@@ -335,7 +338,7 @@ func TestCassandraStore_WriteUpsertsOnePartialRowPerGrain(t *testing.T) {
 			).
 			DoAndReturn(func(_ string, values ...any) *mocks.MockCQLQuery {
 				p, err := chartspec.DecodePartial(
-					asType[map[string][]byte](t, values[7])["tokens_in"],
+					asType[map[string][]byte](t, values[7])[textTokensIn],
 				)
 				require.NoError(t, err)
 				assert.InDelta(t, 42.0, chartspec.Finalize(p, types.AggSum), 0)
@@ -349,11 +352,11 @@ func TestCassandraStore_WriteUpsertsOnePartialRowPerGrain(t *testing.T) {
 
 	err := store.Write(context.Background(), []types.Fact{
 		{
-			Cube:           "genai_calls",
-			OrgID:          "org-1",
+			Cube:           textGenaiCalls,
+			OrgID:          textOrg1,
 			TS:             at,
 			Dims:           dims,
-			Measures:       map[string]float64{"tokens_in": 42},
+			Measures:       map[string]float64{textTokensIn: 42},
 			IdempotencyKey: "k-1",
 		},
 	})
@@ -377,26 +380,32 @@ func TestCassandraStore_RejectsInvalidQueriesAndFacts(t *testing.T) {
 
 	store := newCassandraStore(t, mocks.NewMockCQLSession(gomock.NewController(t)))
 	ctx := context.Background()
-	rng := types.TimeRange{From: day(time.October, 1), To: day(time.October, 2)}
+	rng := types.TimeRange{From: day(time.October, 1), To: day(time.October, dayArg2)}
 
 	for name, q := range map[string]types.AggregateQuery{
-		"cube":  {Cube: "other", OrgID: "o", TimeRange: rng},
-		"grain": {Cube: "genai_calls", OrgID: "o", Grain: types.GrainMinute, TimeRange: rng},
-		"org":   {Cube: "genai_calls", TimeRange: rng},
-		"range": {Cube: "genai_calls", OrgID: "o", TimeRange: types.TimeRange{From: rng.From}},
+		"cube": {Cube: textOther, OrgID: textO, TimeRange: rng},
+		textGrain: {
+			Cube: textGenaiCalls, OrgID: textO, Grain: types.GrainMinute,
+			TimeRange: rng,
+		},
+		"org": {Cube: textGenaiCalls, TimeRange: rng},
+		"range": {
+			Cube: textGenaiCalls, OrgID: textO,
+			TimeRange: types.TimeRange{From: rng.From},
+		},
 	} {
 		_, err := store.Aggregate(ctx, q)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 	}
 
 	for name, f := range map[string]types.Fact{
-		"cube": {Cube: "other", OrgID: "o", IdempotencyKey: "k"},
-		"org":  {Cube: "genai_calls", IdempotencyKey: "k"},
-		"key":  {Cube: "genai_calls", OrgID: "o"},
+		"cube":  {Cube: textOther, OrgID: textO, IdempotencyKey: textK},
+		"org":   {Cube: textGenaiCalls, IdempotencyKey: textK},
+		textKey: {Cube: textGenaiCalls, OrgID: textO},
 		"schema": {
-			Cube:           "genai_calls",
-			OrgID:          "o",
-			IdempotencyKey: "k",
+			Cube:           textGenaiCalls,
+			OrgID:          textO,
+			IdempotencyKey: textK,
 			Schema:         types.FactSchemaVersion + 1,
 		},
 	} {
@@ -409,12 +418,12 @@ func TestCassandraStore_RejectsInvalidQueriesAndFacts(t *testing.T) {
 	}
 
 	for name, cfg := range map[string]analyticscassandra.Config{
-		"grain": {
-			Cubes:       map[string][]types.Grain{"genai_calls": {"fortnight"}},
+		textGrain: {
+			Cubes:       map[string][]types.Grain{textGenaiCalls: {"fortnight"}},
 			BucketWidth: map[types.Grain]types.Grain{"fortnight": types.GrainMonth},
 		},
 		"bucket width": {
-			Cubes:       map[string][]types.Grain{"genai_calls": {types.GrainDay}},
+			Cubes:       map[string][]types.Grain{textGenaiCalls: {types.GrainDay}},
 			BucketWidth: map[types.Grain]types.Grain{types.GrainDay: "quarter"},
 		},
 	} {
@@ -443,12 +452,12 @@ func TestCassandraStore_PageErrorIsTerminal(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
-	from, to := day(time.September, 15), day(time.October, 15)
+	from, to := day(time.September, dayArg15), day(time.October, dayArg15)
 	query := mocks.NewMockCQLQuery(ctrl)
 	iter := mocks.NewMockCQLIter(ctrl)
 
 	session.EXPECT().
-		Query(gomock.Any(), "org-1", "genai_calls", day(time.September, 1), from, to).
+		Query(gomock.Any(), textOrg1, textGenaiCalls, day(time.September, 1), from, to).
 		Return(query)
 	query.EXPECT().WithContext(gomock.Any()).Return(query)
 	query.EXPECT().PageSize(100).Return(query)
@@ -459,20 +468,20 @@ func TestCassandraStore_PageErrorIsTerminal(t *testing.T) {
 	iter.EXPECT().PageState().Return(nil)
 	iter.EXPECT().Close().Return(apperr.New(apperr.CodeUnavailable, "read timed out"))
 	expectPage(t, ctrl, session, day(time.October, 1), from, to, []storedRow{{
-		ts: day(time.October, 2), dims: map[string]string{"team": "t-1"},
-		partials: map[string][]byte{"tokens_in": encoded(t, 1)},
+		ts: day(time.October, 2), dims: map[string]string{textTeam: textT1},
+		partials: map[string][]byte{textTokensIn: encoded(t, 1)},
 	}})
 
 	stream, err := store.Aggregate(context.Background(), types.AggregateQuery{
-		Cube: "genai_calls", OrgID: "org-1", Grain: types.GrainDay,
-		Measures:  []types.MeasureRef{{Name: "tokens_in", Agg: types.AggSum}},
+		Cube: textGenaiCalls, OrgID: textOrg1, Grain: types.GrainDay,
+		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
 		TimeRange: types.TimeRange{From: from, To: to},
 	})
 	require.NoError(t, err)
 
 	defer func() { require.NoError(t, stream.Close()) }()
 
-	for range 2 {
+	for range iterations2 {
 		rows, more, err := stream.Next(context.Background())
 		assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 		assert.Nil(t, rows)
@@ -496,15 +505,15 @@ func TestCassandraStore_ResumeTokenIsBoundToItsQuery(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
 	store := newCassandraStore(t, session)
-	from, to := day(time.September, 15), day(time.October, 15)
+	from, to := day(time.September, dayArg15), day(time.October, dayArg15)
 
 	for _, b := range []time.Time{day(time.September, 1), day(time.October, 1)} {
 		expectPage(t, ctrl, session, b, from, to, nil)
 	}
 
 	q := types.AggregateQuery{
-		Cube: "genai_calls", OrgID: "org-1", Grain: types.GrainDay,
-		Measures:  []types.MeasureRef{{Name: "tokens_in", Agg: types.AggSum}},
+		Cube: textGenaiCalls, OrgID: textOrg1, Grain: types.GrainDay,
+		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
 		TimeRange: types.TimeRange{From: from, To: to},
 	}
 	stream, err := store.Aggregate(context.Background(), q)
@@ -533,7 +542,7 @@ func newTTLStore(
 	t.Helper()
 
 	store, err := analyticscassandra.New(session, analyticscassandra.Config{
-		Cubes:       map[string][]types.Grain{"genai_calls": {types.GrainHour}},
+		Cubes:       map[string][]types.Grain{textGenaiCalls: {types.GrainHour}},
 		BucketWidth: map[types.Grain]types.Grain{types.GrainHour: types.GrainDay},
 		TTL:         map[types.Grain]time.Duration{types.GrainHour: ttl},
 		PageSize:    100,
@@ -559,7 +568,7 @@ func newTTLStore(
 func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 	t.Parallel()
 
-	ttl := 10 * 24 * time.Hour
+	ttl := hours10 * hours1024 * time.Hour
 	today := time.Now().UTC().Truncate(24 * time.Hour)
 
 	t.Run("within retention", func(t *testing.T) {
@@ -580,7 +589,7 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 				t,
 				session,
 				ttl,
-			).Compact(context.Background(), "genai_calls", types.GrainHour, "org-1", bucket),
+			).Compact(context.Background(), textGenaiCalls, types.GrainHour, textOrg1, bucket),
 		)
 	})
 }
@@ -624,9 +633,9 @@ func testCassandraStoreCompactionKeepsTheBucketsRetentionRest5(
 	batch := mocks.NewMockCQLBatch(ctrl)
 	bucket := today.AddDate(0, 0, -2)
 	ts := bucket.Add(9 * time.Hour)
-	dims := map[string]string{"team": "t-1"}
+	dims := map[string]string{textTeam: textT1}
 
-	session.EXPECT().Query(gomock.Any(), "org-1", "genai_calls", bucket).Return(query)
+	session.EXPECT().Query(gomock.Any(), textOrg1, textGenaiCalls, bucket).Return(query)
 	query.EXPECT().WithContext(gomock.Any()).Return(query)
 	query.EXPECT().PageSize(100).Return(query)
 	query.EXPECT().PageState(gomock.Nil()).Return(query)
@@ -648,12 +657,12 @@ func testCassandraStoreCompactionKeepsTheBucketsRetentionRest5(
 			*asType[*string](t, dest[2]) = "k-1"
 			*asType[*map[string]string](t, dest[3]) = dims
 			*asType[*map[string][]byte](t, dest[4]) = map[string][]byte{
-				"tokens_in": encoded(t, 7),
+				textTokensIn: encoded(t, 7),
 			}
 
 			return true
 		}).
-		Times(2)
+		Times(timesArg2)
 
 	testCassandraStoreCompactionKeepsTheBucketsRetentionRest6(
 		t,
@@ -690,7 +699,7 @@ func testCassandraStoreCompactionKeepsTheBucketsRetentionRest6(
 	batch.EXPECT().Query(
 		"INSERT INTO genai_calls_hour (org_id, cube, bucket, ts, dims_key, "+
 			"idempotency_key, dims, partials) VALUES (?, ?, ?, ?, ?, '', ?, ?) USING TTL ?",
-		"org-1", "genai_calls", bucket, ts, "team=t-1", dims, gomock.Any(), gomock.Any(),
+		textOrg1, textGenaiCalls, bucket, ts, "team=t-1", dims, gomock.Any(), gomock.Any(),
 	).
 		Do(func(_ string, values ...any) {
 			got := asType[int](t, values[7])
@@ -722,7 +731,7 @@ func testCassandraStoreCompactionKeepsTheBucketsRetentionRest(
 	batch.EXPECT().Query(
 		"DELETE FROM genai_calls_hour WHERE org_id = ? AND cube = ? AND bucket = ? AND ts "+
 			"= ? AND dims_key = ? AND idempotency_key = ?",
-		"org-1", "genai_calls", bucket, ts, "team=t-1", "k-1",
+		textOrg1, textGenaiCalls, bucket, ts, "team=t-1", "k-1",
 	)
 	session.EXPECT().ExecuteBatch(batch).Return(nil)
 
@@ -732,7 +741,7 @@ func testCassandraStoreCompactionKeepsTheBucketsRetentionRest(
 			t,
 			session,
 			ttl,
-		).Compact(context.Background(), "genai_calls", types.GrainHour, "org-1", bucket),
+		).Compact(context.Background(), textGenaiCalls, types.GrainHour, textOrg1, bucket),
 	)
 }
 

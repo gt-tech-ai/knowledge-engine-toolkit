@@ -27,8 +27,8 @@ func TestTracerBuilder_UnknownKindReturnsError(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	_, err := tracer.New(ctx, tracer.Kind(999))
-	require.Error(t, err, "expected error for unknown kind")
+	_, err := tracer.New(ctx, tracer.Kind(kindArg999))
+	require.Error(t, err, textExpectedErrorForUnknown)
 }
 
 // TestTracerBuilder_DefaultConfig tests that the default tracer config
@@ -45,9 +45,9 @@ func TestTracerBuilder_UnknownKindReturnsError(t *testing.T) {
 func TestTracerBuilder_DefaultConfig(t *testing.T) {
 	t.Parallel()
 
-	cfg := tracer.DefaultConfig("test-service")
+	cfg := tracer.DefaultConfig(textTestService)
 	assert.Equal(t, tracer.KindOTel, cfg.Kind, "default kind should be KindOTel")
-	assert.Equal(t, "test-service", cfg.ServiceName)
+	assert.Equal(t, textTestService, cfg.ServiceName)
 	assert.NotEmpty(t, cfg.Endpoint, "default endpoint must be non-empty")
 }
 
@@ -149,9 +149,9 @@ func TestTracerBuilder_NoopStartReturnsSpan(t *testing.T) {
 	require.NotNil(t, span, "Start must return non-nil span")
 
 	// All Span methods must be safe to call on the noop span.
-	span.SetAttribute("key", "value")
-	span.RecordError(apperr.Sentinel("test"))
-	span.SetStatus(interfaces.SpanStatusOK, "ok")
+	span.SetAttribute(textKey, textValue)
+	span.RecordError(apperr.Sentinel(textTest))
+	span.SetStatus(interfaces.SpanStatusOK, textOk)
 	span.End()
 }
 
@@ -193,7 +193,7 @@ func TestTracerBuilder_KindString(t *testing.T) {
 	}{
 		{"otel", tracer.KindOTel},
 		{"noop", tracer.KindNoop},
-		{"Kind(99)", tracer.Kind(99)},
+		{textKind99, tracer.Kind(kindArg99)},
 	}
 
 	for _, tt := range tests {

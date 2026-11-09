@@ -22,10 +22,10 @@ func TestNopObserver_AllEventsAreInert(t *testing.T) {
 
 	var o engine.NopObserver
 
-	o.OnGateStart("gate", []string{"phase"})
-	o.OnPhaseStart("phase", []string{"step"})
-	o.OnStepStart("phase", "step")
+	o.OnGateStart(textGate, []string{textPhase})
+	o.OnPhaseStart(textPhase, []string{"step"})
+	o.OnStepStart(textPhase, "step")
 	o.OnStepComplete(types.StepResult{})
-	o.OnPhaseComplete("phase", types.StepResults{}, time.Second)
-	o.OnGateComplete("gate", types.StepResults{}, time.Second)
+	o.OnPhaseComplete(textPhase, types.StepResults{}, time.Second)
+	o.OnGateComplete(textGate, types.StepResults{}, time.Second)
 }

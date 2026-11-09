@@ -38,9 +38,9 @@ func TestCacheFactory_DefaultsToAMissingStubAndBuildsRedisOffline(t *testing.T) 
 
 	stub, err := cache.NewFromConfig(ctx, cfg, cache.Deps{})
 	require.NoError(t, err)
-	stub.Set(ctx, "k", []byte("v"), 0)
+	stub.Set(ctx, textK, []byte(textV), 0)
 
-	_, hit := stub.Get(ctx, "k")
+	_, hit := stub.Get(ctx, textK)
 	assert.False(t, hit)
 
 	cfg.Kind = cache.KindRedis

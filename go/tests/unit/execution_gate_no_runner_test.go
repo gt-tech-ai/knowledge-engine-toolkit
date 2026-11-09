@@ -38,11 +38,11 @@ func TestGateRunLocal_RunsLocalJobs(t *testing.T) {
 	}
 	g := gate.New("Seed").
 		Serial(
-			"Phase",
-			job.Base{}.Local("a", "Phase", local("a")),
-			job.Base{}.Local("b", "Phase", local("b")),
+			textPhase2,
+			job.Base{}.Local(textA, textPhase2, local(textA)),
+			job.Base{}.Local(textB, textPhase2, local(textB)),
 		)
 
 	require.NoError(t, g.RunLocal(context.Background()))
-	assert.Equal(t, []string{"a", "b"}, ran)
+	assert.Equal(t, []string{textA, textB}, ran)
 }

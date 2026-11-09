@@ -54,9 +54,9 @@ type documentsReads interface {
 func TestStoreBase_UsesTheTransactionsClientWhenOneIsBound(t *testing.T) {
 	t.Parallel()
 
-	raw, tx := &storeClient{name: "raw"}, &storeClient{name: "tx"}
+	raw, tx := &storeClient{name: textRaw}, &storeClient{name: "tx"}
 	base := fixtures.Must(
-		store.NewBase[documentsStore](fixtures.Decorations(), "documents", raw),
+		store.NewBase[documentsStore](fixtures.Decorations(), textDocuments, raw),
 	)
 
 	assert.Same(t, raw, base.Client(t.Context()))
@@ -98,22 +98,22 @@ func TestStoreBaseWrite_RunsOnlyInsideATransaction(t *testing.T) {
 	t.Parallel()
 
 	base := fixtures.Must(store.NewBase[documentsStore](
-		fixtures.Decorations(), "documents", &storeClient{name: "raw"},
+		fixtures.Decorations(), textDocuments, &storeClient{name: textRaw},
 	))
 	write := func(context.Context) (int, error) { return 1, nil }
 
-	got, err := base.Write(interfaces.WithInTx(t.Context()), "create", write)
+	got, err := base.Write(interfaces.WithInTx(t.Context()), textCreate, write)
 	require.NoError(t, err)
 	assert.Equal(t, 1, got)
 
-	_, err = base.Write(t.Context(), "create", func(context.Context) (int, error) {
+	_, err = base.Write(t.Context(), textCreate, func(context.Context) (int, error) {
 		t.Error("a write outside a transaction must not run")
 
 		return 0, nil
 	})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
-	got, err = base.Exec(t.Context(), "get", write)
+	got, err = base.Exec(t.Context(), textGet, write)
 	require.NoError(t, err)
 	assert.Equal(t, 1, got)
 }
@@ -132,7 +132,7 @@ func TestStoreBaseWrite_RunsOnlyInsideATransaction(t *testing.T) {
 //     on, a Base's CRUD role and its Exec each count their operation once.
 func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, decorate.Tier{Name: "store", Order: []decorate.Layer{
+	assert.Equal(t, decorate.Tier{Name: textStore, Order: []decorate.Layer{
 		decorate.LayerTracing,
 		decorate.LayerMetrics,
 		decorate.LayerLogging,
@@ -145,7 +145,7 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 	}
 	defaults := decoration.DefaultConfig()
 	unobserved, err := decorate.NewDecorations(&defaults, collab).
-		Deps(store.Tier(), "documents")
+		Deps(store.Tier(), textDocuments)
 	require.NoError(t, err)
 	assert.Nil(t, unobserved.Metrics)
 
@@ -157,8 +157,8 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 	decs := decorate.NewDecorations(&cfg, collab)
 	docs, err := store.NewEntity[documentsReads](
 		decs,
-		"documents",
-		&storeClient{name: "raw"},
+		textDocuments,
+		&storeClient{name: textRaw},
 		store.Funcs[*storeClient, reposEnt, reposEntParams, string]{
 			Get: func(_ context.Context, _ *storeClient, id string) (*reposEnt, error) {
 				return &reposEnt{ID: id}, nil
@@ -167,9 +167,9 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	got, err := docs.Get(t.Context(), "a")
+	got, err := docs.Get(t.Context(), textA)
 	require.NoError(t, err)
-	assert.Equal(t, "a", got.ID)
+	assert.Equal(t, textA, got.ID)
 
 	n, err := docs.Exec(
 		t.Context(),
@@ -179,8 +179,8 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, 3, n)
+	assert.Equal(t, equalArg3, n)
 
-	assert.InDelta(t, 1, storeOpCounter(t, reg, "get"), 0)
+	assert.InDelta(t, 1, storeOpCounter(t, reg, textGet), 0)
 	assert.InDelta(t, 1, storeOpCounter(t, reg, "count_by_workspace"), 0)
 }

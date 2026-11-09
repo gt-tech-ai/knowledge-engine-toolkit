@@ -76,5 +76,5 @@ func TestBulkheadKind_String(t *testing.T) {
 
 	assert.Equal(t, "channel", bulkhead.KindChannel.String())
 	assert.Equal(t, "adaptive", bulkhead.KindAdaptive.String())
-	assert.Equal(t, "Kind(99)", bulkhead.Kind(99).String())
+	assert.Equal(t, textKind99, bulkhead.Kind(99).String())
 }

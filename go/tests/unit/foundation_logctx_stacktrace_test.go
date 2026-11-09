@@ -65,7 +65,7 @@ func TestStacktraceHandler_SkipsLoggingPlumbing(t *testing.T) {
 	ch := &stackCaptureHandler{}
 	h := logctx.NewStacktraceHandler(ch, slog.LevelError)
 
-	rec := slog.NewRecord(time.Now(), slog.LevelError, "boom", 0)
+	rec := slog.NewRecord(time.Now(), slog.LevelError, textBoom, 0)
 	require.NoError(t, h.Handle(context.Background(), rec))
 
 	stack, ok := stackAttrValue(ch.rec)
@@ -113,7 +113,7 @@ func TestStacktraceHandler_PrefersOriginStack(t *testing.T) {
 		"origin query failed",
 	)
 	rec := slog.NewRecord(time.Now(), slog.LevelError, "query failed", 0)
-	rec.Add("error", err)
+	rec.Add(textError, err)
 
 	require.NoError(t, h.Handle(context.Background(), rec))
 

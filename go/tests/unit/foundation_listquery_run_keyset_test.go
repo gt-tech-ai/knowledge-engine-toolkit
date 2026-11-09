@@ -45,24 +45,24 @@ func keysetReader(rows []int, sort []types.OrderField) listquery.Reader[int, int
 		ToDomain:   func(i int) (int, error) { return i, nil },
 		Resolve:    listquery.IdentityColumn,
 		Sort:       sort,
-		Tiebreaker: "created_at",
-		Bounds:     listquery.Bounds{DefaultSize: 2},
+		Tiebreaker: textCreatedAt,
+		Bounds:     listquery.Bounds{DefaultSize: defaultSize2},
 		MapErr:     func(err error) error { return err },
 		Keyset: &listquery.Keyset[int]{
 			RowValue: func(row int, col string) (any, bool) {
 				switch col {
-				case "created_at":
+				case textCreatedAt:
 					return keysetStubTime(), true
-				case "id":
+				case textID:
 					return strconv.Itoa(row), true
-				case "name":
-					return "n" + strconv.Itoa(row), true
+				case textName:
+					return textN + strconv.Itoa(row), true
 				default:
 					return nil, false
 				}
 			},
 			ParseID:       func(s string) (any, error) { return s, nil },
-			TimestampCols: map[string]bool{"created_at": true},
+			TimestampCols: map[string]bool{textCreatedAt: true},
 		},
 	}
 }
@@ -83,7 +83,7 @@ func keysetReader(rows []int, sort []types.OrderField) listquery.Reader[int, int
 func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 	t.Parallel()
 
-	customSort := []types.OrderField{{Field: "name", Desc: false}}
+	customSort := []types.OrderField{{Field: textName, Desc: false}}
 
 	t.Run("keyset cursor on a custom sort is rejected", func(t *testing.T) {
 		t.Parallel()
@@ -91,7 +91,7 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 		tok, err := listquery.EncodeToken(types.PageToken{Keyset: &types.KeysetCursor{
 			SortValues:  []any{"n1"},
 			ID:          "1",
-			Fingerprint: []byte("x"),
+			Fingerprint: []byte(textX),
 		}})
 		require.NoError(t, err)
 
@@ -173,9 +173,9 @@ func testRunKeysetOnlyDefaultOrderingRest(t *testing.T) {
 		reader := keysetReader([]int{1, 2, 3}, nil)
 
 		reader.Filter = types.FilterClause{
-			Field:    "name",
+			Field:    textName,
 			Operator: types.OpEq,
-			Value:    "changed",
+			Value:    textChanged,
 		}
 		_, err = listquery.Run(
 			context.Background(),

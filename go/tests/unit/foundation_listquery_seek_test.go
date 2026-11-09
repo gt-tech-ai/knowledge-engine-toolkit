@@ -33,12 +33,12 @@ func TestSeekFilter_Expansion(t *testing.T) {
 		t.Parallel()
 
 		f := listquery.SeekFilter(
-			[]listquery.KeysetColumn{{Column: "created_at", Desc: false}},
+			[]listquery.KeysetColumn{{Column: textCreatedAt, Desc: false}},
 			[]any{time.UnixMicro(1000).UTC()},
 		)
 		clause, ok := f.(types.FilterClause)
 		require.True(t, ok, "a single column seek is a bare clause")
-		assert.Equal(t, "created_at", clause.Field)
+		assert.Equal(t, textCreatedAt, clause.Field)
 		assert.Equal(t, types.OpGt, clause.Operator)
 	})
 
@@ -46,7 +46,7 @@ func TestSeekFilter_Expansion(t *testing.T) {
 		t.Parallel()
 
 		f := listquery.SeekFilter(
-			[]listquery.KeysetColumn{{Column: "created_at", Desc: true}},
+			[]listquery.KeysetColumn{{Column: textCreatedAt, Desc: true}},
 			[]any{time.UnixMicro(1000).UTC()},
 		)
 		clause, ok := f.(types.FilterClause)
@@ -70,8 +70,8 @@ func testSeekFilterExpansionRest(t *testing.T) {
 			ts := time.UnixMicro(2000).UTC()
 			f := listquery.SeekFilter(
 				[]listquery.KeysetColumn{
-					{Column: "created_at", Desc: true},
-					{Column: "id", Desc: true},
+					{Column: textCreatedAt, Desc: true},
+					{Column: textID, Desc: true},
 				},
 				[]any{ts, "the-id"},
 			)
@@ -82,7 +82,7 @@ func testSeekFilterExpansionRest(t *testing.T) {
 			// Arm 1: strict less-than on the leading column.
 			strict, ok := top.Or[0].(types.FilterClause)
 			require.True(t, ok)
-			assert.Equal(t, "created_at", strict.Field)
+			assert.Equal(t, textCreatedAt, strict.Field)
 			assert.Equal(t, types.OpLt, strict.Operator)
 			assert.Equal(t, ts, strict.Value)
 
@@ -93,12 +93,12 @@ func testSeekFilterExpansionRest(t *testing.T) {
 
 			eq, ok := tail.And[0].(types.FilterClause)
 			require.True(t, ok)
-			assert.Equal(t, "created_at", eq.Field)
+			assert.Equal(t, textCreatedAt, eq.Field)
 			assert.Equal(t, types.OpEq, eq.Operator)
 
 			idClause, ok := tail.And[1].(types.FilterClause)
 			require.True(t, ok)
-			assert.Equal(t, "id", idClause.Field)
+			assert.Equal(t, textID, idClause.Field)
 			assert.Equal(t, types.OpLt, idClause.Operator)
 			assert.Equal(t, "the-id", idClause.Value)
 		},

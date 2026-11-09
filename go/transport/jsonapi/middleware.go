@@ -141,8 +141,8 @@ func unwrapRequest(w http.ResponseWriter, r *http.Request, resourceType string) 
 
 // writeJSONAPI writes a response under the JSON:API content type.
 func writeJSONAPI(w http.ResponseWriter, status int, body []byte) {
-	w.Header().Set("Content-Type", contentTypeJSONAPI)
-	w.Header().Del("Content-Length")
+	w.Header().Set(textContentType, contentTypeJSONAPI)
+	w.Header().Del(textContentLength)
 	w.WriteHeader(status)
 
 	if body != nil {
@@ -276,7 +276,7 @@ func transformCreate(
 	result := codec.TransformSingleResource(parsed, rc, selfLink)
 
 	data := stdx.As[map[string]any](result["data"])
-	if id, ok := data["id"].(string); ok && id != "" {
+	if id, ok := data[textID].(string); ok && id != "" {
 		w.Header().Set("Location", selfLink+"/"+id)
 	}
 
@@ -316,8 +316,8 @@ func unwrapAndValidate(body []byte, resourceType string) (unwrapped []byte, msg 
 		return nil, msg
 	}
 
-	if id, ok := data["id"]; ok {
-		attrs["id"] = id
+	if id, ok := data[textID]; ok {
+		attrs[textID] = id
 	}
 
 	out, err := json.Marshal(attrs)
@@ -406,8 +406,8 @@ func writeRequestError(w http.ResponseWriter, message string) {
 		body = nil
 	}
 
-	w.Header().Set("Content-Type", contentTypeJSONAPI)
-	w.Header().Del("Content-Length")
+	w.Header().Set(textContentType, contentTypeJSONAPI)
+	w.Header().Del(textContentLength)
 	w.WriteHeader(http.StatusBadRequest)
 
 	_, _ = w.Write(codec.TransformError(http.StatusBadRequest, body))
@@ -426,8 +426,8 @@ func writeMissingResourceError(w http.ResponseWriter, singleKey string) {
 		body = nil
 	}
 
-	w.Header().Set("Content-Type", contentTypeJSONAPI)
-	w.Header().Del("Content-Length")
+	w.Header().Set(textContentType, contentTypeJSONAPI)
+	w.Header().Del(textContentLength)
 	w.WriteHeader(http.StatusInternalServerError)
 
 	_, _ = w.Write(codec.TransformError(http.StatusInternalServerError, body))
@@ -478,7 +478,7 @@ func IsRESTRequest(r *http.Request) bool {
 	}
 
 	// gRPC and gRPC-Web use application/grpc* content types.
-	ct := r.Header.Get("Content-Type")
+	ct := r.Header.Get(textContentType)
 
 	return !strings.HasPrefix(ct, "application/grpc")
 }

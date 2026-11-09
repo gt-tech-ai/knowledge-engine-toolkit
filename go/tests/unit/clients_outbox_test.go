@@ -40,12 +40,21 @@ func sinkRecords(n int) []types.OutboxRecord {
 	recs := make([]types.OutboxRecord, n)
 	for i := range recs {
 		recs[i] = types.OutboxRecord{
-			ID:        uuid.New(),
-			Tenant:    "org-1",
-			Lane:      "audit",
-			Payload:   []byte(`{"n":` + strconv.Itoa(i) + `}`),
-			Attempts:  1,
-			CreatedAt: time.Date(2026, 10, 9, 23, 30, 0, 0, time.FixedZone("x", -3600)),
+			ID:       uuid.New(),
+			Tenant:   textOrg1,
+			Lane:     textAudit,
+			Payload:  []byte(`{"n":` + strconv.Itoa(i) + `}`),
+			Attempts: 1,
+			CreatedAt: time.Date(
+				year2026,
+				month10,
+				day9,
+				hour23,
+				min30,
+				0,
+				0,
+				time.FixedZone(textX, -3600),
+			),
 		}
 	}
 
@@ -87,7 +96,11 @@ func TestOutboxSinkFromConfig_DefaultsToStubAndRejectsIncompleteBackends(t *test
 	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{})
 	require.NoError(t, err)
 	assert.IsType(t, &stub.Sink{}, sink)
-	assert.Equal(t, []error{nil, nil}, sink.Send(context.Background(), sinkRecords(2)))
+	assert.Equal(
+		t,
+		[]error{nil, nil},
+		sink.Send(context.Background(), sinkRecords(sinkRecordsArg2)),
+	)
 
 	apis := outbox.Deps{
 		SQSAPI: mocks.NewMockOutboxSQSAPI(ctrl),
@@ -95,15 +108,15 @@ func TestOutboxSinkFromConfig_DefaultsToStubAndRejectsIncompleteBackends(t *test
 	}
 	broken := map[string]func(*outbox.Config, *outbox.Deps){
 		"sqs no api": func(c *outbox.Config, d *outbox.Deps) {
-			c.Kind, c.SQS.Queue, d.SQSAPI = outbox.KindSQS, "q", nil
+			c.Kind, c.SQS.Queue, d.SQSAPI = outbox.KindSQS, textQ, nil
 		},
 		"sqs no q": func(c *outbox.Config, _ *outbox.Deps) { c.Kind = outbox.KindSQS },
 		"s3 no api": func(c *outbox.Config, d *outbox.Deps) {
-			c.Kind, c.S3.Bucket, d.S3API = outbox.KindS3, "b", nil
+			c.Kind, c.S3.Bucket, d.S3API = outbox.KindS3, textB, nil
 		},
 		"s3 no bkt": func(c *outbox.Config, _ *outbox.Deps) { c.Kind = outbox.KindS3 },
 		"s3 no {id}": func(c *outbox.Config, _ *outbox.Deps) {
-			c.Kind, c.S3.Bucket, c.S3.KeyTemplate = outbox.KindS3, "b", "{tenant}"
+			c.Kind, c.S3.Bucket, c.S3.KeyTemplate = outbox.KindS3, textB, "{tenant}"
 		},
 	}
 
@@ -117,7 +130,7 @@ func TestOutboxSinkFromConfig_DefaultsToStubAndRejectsIncompleteBackends(t *test
 
 	sqsCfg := outbox.DefaultConfig()
 
-	sqsCfg.Kind, sqsCfg.SQS = outbox.KindSQS, outboxsqs.Config{Queue: "q"}
+	sqsCfg.Kind, sqsCfg.SQS = outbox.KindSQS, outboxsqs.Config{Queue: textQ}
 
 	sqsSink, err := outbox.NewFromConfig(t.Context(), sqsCfg, apis)
 	require.NoError(t, err)
@@ -125,7 +138,7 @@ func TestOutboxSinkFromConfig_DefaultsToStubAndRejectsIncompleteBackends(t *test
 
 	s3Cfg := outbox.DefaultConfig()
 
-	s3Cfg.Kind, s3Cfg.S3.Bucket = outbox.KindS3, "b"
+	s3Cfg.Kind, s3Cfg.S3.Bucket = outbox.KindS3, textB
 
 	s3Sink, err := outbox.NewFromConfig(t.Context(), s3Cfg, apis)
 	require.NoError(t, err)
@@ -152,7 +165,7 @@ func TestSQSSink_MapsPartialBatchFailureToRecords(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockOutboxSQSAPI(ctrl)
-	recs := sinkRecords(12)
+	recs := sinkRecords(sinkRecordsArg12)
 	url := "http://sqs.local/000000000000/audit-events"
 
 	var first *awssqs.SendMessageBatchInput
@@ -164,8 +177,8 @@ func TestSQSSink_MapsPartialBatchFailureToRecords(t *testing.T) {
 		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String(url)}, nil).
 		Times(1)
 
-	successful := make([]sqstypes.SendMessageBatchResultEntry, 0, 8)
-	for _, id := range []string{"0", "1", "2", "4", "5", "6", "8", "9"} {
+	successful := make([]sqstypes.SendMessageBatchResultEntry, 0, capacity8)
+	for _, id := range []string{text0, "1", "2", "4", "5", "6", "8", "9"} {
 		successful = append(
 			successful,
 			sqstypes.SendMessageBatchResultEntry{Id: aws.String(id)},
@@ -263,7 +276,7 @@ func testSQSSinkMapsPartialBatchFailureToRecordsRest(
 	)
 	require.NotNil(t, (*first))
 	assert.Equal(t, url, aws.ToString((*first).QueueUrl))
-	require.Len(t, (*first).Entries, 10)
+	require.Len(t, (*first).Entries, wantEntriesLen10)
 	assert.Equal(t, "3", aws.ToString((*first).Entries[3].Id))
 	assert.Equal(t, `{"n":3}`, aws.ToString((*first).Entries[3].MessageBody))
 	assert.Equal(t, map[string]sqstypes.MessageAttributeValue{
@@ -271,8 +284,8 @@ func testSQSSinkMapsPartialBatchFailureToRecordsRest(
 			DataType:    aws.String("String"),
 			StringValue: aws.String(recs[3].ID.String()),
 		},
-		"tenant": {DataType: aws.String("String"), StringValue: aws.String("org-1")},
-		"lane":   {DataType: aws.String("String"), StringValue: aws.String("audit")},
+		textTenant: {DataType: aws.String("String"), StringValue: aws.String(textOrg1)},
+		textLane:   {DataType: aws.String("String"), StringValue: aws.String(textAudit)},
 	}, (*first).Entries[3].MessageAttributes)
 }
 
@@ -294,8 +307,8 @@ func TestSQSSink_RoutesByKeyAndIsolatesFailingQueue(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockOutboxSQSAPI(ctrl)
-	recs := sinkRecords(6)
-	routes := []string{"standard", "deletion", "facet", "standard", "", "bogus"}
+	recs := sinkRecords(sinkRecordsArg6)
+	routes := []string{textStandard, "deletion", "facet", textStandard, "", textBogus}
 
 	for i, r := range routes {
 		if r != "" {
@@ -389,7 +402,7 @@ func testSQSSinkRoutesByKeyAndIsolatesFailingQueueRest(
 
 	cfg.Kind = outbox.KindSQS
 	cfg.SQS = outboxsqs.Config{Queue: "q-default", Routes: map[string]string{
-		"standard": "q-standard", "deletion": "q-deletion", "facet": "q-facet",
+		textStandard: "q-standard", "deletion": "q-deletion", "facet": "q-facet",
 	}}
 
 	sink, err := outbox.NewFromConfig(t.Context(), cfg, outbox.Deps{SQSAPI: api})
@@ -417,7 +430,7 @@ func testSQSSinkRoutesByKeyAndIsolatesFailingQueueRest(
 
 	bad := cfg
 
-	bad.SQS.Routes = map[string]string{"standard": ""}
+	bad.SQS.Routes = map[string]string{textStandard: ""}
 	_, err = outbox.NewFromConfig(t.Context(), bad, outbox.Deps{SQSAPI: api})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
@@ -443,7 +456,7 @@ func TestS3Sink_KeysByTemplateAndAppliesKMS(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockOutboxS3API(ctrl)
-	recs := sinkRecords(3)
+	recs := sinkRecords(sinkRecordsArg3)
 
 	recs[1].Attributes = map[string]string{
 		"kms_key_id": "arn:aws:kms:us-east-1:000000000000:key/k-1",
@@ -467,7 +480,7 @@ func testS3SinkKeysByTemplateAndAppliesKMSRest5(
 
 	cfg.Kind = outbox.KindS3
 	cfg.S3 = outboxs3.Config{
-		Bucket:      "archive",
+		Bucket:      textArchive,
 		KeyTemplate: "audit/{tenant}/{yyyy}/{mm}/{dd}/{id}.json",
 	}
 
@@ -477,7 +490,7 @@ func testS3SinkKeysByTemplateAndAppliesKMSRest5(
 	results := sink.Send(context.Background(), recs)
 
 	assert.Equal(t, []apperr.ErrorCode{"", "", apperr.CodeForbidden}, codesOf(results))
-	require.Len(t, *puts, 3)
+	require.Len(t, *puts, wantPutsLen3)
 
 	for i, p := range *puts {
 		assertS3Put(t, recs[i], p)
@@ -514,7 +527,7 @@ func TestOutboxSinkDecorators_RetryOnlyTransientWithFullBody(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockOutboxS3API(ctrl)
-	recs := sinkRecords(2)
+	recs := sinkRecords(sinkRecordsArg2)
 
 	var bodies []string
 
@@ -584,7 +597,7 @@ func testOutboxSinkDecoratorsRetryOnlyTransientWithFullBodyRest(
 
 	cfg := outbox.DefaultConfig()
 
-	cfg.Kind, cfg.S3.Bucket = outbox.KindS3, "archive"
+	cfg.Kind, cfg.S3.Bucket = outbox.KindS3, textArchive
 
 	on := true
 	decs := decoration.DefaultConfig()
@@ -629,11 +642,11 @@ func TestSQSSink_FIFOQueueCarriesGroupAndDedupIDs(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockOutboxSQSAPI(ctrl)
-	recs := sinkRecords(3)
+	recs := sinkRecords(sinkRecordsArg3)
 
-	recs[0].Key = "doc-7"
-	recs[0].Attributes = map[string]string{types.OutboxRouteAttribute: "ordered"}
-	recs[1].Attributes = map[string]string{types.OutboxRouteAttribute: "ordered"}
+	recs[0].Key = textDoc7
+	recs[0].Attributes = map[string]string{types.OutboxRouteAttribute: textOrdered}
+	recs[1].Attributes = map[string]string{types.OutboxRouteAttribute: textOrdered}
 
 	expectTwoQueueURLs(api)
 
@@ -642,17 +655,17 @@ func TestSQSSink_FIFOQueueCarriesGroupAndDedupIDs(t *testing.T) {
 	expectTwoQueueSends(api, sent)
 
 	sink, err := outboxsqs.New(outboxsqs.Config{
-		Queue: "plain", Routes: map[string]string{"ordered": "events.fifo"},
+		Queue: textPlain, Routes: map[string]string{textOrdered: "events.fifo"},
 	}, api)
 	require.NoError(t, err)
 
 	assert.Equal(t, []error{nil, nil, nil}, sink.Send(context.Background(), recs))
 
 	fifo := sent["u-events.fifo"]
-	require.Len(t, fifo, 2)
-	assert.Equal(t, "doc-7", aws.ToString(fifo[0].MessageGroupId))
+	require.Len(t, fifo, wantFifoLen2)
+	assert.Equal(t, textDoc7, aws.ToString(fifo[0].MessageGroupId))
 	assert.Equal(t, recs[0].ID.String(), aws.ToString(fifo[0].MessageDeduplicationId))
-	assert.Equal(t, "org-1", aws.ToString(fifo[1].MessageGroupId))
+	assert.Equal(t, textOrg1, aws.ToString(fifo[1].MessageGroupId))
 	assert.Equal(t, recs[1].ID.String(), aws.ToString(fifo[1].MessageDeduplicationId))
 
 	plain := sent["u-plain"]
@@ -677,11 +690,11 @@ func TestSQSSink_FairQueueCarriesAGroupButNoDedupID(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockOutboxSQSAPI(ctrl)
-	recs := sinkRecords(3)
+	recs := sinkRecords(sinkRecordsArg3)
 
 	recs[0].Key = "sync-7"
-	recs[0].Attributes = map[string]string{types.OutboxRouteAttribute: "bulk"}
-	recs[1].Attributes = map[string]string{types.OutboxRouteAttribute: "bulk"}
+	recs[0].Attributes = map[string]string{types.OutboxRouteAttribute: textBulk}
+	recs[1].Attributes = map[string]string{types.OutboxRouteAttribute: textBulk}
 
 	expectTwoQueueURLs(api)
 
@@ -690,8 +703,8 @@ func TestSQSSink_FairQueueCarriesAGroupButNoDedupID(t *testing.T) {
 	expectTwoQueueSends(api, sent)
 
 	sink, err := outboxsqs.New(outboxsqs.Config{
-		Queue:      "plain",
-		Routes:     map[string]string{"bulk": "batches"},
+		Queue:      textPlain,
+		Routes:     map[string]string{textBulk: "batches"},
 		FairQueues: []string{"batches"},
 	}, api)
 	require.NoError(t, err)
@@ -699,9 +712,9 @@ func TestSQSSink_FairQueueCarriesAGroupButNoDedupID(t *testing.T) {
 	assert.Equal(t, []error{nil, nil, nil}, sink.Send(context.Background(), recs))
 
 	fair := sent["u-batches"]
-	require.Len(t, fair, 2)
+	require.Len(t, fair, wantFairLen2)
 	assert.Equal(t, "sync-7", aws.ToString(fair[0].MessageGroupId))
-	assert.Equal(t, "org-1", aws.ToString(fair[1].MessageGroupId))
+	assert.Equal(t, textOrg1, aws.ToString(fair[1].MessageGroupId))
 	assert.Nil(t, fair[0].MessageDeduplicationId)
 
 	plain := sent["u-plain"]
@@ -740,27 +753,27 @@ func testSQSSinkPacksBatchesWithinSQSByteLimitsRest5(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockOutboxSQSAPI(ctrl)
-	recs := sinkRecords(11)
+	recs := sinkRecords(sinkRecordsArg11)
 
-	for i := range recs[:10] {
-		recs[i].Payload = []byte(strings.Repeat("a", 200<<10))
+	for i := range recs[:offset10] {
+		recs[i].Payload = []byte(strings.Repeat(textA, 200<<10))
 	}
 
-	recs[10].Payload = []byte(strings.Repeat("b", maxMessageBytes+1))
+	recs[index10].Payload = []byte(strings.Repeat(textB, maxMessageBytes+1))
 
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("u")}, nil)
+		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String(textU)}, nil)
 
 	requests := captureSendBatches(api)
 
-	sink, err := outboxsqs.New(outboxsqs.Config{Queue: "q"}, api)
+	sink, err := outboxsqs.New(outboxsqs.Config{Queue: textQ}, api)
 	require.NoError(t, err)
 
 	results := sink.Send(context.Background(), recs)
 
 	want := make([]apperr.ErrorCode, len(recs))
 
-	want[10] = apperr.CodeInvalidInput
+	want[index10] = apperr.CodeInvalidInput
 	assert.Equal(t, want, codesOf(results))
 	require.Greater(t, len(*requests), 1)
 
@@ -772,7 +785,7 @@ func testSQSSinkPacksBatchesWithinSQSByteLimitsRest5(t *testing.T) {
 		sent += len(entries)
 	}
 
-	assert.Equal(t, 10, sent, "every sendable record sent exactly once")
+	assert.Equal(t, wantSent10, sent, "every sendable record sent exactly once")
 }
 
 // TestSQSSink_OmitsEmptyStringAttributes tests that no empty attribute is sent.
@@ -793,7 +806,7 @@ func TestSQSSink_OmitsEmptyStringAttributes(t *testing.T) {
 	recs[0].Tenant = ""
 
 	api.EXPECT().GetQueueUrl(gomock.Any(), gomock.Any()).
-		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("u")}, nil)
+		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String(textU)}, nil)
 
 	var sent *awssqs.SendMessageBatchInput
 
@@ -806,11 +819,13 @@ func TestSQSSink_OmitsEmptyStringAttributes(t *testing.T) {
 			sent = in
 
 			return &awssqs.SendMessageBatchOutput{
-				Successful: []sqstypes.SendMessageBatchResultEntry{{Id: aws.String("0")}},
+				Successful: []sqstypes.SendMessageBatchResultEntry{
+					{Id: aws.String(text0)},
+				},
 			}, nil
 		})
 
-	sink, err := outboxsqs.New(outboxsqs.Config{Queue: "q"}, api)
+	sink, err := outboxsqs.New(outboxsqs.Config{Queue: textQ}, api)
 	require.NoError(t, err)
 
 	assert.Equal(t, []error{nil}, sink.Send(context.Background(), recs))
@@ -820,7 +835,7 @@ func TestSQSSink_OmitsEmptyStringAttributes(t *testing.T) {
 			DataType:    aws.String("String"),
 			StringValue: aws.String(recs[0].ID.String()),
 		},
-		"lane": {DataType: aws.String("String"), StringValue: aws.String("audit")},
+		textLane: {DataType: aws.String("String"), StringValue: aws.String(textAudit)},
 	}, sent.Entries[0].MessageAttributes)
 }
 
@@ -841,7 +856,7 @@ func TestS3Sink_KeyTemplateSubstitutesRecordKey(t *testing.T) {
 	api := mocks.NewMockOutboxS3API(ctrl)
 	recs := sinkRecords(1)
 
-	recs[0].Key = "doc-7"
+	recs[0].Key = textDoc7
 
 	var key string
 
@@ -857,7 +872,7 @@ func TestS3Sink_KeyTemplateSubstitutesRecordKey(t *testing.T) {
 		})
 
 	sink, err := outboxs3.New(
-		outboxs3.Config{Bucket: "archive", KeyTemplate: "{tenant}/{key}/{id}"},
+		outboxs3.Config{Bucket: textArchive, KeyTemplate: "{tenant}/{key}/{id}"},
 		api,
 	)
 	require.NoError(t, err)
@@ -881,9 +896,9 @@ func TestSQSSink_SendsTheKeyAsPartitionKey(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockOutboxSQSAPI(ctrl)
-	recs := sinkRecords(2)
+	recs := sinkRecords(sinkRecordsArg2)
 
-	recs[0].Key = "doc-7"
+	recs[0].Key = textDoc7
 
 	var sent *awssqs.SendMessageBatchInput
 
@@ -899,7 +914,7 @@ func TestSQSSink_SendsTheKeyAsPartitionKey(t *testing.T) {
 
 			return &awssqs.SendMessageBatchOutput{
 				Successful: []sqstypes.SendMessageBatchResultEntry{
-					{Id: aws.String("0")}, {Id: aws.String("1")},
+					{Id: aws.String(text0)}, {Id: aws.String("1")},
 				},
 			}, nil
 		})
@@ -920,7 +935,7 @@ func TestSQSSink_SendsTheKeyAsPartitionKey(t *testing.T) {
 	require.NotNil(t, sent)
 
 	key := sent.Entries[0].MessageAttributes[interfaces.PartitionKeyAttribute]
-	assert.Equal(t, "doc-7", aws.ToString(key.StringValue))
+	assert.Equal(t, textDoc7, aws.ToString(key.StringValue))
 	assert.Equal(t, "String", aws.ToString(key.DataType))
 	assert.NotContains(
 		t,
@@ -997,7 +1012,7 @@ func expectS3Puts(t *testing.T, api *mocks.MockOutboxS3API) *[]s3Put {
 			*puts = append(*puts, s3Put{in: in, body: string(body)})
 			if len(*puts) == 3 {
 				return nil, &smithy.GenericAPIError{
-					Code:  "AccessDenied",
+					Code:  textAccessdenied,
 					Fault: smithy.FaultClient,
 				}
 			}
@@ -1014,7 +1029,7 @@ func assertS3Put(t *testing.T, rec types.OutboxRecord, p s3Put) {
 
 	sum := sha256.Sum256(rec.Payload)
 
-	assert.Equal(t, "archive", aws.ToString(p.in.Bucket))
+	assert.Equal(t, textArchive, aws.ToString(p.in.Bucket))
 	assert.Equal(
 		t,
 		"audit/org-1/2026/10/10/"+rec.ID.String()+".json",

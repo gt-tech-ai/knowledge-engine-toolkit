@@ -78,14 +78,14 @@ func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 
 			return nil
 		},
-	}), "users"))
+	}), textUsers))
 
-	got, err := base.Handler("get", echo)(t.Context(), "a")
+	got, err := base.Handler(textGet, echo)(t.Context(), textA)
 	require.NoError(t, err)
 	assert.Equal(t, "echo-a", got)
 	assert.Equal(t, []string{"users.get"}, actions)
 
-	got, err = transport.Base{}.Handler("get", echo)(t.Context(), "b")
+	got, err = transport.Base{}.Handler(textGet, echo)(t.Context(), textB)
 	require.NoError(t, err)
 	assert.Equal(t, "echo-b", got)
 
@@ -93,7 +93,7 @@ func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 		return "", apperr.New(apperr.CodeNotFound, "no such user")
 	}
 
-	_, err = base.Handler("get", failing)(t.Context(), "c")
+	_, err = base.Handler(textGet, failing)(t.Context(), textC)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }
 
@@ -120,8 +120,8 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 
 	limited := fixtures.Must(transport.NewBase[opController](decorate.Fixed(decorate.Deps{
 		RateLimiter: fixtures.StubRateLimiter(false),
-	}), "c"))
-	_, err := limited.Handler("op", handler)(t.Context(), "")
+	}), textC))
+	_, err := limited.Handler(textOp, handler)(t.Context(), "")
 	assert.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	assert.False(t, ran)
 
@@ -146,11 +146,11 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 	shedding := fixtures.Must(
 		transport.NewBase[opController](
 			decorate.Fixed(decorate.Deps{Bulkhead: bh, ShedLoad: true}),
-			"c",
+			textC,
 		),
 	)
 
-	_, err = shedding.Handler("op", handler)(t.Context(), "")
+	_, err = shedding.Handler(textOp, handler)(t.Context(), "")
 	assert.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	assert.False(t, ran)
 
@@ -164,10 +164,10 @@ func testControllerBaseRejectsBeforeTheHandlerRest(t *testing.T) {
 
 	var err error
 
-	panicking := func(context.Context, string) (string, error) { panic("boom") }
+	panicking := func(context.Context, string) (string, error) { panic(textBoom) }
 
-	_, err = fixtures.Must(transport.NewBase[opController](fixtures.Decorations(), "c")).
-		Handler("op", panicking)(
+	_, err = fixtures.Must(transport.NewBase[opController](fixtures.Decorations(), textC)).
+		Handler(textOp, panicking)(
 		t.Context(),
 		"",
 	)
@@ -181,11 +181,11 @@ func testControllerBaseRejectsBeforeTheHandlerRest(t *testing.T) {
 	bounded := fixtures.Must(
 		transport.NewBase[opController](
 			decorate.Fixed(decorate.Deps{Timeout: 10 * time.Millisecond}),
-			"c",
+			textC,
 		),
 	)
 
-	_, err = bounded.Handler("op", slow)(t.Context(), "")
+	_, err = bounded.Handler(textOp, slow)(t.Context(), "")
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
 }
 

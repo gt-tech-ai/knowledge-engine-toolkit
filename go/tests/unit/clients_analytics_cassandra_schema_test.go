@@ -22,7 +22,7 @@ import (
 )
 
 // schemaTables returns the tables the schema tests' catalog declares, in creation order.
-func schemaTables() []string { return []string{"genai_calls_day", "genai_calls_hour"} }
+func schemaTables() []string { return []string{textGenaiCallsDay, "genai_calls_hour"} }
 
 // newSchemaStore builds a store over session that ensures the genai_calls cube's
 // hour and day tables in keyspace "analytics" at Start, polling every millisecond.
@@ -35,9 +35,9 @@ func newSchemaStore(
 	t.Helper()
 
 	store, err := analyticscassandra.New(session, analyticscassandra.Config{
-		Keyspace: "analytics",
+		Keyspace: textAnalytics,
 		Cubes: map[string][]types.Grain{
-			"genai_calls": {types.GrainHour, types.GrainDay},
+			textGenaiCalls: {types.GrainHour, types.GrainDay},
 		},
 		BucketWidth: map[types.Grain]types.Grain{
 			types.GrainHour: types.GrainDay, types.GrainDay: types.GrainMonth,
@@ -90,7 +90,7 @@ func expectStatus(
 			s := stdx.As[string](stmt)
 
 			return strings.Contains(s, "FROM system_schema_mcs.tables")
-		}), "analytics", table).
+		}), textAnalytics, table).
 		Return(query)
 	calls := []*gomock.Call{
 		call,
@@ -162,10 +162,10 @@ func TestCassandraStore_EnsureSchemaWaitsForKeyspacesActive(t *testing.T) {
 	}
 
 	gomock.InOrder(
-		expectStatus(t, ctrl, session, "genai_calls_day", "CREATING", false),
-		expectStatus(t, ctrl, session, "genai_calls_day", "ACTIVE", false),
+		expectStatus(t, ctrl, session, textGenaiCallsDay, "CREATING", false),
+		expectStatus(t, ctrl, session, textGenaiCallsDay, textActive, false),
 	)
-	expectStatus(t, ctrl, session, "genai_calls_hour", "ACTIVE", false)
+	expectStatus(t, ctrl, session, "genai_calls_hour", textActive, false)
 
 	require.NoError(t, store.Start(context.Background()))
 }
@@ -191,9 +191,9 @@ func TestNewFromConfig_EnsureSchemaAwaitsActiveOnKeyspaces(t *testing.T) {
 
 		cfg.Kind = analytics.KindCassandra
 		cfg.CQL.Kind = kind
-		cfg.CQL.Keyspace = "analytics"
+		cfg.CQL.Keyspace = textAnalytics
 		cfg.Cubes = map[string][]types.Grain{
-			"genai_calls": {types.GrainHour, types.GrainDay},
+			textGenaiCalls: {types.GrainHour, types.GrainDay},
 		}
 		cfg.EnsureSchema = ensure
 
@@ -212,7 +212,7 @@ func TestNewFromConfig_EnsureSchemaAwaitsActiveOnKeyspaces(t *testing.T) {
 
 	for _, table := range schemaTables() {
 		expectCreate(ctrl, keyspaces, table)
-		expectStatus(t, ctrl, keyspaces, table, "ACTIVE", false)
+		expectStatus(t, ctrl, keyspaces, table, textActive, false)
 	}
 
 	require.NoError(t, build(keyspaces, cql.KindKeyspaces, true))
@@ -248,7 +248,7 @@ func TestCassandraStore_EnsureSchemaTimesOutUnavailable(t *testing.T) {
 		expectCreate(ctrl, session, table)
 	}
 
-	expectStatus(t, ctrl, session, "genai_calls_day", "CREATING", true)
+	expectStatus(t, ctrl, session, textGenaiCallsDay, "CREATING", true)
 
 	err := store.Start(context.Background())
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))

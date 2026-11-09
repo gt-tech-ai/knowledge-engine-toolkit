@@ -26,7 +26,7 @@ func TestReplayConfigDefaults(t *testing.T) {
 	t.Parallel()
 
 	c := infra.DefaultReplayConfig()
-	assert.Equal(t, 100, c.MaxSize)
+	assert.Equal(t, wantMaxSize100, c.MaxSize)
 	assert.Equal(t, 5*time.Minute, c.TTL)
 	require.NoError(t, c.Validate())
 

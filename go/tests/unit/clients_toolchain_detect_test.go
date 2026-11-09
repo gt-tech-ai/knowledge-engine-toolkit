@@ -54,27 +54,27 @@ func TestClientsToolchainDetector_Scan_Classification(t *testing.T) {
 
 	r.EXPECT().Exists("missingbin").Return(false)
 	r.EXPECT().Exists("lefthook").Return(true)
-	r.EXPECT().Exists("go").Return(true)
+	r.EXPECT().Exists(textGo2).Return(true)
 	r.EXPECT().Exists("node").Return(true)
-	r.EXPECT().Exists("buf").Return(true)
+	r.EXPECT().Exists(textBuf).Return(true)
 	r.EXPECT().Exists("atlas").Return(true)
 	r.EXPECT().
-		RunBuffered(gomock.Any(), gomock.Any(), "go", "version").
+		RunBuffered(gomock.Any(), gomock.Any(), textGo2, textVersion).
 		Return(interfaces.CmdResult{Stdout: []byte("go version go1.26.0 darwin/arm64")})
 	r.EXPECT().
-		RunBuffered(gomock.Any(), gomock.Any(), "node", "--version").
+		RunBuffered(gomock.Any(), gomock.Any(), "node", textVersion2).
 		Return(interfaces.CmdResult{Stdout: []byte("v18.19.0")})
 	r.EXPECT().
-		RunBuffered(gomock.Any(), gomock.Any(), "buf", "--version").
+		RunBuffered(gomock.Any(), gomock.Any(), textBuf, textVersion2).
 		Return(interfaces.CmdResult{Err: assert.AnError})
 	r.EXPECT().
-		RunBuffered(gomock.Any(), gomock.Any(), "atlas", "version").
+		RunBuffered(gomock.Any(), gomock.Any(), "atlas", textVersion).
 		Return(interfaces.CmdResult{Stdout: []byte("no version digits here")})
 
 	det := toolchain.NewDetector(r, fixtures.NopLogger())
-	results := det.Scan(context.Background(), "/root", specs)
+	results := det.Scan(context.Background(), textRoot, specs)
 
-	require.Len(t, results, 6)
+	require.Len(t, results, wantResultsLen6)
 	assert.Equal(t, types.StatusToolMissing, results[0].Status)
 	assert.Equal(t, types.StatusToolOK, results[1].Status)
 	assert.Equal(t, types.StatusToolOK, results[2].Status)
@@ -93,29 +93,29 @@ func TestClientsToolchainDetector_Scan_Classification(t *testing.T) {
 // TestClientsToolchainDetector_Scan_Classification runs.
 func testClientsToolchainDetectorScanClassificationTable() []types.ToolDef {
 	return []types.ToolDef{
-		{Name: "missing", Binary: "missingbin"},
+		{Name: textMissing, Binary: "missingbin"},
 		{Name: "versionless", Binary: "lefthook"},
 		{
-			Name: "current", Binary: "go",
-			MinVersion:   &types.Version{Major: 1, Minor: 26},
-			VersionCmd:   []string{"go", "version"},
+			Name: "current", Binary: textGo2,
+			MinVersion:   &types.Version{Major: 1, Minor: minor26},
+			VersionCmd:   []string{textGo2, textVersion},
 			VersionParse: goVersionParse,
 		},
 		{
-			Name: "stale", Binary: "node",
-			MinVersion:   &types.Version{Major: 20, Minor: 0},
-			VersionCmd:   []string{"node", "--version"},
+			Name: textStale, Binary: "node",
+			MinVersion:   &types.Version{Major: major20, Minor: 0},
+			VersionCmd:   []string{"node", textVersion2},
 			VersionParse: types.ParseFirstVersion,
 		},
 		{
-			Name: "broken-version-cmd", Binary: "buf",
+			Name: "broken-version-cmd", Binary: textBuf,
 			MinVersion: &types.Version{Major: 1, Minor: 0},
-			VersionCmd: []string{"buf", "--version"},
+			VersionCmd: []string{textBuf, textVersion2},
 		},
 		{
 			Name: "unparseable-version", Binary: "atlas",
 			MinVersion: &types.Version{Major: 1, Minor: 0},
-			VersionCmd: []string{"atlas", "version"},
+			VersionCmd: []string{"atlas", textVersion},
 		},
 	}
 }
@@ -136,24 +136,24 @@ func TestClientsToolchainDetector_CheckPrerequisites_Missing(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Exists("docker").Return(false)
+	r.EXPECT().Exists(textDocker).Return(false)
 
 	det := toolchain.NewDetector(r, fixtures.NopLogger())
 	prereqs := []types.ToolDef{
 		{
-			Name:        "Docker",
-			Binary:      "docker",
+			Name:        textDocker2,
+			Binary:      textDocker,
 			FallbackURL: "https://docs.docker.com/get-docker/",
 		},
 	}
 
-	err := det.CheckPrerequisites(context.Background(), "/root", prereqs)
+	err := det.CheckPrerequisites(context.Background(), textRoot, prereqs)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Docker")
+	assert.Contains(t, err.Error(), textDocker2)
 
 	summary := toolchain.SummarizeMissing(err, nil)
 	require.Error(t, summary)
-	assert.Contains(t, summary.Error(), "Docker")
+	assert.Contains(t, summary.Error(), textDocker2)
 }
 
 // TestClientsToolchainSummarizeMissing_OutdatedAndPrereq covers the dependency-summary
@@ -172,13 +172,13 @@ func TestClientsToolchainSummarizeMissing_OutdatedAndPrereq(t *testing.T) {
 	t.Parallel()
 
 	require.NoError(t, toolchain.SummarizeMissing(nil, []types.ToolCheckResult{
-		{Tool: &types.ToolDef{Name: "go"}, Status: types.StatusToolOK},
+		{Tool: &types.ToolDef{Name: textGo2}, Status: types.StatusToolOK},
 	}))
 
 	outdated := []types.ToolCheckResult{{
 		Tool: &types.ToolDef{
-			Name:        "golangci-lint",
-			MinVersion:  &types.Version{Major: 1, Minor: 60},
+			Name:        textGolangciLint,
+			MinVersion:  &types.Version{Major: 1, Minor: minor60},
 			FallbackURL: "https://golangci-lint.run",
 		},
 		Status: types.StatusToolOutdated,
@@ -186,7 +186,7 @@ func TestClientsToolchainSummarizeMissing_OutdatedAndPrereq(t *testing.T) {
 	}}
 	err := toolchain.SummarizeMissing(assert.AnError, outdated)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "golangci-lint")
+	assert.Contains(t, err.Error(), textGolangciLint)
 	assert.Contains(t, err.Error(), "1.55.0")
 	assert.Contains(t, err.Error(), "1.60")
 	assert.Contains(t, err.Error(), "https://golangci-lint.run")

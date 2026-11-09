@@ -29,7 +29,7 @@ func probeOf(
 
 	calls := 0
 
-	p.EXPECT().Run(gomock.Any(), "target").DoAndReturn(
+	p.EXPECT().Run(gomock.Any(), textTarget).DoAndReturn(
 		func(context.Context, string) types.Verdict {
 			v := verdicts[min(calls, len(verdicts)-1)]
 			calls++
@@ -72,29 +72,29 @@ func TestServicesProbe_OneStepPerProbeInOrder(t *testing.T) {
 	set := newSet(
 		t,
 		probe.Options{Parallel: 3},
-		probeOf(ctrl, "a", types.Verdict{Status: types.StatusPass}),
+		probeOf(ctrl, textA, types.Verdict{Status: types.StatusPass}),
 		probeOf(
 			ctrl,
-			"b",
+			textB,
 			types.Verdict{Status: types.StatusFail, Findings: []types.Finding{
 				{
-					Check:   "b",
+					Check:   textB,
 					File:    "x.go",
 					Line:    3,
 					Rule:    "no-todo",
 					Message: "TODO left",
 				},
-				{Check: "b", Message: "repo-wide problem"},
+				{Check: textB, Message: "repo-wide problem"},
 			}},
 		),
-		probeOf(ctrl, "c", types.Verdict{Status: types.StatusWarn, Detail: "slow"}),
+		probeOf(ctrl, textC, types.Verdict{Status: types.StatusWarn, Detail: textSlow}),
 	)
-	res, err := set.Run(t.Context(), "target")
+	res, err := set.Run(t.Context(), textTarget)
 	require.NoError(t, err)
-	require.Len(t, res, 3)
+	require.Len(t, res, wantResLen3)
 	assert.Equal(
 		t,
-		[]string{"a", "b", "c"},
+		[]string{textA, textB, textC},
 		[]string{res[0].Name, res[1].Name, res[2].Name},
 	)
 	assert.Equal(t, "guards", res[1].Group)
@@ -107,7 +107,7 @@ func TestServicesProbe_OneStepPerProbeInOrder(t *testing.T) {
 		string(res[1].Detail),
 	)
 	assert.Equal(t, types.StatusWarn, res[2].Status)
-	assert.Equal(t, "slow", res[2].Error)
+	assert.Equal(t, textSlow, res[2].Error)
 }
 
 // TestServicesProbe_Strict tests strict mode.
@@ -128,13 +128,13 @@ func TestServicesProbe_Strict(t *testing.T) {
 	res, err := newSet(
 		t,
 		probe.Options{},
-		probeOf(ctrl, "s", skip),
-	).Run(t.Context(), "target")
+		probeOf(ctrl, textS, skip),
+	).Run(t.Context(), textTarget)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusSkip, res[0].Status)
 
-	res, err = newSet(t, probe.Options{Strict: true}, probeOf(ctrl, "s", skip)).
-		Run(t.Context(), "target")
+	res, err = newSet(t, probe.Options{Strict: true}, probeOf(ctrl, textS, skip)).
+		Run(t.Context(), textTarget)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, res[0].Status)
 	assert.Equal(t, "skipped under strict: helm not installed", res[0].Error)
@@ -159,7 +159,7 @@ func TestServicesProbe_Timeout(t *testing.T) {
 
 	hung := mocks.NewMockProbe[string](ctrl)
 	hung.EXPECT().Name().Return("hung").AnyTimes()
-	hung.EXPECT().Run(gomock.Any(), "target").DoAndReturn(
+	hung.EXPECT().Run(gomock.Any(), textTarget).DoAndReturn(
 		func(context.Context, string) types.Verdict {
 			<-release
 
@@ -167,8 +167,8 @@ func TestServicesProbe_Timeout(t *testing.T) {
 		})
 
 	set := newSet(t, probe.Options{Timeout: 50 * time.Millisecond},
-		hung, probeOf(ctrl, "ok", types.Verdict{Status: types.StatusPass}))
-	res, err := set.Run(t.Context(), "target")
+		hung, probeOf(ctrl, textOk, types.Verdict{Status: types.StatusPass}))
+	res, err := set.Run(t.Context(), textTarget)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, res[0].Status)
 	assert.Contains(t, res[0].Error, string(apperr.CodeTimeout))
@@ -192,26 +192,26 @@ func TestServicesProbe_Retry(t *testing.T) {
 	flaky := types.Verdict{Status: types.StatusFail, Transient: true, Detail: "not ready"}
 	pass := types.Verdict{Status: types.StatusPass}
 
-	res, err := newSet(t, probe.Options{Retry: 2}, probeOf(ctrl, "f", flaky, pass)).
-		Run(t.Context(), "target")
+	res, err := newSet(t, probe.Options{Retry: 2}, probeOf(ctrl, textF, flaky, pass)).
+		Run(t.Context(), textTarget)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusPass, res[0].Status)
 
 	res, err = newSet(
 		t,
 		probe.Options{Retry: 2},
-		probeOf(ctrl, "f", flaky, flaky, flaky, pass),
+		probeOf(ctrl, textF, flaky, flaky, flaky, pass),
 	).
-		Run(t.Context(), "target")
+		Run(t.Context(), textTarget)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, res[0].Status)
 
 	once := mocks.NewMockProbe[string](ctrl)
-	once.EXPECT().Name().Return("once").AnyTimes()
-	once.EXPECT().Run(gomock.Any(), "target").
-		Return(types.Verdict{Status: types.StatusFail, Detail: "bad"}).Times(1)
+	once.EXPECT().Name().Return(textOnce).AnyTimes()
+	once.EXPECT().Run(gomock.Any(), textTarget).
+		Return(types.Verdict{Status: types.StatusFail, Detail: textBad}).Times(1)
 
-	res, err = newSet(t, probe.Options{Retry: 3}, once).Run(t.Context(), "target")
+	res, err = newSet(t, probe.Options{Retry: 3}, once).Run(t.Context(), textTarget)
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, res[0].Status)
 }
@@ -235,8 +235,8 @@ func TestServicesProbe_CancelledAndInvalid(t *testing.T) {
 	_, err := newSet(
 		t,
 		probe.Options{},
-		probeOf(ctrl, "a", types.Verdict{}),
-	).Run(ctx, "target")
+		probeOf(ctrl, textA, types.Verdict{}),
+	).Run(ctx, textTarget)
 	assert.Equal(t, apperr.CodeCanceled, apperr.Code(err))
 
 	_, err = probe.NewSet[string](
@@ -273,15 +273,15 @@ func TestServicesProbe_PanickingProbe(t *testing.T) {
 	for _, opts := range []probe.Options{{}, {Timeout: time.Minute}} {
 		ctrl := gomock.NewController(t)
 		bad := mocks.NewMockProbe[string](ctrl)
-		bad.EXPECT().Name().Return("bad").AnyTimes()
-		bad.EXPECT().Run(gomock.Any(), "target").DoAndReturn(
+		bad.EXPECT().Name().Return(textBad).AnyTimes()
+		bad.EXPECT().Run(gomock.Any(), textTarget).DoAndReturn(
 			func(context.Context, string) types.Verdict { panic("nil map") })
 
 		res, err := newSet(t, opts, bad,
-			probeOf(ctrl, "ok", types.Verdict{Status: types.StatusPass})).
-			Run(t.Context(), "target")
+			probeOf(ctrl, textOk, types.Verdict{Status: types.StatusPass})).
+			Run(t.Context(), textTarget)
 		require.NoError(t, err)
-		require.Len(t, res, 2)
+		require.Len(t, res, wantResLen2)
 		assert.Equal(t, types.StatusFail, res[0].Status)
 		assert.Equal(t, "1 finding", res[0].Error)
 		assert.Contains(t, string(res[0].Detail), "probe bad panicked: nil map")

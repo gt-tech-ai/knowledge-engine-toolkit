@@ -75,7 +75,7 @@ func TestToolrunParsers_EmptyOutput(t *testing.T) {
 		parseWith(
 			t,
 			parsers.KindEmptyOutput,
-			interfaces.CmdResult{Stdout: []byte("\n")},
+			interfaces.CmdResult{Stdout: []byte(textNewline)},
 		).Status,
 	)
 
@@ -127,8 +127,11 @@ func TestToolrunParsers_Formats(t *testing.T) {
 
 	jl.Stdout = []byte(`{"file":"a.py","line":2,"rule":"E1","message":"bad"}` +
 		"\nnot json\n{\"other\":1}\n")
-	assert.Equal(t, []types.Finding{{File: "a.py", Line: 2, Rule: "E1", Message: "bad"}},
-		parseWith(t, parsers.KindJSONLines, jl).Findings)
+	assert.Equal(
+		t,
+		[]types.Finding{{File: "a.py", Line: 2, Rule: "E1", Message: textBad}},
+		parseWith(t, parsers.KindJSONLines, jl).Findings,
+	)
 
 	sr := fail
 
@@ -137,7 +140,7 @@ func TestToolrunParsers_Formats(t *testing.T) {
 		`"region":{"startLine":7}}}]},{"ruleId":"R2","message":{"text":"n"}}]}]}`)
 	assert.Equal(t, []types.Finding{
 		{File: "f.go", Line: 7, Rule: "R1", Message: "m"},
-		{Rule: "R2", Message: "n"},
+		{Rule: "R2", Message: textN},
 	}, parseWith(t, parsers.KindSARIF, sr).Findings)
 
 	bad := parseWith(t, parsers.KindSARIF, interfaces.CmdResult{Stdout: []byte("oops")})

@@ -68,7 +68,8 @@ func IsUUID(s string) bool {
 
 // uuidByteOK checks the byte at i: a dash at the four group breaks, hex elsewhere.
 func uuidByteOK(i int, c byte) bool {
-	if i == 8 || i == 13 || i == 18 || i == 23 {
+	if i == uuidFirstDash || i == uuidSecondDash || i == uuidThirdDash ||
+		i == uuidFourthDash {
 		return c == '-'
 	}
 

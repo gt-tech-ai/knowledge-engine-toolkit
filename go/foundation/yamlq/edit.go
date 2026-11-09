@@ -243,7 +243,7 @@ func appendItem(lines []string, seq, item *yaml.Node) ([]byte, bool) {
 		return nil, false
 	}
 
-	insert, ok := encodeItem(item, strings.Repeat(" ", dash))
+	insert, ok := encodeItem(item, strings.Repeat(textSpace, dash))
 	if !ok {
 		return nil, false
 	}
@@ -256,7 +256,7 @@ func appendItem(lines []string, seq, item *yaml.Node) ([]byte, bool) {
 
 // dashAt reports whether 1-based line carries a sequence dash at column dash.
 func dashAt(lines []string, line, dash int) bool {
-	if dash < 0 || line < 1 || line > len(lines) || len(lines[line-1]) < dash+2 {
+	if dash < 0 || line < 1 || line > len(lines) || len(lines[line-1]) < dash+dash2 {
 		return false
 	}
 
@@ -348,7 +348,7 @@ func walkToParent(doc *yaml.Node, steps []step) (*yaml.Node, error) {
 // deleteEntryLines removes the lines from first's head comment through entry's end.
 func deleteEntryLines(src []byte, first, entry *yaml.Node) []byte {
 	lines := splitLines(src)
-	from := first.Line - strings.Count(first.HeadComment, "\n") - 1
+	from := first.Line - strings.Count(first.HeadComment, textNewline) - 1
 
 	if first.HeadComment != "" {
 		from--
@@ -435,7 +435,7 @@ func entryOf(parent *yaml.Node, last step) (first, value *yaml.Node, pos int) {
 
 // mappingEntry finds key in a mapping, returning its key node, value and position.
 func mappingEntry(parent *yaml.Node, key string) (first, value *yaml.Node, pos int) {
-	for i := 0; i+1 < len(parent.Content); i += 2 {
+	for i := 0; i+1 < len(parent.Content); i += mappingStride {
 		if parent.Content[i].Value == key {
 			return parent.Content[i], parent.Content[i+1], i
 		}
@@ -515,9 +515,9 @@ func singleLineToken(replacement *yaml.Node) (string, bool) {
 		return "", false
 	}
 
-	token := strings.TrimSuffix(string(text), "\n")
+	token := strings.TrimSuffix(string(text), textNewline)
 
-	return token, !strings.Contains(token, "\n")
+	return token, !strings.Contains(token, textNewline)
 }
 
 // holds reports whether out parses and its value at path in document index is exactly
@@ -590,7 +590,7 @@ func appendKeys(lines []string, parent *yaml.Node, steps []step, value *yaml.Nod
 	insert, ok := encodeBlock(
 		steps,
 		value,
-		strings.Repeat(" ", parent.Content[0].Column-1),
+		strings.Repeat(textSpace, parent.Content[0].Column-1),
 	)
 	if !ok {
 		return nil, false
@@ -641,7 +641,7 @@ func spliceUnderNull(
 		return nil, false
 	}
 
-	insert, ok := encodeBlock(rest, value, strings.Repeat(" ", key.Column+1))
+	insert, ok := encodeBlock(rest, value, strings.Repeat(textSpace, key.Column+1))
 	if !ok {
 		return nil, false
 	}
@@ -669,7 +669,7 @@ func nullHeader(line string, key *yaml.Node) (string, bool) {
 		return "", false
 	}
 
-	return line[:end+1] + " " + tail, true
+	return line[:end+1] + textSpace + tail, true
 }
 
 // stripNullToken removes a leading YAML null spelling from tail.
@@ -721,7 +721,7 @@ func build(n *yaml.Node, steps []step, value *yaml.Node) error {
 func maxLine(n *yaml.Node) int {
 	m := n.Line
 	if n.Kind == yaml.ScalarNode && n.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 {
-		m += strings.Count(strings.TrimSuffix(n.Value, "\n"), "\n") + 1
+		m += strings.Count(strings.TrimSuffix(n.Value, textNewline), textNewline) + 1
 	}
 
 	for _, c := range n.Content {
@@ -745,12 +745,12 @@ func keyNode(key string) *yaml.Node {
 
 // splitLines splits src into lines without terminators; a final newline adds no line.
 func splitLines(src []byte) []string {
-	s := strings.TrimSuffix(string(src), "\n")
+	s := strings.TrimSuffix(string(src), textNewline)
 	if s == "" {
 		return nil
 	}
 
-	return strings.Split(s, "\n")
+	return strings.Split(s, textNewline)
 }
 
 // joinLines joins lines with newlines and a final newline.
@@ -759,7 +759,7 @@ func joinLines(lines []string) []byte {
 		return nil
 	}
 
-	return []byte(strings.Join(lines, "\n") + "\n")
+	return []byte(strings.Join(lines, textNewline) + textNewline)
 }
 
 // DecodeAll decodes every document of src, in order. A malformed document is

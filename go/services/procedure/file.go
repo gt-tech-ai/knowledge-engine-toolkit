@@ -45,7 +45,7 @@ func mode(s string, def fs.FileMode) (fs.FileMode, error) {
 		return def, nil
 	}
 
-	n, err := strconv.ParseUint(s, 8, 32)
+	n, err := strconv.ParseUint(s, base8, bitSize32)
 	if err != nil || n > uint64(fs.ModePerm) {
 		return 0, apperr.New(
 			apperr.CodeInvalidInput,

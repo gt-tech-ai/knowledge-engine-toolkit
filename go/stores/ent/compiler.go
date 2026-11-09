@@ -153,7 +153,7 @@ func applyExists(
 	if join.TargetSoftDeletes {
 		// Don't match via a soft-deleted target row (mirrors the base soft-delete
 		// interceptor).
-		conds = append(conds, entsql.IsNull(target.C("deleted_at")))
+		conds = append(conds, entsql.IsNull(target.C(textDeletedAt)))
 	}
 
 	sub := entsql.Select(target.C(join.TargetKey)).
@@ -339,7 +339,7 @@ func orderByJoinColumn(s *entsql.Selector, join *types.JoinTarget, col, tail str
 	}
 
 	if join.TargetSoftDeletes {
-		conds = append(conds, entsql.IsNull(target.C("deleted_at")))
+		conds = append(conds, entsql.IsNull(target.C(textDeletedAt)))
 	}
 
 	sub := entsql.Select(target.C(col)).
@@ -451,7 +451,7 @@ func orderByAggregate(agg types.AggregateSpec, tail string) Predicate {
 			entsql.ColumnsEQ(target.C(agg.TargetKey), s.C(agg.LocalKey)),
 		}
 		if agg.TargetSoftDeletes {
-			conds = append(conds, entsql.IsNull(target.C("deleted_at")))
+			conds = append(conds, entsql.IsNull(target.C(textDeletedAt)))
 		}
 
 		orderBySubquery(
@@ -494,7 +494,7 @@ func writeIntervalCase(
 		b.WriteString(" WHEN '")
 		b.WriteString(strings.ReplaceAll(c.Value, "'", "''"))
 		b.WriteString("' THEN make_interval(secs => ")
-		b.WriteString(strconv.FormatInt(c.Seconds, 10))
+		b.WriteString(strconv.FormatInt(c.Seconds, base10))
 		b.WriteByte(')')
 	}
 

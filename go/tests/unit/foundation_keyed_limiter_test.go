@@ -25,13 +25,13 @@ func TestKeyedLimiter_CapsEachKeyIndependently(t *testing.T) {
 	l, err := keyed.New(keyed.Config{MaxPerKey: 2})
 	require.NoError(t, err)
 
-	r1, ok := l.TryAcquire("org-a")
+	r1, ok := l.TryAcquire(textOrgA)
 	require.True(t, ok)
 
-	_, ok = l.TryAcquire("org-a")
+	_, ok = l.TryAcquire(textOrgA)
 	require.True(t, ok)
 
-	_, ok = l.TryAcquire("org-a")
+	_, ok = l.TryAcquire(textOrgA)
 	require.False(t, ok, "org-a is at its cap")
 
 	_, ok = l.TryAcquire("org-b")
@@ -40,10 +40,10 @@ func TestKeyedLimiter_CapsEachKeyIndependently(t *testing.T) {
 	r1()
 	r1()
 
-	_, ok = l.TryAcquire("org-a")
+	_, ok = l.TryAcquire(textOrgA)
 	require.True(t, ok, "the release freed one slot")
 
-	_, ok = l.TryAcquire("org-a")
+	_, ok = l.TryAcquire(textOrgA)
 	require.False(t, ok, "a double release frees only one slot")
 }
 

@@ -26,22 +26,26 @@ func TestOps_FillInput(t *testing.T) {
 	t.Parallel()
 
 	flags := []types.FlagSpec{
-		{Name: "coverage-threshold", Type: types.FlagInt, Default: 80},
-		{Name: "go", Type: types.FlagBool},
-		{Name: "changed", Type: types.FlagStrings},
-		{Name: "env", Type: types.FlagString},
+		{Name: "coverage-threshold", Type: types.FlagInt, Default: default80},
+		{Name: textGo2, Type: types.FlagBool},
+		{Name: textChanged, Type: types.FlagStrings},
+		{Name: textEnv, Type: types.FlagString},
 	}
-	args := types.ArgSpec{Names: []string{"overlay"}, Rest: "paths"}
+	args := types.ArgSpec{Names: []string{"overlay"}, Rest: textPaths}
 
-	in := map[string]any{"go": true, "env": "staging", "coverage_threshold": 40.0}
+	in := map[string]any{
+		textGo2:              true,
+		textEnv:              textStaging,
+		"coverage_threshold": coverageThreshold40p0,
+	}
 	ops.FillInput(flags, args, in)
 
 	assert.Equal(t, map[string]any{
 		"coverage_threshold": 40,
-		"go":                 true,
-		"changed":            []string{},
-		"env":                "staging",
+		textGo2:              true,
+		textChanged:          []string{},
+		textEnv:              textStaging,
 		"overlay":            "",
-		"paths":              []string{},
+		textPaths:            []string{},
 	}, in)
 }

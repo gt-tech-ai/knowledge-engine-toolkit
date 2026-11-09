@@ -14,7 +14,7 @@ import (
 
 // programRows are expr rows (one with a for) whose verdicts over guardFiles are known.
 func programRows() []types.GuardRow {
-	deploy := types.FileSelector{Globs: []string{"deploy/*"}}
+	deploy := types.FileSelector{Globs: []string{textDeploy2}}
 
 	return []types.GuardRow{
 		{
@@ -58,7 +58,7 @@ func TestServicesGuard_SharedPrograms(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	got := make([]map[string]types.Verdict, 2)
+	got := make([]map[string]types.Verdict, size2)
 
 	for i := range got {
 		wg.Go(
@@ -72,8 +72,8 @@ func TestServicesGuard_SharedPrograms(t *testing.T) {
 		assert.Equal(t, want, vs)
 	}
 
-	bad := []types.GuardRow{{Name: "bad", Kind: types.GuardExpr, Expr: "files.("}}
-	for range 2 {
+	bad := []types.GuardRow{{Name: textBad, Kind: types.GuardExpr, Expr: "files.("}}
+	for range iterations2 {
 		_, err := guard.NewFromConfig(bad, guard.Deps{Programs: progs})
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -103,7 +103,7 @@ func BenchmarkNewFromConfig_Programs(b *testing.B) {
 func benchmarkNewFromConfigProgramsRest(b *testing.B, rows []types.GuardRow) {
 	b.Helper()
 
-	b.Run("shared", func(b *testing.B) {
+	b.Run(textShared, func(b *testing.B) {
 		progs := guard.NewPrograms()
 		for b.Loop() {
 			_, err := guard.NewFromConfig(

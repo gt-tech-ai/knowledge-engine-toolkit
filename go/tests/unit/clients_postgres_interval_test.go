@@ -25,7 +25,7 @@ import (
 func TestStartStatsCollector_DefaultsNonPositiveInterval(t *testing.T) {
 	t.Parallel()
 
-	db, err := sql.Open("pgx", "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
+	db, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

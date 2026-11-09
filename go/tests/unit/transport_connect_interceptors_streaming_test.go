@@ -59,15 +59,15 @@ func TestMetricsInterceptor_Streaming_RecordsCounterAndDuration(t *testing.T) {
 	hist := mocks.NewMockHistogram(ctrl)
 
 	m.EXPECT().
-		Counter("connect_rpc_requests_total", gomock.Any(), "service", "method", "code").
+		Counter("connect_rpc_requests_total", gomock.Any(), textService, textMethod, "code").
 		Return(counter)
 	m.EXPECT().
 		Histogram(
-			"connect_rpc_duration_seconds", gomock.Any(), gomock.Any(), "service", "method",
+			"connect_rpc_duration_seconds", gomock.Any(), gomock.Any(), textService, textMethod,
 		).
 		Return(hist)
-	counter.EXPECT().Inc("test.v1.StreamService", "Stream", "ok")
-	hist.EXPECT().Observe(gomock.Any(), "test.v1.StreamService", "Stream")
+	counter.EXPECT().Inc(textTestV1Streamservice, "Stream", textOk)
+	hist.EXPECT().Observe(gomock.Any(), textTestV1Streamservice, "Stream")
 
 	interceptor := interceptors.MetricsInterceptor(m)
 	conn := newStreamConn(t)
@@ -104,7 +104,7 @@ func TestTracingInterceptor_Streaming_CreatesSpan(t *testing.T) {
 
 	err := interceptor.WrapStreamingHandler(next)(context.Background(), conn)
 	require.NoError(t, err)
-	assert.Equal(t, "test.v1.StreamService", gotService,
+	assert.Equal(t, textTestV1Streamservice, gotService,
 		"the streaming path must open a span with the rpc.service attribute")
 }
 

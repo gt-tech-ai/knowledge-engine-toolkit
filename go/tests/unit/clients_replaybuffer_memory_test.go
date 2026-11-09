@@ -20,13 +20,13 @@ func appendSeq(t *testing.T, b interfaces.ReplayBuffer, n int) {
 
 	for i := 1; i <= n; i++ {
 		id := "msg-" + itoa(i)
-		require.NoError(t, b.Append(context.Background(), "k", id, []byte(id)))
+		require.NoError(t, b.Append(context.Background(), textK, id, []byte(id)))
 	}
 }
 
 func itoa(i int) string {
 	if i == 0 {
-		return "0"
+		return text0
 	}
 
 	var buf [20]byte
@@ -38,7 +38,7 @@ func itoa(i int) string {
 
 		buf[pos] = byte('0' + i%10)
 
-		i /= 10
+		i /= value10
 	}
 
 	return string(buf[pos:])
@@ -71,24 +71,24 @@ func ids(msgs []interfaces.BufferedMessage) []string {
 func TestReplayBufferMemory_ReplayAfter(t *testing.T) {
 	t.Parallel()
 
-	b := memory.New(100, time.Minute)
-	appendSeq(t, b, 5)
+	b := memory.New(maxSize100, time.Minute)
+	appendSeq(t, b, appendSeqArg5)
 
-	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-2")
+	tail, complete, err := b.ReplayAfter(context.Background(), textK, "msg-2")
 	require.NoError(t, err)
 	assert.True(t, complete, "msg-2 is retained → gapless")
-	assert.Equal(t, []string{"msg-3", "msg-4", "msg-5"}, ids(tail))
+	assert.Equal(t, []string{textMsg3, textMsg4, textMsg5}, ids(tail))
 
-	tail, complete, err = b.ReplayAfter(context.Background(), "k", "msg-5")
+	tail, complete, err = b.ReplayAfter(context.Background(), textK, textMsg5)
 	require.NoError(t, err)
 	assert.True(t, complete)
 	assert.Empty(t, tail, "caught up → nothing to replay")
 
-	_, complete, err = b.ReplayAfter(context.Background(), "k", "msg-999")
+	_, complete, err = b.ReplayAfter(context.Background(), textK, "msg-999")
 	require.NoError(t, err)
 	assert.False(t, complete, "an unknown id is a gap")
 
-	_, complete, err = b.ReplayAfter(context.Background(), "absent", "msg-1")
+	_, complete, err = b.ReplayAfter(context.Background(), textAbsent, textMsg1)
 	require.NoError(t, err)
 	assert.False(t, complete, "an absent key is a gap")
 }
@@ -110,17 +110,17 @@ func TestReplayBufferMemory_ReplayAfter(t *testing.T) {
 func TestReplayBufferMemory_Prune(t *testing.T) {
 	t.Parallel()
 
-	b := memory.New(100, time.Minute)
-	appendSeq(t, b, 5)
+	b := memory.New(maxSize100, time.Minute)
+	appendSeq(t, b, appendSeqArg5)
 
-	require.NoError(t, b.Prune(context.Background(), "k", "msg-3"))
+	require.NoError(t, b.Prune(context.Background(), textK, textMsg3))
 
-	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-3")
+	tail, complete, err := b.ReplayAfter(context.Background(), textK, textMsg3)
 	require.NoError(t, err)
 	assert.True(t, complete)
-	assert.Equal(t, []string{"msg-4", "msg-5"}, ids(tail))
+	assert.Equal(t, []string{textMsg4, textMsg5}, ids(tail))
 
-	_, complete, err = b.ReplayAfter(context.Background(), "k", "msg-1")
+	_, complete, err = b.ReplayAfter(context.Background(), textK, textMsg1)
 	require.NoError(t, err)
 	assert.False(t, complete, "the pruned prefix is a gap")
 }
@@ -141,17 +141,17 @@ func TestReplayBufferMemory_Prune(t *testing.T) {
 func TestReplayBufferMemory_NBoundEvictsOldest(t *testing.T) {
 	t.Parallel()
 
-	b := memory.New(3, time.Minute)
-	appendSeq(t, b, 5)
+	b := memory.New(maxSize3, time.Minute)
+	appendSeq(t, b, appendSeqArg5)
 
-	_, complete, err := b.ReplayAfter(context.Background(), "k", "msg-1")
+	_, complete, err := b.ReplayAfter(context.Background(), textK, textMsg1)
 	require.NoError(t, err)
 	assert.False(t, complete, "msg-1 was evicted by the N-bound → gap")
 
-	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-3")
+	tail, complete, err := b.ReplayAfter(context.Background(), textK, textMsg3)
 	require.NoError(t, err)
 	assert.True(t, complete)
-	assert.Equal(t, []string{"msg-4", "msg-5"}, ids(tail))
+	assert.Equal(t, []string{textMsg4, textMsg5}, ids(tail))
 }
 
 // TestReplayBufferMemory_TTLExpires tests that a key's buffer expires after its TTL,
@@ -168,11 +168,11 @@ func TestReplayBufferMemory_NBoundEvictsOldest(t *testing.T) {
 func TestReplayBufferMemory_TTLExpires(t *testing.T) {
 	t.Parallel()
 
-	b := memory.New(100, 20*time.Millisecond)
-	appendSeq(t, b, 3)
+	b := memory.New(maxSize100, 20*time.Millisecond)
+	appendSeq(t, b, appendSeqArg3)
 
 	assert.Eventually(t, func() bool {
-		_, complete, err := b.ReplayAfter(context.Background(), "k", "msg-1")
+		_, complete, err := b.ReplayAfter(context.Background(), textK, textMsg1)
 
 		return err == nil && !complete
 	}, time.Second, 5*time.Millisecond, "buffer must expire after its TTL")
@@ -201,10 +201,10 @@ func TestReplayBufferMemory_ReplayAfterProperty(t *testing.T) {
 func replayTailMatches(t *testing.T, n, j int) bool {
 	t.Helper()
 
-	b := memory.New(100, time.Minute)
+	b := memory.New(maxSize100, time.Minute)
 	appendSeq(t, b, n)
 
-	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-"+itoa(j))
+	tail, complete, err := b.ReplayAfter(context.Background(), textK, "msg-"+itoa(j))
 	if err != nil || !complete {
 		return false
 	}

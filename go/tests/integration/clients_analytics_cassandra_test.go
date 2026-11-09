@@ -83,7 +83,7 @@ func (s *AnalyticsCassandraSuite) SetupSuite() {
 
 	cfg.Cassandra.Hosts, cfg.Cassandra.Port = []string{s.CassandraHost}, s.CassandraPort
 	cfg.Cassandra.LocalDC = cassandradb.LocalDC
-	cfg.Keyspace, cfg.Timeout = itKeyspace, 20*time.Second
+	cfg.Keyspace, cfg.Timeout = itKeyspace, seconds20*time.Second
 
 	session, err := cql.NewFromConfig(ctx, cfg, cql.Deps{})
 	s.Require().NoError(err)
@@ -113,8 +113,8 @@ func (s *AnalyticsCassandraSuite) TestCassandra_AggregatesAcrossBucketBoundaries
 	store := s.newStore(s.session, 0)
 	org := "org-buckets"
 	s.Require().NoError(store.Write(context.Background(), []types.Fact{
-		fact(org, "a", time.Date(2026, 10, 8, 23, 30, 0, 0, time.UTC), "t-1", "m", 10),
-		fact(org, "b", time.Date(2026, 10, 9, 0, 30, 0, 0, time.UTC), "t-1", "m", 20),
+		fact(org, "a", time.Date(2026, 10, 8, 23, 30, 0, 0, time.UTC), textT1, textM, 10),
+		fact(org, "b", time.Date(2026, 10, 9, 0, 30, 0, 0, time.UTC), textT1, textM, 20),
 	}))
 
 	got := s.totals(
@@ -122,21 +122,21 @@ func (s *AnalyticsCassandraSuite) TestCassandra_AggregatesAcrossBucketBoundaries
 		query(
 			org,
 			types.GrainHour,
-			time.Date(2026, 10, 8, 20, 0, 0, 0, time.UTC),
-			time.Date(2026, 10, 9, 2, 0, 0, 0, time.UTC),
+			time.Date(year2026, month10, day8, hour20, 0, 0, 0, time.UTC),
+			time.Date(year2026, month10, day9, hour2, 0, 0, 0, time.UTC),
 		),
 	)
 
-	s.InDelta(30.0, chartspec.Finalize(got["t-1"], types.AggSum), 0)
-	s.InDelta(2.0, chartspec.Finalize(got["t-1"], types.AggCount), 0)
+	s.InDelta(inDeltaArg30p0, chartspec.Finalize(got[textT1], types.AggSum), 0)
+	s.InDelta(inDeltaArg2p0, chartspec.Finalize(got[textT1], types.AggCount), 0)
 }
 
 // fact builds a genai_calls fact for org.
 func fact(org, key string, at time.Time, team, model string, tokens float64) types.Fact {
 	return types.Fact{
 		Cube: itCube, OrgID: org, TS: at, IdempotencyKey: key,
-		Dims:     map[string]string{"team": team, "model": model},
-		Measures: map[string]float64{"tokens_in": tokens},
+		Dims:     map[string]string{textTeam: team, textModel: model},
+		Measures: map[string]float64{textTokensIn: tokens},
 	}
 }
 
@@ -151,29 +151,29 @@ func fact(org, key string, at time.Time, team, model string, tokens float64) typ
 //   - 80 facts over Sep 25 – Oct 6 (two month buckets); for 30 random $and/$or
 //     filters on team, model and ts, the per-team sums equal the full scan's exactly
 func (s *AnalyticsCassandraSuite) TestCassandra_PushdownMatchesFullScan() {
-	store := s.newStore(s.session, 7)
+	store := s.newStore(s.session, pageSize7)
 	org := "org-pushdown"
-	r := fixtures.NewSequence(42)
+	r := fixtures.NewSequence(seed42)
 
 	var days []time.Time
 
-	first := time.Date(2026, 9, 25, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
+	first := time.Date(year2026, month9, day25, 0, 0, 0, 0, time.UTC)
+	end := time.Date(year2026, month10, day7, 0, 0, 0, 0, time.UTC)
 
 	for d := first; d.Before(end); d = d.AddDate(0, 0, 1) {
 		days = append(days, d)
 	}
 
-	facts := make([]types.Fact, 0, 80)
+	facts := make([]types.Fact, 0, capacity80)
 
-	for i := range 80 {
+	for i := range iterations80 {
 		at := days[r.IntN(len(days))].Add(time.Duration(r.IntN(24*60)) * time.Minute)
 
 		facts = append(facts, fact(
 			org,
 			fmt.Sprintf("f-%d", i),
 			at,
-			[]string{"t-1", "t-2", "t-3"}[r.IntN(3)],
+			[]string{textT1, textT2, textT3}[r.IntN(3)],
 			[]string{"m-a", "m-b"}[r.IntN(2)],
 			float64(1+r.IntN(100)),
 		))
@@ -195,7 +195,8 @@ func testCassandraPushdownMatchesFullScanRest(
 	facts []types.Fact,
 ) {
 	m := listquery.NewMap().
-		Add(listquery.String("team"), listquery.String("model"), listquery.Time("ts").AsTime())
+		Add(listquery.String(textTeam), listquery.String(textModel),
+			listquery.Time("ts").AsTime())
 
 	testCassandraPushdownMatchesFullScanRest2(s, store, org, r, days, facts, m)
 }
@@ -211,7 +212,7 @@ func testCassandraPushdownMatchesFullScanRest2(
 	facts []types.Fact,
 	m *listquery.Map,
 ) {
-	for range 30 {
+	for range iterations30 {
 		gen := genFilter(r, days)
 		filter, err := listquery.Parse(m, gen.json)
 		s.Require().NoError(err, gen.json)
@@ -232,8 +233,8 @@ func testCassandraPushdownMatchesFullScanRest2(
 // query is the tokens_in-by-team query of org over [from, to) at grain.
 func query(org string, grain types.Grain, from, to time.Time) types.AggregateQuery {
 	return types.AggregateQuery{
-		Cube: itCube, OrgID: org, Grain: grain, GroupBy: []string{"team"},
-		Measures:  []types.MeasureRef{{Name: "tokens_in", Agg: types.AggSum}},
+		Cube: itCube, OrgID: org, Grain: grain, GroupBy: []string{textTeam},
+		Measures:  []types.MeasureRef{{Name: textTokensIn, Agg: types.AggSum}},
 		TimeRange: types.TimeRange{From: from, To: to},
 	}
 }
@@ -250,7 +251,14 @@ func query(org string, grain types.Grain, from, to time.Time) types.AggregateQue
 func (s *AnalyticsCassandraSuite) TestCassandra_RedeliveredFactIsNoop() {
 	store := s.newStore(s.session, 0)
 	org := "org-redeliver"
-	f := fact(org, "same", time.Date(2026, 10, 9, 10, 0, 0, 0, time.UTC), "t-1", "m", 17)
+	f := fact(
+		org,
+		"same",
+		time.Date(year2026, month10, day9, hour10, 0, 0, 0, time.UTC),
+		textT1,
+		textM,
+		tokens17,
+	)
 	s.Require().NoError(store.Write(context.Background(), []types.Fact{f}))
 	s.Require().NoError(store.Write(context.Background(), []types.Fact{f}))
 
@@ -260,12 +268,12 @@ func (s *AnalyticsCassandraSuite) TestCassandra_RedeliveredFactIsNoop() {
 			query(
 				org,
 				g,
-				time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC),
-				time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC),
+				time.Date(year2026, month10, day9, 0, 0, 0, 0, time.UTC),
+				time.Date(year2026, month10, day10, 0, 0, 0, 0, time.UTC),
 			),
 		)
-		s.InDelta(17.0, chartspec.Finalize(got["t-1"], types.AggSum), 0, g)
-		s.InDelta(1.0, chartspec.Finalize(got["t-1"], types.AggCount), 0, g)
+		s.InDelta(inDeltaArg17p0, chartspec.Finalize(got[textT1], types.AggSum), 0, g)
+		s.InDelta(inDeltaArg1p0, chartspec.Finalize(got[textT1], types.AggCount), 0, g)
 	}
 }
 
@@ -277,13 +285,13 @@ type randFilter struct {
 
 // genFilter builds a random filter over team, model and the day-aligned time.
 func genFilter(r *fixtures.Sequence, days []time.Time) randFilter {
-	teams, models := []string{"t-1", "t-2", "t-3"}, []string{"m-a", "m-b"}
+	teams, models := []string{textT1, textT2, textT3}, []string{"m-a", "m-b"}
 
 	leaf := func() randFilter { return genLeafFilter(r, days, teams, models) }
 
 	a, b := leaf(), leaf()
 
-	if r.IntN(2) == 0 {
+	if r.IntN(intNArg2) == 0 {
 		return randFilter{
 			json:  `{"$and":[` + a.json + `,` + b.json + `]}`,
 			match: func(f types.Fact) bool { return a.match(f) && b.match(f) },
@@ -302,27 +310,29 @@ func genLeafFilter(
 	days []time.Time,
 	teams, models []string,
 ) randFilter {
-	switch r.IntN(4) {
+	switch r.IntN(intNArg4) {
 	case 0:
 		t := teams[r.IntN(len(teams))]
 
 		return randFilter{
 			json:  fmt.Sprintf(`{"$eq":{"team":%q}}`, t),
-			match: func(f types.Fact) bool { return f.Dims["team"] == t },
+			match: func(f types.Fact) bool { return f.Dims[textTeam] == t },
 		}
 	case 1:
 		a, b := teams[r.IntN(len(teams))], teams[r.IntN(len(teams))]
 
 		return randFilter{
-			json:  fmt.Sprintf(`{"$in":{"team":[%q,%q]}}`, a, b),
-			match: func(f types.Fact) bool { return f.Dims["team"] == a || f.Dims["team"] == b },
+			json: fmt.Sprintf(`{"$in":{"team":[%q,%q]}}`, a, b),
+			match: func(f types.Fact) bool {
+				return f.Dims[textTeam] == a || f.Dims[textTeam] == b
+			},
 		}
-	case 2:
+	case intN2:
 		m := models[r.IntN(len(models))]
 
 		return randFilter{
 			json:  fmt.Sprintf(`{"$ne":{"model":%q}}`, m),
-			match: func(f types.Fact) bool { return f.Dims["model"] != m },
+			match: func(f types.Fact) bool { return f.Dims[textModel] != m },
 		}
 	default:
 		d := days[r.IntN(len(days))]
@@ -347,19 +357,19 @@ func genLeafFilter(
 //   - with 2-row pages over 5 rows, the first page has 2 rows and a token; a new
 //     stream from that token yields the other 3, with no row twice
 func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
-	store := s.newStore(s.session, 2)
+	store := s.newStore(s.session, pageSize2)
 	org := "org-paging"
-	facts := make([]types.Fact, 0, 5)
+	facts := make([]types.Fact, 0, capacity5)
 
-	for i := range 5 {
+	for i := range iterations5 {
 		facts = append(
 			facts,
 			fact(
 				org,
 				fmt.Sprintf("p-%d", i),
-				time.Date(2026, 10, 9, i, 0, 0, 0, time.UTC),
+				time.Date(year2026, month10, day9, i, 0, 0, 0, time.UTC),
 				fmt.Sprintf("t-%d", i),
-				"m",
+				textM,
 				1,
 			),
 		)
@@ -370,8 +380,8 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
 	q := query(
 		org,
 		types.GrainHour,
-		time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC),
-		time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC),
+		time.Date(year2026, month10, day9, 0, 0, 0, 0, time.UTC),
+		time.Date(year2026, month10, day10, 0, 0, 0, 0, time.UTC),
 	)
 	ctx := context.Background()
 
@@ -381,7 +391,7 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
 	page, more, err := first.Next(ctx)
 	s.Require().NoError(err)
 	s.True(more)
-	s.Len(page, 2)
+	s.Len(page, length2)
 
 	token := first.ResumeToken()
 	s.NotEmpty(token)
@@ -393,14 +403,14 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
 	seen := map[string]int{}
 
 	for _, r := range page {
-		seen[r.Group["team"]]++
+		seen[r.Group[textTeam]]++
 	}
 
 	for team := range rest {
 		seen[team]++
 	}
 
-	s.Equal(map[string]int{"t-0": 1, "t-1": 1, "t-2": 1, "t-3": 1, "t-4": 1}, seen)
+	s.Equal(map[string]int{"t-0": 1, textT1: 1, textT2: 1, textT3: 1, "t-4": 1}, seen)
 }
 
 // TestCassandra_CrashBetweenWritesDoesNotLoseMeasures tests that a write that
@@ -415,7 +425,14 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PagingResumeToken() {
 //     redelivered Write, hour and day totals are both exactly 25 with count 1
 func (s *AnalyticsCassandraSuite) TestCassandra_CrashBetweenWritesDoesNotLoseMeasures() {
 	org := "org-crash"
-	f := fact(org, "c-1", time.Date(2026, 10, 9, 14, 0, 0, 0, time.UTC), "t-1", "m", 25)
+	f := fact(
+		org,
+		"c-1",
+		time.Date(year2026, month10, day9, hour14, 0, 0, 0, time.UTC),
+		textT1,
+		textM,
+		tokens25,
+	)
 	crashing := s.newStore(
 		&crashingSession{
 			CQLSession: s.session,
@@ -436,12 +453,12 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CrashBetweenWritesDoesNotLoseMea
 			query(
 				org,
 				g,
-				time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC),
-				time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC),
+				time.Date(year2026, month10, day9, 0, 0, 0, 0, time.UTC),
+				time.Date(year2026, month10, day10, 0, 0, 0, 0, time.UTC),
 			),
 		)
-		s.InDelta(25.0, chartspec.Finalize(got["t-1"], types.AggSum), 0, g)
-		s.InDelta(1.0, chartspec.Finalize(got["t-1"], types.AggCount), 0, g)
+		s.InDelta(inDeltaArg25p0, chartspec.Finalize(got[textT1], types.AggSum), 0, g)
+		s.InDelta(inDeltaArg1p0, chartspec.Finalize(got[textT1], types.AggCount), 0, g)
 	}
 }
 
@@ -459,25 +476,25 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CompactionPreservesTotals() {
 	org := "org-compact"
 	s.writeCompactionFacts(store, org)
 
-	bucket := time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC)
+	bucket := time.Date(year2025, month3, day4, 0, 0, 0, 0, time.UTC)
 	q := query(org, types.GrainHour, bucket, bucket.AddDate(0, 0, 1))
 	before := s.totals(store, q)
-	s.Equal(43, s.partitionRows(org, types.GrainHour, bucket))
+	s.Equal(equalArg43, s.partitionRows(org, types.GrainHour, bucket))
 
 	s.Require().
 		NoError(store.Compact(context.Background(), itCube, types.GrainHour, org, bucket))
 
 	after := s.totals(store, q)
-	s.Equal(2, s.partitionRows(org, types.GrainHour, bucket))
+	s.Equal(equalArg2, s.partitionRows(org, types.GrainHour, bucket))
 
-	for _, team := range []string{"t-1", "t-2"} {
+	for _, team := range []string{textT1, textT2} {
 		for _, agg := range []types.Aggregate{
 			types.AggSum, types.AggCount, types.AggMin, types.AggMax, types.AggP95,
 		} {
 			s.InDelta(
 				chartspec.Finalize(before[team], agg),
 				chartspec.Finalize(after[team], agg),
-				1e-9,
+				delta1em9,
 				"%s %s",
 				team,
 				agg,
@@ -544,28 +561,28 @@ func (s *AnalyticsCassandraSuite) TestCassandra_CompactionIsIdempotent() {
 	store := s.newStore(s.session, 0)
 	org := "org-compact-twice"
 	values := s.writeCompactionFacts(store, org)
-	bucket := time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC)
+	bucket := time.Date(year2025, month3, day4, 0, 0, 0, 0, time.UTC)
 	q := query(org, types.GrainHour, bucket, bucket.AddDate(0, 0, 1))
-	want := 0.0
+	want := want0p0
 
-	for _, v := range values["t-1"] {
+	for _, v := range values[textT1] {
 		want += v
 	}
 
 	ctx := context.Background()
 	s.Require().NoError(store.Compact(ctx, itCube, types.GrainHour, org, bucket))
 	s.Require().NoError(store.Compact(ctx, itCube, types.GrainHour, org, bucket))
-	s.InDelta(want, chartspec.Finalize(s.totals(store, q)["t-1"], types.AggSum), 0)
+	s.InDelta(want, chartspec.Finalize(s.totals(store, q)[textT1], types.AggSum), 0)
 
-	lateAt := time.Date(2025, 3, 4, 9, 5, 0, 0, time.UTC)
-	late := fact(org, "late", lateAt, "t-1", "m", 100)
+	lateAt := time.Date(year2025, month3, day4, hour9, min5, 0, 0, time.UTC)
+	late := fact(org, "late", lateAt, textT1, textM, tokens100)
 	s.Require().NoError(store.Write(ctx, []types.Fact{late}))
 	s.Require().NoError(store.Compact(ctx, itCube, types.GrainHour, org, bucket))
 
-	got := s.totals(store, q)["t-1"]
+	got := s.totals(store, q)[textT1]
 	s.InDelta(want+100, chartspec.Finalize(got, types.AggSum), 0)
-	s.InDelta(41.0, chartspec.Finalize(got, types.AggCount), 0)
-	s.Equal(2, s.partitionRows(org, types.GrainHour, bucket))
+	s.InDelta(inDeltaArg41p0, chartspec.Finalize(got, types.AggCount), 0)
+	s.Equal(equalArg2, s.partitionRows(org, types.GrainHour, bucket))
 	s.False(math.IsNaN(chartspec.Finalize(got, types.AggP95)))
 }
 
@@ -611,13 +628,13 @@ func (s *AnalyticsCassandraSuite) totals(
 		s.Require().NoError(err)
 
 		for _, r := range rows {
-			p, err := chartspec.DecodePartial(r.Partials["tokens_in"])
+			p, err := chartspec.DecodePartial(r.Partials[textTokensIn])
 			s.Require().NoError(err)
 
-			acc := out[r.Group["team"]]
+			acc := out[r.Group[textTeam]]
 			acc.Merge(p)
 
-			out[r.Group["team"]] = acc
+			out[r.Group[textTeam]] = acc
 		}
 
 		if !more {
@@ -661,12 +678,12 @@ func (s *AnalyticsCassandraSuite) writeCompactionFacts(
 	s.T().Helper()
 
 	values := map[string][]float64{}
-	facts := make([]types.Fact, 0, 43)
+	facts := make([]types.Fact, 0, capacity43)
 
-	for i := range 43 {
-		team := "t-1"
-		if i >= 40 {
-			team = "t-2"
+	for i := range iterations43 {
+		team := textT1
+		if i >= value40 {
+			team = textT2
 		}
 
 		v := float64(1 + i%17)
@@ -677,9 +694,9 @@ func (s *AnalyticsCassandraSuite) writeCompactionFacts(
 			fact(
 				org,
 				fmt.Sprintf("k-%d", i),
-				time.Date(2025, 3, 4, 9, i%60, 0, 0, time.UTC),
+				time.Date(year2025, month3, day4, hour9, i%60, 0, 0, time.UTC),
 				team,
-				"m",
+				textM,
 				v,
 			),
 		)
@@ -696,7 +713,7 @@ func matchingTotals(facts []types.Fact, gen randFilter) map[string]float64 {
 
 	for _, f := range facts {
 		if gen.match(f) {
-			want[f.Dims["team"]] += f.Measures["tokens_in"]
+			want[f.Dims[textTeam]] += f.Measures[textTokensIn]
 		}
 	}
 

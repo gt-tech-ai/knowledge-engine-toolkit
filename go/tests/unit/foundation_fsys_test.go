@@ -32,8 +32,8 @@ func TestOSFS_RoundTrips(t *testing.T) {
 	fs := fsys.NewOSFS()
 	dir := t.TempDir()
 
-	sub := filepath.Join(dir, "a", "b")
-	require.NoError(t, fs.MkdirAll(sub, 0o755))
+	sub := filepath.Join(dir, textA, textB)
+	require.NoError(t, fs.MkdirAll(sub, perm0o755))
 
 	info, err := fs.Stat(sub)
 	require.NoError(t, err)
@@ -41,7 +41,7 @@ func TestOSFS_RoundTrips(t *testing.T) {
 
 	file := filepath.Join(sub, "f.txt")
 	want := []byte("hello fsys")
-	require.NoError(t, fs.WriteFile(file, want, 0o644))
+	require.NoError(t, fs.WriteFile(file, want, perm0o644))
 
 	got, err := fs.ReadFile(file)
 	require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestOSFS_RoundTrips(t *testing.T) {
 	_, err = fs.Stat(moved)
 	assert.NoError(t, err, "new path exists after Rename")
 
-	require.NoError(t, fs.RemoveAll(filepath.Join(dir, "a")))
+	require.NoError(t, fs.RemoveAll(filepath.Join(dir, textA)))
 
 	_, err = fs.Stat(sub)
 	assert.True(t, apperr.StdIs(err, iofs.ErrNotExist), "RemoveAll deletes the tree")

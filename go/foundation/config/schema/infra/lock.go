@@ -62,7 +62,7 @@ func (c LockConfig) Validate() error {
 		return apperr.InvalidInput("lock.renew_interval must be > 0")
 	}
 
-	if c.RenewInterval*3 > c.TTL {
+	if c.RenewInterval*renewInterval3 > c.TTL {
 		return apperr.InvalidInput("lock.renew_interval must be <= lock.ttl/3")
 	}
 

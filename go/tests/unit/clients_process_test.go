@@ -47,7 +47,7 @@ func readyAfter(
 
 // sleeper is a process that runs until stopped.
 func sleeper() types.ProcessSpec {
-	return types.ProcessSpec{Name: "sleeper", Args: []string{"/bin/sh", "-c", "sleep 30"}}
+	return types.ProcessSpec{Name: "sleeper", Args: []string{textBinSh, "-c", "sleep 30"}}
 }
 
 // TestClientsProcess_StartReadyStop tests the exec supervisor's lifecycle.
@@ -68,11 +68,11 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 	sup, err := process.NewFromConfig(process.Config{Kind: process.KindExec})
 	require.NoError(t, err)
 
-	ready, runs := readyAfter(t, 3)
+	ready, runs := readyAfter(t, readyAfterArg3)
 
 	h, err := sup.Start(t.Context(), sleeper(), ready)
 	require.NoError(t, err)
-	assert.Equal(t, int32(3), runs.Load())
+	assert.Equal(t, int32(int32Arg3), runs.Load())
 
 	stopped := time.Now()
 
@@ -80,7 +80,7 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 	assert.Less(t, time.Since(stopped), 5*time.Second)
 	require.Error(t, h.Wait())
 
-	never, _ := readyAfter(t, 1000)
+	never, _ := readyAfter(t, readyAfterArg1000)
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 
 	defer cancel()
@@ -92,7 +92,7 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 		t.Context(),
 		types.ProcessSpec{
 			Name: "quitter",
-			Args: []string{"/bin/sh", "-c", "exit 3"},
+			Args: []string{textBinSh, "-c", "exit 3"},
 		},
 		never,
 	)
@@ -103,7 +103,7 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 	require.NoError(t, sup.StopAll(t.Context()))
 	require.Error(t, left.Wait())
 
-	_, err = sup.Start(t.Context(), types.ProcessSpec{Name: "empty"}, nil)
+	_, err = sup.Start(t.Context(), types.ProcessSpec{Name: textEmpty}, nil)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -124,7 +124,7 @@ func TestClientsProcess_DetachAndStub(t *testing.T) {
 	require.NoError(
 		t,
 		sup.Detach(
-			types.ProcessSpec{Name: "d", Args: []string{"/bin/sh", "-c", "exit 0"}},
+			types.ProcessSpec{Name: textD2, Args: []string{textBinSh, "-c", "exit 0"}},
 		),
 	)
 
@@ -159,14 +159,14 @@ func TestClientsProcess_LogFile(t *testing.T) {
 	run := func(word string) {
 		h, err := sup.Start(t.Context(), types.ProcessSpec{
 			Name: "log", LogFile: log,
-			Args: []string{"/bin/sh", "-c", "echo " + word + "; echo " + word + " >&2"},
+			Args: []string{textBinSh, "-c", "echo " + word + "; echo " + word + " >&2"},
 		}, nil)
 		require.NoError(t, err)
 		require.NoError(t, h.Wait())
 	}
 
-	run("one")
-	run("two")
+	run(textOne)
+	run(textTwo)
 
 	data, err := os.ReadFile(filepath.Clean(log))
 	require.NoError(t, err)
@@ -174,11 +174,11 @@ func TestClientsProcess_LogFile(t *testing.T) {
 
 	info, err := os.Stat(log)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(fileModeArg0o600), info.Mode().Perm())
 
 	err = sup.Detach(types.ProcessSpec{
-		Name: "log", LogFile: filepath.Join(t.TempDir(), "missing", "x.log"),
-		Args: []string{"/bin/sh", "-c", "exit 0"},
+		Name: "log", LogFile: filepath.Join(t.TempDir(), textMissing, "x.log"),
+		Args: []string{textBinSh, "-c", "exit 0"},
 	})
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }

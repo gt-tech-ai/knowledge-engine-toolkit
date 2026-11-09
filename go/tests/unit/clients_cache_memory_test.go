@@ -41,11 +41,11 @@ func TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound(t *testing.T) {
 
 		c, err := cache.NewFromConfig(ctx, cfg, cache.Deps{})
 		require.NoError(t, err)
-		c.Set(ctx, "k", []byte("v"), time.Minute)
+		c.Set(ctx, textK, []byte(textV), time.Minute)
 
-		v, hit := c.Get(ctx, "k")
+		v, hit := c.Get(ctx, textK)
 		assert.True(t, hit)
-		assert.Equal(t, []byte("v"), v)
+		assert.Equal(t, []byte(textV), v)
 	})
 
 	t.Run("ttl and delete", func(t *testing.T) {
@@ -53,10 +53,10 @@ func TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound(t *testing.T) {
 
 		now := time.Unix(1_700_000_000, 0)
 		c := memory.New(10, time.Hour, func() time.Time { return now })
-		c.Set(ctx, "short", []byte("a"), time.Minute)
-		c.Set(ctx, "default", []byte("b"), 0)
-		c.Set(ctx, "gone", []byte("c"), time.Hour)
-		c.Delete(ctx, "gone")
+		c.Set(ctx, "short", []byte(textA), time.Minute)
+		c.Set(ctx, "default", []byte(textB), 0)
+		c.Set(ctx, textGone, []byte(textC), time.Hour)
+		c.Delete(ctx, textGone)
 
 		now = now.Add(time.Minute)
 
@@ -66,7 +66,7 @@ func TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound(t *testing.T) {
 		_, hit = c.Get(ctx, "default")
 		assert.True(t, hit, "a zero ttl uses the default")
 
-		_, hit = c.Get(ctx, "gone")
+		_, hit = c.Get(ctx, textGone)
 		assert.False(t, hit, "a deleted value is gone")
 
 		now = now.Add(time.Hour)
@@ -88,15 +88,15 @@ func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest(
 		t.Parallel()
 
 		c := memory.New(2, time.Hour, time.Now)
-		c.Set(ctx, "a", []byte("1"), 0)
-		c.Set(ctx, "b", []byte("2"), 0)
+		c.Set(ctx, textA, []byte("1"), 0)
+		c.Set(ctx, textB, []byte("2"), 0)
 
-		_, _ = c.Get(ctx, "a")
-		c.Set(ctx, "c", []byte("3"), 0)
+		_, _ = c.Get(ctx, textA)
+		c.Set(ctx, textC, []byte("3"), 0)
 
-		_, hitA := c.Get(ctx, "a")
-		_, hitB := c.Get(ctx, "b")
-		_, hitC := c.Get(ctx, "c")
+		_, hitA := c.Get(ctx, textA)
+		_, hitB := c.Get(ctx, textB)
+		_, hitC := c.Get(ctx, textC)
 
 		assert.True(t, hitA)
 		assert.False(t, hitB, "the least recently used key is evicted")
@@ -117,15 +117,15 @@ func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase(
 ) {
 	t.Helper()
 
-	c := memory.New(64, time.Hour, time.Now)
+	c := memory.New(maxEntries64, time.Hour, time.Now)
 
 	var wg sync.WaitGroup
 
-	for i := range 16 {
+	for i := range iterations16 {
 		wg.Go(func() {
 			for j := range 100 {
 				key := fmt.Sprintf("k%d", (i*100+j)%128)
-				c.Set(ctx, key, []byte("v"), 0)
+				c.Set(ctx, key, []byte(textV), 0)
 
 				_, _ = c.Get(ctx, key)
 			}

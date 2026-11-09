@@ -30,10 +30,10 @@ import (
 func TestNewError(t *testing.T) {
 	t.Parallel()
 
-	err := apperr.New(apperr.ErrNotFound, "user not found")
+	err := apperr.New(apperr.ErrNotFound, textUserNotFound)
 
 	assert.Equal(t, apperr.ErrNotFound, err.Code)
-	assert.Equal(t, "user not found", err.Message)
+	assert.Equal(t, textUserNotFound, err.Message)
 	assert.Equal(t, "NOT_FOUND: user not found", err.Error())
 }
 
@@ -51,7 +51,7 @@ func TestWrapError(t *testing.T) {
 	t.Parallel()
 
 	cause := apperr.Sentinel("connection refused")
-	err := apperr.Wrap(cause, apperr.ErrUnavailable, "database connection failed")
+	err := apperr.Wrap(cause, apperr.ErrUnavailable, textDatabaseConnectionFailed)
 
 	appErr := &apperr.AppError{}
 	ok := errors.As(err, &appErr)
@@ -176,17 +176,17 @@ func TestConvenienceConstructors(t *testing.T) {
 func TestWithDetails(t *testing.T) {
 	t.Parallel()
 
-	err := apperr.NotFound("user not found")
-	detailed := apperr.WithDetails(err, map[string]string{"user_id": "123"})
+	err := apperr.NotFound(textUserNotFound)
+	detailed := apperr.WithDetails(err, map[string]string{textUserID: "123"})
 
-	assert.Equal(t, "123", detailed.Details["user_id"], "details should contain user_id")
+	assert.Equal(t, "123", detailed.Details[textUserID], "details should contain user_id")
 
 	// Confirm the original is not mutated.
 	if err.Details != nil {
 		assert.NotEqual(
 			t,
 			"123",
-			err.Details["user_id"],
+			err.Details[textUserID],
 			"original error must not be modified",
 		)
 	}
@@ -208,7 +208,7 @@ func TestIsTransient(t *testing.T) {
 
 	assert.True(
 		t,
-		apperr.IsTransient(apperr.Timeout("timeout")),
+		apperr.IsTransient(apperr.Timeout(textTimeout)),
 		"Timeout should be transient",
 	)
 	assert.True(
@@ -243,12 +243,12 @@ func TestIsPermanent(t *testing.T) {
 	)
 	assert.True(
 		t,
-		apperr.IsPermanent(apperr.InvalidInput("bad")),
+		apperr.IsPermanent(apperr.InvalidInput(textBad)),
 		"InvalidInput should be permanent",
 	)
 	assert.False(
 		t,
-		apperr.IsPermanent(apperr.Timeout("timeout")),
+		apperr.IsPermanent(apperr.Timeout(textTimeout)),
 		"Timeout should not be permanent",
 	)
 }
@@ -270,14 +270,14 @@ func TestToHTTPStatus(t *testing.T) {
 		code   apperr.ErrorCode
 		status int
 	}{
-		{apperr.ErrNotFound, 404},
-		{apperr.ErrInvalidInput, 400},
-		{apperr.ErrUnauthorized, 401},
-		{apperr.ErrForbidden, 403},
-		{apperr.ErrConflict, 409},
-		{apperr.ErrInternal, 500},
-		{apperr.ErrTimeout, 504},
-		{apperr.ErrUnavailable, 503},
+		{apperr.ErrNotFound, tests404},
+		{apperr.ErrInvalidInput, tests400},
+		{apperr.ErrUnauthorized, tests401},
+		{apperr.ErrForbidden, tests403},
+		{apperr.ErrConflict, tests409},
+		{apperr.ErrInternal, tests500},
+		{apperr.ErrTimeout, tests504},
+		{apperr.ErrUnavailable, tests503},
 	}
 
 	for _, tt := range tests {
@@ -305,8 +305,8 @@ func TestMarshalLogObject(t *testing.T) {
 	t.Parallel()
 
 	appErr := apperr.WithDetails(
-		apperr.NotFound("record not found"),
-		map[string]string{"id": "123"},
+		apperr.NotFound(textRecordNotFound),
+		map[string]string{textID: "123"},
 	)
 
 	enc := zapcore.NewMapObjectEncoder()
@@ -317,7 +317,7 @@ func TestMarshalLogObject(t *testing.T) {
 	)
 
 	assert.Equal(t, string(apperr.CodeNotFound), enc.Fields["code"])
-	assert.Equal(t, "record not found", enc.Fields["message"])
+	assert.Equal(t, textRecordNotFound, enc.Fields["message"])
 	assert.Contains(t, enc.Fields, "details", "details field must be present")
 }
 
@@ -334,10 +334,10 @@ func TestMarshalLogObject(t *testing.T) {
 func TestZapErrorAppError(t *testing.T) {
 	t.Parallel()
 
-	appErr := apperr.NotFound("record not found")
+	appErr := apperr.NotFound(textRecordNotFound)
 	field := apperr.ZapError(appErr)
 
-	assert.Equal(t, "error", field.Key)
+	assert.Equal(t, textError, field.Key)
 	assert.Equal(
 		t,
 		zapcore.ObjectMarshalerType,
@@ -361,7 +361,7 @@ func TestZapErrorPlainError(t *testing.T) {
 	plainErr := apperr.Sentinel("something went wrong")
 	field := apperr.ZapError(plainErr)
 
-	assert.Equal(t, "error", field.Key)
+	assert.Equal(t, textError, field.Key)
 	assert.Equal(t, zapcore.ErrorType, field.Type, "plain error should use ErrorType")
 }
 
@@ -377,7 +377,7 @@ func TestZapErrorPlainError(t *testing.T) {
 func TestZapFields(t *testing.T) {
 	t.Parallel()
 
-	appErr := apperr.Internal("database connection failed")
+	appErr := apperr.Internal(textDatabaseConnectionFailed)
 	assertInternalZapFields(t, appErr)
 }
 
@@ -399,7 +399,7 @@ func TestCoreLogErrorTransient(t *testing.T) {
 	apperr.LogError(logger, "request failed", apperr.Timeout("connection timed out"))
 
 	entries := observed.All()
-	require.Len(t, entries, 1, "expected exactly one log entry")
+	require.Len(t, entries, 1, textExpectedExactlyOneLog)
 	assert.Equal(t, zap.WarnLevel, entries[0].Level, "transient error should log at Warn")
 }
 
@@ -421,7 +421,7 @@ func TestCoreLogErrorPermanent(t *testing.T) {
 	apperr.LogError(logger, "lookup failed", apperr.NotFound("record missing"))
 
 	entries := observed.All()
-	require.Len(t, entries, 1, "expected exactly one log entry")
+	require.Len(t, entries, 1, textExpectedExactlyOneLog)
 	assert.Equal(
 		t,
 		zap.ErrorLevel,
@@ -448,7 +448,7 @@ func TestCoreLogErrorPlainError(t *testing.T) {
 	apperr.LogError(logger, "unexpected failure", apperr.Sentinel("disk full"))
 
 	entries := observed.All()
-	require.Len(t, entries, 1, "expected exactly one log entry")
+	require.Len(t, entries, 1, textExpectedExactlyOneLog)
 	assert.Equal(t, zap.ErrorLevel, entries[0].Level, "plain error should log at Error")
 }
 
@@ -470,5 +470,5 @@ func assertInternalZapFields(t *testing.T, appErr *apperr.AppError) {
 
 	msgField, ok := fieldMap["error_message"]
 	require.True(t, ok, "expected error_message field")
-	assert.Equal(t, "database connection failed", msgField.String)
+	assert.Equal(t, textDatabaseConnectionFailed, msgField.String)
 }

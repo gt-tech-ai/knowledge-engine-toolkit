@@ -52,8 +52,16 @@ func TestBuffer_BoundedBlocksProducerAtCapacity(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]stream.Config{
-		"item bound": {Kind: stream.KindBounded, MaxItems: 2, MaxBytes: 1 << 20},
-		"byte bound": {Kind: stream.KindBounded, MaxItems: 10, MaxBytes: 4},
+		"item bound": {
+			Kind:     stream.KindBounded,
+			MaxItems: maxItems2,
+			MaxBytes: 1 << maxBytes20,
+		},
+		"byte bound": {
+			Kind:     stream.KindBounded,
+			MaxItems: maxItems10,
+			MaxBytes: maxBytes4,
+		},
 	}
 	for name, cfg := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -433,8 +441,15 @@ func TestBuffer_MetricsOverDirectHoldNothing(t *testing.T) {
 	require.NoError(t, err)
 
 	buf := stream.NewMetrics(inner, m, "pages", streamSize)
-	got, err := stream.Collect(t.Context(),
-		buf.Wrap(t.Context(), stream.FromSlice([]string{"ab", "cd"})), streamSize, 8)
+	got, err := stream.Collect(
+		t.Context(),
+		buf.Wrap(
+			t.Context(),
+			stream.FromSlice([]string{"ab", "cd"}),
+		),
+		streamSize,
+		maxBytes8,
+	)
 	require.NoError(t, err)
 	require.Equal(t, []string{"ab", "cd"}, got)
 	require.Equal(t, int64(0), items.Load())
@@ -483,8 +498,15 @@ func TestBuffer_UnknownKindFailsLoudly(t *testing.T) {
 	buf, err := stream.NewFromConfig(stream.Config{}, streamSize)
 	require.NoError(t, err)
 
-	got, err := stream.Collect(t.Context(),
-		buf.Wrap(t.Context(), stream.FromSlice([]string{"a", "b"})), streamSize, 8)
+	got, err := stream.Collect(
+		t.Context(),
+		buf.Wrap(
+			t.Context(),
+			stream.FromSlice([]string{textA, textB}),
+		),
+		streamSize,
+		maxBytes8,
+	)
 	require.NoError(t, err)
-	require.Equal(t, []string{"a", "b"}, got)
+	require.Equal(t, []string{textA, textB}, got)
 }

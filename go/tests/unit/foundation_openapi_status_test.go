@@ -27,7 +27,7 @@ import (
 func opResponses(t *testing.T, spec map[string]any, path, method string) map[string]any {
 	t.Helper()
 
-	paths := openapiAsMap(t, spec["paths"], "paths")
+	paths := openapiAsMap(t, spec[textPaths], textPaths)
 	op := openapiAsMap(t, openapiAsMap(t, paths[path], path)[method], method)
 
 	return openapiAsMap(t, op["responses"], "responses")
@@ -62,55 +62,55 @@ func TestOpenAPI_RoleSuccessAndErrorCodes(t *testing.T) {
 	spec := runDocConvert(t, docSwagger)
 
 	// CREATE (POST /documents, top-level collection): 201, no 200/404, +409.
-	create := opResponses(t, spec, "/api/v1/documents", "post")
+	create := opResponses(t, spec, textAPIV1Documents, "post")
 	require.Contains(t, create, "201", "CREATE must return 201")
-	require.NotContains(t, create, "200", "CREATE must not keep the inherited 200")
+	require.NotContains(t, create, text200, "CREATE must not keep the inherited 200")
 	require.NotContains(t, create, "default", "the generic default error is replaced")
 
-	for _, c := range []string{"400", "401", "403", "409"} {
+	for _, c := range []string{text400, text401, text403, text409} {
 		requireCodedError(t, create, c)
 	}
 
-	require.NotContains(t, create, "404", "a top-level create has no parent to 404")
+	require.NotContains(t, create, text404, "a top-level create has no parent to 404")
 
 	// LIST (GET /documents, top-level): 200, +400/401/403 only.
-	list := opResponses(t, spec, "/api/v1/documents", "get")
-	require.Contains(t, list, "200")
+	list := opResponses(t, spec, textAPIV1Documents, textGet)
+	require.Contains(t, list, text200)
 
-	for _, c := range []string{"400", "401", "403"} {
+	for _, c := range []string{text400, text401, text403} {
 		requireCodedError(t, list, c)
 	}
 
-	require.NotContains(t, list, "404")
-	require.NotContains(t, list, "409")
+	require.NotContains(t, list, text404)
+	require.NotContains(t, list, text409)
 
 	// GET_ONE (GET /documents/{id}): 200, +400/401/403/404, no 409.
-	getOne := opResponses(t, spec, "/api/v1/documents/{document_id}", "get")
-	require.Contains(t, getOne, "200")
+	getOne := opResponses(t, spec, textAPIV1DocumentsDocument, textGet)
+	require.Contains(t, getOne, text200)
 
-	for _, c := range []string{"400", "401", "403", "404"} {
+	for _, c := range []string{text400, text401, text403, text404} {
 		requireCodedError(t, getOne, c)
 	}
 
-	require.NotContains(t, getOne, "409")
+	require.NotContains(t, getOne, text409)
 
 	// UPDATE (PATCH /documents/{id}): 200, +400/401/403/404/409.
-	update := opResponses(t, spec, "/api/v1/documents/{document_id}", "patch")
-	require.Contains(t, update, "200")
+	update := opResponses(t, spec, textAPIV1DocumentsDocument, "patch")
+	require.Contains(t, update, text200)
 
-	for _, c := range []string{"400", "401", "403", "404", "409"} {
+	for _, c := range []string{text400, text401, text403, text404, text409} {
 		requireCodedError(t, update, c)
 	}
 
 	// ACTION (POST /documents/{id}/confirm): 200, +400/401/403/404, no 409.
-	action := opResponses(t, spec, "/api/v1/documents/{document_id}/confirm", "post")
-	require.Contains(t, action, "200")
+	action := opResponses(t, spec, textAPIV1DocumentsDocument2, "post")
+	require.Contains(t, action, text200)
 
-	for _, c := range []string{"400", "401", "403", "404"} {
+	for _, c := range []string{text400, text401, text403, text404} {
 		requireCodedError(t, action, c)
 	}
 
-	require.NotContains(t, action, "409")
+	require.NotContains(t, action, text409)
 }
 
 // TestOpenAPI_DeleteEmits204NoBody tests that a DELETE role emits a bodyless 204.
@@ -126,10 +126,10 @@ func TestOpenAPI_DeleteEmits204NoBody(t *testing.T) {
 	t.Parallel()
 
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
-	messages := []*descriptorpb.DescriptorProto{fixtures.EmptyMessage("Empty")}
+	messages := []*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmpty2)}
 	methods := []*descriptorpb.MethodDescriptorProto{
-		fixtures.Method("DeleteThing", "Empty", "Empty",
-			s.MethodOpts("DELETE", "/api/v1/things/{thing_id}", false)),
+		fixtures.Method("DeleteThing", textEmpty2, textEmpty2,
+			s.MethodOpts(textDelete2, "/api/v1/things/{thing_id}", false)),
 	}
 	fds := fixtures.BuildRouteFDS(
 		t,
@@ -138,14 +138,14 @@ func TestOpenAPI_DeleteEmits204NoBody(t *testing.T) {
 		methods,
 	)
 
-	descPath := filepath.Join(t.TempDir(), "d.binpb")
-	require.NoError(t, os.WriteFile(descPath, fds, 0o600))
+	descPath := filepath.Join(t.TempDir(), textDBinpb)
+	require.NoError(t, os.WriteFile(descPath, fds, perm0o600))
 
 	routes, err := openapi.BuildRouteTable(fds, nil)
 	require.NoError(t, err)
 
-	inDir := filepath.Join(t.TempDir(), "in")
-	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o750))
+	inDir := filepath.Join(t.TempDir(), textIn)
+	require.NoError(t, os.MkdirAll(filepath.Join(inDir, textTest, textV1), perm0o750))
 
 	swagger := `{"swagger":"2.0","info":{"title":"t"},
       "paths":{"/api/v1/things/{thing_id}":{"delete":{"operationId":"DeleteThing",
@@ -153,7 +153,14 @@ func TestOpenAPI_DeleteEmits204NoBody(t *testing.T) {
         "responses":{"200":{"description":"ok","schema":{"type":"object"}}}}}},
       "definitions":{}}`
 	require.NoError(t, os.WriteFile(
-		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o600,
+		filepath.Join(
+			inDir,
+			textTest,
+			textV1,
+			textTestSwaggerJSON,
+		),
+		[]byte(swagger),
+		perm0o600,
 	))
 
 	testOpenAPIDeleteEmits204NoBodyRest(t, descPath, routes, inDir)
@@ -174,7 +181,7 @@ func testOpenAPIDeleteEmits204NoBodyRest(
 	res, err := openapi.Convert(
 		fsys.NewOSFS(),
 		inDir,
-		filepath.Join(t.TempDir(), "out"),
+		filepath.Join(t.TempDir(), textOut),
 		descPath,
 		routes, nil,
 	)
@@ -187,17 +194,17 @@ func testOpenAPIDeleteEmits204NoBodyRest(
 
 	require.NoError(t, json.Unmarshal(data, &spec))
 
-	resp := opResponses(t, spec, "/api/v1/things/{thing_id}", "delete")
+	resp := opResponses(t, spec, "/api/v1/things/{thing_id}", textDelete)
 	require.Contains(t, resp, "204", "DELETE must return 204")
-	require.NotContains(t, resp, "200", "DELETE must not keep the inherited 200")
+	require.NotContains(t, resp, text200, "DELETE must not keep the inherited 200")
 
 	del204 := openapiAsMap(t, resp["204"], "204")
 	require.NotContains(t, del204, "content", "a 204 has no response body")
 
-	for _, c := range []string{"400", "401", "403", "404"} {
+	for _, c := range []string{text400, text401, text403, text404} {
 		requireCodedError(t, resp, c)
 	}
 
-	require.NotContains(t, resp, "409")
+	require.NotContains(t, resp, text409)
 	require.NotContains(t, resp, "default")
 }

@@ -105,16 +105,16 @@ func buildRouteLookup(routes []RouteEntry, basePath string) map[string]RouteEntr
 // the per-operation request/response enveloping).
 func routeKey(method, path, basePath string) string {
 	p := path
-	if basePath != "" && basePath != "/" && strings.HasPrefix(p, basePath) {
+	if basePath != "" && basePath != textSlash && strings.HasPrefix(p, basePath) {
 		p = strings.TrimPrefix(p, basePath)
 	}
 
 	if p == "" {
-		p = "/"
+		p = textSlash
 	}
 
 	if len(p) > 1 {
-		p = strings.TrimRight(p, "/")
+		p = strings.TrimRight(p, textSlash)
 	}
 
 	return strings.ToUpper(method) + " " + canonicalizePathParams(p)
@@ -123,14 +123,14 @@ func routeKey(method, path, basePath string) string {
 // canonicalizePathParams rewrites every "{param}" path segment to "{}" so a path
 // template matches regardless of the (camelCase vs snake_case) parameter name.
 func canonicalizePathParams(path string) string {
-	segs := strings.Split(path, "/")
+	segs := strings.Split(path, textSlash)
 	for i, s := range segs {
-		if len(s) >= 2 && s[0] == '{' && s[len(s)-1] == '}' {
+		if len(s) >= sLen2 && s[0] == '{' && s[len(s)-1] == '}' {
 			segs[i] = "{}"
 		}
 	}
 
-	return strings.Join(segs, "/")
+	return strings.Join(segs, textSlash)
 }
 
 // rewriteOperationByRole rewrites an operation's responses (and, for a write op, its
@@ -145,7 +145,7 @@ func canonicalizePathParams(path string) string {
 // (2)+(3) the generated spec (and the clients built from it) reported the wrong status
 // and no coded errors.
 func rewriteOperationByRole(op, schemas map[string]any, entry RouteEntry) {
-	responses := stdx.GetMap(op, "responses")
+	responses := stdx.GetMap(op, textResponses)
 	if responses == nil {
 		return
 	}
@@ -224,7 +224,7 @@ func rewriteSuccessResponse(responses, op, schemas map[string]any, entry RouteEn
 // reshapeSuccessBody replaces a JSON body with the role's envelope under the JSON:API
 // content type, leaving a response with no JSON body or no envelope untouched.
 func reshapeSuccessBody(resp, op, schemas map[string]any, entry RouteEntry) {
-	content := stdx.GetMap(resp, "content")
+	content := stdx.GetMap(resp, textContent)
 	if content == nil || stdx.GetMap(content, mediaJSON) == nil {
 		return
 	}
@@ -236,7 +236,7 @@ func reshapeSuccessBody(resp, op, schemas map[string]any, entry RouteEntry) {
 
 	delete(content, mediaJSON)
 
-	content["application/vnd.api+json"] = map[string]any{keySchema: wrapped}
+	content[textApplicationVndAPIJSON] = map[string]any{keySchema: wrapped}
 }
 
 // successStatusForRole is the HTTP status the JSON:API gateway returns on success
@@ -266,7 +266,7 @@ func successStatusForRole(role Role) string {
 func errorStatusesForRole(role Role, pathTemplate string) []string {
 	codes := []string{"400", "401", "403"}
 	if pathHasParam(pathTemplate) {
-		codes = append(codes, "404")
+		codes = append(codes, text404)
 	}
 
 	if role == RoleCreate || role == RoleUpdate {
@@ -289,8 +289,8 @@ func pathHasParam(pathTemplate string) bool {
 func jsonAPIErrorResponse(status string) map[string]any {
 	return map[string]any{
 		keyDescription: errorStatusDescription(status),
-		"content": map[string]any{
-			"application/vnd.api+json": map[string]any{
+		textContent: map[string]any{
+			textApplicationVndAPIJSON: map[string]any{
 				keySchema: map[string]any{
 					keyRef: "#/components/schemas/JsonApiErrorResponse",
 				},
@@ -308,7 +308,7 @@ func errorStatusDescription(status string) string {
 		return "Missing or invalid authentication."
 	case "403":
 		return "The caller is not permitted to perform this operation."
-	case "404":
+	case text404:
 		return "The addressed resource does not exist."
 	case "409":
 		return "The request conflicts with the current resource state."
@@ -383,7 +383,7 @@ func wrapResourceResponse(
 // responseSchemaName resolves the schema name of an operation's success (2xx)
 // response body, or "" when none is present.
 func responseSchemaName(op map[string]any) string {
-	responses := stdx.GetMap(op, "responses")
+	responses := stdx.GetMap(op, textResponses)
 	for code, resp := range responses {
 		if !isSuccessStatus(code) {
 			continue
@@ -391,7 +391,7 @@ func responseSchemaName(op map[string]any) string {
 
 		schema := stdx.GetMap(
 			stdx.GetMap(
-				stdx.GetMap(stdx.AsMap(resp), "content"),
+				stdx.GetMap(stdx.AsMap(resp), textContent),
 				mediaJSON,
 			),
 			keySchema,
@@ -413,7 +413,7 @@ func envelopeRequestBody(op, schemas map[string]any, entry RouteEntry) {
 		return
 	}
 
-	content := stdx.GetMap(stdx.GetMap(op, "requestBody"), "content")
+	content := stdx.GetMap(stdx.GetMap(op, "requestBody"), textContent)
 	if content == nil {
 		return
 	}
@@ -432,7 +432,7 @@ func envelopeRequestBody(op, schemas map[string]any, entry RouteEntry) {
 
 	delete(content, mediaJSON)
 
-	content["application/vnd.api+json"] = map[string]any{
+	content[textApplicationVndAPIJSON] = map[string]any{
 		keySchema: map[string]any{
 			keyType:     typeObject,
 			keyRequired: []any{keyData},
@@ -446,7 +446,7 @@ func envelopeRequestBody(op, schemas map[string]any, entry RouteEntry) {
 							keyExample: entry.ResourceType,
 						},
 						keyAttributes: map[string]any{
-							keyRef: "#/components/schemas/" + attrsName,
+							keyRef: textComponentsSchemas + attrsName,
 						},
 					},
 				},
@@ -490,7 +490,7 @@ func addJSONAPISchemas(schemas map[string]any) {
 			},
 			"status": map[string]any{
 				keyType:    keyString,
-				keyExample: "404",
+				keyExample: text404,
 			},
 			"detail": map[string]any{
 				keyType:    keyString,
@@ -505,7 +505,7 @@ func addJSONAPISchemas(schemas map[string]any) {
 		keyProperties: map[string]any{
 			"errors": map[string]any{
 				keyType: "array",
-				"items": map[string]any{
+				textItems: map[string]any{
 					keyRef: "#/components/schemas/JsonApiError",
 				},
 			},
@@ -515,8 +515,8 @@ func addJSONAPISchemas(schemas map[string]any) {
 
 // rewriteOperationResponses rewrites response content types and schemas for JSON:API.
 func rewriteOperationResponses(op, schemas map[string]any, cfg serviceConfig) {
-	for code, resp := range stdx.GetMap(op, "responses") {
-		content := stdx.GetMap(stdx.AsMap(resp), "content")
+	for code, resp := range stdx.GetMap(op, textResponses) {
+		content := stdx.GetMap(stdx.AsMap(resp), textContent)
 
 		jsonContent := stdx.GetMap(content, mediaJSON)
 		if jsonContent == nil {
@@ -530,7 +530,7 @@ func rewriteOperationResponses(op, schemas map[string]any, cfg serviceConfig) {
 
 		delete(content, mediaJSON)
 
-		content["application/vnd.api+json"] = map[string]any{keySchema: envelope}
+		content[textApplicationVndAPIJSON] = map[string]any{keySchema: envelope}
 	}
 }
 
@@ -564,7 +564,7 @@ func resolveSchemaName(schema map[string]any) string {
 		return ""
 	}
 
-	parts := strings.Split(ref, "/")
+	parts := strings.Split(ref, textSlash)
 
 	return parts[len(parts)-1]
 }
@@ -645,7 +645,7 @@ func wrapMetaResponse(responseName string, schemas map[string]any) map[string]an
 		}
 
 		schemas[metaSchemaName] = metaSchema
-		metaValue = map[string]any{keyRef: "#/components/schemas/" + metaSchemaName}
+		metaValue = map[string]any{keyRef: textComponentsSchemas + metaSchemaName}
 	}
 
 	// `meta` is required: unlike a single-resource response (where meta only
@@ -682,17 +682,17 @@ func wrapSingleResponse(
 		keyProperties: map[string]any{
 			keyData: map[string]any{
 				keyType:     typeObject,
-				keyRequired: []any{keyType, "id", keyAttributes},
+				keyRequired: []any{keyType, textID, keyAttributes},
 				keyProperties: map[string]any{
 					keyType: map[string]any{
 						keyType:    keyString,
 						keyExample: rc.resourceType,
 					},
-					"id": map[string]any{
+					textID: map[string]any{
 						keyType: keyString,
 					},
 					keyAttributes: map[string]any{
-						keyRef: "#/components/schemas/" + attrsSchemaName,
+						keyRef: textComponentsSchemas + attrsSchemaName,
 					},
 				},
 			},
@@ -761,7 +761,7 @@ func addSingleResponseMeta(
 	resultProps := stdx.GetMap(result, keyProperties)
 
 	resultProps[keyMeta] = map[string]any{
-		keyRef: "#/components/schemas/" + metaSchemaName,
+		keyRef: textComponentsSchemas + metaSchemaName,
 	}
 }
 
@@ -779,15 +779,15 @@ func wrapCollectionResponse(
 		keyProperties: map[string]any{
 			keyData: map[string]any{
 				keyType: "array",
-				"items": map[string]any{
+				textItems: map[string]any{
 					keyType:     typeObject,
-					keyRequired: []any{keyType, "id", keyAttributes},
+					keyRequired: []any{keyType, textID, keyAttributes},
 					keyProperties: map[string]any{
 						keyType: map[string]any{
 							keyType:    keyString,
 							keyExample: rc.resourceType,
 						},
-						"id": map[string]any{
+						textID: map[string]any{
 							keyType: keyString,
 						},
 						keyAttributes: attrsRef,
@@ -827,7 +827,7 @@ func collectionAttributesRef(
 
 	itemSchema := stdx.GetMap(
 		schemas,
-		resolveSchemaName(stdx.GetMap(collProp, "items")),
+		resolveSchemaName(stdx.GetMap(collProp, textItems)),
 	)
 	if itemSchema == nil {
 		return map[string]any{keyType: typeObject, keyDescription: "Resource attributes"}
@@ -836,7 +836,7 @@ func collectionAttributesRef(
 	attrsSchemaName := responseName + "ItemAttributes"
 	schemas[attrsSchemaName] = buildAttributesSchema(itemSchema)
 
-	return map[string]any{keyRef: "#/components/schemas/" + attrsSchemaName}
+	return map[string]any{keyRef: textComponentsSchemas + attrsSchemaName}
 }
 
 // buildAttributesSchema creates an attributes-only schema by removing the "id" field.
@@ -852,7 +852,7 @@ func buildAttributesSchema(resourceSchema map[string]any) map[string]any {
 
 	attrProps := make(map[string]any, len(props))
 	for k, v := range props {
-		if k != "id" {
+		if k != textID {
 			attrProps[k] = v
 		}
 	}
@@ -876,7 +876,7 @@ func requiredWithoutID(resourceSchema map[string]any) []any {
 	var filtered []any
 
 	for _, r := range req {
-		if s, ok := r.(string); ok && s != "id" {
+		if s, ok := r.(string); ok && s != textID {
 			filtered = append(filtered, r)
 		}
 	}

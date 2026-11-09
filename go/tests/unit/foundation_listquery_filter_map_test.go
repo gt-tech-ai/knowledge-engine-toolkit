@@ -28,12 +28,12 @@ func TestListQueryFieldBuilders(t *testing.T) {
 		field listquery.Field
 		typ   listquery.FieldType
 	}{
-		{"string", listquery.String("name"), listquery.FieldString},
-		{"int", listquery.Int("count"), listquery.FieldInt},
+		{textString, listquery.String(textName), listquery.FieldString},
+		{textInt, listquery.Int(textCount), listquery.FieldInt},
 		{"float", listquery.Float("score"), listquery.FieldFloat},
-		{"bool", listquery.Bool("active"), listquery.FieldBool},
-		{"time", listquery.Time("created_at"), listquery.FieldTime},
-		{"id", listquery.ID("owner_id"), listquery.FieldID},
+		{"bool", listquery.Bool(textActive2), listquery.FieldBool},
+		{"time", listquery.Time(textCreatedAt), listquery.FieldTime},
+		{textID, listquery.ID("owner_id"), listquery.FieldID},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -60,7 +60,9 @@ func TestListQueryFieldBuilders(t *testing.T) {
 		t.Parallel()
 
 		base := listquery.String("team_name")
-		got := base.WithJoin(types.JoinTarget{Table: "teams", Columns: []string{"name"}})
+		got := base.WithJoin(
+			types.JoinTarget{Table: "teams", Columns: []string{textName}},
+		)
 		require.NotNil(t, got.Join)
 		require.Equal(t, "teams", got.Join.Table)
 		require.Nil(t, base.Join, "the source field is not mutated")
@@ -69,9 +71,9 @@ func TestListQueryFieldBuilders(t *testing.T) {
 	t.Run("WithOrdinal sets the value-ordinal sort order as a copy", func(t *testing.T) {
 		t.Parallel()
 
-		base := listquery.String("status")
-		got := base.WithOrdinal([]string{"pending", "active", "done"})
-		require.Equal(t, []string{"pending", "active", "done"}, got.Ordinal)
+		base := listquery.String(textStatus)
+		got := base.WithOrdinal([]string{textPending, textActive2, "done"})
+		require.Equal(t, []string{textPending, textActive2, "done"}, got.Ordinal)
 		require.Nil(t, base.Ordinal, "the source field is not mutated")
 	})
 }
@@ -90,11 +92,11 @@ func TestListQueryMapAccessors(t *testing.T) {
 	t.Parallel()
 
 	m := listquery.NewMap().Add(
-		listquery.String("name"),
+		listquery.String(textName),
 		listquery.String("team_name").
 			WithColumn("t_name").
-			WithJoin(types.JoinTarget{Table: "teams", Columns: []string{"name"}}),
-		listquery.String("status").WithOrdinal([]string{"a", "b"}),
+			WithJoin(types.JoinTarget{Table: "teams", Columns: []string{textName}}),
+		listquery.String(textStatus).WithOrdinal([]string{textA, textB}),
 	)
 
 	t.Run(
@@ -102,11 +104,11 @@ func TestListQueryMapAccessors(t *testing.T) {
 		func(t *testing.T) {
 			t.Parallel()
 
-			f, ok := m.Lookup("name")
+			f, ok := m.Lookup(textName)
 			require.True(t, ok)
-			require.Equal(t, "name", f.Name)
+			require.Equal(t, textName, f.Name)
 
-			_, ok = m.Lookup("nope")
+			_, ok = m.Lookup(textNope)
 			require.False(t, ok)
 		},
 	)
@@ -116,9 +118,9 @@ func TestListQueryMapAccessors(t *testing.T) {
 		func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, "t_name", m.Column("team_name"))
-			require.Equal(t, "name", m.Column("name"))
+			require.Equal(t, textName, m.Column(textName))
 			// Unknown field: safe fallback to the name itself.
-			require.Equal(t, "unknown", m.Column("unknown"))
+			require.Equal(t, textUnknown, m.Column(textUnknown))
 		},
 	)
 
@@ -128,17 +130,17 @@ func TestListQueryMapAccessors(t *testing.T) {
 		jt := m.Join("team_name")
 		require.NotNil(t, jt)
 		require.Equal(t, "teams", jt.Table)
-		require.Nil(t, m.Join("name"), "a same-table field has no join")
-		require.Nil(t, m.Join("unknown"), "an unknown field has no join")
+		require.Nil(t, m.Join(textName), "a same-table field has no join")
+		require.Nil(t, m.Join(textUnknown), "an unknown field has no join")
 	})
 
 	t.Run(
 		"Ordinal returns the value ordinal only for an ordinal field",
 		func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, []string{"a", "b"}, m.Ordinal("status"))
-			require.Nil(t, m.Ordinal("name"), "a field with no ordinal returns nil")
-			require.Nil(t, m.Ordinal("unknown"), "an unknown field returns nil")
+			require.Equal(t, []string{textA, textB}, m.Ordinal(textStatus))
+			require.Nil(t, m.Ordinal(textName), "a field with no ordinal returns nil")
+			require.Nil(t, m.Ordinal(textUnknown), "an unknown field returns nil")
 		},
 	)
 }

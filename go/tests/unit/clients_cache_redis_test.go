@@ -30,14 +30,14 @@ import (
 func TestRedisCache_TLSConfiguresEncryptedClient(t *testing.T) {
 	t.Parallel()
 
-	secure := rediscache.New(&rediscache.Config{Addr: "example:6379", TLS: true})
+	secure := rediscache.New(&rediscache.Config{Addr: textExample6379, TLS: true})
 	require.NotNil(
 		t,
 		secure.Client().Options().TLSConfig,
 		"TLS:true must configure an encrypted client",
 	)
 
-	plain := rediscache.New(&rediscache.Config{Addr: "example:6379"})
+	plain := rediscache.New(&rediscache.Config{Addr: textExample6379})
 	require.Nil(
 		t,
 		plain.Client().Options().TLSConfig,
@@ -76,7 +76,7 @@ func TestRedisCache_DefaultConfig(t *testing.T) {
 func TestRedisCache_ClientAccessor(t *testing.T) {
 	t.Parallel()
 
-	c := rediscache.New(&rediscache.Config{Addr: "example:6379"}) // New does no I/O
+	c := rediscache.New(&rediscache.Config{Addr: textExample6379}) // New does no I/O
 	client := c.Client()
 	require.NotNil(t, client, "expected non-nil redis.Client from Client()")
 }

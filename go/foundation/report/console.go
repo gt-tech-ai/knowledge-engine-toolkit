@@ -241,7 +241,7 @@ func (l *consoleLogger) Debug(
 	msg string,
 	kvs ...any,
 ) {
-	l.c.Debugf("%s", l.format(msg, kvs))
+	l.c.Debugf(textS, l.format(msg, kvs))
 }
 
 // Info prints msg at the normal level.
@@ -249,7 +249,7 @@ func (l *consoleLogger) Info(
 	msg string,
 	kvs ...any,
 ) {
-	l.c.Infof("%s", l.format(msg, kvs))
+	l.c.Infof(textS, l.format(msg, kvs))
 }
 
 // Warn prints msg at the normal level.
@@ -257,7 +257,7 @@ func (l *consoleLogger) Warn(
 	msg string,
 	kvs ...any,
 ) {
-	l.c.Warnf("%s", l.format(msg, kvs))
+	l.c.Warnf(textS, l.format(msg, kvs))
 }
 
 // Error prints msg at every level.
@@ -265,7 +265,7 @@ func (l *consoleLogger) Error(
 	msg string,
 	kvs ...any,
 ) {
-	l.c.Errorf("%s", l.format(msg, kvs))
+	l.c.Errorf(textS, l.format(msg, kvs))
 }
 
 // With returns a logger that appends kvs to every message after the pairs already bound.
@@ -292,7 +292,7 @@ func (l *consoleLogger) format(msg string, kvs []any) string {
 	_, _ = sb.WriteString(msg)
 
 	for _, list := range [][]any{l.kvs, kvs} {
-		for i := 0; i+1 < len(list); i += 2 {
+		for i := 0; i+1 < len(list); i += pairStride {
 			_, _ = fmt.Fprintf(&sb, " %v=%v", list[i], list[i+1])
 		}
 	}

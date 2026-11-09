@@ -30,17 +30,17 @@ func TestDiscovererFunc_Discover(t *testing.T) {
 	t.Run("delegates to the wrapped function", func(t *testing.T) {
 		t.Parallel()
 
-		want := []string{"a", "b"}
+		want := []string{textA, textB}
 		f := interfaces.DiscovererFunc[string](
 			func(_ context.Context, root string) ([]string, error) {
-				require.Equalf(t, "/repo", root, "unexpected root %q", root)
+				require.Equalf(t, textRepo, root, "unexpected root %q", root)
 
 				return want, nil
 			},
 		)
 
-		got, err := f.Discover(context.Background(), "/repo")
-		require.NoError(t, err, "unexpected error")
+		got, err := f.Discover(context.Background(), textRepo)
+		require.NoError(t, err, textUnexpectedError)
 		require.Equalf(t, want, got, "got %v, want %v", got, want)
 	})
 
@@ -54,7 +54,7 @@ func TestDiscovererFunc_Discover(t *testing.T) {
 			},
 		)
 
-		_, err := f.Discover(context.Background(), "/repo")
+		_, err := f.Discover(context.Background(), textRepo)
 		require.ErrorIsf(t, err, sentinel, "expected sentinel error, got %v", err)
 	})
 }

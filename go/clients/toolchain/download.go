@@ -153,7 +153,7 @@ func (i *Installer) installDownload(
 	}
 
 	i.log.Info("installed (sha256 verified)",
-		"tool", toolName, "version", dl.Version, "path", filepath.Join(binDir, binary))
+		textTool, toolName, "version", dl.Version, "path", filepath.Join(binDir, binary))
 
 	return nil
 }
@@ -169,7 +169,7 @@ func (i *Installer) pinnedArtifact(
 		artifact, ok = dl.Artifacts[windowsAMD64]
 		if ok {
 			i.log.Info("no windows-arm64 asset; installing the windows-amd64 one "+
-				"(runs under x64 emulation)", "tool", toolName)
+				"(runs under x64 emulation)", textTool, toolName)
 		}
 	}
 

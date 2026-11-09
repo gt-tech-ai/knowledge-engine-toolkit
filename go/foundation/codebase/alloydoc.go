@@ -138,7 +138,7 @@ func alloyLiteral(e *ast.LiteralExpr) any {
 
 // alloyNumber parses an integer, then a float, else keeps the source text.
 func alloyNumber(value string) any {
-	n, err := strconv.ParseInt(value, 10, 64)
+	n, err := strconv.ParseInt(value, base10, bitSize64)
 	if err == nil {
 		return n
 	}
@@ -148,7 +148,7 @@ func alloyNumber(value string) any {
 
 // alloyFloat parses a float, else keeps the source text.
 func alloyFloat(value string) any {
-	f, err := strconv.ParseFloat(value, 64)
+	f, err := strconv.ParseFloat(value, bitSize64)
 	if err == nil {
 		return f
 	}

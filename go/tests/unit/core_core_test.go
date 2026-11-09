@@ -108,9 +108,9 @@ func TestID_IsEmpty_False(t *testing.T) {
 func TestOption_Some(t *testing.T) {
 	t.Parallel()
 
-	opt := types.Some(42)
+	opt := types.Some(someArg42)
 	assert.True(t, opt.Valid, "Some should set Valid=true")
-	assert.Equal(t, 42, opt.Value)
+	assert.Equal(t, wantValue42, opt.Value)
 }
 
 // TestOption_Some_String tests that Some works correctly with string type
@@ -158,10 +158,10 @@ func TestOption_None(t *testing.T) {
 func TestOption_Get_Valid(t *testing.T) {
 	t.Parallel()
 
-	opt := types.Some("test")
+	opt := types.Some(textTest)
 	val, ok := opt.Get()
 	assert.True(t, ok, "Get should return ok=true for Some")
-	assert.Equal(t, "test", val)
+	assert.Equal(t, textTest, val)
 }
 
 // TestOption_Get_None tests that Get returns the zero value and ok=false for
@@ -194,11 +194,11 @@ func TestOption_Get_None(t *testing.T) {
 func TestOption_UnwrapOr_Valid(t *testing.T) {
 	t.Parallel()
 
-	opt := types.Some(10)
+	opt := types.Some(someArg10)
 	assert.Equal(
 		t,
-		10,
-		opt.UnwrapOr(99),
+		wantUnwrapOr10,
+		opt.UnwrapOr(fallback99),
 		"UnwrapOr should return actual value, not fallback",
 	)
 }
@@ -216,7 +216,12 @@ func TestOption_UnwrapOr_None(t *testing.T) {
 	t.Parallel()
 
 	opt := types.None[int]()
-	assert.Equal(t, 99, opt.UnwrapOr(99), "UnwrapOr should return fallback for None")
+	assert.Equal(
+		t,
+		wantUnwrapOr99,
+		opt.UnwrapOr(fallback99),
+		"UnwrapOr should return fallback for None",
+	)
 }
 
 // ---------------------------------------------------------------------------
@@ -236,9 +241,9 @@ func TestPage_HasMore_True(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[string]{
-		Items:      []string{"a", "b"},
-		Total:      10,
-		PageSize:   2,
+		Items:      []string{textA, textB},
+		Total:      total10,
+		PageSize:   pageSize2,
 		PageNumber: 1,
 	}
 	assert.True(t, page.HasMore(), "HasMore should return true when more pages exist")
@@ -257,10 +262,10 @@ func TestPage_HasMore_False(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[string]{
-		Items:      []string{"a", "b"},
-		Total:      4,
-		PageSize:   2,
-		PageNumber: 2,
+		Items:      []string{textA, textB},
+		Total:      total4,
+		PageSize:   pageSize2,
+		PageNumber: pageNumber2,
 	}
 	assert.False(t, page.HasMore(), "HasMore should return false when on the last page")
 }
@@ -278,9 +283,9 @@ func TestPage_HasMore_ExactlyFull(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[string]{
-		Items:      []string{"a"},
-		Total:      2,
-		PageSize:   2,
+		Items:      []string{textA},
+		Total:      total2,
+		PageSize:   pageSize2,
 		PageNumber: 1,
 	}
 	assert.False(
@@ -303,9 +308,9 @@ func TestPage_HasMore_SinglePage(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[int]{
-		Items:      []int{1, 2, 3},
-		Total:      3,
-		PageSize:   10,
+		Items:      []int{1, items2, items3},
+		Total:      total3,
+		PageSize:   pageSize10,
 		PageNumber: 1,
 	}
 	assert.False(
@@ -419,7 +424,7 @@ func TestZapFieldsMarshalLogObject(t *testing.T) {
 	// object field, which internally uses zapFields.MarshalLogObject.
 	err := apperr.WithDetails(
 		apperr.Internal("db failure"),
-		map[string]string{"table": "users", "op": "insert"},
+		map[string]string{"table": textUsers, textOp: "insert"},
 	)
 
 	fields := apperr.ZapFields(err)
@@ -430,7 +435,7 @@ func TestZapFieldsMarshalLogObject(t *testing.T) {
 	logger.Error("test error", fields...)
 
 	entries := observed.All()
-	require.Len(t, entries, 1, "expected exactly one log entry")
+	require.Len(t, entries, 1, textExpectedExactlyOneLog)
 
 	// Verify error_details context map was marshaled.
 	ctx := entries[0].ContextMap()

@@ -35,9 +35,9 @@ func TestReplayBufferFactory(t *testing.T) {
 		Kind: replaybuffer.KindMemory, MaxSize: 10, TTL: time.Minute,
 	}, replaybuffer.Deps{})
 	require.NoError(t, err)
-	require.NoError(t, buf.Append(context.Background(), "k", "msg-1", []byte("x")))
+	require.NoError(t, buf.Append(context.Background(), textK, textMsg1, []byte(textX)))
 
-	tail, complete, err := buf.ReplayAfter(context.Background(), "k", "msg-1")
+	tail, complete, err := buf.ReplayAfter(context.Background(), textK, textMsg1)
 	require.NoError(t, err)
 	assert.True(t, complete)
 	assert.Empty(t, tail)
@@ -48,7 +48,7 @@ func TestReplayBufferFactory(t *testing.T) {
 	require.Error(t, err, "redis kind without a client must fail loudly")
 
 	_, err = replaybuffer.NewFromConfig(t.Context(), replaybuffer.Config{
-		Kind: "bogus", MaxSize: 10, TTL: time.Minute,
+		Kind: textBogus, MaxSize: 10, TTL: time.Minute,
 	}, replaybuffer.Deps{})
 	require.Error(t, err, "unknown kind must fail loudly")
 
@@ -85,11 +85,11 @@ func TestReplayBufferTimeoutDecorator(t *testing.T) {
 		})
 
 	buf := fixtures.Must(replaybuffer.Decorate(
-		base, decorate.Fixed(decorate.Deps{Timeout: 20 * time.Millisecond}), "test",
+		base, decorate.Fixed(decorate.Deps{Timeout: 20 * time.Millisecond}), textTest,
 	))
 
 	done := make(chan error, 1)
-	go func() { done <- buf.Append(context.Background(), "k", "msg-1", []byte("x")) }()
+	go func() { done <- buf.Append(context.Background(), textK, textMsg1, []byte(textX)) }()
 
 	select {
 	case err := <-done:

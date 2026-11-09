@@ -29,7 +29,7 @@ import (
 func TestDeadLetterQueue_SwallowsBackendFailureAndRedrives(t *testing.T) {
 	t.Parallel()
 
-	letter := interfaces.DeadLetter{ID: "m1", Payload: []byte("x"), Reason: "poison"}
+	letter := interfaces.DeadLetter{ID: textM1, Payload: []byte(textX), Reason: "poison"}
 
 	// Backend failure → false (swallowed + logged), consumer survives. The mock
 	// backend's Send fails exactly once, modelling a DLQ outage.
@@ -48,5 +48,5 @@ func TestDeadLetterQueue_SwallowsBackendFailureAndRedrives(t *testing.T) {
 	q := deadletter.New(stub, fixtures.NewSpyLogger())
 	require.True(t, q.Send(context.Background(), letter))
 	require.Len(t, stub.Letters, 1)
-	require.Equal(t, "m1", stub.Letters[0].ID)
+	require.Equal(t, textM1, stub.Letters[0].ID)
 }

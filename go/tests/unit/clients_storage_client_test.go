@@ -56,7 +56,7 @@ func TestStorageClient_NewFromConfig_BuildsRealClient(t *testing.T) {
 	s3Cfg.AccessKeyID = ""
 	s3Cfg.SecretAccessKey = ""
 
-	for name, cfg := range map[string]infra.S3Config{"minio": minioCfg, "s3": s3Cfg} {
+	for name, cfg := range map[string]infra.S3Config{textMinio: minioCfg, "s3": s3Cfg} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -149,7 +149,7 @@ func TestStorageClient_NotFoundMapping(t *testing.T) {
 
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 
-	_, statErr := c.Stat(context.Background(), "b", "missing")
+	_, statErr := c.Stat(context.Background(), textB, textMissing)
 	require.Error(t, statErr)
 	assert.True(
 		t,
@@ -157,11 +157,11 @@ func TestStorageClient_NotFoundMapping(t *testing.T) {
 		"Stat must classify NotFound",
 	)
 
-	exists, err := c.Exists(context.Background(), "b", "missing")
+	exists, err := c.Exists(context.Background(), textB, textMissing)
 	require.NoError(t, err)
 	assert.False(t, exists, "Exists must return false for a missing key")
 
-	_, dlErr := c.Download(context.Background(), "b", "missing")
+	_, dlErr := c.Download(context.Background(), textB, textMissing)
 	require.Error(t, dlErr)
 	assert.True(
 		t,
@@ -191,10 +191,10 @@ func TestStorageClient_Stat_ReturnsMetadata(t *testing.T) {
 
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 
-	obj, err := c.Stat(context.Background(), "b", "doc.pdf")
+	obj, err := c.Stat(context.Background(), textB, "doc.pdf")
 	require.NoError(t, err)
 	assert.Equal(t, "application/pdf", obj.ContentType)
-	assert.Equal(t, int64(1234), obj.Size)
+	assert.Equal(t, int64(int64Arg1234), obj.Size)
 	assert.Equal(t, "doc.pdf", obj.Key)
 }
 
@@ -231,8 +231,8 @@ func TestStorageClient_Upload_SetsContentType(t *testing.T) {
 
 	err := c.Upload(
 		context.Background(),
-		"b",
-		"k",
+		textB,
+		textK,
 		strings.NewReader("hello"),
 		"text/markdown",
 	)
@@ -272,10 +272,10 @@ func TestStorageClient_Upload_ThresholdSelectsSingleVsMultipart(t *testing.T) {
 			t,
 			c.Upload(
 				context.Background(),
-				"b",
-				"k",
+				textB,
+				textK,
 				strings.NewReader("small"),
-				"text/plain",
+				textTextPlain,
 			),
 		)
 	})
@@ -300,10 +300,10 @@ func TestStorageClient_Upload_ThresholdSelectsSingleVsMultipart(t *testing.T) {
 			t,
 			c.Upload(
 				context.Background(),
-				"b",
-				"k",
+				textB,
+				textK,
 				strings.NewReader("abcdef"),
-				"text/plain",
+				textTextPlain,
 			),
 		)
 	})
@@ -335,11 +335,11 @@ func TestStorageClient_ListObjects_MapsContents(t *testing.T) {
 
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 
-	objs, err := c.ListObjects(context.Background(), "b", "")
+	objs, err := c.ListObjects(context.Background(), textB, "")
 	require.NoError(t, err)
-	require.Len(t, objs, 2)
+	require.Len(t, objs, wantObjsLen2)
 	assert.Equal(t, "a.txt", objs[0].Key)
-	assert.Equal(t, int64(10), objs[0].Size)
+	assert.Equal(t, int64(int64Arg10), objs[0].Size)
 	assert.Equal(t, `"e2"`, objs[1].ETag)
 }
 
@@ -375,7 +375,7 @@ func TestStorageClient_ListObjectsPageToken_StreamsWithToken(t *testing.T) {
 			return &awss3.ListObjectsV2Output{
 				Contents: []s3types.Object{
 					{
-						Key:  aws.String("docs/a"),
+						Key:  aws.String(textDocsA),
 						Size: aws.Int64(5),
 						ETag: aws.String(`"e1"`),
 					},
@@ -389,26 +389,32 @@ func TestStorageClient_ListObjectsPageToken_StreamsWithToken(t *testing.T) {
 
 	objs, next, err := c.ListObjectsPageToken(
 		context.Background(),
-		"b",
-		"docs/",
+		textB,
+		textDocs,
 		"tok1",
-		100,
+		limit100,
 	)
 	require.NoError(t, err)
 	require.Len(t, objs, 1)
-	assert.Equal(t, "docs/a", objs[0].Key)
+	assert.Equal(t, textDocsA, objs[0].Key)
 	assert.Equal(t, "tok2", next, "truncated → resume token surfaced")
 
 	// A non-truncated page terminates the stream (next == "").
 	api.EXPECT().ListObjectsV2(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&awss3.ListObjectsV2Output{
 			Contents: []s3types.Object{
-				{Key: aws.String("docs/b"), ETag: aws.String(`"e2"`)},
+				{Key: aws.String(textDocsB), ETag: aws.String(`"e2"`)},
 			},
 			IsTruncated: aws.Bool(false),
 		}, nil)
 
-	_, next, err = c.ListObjectsPageToken(context.Background(), "b", "docs/", "tok2", 100)
+	_, next, err = c.ListObjectsPageToken(
+		context.Background(),
+		textB,
+		textDocs,
+		"tok2",
+		limit100,
+	)
 	require.NoError(t, err)
 	assert.Empty(t, next, "exhausted listing → empty token")
 }
@@ -432,17 +438,17 @@ func TestStorageClient_DeleteBatch_SurfacesPerObjectErrors(t *testing.T) {
 		DeleteObjects(gomock.Any(), gomock.Any()).
 		Return(&awss3.DeleteObjectsOutput{
 			Errors: []s3types.Error{{
-				Key:     aws.String("x"),
-				Code:    aws.String("AccessDenied"),
-				Message: aws.String("nope"),
+				Key:     aws.String(textX),
+				Code:    aws.String(textAccessdenied),
+				Message: aws.String(textNope),
 			}},
 		}, nil)
 
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 
-	err := c.DeleteBatch(context.Background(), "b", []string{"x"})
+	err := c.DeleteBatch(context.Background(), textB, []string{textX})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "AccessDenied")
+	assert.Contains(t, err.Error(), textAccessdenied)
 }
 
 // TestStorageClient_DeleteBatch_ChunksOverLimit tests that a >1000-key delete is
@@ -490,18 +496,18 @@ func TestStorageClient_DeleteBatch_ChunksOverLimit(t *testing.T) {
 
 			return &awss3.DeleteObjectsOutput{}, nil
 		}).
-		Times(3)
+		Times(timesArg3)
 
-	keys := make([]string, 2500)
+	keys := make([]string, size2500)
 	for i := range keys {
 		keys[i] = fmt.Sprintf("k%d", i)
 	}
 
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
-	require.NoError(t, c.DeleteBatch(context.Background(), "b", keys))
+	require.NoError(t, c.DeleteBatch(context.Background(), textB, keys))
 
-	assert.Equal(t, 3, calls, "2500 keys → ceil(2500/1000) = 3 requests")
-	assert.Len(t, seen, 2500, "every key deleted exactly once")
+	assert.Equal(t, wantCalls3, calls, "2500 keys → ceil(2500/1000) = 3 requests")
+	assert.Len(t, seen, wantSeenLen2500, "every key deleted exactly once")
 }
 
 // TestStorageClient_DeleteBatch_BuildsIdentifiers tests that batch delete maps keys
@@ -537,11 +543,14 @@ func TestStorageClient_DeleteBatch_BuildsIdentifiers(t *testing.T) {
 
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 
-	require.NoError(t, c.DeleteBatch(context.Background(), "b", []string{"a", "b", "c"}))
+	require.NoError(
+		t,
+		c.DeleteBatch(context.Background(), textB, []string{textA, textB, textC}),
+	)
 	require.NotNil(t, got)
-	assert.Len(t, got.Delete.Objects, 3)
+	assert.Len(t, got.Delete.Objects, wantObjectsLen3)
 
-	require.NoError(t, c.DeleteBatch(context.Background(), "b", nil))
+	require.NoError(t, c.DeleteBatch(context.Background(), textB, nil))
 }
 
 // TestStorageClient_Multipart_AbortsWithLiveContextOnCancel tests that a failed
@@ -587,12 +596,12 @@ func TestStorageClient_Multipart_AbortsWithLiveContextOnCancel(t *testing.T) {
 	)
 
 	// A 4-byte threshold forces the multipart path for a small body.
-	c := newStorageClientWithMock(t.Context(), t, api, 4)
+	c := newStorageClientWithMock(t.Context(), t, api, threshold4)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // operation context already cancelled before the part fails
 
-	err := c.Upload(ctx, "b", "k", strings.NewReader("abcdef"), "text/plain")
+	err := c.Upload(ctx, textB, textK, strings.NewReader("abcdef"), textTextPlain)
 	require.Error(t, err)
 	require.True(t, aborted, "a failed multipart upload must be aborted")
 	assert.NoError(
@@ -633,10 +642,10 @@ func TestStorageClient_Delete_CallsDeleteObject(t *testing.T) {
 
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 
-	require.NoError(t, c.Delete(context.Background(), "b", "k"))
+	require.NoError(t, c.Delete(context.Background(), textB, textK))
 	require.NotNil(t, got)
-	assert.Equal(t, "b", aws.ToString(got.Bucket))
-	assert.Equal(t, "k", aws.ToString(got.Key))
+	assert.Equal(t, textB, aws.ToString(got.Bucket))
+	assert.Equal(t, textK, aws.ToString(got.Key))
 }
 
 // TestStorageClient_Download_ReturnsBody tests that Download streams the object body
@@ -659,7 +668,7 @@ func TestStorageClient_Download_ReturnsBody(t *testing.T) {
 
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 
-	rc, err := c.Download(context.Background(), "b", "k")
+	rc, err := c.Download(context.Background(), textB, textK)
 	require.NoError(t, err)
 
 	body, err := io.ReadAll(rc)
@@ -684,11 +693,11 @@ func TestStorageClient_NotFound_SmithyAPIErrorCode(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockS3API(ctrl)
 	api.EXPECT().HeadObject(gomock.Any(), gomock.Any()).
-		Return(nil, &smithy.GenericAPIError{Code: "404", Message: "not found"})
+		Return(nil, &smithy.GenericAPIError{Code: text404, Message: textNotFound})
 
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 
-	exists, err := c.Exists(context.Background(), "b", "missing")
+	exists, err := c.Exists(context.Background(), textB, textMissing)
 	require.NoError(t, err)
 	assert.False(t, exists, "a smithy 404 must classify as not-found")
 }
@@ -718,13 +727,13 @@ func TestStorageClient_Presign_BuildsSignedURLs(t *testing.T) {
 
 	getURL, err := c.PresignURL(
 		context.Background(),
-		"bucket",
-		"obj/key.txt",
-		900,
+		textBucket,
+		textObjKeyTxt,
+		expirySeconds900,
 		"report.pdf",
 	)
 	require.NoError(t, err)
-	assert.Contains(t, getURL, "bucket")
+	assert.Contains(t, getURL, textBucket)
 	assert.Contains(t, getURL, "key.txt")
 	// A display filename must be signed into a response-content-disposition override so
 	// S3 serves the object as a download rather than rendering it inline.
@@ -734,13 +743,13 @@ func TestStorageClient_Presign_BuildsSignedURLs(t *testing.T) {
 
 	putURL, err := c.PresignPutURL(
 		context.Background(),
-		"bucket",
-		"obj/key.txt",
-		900,
-		"text/plain",
+		textBucket,
+		textObjKeyTxt,
+		expirySeconds900,
+		textTextPlain,
 	)
 	require.NoError(t, err)
-	assert.Contains(t, putURL, "bucket")
+	assert.Contains(t, putURL, textBucket)
 	assert.Contains(t, putURL, "key.txt")
 }
 
@@ -762,7 +771,7 @@ func TestStorageClient_Presign_UsesPublicEndpoint(t *testing.T) {
 
 	cfg := validS3Config()
 
-	cfg.Endpoint = "http://minio:9000"           // in-cluster: server-side ops
+	cfg.Endpoint = textHTTPMinio9000             // in-cluster: server-side ops
 	cfg.PublicEndpoint = "http://localhost:9000" // browser-reachable: presign only
 
 	c, err := storage.NewFromConfig(
@@ -774,22 +783,22 @@ func TestStorageClient_Presign_UsesPublicEndpoint(t *testing.T) {
 
 	getURL, err := c.PresignURL(
 		context.Background(),
-		"bucket",
-		"obj/key.txt",
-		900,
-		"text/plain",
+		textBucket,
+		textObjKeyTxt,
+		expirySeconds900,
+		textTextPlain,
 	)
 	require.NoError(t, err)
 	assert.Contains(
 		t,
 		getURL,
-		"localhost:9000",
+		textLocalhost9000,
 		"GET presign must use the public endpoint",
 	)
 	assert.NotContains(
 		t,
 		getURL,
-		"minio:9000",
+		textMinio9000,
 		"GET presign must not bake in the in-cluster host",
 	)
 
@@ -808,37 +817,37 @@ func testStorageClientPresignUsesPublicEndpointRest(
 
 	putURL, err := c.PresignPutURL(
 		context.Background(),
-		"bucket",
-		"obj/key.txt",
-		900,
-		"text/plain",
+		textBucket,
+		textObjKeyTxt,
+		expirySeconds900,
+		textTextPlain,
 	)
 	require.NoError(t, err)
 	assert.Contains(
 		t,
 		putURL,
-		"localhost:9000",
+		textLocalhost9000,
 		"PUT presign must use the public endpoint",
 	)
-	assert.NotContains(t, putURL, "minio:9000")
+	assert.NotContains(t, putURL, textMinio9000)
 
 	uploadID := "upload-123"
 	partURL, err := c.PresignUploadPart(
 		context.Background(),
-		"bucket",
-		"obj/key.txt",
+		textBucket,
+		textObjKeyTxt,
 		uploadID,
 		1,
-		900,
+		expirySeconds900,
 	)
 	require.NoError(t, err)
 	assert.Contains(
 		t,
 		partURL,
-		"localhost:9000",
+		textLocalhost9000,
 		"multipart part presign must use the public endpoint",
 	)
-	assert.NotContains(t, partURL, "minio:9000")
+	assert.NotContains(t, partURL, textMinio9000)
 }
 
 // TestStorageClient_Presign_EmptyPublicEndpointFallsBack tests that an empty
@@ -857,7 +866,7 @@ func TestStorageClient_Presign_EmptyPublicEndpointFallsBack(t *testing.T) {
 
 	cfg := validS3Config()
 
-	cfg.Endpoint = "http://minio:9000"
+	cfg.Endpoint = textHTTPMinio9000
 	cfg.PublicEndpoint = "" // opt-in: empty falls back to Endpoint
 
 	c, err := storage.NewFromConfig(
@@ -869,16 +878,16 @@ func TestStorageClient_Presign_EmptyPublicEndpointFallsBack(t *testing.T) {
 
 	putURL, err := c.PresignPutURL(
 		context.Background(),
-		"bucket",
+		textBucket,
 		"k.txt",
-		900,
-		"text/plain",
+		expirySeconds900,
+		textTextPlain,
 	)
 	require.NoError(t, err)
 	assert.Contains(
 		t,
 		putURL,
-		"minio:9000",
+		textMinio9000,
 		"empty public_endpoint falls back to the client endpoint",
 	)
 }
@@ -907,7 +916,7 @@ func TestStorageClient_PresignPutURL_SignsContentTypeAndHost(t *testing.T) {
 
 	cfg := validS3Config()
 
-	cfg.Bucket = "b"
+	cfg.Bucket = textB
 
 	c, err := storage.NewFromConfig(
 		context.Background(),
@@ -917,7 +926,13 @@ func TestStorageClient_PresignPutURL_SignsContentTypeAndHost(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, ct := range []string{"application/pdf", ""} {
-		presigned, err := c.PresignPutURL(context.Background(), "b", "k.pdf", 300, ct)
+		presigned, err := c.PresignPutURL(
+			context.Background(),
+			textB,
+			"k.pdf",
+			expirySeconds300,
+			ct,
+		)
 		require.NoError(t, err)
 
 		u, err := url.Parse(presigned)
@@ -1012,7 +1027,7 @@ func testStorageClientEnsureBucketRest6(t *testing.T) {
 		api := mocks.NewMockS3API(ctrl)
 		expectBucketAbsent(api)
 		api.EXPECT().CreateBucket(gomock.Any(), gomock.Any()).
-			Return(nil, &smithy.GenericAPIError{Code: "AccessDenied"})
+			Return(nil, &smithy.GenericAPIError{Code: textAccessdenied})
 		require.Error(t, newClient(t, api).EnsureBucket(context.Background(), bucket))
 	})
 }

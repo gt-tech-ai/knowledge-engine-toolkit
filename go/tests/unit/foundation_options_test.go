@@ -80,13 +80,13 @@ func TestApplyOptions(t *testing.T) {
 			withMaxRetries(3),
 			withTimeout(30*time.Second),
 			withDebug(true),
-			withName("test"),
+			withName(textTest),
 		)
 
 		assert.Equal(t, 3, cfg.MaxRetries)
 		assert.Equal(t, 30*time.Second, cfg.Timeout)
 		assert.True(t, cfg.EnableDebug, "EnableDebug should be true")
-		assert.Equal(t, "test", cfg.Name)
+		assert.Equal(t, textTest, cfg.Name)
 	})
 
 	testApplyOptionsRest(t)
@@ -204,5 +204,5 @@ func TestOptionTypeAlias(t *testing.T) {
 	cfg := &testConfig{}
 	opt(cfg)
 
-	assert.Equal(t, 99, cfg.MaxRetries)
+	assert.Equal(t, wantMaxRetries99, cfg.MaxRetries)
 }

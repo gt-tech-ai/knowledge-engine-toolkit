@@ -37,7 +37,7 @@ func TestChaosFromConfig(t *testing.T) {
 		chaos.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
 
-	f := types.Fault{Name: "f", Spec: types.FaultSpec{Type: types.FaultPodKill}}
+	f := types.Fault{Name: textF, Spec: types.FaultSpec{Type: types.FaultPodKill}}
 	require.NoError(t, stub.Inject(t.Context(), f))
 	require.NoError(t, stub.Revert(t.Context(), f))
 
@@ -47,13 +47,13 @@ func TestChaosFromConfig(t *testing.T) {
 
 	_, err = chaos.NewFromConfig(t.Context(), chaos.Config{Kind: "fis"},
 		chaos.Deps{Decorations: fixtures.Decorations()})
-	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 	assert.Contains(t, err.Error(), "fis")
 	assert.Contains(t, err.Error(), "chaos-mesh")
 
 	_, err = chaos.NewFromConfig(t.Context(), chaos.Config{Kind: chaos.KindChaosMesh},
 		chaos.Deps{Decorations: fixtures.Decorations()})
-	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 }
 
 // TestChaosMeshInjector_CreatesAndDeletesTheFaultResource tests the Chaos Mesh
@@ -98,11 +98,11 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceCase(
 	fault := types.Fault{
 		Name: "exp-20260925-101500",
 		Target: types.FaultTarget{
-			Namespace: "acme-app",
-			Service:   "api",
+			Namespace: textAcmeApp,
+			Service:   textAPI,
 		},
 		Spec:     tc.fault,
-		Duration: 2 * time.Minute,
+		Duration: minutes2 * time.Minute,
 	}
 
 	var chaosManifest []byte
@@ -128,7 +128,7 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRest(
 	t.Helper()
 
 	runner.EXPECT().
-		RunBuffered(gomock.Any(), "/root", "kubectl", "create", "-f", gomock.Any()).
+		RunBuffered(gomock.Any(), textRoot, textKubectl, textCreate, "-f", gomock.Any()).
 		DoAndReturn(func(
 			_ context.Context,
 			_, _ string,
@@ -142,17 +142,17 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRest(
 			return interfaces.CmdResult{}
 		})
 	runner.EXPECT().
-		RunBuffered(gomock.Any(), "/root", "kubectl", "delete", tc.resource,
-			fault.Name, "--namespace", "acme-app", "--ignore-not-found", "--wait=true").
+		RunBuffered(gomock.Any(), textRoot, textKubectl, textDelete, tc.resource,
+			fault.Name, "--namespace", textAcmeApp, "--ignore-not-found", "--wait=true").
 		Return(interfaces.CmdResult{})
 
 	inj, err := chaos.NewFromConfig(
 		t.Context(),
-		chaos.Config{Kind: chaos.KindChaosMesh, ManagedBy: "acme-chaos"},
+		chaos.Config{Kind: chaos.KindChaosMesh, ManagedBy: textAcmeChaos},
 		chaos.Deps{
 			Decorations: fixtures.Decorations(),
 			Runner:      runner,
-			Root:        "/root",
+			Root:        textRoot,
 		},
 	)
 	require.NoError(t, err)
@@ -163,12 +163,12 @@ func testChaosMeshInjectorCreatesAndDeletesTheFaultResourceRest(
 
 	require.NoError(t, json.Unmarshal(chaosManifest, &got))
 	assert.Equal(t, "chaos-mesh.org/v1alpha1", got["apiVersion"])
-	assert.Equal(t, tc.kind, got["kind"])
+	assert.Equal(t, tc.kind, got[textKind])
 	assert.Equal(t, map[string]any{
-		"name":      fault.Name,
-		"namespace": "acme-app",
+		textName:    fault.Name,
+		"namespace": textAcmeApp,
 		"labels": map[string]any{
-			"app.kubernetes.io/managed-by": "acme-chaos",
+			"app.kubernetes.io/managed-by": textAcmeChaos,
 		},
 	}, got["metadata"])
 	assert.Equal(t, tc.wantSpec, got["spec"])
@@ -192,52 +192,52 @@ func chaosFaultResourceTable() []chaosFaultResourceRow {
 			kind:     "PodChaos",
 			resource: "podchaos.chaos-mesh.org",
 			wantSpec: map[string]any{
-				"action":   "pod-kill",
-				"mode":     "one",
-				"selector": chaosSelector("api"),
-				"duration": "2m0s",
+				textAction:   "pod-kill",
+				textMode:     textOne,
+				textSelector: chaosSelector(textAPI),
+				textDuration: text2m0s,
 			},
 		},
 		{
 			fault: types.FaultSpec{
 				Type:    types.FaultNetworkLatency,
-				Toward:  "retrieval",
-				Latency: 300 * time.Millisecond,
+				Toward:  textRetrieval,
+				Latency: millis300 * time.Millisecond,
 			},
 			kind:     "NetworkChaos",
 			resource: "networkchaos.chaos-mesh.org",
 			wantSpec: map[string]any{
-				"action":    "delay",
-				"mode":      "all",
-				"selector":  chaosSelector("api"),
-				"direction": "to",
-				"target": map[string]any{
-					"mode":     "all",
-					"selector": chaosSelector("retrieval"),
+				textAction:   "delay",
+				textMode:     textAll,
+				textSelector: chaosSelector(textAPI),
+				"direction":  "to",
+				textTarget: map[string]any{
+					textMode:     textAll,
+					textSelector: chaosSelector(textRetrieval),
 				},
-				"delay":    map[string]any{"latency": "300ms"},
-				"duration": "2m0s",
+				"delay":      map[string]any{"latency": "300ms"},
+				textDuration: text2m0s,
 			},
 		},
 		{
 			fault: types.FaultSpec{
 				Type:        types.FaultNetworkLoss,
-				Toward:      "retrieval",
-				LossPercent: 10,
+				Toward:      textRetrieval,
+				LossPercent: lossPercent10,
 			},
 			kind:     "NetworkChaos",
 			resource: "networkchaos.chaos-mesh.org",
 			wantSpec: map[string]any{
-				"action":    "loss",
-				"mode":      "all",
-				"selector":  chaosSelector("api"),
-				"direction": "to",
-				"target": map[string]any{
-					"mode":     "all",
-					"selector": chaosSelector("retrieval"),
+				textAction:   textLoss,
+				textMode:     textAll,
+				textSelector: chaosSelector(textAPI),
+				"direction":  "to",
+				textTarget: map[string]any{
+					textMode:     textAll,
+					textSelector: chaosSelector(textRetrieval),
 				},
-				"loss":     map[string]any{"loss": "10"},
-				"duration": "2m0s",
+				textLoss:     map[string]any{textLoss: "10"},
+				textDuration: text2m0s,
 			},
 		},
 	}
@@ -257,20 +257,20 @@ func TestChaosMeshInjector_InjectFailureCarriesKubectlStderr(t *testing.T) {
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	runner.EXPECT().
-		RunBuffered(gomock.Any(), ".", "kubectl", "create", "-f", gomock.Any()).
+		RunBuffered(gomock.Any(), ".", textKubectl, textCreate, "-f", gomock.Any()).
 		Return(interfaces.CmdResult{
 			Err:    apperr.New(apperr.CodeInternal, "exit status 1"),
 			Stderr: []byte("forbidden: cannot create podchaos\n"),
 		})
 
 	inj, err := chaos.NewFromConfig(t.Context(),
-		chaos.Config{Kind: chaos.KindChaosMesh, ManagedBy: "acme-chaos"},
+		chaos.Config{Kind: chaos.KindChaosMesh, ManagedBy: textAcmeChaos},
 		chaos.Deps{Decorations: fixtures.Decorations(), Runner: runner, Root: "."})
 	require.NoError(t, err)
 
 	err = inj.Inject(t.Context(), types.Fault{
 		Name:   "exp-1",
-		Target: types.FaultTarget{Namespace: "acme-app", Service: "api"},
+		Target: types.FaultTarget{Namespace: textAcmeApp, Service: textAPI},
 		Spec:   types.FaultSpec{Type: types.FaultPodKill},
 	})
 
@@ -281,7 +281,7 @@ func TestChaosMeshInjector_InjectFailureCarriesKubectlStderr(t *testing.T) {
 // chaosSelector is the decoded Chaos Mesh selector for service's pods in acme-app.
 func chaosSelector(service string) map[string]any {
 	return map[string]any{
-		"namespaces":     []any{"acme-app"},
+		"namespaces":     []any{textAcmeApp},
 		"labelSelectors": map[string]any{"app.kubernetes.io/name": service},
 	}
 }
@@ -304,12 +304,12 @@ func TestChaosMeshInjector_CleansUpAndFailsLoudly(t *testing.T) {
 
 	fault := types.Fault{
 		Name:   "exp-1",
-		Target: types.FaultTarget{Namespace: "acme-app", Service: "api"},
+		Target: types.FaultTarget{Namespace: textAcmeApp, Service: textAPI},
 		Spec:   types.FaultSpec{Type: types.FaultPodKill},
 	}
 	newInj := func(r interfaces.CommandRunner) interfaces.FaultInjector {
 		inj, err := chaos.NewFromConfig(t.Context(),
-			chaos.Config{Kind: chaos.KindChaosMesh, ManagedBy: "acme-chaos"},
+			chaos.Config{Kind: chaos.KindChaosMesh, ManagedBy: textAcmeChaos},
 			chaos.Deps{Decorations: fixtures.Decorations(), Runner: r, Root: "."})
 		require.NoError(t, err)
 
@@ -321,13 +321,13 @@ func TestChaosMeshInjector_CleansUpAndFailsLoudly(t *testing.T) {
 	var appliedManifest string
 
 	runner.EXPECT().
-		RunBuffered(gomock.Any(), ".", "kubectl", "create", "-f", gomock.Any()).
+		RunBuffered(gomock.Any(), ".", textKubectl, textCreate, "-f", gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, _ string, a ...string) interfaces.CmdResult {
 			appliedManifest = a[2]
 
 			return interfaces.CmdResult{}
 		})
-	runner.EXPECT().RunBuffered(gomock.Any(), ".", "kubectl", "delete", gomock.Any(),
+	runner.EXPECT().RunBuffered(gomock.Any(), ".", textKubectl, textDelete, gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(interfaces.CmdResult{
 			Err: apperr.New(apperr.CodeInternal, "exit status 1"),
@@ -342,7 +342,7 @@ func TestChaosMeshInjector_CleansUpAndFailsLoudly(t *testing.T) {
 	assert.True(
 		t,
 		strings.HasPrefix(
-			appliedManifest[strings.LastIndex(appliedManifest, "/")+1:],
+			appliedManifest[strings.LastIndex(appliedManifest, textSlash)+1:],
 			"chaos-",
 		),
 	)
@@ -388,6 +388,6 @@ func testChaosMeshInjectorCleansUpAndFailsLoudlyRest(
 		strict.Inject(t.Context(), unknown), strict.Revert(t.Context(), unknown),
 	} {
 		require.Error(t, err)
-		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "%v", err)
+		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)
 	}
 }

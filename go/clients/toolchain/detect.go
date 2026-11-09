@@ -36,7 +36,7 @@ func (d *Detector) Check(
 	tool *types.ToolDef,
 ) types.ToolCheckResult {
 	if !d.runner.Exists(tool.Binary) {
-		d.log.Debug("tool lookup: not found", "tool", tool.Name, "binary", tool.Binary)
+		d.log.Debug("tool lookup: not found", textTool, tool.Name, "binary", tool.Binary)
 
 		return types.ToolCheckResult{
 			Tool:    tool,
@@ -145,7 +145,7 @@ func (d *Detector) checkVersion(
 ) types.ToolCheckResult {
 	d.log.Debug(
 		"running version command",
-		"tool",
+		textTool,
 		tool.Name,
 		"cmd",
 		strings.Join(tool.VersionCmd, " "),
@@ -153,13 +153,13 @@ func (d *Detector) checkVersion(
 
 	result := d.runner.RunBuffered(ctx, root, tool.VersionCmd[0], tool.VersionCmd[1:]...)
 	if result.Err != nil {
-		d.log.Debug("version command failed", "tool", tool.Name, "error", result.Err)
+		d.log.Debug("version command failed", textTool, tool.Name, "error", result.Err)
 
 		return versionRunFailed(tool, result.Err)
 	}
 
 	raw := strings.TrimSpace(string(result.Stdout))
-	d.log.Debug("raw version output", "tool", tool.Name, "output", raw)
+	d.log.Debug("raw version output", textTool, tool.Name, "output", raw)
 
 	verStr := raw
 	if tool.VersionParse != nil {
@@ -168,7 +168,7 @@ func (d *Detector) checkVersion(
 
 	ver, err := types.ParseVersion(verStr)
 	if err != nil {
-		d.log.Debug("version parse error", "tool", tool.Name, "error", err)
+		d.log.Debug("version parse error", textTool, tool.Name, "error", err)
 
 		return versionUnparsed(tool, verStr)
 	}

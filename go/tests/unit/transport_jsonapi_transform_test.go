@@ -36,35 +36,35 @@ func TestTransformSingleResource(t *testing.T) {
 	t.Parallel()
 
 	cfg := codec.ResourceConfig{
-		Type:      "users",
-		SingleKey: "user",
+		Type:      textUsers,
+		SingleKey: textUser,
 	}
 
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 
 		body := map[string]any{
-			"user": map[string]any{
-				"id":          "123",
-				"email":       "test@example.com",
+			textUser: map[string]any{
+				textID:        "123",
+				textEmail:     "test@example.com",
 				"displayName": "Test User",
-				"active":      true,
+				textActive2:   true,
 			},
 		}
 
 		result := codec.TransformSingleResource(body, cfg, "/api/v1/demo/users/123")
 
-		data, ok := result["data"].(map[string]any)
+		data, ok := result[textData].(map[string]any)
 		require.True(t, ok, "expected data key")
-		assert.Equal(t, "users", data["type"])
-		assert.Equal(t, "123", data["id"])
+		assert.Equal(t, textUsers, data[textType])
+		assert.Equal(t, "123", data[textID])
 
 		attrs, ok := data["attributes"].(map[string]any)
 		require.True(t, ok, "expected attributes")
-		assert.Equal(t, "test@example.com", attrs["email"])
+		assert.Equal(t, "test@example.com", attrs[textEmail])
 		assert.Equal(t, "Test User", attrs["displayName"])
-		assert.Equal(t, true, attrs["active"])
-		assert.Nil(t, attrs["id"], "id must not appear in attributes")
+		assert.Equal(t, true, attrs[textActive2])
+		assert.Nil(t, attrs[textID], "id must not appear in attributes")
 
 		links, ok := result["links"].(map[string]any)
 		require.True(t, ok, "expected links")
@@ -82,11 +82,11 @@ func testTransformSingleResourceRest(t *testing.T, cfg codec.ResourceConfig) {
 	t.Run("id-only resource still carries attributes", func(t *testing.T) {
 		t.Parallel()
 
-		body := map[string]any{"user": map[string]any{"id": "123"}}
+		body := map[string]any{textUser: map[string]any{textID: "123"}}
 
 		result := codec.TransformSingleResource(body, cfg, "/api/v1/demo/users/123")
 
-		data, ok := result["data"].(map[string]any)
+		data, ok := result[textData].(map[string]any)
 		require.True(t, ok, "expected data key")
 
 		attrs, ok := data["attributes"].(map[string]any)
@@ -97,17 +97,17 @@ func testTransformSingleResourceRest(t *testing.T, cfg codec.ResourceConfig) {
 	t.Run("missing key wraps as meta", func(t *testing.T) {
 		t.Parallel()
 
-		body := map[string]any{"other": "value"}
+		body := map[string]any{textOther: textValue}
 		result := codec.TransformSingleResource(body, cfg, "/test")
-		meta, ok := result["meta"].(map[string]any)
+		meta, ok := result[textMeta].(map[string]any)
 		require.True(t, ok, "expected meta key")
-		assert.Equal(t, "value", meta["other"])
+		assert.Equal(t, textValue, meta[textOther])
 	})
 
 	t.Run("non-map value falls back", func(t *testing.T) {
 		t.Parallel()
 
-		body := map[string]any{"user": "not-a-map"}
+		body := map[string]any{textUser: "not-a-map"}
 		result := codec.TransformSingleResource(body, cfg, "/test")
 		assert.Equal(t, body, result)
 	})
@@ -137,20 +137,20 @@ func TestTransformCollection(t *testing.T) {
 	t.Parallel()
 
 	cfg := codec.ResourceConfig{
-		Type:          "users",
-		CollectionKey: "users",
-		PaginationKey: "pagination",
+		Type:          textUsers,
+		CollectionKey: textUsers,
+		PaginationKey: textPagination,
 	}
 
 	t.Run("success with pagination", func(t *testing.T) {
 		t.Parallel()
 
 		body := map[string]any{
-			"users": []any{
-				map[string]any{"id": "1", "email": "a@b.com"},
-				map[string]any{"id": "2", "email": "c@d.com"},
+			textUsers: []any{
+				map[string]any{textID: "1", textEmail: textABCom},
+				map[string]any{textID: "2", textEmail: "c@d.com"},
 			},
-			"pagination": map[string]any{
+			textPagination: map[string]any{
 				"nextPageToken": "tok123",
 				"totalCount":    float64(45),
 			},
@@ -158,15 +158,15 @@ func TestTransformCollection(t *testing.T) {
 
 		result := codec.TransformCollection(body, cfg, "/api/v1/demo/users")
 
-		data, ok := result["data"].([]any)
+		data, ok := result[textData].([]any)
 		require.True(t, ok)
 		assert.Len(t, data, 2)
 
 		first := asType[map[string]any](t, data[0])
-		assert.Equal(t, "users", first["type"])
-		assert.Equal(t, "1", first["id"])
+		assert.Equal(t, textUsers, first[textType])
+		assert.Equal(t, "1", first[textID])
 
-		meta, ok := result["meta"].(map[string]any)
+		meta, ok := result[textMeta].(map[string]any)
 		require.True(t, ok)
 		assert.InDelta(t, float64(45), meta["totalCount"], 0)
 
@@ -192,8 +192,8 @@ func testTransformCollectionRest(t *testing.T, cfg codec.ResourceConfig) {
 		t.Parallel()
 
 		body := map[string]any{
-			"users": []any{map[string]any{"id": "1", "email": "a@b.com"}},
-			"pagination": map[string]any{
+			textUsers: []any{map[string]any{textID: "1", textEmail: textABCom}},
+			textPagination: map[string]any{
 				"totalCount":      float64(10000),
 				"totalIsEstimate": true,
 			},
@@ -201,7 +201,7 @@ func testTransformCollectionRest(t *testing.T, cfg codec.ResourceConfig) {
 
 		result := codec.TransformCollection(body, cfg, "/api/v1/demo/users")
 
-		meta, ok := result["meta"].(map[string]any)
+		meta, ok := result[textMeta].(map[string]any)
 		require.True(t, ok)
 		assert.InDelta(t, float64(10000), meta["totalCount"], 0)
 		assert.Equal(
@@ -224,12 +224,12 @@ func testTransformCollectionRest2(t *testing.T, cfg codec.ResourceConfig) {
 		t.Parallel()
 
 		body := map[string]any{
-			"users": []any{},
+			textUsers: []any{},
 		}
 
 		result := codec.TransformCollection(body, cfg, "/api/v1/demo/users")
 
-		data, ok := result["data"].([]any)
+		data, ok := result[textData].([]any)
 		require.True(t, ok)
 		assert.Empty(t, data)
 
@@ -243,12 +243,12 @@ func testTransformCollectionRest2(t *testing.T, cfg codec.ResourceConfig) {
 
 		// Protobuf omits empty repeated fields, so we get just pagination.
 		body := map[string]any{
-			"pagination": map[string]any{},
+			textPagination: map[string]any{},
 		}
 
 		result := codec.TransformCollection(body, cfg, "/api/v1/demo/users")
 
-		data, ok := result["data"].([]any)
+		data, ok := result[textData].([]any)
 		require.True(t, ok)
 		assert.Empty(t, data)
 
@@ -291,15 +291,15 @@ func TestTransformError(t *testing.T) {
 
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
-		errors, ok := parsed["errors"].([]any)
+		errors, ok := parsed[textErrors].([]any)
 		require.True(t, ok)
 		require.Len(t, errors, 1)
 
 		errObj := asType[map[string]any](t, errors[0])
 		assert.Equal(t, "not_found", errObj["code"])
-		assert.Equal(t, "404", errObj["status"])
-		assert.Equal(t, "user not found", errObj["detail"])
-		assert.NotContains(t, errObj, "title")
+		assert.Equal(t, text404, errObj[textStatus])
+		assert.Equal(t, textUserNotFound, errObj["detail"])
+		assert.NotContains(t, errObj, textTitle)
 	})
 
 	t.Run("400 bad request", func(t *testing.T) {
@@ -312,9 +312,9 @@ func TestTransformError(t *testing.T) {
 
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
-		errObj := asType[map[string]any](t, asType[[]any](t, parsed["errors"])[0])
+		errObj := asType[map[string]any](t, asType[[]any](t, parsed[textErrors])[0])
 		assert.Equal(t, "invalid_argument", errObj["code"])
-		assert.Equal(t, "400", errObj["status"])
+		assert.Equal(t, text400, errObj[textStatus])
 		assert.Equal(t, "email is required", errObj["detail"])
 	})
 
@@ -339,14 +339,14 @@ func testTransformErrorRest2(t *testing.T) {
 
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
-		errObj := asType[map[string]any](t, asType[[]any](t, parsed["errors"])[0])
+		errObj := asType[map[string]any](t, asType[[]any](t, parsed[textErrors])[0])
 		assert.Equal(
 			t,
 			"not_found",
 			errObj["code"],
 			"numeric code 5 (NotFound) maps to the connect name",
 		)
-		assert.Equal(t, "404", errObj["status"])
+		assert.Equal(t, text404, errObj[textStatus])
 		assert.Equal(t, "resource not found", errObj["detail"])
 	})
 
@@ -369,9 +369,9 @@ func testTransformErrorRest(t *testing.T) {
 
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
-		errObj := asType[map[string]any](t, asType[[]any](t, parsed["errors"])[0])
-		assert.Equal(t, "unknown", errObj["code"])
-		assert.Equal(t, "500", errObj["status"])
+		errObj := asType[map[string]any](t, asType[[]any](t, parsed[textErrors])[0])
+		assert.Equal(t, textUnknown, errObj["code"])
+		assert.Equal(t, "500", errObj[textStatus])
 	})
 
 	t.Run("500 with unparseable body", func(t *testing.T) {
@@ -384,9 +384,9 @@ func testTransformErrorRest(t *testing.T) {
 
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
-		errObj := asType[map[string]any](t, asType[[]any](t, parsed["errors"])[0])
-		assert.Equal(t, "unknown", errObj["code"])
-		assert.Equal(t, "500", errObj["status"])
+		errObj := asType[map[string]any](t, asType[[]any](t, parsed[textErrors])[0])
+		assert.Equal(t, textUnknown, errObj["code"])
+		assert.Equal(t, "500", errObj[textStatus])
 		assert.NotContains(t, errObj, "detail")
 	})
 
@@ -399,11 +399,11 @@ func testTransformErrorRest(t *testing.T) {
 
 		require.NoError(t, json.Unmarshal(result, &parsed))
 
-		errObj := asType[map[string]any](t, asType[[]any](t, parsed["errors"])[0])
-		assert.Equal(t, "unknown", errObj["code"])
-		assert.Equal(t, "503", errObj["status"])
+		errObj := asType[map[string]any](t, asType[[]any](t, parsed[textErrors])[0])
+		assert.Equal(t, textUnknown, errObj["code"])
+		assert.Equal(t, "503", errObj[textStatus])
 		assert.NotContains(t, errObj, "detail")
-		assert.NotContains(t, errObj, "title")
+		assert.NotContains(t, errObj, textTitle)
 	})
 }
 
@@ -446,7 +446,7 @@ func TestIsRESTRequest(t *testing.T) {
 		t.Parallel()
 
 		r := &http.Request{Header: http.Header{
-			"Content-Type": []string{"application/grpc"},
+			textContentType: []string{"application/grpc"},
 		}}
 		assert.False(t, jsonapi.IsRESTRequest(r))
 	})
@@ -455,7 +455,7 @@ func TestIsRESTRequest(t *testing.T) {
 		t.Parallel()
 
 		r := &http.Request{Header: http.Header{
-			"Content-Type": []string{"application/grpc-web"},
+			textContentType: []string{"application/grpc-web"},
 		}}
 		assert.False(t, jsonapi.IsRESTRequest(r))
 	})

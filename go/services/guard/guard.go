@@ -205,7 +205,7 @@ func validateExpansion(r *types.GuardRow, deps Deps) error {
 	if _, ok := deps.Expanders[r.Each]; !ok {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"unknown expander %q (known: %s)", r.Each,
-			strings.Join(slices.Sorted(maps.Keys(deps.Expanders)), ", ")))
+			strings.Join(slices.Sorted(maps.Keys(deps.Expanders)), textCommaSpace)))
 	}
 
 	return nil
@@ -408,7 +408,7 @@ func (g *guard) tick(
 			vals = append(vals, vars[k])
 		}
 
-		name += " (" + strings.Join(vals, ", ") + ")"
+		name += " (" + strings.Join(vals, textCommaSpace) + ")"
 	}
 
 	t := types.StepResult{Name: name, Group: g.row.Group, Status: types.StatusPass}
@@ -637,5 +637,5 @@ func describe(sel types.FileSelector) string {
 		return "the selector"
 	}
 
-	return strings.Join(parts, ", ")
+	return strings.Join(parts, textCommaSpace)
 }

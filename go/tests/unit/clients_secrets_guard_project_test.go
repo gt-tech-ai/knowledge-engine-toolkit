@@ -35,7 +35,7 @@ func TestGuardDomain(t *testing.T) {
 
 	for _, got := range []string{"", "other.auth0.com"} {
 		err := secrets.GuardDomain(`credentials for "stg"`, "acme.auth0.com", got)
-		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 		assert.Contains(t, err.Error(), `"stg"`)
 		assert.Contains(t, err.Error(), `"acme.auth0.com"`)
 		assert.Contains(t, err.Error(), `"`+got+`"`)
@@ -61,7 +61,7 @@ const (
 func TestProjectEnv(t *testing.T) {
 	t.Parallel()
 
-	ref := types.Ref{Env: "stg", Class: "mgmt"}
+	ref := types.Ref{Env: textStg, Class: "mgmt"}
 	fields := map[string]string{"client_id": "AUTH0_CLIENT_ID"}
 
 	fields[projectFieldSecret] = "AUTH0_CLIENT_SECRET"
@@ -75,7 +75,7 @@ func TestProjectEnv(t *testing.T) {
 
 		return r
 	}
-	src.EXPECT().Get(gomock.Any(), at("client_id")).Return(types.NewSecret("id"), nil)
+	src.EXPECT().Get(gomock.Any(), at("client_id")).Return(types.NewSecret(textID), nil)
 	src.EXPECT().
 		Get(gomock.Any(), at(projectFieldSecret)).
 		Return(types.NewSecret("sec"), nil)
@@ -88,8 +88,8 @@ func TestProjectEnv(t *testing.T) {
 
 	hard := mocks.NewMockSource(gomock.NewController(t))
 	hard.EXPECT().Get(gomock.Any(), gomock.Any()).
-		Return(types.Secret{}, apperr.New(apperr.CodeUnavailable, "down")).AnyTimes()
+		Return(types.Secret{}, apperr.New(apperr.CodeUnavailable, textDown)).AnyTimes()
 
 	_, err = secrets.ProjectEnv(t.Context(), hard, ref, fields)
-	assert.True(t, apperr.Is(err, apperr.CodeUnavailable), "got %v", err)
+	assert.True(t, apperr.Is(err, apperr.CodeUnavailable), textGotV, err)
 }

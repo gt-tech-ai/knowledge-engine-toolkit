@@ -46,7 +46,7 @@ import (
 func TestCircuitBreaker_OptionFunctions(t *testing.T) {
 	t.Parallel()
 
-	cfg := circuitbreaker.DefaultConfig("test")
+	cfg := circuitbreaker.DefaultConfig(textTest)
 	circuitbreaker.WithName("custom")(&cfg)
 	circuitbreaker.WithMaxRequests(5)(&cfg)
 	circuitbreaker.WithInterval(30 * time.Second)(&cfg)
@@ -54,10 +54,10 @@ func TestCircuitBreaker_OptionFunctions(t *testing.T) {
 	circuitbreaker.WithConsecutiveFailures(10)(&cfg)
 
 	assert.Equal(t, "custom", cfg.Name)
-	assert.Equal(t, uint32(5), cfg.MaxRequests)
+	assert.Equal(t, uint32(uint32Arg5), cfg.MaxRequests)
 	assert.Equal(t, 30*time.Second, cfg.Interval)
 	assert.Equal(t, 10*time.Second, cfg.Timeout)
-	assert.Equal(t, uint32(10), cfg.ConsecutiveFailures)
+	assert.Equal(t, uint32(uint32Arg10), cfg.ConsecutiveFailures)
 }
 
 // TestCircuitBreaker_ToOptions tests that Config.ToOptions produces options
@@ -75,9 +75,9 @@ func TestCircuitBreaker_ToOptions(t *testing.T) {
 
 	src := circuitbreaker.Config{
 		Kind:                circuitbreaker.KindGoBreaker,
-		Name:                "src",
-		MaxRequests:         3,
-		ConsecutiveFailures: 7,
+		Name:                textSrc,
+		MaxRequests:         maxRequests3,
+		ConsecutiveFailures: consecutiveFailures7,
 	}
 	opts := src.ToOptions()
 	require.Len(t, opts, 1, "expected 1 option from ToOptions")
@@ -87,7 +87,7 @@ func TestCircuitBreaker_ToOptions(t *testing.T) {
 		opt(&dst)
 	}
 
-	assert.Equal(t, "src", dst.Name)
+	assert.Equal(t, textSrc, dst.Name)
 }
 
 // TestCircuitBreaker_KindString tests that Kind.String() returns readable
@@ -106,12 +106,12 @@ func TestCircuitBreaker_KindString(t *testing.T) {
 
 	assert.Equal(t, "gobreaker", circuitbreaker.KindGoBreaker.String())
 
-	unknown := circuitbreaker.Kind(99)
+	unknown := circuitbreaker.Kind(kindArg99)
 	assert.Contains(
 		t,
 		unknown.String(),
-		"99",
-		"unknown kind should contain its numeric value",
+		text99,
+		textUnknownKindShouldContain,
 	)
 }
 
@@ -161,10 +161,10 @@ func TestRetry_OptionFunctions(t *testing.T) {
 	retry.WithMultiplier(3.0)(&cfg)
 	retry.WithMaxElapsedTime(2 * time.Minute)(&cfg)
 
-	assert.Equal(t, 10, cfg.MaxRetries)
+	assert.Equal(t, wantMaxRetries10, cfg.MaxRetries)
 	assert.Equal(t, 500*time.Millisecond, cfg.InitialInterval)
 	assert.Equal(t, 30*time.Second, cfg.MaxInterval)
-	assert.InDelta(t, 3.0, cfg.Multiplier, 0)
+	assert.InDelta(t, wantMultiplier3p0, cfg.Multiplier, 0)
 	assert.Equal(t, 2*time.Minute, cfg.MaxElapsedTime)
 }
 
@@ -180,7 +180,7 @@ func TestRetry_OptionFunctions(t *testing.T) {
 func TestRetry_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	src := retry.Config{Kind: retry.KindExponential, MaxRetries: 7}
+	src := retry.Config{Kind: retry.KindExponential, MaxRetries: maxRetries7}
 	opts := src.ToOptions()
 	dst := retry.DefaultConfig()
 
@@ -188,7 +188,7 @@ func TestRetry_ToOptions(t *testing.T) {
 		opt(&dst)
 	}
 
-	assert.Equal(t, 7, dst.MaxRetries)
+	assert.Equal(t, wantMaxRetries7, dst.MaxRetries)
 }
 
 // TestRetry_KindString tests that Kind.String() returns readable labels for
@@ -207,12 +207,12 @@ func TestRetry_KindString(t *testing.T) {
 
 	assert.Equal(t, "exponential", retry.KindExponential.String())
 
-	unknown := retry.Kind(99)
+	unknown := retry.Kind(kindArg99)
 	assert.Contains(
 		t,
 		unknown.String(),
-		"99",
-		"unknown kind should contain its numeric value",
+		text99,
+		textUnknownKindShouldContain,
 	)
 }
 
@@ -230,8 +230,8 @@ func TestExponential_DefaultConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := exponential.DefaultConfig()
-	assert.Equal(t, 3, cfg.MaxRetries)
-	assert.InDelta(t, 2.0, cfg.Multiplier, 0)
+	assert.Equal(t, wantMaxRetries3, cfg.MaxRetries)
+	assert.InDelta(t, wantMultiplier2p0, cfg.Multiplier, 0)
 }
 
 // TestExponential_RetryWithResult tests that the generic RetryWithResult
@@ -260,10 +260,10 @@ func TestExponential_RetryWithResult(t *testing.T) {
 
 	// Success case
 	result, err := exponential.RetryWithResult(ctx, r, func() (string, error) {
-		return "ok", nil
+		return textOk, nil
 	})
 	require.NoError(t, err, "RetryWithResult must not return error on success")
-	assert.Equal(t, "ok", result)
+	assert.Equal(t, textOk, result)
 
 	// Failure case - succeeds on 2nd attempt
 	attempt := 0
@@ -303,8 +303,8 @@ func TestRateLimiter_OptionFunctions(t *testing.T) {
 	ratelimiter.WithRate(50.0)(&cfg)
 	ratelimiter.WithBurst(5)(&cfg)
 
-	assert.InDelta(t, 50.0, cfg.Rate, 0)
-	assert.Equal(t, 5, cfg.Burst)
+	assert.InDelta(t, wantRate50p0, cfg.Rate, 0)
+	assert.Equal(t, wantBurst5, cfg.Burst)
 }
 
 // TestRateLimiter_ToOptions tests that Config.ToOptions produces options that
@@ -319,7 +319,7 @@ func TestRateLimiter_OptionFunctions(t *testing.T) {
 func TestRateLimiter_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	src := ratelimiter.Config{Kind: ratelimiter.KindToken, Rate: 42.0, Burst: 3}
+	src := ratelimiter.Config{Kind: ratelimiter.KindToken, Rate: rate42p0, Burst: burst3}
 	opts := src.ToOptions()
 	dst := ratelimiter.DefaultConfig()
 
@@ -327,7 +327,7 @@ func TestRateLimiter_ToOptions(t *testing.T) {
 		opt(&dst)
 	}
 
-	assert.InDelta(t, 42.0, dst.Rate, 0)
+	assert.InDelta(t, wantRate42p0, dst.Rate, 0)
 }
 
 // TestRateLimiter_KindString tests that Kind.String() returns readable labels
@@ -346,12 +346,12 @@ func TestRateLimiter_KindString(t *testing.T) {
 
 	assert.Equal(t, "token", ratelimiter.KindToken.String())
 
-	unknown := ratelimiter.Kind(99)
+	unknown := ratelimiter.Kind(kindArg99)
 	assert.Contains(
 		t,
 		unknown.String(),
-		"99",
-		"unknown kind should contain its numeric value",
+		text99,
+		textUnknownKindShouldContain,
 	)
 }
 
@@ -392,7 +392,7 @@ func TestBulkhead_OptionFunctions(t *testing.T) {
 	cfg := bulkhead.DefaultConfig()
 	bulkhead.WithMaxConcurrent(20)(&cfg)
 
-	assert.Equal(t, 20, cfg.MaxConcurrent)
+	assert.Equal(t, wantMaxConcurrent20, cfg.MaxConcurrent)
 }
 
 // TestBulkhead_ToOptions tests that Config.ToOptions produces options that
@@ -407,7 +407,7 @@ func TestBulkhead_OptionFunctions(t *testing.T) {
 func TestBulkhead_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	src := bulkhead.Config{Kind: bulkhead.KindChannel, MaxConcurrent: 15}
+	src := bulkhead.Config{Kind: bulkhead.KindChannel, MaxConcurrent: maxConcurrent15}
 	opts := src.ToOptions()
 	dst := bulkhead.DefaultConfig()
 
@@ -415,7 +415,7 @@ func TestBulkhead_ToOptions(t *testing.T) {
 		opt(&dst)
 	}
 
-	assert.Equal(t, 15, dst.MaxConcurrent)
+	assert.Equal(t, wantMaxConcurrent15, dst.MaxConcurrent)
 }
 
 // TestBulkhead_KindString tests that Kind.String() returns readable labels for
@@ -434,12 +434,12 @@ func TestBulkhead_KindString(t *testing.T) {
 
 	assert.Equal(t, "channel", bulkhead.KindChannel.String())
 
-	unknown := bulkhead.Kind(99)
+	unknown := bulkhead.Kind(kindArg99)
 	assert.Contains(
 		t,
 		unknown.String(),
-		"99",
-		"unknown kind should contain its numeric value",
+		text99,
+		textUnknownKindShouldContain,
 	)
 }
 
@@ -456,7 +456,7 @@ func TestChannel_DefaultConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := channel.DefaultConfig()
-	assert.Equal(t, 10, cfg.MaxConcurrent)
+	assert.Equal(t, wantMaxConcurrent10, cfg.MaxConcurrent)
 }
 
 // TestChannel_TryExecuteSuccess tests the TryExecute happy path when slots are
@@ -540,7 +540,7 @@ func TestChannel_ExecuteCancelledContext(t *testing.T) {
 func TestTracer_OptionFunctions(t *testing.T) {
 	t.Parallel()
 
-	cfg := tracer.DefaultConfig("test")
+	cfg := tracer.DefaultConfig(textTest)
 	tracer.WithServiceName("custom-service")(&cfg)
 	tracer.WithEndpoint("otel.example.com:4317")(&cfg)
 	tracer.WithSampleRate(0.5)(&cfg)
@@ -548,7 +548,7 @@ func TestTracer_OptionFunctions(t *testing.T) {
 
 	assert.Equal(t, "custom-service", cfg.ServiceName)
 	assert.Equal(t, "otel.example.com:4317", cfg.Endpoint)
-	assert.InDelta(t, 0.5, cfg.SampleRate, 0)
+	assert.InDelta(t, wantSampleRate0p5, cfg.SampleRate, 0)
 	assert.False(t, cfg.Insecure, "Insecure should be false")
 }
 
@@ -564,7 +564,7 @@ func TestTracer_OptionFunctions(t *testing.T) {
 func TestTracer_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	src := tracer.Config{ServiceName: "src-svc", Endpoint: "localhost:4317"}
+	src := tracer.Config{ServiceName: "src-svc", Endpoint: textLocalhost4317}
 	opts := src.ToOptions()
 	dst := tracer.DefaultConfig("default")
 
@@ -591,12 +591,12 @@ func TestTracer_KindString(t *testing.T) {
 
 	assert.Equal(t, "otel", tracer.KindOTel.String())
 
-	unknown := tracer.Kind(99)
+	unknown := tracer.Kind(kindArg99)
 	assert.Contains(
 		t,
 		unknown.String(),
-		"99",
-		"unknown kind should contain its numeric value",
+		text99,
+		textUnknownKindShouldContain,
 	)
 }
 
@@ -663,11 +663,11 @@ func TestConfig_KindString(t *testing.T) {
 
 	assert.Equal(t, "viper", config.KindViper.String())
 
-	unknown := config.Kind(99)
+	unknown := config.Kind(kindArg99)
 	assert.Contains(
 		t,
 		unknown.String(),
-		"99",
-		"unknown kind should contain its numeric value",
+		text99,
+		textUnknownKindShouldContain,
 	)
 }

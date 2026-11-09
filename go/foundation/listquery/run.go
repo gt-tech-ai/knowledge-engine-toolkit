@@ -182,7 +182,7 @@ func pageLimit(page types.PageRequest, b Bounds) int {
 	if limit <= 0 {
 		limit = b.DefaultSize
 		if limit <= 0 {
-			limit = 10
+			limit = limit10
 		}
 	}
 

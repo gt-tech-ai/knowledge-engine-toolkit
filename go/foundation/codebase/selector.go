@@ -74,7 +74,7 @@ func GeneratedHeader(src []byte) bool {
 // any number of whole segments (including none) and every other segment matches as
 // path.Match does. A malformed segment matches nothing.
 func Glob(pattern, p string) bool {
-	return globSegments(strings.Split(pattern, "/"), strings.Split(p, "/"))
+	return globSegments(strings.Split(pattern, textSlash), strings.Split(p, textSlash))
 }
 
 // globSegments matches pattern segments against path segments, backtracking over `**`.
@@ -114,12 +114,12 @@ func segmentMatches(pat, seg string) bool {
 
 // under reports whether p is dir itself or lies beneath it; "" and "." are the root.
 func under(p, dir string) bool {
-	dir = strings.TrimSuffix(dir, "/")
+	dir = strings.TrimSuffix(dir, textSlash)
 	if dir == "" || dir == "." {
 		return true
 	}
 
-	return p == dir || strings.HasPrefix(p, dir+"/")
+	return p == dir || strings.HasPrefix(p, dir+textSlash)
 }
 
 // ignoredScope returns where an IncludeIgnored selector looks for ignored files: its
@@ -154,7 +154,7 @@ func ignoredScope(sel types.FileSelector) []string {
 func literalSegments(glob string) []string {
 	var lit []string
 
-	for seg := range strings.SplitSeq(glob, "/") {
+	for seg := range strings.SplitSeq(glob, textSlash) {
 		if strings.ContainsAny(seg, "*?[") {
 			break
 		}

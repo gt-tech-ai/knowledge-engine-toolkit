@@ -58,7 +58,7 @@ func newPgstore(t *testing.T) (*outboxpg.Store, *sql.DB) {
 	store, err := outboxpg.New(db, outboxpg.Config{
 		Table:            "product_outbox",
 		TenantColumn:     "tenant",
-		AttributeColumns: map[string]string{"event_type": "event_type"},
+		AttributeColumns: map[string]string{textEventType: textEventType},
 		Lease:            time.Minute,
 		MaxErrorLen:      16,
 	})
@@ -83,8 +83,8 @@ func pgstoreEnqueue(
 			rec.Key = uuid.NewSHA1(uuid.NameSpaceOID, []byte(rec.Key)).String()
 		}
 
-		if rec.Attributes["event_type"] == "" {
-			rec.Attributes = map[string]string{"event_type": "suite.v1"}
+		if rec.Attributes[textEventType] == "" {
+			rec.Attributes = map[string]string{textEventType: "suite.v1"}
 		}
 
 		return tx.WithTransaction(ctx, func(ctx context.Context) error {
@@ -116,12 +116,12 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 	rec := types.OutboxRecord{
 		ID:     uuid.New(),
 		Lane:   "producer",
-		Tenant: "org-1",
+		Tenant: textOrg1,
 		Key:    uuid.NewString(),
 		Payload: []byte(
 			`{"a":1}`,
 		),
-		Attributes: map[string]string{"event_type": "made.v1"},
+		Attributes: map[string]string{textEventType: "made.v1"},
 	}
 
 	err := store.Enqueue(ctx, rec)
@@ -136,7 +136,7 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 	})
 	require.ErrorIs(t, err, rolledBack)
 
-	for range 2 {
+	for range iterations2 {
 		require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
 			return store.Enqueue(ctx, rec)
 		}))
@@ -153,9 +153,9 @@ func TestPgstore_EnqueuesInTheBoundTransaction(t *testing.T) {
 	}))
 	require.Len(t, recs, 1)
 	require.Equal(t, rec.ID, recs[0].ID)
-	require.Equal(t, "org-1", recs[0].Tenant)
+	require.Equal(t, textOrg1, recs[0].Tenant)
 	require.Equal(t, rec.Key, recs[0].Key)
-	require.Equal(t, "made.v1", recs[0].Attributes["event_type"])
+	require.Equal(t, "made.v1", recs[0].Attributes[textEventType])
 	require.JSONEq(t, `{"a":1}`, string(recs[0].Payload))
 }
 
@@ -202,8 +202,14 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 
 	for _, id := range []uuid.UUID{sent, parked} {
 		require.NoError(t, pgstoreEnqueue(store, db)(ctx, &types.OutboxRecord{
-			ID: id, Lane: "facts", Tenant: "org-1", Key: key.String(),
-			Payload: []byte(`{}`), Attributes: map[string]string{"event_type": "fact.v1"},
+			ID:     id,
+			Lane:   "facts",
+			Tenant: textOrg1,
+			Key:    key.String(),
+			Payload: []byte(
+				`{}`,
+			),
+			Attributes: map[string]string{textEventType: "fact.v1"},
 		}))
 	}
 
@@ -219,10 +225,10 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 
 		return err
 	}))
-	require.Len(t, recs, 2)
-	require.Equal(t, "org-1", recs[0].Tenant)
+	require.Len(t, recs, wantRecsLen2)
+	require.Equal(t, textOrg1, recs[0].Tenant)
 	require.Equal(t, key.String(), recs[0].Key)
-	require.Equal(t, map[string]string{"event_type": "fact.v1"}, recs[0].Attributes)
+	require.Equal(t, map[string]string{textEventType: "fact.v1"}, recs[0].Attributes)
 
 	require.NoError(t, inTx(func(ctx context.Context) error {
 		err := store.MarkSent(ctx, sent)
@@ -252,7 +258,7 @@ func testPgstoreMapsColumnsAndPurgesSentRowsRest(
 
 	require.NoError(t, db.QueryRowContext(ctx,
 		`SELECT last_error FROM product_outbox WHERE id = $1`, parked).Scan(&lastErr))
-	require.Len(t, lastErr, 16)
+	require.Len(t, lastErr, wantLastErrLen16)
 
 	purge := func(cutoff time.Time) int {
 		var n int

@@ -30,7 +30,7 @@ import (
 //     authorization → timeout.
 func TestServiceTier_Order(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, decorate.Tier{Name: "service", Order: []decorate.Layer{
+	assert.Equal(t, decorate.Tier{Name: textService, Order: []decorate.Layer{
 		decorate.LayerRecovery, decorate.LayerTracing, decorate.LayerMetrics,
 		decorate.LayerLogging, decorate.LayerAuth, decorate.LayerTimeout,
 	}}, service.Tier())
@@ -61,7 +61,7 @@ type countingService struct {
 func (s countingService) Count(ctx context.Context) (int, error) {
 	return s.Exec(
 		ctx,
-		"count",
+		textCount,
 		func(context.Context) (int, error) { return s.count, nil },
 	)
 }
@@ -91,23 +91,23 @@ func TestServiceBase_DecoratesAnEmbeddingServicesOperations(t *testing.T) {
 
 	got, err := countingService{Base: base, count: 3}.Count(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, 3, got)
+	assert.Equal(t, wantGot3, got)
 
-	_, err = base.Exec(t.Context(), "slow", func(ctx context.Context) (int, error) {
+	_, err = base.Exec(t.Context(), textSlow, func(ctx context.Context) (int, error) {
 		<-ctx.Done()
 
 		return 0, ctx.Err()
 	})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
-	_, err = base.Exec(t.Context(), "boom", func(context.Context) (int, error) {
-		panic("boom")
+	_, err = base.Exec(t.Context(), textBoom, func(context.Context) (int, error) {
+		panic(textBoom)
 	})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
 	got, err = countingService{count: 5}.Count(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, 5, got)
+	assert.Equal(t, wantGot5, got)
 }
 
 // TestServiceEntity_DelegatesValidatesAndAuthorizes tests the decorated CRUD
@@ -173,15 +173,15 @@ func testServiceEntityDelegatesValidatesAndAuthorizesRest3(
 
 					return nil
 				},
-			}), "widgets", repo, validate),
+			}), textWidgets, repo, validate),
 	)
-	w := &te{ID: "w1", Name: "one"}
-	repo.EXPECT().Get(gomock.Any(), "w1").Return(w, nil)
+	w := &te{ID: textW1, Name: textOne}
+	repo.EXPECT().Get(gomock.Any(), textW1).Return(w, nil)
 	repo.EXPECT().
 		List(gomock.Any(), tp{}, gomock.Any()).
 		Return(&types.Page[te]{Total: 1}, nil)
 	repo.EXPECT().Create(gomock.Any(), w).Return(w, nil)
-	repo.EXPECT().Update(gomock.Any(), "w1", w).Return(w, nil)
+	repo.EXPECT().Update(gomock.Any(), textW1, w).Return(w, nil)
 
 	testServiceEntityDelegatesValidatesAndAuthorizesRest4(
 		t,
@@ -209,7 +209,7 @@ func testServiceEntityDelegatesValidatesAndAuthorizesRest4(
 ) {
 	t.Helper()
 
-	got, err := svc.Get(t.Context(), "w1")
+	got, err := svc.Get(t.Context(), textW1)
 	require.NoError(t, err)
 	assert.Same(t, w, got)
 
@@ -220,25 +220,25 @@ func testServiceEntityDelegatesValidatesAndAuthorizesRest4(
 	_, err = svc.Create(t.Context(), w)
 	require.NoError(t, err)
 
-	_, err = svc.Update(t.Context(), "w1", w)
+	_, err = svc.Update(t.Context(), textW1, w)
 	require.NoError(t, err)
 
 	_, err = svc.Create(t.Context(), &te{ID: "w2"})
 	require.ErrorIs(t, err, invalid)
-	require.ErrorIs(t, svc.Delete(t.Context(), "w1"), denied)
+	require.ErrorIs(t, svc.Delete(t.Context(), textW1), denied)
 	assert.Equal(t, []string{
 		"widgets.get", "widgets.list", "widgets.create", "widgets.update",
 		"widgets.create", "widgets.delete",
 	}, (*actions))
 
 	keyed := mocks.NewMockCRUDNoListRepository[te, string](ctrl)
-	keyed.EXPECT().Delete(gomock.Any(), "w1").Return(nil)
+	keyed.EXPECT().Delete(gomock.Any(), textW1).Return(nil)
 
 	noList := fixtures.Must(service.NewEntity[
 		interfaces.CRUDNoListRepository[te, string], te, tp, string,
 	](fixtures.Decorations(), "keyed", keyed, validate))
-	require.NoError(t, noList.Delete(t.Context(), "w1"))
+	require.NoError(t, noList.Delete(t.Context(), textW1))
 
-	_, err = noList.Update(t.Context(), "w1", &te{})
+	_, err = noList.Update(t.Context(), textW1, &te{})
 	require.ErrorIs(t, err, invalid)
 }

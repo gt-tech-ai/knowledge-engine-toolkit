@@ -35,8 +35,8 @@ func TestUseStaticCredentials(t *testing.T) {
 			name: "s3 with leaked minioadmin key uses IRSA, not static",
 			cfg: infra.S3Config{
 				Kind:            "s3",
-				AccessKeyID:     "minioadmin",
-				SecretAccessKey: "minioadmin",
+				AccessKeyID:     textMinioadmin,
+				SecretAccessKey: textMinioadmin,
 			},
 			want: false,
 		},
@@ -48,15 +48,15 @@ func TestUseStaticCredentials(t *testing.T) {
 		{
 			name: "minio with key uses static creds",
 			cfg: infra.S3Config{
-				Kind:            "minio",
-				AccessKeyID:     "minioadmin",
-				SecretAccessKey: "minioadmin",
+				Kind:            textMinio,
+				AccessKeyID:     textMinioadmin,
+				SecretAccessKey: textMinioadmin,
 			},
 			want: true,
 		},
 		{
 			name: "minio with empty key uses default chain",
-			cfg:  infra.S3Config{Kind: "minio"},
+			cfg:  infra.S3Config{Kind: textMinio},
 			want: false,
 		},
 	}
@@ -89,14 +89,14 @@ func TestNewConnectorClientBuilder(t *testing.T) {
 	t.Parallel()
 
 	build := s3.NewConnectorClientBuilder(infra.S3Config{
-		Kind:     "minio",
-		Endpoint: "http://minio:9000",
-		Region:   "us-east-1",
+		Kind:     textMinio,
+		Endpoint: textHTTPMinio9000,
+		Region:   textUsEast1,
 	})
 	ctx := context.Background()
 	creds := aws.AnonymousCredentials{}
 
-	client, err := build(ctx, creds, "eu-west-1")
+	client, err := build(ctx, creds, textEuWest1)
 	if err != nil {
 		t.Fatalf("build with explicit region: %v", err)
 	}

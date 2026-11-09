@@ -23,10 +23,10 @@ func TestSelect(t *testing.T) {
 	t.Parallel()
 
 	runs := []types.ToolRun{
-		{Name: "golangci-lint", Verb: "lint", Tags: []string{"go"}},
-		{Name: "ruff", Verb: "lint", Tags: []string{"python", "fast"}},
-		{Name: "hadolint", Verb: "lint", Tags: []string{"infra", "fast"}},
-		{Name: "gofumpt", Verb: "fmt", Tags: []string{"go", "fast"}},
+		{Name: textGolangciLint, Verb: textLint, Tags: []string{textGo2}},
+		{Name: textRuff, Verb: textLint, Tags: []string{textPython, textFast}},
+		{Name: textHadolint, Verb: textLint, Tags: []string{textInfra, textFast}},
+		{Name: textGofumpt, Verb: textFmt, Tags: []string{textGo2, textFast}},
 	}
 	names := func(rs []types.ToolRun) []string {
 		out := make([]string, 0, len(rs))
@@ -40,37 +40,37 @@ func TestSelect(t *testing.T) {
 		sel  types.Selection
 		want []string
 	}{
-		"empty": {
+		textEmpty: {
 			types.Selection{},
-			[]string{"golangci-lint", "ruff", "hadolint", "gofumpt"},
+			[]string{textGolangciLint, textRuff, textHadolint, textGofumpt},
 		},
-		"verbs": {types.Selection{Verbs: []string{"fmt"}}, []string{"gofumpt"}},
+		"verbs": {types.Selection{Verbs: []string{textFmt}}, []string{textGofumpt}},
 		"every tag": {
-			types.Selection{Tags: []string{"go", "fast"}},
-			[]string{"gofumpt"},
+			types.Selection{Tags: []string{textGo2, textFast}},
+			[]string{textGofumpt},
 		},
 		"any tag": {
-			types.Selection{AnyTags: []string{"python", "infra"}},
-			[]string{"ruff", "hadolint"},
+			types.Selection{AnyTags: []string{textPython, textInfra}},
+			[]string{textRuff, textHadolint},
 		},
 		"exclude tags": {
-			types.Selection{ExcludeTags: []string{"fast"}},
-			[]string{"golangci-lint"},
+			types.Selection{ExcludeTags: []string{textFast}},
+			[]string{textGolangciLint},
 		},
 		"names": {
-			types.Selection{Names: []string{"ruff", "gofumpt"}},
-			[]string{"ruff", "gofumpt"},
+			types.Selection{Names: []string{textRuff, textGofumpt}},
+			[]string{textRuff, textGofumpt},
 		},
 		"exclude": {
-			types.Selection{Exclude: []string{"ruff"}},
-			[]string{"golangci-lint", "hadolint", "gofumpt"},
+			types.Selection{Exclude: []string{textRuff}},
+			[]string{textGolangciLint, textHadolint, textGofumpt},
 		},
 		"intersection": {
 			types.Selection{
-				Verbs: []string{"lint"}, AnyTags: []string{"go", "fast"},
-				ExcludeTags: []string{"infra"},
+				Verbs: []string{textLint}, AnyTags: []string{textGo2, textFast},
+				ExcludeTags: []string{textInfra},
 			},
-			[]string{"golangci-lint", "ruff"},
+			[]string{textGolangciLint, textRuff},
 		},
 	}
 

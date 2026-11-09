@@ -28,11 +28,11 @@ func TestEnvelope_RoundTrip(t *testing.T) {
 		Email string `json:"email"`
 	}
 
-	original := user{Name: "Alice", Email: "alice@example.com"}
+	original := user{Name: textAlice, Email: "alice@example.com"}
 	version := 1
 
 	data, err := cache.Encode(original, version)
-	require.NoError(t, err, "Encode must not return error")
+	require.NoError(t, err, textEncodeMustNotReturn)
 
 	decoded, ok, err := cache.Decode[user](data, version)
 	require.NoError(t, err, "Decode must not return error")
@@ -59,9 +59,9 @@ func TestEnvelope_VersionMismatch(t *testing.T) {
 	}
 
 	data, err := cache.Encode(payload{Value: 42}, 1)
-	require.NoError(t, err, "Encode must not return error")
+	require.NoError(t, err, textEncodeMustNotReturn)
 
-	val, ok, err := cache.Decode[payload](data, 2)
+	val, ok, err := cache.Decode[payload](data, version2)
 	require.NoError(t, err, "Decode must not return error on version mismatch")
 	assert.False(t, ok, "Decode must return ok=false for version mismatch")
 	assert.Equal(t, 0, val.Value, "Decode must return zero value on version mismatch")
@@ -110,7 +110,7 @@ func TestEnvelope_ZeroValue(t *testing.T) {
 
 	var zero empty
 
-	version := 5
+	version := version5
 
 	data, err := cache.Encode(zero, version)
 	require.NoError(t, err, "Encode must not return error for zero-value struct")
@@ -137,7 +137,7 @@ func TestEnvelope_CachedAtIsRecent(t *testing.T) {
 	before := time.Now()
 
 	data, err := cache.Encode("hello", 1)
-	require.NoError(t, err, "Encode must not return error")
+	require.NoError(t, err, textEncodeMustNotReturn)
 
 	after := time.Now()
 

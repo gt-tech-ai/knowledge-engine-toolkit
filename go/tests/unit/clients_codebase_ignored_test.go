@@ -36,7 +36,7 @@ func TestCodebaseClient_GitKindIncludeIgnored(t *testing.T) {
 
 	root := t.TempDir()
 	writeFiles(t, root, map[string]string{
-		"a.go": "package a\n", "out/zz_gen.go": "package out\n", "out/log.txt": "x\n",
+		textAGo: textPackageA, textOutZzGenGo: "package out\n", "out/log.txt": "x\n",
 	})
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
@@ -47,10 +47,10 @@ func TestCodebaseClient_GitKindIncludeIgnored(t *testing.T) {
 
 	ignored := []byte("out/log.txt\x00out/zz_gen.go\x00")
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--others",
-		"--ignored", "--exclude-standard", "--", "out").
+		"--ignored", "--exclude-standard", "--", textOut).
 		Return(interfaces.CmdResult{Stdout: ignored}).Times(1)
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--others",
-		"--ignored", "--exclude-standard", "--", "out/zz_gen.go").
+		"--ignored", "--exclude-standard", "--", textOutZzGenGo).
 		Return(interfaces.CmdResult{Stdout: []byte("out/zz_gen.go\x00")}).Times(1)
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--others",
 		"--ignored", "--exclude-standard").
@@ -63,27 +63,27 @@ func TestCodebaseClient_GitKindIncludeIgnored(t *testing.T) {
 
 	files, err := cb.Files(t.Context(), types.FileSelector{IncludeGenerated: true})
 	require.NoError(t, err)
-	assert.Equal(t, []types.File{{Path: "a.go"}}, files)
+	assert.Equal(t, []types.File{{Path: textAGo}}, files)
 
 	files, err = cb.Files(t.Context(), types.FileSelector{
-		Roots: []string{"out"}, Globs: []string{"out/*.go"},
+		Roots: []string{textOut}, Globs: []string{"out/*.go"},
 		IncludeGenerated: true, IncludeIgnored: true,
 	})
 	require.NoError(t, err)
 	assert.Equal(t,
-		[]types.File{{Path: "out/zz_gen.go", Untracked: true, Ignored: true}}, files)
+		[]types.File{{Path: textOutZzGenGo, Untracked: true, Ignored: true}}, files)
 
 	files, err = cb.Files(t.Context(), types.FileSelector{
-		Paths: []string{"out/zz_gen.go"}, IncludeGenerated: true, IncludeIgnored: true,
+		Paths: []string{textOutZzGenGo}, IncludeGenerated: true, IncludeIgnored: true,
 	})
 	require.NoError(t, err)
 	assert.Equal(t,
-		[]types.File{{Path: "out/zz_gen.go", Untracked: true, Ignored: true}}, files)
+		[]types.File{{Path: textOutZzGenGo, Untracked: true, Ignored: true}}, files)
 
 	files, err = cb.Files(t.Context(), types.FileSelector{
 		Globs: []string{"**/zz_gen.go"}, IncludeGenerated: true, IncludeIgnored: true,
 	})
 	require.NoError(t, err)
 	assert.Equal(t,
-		[]types.File{{Path: "out/zz_gen.go", Untracked: true, Ignored: true}}, files)
+		[]types.File{{Path: textOutZzGenGo, Untracked: true, Ignored: true}}, files)
 }

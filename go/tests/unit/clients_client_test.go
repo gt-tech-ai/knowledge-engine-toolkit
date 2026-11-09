@@ -149,10 +149,10 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 	bh := mocks.NewMockBulkhead(ctrl)
 	bh.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, fn func() error) error { return fn() },
-	).Times(4)
+	).Times(timesArg4)
 
 	reg := promclient.NewRegistry()
-	b := wireBase("svc", decorate.Deps{
+	b := wireBase(textSvc, decorate.Deps{
 		Metrics:  prom.NewFromRegistry(reg),
 		Retrier:  countingRetrier(ctrl, 3),
 		Bulkhead: bh,
@@ -175,7 +175,7 @@ func testClientBaseRetriesOnlyIdempotentOperationsRest(
 ) {
 	t.Helper()
 
-	got, err := b.Exec(t.Context(), "get", func(context.Context) (int, error) {
+	got, err := b.Exec(t.Context(), textGet, func(context.Context) (int, error) {
 		calls++
 		if calls < 2 {
 			return 0, transient
@@ -184,12 +184,12 @@ func testClientBaseRetriesOnlyIdempotentOperationsRest(
 		return 42, nil
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 42, got)
-	assert.InDelta(t, 2.0, clientOpCounter(t, reg, "get"), 0)
+	assert.Equal(t, wantGot42, got)
+	assert.InDelta(t, wantClientOpCounter2p0, clientOpCounter(t, reg, textGet), 0)
 
 	calls = 0
 
-	require.NoError(t, b.Do(t.Context(), "put", func(context.Context) error {
+	require.NoError(t, b.Do(t.Context(), textPut, func(context.Context) error {
 		calls++
 		if calls < 3 {
 			return transient
@@ -197,10 +197,10 @@ func testClientBaseRetriesOnlyIdempotentOperationsRest(
 
 		return nil
 	}))
-	assert.Equal(t, 3, calls)
+	assert.Equal(t, wantCalls3, calls)
 
 	calls = 0
-	_, err = b.ExecOnce(t.Context(), "create", func(context.Context) (int, error) {
+	_, err = b.ExecOnce(t.Context(), textCreate, func(context.Context) (int, error) {
 		calls++
 
 		return 0, transient
@@ -219,7 +219,7 @@ func testClientBaseRetriesOnlyIdempotentOperationsRest(
 
 	bare, err := client.Base{}.ExecOnce(
 		t.Context(),
-		"x",
+		textX,
 		func(context.Context) (string, error) {
 			return "bare", nil
 		},
@@ -242,7 +242,7 @@ func testClientBaseRetriesOnlyIdempotentOperationsRest(
 func TestClientBase_StreamDeadlineOutlivesTheOpen(t *testing.T) {
 	t.Parallel()
 
-	b := wireBase("svc", decorate.Deps{Timeout: time.Minute})
+	b := wireBase(textSvc, decorate.Deps{Timeout: time.Minute})
 
 	var streamCtx context.Context
 
@@ -250,10 +250,10 @@ func TestClientBase_StreamDeadlineOutlivesTheOpen(t *testing.T) {
 		func(ctx context.Context) (string, error) {
 			streamCtx = ctx //nolint:fatcontext // captured for inspection
 
-			return "body", nil
+			return textBody, nil
 		})
 	require.NoError(t, err)
-	assert.Equal(t, "body", got)
+	assert.Equal(t, textBody, got)
 
 	_, hasDeadline := streamCtx.Deadline()
 	assert.True(t, hasDeadline)
@@ -261,7 +261,7 @@ func TestClientBase_StreamDeadlineOutlivesTheOpen(t *testing.T) {
 	release()
 	require.ErrorIs(t, streamCtx.Err(), context.Canceled)
 
-	boom := apperr.New(apperr.CodeUnavailable, "down")
+	boom := apperr.New(apperr.CodeUnavailable, textDown)
 
 	_, release, err = b.Stream(t.Context(), "download",
 		func(ctx context.Context) (string, error) {
@@ -295,20 +295,20 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 	deps := decorate.Deps{Timeout: time.Minute}
 
 	baseLock := mocks.NewMockDistributedLock(ctrl)
-	baseLock.EXPECT().Acquire(gomock.Any(), "k").Return("tok", true, nil)
-	baseLock.EXPECT().Renew(gomock.Any(), "k", "tok").Return(true, nil)
-	baseLock.EXPECT().Release(gomock.Any(), "k", "tok").Return(nil)
+	baseLock.EXPECT().Acquire(gomock.Any(), textK).Return(textTok, true, nil)
+	baseLock.EXPECT().Renew(gomock.Any(), textK, textTok).Return(true, nil)
+	baseLock.EXPECT().Release(gomock.Any(), textK, textTok).Return(nil)
 
 	lk := fixtures.Must(lock.Decorate(baseLock, decorate.Fixed(deps), "lock"))
-	token, acquired, err := lk.Acquire(ctx, "k")
+	token, acquired, err := lk.Acquire(ctx, textK)
 	require.NoError(t, err)
-	assert.Equal(t, "tok", token)
+	assert.Equal(t, textTok, token)
 	assert.True(t, acquired)
 
-	held, err := lk.Renew(ctx, "k", "tok")
+	held, err := lk.Renew(ctx, textK, textTok)
 	require.NoError(t, err)
 	assert.True(t, held)
-	require.NoError(t, lk.Release(ctx, "k", "tok"))
+	require.NoError(t, lk.Release(ctx, textK, textTok))
 
 	tail := []interfaces.BufferedMessage{{ID: "m2"}}
 
@@ -329,27 +329,27 @@ func testClientDecorateFamiliesCarryEveryResultRest2(
 	var err error
 
 	baseBuf := mocks.NewMockReplayBuffer(ctrl)
-	baseBuf.EXPECT().ReplayAfter(gomock.Any(), "k", "m1").Return(tail, true, nil)
-	baseBuf.EXPECT().Append(gomock.Any(), "k", "m3", []byte("x")).Return(nil)
-	baseBuf.EXPECT().Prune(gomock.Any(), "k", "m2").Return(nil)
-	baseBuf.EXPECT().Delete(gomock.Any(), "k").Return(nil)
+	baseBuf.EXPECT().ReplayAfter(gomock.Any(), textK, textM1).Return(tail, true, nil)
+	baseBuf.EXPECT().Append(gomock.Any(), textK, "m3", []byte(textX)).Return(nil)
+	baseBuf.EXPECT().Prune(gomock.Any(), textK, "m2").Return(nil)
+	baseBuf.EXPECT().Delete(gomock.Any(), textK).Return(nil)
 
 	buf := fixtures.Must(replaybuffer.Decorate(baseBuf, decorate.Fixed(deps), "replay"))
-	msgs, complete, err := buf.ReplayAfter(ctx, "k", "m1")
+	msgs, complete, err := buf.ReplayAfter(ctx, textK, textM1)
 	require.NoError(t, err)
 	assert.Equal(t, tail, msgs)
 	assert.True(t, complete)
-	require.NoError(t, buf.Append(ctx, "k", "m3", []byte("x")))
-	require.NoError(t, buf.Prune(ctx, "k", "m2"))
-	require.NoError(t, buf.Delete(ctx, "k"))
+	require.NoError(t, buf.Append(ctx, textK, "m3", []byte(textX)))
+	require.NoError(t, buf.Prune(ctx, textK, "m2"))
+	require.NoError(t, buf.Delete(ctx, textK))
 
-	objects := []interfaces.StorageObject{{Key: "a"}}
+	objects := []interfaces.StorageObject{{Key: textA}}
 	baseSrc := mocks.NewMockConnectorSource(ctrl)
 	baseSrc.EXPECT().ListPage(gomock.Any(), "t1", 10).Return(objects, "t2", nil)
-	baseSrc.EXPECT().TestConnection(gomock.Any()).Return(7, nil)
+	baseSrc.EXPECT().TestConnection(gomock.Any()).Return(rets7, nil)
 
 	src := fixtures.Must(connector.Decorate(baseSrc, decorate.Fixed(deps), "connector"))
-	page, next, err := src.ListPage(ctx, "t1", 10)
+	page, next, err := src.ListPage(ctx, "t1", limit10)
 	require.NoError(t, err)
 	assert.Equal(t, objects, page)
 	assert.Equal(t, "t2", next)
@@ -372,29 +372,29 @@ func testClientDecorateFamiliesCarryEveryResultRest(
 
 	n, err := src.TestConnection(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 7, n)
+	assert.Equal(t, equalArg7, n)
 
-	boom := apperr.New(apperr.CodeUnavailable, "down")
+	boom := apperr.New(apperr.CodeUnavailable, textDown)
 	basePub := mocks.NewMockMessagePublisher(ctrl)
-	basePub.EXPECT().Publish(gomock.Any(), "topic", []byte("p")).Return(boom)
+	basePub.EXPECT().Publish(gomock.Any(), "topic", []byte(textP)).Return(boom)
 	basePub.EXPECT().
-		PublishBatch(gomock.Any(), "topic", [][]byte{[]byte("p")}).
+		PublishBatch(gomock.Any(), "topic", [][]byte{[]byte(textP)}).
 		Return(nil)
 
 	pub := fixtures.Must(
 		messaging.Decorate(basePub, decorate.Fixed(deps), "publisher", client.Producer()),
 	)
-	require.ErrorIs(t, pub.Publish(ctx, "topic", []byte("p")), boom)
-	require.NoError(t, pub.PublishBatch(ctx, "topic", [][]byte{[]byte("p")}))
+	require.ErrorIs(t, pub.Publish(ctx, "topic", []byte(textP)), boom)
+	require.NoError(t, pub.PublishBatch(ctx, "topic", [][]byte{[]byte(textP)}))
 
 	body := mocks.NewMockReadCloser(ctrl)
 	body.EXPECT().Close().Return(nil)
 
 	baseStorage := mocks.NewMockStorageClient(ctrl)
-	baseStorage.EXPECT().Download(gomock.Any(), "b", "k").Return(body, nil)
+	baseStorage.EXPECT().Download(gomock.Any(), textB, textK).Return(body, nil)
 
 	rc, err := fixtures.Must(storage.Decorate(baseStorage, decorate.Fixed(deps), "storage")).
-		Download(ctx, "b", "k")
+		Download(ctx, textB, textK)
 	require.NoError(t, err)
 	require.NoError(t, rc.Close())
 
@@ -402,7 +402,7 @@ func testClientDecorateFamiliesCarryEveryResultRest(
 		analytics.Decorate(
 			mocks.NewMockAnalyticsStore(ctrl),
 			decorate.Fixed(deps),
-			"analytics",
+			textAnalytics,
 		),
 	)
 
@@ -453,23 +453,32 @@ func TestClientDecorate_CacheIsFailOpenAndCountsHits(t *testing.T) {
 	obs := decorate.Observability{Metrics: prom.NewFromRegistry(reg)}
 
 	base := mocks.NewMockByteCache(ctrl)
-	base.EXPECT().Get(gomock.Any(), "present").Return([]byte("v"), true)
-	base.EXPECT().Get(gomock.Any(), "absent").Return(nil, false)
+	base.EXPECT().Get(gomock.Any(), "present").Return([]byte(textV), true)
+	base.EXPECT().Get(gomock.Any(), textAbsent).Return(nil, false)
 
 	c := fixtures.Must(
-		cache.Decorate(base, decorate.Fixed(decorate.Deps{Observability: obs}), "authz"),
+		cache.Decorate(
+			base,
+			decorate.Fixed(decorate.Deps{Observability: obs}),
+			textAuthz,
+		),
 	)
 	v, hit := c.Get(ctx, "present")
 	assert.True(t, hit)
-	assert.Equal(t, []byte("v"), v)
+	assert.Equal(t, []byte(textV), v)
 
-	_, hit = c.Get(ctx, "absent")
+	_, hit = c.Get(ctx, textAbsent)
 	assert.False(t, hit)
-	assert.InDelta(t, 1.0, clientCounter(t, reg, "cache_hits_total", "cache", "authz"), 0)
 	assert.InDelta(
 		t,
-		1.0,
-		clientCounter(t, reg, "cache_misses_total", "cache", "authz"),
+		wantClientCounter1p0,
+		clientCounter(t, reg, "cache_hits_total", "cache", textAuthz),
+		0,
+	)
+	assert.InDelta(
+		t,
+		wantClientCounter1p0,
+		clientCounter(t, reg, "cache_misses_total", "cache", textAuthz),
 		0,
 	)
 
@@ -492,17 +501,17 @@ func testClientDecorateCacheIsFailOpenAndCountsHitsRest(
 
 	open := mocks.NewMockCircuitBreaker(ctrl)
 	open.EXPECT().Execute(gomock.Any()).
-		Return(apperr.New(apperr.CodeUnavailable, "breaker open")).Times(2)
+		Return(apperr.New(apperr.CodeUnavailable, "breaker open")).Times(timesArg2)
 
 	refused := fixtures.Must(
 		cache.Decorate(mocks.NewMockByteCache(ctrl), decorate.Fixed(decorate.Deps{
 			Breaker: open,
-		}), "authz"),
+		}), textAuthz),
 	)
 
 	_, hit = refused.Get(ctx, "present")
 	assert.False(t, hit)
-	refused.Set(ctx, "k", []byte("v"), time.Minute)
+	refused.Set(ctx, textK, []byte(textV), time.Minute)
 
 	inv := mocks.NewMockCacheInvalidator(ctrl)
 	boom := apperr.New(apperr.CodeUnavailable, "scan failed")
@@ -514,7 +523,7 @@ func testClientDecorateCacheIsFailOpenAndCountsHitsRest(
 		*mocks.MockCacheInvalidator
 	}{mocks.NewMockByteCache(ctrl), inv}
 	decorated := fixtures.Must(
-		cache.Decorate(both, decorate.Fixed(decorate.Deps{}), "authz"),
+		cache.Decorate(both, decorate.Fixed(decorate.Deps{}), textAuthz),
 	)
 	invalidating, ok := decorated.(interfaces.CacheInvalidator)
 	require.True(t, ok)
@@ -544,7 +553,7 @@ func TestClientDecorate_SecretsAndHandlersAreObserved(t *testing.T) {
 	reg := promclient.NewRegistry()
 	obs := decorate.Observability{Metrics: prom.NewFromRegistry(reg)}
 
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "token"}
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: "token"}
 	boom := apperr.New(apperr.CodeForbidden, "denied")
 	base := mocks.NewMockSource(ctrl)
 	base.EXPECT().Get(gomock.Any(), ref).Return(types.NewSecret("s3cr3t"), nil)
@@ -560,9 +569,9 @@ func TestClientDecorate_SecretsAndHandlersAreObserved(t *testing.T) {
 	got, err := src.Get(ctx, ref)
 	require.NoError(t, err)
 	assert.Equal(t, "s3cr3t", got.Reveal())
-	require.ErrorIs(t, src.Put(ctx, ref, types.NewSecret("x")), boom)
-	assert.InDelta(t, 1.0, clientOpCounter(t, reg, "get"), 0)
-	assert.InDelta(t, 1.0, clientOpCounter(t, reg, "put"), 0)
+	require.ErrorIs(t, src.Put(ctx, ref, types.NewSecret(textX)), boom)
+	assert.InDelta(t, wantClientOpCounter1p0, clientOpCounter(t, reg, textGet), 0)
+	assert.InDelta(t, wantClientOpCounter1p0, clientOpCounter(t, reg, textPut), 0)
 
 	calls := 0
 	handlers := wireBase("messaging.handler", decorate.Deps{
@@ -571,14 +580,14 @@ func TestClientDecorate_SecretsAndHandlersAreObserved(t *testing.T) {
 		Timeout:       time.Minute,
 	}, client.Handler())
 
-	err = handlers.Do(ctx, "orders", func(context.Context) error {
+	err = handlers.Do(ctx, textOrders, func(context.Context) error {
 		calls++
 
 		return boom
 	})
 	require.ErrorIs(t, err, boom)
 	assert.Equal(t, 1, calls)
-	assert.InDelta(t, 1.0, clientOpCounter(t, reg, "orders"), 0)
+	assert.InDelta(t, wantClientOpCounter1p0, clientOpCounter(t, reg, textOrders), 0)
 }
 
 // TestClientBase_MessagingSpansCarryTheirRole tests the span kinds of the messaging
@@ -599,7 +608,7 @@ func TestClientBase_MessagingSpansCarryTheirRole(t *testing.T) {
 	tracer := mocks.NewMockTracer(ctrl)
 	span := mocks.NewMockSpan(ctrl)
 	span.EXPECT().SetAttribute(gomock.Any(), gomock.Any()).AnyTimes()
-	span.EXPECT().End().Times(3)
+	span.EXPECT().End().Times(timesArg3)
 
 	kinds := map[string]interfaces.SpanKind{}
 
@@ -621,14 +630,14 @@ func TestClientBase_MessagingSpansCarryTheirRole(t *testing.T) {
 	deps := decorate.Deps{Tracer: tracer}
 	noop := func(context.Context) error { return nil }
 
-	require.NoError(t, wireBase("store", deps).Do(t.Context(), "put", noop))
+	require.NoError(t, wireBase(textStore, deps).Do(t.Context(), textPut, noop))
 	require.NoError(
 		t,
-		wireBase("bus", deps, client.Producer()).Do(t.Context(), "orders", noop),
+		wireBase("bus", deps, client.Producer()).Do(t.Context(), textOrders, noop),
 	)
 	require.NoError(
 		t,
-		wireBase("bus.handler", deps, client.Handler()).Do(t.Context(), "orders", noop),
+		wireBase("bus.handler", deps, client.Handler()).Do(t.Context(), textOrders, noop),
 	)
 	assert.Equal(t, map[string]interfaces.SpanKind{
 		"store.put":          interfaces.SpanKindClient,

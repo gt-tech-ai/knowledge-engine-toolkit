@@ -84,11 +84,11 @@ func TestDecorateExec_ArbitraryReturnTypes(t *testing.T) {
 func TestDecorateExec_ReturnsResultUnmodifiedOnError(t *testing.T) {
 	t.Parallel()
 
-	want := apperr.Sentinel("boom")
+	want := apperr.Sentinel(textBoom)
 	got, err := decorate.Exec(context.Background(), decorate.Chain(), "X",
 		func(context.Context) (int, error) { return 42, want })
 	require.ErrorIs(t, err, want)
-	assert.Equal(t, 42, got, "Exec must not zero the result on error")
+	assert.Equal(t, wantGot42, got, "Exec must not zero the result on error")
 }
 
 // TestDecorateChain_OutermostFirst tests that Chain composes middlewares
@@ -107,10 +107,10 @@ func TestDecorateChain_OutermostFirst(t *testing.T) {
 	var log []string
 
 	mw := decorate.Chain(
-		recorderMW{name: "a", log: &log},
-		recorderMW{name: "b", log: &log},
+		recorderMW{name: textA, log: &log},
+		recorderMW{name: textB, log: &log},
 	)
-	_, err := decorate.Exec(context.Background(), mw, "op",
+	_, err := decorate.Exec(context.Background(), mw, textOp,
 		func(context.Context) (struct{}, error) {
 			log = append(log, "fn")
 
@@ -138,16 +138,16 @@ func TestTracingMW_OpensSpanWithTierAttrs(t *testing.T) {
 	tracer := fixtures.SpyTracer(func(k string, v any) { attrs[k] = v })
 	mw := decorate.NewTracing(
 		tracer,
-		"repository",
-		"documents",
+		textRepository,
+		textDocuments,
 		interfaces.SpanKindInternal,
 	)
 
-	_, err := decorate.Exec(context.Background(), mw, "UpdateStatus",
+	_, err := decorate.Exec(context.Background(), mw, textUpdatestatus,
 		func(context.Context) (struct{}, error) { return struct{}{}, nil })
 	require.NoError(t, err)
-	assert.Equal(t, "documents", attrs["repository.name"])
-	assert.Equal(t, "UpdateStatus", attrs["repository.operation"])
+	assert.Equal(t, textDocuments, attrs["repository.name"])
+	assert.Equal(t, textUpdatestatus, attrs["repository.operation"])
 }
 
 // TestMetricsMW_RecordsCountAndError tests that the metrics middleware records an
@@ -170,36 +170,39 @@ func TestMetricsMW_RecordsCountAndError(t *testing.T) {
 	dur := mocks.NewMockHistogram(ctrl)
 
 	m.EXPECT().
-		Counter("repository_operations_total", gomock.Any(), "repository", "operation").
+		Counter("repository_operations_total", gomock.Any(), textRepository, "operation").
 		Return(ops)
 	m.EXPECT().
-		Counter("repository_errors_total", gomock.Any(), "repository", "operation").
+		Counter("repository_errors_total", gomock.Any(), textRepository, "operation").
 		Return(errs)
 	m.EXPECT().
 		Histogram(
 			"repository_operation_duration_seconds",
 			gomock.Any(),
 			gomock.Any(),
-			"repository",
+			textRepository,
 			"operation",
 		).
 		Return(dur)
 
-	mw := decorate.NewMetrics(m, "repository", "documents")
+	mw := decorate.NewMetrics(m, textRepository, textDocuments)
 
-	ops.EXPECT().Inc("documents", "UpdateStatus").Times(2)
-	dur.EXPECT().Observe(gomock.Any(), "documents", "UpdateStatus").Times(2)
-	errs.EXPECT().Inc("documents", "UpdateStatus").Times(1) // only the failing call
+	ops.EXPECT().Inc(textDocuments, textUpdatestatus).Times(timesArg2)
+	dur.EXPECT().Observe(gomock.Any(), textDocuments, textUpdatestatus).Times(timesArg2)
+	errs.EXPECT().Inc(textDocuments, textUpdatestatus).Times(1) // only the failing call
 
-	_, err := decorate.Exec(context.Background(), mw, "UpdateStatus",
+	_, err := decorate.Exec(context.Background(), mw, textUpdatestatus,
 		func(context.Context) (struct{}, error) { return struct{}{}, nil })
 	require.NoError(t, err)
 
 	_, err = decorate.Exec(
 		context.Background(),
 		mw,
-		"UpdateStatus",
-		func(context.Context) (struct{}, error) { return struct{}{}, apperr.Sentinel("boom") },
+		textUpdatestatus,
+		func(context.Context) (struct{}, error) {
+			return struct{}{},
+				apperr.Sentinel(textBoom)
+		},
 	)
 	require.Error(t, err)
 }
@@ -217,19 +220,22 @@ func TestLoggingMW_LogsOnEntryAndFailure(t *testing.T) {
 	t.Parallel()
 
 	spy := fixtures.NewSpyLogger()
-	mw := decorate.NewLogging(spy, "repository", "documents")
+	mw := decorate.NewLogging(spy, textRepository, textDocuments)
 
 	_, err := decorate.Exec(
 		context.Background(),
 		mw,
-		"UpdateStatus",
-		func(context.Context) (struct{}, error) { return struct{}{}, apperr.Sentinel("boom") },
+		textUpdatestatus,
+		func(context.Context) (struct{}, error) {
+			return struct{}{},
+				apperr.Sentinel(textBoom)
+		},
 	)
 	require.Error(t, err)
 	assert.Len(
 		t,
 		*spy.ChildDebugCalls,
-		2,
+		wantChildDebugCallsLen2,
 		"entry + failure Debug lines on the context logger",
 	)
 }
@@ -251,7 +257,7 @@ func TestTimeoutMW_AppliesDeadline(t *testing.T) {
 	_, err := decorate.Exec(
 		context.Background(),
 		decorate.NewTimeout(50*time.Millisecond),
-		"op",
+		textOp,
 		func(ctx context.Context) (struct{}, error) {
 			_, hadDeadline = ctx.Deadline()
 
@@ -263,7 +269,7 @@ func TestTimeoutMW_AppliesDeadline(t *testing.T) {
 
 	var passthrough bool
 
-	_, _ = decorate.Exec(context.Background(), decorate.NewTimeout(0), "op",
+	_, _ = decorate.Exec(context.Background(), decorate.NewTimeout(0), textOp,
 		func(ctx context.Context) (struct{}, error) {
 			_, passthrough = ctx.Deadline()
 
@@ -294,7 +300,7 @@ func TestRetryMW_TxGuardedRunsOnce(t *testing.T) {
 		mr := mocks.NewMockRetrier(ctrl) // strict: any Retry call fails the test
 		calls := 0
 		_, err := decorate.Exec(interfaces.WithInTx(context.Background()),
-			decorate.NewRetry(mr), "UpdateStatus",
+			decorate.NewRetry(mr), textUpdatestatus,
 			func(context.Context) (struct{}, error) {
 				calls++
 
@@ -348,12 +354,16 @@ func TestCircuitBreakerMW_ShortCircuitsWhenOpen(t *testing.T) {
 	cb.EXPECT().Execute(gomock.Any()).Return(open) // rejects without calling fn
 
 	ran := false
-	_, err := decorate.Exec(context.Background(), decorate.NewCircuitBreaker(cb), "Get",
+	_, err := decorate.Exec(
+		context.Background(),
+		decorate.NewCircuitBreaker(cb),
+		textGet2,
 		func(context.Context) (struct{}, error) {
 			ran = true
 
 			return struct{}{}, nil
-		})
+		},
+	)
 	require.ErrorIs(t, err, open)
 	assert.False(t, ran, "an open breaker must not run the operation")
 }
@@ -371,8 +381,8 @@ func TestRecoveryMW_ConvertsPanic(t *testing.T) {
 	t.Parallel()
 
 	_, err := decorate.Exec(context.Background(),
-		decorate.NewRecovery(fixtures.NopLogger(), "service", "users"), "Provision",
-		func(context.Context) (struct{}, error) { panic("boom") })
+		decorate.NewRecovery(fixtures.NopLogger(), textService, textUsers), textProvision,
+		func(context.Context) (struct{}, error) { panic(textBoom) })
 	require.Error(t, err, "a panic must be recovered into an error")
 }
 
@@ -394,11 +404,11 @@ func TestAuthMW_ShortCircuitsOnDeny(t *testing.T) {
 	deny := apperr.Sentinel("forbidden")
 	ran := false
 	_, err := decorate.Exec(context.Background(),
-		decorate.NewAuth("users", func(_ context.Context, action string) error {
+		decorate.NewAuth(textUsers, func(_ context.Context, action string) error {
 			gotAction = action
 
 			return deny
-		}), "Provision",
+		}), textProvision,
 		func(context.Context) (struct{}, error) {
 			ran = true
 
@@ -413,10 +423,10 @@ func TestAuthMW_ShortCircuitsOnDeny(t *testing.T) {
 	_, err = decorate.Exec(
 		context.Background(),
 		decorate.NewAuth(
-			"users",
+			textUsers,
 			func(context.Context, string) error { return nil },
 		),
-		"Provision",
+		textProvision,
 		func(context.Context) (struct{}, error) {
 			ranOK = true
 
@@ -477,7 +487,7 @@ func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest5(
 		func(
 			ctx context.Context, _ string, _ ...interfaces.SpanOption,
 		) (context.Context, interfaces.Span) {
-			calls = append(calls, "tracing")
+			calls = append(calls, textTracing)
 
 			return ctx, span
 		})
@@ -485,7 +495,7 @@ func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest5(
 	logger := mocks.NewMockLogger(ctrl)
 	logger.EXPECT().WithContext(gomock.Any()).Return(logger)
 	logger.EXPECT().Debug("service.Place", gomock.Any()).Do(func(string, ...any) {
-		calls = append(calls, "logging")
+		calls = append(calls, textLogging)
 	})
 
 	breaker := mocks.NewMockCircuitBreaker(ctrl)
@@ -526,12 +536,12 @@ func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest(
 ) {
 	t.Helper()
 
-	tier := decorate.Tier{Name: "service", Order: []decorate.Layer{
+	tier := decorate.Tier{Name: textService, Order: []decorate.Layer{
 		decorate.LayerRecovery, decorate.LayerTracing, decorate.LayerMetrics,
 		decorate.LayerLogging, decorate.LayerAuth, decorate.LayerTimeout,
 		decorate.LayerCircuitBreaker, decorate.LayerRetry,
 	}}
-	subject := tier.Subject("orders", decorate.Deps{
+	subject := tier.Subject(textOrders, decorate.Deps{
 		Tracer: tracer, Logger: logger,
 		Auth: func(_ context.Context, action string) error {
 			(*calls) = append((*calls), "auth:"+action)
@@ -541,24 +551,24 @@ func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest(
 		Retrier: retrier,
 		Breaker: breaker,
 	})
-	assert.Equal(t, "orders", subject.Name())
+	assert.Equal(t, textOrders, subject.Name())
 
 	got, err := subject.Exec(t.Context(), "Place", func(context.Context) (int, error) {
-		(*calls) = append((*calls), "op")
+		(*calls) = append((*calls), textOp)
 
 		return 7, nil
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 7, got)
+	assert.Equal(t, wantGot7, got)
 	assert.Equal(
 		t,
 		[]string{
-			"tracing",
-			"logging",
+			textTracing,
+			textLogging,
 			"auth:orders.Place",
 			"breaker",
 			"retry",
-			"op",
+			textOp,
 		},
 		(*calls),
 	)
@@ -584,7 +594,7 @@ func TestLoggingMW_EdgeTierLogsFailuresAtWarnOrError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	logger := mocks.NewMockLogger(ctrl)
 	logger.EXPECT().WithContext(gomock.Any()).Return(logger).AnyTimes()
-	logger.EXPECT().Debug("controller.Get", gomock.Any()).Times(2)
+	logger.EXPECT().Debug("controller.Get", gomock.Any()).Times(timesArg2)
 	logger.EXPECT().Warn("controller.Get failed", gomock.Any())
 	logger.EXPECT().Error("controller.Get failed", gomock.Any())
 	logger.EXPECT().Debug("service.Get", gomock.Any())
@@ -595,17 +605,17 @@ func TestLoggingMW_EdgeTierLogsFailuresAtWarnOrError(t *testing.T) {
 		SkipRecovery: true,
 	}
 	fail := func(code apperr.ErrorCode) func(context.Context) (int, error) {
-		return func(context.Context) (int, error) { return 0, apperr.New(code, "x") }
+		return func(context.Context) (int, error) { return 0, apperr.New(code, textX) }
 	}
 
-	edge := transport.Tier().Subject("users", deps)
-	_, err := edge.Exec(t.Context(), "Get", fail(apperr.CodeNotFound))
+	edge := transport.Tier().Subject(textUsers, deps)
+	_, err := edge.Exec(t.Context(), textGet2, fail(apperr.CodeNotFound))
 	require.Error(t, err)
 
-	_, err = edge.Exec(t.Context(), "Get", fail(apperr.CodeInternal))
+	_, err = edge.Exec(t.Context(), textGet2, fail(apperr.CodeInternal))
 	require.Error(t, err)
 
-	_, err = service.Tier().Subject("users", deps).
-		Exec(t.Context(), "Get", fail(apperr.CodeInternal))
+	_, err = service.Tier().Subject(textUsers, deps).
+		Exec(t.Context(), textGet2, fail(apperr.CodeInternal))
 	require.Error(t, err)
 }

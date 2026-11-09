@@ -57,10 +57,10 @@ func TestEnumMapper(t *testing.T) {
 	assert.Equal(
 		t,
 		pUnspecified,
-		m.ToProtoValue(enumD("absent")),
+		m.ToProtoValue(enumD(textAbsent)),
 	) // unmapped → protoZero fallback
 
-	_, err := m.ToDomainOrError(enumP(99))
+	_, err := m.ToDomainOrError(enumP(enumPArg99))
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
@@ -71,7 +71,7 @@ func TestEnumMapper(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, dOne, fd)
 
-	assert.Len(t, m.ToDomainEntries(), 2)
+	assert.Len(t, m.ToDomainEntries(), wantToDomainEntriesLen2)
 }
 
 // TestNewEnumMapper_ReverseCollisionPanics tests the loud-at-init guard against a

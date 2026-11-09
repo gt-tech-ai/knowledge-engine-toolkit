@@ -38,7 +38,7 @@ func TestClientsSession_ResolveVerifyCache(t *testing.T) {
 
 	ctx := t.Context()
 	src := mocks.NewMockSource(gomock.NewController(t))
-	ok := types.Ref{Env: "stg", Class: "deploy", Field: "aws"}
+	ok := types.Ref{Env: textStg, Class: textDeploy, Field: "aws"}
 	src.EXPECT().
 		Get(gomock.Any(), ok).
 		Return(types.NewSecret(`{"key":"AK"}`), nil).
@@ -100,7 +100,7 @@ func testClientsSessionResolveVerifyCacheRest2(
 
 	var wg sync.WaitGroup
 
-	for range 8 {
+	for range iterations8 {
 		wg.Go(func() {
 			c, err := p.Resolve(ctx, ok)
 			if assert.NoError(
@@ -134,18 +134,18 @@ func testClientsSessionResolveVerifyCacheRest(
 
 	var err error
 
-	bad := types.Ref{Env: "stg", Class: "deploy", Field: "bad"}
+	bad := types.Ref{Env: textStg, Class: textDeploy, Field: textBad}
 	src.EXPECT().
 		Get(gomock.Any(), bad).
 		Return(types.NewSecret(`{"key":"BAD"}`), nil).
-		Times(2)
+		Times(timesArg2)
 
-	for range 2 {
+	for range iterations2 {
 		_, err = p.Resolve(ctx, bad)
 		assert.Equal(t, apperr.CodeUnauthorized, apperr.Code(err))
 	}
 
-	junk := types.Ref{Env: "stg", Class: "deploy", Field: "junk"}
+	junk := types.Ref{Env: textStg, Class: textDeploy, Field: "junk"}
 	src.EXPECT().Get(gomock.Any(), junk).Return(types.NewSecret("not json"), nil)
 
 	_, err = p.Resolve(ctx, junk)

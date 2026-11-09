@@ -58,7 +58,7 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 	span.EXPECT().SetAttribute(gomock.Any(), gomock.Any()).AnyTimes()
 	span.EXPECT().RecordError(gomock.Any()).AnyTimes()
 	span.EXPECT().SetStatus(gomock.Any(), gomock.Any()).AnyTimes()
-	span.EXPECT().End().Times(2)
+	span.EXPECT().End().Times(timesArg2)
 	tracer.EXPECT().
 		Start(gomock.Any(), "lint.execute", gomock.Any()).
 		Times(2).
@@ -74,7 +74,7 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 	fail := false
 	lint := fixtures.Must(job.NewBase(decorate.Fixed(decorate.Deps{
 		Tracer: tracer,
-	}), "lint")).Func("lint", "Static", func(
+	}), textLint)).Func(textLint, "Static", func(
 		_ context.Context, r interfaces.CommandRunner, root string,
 	) (types.StepResults, error) {
 		assert.Same(t, runner, r)
@@ -86,14 +86,14 @@ func TestJobBase_FuncRunsAgainstTheRunnerAndIsObserved(t *testing.T) {
 		return types.StepResults{{Name: root, Status: types.StatusPass}}, nil
 	})
 
-	assert.Equal(t, types.JobMeta{Name: "lint", Group: "Static"}, lint.Meta())
+	assert.Equal(t, types.JobMeta{Name: textLint, Group: "Static"}, lint.Meta())
 
-	got, err := lint.Execute(t.Context(), runner, "/repo")
+	got, err := lint.Execute(t.Context(), runner, textRepo)
 	require.NoError(t, err)
-	assert.Equal(t, types.StepResults{{Name: "/repo", Status: types.StatusPass}}, got)
+	assert.Equal(t, types.StepResults{{Name: textRepo, Status: types.StatusPass}}, got)
 
 	fail = true
-	_, err = lint.Execute(t.Context(), runner, "/repo")
+	_, err = lint.Execute(t.Context(), runner, textRepo)
 	require.ErrorIs(t, err, boom)
 }
 
@@ -113,14 +113,14 @@ func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	meta := types.JobMeta{Name: "seed", Group: "Seed", Tool: "psql"}
-	results := types.StepResults{{Name: "seed", Status: types.StatusPass}}
+	meta := types.JobMeta{Name: textSeed, Group: "Seed", Tool: textPsql}
+	results := types.StepResults{{Name: textSeed, Status: types.StatusPass}}
 
 	seed := job.Base{}.Local(
-		"seed", "Seed",
+		textSeed, "Seed",
 		func(context.Context) (types.StepResults, error) { return results, nil },
 	)
-	assert.Equal(t, types.JobMeta{Name: "seed", Group: "Seed"}, seed.Meta())
+	assert.Equal(t, types.JobMeta{Name: textSeed, Group: "Seed"}, seed.Meta())
 
 	got, err := seed.Execute(t.Context(), nil, "")
 	require.NoError(t, err)
@@ -128,16 +128,16 @@ func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 
 	inner := mocks.NewMockAnyJob(ctrl)
 	inner.EXPECT().Meta().Return(meta)
-	inner.EXPECT().Execute(gomock.Any(), gomock.Any(), "/repo").DoAndReturn(
+	inner.EXPECT().Execute(gomock.Any(), gomock.Any(), textRepo).DoAndReturn(
 		func(context.Context, interfaces.CommandRunner, string) (types.StepResults, error) {
-			panic("boom")
+			panic(textBoom)
 		},
 	)
 
 	wrapped := fixtures.Must(job.NewBase(fixtures.Decorations(), "wrapped")).Wrap(inner)
 	assert.Equal(t, meta, wrapped.Meta())
 
-	_, err = wrapped.Execute(t.Context(), nil, "/repo")
+	_, err = wrapped.Execute(t.Context(), nil, textRepo)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }
 
@@ -153,13 +153,13 @@ func TestJobBase_LocalAndWrapKeepMetaAndRecover(t *testing.T) {
 func TestJobBase_CheckReportsOneStep(t *testing.T) {
 	t.Parallel()
 
-	pass := job.Base{}.Check("fmt", "Go", func(context.Context) error { return nil })
+	pass := job.Base{}.Check(textFmt, "Go", func(context.Context) error { return nil })
 	got, err := pass.Execute(context.Background(), nil, "")
 	require.NoError(t, err)
-	assert.Equal(t, types.JobMeta{Name: "fmt", Group: "Go"}, pass.Meta())
-	assert.Equal(t, types.StepResults{{Name: "fmt", Status: types.StatusPass}}, got)
+	assert.Equal(t, types.JobMeta{Name: textFmt, Group: "Go"}, pass.Meta())
+	assert.Equal(t, types.StepResults{{Name: textFmt, Status: types.StatusPass}}, got)
 
-	fail := job.Base{}.Check("fmt", "Go", func(context.Context) error {
+	fail := job.Base{}.Check(textFmt, "Go", func(context.Context) error {
 		return apperr.New(apperr.CodeInvalidInput, "unformatted")
 	})
 
@@ -186,8 +186,8 @@ func TestJobWarn_DowngradesFailures(t *testing.T) {
 		context.Context, interfaces.CommandRunner, string,
 	) (types.StepResults, error) {
 		return types.StepResults{
-			{Name: "a", Status: types.StatusPass},
-			{Name: "b", Status: types.StatusFail, Error: "missing"},
+			{Name: textA, Status: types.StatusPass},
+			{Name: textB, Status: types.StatusFail, Error: textMissing},
 		}, nil
 	})
 	w := job.Warn(inner)
@@ -195,12 +195,12 @@ func TestJobWarn_DowngradesFailures(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, inner.Meta(), w.Meta())
 	assert.Equal(t, types.StepResults{
-		{Name: "a", Status: types.StatusPass},
-		{Name: "b", Status: types.StatusWarn, Error: "missing"},
+		{Name: textA, Status: types.StatusPass},
+		{Name: textB, Status: types.StatusWarn, Error: textMissing},
 	}, got)
 
 	boom := apperr.New(apperr.CodeUnavailable, "no runner")
-	broken := job.Warn(job.Base{}.Func("x", "y", func(
+	broken := job.Warn(job.Base{}.Func(textX, "y", func(
 		context.Context, interfaces.CommandRunner, string,
 	) (types.StepResults, error) {
 		return nil, boom

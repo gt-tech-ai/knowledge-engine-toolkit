@@ -35,11 +35,11 @@ func TestCodebaseSnapshot_MemoComputesOncePerKey(t *testing.T) {
 		wg    sync.WaitGroup
 	)
 
-	errs := make([]error, 100)
+	errs := make([]error, size100)
 
 	for i := range errs {
 		wg.Go(func() {
-			got, err := s.Memo(t.Context(), "k", func(context.Context) (int, error) {
+			got, err := s.Memo(t.Context(), textK, func(context.Context) (int, error) {
 				calls.Add(1)
 
 				return 42, nil
@@ -59,11 +59,11 @@ func TestCodebaseSnapshot_MemoComputesOncePerKey(t *testing.T) {
 
 	assert.Equal(t, int32(1), calls.Load())
 
-	other, err := s.Memo(t.Context(), "other", func(context.Context) (string, error) {
-		return "x", nil
+	other, err := s.Memo(t.Context(), textOther, func(context.Context) (string, error) {
+		return textX, nil
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "x", other)
+	assert.Equal(t, textX, other)
 }
 
 // TestCodebaseSnapshot_MemoErrors tests what Memo caches when a build fails.
@@ -90,10 +90,10 @@ func TestCodebaseSnapshot_MemoErrors(t *testing.T) {
 
 		return 0, apperr.New(apperr.CodeInvalidInput, "bad file")
 	}
-	_, err := s.Memo(t.Context(), "bad", fail)
+	_, err := s.Memo(t.Context(), textBad, fail)
 	require.Error(t, err)
 
-	_, err = s.Memo(t.Context(), "bad", fail)
+	_, err = s.Memo(t.Context(), textBad, fail)
 	require.Error(t, err)
 	assert.Equal(t, int32(1), calls.Load())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -101,18 +101,18 @@ func TestCodebaseSnapshot_MemoErrors(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	_, err = s.Memo(ctx, "cancel", func(ctx context.Context) (int, error) {
+	_, err = s.Memo(ctx, textCancel, func(ctx context.Context) (int, error) {
 		return 0, ctx.Err()
 	})
 	require.Error(t, err)
 
-	got, err := s.Memo(t.Context(), "cancel", func(context.Context) (int, error) {
+	got, err := s.Memo(t.Context(), textCancel, func(context.Context) (int, error) {
 		return 7, nil
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 7, got)
+	assert.Equal(t, wantGot7, got)
 
-	_, err = s.Memo(t.Context(), "cancel", func(context.Context) (string, error) {
+	_, err = s.Memo(t.Context(), textCancel, func(context.Context) (string, error) {
 		return "", nil
 	})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
@@ -143,23 +143,23 @@ func TestCodebaseSnapshot_MemoPanickingBuild(t *testing.T) {
 		<-release
 		panic("parser bug")
 	}
-	errs := make(chan error, 2)
+	errs := make(chan error, size2)
 
 	go func() {
-		_, err := s.Memo(t.Context(), "k", boom)
+		_, err := s.Memo(t.Context(), textK, boom)
 		errs <- err
 	}()
 
 	<-started
 
 	go func() {
-		_, err := s.Memo(t.Context(), "k", boom)
+		_, err := s.Memo(t.Context(), textK, boom)
 		errs <- err
 	}()
 
 	close(release)
 
-	for range 2 {
+	for range iterations2 {
 		err := <-errs
 		assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 		assert.Contains(t, err.Error(), "parser bug")
@@ -176,11 +176,11 @@ func TestCodebaseSnapshot_MemoPanickingBuild(t *testing.T) {
 		)
 	}
 
-	got, err := s.Memo(t.Context(), "k", func(context.Context) (int, error) {
+	got, err := s.Memo(t.Context(), textK, func(context.Context) (int, error) {
 		return 3, nil
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 3, got)
+	assert.Equal(t, wantGot3, got)
 }
 
 // TestCodebaseSnapshot_KeysListsWhatWasBuilt tests that Keys reports the memoized keys.
@@ -211,7 +211,7 @@ func TestCodebaseSnapshot_KeysListsWhatWasBuilt(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = s.Memo(t.Context(), "text|bad", func(context.Context) (int, error) {
-		return 0, apperr.New(apperr.CodeInternal, "boom")
+		return 0, apperr.New(apperr.CodeInternal, textBoom)
 	})
 	require.Error(t, err)
 

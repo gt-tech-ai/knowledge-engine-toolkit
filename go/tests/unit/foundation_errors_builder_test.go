@@ -67,8 +67,8 @@ func TestErrorsBuilder_NilError(t *testing.T) {
 func TestErrorsBuilder_UnknownKindReturnsError(t *testing.T) {
 	t.Parallel()
 
-	_, err := storeerr.NewDBMapper("bogus")
-	require.Error(t, err, "expected error for unknown kind")
+	_, err := storeerr.NewDBMapper(textBogus)
+	require.Error(t, err, textExpectedErrorForUnknown)
 	assert.Contains(t, err.Error(), `"bogus"`)
 
 	mapper, err := storeerr.NewDBMapper("")

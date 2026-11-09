@@ -26,7 +26,7 @@ func TestErrorClassification(t *testing.T) {
 	t.Parallel()
 
 	timeoutErr := apperr.Timeout("operation timed out")
-	notFoundErr := apperr.NotFound("record not found")
+	notFoundErr := apperr.NotFound(textRecordNotFound)
 
 	assert.True(
 		t,
@@ -38,8 +38,8 @@ func TestErrorClassification(t *testing.T) {
 		apperr.IsPermanent(notFoundErr),
 		"not-found error should be permanent",
 	)
-	assert.Equal(t, 404, apperr.ToHTTPStatus(apperr.CodeNotFound))
-	assert.Equal(t, 401, apperr.ToHTTPStatus(apperr.CodeUnauthorized))
+	assert.Equal(t, wantToHTTPStatus404, apperr.ToHTTPStatus(apperr.CodeNotFound))
+	assert.Equal(t, wantToHTTPStatus401, apperr.ToHTTPStatus(apperr.CodeUnauthorized))
 }
 
 // TestDBErrorMapping tests that PostgreSQL error codes are correctly mapped to

@@ -33,21 +33,24 @@ func cachedGuardDeps(
 		Cache:    cache,
 		Versions: func(tool string) string { return tool + "-1.0" },
 		Expanders: map[string]guard.Expander{
-			"modules": func(context.Context, interfaces.Codebase) (
+			textModules: func(context.Context, interfaces.Codebase) (
 				[]map[string]string, error,
 			) {
-				return []map[string]string{{"dir": "deploy"}, {"dir": "infra"}}, nil
+				return []map[string]string{
+					{textDir: textDeploy},
+					{textDir: textInfra},
+				}, nil
 			},
 		},
 		Go: map[string]guard.GoGuard{
-			"validate": func(
+			textValidate: func(
 				_ context.Context, _ interfaces.Codebase, _ *types.GuardRow,
 				vars map[string]string,
 			) ([]types.Finding, error) {
 				runs.Add(1)
 
-				if vars["dir"] == fail {
-					return []types.Finding{{File: vars["dir"], Message: "bad"}}, nil
+				if vars[textDir] == fail {
+					return []types.Finding{{File: vars[textDir], Message: textBad}}, nil
 				}
 
 				return nil, nil
@@ -84,8 +87,8 @@ func testServicesGuardGoCachedOnInputsRest5(t *testing.T) {
 
 	deps := cachedGuardDeps(t, &runs, "")
 	row := types.GuardRow{
-		Name: "validate", Verb: "test-infra", Kind: types.GuardGo, Each: "modules",
-		Tool: "terraform", Inputs: types.FileSelector{Roots: []string{"{dir}"}},
+		Name: textValidate, Verb: "test-infra", Kind: types.GuardGo, Each: textModules,
+		Tool: textTerraform, Inputs: types.FileSelector{Roots: []string{"{dir}"}},
 	}
 	gs, err := guard.NewFromConfig([]types.GuardRow{row}, deps)
 	require.NoError(t, err)
@@ -110,18 +113,18 @@ func testServicesGuardGoCachedOnInputsRest3(
 
 	v := g.Run(t.Context(), memoryCodebase(t, files))
 	assert.Equal(t, types.StatusPass, v.Status)
-	assert.Equal(t, int32(2), runs.Load())
+	assert.Equal(t, int32(int32Arg2), runs.Load())
 
 	v = g.Run(t.Context(), memoryCodebase(t, files))
 	assert.Equal(t, types.StatusSkip, v.Status)
-	assert.Equal(t, "cached", v.Detail)
-	assert.Equal(t, int32(2), runs.Load(), "a cached pass runs nothing")
+	assert.Equal(t, textCached, v.Detail)
+	assert.Equal(t, int32(int32Arg2), runs.Load(), "a cached pass runs nothing")
 
-	files["infra/main.tf"] = "resource \"y\" {}\n"
+	files[textInfraMainTf] = "resource \"y\" {}\n"
 	v = g.Run(t.Context(), memoryCodebase(t, files))
 	assert.Equal(t, types.StatusPass, v.Status)
 	assert.Empty(t, v.Detail, "one expansion ran, so the *row is not reported cached")
-	assert.Equal(t, int32(3), runs.Load(), "only the edited module runs")
+	assert.Equal(t, int32(int32Arg3), runs.Load(), "only the edited module runs")
 
 	// A failure is not cached: the failing module runs again, the passing one does not.
 	var failing atomic.Int32
@@ -144,16 +147,16 @@ func testServicesGuardGoCachedOnInputsRest4(
 
 	var err error
 
-	fdeps := cachedGuardDeps(t, failing, "infra")
+	fdeps := cachedGuardDeps(t, failing, textInfra)
 	fg, err := guard.NewFromConfig([]types.GuardRow{*row}, fdeps)
 	require.NoError(t, err)
 
-	for range 2 {
+	for range iterations2 {
 		v = fg[0].Run(t.Context(), memoryCodebase(t, files))
 		assert.Equal(t, types.StatusFail, v.Status)
 	}
 
-	assert.Equal(t, int32(3), failing.Load())
+	assert.Equal(t, int32(int32Arg3), failing.Load())
 
 	// No inputs: never cached.
 	plain := *row
@@ -198,14 +201,18 @@ func TestServicesGuard_ExpansionsRunInParallel(t *testing.T) {
 
 	deps := guard.Deps{
 		Expanders: map[string]guard.Expander{
-			"modules": func(context.Context, interfaces.Codebase) (
+			textModules: func(context.Context, interfaces.Codebase) (
 				[]map[string]string, error,
 			) {
-				return []map[string]string{{"dir": "a"}, {"dir": "b"}, {"dir": "c"}}, nil
+				return []map[string]string{
+					{textDir: textA},
+					{textDir: textB},
+					{textDir: textC},
+				}, nil
 			},
 		},
 		Go: map[string]guard.GoGuard{
-			"slow": func(
+			textSlow: func(
 				_ context.Context, _ interfaces.Codebase, _ *types.GuardRow,
 				vars map[string]string,
 			) ([]types.Finding, error) {
@@ -215,19 +222,19 @@ func TestServicesGuard_ExpansionsRunInParallel(t *testing.T) {
 				time.Sleep(20 * time.Millisecond)
 				inFlight.Add(-1)
 
-				return []types.Finding{{File: vars["dir"], Message: "seen"}}, nil
+				return []types.Finding{{File: vars[textDir], Message: "seen"}}, nil
 			},
 		},
 	}
 	gs, err := guard.NewFromConfig([]types.GuardRow{{
-		Name: "slow", Verb: "check", Kind: types.GuardGo, Each: "modules",
+		Name: textSlow, Verb: textCheck, Kind: types.GuardGo, Each: textModules,
 	}}, deps)
 	require.NoError(t, err)
 
 	v := gs[0].Run(t.Context(), memoryCodebase(t, guardFiles()))
 	assert.Equal(t, types.StatusFail, v.Status)
-	require.Len(t, v.Findings, 3)
-	assert.Equal(t, []string{"a", "b", "c"}, []string{
+	require.Len(t, v.Findings, wantFindingsLen3)
+	assert.Equal(t, []string{textA, textB, textC}, []string{
 		v.Findings[0].File, v.Findings[1].File, v.Findings[2].File,
 	})
 	assert.Greater(t, peak.Load(), int32(1), "expansions run concurrently")
@@ -251,8 +258,8 @@ func TestServicesGuard_RowEditMissesCache(t *testing.T) {
 
 	deps := cachedGuardDeps(t, &runs, "")
 	row := types.GuardRow{
-		Name: "validate", Verb: "test-infra", Kind: types.GuardGo, Each: "modules",
-		Tool: "terraform", Inputs: types.FileSelector{Roots: []string{"{dir}"}},
+		Name: textValidate, Verb: "test-infra", Kind: types.GuardGo, Each: textModules,
+		Tool: textTerraform, Inputs: types.FileSelector{Roots: []string{"{dir}"}},
 		Data: map[string]any{"strict": false},
 	}
 	edited := row

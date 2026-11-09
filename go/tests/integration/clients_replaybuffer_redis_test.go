@@ -71,16 +71,16 @@ func (s *ReplayBufferRedisSuite) TearDownTest() {
 //   - after appending msg-1..5, ReplayAfter(msg-2) returns msg-3,4,5 in order (complete)
 //     with their exact payloads.
 func (s *ReplayBufferRedisSuite) TestAppendReplayRoundtrip() {
-	b := s.newBuffer(100, time.Minute)
-	s.appendSeq(b, "k", 5)
+	b := s.newBuffer(maxSize100, time.Minute)
+	s.appendSeq(b, textK, appendSeqArg5)
 
-	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-2")
+	tail, complete, err := b.ReplayAfter(context.Background(), textK, "msg-2")
 	s.Require().NoError(err)
 	s.True(complete)
-	s.Require().Len(tail, 3)
-	s.Equal("msg-3", tail[0].ID)
+	s.Require().Len(tail, length3)
+	s.Equal(textMsg3, tail[0].ID)
 	s.Equal([]byte("payload-msg-3"), tail[0].Payload)
-	s.Equal([]string{"msg-3", "msg-4", "msg-5"}, idsI(tail))
+	s.Equal([]string{textMsg3, textMsg4, textMsg5}, idsI(tail))
 }
 
 // TestNBoundEvicts tests that LTRIM bounds the list to MaxSize and a request for an
@@ -95,17 +95,17 @@ func (s *ReplayBufferRedisSuite) TestAppendReplayRoundtrip() {
 //   - with MaxSize=3, appending msg-1..5 retains msg-3,4,5; ReplayAfter(msg-1) is a gap;
 //     ReplayAfter(msg-3) → msg-4,5.
 func (s *ReplayBufferRedisSuite) TestNBoundEvicts() {
-	b := s.newBuffer(3, time.Minute)
-	s.appendSeq(b, "k", 5)
+	b := s.newBuffer(maxSize3, time.Minute)
+	s.appendSeq(b, textK, appendSeqArg5)
 
-	_, complete, err := b.ReplayAfter(context.Background(), "k", "msg-1")
+	_, complete, err := b.ReplayAfter(context.Background(), textK, textMsg1)
 	s.Require().NoError(err)
 	s.False(complete, "evicted id → gap")
 
-	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-3")
+	tail, complete, err := b.ReplayAfter(context.Background(), textK, textMsg3)
 	s.Require().NoError(err)
 	s.True(complete)
-	s.Equal([]string{"msg-4", "msg-5"}, idsI(tail))
+	s.Equal([]string{textMsg4, textMsg5}, idsI(tail))
 }
 
 // TestPrune tests that Prune drops the acked prefix and records the low-water mark, so a
@@ -120,17 +120,17 @@ func (s *ReplayBufferRedisSuite) TestNBoundEvicts() {
 //   - after Prune(msg-3), ReplayAfter(msg-3) returns msg-4,5 (complete) and
 //     ReplayAfter(msg-1) is a gap.
 func (s *ReplayBufferRedisSuite) TestPrune() {
-	b := s.newBuffer(100, time.Minute)
-	s.appendSeq(b, "k", 5)
+	b := s.newBuffer(maxSize100, time.Minute)
+	s.appendSeq(b, textK, appendSeqArg5)
 
-	s.Require().NoError(b.Prune(context.Background(), "k", "msg-3"))
+	s.Require().NoError(b.Prune(context.Background(), textK, textMsg3))
 
-	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-3")
+	tail, complete, err := b.ReplayAfter(context.Background(), textK, textMsg3)
 	s.Require().NoError(err)
 	s.True(complete)
-	s.Equal([]string{"msg-4", "msg-5"}, idsI(tail))
+	s.Equal([]string{textMsg4, textMsg5}, idsI(tail))
 
-	_, complete, err = b.ReplayAfter(context.Background(), "k", "msg-1")
+	_, complete, err = b.ReplayAfter(context.Background(), textK, textMsg1)
 	s.Require().NoError(err)
 	s.False(complete, "pruned prefix → gap")
 }
@@ -148,19 +148,19 @@ func (s *ReplayBufferRedisSuite) TestPrune() {
 //   - with a 1s TTL, ReplayAfter eventually reports a gap; and after Delete, ReplayAfter
 //     is a gap.
 func (s *ReplayBufferRedisSuite) TestTTLExpiresAndDelete() {
-	b := s.newBuffer(100, time.Second)
-	s.appendSeq(b, "k", 3)
+	b := s.newBuffer(maxSize100, time.Second)
+	s.appendSeq(b, textK, appendSeqArg3)
 	s.Eventually(func() bool {
-		_, complete, err := b.ReplayAfter(context.Background(), "k", "msg-1")
+		_, complete, err := b.ReplayAfter(context.Background(), textK, textMsg1)
 
 		return err == nil && !complete
 	}, 4*time.Second, 100*time.Millisecond, "buffer must expire after its TTL")
 
-	b2 := s.newBuffer(100, time.Minute)
-	s.appendSeq(b2, "d", 3)
-	s.Require().NoError(b2.Delete(context.Background(), "d"))
+	b2 := s.newBuffer(maxSize100, time.Minute)
+	s.appendSeq(b2, textD, appendSeqArg3)
+	s.Require().NoError(b2.Delete(context.Background(), textD))
 
-	_, complete, err := b2.ReplayAfter(context.Background(), "d", "msg-1")
+	_, complete, err := b2.ReplayAfter(context.Background(), textD, textMsg1)
 	s.Require().NoError(err)
 	s.False(complete, "deleted buffer → gap")
 }
@@ -180,15 +180,15 @@ func (s *ReplayBufferRedisSuite) TestTTLExpiresAndDelete() {
 //     entries for the same key.
 func (s *ReplayBufferRedisSuite) TestKeyPrefix() {
 	ctx := context.Background()
-	def := s.newBuffer(100, time.Minute)
+	def := s.newBuffer(maxSize100, time.Minute)
 	custom := replayredis.New(s.client, replayredis.Config{
 		MaxSize: 100, TTL: time.Minute, KeyPrefix: "app:replay:",
 	})
-	s.appendSeq(def, "k", 3)
-	s.Require().NoError(custom.Append(ctx, "k", "msg-8", []byte("custom-8")))
-	s.Require().NoError(custom.Append(ctx, "k", "msg-9", []byte("custom-9")))
-	s.Require().NoError(def.Prune(ctx, "k", "msg-1"))
-	s.Require().NoError(custom.Prune(ctx, "k", "msg-8"))
+	s.appendSeq(def, textK, appendSeqArg3)
+	s.Require().NoError(custom.Append(ctx, textK, textMsg8, []byte("custom-8")))
+	s.Require().NoError(custom.Append(ctx, textK, "msg-9", []byte("custom-9")))
+	s.Require().NoError(def.Prune(ctx, textK, textMsg1))
+	s.Require().NoError(custom.Prune(ctx, textK, textMsg8))
 
 	keys, err := s.client.Keys(ctx, "*").Result()
 	s.Require().NoError(err)
@@ -197,12 +197,12 @@ func (s *ReplayBufferRedisSuite) TestKeyPrefix() {
 		keys,
 	)
 
-	tail, complete, err := def.ReplayAfter(ctx, "k", "msg-1")
+	tail, complete, err := def.ReplayAfter(ctx, textK, textMsg1)
 	s.Require().NoError(err)
 	s.True(complete)
-	s.Equal([]string{"msg-2", "msg-3"}, idsI(tail))
+	s.Equal([]string{"msg-2", textMsg3}, idsI(tail))
 
-	tail, complete, err = custom.ReplayAfter(ctx, "k", "msg-8")
+	tail, complete, err = custom.ReplayAfter(ctx, textK, textMsg8)
 	s.Require().NoError(err)
 	s.True(complete)
 	s.Equal([]string{"msg-9"}, idsI(tail))
@@ -238,7 +238,7 @@ func itoaI(i int) string {
 
 		buf[pos] = byte('0' + i%10)
 
-		i /= 10
+		i /= value10
 	}
 
 	return string(buf[pos:])

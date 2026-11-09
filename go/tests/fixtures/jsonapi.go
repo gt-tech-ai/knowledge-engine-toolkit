@@ -86,11 +86,11 @@ func jSONAPIAnnotationsTable(
 			}},
 			{Name: new("JsonApiOperation"), Field: []*descriptorpb.FieldDescriptorProto{
 				{
-					Name:     new("action"),
+					Name:     new(textAction),
 					Number:   new(int32(1)),
 					Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
 					Type:     descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum(),
-					JsonName: new("action"),
+					JsonName: new(textAction),
 				},
 			}},
 		},
@@ -178,7 +178,7 @@ type Action bool
 // path, plus any additional bindings) and, when action is true, the
 // (jsonapi.v1.operation){action:true} marker.
 func (s JSONAPISetter) MethodOpts(
-	verb, path string, action Action, additional ...[2]string,
+	verb, path string, action Action, additional ...[value2]string,
 ) *descriptorpb.MethodOptions {
 	rule := httpRule(verb, path)
 	for _, ab := range additional {
@@ -190,7 +190,7 @@ func (s JSONAPISetter) MethodOpts(
 
 	if action {
 		m := dynamicpb.NewMessage(s.opMsg)
-		m.Set(s.opMsg.Fields().ByName("action"), protoreflect.ValueOfBool(true))
+		m.Set(s.opMsg.Fields().ByName(textAction), protoreflect.ValueOfBool(true))
 		proto.SetExtension(opts, s.opExt, m)
 	}
 

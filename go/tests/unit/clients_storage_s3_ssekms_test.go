@@ -64,7 +64,7 @@ func TestS3_SSEKMSOnUpload(t *testing.T) {
 			return &awss3.PutObjectOutput{}, nil
 		})
 	require.NoError(t, newSSEKMSStorage(t, api, "arn:key", 0).
-		Upload(ctx, "b", "k", strings.NewReader("hi"), "text/plain"))
+		Upload(ctx, textB, textK, strings.NewReader("hi"), textTextPlain))
 
 	multi := mocks.NewMockS3API(gomock.NewController(t))
 	multi.EXPECT().CreateMultipartUpload(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -79,7 +79,7 @@ func TestS3_SSEKMSOnUpload(t *testing.T) {
 			return nil, errS3
 		})
 	require.Error(t, newSSEKMSStorage(t, multi, "arn:key", 5).
-		Upload(ctx, "b", "k", strings.NewReader("0123456789"), "text/plain"))
+		Upload(ctx, textB, textK, strings.NewReader("0123456789"), textTextPlain))
 
 	plain := mocks.NewMockS3API(gomock.NewController(t))
 	plain.EXPECT().PutObject(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -92,7 +92,7 @@ func TestS3_SSEKMSOnUpload(t *testing.T) {
 			return &awss3.PutObjectOutput{}, nil
 		})
 	require.NoError(t, newSSEKMSStorage(t, plain, "", 0).
-		Upload(ctx, "b", "k", strings.NewReader("hi"), "text/plain"))
+		Upload(ctx, textB, textK, strings.NewReader("hi"), textTextPlain))
 }
 
 // TestS3_DownloadMissingKeyIsNotFound tests the missing-object classification.
@@ -109,6 +109,6 @@ func TestS3_DownloadMissingKeyIsNotFound(t *testing.T) {
 	api := mocks.NewMockS3API(gomock.NewController(t))
 	api.EXPECT().GetObject(gomock.Any(), gomock.Any()).Return(nil, &s3types.NoSuchKey{})
 
-	_, err := newSSEKMSStorage(t, api, "", 0).Download(t.Context(), "b", "missing")
+	_, err := newSSEKMSStorage(t, api, "", 0).Download(t.Context(), textB, textMissing)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }

@@ -57,9 +57,9 @@ func TestTracer_HonorsSampledParent(t *testing.T) {
 		ctx,
 		tracer.KindOTel,
 		tracer.WithServiceName("tracer-sampling-test"),
-		tracer.WithEndpoint("localhost:4317"),
+		tracer.WithEndpoint(textLocalhost4317),
 		tracer.WithSampleRate(
-			1e-9,
+			rate1em9,
 		), // fractional (not 0) → TraceIDRatioBased branch, rejects ~every root
 	)
 	require.NoError(t, err)
@@ -98,8 +98,8 @@ func TestTracer_RootSpanKeepsRatio(t *testing.T) {
 		ctx,
 		tracer.KindOTel,
 		tracer.WithServiceName("tracer-sampling-root-test"),
-		tracer.WithEndpoint("localhost:4317"),
-		tracer.WithSampleRate(1e-9),
+		tracer.WithEndpoint(textLocalhost4317),
+		tracer.WithSampleRate(rate1em9),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tr.Shutdown(context.Background()) })
@@ -134,8 +134,8 @@ func TestContextWithForcedSample(t *testing.T) {
 		ctx,
 		tracer.KindOTel,
 		tracer.WithServiceName("tracer-forced-sample-test"),
-		tracer.WithEndpoint("localhost:4317"),
-		tracer.WithSampleRate(1e-9),
+		tracer.WithEndpoint(textLocalhost4317),
+		tracer.WithSampleRate(rate1em9),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tr.Shutdown(context.Background()) })
@@ -154,7 +154,7 @@ func TestContextWithForcedSample(t *testing.T) {
 	assert.Len(
 		t,
 		tracer.TraceIDFromContext(retCtx),
-		32,
+		wantTraceIDFromContextLen32,
 		"the forced span carries a 32-hex trace id",
 	)
 }
@@ -182,7 +182,7 @@ func TestTracer_ConcurrentNewKeepsOwnSampler(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	for i := range 2 * pairs {
+	for i := range pairs2 * pairs {
 		rate := float64(i % 2)
 
 		wg.Go(func() { results <- probeSampler(ctx, t, rate) })
@@ -216,7 +216,7 @@ func probeSampler(ctx context.Context, t *testing.T, rate float64) samplerProbe 
 
 	tr, err := tracer.New(ctx, tracer.KindOTel,
 		tracer.WithServiceName("tracer-concurrent-test"),
-		tracer.WithEndpoint("localhost:4317"),
+		tracer.WithEndpoint(textLocalhost4317),
 		tracer.WithSampleRate(rate),
 	)
 	if err != nil {

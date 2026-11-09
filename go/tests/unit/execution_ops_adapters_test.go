@@ -57,21 +57,21 @@ func TestExecutionOpsAdapters_FuncDecodeAndDefaults(t *testing.T) {
 
 		return nil
 	}), func(in *adapterInput) { in.Fix = true })
-	op := b(opDesc("lint", types.SafetyReadOnly, types.OpLifecycleBounded),
+	op := b(opDesc(textLint, types.SafetyReadOnly, types.OpLifecycleBounded),
 		opsEnv{Tag: "cli"})
 
 	var schema map[string]any
 
 	require.NoError(t, json.Unmarshal(op.InputSchema(), &schema))
-	assert.Equal(t, "object", schema["type"])
+	assert.Equal(t, "object", schema[textType])
 	assert.Equal(t, false, schema["additionalProperties"])
-	assert.Equal(t, []any{"target"}, schema["required"])
+	assert.Equal(t, []any{textTarget}, schema["required"])
 	assert.NotContains(t, schema, "$schema")
-	assert.Equal(t, []string{"fix", "target"}, keys(schema["properties"]))
+	assert.Equal(t, []string{textFix, textTarget}, keys(schema["properties"]))
 
 	in, err := ops.Decode(op, []byte(`{"target": "a"}`))
 	require.NoError(t, err)
-	assert.Equal(t, &adapterInput{Target: "a", Fix: true}, in)
+	assert.Equal(t, &adapterInput{Target: textA, Fix: true}, in)
 
 	empty, err := ops.Decode(op, nil)
 	require.NoError(t, err)
@@ -85,13 +85,13 @@ func TestExecutionOpsAdapters_FuncDecodeAndDefaults(t *testing.T) {
 	assert.Equal(t, adapterInput{Target: "mutated", Fix: true}, got)
 	assert.Equal(
 		t,
-		"a",
+		textA,
 		asType[*adapterInput](t, in).Target,
 		"the caller's input is not mutated",
 	)
 	assert.Equal(t, "cli", gotEnv.Tag)
 
-	err = op.Run(t.Context(), "nope", nil)
+	err = op.Run(t.Context(), textNope, nil)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 

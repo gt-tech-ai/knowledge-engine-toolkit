@@ -24,9 +24,9 @@ import (
 // accountTarget is the target every resolver test resolves "stg" to.
 func accountTarget(context.Context, string) (account.Target, error) {
 	return account.Target{
-		Profile:         "acme-stg",
-		Region:          "us-east-1",
-		ExpectedAccount: "111122223333",
+		Profile:         textAcmeStg,
+		Region:          textUsEast1,
+		ExpectedAccount: text111122223333,
 		LoginHint:       "run `acme login stg`",
 	}, nil
 }
@@ -34,12 +34,15 @@ func accountTarget(context.Context, string) (account.Target, error) {
 // credsUntil returns an aws.Config whose credentials expire at exp (zero: never).
 func credsUntil(exp time.Time) aws.Config {
 	return aws.Config{
-		Region: "us-east-1",
+		Region: textUsEast1,
 		Credentials: aws.CredentialsProviderFunc(
 			func(context.Context) (aws.Credentials, error) {
 				return aws.Credentials{
-					AccessKeyID: "AKIA", SecretAccessKey: "secret", SessionToken: "tok",
-					CanExpire: !exp.IsZero(), Expires: exp,
+					AccessKeyID:     "AKIA",
+					SecretAccessKey: textSecret,
+					SessionToken:    textTok,
+					CanExpire:       !exp.IsZero(),
+					Expires:         exp,
 				}, nil
 			}),
 	}
@@ -92,27 +95,27 @@ func TestAccountResolver_VerifiesTheAccount(t *testing.T) {
 
 	api := mocks.NewMockAWSSTSAPI(gomock.NewController(t))
 	api.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).
-		Return(identity("111122223333"), nil)
+		Return(identity(text111122223333), nil)
 
-	s, err := newAccountResolver(t, api, load, nil).Resolve(ctx, "stg", false)
+	s, err := newAccountResolver(t, api, load, nil).Resolve(ctx, textStg, false)
 	require.NoError(t, err)
-	assert.Equal(t, "111122223333", s.Account)
-	assert.Equal(t, "us-east-1", s.Region)
-	assert.Equal(t, "acme-stg", s.Profile, "no ambient chain: the profile is forced")
+	assert.Equal(t, text111122223333, s.Account)
+	assert.Equal(t, textUsEast1, s.Region)
+	assert.Equal(t, textAcmeStg, s.Profile, "no ambient chain: the profile is forced")
 	assert.Equal(t, "arn:aws:sts::111122223333:assumed-role/Operator/jane", s.Principal)
 	assert.Equal(t, "AKIA", s.Creds.AccessKeyID)
 
 	pinned, err := s.AWS.Credentials.Retrieve(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, "tok", pinned.SessionToken, "the verified snapshot is pinned")
+	assert.Equal(t, textTok, pinned.SessionToken, "the verified snapshot is pinned")
 
 	wrong := mocks.NewMockAWSSTSAPI(gomock.NewController(t))
 	wrong.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).
 		Return(identity("999988887777"), nil)
 
-	_, err = newAccountResolver(t, wrong, load, nil).Resolve(ctx, "stg", false)
+	_, err = newAccountResolver(t, wrong, load, nil).Resolve(ctx, textStg, false)
 	require.Error(t, err)
-	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 	assert.Contains(t, err.Error(),
 		"wrong account: credentials are for 999988887777, expected 111122223333 for stg")
 }
@@ -137,8 +140,13 @@ func TestAccountResolver_AuthFailuresNameTheLogin(t *testing.T) {
 	failLoad := func(context.Context, string, string) (aws.Config, error) {
 		return aws.Config{}, apperr.Sentinel("no sso token")
 	}
-	_, err := newAccountResolver(t, nil, failLoad, nil).Resolve(t.Context(), "stg", false)
-	assert.True(t, apperr.Is(err, apperr.CodeUnauthorized), "got %v", err)
+	_, err := newAccountResolver(
+		t,
+		nil,
+		failLoad,
+		nil,
+	).Resolve(t.Context(), textStg, false)
+	assert.True(t, apperr.Is(err, apperr.CodeUnauthorized), textGotV, err)
 	assert.Contains(t, err.Error(), "run `acme login stg`")
 
 	cases := []struct {
@@ -152,7 +160,7 @@ func TestAccountResolver_AuthFailuresNameTheLogin(t *testing.T) {
 			apperr.CodeUnauthorized,
 		},
 		{
-			&smithy.GenericAPIError{Code: "AccessDenied"},
+			&smithy.GenericAPIError{Code: textAccessdenied},
 			"access denied",
 			apperr.CodeUnauthorized,
 		},
@@ -174,8 +182,8 @@ func TestAccountResolver_AuthFailuresNameTheLogin(t *testing.T) {
 				api,
 				ok,
 				nil,
-			).Resolve(t.Context(), "stg", false)
-			assert.True(t, apperr.Is(err, tc.code), "got %v", err)
+			).Resolve(t.Context(), textStg, false)
+			assert.True(t, apperr.Is(err, tc.code), textGotV, err)
 
 			if tc.code == apperr.CodeUnauthorized {
 				assert.Contains(t, err.Error(), "run `acme login stg`")
@@ -202,7 +210,7 @@ func TestAccountResolver_CachesUntilExpiry(t *testing.T) {
 		calls int
 	}{
 		{time.Now().Add(time.Hour), "far future is cached", 1},
-		{time.Now().Add(time.Minute), "inside the skew re-resolves", 2},
+		{time.Now().Add(time.Minute), "inside the skew re-resolves", cases2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -210,7 +218,7 @@ func TestAccountResolver_CachesUntilExpiry(t *testing.T) {
 
 			api := mocks.NewMockAWSSTSAPI(gomock.NewController(t))
 			api.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).
-				Return(identity("111122223333"), nil).Times(tc.calls)
+				Return(identity(text111122223333), nil).Times(tc.calls)
 
 			load := func(context.Context, string, string) (aws.Config, error) {
 				return credsUntil(tc.exp), nil
@@ -218,7 +226,7 @@ func TestAccountResolver_CachesUntilExpiry(t *testing.T) {
 			r := newAccountResolver(t, api, load, nil)
 
 			for range 2 {
-				s, err := r.Resolve(t.Context(), "stg", false)
+				s, err := r.Resolve(t.Context(), textStg, false)
 				require.NoError(t, err)
 				assert.WithinDuration(t, tc.exp, s.ExpiresAt(), time.Second)
 			}
@@ -256,16 +264,16 @@ func TestAccountResolver_AmbientChain(t *testing.T) {
 	}
 	api := mocks.NewMockAWSSTSAPI(gomock.NewController(t))
 	api.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).
-		Return(identity("111122223333"), nil).Times(2)
+		Return(identity(text111122223333), nil).Times(timesArg2)
 
 	r := newAccountResolver(t, api, load, getenv)
 
-	_, err := r.Resolve(t.Context(), "stg", false)
+	_, err := r.Resolve(t.Context(), textStg, false)
 	require.NoError(t, err)
 
-	_, err = r.Resolve(t.Context(), "stg", true)
+	_, err = r.Resolve(t.Context(), textStg, true)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"", "acme-stg"}, profiles)
+	assert.Equal(t, []string{"", textAcmeStg}, profiles)
 }
 
 // TestAccountResolver_StubDoesNoIO tests the default kind.
@@ -295,20 +303,20 @@ func TestAccountResolver_StubDoesNoIO(t *testing.T) {
 
 	_, err = account.NewFromConfig(
 		t.Context(),
-		account.Config{Kind: "nope"},
+		account.Config{Kind: textNope},
 		account.Deps{},
 	)
-	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 }
 
 // stgProfile is the profile the writer tests upsert.
 func stgProfile() account.Profile {
 	return account.Profile{
-		Name:        "acme-stg",
-		SSOSession:  "acme",
+		Name:        textAcmeStg,
+		SSOSession:  textAcme,
 		SSOStartURL: "https://acme.awsapps.com/start",
-		SSORegion:   "us-east-1",
-		AccountID:   "111122223333",
+		SSORegion:   textUsEast1,
+		AccountID:   text111122223333,
 		RoleName:    "Admin",
 		Region:      "us-west-2",
 	}
@@ -328,14 +336,14 @@ func stgProfile() account.Profile {
 func TestUpsertProfile(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), "aws", "config")
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	path := filepath.Join(t.TempDir(), "aws", textConfig)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), perm0o700))
 	require.NoError(
 		t,
-		os.WriteFile(path, []byte("[profile other]\nregion = eu-west-1\n"), 0o600),
+		os.WriteFile(path, []byte("[profile other]\nregion = eu-west-1\n"), perm0o600),
 	)
 
-	require.NoError(t, account.UpsertProfile(path, "acme", stgProfile()))
+	require.NoError(t, account.UpsertProfile(path, textAcme, stgProfile()))
 
 	first, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
@@ -346,7 +354,7 @@ func TestUpsertProfile(t *testing.T) {
 	assert.Contains(t, out, "[profile acme-stg]\nsso_session = acme\n"+
 		"sso_account_id = 111122223333\nsso_role_name = Admin\nregion = us-west-2\n")
 
-	require.NoError(t, account.UpsertProfile(path, "acme", stgProfile()))
+	require.NoError(t, account.UpsertProfile(path, textAcme, stgProfile()))
 
 	again, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
@@ -354,14 +362,14 @@ func TestUpsertProfile(t *testing.T) {
 
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(fileModeArg0o600), info.Mode().Perm())
 
-	dup := filepath.Join(t.TempDir(), "config")
+	dup := filepath.Join(t.TempDir(), textConfig)
 	original := "[sso-session acme]\nsso_region = eu-west-1\n"
-	require.NoError(t, os.WriteFile(dup, []byte(original), 0o600))
+	require.NoError(t, os.WriteFile(dup, []byte(original), perm0o600))
 
-	err = account.UpsertProfile(dup, "acme", stgProfile())
-	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+	err = account.UpsertProfile(dup, textAcme, stgProfile())
+	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 	assert.Contains(t, err.Error(), "[sso-session acme]")
 
 	got, err := os.ReadFile(filepath.Clean(dup))
@@ -391,6 +399,6 @@ func TestConfigPath(t *testing.T) {
 
 	got, err = account.ConfigPath(func(string) string { return "" })
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(".aws", "config"),
+	assert.Equal(t, filepath.Join(".aws", textConfig),
 		filepath.Join(filepath.Base(filepath.Dir(got)), filepath.Base(got)))
 }

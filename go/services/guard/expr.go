@@ -46,7 +46,7 @@ type program struct {
 // expansion's placeholders), data (the row's Data, null when it has none) and now (the
 // run's time, a timestamp).
 func exprVars() []string {
-	return []string{"files", "file", "docs", "objects", "vars", "data", "now"}
+	return []string{textFiles, textFile, textDocs, textObjects, "vars", "data", textNow}
 }
 
 // Programs caches compiled guard expressions: one CEL environment, built on first use,
@@ -141,12 +141,12 @@ func (ps *Programs) compile(expr string) (*program, error) {
 func compileIn(env *cel.Env, expr string) (*program, error) {
 	ast, iss := env.Compile(expr)
 	if iss.Err() != nil {
-		return nil, apperr.Wrap(iss.Err(), apperr.CodeInvalidInput, "expr")
+		return nil, apperr.Wrap(iss.Err(), apperr.CodeInvalidInput, textExpr)
 	}
 
 	prg, err := env.Program(ast)
 	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "expr")
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, textExpr)
 	}
 
 	checked, err := cel.AstToCheckedExpr(ast)
@@ -182,7 +182,7 @@ func exprCheck(
 	}
 
 	if act != nil {
-		act["now"] = clock()
+		act[textNow] = clock()
 	}
 
 	if err != nil || missing != nil {
@@ -191,7 +191,7 @@ func exprCheck(
 
 	out, _, err := p.prg.ContextEval(ctx, act)
 	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "expr")
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, textExpr)
 	}
 
 	return results(out, r.Message)
@@ -268,22 +268,22 @@ func addParsedVars(
 	p *program,
 	act map[string]any,
 ) error {
-	if p.uses["docs"] {
+	if p.uses[textDocs] {
 		docs, err := decodeDocs(ctx, cb, r.Files)
 		if err != nil {
 			return err
 		}
 
-		act["docs"] = docs
+		act[textDocs] = docs
 	}
 
-	if p.uses["objects"] && r.Render.ChartDir != "" {
+	if p.uses[textObjects] && r.Render.ChartDir != "" {
 		list, err := renderedObjects(ctx, cb, r)
 		if err != nil {
 			return err
 		}
 
-		act["objects"] = list
+		act[textObjects] = list
 	}
 
 	return nil
@@ -297,7 +297,7 @@ func addFileVars(
 	p *program,
 	act map[string]any,
 ) ([]types.Finding, error) {
-	if !p.uses["files"] && !p.uses["file"] {
+	if !p.uses[textFiles] && !p.uses[textFile] {
 		return nil, nil
 	}
 
@@ -311,12 +311,12 @@ func addFileVars(
 		paths[i] = f.Path
 	}
 
-	texts, err := wantedTexts(ctx, cb, paths, wantedFlag(p.uses["file"]))
+	texts, err := wantedTexts(ctx, cb, paths, wantedFlag(p.uses[textFile]))
 	if err != nil {
 		return nil, err
 	}
 
-	act["files"], act["file"] = paths, texts
+	act[textFiles], act[textFile] = paths, texts
 
 	return nil, nil
 }
@@ -450,7 +450,7 @@ func finding(e any) (types.Finding, error) {
 	case map[string]any:
 		f := types.Finding{}
 
-		f.File = stdx.As[string](x["file"])
+		f.File = stdx.As[string](x[textFile])
 		f.Message = stdx.As[string](x["message"])
 		f.Rule = stdx.As[string](x["rule"])
 
@@ -469,8 +469,8 @@ func finding(e any) (types.Finding, error) {
 // object variables empty until a row's selection fills them.
 func baseActivation(vars map[string]string, data any) map[string]any {
 	return map[string]any{
-		"vars": vars, "data": data, "files": []string{}, "file": map[string]any{},
-		"docs": []any{}, "objects": []any{},
+		"vars": vars, "data": data, textFiles: []string{}, textFile: map[string]any{},
+		textDocs: []any{}, textObjects: []any{},
 	}
 }
 
@@ -501,7 +501,7 @@ func (g *guard) expandFor(
 ) ([]map[string]string, error) {
 	act := baseActivation(vars, g.row.Data)
 
-	act["now"] = time.Now()
+	act[textNow] = time.Now()
 
 	val, _, err := g.forPrg.prg.ContextEval(ctx, act)
 	if err != nil {
@@ -555,7 +555,7 @@ func crossItem(vars map[string]string, item any) (map[string]string, error) {
 // fraction, anything else as fmt prints it.
 func placeholder(v any) string {
 	if f, ok := v.(float64); ok && f == math.Trunc(f) {
-		return strconv.FormatInt(int64(f), 10)
+		return strconv.FormatInt(int64(f), base10)
 	}
 
 	if s, ok := v.(string); ok {

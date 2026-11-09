@@ -114,7 +114,7 @@ func diffFile(line string) string {
 // truncate caps s at summaryWidth characters, marking a cut with "...".
 func truncate(s string) string {
 	if len(s) > summaryWidth {
-		return s[:summaryWidth-3] + "..."
+		return s[:summaryWidth-summaryWidth3] + "..."
 	}
 
 	return s
@@ -145,7 +145,8 @@ func isToolNoise(line string) bool {
 	switch {
 	case strings.HasPrefix(line, "{\""):
 		return true
-	case len(line) > 20 && line[4] == '-' && line[7] == '-' && line[10] == 'T':
+	case len(line) > lineLen20 && line[index4] == '-' &&
+		line[index7] == '-' && line[index10] == 'T':
 		return true
 	case strings.HasPrefix(line, "redis:"),
 		strings.HasPrefix(line, "|"),
@@ -181,7 +182,7 @@ func isDiffContent(line string) bool {
 
 // isVulncheckNoise matches govulncheck's trace frames and explanatory lines.
 func isVulncheckNoise(line string) bool {
-	if len(line) > 2 && line[0] == '#' && line[1] >= '0' && line[1] <= '9' {
+	if len(line) > lineLen2 && line[0] == '#' && line[1] >= '0' && line[1] <= '9' {
 		return true
 	}
 
@@ -222,7 +223,7 @@ func isCallTraceOrDiff(line string) bool {
 		return true
 	}
 
-	if len(line) > 2 && line[0] == '#' && line[1] >= '0' && line[1] <= '9' {
+	if len(line) > lineLen2 && line[0] == '#' && line[1] >= '0' && line[1] <= '9' {
 		return true
 	}
 

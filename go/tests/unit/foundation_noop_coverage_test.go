@@ -34,10 +34,10 @@ func TestNoopCounter_IncAndAdd(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	c := m.Counter("test_total", "help", "label")
+	c := m.Counter("test_total", textHelp, textLabel)
 
-	c.Inc("val")
-	c.Add(5.0, "val")
+	c.Inc(textVal)
+	c.Add(addArg5p0, textVal)
 }
 
 // TestNoopHistogram_Observe tests that the noop histogram's Observe method can
@@ -53,9 +53,9 @@ func TestNoopHistogram_Observe(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	h := m.Histogram("test_duration", "help", nil, "label")
+	h := m.Histogram("test_duration", textHelp, nil, textLabel)
 
-	h.Observe(0.5, "val")
+	h.Observe(observeArg0p5, textVal)
 }
 
 // TestNoopGauge_SetIncDec tests that the noop gauge's Set, Inc, and Dec
@@ -71,11 +71,11 @@ func TestNoopGauge_SetIncDec(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	g := m.Gauge("test_gauge", "help", "label")
+	g := m.Gauge("test_gauge", textHelp, textLabel)
 
-	g.Set(42.0, "val")
-	g.Inc("val")
-	g.Dec("val")
+	g.Set(setArg42p0, textVal)
+	g.Inc(textVal)
+	g.Dec(textVal)
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ func TestNoopSpan_EndAndAttributes(t *testing.T) {
 	ctx, span := tr.Start(context.Background(), "test-op")
 	require.NotNil(t, ctx, "Start must return non-nil context")
 
-	span.SetAttribute("key", "value")
+	span.SetAttribute(textKey, textValue)
 	span.RecordError(apperr.Sentinel("test error"))
 	span.SetStatus(interfaces.SpanStatusOK, "test status")
 	span.End()
@@ -203,11 +203,11 @@ func TestFoundationCacheDecorator_BuilderNoMetrics(t *testing.T) {
 	require.NotNil(t, decorated, "Build() must return non-nil cache")
 
 	ctx := context.Background()
-	decorated.Set(ctx, "key", []byte("val"), time.Minute)
+	decorated.Set(ctx, textKey, []byte(textVal), time.Minute)
 
-	v, ok := decorated.Get(ctx, "key")
+	v, ok := decorated.Get(ctx, textKey)
 	assert.True(t, ok, "Get after Set must return ok=true")
-	assert.Equal(t, "val", string(v))
+	assert.Equal(t, textVal, string(v))
 }
 
 // TestFoundationCacheDecorator_BuilderWithMetrics tests that the metrics
@@ -236,19 +236,19 @@ func TestFoundationCacheDecorator_BuilderWithMetrics(t *testing.T) {
 	ctx := context.Background()
 
 	// Set + Get (hit) - exercises metricsDecorator.Set and .Get hit path.
-	decorated.Set(ctx, "key", []byte("val"), time.Minute)
+	decorated.Set(ctx, textKey, []byte(textVal), time.Minute)
 
-	v, ok := decorated.Get(ctx, "key")
+	v, ok := decorated.Get(ctx, textKey)
 	assert.True(t, ok, "Get after Set must return ok=true")
-	assert.Equal(t, "val", string(v))
+	assert.Equal(t, textVal, string(v))
 
 	// Get (miss) - exercises metricsDecorator.Get miss path.
-	_, ok = decorated.Get(ctx, "missing")
+	_, ok = decorated.Get(ctx, textMissing)
 	assert.False(t, ok, "Get on missing key must return ok=false")
 
 	// Delete - exercises metricsDecorator.Delete.
-	decorated.Delete(ctx, "key")
+	decorated.Delete(ctx, textKey)
 
-	_, ok = decorated.Get(ctx, "key")
+	_, ok = decorated.Get(ctx, textKey)
 	assert.False(t, ok, "Get after Delete must return ok=false")
 }

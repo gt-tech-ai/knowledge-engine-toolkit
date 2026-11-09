@@ -31,12 +31,18 @@ func TestSecret_MasksEverywhereAndRevealsExplicitly(t *testing.T) {
 	s := types.NewSecret(raw)
 
 	require.Equal(t, raw, s.Reveal(), "Reveal must return the raw value")
-	assert.Equal(t, "***", s.String(), "String must mask")
+	assert.Equal(t, textStarStarStar, s.String(), "String must mask")
 
-	for _, verb := range []string{"%s", "%v", "%q", "%#v", "%+v"} {
+	for _, verb := range []string{textS2, textV2, "%q", "%#v", "%+v"} {
 		out := fmt.Sprintf(verb, s)
 		assert.NotContainsf(t, out, raw, "verb %s leaked the value", verb)
-		assert.Containsf(t, out, "***", "verb %s did not render the mask", verb)
+		assert.Containsf(
+			t,
+			out,
+			textStarStarStar,
+			"verb %s did not render the mask",
+			verb,
+		)
 	}
 
 	text, err := s.MarshalText()
@@ -46,7 +52,12 @@ func TestSecret_MasksEverywhereAndRevealsExplicitly(t *testing.T) {
 	blob, err := json.Marshal(s)
 	require.NoError(t, err)
 	assert.NotContains(t, string(blob), raw, "MarshalJSON leaked the value")
-	assert.Contains(t, string(blob), "***", "MarshalJSON did not render the mask")
+	assert.Contains(
+		t,
+		string(blob),
+		textStarStarStar,
+		"MarshalJSON did not render the mask",
+	)
 }
 
 // TestSecret_ZeroValue tests that a zero Secret reports empty and reveals the empty
@@ -78,6 +89,6 @@ func TestSecret_ZeroValue(t *testing.T) {
 func TestRef_String(t *testing.T) {
 	t.Parallel()
 
-	r := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	r := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	assert.Equal(t, "dev/bootstrap/client_secret", r.String())
 }

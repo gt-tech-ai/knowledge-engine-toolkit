@@ -69,7 +69,7 @@ func (i *Installer) CheckPins(
 			continue
 		}
 
-		pkg, want, pinned := strings.Cut(method.Args[len(method.Args)-1], "@")
+		pkg, want, pinned := strings.Cut(method.Args[len(method.Args)-1], textAt)
 		if !pinned {
 			continue
 		}
@@ -113,9 +113,9 @@ func (i *Installer) checkPin(
 		return types.StepResult{Name: name, Status: types.StatusPass}
 	}
 
-	fix := "go install " + pkg + "@" + want
+	fix := "go install " + pkg + textAt + want
 	if i.reinstallHint != nil {
-		fix = i.reinstallHint(tool.Binary, pkg+"@"+want)
+		fix = i.reinstallHint(tool.Binary, pkg+textAt+want)
 	}
 
 	return types.StepResult{
@@ -141,10 +141,10 @@ func buildInfo(out string) (pkg, version string) {
 	for line := range strings.SplitSeq(out, "\n") {
 		fields := strings.Fields(line)
 		switch {
-		case len(fields) >= 2 && fields[0] == "path":
+		case len(fields) >= fieldsLen2 && fields[0] == "path":
 			pkg = fields[1]
-		case len(fields) >= 3 && fields[0] == "mod":
-			version = fields[2]
+		case len(fields) >= fieldsLen3 && fields[0] == "mod":
+			version = fields[index2]
 		default:
 			// No other value changes the outcome.
 		}
@@ -170,7 +170,7 @@ func (i *Installer) InstalledVersion(
 
 	res := i.runner.RunBuffered(ctx, root, "go", "version", "-m", path)
 	if pkg, ver := buildInfo(string(res.Stdout)); res.Err == nil && ver != "" {
-		return pkg + "@" + ver
+		return pkg + textAt + ver
 	}
 
 	if len(tool.VersionCmd) == 0 {

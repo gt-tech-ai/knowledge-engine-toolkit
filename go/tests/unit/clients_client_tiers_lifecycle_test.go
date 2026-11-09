@@ -199,10 +199,10 @@ func TestPostgresBackend_StartUnreachable(t *testing.T) {
 	c := dbpostgres.New(&infra.DatabaseConfig{
 		Host:     "invalid-host.example.invalid",
 		Port:     5432,
-		User:     "u",
-		Password: "p",
-		Database: "d",
-		SSLMode:  "disable",
+		User:     textU,
+		Password: textP,
+		Database: textD2,
+		SSLMode:  textDisable,
 	})
 	assert.Error(t, c.Start(context.Background()))
 }

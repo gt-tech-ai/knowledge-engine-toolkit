@@ -23,8 +23,8 @@ import (
 func TestInt32OrPanic(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, int32(42), apprpc.Int32OrPanic(42))
-	assert.Equal(t, int32(42), apprpc.Int32OrPanic(int64(42)))
+	assert.Equal(t, int32(int32Arg42), apprpc.Int32OrPanic(int32OrPanicArg42))
+	assert.Equal(t, int32(int32Arg42), apprpc.Int32OrPanic(int64(int64Arg42)))
 	assert.Panics(t, func() { apprpc.Int32OrPanic(int64(math.MaxInt32) + 1) })
 }
 
@@ -44,5 +44,5 @@ func TestCountToInt32(t *testing.T) {
 
 	assert.Equal(t, int32(0), apprpc.CountToInt32(-5))
 	assert.Equal(t, int32(math.MaxInt32), apprpc.CountToInt32(int64(math.MaxInt32)+100))
-	assert.Equal(t, int32(1234), apprpc.CountToInt32(1234))
+	assert.Equal(t, int32(int32Arg1234), apprpc.CountToInt32(countToInt32Arg1234))
 }

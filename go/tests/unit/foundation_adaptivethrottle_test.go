@@ -32,13 +32,14 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	for range 10 { // healthy: accepts keep pace with requests → no rejection
+	for range iterations10 { // healthy: accepts keep pace with requests → no rejection
 		require.NoError(t, th.Do(ctx, func() error { return nil }))
 	}
 
 	require.Zero(t, th.RejectionProbability(), "a healthy backend is not throttled")
 
-	for range 20 { // backend down: accepts frozen while requests climb → rejection rises
+	// backend down: accepts frozen while requests climb → rejection rises
+	for range iterations20 {
 		require.Error(
 			t,
 			th.Do(ctx, func() error { return apperr.Sentinel("backend down") }),
@@ -52,7 +53,7 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 		"sustained failure must raise the rejection probability",
 	)
 
-	for range 40 { // recovery: accepts climb again → rejection eases
+	for range iterations40 { // recovery: accepts climb again → rejection eases
 		require.NoError(t, th.Do(ctx, func() error { return nil }))
 	}
 

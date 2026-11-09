@@ -16,15 +16,15 @@ import (
 // fileProc is a procedure of one file step per op, over the input "paths" for ensure.
 func fileProc() []types.Procedure {
 	return []types.Procedure{{
-		Name: "files", Inputs: []string{"paths", "from"},
+		Name: textFiles, Inputs: []string{textPaths, textFrom},
 		Steps: []types.ProcStep{
-			{Name: "mounts", Each: "paths", File: &types.ProcFile{
+			{Name: "mounts", Each: textPaths, File: &types.ProcFile{
 				Op: types.FileEnsure, Path: "{item}",
 			}},
 			{Name: "secrets", File: &types.ProcFile{
 				Op:   types.FileCopy,
 				From: "{from}",
-				Path: "conf/secrets.yaml",
+				Path: textConfSecYaml,
 				Mode: "0600",
 			}},
 			{
@@ -32,7 +32,7 @@ func fileProc() []types.Procedure {
 				File: &types.ProcFile{Op: types.FileMkdir, Path: "out/cache"},
 			},
 			{
-				Name: "stale",
+				Name: textStale,
 				File: &types.ProcFile{Op: types.FileRemove, Path: "out/stale"},
 			},
 		},
@@ -44,8 +44,8 @@ func write(t *testing.T, root, rel, data string) {
 	t.Helper()
 
 	path := filepath.Join(root, rel)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
-	require.NoError(t, os.WriteFile(path, []byte(data), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), perm0o750))
+	require.NoError(t, os.WriteFile(path, []byte(data), perm0o600))
 }
 
 // TestServicesProcedure_FileOps tests the file step's four operations under the root.
@@ -66,8 +66,8 @@ func TestServicesProcedure_FileOps(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	write(t, root, "conf/kept.yaml", "mine")
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "conf", "dir.yaml"), 0o750))
+	write(t, root, textConfKeptYaml, "mine")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, textConf, "dir.yaml"), perm0o750))
 	write(t, root, "conf/secrets.yaml.example", "token: x")
 	write(t, root, "out/stale/a/b.txt", "old")
 
@@ -75,39 +75,39 @@ func TestServicesProcedure_FileOps(t *testing.T) {
 		Root: root, FS: fsys.NewOSFS(),
 	})
 	in := procedure.Vars{
-		"paths": []any{"conf/new.yaml", "conf/kept.yaml", "conf/dir.yaml"},
-		"from":  "conf/secrets.yaml.example",
+		textPaths: []any{"conf/new.yaml", textConfKeptYaml, "conf/dir.yaml"},
+		textFrom:  "conf/secrets.yaml.example",
 	}
 
-	res, err := eng.Run(t.Context(), "files", in, types.RunOptions{})
+	res, err := eng.Run(t.Context(), textFiles, in, types.RunOptions{})
 	require.NoError(t, err)
 	assert.False(t, res.HasFailures(), "%+v", res)
 
 	for rel, want := range map[string]string{
-		"conf/new.yaml": "", "conf/kept.yaml": "mine", "conf/dir.yaml": "",
-		"conf/secrets.yaml": "token: x",
+		"conf/new.yaml": "", textConfKeptYaml: "mine", "conf/dir.yaml": "",
+		textConfSecYaml: "token: x",
 	} {
 		got, readErr := os.ReadFile(filepath.Clean(filepath.Join(root, rel)))
 		require.NoError(t, readErr, rel)
 		assert.Equal(t, want, string(got), rel)
 	}
 
-	info, err := os.Stat(filepath.Join(root, "conf", "secrets.yaml"))
+	info, err := os.Stat(filepath.Join(root, textConf, "secrets.yaml"))
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(fileModeArg0o600), info.Mode().Perm())
 
-	info, err = os.Stat(filepath.Join(root, "out", "cache"))
+	info, err = os.Stat(filepath.Join(root, textOut, "cache"))
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
-	assert.NoDirExists(t, filepath.Join(root, "out", "stale"))
+	assert.NoDirExists(t, filepath.Join(root, textOut, textStale))
 
-	write(t, root, "conf/secrets.yaml", "edited")
+	write(t, root, textConfSecYaml, "edited")
 
-	res, err = eng.Run(t.Context(), "files", in, types.RunOptions{})
+	res, err = eng.Run(t.Context(), textFiles, in, types.RunOptions{})
 	require.NoError(t, err)
 	assert.False(t, res.HasFailures(), "%+v", res)
 
-	got, err := os.ReadFile(filepath.Clean(filepath.Join(root, "conf", "secrets.yaml")))
+	got, err := os.ReadFile(filepath.Clean(filepath.Join(root, textConf, "secrets.yaml")))
 	require.NoError(t, err)
 	assert.Equal(t, "edited", string(got), "copy never overwrites an existing path")
 }
@@ -133,9 +133,9 @@ func TestServicesProcedure_FileRefusals(t *testing.T) {
 
 	one := func(f types.ProcFile) types.StepResult {
 		eng := procEngine(t, &recorder{}, []types.Procedure{{
-			Name: "one", Steps: []types.ProcStep{{Name: "f", File: &f}},
+			Name: textOne, Steps: []types.ProcStep{{Name: textF, File: &f}},
 		}}, procedure.Deps{Root: root, FS: fsys.NewOSFS()})
-		res, err := eng.Run(t.Context(), "one", nil, types.RunOptions{})
+		res, err := eng.Run(t.Context(), textOne, nil, types.RunOptions{})
 		require.NoError(t, err)
 		require.Len(t, res, 1)
 
@@ -145,9 +145,11 @@ func TestServicesProcedure_FileRefusals(t *testing.T) {
 	full := one(types.ProcFile{Op: types.FileEnsure, Path: "conf/full"})
 	assert.Equal(t, types.StatusFail, full.Status)
 	assert.Contains(t, full.Error, "conf/full")
-	assert.FileExists(t, filepath.Join(root, "conf", "full", "keep.txt"))
+	assert.FileExists(t, filepath.Join(root, textConf, textFull, "keep.txt"))
 
-	missing := one(types.ProcFile{Op: types.FileCopy, From: "conf/no.example", Path: "c"})
+	missing := one(
+		types.ProcFile{Op: types.FileCopy, From: "conf/no.example", Path: textC},
+	)
 	assert.Equal(t, types.StatusFail, missing.Status)
 	assert.Contains(t, missing.Error, "conf/no.example")
 
@@ -156,12 +158,20 @@ func TestServicesProcedure_FileRefusals(t *testing.T) {
 	assert.Contains(t, escape.Error, "outside the root")
 	assert.NoFileExists(t, filepath.Join(filepath.Dir(root), "escape.yaml"))
 
+	testServicesProcedureFileRefusalsRest(t)
+}
+
+// testServicesProcedureFileRefusalsRest continues TestServicesProcedure_FileRefusals
+// with its remaining steps.
+func testServicesProcedureFileRefusalsRest(t *testing.T) {
+	t.Helper()
+
 	dry := t.TempDir()
 	eng := procEngine(t, &recorder{}, fileProc(), procedure.Deps{
 		Root: dry, FS: fsys.NewOSFS(),
 	})
-	res, err := eng.Run(t.Context(), "files", procedure.Vars{
-		"paths": []any{"a.yaml"}, "from": "b",
+	res, err := eng.Run(t.Context(), textFiles, procedure.Vars{
+		textPaths: []any{textAYaml}, textFrom: textB,
 	}, types.RunOptions{DryRun: true})
 	require.NoError(t, err)
 
@@ -174,14 +184,14 @@ func TestServicesProcedure_FileRefusals(t *testing.T) {
 	assert.Empty(t, entries)
 
 	for name, f := range map[string]types.ProcFile{
-		"op":    {Op: "chmod", Path: "a"},
-		"from":  {Op: types.FileCopy, Path: "a"},
-		"path":  {Op: types.FileMkdir},
-		"mode":  {Op: types.FileMkdir, Path: "a", Mode: "rwx"},
-		"mixed": {Op: types.FileRemove, Path: "a", From: "b"},
+		textOp:    {Op: "chmod", Path: textA},
+		textFrom:  {Op: types.FileCopy, Path: textA},
+		textPath2: {Op: types.FileMkdir},
+		textMode:  {Op: types.FileMkdir, Path: textA, Mode: "rwx"},
+		"mixed":   {Op: types.FileRemove, Path: textA, From: textB},
 	} {
 		_, err := procedure.NewFromConfig(procedure.Config{Procedures: []types.Procedure{{
-			Name: "bad", Steps: []types.ProcStep{{Name: "f", File: &f}},
+			Name: textBad, Steps: []types.ProcStep{{Name: textF, File: &f}},
 		}}}, procedure.Deps{})
 		require.Error(t, err, name)
 	}

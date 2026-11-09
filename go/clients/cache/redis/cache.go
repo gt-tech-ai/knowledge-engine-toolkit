@@ -204,7 +204,7 @@ func (c *Cache) Get(ctx context.Context, key string) ([]byte, bool) {
 
 		// Connection error or other Redis error - absorb it
 		if c.failureMode == FailureModeError && c.logger != nil {
-			c.logger.Error("redis cache get failed", "key", key, "error", err)
+			c.logger.Error("redis cache get failed", textKey, key, textError, err)
 		}
 
 		return nil, false
@@ -225,7 +225,7 @@ func (c *Cache) Set(ctx context.Context, key string, value []byte, ttl time.Dura
 
 	err := c.client.Set(ctx, key, value, ttl).Err()
 	if err != nil && c.failureMode == FailureModeError && c.logger != nil {
-		c.logger.Error("redis cache set failed", "key", key, "error", err)
+		c.logger.Error("redis cache set failed", textKey, key, textError, err)
 	}
 }
 
@@ -237,7 +237,7 @@ func (c *Cache) Delete(ctx context.Context, key string) {
 
 	err := c.client.Del(ctx, key).Err()
 	if err != nil && c.failureMode == FailureModeError && c.logger != nil {
-		c.logger.Error("redis cache delete failed", "key", key, "error", err)
+		c.logger.Error("redis cache delete failed", textKey, key, textError, err)
 	}
 }
 

@@ -178,14 +178,14 @@ func (i *Installer) Install(
 	}
 
 	inv := i.buildInvocation(method)
-	if inv.command == "winget" {
+	if inv.command == textWinget {
 		return i.runWinget(ctx, root, tool.Name, inv.args)
 	}
 
 	if isGoInstall(method) && (i.platform == osWindows && i.arch == archARM64) {
 		i.log.Info(
 			"cross-compiling as amd64 (Windows ARM64 workaround)",
-			"tool",
+			textTool,
 			tool.Name,
 		)
 	}
@@ -292,7 +292,7 @@ func (i *Installer) InstallSet(
 		return nil
 	}
 
-	names := strings.Join(toolNames(toInstall), ", ")
+	names := strings.Join(toolNames(toInstall), textCommaSpace)
 	if opts.DryRun {
 		i.log.Info(
 			"Would install "+strconv.Itoa(len(toInstall))+" tool(s)",
@@ -376,7 +376,9 @@ func (i *Installer) installAll(
 
 	if len(failed) > 0 {
 		return apperr.New(apperr.CodeInternal, fmt.Sprintf(
-			"failed to install %d tool(s): %s", len(failed), strings.Join(failed, ", "),
+			"failed to install %d tool(s): %s",
+			len(failed),
+			strings.Join(failed, textCommaSpace),
 		))
 	}
 
@@ -447,7 +449,7 @@ func (i *Installer) confirmRequired(
 
 	return i.confirm(
 		ctx,
-		fmt.Sprintf("Install missing tools (%s)?", strings.Join(names, ", ")),
+		fmt.Sprintf("Install missing tools (%s)?", strings.Join(names, textCommaSpace)),
 		autoYesFlag(autoYes),
 	)
 }
@@ -523,7 +525,7 @@ func (i *Installer) installAndVerify(
 		return apperr.Internal(fmt.Sprintf(
 			"%d tool(s) failed to install: %s",
 			len(failures),
-			strings.Join(failures, ", "),
+			strings.Join(failures, textCommaSpace),
 		))
 	}
 
@@ -548,7 +550,7 @@ func selectTargets(tools []types.ToolDef, names []string) ([]types.ToolDef, erro
 		t, ok := byName[name]
 		if !ok {
 			return nil, apperr.New(apperr.CodeInvalidInput, "unknown tool "+name+
-				"; installable: "+strings.Join(toolNames(tools), ", "))
+				"; installable: "+strings.Join(toolNames(tools), textCommaSpace))
 		}
 
 		targets = append(targets, t)
@@ -604,10 +606,10 @@ func isGoInstall(m types.InstallMethod) bool {
 func (i *Installer) buildInvocation(method types.InstallMethod) invocation {
 	inv := invocation{command: method.Command, args: append([]string{}, method.Args...)}
 	switch {
-	case method.Command == "winget":
+	case method.Command == textWinget:
 		inv.args = append(
 			inv.args,
-			"--source", "winget",
+			"--source", textWinget,
 			"--accept-source-agreements", "--accept-package-agreements",
 		)
 	case isGoInstall(method):
@@ -633,9 +635,9 @@ func (i *Installer) runWinget(
 	root, toolName string,
 	args []string,
 ) error {
-	err := i.runner.Run(ctx, root, "winget", args...)
+	err := i.runner.Run(ctx, root, textWinget, args...)
 	if err == nil {
-		i.log.Info("installed via winget", "tool", toolName)
+		i.log.Info("installed via winget", textTool, toolName)
 
 		return nil
 	}

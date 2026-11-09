@@ -45,9 +45,9 @@ func runCountReader(r *countStubRunner, limit int) listquery.Reader[int, int] {
 		Runner:     r,
 		ToDomain:   func(i int) (int, error) { return i, nil },
 		Resolve:    listquery.IdentityColumn,
-		Sort:       []types.OrderField{{Field: "name", Desc: false}},
-		Tiebreaker: "id",
-		Bounds:     listquery.Bounds{DefaultSize: 50, CountCap: limit},
+		Sort:       []types.OrderField{{Field: textName, Desc: false}},
+		Tiebreaker: textID,
+		Bounds:     listquery.Bounds{DefaultSize: defaultSize50, CountCap: limit},
 		MapErr:     func(err error) error { return err },
 		Count:      true,
 	}

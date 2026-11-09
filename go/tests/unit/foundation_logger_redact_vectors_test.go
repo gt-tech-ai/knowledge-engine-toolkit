@@ -36,7 +36,13 @@ func TestRedactPII_SharedVectors(t *testing.T) {
 	t.Parallel()
 
 	raw, err := os.ReadFile(
-		filepath.Join("..", "..", "..", "testdata", "redact_vectors.json"),
+		filepath.Join(
+			textDotDot,
+			textDotDot,
+			textDotDot,
+			"testdata",
+			"redact_vectors.json",
+		),
 	)
 	require.NoError(t, err)
 

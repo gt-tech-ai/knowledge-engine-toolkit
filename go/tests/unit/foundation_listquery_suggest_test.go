@@ -24,10 +24,10 @@ func TestSuggestPageNumber(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, 1, listquery.SuggestPageNumber(""))
 	assert.Equal(t, 1, listquery.SuggestPageNumber("abc"))
-	assert.Equal(t, 1, listquery.SuggestPageNumber("0"))
+	assert.Equal(t, 1, listquery.SuggestPageNumber(text0))
 	assert.Equal(t, 1, listquery.SuggestPageNumber("-4"))
 	assert.Equal(t, 1, listquery.SuggestPageNumber("1"))
-	assert.Equal(t, 3, listquery.SuggestPageNumber("3"))
+	assert.Equal(t, wantSuggestPageNumber3, listquery.SuggestPageNumber("3"))
 }
 
 // TestSuggestPage tests the single-column suggest page builder (SQL already did
@@ -46,17 +46,17 @@ func TestSuggestPage(t *testing.T) {
 	t.Parallel()
 
 	// Probe row present → has more.
-	got := listquery.SuggestPage([]string{"a", "b", "c"}, 2, 1)
-	assert.Equal(t, []string{"a", "b"}, got.Items)
+	got := listquery.SuggestPage([]string{textA, textB, textC}, limit2, 1)
+	assert.Equal(t, []string{textA, textB}, got.Items)
 	assert.Equal(t, "2", got.NextCursor)
-	assert.Equal(t, 2, got.PageSize)
+	assert.Equal(t, wantPageSize2, got.PageSize)
 	assert.Equal(t, 1, got.PageNumber)
 
 	// No probe row → last page.
-	last := listquery.SuggestPage([]string{"a", "b"}, 2, 3)
-	assert.Equal(t, []string{"a", "b"}, last.Items)
+	last := listquery.SuggestPage([]string{textA, textB}, limit2, pageNum3)
+	assert.Equal(t, []string{textA, textB}, last.Items)
 	assert.Empty(t, last.NextCursor)
-	assert.Equal(t, 3, last.PageNumber)
+	assert.Equal(t, wantPageNumber3, last.PageNumber)
 }
 
 // TestMergeDistinct tests the multi-column global-dedup + paging for a suggest field that
@@ -77,18 +77,18 @@ func TestMergeDistinct(t *testing.T) {
 	t.Parallel()
 
 	// Both branches match the same value → exactly once.
-	both := listquery.MergeDistinct([][]string{{"Smith"}, {"Smith"}}, 10, 1)
-	assert.Equal(t, []string{"Smith"}, both.Items)
+	both := listquery.MergeDistinct([][]string{{textSmith2}, {textSmith2}}, limit10, 1)
+	assert.Equal(t, []string{textSmith2}, both.Items)
 	assert.Empty(t, both.NextCursor)
 
 	// Disjoint columns, page 1 of 2 (limit 2) → the two smallest, has-more.
-	cols := [][]string{{"Bob", "Dave"}, {"Alice", "Carol"}}
-	p1 := listquery.MergeDistinct(cols, 2, 1)
-	assert.Equal(t, []string{"Alice", "Bob"}, p1.Items)
+	cols := [][]string{{"Bob", "Dave"}, {textAlice, "Carol"}}
+	p1 := listquery.MergeDistinct(cols, limit2, 1)
+	assert.Equal(t, []string{textAlice, "Bob"}, p1.Items)
 	assert.Equal(t, "2", p1.NextCursor)
 
 	// Page 2 → the next two, no dup/skip across the boundary, no further pages.
-	p2 := listquery.MergeDistinct(cols, 2, 2)
+	p2 := listquery.MergeDistinct(cols, limit2, pageNum2)
 	assert.Equal(t, []string{"Carol", "Dave"}, p2.Items)
 	assert.Empty(t, p2.NextCursor)
 }

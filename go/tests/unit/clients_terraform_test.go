@@ -51,39 +51,42 @@ func TestClientsTerraform_PlanAndApply(t *testing.T) {
 
 	gomock.InOrder(
 		r.EXPECT().
-			RunBuffered(gomock.Any(), "envs/stg", "terraform", "plan", "-input=false",
+			RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "plan", "-input=false",
 				"-out=tf.plan").
 			Return(interfaces.CmdResult{}),
-		r.EXPECT().RunBuffered(gomock.Any(), "envs/stg", "terraform", "show", "-json",
+		r.EXPECT().RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "show", "-json",
 			"tf.plan").Return(interfaces.CmdResult{Stdout: []byte(terraformShow)}),
 	)
 
-	p, err := c.Plan(ctx, "envs/stg", "tf.plan")
+	p, err := c.Plan(ctx, textEnvsStg, "tf.plan")
 	require.NoError(t, err)
-	assert.Equal(t, 2, p.Add)
+	assert.Equal(t, wantAdd2, p.Add)
 	assert.Equal(t, 1, p.Change)
-	assert.Equal(t, 2, p.Destroy)
-	require.Len(t, p.Changes, 4)
+	assert.Equal(t, wantDestroy2, p.Destroy)
+	require.Len(t, p.Changes, wantChangesLen4)
 	assert.Equal(t, types.ResourceChange{
-		Address: "aws_db_instance.d", Type: "aws_db_instance", Name: "d",
-		Actions: []string{"delete", "create"},
+		Address: "aws_db_instance.d", Type: "aws_db_instance", Name: textD2,
+		Actions: []string{textDelete, textCreate},
 	}, p.Changes[3])
 
-	r.EXPECT().RunBuffered(gomock.Any(), "envs/stg", "terraform", "apply", "-input=false",
-		"tf.plan").Return(interfaces.CmdResult{})
-	require.NoError(t, c.Apply(ctx, "envs/stg", "tf.plan"))
+	r.EXPECT().
+		RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "apply", "-input=false",
+			"tf.plan").
+		Return(interfaces.CmdResult{})
+	require.NoError(t, c.Apply(ctx, textEnvsStg, "tf.plan"))
 
-	r.EXPECT().RunBuffered(gomock.Any(), "envs/stg", "terraform", "show", "-json", "x").
+	r.EXPECT().
+		RunBuffered(gomock.Any(), textEnvsStg, textTerraform, "show", "-json", textX).
 		Return(interfaces.CmdResult{Stdout: []byte("not json")})
 
-	_, err = c.Show(ctx, "envs/stg", "x")
+	_, err = c.Show(ctx, textEnvsStg, textX)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	stub, err := terraform.NewFromConfig(ctx, terraform.Config{},
 		terraform.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
 
-	p, err = stub.Plan(ctx, "d", "o")
+	p, err = stub.Plan(ctx, textD2, textO)
 	require.NoError(t, err)
 	assert.True(t, p.Empty())
 }

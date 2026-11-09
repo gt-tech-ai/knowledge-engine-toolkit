@@ -46,7 +46,7 @@ func TestAdapt_Success(t *testing.T) {
 		},
 		http.StatusOK,
 		func(r *http.Request) (reqBody, error) {
-			return reqBody{ID: r.PathValue("id")}, nil
+			return reqBody{ID: r.PathValue(textID)}, nil
 		},
 	)
 
@@ -54,14 +54,14 @@ func TestAdapt_Success(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		t.Context(),
 		http.MethodGet,
-		"/users/123",
+		textUsers123,
 		http.NoBody,
 	)
 
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	assert.Equal(t, textMediaApplication, rec.Header().Get(textContentType))
 
 	var body respBody
 
@@ -142,7 +142,7 @@ func TestAdapt_HandlerError(t *testing.T) {
 	handler := rest.Adapt(
 		bc,
 		func(_ context.Context, _ reqBody) (respBody, error) {
-			return respBody{}, apperr.NotFound("user not found")
+			return respBody{}, apperr.NotFound(textUserNotFound)
 		},
 		http.StatusOK,
 		func(_ *http.Request) (reqBody, error) {
@@ -154,7 +154,7 @@ func TestAdapt_HandlerError(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		t.Context(),
 		http.MethodGet,
-		"/users/123",
+		textUsers123,
 		http.NoBody,
 	)
 
@@ -199,7 +199,7 @@ func TestAdaptNoContent_Success(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		t.Context(),
 		http.MethodDelete,
-		"/users/123",
+		textUsers123,
 		http.NoBody,
 	)
 
@@ -283,7 +283,7 @@ func TestAdaptNoContent_HandlerError(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		t.Context(),
 		http.MethodDelete,
-		"/users/123",
+		textUsers123,
 		http.NoBody,
 	)
 

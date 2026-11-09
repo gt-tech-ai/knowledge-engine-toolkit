@@ -39,13 +39,13 @@ func TestTransformError_BodyFallbacks(t *testing.T) {
 				json.Unmarshal(codec.TransformError(tt.status, tt.body), &doc),
 			)
 
-			errs, ok := doc["errors"].([]any)
+			errs, ok := doc[textErrors].([]any)
 			require.True(t, ok)
 			require.Len(t, errs, 1)
 
 			e := asType[map[string]any](t, errs[0])
 			assert.Equal(t, tt.wantCode, e["code"])
-			assert.Equal(t, tt.wantStatus, e["status"])
+			assert.Equal(t, tt.wantStatus, e[textStatus])
 
 			if tt.wantDetail == "" {
 				assert.NotContains(t, e, "detail")
@@ -53,7 +53,7 @@ func TestTransformError_BodyFallbacks(t *testing.T) {
 				assert.Equal(t, tt.wantDetail, e["detail"])
 			}
 
-			assert.NotContains(t, e, "title")
+			assert.NotContains(t, e, textTitle)
 		})
 	}
 }
@@ -74,37 +74,37 @@ func testTransformErrorBodyFallbacksTable() []testTransformErrorBodyFallbacksRow
 	return []testTransformErrorBodyFallbacksRow{
 		{
 			name:       "uncurated status still stringifies",
-			status:     418,
-			wantCode:   "unknown",
+			status:     status418,
+			wantCode:   textUnknown,
 			wantStatus: "418",
 		},
 		{
 			name:       "status with no http.StatusText still stringifies",
-			status:     599,
-			wantCode:   "unknown",
+			status:     status599,
+			wantCode:   textUnknown,
 			wantStatus: "599",
 		},
 		{
 			name:       "unparseable body keeps defaults",
-			status:     400,
-			body:       []byte("{not json"),
-			wantCode:   "unknown",
-			wantStatus: "400",
+			status:     status400,
+			body:       []byte(textNotStructured),
+			wantCode:   textUnknown,
+			wantStatus: text400,
 		},
 		{
 			name:       "body with empty message omits detail",
-			status:     500,
+			status:     status500,
 			body:       []byte(`{"code":"internal","message":""}`),
-			wantCode:   "internal",
+			wantCode:   textInternal,
 			wantStatus: "500",
 		},
 		{
 			name:       "parsed body overrides code+detail",
-			status:     404,
+			status:     status404,
 			body:       []byte(`{"code":"not_found","message":"gone"}`),
 			wantCode:   "not_found",
-			wantStatus: "404",
-			wantDetail: "gone",
+			wantStatus: text404,
+			wantDetail: textGone,
 		},
 	}
 }
@@ -125,39 +125,39 @@ func TestTransformResource_Fallbacks(t *testing.T) {
 	t.Parallel()
 
 	cfg := codec.ResourceConfig{
-		Type:          "users",
-		SingleKey:     "user",
-		CollectionKey: "users",
+		Type:          textUsers,
+		SingleKey:     textUser,
+		CollectionKey: textUsers,
 	}
 
 	// No single key → meta-only document (action endpoint response).
 	meta := codec.TransformSingleResource(map[string]any{"sent": 5.0}, cfg, "")
-	assert.Equal(t, map[string]any{"meta": map[string]any{"sent": 5.0}}, meta)
+	assert.Equal(t, map[string]any{textMeta: map[string]any{"sent": 5.0}}, meta)
 
 	// Single value not a map → passed through unchanged.
-	notMap := map[string]any{"user": "scalar"}
+	notMap := map[string]any{textUser: textScalar}
 	assert.Equal(t, notMap, codec.TransformSingleResource(notMap, cfg, ""))
 
 	// Missing collection key → empty data array (not a fallback to the body).
 	empty := codec.TransformCollection(map[string]any{}, cfg, "")
-	assert.Equal(t, []any{}, empty["data"])
+	assert.Equal(t, []any{}, empty[textData])
 
 	// Collection value not an array → passed through unchanged.
-	badColl := map[string]any{"users": "scalar"}
+	badColl := map[string]any{textUsers: textScalar}
 	assert.Equal(t, badColl, codec.TransformCollection(badColl, cfg, ""))
 
 	// Resource present WITH a self link and extra sibling fields → data object,
 	// links.self, and the extras collected into meta (the GetCurrentUser shape).
 	full := codec.TransformSingleResource(
 		map[string]any{
-			"user":         map[string]any{"id": "1", "email": "a@b.com"},
+			textUser:       map[string]any{textID: "1", textEmail: textABCom},
 			"currentOrgId": "o1",
 		}, cfg, "/api/users/1",
 	)
 	assert.Equal(t, "/api/users/1", asType[map[string]any](t, full["links"])["self"])
-	assert.Equal(t, map[string]any{"currentOrgId": "o1"}, full["meta"])
+	assert.Equal(t, map[string]any{"currentOrgId": "o1"}, full[textMeta])
 
-	data := asType[map[string]any](t, full["data"])
-	assert.Equal(t, "users", data["type"])
-	assert.Equal(t, "1", data["id"])
+	data := asType[map[string]any](t, full[textData])
+	assert.Equal(t, textUsers, data[textType])
+	assert.Equal(t, "1", data[textID])
 }

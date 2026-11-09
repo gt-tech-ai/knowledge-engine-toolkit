@@ -34,7 +34,7 @@ func TestStagedFiles_ReturnsParsedPaths(t *testing.T) {
 		RunBuffered(gomock.Any(), gomock.Any(), "git", gomock.Any()).
 		Return(interfaces.CmdResult{Stdout: []byte("pkg/foo.go\npkg/bar.go\n")})
 
-	got, err := git.StagedFiles(context.Background(), r, "/repo")
+	got, err := git.StagedFiles(context.Background(), r, textRepo)
 	require.NoError(t, err)
 
 	want := []string{"pkg/foo.go", "pkg/bar.go"}
@@ -59,7 +59,7 @@ func TestStagedFiles_EmptyOutputReturnsNil(t *testing.T) {
 		RunBuffered(gomock.Any(), gomock.Any(), "git", gomock.Any()).
 		Return(interfaces.CmdResult{Stdout: []byte("")})
 
-	got, err := git.StagedFiles(context.Background(), r, "/repo")
+	got, err := git.StagedFiles(context.Background(), r, textRepo)
 	require.NoError(t, err)
 	assert.Nil(t, got, "expected nil")
 }
@@ -83,10 +83,10 @@ func TestStageFiles_CallsGitAdd(t *testing.T) {
 	// The exact-args expectation is the assertion: gomock verifies StageFiles
 	// forwards `git add -- a.go b.go` and nothing else.
 	r.EXPECT().
-		Run(gomock.Any(), "/repo", "git", "add", "--", "a.go", "b.go").
+		Run(gomock.Any(), textRepo, "git", "add", "--", textAGo, "b.go").
 		Return(nil)
 
-	require.NoError(t, git.StageFiles(context.Background(), r, "/repo", "a.go", "b.go"))
+	require.NoError(t, git.StageFiles(context.Background(), r, textRepo, textAGo, "b.go"))
 }
 
 // TestStageFiles_NoPaths_NoOp tests that StageFiles with no paths runs no git
@@ -106,7 +106,7 @@ func TestStageFiles_NoPaths_NoOp(t *testing.T) {
 	// for an empty path set, which is the "no run call" assertion.
 	r := mocks.NewMockCommandRunner(ctrl)
 
-	require.NoError(t, git.StageFiles(context.Background(), r, "/repo"))
+	require.NoError(t, git.StageFiles(context.Background(), r, textRepo))
 }
 
 // --- HasPathsChanged ---
@@ -133,7 +133,7 @@ func TestHasPathsChanged_ExitOneMeansChanged(t *testing.T) {
 	changed, err := git.HasPathsChanged(
 		context.Background(),
 		r,
-		"/repo",
+		textRepo,
 		"HEAD~1",
 		"HEAD",
 		"pkg/",
@@ -163,7 +163,7 @@ func TestHasPathsChanged_NoErrorMeansUnchanged(t *testing.T) {
 	changed, err := git.HasPathsChanged(
 		context.Background(),
 		r,
-		"/repo",
+		textRepo,
 		"HEAD~1",
 		"HEAD",
 	)

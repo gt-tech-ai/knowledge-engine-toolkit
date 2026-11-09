@@ -45,7 +45,7 @@ func TestPostgresMapDBError_Classifies(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := postgres.MapDBError(&pgconn.PgError{Code: tc.code, Message: "x"})
+			got := postgres.MapDBError(&pgconn.PgError{Code: tc.code, Message: textX})
 			assert.Equal(t, tc.want, apperr.Code(got))
 		})
 	}

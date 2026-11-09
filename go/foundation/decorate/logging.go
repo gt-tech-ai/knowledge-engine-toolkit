@@ -39,7 +39,7 @@ func (m loggingMW) WrapOp(
 	next func(context.Context) error,
 ) error {
 	l := m.logger.WithContext(ctx)
-	l.Debug(m.tier+"."+op, m.tier, m.name, "operation", op)
+	l.Debug(m.tier+"."+op, m.tier, m.name, textOperation, op)
 
 	err := next(ctx)
 	if err == nil {
@@ -49,7 +49,7 @@ func (m loggingMW) WrapOp(
 	msg, fields := m.tier+"."+op+" failed", []any{
 		m.tier,
 		m.name,
-		"operation",
+		textOperation,
 		op,
 		"error",
 		err,

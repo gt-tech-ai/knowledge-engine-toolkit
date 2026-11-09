@@ -49,26 +49,32 @@ func TestGateRunLocal_GuardRunnerRejectsEveryCommandCall(t *testing.T) {
 	// noRunner) and exercises every method, capturing each result for assertion
 	// after the gate returns.
 	probe := mocks.NewMockAnyJob(ctrl)
-	probe.EXPECT().Meta().Return(types.JobMeta{Name: "probe"}).AnyTimes()
+	probe.EXPECT().Meta().Return(types.JobMeta{Name: textProbe}).AnyTimes()
 	probe.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			ctx context.Context,
 			runner interfaces.CommandRunner,
 			_ string,
 		) (types.StepResults, error) {
-			runErr = runner.Run(ctx, "/dir", "echo", "hi")
-			runEnvErr = runner.RunWithEnv(ctx, "/dir", []string{"K=V"}, "echo", "hi")
-			buf = runner.RunBuffered(ctx, "/dir", "echo", "hi")
-			bufEnv = runner.RunBufferedWithEnv(ctx, "/dir", []string{"K=V"}, "echo", "hi")
-			exists = runner.Exists("echo")
-			requireErr = runner.RequireTool("echo", "install echo")
+			runErr = runner.Run(ctx, "/dir", textEcho, "hi")
+			runEnvErr = runner.RunWithEnv(ctx, "/dir", []string{"K=V"}, textEcho, "hi")
+			buf = runner.RunBuffered(ctx, "/dir", textEcho, "hi")
+			bufEnv = runner.RunBufferedWithEnv(
+				ctx,
+				"/dir",
+				[]string{"K=V"},
+				textEcho,
+				"hi",
+			)
+			exists = runner.Exists(textEcho)
+			requireErr = runner.RequireTool(textEcho, "install echo")
 
-			return types.StepResults{{Name: "probe", Status: types.StatusPass}}, nil
+			return types.StepResults{{Name: textProbe, Status: types.StatusPass}}, nil
 		},
 	).
 		Times(1)
 
-	g := gate.New("no-runner-guard").Serial("probe", probe)
+	g := gate.New("no-runner-guard").Serial(textProbe, probe)
 	require.NoError(t, g.RunLocal(context.Background()))
 
 	require.Error(t, runErr, "Run must reject on a runner-less gate")
@@ -109,9 +115,9 @@ func TestGateRun_BareFailureWithoutMessageStillFailsGate(t *testing.T) {
 		nil,
 	)
 
-	g := gate.New("bare-gate").Serial("checks", bare)
+	g := gate.New("bare-gate").Serial(textChecks, bare)
 
-	err := g.Run(context.Background(), gateNopRunner(t), "/")
+	err := g.Run(context.Background(), gateNopRunner(t), textSlash)
 	require.Error(t, err, "a message-less Fail must still fail the gate")
 	assert.Contains(
 		t,

@@ -48,7 +48,7 @@ func (v Verdict) render() string {
 	}
 
 	if v.Detail != "" {
-		_, _ = b.WriteString(v.Detail + "\n")
+		_, _ = b.WriteString(v.Detail + textNewline)
 	}
 
 	return b.String()
@@ -69,5 +69,5 @@ func writeFinding(b *strings.Builder, f *Finding) {
 		_, _ = b.WriteString(f.Rule + ": ")
 	}
 
-	_, _ = b.WriteString(f.Message + "\n")
+	_, _ = b.WriteString(f.Message + textNewline)
 }

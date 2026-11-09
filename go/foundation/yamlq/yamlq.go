@@ -84,7 +84,7 @@ func parseStep(path, rest string) (step, string, error) {
 	case strings.HasPrefix(rest, ".."):
 		return parseKeyStep(path, rest[2:], stepDeep, "`..` needs a key")
 	case strings.HasPrefix(rest, ".*"):
-		return step{kind: stepAllValues}, rest[2:], nil
+		return step{kind: stepAllValues}, rest[offset2:], nil
 	case strings.HasPrefix(rest, "."):
 		return parseKeyStep(path, rest[1:], stepKey, "`.` needs a key")
 	case strings.HasPrefix(rest, "["):
@@ -238,7 +238,7 @@ func mappingValues(n *yaml.Node) []*yaml.Node {
 
 	var out []*yaml.Node
 
-	for i := 1; i < len(n.Content); i += 2 {
+	for i := 1; i < len(n.Content); i += mappingStride {
 		out = append(out, n.Content[i])
 	}
 
@@ -251,7 +251,7 @@ func valueOf(n *yaml.Node, key string) *yaml.Node {
 		return nil
 	}
 
-	for i := 0; i+1 < len(n.Content); i += 2 {
+	for i := 0; i+1 < len(n.Content); i += mappingStride {
 		if n.Content[i].Value == key {
 			return n.Content[i+1]
 		}
@@ -290,7 +290,7 @@ func deep(n *yaml.Node, key string) []*yaml.Node {
 func deepMapping(n *yaml.Node, key string) []*yaml.Node {
 	var out []*yaml.Node
 
-	for i := 0; i+1 < len(n.Content); i += 2 {
+	for i := 0; i+1 < len(n.Content); i += mappingStride {
 		if n.Content[i].Value == key {
 			out = append(out, n.Content[i+1])
 		}

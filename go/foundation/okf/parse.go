@@ -28,9 +28,9 @@ func Parse(path string, data []byte) (Doc, error) {
 	src := string(data)
 	doc := Doc{Path: path, Body: src, BodyStartLine: 1}
 	text := strings.TrimPrefix(src, bom)
-	first, rest, _ := strings.Cut(text, "\n")
+	first, rest, _ := strings.Cut(text, textNewline)
 
-	if strings.TrimSuffix(first, "\r") == fence {
+	if strings.TrimSuffix(first, textUd) == fence {
 		split, ok := splitFrontmatter(rest)
 		if !ok {
 			return Doc{}, invalid(path, "the frontmatter block has no closing `---` line")
@@ -64,9 +64,9 @@ type frontmatterSplit struct {
 // and returns the parts around it; ok is false when there is no closing fence.
 func splitFrontmatter(rest string) (split frontmatterSplit, ok bool) {
 	offset := 0
-	for n := 2; offset <= len(rest); n++ {
-		line, _, more := strings.Cut(rest[offset:], "\n")
-		if strings.TrimSuffix(line, "\r") == fence {
+	for n := firstBodyLine; offset <= len(rest); n++ {
+		line, _, more := strings.Cut(rest[offset:], textNewline)
+		if strings.TrimSuffix(line, textUd) == fence {
 			end := min(offset+len(line)+1, len(rest))
 
 			return frontmatterSplit{rest[:offset], rest[end:], n + 1}, true
@@ -111,7 +111,7 @@ func decodeFrontmatter(path, block string) (Frontmatter, error) {
 
 	var fm Frontmatter
 
-	for i := 0; i+1 < len(node.Content); i += 2 {
+	for i := 0; i+1 < len(node.Content); i += pairLen {
 		key, value := node.Content[i].Value, node.Content[i+1]
 
 		err := decodeKey(&fm, key, value)
@@ -206,8 +206,8 @@ func extractLinks(body string, firstLine int) []Link {
 		fences fenceTracker
 	)
 
-	for i, line := range strings.Split(body, "\n") {
-		line = strings.TrimSuffix(line, "\r")
+	for i, line := range strings.Split(body, textNewline) {
+		line = strings.TrimSuffix(line, textUd)
 		if fences.consume(line) || fences.open != "" {
 			continue
 		}

@@ -59,7 +59,7 @@ func TruncateComment(s string, limit int) string {
 func balanceCut(head, tail string) (closing, opening string) {
 	var c, o strings.Builder
 
-	if strings.Count(head, codeFence)%2 == 1 {
+	if strings.Count(head, codeFence)%count2 == 1 {
 		_, _ = c.WriteString("\n" + codeFence)
 	}
 
@@ -71,7 +71,7 @@ func balanceCut(head, tail string) (closing, opening string) {
 		_, _ = o.WriteString("<details>\n")
 	}
 
-	if strings.Count(tail, codeFence)%2 == 1 {
+	if strings.Count(tail, codeFence)%count2 == 1 {
 		_, _ = o.WriteString(codeFence + "\n")
 	}
 

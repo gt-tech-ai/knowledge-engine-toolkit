@@ -16,12 +16,12 @@ import (
 // pinnedRelease returns a well-formed, checksum-pinned github-release method.
 func pinnedRelease() types.InstallMethodEntry {
 	return types.InstallMethodEntry{
-		Kind: types.InstallKindGitHubRelease, Org: "o", Repo: "r", Tag: "v1.0.0",
-		Version: "v1.0.0", Binary: "x",
+		Kind: types.InstallKindGitHubRelease, Org: textO, Repo: "r", Tag: textV100,
+		Version: textV100, Binary: textX,
 		Assets: map[string]types.AssetEntry{
-			"linux-amd64": {
+			textLinuxAmd64: {
 				Name:   "x_linux_amd64.tar.gz",
-				SHA256: strings.Repeat("a", 64),
+				SHA256: strings.Repeat(textA, count64),
 			},
 		},
 	}
@@ -30,10 +30,13 @@ func pinnedRelease() types.InstallMethodEntry {
 // pinnedURL returns a well-formed, checksum-pinned url-kind method.
 func pinnedURL() types.InstallMethodEntry {
 	return types.InstallMethodEntry{
-		Kind: types.InstallKindURL, URL: "https://example.test/dl", Version: "v1.0.0",
-		Binary: "x",
+		Kind: types.InstallKindURL, URL: "https://example.test/dl", Version: textV100,
+		Binary: textX,
 		Assets: map[string]types.AssetEntry{
-			"darwin-arm64": {Name: "x-darwin-arm64", SHA256: strings.Repeat("b", 64)},
+			textDarwinArm64: {
+				Name:   "x-darwin-arm64",
+				SHA256: strings.Repeat(textB, count64),
+			},
 		},
 	}
 }
@@ -41,8 +44,8 @@ func pinnedURL() types.InstallMethodEntry {
 // toolWith wraps one install method (on the "all" platform) in an optional tool.
 func toolWith(m types.InstallMethodEntry) types.ToolEntry {
 	return types.ToolEntry{
-		Name: "x", Binary: "x", Category: types.CategoryOptional, CI: true,
-		Install: map[string]types.InstallMethodEntry{"all": m},
+		Name: textX, Binary: textX, Category: types.CategoryOptional, CI: true,
+		Install: map[string]types.InstallMethodEntry{textAll: m},
 	}
 }
 
@@ -67,10 +70,10 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 	t.Parallel()
 
 	good := types.ToolEntry{
-		Name: "grpcurl", Binary: "grpcurl", Category: types.CategoryOptional,
+		Name: textGrpcurl, Binary: textGrpcurl, Category: types.CategoryOptional,
 		VersionParse: "first-version",
 		Install: map[string]types.InstallMethodEntry{
-			"all": {Kind: types.InstallKindGoInstall, Package: "x/y@v1"},
+			textAll: {Kind: types.InstallKindGoInstall, Package: "x/y@v1"},
 		},
 	}
 
@@ -128,32 +131,32 @@ func validateEntryShapeRows(
 	return []testClientsToolchainValidateToolEntriesRow{
 		{name: "valid lifecycle tool", wantErr: "", tool: good},
 		{name: "registry-only tool", wantErr: "", tool: types.ToolEntry{
-			Name:   "ruff",
-			Binary: "ruff",
-			Cmd:    []string{"uv", "run", "ruff"},
+			Name:   textRuff,
+			Binary: textRuff,
+			Cmd:    []string{textUv, textRun, textRuff},
 		}},
 		{
 			name:    "empty binary",
 			wantErr: "has empty binary",
-			tool:    types.ToolEntry{Name: "x"},
+			tool:    types.ToolEntry{Name: textX},
 		},
 		{
 			name:    "unknown category",
 			wantErr: "has unknown category",
-			tool:    types.ToolEntry{Binary: "x", Category: "bogus"},
+			tool:    types.ToolEntry{Binary: textX, Category: textBogus},
 		},
 		{
 			name:    "unknown version_parse",
 			wantErr: "has unknown version_parse",
-			tool:    types.ToolEntry{Binary: "x", VersionParse: "bogus"},
+			tool:    types.ToolEntry{Binary: textX, VersionParse: textBogus},
 		},
 		{
 			name:    "unknown install kind",
 			wantErr: `unknown install kind "magic"`,
 			tool: types.ToolEntry{
-				Binary: "x",
+				Binary: textX,
 				Install: map[string]types.InstallMethodEntry{
-					"all": {Kind: "magic"},
+					textAll: {Kind: "magic"},
 				},
 			},
 		},
@@ -167,9 +170,9 @@ func validateInstallKindRows() []testClientsToolchainValidateToolEntriesRow {
 			name:    "command kind missing command",
 			wantErr: "command install kind requires a command",
 			tool: types.ToolEntry{
-				Binary: "x",
+				Binary: textX,
 				Install: map[string]types.InstallMethodEntry{
-					"all": {Kind: types.InstallKindCommand},
+					textAll: {Kind: types.InstallKindCommand},
 				},
 			},
 		},
@@ -177,9 +180,9 @@ func validateInstallKindRows() []testClientsToolchainValidateToolEntriesRow {
 			name:    "go-install missing package",
 			wantErr: "go-install kind requires a package",
 			tool: types.ToolEntry{
-				Binary: "x",
+				Binary: textX,
 				Install: map[string]types.InstallMethodEntry{
-					"all": {Kind: types.InstallKindGoInstall},
+					textAll: {Kind: types.InstallKindGoInstall},
 				},
 			},
 		},
@@ -187,9 +190,9 @@ func validateInstallKindRows() []testClientsToolchainValidateToolEntriesRow {
 			name:    "github-release missing repo",
 			wantErr: "github-release kind requires org, repo, tag",
 			tool: types.ToolEntry{
-				Binary: "x",
+				Binary: textX,
 				Install: map[string]types.InstallMethodEntry{
-					"windows": func() types.InstallMethodEntry {
+					textWindows: func() types.InstallMethodEntry {
 						m := pinnedRelease()
 
 						m.Repo = ""
@@ -209,7 +212,7 @@ func validateDownloadRows() []testClientsToolchainValidateToolEntriesRow {
 		{name: "pinned url download", wantErr: "", tool: toolWith(pinnedURL())},
 		{
 			name:    "download without a version",
-			wantErr: "requires version, binary, and assets",
+			wantErr: textRequiresVersionBinaryAnd,
 			tool: toolWith(func() types.InstallMethodEntry {
 				m := pinnedURL()
 
@@ -220,7 +223,7 @@ func validateDownloadRows() []testClientsToolchainValidateToolEntriesRow {
 		},
 		{
 			name:    "download without assets",
-			wantErr: "requires version, binary, and assets",
+			wantErr: textRequiresVersionBinaryAnd,
 			tool: toolWith(func() types.InstallMethodEntry {
 				m := pinnedRelease()
 
@@ -242,7 +245,7 @@ func validateAssetRows() []testClientsToolchainValidateToolEntriesRow {
 				m := pinnedURL()
 
 				m.Assets = map[string]types.AssetEntry{
-					"linux-amd64": {Name: "x.tar.gz", SHA256: "not-a-digest"},
+					textLinuxAmd64: {Name: "x.tar.gz", SHA256: "not-a-digest"},
 				}
 
 				return m
@@ -255,7 +258,7 @@ func validateAssetRows() []testClientsToolchainValidateToolEntriesRow {
 				m := pinnedURL()
 
 				m.Assets = map[string]types.AssetEntry{
-					"plan9-mips": {Name: "x", SHA256: strings.Repeat("a", 64)},
+					"plan9-mips": {Name: textX, SHA256: strings.Repeat(textA, 64)},
 				}
 
 				return m
@@ -275,7 +278,7 @@ func validateAssetRows() []testClientsToolchainValidateToolEntriesRow {
 		{
 			name:    "ci marker on a registry-only tool",
 			wantErr: "is ci but not a required/optional tool",
-			tool:    types.ToolEntry{Name: "ruff", Binary: "ruff", CI: true},
+			tool:    types.ToolEntry{Name: textRuff, Binary: textRuff, CI: true},
 		},
 	}
 }
@@ -290,7 +293,7 @@ func validateMarkerRows() []testClientsToolchainValidateToolEntriesRow {
 				m := pinnedURL()
 
 				m.Assets = map[string]types.AssetEntry{
-					"linux-amd64": {SHA256: strings.Repeat("a", 64)},
+					textLinuxAmd64: {SHA256: strings.Repeat(textA, 64)},
 				}
 
 				return m
@@ -298,7 +301,7 @@ func validateMarkerRows() []testClientsToolchainValidateToolEntriesRow {
 		},
 		{
 			name:    "download without a binary",
-			wantErr: "requires version, binary, and assets",
+			wantErr: textRequiresVersionBinaryAnd,
 			tool: toolWith(func() types.InstallMethodEntry {
 				m := pinnedRelease()
 
@@ -311,8 +314,8 @@ func validateMarkerRows() []testClientsToolchainValidateToolEntriesRow {
 			name:    "ci marker on a prerequisite",
 			wantErr: "is ci but not a required/optional tool",
 			tool: types.ToolEntry{
-				Name:     "go",
-				Binary:   "go",
+				Name:     textGo2,
+				Binary:   textGo2,
 				CI:       true,
 				Category: types.CategoryPrerequisite,
 			},

@@ -46,14 +46,14 @@ func NewMetrics[T any](
 		name:  name,
 		size:  size,
 		items: m.Gauge("stream_buffer_items",
-			"Items read from the source but not yet delivered", "buffer"),
+			"Items read from the source but not yet delivered", textBuffer),
 		bytes: m.Gauge("stream_buffer_bytes",
-			"Bytes read from the source but not yet delivered", "buffer"),
+			"Bytes read from the source but not yet delivered", textBuffer),
 		// The 1 ms floor is deliberate: an unblocked producer hands off in well under the
 		// 5 ms the shared execution buckets start at, and that is the case to tell apart.
 		wait: m.Histogram("stream_buffer_producer_wait_seconds",
 			"Producer wait between handing an item on and pulling the next, in seconds",
-			[]float64{.001, .005, .01, .05, .1, .5, 1, 5, 10}, "buffer"),
+			[]float64{.001, .005, .01, .05, .1, .5, 1, 5, 10}, textBuffer),
 	}
 }
 

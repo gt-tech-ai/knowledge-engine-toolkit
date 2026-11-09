@@ -24,16 +24,16 @@ type randShelf struct {
 // shelfLeaves returns the field references random shelves draw from.
 func shelfLeaves() []types.FieldRef {
 	return []types.FieldRef{
-		{Name: "team"},
-		{Name: "model"},
-		{Name: "workspace"},
-		{Name: "tokens_in", Agg: types.AggSum},
+		{Name: textTeam},
+		{Name: textModel},
+		{Name: textWorkspace},
+		{Name: textTokensIn, Agg: types.AggSum},
 	}
 }
 
 // genShelf builds a random expression at most depth levels deep.
 func genShelf(r *rand.Rand, depth int) *types.AlgebraExpr {
-	if depth <= 1 || r.Intn(3) == 0 {
+	if depth <= 1 || r.Intn(intnArg3) == 0 {
 		leaf := shelfLeaves()[r.Intn(len(shelfLeaves()))]
 
 		return &types.AlgebraExpr{Field: &leaf}
@@ -44,7 +44,7 @@ func genShelf(r *rand.Rand, depth int) *types.AlgebraExpr {
 		types.AlgebraConcat,
 		types.AlgebraNest,
 	}
-	n := 1 + r.Intn(3)
+	n := 1 + r.Intn(intnArg3)
 	args := make([]*types.AlgebraExpr, n)
 
 	for i := range args {
@@ -112,11 +112,11 @@ func TestAlgebra_CrossDistributesOverConcat(t *testing.T) {
 	require.NoError(t, quick.Check(law, &quick.Config{MaxCount: 300}))
 
 	team, model, ws := &types.AlgebraExpr{
-		Field: &types.FieldRef{Name: "team"},
+		Field: &types.FieldRef{Name: textTeam},
 	}, &types.AlgebraExpr{
-		Field: &types.FieldRef{Name: "model"},
+		Field: &types.FieldRef{Name: textModel},
 	}, &types.AlgebraExpr{
-		Field: &types.FieldRef{Name: "workspace"},
+		Field: &types.FieldRef{Name: textWorkspace},
 	}
 	assert.Equal(
 		t,
@@ -175,9 +175,9 @@ func testAlgebraNestIsSubsetOfCrossRest5(t *testing.T) {
 	require.NoError(t, quick.Check(nestIsSubsetOfCross, &quick.Config{MaxCount: 300}))
 
 	team, model := &types.AlgebraExpr{
-		Field: &types.FieldRef{Name: "team"},
+		Field: &types.FieldRef{Name: textTeam},
 	}, &types.AlgebraExpr{
-		Field: &types.FieldRef{Name: "model"},
+		Field: &types.FieldRef{Name: textModel},
 	}
 	for _, tuple := range chartspec.Normalize(op(types.AlgebraCross, team, model)) {
 		assert.False(t, tuple.Nested)

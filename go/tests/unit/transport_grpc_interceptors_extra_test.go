@@ -52,7 +52,7 @@ func TestGRPCInterceptors_ErrorBranches(t *testing.T) {
 		ic := grpcinterceptors.MetricsServerInterceptor(fixtures.NopMetrics())
 		// A method with no service/method separator exercises parseGRPCMethod's fallback.
 		_, err := ic(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "malformed"},
-			func(context.Context, any) (any, error) { return "ok", nil })
+			func(context.Context, any) (any, error) { return textOk, nil })
 		require.NoError(t, err)
 	})
 

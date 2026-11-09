@@ -234,7 +234,7 @@ func (d *Runner) execWithEnv(
 	if err != nil {
 		cs := name
 		if len(args) > 0 {
-			cs = name + " " + strings.Join(args, " ")
+			cs = name + textSpace + strings.Join(args, textSpace)
 		}
 
 		if ctx.Err() != nil {

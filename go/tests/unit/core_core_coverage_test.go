@@ -38,7 +38,7 @@ func TestToHTTPStatus_UnknownCode(t *testing.T) {
 	t.Parallel()
 
 	status := apperr.ToHTTPStatus(apperr.ErrorCode("CUSTOM_CODE"))
-	assert.Equal(t, 500, status)
+	assert.Equal(t, wantStatus500, status)
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ func TestIs_NilError(t *testing.T) {
 func TestCode_AppError(t *testing.T) {
 	t.Parallel()
 
-	err := apperr.NotFound("not found")
+	err := apperr.NotFound(textNotFound)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }
 
@@ -116,7 +116,7 @@ func TestCode_AppError(t *testing.T) {
 func TestCode_PlainError(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, apperr.CodeUnknown, apperr.Code(apperr.Sentinel("plain")))
+	assert.Equal(t, apperr.CodeUnknown, apperr.Code(apperr.Sentinel(textPlain)))
 }
 
 // TestCode_NilError tests that the Code function handles nil errors by
@@ -198,14 +198,14 @@ func TestErrorString_WithCause(t *testing.T) {
 func TestZapFields_NoDetails(t *testing.T) {
 	t.Parallel()
 
-	err := apperr.NotFound("not found")
+	err := apperr.NotFound(textNotFound)
 	keys := fieldKeySet(apperr.ZapFields(err))
 
 	for _, want := range []string{"error_code", "error_message", "error_stack"} {
 		assert.True(t, keys[want], "expected %s field, got keys %v", want, keys)
 	}
 
-	for _, absent := range []string{"error_details", "error_cause"} {
+	for _, absent := range []string{textErrorDetails, "error_cause"} {
 		assert.False(
 			t,
 			keys[absent],
@@ -229,7 +229,7 @@ func TestZapFields_WithDetails(t *testing.T) {
 	t.Parallel()
 
 	err := apperr.WithDetails(
-		apperr.NotFound("not found"),
+		apperr.NotFound(textNotFound),
 		map[string]string{"doc_id": "123"},
 	)
 
@@ -237,7 +237,7 @@ func TestZapFields_WithDetails(t *testing.T) {
 	found := false
 
 	for _, f := range fields {
-		if f.Key == "error_details" {
+		if f.Key == textErrorDetails {
 			found = true
 
 			break
@@ -261,13 +261,13 @@ func TestZapFields_WithMultipleDetails(t *testing.T) {
 	t.Parallel()
 
 	err := apperr.WithDetails(
-		apperr.NotFound("not found"),
+		apperr.NotFound(textNotFound),
 		map[string]string{"doc_id": "123", "tenant_id": "456"},
 	)
 
 	keys := fieldKeySet(apperr.ZapFields(err))
 	for _, want := range []string{
-		"error_code", "error_message", "error_stack", "error_details",
+		"error_code", "error_message", "error_stack", textErrorDetails,
 	} {
 		assert.True(t, keys[want], "expected %s field, got keys %v", want, keys)
 	}
@@ -308,7 +308,7 @@ func TestCombine(t *testing.T) {
 	require.Error(t, combined)
 
 	errs := apperr.Errors(combined)
-	require.Len(t, errs, 2)
+	require.Len(t, errs, wantErrsLen2)
 }
 
 // TestCombine_AllNils tests that Combine returns nil when all inputs are nil,
@@ -345,7 +345,7 @@ func TestAppend(t *testing.T) {
 	result = apperr.Append(result, apperr.Sentinel("second"))
 
 	errs := apperr.Errors(result)
-	require.Len(t, errs, 2)
+	require.Len(t, errs, wantErrsLen2)
 }
 
 // TestErrors_SingleError tests that Errors wraps a single non-combined error
@@ -383,12 +383,12 @@ func TestLogErrors_MultiError(t *testing.T) {
 
 	combined := apperr.Combine(
 		apperr.Timeout("timed out"),
-		apperr.NotFound("missing"),
+		apperr.NotFound(textMissing),
 	)
 
 	apperr.LogErrors(logger, "batch failed", combined)
 
-	require.Len(t, observed.All(), 2)
+	require.Len(t, observed.All(), wantAllLen2)
 }
 
 // TestLogErrors_SingleError tests that LogErrors handles a single
@@ -427,11 +427,11 @@ func TestLogErrors_SingleError(t *testing.T) {
 func TestCoreMarshalLogObject_NoDetails(t *testing.T) {
 	t.Parallel()
 
-	err := apperr.NotFound("not found")
+	err := apperr.NotFound(textNotFound)
 
 	core, observed := observer.New(zap.DebugLevel)
 	logger := zap.New(core)
-	logger.Error("test", apperr.ZapError(err))
+	logger.Error(textTest, apperr.ZapError(err))
 
 	require.Len(t, observed.All(), 1)
 }
@@ -453,10 +453,10 @@ func TestPageRequest(t *testing.T) {
 	t.Parallel()
 
 	pr := types.PageRequest{
-		PageSize:   10,
+		PageSize:   pageSize10,
 		PageNumber: 1,
 	}
-	assert.Equal(t, 10, pr.PageSize)
+	assert.Equal(t, wantPageSize10, pr.PageSize)
 }
 
 // TestPage tests that the generic Page type correctly stores items and total
@@ -472,10 +472,10 @@ func TestPage(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[string]{
-		Items: []string{"a", "b"},
-		Total: 2,
+		Items: []string{textA, textB},
+		Total: total2,
 	}
-	assert.Len(t, page.Items, 2)
+	assert.Len(t, page.Items, wantItemsLen2)
 }
 
 // TestID_StringAndIsEmpty tests that the ID type helpers String and IsEmpty
@@ -512,8 +512,8 @@ func TestID_StringAndIsEmpty(t *testing.T) {
 func TestOption_UnwrapOr(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, 42, types.Some(42).UnwrapOr(0))
-	assert.Equal(t, 99, types.None[int]().UnwrapOr(99))
+	assert.Equal(t, wantUnwrapOr42, types.Some(42).UnwrapOr(0))
+	assert.Equal(t, wantUnwrapOr99, types.None[int]().UnwrapOr(fallback99))
 }
 
 // TestPage_HasMore tests that HasMore returns true when more pages of results
@@ -530,18 +530,18 @@ func TestPage_HasMore(t *testing.T) {
 	t.Parallel()
 
 	p := types.Page[string]{
-		Items:      []string{"a", "b"},
-		Total:      10,
+		Items:      []string{textA, textB},
+		Total:      total10,
 		PageNumber: 1,
-		PageSize:   2,
+		PageSize:   pageSize2,
 	}
 	assert.True(t, p.HasMore())
 
 	full := types.Page[string]{
-		Items:      []string{"a"},
+		Items:      []string{textA},
 		Total:      1,
 		PageNumber: 1,
-		PageSize:   10,
+		PageSize:   pageSize10,
 	}
 	assert.False(t, full.HasMore())
 }
@@ -607,7 +607,7 @@ func TestStdlib_StdIs(t *testing.T) {
 	assert.True(t, apperr.StdIs(wrapped, target), "StdIs should match wrapped sentinel")
 	assert.False(
 		t,
-		apperr.StdIs(wrapped, apperr.Sentinel("other")),
+		apperr.StdIs(wrapped, apperr.Sentinel(textOther)),
 		"StdIs should not match different sentinel",
 	)
 }
@@ -624,7 +624,7 @@ func TestStdlib_StdIs(t *testing.T) {
 func TestStdlib_As(t *testing.T) {
 	t.Parallel()
 
-	appErr := apperr.NotFound("not found")
+	appErr := apperr.NotFound(textNotFound)
 	wrapped := apperr.Join(appErr)
 
 	var target *apperr.AppError
@@ -647,10 +647,10 @@ func TestStdlib_As(t *testing.T) {
 func TestStdlib_Join(t *testing.T) {
 	t.Parallel()
 
-	joined := apperr.Join(apperr.Sentinel("a"), nil, apperr.Sentinel("b"))
+	joined := apperr.Join(apperr.Sentinel(textA), nil, apperr.Sentinel(textB))
 	require.Error(t, joined)
-	assert.Contains(t, joined.Error(), "a")
-	assert.Contains(t, joined.Error(), "b")
+	assert.Contains(t, joined.Error(), textA)
+	assert.Contains(t, joined.Error(), textB)
 
 	assert.NoError(t, apperr.Join(nil, nil), "Join of all nils should return nil")
 }
@@ -719,14 +719,14 @@ func TestStepResults_HasFailures(t *testing.T) {
 	t.Parallel()
 
 	passing := types.StepResults{
-		{Name: "lint", Status: types.StatusPass},
-		{Name: "test", Status: types.StatusPass},
+		{Name: textLint, Status: types.StatusPass},
+		{Name: textTest, Status: types.StatusPass},
 	}
 	assert.False(t, passing.HasFailures(), "no failures in all-pass set")
 
 	withFail := types.StepResults{
-		{Name: "lint", Status: types.StatusPass},
-		{Name: "test", Status: types.StatusFail},
+		{Name: textLint, Status: types.StatusPass},
+		{Name: textTest, Status: types.StatusFail},
 	}
 	assert.True(t, withFail.HasFailures(), "should detect the failing step")
 
@@ -787,7 +787,7 @@ func TestStepResults_CountByStatus(t *testing.T) {
 	}
 	counts := rs.CountByStatus()
 
-	assert.Equal(t, 2, counts[types.StatusPass])
+	assert.Equal(t, wantCounts2, counts[types.StatusPass])
 	assert.Equal(t, 1, counts[types.StatusFail])
 	assert.Equal(t, 1, counts[types.StatusSkip])
 	assert.Equal(t, 0, counts[types.StatusWarn], "missing status defaults to 0")
@@ -808,16 +808,16 @@ func TestStepResults_FailedNames(t *testing.T) {
 	t.Parallel()
 
 	rs := types.StepResults{
-		{Name: "lint", Status: types.StatusPass},
-		{Name: "test", Status: types.StatusFail},
-		{Name: "build", Status: types.StatusFail},
+		{Name: textLint, Status: types.StatusPass},
+		{Name: textTest, Status: types.StatusFail},
+		{Name: textBuild, Status: types.StatusFail},
 	}
 	names := rs.FailedNames()
-	assert.Equal(t, []string{"test", "build"}, names)
+	assert.Equal(t, []string{textTest, textBuild}, names)
 
 	assert.Nil(t, types.StepResults{}.FailedNames(), "empty set returns nil slice")
 
-	allPass := types.StepResults{{Name: "lint", Status: types.StatusPass}}
+	allPass := types.StepResults{{Name: textLint, Status: types.StatusPass}}
 	assert.Nil(t, allPass.FailedNames(), "all-pass set returns nil slice")
 }
 
@@ -838,10 +838,10 @@ func TestStepResults_FailedNames(t *testing.T) {
 func TestOptionFromPtr_NonNil(t *testing.T) {
 	t.Parallel()
 
-	v := 42
+	v := value42
 	opt := types.OptionFromPtr(&v)
 	assert.True(t, opt.Valid)
-	assert.Equal(t, 42, opt.Value)
+	assert.Equal(t, wantValue42, opt.Value)
 }
 
 // TestOptionFromPtr_Nil tests that OptionFromPtr wraps a nil pointer into a
@@ -874,10 +874,10 @@ func TestOptionFromPtr_Nil(t *testing.T) {
 func TestOption_ToPtr_Some(t *testing.T) {
 	t.Parallel()
 
-	opt := types.Some(99)
+	opt := types.Some(someArg99)
 	ptr := opt.ToPtr()
 	require.NotNil(t, ptr)
-	assert.Equal(t, 99, *ptr)
+	assert.Equal(t, wantPtr99, *ptr)
 }
 
 // TestOption_ToPtr_None tests that ToPtr returns nil for a None Option,

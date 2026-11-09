@@ -30,8 +30,8 @@ func TestCircuitBreakerOptions_FailureRatioAndMinRequests(t *testing.T) {
 	cb, err := circuitbreaker.New(
 		circuitbreaker.KindGoBreaker,
 		"branch-cov",
-		circuitbreaker.WithFailureRatio(0.3),
-		circuitbreaker.WithMinRequests(7),
+		circuitbreaker.WithFailureRatio(withFailureRatioArg0p3),
+		circuitbreaker.WithMinRequests(withMinRequestsArg7),
 	)
 	require.NoError(t, err, "New with failure-ratio options must not error")
 	require.NotNil(t, cb, "New must return a non-nil breaker")

@@ -87,12 +87,12 @@ func (disabledThrottler) RejectionProbability() float64 { return 0 }
 func New(cfg Config) *Throttler {
 	k := cfg.K
 	if k <= 0 {
-		k = 2.0
+		k = value2p0
 	}
 
 	decay := cfg.Decay
 	if decay <= 0 || decay > 1 {
-		decay = 0.98
+		decay = decay0p98
 	}
 
 	r := cfg.Rand

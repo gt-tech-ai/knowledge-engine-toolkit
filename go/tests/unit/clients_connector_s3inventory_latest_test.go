@@ -35,7 +35,7 @@ func reportKeys(sc *mocks.MockStorageClient) {
 		return interfaces.StorageObject{Key: inventoryPrefix + key}
 	}
 	sc.EXPECT().
-		ListObjectsPageToken(gomock.Any(), "reports", inventoryPrefix, "", gomock.Any()).
+		ListObjectsPageToken(gomock.Any(), textReports, inventoryPrefix, "", gomock.Any()).
 		Return([]interfaces.StorageObject{
 			obj("2026-11-04T00-00Z/manifest.checksum"),
 			obj("2026-11-04T00-00Z/manifest.json"),
@@ -43,7 +43,7 @@ func reportKeys(sc *mocks.MockStorageClient) {
 			obj("data/1.csv.gz"),
 		}, "page2", nil)
 	sc.EXPECT().
-		ListObjectsPageToken(gomock.Any(), "reports", inventoryPrefix, "page2", gomock.Any()).
+		ListObjectsPageToken(gomock.Any(), textReports, inventoryPrefix, "page2", gomock.Any()).
 		Return([]interfaces.StorageObject{
 			obj("2026-11-05T00-00Z/manifest.checksum"),
 			obj("2026-11-06T00-00Z/manifest.json"),
@@ -72,7 +72,7 @@ func TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	fixture := newInventoryFixture(t, "CSV")
+	fixture := newInventoryFixture(t, textCsv)
 	source := func(list func(*mocks.MockStorageClient)) *s3inventory.Source {
 		sc := mocks.NewMockStorageClient(gomock.NewController(t))
 		fixture.serve(sc, map[string]int{})
@@ -84,18 +84,18 @@ func TestS3Inventory_ReadsTheNewestCompleteReportUnderAPrefix(t *testing.T) {
 		return src
 	}
 
-	_, afterThree, err := source(reportKeys).ListPage(ctx, "", 3)
+	_, afterThree, err := source(reportKeys).ListPage(ctx, "", limit3)
 	require.NoError(t, err)
 
-	all := drain(t, source(reportKeys), "", 2)
-	rest := drain(t, source(func(*mocks.MockStorageClient) {}), afterThree, 3)
+	all := drain(t, source(reportKeys), "", limit2)
+	rest := drain(t, source(func(*mocks.MockStorageClient) {}), afterThree, limit3)
 	_, _, emptyErr := source(func(sc *mocks.MockStorageClient) {
 		sc.EXPECT().
-			ListObjectsPageToken(gomock.Any(), "reports", inventoryPrefix, "", gomock.Any()).
+			ListObjectsPageToken(gomock.Any(), textReports, inventoryPrefix, "", gomock.Any()).
 			Return([]interfaces.StorageObject{
 				{Key: inventoryPrefix + "2026-11-06T00-00Z/manifest.json"},
 			}, "", nil)
-	}).ListPage(ctx, "", 2)
+	}).ListPage(ctx, "", limit2)
 	neither := prefixCfg()
 
 	neither.InventoryPrefix = ""

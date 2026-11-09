@@ -92,17 +92,17 @@ func hasMultipartPartsField(t reflect.Type) bool {
 func TestWorkersConfig_ValidatesSweepTimings(t *testing.T) {
 	t.Parallel()
 
-	expiry := 60 * time.Minute
+	expiry := minutes60 * time.Minute
 	good := workers.Config{
-		Port:        8085,
-		ReaperTTL:   90 * time.Minute,
-		OrphanGrace: 2 * time.Hour,
+		Port:        port8085,
+		ReaperTTL:   minutes90 * time.Minute,
+		OrphanGrace: hours2 * time.Hour,
 	}
 	require.NoError(t, good.Validate(expiry))
 
 	bad := good
 
-	bad.ReaperTTL = 30 * time.Minute // <= expiry
+	bad.ReaperTTL = minutes30 * time.Minute // <= expiry
 	require.Error(
 		t,
 		bad.Validate(expiry),
@@ -128,8 +128,8 @@ func TestWorkersDefaults_AreNeutralAndValid(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, workers.Config{
-		Env:               "dev",
-		OTelEndpoint:      "localhost:4317",
+		Env:               textDev,
+		OTelEndpoint:      textLocalhost4317,
 		RelayInterval:     10 * time.Second,
 		CleanupInterval:   24 * time.Hour,
 		ReaperInterval:    5 * time.Minute,
@@ -162,7 +162,7 @@ func TestWorkersConfig_OverlayIsParsed(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 workers:
   port: 9000
   fan_out_workers: 16
@@ -175,10 +175,10 @@ workers:
 	cfg := workers.DefaultConfig()
 	require.NoError(t, loader.UnmarshalKey("workers", &cfg))
 
-	assert.Equal(t, 9000, cfg.Port, "workers.port overlay must be parsed")
+	assert.Equal(t, wantPort9000, cfg.Port, "workers.port overlay must be parsed")
 	assert.Equal(
 		t,
-		16,
+		wantFanOutWorkers16,
 		cfg.FanOutWorkers,
 		"workers.fan_out_workers overlay must be parsed",
 	)
@@ -188,5 +188,10 @@ workers:
 		cfg.RelayInterval,
 		"workers.relay_interval overlay must be parsed",
 	)
-	assert.Equal(t, 100, cfg.BatchSize, "an unspecified field keeps the seeded default")
+	assert.Equal(
+		t,
+		wantBatchSize100,
+		cfg.BatchSize,
+		"an unspecified field keeps the seeded default",
+	)
 }

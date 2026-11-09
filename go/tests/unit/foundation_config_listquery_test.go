@@ -28,7 +28,7 @@ func TestListqueryFacetConfig(t *testing.T) {
 	t.Parallel()
 
 	def := listquerycfg.DefaultConfig()
-	assert.Equal(t, 100000, def.Facet.RowThreshold)
+	assert.Equal(t, wantRowThreshold100000, def.Facet.RowThreshold)
 	assert.Equal(t, time.Hour, def.Facet.ReconcileInterval)
 	require.NoError(t, def.Validate(), "the default facet config must validate")
 

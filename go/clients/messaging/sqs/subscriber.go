@@ -467,7 +467,7 @@ func (s *Subscriber) backoffOrDone(
 		return false
 	}
 
-	*backoff *= 2
+	*backoff *= backoff2
 	if *backoff > maxBackoff {
 		*backoff = maxBackoff
 	}

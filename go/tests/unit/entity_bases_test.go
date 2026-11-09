@@ -64,17 +64,17 @@ func newWidgetNext(ctrl *gomock.Controller) widgetNext {
 
 // expectEveryWidgetRole scripts one successful call of each of the nine roles on n.
 func expectEveryWidgetRole(n widgetNext) {
-	w := &te{ID: "w1"}
-	n.MockStore.EXPECT().Get(gomock.Any(), "w1").Return(w, nil)
+	w := &te{ID: textW1}
+	n.MockStore.EXPECT().Get(gomock.Any(), textW1).Return(w, nil)
 	n.MockStore.EXPECT().List(gomock.Any(), tp{}, gomock.Any()).
 		Return(&types.Page[te]{Total: 1}, nil)
 	n.MockStore.EXPECT().Create(gomock.Any(), w).Return(w, nil)
-	n.MockStore.EXPECT().Update(gomock.Any(), "w1", w).Return(w, nil)
-	n.MockStore.EXPECT().Delete(gomock.Any(), "w1").Return(nil)
-	n.MockStore.EXPECT().Exists(gomock.Any(), "w1").Return(true, nil)
+	n.MockStore.EXPECT().Update(gomock.Any(), textW1, w).Return(w, nil)
+	n.MockStore.EXPECT().Delete(gomock.Any(), textW1).Return(nil)
+	n.MockStore.EXPECT().Exists(gomock.Any(), textW1).Return(true, nil)
 	n.MockInserter.EXPECT().Insert(gomock.Any(), w).Return(nil)
 	n.MockUpserter.EXPECT().Upsert(gomock.Any(), w).Return(nil)
-	n.MockPurger.EXPECT().PurgeBefore(gomock.Any(), gomock.Any()).Return(3, nil)
+	n.MockPurger.EXPECT().PurgeBefore(gomock.Any(), gomock.Any()).Return(rets3, nil)
 }
 
 // callEveryWidgetRole calls each of r's nine roles once on ctx, requiring each to
@@ -88,10 +88,10 @@ func callEveryWidgetRole(ctx context.Context, t *testing.T, r interface {
 ) {
 	t.Helper()
 
-	w := &te{ID: "w1"}
-	got, err := r.Get(ctx, "w1")
+	w := &te{ID: textW1}
+	got, err := r.Get(ctx, textW1)
 	require.NoError(t, err)
-	assert.Equal(t, "w1", got.ID)
+	assert.Equal(t, textW1, got.ID)
 
 	page, err := r.List(ctx, tp{}, types.PageRequest{})
 	require.NoError(t, err)
@@ -100,11 +100,11 @@ func callEveryWidgetRole(ctx context.Context, t *testing.T, r interface {
 	_, err = r.Create(ctx, w)
 	require.NoError(t, err)
 
-	_, err = r.Update(ctx, "w1", w)
+	_, err = r.Update(ctx, textW1, w)
 	require.NoError(t, err)
-	require.NoError(t, r.Delete(ctx, "w1"))
+	require.NoError(t, r.Delete(ctx, textW1))
 
-	ok, err := r.Exists(ctx, "w1")
+	ok, err := r.Exists(ctx, textW1)
 	require.NoError(t, err)
 	assert.True(t, ok)
 	require.NoError(t, r.Insert(ctx, w))
@@ -112,7 +112,7 @@ func callEveryWidgetRole(ctx context.Context, t *testing.T, r interface {
 
 	n, err := r.PurgeBefore(ctx, time.Unix(0, 0))
 	require.NoError(t, err)
-	assert.Equal(t, 3, n)
+	assert.Equal(t, equalArg3, n)
 }
 
 // widgetFuncs returns the statements of every widget role, each recording the client it
@@ -120,7 +120,7 @@ func callEveryWidgetRole(ctx context.Context, t *testing.T, r interface {
 func widgetFuncs(ran map[string]string) store.Funcs[*storeClient, te, tp, string] {
 	return store.Funcs[*storeClient, te, tp, string]{
 		Get: func(_ context.Context, c *storeClient, id string) (*te, error) {
-			ran["Get"] = c.name
+			ran[textGet2] = c.name
 
 			return &te{ID: id}, nil
 		},
@@ -135,7 +135,7 @@ func widgetFuncs(ran map[string]string) store.Funcs[*storeClient, te, tp, string
 			return &types.Page[te]{Total: 1}, nil
 		},
 		Create: func(_ context.Context, c *storeClient, v *te) (*te, error) {
-			ran["Create"] = c.name
+			ran[textCreate2] = c.name
 
 			return v, nil
 		},
@@ -167,7 +167,7 @@ func widgetFuncs(ran map[string]string) store.Funcs[*storeClient, te, tp, string
 		PurgeBefore: func(_ context.Context, c *storeClient, _ time.Time) (int, error) {
 			ran["PurgeBefore"] = c.name
 
-			return 3, nil
+			return widgetFuncsResult3, nil
 		},
 	}
 }
@@ -209,7 +209,10 @@ func TestStoreEntity_ServesEveryRoleOnTheStatementsClientAndWritesOnlyInATransac
 
 	ran := map[string]string{}
 	s := &widgetStoreImpl{Entity: fixtures.Must(store.NewEntity[widgetStore](
-		fixtures.Decorations(), "widgets", &storeClient{name: "raw"}, widgetFuncs(ran),
+		fixtures.Decorations(),
+		textWidgets,
+		&storeClient{name: textRaw},
+		widgetFuncs(ran),
 	))}
 
 	var _ widgetStore = s
@@ -219,7 +222,7 @@ func TestStoreEntity_ServesEveryRoleOnTheStatementsClientAndWritesOnlyInATransac
 
 	n, err := s.CountByOwner(inTx, "ann")
 	require.NoError(t, err)
-	assert.Equal(t, 2, n)
+	assert.Equal(t, equalArg2, n)
 
 	for role, client := range ran {
 		assert.Equal(t, "tx", client, role)
@@ -227,9 +230,9 @@ func TestStoreEntity_ServesEveryRoleOnTheStatementsClientAndWritesOnlyInATransac
 
 	clear(ran)
 
-	_, err = s.Get(t.Context(), "w1")
+	_, err = s.Get(t.Context(), textW1)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]string{"Get": "raw"}, ran)
+	assert.Equal(t, map[string]string{textGet2: textRaw}, ran)
 
 	clear(ran)
 
@@ -264,7 +267,7 @@ func TestEntityBases_ServeOnlyTheirContractsRoles(t *testing.T) {
 		Get: all.Get, List: all.List, Exists: all.Exists,
 	}
 	ro, err := store.NewEntity[widgetReads](
-		fixtures.Decorations(), "widgets", &storeClient{name: "raw"}, reads,
+		fixtures.Decorations(), textWidgets, &storeClient{name: textRaw}, reads,
 	)
 	require.NoError(t, err)
 
@@ -283,22 +286,22 @@ func TestEntityBases_ServeOnlyTheirContractsRoles(t *testing.T) {
 	)
 
 	_, err = store.NewEntity[widgetStore](
-		fixtures.Decorations(), "widgets", &storeClient{name: "raw"}, reads,
+		fixtures.Decorations(), textWidgets, &storeClient{name: textRaw}, reads,
 	)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
-	assert.Contains(t, err.Error(), "Create")
+	assert.Contains(t, err.Error(), textCreate2)
 
 	readOnlyNext := mocks.NewMockReadListExistStore[te, tp, string](
 		gomock.NewController(t),
 	)
 
 	_, err = repository.NewEntity[interfaces.Repository[te, tp, string], te, tp, string](
-		fixtures.Decorations(), "widgets", readOnlyNext, nil,
+		fixtures.Decorations(), textWidgets, readOnlyNext, nil,
 	)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
-	assert.Contains(t, err.Error(), "Create")
+	assert.Contains(t, err.Error(), textCreate2)
 }
 
 // TestRepositoryEntity_RetriesReadsAndIdempotentWritesOnly tests the repository tier's
@@ -322,7 +325,7 @@ func TestRepositoryEntity_RetriesReadsAndIdempotentWritesOnly(t *testing.T) {
 
 	repo := fixtures.Must(repository.NewEntity[widgetStore, te, tp, string](
 		decorate.Fixed(decorate.Deps{Retrier: passThroughRetrier(t, 6)}),
-		"widgets",
+		textWidgets,
 		next,
 		nil,
 	))
@@ -355,14 +358,14 @@ func TestServiceEntity_ValidatesWritesBeforeTheRepository(t *testing.T) {
 		return nil
 	}
 	svc := fixtures.Must(service.NewEntity[widgetStore, te, tp, string](
-		fixtures.Decorations(), "widgets", next, rejectEmpty,
+		fixtures.Decorations(), textWidgets, next, rejectEmpty,
 	))
 	callEveryWidgetRole(t.Context(), t, svc)
 
 	_, err := svc.Create(t.Context(), &te{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = svc.Update(t.Context(), "w1", &te{})
+	_, err = svc.Update(t.Context(), textW1, &te{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(svc.Upsert(t.Context(), &te{})))
 }
@@ -380,23 +383,23 @@ func TestPipelineEntity_RunsEveryRoleOverTheService(t *testing.T) {
 	t.Parallel()
 
 	svc := mocks.NewMockService[te, tp, string](gomock.NewController(t))
-	w := &te{ID: "w1"}
+	w := &te{ID: textW1}
 	notInTx := gomock.Cond(
 		func(ctx context.Context) bool { return !interfaces.InTx(ctx) },
 	)
-	svc.EXPECT().Get(notInTx, "w1").Return(w, nil)
+	svc.EXPECT().Get(notInTx, textW1).Return(w, nil)
 	svc.EXPECT().List(notInTx, tp{}, gomock.Any()).Return(&types.Page[te]{}, nil)
 	svc.EXPECT().Create(notInTx, w).Return(w, nil)
-	svc.EXPECT().Update(notInTx, "w1", w).Return(w, nil)
-	svc.EXPECT().Delete(notInTx, "w1").Return(nil)
+	svc.EXPECT().Update(notInTx, textW1, w).Return(w, nil)
+	svc.EXPECT().Delete(notInTx, textW1).Return(nil)
 
 	pipe := fixtures.Must(pipeline.NewEntity[widgetService, te, tp, string](
-		fixtures.Decorations(), "widgets", svc,
+		fixtures.Decorations(), textWidgets, svc,
 	))
 
 	var _ widgetService = pipe
 
-	_, err := pipe.Get(t.Context(), "w1")
+	_, err := pipe.Get(t.Context(), textW1)
 	require.NoError(t, err)
 
 	_, err = pipe.List(t.Context(), tp{}, types.PageRequest{})
@@ -405,9 +408,9 @@ func TestPipelineEntity_RunsEveryRoleOverTheService(t *testing.T) {
 	_, err = pipe.Create(t.Context(), w)
 	require.NoError(t, err)
 
-	_, err = pipe.Update(t.Context(), "w1", w)
+	_, err = pipe.Update(t.Context(), textW1, w)
 	require.NoError(t, err)
-	require.NoError(t, pipe.Delete(t.Context(), "w1"))
+	require.NoError(t, pipe.Delete(t.Context(), textW1))
 }
 
 // TestWorkflowEntity_OpensOneTransactionPerWriteAndNoneForARead tests the workflow
@@ -424,20 +427,20 @@ func TestWorkflowEntity_OpensOneTransactionPerWriteAndNoneForARead(t *testing.T)
 	t.Parallel()
 
 	pipes := mocks.NewMockService[te, tp, string](gomock.NewController(t))
-	w := &te{ID: "w1"}
+	w := &te{ID: textW1}
 	in := gomock.Cond(interfaces.InTx)
 	out := gomock.Cond(func(ctx context.Context) bool { return !interfaces.InTx(ctx) })
-	pipes.EXPECT().Get(out, "w1").Return(w, nil)
+	pipes.EXPECT().Get(out, textW1).Return(w, nil)
 	pipes.EXPECT().List(out, tp{}, gomock.Any()).Return(&types.Page[te]{}, nil)
 	pipes.EXPECT().Create(in, w).Return(w, nil)
-	pipes.EXPECT().Update(in, "w1", w).Return(w, nil)
-	pipes.EXPECT().Delete(in, "w1").Return(nil)
+	pipes.EXPECT().Update(in, textW1, w).Return(w, nil)
+	pipes.EXPECT().Delete(in, textW1).Return(nil)
 
 	flow := fixtures.Must(workflow.NewEntity[widgetService, te, tp, string](
-		fixtures.Decorations(), "widgets", txManager(t, 3, nil), pipes,
+		fixtures.Decorations(), textWidgets, txManager(t, txManagerArg3, nil), pipes,
 	))
 
-	_, err := flow.Get(t.Context(), "w1")
+	_, err := flow.Get(t.Context(), textW1)
 	require.NoError(t, err)
 
 	_, err = flow.List(t.Context(), tp{}, types.PageRequest{})
@@ -446,7 +449,7 @@ func TestWorkflowEntity_OpensOneTransactionPerWriteAndNoneForARead(t *testing.T)
 	_, err = flow.Create(t.Context(), w)
 	require.NoError(t, err)
 
-	_, err = flow.Update(t.Context(), "w1", w)
+	_, err = flow.Update(t.Context(), textW1, w)
 	require.NoError(t, err)
-	require.NoError(t, flow.Delete(t.Context(), "w1"))
+	require.NoError(t, flow.Delete(t.Context(), textW1))
 }

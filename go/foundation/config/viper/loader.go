@@ -64,7 +64,7 @@ type Config struct {
 // DefaultConfig returns sensible defaults for a Viper loader.
 func DefaultConfig() Config {
 	return Config{
-		BaseDir: ".",
+		BaseDir: textDot,
 		Env:     ResolveEnv(),
 	}
 }
@@ -183,7 +183,7 @@ func (l *Loader) UnmarshalKey(key string, target any) error {
 	// call Get() on each (which respects BindEnv and AutomaticEnv bindings),
 	// then expand dotted sub-keys into nested maps for mapstructure.
 	resolved := make(map[string]any)
-	prefix := key + "."
+	prefix := key + textDot
 
 	for _, k := range l.v.AllKeys() {
 		if strings.HasPrefix(k, prefix) {
@@ -195,7 +195,7 @@ func (l *Loader) UnmarshalKey(key string, target any) error {
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
 			mapstructure.StringToTimeDurationHookFunc(),
-			mapstructure.StringToSliceHookFunc(","),
+			mapstructure.StringToSliceHookFunc(textComma),
 			StringToStringMapHookFunc(),
 		),
 		TagName:          "mapstructure",
@@ -220,7 +220,7 @@ func (l *Loader) UnmarshalKey(key string, target any) error {
 
 // setNested expands a dotted key (e.g., "server.port") into nested maps.
 func setNested(m map[string]any, key string, value any) {
-	parts := strings.SplitN(key, ".", keyHeadAndRest)
+	parts := strings.SplitN(key, textDot, keyHeadAndRest)
 	if len(parts) == 1 {
 		m[key] = value
 

@@ -48,7 +48,7 @@ func TestPageToken_RoundTrip(t *testing.T) {
 			t.Parallel()
 
 			enc, err := listquery.EncodeToken(types.PageToken{Keyset: &types.KeysetCursor{
-				SortValues:  []any{int64(1_700_000_000_000_000), "indexed"},
+				SortValues:  []any{int64(1_700_000_000_000_000), textIndexed},
 				ID:          "11111111-2222-3333-4444-555555555555",
 				Fingerprint: []byte{0xde, 0xad, 0xbe, 0xef},
 			}})
@@ -63,7 +63,7 @@ func TestPageToken_RoundTrip(t *testing.T) {
 			// from this.
 			require.Len(t, got.Keyset.SortValues, 2)
 			assert.InDelta(t, 1_700_000_000_000_000.0, got.Keyset.SortValues[0], 1)
-			assert.Equal(t, "indexed", got.Keyset.SortValues[1])
+			assert.Equal(t, textIndexed, got.Keyset.SortValues[1])
 		},
 	)
 

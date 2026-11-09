@@ -66,15 +66,18 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 		secretsmanager.Deps{Decorations: decs})
 	require.NoError(t, err)
 
-	_, err = sm.GetSecretValue(ctx, &awssm.GetSecretValueInput{SecretId: aws.String("x")})
+	_, err = sm.GetSecretValue(
+		ctx,
+		&awssm.GetSecretValueInput{SecretId: aws.String(textX)},
+	)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
 	put, err := sm.PutSecretValue(
 		ctx,
-		&awssm.PutSecretValueInput{SecretId: aws.String("x")},
+		&awssm.PutSecretValueInput{SecretId: aws.String(textX)},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "x", aws.ToString(put.Name))
+	assert.Equal(t, textX, aws.ToString(put.Name))
 
 	sq, err := awsquotas.NewFromConfig(
 		ctx,
@@ -173,15 +176,20 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 	require.NoError(t, err)
 
 	api.EXPECT().DescribeSecret(gomock.Any(), gomock.Any()).
-		Return(&awssm.DescribeSecretOutput{Name: aws.String("s")}, nil)
+		Return(&awssm.DescribeSecretOutput{Name: aws.String(textS)}, nil)
 
 	out, err := sm.DescribeSecret(
 		ctx,
-		&awssm.DescribeSecretInput{SecretId: aws.String("s")},
+		&awssm.DescribeSecretInput{SecretId: aws.String(textS)},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "s", aws.ToString(out.Name))
-	assert.InDelta(t, 1.0, clientOpCounter(t, reg, "describe_secret"), 0)
+	assert.Equal(t, textS, aws.ToString(out.Name))
+	assert.InDelta(
+		t,
+		wantClientOpCounter1p0,
+		clientOpCounter(t, reg, "describe_secret"),
+		0,
+	)
 
 	agentAPI := mocks.NewMockAWSBedrockAgentAPI(gomock.NewController(t))
 	agent, err := awsbedrockagent.NewFromConfig(ctx,
@@ -193,11 +201,19 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 
 	_, err = agent.GetDataSource(ctx, &bedrockagent.GetDataSourceInput{})
 	require.NoError(t, err)
-	assert.InDelta(t, 1.0, clientOpCounter(t, reg, "get_data_source"), 0)
+	assert.InDelta(
+		t,
+		wantClientOpCounter1p0,
+		clientOpCounter(t, reg, "get_data_source"),
+		0,
+	)
 
 	api.EXPECT().PutSecretValue(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.New(apperr.CodeUnavailable, "throttled")).Times(1)
 
-	_, err = sm.PutSecretValue(ctx, &awssm.PutSecretValueInput{SecretId: aws.String("s")})
+	_, err = sm.PutSecretValue(
+		ctx,
+		&awssm.PutSecretValueInput{SecretId: aws.String(textS)},
+	)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }

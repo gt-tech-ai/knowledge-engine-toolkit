@@ -34,24 +34,24 @@ func TestNewAWSClient_HonoursEndpointOverride(t *testing.T) {
 	t.Parallel()
 
 	client, err := sqs.NewAWSClient(t.Context(), sqs.Config{
-		AWSRegion:       "eu-west-1",
+		AWSRegion:       textEuWest1,
 		Endpoint:        "http://localhost:9324",
-		AccessKeyID:     "local",
+		AccessKeyID:     textLocal,
 		SecretAccessKey: "local-secret",
 	})
 	require.NoError(t, err)
 
 	opts := client.Options()
-	require.Equal(t, "eu-west-1", opts.Region)
+	require.Equal(t, textEuWest1, opts.Region)
 	require.Equal(t, "http://localhost:9324", aws.ToString(opts.BaseEndpoint))
 
 	creds, err := opts.Credentials.Retrieve(t.Context())
 	require.NoError(t, err)
-	require.Equal(t, "local", creds.AccessKeyID)
+	require.Equal(t, textLocal, creds.AccessKeyID)
 	require.Equal(t, "local-secret", creds.SecretAccessKey)
 
 	regional, err := sqs.NewAWSClient(t.Context(), sqs.Config{
-		AWSRegion: "eu-west-1", AccessKeyID: "local", SecretAccessKey: "local-secret",
+		AWSRegion: textEuWest1, AccessKeyID: textLocal, SecretAccessKey: "local-secret",
 	})
 	require.NoError(t, err)
 	require.Nil(t, regional.Options().BaseEndpoint)
@@ -70,7 +70,7 @@ func TestNewAWSClient_RejectsHalfAStaticCredential(t *testing.T) {
 	t.Parallel()
 
 	client, err := sqs.NewAWSClient(t.Context(), sqs.Config{
-		AWSRegion: "eu-west-1", AccessKeyID: "local",
+		AWSRegion: textEuWest1, AccessKeyID: textLocal,
 	})
 	require.Nil(t, client)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -85,7 +85,7 @@ func recv[T any](t *testing.T, ch <-chan T, what string) T {
 	case v := <-ch:
 		return v
 	case <-time.After(2 * time.Second):
-		require.Failf(t, "timeout", "timed out waiting for %s", what)
+		require.Failf(t, textTimeout, "timed out waiting for %s", what)
 
 		var zero T
 
@@ -183,9 +183,9 @@ func TestSubscriber_LogsAndRecoversFromQueueResolutionError(t *testing.T) {
 		AnyTimes()
 
 	batch := []sqstypes.Message{{
-		MessageId:     aws.String("m1"),
-		Body:          aws.String("x"),
-		ReceiptHandle: aws.String("rh-1"),
+		MessageId:     aws.String(textM1),
+		Body:          aws.String(textX),
+		ReceiptHandle: aws.String(textRh1),
 	}}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
 		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
@@ -201,7 +201,7 @@ func TestSubscriber_LogsAndRecoversFromQueueResolutionError(t *testing.T) {
 
 	handled := make(chan struct{}, 1)
 
-	require.NoError(t, sub.Subscribe(context.Background(), "q",
+	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(_ context.Context, _ *interfaces.Message) error {
 			handled <- struct{}{}
 
@@ -232,9 +232,9 @@ func TestSubscriber_LogsDeleteFailure(t *testing.T) {
 		AnyTimes()
 
 	batch := []sqstypes.Message{{
-		MessageId:     aws.String("m1"),
-		Body:          aws.String("x"),
-		ReceiptHandle: aws.String("rh-1"),
+		MessageId:     aws.String(textM1),
+		Body:          aws.String(textX),
+		ReceiptHandle: aws.String(textRh1),
 	}}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
 		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
@@ -250,14 +250,14 @@ func TestSubscriber_LogsDeleteFailure(t *testing.T) {
 
 	handled := make(chan struct{}, 1)
 
-	require.NoError(t, sub.Subscribe(context.Background(), "q",
+	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(_ context.Context, _ *interfaces.Message) error {
 			handled <- struct{}{}
 
 			return nil
 		}))
 
-	recv(t, handled, "handler to be called")
+	recv(t, handled, textHandlerToBeCalled)
 	require.NoError(t, sub.Close())
 	require.NotEmpty(t, spy.ErrorCalls, "delete failure should be logged")
 }
@@ -282,7 +282,7 @@ func TestPublisher_ReturnsErrorWhenQueueUnresolvable(t *testing.T) {
 	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
-	require.Error(t, pub.Publish(context.Background(), "q", []byte("x")))
+	require.Error(t, pub.Publish(context.Background(), textQ, []byte(textX)))
 }
 
 // TestPublisher_PublishBatch_StopsOnSendError tests that PublishBatch returns the
@@ -308,7 +308,7 @@ func TestPublisher_PublishBatch_StopsOnSendError(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Error(t, pub.PublishBatch(
-		context.Background(), "q", [][]byte{[]byte("a"), []byte("b")},
+		context.Background(), textQ, [][]byte{[]byte(textA), []byte(textB)},
 	))
 }
 
@@ -353,7 +353,7 @@ func TestSubscriber_StopsDuringBackoff(t *testing.T) {
 		API: api, BaseBackoff: 100 * time.Millisecond,
 	})
 	require.NoError(t, err)
-	require.NoError(t, sub.Subscribe(context.Background(), "q",
+	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(_ context.Context, _ *interfaces.Message) error { return nil }))
 
 	recv(t, received, "first receive before backoff")
@@ -398,7 +398,7 @@ func TestPublisher_ResolvesExistingQueueAndCaches(t *testing.T) {
 			return &awssqs.SendMessageOutput{}, nil
 		},
 	).
-		Times(2)
+		Times(timesArg2)
 
 	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
@@ -475,7 +475,7 @@ func TestPublisher_PropagatesSendError(t *testing.T) {
 	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
-	require.Error(t, pub.Publish(context.Background(), "q", []byte("payload")))
+	require.Error(t, pub.Publish(context.Background(), textQ, []byte("payload")))
 }
 
 // TestSubscriber_DeliversAndAcks tests that a received message is handed to the
@@ -498,9 +498,9 @@ func TestSubscriber_DeliversAndAcks(t *testing.T) {
 		AnyTimes()
 
 	batch := []sqstypes.Message{{
-		MessageId:     aws.String("m1"),
+		MessageId:     aws.String(textM1),
 		Body:          aws.String("hello"),
-		ReceiptHandle: aws.String("rh-1"),
+		ReceiptHandle: aws.String(textRh1),
 	}}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
 		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
@@ -528,17 +528,17 @@ func TestSubscriber_DeliversAndAcks(t *testing.T) {
 
 	got := make(chan *interfaces.Message, 1)
 
-	require.NoError(t, sub.Subscribe(context.Background(), "q",
+	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(_ context.Context, m *interfaces.Message) error {
 			got <- m
 
 			return nil
 		}))
 
-	msg := recv(t, got, "handler to be called")
+	msg := recv(t, got, textHandlerToBeCalled)
 	require.Equal(t, "hello", string(msg.Payload))
-	require.Equal(t, "q", msg.Topic)
-	require.Equal(t, "rh-1", recv(t, deleted, "acked message to be deleted"))
+	require.Equal(t, textQ, msg.Topic)
+	require.Equal(t, textRh1, recv(t, deleted, "acked message to be deleted"))
 	require.NoError(t, sub.Close())
 }
 
@@ -561,9 +561,9 @@ func TestSubscriber_HandlerError_DoesNotDelete(t *testing.T) {
 		AnyTimes()
 
 	batch := []sqstypes.Message{{
-		MessageId:     aws.String("m1"),
-		Body:          aws.String("boom"),
-		ReceiptHandle: aws.String("rh-1"),
+		MessageId:     aws.String(textM1),
+		Body:          aws.String(textBoom),
+		ReceiptHandle: aws.String(textRh1),
 	}}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
 		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
@@ -578,14 +578,14 @@ func TestSubscriber_HandlerError_DoesNotDelete(t *testing.T) {
 
 	handled := make(chan struct{}, 1)
 
-	require.NoError(t, sub.Subscribe(context.Background(), "q",
+	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(_ context.Context, _ *interfaces.Message) error {
 			handled <- struct{}{}
 
 			return apperr.Sentinel("transient failure")
 		}))
 
-	recv(t, handled, "handler to be called")
+	recv(t, handled, textHandlerToBeCalled)
 	require.NoError(t, sub.Close())
 }
 
@@ -610,7 +610,7 @@ func TestSubscriber_ReadyErrorPausesReceive(t *testing.T) {
 	// Times(0): a paused subscriber must never receive.
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).Times(0)
 
-	probes := make(chan struct{}, 8)
+	probes := make(chan struct{}, size8)
 	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{
 		API:         api,
 		BaseBackoff: time.Millisecond,
@@ -624,7 +624,7 @@ func TestSubscriber_ReadyErrorPausesReceive(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.NoError(t, sub.Subscribe(context.Background(), "q",
+	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(context.Context, *interfaces.Message) error { return nil }))
 
 	recv(t, probes, "first ready probe")
@@ -654,9 +654,9 @@ func TestSubscriber_NackDelaysVisibility(t *testing.T) {
 		AnyTimes()
 
 	batch := []sqstypes.Message{{
-		MessageId:     aws.String("m1"),
-		Body:          aws.String("boom"),
-		ReceiptHandle: aws.String("rh-1"),
+		MessageId:     aws.String(textM1),
+		Body:          aws.String(textBoom),
+		ReceiptHandle: aws.String(textRh1),
 	}}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
 		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
@@ -682,16 +682,16 @@ func TestSubscriber_NackDelaysVisibility(t *testing.T) {
 		NackDelay:   sqs.NackDelay{Min: 5 * time.Second, Max: 30 * time.Second},
 	})
 	require.NoError(t, err)
-	require.NoError(t, sub.Subscribe(context.Background(), "q",
+	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(context.Context, *interfaces.Message) error {
 			return apperr.Sentinel("transient failure")
 		}))
 
 	in := recv(t, changed, "nacked message's visibility to change")
-	require.Equal(t, "rh-1", aws.ToString(in.ReceiptHandle))
+	require.Equal(t, textRh1, aws.ToString(in.ReceiptHandle))
 	require.Equal(t, "http://q", aws.ToString(in.QueueUrl))
-	require.GreaterOrEqual(t, in.VisibilityTimeout, int32(5))
-	require.LessOrEqual(t, in.VisibilityTimeout, int32(30))
+	require.GreaterOrEqual(t, in.VisibilityTimeout, int32(int32Arg5))
+	require.LessOrEqual(t, in.VisibilityTimeout, int32(int32Arg30))
 	require.NoError(t, sub.Close())
 }
 
@@ -732,10 +732,10 @@ func TestSubscriber_UsesConfiguredWaitTime(t *testing.T) {
 
 	sub, err := sqs.NewSubscriber(t.Context(), sqs.Config{API: api, WaitTimeSeconds: 20})
 	require.NoError(t, err)
-	require.NoError(t, sub.Subscribe(context.Background(), "q",
+	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(context.Context, *interfaces.Message) error { return nil }))
 
-	require.Equal(t, int32(20), recv(t, waits, "a receive"))
+	require.Equal(t, int32(int32Arg20), recv(t, waits, "a receive"))
 	require.NoError(t, sub.Close())
 }
 
@@ -754,11 +754,11 @@ func TestNewSubscriber_RejectsInvalidPollConfig(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]sqs.Config{
-		"wait over 20s": {WaitTimeSeconds: 21},
+		"wait over 20s": {WaitTimeSeconds: waitTimeSeconds21},
 		"negative wait": {WaitTimeSeconds: -1},
 		"negative min":  {NackDelay: sqs.NackDelay{Min: -time.Second, Max: time.Second}},
 		"min above max": {NackDelay: sqs.NackDelay{Min: time.Minute, Max: time.Second}},
-		"max above 12h": {NackDelay: sqs.NackDelay{Max: 13 * time.Hour}},
+		"max above 12h": {NackDelay: sqs.NackDelay{Max: hours13 * time.Hour}},
 	}
 	for name, cfg := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -793,9 +793,9 @@ func TestSubscriber_RetriesAfterReceiveError(t *testing.T) {
 		AnyTimes()
 
 	batch := []sqstypes.Message{{
-		MessageId:     aws.String("m1"),
+		MessageId:     aws.String(textM1),
 		Body:          aws.String("after-retry"),
-		ReceiptHandle: aws.String("rh-1"),
+		ReceiptHandle: aws.String(textRh1),
 	}}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).DoAndReturn(
 		scriptedReceive([]receiveResult{
@@ -814,7 +814,7 @@ func TestSubscriber_RetriesAfterReceiveError(t *testing.T) {
 
 	handled := make(chan struct{}, 1)
 
-	require.NoError(t, sub.Subscribe(context.Background(), "q",
+	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(_ context.Context, _ *interfaces.Message) error {
 			handled <- struct{}{}
 
@@ -858,7 +858,7 @@ func TestPublisher_PublishBatch_SendsEachPayload(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, pub.PublishBatch(
-		context.Background(), "q", [][]byte{[]byte("a"), []byte("b")},
+		context.Background(), textQ, [][]byte{[]byte(textA), []byte(textB)},
 	))
 }
 
@@ -893,17 +893,17 @@ func TestPublisher_PublishBatch_ChunksInto10s(t *testing.T) {
 			return &awssqs.SendMessageBatchOutput{}, nil
 		},
 	).
-		Times(3)
+		Times(timesArg3)
 
 	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
-	payloads := make([][]byte, 25)
+	payloads := make([][]byte, size25)
 	for i := range payloads {
 		payloads[i] = []byte(fmt.Sprintf("m%d", i))
 	}
 
-	require.NoError(t, pub.PublishBatch(context.Background(), "q", payloads))
+	require.NoError(t, pub.PublishBatch(context.Background(), textQ, payloads))
 	require.Equal(t, []int{10, 10, 5}, sizes, "25 payloads chunk into 10+10+5")
 }
 
@@ -936,7 +936,11 @@ func TestPublisher_PublishBatch_SurfacesFailedEntries(t *testing.T) {
 	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
-	err = pub.PublishBatch(context.Background(), "q", [][]byte{[]byte("a"), []byte("b")})
+	err = pub.PublishBatch(
+		context.Background(),
+		textQ,
+		[][]byte{[]byte(textA), []byte(textB)},
+	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "1:InternalError", "failed entry id+code surfaced")
 }
@@ -975,7 +979,7 @@ func testSubscriberFansOutBatchAndBatchDeletesRest6(t *testing.T, api *mocks.Moc
 	for i := range batch {
 		batch[i] = sqstypes.Message{
 			MessageId:     aws.String(fmt.Sprintf("m%d", i)),
-			Body:          aws.String("x"),
+			Body:          aws.String(textX),
 			ReceiptHandle: aws.String(fmt.Sprintf("rh-%d", i)),
 		}
 	}
@@ -996,7 +1000,7 @@ func testSubscriberFansOutBatchAndBatchDeletesRest6(t *testing.T, api *mocks.Moc
 		sqs.Config{API: api, BaseBackoff: time.Millisecond},
 	)
 	require.NoError(t, err)
-	require.NoError(t, sub.Subscribe(context.Background(), "q",
+	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(_ context.Context, _ *interfaces.Message) error {
 			inFlight.Done() // signal this handler is in-flight
 			<-release       // hold so all n overlap — sequential handling never clears the barrier
@@ -1036,7 +1040,7 @@ func TestPublisher_PublishBatch_EmptyIsNoOp(t *testing.T) {
 	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
-	require.NoError(t, pub.PublishBatch(context.Background(), "q", nil))
+	require.NoError(t, pub.PublishBatch(context.Background(), textQ, nil))
 }
 
 // TestPublisher_PublishBatch_QueueResolveError tests that PublishBatch surfaces a
@@ -1058,7 +1062,10 @@ func TestPublisher_PublishBatch_QueueResolveError(t *testing.T) {
 	pub, err := sqs.NewPublisher(t.Context(), sqs.Config{API: api})
 	require.NoError(t, err)
 
-	require.Error(t, pub.PublishBatch(context.Background(), "q", [][]byte{[]byte("a")}))
+	require.Error(
+		t,
+		pub.PublishBatch(context.Background(), textQ, [][]byte{[]byte(textA)}),
+	)
 }
 
 // TestSubscriber_LogsBatchDeletePartialFailure tests that a per-entry failure in
@@ -1081,16 +1088,16 @@ func TestSubscriber_LogsBatchDeletePartialFailure(t *testing.T) {
 		AnyTimes()
 
 	batch := []sqstypes.Message{{
-		MessageId:     aws.String("m1"),
-		Body:          aws.String("x"),
-		ReceiptHandle: aws.String("rh-1"),
+		MessageId:     aws.String(textM1),
+		Body:          aws.String(textX),
+		ReceiptHandle: aws.String(textRh1),
 	}}
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
 		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
 	api.EXPECT().DeleteMessageBatch(gomock.Any(), gomock.Any()).Return(
 		&awssqs.DeleteMessageBatchOutput{
 			Failed: []sqstypes.BatchResultErrorEntry{
-				{Id: aws.String("0"), Code: aws.String("ReceiptHandleIsInvalid")},
+				{Id: aws.String(text0), Code: aws.String("ReceiptHandleIsInvalid")},
 			},
 		}, nil,
 	).AnyTimes()
@@ -1104,14 +1111,14 @@ func TestSubscriber_LogsBatchDeletePartialFailure(t *testing.T) {
 
 	handled := make(chan struct{}, 1)
 
-	require.NoError(t, sub.Subscribe(context.Background(), "q",
+	require.NoError(t, sub.Subscribe(context.Background(), textQ,
 		func(_ context.Context, _ *interfaces.Message) error {
 			handled <- struct{}{}
 
 			return nil
 		}))
 
-	recv(t, handled, "handler to be called")
+	recv(t, handled, textHandlerToBeCalled)
 	require.NoError(t, sub.Close())
 	require.NotEmpty(t, spy.ErrorCalls, "batch-delete partial failure should be logged")
 }

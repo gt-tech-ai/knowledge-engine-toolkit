@@ -22,7 +22,7 @@ func folderOf(cfg interfaces.SourceConfig) string {
 		return ""
 	}
 
-	return strings.TrimSuffix(cfg.InventoryPrefix, "/") + "/"
+	return strings.TrimSuffix(cfg.InventoryPrefix, textSlash) + textSlash
 }
 
 // splitToken splits a folder-mode token "<stamp>/<file>:<row>" into its report and
@@ -33,7 +33,7 @@ func (s *Source) splitToken(token string) (stamp, position string, err error) {
 		return "", token, nil
 	}
 
-	stamp, position, found := strings.Cut(token, "/")
+	stamp, position, found := strings.Cut(token, textSlash)
 	if !found || stamp == "" {
 		return "", "", apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"connector s3_inventory: malformed continuation token %q", token,
@@ -50,7 +50,7 @@ func (s *Source) token(file, row int) string {
 		return position
 	}
 
-	return s.stamp + "/" + position
+	return s.stamp + textSlash + position
 }
 
 // chooseReport points the source at its report in folder mode: the token's (stamp), else
@@ -124,9 +124,10 @@ func (s *Source) newestReport(ctx context.Context) (string, error) {
 func (s *Source) newestStamp(objs []interfaces.StorageObject, newest string) string {
 	for i := range objs {
 		dir, name := path.Split(strings.TrimPrefix(objs[i].Key, s.folder))
-		stamp := strings.TrimSuffix(dir, "/")
+		stamp := strings.TrimSuffix(dir, textSlash)
 
-		complete := name == checksumName && stamp != "" && !strings.Contains(stamp, "/")
+		complete := name == checksumName && stamp != "" &&
+			!strings.Contains(stamp, textSlash)
 		if complete && stamp > newest {
 			newest = stamp
 		}

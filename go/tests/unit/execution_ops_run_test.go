@@ -33,10 +33,10 @@ func funcRegistry(
 	descs := make([]types.OperationDescriptor, 0, 1+len(runs))
 
 	descs = append(descs,
-		opDesc("rm", types.SafetyDestructive, types.OpLifecycleBounded),
+		opDesc(textRm, types.SafetyDestructive, types.OpLifecycleBounded),
 	)
 
-	builders := map[string]ops.Builder[opsEnv]{"rm": mockBuilders(ctrl, descs)["rm"]}
+	builders := map[string]ops.Builder[opsEnv]{textRm: mockBuilders(ctrl, descs)[textRm]}
 
 	for name, run := range runs {
 		desc := opDesc(name, types.SafetyReadOnly, types.OpLifecycleBounded)
@@ -87,16 +87,16 @@ func TestExecutionOpsRegistryRun_TimeoutIsCodeTimeout(t *testing.T) {
 	t.Parallel()
 
 	reg := funcRegistry(t, 10*time.Millisecond, map[string]runFunc{
-		"slow": func(ctx context.Context, _ any, _ interfaces.ExecutionObserver) error {
+		textSlow: func(ctx context.Context, _ any, _ interfaces.ExecutionObserver) error {
 			<-ctx.Done()
 
 			return ctx.Err()
 		},
 	})
-	err := reg.Run(context.Background(), "slow", nil, nil)
+	err := reg.Run(context.Background(), textSlow, nil, nil)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
-	assert.Contains(t, err.Error(), "slow")
+	assert.Contains(t, err.Error(), textSlow)
 	assert.Contains(t, err.Error(), "10ms")
 }
 
@@ -138,11 +138,11 @@ func TestExecutionOpsRegistryRun_PanicIsCodeInternal(t *testing.T) {
 	t.Parallel()
 
 	reg := funcRegistry(t, time.Minute, map[string]runFunc{
-		"boom": func(context.Context, any, interfaces.ExecutionObserver) error {
-			panic("boom")
+		textBoom: func(context.Context, any, interfaces.ExecutionObserver) error {
+			panic(textBoom)
 		},
 	})
-	err := reg.Run(context.Background(), "boom", nil, nil)
+	err := reg.Run(context.Background(), textBoom, nil, nil)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }
@@ -162,11 +162,11 @@ func TestExecutionOpsRegistryRun_UnknownIsNotFound(t *testing.T) {
 
 	reg := funcRegistry(t, time.Minute, nil)
 
-	err := reg.Run(context.Background(), "nope", nil, nil)
+	err := reg.Run(context.Background(), textNope, nil, nil)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
-	err = reg.Run(context.Background(), "rm", nil, nil)
+	err = reg.Run(context.Background(), textRm, nil, nil)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeForbidden, apperr.Code(err))
 }
@@ -185,15 +185,15 @@ func TestExecutionOpsRegistryRun_PreservesErrorCode(t *testing.T) {
 	t.Parallel()
 
 	reg := funcRegistry(t, time.Minute, map[string]runFunc{
-		"bad": func(context.Context, any, interfaces.ExecutionObserver) error {
+		textBad: func(context.Context, any, interfaces.ExecutionObserver) error {
 			return apperr.New(apperr.CodeInvalidInput, "bad flag")
 		},
-		"ok": func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
+		textOk: func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
 	})
-	err := reg.Run(context.Background(), "bad", nil, nil)
+	err := reg.Run(context.Background(), textBad, nil, nil)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "bad flag")
 
-	require.NoError(t, reg.Run(context.Background(), "ok", nil, nil))
+	require.NoError(t, reg.Run(context.Background(), textOk, nil, nil))
 }

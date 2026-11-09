@@ -136,5 +136,5 @@ func testSQLTxCommitsRollsBackAndRefusesNestingRest(
 	_, _, err = mgr.Begin(txCtx)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	require.NoError(t, tx.Commit())
-	require.Equal(t, 2, count())
+	require.Equal(t, wantCount2, count())
 }

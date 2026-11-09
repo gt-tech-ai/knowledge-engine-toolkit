@@ -73,9 +73,9 @@ func testClassifyDerivesEachRoleTable11Part1() []testClassifyDerivesEachRoleRow 
 			name: "LIST — GET collection",
 			in: openapi.Binding{
 				RPC:           "workspace.v1.DocumentService.ListDocuments",
-				HTTPMethod:    "GET",
+				HTTPMethod:    textGet3,
 				PathTemplate:  "/api/v1/workspaces/{workspace_id}/documents",
-				CollectionKey: "documents",
+				CollectionKey: textDocuments,
 			},
 			want: openapi.RoleList,
 		},
@@ -83,9 +83,9 @@ func testClassifyDerivesEachRoleTable11Part1() []testClassifyDerivesEachRoleRow 
 			name: "GET_ONE — GET with trailing {id}",
 			in: openapi.Binding{
 				RPC:          "workspace.v1.DocumentService.GetDocument",
-				HTTPMethod:   "GET",
-				PathTemplate: "/api/v1/workspaces/{workspace_id}/documents/{document_id}",
-				SingleKey:    "document",
+				HTTPMethod:   textGet3,
+				PathTemplate: textAPIV1WorkspaceDoc,
+				SingleKey:    textDocument,
 			},
 			want: openapi.RoleGetOne,
 		},
@@ -93,9 +93,9 @@ func testClassifyDerivesEachRoleTable11Part1() []testClassifyDerivesEachRoleRow 
 			name: "GET_ONE — singleton (no trailing {id})",
 			in: openapi.Binding{
 				RPC:          "identity.v1.IdentityService.GetMe",
-				HTTPMethod:   "GET",
+				HTTPMethod:   textGet3,
 				PathTemplate: "/api/v1/identity/me",
-				SingleKey:    "user",
+				SingleKey:    textUser,
 			},
 			want: openapi.RoleGetOne,
 		},
@@ -103,9 +103,9 @@ func testClassifyDerivesEachRoleTable11Part1() []testClassifyDerivesEachRoleRow 
 			name: "CREATE — POST collection, single-key response",
 			in: openapi.Binding{
 				RPC:          "workspace.v1.WorkspaceService.CreateWorkspace",
-				HTTPMethod:   "POST",
+				HTTPMethod:   textPost,
 				PathTemplate: "/api/v1/workspaces",
-				SingleKey:    "workspace",
+				SingleKey:    textWorkspace,
 			},
 			want: openapi.RoleCreate,
 		},
@@ -120,7 +120,7 @@ func testClassifyDerivesEachRoleTable11Part2() []testClassifyDerivesEachRoleRow 
 			name: "CREATE — POST bulk, collection-key-only response",
 			in: openapi.Binding{
 				RPC:           "workspace.v1.DocumentService.CreateUploadURLs",
-				HTTPMethod:    "POST",
+				HTTPMethod:    textPost,
 				PathTemplate:  "/api/v1/workspaces/{workspace_id}/documents/upload-urls",
 				CollectionKey: "uploadUrls",
 			},
@@ -131,8 +131,8 @@ func testClassifyDerivesEachRoleTable11Part2() []testClassifyDerivesEachRoleRow 
 			in: openapi.Binding{
 				RPC:          "workspace.v1.DocumentService.UpdateDocument",
 				HTTPMethod:   "PUT",
-				PathTemplate: "/api/v1/workspaces/{workspace_id}/documents/{document_id}",
-				SingleKey:    "document",
+				PathTemplate: textAPIV1WorkspaceDoc,
+				SingleKey:    textDocument,
 			},
 			want: openapi.RoleUpdate,
 		},
@@ -140,17 +140,17 @@ func testClassifyDerivesEachRoleTable11Part2() []testClassifyDerivesEachRoleRow 
 			name: "UPDATE — PATCH",
 			in: openapi.Binding{
 				RPC:          "workspace.v1.WorkspaceService.PatchWorkspace",
-				HTTPMethod:   "PATCH",
+				HTTPMethod:   textPatch,
 				PathTemplate: "/api/v1/workspaces/{workspace_id}",
-				SingleKey:    "workspace",
+				SingleKey:    textWorkspace,
 			},
 			want: openapi.RoleUpdate,
 		},
 		{
-			name: "DELETE",
+			name: textDelete2,
 			in: openapi.Binding{
 				RPC:          "workspace.v1.WorkspaceService.DeleteWorkspace",
-				HTTPMethod:   "DELETE",
+				HTTPMethod:   textDelete2,
 				PathTemplate: "/api/v1/workspaces/{workspace_id}",
 			},
 			want: openapi.RoleDelete,
@@ -174,9 +174,9 @@ func TestClassify_PostActionMarkerYieldsAction(t *testing.T) {
 
 	got, err := openapi.Classify(openapi.Binding{
 		RPC:          "workspace.v1.DocumentService.ConfirmDocument",
-		HTTPMethod:   "POST",
+		HTTPMethod:   textPost,
 		PathTemplate: "/api/v1/workspaces/{workspace_id}/documents/{document_id}/confirm",
-		SingleKey:    "document",
+		SingleKey:    textDocument,
 		Action:       true,
 	})
 	require.NoError(t, err)
@@ -209,7 +209,7 @@ func TestClassify_UnclassifiableRestRpcErrors(t *testing.T) {
 			name: "POST, no resource response, no marker",
 			in: openapi.Binding{
 				RPC:          "notification.v1.NotificationService.MarkRead",
-				HTTPMethod:   "POST",
+				HTTPMethod:   textPost,
 				PathTemplate: "/api/v1/notifications/mark-read",
 			},
 		},
@@ -217,16 +217,16 @@ func TestClassify_UnclassifiableRestRpcErrors(t *testing.T) {
 			name: "POST, resource response on trailing {id}, no marker",
 			in: openapi.Binding{
 				RPC:          "workspace.v1.DocumentService.ReplaceDocument",
-				HTTPMethod:   "POST",
-				PathTemplate: "/api/v1/workspaces/{workspace_id}/documents/{document_id}",
-				SingleKey:    "document",
+				HTTPMethod:   textPost,
+				PathTemplate: textAPIV1WorkspaceDoc,
+				SingleKey:    textDocument,
 			},
 		},
 		{
 			name: "GET, no resource keys, no trailing {id}",
 			in: openapi.Binding{
 				RPC:          "workspace.v1.DocumentService.Ping",
-				HTTPMethod:   "GET",
+				HTTPMethod:   textGet3,
 				PathTemplate: "/api/v1/workspaces/{workspace_id}/ping",
 			},
 		},
@@ -235,7 +235,7 @@ func TestClassify_UnclassifiableRestRpcErrors(t *testing.T) {
 			in: openapi.Binding{
 				RPC:          "workspace.v1.DocumentService.HeadDocument",
 				HTTPMethod:   "HEAD",
-				PathTemplate: "/api/v1/workspaces/{workspace_id}/documents/{document_id}",
+				PathTemplate: textAPIV1WorkspaceDoc,
 			},
 		},
 	}

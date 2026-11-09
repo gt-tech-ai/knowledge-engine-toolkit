@@ -147,7 +147,7 @@ func (s source) Put(ctx context.Context, ref types.Ref, value types.Secret) erro
 // lookup returns the value for key in a dotenv-style KEY=value buffer. Blank lines and
 // lines beginning with '#' are ignored; the value is everything after the first '='.
 func lookup(data []byte, key string) (string, bool) {
-	for line := range strings.SplitSeq(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), textNewline) {
 		k, v, ok := splitKV(line)
 		if ok && k == key {
 			return v, true
@@ -161,7 +161,7 @@ func lookup(data []byte, key string) (string, bool) {
 // or appends a new one when the key is absent.
 func upsert(data []byte, key, value string) []byte {
 	line := key + "=" + value
-	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	lines := strings.Split(strings.TrimRight(string(data), textNewline), textNewline)
 	replaced := false
 	out := make([]string, 0, len(lines)+1)
 
@@ -185,14 +185,14 @@ func upsert(data []byte, key, value string) []byte {
 		out = out[1:]
 	}
 
-	return []byte(strings.Join(out, "\n") + "\n")
+	return []byte(strings.Join(out, textNewline) + textNewline)
 }
 
 // replacementLine preserves a shell `export ` prefix on the replaced line, so updating a
 // key in a dotenv file maintained for both `source` and this backend keeps it sourceable.
 func replacementLine(old, line string) string {
-	if strings.HasPrefix(strings.TrimSpace(old), "export ") {
-		return "export " + line
+	if strings.HasPrefix(strings.TrimSpace(old), textExport) {
+		return textExport + line
 	}
 
 	return line
@@ -208,7 +208,7 @@ func replacementLine(old, line string) string {
 func splitKV(line string) (key, value string, ok bool) {
 	trimmed := strings.TrimSpace(line)
 
-	trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "export "))
+	trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, textExport))
 
 	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 		return "", "", false

@@ -51,7 +51,14 @@ func loadSpecGolden(tb testing.TB) specGolden {
 	tb.Helper()
 
 	raw, err := os.ReadFile(
-		filepath.Join("..", "..", "..", "testdata", "chartspec", "specs.golden.json"),
+		filepath.Join(
+			textDotDot,
+			textDotDot,
+			textDotDot,
+			"testdata",
+			"chartspec",
+			"specs.golden.json",
+		),
 	)
 	require.NoError(tb, err)
 
@@ -132,9 +139,9 @@ func TestEncode_LeafChangeChangesOnlyPathHashes(t *testing.T) {
 	assert.NotEqual(t, a.Root, b.Root)
 
 	added := onlyIn(b, a)
-	assert.Len(t, added, 3)
+	assert.Len(t, added, wantAddedLen3)
 	assert.True(t, added[b.Root])
-	assert.Len(t, onlyIn(a, b), 3)
+	assert.Len(t, onlyIn(a, b), wantOnlyInLen3)
 }
 
 // TestEncode_ReorderChangesOnlyParent tests that reordering a shelf's operands
@@ -157,8 +164,8 @@ func TestEncode_ReorderChangesOnlyParent(t *testing.T) {
 
 	a, b := encodeSpec(t, before), encodeSpec(t, after)
 
-	assert.Len(t, onlyIn(b, a), 2)
-	assert.Len(t, onlyIn(a, b), 2)
+	assert.Len(t, onlyIn(b, a), wantOnlyInLen2)
+	assert.Len(t, onlyIn(a, b), wantOnlyInLen2)
 	assert.Len(t, b.Nodes, len(a.Nodes))
 }
 
@@ -176,7 +183,7 @@ func TestEncode_GoldenSpecRoots(t *testing.T) {
 	t.Parallel()
 
 	g := loadSpecGolden(t)
-	require.GreaterOrEqual(t, len(g.Cases), 3)
+	require.GreaterOrEqual(t, len(g.Cases), wantCasesLen3)
 
 	for _, c := range g.Cases {
 		tree := encodeSpec(t, decodeSpec(t, string(c.Spec)))
@@ -235,7 +242,7 @@ func TestDecode_MissingNodeIsNotFound(t *testing.T) {
 	_, err := chartspec.Decode(tree.Root, lookup(missing))
 	assert.True(t, apperr.Is(err, apperr.CodeNotFound), "missing: %v", err)
 
-	bogus := chartspec.Node{Kind: "bogus"}
+	bogus := chartspec.Node{Kind: textBogus}
 	bogusHash, err := bogus.Hash()
 	require.NoError(t, err)
 
@@ -333,7 +340,7 @@ func FuzzEncode_RoundTrip(f *testing.F) {
 
 		tree, err := chartspec.Encode(spec)
 		if err != nil {
-			require.True(t, apperr.Is(err, apperr.CodeInvalidInput), "%v", err)
+			require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)
 
 			return
 		}
@@ -401,7 +408,7 @@ func TestDiff_ZeroSideIsRootChange(t *testing.T) {
 		return chartspec.Node{}, false
 	}
 
-	for _, pair := range [][2]chartspec.Hash{{{}, tree.Root}, {tree.Root, {}}} {
+	for _, pair := range [][iterations2]chartspec.Hash{{{}, tree.Root}, {tree.Root, {}}} {
 		changes, err := chartspec.Diff(pair[0], pair[1], noFetch)
 		require.NoError(t, err)
 		assert.Equal(
@@ -430,12 +437,12 @@ func TestEncode_ChecksClauseOperands(t *testing.T) {
 		spec := decodeSpec(t, treeSpecJSON)
 
 		spec.FilterTree = &types.FilterNode{
-			Clause: &types.FilterNodeClause{Field: "model", Op: op, Value: v},
+			Clause: &types.FilterNodeClause{Field: textModel, Op: op, Value: v},
 		}
 
 		return spec
 	}
-	for _, op := range []types.FilterOperator{"", "regex"} {
+	for _, op := range []types.FilterOperator{"", textRegex} {
 		_, err := chartspec.Encode(withClause(op, "m-1"))
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "op %q: %v", op, err)
 	}
@@ -451,7 +458,7 @@ func TestEncode_ChecksClauseOperands(t *testing.T) {
 
 	typedNil, err := chartspec.Node{
 		Kind:   "filter_clause",
-		Fields: map[string]any{"value": []any(nil)},
+		Fields: map[string]any{textValue: []any(nil)},
 	}.Hash()
 	require.NoError(t, err)
 	assert.Equal(t, bare, typedNil)

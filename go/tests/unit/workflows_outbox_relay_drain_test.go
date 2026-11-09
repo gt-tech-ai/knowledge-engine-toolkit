@@ -23,7 +23,7 @@ const drainBatch = 2
 // drainConfig is a relay config claiming drainBatch rows per pass, sending them in one
 // chunk, with the given drain budget.
 func drainConfig(budget time.Duration) outbox.RelayConfig {
-	cfg := relayConfig(drainBatch, 1, 5)
+	cfg := relayConfig(drainBatch, 1, maxAttempts5)
 
 	cfg.BatchSize = drainBatch
 	cfg.DrainBudget = budget
@@ -54,14 +54,14 @@ func drainMetrics(ctrl *gomock.Controller) (*mocks.MockMetrics, *mocks.MockHisto
 	gauge := mocks.NewMockGauge(ctrl)
 	gauge.EXPECT().Set(gomock.Any(), gomock.Any()).AnyTimes()
 	metrics.EXPECT().
-		Counter(gomock.Any(), gomock.Any(), "lane").
+		Counter(gomock.Any(), gomock.Any(), textLane).
 		AnyTimes().
 		Return(counter)
-	metrics.EXPECT().Gauge(gomock.Any(), gomock.Any(), "lane").AnyTimes().Return(gauge)
+	metrics.EXPECT().Gauge(gomock.Any(), gomock.Any(), textLane).AnyTimes().Return(gauge)
 
 	passes := mocks.NewMockHistogram(ctrl)
 	metrics.EXPECT().
-		Histogram("outbox_relay_passes", gomock.Any(), gomock.Any(), "lane").
+		Histogram("outbox_relay_passes", gomock.Any(), gomock.Any(), textLane).
 		Return(passes)
 
 	return metrics, passes
@@ -79,7 +79,7 @@ func drainMetrics(ctrl *gomock.Controller) (*mocks.MockMetrics, *mocks.MockHisto
 func TestRelayConfig_DrainBudget(t *testing.T) {
 	t.Parallel()
 
-	cfg := outbox.DefaultRelayConfig("audit")
+	cfg := outbox.DefaultRelayConfig(textAudit)
 	assert.Zero(t, cfg.DrainBudget)
 	require.NoError(t, cfg.Validate())
 
@@ -110,11 +110,11 @@ func TestRelay_DrainsUntilAShortClaim(t *testing.T) {
 	metrics, passes := drainMetrics(ctrl)
 	batches := [][]types.OutboxRecord{
 		outboxRecords(
-			2,
+			outboxRecordsArg2,
 			1,
 		),
-		outboxRecords(2, 1),
-		outboxRecords(2, 1),
+		outboxRecords(outboxRecordsArg2, 1),
+		outboxRecords(outboxRecordsArg2, 1),
 		outboxRecords(1, 1),
 	}
 	claims := make([]any, 0, len(batches))
@@ -122,14 +122,14 @@ func TestRelay_DrainsUntilAShortClaim(t *testing.T) {
 	for _, batch := range batches {
 		claims = append(
 			claims,
-			store.EXPECT().Claim(gomock.Any(), "audit", 0, 2).Return(batch, nil),
+			store.EXPECT().Claim(gomock.Any(), textAudit, 0, 2).Return(batch, nil),
 		)
 		expectSent(store, sink, batch)
 	}
 
 	gomock.InOrder(claims...)
-	store.EXPECT().Stats(gomock.Any(), "audit").Return(types.OutboxStats{}, nil)
-	passes.EXPECT().Observe(4.0, "audit")
+	store.EXPECT().Stats(gomock.Any(), textAudit).Return(types.OutboxStats{}, nil)
+	passes.EXPECT().Observe(observeArg4p0, textAudit)
 
 	relay := outbox.NewRelay(drainConfig(time.Minute), relayTx(t), store, sink, nil,
 		metrics, nil, fixedClock())
@@ -156,10 +156,10 @@ func TestRelay_DrainStopsWhenTheBudgetElapses(t *testing.T) {
 	now := relayNow()
 	clock := func() time.Time { return now }
 
-	for range 2 {
-		batch := outboxRecords(2, 1)
+	for range iterations2 {
+		batch := outboxRecords(outboxRecordsArg2, 1)
 
-		store.EXPECT().Claim(gomock.Any(), "audit", 0, 2).DoAndReturn(
+		store.EXPECT().Claim(gomock.Any(), textAudit, 0, 2).DoAndReturn(
 			func(context.Context, string, int, int) ([]types.OutboxRecord, error) {
 				now = now.Add(40 * time.Second)
 
@@ -187,8 +187,8 @@ func TestRelay_ZeroBudgetClaimsOnce(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockOutboxStore(ctrl)
 	sink := mocks.NewMockOutboxSink(ctrl)
-	batch := outboxRecords(2, 1)
-	store.EXPECT().Claim(gomock.Any(), "audit", 0, 2).Return(batch, nil).Times(1)
+	batch := outboxRecords(outboxRecordsArg2, 1)
+	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 2).Return(batch, nil).Times(1)
 	expectSent(store, sink, batch)
 
 	relay := outbox.NewRelay(drainConfig(0), relayTx(t), store, sink, nil, nil, nil,
@@ -212,9 +212,9 @@ func TestRelay_DrainStopsOnTheFirstError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockOutboxStore(ctrl)
 	sink := mocks.NewMockOutboxSink(ctrl)
-	batch := outboxRecords(2, 1)
-	store.EXPECT().Claim(gomock.Any(), "audit", 0, 2).Return(batch, nil).Times(1)
-	sink.EXPECT().Send(gomock.Any(), batch).Return(make([]error, 2))
+	batch := outboxRecords(outboxRecordsArg2, 1)
+	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 2).Return(batch, nil).Times(1)
+	sink.EXPECT().Send(gomock.Any(), batch).Return(make([]error, size2))
 	store.EXPECT().MarkSent(gomock.Any(), batch[0].ID).Return(nil)
 	store.EXPECT().MarkSent(gomock.Any(), batch[1].ID).
 		Return(apperr.New(apperr.CodeUnavailable, "db down"))
@@ -246,8 +246,8 @@ func TestRelay_DrainStopsWhenTheContextEnds(t *testing.T) {
 
 	defer cancel()
 
-	batch := outboxRecords(2, 1)
-	store.EXPECT().Claim(gomock.Any(), "audit", 0, 2).Return(batch, nil).Times(1)
+	batch := outboxRecords(outboxRecordsArg2, 1)
+	store.EXPECT().Claim(gomock.Any(), textAudit, 0, 2).Return(batch, nil).Times(1)
 	sink.EXPECT().Send(gomock.Any(), batch).DoAndReturn(
 		func(context.Context, []types.OutboxRecord) []error {
 			cancel()
@@ -255,7 +255,7 @@ func TestRelay_DrainStopsWhenTheContextEnds(t *testing.T) {
 			return make([]error, 2)
 		})
 	store.EXPECT().MarkSent(gomock.Any(), gomock.AssignableToTypeOf(uuid.UUID{})).
-		Return(nil).Times(2)
+		Return(nil).Times(timesArg2)
 
 	relay := outbox.NewRelay(drainConfig(time.Minute), relayTx(t), store, sink, nil,
 		nil, nil, fixedClock())

@@ -283,29 +283,29 @@ func (r *Relay) RunOnce(ctx context.Context) error {
 
 // registerMetrics registers the relay's outcome counters and backlog gauges, by lane.
 func (r *Relay) registerMetrics(metrics interfaces.Metrics) {
-	r.sent = metrics.Counter("outbox_sent_total", "Outbox records delivered.", "lane")
+	r.sent = metrics.Counter("outbox_sent_total", "Outbox records delivered.", textLane)
 	r.retried = metrics.Counter(
 		"outbox_retried_total",
 		"Outbox deliveries rescheduled after a failure.",
-		"lane",
+		textLane,
 	)
 	r.parked = metrics.Counter(
 		"outbox_parked_total",
 		"Outbox records parked after exhausting their attempts.",
-		"lane",
+		textLane,
 	)
-	r.depth = metrics.Gauge("outbox_depth", "Outbox records pending delivery.", "lane")
+	r.depth = metrics.Gauge("outbox_depth", "Outbox records pending delivery.", textLane)
 	r.lag = metrics.Gauge(
 		"outbox_lag_seconds",
 		"Age of the oldest pending outbox record, in seconds.",
-		"lane",
+		textLane,
 	)
 	r.passes = metrics.Histogram(
 		"outbox_relay_passes",
 		"Claims one relay run made before its lane drained or its drain budget ran out.",
 		// One claim (no backlog, or no drain budget) up to a long drain.
 		[]float64{1, 2, 4, 8, 16, 32, 64, 128},
-		"lane",
+		textLane,
 	)
 }
 
@@ -513,11 +513,11 @@ func (r *Relay) record(
 func (r *Relay) backoff(attempts int) time.Duration {
 	d := r.cfg.BaseBackoff
 	for range attempts {
-		if d >= r.cfg.MaxBackoff/2 {
+		if d >= r.cfg.MaxBackoff/maxBackoff2 {
 			return r.cfg.MaxBackoff
 		}
 
-		d *= 2
+		d *= backoffFactor
 	}
 
 	return min(d, r.cfg.MaxBackoff)
@@ -534,13 +534,13 @@ func (r *Relay) refreshGauges(ctx context.Context) {
 	if err != nil {
 		if r.logger != nil {
 			r.logger.WithContext(ctx).
-				Warn("outbox relay: stats failed", "lane", r.cfg.Lane, "error", err.Error())
+				Warn("outbox relay: stats failed", textLane, r.cfg.Lane, "error", err.Error())
 		}
 
 		return
 	}
 
-	lag := 0.0
+	lag := lag0p0
 	if !stats.OldestPending.IsZero() {
 		lag = max(r.now().Sub(stats.OldestPending).Seconds(), 0)
 	}

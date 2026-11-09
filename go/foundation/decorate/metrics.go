@@ -10,7 +10,19 @@ import (
 // defaultBuckets returns the histogram bucket boundaries (seconds) for operation
 // latency.
 func defaultBuckets() []float64 {
-	return []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}
+	return []float64{
+		defaultBucketsResultp005,
+		defaultBucketsResultp01,
+		defaultBucketsResultp025,
+		defaultBucketsResultp05,
+		defaultBucketsResultp1,
+		defaultBucketsResultp25,
+		defaultBucketsResultp5,
+		1,
+		defaultBucketsResult2p5,
+		defaultBucketsResult5,
+		defaultBucketsResult10,
+	}
 }
 
 // metricsMW records the RED series of a tier: <tier>_operations_total,
@@ -36,14 +48,14 @@ func NewMetrics(m interfaces.Metrics, tier, name string) OpMiddleware {
 	return metricsMW{
 		name: name,
 		ops: m.Counter(
-			tier+"_operations_total", "Total "+tier+" operations", tier, "operation",
+			tier+"_operations_total", "Total "+tier+" operations", tier, textOperation,
 		),
 		errs: m.Counter(
-			tier+"_errors_total", "Total "+tier+" operation errors", tier, "operation",
+			tier+"_errors_total", "Total "+tier+" operation errors", tier, textOperation,
 		),
 		dur: m.Histogram(
 			tier+"_operation_duration_seconds", tier+" operation duration",
-			defaultBuckets(), tier, "operation",
+			defaultBuckets(), tier, textOperation,
 		),
 	}
 }

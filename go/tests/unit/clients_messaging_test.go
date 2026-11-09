@@ -64,16 +64,20 @@ func TestMessaging_FactoryBuildsEachKind(t *testing.T) {
 
 	sub, err := messaging.NewConsumerFromConfig(ctx, messaging.Config{}, deps)
 	require.NoError(t, err)
-	require.NoError(t, pub.Publish(ctx, "t", []byte("hello")))
+	require.NoError(t, pub.Publish(ctx, textT, []byte("hello")))
 
 	got := make(chan []byte, 1)
 
 	go func() {
-		_ = sub.Subscribe(ctx, "t", func(_ context.Context, m *interfaces.Message) error {
-			got <- m.Payload
+		_ = sub.Subscribe(
+			ctx,
+			textT,
+			func(_ context.Context, m *interfaces.Message) error {
+				got <- m.Payload
 
-			return nil
-		})
+				return nil
+			},
+		)
 	}()
 
 	select {
@@ -84,10 +88,10 @@ func TestMessaging_FactoryBuildsEachKind(t *testing.T) {
 	}
 
 	sqsCfg := messaging.Config{Kind: messaging.KindSQS, SQS: infra.SQSConfig{
-		Region:          "us-east-1",
+		Region:          textUsEast1,
 		Endpoint:        "http://localhost:9324",
-		AccessKeyID:     "local",
-		SecretAccessKey: "local",
+		AccessKeyID:     textLocal,
+		SecretAccessKey: textLocal,
 	}}
 	sqsPub, err := messaging.NewFromConfig(ctx, sqsCfg, messaging.Deps{})
 	require.NoError(t, err)

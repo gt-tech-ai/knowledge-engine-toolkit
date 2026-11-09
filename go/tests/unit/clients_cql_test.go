@@ -47,16 +47,16 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 	assert.Equal(t, "LOCAL_QUORUM", cfg.Consistency)
 	assert.Equal(t, 5*time.Second, cfg.Timeout)
 	assert.Equal(t, 5*time.Second, cfg.ConnectTimeout)
-	assert.Equal(t, 500, cfg.PageSize)
-	assert.Equal(t, 2, cfg.NumConns)
-	assert.Equal(t, 9042, cfg.Cassandra.Port)
-	assert.Equal(t, 9142, cfg.Keyspaces.Port)
+	assert.Equal(t, wantPageSize500, cfg.PageSize)
+	assert.Equal(t, wantNumConns2, cfg.NumConns)
+	assert.Equal(t, wantPort9042, cfg.Cassandra.Port)
+	assert.Equal(t, wantPort9142, cfg.Keyspaces.Port)
 
 	cluster, err := cassandrabackend.Cluster(&cassandrabackend.Config{
 		Hosts:          []string{"c1", "c2"},
 		Port:           9042,
 		LocalDC:        "dc1",
-		Keyspace:       "analytics",
+		Keyspace:       textAnalytics,
 		Consistency:    cfg.Consistency,
 		Timeout:        cfg.Timeout,
 		ConnectTimeout: cfg.ConnectTimeout,
@@ -66,8 +66,8 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"c1", "c2"}, cluster.Hosts)
 	assert.Equal(t, gocql.LocalQuorum, cluster.Consistency)
-	assert.Equal(t, "analytics", cluster.Keyspace)
-	assert.Equal(t, 500, cluster.PageSize)
+	assert.Equal(t, textAnalytics, cluster.Keyspace)
+	assert.Equal(t, wantPageSize500, cluster.PageSize)
 	assert.NotNil(t, cluster.PoolConfig.HostSelectionPolicy)
 	// gocql exports neither policy type, so its dynamic type name is the observable.
 	assert.Equal(t, "*gocql.tokenAwareHostPolicy",
@@ -103,9 +103,9 @@ func testDefaultConfigIsLocalQuorumRest(
 	assert.Equal(t, 2*time.Second, proxied.ReconnectInterval)
 	require.NotNil(t, proxied.AddressTranslator)
 
-	ip, port := proxied.AddressTranslator.Translate(net.ParseIP("172.17.0.4"), 9042)
+	ip, port := proxied.AddressTranslator.Translate(net.ParseIP("172.17.0.4"), port9042)
 	assert.Equal(t, "127.0.0.1", ip.String())
-	assert.Equal(t, 19042, port)
+	assert.Equal(t, wantPort19042, port)
 	assert.Equal(t, "*gocql.dcAwareRR",
 		fmt.Sprintf("%T", proxied.PoolConfig.HostSelectionPolicy),
 		"a pinned cluster routes DC-aware round robin, not token-aware")
@@ -141,9 +141,9 @@ func TestKeyspacesConfig_UsesTLSAndSigV4(t *testing.T) {
 
 	provider := credentials.NewStaticCredentialsProvider("AKID", "SECRET", "TOKEN")
 	cluster, err := keyspaces.Cluster(&keyspaces.Config{
-		Region:         "us-east-1",
+		Region:         textUsEast1,
 		Port:           9142,
-		Keyspace:       "analytics",
+		Keyspace:       textAnalytics,
 		Consistency:    "LOCAL_QUORUM",
 		Timeout:        5 * time.Second,
 		ConnectTimeout: 5 * time.Second,
@@ -154,7 +154,7 @@ func TestKeyspacesConfig_UsesTLSAndSigV4(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"cassandra.us-east-1.amazonaws.com"}, cluster.Hosts)
-	assert.Equal(t, 9142, cluster.Port)
+	assert.Equal(t, wantPort9142, cluster.Port)
 	require.NotNil(t, cluster.SslOpts)
 	assert.True(t, cluster.SslOpts.EnableHostVerification)
 	assert.Equal(
@@ -168,7 +168,7 @@ func TestKeyspacesConfig_UsesTLSAndSigV4(t *testing.T) {
 
 	auth, ok := cluster.Authenticator.(sigv4.AwsAuthenticator)
 	require.True(t, ok)
-	assert.Equal(t, "us-east-1", auth.Region)
+	assert.Equal(t, textUsEast1, auth.Region)
 
 	creds, err := auth.CredentialsCallback()
 	require.NoError(t, err)
@@ -204,7 +204,7 @@ func TestKeyspacesConfig_UsesTLSAndSigV4(t *testing.T) {
 func TestClusterConfig_ZeroValuesKeepDriverDefaults(t *testing.T) {
 	t.Parallel()
 
-	want := gocql.NewCluster("x")
+	want := gocql.NewCluster(textX)
 
 	plain, err := cassandrabackend.Cluster(
 		&cassandrabackend.Config{Hosts: []string{"c1"}, Consistency: "ONE"},
@@ -214,12 +214,12 @@ func TestClusterConfig_ZeroValuesKeepDriverDefaults(t *testing.T) {
 	assert.Equal(t, want.ConnectTimeout, plain.ConnectTimeout)
 
 	ks, err := keyspaces.Cluster(
-		&keyspaces.Config{Region: "us-east-1", Consistency: "LOCAL_QUORUM"},
+		&keyspaces.Config{Region: textUsEast1, Consistency: "LOCAL_QUORUM"},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, want.Timeout, ks.Timeout)
 	assert.Equal(t, want.ConnectTimeout, ks.ConnectTimeout)
-	assert.Equal(t, 9142, ks.Port)
+	assert.Equal(t, wantPort9142, ks.Port)
 
 	_, ok := ks.Authenticator.(sigv4.AwsAuthenticator)
 	assert.True(t, ok)

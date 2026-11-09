@@ -58,19 +58,19 @@ func TestLocalLock_Release_TokenFenced(t *testing.T) {
 	l := local.New()
 	ctx := context.Background()
 
-	tok, ok, err := l.Acquire(ctx, "k")
+	tok, ok, err := l.Acquire(ctx, textK)
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	require.NoError(t, l.Release(ctx, "k", "not-the-token"))
+	require.NoError(t, l.Release(ctx, textK, "not-the-token"))
 
-	_, ok2, err := l.Acquire(ctx, "k")
+	_, ok2, err := l.Acquire(ctx, textK)
 	require.NoError(t, err)
 	assert.False(t, ok2, "foreign-token Release must not free the lock")
 
-	require.NoError(t, l.Release(ctx, "k", tok))
+	require.NoError(t, l.Release(ctx, textK, tok))
 
-	_, ok3, err := l.Acquire(ctx, "k")
+	_, ok3, err := l.Acquire(ctx, textK)
 	require.NoError(t, err)
 	assert.True(t, ok3, "holder-token Release frees the lock")
 }
@@ -92,25 +92,25 @@ func TestLocalLock_Renew(t *testing.T) {
 	l := local.New()
 	ctx := context.Background()
 
-	tok, ok, err := l.Acquire(ctx, "k")
+	tok, ok, err := l.Acquire(ctx, textK)
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	held, err := l.Renew(ctx, "k", tok)
+	held, err := l.Renew(ctx, textK, tok)
 	require.NoError(t, err)
 	assert.True(t, held, "current holder's token should keep the lease")
 
-	held, err = l.Renew(ctx, "k", "foreign")
+	held, err = l.Renew(ctx, textK, "foreign")
 	require.NoError(t, err)
 	assert.False(t, held, "foreign token must not renew")
 
-	require.NoError(t, l.Release(ctx, "k", tok))
+	require.NoError(t, l.Release(ctx, textK, tok))
 
-	held, err = l.Renew(ctx, "k", tok)
+	held, err = l.Renew(ctx, textK, tok)
 	require.NoError(t, err)
 	assert.False(t, held, "a released key cannot be renewed")
 
-	held, err = l.Renew(ctx, "never-acquired", "x")
+	held, err = l.Renew(ctx, "never-acquired", textX)
 	require.NoError(t, err)
 	assert.False(t, held, "an unknown key cannot be renewed")
 }

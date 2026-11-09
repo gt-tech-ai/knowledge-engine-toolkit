@@ -35,10 +35,10 @@ func TestExecutionOps_MapInputDefaults(t *testing.T) {
 
 	b := ops.MapInput([]types.FlagSpec{
 		{Name: "dry-run", Type: types.FlagBool},
-		{Name: "profile", Type: types.FlagString, Default: "base"},
-		{Name: "seed", Type: types.FlagInt},
-		{Name: "only", Type: types.FlagStrings},
-		{Name: "wait", Type: types.FlagDuration},
+		{Name: textProfile, Type: types.FlagString, Default: textBase},
+		{Name: textSeed, Type: types.FlagInt},
+		{Name: textOnly, Type: types.FlagStrings},
+		{Name: textWait, Type: types.FlagDuration},
 	}, types.ArgSpec{Names: []string{"customer"}, Rest: "cmd"}, func(
 		_ context.Context, in map[string]any, _ struct{}, _ interfaces.ExecutionObserver,
 	) error {
@@ -46,22 +46,22 @@ func TestExecutionOps_MapInputDefaults(t *testing.T) {
 
 		return nil
 	})
-	op := b(types.OperationDescriptor{Name: "x"}, struct{}{})
-	require.NoError(t, op.Run(t.Context(), &map[string]any{"seed": 7}, nil))
+	op := b(types.OperationDescriptor{Name: textX}, struct{}{})
+	require.NoError(t, op.Run(t.Context(), &map[string]any{textSeed: 7}, nil))
 	assert.Equal(t, map[string]any{
-		"dry_run": false, "profile": "base", "seed": 7, "only": []string{},
-		"wait": time.Duration(0), "customer": "", "cmd": []string{},
+		"dry_run": false, textProfile: textBase, textSeed: 7, textOnly: []string{},
+		textWait: time.Duration(0), "customer": "", "cmd": []string{},
 	}, got)
 	assert.Contains(t, string(op.InputSchema()), `"dry_run"`)
 
 	require.NoError(t, op.Run(t.Context(), &map[string]any{
-		"seed": 7.0, "wait": 1.5e9, "only": []any{"a", "b"}, "profile": "x",
+		textSeed: 7.0, textWait: 1.5e9, textOnly: []any{textA, textB}, textProfile: textX,
 	}, nil))
-	assert.Equal(t, 7, got["seed"])
-	assert.Equal(t, 1500*time.Millisecond, got["wait"])
-	assert.Equal(t, "1.5s", fmt.Sprint(got["wait"]))
-	assert.Equal(t, []string{"a", "b"}, got["only"])
-	assert.Equal(t, "x", got["profile"])
+	assert.Equal(t, wantGot7, got[textSeed])
+	assert.Equal(t, 1500*time.Millisecond, got[textWait])
+	assert.Equal(t, "1.5s", fmt.Sprint(got[textWait]))
+	assert.Equal(t, []string{textA, textB}, got[textOnly])
+	assert.Equal(t, textX, got[textProfile])
 }
 
 // TestExecutionOps_MapInputSecretFlag tests how a map operation's secret flag reaches
@@ -84,9 +84,9 @@ func TestExecutionOps_MapInputSecretFlag(t *testing.T) {
 	t.Parallel()
 
 	op := ops.MapInput([]types.FlagSpec{
-		{Name: "client-id", Type: types.FlagString},
-		{Name: "client-secret", Type: types.FlagString, Secret: true},
-	}, types.ArgSpec{Names: []string{"env"}}, func(
+		{Name: textClientID, Type: types.FlagString},
+		{Name: textClientSecret3, Type: types.FlagString, Secret: true},
+	}, types.ArgSpec{Names: []string{textEnv}}, func(
 		context.Context, map[string]any, struct{}, interfaces.ExecutionObserver,
 	) error {
 		return nil
@@ -94,23 +94,23 @@ func TestExecutionOps_MapInputSecretFlag(t *testing.T) {
 
 	schema := string(op.InputSchema())
 	assert.Contains(t, schema, `"client_id"`)
-	assert.NotContains(t, schema, "client_secret")
+	assert.NotContains(t, schema, textClientSecret)
 
 	_, err := ops.Decode(op, []byte(`{"client_id":"a","env":"e"}`))
 	require.NoError(t, err)
 
-	for _, raw := range []string{`{"client_secret":"s"}`, `{"bogus":1}`} {
+	for _, raw := range []string{textClientSecretS, `{"bogus":1}`} {
 		_, err = ops.Decode(op, []byte(raw))
 		require.Error(t, err, raw)
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), err.Error())
 	}
 
-	_, err = ops.Decode(op, []byte(`{"client_secret":"s"}`))
-	assert.Contains(t, err.Error(), "client_secret")
+	_, err = ops.Decode(op, []byte(textClientSecretS))
+	assert.Contains(t, err.Error(), textClientSecret)
 
-	in, err := ops.DecodeLocal(op, []byte(`{"client_secret":"s"}`))
+	in, err := ops.DecodeLocal(op, []byte(textClientSecretS))
 	require.NoError(t, err)
-	assert.Equal(t, &map[string]any{"client_secret": "s"}, in)
+	assert.Equal(t, &map[string]any{textClientSecret: textS}, in)
 
 	_, err = ops.DecodeLocal(op, []byte(`{"bogus":1}`))
 	require.Error(t, err)

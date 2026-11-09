@@ -32,7 +32,7 @@ func minioS3Client(endpoint string) connectors3.ClientBuilder {
 		region string,
 	) (interfaces.StorageClient, error) {
 		client, err := storages3.NewAWSClientWithCredentials(ctx, infra.S3Config{
-			Kind:           "minio",
+			Kind:           textMinio,
 			Endpoint:       endpoint,
 			ForcePathStyle: true,
 			Region:         region,
@@ -77,11 +77,11 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 		"",
 	)
 	admin, err := storages3.NewAWSClientWithCredentials(ctx, infra.S3Config{
-		Kind:           "minio",
+		Kind:           textMinio,
 		Endpoint:       m.Endpoint(),
 		ForcePathStyle: true,
-		Region:         "us-east-1",
-	}, adminCreds, "us-east-1")
+		Region:         textUsEast1,
+	}, adminCreds, textUsEast1)
 	require.NoError(t, err)
 
 	_, err = admin.CreateBucket(ctx, &awss3.CreateBucketInput{Bucket: aws.String(bucket)})
@@ -105,7 +105,7 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 		Kind:            interfaces.ConnectorKindS3,
 		Bucket:          bucket,
 		Prefix:          "docs/",
-		Region:          "us-east-1",
+		Region:          textUsEast1,
 		AuthMethod:      "access_key",
 		AccessKeyID:     miniofix.RootUser,
 		SecretAccessKey: miniofix.RootPassword,
@@ -131,7 +131,7 @@ func testConnectorS3SourceTestConnectionRealMinIORest(
 
 	n, err := src.TestConnection(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 2, n, "only the two docs/ objects are under the prefix")
+	assert.Equal(t, equalArg2, n, "only the two docs/ objects are under the prefix")
 
 	// A nonexistent bucket is a client-fault error → CodeInvalidInput (not a transport
 	// error).

@@ -100,7 +100,7 @@ func (c *TelemetryClient) Ping(ctx context.Context) error {
 func TraceIDFromHeader(traceresponse string) string {
 	parts := strings.Split(traceresponse, "-")
 
-	if len(parts) < 2 || len(parts[1]) != 32 {
+	if len(parts) < partsLen2 || len(parts[1]) != partsLen32 {
 		return ""
 	}
 
@@ -269,7 +269,7 @@ func (c *TelemetryClient) MetricValue(
 		return 0, apperr.Wrap(err, apperr.CodeInternal, "parse prometheus sample")
 	}
 
-	value, err := strconv.ParseFloat(sample, 64)
+	value, err := strconv.ParseFloat(sample, bitSize64)
 	if err != nil {
 		return 0, apperr.Wrap(err, apperr.CodeInternal, "parse prometheus value")
 	}
@@ -326,7 +326,7 @@ func (c *TelemetryClient) pingOne(ctx context.Context, u string) error {
 	}
 
 	_ = resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode < statusCode200 || resp.StatusCode >= statusCode300 {
 		return apperr.New(apperr.CodeUnavailable, "obs backend not ready: "+u)
 	}
 
@@ -370,7 +370,7 @@ func (c *TelemetryClient) getJSON(ctx context.Context, endpoint string, out any)
 		return nil
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode < statusCode200 || resp.StatusCode >= statusCode300 {
 		return apperr.New(apperr.CodeInternal, "telemetry query failed: "+resp.Status)
 	}
 

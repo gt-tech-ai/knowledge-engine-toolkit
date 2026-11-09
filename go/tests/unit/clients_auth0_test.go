@@ -77,8 +77,8 @@ func (a *auth0Tenant) serveToken(w http.ResponseWriter, r *http.Request) {
 
 // validAuth0TokenForm checks the parsed credentials and the audience.
 func validAuth0TokenForm(r *http.Request) bool {
-	return r.PostForm.Get("client_id") == "id" &&
-		r.PostForm.Get("client_secret") == "secret" &&
+	return r.PostForm.Get("client_id") == textID &&
+		r.PostForm.Get(textClientSecret) == textSecret &&
 		r.PostForm.Get("grant_type") == "client_credentials" &&
 		r.PostForm.Get("audience") == "https://"+r.Host+"/api/v2/"
 }
@@ -104,8 +104,8 @@ func serveAuth0Orgs(orgs []string) http.HandlerFunc {
 		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 		out := []map[string]string{}
 
-		for i := page * 2; i < len(orgs) && i < page*2+2; i++ {
-			out = append(out, map[string]string{"id": orgs[i]})
+		for i := page * page2; i < len(orgs) && i < page*page2+value2; i++ {
+			out = append(out, map[string]string{textID: orgs[i]})
 		}
 
 		_ = json.NewEncoder(w).Encode(out)
@@ -118,7 +118,7 @@ func serveAuth0OrgByName(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.PathValue("name") != "acme" {
+	if r.PathValue(textName) != textAcme {
 		w.WriteHeader(http.StatusNotFound)
 
 		return
@@ -167,11 +167,11 @@ func (a *auth0Tenant) client(
 func auth0Cert(t *testing.T) (x5c string, key *rsa.PrivateKey) {
 	t.Helper()
 
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	key, err := rsa.GenerateKey(rand.Reader, bits2048)
 	require.NoError(t, err)
 
 	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "tenant"},
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: textTenant},
 		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
@@ -200,14 +200,14 @@ func TestClientsAuth0_Management(t *testing.T) {
 
 	x5c, key := auth0Cert(t)
 	tenant := newAuth0Tenant(t, []string{"org_a", "org_b", "org_c"}, x5c)
-	c := tenant.client(t, "id", "secret")
+	c := tenant.client(t, textID, textSecret)
 	ctx := t.Context()
 
 	ids, err := c.OrganizationIDs(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"org_a", "org_b", "org_c"}, ids)
 
-	id, err := c.OrganizationID(ctx, "acme")
+	id, err := c.OrganizationID(ctx, textAcme)
 	require.NoError(t, err)
 	assert.Equal(t, "org_acme", id)
 
@@ -222,13 +222,13 @@ func TestClientsAuth0_Management(t *testing.T) {
 	der, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
 	require.NoError(t, err)
 	assert.Contains(t, sk.PublicKeyPEM, "-----BEGIN PUBLIC KEY-----")
-	assert.Contains(t, strings.ReplaceAll(sk.PublicKeyPEM, "\n", ""),
+	assert.Contains(t, strings.ReplaceAll(sk.PublicKeyPEM, textNewline, ""),
 		base64.StdEncoding.EncodeToString(der)[:40])
 
 	_, err = tenant.client(t, "", "").OrganizationIDs(ctx)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = tenant.client(t, "id", "wrong").OrganizationIDs(ctx)
+	_, err = tenant.client(t, textID, "wrong").OrganizationIDs(ctx)
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
 }
 
@@ -263,7 +263,7 @@ func TestClientsAuth0_Kinds(t *testing.T) {
 		auth0.Deps{Decorations: fixtures.Decorations()})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = auth0.NewFromConfig(ctx, auth0.Config{Kind: "nope"},
+	_, err = auth0.NewFromConfig(ctx, auth0.Config{Kind: textNope},
 		auth0.Deps{Decorations: fixtures.Decorations()})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

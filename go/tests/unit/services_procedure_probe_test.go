@@ -53,7 +53,7 @@ func TestServicesProcedure_ProbeKinds(t *testing.T) {
 			case "/auth":
 				return response(http.StatusUnauthorized, ""), nil
 			case "/body":
-				return response(http.StatusOK, "nope"), nil
+				return response(http.StatusOK, textNope), nil
 			default:
 				return response(http.StatusServiceUnavailable, ""), nil
 			}
@@ -61,7 +61,7 @@ func TestServicesProcedure_ProbeKinds(t *testing.T) {
 		AnyTimes()
 
 	dialer := mocks.NewMockDialer(ctrl)
-	dialer.EXPECT().DialContext(gomock.Any(), "tcp", gomock.Any()).
+	dialer.EXPECT().DialContext(gomock.Any(), textTCP, gomock.Any()).
 		DoAndReturn(func(_ context.Context, _, addr string) (net.Conn, error) {
 			if addr == "db:5432" {
 				client, server := net.Pipe()
@@ -79,9 +79,9 @@ func TestServicesProcedure_ProbeKinds(t *testing.T) {
 		Status: "{item.status}", Contains: "{item.contains}", Hint: "{item.hint}",
 	}
 	procs := []types.Procedure{{
-		Name: "smoke", Inputs: []string{"checks"},
+		Name: "smoke", Inputs: []string{textChecks},
 		Steps: []types.ProcStep{{
-			Name: "{item.name}", Each: "checks", Concurrent: true, Probe: probe,
+			Name: "{item.name}", Each: textChecks, Concurrent: true, Probe: probe,
 		}},
 	}}
 	rec := &recorder{out: map[string]string{
@@ -99,25 +99,25 @@ func testServicesProcedureProbeKindsRest(t *testing.T, eng interfaces.ProcedureR
 
 	check := func(name string, kv ...any) map[string]any {
 		m := map[string]any{
-			"name": name, "http": "", "tcp": "", "exec": []any{},
-			"status": "", "contains": "", "hint": "",
+			textName: name, "http": "", textTCP: "", "exec": []any{},
+			textStatus: "", "contains": "", "hint": "",
 		}
-		for i := 0; i+1 < len(kv); i += 2 {
+		for i := 0; i+1 < len(kv); i += value2 {
 			m[asType[string](t, kv[i])] = kv[i+1]
 		}
 
 		return m
 	}
 
-	res, err := eng.Run(t.Context(), "smoke", procedure.Vars{"checks": []any{
-		check("api", "http", "http://api/ok", "contains", "ok"),
-		check("kong", "http", "http://kong/auth", "status", "401"),
-		check("down", "http", "http://down/x"),
-		check("body", "http", "http://body/body", "contains", "ok"),
-		check("db", "tcp", "db:5432"),
-		check("redis", "tcp", "redis:6379", "hint", "is redis up?"),
-		check("seed", "exec", []any{"psql", "-c", "select"}, "contains", "3 rows"),
-		check("empty", "exec", []any{"psql", "-c", "empty"}, "contains", "3 rows"),
+	res, err := eng.Run(t.Context(), "smoke", procedure.Vars{textChecks: []any{
+		check(textAPI, "http", "http://api/ok", "contains", textOk),
+		check("kong", "http", "http://kong/auth", textStatus, text401),
+		check(textDown, "http", "http://down/x"),
+		check(textBody, "http", "http://body/body", "contains", textOk),
+		check(textDB, textTCP, "db:5432"),
+		check(textRedis, textTCP, "redis:6379", "hint", "is redis up?"),
+		check(textSeed, "exec", []any{textPsql, "-c", "select"}, "contains", "3 rows"),
+		check(textEmpty, "exec", []any{textPsql, "-c", textEmpty}, "contains", "3 rows"),
 	}}, types.RunOptions{})
 
 	require.NoError(t, err)
@@ -129,16 +129,25 @@ func testServicesProcedureProbeKindsRest(t *testing.T, eng interfaces.ProcedureR
 
 	assert.Equal(
 		t,
-		[]string{"api", "kong", "down", "body", "db", "redis", "seed", "empty"},
+		[]string{
+			textAPI,
+			"kong",
+			textDown,
+			textBody,
+			textDB,
+			textRedis,
+			textSeed,
+			textEmpty,
+		},
 		names,
 	)
 
 	st := statuses(res)
-	for _, pass := range []string{"api", "kong", "db", "seed"} {
+	for _, pass := range []string{textAPI, "kong", textDB, textSeed} {
 		assert.Equal(t, types.StatusPass, st[pass], pass)
 	}
 
-	for _, fail := range []string{"down", "body", "redis", "empty"} {
+	for _, fail := range []string{textDown, textBody, textRedis, textEmpty} {
 		assert.Equal(t, types.StatusFail, st[fail], fail)
 	}
 
@@ -169,7 +178,7 @@ func TestServicesProcedure_ProbeRetriesUntilTimeout(t *testing.T) {
 	doer.EXPECT().
 		Do(gomock.Any()).
 		DoAndReturn(func(r *http.Request) (*http.Response, error) {
-			if r.URL.Host == "late" && attempts.Add(1) >= 3 {
+			if r.URL.Host == textLate && attempts.Add(1) >= 3 {
 				return response(http.StatusOK, ""), nil
 			}
 
@@ -182,36 +191,36 @@ func TestServicesProcedure_ProbeRetriesUntilTimeout(t *testing.T) {
 	}
 	procs := []types.Procedure{
 		{
-			Name:  "late",
-			Steps: []types.ProcStep{{Name: "late", Probe: retry("http://late/")}},
+			Name:  textLate,
+			Steps: []types.ProcStep{{Name: textLate, Probe: retry("http://late/")}},
 		},
-		{Name: "dead", Steps: []types.ProcStep{{Name: "dead", Probe: &types.ProcProbe{
+		{Name: textDead, Steps: []types.ProcStep{{Name: textDead, Probe: &types.ProcProbe{
 			HTTP: "http://dead/", Timeout: "30ms", Delay: "1ms", MaxDelay: "2ms",
 		}}}},
-		{Name: "none", Inputs: []string{"url"}, Steps: []types.ProcStep{{
-			Name: "none", Probe: &types.ProcProbe{HTTP: "{url}"},
+		{Name: textNone, Inputs: []string{textURL}, Steps: []types.ProcStep{{
+			Name: textNone, Probe: &types.ProcProbe{HTTP: "{url}"},
 		}}},
-		{Name: "two", Steps: []types.ProcStep{{
-			Name: "two", Probe: &types.ProcProbe{HTTP: "http://a/", TCP: "a:1"},
+		{Name: textTwo, Steps: []types.ProcStep{{
+			Name: textTwo, Probe: &types.ProcProbe{HTTP: "http://a/", TCP: "a:1"},
 		}}},
 	}
 	eng := procEngine(t, &recorder{}, procs, procedure.Deps{HTTP: doer})
 
-	res, err := eng.Run(t.Context(), "late", nil, types.RunOptions{})
+	res, err := eng.Run(t.Context(), textLate, nil, types.RunOptions{})
 	require.NoError(t, err)
-	assert.Equal(t, types.StatusPass, statuses(res)["late"])
-	assert.Equal(t, int32(3), attempts.Load())
+	assert.Equal(t, types.StatusPass, statuses(res)[textLate])
+	assert.Equal(t, int32(int32Arg3), attempts.Load())
 
-	res, err = eng.Run(t.Context(), "dead", nil, types.RunOptions{})
+	res, err = eng.Run(t.Context(), textDead, nil, types.RunOptions{})
 	require.NoError(t, err)
-	assert.Equal(t, types.StatusFail, statuses(res)["dead"])
+	assert.Equal(t, types.StatusFail, statuses(res)[textDead])
 	assert.Contains(t, res[0].Error, "status 502")
 
-	for _, name := range []string{"none", "two"} {
+	for _, name := range []string{textNone, textTwo} {
 		res, err = eng.Run(
 			t.Context(),
 			name,
-			procedure.Vars{"url": ""},
+			procedure.Vars{textURL: ""},
 			types.RunOptions{},
 		)
 		require.NoError(t, err)
@@ -233,11 +242,11 @@ func TestServicesProcedure_ProbeIsAStepKind(t *testing.T) {
 	t.Parallel()
 
 	for name, st := range map[string]types.ProcStep{
-		"probe and tool": {Name: "x", Tool: "echo", Probe: &types.ProcProbe{TCP: "a:1"}},
-		"empty probe":    {Name: "x", Probe: &types.ProcProbe{Contains: "ok"}},
+		"probe and tool": {Name: textX, Tool: textEcho, Probe: &types.ProcProbe{TCP: "a:1"}},
+		"empty probe":    {Name: textX, Probe: &types.ProcProbe{Contains: textOk}},
 	} {
 		_, err := procedure.NewFromConfig(procedure.Config{Procedures: []types.Procedure{
-			{Name: "p", Steps: []types.ProcStep{st}},
+			{Name: textP, Steps: []types.ProcStep{st}},
 		}}, procedure.Deps{})
 		require.Error(t, err, name)
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), name)

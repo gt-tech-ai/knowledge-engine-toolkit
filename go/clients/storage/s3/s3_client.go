@@ -656,7 +656,7 @@ func (c *s3Client) ListObjects(
 			return nil, apperr.Wrap(
 				err,
 				apperr.CodeInternal,
-				fmt.Sprintf("s3 list %s/%s", bucket, prefix),
+				fmt.Sprintf(textS3ListSS, bucket, prefix),
 			)
 		}
 
@@ -700,7 +700,7 @@ func (c *s3Client) ListObjectsPage(
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
-			fmt.Sprintf("s3 list %s/%s", bucket, prefix),
+			fmt.Sprintf(textS3ListSS, bucket, prefix),
 		)
 	}
 
@@ -747,7 +747,7 @@ func (c *s3Client) ListObjectsPageToken(
 		return nil, "", apperr.Wrap(
 			err,
 			apperr.CodeInternal,
-			fmt.Sprintf("s3 list %s/%s", bucket, prefix),
+			fmt.Sprintf(textS3ListSS, bucket, prefix),
 		)
 	}
 

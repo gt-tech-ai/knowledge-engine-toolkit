@@ -36,7 +36,7 @@ func TestGRPCServerFactory(t *testing.T) {
 	t.Parallel()
 
 	cfg := grpcserver.ServerConfig{
-		MaxMessageSize: 16 * 1024 * 1024, // 16MB
+		MaxMessageSize: maxMessageSize16 * maxMessageSize161024 * maxMessageSize1024, // 16MB
 	}
 
 	server := grpcserver.NewServer(cfg)
@@ -46,7 +46,7 @@ func TestGRPCServerFactory(t *testing.T) {
 	grpcserver.RegisterHealthService(server)
 
 	// Start the server
-	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	lis, err := (&net.ListenConfig{}).Listen(t.Context(), textTCP, text127001)
 	require.NoError(t, err, "failed to create listener")
 
 	go func() {
@@ -91,7 +91,7 @@ func TestGRPCClientFactory(t *testing.T) {
 	server := grpcserver.NewServer(cfg)
 	grpcserver.RegisterHealthService(server)
 
-	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	lis, err := (&net.ListenConfig{}).Listen(t.Context(), textTCP, text127001)
 	require.NoError(t, err, "failed to create listener")
 
 	go func() {
@@ -133,7 +133,7 @@ func TestRPCNewFromConfig_DecoratesEveryCall(t *testing.T) {
 	server := grpcserver.NewServer(grpcserver.DefaultServerConfig())
 	grpcserver.RegisterHealthService(server)
 
-	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	lis, err := (&net.ListenConfig{}).Listen(t.Context(), textTCP, text127001)
 	require.NoError(t, err)
 
 	go func() { _ = server.Serve(lis) }()

@@ -36,7 +36,7 @@ func TestBuilderNoDecorators(t *testing.T) {
 
 	r := system.NewBuilder(base).Build()
 
-	require.NoError(t, r.Run(context.Background(), "", "echo"))
+	require.NoError(t, r.Run(context.Background(), "", textEcho))
 }
 
 // TestBuilderWithLogging tests that the logging decorator emits one entry per
@@ -65,11 +65,11 @@ func TestBuilderWithLogging(t *testing.T) {
 
 	r := system.NewBuilder(base).WithLogging(logf).Build()
 
-	require.NoError(t, r.Run(context.Background(), "/tmp", "go", "build"))
+	require.NoError(t, r.Run(context.Background(), textTmp, textGo2, textBuild))
 
 	require.Len(t, logs, 1, "expected 1 log entry")
 	assert.Contains(t, logs[0], "[runner]", "log should contain [runner] prefix")
-	assert.Contains(t, logs[0], "go", "log should contain command name")
+	assert.Contains(t, logs[0], textGo2, "log should contain command name")
 }
 
 // TestBuilderWithLogging_RunBuffered tests that the logging decorator wraps the
@@ -98,7 +98,7 @@ func TestBuilderWithLogging_RunBuffered(t *testing.T) {
 	}
 
 	r := system.NewBuilder(base).WithLogging(logf).Build()
-	cr := r.RunBuffered(context.Background(), "/tmp", "go", "test")
+	cr := r.RunBuffered(context.Background(), textTmp, textGo2, textTest)
 
 	assert.Equal(t, 42*time.Millisecond, cr.Duration, "expected 42ms duration")
 	require.Len(t, logs, 1, "expected 1 log entry")
@@ -131,10 +131,10 @@ func TestBuilderWithLogging_RunWithEnv(t *testing.T) {
 	r := system.NewBuilder(base).WithLogging(logf).Build()
 	require.NoError(t, r.RunWithEnv(
 		context.Background(),
-		"/tmp",
-		[]string{"FOO=bar"},
-		"go",
-		"build",
+		textTmp,
+		[]string{textFooBar},
+		textGo2,
+		textBuild,
 	))
 
 	require.Len(t, logs, 1, "expected 1 log")
@@ -171,10 +171,10 @@ func TestBuilderWithDryRun(t *testing.T) {
 		WithDryRun(true).
 		Build()
 
-	require.NoError(t, r.Run(context.Background(), "/tmp", "rm", "-rf", "/"),
+	require.NoError(t, r.Run(context.Background(), textTmp, textRm, "-rf", textSlash),
 		"dry-run should not call base.Run")
 
-	assert.True(t, r.Exists("go"), "Exists should delegate to base even in dry-run")
+	assert.True(t, r.Exists(textGo2), "Exists should delegate to base even in dry-run")
 
 	found := false
 
@@ -205,7 +205,7 @@ func TestBuilderWithDryRun_RunBuffered(t *testing.T) {
 	base := mocks.NewMockCommandRunner(ctrl)
 
 	r := system.NewBuilder(base).WithDryRun(true).Build()
-	cr := r.RunBuffered(context.Background(), "/tmp", "go", "test")
+	cr := r.RunBuffered(context.Background(), textTmp, textGo2, textTest)
 
 	assert.NoError(t, cr.Err, "dry-run RunBuffered should return nil error")
 }
@@ -273,6 +273,6 @@ func TestFoundationBuilderComposition(t *testing.T) {
 		WithLogging(logf).
 		Build()
 
-	require.NoError(t, r.Run(context.Background(), "", "echo", "hello"))
+	require.NoError(t, r.Run(context.Background(), "", textEcho, "hello"))
 	require.Len(t, logs, 1, "expected 1 log")
 }

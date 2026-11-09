@@ -27,7 +27,7 @@ func TestProvideServerConfig(t *testing.T) {
 
 	// Arrange: Create temp config directory with server config
 	tmpDir := t.TempDir()
-	writeFile(t, filepath.Join(tmpDir, "base.yaml"), `
+	writeFile(t, filepath.Join(tmpDir, textBaseYaml), `
 server:
   http:
     host: "0.0.0.0"
@@ -44,15 +44,15 @@ server:
 
 	var serverCfg infra.ServerConfig
 
-	require.NoError(t, loader.UnmarshalKey("server.http", &serverCfg), "UnmarshalKey")
+	require.NoError(t, loader.UnmarshalKey("server.http", &serverCfg), textUnmarshalkey)
 
 	// Assert: Config loaded correctly
-	assert.Equal(t, "0.0.0.0", serverCfg.Host)
-	assert.Equal(t, 8090, serverCfg.Port)
+	assert.Equal(t, text0000, serverCfg.Host)
+	assert.Equal(t, wantPort8090, serverCfg.Port)
 	assert.Equal(t, "30s", serverCfg.ReadTimeout.String())
 
 	// Validate should pass
-	require.NoError(t, serverCfg.Validate(), "Validate must pass for valid config")
+	require.NoError(t, serverCfg.Validate(), textValidateMustPassFor)
 }
 
 // TestProvideServerConfig_ValidationFailure tests that validation catches zero port.
@@ -68,7 +68,7 @@ func TestProvideServerConfig_ValidationFailure(t *testing.T) {
 
 	// Arrange: ServerConfig with zero port (invalid)
 	serverCfg := infra.ServerConfig{
-		Host: "0.0.0.0",
+		Host: text0000,
 		Port: 0, // Invalid!
 	}
 
@@ -105,11 +105,11 @@ database:
 `
 
 	// Act
-	dbCfg := loadConfigKey[infra.DatabaseConfig](t, yamlText, "database")
+	dbCfg := loadConfigKey[infra.DatabaseConfig](t, yamlText, textDatabase)
 
 	// Assert
 	assert.Equal(t, "localhost", dbCfg.Host)
-	assert.Equal(t, "app", dbCfg.User)
+	assert.Equal(t, textApp, dbCfg.User)
 	assert.Equal(
 		t,
 		"postgres://app:dev_password@localhost:5432/knowledge_engine?sslmode=disable",
@@ -117,7 +117,7 @@ database:
 	)
 
 	// Validate should pass
-	require.NoError(t, dbCfg.Validate(), "Validate must pass for valid config")
+	require.NoError(t, dbCfg.Validate(), textValidateMustPassFor)
 }
 
 // TestProvideRedisConfig tests that a config provider can load RedisConfig.
@@ -142,15 +142,15 @@ redis:
 `
 
 	// Act
-	redisCfg := loadConfigKey[infra.RedisConfig](t, yamlText, "redis")
+	redisCfg := loadConfigKey[infra.RedisConfig](t, yamlText, textRedis)
 
 	// Assert
 	assert.Equal(t, "localhost", redisCfg.Host)
-	assert.Equal(t, 6379, redisCfg.Port)
+	assert.Equal(t, wantPort6379, redisCfg.Port)
 	assert.Equal(t, "localhost:6379", redisCfg.Addr())
 
 	// Validate should pass
-	require.NoError(t, redisCfg.Validate(), "Validate must pass for valid config")
+	require.NoError(t, redisCfg.Validate(), textValidateMustPassFor)
 }
 
 // loadConfigKey loads the YAML as base.yaml and decodes one section of it.
@@ -158,14 +158,14 @@ func loadConfigKey[T any](t *testing.T, yamlText, key string) T {
 	t.Helper()
 
 	tmpDir := t.TempDir()
-	writeFile(t, filepath.Join(tmpDir, "base.yaml"), yamlText)
+	writeFile(t, filepath.Join(tmpDir, textBaseYaml), yamlText)
 
 	loader, err := config.New(config.KindViper, config.WithBaseDir(tmpDir))
 	require.NoError(t, err, "config.New")
 
 	var cfg T
 
-	require.NoError(t, loader.UnmarshalKey(key, &cfg), "UnmarshalKey")
+	require.NoError(t, loader.UnmarshalKey(key, &cfg), textUnmarshalkey)
 
 	return cfg
 }

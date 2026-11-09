@@ -13,7 +13,19 @@ import (
 // httpDurationBuckets returns the default histogram bucket boundaries for HTTP
 // request durations (seconds). Matches Prometheus DefBuckets.
 func httpDurationBuckets() []float64 {
-	return []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}
+	return []float64{
+		httpDurationBucketsResultp005,
+		httpDurationBucketsResultp01,
+		httpDurationBucketsResultp025,
+		httpDurationBucketsResultp05,
+		httpDurationBucketsResultp1,
+		httpDurationBucketsResultp25,
+		httpDurationBucketsResultp5,
+		1,
+		httpDurationBucketsResult2p5,
+		httpDurationBucketsResult5,
+		httpDurationBucketsResult10,
+	}
 }
 
 // statusRecorder wraps http.ResponseWriter to capture the status code.
@@ -210,7 +222,7 @@ func looksLikeID(seg string) bool {
 		return true
 	case stdx.IsUUID(seg):
 		return true
-	case len(seg) >= 16 && stdx.IsHex(seg):
+	case len(seg) >= segLen16 && stdx.IsHex(seg):
 		return true
 	default:
 		return false

@@ -35,7 +35,7 @@ func (c *Client) HasPathsChanged(
 	paths []string,
 ) (bool, error) {
 	args := append([]string{diffCmd, "--quiet", from, to, "--"}, paths...)
-	res := c.runner.RunBuffered(ctx, root, "git", args...)
+	res := c.runner.RunBuffered(ctx, root, textGit, args...)
 
 	if res.Err == nil {
 		return false, nil
@@ -82,7 +82,7 @@ func (c *Client) LsFiles(
 	root string,
 	pathspecs []string,
 ) ([]string, error) {
-	res := c.runner.RunBuffered(ctx, root, "git",
+	res := c.runner.RunBuffered(ctx, root, textGit,
 		append([]string{"ls-files", "-z", "--"}, pathspecs...)...)
 	if res.ExitCode == notARepo {
 		return nil, nil
@@ -107,7 +107,15 @@ func (c *Client) Diff(ctx context.Context, root string, args ...string) ([]byte,
 
 // RevParse resolves ref; an unknown ref is CodeNotFound.
 func (c *Client) RevParse(ctx context.Context, root, ref string) (string, error) {
-	res := c.runner.RunBuffered(ctx, root, "git", "rev-parse", "--verify", "--quiet", ref)
+	res := c.runner.RunBuffered(
+		ctx,
+		root,
+		textGit,
+		"rev-parse",
+		"--verify",
+		"--quiet",
+		ref,
+	)
 	if res.Err != nil {
 		return "", apperr.Wrap(res.Err, apperr.CodeNotFound, "unknown revision "+ref)
 	}
@@ -121,7 +129,7 @@ func (c *Client) RemoteHasRef(
 	ctx context.Context,
 	root, remote, ref string,
 ) (bool, error) {
-	res := c.runner.RunBuffered(ctx, root, "git", "ls-remote", "--exit-code", "--heads",
+	res := c.runner.RunBuffered(ctx, root, textGit, "ls-remote", "--exit-code", "--heads",
 		"--tags", remote, ref)
 	switch {
 	case res.Err == nil:
@@ -139,7 +147,7 @@ const noMatchingRefs = 2
 
 // IsRepo reports whether root is inside a working tree.
 func (c *Client) IsRepo(ctx context.Context, root string) bool {
-	res := c.runner.RunBuffered(ctx, root, "git", "rev-parse", "--is-inside-work-tree")
+	res := c.runner.RunBuffered(ctx, root, textGit, "rev-parse", "--is-inside-work-tree")
 
 	return res.Err == nil && strings.TrimSpace(string(res.Stdout)) == "true"
 }
@@ -176,7 +184,7 @@ func (c *Client) LsUntracked(
 
 // Grep runs `git grep -l -z -I -F -e needle`; exit 1 (no match) is none.
 func (c *Client) Grep(ctx context.Context, root, needle string) ([]string, error) {
-	res := c.runner.RunBuffered(ctx, root, "git", "grep", "-l", "-z", "-I", "-F", "-e",
+	res := c.runner.RunBuffered(ctx, root, textGit, "grep", "-l", "-z", "-I", "-F", "-e",
 		needle)
 	if res.Err != nil && res.ExitCode == grepNoMatch {
 		return nil, nil
@@ -213,7 +221,7 @@ func (c *Client) Tag(ctx context.Context, root string) (string, error) {
 	res := c.runner.RunBuffered(
 		ctx,
 		root,
-		"git",
+		textGit,
 		"describe",
 		"--tags",
 		"--exact-match",
@@ -230,7 +238,7 @@ func (c *Client) Tag(ctx context.Context, root string) (string, error) {
 
 // git runs git args in root and returns stdout or a coded error.
 func (c *Client) git(ctx context.Context, root string, args ...string) ([]byte, error) {
-	res := c.runner.RunBuffered(ctx, root, "git", args...)
+	res := c.runner.RunBuffered(ctx, root, textGit, args...)
 
 	return client.Output(res, "git "+args[0])
 }

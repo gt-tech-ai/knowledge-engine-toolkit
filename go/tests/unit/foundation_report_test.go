@@ -19,16 +19,16 @@ import (
 func reportSteps() types.StepResults {
 	return types.StepResults{
 		{
-			Name:     "gofmt",
-			Group:    "lint",
+			Name:     textGofmt,
+			Group:    textLint,
 			Status:   types.StatusPass,
-			Duration: 1500 * time.Millisecond,
+			Duration: millis1500 * time.Millisecond,
 		},
 		{
-			Name:     "vet",
-			Group:    "lint",
+			Name:     textVet,
+			Group:    textLint,
 			Status:   types.StatusFail,
-			Duration: 2 * time.Second,
+			Duration: seconds2 * time.Second,
 			Error:    "1 finding",
 			Detail:   []byte("a.go:3: shadowed\n"),
 		},
@@ -39,16 +39,16 @@ func reportSteps() types.StepResults {
 func drive(obs interfaces.ExecutionObserver) {
 	steps := reportSteps()
 
-	obs.OnGateStart("preflight", []string{"lint"})
-	obs.OnPhaseStart("lint", []string{"gofmt", "vet"})
+	obs.OnGateStart(textPreflight, []string{textLint})
+	obs.OnPhaseStart(textLint, []string{textGofmt, textVet})
 
 	for _, s := range steps {
 		obs.OnStepStart(s.Name, s.Group)
 		obs.OnStepComplete(s)
 	}
 
-	obs.OnPhaseComplete("lint", steps, 3*time.Second)
-	obs.OnGateComplete("preflight", steps, 4*time.Second)
+	obs.OnPhaseComplete(textLint, steps, 3*time.Second)
+	obs.OnGateComplete(textPreflight, steps, 4*time.Second)
 }
 
 // reportOf builds kind over fresh buffers and drives it.
@@ -80,7 +80,7 @@ func reportOf(t *testing.T, cfg report.Config) (out, errOut string) {
 func TestFoundationReport_LineAndTable(t *testing.T) {
 	t.Parallel()
 
-	hints := []report.Hint{{Group: "lint", Substr: "vet", Text: "Run: go vet ./..."}}
+	hints := []report.Hint{{Group: textLint, Substr: textVet, Text: "Run: go vet ./..."}}
 	failureBlock := "  Failures:\n\n" +
 		"    FAIL vet\n" +
 		"      a.go:3: shadowed\n" +
@@ -156,13 +156,13 @@ func TestFoundationReport_MachineKinds(t *testing.T) {
 	}
 
 	require.NoError(t, json.Unmarshal([]byte(out), &doc))
-	assert.Equal(t, "preflight", doc.Gate)
+	assert.Equal(t, textPreflight, doc.Gate)
 	assert.False(t, doc.Passed)
-	assert.Equal(t, int64(4000), doc.ElapsedMS)
+	assert.Equal(t, int64(int64Arg4000), doc.ElapsedMS)
 	assert.Equal(t, map[string]int{"PASS": 1, "FAIL": 1}, doc.Counts)
-	require.Len(t, doc.Steps, 2)
+	require.Len(t, doc.Steps, wantStepsLen2)
 	assert.Equal(t, "FAIL", doc.Steps[1].Status)
-	assert.Equal(t, int64(1500), doc.Steps[0].DurationMS)
+	assert.Equal(t, int64(int64Arg1500), doc.Steps[0].DurationMS)
 
 	out, errOut = reportOf(t, report.Config{})
 	assert.Empty(t, out+errOut)
@@ -210,12 +210,12 @@ func TestFoundationReport_GHActionsEscapes(t *testing.T) {
 	require.NoError(t, err)
 
 	step := types.StepResult{
-		Name: "lint:go,x", Group: "lint", Status: types.StatusFail,
+		Name: "lint:go,x", Group: textLint, Status: types.StatusFail,
 		Error: "a.go:3: 100% bad,\nsee above",
 	}
-	obs.OnPhaseStart("lint", []string{step.Name})
+	obs.OnPhaseStart(textLint, []string{step.Name})
 	obs.OnStepComplete(step)
-	obs.OnPhaseComplete("lint", types.StepResults{step}, time.Second)
+	obs.OnPhaseComplete(textLint, types.StepResults{step}, time.Second)
 	assert.Contains(t, out.String(),
 		"::error title=lint%3Ago%2Cx::a.go:3: 100%25 bad,%0Asee above\n")
 }

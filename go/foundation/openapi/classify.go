@@ -74,8 +74,8 @@ var pathParamSegment = regexp.MustCompile(`^\{[^/{}]+\}$`)
 // operation, and — for POST — between a create on a collection path and an
 // ambiguous specific-instance POST.
 func pathEndsInParam(pathTemplate string) bool {
-	trimmed := strings.TrimRight(pathTemplate, "/")
-	last := trimmed[strings.LastIndex(trimmed, "/")+1:]
+	trimmed := strings.TrimRight(pathTemplate, textSlash)
+	last := trimmed[strings.LastIndex(trimmed, textSlash)+1:]
 
 	return pathParamSegment.MatchString(last)
 }

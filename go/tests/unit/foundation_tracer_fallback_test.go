@@ -22,7 +22,7 @@ func TestNewFromTracing_DisabledIsNoop(t *testing.T) {
 	t.Parallel()
 
 	warned := false
-	tr := tracer.NewFromTracing(t.Context(), "svc", infra.TracingConfig{Enabled: false},
+	tr := tracer.NewFromTracing(t.Context(), textSvc, infra.TracingConfig{Enabled: false},
 		func(string, ...any) { warned = true })
 	require.IsType(t, &nooptracer.Tracer{}, tr)
 	require.False(t, warned)

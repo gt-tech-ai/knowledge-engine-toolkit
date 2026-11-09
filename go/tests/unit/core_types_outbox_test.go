@@ -20,10 +20,10 @@ import (
 //     "doc-2" mod 8 = 6; fewer than two partitions always give 0
 func TestOutboxPartition_IsFnv32aModPartitions(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, 1, types.OutboxPartition("", 4))
-	assert.Equal(t, 4, types.OutboxPartition("a", 8))
-	assert.Equal(t, 3, types.OutboxPartition("doc-1", 4))
-	assert.Equal(t, 6, types.OutboxPartition("doc-2", 8))
-	assert.Equal(t, 0, types.OutboxPartition("doc-1", 1))
-	assert.Equal(t, 0, types.OutboxPartition("doc-1", 0))
+	assert.Equal(t, 1, types.OutboxPartition("", partitions4))
+	assert.Equal(t, wantOutboxPartition4, types.OutboxPartition(textA, partitions8))
+	assert.Equal(t, wantOutboxPartition3, types.OutboxPartition(textDoc1, partitions4))
+	assert.Equal(t, wantOutboxPartition6, types.OutboxPartition("doc-2", partitions8))
+	assert.Equal(t, 0, types.OutboxPartition(textDoc1, 1))
+	assert.Equal(t, 0, types.OutboxPartition(textDoc1, 0))
 }

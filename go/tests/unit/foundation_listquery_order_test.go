@@ -15,10 +15,10 @@ import (
 // filter-only field.
 func sortMap() *listquery.Map {
 	return listquery.NewMap().Add(
-		listquery.Time("created_at").Sortable(),
-		listquery.String("name").Sortable(),
-		listquery.String("status").Sortable(),
-		listquery.String("secret_note"),
+		listquery.Time(textCreatedAt).Sortable(),
+		listquery.String(textName).Sortable(),
+		listquery.String(textStatus).Sortable(),
+		listquery.String(textSecretNote),
 	)
 }
 
@@ -44,24 +44,24 @@ func TestParseSort_ParsesDirections(t *testing.T) {
 		spec string
 		want []types.OrderField
 	}{
-		{"empty", "", nil},
-		{"blank", "   ", nil},
-		{"single field default asc", "name", []types.OrderField{{Field: "name"}}},
-		{"explicit asc", "name:asc", []types.OrderField{{Field: "name"}}},
+		{textEmpty, "", nil},
+		{"blank", textSpaceSpaceSpace, nil},
+		{"single field default asc", textName, []types.OrderField{{Field: textName}}},
+		{"explicit asc", "name:asc", []types.OrderField{{Field: textName}}},
 		{
 			"explicit desc",
 			"created_at:DESC",
-			[]types.OrderField{{Field: "created_at", Desc: true}},
+			[]types.OrderField{{Field: textCreatedAt, Desc: true}},
 		},
 		{
 			"multi preserves order",
 			"status,name:desc",
-			[]types.OrderField{{Field: "status"}, {Field: "name", Desc: true}},
+			[]types.OrderField{{Field: textStatus}, {Field: textName, Desc: true}},
 		},
 		{
 			"whitespace tolerated",
 			" name : desc , created_at ",
-			[]types.OrderField{{Field: "name", Desc: true}, {Field: "created_at"}},
+			[]types.OrderField{{Field: textName, Desc: true}, {Field: textCreatedAt}},
 		},
 	}
 	for _, tc := range cases {
@@ -92,8 +92,8 @@ func TestParseSort_RejectsUnknownUnsortableAndBadDirection(t *testing.T) {
 	m := sortMap()
 
 	for name, spec := range map[string]string{
-		"unknown field":   "bogus",
-		"unsortable":      "secret_note",
+		textUnknownField:  textBogus,
+		"unsortable":      textSecretNote,
 		"bad direction":   "name:sideways",
 		"extra colon":     "name:asc:desc",
 		"empty token":     "name,,status",
@@ -160,45 +160,45 @@ func testKeysetColumnsTable() []testKeysetColumnsRow {
 			nil,
 			"",
 			[]listquery.KeysetColumn{
-				{Column: "created_at", Desc: true},
-				{Column: "id", Desc: true},
+				{Column: textCreatedAt, Desc: true},
+				{Column: textID, Desc: true},
 			},
 		},
 		{
 			"custom tiebreaker replaces created_at",
 			nil,
-			"joined_at",
+			textJoinedAt,
 			[]listquery.KeysetColumn{
-				{Column: "joined_at", Desc: true},
-				{Column: "id", Desc: true},
+				{Column: textJoinedAt, Desc: true},
+				{Column: textID, Desc: true},
 			},
 		},
 		{
 			"caller sort precedes the DESC tiebreakers",
-			[]types.OrderField{{Field: "name"}},
+			[]types.OrderField{{Field: textName}},
 			"",
 			[]listquery.KeysetColumn{
-				{Column: "name", Desc: false},
-				{Column: "created_at", Desc: true},
-				{Column: "id", Desc: true},
+				{Column: textName, Desc: false},
+				{Column: textCreatedAt, Desc: true},
+				{Column: textID, Desc: true},
 			},
 		},
 		{
 			"caller sort on the tiebreaker is not re-appended (keeps caller ASC)",
-			[]types.OrderField{{Field: "created_at", Desc: false}},
+			[]types.OrderField{{Field: textCreatedAt, Desc: false}},
 			"",
 			[]listquery.KeysetColumn{
-				{Column: "created_at", Desc: false},
-				{Column: "id", Desc: true},
+				{Column: textCreatedAt, Desc: false},
+				{Column: textID, Desc: true},
 			},
 		},
 		{
 			"caller sort on id is not re-appended (keeps caller ASC)",
-			[]types.OrderField{{Field: "id", Desc: false}},
+			[]types.OrderField{{Field: textID, Desc: false}},
 			"",
 			[]listquery.KeysetColumn{
-				{Column: "id", Desc: false},
-				{Column: "created_at", Desc: true},
+				{Column: textID, Desc: false},
+				{Column: textCreatedAt, Desc: true},
 			},
 		},
 	}
@@ -209,10 +209,10 @@ func testKeysetColumnsTable() []testKeysetColumnsRow {
 // comma/colon-split input — the properties that make it a safe transport-edge parser.
 func FuzzParseSort(f *testing.F) {
 	m := sortMap()
-	sortable := map[string]bool{"created_at": true, "name": true, "status": true}
+	sortable := map[string]bool{textCreatedAt: true, textName: true, textStatus: true}
 
 	for _, seed := range []string{
-		"", "name", "a:desc,b", "created_at:desc,name", ",,,", "x:y:z", " : ", "secret_note",
+		"", textName, "a:desc,b", "created_at:desc,name", ",,,", "x:y:z", " : ", textSecretNote,
 	} {
 		f.Add(seed)
 	}

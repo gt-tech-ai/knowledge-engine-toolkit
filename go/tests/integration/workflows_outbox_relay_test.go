@@ -51,7 +51,7 @@ func requireIntegration(t *testing.T) {
 // enqueuedAt returns every enqueued record's creation time: fixed in the past, so
 // the record is due at once and its date-partitioned S3 key is deterministic.
 func enqueuedAt() time.Time {
-	return time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	return time.Date(year2026, 1, day2, hour3, min4, sec5, 0, time.UTC)
 }
 
 // relaySchema is a product-shaped outbox table whose route column carries the record
@@ -134,7 +134,7 @@ func awsConfig(t *testing.T, key, secret string) aws.Config {
 
 	cfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
-		awsconfig.WithRegion("us-east-1"),
+		awsconfig.WithRegion(textUsEast1),
 		awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(key, secret, ""),
 		),
@@ -158,7 +158,7 @@ func enqueueN(
 		ids[i] = uuid.New()
 
 		rec := types.OutboxRecord{
-			ID: ids[i], Lane: lane, Tenant: "org-1", Key: strconv.Itoa(i),
+			ID: ids[i], Lane: lane, Tenant: textOrg1, Key: strconv.Itoa(i),
 			Payload: []byte(`{"seq":` + strconv.Itoa(i) + `}`), CreatedAt: enqueuedAt(),
 		}
 		require.NoError(t, enqueue(context.Background(), &rec))
@@ -172,7 +172,7 @@ func drain(t *testing.T, relay *outbox.Relay, store interfaces.OutboxStore, lane
 	t.Helper()
 
 	ctx := context.Background()
-	for range 10 {
+	for range iterations10 {
 		require.NoError(t, relay.RunOnce(ctx))
 
 		stats, err := store.Stats(ctx, lane)
@@ -235,9 +235,9 @@ func testRelayEndToEndPostgresToSQSRest3(t *testing.T) {
 	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
-	ids := enqueueN(t, enqueue, "events", 25)
+	ids := enqueueN(t, enqueue, textEvents, enqueueNArg25)
 	relay := outbox.NewRelay(
-		outbox.DefaultRelayConfig("events"),
+		outbox.DefaultRelayConfig(textEvents),
 		tx,
 		store,
 		sink,
@@ -265,7 +265,7 @@ func testRelayEndToEndPostgresToSQSRest4(
 
 	var err error
 
-	drain(t, relay, store, "events")
+	drain(t, relay, store, textEvents)
 
 	got, keys := map[string]string{}, map[string]string{}
 	for len(got) < len(ids) {
@@ -292,7 +292,7 @@ func testRelayEndToEndPostgresToSQSRest4(
 		require.Equal(t, strconv.Itoa(i), keys[id.String()])
 	}
 
-	stats, err := store.Stats(ctx, "events")
+	stats, err := store.Stats(ctx, textEvents)
 	require.NoError(t, err)
 	require.Equal(t, types.OutboxStats{}, stats)
 }
@@ -322,10 +322,10 @@ func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 		outboxclient.Deps{},
 	)
 	require.NoError(t, err)
-	enqueueN(t, enqueue, "burst", 1000)
-	enqueueN(t, enqueue, "single", 1000)
+	enqueueN(t, enqueue, textBurst, enqueueNArg1000)
+	enqueueN(t, enqueue, textSingle, enqueueNArg1000)
 
-	draining := outbox.DefaultRelayConfig("burst")
+	draining := outbox.DefaultRelayConfig(textBurst)
 
 	draining.DrainBudget = time.Minute
 	require.NoError(
@@ -333,19 +333,19 @@ func TestRelay_DrainsABacklogInOneRun(t *testing.T) {
 		outbox.NewRelay(draining, tx, store, sink, nil, nil, nil).RunOnce(ctx),
 	)
 
-	single := outbox.DefaultRelayConfig("single")
+	single := outbox.DefaultRelayConfig(textSingle)
 	require.NoError(
 		t,
 		outbox.NewRelay(single, tx, store, sink, nil, nil, nil).RunOnce(ctx),
 	)
 
-	burst, err := store.Stats(ctx, "burst")
+	burst, err := store.Stats(ctx, textBurst)
 	require.NoError(t, err)
 	require.Zero(t, burst.Pending)
 
-	once, err := store.Stats(ctx, "single")
+	once, err := store.Stats(ctx, textSingle)
 	require.NoError(t, err)
-	require.Equal(t, 900, once.Pending)
+	require.Equal(t, wantPending900, once.Pending)
 }
 
 // TestRelay_EndToEnd_PostgresToS3ObjectLock drains a Postgres outbox into an
@@ -415,9 +415,9 @@ func testRelayEndToEndPostgresToS3ObjectLockRest5(
 	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{S3API: api})
 	require.NoError(t, err)
 
-	ids := enqueueN(t, enqueue, "audit", 5)
+	ids := enqueueN(t, enqueue, textAudit, enqueueNArg5)
 	relay := outbox.NewRelay(
-		outbox.DefaultRelayConfig("audit"),
+		outbox.DefaultRelayConfig(textAudit),
 		tx,
 		store,
 		sink,
@@ -425,7 +425,7 @@ func testRelayEndToEndPostgresToS3ObjectLockRest5(
 		nil,
 		nil,
 	)
-	drain(t, relay, store, "audit")
+	drain(t, relay, store, textAudit)
 
 	keys := bucketKeys(ctx, t, api, bucket)
 
@@ -444,7 +444,7 @@ func testRelayEndToEndPostgresToS3ObjectLockRest5(
 		assertLockedObject(ctx, t, api, bucket, "org-1/"+day+"/"+id.String(), i)
 	}
 
-	stats, err := store.Stats(ctx, "audit")
+	stats, err := store.Stats(ctx, textAudit)
 	require.NoError(t, err)
 	require.Equal(t, types.OutboxStats{}, stats)
 }
@@ -739,7 +739,7 @@ func testRelayPartitionsDrainIndependentlyRest4(
 	relayFor := func(partition int) *outbox.Relay {
 		cfg := outbox.DefaultRelayConfig("split")
 
-		cfg.Partitions, cfg.Partition, cfg.DrainBudget = 2, partition, time.Minute
+		cfg.Partitions, cfg.Partition, cfg.DrainBudget = partitions2, partition, time.Minute
 
 		return outbox.NewRelay(cfg, tx, store, sink, nil, nil, nil)
 	}
@@ -749,9 +749,9 @@ func testRelayPartitionsDrainIndependentlyRest4(
 	sent, _ := partitionCounts(t, db)
 	require.Equal(t, map[int]int{0: 0, 1: want[1]}, sent)
 
-	done := make(chan error, 2)
+	done := make(chan error, size2)
 
-	for partition := range 2 {
+	for partition := range iterations2 {
 		go func() { done <- relayFor(partition).RunOnce(ctx) }()
 	}
 

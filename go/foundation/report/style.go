@@ -41,7 +41,8 @@ func (s style) Sprintf(format string, a ...any) string {
 func (s style) Fprintf(w io.Writer, format string, a ...any) {
 	text := fmt.Sprintf(format, a...)
 	if s.on {
-		text = "\x1b[" + s.code + "m" + text + "\x1b[" + ansiReset + "m"
+		text = textU1bBracketOpen + s.code + textM + text + textU1bBracketOpen +
+			ansiReset + textM
 	}
 
 	_, _ = io.WriteString(w, text)
@@ -53,7 +54,7 @@ func (s style) wrap(text string) string {
 		return text
 	}
 
-	return "\x1b[" + s.code + "m" + text + "\x1b[" + s.reset + "m"
+	return textU1bBracketOpen + s.code + textM + text + textU1bBracketOpen + s.reset + textM
 }
 
 // palette is the console's set of styles.

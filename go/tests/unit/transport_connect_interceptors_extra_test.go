@@ -56,7 +56,7 @@ func TestLoggingInterceptor_StatusCodeMapping(t *testing.T) {
 			spy := fixtures.NewSpyLogger()
 			handler := interceptors.NewLoggingInterceptor(spy).WrapUnary(
 				func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-					return nil, connect.NewError(tc.code, apperr.Sentinel("boom"))
+					return nil, connect.NewError(tc.code, apperr.Sentinel(textBoom))
 				},
 			)
 			_, err := handler(context.Background(), newTestRequest())
@@ -120,7 +120,7 @@ func TestPrincipalInterceptor_StreamingFailsClosed(t *testing.T) {
 	}
 	claims := &interceptors.AuthClaims{
 		Sub:      "sub-1",
-		TenantID: "tenant-1",
+		TenantID: textTenant1,
 	} // non-synthetic
 
 	called := false

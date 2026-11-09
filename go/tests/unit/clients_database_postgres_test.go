@@ -34,10 +34,10 @@ func TestStartPoolStatsCollector_PublishesGauges(t *testing.T) {
 
 	// sql.Open does not connect, so Stats() reports the configured caps without a
 	// live database — enough to assert the gauges are published.
-	db, err := sql.Open("pgx", "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
+	db, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	db.SetMaxOpenConns(17)
+	db.SetMaxOpenConns(setMaxOpenConnsArg17)
 
 	m, err := metrics.New(metrics.KindPrometheus)
 	require.NoError(t, err)
@@ -85,7 +85,7 @@ func TestStartPoolStatsCollector_PublishesGauges(t *testing.T) {
 func TestCheck_ClosedPoolErrors(t *testing.T) {
 	t.Parallel()
 
-	db, err := sql.Open("pgx", "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
+	db, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
 	require.NoError(t, err)
 
 	check := postgres.Check(db)
@@ -115,7 +115,7 @@ func TestPingDB_BadDSNFailsFast(t *testing.T) {
 	t.Parallel()
 
 	// Port 1 refuses instantly, so the probe fails well within pingTimeout.
-	db, err := sql.Open("pgx", "postgres://u:p@127.0.0.1:1/db?sslmode=disable")
+	db, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:1/db?sslmode=disable")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

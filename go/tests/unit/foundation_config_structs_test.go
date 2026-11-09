@@ -32,11 +32,11 @@ func TestDatabaseConfig_Defaults(t *testing.T) {
 
 	cfg := infra.DefaultDatabaseConfig()
 	assert.Equal(t, "localhost", cfg.Host)
-	assert.Equal(t, 5432, cfg.Port)
-	assert.Equal(t, "app", cfg.User)
-	assert.Equal(t, "dev_password", cfg.Password)
+	assert.Equal(t, wantPort5432, cfg.Port)
+	assert.Equal(t, textApp, cfg.User)
+	assert.Equal(t, textDevPassword, cfg.Password)
 	assert.Equal(t, "knowledge_engine", cfg.Database)
-	assert.Equal(t, "disable", cfg.SSLMode)
+	assert.Equal(t, textDisable, cfg.SSLMode)
 }
 
 // TestDatabaseConfig_DSN tests that DSN() constructs a valid PostgreSQL connection
@@ -63,15 +63,15 @@ func TestDatabaseConfig_DSN(t *testing.T) {
 			cfg:  infra.DefaultDatabaseConfig(),
 			want: fmt.Sprintf(
 				"postgres://%s:%s@localhost:5432/knowledge_engine?sslmode=disable",
-				"app",
-				"dev_password",
+				textApp,
+				textDevPassword,
 			),
 		},
 		{
 			name: "custom config with sslmode=require",
 			cfg: infra.DatabaseConfig{
 				Host:     "prod-db.example.com",
-				Port:     5432,
+				Port:     port5432,
 				User:     "prod_user",
 				Password: "prod_pass",
 				Database: "prod_db",
@@ -110,15 +110,15 @@ func TestDatabaseConfig_DSNEscapesCredentials(t *testing.T) {
 		user   string
 		phrase string
 	}{
-		{name: "percent", user: "svc", phrase: "100%pass"},
-		{name: "question mark", user: "svc", phrase: "pa?ss"},
-		{name: "hash", user: "svc", phrase: "pa#ss"},
-		{name: "at sign", user: "svc@acct", phrase: "pa@ss"},
-		{name: "colon", user: "svc", phrase: "pa:ss"},
-		{name: "slash", user: "svc", phrase: "pa/ss"},
-		{name: "brackets", user: "svc", phrase: "pa[ss]"},
-		{name: "space", user: "svc", phrase: "pa ss "},
-		{name: "all at once", user: "svc@acct", phrase: "p@ss:w/rd?x#y%z[0] "},
+		{name: "percent", user: textSvc, phrase: "100%pass"},
+		{name: "question mark", user: textSvc, phrase: "pa?ss"},
+		{name: "hash", user: textSvc, phrase: "pa#ss"},
+		{name: "at sign", user: textSvcAcct, phrase: "pa@ss"},
+		{name: "colon", user: textSvc, phrase: "pa:ss"},
+		{name: "slash", user: textSvc, phrase: "pa/ss"},
+		{name: "brackets", user: textSvc, phrase: "pa[ss]"},
+		{name: "space", user: textSvc, phrase: "pa ss "},
+		{name: "all at once", user: textSvcAcct, phrase: "p@ss:w/rd?x#y%z[0] "},
 	}
 
 	for _, tt := range tests {
@@ -130,8 +130,8 @@ func TestDatabaseConfig_DSNEscapesCredentials(t *testing.T) {
 				Port:     6432,
 				User:     tt.user,
 				Password: tt.phrase,
-				Database: "app",
-				SSLMode:  "disable",
+				Database: textApp,
+				SSLMode:  textDisable,
 			}
 
 			parsed, err := pgx.ParseConfig(cfg.DSN())
@@ -140,7 +140,7 @@ func TestDatabaseConfig_DSNEscapesCredentials(t *testing.T) {
 			assert.Equal(t, tt.phrase, parsed.Password)
 			assert.Equal(t, "db.example.com", parsed.Host)
 			assert.Equal(t, uint16(6432), parsed.Port)
-			assert.Equal(t, "app", parsed.Database)
+			assert.Equal(t, textApp, parsed.Database)
 		})
 	}
 }
@@ -173,9 +173,9 @@ func dsnHosts() []string {
 //     parsed by pgx.ParseConfig (the driver's own parser) yields the configured user,
 //     password, database and port, and the host without brackets.
 func FuzzDatabaseConfig_DSNRoundTrip(f *testing.F) {
-	f.Add("svc", "p@ss:w/rd?x#y%z[0] ", "app", uint8(2))
-	f.Add("svc@acct", "pw", "my db/x?y#z%", uint8(3))
-	f.Add("u", "", "d", uint8(5))
+	f.Add(textSvc, "p@ss:w/rd?x#y%z[0] ", textApp, uint8(uint8Arg2))
+	f.Add(textSvcAcct, "pw", "my db/x?y#z%", uint8(uint8Arg3))
+	f.Add(textU, "", textD2, uint8(uint8Arg5))
 
 	f.Fuzz(func(t *testing.T, user, password, database string, hostIdx uint8) {
 		if user == "" || database == "" {
@@ -189,7 +189,7 @@ func FuzzDatabaseConfig_DSNRoundTrip(f *testing.F) {
 		host := dsnHosts()[int(hostIdx)%len(dsnHosts())]
 		cfg := infra.DatabaseConfig{
 			Host: host, Port: 5432, User: user, Password: password,
-			Database: database, SSLMode: "disable",
+			Database: database, SSLMode: textDisable,
 		}
 
 		parsed, err := pgx.ParseConfig(cfg.DSN())
@@ -230,9 +230,9 @@ func TestDatabaseConfig_Validate(t *testing.T) {
 			name: "empty host",
 			cfg: infra.DatabaseConfig{
 				Host:     "",
-				Port:     5432,
-				User:     "app",
-				Password: "dev_password",
+				Port:     port5432,
+				User:     textApp,
+				Password: textDevPassword,
 				Database: "knowledge_engine",
 			},
 			wantErr: true,
@@ -268,7 +268,7 @@ func TestRedisConfig_Defaults(t *testing.T) {
 
 	cfg := infra.DefaultRedisConfig()
 	assert.Equal(t, "localhost", cfg.Host)
-	assert.Equal(t, 6379, cfg.Port)
+	assert.Equal(t, wantPort6379, cfg.Port)
 	assert.Equal(t, 0, cfg.DB)
 }
 
@@ -298,7 +298,7 @@ func TestRedisConfig_Addr(t *testing.T) {
 			name: "custom config",
 			cfg: infra.RedisConfig{
 				Host: "redis.example.com",
-				Port: 6380,
+				Port: port6380,
 			},
 			want: "redis.example.com:6380",
 		},
@@ -327,7 +327,7 @@ func TestServerConfig_Defaults(t *testing.T) {
 	t.Parallel()
 
 	cfg := infra.DefaultServerConfig()
-	assert.Equal(t, "0.0.0.0", cfg.Host)
+	assert.Equal(t, text0000, cfg.Host)
 	assert.Equal(t, 0, cfg.Port)
 	assert.Equal(t, 30*time.Second, cfg.ReadTimeout)
 	assert.Equal(t, 30*time.Second, cfg.WriteTimeout)
@@ -354,15 +354,15 @@ func TestServerConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			cfg: infra.ServerConfig{
-				Host: "0.0.0.0",
-				Port: 8090,
+				Host: text0000,
+				Port: port8090,
 			},
 			wantErr: false,
 		},
 		{
 			name: "port is zero",
 			cfg: infra.ServerConfig{
-				Host: "0.0.0.0",
+				Host: text0000,
 				Port: 0,
 			},
 			wantErr: true,
@@ -399,7 +399,7 @@ func TestS3Config_Defaults(t *testing.T) {
 	cfg := infra.DefaultS3Config()
 	assert.Equal(t, "http://localhost:9000", cfg.Endpoint)
 	assert.Empty(t, cfg.Bucket)
-	assert.Equal(t, "us-east-1", cfg.Region)
+	assert.Equal(t, textUsEast1, cfg.Region)
 }
 
 // TestSQSConfig_Defaults tests that DefaultSQSConfig returns correct defaults.
@@ -419,9 +419,9 @@ func TestSQSConfig_Defaults(t *testing.T) {
 
 	cfg := infra.DefaultSQSConfig()
 	assert.Equal(t, "http://localhost:9324", cfg.Endpoint)
-	assert.Equal(t, "us-east-1", cfg.Region)
-	assert.Equal(t, "local", cfg.AccessKeyID)
-	assert.Equal(t, "local", cfg.SecretAccessKey)
+	assert.Equal(t, textUsEast1, cfg.Region)
+	assert.Equal(t, textLocal, cfg.AccessKeyID)
+	assert.Equal(t, textLocal, cfg.SecretAccessKey)
 	assert.NotNil(t, cfg.Queues)
 	assert.Empty(t, cfg.Queues)
 }
@@ -440,8 +440,8 @@ func TestLoggingConfig_Defaults(t *testing.T) {
 	t.Parallel()
 
 	cfg := infra.DefaultLoggingConfig()
-	assert.Equal(t, "info", cfg.Level)
-	assert.Equal(t, "json", cfg.Format)
+	assert.Equal(t, textInfo, cfg.Level)
+	assert.Equal(t, textStructuredFormat, cfg.Format)
 	assert.True(t, cfg.RedactPII, "RedactPII must default to true")
 }
 
@@ -463,10 +463,10 @@ func TestObservabilityConfig_Defaults(t *testing.T) {
 
 	cfg := infra.DefaultObservabilityConfig()
 	assert.True(t, cfg.Tracing.Enabled, "Tracing.Enabled must default to true")
-	assert.Equal(t, "localhost:4317", cfg.Tracing.Endpoint)
-	assert.InDelta(t, 0.1, cfg.Tracing.SampleRate, 0)
+	assert.Equal(t, textLocalhost4317, cfg.Tracing.Endpoint)
+	assert.InDelta(t, wantSampleRate0p1, cfg.Tracing.SampleRate, 0)
 	assert.True(t, cfg.Metrics.Enabled, "Metrics.Enabled must default to true")
-	assert.Equal(t, 9090, cfg.Metrics.Port)
+	assert.Equal(t, wantPort9090, cfg.Metrics.Port)
 }
 
 // ---------------------------------------------------------------------------
@@ -558,8 +558,8 @@ func testAuthConfigValidateTable() []testAuthConfigValidateRow {
 			name: "valid non-stub config",
 			cfg: infra.AuthConfig{
 				OIDC: infra.OIDCConfig{
-					Issuer:   "https://idp.example.com/",
-					Audience: "https://api.dev.example.com",
+					Issuer:   textHTTPSIdpExampleCom,
+					Audience: textHTTPSAPIDevExample,
 				},
 			},
 			wantErr: false,
@@ -567,14 +567,14 @@ func testAuthConfigValidateTable() []testAuthConfigValidateRow {
 		{
 			name: "missing issuer when stub=false",
 			cfg: infra.AuthConfig{
-				OIDC: infra.OIDCConfig{Audience: "https://api.dev.example.com"},
+				OIDC: infra.OIDCConfig{Audience: textHTTPSAPIDevExample},
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing audience when stub=false",
 			cfg: infra.AuthConfig{
-				OIDC: infra.OIDCConfig{Issuer: "https://idp.example.com/"},
+				OIDC: infra.OIDCConfig{Issuer: textHTTPSIdpExampleCom},
 			},
 			wantErr: true,
 		},
@@ -588,8 +588,8 @@ func testAuthConfigValidateTable() []testAuthConfigValidateRow {
 			name: "service_stub rejected when stub=false",
 			cfg: infra.AuthConfig{
 				OIDC: infra.OIDCConfig{
-					Issuer:   "https://idp.example.com/",
-					Audience: "https://api.dev.example.com",
+					Issuer:   textHTTPSIdpExampleCom,
+					Audience: textHTTPSAPIDevExample,
 				},
 				ServiceStub: true,
 			},
@@ -741,10 +741,10 @@ func TestS3Config_KindAndParityDefaults(t *testing.T) {
 	t.Parallel()
 
 	cfg := infra.DefaultS3Config()
-	assert.Equal(t, "minio", cfg.Kind)
+	assert.Equal(t, textMinio, cfg.Kind)
 	assert.True(t, cfg.ForcePathStyle, "MinIO requires path-style addressing")
-	assert.Equal(t, "minioadmin", cfg.AccessKeyID)
-	assert.Equal(t, "minioadmin", cfg.SecretAccessKey)
+	assert.Equal(t, textMinioadmin, cfg.AccessKeyID)
+	assert.Equal(t, textMinioadmin, cfg.SecretAccessKey)
 	assert.Equal(t, 15*time.Minute, cfg.PresignExpiry)
 }
 
@@ -765,7 +765,7 @@ func TestS3Config_Validate_RejectsUnknownKind(t *testing.T) {
 
 	require.Error(
 		t,
-		infra.S3Config{Kind: "gcs", Bucket: "b"}.Validate(),
+		infra.S3Config{Kind: "gcs", Bucket: textB}.Validate(),
 		"unknown kind must error",
 	)
 	require.Error(
@@ -773,7 +773,7 @@ func TestS3Config_Validate_RejectsUnknownKind(t *testing.T) {
 		infra.S3Config{Kind: "s3", Bucket: ""}.Validate(),
 		"empty bucket must error",
 	)
-	require.NoError(t, infra.S3Config{Kind: "s3", Bucket: "b"}.Validate())
+	require.NoError(t, infra.S3Config{Kind: "s3", Bucket: textB}.Validate())
 }
 
 // TestS3Config_Validate_MultipartExpiry verifies the documented invariant that a
@@ -792,7 +792,11 @@ func TestS3Config_Validate_RejectsUnknownKind(t *testing.T) {
 func TestS3Config_Validate_MultipartExpiry(t *testing.T) {
 	t.Parallel()
 
-	base := infra.S3Config{Kind: "s3", Bucket: "b", PresignExpiry: 15 * time.Minute}
+	base := infra.S3Config{
+		Kind:          "s3",
+		Bucket:        textB,
+		PresignExpiry: minutes15 * time.Minute,
+	}
 
 	tooShort := base
 

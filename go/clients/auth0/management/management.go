@@ -269,7 +269,7 @@ func (c *Client) send(req *http.Request, out any) error {
 
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode < statusCode200 || resp.StatusCode >= statusCode300 {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorSnippetBytes))
 		code := apperr.CodeUpstream
 

@@ -100,7 +100,7 @@ func (s *SQSElasticMQSuite) rawClient() *awssqs.Client {
 
 	awsCfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
-		awsconfig.WithRegion("us-east-1"),
+		awsconfig.WithRegion(textUsEast1),
 		awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(
 				elasticmqdb.AccessKey,

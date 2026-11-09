@@ -25,16 +25,19 @@ import (
 //     CodeInvalidInput
 func TestRelayConfig_Partitions(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, outbox.DefaultRelayConfig("audit").Validate())
+	require.NoError(t, outbox.DefaultRelayConfig(textAudit).Validate())
 
-	cfg := outbox.DefaultRelayConfig("audit")
+	cfg := outbox.DefaultRelayConfig(textAudit)
 
-	cfg.Partitions, cfg.Partition = 3, 2
+	cfg.Partitions, cfg.Partition = partitions3, partition2
 	require.NoError(t, cfg.Validate())
 
-	for _, bad := range [][2]int{{3, 3}, {3, -1}, {-1, 0}, {0, 1}} {
+	for _, bad := range [][iterations2]int{{iterations3, iterations3}, {
+		iterations3,
+		-1,
+	}, {-1, 0}, {0, 1}} {
 		cfg.Partitions, cfg.Partition = bad[0], bad[1]
-		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(cfg.Validate()), "%v", bad)
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(cfg.Validate()), textV2, bad)
 	}
 }
 
@@ -51,11 +54,11 @@ func TestRelay_ClaimsItsPartition(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockOutboxStore(ctrl)
-	cfg := relayConfig(10, 1, 3)
+	cfg := relayConfig(sendBatch10, 1, maxAttempts3)
 
-	cfg.Partitions, cfg.Partition = 3, 2
+	cfg.Partitions, cfg.Partition = partitions3, partition2
 
-	store.EXPECT().Claim(gomock.Any(), "audit", 2, 100).Return(nil, nil)
+	store.EXPECT().Claim(gomock.Any(), textAudit, 2, 100).Return(nil, nil)
 
 	relay := outbox.NewRelay(cfg, relayTx(t), store, mocks.NewMockOutboxSink(ctrl), nil,
 		nil, nil, fixedClock())

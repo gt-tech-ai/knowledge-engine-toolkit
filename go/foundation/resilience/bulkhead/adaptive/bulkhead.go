@@ -98,7 +98,7 @@ func New(cfg Config) *Bulkhead {
 	ratio := cfg.BackoffRatio
 
 	if ratio <= 0 || ratio >= 1 {
-		ratio = 0.9
+		ratio = ratio0p9
 	}
 
 	return &Bulkhead{

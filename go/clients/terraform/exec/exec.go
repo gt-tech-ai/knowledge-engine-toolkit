@@ -27,14 +27,14 @@ func New(runner interfaces.CommandRunner) *Client { return &Client{runner: runne
 
 // Init runs `terraform init -input=false`.
 func (c *Client) Init(ctx context.Context, dir string) error {
-	_, err := c.terraform(ctx, dir, "init", "-input=false")
+	_, err := c.terraform(ctx, dir, "init", textInputFalse)
 
 	return err
 }
 
 // Plan runs `terraform plan -input=false -out=out`, then shows the plan.
 func (c *Client) Plan(ctx context.Context, dir, out string) (types.Plan, error) {
-	_, err := c.terraform(ctx, dir, "plan", "-input=false", "-out="+out)
+	_, err := c.terraform(ctx, dir, "plan", textInputFalse, "-out="+out)
 	if err != nil {
 		return types.Plan{}, err
 	}
@@ -44,7 +44,7 @@ func (c *Client) Plan(ctx context.Context, dir, out string) (types.Plan, error) 
 
 // Apply runs `terraform apply -input=false planFile`.
 func (c *Client) Apply(ctx context.Context, dir, planFile string) error {
-	_, err := c.terraform(ctx, dir, "apply", "-input=false", planFile)
+	_, err := c.terraform(ctx, dir, "apply", textInputFalse, planFile)
 
 	return err
 }

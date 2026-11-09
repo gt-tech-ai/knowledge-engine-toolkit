@@ -144,7 +144,7 @@ func (b *BufferingRunner) runBufferedAndReplay(
 	name string,
 	args ...string,
 ) error {
-	cmdStr := name + " " + strings.Join(args, " ")
+	cmdStr := name + textSpace + strings.Join(args, textSpace)
 
 	b.note(">>", cmdStr)
 

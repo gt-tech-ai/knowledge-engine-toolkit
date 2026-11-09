@@ -32,9 +32,10 @@ func TestAdaptiveBulkhead_LimitShrinksUnderLatencyAndRecovers(t *testing.T) {
 		RTTThreshold:      10 * time.Millisecond,
 		BackoffRatio:      0.5,
 	})
-	require.Equal(t, 10, bh.Limit())
+	require.Equal(t, wantLimit10, bh.Limit())
 
-	for range 4 { // slow samples: RTT over the threshold shrinks the limit multiplicatively
+	// slow samples: RTT over the threshold shrinks the limit multiplicatively
+	for range iterations4 {
 		require.NoError(t, bh.Execute(context.Background(), func() error {
 			time.Sleep(20 * time.Millisecond)
 
@@ -43,9 +44,15 @@ func TestAdaptiveBulkhead_LimitShrinksUnderLatencyAndRecovers(t *testing.T) {
 	}
 
 	shrunk := bh.Limit()
-	require.Less(t, shrunk, 10, "sustained latency must shrink the adaptive limit")
+	require.Less(
+		t,
+		shrunk,
+		wantShrunk10,
+		"sustained latency must shrink the adaptive limit",
+	)
 
-	for range 5 { // fast samples: RTT under the threshold grows the limit back additively
+	// fast samples: RTT under the threshold grows the limit back additively
+	for range iterations5 {
 		require.NoError(t, bh.Execute(context.Background(), func() error { return nil }))
 	}
 

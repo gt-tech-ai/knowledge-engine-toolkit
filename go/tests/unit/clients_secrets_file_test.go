@@ -36,10 +36,10 @@ func TestFileSource_PutThenGetRoundTripsOnIgnoredPath(t *testing.T) {
 		Run(gomock.Any(), gomock.Any(), "git", "check-ignore", "-q", gomock.Any()).
 		Return(nil)
 
-	path := filepath.Join(t.TempDir(), ".secrets.env")
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	path := filepath.Join(t.TempDir(), textSecretsEnv)
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	src := file.New(
-		map[types.Ref]file.Location{ref: {Path: path, Key: "CLIENT_SECRET"}},
+		map[types.Ref]file.Location{ref: {Path: path, Key: textClientSecret2}},
 		runner,
 	)
 
@@ -72,9 +72,9 @@ func TestFileSource_PutRefusesNonIgnoredPath(t *testing.T) {
 		Return(apperr.Sentinel("exit status 1"))
 
 	path := filepath.Join(t.TempDir(), "tracked.env")
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	src := file.New(
-		map[types.Ref]file.Location{ref: {Path: path, Key: "CLIENT_SECRET"}},
+		map[types.Ref]file.Location{ref: {Path: path, Key: textClientSecret2}},
 		runner,
 	)
 
@@ -102,14 +102,14 @@ func TestFileSource_PutRefusesNonIgnoredPath(t *testing.T) {
 func TestFileSource_GetMissingKeyIsNotFound(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), ".secrets.env")
-	require.NoError(t, os.WriteFile(path, []byte("OTHER=x\n"), 0o600))
+	path := filepath.Join(t.TempDir(), textSecretsEnv)
+	require.NoError(t, os.WriteFile(path, []byte("OTHER=x\n"), perm0o600))
 
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl) // Get must not call the runner.
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	src := file.New(
-		map[types.Ref]file.Location{ref: {Path: path, Key: "CLIENT_SECRET"}},
+		map[types.Ref]file.Location{ref: {Path: path, Key: textClientSecret2}},
 		runner,
 	)
 
@@ -134,20 +134,20 @@ func TestFileSource_GetMissingKeyIsNotFound(t *testing.T) {
 func TestFileSource_ReadsExportAndQuotedDotenv(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), ".secrets.env")
+	path := filepath.Join(t.TempDir(), textSecretsEnv)
 	require.NoError(t, os.WriteFile(path, []byte(
 		"export CLIENT_SECRET=\"the-secret\"\n"+
 			"export DOMAIN='dev.example.com'\n"+
 			"PLAIN=bare-value\n",
-	), 0o600))
+	), perm0o600))
 
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl) // Get must not call the runner.
-	sec := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
-	dom := types.Ref{Env: "dev", Class: "bootstrap", Field: "domain"}
-	plain := types.Ref{Env: "dev", Class: "bootstrap", Field: "plain"}
+	sec := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
+	dom := types.Ref{Env: textDev, Class: textBootstrap, Field: "domain"}
+	plain := types.Ref{Env: textDev, Class: textBootstrap, Field: textPlain}
 	src := file.New(map[types.Ref]file.Location{
-		sec:   {Path: path, Key: "CLIENT_SECRET"},
+		sec:   {Path: path, Key: textClientSecret2},
 		dom:   {Path: path, Key: "DOMAIN"},
 		plain: {Path: path, Key: "PLAIN"},
 	}, runner)

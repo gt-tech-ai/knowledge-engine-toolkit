@@ -26,7 +26,7 @@ func TestSection_DecodesAndValidates(t *testing.T) {
 
 	loader := mocks.NewMockConfigLoader(gomock.NewController(t))
 
-	loader.EXPECT().UnmarshalKey("logging", gomock.Any()).DoAndReturn(
+	loader.EXPECT().UnmarshalKey(textLogging, gomock.Any()).DoAndReturn(
 		func(_ string, target any) error {
 			cfg, ok := target.(*infra.LoggingConfig)
 			require.True(t, ok)
@@ -36,17 +36,17 @@ func TestSection_DecodesAndValidates(t *testing.T) {
 			return nil
 		})
 
-	got, err := config.Section[infra.LoggingConfig](loader, "logging")
+	got, err := config.Section[infra.LoggingConfig](loader, textLogging)
 	require.NoError(t, err)
 	require.Equal(t, infra.DefaultLoggingConfig(), got)
 
-	loader.EXPECT().UnmarshalKey("logging", gomock.Any()).
+	loader.EXPECT().UnmarshalKey(textLogging, gomock.Any()).
 		Return(apperr.Sentinel("bad yaml"))
 
-	_, err = config.Section[infra.LoggingConfig](loader, "logging")
+	_, err = config.Section[infra.LoggingConfig](loader, textLogging)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	loader.EXPECT().UnmarshalKey("logging", gomock.Any()).DoAndReturn(
+	loader.EXPECT().UnmarshalKey(textLogging, gomock.Any()).DoAndReturn(
 		func(_ string, target any) error {
 			cfg, ok := target.(*infra.LoggingConfig)
 			require.True(t, ok)
@@ -56,6 +56,6 @@ func TestSection_DecodesAndValidates(t *testing.T) {
 			return nil
 		})
 
-	_, err = config.Section[infra.LoggingConfig](loader, "logging")
+	_, err = config.Section[infra.LoggingConfig](loader, textLogging)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

@@ -32,13 +32,16 @@ type slowOp struct {
 
 // newSlowOp returns a slowOp whose channels hold a few signals without blocking.
 func newSlowOp() *slowOp {
-	return &slowOp{started: make(chan struct{}, 4), release: make(chan struct{}, 4)}
+	return &slowOp{
+		started: make(chan struct{}, size4),
+		release: make(chan struct{}, size4),
+	}
 }
 
 // run is the operation body the stub registry calls.
 func (o *slowOp) run(ctx context.Context, _ any, obs interfaces.ExecutionObserver) error {
 	obs.OnStepComplete(types.StepResult{
-		Name: "build", Status: types.StatusPass, Detail: []byte("one\ntwo\n"),
+		Name: textBuild, Status: types.StatusPass, Detail: []byte("one\ntwo\n"),
 	})
 
 	o.started <- struct{}{}
@@ -57,7 +60,7 @@ func (o *slowOp) run(ctx context.Context, _ any, obs interfaces.ExecutionObserve
 func (o *slowOp) registry(t *testing.T) *ops.Registry {
 	t.Helper()
 
-	return stubOpRegistryLC(t, "slow", `{"type":"object"}`,
+	return stubOpRegistryLC(t, textSlow, textTypeObject,
 		types.OpLifecycleLongRunning, o.run)
 }
 
@@ -98,7 +101,7 @@ func awaitRunState(
 	for {
 		var st mcp.RunStatus
 
-		isErr, text := callJSON(t, cs, "runs.status", map[string]any{"run_id": id}, &st)
+		isErr, text := callJSON(t, cs, textRunsStatus, map[string]any{textRunID: id}, &st)
 		require.False(t, isErr, text)
 
 		if string(st.State) == want {
@@ -134,7 +137,7 @@ func TestTransportMcpLongRunningTool_ReturnsRunID(t *testing.T) {
 
 	var started mcp.RunStarted
 
-	isErr, text := callJSON(t, cs, "slow", nil, &started)
+	isErr, text := callJSON(t, cs, textSlow, nil, &started)
 	require.False(t, isErr, text)
 	assert.NotEmpty(t, started.RunID)
 	assert.Equal(t, "running", string(started.State))
@@ -142,7 +145,7 @@ func TestTransportMcpLongRunningTool_ReturnsRunID(t *testing.T) {
 
 	op.release <- struct{}{}
 
-	awaitRunState(t, cs, started.RunID, "succeeded")
+	awaitRunState(t, cs, started.RunID, textSucceeded)
 }
 
 // TestTransportMcpRunsTools_StatusResultCancelList tests the four runs.* tools over a
@@ -193,15 +196,15 @@ func testTransportMcpRunsToolsStatusResultCancelListRest5(
 
 	var err error
 
-	callJSON(t, cs, "slow", nil, &first)
+	callJSON(t, cs, textSlow, nil, &first)
 	<-op.started
 
-	idArg := map[string]any{"run_id": first.RunID}
+	idArg := map[string]any{textRunID: first.RunID}
 
 	st := awaitRunState(t, cs, first.RunID, "running")
 	require.Len(t, st.Steps, 1)
-	assert.Equal(t, "build", st.Steps[0].Step)
-	assert.Equal(t, "slow", st.Op)
+	assert.Equal(t, textBuild, st.Steps[0].Step)
+	assert.Equal(t, textSlow, st.Op)
 
 	isErr, text := callJSON(t, cs, "runs.result", idArg, nil)
 	assert.True(t, isErr)
@@ -209,7 +212,7 @@ func testTransportMcpRunsToolsStatusResultCancelListRest5(
 
 	op.release <- struct{}{}
 
-	awaitRunState(t, cs, first.RunID, "succeeded")
+	awaitRunState(t, cs, first.RunID, textSucceeded)
 
 	var res mcp.ToolResult
 
@@ -243,14 +246,14 @@ func testTransportMcpRunsToolsStatusResultCancelListRest(
 
 	var second mcp.RunStarted
 
-	callJSON(t, cs, "slow", nil, &second)
+	callJSON(t, cs, textSlow, nil, &second)
 	<-op.started
 
 	isErr, text = callJSON(
 		t,
 		cs,
 		"runs.cancel",
-		map[string]any{"run_id": second.RunID},
+		map[string]any{textRunID: second.RunID},
 		nil,
 	)
 	require.False(t, isErr, text)
@@ -261,15 +264,21 @@ func testTransportMcpRunsToolsStatusResultCancelListRest(
 	isErr, text = callJSON(t, cs, "runs.list", nil, &list)
 	require.False(t, isErr, text)
 	assert.Equal(t, []mcp.RunEntry{
-		{RunID: first.RunID, Op: "slow", State: "succeeded"},
-		{RunID: second.RunID, Op: "slow", State: "cancelled"},
+		{RunID: first.RunID, Op: textSlow, State: textSucceeded},
+		{RunID: second.RunID, Op: textSlow, State: "cancelled"},
 	}, list.Runs)
 
-	isErr, text = callJSON(t, cs, "runs.status", map[string]any{"run_id": "nope"}, nil)
+	isErr, text = callJSON(
+		t,
+		cs,
+		textRunsStatus,
+		map[string]any{textRunID: textNope},
+		nil,
+	)
 	assert.True(t, isErr)
 	assert.Contains(t, text, "NOT_FOUND")
 
-	isErr, text = callJSON(t, cs, "runs.status", nil, nil)
+	isErr, text = callJSON(t, cs, textRunsStatus, nil, nil)
 	assert.True(t, isErr)
 	assert.Contains(t, text, "INVALID_INPUT")
 }
@@ -290,7 +299,10 @@ func stdioSession(
 
 	go func() { done <- srv.ServeStdio(ctx, inR, outW) }()
 
-	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test", Version: "test"}, nil)
+	client := sdkmcp.NewClient(
+		&sdkmcp.Implementation{Name: textTest, Version: textTest},
+		nil,
+	)
 	cs, err := client.Connect(ctx,
 		&sdkmcp.IOTransport{Reader: outR, Writer: inW}, nil)
 	require.NoError(t, err)
@@ -320,7 +332,7 @@ func TestTransportMcpEOF_CancelsActiveRunsBeforeExit(t *testing.T) {
 	require.NoError(t, err)
 
 	cs, inW, done := stdioSession(t.Context(), t, srv)
-	callJSON(t, cs, "slow", nil, &mcp.RunStarted{})
+	callJSON(t, cs, textSlow, nil, &mcp.RunStarted{})
 	<-op.started
 
 	require.NoError(t, inW.Close())
@@ -348,7 +360,7 @@ func TestTransportMcpCancel_CancelsActiveRunsBeforeExit(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cs, inW, done := stdioSession(ctx, t, srv)
 	t.Cleanup(func() { _ = inW.Close() })
-	callJSON(t, cs, "slow", nil, &mcp.RunStarted{})
+	callJSON(t, cs, textSlow, nil, &mcp.RunStarted{})
 	<-op.started
 
 	cancel()
@@ -378,20 +390,20 @@ func TestTransportMcpLongRunningTool_BusyReplyIsToolResult(t *testing.T) {
 
 	var started mcp.RunStarted
 
-	isErr, text := callJSON(t, cs, "slow", nil, &started)
+	isErr, text := callJSON(t, cs, textSlow, nil, &started)
 	require.False(t, isErr, text)
 	<-op.started
 
 	var busy map[string]any
 
-	isErr, text = callJSON(t, cs, "slow", nil, &busy)
+	isErr, text = callJSON(t, cs, textSlow, nil, &busy)
 	assert.True(t, isErr)
 	assert.IsType(t, []any{}, busy["steps"], text)
-	assert.Contains(t, busy["error"], "UNAVAILABLE: busy")
+	assert.Contains(t, busy[textError], "UNAVAILABLE: busy")
 
 	op.release <- struct{}{}
 
-	awaitRunState(t, cs, started.RunID, "succeeded")
+	awaitRunState(t, cs, started.RunID, textSucceeded)
 }
 
 // TestTransportMcpRunsTools_OnlyWithLongRunningOperation tests that the runs.* tools are
@@ -407,7 +419,7 @@ func TestTransportMcpLongRunningTool_BusyReplyIsToolResult(t *testing.T) {
 func TestTransportMcpRunsTools_OnlyWithLongRunningOperation(t *testing.T) {
 	t.Parallel()
 
-	reg := stubOpRegistryLC(t, "stub", `{"type":"object"}`, types.OpLifecycleBounded,
+	reg := stubOpRegistryLC(t, textStub, textTypeObject, types.OpLifecycleBounded,
 		func(context.Context, any, interfaces.ExecutionObserver) error { return nil })
 	srv, err := mcp.New(reg, mcpOpts(t))
 	require.NoError(t, err)
@@ -417,5 +429,5 @@ func TestTransportMcpRunsTools_OnlyWithLongRunningOperation(t *testing.T) {
 	res, err := cs.ListTools(t.Context(), nil)
 	require.NoError(t, err)
 	require.Len(t, res.Tools, 1)
-	assert.Equal(t, "stub", res.Tools[0].Name)
+	assert.Equal(t, textStub, res.Tools[0].Name)
 }

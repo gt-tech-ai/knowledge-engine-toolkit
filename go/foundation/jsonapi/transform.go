@@ -54,7 +54,7 @@ func TransformSingleResource(
 	}
 
 	if len(meta) > 0 {
-		result["meta"] = meta
+		result[textMeta] = meta
 	}
 
 	return result
@@ -71,7 +71,7 @@ func TransformMeta(body map[string]any) map[string]any {
 	meta := make(map[string]any, len(body))
 	maps.Copy(meta, body)
 
-	return map[string]any{"meta": meta}
+	return map[string]any{textMeta: meta}
 }
 
 // TransformCollection converts a Vanguard list response to JSON:API format.
@@ -139,7 +139,7 @@ func collectionLinks(
 	}
 
 	if meta := paginationMeta(pg); len(meta) > 0 {
-		result["meta"] = meta
+		result[textMeta] = meta
 	}
 
 	return links
@@ -167,13 +167,13 @@ func paginationMeta(pg map[string]any) map[string]any {
 func buildResourceObject(resource map[string]any, resourceType string) map[string]any {
 	obj := map[string]any{"type": resourceType}
 
-	if id, ok := resource["id"]; ok {
-		obj["id"] = id
+	if id, ok := resource[textID]; ok {
+		obj[textID] = id
 	}
 
 	attrs := make(map[string]any, len(resource))
 	for k, v := range resource {
-		if k == "id" {
+		if k == textID {
 			continue
 		}
 

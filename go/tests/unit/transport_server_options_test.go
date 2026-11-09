@@ -54,7 +54,7 @@ func TestInterceptors_LaysOutTheControllerTier(t *testing.T) {
 	native := func(layer decorate.Layer) ([]string, bool) {
 		switch layer {
 		case decorate.LayerTracing:
-			return []string{"tracing"}, true
+			return []string{textTracing}, true
 		case decorate.LayerMetrics:
 			return []string{"metrics"}, true
 		case decorate.LayerLogging:
@@ -76,18 +76,18 @@ func TestInterceptors_LaysOutTheControllerTier(t *testing.T) {
 	adapt := func(unary, stream decorate.OpMiddleware) string {
 		runs = append(runs, runGroup{unary: unary, stream: stream})
 
-		return "run"
+		return textRun
 	}
 	d := decorate.Deps{
 		RateLimiter: fixtures.StubRateLimiter(true),
 		Auth:        func(context.Context, string) error { return nil },
-		Timeout:     5 * time.Millisecond,
+		Timeout:     millis5 * time.Millisecond,
 	}
 
-	got := transport.Interceptors("svc", d, native, adapt, []string{"authn"})
+	got := transport.Interceptors(textSvc, d, native, adapt, []string{"authn"})
 
-	assert.Equal(t, []string{"tracing", "metrics", "run", "authn", "run"}, got)
-	require.Len(t, runs, 2)
+	assert.Equal(t, []string{textTracing, "metrics", textRun, "authn", textRun}, got)
+	require.Len(t, runs, wantRunsLen2)
 
 	slow := func(ctx context.Context) error {
 		select {
@@ -97,9 +97,9 @@ func TestInterceptors_LaysOutTheControllerTier(t *testing.T) {
 			return nil
 		}
 	}
-	err := runs[1].unary.WrapOp(t.Context(), "op", slow)
+	err := runs[1].unary.WrapOp(t.Context(), textOp, slow)
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
-	assert.NoError(t, runs[1].stream.WrapOp(t.Context(), "op", slow))
+	assert.NoError(t, runs[1].stream.WrapOp(t.Context(), textOp, slow))
 }
 
 // optionsProcedure is the procedure the ServerOptions tests serve.
@@ -132,7 +132,7 @@ func serveUnary(
 		optionsProcedure,
 		http.NoBody,
 	)
-	req.Header.Set("Content-Type", "application/proto")
+	req.Header.Set(textContentType, "application/proto")
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -161,7 +161,7 @@ func serveStream(
 	// One enveloped, empty request message: flags 0, length 0.
 	body := bytes.NewReader([]byte{0, 0, 0, 0, 0})
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, optionsProcedure, body)
-	req.Header.Set("Content-Type", "application/connect+proto")
+	req.Header.Set(textContentType, "application/connect+proto")
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -190,10 +190,10 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 	ok := func(context.Context) error { return nil }
 
 	assert.Nil(t, interceptors.ServerOptions(
-		"probe", decorate.Deps{SkipRecovery: true}, interceptors.Edge{},
+		textProbe, decorate.Deps{SkipRecovery: true}, interceptors.Edge{},
 	))
 
-	limited := interceptors.ServerOptions("probe", decorate.Deps{
+	limited := interceptors.ServerOptions(textProbe, decorate.Deps{
 		RateLimiter: fixtures.StubRateLimiter(false),
 	}, interceptors.Edge{})
 	assert.Equal(t, http.StatusTooManyRequests, serveUnary(t.Context(), limited, ok))
@@ -201,7 +201,7 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 
 	var actions []string
 
-	guarded := interceptors.ServerOptions("probe", decorate.Deps{
+	guarded := interceptors.ServerOptions(textProbe, decorate.Deps{
 		Auth: func(_ context.Context, action string) error {
 			actions = append(actions, action)
 			if len(actions) > 1 {
@@ -229,9 +229,9 @@ func testConnectServerOptionsDecoratesEveryRPCRest(t *testing.T, denied string) 
 
 	assert.NotContains(t, denied, "secret-action-detail")
 
-	panicking := func(context.Context) error { panic("boom") }
+	panicking := func(context.Context) error { panic(textBoom) }
 	recovering := interceptors.ServerOptions(
-		"probe",
+		textProbe,
 		decorate.Deps{},
 		interceptors.Edge{},
 	)
@@ -240,12 +240,12 @@ func testConnectServerOptionsDecoratesEveryRPCRest(t *testing.T, denied string) 
 		http.StatusInternalServerError,
 		serveUnary(t.Context(), recovering, panicking),
 	)
-	assert.Contains(t, serveStream(t.Context(), recovering, panicking), "internal")
+	assert.Contains(t, serveStream(t.Context(), recovering, panicking), textInternal)
 
 	notFound := func(context.Context) error {
 		return connect.NewError(connect.CodeNotFound, apperr.Sentinel("no such probe"))
 	}
-	bounded := interceptors.ServerOptions("probe", decorate.Deps{
+	bounded := interceptors.ServerOptions(textProbe, decorate.Deps{
 		Timeout: 5 * time.Millisecond,
 	}, interceptors.Edge{})
 	assert.Equal(t, http.StatusNotFound, serveUnary(t.Context(), bounded, notFound))
@@ -258,7 +258,7 @@ func testConnectServerOptionsDecoratesEveryRPCRest(t *testing.T, denied string) 
 			return nil
 		}
 	}
-	assert.NotContains(t, serveStream(t.Context(), bounded, slow), "error")
+	assert.NotContains(t, serveStream(t.Context(), bounded, slow), textError)
 }
 
 // TestGRPCServerOptions_DecoratesEveryRPC tests grpc interceptors.ServerOptions.

@@ -127,7 +127,7 @@ func (l *Logger) WithContext(ctx context.Context) interfaces.Logger {
 	var fields []any
 
 	if correlationID != "" {
-		fields = append(fields, "correlation_id", correlationID)
+		fields = append(fields, textCorrelationID, correlationID)
 	}
 
 	if traceID != "" {
@@ -253,7 +253,7 @@ func (h *redactingHandler) Handle(ctx context.Context, r slog.Record) error {
 	// slog.InfoContext). The Logger wrapper handles all context fields
 	// (correlation_id, trace_id, span_id) through WithContext() instead.
 	if id := logctx.CorrelationID(ctx); id != "" {
-		r2.AddAttrs(slog.String("correlation_id", id))
+		r2.AddAttrs(slog.String(textCorrelationID, id))
 	}
 
 	return h.inner.Handle(ctx, r2)
@@ -282,7 +282,7 @@ func (h *redactingHandler) WithGroup(name string) slog.Handler {
 // would break log<->trace correlation.
 func noRedactKey(key string) bool {
 	switch key {
-	case "trace_id", "span_id", "correlation_id", "request_id", "caller", "stacktrace":
+	case "trace_id", "span_id", textCorrelationID, "request_id", "caller", "stacktrace":
 		return true
 	default:
 		return false

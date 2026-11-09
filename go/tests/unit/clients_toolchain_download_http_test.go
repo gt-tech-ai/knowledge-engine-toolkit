@@ -71,7 +71,7 @@ func runClientsToolchainInstallDefaultDownloaderFetchesOverHTTP(t *testing.T) {
 			binDir, _ := isolateInstallDirs(t)
 			runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 			tool := downloadTool(map[string]types.Artifact{
-				"linux-amd64": {
+				textLinuxAmd64: {
 					URL:    srv.URL + tc.path,
 					SHA256: sha256Hex(checksumPayload()),
 				},
@@ -79,12 +79,12 @@ func runClientsToolchainInstallDefaultDownloaderFetchesOverHTTP(t *testing.T) {
 			inst := toolchain.NewInstaller(
 				runner,
 				fixtures.NopLogger(),
-				"linux-apt",
+				textLinuxApt,
 				denyPrompter(t),
 				toolchain.WithArch("amd64"),
 			)
 
-			err := inst.Install(context.Background(), "/root", tool)
+			err := inst.Install(context.Background(), textRoot, tool)
 
 			if tc.wantErr {
 				require.Error(t, err)
@@ -95,7 +95,7 @@ func runClientsToolchainInstallDefaultDownloaderFetchesOverHTTP(t *testing.T) {
 
 			require.NoError(t, err)
 
-			got, err := os.ReadFile(filepath.Clean(filepath.Join(binDir, "pinned")))
+			got, err := os.ReadFile(filepath.Clean(filepath.Join(binDir, textPinned)))
 			require.NoError(t, err)
 			assert.Equal(t, checksumPayload(), got)
 		})
@@ -147,12 +147,12 @@ func runClientsToolchainInstallWindowsARM64FallsBackToAMD64Asset(t *testing.T) {
 	inst := toolchain.NewInstaller(
 		mocks.NewMockCommandRunner(ctrl),
 		fixtures.NopLogger(),
-		"windows",
+		textWindows,
 		denyPrompter(t),
 		toolchain.WithArch("arm64"),
 		toolchain.WithDownloader(dl),
 	)
 
-	require.NoError(t, inst.Install(context.Background(), "/root", tool))
+	require.NoError(t, inst.Install(context.Background(), textRoot, tool))
 	assert.Equal(t, []string{"pinned.exe"}, dirEntries(t, binDir))
 }

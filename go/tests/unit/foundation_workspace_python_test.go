@@ -13,7 +13,7 @@ import (
 )
 
 // pyRoots are the Python package roots the discovery cases search.
-func pyRoots() []string { return []string{"libs/python", "services/python", "tools"} }
+func pyRoots() []string { return []string{"libs/python", "services/python", textTools} }
 
 // TestPythonPackages tests discovery of Python packages by pyproject.toml.
 //
@@ -32,21 +32,32 @@ func TestPythonPackages(t *testing.T) {
 	root := t.TempDir()
 	wsWrite(
 		t,
-		filepath.Join(root, "libs", "python", "shelf", "pyproject.toml"),
-		"[project]\n",
+		filepath.Join(root, textLibs, textPython, "shelf", textPyprojectToml),
+		textProject,
 	)
 	wsWrite(
 		t,
-		filepath.Join(root, "services", "python", "lend", "pyproject.toml"),
-		"[project]\n",
+		filepath.Join(root, textServices, textPython, "lend", textPyprojectToml),
+		textProject,
 	)
 	wsWrite(
 		t,
-		filepath.Join(root, "services", "python", "server", "deep", "pyproject.toml"),
-		"[project]\n",
+		filepath.Join(
+			root,
+			textServices,
+			textPython,
+			"server",
+			"deep",
+			textPyprojectToml,
+		),
+		textProject,
 	)
-	wsWrite(t, filepath.Join(root, "libs", "python", "nope", "readme.md"), "no pyproject")
-	wsWrite(t, filepath.Join(root, "libs", "python", "stray.txt"), "x")
+	wsWrite(
+		t,
+		filepath.Join(root, textLibs, textPython, textNope, "readme.md"),
+		"no pyproject",
+	)
+	wsWrite(t, filepath.Join(root, textLibs, textPython, "stray.txt"), textX)
 
 	pkgs, err := python.Packages(os.DirFS(root), pyRoots(), nil)
 	require.NoError(t, err)
@@ -83,7 +94,7 @@ func TestPythonPackages_Errors(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		wsWrite(t, filepath.Join(root, "tools"), "not a dir")
+		wsWrite(t, filepath.Join(root, textTools), "not a dir")
 
 		_, err := python.Packages(os.DirFS(root), pyRoots(), nil)
 		require.Error(t, err)
@@ -97,7 +108,7 @@ func TestPythonPackages_Errors(t *testing.T) {
 		}
 
 		root := t.TempDir()
-		bad := filepath.Join(root, "libs", "python", "shelf", "sub")
+		bad := filepath.Join(root, textLibs, textPython, "shelf", textSub)
 		require.NoError(t, os.MkdirAll(bad, 0o750))
 
 		info, err := os.Stat(bad)
@@ -130,11 +141,11 @@ func TestPythonModuleName(t *testing.T) {
 	for _, d := range []string{"__pycache__", "shelf.egg-info", "shelf_core"} {
 		require.NoError(
 			t,
-			os.MkdirAll(filepath.Join(root, "libs", "shelf", "src", d), 0o750),
+			os.MkdirAll(filepath.Join(root, textLibs, "shelf", textSrc, d), perm0o750),
 		)
 	}
 
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "flat"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, textLibs, "flat"), perm0o750))
 
 	assert.Equal(t, "shelf_core", python.ModuleName(os.DirFS(root), "libs/shelf"))
 	assert.Equal(t, "flat", python.ModuleName(os.DirFS(root), "libs/flat"))

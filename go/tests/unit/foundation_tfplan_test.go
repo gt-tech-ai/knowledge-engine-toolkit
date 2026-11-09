@@ -55,7 +55,7 @@ func writeUnitPlan(
 	for _, c := range changes {
 		ch := change{Actions: c.actions}
 		if c.importing {
-			ch.Importing = map[string]string{"id": "adopted"}
+			ch.Importing = map[string]string{textID: "adopted"}
 		}
 
 		doc.ResourceChanges = append(
@@ -65,15 +65,18 @@ func writeUnitPlan(
 	}
 
 	if outputs {
-		doc.OutputChanges = map[string]change{"url": {Actions: []string{"update"}}}
+		doc.OutputChanges = map[string]change{textURL: {Actions: []string{"update"}}}
 	}
 
 	data, err := json.Marshal(doc)
 	require.NoError(t, err)
 
 	unitDir := filepath.Join(dir, unit)
-	require.NoError(t, os.MkdirAll(unitDir, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(unitDir, tfplan.JSONFile), data, 0o600))
+	require.NoError(t, os.MkdirAll(unitDir, perm0o750))
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(unitDir, tfplan.JSONFile), data, perm0o600),
+	)
 }
 
 // TestFoundationTfplan tests the saved-plan reader and its reviewer summary.
@@ -100,7 +103,7 @@ func TestFoundationTfplan(t *testing.T) {
 	writeUnitPlan(
 		t,
 		dir,
-		"vpc",
+		textVpc,
 		true,
 		planChange{address: "aws_vpc.main", actions: []string{"update"}},
 	)
@@ -116,10 +119,10 @@ func TestFoundationTfplan(t *testing.T) {
 		dir,
 		"eks",
 		false,
-		planChange{address: "aws_eks_cluster.main", actions: []string{"create"}},
+		planChange{address: "aws_eks_cluster.main", actions: []string{textCreate}},
 		planChange{
 			address: "aws_eks_node_group.ng",
-			actions: []string{"delete", "create"},
+			actions: []string{textDelete, textCreate},
 		},
 	)
 	writeUnitPlan(
@@ -127,8 +130,8 @@ func TestFoundationTfplan(t *testing.T) {
 		dir,
 		"iam",
 		false,
-		planChange{address: "aws_iam_role.old", actions: []string{"delete"}},
-		planChange{address: "data.aws_iam_policy.p", actions: []string{"read"}},
+		planChange{address: "aws_iam_role.old", actions: []string{textDelete}},
+		planChange{address: "data.aws_iam_policy.p", actions: []string{textRead}},
 		planChange{
 			address:   "aws_iam_role.adopted",
 			actions:   []string{"no-op"},
@@ -145,7 +148,7 @@ func TestFoundationTfplan(t *testing.T) {
 		units = append(units, p.Unit)
 	}
 
-	assert.Equal(t, []string{"eks", "iam", "rds", "vpc"}, units)
+	assert.Equal(t, []string{"eks", "iam", "rds", textVpc}, units)
 	assert.True(t, plans[3].HasChanges() && plans[3].Outputs, "vpc changes an output")
 
 	testFoundationTfplanRest(t, dir, plans)
@@ -192,14 +195,14 @@ func testFoundationTfplanRest(t *testing.T, dir string, plans []tfplan.UnitPlan)
 		last = at
 	}
 
-	none, err := tfplan.ReadUnits(filepath.Join(dir, "missing"))
+	none, err := tfplan.ReadUnits(filepath.Join(dir, textMissing))
 	require.NoError(t, err)
 	assert.Empty(t, none)
-	assert.Contains(t, tfplan.Summary("t", none), "No unit has pending changes.")
+	assert.Contains(t, tfplan.Summary(textT, none), "No unit has pending changes.")
 
-	broken := filepath.Join(dir, "broken", tfplan.JSONFile)
-	require.NoError(t, os.MkdirAll(filepath.Dir(broken), 0o750))
-	require.NoError(t, os.WriteFile(broken, []byte("{"), 0o600))
+	broken := filepath.Join(dir, textBroken, tfplan.JSONFile)
+	require.NoError(t, os.MkdirAll(filepath.Dir(broken), perm0o750))
+	require.NoError(t, os.WriteFile(broken, []byte("{"), perm0o600))
 
 	_, err = tfplan.ReadUnits(dir)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))

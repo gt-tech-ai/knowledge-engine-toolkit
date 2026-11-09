@@ -69,7 +69,7 @@ func TestPipelineStage_ThenComposesAndStopsOnError(t *testing.T) {
 	})
 	untouched := mocks.NewMockPipeline[int, string](gomock.NewController(t))
 
-	_, err = failing.Then(untouched).Execute(t.Context(), "x")
+	_, err = failing.Then(untouched).Execute(t.Context(), textX)
 	require.ErrorIs(t, err, boom)
 
 	assert.Panics(t, func() { failing.Then(interfaces.Pipeline[int, string](nil)) })
@@ -92,9 +92,11 @@ func TestPipelineStage_ThenComposesAndStopsOnError(t *testing.T) {
 func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 	t.Parallel()
 
-	boom := fixtures.Must(pipeline.NewBase[boomPipeline](fixtures.Decorations(), "boom"))
-	_, err := boom.Stage("boom", func(context.Context, int) (int, error) {
-		panic("boom")
+	boom := fixtures.Must(
+		pipeline.NewBase[boomPipeline](fixtures.Decorations(), textBoom),
+	)
+	_, err := boom.Stage(textBoom, func(context.Context, int) (int, error) {
+		panic(textBoom)
 	}).Execute(t.Context(), 1)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
@@ -102,7 +104,7 @@ func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 	tracer := mocks.NewMockTracer(ctrl)
 	span := mocks.NewMockSpan(ctrl)
 	span.EXPECT().SetAttribute(gomock.Any(), gomock.Any()).AnyTimes()
-	span.EXPECT().End().Times(2)
+	span.EXPECT().End().Times(timesArg2)
 
 	start := func(
 		ctx context.Context, _ string, _ ...interfaces.SpanOption,
@@ -149,7 +151,7 @@ func TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
 	t.Parallel()
 
 	stages := pipeline.Base{}
-	started := make(chan struct{}, 3)
+	started := make(chan struct{}, size3)
 	all := make(chan struct{})
 
 	go func() {
@@ -174,7 +176,7 @@ func TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
 	}
 
 	got, err := stages.FanOut("multiply", times(1), times(2), times(3)).
-		Execute(t.Context(), 7)
+		Execute(t.Context(), executeArg7)
 	require.NoError(t, err)
 	assert.Equal(t, []int{7, 14, 21}, got)
 
@@ -191,7 +193,7 @@ func TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
 	_, err = stages.FanOut("sources", blocked, failing).Execute(t.Context(), 1)
 	require.ErrorIs(t, err, boom)
 
-	none, err := stages.FanOut[int, int]("none").Execute(t.Context(), 1)
+	none, err := stages.FanOut[int, int](textNone).Execute(t.Context(), 1)
 	require.NoError(t, err)
 	assert.Empty(t, none)
 }

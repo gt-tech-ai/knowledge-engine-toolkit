@@ -54,12 +54,12 @@ func TestServicesSuite_Composite(t *testing.T) {
 		Decs: fixtures.Decorations(),
 		Spec: types.Composite{Title: "Preflight", Phases: []types.CompositePhase{
 			{Group: "Toolchain", Jobs: []string{"toolchain"}, Serial: true},
-			{Group: "Format", Suites: []types.SuiteRef{{Name: "fmt"}}, Serial: true},
+			{Group: textFormat, Suites: []types.SuiteRef{{Name: textFmt}}, Serial: true},
 			{Group: "Lint & Type Check", Suites: []types.SuiteRef{
-				{Name: "lint", Flags: []string{"go", "offline"}},
-				{Name: "check", Select: &types.Selection{Tags: []string{"mocks"}}},
-			}, Jobs: []string{"trivy"}},
-			{Group: "Unit Tests", Jobs: []string{"go-unit", "ts-unit"}},
+				{Name: textLint, Flags: []string{textGo2, textOffline}},
+				{Name: textCheck, Select: &types.Selection{Tags: []string{"mocks"}}},
+			}, Jobs: []string{textTrivy}},
+			{Group: textUnitTests, Jobs: []string{"go-unit", "ts-unit"}},
 		}},
 		Suites: func(ref types.SuiteRef) []interfaces.AnyJob {
 			refs = append(refs, ref)
@@ -71,14 +71,14 @@ func TestServicesSuite_Composite(t *testing.T) {
 		},
 		Jobs: map[string]func() interfaces.AnyJob{
 			"toolchain": func() interfaces.AnyJob { return nil },
-			"trivy":     func() interfaces.AnyJob { return namedJob("trivy license", "x") },
-			"go-unit":   func() interfaces.AnyJob { return namedJob("Go tests", "x") },
-			"ts-unit":   func() interfaces.AnyJob { return namedJob("TypeScript tests", "x") },
+			textTrivy:   func() interfaces.AnyJob { return namedJob("trivy license", textX) },
+			"go-unit":   func() interfaces.AnyJob { return namedJob("Go tests", textX) },
+			"ts-unit":   func() interfaces.AnyJob { return namedJob("TypeScript tests", textX) },
 		},
 	}
 	g := c.Gate()
 	phases := g.Phases()
-	require.Len(t, phases, 3, "the empty Toolchain phase is dropped")
+	require.Len(t, phases, wantPhasesLen3, "the empty Toolchain phase is dropped")
 
 	names := func(i int) []string {
 		out := make([]string, 0, len(phases[i].Jobs))
@@ -89,17 +89,17 @@ func TestServicesSuite_Composite(t *testing.T) {
 		return out
 	}
 
-	assert.Equal(t, "Format", phases[0].Name)
+	assert.Equal(t, textFormat, phases[0].Name)
 	assert.Equal(t, []string{"fmt a", "fmt b"}, names(0))
 	assert.Equal(t, "Lint & Type Check", phases[1].Name)
 	assert.Equal(t, []string{"lint a", "lint b", "check a", "check b", "trivy license"},
 		names(1))
-	assert.Equal(t, "Unit Tests", phases[2].Name)
-	assert.Equal(t, []string{"Go tests", "TypeScript tests"}, names(2))
+	assert.Equal(t, textUnitTests, phases[2].Name)
+	assert.Equal(t, []string{"Go tests", "TypeScript tests"}, names(namesArg2))
 	assert.Equal(t, []types.SuiteRef{
-		{Name: "fmt"},
-		{Name: "lint", Flags: []string{"go", "offline"}},
-		{Name: "check", Select: &types.Selection{Tags: []string{"mocks"}}},
+		{Name: textFmt},
+		{Name: textLint, Flags: []string{textGo2, textOffline}},
+		{Name: textCheck, Select: &types.Selection{Tags: []string{"mocks"}}},
 	}, refs)
 
 	testServicesSuiteCompositeRest(t, g)
@@ -111,19 +111,19 @@ func testServicesSuiteCompositeRest(t *testing.T, g *gate.Gate) {
 	t.Helper()
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
-	require.NoError(t, g.Run(t.Context(), runner, "/r"))
+	require.NoError(t, g.Run(t.Context(), runner, textR))
 
 	bad := suite.Composite{
 		Decs: fixtures.Decorations(),
 		Spec: types.Composite{Title: "Preflight", Phases: []types.CompositePhase{
-			{Group: "Unit Tests", Jobs: []string{"rust-unit"}},
-			{Group: "Format", Suites: []types.SuiteRef{{Name: "fmt"}}},
+			{Group: textUnitTests, Jobs: []string{"rust-unit"}},
+			{Group: textFormat, Suites: []types.SuiteRef{{Name: textFmt}}},
 		}},
 	}
 	bg := bad.Gate()
-	require.Len(t, bg.Phases(), 2)
+	require.Len(t, bg.Phases(), wantPhasesLen2)
 
-	err := bg.Run(t.Context(), runner, "/r")
+	err := bg.Run(t.Context(), runner, textR)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), string(apperr.CodeInvalidInput))
 	assert.Contains(t, err.Error(), `Preflight: no job "rust-unit"`)

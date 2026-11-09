@@ -584,12 +584,12 @@ func commonPathPrefix(routes []RouteEntry) string {
 		return ""
 	}
 
-	return "/" + strings.Join(prefix, "/")
+	return textSlash + strings.Join(prefix, textSlash)
 }
 
 // pathSegments splits a path template into its segments, ignoring outer slashes.
 func pathSegments(template string) []string {
-	return strings.Split(strings.Trim(template, "/"), "/")
+	return strings.Split(strings.Trim(template, textSlash), textSlash)
 }
 
 // sharedPrefixLen counts the leading segments a and b have in common.

@@ -39,13 +39,13 @@ func TestRequestID_GeneratesWhenMissing(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.NotEmpty(
 		t,
-		rec.Header().Get("X-Request-ID"),
+		rec.Header().Get(textXRequestID),
 		"X-Request-ID header not set on response",
 	)
 }
@@ -71,13 +71,13 @@ func TestRequestID_PreservesExisting(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
-	req.Header.Set("X-Request-ID", "existing-id")
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
+	req.Header.Set(textXRequestID, "existing-id")
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	assert.Equal(t, "existing-id", rec.Header().Get("X-Request-ID"))
+	assert.Equal(t, "existing-id", rec.Header().Get(textXRequestID))
 }
 
 // TestRecovery_CatchesPanic tests that handler panics are caught and converted to 500
@@ -105,7 +105,7 @@ func TestRecovery_CatchesPanic(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -135,7 +135,7 @@ func TestRecovery_PassesThroughNormally(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -165,14 +165,14 @@ func TestCORS_SetsHeaders(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(
 		t,
 		"*",
-		rec.Header().Get("Access-Control-Allow-Origin"),
+		rec.Header().Get(textAccessControlAllowOrigin),
 		"CORS origin header not set",
 	)
 	assert.NotEmpty(
@@ -211,7 +211,7 @@ func TestCORS_ExposesTraceResponseHeader(t *testing.T) {
 		),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -247,7 +247,7 @@ func TestCORS_PreflightReturns204(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "OPTIONS", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), "OPTIONS", textSlash, http.NoBody)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -269,7 +269,7 @@ func TestCORS_PreflightReturns204(t *testing.T) {
 func TestCompression_CompressesLargeResponse(t *testing.T) {
 	t.Parallel()
 
-	largeBody := strings.Repeat("hello world ", 200) // > 1KB
+	largeBody := strings.Repeat("hello world ", count200) // > 1KB
 
 	handler := middleware.Compression()(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -277,16 +277,16 @@ func TestCompression_CompressesLargeResponse(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
-	req.Header.Set("Accept-Encoding", "gzip")
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
+	req.Header.Set("Accept-Encoding", textGzip)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(
 		t,
-		"gzip",
-		rec.Header().Get("Content-Encoding"),
+		textGzip,
+		rec.Header().Get(textContentEncoding),
 		"expected gzip Content-Encoding for large response",
 	)
 
@@ -319,16 +319,16 @@ func TestCompression_SkipsSmallResponse(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
-	req.Header.Set("Accept-Encoding", "gzip")
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
+	req.Header.Set("Accept-Encoding", textGzip)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.NotEqual(
 		t,
-		"gzip",
-		rec.Header().Get("Content-Encoding"),
+		textGzip,
+		rec.Header().Get(textContentEncoding),
 		"should not compress small responses",
 	)
 }
@@ -346,7 +346,7 @@ func TestCompression_SkipsSmallResponse(t *testing.T) {
 func TestCompression_SkipsWithoutAcceptEncoding(t *testing.T) {
 	t.Parallel()
 
-	largeBody := strings.Repeat("hello world ", 200)
+	largeBody := strings.Repeat("hello world ", count200)
 
 	handler := middleware.Compression()(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -354,15 +354,15 @@ func TestCompression_SkipsWithoutAcceptEncoding(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
 	// No Accept-Encoding header
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.NotEqual(
 		t,
-		"gzip",
-		rec.Header().Get("Content-Encoding"),
+		textGzip,
+		rec.Header().Get(textContentEncoding),
 		"should not compress without Accept-Encoding: gzip",
 	)
 }
@@ -389,7 +389,7 @@ func TestHTTPMetrics_Records200(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(
 		t.Context(),
-		"GET",
+		textGet3,
 		"/api/v1/things",
 		http.NoBody,
 	)
@@ -420,7 +420,7 @@ func TestHTTPMetrics_Buckets404AsNotFound(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(
 		t.Context(),
-		"GET",
+		textGet3,
 		"/unknown-path",
 		http.NoBody,
 	)
@@ -455,7 +455,7 @@ func TestHTTPMetrics_PatternUsedAsRouteLabel(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(
 		t.Context(),
-		"GET",
+		textGet3,
 		"/api/v1/items",
 		http.NoBody,
 	)
@@ -488,23 +488,25 @@ func TestHTTPMetrics_NormalizesIDSegmentsToOneRouteSeries(t *testing.T) {
 	hist := mocks.NewMockHistogram(ctrl)
 
 	m.EXPECT().
-		Counter("http_server_requests_total", gomock.Any(), "method", "route", "status").
+		Counter("http_server_requests_total", gomock.Any(), textMethod, "route", textStatus).
 		Return(counter)
 	m.EXPECT().
 		Histogram(
 			"http_server_request_duration_seconds",
 			gomock.Any(),
 			gomock.Any(),
-			"method",
+			textMethod,
 			"route",
-			"status",
+			textStatus,
 		).
 		Return(hist)
 
 	// Both distinct-UUID paths must land on the SAME normalized label — Times(2)
 	// on one expectation fails (unexpected call) if normalization leaks the id.
-	counter.EXPECT().Inc("GET", "/api/documents/{id}", "200").Times(2)
-	hist.EXPECT().Observe(gomock.Any(), "GET", "/api/documents/{id}", "200").Times(2)
+	counter.EXPECT().Inc(textGet3, "/api/documents/{id}", text200).Times(timesArg2)
+	hist.EXPECT().
+		Observe(gomock.Any(), textGet3, "/api/documents/{id}", text200).
+		Times(timesArg2)
 
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -519,7 +521,7 @@ func TestHTTPMetrics_NormalizesIDSegmentsToOneRouteSeries(t *testing.T) {
 		// exercising the normalization branch.
 		req := httptest.NewRequestWithContext(
 			t.Context(),
-			"GET",
+			textGet3,
 			"/api/documents/"+id,
 			http.NoBody,
 		)
@@ -577,7 +579,7 @@ func TestHTTPMetrics_RouteLabelNormalizationCases(t *testing.T) {
 
 			req := httptest.NewRequestWithContext(
 				t.Context(),
-				"GET",
+				textGet3,
 				tc.path,
 				http.NoBody,
 			)
@@ -616,13 +618,13 @@ func routeLabelCasesTable() []routeLabelCasesRow {
 		{"long hex token", "/api/blobs/deadbeefdeadbeef01", "/api/blobs/{id}"},
 		// A >=16-char all-hex segment with a digit (no dashes) is a hash/object key
 		// → {id}. Also exercises isUUID's separator-mismatch branch (s[8] != '-').
-		{"long hex hash", "/api/x/" + strings.Repeat("a1", 18), "/api/x/{id}"},
+		{"long hex hash", textAPIX + strings.Repeat("a1", count18), "/api/x/{id}"},
 		// >=16 chars, has a digit (passes the fast-path) but a non-hex byte → not an
 		// id; covers isHex's reject branch.
 		{
 			"long non-hex token",
-			"/api/blobs/9" + strings.Repeat("z", 16),
-			"/api/blobs/9" + strings.Repeat("z", 16),
+			"/api/blobs/9" + strings.Repeat("z", count16),
+			"/api/blobs/9" + strings.Repeat("z", count16),
 		},
 		// 36 chars with UUID separators and a leading digit but a non-hex byte → not
 		// a UUID (isUUID's hex-reject branch) and not long-hex → unchanged.
@@ -635,8 +637,8 @@ func routeLabelCasesTable() []routeLabelCasesRow {
 		// skips digit-free paths, an accepted tradeoff (real ids carry digits).
 		{
 			"digit-free hex passes through",
-			"/api/x/" + strings.Repeat("a", 36),
-			"/api/x/" + strings.Repeat("a", 36),
+			textAPIX + strings.Repeat(textA, count36),
+			textAPIX + strings.Repeat(textA, count36),
 		},
 		{"no id segment", "/api/v1/health", "/api/v1/health"},
 	}
@@ -682,12 +684,12 @@ func TestHTTPMetrics_EmptyPathRouteLabel(t *testing.T) {
 	})
 	handler := middleware.HTTPMetrics(m)(inner)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
 
 	req.URL.Path = "" // simulate a malformed request with no path
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 
-	assert.Equal(t, "/", gotRoute)
+	assert.Equal(t, textSlash, gotRoute)
 }
 
 // TestHTTPMetrics_FlushesResponseWriter tests that Flush propagates through
@@ -714,7 +716,7 @@ func TestHTTPMetrics_FlushesResponseWriter(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/stream", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, "/stream", http.NoBody)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -741,7 +743,12 @@ func TestHTTPTracing_HandlerReceivesContext(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/api/traced", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGet3,
+		"/api/traced",
+		http.NoBody,
+	)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -793,7 +800,7 @@ func TestChain_AppliesInOrder(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 

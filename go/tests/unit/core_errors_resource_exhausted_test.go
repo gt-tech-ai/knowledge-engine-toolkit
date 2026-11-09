@@ -40,7 +40,7 @@ func TestResourceExhausted_MapsGRPC8AndHTTP429(t *testing.T) {
 
 	code, msg := rpc.Sanitize(err)
 	assert.Equal(t, connect.CodeResourceExhausted, code)
-	assert.Equal(t, connect.Code(8), code)
+	assert.Equal(t, connect.Code(codeArg8), code)
 	assert.Equal(t, "resource exhausted", msg)
 }
 

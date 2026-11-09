@@ -156,8 +156,8 @@ func ConformLog(path string, data []byte) []Finding {
 		fences fenceTracker
 	)
 
-	for i, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSuffix(line, "\r")
+	for i, line := range strings.Split(string(data), textNewline) {
+		line = strings.TrimSuffix(line, textUd)
 		if fences.consume(line) || fences.open != "" || !strings.HasPrefix(line, "## ") {
 			continue
 		}

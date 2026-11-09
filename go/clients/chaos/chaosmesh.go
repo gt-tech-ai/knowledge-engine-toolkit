@@ -174,7 +174,7 @@ func (c *chaosMeshInjector) Inject(ctx context.Context, f types.Fault) error {
 		return err
 	}
 
-	out := c.runner.RunBuffered(ctx, c.root, "kubectl", "create", "-f", file.Name())
+	out := c.runner.RunBuffered(ctx, c.root, textKubectl, "create", "-f", file.Name())
 	if out.Err != nil && strings.Contains(string(out.Stderr), "AlreadyExists") {
 		return apperr.Wrap(out.Err, apperr.CodeConflict, fmt.Sprintf(
 			"%s %s/%s already exists: another run owns it", res.Kind,
@@ -218,7 +218,7 @@ func (c *chaosMeshInjector) Revert(ctx context.Context, f types.Fault) error {
 	}
 
 	resource := strings.ToLower(kind) + "." + chaosMeshGroup
-	out := c.runner.RunBuffered(ctx, c.root, "kubectl", "delete", resource, f.Name,
+	out := c.runner.RunBuffered(ctx, c.root, textKubectl, "delete", resource, f.Name,
 		"--namespace", f.Target.Namespace, "--ignore-not-found", "--wait=true")
 
 	if out.Err != nil {
@@ -237,7 +237,7 @@ func (c *chaosMeshInjector) Active(
 	ctx context.Context,
 	namespace string,
 ) ([]string, error) {
-	out := c.runner.RunBuffered(ctx, c.root, "kubectl", "get",
+	out := c.runner.RunBuffered(ctx, c.root, textKubectl, "get",
 		"podchaos."+chaosMeshGroup+",networkchaos."+chaosMeshGroup,
 		"--namespace", namespace, "--selector", managedByLabel+"="+c.managedBy,
 		"--output", "name")

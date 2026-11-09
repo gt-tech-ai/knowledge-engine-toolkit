@@ -24,25 +24,33 @@ import (
 func TestStepBuilders(t *testing.T) {
 	t.Parallel()
 
-	boom := apperr.New(apperr.CodeUpstream, "boom")
+	boom := apperr.New(apperr.CodeUpstream, textBoom)
 	assert.Equal(t,
-		types.StepResult{Name: "x", Status: types.StatusWarn, Error: boom.Error()},
-		types.NewStep("x", types.StatusWarn, boom))
-	assert.Empty(t, types.NewStep("x", types.StatusPass, nil).Error)
+		types.StepResult{Name: textX, Status: types.StatusWarn, Error: boom.Error()},
+		types.NewStep(textX, types.StatusWarn, boom))
+	assert.Empty(t, types.NewStep(textX, types.StatusPass, nil).Error)
 	assert.Equal(t,
-		types.StepResult{Name: "d", Status: types.StatusWarn, Detail: []byte("a\nb")},
-		types.DetailStep("d", types.StatusWarn, "a\nb"))
+		types.StepResult{Name: textD2, Status: types.StatusWarn, Detail: []byte("a\nb")},
+		types.DetailStep(textD2, types.StatusWarn, "a\nb"))
 	assert.Equal(t,
 		types.StepResults{{Name: "y", Status: types.StatusSkip}},
 		types.OneStep("y", types.StatusSkip, nil))
 
-	results, err := types.CheckStep("lint", nil)
+	results, err := types.CheckStep(textLint, nil)
 	require.NoError(t, err)
-	assert.Equal(t, types.StepResults{{Name: "lint", Status: types.StatusPass}}, results)
+	assert.Equal(
+		t,
+		types.StepResults{{Name: textLint, Status: types.StatusPass}},
+		results,
+	)
 
-	results, err = types.CheckStep("lint", boom)
+	results, err = types.CheckStep(textLint, boom)
 	assert.Same(t, boom, err)
-	assert.Equal(t,
-		types.StepResults{{Name: "lint", Status: types.StatusFail, Error: boom.Error()}},
-		results)
+	assert.Equal(
+		t,
+		types.StepResults{
+			{Name: textLint, Status: types.StatusFail, Error: boom.Error()},
+		},
+		results,
+	)
 }

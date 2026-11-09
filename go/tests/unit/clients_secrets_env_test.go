@@ -22,7 +22,7 @@ import (
 // What it tests:
 //   - Get on a mapped Ref returns a Secret revealing the mapped variable's value.
 func TestEnvSource_ResolvesMappedVariable(t *testing.T) {
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 
 	t.Setenv("KE_DEV_BOOTSTRAP_CLIENT_SECRET", "s3cr3t")
 
@@ -46,7 +46,7 @@ func TestEnvSource_ResolvesMappedVariable(t *testing.T) {
 func TestEnvSource_MissingAndUnmappedAreNotFound(t *testing.T) {
 	t.Parallel()
 
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 
 	unmapped := env.New(map[types.Ref]string{})
 	_, err := unmapped.Get(context.Background(), ref)
@@ -77,9 +77,9 @@ func TestEnvSource_MissingAndUnmappedAreNotFound(t *testing.T) {
 func TestEnvSource_PutIsUnsupported(t *testing.T) {
 	t.Parallel()
 
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	src := env.New(map[types.Ref]string{ref: "KE_X"})
 
-	err := src.Put(context.Background(), ref, types.NewSecret("v"))
+	err := src.Put(context.Background(), ref, types.NewSecret(textV))
 	require.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }

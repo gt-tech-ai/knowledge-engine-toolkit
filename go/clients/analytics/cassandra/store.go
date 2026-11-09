@@ -131,11 +131,11 @@ func newStore(cfg Config) (*Store, error) {
 // applyStoreDefaults fills every unset tuning field.
 func applyStoreDefaults(cfg *Config) {
 	if cfg.PageSize <= 0 {
-		cfg.PageSize = 500
+		cfg.PageSize = pageSize500
 	}
 
 	if cfg.MaxConcurrentBuckets <= 0 {
-		cfg.MaxConcurrentBuckets = 8
+		cfg.MaxConcurrentBuckets = maxConcurrentBuckets8
 	}
 
 	if cfg.SchemaPollInterval <= 0 {

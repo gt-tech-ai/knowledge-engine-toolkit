@@ -52,7 +52,14 @@ func loadFilterGolden(tb testing.TB) (filterGolden, *listquery.Map) {
 	tb.Helper()
 
 	raw, err := os.ReadFile(
-		filepath.Join("..", "..", "..", "testdata", "listquery", "filters.golden.json"),
+		filepath.Join(
+			textDotDot,
+			textDotDot,
+			textDotDot,
+			"testdata",
+			"listquery",
+			"filters.golden.json",
+		),
 	)
 	require.NoError(tb, err)
 
@@ -61,7 +68,7 @@ func loadFilterGolden(tb testing.TB) (filterGolden, *listquery.Map) {
 	require.NoError(tb, json.Unmarshal(raw, &g))
 
 	ctors := map[string]func(string) listquery.Field{
-		"string": listquery.String, "id": listquery.ID, "int": listquery.Int,
+		textString: listquery.String, textID: listquery.ID, textInt: listquery.Int,
 		"float": listquery.Float, "bool": listquery.Bool, "time": listquery.Time,
 	}
 	m := listquery.NewMap()
@@ -82,9 +89,9 @@ func filterWire(f types.Filter) any {
 	switch v := f.(type) {
 	case types.FilterClause:
 		return map[string]any{
-			"field": v.Field,
-			"op":    string(v.Operator),
-			"value": valueWire(v.Value),
+			"field":   v.Field,
+			textOp:    string(v.Operator),
+			textValue: valueWire(v.Value),
 		}
 	case types.CompositeFilter:
 		switch {
@@ -233,18 +240,18 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 	clause := func(v any) types.FilterNode {
 		return types.FilterNode{
 			Clause: &types.FilterNodeClause{
-				Field: "page_count",
+				Field: textPageCount,
 				Op:    types.OpEq,
 				Value: v,
 			},
 		}
 	}
 
-	f, err := listquery.ParseFilter(m, clause(float64(3)))
+	f, err := listquery.ParseFilter(m, clause(float64(float64Arg3)))
 	require.NoError(t, err)
 	assert.Equal(
 		t,
-		types.FilterClause{Field: "page_count", Operator: types.OpEq, Value: int64(3)},
+		types.FilterClause{Field: textPageCount, Operator: types.OpEq, Value: int64(3)},
 		f,
 	)
 
@@ -259,7 +266,7 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 
 	twoArms := clause(float64(1))
 
-	twoArms.Or = []types.FilterNode{clause(float64(2))}
+	twoArms.Or = []types.FilterNode{clause(float64(float64Arg2))}
 
 	withOp := func(op types.FilterOperator) types.FilterNode {
 		n := clause(float64(1))
@@ -270,13 +277,13 @@ func TestParseFilter_ChecksStructuredTree(t *testing.T) {
 	}
 
 	for name, n := range map[string]types.FilterNode{
-		"fraction":         clause(1.5),
-		"beyond 2^53":      clause(float64(1 << 53)),
-		"two arms":         twoArms,
-		"empty member":     {And: []types.FilterNode{{}}},
-		"too deep":         deep,
-		"empty operator":   withOp(""),
-		"unknown operator": withOp("regex"),
+		"fraction":          clause(clauseArg1p5),
+		"beyond 2^53":       clause(float64(1 << 53)),
+		"two arms":          twoArms,
+		"empty member":      {And: []types.FilterNode{{}}},
+		"too deep":          deep,
+		"empty operator":    withOp(""),
+		textUnknownOperator: withOp(textRegex),
 	} {
 		_, err := listquery.ParseFilter(m, n)
 		require.Error(t, err, name)

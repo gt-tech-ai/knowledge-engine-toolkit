@@ -41,7 +41,7 @@ func TestFoundationGhactions(t *testing.T) {
 	assert.Equal(t, "### one\n### two\n", string(data))
 	require.NoError(t, ghactions.AppendSummary("", "nowhere"))
 
-	err = ghactions.AppendSummary(filepath.Join(path, "nested"), "x")
+	err = ghactions.AppendSummary(filepath.Join(path, "nested"), textX)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
 	var out bytes.Buffer
@@ -77,12 +77,12 @@ func TestFoundationGhactions(t *testing.T) {
 func TestGhactions_TruncateComment(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "short", ghactions.TruncateComment("short", 10))
-	assert.Equal(t, "exactly10!", ghactions.TruncateComment("exactly10!", 10))
+	assert.Equal(t, "short", ghactions.TruncateComment("short", limit10))
+	assert.Equal(t, "exactly10!", ghactions.TruncateComment("exactly10!", limit10))
 
-	long := "HEAD-" + strings.Repeat("é", 1000) + "-TAIL"
-	got := ghactions.TruncateComment(long, 400)
-	assert.LessOrEqual(t, utf8.RuneCountInString(got), 400)
+	long := "HEAD-" + strings.Repeat("é", count1000) + "-TAIL"
+	got := ghactions.TruncateComment(long, limit400)
+	assert.LessOrEqual(t, utf8.RuneCountInString(got), wantRuneCountInString400)
 
 	head, rest, ok := strings.Cut(got, "\n\n… ")
 	require.True(t, ok, got)
@@ -96,15 +96,20 @@ func TestGhactions_TruncateComment(t *testing.T) {
 	kept := utf8.RuneCountInString(head) + utf8.RuneCountInString(tail)
 	assert.Equal(t, strconv.Itoa(utf8.RuneCountInString(long)-kept), count,
 		"the notice names exactly the characters removed")
-	assert.Greater(t, utf8.RuneCountInString(got), 300, "cut by characters, not bytes")
+	assert.Greater(
+		t,
+		utf8.RuneCountInString(got),
+		wantRuneCountInString300,
+		"cut by characters, not bytes",
+	)
 	assert.True(t, strings.HasPrefix(got, "HEAD-é"), got)
 	assert.True(t, strings.HasSuffix(got, "é-TAIL"), got)
 	assert.Contains(t, got, "characters cut to fit GitHub's comment limit")
 
-	fenced := "<details>\n```\n" + strings.Repeat("x", 1000) + "\n```\n</details>"
+	fenced := "<details>\n```\n" + strings.Repeat(textX, count1000) + "\n```\n</details>"
 
-	got = ghactions.TruncateComment(fenced, 400)
-	assert.LessOrEqual(t, utf8.RuneCountInString(got), 400)
+	got = ghactions.TruncateComment(fenced, limit400)
+	assert.LessOrEqual(t, utf8.RuneCountInString(got), wantRuneCountInString400)
 
 	before, after, ok := strings.Cut(got, "characters cut")
 	require.True(t, ok, got)
@@ -122,5 +127,5 @@ func TestGhactions_TruncateComment(t *testing.T) {
 	assert.Zero(t, strings.Count(after, "```")%2, "the tail's fence is reopened")
 	assert.Equal(t, strings.Count(after, "<details>"), strings.Count(after, "</details>"))
 
-	assert.Equal(t, "HEAD", ghactions.TruncateComment(long, 4))
+	assert.Equal(t, "HEAD", ghactions.TruncateComment(long, limit4))
 }

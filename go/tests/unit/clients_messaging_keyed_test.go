@@ -74,14 +74,14 @@ func TestMemoryPublisher_KeyedKeepsOrderAndKey(t *testing.T) {
 	pub := memory.NewPublisher(broker)
 	ctx := context.Background()
 
-	require.NoError(t, pub.PublishBatchKeyed(ctx, "t", []interfaces.KeyedPayload{
-		{Key: "doc-1", Payload: []byte("a")},
-		{Key: "doc-2", Payload: []byte("b")},
-		{Key: "doc-1", Payload: []byte("c")},
+	require.NoError(t, pub.PublishBatchKeyed(ctx, textT, []interfaces.KeyedPayload{
+		{Key: textDoc1, Payload: []byte(textA)},
+		{Key: "doc-2", Payload: []byte(textB)},
+		{Key: textDoc1, Payload: []byte(textC)},
 	}))
-	require.NoError(t, pub.PublishKeyed(ctx, "t", "doc-1", []byte("d")))
+	require.NoError(t, pub.PublishKeyed(ctx, textT, textDoc1, []byte(textD2)))
 
-	msgs := receiveKeyed(t, broker, "t", 4)
+	msgs := receiveKeyed(t, broker, textT, receiveKeyedArg4)
 	bodies := make([]string, len(msgs))
 	keys := make([]string, len(msgs))
 
@@ -90,8 +90,8 @@ func TestMemoryPublisher_KeyedKeepsOrderAndKey(t *testing.T) {
 		keys[i] = msg.Metadata[interfaces.PartitionKeyAttribute]
 	}
 
-	assert.Equal(t, []string{"a", "b", "c", "d"}, bodies)
-	assert.Equal(t, []string{"doc-1", "doc-2", "doc-1", "doc-1"}, keys)
+	assert.Equal(t, []string{textA, textB, textC, textD2}, bodies)
+	assert.Equal(t, []string{textDoc1, "doc-2", textDoc1, textDoc1}, keys)
 	assert.True(t, pub.OrderedPerKey())
 }
 
@@ -179,20 +179,20 @@ func testSQSPublisherKeyedSendsThePartitionKeyAttributeRest(
 	pub := fixtures.Must(sqs.NewPublisher(t.Context(), sqs.Config{API: api}))
 	ctx := context.Background()
 
-	require.NoError(t, pub.PublishKeyed(ctx, "q", "doc-9", []byte("x")))
+	require.NoError(t, pub.PublishKeyed(ctx, textQ, "doc-9", []byte(textX)))
 
-	items := make([]interfaces.KeyedPayload, 12)
-	want := make([]string, 12)
+	items := make([]interfaces.KeyedPayload, size12)
+	want := make([]string, size12)
 
 	for i := range items {
-		want[i] = []string{"even", "odd"}[i%2]
-		items[i] = interfaces.KeyedPayload{Key: want[i], Payload: []byte("p")}
+		want[i] = []string{"even", "odd"}[i%index2]
+		items[i] = interfaces.KeyedPayload{Key: want[i], Payload: []byte(textP)}
 	}
 
-	require.NoError(t, pub.PublishBatchKeyed(ctx, "q", items))
+	require.NoError(t, pub.PublishBatchKeyed(ctx, textQ, items))
 
 	assert.Equal(t, []int{10, 2}, sizes)
-	assert.Len(t, ids, 12)
+	assert.Len(t, ids, wantIDsLen12)
 	assert.Equal(t, want, keys)
 	assert.False(t, pub.OrderedPerKey())
 }
@@ -213,25 +213,25 @@ func TestDecorate_KeepsTheKeyedCapability(t *testing.T) {
 	deps := decorate.Fixed(decorate.Deps{Timeout: time.Minute})
 	broker := memory.NewBroker()
 	pub := fixtures.Must(
-		messaging.Decorate(memory.NewPublisher(broker), deps, "p", client.Producer()),
+		messaging.Decorate(memory.NewPublisher(broker), deps, textP, client.Producer()),
 	)
 	keyed, ok := pub.(interfaces.KeyedPublisher)
 	require.True(t, ok)
 
 	ctx := context.Background()
 
-	require.NoError(t, keyed.PublishKeyed(ctx, "t", "k1", []byte("a")))
-	require.NoError(t, keyed.PublishBatchKeyed(ctx, "t",
-		[]interfaces.KeyedPayload{{Key: "k2", Payload: []byte("b")}}))
+	require.NoError(t, keyed.PublishKeyed(ctx, textT, "k1", []byte(textA)))
+	require.NoError(t, keyed.PublishBatchKeyed(ctx, textT,
+		[]interfaces.KeyedPayload{{Key: "k2", Payload: []byte(textB)}}))
 
-	msgs := receiveKeyed(t, broker, "t", 2)
+	msgs := receiveKeyed(t, broker, textT, receiveKeyedArg2)
 	assert.Equal(t, "k1", msgs[0].Metadata[interfaces.PartitionKeyAttribute])
 	assert.Equal(t, "k2", msgs[1].Metadata[interfaces.PartitionKeyAttribute])
 	assert.True(t, keyed.OrderedPerKey())
 
 	ctrl := gomock.NewController(t)
 	plain := fixtures.Must(
-		messaging.Decorate(mocks.NewMockMessagePublisher(ctrl), deps, "p"),
+		messaging.Decorate(mocks.NewMockMessagePublisher(ctrl), deps, textP),
 	)
 
 	_, ok = plain.(interfaces.KeyedPublisher)

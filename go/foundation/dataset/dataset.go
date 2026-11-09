@@ -215,7 +215,7 @@ func (d *Dataset) addEncoded(name string, v any) error {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "encode "+name)
 	}
 
-	for i := 0; i+1 < len(root.Content); i += 2 {
+	for i := 0; i+1 < len(root.Content); i += mappingStride {
 		d.sections[root.Content[i].Value] = root.Content[i+1]
 	}
 
@@ -332,7 +332,7 @@ func (d *Dataset) merge(dst, src *yaml.Node, at, p string) error {
 
 // mergeMappings merges src's keys into dst, recursing into a key both have.
 func (d *Dataset) mergeMappings(dst, src *yaml.Node, at, p string) error {
-	for i := 0; i+1 < len(src.Content); i += 2 {
+	for i := 0; i+1 < len(src.Content); i += mappingStride {
 		k, v := src.Content[i], src.Content[i+1]
 		sub := at + "." + k.Value
 
@@ -372,7 +372,7 @@ func (d *Dataset) mergeSequences(dst, src *yaml.Node, at, p string) error {
 func (d *Dataset) claim(n *yaml.Node, at, p string) {
 	switch n.Kind {
 	case yaml.MappingNode:
-		for i := 0; i+1 < len(n.Content); i += 2 {
+		for i := 0; i+1 < len(n.Content); i += kind2 {
 			d.claim(n.Content[i+1], at+"."+n.Content[i].Value, p)
 		}
 	case yaml.SequenceNode:
@@ -397,7 +397,7 @@ func (d *Dataset) claimItems(n *yaml.Node, at, p string) {
 
 // mappingValue returns the value node of key in the mapping m, or nil.
 func mappingValue(m *yaml.Node, key string) *yaml.Node {
-	for i := 0; i+1 < len(m.Content); i += 2 {
+	for i := 0; i+1 < len(m.Content); i += mappingStride {
 		if m.Content[i].Value == key {
 			return m.Content[i+1]
 		}

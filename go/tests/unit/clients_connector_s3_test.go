@@ -45,9 +45,9 @@ func stubBuilder(
 func s3Cfg(method string) interfaces.SourceConfig {
 	return interfaces.SourceConfig{
 		Kind:            interfaces.ConnectorKindS3,
-		Bucket:          "b",
-		Prefix:          "docs/",
-		Region:          "us-east-1",
+		Bucket:          textB,
+		Prefix:          textDocs,
+		Region:          textUsEast1,
 		AuthMethod:      method,
 		AccessKeyID:     "AK",
 		SecretAccessKey: "SK",
@@ -79,12 +79,12 @@ func TestS3ConnectorSource_TestConnection(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		sc := mocks.NewMockStorageClient(ctrl)
-		sc.EXPECT().ListObjectsPage(gomock.Any(), "b", "docs/", gomock.Any()).
-			Return([]interfaces.StorageObject{{Key: "docs/a"}, {Key: "docs/b"}}, nil)
+		sc.EXPECT().ListObjectsPage(gomock.Any(), textB, textDocs, gomock.Any()).
+			Return([]interfaces.StorageObject{{Key: textDocsA}, {Key: textDocsB}}, nil)
 
 		src, err := connectors3.NewSource(
 			ctx,
-			s3Cfg("access_key"),
+			s3Cfg(textAccessKey),
 			nil,
 			stubBuilder(sc, nil),
 		)
@@ -110,11 +110,11 @@ func testS3ConnectorSourceTestConnectionRest(ctx context.Context, t *testing.T) 
 		sc := mocks.NewMockStorageClient(ctrl)
 		sc.EXPECT().
 			ListObjectsPage(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-			Return(nil, &smithy.GenericAPIError{Code: "AccessDenied", Fault: smithy.FaultClient})
+			Return(nil, &smithy.GenericAPIError{Code: textAccessdenied, Fault: smithy.FaultClient})
 
 		src, _ := connectors3.NewSource(
 			ctx,
-			s3Cfg("access_key"),
+			s3Cfg(textAccessKey),
 			nil,
 			stubBuilder(sc, nil),
 		)
@@ -137,7 +137,7 @@ func testS3ConnectorSourceTestConnectionRest(ctx context.Context, t *testing.T) 
 
 		src, _ := connectors3.NewSource(
 			ctx,
-			s3Cfg("access_key"),
+			s3Cfg(textAccessKey),
 			nil,
 			stubBuilder(sc, nil),
 		)
@@ -177,12 +177,12 @@ func TestS3ConnectorSource_ListPage(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		sc := mocks.NewMockStorageClient(ctrl)
 		sc.EXPECT().
-			ListObjectsPageToken(gomock.Any(), "b", "docs/", "tok1", 1000).
-			Return([]interfaces.StorageObject{{Key: "docs/a"}}, "tok2", nil)
+			ListObjectsPageToken(gomock.Any(), textB, textDocs, "tok1", 1000).
+			Return([]interfaces.StorageObject{{Key: textDocsA}}, "tok2", nil)
 
 		src, err := connectors3.NewSource(
 			ctx,
-			s3Cfg("access_key"),
+			s3Cfg(textAccessKey),
 			nil,
 			stubBuilder(sc, nil),
 		)
@@ -217,7 +217,7 @@ func testS3ConnectorSourceListPageRest(ctx context.Context, t *testing.T) {
 
 		src, _ := connectors3.NewSource(
 			ctx,
-			s3Cfg("access_key"),
+			s3Cfg(textAccessKey),
 			nil,
 			stubBuilder(sc, nil),
 		)
@@ -238,7 +238,7 @@ func testS3ConnectorSourceListPageRest(ctx context.Context, t *testing.T) {
 
 		src, _ := connectors3.NewSource(
 			ctx,
-			s3Cfg("access_key"),
+			s3Cfg(textAccessKey),
 			nil,
 			stubBuilder(sc, nil),
 		)
@@ -268,14 +268,14 @@ func TestS3ConnectorSource_AuthSelection(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	sc := mocks.NewMockStorageClient(ctrl)
 
-	_, err := connectors3.NewSource(ctx, s3Cfg("bogus"), nil, stubBuilder(sc, nil))
+	_, err := connectors3.NewSource(ctx, s3Cfg(textBogus), nil, stubBuilder(sc, nil))
 	require.True(
 		t,
 		apperr.Is(err, apperr.CodeInvalidInput),
 		"unknown auth method fails loud",
 	)
 
-	for _, method := range []string{"access_key", "iam_role"} {
+	for _, method := range []string{textAccessKey, textIamRole} {
 		var captured aws.CredentialsProvider
 
 		_, err := connectors3.NewSource(
@@ -297,7 +297,7 @@ func TestS3ConnectorSource_AuthSelection(t *testing.T) {
 
 	_, err = connectors3.NewSource(
 		ctx,
-		s3Cfg("access_key"),
+		s3Cfg(textAccessKey),
 		nil,
 		stubBuilder(sc, func(c aws.CredentialsProvider) { static = c }),
 	)
@@ -344,7 +344,7 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 		t.Parallel()
 
 		ctrl := gomock.NewController(t)
-		cfg := s3Cfg("iam_role")
+		cfg := s3Cfg(textIamRole)
 
 		cfg.ExternalID = ""
 
@@ -353,7 +353,7 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 			STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
 		})
 		_, err := b.Build(ctx, cfg)
-		require.True(t, apperr.Is(err, apperr.CodeInvalidInput), "%v", err)
+		require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textV2, err)
 	})
 }
 
@@ -409,50 +409,50 @@ func s3InvalidAuthConfigTable() []s3InvalidAuthConfigRow {
 	return []s3InvalidAuthConfigRow{
 		{
 			name:   "iam_role empty role ARN",
-			method: "iam_role",
+			method: textIamRole,
 			mutate: func(c *interfaces.SourceConfig) {
 				c.IAMRoleARN = ""
 			},
 		},
-		{name: "iam_role nil STS client", method: "iam_role", nilSTS: true},
+		{name: "iam_role nil STS client", method: textIamRole, nilSTS: true},
 		{
 			name:   "iam_role empty external id",
-			method: "iam_role",
+			method: textIamRole,
 			mutate: func(c *interfaces.SourceConfig) {
 				c.ExternalID = ""
 			},
 		},
 		{
 			name:   "iam_role whitespace external id",
-			method: "iam_role",
+			method: textIamRole,
 			mutate: func(c *interfaces.SourceConfig) {
-				c.ExternalID = "   "
+				c.ExternalID = textSpaceSpaceSpace
 			},
 		},
 		{
 			name:   "iam_role one-char external id",
-			method: "iam_role",
+			method: textIamRole,
 			mutate: func(c *interfaces.SourceConfig) {
-				c.ExternalID = "x"
+				c.ExternalID = textX
 			},
 		},
 		{
 			name:   "iam_role external id with a space",
-			method: "iam_role",
+			method: textIamRole,
 			mutate: func(c *interfaces.SourceConfig) {
 				c.ExternalID = "tenant 42"
 			},
 		},
 		{
 			name:   "access_key empty key id",
-			method: "access_key",
+			method: textAccessKey,
 			mutate: func(c *interfaces.SourceConfig) {
 				c.AccessKeyID = ""
 			},
 		},
 		{
 			name:   "access_key empty secret",
-			method: "access_key",
+			method: textAccessKey,
 			mutate: func(c *interfaces.SourceConfig) {
 				c.SecretAccessKey = ""
 			},
@@ -529,14 +529,14 @@ func TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures(t *testing.T) {
 
 			src, err := connectors3.NewSource(
 				ctx,
-				s3Cfg("iam_role"),
+				s3Cfg(textIamRole),
 				stsClient,
 				stubBuilder(sc, func(c aws.CredentialsProvider) { captured = c }),
 			)
 			require.NoError(t, err)
 
 			_, err = src.TestConnection(ctx)
-			require.Equal(t, tc.want, apperr.Code(err), "%v", err)
+			require.Equal(t, tc.want, apperr.Code(err), textV2, err)
 		})
 	}
 
@@ -558,7 +558,7 @@ func s3APIFailureTable() []s3APIFailureRow {
 		{
 			name: "STS AccessDenied → InvalidInput",
 			stsErr: &smithy.GenericAPIError{
-				Code:    "AccessDenied",
+				Code:    textAccessdenied,
 				Message: "not authorized to assume",
 			},
 			want: apperr.CodeInvalidInput,
@@ -614,7 +614,7 @@ func testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest(
 					Response: &http.Response{StatusCode: tc.status},
 				},
 				Err: &smithy.GenericAPIError{
-					Code: "AccessDenied",
+					Code: textAccessdenied,
 				}, // Fault unset, as S3 deserializes it
 			}
 			sc.EXPECT().
@@ -623,14 +623,14 @@ func testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest(
 
 			src, err := connectors3.NewSource(
 				ctx,
-				s3Cfg("access_key"),
+				s3Cfg(textAccessKey),
 				nil,
 				stubBuilder(sc, nil),
 			)
 			require.NoError(t, err)
 
 			_, err = src.TestConnection(ctx)
-			require.Equal(t, tc.want, apperr.Code(err), "%v", err)
+			require.Equal(t, tc.want, apperr.Code(err), textV2, err)
 		})
 	}
 }
@@ -657,7 +657,7 @@ func TestConnectorSourceBuilder_Build(t *testing.T) {
 		t.Parallel()
 
 		b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{})
-		_, err := b.Build(ctx, interfaces.SourceConfig{Kind: "bogus"})
+		_, err := b.Build(ctx, interfaces.SourceConfig{Kind: textBogus})
 		require.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 	})
 
@@ -668,14 +668,14 @@ func TestConnectorSourceBuilder_Build(t *testing.T) {
 
 			ctrl := gomock.NewController(t)
 			sc := mocks.NewMockStorageClient(ctrl)
-			sc.EXPECT().ListObjectsPage(gomock.Any(), "b", "docs/", gomock.Any()).
-				Return([]interfaces.StorageObject{{Key: "docs/a"}}, nil)
+			sc.EXPECT().ListObjectsPage(gomock.Any(), textB, textDocs, gomock.Any()).
+				Return([]interfaces.StorageObject{{Key: textDocsA}}, nil)
 
 			b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
 				BuildS3Client: stubBuilder(sc, nil),
 				STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
 			})
-			src, err := b.Build(ctx, s3Cfg("access_key"))
+			src, err := b.Build(ctx, s3Cfg(textAccessKey))
 			require.NoError(t, err)
 
 			n, err := src.TestConnection(ctx)
@@ -715,7 +715,7 @@ func TestS3ConnectorSource_IAMRoleSendsExternalID(t *testing.T) {
 
 			return &sts.AssumeRoleOutput{Credentials: &ststypes.Credentials{
 				AccessKeyId:     aws.String("ASIA"),
-				SecretAccessKey: aws.String("secret"),
+				SecretAccessKey: aws.String(textSecret),
 				SessionToken:    aws.String("token"),
 				Expiration:      aws.Time(time.Now().Add(time.Hour)),
 			}}, nil
@@ -725,7 +725,7 @@ func TestS3ConnectorSource_IAMRoleSendsExternalID(t *testing.T) {
 
 	_, err := connectors3.NewSource(
 		ctx,
-		s3Cfg("iam_role"),
+		s3Cfg(textIamRole),
 		stsClient,
 		stubBuilder(sc, func(c aws.CredentialsProvider) { captured = c }),
 	)

@@ -26,7 +26,7 @@ import (
 func TestPauseGate_ClosesForThePauseOnAnOutage(t *testing.T) {
 	t.Parallel()
 
-	now := time.Unix(1_000, 0)
+	now := time.Unix(sec1000, 0)
 	gauge := mocks.NewMockGauge(gomock.NewController(t))
 	gate, err := pausegate.New(pausegate.Config{Pause: 30 * time.Second}, gauge,
 		func() time.Time { return now })

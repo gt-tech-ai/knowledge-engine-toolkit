@@ -101,11 +101,13 @@ func DefaultConfig() Config {
 		ReaperInterval:    defaultConfigReaperInterval,
 		ReaperTTL:         defaultReaperTTL, // > the 60m multipart part-URL expiry
 		RetentionInterval: 1 * time.Hour,
-		RetentionTTL:      7 * 24 * time.Hour, // keep a week of sent rows for audit/debug
-		OrphanGrace:       defaultOrphanGrace, // > the 60m multipart part-URL expiry
-		Port:              0,
-		BatchSize:         defaultConfigBatchSize,
-		FanOutWorkers:     defaultConfigFanOutWorkers,
+		// keep a week of sent rows for audit/debug
+		RetentionTTL: daysPerWeek * hoursPerDay * time.Hour,
+		// > the 60m multipart part-URL expiry
+		OrphanGrace:   defaultOrphanGrace,
+		Port:          0,
+		BatchSize:     defaultConfigBatchSize,
+		FanOutWorkers: defaultConfigFanOutWorkers,
 	}
 }
 

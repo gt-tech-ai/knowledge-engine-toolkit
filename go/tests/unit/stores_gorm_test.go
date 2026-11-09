@@ -65,10 +65,10 @@ func TestGormAdapter_LifecycleUnreachable(t *testing.T) {
 		Database: infra.DatabaseConfig{
 			Host:     "invalid-host.example.invalid",
 			Port:     5432,
-			User:     "u",
-			Password: "p",
-			Database: "d",
-			SSLMode:  "disable",
+			User:     textU,
+			Password: textP,
+			Database: textD2,
+			SSLMode:  textDisable,
 		},
 	})
 	require.NoError(

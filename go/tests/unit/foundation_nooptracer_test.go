@@ -30,10 +30,10 @@ func TestNoopTracer_SpanIsInert(t *testing.T) {
 	tr, err := nooptracer.New()
 	require.NoError(t, err)
 
-	_, span := tr.Start(context.Background(), "op")
-	span.SetAttribute("key", "value")
-	span.RecordError(apperr.Sentinel("boom"))
-	span.SetStatus(interfaces.SpanStatusError, "failed")
+	_, span := tr.Start(context.Background(), textOp)
+	span.SetAttribute(textKey, textValue)
+	span.RecordError(apperr.Sentinel(textBoom))
+	span.SetStatus(interfaces.SpanStatusError, textFailed)
 	span.End()
 
 	require.NoError(t, tr.Shutdown(context.Background()))

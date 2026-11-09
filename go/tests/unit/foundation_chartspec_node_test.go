@@ -28,7 +28,14 @@ func TestNodeHash_GoldenCorpus(t *testing.T) {
 	t.Parallel()
 
 	raw, err := os.ReadFile(
-		filepath.Join("..", "..", "..", "testdata", "chartspec", "nodes.golden.json"),
+		filepath.Join(
+			textDotDot,
+			textDotDot,
+			textDotDot,
+			"testdata",
+			"chartspec",
+			"nodes.golden.json",
+		),
 	)
 	require.NoError(t, err)
 
@@ -45,7 +52,7 @@ func TestNodeHash_GoldenCorpus(t *testing.T) {
 	}
 
 	require.NoError(t, json.Unmarshal(raw, &corpus))
-	require.GreaterOrEqual(t, len(corpus.Cases), 6)
+	require.GreaterOrEqual(t, len(corpus.Cases), wantCasesLen6)
 
 	for _, c := range corpus.Cases {
 		canonical, err := c.Node.Canonical()

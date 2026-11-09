@@ -23,7 +23,7 @@ func baseWithDB(t *testing.T) string {
 	t.Helper()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 database:
   host: "localhost"
   port: 5432
@@ -74,7 +74,7 @@ func loadWithSchema(
 	opts := []options.Option[config.Config]{
 		config.WithBaseDir(dir),
 		config.WithEnvironment(""),
-		config.WithEnvPrefix("MYAPP"),
+		config.WithEnvPrefix(textMyapp),
 		config.WithSchema(&bindingSchema{}),
 	}
 	cfg, err := config.New(config.KindViper, append(opts, extra...)...)
@@ -97,7 +97,7 @@ func loadWithSchema(
 //     YAML file, override their fields when the sections are unmarshaled.
 func TestConfig_CanonicalPrefixedPath_BindsKeyAbsentFromYAML(t *testing.T) {
 	dir := baseWithDB(t)
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 database:
   host: "localhost"
 messaging:
@@ -105,14 +105,14 @@ messaging:
     endpoint: http://localhost:9324
 `)
 	t.Setenv("MYAPP_DATABASE_MAX_CONNECTIONS", "77")
-	t.Setenv("MYAPP_MESSAGING_SQS_REGION", "eu-west-1")
+	t.Setenv("MYAPP_MESSAGING_SQS_REGION", textEuWest1)
 
 	cfg := loadWithSchema(t, dir)
 
 	var db infra.DatabaseConfig
 
-	require.NoError(t, cfg.UnmarshalKey("database", &db))
-	assert.Equal(t, 77, db.MaxConnections,
+	require.NoError(t, cfg.UnmarshalKey(textDatabase, &db))
+	assert.Equal(t, wantMaxConnections77, db.MaxConnections,
 		"MYAPP_DATABASE_MAX_CONNECTIONS must bind database.max_connections")
 
 	var sqs infra.SQSConfig
@@ -120,7 +120,7 @@ messaging:
 	require.NoError(t, cfg.UnmarshalKey("messaging.sqs", &sqs))
 	assert.Equal(
 		t,
-		"eu-west-1",
+		textEuWest1,
 		sqs.Region,
 		"MYAPP_MESSAGING_SQS_REGION must bind messaging.sqs.region",
 	)
@@ -140,7 +140,7 @@ messaging:
 //     through UnmarshalKey.
 func TestConfig_EnvAlias_Resolves(t *testing.T) {
 	dir := baseWithDB(t)
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 database:
   host: "localhost"
 storage:
@@ -149,7 +149,7 @@ storage:
 tracing:
   enabled: true
 `)
-	t.Setenv("DB_HOST", "db.internal")
+	t.Setenv(textDBHost, textDBInternal)
 	t.Setenv("S3_BUCKET", "prod-bucket")
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "collector:4317")
 
@@ -157,8 +157,8 @@ tracing:
 
 	var db infra.DatabaseConfig
 
-	require.NoError(t, cfg.UnmarshalKey("database", &db))
-	assert.Equal(t, "db.internal", db.Host, "DB_HOST must override database.host")
+	require.NoError(t, cfg.UnmarshalKey(textDatabase, &db))
+	assert.Equal(t, textDBInternal, db.Host, "DB_HOST must override database.host")
 
 	var s3 infra.S3Config
 
@@ -167,7 +167,7 @@ tracing:
 
 	var tracing infra.TracingConfig
 
-	require.NoError(t, cfg.UnmarshalKey("tracing", &tracing))
+	require.NoError(t, cfg.UnmarshalKey(textTracing, &tracing))
 	assert.Equal(t, "collector:4317", tracing.Endpoint,
 		"OTEL_EXPORTER_OTLP_ENDPOINT must override tracing.endpoint")
 }
@@ -195,10 +195,10 @@ func TestConfig_EmptyPrefix_BindsBarePath(t *testing.T) {
 
 	var db infra.DatabaseConfig
 
-	require.NoError(t, cfg.UnmarshalKey("database", &db))
+	require.NoError(t, cfg.UnmarshalKey(textDatabase, &db))
 	assert.Equal(
 		t,
-		33,
+		wantMaxConnections33,
 		db.MaxConnections,
 		"DATABASE_MAX_CONNECTIONS must bind with no prefix",
 	)
@@ -259,12 +259,12 @@ func TestConfig_ExtraEnvReplacesSchemaBinding(t *testing.T) {
 	dir := baseWithDB(t)
 	repoint := config.WithExtraEnv(map[string][]string{"database.host": {"PGHOST"}})
 
-	t.Setenv("DB_HOST", "from-alias")
+	t.Setenv(textDBHost, "from-alias")
 	t.Setenv("PGHOST", "from-extra")
 
 	var db infra.DatabaseConfig
 
-	require.NoError(t, loadWithSchema(t, dir, repoint).UnmarshalKey("database", &db))
+	require.NoError(t, loadWithSchema(t, dir, repoint).UnmarshalKey(textDatabase, &db))
 	assert.Equal(
 		t,
 		"from-extra",
@@ -273,7 +273,7 @@ func TestConfig_ExtraEnvReplacesSchemaBinding(t *testing.T) {
 	)
 
 	t.Setenv("PGHOST", "")
-	require.NoError(t, loadWithSchema(t, dir, repoint).UnmarshalKey("database", &db))
+	require.NoError(t, loadWithSchema(t, dir, repoint).UnmarshalKey(textDatabase, &db))
 	assert.Equal(t, "localhost", db.Host, "the replaced schema alias must not bind")
 }
 
@@ -308,8 +308,8 @@ type squashRoot struct {
 //   - A "-" field gets no binding.
 func TestConfig_SchemaTagForms_Bind(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), "user: app\n")
-	t.Setenv("DB_HOST", "db.internal")
+	writeFile(t, filepath.Join(dir, textBaseYaml), "user: app\n")
+	t.Setenv(textDBHost, textDBInternal)
 	t.Setenv("MYAPP_PORT", "6543")
 	t.Setenv("MYAPP_LABEL", "blue")
 	t.Setenv("MYAPP_REPLICAS", "3")
@@ -318,7 +318,7 @@ func TestConfig_SchemaTagForms_Bind(t *testing.T) {
 	cfg, err := config.New(config.KindViper,
 		config.WithBaseDir(dir),
 		config.WithEnvironment(""),
-		config.WithEnvPrefix("MYAPP"),
+		config.WithEnvPrefix(textMyapp),
 		config.WithSchema(squashRoot{}),
 	)
 	require.NoError(t, err)
@@ -328,24 +328,29 @@ func TestConfig_SchemaTagForms_Bind(t *testing.T) {
 	require.NoError(t, cfg.Unmarshal(&root))
 	assert.Equal(
 		t,
-		"db.internal",
+		textDBInternal,
 		root.DatabaseConfig.Host,
 		"the squashed DB_HOST alias must bind host",
 	)
 	assert.Equal(
 		t,
-		6543,
+		wantPort6543,
 		root.DatabaseConfig.Port,
 		"MYAPP_PORT must bind the squashed port",
 	)
 	assert.Equal(
 		t,
-		"app",
+		textApp,
 		root.DatabaseConfig.User,
 		"YAML values of the squashed section still decode",
 	)
 	assert.Equal(t, "blue", root.Label, "the tag name before the comma names the key")
-	assert.Equal(t, 3, root.Replicas, "an untagged field binds by its field name")
+	assert.Equal(
+		t,
+		wantReplicas3,
+		root.Replicas,
+		"an untagged field binds by its field name",
+	)
 
 	loader, ok := cfg.(*viperloader.Loader)
 	require.True(t, ok)
@@ -374,8 +379,8 @@ func TestConfig_InvalidSchemaRejected(t *testing.T) {
 	root := &bindingSchema{}
 
 	for name, schema := range map[string]any{
-		"map":                map[string]any{"database": map[string]any{}},
-		"scalar":             42,
+		"map":                map[string]any{textDatabase: map[string]any{}},
+		textScalar:           textScalar42,
 		"pointer to pointer": &root,
 	} {
 		_, err := config.New(
@@ -408,7 +413,7 @@ func TestConfig_InvalidSchemaRejected(t *testing.T) {
 //     {"reports":"rcur,rprev","orders":"otok"} on AuthConfig.ServiceTokens.
 func TestConfig_ServiceTokens_FlatEnvPopulatesMap(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 auth:
   stub: true
 `)
@@ -422,8 +427,8 @@ auth:
 	assert.Equal(
 		t,
 		map[string]string{
-			"reports": "rcur,rprev",
-			"orders":  "otok",
+			textReports: "rcur,rprev",
+			textOrders:  textOtok,
 		},
 		auth.ServiceTokens,
 		"SERVICE_AUTH_TOKENS must decode into the auth.service_tokens map, preserving the "+

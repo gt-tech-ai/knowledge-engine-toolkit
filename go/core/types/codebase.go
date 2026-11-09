@@ -82,12 +82,15 @@ type Text struct {
 // Lines returns the file's lines without their terminators; a trailing newline does not
 // add an empty last line.
 func (t Text) Lines() []string {
-	s := strings.TrimSuffix(strings.ReplaceAll(string(t.Bytes), "\r\n", "\n"), "\n")
+	s := strings.TrimSuffix(
+		strings.ReplaceAll(string(t.Bytes), "\r\n", textNewline),
+		textNewline,
+	)
 	if s == "" {
 		return nil
 	}
 
-	return strings.Split(s, "\n")
+	return strings.Split(s, textNewline)
 }
 
 // IsBinary reports whether data holds a NUL byte in its first 8 KiB.

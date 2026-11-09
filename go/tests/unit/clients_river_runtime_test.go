@@ -23,7 +23,7 @@ func unreachableDB() string { return poolURL("127.0.0.1:1", "sslmode=disable") }
 func poolURL(host, query string) string {
 	u := url.URL{
 		Scheme:   "postgres",
-		User:     url.UserPassword("u", "p"),
+		User:     url.UserPassword(textU, textP),
 		Host:     host,
 		Path:     "/db",
 		RawQuery: query,

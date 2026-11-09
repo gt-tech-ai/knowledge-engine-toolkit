@@ -43,7 +43,7 @@ func sizeViolations(t *testing.T, cb interfaces.Codebase, roots []string) []stri
 
 	files, err := cb.Go().Parse(t.Context(), types.FileSelector{
 		Roots:   roots,
-		Exts:    []string{".go"},
+		Exts:    []string{textGo3},
 		Exclude: []string{"**/*_test.go"},
 	}, types.ParseComments)
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestCodeSizeBudget_TreesStayWithinBudget(t *testing.T) {
 
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{
 		Kind: clientcodebase.KindFS,
-		Root: filepath.Join("..", ".."),
+		Root: filepath.Join(textDotDot, textDotDot),
 	}, clientcodebase.Deps{})
 	require.NoError(t, err)
 
@@ -157,22 +157,28 @@ func TestCodeSizeBudget_TreesStayWithinBudget(t *testing.T) {
 func TestCodeSizeBudget_FlagsAnOverBudgetFunction(t *testing.T) {
 	t.Parallel()
 
-	long := "func Long() {\n" + strings.Repeat("\t_ = 1\n", 49) + "}\n"
-	fits := "func Fits() {\n" + strings.Repeat("\t_ = 1\n", 48) + "}\n"
+	long := "func Long() {\n" + strings.Repeat(
+		"\t_ = 1\n",
+		count49,
+	) + textBraceCloseNewline
+	fits := "func Fits() {\n" + strings.Repeat(
+		"\t_ = 1\n",
+		count48,
+	) + textBraceCloseNewline
 	deep := "func Deep() {\n" + strings.Repeat(
 		"if true {\n",
-		5,
+		count5,
 	) + strings.Repeat(
-		"}\n",
-		5,
-	) + "}\n"
+		textBraceCloseNewline,
+		count5,
+	) + textBraceCloseNewline
 	four := "func Four() {\n" + strings.Repeat(
 		"if true {\n",
-		4,
+		count4,
 	) + strings.Repeat(
-		"}\n",
-		4,
-	) + "}\n"
+		textBraceCloseNewline,
+		count4,
+	) + textBraceCloseNewline
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
 		clientcodebase.Deps{Files: map[string]string{
 			"budget/a.go": "package budget\n\n" + long + fits + deep + four,

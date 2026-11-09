@@ -29,7 +29,7 @@ import (
 //     circuit breaker → retry.
 func TestRepositoryTier_Order(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, decorate.Tier{Name: "repository", Order: []decorate.Layer{
+	assert.Equal(t, decorate.Tier{Name: textRepository, Order: []decorate.Layer{
 		decorate.LayerTracing, decorate.LayerMetrics, decorate.LayerLogging,
 		decorate.LayerTimeout, decorate.LayerCircuitBreaker, decorate.LayerRetry,
 	}}, repository.Tier())
@@ -72,8 +72,8 @@ func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 	base := fixtures.Must(repository.NewBase[widgetsQueries](decorate.Fixed(decorate.Deps{
 		Timeout: 20 * time.Millisecond,
 		Retrier: passThroughRetrier(t, 2),
-	}), "widgets"))
-	assert.Equal(t, "widgets", base.Name())
+	}), textWidgets))
+	assert.Equal(t, textWidgets, base.Name())
 
 	got, err := base.Exec(
 		t.Context(),
@@ -83,9 +83,9 @@ func TestRepositoryBase_RunsCustomQueriesThroughTheChain(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, 4, got)
+	assert.Equal(t, wantGot4, got)
 
-	_, err = base.Exec(t.Context(), "slow", func(ctx context.Context) (int, error) {
+	_, err = base.Exec(t.Context(), textSlow, func(ctx context.Context) (int, error) {
 		<-ctx.Done()
 
 		return 0, ctx.Err()
@@ -126,22 +126,22 @@ func TestRepositoryEntity_NarrowContracts(t *testing.T) {
 	})
 
 	reads := mocks.NewMockReadListExistStore[te, tp, string](ctrl)
-	reads.EXPECT().Exists(gomock.Any(), "w1").Return(true, nil)
+	reads.EXPECT().Exists(gomock.Any(), textW1).Return(true, nil)
 
 	ro := fixtures.Must(repository.NewEntity[
 		interfaces.ReadListExistStore[te, tp, string], te, tp, string,
-	](decs, "widgets", reads, nil))
-	ok, err := ro.Exists(t.Context(), "w1")
+	](decs, textWidgets, reads, nil))
+	ok, err := ro.Exists(t.Context(), textW1)
 	require.NoError(t, err)
 	assert.True(t, ok)
 
 	keyed := mocks.NewMockCRUDNoListStore[te, string](ctrl)
-	keyed.EXPECT().Delete(gomock.Any(), "w1").Return(nil)
+	keyed.EXPECT().Delete(gomock.Any(), textW1).Return(nil)
 
 	kr := fixtures.Must(repository.NewEntity[
 		interfaces.CRUDNoListStore[te, string], te, tp, string,
-	](decs, "widgets", keyed, nil))
-	require.NoError(t, kr.Delete(t.Context(), "w1"))
+	](decs, textWidgets, keyed, nil))
+	require.NoError(t, kr.Delete(t.Context(), textW1))
 
 	appends := mocks.NewMockInsertOnlyStore[te](ctrl)
 	conflict := apperr.New(apperr.CodeConflict, "duplicate")
@@ -156,6 +156,6 @@ func TestRepositoryEntity_NarrowContracts(t *testing.T) {
 
 	ar := fixtures.Must(repository.NewEntity[
 		interfaces.InsertOnlyStore[te], te, tp, string,
-	](decs, "widgets", appends, nil))
-	require.ErrorIs(t, ar.Insert(t.Context(), &te{ID: "w1"}), conflict)
+	](decs, textWidgets, appends, nil))
+	require.ErrorIs(t, ar.Insert(t.Context(), &te{ID: textW1}), conflict)
 }

@@ -48,9 +48,9 @@ func TestRedactPII_Phone(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"call 555-123-4567", "call [REDACTED]"},
-		{"call (555) 123-4567", "call [REDACTED]"},
-		{"call +1-555-123-4567", "call [REDACTED]"},
+		{"call 555-123-4567", textCallRedacted},
+		{"call (555) 123-4567", textCallRedacted},
+		{"call +1-555-123-4567", textCallRedacted},
 	}
 	for _, tc := range tests {
 		got := logger.RedactPII(tc.input)
@@ -117,8 +117,8 @@ func TestRedactPII_AuthToken(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"Bearer eyJhbGciOiJIUzI1NiJ9.abc", "[REDACTED]"},
-		{"token=abc123xyz", "[REDACTED]"},
+		{"Bearer eyJhbGciOiJIUzI1NiJ9.abc", textRedacted},
+		{"token=abc123xyz", textRedacted},
 		{
 			// Fake 3-segment JWT — test fixture only, never a real credential. The
 			// trailing gitleaks:allow marks it as an intentional false positive so the
@@ -231,7 +231,7 @@ func TestNewLogger_CreatesValidLogger(t *testing.T) {
 
 	_ = buf // logger writes to stdout, but shouldn't panic
 
-	l.Info("test message", "key", "value")
+	l.Info("test message", textKey, textValue)
 }
 
 // TestNewLogger_TextFormat tests that the text output format initializes correctly.
@@ -249,8 +249,8 @@ func TestNewLogger_TextFormat(t *testing.T) {
 
 	cfg := logger.Config{
 		Kind:      logger.KindZap,
-		Level:     "debug",
-		Format:    "text",
+		Level:     textDebug,
+		Format:    textText,
 		RedactPII: false,
 	}
 	l, err := logger.NewFromConfig(cfg)
@@ -280,8 +280,8 @@ func TestTraceID_ExtractsFromContext(t *testing.T) {
 	assert.Empty(t, logger.TraceID(ctx), "expected empty trace ID for empty context")
 
 	// Test case 2: Context with valid span returns trace ID
-	traceID, _ := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
-	spanID, _ := trace.SpanIDFromHex("00f067aa0ba902b7")
+	traceID, _ := trace.TraceIDFromHex(text4bf92f3577b34da6a3ce929d0e)
+	spanID, _ := trace.SpanIDFromHex(text00f067aa0ba902b7)
 	spanCtx := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    traceID,
 		SpanID:     spanID,
@@ -290,7 +290,7 @@ func TestTraceID_ExtractsFromContext(t *testing.T) {
 
 	ctx = trace.ContextWithSpanContext(context.Background(), spanCtx)
 
-	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", logger.TraceID(ctx))
+	assert.Equal(t, text4bf92f3577b34da6a3ce929d0e, logger.TraceID(ctx))
 }
 
 // TestSpanID_ExtractsFromContext tests that SpanID extracts the OTel span ID from
@@ -313,8 +313,8 @@ func TestSpanID_ExtractsFromContext(t *testing.T) {
 	assert.Empty(t, logger.SpanID(ctx), "expected empty span ID for empty context")
 
 	// Test case 2: Context with valid span returns span ID
-	traceID, _ := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
-	spanID, _ := trace.SpanIDFromHex("00f067aa0ba902b7")
+	traceID, _ := trace.TraceIDFromHex(text4bf92f3577b34da6a3ce929d0e)
+	spanID, _ := trace.SpanIDFromHex(text00f067aa0ba902b7)
 	spanCtx := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    traceID,
 		SpanID:     spanID,
@@ -323,7 +323,7 @@ func TestSpanID_ExtractsFromContext(t *testing.T) {
 
 	ctx = trace.ContextWithSpanContext(context.Background(), spanCtx)
 
-	assert.Equal(t, "00f067aa0ba902b7", logger.SpanID(ctx))
+	assert.Equal(t, text00f067aa0ba902b7, logger.SpanID(ctx))
 }
 
 // TestWithContext_IncludesTraceFields tests that WithContext adds trace_id and span_id
@@ -347,8 +347,8 @@ func TestWithContext_IncludesTraceFields(t *testing.T) {
 	require.NoError(t, err, "unexpected error from NewFromConfig")
 
 	// Test case 1: Context with span but NO correlation ID should still add trace fields
-	traceID, _ := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
-	spanID, _ := trace.SpanIDFromHex("00f067aa0ba902b7")
+	traceID, _ := trace.TraceIDFromHex(text4bf92f3577b34da6a3ce929d0e)
+	spanID, _ := trace.SpanIDFromHex(text00f067aa0ba902b7)
 	spanCtx := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    traceID,
 		SpanID:     spanID,

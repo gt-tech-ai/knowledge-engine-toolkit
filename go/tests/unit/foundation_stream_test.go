@@ -26,7 +26,7 @@ import (
 func TestStream_FromSliceYieldsInOrderThenEnds(t *testing.T) {
 	t.Parallel()
 
-	s := stream.FromSlice([]string{"a", "b", "c"})
+	s := stream.FromSlice([]string{textA, textB, textC})
 
 	var got []string
 
@@ -41,7 +41,7 @@ func TestStream_FromSliceYieldsInOrderThenEnds(t *testing.T) {
 		got = append(got, item)
 	}
 
-	require.Equal(t, []string{"a", "b", "c"}, got)
+	require.Equal(t, []string{textA, textB, textC}, got)
 
 	item, ok, err := s.Next(t.Context())
 	require.NoError(t, err)
@@ -95,7 +95,7 @@ func testChunkSplitsAtMaxBytesKeepingOrderRest5(t *testing.T) {
 	t.Helper()
 
 	law := func(raw []uint8, budget uint8) bool {
-		maxBytes := int(budget)%64 + 1
+		maxBytes := int(budget)%int642 + 1
 		items := make([]int, len(raw))
 
 		for i, r := range raw {
@@ -128,13 +128,13 @@ func TestChunk_OversizedItemIsResourceExhausted(t *testing.T) {
 
 	size := func(s string) int { return len(s) }
 
-	_, err := stream.Chunk([]string{"ab", "toolong"}, size, 4)
+	_, err := stream.Chunk([]string{"ab", "toolong"}, size, maxBytes4)
 	require.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 
-	_, err = stream.Chunk([]string{"a"}, size, 0)
+	_, err = stream.Chunk([]string{textA}, size, 0)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	chunks, err := stream.Chunk(nil, size, 4)
+	chunks, err := stream.Chunk(nil, size, maxBytes4)
 	require.NoError(t, err)
 	require.Empty(t, chunks)
 }

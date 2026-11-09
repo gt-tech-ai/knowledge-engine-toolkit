@@ -36,7 +36,7 @@ func recoveredError(
 		logger.WithContext(ctx).Error(
 			tier+" panic recovered",
 			tier, name,
-			"operation", op,
+			textOperation, op,
 			"panic", fmt.Sprint(r),
 			"stack", string(debug.Stack()),
 		)

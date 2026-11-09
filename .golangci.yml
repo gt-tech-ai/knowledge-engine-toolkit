@@ -229,14 +229,12 @@ linters:
       min-complexity: 15
     revive:
       # Every rule on. line-length-limit is off because lll enforces the 90 columns and
-      # skips the single tokens Go cannot wrap; add-constant is held off until the
-      # repeated literals are named.
+      # skips the single tokens Go cannot wrap.
       enable-all-rules: true
       rules:
         - name: line-length-limit
           disabled: true
         - name: add-constant
-          disabled: true
           arguments:
             - allowInts: "0,1"
               allowStrs: '""'
@@ -519,13 +517,6 @@ linters:
       - linters:
           - lll
         source: '^\s*\w+\s+[\w.*\[\]]+\s+`(\w+:"[^"]*"\s*)+`$'
-      # Test code is linted like production code except for the linters whose findings are
-      # noise there: a literal repeated as an expected
-      # value (goconst: a test's literal is its expected value; naming it hides the spec
-      # from the assertion).
-      - path: _test\.go
-        linters:
-          - goconst
     paths:
       - .*\.pb\.go$
       - .*\.gen\.go$

@@ -30,7 +30,7 @@ func TestLockConfigValidate(t *testing.T) {
 	def := infra.DefaultLockConfig()
 	assert.Equal(
 		t,
-		"local",
+		textLocal,
 		def.Kind,
 		"default backend must be the in-process local lock",
 	)
@@ -45,7 +45,7 @@ func TestLockConfigValidate(t *testing.T) {
 
 	redis := infra.DefaultLockConfig()
 
-	redis.Kind = "redis"
+	redis.Kind = textRedis
 	require.NoError(t, redis.Validate(), "kind=redis must validate")
 
 	badKind := infra.DefaultLockConfig()
@@ -69,7 +69,7 @@ func TestLockConfigValidate(t *testing.T) {
 
 	tooFast := infra.DefaultLockConfig()
 
-	tooFast.RenewInterval = 20 * time.Second // > ttl/3 (30s/3 = 10s)
+	tooFast.RenewInterval = seconds20 * time.Second // > ttl/3 (30s/3 = 10s)
 	assert.Error(
 		t,
 		tooFast.Validate(),

@@ -22,13 +22,13 @@ import (
 func TestGetMap(t *testing.T) {
 	t.Parallel()
 
-	nested := map[string]any{"a": 1}
-	m := map[string]any{"obj": nested, "str": "x"}
+	nested := map[string]any{textA: 1}
+	m := map[string]any{textObj: nested, "str": textX}
 
-	require.Equal(t, nested, stdx.GetMap(m, "obj"), "present map key returns the map")
-	require.Nil(t, stdx.GetMap(m, "missing"), "absent key returns nil")
+	require.Equal(t, nested, stdx.GetMap(m, textObj), "present map key returns the map")
+	require.Nil(t, stdx.GetMap(m, textMissing), "absent key returns nil")
 	require.Nil(t, stdx.GetMap(m, "str"), "non-map value returns nil")
-	require.Nil(t, stdx.GetMap(nil, "obj"), "nil map returns nil")
+	require.Nil(t, stdx.GetMap(nil, textObj), "nil map returns nil")
 }
 
 // TestGetSlice tests that GetSlice returns the slice for a present []any key and
@@ -43,18 +43,18 @@ func TestGetMap(t *testing.T) {
 func TestGetSlice(t *testing.T) {
 	t.Parallel()
 
-	items := []any{"x", "y"}
-	m := map[string]any{"list": items, "obj": map[string]any{}}
+	items := []any{textX, "y"}
+	m := map[string]any{textList: items, textObj: map[string]any{}}
 
 	require.Equal(
 		t,
 		items,
-		stdx.GetSlice(m, "list"),
+		stdx.GetSlice(m, textList),
 		"present slice key returns the slice",
 	)
-	require.Nil(t, stdx.GetSlice(m, "missing"), "absent key returns nil")
-	require.Nil(t, stdx.GetSlice(m, "obj"), "non-slice value returns nil")
-	require.Nil(t, stdx.GetSlice(nil, "list"), "nil map returns nil")
+	require.Nil(t, stdx.GetSlice(m, textMissing), "absent key returns nil")
+	require.Nil(t, stdx.GetSlice(m, textObj), "non-slice value returns nil")
+	require.Nil(t, stdx.GetSlice(nil, textList), "nil map returns nil")
 }
 
 // TestGetString tests that GetString returns the string for a present
@@ -71,21 +71,21 @@ func TestGetSlice(t *testing.T) {
 func TestGetString(t *testing.T) {
 	t.Parallel()
 
-	m := map[string]any{"name": "user", "count": 3}
+	m := map[string]any{textName: textUser, textCount: textCount3}
 
 	require.Equal(
 		t,
-		"user",
-		stdx.GetString(m, "name"),
+		textUser,
+		stdx.GetString(m, textName),
 		"present string key returns the string",
 	)
-	require.Empty(t, stdx.GetString(m, "missing"), "absent key returns empty string")
+	require.Empty(t, stdx.GetString(m, textMissing), "absent key returns empty string")
 	require.Empty(
 		t,
-		stdx.GetString(m, "count"),
+		stdx.GetString(m, textCount),
 		"non-string value returns empty string",
 	)
-	require.Empty(t, stdx.GetString(nil, "name"), "nil map returns empty string")
+	require.Empty(t, stdx.GetString(nil, textName), "nil map returns empty string")
 }
 
 // TestAsMap tests that AsMap asserts an arbitrary value to map[string]any,
@@ -101,9 +101,9 @@ func TestGetString(t *testing.T) {
 func TestAsMap(t *testing.T) {
 	t.Parallel()
 
-	inner := map[string]any{"k": "v"}
+	inner := map[string]any{textK: textV}
 
 	require.Equal(t, inner, stdx.AsMap(any(inner)), "map value returns the map")
-	require.Nil(t, stdx.AsMap(any("x")), "non-map value returns nil")
+	require.Nil(t, stdx.AsMap(any(textX)), "non-map value returns nil")
 	require.Nil(t, stdx.AsMap(nil), "nil value returns nil")
 }

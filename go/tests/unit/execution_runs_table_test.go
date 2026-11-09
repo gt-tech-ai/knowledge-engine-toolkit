@@ -35,8 +35,8 @@ func heldRegistry(
 
 	started, release = make(chan struct{}), make(chan struct{})
 	reg = funcRegistry(t, d, map[string]runFunc{
-		"hold": func(ctx context.Context, _ any, obs interfaces.ExecutionObserver) error {
-			obs.OnStepComplete(types.StepResult{Name: "lint", Status: types.StatusPass})
+		textHold: func(ctx context.Context, _ any, obs interfaces.ExecutionObserver) error {
+			obs.OnStepComplete(types.StepResult{Name: textLint, Status: types.StatusPass})
 			close(started)
 
 			select {
@@ -46,7 +46,7 @@ func heldRegistry(
 				return ctx.Err()
 			}
 		},
-		"ok": func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
+		textOk: func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
 	})
 
 	return reg, started, release
@@ -70,7 +70,7 @@ func TestExecutionRunsStart_ReturnsRunIDImmediately(t *testing.T) {
 	table := runs.New(reg, seqIDs(), nil, 0)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	id, err := table.Start(ctx, "hold", nil)
+	id, err := table.Start(ctx, textHold, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "run-1", id)
 	<-started
@@ -79,7 +79,7 @@ func TestExecutionRunsStart_ReturnsRunIDImmediately(t *testing.T) {
 	snap, err := table.Status(id)
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateRunning, snap.State)
-	assert.Equal(t, "hold", snap.Op)
+	assert.Equal(t, textHold, snap.Op)
 
 	close(release)
 	table.Wait()
@@ -114,14 +114,14 @@ func TestExecutionRunsStatus_TransitionsRunningToSucceeded(t *testing.T) {
 		return []string{"/runs/" + s.ID + "/lint.log"}, nil
 	}, 0)
 
-	id, err := table.Start(context.Background(), "hold", nil)
+	id, err := table.Start(context.Background(), textHold, nil)
 	require.NoError(t, err)
 	<-started
 
 	snap, err := table.Status(id)
 	require.NoError(t, err)
 	require.Len(t, snap.Steps, 1)
-	assert.Equal(t, "lint", snap.Steps[0].Name)
+	assert.Equal(t, textLint, snap.Steps[0].Name)
 
 	_, err = table.Result(id)
 	assert.Equal(t, apperr.CodeConflict, apperr.Code(err))
@@ -141,12 +141,12 @@ func TestExecutionRunsStatus_TransitionsRunningToSucceeded(t *testing.T) {
 	require.Len(t, list, 1)
 	assert.Equal(t, id, list[0].ID)
 
-	_, err = table.Status("nope")
+	_, err = table.Status(textNope)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
-	_, err = table.Result("nope")
+	_, err = table.Result(textNope)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
-	assert.Equal(t, apperr.CodeNotFound, apperr.Code(table.Cancel("nope")))
+	assert.Equal(t, apperr.CodeNotFound, apperr.Code(table.Cancel(textNope)))
 }
 
 // TestExecutionRunsCancel_EndsRunAsCancelled tests that cancelling a run stops its
@@ -164,7 +164,7 @@ func TestExecutionRunsCancel_EndsRunAsCancelled(t *testing.T) {
 
 	reg, started, _ := heldRegistry(t, time.Minute)
 	table := runs.New(reg, seqIDs(), nil, 0)
-	id, err := table.Start(context.Background(), "hold", nil)
+	id, err := table.Start(context.Background(), textHold, nil)
 	require.NoError(t, err)
 	<-started
 
@@ -176,7 +176,7 @@ func TestExecutionRunsCancel_EndsRunAsCancelled(t *testing.T) {
 	assert.Equal(t, runs.StateCancelled, snap.State)
 	assert.Equal(t, apperr.CodeCanceled, apperr.Code(snap.Err))
 	require.NoError(t, table.Cancel(id))
-	require.NoError(t, reg.Run(context.Background(), "ok", nil, nil))
+	require.NoError(t, reg.Run(context.Background(), textOk, nil, nil))
 }
 
 // TestExecutionRunsTimeout_EndsRunAsFailedWithCodeTimeout tests that a run exceeding its
@@ -193,7 +193,7 @@ func TestExecutionRunsTimeout_EndsRunAsFailedWithCodeTimeout(t *testing.T) {
 
 	reg, _, _ := heldRegistry(t, 10*time.Millisecond)
 	table := runs.New(reg, seqIDs(), nil, 0)
-	id, err := table.Start(context.Background(), "hold", nil)
+	id, err := table.Start(context.Background(), textHold, nil)
 	require.NoError(t, err)
 
 	table.Wait()
@@ -219,7 +219,7 @@ func TestExecutionRunsCancelAll_StopsActiveRunsAndRefusesNewOnes(t *testing.T) {
 
 	reg, started, _ := heldRegistry(t, time.Minute)
 	table := runs.New(reg, seqIDs(), nil, 0)
-	id, err := table.Start(context.Background(), "hold", nil)
+	id, err := table.Start(context.Background(), textHold, nil)
 	require.NoError(t, err)
 	<-started
 
@@ -230,9 +230,9 @@ func TestExecutionRunsCancelAll_StopsActiveRunsAndRefusesNewOnes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, runs.StateCancelled, snap.State)
 
-	_, err = table.Start(context.Background(), "ok", nil)
+	_, err = table.Start(context.Background(), textOk, nil)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
-	require.NoError(t, reg.Run(context.Background(), "ok", nil, nil))
+	require.NoError(t, reg.Run(context.Background(), textOk, nil, nil))
 }
 
 // TestExecutionRunsSecondStart_WhileActiveReturnsBusyWithRunID tests that the
@@ -250,21 +250,21 @@ func TestExecutionRunsSecondStart_WhileActiveReturnsBusyWithRunID(t *testing.T) 
 
 	reg, started, release := heldRegistry(t, time.Minute)
 	table := runs.New(reg, seqIDs(), nil, 0)
-	_, err := table.Start(context.Background(), "hold", nil)
+	_, err := table.Start(context.Background(), textHold, nil)
 	require.NoError(t, err)
 	<-started
 
-	_, err = table.Start(context.Background(), "ok", nil)
+	_, err = table.Start(context.Background(), textOk, nil)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 	assert.Contains(t, err.Error(), "busy: run-1 is running")
 
-	err = reg.Run(context.Background(), "ok", nil, nil)
+	err = reg.Run(context.Background(), textOk, nil, nil)
 	assert.Contains(t, err.Error(), "busy: run-1 is running")
 
 	close(release)
 	table.Wait()
 
-	_, err = table.Start(context.Background(), "ok", nil)
+	_, err = table.Start(context.Background(), textOk, nil)
 	require.NoError(t, err)
 	table.Wait()
 }
@@ -290,7 +290,7 @@ func TestExecutionRunsOnDoneError_JoinsRunError(t *testing.T) {
 
 	reg, _, _ := heldRegistry(t, time.Minute)
 	table := runs.New(reg, seqIDs(), onDone, 0)
-	id, err := table.Start(context.Background(), "ok", nil)
+	id, err := table.Start(context.Background(), textOk, nil)
 	require.NoError(t, err)
 	table.Wait()
 
@@ -301,7 +301,7 @@ func TestExecutionRunsOnDoneError_JoinsRunError(t *testing.T) {
 
 	reg, _, _ = heldRegistry(t, 10*time.Millisecond)
 	table = runs.New(reg, seqIDs(), onDone, 0)
-	id, err = table.Start(context.Background(), "hold", nil)
+	id, err = table.Start(context.Background(), textHold, nil)
 	require.NoError(t, err)
 	table.Wait()
 
@@ -326,10 +326,10 @@ func TestExecutionRunsRetention_ForgetsOldestFinishedRuns(t *testing.T) {
 	t.Parallel()
 
 	reg, _, _ := heldRegistry(t, time.Minute)
-	table := runs.New(reg, seqIDs(), nil, 2)
+	table := runs.New(reg, seqIDs(), nil, keep2)
 
-	for range 3 {
-		_, err := table.Start(context.Background(), "ok", nil)
+	for range iterations3 {
+		_, err := table.Start(context.Background(), textOk, nil)
 		require.NoError(t, err)
 		table.Wait()
 	}
@@ -360,12 +360,12 @@ func TestExecutionRunsStart_DuplicateRunIDFailsInternal(t *testing.T) {
 
 	reg, _, _ := heldRegistry(t, time.Minute)
 	table := runs.New(reg, func() string { return "dup" }, nil, 0)
-	_, err := table.Start(context.Background(), "ok", nil)
+	_, err := table.Start(context.Background(), textOk, nil)
 	require.NoError(t, err)
 	table.Wait()
 
-	_, err = table.Start(context.Background(), "ok", nil)
+	_, err = table.Start(context.Background(), textOk, nil)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	assert.Len(t, table.List(), 1)
-	require.NoError(t, reg.Run(context.Background(), "ok", nil, nil))
+	require.NoError(t, reg.Run(context.Background(), textOk, nil, nil))
 }

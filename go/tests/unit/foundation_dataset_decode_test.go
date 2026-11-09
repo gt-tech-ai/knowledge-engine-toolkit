@@ -49,22 +49,22 @@ func TestDataset_Decode(t *testing.T) {
 
 	good := fstest.MapFS{
 		"data/tools.yaml": {Data: []byte("tools:\n  - name: buf\n    pin: v1.73.0\n")},
-		"data/paths.yaml": {Data: []byte("paths:\n  root: .\nlimits: {max: 3}\n")},
+		textDataPathsYaml: {Data: []byte("paths:\n  root: .\nlimits: {max: 3}\n")},
 	}
-	d, err := dataset.Load(good, "data")
+	d, err := dataset.Load(good, textData)
 	require.NoError(t, err)
 
 	var out decodedData
 
 	require.NoError(t, d.Decode(&out))
-	assert.Equal(t, []datasetTool{{Name: "buf", Pin: "v1.73.0"}}, out.Tools)
+	assert.Equal(t, []datasetTool{{Name: textBuf, Pin: "v1.73.0"}}, out.Tools)
 	assert.Equal(t, ".", out.Paths.Root)
-	assert.Equal(t, map[string]int{"max": 3}, out.Limits)
+	assert.Equal(t, map[string]int{textMax: 3}, out.Limits)
 	assert.Nil(t, out.Absent)
 
 	unknownKey, err := dataset.Load(fstest.MapFS{
 		"data/extra.yaml": {Data: []byte("mystery: 1\n")},
-	}, "data")
+	}, textData)
 	require.NoError(t, err)
 
 	err = unknownKey.Decode(&decodedData{})
@@ -73,13 +73,13 @@ func TestDataset_Decode(t *testing.T) {
 	require.ErrorContains(t, err, "data/extra.yaml")
 
 	unknownField, err := dataset.Load(fstest.MapFS{
-		"data/paths.yaml": {Data: []byte("paths:\n  rooot: .\n")},
-	}, "data")
+		textDataPathsYaml: {Data: []byte("paths:\n  rooot: .\n")},
+	}, textData)
 	require.NoError(t, err)
 
 	err = unknownField.Decode(&decodedData{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	require.ErrorContains(t, err, "data/paths.yaml")
+	require.ErrorContains(t, err, textDataPathsYaml)
 
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(d.Decode(decodedData{})))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(d.Decode((*decodedData)(nil))))
@@ -122,10 +122,10 @@ func TestDataset_DecodeKeepsBlockScalars(t *testing.T) {
 
 	require.NoError(t, yaml.Unmarshal([]byte(src), &want))
 
-	ds, err := dataset.Load(fstest.MapFS{"data/q.yaml": {Data: []byte(src)}}, "data")
+	ds, err := dataset.Load(fstest.MapFS{"data/q.yaml": {Data: []byte(src)}}, textData)
 	require.NoError(t, err)
 
-	got, err := ds.Section[queries]("q")
+	got, err := ds.Section[queries](textQ)
 	require.NoError(t, err)
 	assert.Equal(t, want.Q, got)
 

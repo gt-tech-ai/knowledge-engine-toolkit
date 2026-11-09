@@ -65,7 +65,7 @@ func (libs) ProgramOptions() []cel.ProgramOption { return nil }
 // exprArg reports whether arg is exactly `${expr}`, returning expr.
 func exprArg(arg string) (string, bool) {
 	if strings.HasPrefix(arg, "${") && strings.HasSuffix(arg, "}") {
-		return arg[2 : len(arg)-1], true
+		return arg[offset2 : len(arg)-1], true
 	}
 
 	return "", false

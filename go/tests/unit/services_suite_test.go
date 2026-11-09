@@ -24,37 +24,51 @@ import (
 // that reaches the network, and a fmt row no lint selection may pick.
 func suiteRuns() []types.ToolRun {
 	return []types.ToolRun{
-		{Name: "golangci-lint", Verb: "lint", Group: "Lint", Tags: []string{"go"}},
-		{Name: "ruff", Verb: "lint", Group: "Lint", Tags: []string{"python", "slow"}},
 		{
-			Name:  "lychee",
-			Verb:  "lint",
-			Group: "Docs Lint",
-			Tags:  []string{"docs", "online"},
+			Name:  textGolangciLint,
+			Verb:  textLint,
+			Group: textLint2,
+			Tags:  []string{textGo2},
 		},
-		{Name: "gofumpt", Verb: "fmt", Group: "Format", Tags: []string{"go"}},
+		{
+			Name:  textRuff,
+			Verb:  textLint,
+			Group: textLint2,
+			Tags:  []string{textPython, textSlow},
+		},
+		{
+			Name:  textLychee,
+			Verb:  textLint,
+			Group: textDocsLint,
+			Tags:  []string{textDocs2, textOnline},
+		},
+		{Name: textGofumpt, Verb: textFmt, Group: textFormat, Tags: []string{textGo2}},
 	}
 }
 
 // lintSuite is a lint suite over suiteRuns.
 func lintSuite() types.Suite {
 	lint := func(tag string) types.Selection {
-		return types.Selection{Verbs: []string{"lint"}, Tags: []string{tag}}
+		return types.Selection{Verbs: []string{textLint}, Tags: []string{tag}}
 	}
 
 	return types.Suite{
-		Title: "Lint",
+		Title: textLint2,
 		Select: types.Selection{
-			Verbs:   []string{"lint"},
-			AnyTags: []string{"go", "python"},
+			Verbs:   []string{textLint},
+			AnyTags: []string{textGo2, textPython},
 		},
-		Phases: []types.Phase{{Group: "Docs Lint"}, {Group: "Lint"}},
+		Phases: []types.Phase{{Group: textDocsLint}, {Group: textLint2}},
 		Selectors: map[string]types.Selection{
-			"go": lint("go"), "python": lint("python"), "docs": lint("docs"),
+			textGo2: lint(
+				textGo2,
+			),
+			textPython: lint(textPython),
+			textDocs2:  lint(textDocs2),
 		},
 		Modifiers: map[string]types.Selection{
-			"fast":    {ExcludeTags: []string{"slow"}},
-			"offline": {ExcludeTags: []string{"online"}},
+			textFast:    {ExcludeTags: []string{textSlow}},
+			textOffline: {ExcludeTags: []string{textOnline}},
 		},
 	}
 }
@@ -93,47 +107,75 @@ func TestServicesSuite_SelectComposesFlags(t *testing.T) {
 
 		return entryNames(got)
 	}
-	assert.Equal(t, []string{"golangci-lint", "ruff"}, names(s, catalog))
-	assert.Equal(t, []string{"golangci-lint", "ruff"}, names(s, catalog, "python", "go"))
-	assert.Equal(t, []string{"golangci-lint"}, names(s, catalog, "go", "fast"))
-	assert.Equal(t, []string{"lychee"}, names(s, catalog, "docs"))
-	assert.Empty(t, names(s, catalog, "docs", "offline"))
+	assert.Equal(t, []string{textGolangciLint, textRuff}, names(s, catalog))
+	assert.Equal(
+		t,
+		[]string{textGolangciLint, textRuff},
+		names(s, catalog, textPython, textGo2),
+	)
+	assert.Equal(t, []string{textGolangciLint}, names(s, catalog, textGo2, textFast))
+	assert.Equal(t, []string{textLychee}, names(s, catalog, textDocs2))
+	assert.Empty(t, names(s, catalog, textDocs2, textOffline))
 
-	_, err := suite.Select(s, catalog, []string{"rust"})
+	_, err := suite.Select(s, catalog, []string{textRust})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	require.ErrorContains(t, err, "rust")
+	require.ErrorContains(t, err, textRust)
 
 	gated := s
 
-	gated.Gated = map[string]string{"offline": "offline"}
+	gated.Gated = map[string]string{textOffline: textOffline}
+
+	testServicesSuiteSelectComposesFlagsRest(t, s, catalog, names, gated)
+}
+
+// testServicesSuiteSelectComposesFlagsRest continues
+// TestServicesSuite_SelectComposesFlags with its remaining steps.
+func testServicesSuiteSelectComposesFlagsRest(
+	t *testing.T,
+	s types.Suite,
+	catalog []suite.Entry,
+	names func(s types.Suite, cat []suite.Entry, flags ...string) []string,
+	gated types.Suite,
+) {
+	t.Helper()
+
+	var err error
 
 	offline := suite.Runs(nil, nil, []types.ToolRun{
 		{
-			Name:  "lychee",
-			Verb:  "lint",
-			Group: "Docs Lint",
-			Tags:  []string{"docs", "online"},
+			Name:  textLychee,
+			Verb:  textLint,
+			Group: textDocsLint,
+			Tags:  []string{textDocs2, textOnline},
 		},
 		{
 			Name:  "lychee offline",
-			Verb:  "lint",
-			Group: "Docs Lint",
-			Tags:  []string{"docs", "offline"},
+			Verb:  textLint,
+			Group: textDocsLint,
+			Tags:  []string{textDocs2, textOffline},
 		},
 	})
-	assert.Equal(t, []string{"lychee"}, names(gated, offline, "docs"))
-	assert.Equal(t, []string{"lychee offline"}, names(gated, offline, "docs", "offline"))
+	assert.Equal(t, []string{textLychee}, names(gated, offline, textDocs2))
+	assert.Equal(
+		t,
+		[]string{"lychee offline"},
+		names(gated, offline, textDocs2, textOffline),
+	)
 
 	steps := suite.Steps(map[string]suite.Step{
-		"lint.vet": {Group: "Lint", Tags: []string{"go"}},
-		"lint.off": {Group: "Lint", Tags: []string{"go"}},
+		textLintVet: {Group: textLint2, Tags: []string{textGo2}},
+		"lint.off":  {Group: textLint2, Tags: []string{textGo2}},
 	})
 	withSteps := s
 
-	withSteps.Steps = []string{"lint.vet"}
+	withSteps.Steps = []string{textLintVet}
 
 	all := slices.Concat(catalog, steps)
-	assert.Equal(t, []string{"golangci-lint", "lint.vet"}, names(withSteps, all, "go"))
+	assert.Equal(
+		t,
+		[]string{textGolangciLint, textLintVet},
+		names(withSteps, all, textGo2),
+	)
 
 	withSteps.Steps = []string{"lint.nope"}
 	_, err = suite.Select(withSteps, all, nil)
@@ -161,23 +203,23 @@ func TestServicesSuite_PlanOrdersPhases(t *testing.T) {
 	selected, err := suite.Select(
 		s,
 		suite.Runs(nil, nil, suiteRuns()),
-		[]string{"go", "docs"},
+		[]string{textGo2, textDocs2},
 	)
 	require.NoError(t, err)
 
 	plan, err := suite.Plan(s, selected)
 	require.NoError(t, err)
-	require.Len(t, plan, 2)
-	assert.Equal(t, "Docs Lint", plan[0].Group)
+	require.Len(t, plan, wantPlanLen2)
+	assert.Equal(t, textDocsLint, plan[0].Group)
 	assert.False(t, plan[0].Serial)
-	assert.Equal(t, "lychee", plan[0].Entries[0].Name)
-	assert.Equal(t, "Lint", plan[1].Group)
+	assert.Equal(t, textLychee, plan[0].Entries[0].Name)
+	assert.Equal(t, textLint2, plan[1].Group)
 	assert.True(t, plan[1].Serial)
 
 	_, err = suite.Plan(s, suite.Runs(nil, nil, suiteRuns()[3:]))
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	require.ErrorContains(t, err, "gofumpt")
-	assert.ErrorContains(t, err, "Format")
+	require.ErrorContains(t, err, textGofumpt)
+	assert.ErrorContains(t, err, textFormat)
 }
 
 // TestServicesSuite_Gate tests the gate a suite builds.
@@ -253,21 +295,21 @@ func testServicesSuiteGateRest2(
 	t.Helper()
 
 	s := types.Suite{
-		Title:  "Lint",
-		Select: types.Selection{Verbs: []string{"lint"}},
-		Phases: []types.Phase{{Group: "Format", Serial: true}, {Group: "Lint"}},
+		Title:  textLint2,
+		Select: types.Selection{Verbs: []string{textLint}},
+		Phases: []types.Phase{{Group: textFormat, Serial: true}, {Group: textLint2}},
 		Selectors: map[string]types.Selection{
-			"go":     {Verbs: []string{"lint"}, Tags: []string{"go"}},
-			"python": {Verbs: []string{"lint"}, Tags: []string{"python"}},
+			textGo2:    {Verbs: []string{textLint}, Tags: []string{textGo2}},
+			textPython: {Verbs: []string{textLint}, Tags: []string{textPython}},
 		},
-		Steps: []string{"lint.vet"},
+		Steps: []string{textLintVet},
 	}
 	catalog := append(suite.Runs(tr, nil, []types.ToolRun{
-		{Name: "gofumpt", Verb: "lint", Group: "Format", Tags: []string{"go"}},
-		{Name: "golines", Verb: "lint", Group: "Format", Tags: []string{"go"}},
-		{Name: "ruff", Verb: "lint", Group: "Lint", Tags: []string{"python"}},
-	}), suite.Steps(map[string]suite.Step{"lint.vet": {
-		Group: "Lint", Tags: []string{"go"},
+		{Name: textGofumpt, Verb: textLint, Group: textFormat, Tags: []string{textGo2}},
+		{Name: "golines", Verb: textLint, Group: textFormat, Tags: []string{textGo2}},
+		{Name: textRuff, Verb: textLint, Group: textLint2, Tags: []string{textPython}},
+	}), suite.Steps(map[string]suite.Step{textLintVet: {
+		Group: textLint2, Tags: []string{textGo2},
 		Run: func(_ context.Context, env *suite.StepEnv) (types.StepResults, error) {
 			assert.Same(t, runner, asType[*mocks.MockCommandRunner](t, env.Runner))
 			mu.Lock()
@@ -275,20 +317,20 @@ func testServicesSuiteGateRest2(
 			(*ran) = append((*ran), "lint.vet@"+env.Root)
 			mu.Unlock()
 
-			return types.OneStep("vet", types.StatusPass, nil), nil
+			return types.OneStep(textVet, types.StatusPass, nil), nil
 		},
 	}})...)
 	env := suite.Env{Decs: fixtures.Decorations()}
-	g := suite.Gate{Env: env, Suite: s, Catalog: catalog, Flags: []string{"go"}}.Gate()
-	phases := make([]string, 0, 2)
+	g := suite.Gate{Env: env, Suite: s, Catalog: catalog, Flags: []string{textGo2}}.Gate()
+	phases := make([]string, 0, capacity2)
 
 	for _, p := range g.Phases() {
 		phases = append(phases, p.Name)
 	}
 
-	assert.Equal(t, []string{"Format", "Lint"}, phases)
-	require.NoError(t, g.Run(t.Context(), runner, "/r"))
-	assert.Equal(t, []string{"gofumpt", "golines", "lint.vet@/r"}, (*ran))
+	assert.Equal(t, []string{textFormat, textLint2}, phases)
+	require.NoError(t, g.Run(t.Context(), runner, textR))
+	assert.Equal(t, []string{textGofumpt, "golines", "lint.vet@/r"}, (*ran))
 	assert.Equal(t, int32(1), peak.Load(), "a serial phase runs one row at a time")
 
 	testServicesSuiteGateRest(t, tr, runner, s, catalog, env)
@@ -305,30 +347,30 @@ func testServicesSuiteGateRest(
 ) {
 	t.Helper()
 
-	plain := types.ToolRun{Name: "hadolint", Verb: "lint"}
+	plain := types.ToolRun{Name: textHadolint, Verb: textLint}
 	tr.EXPECT().Run(gomock.Any(), nil, plain, types.RunOptions{Fix: true}).
 		Return(nil, apperr.New(apperr.CodeInvalidInput, "no value for {image}"))
 
 	j := suite.Runs(tr, nil, []types.ToolRun{plain})[0].Job(suite.Env{
 		Decs: fixtures.Decorations(), Opts: types.RunOptions{Fix: true},
 	})
-	assert.Equal(t, types.JobMeta{Name: "hadolint", Group: "lint"}, j.Meta())
+	assert.Equal(t, types.JobMeta{Name: textHadolint, Group: textLint}, j.Meta())
 
-	got, err := j.Execute(t.Context(), runner, "/r")
+	got, err := j.Execute(t.Context(), runner, textR)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, types.StatusFail, got[0].Status)
 	assert.Contains(t, got[0].Error, string(apperr.CodeInvalidInput))
 
-	bad := suite.Gate{Env: env, Suite: s, Catalog: catalog, Flags: []string{"rust"}}
-	require.Error(t, bad.Gate().Run(t.Context(), runner, "/r"))
+	bad := suite.Gate{Env: env, Suite: s, Catalog: catalog, Flags: []string{textRust}}
+	require.Error(t, bad.Gate().Run(t.Context(), runner, textR))
 
 	jobs := bad.Jobs()
 	require.Len(t, jobs, 1)
 
-	res, _ := jobs[0].Execute(t.Context(), runner, "/r")
+	res, _ := jobs[0].Execute(t.Context(), runner, textR)
 	require.Len(t, res, 1)
-	assert.Contains(t, res[0].Error, "rust")
+	assert.Contains(t, res[0].Error, textRust)
 }
 
 // recordPeak raises peak to n unless a concurrent caller already raised it further.

@@ -34,7 +34,7 @@ func TestMiddleware_LargeBodyPassthrough(t *testing.T) {
 	}
 
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(textContentType, textMediaApplication)
 		w.WriteHeader(http.StatusOK)
 
 		_, _ = w.Write(big)
@@ -45,10 +45,10 @@ func TestMiddleware_LargeBodyPassthrough(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		t.Context(),
 		http.MethodGet,
-		"/api/v1/documents",
+		textAPIV1Documents,
 		http.NoBody,
 	)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", textMediaApplication)
 	handler.ServeHTTP(rec, req)
 
 	res := rec.Result()
@@ -82,8 +82,8 @@ func TestMiddleware_ReclassifiesVanguardBindingError(t *testing.T) {
 		code int
 		want int
 	}{
-		{"vanguard binding error (code 2) is a 400", 2, http.StatusBadRequest},
-		{"real handler 500 (code 13) stays 500", 13, http.StatusInternalServerError},
+		{"vanguard binding error (code 2) is a 400", cases2, http.StatusBadRequest},
+		{"real handler 500 (code 13) stays 500", cases13, http.StatusInternalServerError},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -100,7 +100,7 @@ func TestMiddleware_ReclassifiesVanguardBindingError(t *testing.T) {
 			req := httptest.NewRequestWithContext(
 				t.Context(),
 				http.MethodGet,
-				"/api/v1/documents",
+				textAPIV1Documents,
 				http.NoBody,
 			)
 			handler.ServeHTTP(rec, req)
@@ -125,7 +125,7 @@ func TestMiddleware_UnparseableBodyPassthrough(t *testing.T) {
 
 	raw := []byte("[this is not json")
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(textContentType, textMediaApplication)
 		w.WriteHeader(http.StatusOK)
 
 		_, _ = w.Write(raw)
@@ -136,10 +136,10 @@ func TestMiddleware_UnparseableBodyPassthrough(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		t.Context(),
 		http.MethodGet,
-		"/api/v1/documents",
+		textAPIV1Documents,
 		http.NoBody,
 	)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", textMediaApplication)
 	handler.ServeHTTP(rec, req)
 
 	res := rec.Result()
@@ -163,23 +163,23 @@ func TestMiddleware_UnparseableBodyPassthrough(t *testing.T) {
 func TestTransformCollection_PreservesNonObjectItems(t *testing.T) {
 	t.Parallel()
 
-	cfg := codec.ResourceConfig{Type: "users", CollectionKey: "users"}
+	cfg := codec.ResourceConfig{Type: textUsers, CollectionKey: textUsers}
 	body := map[string]any{
-		"users": []any{
+		textUsers: []any{
 			"scalar-item",
-			map[string]any{"id": "1", "email": "a@b.test"},
+			map[string]any{textID: "1", textEmail: "a@b.test"},
 		},
 	}
 
 	result := codec.TransformCollection(body, cfg, "/api/v1/demo/users")
 
-	data, ok := result["data"].([]any)
+	data, ok := result[textData].([]any)
 	require.True(t, ok)
-	require.Len(t, data, 2)
+	require.Len(t, data, wantDataLen2)
 	assert.Equal(t, "scalar-item", data[0], "a non-object item is preserved verbatim")
 
 	obj, ok := data[1].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "users", obj["type"])
-	assert.Equal(t, "1", obj["id"])
+	assert.Equal(t, textUsers, obj[textType])
+	assert.Equal(t, "1", obj[textID])
 }

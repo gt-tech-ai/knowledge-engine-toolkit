@@ -57,7 +57,7 @@ func TestProvider_ExpiryAwareCache(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	ref := types.Ref{Env: "stg", Class: "deploy", Field: "aws"}
+	ref := types.Ref{Env: textStg, Class: textDeploy, Field: "aws"}
 	secretAt := func(exp time.Time) types.Secret {
 		b, err := json.Marshal(expiringCred{Exp: exp})
 		require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestProvider_ExpiryAwareCache(t *testing.T) {
 		reads int
 	}{
 		{time.Now().Add(time.Hour), "far future is cached", 1},
-		{time.Now().Add(session.ExpirySkew / 2), "inside the skew is refetched", 2},
+		{time.Now().Add(session.ExpirySkew / 2), "inside the skew is refetched", cases2},
 		{time.Time{}, "zero never expires", 1},
 	}
 	for _, tc := range cases {
@@ -99,7 +99,7 @@ func TestProvider_ExpiryAwareCache(t *testing.T) {
 		Times(1)
 
 	p := expiryProvider[sessionCred](plain)
-	for range 2 {
+	for range iterations2 {
 		_, err := p.Resolve(ctx, ref)
 		require.NoError(t, err)
 	}

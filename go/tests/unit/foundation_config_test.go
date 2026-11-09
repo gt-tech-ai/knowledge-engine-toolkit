@@ -33,7 +33,7 @@ func TestConfig_LoadBaseConfig(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 server:
   port: 8080
 database:
@@ -47,9 +47,9 @@ database:
 	)
 
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
-	require.NoError(t, err, "New")
+	require.NoError(t, err, textNew)
 
-	assert.Equal(t, 8080, cfg.GetInt("server.port"))
+	assert.Equal(t, wantGetInt8080, cfg.GetInt(textServerPort))
 	assert.Equal(t, "localhost", cfg.GetString("database.host"))
 }
 
@@ -71,7 +71,7 @@ func TestConfig_EnvironmentOverlay(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 server:
   port: 8080
 log:
@@ -90,12 +90,12 @@ log:
 	cfg, err = config.New(
 		config.KindViper,
 		config.WithBaseDir(dir),
-		config.WithEnvironment("production"),
+		config.WithEnvironment(textProduction),
 	)
-	require.NoError(t, err, "New")
+	require.NoError(t, err, textNew)
 
-	assert.Equal(t, "warn", cfg.GetString("log.level"))
-	assert.Equal(t, 8080, cfg.GetInt("server.port"))
+	assert.Equal(t, textWarn, cfg.GetString("log.level"))
+	assert.Equal(t, wantGetInt8080, cfg.GetInt(textServerPort))
 }
 
 // TestConfig_EnvVarsOverride tests that prefixed environment variables
@@ -114,15 +114,12 @@ log:
 // must NOT call t.Parallel().
 func TestConfig_EnvVarsOverride(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
-server:
-  port: 8080
-`)
+	writeFile(t, filepath.Join(dir, textBaseYaml), textServerPort8080Yaml)
 	t.Setenv("MYAPP_SERVER_PORT", "9090")
 
 	cfg := loadWithSchema(t, dir)
 
-	assert.Equal(t, 9090, cfg.GetInt("server.port"), "env override failed")
+	assert.Equal(t, wantGetInt9090, cfg.GetInt(textServerPort), "env override failed")
 }
 
 // TestConfig_StoragePublicEndpointEnvOverride tests that MYAPP_STORAGE_S3_PUBLIC_ENDPOINT
@@ -138,7 +135,7 @@ server:
 //     sets S3Config.PublicEndpoint through UnmarshalKey("storage.s3").
 func TestConfig_StoragePublicEndpointEnvOverride(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 storage:
   s3:
     bucket: uploads
@@ -183,8 +180,8 @@ func TestConfig_MissingBaseConfig(t *testing.T) {
 func TestConfig_UnknownKindReturnsError(t *testing.T) {
 	t.Parallel()
 
-	_, err := config.New(config.Kind(99))
-	require.Error(t, err, "expected error for unknown kind")
+	_, err := config.New(config.Kind(kindArg99))
+	require.Error(t, err, textExpectedErrorForUnknown)
 }
 
 // TestConfig_DefaultConfig tests that DefaultConfig returns sensible defaults.
@@ -221,7 +218,7 @@ func TestConfig_NewFromConfig(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 app:
   name: test-service
   debug: false
@@ -234,7 +231,7 @@ app:
 	cfg := config.DefaultConfig()
 
 	cfg.Viper.BaseDir = dir
-	cfg.Viper.Env = "dev"
+	cfg.Viper.Env = textDev
 
 	var (
 		loader interfaces.ConfigLoader
@@ -244,7 +241,7 @@ app:
 	loader, err = config.NewFromConfig(cfg)
 	require.NoError(t, err, "NewFromConfig")
 
-	assert.Equal(t, "test-service", loader.GetString("app.name"))
+	assert.Equal(t, textTestService, loader.GetString(textAppName))
 	assert.True(
 		t,
 		loader.GetBool("app.debug"),
@@ -265,7 +262,7 @@ func TestConfig_Unmarshal(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 server:
   port: 8080
   host: 0.0.0.0
@@ -277,7 +274,7 @@ server:
 	)
 
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
-	require.NoError(t, err, "New")
+	require.NoError(t, err, textNew)
 
 	// shapeServer is the Server element of this document.
 	type shapeServer struct {
@@ -290,8 +287,8 @@ server:
 	}
 
 	require.NoError(t, cfg.Unmarshal(&target), "Unmarshal")
-	assert.Equal(t, 8080, target.Server.Port)
-	assert.Equal(t, "0.0.0.0", target.Server.Host)
+	assert.Equal(t, wantPort8080, target.Server.Port)
+	assert.Equal(t, text0000, target.Server.Host)
 }
 
 // TestConfig_GetBool tests that GetBool correctly reads boolean config values.
@@ -306,7 +303,7 @@ func TestConfig_GetBool(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 feature:
   enabled: true
   disabled: false
@@ -318,7 +315,7 @@ feature:
 	)
 
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
-	require.NoError(t, err, "New")
+	require.NoError(t, err, textNew)
 
 	assert.True(t, cfg.GetBool("feature.enabled"), "feature.enabled = false, want true")
 	assert.False(
@@ -341,7 +338,7 @@ func TestConfig_Get(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 app:
   name: test
 `)
@@ -352,9 +349,9 @@ app:
 	)
 
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
-	require.NoError(t, err, "New")
+	require.NoError(t, err, textNew)
 
-	assert.NotNil(t, cfg.Get("app.name"), "Get(app.name) should return non-nil")
+	assert.NotNil(t, cfg.Get(textAppName), "Get(app.name) should return non-nil")
 	assert.Nil(t, cfg.Get("nonexistent.key"), "Get(nonexistent.key) should return nil")
 }
 
@@ -377,17 +374,17 @@ func TestConfig_MockAsConsumerDependency(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mock := mocks.NewMockConfigLoader(ctrl)
 
-	mock.EXPECT().GetString("server.host").Return("0.0.0.0")
-	mock.EXPECT().GetInt("server.port").Return(8080)
-	mock.EXPECT().GetBool("debug").Return(false)
-	mock.EXPECT().Get("app.name").Return("test-service")
+	mock.EXPECT().GetString("server.host").Return(text0000)
+	mock.EXPECT().GetInt(textServerPort).Return(rets8080)
+	mock.EXPECT().GetBool(textDebug).Return(false)
+	mock.EXPECT().Get(textAppName).Return(textTestService)
 
 	var cfg interfaces.ConfigLoader = mock
 
-	assert.Equal(t, "0.0.0.0", cfg.GetString("server.host"))
-	assert.Equal(t, 8080, cfg.GetInt("server.port"))
-	assert.False(t, cfg.GetBool("debug"), "expected debug = false")
-	assert.Equal(t, "test-service", cfg.Get("app.name"))
+	assert.Equal(t, text0000, cfg.GetString("server.host"))
+	assert.Equal(t, wantGetInt8080, cfg.GetInt(textServerPort))
+	assert.False(t, cfg.GetBool(textDebug), "expected debug = false")
+	assert.Equal(t, textTestService, cfg.Get(textAppName))
 }
 
 // TestConfig_UnmarshalKey tests that UnmarshalKey decodes a specific config section into
@@ -405,7 +402,7 @@ func TestConfig_UnmarshalKey(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 database:
   host: localhost
   port: 5432
@@ -421,7 +418,7 @@ database:
 	)
 
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
-	require.NoError(t, err, "New")
+	require.NoError(t, err, textNew)
 
 	var dbCfg struct {
 		Host     string `mapstructure:"host"`
@@ -432,14 +429,14 @@ database:
 		Port     int    `mapstructure:"port"`
 	}
 
-	require.NoError(t, cfg.UnmarshalKey("database", &dbCfg), "UnmarshalKey")
+	require.NoError(t, cfg.UnmarshalKey(textDatabase, &dbCfg), textUnmarshalkey)
 
 	assert.Equal(t, "localhost", dbCfg.Host)
-	assert.Equal(t, 5432, dbCfg.Port)
-	assert.Equal(t, "app", dbCfg.User)
-	assert.Equal(t, "dev_password", dbCfg.Password)
+	assert.Equal(t, wantPort5432, dbCfg.Port)
+	assert.Equal(t, textApp, dbCfg.User)
+	assert.Equal(t, textDevPassword, dbCfg.Password)
 	assert.Equal(t, "knowledge_engine", dbCfg.Database)
-	assert.Equal(t, "disable", dbCfg.SSLMode)
+	assert.Equal(t, textDisable, dbCfg.SSLMode)
 }
 
 // TestConfig_MessagingSQSEnvOverride tests that the prefixed messaging.sqs env vars
@@ -458,22 +455,22 @@ database:
 // NOTE: t.Setenv panics under t.Parallel, so this test is intentionally serial.
 func TestConfig_MessagingSQSEnvOverride(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 messaging:
   sqs:
     endpoint: http://localhost:9324
 `)
-	t.Setenv("MYAPP_MESSAGING_SQS_REGION", "eu-west-1")
+	t.Setenv("MYAPP_MESSAGING_SQS_REGION", textEuWest1)
 	t.Setenv("SQS_ENDPOINT", "https://sqs.eu-west-1.amazonaws.example")
 
 	cfg := loadWithSchema(t, dir)
 
 	var sqsCfg infra.SQSConfig
 
-	require.NoError(t, cfg.UnmarshalKey("messaging.sqs", &sqsCfg), "UnmarshalKey")
+	require.NoError(t, cfg.UnmarshalKey("messaging.sqs", &sqsCfg), textUnmarshalkey)
 	assert.Equal(
 		t,
-		"eu-west-1",
+		textEuWest1,
 		sqsCfg.Region,
 		"MYAPP_MESSAGING_SQS_REGION must bind the absent key",
 	)
@@ -497,7 +494,7 @@ func TestConfig_UnmarshalKeyWithDuration(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 server:
   http:
     host: "0.0.0.0"
@@ -512,7 +509,7 @@ server:
 	)
 
 	cfg, err = config.New(config.KindViper, config.WithBaseDir(dir))
-	require.NoError(t, err, "New")
+	require.NoError(t, err, textNew)
 
 	// shapeHTTP is the HTTP element of this document.
 	type shapeHTTP struct {
@@ -526,7 +523,7 @@ server:
 		HTTP shapeHTTP `mapstructure:"http"`
 	}
 
-	require.NoError(t, cfg.UnmarshalKey("server", &serverCfg), "UnmarshalKey")
+	require.NoError(t, cfg.UnmarshalKey("server", &serverCfg), textUnmarshalkey)
 
 	assert.Equal(t, 30*time.Second, serverCfg.HTTP.ReadTimeout)
 	assert.Equal(t, 60*time.Second, serverCfg.HTTP.WriteTimeout)
@@ -548,7 +545,7 @@ server:
 // must NOT call t.Parallel().
 func TestConfig_LegacyEnvVarOverride(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 database:
   host: localhost
   port: 5432
@@ -557,7 +554,7 @@ redis:
   port: 6379
 `)
 
-	t.Setenv("DB_HOST", "override-host")
+	t.Setenv(textDBHost, "override-host")
 	t.Setenv("REDIS_HOST", "override-redis")
 
 	cfg := loadWithSchema(t, dir)
@@ -593,7 +590,7 @@ func TestConfigBuilder_KindString(t *testing.T) {
 		kind config.Kind
 	}{
 		{"viper", config.KindViper},
-		{"Kind(99)", config.Kind(99)},
+		{textKind99, config.Kind(kindArg99)},
 	}
 
 	for _, tt := range tests {
@@ -643,28 +640,28 @@ func TestConfigBuilder_WithOptions(t *testing.T) {
 	t.Parallel()
 
 	root := &consumerRoot{}
-	first := map[string][]string{"a.key": {"A_KEY"}, "shared": {"OLD"}}
+	first := map[string][]string{"a.key": {"A_KEY"}, textShared: {"OLD"}}
 	cfg := config.DefaultConfig()
 	options.ApplyOptions(&cfg,
 		config.WithBaseDir("/etc/app"),
-		config.WithEnvironment("staging"),
-		config.WithEnvPrefix("MYAPP"),
+		config.WithEnvironment(textStaging),
+		config.WithEnvPrefix(textMyapp),
 		config.WithSchema(root),
 		config.WithExtraEnv(first),
-		config.WithExtraEnv(map[string][]string{"b.key": {"B_KEY"}, "shared": {"NEW"}}),
+		config.WithExtraEnv(map[string][]string{"b.key": {"B_KEY"}, textShared: {"NEW"}}),
 	)
 
 	assert.Equal(t, "/etc/app", cfg.Viper.BaseDir)
-	assert.Equal(t, "staging", cfg.Viper.Env)
-	assert.Equal(t, "MYAPP", cfg.Viper.Prefix)
+	assert.Equal(t, textStaging, cfg.Viper.Env)
+	assert.Equal(t, textMyapp, cfg.Viper.Prefix)
 	assert.Same(t, root, cfg.Viper.Schema)
 	assert.Equal(t, map[string][]string{
-		"a.key": {"A_KEY"}, "b.key": {"B_KEY"}, "shared": {"NEW"},
+		"a.key": {"A_KEY"}, "b.key": {"B_KEY"}, textShared: {"NEW"},
 	}, cfg.Viper.ExtraEnv, "WithExtraEnv calls must merge")
 	assert.Equal(
 		t,
 		[]string{"OLD"},
-		first["shared"],
+		first[textShared],
 		"the caller's map must not be modified",
 	)
 }
@@ -682,16 +679,13 @@ func TestConfig_EnvOverlayMergeError(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
-server:
-  port: 8080
-`)
+	writeFile(t, filepath.Join(dir, textBaseYaml), textServerPort8080Yaml)
 	writeFile(t, filepath.Join(dir, "broken.yaml"), ":\n  - :\n\t\t- bad")
 
 	_, err := config.New(
 		config.KindViper,
 		config.WithBaseDir(dir),
-		config.WithEnvironment("broken"),
+		config.WithEnvironment(textBroken),
 	)
 	require.Error(t, err, "expected error when merging invalid env overlay")
 }
@@ -709,10 +703,7 @@ func TestConfig_SecretsMergeError(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
-server:
-  port: 8080
-`)
+	writeFile(t, filepath.Join(dir, textBaseYaml), textServerPort8080Yaml)
 	writeFile(t, filepath.Join(dir, "secrets.yaml"), ":\n  - :\n\t\t- bad")
 
 	_, err := config.New(config.KindViper, config.WithBaseDir(dir))
@@ -735,13 +726,10 @@ func TestConfig_UnmarshalKeyMissingKey(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
-server:
-  port: 8080
-`)
+	writeFile(t, filepath.Join(dir, textBaseYaml), textServerPort8080Yaml)
 
 	cfg, err := config.New(config.KindViper, config.WithBaseDir(dir))
-	require.NoError(t, err, "New")
+	require.NoError(t, err, textNew)
 
 	var target struct {
 		Host string `mapstructure:"host"`
@@ -773,7 +761,7 @@ func TestConfigBuilder_NewFromConfigUnknownKind(t *testing.T) {
 
 	cfg := config.DefaultConfig()
 
-	cfg.Kind = config.Kind(99)
+	cfg.Kind = config.Kind(kindArg99)
 
 	_, err := config.NewFromConfig(cfg)
 	require.Error(t, err, "expected error for unknown kind in NewFromConfig")
@@ -802,40 +790,40 @@ func TestConfigBuilder_NewFromConfigUnknownKind(t *testing.T) {
 // NOTE: t.Setenv panics in parallel tests - must NOT call t.Parallel().
 func TestConfig_DefaultEnvSelectors(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), "tier: base\n")
+	writeFile(t, filepath.Join(dir, textBaseYaml), "tier: base\n")
 	writeFile(t, filepath.Join(dir, "staging.yaml"), "tier: staging\n")
 	writeFile(t, filepath.Join(dir, "production.yaml"), "tier: production\n")
 
 	tier := func() string {
 		cfg, err := config.New(config.KindViper, config.WithBaseDir(dir))
-		require.NoError(t, err, "New")
+		require.NoError(t, err, textNew)
 
 		return cfg.GetString("tier")
 	}
 
-	t.Setenv("MYAPP_ENV", "")
-	t.Setenv("APP_ENV", "staging")
-	t.Setenv("ENVIRONMENT", "production")
-	assert.Equal(t, "staging", tier(), "APP_ENV must win over ENVIRONMENT")
+	t.Setenv(textMyappEnv, "")
+	t.Setenv(textAppEnv, textStaging)
+	t.Setenv("ENVIRONMENT", textProduction)
+	assert.Equal(t, textStaging, tier(), "APP_ENV must win over ENVIRONMENT")
 
-	t.Setenv("APP_ENV", "")
-	assert.Equal(t, "production", tier(), "ENVIRONMENT is the fallback")
+	t.Setenv(textAppEnv, "")
+	assert.Equal(t, textProduction, tier(), "ENVIRONMENT is the fallback")
 
 	t.Setenv("ENVIRONMENT", "")
-	t.Setenv("MYAPP_ENV", "staging")
+	t.Setenv(textMyappEnv, textStaging)
 	assert.Equal(
 		t,
-		"base",
+		textBase,
 		tier(),
 		"a variable outside the default selectors must not select an overlay",
 	)
 
 	cfg, err := config.New(config.KindViper, config.WithBaseDir(dir),
-		config.WithEnvSelectors("MYAPP_ENV", "APP_ENV"))
-	require.NoError(t, err, "New")
+		config.WithEnvSelectors(textMyappEnv, textAppEnv))
+	require.NoError(t, err, textNew)
 	assert.Equal(
 		t,
-		"staging",
+		textStaging,
 		cfg.GetString("tier"),
 		"WithEnvSelectors must pick the consumer's selector",
 	)
@@ -857,7 +845,7 @@ func TestConfig_OverlayDeepMergesQueuesMap(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 messaging:
   sqs:
     queues:
@@ -874,9 +862,9 @@ messaging:
 	cfg, err := config.New(
 		config.KindViper,
 		config.WithBaseDir(dir),
-		config.WithEnvironment("staging"),
+		config.WithEnvironment(textStaging),
 	)
-	require.NoError(t, err, "New")
+	require.NoError(t, err, textNew)
 
 	assert.Equal(
 		t,
@@ -886,7 +874,7 @@ messaging:
 	)
 	assert.Equal(
 		t,
-		"orders",
+		textOrders,
 		cfg.GetString("messaging.sqs.queues.orders"),
 		"deep-merge must preserve sibling queue keys from base",
 	)
@@ -916,23 +904,28 @@ type consumerRoot struct {
 //   - WithExtraEnv binds a non-struct key (feature.flag) to FEATURE_FLAG.
 func TestConfig_ConsumerSchemaAndExtraEnv(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), "feature:\n  other: x\n")
+	writeFile(t, filepath.Join(dir, textBaseYaml), "feature:\n  other: x\n")
 	t.Setenv("WIDGET_SIZE", "7")
 	t.Setenv("FEATURE_FLAG", "on")
 
 	cfg, err := config.New(
 		config.KindViper,
 		config.WithBaseDir(dir),
-		config.WithEnvPrefix("MYAPP"),
+		config.WithEnvPrefix(textMyapp),
 		config.WithSchema(&consumerRoot{}),
 		config.WithExtraEnv(map[string][]string{"feature.flag": {"FEATURE_FLAG"}}),
 	)
-	require.NoError(t, err, "New")
+	require.NoError(t, err, textNew)
 
 	var root consumerRoot
 
 	require.NoError(t, cfg.Unmarshal(&root), "Unmarshal")
-	assert.Equal(t, 7, root.Widget.Size, "the consumer schema's envalias must bind")
+	assert.Equal(
+		t,
+		wantSize7,
+		root.Widget.Size,
+		"the consumer schema's envalias must bind",
+	)
 	assert.Equal(t, "on", cfg.GetString("feature.flag"), "ExtraEnv must bind the key")
 }
 
@@ -948,17 +941,17 @@ func TestConfig_ConsumerSchemaAndExtraEnv(t *testing.T) {
 //     selector is also set.
 //   - No selector set resolves to "" (base config only).
 func TestConfig_ResolveEnvFrom(t *testing.T) {
-	t.Setenv("MYAPP_ENV", "Prod")
-	t.Setenv("APP_ENV", "dev")
-	assert.Equal(t, "prod", viperloader.ResolveEnvFrom("MYAPP_ENV", "APP_ENV"),
+	t.Setenv(textMyappEnv, "Prod")
+	t.Setenv(textAppEnv, textDev)
+	assert.Equal(t, "prod", viperloader.ResolveEnvFrom(textMyappEnv, textAppEnv),
 		"the first set selector must win")
 
-	t.Setenv("MYAPP_ENV", "")
-	t.Setenv("APP_ENV", " Staging ")
-	assert.Equal(t, "staging", viperloader.ResolveEnvFrom("MYAPP_ENV", "APP_ENV"))
+	t.Setenv(textMyappEnv, "")
+	t.Setenv(textAppEnv, " Staging ")
+	assert.Equal(t, textStaging, viperloader.ResolveEnvFrom(textMyappEnv, textAppEnv))
 
-	t.Setenv("APP_ENV", "")
-	assert.Empty(t, viperloader.ResolveEnvFrom("MYAPP_ENV", "APP_ENV"))
+	t.Setenv(textAppEnv, "")
+	assert.Empty(t, viperloader.ResolveEnvFrom(textMyappEnv, textAppEnv))
 }
 
 // writeFile is a test helper that writes content to path, failing the test on
@@ -966,6 +959,6 @@ func TestConfig_ResolveEnvFrom(t *testing.T) {
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 
-	err := os.WriteFile(path, []byte(content), 0o600)
+	err := os.WriteFile(path, []byte(content), perm0o600)
 	require.NoErrorf(t, err, "write %s", path)
 }

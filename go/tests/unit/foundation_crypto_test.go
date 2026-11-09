@@ -65,7 +65,7 @@ func TestEncryptor_WrongKeyFailsToDecrypt(t *testing.T) {
 	encB, err := crypto.New(bytes.Repeat([]byte{0x3c}, crypto.KeySize))
 	require.NoError(t, err)
 
-	ct, err := encA.Encrypt([]byte("secret"))
+	ct, err := encA.Encrypt([]byte(textSecret))
 	require.NoError(t, err)
 
 	_, err = encB.Decrypt(ct)
@@ -87,10 +87,10 @@ func TestEncryptor_TamperedCiphertextFails(t *testing.T) {
 	enc, err := crypto.New(testKey())
 	require.NoError(t, err)
 
-	ct, err := enc.Encrypt([]byte("secret"))
+	ct, err := enc.Encrypt([]byte(textSecret))
 	require.NoError(t, err)
 
-	ct[len(ct)-1] ^= 0xff // flip the last byte (inside the auth tag)
+	ct[len(ct)-1] ^= value0xff // flip the last byte (inside the auth tag)
 
 	_, err = enc.Decrypt(ct)
 	require.Error(t, err, "tampered ciphertext must fail authentication")
@@ -117,7 +117,7 @@ func TestNewFromConfig(t *testing.T) {
 	require.NotNil(t, enc)
 
 	for name, key := range map[string]string{
-		"empty":        "",
+		textEmpty:      "",
 		"not base64":   "not-base64-!!!",
 		"wrong length": base64.StdEncoding.EncodeToString([]byte("too-short")),
 		"zero-len key": base64.StdEncoding.EncodeToString([]byte{}),
@@ -143,7 +143,7 @@ func TestNewFromConfig(t *testing.T) {
 func TestNew_RejectsWrongKeyLength(t *testing.T) {
 	t.Parallel()
 
-	_, err := crypto.New(bytes.Repeat([]byte{1}, 16))
+	_, err := crypto.New(bytes.Repeat([]byte{1}, count16))
 	require.Error(t, err)
 
 	_, err = crypto.New(nil)
@@ -161,7 +161,7 @@ func TestNew_RejectsWrongKeyLength(t *testing.T) {
 func FuzzEncryptRoundtrip(f *testing.F) {
 	f.Add([]byte(""))
 	f.Add([]byte("access_key_id=AKIA...;secret=...."))
-	f.Add(make([]byte, 1024))
+	f.Add(make([]byte, size1024))
 
 	enc, err := crypto.New(testKey())
 	require.NoError(f, err)

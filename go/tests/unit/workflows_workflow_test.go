@@ -70,7 +70,9 @@ type testFlows interface {
 // testWorkflow is an undecorated workflow.Base over testFlows whose transactions open
 // through tx.
 func testWorkflow(tx interfaces.TransactionManager) workflow.Base {
-	return fixtures.Must(workflow.NewBase[testFlows](fixtures.Decorations(), "test", tx))
+	return fixtures.Must(
+		workflow.NewBase[testFlows](fixtures.Decorations(), textTest, tx),
+	)
 }
 
 // inTx reports whether ctx is in a transaction, as a workflow body.
@@ -90,14 +92,14 @@ func inTx(ctx context.Context) (bool, error) { return interfaces.InTx(ctx), nil 
 func TestWorkflowBase_ReadCommandAndSagaShapes(t *testing.T) {
 	t.Parallel()
 
-	flows := testWorkflow(txManager(t, 2, nil))
-	assert.Equal(t, "test", flows.Name())
+	flows := testWorkflow(txManager(t, txManagerArg2, nil))
+	assert.Equal(t, textTest, flows.Name())
 
-	got, err := flows.Exec(t.Context(), "read", inTx)
+	got, err := flows.Exec(t.Context(), textRead, inTx)
 	require.NoError(t, err)
 	assert.False(t, got, "Exec opens no transaction")
 
-	got, err = flows.ExecTx(t.Context(), "command", inTx)
+	got, err = flows.ExecTx(t.Context(), textCommand, inTx)
 	require.NoError(t, err)
 	assert.True(t, got, "ExecTx runs fn on the transaction's context")
 
@@ -214,7 +216,7 @@ func TestWorkflowBasePass_DecoratesALoopPass(t *testing.T) {
 	assert.False(t, sawTx, "a pass runs with no transaction")
 
 	_, err = decorator("boom-pass", loop.Pass(func(context.Context) error {
-		panic("boom")
+		panic(textBoom)
 	})).Execute(t.Context(), struct{}{})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }
@@ -235,7 +237,7 @@ func TestWorkflowBase_AppliesTimeoutAndRecovery(t *testing.T) {
 		Logger:  fixtures.NopLogger(),
 		Timeout: 5 * time.Millisecond,
 	}), "bounded", nil))
-	_, err := bounded.Exec(t.Context(), "slow", func(ctx context.Context) (int, error) {
+	_, err := bounded.Exec(t.Context(), textSlow, func(ctx context.Context) (int, error) {
 		<-ctx.Done()
 
 		return 0, ctx.Err()
@@ -243,8 +245,8 @@ func TestWorkflowBase_AppliesTimeoutAndRecovery(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	_, err = testWorkflow(nil).
-		Exec(t.Context(), "boom", func(context.Context) (int, error) {
-			panic("boom")
+		Exec(t.Context(), textBoom, func(context.Context) (int, error) {
+			panic(textBoom)
 		})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }

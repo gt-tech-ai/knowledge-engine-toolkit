@@ -303,7 +303,7 @@ func statusError(status int, body io.Reader) error {
 
 // parseSample decodes one [<unix time>, "<value>"] pair, failing closed on a NaN or
 // infinite value.
-func parseSample(pair [2]json.RawMessage) (Sample, error) {
+func parseSample(pair [samplePairLen]json.RawMessage) (Sample, error) {
 	var ts float64
 
 	err := json.Unmarshal(pair[0], &ts)
@@ -326,7 +326,7 @@ func parseSample(pair [2]json.RawMessage) (Sample, error) {
 		)
 	}
 
-	v, err := strconv.ParseFloat(raw, 64)
+	v, err := strconv.ParseFloat(raw, bitSize64)
 	if err != nil {
 		return Sample{}, apperr.Wrap(
 			err,

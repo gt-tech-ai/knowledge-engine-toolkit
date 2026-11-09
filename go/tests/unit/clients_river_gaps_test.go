@@ -66,7 +66,7 @@ func TestNewInsertClient_FailsLoudlyBeforeOpeningAPool(t *testing.T) {
 		riverpkg.InsertClientName: {Bulkhead: semaphore},
 	}
 
-	_, err := riverpkg.NewInsertClient(t.Context(), "postgres://unused", 1,
+	_, err := riverpkg.NewInsertClient(t.Context(), textPostgresUnused, 1,
 		decorate.NewDecorations(&bad, decorate.Collaborators{}))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 

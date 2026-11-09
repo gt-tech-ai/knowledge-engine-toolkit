@@ -21,7 +21,7 @@ import (
 func TestBuildQueues(t *testing.T) {
 	t.Parallel()
 
-	q := buildQueues("heavy", 4)
+	q := buildQueues("heavy", maxWorkers4)
 	if len(q) != 1 {
 		t.Fatalf("want exactly 1 queue, got %d", len(q))
 	}
@@ -31,7 +31,7 @@ func TestBuildQueues(t *testing.T) {
 		t.Fatal("named queue heavy missing")
 	}
 
-	if cfg.MaxWorkers != 4 {
+	if cfg.MaxWorkers != maxWorkers4 {
 		t.Errorf("heavy MaxWorkers = %d, want 4", cfg.MaxWorkers)
 	}
 
@@ -47,3 +47,6 @@ func TestBuildQueues(t *testing.T) {
 		t.Errorf("default MaxWorkers = %d, want %d", cfg.MaxWorkers, defaultMaxWorkers)
 	}
 }
+
+// maxWorkers4 is the maxWorkers value 4.
+const maxWorkers4 = 4

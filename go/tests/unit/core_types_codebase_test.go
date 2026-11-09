@@ -22,10 +22,10 @@ func TestCoreTypesFileSelector_IsZero(t *testing.T) {
 	assert.True(t, types.FileSelector{}.IsZero())
 
 	for name, s := range map[string]types.FileSelector{
-		"roots":             {Roots: []string{"a"}},
-		"paths":             {Paths: []string{"a.go"}},
-		"globs":             {Globs: []string{"*.go"}},
-		"exts":              {Exts: []string{".go"}},
+		"roots":             {Roots: []string{textA}},
+		textPaths:           {Paths: []string{textAGo}},
+		"globs":             {Globs: []string{textGo}},
+		"exts":              {Exts: []string{textGo3}},
 		"exclude":           {Exclude: []string{"vendor"}},
 		"tracked only":      {TrackedOnly: true},
 		"include generated": {IncludeGenerated: true},
@@ -50,7 +50,7 @@ func TestCoreTypesText_Lines(t *testing.T) {
 	for _, src := range []string{"a\nb\n", "a\nb", "a\r\nb\r\n", "a\r\nb"} {
 		assert.Equal(
 			t,
-			[]string{"a", "b"},
+			[]string{textA, textB},
 			types.Text{Bytes: []byte(src)}.Lines(),
 			"%q",
 			src,

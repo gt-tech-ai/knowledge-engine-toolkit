@@ -23,9 +23,9 @@ const toolrunRoot = "/repo"
 // lintModules is a Go codebase with two modules.
 func lintModules() map[string]string {
 	return map[string]string{
-		"go.work":  "go 1.27\n\nuse (\n\t./a\n\t./b\n)\n",
-		"a/go.mod": "module a\n", "a/a.go": "package a\n",
-		"b/go.mod": "module b\n", "b/b.go": "package b\n",
+		textGoWork: "go 1.27\n\nuse (\n\t./a\n\t./b\n)\n",
+		"a/go.mod": textModuleA, "a/a.go": textPackageA,
+		"b/go.mod": textModuleB, "b/b.go": "package b\n",
 	}
 }
 
@@ -59,7 +59,7 @@ func newToolRunner(
 		Tools: func(name string) (interfaces.ToolSpec, bool) {
 			return spec, name == spec.Name()
 		},
-		Versions: func(string) string { return "v1" },
+		Versions: func(string) string { return textV1 },
 	})
 	require.NoError(t, err)
 
@@ -82,11 +82,11 @@ func TestServicesToolrun_MissingAndUnknownTool(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
-	runner.EXPECT().Exists("hadolint").Return(false).AnyTimes()
+	runner.EXPECT().Exists(textHadolint).Return(false).AnyTimes()
 
-	tr := newToolRunner(t, runner, toolOf(ctrl, "hadolint"), nil)
-	cb := memoryCodebase(t, map[string]string{"Dockerfile": "FROM x\n"})
-	run := types.ToolRun{Name: "hadolint", Verb: "lint", Tool: "hadolint"}
+	tr := newToolRunner(t, runner, toolOf(ctrl, textHadolint), nil)
+	cb := memoryCodebase(t, map[string]string{textDockerfile: "FROM x\n"})
+	run := types.ToolRun{Name: textHadolint, Verb: textLint, Tool: textHadolint}
 
 	res, err := tr.Run(t.Context(), cb, run, types.RunOptions{})
 	require.NoError(t, err)
@@ -102,23 +102,29 @@ func TestServicesToolrun_MissingAndUnknownTool(t *testing.T) {
 	_, err = tr.Run(
 		t.Context(),
 		cb,
-		types.ToolRun{Name: "x", Tool: "nope"},
+		types.ToolRun{Name: textX, Tool: textNope},
 		types.RunOptions{},
 	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	ruff := mocks.NewMockToolSpec(ctrl)
-	ruff.EXPECT().Name().Return("ruff").AnyTimes()
-	ruff.EXPECT().Binary().Return("ruff").AnyTimes()
+	ruff.EXPECT().Name().Return(textRuff).AnyTimes()
+	ruff.EXPECT().Binary().Return(textRuff).AnyTimes()
 	ruff.EXPECT().Cmd(gomock.Any()).DoAndReturn(func(args ...string) (string, []string) {
-		return "uv", append([]string{"run", "ruff"}, args...)
+		return textUv, append([]string{textRun, textRuff}, args...)
 	}).AnyTimes()
-	runner.EXPECT().Exists("uv").Return(true).AnyTimes()
-	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "uv", "run", "ruff", "check").
+	runner.EXPECT().Exists(textUv).Return(true).AnyTimes()
+	runner.EXPECT().
+		RunBuffered(gomock.Any(), gomock.Any(), textUv, textRun, textRuff, textCheck).
 		Return(interfaces.CmdResult{})
 
 	res, err = newToolRunner(t, runner, ruff, nil).Run(t.Context(), cb,
-		types.ToolRun{Name: "ruff", Verb: "lint", Tool: "ruff", Args: []string{"check"}},
+		types.ToolRun{
+			Name: textRuff,
+			Verb: textLint,
+			Tool: textRuff,
+			Args: []string{textCheck},
+		},
 		types.RunOptions{})
 	require.NoError(t, err)
 	assert.Equal(
@@ -146,30 +152,30 @@ func TestServicesToolrun_EachTargetFansOut(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
-	runner.EXPECT().Exists("golangci-lint").Return(true).AnyTimes()
-	runner.EXPECT().RunBuffered(gomock.Any(), filepath.Join(toolrunRoot, "a"),
-		"golangci-lint", "run", ".", "--fix").Return(interfaces.CmdResult{})
-	runner.EXPECT().RunBuffered(gomock.Any(), filepath.Join(toolrunRoot, "b"),
-		"golangci-lint", "run", ".", "--fix").Return(interfaces.CmdResult{
+	runner.EXPECT().Exists(textGolangciLint).Return(true).AnyTimes()
+	runner.EXPECT().RunBuffered(gomock.Any(), filepath.Join(toolrunRoot, textA),
+		textGolangciLint, textRun, ".", textFix2).Return(interfaces.CmdResult{})
+	runner.EXPECT().RunBuffered(gomock.Any(), filepath.Join(toolrunRoot, textB),
+		textGolangciLint, textRun, ".", textFix2).Return(interfaces.CmdResult{
 		ExitCode: 1,
 		Err:      apperr.New(apperr.CodeInternal, "exit 1"),
-		Stdout:   []byte("bad"),
+		Stdout:   []byte(textBad),
 	})
 
-	tr := newToolRunner(t, runner, toolOf(ctrl, "golangci-lint"), nil)
+	tr := newToolRunner(t, runner, toolOf(ctrl, textGolangciLint), nil)
 	res, err := tr.Run(t.Context(), memoryCodebase(t, lintModules()), types.ToolRun{
-		Name: "golangci-lint", Verb: "lint", Tool: "golangci-lint",
-		Args: []string{"run", "{target}"}, FixArgs: []string{"--fix"},
+		Name: textGolangciLint, Verb: textLint, Tool: textGolangciLint,
+		Args: []string{textRun, textTarget2}, FixArgs: []string{textFix2},
 		Targets: types.TargetSpec{Kind: "go_modules"},
 		Each:    types.EachTarget, Cwd: types.CwdTarget,
 	}, types.RunOptions{Fix: true})
 	require.NoError(t, err)
-	require.Len(t, res, 2)
+	require.Len(t, res, wantResLen2)
 	assert.Equal(t, "golangci-lint a", res[0].Name)
-	assert.Equal(t, "lint", res[0].Group)
+	assert.Equal(t, textLint, res[0].Group)
 	assert.Equal(t, types.StatusPass, res[0].Status)
 	assert.Equal(t, types.StatusFail, res[1].Status)
-	assert.Equal(t, "bad", res[1].Error)
+	assert.Equal(t, textBad, res[1].Error)
 }
 
 // TestServicesToolrun_EachRunAndParse tests a single run over every target.
@@ -186,24 +192,24 @@ func TestServicesToolrun_EachRunAndParse(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
-	runner.EXPECT().Exists("shellcheck").Return(true)
-	runner.EXPECT().RunBuffered(gomock.Any(), toolrunRoot, "shellcheck", "-f", "gcc",
+	runner.EXPECT().Exists(textShellcheck).Return(true)
+	runner.EXPECT().RunBuffered(gomock.Any(), toolrunRoot, textShellcheck, "-f", textGcc,
 		"a.sh", "b/c.sh").Return(interfaces.CmdResult{
 		ExitCode: 1, Err: apperr.New(apperr.CodeInternal, "exit 1"),
 		Stdout: []byte("a.sh:3:1: warning: quote this\n"),
 	})
 
-	tr := newToolRunner(t, runner, toolOf(ctrl, "shellcheck"), nil)
+	tr := newToolRunner(t, runner, toolOf(ctrl, textShellcheck), nil)
 	res, err := tr.Run(t.Context(),
 		memoryCodebase(t, map[string]string{"a.sh": "", "b/c.sh": "", "d.md": ""}),
 		types.ToolRun{
-			Name: "shellcheck", Verb: "lint", Tool: "shellcheck", Parse: "gcc",
-			Args:    []string{"-f", "gcc", "{target}"},
-			Targets: types.TargetSpec{Kind: "files", Glob: "**/*.sh"},
+			Name: textShellcheck, Verb: textLint, Tool: textShellcheck, Parse: textGcc,
+			Args:    []string{"-f", textGcc, textTarget2},
+			Targets: types.TargetSpec{Kind: textFiles, Glob: "**/*.sh"},
 		}, types.RunOptions{})
 	require.NoError(t, err)
 	require.Len(t, res, 1)
-	assert.Equal(t, "shellcheck", res[0].Name)
+	assert.Equal(t, textShellcheck, res[0].Name)
 	assert.Equal(t, types.StatusFail, res[0].Status)
 	assert.Equal(t, "1 finding", res[0].Error)
 	assert.Equal(t, "a.sh:3: warning: quote this\n", string(res[0].Detail)[:28])
@@ -230,15 +236,15 @@ func TestServicesToolrun_Cache(t *testing.T) {
 	require.NoError(t, err)
 
 	runner := mocks.NewMockCommandRunner(ctrl)
-	runner.EXPECT().Exists("vet").Return(true).AnyTimes()
-	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "vet", gomock.Any()).
-		Return(interfaces.CmdResult{}).Times(3)
+	runner.EXPECT().Exists(textVet).Return(true).AnyTimes()
+	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), textVet, gomock.Any()).
+		Return(interfaces.CmdResult{}).Times(timesArg3)
 
-	tr := newToolRunner(t, runner, toolOf(ctrl, "vet"), cache)
+	tr := newToolRunner(t, runner, toolOf(ctrl, textVet), cache)
 	run := types.ToolRun{
-		Name: "vet", Verb: "lint", Tool: "vet", Args: []string{"{target}"},
+		Name: textVet, Verb: textLint, Tool: textVet, Args: []string{textTarget2},
 		Targets: types.TargetSpec{Kind: "go_modules"}, Each: types.EachTarget,
-		Inputs: types.FileSelector{Roots: []string{"{target}"}, Exts: []string{".go"}},
+		Inputs: types.FileSelector{Roots: []string{textTarget2}, Exts: []string{textGo3}},
 	}
 
 	t.Helper()
@@ -270,7 +276,7 @@ func testServicesToolrunCacheRest3(
 	res, err = tr.Run(t.Context(), memoryCodebase(t, files), run, types.RunOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusSkip, res[0].Status)
-	assert.Equal(t, "cached", string(res[0].Detail))
+	assert.Equal(t, textCached, string(res[0].Detail))
 	assert.Equal(t, types.StatusPass, res[1].Status)
 
 	uncached := run
@@ -278,10 +284,10 @@ func testServicesToolrunCacheRest3(
 	uncached.Inputs = types.FileSelector{}
 	uncached.Each = types.EachRun
 
-	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "vet", "a", "b").
-		Return(interfaces.CmdResult{}).Times(2)
+	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), textVet, textA, textB).
+		Return(interfaces.CmdResult{}).Times(timesArg2)
 
-	for range 2 {
+	for range iterations2 {
 		res, err = tr.Run(
 			t.Context(),
 			memoryCodebase(t, files),
@@ -311,15 +317,15 @@ func testServicesToolrunCacheRest4(
 
 	var err error
 
-	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "vet", gomock.Any()).
-		Return(interfaces.CmdResult{}).Times(4)
+	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), textVet, gomock.Any()).
+		Return(interfaces.CmdResult{}).Times(timesArg4)
 
 	off, err := toolrun.NewFromConfig(toolrun.Config{}, toolrun.Deps{
 		Decorations: fixtures.Decorations(),
 		Runner:      runner,
 		Root:        toolrunRoot,
 		Tools: func(name string) (interfaces.ToolSpec, bool) {
-			return toolOf(ctrl, "vet"), name == "vet"
+			return toolOf(ctrl, textVet), name == textVet
 		},
 		Versions: func(string) string {
 			t.Error("the off cache probed a tool version")
@@ -329,7 +335,7 @@ func testServicesToolrunCacheRest4(
 	})
 	require.NoError(t, err)
 
-	for range 2 {
+	for range iterations2 {
 		res, err = off.Run(t.Context(), memoryCodebase(t, files), run, types.RunOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, types.StatusPass, res[0].Status, "the off cache never skips")
@@ -356,18 +362,18 @@ func TestServicesToolrun_RunEditMissesCache(t *testing.T) {
 	require.NoError(t, err)
 
 	runner := mocks.NewMockCommandRunner(ctrl)
-	runner.EXPECT().Exists("vet").Return(true).AnyTimes()
-	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "vet", gomock.Any()).
+	runner.EXPECT().Exists(textVet).Return(true).AnyTimes()
+	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), textVet, gomock.Any()).
 		Return(interfaces.CmdResult{}).Times(1)
 	runner.EXPECT().RunBufferedWithEnv(
-		gomock.Any(), gomock.Any(), gomock.Any(), "vet", gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any(), textVet, gomock.Any(),
 	).Return(interfaces.CmdResult{}).Times(1)
 
-	tr := newToolRunner(t, runner, toolOf(ctrl, "vet"), cache)
+	tr := newToolRunner(t, runner, toolOf(ctrl, textVet), cache)
 	run := types.ToolRun{
-		Name: "vet", Verb: "lint", Tool: "vet", Args: []string{"."},
+		Name: textVet, Verb: textLint, Tool: textVet, Args: []string{"."},
 		Each:   types.EachRun,
-		Inputs: types.FileSelector{Exts: []string{".go"}},
+		Inputs: types.FileSelector{Exts: []string{textGo3}},
 	}
 	edited := run
 
@@ -401,15 +407,15 @@ func TestServicesToolrun_NoTargetsSkips(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
-	runner.EXPECT().Exists("shellcheck").Return(true).AnyTimes()
+	runner.EXPECT().Exists(textShellcheck).Return(true).AnyTimes()
 
-	tr := newToolRunner(t, runner, toolOf(ctrl, "shellcheck"), nil)
+	tr := newToolRunner(t, runner, toolOf(ctrl, textShellcheck), nil)
 	for _, each := range []string{types.EachTarget, types.EachRun} {
-		res, err := tr.Run(t.Context(), memoryCodebase(t, map[string]string{"a.md": ""}),
+		res, err := tr.Run(t.Context(), memoryCodebase(t, map[string]string{textAMd: ""}),
 			types.ToolRun{
-				Name: "shellcheck", Verb: "lint", Tool: "shellcheck",
-				Args:    []string{"{target}"},
-				Targets: types.TargetSpec{Kind: "files", Glob: "**/*.sh"},
+				Name: textShellcheck, Verb: textLint, Tool: textShellcheck,
+				Args:    []string{textTarget2},
+				Targets: types.TargetSpec{Kind: textFiles, Glob: "**/*.sh"},
 				Each:    each,
 			}, types.RunOptions{})
 		require.NoError(t, err)
@@ -443,25 +449,25 @@ func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 	require.NoError(t, err)
 
 	runner := mocks.NewMockCommandRunner(ctrl)
-	runner.EXPECT().Exists("buf").Return(true).AnyTimes()
+	runner.EXPECT().Exists(textBuf).Return(true).AnyTimes()
 	runner.EXPECT().RunBuffered(gomock.Any(), filepath.Join(toolrunRoot, "zarf", "proto"),
-		"buf", "breaking").Return(interfaces.CmdResult{
+		textBuf, "breaking").Return(interfaces.CmdResult{
 		ExitCode: 1, Err: apperr.New(apperr.CodeInternal, "exit 1"),
 		Stdout: []byte("removed field"),
-	}).Times(2)
+	}).Times(timesArg2)
 
-	tr := newToolRunner(t, runner, toolOf(ctrl, "buf"), cache)
+	tr := newToolRunner(t, runner, toolOf(ctrl, textBuf), cache)
 	cb := memoryCodebase(
 		t,
 		map[string]string{"zarf/proto/a.proto": "syntax = \"proto3\";\n"},
 	)
 	run := types.ToolRun{
-		Name: "breaking", Verb: "check", Tool: "buf", Group: "Proto",
+		Name: "breaking", Verb: textCheck, Tool: textBuf, Group: "Proto",
 		Cwd: "zarf/proto", Args: []string{"breaking"}, Advisory: true,
 		Inputs: types.FileSelector{Roots: []string{"zarf/proto"}},
 	}
 
-	for range 2 {
+	for range iterations2 {
 		res, err := tr.Run(t.Context(), cb, run, types.RunOptions{})
 		require.NoError(t, err)
 		require.Len(t, res, 1)
@@ -470,17 +476,17 @@ func TestServicesToolrun_GroupCwdAndAdvisory(t *testing.T) {
 		assert.Equal(t, "removed field", res[0].Error)
 	}
 
-	runner.EXPECT().RunBuffered(gomock.Any(), toolrunRoot, "buf", "lint").
+	runner.EXPECT().RunBuffered(gomock.Any(), toolrunRoot, textBuf, textLint).
 		Return(interfaces.CmdResult{})
 
 	res, err := tr.Run(t.Context(), cb, types.ToolRun{
-		Name: "lint", Verb: "check", Tool: "buf", Args: []string{"lint"},
+		Name: textLint, Verb: textCheck, Tool: textBuf, Args: []string{textLint},
 	}, types.RunOptions{})
 	require.NoError(t, err)
-	assert.Equal(t, "check", res[0].Group)
+	assert.Equal(t, textCheck, res[0].Group)
 
 	_, err = tr.Run(t.Context(), cb, types.ToolRun{
-		Name: "x", Verb: "check", Tool: "buf", Cwd: "../elsewhere",
+		Name: textX, Verb: textCheck, Tool: textBuf, Cwd: "../elsewhere",
 	}, types.RunOptions{})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
@@ -507,43 +513,43 @@ func TestServicesToolrun_RunOptions(t *testing.T) {
 	require.NoError(t, err)
 
 	runner := mocks.NewMockCommandRunner(ctrl)
-	runner.EXPECT().Exists("trivy").Return(true).AnyTimes()
-	runner.EXPECT().Exists("hadolint").Return(false).AnyTimes()
-	runner.EXPECT().RunBuffered(gomock.Any(), toolrunRoot, "trivy", "image", "api:1",
+	runner.EXPECT().Exists(textTrivy).Return(true).AnyTimes()
+	runner.EXPECT().Exists(textHadolint).Return(false).AnyTimes()
+	runner.EXPECT().RunBuffered(gomock.Any(), toolrunRoot, textTrivy, textImage, "api:1",
 		"--exit-code", "1").Return(interfaces.CmdResult{})
-	runner.EXPECT().RunBuffered(gomock.Any(), toolrunRoot, "trivy", "image", "api:2",
+	runner.EXPECT().RunBuffered(gomock.Any(), toolrunRoot, textTrivy, textImage, "api:2",
 		"--exit-code", "1").Return(interfaces.CmdResult{})
 
-	spec := toolOf(ctrl, "trivy")
+	spec := toolOf(ctrl, textTrivy)
 	tr, err := toolrun.NewFromConfig(toolrun.Config{}, toolrun.Deps{
 		Decorations: fixtures.Decorations(), Runner: runner, Root: toolrunRoot,
 		Cache: cache,
 		Tools: func(name string) (interfaces.ToolSpec, bool) {
-			if name == "hadolint" {
-				return toolOf(ctrl, "hadolint"), true
+			if name == textHadolint {
+				return toolOf(ctrl, textHadolint), true
 			}
 
-			return spec, name == "trivy"
+			return spec, name == textTrivy
 		},
 	})
 	require.NoError(t, err)
 
-	cb := memoryCodebase(t, map[string]string{"Dockerfile": "FROM x\n"})
+	cb := memoryCodebase(t, map[string]string{textDockerfile: "FROM x\n"})
 
 	res, err := tr.Run(t.Context(), cb,
-		types.ToolRun{Name: "hadolint", Verb: "lint", Tool: "hadolint"},
+		types.ToolRun{Name: textHadolint, Verb: textLint, Tool: textHadolint},
 		types.RunOptions{Strict: true})
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusFail, res[0].Status)
 
 	image := types.ToolRun{
-		Name: "trivy image", Verb: "security", Tool: "trivy",
-		Args: []string{"image", "{image}"}, FixArgs: []string{"--exit-code", "1"},
-		Inputs: types.FileSelector{Paths: []string{"Dockerfile"}},
+		Name: "trivy image", Verb: textSecurity, Tool: textTrivy,
+		Args: []string{textImage, "{image}"}, FixArgs: []string{"--exit-code", "1"},
+		Inputs: types.FileSelector{Paths: []string{textDockerfile}},
 	}
 	for _, img := range []string{"api:1", "api:2"} {
 		res, err = tr.Run(t.Context(), cb, image, types.RunOptions{
-			Fix: true, Vars: map[string]string{"image": img},
+			Fix: true, Vars: map[string]string{textImage: img},
 		})
 		require.NoError(t, err)
 		assert.Equal(t, types.StatusPass, res[0].Status, img)
@@ -552,7 +558,7 @@ func TestServicesToolrun_RunOptions(t *testing.T) {
 	_, err = tr.Run(t.Context(), cb, image, types.RunOptions{})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "trivy image")
-	assert.ErrorContains(t, err, "image")
+	assert.ErrorContains(t, err, textImage)
 }
 
 // TestServicesToolrun_Env tests a run's environment entries.
@@ -569,16 +575,16 @@ func TestServicesToolrun_Env(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
-	runner.EXPECT().Exists("ruff").Return(true)
+	runner.EXPECT().Exists(textRuff).Return(true)
 	runner.EXPECT().RunBufferedWithEnv(gomock.Any(), gomock.Any(),
-		[]string{"-VIRTUAL_ENV", "MODE=ci"}, "ruff", "check").
+		[]string{textVirtualEnv, "MODE=ci"}, textRuff, textCheck).
 		Return(interfaces.CmdResult{})
 
-	tr := newToolRunner(t, runner, toolOf(ctrl, "ruff"), nil)
+	tr := newToolRunner(t, runner, toolOf(ctrl, textRuff), nil)
 	res, err := tr.Run(t.Context(), nil, types.ToolRun{
-		Name: "ruff", Verb: "lint", Tool: "ruff", Args: []string{"check"},
-		Env: []string{"-VIRTUAL_ENV", "MODE={mode}"},
-	}, types.RunOptions{Vars: map[string]string{"mode": "ci"}})
+		Name: textRuff, Verb: textLint, Tool: textRuff, Args: []string{textCheck},
+		Env: []string{textVirtualEnv, "MODE={mode}"},
+	}, types.RunOptions{Vars: map[string]string{textMode: "ci"}})
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusPass, res[0].Status)
 }

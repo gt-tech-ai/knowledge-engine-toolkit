@@ -1,6 +1,7 @@
 package unit_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,53 +34,81 @@ func TestClientsDocker_Exec(t *testing.T) {
 	ctx := t.Context()
 	r := mocks.NewMockCommandRunner(gomock.NewController(t))
 	c, err := docker.NewFromConfig(ctx, docker.Config{Kind: docker.KindExec},
-		docker.Deps{Decorations: fixtures.Decorations(), Runner: r, Root: "/repo"})
+		docker.Deps{Decorations: fixtures.Decorations(), Runner: r, Root: textRepo})
 	require.NoError(t, err)
 
 	r.EXPECT().
-		RunBufferedWithEnv(gomock.Any(), "/repo", gomock.Nil(), "docker", "buildx", "build",
+		RunBufferedWithEnv(gomock.Any(), textRepo, gomock.Nil(), textDocker, "buildx",
+			textBuild,
 			"--load", "--provenance=false", "--sbom=false", "-f", "d/Dockerfile",
-			"--target", "run",
+			"--target", textRun,
 			"--platform", "linux/amd64", "--build-arg", "A=1", "--build-arg", "B=2",
 			"-t", "api:dev", ".").
 		Return(interfaces.CmdResult{})
 	require.NoError(t, c.Build(ctx, types.BuildSpec{
-		Context: ".", Dockerfile: "d/Dockerfile", Target: "run", Platform: "linux/amd64",
-		BuildArgs: map[string]string{"B": "2", "A": "1"}, Tags: []string{"api:dev"},
+		Context:    ".",
+		Dockerfile: "d/Dockerfile",
+		Target:     textRun,
+		Platform:   "linux/amd64",
+		BuildArgs:  map[string]string{"B": "2", "A": "1"},
+		Tags:       []string{"api:dev"},
 	}))
 
-	r.EXPECT().RunBufferedWithEnv(gomock.Any(), "/repo", gomock.Nil(), "docker", "image",
-		"inspect", "gone:1").Return(exitWith(1, "Error: No such image: gone:1"))
+	r.EXPECT().
+		RunBufferedWithEnv(gomock.Any(), textRepo, gomock.Nil(), textDocker, textImage,
+			"inspect", "gone:1").
+		Return(exitWith(1, "Error: No such image: gone:1"))
 
 	_, err = c.Inspect(ctx, "gone:1")
+
+	testClientsDockerExecRest(ctx, t, r, c, err)
+}
+
+// testClientsDockerExecRest continues TestClientsDocker_Exec with its remaining steps.
+func testClientsDockerExecRest(
+	ctx context.Context,
+	t *testing.T,
+	r *mocks.MockCommandRunner,
+	c interfaces.DockerClient,
+	err error,
+) {
+	t.Helper()
+
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
 	spec := types.ComposeSpec{
-		Project: "dev", Files: []string{"a.yaml", "b.yaml"}, Profiles: []string{"obs"},
-		Services: []string{"api"}, Env: []string{"X=1"}, RemoveVolumes: true,
+		Project: textDev, Files: []string{textAYaml, "b.yaml"}, Profiles: []string{"obs"},
+		Services: []string{textAPI}, Env: []string{textX1}, RemoveVolumes: true,
 	}
 	compose := []any{
-		"compose",
+		textCompose,
 		"-p",
-		"dev",
+		textDev,
 		"-f",
-		"a.yaml",
+		textAYaml,
 		"-f",
 		"b.yaml",
 		"--profile",
 		"obs",
 	}
-	r.EXPECT().RunBufferedWithEnv(gomock.Any(), "/repo", []string{"X=1"}, "docker",
-		append(compose, "up", "-d", "--wait", "api")...).Return(interfaces.CmdResult{})
+	r.EXPECT().RunBufferedWithEnv(gomock.Any(), textRepo, []string{textX1}, textDocker,
+		append(
+			compose,
+			textUp,
+			"-d",
+			"--wait",
+			textAPI,
+		)...).
+		Return(interfaces.CmdResult{})
 	require.NoError(t, c.ComposeUp(ctx, spec))
-	r.EXPECT().RunBufferedWithEnv(gomock.Any(), "/repo", []string{"X=1"}, "docker",
-		append(compose, "down", "--volumes")...).Return(interfaces.CmdResult{})
+	r.EXPECT().RunBufferedWithEnv(gomock.Any(), textRepo, []string{textX1}, textDocker,
+		append(compose, textDown, "--volumes")...).Return(interfaces.CmdResult{})
 	require.NoError(t, c.ComposeDown(ctx, spec))
 
 	stub, err := docker.NewFromConfig(ctx, docker.Config{},
 		docker.Deps{Decorations: fixtures.Decorations()})
 	require.NoError(t, err)
 
-	_, err = stub.Inspect(ctx, "x")
+	_, err = stub.Inspect(ctx, textX)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }

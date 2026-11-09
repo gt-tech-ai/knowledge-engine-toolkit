@@ -25,7 +25,7 @@ import (
 func TestSQLTx_RefusesANestedTransactionAndANilDB(t *testing.T) {
 	t.Parallel()
 
-	db, err := sql.Open("pgx", "postgres://unused")
+	db, err := sql.Open(textPgx, textPostgresUnused)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

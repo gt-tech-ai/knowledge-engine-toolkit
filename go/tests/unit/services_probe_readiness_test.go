@@ -58,7 +58,7 @@ func TestOIDCProbe(t *testing.T) {
 		doer.EXPECT().Do(gomock.Any()).Return(newResp(http.StatusOK), nil)
 
 		got := readiness.OIDC{HTTP: doer, Domain: "acme.us.auth0.com"}.
-			Run(t.Context(), readiness.Target{KubeContext: "staging"})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging})
 
 		assert.Equal(t, types.StatusPass, got.Status)
 	})
@@ -80,7 +80,7 @@ func TestOIDCProbe(t *testing.T) {
 			})
 
 		got := readiness.OIDC{HTTP: doer, Domain: "acme.us.auth0.com"}.
-			Run(t.Context(), readiness.Target{KubeContext: "staging"})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging})
 
 		assert.Equal(t, types.StatusFail, got.Status)
 		assert.Equal(
@@ -115,7 +115,7 @@ func TestSecretsProbe(t *testing.T) {
 			SM: sm,
 		}.Run(
 			t.Context(),
-			readiness.Target{KubeContext: "staging"},
+			readiness.Target{KubeContext: textStaging},
 		)
 		assert.Equal(t, types.StatusSkip, got.Status)
 	})
@@ -131,7 +131,7 @@ func TestSecretsProbe(t *testing.T) {
 				in *secretsmanager.DescribeSecretInput,
 				_ ...func(*secretsmanager.Options),
 			) (*secretsmanager.DescribeSecretOutput, error) {
-				if aws.ToString(in.SecretId) == "argocd-repo" {
+				if aws.ToString(in.SecretId) == textArgocdRepo {
 					return nil, apperr.New(
 						apperr.CodeInternal,
 						"ResourceNotFoundException",
@@ -144,15 +144,15 @@ func TestSecretsProbe(t *testing.T) {
 
 		got := readiness.Secrets{
 			SM:    sm,
-			Names: []string{"auth0-bootstrap", "argocd-repo"},
+			Names: []string{"auth0-bootstrap", textArgocdRepo},
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: "staging"},
+				readiness.Target{KubeContext: textStaging},
 			)
 
 		assert.Equal(t, types.StatusFail, got.Status)
-		assert.Contains(t, got.Detail, "argocd-repo")
+		assert.Contains(t, got.Detail, textArgocdRepo)
 		assert.NotContains(t, got.Detail, "auth0-bootstrap present")
 	})
 
@@ -172,11 +172,11 @@ func testSecretsProbeRest(t *testing.T) {
 
 		got := readiness.Secrets{
 			SM:    sm,
-			Names: []string{"auth0-bootstrap", "argocd-repo"},
+			Names: []string{"auth0-bootstrap", textArgocdRepo},
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: "staging"},
+				readiness.Target{KubeContext: textStaging},
 			)
 
 		assert.Equal(t, types.StatusPass, got.Status)
@@ -217,7 +217,7 @@ func TestDNSProbe(t *testing.T) {
 			Return(nil, apperr.New(apperr.CodeInternal, "NXDOMAIN"))
 
 		got := readiness.DNS{Resolver: res, Route53: r53, ApexDomain: "acme.com"}.
-			Run(t.Context(), readiness.Target{KubeContext: "staging"})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging})
 
 		assert.Equal(t, types.StatusFail, got.Status)
 		assert.Contains(t, got.Detail, "delegation")
@@ -237,7 +237,7 @@ func TestDNSProbe(t *testing.T) {
 			Return([]*net.NS{{Host: "ns-1.awsdns-00.com."}}, nil)
 
 		got := readiness.DNS{Resolver: res, Route53: r53, ApexDomain: "acme.com"}.
-			Run(t.Context(), readiness.Target{KubeContext: "staging"})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging})
 
 		assert.Equal(t, types.StatusPass, got.Status)
 	})
@@ -268,7 +268,7 @@ func TestSESProbe(t *testing.T) {
 			SES: ses,
 		}.Run(
 			t.Context(),
-			readiness.Target{KubeContext: "staging"},
+			readiness.Target{KubeContext: textStaging},
 		)
 
 		assert.Equal(t, types.StatusFail, got.Status)
@@ -286,7 +286,7 @@ func TestSESProbe(t *testing.T) {
 			SES: ses,
 		}.Run(
 			t.Context(),
-			readiness.Target{KubeContext: "staging"},
+			readiness.Target{KubeContext: textStaging},
 		)
 
 		assert.Equal(t, types.StatusPass, got.Status)
@@ -320,7 +320,7 @@ func TestBedrockProbe(t *testing.T) {
 
 		got := readiness.Bedrock{
 			Bedrock:  br,
-			ModelIDs: []string{"sonnet", "haiku"},
+			ModelIDs: []string{textSonnet, textHaiku},
 		}.
 			Run(
 				t.Context(),
@@ -360,15 +360,15 @@ func TestBedrockProbe(t *testing.T) {
 		// sonnet, haiku, haiku (dup) → 2 distinct ids → 2 calls.
 		got := readiness.Bedrock{
 			Bedrock:  br,
-			ModelIDs: []string{"sonnet", "haiku", "haiku"},
+			ModelIDs: []string{textSonnet, textHaiku, textHaiku},
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: "staging"},
+				readiness.Target{KubeContext: textStaging},
 			)
 
 		assert.Equal(t, types.StatusPass, got.Status)
-		assert.ElementsMatch(t, []string{"sonnet", "haiku"}, calledIDs)
+		assert.ElementsMatch(t, []string{textSonnet, textHaiku}, calledIDs)
 	})
 }
 
@@ -397,7 +397,7 @@ func TestQuotasProbe(t *testing.T) {
 			Quotas: q,
 		}.Run(
 			t.Context(),
-			readiness.Target{KubeContext: "staging"},
+			readiness.Target{KubeContext: textStaging},
 		)
 		assert.Equal(t, types.StatusSkip, got.Status)
 	})
@@ -420,7 +420,7 @@ func TestQuotasProbe(t *testing.T) {
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: "staging"},
+				readiness.Target{KubeContext: textStaging},
 			)
 
 		assert.Equal(t, types.StatusFail, got.Status)
@@ -466,7 +466,7 @@ func TestRegistryProbe(t *testing.T) {
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: "staging"},
+				readiness.Target{KubeContext: textStaging},
 			)
 
 		assert.Equal(t, types.StatusFail, got.Status)
@@ -493,7 +493,7 @@ func TestRegistryProbe(t *testing.T) {
 		}.
 			Run(
 				t.Context(),
-				readiness.Target{KubeContext: "staging"},
+				readiness.Target{KubeContext: textStaging},
 			)
 
 		assert.Equal(t, types.StatusPass, got.Status)
@@ -520,7 +520,7 @@ func TestClusterProbe(t *testing.T) {
 
 		runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 		runner.EXPECT().
-			RunBuffered(gomock.Any(), gomock.Any(), "kubectl", gomock.Any()).
+			RunBuffered(gomock.Any(), gomock.Any(), textKubectl, gomock.Any()).
 			Return(
 				interfaces.CmdResult{
 					Err:      apperr.New(apperr.CodeInternal, "forbidden"),
@@ -530,7 +530,7 @@ func TestClusterProbe(t *testing.T) {
 			)
 
 		got := readiness.Cluster{Runner: runner}.
-			Run(t.Context(), readiness.Target{KubeContext: "staging"})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging})
 
 		assert.Equal(t, types.StatusFail, got.Status)
 	})
@@ -543,7 +543,7 @@ func TestClusterProbe(t *testing.T) {
 		var gotArgs []string
 
 		runner.EXPECT().
-			RunBuffered(gomock.Any(), gomock.Any(), "kubectl", gomock.Any()).
+			RunBuffered(gomock.Any(), gomock.Any(), textKubectl, gomock.Any()).
 			DoAndReturn(func(_ context.Context, _, _ string, args ...string) interfaces.CmdResult {
 				gotArgs = args
 
@@ -551,12 +551,12 @@ func TestClusterProbe(t *testing.T) {
 			})
 
 		got := readiness.Cluster{Runner: runner}.
-			Run(t.Context(), readiness.Target{KubeContext: "staging"})
+			Run(t.Context(), readiness.Target{KubeContext: textStaging})
 
 		assert.Equal(t, types.StatusPass, got.Status)
 		assert.Equal(
 			t,
-			[]string{"--context", "staging", "auth", "can-i", "get", "pods"},
+			[]string{"--context", textStaging, "auth", "can-i", textGet, textPods},
 			gotArgs,
 		)
 	})

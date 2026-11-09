@@ -73,15 +73,15 @@ func TestGate_SerialPhaseFiresPhaseCompleteOnceWithElapsed(t *testing.T) {
 	).AnyTimes()
 
 	g := gate.New("g").
-		Serial("phase", sleepyJob(t, "a"), sleepyJob(t, "b"), sleepyJob(t, "c")).
+		Serial(textPhase, sleepyJob(t, textA), sleepyJob(t, textB), sleepyJob(t, textC)).
 		Observe(obs)
 
-	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), "/"))
+	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), textSlash))
 
 	assert.Len(
 		t,
 		phaseResults,
-		3,
+		wantPhaseResultsLen3,
 		"expected the single phase-complete to carry all 3 results",
 	)
 	assert.Positive(t, phaseElapsed, "expected positive phase elapsed")

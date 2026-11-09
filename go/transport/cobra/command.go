@@ -220,7 +220,7 @@ func addFlag(
 			fmt.Sprintf("field %s: flag tag %q is not name,short,usage", sf.Name, tag))
 	}
 
-	name, short, usage := parts[0], parts[1], parts[2]
+	name, short, usage := parts[0], parts[1], parts[index2]
 
 	if !registerFlagVar(cmd.Flags(), fv, name, short, usage) {
 		return "", apperr.New(apperr.CodeInvalidInput,

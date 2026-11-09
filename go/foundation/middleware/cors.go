@@ -30,7 +30,7 @@ type CORSConfig struct {
 // DefaultCORSConfig returns permissive CORS defaults suitable for development.
 func DefaultCORSConfig() CORSConfig {
 	return CORSConfig{
-		AllowOrigins:   []string{"*"},
+		AllowOrigins:   []string{textStar},
 		AllowMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:   []string{"Authorization", "Content-Type", "X-Request-ID"},
 		ExposedHeaders: []string{"traceresponse"},
@@ -43,12 +43,12 @@ func DefaultCORSConfig() CORSConfig {
 // OPTIONS requests with 204 No Content. When AllowOrigins is ["*"], all
 // origins are permitted (no Vary header).
 func CORS(cfg *CORSConfig) Middleware {
-	methods := strings.Join(cfg.AllowMethods, ", ")
-	headers := strings.Join(cfg.AllowHeaders, ", ")
-	exposed := strings.Join(cfg.ExposedHeaders, ", ")
+	methods := strings.Join(cfg.AllowMethods, textCommaSpace)
+	headers := strings.Join(cfg.AllowHeaders, textCommaSpace)
+	exposed := strings.Join(cfg.ExposedHeaders, textCommaSpace)
 
 	// Build a set for O(1) origin lookup
-	allowAll := len(cfg.AllowOrigins) == 1 && cfg.AllowOrigins[0] == "*"
+	allowAll := len(cfg.AllowOrigins) == 1 && cfg.AllowOrigins[0] == textStar
 	originSet := make(map[string]struct{}, len(cfg.AllowOrigins))
 
 	for _, o := range cfg.AllowOrigins {
@@ -87,7 +87,7 @@ func setAllowOrigin(
 	set map[string]struct{},
 ) {
 	if allowAll {
-		h.Set("Access-Control-Allow-Origin", "*")
+		h.Set("Access-Control-Allow-Origin", textStar)
 
 		return
 	}

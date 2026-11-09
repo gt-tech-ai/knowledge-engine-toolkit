@@ -37,7 +37,7 @@ func (stringBackend) ExistsClause(
 
 	inner := strings.Join(preds, " OR ")
 	if len(preds) > 1 {
-		inner = "(" + inner + ")"
+		inner = textOpen + inner + textClose
 	}
 
 	if join.TargetSoftDeletes {
@@ -51,7 +51,7 @@ func (stringBackend) ExistsClause(
 func (stringBackend) And(
 	subs []string,
 ) string {
-	return "(" + strings.Join(subs, " AND ") + ")"
+	return textOpen + strings.Join(subs, " AND ") + textClose
 }
 
 // nullsOrder is the sort suffix of a direction, nulls last on ascending.
@@ -62,7 +62,7 @@ func nullsOrder(desc bool) string {
 func (stringBackend) Or(
 	subs []string,
 ) string {
-	return "(" + strings.Join(subs, " OR ") + ")"
+	return textOpen + strings.Join(subs, " OR ") + textClose
 }
 func (stringBackend) Empty() string { return "TRUE" }
 func (stringBackend) Order(col string, desc bool) string {
@@ -106,7 +106,7 @@ func orderDerivedRest(d types.DerivedSort, dir string) string {
 		a := d.Aggregate
 		arg := "*"
 
-		if a.Func != "count" {
+		if a.Func != textCount {
 			arg = a.Table + "." + a.Column
 		}
 
@@ -146,8 +146,8 @@ func orderDerivedRest(d types.DerivedSort, dir string) string {
 // resolveNameToTitle maps the Document DTO field "name" to its storage column "title"
 // (the real gen/go/listquery mapping); every other field resolves to itself.
 func resolveNameToTitle(field string) string {
-	if field == "name" {
-		return "title"
+	if field == textName {
+		return textTitle
 	}
 
 	return field
@@ -202,7 +202,11 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 	t.Run("leaf clause resolves column and renders op/value", func(t *testing.T) {
 		t.Parallel()
 
-		clause := types.FilterClause{Field: "name", Operator: types.OpLike, Value: "rep"}
+		clause := types.FilterClause{
+			Field:    textName,
+			Operator: types.OpLike,
+			Value:    textRep,
+		}
 		assert.Equal(
 			t,
 			"title like rep",
@@ -214,8 +218,12 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 		t.Parallel()
 
 		f := types.CompositeFilter{And: []types.Filter{
-			types.FilterClause{Field: "status", Operator: types.OpEq, Value: "indexed"},
-			types.FilterClause{Field: "name", Operator: types.OpLike, Value: "rep"},
+			types.FilterClause{
+				Field:    textStatus,
+				Operator: types.OpEq,
+				Value:    textIndexed,
+			},
+			types.FilterClause{Field: textName, Operator: types.OpLike, Value: textRep},
 		}}
 		assert.Equal(
 			t,
@@ -241,10 +249,10 @@ func testCompileFoldViaStringAlgebraRest4(t *testing.T, b stringBackend) {
 			// EXISTS, one join. The clause carries the JoinTarget ResolveFilter would
 			// stamp in production.
 			clause := types.FilterClause{
-				Field: "name", Operator: types.OpLike, Value: "smith",
+				Field: textName, Operator: types.OpLike, Value: textSmith,
 				Join: &types.JoinTarget{
-					Table: "users", LocalKey: "user_id", TargetKey: "id",
-					Columns: []string{"first_name", "last_name"},
+					Table: textUsers, LocalKey: textUserID, TargetKey: textID,
+					Columns: []string{textFirstName, textLastName},
 				},
 			}
 			assert.Equal(t,
@@ -280,25 +288,25 @@ func testCompileFoldViaStringAlgebraRest4(t *testing.T, b stringBackend) {
 func testCompileFoldViaStringAlgebraTable() types.CompositeFilter {
 	return types.CompositeFilter{And: []types.Filter{
 		types.FilterClause{
-			Field:    "name",
+			Field:    textName,
 			Operator: types.OpLike,
-			Value:    "smith",
+			Value:    textSmith,
 			Join: &types.JoinTarget{
-				Table:     "users",
-				LocalKey:  "user_id",
-				TargetKey: "id",
-				Columns:   []string{"first_name"},
+				Table:     textUsers,
+				LocalKey:  textUserID,
+				TargetKey: textID,
+				Columns:   []string{textFirstName},
 			},
 		},
 		types.FilterClause{
-			Field:    "email",
+			Field:    textEmail,
 			Operator: types.OpLike,
 			Value:    "corp",
 			Join: &types.JoinTarget{
-				Table:     "users",
-				LocalKey:  "user_id",
-				TargetKey: "id",
-				Columns:   []string{"email"},
+				Table:     textUsers,
+				LocalKey:  textUserID,
+				TargetKey: textID,
+				Columns:   []string{textEmail},
 			},
 		},
 	}}
@@ -316,12 +324,12 @@ func testCompileFoldViaStringAlgebraRest2(t *testing.T, b stringBackend) {
 		// runner (folding with an identity resolver) still compiles it to an EXISTS; a
 		// same-table field gets no join.
 		joinOf := func(field string) *types.JoinTarget {
-			if field == "name" {
+			if field == textName {
 				return &types.JoinTarget{
-					Table:     "users",
-					LocalKey:  "user_id",
-					TargetKey: "id",
-					Columns:   []string{"first_name"},
+					Table:     textUsers,
+					LocalKey:  textUserID,
+					TargetKey: textID,
+					Columns:   []string{textFirstName},
 				}
 			}
 
@@ -331,21 +339,21 @@ func testCompileFoldViaStringAlgebraRest2(t *testing.T, b stringBackend) {
 			t,
 			listquery.ResolveFilter(resolveNameToTitle, joinOf,
 				types.FilterClause{
-					Field: "name", Operator: types.OpLike, Value: "smith",
+					Field: textName, Operator: types.OpLike, Value: textSmith,
 				}),
 		)
 		assert.NotNil(t, joined.Join)
-		assert.Equal(t, "users", joined.Join.Table)
+		assert.Equal(t, textUsers, joined.Join.Table)
 
 		plain := asType[types.FilterClause](
 			t,
 			listquery.ResolveFilter(resolveNameToTitle, joinOf,
 				types.FilterClause{
-					Field: "status", Operator: types.OpEq, Value: "indexed",
+					Field: textStatus, Operator: types.OpEq, Value: textIndexed,
 				}),
 		)
 		assert.Nil(t, plain.Join)
-		assert.Equal(t, "status", plain.Field)
+		assert.Equal(t, textStatus, plain.Field)
 	})
 
 	testCompileFoldViaStringAlgebraRest7(t, b)
@@ -361,9 +369,17 @@ func testCompileFoldViaStringAlgebraRest7(t *testing.T, b stringBackend) {
 		t.Parallel()
 
 		f := types.CompositeFilter{And: []types.Filter{
-			types.FilterClause{Field: "status", Operator: types.OpEq, Value: "indexed"},
+			types.FilterClause{
+				Field:    textStatus,
+				Operator: types.OpEq,
+				Value:    textIndexed,
+			},
 			types.CompositeFilter{Or: []types.Filter{
-				types.FilterClause{Field: "name", Operator: types.OpLike, Value: "rep"},
+				types.FilterClause{
+					Field:    textName,
+					Operator: types.OpLike,
+					Value:    textRep,
+				},
 				types.FilterClause{Field: "format", Operator: types.OpEq, Value: "pdf"},
 			}},
 		}}
@@ -383,10 +399,10 @@ func testCompileFoldViaStringAlgebraRest7(t *testing.T, b stringBackend) {
 				nil,
 				nil,
 				nil,
-				[]types.OrderField{{Field: "name", Desc: false}},
+				[]types.OrderField{{Field: textName, Desc: false}},
 				"",
 			)
-			assert.Equal(t, []string{"title ASC", "created_at DESC", "id DESC"}, got)
+			assert.Equal(t, []string{"title ASC", textCreatedAtDesc, textIDDesc}, got)
 		},
 	)
 
@@ -407,10 +423,10 @@ func testCompileFoldViaStringAlgebraRest(t *testing.T, b stringBackend) {
 			nil,
 			nil,
 			nil,
-			[]types.OrderField{{Field: "created_at", Desc: false}},
-			"created_at",
+			[]types.OrderField{{Field: textCreatedAt, Desc: false}},
+			textCreatedAt,
 		)
-		assert.Equal(t, []string{"created_at ASC", "id DESC"}, got)
+		assert.Equal(t, []string{"created_at ASC", textIDDesc}, got)
 	})
 
 	t.Run("dedup when id is the primary sort", func(t *testing.T) {
@@ -422,10 +438,10 @@ func testCompileFoldViaStringAlgebraRest(t *testing.T, b stringBackend) {
 			nil,
 			nil,
 			nil,
-			[]types.OrderField{{Field: "id", Desc: false}},
+			[]types.OrderField{{Field: textID, Desc: false}},
 			"",
 		)
-		assert.Equal(t, []string{"id ASC", "created_at DESC"}, got)
+		assert.Equal(t, []string{"id ASC", textCreatedAtDesc}, got)
 	})
 
 	t.Run(
@@ -442,10 +458,10 @@ func testCompileFoldViaStringAlgebraRest(t *testing.T, b stringBackend) {
 				nil,
 				nil,
 				nil,
-				[]types.OrderField{{Field: "role", Desc: false}},
-				"joined_at",
+				[]types.OrderField{{Field: textRole, Desc: false}},
+				textJoinedAt,
 			)
-			assert.Equal(t, []string{"role ASC", "joined_at DESC", "id DESC"}, got)
+			assert.Equal(t, []string{"role ASC", "joined_at DESC", textIDDesc}, got)
 		},
 	)
 
@@ -466,10 +482,10 @@ func testCompileFoldViaStringAlgebraRest6(t *testing.T, b stringBackend) {
 			nil,
 			nil,
 			nil,
-			[]types.OrderField{{Field: "joined_at", Desc: false}},
-			"joined_at",
+			[]types.OrderField{{Field: textJoinedAt, Desc: false}},
+			textJoinedAt,
 		)
-		assert.Equal(t, []string{"joined_at ASC", "id DESC"}, got)
+		assert.Equal(t, []string{"joined_at ASC", textIDDesc}, got)
 	})
 
 	// A joined sort field resolves via joinOf to a correlated-subquery ORDER BY term (one
@@ -484,8 +500,8 @@ func testCompileFoldViaStringAlgebraRest6(t *testing.T, b stringBackend) {
 			joinOf := func(field string) *types.JoinTarget {
 				if field == "member_name" {
 					return &types.JoinTarget{
-						Table: "users", LocalKey: "user_id", TargetKey: "id",
-						Columns: []string{"first_name", "last_name"},
+						Table: textUsers, LocalKey: textUserID, TargetKey: textID,
+						Columns: []string{textFirstName, textLastName},
 					}
 				}
 
@@ -498,13 +514,13 @@ func testCompileFoldViaStringAlgebraRest6(t *testing.T, b stringBackend) {
 				nil,
 				nil,
 				[]types.OrderField{{Field: "member_name", Desc: false}},
-				"joined_at",
+				textJoinedAt,
 			)
 			assert.Equal(t, []string{
 				"(SELECT users.first_name WHERE users.id=<base>.user_id) ASC NULLS LAST, " +
 					"(SELECT users.last_name WHERE users.id=<base>.user_id) ASC NULLS LAST",
 				"joined_at DESC",
-				"id DESC",
+				textIDDesc,
 			}, got)
 		},
 	)
@@ -526,8 +542,8 @@ func testCompileFoldViaStringAlgebraRest3(t *testing.T, b stringBackend) {
 			t.Parallel()
 
 			ordinalOf := func(field string) []string {
-				if field == "role" {
-					return []string{"admin", "write", "read"}
+				if field == textRole {
+					return []string{textAdmin, "write", textRead}
 				}
 
 				return nil
@@ -538,13 +554,13 @@ func testCompileFoldViaStringAlgebraRest3(t *testing.T, b stringBackend) {
 				nil,
 				ordinalOf,
 				nil,
-				[]types.OrderField{{Field: "role", Desc: false}},
+				[]types.OrderField{{Field: textRole, Desc: false}},
 				"granted_at",
 			)
 			assert.Equal(t, []string{
 				"CASE(role;admin,write,read) ASC",
 				"granted_at DESC",
-				"id DESC",
+				textIDDesc,
 			}, got)
 		},
 	)
@@ -570,8 +586,8 @@ func testCompileFoldViaStringAlgebraRest5(t *testing.T, b stringBackend) {
 				switch field {
 				case "document_count":
 					return &types.DerivedSort{Aggregate: &types.AggregateSpec{
-						Table: "documents", LocalKey: "id", TargetKey: "connector_id",
-						Func: "count", TargetSoftDeletes: true,
+						Table: textDocuments, LocalKey: textID, TargetKey: "connector_id",
+						Func: textCount, TargetSoftDeletes: true,
 					}}
 				case "next_sync_at":
 					return &types.DerivedSort{Interval: &types.IntervalSpec{
@@ -594,13 +610,13 @@ func testCompileFoldViaStringAlgebraRest5(t *testing.T, b stringBackend) {
 				nil,
 				derivedOf,
 				[]types.OrderField{{Field: "document_count", Desc: true}},
-				"created_at",
+				textCreatedAt,
 			)
 			assert.Equal(t, []string{
 				"(SELECT COUNT(*) FROM documents WHERE documents.connector_id=<base>.id " +
 					"AND documents.deleted_at IS NULL) DESC NULLS FIRST",
-				"created_at DESC",
-				"id DESC",
+				textCreatedAtDesc,
+				textIDDesc,
 			}, gotAgg)
 
 			gotInterval := listquery.CompileOrder[string, string](
@@ -610,12 +626,12 @@ func testCompileFoldViaStringAlgebraRest5(t *testing.T, b stringBackend) {
 				nil,
 				derivedOf,
 				[]types.OrderField{{Field: "next_sync_at", Desc: false}},
-				"created_at",
+				textCreatedAt,
 			)
 			assert.Equal(t, []string{
 				"(last_sync_at + CASE(schedule;hourly=>3600s,daily=>86400s)) ASC NULLS LAST",
-				"created_at DESC",
-				"id DESC",
+				textCreatedAtDesc,
+				textIDDesc,
 			}, gotInterval)
 		},
 	)

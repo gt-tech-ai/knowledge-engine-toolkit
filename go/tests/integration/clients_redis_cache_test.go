@@ -149,19 +149,19 @@ func (s *RedisCacheSuite) TestGetOrLoad_PopulatesOnMiss() {
 	loader := func() ([]byte, error) {
 		calls++
 
-		return []byte("loaded-value"), nil
+		return []byte(textLoadedValue), nil
 	}
 
 	// First call: miss, loader invoked.
 	got, err := s.cache.GetOrLoad(ctx, key, loader, time.Minute)
 	s.Require().NoError(err)
-	s.Equal([]byte("loaded-value"), got)
+	s.Equal([]byte(textLoadedValue), got)
 	s.Equal(1, calls, "loader should be called exactly once on miss")
 
 	// Second call: hit, loader not invoked again.
 	got2, err := s.cache.GetOrLoad(ctx, key, loader, time.Minute)
 	s.Require().NoError(err)
-	s.Equal([]byte("loaded-value"), got2)
+	s.Equal([]byte(textLoadedValue), got2)
 	s.Equal(1, calls, "loader should not be called again on cache hit")
 }
 
@@ -210,7 +210,7 @@ func (s *RedisCacheSuite) TestGetOrLoad_LoaderErrorAndNilValue() {
 func (s *RedisCacheSuite) TestTTLExpiry() {
 	ctx := context.Background()
 	key := s.uniqueKey("ttl")
-	ttl := 60 * time.Millisecond
+	ttl := millis60 * time.Millisecond
 
 	s.cache.Set(ctx, key, []byte("expires-soon"), ttl)
 
@@ -243,7 +243,7 @@ func (s *RedisCacheSuite) TestTTLSelection() {
 	}
 
 	explicit := s.uniqueKey("explicit")
-	s.cache.Set(ctx, explicit, []byte("v"), 60*time.Second)
+	s.cache.Set(ctx, explicit, []byte(textV), 60*time.Second)
 	s.LessOrEqual(ttlOf(s.cache, explicit), 60*time.Second)
 	s.Greater(ttlOf(s.cache, explicit), 50*time.Second, "TTL should be close to 60s")
 
@@ -251,19 +251,19 @@ func (s *RedisCacheSuite) TestTTLSelection() {
 		func(cfg *rediscache.Config) { cfg.DefaultTTL = 30 * time.Second },
 	)
 	configured := s.uniqueKey("configured")
-	short.Set(ctx, configured, []byte("v"), 0)
+	short.Set(ctx, configured, []byte(textV), 0)
 	s.Greater(ttlOf(short, configured), time.Duration(0), "a zero TTL takes the default")
 	s.LessOrEqual(ttlOf(short, configured), 30*time.Second)
 
 	unset := s.newCache(func(cfg *rediscache.Config) { cfg.DefaultTTL = 0 })
 	fallback := s.uniqueKey("fallback")
-	unset.Set(ctx, fallback, []byte("v"), 0)
+	unset.Set(ctx, fallback, []byte(textV), 0)
 	s.Greater(ttlOf(unset, fallback), time.Duration(0), "New falls back to a 5m default")
 	s.LessOrEqual(ttlOf(unset, fallback), 5*time.Minute)
 
 	got, ok := unset.Get(ctx, fallback)
 	s.True(ok)
-	s.Equal([]byte("v"), got)
+	s.Equal([]byte(textV), got)
 }
 
 // TestZeroOpTimeout tests that a cache with OpTimeout=0 runs every op under the
@@ -278,7 +278,7 @@ func (s *RedisCacheSuite) TestTTLSelection() {
 func (s *RedisCacheSuite) TestZeroOpTimeout() {
 	ctx := context.Background()
 	c := s.newCache(func(cfg *rediscache.Config) { cfg.OpTimeout = 0 })
-	key := s.uniqueKey("k")
+	key := s.uniqueKey(textK)
 
 	c.Set(ctx, key, []byte("value1"), time.Minute)
 
@@ -312,7 +312,7 @@ func (s *RedisCacheSuite) TestInvalidatePrefix() {
 	p := s.uniqueKey("")
 	set := func(keys ...string) {
 		for _, k := range keys {
-			s.cache.Set(ctx, p+k, []byte("v"), time.Minute)
+			s.cache.Set(ctx, p+k, []byte(textV), time.Minute)
 		}
 	}
 	present := func(k string) bool {
@@ -335,10 +335,10 @@ func (s *RedisCacheSuite) TestInvalidatePrefix() {
 	s.False(present("lit*:1"), "literal-star key should be invalidated")
 	s.True(present("litERAL:1"), "non-matching key must survive (metachar escaped)")
 
-	set("k1")
+	set(textK1)
 	s.Require().NoError(s.cache.InvalidatePrefix(ctx, ""))
 	s.Require().NoError(s.cache.InvalidatePrefix(ctx, "   "))
-	s.True(present("k1"), "empty/whitespace prefix must not flush the cache")
+	s.True(present(textK1), "empty/whitespace prefix must not flush the cache")
 }
 
 // TestInvalidateAll tests that InvalidateAll clears the cache's database.
@@ -355,12 +355,12 @@ func (s *RedisCacheSuite) TestInvalidateAll() {
 	c := s.newCache(
 		func(cfg *rediscache.Config) { cfg.DB = 15 },
 	) // FLUSHDB stays in DB 15
-	c.Set(ctx, "k1", []byte("v1"), time.Minute)
+	c.Set(ctx, textK1, []byte("v1"), time.Minute)
 	c.Set(ctx, "k2", []byte("v2"), time.Minute)
 
 	s.Require().NoError(c.InvalidateAll(ctx))
 
-	_, ok := c.Get(ctx, "k1")
+	_, ok := c.Get(ctx, textK1)
 	s.False(ok, "k1 should be cleared by InvalidateAll")
 
 	_, ok = c.Get(ctx, "k2")
@@ -415,18 +415,18 @@ func (s *RedisCacheSuite) TestUnreachable_ByteCacheDegradesToMiss() {
 	s.Nil(val)
 	logged.Set(ctx, "key2", []byte("value2"), time.Minute)
 	logged.Delete(ctx, "key3")
-	s.Len(spy.ErrorCalls, 3, "error mode logs each failed Get/Set/Delete at Error")
+	s.Len(spy.ErrorCalls, length3, "error mode logs each failed Get/Set/Delete at Error")
 
 	silent := s.unreachableCache(func(cfg *rediscache.Config) {
 		cfg.FailureMode = rediscache.FailureModeError
 		cfg.Logger = nil
 	})
 
-	val, ok = silent.Get(ctx, "any-key")
+	val, ok = silent.Get(ctx, textAnyKey)
 	s.False(ok, "expected miss when Redis is unavailable")
 	s.Nil(val)
-	silent.Set(ctx, "any-key", []byte("data"), time.Minute)
-	silent.Delete(ctx, "any-key")
+	silent.Set(ctx, textAnyKey, []byte("data"), time.Minute)
+	silent.Delete(ctx, textAnyKey)
 }
 
 // TestUnreachable_InvalidationSurfacesErrors tests that the CacheInvalidator
@@ -481,7 +481,7 @@ func (s *RedisCacheSuite) newCache(mutate func(*rediscache.Config)) *rediscache.
 	cfg := rediscache.DefaultConfig()
 
 	cfg.Addr = s.RedisAddr
-	cfg.OpTimeout = 2 * time.Second
+	cfg.OpTimeout = seconds2 * time.Second
 
 	if mutate != nil {
 		mutate(&cfg)

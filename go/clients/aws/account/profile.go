@@ -102,9 +102,9 @@ func UpsertProfile(path, owner string, p Profile) error {
 	var b strings.Builder
 
 	_, _ = b.WriteString(pre)
-	_, _ = b.WriteString(begin + "\n")
+	_, _ = b.WriteString(begin + textNewline)
 	_, _ = b.WriteString(renderSections(sections))
-	_, _ = b.WriteString(end + "\n")
+	_, _ = b.WriteString(end + textNewline)
 	_, _ = b.WriteString(post)
 
 	return writeFileAtomic(path, []byte(b.String()))
@@ -112,7 +112,7 @@ func UpsertProfile(path, owner string, p Profile) error {
 
 // refuseUnmanaged fails when the operator's own (unfenced) text defines one of headers.
 func refuseUnmanaged(path, owner, unmanaged string, headers ...string) error {
-	for line := range strings.SplitSeq(unmanaged, "\n") {
+	for line := range strings.SplitSeq(unmanaged, textNewline) {
 		trimmed := strings.TrimSpace(line)
 		for _, h := range headers {
 			if trimmed == "["+h+"]" {
@@ -131,15 +131,15 @@ func refuseUnmanaged(path, owner, unmanaged string, headers ...string) error {
 // (newline-terminated, plus a blank line) so the block is appended at the end; a begin
 // with no end treats the remainder as the block's text and re-fences it.
 func splitManaged(content, begin, end string) (pre, inner, post string) {
-	at := strings.Index(content, begin+"\n")
+	at := strings.Index(content, begin+textNewline)
 	if at == -1 {
 		pre = content
-		if pre != "" && !strings.HasSuffix(pre, "\n") {
-			pre += "\n"
+		if pre != "" && !strings.HasSuffix(pre, textNewline) {
+			pre += textNewline
 		}
 
 		if pre != "" {
-			pre += "\n"
+			pre += textNewline
 		}
 
 		return pre, "", ""
@@ -148,7 +148,7 @@ func splitManaged(content, begin, end string) (pre, inner, post string) {
 	pre = content[:at]
 
 	rest := content[at+len(begin)+1:]
-	stop := strings.Index(rest, end+"\n")
+	stop := strings.Index(rest, end+textNewline)
 
 	if stop == -1 {
 		return pre, rest, ""
@@ -171,7 +171,7 @@ type iniSection struct {
 func parseSections(inner string) []iniSection {
 	var sections []iniSection
 
-	for line := range strings.SplitSeq(inner, "\n") {
+	for line := range strings.SplitSeq(inner, textNewline) {
 		trimmed := strings.TrimSpace(line)
 		switch {
 		case strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]"):
@@ -208,7 +208,7 @@ func renderSections(sections []iniSection) string {
 		_, _ = b.WriteString("[" + s.header + "]\n")
 
 		for _, line := range s.body {
-			_, _ = b.WriteString(line + "\n")
+			_, _ = b.WriteString(line + textNewline)
 		}
 	}
 

@@ -23,10 +23,10 @@ import (
 func TestOption_IsSomeIsNoneUnwrapOrElse(t *testing.T) {
 	t.Parallel()
 
-	some := types.Some(42)
+	some := types.Some(someArg42)
 	assert.True(t, some.IsSome())
 	assert.False(t, some.IsNone())
-	assert.Equal(t, 42, some.UnwrapOrElse(func() int {
+	assert.Equal(t, wantUnwrapOrElse42, some.UnwrapOrElse(func() int {
 		t.Fatal("fallback must not be called when a value is present")
 
 		return -1

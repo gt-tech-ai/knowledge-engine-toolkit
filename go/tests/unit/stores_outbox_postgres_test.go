@@ -29,21 +29,25 @@ func TestPgstoreConfig_RejectsUnsafeNamesAndLeases(t *testing.T) {
 
 	ok := outboxpg.Config{
 		Table:        "aiops_outbox",
-		TenantColumn: "tenant",
+		TenantColumn: textTenant,
 		Lease:        time.Minute,
 	}
 	require.NoError(t, ok.Validate())
 
 	bad := []outboxpg.Config{
 		{Table: "x; DROP TABLE y", Lease: time.Minute},
-		{Table: "t", KeyColumn: `"k"`, Lease: time.Minute},
-		{Table: "t", TenantColumn: "Tenant", Lease: time.Minute},
-		{Table: "t", AttributeColumns: map[string]string{"a": "1a"}, Lease: time.Minute},
-		{Table: "t"},
-		{Table: "t", Lease: time.Minute, MaxErrorLen: -1},
+		{Table: textT, KeyColumn: `"k"`, Lease: time.Minute},
+		{Table: textT, TenantColumn: "Tenant", Lease: time.Minute},
+		{
+			Table:            textT,
+			AttributeColumns: map[string]string{textA: "1a"},
+			Lease:            time.Minute,
+		},
+		{Table: textT},
+		{Table: textT, Lease: time.Minute, MaxErrorLen: -1},
 	}
 	// sql.Open is lazy: a real handle that never connects, since New does no I/O.
-	db, err := sql.Open("pgx", "postgres://unused")
+	db, err := sql.Open(textPgx, textPostgresUnused)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -66,24 +70,24 @@ func TestPgstore_RefusesWritesOutsideATransaction(t *testing.T) {
 	t.Parallel()
 
 	// sql.Open is lazy: a handle that never connects, so any I/O would fail UNAVAILABLE.
-	db, err := sql.Open("pgx", "postgres://unused")
+	db, err := sql.Open(textPgx, textPostgresUnused)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
-	store, err := outboxpg.New(db, outboxpg.Config{Table: "t", Lease: time.Minute})
+	store, err := outboxpg.New(db, outboxpg.Config{Table: textT, Lease: time.Minute})
 	require.NoError(t, err)
 
 	ctx, id := t.Context(), uuid.New()
 
-	_, err = store.Claim(ctx, "lane", 0, 10)
+	_, err = store.Claim(ctx, textLane, 0, limit10)
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
 	require.Equal(t, apperr.CodeInternal, apperr.Code(store.MarkSent(ctx, id)))
 	require.Equal(
 		t,
 		apperr.CodeInternal,
-		apperr.Code(store.Retry(ctx, id, time.Now(), "e")),
+		apperr.Code(store.Retry(ctx, id, time.Now(), textE)),
 	)
-	require.Equal(t, apperr.CodeInternal, apperr.Code(store.Park(ctx, id, "e")))
+	require.Equal(t, apperr.CodeInternal, apperr.Code(store.Park(ctx, id, textE)))
 
 	_, err = store.DeleteSentBefore(ctx, time.Now())
 	require.Equal(t, apperr.CodeInternal, apperr.Code(err))
@@ -102,28 +106,28 @@ func TestPgstore_RefusesWritesOutsideATransaction(t *testing.T) {
 func TestPgstore_ValidatesPartitions(t *testing.T) {
 	t.Parallel()
 
-	db, err := sql.Open("pgx", "postgres://unused")
+	db, err := sql.Open(textPgx, textPostgresUnused)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
-	base := outboxpg.Config{Table: "t", Lease: time.Minute}
+	base := outboxpg.Config{Table: textT, Lease: time.Minute}
 	for _, cfg := range []outboxpg.Config{
-		{Table: "t", Lease: time.Minute, Partitions: 2},
-		{Table: "t", Lease: time.Minute, PartitionColumn: "Part", Partitions: 2},
-		{Table: "t", Lease: time.Minute, PartitionColumn: "part", Partitions: -1},
+		{Table: textT, Lease: time.Minute, Partitions: partitions2},
+		{Table: textT, Lease: time.Minute, PartitionColumn: "Part", Partitions: partitions2},
+		{Table: textT, Lease: time.Minute, PartitionColumn: "part", Partitions: -1},
 	} {
 		_, err := outboxpg.New(db, cfg)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), "%+v", cfg)
 	}
 
-	base.PartitionColumn, base.Partitions = "part", 3
+	base.PartitionColumn, base.Partitions = "part", partitions3
 
 	store, err := outboxpg.New(db, base)
 	require.NoError(t, err)
 
 	ctx := interfaces.WithInTx(context.Background())
-	for _, partition := range []int{3, -1} {
-		_, err := store.Claim(ctx, "lane", partition, 10)
+	for _, partition := range []int{iterations3, -1} {
+		_, err := store.Claim(ctx, textLane, partition, limit10)
 		assert.Equal(
 			t,
 			apperr.CodeInvalidInput,

@@ -57,8 +57,8 @@ func mixedDescs() []types.OperationDescriptor {
 		opDesc("mut", types.SafetyMutating, types.OpLifecycleBounded),
 		opDesc("destroy", types.SafetyDestructive, types.OpLifecycleBounded),
 		opDesc("cred", types.SafetyCredentialed, types.OpLifecycleBounded),
-		opDesc("long", types.SafetyReadOnly, types.OpLifecycleLongRunning),
-		opDesc("ask", types.SafetyReadOnly, types.OpLifecycleInteractive),
+		opDesc(textLong, types.SafetyReadOnly, types.OpLifecycleLongRunning),
+		opDesc(textAsk, types.SafetyReadOnly, types.OpLifecycleInteractive),
 	}
 }
 
@@ -117,7 +117,7 @@ func TestExecutionOpsPolicy_ExcludesOperationAboveMaxSafety(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"ask", "long", "mut", "ro"}, listedNames(reg))
+	assert.Equal(t, []string{textAsk, textLong, "mut", "ro"}, listedNames(reg))
 
 	_, ok := reg.Lookup("cred")
 	assert.False(t, ok)
@@ -147,14 +147,14 @@ func TestExecutionOpsPolicy_ExcludesDisallowedLifecycle(t *testing.T) {
 		MaxSafety: types.SafetyCredentialed, Lifecycles: noInteractive,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"cred", "destroy", "long", "mut", "ro"}, listedNames(reg))
+	assert.Equal(t, []string{"cred", "destroy", textLong, "mut", "ro"}, listedNames(reg))
 
 	reg, err = newPolicyRegistry(t, types.ExposurePolicy{
 		MaxSafety: types.SafetyCredentialed, Lifecycles: noInteractive,
-		Allow: []string{"ro", "long"}, Deny: []string{"ro"},
+		Allow: []string{"ro", textLong}, Deny: []string{"ro"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"long"}, listedNames(reg))
+	assert.Equal(t, []string{textLong}, listedNames(reg))
 }
 
 // TestExecutionOpsFactory_FailsOnUnknownOperationInPolicy tests that a policy naming an
@@ -173,12 +173,12 @@ func TestExecutionOpsFactory_FailsOnUnknownOperationInPolicy(t *testing.T) {
 		{
 			MaxSafety:  types.SafetyReadOnly,
 			Lifecycles: allLifecycles(),
-			Allow:      []string{"nope"},
+			Allow:      []string{textNope},
 		},
 		{
 			MaxSafety:  types.SafetyReadOnly,
 			Lifecycles: allLifecycles(),
-			Deny:       []string{"nope"},
+			Deny:       []string{textNope},
 		},
 	} {
 		_, err := newPolicyRegistry(t, p)
@@ -218,7 +218,7 @@ func TestExecutionOpsFactory_FailsOnDescriptorWithoutImplementation(t *testing.T
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), `"ro"`)
 
-	builders = mockBuilders(ctrl, append(descs, opDesc("extra", types.SafetyReadOnly,
+	builders = mockBuilders(ctrl, append(descs, opDesc(textExtra, types.SafetyReadOnly,
 		types.OpLifecycleBounded)))
 	_, err = ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{

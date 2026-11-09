@@ -243,7 +243,7 @@ func (s *Server) startAPIDocs(
 		return nil, err
 	}
 
-	s.d.Log.Warn("API docs server failed (continuing)", "error", err.Error())
+	s.d.Log.Warn("API docs server failed (continuing)", textError, err.Error())
 
 	return none, nil
 }
@@ -277,16 +277,16 @@ func (s *Server) startProcesses(
 // of several.
 func (s *Server) docsRoot(mux *http.ServeMux, specs []spec) http.Handler {
 	if len(specs) == 1 {
-		mux.Handle("/openapi.json", docs.SpecHandler(specs[0].data))
+		mux.Handle(textOpenapiJSON, docs.SpecHandler(specs[0].data))
 
-		return docs.RedocHandler("/openapi.json", title(specs[0].name))
+		return docs.RedocHandler(textOpenapiJSON, title(specs[0].name))
 	}
 
 	index := template.Must(template.New("index").Parse(indexPage))
 	names := make([]string, 0, len(specs))
 
 	for _, sp := range specs {
-		url := "/" + sp.name + "/openapi.json"
+		url := "/" + sp.name + textOpenapiJSON
 		mux.Handle(url, docs.SpecHandler(sp.data))
 		mux.Handle("/"+sp.name, docs.RedocHandler(url, title(sp.name)))
 
@@ -298,7 +298,7 @@ func (s *Server) docsRoot(mux *http.ServeMux, specs []spec) http.Handler {
 
 		err := index.Execute(w, names)
 		if err != nil {
-			s.d.Log.Warn("render API docs index", "error", err.Error())
+			s.d.Log.Warn("render API docs index", textError, err.Error())
 		}
 	})
 }
@@ -307,7 +307,7 @@ func (s *Server) docsRoot(mux *http.ServeMux, specs []spec) http.Handler {
 func (s *Server) serveDocs(srv *http.Server, ln net.Listener) {
 	err := srv.Serve(ln)
 	if err != nil && !apperr.StdIs(err, http.ErrServerClosed) {
-		s.d.Log.Warn("API docs server error", "error", err.Error())
+		s.d.Log.Warn("API docs server error", textError, err.Error())
 	}
 }
 
@@ -321,7 +321,7 @@ func (s *Server) shutdown(
 
 		err := api.Shutdown(stop)
 		if err != nil {
-			s.d.Log.Warn("API docs server shutdown", "error", err.Error())
+			s.d.Log.Warn("API docs server shutdown", textError, err.Error())
 		}
 
 		cancel()
@@ -330,7 +330,7 @@ func (s *Server) shutdown(
 	for _, p := range procs {
 		err := p.Wait()
 		if err != nil {
-			s.d.Log.Debug("doc server exited", "error", err.Error())
+			s.d.Log.Debug("doc server exited", textError, err.Error())
 		}
 	}
 }

@@ -45,7 +45,7 @@ func (c *Client) Template(ctx context.Context, spec types.RenderSpec) ([]byte, e
 	args := append([]string{"template", release, spec.ChartDir}, values(spec)...)
 
 	return client.Output(
-		c.runner.RunBuffered(ctx, c.root, "helm", args...),
+		c.runner.RunBuffered(ctx, c.root, textHelm, args...),
 		"helm template",
 	)
 }
@@ -71,7 +71,7 @@ func (c *Client) DependencyBuild(ctx context.Context, chartDir string) error {
 	}
 
 	_, err = client.Output(
-		c.runner.RunBuffered(ctx, c.root, "helm", "dependency", "build", chartDir,
+		c.runner.RunBuffered(ctx, c.root, textHelm, "dependency", "build", chartDir,
 			"--repository-cache", cache,
 			"--repository-config", filepath.Join(home, "repositories.yaml")),
 		"helm dependency build")
@@ -83,7 +83,7 @@ func (c *Client) DependencyBuild(ctx context.Context, chartDir string) error {
 func (c *Client) Lint(ctx context.Context, spec types.RenderSpec) error {
 	args := append([]string{"lint", spec.ChartDir}, values(spec)...)
 	_, err := client.Output(
-		c.runner.RunBuffered(ctx, c.root, "helm", args...),
+		c.runner.RunBuffered(ctx, c.root, textHelm, args...),
 		"helm lint",
 	)
 

@@ -28,10 +28,10 @@ func mcpOpts(t *testing.T) mcp.Options {
 	t.Helper()
 
 	return mcp.Options{
-		Name:    "tools",
-		Version: "test",
+		Name:    textTools,
+		Version: textTest,
 		Settings: types.MCPSettings{
-			TailLines: 40, RunRetention: 20, RunDir: ".runs",
+			TailLines: tailLines40, RunRetention: runRetention20, RunDir: ".runs",
 		},
 		RunDir: mcp.NewRunDir(t.TempDir(), time.Now),
 	}
@@ -80,7 +80,10 @@ func connectMCP(t *testing.T, srv *mcp.Server) *sdkmcp.ClientSession {
 
 	go func() { done <- srv.Serve(ctx, serverT) }()
 
-	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test", Version: "test"}, nil)
+	client := sdkmcp.NewClient(
+		&sdkmcp.Implementation{Name: textTest, Version: textTest},
+		nil,
+	)
 	cs, err := client.Connect(ctx, clientT, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -202,7 +205,7 @@ func TestTransportMcpServe_ListsOnlyMCPPolicyOperations(t *testing.T) {
 		"runs.cancel",
 		"runs.list",
 		"runs.result",
-		"runs.status",
+		textRunsStatus,
 	)
 	slices.Sort(wantNames)
 
@@ -268,8 +271,8 @@ func TestTransportMcpToolInputSchema_MatchesOperation(t *testing.T) {
 func TestTransportMcpNew_RejectsNonObjectSchema(t *testing.T) {
 	t.Parallel()
 
-	for _, schema := range []string{`{"type":"array"}`, `{not json`} {
-		_, err := mcp.New(stubOpRegistry(t, "bad", schema, nil), mcpOpts(t))
+	for _, schema := range []string{`{"type":"array"}`, textNotStructured} {
+		_, err := mcp.New(stubOpRegistry(t, textBad, schema, nil), mcpOpts(t))
 		require.Error(t, err, schema)
 		assert.Equal(t, apperr.CodeInternal, apperr.Code(err), schema)
 		assert.Contains(t, err.Error(), `"bad"`, schema)
@@ -293,7 +296,7 @@ func TestTransportMcpCallTool_RunsOperation(t *testing.T) {
 	var runs []stubInput
 
 	fail := false
-	reg := stubOpRegistry(t, "stub", `{"type":"object"}`,
+	reg := stubOpRegistry(t, textStub, textTypeObject,
 		func(_ context.Context, input any, _ interfaces.ExecutionObserver) error {
 			in, ok := input.(*stubInput)
 			if !assert.True(t, ok) {
@@ -315,7 +318,7 @@ func TestTransportMcpCallTool_RunsOperation(t *testing.T) {
 	ctx := context.Background()
 
 	res, err := cs.CallTool(ctx, &sdkmcp.CallToolParams{
-		Name: "stub", Arguments: map[string]any{"go": true},
+		Name: textStub, Arguments: map[string]any{textGo2: true},
 	})
 	require.NoError(t, err)
 	assert.False(t, res.IsError)
@@ -328,18 +331,18 @@ func TestTransportMcpCallTool_RunsOperation(t *testing.T) {
 	assert.Equal(t, []stubInput{{Go: true}}, runs)
 
 	fail = true
-	res, err = cs.CallTool(ctx, &sdkmcp.CallToolParams{Name: "stub"})
+	res, err = cs.CallTool(ctx, &sdkmcp.CallToolParams{Name: textStub})
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
 	assert.Contains(t, toolText(t, res), "stub refused")
 
 	res, err = cs.CallTool(ctx, &sdkmcp.CallToolParams{
-		Name: "stub", Arguments: map[string]any{"bogus": 1},
+		Name: textStub, Arguments: map[string]any{textBogus: 1},
 	})
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
-	assert.Contains(t, toolText(t, res), "bogus")
-	assert.Len(t, runs, 2)
+	assert.Contains(t, toolText(t, res), textBogus)
+	assert.Len(t, runs, wantRunsLen2)
 }
 
 // toolText returns the text of a tool result's single text content.
@@ -480,8 +483,8 @@ func TestTransportMcpCallTool_RefusesASecretArgument(t *testing.T) {
 		},
 		Descriptors: []types.OperationDescriptor{desc},
 		Builders: map[string]ops.Builder[opsEnv]{"kb": ops.MapInput([]types.FlagSpec{
-			{Name: "client-id", Type: types.FlagString},
-			{Name: "client-secret", Type: types.FlagString, Secret: true},
+			{Name: textClientID, Type: types.FlagString},
+			{Name: textClientSecret3, Type: types.FlagString, Secret: true},
 		}, types.ArgSpec{}, func(
 			context.Context, map[string]any, opsEnv, interfaces.ExecutionObserver,
 		) error {
@@ -505,20 +508,20 @@ func TestTransportMcpCallTool_RefusesASecretArgument(t *testing.T) {
 		if tool.Name == "kb" {
 			blob, merr := json.Marshal(tool.InputSchema)
 			require.NoError(t, merr)
-			assert.NotContains(t, string(blob), "client_secret")
+			assert.NotContains(t, string(blob), textClientSecret)
 		}
 	}
 
 	res, err := cs.CallTool(ctx, &sdkmcp.CallToolParams{
-		Name: "kb", Arguments: map[string]any{"client_secret": "s3cr3t"},
+		Name: "kb", Arguments: map[string]any{textClientSecret: "s3cr3t"},
 	})
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
-	assert.Contains(t, toolText(t, res), "client_secret")
+	assert.Contains(t, toolText(t, res), textClientSecret)
 	assert.Zero(t, ran, "a refused call must not run")
 
 	res, err = cs.CallTool(ctx, &sdkmcp.CallToolParams{
-		Name: "kb", Arguments: map[string]any{"client_id": "a"},
+		Name: "kb", Arguments: map[string]any{"client_id": textA},
 	})
 	require.NoError(t, err)
 	assert.False(t, res.IsError, toolText(t, res))

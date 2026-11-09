@@ -41,7 +41,7 @@ func RenderFrontmatter(fm Frontmatter) []byte {
 
 	var buf bytes.Buffer
 
-	_, _ = buf.WriteString(fence + "\n")
+	_, _ = buf.WriteString(fence + textNewline)
 
 	if len(node.Content) > 0 {
 		enc := yaml.NewEncoder(&buf)
@@ -51,7 +51,7 @@ func RenderFrontmatter(fm Frontmatter) []byte {
 		_ = enc.Close()
 	}
 
-	_, _ = buf.WriteString(fence + "\n")
+	_, _ = buf.WriteString(fence + textNewline)
 
 	return buf.Bytes()
 }
@@ -62,7 +62,7 @@ func addEntry(node *yaml.Node, key string, value *yaml.Node) {
 }
 
 // addScalars appends each non-empty {key, value} pair.
-func addScalars(node *yaml.Node, pairs [][2]string) {
+func addScalars(node *yaml.Node, pairs [][pairLen]string) {
 	for _, kv := range pairs {
 		if kv[1] != "" {
 			addEntry(node, kv[0], scalar(kv[1]))
@@ -190,7 +190,7 @@ func RenderIndex(entries []IndexEntry) []byte {
 
 	blocks = flushIndexBlock(blocks, &block)
 
-	return []byte(strings.Join(blocks, "\n"))
+	return []byte(strings.Join(blocks, textNewline))
 }
 
 // compareIndexEntries orders by section, then title ignoring case, then link.
@@ -231,7 +231,7 @@ func entryLine(e IndexEntry) string {
 		line += " - " + d
 	}
 
-	return line + "\n"
+	return line + textNewline
 }
 
 // RenderRootIndex writes the bundle-root index.md: an okf_version-only frontmatter

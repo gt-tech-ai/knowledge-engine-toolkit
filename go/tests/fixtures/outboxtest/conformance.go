@@ -130,7 +130,7 @@ func (h Harness) concurrentClaimsAreDisjoint(t *testing.T) {
 		wg   sync.WaitGroup
 	)
 
-	for range 5 {
+	for range iterations5 {
 		wg.Go(func() {
 			recs, err := h.claim(ctx, lane)
 

@@ -63,8 +63,8 @@ func testNewGroupFromSpecsDecoratesAndRunsEverySpecCase(
 
 	schedule := loop.Config{Interval: time.Minute, RunAtStart: true}
 	group, err := loop.NewGroupFromSpecs([]loop.Spec{
-		{Run: countPass(&a), Name: "a", Op: "loop.a", Schedule: schedule},
-		{Run: countPass(&b), Name: "b", Op: "loop.b", Schedule: schedule},
+		{Run: countPass(&a), Name: textA, Op: "loop.a", Schedule: schedule},
+		{Run: countPass(&b), Name: textB, Op: "loop.b", Schedule: schedule},
 	}, decorate, quietLogger(t))
 	require.NoError(t, err)
 
@@ -95,7 +95,7 @@ func TestNewGroupFromSpecs_RejectsAnInvalidSchedule(t *testing.T) {
 	_, err := loop.NewGroupFromSpecs([]loop.Spec{
 		{
 			Run:      okPass,
-			Name:     "bad",
+			Name:     textBad,
 			Op:       "loop.bad",
 			Schedule: loop.Config{Interval: -time.Second},
 		},

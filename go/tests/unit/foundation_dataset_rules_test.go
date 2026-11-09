@@ -23,7 +23,7 @@ func rulesData(t *testing.T) *dataset.Dataset {
 		"data/procs.yaml": {Data: []byte(
 			"procedures:\n  - {name: up, steps: [a]}\n  - {name: down, steps: []}\n",
 		)},
-	}, "data")
+	}, textData)
 	require.NoError(t, err)
 
 	return d
@@ -54,7 +54,7 @@ func TestFoundationDataset_Check(t *testing.T) {
 	require.NoError(t, d.Check([]dataset.Rule{
 		{Name: "listed", Expr: "size(ci.must_succeed) > 0", Message: "list the jobs"},
 		{Name: "whole", Expr: "data.ci.max_chars > 0", Message: "positive"},
-		{Name: "none", Expr: "procedures.filter(p, p.name == 'x').map(p, p.name)"},
+		{Name: textNone, Expr: "procedures.filter(p, p.name == 'x').map(p, p.name)"},
 	}))
 
 	err := d.Check([]dataset.Rule{
@@ -73,14 +73,14 @@ func TestFoundationDataset_Check(t *testing.T) {
 			Expr: "procedures.filter(p, size(p.steps) == 0)" +
 				".map(p, 'procedure ' + p.name + ' has no steps')",
 		},
-		{Name: "ok", Expr: "true", Message: "never"},
+		{Name: textOk, Expr: textTrue, Message: textNever},
 	})
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "distinct: ci.must_succeed has a duplicate job id")
 	assert.Contains(t, err.Error(), "bounded: ci.max_chars is over 65536")
 	assert.Contains(t, err.Error(), "steps: procedure down has no steps")
-	assert.NotContains(t, err.Error(), "never")
+	assert.NotContains(t, err.Error(), textNever)
 
 	for name, expr := range map[string]string{
 		"bad syntax":   "ci.must_succeed.(",
@@ -147,12 +147,12 @@ func TestFoundationDataset_FromValue(t *testing.T) {
 
 	d, err := dataset.FromValue("inline", struct {
 		CI ci `yaml:"ci"`
-	}{CI: ci{MustSucceed: []string{"a", "a"}}})
+	}{CI: ci{MustSucceed: []string{textA, textA}}})
 	require.NoError(t, err)
 
 	jobs, err := d.Section[map[string][]string]("ci")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"a", "a"}, jobs["must_succeed"])
+	assert.Equal(t, []string{textA, textA}, jobs["must_succeed"])
 
 	err = d.Check([]dataset.Rule{{
 		Name: "distinct", Expr: "ci.must_succeed.distinct() == ci.must_succeed",
@@ -160,8 +160,8 @@ func TestFoundationDataset_FromValue(t *testing.T) {
 	}})
 	require.ErrorContains(t, err, "distinct: duplicate job")
 
-	_, err = dataset.FromValue("scalar", 3)
+	_, err = dataset.FromValue(textScalar, fromValueArg3)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	assert.Contains(t, err.Error(), "scalar")
+	assert.Contains(t, err.Error(), textScalar)
 }

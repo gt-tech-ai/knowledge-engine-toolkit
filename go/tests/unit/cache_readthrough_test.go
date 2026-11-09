@@ -54,7 +54,7 @@ func gatedLoad(count *atomic.Int32, started, release chan struct{}) func() (int,
 
 		<-release
 
-		return 42, nil
+		return gatedLoadResult42, nil
 	}
 }
 
@@ -137,7 +137,7 @@ func TestReadThrough_HitSkipsLoad(t *testing.T) {
 
 	const key = "k2"
 
-	encoded, err := cache.Encode(99, 1)
+	encoded, err := cache.Encode(encodeArg99, 1)
 	require.NoError(t, err)
 	m.EXPECT().Get(gomock.Any(), key).Return(encoded, true)
 
@@ -158,7 +158,7 @@ func TestReadThrough_HitSkipsLoad(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, 99, v, "the cached value is returned")
+	assert.Equal(t, equalArg99, v, "the cached value is returned")
 	assert.False(t, loadCalled, "a hit does not call load")
 }
 
@@ -250,7 +250,12 @@ func TestReadThrough_StaleVersionReloads(t *testing.T) {
 	)
 	require.NoError(t, err)
 	assert.True(t, loaded, "a stale-version hit re-runs load")
-	assert.Equal(t, 77, v, "the fresh value is returned, not the stale-version entry")
+	assert.Equal(
+		t,
+		equalArg77,
+		v,
+		"the fresh value is returned, not the stale-version entry",
+	)
 }
 
 // expectGetBarrier holds every Get until `callers` have arrived and releaseGet closes.
@@ -303,12 +308,12 @@ func readThroughExpecting42(
 		return
 	}
 
-	assert.Equal(t, 42, v)
+	assert.Equal(t, equalArg42, v)
 }
 
 // yieldScheduler gives runnable goroutines many chances to run.
 func yieldScheduler() {
-	for range 100 {
+	for range iterations100 {
 		runtime.Gosched()
 	}
 }

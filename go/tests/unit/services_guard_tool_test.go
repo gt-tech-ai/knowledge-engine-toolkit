@@ -34,12 +34,12 @@ func TestServicesGuard_Tool(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	ok := types.RenderSpec{ChartDir: "chart", Set: map[string]string{"kind": "hpa"}}
-	bad := types.RenderSpec{ChartDir: "chart", Set: map[string]string{"kind": "x"}}
+	ok := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: "hpa"}}
+	bad := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: textX}}
 	r := mocks.NewMockRenderer(ctrl)
 	r.EXPECT().Render(gomock.Any(), ok).Return([]types.Object{
-		{Kind: "Deployment", Doc: map[string]any{"kind": "Deployment"}},
-		{Kind: "Service", Doc: map[string]any{"kind": "Service"}},
+		{Kind: textDeployment, Doc: map[string]any{textKind: textDeployment}},
+		{Kind: "Service", Doc: map[string]any{textKind: "Service"}},
 	}, nil).AnyTimes()
 	r.EXPECT().Render(gomock.Any(), bad).
 		Return(nil, apperr.New(apperr.CodeUpstream, "unknown kind")).AnyTimes()
@@ -50,12 +50,12 @@ func TestServicesGuard_Tool(t *testing.T) {
 
 	runner := mocks.NewMockCommandRunner(ctrl)
 	runner.EXPECT().
-		RunBufferedWithInput(gomock.Any(), "/repo", gomock.Nil(),
+		RunBufferedWithInput(gomock.Any(), textRepo, gomock.Nil(),
 			[]byte("kind: Deployment\n---\nkind: Service\n"),
 			"kubeconform", "-strict", "-summary", "-kubernetes-version", "1.30").
 		Return(interfaces.CmdResult{}).Times(1)
 	runner.EXPECT().
-		RunBufferedWithInput(gomock.Any(), "/repo", gomock.Nil(), gomock.Any(),
+		RunBufferedWithInput(gomock.Any(), textRepo, gomock.Nil(), gomock.Any(),
 			"kubeconform", "-strict", "-summary", "-kubernetes-version", "1.29").
 		Return(interfaces.CmdResult{
 			Stdout: []byte("Deployment is invalid"),
@@ -77,7 +77,7 @@ func testServicesGuardToolRest(
 	var err error
 
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
-		return []map[string]string{{"k8s": "1.29"}}, nil
+		return []map[string]string{{textK8s: "1.29"}}, nil
 	}
 	row := func(name string, spec types.RenderSpec, k8s string) types.GuardRow {
 		return types.GuardRow{
@@ -90,14 +90,16 @@ func testServicesGuardToolRest(
 		func() types.GuardRow {
 			r := row("invalid", ok, "{k8s}")
 
-			r.Each = "k8s"
+			r.Each = textK8s
 
 			return r
 		}(),
 		row("unrendered", bad, "1.30"),
 	}
 	gs, err := guard.NewFromConfig(rows, guard.Deps{
-		Runner: runner, Root: "/repo", Expanders: map[string]guard.Expander{"k8s": each},
+		Runner:    runner,
+		Root:      textRepo,
+		Expanders: map[string]guard.Expander{textK8s: each},
 	})
 	require.NoError(t, err)
 
@@ -113,7 +115,7 @@ func testServicesGuardToolRest(
 	require.Equal(t, types.StatusFail, v["unrendered"].Status)
 	assert.Contains(t, v["unrendered"].Detail, "render chart: ")
 
-	_, err = guard.NewFromConfig([]types.GuardRow{{Name: "t", Kind: types.GuardTool}},
+	_, err = guard.NewFromConfig([]types.GuardRow{{Name: textT, Kind: types.GuardTool}},
 		guard.Deps{})
 	require.Error(t, err, "a tool row needs a tool")
 

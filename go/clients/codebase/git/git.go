@@ -44,12 +44,12 @@ func New(root string, runner interfaces.CommandRunner) *Source {
 // List returns the tracked files present on disk and the untracked, non-ignored
 // files, sorted.
 func (s *Source) List(ctx context.Context) ([]types.File, error) {
-	tracked, err := s.lines(ctx, "ls-files", "-z", "--cached")
+	tracked, err := s.lines(ctx, textLsFiles, textZ, "--cached")
 	if err != nil {
 		return nil, err
 	}
 
-	untracked, err := s.lines(ctx, "ls-files", "-z", "--others", "--exclude-standard")
+	untracked, err := s.lines(ctx, textLsFiles, textZ, textOthers, textExcludeStandard)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (s *Source) List(ctx context.Context) ([]types.File, error) {
 // ListIgnored returns the untracked files git ignores under scope (the whole tree when
 // scope is empty), sorted.
 func (s *Source) ListIgnored(ctx context.Context, scope []string) ([]types.File, error) {
-	args := []string{"ls-files", "-z", "--others", "--ignored", "--exclude-standard"}
+	args := []string{textLsFiles, textZ, textOthers, "--ignored", textExcludeStandard}
 	if len(scope) > 0 {
 		args = append(append(args, "--"), scope...)
 	}
@@ -112,12 +112,12 @@ func (s *Source) Changed(ctx context.Context, base string) (map[string]bool, err
 		return nil, apperr.Wrap(res.Err, apperr.CodeNotFound, "unknown base "+base)
 	}
 
-	diff, err := s.lines(ctx, "diff", "--name-only", "-z", "--merge-base", base)
+	diff, err := s.lines(ctx, "diff", "--name-only", textZ, "--merge-base", base)
 	if err != nil {
 		return nil, err
 	}
 
-	untracked, err := s.lines(ctx, "ls-files", "-z", "--others", "--exclude-standard")
+	untracked, err := s.lines(ctx, textLsFiles, textZ, textOthers, textExcludeStandard)
 	if err != nil {
 		return nil, err
 	}

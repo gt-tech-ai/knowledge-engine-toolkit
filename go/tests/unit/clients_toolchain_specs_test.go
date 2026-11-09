@@ -39,35 +39,35 @@ func TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest(t *testing.T
 	}
 
 	// Prerequisite: version detection, no install methods (manual only).
-	goDef := find("go")
+	goDef := find(textGo2)
 	require.NotNil(t, goDef.MinVersion)
 	assert.Equal(t, "1.27", goDef.MinVersion.String())
-	assert.Equal(t, []string{"go", "version"}, goDef.VersionCmd)
+	assert.Equal(t, []string{textGo2, textVersion}, goDef.VersionCmd)
 	assert.Empty(t, goDef.InstallMethods)
 
 	// Required, command kind: uv's darwin method is a brew install.
-	uv := find("uv")
+	uv := find(textUv)
 	assert.Equal(
 		t,
-		types.InstallMethod{Command: "brew", Args: []string{"install", "uv"}},
+		types.InstallMethod{Command: "brew", Args: []string{textInstall, textUv}},
 		uv.InstallMethods["darwin"],
 	)
 
 	// Required, go-install kind: buf's "all" method expands to `go install`.
-	buf := find("buf")
+	buf := find(textBuf)
 	assert.Equal(
 		t, types.InstallMethod{
-			Command: "go",
-			Args:    []string{"install", manifestInstall(t, "buf", "all").Package},
-		}, buf.InstallMethods["all"],
+			Command: textGo2,
+			Args:    []string{textInstall, manifestInstall(t, textBuf, textAll).Package},
+		}, buf.InstallMethods[textAll],
 	)
 
 	// Required, github-release kind: golangci-lint's windows method is a pinned
 	// download of the release asset, verified against its SHA-256 (no command). The
 	// expected artifact is derived from the manifest entry, so a pin bump needs no
 	// test edit; the projection (org/repo/tag → release URL) is what is asserted.
-	lintEntry := manifestInstall(t, "golangci-lint", "windows")
-	lint := find("golangci-lint")
+	lintEntry := manifestInstall(t, textGolangciLint, textWindows)
+	lint := find(textGolangciLint)
 
 	testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestRest(
 		t,
@@ -90,7 +90,7 @@ func testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestRest(
 ) {
 	t.Helper()
 
-	win := lint.InstallMethods["windows"]
+	win := lint.InstallMethods[textWindows]
 	assert.Empty(t, win.Command)
 	require.NotNil(t, win.Download)
 	assert.Equal(t, lintEntry.Binary, win.Download.Binary)
@@ -98,34 +98,34 @@ func testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestRest(
 
 	asset := lintEntry.Assets["windows-amd64"]
 	assert.Equal(t, types.Artifact{
-		URL: "https://github.com/" + lintEntry.Org + "/" + lintEntry.Repo +
-			"/releases/download/" + lintEntry.Tag + "/" + asset.Name,
+		URL: "https://github.com/" + lintEntry.Org + textSlash + lintEntry.Repo +
+			"/releases/download/" + lintEntry.Tag + textSlash + asset.Name,
 		SHA256: asset.SHA256,
 	}, win.Download.Artifacts["windows-amd64"])
 
 	// CI tool, url kind: atlas downloads from its release host (asset appended to
 	// the base URL), and the ci marker projects.
-	atlasEntry := manifestInstall(t, "atlas", "all")
+	atlasEntry := manifestInstall(t, "atlas", textAll)
 	atlas := find("atlas")
 	assert.True(t, atlas.CI)
-	require.NotNil(t, atlas.InstallMethods["all"].Download)
+	require.NotNil(t, atlas.InstallMethods[textAll].Download)
 	assert.Equal(t, types.Artifact{
-		URL:    atlasEntry.URL + "/" + atlasEntry.Assets["linux-amd64"].Name,
-		SHA256: atlasEntry.Assets["linux-amd64"].SHA256,
-	}, atlas.InstallMethods["all"].Download.Artifacts["linux-amd64"])
-	assert.False(t, find("pgcli").CI, "a local-only tool is not in the CI set")
+		URL:    atlasEntry.URL + textSlash + atlasEntry.Assets[textLinuxAmd64].Name,
+		SHA256: atlasEntry.Assets[textLinuxAmd64].SHA256,
+	}, atlas.InstallMethods[textAll].Download.Artifacts[textLinuxAmd64])
+	assert.False(t, find(textPgcli).CI, "a local-only tool is not in the CI set")
 
 	// Optional: description projects from the toolchain.
-	pgcli := find("pgcli")
+	pgcli := find(textPgcli)
 	assert.Equal(t, "Enhanced PostgreSQL CLI", pgcli.Description)
 	assert.Equal(
 		t,
-		types.InstallMethod{Command: "pip", Args: []string{"install", "pgcli"}},
-		pgcli.InstallMethods["all"],
+		types.InstallMethod{Command: textPip, Args: []string{textInstall, textPgcli}},
+		pgcli.InstallMethods[textAll],
 	)
 
 	// Registry-only tools (no category) are not lifecycle specs.
-	_, ok := cat.Find("ruff")
+	_, ok := cat.Find(textRuff)
 	assert.False(t, ok, "registry-only ruff must not be a lifecycle tool")
 
 	// Sanity: every category is populated from the embedded toolchain.
@@ -151,11 +151,11 @@ func TestClientsToolchainResolveVersionParse_Behavior(t *testing.T) {
 	cat, err := toolchain.NewCatalog(toolEntries(t))
 	require.NoError(t, err)
 
-	goDef, ok := cat.Find("go")
+	goDef, ok := cat.Find(textGo2)
 	require.True(t, ok)
 	assert.Equal(t, "1.26.0", goDef.VersionParse("go version go1.26.0 darwin/arm64"))
 
-	uvDef, ok := cat.Find("uv")
+	uvDef, ok := cat.Find(textUv)
 	require.True(t, ok)
 	assert.Equal(t, "0.5.1", uvDef.VersionParse("uv 0.5.1"))
 }

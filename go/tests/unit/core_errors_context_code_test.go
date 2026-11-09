@@ -32,7 +32,7 @@ func TestContextCode_MapsContextErrors(t *testing.T) {
 		t,
 		apperr.CodeTimeout,
 		apperr.ContextCode(
-			apperr.Join(apperr.Sentinel("op"), context.DeadlineExceeded),
+			apperr.Join(apperr.Sentinel(textOp), context.DeadlineExceeded),
 			apperr.CodeInternal,
 		),
 	)

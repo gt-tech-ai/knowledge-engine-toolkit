@@ -53,7 +53,7 @@ func (s *RedisLockSuite) SetupTest() {
 	cfg := rediscache.DefaultConfig()
 
 	cfg.Addr = s.RedisAddr
-	cfg.OpTimeout = 2 * time.Second
+	cfg.OpTimeout = seconds2 * time.Second
 	s.cache = rediscache.New(&cfg)
 }
 
@@ -253,7 +253,7 @@ func (s *RedisLockSuite) TestRelease_StaleTokenAfterExpiry_ABA() {
 //   - After the lease expires, Renew with the original token returns held=false, nil.
 func (s *RedisLockSuite) TestRenew_AfterExpiryReportsLost() {
 	ctx := context.Background()
-	ttl := 120 * time.Millisecond
+	ttl := millis120 * time.Millisecond
 	lk := s.newLock(ttl)
 	k := s.key("renew-lost")
 
@@ -285,7 +285,7 @@ func (s *RedisLockSuite) TestRenew_AfterExpiryReportsLost() {
 //     contender still loses), and a final Renew still reports held=true.
 func (s *RedisLockSuite) TestRenew_KeepsHoldAlive() {
 	ctx := context.Background()
-	ttl := 300 * time.Millisecond
+	ttl := millis300 * time.Millisecond
 	lk := s.newLock(ttl)
 	k := s.key("renew-alive")
 
@@ -294,7 +294,7 @@ func (s *RedisLockSuite) TestRenew_KeepsHoldAlive() {
 	s.Require().True(ok)
 
 	// Renew before expiry, twice, spanning more than the base TTL in total.
-	for range 2 {
+	for range iterations2 {
 		time.Sleep(ttl * 2 / 3)
 
 		held, err := lk.Renew(ctx, k, tok)

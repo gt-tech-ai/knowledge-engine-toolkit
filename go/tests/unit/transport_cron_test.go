@@ -27,20 +27,20 @@ func cronRegistry(t *testing.T, ran *string) *ops.Registry {
 		return nil
 	})
 	descs := []types.OperationDescriptor{
-		opDesc("drift", types.SafetyReadOnly, types.OpLifecycleLongRunning),
-		opDesc("ask", types.SafetyReadOnly, types.OpLifecycleInteractive),
-		opDesc("wipe", types.SafetyDestructive, types.OpLifecycleBounded),
+		opDesc(textDrift, types.SafetyReadOnly, types.OpLifecycleLongRunning),
+		opDesc(textAsk, types.SafetyReadOnly, types.OpLifecycleInteractive),
+		opDesc(textWipe, types.SafetyDestructive, types.OpLifecycleBounded),
 	}
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-			Deny: []string{"wipe"},
+			Deny: []string{textWipe},
 		},
 		Descriptors: descs,
 		Builders: map[string]ops.Builder[opsEnv]{
-			"drift": run,
-			"ask":   run,
-			"wipe":  run,
+			textDrift: run,
+			textAsk:   run,
+			textWipe:  run,
 		},
 	})
 	require.NoError(t, err)
@@ -67,21 +67,21 @@ func TestTransportCron_Run(t *testing.T) {
 	reg := cronRegistry(t, &ran)
 	require.NoError(
 		t,
-		cron.Run(t.Context(), reg, "drift", []byte(`{"target":"live"}`), nil),
+		cron.Run(t.Context(), reg, textDrift, []byte(`{"target":"live"}`), nil),
 	)
 	assert.Equal(t, "live", ran)
 
 	ran = ""
 
 	for name, want := range map[string]apperr.ErrorCode{
-		"wipe": apperr.CodeForbidden, "nope": apperr.CodeNotFound,
-		"ask": apperr.CodeInvalidInput,
+		textWipe: apperr.CodeForbidden, textNope: apperr.CodeNotFound,
+		textAsk: apperr.CodeInvalidInput,
 	} {
 		err := cron.Run(t.Context(), reg, name, nil, nil)
 		assert.Equal(t, want, apperr.Code(err), name)
 	}
 
-	err := cron.Run(t.Context(), reg, "drift", []byte(`{"targt":"x"}`), nil)
+	err := cron.Run(t.Context(), reg, textDrift, []byte(`{"targt":"x"}`), nil)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Empty(t, ran)
 }

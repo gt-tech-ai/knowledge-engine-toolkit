@@ -17,7 +17,19 @@ const minMethodParts = 2
 // defaultDurationBuckets returns the default histogram bucket boundaries for RPC
 // durations (in seconds). Matches Prometheus DefBuckets.
 func defaultDurationBuckets() []float64 {
-	return []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}
+	return []float64{
+		defaultDurationBucketsResup005,
+		defaultDurationBucketsResup01,
+		defaultDurationBucketsResup025,
+		defaultDurationBucketsResup05,
+		defaultDurationBucketsResup1,
+		defaultDurationBucketsResup25,
+		defaultDurationBucketsResup5,
+		1,
+		defaultDurationBucketsResu2p5,
+		defaultDurationBucketsResu5,
+		defaultDurationBucketsResu10,
+	}
 }
 
 // MetricsServerInterceptor returns a server-side interceptor that records

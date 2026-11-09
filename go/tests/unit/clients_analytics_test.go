@@ -38,7 +38,7 @@ func TestNewFromConfig_DefaultsToStub(t *testing.T) {
 		types.GrainMinute: types.GrainHour, types.GrainHour: types.GrainDay,
 		types.GrainDay: types.GrainMonth, types.GrainMonth: types.GrainMonth,
 	}, cfg.BucketWidth)
-	assert.Equal(t, 8, cfg.MaxConcurrentBuckets)
+	assert.Equal(t, wantMaxConcurrentBuckets8, cfg.MaxConcurrentBuckets)
 
 	ctx := context.Background()
 	store, err := analytics.NewFromConfig(ctx, analytics.Config{}, analytics.Deps{})
@@ -47,12 +47,15 @@ func TestNewFromConfig_DefaultsToStub(t *testing.T) {
 	require.NoError(t, store.Start(ctx))
 	require.NoError(
 		t,
-		store.Write(ctx, []types.Fact{{Cube: "genai_calls", OrgID: "o", TS: time.Now()}}),
+		store.Write(
+			ctx,
+			[]types.Fact{{Cube: textGenaiCalls, OrgID: textO, TS: time.Now()}},
+		),
 	)
 
 	stream, err := store.Aggregate(
 		ctx,
-		types.AggregateQuery{Cube: "genai_calls", OrgID: "o"},
+		types.AggregateQuery{Cube: textGenaiCalls, OrgID: textO},
 	)
 	require.NoError(t, err)
 
@@ -95,9 +98,11 @@ func TestNewFromConfig_CassandraKindDialsNestedConfigAtStart(t *testing.T) {
 
 	cfg.Kind = analytics.KindCassandra
 	cfg.CQL.Kind = cql.KindKeyspaces
-	cfg.CQL.Keyspaces.Region = "us-east-1"
-	cfg.CQL.Keyspace = "analytics"
-	cfg.Cubes = map[string][]types.Grain{"genai_calls": {types.GrainHour, types.GrainDay}}
+	cfg.CQL.Keyspaces.Region = textUsEast1
+	cfg.CQL.Keyspace = textAnalytics
+	cfg.Cubes = map[string][]types.Grain{
+		textGenaiCalls: {types.GrainHour, types.GrainDay},
+	}
 
 	store, err := analytics.NewFromConfig(ctx, cfg, analytics.Deps{
 		Dial: func(_ context.Context, c cql.Config) (interfaces.CQLSession, error) {
@@ -109,15 +114,15 @@ func TestNewFromConfig_CassandraKindDialsNestedConfigAtStart(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got, "no dial at construction")
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(store.Write(ctx, []types.Fact{
-		{Cube: "genai_calls", OrgID: "o", IdempotencyKey: "k"},
+		{Cube: textGenaiCalls, OrgID: textO, IdempotencyKey: textK},
 	})))
 
 	require.NoError(t, store.Start(ctx))
 	require.NoError(t, store.Start(ctx))
 	require.Len(t, got, 1)
 	assert.Equal(t, cql.KindKeyspaces, got[0].Kind)
-	assert.Equal(t, "us-east-1", got[0].Keyspaces.Region)
-	assert.Equal(t, "analytics", got[0].Keyspace)
+	assert.Equal(t, textUsEast1, got[0].Keyspaces.Region)
+	assert.Equal(t, textAnalytics, got[0].Keyspace)
 	assert.Implements(t, (*interfaces.AnalyticsStore)(nil), store)
 	assert.Implements(t, (*interfaces.AnalyticsCompactor)(nil), store)
 

@@ -25,7 +25,7 @@ type widgetCreated struct {
 	WidgetID string `json:"widget_id"`
 }
 
-func (*widgetCreated) Type() events.EventType           { return "widget.created" }
+func (*widgetCreated) Type() events.EventType           { return textWidgetCreated }
 func (e *widgetCreated) Metadata() events.EventMetadata { return e.EventMetadata }
 
 // widgetValue implements Event with value receivers, so a factory can return it by value
@@ -45,7 +45,7 @@ func newWidgetRegistry(tb testing.TB) *events.Registry {
 	reg := events.NewRegistry()
 	require.NoError(
 		tb,
-		reg.Register("widget.created", func() events.Event { return &widgetCreated{} }),
+		reg.Register(textWidgetCreated, func() events.Event { return &widgetCreated{} }),
 	)
 
 	return reg
@@ -81,14 +81,14 @@ func TestRegistryParsesConsumerEvents(t *testing.T) {
 
 	got, ok := evt.(*widgetCreated)
 	require.True(t, ok, "want *widgetCreated, got %T", evt)
-	assert.Equal(t, "w1", got.WidgetID)
+	assert.Equal(t, textW1, got.WidgetID)
 	assert.Equal(t, "e1", got.Metadata().EventID)
 	assert.Equal(t, "t1", got.Metadata().TenantID)
 
 	for name, payload := range map[string]string{
 		"unregistered type":  `{"event_type":"widget.deleted"}`,
 		"missing event_type": `{"widget_id":"w1"}`,
-		"malformed payload":  `{not json`,
+		"malformed payload":  textNotStructured,
 		"undecodable body":   `{"event_type":"widget.created","widget_id":123}`,
 	} {
 		_, err = reg.Parse([]byte(payload))
@@ -97,7 +97,7 @@ func TestRegistryParsesConsumerEvents(t *testing.T) {
 
 	for name, register := range map[string]func() error{
 		"duplicate": func() error {
-			return reg.Register("widget.created", func() events.Event { return &widgetCreated{} })
+			return reg.Register(textWidgetCreated, func() events.Event { return &widgetCreated{} })
 		},
 		"nil factory": func() error { return reg.Register("widget.updated", nil) },
 		"empty type": func() error {
@@ -137,7 +137,7 @@ func TestRegistry_ZeroValueAndConcurrentUse(t *testing.T) {
 
 	require.NoError(
 		t,
-		reg.Register("widget.created", func() events.Event { return &widgetCreated{} }),
+		reg.Register(textWidgetCreated, func() events.Event { return &widgetCreated{} }),
 	)
 
 	const workers = 16
@@ -183,7 +183,7 @@ func TestRegistry_ZeroValueAndConcurrentUse(t *testing.T) {
 //     event parses back equal to its JSON-decoded form (JSON replaces invalid UTF-8 with
 //     U+FFFD).
 func FuzzRegistryRoundTrip(f *testing.F) {
-	f.Add("e1", "t1", "w1")
+	f.Add("e1", "t1", textW1)
 	f.Add("", "", "")
 	f.Add("é\"\\", "tenant/with/slash", "\x00")
 
@@ -192,7 +192,7 @@ func FuzzRegistryRoundTrip(f *testing.F) {
 	f.Fuzz(func(t *testing.T, eventID, tenantID, widgetID string) {
 		in := &widgetCreated{
 			EventID:   eventID,
-			EventType: "widget.created",
+			EventType: textWidgetCreated,
 			TenantID:  tenantID,
 			WidgetID:  widgetID,
 		}

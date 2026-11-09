@@ -36,14 +36,14 @@ func TestSpecHandler_ServesJSONSpec(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		t.Context(),
 		http.MethodGet,
-		"/openapi.json",
+		textOpenapiJSON,
 		http.NoBody,
 	)
 
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	assert.Equal(t, textMediaApplication, rec.Header().Get(textContentType))
 	assert.Equal(t, "public, max-age=3600", rec.Header().Get("Cache-Control"))
 	assert.Equal(t, string(spec), rec.Body.String())
 }
@@ -68,14 +68,14 @@ func TestSpecHandler_EmptySpec(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		t.Context(),
 		http.MethodGet,
-		"/openapi.json",
+		textOpenapiJSON,
 		http.NoBody,
 	)
 
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	assert.Equal(t, textMediaApplication, rec.Header().Get(textContentType))
 	assert.Empty(t, rec.Body.String())
 }
 
@@ -97,7 +97,7 @@ func TestSpecHandler_EmptySpec(t *testing.T) {
 func TestRedocHandler_RendersHTML(t *testing.T) {
 	t.Parallel()
 
-	handler := docs.RedocHandler("/openapi.json", "My API")
+	handler := docs.RedocHandler(textOpenapiJSON, "My API")
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequestWithContext(
@@ -110,7 +110,7 @@ func TestRedocHandler_RendersHTML(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "text/html; charset=utf-8", rec.Header().Get("Content-Type"))
+	assert.Equal(t, "text/html; charset=utf-8", rec.Header().Get(textContentType))
 	assert.Equal(t, "public, max-age=3600", rec.Header().Get("Cache-Control"))
 
 	body := rec.Body.String()

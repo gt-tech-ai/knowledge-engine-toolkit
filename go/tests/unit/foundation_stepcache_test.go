@@ -25,15 +25,29 @@ import (
 func TestFoundationStepcache_Key(t *testing.T) {
 	t.Parallel()
 
-	base := stepcache.Key([]byte("src"), "v1", []string{"run", "./..."})
-	assert.Len(t, base, 64)
-	assert.Equal(t, base, stepcache.Key([]byte("src"), "v1", []string{"run", "./..."}))
+	base := stepcache.Key(
+		[]byte(textSrc),
+		textV1,
+		[]string{textRun, textDotSlashDotDotDot},
+	)
+	assert.Len(t, base, wantBaseLen64)
+	assert.Equal(
+		t,
+		base,
+		stepcache.Key([]byte(textSrc), textV1, []string{textRun, textDotSlashDotDotDot}),
+	)
 
 	for name, other := range map[string]string{
-		"input":   stepcache.Key([]byte("srd"), "v1", []string{"run", "./..."}),
-		"version": stepcache.Key([]byte("src"), "v2", []string{"run", "./..."}),
-		"arg":     stepcache.Key([]byte("src"), "v1", []string{"run", "./x"}),
-		"split":   stepcache.Key([]byte("src"), "v1", []string{"ru", "n./..."}),
+		"input": stepcache.Key([]byte("srd"), textV1, []string{
+			textRun,
+			textDotSlashDotDotDot,
+		}),
+		textVersion: stepcache.Key([]byte(textSrc), "v2", []string{
+			textRun,
+			textDotSlashDotDotDot,
+		}),
+		"arg":   stepcache.Key([]byte(textSrc), textV1, []string{textRun, "./x"}),
+		"split": stepcache.Key([]byte(textSrc), textV1, []string{"ru", "n./..."}),
 	} {
 		assert.NotEqual(t, base, other, name)
 	}
@@ -53,7 +67,7 @@ func TestFoundationStepcache_Kinds(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	key := stepcache.Key([]byte("a"), "v", nil)
+	key := stepcache.Key([]byte(textA), textV, nil)
 
 	off, err := stepcache.NewFromConfig(stepcache.Config{})
 	require.NoError(t, err)
@@ -77,14 +91,14 @@ func TestFoundationStepcache_Kinds(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, hit)
 
-	hit, err = again.Hit(ctx, stepcache.Key([]byte("b"), "v", nil))
+	hit, err = again.Hit(ctx, stepcache.Key([]byte(textB), textV, nil))
 	require.NoError(t, err)
 	assert.False(t, hit)
 
 	_, err = again.Hit(ctx, "../../etc/passwd")
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, err = stepcache.NewFromConfig(stepcache.Config{Kind: "redis"})
+	_, err = stepcache.NewFromConfig(stepcache.Config{Kind: textRedis})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	_, err = stepcache.NewFromConfig(stepcache.Config{Kind: stepcache.KindDir})
@@ -107,7 +121,7 @@ func TestFoundationStepcache_SaltPartitionsKeys(t *testing.T) {
 
 	ctx := t.Context()
 	root := t.TempDir()
-	key := stepcache.Key([]byte("a"), "v", nil)
+	key := stepcache.Key([]byte(textA), textV, nil)
 	open := func(salt string) interfaces.StepCache {
 		c, err := stepcache.NewFromConfig(stepcache.Config{
 			Kind: stepcache.KindDir, Dir: root, Salt: salt,
@@ -116,9 +130,9 @@ func TestFoundationStepcache_SaltPartitionsKeys(t *testing.T) {
 
 		return c
 	}
-	require.NoError(t, open("a").Record(ctx, key))
+	require.NoError(t, open(textA).Record(ctx, key))
 
-	for salt, want := range map[string]bool{"a": true, "b": false, "": false} {
+	for salt, want := range map[string]bool{textA: true, textB: false, "": false} {
 		hit, err := open(salt).Hit(ctx, key)
 		require.NoError(t, err)
 		assert.Equal(t, want, hit, "salt %q", salt)
@@ -150,9 +164,9 @@ func TestFoundationStepcache_SaltDirsAndBinary(t *testing.T) {
 	ctx := t.Context()
 	root, policy := t.TempDir(), t.TempDir()
 	file := filepath.Join(policy, "rules.yaml")
-	require.NoError(t, os.WriteFile(file, []byte("max: 1\n"), 0o600))
+	require.NoError(t, os.WriteFile(file, []byte("max: 1\n"), perm0o600))
 
-	key := stepcache.Key([]byte("a"), "v", nil)
+	key := stepcache.Key([]byte(textA), textV, nil)
 	open := func(dirs ...string) interfaces.StepCache {
 		c, err := stepcache.NewFromConfig(stepcache.Config{
 			Kind: stepcache.KindDir, Dir: root, SaltBinary: true, SaltDirs: dirs,
@@ -167,13 +181,13 @@ func TestFoundationStepcache_SaltDirsAndBinary(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, hit, "unchanged salt dirs hit")
 
-	require.NoError(t, os.WriteFile(file, []byte("max: 2\n"), 0o600))
+	require.NoError(t, os.WriteFile(file, []byte("max: 2\n"), perm0o600))
 
 	hit, err = open(policy).Hit(ctx, key)
 	require.NoError(t, err)
 	assert.False(t, hit, "an edited salt dir misses")
 
-	missing := open(filepath.Join(policy, "absent"))
+	missing := open(filepath.Join(policy, textAbsent))
 
 	_, err = missing.Hit(ctx, key)
 	require.NoError(t, err, "a missing salt dir hashes empty")

@@ -33,7 +33,12 @@ func TestResilienceExtraDefaults_BudgetAndTimeout(t *testing.T) {
 	t.Parallel()
 
 	b := resilience.DefaultBudgetConfig()
-	assert.Equal(t, int32(100), b.MaxRetries, "default retry budget must stay 100")
+	assert.Equal(
+		t,
+		int32(int32Arg100),
+		b.MaxRetries,
+		"default retry budget must stay 100",
+	)
 	require.NoError(t, b.Validate(), "the default budget must validate")
 
 	to := resilience.DefaultTimeoutConfig()
@@ -91,7 +96,7 @@ func TestResilienceValidate_RemainingBranches(t *testing.T) {
 
 	badRatio := resilience.DefaultBulkheadConfig()
 
-	badRatio.BackoffRatio = 1.5
+	badRatio.BackoffRatio = backoffRatio1p5
 	require.Error(t, badRatio.Validate(), "backoff_ratio outside (0,1] must be rejected")
 
 	// Rate limit: default validates, then negative rate and burst are rejected.
@@ -271,19 +276,22 @@ func testLayerConfigValidateRemainingBranchesRest(t *testing.T) {
 	badDrain := workers.Config{RelayDrainBudget: -time.Second}
 	require.Error(t, badDrain.Validate(0), "a negative drain budget must be rejected")
 
-	interval := 10 * time.Second
+	interval := seconds10 * time.Second
 	overrun := workers.Config{RelayInterval: interval, RelayDrainBudget: interval}
 	require.Error(t, overrun.Validate(0),
 		"a drain budget at or above the relay interval must be rejected")
 
-	fits := workers.Config{RelayInterval: interval, RelayDrainBudget: 8 * time.Second}
+	fits := workers.Config{
+		RelayInterval:    interval,
+		RelayDrainBudget: seconds8 * time.Second,
+	}
 	require.NoError(t, fits.Validate(0), "a drain budget inside the interval is valid")
 
-	expiry := 60 * time.Minute
+	expiry := minutes60 * time.Minute
 	badOrphan := workers.Config{
-		Port:        8085,
-		ReaperTTL:   90 * time.Minute, // above expiry (valid)
-		OrphanGrace: 30 * time.Minute, // <= expiry (invalid)
+		Port:        port8085,
+		ReaperTTL:   minutes90 * time.Minute, // above expiry (valid)
+		OrphanGrace: minutes30 * time.Minute, // <= expiry (invalid)
 	}
 	assert.Error(t, badOrphan.Validate(expiry),
 		"an orphan_grace within the multipart presign window must be rejected")

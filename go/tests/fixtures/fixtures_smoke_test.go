@@ -106,7 +106,7 @@ func testFactoriesExerciseEveryDoubleRest3(ctx context.Context, t *testing.T) {
 	assertPanics(t, func() { _, _ = fixtures.PanicPipeline().Execute(ctx, "x") })
 
 	// Must: the value through, a constructor error as a panic.
-	if got := fixtures.Must(7, nil); got != 7 {
+	if got := fixtures.Must(mustArg7, nil); got != got7 {
 		t.Errorf("Must = %d, want 7", got)
 	}
 
@@ -116,7 +116,7 @@ func testFactoriesExerciseEveryDoubleRest3(ctx context.Context, t *testing.T) {
 	)
 
 	// Retrier: fails twice then succeeds → 3 attempts.
-	retrier, attempts := fixtures.StubRetrier(2, false)
+	retrier, attempts := fixtures.StubRetrier(failUntil2, false)
 	calls := 0
 
 	_ = retrier.Retry(ctx, func() error {
@@ -140,7 +140,7 @@ func testFactoriesExerciseEveryDoubleRest(
 
 	var err error
 
-	if attempts() != 3 {
+	if attempts() != attempts3 {
 		t.Fatalf("StubRetrier attempts: %d, want 3", attempts())
 	}
 
@@ -203,17 +203,17 @@ func testFactoriesExerciseEveryDoubleRest2(
 
 	// StubStore: in-memory CRUD is observable end-to-end.
 	store := fixtures.StubStore()
-	created, err := store.Create(ctx, &fixtures.TestEntity{ID: "e1", Name: "alice"})
+	created, err := store.Create(ctx, &fixtures.TestEntity{ID: textE1, Name: textAlice})
 
-	if err != nil || created.Name != "alice" {
+	if err != nil || created.Name != textAlice {
 		t.Fatalf("StubStore.Create: %+v, %v", created, err)
 	}
 
-	if got, _ := store.Get(ctx, "e1"); got == nil || got.Name != "alice" {
+	if got, _ := store.Get(ctx, textE1); got == nil || got.Name != textAlice {
 		t.Fatalf("StubStore.Get after Create: %+v", got)
 	}
 
-	if ok, _ := store.Exists(ctx, "e1"); !ok {
+	if ok, _ := store.Exists(ctx, textE1); !ok {
 		t.Fatal("StubStore.Exists after Create should be true")
 	}
 
@@ -229,8 +229,8 @@ func testFactoriesExerciseEveryDoubleRest4(
 ) {
 	t.Helper()
 
-	_ = store.Delete(ctx, "e1")
-	if got, _ := store.Get(ctx, "e1"); got != nil {
+	_ = store.Delete(ctx, textE1)
+	if got, _ := store.Get(ctx, textE1); got != nil {
 		t.Fatalf("StubStore.Get after Delete: %+v, want nil", got)
 	}
 

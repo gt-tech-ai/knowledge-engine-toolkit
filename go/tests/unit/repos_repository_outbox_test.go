@@ -49,29 +49,29 @@ func TestRepositoryOutbox_ClaimsOnceAndRetriesTheRest(t *testing.T) {
 
 		return ok
 	})
-	id, next, cutoff := uuid.New(), time.Unix(100, 0), time.Unix(50, 0)
-	claimed := []types.OutboxRecord{{ID: id, Lane: "facts"}}
+	id, next, cutoff := uuid.New(), time.Unix(sec100, 0), time.Unix(sec50, 0)
+	claimed := []types.OutboxRecord{{ID: id, Lane: textFacts}}
 	conflict := apperr.New(apperr.CodeConflict, "not pending")
 
-	store.EXPECT().Claim(bounded, "facts", 0, 10).Return(claimed, nil)
+	store.EXPECT().Claim(bounded, textFacts, 0, 10).Return(claimed, nil)
 	store.EXPECT().MarkSent(bounded, id).Return(conflict)
-	store.EXPECT().Retry(bounded, id, next, "boom").Return(nil)
-	store.EXPECT().Park(bounded, id, "boom").Return(nil)
-	store.EXPECT().Stats(bounded, "facts").Return(types.OutboxStats{Pending: 3}, nil)
-	store.EXPECT().DeleteSentBefore(bounded, cutoff).Return(7, nil)
+	store.EXPECT().Retry(bounded, id, next, textBoom).Return(nil)
+	store.EXPECT().Park(bounded, id, textBoom).Return(nil)
+	store.EXPECT().Stats(bounded, textFacts).Return(types.OutboxStats{Pending: 3}, nil)
+	store.EXPECT().DeleteSentBefore(bounded, cutoff).Return(rets7, nil)
 
-	got, err := repo.Claim(t.Context(), "facts", 0, 10)
+	got, err := repo.Claim(t.Context(), textFacts, 0, limit10)
 	require.NoError(t, err)
 	assert.Equal(t, claimed, got)
 	assert.Equal(t, apperr.CodeConflict, apperr.Code(repo.MarkSent(t.Context(), id)))
-	require.NoError(t, repo.Retry(t.Context(), id, next, "boom"))
-	require.NoError(t, repo.Park(t.Context(), id, "boom"))
+	require.NoError(t, repo.Retry(t.Context(), id, next, textBoom))
+	require.NoError(t, repo.Park(t.Context(), id, textBoom))
 
-	stats, err := repo.Stats(t.Context(), "facts")
+	stats, err := repo.Stats(t.Context(), textFacts)
 	require.NoError(t, err)
 	assert.Equal(t, types.OutboxStats{Pending: 3}, stats)
 
 	n, err := repo.DeleteSentBefore(t.Context(), cutoff)
 	require.NoError(t, err)
-	assert.Equal(t, 7, n)
+	assert.Equal(t, equalArg7, n)
 }

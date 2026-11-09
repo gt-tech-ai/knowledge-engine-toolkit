@@ -47,7 +47,7 @@ func TestMemoryMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 	// The consumer runs on its own context, with no span of the publisher's.
 	consumer := oteltrace.ContextWithSpanContext(ctx, oteltrace.SpanContext{})
 	broker := memory.NewBroker()
-	require.NoError(t, memory.NewPublisher(broker).Publish(ctx, "topic", []byte("x")))
+	require.NoError(t, memory.NewPublisher(broker).Publish(ctx, "topic", []byte(textX)))
 
 	sub := memory.NewSubscriber(broker, client.Base{})
 	got := make(chan oteltrace.TraceID, 1)
@@ -145,8 +145,8 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest3(
 
 	pub, err := sqs.NewPublisher(ctx, sqs.Config{API: api})
 	require.NoError(t, err)
-	require.NoError(t, pub.Publish(ctx, "q", []byte("x")))
-	require.NoError(t, pub.PublishBatch(ctx, "q", [][]byte{[]byte("x")}))
+	require.NoError(t, pub.Publish(ctx, textQ, []byte(textX)))
+	require.NoError(t, pub.PublishBatch(ctx, textQ, [][]byte{[]byte(textX)}))
 	require.Contains(t, sent, "traceparent")
 	assert.Equal(t, "String", aws.ToString(sent["traceparent"].DataType))
 	assert.Contains(
@@ -184,7 +184,7 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest4(
 			asked = in.MessageAttributeNames
 
 			return &awssqs.ReceiveMessageOutput{Messages: []sqstypes.Message{{
-				MessageId: aws.String("m1"), Body: aws.String("x"),
+				MessageId: aws.String(textM1), Body: aws.String(textX),
 				ReceiptHandle: aws.String("rh"), MessageAttributes: sent,
 			}}}, nil
 		}
@@ -226,7 +226,7 @@ func testSQSMessagingHandlerContinuesThePublishersTraceRest2(
 
 	got := make(chan delivery, 1)
 
-	require.NoError(t, sub.Subscribe(consumer, "q",
+	require.NoError(t, sub.Subscribe(consumer, textQ,
 		func(ctx context.Context, m *interfaces.Message) error {
 			got <- delivery{trace: traceOf(ctx), metadata: m.Metadata}
 

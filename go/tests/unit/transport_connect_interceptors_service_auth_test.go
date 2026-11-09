@@ -31,17 +31,17 @@ func TestStaticTokenValidator_PerCaller(t *testing.T) {
 	t.Parallel()
 
 	v := interceptors.NewStaticTokenValidator(map[string]string{
-		"reports": "tok-reports",
-		"orders":  "tok-orders",
+		textReports: "tok-reports",
+		textOrders:  textTokOrders,
 	})
 
 	caller, ok := v.Validate("tok-reports")
 	assert.True(t, ok)
-	assert.Equal(t, "reports", caller)
+	assert.Equal(t, textReports, caller)
 
-	caller, ok = v.Validate("tok-orders")
+	caller, ok = v.Validate(textTokOrders)
 	assert.True(t, ok)
-	assert.Equal(t, "orders", caller)
+	assert.Equal(t, textOrders, caller)
 
 	_, ok = v.Validate("tok-wrong")
 	assert.False(t, ok, "an unknown token must not resolve to any caller")
@@ -66,16 +66,16 @@ func TestStaticTokenValidator_DualTokenWindow(t *testing.T) {
 	t.Parallel()
 
 	v := interceptors.NewStaticTokenValidator(map[string]string{
-		"reports": "tok-new, tok-old",
+		textReports: "tok-new, tok-old",
 	})
 
 	caller, ok := v.Validate("tok-new")
 	require.True(t, ok)
-	assert.Equal(t, "reports", caller)
+	assert.Equal(t, textReports, caller)
 
 	caller, ok = v.Validate("tok-old")
 	require.True(t, ok, "the previous token must still be accepted during rotation")
-	assert.Equal(t, "reports", caller)
+	assert.Equal(t, textReports, caller)
 
 	_, ok = v.Validate("tok-unrelated")
 	assert.False(t, ok)
@@ -98,7 +98,7 @@ func TestStaticTokenValidator_EmptyMapRejectsAll(t *testing.T) {
 	_, ok := empty.Validate("anything")
 	assert.False(t, ok)
 
-	blank := interceptors.NewStaticTokenValidator(map[string]string{"reports": "  , "})
+	blank := interceptors.NewStaticTokenValidator(map[string]string{textReports: "  , "})
 
 	_, ok = blank.Validate("anything")
 	assert.False(t, ok, "a caller with only blank tokens must be dropped")
@@ -135,7 +135,7 @@ func TestServiceAuthInterceptor_Unary(t *testing.T) {
 	t.Parallel()
 
 	validator := interceptors.NewStaticTokenValidator(
-		map[string]string{"orders": "tok-orders"},
+		map[string]string{textOrders: textTokOrders},
 	)
 	interceptor := interceptors.NewServiceAuthInterceptor(
 		validator,
@@ -162,13 +162,13 @@ func TestServiceAuthInterceptor_Unary(t *testing.T) {
 			next,
 		)(
 			context.Background(),
-			bearerReq("tok-orders"),
+			bearerReq(textTokOrders),
 		)
 		require.NoError(t, err)
 		assert.NotNil(t, resp)
 		assert.True(t, ran, "handler must run for an authenticated caller")
 		assert.True(t, gotOK)
-		assert.Equal(t, "orders", gotCaller)
+		assert.Equal(t, textOrders, gotCaller)
 	})
 
 	testServiceAuthInterceptorUnaryRest(t, interceptor)
@@ -224,7 +224,7 @@ func TestServiceAuthInterceptor_StubAndAudit(t *testing.T) {
 	t.Parallel()
 
 	validator := interceptors.NewStaticTokenValidator(
-		map[string]string{"orders": "tok-orders"},
+		map[string]string{textOrders: textTokOrders},
 	)
 
 	t.Run("stub bypass admits with synthetic caller", func(t *testing.T) {
@@ -290,7 +290,7 @@ func TestServiceAuthInterceptor_Streaming(t *testing.T) {
 	t.Parallel()
 
 	validator := interceptors.NewStaticTokenValidator(
-		map[string]string{"orders": "tok-orders"},
+		map[string]string{textOrders: textTokOrders},
 	)
 	interceptor := interceptors.NewServiceAuthInterceptor(
 		validator,
@@ -356,9 +356,9 @@ func testServiceAuthInterceptorStreamingRest(
 			next,
 		)(
 			context.Background(),
-			newConn("tok-orders"),
+			newConn(textTokOrders),
 		)
 		require.NoError(t, err)
-		assert.Equal(t, "orders", caller)
+		assert.Equal(t, textOrders, caller)
 	})
 }

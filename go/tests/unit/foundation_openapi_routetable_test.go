@@ -50,9 +50,9 @@ func sortedEntries(entries []openapi.RouteEntry) []openapi.RouteEntry {
 // CREATE / UPDATE and a resource-shaped POST action (Confirm).
 func docMessages(s fixtures.JSONAPISetter) []*descriptorpb.DescriptorProto {
 	return []*descriptorpb.DescriptorProto{
-		fixtures.ResourceMessage(s, "Document", "documents", "document", ""),
-		fixtures.ResourceMessage(s, "DocumentList", "documents", "", "documents"),
-		fixtures.EmptyMessage("Empty"),
+		fixtures.ResourceMessage(s, textDocument2, textDocuments, textDocument, ""),
+		fixtures.ResourceMessage(s, textDocumentlist, textDocuments, "", textDocuments),
+		fixtures.EmptyMessage(textEmpty2),
 		fixtures.EmptyMessage("CreateDocumentRequest"),
 		fixtures.EmptyMessage("UpdateDocumentRequest"),
 	}
@@ -60,16 +60,16 @@ func docMessages(s fixtures.JSONAPISetter) []*descriptorpb.DescriptorProto {
 
 func docMethods(s fixtures.JSONAPISetter) []*descriptorpb.MethodDescriptorProto {
 	return []*descriptorpb.MethodDescriptorProto{
-		fixtures.Method("ListDocuments", "Empty", "DocumentList",
-			s.MethodOpts("GET", "/api/v1/documents", false)),
-		fixtures.Method("GetDocument", "Empty", "Document",
-			s.MethodOpts("GET", "/api/v1/documents/{document_id}", false)),
-		fixtures.Method("CreateDocument", "CreateDocumentRequest", "Document",
-			s.MethodOpts("POST", "/api/v1/documents", false)),
-		fixtures.Method("UpdateDocument", "UpdateDocumentRequest", "Document",
-			s.MethodOpts("PATCH", "/api/v1/documents/{document_id}", false)),
-		fixtures.Method("ConfirmDocument", "Empty", "Document",
-			s.MethodOpts("POST", "/api/v1/documents/{document_id}/confirm", true)),
+		fixtures.Method("ListDocuments", textEmpty2, textDocumentlist,
+			s.MethodOpts(textGet3, textAPIV1Documents, false)),
+		fixtures.Method(textGetdocument, textEmpty2, textDocument2,
+			s.MethodOpts(textGet3, textAPIV1DocumentsDocument, false)),
+		fixtures.Method("CreateDocument", "CreateDocumentRequest", textDocument2,
+			s.MethodOpts(textPost, textAPIV1Documents, false)),
+		fixtures.Method("UpdateDocument", "UpdateDocumentRequest", textDocument2,
+			s.MethodOpts(textPatch, textAPIV1DocumentsDocument, false)),
+		fixtures.Method("ConfirmDocument", textEmpty2, textDocument2,
+			s.MethodOpts(textPost, textAPIV1DocumentsDocument2, true)),
 	}
 }
 
@@ -143,22 +143,29 @@ func runDocConvert(t *testing.T, swagger string) map[string]any {
 	fds := fixtures.BuildRouteFDS(t, s.FileOptsWithService(),
 		docMessages(s), docMethods(s))
 
-	descPath := filepath.Join(t.TempDir(), "d.binpb")
-	require.NoError(t, os.WriteFile(descPath, fds, 0o600))
+	descPath := filepath.Join(t.TempDir(), textDBinpb)
+	require.NoError(t, os.WriteFile(descPath, fds, perm0o600))
 
 	routes, err := openapi.BuildRouteTable(fds, nil)
 	require.NoError(t, err)
 
-	inDir := filepath.Join(t.TempDir(), "in")
-	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o750))
+	inDir := filepath.Join(t.TempDir(), textIn)
+	require.NoError(t, os.MkdirAll(filepath.Join(inDir, textTest, textV1), perm0o750))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o600,
+		filepath.Join(
+			inDir,
+			textTest,
+			textV1,
+			textTestSwaggerJSON,
+		),
+		[]byte(swagger),
+		perm0o600,
 	))
 
 	res, err := openapi.Convert(
 		fsys.NewOSFS(),
 		inDir,
-		filepath.Join(t.TempDir(), "out"),
+		filepath.Join(t.TempDir(), textOut),
 		descPath,
 		routes, docHeaders(),
 	)
@@ -184,9 +191,13 @@ func successSchema(
 ) map[string]any {
 	t.Helper()
 
-	paths := openapiAsMap(t, spec["paths"], "paths")
+	paths := openapiAsMap(t, spec[textPaths], textPaths)
 	op := openapiAsMap(t, openapiAsMap(t, paths[path], path)[method], method)
-	resp := openapiAsMap(t, openapiAsMap(t, op["responses"], "responses")["200"], "200")
+	resp := openapiAsMap(
+		t,
+		openapiAsMap(t, op["responses"], "responses")[text200],
+		text200,
+	)
 	content := openapiAsMap(t, resp["content"], "content")
 
 	return openapiAsMap(t,
@@ -218,27 +229,32 @@ func TestRouteTable_EmitsEntryPerHTTPRPC(t *testing.T) {
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 
 	messages := []*descriptorpb.DescriptorProto{
-		fixtures.ResourceMessage(s, "Document", "documents", "document", ""),
-		fixtures.ResourceMessage(s, "DocumentList", "documents", "", "documents"),
-		fixtures.EmptyMessage("Empty"),
+		fixtures.ResourceMessage(s, textDocument2, textDocuments, textDocument, ""),
+		fixtures.ResourceMessage(s, textDocumentlist, textDocuments, "", textDocuments),
+		fixtures.EmptyMessage(textEmpty2),
 	}
 	methods := []*descriptorpb.MethodDescriptorProto{
-		fixtures.Method("ListDocuments", "Empty", "DocumentList",
-			s.MethodOpts("GET", "/api/v1/documents", false)),
-		fixtures.Method("GetDocument", "Empty", "Document",
-			s.MethodOpts("GET", "/api/v1/documents/{document_id}", false)),
-		fixtures.Method("CreateDocument", "Document", "Document",
-			s.MethodOpts("POST", "/api/v1/documents", false)),
-		fixtures.Method("UpdateDocument", "Document", "Document",
-			s.MethodOpts("PATCH", "/api/v1/documents/{document_id}", false)),
-		fixtures.Method("DeleteDocument", "Empty", "Empty",
-			s.MethodOpts("DELETE", "/api/v1/documents/{document_id}", false)),
-		fixtures.Method("ConfirmDocument", "Empty", "Document",
-			s.MethodOpts("POST", "/api/v1/documents/{document_id}/confirm", true)),
-		fixtures.Method("GetDocumentAliased", "Empty", "Document",
-			s.MethodOpts("GET", "/api/v1/aliases/{alias}", false,
-				[2]string{"GET", "/api/v1/aliases/by-name/{name}"})),
-		fixtures.Method("InternalPing", "Empty", "Empty", nil), // gRPC-only → skipped
+		fixtures.Method("ListDocuments", textEmpty2, textDocumentlist,
+			s.MethodOpts(textGet3, textAPIV1Documents, false)),
+		fixtures.Method(textGetdocument, textEmpty2, textDocument2,
+			s.MethodOpts(textGet3, textAPIV1DocumentsDocument, false)),
+		fixtures.Method("CreateDocument", textDocument2, textDocument2,
+			s.MethodOpts(textPost, textAPIV1Documents, false)),
+		fixtures.Method("UpdateDocument", textDocument2, textDocument2,
+			s.MethodOpts(textPatch, textAPIV1DocumentsDocument, false)),
+		fixtures.Method("DeleteDocument", textEmpty2, textEmpty2,
+			s.MethodOpts(textDelete2, textAPIV1DocumentsDocument, false)),
+		fixtures.Method("ConfirmDocument", textEmpty2, textDocument2,
+			s.MethodOpts(textPost, textAPIV1DocumentsDocument2, true)),
+		fixtures.Method("GetDocumentAliased", textEmpty2, textDocument2,
+			s.MethodOpts(textGet3, "/api/v1/aliases/{alias}", false,
+				[2]string{textGet3, "/api/v1/aliases/by-name/{name}"})),
+		fixtures.Method(
+			"InternalPing",
+			textEmpty2,
+			textEmpty2,
+			nil,
+		), // gRPC-only → skipped
 	}
 
 	fds := fixtures.BuildRouteFDS(
@@ -271,41 +287,41 @@ func testRouteTableEmitsEntryPerHTTPRPCTable8() []openapi.RouteEntry {
 func testRouteTableEmitsEntryPerHTTPRPCTable8Part1() []openapi.RouteEntry {
 	return []openapi.RouteEntry{
 		{
-			Method:       "GET",
+			Method:       textGet3,
 			PathTemplate: "/api/v1/aliases/by-name/{name}",
 			Role:         openapi.RoleGetOne,
-			ResourceType: "documents",
-			SingleKey:    "document",
+			ResourceType: textDocuments,
+			SingleKey:    textDocument,
 			RPC:          "test.v1.TestService.GetDocumentAliased",
 		},
 		{
-			Method:       "GET",
+			Method:       textGet3,
 			PathTemplate: "/api/v1/aliases/{alias}",
 			Role:         openapi.RoleGetOne,
-			ResourceType: "documents",
-			SingleKey:    "document",
+			ResourceType: textDocuments,
+			SingleKey:    textDocument,
 			RPC:          "test.v1.TestService.GetDocumentAliased",
 		},
 		{
-			Method:        "GET",
-			PathTemplate:  "/api/v1/documents",
+			Method:        textGet3,
+			PathTemplate:  textAPIV1Documents,
 			Role:          openapi.RoleList,
-			ResourceType:  "documents",
-			CollectionKey: "documents",
+			ResourceType:  textDocuments,
+			CollectionKey: textDocuments,
 			RPC:           "test.v1.TestService.ListDocuments",
 		},
 		{
-			Method:          "POST",
-			PathTemplate:    "/api/v1/documents",
+			Method:          textPost,
+			PathTemplate:    textAPIV1Documents,
 			Role:            openapi.RoleCreate,
-			ResourceType:    "documents",
-			SingleKey:       "document",
+			ResourceType:    textDocuments,
+			SingleKey:       textDocument,
 			RequestEnvelope: true,
 			RPC:             "test.v1.TestService.CreateDocument",
 		},
 		{
-			Method:       "DELETE",
-			PathTemplate: "/api/v1/documents/{document_id}",
+			Method:       textDelete2,
+			PathTemplate: textAPIV1DocumentsDocument,
 			Role:         openapi.RoleDelete,
 			RPC:          "test.v1.TestService.DeleteDocument",
 		},
@@ -317,28 +333,28 @@ func testRouteTableEmitsEntryPerHTTPRPCTable8Part1() []openapi.RouteEntry {
 func testRouteTableEmitsEntryPerHTTPRPCTable8Part2() []openapi.RouteEntry {
 	return []openapi.RouteEntry{
 		{
-			Method:       "GET",
-			PathTemplate: "/api/v1/documents/{document_id}",
+			Method:       textGet3,
+			PathTemplate: textAPIV1DocumentsDocument,
 			Role:         openapi.RoleGetOne,
-			ResourceType: "documents",
-			SingleKey:    "document",
+			ResourceType: textDocuments,
+			SingleKey:    textDocument,
 			RPC:          "test.v1.TestService.GetDocument",
 		},
 		{
-			Method:          "PATCH",
-			PathTemplate:    "/api/v1/documents/{document_id}",
+			Method:          textPatch,
+			PathTemplate:    textAPIV1DocumentsDocument,
 			Role:            openapi.RoleUpdate,
-			ResourceType:    "documents",
-			SingleKey:       "document",
+			ResourceType:    textDocuments,
+			SingleKey:       textDocument,
 			RequestEnvelope: true,
 			RPC:             "test.v1.TestService.UpdateDocument",
 		},
 		{
-			Method:       "POST",
-			PathTemplate: "/api/v1/documents/{document_id}/confirm",
+			Method:       textPost,
+			PathTemplate: textAPIV1DocumentsDocument2,
 			Role:         openapi.RoleAction,
-			ResourceType: "documents",
-			SingleKey:    "document",
+			ResourceType: textDocuments,
+			SingleKey:    textDocument,
 			RPC:          "test.v1.TestService.ConfirmDocument",
 		},
 	}
@@ -361,10 +377,10 @@ func TestRouteTable_ErrorsOnUnclassifiableRPC(t *testing.T) {
 	fds := fixtures.BuildRouteFDS(
 		t,
 		s.FileOptsWithService(),
-		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage("Empty")},
+		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmpty2)},
 		[]*descriptorpb.MethodDescriptorProto{
-			fixtures.Method("MarkRead", "Empty", "Empty",
-				s.MethodOpts("POST", "/api/v1/notifications/mark-read", false)),
+			fixtures.Method("MarkRead", textEmpty2, textEmpty2,
+				s.MethodOpts(textPost, "/api/v1/notifications/mark-read", false)),
 		},
 	)
 
@@ -393,10 +409,10 @@ func TestRouteTable_ExemptSkipsUnclassifiable(t *testing.T) {
 	fds := fixtures.BuildRouteFDS(
 		t,
 		s.FileOptsWithService(),
-		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage("Empty")},
+		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmpty2)},
 		[]*descriptorpb.MethodDescriptorProto{
-			fixtures.Method("MarkRead", "Empty", "Empty",
-				s.MethodOpts("POST", "/api/v1/notifications/mark-read", false)),
+			fixtures.Method("MarkRead", textEmpty2, textEmpty2,
+				s.MethodOpts(textPost, "/api/v1/notifications/mark-read", false)),
 		},
 	)
 
@@ -427,36 +443,36 @@ func TestOpenAPI_MarksDataRequiredByRole(t *testing.T) {
 	spec := runDocConvert(t, docSwagger)
 
 	// GET_ONE: single data object required.
-	getEnv := successSchema(t, spec, "/api/v1/documents/{document_id}", "get")
-	require.Contains(t, getEnv["required"], "data")
+	getEnv := successSchema(t, spec, textAPIV1DocumentsDocument, textGet)
+	require.Contains(t, getEnv["required"], textData)
 
 	getData := openapiAsMap(
 		t,
-		openapiAsMap(t, getEnv["properties"], "props")["data"],
-		"data",
+		openapiAsMap(t, getEnv["properties"], textProps)[textData],
+		textData,
 	)
-	assert.Equal(t, "object", getData["type"])
+	assert.Equal(t, "object", getData[textType])
 
 	// LIST: data array + meta.
-	listEnv := successSchema(t, spec, "/api/v1/documents", "get")
+	listEnv := successSchema(t, spec, textAPIV1Documents, textGet)
 	listData := openapiAsMap(
 		t,
-		openapiAsMap(t, listEnv["properties"], "props")["data"],
-		"data",
+		openapiAsMap(t, listEnv["properties"], textProps)[textData],
+		textData,
 	)
-	assert.Equal(t, "array", listData["type"])
-	assert.Contains(t, openapiAsMap(t, listEnv["properties"], "props"), "meta")
+	assert.Equal(t, "array", listData[textType])
+	assert.Contains(t, openapiAsMap(t, listEnv["properties"], textProps), textMeta)
 
 	// ACTION: meta-only, never a data resource.
 	confirmEnv := successSchema(
 		t,
 		spec,
-		"/api/v1/documents/{document_id}/confirm",
+		textAPIV1DocumentsDocument2,
 		"post",
 	)
-	confirmProps := openapiAsMap(t, confirmEnv["properties"], "props")
-	assert.Contains(t, confirmProps, "meta")
-	assert.NotContains(t, confirmProps, "data",
+	confirmProps := openapiAsMap(t, confirmEnv["properties"], textProps)
+	assert.Contains(t, confirmProps, textMeta)
+	assert.NotContains(t, confirmProps, textData,
 		"a resource-shaped ACTION must be meta-only, not wrapped as a single resource")
 }
 
@@ -476,7 +492,7 @@ func TestOpenAPI_WriteOpsGetRequestEnvelope(t *testing.T) {
 	t.Parallel()
 
 	spec := runDocConvert(t, docSwagger)
-	paths := openapiAsMap(t, spec["paths"], "paths")
+	paths := openapiAsMap(t, spec[textPaths], textPaths)
 
 	assertEnvelopedBody := func(path, method, attrsSchema string) {
 		op := openapiAsMap(t, openapiAsMap(t, paths[path], path)[method], method)
@@ -489,24 +505,24 @@ func TestOpenAPI_WriteOpsGetRequestEnvelope(t *testing.T) {
 			openapiAsMap(t, content["application/vnd.api+json"], "aj")["schema"],
 			"schema",
 		)
-		require.Contains(t, schema["required"], "data")
+		require.Contains(t, schema["required"], textData)
 
 		data := openapiAsMap(
 			t,
-			openapiAsMap(t, schema["properties"], "props")["data"],
-			"data",
+			openapiAsMap(t, schema["properties"], textProps)[textData],
+			textData,
 		)
 		dataProps := openapiAsMap(t, data["properties"], "dp")
-		require.Contains(t, dataProps, "type")
+		require.Contains(t, dataProps, textType)
 
 		attrs := openapiAsMap(t, dataProps["attributes"], "attributes")
-		assert.Equal(t, "#/components/schemas/"+attrsSchema, attrs["$ref"],
+		assert.Equal(t, "#/components/schemas/"+attrsSchema, attrs[textRef],
 			"%s %s attributes schema", method, path)
 	}
 
-	assertEnvelopedBody("/api/v1/documents", "post", "CreateDocumentRequestAttributes")
+	assertEnvelopedBody(textAPIV1Documents, "post", "CreateDocumentRequestAttributes")
 	assertEnvelopedBody(
-		"/api/v1/documents/{document_id}",
+		textAPIV1DocumentsDocument,
 		"patch",
 		"UpdateDocumentRequestAttributes",
 	)
@@ -519,7 +535,7 @@ func TestOpenAPI_WriteOpsGetRequestEnvelope(t *testing.T) {
 
 	// GET has no request body.
 	getOp := openapiAsMap(t,
-		openapiAsMap(t, paths["/api/v1/documents/{document_id}"], "p")["get"], "get")
+		openapiAsMap(t, paths[textAPIV1DocumentsDocument], textP)[textGet], textGet)
 	assert.NotContains(t, getOp, "requestBody")
 }
 
@@ -551,12 +567,16 @@ func TestOpenAPI_RouteLookupNormalizesBasePath(t *testing.T) {
       }
     }`
 	spec := runDocConvert(t, relSwagger)
-	env := successSchema(t, spec, "/documents", "get")
-	data := openapiAsMap(t, openapiAsMap(t, env["properties"], "props")["data"], "data")
+	env := successSchema(t, spec, "/documents", textGet)
+	data := openapiAsMap(
+		t,
+		openapiAsMap(t, env["properties"], textProps)[textData],
+		textData,
+	)
 	assert.Equal(
 		t,
 		"array",
-		data["type"],
+		data[textType],
 		"relative path key must still resolve to its LIST RouteEntry after base-path "+
 			"normalization",
 	)
@@ -576,19 +596,19 @@ func TestOpenAPI_ResourceKeyConflictStillErrors(t *testing.T) {
 
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	messages := []*descriptorpb.DescriptorProto{
-		fixtures.ResourceMessage(s, "Document", "documents", "document", ""),
+		fixtures.ResourceMessage(s, textDocument2, textDocuments, textDocument, ""),
 		fixtures.ResourceMessage(
 			s,
 			"Other",
 			"others",
-			"document",
+			textDocument,
 			"",
 		), // shares single key "document"
-		fixtures.EmptyMessage("Empty"),
+		fixtures.EmptyMessage(textEmpty2),
 	}
 	methods := []*descriptorpb.MethodDescriptorProto{
-		fixtures.Method("GetDocument", "Empty", "Document",
-			s.MethodOpts("GET", "/api/v1/documents/{document_id}", false)),
+		fixtures.Method(textGetdocument, textEmpty2, textDocument2,
+			s.MethodOpts(textGet3, textAPIV1DocumentsDocument, false)),
 	}
 	fds := fixtures.BuildRouteFDS(
 		t,
@@ -597,20 +617,20 @@ func TestOpenAPI_ResourceKeyConflictStillErrors(t *testing.T) {
 		methods,
 	)
 
-	descPath := filepath.Join(t.TempDir(), "d.binpb")
-	require.NoError(t, os.WriteFile(descPath, fds, 0o600))
+	descPath := filepath.Join(t.TempDir(), textDBinpb)
+	require.NoError(t, os.WriteFile(descPath, fds, perm0o600))
 
-	inDir := filepath.Join(t.TempDir(), "in")
-	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o750))
+	inDir := filepath.Join(t.TempDir(), textIn)
+	require.NoError(t, os.MkdirAll(filepath.Join(inDir, textTest, textV1), perm0o750))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(inDir, "test", "v1", "test.swagger.json"),
-		[]byte(`{"swagger":"2.0","info":{"title":"t"},"paths":{}}`), 0o600,
+		filepath.Join(inDir, textTest, textV1, textTestSwaggerJSON),
+		[]byte(`{"swagger":"2.0","info":{"title":"t"},"paths":{}}`), perm0o600,
 	))
 
 	_, err := openapi.Convert(
 		fsys.NewOSFS(),
 		inDir,
-		filepath.Join(t.TempDir(), "out"),
+		filepath.Join(t.TempDir(), textOut),
 		descPath,
 		nil, nil,
 	)
@@ -691,27 +711,16 @@ func TestOpenAPI_ResourcelessGetOneIsMetaOnly(t *testing.T) {
 
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	messages := []*descriptorpb.DescriptorProto{
-		fixtures.EmptyMessage("Empty"),
+		fixtures.EmptyMessage(textEmpty2),
 		fixtures.EmptyMessage("NoteResp"), // no (jsonapi.v1.resource)
 	}
 	methods := []*descriptorpb.MethodDescriptorProto{
-		fixtures.Method("GetNote", "Empty", "NoteResp",
-			s.MethodOpts("GET", "/api/v1/notes/{note_id}", false)),
+		fixtures.Method("GetNote", textEmpty2, "NoteResp",
+			s.MethodOpts(textGet3, "/api/v1/notes/{note_id}", false)),
 	}
-	fds := fixtures.BuildRouteFDS(
-		t,
-		s.FileOptsWithService(),
-		messages,
-		methods,
+	descPath, routes, inDir := openAPIFixtureDirs(
+		t, fixtures.BuildRouteFDS(t, s.FileOptsWithService(), messages, methods),
 	)
-	descPath := filepath.Join(t.TempDir(), "d.binpb")
-	require.NoError(t, os.WriteFile(descPath, fds, 0o600))
-
-	routes, err := openapi.BuildRouteTable(fds, nil)
-	require.NoError(t, err)
-
-	inDir := filepath.Join(t.TempDir(), "in")
-	require.NoError(t, os.MkdirAll(filepath.Join(inDir, "test", "v1"), 0o750))
 
 	swagger := `{"swagger":"2.0","info":{"title":"t"},
       "paths":{"/api/v1/notes/{note_id}":{"get":{"operationId":"GetNote",
@@ -719,14 +728,37 @@ func TestOpenAPI_ResourcelessGetOneIsMetaOnly(t *testing.T) {
           "schema":{"$ref":"#/definitions/NoteResponse"}}}}}},
       "definitions":{"NoteResponse":{"type":"object",
         "properties":{"status":{"type":"string"}}}}}`
+
+	testOpenAPIResourcelessGetOneIsMetaOnlyRest(t, descPath, routes, inDir, swagger)
+}
+
+// testOpenAPIResourcelessGetOneIsMetaOnlyRest continues
+// TestOpenAPI_ResourcelessGetOneIsMetaOnly with its remaining steps.
+func testOpenAPIResourcelessGetOneIsMetaOnlyRest(
+	t *testing.T,
+	descPath string,
+	routes map[string][]openapi.RouteEntry,
+	inDir, swagger string,
+) {
+	t.Helper()
+
+	var err error
+
 	require.NoError(t, os.WriteFile(
-		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o600,
+		filepath.Join(
+			inDir,
+			textTest,
+			textV1,
+			textTestSwaggerJSON,
+		),
+		[]byte(swagger),
+		perm0o600,
 	))
 
 	res, err := openapi.Convert(
 		fsys.NewOSFS(),
 		inDir,
-		filepath.Join(t.TempDir(), "out"),
+		filepath.Join(t.TempDir(), textOut),
 		descPath,
 		routes, nil,
 	)
@@ -739,8 +771,8 @@ func TestOpenAPI_ResourcelessGetOneIsMetaOnly(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(data, &spec))
 
-	env := successSchema(t, spec, "/api/v1/notes/{note_id}", "get")
-	props := openapiAsMap(t, env["properties"], "props")
-	assert.Contains(t, props, "meta")
-	assert.NotContains(t, props, "data", "a resource-less GET_ONE must be meta-only")
+	env := successSchema(t, spec, "/api/v1/notes/{note_id}", textGet)
+	props := openapiAsMap(t, env["properties"], textProps)
+	assert.Contains(t, props, textMeta)
+	assert.NotContains(t, props, textData, "a resource-less GET_ONE must be meta-only")
 }

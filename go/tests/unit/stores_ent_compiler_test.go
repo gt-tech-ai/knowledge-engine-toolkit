@@ -17,7 +17,7 @@ import (
 // "documents" and returns the rendered SQL + bound args, so a test can assert the
 // predicate is parameterized (values as $N placeholders, never inlined).
 func renderPred(pred entcompiler.Predicate) (query string, args []any) {
-	sel := entsql.Dialect(dialect.Postgres).Select("*").From(entsql.Table("documents"))
+	sel := entsql.Dialect(dialect.Postgres).Select("*").From(entsql.Table(textDocuments))
 	pred(sel)
 
 	return sel.Query()
@@ -26,7 +26,7 @@ func renderPred(pred entcompiler.Predicate) (query string, args []any) {
 // renderOrder applies compiled order options to a fresh Postgres selector and returns the
 // SQL, so a test can assert the ORDER BY column list + tiebreakers.
 func renderOrder(orders []entcompiler.Predicate) string {
-	sel := entsql.Dialect(dialect.Postgres).Select("*").From(entsql.Table("documents"))
+	sel := entsql.Dialect(dialect.Postgres).Select("*").From(entsql.Table(textDocuments))
 	for _, o := range orders {
 		o(sel)
 	}
@@ -71,11 +71,11 @@ func TestEntBackend_Clauses(t *testing.T) {
 			{"lte", types.OpLte, `"page_count" <= $1`},
 		}
 		for _, tc := range cases {
-			col := "status"
-			val := any("indexed")
+			col := textStatus
+			val := any(textIndexed)
 
 			if strings.HasPrefix(tc.name, "g") || strings.HasPrefix(tc.name, "l") {
-				col, val = "page_count", int64(3)
+				col, val = textPageCount, int64(3)
 			}
 
 			q, args := renderPred(b.Clause(col, tc.op, val))
@@ -96,8 +96,8 @@ func testEntBackendClausesRest(t *testing.T, b entcompiler.Backend) {
 		func(t *testing.T) {
 			t.Parallel()
 
-			q, args := renderPred(b.Clause("title", types.OpLike, "rep"))
-			assert.Contains(t, q, "title")
+			q, args := renderPred(b.Clause(textTitle, types.OpLike, textRep))
+			assert.Contains(t, q, textTitle)
 			assert.Contains(t, q, "$1")
 			assert.Equal(t, []any{"%rep%"}, args)
 		},
@@ -106,17 +106,19 @@ func testEntBackendClausesRest(t *testing.T, b entcompiler.Backend) {
 	t.Run("in expands the parser []any to $1, $2", func(t *testing.T) {
 		t.Parallel()
 
-		q, args := renderPred(b.Clause("status", types.OpIn, []any{"indexed", "pending"}))
+		q, args := renderPred(
+			b.Clause(textStatus, types.OpIn, []any{textIndexed, textPending}),
+		)
 		assert.Contains(t, q, `"status" IN ($1, $2)`)
-		assert.Equal(t, []any{"indexed", "pending"}, args)
+		assert.Equal(t, []any{textIndexed, textPending}, args)
 	})
 
 	t.Run("not_in expands the parser []any", func(t *testing.T) {
 		t.Parallel()
 
-		q, args := renderPred(b.Clause("status", types.OpNotIn, []any{"failed"}))
+		q, args := renderPred(b.Clause(textStatus, types.OpNotIn, []any{textFailed}))
 		assert.Contains(t, q, `"status" NOT IN ($1)`)
-		assert.Equal(t, []any{"failed"}, args)
+		assert.Equal(t, []any{textFailed}, args)
 	})
 
 	t.Run("empty adds no WHERE", func(t *testing.T) {
@@ -154,13 +156,21 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 		t.Parallel()
 
 		f := types.CompositeFilter{And: []types.Filter{
-			types.FilterClause{Field: "status", Operator: types.OpEq, Value: "indexed"},
+			types.FilterClause{
+				Field:    textStatus,
+				Operator: types.OpEq,
+				Value:    textIndexed,
+			},
 			types.CompositeFilter{Or: []types.Filter{
-				types.FilterClause{Field: "name", Operator: types.OpLike, Value: "rep"},
 				types.FilterClause{
-					Field:    "status",
+					Field:    textName,
+					Operator: types.OpLike,
+					Value:    textRep,
+				},
+				types.FilterClause{
+					Field:    textStatus,
 					Operator: types.OpIn,
-					Value:    []any{"a", "b"},
+					Value:    []any{textA, textB},
 				},
 			}},
 		}}
@@ -172,8 +182,8 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 		q, args := renderPred(pred)
 		assert.Contains(t, q, "AND")
 		assert.Contains(t, q, "OR")
-		assert.Contains(t, q, "title")
-		assert.Equal(t, []any{"indexed", "%rep%", "a", "b"}, args)
+		assert.Contains(t, q, textTitle)
+		assert.Equal(t, []any{textIndexed, "%rep%", textA, textB}, args)
 	})
 
 	t.Run(
@@ -187,7 +197,7 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 				nil,
 				nil,
 				nil,
-				[]types.OrderField{{Field: "name", Desc: false}},
+				[]types.OrderField{{Field: textName, Desc: false}},
 				"",
 			)
 			q := renderOrder(orders)
@@ -213,8 +223,8 @@ func testEntBackendCompositeAndOrderRest(t *testing.T, b entcompiler.Backend) {
 			nil,
 			nil,
 			nil,
-			[]types.OrderField{{Field: "created_at", Desc: false}},
-			"created_at",
+			[]types.OrderField{{Field: textCreatedAt, Desc: false}},
+			textCreatedAt,
 		)
 		q := renderOrder(orders)
 		assert.Equal(t, 1, strings.Count(q, `"created_at"`), "created_at not duplicated")
@@ -230,7 +240,7 @@ func testEntBackendCompositeAndOrderRest(t *testing.T, b entcompiler.Backend) {
 			nil,
 			nil,
 			nil,
-			[]types.OrderField{{Field: "id", Desc: false}},
+			[]types.OrderField{{Field: textID, Desc: false}},
 			"",
 		)
 		q := renderOrder(orders)
@@ -252,8 +262,8 @@ func testEntBackendCompositeAndOrderRest(t *testing.T, b entcompiler.Backend) {
 				nil,
 				nil,
 				nil,
-				[]types.OrderField{{Field: "role", Desc: false}},
-				"joined_at",
+				[]types.OrderField{{Field: textRole, Desc: false}},
+				textJoinedAt,
 			)
 			q := renderOrder(orders)
 			assertOrderedColumns(t, q, `"role"`, `"joined_at" DESC`, `"id" DESC`)
@@ -285,10 +295,10 @@ func TestEntBackend_ExistsClauseHonorsCaseInsensitive(t *testing.T) {
 
 	b := entcompiler.New()
 	base := types.JoinTarget{
-		Table:     "users",
-		LocalKey:  "user_id",
-		TargetKey: "id",
-		Columns:   []string{"first_name"},
+		Table:     textUsers,
+		LocalKey:  textUserID,
+		TargetKey: textID,
+		Columns:   []string{textFirstName},
 	}
 
 	fold := base
@@ -332,8 +342,8 @@ func TestEntBackend_OrderJoin(t *testing.T) {
 
 	b := entcompiler.New()
 	join := types.JoinTarget{
-		Table: "users", LocalKey: "user_id", TargetKey: "id",
-		Columns: []string{"first_name", "last_name"},
+		Table: textUsers, LocalKey: textUserID, TargetKey: textID,
+		Columns: []string{textFirstName, textLastName},
 	}
 
 	asc := renderOrder([]entcompiler.Predicate{b.OrderJoin(join, false)})
@@ -342,8 +352,8 @@ func TestEntBackend_OrderJoin(t *testing.T) {
 	assert.Contains(t, asc, `"users"."first_name"`)
 	assert.Contains(t, asc, `"users"."last_name"`)
 	assert.Contains(t, asc, `"documents"."user_id"`)
-	assert.Contains(t, asc, "NULLS LAST")
-	assert.NotContains(t, asc, "NULLS FIRST")
+	assert.Contains(t, asc, textNullsLast)
+	assert.NotContains(t, asc, textNullsFirst)
 	// The base query is NOT joined — the correlation lives inside the ORDER BY subquery
 	// only.
 	assert.NotContains(t, asc, "JOIN")
@@ -351,15 +361,15 @@ func TestEntBackend_OrderJoin(t *testing.T) {
 	assert.NotContains(t, asc, "deleted_at")
 
 	desc := renderOrder([]entcompiler.Predicate{b.OrderJoin(join, true)})
-	assert.Contains(t, desc, "NULLS FIRST")
-	assert.NotContains(t, desc, "NULLS LAST")
+	assert.Contains(t, desc, textNullsFirst)
+	assert.NotContains(t, desc, textNullsLast)
 
 	// A soft-deleting target adds the `deleted_at IS NULL` guard to the correlated
 	// subquery, so the sort excludes a soft-deleted target (matching ExistsClause's
 	// filter) instead of sorting its stale value.
 	softDel := types.JoinTarget{
-		Table: "connectors", LocalKey: "connector_id", TargetKey: "id",
-		Columns: []string{"name"}, TargetSoftDeletes: true,
+		Table: "connectors", LocalKey: "connector_id", TargetKey: textID,
+		Columns: []string{textName}, TargetSoftDeletes: true,
 	}
 	guarded := renderOrder([]entcompiler.Predicate{b.OrderJoin(softDel, false)})
 	assert.Contains(t, guarded, `"connectors"."deleted_at" IS NULL`)
@@ -384,7 +394,7 @@ func TestEntBackend_OrderOrdinal(t *testing.T) {
 	t.Parallel()
 
 	b := entcompiler.New()
-	values := []string{"admin", "write", "read"}
+	values := []string{textAdmin, "write", textRead}
 
 	asc := renderOrder(
 		[]entcompiler.Predicate{b.OrderOrdinal("access_level", values, false)},
@@ -428,8 +438,8 @@ func TestEntBackend_OrderDerived(t *testing.T) {
 	b := entcompiler.New()
 
 	agg := types.DerivedSort{Aggregate: &types.AggregateSpec{
-		Table: "team_members", LocalKey: "id", TargetKey: "team_id",
-		Func: "count", TargetSoftDeletes: true,
+		Table: "team_members", LocalKey: textID, TargetKey: "team_id",
+		Func: textCount, TargetSoftDeletes: true,
 	}}
 	asc := renderOrder([]entcompiler.Predicate{b.OrderDerived(agg, false)})
 	assert.Contains(t, asc, "COUNT(*)")
@@ -439,19 +449,19 @@ func TestEntBackend_OrderDerived(t *testing.T) {
 	// base JOIN.
 	assert.Contains(t, asc, `"documents"."id"`)
 	assert.Contains(t, asc, `"team_members"."deleted_at" IS NULL`)
-	assert.Contains(t, asc, "NULLS LAST")
+	assert.Contains(t, asc, textNullsLast)
 	assert.NotContains(t, asc, "JOIN")
 
 	desc := renderOrder([]entcompiler.Predicate{b.OrderDerived(agg, true)})
-	assert.Contains(t, desc, "NULLS FIRST")
-	assert.NotContains(t, desc, "NULLS LAST")
+	assert.Contains(t, desc, textNullsFirst)
+	assert.NotContains(t, desc, textNullsLast)
 
 	iv := types.DerivedSort{Interval: &types.IntervalSpec{
 		BaseColumn:          "last_sync_at",
 		DiscriminatorColumn: "schedule",
 		Cases: []types.IntervalCase{
-			{Value: "hourly", Seconds: 3600},
-			{Value: "daily", Seconds: 86400},
+			{Value: "hourly", Seconds: seconds3600},
+			{Value: "daily", Seconds: seconds86400},
 		},
 	}}
 	ivSQL := renderOrder([]entcompiler.Predicate{b.OrderDerived(iv, false)})
@@ -460,7 +470,7 @@ func TestEntBackend_OrderDerived(t *testing.T) {
 	assert.Contains(t, ivSQL, "WHEN 'hourly' THEN make_interval(secs => 3600)")
 	assert.Contains(t, ivSQL, "WHEN 'daily' THEN make_interval(secs => 86400)")
 	assert.Contains(t, ivSQL, "ELSE NULL END")
-	assert.Contains(t, ivSQL, "NULLS LAST")
+	assert.Contains(t, ivSQL, textNullsLast)
 }
 
 // assertOrderedColumns asserts each fragment appears in q in the given left-to-right

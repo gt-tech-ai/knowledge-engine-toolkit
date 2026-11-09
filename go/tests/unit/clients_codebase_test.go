@@ -27,8 +27,8 @@ func writeFiles(t *testing.T, root string, files map[string]string) {
 
 	for p, body := range files {
 		full := filepath.Join(root, filepath.FromSlash(p))
-		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o750))
-		require.NoError(t, os.WriteFile(full, []byte(body), 0o600))
+		require.NoError(t, os.MkdirAll(filepath.Dir(full), perm0o750))
+		require.NoError(t, os.WriteFile(full, []byte(body), perm0o600))
 	}
 }
 
@@ -64,7 +64,7 @@ func TestCodebaseClient_MemoryKindIsTheDefault(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "one\n", string(text.Bytes))
 
-	changed, err := r.Changed(ctx, "main")
+	changed, err := r.Changed(ctx, textMain)
 	require.NoError(t, err)
 	assert.Empty(t, changed)
 
@@ -136,7 +136,7 @@ func TestCodebaseClient_GitKind(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeFiles(t, root, map[string]string{"a.go": "package a\n", "new.txt": "n\n"})
+	writeFiles(t, root, map[string]string{textAGo: textPackageA, textNewTxt: "n\n"})
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "ls-files", "-z", "--cached").
@@ -149,7 +149,7 @@ func TestCodebaseClient_GitKind(t *testing.T) {
 			"main^{commit}").
 		Return(interfaces.CmdResult{Stdout: []byte("abc\n")})
 	runner.EXPECT().RunBuffered(gomock.Any(), root, "git", "diff", "--name-only", "-z",
-		"--merge-base", "main").Return(interfaces.CmdResult{Stdout: []byte("a.go\x00")})
+		"--merge-base", textMain).Return(interfaces.CmdResult{Stdout: []byte("a.go\x00")})
 	runner.EXPECT().
 		RunBuffered(gomock.Any(), root, "git", "rev-parse", "--verify", "--quiet",
 			"nope^{commit}").
@@ -166,15 +166,15 @@ func TestCodebaseClient_GitKind(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(
 		t,
-		[]types.File{{Path: "a.go"}, {Path: "new.txt", Untracked: true}},
+		[]types.File{{Path: textAGo}, {Path: textNewTxt, Untracked: true}},
 		files,
 	)
 
-	changed, err := r.Changed(t.Context(), "main")
+	changed, err := r.Changed(t.Context(), textMain)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]bool{"a.go": true, "new.txt": true}, changed)
+	assert.Equal(t, map[string]bool{textAGo: true, textNewTxt: true}, changed)
 
-	_, err = r.Changed(t.Context(), "nope")
+	_, err = r.Changed(t.Context(), textNope)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
 	notRepo := mocks.NewMockCommandRunner(gomock.NewController(t))
@@ -210,10 +210,10 @@ func TestCodebaseClient_RunsThroughTheClientTier(t *testing.T) {
 		Metrics: prom.NewFromRegistry(reg),
 	})
 	r, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
-		clientcodebase.Deps{Decorations: decs, Files: map[string]string{"a": "b"}})
+		clientcodebase.Deps{Decorations: decs, Files: map[string]string{textA: textB}})
 	require.NoError(t, err)
 
 	_, err = r.Files(t.Context(), types.FileSelector{})
 	require.NoError(t, err)
-	assert.InDelta(t, 1.0, clientOpCounter(t, reg, "files"), 0)
+	assert.InDelta(t, wantClientOpCounter1p0, clientOpCounter(t, reg, textFiles), 0)
 }

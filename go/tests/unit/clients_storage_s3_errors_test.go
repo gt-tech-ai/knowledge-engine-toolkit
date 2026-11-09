@@ -48,7 +48,7 @@ func TestStorageClient_ErrorPaths(t *testing.T) {
 
 		api := mocks.NewMockS3API(gomock.NewController(t))
 		c := newStorageClientWithMock(ctx, t, api, 0)
-		err := c.Upload(ctx, "b", "k", iotest.ErrReader(errS3), "text/plain")
+		err := c.Upload(ctx, textB, textK, iotest.ErrReader(errS3), textTextPlain)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "reading upload body")
 	})
@@ -60,7 +60,7 @@ func TestStorageClient_ErrorPaths(t *testing.T) {
 		api.EXPECT().PutObject(gomock.Any(), gomock.Any()).Return(nil, errS3)
 
 		c := newStorageClientWithMock(ctx, t, api, 0)
-		err := c.Upload(ctx, "b", "k", strings.NewReader("hi"), "text/plain")
+		err := c.Upload(ctx, textB, textK, strings.NewReader("hi"), textTextPlain)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "s3 put")
 	})
@@ -72,7 +72,7 @@ func TestStorageClient_ErrorPaths(t *testing.T) {
 		api.EXPECT().CreateMultipartUpload(gomock.Any(), gomock.Any()).Return(nil, errS3)
 
 		c := newStorageClientWithMock(ctx, t, api, 5) // threshold 5 forces multipart
-		err := c.Upload(ctx, "b", "k", strings.NewReader("0123456789"), "text/plain")
+		err := c.Upload(ctx, textB, textK, strings.NewReader("0123456789"), textTextPlain)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "create multipart")
 	})
@@ -92,7 +92,7 @@ func testStorageClientErrorPathsRest2(ctx context.Context, t *testing.T) {
 		api.EXPECT().CreateMultipartUpload(gomock.Any(), gomock.Any()).
 			Return(&awss3.CreateMultipartUploadOutput{UploadId: aws.String("u1")}, nil)
 		api.EXPECT().UploadPart(gomock.Any(), gomock.Any()).
-			Return(&awss3.UploadPartOutput{ETag: aws.String("e")}, nil).AnyTimes()
+			Return(&awss3.UploadPartOutput{ETag: aws.String(textE)}, nil).AnyTimes()
 		api.EXPECT().AbortMultipartUpload(gomock.Any(), gomock.Any()).
 			Return(&awss3.AbortMultipartUploadOutput{}, nil).AnyTimes()
 
@@ -100,7 +100,7 @@ func testStorageClientErrorPathsRest2(ctx context.Context, t *testing.T) {
 
 		// 6 readable bytes (so classifyBody selects multipart) then a hard read error.
 		body := io.MultiReader(bytes.NewReader([]byte("ABCDEF")), iotest.ErrReader(errS3))
-		err := c.Upload(ctx, "b", "k", body, "text/plain")
+		err := c.Upload(ctx, textB, textK, body, textTextPlain)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "reading multipart body")
 	})
@@ -112,7 +112,7 @@ func testStorageClientErrorPathsRest2(ctx context.Context, t *testing.T) {
 		api.EXPECT().CreateMultipartUpload(gomock.Any(), gomock.Any()).
 			Return(&awss3.CreateMultipartUploadOutput{UploadId: aws.String("u1")}, nil)
 		api.EXPECT().UploadPart(gomock.Any(), gomock.Any()).
-			Return(&awss3.UploadPartOutput{ETag: aws.String("e")}, nil).AnyTimes()
+			Return(&awss3.UploadPartOutput{ETag: aws.String(textE)}, nil).AnyTimes()
 		api.EXPECT().
 			CompleteMultipartUpload(gomock.Any(), gomock.Any()).
 			Return(nil, errS3)
@@ -120,7 +120,7 @@ func testStorageClientErrorPathsRest2(ctx context.Context, t *testing.T) {
 			Return(&awss3.AbortMultipartUploadOutput{}, nil).AnyTimes()
 
 		c := newStorageClientWithMock(ctx, t, api, 5)
-		err := c.Upload(ctx, "b", "k", strings.NewReader("0123456789"), "text/plain")
+		err := c.Upload(ctx, textB, textK, strings.NewReader("0123456789"), textTextPlain)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "complete multipart")
 	})
@@ -140,7 +140,7 @@ func testStorageClientErrorPathsRest(ctx context.Context, t *testing.T) {
 		api.EXPECT().GetObject(gomock.Any(), gomock.Any()).Return(nil, errS3)
 
 		c := newStorageClientWithMock(ctx, t, api, 0)
-		_, err := c.Download(ctx, "b", "k")
+		_, err := c.Download(ctx, textB, textK)
 		require.Error(t, err)
 		assert.Contains(
 			t,
@@ -157,7 +157,7 @@ func testStorageClientErrorPathsRest(ctx context.Context, t *testing.T) {
 		api.EXPECT().DeleteObject(gomock.Any(), gomock.Any()).Return(nil, errS3)
 
 		c := newStorageClientWithMock(ctx, t, api, 0)
-		require.Error(t, c.Delete(ctx, "b", "k"))
+		require.Error(t, c.Delete(ctx, textB, textK))
 	})
 
 	t.Run("delete batch wraps a request error", func(t *testing.T) {
@@ -167,7 +167,7 @@ func testStorageClientErrorPathsRest(ctx context.Context, t *testing.T) {
 		api.EXPECT().DeleteObjects(gomock.Any(), gomock.Any()).Return(nil, errS3)
 
 		c := newStorageClientWithMock(ctx, t, api, 0)
-		err := c.DeleteBatch(ctx, "b", []string{"k1", "k2"})
+		err := c.DeleteBatch(ctx, textB, []string{"k1", "k2"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "delete batch")
 	})
@@ -187,7 +187,7 @@ func testStorageClientErrorPathsRest3(ctx context.Context, t *testing.T) {
 		api.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(nil, errS3)
 
 		c := newStorageClientWithMock(ctx, t, api, 0)
-		_, err := c.Exists(ctx, "b", "k")
+		_, err := c.Exists(ctx, textB, textK)
 		require.Error(
 			t,
 			err,
@@ -202,7 +202,7 @@ func testStorageClientErrorPathsRest3(ctx context.Context, t *testing.T) {
 		api.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(nil, errS3)
 
 		c := newStorageClientWithMock(ctx, t, api, 0)
-		_, err := c.Stat(ctx, "b", "k")
+		_, err := c.Stat(ctx, textB, textK)
 		require.Error(t, err)
 	})
 
@@ -217,7 +217,7 @@ func testStorageClientErrorPathsRest3(ctx context.Context, t *testing.T) {
 			Return(nil, errS3)
 
 		c := newStorageClientWithMock(ctx, t, api, 0)
-		_, err := c.ListObjects(ctx, "b", "prefix/")
+		_, err := c.ListObjects(ctx, textB, "prefix/")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "s3 list")
 	})
@@ -246,9 +246,9 @@ func TestStorageClient_Presign_EncodesUnsafeFilename(t *testing.T) {
 
 	url, err := c.PresignURL(
 		context.Background(),
-		"bucket",
-		"obj/key.txt",
-		900,
+		textBucket,
+		textObjKeyTxt,
+		expirySeconds900,
 		`ré"port.pdf`,
 	)
 	require.NoError(t, err)

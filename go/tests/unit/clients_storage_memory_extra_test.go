@@ -37,16 +37,16 @@ func TestStorageMemory_ErrorPaths(t *testing.T) {
 	ctx := context.Background()
 	c := memory.New()
 
-	err := c.Upload(ctx, "b", "k", iotest.ErrReader(errS3), "text/plain")
+	err := c.Upload(ctx, textB, textK, iotest.ErrReader(errS3), textTextPlain)
 	require.Error(t, err, "a body read failure must surface, not be stored as empty")
 
-	err = c.CompleteMultipartUpload(ctx, "b", "k", "no-such-upload", nil)
+	err = c.CompleteMultipartUpload(ctx, textB, textK, "no-such-upload", nil)
 	require.Error(t, err, "completing an unknown upload id must be a not-found error")
 
-	id, err := c.CreateMultipartUpload(ctx, "b", "intended", "application/octet-stream")
+	id, err := c.CreateMultipartUpload(ctx, textB, "intended", "application/octet-stream")
 	require.NoError(t, err)
 
-	err = c.CompleteMultipartUpload(ctx, "b", "elsewhere", id, nil)
+	err = c.CompleteMultipartUpload(ctx, textB, "elsewhere", id, nil)
 	require.Equal(
 		t,
 		apperr.CodeNotFound,
@@ -55,7 +55,7 @@ func TestStorageMemory_ErrorPaths(t *testing.T) {
 		err,
 	)
 
-	exists, err := c.Exists(ctx, "b", "elsewhere")
+	exists, err := c.Exists(ctx, textB, "elsewhere")
 	require.NoError(t, err)
 	require.False(t, exists, "a mismatched complete must not write an object")
 }
@@ -78,7 +78,7 @@ func TestStorageClient_Exists_ReturnsTrueWhenPresent(t *testing.T) {
 
 	c := newStorageClientWithMock(t.Context(), t, api, 0)
 
-	exists, err := c.Exists(context.Background(), "b", "k")
+	exists, err := c.Exists(context.Background(), textB, textK)
 	require.NoError(t, err)
 	assert.True(t, exists, "a present object must report exists=true")
 }

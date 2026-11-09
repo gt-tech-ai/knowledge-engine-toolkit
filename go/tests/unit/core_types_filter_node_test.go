@@ -63,7 +63,7 @@ func TestFilterNode_JSONRoundTripsGrammar(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(`{"$lt": {"page_count": 12}}`), &n))
 	require.NotNil(t, n.Clause)
 	assert.Equal(t, types.FilterNodeClause{
-		Field: "page_count", Op: types.OpLt, Value: json.Number("12"),
+		Field: textPageCount, Op: types.OpLt, Value: json.Number("12"),
 	}, *n.Clause)
 }
 
@@ -82,15 +82,15 @@ func TestFilterNode_RejectsTwoArms(t *testing.T) {
 	t.Parallel()
 
 	both := types.FilterNode{
-		Clause: &types.FilterNodeClause{Field: "name", Op: types.OpEq, Value: "a"},
+		Clause: &types.FilterNodeClause{Field: textName, Op: types.OpEq, Value: textA},
 		And:    []types.FilterNode{{}},
 	}
 	_, err := json.Marshal(both)
 	require.Error(t, err)
-	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 
 	for name, in := range map[string]string{
-		"unknown operator":  `{"$regex": {"name": "x"}}`,
+		textUnknownOperator: `{"$regex": {"name": "x"}}`,
 		"two operator keys": `{"$eq": {"name": "a"}, "$ne": {"name": "b"}}`,
 		"two body fields":   `{"$eq": {"name": "a", "status": "b"}}`,
 		"non-array group":   `{"$or": {"$eq": {"name": "a"}}}`,

@@ -22,9 +22,9 @@ import (
 // guardFiles returns the repository the guard tests run over.
 func guardFiles() map[string]string {
 	return map[string]string{
-		"deploy/a.yaml":     "# image: latest\nimage: app:1.2\nreplicas: 2\n",
-		"deploy/b.yaml":     "image: app:latest\nreplicas: 1\n",
-		"infra/main.tf":     "// TODO\nresource \"x\" {}\n",
+		textDeployAYaml:     "# image: latest\nimage: app:1.2\nreplicas: 2\n",
+		textDeployBManifest: "image: app:latest\nreplicas: 1\n",
+		textInfraMainTf:     "// TODO\nresource \"x\" {}\n",
 		"notes/broken.yaml": "a: [\n",
 		"policy/p.yaml": "kind: AuthorizationPolicy\nspec:\n  rules:\n" +
 			"  - from:\n    - source:\n        principals: [kong, api]\n",
@@ -72,7 +72,7 @@ func TestServicesGuard_Match(t *testing.T) {
 			Forbid: []string{`:latest\b`},
 		},
 		{
-			Name: "pinned", Kind: types.GuardMatch, Files: deploy, Literal: true,
+			Name: textPinned, Kind: types.GuardMatch, Files: deploy, Literal: true,
 			Names:   []string{"has-image", "has-replicas-2"},
 			Require: []string{"image:", "replicas: 2"},
 		},
@@ -81,24 +81,24 @@ func TestServicesGuard_Match(t *testing.T) {
 			Kind:         types.GuardMatch,
 			SkipComments: true,
 			Files: types.FileSelector{
-				Paths: []string{"infra/main.tf"},
+				Paths: []string{textInfraMainTf},
 			},
 			Forbid: []string{"TODO"},
 		},
 		{
-			Name:  "none",
+			Name:  textNone,
 			Kind:  types.GuardMatch,
-			Files: types.FileSelector{Paths: []string{"x"}},
+			Files: types.FileSelector{Paths: []string{textX}},
 		},
 		{
 			Name: "none-ok", Kind: types.GuardMatch, Optional: true,
-			Files: types.FileSelector{Paths: []string{"x"}},
+			Files: types.FileSelector{Paths: []string{textX}},
 		},
 	}, guard.Deps{})
 
 	require.Equal(t, types.StatusFail, vs["no-latest"].Status)
 	require.Len(t, vs["no-latest"].Findings, 1)
-	assert.Equal(t, "deploy/b.yaml", vs["no-latest"].Findings[0].File)
+	assert.Equal(t, textDeployBManifest, vs["no-latest"].Findings[0].File)
 	assert.Equal(t, 1, vs["no-latest"].Findings[0].Line)
 	assert.Contains(t, vs["no-latest"].Detail, "deploy/b.yaml:1:")
 	assert.Equal(t, types.StatusPass, vs["has-image"].Status)
@@ -109,7 +109,7 @@ func TestServicesGuard_Match(t *testing.T) {
 		`deploy/b.yaml does not contain "replicas: 2"`,
 	)
 	assert.Equal(t, types.StatusPass, vs["tf"].Status)
-	assert.Equal(t, types.StatusFail, vs["none"].Status)
+	assert.Equal(t, types.StatusFail, vs[textNone].Status)
 	assert.Equal(t, types.StatusPass, vs["none-ok"].Status)
 }
 
@@ -129,7 +129,7 @@ func TestServicesGuard_MatchAllow(t *testing.T) {
 
 	deploy := types.FileSelector{Globs: []string{"deploy/*.yaml"}}
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
-		return []map[string]string{{"pinned": `app:latest`}}, nil
+		return []map[string]string{{textPinned: `app:latest`}}, nil
 	}
 	vs := runGuards(t, []types.GuardRow{
 		{
@@ -144,11 +144,11 @@ func TestServicesGuard_MatchAllow(t *testing.T) {
 
 	require.Equal(t, types.StatusFail, vs["no-app-tags"].Status)
 	require.Len(t, vs["no-app-tags"].Findings, 1)
-	assert.Equal(t, "deploy/b.yaml", vs["no-app-tags"].Findings[0].File)
+	assert.Equal(t, textDeployBManifest, vs["no-app-tags"].Findings[0].File)
 	assert.Equal(t, types.StatusPass, vs["expanded"].Status)
 
 	_, err := guard.NewFromConfig([]types.GuardRow{{
-		Name: "bad", Kind: types.GuardMatch, Files: deploy, Allow: []string{"("},
+		Name: textBad, Kind: types.GuardMatch, Files: deploy, Allow: []string{textOpen},
 	}}, guard.Deps{})
 	require.Error(t, err)
 }
@@ -166,7 +166,10 @@ func TestServicesGuard_YAMLAndEach(t *testing.T) {
 	t.Parallel()
 
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
-		return []map[string]string{{"f": "a", "n": "2"}, {"f": "b", "n": "2"}}, nil
+		return []map[string]string{
+			{textF: textA, textN: "2"},
+			{textF: textB, textN: "2"},
+		}, nil
 	}
 	vs := runGuards(t, []types.GuardRow{
 		{
@@ -174,16 +177,16 @@ func TestServicesGuard_YAMLAndEach(t *testing.T) {
 			Expect: "{n}", Files: types.FileSelector{Paths: []string{"deploy/{f}.yaml"}},
 		},
 		{
-			Name: "missing", Kind: types.GuardYAML, Path: "$.nope",
-			Files: types.FileSelector{Paths: []string{"deploy/a.yaml"}},
+			Name: textMissing, Kind: types.GuardYAML, Path: "$.nope",
+			Files: types.FileSelector{Paths: []string{textDeployAYaml}},
 		},
 	}, guard.Deps{Expanders: map[string]guard.Expander{"deploys": each}})
 
 	require.Equal(t, types.StatusFail, vs["replicas"].Status)
 	require.Len(t, vs["replicas"].Findings, 1)
-	assert.Equal(t, "deploy/b.yaml", vs["replicas"].Findings[0].File)
-	assert.Equal(t, 2, vs["replicas"].Findings[0].Line)
-	assert.Equal(t, types.StatusFail, vs["missing"].Status)
+	assert.Equal(t, textDeployBManifest, vs["replicas"].Findings[0].File)
+	assert.Equal(t, wantLine2, vs["replicas"].Findings[0].Line)
+	assert.Equal(t, types.StatusFail, vs[textMissing].Status)
 }
 
 // TestServicesGuard_Expr tests the expr kind.
@@ -218,15 +221,15 @@ func TestServicesGuard_Expr(t *testing.T) {
 				.map(d, {"file": d.path, "line": 1, "message": "kong missing"})`,
 		},
 		{
-			Name:  "text",
+			Name:  textText,
 			Kind:  types.GuardExpr,
-			Files: types.FileSelector{Globs: []string{"deploy/*"}},
+			Files: types.FileSelector{Globs: []string{textDeploy2}},
 			Expr: `files.filter(p, file[p].text.contains("latest") && p.endsWith("b.yaml"))
 				.map(p, {"file": p, "line": 1, "message": "latest"})`,
 		},
 		{
 			Name: "bind", Kind: types.GuardExpr,
-			Files: types.FileSelector{Globs: []string{"deploy/*"}},
+			Files: types.FileSelector{Globs: []string{textDeploy2}},
 			Expr: `cel.bind(t, file["deploy/a.yaml"].text,
 				regex.extract(t, "image: (app:[0-9.]+)") == optional.of("app:1.2"))`,
 		},
@@ -242,14 +245,14 @@ func TestServicesGuard_Expr(t *testing.T) {
 	require.Equal(t, types.StatusFail, vs["two-principals"].Status)
 	assert.Equal(t, "too many principals", vs["two-principals"].Findings[0].Message)
 	assert.Equal(t, types.StatusPass, vs["listed"].Status)
-	require.Equal(t, types.StatusFail, vs["text"].Status)
-	assert.Equal(t, "deploy/b.yaml", vs["text"].Findings[0].File)
-	assert.Equal(t, 1, vs["text"].Findings[0].Line)
+	require.Equal(t, types.StatusFail, vs[textText].Status)
+	assert.Equal(t, textDeployBManifest, vs[textText].Findings[0].File)
+	assert.Equal(t, 1, vs[textText].Findings[0].Line)
 	assert.Equal(t, types.StatusPass, vs["literal"].Status, vs["literal"].Detail)
 	assert.Equal(t, types.StatusPass, vs["bind"].Status, vs["bind"].Detail)
 
 	_, err := guard.NewFromConfig([]types.GuardRow{
-		{Name: "bad", Kind: types.GuardExpr, Expr: "files.("},
+		{Name: textBad, Kind: types.GuardExpr, Expr: "files.("},
 	}, guard.Deps{})
 	require.Error(t, err)
 }
@@ -271,25 +274,29 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 	computed := func(
 		_ context.Context, _ interfaces.Codebase, row *types.GuardRow, vars map[string]string,
 	) ([]types.Finding, error) {
-		return []types.Finding{{Message: row.Message + " " + vars["env"]}}, nil
+		return []types.Finding{{Message: row.Message + " " + vars[textEnv]}}, nil
 	}
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
-		return []map[string]string{{"env": "a"}}, nil
+		return []map[string]string{{textEnv: textA}}, nil
 	}
 	gs, err := guard.NewFromConfig([]types.GuardRow{
 		{
-			Name: "computed", Kind: types.GuardGo, Verb: "check", Tags: []string{"k8s"},
-			Each: "envs", Message: "computed in {env}",
+			Name:    textComputed,
+			Kind:    types.GuardGo,
+			Verb:    textCheck,
+			Tags:    []string{textK8s},
+			Each:    textEnvs,
+			Message: "computed in {env}",
 		},
-		{Name: "shared", Kind: types.GuardGo, Func: "computed", Message: "shared"},
+		{Name: textShared, Kind: types.GuardGo, Func: textComputed, Message: textShared},
 	}, guard.Deps{
-		Go:        map[string]guard.GoGuard{"computed": computed},
-		Expanders: map[string]guard.Expander{"envs": each},
+		Go:        map[string]guard.GoGuard{textComputed: computed},
+		Expanders: map[string]guard.Expander{textEnvs: each},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, types.EntryMeta{
-		Name: "computed", Verb: "check", Group: "check",
-		Tags: []string{"k8s"},
+		Name: textComputed, Verb: textCheck, Group: textCheck,
+		Tags: []string{textK8s},
 	}, gs[0].Meta())
 
 	cb, err := clientcodebase.NewFromConfig(t.Context(), clientcodebase.Config{},
@@ -309,11 +316,11 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 	assert.Equal(t, "shared ", gs[1].Run(t.Context(), cb).Findings[0].Message)
 
 	for _, r := range []types.GuardRow{
-		{Name: "k", Kind: "regex"},
-		{Name: "e", Kind: types.GuardMatch, Each: "nope"},
+		{Name: textK, Kind: textRegex},
+		{Name: textE, Kind: types.GuardMatch, Each: textNope},
 		{Name: "g", Kind: types.GuardGo},
 		{Name: "y", Kind: types.GuardYAML},
-		{Name: "n", Kind: types.GuardMatch, Names: []string{"a"}},
+		{Name: textN, Kind: types.GuardMatch, Names: []string{textA}},
 	} {
 		_, err := guard.NewFromConfig([]types.GuardRow{r}, guard.Deps{})
 		require.Error(t, err, r.Name)
@@ -331,13 +338,13 @@ func TestServicesGuard_GoAndValidation(t *testing.T) {
 func TestServicesGuard_ExprRender(t *testing.T) {
 	t.Parallel()
 
-	ok := types.RenderSpec{ChartDir: "chart", Set: map[string]string{"kind": "hpa"}}
-	bad := types.RenderSpec{ChartDir: "chart", Set: map[string]string{"kind": "x"}}
+	ok := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: "hpa"}}
+	bad := types.RenderSpec{ChartDir: textChart, Set: map[string]string{textKind: textX}}
 	r := mocks.NewMockRenderer(gomock.NewController(t))
 	r.EXPECT().Render(gomock.Any(), ok).Return([]types.Object{
 		{
 			Kind: "HorizontalPodAutoscaler",
-			Doc:  map[string]any{"kind": "HorizontalPodAutoscaler"},
+			Doc:  map[string]any{textKind: "HorizontalPodAutoscaler"},
 		},
 	}, nil).AnyTimes()
 	r.EXPECT().Render(gomock.Any(), bad).
@@ -390,7 +397,7 @@ func TestServicesGuard_ExprDecode(t *testing.T) {
 	cb := memoryCodebase(t, map[string]string{
 		"tf/main.tf": "resource \"aws_kms_key\" \"cosign\" {\n" +
 			"  key_usage = \"SIGN_VERIFY\"\n}\n",
-		"obs/values.yaml": "alloy:\n  content: |\n    loki.process \"redact\" {\n" +
+		textObsValuesYaml: "alloy:\n  content: |\n    loki.process \"redact\" {\n" +
 			"      forward_to = [loki.write.default.receiver]\n    }\n",
 	})
 	gs, err := guard.NewFromConfig([]types.GuardRow{
@@ -399,20 +406,20 @@ func TestServicesGuard_ExprDecode(t *testing.T) {
 			Kind: types.GuardExpr,
 			Files: types.FileSelector{
 				Paths: []string{"tf/main.tf"},
-				Exts:  []string{".tf"},
+				Exts:  []string{textTf},
 			},
 			Expr: `docs.size() == 1 && docs[0].format == 'hcl' &&
 				docs[0].doc.resource.aws_kms_key.cosign[0].key_usage == 'SIGN_VERIFY'`,
 		},
 		{
 			Name: "embedded", Kind: types.GuardExpr,
-			Files: types.FileSelector{Paths: []string{"obs/values.yaml"}},
+			Files: types.FileSelector{Paths: []string{textObsValuesYaml}},
 			Expr: `decode('alloy', docs[0].doc.alloy.content)['loki.process']['redact'][0]
 				.forward_to == ['loki.write.default.receiver']`,
 		},
 		{
-			Name: "unknown", Kind: types.GuardExpr,
-			Files: types.FileSelector{Paths: []string{"obs/values.yaml"}},
+			Name: textUnknown, Kind: types.GuardExpr,
+			Files: types.FileSelector{Paths: []string{textObsValuesYaml}},
 			Expr:  `decode('ini', docs[0].doc.alloy.content) != null`,
 		},
 	}, guard.Deps{})
@@ -425,8 +432,8 @@ func TestServicesGuard_ExprDecode(t *testing.T) {
 
 	assert.Equal(t, types.StatusPass, vs["hcl"].Status, vs["hcl"].Detail)
 	assert.Equal(t, types.StatusPass, vs["embedded"].Status, vs["embedded"].Detail)
-	assert.Equal(t, types.StatusFail, vs["unknown"].Status)
-	assert.Contains(t, vs["unknown"].Detail, "unknown format ini")
+	assert.Equal(t, types.StatusFail, vs[textUnknown].Status)
+	assert.Contains(t, vs[textUnknown].Detail, "unknown format ini")
 }
 
 // TestServicesGuard_ExprSHA256 tests sha256(text) over a selected file's text.
@@ -518,7 +525,7 @@ func TestServicesGuard_ExprTOMLAndNow(t *testing.T) {
 		return vs
 	}
 
-	before := run(time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
+	before := run(time.Date(year2026, month3, 1, 0, 0, 0, 0, time.UTC))
 	assert.Equal(
 		t,
 		types.StatusPass,
@@ -532,7 +539,7 @@ func TestServicesGuard_ExprTOMLAndNow(t *testing.T) {
 		before["embedded"].Detail,
 	)
 
-	after := run(time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC))
+	after := run(time.Date(year2026, month7, 1, 0, 0, 0, 0, time.UTC))
 	assert.Equal(
 		t,
 		types.StatusFail,
@@ -555,10 +562,10 @@ func TestServicesGuard_ExprTOMLAndNow(t *testing.T) {
 func TestServicesGuard_GoUnavailableSkips(t *testing.T) {
 	t.Parallel()
 
-	cb := memoryCodebase(t, map[string]string{"a.txt": "x"})
+	cb := memoryCodebase(t, map[string]string{"a.txt": textX})
 	rows := []types.GuardRow{
 		{Name: "needs a tool", Kind: types.GuardGo},
-		{Name: "broken", Kind: types.GuardGo},
+		{Name: textBroken, Kind: types.GuardGo},
 	}
 	gs, err := guard.NewFromConfig(rows, guard.Deps{Go: map[string]guard.GoGuard{
 		"needs a tool": func(
@@ -566,10 +573,10 @@ func TestServicesGuard_GoUnavailableSkips(t *testing.T) {
 		) ([]types.Finding, error) {
 			return nil, apperr.New(apperr.CodeUnavailable, "terraform is not installed")
 		},
-		"broken": func(
+		textBroken: func(
 			context.Context, interfaces.Codebase, *types.GuardRow, map[string]string,
 		) ([]types.Finding, error) {
-			return nil, apperr.New(apperr.CodeInternal, "boom")
+			return nil, apperr.New(apperr.CodeInternal, textBoom)
 		},
 	}})
 	require.NoError(t, err)

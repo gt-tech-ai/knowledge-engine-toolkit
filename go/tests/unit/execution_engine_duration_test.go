@@ -119,7 +119,7 @@ func TestRunJobGroup_StampsDurationOnZeroResult(t *testing.T) {
 	results, err := engine.RunJobGroup(
 		context.Background(),
 		engineNopRunner(t),
-		"/root",
+		textRoot,
 		[]interfaces.AnyJob{job},
 		engine.NopObserver{},
 	)
@@ -154,7 +154,7 @@ func TestRunJobGroup_PreservesNonZeroDuration(t *testing.T) {
 	results, err := engine.RunJobGroup(
 		context.Background(),
 		engineNopRunner(t),
-		"/root",
+		textRoot,
 		[]interfaces.AnyJob{job},
 		engine.NopObserver{},
 	)
@@ -178,11 +178,11 @@ func TestRunJobGroup_StampsDurationOnErrorResult(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	job := sleepingJob(ctrl, 3*time.Millisecond, nil, apperr.Sentinel("boom"))
+	job := sleepingJob(ctrl, 3*time.Millisecond, nil, apperr.Sentinel(textBoom))
 	results, err := engine.RunJobGroup(
 		context.Background(),
 		engineNopRunner(t),
-		"/root",
+		textRoot,
 		[]interfaces.AnyJob{job},
 		engine.NopObserver{},
 	)

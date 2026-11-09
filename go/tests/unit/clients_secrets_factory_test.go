@@ -24,7 +24,7 @@ import (
 // What it tests:
 //   - NewFromConfig(KindEnv) returns a Source whose Get resolves the mapped variable.
 func TestNewFromConfig_EnvKindResolves(t *testing.T) {
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 
 	t.Setenv("KE_FACTORY_ENV_TEST", "from-env")
 

@@ -120,7 +120,7 @@ func NewFromConfig(
 		)
 	}
 
-	if cfg.RenewInterval*3 > cfg.TTL {
+	if cfg.RenewInterval*renewInterval3 > cfg.TTL {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"lock renew_interval must be <= ttl/3",

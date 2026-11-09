@@ -25,7 +25,7 @@ func TestFileExists(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file.txt")
 	require.False(t, stdx.FileExists(path), "expected false for non-existent file")
-	require.NoError(t, os.WriteFile(path, []byte("x"), 0o600))
+	require.NoError(t, os.WriteFile(path, []byte(textX), perm0o600))
 	require.True(t, stdx.FileExists(path), "expected true for existing file")
 	// directory should not count as a file
 	require.False(t, stdx.FileExists(dir), "expected false for directory path")
@@ -47,7 +47,7 @@ func TestDirExists(t *testing.T) {
 	require.True(t, stdx.DirExists(dir), "expected true for existing dir")
 	require.False(
 		t,
-		stdx.DirExists(filepath.Join(dir, "nope")),
+		stdx.DirExists(filepath.Join(dir, textNope)),
 		"expected false for non-existent dir",
 	)
 }
@@ -63,8 +63,8 @@ func TestDirExists(t *testing.T) {
 //   - A set key returns its value; an unset key returns the fallback.
 func TestOrDefault(t *testing.T) {
 	t.Setenv("HELPERS_TEST_KEY", "set-value")
-	require.Equal(t, "set-value", stdx.OrDefault("HELPERS_TEST_KEY", "fallback"))
-	require.Equal(t, "fallback", stdx.OrDefault("HELPERS_TEST_UNSET", "fallback"))
+	require.Equal(t, "set-value", stdx.OrDefault("HELPERS_TEST_KEY", textFallback))
+	require.Equal(t, textFallback, stdx.OrDefault("HELPERS_TEST_UNSET", textFallback))
 }
 
 // TestUnique tests that Unique collapses duplicate elements to their first
@@ -79,8 +79,8 @@ func TestOrDefault(t *testing.T) {
 func TestUnique(t *testing.T) {
 	t.Parallel()
 
-	got := stdx.Unique([]string{"a", "b", "a", "c", "b"})
-	require.Len(t, got, 3)
+	got := stdx.Unique([]string{textA, textB, textA, textC, textB})
+	require.Len(t, got, wantGotLen3)
 }
 
 // TestUniqueDirs tests that UniqueDirs reduces a set of file paths to their
@@ -96,7 +96,7 @@ func TestUniqueDirs(t *testing.T) {
 	t.Parallel()
 
 	got := stdx.UniqueDirs([]string{"/a/b/c.go", "/a/b/d.go", "/x/y.go"})
-	require.Len(t, got, 2)
+	require.Len(t, got, wantGotLen2)
 }
 
 // TestTruncate tests that Truncate caps a string at the rune limit and leaves
@@ -113,9 +113,9 @@ func TestUniqueDirs(t *testing.T) {
 func TestTruncate(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "hello", stdx.Truncate("hello world", 5))
-	require.Equal(t, "hi", stdx.Truncate("hi", 10))
-	require.Empty(t, stdx.Truncate("", 5))
+	require.Equal(t, "hello", stdx.Truncate("hello world", limit5))
+	require.Equal(t, "hi", stdx.Truncate("hi", limit10))
+	require.Empty(t, stdx.Truncate("", limit5))
 }
 
 // TestIsAllDigits tests that IsAllDigits recognises non-empty all-ASCII-digit
@@ -136,9 +136,9 @@ func TestIsAllDigits(t *testing.T) {
 		want bool
 	}{
 		{"42", true},
-		{"0", true},
+		{text0, true},
 		{"", false},
-		{"v1", false},
+		{textV1, false},
 		{"12a", false},
 		{"-3", false},
 	}

@@ -40,11 +40,11 @@ func sha256Hex(b []byte) string {
 // the given per-platform artifacts.
 func downloadTool(artifacts map[string]types.Artifact) *types.ToolDef {
 	return &types.ToolDef{
-		Name:   "pinned",
-		Binary: "pinned",
+		Name:   textPinned,
+		Binary: textPinned,
 		InstallMethods: map[string]types.InstallMethod{
-			"all": {Download: &types.Download{
-				Binary:    "pinned",
+			textAll: {Download: &types.Download{
+				Binary:    textPinned,
 				Version:   "v1.2.3",
 				Artifacts: artifacts,
 			}},
@@ -59,7 +59,7 @@ func isolateInstallDirs(t *testing.T) (binDir, tmpDir string) {
 	t.Helper()
 
 	binDir, tmpDir = t.TempDir(), t.TempDir()
-	t.Setenv("GOBIN", binDir)
+	t.Setenv(textGobin, binDir)
 	t.Setenv("TMPDIR", tmpDir)
 
 	return binDir, tmpDir
@@ -179,10 +179,10 @@ func runClientsToolchainInstallVerifiesSHA256BeforePlacingBinary(t *testing.T) {
 				Return(io.NopCloser(bytes.NewReader(tc.artifact)), nil)
 
 			tool := downloadTool(map[string]types.Artifact{
-				"linux-amd64": {
+				textLinuxAmd64: {
 					URL: tc.url, SHA256: sha256Hex(tc.artifact), Member: tc.member,
 				},
-				"darwin-arm64": {
+				textDarwinArm64: {
 					URL:    "https://example.test/other",
 					SHA256: sha256Hex(nil),
 				},
@@ -190,15 +190,15 @@ func runClientsToolchainInstallVerifiesSHA256BeforePlacingBinary(t *testing.T) {
 			inst := toolchain.NewInstaller(
 				runner,
 				fixtures.NopLogger(),
-				"linux-apt",
+				textLinuxApt,
 				denyPrompter(t),
 				toolchain.WithArch("amd64"),
 				toolchain.WithDownloader(dl),
 			)
 
-			require.NoError(t, inst.Install(context.Background(), "/root", tool))
+			require.NoError(t, inst.Install(context.Background(), textRoot, tool))
 
-			placed := filepath.Join(binDir, "pinned")
+			placed := filepath.Join(binDir, textPinned)
 			got, err := os.ReadFile(filepath.Clean(placed))
 			require.NoError(t, err)
 			assert.Equal(t, checksumPayload(), got)
@@ -210,7 +210,7 @@ func runClientsToolchainInstallVerifiesSHA256BeforePlacingBinary(t *testing.T) {
 				info.Mode().Perm()&0o111,
 				"placed binary must be executable",
 			)
-			assert.Equal(t, []string{"pinned"}, dirEntries(t, binDir))
+			assert.Equal(t, []string{textPinned}, dirEntries(t, binDir))
 			assert.Empty(t, dirEntries(t, tmpDir), "the verified download is cleaned up")
 		})
 	}
@@ -247,7 +247,7 @@ func runClientsToolchainInstallVerifiesSHA256BeforePlacingBinaryTable(
 		{
 			"zip archive",
 			"https://example.test/pinned_linux_amd64.zip", "",
-			zipOf(t, "pinned", checksumPayload()),
+			zipOf(t, textPinned, checksumPayload()),
 		},
 		{
 			"gz single file",
@@ -293,18 +293,18 @@ func runClientsToolchainInstallLeavesNothingWhenTheArtifactIsUnusable(t *testing
 		t.Helper()
 
 		tool := downloadTool(
-			map[string]types.Artifact{"linux-amd64": {URL: url, SHA256: sha}},
+			map[string]types.Artifact{textLinuxAmd64: {URL: url, SHA256: sha}},
 		)
 		inst := toolchain.NewInstaller(
 			mocks.NewMockCommandRunner(gomock.NewController(t)),
 			fixtures.NopLogger(),
-			"linux-apt",
+			textLinuxApt,
 			denyPrompter(t),
 			toolchain.WithArch("amd64"),
 			toolchain.WithDownloader(dl),
 		)
 
-		return inst.Install(context.Background(), "/root", tool)
+		return inst.Install(context.Background(), textRoot, tool)
 	}
 
 	t.Run("verified archive without the binary", func(t *testing.T) {
@@ -382,18 +382,18 @@ func runClientsToolchainInstallFailsAndLeavesNothingOnChecksumMismatch(t *testin
 		Return(io.NopCloser(bytes.NewReader([]byte("tampered upstream binary"))), nil)
 
 	tool := downloadTool(map[string]types.Artifact{
-		"linux-amd64": {URL: url, SHA256: sha256Hex(checksumPayload())},
+		textLinuxAmd64: {URL: url, SHA256: sha256Hex(checksumPayload())},
 	})
 	inst := toolchain.NewInstaller(
 		runner,
 		fixtures.NopLogger(),
-		"linux-apt",
+		textLinuxApt,
 		denyPrompter(t),
 		toolchain.WithArch("amd64"),
 		toolchain.WithDownloader(dl),
 	)
 
-	err := inst.Install(context.Background(), "/root", tool)
+	err := inst.Install(context.Background(), textRoot, tool)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sha256 mismatch")
 	assert.Empty(t, dirEntries(t, binDir), "a mismatched artifact must not be installed")
@@ -430,10 +430,10 @@ func runClientsToolchainInstallFailsWhenPlatformChecksumMissing(t *testing.T) {
 
 	cases := map[string]map[string]types.Artifact{
 		"no artifact for the platform": {
-			"darwin-arm64": {URL: "https://example.test/darwin", SHA256: sha256Hex(nil)},
+			textDarwinArm64: {URL: "https://example.test/darwin", SHA256: sha256Hex(nil)},
 		},
 		"artifact without a checksum": {
-			"linux-amd64": {URL: "https://example.test/linux"},
+			textLinuxAmd64: {URL: "https://example.test/linux"},
 		},
 	}
 	for name, artifacts := range cases {
@@ -446,15 +446,15 @@ func runClientsToolchainInstallFailsWhenPlatformChecksumMissing(t *testing.T) {
 			inst := toolchain.NewInstaller(
 				runner,
 				fixtures.NopLogger(),
-				"linux-apt",
+				textLinuxApt,
 				denyPrompter(t),
 				toolchain.WithArch("amd64"),
 				toolchain.WithDownloader(dl),
 			)
 
-			err := inst.Install(context.Background(), "/root", downloadTool(artifacts))
+			err := inst.Install(context.Background(), textRoot, downloadTool(artifacts))
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "linux-amd64")
+			assert.Contains(t, err.Error(), textLinuxAmd64)
 			assert.Empty(t, dirEntries(t, binDir))
 		})
 	}

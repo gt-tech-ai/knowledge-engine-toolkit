@@ -67,25 +67,25 @@ func (s *RedisMessagingSuite) TestPublisher_PublishesToChannel() {
 	probe := s.newClient()
 
 	ctx := context.Background()
-	got := make(chan string, 8)
-	s.Require().NoError(sub.Subscribe(ctx, "events", chanHandler(got)))
-	s.waitSubscribed(probe, "events")
+	got := make(chan string, size8)
+	s.Require().NoError(sub.Subscribe(ctx, textEvents, chanHandler(got)))
+	s.waitSubscribed(probe, textEvents)
 
 	// An empty batch is a no-op (short-circuit before any pipeline round-trip).
-	s.Require().NoError(pub.PublishBatch(ctx, "events", nil))
+	s.Require().NoError(pub.PublishBatch(ctx, textEvents, nil))
 
-	s.Require().NoError(pub.Publish(ctx, "events", []byte("hello")))
+	s.Require().NoError(pub.Publish(ctx, textEvents, []byte("hello")))
 	s.Equal("hello", recvChan(s.T(), got, "published message"))
 
 	s.Require().
-		NoError(pub.PublishBatch(ctx, "events", [][]byte{[]byte("a"), []byte("b")}))
+		NoError(pub.PublishBatch(ctx, textEvents, [][]byte{[]byte("a"), []byte("b")}))
 
 	batch := []string{recvChan(s.T(), got, "batch 1"), recvChan(s.T(), got, "batch 2")}
 	s.ElementsMatch([]string{"a", "b"}, batch)
 
 	// PublishCount reports the subscriber count (the backplane's cluster-delivery signal)
 	// and still delivers to that subscriber.
-	n, err := pub.PublishCount(ctx, "events", []byte("count-me"))
+	n, err := pub.PublishCount(ctx, textEvents, []byte("count-me"))
 	s.Require().NoError(err)
 	s.Equal(1, n, "one subscriber is listening on events")
 	s.Equal("count-me", recvChan(s.T(), got, "counted publish still delivers"))
@@ -115,7 +115,7 @@ func (s *RedisMessagingSuite) TestPublisher_Error_Unavailable() {
 	pub, err := msgredis.NewPublisher(msgredis.Config{Client: dead})
 	s.Require().NoError(err)
 
-	err = pub.Publish(context.Background(), "events", []byte("x"))
+	err = pub.Publish(context.Background(), textEvents, []byte("x"))
 	s.Require().Error(err)
 	s.Equal(apperr.CodeUnavailable, apperr.Code(err))
 }
@@ -139,20 +139,20 @@ func (s *RedisMessagingSuite) TestSubscriber_DynamicSubscribeUnsubscribe() {
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	ctx := context.Background()
-	chA := make(chan string, 4)
-	chB := make(chan string, 4)
+	chA := make(chan string, size4)
+	chB := make(chan string, size4)
 
-	s.Require().NoError(sub.Subscribe(ctx, "chan.A", chanHandler(chA)))
-	s.waitSubscribed(probe, "chan.A")
-	s.Require().NoError(probe.Publish(ctx, "chan.A", "a1").Err())
+	s.Require().NoError(sub.Subscribe(ctx, textChanA, chanHandler(chA)))
+	s.waitSubscribed(probe, textChanA)
+	s.Require().NoError(probe.Publish(ctx, textChanA, "a1").Err())
 	s.Equal("a1", recvChan(s.T(), chA, "chan.A live"))
 
-	s.Require().NoError(sub.Unsubscribe(ctx, "chan.A"))
-	s.waitUnsubscribed(probe, "chan.A")
+	s.Require().NoError(sub.Unsubscribe(ctx, textChanA))
+	s.waitUnsubscribed(probe, textChanA)
 	s.Require().NoError(sub.Subscribe(ctx, "chan.B", chanHandler(chB)))
 	s.waitSubscribed(probe, "chan.B")
 
-	s.Require().NoError(probe.Publish(ctx, "chan.A", "a2").Err())
+	s.Require().NoError(probe.Publish(ctx, textChanA, "a2").Err())
 	s.Require().NoError(probe.Publish(ctx, "chan.B", "b1").Err())
 	s.Equal("b1", recvChan(s.T(), chB, "chan.B live"))
 
@@ -180,7 +180,7 @@ func (s *RedisMessagingSuite) TestSubscriber_PatternSubscribeReceivesMatching() 
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	ctx := context.Background()
-	chP := make(chan string, 4)
+	chP := make(chan string, size4)
 
 	s.Require().NoError(sub.PSubscribe(ctx, "news.*", chanHandler(chP)))
 	s.waitPatterns(probe, 1)
@@ -246,8 +246,8 @@ func (s *RedisMessagingSuite) TestSubscriber_FirstCallerCancel_KeepsDelivering()
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	firstCtx, cancel := context.WithCancel(context.Background())
-	got := make(chan string, 4)
-	alive := make(chan bool, 4)
+	got := make(chan string, size4)
+	alive := make(chan bool, size4)
 	handler := func(hctx context.Context, msg *coreiface.Message) error {
 		alive <- hctx.Err() == nil
 
@@ -289,7 +289,7 @@ func (s *RedisMessagingSuite) TestSubscriber_HandlerError_LoggedNotRequeued() {
 	s.Require().NoError(err)
 
 	ctx := context.Background()
-	received := make(chan string, 8)
+	received := make(chan string, size8)
 	failing := func(_ context.Context, msg *coreiface.Message) error {
 		received <- string(msg.Payload)
 
@@ -360,10 +360,10 @@ func (s *RedisMessagingSuite) TestNewFromConfig_ReusesSharedClient() {
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	ctx := context.Background()
-	got := make(chan string, 4)
-	s.Require().NoError(sub.Subscribe(ctx, "rt.chan", chanHandler(got)))
-	s.waitSubscribed(s.newClient(), "rt.chan")
-	s.Require().NoError(pub.Publish(ctx, "rt.chan", []byte("via-shared-client")))
+	got := make(chan string, size4)
+	s.Require().NoError(sub.Subscribe(ctx, textRtChan, chanHandler(got)))
+	s.waitSubscribed(s.newClient(), textRtChan)
+	s.Require().NoError(pub.Publish(ctx, textRtChan, []byte("via-shared-client")))
 	s.Equal("via-shared-client", recvChan(s.T(), got, "roundtrip via shared client"))
 }
 
@@ -396,10 +396,10 @@ func (s *RedisMessagingSuite) TestNewPublisher_KindRedis() {
 	s.T().Cleanup(func() { _ = sub.Close() })
 
 	ctx := context.Background()
-	got := make(chan string, 4)
-	s.Require().NoError(sub.Subscribe(ctx, "kr.chan", chanHandler(got)))
-	s.waitSubscribed(s.newClient(), "kr.chan")
-	s.Require().NoError(pub.Publish(ctx, "kr.chan", []byte("kind-redis")))
+	got := make(chan string, size4)
+	s.Require().NoError(sub.Subscribe(ctx, textKrChan, chanHandler(got)))
+	s.waitSubscribed(s.newClient(), textKrChan)
+	s.Require().NoError(pub.Publish(ctx, textKrChan, []byte("kind-redis")))
 	s.Equal("kind-redis", recvChan(s.T(), got, "KindRedis roundtrip"))
 }
 

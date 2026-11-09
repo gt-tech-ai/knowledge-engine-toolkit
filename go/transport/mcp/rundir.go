@@ -90,7 +90,7 @@ func writeStepLog(dir string, s *types.StepResult, used map[string]bool) (string
 	base := safeName(s.Name)
 	name := base
 
-	for n := 2; used[name]; n++ {
+	for n := firstNameSuffix; used[name]; n++ {
 		name = fmt.Sprintf("%s-%d", base, n)
 	}
 

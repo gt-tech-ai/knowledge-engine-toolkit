@@ -30,15 +30,15 @@ func TestBuildDeps_OncePerChartPerSnapshot(t *testing.T) {
 
 	ctx := t.Context()
 	c := mocks.NewMockHelmClient(gomock.NewController(t))
-	snap := codebase.NewSnapshot("t")
+	snap := codebase.NewSnapshot(textT)
 
-	c.EXPECT().DependencyBuild(gomock.Any(), "charts/api").Return(nil).Times(1)
+	c.EXPECT().DependencyBuild(gomock.Any(), textChartsAPI).Return(nil).Times(1)
 	c.EXPECT().DependencyBuild(gomock.Any(), "charts/web").Return(nil).Times(1)
 
 	var wg sync.WaitGroup
 
-	for range 8 {
-		wg.Go(func() { assert.NoError(t, helm.BuildDeps(ctx, c, snap, "charts/api")) })
+	for range iterations8 {
+		wg.Go(func() { assert.NoError(t, helm.BuildDeps(ctx, c, snap, textChartsAPI)) })
 	}
 
 	wg.Wait()
@@ -47,15 +47,15 @@ func TestBuildDeps_OncePerChartPerSnapshot(t *testing.T) {
 	c.EXPECT().Template(gomock.Any(), gomock.Any()).Return([]byte("kind: X\n"), nil)
 
 	_, err := helm.NewRenderer(c, snap).
-		Render(ctx, types.RenderSpec{ChartDir: "charts/api"})
+		Render(ctx, types.RenderSpec{ChartDir: textChartsAPI})
 	require.NoError(t, err)
 
-	bad := codebase.NewSnapshot("bad")
+	bad := codebase.NewSnapshot(textBad)
 
 	c.EXPECT().DependencyBuild(gomock.Any(), "charts/bad").
-		Return(apperr.New(apperr.CodeUpstream, "boom")).Times(1)
+		Return(apperr.New(apperr.CodeUpstream, textBoom)).Times(1)
 
-	for range 2 {
+	for range iterations2 {
 		err := helm.BuildDeps(ctx, c, bad, "charts/bad")
 		assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
 	}

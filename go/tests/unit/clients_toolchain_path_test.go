@@ -28,14 +28,14 @@ const goWorkspace = "/ws/go"
 // What it tests:
 //   - Adding the same directory twice leaves exactly one entry on PATH.
 func TestClientsToolchainAddToPathIfMissing_Idempotent(t *testing.T) {
-	t.Setenv("PATH", "/usr/bin")
-	toolchain.AddToPathIfMissing("/opt/tool/bin", fixtures.NopLogger())
-	toolchain.AddToPathIfMissing("/opt/tool/bin", fixtures.NopLogger())
+	t.Setenv(textPath, textUsrBin)
+	toolchain.AddToPathIfMissing(textOptToolBin, fixtures.NopLogger())
+	toolchain.AddToPathIfMissing(textOptToolBin, fixtures.NopLogger())
 
 	count := 0
 
-	for _, e := range filepath.SplitList(os.Getenv("PATH")) {
-		if strings.EqualFold(e, "/opt/tool/bin") {
+	for _, e := range filepath.SplitList(os.Getenv(textPath)) {
+		if strings.EqualFold(e, textOptToolBin) {
 			count++
 		}
 	}
@@ -66,13 +66,13 @@ func TestClientsToolchainProvision_ResolveGoBin_EnvDriven(t *testing.T) {
 		inst := toolchain.NewInstaller(
 			r,
 			fixtures.NopLogger(),
-			"linux-apt",
+			textLinuxApt,
 			denyPrompter(t),
 		)
 		// checkOnly=true installs nothing; ensureGoBinInPath still runs and mutates PATH.
 		_ = inst.Provision(
 			context.Background(),
-			"/root",
+			textRoot,
 			provisionCatalog(t),
 			false,
 			true,
@@ -80,33 +80,33 @@ func TestClientsToolchainProvision_ResolveGoBin_EnvDriven(t *testing.T) {
 	}
 
 	onPath := func(want string) bool {
-		return slices.Contains(filepath.SplitList(os.Getenv("PATH")), want)
+		return slices.Contains(filepath.SplitList(os.Getenv(textPath)), want)
 	}
 
 	t.Run("GOBIN is used directly", func(t *testing.T) {
-		t.Setenv("PATH", "/usr/bin")
-		t.Setenv("GOBIN", "/custom/gobin")
+		t.Setenv(textPath, textUsrBin)
+		t.Setenv(textGobin, "/custom/gobin")
 		provision(t)
 		assert.True(
 			t,
 			onPath("/custom/gobin"),
 			"GOBIN must be added to PATH, got %q",
-			os.Getenv("PATH"),
+			os.Getenv(textPath),
 		)
 	})
 
 	t.Run("GOPATH/bin when GOBIN unset", func(t *testing.T) {
-		t.Setenv("PATH", "/usr/bin")
-		t.Setenv("GOBIN", "")
+		t.Setenv(textPath, textUsrBin)
+		t.Setenv(textGobin, "")
 		t.Setenv("GOPATH", "/ws/go")
 		provision(t)
-		assert.True(t, onPath(filepath.Join(goWorkspace, "bin")),
-			"GOPATH/bin must be added to PATH, got %q", os.Getenv("PATH"))
+		assert.True(t, onPath(filepath.Join(goWorkspace, textBin)),
+			"GOPATH/bin must be added to PATH, got %q", os.Getenv(textPath))
 	})
 
 	t.Run("~/go/bin fallback when GOBIN and GOPATH unset", func(t *testing.T) {
-		t.Setenv("PATH", "/usr/bin")
-		t.Setenv("GOBIN", "")
+		t.Setenv(textPath, textUsrBin)
+		t.Setenv(textGobin, "")
 		t.Setenv("GOPATH", "")
 		provision(t)
 
@@ -115,7 +115,7 @@ func TestClientsToolchainProvision_ResolveGoBin_EnvDriven(t *testing.T) {
 			t.Skip("home dir unresolvable on this host")
 		}
 
-		assert.True(t, onPath(filepath.Join(home, "go", "bin")),
-			"~/go/bin must be added to PATH, got %q", os.Getenv("PATH"))
+		assert.True(t, onPath(filepath.Join(home, textGo2, textBin)),
+			"~/go/bin must be added to PATH, got %q", os.Getenv(textPath))
 	})
 }

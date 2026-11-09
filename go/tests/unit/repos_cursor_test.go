@@ -32,7 +32,16 @@ func TestCursorCodec_RoundTripAndUTCNormalization(t *testing.T) {
 	require.NotNil(t, codec)
 
 	loc := time.FixedZone("UTC+5", 5*60*60)
-	created := time.Date(2026, 7, 24, 12, 30, 45, 123456789, loc)
+	created := time.Date(
+		year2026,
+		month7,
+		day24,
+		hour12,
+		min30,
+		sec45,
+		nsec123456789,
+		loc,
+	)
 
 	token := codec.Encode(created, "id-42")
 	require.NotEmpty(t, token)
@@ -61,7 +70,7 @@ func TestCursorCodec_EmptyID(t *testing.T) {
 	t.Parallel()
 
 	codec := repository.NewCursorCodec()
-	created := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	created := time.Date(year2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	got, err := codec.Decode(codec.Encode(created, ""))
 	require.NoError(t, err)

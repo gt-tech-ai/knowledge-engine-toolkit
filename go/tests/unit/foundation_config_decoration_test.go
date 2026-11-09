@@ -40,7 +40,7 @@ import (
 func TestLoadDecorationConfig_OverlaysTheSectionOnTheDefaults(t *testing.T) {
 	t.Parallel()
 
-	t.Run("absent", func(t *testing.T) {
+	t.Run(textAbsent, func(t *testing.T) {
 		t.Parallel()
 
 		loader := mocks.NewMockConfigLoader(gomock.NewController(t))
@@ -119,9 +119,12 @@ func TestLoadDecorationConfig_KeepsDottedComponentNames(t *testing.T) {
 
 	dir := t.TempDir()
 	write := func(name, body string) {
-		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600))
+		require.NoError(
+			t,
+			os.WriteFile(filepath.Join(dir, name), []byte(body), perm0o600),
+		)
 	}
-	write("base.yaml", `decoration:
+	write(textBaseYaml, `decoration:
   clients:
     overrides:
       seed.ingress.gateway:
@@ -145,7 +148,7 @@ func TestLoadDecorationConfig_KeepsDottedComponentNames(t *testing.T) {
 	loader, err := config.New(
 		config.KindViper,
 		config.WithBaseDir(dir),
-		config.WithEnvironment("dev"),
+		config.WithEnvironment(textDev),
 	)
 	require.NoError(t, err)
 
@@ -166,7 +169,7 @@ func TestLoadDecorationConfig_KeepsDottedComponentNames(t *testing.T) {
 	s3 := cfg.Clients.For("outbox.s3")
 	require.NotNil(t, s3.Timeout)
 	assert.Equal(t, 4*time.Second, *s3.Timeout)
-	assert.NotContains(t, cfg.Clients.Overrides, "seed")
+	assert.NotContains(t, cfg.Clients.Overrides, textSeed)
 }
 
 // TestDecorations_BuildEachComponentsLayersFromConfig tests decorate.Decorations.
@@ -209,9 +212,9 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	lock := deps(client.Tier(), "lock")
 	assert.Equal(t, collab.Observability, lock.Observability)
 	assert.Nil(t, lock.Breaker)
-	assert.Equal(t, collab.Observability, deps(workflow.Tier(), "ask").Observability)
+	assert.Equal(t, collab.Observability, deps(workflow.Tier(), textAsk).Observability)
 
-	svc := deps(service.Tier(), "users")
+	svc := deps(service.Tier(), textUsers)
 	assert.Equal(t, decorate.Observability{}, svc.Observability)
 	assert.False(t, svc.SkipRecovery)
 
@@ -227,7 +230,7 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	assert.Nil(t, storage.Retrier)
 	assert.False(t, storage.ShedLoad)
 
-	api := deps(transport.Tier(), "api")
+	api := deps(transport.Tier(), textAPI)
 	assert.Nil(t, api.Bulkhead)
 	assert.Nil(t, api.RateLimiter)
 
@@ -245,18 +248,18 @@ func testDecorationsBuildEachComponentsLayersFromConfigRest(
 ) {
 	t.Helper()
 
-	repo := deps(repository.Tier(), "users")
+	repo := deps(repository.Tier(), textUsers)
 	assert.NotNil(t, repo.Retrier)
 	assert.NotNil(t, repo.Breaker)
 
-	off, on, timeout := false, true, 2*time.Second
+	off, on, timeout := false, true, seconds2*time.Second
 	cfg := decoration.DefaultConfig()
 
 	cfg.Services.Overrides = map[string]decoration.Layers{
 		"billing": {Tracing: &off, Recovery: &off, Metrics: &on, Timeout: &timeout},
 	}
 	cfg.Controllers.Overrides = map[string]decoration.Layers{
-		"api": {Bulkhead: decoration.Bulkhead{Enabled: &on}},
+		textAPI: {Bulkhead: decoration.Bulkhead{Enabled: &on}},
 	}
 
 	tuned := decorate.NewDecorations(&cfg, collab)
@@ -267,16 +270,16 @@ func testDecorationsBuildEachComponentsLayersFromConfigRest(
 	assert.True(t, billing.SkipRecovery)
 	assert.Equal(t, timeout, billing.Timeout)
 
-	shedding, err := tuned.Deps(transport.Tier(), "api")
+	shedding, err := tuned.Deps(transport.Tier(), textAPI)
 	require.NoError(t, err)
 	assert.NotNil(t, shedding.Bulkhead)
 	assert.True(t, shedding.ShedLoad)
 
-	users, err := tuned.Deps(service.Tier(), "users")
+	users, err := tuned.Deps(service.Tier(), textUsers)
 	require.NoError(t, err)
 	assert.Equal(t, svc, users)
 
-	_, err = decs.Deps(decorate.Tier{Name: "gateway"}, "x")
+	_, err = decs.Deps(decorate.Tier{Name: "gateway"}, textX)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	bad := decoration.DefaultConfig()
@@ -310,16 +313,21 @@ func TestDecorations_RecoveryLogsAPanicWithLoggingOff(t *testing.T) {
 	collab := decorate.Collaborators{
 		Logger: logger,
 	}
-	deps, err := decorate.NewDecorations(&defaults, collab).Deps(service.Tier(), "users")
+	deps, err := decorate.NewDecorations(&defaults, collab).
+		Deps(service.Tier(), textUsers)
 	require.NoError(t, err)
 	require.Nil(t, deps.Logger)
 
-	_, err = service.Tier().Subject("users", deps).Exec(t.Context(), "Provision",
-		func(context.Context) (int, error) { panic("boom") })
+	_, err = service.Tier().Subject(textUsers, deps).Exec(t.Context(), textProvision,
+		func(context.Context) (int, error) { panic(textBoom) })
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
 	off := false
-	unrecovered, err := decorate.Build("users", decoration.Layers{Recovery: &off}, collab)
+	unrecovered, err := decorate.Build(
+		textUsers,
+		decoration.Layers{Recovery: &off},
+		collab,
+	)
 	require.NoError(t, err)
 	assert.Nil(t, unrecovered.PanicLogger)
 }

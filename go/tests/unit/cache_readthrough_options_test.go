@@ -134,7 +134,7 @@ func testReadThroughNilCacheCoalescesWithoutCachingRest5(t *testing.T) {
 	started := make(chan struct{})
 	secondLoad := make(chan struct{})
 	release := make(chan struct{})
-	results := make(chan readThroughResult, 2)
+	results := make(chan readThroughResult, size2)
 
 	run := func(load func() (int, error)) {
 		v, err := cache.ReadThrough(
@@ -200,12 +200,12 @@ func testReadThroughNilCacheCoalescesWithoutCachingRest(
 
 	close(release)
 
-	for range 2 {
+	for range iterations2 {
 		r := <-results
 		require.NoError(t, r.err)
 		assert.Equal(
 			t,
-			42,
+			wantValue42,
 			r.value,
 			"every caller receives the single shared load's value",
 		)
@@ -251,7 +251,7 @@ func testReadThroughFirstCallerCancelDoesNotFailOthersRest7(
 
 	const key = "detached"
 
-	m.EXPECT().Get(gomock.Any(), key).Return(nil, false).Times(2)
+	m.EXPECT().Get(gomock.Any(), key).Return(nil, false).Times(timesArg2)
 
 	setCtxErr := expectSetContexts(m, key)
 
@@ -309,7 +309,7 @@ func testReadThroughFirstCallerCancelDoesNotFailOthersRest(
 ) {
 	t.Helper()
 
-	for range 100 {
+	for range iterations100 {
 		runtime.Gosched()
 	}
 
@@ -327,7 +327,7 @@ func testReadThroughFirstCallerCancelDoesNotFailOthersRest(
 
 	r := <-resB
 	require.NoError(t, r.err)
-	assert.Equal(t, 42, r.value)
+	assert.Equal(t, wantValue42, r.value)
 	require.NoError(
 		t,
 		<-setCtxErr,
@@ -415,7 +415,7 @@ func TestReadThrough_DoneContextSkipsLoad(t *testing.T) {
 
 // expectSetContexts allows Set and reports the context error each call saw.
 func expectSetContexts(m *mocks.MockByteCache, key string) chan error {
-	setCtxErr := make(chan error, 2)
+	setCtxErr := make(chan error, size2)
 
 	m.EXPECT().Set(gomock.Any(), key, gomock.Any(), time.Minute).DoAndReturn(
 		func(ctx context.Context, _ string, _ []byte, _ time.Duration) {
@@ -441,6 +441,6 @@ func newBlockingLoader(started, release chan struct{}) blockingLoader {
 
 		<-release
 
-		return 42, nil
+		return newBlockingLoaderResult42, nil
 	}
 }

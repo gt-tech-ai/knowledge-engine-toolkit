@@ -68,7 +68,7 @@ func TestStackTraceNoStack(t *testing.T) {
 func TestWrapPreservesOriginStack(t *testing.T) {
 	t.Parallel()
 
-	origin := apperr.New(apperr.CodeInternal, "origin")
+	origin := apperr.New(apperr.CodeInternal, textOrigin)
 	originStack := origin.StackTrace()
 	require.NotEmpty(t, originStack, "origin error should capture a stack")
 
@@ -96,11 +96,11 @@ func TestStackTraceStartsAtCaller(t *testing.T) {
 	t.Parallel()
 
 	for name, err := range map[string]*apperr.AppError{
-		"New":          apperr.New(apperr.CodeInternal, "origin"),
-		"InvalidInput": apperr.InvalidInput("origin"),
-		"Unavailable":  apperr.Unavailable("origin"),
+		textNew:          apperr.New(apperr.CodeInternal, textOrigin),
+		textInvalidinput: apperr.InvalidInput(textOrigin),
+		"Unavailable":    apperr.Unavailable(textOrigin),
 	} {
-		first, _, _ := strings.Cut(err.StackTrace(), "\n")
+		first, _, _ := strings.Cut(err.StackTrace(), textNewline)
 		assert.True(t, strings.HasSuffix(first, ".TestStackTraceStartsAtCaller"),
 			"%s: first frame = %q, want the calling test function", name, first)
 	}
@@ -109,11 +109,11 @@ func TestStackTraceStartsAtCaller(t *testing.T) {
 
 	require.ErrorAs(
 		t,
-		apperr.Wrap(apperr.Sentinel("cause"), apperr.CodeInternal, "origin"),
+		apperr.Wrap(apperr.Sentinel("cause"), apperr.CodeInternal, textOrigin),
 		&wrapped,
 	)
 
-	first, _, _ := strings.Cut(wrapped.StackTrace(), "\n")
+	first, _, _ := strings.Cut(wrapped.StackTrace(), textNewline)
 	assert.True(t, strings.HasSuffix(first, ".TestStackTraceStartsAtCaller"),
 		"Wrap: first frame = %q, want the calling test function", first)
 }
@@ -159,7 +159,7 @@ func TestMarshalLogObjectWithCause(t *testing.T) {
 func TestZapFieldsWithCause(t *testing.T) {
 	t.Parallel()
 
-	wrapped := apperr.Wrap(apperr.Sentinel("boom"), apperr.CodeInternal, "op failed")
+	wrapped := apperr.Wrap(apperr.Sentinel(textBoom), apperr.CodeInternal, "op failed")
 	appErr := &apperr.AppError{}
 	ok := errors.As(wrapped, &appErr)
 	require.True(t, ok)

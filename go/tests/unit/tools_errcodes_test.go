@@ -28,7 +28,7 @@ func committedTaxonomy(t *testing.T) map[string]string {
 	files := map[string]string{}
 
 	for _, p := range []string{errcodes.SourcePath, errcodes.GoPath, errcodes.PythonPath} {
-		b, err := os.ReadFile(filepath.FromSlash(repoRoot + "/" + p))
+		b, err := os.ReadFile(filepath.FromSlash(repoRoot + textSlash + p))
 		require.NoError(t, err)
 
 		files[p] = string(b)
@@ -135,7 +135,7 @@ func TestErrcodes_RejectsInvalidTaxonomy(t *testing.T) {
 		"grpc status": row("    grpc: TEAPOT\n    retry: none\n"),
 		"duplicate": row("    grpc: INTERNAL\n    retry: none\n") +
 			"  - {code: A, go: CodeB, doc: b, http: 500, grpc: INTERNAL, retry: none}\n",
-		"unknown field": row("    grpc: INTERNAL\n    retry: none\n    colour: red\n"),
+		textUnknownField: row("    grpc: INTERNAL\n    retry: none\n    colour: red\n"),
 		"missing go": "codes:\n  - {code: A, doc: a, http: 500, grpc: INTERNAL," +
 			" retry: none}\n",
 	}

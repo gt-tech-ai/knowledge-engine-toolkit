@@ -78,19 +78,19 @@ func TestViperLoader_Viper(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 app:
   name: viper-test
 `)
 
-	cfg := viperloader.Config{BaseDir: dir, Prefix: "MYAPP"}
+	cfg := viperloader.Config{BaseDir: dir, Prefix: textMyapp}
 	loader := viperloader.New(cfg)
-	require.NoError(t, loader.Load(), "Load")
+	require.NoError(t, loader.Load(), textLoad)
 
 	v := loader.Viper()
 	require.NotNil(t, v, "Viper() returned nil")
 
-	assert.Equal(t, "viper-test", v.GetString("app.name"))
+	assert.Equal(t, "viper-test", v.GetString(textAppName))
 }
 
 // TestViperLoader_SecretsOverlay tests that secrets.yaml is merged into the
@@ -108,7 +108,7 @@ func TestViperLoader_SecretsOverlay(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 db:
   host: localhost
   password: default
@@ -118,9 +118,9 @@ db:
   password: s3cr3t
 `)
 
-	cfg := viperloader.Config{BaseDir: dir, Prefix: "MYAPP"}
+	cfg := viperloader.Config{BaseDir: dir, Prefix: textMyapp}
 	loader := viperloader.New(cfg)
-	require.NoError(t, loader.Load(), "Load")
+	require.NoError(t, loader.Load(), textLoad)
 
 	assert.Equal(
 		t,
@@ -145,11 +145,11 @@ func TestViperLoader_LoadInvalidYAML(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 not: [valid: yaml
 `)
 
-	cfg := viperloader.Config{BaseDir: dir, Prefix: "MYAPP"}
+	cfg := viperloader.Config{BaseDir: dir, Prefix: textMyapp}
 	loader := viperloader.New(cfg)
 	require.Error(t, loader.Load(), "expected error for invalid YAML")
 }
@@ -172,10 +172,14 @@ not: [valid: yaml
 func TestZapLogger_WithAttrs_Redaction(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
-	child := slogger.With("email", "user@example.com")
+	child := slogger.With(textEmail, "user@example.com")
 	require.NotNil(t, child, "expected non-nil child logger")
 
 	child.InfoContext(t.Context(), "test message with pre-attached PII attr")
@@ -195,13 +199,24 @@ func TestZapLogger_WithAttrs_Redaction(t *testing.T) {
 func TestZapLogger_WithGroup(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
 	grouped := slogger.WithGroup("request")
 	require.NotNil(t, grouped, "expected non-nil grouped logger")
 
-	grouped.InfoContext(t.Context(), "grouped message", "method", "GET", "path", "/api")
+	grouped.InfoContext(
+		t.Context(),
+		"grouped message",
+		textMethod,
+		textGet3,
+		textPath2,
+		textAPI2,
+	)
 }
 
 // TestZapLogger_RedactAttr_NonString tests that redactAttr passes through
@@ -216,17 +231,21 @@ func TestZapLogger_WithGroup(t *testing.T) {
 func TestZapLogger_RedactAttr_NonString(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
 	slogger.InfoContext(
 		t.Context(),
 		"non-string attr",
-		"count",
-		42,
+		textCount,
+		infoContextArg42,
 		"ratio",
-		3.14,
-		"ok",
+		infoContextArg3p14,
+		textOk,
 		true,
 	)
 }
@@ -245,12 +264,16 @@ func TestZapLogger_RedactAttr_NonString(t *testing.T) {
 func TestZapLogger_RedactAttr_SensitiveValues(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
 	slogger.InfoContext(t.Context(),
 		"user lookup",
-		"email", "admin@corp.com",
+		textEmail, "admin@corp.com",
 		"phone", "555-123-4567",
 		"ssn", "123-45-6789",
 		"safe_field", "no-pii-here",
@@ -271,13 +294,17 @@ func TestZapLogger_RedactAttr_SensitiveValues(t *testing.T) {
 func TestZapLogger_WithAttrs_MultipleAttrs(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
 	child := slogger.With(
-		"service", "api",
-		"email", "test@test.com",
-		"count", 5,
+		textService, textAPI,
+		textEmail, "test@test.com",
+		textCount, withArg5,
 	)
 	child.InfoContext(t.Context(), "multi-attr test")
 }
@@ -295,10 +322,14 @@ func TestZapLogger_WithAttrs_MultipleAttrs(t *testing.T) {
 func TestZapLogger_WithGroupThenAttrs(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
-	child := slogger.WithGroup("http").With("method", "POST")
+	child := slogger.WithGroup("http").With(textMethod, textPost)
 	child.InfoContext(t.Context(), "grouped with attrs")
 }
 
@@ -321,12 +352,12 @@ func TestNoopMetrics_CounterMultipleLabels(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	c := m.Counter("requests_total", "Total requests", "method", "path", "status")
+	c := m.Counter("requests_total", "Total requests", textMethod, textPath2, textStatus)
 
-	c.Inc("GET", "/api", "200")
-	c.Inc("POST", "/api", "201")
-	c.Add(10.0, "GET", "/health", "200")
-	c.Add(0.0, "DELETE", "/api/1", "404")
+	c.Inc(textGet3, textAPI2, text200)
+	c.Inc(textPost, textAPI2, "201")
+	c.Add(addArg10p0, textGet3, "/health", text200)
+	c.Add(addArg0p0, textDelete2, "/api/1", text404)
 }
 
 // TestNoopMetrics_HistogramMultipleLabels tests that the noop histogram handles
@@ -347,13 +378,13 @@ func TestNoopMetrics_HistogramMultipleLabels(t *testing.T) {
 		"request_duration",
 		"Duration",
 		[]float64{0.1, 0.5, 1.0},
-		"method",
-		"path",
+		textMethod,
+		textPath2,
 	)
 
-	h.Observe(0.05, "GET", "/api")
-	h.Observe(0.5, "POST", "/api")
-	h.Observe(2.0, "GET", "/search")
+	h.Observe(observeArg0p05, textGet3, textAPI2)
+	h.Observe(observeArg0p5, textPost, textAPI2)
+	h.Observe(observeArg2p0, textGet3, "/search")
 }
 
 // TestNoopMetrics_GaugeMultipleLabels tests that the noop gauge handles
@@ -370,12 +401,12 @@ func TestNoopMetrics_GaugeMultipleLabels(t *testing.T) {
 	t.Parallel()
 
 	m := noop.New()
-	g := m.Gauge("active_connections", "Active connections", "service", "region")
+	g := m.Gauge("active_connections", "Active connections", textService, "region")
 
-	g.Set(100.0, "api", "us-east-1")
-	g.Inc("api", "us-east-1")
-	g.Dec("api", "us-east-1")
-	g.Set(0.0, "billing", "eu-west-1")
+	g.Set(setArg100p0, textAPI, textUsEast1)
+	g.Inc(textAPI, textUsEast1)
+	g.Dec(textAPI, textUsEast1)
+	g.Set(setArg0p0, "billing", textEuWest1)
 }
 
 // TestNoopMetrics_HandlerReturns404 tests that the noop metrics handler returns
@@ -394,7 +425,7 @@ func TestNoopMetrics_HandlerReturns404(t *testing.T) {
 	m := noop.New()
 	handler := m.Handler()
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/metrics", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, "/metrics", http.NoBody)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -421,10 +452,10 @@ func TestCORS_SpecificOrigin_Allowed(t *testing.T) {
 	t.Parallel()
 
 	cfg := middleware.CORSConfig{
-		AllowOrigins: []string{"https://app.example.com", "https://admin.example.com"},
-		AllowMethods: []string{"GET", "POST"},
-		AllowHeaders: []string{"Authorization", "Content-Type"},
-		MaxAge:       "3600",
+		AllowOrigins: []string{textHTTPSAppExampleCom, "https://admin.example.com"},
+		AllowMethods: []string{textGet3, textPost},
+		AllowHeaders: []string{"Authorization", textContentType},
+		MaxAge:       text3600,
 	}
 
 	handler := middleware.CORS(
@@ -435,18 +466,18 @@ func TestCORS_SpecificOrigin_Allowed(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/api/data", http.NoBody)
-	req.Header.Set("Origin", "https://app.example.com")
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textAPIData, http.NoBody)
+	req.Header.Set(textOrigin2, textHTTPSAppExampleCom)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(
 		t,
-		"https://app.example.com",
-		rec.Header().Get("Access-Control-Allow-Origin"),
+		textHTTPSAppExampleCom,
+		rec.Header().Get(textAccessControlAllowOrigin),
 	)
-	assert.Equal(t, "Origin", rec.Header().Get("Vary"))
+	assert.Equal(t, textOrigin2, rec.Header().Get("Vary"))
 }
 
 // TestCORS_SpecificOrigin_Disallowed tests that CORS blocks cross-origin
@@ -463,10 +494,10 @@ func TestCORS_SpecificOrigin_Disallowed(t *testing.T) {
 	t.Parallel()
 
 	cfg := middleware.CORSConfig{
-		AllowOrigins: []string{"https://app.example.com"},
-		AllowMethods: []string{"GET"},
-		AllowHeaders: []string{"Content-Type"},
-		MaxAge:       "3600",
+		AllowOrigins: []string{textHTTPSAppExampleCom},
+		AllowMethods: []string{textGet3},
+		AllowHeaders: []string{textContentType},
+		MaxAge:       text3600,
 	}
 
 	handler := middleware.CORS(
@@ -477,15 +508,15 @@ func TestCORS_SpecificOrigin_Disallowed(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/api/data", http.NoBody)
-	req.Header.Set("Origin", "https://evil.com")
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textAPIData, http.NoBody)
+	req.Header.Set(textOrigin2, "https://evil.com")
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Empty(
 		t,
-		rec.Header().Get("Access-Control-Allow-Origin"),
+		rec.Header().Get(textAccessControlAllowOrigin),
 		"Allow-Origin should be empty for disallowed origin",
 	)
 }
@@ -504,10 +535,10 @@ func TestCORS_NoOriginHeader(t *testing.T) {
 	t.Parallel()
 
 	cfg := middleware.CORSConfig{
-		AllowOrigins: []string{"https://app.example.com"},
-		AllowMethods: []string{"GET"},
-		AllowHeaders: []string{"Content-Type"},
-		MaxAge:       "3600",
+		AllowOrigins: []string{textHTTPSAppExampleCom},
+		AllowMethods: []string{textGet3},
+		AllowHeaders: []string{textContentType},
+		MaxAge:       text3600,
 	}
 
 	handler := middleware.CORS(
@@ -518,13 +549,13 @@ func TestCORS_NoOriginHeader(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/api/data", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textAPIData, http.NoBody)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Empty(
 		t,
-		rec.Header().Get("Access-Control-Allow-Origin"),
+		rec.Header().Get(textAccessControlAllowOrigin),
 		"Allow-Origin should be empty when no Origin header",
 	)
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -547,9 +578,9 @@ func TestCORS_Preflight_SpecificOrigin(t *testing.T) {
 	t.Parallel()
 
 	cfg := middleware.CORSConfig{
-		AllowOrigins: []string{"https://app.example.com"},
-		AllowMethods: []string{"GET", "POST", "PUT"},
-		AllowHeaders: []string{"Authorization", "Content-Type"},
+		AllowOrigins: []string{textHTTPSAppExampleCom},
+		AllowMethods: []string{textGet3, textPost, "PUT"},
+		AllowHeaders: []string{"Authorization", textContentType},
 		MaxAge:       "7200",
 	}
 
@@ -565,10 +596,10 @@ func TestCORS_Preflight_SpecificOrigin(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		t.Context(),
 		"OPTIONS",
-		"/api/data",
+		textAPIData,
 		http.NoBody,
 	)
-	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set(textOrigin2, textHTTPSAppExampleCom)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -637,7 +668,10 @@ func TestGetRequestID_UnrelatedContext(t *testing.T) {
 func TestCompression_MultipleWrites(t *testing.T) {
 	t.Parallel()
 
-	chunk := strings.Repeat("x", 600) // 600 bytes each, 3 chunks = 1800 > 1024 threshold
+	chunk := strings.Repeat(
+		textX,
+		count600,
+	) // 600 bytes each, 3 chunks = 1800 > 1024 threshold
 
 	handler := middleware.Compression()(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -647,16 +681,16 @@ func TestCompression_MultipleWrites(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
-	req.Header.Set("Accept-Encoding", "gzip")
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
+	req.Header.Set("Accept-Encoding", textGzip)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	require.Equal(
 		t,
-		"gzip",
-		rec.Header().Get("Content-Encoding"),
+		textGzip,
+		rec.Header().Get(textContentEncoding),
 		"expected gzip Content-Encoding for multi-write response",
 	)
 
@@ -683,7 +717,7 @@ func TestCompression_MultipleWrites(t *testing.T) {
 func TestCompression_ExactThreshold(t *testing.T) {
 	t.Parallel()
 
-	exactBody := strings.Repeat("y", 1024)
+	exactBody := strings.Repeat("y", count1024)
 
 	handler := middleware.Compression()(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -691,16 +725,16 @@ func TestCompression_ExactThreshold(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
-	req.Header.Set("Accept-Encoding", "gzip")
+	req := httptest.NewRequestWithContext(t.Context(), textGet3, textSlash, http.NoBody)
+	req.Header.Set("Accept-Encoding", textGzip)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(
 		t,
-		"gzip",
-		rec.Header().Get("Content-Encoding"),
+		textGzip,
+		rec.Header().Get(textContentEncoding),
 		"expected gzip at exact 1024-byte threshold",
 	)
 }
@@ -733,7 +767,7 @@ func TestRetryWithResult_Success(t *testing.T) {
 	result, err := exponential.RetryWithResult(ctx, r, func() (string, error) {
 		return "hello", nil
 	})
-	require.NoError(t, err, "unexpected error")
+	require.NoError(t, err, textUnexpectedError)
 	assert.Equal(t, "hello", result)
 }
 
@@ -771,9 +805,9 @@ func TestRetryWithResult_SucceedsAfterRetries(t *testing.T) {
 
 		return 42, nil
 	})
-	require.NoError(t, err, "unexpected error")
-	assert.Equal(t, 42, result)
-	assert.Equal(t, int32(3), attempts.Load(), "expected 3 total attempts")
+	require.NoError(t, err, textUnexpectedError)
+	assert.Equal(t, wantResult42, result)
+	assert.Equal(t, int32(int32Arg3), attempts.Load(), "expected 3 total attempts")
 }
 
 // TestRetryWithResult_AllFailures tests that RetryWithResult returns an error
@@ -828,7 +862,7 @@ func TestRetryWithResult_BudgetExhausted(t *testing.T) {
 		MaxElapsedTime:  5 * time.Second,
 	})
 
-	b := budget.NewBudget(2)
+	b := budget.NewBudget(maxRetries2)
 	ctx := budget.WithRetryBudget(context.Background(), b)
 
 	var attempts atomic.Int32
@@ -947,7 +981,7 @@ func TestRetryBudget_RemainingWithoutBudget(t *testing.T) {
 func TestRetryBudget_RemainingFullyConsumed(t *testing.T) {
 	t.Parallel()
 
-	b := budget.NewBudget(2)
+	b := budget.NewBudget(maxRetries2)
 	ctx := budget.WithRetryBudget(context.Background(), b)
 
 	budget.ConsumeRetry(ctx)
@@ -976,7 +1010,7 @@ func TestRetryBudget_ConsumeRetry_Idempotent(t *testing.T) {
 
 	require.True(t, budget.ConsumeRetry(ctx), "first consume should succeed")
 
-	for i := range 5 {
+	for i := range iterations5 {
 		assert.False(t, budget.ConsumeRetry(ctx), "consume %d should have failed", i+2)
 	}
 }
@@ -997,10 +1031,10 @@ func TestRetryBudget_ConsumeRetry_Idempotent(t *testing.T) {
 //   - Setting APP_ENV=staging causes DefaultConfig().Env to be "staging"
 func TestViperDefaultConfig_EnvOverride(t *testing.T) {
 	// t.Setenv is not compatible with t.Parallel()
-	t.Setenv("APP_ENV", "staging")
+	t.Setenv(textAppEnv, textStaging)
 
 	cfg := viperloader.DefaultConfig()
-	assert.Equal(t, "staging", cfg.Env)
+	assert.Equal(t, textStaging, cfg.Env)
 }
 
 // ---------------------------------------------------------------------------
@@ -1023,7 +1057,7 @@ func TestViperLoader_FullLayerLoading(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "base.yaml"), `
+	writeFile(t, filepath.Join(dir, textBaseYaml), `
 server:
   port: 8080
   host: localhost
@@ -1041,12 +1075,12 @@ db:
   password: staging-secret
 `)
 
-	cfg := viperloader.Config{BaseDir: dir, Env: "staging", Prefix: "MYAPP"}
+	cfg := viperloader.Config{BaseDir: dir, Env: textStaging, Prefix: textMyapp}
 	loader := viperloader.New(cfg)
-	require.NoError(t, loader.Load(), "Load")
+	require.NoError(t, loader.Load(), textLoad)
 
-	assert.Equal(t, 8080, loader.GetInt("server.port"))
-	assert.Equal(t, "warn", loader.GetString("log.level"))
+	assert.Equal(t, wantGetInt8080, loader.GetInt(textServerPort))
+	assert.Equal(t, textWarn, loader.GetString("log.level"))
 	assert.Equal(t, "staging-secret", loader.GetString("db.password"))
 }
 
@@ -1069,7 +1103,11 @@ db:
 func TestZapLogger_RedactingHandler_Enabled(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "warn", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textWarn,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
 	slogger.DebugContext(t.Context(), "this should be filtered out")
@@ -1091,7 +1129,11 @@ func TestZapLogger_RedactingHandler_Enabled(t *testing.T) {
 func TestZapLogger_RedactingHandler_Handle_WithCorrelation(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: "debug", Format: "json", RedactPII: true}
+	cfg := zaplogger.Config{
+		Level:     textDebug,
+		Format:    textStructuredFormat,
+		RedactPII: true,
+	}
 	slogger := zaplogger.NewSlog(cfg)
 
 	ctx := context.Background()
@@ -1120,13 +1162,13 @@ func TestOTelTracer_NewAndShutdown(t *testing.T) {
 	ctx := context.Background()
 	cfg := oteltracer.Config{
 		ServiceName: "test-service-shutdown",
-		Endpoint:    "localhost:4317",
-		SampleRate:  1.0,
+		Endpoint:    textLocalhost4317,
+		SampleRate:  sampleRate1p0,
 		Insecure:    true,
 	}
 
 	tr, err := oteltracer.New(ctx, cfg)
-	require.NoError(t, err, "oteltracer.New")
+	require.NoError(t, err, textOteltracerNew)
 	require.NotNil(t, tr, "expected non-nil tracer")
 
 	var _ interfaces.Tracer = tr
@@ -1157,11 +1199,11 @@ func TestOTelTracer_SpanConversions(t *testing.T) {
 	ctx := context.Background()
 	tr, err := oteltracer.New(ctx, oteltracer.Config{
 		ServiceName: "test-service-spans",
-		Endpoint:    "localhost:4317",
+		Endpoint:    textLocalhost4317,
 		SampleRate:  1.0,
 		Insecure:    true,
 	})
-	require.NoError(t, err, "oteltracer.New")
+	require.NoError(t, err, textOteltracerNew)
 	t.Cleanup(func() { _ = tr.Shutdown(ctx) })
 
 	// readOnly starts a span and returns it with OTel's read-only view of it.
@@ -1177,22 +1219,22 @@ func TestOTelTracer_SpanConversions(t *testing.T) {
 
 	span, ro := readOnly()
 	span.SetAttribute("user.id", "abc-123")
-	span.SetAttribute("count", 42)
-	span.SetAttribute("data", int64(1000))
-	span.SetAttribute("score", 3.14)
-	span.SetAttribute("active", true)
+	span.SetAttribute(textCount, setAttributeArg42)
+	span.SetAttribute(textData, int64(int64Arg1000))
+	span.SetAttribute("score", setAttributeArg3p14)
+	span.SetAttribute(textActive2, true)
 	span.SetAttribute("complex", struct{}{})
 	span.RecordError(apperr.Sentinel("test error"))
-	span.SetStatus(interfaces.SpanStatusError, "failed")
+	span.SetStatus(interfaces.SpanStatusError, textFailed)
 
 	t.Helper()
 
 	assert.ElementsMatch(t, []attribute.KeyValue{
 		attribute.String("user.id", "abc-123"),
-		attribute.Int("count", 42),
-		attribute.Int64("data", 1000),
+		attribute.Int(textCount, 42),
+		attribute.Int64(textData, 1000),
 		attribute.Float64("score", 3.14),
-		attribute.Bool("active", true),
+		attribute.Bool(textActive2, true),
 		attribute.String("complex", ""),
 	}, ro.Attributes())
 
@@ -1214,7 +1256,7 @@ func testOTelTracerSpanConversionsRest3(
 	assert.Equal(t, "exception", ro.Events()[0].Name)
 	assert.Equal(
 		t,
-		sdktrace.Status{Code: codes.Error, Description: "failed"},
+		sdktrace.Status{Code: codes.Error, Description: textFailed},
 		ro.Status(),
 	)
 
@@ -1252,9 +1294,9 @@ func TestOTelTracer_EndUnsampledSpan(t *testing.T) {
 
 	ctx := context.Background()
 	tr, err := oteltracer.New(ctx, oteltracer.Config{
-		ServiceName: "test-service-end", Endpoint: "localhost:4317", Insecure: true,
+		ServiceName: "test-service-end", Endpoint: textLocalhost4317, Insecure: true,
 	})
-	require.NoError(t, err, "oteltracer.New")
+	require.NoError(t, err, textOteltracerNew)
 	t.Cleanup(func() { _ = tr.Shutdown(ctx) })
 
 	spanCtx, span := tr.Start(ctx, "unsampled")
@@ -1279,12 +1321,12 @@ func TestOTelTracer_EndUnsampledSpan(t *testing.T) {
 func TestOTelTracer_SampleRates(t *testing.T) {
 	t.Parallel()
 
-	rates := []float64{1.0, 0.0, -1.0, 0.5, 2.0}
+	rates := []float64{rates1p0, rates0p0, -rates1p0, rates0p5, rates2p0}
 	for _, rate := range rates {
 		ctx := context.Background()
 		cfg := oteltracer.Config{
 			ServiceName: "sample-test",
-			Endpoint:    "localhost:4317",
+			Endpoint:    textLocalhost4317,
 			SampleRate:  rate,
 			Insecure:    true,
 		}
@@ -1313,8 +1355,8 @@ func TestOTelTracer_SecureMode(t *testing.T) {
 	ctx := context.Background()
 	cfg := oteltracer.Config{
 		ServiceName: "secure-test",
-		Endpoint:    "localhost:4317",
-		SampleRate:  1.0,
+		Endpoint:    textLocalhost4317,
+		SampleRate:  sampleRate1p0,
 		Insecure:    false,
 	}
 
@@ -1367,8 +1409,8 @@ func TestTracer_New_WithOptions(t *testing.T) {
 	tr, err := tracer.New(
 		ctx, tracer.KindOTel,
 		tracer.WithServiceName("option-test"),
-		tracer.WithEndpoint("localhost:4317"),
-		tracer.WithSampleRate(0.5),
+		tracer.WithEndpoint(textLocalhost4317),
+		tracer.WithSampleRate(rate0p5),
 		tracer.WithInsecure(true),
 	)
 	require.NoError(t, err, "tracer.New")
@@ -1393,13 +1435,13 @@ func TestOTelTracer_ShutdownNilFn(t *testing.T) {
 	ctx := context.Background()
 	cfg := oteltracer.Config{
 		ServiceName: "nil-shutdown-test",
-		Endpoint:    "localhost:4317",
-		SampleRate:  1.0,
+		Endpoint:    textLocalhost4317,
+		SampleRate:  sampleRate1p0,
 		Insecure:    true,
 	}
 
 	tr, err := oteltracer.New(ctx, cfg)
-	require.NoError(t, err, "oteltracer.New")
+	require.NoError(t, err, textOteltracerNew)
 
 	require.NoError(t, tr.Shutdown(ctx), "first Shutdown")
 }

@@ -84,7 +84,7 @@ func TestNewTestMinIO_WithImageOverridesTheDefault(t *testing.T) {
 
 	ctx := context.Background()
 
-	digest := strings.SplitN(miniodb.DefaultImage, "@", 2)[1]
+	digest := strings.SplitN(miniodb.DefaultImage, "@", splitNArg2)[1]
 	digestOnly := "cgr.dev/chainguard/minio@" + digest
 	started, err := miniodb.NewTestMinIO(ctx, miniodb.WithImage(digestOnly))
 
@@ -147,14 +147,14 @@ func (s *StorageMinIOSuite) TestUploadDownload_SmallAndMultipart() {
 	small := s.loadFixture()
 	s.Require().
 		NoError(
-			s.client.Upload(ctx, testBucket, "small.md", bytes.NewReader(small), "text/markdown"),
+			s.client.Upload(ctx, testBucket, "small.md", bytes.NewReader(small), textTextMarkdown),
 		)
 	s.Equal(small, s.download(ctx, "small.md"))
 
 	large := s.largeFixture(6 * 1024 * 1024)
 	s.Require().
 		NoError(
-			s.client.Upload(ctx, testBucket, "large.md", bytes.NewReader(large), "text/markdown"),
+			s.client.Upload(ctx, testBucket, "large.md", bytes.NewReader(large), textTextMarkdown),
 		)
 
 	got := s.download(ctx, "large.md")
@@ -177,7 +177,13 @@ func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 
 	const ct = "text/markdown"
 
-	putURL, err := s.client.PresignPutURL(ctx, testBucket, "presigned.md", 300, ct)
+	putURL, err := s.client.PresignPutURL(
+		ctx,
+		testBucket,
+		"presigned.md",
+		expirySeconds300,
+		ct,
+	)
 	s.Require().NoError(err)
 
 	putReq, err := http.NewRequestWithContext(
@@ -198,7 +204,7 @@ func (s *StorageMinIOSuite) TestPresignedURL_PutGet() {
 		ctx,
 		testBucket,
 		"presigned.md",
-		300,
+		expirySeconds300,
 		"My Report.md",
 	)
 	s.Require().NoError(err)
@@ -238,17 +244,17 @@ func (s *StorageMinIOSuite) TestStat_And_List() {
 
 	for _, k := range []string{"docs/a.md", "docs/b.md", "other/c.md"} {
 		s.Require().
-			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), "text/markdown"))
+			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), textTextMarkdown))
 	}
 
 	stat, err := s.client.Stat(ctx, testBucket, "docs/a.md")
 	s.Require().NoError(err)
-	s.Equal("text/markdown", stat.ContentType)
+	s.Equal(textTextMarkdown, stat.ContentType)
 	s.Positive(stat.Size)
 
 	objs, err := s.client.ListObjects(ctx, testBucket, "docs/")
 	s.Require().NoError(err)
-	s.Len(objs, 2, "only docs/ prefix objects")
+	s.Len(objs, length2, "only docs/ prefix objects")
 }
 
 // TestListObjectsPageToken_PagesToExhaustion verifies the resumable, token-paginated
@@ -273,7 +279,7 @@ func (s *StorageMinIOSuite) TestListObjectsPageToken_PagesToExhaustion() {
 
 	for _, k := range want {
 		s.Require().
-			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), "text/markdown"))
+			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), textTextMarkdown))
 	}
 
 	var got []string
@@ -287,14 +293,15 @@ func (s *StorageMinIOSuite) TestListObjectsPageToken_PagesToExhaustion() {
 			testBucket,
 			"page/",
 			token,
-			2,
+			limit2,
 		)
 		s.Require().NoError(err)
 
 		pages++
 		s.Require().
-			Less(pages, 10, "the crawl must terminate (guard against a non-empty-token loop)")
-		s.Require().LessOrEqual(len(objs), 2, "each page honors the limit")
+			Less(pages, lessArg10,
+				"the crawl must terminate (guard against a non-empty-token loop)")
+		s.Require().LessOrEqual(len(objs), lessOrEqualArg2, "each page honors the limit")
 
 		for _, o := range objs {
 			got = append(got, o.Key)
@@ -307,7 +314,7 @@ func (s *StorageMinIOSuite) TestListObjectsPageToken_PagesToExhaustion() {
 		token = next
 	}
 
-	s.Equal(3, pages, "5 objects at limit=2 => 3 pages (2+2+1)")
+	s.Equal(equalArg3, pages, "5 objects at limit=2 => 3 pages (2+2+1)")
 	s.ElementsMatch(
 		want,
 		got,
@@ -328,22 +335,23 @@ func (s *StorageMinIOSuite) TestDelete_DeleteBatch_Exists() {
 	body := s.loadFixture()
 	s.Require().
 		NoError(
-			s.client.Upload(ctx, testBucket, "del/one.md", bytes.NewReader(body), "text/markdown"),
+			s.client.Upload(ctx, testBucket, textDelOneMd, bytes.NewReader(body),
+				textTextMarkdown),
 		)
 
-	exists, err := s.client.Exists(ctx, testBucket, "del/one.md")
+	exists, err := s.client.Exists(ctx, testBucket, textDelOneMd)
 	s.Require().NoError(err)
 	s.True(exists)
 
-	s.Require().NoError(s.client.Delete(ctx, testBucket, "del/one.md"))
+	s.Require().NoError(s.client.Delete(ctx, testBucket, textDelOneMd))
 
-	exists, err = s.client.Exists(ctx, testBucket, "del/one.md")
+	exists, err = s.client.Exists(ctx, testBucket, textDelOneMd)
 	s.Require().NoError(err)
 	s.False(exists)
 
 	for _, k := range []string{"batch/x.md", "batch/y.md"} {
 		s.Require().
-			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), "text/markdown"))
+			NoError(s.client.Upload(ctx, testBucket, k, bytes.NewReader(body), textTextMarkdown))
 	}
 
 	s.Require().
@@ -360,7 +368,7 @@ func (s *StorageMinIOSuite) rawClient() *awss3.Client {
 
 	awsCfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
-		awsconfig.WithRegion("us-east-1"),
+		awsconfig.WithRegion(textUsEast1),
 		awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(
 				miniodb.RootUser,

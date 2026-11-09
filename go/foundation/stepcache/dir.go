@@ -171,7 +171,7 @@ func (d dir) Record(_ context.Context, key string) error {
 // is CodeInvalidInput, so a key can never name a path outside root.
 func (d dir) path(key string) (string, error) {
 	b, err := hex.DecodeString(key)
-	if err != nil || len(b) != 32 {
+	if err != nil || len(b) != bLen32 {
 		return "", apperr.New(apperr.CodeInvalidInput, "stepcache: malformed key "+key)
 	}
 

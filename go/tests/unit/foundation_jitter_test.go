@@ -29,7 +29,7 @@ func TestEqualJitter_RangeAndVariation(t *testing.T) {
 
 	seen := make(map[time.Duration]struct{})
 
-	for range 200 {
+	for range iterations200 {
 		j := retry.EqualJitter(d)
 		require.GreaterOrEqual(t, j, d/2, "jitter must be >= d/2 (equal jitter floor)")
 		require.LessOrEqual(t, j, d, "jitter must be <= d")
@@ -63,7 +63,7 @@ func TestFullJitter_RangeAndVariation(t *testing.T) {
 
 	seen := make(map[time.Duration]struct{})
 
-	for range 200 {
+	for range iterations200 {
 		j := retry.FullJitter(d)
 		require.GreaterOrEqual(t, j, time.Duration(0))
 		require.LessOrEqual(t, j, d)
@@ -91,7 +91,7 @@ func TestJitter_MaxDurationDoesNotOverflow(t *testing.T) {
 
 	maxD := time.Duration(math.MaxInt64)
 
-	for range 100 {
+	for range iterations100 {
 		full := retry.FullJitter(maxD)
 		require.GreaterOrEqual(t, full, time.Duration(0))
 

@@ -48,9 +48,9 @@ func denyPrompter(t *testing.T) interfaces.Prompter {
 func registerToolScanMock(r *mocks.MockCommandRunner) {
 	r.EXPECT().Exists(gomock.Any()).Return(true).AnyTimes()
 
-	for i := range 9 {
+	for i := range iterations9 {
 		args := make([]any, 0, 3+i)
-		for range 3 + i {
+		for range iterations3 + i {
 			args = append(args, gomock.Any())
 		}
 

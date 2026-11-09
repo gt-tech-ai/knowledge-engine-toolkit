@@ -26,9 +26,9 @@ func scaffoldTemplates() fstest.MapFS {
 // scaffoldPolicy gives each template its policy.
 func scaffoldPolicy(path string) types.FilePolicy {
 	switch path {
-	case "svc/README.md":
+	case textSvcReadmeMd:
 		return types.PolicyOnce
-	case "svc/wire.go":
+	case textSvcWireGo:
 		return types.PolicyPreserve
 	default:
 		return types.PolicyRegenerate
@@ -52,10 +52,10 @@ func TestFoundationScaffold_PlanAndApply(t *testing.T) {
 
 	ctx := t.Context()
 	files := map[string]string{
-		"svc/README.md": "# hand written\n",
-		"svc/wire.go":   "// old header\n// scaffold:preserve\nfunc custom() {}\n",
+		textSvcReadmeMd: "# hand written\n",
+		textSvcWireGo:   "// old header\n// scaffold:preserve\nfunc custom() {}\n",
 	}
-	data := map[string]string{"Name": "svc"}
+	data := map[string]string{textName2: textSvc}
 	plan, err := scaffold.Plan(ctx, scaffoldTemplates(), data, scaffoldPolicy,
 		memoryCodebase(t, files))
 	require.NoError(t, err)
@@ -66,8 +66,8 @@ func TestFoundationScaffold_PlanAndApply(t *testing.T) {
 	}
 
 	assert.Equal(t, map[string]types.FileAction{
-		"svc/main.go": types.FileCreate, "svc/README.md": types.FileKeep,
-		"svc/wire.go": types.FileUpdate,
+		"svc/main.go": types.FileCreate, textSvcReadmeMd: types.FileKeep,
+		textSvcWireGo: types.FileUpdate,
 	}, actions)
 
 	written := map[string]string{}
@@ -81,7 +81,7 @@ func TestFoundationScaffold_PlanAndApply(t *testing.T) {
 	require.NoError(t, scaffold.Apply(ctx, write, plan, false))
 	assert.Equal(t, map[string]string{
 		"svc/main.go": "package svc\n",
-		"svc/wire.go": "// generated svc\n// scaffold:preserve\nfunc custom() {}\n",
+		textSvcWireGo: "// generated svc\n// scaffold:preserve\nfunc custom() {}\n",
 	}, written)
 
 	maps.Copy(files, written)
@@ -110,9 +110,9 @@ func TestFoundationScaffold_Conflicts(t *testing.T) {
 	plan, err := scaffold.Plan(
 		ctx,
 		scaffoldTemplates(),
-		map[string]string{"Name": "svc"},
+		map[string]string{textName2: textSvc},
 		scaffoldPolicy,
-		memoryCodebase(t, map[string]string{"svc/wire.go": "no marker\n"}),
+		memoryCodebase(t, map[string]string{textSvcWireGo: "no marker\n"}),
 	)
 	require.NoError(t, err)
 
@@ -129,7 +129,7 @@ func TestFoundationScaffold_Conflicts(t *testing.T) {
 		false,
 	)
 	assert.Equal(t, apperr.CodeConflict, apperr.Code(err))
-	assert.Contains(t, err.Error(), "svc/wire.go")
+	assert.Contains(t, err.Error(), textSvcWireGo)
 	assert.Zero(t, written)
 
 	_, err = scaffold.Plan(ctx, scaffoldTemplates(), map[string]string{},
@@ -152,27 +152,27 @@ func TestFoundationScaffold_PlanFiles(t *testing.T) {
 	t.Parallel()
 
 	cb := memoryCodebase(t, map[string]string{
-		"a/hand.yaml": "tuned: true\n",
-		"a/gen.hcl":   "old\n",
-		"a/same.hcl":  "same\n",
-		"a/keep.go":   "no marker\n",
+		textAHandYaml: "tuned: true\n",
+		textAGenHcl:   textOld,
+		textASameHcl:  "same\n",
+		textAKeepGo:   "no marker\n",
 	})
 	policy := func(path string) types.FilePolicy {
 		switch path {
-		case "a/hand.yaml":
+		case textAHandYaml:
 			return types.PolicyOnce
-		case "a/keep.go":
+		case textAKeepGo:
 			return types.PolicyPreserve
 		default:
 			return types.PolicyRegenerate
 		}
 	}
 	plan, err := scaffold.PlanFiles(t.Context(), cb, types.Artifacts{
-		"a/new.md":    []byte("new\n"),
-		"a/hand.yaml": []byte("tuned: false\n"),
-		"a/gen.hcl":   []byte("new\n"),
-		"a/same.hcl":  []byte("same\n"),
-		"a/keep.go":   []byte("head\n// scaffold:preserve\n"),
+		textANewMd:    []byte("new\n"),
+		textAHandYaml: []byte("tuned: false\n"),
+		textAGenHcl:   []byte("new\n"),
+		textASameHcl:  []byte("same\n"),
+		textAKeepGo:   []byte("head\n// scaffold:preserve\n"),
 	}, policy)
 	require.NoError(t, err)
 
@@ -183,7 +183,7 @@ func TestFoundationScaffold_PlanFiles(t *testing.T) {
 		got[e.Path] = e.Action
 		paths = append(paths, e.Path)
 
-		if e.Path == "a/hand.yaml" {
+		if e.Path == textAHandYaml {
 			assert.Equal(t, "tuned: true\n", string(e.Content))
 		}
 	}
@@ -191,19 +191,19 @@ func TestFoundationScaffold_PlanFiles(t *testing.T) {
 	assert.Equal(
 		t,
 		[]string{
-			"a/gen.hcl",
-			"a/hand.yaml",
-			"a/keep.go",
-			"a/new.md",
-			"a/same.hcl",
+			textAGenHcl,
+			textAHandYaml,
+			textAKeepGo,
+			textANewMd,
+			textASameHcl,
 		},
 		paths,
 	)
 	assert.Equal(t, map[string]types.FileAction{
-		"a/new.md":    types.FileCreate,
-		"a/hand.yaml": types.FileKeep,
-		"a/gen.hcl":   types.FileUpdate,
-		"a/same.hcl":  types.FileKeep,
-		"a/keep.go":   types.FileConflict,
+		textANewMd:    types.FileCreate,
+		textAHandYaml: types.FileKeep,
+		textAGenHcl:   types.FileUpdate,
+		textASameHcl:  types.FileKeep,
+		textAKeepGo:   types.FileConflict,
 	}, got)
 }

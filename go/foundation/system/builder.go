@@ -204,8 +204,8 @@ type loggingRunner struct {
 func (d *loggingRunner) Run(ctx context.Context, dir, name string, args ...string) error {
 	start := time.Now()
 	err := d.inner.Run(ctx, dir, name, args...)
-	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
-		name, strings.Join(args, " "), dir, time.Since(start), err)
+	d.logf(textRunnerSSDir,
+		name, strings.Join(args, textSpace), dir, time.Since(start), err)
 
 	return err
 }
@@ -221,8 +221,8 @@ func (d *loggingRunner) RunWithEnv(
 ) error {
 	start := time.Now()
 	err := d.inner.RunWithEnv(ctx, dir, extraEnv, name, args...)
-	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
-		name, strings.Join(args, " "), dir, time.Since(start), err)
+	d.logf(textRunnerSSDir,
+		name, strings.Join(args, textSpace), dir, time.Since(start), err)
 
 	return err
 }
@@ -236,8 +236,8 @@ func (d *loggingRunner) RunBuffered(
 ) CmdResult {
 	start := time.Now()
 	cr := d.inner.RunBuffered(ctx, dir, name, args...)
-	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
-		name, strings.Join(args, " "), dir, time.Since(start), cr.Err)
+	d.logf(textRunnerSSDir,
+		name, strings.Join(args, textSpace), dir, time.Since(start), cr.Err)
 
 	return cr
 }
@@ -253,8 +253,8 @@ func (d *loggingRunner) RunBufferedWithEnv(
 ) CmdResult {
 	start := time.Now()
 	cr := d.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
-	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
-		name, strings.Join(args, " "), dir, time.Since(start), cr.Err)
+	d.logf(textRunnerSSDir,
+		name, strings.Join(args, textSpace), dir, time.Since(start), cr.Err)
 
 	return cr
 }
@@ -272,8 +272,8 @@ func (d *loggingRunner) RunBufferedWithInput(
 ) CmdResult {
 	start := time.Now()
 	cr := d.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
-	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
-		name, strings.Join(args, " "), dir, time.Since(start), cr.Err)
+	d.logf(textRunnerSSDir,
+		name, strings.Join(args, textSpace), dir, time.Since(start), cr.Err)
 
 	return cr
 }
@@ -467,7 +467,7 @@ func (d *dryRunRunner) RequireTool(name, installHint string) error {
 // log emits the "would execute" line for a command when a logger is configured.
 func (d *dryRunRunner) log(name string, args ...string) {
 	if d.logf != nil {
-		d.logf("[dry-run] would execute: %s %s", name, strings.Join(args, " "))
+		d.logf("[dry-run] would execute: %s %s", name, strings.Join(args, textSpace))
 	}
 }
 
@@ -605,5 +605,5 @@ func (*hookRunner) cmdStr(name string, args []string) string {
 		return name
 	}
 
-	return name + " " + strings.Join(args, " ")
+	return name + textSpace + strings.Join(args, textSpace)
 }
