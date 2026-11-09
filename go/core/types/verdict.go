@@ -43,19 +43,8 @@ func (v Verdict) render() string {
 
 	var b strings.Builder
 
-	for _, f := range v.Findings {
-		switch {
-		case f.File != "" && f.Line > 0:
-			fmt.Fprintf(&b, "%s:%d: ", f.File, f.Line)
-		case f.File != "":
-			b.WriteString(f.File + ": ")
-		}
-
-		if f.Rule != "" {
-			b.WriteString(f.Rule + ": ")
-		}
-
-		b.WriteString(f.Message + "\n")
+	for i := range v.Findings {
+		writeFinding(&b, &v.Findings[i])
 	}
 
 	if v.Detail != "" {
@@ -63,4 +52,20 @@ func (v Verdict) render() string {
 	}
 
 	return b.String()
+}
+
+// writeFinding writes one finding as `file:line: rule: message`, omitting unset parts.
+func writeFinding(b *strings.Builder, f *Finding) {
+	switch {
+	case f.File != "" && f.Line > 0:
+		fmt.Fprintf(b, "%s:%d: ", f.File, f.Line)
+	case f.File != "":
+		b.WriteString(f.File + ": ")
+	}
+
+	if f.Rule != "" {
+		b.WriteString(f.Rule + ": ")
+	}
+
+	b.WriteString(f.Message + "\n")
 }

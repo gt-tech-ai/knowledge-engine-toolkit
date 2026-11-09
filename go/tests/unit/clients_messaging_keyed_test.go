@@ -142,6 +142,20 @@ func TestSQSPublisher_KeyedSendsThePartitionKeyAttribute(t *testing.T) {
 
 	var keys []string
 
+	testSQSPublisherKeyedSendsThePartitionKeyAttributeRest(t, api, sizes, ids, keys)
+}
+
+// testSQSPublisherKeyedSendsThePartitionKeyAttributeRest continues
+// TestSQSPublisher_KeyedSendsThePartitionKeyAttribute with its remaining steps.
+func testSQSPublisherKeyedSendsThePartitionKeyAttributeRest(
+	t *testing.T,
+	api *mocks.MockAPI,
+	sizes []int,
+	ids map[string]bool,
+	keys []string,
+) {
+	t.Helper()
+
 	api.EXPECT().SendMessageBatch(gomock.Any(), gomock.Any()).Times(2).DoAndReturn(
 		func(
 			_ context.Context,

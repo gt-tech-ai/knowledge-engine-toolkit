@@ -7,6 +7,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -42,88 +43,105 @@ func newAuth0Tenant(t *testing.T, orgs []string, x5c string) *auth0Tenant {
 
 	tenant := &auth0Tenant{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /oauth/token", func(w http.ResponseWriter, r *http.Request) {
-		err := r.ParseForm()
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
 
-			return
-		}
-
-		if r.PostForm.Get("client_id") != "id" ||
-			r.PostForm.Get("client_secret") != "secret" ||
-			r.PostForm.Get("grant_type") != "client_credentials" ||
-			r.PostForm.Get("audience") != "https://"+r.Host+"/api/v2/" {
-			w.WriteHeader(http.StatusUnauthorized)
-
-			return
-		}
-
-		tenant.tokens.Add(1)
-
-		_ = json.NewEncoder(w).
-			Encode(map[string]any{"access_token": "tok", "expires_in": 3600})
-	})
-
-	authorized := func(w http.ResponseWriter, r *http.Request) bool {
-		if r.Header.Get("Authorization") != "Bearer tok" {
-			w.WriteHeader(http.StatusUnauthorized)
-
-			return false
-		}
-
-		return true
-	}
-	mux.HandleFunc(
-		"GET /api/v2/organizations",
-		func(w http.ResponseWriter, r *http.Request) {
-			if !authorized(w, r) {
-				return
-			}
-
-			page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-			out := []map[string]string{}
-
-			for i := page * 2; i < len(orgs) && i < page*2+2; i++ {
-				out = append(out, map[string]string{"id": orgs[i]})
-			}
-
-			_ = json.NewEncoder(w).Encode(out)
-		},
-	)
-	mux.HandleFunc("GET /api/v2/organizations/name/{name}",
-		func(w http.ResponseWriter, r *http.Request) {
-			if !authorized(w, r) {
-				return
-			}
-
-			if r.PathValue("name") != "acme" {
-				w.WriteHeader(http.StatusNotFound)
-
-				return
-			}
-
-			_ = json.NewEncoder(w).Encode(map[string]string{"id": "org_acme"})
-		})
-	mux.HandleFunc(
-		"GET /.well-known/jwks.json",
-		func(w http.ResponseWriter, _ *http.Request) {
-			keys := []map[string]any{{"use": "enc", "kid": "enc-1", "x5c": []string{x5c}}}
-			if x5c != "" {
-				keys = append(
-					keys,
-					map[string]any{"use": "sig", "kid": "sig-1", "x5c": []string{x5c}},
-				)
-			}
-
-			_ = json.NewEncoder(w).Encode(map[string]any{"keys": keys})
-		},
-	)
+	mux.HandleFunc("POST /oauth/token", tenant.serveToken)
+	mux.HandleFunc("GET /api/v2/organizations", serveAuth0Orgs(orgs))
+	mux.HandleFunc("GET /api/v2/organizations/name/{name}", serveAuth0OrgByName)
+	mux.HandleFunc("GET /.well-known/jwks.json", serveAuth0JWKS(x5c))
 
 	tenant.server = httptest.NewTLSServer(mux)
 	t.Cleanup(tenant.server.Close)
 
 	return tenant
+}
+
+// serveToken grants a token to the expected client-credentials form and counts it.
+func (a *auth0Tenant) serveToken(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseForm()
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+
+		return
+	}
+
+	if !validAuth0TokenForm(r) {
+		w.WriteHeader(http.StatusUnauthorized)
+
+		return
+	}
+
+	a.tokens.Add(1)
+
+	_, _ = fmt.Fprint(w, `{"access_token":"tok","expires_in":3600}`)
+}
+
+// validAuth0TokenForm checks the parsed credentials and the audience.
+func validAuth0TokenForm(r *http.Request) bool {
+	return r.PostForm.Get("client_id") == "id" &&
+		r.PostForm.Get("client_secret") == "secret" &&
+		r.PostForm.Get("grant_type") == "client_credentials" &&
+		r.PostForm.Get("audience") == "https://"+r.Host+"/api/v2/"
+}
+
+// auth0Authorized rejects a request without the granted bearer token.
+func auth0Authorized(w http.ResponseWriter, r *http.Request) bool {
+	if r.Header.Get("Authorization") != "Bearer tok" {
+		w.WriteHeader(http.StatusUnauthorized)
+
+		return false
+	}
+
+	return true
+}
+
+// serveAuth0Orgs lists the organizations two to a page.
+func serveAuth0Orgs(orgs []string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !auth0Authorized(w, r) {
+			return
+		}
+
+		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		out := []map[string]string{}
+
+		for i := page * 2; i < len(orgs) && i < page*2+2; i++ {
+			out = append(out, map[string]string{"id": orgs[i]})
+		}
+
+		_ = json.NewEncoder(w).Encode(out)
+	}
+}
+
+// serveAuth0OrgByName resolves only the name "acme".
+func serveAuth0OrgByName(w http.ResponseWriter, r *http.Request) {
+	if !auth0Authorized(w, r) {
+		return
+	}
+
+	if r.PathValue("name") != "acme" {
+		w.WriteHeader(http.StatusNotFound)
+
+		return
+	}
+
+	_, _ = fmt.Fprint(w, `{"id":"org_acme"}`)
+}
+
+// serveAuth0JWKS always offers an encryption key, and a signing key when x5c is set.
+func serveAuth0JWKS(x5c string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		keys := []map[string]any{{"use": "enc", "kid": "enc-1", "x5c": []string{x5c}}}
+		if x5c != "" {
+			keys = append(
+				keys,
+				map[string]any{"use": "sig", "kid": "sig-1", "x5c": []string{x5c}},
+			)
+		}
+
+		body, _ := json.Marshal(map[string]any{"keys": keys})
+
+		_, _ = w.Write(body)
+	}
 }
 
 // client builds the management kind against the tenant with clientID/secret.

@@ -12,6 +12,10 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
+// sizeBucketStart, sizeBucketFactor and sizeBucketCount lay out the exponential size
+// buckets.
+const sizeBucketStart, sizeBucketFactor, sizeBucketCount = 100, 10, 6
+
 // Compile-time interface assertions.
 var (
 	// Metrics must satisfy interfaces.Metrics.
@@ -63,23 +67,7 @@ func (m *Metrics) Counter(name, help string, labels ...string) interfaces.Counte
 		Help: help,
 	}, labels)
 
-	err := m.reg.Register(c)
-	if err != nil {
-		var are prometheus.AlreadyRegisteredError
-
-		if apperr.As(err, &are) {
-			existing, ok := are.ExistingCollector.(*prometheus.CounterVec)
-			if !ok {
-				panic(err)
-			}
-
-			return &counter{inner: existing}
-		}
-
-		panic(err)
-	}
-
-	return &counter{inner: c}
+	return &counter{inner: registerOrReuse(m.reg, c)}
 }
 
 // Histogram registers and returns a labelled histogram with the given buckets.
@@ -96,23 +84,7 @@ func (m *Metrics) Histogram(
 		Buckets: buckets,
 	}, labels)
 
-	err := m.reg.Register(h)
-	if err != nil {
-		var are prometheus.AlreadyRegisteredError
-
-		if apperr.As(err, &are) {
-			existing, ok := are.ExistingCollector.(*prometheus.HistogramVec)
-			if !ok {
-				panic(err)
-			}
-
-			return &histogram{inner: existing}
-		}
-
-		panic(err)
-	}
-
-	return &histogram{inner: h}
+	return &histogram{inner: registerOrReuse(m.reg, h)}
 }
 
 // Gauge registers and returns a labelled gauge. If a collector with the same
@@ -124,23 +96,29 @@ func (m *Metrics) Gauge(name, help string, labels ...string) interfaces.Gauge {
 		Help: help,
 	}, labels)
 
-	err := m.reg.Register(g)
-	if err != nil {
-		var are prometheus.AlreadyRegisteredError
+	return &gauge{inner: registerOrReuse(m.reg, g)}
+}
 
-		if apperr.As(err, &are) {
-			existing, ok := are.ExistingCollector.(*prometheus.GaugeVec)
-			if !ok {
-				panic(err)
-			}
+// registerOrReuse registers the collector, returning the already registered one of the
+// same name and type instead; any other registration error panics.
+func registerOrReuse[C prometheus.Collector](reg *prometheus.Registry, c C) C {
+	err := reg.Register(c)
+	if err == nil {
+		return c
+	}
 
-			return &gauge{inner: existing}
-		}
+	var are prometheus.AlreadyRegisteredError
 
+	if !apperr.As(err, &are) {
 		panic(err)
 	}
 
-	return &gauge{inner: g}
+	existing, ok := are.ExistingCollector.(C)
+	if !ok {
+		panic(err)
+	}
+
+	return existing
 }
 
 // Handler returns an HTTP handler that exposes the registry in the Prometheus
@@ -248,9 +226,13 @@ func NewHTTPServerMetrics(reg prometheus.Registerer) *HTTPServerMetrics {
 			Buckets: prometheus.DefBuckets,
 		}, []string{labelMethod, labelPath}),
 		ResponseSize: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "http_server_response_size_bytes",
-			Help:    "HTTP response size in bytes",
-			Buckets: prometheus.ExponentialBuckets(100, 10, 6),
+			Name: "http_server_response_size_bytes",
+			Help: "HTTP response size in bytes",
+			Buckets: prometheus.ExponentialBuckets(
+				sizeBucketStart,
+				sizeBucketFactor,
+				sizeBucketCount,
+			),
 		}, []string{labelMethod, labelPath}),
 	}
 

@@ -16,6 +16,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
+// keyHeadAndRest is splits a dotted key into its first segment and the remainder.
+const keyHeadAndRest = 2
+
 // Compile-time interface assertion.
 var _ interfaces.ConfigLoader = (*Loader)(nil)
 
@@ -111,46 +114,9 @@ func (l *Loader) Load() error {
 	l.v.SetEnvPrefix(l.prefix)
 	l.v.SetEnvKeyReplacer(envReplacer())
 
-	// Layer 1: Base config
-	l.v.SetConfigFile(l.baseDir + "/base.yaml")
-
-	err = l.v.ReadInConfig()
+	err = l.readLayers()
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return apperr.Wrap(err, apperr.CodeInternal, "read base config")
-		}
-	}
-
-	// Layer 2: Environment overlay
-	if l.env != "" {
-		envFile := fmt.Sprintf("%s/%s.yaml", l.baseDir, l.env)
-
-		_, err := os.Stat(envFile)
-		if err == nil {
-			l.v.SetConfigFile(envFile)
-
-			err := l.v.MergeInConfig()
-			if err != nil {
-				return apperr.Wrap(
-					err,
-					apperr.CodeInternal,
-					"merge env config "+l.env,
-				)
-			}
-		}
-	}
-
-	// Layer 3: Secrets file
-	secretsFile := l.baseDir + "/secrets.yaml"
-
-	_, err = os.Stat(secretsFile)
-	if err == nil {
-		l.v.SetConfigFile(secretsFile)
-
-		err := l.v.MergeInConfig()
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "merge secrets")
-		}
+		return err
 	}
 
 	// Layer 4: Env bindings. The consumer's schema binds <PREFIX>_<PATH> + alias env
@@ -254,7 +220,7 @@ func (l *Loader) UnmarshalKey(key string, target any) error {
 
 // setNested expands a dotted key (e.g., "server.port") into nested maps.
 func setNested(m map[string]any, key string, value any) {
-	parts := strings.SplitN(key, ".", 2)
+	parts := strings.SplitN(key, ".", keyHeadAndRest)
 	if len(parts) == 1 {
 		m[key] = value
 
@@ -274,4 +240,42 @@ func setNested(m map[string]any, key string, value any) {
 // This is an escape hatch available only on the concrete *Loader type.
 func (l *Loader) Viper() *viper.Viper {
 	return l.v
+}
+
+// mergeIfPresent merges one config file over what is loaded, when it exists.
+func (l *Loader) mergeIfPresent(file, failure string) error {
+	_, err := os.Stat(file)
+	if err == nil {
+		l.v.SetConfigFile(file)
+
+		err := l.v.MergeInConfig()
+		if err != nil {
+			return apperr.Wrap(err, apperr.CodeInternal, failure)
+		}
+	}
+
+	return nil
+}
+
+// readLayers reads the base file (optional), then merges the environment overlay and
+// the secrets file when each exists.
+func (l *Loader) readLayers() error {
+	l.v.SetConfigFile(l.baseDir + "/base.yaml")
+
+	err := l.v.ReadInConfig()
+	if err != nil && !os.IsNotExist(err) {
+		return apperr.Wrap(err, apperr.CodeInternal, "read base config")
+	}
+
+	if l.env != "" {
+		err = l.mergeIfPresent(
+			fmt.Sprintf("%s/%s.yaml", l.baseDir, l.env),
+			"merge env config "+l.env,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return l.mergeIfPresent(l.baseDir+"/secrets.yaml", "merge secrets")
 }

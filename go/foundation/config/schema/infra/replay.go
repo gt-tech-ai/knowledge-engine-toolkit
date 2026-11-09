@@ -6,6 +6,12 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// defaultReplayConfigMaxSize is the default MaxSize of ReplayConfig.
+const defaultReplayConfigMaxSize = 100
+
+// defaultReplayConfigTTL is the default TTL of ReplayConfig.
+const defaultReplayConfigTTL = 5 * time.Minute
+
 // ReplayConfig tunes the WebSocket reconnect-replay buffer: the per-connection outbound
 // message tail buffered for resend when a client's socket briefly drops. The backend
 // (in-process memory vs cross-pod Redis) is selected at the composition root by whether
@@ -26,8 +32,8 @@ type ReplayConfig struct {
 // staging/prod share the Redis client so the same values drive the redis backend.
 func DefaultReplayConfig() ReplayConfig {
 	return ReplayConfig{
-		MaxSize: 100,
-		TTL:     5 * time.Minute,
+		MaxSize: defaultReplayConfigMaxSize,
+		TTL:     defaultReplayConfigTTL,
 	}
 }
 

@@ -102,6 +102,14 @@ func TestRunnerBuilder_DecoratesAndFiresHooks(t *testing.T) {
 	assert.Contains(t, events, "start:go version")
 	assert.Contains(t, events, "ok:go version", "success fires OnSuccess")
 
+	testRunnerBuilderDecoratesAndFiresHooksRest(t, ctrl)
+}
+
+// testRunnerBuilderDecoratesAndFiresHooksRest continues
+// TestRunnerBuilder_DecoratesAndFiresHooks with its remaining steps.
+func testRunnerBuilderDecoratesAndFiresHooksRest(t *testing.T, ctrl *gomock.Controller) {
+	t.Helper()
+
 	// Failing inner fires OnFailure for both Run and RunBuffered.
 	var failEvents []string
 

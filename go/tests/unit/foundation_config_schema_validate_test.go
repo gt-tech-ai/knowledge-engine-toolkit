@@ -99,6 +99,17 @@ func TestResilienceValidate_RemainingBranches(t *testing.T) {
 
 	badRate := resilience.DefaultRateLimitConfig()
 
+	testResilienceValidateRemainingBranchesRest(t, badRate)
+}
+
+// testResilienceValidateRemainingBranchesRest continues
+// TestResilienceValidate_RemainingBranches with its remaining steps.
+func testResilienceValidateRemainingBranchesRest(
+	t *testing.T,
+	badRate resilience.RateLimitConfig,
+) {
+	t.Helper()
+
 	badRate.Rate = -1
 	require.Error(t, badRate.Validate(), "a negative rate must be rejected")
 
@@ -215,6 +226,14 @@ func TestLayerConfigValidate_RemainingBranches(t *testing.T) {
 
 	badCountCap.CountCap = -1
 	require.Error(t, badCountCap.Validate(), "a negative count_cap must be rejected")
+
+	testLayerConfigValidateRemainingBranchesRest(t)
+}
+
+// testLayerConfigValidateRemainingBranchesRest continues
+// TestLayerConfigValidate_RemainingBranches with its remaining steps.
+func testLayerConfigValidateRemainingBranchesRest(t *testing.T) {
+	t.Helper()
 
 	// the list-query cache TTLs must be non-negative, and the
 	// defaults are 45s/60s — a negative TTL is a config error.

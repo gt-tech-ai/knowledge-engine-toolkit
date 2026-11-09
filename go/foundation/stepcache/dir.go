@@ -11,6 +11,12 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// groupDirMode is the mode of a directory its group may read.
+const groupDirMode = 0o750
+
+// privateFileMode is the mode of a file only its owner reads.
+const privateFileMode = 0o600
+
 // dir records each passed key as an empty marker file named by the key, or by the
 // key's hash under the salt when there is one.
 type dir struct {
@@ -47,16 +53,26 @@ func deriveSalt(cfg Config) (string, error) {
 		parts = append(parts, bin)
 	}
 
-	for _, root := range cfg.SaltDirs {
-		var err error
-
-		parts, err = appendSaltDir(parts, root)
-		if err != nil {
-			return "", err
-		}
+	parts, err := appendSaltDirs(parts, cfg.SaltDirs)
+	if err != nil {
+		return "", err
 	}
 
 	return Key(nil, "", parts), nil
+}
+
+// appendSaltDirs adds every root's files to the salt parts.
+func appendSaltDirs(parts, roots []string) ([]string, error) {
+	var err error
+
+	for _, root := range roots {
+		parts, err = appendSaltDir(parts, root)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return parts, nil
 }
 
 // appendSaltDir appends each file's path and contents under root, in walk order, to
@@ -81,20 +97,25 @@ func appendSaltDir(parts []string, root string) ([]string, error) {
 			return err
 		}
 
-		b, err := fs.ReadFile(fsys, p)
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "stepcache: read "+p)
-		}
-
-		parts = append(parts, filepath.ToSlash(filepath.Join(root, p)), string(b))
-
-		return nil
+		return appendSaltFile(&parts, fsys, root, p)
 	})
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "stepcache: hash "+root)
 	}
 
 	return parts, nil
+}
+
+// appendSaltFile adds one file's root-qualified path and content to the salt parts.
+func appendSaltFile(parts *[]string, fsys fs.FS, root, p string) error {
+	b, err := fs.ReadFile(fsys, p)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "stepcache: read "+p)
+	}
+
+	*parts = append(*parts, filepath.ToSlash(filepath.Join(root, p)), string(b))
+
+	return nil
 }
 
 // Hit reports whether key's marker exists.
@@ -121,12 +142,16 @@ func (d dir) Record(_ context.Context, key string) error {
 		return err
 	}
 
-	err = os.MkdirAll(d.root, 0o750)
+	err = os.MkdirAll(d.root, groupDirMode)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "stepcache: create "+d.root)
 	}
 
-	f, err := os.OpenFile(filepath.Clean(p), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(
+		filepath.Clean(p),
+		os.O_CREATE|os.O_EXCL|os.O_WRONLY,
+		privateFileMode,
+	)
 	switch {
 	case err == nil:
 		err := f.Close()

@@ -101,16 +101,7 @@ func (s *Source) newestReport(ctx context.Context) (string, error) {
 			return "", connectors3.ClassifyListError(err)
 		}
 
-		for i := range objs {
-			rel := strings.TrimPrefix(objs[i].Key, s.folder)
-			dir, name := path.Split(rel)
-			stamp := strings.TrimSuffix(dir, "/")
-
-			if name == checksumName && stamp != "" && !strings.Contains(stamp, "/") &&
-				stamp > newest {
-				newest = stamp
-			}
-		}
+		newest = s.newestStamp(objs, newest)
 
 		if next == "" {
 			break
@@ -126,4 +117,20 @@ func (s *Source) newestReport(ctx context.Context) (string, error) {
 	}
 
 	return newest, nil
+}
+
+// newestStamp returns the latest report stamp among objs and newest; only a stamped
+// folder holding the checksum file is a complete report.
+func (s *Source) newestStamp(objs []interfaces.StorageObject, newest string) string {
+	for i := range objs {
+		dir, name := path.Split(strings.TrimPrefix(objs[i].Key, s.folder))
+		stamp := strings.TrimSuffix(dir, "/")
+
+		complete := name == checksumName && stamp != "" && !strings.Contains(stamp, "/")
+		if complete && stamp > newest {
+			newest = stamp
+		}
+	}
+
+	return newest
 }

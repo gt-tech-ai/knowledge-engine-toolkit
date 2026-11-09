@@ -87,12 +87,20 @@ func StagedModules(
 		}
 
 		seen[mod] = struct{}{}
-		if keep == nil || keep(mod) {
-			modules = append(modules, mod)
-		}
+
+		modules = appendKept(modules, mod, keep)
 	}
 
 	return modules
+}
+
+// appendKept adds mod unless keep rejects it; a nil keep accepts everything.
+func appendKept(modules []string, mod string, keep func(string) bool) []string {
+	if keep != nil && !keep(mod) {
+		return modules
+	}
+
+	return append(modules, mod)
 }
 
 // owningModule walks up from dir to the nearest directory holding a go.mod, falling

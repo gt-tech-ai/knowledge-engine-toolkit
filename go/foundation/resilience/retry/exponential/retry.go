@@ -12,6 +12,21 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/budget"
 )
 
+// defaultConfigMaxRetries is the default MaxRetries of Config.
+const defaultConfigMaxRetries = 3
+
+// defaultConfigInitialInterval is the default InitialInterval of Config.
+const defaultConfigInitialInterval = 100 * time.Millisecond
+
+// defaultConfigMaxInterval is the default MaxInterval of Config.
+const defaultConfigMaxInterval = 5 * time.Second
+
+// defaultConfigMultiplier is the default Multiplier of Config.
+const defaultConfigMultiplier = 2.0
+
+// defaultConfigMaxElapsedTime is the default MaxElapsedTime of Config.
+const defaultConfigMaxElapsedTime = 30 * time.Second
+
 // Compile-time interface assertion.
 var _ interfaces.Retrier = (*Retrier)(nil)
 
@@ -91,11 +106,11 @@ func IsRetryable(err error) bool {
 // DefaultConfig returns sensible defaults for exponential backoff.
 func DefaultConfig() Config {
 	return Config{
-		MaxRetries:      3,
-		InitialInterval: 100 * time.Millisecond,
-		MaxInterval:     5 * time.Second,
-		Multiplier:      2.0,
-		MaxElapsedTime:  30 * time.Second,
+		MaxRetries:      defaultConfigMaxRetries,
+		InitialInterval: defaultConfigInitialInterval,
+		MaxInterval:     defaultConfigMaxInterval,
+		Multiplier:      defaultConfigMultiplier,
+		MaxElapsedTime:  defaultConfigMaxElapsedTime,
 	}
 }
 
@@ -124,15 +139,11 @@ func (r *Retrier) Retry(ctx context.Context, op func() error) error {
 		retrying = true
 
 		e := op()
-		if e != nil {
-			if !isRetryable(e) {
-				return struct{}{}, backoff.Permanent(e)
-			}
-
-			return struct{}{}, e
+		if e != nil && !isRetryable(e) {
+			return struct{}{}, backoff.Permanent(e)
 		}
 
-		return struct{}{}, nil
+		return struct{}{}, e
 	}, r.retryOpts()...)
 
 	return err

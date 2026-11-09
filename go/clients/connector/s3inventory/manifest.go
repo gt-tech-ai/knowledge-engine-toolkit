@@ -144,6 +144,16 @@ func (s schema) object(
 		return interfaces.StorageObject{}, false, nil
 	}
 
+	obj, err := s.storageObject(row, key)
+
+	return obj, err == nil, err
+}
+
+// storageObject builds the object from a row that passed the listing's filters.
+func (s schema) storageObject(
+	row []string,
+	key string,
+) (interfaces.StorageObject, error) {
 	obj := interfaces.StorageObject{
 		Key:          key,
 		LastModified: rfc3339(s.field(row, colLastModified)),
@@ -152,16 +162,19 @@ func (s schema) object(
 		obj.ETag = `"` + etag + `"`
 	}
 
-	if size := s.field(row, colSize); size != "" {
-		_, err := fmt.Sscan(size, &obj.Size)
-		if err != nil {
-			return interfaces.StorageObject{}, false, apperr.Wrap(
-				err, apperr.CodeInvalidInput, "connector s3_inventory: bad size",
-			)
-		}
+	size := s.field(row, colSize)
+	if size == "" {
+		return obj, nil
 	}
 
-	return obj, true, nil
+	_, err := fmt.Sscan(size, &obj.Size)
+	if err != nil {
+		return interfaces.StorageObject{}, apperr.Wrap(
+			err, apperr.CodeInvalidInput, "connector s3_inventory: bad size",
+		)
+	}
+
+	return obj, nil
 }
 
 // rfc3339 reformats the report's ISO 8601 time (with milliseconds) the way a listing

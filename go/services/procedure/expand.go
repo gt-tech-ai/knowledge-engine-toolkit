@@ -157,44 +157,49 @@ func text(s string, vars Vars) (string, error) {
 // list-valued `${expr}` splat.
 func (c *compiled) args(ctx context.Context, in []string, vars Vars) ([]string, error) {
 	out := make([]string, 0, len(in))
+
 	for _, a := range in {
-		var v any
-
-		switch m := splat.FindStringSubmatch(a); {
-		case m != nil:
-			var ok bool
-
-			if v, ok = lookup(vars, m[1]); !ok {
-				return nil, apperr.New(
-					apperr.CodeInvalidInput,
-					fmt.Sprintf("no variable %q", m[1]),
-				)
-			}
-		default:
-			x, isExpr := exprArg(a)
-			if !isExpr {
-				t, err := text(a, vars)
-				if err != nil {
-					return nil, err
-				}
-
-				out = append(out, t)
-
-				continue
-			}
-
-			var err error
-
-			v, err = c.eval(ctx, x, vars)
-			if err != nil {
-				return nil, err
-			}
+		expanded, err := c.expandArg(ctx, a, vars)
+		if err != nil {
+			return nil, err
 		}
 
-		out = append(out, list(v)...)
+		out = append(out, expanded...)
 	}
 
 	return out, nil
+}
+
+// expandArg expands one argument: a splat variable, an expression, or plain text.
+func (c *compiled) expandArg(ctx context.Context, a string, vars Vars) ([]string, error) {
+	if m := splat.FindStringSubmatch(a); m != nil {
+		v, ok := lookup(vars, m[1])
+		if !ok {
+			return nil, apperr.New(
+				apperr.CodeInvalidInput,
+				fmt.Sprintf("no variable %q", m[1]),
+			)
+		}
+
+		return list(v), nil
+	}
+
+	x, isExpr := exprArg(a)
+	if !isExpr {
+		t, err := text(a, vars)
+		if err != nil {
+			return nil, err
+		}
+
+		return []string{t}, nil
+	}
+
+	v, err := c.eval(ctx, x, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	return list(v), nil
 }
 
 // list renders v as arguments: each element of a list, else v alone.

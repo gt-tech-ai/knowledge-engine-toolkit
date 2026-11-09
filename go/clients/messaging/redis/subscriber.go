@@ -280,28 +280,38 @@ func (s *Subscriber) dispatch(ctx context.Context, ch <-chan *goredis.Message) {
 	defer s.wg.Done()
 
 	for msg := range ch {
-		s.mu.RLock()
-
-		handler, ok := s.channels[msg.Channel]
-		if !ok && msg.Pattern != "" {
-			handler, ok = s.patterns[msg.Pattern]
+		handler, ok := s.handlerFor(msg)
+		if ok {
+			s.deliver(ctx, msg, handler)
 		}
+	}
+}
 
-		s.mu.RUnlock()
+// handlerFor finds the message's handler by channel, then by pattern.
+func (s *Subscriber) handlerFor(msg *goredis.Message) (interfaces.MessageHandler, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-		if !ok {
-			continue
-		}
+	handler, ok := s.channels[msg.Channel]
+	if !ok && msg.Pattern != "" {
+		handler, ok = s.patterns[msg.Pattern]
+	}
 
-		m := &interfaces.Message{Topic: msg.Channel, Payload: []byte(msg.Payload)}
-		err := s.handlers.DoOnce(ctx, m.Topic, func(ctx context.Context) error {
-			return handler(ctx, m)
-		})
+	return handler, ok
+}
 
-		if err != nil && s.logger != nil {
-			s.logger.WithContext(ctx).Error(
-				"message handle failed", "topic", m.Topic, "error", err,
-			)
-		}
+// deliver runs the handler through the tier, logging a failure.
+func (s *Subscriber) deliver(
+	ctx context.Context, msg *goredis.Message, handler interfaces.MessageHandler,
+) {
+	m := &interfaces.Message{Topic: msg.Channel, Payload: []byte(msg.Payload)}
+
+	err := s.handlers.DoOnce(ctx, m.Topic, func(ctx context.Context) error {
+		return handler(ctx, m)
+	})
+	if err != nil && s.logger != nil {
+		s.logger.WithContext(ctx).Error(
+			"message handle failed", "topic", m.Topic, "error", err,
+		)
 	}
 }

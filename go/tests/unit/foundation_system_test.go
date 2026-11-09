@@ -156,6 +156,18 @@ func TestBufferingRunner(t *testing.T) {
 
 	// Run (no env) success path.
 	okInner := mocks.NewMockCommandRunner(ctrl)
+
+	testBufferingRunnerRest(t, ctrl, okInner)
+}
+
+// testBufferingRunnerRest continues TestBufferingRunner with its remaining steps.
+func testBufferingRunnerRest(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	okInner *mocks.MockCommandRunner,
+) {
+	t.Helper()
+
 	okInner.EXPECT().
 		RunBuffered(gomock.Any(), "", "x").
 		Return(system.CmdResult{Stdout: []byte("hi")})

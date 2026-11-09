@@ -15,6 +15,9 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// startupTimeout bounds the container's start.
+const startupTimeout = 60 * time.Second
+
 const (
 	// DefaultImage is the MinIO image NewTestMinIO starts unless WithImage overrides it:
 	// Chainguard's free build, pinned by digest (a multi-arch index) because MinIO no
@@ -74,7 +77,7 @@ func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
 		Cmd: []string{"server", "/data"},
 		WaitingFor: wait.ForHTTP("/minio/health/ready").
 			WithPort(minioAPIPort).
-			WithStartupTimeout(60 * time.Second),
+			WithStartupTimeout(startupTimeout),
 	}
 
 	container, err := testcontainers.GenericContainer(

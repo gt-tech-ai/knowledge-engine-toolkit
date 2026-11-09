@@ -40,35 +40,40 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockByteCache(ctrl)
 
+	testReadThroughSingleFlightCollapsesConcurrentRest7(t, m)
+}
+
+// gatedLoad builds the load every concurrent caller shares: it counts each run, signals
+// started on its first run, and blocks until release closes.
+func gatedLoad(count *atomic.Int32, started, release chan struct{}) func() (int, error) {
+	var once sync.Once
+
+	return func() (int, error) {
+		count.Add(1)
+		once.Do(func() { close(started) })
+
+		<-release
+
+		return 42, nil
+	}
+}
+
+// testReadThroughSingleFlightCollapsesConcurrentRest7 continues
+// testReadThroughSingleFlightCollapsesConcurrentRest6 with its remaining steps.
+func testReadThroughSingleFlightCollapsesConcurrentRest7(
+	t *testing.T,
+	m *mocks.MockByteCache,
+) {
+	t.Helper()
+
 	const (
 		key     = "k1"
 		ttl     = time.Minute
 		callers = 20
 	)
 
-	// Rendezvous barrier INSIDE Get — the call ReadThrough makes immediately before
-	// singleflight.Do. Every caller blocks here until all `callers` have arrived, then
-	// they are released together, so each reaches Do while the winner's load is still
-	// in-flight and collapses onto it. This removes the race the previous version had: it
-	// gated `release` on a counter incremented in the goroutine BODY (before ReadThrough
-	// even called Get), so a straggler could still be between that counter and Do when
-	// the winner finished — and, with an always-miss mock, that straggler fired a SECOND
-	// load (flaky "expected 1, actual 2"). The winner still Sets once (AnyTimes covers
-	// the collapsed single Set).
-	var arrived sync.WaitGroup
+	arrived, releaseGet := expectGetBarrier(m, key, callers)
 
-	arrived.Add(callers)
-
-	releaseGet := make(chan struct{})
-
-	m.EXPECT().Get(gomock.Any(), key).DoAndReturn(
-		func(context.Context, string) ([]byte, bool) {
-			arrived.Done()
-			<-releaseGet
-
-			return nil, false
-		},
-	).Times(callers)
 	m.EXPECT().Set(gomock.Any(), key, gomock.Any(), ttl).AnyTimes()
 
 	var (
@@ -83,33 +88,12 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 		chan struct{},
 	) // the winner closes this once it is confirmed in-flight
 
-	var (
-		startOnce sync.Once
-		wg        sync.WaitGroup
-	)
+	var wg sync.WaitGroup
+
+	load := gatedLoad(&loadCount, started, release)
 
 	for range callers {
-		wg.Go(func() {
-			v, err := cache.ReadThrough(
-				context.Background(), m, &sf, key, ttl, 1,
-				func() (int, error) {
-					loadCount.Add(1)
-					// The winner signals it is in-flight.
-					startOnce.Do(func() { close(started) })
-
-					<-release
-
-					return 42, nil
-				},
-			)
-			if err != nil {
-				t.Errorf("ReadThrough: %v", err)
-
-				return
-			}
-
-			assert.Equal(t, 42, v)
-		})
+		wg.Go(func() { readThroughExpecting42(t, m, &sf, key, ttl, load) })
 	}
 
 	// Open the Get barrier once every caller has reached it, so all callers proceed to Do
@@ -127,26 +111,12 @@ func TestReadThrough_SingleFlightCollapsesConcurrent(t *testing.T) {
 		t.Fatal("the single-flight winner never entered its load")
 	}
 
-	for range 100 {
-		runtime.Gosched()
-	}
+	yieldScheduler()
 
 	close(release)
 	wg.Wait()
 
-	// Assert the collapse HAPPENED — at least one load, but fewer than the caller count —
-	// rather than exactly one. Exactly-one is not deterministically achievable for a
-	// black-box goroutine stampede: a caller can always be preempted in the few
-	// instructions between Get returning and singleflight.Do acquiring the in-flight
-	// entry, so if the winner finishes first that straggler fires its own load. This is
-	// the same bound `x/sync/singleflight`'s own TestDoDupSuppress asserts (`0 < calls <
-	// n`). The Get barrier + block-until-attached above make the realistic result 1
-	// (occasionally a small number under load); the assertion tolerates that rare
-	// straggler without flaking.
-	loads := loadCount.Load()
-	assert.GreaterOrEqual(t, loads, int32(1), "at least one caller must load")
-	assert.Less(t, loads, int32(callers),
-		"single-flight suppresses the stampede — far fewer loads than callers")
+	assertCollapsed(t, loadCount.Load(), callers)
 }
 
 // TestReadThrough_HitSkipsLoad tests that a version-matching cache hit returns the
@@ -281,4 +251,83 @@ func TestReadThrough_StaleVersionReloads(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, loaded, "a stale-version hit re-runs load")
 	assert.Equal(t, 77, v, "the fresh value is returned, not the stale-version entry")
+}
+
+// expectGetBarrier holds every Get until `callers` have arrived and releaseGet closes.
+//
+// Rendezvous barrier INSIDE Get — the call ReadThrough makes immediately before
+// singleflight.Do. Every caller blocks here until all `callers` have arrived, then
+// they are released together, so each reaches Do while the winner's load is still
+// in-flight and collapses onto it. This removes the race the previous version had: it
+// gated `release` on a counter incremented in the goroutine BODY (before ReadThrough
+// even called Get), so a straggler could still be between that counter and Do when
+// the winner finished — and, with an always-miss mock, that straggler fired a SECOND
+// load (flaky "expected 1, actual 2"). The winner still Sets once (AnyTimes covers
+// the collapsed single Set).
+func expectGetBarrier(
+	m *mocks.MockByteCache, key string, callers int,
+) (barrier *sync.WaitGroup, open chan struct{}) {
+	arrived := &sync.WaitGroup{}
+
+	arrived.Add(callers)
+
+	releaseGet := make(chan struct{})
+
+	m.EXPECT().Get(gomock.Any(), key).DoAndReturn(
+		func(context.Context, string) ([]byte, bool) {
+			arrived.Done()
+			<-releaseGet
+
+			return nil, false
+		},
+	).Times(callers)
+
+	return arrived, releaseGet
+}
+
+// readThroughExpecting42 runs one caller and asserts it sees the shared value.
+func readThroughExpecting42(
+	t *testing.T,
+	m *mocks.MockByteCache,
+	sf *singleflight.Group,
+	key string,
+	ttl time.Duration,
+	load func() (int, error),
+) {
+	t.Helper()
+
+	v, err := cache.ReadThrough(context.Background(), m, sf, key, ttl, 1, load)
+	if err != nil {
+		t.Errorf("ReadThrough: %v", err)
+
+		return
+	}
+
+	assert.Equal(t, 42, v)
+}
+
+// yieldScheduler gives runnable goroutines many chances to run.
+func yieldScheduler() {
+	for range 100 {
+		runtime.Gosched()
+	}
+}
+
+// assertCollapsed requires at least one load and fewer loads than callers.
+//
+// Assert the collapse HAPPENED — at least one load, but fewer than the caller count —
+// rather than exactly one. Exactly-one is not deterministically achievable for a
+// black-box goroutine stampede: a caller can always be preempted in the few
+// instructions between Get returning and singleflight.Do acquiring the in-flight
+// entry, so if the winner finishes first that straggler fires its own load. This is
+// the same bound `x/sync/singleflight`'s own TestDoDupSuppress asserts (`0 < calls <
+// n`). The Get barrier + block-until-attached above make the realistic result 1
+// (occasionally a small number under load); the assertion tolerates that rare
+// straggler without flaking.
+func assertCollapsed(t *testing.T, loads, callers int32) {
+	t.Helper()
+
+	assert.GreaterOrEqual(t, loads, int32(1), "at least one caller must load")
+	assert.Less(t, loads, callers,
+		"single-flight suppresses the stampede — far fewer loads than callers")
 }

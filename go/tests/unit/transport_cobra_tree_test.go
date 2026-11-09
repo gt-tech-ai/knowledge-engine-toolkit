@@ -310,6 +310,21 @@ func TestTransportCobra_TreeResolvesPerRun(t *testing.T) {
 	assert.Equal(t, map[string]any{"env": "staging"}, got.up)
 	assert.Same(t, obs, seen)
 
+	testTransportCobraTreeResolvesPerRunRest(t, opts, spec, root)
+}
+
+// testTransportCobraTreeResolvesPerRunRest continues
+// TestTransportCobra_TreeResolvesPerRun with its remaining steps.
+func testTransportCobraTreeResolvesPerRunRest(
+	t *testing.T,
+	opts opscobra.Options,
+	spec types.CommandSpec,
+	root *spf.Command,
+) {
+	t.Helper()
+
+	var err error
+
 	dev, _, err := root.Find([]string{"dev"})
 	require.NoError(t, err)
 
@@ -392,6 +407,19 @@ func TestTransportCobra_TreeRunHooks(t *testing.T) {
 
 	flags := []types.FlagSpec{{Name: "fix"}}
 	ran := map[string]map[string]any{}
+
+	testTransportCobraTreeRunHooksRest5(t, flags, ran)
+}
+
+// testTransportCobraTreeRunHooksRest5 continues testTransportCobraTreeRunHooksRest4 with
+// its remaining steps.
+func testTransportCobraTreeRunHooksRest5(
+	t *testing.T,
+	flags []types.FlagSpec,
+	ran map[string]map[string]any,
+) {
+	t.Helper()
+
 	run := func(name string) ops.Builder[opsEnv] {
 		return ops.MapInput(
 			slices.Concat(
@@ -421,6 +449,21 @@ func TestTransportCobra_TreeRunHooks(t *testing.T) {
 			"lint.fix": run("lint.fix"),
 		},
 	})
+
+	testTransportCobraTreeRunHooksRest(t, flags, ran, reg, err)
+}
+
+// testTransportCobraTreeRunHooksRest continues testTransportCobraTreeRunHooksRest5 with
+// its remaining steps.
+func testTransportCobraTreeRunHooksRest(
+	t *testing.T,
+	flags []types.FlagSpec,
+	ran map[string]map[string]any,
+	reg *ops.Registry,
+	err error,
+) {
+	t.Helper()
+
 	require.NoError(t, err)
 
 	var after []string
@@ -499,7 +542,19 @@ func TestTransportCobra_TreeRunOverride(t *testing.T) {
 
 	flags := []types.FlagSpec{{Name: "env", Type: types.FlagString}}
 
-	var ran map[string]any
+	ran := &capturedRun{}
+
+	testTransportCobraTreeRunOverrideRest5(t, flags, ran)
+}
+
+// testTransportCobraTreeRunOverrideRest5 continues testTransportCobraTreeRunOverrideRest4
+// with its remaining steps.
+func testTransportCobraTreeRunOverrideRest5(
+	t *testing.T,
+	flags []types.FlagSpec,
+	ran *capturedRun,
+) {
+	t.Helper()
 
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
@@ -512,7 +567,7 @@ func TestTransportCobra_TreeRunOverride(t *testing.T) {
 			"drift": ops.MapInput(flags, types.ArgSpec{}, func(
 				_ context.Context, in map[string]any, _ opsEnv, _ interfaces.ExecutionObserver,
 			) error {
-				ran = in
+				ran.in = in
 
 				return nil
 			}),
@@ -524,6 +579,22 @@ func TestTransportCobra_TreeRunOverride(t *testing.T) {
 		Use:      "app",
 		Commands: []types.CommandSpec{{Use: "drift", Op: "drift", Flags: flags}},
 	}
+
+	testTransportCobraTreeRunOverrideRest(t, ran, reg, spec)
+}
+
+// testTransportCobraTreeRunOverrideRest continues testTransportCobraTreeRunOverrideRest5
+// with its remaining steps.
+func testTransportCobraTreeRunOverrideRest(
+	t *testing.T,
+	ran *capturedRun,
+	reg *ops.Registry,
+	spec types.CommandSpec,
+) {
+	t.Helper()
+
+	var err error
+
 	tree := func(run func(
 		context.Context, *ops.Registry, string, []byte, interfaces.ExecutionObserver,
 	) error,
@@ -554,8 +625,14 @@ func TestTransportCobra_TreeRunOverride(t *testing.T) {
 	assert.Same(t, reg, got.reg)
 	assert.Equal(t, "drift", got.op)
 	assert.JSONEq(t, `{"env":"staging"}`, got.raw)
-	assert.Nil(t, ran, "the override replaces the operation's run")
+	assert.Nil(t, ran.in, "the override replaces the operation's run")
 
 	require.NoError(t, tree(opscobra.RunLocal))
-	assert.Equal(t, map[string]any{"env": "staging"}, ran)
+	assert.Equal(t, map[string]any{"env": "staging"}, ran.in)
+}
+
+// capturedRun holds the input a run override received.
+type capturedRun struct {
+	// in is the operation input, nil until the override ran.
+	in map[string]any
 }

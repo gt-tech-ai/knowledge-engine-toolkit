@@ -83,6 +83,21 @@ func TestSQLTx_CommitsRollsBackAndRefusesNesting(t *testing.T) {
 
 	hooks := 0
 
+	testSQLTxCommitsRollsBackAndRefusesNestingRest(t, mgr, ctx, insert, count, hooks)
+}
+
+// testSQLTxCommitsRollsBackAndRefusesNestingRest continues
+// TestSQLTx_CommitsRollsBackAndRefusesNesting with its remaining steps.
+func testSQLTxCommitsRollsBackAndRefusesNestingRest(
+	t *testing.T,
+	mgr *sqltx.Manager,
+	ctx context.Context,
+	insert func(ctx context.Context, body string) error,
+	count func() int,
+	hooks int,
+) {
+	t.Helper()
+
 	require.NoError(t, mgr.WithTransaction(ctx, func(ctx context.Context) error {
 		interfaces.RegisterAfterCommit(ctx, func() { hooks++ })
 		require.Zero(t, hooks, "the hook waits for the commit")

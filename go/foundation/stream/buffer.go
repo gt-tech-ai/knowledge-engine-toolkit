@@ -187,21 +187,28 @@ func (q *queue[T]) produce(
 			return
 		}
 
-		n := size(item)
-
-		err = q.sem.Acquire(ctx, n)
-		if err != nil {
-			q.exitErr = canceled(err)
-
-			return
-		}
-
-		if !q.send(ctx, entry[T]{item: item, n: n}) {
-			q.sem.Release(n)
-
+		if !q.enqueue(ctx, item, size(item)) {
 			return
 		}
 	}
+}
+
+// enqueue reserves the item's bytes and queues it, reporting whether to keep producing.
+func (q *queue[T]) enqueue(ctx context.Context, item T, n int64) bool {
+	err := q.sem.Acquire(ctx, n)
+	if err != nil {
+		q.exitErr = canceled(err)
+
+		return false
+	}
+
+	if !q.send(ctx, entry[T]{item: item, n: n}) {
+		q.sem.Release(n)
+
+		return false
+	}
+
+	return true
 }
 
 // send enqueues e, reporting false (and recording why) when ctx ends first.

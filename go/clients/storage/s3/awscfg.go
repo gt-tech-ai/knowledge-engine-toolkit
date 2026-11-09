@@ -15,6 +15,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 )
 
+// sdkRetryMaxAttempts is the attempts the AWS SDK makes before giving up.
+const sdkRetryMaxAttempts = 4
+
 // kindMinIO is the infra.S3Config Kind of the MinIO (local/dev) backend, which uses
 // path-style addressing, an explicit endpoint and static credentials.
 const kindMinIO = "minio"
@@ -55,7 +58,7 @@ func NewAWSClient(ctx context.Context, cfg infra.S3Config) (*s3.Client, error) {
 	loadOpts := []func(*awsconfig.LoadOptions) error{
 		awsconfig.WithRegion(cfg.Region),
 		awsconfig.WithRetryMode(aws.RetryModeStandard),
-		awsconfig.WithRetryMaxAttempts(4),
+		awsconfig.WithRetryMaxAttempts(sdkRetryMaxAttempts),
 	}
 	if UseStaticCredentials(cfg) {
 		loadOpts = append(loadOpts, awsconfig.WithCredentialsProvider(
@@ -90,7 +93,7 @@ func NewAWSClientWithCredentials(
 		ctx,
 		awsconfig.WithRegion(region),
 		awsconfig.WithRetryMode(aws.RetryModeStandard),
-		awsconfig.WithRetryMaxAttempts(4),
+		awsconfig.WithRetryMaxAttempts(sdkRetryMaxAttempts),
 		awsconfig.WithCredentialsProvider(creds),
 	)
 	if err != nil {

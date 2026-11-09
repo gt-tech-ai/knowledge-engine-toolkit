@@ -11,6 +11,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
+// minMethodParts is the path segments of a full method: service and method.
+const minMethodParts = 2
+
 // defaultDurationBuckets returns the default histogram bucket boundaries for RPC
 // durations (in seconds). Matches Prometheus DefBuckets.
 func defaultDurationBuckets() []float64 {
@@ -68,7 +71,7 @@ func metrics(m interfaces.Metrics) around {
 // gRPC full methods have the format "/package.ServiceName/MethodName".
 func parseGRPCMethod(fullMethod string) (service, method string) {
 	parts := strings.Split(strings.TrimPrefix(fullMethod, "/"), "/")
-	if len(parts) >= 2 {
+	if len(parts) >= minMethodParts {
 		return parts[0], parts[1]
 	}
 

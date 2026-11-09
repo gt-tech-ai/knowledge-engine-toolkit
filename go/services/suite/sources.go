@@ -22,38 +22,57 @@ func Runs(
 ) []Entry {
 	out := make([]Entry, 0, len(runs))
 	for i := range runs {
-		r := runs[i]
-		group := r.Group
-
-		if group == "" {
-			group = r.Verb
-		}
-
-		var shells []string
-
-		if r.Tool != "" {
-			shells = []string{r.Tool}
-		}
-
-		out = append(out, Entry{
-			Name: r.Name, Verb: r.Verb, Group: group, Kind: KindRun, Tags: r.Tags,
-			Tools: shells,
-			Job: func(env Env) interfaces.AnyJob {
-				return Build(env, r.Verb, r.Name, group, func(
-					ctx context.Context, _ interfaces.CommandRunner, _ string,
-				) (types.StepResults, error) {
-					res, err := tools.Run(ctx, cb, r, env.Opts)
-					if err != nil {
-						return types.OneStep(r.Name, types.StatusFail, err), nil
-					}
-
-					return res, nil
-				})
-			},
-		})
+		out = append(out, runEntry(tools, cb, runs[i]))
 	}
 
 	return out
+}
+
+// runEntry is the catalog entry of one tool run, grouped by its verb when it names
+// no group.
+func runEntry(
+	tools interfaces.ToolRunner,
+	cb interfaces.Codebase,
+	r types.ToolRun,
+) Entry {
+	group := r.Group
+	if group == "" {
+		group = r.Verb
+	}
+
+	var shells []string
+
+	if r.Tool != "" {
+		shells = []string{r.Tool}
+	}
+
+	return Entry{
+		Name: r.Name, Verb: r.Verb, Group: group, Kind: KindRun, Tags: r.Tags,
+		Tools: shells,
+		Job: func(env Env) interfaces.AnyJob {
+			return Build(env, r.Verb, r.Name, group, func(
+				ctx context.Context, _ interfaces.CommandRunner, _ string,
+			) (types.StepResults, error) {
+				return runStepResults(ctx, tools, cb, r, env.Opts), nil
+			})
+		},
+	}
+}
+
+// runStepResults runs the tool, reporting a run error as one failed step.
+func runStepResults(
+	ctx context.Context,
+	tools interfaces.ToolRunner,
+	cb interfaces.Codebase,
+	r types.ToolRun,
+	opts types.RunOptions,
+) types.StepResults {
+	res, err := tools.Run(ctx, cb, r, opts)
+	if err != nil {
+		return types.OneStep(r.Name, types.StatusFail, err)
+	}
+
+	return res
 }
 
 // StepEnv is what a registered step runs against.
@@ -119,39 +138,46 @@ const KindGuard = "guard"
 func Guards(gs []interfaces.Guard, cb interfaces.Codebase) []Entry {
 	out := make([]Entry, 0, len(gs))
 	for _, g := range gs {
-		m := g.Meta()
-
-		out = append(out, Entry{
-			Name: m.Name, Verb: m.Verb, Group: m.Group, Kind: KindGuard, Tags: m.Tags,
-			Tools: m.Tools,
-			Job: func(env Env) interfaces.AnyJob {
-				return Build(env, m.Verb, m.Name, m.Group, func(
-					ctx context.Context, _ interfaces.CommandRunner, _ string,
-				) (types.StepResults, error) {
-					v := g.Run(ctx, cb)
-					if env.Opts.Strict && v.Status == types.StatusSkip &&
-						v.Detail != types.CachedDetail {
-						v.Status = types.StatusFail
-					}
-
-					step := types.StepResult{
-						Name:   m.Name,
-						Group:  m.Group,
-						Status: v.Status,
-					}
-					if v.Status != types.StatusFail {
-						step.Detail = []byte(v.Detail)
-					} else if step.Error = strings.TrimSpace(v.Detail); step.Error == "" {
-						step.Error = "failed"
-					}
-
-					return types.StepResults{step}, nil
-				})
-			},
-		})
+		out = append(out, guardEntry(g, cb))
 	}
 
 	return out
+}
+
+// guardEntry is the catalog entry of one guard.
+func guardEntry(g interfaces.Guard, cb interfaces.Codebase) Entry {
+	m := g.Meta()
+
+	return Entry{
+		Name: m.Name, Verb: m.Verb, Group: m.Group, Kind: KindGuard, Tags: m.Tags,
+		Tools: m.Tools,
+		Job: func(env Env) interfaces.AnyJob {
+			return Build(env, m.Verb, m.Name, m.Group, func(
+				ctx context.Context, _ interfaces.CommandRunner, _ string,
+			) (types.StepResults, error) {
+				step := guardStep(g.Run(ctx, cb), m.Name, m.Group, env.Opts.Strict)
+
+				return types.StepResults{step}, nil
+			})
+		},
+	}
+}
+
+// guardStep turns a verdict into a step. Strict mode fails a skip unless it came from
+// the cache; a failure always carries an error text.
+func guardStep(v types.Verdict, name, group string, strict bool) types.StepResult {
+	if strict && v.Status == types.StatusSkip && v.Detail != types.CachedDetail {
+		v.Status = types.StatusFail
+	}
+
+	step := types.StepResult{Name: name, Group: group, Status: v.Status}
+	if v.Status != types.StatusFail {
+		step.Detail = []byte(v.Detail)
+	} else if step.Error = strings.TrimSpace(v.Detail); step.Error == "" {
+		step.Error = "failed"
+	}
+
+	return step
 }
 
 // KindProcedure marks a procedure entry.

@@ -65,6 +65,35 @@ func TestStream_FromSliceYieldsInOrderThenEnds(t *testing.T) {
 func TestChunk_SplitsAtMaxBytesKeepingOrder(t *testing.T) {
 	t.Parallel()
 
+	testChunkSplitsAtMaxBytesKeepingOrderRest5(t)
+}
+
+// chunksAreMaximal reports whether every chunk is non-empty, fits maxBytes, and could not
+// have absorbed the first item of its successor.
+func chunksAreMaximal(chunks [][]int, maxBytes int) bool {
+	prev := -1
+
+	for _, c := range chunks {
+		total := 0
+		for _, n := range c {
+			total += n
+		}
+
+		if len(c) == 0 || total > maxBytes || (prev >= 0 && prev+c[0] <= maxBytes) {
+			return false
+		}
+
+		prev = total
+	}
+
+	return true
+}
+
+// testChunkSplitsAtMaxBytesKeepingOrderRest5 continues
+// testChunkSplitsAtMaxBytesKeepingOrderRest4 with its remaining steps.
+func testChunkSplitsAtMaxBytesKeepingOrderRest5(t *testing.T) {
+	t.Helper()
+
 	law := func(raw []uint8, budget uint8) bool {
 		maxBytes := int(budget)%64 + 1
 		items := make([]int, len(raw))
@@ -78,26 +107,8 @@ func TestChunk_SplitsAtMaxBytesKeepingOrder(t *testing.T) {
 			return false
 		}
 
-		var flat []int
-
-		prev := -1
-
-		for _, c := range chunks {
-			total := 0
-			for _, n := range c {
-				total += n
-			}
-
-			if len(c) == 0 || total > maxBytes || (prev >= 0 && prev+c[0] <= maxBytes) {
-				return false
-			}
-
-			prev = total
-
-			flat = append(flat, c...)
-		}
-
-		return slices.Equal(flat, items)
+		return chunksAreMaximal(chunks, maxBytes) &&
+			slices.Equal(slices.Concat(chunks...), items)
 	}
 	require.NoError(t, quick.Check(law, &quick.Config{MaxCount: 300}))
 }

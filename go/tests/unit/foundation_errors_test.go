@@ -59,12 +59,49 @@ func TestErrorClassification(t *testing.T) {
 func TestDBErrorMapping(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		err          error
-		name         string
-		expectedCode apperr.ErrorCode
-		expectedNil  bool
-	}{
+	tests := testDBErrorMappingTable()
+
+	mapper, mapperErr := repoerrors.NewDBMapper(repoerrors.KindPostgres)
+	require.NoError(t, mapperErr, "mapper factory must not return error")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			mappedErr := mapper(tt.err)
+
+			if tt.expectedNil {
+				assert.NoError(t, mappedErr, "mapper must return nil for nil input")
+
+				return
+			}
+
+			require.Error(t, mappedErr, "mapper must return non-nil error")
+
+			var appErr *apperr.AppError
+
+			require.ErrorAs(
+				t,
+				mappedErr, &appErr,
+				"mapped error must be *AppError, got %T",
+				mappedErr,
+			)
+			assert.Equal(t, tt.expectedCode, appErr.Code)
+		})
+	}
+}
+
+// testDBErrorMappingRow is one row of testDBErrorMappingTable.
+type testDBErrorMappingRow struct {
+	err          error
+	name         string
+	expectedCode apperr.ErrorCode
+	expectedNil  bool
+}
+
+// testDBErrorMappingTable builds the table TestDBErrorMapping runs.
+func testDBErrorMappingTable() []testDBErrorMappingRow {
+	return []testDBErrorMappingRow{
 		{
 			name:        "nil error",
 			err:         nil,
@@ -107,34 +144,5 @@ func TestDBErrorMapping(t *testing.T) {
 			},
 			expectedCode: apperr.CodeInternal,
 		},
-	}
-
-	mapper, mapperErr := repoerrors.NewDBMapper(repoerrors.KindPostgres)
-	require.NoError(t, mapperErr, "mapper factory must not return error")
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			mappedErr := mapper(tt.err)
-
-			if tt.expectedNil {
-				assert.NoError(t, mappedErr, "mapper must return nil for nil input")
-
-				return
-			}
-
-			require.Error(t, mappedErr, "mapper must return non-nil error")
-
-			var appErr *apperr.AppError
-
-			require.ErrorAs(
-				t,
-				mappedErr, &appErr,
-				"mapped error must be *AppError, got %T",
-				mappedErr,
-			)
-			assert.Equal(t, tt.expectedCode, appErr.Code)
-		})
 	}
 }

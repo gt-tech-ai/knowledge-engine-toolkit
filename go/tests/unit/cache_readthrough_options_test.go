@@ -116,6 +116,14 @@ func TestReadThrough_UncacheableResultSharedButNotStored(t *testing.T) {
 func TestReadThrough_NilCacheCoalescesWithoutCaching(t *testing.T) {
 	t.Parallel()
 
+	testReadThroughNilCacheCoalescesWithoutCachingRest5(t)
+}
+
+// testReadThroughNilCacheCoalescesWithoutCachingRest5 continues
+// testReadThroughNilCacheCoalescesWithoutCachingRest4 with its remaining steps.
+func testReadThroughNilCacheCoalescesWithoutCachingRest5(t *testing.T) {
+	t.Helper()
+
 	const key = "nocache"
 
 	var (
@@ -153,6 +161,27 @@ func TestReadThrough_NilCacheCoalescesWithoutCaching(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("the first load never started")
 	}
+
+	testReadThroughNilCacheCoalescesWithoutCachingRest(
+		t,
+		&loads,
+		secondLoad,
+		release,
+		results,
+		run,
+	)
+}
+
+// testReadThroughNilCacheCoalescesWithoutCachingRest continues
+// testReadThroughNilCacheCoalescesWithoutCachingRest5 with its remaining steps.
+func testReadThroughNilCacheCoalescesWithoutCachingRest(
+	t *testing.T,
+	loads *atomic.Int32,
+	secondLoad, release chan struct{},
+	results chan readThroughResult,
+	run func(load func() (int, error)),
+) {
+	t.Helper()
 
 	go run(func() (int, error) {
 		loads.Add(1)
@@ -209,37 +238,28 @@ func TestReadThrough_FirstCallerCancelDoesNotFailOthers(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockByteCache(ctrl)
 
+	testReadThroughFirstCallerCancelDoesNotFailOthersRest7(t, m)
+}
+
+// testReadThroughFirstCallerCancelDoesNotFailOthersRest7 continues
+// testReadThroughFirstCallerCancelDoesNotFailOthersRest5 with its remaining steps.
+func testReadThroughFirstCallerCancelDoesNotFailOthersRest7(
+	t *testing.T,
+	m *mocks.MockByteCache,
+) {
+	t.Helper()
+
 	const key = "detached"
 
 	m.EXPECT().Get(gomock.Any(), key).Return(nil, false).Times(2)
 
-	setCtxErr := make(chan error, 2)
-
-	m.EXPECT().Set(gomock.Any(), key, gomock.Any(), time.Minute).DoAndReturn(
-		func(ctx context.Context, _ string, _ []byte, _ time.Duration) {
-			setCtxErr <- ctx.Err()
-		},
-	).MinTimes(1)
+	setCtxErr := expectSetContexts(m, key)
 
 	var sf singleflight.Group
 
 	started := make(chan struct{})
 	release := make(chan struct{})
-	// loader is the shared load's signature; a named type keeps it fixed for the
-	// two ReadThrough calls that share it.
-	type loader func() (int, error)
-
-	var load loader = func() (int, error) {
-		select {
-		case <-started:
-		default:
-			close(started)
-		}
-
-		<-release
-
-		return 42, nil
-	}
+	load := newBlockingLoader(started, release)
 
 	ctxA, cancelA := context.WithCancel(context.Background())
 
@@ -267,6 +287,27 @@ func TestReadThrough_FirstCallerCancelDoesNotFailOthers(t *testing.T) {
 		)
 		resB <- readThroughResult{value: v, err: err}
 	}()
+
+	testReadThroughFirstCallerCancelDoesNotFailOthersRest(
+		t,
+		setCtxErr,
+		release,
+		cancelA,
+		resA,
+		resB,
+	)
+}
+
+// testReadThroughFirstCallerCancelDoesNotFailOthersRest continues
+// TestReadThrough_FirstCallerCancelDoesNotFailOthers with its remaining steps.
+func testReadThroughFirstCallerCancelDoesNotFailOthersRest(
+	t *testing.T,
+	setCtxErr chan error,
+	release chan struct{},
+	cancelA context.CancelFunc,
+	resA, resB chan readThroughResult,
+) {
+	t.Helper()
 
 	for range 100 {
 		runtime.Gosched()
@@ -370,4 +411,36 @@ func TestReadThrough_DoneContextSkipsLoad(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
 	assert.Equal(t, int32(0), loads.Load(), "a done caller starts no load")
+}
+
+// expectSetContexts allows Set and reports the context error each call saw.
+func expectSetContexts(m *mocks.MockByteCache, key string) chan error {
+	setCtxErr := make(chan error, 2)
+
+	m.EXPECT().Set(gomock.Any(), key, gomock.Any(), time.Minute).DoAndReturn(
+		func(ctx context.Context, _ string, _ []byte, _ time.Duration) {
+			setCtxErr <- ctx.Err()
+		},
+	).MinTimes(1)
+
+	return setCtxErr
+}
+
+// blockingLoader is the shared load's signature; a named type keeps it fixed for the
+// two ReadThrough calls that share it.
+type blockingLoader func() (int, error)
+
+// newBlockingLoader signals started on the first call and holds until release closes.
+func newBlockingLoader(started, release chan struct{}) blockingLoader {
+	return func() (int, error) {
+		select {
+		case <-started:
+		default:
+			close(started)
+		}
+
+		<-release
+
+		return 42, nil
+	}
 }

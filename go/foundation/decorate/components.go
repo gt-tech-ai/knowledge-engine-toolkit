@@ -49,6 +49,24 @@ func (d Decorations) VerifyExplicit(prefixes ...string) error {
 		return err
 	}
 
+	missing := d.missingEntries(prefixes)
+	if len(missing) == 0 {
+		return err
+	}
+
+	miss := apperr.New(
+		apperr.CodeInvalidInput,
+		"no entry for "+strings.Join(missing, ", "),
+	)
+	if err != nil {
+		return apperr.Wrap(apperr.Join(err, miss), apperr.CodeInvalidInput, "decoration")
+	}
+
+	return apperr.Wrap(miss, apperr.CodeInvalidInput, "decoration")
+}
+
+// missingEntries lists the config keys an owned component has no override under.
+func (d Decorations) missingEntries(prefixes []string) []string {
 	cfg := d.cfg
 	if cfg == nil {
 		cfg = &decoration.Config{}
@@ -66,11 +84,8 @@ func (d Decorations) VerifyExplicit(prefixes ...string) error {
 	var missing []string
 
 	for _, c := range d.Components() {
-		if !owned(c.Name, prefixes) {
-			continue
-		}
-
-		if _, ok := overrides[c.Tier][c.Name]; !ok {
+		_, ok := overrides[c.Tier][c.Name]
+		if owned(c.Name, prefixes) && !ok {
 			missing = append(
 				missing,
 				decoration.SectionKey+"."+keys[c.Tier]+".overrides."+c.Name,
@@ -78,17 +93,5 @@ func (d Decorations) VerifyExplicit(prefixes ...string) error {
 		}
 	}
 
-	if len(missing) == 0 {
-		return err
-	}
-
-	miss := apperr.New(
-		apperr.CodeInvalidInput,
-		"no entry for "+strings.Join(missing, ", "),
-	)
-	if err != nil {
-		return apperr.Wrap(apperr.Join(err, miss), apperr.CodeInvalidInput, "decoration")
-	}
-
-	return apperr.Wrap(miss, apperr.CodeInvalidInput, "decoration")
+	return missing
 }

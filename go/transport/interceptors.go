@@ -28,44 +28,70 @@ func Interceptors[I any](
 
 	streamDeps.Timeout = 0
 
-	var (
-		out           []I
-		unary, stream []decorate.OpMiddleware
-	)
-
-	flush := func() {
-		if len(unary)+len(stream) > 0 {
-			out = append(out, adapt(decorate.Chain(unary...), decorate.Chain(stream...)))
-		}
-
-		unary, stream = nil, nil
-	}
+	b := &interceptorRun[I]{adapt: adapt}
 
 	for _, layer := range tier.Order {
 		if layer == decorate.LayerAuth {
-			flush()
-
-			out = append(out, authn...)
+			b.place(authn)
 		}
 
 		if ics, ok := native(layer); ok {
-			flush()
-
-			out = append(out, ics...)
+			b.place(ics)
 
 			continue
 		}
 
-		if mw := tier.Middleware(layer, name, d); mw != nil {
-			unary = append(unary, mw)
-		}
-
-		if mw := tier.Middleware(layer, name, streamDeps); mw != nil {
-			stream = append(stream, mw)
-		}
+		b.add(tier.Middleware(layer, name, d), tier.Middleware(layer, name, streamDeps))
 	}
 
-	flush()
+	b.flush()
 
-	return out
+	return b.out
+}
+
+// interceptorRun lays middleware out as interceptors, merging each run of adjacent
+// layers into one.
+type interceptorRun[I any] struct {
+	// adapt shapes a run's unary and stream chains into one interceptor.
+	adapt func(unary, stream decorate.OpMiddleware) I
+
+	// out holds the interceptors laid out so far.
+	out []I
+
+	// unary holds the current run's unary layers.
+	unary []decorate.OpMiddleware
+
+	// stream holds the current run's stream layers.
+	stream []decorate.OpMiddleware
+}
+
+// add extends the current run with a layer's unary and stream middleware, either of
+// which may be absent.
+func (b *interceptorRun[I]) add(unary, stream decorate.OpMiddleware) {
+	if unary != nil {
+		b.unary = append(b.unary, unary)
+	}
+
+	if stream != nil {
+		b.stream = append(b.stream, stream)
+	}
+}
+
+// flush closes the current run into one interceptor.
+func (b *interceptorRun[I]) flush() {
+	if len(b.unary)+len(b.stream) > 0 {
+		b.out = append(
+			b.out,
+			b.adapt(decorate.Chain(b.unary...), decorate.Chain(b.stream...)),
+		)
+	}
+
+	b.unary, b.stream = nil, nil
+}
+
+// place closes the current run and appends ready-made interceptors after it.
+func (b *interceptorRun[I]) place(ics []I) {
+	b.flush()
+
+	b.out = append(b.out, ics...)
 }

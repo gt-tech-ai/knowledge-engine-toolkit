@@ -9,6 +9,12 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// safetyRankDestructive is the rank of a destructive operation.
+const safetyRankDestructive = 2
+
+// safetyRankCredentialed is the rank of a credentialed operation.
+const safetyRankCredentialed = 3
+
 // SafetyClass ranks what an operation may do to the developer's machine and the
 // environments it can reach. Exposure policies admit an operation when its class
 // ranks at or below the policy's ceiling, so the order is load-bearing.
@@ -36,9 +42,9 @@ func safetyRanks(c SafetyClass) (int, bool) {
 	case SafetyMutating:
 		return 1, true
 	case SafetyDestructive:
-		return 2, true
+		return safetyRankDestructive, true
 	case SafetyCredentialed:
-		return 3, true
+		return safetyRankCredentialed, true
 	default:
 		return 0, false
 	}

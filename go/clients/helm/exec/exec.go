@@ -15,6 +15,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// groupDirMode is the mode of a directory its group may read.
+const groupDirMode = 0o750
+
 // Client runs helm in the codebase root.
 type Client struct {
 	// runner runs helm.
@@ -62,7 +65,7 @@ func (c *Client) DependencyBuild(ctx context.Context, chartDir string) error {
 
 	cache := filepath.Join(home, "cache")
 
-	err = os.MkdirAll(cache, 0o750)
+	err = os.MkdirAll(cache, groupDirMode)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create a helm cache for "+chartDir)
 	}

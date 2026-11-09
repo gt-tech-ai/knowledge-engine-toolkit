@@ -202,7 +202,16 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 
 	requireIntegration(t)
 
+	testRelayEndToEndPostgresToSQSRest3(t)
+}
+
+// testRelayEndToEndPostgresToSQSRest3 continues testRelayEndToEndPostgresToSQSRest2 with
+// its remaining steps.
+func testRelayEndToEndPostgresToSQSRest3(t *testing.T) {
+	t.Helper()
+
 	ctx := context.Background()
+
 	store, enqueue, tx := newOutboxStore(t)
 	emq, err := elasticmqdb.NewTestElasticMQ(ctx)
 	require.NoError(t, err, "start elasticmq")
@@ -236,6 +245,26 @@ func TestRelay_EndToEnd_PostgresToSQS(t *testing.T) {
 		nil,
 		nil,
 	)
+
+	testRelayEndToEndPostgresToSQSRest4(t, store, api, created, ids, relay)
+}
+
+// testRelayEndToEndPostgresToSQSRest4 continues testRelayEndToEndPostgresToSQSRest3 with
+// its remaining steps.
+func testRelayEndToEndPostgresToSQSRest4(
+	t *testing.T,
+	store interfaces.OutboxStore,
+	api *awssqs.Client,
+	created *awssqs.CreateQueueOutput,
+	ids []uuid.UUID,
+	relay *outbox.Relay,
+) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	var err error
+
 	drain(t, relay, store, "events")
 
 	got, keys := map[string]string{}, map[string]string{}
@@ -336,7 +365,16 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 
 	requireIntegration(t)
 
+	testRelayEndToEndPostgresToS3ObjectLockRest3(t)
+}
+
+// testRelayEndToEndPostgresToS3ObjectLockRest3 continues
+// testRelayEndToEndPostgresToS3ObjectLockRest2 with its remaining steps.
+func testRelayEndToEndPostgresToS3ObjectLockRest3(t *testing.T) {
+	t.Helper()
+
 	ctx := context.Background()
+
 	store, enqueue, tx := newOutboxStore(t)
 	mio, err := miniodb.NewTestMinIO(ctx)
 	require.NoError(t, err, "start minio")
@@ -349,27 +387,25 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 		},
 	)
 
+	testRelayEndToEndPostgresToS3ObjectLockRest5(t, store, enqueue, tx, api)
+}
+
+// testRelayEndToEndPostgresToS3ObjectLockRest5 continues
+// testRelayEndToEndPostgresToS3ObjectLockRest4 with its remaining steps.
+func testRelayEndToEndPostgresToS3ObjectLockRest5(
+	t *testing.T,
+	store interfaces.OutboxStore,
+	enqueue func(context.Context, *types.OutboxRecord) error,
+	tx interfaces.TransactionManager,
+	api *awss3.Client,
+) {
+	t.Helper()
+
+	ctx := context.Background()
+
 	const bucket = "audit-worm"
 
-	_, err = api.CreateBucket(
-		ctx,
-		&awss3.CreateBucketInput{
-			Bucket:                     aws.String(bucket),
-			ObjectLockEnabledForBucket: aws.Bool(true),
-		},
-	)
-	require.NoError(t, err)
-
-	_, err = api.PutObjectLockConfiguration(ctx, &awss3.PutObjectLockConfigurationInput{
-		Bucket: aws.String(bucket),
-		ObjectLockConfiguration: &s3types.ObjectLockConfiguration{
-			ObjectLockEnabled: s3types.ObjectLockEnabledEnabled,
-			Rule: &s3types.ObjectLockRule{DefaultRetention: &s3types.DefaultRetention{
-				Mode: s3types.ObjectLockRetentionModeCompliance, Days: aws.Int32(1),
-			}},
-		},
-	})
-	require.NoError(t, err)
+	createLockedBucket(t, ctx, api, bucket)
 
 	cfg := outboxclient.DefaultConfig()
 
@@ -391,16 +427,7 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 	)
 	drain(t, relay, store, "audit")
 
-	listed, err := api.ListObjectsV2(
-		ctx,
-		&awss3.ListObjectsV2Input{Bucket: aws.String(bucket)},
-	)
-	require.NoError(t, err)
-
-	keys := make([]string, 0, len(listed.Contents))
-	for _, o := range listed.Contents {
-		keys = append(keys, aws.ToString(o.Key))
-	}
+	keys := bucketKeys(t, ctx, api, bucket)
 
 	day := enqueuedAt().Format("2006/01/02")
 	want := make([]string, len(ids))
@@ -414,26 +441,7 @@ func TestRelay_EndToEnd_PostgresToS3ObjectLock(t *testing.T) {
 	require.Equal(t, want, keys)
 
 	for i, id := range ids {
-		key := aws.String("org-1/" + day + "/" + id.String())
-		head, err := api.HeadObject(
-			ctx,
-			&awss3.HeadObjectInput{Bucket: aws.String(bucket), Key: key},
-		)
-		require.NoError(t, err)
-		require.Equal(t, s3types.ObjectLockModeCompliance, head.ObjectLockMode)
-
-		obj, err := api.GetObject(
-			ctx,
-			&awss3.GetObjectInput{Bucket: aws.String(bucket), Key: key},
-		)
-		require.NoError(t, err)
-
-		body, err := io.ReadAll(obj.Body)
-
-		_ = obj.Body.Close()
-
-		require.NoError(t, err)
-		require.Equal(t, `{"seq":`+strconv.Itoa(i)+`}`, string(body))
+		assertLockedObject(t, ctx, api, bucket, "org-1/"+day+"/"+id.String(), i)
 	}
 
 	stats, err := store.Stats(ctx, "audit")
@@ -459,7 +467,16 @@ func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 
 	requireIntegration(t)
 
+	testRelayEndToEndRoutesIsolateQueuesRest3(t)
+}
+
+// testRelayEndToEndRoutesIsolateQueuesRest3 continues
+// testRelayEndToEndRoutesIsolateQueuesRest2 with its remaining steps.
+func testRelayEndToEndRoutesIsolateQueuesRest3(t *testing.T) {
+	t.Helper()
+
 	ctx := context.Background()
+
 	store, enqueue, tx := newOutboxStore(t)
 	emq, err := elasticmqdb.NewTestElasticMQ(ctx)
 	require.NoError(t, err, "start elasticmq")
@@ -504,6 +521,32 @@ func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 	sink, err := outboxclient.NewFromConfig(ctx, cfg, outboxclient.Deps{SQSAPI: api})
 	require.NoError(t, err)
 
+	testRelayEndToEndRoutesIsolateQueuesRest5(
+		t,
+		store,
+		enqueue,
+		tx,
+		api,
+		healthy,
+		urls,
+		sink,
+	)
+}
+
+// testRelayEndToEndRoutesIsolateQueuesRest5 continues
+// testRelayEndToEndRoutesIsolateQueuesRest2 with its remaining steps.
+func testRelayEndToEndRoutesIsolateQueuesRest5(
+	t *testing.T,
+	store interfaces.OutboxStore,
+	enqueue func(context.Context, *types.OutboxRecord) error,
+	tx interfaces.TransactionManager,
+	api *awssqs.Client,
+	healthy []string,
+	urls map[string]string,
+	sink interfaces.OutboxSink,
+) {
+	t.Helper()
+
 	outboxtest.RunRouting(
 		t,
 		outboxtest.Harness{Store: store, Tx: tx, Enqueue: enqueue},
@@ -517,28 +560,7 @@ func TestRelay_EndToEnd_RoutesIsolateQueues(t *testing.T) {
 			},
 			Healthy: healthy, Broken: "member_removed",
 			Delivered: func(ctx context.Context, route string) ([]string, error) {
-				var got []string
-
-				for {
-					out, err := api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
-						QueueUrl: aws.String(
-							urls[route],
-						),
-						MaxNumberOfMessages: 10,
-						WaitTimeSeconds:     1,
-					})
-					if err != nil || len(out.Messages) == 0 {
-						return got, apperr.Wrap(
-							err,
-							apperr.CodeUnavailable,
-							"receive sqs messages",
-						)
-					}
-
-					for _, m := range out.Messages {
-						got = append(got, aws.ToString(m.Body))
-					}
-				}
+				return receiveAll(ctx, api, urls[route])
 			},
 		},
 	)
@@ -630,6 +652,26 @@ func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 	require.NoError(t, err)
 
 	tx := sqltx.New(db)
+
+	t.Helper()
+
+	testRelayPartitionsDrainIndependentlyRest3(t, db, store, tx)
+}
+
+// testRelayPartitionsDrainIndependentlyRest3 continues
+// testRelayPartitionsDrainIndependentlyRest2 with its remaining steps.
+func testRelayPartitionsDrainIndependentlyRest3(
+	t *testing.T,
+	db *sql.DB,
+	store interfaces.OutboxStore,
+	tx *sqltx.Manager,
+) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	var err error
+
 	want := map[int]int{}
 
 	require.NoError(t, tx.WithTransaction(ctx, func(ctx context.Context) error {
@@ -659,9 +701,33 @@ func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 	}, outboxstore.Deps{DB: db})
 	require.NoError(t, err)
 
+	testRelayPartitionsDrainIndependentlyRest4(t, db, store, tx, want, narrowed)
+}
+
+// testRelayPartitionsDrainIndependentlyRest4 continues
+// testRelayPartitionsDrainIndependentlyRest3 with its remaining steps.
+func testRelayPartitionsDrainIndependentlyRest4(
+	t *testing.T,
+	db *sql.DB,
+	store interfaces.OutboxStore,
+	tx *sqltx.Manager,
+	want map[int]int,
+	narrowed interfaces.OutboxStore,
+) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	var err error
+
 	stats, err := narrowed.Stats(ctx, "split")
 	require.NoError(t, err)
-	require.Equal(t, want[1], stats.Stranded, "partition 1 is stranded at one partition")
+	require.Equal(
+		t,
+		want[1],
+		stats.Stranded,
+		"partition 1 is stranded at one partition",
+	)
 
 	sink, err := outboxclient.NewFromConfig(
 		ctx,
@@ -695,4 +761,107 @@ func TestRelay_PartitionsDrainIndependently(t *testing.T) {
 	sent, reclaimed := partitionCounts(t, db)
 	require.Equal(t, want, sent)
 	require.Equal(t, map[int]int{0: 0, 1: 0}, reclaimed)
+}
+
+// createLockedBucket creates a bucket with default compliance-mode object lock.
+func createLockedBucket(
+	t *testing.T,
+	ctx context.Context,
+	api *awss3.Client,
+	bucket string,
+) {
+	t.Helper()
+
+	var err error
+
+	_, err = api.CreateBucket(
+		ctx,
+		&awss3.CreateBucketInput{
+			Bucket:                     aws.String(bucket),
+			ObjectLockEnabledForBucket: aws.Bool(true),
+		},
+	)
+	require.NoError(t, err)
+
+	_, err = api.PutObjectLockConfiguration(ctx, &awss3.PutObjectLockConfigurationInput{
+		Bucket: aws.String(bucket),
+		ObjectLockConfiguration: &s3types.ObjectLockConfiguration{
+			ObjectLockEnabled: s3types.ObjectLockEnabledEnabled,
+			Rule: &s3types.ObjectLockRule{DefaultRetention: &s3types.DefaultRetention{
+				Mode: s3types.ObjectLockRetentionModeCompliance, Days: aws.Int32(1),
+			}},
+		},
+	})
+	require.NoError(t, err)
+}
+
+// bucketKeys lists the bucket's object keys.
+func bucketKeys(
+	t *testing.T,
+	ctx context.Context,
+	api *awss3.Client,
+	bucket string,
+) []string {
+	t.Helper()
+
+	listed, err := api.ListObjectsV2(
+		ctx,
+		&awss3.ListObjectsV2Input{Bucket: aws.String(bucket)},
+	)
+	require.NoError(t, err)
+
+	keys := make([]string, 0, len(listed.Contents))
+	for _, o := range listed.Contents {
+		keys = append(keys, aws.ToString(o.Key))
+	}
+
+	return keys
+}
+
+// assertLockedObject requires the object to be compliance-locked and to hold record seq.
+func assertLockedObject(
+	t *testing.T, ctx context.Context, api *awss3.Client, bucket, name string, seq int,
+) {
+	t.Helper()
+
+	key := aws.String(name)
+	head, err := api.HeadObject(
+		ctx,
+		&awss3.HeadObjectInput{Bucket: aws.String(bucket), Key: key},
+	)
+	require.NoError(t, err)
+	require.Equal(t, s3types.ObjectLockModeCompliance, head.ObjectLockMode)
+
+	obj, err := api.GetObject(
+		ctx,
+		&awss3.GetObjectInput{Bucket: aws.String(bucket), Key: key},
+	)
+	require.NoError(t, err)
+
+	body, err := io.ReadAll(obj.Body)
+
+	_ = obj.Body.Close()
+
+	require.NoError(t, err)
+	require.Equal(t, `{"seq":`+strconv.Itoa(seq)+`}`, string(body))
+}
+
+// receiveAll drains the queue and returns the message bodies.
+func receiveAll(ctx context.Context, api *awssqs.Client, url string) ([]string, error) {
+	var got []string
+
+	for {
+		out, err := api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
+			QueueUrl:            aws.String(url),
+			MaxNumberOfMessages: 10,
+			WaitTimeSeconds:     1,
+		})
+		if err != nil || len(out.Messages) == 0 {
+			return got, apperr.Wrap(err, apperr.CodeUnavailable, "receive sqs messages")
+		}
+
+		for _, m := range out.Messages {
+			got = append(got, aws.ToString(m.Body))
+		}
+	}
 }

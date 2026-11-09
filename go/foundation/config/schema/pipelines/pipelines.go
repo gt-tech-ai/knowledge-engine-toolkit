@@ -9,6 +9,12 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// defaultMultipartThresholdBytes is the object size at which an upload turns multipart.
+const defaultMultipartThresholdBytes = 20 << 20
+
+// defaultMultipartPartSizeBytes is the size of one multipart part.
+const defaultMultipartPartSizeBytes = 16 << 20
+
 // UploadConfig tunes the multipart-upload sizing.
 type UploadConfig struct {
 	// MultipartThresholdBytes is the size at/above which an upload uses the
@@ -31,8 +37,8 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Upload: UploadConfig{
-			MultipartThresholdBytes: 20 << 20,
-			MultipartPartSizeBytes:  16 << 20,
+			MultipartThresholdBytes: defaultMultipartThresholdBytes,
+			MultipartPartSizeBytes:  defaultMultipartPartSizeBytes,
 		},
 	}
 }

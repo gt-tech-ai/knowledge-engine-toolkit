@@ -7,6 +7,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// minHashPartitions is the fewest partitions that make hashing a key meaningful.
+const minHashPartitions = 2
+
 // OutboxRouteAttribute is the record attribute a routing sink reads to pick the
 // record's destination (e.g. one queue per event type).
 const OutboxRouteAttribute = "route"
@@ -17,7 +20,7 @@ const OutboxRouteAttribute = "route"
 // recomputes it on claim, so rows keep the partition they were written with.
 // Partitions below 2 put every record in partition 0.
 func OutboxPartition(key string, partitions int) int {
-	if partitions < 2 {
+	if partitions < minHashPartitions {
 		return 0
 	}
 

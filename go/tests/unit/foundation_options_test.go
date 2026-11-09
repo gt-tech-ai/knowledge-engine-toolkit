@@ -89,6 +89,13 @@ func TestApplyOptions(t *testing.T) {
 		assert.Equal(t, "test", cfg.Name)
 	})
 
+	testApplyOptionsRest(t)
+}
+
+// testApplyOptionsRest continues TestApplyOptions with its remaining steps.
+func testApplyOptionsRest(t *testing.T) {
+	t.Helper()
+
 	t.Run("later options override earlier ones", func(t *testing.T) {
 		t.Parallel()
 

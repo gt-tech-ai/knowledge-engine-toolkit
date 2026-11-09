@@ -18,46 +18,14 @@ import (
 func convertToOAS3(
 	swagger map[string]any, cfg serviceConfig, headers map[string]string,
 ) (map[string]any, error) {
-	raw, err := json.Marshal(swagger)
+	doc2, err := parseSwagger2(swagger)
 	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInternal, "marshal swagger")
+		return nil, err
 	}
 
-	var doc2 openapi2.T
-
-	err = json.Unmarshal(raw, &doc2)
+	oas, err := swagger2ToMap(doc2)
 	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse swagger")
-	}
-
-	// protoc-gen-openapiv2 declares JSON; a spec that omits it would convert to */*.
-	if len(doc2.Consumes) == 0 {
-		doc2.Consumes = []string{mediaJSON}
-	}
-
-	if len(doc2.Produces) == 0 {
-		doc2.Produces = []string{mediaJSON}
-	}
-
-	doc3, err := openapi2conv.ToV3(&doc2)
-	if err != nil {
-		return nil, apperr.Wrap(
-			err,
-			apperr.CodeInvalidInput,
-			"convert swagger to openapi 3",
-		)
-	}
-
-	raw, err = json.Marshal(doc3)
-	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInternal, "marshal openapi 3")
-	}
-
-	var oas map[string]any
-
-	err = json.Unmarshal(raw, &oas)
-	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInternal, "decode openapi 3")
+		return nil, err
 	}
 
 	if defs, ok := swagger["definitions"].(map[string]any); ok {
@@ -75,8 +43,69 @@ func convertToOAS3(
 		oas["servers"] = []any{map[string]any{"url": cfg.basePath}}
 	}
 
+	addSecuritySchemes(oas, headers)
+
+	return oas, nil
+}
+
+// parseSwagger2 decodes the merged spec and defaults its media types:
+// protoc-gen-openapiv2 declares JSON, and a spec that omits it would convert to */*.
+func parseSwagger2(swagger map[string]any) (*openapi2.T, error) {
+	raw, err := json.Marshal(swagger)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "marshal swagger")
+	}
+
+	var doc2 openapi2.T
+
+	err = json.Unmarshal(raw, &doc2)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse swagger")
+	}
+
+	if len(doc2.Consumes) == 0 {
+		doc2.Consumes = []string{mediaJSON}
+	}
+
+	if len(doc2.Produces) == 0 {
+		doc2.Produces = []string{mediaJSON}
+	}
+
+	return &doc2, nil
+}
+
+// swagger2ToMap converts through openapi2conv and returns the result as a JSON map
+// for the JSON:API rewrite.
+func swagger2ToMap(doc2 *openapi2.T) (map[string]any, error) {
+	doc3, err := openapi2conv.ToV3(doc2)
+	if err != nil {
+		return nil, apperr.Wrap(
+			err,
+			apperr.CodeInvalidInput,
+			"convert swagger to openapi 3",
+		)
+	}
+
+	raw, err := json.Marshal(doc3)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "marshal openapi 3")
+	}
+
+	var oas map[string]any
+
+	err = json.Unmarshal(raw, &oas)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "decode openapi 3")
+	}
+
+	return oas, nil
+}
+
+// addSecuritySchemes declares one API-key scheme per entry of headers (scheme name
+// → request header), all required on every operation; empty headers declare none.
+func addSecuritySchemes(oas map[string]any, headers map[string]string) {
 	if len(headers) == 0 {
-		return oas, nil
+		return
 	}
 
 	components, _ := oas["components"].(map[string]any)
@@ -99,8 +128,6 @@ func convertToOAS3(
 
 	components["securitySchemes"] = schemes
 	oas["security"] = []any{required}
-
-	return oas, nil
 }
 
 // graftRefSiblings copies back what openapi2conv drops: the keys beside a $ref in the
@@ -111,32 +138,42 @@ func convertToOAS3(
 func graftRefSiblings(from, to any) {
 	switch f := from.(type) {
 	case map[string]any:
-		t, ok := to.(map[string]any)
-		if !ok {
-			return
-		}
+		graftMapSiblings(f, to)
+	case []any:
+		graftListSiblings(f, to)
+	}
+}
 
-		if _, isRef := f[keyRef]; isRef {
-			for k, v := range f {
-				if _, set := t[k]; !set {
-					t[k] = v
-				}
-			}
+// graftMapSiblings copies a $ref's sibling keys, or recurses into a plain schema.
+func graftMapSiblings(from map[string]any, to any) {
+	t, ok := to.(map[string]any)
+	if !ok {
+		return
+	}
 
-			return
-		}
-
-		for k, v := range f {
+	if _, isRef := from[keyRef]; !isRef {
+		for k, v := range from {
 			graftRefSiblings(v, t[k])
 		}
-	case []any:
-		t, ok := to.([]any)
-		if !ok || len(t) != len(f) {
-			return
-		}
 
-		for i := range f {
-			graftRefSiblings(f[i], t[i])
+		return
+	}
+
+	for k, v := range from {
+		if _, set := t[k]; !set {
+			t[k] = v
 		}
+	}
+}
+
+// graftListSiblings walks two lists in step, leaving a differently shaped list alone.
+func graftListSiblings(from []any, to any) {
+	t, ok := to.([]any)
+	if !ok || len(t) != len(from) {
+		return
+	}
+
+	for i := range from {
+		graftRefSiblings(from[i], t[i])
 	}
 }

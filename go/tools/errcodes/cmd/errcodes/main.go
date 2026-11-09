@@ -17,6 +17,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tools/errcodes"
 )
 
+// generatedFileMode is the mode of a file the generator writes.
+const generatedFileMode = 0o600
+
 // main parses -root and writes the outputs, exiting 1 on any error.
 func main() {
 	root := flag.String("root", ".", "the repository root")
@@ -43,7 +46,7 @@ func run(ctx context.Context, root string) error {
 	return gen.Apply(ctx, func(p string, data []byte) error {
 		dst := filepath.Join(root, filepath.FromSlash(p))
 		// A committed source file, readable like every other one.
-		err := os.WriteFile(dst, data, 0o600)
+		err := os.WriteFile(dst, data, generatedFileMode)
 		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, "write "+p)
 		}

@@ -22,6 +22,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// maxErrorSnippetBytes is how much of an error response body is kept for the message.
+const maxErrorSnippetBytes = 256
+
 // pageSize is the organizations page size, the Management API's maximum.
 const pageSize = 100
 
@@ -73,25 +76,16 @@ func (c *Client) OrganizationIDs(ctx context.Context) ([]string, error) {
 	var ids []string
 
 	for page := 0; ; page++ {
-		var orgs []struct {
-			ID string `json:"id"`
-		}
-
-		endpoint := fmt.Sprintf("%s/organizations?per_page=%d&page=%d",
-			c.api(), pageSize, page)
-
-		err := c.getJSON(ctx, endpoint, token, &orgs)
+		pageIDs, err := c.organizationPage(ctx, token, page)
 		if err != nil {
 			return nil, err
 		}
 
-		if len(orgs) == 0 {
+		if len(pageIDs) == 0 {
 			return ids, nil
 		}
 
-		for _, o := range orgs {
-			ids = append(ids, o.ID)
-		}
+		ids = append(ids, pageIDs...)
 	}
 }
 
@@ -143,18 +137,47 @@ func (c *Client) SigningKey(ctx context.Context) (types.SigningKey, error) {
 	}
 
 	for _, k := range jwks.Keys {
-		if k.Use == "sig" && len(k.X5C) > 0 {
-			pemKey, err := x5cToPEM(k.X5C[0])
-			if err != nil {
-				return types.SigningKey{}, err
-			}
-
-			return types.SigningKey{PublicKeyPEM: pemKey, KeyID: k.Kid}, nil
+		if k.Use != "sig" || len(k.X5C) == 0 {
+			continue
 		}
+
+		pemKey, err := x5cToPEM(k.X5C[0])
+
+		return types.SigningKey{PublicKeyPEM: pemKey, KeyID: k.Kid}, err
 	}
 
 	return types.SigningKey{}, apperr.New(apperr.CodeUpstream,
 		"auth0: the tenant's JWKS has no signing key with a certificate")
+}
+
+// organizationPage fetches one page of organization ids.
+func (c *Client) organizationPage(
+	ctx context.Context,
+	token string,
+	page int,
+) ([]string, error) {
+	var orgs []struct {
+		ID string `json:"id"`
+	}
+
+	endpoint := fmt.Sprintf(
+		"%s/organizations?per_page=%d&page=%d",
+		c.api(),
+		pageSize,
+		page,
+	)
+
+	err := c.getJSON(ctx, endpoint, token, &orgs)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]string, 0, len(orgs))
+	for _, o := range orgs {
+		ids = append(ids, o.ID)
+	}
+
+	return ids, nil
 }
 
 // api is the Management API base URL.
@@ -174,6 +197,11 @@ func (c *Client) bearer(ctx context.Context) (string, error) {
 		return c.token, nil
 	}
 
+	return c.fetchToken(ctx)
+}
+
+// fetchToken requests a client-credentials token and caches it; the caller holds mu.
+func (c *Client) fetchToken(ctx context.Context) (string, error) {
 	form := url.Values{
 		"grant_type":    {"client_credentials"},
 		"client_id":     {c.clientID},
@@ -239,7 +267,7 @@ func (c *Client) send(req *http.Request, out any) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorSnippetBytes))
 		code := apperr.CodeUpstream
 
 		if resp.StatusCode == http.StatusNotFound {

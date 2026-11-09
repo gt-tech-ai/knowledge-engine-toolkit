@@ -54,45 +54,13 @@ func (p Pool) FanOut[T any](
 	// every item still gets a result.
 	i := 0
 
-spawnLoop:
-	for ; i < len(items); i++ {
-		select {
-		case sem <- struct{}{}:
-		case <-gctx.Done():
-			break spawnLoop
-		}
-
-		idx, it := i, items[i]
+	for ; i < len(items) && acquireSlot(gctx, sem); i++ {
+		idx := i
 
 		g.Go(func() error {
 			defer func() { <-sem }()
 
-			// Measure each unit's wall-clock from the moment it holds a worker
-			// slot (queue-wait excluded), so duration reflects the work itself.
-			start := time.Now()
-
-			// Isolate panics so one bad item cannot crash the whole run.
-			defer func() {
-				if r := recover(); r != nil {
-					results[idx] = types.StepResult{
-						Status:   types.StatusFail,
-						Error:    "panic recovered",
-						Detail:   debug.Stack(),
-						Duration: time.Since(start),
-					}
-					emitter.complete(results[idx])
-				}
-			}()
-
-			r := fn(gctx, it)
-			// Stamp the measured duration only when the producer didn't time
-			// itself (Duration left zero); a self-timing fn is preserved.
-			if r.Duration == 0 {
-				r.Duration = time.Since(start)
-			}
-
-			results[idx] = r
-			emitter.complete(r)
+			runUnit(gctx, fn, items[idx], &results[idx], emitter)
 
 			return nil // never cancel sibling goroutines
 		})
@@ -112,4 +80,50 @@ spawnLoop:
 	_ = g.Wait()
 
 	return results
+}
+
+// acquireSlot takes a worker slot, or reports false once ctx is cancelled.
+func acquireSlot(ctx context.Context, sem chan<- struct{}) bool {
+	select {
+	case sem <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// runUnit runs one item, storing its result in slot and delivering it. A panic is
+// isolated so one bad item cannot crash the whole run. Wall-clock is measured from the
+// moment the unit holds a worker slot (queue-wait excluded), so duration reflects the
+// work itself.
+func runUnit[T any](
+	ctx context.Context,
+	fn func(ctx context.Context, item T) types.StepResult,
+	item T,
+	slot *types.StepResult,
+	emitter *stepEmitter,
+) {
+	start := time.Now()
+
+	defer func() {
+		if r := recover(); r != nil {
+			*slot = types.StepResult{
+				Status:   types.StatusFail,
+				Error:    "panic recovered",
+				Detail:   debug.Stack(),
+				Duration: time.Since(start),
+			}
+			emitter.complete(*slot)
+		}
+	}()
+
+	r := fn(ctx, item)
+	// Stamp the measured duration only when the producer didn't time itself
+	// (Duration left zero); a self-timing fn is preserved.
+	if r.Duration == 0 {
+		r.Duration = time.Since(start)
+	}
+
+	*slot = r
+	emitter.complete(r)
 }

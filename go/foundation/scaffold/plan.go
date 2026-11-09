@@ -44,22 +44,7 @@ func Plan(
 			return err
 		}
 
-		path, err := render(name, strings.TrimSuffix(name, tmplSuffix), data)
-		if err != nil {
-			return err
-		}
-
-		src, err := iofs.ReadFile(tmpl, name)
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "read template "+name)
-		}
-
-		content, err := render(name, string(src), data)
-		if err != nil {
-			return err
-		}
-
-		entry, err := decide(ctx, cb, string(path), content, policy(string(path)))
+		entry, err := planFile(ctx, cb, tmpl, name, data, policy)
 		if err != nil {
 			return err
 		}
@@ -73,6 +58,47 @@ func Plan(
 	}
 
 	return plan, nil
+}
+
+// planFile renders one template and decides what applying it would do.
+func planFile(
+	ctx context.Context,
+	cb interfaces.Codebase,
+	tmpl iofs.FS,
+	name string,
+	data any,
+	policy func(path string) types.FilePolicy,
+) (types.FileEntry, error) {
+	path, content, err := renderFile(tmpl, name, data)
+	if err != nil {
+		return types.FileEntry{}, err
+	}
+
+	return decide(ctx, cb, path, content, policy(path))
+}
+
+// renderFile renders one template's destination path and content.
+func renderFile(
+	tmpl iofs.FS,
+	name string,
+	data any,
+) (target string, rendered []byte, retErr error) {
+	path, err := render(name, strings.TrimSuffix(name, tmplSuffix), data)
+	if err != nil {
+		return "", nil, err
+	}
+
+	src, err := iofs.ReadFile(tmpl, name)
+	if err != nil {
+		return "", nil, apperr.Wrap(err, apperr.CodeInternal, "read template "+name)
+	}
+
+	content, err := render(name, string(src), data)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return string(path), content, nil
 }
 
 // PlanFiles decides each of files' actions against cb under policy, as Plan does for a

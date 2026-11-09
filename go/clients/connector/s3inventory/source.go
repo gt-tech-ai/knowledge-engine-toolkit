@@ -152,10 +152,7 @@ func (s *Source) ListPage(
 			return nil, "", err
 		}
 
-		file, row = cur.file, cur.row
-		if cur.rows == nil {
-			file, row = file+1, 0
-		}
+		file, row = cur.nextPosition()
 	}
 
 	if file >= len(s.report.Files) {
@@ -163,6 +160,15 @@ func (s *Source) ListPage(
 	}
 
 	return page, s.token(file, row), nil
+}
+
+// nextPosition is where the next read resumes: the next file once this one is drained.
+func (c *cursor) nextPosition() (file, row int) {
+	if c.rows == nil {
+		return c.file + 1, 0
+	}
+
+	return c.file, c.row
 }
 
 // resume loads the report continuationToken names and returns the data file and row it
@@ -242,22 +248,13 @@ func (s *Source) fill(
 	limit int,
 ) ([]interfaces.StorageObject, error) {
 	for len(page) < limit {
-		record, err := next(cur)
-		if apperr.StdIs(err, io.EOF) {
-			s.release()
+		obj, ok, done, err := s.nextObject(cur)
+		if err != nil {
+			return nil, err
+		}
 
+		if done {
 			return page, nil
-		}
-
-		if err != nil {
-			return nil, err
-		}
-
-		cur.row++
-
-		obj, ok, err := s.cols.object(record, s.bucket, s.prefix)
-		if err != nil {
-			return nil, err
 		}
 
 		if ok {
@@ -265,16 +262,44 @@ func (s *Source) fill(
 		}
 	}
 
+	s.readAhead(cur)
+
+	return page, nil
+}
+
+// nextObject reads one row. done reports the file's end, ok a row the listing keeps.
+func (s *Source) nextObject(
+	cur *cursor,
+) (obj interfaces.StorageObject, ok, done bool, err error) {
+	record, err := next(cur)
+	if apperr.StdIs(err, io.EOF) {
+		s.release()
+
+		return obj, false, true, nil
+	}
+
+	if err != nil {
+		return obj, false, false, err
+	}
+
+	cur.row++
+
+	obj, ok, err = s.cols.object(record, s.bucket, s.prefix)
+
+	return obj, ok, false, err
+}
+
+// readAhead peeks one row so a page ending at the file's end releases it. Any other
+// read-ahead failure is left for the next page, which retries a fresh body.
+func (s *Source) readAhead(cur *cursor) {
 	ahead, err := cur.rows.Read()
+
 	switch {
 	case apperr.StdIs(err, io.EOF):
 		s.release()
 	case err == nil:
 		cur.pending = ahead
 	}
-
-	// Another read-ahead failure is left for the next page, which retries a fresh body.
-	return page, nil
 }
 
 // next returns cur's read-ahead row when there is one, else the next row of the file:

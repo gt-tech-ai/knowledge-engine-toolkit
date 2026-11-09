@@ -4,6 +4,12 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// defaultAdaptiveThrottleConfigK is the default K of AdaptiveThrottleConfig.
+const defaultAdaptiveThrottleConfigK = 2.0
+
+// defaultAdaptiveThrottleConfigDecay is the default Decay of AdaptiveThrottleConfig.
+const defaultAdaptiveThrottleConfigDecay = 0.98
+
 // AdaptiveThrottleConfig tunes the client-side SRE adaptive throttler
 // (adaptivethrottle.Config), read from the `resilience.adaptive_throttle` overlay.
 // Load-shedding is opt-in, so Kind defaults to "disabled" (a no-op pass-through);
@@ -28,8 +34,8 @@ type AdaptiveThrottleConfig struct {
 func DefaultAdaptiveThrottleConfig() AdaptiveThrottleConfig {
 	return AdaptiveThrottleConfig{
 		Kind:  "disabled",
-		K:     2.0,
-		Decay: 0.98,
+		K:     defaultAdaptiveThrottleConfigK,
+		Decay: defaultAdaptiveThrottleConfigDecay,
 	}
 }
 

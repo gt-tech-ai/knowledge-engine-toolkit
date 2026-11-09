@@ -98,23 +98,10 @@ func New(reg Registry, opts Options) (*Server, error) {
 				return opts.RunDir.WriteSteps(snap.ID, flatten(snap.Steps))
 			}, opts.Settings.RunRetention),
 	}
-	background := false
 
-	for _, op := range reg.List() {
-		tool, err := toolFor(op)
-		if err != nil {
-			return nil, err
-		}
-
-		if op.Descriptor().Lifecycle == types.OpLifecycleLongRunning {
-			s.srv.AddTool(tool, s.startHandler(op))
-
-			background = true
-
-			continue
-		}
-
-		s.srv.AddTool(tool, s.handler(op))
+	background, err := s.addOperationTools(reg.List())
+	if err != nil {
+		return nil, err
 	}
 
 	if background {
@@ -157,6 +144,31 @@ func (s *Server) ServeStdio(
 	}
 
 	return apperr.Wrap(err, apperr.CodeInternal, "mcp server: transport failed")
+}
+
+// addOperationTools adds a tool per operation, reporting whether any runs in the
+// background.
+func (s *Server) addOperationTools(list []interfaces.Operation) (bool, error) {
+	background := false
+
+	for _, op := range list {
+		tool, err := toolFor(op)
+		if err != nil {
+			return false, err
+		}
+
+		if op.Descriptor().Lifecycle == types.OpLifecycleLongRunning {
+			s.srv.AddTool(tool, s.startHandler(op))
+
+			background = true
+
+			continue
+		}
+
+		s.srv.AddTool(tool, s.handler(op))
+	}
+
+	return background, nil
 }
 
 // prune keeps the newest Settings.RunRetention run directories.

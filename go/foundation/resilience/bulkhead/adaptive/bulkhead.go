@@ -17,6 +17,18 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
+// defaultConfigMaxConcurrent is the default MaxConcurrent of Config.
+const defaultConfigMaxConcurrent = 20
+
+// defaultConfigInitialConcurrent is the default InitialConcurrent of Config.
+const defaultConfigInitialConcurrent = 10
+
+// defaultConfigRTTThreshold is the default RTTThreshold of Config.
+const defaultConfigRTTThreshold = 100 * time.Millisecond
+
+// defaultConfigBackoffRatio is the default BackoffRatio of Config.
+const defaultConfigBackoffRatio = 0.9
+
 // ErrBulkheadFull is returned by TryExecute when the current adaptive limit is reached.
 var ErrBulkheadFull = apperr.New(
 	apperr.CodeUnavailable,
@@ -50,10 +62,10 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		MinConcurrent:     1,
-		MaxConcurrent:     20,
-		InitialConcurrent: 10,
-		RTTThreshold:      100 * time.Millisecond,
-		BackoffRatio:      0.9,
+		MaxConcurrent:     defaultConfigMaxConcurrent,
+		InitialConcurrent: defaultConfigInitialConcurrent,
+		RTTThreshold:      defaultConfigRTTThreshold,
+		BackoffRatio:      defaultConfigBackoffRatio,
 	}
 }
 

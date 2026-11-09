@@ -72,20 +72,7 @@ func TestFieldsExtraction(t *testing.T) {
 	t.Parallel()
 
 	appErr := apperr.Internal("database connection failed")
-	fields := apperr.ZapFields(appErr)
-
-	fieldMap := make(map[string]zap.Field, len(fields))
-	for _, f := range fields {
-		fieldMap[f.Key] = f
-	}
-
-	codeField, ok := fieldMap["error_code"]
-	require.True(t, ok, "expected error_code field")
-	assert.Equal(t, string(apperr.CodeInternal), codeField.String)
-
-	msgField, ok := fieldMap["error_message"]
-	require.True(t, ok, "expected error_message field")
-	assert.Equal(t, "database connection failed", msgField.String)
+	assertInternalZapFields(t, appErr)
 }
 
 // TestFieldsWithDetails tests that ZapFields() includes error_details when present.

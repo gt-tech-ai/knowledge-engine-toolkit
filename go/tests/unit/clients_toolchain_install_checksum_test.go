@@ -168,34 +168,7 @@ func TestClientsToolchainInstall_VerifiesSHA256BeforePlacingBinary(t *testing.T)
 func runClientsToolchainInstallVerifiesSHA256BeforePlacingBinary(t *testing.T) {
 	t.Helper()
 
-	cases := []struct {
-		name     string
-		url      string
-		member   string
-		artifact []byte
-	}{
-		{"raw binary", "https://example.test/pinned-linux-amd64", "", checksumPayload()},
-		{
-			"tar.gz archive",
-			"https://example.test/pinned_linux_amd64.tar.gz", "",
-			tarGz(t, "pinned-1.2.3/pinned", checksumPayload()),
-		},
-		{
-			"tar.gz archive with a platform-named member",
-			"https://example.test/pinned_linux_amd64.tgz", "pinned-linux-amd64",
-			tarGz(t, "pinned-linux-amd64", checksumPayload()),
-		},
-		{
-			"zip archive",
-			"https://example.test/pinned_linux_amd64.zip", "",
-			zipOf(t, "pinned", checksumPayload()),
-		},
-		{
-			"gz single file",
-			"https://example.test/pinned-linux-x86_64.gz", "",
-			gzOf(t, checksumPayload()),
-		},
-	}
+	cases := runClientsToolchainInstallVerifiesSHA256BeforePlacingBinaryTable(t)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			binDir, tmpDir := isolateInstallDirs(t)
@@ -240,6 +213,47 @@ func runClientsToolchainInstallVerifiesSHA256BeforePlacingBinary(t *testing.T) {
 			assert.Equal(t, []string{"pinned"}, dirEntries(t, binDir))
 			assert.Empty(t, dirEntries(t, tmpDir), "the verified download is cleaned up")
 		})
+	}
+}
+
+// runClientsToolchainInstallVerifiesSHA256BeforePlacingBinaryRow is one row of
+// runClientsToolchainInstallVerifiesSHA256BeforePlacingBinaryTable.
+type runClientsToolchainInstallVerifiesSHA256BeforePlacingBinaryRow struct {
+	name     string
+	url      string
+	member   string
+	artifact []byte
+}
+
+// runClientsToolchainInstallVerifiesSHA256BeforePlacingBinaryTable builds the table
+// runClientsToolchainInstallVerifiesSHA256BeforePlacingBinary runs.
+func runClientsToolchainInstallVerifiesSHA256BeforePlacingBinaryTable(
+	t *testing.T,
+) []runClientsToolchainInstallVerifiesSHA256BeforePlacingBinaryRow {
+	t.Helper()
+
+	return []runClientsToolchainInstallVerifiesSHA256BeforePlacingBinaryRow{
+		{"raw binary", "https://example.test/pinned-linux-amd64", "", checksumPayload()},
+		{
+			"tar.gz archive",
+			"https://example.test/pinned_linux_amd64.tar.gz", "",
+			tarGz(t, "pinned-1.2.3/pinned", checksumPayload()),
+		},
+		{
+			"tar.gz archive with a platform-named member",
+			"https://example.test/pinned_linux_amd64.tgz", "pinned-linux-amd64",
+			tarGz(t, "pinned-linux-amd64", checksumPayload()),
+		},
+		{
+			"zip archive",
+			"https://example.test/pinned_linux_amd64.zip", "",
+			zipOf(t, "pinned", checksumPayload()),
+		},
+		{
+			"gz single file",
+			"https://example.test/pinned-linux-x86_64.gz", "",
+			gzOf(t, checksumPayload()),
+		},
 	}
 }
 

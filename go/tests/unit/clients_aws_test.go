@@ -1,6 +1,7 @@
 package unit_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -89,6 +90,20 @@ func TestClientsAws_StubsAreTheDefault(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = sesc.GetAccount(ctx, &sesv2.GetAccountInput{})
+
+	testClientsAwsStubsAreTheDefaultRest(t, ctx, decs, err)
+}
+
+// testClientsAwsStubsAreTheDefaultRest continues TestClientsAws_StubsAreTheDefault with
+// its remaining steps.
+func testClientsAwsStubsAreTheDefaultRest(
+	t *testing.T,
+	ctx context.Context,
+	decs decorate.Decorations,
+	err error,
+) {
+	t.Helper()
+
 	require.NoError(t, err)
 
 	br, err := bedrock.NewFromConfig(

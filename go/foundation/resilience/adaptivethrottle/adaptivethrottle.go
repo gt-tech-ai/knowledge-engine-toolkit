@@ -17,6 +17,12 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
+// defaultK is the default accepts multiplier.
+const defaultK = 2.0
+
+// defaultDecay is the default per-window decay.
+const defaultDecay = 0.98
+
 // ErrThrottled is returned when the throttler sheds a request locally without calling op.
 var ErrThrottled = apperr.New(
 	apperr.CodeUnavailable,
@@ -40,7 +46,7 @@ type Config struct {
 
 // DefaultConfig returns SRE-typical throttler defaults.
 func DefaultConfig() Config {
-	return Config{K: 2.0, Decay: 0.98}
+	return Config{K: defaultK, Decay: defaultDecay}
 }
 
 // Throttler is the SRE client-side adaptive throttler.

@@ -211,6 +211,23 @@ func (d Decorations) ownOverride(tier Tier, name string) decoration.Layers {
 // layer that is on gets its collaborator from c, or its primitive built from its tuning
 // (the breaker is named name). An invalid tuning is CodeInvalidInput.
 func Build(name string, l decoration.Layers, c Collaborators) (Deps, error) {
+	deps := observabilityDeps(&l, c)
+
+	err := addCallGuards(&deps, name, &l)
+	if err != nil {
+		return Deps{}, err
+	}
+
+	err = addLoadGuards(&deps, name, &l)
+	if err != nil {
+		return Deps{}, err
+	}
+
+	return deps, nil
+}
+
+// observabilityDeps selects the collaborators of the enabled observability layers.
+func observabilityDeps(l *decoration.Layers, c Collaborators) Deps {
 	deps := Deps{SkipRecovery: !decoration.On(l.Recovery)}
 	if !deps.SkipRecovery {
 		deps.PanicLogger = c.Logger
@@ -236,26 +253,38 @@ func Build(name string, l decoration.Layers, c Collaborators) (Deps, error) {
 		deps.Timeout = *l.Timeout
 	}
 
+	return deps
+}
+
+// addCallGuards builds the retrier and circuit breaker when enabled.
+func addCallGuards(deps *Deps, name string, l *decoration.Layers) error {
 	var err error
 
 	if decoration.On(l.Retry.Enabled) {
 		deps.Retrier, err = newRetrier(l.Retry)
 		if err != nil {
-			return Deps{}, wrapLayer(err, name, "retry")
+			return wrapLayer(err, name, "retry")
 		}
 	}
 
 	if decoration.On(l.CircuitBreaker.Enabled) {
 		deps.Breaker, err = newBreaker(name, l.CircuitBreaker)
 		if err != nil {
-			return Deps{}, wrapLayer(err, name, "circuit_breaker")
+			return wrapLayer(err, name, "circuit_breaker")
 		}
 	}
+
+	return nil
+}
+
+// addLoadGuards builds the bulkhead and rate limiter when enabled.
+func addLoadGuards(deps *Deps, name string, l *decoration.Layers) error {
+	var err error
 
 	if decoration.On(l.Bulkhead.Enabled) {
 		deps.Bulkhead, err = newBulkhead(l.Bulkhead)
 		if err != nil {
-			return Deps{}, wrapLayer(err, name, "bulkhead")
+			return wrapLayer(err, name, "bulkhead")
 		}
 
 		deps.ShedLoad = decoration.On(l.Bulkhead.Shed)
@@ -264,11 +293,11 @@ func Build(name string, l decoration.Layers, c Collaborators) (Deps, error) {
 	if decoration.On(l.RateLimit.Enabled) {
 		deps.RateLimiter, err = newRateLimiter(l.RateLimit)
 		if err != nil {
-			return Deps{}, wrapLayer(err, name, "rate_limit")
+			return wrapLayer(err, name, "rate_limit")
 		}
 	}
 
-	return deps, nil
+	return nil
 }
 
 // newRetrier builds the exponential-backoff retrier r tunes.

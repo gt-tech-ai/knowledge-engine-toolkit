@@ -15,6 +15,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// backoffFactor multiplies the wait between liveness polls.
+const backoffFactor = 2
+
 const (
 	// firstBackoff is the wait before the second readiness check.
 	firstBackoff = 50 * time.Millisecond
@@ -62,28 +65,9 @@ func command(spec types.ProcessSpec) (*osexec.Cmd, func(), error) {
 	cmd.Dir = spec.Dir
 	cmd.Env = types.MergeEnv(os.Environ(), spec.Env)
 
-	release := func() {}
-
-	if spec.LogFile != "" {
-		f, err := os.OpenFile(
-			spec.LogFile,
-			os.O_CREATE|os.O_WRONLY|os.O_APPEND,
-			logFileMode,
-		)
-		if err != nil {
-			return nil, nil, apperr.Wrap(err, apperr.CodeUnavailable,
-				"open "+spec.Name+"'s log "+spec.LogFile)
-		}
-
-		release = func() { _ = f.Close() }
-
-		if spec.Stdout == nil {
-			spec.Stdout = f
-		}
-
-		if spec.Stderr == nil {
-			spec.Stderr = f
-		}
+	release, err := attachLogFile(&spec)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	cmd.Stdout, cmd.Stderr = orDiscard(spec.Stdout), orDiscard(spec.Stderr)
@@ -92,6 +76,30 @@ func command(spec types.ProcessSpec) (*osexec.Cmd, func(), error) {
 	cmd.WaitDelay = waitDelay
 
 	return cmd, release, nil
+}
+
+// attachLogFile opens the spec's log file and points any unset output at it, returning
+// the function that closes it.
+func attachLogFile(spec *types.ProcessSpec) (func(), error) {
+	if spec.LogFile == "" {
+		return func() {}, nil
+	}
+
+	f, err := os.OpenFile(spec.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, logFileMode)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeUnavailable,
+			"open "+spec.Name+"'s log "+spec.LogFile)
+	}
+
+	if spec.Stdout == nil {
+		spec.Stdout = f
+	}
+
+	if spec.Stderr == nil {
+		spec.Stderr = f
+	}
+
+	return func() { _ = f.Close() }, nil
 }
 
 // orDiscard is w, or io.Discard when w is nil.
@@ -282,6 +290,6 @@ func (h *handle) awaitReady(
 		case <-timer.C:
 		}
 
-		wait = min(2*wait, maxBackoff)
+		wait = min(backoffFactor*wait, maxBackoff)
 	}
 }

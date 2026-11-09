@@ -58,33 +58,44 @@ func (t Tier) readOverrides(
 			continue
 		}
 
-		name := k
-		if prefix != "" {
-			name = prefix + "." + k
-		}
-
-		if hasLayer(inner) {
-			var l Layers
-
-			err := loader.UnmarshalKey(key+"."+name, &l)
-			if err != nil {
-				return apperr.Wrap(
-					err,
-					apperr.CodeInvalidInput,
-					"load decoration override "+name,
-				)
-			}
-
-			t.Overrides[name] = l
-		}
-
-		err := t.readOverrides(loader, key, name, inner)
+		err := t.readOverride(loader, key, joinDotted(prefix, k), inner)
 		if err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// joinDotted appends k to a dotted prefix, which may be empty.
+func joinDotted(prefix, k string) string {
+	if prefix == "" {
+		return k
+	}
+
+	return prefix + "." + k
+}
+
+// readOverride loads name's layers when it has any, then walks what is nested under it.
+func (t Tier) readOverride(
+	loader interfaces.ConfigLoader, key, name string, inner map[string]any,
+) error {
+	if hasLayer(inner) {
+		var l Layers
+
+		err := loader.UnmarshalKey(key+"."+name, &l)
+		if err != nil {
+			return apperr.Wrap(
+				err,
+				apperr.CodeInvalidInput,
+				"load decoration override "+name,
+			)
+		}
+
+		t.Overrides[name] = l
+	}
+
+	return t.readOverrides(loader, key, name, inner)
 }
 
 // hasLayer reports whether m sets any layer, so it is an override rather than only a

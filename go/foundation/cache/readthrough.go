@@ -81,13 +81,8 @@ func ReadThrough[T any](
 		return zero, contextError(err)
 	}
 
-	if c != nil {
-		if data, hit := c.Get(ctx, key); hit {
-			val, ok, decErr := Decode[T](data, version)
-			if decErr == nil && ok {
-				return val, nil
-			}
-		}
+	if val, ok := cachedValue[T](ctx, c, key, version); ok {
+		return val, nil
 	}
 
 	detached := context.WithoutCancel(ctx)
@@ -97,15 +92,64 @@ func ReadThrough[T any](
 			return nil, loadErr
 		}
 
-		if c != nil && (o.cacheable == nil || o.cacheable(result)) {
-			encoded, encErr := Encode(result, version)
-			if encErr == nil {
-				c.Set(detached, key, encoded, ttl)
-			}
-		}
+		storeValue(detached, c, key, ttl, version, result, o.cacheable)
 
 		return result, nil
 	})
+
+	return awaitFlight[T](ctx, flight)
+}
+
+// cachedValue reads a decodable entry; a nil cache, a miss or a stale entry is false.
+func cachedValue[T any](
+	ctx context.Context, c interfaces.ByteCache, key string, version int,
+) (T, bool) {
+	var zero T
+
+	if c == nil {
+		return zero, false
+	}
+
+	data, hit := c.Get(ctx, key)
+	if !hit {
+		return zero, false
+	}
+
+	val, ok, err := Decode[T](data, version)
+	if err != nil || !ok {
+		return zero, false
+	}
+
+	return val, true
+}
+
+// storeValue encodes and caches the value; a nil cache, a value cacheable rejects or an
+// encode failure stores nothing. A nil cacheable accepts every value.
+func storeValue[T any](
+	ctx context.Context,
+	c interfaces.ByteCache,
+	key string,
+	ttl time.Duration,
+	version int,
+	value T,
+	cacheable func(T) bool,
+) {
+	if c == nil || (cacheable != nil && !cacheable(value)) {
+		return
+	}
+
+	encoded, err := Encode(value, version)
+	if err == nil {
+		c.Set(ctx, key, encoded, ttl)
+	}
+}
+
+// awaitFlight waits for the shared load or the caller's cancellation.
+func awaitFlight[T any](
+	ctx context.Context,
+	flight <-chan singleflight.Result,
+) (T, error) {
+	var zero T
 
 	select {
 	case <-ctx.Done():

@@ -50,60 +50,46 @@ func cached[T, P any, ID comparable](
 ) decorate.Roles[T, P, ID] {
 	rc := &roleCache[T, ID]{cache: c, name: name}
 
+	cacheReads(&roles, rc)
+	cacheWrites(&roles, rc)
+
+	return roles
+}
+
+// cacheReads serves Get and Exists from the cache where it can.
+func cacheReads[T, P any, ID comparable](
+	roles *decorate.Roles[T, P, ID], rc *roleCache[T, ID],
+) {
 	if get := roles.Get; get != nil {
 		roles.Get = func(ctx context.Context, id ID) (*T, error) { return rc.get(ctx, id, get) }
 	}
 
 	if exists := roles.Exists; exists != nil {
 		roles.Exists = func(ctx context.Context, id ID) (bool, error) {
-			if interfaces.InTx(ctx) {
-				return exists(ctx, id)
-			}
-
-			if _, ok := rc.read(ctx, CacheKey(name, id)); ok {
-				return true, nil
-			}
-
-			return exists(ctx, id)
+			return rc.exists(ctx, id, exists)
 		}
 	}
+}
 
-	if create := roles.Create; create != nil && c.IDOf != nil {
+// cacheWrites primes the cache on Create and evicts on Update and Delete.
+func cacheWrites[T, P any, ID comparable](
+	roles *decorate.Roles[T, P, ID], rc *roleCache[T, ID],
+) {
+	if create := roles.Create; create != nil && rc.cache.IDOf != nil {
 		roles.Create = func(ctx context.Context, entity *T) (*T, error) {
-			result, err := create(ctx, entity)
-			if err != nil {
-				return nil, err
-			}
-
-			rc.prime(ctx, CacheKey(name, c.IDOf(result)), result)
-
-			return result, nil
+			return rc.create(ctx, entity, create)
 		}
 	}
 
 	if update := roles.Update; update != nil {
 		roles.Update = func(ctx context.Context, id ID, entity *T) (*T, error) {
-			result, err := update(ctx, id, entity)
-			if err == nil {
-				rc.evict(ctx, CacheKey(name, id))
-			}
-
-			return result, err
+			return rc.update(ctx, id, entity, update)
 		}
 	}
 
 	if del := roles.Delete; del != nil {
-		roles.Delete = func(ctx context.Context, id ID) error {
-			err := del(ctx, id)
-			if err == nil {
-				rc.evict(ctx, CacheKey(name, id))
-			}
-
-			return err
-		}
+		roles.Delete = func(ctx context.Context, id ID) error { return rc.remove(ctx, id, del) }
 	}
-
-	return roles
 }
 
 // roleCache holds the cache state a cached repository's roles share.
@@ -116,6 +102,59 @@ type roleCache[T any, ID comparable] struct {
 
 	// cache configures the entries.
 	cache Cache[T, ID]
+}
+
+// exists answers from the cache outside a transaction; a miss asks the next tier.
+func (rc *roleCache[T, ID]) exists(
+	ctx context.Context, id ID, next func(context.Context, ID) (bool, error),
+) (bool, error) {
+	if interfaces.InTx(ctx) {
+		return next(ctx, id)
+	}
+
+	if _, ok := rc.read(ctx, CacheKey(rc.name, id)); ok {
+		return true, nil
+	}
+
+	return next(ctx, id)
+}
+
+// create primes the cache with a created entity.
+func (rc *roleCache[T, ID]) create(
+	ctx context.Context, entity *T, next func(context.Context, *T) (*T, error),
+) (*T, error) {
+	result, err := next(ctx, entity)
+	if err != nil {
+		return nil, err
+	}
+
+	rc.prime(ctx, CacheKey(rc.name, rc.cache.IDOf(result)), result)
+
+	return result, nil
+}
+
+// update evicts the entity once the update succeeds.
+func (rc *roleCache[T, ID]) update(
+	ctx context.Context, id ID, entity *T, next func(context.Context, ID, *T) (*T, error),
+) (*T, error) {
+	result, err := next(ctx, id, entity)
+	if err == nil {
+		rc.evict(ctx, CacheKey(rc.name, id))
+	}
+
+	return result, err
+}
+
+// remove evicts the entity once the delete succeeds.
+func (rc *roleCache[T, ID]) remove(
+	ctx context.Context, id ID, next func(context.Context, ID) error,
+) error {
+	err := next(ctx, id)
+	if err == nil {
+		rc.evict(ctx, CacheKey(rc.name, id))
+	}
+
+	return err
 }
 
 // read returns the cached entity under key, if a current one is there.

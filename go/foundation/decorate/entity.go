@@ -75,6 +75,14 @@ type Roles[T, P any, ID comparable] struct {
 func RolesOf[T, P any, ID comparable](next any) Roles[T, P, ID] {
 	var r Roles[T, P, ID]
 
+	bindReadRoles(next, &r)
+	bindWriteRoles(next, &r)
+
+	return r
+}
+
+// bindReadRoles binds the read operations next implements.
+func bindReadRoles[T, P any, ID comparable](next any, r *Roles[T, P, ID]) {
 	if n, ok := next.(interfaces.Reader[T, ID]); ok {
 		r.Get = n.Get
 	}
@@ -83,6 +91,13 @@ func RolesOf[T, P any, ID comparable](next any) Roles[T, P, ID] {
 		r.List = n.List
 	}
 
+	if n, ok := next.(interfaces.Exister[ID]); ok {
+		r.Exists = n.Exists
+	}
+}
+
+// bindWriteRoles binds the write operations next implements.
+func bindWriteRoles[T, P any, ID comparable](next any, r *Roles[T, P, ID]) {
 	if n, ok := next.(interfaces.Creator[T, *T]); ok {
 		r.Create = n.Create
 	}
@@ -93,10 +108,6 @@ func RolesOf[T, P any, ID comparable](next any) Roles[T, P, ID] {
 
 	if n, ok := next.(interfaces.Deleter[ID]); ok {
 		r.Delete = n.Delete
-	}
-
-	if n, ok := next.(interfaces.Exister[ID]); ok {
-		r.Exists = n.Exists
 	}
 
 	if n, ok := next.(interfaces.Inserter[T]); ok {
@@ -110,8 +121,6 @@ func RolesOf[T, P any, ID comparable](next any) Roles[T, P, ID] {
 	if n, ok := next.(interfaces.Purger); ok {
 		r.PurgeBefore = n.PurgeBefore
 	}
-
-	return r
 }
 
 // missing returns the roles the contract C names that r lacks.

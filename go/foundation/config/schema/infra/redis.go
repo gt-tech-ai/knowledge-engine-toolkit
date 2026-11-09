@@ -2,6 +2,15 @@ package infra
 
 import "fmt"
 
+// defaultRedisConfigPort is the default Port of RedisConfig.
+const defaultRedisConfigPort = 6379
+
+// defaultRedisConfigPoolSize is the default PoolSize of RedisConfig.
+const defaultRedisConfigPoolSize = 100
+
+// defaultRedisConfigMinIdleConns is the default MinIdleConns of RedisConfig.
+const defaultRedisConfigMinIdleConns = 5
+
 // RedisConfig holds Redis connection configuration.
 type RedisConfig struct {
 	// Host is the Redis server hostname or IP address.
@@ -38,10 +47,10 @@ func DefaultRedisConfig() RedisConfig {
 		Host:         "localhost",
 		Password:     "",
 		FailureMode:  "bypass",
-		Port:         6379,
+		Port:         defaultRedisConfigPort,
 		DB:           0,
-		PoolSize:     100,
-		MinIdleConns: 5,
+		PoolSize:     defaultRedisConfigPoolSize,
+		MinIdleConns: defaultRedisConfigMinIdleConns,
 	}
 }
 

@@ -6,6 +6,18 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// defaultServerConfigReadTimeout is the default ReadTimeout of ServerConfig.
+const defaultServerConfigReadTimeout = 30 * time.Second
+
+// defaultServerConfigReadHeaderTimeout is the default ReadHeaderTimeout of ServerConfig.
+const defaultServerConfigReadHeaderTimeout = 10 * time.Second
+
+// defaultServerConfigWriteTimeout is the default WriteTimeout of ServerConfig.
+const defaultServerConfigWriteTimeout = 30 * time.Second
+
+// defaultServerConfigIdleTimeout is the default IdleTimeout of ServerConfig.
+const defaultServerConfigIdleTimeout = 120 * time.Second
+
 // ServerConfig holds HTTP server configuration.
 type ServerConfig struct {
 	// Host is the network interface address to bind (e.g. "0.0.0.0" for all interfaces).
@@ -38,10 +50,10 @@ func DefaultServerConfig() ServerConfig {
 		Host:              "0.0.0.0",
 		Port:              0,
 		WSPort:            0,
-		ReadTimeout:       30 * time.Second,
-		ReadHeaderTimeout: 10 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		ReadTimeout:       defaultServerConfigReadTimeout,
+		ReadHeaderTimeout: defaultServerConfigReadHeaderTimeout,
+		WriteTimeout:      defaultServerConfigWriteTimeout,
+		IdleTimeout:       defaultServerConfigIdleTimeout,
 	}
 }
 

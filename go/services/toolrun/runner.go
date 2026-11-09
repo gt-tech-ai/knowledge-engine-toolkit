@@ -163,21 +163,34 @@ func (r *runner) run(
 	}
 
 	inv := &invocation{run: run, spec: spec, parser: parser, fix: opts.Fix}
+
+	return r.dispatch(ctx, cb, inv, targets), nil
+}
+
+// dispatch runs the tool once over all targets, or once per target when asked.
+func (r *runner) dispatch(
+	ctx context.Context,
+	cb interfaces.Codebase,
+	inv *invocation,
+	targets []string,
+) types.StepResults {
+	run := inv.run
+
 	if len(targets) == 0 && (run.Targets.Kind != "" || run.Each == types.EachTarget) {
 		return types.StepResults{{
 			Name: run.Name, Group: group(run), Status: types.StatusSkip,
 			Detail: []byte("no targets"),
-		}}, nil
+		}}
 	}
 
 	if run.Each != types.EachTarget {
-		return types.StepResults{r.invoke(ctx, cb, inv, "", targets)}, nil
+		return types.StepResults{r.invoke(ctx, cb, inv, "", targets)}
 	}
 
 	return engine.Pool(r.deps.Pool).FanOut(ctx, targets,
 		func(ctx context.Context, target string) types.StepResult {
 			return r.invoke(ctx, cb, inv, target, []string{target})
-		}), nil
+		})
 }
 
 // validate rejects a run whose Each or Missing names no known value, or whose Cwd is
@@ -217,37 +230,57 @@ func validCwd(cwd string) bool {
 // vars[name]; a placeholder with no value is CodeInvalidInput naming the run and the
 // variable. `{target}` is left for the invocation.
 func substitute(run types.ToolRun, vars map[string]string) (types.ToolRun, error) {
-	var missingVar string
+	s := &substitution{vars: vars}
 
-	sub := func(args []string) []string {
-		out := make([]string, len(args))
-		for i, a := range args {
-			out[i] = placeholder.ReplaceAllStringFunc(a, func(m string) string {
-				name := m[1 : len(m)-1]
-				if m == targetPlaceholder {
-					return m
-				}
+	run.Args, run.FixArgs, run.Env = s.args(
+		run.Args,
+	), s.args(
+		run.FixArgs,
+	), s.args(
+		run.Env,
+	)
 
-				v, ok := vars[name]
-				if !ok && missingVar == "" {
-					missingVar = name
-				}
-
-				return v
-			})
-		}
-
-		return out
-	}
-
-	run.Args, run.FixArgs, run.Env = sub(run.Args), sub(run.FixArgs), sub(run.Env)
-
-	if missingVar != "" {
+	if s.missing != "" {
 		return run, apperr.New(apperr.CodeInvalidInput,
-			"tool run "+run.Name+": no value for {"+missingVar+"}")
+			"tool run "+run.Name+": no value for {"+s.missing+"}")
 	}
 
 	return run, nil
+}
+
+// substitution expands {name} placeholders, remembering the first with no value.
+type substitution struct {
+	// vars holds the placeholder values.
+	vars map[string]string
+
+	// missing names the first placeholder with no value.
+	missing string
+}
+
+// args expands each argument.
+func (s *substitution) args(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = placeholder.ReplaceAllStringFunc(a, s.replace)
+	}
+
+	return out
+}
+
+// replace expands one placeholder; the target placeholder is left for later.
+func (s *substitution) replace(m string) string {
+	if m == targetPlaceholder {
+		return m
+	}
+
+	name := m[1 : len(m)-1]
+
+	v, ok := s.vars[name]
+	if !ok && s.missing == "" {
+		s.missing = name
+	}
+
+	return v
 }
 
 // group is the gate phase run's steps report under.
@@ -318,15 +351,7 @@ func (r *runner) invoke(
 ) types.StepResult {
 	run := inv.run
 	name := strings.TrimSpace(run.Name + " " + target)
-	dir, argTargets := r.deps.Root, targets
-
-	switch run.Cwd {
-	case "", types.CwdRoot:
-	case types.CwdTarget:
-		dir, argTargets = r.cwdOf(ctx, cb, target)
-	default:
-		dir = filepath.Join(r.deps.Root, filepath.FromSlash(run.Cwd))
-	}
+	dir, argTargets := r.workDir(ctx, cb, &run, target, targets)
 
 	args := expand(run.Args, argTargets)
 	if inv.fix {
@@ -341,27 +366,71 @@ func (r *runner) invoke(
 		}
 	}
 
-	if key != "" {
-		hit, err := r.deps.Cache.Hit(ctx, key)
-		if err == nil && hit {
-			return types.StepResult{
-				Name: name, Group: group(run), Status: types.StatusSkip,
-				Detail: []byte(types.CachedDetail),
-			}
+	if r.cached(ctx, key) {
+		return types.StepResult{
+			Name: name, Group: group(run), Status: types.StatusSkip,
+			Detail: []byte(types.CachedDetail),
 		}
 	}
 
-	exe, cmdArgs := inv.spec.Cmd(args...)
+	res := r.execute(ctx, inv, dir, args)
 
-	var res interfaces.CmdResult
+	v := judged(inv.parser.Parse(res), &run)
+	step := v.Step(name, group(run))
 
-	if len(run.Env) > 0 {
-		res = r.deps.Runner.RunBufferedWithEnv(ctx, dir, run.Env, exe, cmdArgs...)
-	} else {
-		res = r.deps.Runner.RunBuffered(ctx, dir, exe, cmdArgs...)
+	step.Duration = res.Duration
+
+	if key != "" && v.Status == types.StatusPass {
+		r.recordPass(ctx, key, &step)
 	}
 
-	v := inv.parser.Parse(res)
+	return step
+}
+
+// workDir resolves where the tool runs and the targets to pass it.
+func (r *runner) workDir(
+	ctx context.Context,
+	cb interfaces.Codebase,
+	run *types.ToolRun,
+	target string,
+	targets []string,
+) (dir string, resolved []string) {
+	switch run.Cwd {
+	case "", types.CwdRoot:
+		return r.deps.Root, targets
+	case types.CwdTarget:
+		return r.cwdOf(ctx, cb, target)
+	default:
+		return filepath.Join(r.deps.Root, filepath.FromSlash(run.Cwd)), targets
+	}
+}
+
+// cached reports a recorded pass for key; a cache error counts as a miss.
+func (r *runner) cached(ctx context.Context, key string) bool {
+	if key == "" {
+		return false
+	}
+
+	hit, err := r.deps.Cache.Hit(ctx, key)
+
+	return err == nil && hit
+}
+
+// execute runs the tool, passing the run's environment when it has one.
+func (r *runner) execute(
+	ctx context.Context, inv *invocation, dir string, args []string,
+) interfaces.CmdResult {
+	exe, cmdArgs := inv.spec.Cmd(args...)
+
+	if len(inv.run.Env) > 0 {
+		return r.deps.Runner.RunBufferedWithEnv(ctx, dir, inv.run.Env, exe, cmdArgs...)
+	}
+
+	return r.deps.Runner.RunBuffered(ctx, dir, exe, cmdArgs...)
+}
+
+// judged names the check on each finding and softens an advisory run's failure.
+func judged(v types.Verdict, run *types.ToolRun) types.Verdict {
 	for i := range v.Findings {
 		v.Findings[i].Check = run.Name
 	}
@@ -370,18 +439,15 @@ func (r *runner) invoke(
 		v.Status = types.StatusWarn
 	}
 
-	step := v.Step(name, group(run))
+	return v
+}
 
-	step.Duration = res.Duration
-
-	if key != "" && v.Status == types.StatusPass {
-		err := r.deps.Cache.Record(ctx, key)
-		if err != nil {
-			step.Status, step.Error = types.StatusWarn, "passed; not cached: "+err.Error()
-		}
+// recordPass caches a pass, downgrading the step to a warning when that fails.
+func (r *runner) recordPass(ctx context.Context, key string, step *types.StepResult) {
+	err := r.deps.Cache.Record(ctx, key)
+	if err != nil {
+		step.Status, step.Error = types.StatusWarn, "passed; not cached: "+err.Error()
 	}
-
-	return step
 }
 
 // cwdOf is where a cwd: target invocation runs and what `{target}` means there: the

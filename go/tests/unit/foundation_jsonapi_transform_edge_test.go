@@ -27,14 +27,51 @@ import (
 func TestTransformError_BodyFallbacks(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		wantCode   string
-		wantStatus string
-		wantDetail string // "" means the member must be absent
-		body       []byte
-		status     int
-	}{
+	tests := testTransformErrorBodyFallbacksTable()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var doc map[string]any
+
+			require.NoError(
+				t,
+				json.Unmarshal(codec.TransformError(tt.status, tt.body), &doc),
+			)
+
+			errs, ok := doc["errors"].([]any)
+			require.True(t, ok)
+			require.Len(t, errs, 1)
+
+			e := asType[map[string]any](t, errs[0])
+			assert.Equal(t, tt.wantCode, e["code"])
+			assert.Equal(t, tt.wantStatus, e["status"])
+
+			if tt.wantDetail == "" {
+				assert.NotContains(t, e, "detail")
+			} else {
+				assert.Equal(t, tt.wantDetail, e["detail"])
+			}
+
+			assert.NotContains(t, e, "title")
+		})
+	}
+}
+
+// testTransformErrorBodyFallbacksRow is one row of testTransformErrorBodyFallbacksTable.
+type testTransformErrorBodyFallbacksRow struct {
+	name       string
+	wantCode   string
+	wantStatus string
+	wantDetail string // "" means the member must be absent
+	body       []byte
+	status     int
+}
+
+// testTransformErrorBodyFallbacksTable builds the table TestTransformError_BodyFallbacks
+// runs.
+func testTransformErrorBodyFallbacksTable() []testTransformErrorBodyFallbacksRow {
+	return []testTransformErrorBodyFallbacksRow{
 		{
 			name:       "uncurated status still stringifies",
 			status:     418,
@@ -69,34 +106,6 @@ func TestTransformError_BodyFallbacks(t *testing.T) {
 			wantStatus: "404",
 			wantDetail: "gone",
 		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			var doc map[string]any
-
-			require.NoError(
-				t,
-				json.Unmarshal(codec.TransformError(tt.status, tt.body), &doc),
-			)
-
-			errs, ok := doc["errors"].([]any)
-			require.True(t, ok)
-			require.Len(t, errs, 1)
-
-			e := asType[map[string]any](t, errs[0])
-			assert.Equal(t, tt.wantCode, e["code"])
-			assert.Equal(t, tt.wantStatus, e["status"])
-
-			if tt.wantDetail == "" {
-				assert.NotContains(t, e, "detail")
-			} else {
-				assert.Equal(t, tt.wantDetail, e["detail"])
-			}
-
-			assert.NotContains(t, e, "title")
-		})
 	}
 }
 

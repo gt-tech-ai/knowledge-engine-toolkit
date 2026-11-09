@@ -175,6 +175,24 @@ func TestTransportMcpRunsTools_StatusResultCancelList(t *testing.T) {
 
 	var first mcp.RunStarted
 
+	t.Helper()
+
+	testTransportMcpRunsToolsStatusResultCancelListRest5(t, op, root, cs, first)
+}
+
+// testTransportMcpRunsToolsStatusResultCancelListRest5 continues
+// testTransportMcpRunsToolsStatusResultCancelListRest4 with its remaining steps.
+func testTransportMcpRunsToolsStatusResultCancelListRest5(
+	t *testing.T,
+	op *slowOp,
+	root string,
+	cs *sdkmcp.ClientSession,
+	first mcp.RunStarted,
+) {
+	t.Helper()
+
+	var err error
+
 	callJSON(t, cs, "slow", nil, &first)
 	<-op.started
 
@@ -205,6 +223,23 @@ func TestTransportMcpRunsTools_StatusResultCancelList(t *testing.T) {
 	body, err := os.ReadFile(filepath.Clean(log))
 	require.NoError(t, err)
 	assert.Equal(t, "one\ntwo\n", string(body))
+
+	testTransportMcpRunsToolsStatusResultCancelListRest(t, op, cs, &first)
+}
+
+// testTransportMcpRunsToolsStatusResultCancelListRest continues
+// testTransportMcpRunsToolsStatusResultCancelListRest5 with its remaining steps.
+func testTransportMcpRunsToolsStatusResultCancelListRest(
+	t *testing.T,
+	op *slowOp,
+	cs *sdkmcp.ClientSession,
+	first *mcp.RunStarted,
+) {
+	t.Helper()
+
+	var text string
+
+	var isErr bool
 
 	var second mcp.RunStarted
 

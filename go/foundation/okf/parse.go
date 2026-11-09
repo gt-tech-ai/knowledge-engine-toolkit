@@ -9,6 +9,9 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// maxFenceIndent is the most spaces a code fence may be indented.
+const maxFenceIndent = 3
+
 // fence is the line that opens and closes a frontmatter block.
 const fence = "---"
 
@@ -189,34 +192,27 @@ var (
 // is the file line body starts on.
 func extractLinks(body string, firstLine int) []Link {
 	var (
-		links []Link
-		open  string
+		links  []Link
+		fences fenceTracker
 	)
 
 	for i, line := range strings.Split(body, "\n") {
 		line = strings.TrimSuffix(line, "\r")
-		if marker := fenceMarker(line); marker != "" {
-			switch {
-			case open == "":
-				open = marker
-			case strings.HasPrefix(marker, open[:1]):
-				open = ""
-			}
-
+		if fences.consume(line) || fences.open != "" {
 			continue
 		}
 
-		if open != "" {
-			continue
-		}
+		links = appendLineLinks(links, blankCodeSpans(line), firstLine+i)
+	}
 
-		line = blankCodeSpans(line)
-		for _, m := range refDefinition.FindAllStringSubmatch(line, -1) {
-			links = appendLink(links, m[1], firstLine+i)
-		}
+	return links
+}
 
-		for _, m := range inlineLink.FindAllStringSubmatch(line, -1) {
-			links = appendLink(links, m[1], firstLine+i)
+// appendLineLinks adds a line's reference definitions, then its inline links.
+func appendLineLinks(links []Link, line string, lineNo int) []Link {
+	for _, re := range []*regexp.Regexp{refDefinition, inlineLink} {
+		for _, m := range re.FindAllStringSubmatch(line, -1) {
+			links = appendLink(links, m[1], lineNo)
 		}
 	}
 
@@ -227,7 +223,7 @@ func extractLinks(body string, firstLine int) []Link {
 // block on line, or "" when line is not a fence.
 func fenceMarker(line string) string {
 	trimmed := strings.TrimLeft(line, " ")
-	if len(line)-len(trimmed) > 3 {
+	if len(line)-len(trimmed) > maxFenceIndent {
 		return ""
 	}
 

@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"context"
+	"maps"
 	"testing"
 	"time"
 
@@ -90,15 +91,57 @@ func TestSQSMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
 		AnyTimes()
 
-	var sent map[string]sqstypes.MessageAttributeValue
+	sent := map[string]sqstypes.MessageAttributeValue{}
+
+	testSQSMessagingHandlerContinuesThePublishersTraceRest8(
+		t,
+		sc,
+		ctx,
+		consumer,
+		api,
+		sent,
+	)
+}
+
+// testSQSMessagingHandlerContinuesThePublishersTraceRest8 continues
+// testSQSMessagingHandlerContinuesThePublishersTraceRest7 with its remaining steps.
+func testSQSMessagingHandlerContinuesThePublishersTraceRest8(
+	t *testing.T,
+	sc oteltrace.SpanContext,
+	ctx, consumer context.Context,
+	api *mocks.MockAPI,
+	sent map[string]sqstypes.MessageAttributeValue,
+) {
+	t.Helper()
 
 	api.EXPECT().SendMessage(gomock.Any(), gomock.Any()).DoAndReturn(func(
 		_ context.Context, in *awssqs.SendMessageInput, _ ...func(*awssqs.Options),
 	) (*awssqs.SendMessageOutput, error) {
-		sent = in.MessageAttributes
+		maps.Copy(sent, in.MessageAttributes)
 
 		return &awssqs.SendMessageOutput{}, nil
 	})
+
+	testSQSMessagingHandlerContinuesThePublishersTraceRest3(
+		t,
+		sc,
+		ctx,
+		consumer,
+		api,
+		sent,
+	)
+}
+
+// testSQSMessagingHandlerContinuesThePublishersTraceRest3 continues
+// testSQSMessagingHandlerContinuesThePublishersTraceRest with its remaining steps.
+func testSQSMessagingHandlerContinuesThePublishersTraceRest3(
+	t *testing.T,
+	sc oteltrace.SpanContext,
+	ctx, consumer context.Context,
+	api *mocks.MockAPI,
+	sent map[string]sqstypes.MessageAttributeValue,
+) {
+	t.Helper()
 
 	var batched map[string]sqstypes.MessageAttributeValue
 
@@ -125,6 +168,31 @@ func TestSQSMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 
 	var asked []string
 
+	testSQSMessagingHandlerContinuesThePublishersTraceRest4(
+		t,
+		sc,
+		ctx,
+		consumer,
+		api,
+		sent,
+		asked,
+	)
+}
+
+// testSQSMessagingHandlerContinuesThePublishersTraceRest4 continues
+// testSQSMessagingHandlerContinuesThePublishersTraceRest3 with its remaining steps.
+func testSQSMessagingHandlerContinuesThePublishersTraceRest4(
+	t *testing.T,
+	sc oteltrace.SpanContext,
+	ctx, consumer context.Context,
+	api *mocks.MockAPI,
+	sent map[string]sqstypes.MessageAttributeValue,
+	asked []string,
+) {
+	t.Helper()
+
+	var err error
+
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).DoAndReturn(func(
 		ctx context.Context, in *awssqs.ReceiveMessageInput, _ ...func(*awssqs.Options),
 	) (*awssqs.ReceiveMessageOutput, error) {
@@ -150,6 +218,28 @@ func TestSQSMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	testSQSMessagingHandlerContinuesThePublishersTraceRest2(
+		t,
+		sc,
+		consumer,
+		sent,
+		&asked,
+		sub,
+	)
+}
+
+// testSQSMessagingHandlerContinuesThePublishersTraceRest2 continues
+// testSQSMessagingHandlerContinuesThePublishersTraceRest with its remaining steps.
+func testSQSMessagingHandlerContinuesThePublishersTraceRest2(
+	t *testing.T,
+	sc oteltrace.SpanContext,
+	consumer context.Context,
+	sent map[string]sqstypes.MessageAttributeValue,
+	asked *[]string,
+	sub *sqs.Subscriber,
+) {
+	t.Helper()
+
 	type delivery struct {
 		metadata map[string]string
 		trace    oteltrace.TraceID
@@ -166,7 +256,7 @@ func TestSQSMessaging_HandlerContinuesThePublishersTrace(t *testing.T) {
 
 	d := recv(t, got, "the handler to run")
 	require.NoError(t, sub.Close())
-	assert.Equal(t, []string{"All"}, asked)
+	assert.Equal(t, []string{"All"}, (*asked))
 	assert.Equal(t, sc.TraceID(), d.trace)
 	assert.Equal(
 		t,

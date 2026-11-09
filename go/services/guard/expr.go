@@ -25,6 +25,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
 )
 
+// exprEnvBaseOptions sizes the CEL options every expression environment starts with.
+const exprEnvBaseOptions = 10
+
 // program is a compiled expr row and the activation variables it references, so a run
 // reads only what the expression uses.
 type program struct {
@@ -73,7 +76,7 @@ func NewPrograms() *Programs {
 // lowercase-hex digest of a string (a copied file checked against its source's recorded
 // digest), and exprVars as dyn.
 func newEnv() (*cel.Env, error) {
-	opts := make([]cel.EnvOption, 0, 10+len(exprVars()))
+	opts := make([]cel.EnvOption, 0, exprEnvBaseOptions+len(exprVars()))
 
 	opts = append(
 		opts,
@@ -242,64 +245,130 @@ func activation(
 	vars map[string]string,
 ) (map[string]any, []types.Finding, error) {
 	act := baseActivation(vars, r.Data)
-	if p.uses["files"] || p.uses["file"] {
-		fs, missing, err := files(ctx, cb, r)
-		if err != nil || missing != nil {
-			return nil, missing, err
-		}
 
-		paths := make([]string, len(fs))
-		texts := map[string]any{}
-
-		for i, f := range fs {
-			paths[i] = f.Path
-
-			if !p.uses["file"] {
-				continue
-			}
-
-			t, err := cb.Text(ctx, f.Path)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			texts[f.Path] = map[string]any{
-				keyPath: f.Path, "text": string(t.Bytes), "lines": t.Lines(),
-			}
-		}
-
-		act["files"], act["file"] = paths, texts
+	missing, err := addFileVars(ctx, cb, r, p, act)
+	if err != nil || missing != nil {
+		return nil, missing, err
 	}
 
+	err = addParsedVars(ctx, cb, r, p, act)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return act, nil, nil
+}
+
+// addParsedVars sets the `docs` and `objects` variables the program uses.
+func addParsedVars(
+	ctx context.Context,
+	cb interfaces.Codebase,
+	r *types.GuardRow,
+	p *program,
+	act map[string]any,
+) error {
 	if p.uses["docs"] {
 		docs, err := decodeDocs(ctx, cb, r.Files)
 		if err != nil {
-			return nil, nil, err
+			return err
 		}
 
 		act["docs"] = docs
 	}
 
 	if p.uses["objects"] && r.Render.ChartDir != "" {
-		objs, err := cb.Rendered(ctx, r.Render)
+		list, err := renderedObjects(ctx, cb, r)
 		if err != nil {
-			return nil, nil, err
-		}
-
-		list := make([]any, len(objs))
-		for i := range objs {
-			o := &objs[i]
-
-			list[i] = map[string]any{
-				"kind": o.Kind, "name": o.Name,
-				"namespace": o.Namespace, "source": o.Source, "doc": o.Doc,
-			}
+			return err
 		}
 
 		act["objects"] = list
 	}
 
-	return act, nil, nil
+	return nil
+}
+
+// addFileVars sets the `files` paths and, when used, the `file` contents map.
+func addFileVars(
+	ctx context.Context,
+	cb interfaces.Codebase,
+	r *types.GuardRow,
+	p *program,
+	act map[string]any,
+) ([]types.Finding, error) {
+	if !p.uses["files"] && !p.uses["file"] {
+		return nil, nil
+	}
+
+	fs, missing, err := files(ctx, cb, r)
+	if err != nil || missing != nil {
+		return missing, err
+	}
+
+	paths := make([]string, len(fs))
+	for i, f := range fs {
+		paths[i] = f.Path
+	}
+
+	texts, err := wantedTexts(ctx, cb, paths, p.uses["file"])
+	if err != nil {
+		return nil, err
+	}
+
+	act["files"], act["file"] = paths, texts
+
+	return nil, nil
+}
+
+// wantedTexts reads the files' texts when the program uses them.
+func wantedTexts(
+	ctx context.Context, cb interfaces.Codebase, paths []string, wanted bool,
+) (map[string]any, error) {
+	if !wanted {
+		return map[string]any{}, nil
+	}
+
+	return fileTexts(ctx, cb, paths)
+}
+
+// fileTexts reads each path into the map the `file` variable exposes.
+func fileTexts(
+	ctx context.Context, cb interfaces.Codebase, paths []string,
+) (map[string]any, error) {
+	texts := make(map[string]any, len(paths))
+
+	for _, p := range paths {
+		t, err := cb.Text(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+
+		texts[p] = map[string]any{keyPath: p, "text": string(t.Bytes), "lines": t.Lines()}
+	}
+
+	return texts, nil
+}
+
+// renderedObjects renders the row's chart into the list the `objects` variable exposes.
+func renderedObjects(
+	ctx context.Context, cb interfaces.Codebase, r *types.GuardRow,
+) ([]any, error) {
+	objs, err := cb.Rendered(ctx, r.Render)
+	if err != nil {
+		return nil, err
+	}
+
+	list := make([]any, len(objs))
+	for i := range objs {
+		o := &objs[i]
+
+		list[i] = map[string]any{
+			"kind": o.Kind, "name": o.Name,
+			"namespace": o.Namespace, "source": o.Source, "doc": o.Doc,
+		}
+	}
+
+	return list, nil
 }
 
 // decodeDocs decodes every configuration document sel selects (Codebase.Docs: YAML by
@@ -346,21 +415,27 @@ func results(v ref.Val, message string) ([]types.Finding, error) {
 
 		return []types.Finding{{Message: message}}, nil
 	case []any:
-		out := make([]types.Finding, 0, len(x))
-		for _, e := range x {
-			f, err := finding(e)
-			if err != nil {
-				return nil, err
-			}
-
-			out = append(out, f)
-		}
-
-		return out, nil
+		return listFindings(x)
 	}
 
 	return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 		"expr result %T: want a bool or a list of findings", native))
+}
+
+// listFindings decodes an expression's list result.
+func listFindings(list []any) ([]types.Finding, error) {
+	out := make([]types.Finding, 0, len(list))
+
+	for _, e := range list {
+		f, err := finding(e)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, f)
+	}
+
+	return out, nil
 }
 
 // finding converts one list element to a finding.
@@ -405,51 +480,71 @@ func (g *guard) forEach(
 	var out []map[string]string
 
 	for _, vars := range expansions {
-		act := baseActivation(vars, g.row.Data)
-
-		act["now"] = time.Now()
-
-		val, _, err := g.forPrg.prg.ContextEval(ctx, act)
+		rows, err := g.expandFor(ctx, vars)
 		if err != nil {
-			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "for")
+			return nil, err
 		}
 
-		pb, err := val.ConvertToNative(reflect.TypeFor[*structpb.Value]())
-		if err != nil {
-			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "for result")
-		}
-
-		items, ok := pb.(*structpb.Value).AsInterface().([]any)
-		if !ok {
-			return nil, apperr.New(
-				apperr.CodeInvalidInput,
-				"for must return a list of maps",
-			)
-		}
-
-		for _, item := range items {
-			m, ok := item.(map[string]any)
-			if !ok {
-				return nil, apperr.New(
-					apperr.CodeInvalidInput,
-					"for must return a list of maps",
-				)
-			}
-
-			row := maps.Clone(vars)
-			if row == nil {
-				row = map[string]string{}
-			}
-
-			for k, v := range m {
-				row[k] = placeholder(v)
-			}
-
-			out = append(out, row)
-		}
+		out = append(out, rows...)
 	}
 
 	return out, nil
+}
+
+// expandFor evaluates the `for` expression under vars and crosses vars with each item.
+func (g *guard) expandFor(
+	ctx context.Context, vars map[string]string,
+) ([]map[string]string, error) {
+	act := baseActivation(vars, g.row.Data)
+
+	act["now"] = time.Now()
+
+	val, _, err := g.forPrg.prg.ContextEval(ctx, act)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "for")
+	}
+
+	pb, err := val.ConvertToNative(reflect.TypeFor[*structpb.Value]())
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "for result")
+	}
+
+	items, ok := pb.(*structpb.Value).AsInterface().([]any)
+	if !ok {
+		return nil, apperr.New(apperr.CodeInvalidInput, "for must return a list of maps")
+	}
+
+	rows := make([]map[string]string, 0, len(items))
+
+	for _, item := range items {
+		row, err := crossItem(vars, item)
+		if err != nil {
+			return nil, err
+		}
+
+		rows = append(rows, row)
+	}
+
+	return rows, nil
+}
+
+// crossItem copies vars and overlays one `for` item, which must be a map.
+func crossItem(vars map[string]string, item any) (map[string]string, error) {
+	m, ok := item.(map[string]any)
+	if !ok {
+		return nil, apperr.New(apperr.CodeInvalidInput, "for must return a list of maps")
+	}
+
+	row := maps.Clone(vars)
+	if row == nil {
+		row = map[string]string{}
+	}
+
+	for k, v := range m {
+		row[k] = placeholder(v)
+	}
+
+	return row, nil
 }
 
 // placeholder renders a for map's value as placeholder text: a whole number without a

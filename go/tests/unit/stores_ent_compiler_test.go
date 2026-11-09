@@ -84,6 +84,13 @@ func TestEntBackend_Clauses(t *testing.T) {
 		}
 	})
 
+	testEntBackendClausesRest(t, b)
+}
+
+// testEntBackendClausesRest continues TestEntBackend_Clauses with its remaining steps.
+func testEntBackendClausesRest(t *testing.T, b entcompiler.Backend) {
+	t.Helper()
+
 	t.Run(
 		"like resolves to a case-insensitive parameterized match on the column",
 		func(t *testing.T) {
@@ -188,6 +195,14 @@ func TestEntBackend_CompositeAndOrder(t *testing.T) {
 			assertOrderedColumns(t, q, `"title"`, `"created_at" DESC`, `"id" DESC`)
 		},
 	)
+
+	testEntBackendCompositeAndOrderRest(t, b)
+}
+
+// testEntBackendCompositeAndOrderRest continues TestEntBackend_CompositeAndOrder with
+// its remaining steps.
+func testEntBackendCompositeAndOrderRest(t *testing.T, b entcompiler.Backend) {
+	t.Helper()
 
 	t.Run("created_at primary sort dedups its tiebreaker", func(t *testing.T) {
 		t.Parallel()

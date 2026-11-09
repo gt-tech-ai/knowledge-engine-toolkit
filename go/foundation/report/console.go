@@ -10,6 +10,12 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// exitCodeInput is the exit status for a failure the caller can correct.
+const exitCodeInput = 2
+
+// exitCodeUnavailable is the exit status for an unavailable dependency.
+const exitCodeUnavailable = 3
+
 // ConsoleConfig tunes a Console. A composition root resolves it from the environment
 // (a TTY, NO_COLOR, CI, GITHUB_STEP_SUMMARY); the console itself reads nothing.
 type ConsoleConfig struct {
@@ -169,9 +175,9 @@ func (c *Console) FormatError(err error) int {
 func ExitCode(code apperr.ErrorCode) int {
 	switch code {
 	case apperr.CodeInvalidInput, apperr.CodeNotFound, apperr.CodeQualityFailed:
-		return 2
+		return exitCodeInput
 	case apperr.CodeUnavailable:
-		return 3
+		return exitCodeUnavailable
 	case apperr.CodeUnknown,
 		apperr.CodeInternal,
 		apperr.CodeUnauthorized,

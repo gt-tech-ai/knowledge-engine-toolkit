@@ -7,6 +7,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// keysetTieBreakColumns sizes the columns a keyset adds to the requested ordering.
+const keysetTieBreakColumns = 2
+
 // ColumnFn resolves an allow-listed DTO field name to its storage column. Build one from
 // a resource's filter allow-list with (*Map).Column; it falls back to the field name when
 // the field is not allow-listed.
@@ -214,78 +217,104 @@ func KeysetColumns(
 		tiebreaker = tiebreakerCreatedAt
 	}
 
-	out := make([]KeysetColumn, 0, len(ofs)+2)
-	seen := make(map[string]bool, len(ofs)+2)
-	appendCol := func(col string, desc bool) {
-		if seen[col] {
-			return
-		}
-
-		seen[col] = true
-		out = append(out, KeysetColumn{Column: col, Desc: desc})
+	b := keysetBuilder{
+		out:  make([]KeysetColumn, 0, len(ofs)+keysetTieBreakColumns),
+		seen: make(map[string]bool, len(ofs)+keysetTieBreakColumns),
 	}
 
 	for _, of := range ofs {
-		// A joined sort field carries a JoinTarget instead of a base column; the ORDER BY
-		// is a correlated subquery, so it never participates in the keyset seek (a joined
-		// sort is always a custom sort → the offset pager). Dedup it by a join signature
-		// (never collides with a same-table tiebreaker, which is always a base column).
-		if joinOf != nil {
-			if j := joinOf(of.Field); j != nil {
-				key := "\x00join\x00" + j.Table + "\x00" + strings.Join(j.Columns, ",")
-				if !seen[key] {
-					seen[key] = true
-
-					out = append(out, KeysetColumn{Join: j, Desc: of.Desc})
-				}
-
-				continue
-			}
+		if b.addJoin(joinOf, of) || b.addDerived(derivedOf, of) {
+			continue
 		}
 
-		// A derived sort field carries a correlated-aggregate / interval spec instead of
-		// a base column (a Documents/Members count, a Next Sync). Like a join it never
-		// participates in the keyset seek (always a custom sort → the offset pager).
-		// Dedup by the resolved field name (a derived sort has no base column to key on;
-		// the field name is unique per resolver).
-		if derivedOf != nil {
-			if d := derivedOf(of.Field); d != nil {
-				key := "\x00derived\x00" + of.Field
-				if !seen[key] {
-					seen[key] = true
-
-					out = append(out, KeysetColumn{Derived: d, Desc: of.Desc})
-				}
-
-				continue
-			}
-		}
-
-		// A same-table field with a value ordinal sorts by a CASE over its column; it
-		// dedups on the resolved column like a plain column (an ordinal is just a
-		// different ORDER BY over that column).
 		col := resolve(of.Field)
-		if ordinalOf != nil {
-			if ord := ordinalOf(of.Field); len(ord) > 0 {
-				if !seen[col] {
-					seen[col] = true
-					out = append(
-						out,
-						KeysetColumn{Column: col, Ordinal: ord, Desc: of.Desc},
-					)
-				}
-
-				continue
-			}
+		if !b.addOrdinal(ordinalOf, of, col) {
+			b.add(col, KeysetColumn{Column: col, Desc: of.Desc})
 		}
-
-		appendCol(col, of.Desc)
 	}
 
-	appendCol(tiebreaker, true)
-	appendCol(tiebreakerID, true)
+	b.add(tiebreaker, KeysetColumn{Column: tiebreaker, Desc: true})
+	b.add(tiebreakerID, KeysetColumn{Column: tiebreakerID, Desc: true})
 
-	return out
+	return b.out
+}
+
+// keysetBuilder accumulates keyset columns, keeping the first of each dedup key.
+type keysetBuilder struct {
+	// seen holds the dedup keys already added.
+	seen map[string]bool
+
+	// out holds the columns in sort order.
+	out []KeysetColumn
+}
+
+// add appends c unless key was already added.
+func (b *keysetBuilder) add(key string, c KeysetColumn) {
+	if b.seen[key] {
+		return
+	}
+
+	b.seen[key] = true
+	b.out = append(b.out, c)
+}
+
+// addJoin handles a joined sort field. It carries a JoinTarget instead of a base column;
+// the ORDER BY is a correlated subquery, so it never participates in the keyset seek (a
+// joined sort is always a custom sort → the offset pager). It dedups by a join signature,
+// which never collides with a same-table tiebreaker (always a base column).
+func (b *keysetBuilder) addJoin(joinOf JoinFn, of types.OrderField) bool {
+	if joinOf == nil {
+		return false
+	}
+
+	j := joinOf(of.Field)
+	if j == nil {
+		return false
+	}
+
+	key := "\x00join\x00" + j.Table + "\x00" + strings.Join(j.Columns, ",")
+	b.add(key, KeysetColumn{Join: j, Desc: of.Desc})
+
+	return true
+}
+
+// addDerived handles a derived sort field: a correlated-aggregate / interval spec instead
+// of a base column. Like a join it never participates in the keyset seek. It dedups by
+// the resolved field name, which is unique per resolver.
+func (b *keysetBuilder) addDerived(derivedOf DerivedFn, of types.OrderField) bool {
+	if derivedOf == nil {
+		return false
+	}
+
+	d := derivedOf(of.Field)
+	if d == nil {
+		return false
+	}
+
+	b.add("\x00derived\x00"+of.Field, KeysetColumn{Derived: d, Desc: of.Desc})
+
+	return true
+}
+
+// addOrdinal handles a same-table field with a value ordinal, which sorts by a CASE over
+// its column; it dedups on the resolved column like a plain column.
+func (b *keysetBuilder) addOrdinal(
+	ordinalOf OrdinalFn,
+	of types.OrderField,
+	col string,
+) bool {
+	if ordinalOf == nil {
+		return false
+	}
+
+	ord := ordinalOf(of.Field)
+	if len(ord) == 0 {
+		return false
+	}
+
+	b.add(col, KeysetColumn{Column: col, Ordinal: ord, Desc: of.Desc})
+
+	return true
 }
 
 // CompileOrder folds the ordered sort directives into backend sort nodes over the shared

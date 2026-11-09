@@ -1,6 +1,7 @@
 package unit_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -73,11 +74,58 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 		},
 	}
 
-	cases := []struct {
-		name    string
-		wantErr string // "" = valid
-		tool    types.ToolEntry
-	}{
+	cases := testClientsToolchainValidateToolEntriesTable5(good)
+
+	_, dup := toolchain.NewCatalog([]types.ToolEntry{good, good})
+	require.Error(t, dup)
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(dup))
+	assert.Contains(t, dup.Error(), `duplicate binary "grpcurl"`)
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := apperr.Join(types.ValidateToolEntries(
+				[]types.ToolEntry{tc.tool})...)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+
+				return
+			}
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErr, "the rule that fired")
+		})
+	}
+}
+
+// testClientsToolchainValidateToolEntriesRow is one row of
+// testClientsToolchainValidateToolEntriesTable.
+type testClientsToolchainValidateToolEntriesRow struct {
+	name    string
+	wantErr string // "" = valid
+	tool    types.ToolEntry
+}
+
+// testClientsToolchainValidateToolEntriesTable5 builds the table
+// testClientsToolchainValidateToolEntriesTable4 runs.
+func testClientsToolchainValidateToolEntriesTable5(
+	good types.ToolEntry,
+) []testClientsToolchainValidateToolEntriesRow {
+	return slices.Concat(
+		validateEntryShapeRows(good),
+		validateInstallKindRows(),
+		validateDownloadRows(),
+		validateAssetRows(),
+		validateMarkerRows(),
+	)
+}
+
+// validateEntryShapeRows lists the entry-level rows.
+func validateEntryShapeRows(
+	good types.ToolEntry,
+) []testClientsToolchainValidateToolEntriesRow {
+	return []testClientsToolchainValidateToolEntriesRow{
 		{name: "valid lifecycle tool", wantErr: "", tool: good},
 		{name: "registry-only tool", wantErr: "", tool: types.ToolEntry{
 			Name:   "ruff",
@@ -109,6 +157,12 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 				},
 			},
 		},
+	}
+}
+
+// validateInstallKindRows lists the install-kind rows.
+func validateInstallKindRows() []testClientsToolchainValidateToolEntriesRow {
+	return []testClientsToolchainValidateToolEntriesRow{
 		{
 			name:    "command kind missing command",
 			wantErr: "command install kind requires a command",
@@ -145,6 +199,12 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 				},
 			},
 		},
+	}
+}
+
+// validateDownloadRows lists the pinned-download rows.
+func validateDownloadRows() []testClientsToolchainValidateToolEntriesRow {
+	return []testClientsToolchainValidateToolEntriesRow{
 		{name: "pinned github-release", wantErr: "", tool: toolWith(pinnedRelease())},
 		{name: "pinned url download", wantErr: "", tool: toolWith(pinnedURL())},
 		{
@@ -169,6 +229,12 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 				return m
 			}()),
 		},
+	}
+}
+
+// validateAssetRows lists the asset rows.
+func validateAssetRows() []testClientsToolchainValidateToolEntriesRow {
+	return []testClientsToolchainValidateToolEntriesRow{
 		{
 			name:    "asset with a malformed sha256",
 			wantErr: "needs a name and a 64-hex sha256",
@@ -211,6 +277,12 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 			wantErr: "is ci but not a required/optional tool",
 			tool:    types.ToolEntry{Name: "ruff", Binary: "ruff", CI: true},
 		},
+	}
+}
+
+// validateMarkerRows lists the remaining asset, download and CI-marker rows.
+func validateMarkerRows() []testClientsToolchainValidateToolEntriesRow {
+	return []testClientsToolchainValidateToolEntriesRow{
 		{
 			name:    "asset without a name",
 			wantErr: "needs a name and a 64-hex sha256",
@@ -245,27 +317,5 @@ func TestClientsToolchainValidateToolEntries(t *testing.T) {
 				Category: types.CategoryPrerequisite,
 			},
 		},
-	}
-
-	_, dup := toolchain.NewCatalog([]types.ToolEntry{good, good})
-	require.Error(t, dup)
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(dup))
-	assert.Contains(t, dup.Error(), `duplicate binary "grpcurl"`)
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			err := apperr.Join(types.ValidateToolEntries(
-				[]types.ToolEntry{tc.tool})...)
-			if tc.wantErr == "" {
-				require.NoError(t, err)
-
-				return
-			}
-
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tc.wantErr, "the rule that fired")
-		})
 	}
 }

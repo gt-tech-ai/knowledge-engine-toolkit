@@ -14,6 +14,7 @@ package openapi
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"maps"
 	"path/filepath"
 	"sort"
@@ -90,11 +91,7 @@ func Convert(
 	// not the converter's failure to report).
 	swaggerFiles, err := findSwaggerFiles(fsys, inDir)
 	if err != nil {
-		return Result{}, apperr.Wrap(
-			err,
-			apperr.CodeInternal,
-			"walk "+inDir,
-		)
+		return Result{}, apperr.Wrap(err, apperr.CodeInternal, "walk "+inDir)
 	}
 
 	if len(swaggerFiles) == 0 {
@@ -115,24 +112,38 @@ func Convert(
 		return Result{}, apperr.Wrap(err, apperr.CodeInternal, "read service configs")
 	}
 
-	// Route each swagger file to its service via the proto package's
-	// jsonapi.v1.service annotation. Multiple packages can map to one service
-	// (several packages → one service); their swagger files merge into a
-	// single per-service spec. Files whose package declares no service
-	// annotation are skipped (e.g. ws/v1, retrieval/v1, jsonapi/v1).
-	byService := make(map[string][]string)
+	byService, skipped, err := routeSwaggerFiles(inDir, swaggerFiles, pkgToService)
+	if err != nil {
+		return Result{}, err
+	}
 
-	var skipped []string
+	written, err := convertServices(fsys, byService, configs, outDir, routes, headers)
+	if err != nil {
+		return Result{}, err
+	}
+
+	sort.Strings(written)
+	sort.Strings(skipped)
+
+	return Result{Written: written, Skipped: skipped}, nil
+}
+
+// routeSwaggerFiles assigns each swagger file to its service via the proto
+// package's jsonapi.v1.service annotation. Multiple packages can map to one
+// service, and their files merge into a single per-service spec. Files whose
+// package declares no service annotation are returned as skipped.
+func routeSwaggerFiles(
+	inDir string, swaggerFiles []string, pkgToService map[string]string,
+) (byService map[string][]string, skipped []string, err error) {
+	byService = make(map[string][]string)
 
 	for _, sf := range swaggerFiles {
 		rel, err := filepath.Rel(inDir, sf)
 		if err != nil {
-			return Result{}, apperr.Wrap(err, apperr.CodeInternal, "rel path")
+			return nil, nil, apperr.Wrap(err, apperr.CodeInternal, "rel path")
 		}
 
-		pkgPath := filepath.ToSlash(filepath.Dir(rel))
-		svc, ok := pkgToService[pkgPath]
-
+		svc, ok := pkgToService[filepath.ToSlash(filepath.Dir(rel))]
 		if !ok {
 			skipped = append(skipped, sf)
 
@@ -142,43 +153,61 @@ func Convert(
 		byService[svc] = append(byService[svc], sf)
 	}
 
+	return byService, skipped, nil
+}
+
+// convertServices converts each routed service, failing on one with no config.
+func convertServices(
+	fsys interfaces.FS,
+	byService map[string][]string,
+	configs map[string]serviceConfig,
+	outDir string,
+	routes map[string][]RouteEntry,
+	headers map[string]string,
+) ([]string, error) {
 	var written []string
 
 	for svc, files := range byService {
 		cfg, ok := configs[svc]
 		if !ok {
-			return Result{}, apperr.New(
+			return nil, apperr.New(
 				apperr.CodeInternal,
 				fmt.Sprintf("no config for service %q", svc),
 			)
 		}
 
-		// Merge all swagger specs across every package mapped to this service.
-		merged, err := MergeSwaggerFiles(fsys, files)
+		outPath, err := convertService(fsys, files, outDir, cfg, routes[svc], headers)
 		if err != nil {
-			return Result{}, apperr.Wrap(
-				err,
-				apperr.CodeInternal,
-				"merge service "+svc,
-			)
-		}
-
-		outPath, err := processSpec(fsys, merged, outDir, cfg, routes[svc], headers)
-		if err != nil {
-			return Result{}, apperr.Wrap(
-				err,
-				apperr.CodeInternal,
-				"process service "+svc,
-			)
+			return nil, err
 		}
 
 		written = append(written, outPath)
 	}
 
-	sort.Strings(written)
-	sort.Strings(skipped)
+	return written, nil
+}
 
-	return Result{Written: written, Skipped: skipped}, nil
+// convertService merges every swagger file mapped to one service and writes the
+// resulting spec, returning the path written.
+func convertService(
+	fsys interfaces.FS,
+	files []string,
+	outDir string,
+	cfg serviceConfig,
+	routes []RouteEntry,
+	headers map[string]string,
+) (string, error) {
+	merged, err := MergeSwaggerFiles(fsys, files)
+	if err != nil {
+		return "", apperr.Wrap(err, apperr.CodeInternal, "merge service "+cfg.service)
+	}
+
+	outPath, err := processSpec(fsys, merged, outDir, cfg, routes, headers)
+	if err != nil {
+		return "", apperr.Wrap(err, apperr.CodeInternal, "process service "+cfg.service)
+	}
+
+	return outPath, nil
 }
 
 // findSwaggerFiles returns every *.swagger.json file under dir, walked through fsys in
@@ -192,24 +221,28 @@ func findSwaggerFiles(fsys interfaces.FS, dir string) ([]string, error) {
 	var files []string
 
 	for _, e := range entries {
-		p := filepath.Join(dir, e.Name())
-		if e.IsDir() {
-			sub, err := findSwaggerFiles(fsys, p)
-			if err != nil {
-				return nil, err
-			}
-
-			files = append(files, sub...)
-
-			continue
+		found, err := swaggerFilesAt(fsys, filepath.Join(dir, e.Name()), e)
+		if err != nil {
+			return nil, err
 		}
 
-		if strings.HasSuffix(e.Name(), ".swagger.json") {
-			files = append(files, p)
-		}
+		files = append(files, found...)
 	}
 
 	return files, nil
+}
+
+// swaggerFilesAt returns the swagger files one directory entry contributes.
+func swaggerFilesAt(fsys interfaces.FS, p string, e fs.DirEntry) ([]string, error) {
+	if e.IsDir() {
+		return findSwaggerFiles(fsys, p)
+	}
+
+	if strings.HasSuffix(e.Name(), ".swagger.json") {
+		return []string{p}, nil
+	}
+
+	return nil, nil
 }
 
 // MergeSwaggerFiles reads multiple swagger JSON files and merges their paths
@@ -225,20 +258,9 @@ func MergeSwaggerFiles(fsys interfaces.FS, files []string) (map[string]any, erro
 	var merged map[string]any
 
 	for _, f := range files {
-		data, err := fsys.ReadFile(f)
+		spec, err := readSwaggerSpec(fsys, f)
 		if err != nil {
-			return nil, apperr.Wrap(err, apperr.CodeInternal, "read "+f)
-		}
-
-		var spec map[string]any
-
-		err = json.Unmarshal(data, &spec)
-		if err != nil {
-			return nil, apperr.Wrap(
-				err,
-				apperr.CodeInternal,
-				"parse "+f,
-			)
+			return nil, err
 		}
 
 		if merged == nil {
@@ -247,30 +269,44 @@ func MergeSwaggerFiles(fsys interfaces.FS, files []string) (map[string]any, erro
 			continue
 		}
 
-		// Merge paths.
-		if paths := helpers.GetMap(spec, "paths"); paths != nil {
-			mergedPaths := helpers.GetMap(merged, "paths")
-			if mergedPaths == nil {
-				mergedPaths = make(map[string]any)
-				merged["paths"] = mergedPaths
-			}
-
-			maps.Copy(mergedPaths, paths)
-		}
-
-		// Merge definitions.
-		if defs := helpers.GetMap(spec, "definitions"); defs != nil {
-			mergedDefs := helpers.GetMap(merged, "definitions")
-			if mergedDefs == nil {
-				mergedDefs = make(map[string]any)
-				merged["definitions"] = mergedDefs
-			}
-
-			maps.Copy(mergedDefs, defs)
-		}
+		mergeSpecSection(merged, spec, "paths")
+		mergeSpecSection(merged, spec, "definitions")
 	}
 
 	return merged, nil
+}
+
+// readSwaggerSpec reads and decodes one swagger file through fsys.
+func readSwaggerSpec(fsys interfaces.FS, file string) (map[string]any, error) {
+	data, err := fsys.ReadFile(file)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "read "+file)
+	}
+
+	var spec map[string]any
+
+	err = json.Unmarshal(data, &spec)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, "parse "+file)
+	}
+
+	return spec, nil
+}
+
+// mergeSpecSection copies spec's named section into merged, creating it when absent.
+func mergeSpecSection(merged, spec map[string]any, section string) {
+	from := helpers.GetMap(spec, section)
+	if from == nil {
+		return
+	}
+
+	into := helpers.GetMap(merged, section)
+	if into == nil {
+		into = make(map[string]any)
+		merged[section] = into
+	}
+
+	maps.Copy(into, from)
 }
 
 // processSpec converts a merged Swagger 2.0 spec to a JSON:API OpenAPI 3
@@ -297,7 +333,7 @@ func processSpec(
 	// Write output.
 	outputDir := filepath.Join(outDir, cfg.service, "docs")
 
-	err = fsys.MkdirAll(outputDir, 0o755)
+	err = fsys.MkdirAll(outputDir, publicDirMode)
 	if err != nil {
 		return "", apperr.Wrap(
 			err,
@@ -315,7 +351,7 @@ func processSpec(
 
 	out = append(out, '\n')
 
-	err = fsys.WriteFile(outputPath, out, 0o600)
+	err = fsys.WriteFile(outputPath, out, privateFileMode)
 	if err != nil {
 		return "", apperr.Wrap(
 			err,

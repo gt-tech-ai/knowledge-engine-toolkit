@@ -24,6 +24,12 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// readyLogOccurrences counts the ready lines Postgres logs across its init restart.
+const readyLogOccurrences = 2
+
+// startupTimeout bounds the container's start.
+const startupTimeout = 30 * time.Second
+
 const (
 	// dbUser is the superuser the PostgreSQL testcontainer is provisioned with.
 	dbUser = "test"
@@ -56,8 +62,8 @@ func NewTestDatabase(ctx context.Context) (*TestDatabase, error) {
 			"POSTGRES_DB":       dbName,
 		},
 		WaitingFor: wait.ForLog("database system is ready to accept connections").
-			WithOccurrence(2).
-			WithStartupTimeout(30 * time.Second),
+			WithOccurrence(readyLogOccurrences).
+			WithStartupTimeout(startupTimeout),
 	}
 
 	container, err := testcontainers.GenericContainer(

@@ -122,6 +122,14 @@ func TestRun_Keyset_OnlyDefaultOrdering(t *testing.T) {
 		assert.Equal(t, int32(2), decoded.OffsetPage, "the next offset page")
 	})
 
+	testRunKeysetOnlyDefaultOrderingRest(t)
+}
+
+// testRunKeysetOnlyDefaultOrderingRest continues TestRun_Keyset_OnlyDefaultOrdering with
+// its remaining steps.
+func testRunKeysetOnlyDefaultOrderingRest(t *testing.T) {
+	t.Helper()
+
 	t.Run("default-order offset page bridges to a keyset next-token", func(t *testing.T) {
 		t.Parallel()
 

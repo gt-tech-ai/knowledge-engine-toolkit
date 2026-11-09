@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+// maxStackDepth is the most frames a captured stack holds.
+const maxStackDepth = 64
+
+// captureStackSkip is the frames dropped: runtime.Callers and captureStack.
+const captureStackSkip = 2
+
 // StacktraceKey is the attribute key under which the captured stack is logged.
 const StacktraceKey = "stacktrace"
 
@@ -107,9 +113,9 @@ func (h *stacktraceHandler) WithGroup(name string) slog.Handler {
 // "func\n\tfile:line" trace, skipping runtime, log/slog, and logger-internal
 // frames so the trace starts at the caller's own code.
 func captureStack() string {
-	pcs := make([]uintptr, 64)
+	pcs := make([]uintptr, maxStackDepth)
 	// Skip runtime.Callers + captureStack itself.
-	n := runtime.Callers(2, pcs)
+	n := runtime.Callers(captureStackSkip, pcs)
 	frames := runtime.CallersFrames(pcs[:n])
 
 	var b strings.Builder

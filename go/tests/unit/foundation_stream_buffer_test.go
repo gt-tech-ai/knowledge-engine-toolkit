@@ -59,30 +59,38 @@ func TestBuffer_BoundedBlocksProducerAtCapacity(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			var pulled atomic.Int64
-
-			buf, err := stream.NewFromConfig(cfg, streamSize)
-			require.NoError(t, err)
-
-			out := buf.Wrap(t.Context(), endlessStream(t, &pulled))
-
-			defer func() { require.NoError(t, out.Close()) }()
-
-			require.Eventually(t, func() bool { return pulled.Load() == 3 },
-				5*time.Second, time.Millisecond)
-			require.Never(t, func() bool { return pulled.Load() > 3 },
-				50*time.Millisecond, time.Millisecond)
-
-			item, ok, err := out.Next(t.Context())
-			require.NoError(t, err)
-			require.True(t, ok)
-			require.Equal(t, "ab", item)
-			require.Eventually(t, func() bool { return pulled.Load() == 4 },
-				5*time.Second, time.Millisecond)
-			require.Never(t, func() bool { return pulled.Load() > 4 },
-				50*time.Millisecond, time.Millisecond)
+			testBufferBoundedBlocksProducerAtCapacityCase(t, cfg)
 		})
 	}
+}
+
+// testBufferBoundedBlocksProducerAtCapacityCase is the body of a closure in
+// TestBuffer_BoundedBlocksProducerAtCapacity.
+func testBufferBoundedBlocksProducerAtCapacityCase(t *testing.T, cfg stream.Config) {
+	t.Helper()
+
+	var pulled atomic.Int64
+
+	buf, err := stream.NewFromConfig(cfg, streamSize)
+	require.NoError(t, err)
+
+	out := buf.Wrap(t.Context(), endlessStream(t, &pulled))
+
+	defer func() { require.NoError(t, out.Close()) }()
+
+	require.Eventually(t, func() bool { return pulled.Load() == 3 },
+		5*time.Second, time.Millisecond)
+	require.Never(t, func() bool { return pulled.Load() > 3 },
+		50*time.Millisecond, time.Millisecond)
+
+	item, ok, err := out.Next(t.Context())
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "ab", item)
+	require.Eventually(t, func() bool { return pulled.Load() == 4 },
+		5*time.Second, time.Millisecond)
+	require.Never(t, func() bool { return pulled.Load() > 4 },
+		50*time.Millisecond, time.Millisecond)
 }
 
 // TestBuffer_DeliversItemsBeforeSourceError tests error ordering through each kind.
@@ -102,37 +110,45 @@ func TestBuffer_DeliversItemsBeforeSourceError(t *testing.T) {
 		t.Run(kind.String(), func(t *testing.T) {
 			t.Parallel()
 
-			boom := apperr.New(apperr.CodeUnavailable, "store down")
-			buf, err := stream.NewFromConfig(
-				stream.Config{Kind: kind, MaxItems: 1, MaxBytes: 1}, streamSize)
-			require.NoError(t, err)
-
-			out := buf.Wrap(t.Context(), scriptedStream(t, []string{"aa", "bb"}, boom))
-
-			var got []string
-
-			for {
-				item, ok, err := out.Next(t.Context())
-				if err != nil {
-					require.ErrorIs(t, err, boom)
-
-					break
-				}
-
-				require.True(t, ok)
-
-				got = append(got, item)
-			}
-
-			require.Equal(t, []string{"aa", "bb"}, got)
-
-			_, ok, err := out.Next(t.Context())
-			require.False(t, ok)
-			require.ErrorIs(t, err, boom)
-			require.NoError(t, out.Close())
-			require.NoError(t, out.Close())
+			testBufferDeliversItemsBeforeSourceErrorCase(t, kind)
 		})
 	}
+}
+
+// testBufferDeliversItemsBeforeSourceErrorCase is the body of a closure in
+// TestBuffer_DeliversItemsBeforeSourceError.
+func testBufferDeliversItemsBeforeSourceErrorCase(t *testing.T, kind stream.Kind) {
+	t.Helper()
+
+	boom := apperr.New(apperr.CodeUnavailable, "store down")
+	buf, err := stream.NewFromConfig(
+		stream.Config{Kind: kind, MaxItems: 1, MaxBytes: 1}, streamSize)
+	require.NoError(t, err)
+
+	out := buf.Wrap(t.Context(), scriptedStream(t, []string{"aa", "bb"}, boom))
+
+	var got []string
+
+	for {
+		item, ok, err := out.Next(t.Context())
+		if err != nil {
+			require.ErrorIs(t, err, boom)
+
+			break
+		}
+
+		require.True(t, ok)
+
+		got = append(got, item)
+	}
+
+	require.Equal(t, []string{"aa", "bb"}, got)
+
+	_, ok, err := out.Next(t.Context())
+	require.False(t, ok)
+	require.ErrorIs(t, err, boom)
+	require.NoError(t, out.Close())
+	require.NoError(t, out.Close())
 }
 
 // TestBuffer_CloseStopsProducer tests that closing a bounded stream ends its producer.
@@ -236,37 +252,45 @@ func TestBuffer_CloseUnblocksPendingNext(t *testing.T) {
 		t.Run(kind.String(), func(t *testing.T) {
 			t.Parallel()
 
-			buf, err := stream.NewFromConfig(
-				stream.Config{Kind: kind, MaxItems: 1, MaxBytes: 1}, streamSize)
-			require.NoError(t, err)
-
-			out := buf.Wrap(t.Context(), blockingStream(t))
-
-			type result struct {
-				err error
-				ok  bool
-			}
-
-			done := make(chan result, 1)
-
-			go func() {
-				_, ok, err := out.Next(t.Context())
-				done <- result{ok: ok, err: err}
-			}()
-
-			require.Never(t, func() bool { return len(done) > 0 },
-				20*time.Millisecond, time.Millisecond)
-
-			require.NoError(t, out.Close())
-
-			select {
-			case got := <-done:
-				require.NoError(t, got.err)
-				require.False(t, got.ok)
-			case <-time.After(time.Second):
-				t.Fatal("Next stayed blocked after Close")
-			}
+			testBufferCloseUnblocksPendingNextCase(t, kind)
 		})
+	}
+}
+
+// testBufferCloseUnblocksPendingNextCase is the body of a closure in
+// TestBuffer_CloseUnblocksPendingNext.
+func testBufferCloseUnblocksPendingNextCase(t *testing.T, kind stream.Kind) {
+	t.Helper()
+
+	buf, err := stream.NewFromConfig(
+		stream.Config{Kind: kind, MaxItems: 1, MaxBytes: 1}, streamSize)
+	require.NoError(t, err)
+
+	out := buf.Wrap(t.Context(), blockingStream(t))
+
+	type result struct {
+		err error
+		ok  bool
+	}
+
+	done := make(chan result, 1)
+
+	go func() {
+		_, ok, err := out.Next(t.Context())
+		done <- result{ok: ok, err: err}
+	}()
+
+	require.Never(t, func() bool { return len(done) > 0 },
+		20*time.Millisecond, time.Millisecond)
+
+	require.NoError(t, out.Close())
+
+	select {
+	case got := <-done:
+		require.NoError(t, got.err)
+		require.False(t, got.ok)
+	case <-time.After(time.Second):
+		t.Fatal("Next stayed blocked after Close")
 	}
 }
 

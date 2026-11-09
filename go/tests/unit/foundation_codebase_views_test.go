@@ -12,6 +12,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
@@ -90,6 +91,15 @@ func sourceOf(t *testing.T) (*mocks.MockCodebaseSource, map[string]int, *sync.Mu
 func TestCodebase_FilesTextAndMatch(t *testing.T) {
 	t.Parallel()
 
+	testCodebaseFilesTextAndMatchRest5(t)
+}
+
+// testCodebaseFilesTextAndMatchRest5 continues testCodebaseFilesTextAndMatchRest4 with
+// its
+// remaining steps.
+func testCodebaseFilesTextAndMatchRest5(t *testing.T) {
+	t.Helper()
+
 	src, reads, mu := sourceOf(t)
 	r := codebase.New(src, codebase.NewSnapshot("t"), nil)
 	ctx := t.Context()
@@ -115,6 +125,22 @@ func TestCodebase_FilesTextAndMatch(t *testing.T) {
 	)
 	require.NoError(t, err)
 	assert.Empty(t, files)
+
+	testCodebaseFilesTextAndMatchRest(t, reads, mu, r, ctx)
+}
+
+// testCodebaseFilesTextAndMatchRest continues testCodebaseFilesTextAndMatchRest5 with its
+// remaining steps.
+func testCodebaseFilesTextAndMatchRest(
+	t *testing.T,
+	reads map[string]int,
+	mu *sync.Mutex,
+	r interfaces.Codebase,
+	ctx context.Context,
+) {
+	t.Helper()
+
+	var err error
 
 	hits, err := r.Match(
 		ctx,

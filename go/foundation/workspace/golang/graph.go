@@ -95,13 +95,8 @@ func ParseWorkspaceGraph(work []byte, goMods map[string][]byte) ([]Module, error
 	dirOf := map[string]string{}
 
 	for _, dir := range dirs {
-		data, ok := goMods[dir]
-		if !ok {
-			continue
-		}
-
-		mf, err := modfile.ParseLax(dir+"/"+modFile, data, nil)
-		if err != nil || mf.Module == nil {
+		mf := parseWorkMember(dir, goMods)
+		if mf == nil {
 			continue
 		}
 
@@ -111,12 +106,36 @@ func ParseWorkspaceGraph(work []byte, goMods map[string][]byte) ([]Module, error
 	}
 
 	for i, mf := range parsed {
-		for _, r := range mf.Require {
-			if dep, ok := dirOf[r.Mod.Path]; ok && !r.Indirect {
-				out[i].Requires = append(out[i].Requires, dep)
-			}
-		}
+		out[i].Requires = directLocalRequires(mf, dirOf)
 	}
 
 	return out, nil
+}
+
+// parseWorkMember parses dir's go.mod, nil when it is absent or unusable.
+func parseWorkMember(dir string, goMods map[string][]byte) *modfile.File {
+	data, ok := goMods[dir]
+	if !ok {
+		return nil
+	}
+
+	mf, err := modfile.ParseLax(dir+"/"+modFile, data, nil)
+	if err != nil || mf.Module == nil {
+		return nil
+	}
+
+	return mf
+}
+
+// directLocalRequires lists the workspace dirs mf directly requires.
+func directLocalRequires(mf *modfile.File, dirOf map[string]string) []string {
+	var requires []string
+
+	for _, r := range mf.Require {
+		if dep, ok := dirOf[r.Mod.Path]; ok && !r.Indirect {
+			requires = append(requires, dep)
+		}
+	}
+
+	return requires
 }

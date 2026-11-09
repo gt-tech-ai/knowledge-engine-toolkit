@@ -181,9 +181,36 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PushdownMatchesFullScan() {
 
 	s.Require().NoError(store.Write(context.Background(), facts))
 
+	testCassandraPushdownMatchesFullScanRest(s, store, org, r, days, facts)
+}
+
+// testCassandraPushdownMatchesFullScanRest continues
+// TestCassandra_PushdownMatchesFullScan with its remaining steps.
+func testCassandraPushdownMatchesFullScanRest(
+	s *AnalyticsCassandraSuite,
+	store *analyticscassandra.Store,
+	org string,
+	r *fixtures.Sequence,
+	days []time.Time,
+	facts []types.Fact,
+) {
 	m := listquery.NewMap().
 		Add(listquery.String("team"), listquery.String("model"), listquery.Time("ts").AsTime())
 
+	testCassandraPushdownMatchesFullScanRest2(s, store, org, r, days, facts, m)
+}
+
+// testCassandraPushdownMatchesFullScanRest2 continues
+// testCassandraPushdownMatchesFullScanRest with its remaining steps.
+func testCassandraPushdownMatchesFullScanRest2(
+	s *AnalyticsCassandraSuite,
+	store *analyticscassandra.Store,
+	org string,
+	r *fixtures.Sequence,
+	days []time.Time,
+	facts []types.Fact,
+	m *listquery.Map,
+) {
 	for range 30 {
 		gen := genFilter(r, days)
 		filter, err := listquery.Parse(m, gen.json)
@@ -195,18 +222,8 @@ func (s *AnalyticsCassandraSuite) TestCassandra_PushdownMatchesFullScan() {
 
 		got := s.totals(store, q)
 
-		want := map[string]float64{}
-
-		for _, f := range facts {
-			if gen.match(f) {
-				want[f.Dims["team"]] += f.Measures["tokens_in"]
-			}
-		}
-
-		gotSums := map[string]float64{}
-		for team, p := range got {
-			gotSums[team] = chartspec.Finalize(p, types.AggSum)
-		}
+		want := matchingTotals(facts, gen)
+		gotSums := finalizedSums(got)
 
 		s.Equal(want, gotSums, gen.json)
 	}
@@ -261,40 +278,9 @@ type randFilter struct {
 // genFilter builds a random filter over team, model and the day-aligned time.
 func genFilter(r *fixtures.Sequence, days []time.Time) randFilter {
 	teams, models := []string{"t-1", "t-2", "t-3"}, []string{"m-a", "m-b"}
-	leaf := func() randFilter {
-		switch r.IntN(4) {
-		case 0:
-			t := teams[r.IntN(len(teams))]
 
-			return randFilter{
-				json:  fmt.Sprintf(`{"$eq":{"team":%q}}`, t),
-				match: func(f types.Fact) bool { return f.Dims["team"] == t },
-			}
-		case 1:
-			a, b := teams[r.IntN(len(teams))], teams[r.IntN(len(teams))]
+	leaf := func() randFilter { return genLeafFilter(r, days, teams, models) }
 
-			return randFilter{
-				json:  fmt.Sprintf(`{"$in":{"team":[%q,%q]}}`, a, b),
-				match: func(f types.Fact) bool { return f.Dims["team"] == a || f.Dims["team"] == b },
-			}
-		case 2:
-			m := models[r.IntN(len(models))]
-
-			return randFilter{
-				json:  fmt.Sprintf(`{"$ne":{"model":%q}}`, m),
-				match: func(f types.Fact) bool { return f.Dims["model"] != m },
-			}
-		default:
-			d := days[r.IntN(len(days))]
-
-			return randFilter{
-				json: fmt.Sprintf(`{"$gte":{"ts":%q}}`, d.Format(time.RFC3339)),
-				match: func(f types.Fact) bool {
-					return !chartspec.Truncate(f.TS, types.GrainDay).Before(d)
-				},
-			}
-		}
-	}
 	a, b := leaf(), leaf()
 
 	if r.IntN(2) == 0 {
@@ -307,6 +293,46 @@ func genFilter(r *fixtures.Sequence, days []time.Time) randFilter {
 	return randFilter{
 		json:  `{"$or":[` + a.json + `,` + b.json + `]}`,
 		match: func(f types.Fact) bool { return a.match(f) || b.match(f) },
+	}
+}
+
+// genLeafFilter draws one single-condition filter with its in-memory equivalent.
+func genLeafFilter(
+	r *fixtures.Sequence,
+	days []time.Time,
+	teams, models []string,
+) randFilter {
+	switch r.IntN(4) {
+	case 0:
+		t := teams[r.IntN(len(teams))]
+
+		return randFilter{
+			json:  fmt.Sprintf(`{"$eq":{"team":%q}}`, t),
+			match: func(f types.Fact) bool { return f.Dims["team"] == t },
+		}
+	case 1:
+		a, b := teams[r.IntN(len(teams))], teams[r.IntN(len(teams))]
+
+		return randFilter{
+			json:  fmt.Sprintf(`{"$in":{"team":[%q,%q]}}`, a, b),
+			match: func(f types.Fact) bool { return f.Dims["team"] == a || f.Dims["team"] == b },
+		}
+	case 2:
+		m := models[r.IntN(len(models))]
+
+		return randFilter{
+			json:  fmt.Sprintf(`{"$ne":{"model":%q}}`, m),
+			match: func(f types.Fact) bool { return f.Dims["model"] != m },
+		}
+	default:
+		d := days[r.IntN(len(days))]
+
+		return randFilter{
+			json: fmt.Sprintf(`{"$gte":{"ts":%q}}`, d.Format(time.RFC3339)),
+			match: func(f types.Fact) bool {
+				return !chartspec.Truncate(f.TS, types.GrainDay).Before(d)
+			},
+		}
 	}
 }
 
@@ -662,4 +688,28 @@ func (s *AnalyticsCassandraSuite) writeCompactionFacts(
 	s.Require().NoError(store.Write(context.Background(), facts))
 
 	return values
+}
+
+// matchingTotals sums tokens_in per team over the facts the filter matches.
+func matchingTotals(facts []types.Fact, gen randFilter) map[string]float64 {
+	want := map[string]float64{}
+
+	for _, f := range facts {
+		if gen.match(f) {
+			want[f.Dims["team"]] += f.Measures["tokens_in"]
+		}
+	}
+
+	return want
+}
+
+// finalizedSums reads each team's partial as its sum.
+func finalizedSums(got map[string]chartspec.Partial) map[string]float64 {
+	sums := map[string]float64{}
+
+	for team, p := range got {
+		sums[team] = chartspec.Finalize(p, types.AggSum)
+	}
+
+	return sums
 }

@@ -6,6 +6,22 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// defaultBreakerConfigInterval is the default Interval of BreakerConfig.
+const defaultBreakerConfigInterval = 60 * time.Second
+
+// defaultBreakerConfigTimeout is the default Timeout of BreakerConfig.
+const defaultBreakerConfigTimeout = 30 * time.Second
+
+// defaultBreakerConfigConsecutiveFailures is the default ConsecutiveFailures of
+// BreakerConfig.
+const defaultBreakerConfigConsecutiveFailures = 5
+
+// defaultBreakerConfigFailureRatio is the default FailureRatio of BreakerConfig.
+const defaultBreakerConfigFailureRatio = 0.5
+
+// defaultBreakerConfigMinRequests is the default MinRequests of BreakerConfig.
+const defaultBreakerConfigMinRequests = 10
+
 // BreakerConfig tunes the gobreaker circuit-breaker decorator
 // (circuitbreaker.Config). Name and Kind stay with the provider (identity /
 // impl selection); this is the tuning surface only.
@@ -38,11 +54,11 @@ type BreakerConfig struct {
 func DefaultBreakerConfig() BreakerConfig {
 	return BreakerConfig{
 		MaxRequests:         1,
-		Interval:            60 * time.Second,
-		Timeout:             30 * time.Second,
-		ConsecutiveFailures: 5,
-		FailureRatio:        0.5,
-		MinRequests:         10,
+		Interval:            defaultBreakerConfigInterval,
+		Timeout:             defaultBreakerConfigTimeout,
+		ConsecutiveFailures: defaultBreakerConfigConsecutiveFailures,
+		FailureRatio:        defaultBreakerConfigFailureRatio,
+		MinRequests:         defaultBreakerConfigMinRequests,
 	}
 }
 

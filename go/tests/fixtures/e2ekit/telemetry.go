@@ -14,12 +14,19 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
+
+// traceWaitTimeout bounds the wait for a trace to reach the backend.
+const traceWaitTimeout = 20 * time.Second
+
+// tracePollInterval is the wait between trace lookups.
+const tracePollInterval = 500 * time.Millisecond
 
 // HTTPDoer is the minimal HTTP boundary the telemetry assertions need. *http.Client
 // satisfies it; a unit test injects a mock so query construction + response parsing are
@@ -78,19 +85,9 @@ func (c *TelemetryClient) Ping(ctx context.Context) error {
 		c.promURL + "/-/healthy",
 		c.lokiURL + "/ready",
 	} {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
+		err := c.pingOne(ctx, u)
 		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "build ping request")
-		}
-
-		resp, err := c.http.Do(req)
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeUnavailable, "ping "+u)
-		}
-
-		_ = resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return apperr.New(apperr.CodeUnavailable, "obs backend not ready: "+u)
+			return err
 		}
 	}
 
@@ -102,17 +99,25 @@ func (c *TelemetryClient) Ping(ctx context.Context) error {
 // absent or malformed.
 func TraceIDFromHeader(traceresponse string) string {
 	parts := strings.Split(traceresponse, "-")
+
 	if len(parts) < 2 || len(parts[1]) != 32 {
 		return ""
 	}
 
 	for _, r := range parts[1] {
-		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+		if !isLowerHexRune(r) {
 			return ""
 		}
 	}
 
 	return parts[1]
+}
+
+// isLowerHexRune reports a digit or a lowercase hex letter.
+func isLowerHexRune(
+	r rune,
+) bool {
+	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')
 }
 
 // ForceSampledTraceparent builds a W3C `traceparent` header value (`00-<32hex
@@ -171,18 +176,7 @@ func (c *TelemetryClient) TraceSpansService(
 	ctx context.Context,
 	traceID, service string,
 ) (bool, error) {
-	var body struct {
-		Batches []struct {
-			Resource struct {
-				Attributes []struct {
-					Key   string `json:"key"`
-					Value struct {
-						StringValue string `json:"stringValue"`
-					} `json:"value"`
-				} `json:"attributes"`
-			} `json:"resource"`
-		} `json:"batches"`
-	}
+	var body tempoTrace
 
 	err := c.getJSON(
 		ctx,
@@ -193,15 +187,40 @@ func (c *TelemetryClient) TraceSpansService(
 		return false, err
 	}
 
-	for _, batch := range body.Batches {
-		for _, attr := range batch.Resource.Attributes {
-			if attr.Key == "service.name" && attr.Value.StringValue == service {
-				return true, nil
-			}
+	return body.namesService(service), nil
+}
+
+// tempoAttribute is one resource attribute of a Tempo batch.
+type tempoAttribute struct {
+	Key   string `json:"key"`
+	Value struct {
+		StringValue string `json:"stringValue"`
+	} `json:"value"`
+}
+
+// tempoBatch is one resource batch of a Tempo trace.
+type tempoBatch struct {
+	Resource struct {
+		Attributes []tempoAttribute `json:"attributes"`
+	} `json:"resource"`
+}
+
+// tempoTrace is the part of Tempo's trace response that names the services.
+type tempoTrace struct {
+	Batches []tempoBatch `json:"batches"`
+}
+
+// namesService reports whether a batch's service.name equals service.
+func (t *tempoTrace) namesService(service string) bool {
+	for _, batch := range t.Batches {
+		if slices.ContainsFunc(batch.Resource.Attributes, func(a tempoAttribute) bool {
+			return a.Key == "service.name" && a.Value.StringValue == service
+		}) {
+			return true
 		}
 	}
 
-	return false, nil
+	return false
 }
 
 // MetricValue returns the first instant-vector sample value for promQL, or 0 (nil error)
@@ -276,14 +295,34 @@ func (c *TelemetryClient) LogHasTrace(
 	return lines, nil
 }
 
+// pingOne requires one backend's health endpoint to answer 2xx.
+func (c *TelemetryClient) pingOne(ctx context.Context, u string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "build ping request")
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeUnavailable, "ping "+u)
+	}
+
+	_ = resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return apperr.New(apperr.CodeUnavailable, "obs backend not ready: "+u)
+	}
+
+	return nil
+}
+
 // PollTraceInTempo polls ta until traceID has at least one span batch in Tempo, or ~20s
 // elapse (spans reach Tempo a few seconds after the RPC). Returns nil on success, else a
 // CodeUnavailable error carrying the last error/miss.
 func PollTraceInTempo(ctx context.Context, ta TraceAsserter, traceID string) error {
 	return pollEvery(
 		ctx,
-		20*time.Second,
-		500*time.Millisecond,
+		traceWaitTimeout,
+		tracePollInterval,
 		"trace "+traceID+" in Tempo",
 		func(ctx context.Context) (bool, error) {
 			n, err := ta.TraceInTempo(ctx, traceID)

@@ -71,6 +71,14 @@ func TestTransformSingleResource(t *testing.T) {
 		assert.Equal(t, "/api/v1/demo/users/123", links["self"])
 	})
 
+	testTransformSingleResourceRest(t, cfg)
+}
+
+// testTransformSingleResourceRest continues TestTransformSingleResource with its
+// remaining steps.
+func testTransformSingleResourceRest(t *testing.T, cfg codec.ResourceConfig) {
+	t.Helper()
+
 	t.Run("id-only resource still carries attributes", func(t *testing.T) {
 		t.Parallel()
 
@@ -167,10 +175,18 @@ func TestTransformCollection(t *testing.T) {
 		assert.Equal(t, "/api/v1/demo/users", links["self"])
 		assert.Equal(t, "/api/v1/demo/users?page_token=tok123", links["next"])
 
-		// The exact-count case carries no estimate flag (protojson omits the default false).
+		// The exact-count case carries no estimate flag (protojson omits the default
+		// false).
 		_, hasEstimate := meta["totalIsEstimate"]
 		assert.False(t, hasEstimate, "an exact total must not advertise an estimate")
 	})
+
+	testTransformCollectionRest(t, cfg)
+}
+
+// testTransformCollectionRest continues TestTransformCollection with its remaining steps.
+func testTransformCollectionRest(t *testing.T, cfg codec.ResourceConfig) {
+	t.Helper()
 
 	t.Run("over-cap total forwards the estimate flag", func(t *testing.T) {
 		t.Parallel()
@@ -195,6 +211,14 @@ func TestTransformCollection(t *testing.T) {
 			"the N+ estimate flag must reach the client",
 		)
 	})
+
+	testTransformCollectionRest2(t, cfg)
+}
+
+// testTransformCollectionRest2 continues testTransformCollectionRest with its remaining
+// steps.
+func testTransformCollectionRest2(t *testing.T, cfg codec.ResourceConfig) {
+	t.Helper()
 
 	t.Run("empty collection", func(t *testing.T) {
 		t.Parallel()
@@ -294,6 +318,13 @@ func TestTransformError(t *testing.T) {
 		assert.Equal(t, "email is required", errObj["detail"])
 	})
 
+	testTransformErrorRest2(t)
+}
+
+// testTransformErrorRest2 continues TestTransformError with its remaining steps.
+func testTransformErrorRest2(t *testing.T) {
+	t.Helper()
+
 	// The live path: Vanguard renders a transcoded Connect/gRPC error as a
 	// google.rpc.Status whose "code" is a NUMBER, so the numeric google.rpc.Code
 	// must map to its canonical snake_case name — not degrade to "unknown" (the
@@ -318,6 +349,13 @@ func TestTransformError(t *testing.T) {
 		assert.Equal(t, "404", errObj["status"])
 		assert.Equal(t, "resource not found", errObj["detail"])
 	})
+
+	testTransformErrorRest(t)
+}
+
+// testTransformErrorRest continues TestTransformError with its remaining steps.
+func testTransformErrorRest(t *testing.T) {
+	t.Helper()
 
 	// An out-of-range numeric code has no canonical name, so it keeps the "unknown"
 	// default rather than leaking a bare number as the machine-readable code.

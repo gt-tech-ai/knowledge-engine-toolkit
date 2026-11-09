@@ -24,25 +24,10 @@ func (s *Store) ensureSchema(ctx context.Context, session interfaces.CQLSession)
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.SchemaTimeout)
 	defer cancel()
 
-	type table struct{ name, ddl string }
-
-	var tables []table
-
-	for cube, grains := range s.cfg.Cubes {
-		for _, grain := range grains {
-			ddl, err := SchemaCQL(s.cfg.Keyspace, cube, grain)
-			if err != nil {
-				return err
-			}
-
-			tables = append(tables, table{name: TableName(cube, grain), ddl: ddl})
-		}
+	tables, err := s.schemaTables()
+	if err != nil {
+		return err
 	}
-
-	slices.SortFunc(
-		tables,
-		func(a, b table) int { return strings.Compare(a.name, b.name) },
-	)
 
 	for _, t := range tables {
 		err := session.Query(t.ddl).WithContext(ctx).Exec()
@@ -55,6 +40,13 @@ func (s *Store) ensureSchema(ctx context.Context, session interfaces.CQLSession)
 		return nil
 	}
 
+	return s.awaitTables(ctx, session, tables)
+}
+
+// awaitTables waits for each table to become active.
+func (s *Store) awaitTables(
+	ctx context.Context, session interfaces.CQLSession, tables []schemaTable,
+) error {
 	for _, t := range tables {
 		err := s.awaitActive(ctx, session, t.name)
 		if err != nil {
@@ -63,6 +55,37 @@ func (s *Store) ensureSchema(ctx context.Context, session interfaces.CQLSession)
 	}
 
 	return nil
+}
+
+// schemaTable is one rollup table and the DDL that creates it.
+type schemaTable struct {
+	// name is the table's name.
+	name string
+
+	// ddl is its CREATE statement.
+	ddl string
+}
+
+// schemaTables lists every declared table, sorted so the DDL order is stable.
+func (s *Store) schemaTables() ([]schemaTable, error) {
+	var tables []schemaTable
+
+	for cube, grains := range s.cfg.Cubes {
+		for _, grain := range grains {
+			ddl, err := SchemaCQL(s.cfg.Keyspace, cube, grain)
+			if err != nil {
+				return nil, err
+			}
+
+			tables = append(tables, schemaTable{name: TableName(cube, grain), ddl: ddl})
+		}
+	}
+
+	slices.SortFunc(tables, func(a, b schemaTable) int {
+		return strings.Compare(a.name, b.name)
+	})
+
+	return tables, nil
 }
 
 // awaitActive polls table's status every SchemaPollInterval until it is ACTIVE.

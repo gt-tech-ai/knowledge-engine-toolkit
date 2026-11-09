@@ -100,6 +100,14 @@ func TestRun_OffsetTotalCount_BoundedExactVsEstimate(t *testing.T) {
 		assert.Equal(t, 11, r.gotBound)
 	})
 
+	testRunOffsetTotalCountBoundedExactVsEstimateRest(t)
+}
+
+// testRunOffsetTotalCountBoundedExactVsEstimateRest continues
+// TestRun_OffsetTotalCount_BoundedExactVsEstimate with its remaining steps.
+func testRunOffsetTotalCountBoundedExactVsEstimateRest(t *testing.T) {
+	t.Helper()
+
 	// The exact boundary — total == cap and total == cap+1 — pins the `>` in boundedTotal
 	// so a `>`/`>=` off-by-one can't slip through (the below/above cases are too far to
 	// catch it).

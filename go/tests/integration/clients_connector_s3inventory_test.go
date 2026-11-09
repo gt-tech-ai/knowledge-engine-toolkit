@@ -38,6 +38,19 @@ func writeInventory(
 ) string {
 	t.Helper()
 
+	return writeInventoryRest5(t, ctx, admin, bucket, reportBucket, perFile)
+}
+
+// writeInventoryRest5 continues writeInventoryRest4 with its remaining steps.
+func writeInventoryRest5(
+	t *testing.T,
+	ctx context.Context,
+	admin *awss3.Client,
+	bucket, reportBucket string,
+	perFile int,
+) string {
+	t.Helper()
+
 	listed, err := admin.ListObjectsV2(
 		ctx,
 		&awss3.ListObjectsV2Input{Bucket: aws.String(bucket)},
@@ -47,24 +60,7 @@ func writeInventory(
 	var files []map[string]any
 
 	for start := 0; start < len(listed.Contents); start += perFile {
-		var buf bytes.Buffer
-
-		gz := gzip.NewWriter(&buf)
-		rows := csv.NewWriter(gz)
-
-		for _, o := range listed.Contents[start:min(start+perFile, len(listed.Contents))] {
-			require.NoError(t, rows.Write([]string{
-				bucket,
-				url.QueryEscape(aws.ToString(o.Key)),
-				strconv.FormatInt(aws.ToInt64(o.Size), 10),
-				o.LastModified.UTC().Format("2006-01-02T15:04:05.000Z"),
-				strings.Trim(aws.ToString(o.ETag), `"`),
-			}))
-		}
-
-		rows.Flush()
-		require.NoError(t, rows.Error())
-		require.NoError(t, gz.Close())
+		body := inventoryCSV(t, bucket, listed, start, perFile)
 
 		key := fmt.Sprintf("inv/%s/data/%d.csv.gz", bucket, len(files))
 
@@ -73,7 +69,7 @@ func writeInventory(
 				reportBucket,
 			),
 			Key:  aws.String(key),
-			Body: bytes.NewReader(buf.Bytes()),
+			Body: bytes.NewReader(body),
 		})
 		require.NoError(t, err)
 
@@ -156,6 +152,21 @@ func TestS3Inventory_ListsAWrittenReportLikeTheBucket(t *testing.T) {
 	), "us-east-1")
 	require.NoError(t, err)
 
+	testS3InventoryListsAWrittenReportLikeTheBucketRest(t, ctx, m, admin)
+}
+
+// testS3InventoryListsAWrittenReportLikeTheBucketRest continues
+// TestS3Inventory_ListsAWrittenReportLikeTheBucket with its remaining steps.
+func testS3InventoryListsAWrittenReportLikeTheBucketRest(
+	t *testing.T,
+	ctx context.Context,
+	m *miniofix.TestMinIO,
+	admin *awss3.Client,
+) {
+	t.Helper()
+
+	var err error
+
 	const bucket, reports = "corp-docs", "corp-reports"
 
 	for _, b := range []string{bucket, reports} {
@@ -206,4 +217,35 @@ func TestS3Inventory_ListsAWrittenReportLikeTheBucket(t *testing.T) {
 
 	require.Len(t, want, 5)
 	require.Equal(t, want, got)
+}
+
+// inventoryCSV renders one gzipped report file from up to perFile listed objects.
+func inventoryCSV(
+	t *testing.T,
+	bucket string,
+	listed *awss3.ListObjectsV2Output,
+	start, perFile int,
+) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+
+	gz := gzip.NewWriter(&buf)
+	rows := csv.NewWriter(gz)
+
+	for _, o := range listed.Contents[start:min(start+perFile, len(listed.Contents))] {
+		require.NoError(t, rows.Write([]string{
+			bucket,
+			url.QueryEscape(aws.ToString(o.Key)),
+			strconv.FormatInt(aws.ToInt64(o.Size), 10),
+			o.LastModified.UTC().Format("2006-01-02T15:04:05.000Z"),
+			strings.Trim(aws.ToString(o.ETag), `"`),
+		}))
+	}
+
+	rows.Flush()
+	require.NoError(t, rows.Error())
+	require.NoError(t, gz.Close())
+
+	return buf.Bytes()
 }

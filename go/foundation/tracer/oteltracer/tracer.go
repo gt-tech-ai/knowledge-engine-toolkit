@@ -21,6 +21,21 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
+// batchQueueSize is the spans the batch exporter queues.
+const batchQueueSize = 4096
+
+// exportTimeout bounds one OTLP export.
+const exportTimeout = 30 * time.Second
+
+// retryMaxInterval caps the wait between OTLP export retries.
+const retryMaxInterval = 5 * time.Second
+
+// retryMaxElapsed bounds all retries of one OTLP export.
+const retryMaxElapsed = 30 * time.Second
+
+// keepaliveTimeout is how long a keepalive ping may wait for its reply.
+const keepaliveTimeout = 20 * time.Second
+
 // Compile-time interface assertions.
 var (
 	// Tracer must satisfy interfaces.Tracer.
@@ -133,40 +148,7 @@ func (s *span) SetStatus(code interfaces.SpanStatusCode, description string) {
 // W3C TraceContext + Baggage propagators, and returns the provider so the caller
 // takes its tracer from it and can flush it on exit.
 func setup(ctx context.Context, cfg Config) (*sdktrace.TracerProvider, error) {
-	opts := []otlptracegrpc.Option{
-		otlptracegrpc.WithEndpoint(cfg.Endpoint),
-		// Tolerate a brief collector-unavailable window at startup — e.g. a pod
-		// that races ahead of a node-local collector during autoscaler node
-		// bring-up — by retrying transient export failures within a bounded budget
-		// instead of dropping the batch and logging an error on the first miss.
-		// The export timeout matches the retry budget so a retry can actually span
-		// the window; both are bounded so a genuinely prolonged outage still
-		// degrades gracefully (spans drop, memory stays capped) rather than
-		// stalling the exporter.
-		otlptracegrpc.WithTimeout(30 * time.Second),
-		otlptracegrpc.WithRetry(otlptracegrpc.RetryConfig{
-			Enabled:         true,
-			InitialInterval: 1 * time.Second,
-			MaxInterval:     5 * time.Second,
-			MaxElapsedTime:  30 * time.Second,
-		}),
-		// Keepalive so a wedged / half-open connection is detected and re-established in
-		// ~1 minute instead of stalling exports for many minutes (retry alone reuses the
-		// same broken connection; keepalive PINGs during an in-flight export tear it down
-		// and reconnect). PermitWithoutStream is false so pings fire only while an export
-		// is active — this never trips the collector's default gRPC keepalive
-		// enforcement, which only polices pings sent with no active stream.
-		otlptracegrpc.WithDialOption(grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                1 * time.Minute,
-			Timeout:             20 * time.Second,
-			PermitWithoutStream: false,
-		})),
-	}
-	if cfg.Insecure {
-		opts = append(opts, otlptracegrpc.WithInsecure())
-	}
-
-	exporter, err := otlptracegrpc.New(ctx, opts...)
+	exporter, err := otlptracegrpc.New(ctx, exporterOptions(cfg)...)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "create OTLP exporter")
 	}
@@ -181,30 +163,14 @@ func setup(ctx context.Context, cfg Config) (*sdktrace.TracerProvider, error) {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "create resource")
 	}
 
-	var sampler sdktrace.Sampler
-
-	switch {
-	case cfg.SampleRate >= 1.0:
-		sampler = sdktrace.AlwaysSample()
-	case cfg.SampleRate <= 0:
-		sampler = sdktrace.NeverSample()
-	default:
-		// ParentBased so an incoming sampled parent (a W3C traceparent with sampled=1,
-		// extracted by the TraceContext propagator) forces the span sampled — the lever
-		// an end-to-end telemetry check relies on to guarantee its one request's trace
-		// reaches the backend without raising the ratio for normal traffic. A ROOT span
-		// with no parent still follows the ratio.
-		sampler = sdktrace.ParentBased(sdktrace.TraceIDRatioBased(cfg.SampleRate))
-	}
-
 	tp := sdktrace.NewTracerProvider(
 		// A span queue larger than the SDK default (2048) so a burst on a freshly-started
 		// pod — a cold exporter catching up while its connection re-establishes — buffers
 		// spans instead of dropping them. Bounded so a prolonged outage still caps
 		// memory.
-		sdktrace.WithBatcher(exporter, sdktrace.WithMaxQueueSize(4096)),
+		sdktrace.WithBatcher(exporter, sdktrace.WithMaxQueueSize(batchQueueSize)),
 		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sampler),
+		sdktrace.WithSampler(newSampler(cfg.SampleRate)),
 	)
 
 	otel.SetTracerProvider(tp)
@@ -214,6 +180,61 @@ func setup(ctx context.Context, cfg Config) (*sdktrace.TracerProvider, error) {
 	))
 
 	return tp, nil
+}
+
+// exporterOptions configures the OTLP gRPC exporter from cfg.
+func exporterOptions(cfg Config) []otlptracegrpc.Option {
+	opts := []otlptracegrpc.Option{
+		otlptracegrpc.WithEndpoint(cfg.Endpoint),
+		// Tolerate a brief collector-unavailable window at startup — e.g. a pod
+		// that races ahead of a node-local collector during autoscaler node
+		// bring-up — by retrying transient export failures within a bounded budget
+		// instead of dropping the batch and logging an error on the first miss.
+		// The export timeout matches the retry budget so a retry can actually span
+		// the window; both are bounded so a genuinely prolonged outage still
+		// degrades gracefully (spans drop, memory stays capped) rather than
+		// stalling the exporter.
+		otlptracegrpc.WithTimeout(exportTimeout),
+		otlptracegrpc.WithRetry(otlptracegrpc.RetryConfig{
+			Enabled:         true,
+			InitialInterval: 1 * time.Second,
+			MaxInterval:     retryMaxInterval,
+			MaxElapsedTime:  retryMaxElapsed,
+		}),
+		// Keepalive so a wedged / half-open connection is detected and re-established in
+		// ~1 minute instead of stalling exports for many minutes (retry alone reuses the
+		// same broken connection; keepalive PINGs during an in-flight export tear it down
+		// and reconnect). PermitWithoutStream is false so pings fire only while an export
+		// is active — this never trips the collector's default gRPC keepalive
+		// enforcement, which only polices pings sent with no active stream.
+		otlptracegrpc.WithDialOption(grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                1 * time.Minute,
+			Timeout:             keepaliveTimeout,
+			PermitWithoutStream: false,
+		})),
+	}
+	if cfg.Insecure {
+		opts = append(opts, otlptracegrpc.WithInsecure())
+	}
+
+	return opts
+}
+
+// newSampler picks the sampler for the configured rate.
+func newSampler(rate float64) sdktrace.Sampler {
+	switch {
+	case rate >= 1.0:
+		return sdktrace.AlwaysSample()
+	case rate <= 0:
+		return sdktrace.NeverSample()
+	default:
+		// ParentBased so an incoming sampled parent (a W3C traceparent with sampled=1,
+		// extracted by the TraceContext propagator) forces the span sampled — the lever
+		// an end-to-end telemetry check relies on to guarantee its one request's trace
+		// reaches the backend without raising the ratio for normal traffic. A ROOT span
+		// with no parent still follows the ratio.
+		return sdktrace.ParentBased(sdktrace.TraceIDRatioBased(rate))
+	}
 }
 
 // toOTelSpanKind maps a foundation SpanKind to its OTel equivalent, defaulting

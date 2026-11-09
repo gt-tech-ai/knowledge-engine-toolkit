@@ -136,9 +136,8 @@ func normalizeRoute(path string) string {
 
 	// Walk the '/'-separated segments in place; only start building a new string
 	// once a segment is found that must be collapsed.
-	var b strings.Builder
+	var w routeWriter
 
-	rewritten := false
 	start := 0
 
 	for i := 0; i <= len(path); i++ {
@@ -146,33 +145,54 @@ func normalizeRoute(path string) string {
 			continue
 		}
 
-		seg := path[start:i]
-		switch {
-		case looksLikeID(seg):
-			if !rewritten {
-				b.Grow(len(path) + len("{id}"))
-				b.WriteString(path[:start])
-
-				rewritten = true
-			}
-
-			b.WriteString("{id}")
-		case rewritten:
-			b.WriteString(seg)
-		}
-
-		if rewritten && i < len(path) {
-			b.WriteByte('/')
-		}
+		w.segment(path, start, i)
 
 		start = i + 1
 	}
 
-	if !rewritten {
+	if !w.rewritten {
 		return path
 	}
 
-	return b.String()
+	return w.b.String()
+}
+
+// routeWriter rebuilds a path once a segment has been collapsed.
+type routeWriter struct {
+	// b holds the rewritten path.
+	b strings.Builder
+
+	// rewritten reports whether a segment has been collapsed yet.
+	rewritten bool
+}
+
+// segment emits path[start:end], collapsing an id-like segment to {id}.
+func (w *routeWriter) segment(path string, start, end int) {
+	seg := path[start:end]
+
+	switch {
+	case looksLikeID(seg):
+		w.begin(path, start)
+		w.b.WriteString("{id}")
+	case w.rewritten:
+		w.b.WriteString(seg)
+	}
+
+	if w.rewritten && end < len(path) {
+		w.b.WriteByte('/')
+	}
+}
+
+// begin copies the untouched prefix the first time a segment is collapsed.
+func (w *routeWriter) begin(path string, start int) {
+	if w.rewritten {
+		return
+	}
+
+	w.b.Grow(len(path) + len("{id}"))
+	w.b.WriteString(path[:start])
+
+	w.rewritten = true
 }
 
 // looksLikeID reports whether a path segment is a high-cardinality identifier that

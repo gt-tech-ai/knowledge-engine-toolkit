@@ -15,6 +15,21 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
+// poolSizePerProc is the connections pooled for each GOMAXPROCS unit.
+const poolSizePerProc = 10
+
+// fallbackEntryTTL is the entry lifetime used when none is configured.
+const fallbackEntryTTL = 5 * time.Minute
+
+// defaultConfigMinIdleConns is the default MinIdleConns of Config.
+const defaultConfigMinIdleConns = 5
+
+// defaultConfigDefaultTTL is the default DefaultTTL of Config.
+const defaultConfigDefaultTTL = 5 * time.Minute
+
+// defaultConfigOpTimeout is the default OpTimeout of Config.
+const defaultConfigOpTimeout = 500 * time.Millisecond
+
 // Compile-time interface assertions.
 var (
 	// Cache satisfies the ByteCache contract (Get/Set/Delete over []byte).
@@ -107,10 +122,10 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Addr:         "localhost:6379",
-		PoolSize:     10 * runtime.GOMAXPROCS(0),
-		MinIdleConns: 5,
-		DefaultTTL:   5 * time.Minute,
-		OpTimeout:    500 * time.Millisecond,
+		PoolSize:     poolSizePerProc * runtime.GOMAXPROCS(0),
+		MinIdleConns: defaultConfigMinIdleConns,
+		DefaultTTL:   defaultConfigDefaultTTL,
+		OpTimeout:    defaultConfigOpTimeout,
 		FailureMode:  FailureModeBypass,
 	}
 }
@@ -145,7 +160,7 @@ type Cache struct {
 // Redis operations are absorbed internally per FailureMode.
 func New(cfg *Config) *Cache {
 	if cfg.DefaultTTL == 0 {
-		cfg.DefaultTTL = 5 * time.Minute
+		cfg.DefaultTTL = fallbackEntryTTL
 	}
 
 	opts := &redis.Options{
@@ -243,24 +258,9 @@ func (c *Cache) InvalidatePrefix(ctx context.Context, prefix string) error {
 	var cursor uint64
 
 	for {
-		keys, next, err := c.client.Scan(ctx, cursor, pattern, scanCount).Result()
+		next, err := c.invalidatePage(ctx, cursor, pattern)
 		if err != nil {
-			return apperr.Wrap(
-				err,
-				apperr.CodeUnavailable,
-				"redis scan for prefix invalidation",
-			)
-		}
-
-		if len(keys) > 0 {
-			err := c.client.Unlink(ctx, keys...).Err()
-			if err != nil {
-				return apperr.Wrap(
-					err,
-					apperr.CodeUnavailable,
-					"redis unlink for prefix invalidation",
-				)
-			}
+			return err
 		}
 
 		cursor = next
@@ -350,6 +350,41 @@ func (c *Cache) Close() error {
 // is an extended method available only on the concrete *Cache type.
 func (c *Cache) Client() *redis.Client {
 	return c.client
+}
+
+// unlink removes the scanned keys, if any.
+func (c *Cache) unlink(ctx context.Context, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	err := c.client.Unlink(ctx, keys...).Err()
+	if err != nil {
+		return apperr.Wrap(
+			err,
+			apperr.CodeUnavailable,
+			"redis unlink for prefix invalidation",
+		)
+	}
+
+	return nil
+}
+
+// invalidatePage scans one page of matching keys, unlinks them and returns the next
+// cursor.
+func (c *Cache) invalidatePage(
+	ctx context.Context, cursor uint64, pattern string,
+) (uint64, error) {
+	keys, next, err := c.client.Scan(ctx, cursor, pattern, scanCount).Result()
+	if err != nil {
+		return 0, apperr.Wrap(
+			err,
+			apperr.CodeUnavailable,
+			"redis scan for prefix invalidation",
+		)
+	}
+
+	return next, c.unlink(ctx, keys)
 }
 
 // opCtx returns a context with the per-operation timeout applied. If opTimeout

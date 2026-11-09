@@ -115,13 +115,22 @@ func (b *Buffer) ReplayAfter(
 		return msgs, true, nil // acked exactly the low-water mark → whole tail is gapless
 	}
 
+	tail, found := suffixAfter(msgs, afterMsgID)
+
+	return tail, found, nil
+}
+
+// suffixAfter returns the messages after id; false means id is not retained, a gap.
+func suffixAfter(
+	msgs []interfaces.BufferedMessage, id string,
+) ([]interfaces.BufferedMessage, bool) {
 	for i, m := range msgs {
-		if m.ID == afterMsgID {
-			return msgs[i+1:], true, nil
+		if m.ID == id {
+			return msgs[i+1:], true
 		}
 	}
 
-	return nil, false, nil // not retained → gap
+	return nil, false
 }
 
 // Prune drops entries up to and including upToMsgID and records it as the low-water mark,

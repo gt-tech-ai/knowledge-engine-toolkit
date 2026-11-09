@@ -15,6 +15,9 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// startupTimeout bounds the container's start.
+const startupTimeout = 60 * time.Second
+
 const (
 	// elasticmqImage is the ElasticMQ container image the fixture starts.
 	elasticmqImage = "softwaremill/elasticmq:1.6.6"
@@ -45,7 +48,7 @@ func NewTestElasticMQ(ctx context.Context) (*TestElasticMQ, error) {
 		Image:        elasticmqImage,
 		ExposedPorts: []string{elasticmqPort},
 		WaitingFor: wait.ForListeningPort(elasticmqPort).
-			WithStartupTimeout(60 * time.Second),
+			WithStartupTimeout(startupTimeout),
 	}
 
 	container, err := testcontainers.GenericContainer(

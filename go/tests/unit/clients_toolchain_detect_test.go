@@ -50,32 +50,7 @@ func TestClientsToolchainDetector_Scan_Classification(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 
-	specs := []types.ToolDef{
-		{Name: "missing", Binary: "missingbin"},
-		{Name: "versionless", Binary: "lefthook"},
-		{
-			Name: "current", Binary: "go",
-			MinVersion:   &types.Version{Major: 1, Minor: 26},
-			VersionCmd:   []string{"go", "version"},
-			VersionParse: goVersionParse,
-		},
-		{
-			Name: "stale", Binary: "node",
-			MinVersion:   &types.Version{Major: 20, Minor: 0},
-			VersionCmd:   []string{"node", "--version"},
-			VersionParse: types.ParseFirstVersion,
-		},
-		{
-			Name: "broken-version-cmd", Binary: "buf",
-			MinVersion: &types.Version{Major: 1, Minor: 0},
-			VersionCmd: []string{"buf", "--version"},
-		},
-		{
-			Name: "unparseable-version", Binary: "atlas",
-			MinVersion: &types.Version{Major: 1, Minor: 0},
-			VersionCmd: []string{"atlas", "version"},
-		},
-	}
+	specs := testClientsToolchainDetectorScanClassificationTable()
 
 	r.EXPECT().Exists("missingbin").Return(false)
 	r.EXPECT().Exists("lefthook").Return(true)
@@ -112,6 +87,37 @@ func TestClientsToolchainDetector_Scan_Classification(t *testing.T) {
 		t, types.StatusToolOK, results[5].Status,
 		"unparseable version -> OK (best-effort)",
 	)
+}
+
+// testClientsToolchainDetectorScanClassificationTable builds the table
+// TestClientsToolchainDetector_Scan_Classification runs.
+func testClientsToolchainDetectorScanClassificationTable() []types.ToolDef {
+	return []types.ToolDef{
+		{Name: "missing", Binary: "missingbin"},
+		{Name: "versionless", Binary: "lefthook"},
+		{
+			Name: "current", Binary: "go",
+			MinVersion:   &types.Version{Major: 1, Minor: 26},
+			VersionCmd:   []string{"go", "version"},
+			VersionParse: goVersionParse,
+		},
+		{
+			Name: "stale", Binary: "node",
+			MinVersion:   &types.Version{Major: 20, Minor: 0},
+			VersionCmd:   []string{"node", "--version"},
+			VersionParse: types.ParseFirstVersion,
+		},
+		{
+			Name: "broken-version-cmd", Binary: "buf",
+			MinVersion: &types.Version{Major: 1, Minor: 0},
+			VersionCmd: []string{"buf", "--version"},
+		},
+		{
+			Name: "unparseable-version", Binary: "atlas",
+			MinVersion: &types.Version{Major: 1, Minor: 0},
+			VersionCmd: []string{"atlas", "version"},
+		},
+	}
 }
 
 // TestClientsToolchainDetector_CheckPrerequisites_Missing verifies prerequisite

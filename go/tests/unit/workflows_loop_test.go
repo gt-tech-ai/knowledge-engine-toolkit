@@ -53,36 +53,44 @@ func TestTicker_RunsAtStartThenEveryInterval(t *testing.T) {
 
 	for _, atStart := range []bool{true, false} {
 		synctest.Test(t, func(t *testing.T) {
-			var passes atomic.Int64
-
-			tk, err := loop.NewTicker("refresh", loop.Pass(func(context.Context) error {
-				passes.Add(1)
-
-				return nil
-			}), loop.Config{Interval: time.Minute, RunAtStart: atStart}, quietLogger(t))
-			require.NoError(t, err)
-
-			ctx, cancel := context.WithCancel(t.Context())
-			done := make(chan error, 1)
-
-			go func() { done <- tk.Run(ctx) }()
-
-			synctest.Wait()
-
-			first := int64(0)
-			if atStart {
-				first = 1
-			}
-
-			require.Equal(t, first, passes.Load())
-			time.Sleep(3 * time.Minute)
-			synctest.Wait()
-			require.Equal(t, first+3, passes.Load())
-
-			cancel()
-			require.NoError(t, <-done)
+			testTickerRunsAtStartThenEveryIntervalCase(t, atStart)
 		})
 	}
+}
+
+// testTickerRunsAtStartThenEveryIntervalCase is the body of a closure in
+// TestTicker_RunsAtStartThenEveryInterval.
+func testTickerRunsAtStartThenEveryIntervalCase(t *testing.T, atStart bool) {
+	t.Helper()
+
+	var passes atomic.Int64
+
+	tk, err := loop.NewTicker("refresh", loop.Pass(func(context.Context) error {
+		passes.Add(1)
+
+		return nil
+	}), loop.Config{Interval: time.Minute, RunAtStart: atStart}, quietLogger(t))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+
+	go func() { done <- tk.Run(ctx) }()
+
+	synctest.Wait()
+
+	first := int64(0)
+	if atStart {
+		first = 1
+	}
+
+	require.Equal(t, first, passes.Load())
+	time.Sleep(3 * time.Minute)
+	synctest.Wait()
+	require.Equal(t, first+3, passes.Load())
+
+	cancel()
+	require.NoError(t, <-done)
 }
 
 // TestTicker_FailedPassIsLoggedAndRetried tests the ticker's failure handling.

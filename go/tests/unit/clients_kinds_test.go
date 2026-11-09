@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"context"
+	"maps"
 	"testing"
 	"time"
 
@@ -44,123 +45,19 @@ import (
 func TestClientFamilies_RejectAnUnknownKind(t *testing.T) {
 	t.Parallel()
 
-	const bogus client.Kind = "bogus"
+	testClientFamiliesRejectAnUnknownKindRest5(t)
+}
 
-	families := map[string]func(ctx context.Context) error{
-		"analytics": func(ctx context.Context) error {
-			_, err := analytics.NewFromConfig(
-				ctx,
-				analytics.Config{Kind: bogus},
-				analytics.Deps{},
-			)
+// testClientFamiliesRejectAnUnknownKindRest5 continues
+// testClientFamiliesRejectAnUnknownKindRest4 with its remaining steps.
+func testClientFamiliesRejectAnUnknownKindRest5(t *testing.T) {
+	t.Helper()
 
-			return err
-		},
-		"cache": func(ctx context.Context) error {
-			_, err := cache.NewFromConfig(ctx, cache.Config{Kind: bogus}, cache.Deps{})
+	families := map[string]func(ctx context.Context) error{}
 
-			return err
-		},
-		"connector": func(ctx context.Context) error {
-			_, err := connector.NewSourceBuilder(connector.Config{}, connector.Deps{}).
-				Build(ctx, interfaces.SourceConfig{Kind: interfaces.ConnectorKind(bogus)})
-
-			return err
-		},
-		"cql": func(ctx context.Context) error {
-			_, err := cql.NewFromConfig(ctx, cql.Config{Kind: bogus}, cql.Deps{})
-
-			return err
-		},
-		"database": func(ctx context.Context) error {
-			_, err := database.NewFromConfig(
-				ctx,
-				database.Config{Kind: bogus},
-				database.Deps{},
-			)
-
-			return err
-		},
-		"lock": func(ctx context.Context) error {
-			_, err := lock.NewFromConfig(ctx, lock.Config{
-				Kind: bogus, TTL: time.Minute, RenewInterval: time.Second,
-			}, lock.Deps{})
-
-			return err
-		},
-		"messaging": func(ctx context.Context) error {
-			_, err := messaging.NewFromConfig(
-				ctx,
-				messaging.Config{Kind: bogus},
-				messaging.Deps{},
-			)
-			if err == nil {
-				_, err = messaging.NewConsumerFromConfig(
-					ctx, messaging.Config{Kind: bogus}, messaging.Deps{},
-				)
-			}
-
-			return err
-		},
-		"outbox": func(ctx context.Context) error {
-			_, err := outbox.NewFromConfig(ctx, outbox.Config{Kind: bogus}, outbox.Deps{})
-
-			return err
-		},
-		"outbox store": func(ctx context.Context) error {
-			_, err := outboxstore.NewFromConfig(
-				ctx, outboxstore.Config{Kind: bogus}, outboxstore.Deps{},
-			)
-
-			return err
-		},
-		"prometheus": func(ctx context.Context) error {
-			_, err := prometheus.NewFromConfig(
-				ctx, prometheus.Config{Kind: bogus}, prometheus.Deps{},
-			)
-
-			return err
-		},
-		"replaybuffer": func(ctx context.Context) error {
-			_, err := replaybuffer.NewFromConfig(
-				ctx,
-				replaybuffer.Config{Kind: bogus, MaxSize: 1, TTL: time.Minute},
-				replaybuffer.Deps{},
-			)
-
-			return err
-		},
-		"rpc": func(ctx context.Context) error {
-			_, err := rpc.NewFromConfig(ctx, rpc.Config{Kind: bogus}, rpc.Deps{})
-
-			return err
-		},
-		"secrets": func(ctx context.Context) error {
-			_, err := secrets.NewFromConfig(
-				ctx,
-				secrets.Config{Kind: bogus},
-				secrets.Deps{},
-			)
-
-			return err
-		},
-		"storage": func(ctx context.Context) error {
-			_, err := storage.NewFromConfig(
-				ctx,
-				storage.Config{Kind: bogus},
-				storage.Deps{},
-			)
-
-			return err
-		},
-		"transport": func(ctx context.Context) error {
-			_, err := server.NewFromConfig(
-				ctx, server.Config{Kind: bogus}, server.Deps{},
-			)
-
-			return err
-		},
-	}
+	maps.Copy(families, unknownKindBuilders1())
+	maps.Copy(families, unknownKindBuilders2())
+	maps.Copy(families, unknownKindBuilders3())
 
 	for family, build := range families {
 		t.Run(family, func(t *testing.T) {
@@ -252,3 +149,153 @@ type toyBackend struct{}
 
 // Ping succeeds.
 func (toyBackend) Ping(context.Context) error { return nil }
+
+// bogusClientKind is a kind no client family registers.
+const bogusClientKind client.Kind = "bogus"
+
+// unknownKindBuilders1 builds one group of client families with the bogus kind.
+func unknownKindBuilders1() map[string]func(ctx context.Context) error {
+	return map[string]func(ctx context.Context) error{
+		"analytics": func(ctx context.Context) error {
+			_, err := analytics.NewFromConfig(
+				ctx,
+				analytics.Config{Kind: bogusClientKind},
+				analytics.Deps{},
+			)
+
+			return err
+		},
+		"cache": func(ctx context.Context) error {
+			_, err := cache.NewFromConfig(
+				ctx,
+				cache.Config{Kind: bogusClientKind},
+				cache.Deps{},
+			)
+
+			return err
+		},
+		"connector": func(ctx context.Context) error {
+			_, err := connector.NewSourceBuilder(connector.Config{}, connector.Deps{}).
+				Build(ctx, interfaces.SourceConfig{Kind: interfaces.ConnectorKind(bogusClientKind)})
+
+			return err
+		},
+		"cql": func(ctx context.Context) error {
+			_, err := cql.NewFromConfig(
+				ctx,
+				cql.Config{Kind: bogusClientKind},
+				cql.Deps{},
+			)
+
+			return err
+		},
+		"database": func(ctx context.Context) error {
+			_, err := database.NewFromConfig(
+				ctx,
+				database.Config{Kind: bogusClientKind},
+				database.Deps{},
+			)
+
+			return err
+		},
+	}
+}
+
+// unknownKindBuilders2 builds one group of client families with the bogus kind.
+func unknownKindBuilders2() map[string]func(ctx context.Context) error {
+	return map[string]func(ctx context.Context) error{
+		"lock": func(ctx context.Context) error {
+			_, err := lock.NewFromConfig(ctx, lock.Config{
+				Kind: bogusClientKind, TTL: time.Minute, RenewInterval: time.Second,
+			}, lock.Deps{})
+
+			return err
+		},
+		"messaging": func(ctx context.Context) error {
+			_, err := messaging.NewFromConfig(
+				ctx,
+				messaging.Config{Kind: bogusClientKind},
+				messaging.Deps{},
+			)
+			if err == nil {
+				_, err = messaging.NewConsumerFromConfig(
+					ctx, messaging.Config{Kind: bogusClientKind}, messaging.Deps{},
+				)
+			}
+
+			return err
+		},
+		"outbox": func(ctx context.Context) error {
+			_, err := outbox.NewFromConfig(
+				ctx,
+				outbox.Config{Kind: bogusClientKind},
+				outbox.Deps{},
+			)
+
+			return err
+		},
+		"outbox store": func(ctx context.Context) error {
+			_, err := outboxstore.NewFromConfig(
+				ctx, outboxstore.Config{Kind: bogusClientKind}, outboxstore.Deps{},
+			)
+
+			return err
+		},
+		"prometheus": func(ctx context.Context) error {
+			_, err := prometheus.NewFromConfig(
+				ctx, prometheus.Config{Kind: bogusClientKind}, prometheus.Deps{},
+			)
+
+			return err
+		},
+	}
+}
+
+// unknownKindBuilders3 builds one group of client families with the bogus kind.
+func unknownKindBuilders3() map[string]func(ctx context.Context) error {
+	return map[string]func(ctx context.Context) error{
+		"replaybuffer": func(ctx context.Context) error {
+			_, err := replaybuffer.NewFromConfig(
+				ctx,
+				replaybuffer.Config{Kind: bogusClientKind, MaxSize: 1, TTL: time.Minute},
+				replaybuffer.Deps{},
+			)
+
+			return err
+		},
+		"rpc": func(ctx context.Context) error {
+			_, err := rpc.NewFromConfig(
+				ctx,
+				rpc.Config{Kind: bogusClientKind},
+				rpc.Deps{},
+			)
+
+			return err
+		},
+		"secrets": func(ctx context.Context) error {
+			_, err := secrets.NewFromConfig(
+				ctx,
+				secrets.Config{Kind: bogusClientKind},
+				secrets.Deps{},
+			)
+
+			return err
+		},
+		"storage": func(ctx context.Context) error {
+			_, err := storage.NewFromConfig(
+				ctx,
+				storage.Config{Kind: bogusClientKind},
+				storage.Deps{},
+			)
+
+			return err
+		},
+		"transport": func(ctx context.Context) error {
+			_, err := server.NewFromConfig(
+				ctx, server.Config{Kind: bogusClientKind}, server.Deps{},
+			)
+
+			return err
+		},
+	}
+}

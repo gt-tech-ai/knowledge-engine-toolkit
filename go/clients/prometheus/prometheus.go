@@ -16,6 +16,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
+// defaultConfigTimeout is the default Timeout of Config.
+const defaultConfigTimeout = 30 * time.Second
+
 const (
 	// KindStub answers every query with a zero (the default).
 	KindStub = client.KindStub
@@ -55,7 +58,7 @@ type Deps struct {
 func DefaultConfig() Config {
 	return Config{
 		HTTP: promhttp.Config{
-			Timeout:      30 * time.Second,
+			Timeout:      defaultConfigTimeout,
 			MaxBodyBytes: DefaultMaxBodyBytes,
 		},
 	}

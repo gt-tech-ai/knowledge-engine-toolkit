@@ -108,29 +108,35 @@ func Parse(out []byte) (types.Plan, error) {
 	var p types.Plan
 
 	for _, rc := range doc.ResourceChanges {
-		acts := rc.Change.Actions
-		create, del := slices.Contains(acts, "create"), slices.Contains(acts, "delete")
-		update := slices.Contains(acts, "update")
-
-		if !create && !del && !update {
+		if !countActions(&p, rc.Change.Actions) {
 			continue
 		}
 
 		p.Changes = append(p.Changes, types.ResourceChange{
-			Address: rc.Address, Type: rc.Type, Name: rc.Name, Actions: acts,
+			Address: rc.Address, Type: rc.Type, Name: rc.Name, Actions: rc.Change.Actions,
 		})
-		if create {
-			p.Add++
-		}
-
-		if del {
-			p.Destroy++
-		}
-
-		if update {
-			p.Change++
-		}
 	}
 
 	return p, nil
+}
+
+// countActions adds the change's actions to the plan totals, reporting whether it has
+// any.
+func countActions(p *types.Plan, acts []string) bool {
+	create, del := slices.Contains(acts, "create"), slices.Contains(acts, "delete")
+	update := slices.Contains(acts, "update")
+
+	if create {
+		p.Add++
+	}
+
+	if del {
+		p.Destroy++
+	}
+
+	if update {
+		p.Change++
+	}
+
+	return create || del || update
 }

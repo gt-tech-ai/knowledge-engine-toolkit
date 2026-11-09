@@ -90,12 +90,15 @@ func Filename(field, v string, maxBytes int) error {
 		)
 	}
 
-	if strings.ContainsFunc(v, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+	if strings.ContainsFunc(v, isControlRune) {
 		return apperr.InvalidInput(field + ": must not contain control characters")
 	}
 
 	return nil
 }
+
+// isControlRune reports an ASCII control character.
+func isControlRune(r rune) bool { return r < 0x20 || r == 0x7f }
 
 // HTTPSURL checks that v parses as an http/https URL WITH a host (reuses net/url) —
 // rejecting the javascript:, data:, file: URIs a bare URI check admits, and the

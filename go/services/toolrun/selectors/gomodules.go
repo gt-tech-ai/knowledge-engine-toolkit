@@ -31,6 +31,11 @@ func (goModules) Select(
 		return nil, err
 	}
 
+	return modulesWithFiles(mods, gofiles), nil
+}
+
+// modulesWithFiles keeps the modules that own at least one of the Go files.
+func modulesWithFiles(mods []string, gofiles []types.File) []string {
 	owns := map[string]bool{}
 
 	for _, f := range gofiles {
@@ -40,13 +45,14 @@ func (goModules) Select(
 	}
 
 	out := make([]string, 0, len(mods))
+
 	for _, m := range mods {
 		if owns[m] {
 			out = append(out, m)
 		}
 	}
 
-	return out, nil
+	return out
 }
 
 // owner returns the deepest module in mods that contains p.

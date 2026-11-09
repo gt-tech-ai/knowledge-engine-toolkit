@@ -793,6 +793,19 @@ func TestStorageClient_Presign_UsesPublicEndpoint(t *testing.T) {
 		"GET presign must not bake in the in-cluster host",
 	)
 
+	testStorageClientPresignUsesPublicEndpointRest(t, c)
+}
+
+// testStorageClientPresignUsesPublicEndpointRest continues
+// TestStorageClient_Presign_UsesPublicEndpoint with its remaining steps.
+func testStorageClientPresignUsesPublicEndpointRest(
+	t *testing.T,
+	c interfaces.StorageClient,
+) {
+	t.Helper()
+
+	var err error
+
 	putURL, err := c.PresignPutURL(
 		context.Background(),
 		"bucket",
@@ -936,6 +949,15 @@ func TestStorageClient_PresignPutURL_SignsContentTypeAndHost(t *testing.T) {
 func TestStorageClient_EnsureBucket(t *testing.T) {
 	t.Parallel()
 
+	testStorageClientEnsureBucketRest6(t)
+}
+
+// testStorageClientEnsureBucketRest6 continues testStorageClientEnsureBucketRest4 with
+// its
+// remaining steps.
+func testStorageClientEnsureBucketRest6(t *testing.T) {
+	t.Helper()
+
 	const bucket = "documents"
 
 	newClient := func(t *testing.T, api s3.S3API) interfaces.StorageClient {
@@ -966,9 +988,7 @@ func TestStorageClient_EnsureBucket(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		api := mocks.NewMockS3API(ctrl)
-		api.EXPECT().
-			HeadBucket(gomock.Any(), gomock.Any()).
-			Return(nil, &s3types.NotFound{})
+		expectBucketAbsent(api)
 		api.EXPECT().CreateBucket(gomock.Any(), gomock.Any()).
 			Return(&awss3.CreateBucketOutput{}, nil)
 		require.NoError(t, newClient(t, api).EnsureBucket(context.Background(), bucket))
@@ -979,9 +999,7 @@ func TestStorageClient_EnsureBucket(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		api := mocks.NewMockS3API(ctrl)
-		api.EXPECT().
-			HeadBucket(gomock.Any(), gomock.Any()).
-			Return(nil, &s3types.NotFound{})
+		expectBucketAbsent(api)
 		api.EXPECT().CreateBucket(gomock.Any(), gomock.Any()).
 			Return(nil, &s3types.BucketAlreadyOwnedByYou{})
 		require.NoError(t, newClient(t, api).EnsureBucket(context.Background(), bucket))
@@ -992,11 +1010,16 @@ func TestStorageClient_EnsureBucket(t *testing.T) {
 
 		ctrl := gomock.NewController(t)
 		api := mocks.NewMockS3API(ctrl)
-		api.EXPECT().
-			HeadBucket(gomock.Any(), gomock.Any()).
-			Return(nil, &s3types.NotFound{})
+		expectBucketAbsent(api)
 		api.EXPECT().CreateBucket(gomock.Any(), gomock.Any()).
 			Return(nil, &smithy.GenericAPIError{Code: "AccessDenied"})
 		require.Error(t, newClient(t, api).EnsureBucket(context.Background(), bucket))
 	})
+}
+
+// expectBucketAbsent answers HeadBucket with NotFound.
+func expectBucketAbsent(api *mocks.MockS3API) {
+	api.EXPECT().
+		HeadBucket(gomock.Any(), gomock.Any()).
+		Return(nil, &s3types.NotFound{})
 }

@@ -106,60 +106,72 @@ func (s *Server) startHandler(op interfaces.Operation) sdkmcp.ToolHandler {
 // addRunsTools adds the runs.* tools that observe and stop the background runs.
 func (s *Server) addRunsTools() {
 	s.addRunTool("runs.status", "Report a background run's state and finished steps",
-		func(id string) (*sdkmcp.CallToolResult, error) {
-			snap, err := s.table.Status(id)
-			if err != nil {
-				return replyErr(err)
-			}
-
-			return reply(RunStatus{
-				RunID: snap.ID, Op: snap.Op, State: snap.State,
-				Steps: summarize(flatten(snap.Steps), snap.LogPaths),
-			}, false)
-		})
+		s.runStatus)
 	s.addRunTool("runs.result",
 		"Return a finished background run's result: step summaries, failed-step tails "+
 			"and log paths",
-		func(id string) (*sdkmcp.CallToolResult, error) {
-			snap, err := s.table.Result(id)
-			if err != nil {
-				return replyErr(err)
-			}
-
-			res := buildResult(
-				flatten(snap.Steps), s.settings.TailLines, snap.LogPaths, snap.Err,
-			)
-
-			return reply(res, snap.Err != nil)
-		})
+		s.runResult)
 	s.addRunTool("runs.cancel", "Cancel a background run (a no-op once it has ended)",
-		func(id string) (*sdkmcp.CallToolResult, error) {
-			err := s.table.Cancel(id)
-			if err != nil {
-				return replyErr(err)
-			}
-
-			snap, err := s.table.Status(id)
-			if err != nil {
-				return replyErr(err)
-			}
-
-			return reply(entry(&snap), false)
-		})
+		s.runCancel)
 	s.srv.AddTool(&sdkmcp.Tool{
 		Name:        "runs.list",
 		Description: "List the background runs this server started, oldest first",
 		InputSchema: json.RawMessage(emptySchema),
-	}, func(context.Context, *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
-		list := RunList{Runs: []RunEntry{}}
-		snaps := s.table.List()
+	}, s.runList)
+}
 
-		for i := range snaps {
-			list.Runs = append(list.Runs, entry(&snaps[i]))
-		}
+// runStatus answers runs.status.
+func (s *Server) runStatus(id string) (*sdkmcp.CallToolResult, error) {
+	snap, err := s.table.Status(id)
+	if err != nil {
+		return replyErr(err)
+	}
 
-		return reply(list, false)
-	})
+	return reply(RunStatus{
+		RunID: snap.ID, Op: snap.Op, State: snap.State,
+		Steps: summarize(flatten(snap.Steps), snap.LogPaths),
+	}, false)
+}
+
+// runResult answers runs.result.
+func (s *Server) runResult(id string) (*sdkmcp.CallToolResult, error) {
+	snap, err := s.table.Result(id)
+	if err != nil {
+		return replyErr(err)
+	}
+
+	res := buildResult(flatten(snap.Steps), s.settings.TailLines, snap.LogPaths, snap.Err)
+
+	return reply(res, snap.Err != nil)
+}
+
+// runCancel answers runs.cancel with the run's state after the cancel.
+func (s *Server) runCancel(id string) (*sdkmcp.CallToolResult, error) {
+	err := s.table.Cancel(id)
+	if err != nil {
+		return replyErr(err)
+	}
+
+	snap, err := s.table.Status(id)
+	if err != nil {
+		return replyErr(err)
+	}
+
+	return reply(entry(&snap), false)
+}
+
+// runList answers runs.list.
+func (s *Server) runList(
+	context.Context, *sdkmcp.CallToolRequest,
+) (*sdkmcp.CallToolResult, error) {
+	list := RunList{Runs: []RunEntry{}}
+	snaps := s.table.List()
+
+	for i := range snaps {
+		list.Runs = append(list.Runs, entry(&snaps[i]))
+	}
+
+	return reply(list, false)
 }
 
 // addRunTool adds a runs.* tool taking {run_id}; a missing or undecodable run_id is an

@@ -86,6 +86,22 @@ func Detect(ctx context.Context, cb interfaces.Codebase) (EcosystemSet, error) {
 		return EcosystemSet{}, err
 	}
 
+	var goModule string
+
+	text, err := cb.Text(ctx, "go.mod")
+	if err == nil {
+		goModule = modulePath(string(text.Bytes))
+	}
+
+	return EcosystemSet{
+		Managers:    presentManagers(files),
+		IgnorePaths: []string{"**/node_modules/**", ".venv/**"},
+		GoModule:    goModule,
+	}, nil
+}
+
+// presentManagers lists, sorted, the managers the unpruned files show.
+func presentManagers(files []types.File) []Manager {
 	present, marks := map[Manager]bool{}, markers()
 
 	for _, f := range files {
@@ -105,18 +121,7 @@ func Detect(ctx context.Context, cb interfaces.Codebase) (EcosystemSet, error) {
 
 	slices.Sort(managers)
 
-	var goModule string
-
-	text, err := cb.Text(ctx, "go.mod")
-	if err == nil {
-		goModule = modulePath(string(text.Bytes))
-	}
-
-	return EcosystemSet{
-		Managers:    managers,
-		IgnorePaths: []string{"**/node_modules/**", ".venv/**"},
-		GoModule:    goModule,
-	}, nil
+	return managers
 }
 
 // pruned reports whether p lies under a directory Detect skips.
@@ -155,20 +160,29 @@ func classify(p string, marks map[string]Manager) (Manager, bool) {
 	yml := strings.HasSuffix(lower, ".yml") || strings.HasSuffix(lower, ".yaml")
 
 	switch {
-	case yml && (strings.HasPrefix(lower, "docker-compose") ||
-		strings.HasPrefix(lower, "compose")):
+	case yml && isComposeName(lower):
 		return ManagerDockerCompose, true
 	case strings.HasSuffix(name, ".tf"):
 		return ManagerTerraform, true
 	case name == "Chart.yaml":
 		return ManagerHelmv3, !strings.Contains("/"+p, "/charts/")
-	case yml && strings.HasPrefix(p, ".github/workflows/"),
-		strings.HasPrefix(p, ".github/actions/") &&
-			(name == "action.yml" || name == "action.yaml"):
+	case yml && strings.HasPrefix(p, ".github/workflows/"), isActionFile(p, name):
 		return ManagerGithubActions, true
 	}
 
 	return "", false
+}
+
+// isComposeName reports a lowercase file name a compose file carries.
+func isComposeName(lower string) bool {
+	return strings.HasPrefix(lower, "docker-compose") ||
+		strings.HasPrefix(lower, "compose")
+}
+
+// isActionFile reports a composite action's metadata file.
+func isActionFile(p, name string) bool {
+	return strings.HasPrefix(p, ".github/actions/") &&
+		(name == "action.yml" || name == "action.yaml")
 }
 
 // modulePath returns the module directive's path in a go.mod, or "".

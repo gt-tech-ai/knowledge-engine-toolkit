@@ -89,23 +89,11 @@ func native[I any](
 	return func(layer decorate.Layer) ([]I, bool) {
 		switch layer {
 		case decorate.LayerTracing:
-			return when(
-				d.Tracer != nil,
-				func() around { return tracing(d.Tracer) },
-				shape,
-			), true
+			return nativeTracing(d, shape), true
 		case decorate.LayerMetrics:
-			return when(
-				d.Metrics != nil,
-				func() around { return metrics(d.Metrics) },
-				shape,
-			), true
+			return nativeMetrics(d, shape), true
 		case decorate.LayerLogging:
-			return when(
-				d.Logger != nil,
-				func() around { return logging(d.Logger) },
-				shape,
-			), true
+			return nativeLogging(d, shape), true
 		case decorate.LayerRecovery,
 			decorate.LayerAuth,
 			decorate.LayerTimeout,
@@ -118,6 +106,21 @@ func native[I any](
 			return nil, false
 		}
 	}
+}
+
+// nativeTracing is the tracing interceptor, when a tracer is wired.
+func nativeTracing[I any](d decorate.Deps, shape func(around) I) []I {
+	return when(d.Tracer != nil, func() around { return tracing(d.Tracer) }, shape)
+}
+
+// nativeMetrics is the metrics interceptor, when a recorder is wired.
+func nativeMetrics[I any](d decorate.Deps, shape func(around) I) []I {
+	return when(d.Metrics != nil, func() around { return metrics(d.Metrics) }, shape)
+}
+
+// nativeLogging is the access-log interceptor, when a logger is wired.
+func nativeLogging[I any](d decorate.Deps, shape func(around) I) []I {
+	return when(d.Logger != nil, func() around { return logging(d.Logger) }, shape)
 }
 
 // when returns the interceptor shape makes from build's around, or none when its

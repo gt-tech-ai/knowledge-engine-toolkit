@@ -237,10 +237,7 @@ func (r *sdkResolver) resolve(
 		return Session{}, err
 	}
 
-	profile := ""
-	if forceProfile || !r.ambient() {
-		profile = t.Profile
-	}
+	profile := r.profileFor(forceProfile, t.Profile)
 
 	awscfg, err := r.deps.LoadAWS(ctx, profile, t.Region)
 	if err != nil {
@@ -278,6 +275,15 @@ func (r *sdkResolver) resolve(
 		AWS: awscfg, Creds: creds, Account: t.ExpectedAccount,
 		Region: t.Region, Profile: profile, Principal: aws.ToString(out.Arn),
 	}, nil
+}
+
+// profileFor is the profile to load: none when ambient credentials serve, unless forced.
+func (r *sdkResolver) profileFor(force bool, profile string) string {
+	if force || !r.ambient() {
+		return profile
+	}
+
+	return ""
 }
 
 // stsFor returns Deps.STS, else the decorated SDK STS client over awscfg.

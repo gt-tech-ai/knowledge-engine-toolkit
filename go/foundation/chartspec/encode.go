@@ -175,35 +175,57 @@ func (e *encoder) spec(s types.ChartSpec) (Hash, error) {
 		setChild(&n, c.name, h)
 	}
 
-	detail := make([]Hash, 0, len(s.Detail))
-	for _, ref := range s.Detail {
-		h, err := e.fieldRef(&ref)
-		if err != nil {
-			return Hash{}, err
-		}
-
-		detail = append(detail, h)
+	detail, err := e.detailList(s.Detail)
+	if err != nil {
+		return Hash{}, err
 	}
 
 	setList(&n, memberDetail, detail)
 
-	sorts := make([]Hash, 0, len(s.Sort))
-	for _, o := range s.Sort {
+	sorts, err := e.sortList(s.Sort)
+	if err != nil {
+		return Hash{}, err
+	}
+
+	setList(&n, memberSort, sorts)
+
+	return e.put(n)
+}
+
+// detailList encodes the detail field references.
+func (e *encoder) detailList(detail []types.FieldRef) ([]Hash, error) {
+	out := make([]Hash, 0, len(detail))
+
+	for i := range detail {
+		h, err := e.fieldRef(&detail[i])
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, h)
+	}
+
+	return out, nil
+}
+
+// sortList encodes the sort directives.
+func (e *encoder) sortList(sorts []types.OrderField) ([]Hash, error) {
+	out := make([]Hash, 0, len(sorts))
+
+	for _, o := range sorts {
 		sn := Node{Kind: kindSort}
 		setField(&sn, memberField, o.Field)
 		setField(&sn, memberDesc, o.Desc)
 
 		h, err := e.put(sn)
 		if err != nil {
-			return Hash{}, err
+			return nil, err
 		}
 
-		sorts = append(sorts, h)
+		out = append(out, h)
 	}
 
-	setList(&n, memberSort, sorts)
-
-	return e.put(n)
+	return out, nil
 }
 
 // fieldRef encodes a field reference; nil is absent.
@@ -313,15 +335,7 @@ func (e *encoder) filter(f *types.FilterNode) (Hash, error) {
 
 // filterNode encodes one filter node and its members.
 func (e *encoder) filterNode(f types.FilterNode) (Hash, error) {
-	set := 0
-
-	for _, armSet := range []bool{f.Clause != nil, f.And != nil, f.Or != nil} {
-		if armSet {
-			set++
-		}
-	}
-
-	if set > 1 {
+	if filterArmsSet(&f) > 1 {
 		return Hash{}, apperr.New(apperr.CodeInvalidInput,
 			"chartspec: a filter node must set at most one of clause, and, or")
 	}
@@ -343,6 +357,7 @@ func (e *encoder) filterNode(f types.FilterNode) (Hash, error) {
 	}
 
 	hs := make([]Hash, 0, len(members))
+
 	for _, m := range members {
 		h, err := e.filterNode(m)
 		if err != nil {
@@ -355,6 +370,19 @@ func (e *encoder) filterNode(f types.FilterNode) (Hash, error) {
 	setList(&n, memberMembers, hs)
 
 	return e.put(n)
+}
+
+// filterArmsSet counts which of a filter node's clause, and, or arms are set.
+func filterArmsSet(f *types.FilterNode) int {
+	set := 0
+
+	for _, armSet := range []bool{f.Clause != nil, f.And != nil, f.Or != nil} {
+		if armSet {
+			set++
+		}
+	}
+
+	return set
 }
 
 // filterClause encodes one comparison. An unknown operator is CodeInvalidInput, so a

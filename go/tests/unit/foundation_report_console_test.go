@@ -174,12 +174,36 @@ func TestConsole_Golden(t *testing.T) {
 	)
 	observe := func(c *report.Console) { replayConsoleRun(c.Observer()) }
 
-	cases := []struct { //nolint:govet // fieldalignment: rows read in field order
-		golden string
-		cfg    report.ConsoleConfig
-		level  report.Level
-		run    func(c *report.Console)
-	}{
+	cases := testConsoleGoldenTable(t, failure, observe)
+
+	for _, tc := range cases {
+		t.Run(tc.golden, func(t *testing.T) {
+			t.Parallel()
+
+			c, errOut := newTestConsole(t, tc.cfg, tc.level)
+			tc.run(c)
+			assert.Equal(t, consoleGolden(t, tc.golden), errOut.String())
+		})
+	}
+}
+
+// testConsoleGoldenRow is one row of testConsoleGoldenTable.
+type testConsoleGoldenRow struct { //nolint:govet // rows read in field order
+	golden string
+	cfg    report.ConsoleConfig
+	level  report.Level
+	run    func(c *report.Console)
+}
+
+// testConsoleGoldenTable builds the table TestConsole_Golden runs.
+func testConsoleGoldenTable(
+	t *testing.T,
+	failure error,
+	observe func(c *report.Console),
+) []testConsoleGoldenRow {
+	t.Helper()
+
+	return []testConsoleGoldenRow{
 		{"line_ci.txt", report.ConsoleConfig{CI: true}, report.LevelNormal, observe},
 		{"line_tty.txt", report.ConsoleConfig{}, report.LevelNormal, observe},
 		{
@@ -223,16 +247,6 @@ func TestConsole_Golden(t *testing.T) {
 				log.Error("install failed", "tool", "ruff")
 			},
 		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.golden, func(t *testing.T) {
-			t.Parallel()
-
-			c, errOut := newTestConsole(t, tc.cfg, tc.level)
-			tc.run(c)
-			assert.Equal(t, consoleGolden(t, tc.golden), errOut.String())
-		})
 	}
 }
 

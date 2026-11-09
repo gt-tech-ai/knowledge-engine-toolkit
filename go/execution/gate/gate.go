@@ -159,6 +159,24 @@ func (g *Gate) run(
 
 	g.obs.OnGateStart(g.name, phaseNames)
 
+	all, gateErr := g.runPhases(ctx, runner, root)
+
+	g.obs.OnGateComplete(g.name, all, time.Since(gateStart))
+
+	if gateErr != nil {
+		return apperr.Wrap(gateErr, apperr.CodeQualityFailed, "gate "+g.name+" failed")
+	}
+
+	return nil
+}
+
+// runPhases runs each phase, joining the failures and stopping at the first one when
+// the gate is configured to.
+func (g *Gate) runPhases(
+	ctx context.Context,
+	runner interfaces.CommandRunner,
+	root string,
+) (types.StepResults, error) {
 	var (
 		all     types.StepResults
 		gateErr error
@@ -169,24 +187,18 @@ func (g *Gate) run(
 
 		all = append(all, phaseResults...)
 
-		if err != nil || phaseResults.HasFailures() {
-			phaseErr := phaseFailureError(phase.Name, phaseResults)
+		if err == nil && !phaseResults.HasFailures() {
+			continue
+		}
 
-			gateErr = apperr.Join(gateErr, phaseErr)
+		gateErr = apperr.Join(gateErr, phaseFailureError(phase.Name, phaseResults))
 
-			if g.stopOnFailure {
-				break
-			}
+		if g.stopOnFailure {
+			break
 		}
 	}
 
-	g.obs.OnGateComplete(g.name, all, time.Since(gateStart))
-
-	if gateErr != nil {
-		return apperr.Wrap(gateErr, apperr.CodeQualityFailed, "gate "+g.name+" failed")
-	}
-
-	return nil
+	return all, gateErr
 }
 
 // runPhase executes all jobs in a phase and fires obs.OnPhaseComplete exactly
@@ -217,32 +229,39 @@ func runPhase(
 	if phase.parallel {
 		results, phaseErr = engine.RunJobGroup(ctx, runner, root, phase.Jobs, obs)
 	} else {
-		for _, job := range phase.Jobs {
-			sr, err := engine.RunJobGroup(
-				ctx,
-				runner,
-				root,
-				[]interfaces.AnyJob{job},
-				obs,
-			)
-
-			results = append(results, sr...)
-
-			if err != nil {
-				phaseErr = err
-
-				break
-			}
-
-			if sr.HasFailures() {
-				break
-			}
-		}
+		results, phaseErr = runSerial(ctx, runner, root, phase.Jobs, obs)
 	}
 
 	obs.OnPhaseComplete(phase.Name, results, time.Since(start))
 
 	return results, phaseErr
+}
+
+// runSerial runs the jobs one at a time, stopping at the first error or failing job.
+func runSerial(
+	ctx context.Context,
+	runner interfaces.CommandRunner,
+	root string,
+	jobs []interfaces.AnyJob,
+	obs interfaces.ExecutionObserver,
+) (types.StepResults, error) {
+	var results types.StepResults
+
+	for _, job := range jobs {
+		sr, err := engine.RunJobGroup(ctx, runner, root, []interfaces.AnyJob{job}, obs)
+
+		results = append(results, sr...)
+
+		if err != nil {
+			return results, err
+		}
+
+		if sr.HasFailures() {
+			break
+		}
+	}
+
+	return results, nil
 }
 
 // phaseFailureError constructs a CodeQualityFailed error aggregating all

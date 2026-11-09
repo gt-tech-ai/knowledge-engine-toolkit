@@ -148,26 +148,31 @@ func TestAlgebra_CrossDistributesOverConcat(t *testing.T) {
 func TestAlgebra_NestIsSubsetOfCross(t *testing.T) {
 	t.Parallel()
 
-	law := func(a, b randShelf) bool {
-		nest := chartspec.Normalize(op(types.AlgebraNest, a.E, b.E))
-		cross := tupleKeys(chartspec.Normalize(op(types.AlgebraCross, a.E, b.E)))
+	testAlgebraNestIsSubsetOfCrossRest5(t)
+}
 
-		for _, tuple := range nest {
-			if !tuple.Nested {
-				return false
-			}
+// nestIsSubsetOfCross is the law that every tuple of a nest of a and b is marked nested
+// and also appears in the cross of a and b.
+func nestIsSubsetOfCross(a, b randShelf) bool {
+	nest := chartspec.Normalize(op(types.AlgebraNest, a.E, b.E))
+	cross := tupleKeys(chartspec.Normalize(op(types.AlgebraCross, a.E, b.E)))
 
-			if _, found := slices.BinarySearch(
-				cross,
-				tupleKeys([]chartspec.Tuple{tuple})[0],
-			); !found {
-				return false
-			}
+	for _, tuple := range nest {
+		key := tupleKeys([]chartspec.Tuple{tuple})[0]
+		if _, found := slices.BinarySearch(cross, key); !tuple.Nested || !found {
+			return false
 		}
-
-		return true
 	}
-	require.NoError(t, quick.Check(law, &quick.Config{MaxCount: 300}))
+
+	return true
+}
+
+// testAlgebraNestIsSubsetOfCrossRest5 continues testAlgebraNestIsSubsetOfCrossRest4
+// with its remaining steps.
+func testAlgebraNestIsSubsetOfCrossRest5(t *testing.T) {
+	t.Helper()
+
+	require.NoError(t, quick.Check(nestIsSubsetOfCross, &quick.Config{MaxCount: 300}))
 
 	team, model := &types.AlgebraExpr{
 		Field: &types.FieldRef{Name: "team"},

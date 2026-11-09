@@ -542,51 +542,7 @@ func TestHTTPMetrics_NormalizesIDSegmentsToOneRouteSeries(t *testing.T) {
 func TestHTTPMetrics_RouteLabelNormalizationCases(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name      string
-		path      string
-		wantRoute string
-	}{
-		{"numeric id", "/api/items/42", "/api/items/{id}"},
-		{
-			"uuid",
-			"/api/documents/33333333-3333-3333-3333-333333333333",
-			"/api/documents/{id}",
-		},
-		{
-			// id segment followed by a sub-resource: exercises rewriting a
-			// non-id segment that comes after a collapsed one.
-			"id then subresource",
-			"/api/documents/44444444-4444-4444-4444-444444444444/status",
-			"/api/documents/{id}/status",
-		},
-		{"long hex token", "/api/blobs/deadbeefdeadbeef01", "/api/blobs/{id}"},
-		// A >=16-char all-hex segment with a digit (no dashes) is a hash/object key
-		// → {id}. Also exercises isUUID's separator-mismatch branch (s[8] != '-').
-		{"long hex hash", "/api/x/" + strings.Repeat("a1", 18), "/api/x/{id}"},
-		// >=16 chars, has a digit (passes the fast-path) but a non-hex byte → not an
-		// id; covers isHex's reject branch.
-		{
-			"long non-hex token",
-			"/api/blobs/9" + strings.Repeat("z", 16),
-			"/api/blobs/9" + strings.Repeat("z", 16),
-		},
-		// 36 chars with UUID separators and a leading digit but a non-hex byte → not
-		// a UUID (isUUID's hex-reject branch) and not long-hex → unchanged.
-		{
-			"dashed non-hex",
-			"/api/x/1ggggggg-gggg-gggg-gggg-gggggggggggg",
-			"/api/x/1ggggggg-gggg-gggg-gggg-gggggggggggg",
-		},
-		// A digit-free hex-looking token is deliberately NOT collapsed: the fast-path
-		// skips digit-free paths, an accepted tradeoff (real ids carry digits).
-		{
-			"digit-free hex passes through",
-			"/api/x/" + strings.Repeat("a", 36),
-			"/api/x/" + strings.Repeat("a", 36),
-		},
-		{"no id segment", "/api/v1/health", "/api/v1/health"},
-	}
+	cases := routeLabelCasesTable()
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -629,6 +585,60 @@ func TestHTTPMetrics_RouteLabelNormalizationCases(t *testing.T) {
 
 			assert.Equal(t, tc.wantRoute, gotRoute, "route label for %s", tc.path)
 		})
+	}
+}
+
+// routeLabelCasesRow is one row of
+// routeLabelCasesTable.
+type routeLabelCasesRow struct {
+	name      string
+	path      string
+	wantRoute string
+}
+
+// routeLabelCasesTable builds the table
+// TestHTTPMetrics_RouteLabelNormalizationCases runs.
+func routeLabelCasesTable() []routeLabelCasesRow {
+	return []routeLabelCasesRow{
+		{"numeric id", "/api/items/42", "/api/items/{id}"},
+		{
+			"uuid",
+			"/api/documents/33333333-3333-3333-3333-333333333333",
+			"/api/documents/{id}",
+		},
+		{
+			// id segment followed by a sub-resource: exercises rewriting a
+			// non-id segment that comes after a collapsed one.
+			"id then subresource",
+			"/api/documents/44444444-4444-4444-4444-444444444444/status",
+			"/api/documents/{id}/status",
+		},
+		{"long hex token", "/api/blobs/deadbeefdeadbeef01", "/api/blobs/{id}"},
+		// A >=16-char all-hex segment with a digit (no dashes) is a hash/object key
+		// → {id}. Also exercises isUUID's separator-mismatch branch (s[8] != '-').
+		{"long hex hash", "/api/x/" + strings.Repeat("a1", 18), "/api/x/{id}"},
+		// >=16 chars, has a digit (passes the fast-path) but a non-hex byte → not an
+		// id; covers isHex's reject branch.
+		{
+			"long non-hex token",
+			"/api/blobs/9" + strings.Repeat("z", 16),
+			"/api/blobs/9" + strings.Repeat("z", 16),
+		},
+		// 36 chars with UUID separators and a leading digit but a non-hex byte → not
+		// a UUID (isUUID's hex-reject branch) and not long-hex → unchanged.
+		{
+			"dashed non-hex",
+			"/api/x/1ggggggg-gggg-gggg-gggg-gggggggggggg",
+			"/api/x/1ggggggg-gggg-gggg-gggg-gggggggggggg",
+		},
+		// A digit-free hex-looking token is deliberately NOT collapsed: the fast-path
+		// skips digit-free paths, an accepted tradeoff (real ids carry digits).
+		{
+			"digit-free hex passes through",
+			"/api/x/" + strings.Repeat("a", 36),
+			"/api/x/" + strings.Repeat("a", 36),
+		},
+		{"no id segment", "/api/v1/health", "/api/v1/health"},
 	}
 }
 

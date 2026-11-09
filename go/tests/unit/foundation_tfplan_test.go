@@ -139,6 +139,16 @@ func TestFoundationTfplan(t *testing.T) {
 
 	assert.Equal(t, []string{"eks", "iam", "rds", "vpc"}, units)
 	assert.True(t, plans[3].HasChanges() && plans[3].Outputs, "vpc changes an output")
+
+	testFoundationTfplanRest(t, dir, plans)
+}
+
+// testFoundationTfplanRest continues TestFoundationTfplan with its remaining steps.
+func testFoundationTfplanRest(t *testing.T, dir string, plans []tfplan.UnitPlan) {
+	t.Helper()
+
+	var err error
+
 	assert.False(t, plans[2].HasChanges(), "rds plans nothing")
 	assert.Equal(t, []tfplan.Change{
 		{Address: "aws_eks_node_group.ng", Action: tfplan.ActionReplace},

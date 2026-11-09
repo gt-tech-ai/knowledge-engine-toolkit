@@ -17,6 +17,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/logger/logctx"
 )
 
+// logCallerSkip is the frames between runtime.Callers and the real log caller.
+const logCallerSkip = 3
+
 // Compile-time interface assertion.
 var _ interfaces.Logger = (*Logger)(nil)
 
@@ -151,7 +154,7 @@ func (l *Logger) log(level slog.Level, msg string, keysAndValues []any) {
 	var pcs [1]uintptr
 
 	// Skip [runtime.Callers, log, the exported Debug/Info/Warn/Error] -> real caller.
-	runtime.Callers(3, pcs[:])
+	runtime.Callers(logCallerSkip, pcs[:])
 
 	r := slog.NewRecord(time.Now(), level, msg, pcs[0])
 	r.Add(keysAndValues...)

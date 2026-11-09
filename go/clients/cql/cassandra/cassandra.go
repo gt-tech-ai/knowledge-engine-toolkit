@@ -93,12 +93,32 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 	}
 
 	cluster := gocql.NewCluster(cfg.Hosts...)
-	if cfg.Port > 0 {
-		cluster.Port = cfg.Port
-	}
+
+	applyTuning(cluster, cfg)
 
 	cluster.Keyspace = cfg.Keyspace
 	cluster.Consistency = consistency
+	cluster.PageSize = cfg.PageSize
+
+	if cfg.DisableHostDiscovery {
+		err := pinContactPoint(cluster, cfg.Hosts)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	cluster.PoolConfig.HostSelectionPolicy = hostPolicy(cfg)
+
+	applySecurity(cluster, cfg)
+
+	return cluster, nil
+}
+
+// applyTuning overrides the driver's defaults with each positive setting.
+func applyTuning(cluster *gocql.ClusterConfig, cfg *Config) {
+	if cfg.Port > 0 {
+		cluster.Port = cfg.Port
+	}
 
 	if cfg.Timeout > 0 {
 		cluster.Timeout = cfg.Timeout
@@ -108,14 +128,6 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 		cluster.ConnectTimeout = cfg.ConnectTimeout
 	}
 
-	cluster.PageSize = cfg.PageSize
-	if cfg.DisableHostDiscovery {
-		err := pinContactPoint(cluster, cfg.Hosts)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	if cfg.ReconnectInterval > 0 {
 		cluster.ReconnectInterval = cfg.ReconnectInterval
 	}
@@ -123,8 +135,10 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 	if cfg.NumConns > 0 {
 		cluster.NumConns = cfg.NumConns
 	}
+}
 
-	cluster.PoolConfig.HostSelectionPolicy = hostPolicy(cfg)
+// applySecurity sets the password authenticator and TLS when configured.
+func applySecurity(cluster *gocql.ClusterConfig, cfg *Config) {
 	if cfg.Username != "" {
 		cluster.Authenticator = gocql.PasswordAuthenticator{
 			Username: cfg.Username,
@@ -138,8 +152,6 @@ func Cluster(cfg *Config) (*gocql.ClusterConfig, error) {
 			EnableHostVerification: true,
 		}
 	}
-
-	return cluster, nil
 }
 
 // hostPolicy picks the host-selection policy: token-aware over DC-aware round robin

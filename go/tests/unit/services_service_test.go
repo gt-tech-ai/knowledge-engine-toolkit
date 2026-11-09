@@ -138,6 +138,28 @@ func TestServiceEntity_DelegatesValidatesAndAuthorizes(t *testing.T) {
 	}
 	denied := apperr.New(apperr.CodeForbidden, "denied")
 
+	testServiceEntityDelegatesValidatesAndAuthorizesRest3(
+		t,
+		ctrl,
+		repo,
+		invalid,
+		validate,
+		denied,
+	)
+}
+
+// testServiceEntityDelegatesValidatesAndAuthorizesRest3 continues
+// testServiceEntityDelegatesValidatesAndAuthorizesRest2 with its remaining steps.
+func testServiceEntityDelegatesValidatesAndAuthorizesRest3(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	repo *mocks.MockRepository[te, tp, string],
+	invalid *apperr.AppError,
+	validate func(e *te) error,
+	denied *apperr.AppError,
+) {
+	t.Helper()
+
 	var actions []string
 
 	svc := fixtures.Must(
@@ -161,6 +183,32 @@ func TestServiceEntity_DelegatesValidatesAndAuthorizes(t *testing.T) {
 	repo.EXPECT().Create(gomock.Any(), w).Return(w, nil)
 	repo.EXPECT().Update(gomock.Any(), "w1", w).Return(w, nil)
 
+	testServiceEntityDelegatesValidatesAndAuthorizesRest4(
+		t,
+		ctrl,
+		invalid,
+		validate,
+		denied,
+		&actions,
+		svc,
+		w,
+	)
+}
+
+// testServiceEntityDelegatesValidatesAndAuthorizesRest4 continues
+// testServiceEntityDelegatesValidatesAndAuthorizesRest3 with its remaining steps.
+func testServiceEntityDelegatesValidatesAndAuthorizesRest4(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	invalid *apperr.AppError,
+	validate func(e *te) error,
+	denied *apperr.AppError,
+	actions *[]string,
+	svc service.Entity[te, tp, string, *mocks.MockRepository[te, tp, string]],
+	w *te,
+) {
+	t.Helper()
+
 	got, err := svc.Get(t.Context(), "w1")
 	require.NoError(t, err)
 	assert.Same(t, w, got)
@@ -181,7 +229,7 @@ func TestServiceEntity_DelegatesValidatesAndAuthorizes(t *testing.T) {
 	assert.Equal(t, []string{
 		"widgets.get", "widgets.list", "widgets.create", "widgets.update",
 		"widgets.create", "widgets.delete",
-	}, actions)
+	}, (*actions))
 
 	keyed := mocks.NewMockCRUDNoListRepository[te, string](ctrl)
 	keyed.EXPECT().Delete(gomock.Any(), "w1").Return(nil)

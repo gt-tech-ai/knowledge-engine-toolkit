@@ -8,6 +8,12 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// privateDirMode is the mode of a directory only its owner enters.
+const privateDirMode = 0o700
+
+// privateFileMode is the mode of a file only its owner reads.
+const privateFileMode = 0o600
+
 // Profile is one SSO profile a sign-in flow writes to the shared AWS config: an
 // `[sso-session]` stanza and the `[profile]` stanza that uses it.
 type Profile struct {
@@ -214,7 +220,7 @@ func renderSections(sections []iniSection) string {
 func writeFileAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 
-	err := os.MkdirAll(dir, 0o700)
+	err := os.MkdirAll(dir, privateDirMode)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create dir "+dir)
 	}
@@ -228,7 +234,7 @@ func writeFileAtomic(path string, data []byte) error {
 
 	defer func() { _ = os.Remove(name) }()
 
-	err = tmp.Chmod(0o600)
+	err = tmp.Chmod(privateFileMode)
 	if err != nil {
 		_ = tmp.Close()
 

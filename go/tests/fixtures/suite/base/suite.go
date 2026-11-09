@@ -11,6 +11,9 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// timeTolerance is how far two timestamps may differ and still count as equal.
+const timeTolerance = 10 * time.Millisecond
+
 // TestSuite provides common test infrastructure for all suites.
 type TestSuite struct {
 	// Suite is the embedded testify suite providing assertions and lifecycle hooks.
@@ -49,7 +52,7 @@ func (s *TestSuite) IsIntegration() bool {
 func (s *TestSuite) TimesEqual(expected, actual time.Time) {
 	s.T().Helper()
 
-	s.WithinDuration(expected, actual, 10*time.Millisecond)
+	s.WithinDuration(expected, actual, timeTolerance)
 }
 
 // TimesNotEqual asserts that the provided times are not equal.

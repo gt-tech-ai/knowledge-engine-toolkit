@@ -34,35 +34,7 @@ func (s *Source) List(ctx context.Context) ([]types.File, error) {
 	var out []types.File
 
 	err := filepath.WalkDir(s.root, func(p string, d iofs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		err = ctx.Err()
-		if err != nil {
-			return apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled), "walk")
-		}
-
-		if d.IsDir() {
-			if d.Name() == ".git" {
-				return filepath.SkipDir
-			}
-
-			return nil
-		}
-
-		if !d.Type().IsRegular() {
-			return nil
-		}
-
-		rel, err := filepath.Rel(s.root, p)
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "relative path of "+p)
-		}
-
-		out = append(out, types.File{Path: filepath.ToSlash(rel)})
-
-		return nil
+		return s.visit(ctx, &out, p, d, err)
 	})
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeInternal),
@@ -88,6 +60,37 @@ func (s *Source) Read(_ context.Context, p string) ([]byte, error) {
 // Changed returns an empty set: the source has no version control.
 func (s *Source) Changed(context.Context, string) (map[string]bool, error) {
 	return map[string]bool{}, nil
+}
+
+// visit records one regular file, skipping the .git directory and stopping on cancel.
+func (s *Source) visit(
+	ctx context.Context, out *[]types.File, p string, d iofs.DirEntry, err error,
+) error {
+	if err != nil {
+		return err
+	}
+
+	err = ctx.Err()
+	if err != nil {
+		return apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled), "walk")
+	}
+
+	if d.IsDir() && d.Name() == ".git" {
+		return filepath.SkipDir
+	}
+
+	if !d.Type().IsRegular() {
+		return nil
+	}
+
+	rel, err := filepath.Rel(s.root, p)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "relative path of "+p)
+	}
+
+	*out = append(*out, types.File{Path: filepath.ToSlash(rel)})
+
+	return nil
 }
 
 // ReadFile reads the repository-relative path p under root through an os.Root; a

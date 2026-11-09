@@ -11,6 +11,9 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// defaultConfigRowThreshold is the default RowThreshold of Config.
+const defaultConfigRowThreshold = 100000
+
 // Config groups the list-query platform's tunable knobs under the "listquery" key.
 type Config struct {
 	// Facet tunes the value-suggestion facet (listquery.facet.*).
@@ -36,7 +39,7 @@ type FacetConfig struct {
 func DefaultConfig() Config {
 	return Config{
 		Facet: FacetConfig{
-			RowThreshold:      100000,
+			RowThreshold:      defaultConfigRowThreshold,
 			ReconcileInterval: time.Hour,
 		},
 	}

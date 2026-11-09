@@ -38,18 +38,21 @@ func GoWorkModules(fsys fs.FS, filter func(relPath string) bool) ([]string, erro
 
 	for _, use := range work.Use {
 		mod := strings.TrimPrefix(filepath.ToSlash(use.Path), "./")
-		if mod == "" || mod == "." {
-			continue
+		if wantedModule(mod, filter) {
+			modules = append(modules, mod)
 		}
-
-		if filter != nil && !filter(mod) {
-			continue
-		}
-
-		modules = append(modules, mod)
 	}
 
 	return modules, nil
+}
+
+// wantedModule excludes the workspace root and anything filter rejects.
+func wantedModule(mod string, filter func(string) bool) bool {
+	if mod == "" || mod == "." {
+		return false
+	}
+
+	return filter == nil || filter(mod)
 }
 
 // parseWork reads and parses the go.work of the repository fsys: a missing one is
@@ -132,6 +135,11 @@ func scopeDirectives(scoped, work *modfile.WorkFile, root string) error {
 		}
 	}
 
+	return scopeReplaces(scoped, work, root)
+}
+
+// scopeReplaces copies each replace, making a relative directory target absolute.
+func scopeReplaces(scoped, work *modfile.WorkFile, root string) error {
 	for _, r := range work.Replace {
 		target := r.New.Path
 		if modfile.IsDirectoryPath(target) && !filepath.IsAbs(target) {

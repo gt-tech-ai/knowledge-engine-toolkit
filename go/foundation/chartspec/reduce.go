@@ -9,6 +9,15 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// medianQuantile is the quantile of the median.
+const medianQuantile = 0.5
+
+// p95Quantile is the quantile of p95.
+const p95Quantile = 0.95
+
+// p99Quantile is the quantile of p99.
+const p99Quantile = 0.99
+
 // SketchRelativeAccuracy is the relative accuracy of every quantile sketch: a
 // p50/p95/p99 is within 1% of the exact value at its rank.
 const SketchRelativeAccuracy = 0.01
@@ -148,11 +157,11 @@ func finalizeValue(p Partial, agg types.Aggregate) float64 {
 	case types.AggMax:
 		return p.Max
 	case types.AggP50:
-		return quantile(p.Sketch, 0.5)
+		return quantile(p.Sketch, medianQuantile)
 	case types.AggP95:
-		return quantile(p.Sketch, 0.95)
+		return quantile(p.Sketch, p95Quantile)
 	case types.AggP99:
-		return quantile(p.Sketch, 0.99)
+		return quantile(p.Sketch, p99Quantile)
 	case types.AggNone, types.AggSum, types.AggCount, types.AggCountDistinct:
 		return math.NaN()
 	default:

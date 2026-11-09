@@ -131,12 +131,30 @@ func TestKeysetColumns(t *testing.T) {
 
 	identity := func(f string) string { return f }
 
-	cases := []struct {
-		name       string
-		ofs        []types.OrderField
-		tiebreaker string
-		want       []listquery.KeysetColumn
-	}{
+	cases := testKeysetColumnsTable()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(
+				t,
+				tc.want,
+				listquery.KeysetColumns(identity, nil, nil, nil, tc.ofs, tc.tiebreaker),
+			)
+		})
+	}
+}
+
+// testKeysetColumnsRow is one row of testKeysetColumnsTable.
+type testKeysetColumnsRow struct {
+	name       string
+	ofs        []types.OrderField
+	tiebreaker string
+	want       []listquery.KeysetColumn
+}
+
+// testKeysetColumnsTable builds the table TestKeysetColumns runs.
+func testKeysetColumnsTable() []testKeysetColumnsRow {
+	return []testKeysetColumnsRow{
 		{
 			"empty sort → created_at DESC, id DESC",
 			nil,
@@ -183,16 +201,6 @@ func TestKeysetColumns(t *testing.T) {
 				{Column: "created_at", Desc: true},
 			},
 		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(
-				t,
-				tc.want,
-				listquery.KeysetColumns(identity, nil, nil, nil, tc.ofs, tc.tiebreaker),
-			)
-		})
 	}
 }
 

@@ -18,6 +18,9 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// ruleEnvBaseOptions sizes the CEL options every rule environment starts with.
+const ruleEnvBaseOptions = 8
+
 // Rule is one constraint over a dataset, as data: a CEL expression over its sections.
 type Rule struct {
 	// Name identifies the rule in a failure.
@@ -54,10 +57,39 @@ func (d *Dataset) Check(rules []Rule) error {
 		return err
 	}
 
-	var failures []string
+	progs, need, failures := compileRules(env, rules)
 
+	if need[dataVar] {
+		for _, k := range keys {
+			need[k] = true
+		}
+	}
+
+	act, err := d.activation(keys, need)
+	if err != nil {
+		return err
+	}
+
+	failures = append(failures, evalRules(rules, progs, act)...)
+
+	if len(failures) == 0 {
+		return nil
+	}
+
+	return apperr.New(apperr.CodeInvalidInput,
+		"data rules failed:\n  - "+strings.Join(failures, "\n  - "))
+}
+
+// compileRules compiles each rule, returning a nil program and a failure for one that
+// does not, along with the variables the compiled rules use.
+func compileRules(
+	env *cel.Env,
+	rules []Rule,
+) (programs []cel.Program, needed map[string]bool, problems []string) {
 	progs := make([]cel.Program, len(rules))
 	need := map[string]bool{}
+
+	var failures []string
 
 	for i := range rules {
 		prg, uses, err := compileRule(env, rules[i].Expr)
@@ -72,16 +104,12 @@ func (d *Dataset) Check(rules []Rule) error {
 		maps.Copy(need, uses)
 	}
 
-	if need[dataVar] {
-		for _, k := range keys {
-			need[k] = true
-		}
-	}
+	return progs, need, failures
+}
 
-	act, err := d.activation(keys, need)
-	if err != nil {
-		return err
-	}
+// evalRules runs each compiled rule, collecting its failure messages.
+func evalRules(rules []Rule, progs []cel.Program, act map[string]any) []string {
+	var failures []string
 
 	for i := range rules {
 		if progs[i] == nil {
@@ -93,12 +121,7 @@ func (d *Dataset) Check(rules []Rule) error {
 		}
 	}
 
-	if len(failures) == 0 {
-		return nil
-	}
-
-	return apperr.New(apperr.CodeInvalidInput,
-		"data rules failed:\n  - "+strings.Join(failures, "\n  - "))
+	return failures
 }
 
 // Validate checks every section of d, as one object keyed by section, against the JSON
@@ -225,7 +248,7 @@ func ruleVars(keys []string) []string {
 // with each identifier-shaped key and data declared.
 func ruleEnv(keys []string) (*cel.Env, error) {
 	vars := ruleVars(keys)
-	opts := make([]cel.EnvOption, 0, 8+len(vars))
+	opts := make([]cel.EnvOption, 0, ruleEnvBaseOptions+len(vars))
 
 	opts = append(opts, ext.Strings(), ext.Lists(), ext.Sets(), cel.OptionalTypes(),
 		ext.Bindings(), ext.Math(), ext.Regex(), cel.Variable(dataVar, cel.DynType))

@@ -122,6 +122,13 @@ func TestCached_Get(t *testing.T) {
 		assert.NotSame(t, backend, got, "the caller gets an independent copy")
 	})
 
+	testCachedGetRest(t, ctx, stored)
+}
+
+// testCachedGetRest continues TestCached_Get with its remaining steps.
+func testCachedGetRest(t *testing.T, ctx context.Context, stored te) {
+	t.Helper()
+
 	for _, tc := range []struct {
 		name string
 		data []byte
@@ -229,6 +236,13 @@ func TestCached_Writes(t *testing.T) {
 		_, err := cachingRepo(store, cache, true).Create(ctx, &te{ID: "id"})
 		assert.ErrorIs(t, err, sentinel)
 	})
+
+	testCachedWritesRest(t, ctx)
+}
+
+// testCachedWritesRest continues TestCached_Writes with its remaining steps.
+func testCachedWritesRest(t *testing.T, ctx context.Context) {
+	t.Helper()
 
 	t.Run("update evicts on success, not on failure", func(t *testing.T) {
 		t.Parallel()
@@ -383,6 +397,14 @@ func TestCached_InTransaction(t *testing.T) {
 		assert.True(t, ok)
 		interfaces.RunAfterCommit(ctx)
 	})
+
+	testCachedInTransactionRest(t, txCtx, row)
+}
+
+// testCachedInTransactionRest continues TestCached_InTransaction with its remaining
+// steps.
+func testCachedInTransactionRest(t *testing.T, txCtx func() context.Context, row *te) {
+	t.Helper()
 
 	t.Run("create primes only after commit", func(t *testing.T) {
 		t.Parallel()

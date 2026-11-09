@@ -72,6 +72,14 @@ func cachedGuardDeps(
 func TestServicesGuard_GoCachedOnInputs(t *testing.T) {
 	t.Parallel()
 
+	testServicesGuardGoCachedOnInputsRest5(t)
+}
+
+// testServicesGuardGoCachedOnInputsRest5 continues testServicesGuardGoCachedOnInputsRest4
+// with its remaining steps.
+func testServicesGuardGoCachedOnInputsRest5(t *testing.T) {
+	t.Helper()
+
 	var runs atomic.Int32
 
 	deps := cachedGuardDeps(t, &runs, "")
@@ -83,6 +91,21 @@ func TestServicesGuard_GoCachedOnInputs(t *testing.T) {
 	require.NoError(t, err)
 
 	g := gs[0]
+
+	testServicesGuardGoCachedOnInputsRest3(t, &runs, deps, &row, g)
+}
+
+// testServicesGuardGoCachedOnInputsRest3 continues testServicesGuardGoCachedOnInputsRest2
+// with its remaining steps.
+func testServicesGuardGoCachedOnInputsRest3(
+	t *testing.T,
+	runs *atomic.Int32,
+	deps guard.Deps,
+	row *types.GuardRow,
+	g interfaces.Guard,
+) {
+	t.Helper()
+
 	files := guardFiles()
 
 	v := g.Run(t.Context(), memoryCodebase(t, files))
@@ -97,14 +120,32 @@ func TestServicesGuard_GoCachedOnInputs(t *testing.T) {
 	files["infra/main.tf"] = "resource \"y\" {}\n"
 	v = g.Run(t.Context(), memoryCodebase(t, files))
 	assert.Equal(t, types.StatusPass, v.Status)
-	assert.Empty(t, v.Detail, "one expansion ran, so the row is not reported cached")
+	assert.Empty(t, v.Detail, "one expansion ran, so the *row is not reported cached")
 	assert.Equal(t, int32(3), runs.Load(), "only the edited module runs")
 
 	// A failure is not cached: the failing module runs again, the passing one does not.
 	var failing atomic.Int32
 
-	fdeps := cachedGuardDeps(t, &failing, "infra")
-	fg, err := guard.NewFromConfig([]types.GuardRow{row}, fdeps)
+	testServicesGuardGoCachedOnInputsRest4(t, runs, deps, row, files, v, &failing)
+}
+
+// testServicesGuardGoCachedOnInputsRest4 continues testServicesGuardGoCachedOnInputsRest3
+// with its remaining steps.
+func testServicesGuardGoCachedOnInputsRest4(
+	t *testing.T,
+	runs *atomic.Int32,
+	deps guard.Deps,
+	row *types.GuardRow,
+	files map[string]string,
+	v types.Verdict,
+	failing *atomic.Int32,
+) {
+	t.Helper()
+
+	var err error
+
+	fdeps := cachedGuardDeps(t, failing, "infra")
+	fg, err := guard.NewFromConfig([]types.GuardRow{*row}, fdeps)
 	require.NoError(t, err)
 
 	for range 2 {
@@ -115,7 +156,7 @@ func TestServicesGuard_GoCachedOnInputs(t *testing.T) {
 	assert.Equal(t, int32(3), failing.Load())
 
 	// No inputs: never cached.
-	plain := row
+	plain := *row
 
 	plain.Inputs = types.FileSelector{}
 
@@ -131,7 +172,7 @@ func TestServicesGuard_GoCachedOnInputs(t *testing.T) {
 	// Another tool version misses.
 	deps.Versions = func(string) string { return "2.0" }
 
-	vg, err := guard.NewFromConfig([]types.GuardRow{row}, deps)
+	vg, err := guard.NewFromConfig([]types.GuardRow{*row}, deps)
 	require.NoError(t, err)
 
 	before = runs.Load()

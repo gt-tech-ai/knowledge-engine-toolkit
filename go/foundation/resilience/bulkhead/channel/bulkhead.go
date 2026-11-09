@@ -8,6 +8,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
+// defaultConfigMaxConcurrent is the default MaxConcurrent of Config.
+const defaultConfigMaxConcurrent = 10
+
 // ErrBulkheadFull is returned when the bulkhead semaphore is full.
 var ErrBulkheadFull = apperr.New(
 	apperr.CodeUnavailable,
@@ -26,7 +29,7 @@ type Config struct {
 // DefaultConfig returns sensible defaults for channel bulkhead.
 func DefaultConfig() Config {
 	return Config{
-		MaxConcurrent: 10,
+		MaxConcurrent: defaultConfigMaxConcurrent,
 	}
 }
 

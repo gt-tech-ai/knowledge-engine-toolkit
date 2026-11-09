@@ -149,32 +149,59 @@ func resolveErrorCode(err error) connect.Code {
 		return connectErr.Code()
 	}
 
-	switch apperr.Code(err) {
-	case apperr.CodeUnknown, apperr.CodeUnavailable, apperr.CodeUpstream:
-		return connect.CodeUnavailable
-	case apperr.CodeNotFound:
-		return connect.CodeNotFound
-	case apperr.CodeInvalidInput:
-		return connect.CodeInvalidArgument
-	case apperr.CodeConflict:
-		return connect.CodeAlreadyExists
-	case apperr.CodeUnauthorized:
-		return connect.CodeUnauthenticated
-	case apperr.CodeForbidden:
-		return connect.CodePermissionDenied
-	case apperr.CodeTimeout:
-		return connect.CodeDeadlineExceeded
-	case apperr.CodeCanceled:
-		return connect.CodeCanceled
-	case apperr.CodeResourceExhausted:
-		return connect.CodeResourceExhausted
-	case apperr.CodeInternal,
-		apperr.CodeIngestion,
-		apperr.CodeQualityFailed:
-		return connect.CodeInternal
-	default:
-		return connect.CodeInternal
+	code := apperr.Code(err)
+	if mapped, ok := callerFaultCode(code); ok {
+		return mapped
 	}
+
+	if code == apperr.CodeUnknown || code == apperr.CodeUnavailable ||
+		code == apperr.CodeUpstream {
+		return connect.CodeUnavailable
+	}
+
+	return serverFaultCode(code)
+}
+
+// serverFaultCode maps the remaining application codes.
+func serverFaultCode(code apperr.ErrorCode) connect.Code {
+	if code == apperr.CodeTimeout {
+		return connect.CodeDeadlineExceeded
+	}
+
+	if code == apperr.CodeCanceled {
+		return connect.CodeCanceled
+	}
+
+	if code == apperr.CodeResourceExhausted {
+		return connect.CodeResourceExhausted
+	}
+
+	return connect.CodeInternal
+}
+
+// callerFaultCode maps the application codes that blame the caller.
+func callerFaultCode(code apperr.ErrorCode) (connect.Code, bool) {
+	if code == apperr.CodeNotFound {
+		return connect.CodeNotFound, true
+	}
+
+	if code == apperr.CodeInvalidInput {
+		return connect.CodeInvalidArgument, true
+	}
+
+	if code == apperr.CodeConflict {
+		return connect.CodeAlreadyExists, true
+	}
+
+	if code == apperr.CodeUnauthorized {
+		return connect.CodeUnauthenticated, true
+	}
+
+	if code == apperr.CodeForbidden {
+		return connect.CodePermissionDenied, true
+	}
+
+	return 0, false
 }
 
 // isNilPrincipal reports whether p is a nil value of a nillable kind (pointer,

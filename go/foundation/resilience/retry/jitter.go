@@ -6,6 +6,9 @@ import (
 	"time"
 )
 
+// jitterDivisor is halves a delay into its fixed and jittered parts.
+const jitterDivisor = 2
+
 // EqualJitter applies equal jitter to a backoff duration: half of d plus a uniform
 // random share of the other half, so the effective wait falls in [d/2, d]. It
 // desynchronizes retries across callers recovering from the same outage (the AWS
@@ -17,7 +20,7 @@ func EqualJitter(d time.Duration) time.Duration {
 		return d
 	}
 
-	half := d / 2
+	half := d / jitterDivisor
 
 	return half + time.Duration(upTo(int64(half)))
 }

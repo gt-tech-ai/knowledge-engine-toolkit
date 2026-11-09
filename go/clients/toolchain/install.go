@@ -15,6 +15,24 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// wingetNoUpdateAvailable is the winget exit code for an installed package with no
+// update.
+const wingetNoUpdateAvailable = 0x8A15002B
+
+// wingetPackageInstalled is the winget exit code for a package that is already installed.
+const wingetPackageInstalled = 0x8A150061
+
+// wingetOtherVersionInstalled is the winget exit code for another version already
+// installed.
+const wingetOtherVersionInstalled = 0x8A15010D
+
+// wingetVersionNotNewer is the winget exit code for an upgrade no newer than what is
+// installed.
+const wingetVersionNotNewer = 0x8A15004F
+
+// lookupNamesPerTool sizes the lookup that indexes each tool under two names.
+const lookupNamesPerTool = 2
+
 // PlatformKey returns the platform key used to select install methods:
 // "darwin", "windows", or "linux-apt"/"linux-dnf"/"linux-pacman".
 func PlatformKey() string {
@@ -187,19 +205,7 @@ func (i *Installer) Provision(
 	cat *Catalog,
 	autoYes, checkOnly bool,
 ) error {
-	_ = os.Setenv("GOTOOLCHAIN", "local")
-
-	i.log.Debug("platform detected", "key", i.platform)
-	i.ensureGoBinInPath()
-
-	if i.platform == osWindows {
-		i.ensureMsys2InPath()
-	}
-
-	if i.platform == osDarwin && !i.runner.Exists("brew") {
-		i.log.Warn("Homebrew not found; some tools may need manual installation")
-		i.log.Info("Install Homebrew: https://brew.sh")
-	}
+	i.preparePlatform()
 
 	det := NewDetector(i.runner, i.log)
 	i.log.Info("Prerequisites:")
@@ -276,40 +282,27 @@ func (i *Installer) InstallSet(
 		return err
 	}
 
-	det := NewDetector(i.runner, i.log)
-
-	var toInstall []types.ToolDef
-
-	for j := range targets {
-		// --force rebuilds even an OK tool (the post-Go-bump case: right version,
-		// stale build-Go); otherwise skip anything already installed + current.
-		if opts.Force ||
-			det.Check(ctx, root, &targets[j]).Status != types.StatusToolOK {
-			toInstall = append(toInstall, targets[j])
-		}
-	}
-
+	toInstall := i.pendingTargets(ctx, root, targets, opts.Force)
 	if len(toInstall) == 0 {
 		i.log.Info("All requested tools are already installed")
 
 		return nil
 	}
 
-	names := toolNames(toInstall)
+	names := strings.Join(toolNames(toInstall), ", ")
 	if opts.DryRun {
-		i.log.Info("Would install "+strconv.Itoa(len(toInstall))+" tool(s)",
-			"tools", strings.Join(names, ", "))
+		i.log.Info(
+			"Would install "+strconv.Itoa(len(toInstall))+" tool(s)",
+			"tools",
+			names,
+		)
 
 		return nil
 	}
 
 	yes, err := i.confirm(
 		ctx,
-		fmt.Sprintf(
-			"Install %d tool(s) (%s)?",
-			len(toInstall),
-			strings.Join(names, ", "),
-		),
+		fmt.Sprintf("Install %d tool(s) (%s)?", len(toInstall), names),
 		opts.AutoYes,
 	)
 	if err != nil {
@@ -322,14 +315,56 @@ func (i *Installer) InstallSet(
 		return nil
 	}
 
+	return i.installAll(ctx, root, toInstall)
+}
+
+// preparePlatform pins the Go toolchain and puts the platform's tool dirs on PATH.
+func (i *Installer) preparePlatform() {
+	_ = os.Setenv("GOTOOLCHAIN", "local")
+
+	i.log.Debug("platform detected", "key", i.platform)
+	i.ensureGoBinInPath()
+
+	if i.platform == osWindows {
+		i.ensureMsys2InPath()
+	}
+
+	if i.platform == osDarwin && !i.runner.Exists("brew") {
+		i.log.Warn("Homebrew not found; some tools may need manual installation")
+		i.log.Info("Install Homebrew: https://brew.sh")
+	}
+}
+
+// pendingTargets keeps the targets to install: force rebuilds even an OK tool (the
+// post-Go-bump case: right version, stale build-Go); otherwise a current one is skipped.
+func (i *Installer) pendingTargets(
+	ctx context.Context, root string, targets []types.ToolDef, force bool,
+) []types.ToolDef {
+	det := NewDetector(i.runner, i.log)
+
+	var pending []types.ToolDef
+
+	for j := range targets {
+		if force || det.Check(ctx, root, &targets[j]).Status != types.StatusToolOK {
+			pending = append(pending, targets[j])
+		}
+	}
+
+	return pending
+}
+
+// installAll installs every tool, reporting all failures together.
+func (i *Installer) installAll(
+	ctx context.Context, root string, tools []types.ToolDef,
+) error {
 	var failed []string
 
-	for j := range toInstall {
-		err := i.Install(ctx, root, &toInstall[j])
+	for j := range tools {
+		err := i.Install(ctx, root, &tools[j])
 		if err != nil {
-			i.log.Warn(fmt.Sprintf("Failed to install %s: %v", toInstall[j].Name, err))
+			i.log.Warn(fmt.Sprintf("Failed to install %s: %v", tools[j].Name, err))
 
-			failed = append(failed, toInstall[j].Name)
+			failed = append(failed, tools[j].Name)
 		}
 	}
 
@@ -493,7 +528,7 @@ func selectTargets(tools []types.ToolDef, names []string) ([]types.ToolDef, erro
 		return tools, nil
 	}
 
-	byName := make(map[string]types.ToolDef, 2*len(tools))
+	byName := make(map[string]types.ToolDef, lookupNamesPerTool*len(tools))
 	for i := range tools {
 		byName[tools[i].Binary] = tools[i]
 		byName[tools[i].Name] = tools[i]
@@ -539,21 +574,14 @@ type invocation struct {
 // preferring a cross-platform go-install over a native Windows installer (which
 // is more fragile), and falling back to the "all" method.
 func (i *Installer) resolveMethod(tool *types.ToolDef) (types.InstallMethod, bool) {
-	if m, ok := tool.InstallMethods[i.platform]; ok {
-		if i.platform == osWindows {
-			if all, has := tool.InstallMethods["all"]; has && isGoInstall(all) {
-				return all, true
-			}
-		}
+	m, ok := tool.InstallMethods[i.platform]
+	all, hasAll := tool.InstallMethods["all"]
 
-		return m, true
+	if hasAll && (!ok || (i.platform == osWindows && isGoInstall(all))) {
+		return all, true
 	}
 
-	if m, ok := tool.InstallMethods["all"]; ok {
-		return m, true
-	}
-
-	return types.InstallMethod{}, false
+	return m, ok
 }
 
 // isGoInstall reports whether a method is a `go install` invocation.
@@ -620,13 +648,13 @@ func (i *Installer) runWinget(
 // already present to its human-readable description; ok is false for any other code.
 func wingetAlreadyInstalledCodes(code uint32) (string, bool) {
 	switch code {
-	case 0x8A15002B:
+	case wingetNoUpdateAvailable:
 		return "already installed, no update available", true
-	case 0x8A150061:
+	case wingetPackageInstalled:
 		return "package already installed", true
-	case 0x8A15010D:
+	case wingetOtherVersionInstalled:
 		return "another version already installed", true
-	case 0x8A15004F:
+	case wingetVersionNotNewer:
 		return "upgrade version not newer than installed", true
 	default:
 		return "", false

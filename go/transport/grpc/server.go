@@ -11,6 +11,18 @@ import (
 	"google.golang.org/grpc/keepalive"
 )
 
+// defaultMaxMessageSize is the default limit on one gRPC message, in bytes.
+const defaultMaxMessageSize = 16 * 1024 * 1024
+
+// defaultServerConfigKeepaliveTimeout is the default KeepaliveTimeout of ServerConfig.
+const defaultServerConfigKeepaliveTimeout = 20 * time.Second
+
+// defaultServerConfigKeepaliveMinTime is the default KeepaliveMinTime of ServerConfig.
+const defaultServerConfigKeepaliveMinTime = 10 * time.Second
+
+// serverBaseOptions sizes the options every server starts with.
+const serverBaseOptions = 4
+
 // ServerConfig holds configuration for a gRPC server.
 type ServerConfig struct {
 	// MaxMessageSize is the maximum allowed size in bytes for sent and received messages.
@@ -37,17 +49,17 @@ type ServerConfig struct {
 // DefaultServerConfig returns default gRPC server configuration.
 func DefaultServerConfig() ServerConfig {
 	return ServerConfig{
-		MaxMessageSize:   16 * 1024 * 1024, // 16MB
+		MaxMessageSize:   defaultMaxMessageSize, // 16MB
 		KeepaliveTime:    time.Minute,
-		KeepaliveTimeout: 20 * time.Second,
-		KeepaliveMinTime: 10 * time.Second,
+		KeepaliveTimeout: defaultServerConfigKeepaliveTimeout,
+		KeepaliveMinTime: defaultServerConfigKeepaliveMinTime,
 	}
 }
 
 // NewServer creates a configured gRPC server.
 // Interceptors should be provided via options.
 func NewServer(cfg ServerConfig, opts ...grpc.ServerOption) *grpc.Server {
-	serverOpts := make([]grpc.ServerOption, 0, 4+len(opts))
+	serverOpts := make([]grpc.ServerOption, 0, serverBaseOptions+len(opts))
 
 	serverOpts = append(serverOpts,
 		grpc.MaxRecvMsgSize(cfg.MaxMessageSize),

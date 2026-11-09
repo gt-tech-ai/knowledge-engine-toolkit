@@ -157,35 +157,7 @@ func TestScanImage(t *testing.T) {
 	t.Run("missing trivy and empty policy", func(t *testing.T) {
 		t.Parallel()
 
-		runner := mocks.NewMockCommandRunner(gomock.NewController(t))
-		runner.EXPECT().Exists("trivy").Return(false).Times(2)
-
-		skip := imagescan.ScanImage(
-			t.Context(),
-			runner,
-			"/repo",
-			scanPolicy(),
-			ref,
-			false,
-		)
-		assert.Equal(t, types.StatusSkip, skip[0].Status)
-
-		strict := imagescan.ScanImage(
-			t.Context(),
-			runner,
-			"/repo",
-			scanPolicy(),
-			ref,
-			true,
-		)
-		assert.Equal(t, types.StatusFail, strict[0].Status)
-
-		present := mocks.NewMockCommandRunner(gomock.NewController(t))
-		present.EXPECT().Exists("trivy").Return(true)
-
-		empty := imagescan.ScanImage(t.Context(), present, "/repo",
-			imagescan.TrivyPolicy{}, ref, true)
-		assert.Equal(t, types.StatusFail, empty[0].Status)
+		assertScanWithoutTrivy(t, ref)
 	})
 }
 
@@ -197,4 +169,39 @@ func toAny(args []string) []any {
 	}
 
 	return out
+}
+
+// assertScanWithoutTrivy pins the outcomes when trivy is absent or the policy is empty.
+func assertScanWithoutTrivy(t *testing.T, ref string) {
+	t.Helper()
+
+	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
+	runner.EXPECT().Exists("trivy").Return(false).Times(2)
+
+	skip := imagescan.ScanImage(
+		t.Context(),
+		runner,
+		"/repo",
+		scanPolicy(),
+		ref,
+		false,
+	)
+	assert.Equal(t, types.StatusSkip, skip[0].Status)
+
+	strict := imagescan.ScanImage(
+		t.Context(),
+		runner,
+		"/repo",
+		scanPolicy(),
+		ref,
+		true,
+	)
+	assert.Equal(t, types.StatusFail, strict[0].Status)
+
+	present := mocks.NewMockCommandRunner(gomock.NewController(t))
+	present.EXPECT().Exists("trivy").Return(true)
+
+	empty := imagescan.ScanImage(t.Context(), present, "/repo",
+		imagescan.TrivyPolicy{}, ref, true)
+	assert.Equal(t, types.StatusFail, empty[0].Status)
 }

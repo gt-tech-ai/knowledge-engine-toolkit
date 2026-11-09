@@ -58,19 +58,9 @@ func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
 		chains: map[string]decorate.OpMiddleware{},
 	}
 
-	for _, d := range cfg.Descriptors {
-		if !admits(cfg.Policy, d) {
-			continue
-		}
-
-		op, err := build(cfg.Builders[d.Name], d, cfg.Env)
-		if err != nil {
-			return nil, err
-		}
-
-		reg.ops[d.Name] = op
-		reg.chains[d.Name] = decorators(d, cfg.Log)
-		reg.list = append(reg.list, op)
+	err = addAdmitted(reg, &cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	slices.SortFunc(reg.list, func(a, b interfaces.Operation) int {
@@ -78,6 +68,26 @@ func NewFromConfig[E any](cfg Config[E]) (*Registry, error) {
 	})
 
 	return reg, nil
+}
+
+// addAdmitted builds and registers each operation the policy admits.
+func addAdmitted[E any](reg *Registry, cfg *Config[E]) error {
+	for _, d := range cfg.Descriptors {
+		if !admits(cfg.Policy, d) {
+			continue
+		}
+
+		op, err := build(cfg.Builders[d.Name], d, cfg.Env)
+		if err != nil {
+			return err
+		}
+
+		reg.ops[d.Name] = op
+		reg.chains[d.Name] = decorators(d, cfg.Log)
+		reg.list = append(reg.list, op)
+	}
+
+	return nil
 }
 
 // build runs b for d and checks what it built: an operation, whose seeded defaults (if
@@ -111,22 +121,11 @@ func pairDescriptors[E any](
 	descs []types.OperationDescriptor, builders map[string]Builder[E],
 ) (map[string]bool, error) {
 	known := make(map[string]bool, len(descs))
+
 	for _, d := range descs {
-		err := d.Validate()
+		err := checkDescriptor(d, known, builders)
 		if err != nil {
 			return nil, err
-		}
-
-		if known[d.Name] {
-			return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-				"operation descriptor %q is declared twice", d.Name,
-			))
-		}
-
-		if b, ok := builders[d.Name]; !ok || b == nil {
-			return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-				"operation descriptor %q has no implementation", d.Name,
-			))
 		}
 
 		known[d.Name] = true
@@ -148,4 +147,28 @@ func pairDescriptors[E any](
 	}
 
 	return known, nil
+}
+
+// checkDescriptor requires a valid, first-seen descriptor with an implementation.
+func checkDescriptor[E any](
+	d types.OperationDescriptor, known map[string]bool, builders map[string]Builder[E],
+) error {
+	err := d.Validate()
+	if err != nil {
+		return err
+	}
+
+	if known[d.Name] {
+		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+			"operation descriptor %q is declared twice", d.Name,
+		))
+	}
+
+	if b, ok := builders[d.Name]; !ok || b == nil {
+		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+			"operation descriptor %q has no implementation", d.Name,
+		))
+	}
+
+	return nil
 }

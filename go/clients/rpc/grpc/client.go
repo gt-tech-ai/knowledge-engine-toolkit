@@ -12,6 +12,12 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// defaultMaxMessageSize is the default limit on one gRPC message, in bytes.
+const defaultMaxMessageSize = 16 * 1024 * 1024
+
+// defaultClientConfigKeepaliveTimeout is the default KeepaliveTimeout of ClientConfig.
+const defaultClientConfigKeepaliveTimeout = 20 * time.Second
+
 // ClientConfig holds configuration for a gRPC client.
 type ClientConfig struct {
 	// Target is the server address in the form host:port.
@@ -36,9 +42,9 @@ type ClientConfig struct {
 func DefaultClientConfig(target string) ClientConfig {
 	return ClientConfig{
 		Target:           target,
-		MaxMessageSize:   16 * 1024 * 1024, // 16MB
+		MaxMessageSize:   defaultMaxMessageSize, // 16MB
 		KeepaliveTime:    time.Minute,
-		KeepaliveTimeout: 20 * time.Second,
+		KeepaliveTimeout: defaultClientConfigKeepaliveTimeout,
 		UseTLS:           false, // insecure: enable TLS outside local dev
 	}
 }

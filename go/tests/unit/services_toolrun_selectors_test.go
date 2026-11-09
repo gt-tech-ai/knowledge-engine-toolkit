@@ -92,6 +92,19 @@ func TestToolrunSelectors_Kinds(t *testing.T) {
 			types.TargetSpec{Glob: "docker/*/Dockerfile"},
 		),
 	)
+
+	testToolrunSelectorsKindsRest(t, cb, none)
+}
+
+// testToolrunSelectorsKindsRest continues TestToolrunSelectors_Kinds with its remaining
+// steps.
+func testToolrunSelectorsKindsRest(
+	t *testing.T,
+	cb interfaces.Codebase,
+	none selectors.Deps,
+) {
+	t.Helper()
+
 	assert.Equal(t, []string{"docker/api/Dockerfile"},
 		selectWith(t, selectors.KindFiles, none, cb,
 			types.TargetSpec{Glob: "docker/*/Dockerfile", SkipHeredoc: true}))

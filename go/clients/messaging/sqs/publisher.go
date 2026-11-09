@@ -168,17 +168,29 @@ func (p *Publisher) sendBatch(
 	}
 
 	for start := 0; start < len(entries); start += maxBatchSize {
-		out, err := p.api.SendMessageBatch(ctx, &awssqs.SendMessageBatchInput{
-			QueueUrl: aws.String(url),
-			Entries:  entries[start:min(start+maxBatchSize, len(entries))],
-		})
+		err := p.sendChunk(ctx, url, entries[start:min(start+maxBatchSize, len(entries))])
 		if err != nil {
-			return apperr.Wrap(err, apperr.CodeUnavailable, "sqs send message batch")
+			return err
 		}
+	}
 
-		if len(out.Failed) > 0 {
-			return failedEntriesError("sqs send message batch", out.Failed)
-		}
+	return nil
+}
+
+// sendChunk sends at most one SQS batch, failing on any rejected entry.
+func (p *Publisher) sendChunk(
+	ctx context.Context, url string, chunk []sqstypes.SendMessageBatchRequestEntry,
+) error {
+	out, err := p.api.SendMessageBatch(ctx, &awssqs.SendMessageBatchInput{
+		QueueUrl: aws.String(url),
+		Entries:  chunk,
+	})
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeUnavailable, "sqs send message batch")
+	}
+
+	if len(out.Failed) > 0 {
+		return failedEntriesError("sqs send message batch", out.Failed)
 	}
 
 	return nil

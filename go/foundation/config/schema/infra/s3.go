@@ -7,6 +7,17 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// multipartPresignFactor is how many single-part expiries a multipart presign lasts when
+// unset.
+const multipartPresignFactor = 4
+
+// defaultS3ConfigPresignExpiry is the default PresignExpiry of S3Config.
+const defaultS3ConfigPresignExpiry = 15 * time.Minute
+
+// defaultS3ConfigMultipartPresignExpiry is the default MultipartPresignExpiry of
+// S3Config.
+const defaultS3ConfigMultipartPresignExpiry = 60 * time.Minute
+
 // S3Config holds S3-compatible storage configuration, including the backend
 // selection (AWS S3 vs MinIO) used by the storage client's Kind-factory.
 type S3Config struct {
@@ -66,7 +77,7 @@ func (c S3Config) EffectiveMultipartPresignExpiry() time.Duration {
 		return c.MultipartPresignExpiry
 	}
 
-	return 4 * c.PresignExpiry
+	return multipartPresignFactor * c.PresignExpiry
 }
 
 // DefaultS3Config returns an S3Config with defaults for local MinIO. Bucket is left
@@ -80,8 +91,8 @@ func DefaultS3Config() S3Config {
 		AccessKeyID:            "minioadmin",
 		SecretAccessKey:        "minioadmin",
 		ForcePathStyle:         true,
-		PresignExpiry:          15 * time.Minute,
-		MultipartPresignExpiry: 60 * time.Minute,
+		PresignExpiry:          defaultS3ConfigPresignExpiry,
+		MultipartPresignExpiry: defaultS3ConfigMultipartPresignExpiry,
 	}
 }
 

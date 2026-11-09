@@ -48,32 +48,17 @@ func (s *Store) Compact(
 	org string,
 	bucket time.Time,
 ) error {
-	grains, ok := s.cfg.Cubes[cube]
-	if !ok || !slices.Contains(grains, grain) {
-		return apperr.New(apperr.CodeInvalidInput, "analytics: undeclared cube or grain")
-	}
-
-	width := s.cfg.BucketWidth[grain]
-
 	bucket = bucket.UTC()
-
-	end := chartspec.Next(bucket, width)
 	now := time.Now()
 
-	if !chartspec.Truncate(bucket, width).Equal(bucket) || end.After(now) {
-		return apperr.New(
-			apperr.CodeInvalidInput,
-			"analytics: only a closed, aligned bucket can be compacted",
-		)
+	end, err := s.closedBucketEnd(cube, grain, bucket, now)
+	if err != nil {
+		return err
 	}
 
-	var ttlSeconds int
-
-	if ttl := s.cfg.TTL[grain]; ttl > 0 {
-		ttlSeconds = int(end.Add(ttl).Sub(now) / time.Second)
-		if ttlSeconds < 1 {
-			return nil
-		}
+	ttlSeconds, expired := remainingTTL(s.cfg.TTL[grain], end, now)
+	if expired {
+		return nil
 	}
 
 	session, err := s.sess()
@@ -87,22 +72,51 @@ func (s *Store) Compact(
 	}
 
 	for _, g := range groups {
-		err := compactGroup(
-			ctx,
-			session,
-			cube,
-			grain,
-			org,
-			bucket,
-			ttlSeconds,
-			g,
-		)
+		err := compactGroup(ctx, session, cube, grain, org, bucket, ttlSeconds, g)
 		if err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// closedBucketEnd returns the bucket's end, rejecting an undeclared cube or grain and
+// a bucket that is misaligned or still open.
+func (s *Store) closedBucketEnd(
+	cube string, grain types.Grain, bucket, now time.Time,
+) (time.Time, error) {
+	grains, ok := s.cfg.Cubes[cube]
+	if !ok || !slices.Contains(grains, grain) {
+		return time.Time{}, apperr.New(
+			apperr.CodeInvalidInput,
+			"analytics: undeclared cube or grain",
+		)
+	}
+
+	width := s.cfg.BucketWidth[grain]
+	end := chartspec.Next(bucket, width)
+
+	if !chartspec.Truncate(bucket, width).Equal(bucket) || end.After(now) {
+		return time.Time{}, apperr.New(
+			apperr.CodeInvalidInput,
+			"analytics: only a closed, aligned bucket can be compacted",
+		)
+	}
+
+	return end, nil
+}
+
+// remainingTTL returns the seconds a bucket ending at end has left (0 means no TTL);
+// expired reports a bucket already past its TTL.
+func remainingTTL(ttl time.Duration, end, now time.Time) (seconds int, expired bool) {
+	if ttl <= 0 {
+		return 0, false
+	}
+
+	seconds = int(end.Add(ttl).Sub(now) / time.Second)
+
+	return seconds, seconds < 1
 }
 
 // readPartition reads every row of one partition, grouped by (ts, dims_key) in
@@ -115,9 +129,7 @@ func (s *Store) readPartition(
 	org string,
 	bucket time.Time,
 ) ([]*groupRows, error) {
-	var groups []*groupRows
-
-	index := map[string]*groupRows{}
+	collected := &partitionGroups{index: map[string]*groupRows{}}
 
 	var state []byte
 
@@ -133,32 +145,7 @@ func (s *Store) readPartition(
 			bucket,
 		).WithContext(ctx).PageSize(s.cfg.PageSize).PageState(state).Idempotent(true).Iter()
 
-		var (
-			ts           time.Time
-			dimsKey, key string
-			dims         map[string]string
-			partials     map[string][]byte
-		)
-
-		for iter.Scan(&ts, &dimsKey, &key, &dims, &partials) {
-			id := ts.UTC().Format(time.RFC3339Nano) + "|" + dimsKey
-			g, ok := index[id]
-
-			if !ok {
-				g = &groupRows{ts: ts.UTC(), dims: dims, dimsKey: dimsKey}
-				index[id] = g
-				groups = append(groups, g)
-			}
-
-			if key == "" {
-				g.compacted = partials
-			} else {
-				g.keys = append(g.keys, key)
-				g.facts = append(g.facts, partials)
-			}
-
-			ts, dimsKey, key, dims, partials = time.Time{}, "", "", nil, nil
-		}
+		collected.scan(iter)
 
 		state = iter.PageState()
 
@@ -168,9 +155,57 @@ func (s *Store) readPartition(
 		}
 
 		if len(state) == 0 {
-			return groups, nil
+			return collected.groups, nil
 		}
 	}
+}
+
+// partitionGroups collects a partition's rows by (ts, dims_key), in read order.
+type partitionGroups struct {
+	// index finds a group by its identity.
+	index map[string]*groupRows
+
+	// groups holds the groups in first-seen order.
+	groups []*groupRows
+}
+
+// scan files every row of one page.
+func (p *partitionGroups) scan(iter interfaces.CQLIter) {
+	var (
+		ts           time.Time
+		dimsKey, key string
+		dims         map[string]string
+		partials     map[string][]byte
+	)
+
+	for iter.Scan(&ts, &dimsKey, &key, &dims, &partials) {
+		g := p.group(ts.UTC(), dimsKey, dims)
+
+		if key == "" {
+			g.compacted = partials
+		} else {
+			g.keys = append(g.keys, key)
+			g.facts = append(g.facts, partials)
+		}
+
+		ts, dimsKey, key, dims, partials = time.Time{}, "", "", nil, nil
+	}
+}
+
+// group returns the (ts, dims_key) group, creating it on first sight.
+func (p *partitionGroups) group(
+	ts time.Time, dimsKey string, dims map[string]string,
+) *groupRows {
+	id := ts.Format(time.RFC3339Nano) + "|" + dimsKey
+
+	g, ok := p.index[id]
+	if !ok {
+		g = &groupRows{ts: ts, dims: dims, dimsKey: dimsKey}
+		p.index[id] = g
+		p.groups = append(p.groups, g)
+	}
+
+	return g
 }
 
 // compactGroup folds a group's per-fact rows into its compacted row, a chunk per
@@ -187,17 +222,7 @@ func compactGroup(
 ) error {
 	table := TableName(cube, grain)
 	dimsKey := g.dimsKey
-	upsert := "INSERT INTO " + table +
-		" (org_id, cube, bucket, ts, dims_key, idempotency_key, dims, partials)" +
-		" VALUES (?, ?, ?, ?, ?, '', ?, ?)"
-
-	var ttlArgs []any
-
-	if ttlSeconds > 0 {
-		upsert += " USING TTL ?"
-
-		ttlArgs = []any{ttlSeconds}
-	}
+	upsert, ttlArgs := compactUpsert(table, ttlSeconds)
 
 	merged := g.compacted
 	for start := 0; start < len(g.keys); start += compactChunk {
@@ -231,35 +256,33 @@ func compactGroup(
 	return nil
 }
 
+// compactUpsert is the statement that writes a compacted row, with its TTL arguments.
+func compactUpsert(table string, ttlSeconds int) (cql string, binds []any) {
+	upsert := "INSERT INTO " + table +
+		" (org_id, cube, bucket, ts, dims_key, idempotency_key, dims, partials)" +
+		" VALUES (?, ?, ?, ?, ?, '', ?, ?)"
+
+	if ttlSeconds <= 0 {
+		return upsert, nil
+	}
+
+	return upsert + " USING TTL ?", []any{ttlSeconds}
+}
+
 // mergePartials merges base and every row's partials, measure by measure.
 func mergePartials(
 	base map[string][]byte,
 	rows []map[string][]byte,
 ) (map[string][]byte, error) {
 	acc := map[string]chartspec.Partial{}
-	add := func(partials map[string][]byte) error {
-		for name, blob := range partials {
-			p, err := chartspec.DecodePartial(blob)
-			if err != nil {
-				return err
-			}
 
-			cur := acc[name]
-			cur.Merge(p)
-
-			acc[name] = cur
-		}
-
-		return nil
-	}
-
-	err := add(base)
+	err := accumulatePartials(acc, base)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, row := range rows {
-		err := add(row)
+		err := accumulatePartials(acc, row)
 		if err != nil {
 			return nil, err
 		}
@@ -271,4 +294,24 @@ func mergePartials(
 	}
 
 	return out, nil
+}
+
+// accumulatePartials merges one row's encoded partials into acc.
+func accumulatePartials(
+	acc map[string]chartspec.Partial,
+	partials map[string][]byte,
+) error {
+	for name, blob := range partials {
+		p, err := chartspec.DecodePartial(blob)
+		if err != nil {
+			return err
+		}
+
+		cur := acc[name]
+		cur.Merge(p)
+
+		acc[name] = cur
+	}
+
+	return nil
 }

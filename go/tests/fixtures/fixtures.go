@@ -495,30 +495,15 @@ func NewSpyLogger() *SpyLogger {
 // configureSpyLogger registers the recording expectations on s's embedded mock.
 func configureSpyLogger(s *SpyLogger) {
 	m := s.MockLogger
-	m.EXPECT().Debug(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...any) {
-		s.DebugCalls = append(s.DebugCalls, msg)
-		if s.parentDebugRef != nil {
-			*s.parentDebugRef = append(*s.parentDebugRef, msg)
-		}
-	}).AnyTimes()
-	m.EXPECT().Info(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...any) {
-		s.InfoCalls = append(s.InfoCalls, msg)
-		if s.parentInfoRef != nil {
-			*s.parentInfoRef = append(*s.parentInfoRef, msg)
-		}
-	}).AnyTimes()
-	m.EXPECT().Warn(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...any) {
-		s.WarnCalls = append(s.WarnCalls, msg)
-		if s.parentWarnRef != nil {
-			*s.parentWarnRef = append(*s.parentWarnRef, msg)
-		}
-	}).AnyTimes()
-	m.EXPECT().Error(gomock.Any(), gomock.Any()).Do(func(msg string, _ ...any) {
-		s.ErrorCalls = append(s.ErrorCalls, msg)
-		if s.parentErrorRef != nil {
-			*s.parentErrorRef = append(*s.parentErrorRef, msg)
-		}
-	}).AnyTimes()
+
+	m.EXPECT().Debug(gomock.Any(), gomock.Any()).
+		Do(spyRecorder(&s.DebugCalls, s.parentDebugRef)).AnyTimes()
+	m.EXPECT().Info(gomock.Any(), gomock.Any()).
+		Do(spyRecorder(&s.InfoCalls, s.parentInfoRef)).AnyTimes()
+	m.EXPECT().Warn(gomock.Any(), gomock.Any()).
+		Do(spyRecorder(&s.WarnCalls, s.parentWarnRef)).AnyTimes()
+	m.EXPECT().Error(gomock.Any(), gomock.Any()).
+		Do(spyRecorder(&s.ErrorCalls, s.parentErrorRef)).AnyTimes()
 	m.EXPECT().With(gomock.Any()).Return(s).AnyTimes()
 	m.EXPECT().
 		WithContext(gomock.Any()).
@@ -540,4 +525,15 @@ func configureSpyLogger(s *SpyLogger) {
 			return child
 		}).
 		AnyTimes()
+}
+
+// spyRecorder appends each message to calls and, for a child logger, to its parent's
+// list.
+func spyRecorder(calls, parent *[]string) func(string, ...any) {
+	return func(msg string, _ ...any) {
+		*calls = append(*calls, msg)
+		if parent != nil {
+			*parent = append(*parent, msg)
+		}
+	}
 }

@@ -52,6 +52,15 @@ func TestServicesSuite_Tools(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	testServicesSuiteToolsRest(t, gs)
+}
+
+// testServicesSuiteToolsRest continues TestServicesSuite_Tools with its remaining steps.
+func testServicesSuiteToolsRest(t *testing.T, gs []interfaces.Guard) {
+	t.Helper()
+
+	var err error
+
 	catalog := append(append(suite.Runs(nil, nil, []types.ToolRun{
 		{
 			Name: "golangci-lint",

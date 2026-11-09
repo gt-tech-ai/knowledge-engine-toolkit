@@ -11,77 +11,32 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// yamlIndent is the indent of rendered YAML.
+const yamlIndent = 2
+
 // RenderFrontmatter writes fm as a `---`-fenced YAML block in a stable order: the OKF
 // keys (okf_version, type, title, description, resource, tags, status, stale_after,
 // generated, verified), then Extra's keys sorted. Empty fields are omitted; tags and
 // attributions are flow style; a single verifier is a bare mapping.
 func RenderFrontmatter(fm Frontmatter) []byte {
 	node := &yaml.Node{Kind: yaml.MappingNode}
-	add := func(key string, value *yaml.Node) {
-		node.Content = append(node.Content, scalar(key), value)
-	}
 
-	for _, kv := range []struct{ key, value string }{
+	addScalars(node, [][2]string{
 		{keyOKFVersion, fm.OKFVersion},
 		{"type", fm.Type},
 		{"title", fm.Title},
 		{"description", fm.Description},
 		{"resource", fm.Resource},
-	} {
-		if kv.value != "" {
-			add(kv.key, scalar(kv.value))
-		}
-	}
-
-	if len(fm.Tags) > 0 {
-		tags := &yaml.Node{Kind: yaml.SequenceNode, Style: yaml.FlowStyle}
-		for _, t := range fm.Tags {
-			tags.Content = append(tags.Content, scalar(t))
-		}
-
-		add("tags", tags)
-	}
-
-	for _, kv := range []struct{ key, value string }{
-		{"status", fm.Status}, {"stale_after", fm.StaleAfter},
-	} {
-		if kv.value != "" {
-			add(kv.key, scalar(kv.value))
-		}
-	}
+	})
+	addTags(node, fm.Tags)
+	addScalars(node, [][2]string{{"status", fm.Status}, {"stale_after", fm.StaleAfter}})
 
 	if fm.Generated != nil {
-		add("generated", attribution(*fm.Generated))
+		addEntry(node, "generated", attribution(*fm.Generated))
 	}
 
-	switch len(fm.Verified) {
-	case 0:
-	case 1:
-		add("verified", attribution(fm.Verified[0]))
-	default:
-		list := &yaml.Node{Kind: yaml.SequenceNode}
-		for _, a := range fm.Verified {
-			list.Content = append(list.Content, attribution(a))
-		}
-
-		add("verified", list)
-	}
-
-	keys := make([]string, 0, len(fm.Extra))
-	for k := range fm.Extra {
-		keys = append(keys, k)
-	}
-
-	sort.Strings(keys)
-
-	for _, k := range keys {
-		var value yaml.Node
-
-		err := value.Encode(fm.Extra[k])
-		if err == nil {
-			add(k, &value)
-		}
-	}
+	addVerified(node, fm.Verified)
+	addExtra(node, fm.Extra)
 
 	var buf bytes.Buffer
 
@@ -89,7 +44,7 @@ func RenderFrontmatter(fm Frontmatter) []byte {
 
 	if len(node.Content) > 0 {
 		enc := yaml.NewEncoder(&buf)
-		enc.SetIndent(2)
+		enc.SetIndent(yamlIndent)
 
 		_ = enc.Encode(node) // a tree of strings and decoded values always encodes
 		_ = enc.Close()
@@ -98,6 +53,69 @@ func RenderFrontmatter(fm Frontmatter) []byte {
 	buf.WriteString(fence + "\n")
 
 	return buf.Bytes()
+}
+
+// addEntry appends one key/value pair.
+func addEntry(node *yaml.Node, key string, value *yaml.Node) {
+	node.Content = append(node.Content, scalar(key), value)
+}
+
+// addScalars appends each non-empty {key, value} pair.
+func addScalars(node *yaml.Node, pairs [][2]string) {
+	for _, kv := range pairs {
+		if kv[1] != "" {
+			addEntry(node, kv[0], scalar(kv[1]))
+		}
+	}
+}
+
+// addTags appends the tags as a flow sequence, when there are any.
+func addTags(node *yaml.Node, tags []string) {
+	if len(tags) == 0 {
+		return
+	}
+
+	list := &yaml.Node{Kind: yaml.SequenceNode, Style: yaml.FlowStyle}
+	for _, t := range tags {
+		list.Content = append(list.Content, scalar(t))
+	}
+
+	addEntry(node, "tags", list)
+}
+
+// addVerified appends one attribution as a mapping and several as a sequence.
+func addVerified(node *yaml.Node, verified []Attribution) {
+	switch len(verified) {
+	case 0:
+	case 1:
+		addEntry(node, "verified", attribution(verified[0]))
+	default:
+		list := &yaml.Node{Kind: yaml.SequenceNode}
+		for _, a := range verified {
+			list.Content = append(list.Content, attribution(a))
+		}
+
+		addEntry(node, "verified", list)
+	}
+}
+
+// addExtra appends the unrecognized keys in sorted order, dropping any that won't encode.
+func addExtra(node *yaml.Node, extra map[string]any) {
+	keys := make([]string, 0, len(extra))
+	for k := range extra {
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		var value yaml.Node
+
+		err := value.Encode(extra[k])
+		if err == nil {
+			addEntry(node, k, &value)
+		}
+	}
 }
 
 // scalar is a string node that the encoder quotes whenever the plain form would read
@@ -149,18 +167,10 @@ func (f Frontmatter) Stale(now time.Time) (bool, error) {
 // link, so the output does not depend on input order.
 func RenderIndex(entries []IndexEntry) []byte {
 	sorted := append([]IndexEntry(nil), entries...)
-	sort.SliceStable(sorted, func(i, j int) bool {
-		a, b := sorted[i], sorted[j]
-		if a.Section != b.Section {
-			return a.Section < b.Section
-		}
-
-		if ta, tb := strings.ToLower(a.Title), strings.ToLower(b.Title); ta != tb {
-			return ta < tb
-		}
-
-		return a.Link < b.Link
-	})
+	sort.SliceStable(
+		sorted,
+		func(i, j int) bool { return indexEntryLess(&sorted[i], &sorted[j]) },
+	)
 
 	var (
 		blocks []string
@@ -171,25 +181,50 @@ func RenderIndex(entries []IndexEntry) []byte {
 
 	for i, e := range sorted {
 		if i == 0 || e.Section != section {
-			if block.Len() > 0 {
-				blocks = append(blocks, block.String())
-				block.Reset()
-			}
-
+			blocks = flushIndexBlock(blocks, &block)
 			section = e.Section
-			if section != "" {
-				block.WriteString("# " + section + "\n\n")
-			}
+
+			writeSectionHeading(&block, section)
 		}
 
 		block.WriteString(entryLine(e))
 	}
 
-	if block.Len() > 0 {
-		blocks = append(blocks, block.String())
-	}
+	blocks = flushIndexBlock(blocks, &block)
 
 	return []byte(strings.Join(blocks, "\n"))
+}
+
+// indexEntryLess orders by section, then title ignoring case, then link.
+func indexEntryLess(a, b *IndexEntry) bool {
+	if a.Section != b.Section {
+		return a.Section < b.Section
+	}
+
+	if ta, tb := strings.ToLower(a.Title), strings.ToLower(b.Title); ta != tb {
+		return ta < tb
+	}
+
+	return a.Link < b.Link
+}
+
+// flushIndexBlock moves a non-empty block into blocks.
+func flushIndexBlock(blocks []string, block *strings.Builder) []string {
+	if block.Len() == 0 {
+		return blocks
+	}
+
+	blocks = append(blocks, block.String())
+	block.Reset()
+
+	return blocks
+}
+
+// writeSectionHeading writes a named section's heading.
+func writeSectionHeading(block *strings.Builder, section string) {
+	if section != "" {
+		block.WriteString("# " + section + "\n\n")
+	}
 }
 
 // entryLine renders one index entry, escaping brackets in the title and folding the

@@ -199,6 +199,18 @@ func TestServicesSuite_Gate(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	tr := mocks.NewMockToolRunner(ctrl)
 
+	testServicesSuiteGateRest6(t, ctrl, tr)
+}
+
+// testServicesSuiteGateRest6 continues testServicesSuiteGateRest5 with its remaining
+// steps.
+func testServicesSuiteGateRest6(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	tr *mocks.MockToolRunner,
+) {
+	t.Helper()
+
 	var (
 		inFlight, peak atomic.Int32
 		mu             sync.Mutex
@@ -224,6 +236,22 @@ func TestServicesSuite_Gate(t *testing.T) {
 		})
 
 	runner := mocks.NewMockCommandRunner(ctrl)
+
+	testServicesSuiteGateRest2(t, tr, &peak, &mu, &ran, runner)
+}
+
+// testServicesSuiteGateRest2 continues testServicesSuiteGateRest6 with its remaining
+// steps.
+func testServicesSuiteGateRest2(
+	t *testing.T,
+	tr *mocks.MockToolRunner,
+	peak *atomic.Int32,
+	mu *sync.Mutex,
+	ran *[]string,
+	runner *mocks.MockCommandRunner,
+) {
+	t.Helper()
+
 	s := types.Suite{
 		Title:  "Lint",
 		Select: types.Selection{Verbs: []string{"lint"}},
@@ -244,7 +272,7 @@ func TestServicesSuite_Gate(t *testing.T) {
 			assert.Same(t, runner, asType[*mocks.MockCommandRunner](t, env.Runner))
 			mu.Lock()
 
-			ran = append(ran, "lint.vet@"+env.Root)
+			(*ran) = append((*ran), "lint.vet@"+env.Root)
 			mu.Unlock()
 
 			return types.OneStep("vet", types.StatusPass, nil), nil
@@ -260,8 +288,22 @@ func TestServicesSuite_Gate(t *testing.T) {
 
 	assert.Equal(t, []string{"Format", "Lint"}, phases)
 	require.NoError(t, g.Run(t.Context(), runner, "/r"))
-	assert.Equal(t, []string{"gofumpt", "golines", "lint.vet@/r"}, ran)
+	assert.Equal(t, []string{"gofumpt", "golines", "lint.vet@/r"}, (*ran))
 	assert.Equal(t, int32(1), peak.Load(), "a serial phase runs one row at a time")
+
+	testServicesSuiteGateRest(t, tr, runner, s, catalog, env)
+}
+
+// testServicesSuiteGateRest continues TestServicesSuite_Gate with its remaining steps.
+func testServicesSuiteGateRest(
+	t *testing.T,
+	tr *mocks.MockToolRunner,
+	runner *mocks.MockCommandRunner,
+	s types.Suite,
+	catalog []suite.Entry,
+	env suite.Env,
+) {
+	t.Helper()
 
 	plain := types.ToolRun{Name: "hadolint", Verb: "lint"}
 	tr.EXPECT().Run(gomock.Any(), nil, plain, types.RunOptions{Fix: true}).

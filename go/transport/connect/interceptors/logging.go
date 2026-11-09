@@ -2,6 +2,7 @@ package interceptors
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"connectrpc.com/connect"
@@ -9,6 +10,9 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
+
+// statusClientClosed is the non-standard status of a request the client abandoned.
+const statusClientClosed = 499
 
 // is4xxConnectCode reports whether the Connect error code maps to an HTTP 4xx
 // status. 4xx codes represent normal client conditions and must not trip an
@@ -36,32 +40,44 @@ func is4xxConnectCode(code connect.Code) bool {
 // per the Connect protocol specification. Used to populate the numeric status log
 // field, so a log-based alert can match on it (e.g. status >= 400).
 func connectCodeToHTTPStatus(code connect.Code) int {
+	if status, ok := clientFaultStatus(code); ok {
+		return status
+	}
+
+	switch code {
+	case connect.CodeUnimplemented:
+		return http.StatusNotImplemented
+	case connect.CodeUnavailable:
+		return http.StatusServiceUnavailable
+	case connect.CodeDeadlineExceeded:
+		return http.StatusGatewayTimeout
+	case connect.CodeCanceled:
+		// 499 client-closed-request: the caller went away; not a server 5xx.
+		return statusClientClosed
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+// clientFaultStatus maps the codes that blame the request to their 4xx status.
+func clientFaultStatus(code connect.Code) (int, bool) {
 	switch code {
 	case connect.CodeInvalidArgument,
 		connect.CodeFailedPrecondition,
 		connect.CodeOutOfRange:
-		return 400
+		return http.StatusBadRequest, true
 	case connect.CodeUnauthenticated:
-		return 401
+		return http.StatusUnauthorized, true
 	case connect.CodePermissionDenied:
-		return 403
+		return http.StatusForbidden, true
 	case connect.CodeNotFound:
-		return 404
+		return http.StatusNotFound, true
 	case connect.CodeAlreadyExists:
-		return 409
+		return http.StatusConflict, true
 	case connect.CodeResourceExhausted:
-		return 429
-	case connect.CodeUnimplemented:
-		return 501
-	case connect.CodeUnavailable:
-		return 503
-	case connect.CodeDeadlineExceeded:
-		return 504
-	case connect.CodeCanceled:
-		// 499 client-closed-request: the caller went away; not a server 5xx.
-		return 499
+		return http.StatusTooManyRequests, true
 	default:
-		return 500
+		return 0, false
 	}
 }
 
@@ -135,7 +151,15 @@ func (i loggingInterceptor) logAccess(
 ) {
 	l := i.logger.WithContext(ctx)
 	if err == nil {
-		l.Info("request", "procedure", procedure, "duration", duration, "status", 200)
+		l.Info(
+			"request",
+			"procedure",
+			procedure,
+			"duration",
+			duration,
+			"status",
+			http.StatusOK,
+		)
 
 		return
 	}

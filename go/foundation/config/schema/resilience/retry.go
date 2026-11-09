@@ -14,6 +14,21 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// defaultRetryConfigMaxRetries is the default MaxRetries of RetryConfig.
+const defaultRetryConfigMaxRetries = 3
+
+// defaultRetryConfigInitialInterval is the default InitialInterval of RetryConfig.
+const defaultRetryConfigInitialInterval = 100 * time.Millisecond
+
+// defaultRetryConfigMaxInterval is the default MaxInterval of RetryConfig.
+const defaultRetryConfigMaxInterval = 5 * time.Second
+
+// defaultRetryConfigMultiplier is the default Multiplier of RetryConfig.
+const defaultRetryConfigMultiplier = 2.0
+
+// defaultRetryConfigMaxElapsedTime is the default MaxElapsedTime of RetryConfig.
+const defaultRetryConfigMaxElapsedTime = 30 * time.Second
+
 // RetryConfig tunes the exponential-backoff retry decorator (retry.Config).
 type RetryConfig struct {
 	// InitialInterval is the first backoff delay between retries.
@@ -36,11 +51,11 @@ type RetryConfig struct {
 // config surface with no overlay matches the retry package's own defaults.
 func DefaultRetryConfig() RetryConfig {
 	return RetryConfig{
-		MaxRetries:      3,
-		InitialInterval: 100 * time.Millisecond,
-		MaxInterval:     5 * time.Second,
-		Multiplier:      2.0,
-		MaxElapsedTime:  30 * time.Second,
+		MaxRetries:      defaultRetryConfigMaxRetries,
+		InitialInterval: defaultRetryConfigInitialInterval,
+		MaxInterval:     defaultRetryConfigMaxInterval,
+		Multiplier:      defaultRetryConfigMultiplier,
+		MaxElapsedTime:  defaultRetryConfigMaxElapsedTime,
 	}
 }
 

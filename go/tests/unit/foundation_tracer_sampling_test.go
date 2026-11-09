@@ -178,39 +178,14 @@ func TestTracer_ConcurrentNewKeepsOwnSampler(t *testing.T) {
 
 	ctx := t.Context()
 
-	type result struct {
-		err       error
-		rate      float64
-		recording bool
-	}
-
-	results := make(chan result, 2*pairs)
+	results := make(chan samplerProbe, 2*pairs)
 
 	var wg sync.WaitGroup
 
 	for i := range 2 * pairs {
 		rate := float64(i % 2)
 
-		wg.Go(func() {
-			tr, err := tracer.New(ctx, tracer.KindOTel,
-				tracer.WithServiceName("tracer-concurrent-test"),
-				tracer.WithEndpoint("localhost:4317"),
-				tracer.WithSampleRate(rate),
-			)
-			if err != nil {
-				results <- result{err: err}
-
-				return
-			}
-
-			t.Cleanup(func() { _ = tr.Shutdown(context.WithoutCancel(ctx)) })
-
-			// Spans are never ended, so nothing is queued for export to the collector.
-			retCtx, _ := tr.Start(ctx, "root")
-			results <- result{
-				rate: rate, recording: oteltrace.SpanFromContext(retCtx).IsRecording(),
-			}
-		})
+		wg.Go(func() { results <- probeSampler(ctx, t, rate) })
 	}
 
 	wg.Wait()
@@ -225,5 +200,36 @@ func TestTracer_ConcurrentNewKeepsOwnSampler(t *testing.T) {
 			"a tracer at rate %v must follow its own sampler",
 			r.rate,
 		)
+	}
+}
+
+// samplerProbe is what one concurrently built tracer did with a root span.
+type samplerProbe struct {
+	err       error
+	rate      float64
+	recording bool
+}
+
+// probeSampler builds a tracer at rate and reports whether its root span records.
+func probeSampler(ctx context.Context, t *testing.T, rate float64) samplerProbe {
+	t.Helper()
+
+	tr, err := tracer.New(ctx, tracer.KindOTel,
+		tracer.WithServiceName("tracer-concurrent-test"),
+		tracer.WithEndpoint("localhost:4317"),
+		tracer.WithSampleRate(rate),
+	)
+	if err != nil {
+		return samplerProbe{err: err}
+	}
+
+	t.Cleanup(func() { _ = tr.Shutdown(context.WithoutCancel(ctx)) })
+
+	// Spans are never ended, so nothing is queued for export to the collector.
+	retCtx, _ := tr.Start(ctx, "root")
+
+	return samplerProbe{
+		rate:      rate,
+		recording: oteltrace.SpanFromContext(retCtx).IsRecording(),
 	}
 }

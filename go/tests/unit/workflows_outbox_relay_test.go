@@ -81,6 +81,29 @@ func TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction(t *test
 	metrics := mocks.NewMockMetrics(ctrl)
 	counters := map[string]*mocks.MockCounter{}
 
+	testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest8(
+		t,
+		ctrl,
+		store,
+		sink,
+		metrics,
+		counters,
+	)
+}
+
+// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest8 continues
+// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest7 with its
+// remaining steps.
+func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest8(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	store *mocks.MockOutboxStore,
+	sink *mocks.MockOutboxSink,
+	metrics *mocks.MockMetrics,
+	counters map[string]*mocks.MockCounter,
+) {
+	t.Helper()
+
 	metrics.EXPECT().Counter(gomock.Any(), gomock.Any(), "lane").AnyTimes().DoAndReturn(
 		func(name, _ string, _ ...string) interfaces.Counter {
 			c := mocks.NewMockCounter(ctrl)
@@ -99,6 +122,29 @@ func TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction(t *test
 	metrics.EXPECT().
 		Histogram("outbox_relay_passes", gomock.Any(), gomock.Any(), "lane").
 		Return(passes)
+
+	testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest3(
+		t,
+		ctrl,
+		store,
+		sink,
+		metrics,
+		counters,
+	)
+}
+
+// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest3 continues
+// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest2 with its
+// remaining steps.
+func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest3(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	store *mocks.MockOutboxStore,
+	sink *mocks.MockOutboxSink,
+	metrics *mocks.MockMetrics,
+	counters map[string]*mocks.MockCounter,
+) {
+	t.Helper()
 
 	recs := outboxRecords(2, 1)
 	commitErr := apperr.New(apperr.CodeUnavailable, "commit lost")
@@ -122,6 +168,33 @@ func TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction(t *test
 			return nil
 		})
 
+	testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest4(
+		t,
+		store,
+		sink,
+		metrics,
+		counters,
+		recs,
+		tx,
+		&txs,
+	)
+}
+
+// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest4 continues
+// testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest3 with its
+// remaining steps.
+func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionRest4(
+	t *testing.T,
+	store *mocks.MockOutboxStore,
+	sink *mocks.MockOutboxSink,
+	metrics *mocks.MockMetrics,
+	counters map[string]*mocks.MockCounter,
+	recs []types.OutboxRecord,
+	tx *mocks.MockTransactionManager,
+	txs *int,
+) {
+	t.Helper()
+
 	inTx := interfaces.InTx
 
 	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).DoAndReturn(
@@ -137,7 +210,9 @@ func TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction(t *test
 			return make([]error, len(recs))
 		})
 
-	for _, r := range recs {
+	for i := range recs {
+		r := &recs[i]
+
 		store.EXPECT().MarkSent(gomock.Any(), r.ID).DoAndReturn(
 			func(ctx context.Context, _ uuid.UUID) error {
 				require.True(t, inTx(ctx), "each finalize commits in a transaction")
@@ -156,7 +231,7 @@ func TestRelay_CommitsClaimAndEachFinalizeAndDeliversOutsideATransaction(t *test
 	err := relay.RunOnce(context.Background())
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
-	assert.Equal(t, 3, txs)
+	assert.Equal(t, 3, (*txs))
 }
 
 // fixedClock returns a relay option pinning the clock to relayNow.
@@ -290,6 +365,28 @@ func TestRelay_BackoffIsExponentialWithJitterAndCapped(t *testing.T) {
 		recs = append(recs, outboxRecords(1, attempts)...)
 	}
 
+	testRelayBackoffIsExponentialWithJitterAndCappedRest4(
+		t,
+		store,
+		sink,
+		ctx,
+		sendErr,
+		recs,
+	)
+}
+
+// testRelayBackoffIsExponentialWithJitterAndCappedRest4 continues
+// testRelayBackoffIsExponentialWithJitterAndCappedRest3 with its remaining steps.
+func testRelayBackoffIsExponentialWithJitterAndCappedRest4(
+	t *testing.T,
+	store *mocks.MockOutboxStore,
+	sink *mocks.MockOutboxSink,
+	ctx context.Context,
+	sendErr *apperr.AppError,
+	recs []types.OutboxRecord,
+) {
+	t.Helper()
+
 	var (
 		mu   sync.Mutex
 		caps []time.Duration
@@ -309,13 +406,42 @@ func TestRelay_BackoffIsExponentialWithJitterAndCapped(t *testing.T) {
 		Send(gomock.Any(), recs).
 		Return([]error{sendErr, sendErr, sendErr, sendErr})
 
+	testRelayBackoffIsExponentialWithJitterAndCappedRest5(
+		t,
+		store,
+		sink,
+		ctx,
+		sendErr,
+		recs,
+		&caps,
+		half,
+	)
+}
+
+// testRelayBackoffIsExponentialWithJitterAndCappedRest5 continues
+// testRelayBackoffIsExponentialWithJitterAndCappedRest4 with its remaining steps.
+func testRelayBackoffIsExponentialWithJitterAndCappedRest5(
+	t *testing.T,
+	store *mocks.MockOutboxStore,
+	sink *mocks.MockOutboxSink,
+	ctx context.Context,
+	sendErr *apperr.AppError,
+	recs []types.OutboxRecord,
+	caps *[]time.Duration,
+	half outbox.Option,
+) {
+	t.Helper()
+
 	wantNext := []time.Duration{
 		time.Second,
 		2 * time.Second,
 		4 * time.Second,
 		5 * time.Second,
 	}
-	for i, r := range recs {
+
+	for i := range recs {
+		r := &recs[i]
+
 		store.EXPECT().
 			Retry(gomock.Any(), r.ID, relayNow().Add(wantNext[i]), "UNAVAILABLE: down").
 			Return(nil)
@@ -341,8 +467,22 @@ func TestRelay_BackoffIsExponentialWithJitterAndCapped(t *testing.T) {
 			8 * time.Second,
 			10 * time.Second,
 		},
-		caps,
+		(*caps),
 	)
+
+	testRelayBackoffIsExponentialWithJitterAndCappedRest(t, store, sink, ctx, sendErr)
+}
+
+// testRelayBackoffIsExponentialWithJitterAndCappedRest continues
+// TestRelay_BackoffIsExponentialWithJitterAndCapped with its remaining steps.
+func testRelayBackoffIsExponentialWithJitterAndCappedRest(
+	t *testing.T,
+	store *mocks.MockOutboxStore,
+	sink *mocks.MockOutboxSink,
+	ctx context.Context,
+	sendErr *apperr.AppError,
+) {
+	t.Helper()
 
 	one := outboxRecords(1, 3)
 	store.EXPECT().Claim(gomock.Any(), "audit", 0, 100).Return(one, nil)
@@ -432,6 +572,21 @@ func TestRelay_ReportsDepthAndLag(t *testing.T) {
 	store := mocks.NewMockOutboxStore(ctrl)
 	sink := mocks.NewMockOutboxSink(ctrl)
 	metrics := mocks.NewMockMetrics(ctrl)
+
+	testRelayReportsDepthAndLagRest3(t, ctrl, store, sink, metrics)
+}
+
+// testRelayReportsDepthAndLagRest3 continues testRelayReportsDepthAndLagRest2 with its
+// remaining steps.
+func testRelayReportsDepthAndLagRest3(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	store *mocks.MockOutboxStore,
+	sink *mocks.MockOutboxSink,
+	metrics *mocks.MockMetrics,
+) {
+	t.Helper()
+
 	sent, retried, parked := mocks.NewMockCounter(
 		ctrl,
 	), mocks.NewMockCounter(
@@ -465,6 +620,23 @@ func TestRelay_ReportsDepthAndLag(t *testing.T) {
 	store.EXPECT().Park(gomock.Any(), park.ID, fail.Error()).Return(nil)
 	sent.EXPECT().Inc("audit").Times(1)
 	retried.EXPECT().Inc("audit").Times(1)
+
+	testRelayReportsDepthAndLagRest4(t, store, sink, metrics, parked, depth, lag, ctx)
+}
+
+// testRelayReportsDepthAndLagRest4 continues testRelayReportsDepthAndLagRest3 with its
+// remaining steps.
+func testRelayReportsDepthAndLagRest4(
+	t *testing.T,
+	store *mocks.MockOutboxStore,
+	sink *mocks.MockOutboxSink,
+	metrics *mocks.MockMetrics,
+	parked *mocks.MockCounter,
+	depth, lag *mocks.MockGauge,
+	ctx context.Context,
+) {
+	t.Helper()
+
 	parked.EXPECT().Inc("audit").Times(1)
 	store.EXPECT().Stats(gomock.Any(), "audit").
 		Return(
@@ -797,6 +969,17 @@ func TestRelay_ParkOnPermanentParksAtFirstPermanentFailure(t *testing.T) {
 		)
 	})
 
+	testRelayParkOnPermanentParksAtFirstPermanentFailureRest(t, reject)
+}
+
+// testRelayParkOnPermanentParksAtFirstPermanentFailureRest continues
+// TestRelay_ParkOnPermanentParksAtFirstPermanentFailure with its remaining steps.
+func testRelayParkOnPermanentParksAtFirstPermanentFailureRest(
+	t *testing.T,
+	reject *apperr.AppError,
+) {
+	t.Helper()
+
 	t.Run("disabled", func(t *testing.T) {
 		t.Parallel()
 
@@ -883,6 +1066,17 @@ func TestLoadRelayConfig_OverlaysDefaultsAndRejectsInvalid(t *testing.T) {
 		want.MaxAttempts = 3
 		assert.Equal(t, want, cfg)
 	})
+
+	testLoadRelayConfigOverlaysDefaultsAndRejectsInvalidRest(t, set)
+}
+
+// testLoadRelayConfigOverlaysDefaultsAndRejectsInvalidRest continues
+// TestLoadRelayConfig_OverlaysDefaultsAndRejectsInvalid with its remaining steps.
+func testLoadRelayConfigOverlaysDefaultsAndRejectsInvalidRest(
+	t *testing.T,
+	set func(mut func(*outbox.RelayConfig)) func(string, any) error,
+) {
+	t.Helper()
 
 	t.Run("invalid", func(t *testing.T) {
 		t.Parallel()

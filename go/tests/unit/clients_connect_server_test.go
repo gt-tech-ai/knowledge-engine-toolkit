@@ -134,23 +134,7 @@ func TestConnectServer_ShutdownNilHTTPServer(t *testing.T) {
 func TestConnectServer_HealthzHandler(t *testing.T) {
 	t.Parallel()
 
-	logger := fixtures.NopLogger()
-	cfg := connectpkg.DefaultServerConfig(0)
-	srv := connectpkg.NewServer(cfg, logger)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(
-		t.Context(),
-		http.MethodGet,
-		"/healthz",
-		http.NoBody,
-	)
-	srv.Mux().ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	body, _ := io.ReadAll(rec.Body)
-	assert.Equal(t, "ok", string(body))
+	assertProbeOK(t, "/healthz")
 }
 
 // TestConnectServer_ReadyzHandler tests that the /readyz endpoint registered
@@ -166,23 +150,7 @@ func TestConnectServer_HealthzHandler(t *testing.T) {
 func TestConnectServer_ReadyzHandler(t *testing.T) {
 	t.Parallel()
 
-	logger := fixtures.NopLogger()
-	cfg := connectpkg.DefaultServerConfig(0)
-	srv := connectpkg.NewServer(cfg, logger)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(
-		t.Context(),
-		http.MethodGet,
-		"/readyz",
-		http.NoBody,
-	)
-	srv.Mux().ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	body, _ := io.ReadAll(rec.Body)
-	assert.Equal(t, "ok", string(body))
+	assertProbeOK(t, "/readyz")
 }
 
 // TestConnectServer_StartAndShutdown tests that Start listens on an
@@ -273,4 +241,20 @@ func TestConnectServer_StartBindError(t *testing.T) {
 		srv.Readiness(context.Background()),
 		"a server that failed to bind must not be ready",
 	)
+}
+
+// assertProbeOK requires the new server's probe endpoint to answer 200 "ok".
+func assertProbeOK(t *testing.T, path string) {
+	t.Helper()
+
+	srv := connectpkg.NewServer(connectpkg.DefaultServerConfig(0), fixtures.NopLogger())
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, http.NoBody)
+	srv.Mux().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	body, _ := io.ReadAll(rec.Body)
+	assert.Equal(t, "ok", string(body))
 }

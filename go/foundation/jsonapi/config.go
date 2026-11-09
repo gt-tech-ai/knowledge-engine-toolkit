@@ -119,32 +119,31 @@ func (c Config) MatchRoute(method, path string) (RouteEntry, bool) {
 
 	segs := splitPath(path)
 
-	var (
-		best         RouteEntry
-		bestLiterals int
-	)
+	var best RouteEntry
 
-	found := false
+	bestLiterals := -1
+
 	// Index-based iteration avoids copying the (large) RouteEntry each loop.
 	for i := range c.Routes {
-		e := c.Routes[i]
-		if !strings.EqualFold(e.Method, method) {
-			continue
-		}
-
-		literals, ok := matchTemplate(splitPath(e.PathTemplate), segs)
-		if !ok {
-			continue
-		}
+		literals, ok := matchEntry(&c.Routes[i], method, segs)
 
 		// Prefer the template with the most literal (non-wildcard) segment
 		// matches, so a literal route beats a {param} route at the same position.
-		if !found || literals > bestLiterals {
-			best, bestLiterals, found = e, literals, true
+		if ok && literals > bestLiterals {
+			best, bestLiterals = c.Routes[i], literals
 		}
 	}
 
-	return best, found
+	return best, bestLiterals >= 0
+}
+
+// matchEntry reports whether e serves method and segs, and its literal-segment count.
+func matchEntry(e *RouteEntry, method string, segs []string) (int, bool) {
+	if !strings.EqualFold(e.Method, method) {
+		return 0, false
+	}
+
+	return matchTemplate(splitPath(e.PathTemplate), segs)
 }
 
 // splitPath splits a URL path into its non-empty segments.

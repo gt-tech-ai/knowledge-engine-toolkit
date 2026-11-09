@@ -195,31 +195,45 @@ func (l *locker) Hold(
 		})
 	}
 
-	go func() {
-		ticker := time.NewTicker(l.renewInterval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-stop:
-				return
-			case <-heldCtx.Done():
-				return
-			case <-ticker.C:
-				stillHeld, renewErr := l.Renew(heldCtx, key, token)
-				if renewErr != nil || !stillHeld {
-					// Lease lost: cancel held so the in-flight work stops. Do
-					// not Release — we no longer own the key (release, when
-					// the caller defers it, is a token-fenced no-op).
-					cancel()
-
-					return
-				}
-			}
-		}
-	}()
+	go l.keepRenewed(heldCtx, stop, cancel, key, token)
 
 	return heldCtx, releaseFn, true, nil
+}
+
+// keepRenewed renews the lease each interval until stopped or the lease is lost. On a
+// lost lease it cancels held so the in-flight work stops; it does not Release, because
+// the key is no longer ours (release, when the caller defers it, is a token-fenced no-
+// op).
+func (l *locker) keepRenewed(
+	held context.Context,
+	stop <-chan struct{},
+	cancel context.CancelFunc,
+	key, token string,
+) {
+	ticker := time.NewTicker(l.renewInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-stop:
+			return
+		case <-held.Done():
+			return
+		case <-ticker.C:
+			if !l.stillHeld(held, key, token) {
+				cancel()
+
+				return
+			}
+		}
+	}
+}
+
+// stillHeld renews the lease once, reporting whether it is still ours.
+func (l *locker) stillHeld(ctx context.Context, key, token string) bool {
+	held, err := l.Renew(ctx, key, token)
+
+	return err == nil && held
 }
 
 // canceledContext returns a child of ctx that is already cancelled, so the

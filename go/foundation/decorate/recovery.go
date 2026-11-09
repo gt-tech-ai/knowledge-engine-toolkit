@@ -18,21 +18,29 @@ func NewRecovery(logger interfaces.Logger, tier, name string) OpMiddleware {
 		func(ctx context.Context, op string, next func(context.Context) error) (err error) {
 			defer func() {
 				if r := recover(); r != nil {
-					if logger != nil {
-						logger.WithContext(ctx).Error(
-							tier+" panic recovered",
-							tier, name,
-							"operation", op,
-							"panic", fmt.Sprint(r),
-							"stack", string(debug.Stack()),
-						)
-					}
-
-					err = apperr.Internal("internal " + tier + " error: panic recovered")
+					err = recoveredError(ctx, logger, tier, name, op, r)
 				}
 			}()
 
 			return next(ctx)
 		},
 	)
+}
+
+// recoveredError logs a recovered panic, when a logger is set, and returns the coded
+// error the caller sees.
+func recoveredError(
+	ctx context.Context, logger interfaces.Logger, tier, name, op string, r any,
+) error {
+	if logger != nil {
+		logger.WithContext(ctx).Error(
+			tier+" panic recovered",
+			tier, name,
+			"operation", op,
+			"panic", fmt.Sprint(r),
+			"stack", string(debug.Stack()),
+		)
+	}
+
+	return apperr.Internal("internal " + tier + " error: panic recovered")
 }

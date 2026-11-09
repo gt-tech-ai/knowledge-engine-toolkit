@@ -11,6 +11,15 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// sequenceDashOffset is the columns between a sequence dash and its item.
+const sequenceDashOffset = 3
+
+// yamlIndent is the indent of edited YAML.
+const yamlIndent = 2
+
+// mappingEntryWidth is the Content slots a mapping entry takes: key and value.
+const mappingEntryWidth = 2
+
 // mapTag is the YAML mapping tag.
 const mapTag = "!!map"
 
@@ -78,32 +87,51 @@ type upsert struct {
 // (upsertMissing).
 func (e upsert) run(steps []step) ([]byte, error) {
 	cur := root(e.docs[e.index])
-	for i, st := range steps {
-		cur = deref(cur)
 
-		next, err := child(cur, st)
-		if err != nil {
-			return nil, err
+	for i := range steps {
+		var (
+			out []byte
+			err error
+		)
+
+		cur, out, err = e.advance(deref(cur), steps, i)
+		if err != nil || cur == nil {
+			return out, err
 		}
-
-		switch {
-		case next == nil:
-			return e.missing(cur, steps[i:])
-		case i == len(steps)-1:
-			return e.leaf(cur, next)
-		case isNull(next):
-			out, ok := spliceUnderNull(e.lines, cur, st, steps[i+1:], e.node)
-			if ok && holds(out, e.index, e.path, e.node) {
-				return out, nil
-			}
-
-			*next = yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
-		}
-
-		cur = next
 	}
 
 	return nil, invalid(e.path, "an edit needs at least one step")
+}
+
+// advance applies step i under cur. It returns the node to descend into, or a nil node
+// with the finished file when the step ended the edit.
+func (e upsert) advance(cur *yaml.Node, steps []step, i int) (*yaml.Node, []byte, error) {
+	st := steps[i]
+
+	next, err := child(cur, st)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	switch {
+	case next == nil:
+		out, err := e.missing(cur, steps[i:])
+
+		return nil, out, err
+	case i == len(steps)-1:
+		out, err := e.leaf(cur, next)
+
+		return nil, out, err
+	case isNull(next):
+		if out, ok := spliceUnderNull(e.lines, cur, st, steps[i+1:], e.node); ok &&
+			holds(out, e.index, e.path, e.node) {
+			return nil, out, nil
+		}
+
+		*next = yaml.Node{Kind: yaml.MappingNode, Tag: mapTag}
+	}
+
+	return next, nil, nil
 }
 
 // leaf replaces the existing value old under parent: spliced over its token when it can
@@ -153,21 +181,9 @@ func AppendAt(src []byte, index int, path string, value any) ([]byte, error) {
 		return nil, err
 	}
 
-	seq := root(docs[index])
-	for _, st := range steps {
-		seq, err = child(deref(seq), st)
-		if err != nil {
-			return nil, err
-		}
-
-		if seq == nil {
-			return nil, invalid(path, "selects nothing")
-		}
-	}
-
-	seq = deref(seq)
-	if seq.Kind != yaml.SequenceNode {
-		return nil, invalid(path, "does not select a sequence")
+	seq, err := selectSequence(docs[index], steps, path)
+	if err != nil {
+		return nil, err
 	}
 
 	var node yaml.Node
@@ -186,6 +202,31 @@ func AppendAt(src []byte, index int, path string, value any) ([]byte, error) {
 	return encodeAll(docs)
 }
 
+// selectSequence walks steps from doc's root to the sequence an append targets.
+func selectSequence(doc *yaml.Node, steps []step, path string) (*yaml.Node, error) {
+	seq := root(doc)
+
+	for _, st := range steps {
+		next, err := child(deref(seq), st)
+		if err != nil {
+			return nil, err
+		}
+
+		if next == nil {
+			return nil, invalid(path, "selects nothing")
+		}
+
+		seq = next
+	}
+
+	seq = deref(seq)
+	if seq.Kind != yaml.SequenceNode {
+		return nil, invalid(path, "does not select a sequence")
+	}
+
+	return seq, nil
+}
+
 // appendItem splices item after the last line of block sequence seq, its dash indented
 // like the items', returning false when seq is a flow or empty sequence.
 func appendItem(lines []string, seq, item *yaml.Node) ([]byte, bool) {
@@ -194,41 +235,62 @@ func appendItem(lines []string, seq, item *yaml.Node) ([]byte, bool) {
 	}
 
 	last := seq.Content[len(seq.Content)-1]
-	dash := last.Column - 3
+	dash := last.Column - sequenceDashOffset
 
-	if dash < 0 || last.Line < 1 || last.Line > len(lines) ||
-		len(lines[last.Line-1]) < dash+2 ||
-		!strings.HasPrefix(lines[last.Line-1][dash:], "- ") {
+	if !dashAt(lines, last.Line, dash) {
 		return nil, false
 	}
 
-	var buf bytes.Buffer
-
-	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(2)
-
-	block := &yaml.Node{
-		Kind:    yaml.SequenceNode,
-		Tag:     "!!seq",
-		Content: []*yaml.Node{item},
-	}
-	if enc.Encode(block) != nil || enc.Close() != nil {
+	insert, ok := encodeItem(item, strings.Repeat(" ", dash))
+	if !ok {
 		return nil, false
-	}
-
-	indent := strings.Repeat(" ", dash)
-	insert := splitLines(buf.Bytes())
-
-	for i, l := range insert {
-		if l != "" {
-			insert[i] = indent + l
-		}
 	}
 
 	at := maxLine(last)
 	out := append(append(lines[:at:at], insert...), lines[at:]...)
 
 	return joinLines(out), true
+}
+
+// dashAt reports whether 1-based line carries a sequence dash at column dash.
+func dashAt(lines []string, line, dash int) bool {
+	if dash < 0 || line < 1 || line > len(lines) || len(lines[line-1]) < dash+2 {
+		return false
+	}
+
+	return strings.HasPrefix(lines[line-1][dash:], "- ")
+}
+
+// encodeItem renders item as a one-item block sequence whose lines start with indent.
+func encodeItem(item *yaml.Node, indent string) ([]string, bool) {
+	block := &yaml.Node{
+		Kind:    yaml.SequenceNode,
+		Tag:     "!!seq",
+		Content: []*yaml.Node{item},
+	}
+
+	return encodeIndented(block, indent)
+}
+
+// encodeIndented renders node at two-space indentation, prefixing each non-empty line.
+func encodeIndented(node *yaml.Node, indent string) ([]string, bool) {
+	var buf bytes.Buffer
+
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(yamlIndent)
+
+	if enc.Encode(node) != nil || enc.Close() != nil {
+		return nil, false
+	}
+
+	lines := splitLines(buf.Bytes())
+	for i, l := range lines {
+		if l != "" {
+			lines[i] = indent + l
+		}
+	}
+
+	return lines, true
 }
 
 // Delete removes the node at path from the first document of src.
@@ -246,34 +308,18 @@ func DeleteAt(src []byte, index int, path string) ([]byte, error) {
 		return nil, err
 	}
 
-	parent := root(docs[index])
-	for _, st := range steps[:len(steps)-1] {
-		parent, err = child(deref(parent), st)
-		if err != nil || parent == nil {
-			return src, err
-		}
+	parent, err := walkToParent(docs[index], steps)
+	if err != nil || parent == nil {
+		return src, err
 	}
 
-	parent = deref(parent)
-
-	last := steps[len(steps)-1]
-	first, entry, pos := entryOf(parent, last)
-
+	first, entry, pos := entryOf(parent, steps[len(steps)-1])
 	if entry == nil {
 		return src, nil
 	}
 
 	if parent.Style&yaml.FlowStyle == 0 {
-		lines := splitLines(src)
-		from := first.Line - strings.Count(first.HeadComment, "\n") - 1
-
-		if first.HeadComment != "" {
-			from--
-		}
-
-		to := maxLine(entry)
-
-		return joinLines(append(lines[:from:from], lines[to:]...)), nil
+		return deleteEntryLines(src, first, entry), nil
 	}
 
 	parent.Content = append(parent.Content[:pos], parent.Content[pos+width(parent):]...)
@@ -281,21 +327,39 @@ func DeleteAt(src []byte, index int, path string) ([]byte, error) {
 	return encodeAll(docs)
 }
 
+// walkToParent follows all but the last step, returning nil when a key is missing.
+func walkToParent(doc *yaml.Node, steps []step) (*yaml.Node, error) {
+	parent := root(doc)
+
+	for _, st := range steps[:len(steps)-1] {
+		next, err := child(deref(parent), st)
+		if err != nil || next == nil {
+			return nil, err
+		}
+
+		parent = next
+	}
+
+	return deref(parent), nil
+}
+
+// deleteEntryLines removes the lines from first's head comment through entry's end.
+func deleteEntryLines(src []byte, first, entry *yaml.Node) []byte {
+	lines := splitLines(src)
+	from := first.Line - strings.Count(first.HeadComment, "\n") - 1
+
+	if first.HeadComment != "" {
+		from--
+	}
+
+	return joinLines(append(lines[:from:from], lines[maxLine(entry):]...))
+}
+
 // prepare parses path and src and checks index.
 func prepare(src []byte, index int, path string) ([]step, []*yaml.Node, error) {
-	steps, err := parse(path)
+	steps, err := editSteps(path)
 	if err != nil {
 		return nil, nil, err
-	}
-
-	if len(steps) == 0 {
-		return nil, nil, invalid(path, "an edit needs at least one step")
-	}
-
-	for _, st := range steps {
-		if st.kind != stepKey && st.kind != stepIndex {
-			return nil, nil, invalid(path, "an edit path uses only .key and [n] steps")
-		}
 	}
 
 	docs, err := DecodeAll(src)
@@ -309,6 +373,26 @@ func prepare(src []byte, index int, path string) ([]step, []*yaml.Node, error) {
 	}
 
 	return steps, docs, nil
+}
+
+// editSteps parses path, keeping only the step kinds an edit can follow.
+func editSteps(path string) ([]step, error) {
+	steps, err := parse(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(steps) == 0 {
+		return nil, invalid(path, "an edit needs at least one step")
+	}
+
+	for _, st := range steps {
+		if st.kind != stepKey && st.kind != stepIndex {
+			return nil, invalid(path, "an edit path uses only .key and [n] steps")
+		}
+	}
+
+	return steps, nil
 }
 
 // child returns n's node for st: nil for a missing mapping key, CodeInvalidInput for a
@@ -339,10 +423,17 @@ func entryOf(parent *yaml.Node, last step) (first, value *yaml.Node, pos int) {
 			return parent.Content[last.index], parent.Content[last.index], last.index
 		}
 	case last.kind == stepKey && parent.Kind == yaml.MappingNode:
-		for i := 0; i+1 < len(parent.Content); i += 2 {
-			if parent.Content[i].Value == last.key {
-				return parent.Content[i], parent.Content[i+1], i
-			}
+		return mappingEntry(parent, last.key)
+	}
+
+	return nil, nil, 0
+}
+
+// mappingEntry finds key in a mapping, returning its key node, value and position.
+func mappingEntry(parent *yaml.Node, key string) (first, value *yaml.Node, pos int) {
+	for i := 0; i+1 < len(parent.Content); i += 2 {
+		if parent.Content[i].Value == key {
+			return parent.Content[i], parent.Content[i+1], i
 		}
 	}
 
@@ -352,7 +443,7 @@ func entryOf(parent *yaml.Node, last step) (first, value *yaml.Node, pos int) {
 // width is how many Content slots one entry of n takes.
 func width(n *yaml.Node) int {
 	if n.Kind == yaml.MappingNode {
-		return 2
+		return mappingEntryWidth
 	}
 
 	return 1
@@ -363,41 +454,66 @@ func width(n *yaml.Node) int {
 // when the splice does not apply. A scalar that wraps onto the next line is caught by
 // the caller's holds check.
 func replaceScalar(lines []string, parent, old, replacement *yaml.Node) ([]byte, bool) {
-	if old.Kind != yaml.ScalarNode || replacement.Kind != yaml.ScalarNode ||
-		parent.Style&yaml.FlowStyle != 0 ||
-		old.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 ||
-		old.Line < 1 || old.Line > len(lines) {
+	if !spliceableScalar(lines, parent, old, replacement) {
 		return nil, false
 	}
 
 	line := lines[old.Line-1]
 	start := old.Column - 1
 
-	if start < 0 || start > len(line) {
+	end, ok := scalarTokenEnd(line, start)
+	if !ok {
 		return nil, false
 	}
 
-	end := start + tokenLen(line[start:])
-	if rest := strings.TrimSpace(
-		line[end:],
-	); rest != "" &&
-		!strings.HasPrefix(rest, "#") {
-		return nil, false
-	}
-
-	text, err := yaml.Marshal(replacement)
-	if err != nil {
-		return nil, false
-	}
-
-	token := strings.TrimSuffix(string(text), "\n")
-	if strings.Contains(token, "\n") {
+	token, ok := singleLineToken(replacement)
+	if !ok {
 		return nil, false
 	}
 
 	lines[old.Line-1] = line[:start] + token + line[end:]
 
 	return joinLines(lines), true
+}
+
+// spliceableScalar reports whether old is a single-line scalar in a block collection,
+// so its token can be replaced where it stands.
+func spliceableScalar(lines []string, parent, old, replacement *yaml.Node) bool {
+	if old.Kind != yaml.ScalarNode || replacement.Kind != yaml.ScalarNode {
+		return false
+	}
+
+	if parent.Style&yaml.FlowStyle != 0 ||
+		old.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 {
+		return false
+	}
+
+	return old.Line >= 1 && old.Line <= len(lines)
+}
+
+// scalarTokenEnd returns where the token at start ends, false when anything but a
+// comment follows it on the line.
+func scalarTokenEnd(line string, start int) (int, bool) {
+	if start < 0 || start > len(line) {
+		return 0, false
+	}
+
+	end := start + tokenLen(line[start:])
+	rest := strings.TrimSpace(line[end:])
+
+	return end, rest == "" || strings.HasPrefix(rest, "#")
+}
+
+// singleLineToken renders a scalar, false when its text would wrap across lines.
+func singleLineToken(replacement *yaml.Node) (string, bool) {
+	text, err := yaml.Marshal(replacement)
+	if err != nil {
+		return "", false
+	}
+
+	token := strings.TrimSuffix(string(text), "\n")
+
+	return token, !strings.Contains(token, "\n")
 }
 
 // holds reports whether out parses and its value at path in document index is exactly
@@ -419,19 +535,7 @@ func holds(out []byte, index int, path string, replacement *yaml.Node) bool {
 // closing quote, else everything up to a ` #` comment, trailing spaces trimmed.
 func tokenLen(s string) int {
 	if s != "" && (s[0] == '"' || s[0] == '\'') {
-		q := s[0]
-		for i := 1; i < len(s); i++ {
-			switch {
-			case q == '"' && s[i] == '\\':
-				i++
-			case s[i] == q && q == '\'' && i+1 < len(s) && s[i+1] == '\'':
-				i++
-			case s[i] == q:
-				return i + 1
-			}
-		}
-
-		return len(s)
+		return quotedTokenLen(s)
 	}
 
 	end := len(s)
@@ -440,6 +544,25 @@ func tokenLen(s string) int {
 	}
 
 	return len(strings.TrimRight(s[:end], " \t"))
+}
+
+// quotedTokenLen is the length of the quoted string that starts s, through its closing
+// quote; an unterminated string runs to the end.
+func quotedTokenLen(s string) int {
+	q := s[0]
+
+	for i := 1; i < len(s); i++ {
+		switch {
+		case q == '"' && s[i] == '\\':
+			i++
+		case s[i] == q && q == '\'' && i+1 < len(s) && s[i+1] == '\'':
+			i++
+		case s[i] == q:
+			return i + 1
+		}
+	}
+
+	return len(s)
 }
 
 // appendKeys inserts the missing keys of steps (all mapping keys) with value as a block
@@ -531,15 +654,7 @@ func nullHeader(line string, key *yaml.Node) (string, bool) {
 		return "", false
 	}
 
-	tail := strings.TrimSpace(line[end+1:])
-	for _, token := range []string{"~", "null", "Null", "NULL"} {
-		if t, ok := strings.CutPrefix(tail, token); ok && (t == "" || t[0] == ' ') {
-			tail = strings.TrimSpace(t)
-
-			break
-		}
-	}
-
+	tail := stripNullToken(strings.TrimSpace(line[end+1:]))
 	if tail == "" {
 		return line[:end+1], true
 	}
@@ -551,6 +666,17 @@ func nullHeader(line string, key *yaml.Node) (string, bool) {
 	return line[:end+1] + " " + tail, true
 }
 
+// stripNullToken removes a leading YAML null spelling from tail.
+func stripNullToken(tail string) string {
+	for _, token := range []string{"~", "null", "Null", "NULL"} {
+		if t, ok := strings.CutPrefix(tail, token); ok && (t == "" || t[0] == ' ') {
+			return strings.TrimSpace(t)
+		}
+	}
+
+	return tail
+}
+
 // encodeBlock renders steps' keys, ending in value, as a two-space block mapping whose
 // lines each start with indent; false when the steps cannot form one.
 func encodeBlock(steps []step, value *yaml.Node, indent string) ([]string, bool) {
@@ -559,23 +685,7 @@ func encodeBlock(steps []step, value *yaml.Node, indent string) ([]string, bool)
 		return nil, false
 	}
 
-	var buf bytes.Buffer
-
-	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(2)
-
-	if enc.Encode(block) != nil || enc.Close() != nil {
-		return nil, false
-	}
-
-	lines := splitLines(buf.Bytes())
-	for i, l := range lines {
-		if l != "" {
-			lines[i] = indent + l
-		}
-	}
-
-	return lines, true
+	return encodeIndented(block, indent)
 }
 
 // build adds steps' missing keys under n, ending in value.
@@ -675,7 +785,7 @@ func encodeAll(docs []*yaml.Node) ([]byte, error) {
 	var buf bytes.Buffer
 
 	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(2)
+	enc.SetIndent(yamlIndent)
 
 	for _, doc := range docs {
 		err := enc.Encode(doc)

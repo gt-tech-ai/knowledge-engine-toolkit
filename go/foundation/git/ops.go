@@ -8,6 +8,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/system"
 )
 
+// opBaseArgs sizes the fixed arguments of a path operation.
+const opBaseArgs = 5
+
 // HasPathsChanged reports whether any of the given paths differ between two
 // git refs. It returns true when git diff --quiet exits non-zero (meaning
 // there are differences).
@@ -19,7 +22,7 @@ func HasPathsChanged(
 	to string,
 	paths ...string,
 ) (bool, error) {
-	args := make([]string, 0, 5+len(paths))
+	args := make([]string, 0, opBaseArgs+len(paths))
 
 	args = append(args, "diff", "--quiet", from, to, "--")
 	args = append(args, paths...)

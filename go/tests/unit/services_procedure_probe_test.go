@@ -14,6 +14,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/procedure"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
@@ -87,6 +88,15 @@ func TestServicesProcedure_ProbeKinds(t *testing.T) {
 		"psql -c select": "3 rows", "psql -c empty": "0 rows",
 	}}
 	eng := procEngine(t, rec, procs, procedure.Deps{HTTP: doer, Dialer: dialer})
+
+	testServicesProcedureProbeKindsRest(t, eng)
+}
+
+// testServicesProcedureProbeKindsRest continues TestServicesProcedure_ProbeKinds with
+// its remaining steps.
+func testServicesProcedureProbeKindsRest(t *testing.T, eng interfaces.ProcedureRunner) {
+	t.Helper()
+
 	check := func(name string, kv ...any) map[string]any {
 		m := map[string]any{
 			"name": name, "http": "", "tcp": "", "exec": []any{},

@@ -165,15 +165,7 @@ func MergeEnv(base, extra []string) []string {
 	}
 
 	out := make([]string, 0, len(base)+len(extra))
-	drop := map[string]bool{}
-
-	for _, e := range extra {
-		if name, ok := strings.CutPrefix(e, "-"); ok {
-			drop[name] = true
-		} else if name, _, ok := strings.Cut(e, "="); ok {
-			drop[name] = true
-		}
-	}
+	drop := envOverrides(extra)
 
 	for _, e := range base {
 		if name, _, _ := strings.Cut(e, "="); !drop[name] {
@@ -188,4 +180,19 @@ func MergeEnv(base, extra []string) []string {
 	}
 
 	return out
+}
+
+// envOverrides names the base variables extra removes (`-NAME`) or replaces (`NAME=v`).
+func envOverrides(extra []string) map[string]bool {
+	drop := map[string]bool{}
+
+	for _, e := range extra {
+		if name, ok := strings.CutPrefix(e, "-"); ok {
+			drop[name] = true
+		} else if name, _, ok := strings.Cut(e, "="); ok {
+			drop[name] = true
+		}
+	}
+
+	return drop
 }

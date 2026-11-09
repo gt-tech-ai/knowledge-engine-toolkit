@@ -66,28 +66,9 @@ func (p *UnitPlan) HasChanges() bool { return len(p.Changes) > 0 || p.Outputs }
 // ReadUnits reads every unit's JSONFile under dir, sorted by unit path. A missing dir
 // reads as no units.
 func ReadUnits(dir string) ([]UnitPlan, error) {
-	var plans []UnitPlan
+	w := &unitWalk{dir: dir}
 
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || d.Name() != JSONFile {
-			return err
-		}
-
-		rel, err := filepath.Rel(dir, filepath.Dir(path))
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "locate the unit of "+path)
-		}
-
-		p, err := readUnit(path, filepath.ToSlash(rel))
-		if err != nil {
-			return err
-		}
-
-		plans = append(plans, p)
-
-		return nil
-	})
-
+	err := filepath.WalkDir(dir, w.visit)
 	if err != nil && !apperr.StdIs(err, fs.ErrNotExist) {
 		return nil, apperr.Wrap(
 			err,
@@ -96,9 +77,42 @@ func ReadUnits(dir string) ([]UnitPlan, error) {
 		)
 	}
 
-	slices.SortFunc(plans, func(a, b UnitPlan) int { return cmp.Compare(a.Unit, b.Unit) })
+	slices.SortFunc(
+		w.plans,
+		func(a, b UnitPlan) int { return cmp.Compare(a.Unit, b.Unit) },
+	)
 
-	return plans, nil
+	return w.plans, nil
+}
+
+// unitWalk collects the plan of every unit under dir.
+type unitWalk struct {
+	// dir is the walk's root; a unit is named relative to it.
+	dir string
+
+	// plans holds the plans read.
+	plans []UnitPlan
+}
+
+// visit is the fs.WalkDirFunc that reads each plan file.
+func (w *unitWalk) visit(path string, d fs.DirEntry, err error) error {
+	if err != nil || d.IsDir() || d.Name() != JSONFile {
+		return err
+	}
+
+	rel, err := filepath.Rel(w.dir, filepath.Dir(path))
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "locate the unit of "+path)
+	}
+
+	p, err := readUnit(path, filepath.ToSlash(rel))
+	if err != nil {
+		return err
+	}
+
+	w.plans = append(w.plans, p)
+
+	return nil
 }
 
 // readUnit parses one unit's plan JSON into its counted changes.
@@ -115,8 +129,19 @@ func readUnit(path, unit string) (UnitPlan, error) {
 		return UnitPlan{}, apperr.Wrap(err, apperr.CodeInternal, "parse "+path)
 	}
 
-	p := UnitPlan{Unit: unit}
+	p := UnitPlan{Unit: unit, Outputs: outputsChange(&doc)}
 
+	p.addChanges(&doc)
+
+	slices.SortStableFunc(p.Changes, func(a, b Change) int {
+		return cmp.Compare(destroyRank(a.Action), destroyRank(b.Action))
+	})
+
+	return p, nil
+}
+
+// addChanges counts and records each resource change that is an action.
+func (p *UnitPlan) addChanges(doc *tfjson.Plan) {
 	for _, rc := range doc.ResourceChanges {
 		if rc == nil || rc.Change == nil {
 			continue
@@ -131,18 +156,17 @@ func readUnit(path, unit string) (UnitPlan, error) {
 
 		p.Changes = append(p.Changes, Change{Address: rc.Address, Action: action})
 	}
+}
 
+// outputsChange reports whether any output changes.
+func outputsChange(doc *tfjson.Plan) bool {
 	for _, oc := range doc.OutputChanges {
 		if oc != nil && !oc.Actions.NoOp() {
-			p.Outputs = true
+			return true
 		}
 	}
 
-	slices.SortStableFunc(p.Changes, func(a, b Change) int {
-		return cmp.Compare(destroyRank(a.Action), destroyRank(b.Action))
-	})
-
-	return p, nil
+	return false
 }
 
 // changeAction labels a resource's planned action list, or returns "" for no change
@@ -204,13 +228,7 @@ func destroyRank(action string) int {
 // changes, then unchanged units.
 func Summary(title string, plans []UnitPlan) string {
 	plans = slices.Clone(plans)
-	slices.SortStableFunc(plans, func(a, b UnitPlan) int {
-		if c := cmp.Compare(b.Destroy, a.Destroy); c != 0 {
-			return c
-		}
-
-		return cmp.Compare(changeRank(a), changeRank(b))
-	})
+	slices.SortStableFunc(plans, comparePlans)
 
 	var add, change, destroy int
 
@@ -231,6 +249,26 @@ func Summary(title string, plans []UnitPlan) string {
 	fmt.Fprintf(&b, "%d unit(s): **%d to add, %d to change, %d to destroy.**\n\n",
 		len(plans), add, change, destroy)
 	writeDestroys(&b, plans)
+	writeUnitTable(&b, plans)
+
+	for _, p := range plans {
+		writeUnitChanges(&b, p)
+	}
+
+	return b.String()
+}
+
+// comparePlans orders the most destructive units first, then by change rank.
+func comparePlans(a, b UnitPlan) int {
+	if c := cmp.Compare(b.Destroy, a.Destroy); c != 0 {
+		return c
+	}
+
+	return cmp.Compare(changeRank(a), changeRank(b))
+}
+
+// writeUnitTable writes one row per unit.
+func writeUnitTable(b *strings.Builder, plans []UnitPlan) {
 	b.WriteString("| Unit | Add | Change | Destroy |\n|---|---:|---:|---:|\n")
 
 	for _, p := range plans {
@@ -239,14 +277,8 @@ func Summary(title string, plans []UnitPlan) string {
 			unit += " (outputs change)"
 		}
 
-		fmt.Fprintf(&b, "| %s | %d | %d | %d |\n", cell(unit), p.Add, p.Change, p.Destroy)
+		fmt.Fprintf(b, "| %s | %d | %d | %d |\n", cell(unit), p.Add, p.Change, p.Destroy)
 	}
-
-	for _, p := range plans {
-		writeUnitChanges(&b, p)
-	}
-
-	return b.String()
 }
 
 // changeRank orders a unit with resource changes before one without.

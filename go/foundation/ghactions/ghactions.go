@@ -51,19 +51,26 @@ func AppendSummary(path, markdown string) error {
 func MaskEnv(w io.Writer, env []string) error {
 	for _, kv := range env {
 		_, value, _ := strings.Cut(kv, "=")
-		for line := range strings.SplitSeq(value, "\n") {
-			if line = strings.TrimSpace(line); line == "" {
-				continue
-			}
 
-			_, err := fmt.Fprintf(
-				w,
-				"::add-mask::%s\n",
-				EscapeData(line),
-			)
-			if err != nil {
-				return apperr.Wrap(err, apperr.CodeInternal, "write the mask command")
-			}
+		err := maskValue(w, value)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// maskValue writes one add-mask command per non-blank line of value.
+func maskValue(w io.Writer, value string) error {
+	for line := range strings.SplitSeq(value, "\n") {
+		if line = strings.TrimSpace(line); line == "" {
+			continue
+		}
+
+		_, err := fmt.Fprintf(w, "::add-mask::%s\n", EscapeData(line))
+		if err != nil {
+			return apperr.Wrap(err, apperr.CodeInternal, "write the mask command")
 		}
 	}
 

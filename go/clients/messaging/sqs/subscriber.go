@@ -168,38 +168,42 @@ func (s *Subscriber) consume(
 
 	backoff := s.baseBackoff
 
-	for {
-		if ctx.Err() != nil {
-			return
-		}
-
-		ready, ok := s.awaitQueue(ctx, topic, &queueURL, &backoff)
-		if !ok {
-			return
-		}
-
-		if !ready {
-			continue
-		}
-
-		out, err := s.api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
-			QueueUrl:              aws.String(queueURL),
-			MaxNumberOfMessages:   maxMessagesPerReceive,
-			WaitTimeSeconds:       s.waitTimeSeconds,
-			MessageAttributeNames: []string{"All"},
-		})
-		if err != nil {
-			if !s.backoffOrDone(ctx, "receive", topic, err, &backoff) {
-				return
-			}
-
-			continue
-		}
-
-		backoff = s.baseBackoff
-
-		s.handleBatch(ctx, topic, queueURL, handler, out.Messages)
+	for s.pollOnce(ctx, topic, handler, &queueURL, &backoff) {
 	}
+}
+
+// pollOnce resolves the queue and handles one receive, reporting whether to keep polling.
+func (s *Subscriber) pollOnce(
+	ctx context.Context,
+	topic string,
+	handler interfaces.MessageHandler,
+	queueURL *string,
+	backoff *time.Duration,
+) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+
+	ready, ok := s.awaitQueue(ctx, topic, queueURL, backoff)
+	if !ok || !ready {
+		return ok
+	}
+
+	out, err := s.api.ReceiveMessage(ctx, &awssqs.ReceiveMessageInput{
+		QueueUrl:              aws.String(*queueURL),
+		MaxNumberOfMessages:   maxMessagesPerReceive,
+		WaitTimeSeconds:       s.waitTimeSeconds,
+		MessageAttributeNames: []string{"All"},
+	})
+	if err != nil {
+		return s.backoffOrDone(ctx, "receive", topic, err, backoff)
+	}
+
+	*backoff = s.baseBackoff
+
+	s.handleBatch(ctx, topic, *queueURL, handler, out.Messages)
+
+	return true
 }
 
 // awaitQueue resolves the topic's queue URL into *queueURL when it is still empty, then
@@ -250,8 +254,7 @@ func (s *Subscriber) handleBatch(
 	}
 
 	var (
-		mu      sync.Mutex
-		handled []sqstypes.Message
+		handled handledMessages
 		wg      sync.WaitGroup
 	)
 
@@ -268,21 +271,46 @@ func (s *Subscriber) handleBatch(
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			if !s.runHandler(ctx, topic, handler, m) {
-				s.delayRedelivery(ctx, topic, queueURL, m)
-
-				return
-			}
-
-			mu.Lock()
-
-			handled = append(handled, m)
-			mu.Unlock()
+			s.handleOne(ctx, topic, queueURL, handler, m, &handled)
 		}(m)
 	}
 
 	wg.Wait()
-	s.deleteHandled(ctx, topic, queueURL, handled)
+	s.deleteHandled(ctx, topic, queueURL, handled.list)
+}
+
+// handledMessages collects the messages handled across a batch's goroutines.
+type handledMessages struct {
+	// list holds the handled messages.
+	list []sqstypes.Message
+
+	// mu guards list.
+	mu sync.Mutex
+}
+
+// add records a handled message.
+func (h *handledMessages) add(m sqstypes.Message) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.list = append(h.list, m)
+}
+
+// handleOne runs the handler, recording a success or delaying a failure's redelivery.
+func (s *Subscriber) handleOne(
+	ctx context.Context,
+	topic, queueURL string,
+	handler interfaces.MessageHandler,
+	m sqstypes.Message,
+	handled *handledMessages,
+) {
+	if !s.runHandler(ctx, topic, handler, m) {
+		s.delayRedelivery(ctx, topic, queueURL, m)
+
+		return
+	}
+
+	handled.add(m)
 }
 
 // runHandler dispatches one message to the handler on a grace-bounded context

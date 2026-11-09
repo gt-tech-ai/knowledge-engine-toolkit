@@ -16,6 +16,21 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// largeBatchRows is the rows of the large-batch scenario.
+const largeBatchRows = 50
+
+// pairRows is the rows of a two-row scenario.
+const pairRows = 2
+
+// attemptsAfterRetry is the attempts recorded once a row has been retried.
+const attemptsAfterRetry = 2
+
+// tripleRows is the rows of a three-row scenario.
+const tripleRows = 3
+
+// oldestOffset is how far the oldest pending record sits after the test's reference time.
+const oldestOffset = 2 * time.Second
+
 // Harness is what the conformance suite drives: the store under test plus the
 // producer-side insert the OutboxStore port does not carry.
 type Harness struct {
@@ -106,7 +121,7 @@ func newLane() string { return "conformance-" + uuid.NewString() }
 // concurrentClaimsAreDisjoint claims 50 rows from 5 goroutines.
 func (h Harness) concurrentClaimsAreDisjoint(t *testing.T) {
 	ctx, lane := context.Background(), newLane()
-	want := seed(t, h, lane, 50, time.Now().Add(-time.Hour))
+	want := seed(t, h, lane, largeBatchRows, time.Now().Add(-time.Hour))
 
 	var (
 		mu   sync.Mutex
@@ -146,11 +161,11 @@ func (h Harness) concurrentClaimsAreDisjoint(t *testing.T) {
 // nextAttemptAtIsHonoured checks the lease and Retry's schedule.
 func (h Harness) nextAttemptAtIsHonoured(t *testing.T) {
 	ctx, lane := context.Background(), newLane()
-	ids := seed(t, h, lane, 2, time.Now().Add(-time.Hour))
+	ids := seed(t, h, lane, pairRows, time.Now().Add(-time.Hour))
 
 	first, err := h.claim(ctx, lane)
 	require.NoError(t, err)
-	require.Len(t, first, 2)
+	require.Len(t, first, pairRows)
 	require.Equal(t, 1, first[0].Attempts)
 
 	again, err := h.claim(ctx, lane)
@@ -174,13 +189,13 @@ func (h Harness) nextAttemptAtIsHonoured(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, due, 1)
 	require.Equal(t, ids[0], due[0].ID)
-	require.Equal(t, 2, due[0].Attempts)
+	require.Equal(t, attemptsAfterRetry, due[0].Attempts)
 }
 
 // sentAndParkedAreNotClaimed finalizes two unclaimed due rows and claims.
 func (h Harness) sentAndParkedAreNotClaimed(t *testing.T) {
 	ctx, lane := context.Background(), newLane()
-	ids := seed(t, h, lane, 3, time.Now().Add(-time.Hour))
+	ids := seed(t, h, lane, tripleRows, time.Now().Add(-time.Hour))
 
 	require.NoError(
 		t,
@@ -207,11 +222,11 @@ func (h Harness) sentAndParkedAreNotClaimed(t *testing.T) {
 func (h Harness) statsCountsPendingAndParked(t *testing.T) {
 	ctx, lane := context.Background(), newLane()
 	oldest := time.Now().Add(-time.Hour).Truncate(time.Second)
-	ids := seed(t, h, lane, 3, oldest)
+	ids := seed(t, h, lane, tripleRows, oldest)
 
 	stats, err := h.Store.Stats(ctx, lane)
 	require.NoError(t, err)
-	require.Equal(t, 3, stats.Pending)
+	require.Equal(t, tripleRows, stats.Pending)
 	require.Equal(t, 0, stats.Parked)
 	require.True(
 		t,
@@ -240,7 +255,7 @@ func (h Harness) statsCountsPendingAndParked(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, stats.Pending)
 	require.Equal(t, 1, stats.Parked)
-	require.True(t, oldest.Add(2*time.Second).Equal(stats.OldestPending))
+	require.True(t, oldest.Add(oldestOffset).Equal(stats.OldestPending))
 
 	empty, err := h.Store.Stats(ctx, newLane())
 	require.NoError(t, err)

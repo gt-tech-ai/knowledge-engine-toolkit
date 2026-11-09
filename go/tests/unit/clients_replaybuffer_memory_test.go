@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"testing/quick"
 	"time"
@@ -192,34 +193,40 @@ func TestReplayBufferMemory_TTLExpires(t *testing.T) {
 func TestReplayBufferMemory_ReplayAfterProperty(t *testing.T) {
 	t.Parallel()
 
+	testReplayBufferMemoryReplayAfterPropertyRest5(t)
+}
+
+// replayTailMatches reports whether replaying after message j of an n-message buffer
+// returns a complete tail holding exactly messages j+1 through n, in order.
+func replayTailMatches(t *testing.T, n, j int) bool {
+	t.Helper()
+
+	b := memory.New(100, time.Minute)
+	appendSeq(t, b, n)
+
+	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-"+itoa(j))
+	if err != nil || !complete {
+		return false
+	}
+
+	want := make([]string, 0, n-j)
+	for i := j + 1; i <= n; i++ {
+		want = append(want, "msg-"+itoa(i))
+	}
+
+	return slices.Equal(ids(tail), want)
+}
+
+// testReplayBufferMemoryReplayAfterPropertyRest5 continues
+// testReplayBufferMemoryReplayAfterPropertyRest4 with its remaining steps.
+func testReplayBufferMemoryReplayAfterPropertyRest5(t *testing.T) {
+	t.Helper()
+
 	property := func(nRaw, jRaw uint8) bool {
 		n := int(nRaw%50) + 1 // 1..50
 		j := int(jRaw)%n + 1  // 1..n
-		b := memory.New(100, time.Minute)
-		appendSeq(t, b, n)
 
-		tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-"+itoa(j))
-		if err != nil || !complete {
-			return false
-		}
-
-		want := make([]string, 0, n-j)
-		for i := j + 1; i <= n; i++ {
-			want = append(want, "msg-"+itoa(i))
-		}
-
-		got := ids(tail)
-		if len(got) != len(want) {
-			return false
-		}
-
-		for i := range want {
-			if got[i] != want[i] {
-				return false
-			}
-		}
-
-		return true
+		return replayTailMatches(t, n, j)
 	}
 	require.NoError(t, quick.Check(property, &quick.Config{MaxCount: 200}))
 }

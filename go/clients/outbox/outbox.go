@@ -80,38 +80,42 @@ func kinds() client.Kinds[Config, Deps, interfaces.OutboxSink] {
 			KindStub: func(context.Context, Config, Deps) (interfaces.OutboxSink, error) {
 				return stub.New(), nil
 			},
-			KindSQS: func(
-				_ context.Context, cfg Config, deps Deps,
-			) (interfaces.OutboxSink, error) {
-				api := deps.SQSAPI
-				if api != nil {
-					b, err := tier[outboxsqs.API]("sqs", cfg, deps)
-					if err != nil {
-						return nil, err
-					}
-
-					api = decorateSQS(api, b)
-				}
-
-				return outboxsqs.New(cfg.SQS, api) // reports a missing API
-			},
-			KindS3: func(
-				_ context.Context, cfg Config, deps Deps,
-			) (interfaces.OutboxSink, error) {
-				api := deps.S3API
-				if api != nil {
-					b, err := tier[outboxs3.API]("s3", cfg, deps)
-					if err != nil {
-						return nil, err
-					}
-
-					api = decorateS3(api, b)
-				}
-
-				return outboxs3.New(cfg.S3, api) // reports a missing API
-			},
+			KindSQS: newSQSSink,
+			KindS3:  newS3Sink,
 		},
 	}
+}
+
+// newSQSSink builds the SQS sink, decorating the API when one is injected; the sink
+// reports a missing API.
+func newSQSSink(_ context.Context, cfg Config, deps Deps) (interfaces.OutboxSink, error) {
+	api := deps.SQSAPI
+	if api != nil {
+		b, err := tier[outboxsqs.API]("sqs", cfg, deps)
+		if err != nil {
+			return nil, err
+		}
+
+		api = decorateSQS(api, b)
+	}
+
+	return outboxsqs.New(cfg.SQS, api)
+}
+
+// newS3Sink builds the S3 sink, decorating the API when one is injected; the sink
+// reports a missing API.
+func newS3Sink(_ context.Context, cfg Config, deps Deps) (interfaces.OutboxSink, error) {
+	api := deps.S3API
+	if api != nil {
+		b, err := tier[outboxs3.API]("s3", cfg, deps)
+		if err != nil {
+			return nil, err
+		}
+
+		api = decorateS3(api, b)
+	}
+
+	return outboxs3.New(cfg.S3, api)
 }
 
 // NewFromConfig builds the sink cfg.Kind selects, its SDK client run through the

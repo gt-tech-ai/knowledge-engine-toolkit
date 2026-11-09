@@ -137,52 +137,50 @@ func (t Tier) Chain(name string, d Deps) OpMiddleware {
 // implements natively.
 func (t Tier) Middleware(layer Layer, name string, d Deps) OpMiddleware {
 	switch layer {
-	case LayerRecovery:
-		return when(
-			!d.SkipRecovery,
-			func() OpMiddleware { return NewRecovery(d.panicLogger(), t.Name, name) },
-		)
-	case LayerTracing:
-		return when(
-			d.Tracer != nil,
-			func() OpMiddleware { return NewTracing(d.Tracer, t.Name, name, t.SpanKind) },
-		)
-	case LayerMetrics:
-		return when(
-			d.Metrics != nil,
-			func() OpMiddleware { return NewMetrics(d.Metrics, t.Name, name) },
-		)
-	case LayerLogging:
-		return when(
-			d.Logger != nil,
-			func() OpMiddleware {
-				return loggingMW{logger: d.Logger, tier: t.Name, name: name, edge: t.Edge}
-			},
-		)
-	case LayerAuth:
+	case LayerRecovery, LayerTracing, LayerMetrics, LayerLogging:
+		return t.observabilityMiddleware(layer, name, d)
+	case LayerAuth, LayerTimeout, LayerCircuitBreaker:
+		return callMiddleware(layer, name, d)
+	case LayerRetry, LayerBulkhead, LayerRateLimit:
+		return loadMiddleware(layer, d)
+	default:
+		return nil
+	}
+}
+
+// callMiddleware builds the auth, timeout or circuit breaker layer.
+func callMiddleware(layer Layer, name string, d Deps) OpMiddleware {
+	if layer == LayerAuth {
 		return when(d.Auth != nil, func() OpMiddleware { return NewAuth(name, d.Auth) })
-	case LayerTimeout:
+	}
+
+	if layer == LayerTimeout {
 		return when(d.Timeout > 0, func() OpMiddleware { return NewTimeout(d.Timeout) })
-	case LayerCircuitBreaker:
-		return when(
-			d.Breaker != nil,
-			func() OpMiddleware { return NewCircuitBreaker(d.Breaker) },
-		)
-	case LayerRetry:
+	}
+
+	return when(
+		d.Breaker != nil,
+		func() OpMiddleware { return NewCircuitBreaker(d.Breaker) },
+	)
+}
+
+// loadMiddleware builds the retry, bulkhead or rate limit layer.
+func loadMiddleware(layer Layer, d Deps) OpMiddleware {
+	if layer == LayerRetry {
 		return when(d.Retrier != nil, func() OpMiddleware { return NewRetry(d.Retrier) })
-	case LayerBulkhead:
+	}
+
+	if layer == LayerBulkhead {
 		return when(
 			d.Bulkhead != nil,
 			func() OpMiddleware { return NewBulkhead(d.Bulkhead, d.ShedLoad) },
 		)
-	case LayerRateLimit:
-		return when(
-			d.RateLimiter != nil,
-			func() OpMiddleware { return NewRateLimit(d.RateLimiter) },
-		)
-	default:
-		return nil
 	}
+
+	return when(
+		d.RateLimiter != nil,
+		func() OpMiddleware { return NewRateLimit(d.RateLimiter) },
+	)
 }
 
 // when builds the middleware only when its collaborator is present.
@@ -199,6 +197,37 @@ func when(present bool, build func() OpMiddleware) OpMiddleware {
 // named where it is built.
 func (t Tier) Subject(name string, d Deps) Subject {
 	return Subject{all: t.chains(name, d), name: name}
+}
+
+// observabilityMiddleware builds the recovery, tracing, metrics or logging layer.
+func (t Tier) observabilityMiddleware(layer Layer, name string, d Deps) OpMiddleware {
+	if layer == LayerTracing {
+		return when(
+			d.Tracer != nil,
+			func() OpMiddleware { return NewTracing(d.Tracer, t.Name, name, t.SpanKind) },
+		)
+	}
+
+	if layer == LayerMetrics {
+		return when(
+			d.Metrics != nil,
+			func() OpMiddleware { return NewMetrics(d.Metrics, t.Name, name) },
+		)
+	}
+
+	if layer == LayerLogging {
+		return when(
+			d.Logger != nil,
+			func() OpMiddleware {
+				return loggingMW{logger: d.Logger, tier: t.Name, name: name, edge: t.Edge}
+			},
+		)
+	}
+
+	return when(
+		!d.SkipRecovery,
+		func() OpMiddleware { return NewRecovery(d.panicLogger(), t.Name, name) },
+	)
 }
 
 // chains builds the chains one operation can run on from d.

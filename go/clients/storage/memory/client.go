@@ -337,15 +337,7 @@ func (c *Client) ListObjectsPageToken(
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	keys := make([]string, 0, len(c.buckets[bucket]))
-	for key := range c.buckets[bucket] {
-		if strings.HasPrefix(key, prefix) && key > continuationToken {
-			keys = append(keys, key)
-		}
-	}
-
-	sort.Strings(keys)
-
+	keys := c.keysAfter(bucket, prefix, continuationToken)
 	objects := make([]interfaces.StorageObject, 0, len(keys))
 	next := ""
 
@@ -360,6 +352,22 @@ func (c *Client) ListObjectsPageToken(
 	}
 
 	return objects, next, nil
+}
+
+// keysAfter lists the bucket's keys under prefix past the token, sorted; the caller
+// holds mu.
+func (c *Client) keysAfter(bucket, prefix, token string) []string {
+	keys := make([]string, 0, len(c.buckets[bucket]))
+
+	for key := range c.buckets[bucket] {
+		if strings.HasPrefix(key, prefix) && key > token {
+			keys = append(keys, key)
+		}
+	}
+
+	sort.Strings(keys)
+
+	return keys
 }
 
 // bucketOf returns the bucket's object map, creating it on demand. Caller holds c.mu.

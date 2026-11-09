@@ -99,32 +99,59 @@ func pathEndsInParam(pathTemplate string) bool {
 // error: it is ambiguous between an idempotent create and an instance action, so
 // the author must add the (jsonapi.v1.operation){action} marker or restructure.
 func Classify(b Binding) (Role, error) {
-	hasResource := b.SingleKey != "" || b.CollectionKey != ""
-
-	switch strings.ToUpper(b.HTTPMethod) {
-	case "DELETE":
-		return RoleDelete, nil
-	case "PUT", "PATCH":
-		return RoleUpdate, nil
-	case "GET":
-		switch {
-		case pathEndsInParam(b.PathTemplate):
-			return RoleGetOne, nil
-		case b.CollectionKey != "":
-			return RoleList, nil
-		case b.SingleKey != "":
-			return RoleGetOne, nil
-		}
-	case "POST":
-		switch {
-		case b.Action:
-			return RoleAction, nil
-		case hasResource && !pathEndsInParam(b.PathTemplate):
-			return RoleCreate, nil
-		}
+	role := roleForMethod(b)
+	if role == "" {
+		return "", unclassifiable(b)
 	}
 
-	return "", unclassifiable(b)
+	return role, nil
+}
+
+// roleForMethod dispatches on the HTTP verb; "" means no role applies, which keeps
+// the single error path in Classify.
+func roleForMethod(b Binding) Role {
+	switch strings.ToUpper(b.HTTPMethod) {
+	case "DELETE":
+		return RoleDelete
+	case "PUT", "PATCH":
+		return RoleUpdate
+	case "GET":
+		return roleForGet(b)
+	case "POST":
+		return roleForPost(b)
+	default:
+		return ""
+	}
+}
+
+// roleForGet separates fetching one resource from listing a collection; a trailing
+// path parameter wins over the response keys.
+func roleForGet(b Binding) Role {
+	switch {
+	case pathEndsInParam(b.PathTemplate):
+		return RoleGetOne
+	case b.CollectionKey != "":
+		return RoleList
+	case b.SingleKey != "":
+		return RoleGetOne
+	default:
+		return ""
+	}
+}
+
+// roleForPost separates an action from a create; a resource returned on a
+// specific-instance path is left unclassified because it is ambiguous.
+func roleForPost(b Binding) Role {
+	hasResource := b.SingleKey != "" || b.CollectionKey != ""
+
+	switch {
+	case b.Action:
+		return RoleAction
+	case hasResource && !pathEndsInParam(b.PathTemplate):
+		return RoleCreate
+	default:
+		return ""
+	}
 }
 
 // unclassifiable builds the coded, RPC-naming error Classify returns when it

@@ -169,16 +169,9 @@ func (c *chaosMeshInjector) Inject(ctx context.Context, f types.Fault) error {
 
 	defer func() { _ = os.Remove(file.Name()) }()
 
-	_, err = file.Write(data)
+	err = writeManifest(file, data)
 	if err != nil {
-		_ = file.Close()
-
-		return apperr.Wrap(err, apperr.CodeInternal, "write chaos manifest file")
-	}
-
-	err = file.Close()
-	if err != nil {
-		return apperr.Wrap(err, apperr.CodeInternal, "close chaos manifest file")
+		return err
 	}
 
 	out := c.runner.RunBuffered(ctx, c.root, "kubectl", "create", "-f", file.Name())
@@ -194,6 +187,23 @@ func (c *chaosMeshInjector) Inject(ctx context.Context, f types.Fault) error {
 			"kubectl create %s %s/%s: %s",
 			res.Kind, f.Target.Namespace, f.Name, strings.TrimSpace(string(out.Stderr)),
 		))
+	}
+
+	return nil
+}
+
+// writeManifest writes data to the open file and closes it.
+func writeManifest(file *os.File, data []byte) error {
+	_, err := file.Write(data)
+	if err != nil {
+		_ = file.Close()
+
+		return apperr.Wrap(err, apperr.CodeInternal, "write chaos manifest file")
+	}
+
+	err = file.Close()
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "close chaos manifest file")
 	}
 
 	return nil

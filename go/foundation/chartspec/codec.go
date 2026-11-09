@@ -12,6 +12,15 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// partialMinSlot is the position of Min in an encoded Partial.
+const partialMinSlot = 2
+
+// partialMaxSlot is the position of Max in an encoded Partial.
+const partialMaxSlot = 3
+
+// partialBodyHint is the capacity reserved for an encoded partial's body.
+const partialBodyHint = 64
+
 // partialCodecVersion is the first byte of an encoded Partial.
 const partialCodecVersion byte = 1
 
@@ -21,7 +30,7 @@ const partialHeaderLen = 1 + 4*8
 // EncodePartial serializes p (version byte, sum, count, min, max as big-endian
 // float64, then the DDSketch with its index mapping) for storage in a row.
 func EncodePartial(p Partial) []byte {
-	out := make([]byte, partialHeaderLen, partialHeaderLen+64)
+	out := make([]byte, partialHeaderLen, partialHeaderLen+partialBodyHint)
 
 	out[0] = partialCodecVersion
 
@@ -49,7 +58,7 @@ func DecodePartial(b []byte) (Partial, error) {
 	f := func(i int) float64 {
 		return math.Float64frombits(binary.BigEndian.Uint64(b[1+8*i:]))
 	}
-	p := Partial{Sum: f(0), Count: f(1), Min: f(2), Max: f(3)}
+	p := Partial{Sum: f(0), Count: f(1), Min: f(partialMinSlot), Max: f(partialMaxSlot)}
 
 	if rest := b[partialHeaderLen:]; len(rest) > 0 {
 		sketch, err := ddsketch.DecodeDDSketch(rest, store.DefaultProvider, nil)

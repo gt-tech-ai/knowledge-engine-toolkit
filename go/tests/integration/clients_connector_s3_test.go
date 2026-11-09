@@ -111,6 +111,21 @@ func TestConnectorS3Source_TestConnection_RealMinIO(t *testing.T) {
 		SecretAccessKey: miniofix.RootPassword,
 	}
 
+	testConnectorS3SourceTestConnectionRealMinIORest(t, ctx, builder, cfg)
+}
+
+// testConnectorS3SourceTestConnectionRealMinIORest continues
+// TestConnectorS3Source_TestConnection_RealMinIO with its remaining steps.
+func testConnectorS3SourceTestConnectionRealMinIORest(
+	t *testing.T,
+	ctx context.Context,
+	builder interfaces.SourceBuilder,
+	cfg interfaces.SourceConfig,
+) {
+	t.Helper()
+
+	var err error
+
 	src, err := builder.Build(ctx, cfg)
 	require.NoError(t, err)
 

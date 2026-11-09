@@ -216,6 +216,15 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 
 	denied := serveStream(t.Context(), guarded, ok)
 	assert.Contains(t, denied, "permission denied")
+
+	testConnectServerOptionsDecoratesEveryRPCRest(t, denied)
+}
+
+// testConnectServerOptionsDecoratesEveryRPCRest continues
+// TestConnectServerOptions_DecoratesEveryRPC with its remaining steps.
+func testConnectServerOptionsDecoratesEveryRPCRest(t *testing.T, denied string) {
+	t.Helper()
+
 	assert.NotContains(t, denied, "secret-action-detail")
 
 	panicking := func(context.Context) error { panic("boom") }
@@ -298,6 +307,19 @@ func TestGRPCServerOptions_DecoratesEveryRPC(t *testing.T) {
 
 		return grpc_health_v1.NewHealthClient(conn)
 	}
+
+	testGRPCServerOptionsDecoratesEveryRPCRest(t, actions, serve)
+}
+
+// testGRPCServerOptionsDecoratesEveryRPCRest continues
+// TestGRPCServerOptions_DecoratesEveryRPC with its remaining steps.
+func testGRPCServerOptionsDecoratesEveryRPCRest(
+	t *testing.T,
+	actions []string,
+	serve func(d decorate.Deps) grpc_health_v1.HealthClient,
+) {
+	t.Helper()
+
 	check := func(d decorate.Deps) error {
 		_, err := serve(d).Check(t.Context(), &grpc_health_v1.HealthCheckRequest{})
 

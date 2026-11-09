@@ -960,6 +960,14 @@ func TestSubscriber_FansOutBatchAndBatchDeletes(t *testing.T) {
 		Return(&awssqs.GetQueueUrlOutput{QueueUrl: aws.String("http://q")}, nil).
 		AnyTimes()
 
+	testSubscriberFansOutBatchAndBatchDeletesRest6(t, api)
+}
+
+// testSubscriberFansOutBatchAndBatchDeletesRest6 continues
+// testSubscriberFansOutBatchAndBatchDeletesRest4 with its remaining steps.
+func testSubscriberFansOutBatchAndBatchDeletesRest6(t *testing.T, api *mocks.MockAPI) {
+	t.Helper()
+
 	const n = 10
 
 	batch := make([]sqstypes.Message, n)
@@ -975,23 +983,7 @@ func TestSubscriber_FansOutBatchAndBatchDeletes(t *testing.T) {
 	api.EXPECT().ReceiveMessage(gomock.Any(), gomock.Any()).
 		DoAndReturn(scriptedReceive([]receiveResult{{batch: batch}})).AnyTimes()
 
-	deletedCount := make(chan int, 1)
-
-	api.EXPECT().DeleteMessageBatch(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(
-			_ context.Context,
-			in *awssqs.DeleteMessageBatchInput,
-			_ ...func(*awssqs.Options),
-		) (*awssqs.DeleteMessageBatchOutput, error) {
-			select {
-			case deletedCount <- len(in.Entries):
-			default:
-			}
-
-			return &awssqs.DeleteMessageBatchOutput{}, nil
-		},
-	).
-		AnyTimes()
+	deletedCount := expectBatchDeleteCount(api)
 
 	var inFlight sync.WaitGroup
 
@@ -1122,4 +1114,27 @@ func TestSubscriber_LogsBatchDeletePartialFailure(t *testing.T) {
 	recv(t, handled, "handler to be called")
 	require.NoError(t, sub.Close())
 	require.NotEmpty(t, spy.ErrorCalls, "batch-delete partial failure should be logged")
+}
+
+// expectBatchDeleteCount reports the entry count of the first DeleteMessageBatch.
+func expectBatchDeleteCount(api *mocks.MockAPI) chan int {
+	deletedCount := make(chan int, 1)
+
+	api.EXPECT().DeleteMessageBatch(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			in *awssqs.DeleteMessageBatchInput,
+			_ ...func(*awssqs.Options),
+		) (*awssqs.DeleteMessageBatchOutput, error) {
+			select {
+			case deletedCount <- len(in.Entries):
+			default:
+			}
+
+			return &awssqs.DeleteMessageBatchOutput{}, nil
+		},
+	).
+		AnyTimes()
+
+	return deletedCount
 }

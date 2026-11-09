@@ -453,35 +453,49 @@ func TestS3Inventory_RefusesMalformedDataFiles(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
-			manifest, err := json.Marshal(map[string]any{
-				"sourceBucket": "b", "fileFormat": "CSV", "fileSchema": tc.schema,
-				"files": []map[string]any{{"key": "inv/data/plain.csv"}},
-			})
-			require.NoError(t, err)
-
-			sc := mocks.NewMockStorageClient(gomock.NewController(t))
-			sc.EXPECT().Download(gomock.Any(), "reports", gomock.Any()).
-				DoAndReturn(func(_ context.Context, _, key string) (io.ReadCloser, error) {
-					if key == inventoryManifestKey {
-						return io.NopCloser(bytes.NewReader(manifest)), nil
-					}
-
-					return io.NopCloser(strings.NewReader(tc.data)), nil
-				}).
-				AnyTimes()
-
-			src, err := s3inventory.NewSource(
-				ctx,
-				inventoryCfg(),
-				nil,
-				stubBuilder(sc, nil),
-			)
-			require.NoError(t, err)
-
-			_, _, err = src.ListPage(ctx, tc.token, 10)
-
-			require.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+			testS3InventoryRefusesMalformedDataFilesCase(t, tc)
 		})
 	}
+}
+
+// testS3InventoryRefusesMalformedDataFilesCase is the body of a closure in
+// TestS3Inventory_RefusesMalformedDataFiles.
+func testS3InventoryRefusesMalformedDataFilesCase(t *testing.T, tc struct {
+	name   string
+	schema string
+	data   string
+	token  string
+},
+) {
+	t.Helper()
+
+	ctx := context.Background()
+	manifest, err := json.Marshal(map[string]any{
+		"sourceBucket": "b", "fileFormat": "CSV", "fileSchema": tc.schema,
+		"files": []map[string]any{{"key": "inv/data/plain.csv"}},
+	})
+	require.NoError(t, err)
+
+	sc := mocks.NewMockStorageClient(gomock.NewController(t))
+	sc.EXPECT().Download(gomock.Any(), "reports", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _, key string) (io.ReadCloser, error) {
+			if key == inventoryManifestKey {
+				return io.NopCloser(bytes.NewReader(manifest)), nil
+			}
+
+			return io.NopCloser(strings.NewReader(tc.data)), nil
+		}).
+		AnyTimes()
+
+	src, err := s3inventory.NewSource(
+		ctx,
+		inventoryCfg(),
+		nil,
+		stubBuilder(sc, nil),
+	)
+	require.NoError(t, err)
+
+	_, _, err = src.ListPage(ctx, tc.token, 10)
+
+	require.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
 }

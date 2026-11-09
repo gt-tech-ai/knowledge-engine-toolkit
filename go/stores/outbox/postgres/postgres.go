@@ -43,6 +43,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/store"
 )
 
+// outboxFixedColumns counts the columns scanned before the attribute columns.
+const outboxFixedColumns = 7
+
 // Compile-time check: a Store is an OutboxStore.
 var _ interfaces.OutboxStore = (*Store)(nil)
 
@@ -84,25 +87,9 @@ type Config struct {
 // Validate rejects a non-identifier table or column and a non-positive lease with
 // CodeInvalidInput.
 func (c Config) Validate() error {
-	names := []string{c.Table, c.keyColumn()}
-	if c.TenantColumn != "" {
-		names = append(names, c.TenantColumn)
-	}
-
-	if c.PartitionColumn != "" {
-		names = append(names, c.PartitionColumn)
-	}
-
-	for _, col := range c.AttributeColumns {
-		names = append(names, col)
-	}
-
-	for _, n := range names {
-		if !isIdentifier(n) {
-			return apperr.InvalidInput(
-				fmt.Sprintf("outbox postgres store: %q is not a plain identifier", n),
-			)
-		}
+	err := c.validateIdentifiers()
+	if err != nil {
+		return err
 	}
 
 	if c.Lease <= 0 {
@@ -125,6 +112,32 @@ func (c Config) Validate() error {
 	return nil
 }
 
+// validateIdentifiers requires every configured table and column name to be plain.
+func (c Config) validateIdentifiers() error {
+	names := []string{c.Table, c.keyColumn()}
+	if c.TenantColumn != "" {
+		names = append(names, c.TenantColumn)
+	}
+
+	if c.PartitionColumn != "" {
+		names = append(names, c.PartitionColumn)
+	}
+
+	for _, col := range c.AttributeColumns {
+		names = append(names, col)
+	}
+
+	for _, n := range names {
+		if !isIdentifier(n) {
+			return apperr.InvalidInput(
+				fmt.Sprintf("outbox postgres store: %q is not a plain identifier", n),
+			)
+		}
+	}
+
+	return nil
+}
+
 // partitions is Partitions with its default of 1.
 func (c Config) partitions() int {
 	return max(c.Partitions, 1)
@@ -134,17 +147,27 @@ func (c Config) partitions() int {
 // underscore, then letters, digits or underscores, at most 63 bytes). The table and
 // column names are interpolated into the statements, so nothing else is accepted.
 func isIdentifier(n string) bool {
-	if n == "" || len(n) > 63 || (n[0] >= '0' && n[0] <= '9') {
+	if n == "" || len(n) > 63 || isDigitRune(rune(n[0])) {
 		return false
 	}
 
 	for _, r := range n {
-		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_' {
+		if !isIdentifierRune(r) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// isDigitRune reports an ASCII digit.
+func isDigitRune(r rune) bool { return r >= '0' && r <= '9' }
+
+// isIdentifierRune reports a lowercase letter, digit or underscore.
+func isIdentifierRune(
+	r rune,
+) bool {
+	return (r >= 'a' && r <= 'z') || isDigitRune(r) || r == '_'
 }
 
 // keyColumn is KeyColumn with its default.
@@ -515,7 +538,7 @@ func (s *Store) scanClaimed(rows *sql.Rows) (types.OutboxRecord, error) {
 	var rec types.OutboxRecord
 
 	attrs := make([]sql.NullString, len(s.attrKeys))
-	dest := make([]any, 0, 7+len(attrs))
+	dest := make([]any, 0, outboxFixedColumns+len(attrs))
 
 	dest = append(dest,
 		&rec.ID,

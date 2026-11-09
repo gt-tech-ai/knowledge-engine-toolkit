@@ -11,6 +11,7 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/gate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/job"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/suite"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
@@ -100,6 +101,14 @@ func TestServicesSuite_Composite(t *testing.T) {
 		{Name: "lint", Flags: []string{"go", "offline"}},
 		{Name: "check", Select: &types.Selection{Tags: []string{"mocks"}}},
 	}, refs)
+
+	testServicesSuiteCompositeRest(t, g)
+}
+
+// testServicesSuiteCompositeRest continues TestServicesSuite_Composite with its
+// remaining steps.
+func testServicesSuiteCompositeRest(t *testing.T, g *gate.Gate) {
+	t.Helper()
 
 	runner := mocks.NewMockCommandRunner(gomock.NewController(t))
 	require.NoError(t, g.Run(t.Context(), runner, "/r"))

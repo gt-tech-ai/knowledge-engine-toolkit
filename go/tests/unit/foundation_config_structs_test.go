@@ -523,11 +523,32 @@ func TestAppConfig_DefaultAndValidate(t *testing.T) {
 func TestAuthConfig_Validate(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		cfg     infra.AuthConfig
-		wantErr bool
-	}{
+	tests := testAuthConfigValidateTable()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tt.cfg.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// testAuthConfigValidateRow is one row of testAuthConfigValidateTable.
+type testAuthConfigValidateRow struct {
+	name    string
+	cfg     infra.AuthConfig
+	wantErr bool
+}
+
+// testAuthConfigValidateTable builds the table TestAuthConfig_Validate runs.
+func testAuthConfigValidateTable() []testAuthConfigValidateRow {
+	return []testAuthConfigValidateRow{
 		{
 			name:    "stub mode skips issuer/audience check",
 			cfg:     infra.AuthConfig{Stub: true},
@@ -575,19 +596,6 @@ func TestAuthConfig_Validate(t *testing.T) {
 			// deploy (stub=false) must not bypass service auth
 			wantErr: true,
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			err := tt.cfg.Validate()
-			if tt.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-		})
 	}
 }
 

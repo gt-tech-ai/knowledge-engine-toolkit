@@ -65,33 +65,46 @@ func (v *view) Docs(
 	var out []types.Document
 
 	for _, f := range files {
-		format := docFormat(path.Ext(f.Path))
-
-		var docs []any
-
-		switch format {
-		case formatYAML:
-			docs, err = v.yamlDocs(ctx, f.Path)
-		case formatHCL:
-			docs, err = v.oneDoc(ctx, formatHCL, f.Path, decodeHCL)
-		case formatAlloy:
-			docs, err = v.oneDoc(ctx, formatAlloy, f.Path, decodeAlloy)
-		case formatTOML:
-			docs, err = v.oneDoc(ctx, formatTOML, f.Path, decodeTOML)
-		default:
-			continue
-		}
-
+		docs, err := v.fileDocuments(ctx, f.Path)
 		if err != nil {
 			return nil, err
 		}
 
-		for i, d := range docs {
-			out = append(
-				out,
-				types.Document{Value: d, Path: f.Path, Format: format, Index: i},
-			)
-		}
+		out = append(out, docs...)
+	}
+
+	return out, nil
+}
+
+// fileDocuments decodes one file by its format; an unknown format yields nothing.
+func (v *view) fileDocuments(ctx context.Context, p string) ([]types.Document, error) {
+	format := docFormat(path.Ext(p))
+
+	var (
+		docs []any
+		err  error
+	)
+
+	switch format {
+	case formatYAML:
+		docs, err = v.yamlDocs(ctx, p)
+	case formatHCL:
+		docs, err = v.oneDoc(ctx, formatHCL, p, decodeHCL)
+	case formatAlloy:
+		docs, err = v.oneDoc(ctx, formatAlloy, p, decodeAlloy)
+	case formatTOML:
+		docs, err = v.oneDoc(ctx, formatTOML, p, decodeTOML)
+	default:
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]types.Document, 0, len(docs))
+	for i, d := range docs {
+		out = append(out, types.Document{Value: d, Path: p, Format: format, Index: i})
 	}
 
 	return out, nil

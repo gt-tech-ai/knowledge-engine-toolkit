@@ -102,49 +102,66 @@ func TestGRPCClientOptions_StampEveryAttempt(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			var unary, stream []metadata.MD
-
-			conn := dialDecorated(
-				t,
-				wireBase("probe", fastRetrier(t)),
-				tc.token,
-				func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn,
-					_ grpc.UnaryInvoker, _ ...grpc.CallOption,
-				) error {
-					md, _ := metadata.FromOutgoingContext(ctx)
-
-					unary = append(unary, md)
-
-					return errCaptured
-				},
-				func(ctx context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string,
-					_ grpc.Streamer, _ ...grpc.CallOption,
-				) (grpc.ClientStream, error) {
-					md, _ := metadata.FromOutgoingContext(ctx)
-
-					stream = append(stream, md)
-
-					return nil, errCaptured
-				},
-			)
-
-			require.Equal(t, codes.Aborted,
-				status.Code(conn.Invoke(ctx, "/test.Service/Unary", nil, nil)))
-
-			_, err := conn.NewStream(ctx, &grpc.StreamDesc{}, "/test.Service/Stream")
-			require.Equal(t, codes.Aborted, status.Code(err))
-
-			require.Len(t, unary, 3, "the transient failure is retried")
-			require.Len(t, stream, 1, "a stream open is never retried")
-
-			for i, md := range append(unary, stream...) {
-				assert.Equal(t, tc.want, md.Get("authorization"), "call %d", i)
-
-				tp := md.Get("traceparent")
-				require.Len(t, tp, 1, "call %d", i)
-				assert.Contains(t, tp[0], sc.TraceID().String(), "call %d", i)
-			}
+			testGRPCClientOptionsStampEveryAttemptCase(t, sc, ctx, tc)
 		})
+	}
+}
+
+// testGRPCClientOptionsStampEveryAttemptCase is the body of a closure in
+// TestGRPCClientOptions_StampEveryAttempt.
+func testGRPCClientOptionsStampEveryAttemptCase(
+	t *testing.T,
+	sc oteltrace.SpanContext,
+	ctx context.Context,
+	tc struct {
+		name  string
+		token string
+		want  []string
+	},
+) {
+	t.Helper()
+
+	var unary, stream []metadata.MD
+
+	conn := dialDecorated(
+		t,
+		wireBase("probe", fastRetrier(t)),
+		tc.token,
+		func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn,
+			_ grpc.UnaryInvoker, _ ...grpc.CallOption,
+		) error {
+			md, _ := metadata.FromOutgoingContext(ctx)
+
+			unary = append(unary, md)
+
+			return errCaptured
+		},
+		func(ctx context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string,
+			_ grpc.Streamer, _ ...grpc.CallOption,
+		) (grpc.ClientStream, error) {
+			md, _ := metadata.FromOutgoingContext(ctx)
+
+			stream = append(stream, md)
+
+			return nil, errCaptured
+		},
+	)
+
+	require.Equal(t, codes.Aborted,
+		status.Code(conn.Invoke(ctx, "/test.Service/Unary", nil, nil)))
+
+	_, err := conn.NewStream(ctx, &grpc.StreamDesc{}, "/test.Service/Stream")
+	require.Equal(t, codes.Aborted, status.Code(err))
+
+	require.Len(t, unary, 3, "the transient failure is retried")
+	require.Len(t, stream, 1, "a stream open is never retried")
+
+	for i, md := range append(unary, stream...) {
+		assert.Equal(t, tc.want, md.Get("authorization"), "call %d", i)
+
+		tp := md.Get("traceparent")
+		require.Len(t, tp, 1, "call %d", i)
+		assert.Contains(t, tp[0], sc.TraceID().String(), "call %d", i)
 	}
 }
 
@@ -195,6 +212,21 @@ func TestGRPCClientOptions_ClassifyByTheSharedPolicy(t *testing.T) {
 		assert.Equal(t, "bad query", status.Convert(err).Message())
 		assert.Equal(t, 1, calls)
 	})
+
+	testGRPCClientOptionsClassifyByTheSharedPolicyRest(t, noStream, answers)
+}
+
+// testGRPCClientOptionsClassifyByTheSharedPolicyRest continues
+// TestGRPCClientOptions_ClassifyByTheSharedPolicy with its remaining steps.
+func testGRPCClientOptionsClassifyByTheSharedPolicyRest(
+	t *testing.T,
+	noStream func(
+		context.Context, *grpc.StreamDesc, *grpc.ClientConn, string,
+		grpc.Streamer, ...grpc.CallOption,
+	) (grpc.ClientStream, error),
+	answers func(calls *int, errs ...error) grpc.UnaryClientInterceptor,
+) {
+	t.Helper()
 
 	t.Run("transient", func(t *testing.T) {
 		t.Parallel()

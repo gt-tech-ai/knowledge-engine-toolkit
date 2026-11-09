@@ -26,20 +26,9 @@ func toolCheck(
 		return nil, apperr.New(apperr.CodeInternal, "no runner for tool "+r.Tool)
 	}
 
-	var input []byte
-
-	if r.Render.ChartDir != "" {
-		objs, err := cb.Rendered(ctx, r.Render)
-		if err != nil { //nolint:nilerr // a chart that fails to render is the row's finding
-			return []types.Finding{
-				{Message: "render " + r.Render.ChartDir + ": " + err.Error()},
-			}, nil
-		}
-
-		input, err = documents(objs)
-		if err != nil {
-			return nil, err
-		}
+	input, rendered, err := renderToolInput(ctx, cb, r)
+	if err != nil || rendered != nil {
+		return rendered, err
 	}
 
 	res := runner.RunBufferedWithInput(ctx, root, nil, input, r.Tool, r.Args...)
@@ -55,6 +44,27 @@ func toolCheck(
 	return []types.Finding{{
 		Message: subject + ": " + string(res.Stdout) + string(res.Stderr),
 	}}, nil
+}
+
+// renderToolInput renders the row's chart to the tool's stdin. A chart that fails to
+// render is the row's finding, returned instead of an error.
+func renderToolInput(
+	ctx context.Context, cb interfaces.Codebase, r *types.GuardRow,
+) ([]byte, []types.Finding, error) {
+	if r.Render.ChartDir == "" {
+		return nil, nil, nil
+	}
+
+	objs, err := cb.Rendered(ctx, r.Render)
+	if err == nil {
+		input, derr := documents(objs)
+
+		return input, nil, derr
+	}
+
+	return nil, []types.Finding{
+		{Message: "render " + r.Render.ChartDir + ": " + err.Error()},
+	}, nil
 }
 
 // documents encodes objs as a YAML stream, one document per object.

@@ -178,76 +178,84 @@ func decodeValue(op types.FilterOperator, v any, ft FieldType) (any, error) {
 // RFC 3339 time. A number may arrive as a json.Number (from JSON) or a float64 (from a
 // structured source). A null or type-incompatible value is CodeInvalidInput.
 func decodeScalar(v any, ft FieldType) (any, error) {
-	mismatch := apperr.New(
+	switch ft {
+	case FieldString, FieldID:
+		s, ok := v.(string)
+
+		return scalarOrMismatch(s, ok)
+	case FieldInt:
+		return scalarOrMismatch(safeInt(v))
+	case FieldFloat:
+		return scalarOrMismatch(number(v))
+	case FieldBool:
+		b, ok := v.(bool)
+
+		return scalarOrMismatch(b, ok)
+	case FieldTime:
+		return decodeTimeScalar(v)
+	}
+
+	return nil, scalarMismatch()
+}
+
+// scalarMismatch is the error for a value that does not fit its field's type.
+func scalarMismatch() error {
+	return apperr.New(
 		apperr.CodeInvalidInput,
 		"filter: value type does not match field type",
 	)
+}
 
-	switch ft {
-	case FieldString, FieldID:
-		if s, ok := v.(string); ok {
-			return s, nil
-		}
-	case FieldInt:
-		if n, ok := safeInt(v); ok {
-			return n, nil
-		}
-	case FieldFloat:
-		if f, ok := number(v); ok {
-			return f, nil
-		}
-	case FieldBool:
-		if b, ok := v.(bool); ok {
-			return b, nil
-		}
-	case FieldTime:
-		s, ok := v.(string)
-		if !ok {
-			return nil, mismatch
-		}
-
-		ts, err := time.Parse(time.RFC3339, s)
-		if err != nil {
-			return nil, apperr.Wrap(
-				err,
-				apperr.CodeInvalidInput,
-				"filter: time value must be RFC3339",
-			)
-		}
-
-		return ts, nil
+// scalarOrMismatch returns val when the conversion succeeded.
+func scalarOrMismatch[T any](val T, ok bool) (any, error) {
+	if !ok {
+		return nil, scalarMismatch()
 	}
 
-	return nil, mismatch
+	return val, nil
+}
+
+// decodeTimeScalar parses an RFC3339 string.
+func decodeTimeScalar(v any) (any, error) {
+	s, ok := v.(string)
+	if !ok {
+		return nil, scalarMismatch()
+	}
+
+	ts, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return nil, apperr.Wrap(
+			err,
+			apperr.CodeInvalidInput,
+			"filter: time value must be RFC3339",
+		)
+	}
+
+	return ts, nil
 }
 
 // safeInt reads a whole number within ±maxSafeInt from a json.Number or a float64.
 func safeInt(v any) (int64, bool) {
-	var n int64
-
-	switch x := v.(type) {
-	case json.Number:
-		parsed, err := x.Int64()
-		if err != nil {
-			return 0, false
-		}
-
-		n = parsed
-	case float64:
-		if x != math.Trunc(x) || math.Abs(x) > maxSafeInt {
-			return 0, false
-		}
-
-		n = int64(x)
-	default:
-		return 0, false
-	}
-
-	if n > maxSafeInt || n < -maxSafeInt {
+	n, ok := wholeNumber(v)
+	if !ok || n > maxSafeInt || n < -maxSafeInt {
 		return 0, false
 	}
 
 	return n, true
+}
+
+// wholeNumber converts a JSON number with no fractional part.
+func wholeNumber(v any) (int64, bool) {
+	switch x := v.(type) {
+	case json.Number:
+		parsed, err := x.Int64()
+
+		return parsed, err == nil
+	case float64:
+		return int64(x), x == math.Trunc(x) && math.Abs(x) <= maxSafeInt
+	default:
+		return 0, false
+	}
 }
 
 // number reads a finite float64 from a json.Number or a float64.

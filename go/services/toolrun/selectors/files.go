@@ -29,22 +29,35 @@ func (files) Select(
 	}
 
 	out := make([]string, 0, len(found))
-	for _, f := range found {
-		if spec.SkipHeredoc {
-			text, err := cb.Text(ctx, f.Path)
-			if err != nil {
-				return nil, err
-			}
 
-			if heredocRe.Match(text.Bytes) {
-				continue
-			}
+	for _, f := range found {
+		keep, err := keepFile(ctx, cb, spec, f.Path)
+		if err != nil {
+			return nil, err
 		}
 
-		out = append(out, f.Path)
+		if keep {
+			out = append(out, f.Path)
+		}
 	}
 
 	return out, nil
+}
+
+// keepFile applies the spec's heredoc exclusion, reading the file only when it is on.
+func keepFile(
+	ctx context.Context, cb interfaces.Codebase, spec types.TargetSpec, p string,
+) (bool, error) {
+	if !spec.SkipHeredoc {
+		return true, nil
+	}
+
+	text, err := cb.Text(ctx, p)
+	if err != nil {
+		return false, err
+	}
+
+	return !heredocRe.Match(text.Bytes), nil
 }
 
 // fileDirs is KindFileDirs.

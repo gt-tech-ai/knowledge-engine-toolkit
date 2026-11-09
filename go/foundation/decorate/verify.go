@@ -85,29 +85,12 @@ func (d Decorations) Verify(prefixes ...string) error {
 	defer d.reg.mu.Unlock()
 
 	errs := slices.Clone(d.reg.errs)
-	if d.cfg != nil {
-		var unused []string
 
-		sections := d.cfg.Sections()
-
-		for i := range sections {
-			s := &sections[i]
-			for _, key := range slices.Sorted(maps.Keys(s.Tier.Overrides)) {
-				if owned(key, prefixes) && !d.reg.covers(s.Name, key) {
-					unused = append(
-						unused,
-						decoration.SectionKey+"."+s.Key+".overrides."+key,
-					)
-				}
-			}
-		}
-
-		if len(unused) > 0 {
-			errs = append(errs, apperr.New(
-				apperr.CodeInvalidInput,
-				"no component uses "+strings.Join(unused, ", "),
-			))
-		}
+	if unused := d.unusedOverrides(prefixes); len(unused) > 0 {
+		errs = append(errs, apperr.New(
+			apperr.CodeInvalidInput,
+			"no component uses "+strings.Join(unused, ", "),
+		))
 	}
 
 	if len(errs) == 0 {
@@ -115,6 +98,37 @@ func (d Decorations) Verify(prefixes ...string) error {
 	}
 
 	return apperr.Wrap(apperr.Join(errs...), apperr.CodeInvalidInput, "decoration")
+}
+
+// unusedOverrides lists the owned override keys no component resolved; the caller
+// holds the registry lock.
+func (d Decorations) unusedOverrides(prefixes []string) []string {
+	if d.cfg == nil {
+		return nil
+	}
+
+	var unused []string
+
+	sections := d.cfg.Sections()
+
+	for i := range sections {
+		unused = append(unused, d.unusedInSection(&sections[i], prefixes)...)
+	}
+
+	return unused
+}
+
+// unusedInSection lists one section's owned override keys no component resolved.
+func (d Decorations) unusedInSection(s *decoration.Section, prefixes []string) []string {
+	var unused []string
+
+	for _, key := range slices.Sorted(maps.Keys(s.Tier.Overrides)) {
+		if owned(key, prefixes) && !d.reg.covers(s.Name, key) {
+			unused = append(unused, decoration.SectionKey+"."+s.Key+".overrides."+key)
+		}
+	}
+
+	return unused
 }
 
 // owned reports whether key is one of prefixes or beneath one.

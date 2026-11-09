@@ -30,6 +30,21 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/workflow"
 )
 
+// defaultBatchSize is the rows one relay pass claims.
+const defaultBatchSize = 100
+
+// defaultSendBatch is the rows one send carries.
+const defaultSendBatch = 10
+
+// defaultConcurrency is the concurrent sends of a relay pass.
+const defaultConcurrency = 4
+
+// defaultMaxAttempts is the attempts before a row is dead-lettered.
+const defaultMaxAttempts = 10
+
+// defaultMaxBackoff is the longest delay between attempts.
+const defaultMaxBackoff = 5 * time.Minute
+
 // RelayConfig tunes one relay; one relay drains one lane.
 type RelayConfig struct {
 	// Lane is the outbox lane drained.
@@ -69,8 +84,13 @@ type RelayConfig struct {
 // to 5m.
 func DefaultRelayConfig(lane string) RelayConfig {
 	return RelayConfig{
-		Lane: lane, BatchSize: 100, SendBatch: 10, Concurrency: 4, MaxAttempts: 10,
-		BaseBackoff: time.Second, MaxBackoff: 5 * time.Minute,
+		Lane:        lane,
+		BatchSize:   defaultBatchSize,
+		SendBatch:   defaultSendBatch,
+		Concurrency: defaultConcurrency,
+		MaxAttempts: defaultMaxAttempts,
+		BaseBackoff: time.Second,
+		MaxBackoff:  defaultMaxBackoff,
 	}
 }
 
@@ -291,26 +311,7 @@ func (r *Relay) registerMetrics(metrics interfaces.Metrics) {
 
 // runOnce is RunOnce without the span.
 func (r *Relay) runOnce(ctx context.Context) error {
-	start := r.now()
-	passes := 0
-
-	var err error
-
-	for {
-		var claimed int
-
-		claimed, err = r.pass(ctx)
-
-		if claimed < 0 {
-			break // the claim failed; nothing was delivered this pass
-		}
-
-		passes++
-
-		if err != nil || !r.drainMore(ctx, start, claimed) {
-			break
-		}
-	}
+	passes, err := r.drain(ctx)
 
 	if passes > 0 {
 		if r.passes != nil {
@@ -321,6 +322,26 @@ func (r *Relay) runOnce(ctx context.Context) error {
 	}
 
 	return err
+}
+
+// drain runs passes until a claim fails, a pass errors or the drain budget ends,
+// returning how many passes claimed successfully.
+func (r *Relay) drain(ctx context.Context) (int, error) {
+	start := r.now()
+	passes := 0
+
+	for {
+		claimed, err := r.pass(ctx)
+		if claimed < 0 {
+			return passes, err // the claim failed; nothing was delivered this pass
+		}
+
+		passes++
+
+		if err != nil || !r.drainMore(ctx, start, claimed) {
+			return passes, err
+		}
+	}
 }
 
 // drainMore reports whether a run whose latest pass claimed that many rows should
@@ -349,20 +370,9 @@ func (r *Relay) pass(ctx context.Context) (int, error) {
 	}
 
 	var (
-		mu    sync.Mutex
-		first error
+		first firstError
+		g     errgroup.Group
 	)
-
-	keep := func(err error) {
-		mu.Lock()
-		defer mu.Unlock()
-
-		if first == nil {
-			first = err
-		}
-	}
-
-	var g errgroup.Group
 
 	g.SetLimit(r.cfg.Concurrency)
 
@@ -370,9 +380,7 @@ func (r *Relay) pass(ctx context.Context) (int, error) {
 		chunk := recs[start:min(start+r.cfg.SendBatch, len(recs))]
 
 		g.Go(func() error {
-			for _, err := range r.deliver(ctx, chunk) {
-				keep(err)
-			}
+			first.keep(r.deliver(ctx, chunk))
 
 			return nil
 		})
@@ -380,29 +388,32 @@ func (r *Relay) pass(ctx context.Context) (int, error) {
 
 	_ = g.Wait() // workers report through keep, never through the group.
 
-	return len(recs), first
+	return len(recs), first.err
+}
+
+// firstError keeps the first error reported across a pass's workers.
+type firstError struct {
+	// err is the first error kept.
+	err error
+
+	// mu guards err.
+	mu sync.Mutex
+}
+
+// keep records the first of errs if none is kept yet.
+func (f *firstError) keep(errs []error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.err == nil && len(errs) > 0 {
+		f.err = errs[0]
+	}
 }
 
 // deliver sends one chunk and finalizes each of its rows, returning the finalize
 // errors.
 func (r *Relay) deliver(ctx context.Context, chunk []types.OutboxRecord) []error {
-	results := r.sink.Send(ctx, chunk)
-	if len(results) != len(chunk) {
-		mismatch := apperr.New(
-			apperr.CodeInternal,
-			fmt.Sprintf(
-				"outbox relay: sink returned %d results for %d records",
-				len(results),
-				len(chunk),
-			),
-		)
-
-		results = make([]error, len(chunk))
-
-		for i := range results {
-			results[i] = mismatch
-		}
-	}
+	results := alignedResults(r.sink.Send(ctx, chunk), len(chunk))
 
 	var errs []error
 
@@ -418,6 +429,29 @@ func (r *Relay) deliver(ctx context.Context, chunk []types.OutboxRecord) []error
 	}
 
 	return errs
+}
+
+// alignedResults fails every record when the sink's result count does not match.
+func alignedResults(results []error, n int) []error {
+	if len(results) == n {
+		return results
+	}
+
+	mismatch := apperr.New(
+		apperr.CodeInternal,
+		fmt.Sprintf(
+			"outbox relay: sink returned %d results for %d records",
+			len(results),
+			n,
+		),
+	)
+
+	out := make([]error, n)
+	for i := range out {
+		out[i] = mismatch
+	}
+
+	return out
 }
 
 // interrupted reports a send that failed only because the run's own context

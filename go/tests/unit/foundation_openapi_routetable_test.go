@@ -15,6 +15,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"testing"
 
@@ -251,7 +252,25 @@ func TestRouteTable_EmitsEntryPerHTTPRPC(t *testing.T) {
 	table, err := openapi.BuildRouteTable(fds, nil)
 	require.NoError(t, err)
 
-	want := []openapi.RouteEntry{
+	want := testRouteTableEmitsEntryPerHTTPRPCTable8()
+
+	require.Len(t, table, 1, "one service bucket")
+	assert.Equal(t, want, sortedEntries(table["testsvc"]))
+}
+
+// testRouteTableEmitsEntryPerHTTPRPCTable8 builds the table
+// testRouteTableEmitsEntryPerHTTPRPCTable7 runs.
+func testRouteTableEmitsEntryPerHTTPRPCTable8() []openapi.RouteEntry {
+	return slices.Concat(
+		testRouteTableEmitsEntryPerHTTPRPCTable8Part1(),
+		testRouteTableEmitsEntryPerHTTPRPCTable8Part2(),
+	)
+}
+
+// testRouteTableEmitsEntryPerHTTPRPCTable8Part1 lists part of the
+// testRouteTableEmitsEntryPerHTTPRPCTable8 rows.
+func testRouteTableEmitsEntryPerHTTPRPCTable8Part1() []openapi.RouteEntry {
+	return []openapi.RouteEntry{
 		{
 			Method:       "GET",
 			PathTemplate: "/api/v1/aliases/by-name/{name}",
@@ -291,6 +310,13 @@ func TestRouteTable_EmitsEntryPerHTTPRPC(t *testing.T) {
 			Role:         openapi.RoleDelete,
 			RPC:          "test.v1.TestService.DeleteDocument",
 		},
+	}
+}
+
+// testRouteTableEmitsEntryPerHTTPRPCTable8Part2 lists part of the
+// testRouteTableEmitsEntryPerHTTPRPCTable8 rows.
+func testRouteTableEmitsEntryPerHTTPRPCTable8Part2() []openapi.RouteEntry {
+	return []openapi.RouteEntry{
 		{
 			Method:       "GET",
 			PathTemplate: "/api/v1/documents/{document_id}",
@@ -317,9 +343,6 @@ func TestRouteTable_EmitsEntryPerHTTPRPC(t *testing.T) {
 			RPC:          "test.v1.TestService.ConfirmDocument",
 		},
 	}
-
-	require.Len(t, table, 1, "one service bucket")
-	assert.Equal(t, want, sortedEntries(table["testsvc"]))
 }
 
 // TestRouteTable_ErrorsOnUnclassifiableRPC tests that an unclassifiable, non-exempt

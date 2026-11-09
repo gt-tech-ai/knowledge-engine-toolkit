@@ -8,6 +8,7 @@ package unit_test
 // these fixtures agree by construction.
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -35,11 +36,39 @@ import (
 func TestClassify_DerivesEachRole(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name string
-		want openapi.Role
-		in   openapi.Binding
-	}{
+	cases := testClassifyDerivesEachRoleTable11()
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := openapi.Classify(tc.in)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// testClassifyDerivesEachRoleRow is one row of testClassifyDerivesEachRoleTable.
+type testClassifyDerivesEachRoleRow struct {
+	name string
+	want openapi.Role
+	in   openapi.Binding
+}
+
+// testClassifyDerivesEachRoleTable11 builds the table testClassifyDerivesEachRoleTable10
+// runs.
+func testClassifyDerivesEachRoleTable11() []testClassifyDerivesEachRoleRow {
+	return slices.Concat(
+		testClassifyDerivesEachRoleTable11Part1(),
+		testClassifyDerivesEachRoleTable11Part2(),
+	)
+}
+
+// testClassifyDerivesEachRoleTable11Part1 lists part of the
+// testClassifyDerivesEachRoleTable11 rows.
+func testClassifyDerivesEachRoleTable11Part1() []testClassifyDerivesEachRoleRow {
+	return []testClassifyDerivesEachRoleRow{
 		{
 			name: "LIST — GET collection",
 			in: openapi.Binding{
@@ -80,6 +109,13 @@ func TestClassify_DerivesEachRole(t *testing.T) {
 			},
 			want: openapi.RoleCreate,
 		},
+	}
+}
+
+// testClassifyDerivesEachRoleTable11Part2 lists part of the
+// testClassifyDerivesEachRoleTable11 rows.
+func testClassifyDerivesEachRoleTable11Part2() []testClassifyDerivesEachRoleRow {
+	return []testClassifyDerivesEachRoleRow{
 		{
 			name: "CREATE — POST bulk, collection-key-only response",
 			in: openapi.Binding{
@@ -119,16 +155,6 @@ func TestClassify_DerivesEachRole(t *testing.T) {
 			},
 			want: openapi.RoleDelete,
 		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			got, err := openapi.Classify(tc.in)
-			require.NoError(t, err)
-			assert.Equal(t, tc.want, got)
-		})
 	}
 }
 

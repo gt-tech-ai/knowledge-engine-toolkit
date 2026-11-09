@@ -6,6 +6,12 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// defaultLockConfigTTL is the default TTL of LockConfig.
+const defaultLockConfigTTL = 30 * time.Second
+
+// defaultLockConfigRenewInterval is the default RenewInterval of LockConfig.
+const defaultLockConfigRenewInterval = 10 * time.Second
+
 // LockConfig selects and tunes the distributed lock that enforces at most one
 // active operation per key across service replicas.
 // The clients/lock factory reads Kind to pick a backend; TTL and RenewInterval
@@ -33,8 +39,8 @@ const lockKindLocal = "local"
 func DefaultLockConfig() LockConfig {
 	return LockConfig{
 		Kind:          lockKindLocal,
-		TTL:           30 * time.Second,
-		RenewInterval: 10 * time.Second,
+		TTL:           defaultLockConfigTTL,
+		RenewInterval: defaultLockConfigRenewInterval,
 	}
 }
 

@@ -5,6 +5,9 @@ import (
 	"strings"
 )
 
+// headShareDivisor is halves the kept runes between head and tail.
+const headShareDivisor = 2
+
 // codeFence opens and closes a markdown code block.
 const codeFence = "```"
 
@@ -29,7 +32,7 @@ func TruncateComment(s string, limit int) string {
 		return string(runes[:limit])
 	}
 
-	headLen := (keep + 1) / 2
+	headLen := (keep + 1) / headShareDivisor
 	tailLen := keep - headLen
 	cut := len(runes) - keep
 	head, tail := string(runes[:headLen]), string(runes[len(runes)-tailLen:])
@@ -41,7 +44,7 @@ func TruncateComment(s string, limit int) string {
 			return string(runes[:limit])
 		}
 
-		headLen = (keep + 1) / 2
+		headLen = (keep + 1) / headShareDivisor
 		tailLen = keep - headLen
 		cut = len(runes) - keep
 		head, tail = string(runes[:headLen]), string(runes[len(runes)-tailLen:])

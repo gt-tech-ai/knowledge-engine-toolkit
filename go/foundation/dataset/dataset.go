@@ -71,32 +71,17 @@ func Load(fsys fs.FS, dir string) (*Dataset, error) {
 // path is in skip (a template or scaffold tree holding YAML that is not data) is not
 // read. A missing dir is CodeNotFound.
 func LoadTree(fsys fs.FS, dir string, skip ...string) (*Dataset, error) {
-	var files []string
+	w := &yamlWalk{dir: dir, skip: skip}
 
-	err := fs.WalkDir(fsys, dir, func(p string, e fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		rel := strings.TrimPrefix(strings.TrimPrefix(p, dir), "/")
-		if e.IsDir() && rel != "" && slices.Contains(skip, rel) {
-			return fs.SkipDir
-		}
-
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
-			files = append(files, p)
-		}
-
-		return nil
-	})
+	err := fs.WalkDir(fsys, dir, w.visit)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeNotFound, "read data dir "+dir)
 	}
 
-	slices.Sort(files)
+	slices.Sort(w.files)
 
 	d := newDataset()
-	for _, p := range files {
+	for _, p := range w.files {
 		err := d.add(fsys, p)
 		if err != nil {
 			return nil, err
@@ -104,6 +89,36 @@ func LoadTree(fsys fs.FS, dir string, skip ...string) (*Dataset, error) {
 	}
 
 	return d, nil
+}
+
+// yamlWalk collects the YAML files under dir, skipping the named subtrees.
+type yamlWalk struct {
+	// dir is the walk's root.
+	dir string
+
+	// skip lists subtrees, relative to dir, to leave out.
+	skip []string
+
+	// files holds the paths found.
+	files []string
+}
+
+// visit is the fs.WalkDirFunc that records each YAML file.
+func (w *yamlWalk) visit(p string, e fs.DirEntry, err error) error {
+	if err != nil {
+		return err
+	}
+
+	rel := strings.TrimPrefix(strings.TrimPrefix(p, w.dir), "/")
+	if e.IsDir() && rel != "" && slices.Contains(w.skip, rel) {
+		return fs.SkipDir
+	}
+
+	if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
+		w.files = append(w.files, p)
+	}
+
+	return nil
 }
 
 // newDataset returns an empty Dataset.
@@ -128,23 +143,13 @@ func FromValue(name string, v any) (*Dataset, error) {
 
 	switch {
 	case rv.Kind() == reflect.Struct && !hasInline(rv.Type()):
-		for key, i := range fieldsByKey(rv.Type()) {
-			d.goValues[key] = rv.Field(i).Interface()
-		}
+		d.addStructFields(rv)
 	case rv.Kind() == reflect.Map && rv.Type().Key().Kind() == reflect.String:
-		for _, k := range rv.MapKeys() {
-			d.goValues[k.String()] = rv.MapIndex(k).Interface()
-		}
+		d.addMapEntries(rv)
 	case rv.Kind() == reflect.Struct:
-		var root yaml.Node
-
-		err := root.Encode(v)
+		err := d.addEncoded(name, v)
 		if err != nil {
-			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "encode "+name)
-		}
-
-		for i := 0; i+1 < len(root.Content); i += 2 {
-			d.sections[root.Content[i].Value] = root.Content[i+1]
+			return nil, err
 		}
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput,
@@ -201,6 +206,36 @@ func (d *Dataset) Section[T any](name string) (T, error) {
 	return out, nil
 }
 
+// addEncoded encodes a struct with inline fields and records its top-level keys.
+func (d *Dataset) addEncoded(name string, v any) error {
+	var root yaml.Node
+
+	err := root.Encode(v)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInvalidInput, "encode "+name)
+	}
+
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		d.sections[root.Content[i].Value] = root.Content[i+1]
+	}
+
+	return nil
+}
+
+// addMapEntries records each entry of a string-keyed map.
+func (d *Dataset) addMapEntries(rv reflect.Value) {
+	for _, k := range rv.MapKeys() {
+		d.goValues[k.String()] = rv.MapIndex(k).Interface()
+	}
+}
+
+// addStructFields records each keyed field of a struct with no inline fields.
+func (d *Dataset) addStructFields(rv reflect.Value) {
+	for key, i := range fieldsByKey(rv.Type()) {
+		d.goValues[key] = rv.Field(i).Interface()
+	}
+}
+
 // keys returns every section key of d, sorted.
 func (d *Dataset) keys() []string {
 	out := slices.Collect(maps.Keys(d.sections))
@@ -252,20 +287,31 @@ func (d *Dataset) add(fsys fs.FS, p string) error {
 
 	for _, key := range slices.Sorted(maps.Keys(doc)) {
 		node := doc[key]
-		unfold(&node)
 
-		if prev, ok := d.sections[key]; ok {
-			err := d.merge(prev, &node, key, p)
-			if err != nil {
-				return err
-			}
-		} else {
-			d.sections[key] = &node
-			d.claim(&node, key, p)
+		err := d.addSection(key, &node, p)
+		if err != nil {
+			return err
 		}
-
-		d.files[key] = append(d.files[key], p)
 	}
+
+	return nil
+}
+
+// addSection merges one top-level key from file p.
+func (d *Dataset) addSection(key string, node *yaml.Node, p string) error {
+	unfold(node)
+
+	if prev, ok := d.sections[key]; ok {
+		err := d.merge(prev, node, key, p)
+		if err != nil {
+			return err
+		}
+	} else {
+		d.sections[key] = node
+		d.claim(node, key, p)
+	}
+
+	d.files[key] = append(d.files[key], p)
 
 	return nil
 }
@@ -276,39 +322,49 @@ func (d *Dataset) add(fsys fs.FS, p string) error {
 func (d *Dataset) merge(dst, src *yaml.Node, at, p string) error {
 	switch {
 	case dst.Kind == yaml.MappingNode && src.Kind == yaml.MappingNode:
-		for i := 0; i+1 < len(src.Content); i += 2 {
-			k, v := src.Content[i], src.Content[i+1]
-			sub := at + "." + k.Value
-
-			if existing := mappingValue(dst, k.Value); existing != nil {
-				err := d.merge(existing, v, sub, p)
-				if err != nil {
-					return err
-				}
-
-				continue
-			}
-
-			dst.Content = append(dst.Content, k, v)
-			d.claim(v, sub, p)
-		}
-
-		return nil
+		return d.mergeMappings(dst, src, at, p)
 	case dst.Kind == yaml.SequenceNode && src.Kind == yaml.SequenceNode:
-		for _, item := range src.Content {
-			key := at + "[" + itemName(item) + "]"
-			if prev, dup := d.origin[key]; dup && itemName(item) != "" && prev != p {
-				return conflict(key, prev, p)
-			}
-		}
-
-		dst.Content = append(dst.Content, src.Content...)
-		d.claim(src, at, p)
-
-		return nil
+		return d.mergeSequences(dst, src, at, p)
 	default:
 		return conflict(at, d.firstFile(at), p)
 	}
+}
+
+// mergeMappings merges src's keys into dst, recursing into a key both have.
+func (d *Dataset) mergeMappings(dst, src *yaml.Node, at, p string) error {
+	for i := 0; i+1 < len(src.Content); i += 2 {
+		k, v := src.Content[i], src.Content[i+1]
+		sub := at + "." + k.Value
+
+		if existing := mappingValue(dst, k.Value); existing != nil {
+			err := d.merge(existing, v, sub, p)
+			if err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		dst.Content = append(dst.Content, k, v)
+		d.claim(v, sub, p)
+	}
+
+	return nil
+}
+
+// mergeSequences appends src's items to dst, rejecting a named item another file owns.
+func (d *Dataset) mergeSequences(dst, src *yaml.Node, at, p string) error {
+	for _, item := range src.Content {
+		key := at + "[" + itemName(item) + "]"
+		if prev, dup := d.origin[key]; dup && itemName(item) != "" && prev != p {
+			return conflict(key, prev, p)
+		}
+	}
+
+	dst.Content = append(dst.Content, src.Content...)
+	d.claim(src, at, p)
+
+	return nil
 }
 
 // claim records p as the origin of every scalar under n (by dotted path) and of every
@@ -320,18 +376,20 @@ func (d *Dataset) claim(n *yaml.Node, at, p string) {
 			d.claim(n.Content[i+1], at+"."+n.Content[i].Value, p)
 		}
 	case yaml.SequenceNode:
-		for _, item := range n.Content {
-			name := itemName(item)
-			if name == "" {
-				continue
-			}
-
-			if _, seen := d.origin[at+"["+name+"]"]; !seen {
-				d.origin[at+"["+name+"]"] = p
-			}
-		}
+		d.claimItems(n, at, p)
 	case yaml.DocumentNode, yaml.ScalarNode, yaml.AliasNode:
 		d.origin[at] = p
+	}
+}
+
+// claimItems records the first file to define each named sequence item.
+func (d *Dataset) claimItems(n *yaml.Node, at, p string) {
+	for _, item := range n.Content {
+		key := at + "[" + itemName(item) + "]"
+
+		if _, seen := d.origin[key]; itemName(item) != "" && !seen {
+			d.origin[key] = p
+		}
 	}
 }
 

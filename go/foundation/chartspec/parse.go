@@ -133,15 +133,9 @@ func validateFields(spec *types.ChartSpec, m *listquery.Map) (map[string]bool, e
 		}
 	}
 
-	for _, ref := range spec.Detail {
-		f, ok := m.Lookup(ref.Name)
-		if !ok || f.Role == listquery.RoleMeasure || ref.Agg != types.AggNone {
-			return nil, invalid(
-				"detail field " + ref.Name + " is not a declared dimension",
-			)
-		}
-
-		keys[ref.Key()] = true
+	err := validateDetail(spec.Detail, m, keys)
+	if err != nil {
+		return nil, err
 	}
 
 	for _, ref := range spec.Encodings.Fields() {
@@ -154,6 +148,24 @@ func validateFields(spec *types.ChartSpec, m *listquery.Map) (map[string]bool, e
 	}
 
 	return keys, nil
+}
+
+// validateDetail checks that each detail field is a declared, unaggregated dimension.
+func validateDetail(
+	detail []types.FieldRef,
+	m *listquery.Map,
+	keys map[string]bool,
+) error {
+	for _, ref := range detail {
+		f, ok := m.Lookup(ref.Name)
+		if !ok || f.Role == listquery.RoleMeasure || ref.Agg != types.AggNone {
+			return invalid("detail field " + ref.Name + " is not a declared dimension")
+		}
+
+		keys[ref.Key()] = true
+	}
+
+	return nil
 }
 
 // compileFilter compiles the spec's filter tree with listquery.ParseFilter into
@@ -190,15 +202,19 @@ func validateShelf(
 	}
 
 	if e.Field != nil {
-		if e.Op != "" || len(e.Args) > 0 {
-			return invalid("a shelf node is either a field or an operator")
-		}
-
-		keys[e.Field.Key()] = true
-
-		return validateRef(*e.Field, m)
+		return validateShelfLeaf(e, m, keys)
 	}
 
+	return validateShelfOperator(e, m, depth, keys)
+}
+
+// validateShelfOperator checks an operator node and walks its operands.
+func validateShelfOperator(
+	e *types.AlgebraExpr,
+	m *listquery.Map,
+	depth int,
+	keys map[string]bool,
+) error {
 	if !validOp(e.Op) {
 		return invalid("unknown shelf operator " + string(e.Op))
 	}
@@ -219,6 +235,21 @@ func validateShelf(
 	}
 
 	return nil
+}
+
+// validateShelfLeaf checks a field leaf carries no operator and records its Key.
+func validateShelfLeaf(
+	e *types.AlgebraExpr,
+	m *listquery.Map,
+	keys map[string]bool,
+) error {
+	if e.Op != "" || len(e.Args) > 0 {
+		return invalid("a shelf node is either a field or an operator")
+	}
+
+	keys[e.Field.Key()] = true
+
+	return validateRef(*e.Field, m)
 }
 
 // validateRef checks one field reference against m: allow-listed, and aggregated

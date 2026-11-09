@@ -145,14 +145,13 @@ func (b *BufferingRunner) runBufferedAndReplay(
 	args ...string,
 ) error {
 	cmdStr := name + " " + strings.Join(args, " ")
-	if !b.quiet {
-		fmt.Fprintf(os.Stderr, ">> %s\n", cmdStr)
-	}
+
+	b.note(">>", cmdStr)
 
 	if len(extraEnv) > 0 {
 		err := b.inner.RunWithEnv(ctx, dir, extraEnv, name, args...)
-		if err == nil && !b.quiet {
-			fmt.Fprintf(os.Stderr, "ok %s\n", cmdStr)
+		if err == nil {
+			b.note("ok", cmdStr)
 		}
 
 		return err
@@ -160,15 +159,7 @@ func (b *BufferingRunner) runBufferedAndReplay(
 
 	result := b.inner.RunBuffered(ctx, dir, name, args...)
 
-	if !b.quiet {
-		if len(result.Stdout) > 0 {
-			_, _ = os.Stdout.Write(result.Stdout)
-		}
-
-		if len(result.Stderr) > 0 {
-			_, _ = os.Stderr.Write(result.Stderr)
-		}
-	}
+	b.replay(result.Stdout, result.Stderr)
 
 	b.mu.Lock()
 	b.buf.Write(result.Stdout)
@@ -176,16 +167,34 @@ func (b *BufferingRunner) runBufferedAndReplay(
 	b.mu.Unlock()
 
 	if result.Err != nil {
-		if !b.quiet {
-			fmt.Fprintf(os.Stderr, "FAIL %s\n", cmdStr)
-		}
+		b.note("FAIL", cmdStr)
 
 		return apperr.Wrap(result.Err, apperr.CodeInternal, cmdStr+" failed")
 	}
 
-	if !b.quiet {
-		fmt.Fprintf(os.Stderr, "ok %s\n", cmdStr)
-	}
+	b.note("ok", cmdStr)
 
 	return nil
+}
+
+// note prints one progress line unless the runner is quiet.
+func (b *BufferingRunner) note(verb, cmd string) {
+	if !b.quiet {
+		fmt.Fprintf(os.Stderr, "%s %s\n", verb, cmd)
+	}
+}
+
+// replay echoes a finished command's output unless the runner is quiet.
+func (b *BufferingRunner) replay(stdout, stderr []byte) {
+	if b.quiet {
+		return
+	}
+
+	if len(stdout) > 0 {
+		_, _ = os.Stdout.Write(stdout)
+	}
+
+	if len(stderr) > 0 {
+		_, _ = os.Stderr.Write(stderr)
+	}
 }

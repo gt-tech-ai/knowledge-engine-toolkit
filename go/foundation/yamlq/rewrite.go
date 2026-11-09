@@ -32,37 +32,71 @@ func Rewrite(
 		return nil, err
 	}
 
-	parents := parentsOf(root(docs[0]), nil, map[*yaml.Node]*yaml.Node{})
-	lines := splitLines(src)
+	rw := &scalarRewrite{
+		lines:   splitLines(src),
+		parents: parentsOf(root(docs[0]), nil, map[*yaml.Node]*yaml.Node{}),
+		top:     root(docs[0]),
+		path:    path,
+		fn:      fn,
+	}
 	out := src
 
 	for _, m := range matches {
-		if m.Node.Kind != yaml.ScalarNode {
-			continue
-		}
-
-		value, ok := fn(m.Node.Value)
-		if !ok {
-			continue
-		}
-
-		replacement := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
-		if m.Node.Style == yaml.DoubleQuotedStyle {
-			replacement.Style = yaml.DoubleQuotedStyle
-		}
-
-		parent := parents[m.Node]
-		if parent == nil {
-			parent = root(docs[0])
-		}
-
-		if out, ok = replaceScalar(lines, parent, m.Node, replacement); !ok {
-			return nil, invalid(path, "a scalar at line "+strconv.Itoa(m.Node.Line)+
-				" cannot be rewritten in place")
+		out, err = rw.apply(m, out)
+		if err != nil {
+			return nil, err
 		}
 	}
 
 	return out, nil
+}
+
+// scalarRewrite is the state one Rewrite shares across its matches.
+type scalarRewrite struct {
+	// parents maps every node of the document to its parent.
+	parents map[*yaml.Node]*yaml.Node
+
+	// top is the document's content node, the parent of a parentless match.
+	top *yaml.Node
+
+	// fn supplies each new value, returning false to keep the old one.
+	fn func(old string) (string, bool)
+
+	// path is the query, named in errors.
+	path string
+
+	// lines is the source, updated in place by each splice.
+	lines []string
+}
+
+// apply rewrites one match, returning the file so far: out when m is left alone.
+func (r *scalarRewrite) apply(m Match, out []byte) ([]byte, error) {
+	if m.Node.Kind != yaml.ScalarNode {
+		return out, nil
+	}
+
+	value, ok := r.fn(m.Node.Value)
+	if !ok {
+		return out, nil
+	}
+
+	replacement := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+	if m.Node.Style == yaml.DoubleQuotedStyle {
+		replacement.Style = yaml.DoubleQuotedStyle
+	}
+
+	parent := r.parents[m.Node]
+	if parent == nil {
+		parent = r.top
+	}
+
+	spliced, ok := replaceScalar(r.lines, parent, m.Node, replacement)
+	if !ok {
+		return nil, invalid(r.path, "a scalar at line "+strconv.Itoa(m.Node.Line)+
+			" cannot be rewritten in place")
+	}
+
+	return spliced, nil
 }
 
 // parentsOf maps every node under n to its parent (n's own parent is parent).

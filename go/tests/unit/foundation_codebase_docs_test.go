@@ -1,12 +1,14 @@
 package unit_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -26,35 +28,7 @@ import (
 func TestFoundationCodebase_Docs(t *testing.T) {
 	t.Parallel()
 
-	cb := memoryCodebase(t, map[string]string{
-		"infra/main.tf": "resource \"aws_kms_alias\" \"cosign\" {\n" +
-			"  name          = \"alias/cosign\"\n" +
-			"  target_key_id = aws_kms_key.cosign.key_id\n" +
-			"  count         = 1 + 1\n" +
-			"  tags          = { Name = \"x\" }\n" +
-			"  ingress {\n    from_port = 443\n  }\n" +
-			"  ingress {\n    from_port = 80\n  }\n" +
-			"}\n" +
-			"variable \"region\" {\n  default = \"us-east-1\"\n}\n",
-		"obs/config.alloy": "loki.source.kubernetes \"pods\" {\n" +
-			"  forward_to = [loki.process.redact.receiver]\n" +
-			"}\n" +
-			"loki.process \"redact\" {\n" +
-			"  forward_to = [loki.write.default.receiver]\n" +
-			"  stage.replace {\n" +
-			"    expression = \"(?i)(bearer )\\\\S+\"\n" +
-			"    replace    = \"${1}REDACTED\"\n" +
-			"  }\n" +
-			"  stage.replace {\n" +
-			"    expression = \"token=\\\\S+\"\n" +
-			"    replace    = \"token=REDACTED\"\n" +
-			"    max        = 2\n" +
-			"    keep       = true\n" +
-			"  }\n" +
-			"}\n",
-		"app/values.yaml": "a: 1\n---\nb: [x, y]\n",
-		"bad/broken.tf":   "resource {\n",
-	})
+	cb := memoryCodebase(t, testFoundationCodebaseDocsTable())
 	ctx := t.Context()
 
 	yamlOnly, err := cb.Docs(ctx, types.FileSelector{})
@@ -90,6 +64,22 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 
 	region := asType[map[string]any](t, asType[[]any](t,
 		asType[map[string]any](t, doc["variable"])["region"])[0])
+
+	testFoundationCodebaseDocsRest(t, cb, ctx, region)
+}
+
+// testFoundationCodebaseDocsRest continues TestFoundationCodebase_Docs with its
+// remaining steps.
+func testFoundationCodebaseDocsRest(
+	t *testing.T,
+	cb interfaces.Codebase,
+	ctx context.Context,
+	region map[string]any,
+) {
+	t.Helper()
+
+	var err error
+
 	assert.Equal(
 		t,
 		"us-east-1",
@@ -129,4 +119,37 @@ func TestFoundationCodebase_Docs(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "bad/broken.tf")
+}
+
+// testFoundationCodebaseDocsTable builds the table TestFoundationCodebase_Docs runs.
+func testFoundationCodebaseDocsTable() map[string]string {
+	return map[string]string{
+		"infra/main.tf": "resource \"aws_kms_alias\" \"cosign\" {\n" +
+			"  name          = \"alias/cosign\"\n" +
+			"  target_key_id = aws_kms_key.cosign.key_id\n" +
+			"  count         = 1 + 1\n" +
+			"  tags          = { Name = \"x\" }\n" +
+			"  ingress {\n    from_port = 443\n  }\n" +
+			"  ingress {\n    from_port = 80\n  }\n" +
+			"}\n" +
+			"variable \"region\" {\n  default = \"us-east-1\"\n}\n",
+		"obs/config.alloy": "loki.source.kubernetes \"pods\" {\n" +
+			"  forward_to = [loki.process.redact.receiver]\n" +
+			"}\n" +
+			"loki.process \"redact\" {\n" +
+			"  forward_to = [loki.write.default.receiver]\n" +
+			"  stage.replace {\n" +
+			"    expression = \"(?i)(bearer )\\\\S+\"\n" +
+			"    replace    = \"${1}REDACTED\"\n" +
+			"  }\n" +
+			"  stage.replace {\n" +
+			"    expression = \"token=\\\\S+\"\n" +
+			"    replace    = \"token=REDACTED\"\n" +
+			"    max        = 2\n" +
+			"    keep       = true\n" +
+			"  }\n" +
+			"}\n",
+		"app/values.yaml": "a: 1\n---\nb: [x, y]\n",
+		"bad/broken.tf":   "resource {\n",
+	}
 }

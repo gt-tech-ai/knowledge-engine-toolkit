@@ -17,23 +17,9 @@ func Apply(
 	plan types.FilePlan,
 	dryRun bool,
 ) error {
-	var conflicts []string
-
-	for _, e := range plan.Entries {
-		if e.Action == types.FileConflict {
-			conflicts = append(conflicts, e.Path+": "+e.Reason)
-		}
-	}
-
-	if len(conflicts) > 0 {
-		return apperr.New(
-			apperr.CodeConflict,
-			"scaffold conflicts: "+strings.Join(conflicts, "; "),
-		)
-	}
-
-	if dryRun {
-		return nil
+	err := conflictError(plan)
+	if err != nil || dryRun {
+		return err
 	}
 
 	for _, e := range plan.Entries {
@@ -53,4 +39,24 @@ func Apply(
 	}
 
 	return nil
+}
+
+// conflictError names every conflicting entry, or is nil when the plan has none.
+func conflictError(plan types.FilePlan) error {
+	var conflicts []string
+
+	for _, e := range plan.Entries {
+		if e.Action == types.FileConflict {
+			conflicts = append(conflicts, e.Path+": "+e.Reason)
+		}
+	}
+
+	if len(conflicts) == 0 {
+		return nil
+	}
+
+	return apperr.New(
+		apperr.CodeConflict,
+		"scaffold conflicts: "+strings.Join(conflicts, "; "),
+	)
 }

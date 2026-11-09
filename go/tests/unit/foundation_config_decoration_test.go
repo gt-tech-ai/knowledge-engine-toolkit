@@ -231,6 +231,20 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	assert.Nil(t, api.Bulkhead)
 	assert.Nil(t, api.RateLimiter)
 
+	testDecorationsBuildEachComponentsLayersFromConfigRest(t, collab, decs, deps, svc)
+}
+
+// testDecorationsBuildEachComponentsLayersFromConfigRest continues
+// TestDecorations_BuildEachComponentsLayersFromConfig with its remaining steps.
+func testDecorationsBuildEachComponentsLayersFromConfigRest(
+	t *testing.T,
+	collab decorate.Collaborators,
+	decs decorate.Decorations,
+	deps func(tier decorate.Tier, name string) decorate.Deps,
+	svc decorate.Deps,
+) {
+	t.Helper()
+
 	repo := deps(repository.Tier(), "users")
 	assert.NotNil(t, repo.Retrier)
 	assert.NotNil(t, repo.Breaker)

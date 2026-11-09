@@ -132,28 +132,34 @@ func (o *mapOp[E]) Run(
 // fills the same way so the procedure sees every declared input.
 func FillInput(flags []types.FlagSpec, args types.ArgSpec, in map[string]any) {
 	for i := range flags {
-		f := &flags[i]
-		v, ok := in[f.FlagField()]
-
-		if !ok {
-			in[f.FlagField()] = flagDefault(f)
-
-			continue
-		}
-
-		in[f.FlagField()] = coerce(f.Type, v)
+		fillFlag(&flags[i], in)
 	}
 
 	for _, n := range args.Names {
-		if _, ok := in[n]; !ok {
-			in[n] = ""
-		}
+		setIfAbsent(in, n, "")
 	}
 
 	if args.Rest != "" {
-		if _, ok := in[args.Rest]; !ok {
-			in[args.Rest] = []string{}
-		}
+		setIfAbsent(in, args.Rest, []string{})
+	}
+}
+
+// fillFlag coerces a supplied flag, or sets its default.
+func fillFlag(f *types.FlagSpec, in map[string]any) {
+	v, ok := in[f.FlagField()]
+	if !ok {
+		in[f.FlagField()] = flagDefault(f)
+
+		return
+	}
+
+	in[f.FlagField()] = coerce(f.Type, v)
+}
+
+// setIfAbsent sets key only when in has no value for it.
+func setIfAbsent(in map[string]any, key string, value any) {
+	if _, ok := in[key]; !ok {
+		in[key] = value
 	}
 }
 
@@ -172,16 +178,21 @@ func coerce(flagType string, v any) any {
 		}
 	case []any:
 		if types.IsListFlag(flagType) {
-			out := make([]string, 0, len(x))
-			for _, item := range x {
-				out = append(out, fmt.Sprint(item))
-			}
-
-			return out
+			return stringItems(x)
 		}
 	}
 
 	return v
+}
+
+// stringItems renders each list item as a string.
+func stringItems(items []any) []string {
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		out = append(out, fmt.Sprint(item))
+	}
+
+	return out
 }
 
 // flagDefault is f's declared default, else the zero of its type.
@@ -230,42 +241,8 @@ func duration(v any) any {
 func MapSchema(flags []types.FlagSpec, args types.ArgSpec) []byte {
 	props := map[string]any{}
 
-	var required []string
-
-	for i := range flags {
-		f := &flags[i]
-		if f.Secret {
-			continue
-		}
-
-		p := map[string]any{schemaType: jsonType(f.Type)}
-		if types.IsListFlag(f.Type) {
-			p["items"] = map[string]any{schemaType: schemaString}
-		}
-
-		if f.Usage != "" {
-			p["description"] = f.Usage
-		}
-
-		props[f.FlagField()] = p
-		if f.Required {
-			required = append(required, f.FlagField())
-		}
-	}
-
-	for i, n := range args.Names {
-		props[n] = map[string]any{schemaType: schemaString}
-		if i < args.Min {
-			required = append(required, n)
-		}
-	}
-
-	if args.Rest != "" {
-		props[args.Rest] = map[string]any{
-			schemaType: "array",
-			"items":    map[string]any{schemaType: schemaString},
-		}
-	}
+	required := flagProperties(flags, props)
+	required = append(required, argProperties(args, props)...)
 
 	s := map[string]any{
 		schemaType:             "object",
@@ -282,6 +259,61 @@ func MapSchema(flags []types.FlagSpec, args types.ArgSpec) []byte {
 	}
 
 	return blob
+}
+
+// flagProperties adds each non-secret flag to props and returns the required ones.
+func flagProperties(flags []types.FlagSpec, props map[string]any) []string {
+	var required []string
+
+	for i := range flags {
+		f := &flags[i]
+		if f.Secret {
+			continue
+		}
+
+		props[f.FlagField()] = flagProperty(f)
+
+		if f.Required {
+			required = append(required, f.FlagField())
+		}
+	}
+
+	return required
+}
+
+// flagProperty is one flag's JSON schema.
+func flagProperty(f *types.FlagSpec) map[string]any {
+	p := map[string]any{schemaType: jsonType(f.Type)}
+	if types.IsListFlag(f.Type) {
+		p["items"] = map[string]any{schemaType: schemaString}
+	}
+
+	if f.Usage != "" {
+		p["description"] = f.Usage
+	}
+
+	return p
+}
+
+// argProperties adds the positional arguments to props and returns the required ones.
+func argProperties(args types.ArgSpec, props map[string]any) []string {
+	var required []string
+
+	for i, n := range args.Names {
+		props[n] = map[string]any{schemaType: schemaString}
+		if i < args.Min {
+			required = append(required, n)
+		}
+	}
+
+	if args.Rest != "" {
+		props[args.Rest] = map[string]any{
+			schemaType: "array",
+			"items":    map[string]any{schemaType: schemaString},
+		}
+	}
+
+	return required
 }
 
 // jsonType is the JSON Schema type of a flag type.

@@ -58,12 +58,18 @@ func sizeViolations(t *testing.T, cb interfaces.Codebase, roots []string) []stri
 			)
 		}
 
-		for _, decl := range f.AST.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil {
-				continue
-			}
+		out = append(out, fileFuncViolations(f)...)
+	}
 
+	return out
+}
+
+// fileFuncViolations checks every function with a body in the file.
+func fileFuncViolations(f types.GoFile) []string {
+	var out []string
+
+	for _, decl := range f.AST.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
 			out = append(out, funcViolations(f.FileSet, f.Path, fn)...)
 		}
 	}

@@ -94,6 +94,15 @@ func BenchmarkNewFromConfig_Programs(b *testing.B) {
 			}
 		}
 	})
+
+	benchmarkNewFromConfigProgramsRest(b, rows)
+}
+
+// benchmarkNewFromConfigProgramsRest continues BenchmarkNewFromConfig_Programs with
+// its remaining steps.
+func benchmarkNewFromConfigProgramsRest(b *testing.B, rows []types.GuardRow) {
+	b.Helper()
+
 	b.Run("shared", func(b *testing.B) {
 		progs := guard.NewPrograms()
 		for b.Loop() {

@@ -18,6 +18,18 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
+// extensionFieldNumber is the field number of the option extension.
+const extensionFieldNumber = 50001
+
+// fieldTwo is the second field number of a message.
+const fieldTwo = 2
+
+// fieldThree is the third field number of a message.
+const fieldThree = 3
+
+// fieldFour is the fourth field number of a message.
+const fieldFour = 4
+
 // JSONAPIAnnotations builds the protoreflect.FileDescriptor for a hand-authored
 // jsonapi/v1/annotations.proto — the three messages (JsonApiService /
 // JsonApiResource / JsonApiOperation) and their three extends (FileOptions /
@@ -39,7 +51,7 @@ func JSONAPIAnnotations(tb testing.TB) protoreflect.FileDescriptor {
 	ext := func(name, extendee, typeName string) *descriptorpb.FieldDescriptorProto {
 		return &descriptorpb.FieldDescriptorProto{
 			Name:     new(name),
-			Number:   new(int32(50001)),
+			Number:   new(int32(extensionFieldNumber)),
 			Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
 			Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
 			TypeName: new(typeName),
@@ -47,18 +59,30 @@ func JSONAPIAnnotations(tb testing.TB) protoreflect.FileDescriptor {
 			JsonName: new(name),
 		}
 	}
-	fdp := &descriptorpb.FileDescriptorProto{
+	fdp := jSONAPIAnnotationsTable(str, ext)
+	fd, err := protodesc.NewFile(fdp, protoregistry.GlobalFiles)
+	require.NoError(tb, err, "build synthetic jsonapi/v1/annotations.proto")
+
+	return fd
+}
+
+// jSONAPIAnnotationsTable builds the table JSONAPIAnnotations runs.
+func jSONAPIAnnotationsTable(
+	str func(name string, num int32) *descriptorpb.FieldDescriptorProto,
+	ext func(name, extendee, typeName string) *descriptorpb.FieldDescriptorProto,
+) *descriptorpb.FileDescriptorProto {
+	return &descriptorpb.FileDescriptorProto{
 		Name:       new("jsonapi/v1/annotations.proto"),
 		Package:    new("jsonapi.v1"),
 		Syntax:     new("proto3"),
 		Dependency: []string{"google/protobuf/descriptor.proto"},
 		MessageType: []*descriptorpb.DescriptorProto{
 			{Name: new("JsonApiService"), Field: []*descriptorpb.FieldDescriptorProto{
-				str("name", 1), str("base_path", 2),
+				str("name", 1), str("base_path", fieldTwo),
 			}},
 			{Name: new("JsonApiResource"), Field: []*descriptorpb.FieldDescriptorProto{
-				str("type", 1), str("single_key", 2),
-				str("collection_key", 3), str("pagination_key", 4),
+				str("type", 1), str("single_key", fieldTwo),
+				str("collection_key", fieldThree), str("pagination_key", fieldFour),
 			}},
 			{Name: new("JsonApiOperation"), Field: []*descriptorpb.FieldDescriptorProto{
 				{
@@ -84,10 +108,6 @@ func JSONAPIAnnotations(tb testing.TB) protoreflect.FileDescriptor {
 			),
 		},
 	}
-	fd, err := protodesc.NewFile(fdp, protoregistry.GlobalFiles)
-	require.NoError(tb, err, "build synthetic jsonapi/v1/annotations.proto")
-
-	return fd
 }
 
 // JSONAPISetter carries the dynamic extension types + message descriptors decoded from

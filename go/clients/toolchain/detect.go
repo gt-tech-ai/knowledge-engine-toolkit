@@ -153,16 +153,7 @@ func (d *Detector) checkVersion(
 	if result.Err != nil {
 		d.log.Debug("version command failed", "tool", tool.Name, "error", result.Err)
 
-		return types.ToolCheckResult{
-			Tool:   tool,
-			Status: types.StatusToolOutdated,
-			Found:  "unknown",
-			Message: fmt.Sprintf(
-				"%s: found but version check failed: %v",
-				tool.Name,
-				result.Err,
-			),
-		}
+		return versionRunFailed(tool, result.Err)
 	}
 
 	raw := strings.TrimSpace(string(result.Stdout))
@@ -177,16 +168,7 @@ func (d *Detector) checkVersion(
 	if err != nil {
 		d.log.Debug("version parse error", "tool", tool.Name, "error", err)
 
-		return types.ToolCheckResult{
-			Tool:   tool,
-			Status: types.StatusToolOK,
-			Found:  verStr,
-			Message: fmt.Sprintf(
-				"%s: installed (version parse failed: %s)",
-				tool.Name,
-				verStr,
-			),
-		}
+		return versionUnparsed(tool, verStr)
 	}
 
 	if !ver.MeetsMinimum(*tool.MinVersion) {
@@ -208,6 +190,30 @@ func (d *Detector) checkVersion(
 		Status:  types.StatusToolOK,
 		Found:   ver.String(),
 		Message: fmt.Sprintf("%s: %s OK (installed)", tool.Name, ver),
+	}
+}
+
+// versionRunFailed is the result for a found tool whose version command failed.
+func versionRunFailed(tool *types.ToolDef, err error) types.ToolCheckResult {
+	return types.ToolCheckResult{
+		Tool:    tool,
+		Status:  types.StatusToolOutdated,
+		Found:   "unknown",
+		Message: fmt.Sprintf("%s: found but version check failed: %v", tool.Name, err),
+	}
+}
+
+// versionUnparsed is the result for an installed tool whose version output is opaque.
+func versionUnparsed(tool *types.ToolDef, verStr string) types.ToolCheckResult {
+	return types.ToolCheckResult{
+		Tool:   tool,
+		Status: types.StatusToolOK,
+		Found:  verStr,
+		Message: fmt.Sprintf(
+			"%s: installed (version parse failed: %s)",
+			tool.Name,
+			verStr,
+		),
 	}
 }
 
@@ -244,22 +250,9 @@ func SummarizeMissing(prereqErr error, results []types.ToolCheckResult) error {
 	}
 
 	for i := range results {
-		r := &results[i]
-		if r.Status != types.StatusToolMissing &&
-			r.Status != types.StatusToolOutdated {
-			continue
+		if line := missingLine(&results[i]); line != "" {
+			lines = append(lines, line)
 		}
-
-		msg := r.Tool.Name
-		if r.Status == types.StatusToolOutdated && r.Found != "" {
-			msg += fmt.Sprintf(" (found %s, need >= %s)", r.Found, r.Tool.MinVersion)
-		}
-
-		if r.Tool.FallbackURL != "" {
-			msg += "\n    Install: " + r.Tool.FallbackURL
-		}
-
-		lines = append(lines, msg)
 	}
 
 	if len(lines) > 0 {
@@ -270,4 +263,22 @@ func SummarizeMissing(prereqErr error, results []types.ToolCheckResult) error {
 	}
 
 	return nil
+}
+
+// missingLine describes a missing or outdated tool; "" for any other status.
+func missingLine(r *types.ToolCheckResult) string {
+	if r.Status != types.StatusToolMissing && r.Status != types.StatusToolOutdated {
+		return ""
+	}
+
+	msg := r.Tool.Name
+	if r.Status == types.StatusToolOutdated && r.Found != "" {
+		msg += fmt.Sprintf(" (found %s, need >= %s)", r.Found, r.Tool.MinVersion)
+	}
+
+	if r.Tool.FallbackURL != "" {
+		msg += "\n    Install: " + r.Tool.FallbackURL
+	}
+
+	return msg
 }

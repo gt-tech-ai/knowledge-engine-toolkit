@@ -72,28 +72,39 @@ func FuzzActionableLines(f *testing.F) {
 	f.Add("diff --git a/x b/y\n+z\n", 1)
 	f.Add("{\"a\":1}\nplain\n", 5)
 	f.Fuzz(func(t *testing.T, output string, limit int) {
-		if limit < 1 || limit > 50 {
-			return
-		}
-
-		lines := report.ActionableLines([]byte(output), limit)
-		assert.LessOrEqual(t, len(lines), limit)
-
-		for _, l := range lines {
-			found := false
-
-			for raw := range strings.SplitSeq(output, "\n") {
-				in := strings.TrimSpace(raw)
-				if in == l || (len(in) > 200 && l == in[:197]+"...") ||
-					strings.HasPrefix(in, "diff --git ") &&
-						strings.HasSuffix(in, " b/"+l) {
-					found = true
-
-					break
-				}
-			}
-
-			assert.True(t, found, "line %q is not from the input", l)
-		}
+		fuzzActionableLinesCase(t, output, limit)
 	})
+}
+
+// fuzzActionableLinesCase is the body of a closure in FuzzActionableLines.
+func fuzzActionableLinesCase(t *testing.T, output string, limit int) {
+	t.Helper()
+
+	if limit < 1 || limit > 50 {
+		return
+	}
+
+	lines := report.ActionableLines([]byte(output), limit)
+	assert.LessOrEqual(t, len(lines), limit)
+
+	for _, l := range lines {
+		assert.True(t, lineFromOutput(output, l), "line %q is not from the input", l)
+	}
+}
+
+// lineFromOutput reports whether l is some output line, its truncation, or a diff target.
+func lineFromOutput(output, l string) bool {
+	for raw := range strings.SplitSeq(output, "\n") {
+		if derivesLine(strings.TrimSpace(raw), l) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// derivesLine reports whether in yields l unchanged, truncated, or as a diff's b/ path.
+func derivesLine(in, l string) bool {
+	return in == l || (len(in) > 200 && l == in[:197]+"...") ||
+		strings.HasPrefix(in, "diff --git ") && strings.HasSuffix(in, " b/"+l)
 }

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -76,43 +77,7 @@ func promInstant(v string) string {
 func TestClient_QueryParsesVector(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name     string
-		body     string
-		wantCode apperr.ErrorCode
-		want     float64
-	}{
-		{
-			name: "one sample",
-			body: strings.Replace(promVector, "%s", promInstant("12.5"), 1),
-			want: 12.5,
-		},
-		{
-			name:     "no sample",
-			body:     strings.Replace(promVector, "%s", "", 1),
-			wantCode: apperr.CodeNotFound,
-		},
-		{
-			name:     "NaN",
-			body:     strings.Replace(promVector, "%s", promInstant("NaN"), 1),
-			wantCode: apperr.CodeNotFound,
-		},
-		{
-			name: "two series",
-			body: strings.Replace(
-				promVector,
-				"%s",
-				promInstant("1")+","+promInstant("2"),
-				1,
-			),
-			wantCode: apperr.CodeInvalidInput,
-		},
-		{
-			name:     "matrix",
-			body:     strings.Replace(promMatrix, "%s", "", 1),
-			wantCode: apperr.CodeInvalidInput,
-		},
-	}
+	cases := testClientQueryParsesVectorTable()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -151,6 +116,50 @@ func TestClient_QueryParsesVector(t *testing.T) {
 	}
 }
 
+// testClientQueryParsesVectorRow is one row of testClientQueryParsesVectorTable.
+type testClientQueryParsesVectorRow struct {
+	name     string
+	body     string
+	wantCode apperr.ErrorCode
+	want     float64
+}
+
+// testClientQueryParsesVectorTable builds the table TestClient_QueryParsesVector runs.
+func testClientQueryParsesVectorTable() []testClientQueryParsesVectorRow {
+	return []testClientQueryParsesVectorRow{
+		{
+			name: "one sample",
+			body: strings.Replace(promVector, "%s", promInstant("12.5"), 1),
+			want: 12.5,
+		},
+		{
+			name:     "no sample",
+			body:     strings.Replace(promVector, "%s", "", 1),
+			wantCode: apperr.CodeNotFound,
+		},
+		{
+			name:     "NaN",
+			body:     strings.Replace(promVector, "%s", promInstant("NaN"), 1),
+			wantCode: apperr.CodeNotFound,
+		},
+		{
+			name: "two series",
+			body: strings.Replace(
+				promVector,
+				"%s",
+				promInstant("1")+","+promInstant("2"),
+				1,
+			),
+			wantCode: apperr.CodeInvalidInput,
+		},
+		{
+			name:     "matrix",
+			body:     strings.Replace(promMatrix, "%s", "", 1),
+			wantCode: apperr.CodeInvalidInput,
+		},
+	}
+}
+
 // TestClient_QueryRangeParsesMatrix tests the range query's contract: one series of
 // finite samples is the series; anything else is an error.
 //
@@ -168,41 +177,7 @@ func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 	t.Parallel()
 
 	t0 := time.Unix(1727260000, 0).UTC()
-	cases := []struct {
-		name     string
-		body     string
-		wantCode apperr.ErrorCode
-		want     []promhttp.Sample
-	}{
-		{
-			name: "one series",
-			body: strings.Replace(promMatrix, "%s", promSeries("1.5", "2"), 1),
-			want: []promhttp.Sample{
-				{Time: t0, Value: 1.5},
-				{Time: t0.Add(time.Hour), Value: 2},
-			},
-		},
-		{
-			name: "no series",
-			body: strings.Replace(promMatrix, "%s", "", 1),
-			want: []promhttp.Sample{},
-		},
-		{
-			name: "two series",
-			body: strings.Replace(
-				promMatrix,
-				"%s",
-				promSeries("1")+","+promSeries("2"),
-				1,
-			),
-			wantCode: apperr.CodeInvalidInput,
-		},
-		{
-			name:     "NaN",
-			body:     strings.Replace(promMatrix, "%s", promSeries("NaN"), 1),
-			wantCode: apperr.CodeNotFound,
-		},
-	}
+	cases := testClientQueryRangeParsesMatrixTable(t0)
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -247,6 +222,52 @@ func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 	}
 }
 
+// testClientQueryRangeParsesMatrixRow is one row of
+// testClientQueryRangeParsesMatrixTable.
+type testClientQueryRangeParsesMatrixRow struct {
+	name     string
+	body     string
+	wantCode apperr.ErrorCode
+	want     []promhttp.Sample
+}
+
+// testClientQueryRangeParsesMatrixTable builds the table
+// TestClient_QueryRangeParsesMatrix runs.
+func testClientQueryRangeParsesMatrixTable(
+	t0 time.Time,
+) []testClientQueryRangeParsesMatrixRow {
+	return []testClientQueryRangeParsesMatrixRow{
+		{
+			name: "one series",
+			body: strings.Replace(promMatrix, "%s", promSeries("1.5", "2"), 1),
+			want: []promhttp.Sample{
+				{Time: t0, Value: 1.5},
+				{Time: t0.Add(time.Hour), Value: 2},
+			},
+		},
+		{
+			name: "no series",
+			body: strings.Replace(promMatrix, "%s", "", 1),
+			want: []promhttp.Sample{},
+		},
+		{
+			name: "two series",
+			body: strings.Replace(
+				promMatrix,
+				"%s",
+				promSeries("1")+","+promSeries("2"),
+				1,
+			),
+			wantCode: apperr.CodeInvalidInput,
+		},
+		{
+			name:     "NaN",
+			body:     strings.Replace(promMatrix, "%s", promSeries("NaN"), 1),
+			wantCode: apperr.CodeNotFound,
+		},
+	}
+}
+
 // TestClient_ErrorStatusIsCoded tests that every failure on the request path carries the
 // code that tells a caller whether to retry, fix the query, or report the server.
 //
@@ -270,14 +291,96 @@ func TestClient_QueryRangeParsesMatrix(t *testing.T) {
 func TestClient_ErrorStatusIsCoded(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		doErr    error
-		body     string
-		name     string
-		wantMsg  string
-		wantCode apperr.ErrorCode
-		status   int
-	}{
+	cases := testClientErrorStatusIsCodedTable11()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			testClientErrorStatusIsCodedCase(t, tc)
+		})
+	}
+
+	t.Run("bad base URL", func(t *testing.T) {
+		t.Parallel()
+
+		doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
+		doer.EXPECT().Do(gomock.Any()).Times(0)
+
+		_, err := promhttp.New("http://[::1", doer).Query(t.Context(), `up`)
+
+		require.Error(t, err)
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+	})
+	t.Run("bad range", func(t *testing.T) {
+		t.Parallel()
+
+		doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
+		doer.EXPECT().Do(gomock.Any()).Times(0)
+
+		c := promhttp.New("http://prom.test:9090", doer)
+		t0 := time.Unix(1727260000, 0)
+
+		_, err := c.QueryRange(t.Context(), `up`, t0, t0.Add(time.Hour), 0)
+		require.Error(t, err)
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
+		_, err = c.QueryRange(t.Context(), `up`, t0.Add(time.Hour), t0, time.Minute)
+		require.Error(t, err)
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+	})
+}
+
+// testClientErrorStatusIsCodedCase is the body of a closure in
+// TestClient_ErrorStatusIsCoded.
+func testClientErrorStatusIsCodedCase(
+	t *testing.T,
+	tc testClientErrorStatusIsCodedRow,
+) {
+	t.Helper()
+
+	doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
+	doer.EXPECT().
+		Do(gomock.Any()).
+		DoAndReturn(func(*http.Request) (*http.Response, error) {
+			if tc.doErr != nil {
+				return nil, tc.doErr
+			}
+
+			return promResponse(tc.status, tc.body), nil
+		})
+
+	_, err := promhttp.New("http://prom.test:9090", doer).
+		Query(t.Context(), `up`)
+
+	require.Error(t, err)
+	assert.Equal(t, tc.wantCode, apperr.Code(err))
+	assert.Contains(t, err.Error(), tc.wantMsg)
+}
+
+// testClientErrorStatusIsCodedRow is one row of testClientErrorStatusIsCodedTable.
+type testClientErrorStatusIsCodedRow struct {
+	doErr    error
+	body     string
+	name     string
+	wantMsg  string
+	wantCode apperr.ErrorCode
+	status   int
+}
+
+// testClientErrorStatusIsCodedTable11 builds the table
+// testClientErrorStatusIsCodedTable10
+// runs.
+func testClientErrorStatusIsCodedTable11() []testClientErrorStatusIsCodedRow {
+	return slices.Concat(
+		testClientErrorStatusIsCodedTable11Part1(),
+		testClientErrorStatusIsCodedTable11Part2(),
+	)
+}
+
+// testClientErrorStatusIsCodedTable11Part1 lists part of the
+// testClientErrorStatusIsCodedTable11 rows.
+func testClientErrorStatusIsCodedTable11Part1() []testClientErrorStatusIsCodedRow {
+	return []testClientErrorStatusIsCodedRow{
 		{
 			name:     "transport",
 			doErr:    apperr.Sentinel("connection refused"),
@@ -320,6 +423,13 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 			body:     `<html>`,
 			wantCode: apperr.CodeUnavailable,
 		},
+	}
+}
+
+// testClientErrorStatusIsCodedTable11Part2 lists part of the
+// testClientErrorStatusIsCodedTable11 rows.
+func testClientErrorStatusIsCodedTable11Part2() []testClientErrorStatusIsCodedRow {
+	return []testClientErrorStatusIsCodedRow{
 		{
 			name:     "HTTP 503",
 			status:   http.StatusServiceUnavailable,
@@ -353,58 +463,6 @@ func TestClient_ErrorStatusIsCoded(t *testing.T) {
 			wantCode: apperr.CodeUpstream,
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
-			doer.EXPECT().
-				Do(gomock.Any()).
-				DoAndReturn(func(*http.Request) (*http.Response, error) {
-					if tc.doErr != nil {
-						return nil, tc.doErr
-					}
-
-					return promResponse(tc.status, tc.body), nil
-				})
-
-			_, err := promhttp.New("http://prom.test:9090", doer).
-				Query(t.Context(), `up`)
-
-			require.Error(t, err)
-			assert.Equal(t, tc.wantCode, apperr.Code(err))
-			assert.Contains(t, err.Error(), tc.wantMsg)
-		})
-	}
-
-	t.Run("bad base URL", func(t *testing.T) {
-		t.Parallel()
-
-		doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
-		doer.EXPECT().Do(gomock.Any()).Times(0)
-
-		_, err := promhttp.New("http://[::1", doer).Query(t.Context(), `up`)
-
-		require.Error(t, err)
-		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	})
-	t.Run("bad range", func(t *testing.T) {
-		t.Parallel()
-
-		doer := mocks.NewMockPrometheusHTTPDoer(gomock.NewController(t))
-		doer.EXPECT().Do(gomock.Any()).Times(0)
-
-		c := promhttp.New("http://prom.test:9090", doer)
-		t0 := time.Unix(1727260000, 0)
-
-		_, err := c.QueryRange(t.Context(), `up`, t0, t0.Add(time.Hour), 0)
-		require.Error(t, err)
-		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-
-		_, err = c.QueryRange(t.Context(), `up`, t0.Add(time.Hour), t0, time.Minute)
-		require.Error(t, err)
-		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	})
 }
 
 // TestPrometheusFromConfig_StubDefaultAndHTTPNeedsBaseURL tests the factory: the
@@ -511,6 +569,21 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 			Do(gomock.Any()).
 			Return(&http.Response{StatusCode: http.StatusOK, Body: src}, nil),
 	)
+
+	testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest(t, reg, stack, inner)
+}
+
+// testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest continues
+// TestDecorateDoer_RetriesTransportErrorsAndBuffersBody with its remaining steps.
+func testDecorateDoerRetriesTransportErrorsAndBuffersBodyRest(
+	t *testing.T,
+	reg *promclient.Registry,
+	stack client.Base,
+	inner *mocks.MockPrometheusHTTPDoer,
+) {
+	t.Helper()
+
+	var err error
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
 		"http://prom.test/api/v1/query_range", http.NoBody)

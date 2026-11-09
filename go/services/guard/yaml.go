@@ -32,31 +32,38 @@ func yamlCheck(
 			return nil, err
 		}
 
-		if len(ms) == 0 {
-			out = append(out, types.Finding{
-				File: d.Path, Rule: keyPath, Message: d.Path + " has no " + r.Path,
-			})
-
-			continue
-		}
-
-		for _, m := range ms {
-			if r.Expect != "" && m.Value != r.Expect {
-				out = append(out, types.Finding{
-					File: d.Path,
-					Line: m.Line,
-					Rule: "expect",
-					Message: r.Path + " is " + quote(
-						m.Value,
-					) + ", want " + quote(
-						r.Expect,
-					),
-				})
-			}
-		}
+		out = append(out, yamlDocFindings(d.Path, ms, r)...)
 	}
 
 	return out, nil
+}
+
+// yamlDocFindings reports a path that selects nothing, or each value off the expectation.
+func yamlDocFindings(
+	doc string,
+	ms []types.YAMLMatch,
+	r *types.GuardRow,
+) []types.Finding {
+	if len(ms) == 0 {
+		return []types.Finding{
+			{File: doc, Rule: keyPath, Message: doc + " has no " + r.Path},
+		}
+	}
+
+	var out []types.Finding
+
+	for _, m := range ms {
+		if r.Expect != "" && m.Value != r.Expect {
+			out = append(out, types.Finding{
+				File:    doc,
+				Line:    m.Line,
+				Rule:    "expect",
+				Message: r.Path + " is " + quote(m.Value) + ", want " + quote(r.Expect),
+			})
+		}
+	}
+
+	return out
 }
 
 // quote double-quotes s.

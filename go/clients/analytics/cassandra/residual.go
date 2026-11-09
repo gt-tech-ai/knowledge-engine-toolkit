@@ -2,6 +2,7 @@ package cassandra
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -113,28 +114,41 @@ func compareString(got string, op types.FilterOperator, v any) bool {
 	case types.OpNe:
 		return got != fmt.Sprint(v)
 	case types.OpIn, types.OpNotIn:
-		found := false
-
-		if list, ok := v.([]any); ok {
-			for _, item := range list {
-				found = found || got == fmt.Sprint(item)
-			}
-		}
-
-		return found == (op == types.OpIn)
+		return stringInList(got, v) == (op == types.OpIn)
 	case types.OpLike:
 		return strings.Contains(strings.ToLower(got), strings.ToLower(fmt.Sprint(v)))
-	case types.OpGt:
-		return got > fmt.Sprint(v)
-	case types.OpGte:
-		return got >= fmt.Sprint(v)
-	case types.OpLt:
-		return got < fmt.Sprint(v)
-	case types.OpLte:
-		return got <= fmt.Sprint(v)
+	case types.OpGt, types.OpGte, types.OpLt, types.OpLte:
+		return compareOrdered(got, op, fmt.Sprint(v))
 	default:
 		return false
 	}
+}
+
+// stringInList reports whether got equals an item of the list v; a non-list is empty.
+func stringInList(got string, v any) bool {
+	list, _ := v.([]any)
+
+	return slices.ContainsFunc(
+		list,
+		func(item any) bool { return got == fmt.Sprint(item) },
+	)
+}
+
+// compareOrdered applies a range operator to two strings.
+func compareOrdered(got string, op types.FilterOperator, want string) bool {
+	if op == types.OpGt {
+		return got > want
+	}
+
+	if op == types.OpGte {
+		return got >= want
+	}
+
+	if op == types.OpLt {
+		return got < want
+	}
+
+	return got <= want
 }
 
 // compareTime applies op to the row's time; a non-time operand never matches.
@@ -179,36 +193,41 @@ func pushdown(f types.Filter, lo, hi time.Time) (from, to time.Time) {
 	}
 
 	for _, c := range clauses {
-		clause, ok := c.(types.FilterClause)
-		if !ok || clause.Field != TimeField {
-			continue
+		clause, at, ok := timeClause(c)
+		if ok {
+			lo, hi = narrowWindow(clause.Operator, at, lo, hi)
 		}
+	}
 
-		at, ok := clause.Value.(time.Time)
-		if !ok {
-			continue
-		}
+	return lo, hi
+}
 
-		switch clause.Operator {
-		case types.OpGt, types.OpGte:
-			if down := at.Truncate(time.Millisecond); down.After(lo) {
-				lo = down
-			}
-		case types.OpLt, types.OpLte:
-			if up := at.Truncate(time.Millisecond).Add(time.Millisecond); up.Before(hi) {
-				hi = up
-			}
-		case types.OpEq:
-			lo, hi = maxTime(
-				lo,
-				at.Truncate(time.Millisecond),
-			), minTime(
-				hi,
-				at.Truncate(time.Millisecond).Add(time.Millisecond),
-			)
-		case types.OpNe, types.OpIn, types.OpNotIn, types.OpLike:
-			// These do not bound the range; the residual predicate applies them.
-		}
+// timeClause unpacks a clause that compares the time field with a time value.
+func timeClause(c types.Filter) (types.FilterClause, time.Time, bool) {
+	clause, ok := c.(types.FilterClause)
+	if !ok || clause.Field != TimeField {
+		return types.FilterClause{}, time.Time{}, false
+	}
+
+	at, ok := clause.Value.(time.Time)
+
+	return clause, at, ok
+}
+
+// narrowWindow tightens [lo, hi) by one time comparison, at millisecond precision.
+func narrowWindow(op types.FilterOperator, at, lo, hi time.Time) (from, to time.Time) {
+	down := at.Truncate(time.Millisecond)
+	up := down.Add(time.Millisecond)
+
+	switch op {
+	case types.OpGt, types.OpGte:
+		return maxTime(lo, down), hi
+	case types.OpLt, types.OpLte:
+		return lo, minTime(hi, up)
+	case types.OpEq:
+		return maxTime(lo, down), minTime(hi, up)
+	case types.OpNe, types.OpIn, types.OpNotIn, types.OpLike:
+		// These do not bound the range; the residual predicate applies them.
 	}
 
 	return lo, hi

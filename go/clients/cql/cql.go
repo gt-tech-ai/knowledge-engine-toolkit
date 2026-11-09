@@ -20,6 +20,21 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
+// defaultCassandraPort is the native-protocol port Cassandra listens on by default.
+const defaultCassandraPort = 9042
+
+// defaultConfigTimeout is the default Timeout of Config.
+const defaultConfigTimeout = 5 * time.Second
+
+// defaultConfigConnectTimeout is the default ConnectTimeout of Config.
+const defaultConfigConnectTimeout = 5 * time.Second
+
+// defaultConfigPageSize is the default PageSize of Config.
+const defaultConfigPageSize = 500
+
+// defaultConfigNumConns is the default NumConns of Config.
+const defaultConfigNumConns = 2
+
 const (
 	// KindCassandra connects to a self-managed Apache Cassandra (the default).
 	KindCassandra client.Kind = "cassandra"
@@ -92,12 +107,15 @@ func DefaultConfig() Config {
 	return Config{
 		Kind:           KindCassandra,
 		Consistency:    "LOCAL_QUORUM",
-		Timeout:        5 * time.Second,
-		ConnectTimeout: 5 * time.Second,
-		PageSize:       500,
-		NumConns:       2,
-		Cassandra:      CassandraConfig{Hosts: []string{"localhost"}, Port: 9042},
-		Keyspaces:      KeyspacesConfig{Port: keyspaces.DefaultPort},
+		Timeout:        defaultConfigTimeout,
+		ConnectTimeout: defaultConfigConnectTimeout,
+		PageSize:       defaultConfigPageSize,
+		NumConns:       defaultConfigNumConns,
+		Cassandra: CassandraConfig{
+			Hosts: []string{"localhost"},
+			Port:  defaultCassandraPort,
+		},
+		Keyspaces: KeyspacesConfig{Port: keyspaces.DefaultPort},
 	}
 }
 

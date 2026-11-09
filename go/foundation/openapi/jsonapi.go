@@ -39,29 +39,47 @@ func rewriteForJSONAPI(oas map[string]any, cfg serviceConfig, routes []RouteEntr
 	lookup := buildRouteLookup(routes, cfg.basePath)
 
 	for pathKey, pathItem := range paths {
-		pi := helpers.AsMap(pathItem)
-		if pi == nil {
-			continue
-		}
+		rewritePathItem(pathKey, helpers.AsMap(pathItem), schemas, cfg, lookup)
+	}
+}
 
-		for method, operation := range pi {
-			op := helpers.AsMap(operation)
-			if op == nil {
-				continue
-			}
-
-			entry, ok := lookup[routeKey(method, pathKey, cfg.basePath)]
-			if ok {
-				rewriteOperationByRole(op, schemas, entry)
-
-				continue
-			}
-
-			// Exempt/unclassified operation (or no route table): keep the
-			// by-resource-property envelope so its contract is unchanged.
-			rewriteOperationResponses(op, schemas, cfg)
+// rewritePathItem rewrites each operation of one path; a non-object entry is skipped.
+func rewritePathItem(
+	pathKey string,
+	item, schemas map[string]any,
+	cfg serviceConfig,
+	lookup map[string]RouteEntry,
+) {
+	for method, operation := range item {
+		if op := helpers.AsMap(operation); op != nil {
+			rewriteOperation(
+				op,
+				schemas,
+				cfg,
+				lookup,
+				routeKey(method, pathKey, cfg.basePath),
+			)
 		}
 	}
+}
+
+// rewriteOperation envelopes one operation by its route role; an exempt or
+// unclassified operation (or no route table) keeps the by-resource-property
+// envelope so its contract is unchanged.
+func rewriteOperation(
+	op, schemas map[string]any,
+	cfg serviceConfig,
+	lookup map[string]RouteEntry,
+	key string,
+) {
+	entry, ok := lookup[key]
+	if ok {
+		rewriteOperationByRole(op, schemas, entry)
+
+		return
+	}
+
+	rewriteOperationResponses(op, schemas, cfg)
 }
 
 // buildRouteLookup indexes a service's route entries by (upper method, base-path-
@@ -137,7 +155,7 @@ func rewriteOperationByRole(op, schemas map[string]any, entry RouteEntry) {
 	// Replace every inherited error/`default` response with the role-derived coded
 	// set, each in the JSON:API error envelope.
 	for code := range responses {
-		if code == "default" || (len(code) == 3 && code[0] >= '4') {
+		if isErrorStatus(code) {
 			delete(responses, code)
 		}
 	}
@@ -149,26 +167,35 @@ func rewriteOperationByRole(op, schemas map[string]any, entry RouteEntry) {
 	envelopeRequestBody(op, schemas, entry)
 }
 
+// isErrorStatus reports whether a response key is `default` or a 4xx/5xx status.
+func isErrorStatus(code string) bool {
+	return code == "default" || (len(code) == statusCodeLen && code[0] >= '4')
+}
+
+// isSuccessStatus reports whether a response key is a 2xx status.
+func isSuccessStatus(code string) bool {
+	return len(code) == statusCodeLen && code[0] == '2'
+}
+
+// findSuccessResponse returns the first 2xx response that is a schema object.
+func findSuccessResponse(
+	responses map[string]any,
+) (status string, response map[string]any) {
+	for code, resp := range responses {
+		if r := helpers.AsMap(resp); isSuccessStatus(code) && r != nil {
+			return code, r
+		}
+	}
+
+	return "", nil
+}
+
 // rewriteSuccessResponse reshapes the operation's success (2xx) response into the
 // role's JSON:API envelope and moves it under the status code the gateway returns
 // for that role: a DELETE becomes a bodyless 204, a CREATE a 201 carrying the
 // created-resource envelope, and every read/update/action stays 200.
 func rewriteSuccessResponse(responses, op, schemas map[string]any, entry RouteEntry) {
-	var (
-		srcCode string
-		srcResp map[string]any
-	)
-
-	for code, resp := range responses {
-		if len(code) == 3 && code[0] == '2' {
-			if r := helpers.AsMap(resp); r != nil {
-				srcCode, srcResp = code, r
-
-				break
-			}
-		}
-	}
-
+	srcCode, srcResp := findSuccessResponse(responses)
 	if srcResp == nil {
 		return
 	}
@@ -184,15 +211,7 @@ func rewriteSuccessResponse(responses, op, schemas map[string]any, entry RouteEn
 		return
 	}
 
-	// Reshape the body into the role's envelope (JSON:API content type).
-	if content := helpers.GetMap(srcResp, "content"); content != nil &&
-		helpers.GetMap(content, mediaJSON) != nil {
-		if wrapped := wrapByRole(op, schemas, entry); wrapped != nil {
-			delete(content, mediaJSON)
-
-			content["application/vnd.api+json"] = map[string]any{keySchema: wrapped}
-		}
-	}
+	reshapeSuccessBody(srcResp, op, schemas, entry)
 
 	// Renumber when the role's success code differs from the inherited one (CREATE).
 	if target != srcCode {
@@ -200,6 +219,24 @@ func rewriteSuccessResponse(responses, op, schemas map[string]any, entry RouteEn
 
 		responses[target] = srcResp
 	}
+}
+
+// reshapeSuccessBody replaces a JSON body with the role's envelope under the JSON:API
+// content type, leaving a response with no JSON body or no envelope untouched.
+func reshapeSuccessBody(resp, op, schemas map[string]any, entry RouteEntry) {
+	content := helpers.GetMap(resp, "content")
+	if content == nil || helpers.GetMap(content, mediaJSON) == nil {
+		return
+	}
+
+	wrapped := wrapByRole(op, schemas, entry)
+	if wrapped == nil {
+		return
+	}
+
+	delete(content, mediaJSON)
+
+	content["application/vnd.api+json"] = map[string]any{keySchema: wrapped}
 }
 
 // successStatusForRole is the HTTP status the JSON:API gateway returns on success
@@ -295,58 +332,48 @@ func wrapByRole(op, schemas map[string]any, entry RouteEntry) map[string]any {
 		paginationKey: entry.PaginationKey,
 	}
 
+	name := responseSchemaName(op)
+
 	switch entry.Role {
 	case RoleDelete:
 		return map[string]any{keyType: typeObject, keyDescription: emptyResponseDesc}
 	case RoleAction:
-		return wrapMetaResponse(responseSchemaName(op), schemas)
+		return wrapMetaResponse(name, schemas)
 	case RoleList:
-		return wrapCollectionResponse(responseSchemaName(op), rc, schemas)
+		return wrapCollectionResponse(name, rc, schemas)
 	case RoleGetOne, RoleCreate, RoleUpdate:
-		name := responseSchemaName(op)
-		respSchema := helpers.GetMap(schemas, name)
-		props := helpers.GetMap(respSchema, keyProperties)
-		// A bulk create whose response carries only a collection key is still a
-		// collection envelope (the CREATE rule).
-		if rc.singleKey == "" && rc.collectionKey != "" {
-			return wrapCollectionResponse(name, rc, schemas)
-		}
-
-		if len(props) == 0 {
-			return map[string]any{keyType: typeObject, keyDescription: emptyResponseDesc}
-		}
-
-		// A resource-less GET_ONE/UPDATE (classified from verb/path, no resource
-		// key on its own response) wraps meta-only — matching the by-property
-		// fallback — rather than emitting a dangling attributes $ref.
-		if rc.singleKey == "" {
-			return wrapMetaResponse(name, schemas)
-		}
-
-		return wrapSingleResponse(name, props[rc.singleKey], rc, schemas, props)
-	default: // GET_ONE / CREATE / UPDATE
-		name := responseSchemaName(op)
-		respSchema := helpers.GetMap(schemas, name)
-		props := helpers.GetMap(respSchema, keyProperties)
-		// A bulk create whose response carries only a collection key is still a
-		// collection envelope (the CREATE rule).
-		if rc.singleKey == "" && rc.collectionKey != "" {
-			return wrapCollectionResponse(name, rc, schemas)
-		}
-
-		if len(props) == 0 {
-			return map[string]any{keyType: typeObject, keyDescription: emptyResponseDesc}
-		}
-
-		// A resource-less GET_ONE/UPDATE (classified from verb/path, no resource
-		// key on its own response) wraps meta-only — matching the by-property
-		// fallback — rather than emitting a dangling attributes $ref.
-		if rc.singleKey == "" {
-			return wrapMetaResponse(name, schemas)
-		}
-
-		return wrapSingleResponse(name, props[rc.singleKey], rc, schemas, props)
+		return wrapResourceResponse(name, rc, schemas)
+	default:
+		return wrapResourceResponse(name, rc, schemas)
 	}
+}
+
+// wrapResourceResponse builds the envelope of a GET_ONE, CREATE or UPDATE response.
+func wrapResourceResponse(
+	name string,
+	rc resourceConfig,
+	schemas map[string]any,
+) map[string]any {
+	props := helpers.GetMap(helpers.GetMap(schemas, name), keyProperties)
+
+	// A bulk create whose response carries only a collection key is still a
+	// collection envelope (the CREATE rule).
+	if rc.singleKey == "" && rc.collectionKey != "" {
+		return wrapCollectionResponse(name, rc, schemas)
+	}
+
+	if len(props) == 0 {
+		return map[string]any{keyType: typeObject, keyDescription: emptyResponseDesc}
+	}
+
+	// A resource-less GET_ONE/UPDATE (classified from verb/path, no resource
+	// key on its own response) wraps meta-only — matching the by-property
+	// fallback — rather than emitting a dangling attributes $ref.
+	if rc.singleKey == "" {
+		return wrapMetaResponse(name, schemas)
+	}
+
+	return wrapSingleResponse(name, props[rc.singleKey], rc, schemas, props)
 }
 
 // responseSchemaName resolves the schema name of an operation's success (2xx)
@@ -354,7 +381,7 @@ func wrapByRole(op, schemas map[string]any, entry RouteEntry) map[string]any {
 func responseSchemaName(op map[string]any) string {
 	responses := helpers.GetMap(op, "responses")
 	for code, resp := range responses {
-		if len(code) != 3 || code[0] != '2' {
+		if !isSuccessStatus(code) {
 			continue
 		}
 
@@ -484,66 +511,46 @@ func addJSONAPISchemas(schemas map[string]any) {
 
 // rewriteOperationResponses rewrites response content types and schemas for JSON:API.
 func rewriteOperationResponses(op, schemas map[string]any, cfg serviceConfig) {
-	responses := helpers.GetMap(op, "responses")
-	if responses == nil {
-		return
-	}
-
-	for code, resp := range responses {
-		r := helpers.AsMap(resp)
-		if r == nil {
-			continue
-		}
-
-		content := helpers.GetMap(r, "content")
-		if content == nil {
-			continue
-		}
+	for code, resp := range helpers.GetMap(op, "responses") {
+		content := helpers.GetMap(helpers.AsMap(resp), "content")
 
 		jsonContent := helpers.GetMap(content, mediaJSON)
 		if jsonContent == nil {
 			continue
 		}
 
-		// Error responses get JSON:API error envelope.
-		if code == "default" || (len(code) == 3 && code[0] >= '4') {
-			delete(content, mediaJSON)
-
-			content["application/vnd.api+json"] = map[string]any{
-				keySchema: map[string]any{
-					keyRef: "#/components/schemas/JsonApiErrorResponse",
-				},
-			}
-
+		envelope := responseEnvelope(code, jsonContent, schemas, cfg)
+		if envelope == nil {
 			continue
 		}
 
-		// Success responses: determine if single or collection.
-		schema := helpers.GetMap(jsonContent, keySchema)
-		if schema == nil {
-			continue
-		}
+		delete(content, mediaJSON)
 
-		schemaName := resolveSchemaName(schema)
-		if schemaName == "" {
-			continue
-		}
-
-		// Check if it's a collection or single response based on the schema content.
-		actualSchema := helpers.GetMap(schemas, schemaName)
-		if actualSchema == nil {
-			continue
-		}
-
-		wrapped := wrapResponseSchema(schemaName, actualSchema, schemas, cfg)
-		if wrapped != nil {
-			delete(content, mediaJSON)
-
-			content["application/vnd.api+json"] = map[string]any{
-				keySchema: wrapped,
-			}
-		}
+		content["application/vnd.api+json"] = map[string]any{keySchema: envelope}
 	}
+}
+
+// responseEnvelope returns the schema that replaces one JSON response body: the
+// shared error envelope for an error status, the resource envelope otherwise, or nil
+// when the body names no known schema and must stay as it is.
+func responseEnvelope(
+	code string, jsonContent, schemas map[string]any, cfg serviceConfig,
+) map[string]any {
+	if isErrorStatus(code) {
+		return map[string]any{keyRef: "#/components/schemas/JsonApiErrorResponse"}
+	}
+
+	schemaName := resolveSchemaName(helpers.GetMap(jsonContent, keySchema))
+	if schemaName == "" {
+		return nil
+	}
+
+	actualSchema := helpers.GetMap(schemas, schemaName)
+	if actualSchema == nil {
+		return nil
+	}
+
+	return wrapResponseSchema(schemaName, actualSchema, schemas, cfg)
 }
 
 // resolveSchemaName extracts the schema name from a $ref or returns empty.
@@ -662,22 +669,8 @@ func wrapSingleResponse(
 	schemas map[string]any,
 	responseProps map[string]any,
 ) map[string]any {
-	// Resolve the resource schema reference.
-	resourceSchemaName := ""
-	if sp, ok := singleProp.(map[string]any); ok {
-		resourceSchemaName = resolveSchemaName(sp)
-	}
-
-	// Create an attributes schema by extracting the resource schema minus "id".
 	attrsSchemaName := responseName + "Attributes"
-
-	if resourceSchemaName != "" {
-		if resourceSchema, ok := schemas[resourceSchemaName].(map[string]any); ok {
-			attrsSchema := buildAttributesSchema(resourceSchema)
-
-			schemas[attrsSchemaName] = attrsSchema
-		}
-	}
+	addResourceAttributes(singleProp, attrsSchemaName, schemas)
 
 	result := map[string]any{
 		keyType:     typeObject,
@@ -708,35 +701,64 @@ func wrapSingleResponse(
 		},
 	}
 
-	// Collect extra response fields (beyond the resource key) into a `meta`
-	// schema. This mirrors TransformSingleResource in the runtime middleware,
-	// which puts fields like currentOrgId into the meta envelope.
+	addSingleResponseMeta(result, responseName, rc.singleKey, schemas, responseProps)
+
+	return result
+}
+
+// addResourceAttributes registers the attributes schema (the resource minus "id") of
+// the resource singleProp references, when it resolves to a known schema.
+func addResourceAttributes(
+	singleProp any,
+	attrsSchemaName string,
+	schemas map[string]any,
+) {
+	sp, ok := singleProp.(map[string]any)
+	if !ok {
+		return
+	}
+
+	name := resolveSchemaName(sp)
+	if name == "" {
+		return
+	}
+
+	if resourceSchema, ok := schemas[name].(map[string]any); ok {
+		schemas[attrsSchemaName] = buildAttributesSchema(resourceSchema)
+	}
+}
+
+// addSingleResponseMeta collects the fields beyond the resource key into a `meta`
+// schema, mirroring TransformSingleResource in the runtime middleware.
+func addSingleResponseMeta(
+	result map[string]any,
+	responseName, singleKey string,
+	schemas, responseProps map[string]any,
+) {
 	metaProps := make(map[string]any)
 
 	for k, v := range responseProps {
-		if k == rc.singleKey {
-			continue
-		}
-
-		metaProps[k] = v
-	}
-
-	if len(metaProps) > 0 {
-		metaSchemaName := responseName + "Meta"
-
-		schemas[metaSchemaName] = map[string]any{
-			keyType:       typeObject,
-			keyProperties: metaProps,
-		}
-
-		resultProps := helpers.GetMap(result, keyProperties)
-
-		resultProps[keyMeta] = map[string]any{
-			keyRef: "#/components/schemas/" + metaSchemaName,
+		if k != singleKey {
+			metaProps[k] = v
 		}
 	}
 
-	return result
+	if len(metaProps) == 0 {
+		return
+	}
+
+	metaSchemaName := responseName + "Meta"
+
+	schemas[metaSchemaName] = map[string]any{
+		keyType:       typeObject,
+		keyProperties: metaProps,
+	}
+
+	resultProps := helpers.GetMap(result, keyProperties)
+
+	resultProps[keyMeta] = map[string]any{
+		keyRef: "#/components/schemas/" + metaSchemaName,
+	}
 }
 
 // wrapCollectionResponse creates a JSON:API collection envelope schema.
@@ -745,31 +767,7 @@ func wrapCollectionResponse(
 	rc resourceConfig,
 	schemas map[string]any,
 ) map[string]any {
-	// Try to find or create the attributes schema from the items.
-	attrsRef := map[string]any{
-		keyType:        typeObject,
-		keyDescription: "Resource attributes",
-	}
-	attrsSchemaName := responseName + "ItemAttributes"
-
-	// Look for the items schema in the collection definition. Each accessor
-	// yields nil when the shape isn't what we expect, so a missing hop leaves
-	// itemSchemaName empty and attrsRef at its default — the same fall-through
-	// the nested type assertions produced, without the five-deep pyramid.
-	collProp := helpers.GetMap(
-		helpers.GetMap(helpers.GetMap(schemas, responseName), keyProperties),
-		rc.collectionKey,
-	)
-	items := helpers.GetMap(collProp, "items")
-
-	if itemSchemaName := resolveSchemaName(items); itemSchemaName != "" {
-		if itemSchema := helpers.GetMap(schemas, itemSchemaName); itemSchema != nil {
-			schemas[attrsSchemaName] = buildAttributesSchema(itemSchema)
-			attrsRef = map[string]any{
-				keyRef: "#/components/schemas/" + attrsSchemaName,
-			}
-		}
-	}
+	attrsRef := collectionAttributesRef(responseName, rc.collectionKey, schemas)
 
 	return map[string]any{
 		keyType:     typeObject,
@@ -812,6 +810,31 @@ func wrapCollectionResponse(
 	}
 }
 
+// collectionAttributesRef registers the attributes schema of a collection's items and
+// returns a reference to it. Each accessor yields nil when the shape isn't what we
+// expect, so a missing hop falls through to an inline open object.
+func collectionAttributesRef(
+	responseName, collectionKey string, schemas map[string]any,
+) map[string]any {
+	collProp := helpers.GetMap(
+		helpers.GetMap(helpers.GetMap(schemas, responseName), keyProperties),
+		collectionKey,
+	)
+
+	itemSchema := helpers.GetMap(
+		schemas,
+		resolveSchemaName(helpers.GetMap(collProp, "items")),
+	)
+	if itemSchema == nil {
+		return map[string]any{keyType: typeObject, keyDescription: "Resource attributes"}
+	}
+
+	attrsSchemaName := responseName + "ItemAttributes"
+	schemas[attrsSchemaName] = buildAttributesSchema(itemSchema)
+
+	return map[string]any{keyRef: "#/components/schemas/" + attrsSchemaName}
+}
+
 // buildAttributesSchema creates an attributes-only schema by removing the "id" field.
 func buildAttributesSchema(resourceSchema map[string]any) map[string]any {
 	attrs := map[string]any{
@@ -825,11 +848,9 @@ func buildAttributesSchema(resourceSchema map[string]any) map[string]any {
 
 	attrProps := make(map[string]any, len(props))
 	for k, v := range props {
-		if k == "id" {
-			continue
+		if k != "id" {
+			attrProps[k] = v
 		}
-
-		attrProps[k] = v
 	}
 
 	if len(attrProps) > 0 {
@@ -837,19 +858,24 @@ func buildAttributesSchema(resourceSchema map[string]any) map[string]any {
 	}
 
 	// Preserve `required` array from the resource schema, excluding "id".
-	if req, ok := resourceSchema[keyRequired].([]any); ok {
-		var filtered []any
-
-		for _, r := range req {
-			if s, ok := r.(string); ok && s != "id" {
-				filtered = append(filtered, r)
-			}
-		}
-
-		if len(filtered) > 0 {
-			attrs[keyRequired] = filtered
-		}
+	if filtered := requiredWithoutID(resourceSchema); len(filtered) > 0 {
+		attrs[keyRequired] = filtered
 	}
 
 	return attrs
+}
+
+// requiredWithoutID returns the schema's required names, minus "id" and non-strings.
+func requiredWithoutID(resourceSchema map[string]any) []any {
+	req, _ := resourceSchema[keyRequired].([]any)
+
+	var filtered []any
+
+	for _, r := range req {
+		if s, ok := r.(string); ok && s != "id" {
+			filtered = append(filtered, r)
+		}
+	}
+
+	return filtered
 }

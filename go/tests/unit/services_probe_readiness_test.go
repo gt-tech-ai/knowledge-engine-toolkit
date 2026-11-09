@@ -156,6 +156,13 @@ func TestSecretsProbe(t *testing.T) {
 		assert.NotContains(t, got.Detail, "auth0-bootstrap present")
 	})
 
+	testSecretsProbeRest(t)
+}
+
+// testSecretsProbeRest continues TestSecretsProbe with its remaining steps.
+func testSecretsProbeRest(t *testing.T) {
+	t.Helper()
+
 	t.Run("pass_when_all_present", func(t *testing.T) {
 		t.Parallel()
 

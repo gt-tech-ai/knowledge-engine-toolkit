@@ -565,75 +565,7 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 	t.Run("within retention", func(t *testing.T) {
 		t.Parallel()
 
-		ctrl := gomock.NewController(t)
-		session := mocks.NewMockCQLSession(ctrl)
-		query := mocks.NewMockCQLQuery(ctrl)
-		iter := mocks.NewMockCQLIter(ctrl)
-		batch := mocks.NewMockCQLBatch(ctrl)
-		bucket := today.AddDate(0, 0, -2)
-		ts := bucket.Add(9 * time.Hour)
-		dims := map[string]string{"team": "t-1"}
-
-		session.EXPECT().Query(gomock.Any(), "org-1", "genai_calls", bucket).Return(query)
-		query.EXPECT().WithContext(gomock.Any()).Return(query)
-		query.EXPECT().PageSize(100).Return(query)
-		query.EXPECT().PageState(gomock.Nil()).Return(query)
-		query.EXPECT().Idempotent(true).Return(query)
-		query.EXPECT().Iter().Return(iter)
-
-		served := false
-
-		iter.EXPECT().
-			Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-			DoAndReturn(func(dest ...any) bool {
-				if served {
-					return false
-				}
-
-				served = true
-				*asType[*time.Time](t, dest[0]) = ts
-				*asType[*string](t, dest[1]) = "team=t-1"
-				*asType[*string](t, dest[2]) = "k-1"
-				*asType[*map[string]string](t, dest[3]) = dims
-				*asType[*map[string][]byte](t, dest[4]) = map[string][]byte{
-					"tokens_in": encoded(t, 7),
-				}
-
-				return true
-			}).
-			Times(2)
-		iter.EXPECT().PageState().Return(nil)
-		iter.EXPECT().Close().Return(nil)
-
-		want := int(time.Until(bucket.AddDate(0, 0, 1).Add(ttl)) / time.Second)
-
-		session.EXPECT().Batch(gomock.Any()).Return(batch)
-		batch.EXPECT().WithContext(gomock.Any()).Return(batch)
-		batch.EXPECT().Query(
-			"INSERT INTO genai_calls_hour (org_id, cube, bucket, ts, dims_key, "+
-				"idempotency_key, dims, partials) VALUES (?, ?, ?, ?, ?, '', ?, ?) USING TTL ?",
-			"org-1", "genai_calls", bucket, ts, "team=t-1", dims, gomock.Any(), gomock.Any(),
-		).
-			Do(func(_ string, values ...any) {
-				got := asType[int](t, values[7])
-				assert.LessOrEqual(t, got, want)
-				assert.GreaterOrEqual(t, got, want-5)
-			})
-		batch.EXPECT().Query(
-			"DELETE FROM genai_calls_hour WHERE org_id = ? AND cube = ? AND bucket = ? AND ts "+
-				"= ? AND dims_key = ? AND idempotency_key = ?",
-			"org-1", "genai_calls", bucket, ts, "team=t-1", "k-1",
-		)
-		session.EXPECT().ExecuteBatch(batch).Return(nil)
-
-		require.NoError(
-			t,
-			newTTLStore(
-				t,
-				session,
-				ttl,
-			).Compact(context.Background(), "genai_calls", types.GrainHour, "org-1", bucket),
-		)
+		testCassandraStoreCompactionKeepsTheBucketsRetentionCase(t, ttl, today)
 	})
 
 	t.Run("past retention", func(t *testing.T) {
@@ -651,6 +583,157 @@ func TestCassandraStore_CompactionKeepsTheBucketsRetention(t *testing.T) {
 			).Compact(context.Background(), "genai_calls", types.GrainHour, "org-1", bucket),
 		)
 	})
+}
+
+// testCassandraStoreCompactionKeepsTheBucketsRetentionCase is the body of a closure in
+// TestCassandraStore_CompactionKeepsTheBucketsRetention.
+func testCassandraStoreCompactionKeepsTheBucketsRetentionCase(
+	t *testing.T,
+	ttl time.Duration,
+	today time.Time,
+) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	session := mocks.NewMockCQLSession(ctrl)
+	query := mocks.NewMockCQLQuery(ctrl)
+
+	testCassandraStoreCompactionKeepsTheBucketsRetentionRest5(
+		t,
+		ttl,
+		today,
+		ctrl,
+		session,
+		query,
+	)
+}
+
+// testCassandraStoreCompactionKeepsTheBucketsRetentionRest5 continues
+// testCassandraStoreCompactionKeepsTheBucketsRetentionRest3 with its remaining steps.
+func testCassandraStoreCompactionKeepsTheBucketsRetentionRest5(
+	t *testing.T,
+	ttl time.Duration,
+	today time.Time,
+	ctrl *gomock.Controller,
+	session *mocks.MockCQLSession,
+	query *mocks.MockCQLQuery,
+) {
+	t.Helper()
+
+	iter := mocks.NewMockCQLIter(ctrl)
+	batch := mocks.NewMockCQLBatch(ctrl)
+	bucket := today.AddDate(0, 0, -2)
+	ts := bucket.Add(9 * time.Hour)
+	dims := map[string]string{"team": "t-1"}
+
+	session.EXPECT().Query(gomock.Any(), "org-1", "genai_calls", bucket).Return(query)
+	query.EXPECT().WithContext(gomock.Any()).Return(query)
+	query.EXPECT().PageSize(100).Return(query)
+	query.EXPECT().PageState(gomock.Nil()).Return(query)
+	query.EXPECT().Idempotent(true).Return(query)
+	query.EXPECT().Iter().Return(iter)
+
+	served := false
+
+	iter.EXPECT().
+		Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(dest ...any) bool {
+			if served {
+				return false
+			}
+
+			served = true
+			*asType[*time.Time](t, dest[0]) = ts
+			*asType[*string](t, dest[1]) = "team=t-1"
+			*asType[*string](t, dest[2]) = "k-1"
+			*asType[*map[string]string](t, dest[3]) = dims
+			*asType[*map[string][]byte](t, dest[4]) = map[string][]byte{
+				"tokens_in": encoded(t, 7),
+			}
+
+			return true
+		}).
+		Times(2)
+
+	testCassandraStoreCompactionKeepsTheBucketsRetentionRest6(
+		t,
+		ttl,
+		session,
+		iter,
+		batch,
+		bucket,
+		ts,
+		dims,
+	)
+}
+
+// testCassandraStoreCompactionKeepsTheBucketsRetentionRest6 continues
+// testCassandraStoreCompactionKeepsTheBucketsRetentionRest5 with its remaining steps.
+func testCassandraStoreCompactionKeepsTheBucketsRetentionRest6(
+	t *testing.T,
+	ttl time.Duration,
+	session *mocks.MockCQLSession,
+	iter *mocks.MockCQLIter,
+	batch *mocks.MockCQLBatch,
+	bucket, ts time.Time,
+	dims map[string]string,
+) {
+	t.Helper()
+
+	iter.EXPECT().PageState().Return(nil)
+	iter.EXPECT().Close().Return(nil)
+
+	want := int(time.Until(bucket.AddDate(0, 0, 1).Add(ttl)) / time.Second)
+
+	session.EXPECT().Batch(gomock.Any()).Return(batch)
+	batch.EXPECT().WithContext(gomock.Any()).Return(batch)
+	batch.EXPECT().Query(
+		"INSERT INTO genai_calls_hour (org_id, cube, bucket, ts, dims_key, "+
+			"idempotency_key, dims, partials) VALUES (?, ?, ?, ?, ?, '', ?, ?) USING TTL ?",
+		"org-1", "genai_calls", bucket, ts, "team=t-1", dims, gomock.Any(), gomock.Any(),
+	).
+		Do(func(_ string, values ...any) {
+			got := asType[int](t, values[7])
+			assert.LessOrEqual(t, got, want)
+			assert.GreaterOrEqual(t, got, want-5)
+		})
+
+	testCassandraStoreCompactionKeepsTheBucketsRetentionRest(
+		t,
+		ttl,
+		session,
+		batch,
+		bucket,
+		ts,
+	)
+}
+
+// testCassandraStoreCompactionKeepsTheBucketsRetentionRest continues
+// testCassandraStoreCompactionKeepsTheBucketsRetentionCase with its remaining steps.
+func testCassandraStoreCompactionKeepsTheBucketsRetentionRest(
+	t *testing.T,
+	ttl time.Duration,
+	session *mocks.MockCQLSession,
+	batch *mocks.MockCQLBatch,
+	bucket, ts time.Time,
+) {
+	t.Helper()
+
+	batch.EXPECT().Query(
+		"DELETE FROM genai_calls_hour WHERE org_id = ? AND cube = ? AND bucket = ? AND ts "+
+			"= ? AND dims_key = ? AND idempotency_key = ?",
+		"org-1", "genai_calls", bucket, ts, "team=t-1", "k-1",
+	)
+	session.EXPECT().ExecuteBatch(batch).Return(nil)
+
+	require.NoError(
+		t,
+		newTTLStore(
+			t,
+			session,
+			ttl,
+		).Compact(context.Background(), "genai_calls", types.GrainHour, "org-1", bucket),
+	)
 }
 
 // TestCassandraStore_ReadinessQueriesTheCoordinator tests the store's readiness probe.

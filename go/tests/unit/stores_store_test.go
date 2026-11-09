@@ -79,21 +79,9 @@ func storeOpCounter(t *testing.T, reg *promclient.Registry, op string) float64 {
 	mfs, err := reg.Gather()
 	require.NoError(t, err)
 
-	for _, mf := range mfs {
-		if mf.GetName() != "store_operations_total" {
-			continue
-		}
+	v, _ := counterByLabel(mfs, "store_operations_total", "operation", op)
 
-		for _, m := range mf.GetMetric() {
-			for _, l := range m.GetLabel() {
-				if l.GetName() == "operation" && l.GetValue() == op {
-					return m.GetCounter().GetValue()
-				}
-			}
-		}
-	}
-
-	return 0
+	return v
 }
 
 // TestStoreBaseWrite_RunsOnlyInsideATransaction tests the store base's write guard.

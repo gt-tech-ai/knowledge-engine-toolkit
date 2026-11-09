@@ -156,6 +156,21 @@ func TestOpenAPI_DeleteEmits204NoBody(t *testing.T) {
 		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o600,
 	))
 
+	testOpenAPIDeleteEmits204NoBodyRest(t, descPath, routes, inDir)
+}
+
+// testOpenAPIDeleteEmits204NoBodyRest continues TestOpenAPI_DeleteEmits204NoBody with
+// its remaining steps.
+func testOpenAPIDeleteEmits204NoBodyRest(
+	t *testing.T,
+	descPath string,
+	routes map[string][]openapi.RouteEntry,
+	inDir string,
+) {
+	t.Helper()
+
+	var err error
+
 	res, err := openapi.Convert(
 		fsys.NewOSFS(),
 		inDir,

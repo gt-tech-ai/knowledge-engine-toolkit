@@ -451,6 +451,28 @@ func TestTierChain_AppliesTheTiersLayersInOrderAndSkipsMissingOnes(t *testing.T)
 	span := mocks.NewMockSpan(ctrl)
 	span.EXPECT().SetAttribute(gomock.Any(), gomock.Any()).AnyTimes()
 	span.EXPECT().End()
+
+	testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest5(
+		t,
+		ctrl,
+		calls,
+		tracer,
+		span,
+	)
+}
+
+// testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest5 continues
+// testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest4 with its remaining
+// steps.
+func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest5(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	calls []string,
+	tracer *mocks.MockTracer,
+	span *mocks.MockSpan,
+) {
+	t.Helper()
+
 	tracer.EXPECT().Start(gomock.Any(), "orders.Place", gomock.Any()).DoAndReturn(
 		func(
 			ctx context.Context, _ string, _ ...interfaces.SpanOption,
@@ -481,6 +503,29 @@ func TestTierChain_AppliesTheTiersLayersInOrderAndSkipsMissingOnes(t *testing.T)
 			return op()
 		})
 
+	testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest(
+		t,
+		&calls,
+		tracer,
+		logger,
+		breaker,
+		retrier,
+	)
+}
+
+// testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest continues
+// testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest5 with its remaining
+// steps.
+func testTierChainAppliesTheTiersLayersInOrderAndSkipsMissingOnesRest(
+	t *testing.T,
+	calls *[]string,
+	tracer *mocks.MockTracer,
+	logger *mocks.MockLogger,
+	breaker *mocks.MockCircuitBreaker,
+	retrier *mocks.MockRetrier,
+) {
+	t.Helper()
+
 	tier := decorate.Tier{Name: "service", Order: []decorate.Layer{
 		decorate.LayerRecovery, decorate.LayerTracing, decorate.LayerMetrics,
 		decorate.LayerLogging, decorate.LayerAuth, decorate.LayerTimeout,
@@ -489,7 +534,7 @@ func TestTierChain_AppliesTheTiersLayersInOrderAndSkipsMissingOnes(t *testing.T)
 	subject := tier.Subject("orders", decorate.Deps{
 		Tracer: tracer, Logger: logger,
 		Auth: func(_ context.Context, action string) error {
-			calls = append(calls, "auth:"+action)
+			(*calls) = append((*calls), "auth:"+action)
 
 			return nil
 		},
@@ -499,7 +544,7 @@ func TestTierChain_AppliesTheTiersLayersInOrderAndSkipsMissingOnes(t *testing.T)
 	assert.Equal(t, "orders", subject.Name())
 
 	got, err := subject.Exec(t.Context(), "Place", func(context.Context) (int, error) {
-		calls = append(calls, "op")
+		(*calls) = append((*calls), "op")
 
 		return 7, nil
 	})
@@ -515,7 +560,7 @@ func TestTierChain_AppliesTheTiersLayersInOrderAndSkipsMissingOnes(t *testing.T)
 			"retry",
 			"op",
 		},
-		calls,
+		(*calls),
 	)
 
 	got, err = decorate.Subject{}.Exec(t.Context(), "Plain",

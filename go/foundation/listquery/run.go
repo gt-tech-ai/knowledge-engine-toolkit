@@ -221,24 +221,11 @@ func offsetPage[T, D any](
 		return nil, r.MapErr(err)
 	}
 
-	hasMore := len(rows) > limit
-	if hasMore {
-		rows = rows[:limit]
-	}
+	rows, hasMore := trimProbeRow(rows, limit)
 
-	var (
-		total    int64
-		estimate bool
-	)
-
-	// A count-cache decorator that already holds the total sets WithSkipCount on its
-	// inner call, so Run skips the (otherwise recomputed) bounded count and the decorator
-	// injects the cached value.
-	if r.Count && !CountSkipped(ctx) {
-		total, estimate, err = boundedTotal(ctx, filters, r)
-		if err != nil {
-			return nil, err
-		}
+	total, estimate, err := pageTotal(ctx, filters, r)
+	if err != nil {
+		return nil, err
 	}
 
 	next, err := offsetNextCursor(hasMore, pageNum, cols, rows, r)
@@ -259,6 +246,28 @@ func offsetPage[T, D any](
 		PageSize:        limit,
 		PageNumber:      pageNum,
 	}, nil
+}
+
+// trimProbeRow drops the extra row fetched to detect another page.
+func trimProbeRow[T any](rows []T, limit int) ([]T, bool) {
+	if len(rows) > limit {
+		return rows[:limit], true
+	}
+
+	return rows, false
+}
+
+// pageTotal computes the bounded count when asked. A count-cache decorator that already
+// holds the total sets WithSkipCount on its inner call, so Run skips the (otherwise
+// recomputed) bounded count and the decorator injects the cached value.
+func pageTotal[T, D any](
+	ctx context.Context, filters []types.Filter, r Reader[T, D],
+) (total int64, known bool, retErr error) {
+	if !r.Count || CountSkipped(ctx) {
+		return 0, false, nil
+	}
+
+	return boundedTotal(ctx, filters, r)
 }
 
 // boundedTotal computes the offset pager's total_count, bounded at the reader's count
@@ -318,23 +327,11 @@ func keysetPage[T, D any](
 		return nil, r.MapErr(err)
 	}
 
-	hasMore := len(rows) > limit
-	if hasMore {
-		rows = rows[:limit]
-	}
+	rows, hasMore := trimProbeRow(rows, limit)
 
-	next := ""
-	if hasMore && len(rows) > 0 {
-		next, err = mintKeysetCursor(
-			r.Keyset,
-			cols,
-			rows[len(rows)-1],
-			r.Sort,
-			r.Filter,
-		)
-		if err != nil {
-			return nil, err
-		}
+	next, err := keysetNextCursor(hasMore, cols, rows, r)
+	if err != nil {
+		return nil, err
 	}
 
 	items, err := mapAll(rows, r.ToDomain)
@@ -347,6 +344,17 @@ func keysetPage[T, D any](
 		NextCursor: next,
 		PageSize:   limit,
 	}, nil
+}
+
+// keysetNextCursor mints the next page's cursor from the last row, "" on the last page.
+func keysetNextCursor[T, D any](
+	hasMore bool, cols []KeysetColumn, rows []T, r Reader[T, D],
+) (string, error) {
+	if !hasMore || len(rows) == 0 {
+		return "", nil
+	}
+
+	return mintKeysetCursor(r.Keyset, cols, rows[len(rows)-1], r.Sort, r.Filter)
 }
 
 // cursorValues pairs the cursor's values with the ordered keyset columns and restores
@@ -362,36 +370,13 @@ func cursorValues[T any](
 	si := 0
 
 	for i, c := range cols {
-		if c.Column == KeysetIDColumn {
-			id, err := parseID(ks, cur.ID)
-			if err != nil {
-				return nil, err
-			}
-
-			values[i] = id
-
-			continue
-		}
-
-		if si >= len(cur.SortValues) {
-			return nil, apperr.InvalidInput(
-				"keyset cursor has too few sort values for the sort",
-			)
-		}
-
-		v := cur.SortValues[si]
-		si++
-
-		if ks.TimestampCols[c.Column] {
-			t, err := unixMicroToTime(v)
-			if err != nil {
-				return nil, err
-			}
-
-			v = t
+		v, consumed, err := cursorColumnValue(ks, c.Column, &cur, si)
+		if err != nil {
+			return nil, err
 		}
 
 		values[i] = v
+		si += consumed
 	}
 
 	if si != len(cur.SortValues) {
@@ -401,6 +386,33 @@ func cursorValues[T any](
 	}
 
 	return values, nil
+}
+
+// cursorColumnValue decodes one column's seek value, reporting how many sort values
+// it consumed from position si: none for the id column, which has its own field.
+func cursorColumnValue[T any](
+	ks *Keyset[T], column string, cur *types.KeysetCursor, si int,
+) (value any, next int, retErr error) {
+	if column == KeysetIDColumn {
+		id, err := parseID(ks, cur.ID)
+
+		return id, 0, err
+	}
+
+	if si >= len(cur.SortValues) {
+		return nil, 0, apperr.InvalidInput(
+			"keyset cursor has too few sort values for the sort",
+		)
+	}
+
+	v := cur.SortValues[si]
+	if !ks.TimestampCols[column] {
+		return v, 1, nil
+	}
+
+	t, err := unixMicroToTime(v)
+
+	return t, 1, err
 }
 
 // mintKeysetCursor encodes the forward keyset token for the page whose last row is
@@ -420,31 +432,15 @@ func mintKeysetCursor[T any](
 	var id string
 
 	for _, c := range cols {
-		v, ok := ks.RowValue(lastRow, c.Column)
-		if !ok {
-			return "", apperr.Internal("keyset cursor cannot extract column " + c.Column)
+		v, err := cursorRowValue(ks, lastRow, c.Column)
+		if err != nil {
+			return "", err
 		}
 
 		if c.Column == KeysetIDColumn {
-			s, isStr := v.(string)
-			if !isStr {
-				return "", apperr.Internal("keyset id column value is not a string")
-			}
-
-			id = s
+			id, _ = v.(string) // cursorRowValue checked it
 
 			continue
-		}
-
-		if ks.TimestampCols[c.Column] {
-			t, isTime := v.(time.Time)
-			if !isTime {
-				return "", apperr.Internal(
-					"keyset timestamp column value is not a time.Time",
-				)
-			}
-
-			v = t.UnixMicro()
 		}
 
 		sortValues = append(sortValues, v)
@@ -455,6 +451,34 @@ func mintKeysetCursor[T any](
 		ID:          id,
 		Fingerprint: types.Fingerprint(sort, filter),
 	}})
+}
+
+// cursorRowValue reads a column from the row in its cursor form: the id as a string, a
+// timestamp as Unix microseconds, anything else as it is.
+func cursorRowValue[T any](ks *Keyset[T], row T, column string) (any, error) {
+	v, ok := ks.RowValue(row, column)
+	if !ok {
+		return nil, apperr.Internal("keyset cursor cannot extract column " + column)
+	}
+
+	if column == KeysetIDColumn {
+		if _, isStr := v.(string); !isStr {
+			return nil, apperr.Internal("keyset id column value is not a string")
+		}
+
+		return v, nil
+	}
+
+	if !ks.TimestampCols[column] {
+		return v, nil
+	}
+
+	t, isTime := v.(time.Time)
+	if !isTime {
+		return nil, apperr.Internal("keyset timestamp column value is not a time.Time")
+	}
+
+	return t.UnixMicro(), nil
 }
 
 // offsetNextCursor returns the next-page token for an offset page. A keyset-wired reader

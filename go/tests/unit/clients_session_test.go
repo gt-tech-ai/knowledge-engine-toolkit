@@ -46,6 +46,20 @@ func TestClientsSession_ResolveVerifyCache(t *testing.T) {
 
 	verified := 0
 
+	testClientsSessionResolveVerifyCacheRest6(t, ctx, src, ok, verified)
+}
+
+// testClientsSessionResolveVerifyCacheRest6 continues
+// testClientsSessionResolveVerifyCacheRest5 with its remaining steps.
+func testClientsSessionResolveVerifyCacheRest6(
+	t *testing.T,
+	ctx context.Context,
+	src *mocks.MockSource,
+	ok types.Ref,
+	verified int,
+) {
+	t.Helper()
+
 	var mu sync.Mutex
 
 	p := session.NewProvider(src,
@@ -73,6 +87,21 @@ func TestClientsSession_ResolveVerifyCache(t *testing.T) {
 		},
 		func(c sessionCred) []string { return []string{"AWS_ACCESS_KEY_ID=" + c.Key} })
 
+	testClientsSessionResolveVerifyCacheRest2(t, ctx, src, ok, &verified, p)
+}
+
+// testClientsSessionResolveVerifyCacheRest2 continues
+// testClientsSessionResolveVerifyCacheRest6 with its remaining steps.
+func testClientsSessionResolveVerifyCacheRest2(
+	t *testing.T,
+	ctx context.Context,
+	src *mocks.MockSource,
+	ok types.Ref,
+	verified *int,
+	p *session.Provider[sessionCred],
+) {
+	t.Helper()
+
 	var wg sync.WaitGroup
 
 	for range 8 {
@@ -92,7 +121,22 @@ func TestClientsSession_ResolveVerifyCache(t *testing.T) {
 	env, err := p.Env(ctx, ok)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"AWS_ACCESS_KEY_ID=AK"}, env)
-	assert.Equal(t, 1, verified)
+	assert.Equal(t, 1, (*verified))
+
+	testClientsSessionResolveVerifyCacheRest(t, ctx, src, p)
+}
+
+// testClientsSessionResolveVerifyCacheRest continues
+// TestClientsSession_ResolveVerifyCache with its remaining steps.
+func testClientsSessionResolveVerifyCacheRest(
+	t *testing.T,
+	ctx context.Context,
+	src *mocks.MockSource,
+	p *session.Provider[sessionCred],
+) {
+	t.Helper()
+
+	var err error
 
 	bad := types.Ref{Env: "stg", Class: "deploy", Field: "bad"}
 	src.EXPECT().

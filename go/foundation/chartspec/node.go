@@ -101,43 +101,11 @@ type nodeWire struct {
 // section left empty).
 // Canonical is the hashed form of the same object.
 func (n Node) MarshalJSON() ([]byte, error) {
-	w := nodeWire{Kind: n.Kind}
-	for k, v := range n.Fields {
-		if absent(v) {
-			continue
-		}
-
-		if w.Fields == nil {
-			w.Fields = map[string]any{}
-		}
-
-		w.Fields[k] = v
-	}
-
-	for k, h := range n.Children {
-		if h.IsZero() {
-			continue
-		}
-
-		if w.Children == nil {
-			w.Children = map[string]string{}
-		}
-
-		w.Children[k] = h.String()
-	}
-
-	for k, hs := range n.Lists {
-		if len(hs) == 0 {
-			continue
-		}
-
-		if w.Lists == nil {
-			w.Lists = map[string][]string{}
-		}
-
-		for _, h := range hs {
-			w.Lists[k] = append(w.Lists[k], h.String())
-		}
+	w := nodeWire{
+		Kind:     n.Kind,
+		Fields:   wireFields(n.Fields),
+		Children: wireChildren(n.Children),
+		Lists:    wireLists(n.Lists),
 	}
 
 	out, err := json.Marshal(w)
@@ -146,6 +114,73 @@ func (n Node) MarshalJSON() ([]byte, error) {
 	}
 
 	return out, nil
+}
+
+// wireFields copies the present fields; nil when none is.
+func wireFields(fields map[string]any) map[string]any {
+	var out map[string]any
+
+	for k, v := range fields {
+		if absent(v) {
+			continue
+		}
+
+		if out == nil {
+			out = map[string]any{}
+		}
+
+		out[k] = v
+	}
+
+	return out
+}
+
+// wireChildren renders the non-zero child hashes; nil when none is.
+func wireChildren(children map[string]Hash) map[string]string {
+	var out map[string]string
+
+	for k, h := range children {
+		if h.IsZero() {
+			continue
+		}
+
+		if out == nil {
+			out = map[string]string{}
+		}
+
+		out[k] = h.String()
+	}
+
+	return out
+}
+
+// wireLists renders the non-empty lists; nil when none is.
+func wireLists(lists map[string][]Hash) map[string][]string {
+	var out map[string][]string
+
+	for k, hs := range lists {
+		if len(hs) == 0 {
+			continue
+		}
+
+		if out == nil {
+			out = map[string][]string{}
+		}
+
+		out[k] = hashStrings(hs)
+	}
+
+	return out
+}
+
+// hashStrings renders hashes as hex.
+func hashStrings(hs []Hash) []string {
+	out := make([]string, 0, len(hs))
+	for _, h := range hs {
+		out = append(out, h.String())
+	}
+
+	return out
 }
 
 // UnmarshalJSON reads a node from its JSON shape, keeping numbers as json.Number. A
@@ -165,36 +200,70 @@ func (n *Node) UnmarshalJSON(data []byte) error {
 		return apperr.New(apperr.CodeInvalidInput, "chartspec: a node needs a kind")
 	}
 
-	node := Node{Kind: w.Kind, Fields: w.Fields}
-	for k, s := range w.Children {
+	children, err := parseChildren(w.Children)
+	if err != nil {
+		return err
+	}
+
+	lists, err := parseLists(w.Lists)
+	if err != nil {
+		return err
+	}
+
+	*n = Node{Kind: w.Kind, Fields: w.Fields, Children: children, Lists: lists}
+
+	return nil
+}
+
+// parseChildren parses the child hashes; nil when there are none.
+func parseChildren(wire map[string]string) (map[string]Hash, error) {
+	var out map[string]Hash
+
+	for k, s := range wire {
+		h, err := ParseHash(s)
+		if err != nil {
+			return nil, err
+		}
+
+		if out == nil {
+			out = map[string]Hash{}
+		}
+
+		out[k] = h
+	}
+
+	return out, nil
+}
+
+// parseLists parses the hash lists; nil when there are none, and an empty list has
+// no key.
+func parseLists(wire map[string][]string) (map[string][]Hash, error) {
+	var out map[string][]Hash
+
+	for k, ss := range wire {
+		if out == nil {
+			out = map[string][]Hash{}
+		}
+
+		err := appendParsedHashes(out, k, ss)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return out, nil
+}
+
+// appendParsedHashes parses ss onto list k of out.
+func appendParsedHashes(out map[string][]Hash, k string, ss []string) error {
+	for _, s := range ss {
 		h, err := ParseHash(s)
 		if err != nil {
 			return err
 		}
 
-		if node.Children == nil {
-			node.Children = map[string]Hash{}
-		}
-
-		node.Children[k] = h
+		out[k] = append(out[k], h)
 	}
-
-	for k, ss := range w.Lists {
-		if node.Lists == nil {
-			node.Lists = map[string][]Hash{}
-		}
-
-		for _, s := range ss {
-			h, err := ParseHash(s)
-			if err != nil {
-				return err
-			}
-
-			node.Lists[k] = append(node.Lists[k], h)
-		}
-	}
-
-	*n = node
 
 	return nil
 }

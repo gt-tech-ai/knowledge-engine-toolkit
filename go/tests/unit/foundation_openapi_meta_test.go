@@ -72,6 +72,22 @@ func TestOpenAPI_EmptyActionMetaHasNoDanglingRef(t *testing.T) {
         "responses":{"200":{"description":"ok",
           "schema":{"$ref":"#/definitions/PauseThingResponse"}}}}}},
       "definitions":{"PauseThingResponse":{"type":"object"}}}`
+
+	testOpenAPIEmptyActionMetaHasNoDanglingRefRest(t, descPath, routes, inDir, swagger)
+}
+
+// testOpenAPIEmptyActionMetaHasNoDanglingRefRest continues
+// TestOpenAPI_EmptyActionMetaHasNoDanglingRef with its remaining steps.
+func testOpenAPIEmptyActionMetaHasNoDanglingRefRest(
+	t *testing.T,
+	descPath string,
+	routes map[string][]openapi.RouteEntry,
+	inDir, swagger string,
+) {
+	t.Helper()
+
+	var err error
+
 	require.NoError(t, os.WriteFile(
 		filepath.Join(inDir, "test", "v1", "test.swagger.json"), []byte(swagger), 0o600,
 	))

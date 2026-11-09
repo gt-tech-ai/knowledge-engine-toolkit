@@ -54,6 +54,14 @@ func TestSeekFilter_Expansion(t *testing.T) {
 		assert.Equal(t, types.OpLt, clause.Operator)
 	})
 
+	testSeekFilterExpansionRest(t)
+}
+
+// testSeekFilterExpansionRest continues TestSeekFilter_Expansion with its remaining
+// steps.
+func testSeekFilterExpansionRest(t *testing.T) {
+	t.Helper()
+
 	t.Run(
 		"two descending columns expand to strict OR (eq AND strict)",
 		func(t *testing.T) {

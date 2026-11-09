@@ -104,6 +104,19 @@ func rolesOf[C, T, P any, ID comparable](
 ) decorate.Roles[T, P, ID] {
 	var r decorate.Roles[T, P, ID]
 
+	bindReads(&r, b, f)
+	bindWrites(&r, b, f)
+	bindBulk(&r, b, f)
+
+	return r
+}
+
+// bindReads binds the declared read roles over the store's client.
+func bindReads[C, T, P any, ID comparable](
+	r *decorate.Roles[T, P, ID],
+	b Base[C],
+	f Funcs[C, T, P, ID],
+) {
 	if f.Get != nil {
 		r.Get = func(ctx context.Context, id ID) (*T, error) {
 			return f.Get(ctx, b.Client(ctx), id)
@@ -120,6 +133,19 @@ func rolesOf[C, T, P any, ID comparable](
 		}
 	}
 
+	if f.Exists != nil {
+		r.Exists = func(ctx context.Context, id ID) (bool, error) {
+			return f.Exists(ctx, b.Client(ctx), id)
+		}
+	}
+}
+
+// bindWrites binds the declared single-entity write roles over the store's client.
+func bindWrites[C, T, P any, ID comparable](
+	r *decorate.Roles[T, P, ID],
+	b Base[C],
+	f Funcs[C, T, P, ID],
+) {
 	if f.Create != nil {
 		r.Create = func(ctx context.Context, v *T) (*T, error) {
 			return f.Create(ctx, b.Client(ctx), v)
@@ -137,13 +163,14 @@ func rolesOf[C, T, P any, ID comparable](
 			return f.Delete(ctx, b.Client(ctx), id)
 		}
 	}
+}
 
-	if f.Exists != nil {
-		r.Exists = func(ctx context.Context, id ID) (bool, error) {
-			return f.Exists(ctx, b.Client(ctx), id)
-		}
-	}
-
+// bindBulk binds the declared insert, upsert and purge roles over the store's client.
+func bindBulk[C, T, P any, ID comparable](
+	r *decorate.Roles[T, P, ID],
+	b Base[C],
+	f Funcs[C, T, P, ID],
+) {
 	if f.Insert != nil {
 		r.Insert = func(ctx context.Context, v *T) error {
 			return f.Insert(ctx, b.Client(ctx), v)
@@ -161,6 +188,4 @@ func rolesOf[C, T, P any, ID comparable](
 			return f.PurgeBefore(ctx, b.Client(ctx), cutoff)
 		}
 	}
-
-	return r
 }

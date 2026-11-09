@@ -412,6 +412,19 @@ func TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet(t *testing.T) {
 			AutoYes: true,
 		},
 	)
+
+	testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRest(t, cat, err)
+}
+
+// testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRest continues
+// TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet with its remaining steps.
+func testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRest(
+	t *testing.T,
+	cat *toolchain.Catalog,
+	err error,
+) {
+	t.Helper()
+
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--ci")
 

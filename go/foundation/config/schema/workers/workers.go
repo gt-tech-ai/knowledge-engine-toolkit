@@ -12,6 +12,27 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// defaultReaperTTL is how long a claimed upload may sit before the reaper takes it.
+const defaultReaperTTL = 90 * time.Minute
+
+// defaultOrphanGrace is how long an unreferenced object survives.
+const defaultOrphanGrace = 2 * time.Hour
+
+// defaultConfigRelayInterval is the default RelayInterval of Config.
+const defaultConfigRelayInterval = 10 * time.Second
+
+// defaultConfigCleanupInterval is the default CleanupInterval of Config.
+const defaultConfigCleanupInterval = 24 * time.Hour
+
+// defaultConfigReaperInterval is the default ReaperInterval of Config.
+const defaultConfigReaperInterval = 5 * time.Minute
+
+// defaultConfigBatchSize is the default BatchSize of Config.
+const defaultConfigBatchSize = 100
+
+// defaultConfigFanOutWorkers is the default FanOutWorkers of Config.
+const defaultConfigFanOutWorkers = 8
+
 // Config holds the shared worker tunables. DefaultConfig seeds non-zero sweep
 // cadences and TTLs; a worker that runs no sweeps ignores them (or zeroes them).
 // Validate enforces the cross-field invariant against the multipart presign expiry
@@ -75,16 +96,16 @@ func DefaultConfig() Config {
 		ServiceName:       "",
 		Env:               "dev",
 		OTelEndpoint:      "localhost:4317",
-		RelayInterval:     10 * time.Second,
-		CleanupInterval:   24 * time.Hour,
-		ReaperInterval:    5 * time.Minute,
-		ReaperTTL:         90 * time.Minute, // > the 60m multipart part-URL expiry
+		RelayInterval:     defaultConfigRelayInterval,
+		CleanupInterval:   defaultConfigCleanupInterval,
+		ReaperInterval:    defaultConfigReaperInterval,
+		ReaperTTL:         defaultReaperTTL, // > the 60m multipart part-URL expiry
 		RetentionInterval: 1 * time.Hour,
 		RetentionTTL:      7 * 24 * time.Hour, // keep a week of sent rows for audit/debug
-		OrphanGrace:       2 * time.Hour,      // > the 60m multipart part-URL expiry
+		OrphanGrace:       defaultOrphanGrace, // > the 60m multipart part-URL expiry
 		Port:              0,
-		BatchSize:         100,
-		FanOutWorkers:     8,
+		BatchSize:         defaultConfigBatchSize,
+		FanOutWorkers:     defaultConfigFanOutWorkers,
 	}
 }
 
@@ -113,6 +134,12 @@ func (c Config) Validate(multipartExpiry time.Duration) error {
 		return nil
 	}
 
+	return c.validateMultipartWindows(multipartExpiry)
+}
+
+// validateMultipartWindows requires the reaper and orphan windows to outlast a
+// multipart upload's presigned URLs.
+func (c Config) validateMultipartWindows(multipartExpiry time.Duration) error {
 	if c.ReaperTTL > 0 && c.ReaperTTL <= multipartExpiry {
 		return apperr.InvalidInput(fmt.Sprintf(
 			"workers.reaper_ttl (%s) must exceed the multipart presign expiry (%s)",

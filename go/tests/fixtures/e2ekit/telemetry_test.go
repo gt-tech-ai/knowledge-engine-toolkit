@@ -378,6 +378,13 @@ func TestPollHelpers(t *testing.T) {
 		assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 	})
 
+	testPollHelpersRest(t, ctx)
+}
+
+// testPollHelpersRest continues TestPollHelpers with its remaining steps.
+func testPollHelpersRest(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	t.Run("PollUntil names a miss at the deadline", func(t *testing.T) {
 		t.Parallel()
 

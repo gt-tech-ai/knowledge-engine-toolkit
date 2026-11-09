@@ -70,28 +70,7 @@ func (v *view) Files(ctx context.Context, sel types.FileSelector) ([]types.File,
 		}
 	}
 
-	var out []types.File
-
-	for _, f := range all {
-		if !Matches(sel, f.Path) || (sel.TrackedOnly && f.Untracked) {
-			continue
-		}
-
-		if !sel.IncludeGenerated && strings.HasSuffix(f.Path, ".go") {
-			generated, err := v.generated(ctx, f.Path)
-			if err != nil {
-				return nil, err
-			}
-
-			if generated {
-				continue
-			}
-		}
-
-		out = append(out, f)
-	}
-
-	return out, nil
+	return v.filterSelected(ctx, sel, all)
 }
 
 // Text returns one file's contents, read once per snapshot.
@@ -129,16 +108,10 @@ func (v *view) Match(
 
 	for i, f := range files {
 		g.Go(func() error {
-			text, err := v.Text(gctx, f.Path)
-			if err != nil {
-				return err
-			}
+			hits, err := v.fileHits(gctx, f.Path, patterns)
+			perFile[i] = hits
 
-			if !text.Binary {
-				perFile[i] = scan(text, patterns)
-			}
-
-			return nil
+			return err
 		})
 	}
 
@@ -216,6 +189,58 @@ func (v *view) Rendered(
 		func(ctx context.Context) ([]types.Object, error) {
 			return v.renderer.Render(ctx, spec)
 		})
+}
+
+// fileHits scans one file; a binary file has none.
+func (v *view) fileHits(
+	ctx context.Context, p string, patterns []*regexp.Regexp,
+) ([]types.Hit, error) {
+	text, err := v.Text(ctx, p)
+	if err != nil || text.Binary {
+		return nil, err
+	}
+
+	return scan(text, patterns), nil
+}
+
+// selected reports whether sel keeps f, reading the file only to spot generated Go.
+func (v *view) selected(
+	ctx context.Context, sel types.FileSelector, f types.File,
+) (bool, error) {
+	if !Matches(sel, f.Path) || (sel.TrackedOnly && f.Untracked) {
+		return false, nil
+	}
+
+	if sel.IncludeGenerated || !strings.HasSuffix(f.Path, ".go") {
+		return true, nil
+	}
+
+	generated, err := v.generated(ctx, f.Path)
+	if err != nil {
+		return false, err
+	}
+
+	return !generated, nil
+}
+
+// filterSelected keeps the files sel selects, in order.
+func (v *view) filterSelected(
+	ctx context.Context, sel types.FileSelector, all []types.File,
+) ([]types.File, error) {
+	var out []types.File
+
+	for _, f := range all {
+		keep, err := v.selected(ctx, sel, f)
+		if err != nil {
+			return nil, err
+		}
+
+		if keep {
+			out = append(out, f)
+		}
+	}
+
+	return out, nil
 }
 
 // withIgnored returns all plus the ignored files under sel's scope, sorted by path; a

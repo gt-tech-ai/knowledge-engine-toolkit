@@ -17,6 +17,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
+// defaultConfigMaxConcurrentBuckets is the default MaxConcurrentBuckets of Config.
+const defaultConfigMaxConcurrentBuckets = 8
+
 const (
 	// KindStub accepts writes and answers empty results (the default).
 	KindStub = client.KindStub
@@ -61,7 +64,7 @@ func DefaultConfig() Config {
 		},
 		Cubes:                map[string][]types.Grain{},
 		TTL:                  map[types.Grain]time.Duration{},
-		MaxConcurrentBuckets: 8,
+		MaxConcurrentBuckets: defaultConfigMaxConcurrentBuckets,
 	}
 }
 

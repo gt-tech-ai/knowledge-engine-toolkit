@@ -73,6 +73,18 @@ func Collect[T any](
 			fmt.Sprintf("stream: collect max bytes must be positive, got %d", maxBytes))
 	}
 
+	return collectBounded(ctx, s, size, maxBytes)
+}
+
+// collectBounded reads the stream to its end, failing once the items outgrow maxBytes.
+func collectBounded[T any](
+	ctx context.Context,
+	s interfaces.Stream[T],
+	size func(T) int,
+	maxBytes int,
+) ([]T, error) {
+	var items []T
+
 	used := 0
 
 	for {

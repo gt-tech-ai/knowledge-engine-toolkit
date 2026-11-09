@@ -231,31 +231,21 @@ func (s *stream) Next(ctx context.Context) ([]types.Row, bool, error) {
 	}
 
 	for s.cur < len(s.buckets) {
-		select {
-		case p, ok := <-s.chans[s.cur]:
-			if !ok {
-				s.cur++
-				s.fill()
-
-				continue
-			}
-
-			if p.err != nil {
-				s.err = p.err
-
-				return nil, false, s.err
-			}
-
-			s.token = s.position(p)
-
-			return p.rows, len(p.next) > 0 || s.cur+1 < len(s.buckets), nil
-		case <-ctx.Done():
-			return nil, false, apperr.Wrap(
-				ctx.Err(),
-				apperr.CodeCanceled,
-				"analytics: stream read canceled",
-			)
+		p, ok, err := s.receive(ctx)
+		if err != nil {
+			return nil, false, err
 		}
+
+		if !ok {
+			s.cur++
+			s.fill()
+
+			continue
+		}
+
+		s.token = s.position(p)
+
+		return p.rows, len(p.next) > 0 || s.cur+1 < len(s.buckets), nil
 	}
 
 	return nil, false, nil
@@ -276,6 +266,27 @@ func (s *stream) Close() error {
 	s.wg.Wait()
 
 	return nil
+}
+
+// receive waits for the current bucket's next page; false means the bucket is drained.
+// A page's error sticks to the stream; a canceled wait does not.
+func (s *stream) receive(ctx context.Context) (page, bool, error) {
+	select {
+	case p, ok := <-s.chans[s.cur]:
+		if ok && p.err != nil {
+			s.err = p.err
+
+			return page{}, false, s.err
+		}
+
+		return p, ok, nil
+	case <-ctx.Done():
+		return page{}, false, apperr.Wrap(
+			ctx.Err(),
+			apperr.CodeCanceled,
+			"analytics: stream read canceled",
+		)
+	}
 }
 
 // fill starts readers until window buckets ahead of cur are in flight.

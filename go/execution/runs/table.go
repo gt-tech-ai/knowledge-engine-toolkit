@@ -266,13 +266,7 @@ func (t *Table) trim() {
 		return
 	}
 
-	finished := 0
-
-	for _, id := range t.order {
-		if t.runs[id].state != StateRunning {
-			finished++
-		}
-	}
+	finished := t.finishedCount()
 
 	kept := t.order[:0]
 	for _, id := range t.order {
@@ -288,6 +282,19 @@ func (t *Table) trim() {
 	}
 
 	t.order = kept
+}
+
+// finishedCount is how many tracked runs have ended.
+func (t *Table) finishedCount() int {
+	finished := 0
+
+	for _, id := range t.order {
+		if t.runs[id].state != StateRunning {
+			finished++
+		}
+	}
+
+	return finished
 }
 
 // notFound is the error for a run id the table never issued.

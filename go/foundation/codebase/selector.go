@@ -12,35 +12,30 @@ import (
 // Exts and Exclude (TrackedOnly, IncludeGenerated and IncludeIgnored need the file,
 // not its path).
 func Matches(sel types.FileSelector, p string) bool {
-	if len(sel.Paths) > 0 && !slices.Contains(sel.Paths, p) {
-		return false
+	return includedBy(sel, p) &&
+		!slices.ContainsFunc(sel.Exclude, func(x string) bool { return excludes(x, p) })
+}
+
+// includedBy applies the selector's positive filters; an unset filter passes.
+func includedBy(sel types.FileSelector, p string) bool {
+	return emptyOrAny(sel.Paths, func(c string) bool { return c == p }) &&
+		emptyOrAny(sel.Roots, func(r string) bool { return under(p, r) }) &&
+		emptyOrAny(sel.Globs, func(g string) bool { return Glob(g, p) }) &&
+		emptyOrAny(sel.Exts, func(e string) bool { return strings.HasSuffix(p, e) })
+}
+
+// emptyOrAny reports whether a filter is unset or some entry passes.
+func emptyOrAny(entries []string, pass func(string) bool) bool {
+	return len(entries) == 0 || slices.ContainsFunc(entries, pass)
+}
+
+// excludes applies one exclude entry: a glob, or a path prefix.
+func excludes(x, p string) bool {
+	if strings.ContainsAny(x, "*?[") {
+		return Glob(x, p)
 	}
 
-	if len(sel.Roots) > 0 && !slices.ContainsFunc(sel.Roots, func(r string) bool {
-		return under(p, r)
-	}) {
-		return false
-	}
-
-	if len(sel.Globs) > 0 && !slices.ContainsFunc(sel.Globs, func(g string) bool {
-		return Glob(g, p)
-	}) {
-		return false
-	}
-
-	if len(sel.Exts) > 0 && !slices.ContainsFunc(sel.Exts, func(e string) bool {
-		return strings.HasSuffix(p, e)
-	}) {
-		return false
-	}
-
-	return !slices.ContainsFunc(sel.Exclude, func(x string) bool {
-		if strings.ContainsAny(x, "*?[") {
-			return Glob(x, p)
-		}
-
-		return under(p, x)
-	})
+	return under(p, x)
 }
 
 // GeneratedName reports whether a Go file's name marks it generated: protobuf and
@@ -86,22 +81,10 @@ func Glob(pattern, p string) bool {
 func globSegments(pat, segs []string) bool {
 	for len(pat) > 0 {
 		if pat[0] == "**" {
-			rest := pat[1:]
-			for i := 0; i <= len(segs); i++ {
-				if globSegments(rest, segs[i:]) {
-					return true
-				}
-			}
-
-			return false
+			return globAnyDepth(pat[1:], segs)
 		}
 
-		if len(segs) == 0 {
-			return false
-		}
-
-		ok, err := path.Match(pat[0], segs[0])
-		if err != nil || !ok {
+		if len(segs) == 0 || !segmentMatches(pat[0], segs[0]) {
 			return false
 		}
 
@@ -109,6 +92,24 @@ func globSegments(pat, segs []string) bool {
 	}
 
 	return len(segs) == 0
+}
+
+// globAnyDepth tries the rest of a pattern after a `**` at every remaining depth.
+func globAnyDepth(rest, segs []string) bool {
+	for i := 0; i <= len(segs); i++ {
+		if globSegments(rest, segs[i:]) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// segmentMatches matches one path segment; a malformed pattern matches nothing.
+func segmentMatches(pat, seg string) bool {
+	ok, err := path.Match(pat, seg)
+
+	return err == nil && ok
 }
 
 // under reports whether p is dir itself or lies beneath it; "" and "." are the root.
@@ -134,17 +135,9 @@ func ignoredScope(sel types.FileSelector) []string {
 	}
 
 	scope := make([]string, 0, len(sel.Globs))
+
 	for _, g := range sel.Globs {
-		var lit []string
-
-		for seg := range strings.SplitSeq(g, "/") {
-			if strings.ContainsAny(seg, "*?[") {
-				break
-			}
-
-			lit = append(lit, seg)
-		}
-
+		lit := literalSegments(g)
 		if len(lit) == 0 {
 			return nil
 		}
@@ -155,4 +148,19 @@ func ignoredScope(sel types.FileSelector) []string {
 	slices.Sort(scope)
 
 	return slices.Compact(scope)
+}
+
+// literalSegments returns a glob's leading segments that hold no wildcard.
+func literalSegments(glob string) []string {
+	var lit []string
+
+	for seg := range strings.SplitSeq(glob, "/") {
+		if strings.ContainsAny(seg, "*?[") {
+			break
+		}
+
+		lit = append(lit, seg)
+	}
+
+	return lit
 }

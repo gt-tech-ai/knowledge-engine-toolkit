@@ -57,6 +57,23 @@ func TestStorageMemory_RoundTrip(t *testing.T) {
 	require.Equal(t, "k", objs[0].Key)
 
 	getURL, err := c.PresignURL(ctx, "b", "k", 60, "")
+
+	testStorageMemoryRoundTripRest(t, c, ctx, err, getURL)
+}
+
+// testStorageMemoryRoundTripRest continues TestStorageMemory_RoundTrip with its
+// remaining steps.
+func testStorageMemoryRoundTripRest(
+	t *testing.T,
+	c *memory.Client,
+	ctx context.Context,
+	err error,
+	getURL string,
+) {
+	t.Helper()
+
+	var exists bool
+
 	require.NoError(t, err)
 	require.True(
 		t,

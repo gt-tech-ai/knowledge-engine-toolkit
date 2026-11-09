@@ -81,32 +81,14 @@ type PlannedPhase struct {
 // step entries the suite's Steps does not name. A flag the suite does not declare, or a
 // listed step the catalog lacks, is CodeInvalidInput.
 func Select(s types.Suite, catalog []Entry, flags []string) ([]Entry, error) {
-	var sels, mods []types.Selection
-
-	for _, f := range flags {
-		if sel, ok := s.Selectors[f]; ok {
-			sels = append(sels, sel)
-
-			continue
-		}
-
-		if mod, ok := s.Modifiers[f]; ok {
-			mods = append(mods, mod)
-
-			continue
-		}
-
-		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"suite %s has no flag %q (known: %s)", s.Title, f, flagNames(s)))
+	sels, mods, err := parseFlags(&s, flags)
+	if err != nil {
+		return nil, err
 	}
 
-	for _, name := range s.Steps {
-		if !slices.ContainsFunc(catalog, func(e Entry) bool {
-			return e.Kind == KindStep && e.Name == name
-		}) {
-			return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-				"suite %s: no registered step %q", s.Title, name))
-		}
+	err = checkSteps(&s, catalog)
+	if err != nil {
+		return nil, err
 	}
 
 	if len(sels) == 0 {
@@ -116,16 +98,65 @@ func Select(s types.Suite, catalog []Entry, flags []string) ([]Entry, error) {
 	var out []Entry
 
 	for _, e := range catalog {
-		if e.Kind == KindStep && !slices.Contains(s.Steps, e.Name) {
-			continue
-		}
-
-		if matchesAny(e, sels) && matchesAll(e, mods) && ungated(s, e, flags) {
+		if selected(&s, e, sels, mods, flags) {
 			out = append(out, e)
 		}
 	}
 
 	return out, nil
+}
+
+// selected reports whether the suite runs the entry under these selections.
+func selected(
+	s *types.Suite,
+	e Entry,
+	sels, mods []types.Selection,
+	flags []string,
+) bool {
+	if e.Kind == KindStep && !slices.Contains(s.Steps, e.Name) {
+		return false
+	}
+
+	return matchesAny(e, sels) && matchesAll(e, mods) && ungated(*s, e, flags)
+}
+
+// parseFlags sorts the flags into selectors and modifiers, rejecting an unknown one.
+func parseFlags(
+	s *types.Suite,
+	flags []string,
+) (sels, mods []types.Selection, err error) {
+	for _, f := range flags {
+		if sel, ok := s.Selectors[f]; ok {
+			sels = append(sels, sel)
+
+			continue
+		}
+
+		mod, ok := s.Modifiers[f]
+		if !ok {
+			return nil, nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+				"suite %s has no flag %q (known: %s)", s.Title, f, flagNames(*s)))
+		}
+
+		mods = append(mods, mod)
+	}
+
+	return sels, mods, nil
+}
+
+// checkSteps requires every step the suite names to be registered.
+func checkSteps(s *types.Suite, catalog []Entry) error {
+	for _, name := range s.Steps {
+		found := slices.ContainsFunc(catalog, func(e Entry) bool {
+			return e.Kind == KindStep && e.Name == name
+		})
+		if !found {
+			return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+				"suite %s: no registered step %q", s.Title, name))
+		}
+	}
+
+	return nil
 }
 
 // Tools returns, sorted and unique, the binaries the entries the flags select in s shell:
@@ -154,10 +185,7 @@ func Plan(s types.Suite, entries []Entry) ([]PlannedPhase, error) {
 	byGroup := map[string][]Entry{}
 
 	for _, e := range entries {
-		if !slices.ContainsFunc(
-			s.Phases,
-			func(p types.Phase) bool { return p.Group == e.Group },
-		) {
+		if !hasPhase(s.Phases, e.Group) {
 			return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 				"suite %s: %s is in group %q, which no phase names",
 				s.Title,
@@ -178,6 +206,14 @@ func Plan(s types.Suite, entries []Entry) ([]PlannedPhase, error) {
 	}
 
 	return out, nil
+}
+
+// hasPhase reports whether a phase runs the group.
+func hasPhase(phases []types.Phase, group string) bool {
+	return slices.ContainsFunc(
+		phases,
+		func(p types.Phase) bool { return p.Group == group },
+	)
 }
 
 // Gate composes one suite's gate.

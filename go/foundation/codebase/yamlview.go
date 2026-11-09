@@ -114,27 +114,31 @@ func (y *yamlView) nodes(ctx context.Context, p string) ([]*yaml.Node, error) {
 	return y.parent.snap.Memo(
 		ctx,
 		"yaml|"+p,
-		func(ctx context.Context) ([]*yaml.Node, error) {
-			text, err := y.parent.Text(ctx, p)
-			if err != nil {
-				return nil, err
-			}
-
-			docs, err := yamlq.DecodeAll(text.Bytes)
-			if err != nil {
-				return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
-			}
-
-			out := docs[:0]
-			for _, d := range docs {
-				if len(d.Content) > 0 && !emptyDoc(d.Content[0]) {
-					out = append(out, d)
-				}
-			}
-
-			return out, nil
-		},
+		func(ctx context.Context) ([]*yaml.Node, error) { return y.parseNodes(ctx, p) },
 	)
+}
+
+// parseNodes reads and decodes p, dropping empty documents.
+func (y *yamlView) parseNodes(ctx context.Context, p string) ([]*yaml.Node, error) {
+	text, err := y.parent.Text(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+
+	docs, err := yamlq.DecodeAll(text.Bytes)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+p)
+	}
+
+	out := docs[:0]
+
+	for _, d := range docs {
+		if len(d.Content) > 0 && !emptyDoc(d.Content[0]) {
+			out = append(out, d)
+		}
+	}
+
+	return out, nil
 }
 
 // emptyDoc reports whether a document's root is the implicit null of an empty document.

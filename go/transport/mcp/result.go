@@ -92,35 +92,47 @@ func summarize(steps []types.StepResult, logs []string) []StepSummary {
 // " #<n>" suffix, so every entry — and so every failed tail and log — is distinct even
 // when several modules report a same-named package.
 func flatten(steps []types.StepResult) []types.StepResult {
-	var out []types.StepResult
+	f := &stepFlattener{seen: map[string]int{}}
 
-	seen := map[string]int{}
+	f.walk("", steps)
 
-	var walk func(prefix string, group []types.StepResult)
+	return f.out
+}
 
-	walk = func(prefix string, group []types.StepResult) {
-		for _, s := range group {
-			name := s.Name
-			if prefix != "" {
-				name = prefix + "/" + s.Name
-			}
+// stepFlattener collects a step tree in pre-order under unique slash-joined names.
+type stepFlattener struct {
+	// seen counts each name so a repeat gets a ` #n` suffix.
+	seen map[string]int
 
-			seen[name]++
-			if seen[name] > 1 {
-				name = fmt.Sprintf("%s #%d", name, seen[name])
-			}
+	// out holds the flattened steps.
+	out []types.StepResult
+}
 
-			children := s.Children
+// walk appends each step of group, then its children under the step's name.
+func (f *stepFlattener) walk(prefix string, group []types.StepResult) {
+	for _, s := range group {
+		name := f.uniqueName(prefix, s.Name)
+		children := s.Children
 
-			s.Name, s.Children = name, nil
-			out = append(out, s)
+		s.Name, s.Children = name, nil
+		f.out = append(f.out, s)
 
-			walk(name, children)
-		}
+		f.walk(name, children)
 	}
-	walk("", steps)
+}
 
-	return out
+// uniqueName joins prefix and name, suffixing a repeat.
+func (f *stepFlattener) uniqueName(prefix, name string) string {
+	if prefix != "" {
+		name = prefix + "/" + name
+	}
+
+	f.seen[name]++
+	if f.seen[name] > 1 {
+		return fmt.Sprintf("%s #%d", name, f.seen[name])
+	}
+
+	return name
 }
 
 // failureText is what a failed step contributes to a result: the last n lines of its

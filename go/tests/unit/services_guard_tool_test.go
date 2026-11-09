@@ -62,6 +62,20 @@ func TestServicesGuard_Tool(t *testing.T) {
 			Err:    apperr.Sentinel("exit status 1"),
 		}).Times(1)
 
+	testServicesGuardToolRest(t, ok, bad, cb, runner)
+}
+
+// testServicesGuardToolRest continues TestServicesGuard_Tool with its remaining steps.
+func testServicesGuardToolRest(
+	t *testing.T,
+	ok, bad types.RenderSpec,
+	cb interfaces.Codebase,
+	runner *mocks.MockCommandRunner,
+) {
+	t.Helper()
+
+	var err error
+
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
 		return []map[string]string{{"k8s": "1.29"}}, nil
 	}

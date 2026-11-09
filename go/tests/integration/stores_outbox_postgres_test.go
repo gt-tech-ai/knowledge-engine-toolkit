@@ -233,6 +233,21 @@ func TestPgstore_MapsColumnsAndPurgesSentRows(t *testing.T) {
 		return store.Park(ctx, parked, strings.Repeat("x", 40))
 	}))
 
+	testPgstoreMapsColumnsAndPurgesSentRowsRest(t, ctx, store, db, parked, inTx)
+}
+
+// testPgstoreMapsColumnsAndPurgesSentRowsRest continues
+// TestPgstore_MapsColumnsAndPurgesSentRows with its remaining steps.
+func testPgstoreMapsColumnsAndPurgesSentRowsRest(
+	t *testing.T,
+	ctx context.Context,
+	store *outboxpg.Store,
+	db *sql.DB,
+	parked uuid.UUID,
+	inTx func(fn func(context.Context) error) error,
+) {
+	t.Helper()
+
 	var lastErr string
 
 	require.NoError(t, db.QueryRowContext(ctx,

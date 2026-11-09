@@ -97,14 +97,9 @@ func New(cfg Config, api API) (*Sink, error) {
 		)
 	}
 
-	routes := make(map[string]string, len(cfg.Routes))
-	for route, queue := range cfg.Routes {
-		if route == "" || queue == "" {
-			return nil, apperr.New(apperr.CodeInvalidInput,
-				"outbox sqs sink: route "+route+" needs a non-empty name and queue")
-		}
-
-		routes[route] = queue
+	routes, err := copyRoutes(cfg.Routes)
+	if err != nil {
+		return nil, err
 	}
 
 	fair := make(map[string]bool, len(cfg.FairQueues))
@@ -119,6 +114,22 @@ func New(cfg Config, api API) (*Sink, error) {
 		fair:   fair,
 		urls:   map[string]string{},
 	}, nil
+}
+
+// copyRoutes copies the route table, rejecting an empty name or queue.
+func copyRoutes(in map[string]string) (map[string]string, error) {
+	routes := make(map[string]string, len(in))
+
+	for route, queue := range in {
+		if route == "" || queue == "" {
+			return nil, apperr.New(apperr.CodeInvalidInput,
+				"outbox sqs sink: route "+route+" needs a non-empty name and queue")
+		}
+
+		routes[route] = queue
+	}
+
+	return routes, nil
 }
 
 // Send groups recs by destination queue and delivers each group independently
@@ -190,17 +201,28 @@ func (s *Sink) sendQueue(
 	}
 
 	for _, part := range packBatches(recs, idx, results) {
-		batch := make([]types.OutboxRecord, len(part))
-		for j, i := range part {
-			batch[j] = recs[i]
-		}
+		s.sendPart(ctx, url, queue, recs, part, results)
+	}
+}
 
-		out := make([]error, len(part))
-		s.sendBatch(ctx, url, s.delivery(queue), batch, out)
+// sendPart sends one packed batch and copies its outcomes back to results.
+func (s *Sink) sendPart(
+	ctx context.Context,
+	url, queue string,
+	recs []types.OutboxRecord,
+	part []int,
+	results []error,
+) {
+	batch := make([]types.OutboxRecord, len(part))
+	for j, i := range part {
+		batch[j] = recs[i]
+	}
 
-		for j, i := range part {
-			results[i] = out[j]
-		}
+	out := make([]error, len(part))
+	s.sendBatch(ctx, url, s.delivery(queue), batch, out)
+
+	for j, i := range part {
+		results[i] = out[j]
 	}
 }
 
@@ -232,7 +254,7 @@ func packBatches(
 			continue
 		}
 
-		if len(run) == maxBatch || (len(run) > 0 && size+n > maxBatchBytes) {
+		if batchFull(len(run), size, n) {
 			runs = append(runs, run)
 			run, size = nil, 0
 		}
@@ -247,6 +269,11 @@ func packBatches(
 	}
 
 	return runs
+}
+
+// batchFull reports whether a message of n bytes must start a new batch.
+func batchFull(count, size, n int) bool {
+	return count == maxBatch || (count > 0 && size+n > maxBatchBytes)
 }
 
 // messageSize is rec's size as SQS counts it against its limits: the body plus
@@ -285,28 +312,12 @@ func (s *Sink) sendBatch(
 	recs []types.OutboxRecord,
 	results []error,
 ) {
-	entries := make([]sqstypes.SendMessageBatchRequestEntry, len(recs))
-	for i := range recs {
-		rec := &recs[i]
-
-		entries[i] = sqstypes.SendMessageBatchRequestEntry{
-			Id:                aws.String(strconv.Itoa(i)),
-			MessageBody:       aws.String(string(rec.Payload)),
-			MessageAttributes: messageAttributes(rec),
-		}
-
-		if how.grouped {
-			entries[i].MessageGroupId = aws.String(groupID(rec))
-		}
-
-		if how.deduplicated {
-			entries[i].MessageDeduplicationId = aws.String(rec.ID.String())
-		}
-	}
-
 	out, err := s.api.SendMessageBatch(
 		ctx,
-		&awssqs.SendMessageBatchInput{QueueUrl: aws.String(url), Entries: entries},
+		&awssqs.SendMessageBatchInput{
+			QueueUrl: aws.String(url),
+			Entries:  batchEntries(how, recs),
+		},
 	)
 	if err != nil {
 		fill(
@@ -333,25 +344,51 @@ func (s *Sink) sendBatch(
 	}
 
 	for _, failed := range out.Failed {
-		i, valid := entryIndex(failed.Id, len(recs))
-		if !valid {
-			continue
+		if i, valid := entryIndex(failed.Id, len(recs)); valid {
+			results[i] = batchEntryError(&failed)
 		}
-
-		code := apperr.CodeUnavailable
-		if failed.SenderFault {
-			code = apperr.CodeInvalidInput
-		}
-
-		results[i] = apperr.New(
-			code,
-			"outbox sqs sink: "+aws.ToString(
-				failed.Code,
-			)+": "+aws.ToString(
-				failed.Message,
-			),
-		)
 	}
+}
+
+// batchEntries builds the request entries, indexed by position.
+func batchEntries(
+	how delivery, recs []types.OutboxRecord,
+) []sqstypes.SendMessageBatchRequestEntry {
+	entries := make([]sqstypes.SendMessageBatchRequestEntry, len(recs))
+
+	for i := range recs {
+		rec := &recs[i]
+
+		entries[i] = sqstypes.SendMessageBatchRequestEntry{
+			Id:                aws.String(strconv.Itoa(i)),
+			MessageBody:       aws.String(string(rec.Payload)),
+			MessageAttributes: messageAttributes(rec),
+		}
+
+		if how.grouped {
+			entries[i].MessageGroupId = aws.String(groupID(rec))
+		}
+
+		if how.deduplicated {
+			entries[i].MessageDeduplicationId = aws.String(rec.ID.String())
+		}
+	}
+
+	return entries
+}
+
+// batchEntryError codes a failed entry: the sender's fault is invalid input, anything
+// else is transient.
+func batchEntryError(failed *sqstypes.BatchResultErrorEntry) error {
+	code := apperr.CodeUnavailable
+	if failed.SenderFault {
+		code = apperr.CodeInvalidInput
+	}
+
+	return apperr.New(
+		code,
+		"outbox sqs sink: "+aws.ToString(failed.Code)+": "+aws.ToString(failed.Message),
+	)
 }
 
 // queueURL resolves and caches queue's URL; a failure is not cached. The lookup

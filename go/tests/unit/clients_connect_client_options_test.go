@@ -140,6 +140,14 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 		assert.EqualValues(t, 1, calls.Load())
 	})
 
+	testConnectClientOptionsDecorateEveryCallRest(t, ctx)
+}
+
+// testConnectClientOptionsDecorateEveryCallRest continues
+// TestConnectClientOptions_DecorateEveryCall with its remaining steps.
+func testConnectClientOptionsDecorateEveryCallRest(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	t.Run("permanent", func(t *testing.T) {
 		t.Parallel()
 

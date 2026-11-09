@@ -94,8 +94,7 @@ func TestProvideDatabaseConfig(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
-	tmpDir := t.TempDir()
-	writeFile(t, filepath.Join(tmpDir, "base.yaml"), `
+	yamlText := `
 database:
   host: localhost
   port: 5432
@@ -103,15 +102,10 @@ database:
   password: dev_password
   database: knowledge_engine
   sslmode: disable
-`)
+`
 
 	// Act
-	loader, err := config.New(config.KindViper, config.WithBaseDir(tmpDir))
-	require.NoError(t, err, "config.New")
-
-	var dbCfg infra.DatabaseConfig
-
-	require.NoError(t, loader.UnmarshalKey("database", &dbCfg), "UnmarshalKey")
+	dbCfg := loadConfigKey[infra.DatabaseConfig](t, yamlText, "database")
 
 	// Assert
 	assert.Equal(t, "localhost", dbCfg.Host)
@@ -139,22 +133,16 @@ func TestProvideRedisConfig(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
-	tmpDir := t.TempDir()
-	writeFile(t, filepath.Join(tmpDir, "base.yaml"), `
+	yamlText := `
 redis:
   host: localhost
   port: 6379
   password: ""
   db: 0
-`)
+`
 
 	// Act
-	loader, err := config.New(config.KindViper, config.WithBaseDir(tmpDir))
-	require.NoError(t, err, "config.New")
-
-	var redisCfg infra.RedisConfig
-
-	require.NoError(t, loader.UnmarshalKey("redis", &redisCfg), "UnmarshalKey")
+	redisCfg := loadConfigKey[infra.RedisConfig](t, yamlText, "redis")
 
 	// Assert
 	assert.Equal(t, "localhost", redisCfg.Host)
@@ -163,4 +151,21 @@ redis:
 
 	// Validate should pass
 	require.NoError(t, redisCfg.Validate(), "Validate must pass for valid config")
+}
+
+// loadConfigKey loads the YAML as base.yaml and decodes one section of it.
+func loadConfigKey[T any](t *testing.T, yamlText, key string) T {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	writeFile(t, filepath.Join(tmpDir, "base.yaml"), yamlText)
+
+	loader, err := config.New(config.KindViper, config.WithBaseDir(tmpDir))
+	require.NoError(t, err, "config.New")
+
+	var cfg T
+
+	require.NoError(t, loader.UnmarshalKey(key, &cfg), "UnmarshalKey")
+
+	return cfg
 }

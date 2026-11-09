@@ -70,6 +70,10 @@ linters:
     # Code quality
     - whitespace
     - dogsled
+    - gocognit
+    - nestif
+    - interfacebloat
+    - mnd
     - errname
     - goprintffuncname
     - nakedret
@@ -183,9 +187,7 @@ linters:
         - module: io/ioutil
           reason: "deprecated since Go 1.16; use io and os"
     dogsled:
-      # Fixture constructors return the whole wiring (service, repos, mocks); a test that
-      # needs two of them ignores the rest, up to four.
-      max-blank-identifiers: 4
+      max-blank-identifiers: 2
     dupword:
       # Intentional repeats in embedded scripts: a Lua block that closes a nested `if`
       # inside a `for` ends `end end`.
@@ -269,10 +271,10 @@ linters:
     gosec:
       excludes: []
     dupl:
-      threshold: 150
+      threshold: 100
     funlen:
-      lines: 120
-      statements: 75
+      lines: 60
+      statements: 40
     lll:
       line-length: 90
     spancheck:
@@ -528,15 +530,11 @@ linters:
           - lll
         source: '^\s*\w+\s+[\w.*\[\]]+\s+`(\w+:"[^"]*"\s*)+`$'
       # Test code is linted like production code except for the linters whose findings are
-      # noise there: duplicated table-driven bodies (dupl), length and complexity of a
-      # test that walks a scenario (funlen, gocyclo), and a literal repeated as an expected
+      # noise there: a literal repeated as an expected
       # value (goconst: a test's literal is its expected value; naming it hides the spec
       # from the assertion).
       - path: _test\.go
         linters:
-          - dupl
-          - funlen
-          - gocyclo
           - goconst
     paths:
       - .*\.pb\.go$

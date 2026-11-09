@@ -20,58 +20,91 @@ const (
 // that type's required keys non-empty. index.md may carry frontmatter only at
 // rules.RootIndex and only okf_version; index.md and log.md are never concepts.
 func Conform(doc Doc, rules Rules) []Finding {
-	finding := func(rule, msg string) []Finding {
-		return []Finding{{Path: doc.Path, Line: 1, Rule: rule, Message: msg}}
-	}
-	fm := doc.Frontmatter
-
 	switch pathpkg.Base(doc.Path) {
 	case IndexFile:
-		switch {
-		case !doc.HasFrontmatter:
-			return nil
-		case fm.Type != "":
-			return finding(
-				RuleReservedName,
-				"index.md is a directory listing, not a concept: move the content to its own file",
-			)
-		case doc.Path == rules.RootIndex && onlyOKFVersion(fm):
-			return nil
-		default:
-			return finding(
-				RuleIndexFrontmatter,
-				"index.md takes no frontmatter, except okf_version on the bundle-root index",
-			)
-		}
+		return conformIndex(&doc, &rules)
 	case LogFile:
-		if doc.HasFrontmatter {
-			return finding(
-				RuleReservedName,
-				"log.md is an update history, not a concept: remove its frontmatter",
-			)
-		}
+		return conformLogFrontmatter(&doc)
+	default:
+		return conformConcept(&doc, &rules)
+	}
+}
 
+// docFinding is a single finding on the document's first line.
+func docFinding(doc *Doc, rule, msg string) []Finding {
+	return []Finding{{Path: doc.Path, Line: 1, Rule: rule, Message: msg}}
+}
+
+// conformIndex checks an index.md: no frontmatter, except okf_version on the root.
+func conformIndex(doc *Doc, rules *Rules) []Finding {
+	switch {
+	case !doc.HasFrontmatter:
+		return nil
+	case doc.Frontmatter.Type != "":
+		return docFinding(
+			doc,
+			RuleReservedName,
+			"index.md is a directory listing, not a concept: move the content to its own file",
+		)
+	case doc.Path == rules.RootIndex && onlyOKFVersion(doc.Frontmatter):
+		return nil
+	default:
+		return docFinding(
+			doc,
+			RuleIndexFrontmatter,
+			"index.md takes no frontmatter, except okf_version on the bundle-root index",
+		)
+	}
+}
+
+// conformLogFrontmatter requires a log.md to have no frontmatter.
+func conformLogFrontmatter(doc *Doc) []Finding {
+	if !doc.HasFrontmatter {
 		return nil
 	}
 
+	return docFinding(
+		doc,
+		RuleReservedName,
+		"log.md is an update history, not a concept: remove its frontmatter",
+	)
+}
+
+// conformConcept checks a concept's frontmatter against the type vocabulary.
+func conformConcept(doc *Doc, rules *Rules) []Finding {
+	fm := doc.Frontmatter
+
 	if !doc.HasFrontmatter {
-		return finding(RuleNoFrontmatter, "add a frontmatter block with at least `type`")
+		return docFinding(
+			doc,
+			RuleNoFrontmatter,
+			"add a frontmatter block with at least `type`",
+		)
 	}
 
 	if fm.Type == "" {
-		return finding(RuleMissingKey, "frontmatter key `type` is missing or empty")
+		return docFinding(
+			doc,
+			RuleMissingKey,
+			"frontmatter key `type` is missing or empty",
+		)
 	}
 
 	required, known := rules.RequiredKeys[fm.Type]
 	if len(rules.RequiredKeys) > 0 && !known {
-		return finding(RuleUnknownType, "type `"+fm.Type+"` is not in the vocabulary")
+		return docFinding(
+			doc,
+			RuleUnknownType,
+			"type `"+fm.Type+"` is not in the vocabulary",
+		)
 	}
 
 	var out []Finding
 
 	for _, key := range required {
 		if !HasKey(fm, key) {
-			out = append(out, finding(
+			out = append(out, docFinding(
+				doc,
 				RuleMissingKey,
 				"type `"+fm.Type+"` requires frontmatter key `"+key+"`, which is missing or empty",
 			)...)
@@ -118,51 +151,76 @@ func HasKey(fm Frontmatter, key string) bool {
 // heading outside a fenced block is a YYYY-MM-DD date, newest first with no repeats.
 func ConformLog(path string, data []byte) []Finding {
 	var (
-		out  []Finding
-		prev time.Time
-		open string
+		out    []Finding
+		prev   time.Time
+		fences fenceTracker
 	)
 
 	for i, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSuffix(line, "\r")
-		if marker := fenceMarker(line); marker != "" {
-			if open == "" {
-				open = marker
-			} else if strings.HasPrefix(marker, open[:1]) {
-				open = ""
-			}
-
-			continue
-		}
-
-		if open != "" || !strings.HasPrefix(line, "## ") {
+		if fences.consume(line) || fences.open != "" || !strings.HasPrefix(line, "## ") {
 			continue
 		}
 
 		heading := strings.TrimSpace(strings.TrimPrefix(line, "## "))
 
-		date, err := time.Parse(time.DateOnly, heading)
-		if err != nil {
-			out = append(out, Finding{
-				Path: path, Line: i + 1, Rule: RuleLogHeading,
-				Message: "log heading `" + heading + "` is not a YYYY-MM-DD date",
-			})
+		var found []Finding
 
-			continue
-		}
-
-		if !prev.IsZero() && !date.Before(prev) {
-			out = append(out, Finding{
-				Path: path,
-				Line: i + 1,
-				Rule: RuleLogOrder,
-				Message: "log date " + heading + " is not older than the heading above it: " +
-					"keep dates newest first, one heading per date",
-			})
-		}
-
-		prev = date
+		prev, found = checkLogHeading(path, i+1, heading, prev)
+		out = append(out, found...)
 	}
 
 	return out
+}
+
+// checkLogHeading validates one heading against the date above it, returning the
+// date to compare the next heading with (unchanged when this one is not a date).
+func checkLogHeading(
+	path string,
+	line int,
+	heading string,
+	prev time.Time,
+) (time.Time, []Finding) {
+	date, err := time.Parse(time.DateOnly, heading)
+	if err != nil {
+		return prev, []Finding{{
+			Path: path, Line: line, Rule: RuleLogHeading,
+			Message: "log heading `" + heading + "` is not a YYYY-MM-DD date",
+		}}
+	}
+
+	if prev.IsZero() || date.Before(prev) {
+		return date, nil
+	}
+
+	return date, []Finding{{
+		Path: path,
+		Line: line,
+		Rule: RuleLogOrder,
+		Message: "log date " + heading + " is not older than the heading above it: " +
+			"keep dates newest first, one heading per date",
+	}}
+}
+
+// fenceTracker follows code fences across a document's lines.
+type fenceTracker struct {
+	// open is the marker of the fence the current line is inside, "" when outside.
+	open string
+}
+
+// consume updates the state for line, reporting whether line was a fence marker.
+func (f *fenceTracker) consume(line string) bool {
+	marker := fenceMarker(line)
+	if marker == "" {
+		return false
+	}
+
+	switch {
+	case f.open == "":
+		f.open = marker
+	case strings.HasPrefix(marker, f.open[:1]):
+		f.open = ""
+	}
+
+	return true
 }

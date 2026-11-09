@@ -22,6 +22,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/stepcache"
 )
 
+// fieldsPerPair is a key and a value.
+const fieldsPerPair = 2
+
 // Expander lists the rows a guard row with `each:` expands over: one map of placeholder
 // values per guard to build.
 type Expander func(
@@ -90,75 +93,77 @@ func NewFromConfig(rows []types.GuardRow, deps Deps) ([]interfaces.Guard, error)
 	}
 
 	out := make([]interfaces.Guard, 0, len(rows))
+
 	for i := range rows {
-		r := rows[i]
-		if r.Group == "" {
-			r.Group = r.Verb
-		}
-
-		err := validate(&r, deps)
+		guards, err := guardsForRow(&rows[i], deps)
 		if err != nil {
-			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "guard "+r.Name)
+			return nil, err
 		}
 
-		var prg, forPrg *program
-
-		if r.Kind == types.GuardExpr {
-			prg, _ = deps.Programs.compile(r.Expr) // validate compiled (and cached) it
-		}
-
-		if r.For != "" {
-			forPrg, _ = deps.Programs.compile(r.For) // validate compiled (and cached) it
-		}
-
-		names := []string{r.Name}
-		if r.Kind == types.GuardMatch && len(r.Names) > 0 {
-			names = r.Names
-		}
-
-		for j, n := range names {
-			g := &guard{row: r, name: n, deps: deps, prg: prg, forPrg: forPrg, only: -1}
-			if len(names) > 1 {
-				g.only = j
-			}
-
-			out = append(out, g)
-		}
+		out = append(out, guards...)
 	}
 
 	return out, nil
 }
 
-// validate checks r's kind and the parts that can fail before a run.
-func validate(r *types.GuardRow, deps Deps) error {
-	if r.For != "" {
-		_, err := deps.Programs.compile(r.For)
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInvalidInput, "for")
-		}
+// guardsForRow validates one row and builds its guards: one per name of a match row
+// with names, else one.
+func guardsForRow(row *types.GuardRow, deps Deps) ([]interfaces.Guard, error) {
+	r := *row
+	if r.Group == "" {
+		r.Group = r.Verb
 	}
 
-	if r.Each != "" {
-		if _, ok := deps.Expanders[r.Each]; !ok {
-			return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-				"unknown expander %q (known: %s)", r.Each,
-				strings.Join(slices.Sorted(maps.Keys(deps.Expanders)), ", ")))
+	err := validate(&r, deps)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "guard "+r.Name)
+	}
+
+	prg, forPrg := rowPrograms(&r, deps)
+
+	names := []string{r.Name}
+	if r.Kind == types.GuardMatch && len(r.Names) > 0 {
+		names = r.Names
+	}
+
+	out := make([]interfaces.Guard, 0, len(names))
+
+	for j, n := range names {
+		g := &guard{row: r, name: n, deps: deps, prg: prg, forPrg: forPrg, only: -1}
+		if len(names) > 1 {
+			g.only = j
 		}
+
+		out = append(out, g)
+	}
+
+	return out, nil
+}
+
+// rowPrograms returns the row's compiled programs; validate already compiled and
+// cached them, so the compile errors are known nil.
+func rowPrograms(r *types.GuardRow, deps Deps) (prg, forPrg *program) {
+	if r.Kind == types.GuardExpr {
+		prg, _ = deps.Programs.compile(r.Expr)
+	}
+
+	if r.For != "" {
+		forPrg, _ = deps.Programs.compile(r.For)
+	}
+
+	return prg, forPrg
+}
+
+// validate checks r's kind and the parts that can fail before a run.
+func validate(r *types.GuardRow, deps Deps) error {
+	err := validateExpansion(r, deps)
+	if err != nil {
+		return err
 	}
 
 	switch r.Kind {
 	case types.GuardMatch:
-		if len(r.Names) > 0 && len(r.Names) != len(r.Require) {
-			return apperr.New(
-				apperr.CodeInvalidInput,
-				"names must pair with require",
-			)
-		}
-
-		all := append(append(slices.Clone(r.Require), r.Forbid...), r.Allow...)
-		_, err := patterns(all, r.Literal)
-
-		return err
+		return validateMatch(r)
 	case types.GuardYAML:
 		if r.Path == "" {
 			return apperr.New(apperr.CodeInvalidInput, "a yaml guard needs a path")
@@ -182,6 +187,40 @@ func validate(r *types.GuardRow, deps Deps) error {
 	}
 
 	return nil
+}
+
+// validateExpansion checks the row's `for` expression and `each` expander.
+func validateExpansion(r *types.GuardRow, deps Deps) error {
+	if r.For != "" {
+		_, err := deps.Programs.compile(r.For)
+		if err != nil {
+			return apperr.Wrap(err, apperr.CodeInvalidInput, "for")
+		}
+	}
+
+	if r.Each == "" {
+		return nil
+	}
+
+	if _, ok := deps.Expanders[r.Each]; !ok {
+		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+			"unknown expander %q (known: %s)", r.Each,
+			strings.Join(slices.Sorted(maps.Keys(deps.Expanders)), ", ")))
+	}
+
+	return nil
+}
+
+// validateMatch checks a match row's name pairing and compiles its patterns.
+func validateMatch(r *types.GuardRow) error {
+	if len(r.Names) > 0 && len(r.Names) != len(r.Require) {
+		return apperr.New(apperr.CodeInvalidInput, "names must pair with require")
+	}
+
+	all := append(append(slices.Clone(r.Require), r.Forbid...), r.Allow...)
+	_, err := patterns(all, r.Literal)
+
+	return err
 }
 
 // validateRun checks that a tool row names its tool, and that a gen row names its
@@ -252,33 +291,12 @@ func (g *guard) Meta() types.EntryMeta {
 // all of them deciding the verdict. A go row with inputs skips every expansion whose
 // inputs passed before, and is Skip "cached" when all of them did.
 func (g *guard) Run(ctx context.Context, cb interfaces.Codebase) types.Verdict {
-	expansions := []map[string]string{{}}
-
-	if g.row.Each != "" {
-		rows, err := g.deps.Expanders[g.row.Each](ctx, cb)
-		if err != nil {
-			return failed(err)
-		}
-
-		expansions = rows
+	expansions, err := g.expansions(ctx, cb)
+	if err != nil {
+		return failed(err)
 	}
 
-	if g.forPrg != nil {
-		crossed, err := g.forEach(ctx, expansions)
-		if err != nil {
-			return failed(err)
-		}
-
-		expansions = crossed
-	}
-
-	type slot struct {
-		err      error
-		findings []types.Finding
-		cached   bool
-	}
-
-	slots := make([]slot, len(expansions))
+	slots := make([]expansionSlot, len(expansions))
 	idx := make([]int, len(expansions))
 
 	for i := range idx {
@@ -293,17 +311,68 @@ func (g *guard) Run(ctx context.Context, cb interfaces.Codebase) types.Verdict {
 		return g.tick(expansions[i], s.findings, s.cached, s.err)
 	})
 
-	var findings []types.Finding
+	return g.verdict(slots)
+}
 
-	cached := len(expansions) > 0
+// expansionSlot is one expansion's outcome.
+type expansionSlot struct {
+	// err is the failure that stopped the expansion's check.
+	err error
 
-	for _, s := range slots {
-		if s.err != nil {
-			return failed(s.err)
+	// findings are the expansion's violations.
+	findings []types.Finding
+
+	// cached reports the result came from the step cache.
+	cached bool
+}
+
+// expansions lists the variable sets to check: one empty set, widened by `each` and
+// crossed with `for`.
+func (g *guard) expansions(
+	ctx context.Context, cb interfaces.Codebase,
+) ([]map[string]string, error) {
+	expansions := []map[string]string{{}}
+
+	if g.row.Each != "" {
+		rows, err := g.deps.Expanders[g.row.Each](ctx, cb)
+		if err != nil {
+			return nil, err
 		}
 
-		cached = cached && s.cached
-		findings = append(findings, s.findings...)
+		expansions = rows
+	}
+
+	if g.forPrg == nil {
+		return expansions, nil
+	}
+
+	return g.forEach(ctx, expansions)
+}
+
+// stamp names the check on each finding and defaults its message to the row's.
+func (g *guard) stamp(findings []types.Finding) {
+	for i := range findings {
+		findings[i].Check = g.name
+		if findings[i].Message == "" {
+			findings[i].Message = g.row.Message
+		}
+	}
+}
+
+// verdict folds the expansions' outcomes: any error fails, all-cached skips, no
+// findings passes.
+func (g *guard) verdict(slots []expansionSlot) types.Verdict {
+	var findings []types.Finding
+
+	cached := len(slots) > 0
+
+	for i := range slots {
+		if slots[i].err != nil {
+			return failed(slots[i].err)
+		}
+
+		cached = cached && slots[i].cached
+		findings = append(findings, slots[i].findings...)
 	}
 
 	if cached {
@@ -314,12 +383,7 @@ func (g *guard) Run(ctx context.Context, cb interfaces.Codebase) types.Verdict {
 		return types.Verdict{Status: types.StatusPass}
 	}
 
-	for i := range findings {
-		findings[i].Check = g.name
-		if findings[i].Message == "" {
-			findings[i].Message = g.row.Message
-		}
-	}
+	g.stamp(findings)
 
 	return types.Verdict{
 		Status:   types.StatusFail,
@@ -491,7 +555,7 @@ func expand(row *types.GuardRow, vars map[string]string) types.GuardRow {
 		return r
 	}
 
-	pairs := make([]string, 0, 2*len(vars))
+	pairs := make([]string, 0, fieldsPerPair*len(vars))
 	for _, k := range slices.Sorted(maps.Keys(vars)) {
 		pairs = append(pairs, "{"+k+"}", vars[k])
 	}

@@ -59,17 +59,11 @@ func native(d decorate.Deps) func(decorate.Layer) ([]connect.Interceptor, bool) 
 	return func(layer decorate.Layer) ([]connect.Interceptor, bool) {
 		switch layer {
 		case decorate.LayerTracing:
-			return when(d.Tracer != nil, func() connect.Interceptor {
-				return TracingInterceptor(d.Tracer)
-			}), true
+			return nativeTracing(d), true
 		case decorate.LayerMetrics:
-			return when(d.Metrics != nil, func() connect.Interceptor {
-				return MetricsInterceptor(d.Metrics)
-			}), true
+			return nativeMetrics(d), true
 		case decorate.LayerLogging:
-			return when(d.Logger != nil, func() connect.Interceptor {
-				return NewLoggingInterceptor(d.Logger)
-			}), true
+			return nativeLogging(d), true
 		case decorate.LayerRecovery,
 			decorate.LayerAuth,
 			decorate.LayerTimeout,
@@ -82,6 +76,30 @@ func native(d decorate.Deps) func(decorate.Layer) ([]connect.Interceptor, bool) 
 			return nil, false
 		}
 	}
+}
+
+// nativeTracing is the tracing interceptor, when a tracer is wired.
+func nativeTracing(d decorate.Deps) []connect.Interceptor {
+	return when(
+		d.Tracer != nil,
+		func() connect.Interceptor { return TracingInterceptor(d.Tracer) },
+	)
+}
+
+// nativeMetrics is the metrics interceptor, when a recorder is wired.
+func nativeMetrics(d decorate.Deps) []connect.Interceptor {
+	return when(
+		d.Metrics != nil,
+		func() connect.Interceptor { return MetricsInterceptor(d.Metrics) },
+	)
+}
+
+// nativeLogging is the access-log interceptor, when a logger is wired.
+func nativeLogging(d decorate.Deps) []connect.Interceptor {
+	return when(
+		d.Logger != nil,
+		func() connect.Interceptor { return NewLoggingInterceptor(d.Logger) },
+	)
 }
 
 // when returns the interceptor build makes, or none when its collaborator is absent.

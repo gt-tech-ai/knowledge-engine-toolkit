@@ -138,14 +138,19 @@ func decodeFilterNode(data []byte, depth int) (FilterNode, error) {
 	}
 
 	for key, raw := range obj {
-		if key == filterAndKey || key == filterOrKey {
-			return decodeFilterGroup(key, raw, depth)
-		}
-
-		return decodeFilterClause(key, raw)
+		return decodeFilterEntry(key, raw, depth)
 	}
 
 	return FilterNode{}, nil // unreachable: obj has exactly one key
+}
+
+// decodeFilterEntry decodes a node's single operator: a group or a clause.
+func decodeFilterEntry(key string, raw json.RawMessage, depth int) (FilterNode, error) {
+	if key == filterAndKey || key == filterOrKey {
+		return decodeFilterGroup(key, raw, depth)
+	}
+
+	return decodeFilterClause(key, raw)
 }
 
 // decodeFilterGroup decodes the array body of an $and or $or group.

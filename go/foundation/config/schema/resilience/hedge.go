@@ -6,6 +6,9 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// defaultHedgeConfigDelay is the default Delay of HedgeConfig.
+const defaultHedgeConfigDelay = 50 * time.Millisecond
+
 // HedgeConfig tunes the tail-latency hedger (hedge.Config), read from the
 // `resilience.hedge` overlay. Hedging duplicates load and is only safe for
 // IDEMPOTENT / read-only paths, so it is DISABLED by default and opted into per
@@ -27,7 +30,7 @@ type HedgeConfig struct {
 func DefaultHedgeConfig() HedgeConfig {
 	return HedgeConfig{
 		Kind:  "disabled",
-		Delay: 50 * time.Millisecond,
+		Delay: defaultHedgeConfigDelay,
 	}
 }
 

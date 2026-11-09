@@ -35,20 +35,35 @@ func Packages(
 			return nil, apperr.Wrap(err, apperr.CodeInternal, "read directory "+searchDir)
 		}
 
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-
-			err := findPyprojectDirs(fsys, path.Join(searchDir, entry.Name()), filter,
-				&packages)
-			if err != nil {
-				return nil, err
-			}
+		err = scanSubdirs(fsys, searchDir, entries, filter, &packages)
+		if err != nil {
+			return nil, err
 		}
 	}
 
 	return packages, nil
+}
+
+// scanSubdirs searches each directory entry of dir for pyproject directories.
+func scanSubdirs(
+	fsys fs.FS,
+	dir string,
+	entries []fs.DirEntry,
+	filter func(string) bool,
+	out *[]string,
+) error {
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		err := findPyprojectDirs(fsys, path.Join(dir, entry.Name()), filter, out)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // findPyprojectDirs recursively finds directories of fsys containing pyproject.toml
@@ -75,23 +90,7 @@ func findPyprojectDirs(
 		return apperr.Wrap(err, apperr.CodeInternal, "read directory "+dir)
 	}
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		err := findPyprojectDirs(
-			fsys,
-			path.Join(dir, entry.Name()),
-			filter,
-			out,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return scanSubdirs(fsys, dir, entries, filter, out)
 }
 
 // ModuleName is the importable module of a src-layout package directory pkgDir of

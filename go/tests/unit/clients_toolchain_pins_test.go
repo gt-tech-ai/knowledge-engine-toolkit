@@ -98,6 +98,20 @@ func TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin(t *testin
 	}
 
 	got = check(interfaces.CmdResult{Stdout: []byte(path + ": not a Go binary\n")})
+
+	testClientsToolchainCheckPinsFailsWhenTheBinaryOnPathIsNotThePinRest(t, tools, got)
+}
+
+// testClientsToolchainCheckPinsFailsWhenTheBinaryOnPathIsNotThePinRest continues
+// TestClientsToolchainCheckPins_FailsWhenTheBinaryOnPathIsNotThePin with its remaining
+// steps.
+func testClientsToolchainCheckPinsFailsWhenTheBinaryOnPathIsNotThePinRest(
+	t *testing.T,
+	tools []types.ToolDef,
+	got types.StepResults,
+) {
+	t.Helper()
+
 	assert.Equal(t, types.StatusSkip, got[0].Status)
 
 	ctrl := gomock.NewController(t)

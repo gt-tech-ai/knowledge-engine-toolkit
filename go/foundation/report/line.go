@@ -104,21 +104,26 @@ func (l *line) OnGateComplete(
 	elapsed time.Duration,
 ) {
 	if l.p.richLine() {
-		var unticked types.StepResults
-
-		for _, r := range results {
-			if !l.ticked[r.Name] {
-				unticked = append(unticked, r)
-			}
-		}
-
-		if len(unticked) > 0 {
-			l.p.resultsTable(unticked)
-		}
+		l.printUnticked(results)
 	}
 
 	l.p.failureBlock(results)
 	l.p.lineSummary(results, elapsed)
+}
+
+// printUnticked tables the results the live line never showed.
+func (l *line) printUnticked(results types.StepResults) {
+	var unticked types.StepResults
+
+	for _, r := range results {
+		if !l.ticked[r.Name] {
+			unticked = append(unticked, r)
+		}
+	}
+
+	if len(unticked) > 0 {
+		l.p.resultsTable(unticked)
+	}
 }
 
 // icon is a status's tick glyph.

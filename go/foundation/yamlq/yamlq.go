@@ -66,51 +66,62 @@ func parse(path string) ([]step, error) {
 
 	var steps []step
 
-	rest := path[1:]
-
-	for rest != "" {
-		switch {
-		case strings.HasPrefix(rest, ".."):
-			key, tail := splitKey(rest[2:])
-			if key == "" {
-				return nil, invalid(path, "`..` needs a key")
-			}
-
-			steps, rest = append(steps, step{kind: stepDeep, key: key}), tail
-		case strings.HasPrefix(rest, ".*"):
-			steps, rest = append(steps, step{kind: stepAllValues}), rest[2:]
-		case strings.HasPrefix(rest, "."):
-			key, tail := splitKey(rest[1:])
-			if key == "" {
-				return nil, invalid(path, "`.` needs a key")
-			}
-
-			steps, rest = append(steps, step{kind: stepKey, key: key}), tail
-		case strings.HasPrefix(rest, "["):
-			end := strings.IndexByte(rest, ']')
-			if end < 0 {
-				return nil, invalid(path, "unclosed [")
-			}
-
-			inner := rest[1:end]
-			if inner == "*" {
-				steps = append(steps, step{kind: stepAllItems})
-			} else {
-				n, err := strconv.Atoi(inner)
-				if err != nil || n < 0 {
-					return nil, invalid(path, "an index is * or a non-negative integer")
-				}
-
-				steps = append(steps, step{kind: stepIndex, index: n})
-			}
-
-			rest = rest[end+1:]
-		default:
-			return nil, invalid(path, "unexpected "+strconv.Quote(rest))
+	for rest := path[1:]; rest != ""; {
+		st, tail, err := parseStep(path, rest)
+		if err != nil {
+			return nil, err
 		}
+
+		steps, rest = append(steps, st), tail
 	}
 
 	return steps, nil
+}
+
+// parseStep reads the step at the start of rest and returns what follows it.
+func parseStep(path, rest string) (step, string, error) {
+	switch {
+	case strings.HasPrefix(rest, ".."):
+		return parseKeyStep(path, rest[2:], stepDeep, "`..` needs a key")
+	case strings.HasPrefix(rest, ".*"):
+		return step{kind: stepAllValues}, rest[2:], nil
+	case strings.HasPrefix(rest, "."):
+		return parseKeyStep(path, rest[1:], stepKey, "`.` needs a key")
+	case strings.HasPrefix(rest, "["):
+		return parseBracketStep(path, rest)
+	default:
+		return step{}, "", invalid(path, "unexpected "+strconv.Quote(rest))
+	}
+}
+
+// parseKeyStep reads a key step of kind; an empty key fails with why.
+func parseKeyStep(path, rest string, kind stepKind, why string) (step, string, error) {
+	key, tail := splitKey(rest)
+	if key == "" {
+		return step{}, "", invalid(path, why)
+	}
+
+	return step{kind: kind, key: key}, tail, nil
+}
+
+// parseBracketStep reads a `[*]` or `[n]` step.
+func parseBracketStep(path, rest string) (step, string, error) {
+	end := strings.IndexByte(rest, ']')
+	if end < 0 {
+		return step{}, "", invalid(path, "unclosed [")
+	}
+
+	inner, tail := rest[1:end], rest[end+1:]
+	if inner == "*" {
+		return step{kind: stepAllItems}, tail, nil
+	}
+
+	n, err := strconv.Atoi(inner)
+	if err != nil || n < 0 {
+		return step{}, "", invalid(path, "an index is * or a non-negative integer")
+	}
+
+	return step{kind: stepIndex, index: n}, tail, nil
 }
 
 // splitKey returns the key at the start of s and the rest of s.
@@ -171,33 +182,62 @@ func apply(cur []*yaml.Node, st step) []*yaml.Node {
 	var out []*yaml.Node
 
 	for _, n := range cur {
-		n = deref(n)
-		if n == nil {
-			continue
+		if n = deref(n); n != nil {
+			out = append(out, applyStep(n, st)...)
 		}
+	}
 
-		switch st.kind {
-		case stepKey:
-			if v := valueOf(n, st.key); v != nil {
-				out = append(out, v)
-			}
-		case stepDeep:
-			out = append(out, deep(n, st.key)...)
-		case stepAllValues:
-			if n.Kind == yaml.MappingNode {
-				for i := 1; i < len(n.Content); i += 2 {
-					out = append(out, n.Content[i])
-				}
-			}
-		case stepIndex:
-			if n.Kind == yaml.SequenceNode && st.index < len(n.Content) {
-				out = append(out, n.Content[st.index])
-			}
-		case stepAllItems:
-			if n.Kind == yaml.SequenceNode {
-				out = append(out, n.Content...)
-			}
+	return out
+}
+
+// applyStep returns what one step selects in a dereferenced node.
+func applyStep(n *yaml.Node, st step) []*yaml.Node {
+	switch st.kind {
+	case stepKey:
+		return oneNode(valueOf(n, st.key))
+	case stepDeep:
+		return deep(n, st.key)
+	case stepAllValues:
+		return mappingValues(n)
+	case stepIndex:
+		return oneNode(sequenceItem(n, st.index))
+	case stepAllItems:
+		if n.Kind == yaml.SequenceNode {
+			return n.Content
 		}
+	}
+
+	return nil
+}
+
+// oneNode wraps a selected node, turning a missing one into an empty selection.
+func oneNode(n *yaml.Node) []*yaml.Node {
+	if n == nil {
+		return nil
+	}
+
+	return []*yaml.Node{n}
+}
+
+// sequenceItem returns item index of a sequence, or nil.
+func sequenceItem(n *yaml.Node, index int) *yaml.Node {
+	if n.Kind != yaml.SequenceNode || index >= len(n.Content) {
+		return nil
+	}
+
+	return n.Content[index]
+}
+
+// mappingValues returns every value of a mapping, and nothing for any other node.
+func mappingValues(n *yaml.Node) []*yaml.Node {
+	if n.Kind != yaml.MappingNode {
+		return nil
+	}
+
+	var out []*yaml.Node
+
+	for i := 1; i < len(n.Content); i += 2 {
+		out = append(out, n.Content[i])
 	}
 
 	return out
@@ -229,19 +269,28 @@ func deep(n *yaml.Node, key string) []*yaml.Node {
 
 	switch n.Kind {
 	case yaml.MappingNode:
-		for i := 0; i+1 < len(n.Content); i += 2 {
-			if n.Content[i].Value == key {
-				out = append(out, n.Content[i+1])
-			}
-
-			out = append(out, deep(n.Content[i+1], key)...)
-		}
+		out = deepMapping(n, key)
 	case yaml.SequenceNode, yaml.DocumentNode:
 		for _, c := range n.Content {
 			out = append(out, deep(c, key)...)
 		}
 	case yaml.ScalarNode, yaml.AliasNode:
 		// A scalar has no keys; deref already resolved an alias.
+	}
+
+	return out
+}
+
+// deepMapping collects key's values in a mapping and in everything below it.
+func deepMapping(n *yaml.Node, key string) []*yaml.Node {
+	var out []*yaml.Node
+
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if n.Content[i].Value == key {
+			out = append(out, n.Content[i+1])
+		}
+
+		out = append(out, deep(n.Content[i+1], key)...)
 	}
 
 	return out

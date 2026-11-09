@@ -74,6 +74,21 @@ func TestDefaultConfig_IsLocalQuorum(t *testing.T) {
 		fmt.Sprintf("%T", cluster.PoolConfig.HostSelectionPolicy),
 		"a discovering cluster routes token-aware")
 	assert.Nil(t, cluster.Authenticator)
+
+	testDefaultConfigIsLocalQuorumRest(t, cfg, cluster)
+}
+
+// testDefaultConfigIsLocalQuorumRest continues TestDefaultConfig_IsLocalQuorum with its
+// remaining steps.
+func testDefaultConfigIsLocalQuorumRest(
+	t *testing.T,
+	cfg cql.Config,
+	cluster *gocql.ClusterConfig,
+) {
+	t.Helper()
+
+	var err error
+
 	assert.False(t, cluster.DisableInitialHostLookup)
 
 	proxied, err := cassandrabackend.Cluster(&cassandrabackend.Config{

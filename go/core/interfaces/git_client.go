@@ -6,11 +6,13 @@ import "context"
 // helpers plus file listing, revision lookup and tags.
 type GitClient interface {
 	GitOps
+	GitRevisions
+	GitWorkingTree
+}
 
-	// LsFiles returns the tracked files matching pathspecs (every tracked file when
-	// none), relative to root; outside a repository it returns none.
-	LsFiles(ctx context.Context, root string, pathspecs []string) ([]string, error)
-
+// GitRevisions reads history and revisions: diffs, revision lookup, remotes, tags and the
+// log.
+type GitRevisions interface {
 	// ChangedSince returns the files that differ between the merge base with base and
 	// the working tree.
 	ChangedSince(ctx context.Context, root, base string) ([]string, error)
@@ -33,6 +35,13 @@ type GitClient interface {
 
 	// Log returns `git log` output for args (the caller picks the format and limits).
 	Log(ctx context.Context, root string, args ...string) ([]byte, error)
+}
+
+// GitWorkingTree lists, searches and changes the files of a working tree.
+type GitWorkingTree interface {
+	// LsFiles returns the tracked files matching pathspecs (every tracked file when
+	// none), relative to root; outside a repository it returns none.
+	LsFiles(ctx context.Context, root string, pathspecs []string) ([]string, error)
 
 	// Status returns `git status --porcelain` output for pathspecs (the whole tree when
 	// none): one "XY path" line per changed or untracked file.

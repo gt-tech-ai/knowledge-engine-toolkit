@@ -31,21 +31,27 @@ var _ interfaces.ServiceTokenValidator = (*StaticTokenValidator)(nil)
 // token is dropped (so it can never match).
 func NewStaticTokenValidator(serviceTokens map[string]string) *StaticTokenValidator {
 	accepted := make(map[string][]string, len(serviceTokens))
+
 	for caller, raw := range serviceTokens {
-		var toks []string
-
-		for t := range strings.SplitSeq(raw, ",") {
-			if t = strings.TrimSpace(t); t != "" {
-				toks = append(toks, t)
-			}
-		}
-
-		if len(toks) > 0 {
+		if toks := splitTokens(raw); len(toks) > 0 {
 			accepted[caller] = toks
 		}
 	}
 
 	return &StaticTokenValidator{accepted: accepted}
+}
+
+// splitTokens reads a comma-separated token list, dropping blanks.
+func splitTokens(raw string) []string {
+	var toks []string
+
+	for t := range strings.SplitSeq(raw, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			toks = append(toks, t)
+		}
+	}
+
+	return toks
 }
 
 // Validate returns the caller whose current-or-previous token matches, using a
@@ -176,21 +182,7 @@ func (s serviceAuthInterceptor) authenticate(
 
 	caller, ok := s.validator.Validate(bearerToken(h.Get(headerAuthorization)))
 	if !ok {
-		if s.audit {
-			if s.logger != nil {
-				s.logger.Warn(
-					"service auth: unauthenticated internal call admitted (audit mode)",
-					"procedure", procedure,
-				)
-			}
-
-			return ctx, nil
-		}
-
-		return nil, connect.NewError(
-			connect.CodeUnauthenticated,
-			apperr.Unauthorized("service authentication required"),
-		)
+		return s.unauthenticated(ctx, procedure)
 	}
 
 	if s.audit && s.logger != nil {
@@ -202,6 +194,27 @@ func (s serviceAuthInterceptor) authenticate(
 	}
 
 	return WithCallerIdentity(ctx, caller), nil
+}
+
+// unauthenticated rejects the call, or in audit mode logs it and admits it.
+func (s serviceAuthInterceptor) unauthenticated(
+	ctx context.Context, procedure string,
+) (context.Context, error) {
+	if !s.audit {
+		return nil, connect.NewError(
+			connect.CodeUnauthenticated,
+			apperr.Unauthorized("service authentication required"),
+		)
+	}
+
+	if s.logger != nil {
+		s.logger.Warn(
+			"service auth: unauthenticated internal call admitted (audit mode)",
+			"procedure", procedure,
+		)
+	}
+
+	return ctx, nil
 }
 
 // bearerToken extracts the token from an "Authorization: Bearer <token>" header value,

@@ -16,6 +16,9 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// startupTimeout bounds the container's start.
+const startupTimeout = 30 * time.Second
+
 const (
 	// redisImage is the Redis container image the fixture starts.
 	redisImage = "redis:7-alpine"
@@ -55,7 +58,7 @@ func NewTestRedis(ctx context.Context) (*TestRedis, error) {
 		Image:        redisImage,
 		ExposedPorts: []string{redisPort},
 		WaitingFor: wait.ForListeningPort(redisPort).
-			WithStartupTimeout(30 * time.Second),
+			WithStartupTimeout(startupTimeout),
 	}
 
 	container, err := testcontainers.GenericContainer(

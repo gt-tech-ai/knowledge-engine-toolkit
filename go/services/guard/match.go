@@ -20,6 +20,46 @@ func matchCheck(
 	r *types.GuardRow,
 	only int,
 ) ([]types.Finding, error) {
+	set, err := compileMatchSet(r, only)
+	if err != nil {
+		return nil, err
+	}
+
+	fs, missing, err := files(ctx, cb, r)
+	if err != nil || missing != nil {
+		return missing, err
+	}
+
+	var out []types.Finding
+
+	for _, f := range fs {
+		text, err := cb.Text(ctx, f.Path)
+		if err != nil {
+			return nil, err
+		}
+
+		lines := active(f.Path, text.Lines(), r.SkipComments)
+		out = append(out, set.requireFindings(f.Path, lines, r.Literal)...)
+		out = append(out, set.forbidFindings(f.Path, lines, r.Literal)...)
+	}
+
+	return out, nil
+}
+
+// matchSet is a match row's compiled patterns.
+type matchSet struct {
+	// require must each appear in a file.
+	require []*regexp.Regexp
+
+	// forbid must not appear on a line.
+	forbid []*regexp.Regexp
+
+	// allow excuses a line a forbid pattern hit.
+	allow []*regexp.Regexp
+}
+
+// compileMatchSet compiles the row's patterns; only >= 0 narrows require to that one.
+func compileMatchSet(r *types.GuardRow, only int) (*matchSet, error) {
 	require, err := patterns(r.Require, r.Literal)
 	if err != nil {
 		return nil, err
@@ -39,45 +79,64 @@ func matchCheck(
 		return nil, err
 	}
 
-	fs, missing, err := files(ctx, cb, r)
-	if err != nil || missing != nil {
-		return missing, err
-	}
+	return &matchSet{require: require, forbid: forbid, allow: allow}, nil
+}
 
+// requireFindings reports each required pattern no line of the file matches.
+func (s *matchSet) requireFindings(
+	file string,
+	lines []line,
+	literal bool,
+) []types.Finding {
 	var out []types.Finding
 
-	for _, f := range fs {
-		text, err := cb.Text(ctx, f.Path)
-		if err != nil {
-			return nil, err
-		}
-
-		lines := active(f.Path, text.Lines(), r.SkipComments)
-		for _, re := range require {
-			if !slices.ContainsFunc(
-				lines,
-				func(l line) bool { return re.MatchString(l.text) },
-			) {
-				out = append(out, types.Finding{
-					File: f.Path, Rule: "require",
-					Message: f.Path + " does not contain " + show(re, r.Literal),
-				})
-			}
-		}
-
-		for _, re := range forbid {
-			for _, l := range lines {
-				if re.MatchString(l.text) && !matchesAny(allow, l.text) {
-					out = append(out, types.Finding{
-						File: f.Path, Line: l.n, Rule: "forbid",
-						Message: "contains " + show(re, r.Literal),
-					})
-				}
-			}
+	for _, re := range s.require {
+		found := slices.ContainsFunc(
+			lines,
+			func(l line) bool { return re.MatchString(l.text) },
+		)
+		if !found {
+			out = append(out, types.Finding{
+				File: file, Rule: "require",
+				Message: file + " does not contain " + show(re, literal),
+			})
 		}
 	}
 
-	return out, nil
+	return out
+}
+
+// forbidFindings reports each line a forbidden pattern hits and no allow excuses.
+func (s *matchSet) forbidFindings(
+	file string,
+	lines []line,
+	literal bool,
+) []types.Finding {
+	out := make([]types.Finding, 0, len(s.forbid))
+
+	for _, re := range s.forbid {
+		out = append(out, s.forbiddenLines(re, file, lines, literal)...)
+	}
+
+	return out
+}
+
+// forbiddenLines reports the lines one forbidden pattern hits.
+func (s *matchSet) forbiddenLines(
+	re *regexp.Regexp, file string, lines []line, literal bool,
+) []types.Finding {
+	var out []types.Finding
+
+	for _, l := range lines {
+		if re.MatchString(l.text) && !matchesAny(s.allow, l.text) {
+			out = append(out, types.Finding{
+				File: file, Line: l.n, Rule: "forbid",
+				Message: "contains " + show(re, literal),
+			})
+		}
+	}
+
+	return out
 }
 
 // matchesAny reports whether one of res matches s.

@@ -13,6 +13,12 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// routedRows is the rows sent to the healthy route.
+const routedRows = 3
+
+// brokenRows is the rows sent to the broken route.
+const brokenRows = 2
+
 // Routing is what RunRouting drives: one relay pass over a routing sink with
 // healthy routes and one broken route, and a way to read what each route
 // received. The caller builds the relay, so this fixture depends only on core.
@@ -64,10 +70,10 @@ func RunRouting(t *testing.T, h Harness, r Routing) {
 	}
 
 	for _, route := range r.Healthy {
-		enqueue(route, 3)
+		enqueue(route, routedRows)
 	}
 
-	enqueue(r.Broken, 2)
+	enqueue(r.Broken, brokenRows)
 
 	require.NoError(t, r.RunOnce(ctx, lane))
 
@@ -80,6 +86,6 @@ func RunRouting(t *testing.T, h Harness, r Routing) {
 
 	stats, err := h.Store.Stats(ctx, lane)
 	require.NoError(t, err)
-	require.Equal(t, 2, stats.Pending)
+	require.Equal(t, brokenRows, stats.Pending)
 	require.Equal(t, 0, stats.Parked)
 }

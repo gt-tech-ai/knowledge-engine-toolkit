@@ -95,6 +95,14 @@ func TestS3ConnectorSource_TestConnection(t *testing.T) {
 		require.Equal(t, 2, n)
 	})
 
+	testS3ConnectorSourceTestConnectionRest(t, ctx)
+}
+
+// testS3ConnectorSourceTestConnectionRest continues TestS3ConnectorSource_TestConnection
+// with its remaining steps.
+func testS3ConnectorSourceTestConnectionRest(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	t.Run("a client-fault API error → InvalidInput", func(t *testing.T) {
 		t.Parallel()
 
@@ -185,6 +193,14 @@ func TestS3ConnectorSource_ListPage(t *testing.T) {
 		require.Len(t, objs, 1)
 		require.Equal(t, "tok2", next, "the resume token is surfaced for checkpointing")
 	})
+
+	testS3ConnectorSourceListPageRest(t, ctx)
+}
+
+// testS3ConnectorSourceListPageRest continues TestS3ConnectorSource_ListPage with its
+// remaining steps.
+func testS3ConnectorSourceListPageRest(t *testing.T, ctx context.Context) {
+	t.Helper()
 
 	t.Run("a client-fault API error → InvalidInput (terminal)", func(t *testing.T) {
 		t.Parallel()
@@ -315,12 +331,84 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 
 	ctx := context.Background()
 
-	cases := []struct {
-		mutate func(*interfaces.SourceConfig)
-		name   string
-		method string
-		nilSTS bool
-	}{
+	cases := s3InvalidAuthConfigTable()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			testS3ConnectorSourceRejectsInvalidAuthConfigCase(t, ctx, tc)
+		})
+	}
+
+	t.Run("the connector builder surfaces the refusal", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		cfg := s3Cfg("iam_role")
+
+		cfg.ExternalID = ""
+
+		b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
+			BuildS3Client: stubBuilder(mocks.NewMockStorageClient(ctrl), nil),
+			STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
+		})
+		_, err := b.Build(ctx, cfg)
+		require.True(t, apperr.Is(err, apperr.CodeInvalidInput), "%v", err)
+	})
+}
+
+// testS3ConnectorSourceRejectsInvalidAuthConfigCase is the body of a closure in
+// TestS3ConnectorSource_RejectsInvalidAuthConfig.
+func testS3ConnectorSourceRejectsInvalidAuthConfigCase(
+	t *testing.T,
+	ctx context.Context,
+	tc s3InvalidAuthConfigRow,
+) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	cfg := s3Cfg(tc.method)
+
+	if tc.mutate != nil {
+		tc.mutate(&cfg)
+	}
+
+	var stsClient stscreds.AssumeRoleAPIClient
+
+	if !tc.nilSTS {
+		stsClient = mocks.NewMockAssumeRoleAPIClient(
+			ctrl,
+		) // no EXPECT: STS is never called
+	}
+
+	_, err := connectors3.NewSource(
+		ctx,
+		cfg,
+		stsClient,
+		stubBuilder(mocks.NewMockStorageClient(ctrl), nil),
+	)
+	require.True(
+		t,
+		apperr.Is(err, apperr.CodeInvalidInput),
+		"%s: %v",
+		tc.name,
+		err,
+	)
+}
+
+// s3InvalidAuthConfigRow is one row of
+// s3InvalidAuthConfigTable.
+type s3InvalidAuthConfigRow struct {
+	mutate func(*interfaces.SourceConfig)
+	name   string
+	method string
+	nilSTS bool
+}
+
+// s3InvalidAuthConfigTable builds the table
+// TestS3ConnectorSource_RejectsInvalidAuthConfig runs.
+func s3InvalidAuthConfigTable() []s3InvalidAuthConfigRow {
+	return []s3InvalidAuthConfigRow{
 		{
 			name:   "iam_role empty role ARN",
 			method: "iam_role",
@@ -372,56 +460,6 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 			},
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			ctrl := gomock.NewController(t)
-			cfg := s3Cfg(tc.method)
-
-			if tc.mutate != nil {
-				tc.mutate(&cfg)
-			}
-
-			var stsClient stscreds.AssumeRoleAPIClient
-
-			if !tc.nilSTS {
-				stsClient = mocks.NewMockAssumeRoleAPIClient(
-					ctrl,
-				) // no EXPECT: STS is never called
-			}
-
-			_, err := connectors3.NewSource(
-				ctx,
-				cfg,
-				stsClient,
-				stubBuilder(mocks.NewMockStorageClient(ctrl), nil),
-			)
-			require.True(
-				t,
-				apperr.Is(err, apperr.CodeInvalidInput),
-				"%s: %v",
-				tc.name,
-				err,
-			)
-		})
-	}
-
-	t.Run("the connector builder surfaces the refusal", func(t *testing.T) {
-		t.Parallel()
-
-		ctrl := gomock.NewController(t)
-		cfg := s3Cfg("iam_role")
-
-		cfg.ExternalID = ""
-
-		b := connector.NewSourceBuilder(connector.Config{}, connector.Deps{
-			BuildS3Client: stubBuilder(mocks.NewMockStorageClient(ctrl), nil),
-			STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
-		})
-		_, err := b.Build(ctx, cfg)
-		require.True(t, apperr.Is(err, apperr.CodeInvalidInput), "%v", err)
-	})
 }
 
 // TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures tests how TestConnection
@@ -473,29 +511,7 @@ func TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures(t *testing.T) {
 		}
 	}
 
-	credCases := []struct {
-		stsErr error
-		name   string
-		want   apperr.ErrorCode
-	}{
-		{
-			name: "STS AccessDenied → InvalidInput",
-			stsErr: &smithy.GenericAPIError{
-				Code:    "AccessDenied",
-				Message: "not authorized to assume",
-			},
-			want: apperr.CodeInvalidInput,
-		},
-		{
-			name: "caller deadline → Unavailable",
-			stsErr: &smithy.OperationError{
-				ServiceID:     "STS",
-				OperationName: "AssumeRole",
-				Err:           context.DeadlineExceeded,
-			},
-			want: apperr.CodeUnavailable,
-		},
-	}
+	credCases := s3APIFailureTable()
 	for _, tc := range credCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -525,6 +541,49 @@ func TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures(t *testing.T) {
 			require.Equal(t, tc.want, apperr.Code(err), "%v", err)
 		})
 	}
+
+	testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest(t, ctx)
+}
+
+// s3APIFailureRow is one row of
+// s3APIFailureTable.
+type s3APIFailureRow struct {
+	stsErr error
+	name   string
+	want   apperr.ErrorCode
+}
+
+// s3APIFailureTable builds the table
+// TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures runs.
+func s3APIFailureTable() []s3APIFailureRow {
+	return []s3APIFailureRow{
+		{
+			name: "STS AccessDenied → InvalidInput",
+			stsErr: &smithy.GenericAPIError{
+				Code:    "AccessDenied",
+				Message: "not authorized to assume",
+			},
+			want: apperr.CodeInvalidInput,
+		},
+		{
+			name: "caller deadline → Unavailable",
+			stsErr: &smithy.OperationError{
+				ServiceID:     "STS",
+				OperationName: "AssumeRole",
+				Err:           context.DeadlineExceeded,
+			},
+			want: apperr.CodeUnavailable,
+		},
+	}
+}
+
+// testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest continues
+// TestS3ConnectorSource_ClassifiesCredentialAndAPIFailures with its remaining steps.
+func testS3ConnectorSourceClassifiesCredentialAndAPIFailuresRest(
+	t *testing.T,
+	ctx context.Context,
+) {
+	t.Helper()
 
 	statusCases := []struct {
 		name   string

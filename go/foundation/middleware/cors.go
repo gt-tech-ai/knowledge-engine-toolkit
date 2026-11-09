@@ -57,25 +57,13 @@ func CORS(cfg *CORSConfig) Middleware {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
+			h := w.Header()
 
-			if allowAll {
-				w.Header().Set("Access-Control-Allow-Origin", "*")
-			} else if origin != "" {
-				if _, ok := originSet[origin]; ok {
-					w.Header().Set("Access-Control-Allow-Origin", origin)
-					w.Header().Set("Vary", "Origin")
-				}
-			}
-
-			w.Header().Set("Access-Control-Allow-Methods", methods)
-			w.Header().Set("Access-Control-Allow-Headers", headers)
-
-			if exposed != "" {
-				w.Header().Set("Access-Control-Expose-Headers", exposed)
-			}
-
-			w.Header().Set("Access-Control-Max-Age", cfg.MaxAge)
+			setAllowOrigin(h, r.Header.Get("Origin"), allowAll, originSet)
+			h.Set("Access-Control-Allow-Methods", methods)
+			h.Set("Access-Control-Allow-Headers", headers)
+			setExposeHeaders(h, exposed)
+			h.Set("Access-Control-Max-Age", cfg.MaxAge)
 
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
@@ -85,5 +73,31 @@ func CORS(cfg *CORSConfig) Middleware {
 
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+// setAllowOrigin answers with a wildcard, or echoes an allowed request origin.
+func setAllowOrigin(
+	h http.Header,
+	origin string,
+	allowAll bool,
+	set map[string]struct{},
+) {
+	if allowAll {
+		h.Set("Access-Control-Allow-Origin", "*")
+
+		return
+	}
+
+	if _, ok := set[origin]; ok && origin != "" {
+		h.Set("Access-Control-Allow-Origin", origin)
+		h.Set("Vary", "Origin")
+	}
+}
+
+// setExposeHeaders sets the header only when headers are exposed.
+func setExposeHeaders(h http.Header, exposed string) {
+	if exposed != "" {
+		h.Set("Access-Control-Expose-Headers", exposed)
 	}
 }

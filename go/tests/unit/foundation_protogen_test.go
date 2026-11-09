@@ -18,7 +18,8 @@ import (
 // protogenPkg is the generated Python package the passes run over.
 const protogenPkg = "acme_generated"
 
-// writeProtoFile writes content to dir/name, creating parent dirs, failing the test on error.
+// writeProtoFile writes content to dir/name, creating parent dirs, failing the test on
+// error.
 func writeProtoFile(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)

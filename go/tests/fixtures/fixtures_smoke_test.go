@@ -6,8 +6,11 @@ import (
 	"io"
 	"testing"
 
+	"google.golang.org/grpc"
+
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
 // TestFactories_ExerciseEveryDouble smoke-tests every factory through its
@@ -74,6 +77,14 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 		t.Fatalf("StubService.Get: %+v, want Name=mock", got)
 	}
 
+	testFactoriesExerciseEveryDoubleRest3(t, ctx)
+}
+
+// testFactoriesExerciseEveryDoubleRest3 continues TestFactories_ExerciseEveryDouble with
+// its remaining steps.
+func testFactoriesExerciseEveryDoubleRest3(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	boom := apperr.Sentinel("boom")
 	_, err := fixtures.StubService(boom, false).Get(ctx, "1")
 
@@ -117,6 +128,21 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 
 		return nil
 	})
+
+	testFactoriesExerciseEveryDoubleRest(t, ctx, boom, attempts)
+}
+
+// testFactoriesExerciseEveryDoubleRest continues TestFactories_ExerciseEveryDouble with
+// its remaining steps.
+func testFactoriesExerciseEveryDoubleRest(
+	t *testing.T,
+	ctx context.Context,
+	boom error,
+	attempts func() int,
+) {
+	t.Helper()
+
+	var err error
 
 	if attempts() != 3 {
 		t.Fatalf("StubRetrier attempts: %d, want 3", attempts())
@@ -162,6 +188,20 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 		t.Fatalf("RecvMsg #1: %v, want boom", err)
 	}
 
+	testFactoriesExerciseEveryDoubleRest2(t, ctx, cs)
+}
+
+// testFactoriesExerciseEveryDoubleRest2 continues testFactoriesExerciseEveryDoubleRest
+// with its remaining steps.
+func testFactoriesExerciseEveryDoubleRest2(
+	t *testing.T,
+	ctx context.Context,
+	cs grpc.ClientStream,
+) {
+	t.Helper()
+
+	var err error
+
 	err = cs.RecvMsg(nil)
 	if !errors.Is(err, io.EOF) {
 		t.Fatalf("RecvMsg #2: %v, want EOF", err)
@@ -182,6 +222,18 @@ func TestFactories_ExerciseEveryDouble(t *testing.T) {
 	if ok, _ := store.Exists(ctx, "e1"); !ok {
 		t.Fatal("StubStore.Exists after Create should be true")
 	}
+
+	testFactoriesExerciseEveryDoubleRest4(t, ctx, store)
+}
+
+// testFactoriesExerciseEveryDoubleRest4 continues testFactoriesExerciseEveryDoubleRest2
+// with its remaining steps.
+func testFactoriesExerciseEveryDoubleRest4(
+	t *testing.T,
+	ctx context.Context,
+	store *mocks.MockStore[fixtures.TestEntity, fixtures.TestParams, string],
+) {
+	t.Helper()
 
 	_ = store.Delete(ctx, "e1")
 	if got, _ := store.Get(ctx, "e1"); got != nil {

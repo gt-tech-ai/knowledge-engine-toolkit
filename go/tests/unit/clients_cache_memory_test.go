@@ -1,6 +1,7 @@
 package unit_test
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -73,6 +74,17 @@ func TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound(t *testing.T) {
 		assert.False(t, hit, "the default ttl expires too")
 	})
 
+	testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest(t, ctx)
+}
+
+// testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest continues
+// TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound with its remaining steps.
+func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest(
+	t *testing.T,
+	ctx context.Context,
+) {
+	t.Helper()
+
 	t.Run("bounded least recently used", func(t *testing.T) {
 		t.Parallel()
 
@@ -95,21 +107,32 @@ func TestCacheMemory_HoldsValuesForTheirTTLWithinItsBound(t *testing.T) {
 	t.Run("concurrent use", func(t *testing.T) {
 		t.Parallel()
 
-		c := memory.New(64, time.Hour, time.Now)
-
-		var wg sync.WaitGroup
-
-		for i := range 16 {
-			wg.Go(func() {
-				for j := range 100 {
-					key := fmt.Sprintf("k%d", (i*100+j)%128)
-					c.Set(ctx, key, []byte("v"), 0)
-
-					_, _ = c.Get(ctx, key)
-				}
-			})
-		}
-
-		wg.Wait()
+		testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase(t, ctx)
 	})
+}
+
+// testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase is the body of a closure in
+// testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundRest2.
+func testCacheMemoryHoldsValuesForTheirTTLWithinItsBoundCase(
+	t *testing.T,
+	ctx context.Context,
+) {
+	t.Helper()
+
+	c := memory.New(64, time.Hour, time.Now)
+
+	var wg sync.WaitGroup
+
+	for i := range 16 {
+		wg.Go(func() {
+			for j := range 100 {
+				key := fmt.Sprintf("k%d", (i*100+j)%128)
+				c.Set(ctx, key, []byte("v"), 0)
+
+				_, _ = c.Get(ctx, key)
+			}
+		})
+	}
+
+	wg.Wait()
 }

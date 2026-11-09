@@ -125,17 +125,26 @@ func OpName(method string) string {
 	var b strings.Builder
 
 	for i, c := range r {
-		if unicode.IsUpper(c) && i > 0 {
-			prevLower := unicode.IsLower(r[i-1]) || unicode.IsDigit(r[i-1])
-			nextLower := i+1 < len(r) && unicode.IsLower(r[i+1])
-
-			if prevLower || (unicode.IsUpper(r[i-1]) && nextLower) {
-				b.WriteByte('_')
-			}
+		if startsWord(r, i) {
+			b.WriteByte('_')
 		}
 
 		b.WriteRune(unicode.ToLower(c))
 	}
 
 	return b.String()
+}
+
+// startsWord reports whether rune i begins a new snake_case word: an upper-case rune
+// after a lower-case or digit, or the last capital of an acronym before a lower-case.
+func startsWord(r []rune, i int) bool {
+	if i == 0 || !unicode.IsUpper(r[i]) {
+		return false
+	}
+
+	prev := r[i-1]
+	nextLower := i+1 < len(r) && unicode.IsLower(r[i+1])
+
+	return unicode.IsLower(prev) || unicode.IsDigit(prev) ||
+		(unicode.IsUpper(prev) && nextLower)
 }

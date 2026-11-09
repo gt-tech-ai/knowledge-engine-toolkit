@@ -20,6 +20,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/docs"
 )
 
+// defaultServeAPIDocsReadHeaderTimeout is the default ReadHeaderTimeout of ServeAPIDocs.
+const defaultServeAPIDocsReadHeaderTimeout = 10 * time.Second
+
 // shutdownTimeout bounds the API server's graceful shutdown once the context ends.
 const shutdownTimeout = 5 * time.Second
 
@@ -112,36 +115,14 @@ func (s *Server) Serve(ctx context.Context, targets Targets) error {
 		return err
 	}
 
-	var procs []interfaces.ProcessHandle
-
-	for _, start := range []struct {
-		run func(context.Context) (interfaces.ProcessHandle, error)
-		on  bool
-	}{{s.ServeGoDocs, targets.Go}, {s.ServePythonDocs, targets.Python}} {
-		if !start.on && !targets.all() {
-			continue
-		}
-
-		p, err := start.run(ctx)
-		if err != nil {
-			return err
-		}
-
-		procs = append(procs, p)
+	procs, err := s.startProcesses(ctx, targets)
+	if err != nil {
+		return err
 	}
 
-	var api *http.Server
-
-	if targets.API || targets.all() {
-		srv, err := s.ServeAPIDocs(ctx)
-		switch {
-		case err != nil && targets.API:
-			return err
-		case err != nil:
-			s.d.Log.Warn("API docs server failed (continuing)", "error", err.Error())
-		default:
-			api = srv
-		}
+	api, err := s.startAPIDocs(ctx, targets)
+	if err != nil {
+		return err
 	}
 
 	if len(procs) == 0 && api == nil {
@@ -211,34 +192,7 @@ func (s *Server) ServeAPIDocs(ctx context.Context) (*http.Server, error) {
 	}
 
 	mux := http.NewServeMux()
-
-	var root http.Handler
-
-	if len(specs) == 1 {
-		mux.Handle("/openapi.json", docs.SpecHandler(specs[0].data))
-
-		root = docs.RedocHandler("/openapi.json", title(specs[0].name))
-	} else {
-		index := template.Must(template.New("index").Parse(indexPage))
-		names := make([]string, 0, len(specs))
-
-		for _, sp := range specs {
-			url := "/" + sp.name + "/openapi.json"
-			mux.Handle(url, docs.SpecHandler(sp.data))
-			mux.Handle("/"+sp.name, docs.RedocHandler(url, title(sp.name)))
-
-			names = append(names, sp.name)
-		}
-
-		root = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-			err := index.Execute(w, names)
-			if err != nil {
-				s.d.Log.Warn("render API docs index", "error", err.Error())
-			}
-		})
-	}
+	root := s.docsRoot(mux, specs)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -253,7 +207,7 @@ func (s *Server) ServeAPIDocs(ctx context.Context) (*http.Server, error) {
 	srv := &http.Server{
 		Addr:              ":" + s.cfg.APIPort,
 		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
+		ReadHeaderTimeout: defaultServeAPIDocsReadHeaderTimeout,
 	}
 
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", srv.Addr)
@@ -261,16 +215,100 @@ func (s *Server) ServeAPIDocs(ctx context.Context) (*http.Server, error) {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "listen "+srv.Addr)
 	}
 
-	go func() {
-		err := srv.Serve(ln)
-		if err != nil && !apperr.StdIs(err, http.ErrServerClosed) {
-			s.d.Log.Warn("API docs server error", "error", err.Error())
-		}
-	}()
+	go s.serveDocs(srv, ln)
 
 	s.d.Log.Info("API docs server started", "url", "http://localhost:"+s.cfg.APIPort)
 
 	return srv, nil
+}
+
+// startAPIDocs starts the API docs server. A failure is fatal only when API docs were
+// asked for by name; under "all" it is logged and the others carry on.
+func (s *Server) startAPIDocs(
+	ctx context.Context,
+	targets Targets,
+) (*http.Server, error) {
+	var none *http.Server
+
+	if !targets.API && !targets.all() {
+		return none, nil
+	}
+
+	srv, err := s.ServeAPIDocs(ctx)
+	if err == nil {
+		return srv, nil
+	}
+
+	if targets.API {
+		return nil, err
+	}
+
+	s.d.Log.Warn("API docs server failed (continuing)", "error", err.Error())
+
+	return none, nil
+}
+
+// startProcesses starts the targeted language doc servers.
+func (s *Server) startProcesses(
+	ctx context.Context, targets Targets,
+) ([]interfaces.ProcessHandle, error) {
+	var procs []interfaces.ProcessHandle
+
+	for _, start := range []struct {
+		run func(context.Context) (interfaces.ProcessHandle, error)
+		on  bool
+	}{{s.ServeGoDocs, targets.Go}, {s.ServePythonDocs, targets.Python}} {
+		if !start.on && !targets.all() {
+			continue
+		}
+
+		p, err := start.run(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		procs = append(procs, p)
+	}
+
+	return procs, nil
+}
+
+// docsRoot mounts the specs and returns the root page: the one spec's Redoc, or an index
+// of several.
+func (s *Server) docsRoot(mux *http.ServeMux, specs []spec) http.Handler {
+	if len(specs) == 1 {
+		mux.Handle("/openapi.json", docs.SpecHandler(specs[0].data))
+
+		return docs.RedocHandler("/openapi.json", title(specs[0].name))
+	}
+
+	index := template.Must(template.New("index").Parse(indexPage))
+	names := make([]string, 0, len(specs))
+
+	for _, sp := range specs {
+		url := "/" + sp.name + "/openapi.json"
+		mux.Handle(url, docs.SpecHandler(sp.data))
+		mux.Handle("/"+sp.name, docs.RedocHandler(url, title(sp.name)))
+
+		names = append(names, sp.name)
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+		err := index.Execute(w, names)
+		if err != nil {
+			s.d.Log.Warn("render API docs index", "error", err.Error())
+		}
+	})
+}
+
+// serveDocs serves until the server closes, logging any other end.
+func (s *Server) serveDocs(srv *http.Server, ln net.Listener) {
+	err := srv.Serve(ln)
+	if err != nil && !apperr.StdIs(err, http.ErrServerClosed) {
+		s.d.Log.Warn("API docs server error", "error", err.Error())
+	}
 }
 
 // shutdown stops api gracefully and waits for every process; a process stopped by the
@@ -336,22 +374,14 @@ func (s *Server) readSpecs() ([]spec, error) {
 	var out []spec
 
 	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-
-		p := filepath.Join(dir, e.Name(), filepath.FromSlash(s.cfg.OpenAPISpec))
-		data, err := os.ReadFile(filepath.Clean(p))
-
-		if os.IsNotExist(err) {
-			continue
-		}
-
+		sp, ok, err := s.readSpec(dir, e)
 		if err != nil {
-			return nil, apperr.Wrap(err, apperr.CodeInternal, "read "+p)
+			return nil, err
 		}
 
-		out = append(out, spec{name: e.Name(), data: data})
+		if ok {
+			out = append(out, sp)
+		}
 	}
 
 	if len(out) == 0 {
@@ -360,6 +390,26 @@ func (s *Server) readSpecs() ([]spec, error) {
 	}
 
 	return out, nil
+}
+
+// readSpec reads one service directory's spec; false when it has none.
+func (s *Server) readSpec(dir string, e os.DirEntry) (spec, bool, error) {
+	if !e.IsDir() {
+		return spec{}, false, nil
+	}
+
+	p := filepath.Join(dir, e.Name(), filepath.FromSlash(s.cfg.OpenAPISpec))
+
+	data, err := os.ReadFile(filepath.Clean(p))
+	if os.IsNotExist(err) {
+		return spec{}, false, nil
+	}
+
+	if err != nil {
+		return spec{}, false, apperr.Wrap(err, apperr.CodeInternal, "read "+p)
+	}
+
+	return spec{name: e.Name(), data: data}, true, nil
 }
 
 // title capitalizes a service dir name for its page title.

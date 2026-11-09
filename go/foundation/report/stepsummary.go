@@ -10,6 +10,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// privateFileMode is the mode of a file only its owner reads.
+const privateFileMode = 0o600
+
 // summaryErrorWidth caps an error cell in the step summary table.
 const summaryErrorWidth = 80
 
@@ -45,19 +48,24 @@ func WriteStepSummary(w io.Writer, results types.StepResults, total time.Duratio
 		n[types.StatusSkip],
 		round(total),
 	)
-	for _, r := range results {
-		if err != nil || r.Status == types.StatusPass {
+	if err != nil {
+		return err
+	}
+
+	err = writeSummaryRows(w, results)
+	if err != nil {
+		return err
+	}
+
+	return writeSummary(w, "\n")
+}
+
+// writeSummaryRows writes a row per non-passing result, stopping at the first error.
+func writeSummaryRows(w io.Writer, results types.StepResults) error {
+	for i := range results {
+		r := &results[i]
+		if r.Status == types.StatusPass {
 			continue
-		}
-
-		icon := "&#x274C;"
-
-		switch r.Status {
-		case types.StatusSkip:
-			icon = "&#x23ED;"
-		case types.StatusWarn:
-			icon = "&#x26A0;"
-		case types.StatusPass, types.StatusFail:
 		}
 
 		msg := r.Error
@@ -65,21 +73,33 @@ func WriteStepSummary(w io.Writer, results types.StepResults, total time.Duratio
 			msg = msg[:summaryErrorWidth-3] + "..."
 		}
 
-		err = writeSummary(
+		err := writeSummary(
 			w,
 			"| %s | %s | %s | %s |\n",
 			r.Name,
-			icon,
+			summaryIcon(r.Status),
 			round(r.Duration),
 			msg,
 		)
+		if err != nil {
+			return err
+		}
 	}
 
-	if err != nil {
-		return err
+	return nil
+}
+
+// summaryIcon is the HTML entity for a non-passing status.
+func summaryIcon(status types.StepStatus) string {
+	if status == types.StatusSkip {
+		return "&#x23ED;"
 	}
 
-	return writeSummary(w, "\n")
+	if status == types.StatusWarn {
+		return "&#x26A0;"
+	}
+
+	return "&#x274C;"
 }
 
 // writeSummary writes one formatted piece of the summary, coding a write error.
@@ -121,7 +141,7 @@ func (s *stepSummary) OnGateComplete(
 	results types.StepResults,
 	elapsed time.Duration,
 ) {
-	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, privateFileMode)
 	if err != nil {
 		return
 	}

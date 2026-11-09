@@ -22,6 +22,12 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/ratelimiter/token"
 )
 
+// defaultConfigRate is the default Rate of Config.
+const defaultConfigRate = 100
+
+// defaultConfigBurst is the default Burst of Config.
+const defaultConfigBurst = 10
+
 // ErrRateLimited is returned when the rate limiter rejects a request.
 var ErrRateLimited = apperr.New(apperr.CodeUnavailable, "rate limited")
 
@@ -61,8 +67,8 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Kind:  KindToken,
-		Rate:  100,
-		Burst: 10,
+		Rate:  defaultConfigRate,
+		Burst: defaultConfigBurst,
 	}
 }
 

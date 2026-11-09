@@ -23,6 +23,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 )
 
+// defaultLayerTimeout is the timeout layer's default deadline.
+const defaultLayerTimeout = 30 * time.Second
+
 // SectionKey is the config key the decoration section lives under.
 const SectionKey = "decoration"
 
@@ -118,19 +121,20 @@ func Merge(base, over Layers) Layers {
 // mergeValue lays src's set fields over dst, recursing into structs.
 func mergeValue(dst, src reflect.Value) {
 	for i := range src.NumField() {
-		s, d := src.Field(i), dst.Field(i)
-		switch s.Kind() {
-		case reflect.Struct:
-			mergeValue(d, s)
-		case reflect.Pointer:
-			if !s.IsNil() {
-				d.Set(s)
-			}
-		default:
-			if !s.IsZero() {
-				d.Set(s)
-			}
-		}
+		mergeField(dst.Field(i), src.Field(i))
+	}
+}
+
+// mergeField recurses into a struct and copies any other value that is set.
+func mergeField(d, s reflect.Value) {
+	if s.Kind() == reflect.Struct {
+		mergeValue(d, s)
+
+		return
+	}
+
+	if !s.IsZero() {
+		d.Set(s)
 	}
 }
 
@@ -176,19 +180,26 @@ func (t Tier) Sources(name string) []string {
 		out = append(out, "defaults")
 	}
 
-	for i := range len(name) {
-		if name[i] == '.' {
-			if _, ok := t.Overrides[name[:i]]; ok {
-				out = append(out, "overrides."+name[:i])
-			}
+	for _, key := range dottedPrefixes(name) {
+		if _, ok := t.Overrides[key]; ok {
+			out = append(out, "overrides."+key)
 		}
 	}
 
-	if _, ok := t.Overrides[name]; ok {
-		out = append(out, "overrides."+name)
+	return out
+}
+
+// dottedPrefixes lists name's dotted prefixes, shortest first, ending with name itself.
+func dottedPrefixes(name string) []string {
+	var out []string
+
+	for i := range len(name) {
+		if name[i] == '.' {
+			out = append(out, name[:i])
+		}
 	}
 
-	return out
+	return append(out, name)
 }
 
 // overlay lays over on t: its defaults over t's, and each override over t's override
@@ -315,7 +326,7 @@ func DefaultConfig() Config {
 
 	guarded := func() Layers {
 		return Layers{
-			Timeout:        new(30 * time.Second),
+			Timeout:        new(defaultLayerTimeout),
 			Bulkhead:       Bulkhead{Enabled: new(true)},
 			CircuitBreaker: CircuitBreaker{Enabled: new(true)},
 		}

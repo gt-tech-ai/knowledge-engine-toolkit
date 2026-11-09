@@ -79,21 +79,29 @@ func InjectConversation(ctx context.Context, c Conversation) context.Context {
 		values[BaggagePrevTraceparent] = carrier.Get("traceparent")
 	}
 
-	bag := baggage.FromContext(ctx)
+	bag, ok := withMembers(baggage.FromContext(ctx), values)
+	if !ok {
+		return ctx
+	}
 
+	return baggage.ContextWithBaggage(ctx, bag)
+}
+
+// withMembers adds the values to bag; false means one was rejected.
+func withMembers(bag baggage.Baggage, values map[string]string) (baggage.Baggage, bool) {
 	for key, value := range values {
 		member, err := baggage.NewMemberRaw(key, value)
 		if err != nil {
-			return ctx
+			return bag, false
 		}
 
 		bag, err = bag.SetMember(member)
 		if err != nil {
-			return ctx
+			return bag, false
 		}
 	}
 
-	return baggage.ContextWithBaggage(ctx, bag)
+	return bag, true
 }
 
 // ConversationStartOptions returns the span start options for a turn's root

@@ -84,70 +84,78 @@ func TransformCollection(
 ) map[string]any {
 	var items []any
 
-	raw, ok := body[cfg.CollectionKey]
-	if ok {
+	// If the collection key is missing (protobuf omits empty repeated
+	// fields), treat it as an empty array rather than falling back.
+	if raw, ok := body[cfg.CollectionKey]; ok {
 		items, ok = raw.([]any)
 		if !ok {
 			return body
 		}
 	}
 
-	// If the collection key is missing (protobuf omits empty repeated
-	// fields), treat it as an empty array rather than falling back.
+	result := map[string]any{"data": resourceObjects(items, cfg.Type)}
 
+	// Always add self link when available.
+	if selfLink != "" {
+		result["links"] = collectionLinks(result, body, cfg.PaginationKey, selfLink)
+	}
+
+	return result
+}
+
+// resourceObjects builds each object item's resource, preserving non-object items.
+func resourceObjects(items []any, resourceType string) []any {
 	data := make([]any, 0, len(items))
+
 	for _, item := range items {
 		m, ok := item.(map[string]any)
 		if !ok {
-			data = append(data, item) // preserve non-object items
+			data = append(data, item)
 
 			continue
 		}
 
-		data = append(data, buildResourceObject(m, cfg.Type))
+		data = append(data, buildResourceObject(m, resourceType))
 	}
 
-	result := map[string]any{"data": data}
+	return data
+}
 
-	// Always add self link when available.
-	if selfLink != "" {
-		links := map[string]any{"self": selfLink}
+// collectionLinks builds the links member and maps pagination onto meta in result.
+func collectionLinks(
+	result, body map[string]any, paginationKey, selfLink string,
+) map[string]any {
+	links := map[string]any{"self": selfLink}
 
-		// Map pagination to meta and links.
-		if cfg.PaginationKey != "" {
-			if pgRaw, ok := body[cfg.PaginationKey]; ok {
-				if pg, ok := pgRaw.(map[string]any); ok {
-					meta := make(map[string]any)
+	pg, _ := body[paginationKey].(map[string]any)
+	if paginationKey == "" || pg == nil {
+		return links
+	}
 
-					if tc, ok := pg["totalCount"]; ok {
-						meta["totalCount"] = tc
-					}
+	if s, ok := pg["nextPageToken"].(string); ok && s != "" {
+		links["next"] = selfLink + "?page_token=" + s
+	}
 
-					// Forward the bounded-count "N+" estimate flag: protojson emits it only
-					// when true (non-default bool), so its presence in meta signals the total is capped.
-					// Dropping it here silently hid the estimate from every REST client (the UI could
-					// never render "10,000+").
-					if est, ok := pg["totalIsEstimate"]; ok {
-						meta["totalIsEstimate"] = est
-					}
+	if meta := paginationMeta(pg); len(meta) > 0 {
+		result["meta"] = meta
+	}
 
-					if npt, ok := pg["nextPageToken"]; ok {
-						if s, ok := npt.(string); ok && s != "" {
-							links["next"] = selfLink + "?page_token=" + s
-						}
-					}
+	return links
+}
 
-					if len(meta) > 0 {
-						result["meta"] = meta
-					}
-				}
-			}
+// paginationMeta copies the count members. The bounded-count "N+" estimate flag is
+// forwarded too: protojson emits it only when true, so its presence signals the total
+// is capped, and dropping it would hide the estimate from every REST client.
+func paginationMeta(pg map[string]any) map[string]any {
+	meta := make(map[string]any)
+
+	for _, member := range []string{"totalCount", "totalIsEstimate"} {
+		if v, ok := pg[member]; ok {
+			meta[member] = v
 		}
-
-		result["links"] = links
 	}
 
-	return result
+	return meta
 }
 
 // buildResourceObject creates a JSON:API resource object from a flat protobuf
@@ -204,24 +212,7 @@ func buildResourceObject(resource map[string]any, resourceType string) map[strin
 // as an array, and that shape is kept even though nothing here reports more
 // than one failure at a time.
 func TransformError(statusCode int, body []byte) []byte {
-	code := "unknown"
-	detail := ""
-
-	// Try to parse the Connect error body.
-	if len(body) > 0 {
-		var parsed map[string]any
-
-		err := json.Unmarshal(body, &parsed)
-		if err == nil {
-			if c := normalizeErrorCode(parsed[MemberCode]); c != "" {
-				code = c
-			}
-
-			if m, ok := parsed["message"].(string); ok && m != "" {
-				detail = m
-			}
-		}
-	}
+	code, detail := parseErrorBody(body)
 
 	statusStr := strconv.Itoa(statusCode)
 	member := map[string]any{
@@ -240,6 +231,31 @@ func TransformError(statusCode int, body []byte) []byte {
 	}
 
 	return out
+}
+
+// parseErrorBody reads a Connect error body's code and message; anything unreadable
+// leaves code "unknown" and no detail.
+func parseErrorBody(body []byte) (code, detail string) {
+	code = "unknown"
+
+	if len(body) == 0 {
+		return code, ""
+	}
+
+	var parsed map[string]any
+
+	err := json.Unmarshal(body, &parsed)
+	if err != nil {
+		return code, ""
+	}
+
+	if c := normalizeErrorCode(parsed[MemberCode]); c != "" {
+		code = c
+	}
+
+	detail, _ = parsed["message"].(string)
+
+	return code, detail
 }
 
 // MemberCode is the error-body member carrying the machine-readable error code,

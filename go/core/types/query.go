@@ -327,29 +327,27 @@ func encodeFilterFingerprint(b *strings.Builder, f Filter) {
 		b.WriteByte(')')
 	case CompositeFilter:
 		if len(v.And) > 0 {
-			b.WriteString("and(")
-
-			for _, sub := range v.And {
-				encodeFilterFingerprint(b, sub)
-				b.WriteByte(',')
-			}
-
-			b.WriteByte(')')
+			encodeGroupFingerprint(b, "and(", v.And)
 
 			return
 		}
 
-		b.WriteString("or(")
-
-		for _, sub := range v.Or {
-			encodeFilterFingerprint(b, sub)
-			b.WriteByte(',')
-		}
-
-		b.WriteByte(')')
+		encodeGroupFingerprint(b, "or(", v.Or)
 	default:
 		b.WriteString("()")
 	}
+}
+
+// encodeGroupFingerprint writes a composite's opening token and its members.
+func encodeGroupFingerprint(b *strings.Builder, open string, members []Filter) {
+	b.WriteString(open)
+
+	for _, sub := range members {
+		encodeFilterFingerprint(b, sub)
+		b.WriteByte(',')
+	}
+
+	b.WriteByte(')')
 }
 
 // encodeValueFingerprint writes a type-tagged, deterministic encoding of a filter value,

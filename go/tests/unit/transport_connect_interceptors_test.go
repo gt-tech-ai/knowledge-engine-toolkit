@@ -507,19 +507,11 @@ func TestLoggingInterceptor_Success(t *testing.T) {
 func TestLoggingInterceptor_Error(t *testing.T) {
 	t.Parallel()
 
-	logger := fixtures.NopLogger()
-	interceptor := interceptors.NewLoggingInterceptor(logger)
-
-	innerErr := connect.NewError(connect.CodeNotFound, apperr.Sentinel("not found"))
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			return nil, innerErr
-		},
+	assertErrorPassesThrough(
+		t,
+		interceptors.NewLoggingInterceptor(fixtures.NopLogger()),
+		connect.CodeNotFound,
 	)
-
-	_, err := handler(context.Background(), newTestRequest())
-	require.Error(t, err, "expected error to pass through")
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
 
 // TestLoggingInterceptor_UsesWithContext tests that the logging interceptor
@@ -603,19 +595,7 @@ func TestLoggingInterceptor_UsesWithContext_Error(t *testing.T) {
 func TestLoggingInterceptor_4xxCodeLogsAtWarn(t *testing.T) {
 	t.Parallel()
 
-	spy := fixtures.NewSpyLogger()
-	interceptor := interceptors.NewLoggingInterceptor(spy)
-
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			return nil, connect.NewError(
-				connect.CodeInvalidArgument,
-				apperr.Sentinel("bad input"),
-			)
-		},
-	)
-
-	_, _ = handler(context.Background(), newTestRequest())
+	spy := logFailedCall(connect.CodeInvalidArgument)
 
 	assert.Len(t, *spy.ChildWarnCalls, 1)
 	assert.Empty(t, *spy.ChildErrorCalls, "expected 0 calls")
@@ -634,19 +614,7 @@ func TestLoggingInterceptor_4xxCodeLogsAtWarn(t *testing.T) {
 func TestLoggingInterceptor_5xxCodeLogsAtError(t *testing.T) {
 	t.Parallel()
 
-	spy := fixtures.NewSpyLogger()
-	interceptor := interceptors.NewLoggingInterceptor(spy)
-
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			return nil, connect.NewError(
-				connect.CodeInternal,
-				apperr.Sentinel("server fault"),
-			)
-		},
-	)
-
-	_, _ = handler(context.Background(), newTestRequest())
+	spy := logFailedCall(connect.CodeInternal)
 
 	assert.Len(t, *spy.ChildErrorCalls, 1)
 	assert.Empty(t, *spy.ChildWarnCalls, "expected 0 calls")
@@ -665,19 +633,7 @@ func TestLoggingInterceptor_5xxCodeLogsAtError(t *testing.T) {
 func TestLoggingInterceptor_CanceledLogsAtWarn(t *testing.T) {
 	t.Parallel()
 
-	spy := fixtures.NewSpyLogger()
-	interceptor := interceptors.NewLoggingInterceptor(spy)
-
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			return nil, connect.NewError(
-				connect.CodeCanceled,
-				apperr.Sentinel("client canceled"),
-			)
-		},
-	)
-
-	_, _ = handler(context.Background(), newTestRequest())
+	spy := logFailedCall(connect.CodeCanceled)
 
 	assert.Len(t, *spy.ChildWarnCalls, 1)
 	assert.Empty(t, *spy.ChildErrorCalls, "a cancellation must not log at Error")
@@ -814,19 +770,11 @@ func TestTracingInterceptor_Success(t *testing.T) {
 func TestTracingInterceptor_Error(t *testing.T) {
 	t.Parallel()
 
-	tracer := fixtures.NopTracer()
-	interceptor := interceptors.TracingInterceptor(tracer)
-
-	innerErr := connect.NewError(connect.CodeInternal, apperr.Sentinel("boom"))
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			return nil, innerErr
-		},
+	assertErrorPassesThrough(
+		t,
+		interceptors.TracingInterceptor(fixtures.NopTracer()),
+		connect.CodeInternal,
 	)
-
-	_, err := handler(context.Background(), newTestRequest())
-	require.Error(t, err, "expected error to pass through")
-	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
 }
 
 // TestTracingInterceptor_ExtractsTraceContext tests that the server-side
@@ -1118,4 +1066,40 @@ func TestAuthInterceptor_StreamingExtractsHeaders(t *testing.T) {
 	require.True(t, ok, "streaming handler should see auth claims")
 	assert.Equal(t, "stream-user", claims.Sub)
 	assert.Equal(t, "org-7", claims.TenantID)
+}
+
+// assertErrorPassesThrough requires the interceptor to return a handler's error code as
+// is.
+func assertErrorPassesThrough(
+	t *testing.T,
+	interceptor connect.Interceptor,
+	code connect.Code,
+) {
+	t.Helper()
+
+	inner := connect.NewError(code, apperr.Sentinel("handler failed"))
+	handler := interceptor.WrapUnary(
+		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+			return nil, inner
+		},
+	)
+
+	_, err := handler(context.Background(), newTestRequest())
+	require.Error(t, err, "expected error to pass through")
+	assert.Equal(t, code, connect.CodeOf(err))
+}
+
+// logFailedCall runs a handler failing with code through a logging interceptor and
+// returns the spy that recorded it.
+func logFailedCall(code connect.Code) *fixtures.SpyLogger {
+	spy := fixtures.NewSpyLogger()
+	handler := interceptors.NewLoggingInterceptor(spy).WrapUnary(
+		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+			return nil, connect.NewError(code, apperr.Sentinel("handler failed"))
+		},
+	)
+
+	_, _ = handler(context.Background(), newTestRequest())
+
+	return spy
 }

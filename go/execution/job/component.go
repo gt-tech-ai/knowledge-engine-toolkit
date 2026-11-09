@@ -19,19 +19,19 @@ func snake(s string) string {
 	sep := false
 
 	for _, r := range strings.ToLower(s) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			if sep && b.Len() > 0 {
-				b.WriteByte('_')
-			}
-
-			b.WriteRune(r)
-
-			sep = false
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			sep = true
 
 			continue
 		}
 
-		sep = true
+		if sep && b.Len() > 0 {
+			b.WriteByte('_')
+		}
+
+		b.WriteRune(r)
+
+		sep = false
 	}
 
 	return b.String()

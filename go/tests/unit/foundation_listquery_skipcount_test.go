@@ -59,6 +59,13 @@ func TestRun_SkipCount(t *testing.T) {
 		assert.Equal(t, 11, r.gotBound, "Count was called with cap+1")
 	})
 
+	testRunSkipCountRest(t)
+}
+
+// testRunSkipCountRest continues TestRun_SkipCount with its remaining steps.
+func testRunSkipCountRest(t *testing.T) {
+	t.Helper()
+
 	t.Run(
 		"the flag does not leak to a sibling List on the original context",
 		func(t *testing.T) {
@@ -74,7 +81,8 @@ func TestRun_SkipCount(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			// ...and the ORIGINAL context still computes a real total for an unrelated reader.
+			// ...and the ORIGINAL context still computes a real total for an unrelated
+			// reader.
 			sibling := &countStubRunner{rows: []int{1, 2, 3}, total: 3}
 			page, err := listquery.Run(
 				base,

@@ -173,7 +173,8 @@ func FuzzEncryptRoundtrip(f *testing.F) {
 		got, err := enc.Decrypt(ct)
 		require.NoError(t, err)
 		// bytes.Equal (not require.Equal): the roundtrip preserves byte CONTENT, and an
-		// empty plaintext round-trips to a nil slice — the same bytes, which require.Equal
+		// empty plaintext round-trips to a nil slice — the same bytes, which
+		// require.Equal
 		// would (wrongly) treat as unequal.
 		require.True(t, bytes.Equal(plaintext, got), "roundtrip must preserve bytes")
 	})

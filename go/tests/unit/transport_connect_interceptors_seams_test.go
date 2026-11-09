@@ -266,6 +266,14 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 	p, _ = coreprincipal.PrincipalFrom[principal](got)
 	assert.Equal(t, "resolved", p.Tenant, "without a stub, synthetic claims resolve")
 
+	testPrincipalInterceptorStubAndErrorsRest(t)
+}
+
+// testPrincipalInterceptorStubAndErrorsRest continues
+// TestPrincipalInterceptor_StubAndErrors with its remaining steps.
+func testPrincipalInterceptorStubAndErrorsRest(t *testing.T) {
+	t.Helper()
+
 	const leakedDetail = "pq: host db-7.internal password auth failed"
 
 	cases := map[string]struct {
@@ -301,6 +309,18 @@ func TestPrincipalInterceptor_StubAndErrors(t *testing.T) {
 			connect.CodeResourceExhausted,
 		},
 	}
+
+	testPrincipalInterceptorStubAndErrorsRest2(t, cases)
+}
+
+// testPrincipalInterceptorStubAndErrorsRest2 continues
+// testPrincipalInterceptorStubAndErrorsRest with its remaining steps.
+func testPrincipalInterceptorStubAndErrorsRest2(t *testing.T, cases map[string]struct {
+	err  error
+	want connect.Code
+},
+) {
+	t.Helper()
 
 	for path, invoke := range serverPaths() {
 		for name, tc := range cases {
@@ -409,43 +429,54 @@ func TestTenantScopeInterceptor_StampsExtractedTenant(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			tenant, resolved := uuid.New(), true
-			extract := func(context.Context) (uuid.UUID, bool) { return tenant, resolved }
-			stampers := []interceptors.TenantStamper{
-				interceptors.StampTenantContext,
-				interceptors.SessionVarStamper("app.tenant"),
-			}
-			ic := interceptors.NewTenantScopeInterceptor(extract, stampers...)
-
-			stampers[0] = func(ctx context.Context, _ uuid.UUID) context.Context { return ctx }
-
-			got, err := invoke(ic, context.Background())
-			require.NoError(t, err)
-
-			id, ok := coretenant.TenantFromContext(got)
-			assert.True(t, ok, "the core tenant context must be stamped")
-			assert.Equal(t, tenant, id)
-
-			v, ok := entsql.VarFromContext(got, "app.tenant")
-			assert.True(t, ok, "the session variable must be stamped")
-			assert.Equal(t, tenant.String(), v)
-
-			for label, set := range map[string]func(){
-				"unresolved": func() { tenant, resolved = uuid.New(), false },
-				"nil uuid":   func() { tenant, resolved = uuid.Nil, true },
-			} {
-				set()
-
-				unstamped, err := invoke(ic, context.Background())
-				require.NoError(t, err)
-
-				_, ok = coretenant.TenantFromContext(unstamped)
-				assert.False(t, ok, "%s: no tenant context may be stamped", label)
-
-				_, ok = entsql.VarFromContext(unstamped, "app.tenant")
-				assert.False(t, ok, "%s: no session variable may be stamped", label)
-			}
+			testTenantScopeInterceptorStampsExtractedTenantCase(t, invoke)
 		})
+	}
+}
+
+// testTenantScopeInterceptorStampsExtractedTenantCase is the body of a closure in
+// TestTenantScopeInterceptor_StampsExtractedTenant.
+func testTenantScopeInterceptorStampsExtractedTenantCase(
+	t *testing.T,
+	invoke serverPath,
+) {
+	t.Helper()
+
+	tenant, resolved := uuid.New(), true
+	extract := func(context.Context) (uuid.UUID, bool) { return tenant, resolved }
+	stampers := []interceptors.TenantStamper{
+		interceptors.StampTenantContext,
+		interceptors.SessionVarStamper("app.tenant"),
+	}
+	ic := interceptors.NewTenantScopeInterceptor(extract, stampers...)
+
+	stampers[0] = func(ctx context.Context, _ uuid.UUID) context.Context { return ctx }
+
+	got, err := invoke(ic, context.Background())
+	require.NoError(t, err)
+
+	id, ok := coretenant.TenantFromContext(got)
+	assert.True(t, ok, "the core tenant context must be stamped")
+	assert.Equal(t, tenant, id)
+
+	v, ok := entsql.VarFromContext(got, "app.tenant")
+	assert.True(t, ok, "the session variable must be stamped")
+	assert.Equal(t, tenant.String(), v)
+
+	for label, set := range map[string]func(){
+		"unresolved": func() { tenant, resolved = uuid.New(), false },
+		"nil uuid":   func() { tenant, resolved = uuid.Nil, true },
+	} {
+		set()
+
+		unstamped, err := invoke(ic, context.Background())
+		require.NoError(t, err)
+
+		_, ok = coretenant.TenantFromContext(unstamped)
+		assert.False(t, ok, "%s: no tenant context may be stamped", label)
+
+		_, ok = entsql.VarFromContext(unstamped, "app.tenant")
+		assert.False(t, ok, "%s: no session variable may be stamped", label)
 	}
 }
 

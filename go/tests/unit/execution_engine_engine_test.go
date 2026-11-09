@@ -391,6 +391,26 @@ func TestObserverStartEvents(t *testing.T) {
 	obs.EXPECT().OnStepComplete(gomock.Any()).AnyTimes()
 	obs.EXPECT().OnPhaseComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnGateComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	testObserverStartEventsRest(
+		t,
+		gateStarts,
+		phaseStarts,
+		stepStarts,
+		gateStartPhases,
+		obs,
+	)
+}
+
+// testObserverStartEventsRest continues TestObserverStartEvents with its remaining steps.
+func testObserverStartEventsRest(
+	t *testing.T,
+	gateStarts, phaseStarts, stepStarts []string,
+	gateStartPhases [][]string,
+	obs *mocks.MockExecutionObserver,
+) {
+	t.Helper()
+
 	obs.EXPECT().
 		OnGateStart(gomock.Any(), gomock.Any()).
 		Do(func(name string, phases []string) {
@@ -462,6 +482,14 @@ func TestRunJobGroup_FanOutEmitsLivePerUnit(t *testing.T) {
 	t.Parallel()
 
 	release := make(chan struct{})
+
+	testRunJobGroupFanOutEmitsLivePerUnitRest(t, release)
+}
+
+// testRunJobGroupFanOutEmitsLivePerUnitRest continues
+// TestRunJobGroup_FanOutEmitsLivePerUnit with its remaining steps.
+func testRunJobGroupFanOutEmitsLivePerUnitRest(t *testing.T, release chan struct{}) {
+	t.Helper()
 
 	var (
 		mu    sync.Mutex

@@ -171,6 +171,14 @@ func TestServiceAuthInterceptor_Unary(t *testing.T) {
 		assert.Equal(t, "orders", gotCaller)
 	})
 
+	testServiceAuthInterceptorUnaryRest(t, interceptor)
+}
+
+// testServiceAuthInterceptorUnaryRest continues TestServiceAuthInterceptor_Unary with
+// its remaining steps.
+func testServiceAuthInterceptorUnaryRest(t *testing.T, interceptor connect.Interceptor) {
+	t.Helper()
+
 	for _, tc := range []struct {
 		name  string
 		token string
@@ -306,6 +314,18 @@ func TestServiceAuthInterceptor_Streaming(t *testing.T) {
 
 		return conn
 	}
+
+	testServiceAuthInterceptorStreamingRest(t, interceptor, newConn)
+}
+
+// testServiceAuthInterceptorStreamingRest continues TestServiceAuthInterceptor_Streaming
+// with its remaining steps.
+func testServiceAuthInterceptorStreamingRest(
+	t *testing.T,
+	interceptor connect.Interceptor,
+	newConn func(token string) *mocks.MockStreamingHandlerConn,
+) {
+	t.Helper()
 
 	t.Run("missing token rejects the stream", func(t *testing.T) {
 		t.Parallel()

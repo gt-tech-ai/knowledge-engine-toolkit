@@ -525,22 +525,29 @@ func FuzzOKFParse(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, src string) {
-		doc, err := okf.Parse("f.md", []byte(src))
-		if err != nil {
-			return
-		}
-
-		if !strings.HasSuffix(src, doc.Body) {
-			t.Fatalf("body %q is not a suffix of %q", doc.Body, src)
-		}
-
-		lines := strings.Count(src, "\n") + 1
-		for _, l := range doc.Links {
-			if l.Line < 1 || l.Line > lines {
-				t.Fatalf("link line %d outside 1..%d", l.Line, lines)
-			}
-		}
+		fuzzOKFParseCase(t, src)
 	})
+}
+
+// fuzzOKFParseCase is the body of a closure in FuzzOKFParse.
+func fuzzOKFParseCase(t *testing.T, src string) {
+	t.Helper()
+
+	doc, err := okf.Parse("f.md", []byte(src))
+	if err != nil {
+		return
+	}
+
+	if !strings.HasSuffix(src, doc.Body) {
+		t.Fatalf("body %q is not a suffix of %q", doc.Body, src)
+	}
+
+	lines := strings.Count(src, "\n") + 1
+	for _, l := range doc.Links {
+		if l.Line < 1 || l.Line > lines {
+			t.Fatalf("link line %d outside 1..%d", l.Line, lines)
+		}
+	}
 }
 
 // TestOKFHasKey tests key presence over named and extension keys.

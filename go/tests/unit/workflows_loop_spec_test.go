@@ -28,39 +28,47 @@ func TestNewGroupFromSpecs_DecoratesAndRunsEverySpec(t *testing.T) {
 
 	for _, decorated := range []bool{true, false} {
 		synctest.Test(t, func(t *testing.T) {
-			var (
-				a, b     atomic.Int64
-				ops      []string
-				decorate loop.Decorator
-			)
-
-			if decorated {
-				decorate = func(op string, pass passWorkflow) passWorkflow {
-					ops = append(ops, op)
-
-					return pass
-				}
-			}
-
-			schedule := loop.Config{Interval: time.Minute, RunAtStart: true}
-			group, err := loop.NewGroupFromSpecs([]loop.Spec{
-				{Run: countPass(&a), Name: "a", Op: "loop.a", Schedule: schedule},
-				{Run: countPass(&b), Name: "b", Op: "loop.b", Schedule: schedule},
-			}, decorate, quietLogger(t))
-			require.NoError(t, err)
-
-			require.NoError(t, group.Start(t.Context()))
-			synctest.Wait()
-			require.Equal(t, int64(1), a.Load())
-			require.Equal(t, int64(1), b.Load())
-			require.NoError(t, group.Stop(t.Context()))
-
-			if decorated {
-				require.Equal(t, []string{"loop.a", "loop.b"}, ops)
-			} else {
-				require.Empty(t, ops)
-			}
+			testNewGroupFromSpecsDecoratesAndRunsEverySpecCase(t, decorated)
 		})
+	}
+}
+
+// testNewGroupFromSpecsDecoratesAndRunsEverySpecCase is the body of a closure in
+// TestNewGroupFromSpecs_DecoratesAndRunsEverySpec.
+func testNewGroupFromSpecsDecoratesAndRunsEverySpecCase(t *testing.T, decorated bool) {
+	t.Helper()
+
+	var (
+		a, b     atomic.Int64
+		ops      []string
+		decorate loop.Decorator
+	)
+
+	if decorated {
+		decorate = func(op string, pass passWorkflow) passWorkflow {
+			ops = append(ops, op)
+
+			return pass
+		}
+	}
+
+	schedule := loop.Config{Interval: time.Minute, RunAtStart: true}
+	group, err := loop.NewGroupFromSpecs([]loop.Spec{
+		{Run: countPass(&a), Name: "a", Op: "loop.a", Schedule: schedule},
+		{Run: countPass(&b), Name: "b", Op: "loop.b", Schedule: schedule},
+	}, decorate, quietLogger(t))
+	require.NoError(t, err)
+
+	require.NoError(t, group.Start(t.Context()))
+	synctest.Wait()
+	require.Equal(t, int64(1), a.Load())
+	require.Equal(t, int64(1), b.Load())
+	require.NoError(t, group.Stop(t.Context()))
+
+	if decorated {
+		require.Equal(t, []string{"loop.a", "loop.b"}, ops)
+	} else {
+		require.Empty(t, ops)
 	}
 }
 

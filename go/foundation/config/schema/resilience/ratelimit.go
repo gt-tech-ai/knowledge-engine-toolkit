@@ -2,6 +2,12 @@ package resilience
 
 import apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 
+// defaultRateLimitConfigRate is the default Rate of RateLimitConfig.
+const defaultRateLimitConfigRate = 100
+
+// defaultRateLimitConfigBurst is the default Burst of RateLimitConfig.
+const defaultRateLimitConfigBurst = 10
+
 // RateLimitConfig tunes the token-bucket rate limiter (ratelimiter/token.Config),
 // whose own defaults are Rate 100 / Burst 10.
 type RateLimitConfig struct {
@@ -15,8 +21,8 @@ type RateLimitConfig struct {
 // DefaultRateLimitConfig returns defaults identical to token.DefaultConfig().
 func DefaultRateLimitConfig() RateLimitConfig {
 	return RateLimitConfig{
-		Rate:  100,
-		Burst: 10,
+		Rate:  defaultRateLimitConfigRate,
+		Burst: defaultRateLimitConfigBurst,
 	}
 }
 

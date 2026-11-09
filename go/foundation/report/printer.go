@@ -12,6 +12,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// maxMessageLen is the longest message printed before truncation.
+const maxMessageLen = 100
+
 // Level is a console verbosity.
 type Level int32
 
@@ -142,8 +145,8 @@ func (p *printer) resultsTable(results types.StepResults) {
 		}
 
 		msg := stripCode(r.Error)
-		if len(msg) > 100 {
-			msg = msg[:97] + "..."
+		if len(msg) > maxMessageLen {
+			msg = msg[:maxMessageLen-len("...")] + "..."
 		}
 
 		_, _ = fmt.Fprintf(
@@ -245,18 +248,7 @@ func (p *printer) failureBlock(results types.StepResults) {
 		return
 	}
 
-	var flagged []*types.StepResult
-
-	failed := false
-
-	for i := range results {
-		r := &results[i]
-		if r.Status == types.StatusFail || r.Status == types.StatusWarn {
-			flagged = append(flagged, r)
-			failed = failed || r.Status == types.StatusFail
-		}
-	}
-
+	flagged, failed := flaggedResults(results)
 	if len(flagged) == 0 {
 		return
 	}
@@ -275,6 +267,23 @@ func (p *printer) failureBlock(results types.StepResults) {
 	_, _ = fmt.Fprintln(p.w)
 }
 
+// flaggedResults picks the failed and warned results, reporting whether any failed.
+func flaggedResults(results types.StepResults) ([]*types.StepResult, bool) {
+	var flagged []*types.StepResult
+
+	failed := false
+
+	for i := range results {
+		r := &results[i]
+		if r.Status == types.StatusFail || r.Status == types.StatusWarn {
+			flagged = append(flagged, r)
+			failed = failed || r.Status == types.StatusFail
+		}
+	}
+
+	return flagged, failed
+}
+
 // stepDetail prints one flagged step: its name, the actionable lines of its output
 // (or its error, split into clauses, when the output has none) and its hint.
 func (p *printer) stepDetail(r *types.StepResult) {
@@ -287,13 +296,7 @@ func (p *printer) stepDetail(r *types.StepResult) {
 
 	lines := ActionableLines(r.Detail, actionableLineLimit)
 	if len(lines) == 0 && r.Error != "" {
-		for part := range strings.SplitSeq(r.Error, "\n") {
-			for clause := range strings.SplitSeq(strings.TrimSpace(part), "; ") {
-				if clause = strings.TrimSpace(clause); clause != "" {
-					lines = append(lines, truncate(clause))
-				}
-			}
-		}
+		lines = errorClauses(r.Error)
 	}
 
 	for _, l := range lines {
@@ -303,6 +306,21 @@ func (p *printer) stepDetail(r *types.StepResult) {
 	if hint := p.hint(r); hint != "" {
 		_, _ = fmt.Fprintf(p.w, "      %s\n", p.pal.info.Sprint(hint))
 	}
+}
+
+// errorClauses splits an error on newlines and semicolons into truncated clauses.
+func errorClauses(msg string) []string {
+	var lines []string
+
+	for part := range strings.SplitSeq(msg, "\n") {
+		for clause := range strings.SplitSeq(strings.TrimSpace(part), "; ") {
+			if clause = strings.TrimSpace(clause); clause != "" {
+				lines = append(lines, truncate(clause))
+			}
+		}
+	}
+
+	return lines
 }
 
 // hint returns the first hint whose group equals r's and whose name fragment (empty

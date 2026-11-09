@@ -1184,6 +1184,9 @@ func TestOTelTracer_SpanConversions(t *testing.T) {
 	span.SetAttribute("complex", struct{}{})
 	span.RecordError(apperr.Sentinel("test error"))
 	span.SetStatus(interfaces.SpanStatusError, "failed")
+
+	t.Helper()
+
 	assert.ElementsMatch(t, []attribute.KeyValue{
 		attribute.String("user.id", "abc-123"),
 		attribute.Int("count", 42),
@@ -1192,6 +1195,21 @@ func TestOTelTracer_SpanConversions(t *testing.T) {
 		attribute.Bool("active", true),
 		attribute.String("complex", ""),
 	}, ro.Attributes())
+
+	testOTelTracerSpanConversionsRest3(t, readOnly, ro)
+}
+
+// testOTelTracerSpanConversionsRest3 continues testOTelTracerSpanConversionsRest with its
+// remaining steps.
+func testOTelTracerSpanConversionsRest3(
+	t *testing.T,
+	readOnly func(opts ...interfaces.SpanOption) (interfaces.Span, sdktrace.ReadOnlySpan),
+	ro sdktrace.ReadOnlySpan,
+) {
+	t.Helper()
+
+	var span interfaces.Span
+
 	require.Len(t, ro.Events(), 1)
 	assert.Equal(t, "exception", ro.Events()[0].Name)
 	assert.Equal(

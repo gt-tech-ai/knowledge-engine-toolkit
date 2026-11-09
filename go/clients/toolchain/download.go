@@ -21,6 +21,12 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// groupDirMode is the mode of a directory its group may read.
+const groupDirMode = 0o750
+
+// publicDirMode is the mode of a directory anyone may read.
+const publicDirMode = 0o755
+
 // maxBinarySize caps how many bytes are extracted for one binary (the largest
 // pinned tool is well under it), bounding a malformed archive's decompression.
 const maxBinarySize = 1 << 30
@@ -114,34 +120,15 @@ func (i *Installer) installDownload(
 ) error {
 	goos := platformOS(i.platform)
 	target := goos + "-" + i.arch
-	artifact, ok := dl.Artifacts[target]
 
-	if !ok && target == windowsARM64 {
-		artifact, ok = dl.Artifacts[windowsAMD64]
-		if ok {
-			i.log.Info("no windows-arm64 asset; installing the windows-amd64 one "+
-				"(runs under x64 emulation)", "tool", toolName)
-		}
-	}
-
-	if !ok || artifact.SHA256 == "" {
-		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
-			"%s %s has no pinned sha256 for %s; refusing an unverified download",
-			toolName, dl.Version, target,
-		))
-	}
-
-	binDir := resolveGoBin()
-	if binDir == "" {
-		return apperr.New(
-			apperr.CodeUnavailable,
-			"cannot resolve the install dir (GOBIN)",
-		)
-	}
-
-	err := os.MkdirAll(binDir, 0o750)
+	artifact, err := i.pinnedArtifact(toolName, dl, target)
 	if err != nil {
-		return apperr.Wrap(err, apperr.CodeInternal, "create install dir "+binDir)
+		return err
+	}
+
+	binDir, err := ensureInstallDir()
+	if err != nil {
+		return err
 	}
 
 	archive, err := i.fetchVerified(ctx, artifact)
@@ -169,6 +156,49 @@ func (i *Installer) installDownload(
 		"tool", toolName, "version", dl.Version, "path", filepath.Join(binDir, binary))
 
 	return nil
+}
+
+// pinnedArtifact picks target's download, falling back from windows-arm64 to the
+// windows-amd64 asset (run under x64 emulation). An unpinned asset is refused.
+func (i *Installer) pinnedArtifact(
+	toolName string, dl *types.Download, target string,
+) (types.Artifact, error) {
+	artifact, ok := dl.Artifacts[target]
+
+	if !ok && target == windowsARM64 {
+		artifact, ok = dl.Artifacts[windowsAMD64]
+		if ok {
+			i.log.Info("no windows-arm64 asset; installing the windows-amd64 one "+
+				"(runs under x64 emulation)", "tool", toolName)
+		}
+	}
+
+	if !ok || artifact.SHA256 == "" {
+		return types.Artifact{}, apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
+			"%s %s has no pinned sha256 for %s; refusing an unverified download",
+			toolName, dl.Version, target,
+		))
+	}
+
+	return artifact, nil
+}
+
+// ensureInstallDir resolves GOBIN and creates it.
+func ensureInstallDir() (string, error) {
+	binDir := resolveGoBin()
+	if binDir == "" {
+		return "", apperr.New(
+			apperr.CodeUnavailable,
+			"cannot resolve the install dir (GOBIN)",
+		)
+	}
+
+	err := os.MkdirAll(binDir, groupDirMode)
+	if err != nil {
+		return "", apperr.Wrap(err, apperr.CodeInternal, "create install dir "+binDir)
+	}
+
+	return binDir, nil
 }
 
 // fetchVerified streams an artifact (at most maxDownloadSize bytes) into a temp file
@@ -244,7 +274,7 @@ func placeBinary(artifactPath, url, member, binary, binDir string) error {
 		return err
 	}
 
-	err = os.Chmod(stagedPath, 0o755)
+	err = os.Chmod(stagedPath, publicDirMode)
 	if err != nil {
 		_ = os.Remove(stagedPath)
 
@@ -326,7 +356,16 @@ func extractFromTarGz(src, binary string, w io.Writer) error {
 
 	defer func() { _ = gz.Close() }()
 
-	tr := tar.NewReader(gz)
+	return copyTarEntry(tar.NewReader(gz), binary, w)
+}
+
+// isBinaryEntry reports whether hdr is the regular file named binary.
+func isBinaryEntry(hdr *tar.Header, binary string) bool {
+	return hdr.Typeflag == tar.TypeReg && path.Base(hdr.Name) == binary
+}
+
+// copyTarEntry copies the regular file named binary from tr to w.
+func copyTarEntry(tr *tar.Reader, binary string, w io.Writer) error {
 	for {
 		hdr, err := tr.Next()
 		if apperr.StdIs(err, io.EOF) {
@@ -337,7 +376,7 @@ func extractFromTarGz(src, binary string, w io.Writer) error {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "read tar archive")
 		}
 
-		if hdr.Typeflag == tar.TypeReg && path.Base(hdr.Name) == binary {
+		if isBinaryEntry(hdr, binary) {
 			return boundedCopy(w, tr)
 		}
 	}

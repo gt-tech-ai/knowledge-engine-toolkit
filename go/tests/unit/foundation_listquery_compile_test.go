@@ -106,6 +106,11 @@ func (stringBackend) OrderDerived(d types.DerivedSort, desc bool) string {
 		dir = "DESC NULLS FIRST"
 	}
 
+	return orderDerivedRest(d, dir)
+}
+
+// orderDerivedRest continues OrderDerived with its remaining steps.
+func orderDerivedRest(d types.DerivedSort, dir string) string {
 	switch {
 	case d.Aggregate != nil:
 		a := d.Aggregate
@@ -229,6 +234,14 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 		)
 	})
 
+	testCompileFoldViaStringAlgebraRest4(t, b)
+}
+
+// testCompileFoldViaStringAlgebraRest4 continues TestCompile_FoldViaStringAlgebra with
+// its remaining steps.
+func testCompileFoldViaStringAlgebraRest4(t *testing.T, b stringBackend) {
+	t.Helper()
+
 	t.Run(
 		"joined clause compiles to a correlated EXISTS (multi-column ORs)",
 		func(t *testing.T) {
@@ -259,30 +272,7 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 			// Filtering by member name AND email — both on the users join — yields two
 			// independent EXISTS, never a duplicate JOIN (the payoff of the EXISTS
 			// mechanism).
-			f := types.CompositeFilter{And: []types.Filter{
-				types.FilterClause{
-					Field:    "name",
-					Operator: types.OpLike,
-					Value:    "smith",
-					Join: &types.JoinTarget{
-						Table:     "users",
-						LocalKey:  "user_id",
-						TargetKey: "id",
-						Columns:   []string{"first_name"},
-					},
-				},
-				types.FilterClause{
-					Field:    "email",
-					Operator: types.OpLike,
-					Value:    "corp",
-					Join: &types.JoinTarget{
-						Table:     "users",
-						LocalKey:  "user_id",
-						TargetKey: "id",
-						Columns:   []string{"email"},
-					},
-				},
-			}}
+			f := testCompileFoldViaStringAlgebraTable()
 			assert.Equal(
 				t,
 				"(EXISTS(users WHERE users.id=<base>.user_id AND users.first_name like smith) AND "+
@@ -291,6 +281,43 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 			)
 		},
 	)
+
+	testCompileFoldViaStringAlgebraRest2(t, b)
+}
+
+// testCompileFoldViaStringAlgebraTable builds the table TestCompile_FoldViaStringAlgebra
+// runs.
+func testCompileFoldViaStringAlgebraTable() types.CompositeFilter {
+	return types.CompositeFilter{And: []types.Filter{
+		types.FilterClause{
+			Field:    "name",
+			Operator: types.OpLike,
+			Value:    "smith",
+			Join: &types.JoinTarget{
+				Table:     "users",
+				LocalKey:  "user_id",
+				TargetKey: "id",
+				Columns:   []string{"first_name"},
+			},
+		},
+		types.FilterClause{
+			Field:    "email",
+			Operator: types.OpLike,
+			Value:    "corp",
+			Join: &types.JoinTarget{
+				Table:     "users",
+				LocalKey:  "user_id",
+				TargetKey: "id",
+				Columns:   []string{"email"},
+			},
+		},
+	}}
+}
+
+// testCompileFoldViaStringAlgebraRest2 continues TestCompile_FoldViaStringAlgebra with
+// its remaining steps.
+func testCompileFoldViaStringAlgebraRest2(t *testing.T, b stringBackend) {
+	t.Helper()
 
 	t.Run("ResolveFilter stamps the join target from the JoinFn", func(t *testing.T) {
 		t.Parallel()
@@ -331,6 +358,15 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 		assert.Equal(t, "status", plain.Field)
 	})
 
+	testCompileFoldViaStringAlgebraRest7(t, b)
+}
+
+// testCompileFoldViaStringAlgebraRest7 continues testCompileFoldViaStringAlgebraRest2
+// with
+// its remaining steps.
+func testCompileFoldViaStringAlgebraRest7(t *testing.T, b stringBackend) {
+	t.Helper()
+
 	t.Run("nested and(eq, or(like, eq))", func(t *testing.T) {
 		t.Parallel()
 
@@ -363,6 +399,14 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 			assert.Equal(t, []string{"title ASC", "created_at DESC", "id DESC"}, got)
 		},
 	)
+
+	testCompileFoldViaStringAlgebraRest(t, b)
+}
+
+// testCompileFoldViaStringAlgebraRest continues TestCompile_FoldViaStringAlgebra with
+// its remaining steps.
+func testCompileFoldViaStringAlgebraRest(t *testing.T, b stringBackend) {
+	t.Helper()
 
 	t.Run("dedup when created_at is the primary sort", func(t *testing.T) {
 		t.Parallel()
@@ -414,6 +458,14 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 			assert.Equal(t, []string{"role ASC", "joined_at DESC", "id DESC"}, got)
 		},
 	)
+
+	testCompileFoldViaStringAlgebraRest6(t, b)
+}
+
+// testCompileFoldViaStringAlgebraRest6 continues testCompileFoldViaStringAlgebraRest
+// with its remaining steps.
+func testCompileFoldViaStringAlgebraRest6(t *testing.T, b stringBackend) {
+	t.Helper()
 
 	t.Run("dedup when the passed keyset column is the primary sort", func(t *testing.T) {
 		t.Parallel()
@@ -467,6 +519,14 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 		},
 	)
 
+	testCompileFoldViaStringAlgebraRest3(t, b)
+}
+
+// testCompileFoldViaStringAlgebraRest3 continues testCompileFoldViaStringAlgebraRest
+// with its remaining steps.
+func testCompileFoldViaStringAlgebraRest3(t *testing.T, b stringBackend) {
+	t.Helper()
+
 	// A value-ordinal sort field resolves via ordinalOf to a CASE ORDER BY over its
 	// column's values, placed before the same-table tiebreaker + id — proving the
 	// compiler branches to OrderOrdinal for an ordinal field.
@@ -498,6 +558,14 @@ func TestCompile_FoldViaStringAlgebra(t *testing.T) {
 			}, got)
 		},
 	)
+
+	testCompileFoldViaStringAlgebraRest5(t, b)
+}
+
+// testCompileFoldViaStringAlgebraRest5 continues testCompileFoldViaStringAlgebraRest3
+// with its remaining steps.
+func testCompileFoldViaStringAlgebraRest5(t *testing.T, b stringBackend) {
+	t.Helper()
 
 	// A derived sort field resolves via derivedOf to a correlated-aggregate / interval
 	// ORDER BY, placed before the same-table tiebreaker + id — proving the compiler

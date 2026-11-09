@@ -77,6 +77,14 @@ func TestStorageClient_ErrorPaths(t *testing.T) {
 		assert.Contains(t, err.Error(), "create multipart")
 	})
 
+	testStorageClientErrorPathsRest2(t, ctx)
+}
+
+// testStorageClientErrorPathsRest2 continues TestStorageClient_ErrorPaths with its
+// remaining steps.
+func testStorageClientErrorPathsRest2(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	t.Run("multipart aborts on a mid-stream body read error", func(t *testing.T) {
 		t.Parallel()
 
@@ -117,6 +125,14 @@ func TestStorageClient_ErrorPaths(t *testing.T) {
 		assert.Contains(t, err.Error(), "complete multipart")
 	})
 
+	testStorageClientErrorPathsRest(t, ctx)
+}
+
+// testStorageClientErrorPathsRest continues TestStorageClient_ErrorPaths with its
+// remaining steps.
+func testStorageClientErrorPathsRest(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	t.Run("download wraps a generic backend error", func(t *testing.T) {
 		t.Parallel()
 
@@ -155,6 +171,14 @@ func TestStorageClient_ErrorPaths(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "delete batch")
 	})
+
+	testStorageClientErrorPathsRest3(t, ctx)
+}
+
+// testStorageClientErrorPathsRest3 continues testStorageClientErrorPathsRest with its
+// remaining steps.
+func testStorageClientErrorPathsRest3(t *testing.T, ctx context.Context) {
+	t.Helper()
 
 	t.Run("exists wraps a generic backend error", func(t *testing.T) {
 		t.Parallel()

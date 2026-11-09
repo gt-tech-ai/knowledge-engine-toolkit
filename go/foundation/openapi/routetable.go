@@ -16,6 +16,12 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
+// publicDirMode is the mode of a directory anyone may read.
+const publicDirMode = 0o755
+
+// privateFileMode is the mode of a file only its owner reads.
+const privateFileMode = 0o600
+
 // RouteEntry is one operation-keyed row of the generated route table: a single
 // REST binding (method + path) tagged with the JSON:API Role it classifies into
 // and the response's resource keys. It is the single generated contract that
@@ -90,6 +96,57 @@ func BuildRouteTable(
 		return map[string][]RouteEntry{}, nil
 	}
 
+	exts, err := resolveJSONAPIExtensions(types)
+	if err != nil {
+		return nil, err
+	}
+
+	table := map[string][]RouteEntry{}
+
+	err = exts.walkSurface(
+		files,
+		func(svc serviceOpt, md protoreflect.MethodDescriptor) error {
+			entries, err := routeEntriesForMethod(md, exts, exempt)
+			if err != nil {
+				return err
+			}
+
+			table[svc.name] = append(table[svc.name], entries...)
+
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	for svc := range table {
+		sortRouteEntries(table[svc])
+	}
+
+	return table, nil
+}
+
+// jsonAPIExtensions holds the jsonapi.v1 extensions resolved from a descriptor
+// set's own definitions, shared by the route table and the completeness gate so
+// the two read the identical surface.
+type jsonAPIExtensions struct {
+	// svc is the (jsonapi.v1.service) file option.
+	svc protoreflect.ExtensionType
+
+	// res is the (jsonapi.v1.resource) message option.
+	res protoreflect.ExtensionType
+
+	// op is the (jsonapi.v1.operation) method option.
+	op protoreflect.ExtensionType
+
+	// types resolves extension values during option decoding.
+	types *protoregistry.Types
+}
+
+// resolveJSONAPIExtensions finds the three jsonapi.v1 extensions, failing loudly
+// when the descriptor set does not define them.
+func resolveJSONAPIExtensions(types *protoregistry.Types) (*jsonAPIExtensions, error) {
 	svcExt, _ := types.FindExtensionByName(jsonAPIServiceExtension)
 	resExt, _ := types.FindExtensionByName(jsonAPIResourceExtension)
 	opExt, _ := types.FindExtensionByName(jsonAPIOperationExtension)
@@ -106,51 +163,150 @@ func BuildRouteTable(
 		)
 	}
 
-	table := map[string][]RouteEntry{}
+	return &jsonAPIExtensions{svc: svcExt, res: resExt, op: opExt, types: types}, nil
+}
 
+// surfaceVisitor receives each method of the JSON:API REST surface.
+type surfaceVisitor func(svc serviceOpt, md protoreflect.MethodDescriptor) error
+
+// walkSurface visits every method of every (jsonapi.v1.service) file, stopping at
+// the first error.
+func (x *jsonAPIExtensions) walkSurface(
+	files *protoregistry.Files,
+	visit surfaceVisitor,
+) error {
 	var walkErr error
 
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		svc, ok, err := readServiceOption(fd, svcExt, types)
-		if err != nil {
-			walkErr = apperr.Wrap(err, apperr.CodeInternal, fd.Path())
+		walkErr = x.visitFile(fd, visit)
 
-			return false
-		}
-
-		if !ok {
-			return true // not part of the JSON:API REST surface
-		}
-
-		svcs := fd.Services()
-		for i := range svcs.Len() {
-			methods := svcs.Get(i).Methods()
-			for j := range methods.Len() {
-				entries, err := routeEntriesForMethod(
-					methods.Get(j), resExt, opExt, types, exempt,
-				)
-				if err != nil {
-					walkErr = err
-
-					return false
-				}
-
-				table[svc.name] = append(table[svc.name], entries...)
-			}
-		}
-
-		return true
+		return walkErr == nil
 	})
 
-	if walkErr != nil {
-		return nil, walkErr
+	return walkErr
+}
+
+// visitFile visits each service of fd, skipping a file outside the REST surface.
+func (x *jsonAPIExtensions) visitFile(
+	fd protoreflect.FileDescriptor,
+	visit surfaceVisitor,
+) error {
+	svc, ok, err := readServiceOption(fd, x.svc, x.types)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, fd.Path())
 	}
 
-	for svc := range table {
-		sortRouteEntries(table[svc])
+	if !ok {
+		return nil // not part of the JSON:API REST surface
 	}
 
-	return table, nil
+	services := fd.Services()
+	for i := range services.Len() {
+		err := visitServiceMethods(services.Get(i), svc, visit)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// visitServiceMethods visits each method of one service, stopping at the first error.
+func visitServiceMethods(
+	sd protoreflect.ServiceDescriptor, svc serviceOpt, visit surfaceVisitor,
+) error {
+	methods := sd.Methods()
+	for i := range methods.Len() {
+		err := visit(svc, methods.Get(i))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// methodRoutes is one method's decoded annotations and HTTP bindings; a gRPC-only
+// method has no bindings.
+type methodRoutes struct {
+	// rpc is the method's full name.
+	rpc string
+
+	// resource is the decoded (jsonapi.v1.resource) of the response.
+	resource resourceConfig
+
+	// bindings is every google.api.http binding on the method.
+	bindings []httpBinding
+
+	// action reports the (jsonapi.v1.operation){action} marker.
+	action bool
+}
+
+// binding builds the Classify input for one of the method's HTTP bindings.
+func (m *methodRoutes) binding(b httpBinding) Binding {
+	return Binding{
+		RPC:           m.rpc,
+		HTTPMethod:    b.verb,
+		PathTemplate:  b.path,
+		SingleKey:     m.resource.singleKey,
+		CollectionKey: m.resource.collectionKey,
+		Action:        m.action,
+	}
+}
+
+// entry builds the RouteEntry of one classified HTTP binding.
+func (m *methodRoutes) entry(b httpBinding, role Role) RouteEntry {
+	return RouteEntry{
+		Method:          strings.ToUpper(b.verb),
+		PathTemplate:    b.path,
+		Role:            role,
+		ResourceType:    m.resource.resourceType,
+		SingleKey:       m.resource.singleKey,
+		CollectionKey:   m.resource.collectionKey,
+		PaginationKey:   m.resource.paginationKey,
+		RequestEnvelope: role == RoleCreate || role == RoleUpdate,
+		RPC:             m.rpc,
+	}
+}
+
+// methodRoutes decodes md's annotations. A malformed annotation or a type-less
+// resource is an error; a gRPC-only method returns no bindings and no error.
+func (x *jsonAPIExtensions) methodRoutes(
+	md protoreflect.MethodDescriptor,
+) (*methodRoutes, error) {
+	bindings, err := methodHTTPBindings(md)
+	if err != nil {
+		return nil, err
+	}
+
+	routes := &methodRoutes{rpc: string(md.FullName()), bindings: bindings}
+	if len(bindings) == 0 {
+		return routes, nil // gRPC-only method — not a REST route
+	}
+
+	routes.action, err = readOperationOption(md, x.op, x.types)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, routes.rpc)
+	}
+
+	rc, hasRes, err := readResourceOption(md.Output(), x.res, x.types)
+	if err != nil {
+		return nil, apperr.Wrap(err, apperr.CodeInternal, routes.rpc)
+	}
+
+	if hasRes && rc.resourceType == "" {
+		return nil, apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf(
+				"%s: response %q: (jsonapi.v1.resource) is missing required field 'type'",
+				routes.rpc, md.Output().Name(),
+			),
+		)
+	}
+
+	routes.resource = rc
+
+	return routes, nil
 }
 
 // routeEntriesForMethod classifies one method's HTTP bindings into RouteEntries.
@@ -159,71 +315,27 @@ func BuildRouteTable(
 // propagated.
 func routeEntriesForMethod(
 	md protoreflect.MethodDescriptor,
-	resExt, opExt protoreflect.ExtensionType,
-	types *protoregistry.Types,
+	exts *jsonAPIExtensions,
 	exempt map[string]bool,
 ) ([]RouteEntry, error) {
-	bindings, err := methodHTTPBindings(md)
+	routes, err := exts.methodRoutes(md)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(bindings) == 0 {
-		return nil, nil // gRPC-only method — not a REST route
-	}
-
-	rpc := string(md.FullName())
-
-	action, err := readOperationOption(md, opExt, types)
-	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInternal, rpc)
-	}
-
-	rc, hasRes, err := readResourceOption(md.Output(), resExt, types)
-	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInternal, rpc)
-	}
-
-	if hasRes && rc.resourceType == "" {
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			fmt.Sprintf(
-				"%s: response %q: (jsonapi.v1.resource) is missing required field 'type'",
-				rpc, md.Output().Name(),
-			),
-		)
-	}
-
 	var out []RouteEntry
 
-	for _, b := range bindings {
-		role, err := Classify(Binding{
-			RPC:           rpc,
-			HTTPMethod:    b.verb,
-			PathTemplate:  b.path,
-			SingleKey:     rc.singleKey,
-			CollectionKey: rc.collectionKey,
-			Action:        action,
-		})
-		if err != nil {
-			if exempt[rpc] {
-				continue // a genuine action/internal RPC — skipped, not fatal
-			}
+	for _, b := range routes.bindings {
+		role, err := Classify(routes.binding(b))
+		if err != nil && exempt[routes.rpc] {
+			continue // a genuine action/internal RPC — skipped, not fatal
+		}
 
+		if err != nil {
 			return nil, err
 		}
 
-		out = append(out, RouteEntry{
-			Method:          strings.ToUpper(b.verb),
-			PathTemplate:    b.path,
-			Role:            role,
-			ResourceType:    rc.resourceType,
-			SingleKey:       rc.singleKey,
-			CollectionKey:   rc.collectionKey,
-			PaginationKey:   rc.paginationKey,
-			RequestEnvelope: role == RoleCreate || role == RoleUpdate,
-			RPC:             rpc,
-		})
+		out = append(out, routes.entry(b, role))
 	}
 
 	return out, nil
@@ -311,75 +423,96 @@ func WriteRuntimeRouteTable(
 	sort.Strings(services)
 
 	for _, svc := range services {
-		var b strings.Builder
+		formatted, err := renderRouteFile(svc, routes[svc], runtimeImport)
+		if err != nil {
+			return err
+		}
 
-		b.WriteString(
-			"// Code generated by the knowledge-engine openapi route table; DO NOT EDIT.\n\n",
-		)
-		fmt.Fprintf(&b, "package %s\n\n", goPackageName(svc))
-		fmt.Fprintf(&b, "import jsonapi %q\n\n", runtimeImport)
+		err = writeRouteFile(fsys, outDir, svc, formatted)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// renderRouteFile emits and gofmts one service's generated routes.go; a malformed
+// emission fails here rather than reaching the disk.
+func renderRouteFile(
+	svc string,
+	entries []RouteEntry,
+	runtimeImport string,
+) ([]byte, error) {
+	var b strings.Builder
+
+	b.WriteString(
+		"// Code generated by the knowledge-engine openapi route table; DO NOT EDIT.\n\n",
+	)
+	fmt.Fprintf(&b, "package %s\n\n", goPackageName(svc))
+	fmt.Fprintf(&b, "import jsonapi %q\n\n", runtimeImport)
+	fmt.Fprintf(
+		&b,
+		"// BasePath is the URL prefix every route of the %q service shares.\n"+
+			"const BasePath = %q\n\n",
+		svc,
+		commonPathPrefix(entries),
+	)
+	fmt.Fprintf(
+		&b,
+		"// Routes is the generated JSON:API route table for the %q service.\nvar Routes = "+
+			"[]jsonapi.RouteEntry{\n",
+		svc,
+	)
+
+	for i := range entries {
+		e := &entries[i]
 		fmt.Fprintf(
 			&b,
-			"// BasePath is the URL prefix every route of the %q service shares.\n"+
-				"const BasePath = %q\n\n",
-			svc,
-			commonPathPrefix(routes[svc]),
+			"\t{Method: %q, PathTemplate: %q, Role: %q, ResourceType: %q, SingleKey: %q, "+
+				"CollectionKey: %q, PaginationKey: %q, RequestEnvelope: %t, RPC: %q},\n",
+			e.Method,
+			e.PathTemplate,
+			string(e.Role),
+			e.ResourceType,
+			e.SingleKey,
+			e.CollectionKey,
+			e.PaginationKey,
+			e.RequestEnvelope,
+			e.RPC,
 		)
-		fmt.Fprintf(
-			&b,
-			"// Routes is the generated JSON:API route table for the %q service.\nvar Routes = "+
-				"[]jsonapi.RouteEntry{\n",
-			svc,
+	}
+
+	b.WriteString("}\n")
+
+	formatted, err := format.Source([]byte(b.String()))
+	if err != nil {
+		return nil, apperr.Wrap(
+			err,
+			apperr.CodeInternal,
+			fmt.Sprintf("format generated routes for service %q", svc),
 		)
+	}
 
-		for i := range routes[svc] {
-			e := &routes[svc][i]
-			fmt.Fprintf(
-				&b,
-				"\t{Method: %q, PathTemplate: %q, Role: %q, ResourceType: %q, SingleKey: %q, "+
-					"CollectionKey: %q, PaginationKey: %q, RequestEnvelope: %t, RPC: %q},\n",
-				e.Method,
-				e.PathTemplate,
-				string(e.Role),
-				e.ResourceType,
-				e.SingleKey,
-				e.CollectionKey,
-				e.PaginationKey,
-				e.RequestEnvelope,
-				e.RPC,
-			)
-		}
+	return formatted, nil
+}
 
-		b.WriteString("}\n")
+// writeRouteFile stores one service's rendered routes.go under outDir through fsys.
+func writeRouteFile(fsys interfaces.FS, outDir, svc string, formatted []byte) error {
+	dir := filepath.Join(outDir, svc)
 
-		formatted, err := format.Source([]byte(b.String()))
-		if err != nil {
-			return apperr.Wrap(
-				err,
-				apperr.CodeInternal,
-				fmt.Sprintf("format generated routes for service %q", svc),
-			)
-		}
+	err := fsys.MkdirAll(dir, publicDirMode)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "create "+dir)
+	}
 
-		dir := filepath.Join(outDir, svc)
-
-		err = fsys.MkdirAll(dir, 0o755)
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "create "+dir)
-		}
-
-		err = fsys.WriteFile(
-			filepath.Join(dir, "routes.go"),
-			formatted,
-			0o600,
+	err = fsys.WriteFile(filepath.Join(dir, "routes.go"), formatted, privateFileMode)
+	if err != nil {
+		return apperr.Wrap(
+			err,
+			apperr.CodeInternal,
+			fmt.Sprintf("write routes.go for service %q", svc),
 		)
-		if err != nil {
-			return apperr.Wrap(
-				err,
-				apperr.CodeInternal,
-				fmt.Sprintf("write routes.go for service %q", svc),
-			)
-		}
 	}
 
 	return nil
@@ -391,7 +524,7 @@ func goPackageName(service string) string {
 	var b strings.Builder
 
 	for _, r := range strings.ToLower(service) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+		if isASCIIDigit(r) || (r >= 'a' && r <= 'z') {
 			b.WriteRune(r)
 		}
 	}
@@ -401,11 +534,17 @@ func goPackageName(service string) string {
 		return "routes"
 	}
 
-	if name[0] >= '0' && name[0] <= '9' {
+	if isASCIIDigit(rune(name[0])) {
 		return "_" + name
 	}
 
 	return name
+}
+
+// isASCIIDigit reports whether r is 0-9; unicode.IsDigit also accepts digits a Go
+// package name cannot start from.
+func isASCIIDigit(r rune) bool {
+	return r >= '0' && r <= '9'
 }
 
 // sortRouteEntries orders entries by (PathTemplate, Method) in place, so the
@@ -434,16 +573,9 @@ func commonPathPrefix(routes []RouteEntry) string {
 		return ""
 	}
 
-	prefix := strings.Split(strings.Trim(routes[0].PathTemplate, "/"), "/")
+	prefix := pathSegments(routes[0].PathTemplate)
 	for i := range routes[1:] {
-		segs := strings.Split(strings.Trim(routes[i+1].PathTemplate, "/"), "/")
-		n := 0
-
-		for n < len(prefix) && n < len(segs) && prefix[n] == segs[n] {
-			n++
-		}
-
-		prefix = prefix[:n]
+		prefix = prefix[:sharedPrefixLen(prefix, pathSegments(routes[i+1].PathTemplate))]
 	}
 
 	// A trailing {param} is per-request, never part of the base.
@@ -456,4 +588,20 @@ func commonPathPrefix(routes []RouteEntry) string {
 	}
 
 	return "/" + strings.Join(prefix, "/")
+}
+
+// pathSegments splits a path template into its segments, ignoring outer slashes.
+func pathSegments(template string) []string {
+	return strings.Split(strings.Trim(template, "/"), "/")
+}
+
+// sharedPrefixLen counts the leading segments a and b have in common.
+func sharedPrefixLen(a, b []string) int {
+	n := 0
+
+	for n < len(a) && n < len(b) && a[n] == b[n] {
+		n++
+	}
+
+	return n
 }

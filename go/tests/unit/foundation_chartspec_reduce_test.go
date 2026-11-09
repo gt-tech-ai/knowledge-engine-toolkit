@@ -58,6 +58,11 @@ func sameAnswers(a, b chartspec.Partial) bool {
 		}
 	}
 
+	return sameAnswersRest(a, b)
+}
+
+// sameAnswersRest continues sameAnswers with its remaining steps.
+func sameAnswersRest(a, b chartspec.Partial) bool {
 	for _, agg := range []types.Aggregate{types.AggSum, types.AggAvg} {
 		x, y := chartspec.Finalize(a, agg), chartspec.Finalize(b, agg)
 		if math.IsNaN(x) && math.IsNaN(y) {
@@ -176,6 +181,67 @@ func TestSketch_MergePreservesQuantilesWithin1Pct(t *testing.T) {
 	t.Parallel()
 
 	r := fixtures.NewSequence(7)
+
+	testSketchMergePreservesQuantilesWithin1PctRest5(t, r)
+}
+
+// mergedShards splits values round-robin into the given number of shards and merges
+// each shard's partial into one.
+func mergedShards(t *testing.T, values []float64, shards int) chartspec.Partial {
+	t.Helper()
+
+	var total chartspec.Partial
+
+	for s := range shards {
+		var shard []float64
+
+		for i := s; i < len(values); i += shards {
+			shard = append(shard, values[i])
+		}
+
+		total.Merge(partialOf(t, shard))
+	}
+
+	return total
+}
+
+// assertQuantilesWithin1Pct checks each sketched quantile of total against the exact
+// quantile of values, within 1% relative error.
+func assertQuantilesWithin1Pct(
+	t *testing.T,
+	total chartspec.Partial,
+	values []float64,
+	trial int,
+) {
+	t.Helper()
+
+	sorted := slices.Sorted(slices.Values(values))
+
+	for _, q := range []struct {
+		agg types.Aggregate
+		q   float64
+	}{{types.AggP50, 0.5}, {types.AggP95, 0.95}, {types.AggP99, 0.99}} {
+		exact := sorted[int(q.q*float64(len(values)-1))]
+		got := chartspec.Finalize(total, q.agg)
+		assert.LessOrEqual(
+			t,
+			math.Abs(got-exact),
+			0.01*exact+1e-12,
+			"trial %d %s",
+			trial,
+			q.agg,
+		)
+	}
+}
+
+// testSketchMergePreservesQuantilesWithin1PctRest5 continues
+// testSketchMergePreservesQuantilesWithin1PctRest4 with its remaining steps.
+func testSketchMergePreservesQuantilesWithin1PctRest5(
+	t *testing.T,
+	r *fixtures.Sequence,
+) {
+	t.Helper()
+
 	for trial := range 50 {
 		n := 50 + r.IntN(2000)
 		values := make([]float64, n)
@@ -186,36 +252,9 @@ func TestSketch_MergePreservesQuantilesWithin1Pct(t *testing.T) {
 
 		shards := 1 + r.IntN(8)
 
-		var total chartspec.Partial
+		total := mergedShards(t, values, shards)
 
-		for s := range shards {
-			var shard []float64
-
-			for i := s; i < n; i += shards {
-				shard = append(shard, values[i])
-			}
-
-			total.Merge(partialOf(t, shard))
-		}
-
-		sorted := slices.Clone(values)
-		slices.Sort(sorted)
-
-		for _, q := range []struct {
-			agg types.Aggregate
-			q   float64
-		}{{types.AggP50, 0.5}, {types.AggP95, 0.95}, {types.AggP99, 0.99}} {
-			exact := sorted[int(q.q*float64(n-1))]
-			got := chartspec.Finalize(total, q.agg)
-			assert.LessOrEqual(
-				t,
-				math.Abs(got-exact),
-				0.01*exact+1e-12,
-				"trial %d %s",
-				trial,
-				q.agg,
-			)
-		}
+		assertQuantilesWithin1Pct(t, total, values, trial)
 	}
 }
 

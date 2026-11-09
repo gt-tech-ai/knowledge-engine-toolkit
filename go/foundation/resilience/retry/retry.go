@@ -21,6 +21,21 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
 )
 
+// defaultConfigMaxRetries is the default MaxRetries of Config.
+const defaultConfigMaxRetries = 3
+
+// defaultConfigInitialInterval is the default InitialInterval of Config.
+const defaultConfigInitialInterval = 100 * time.Millisecond
+
+// defaultConfigMaxInterval is the default MaxInterval of Config.
+const defaultConfigMaxInterval = 5 * time.Second
+
+// defaultConfigMultiplier is the default Multiplier of Config.
+const defaultConfigMultiplier = 2.0
+
+// defaultConfigMaxElapsedTime is the default MaxElapsedTime of Config.
+const defaultConfigMaxElapsedTime = 30 * time.Second
+
 // Kind specifies which retrier implementation to use.
 type Kind int
 
@@ -66,11 +81,11 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Kind:            KindExponential,
-		MaxRetries:      3,
-		InitialInterval: 100 * time.Millisecond,
-		MaxInterval:     5 * time.Second,
-		Multiplier:      2.0,
-		MaxElapsedTime:  30 * time.Second,
+		MaxRetries:      defaultConfigMaxRetries,
+		InitialInterval: defaultConfigInitialInterval,
+		MaxInterval:     defaultConfigMaxInterval,
+		Multiplier:      defaultConfigMultiplier,
+		MaxElapsedTime:  defaultConfigMaxElapsedTime,
 	}
 }
 

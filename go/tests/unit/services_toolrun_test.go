@@ -241,6 +241,25 @@ func TestServicesToolrun_Cache(t *testing.T) {
 		Inputs: types.FileSelector{Roots: []string{"{target}"}, Exts: []string{".go"}},
 	}
 
+	t.Helper()
+
+	testServicesToolrunCacheRest3(t, ctrl, runner, tr, run)
+}
+
+// testServicesToolrunCacheRest3 continues testServicesToolrunCacheRest2 with its
+// remaining
+// steps.
+func testServicesToolrunCacheRest3(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	runner *mocks.MockCommandRunner,
+	tr interfaces.ToolRunner,
+	run types.ToolRun,
+) {
+	t.Helper()
+
+	var err error
+
 	files := lintModules()
 	res, err := tr.Run(t.Context(), memoryCodebase(t, files), run, types.RunOptions{})
 	require.NoError(t, err)
@@ -272,6 +291,25 @@ func TestServicesToolrun_Cache(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, types.StatusPass, res[0].Status)
 	}
+
+	testServicesToolrunCacheRest4(t, ctrl, runner, run, files)
+}
+
+// testServicesToolrunCacheRest4 continues testServicesToolrunCacheRest3 with its
+// remaining
+// steps.
+func testServicesToolrunCacheRest4(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	runner *mocks.MockCommandRunner,
+	run types.ToolRun,
+	files map[string]string,
+) {
+	t.Helper()
+
+	var res types.StepResults
+
+	var err error
 
 	runner.EXPECT().RunBuffered(gomock.Any(), gomock.Any(), "vet", gomock.Any()).
 		Return(interfaces.CmdResult{}).Times(4)

@@ -7,6 +7,9 @@ import (
 	"strings"
 )
 
+// binarySniffLen is how many leading bytes are searched for a NUL.
+const binarySniffLen = 8192
+
 // File is one file of a repository, named by its slash-separated path relative to the
 // repository root.
 type File struct {
@@ -91,7 +94,7 @@ func (t Text) Lines() []string {
 
 // IsBinary reports whether data holds a NUL byte in its first 8 KiB.
 func IsBinary(data []byte) bool {
-	return bytes.IndexByte(data[:min(len(data), 8192)], 0) >= 0
+	return bytes.IndexByte(data[:min(len(data), binarySniffLen)], 0) >= 0
 }
 
 // Hit is one line of a file that matched a pattern.

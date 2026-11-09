@@ -199,25 +199,9 @@ func (e *engine) compileSteps(env *cel.Env, c *compiled, steps []types.ProcStep)
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+st.Name)
 		}
 
-		exprs := []string{st.When, st.Each}
-
-		var probeExec []string
-
-		if st.Probe != nil {
-			probeExec = st.Probe.Exec
-		}
-
-		for _, a := range slices.Concat(st.Args, st.Exec, st.Env, probeExec) {
-			if x, ok := exprArg(a); ok {
-				exprs = append(exprs, x)
-			}
-		}
-
-		for _, x := range exprs {
-			err := c.program(env, x)
-			if err != nil {
-				return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+st.Name)
-			}
+		err = compileStepExprs(env, c, st)
+		if err != nil {
+			return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+st.Name)
 		}
 
 		err = e.compileSteps(env, c, st.Parallel)
@@ -227,6 +211,37 @@ func (e *engine) compileSteps(env *cel.Env, c *compiled, steps []types.ProcStep)
 	}
 
 	return nil
+}
+
+// compileStepExprs compiles every expression the step carries.
+func compileStepExprs(env *cel.Env, c *compiled, st *types.ProcStep) error {
+	for _, x := range stepExprs(st) {
+		err := c.program(env, x)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// stepExprs lists the step's when and each, plus its expression arguments.
+func stepExprs(st *types.ProcStep) []string {
+	exprs := []string{st.When, st.Each}
+
+	var probeExec []string
+
+	if st.Probe != nil {
+		probeExec = st.Probe.Exec
+	}
+
+	for _, a := range slices.Concat(st.Args, st.Exec, st.Env, probeExec) {
+		if x, ok := exprArg(a); ok {
+			exprs = append(exprs, x)
+		}
+	}
+
+	return exprs
 }
 
 // validate checks that st runs exactly one known thing and captures validly.
@@ -244,16 +259,26 @@ func (e *engine) validate(st *types.ProcStep) error {
 	case st.Call != "" && e.procs[st.Call] == nil:
 		return apperr.New(apperr.CodeInvalidInput, "no procedure "+st.Call)
 	case st.Tool != "":
-		if e.deps.Tools == nil {
-			return apperr.New(apperr.CodeInvalidInput, "no toolchain for tool "+st.Tool)
-		}
-
-		if _, ok := e.deps.Tools(st.Tool); !ok {
-			return apperr.New(apperr.CodeInvalidInput, "unknown tool "+st.Tool)
+		err := e.validateTool(st.Tool)
+		if err != nil {
+			return err
 		}
 	}
 
 	return validCapture(st)
+}
+
+// validateTool checks a toolchain is wired and knows the tool.
+func (e *engine) validateTool(tool string) error {
+	if e.deps.Tools == nil {
+		return apperr.New(apperr.CodeInvalidInput, "no toolchain for tool "+tool)
+	}
+
+	if _, ok := e.deps.Tools(tool); !ok {
+		return apperr.New(apperr.CodeInvalidInput, "unknown tool "+tool)
+	}
+
+	return nil
 }
 
 // validShape checks that st runs exactly one thing, that a probe names its kind, that

@@ -11,6 +11,12 @@ import (
 // the presigned/browser-direct multipart control plane (create/presign-part/complete/
 // abort/list) for large-file uploads. Absent objects surface as errors.ErrNotFound.
 type StorageClient interface {
+	StorageObjects
+	StorageMultipart
+}
+
+// StorageObjects stores, reads, lists and removes objects.
+type StorageObjects interface {
 	// Upload stores an object with the given key in the specified bucket.
 	Upload(
 		ctx context.Context,
@@ -36,6 +42,43 @@ type StorageClient interface {
 	// without downloading its body. Returns errors.ErrNotFound when the key is absent.
 	Stat(ctx context.Context, bucket, key string) (StorageObject, error)
 
+	// ListObjects lists objects in a bucket with the given prefix.
+	ListObjects(ctx context.Context, bucket, prefix string) ([]StorageObject, error)
+
+	// ListObjectsPage lists AT MOST limit objects in a bucket with the given prefix — a
+	// bounded single-page variant of ListObjects for callers that need a cheap
+	// reachability/count probe rather than a full inventory (e.g. a connector's
+	// TestConnection against a large customer bucket). A non-positive limit lists at most
+	// one page's worth (backend default).
+	ListObjectsPage(
+		ctx context.Context,
+		bucket, prefix string,
+		limit int,
+	) ([]StorageObject, error)
+
+	// ListObjectsPageToken lists AT MOST limit objects under prefix STARTING AFTER
+	// continuationToken (empty token = start of the listing) and returns the objects plus
+	// the token to resume from (nextToken == "" when the listing is exhausted). It is the
+	// resumable, memory-bounded streaming primitive a large-bucket crawl pages over —
+	// never materializing the full key list — so a caller (e.g. a sync engine) holds at
+	// most one page at a time and can checkpoint the token to crash-resume. A
+	// non-positive limit lets the backend apply its default page size.
+	ListObjectsPageToken(
+		ctx context.Context,
+		bucket, prefix, continuationToken string,
+		limit int,
+	) (objects []StorageObject, nextToken string, err error)
+
+	// EnsureBucket creates the named bucket if it does not already exist,
+	// idempotently (a concurrently-created bucket is treated as success). It exists
+	// so local/dev provisioning — e.g. a seeding tool — can guarantee an upload
+	// path has its bucket before the first presigned PUT.
+	EnsureBucket(ctx context.Context, bucket string) error
+}
+
+// StorageMultipart is the presigned, browser-direct upload control plane: presigned GET
+// and PUT URLs and multipart uploads.
+type StorageMultipart interface {
 	// PresignURL generates a pre-signed URL for temporary GET (download) access to
 	// an object. The URL expires after the specified duration (in seconds).
 	//
@@ -98,39 +141,6 @@ type StorageClient interface {
 	// multipart uploads in a bucket, so a cleanup sweep can abort abandoned ones —
 	// which are invisible to ListObjects until completed.
 	ListMultipartUploads(ctx context.Context, bucket string) ([]MultipartUpload, error)
-
-	// ListObjects lists objects in a bucket with the given prefix.
-	ListObjects(ctx context.Context, bucket, prefix string) ([]StorageObject, error)
-
-	// ListObjectsPage lists AT MOST limit objects in a bucket with the given prefix — a
-	// bounded single-page variant of ListObjects for callers that need a cheap
-	// reachability/count probe rather than a full inventory (e.g. a connector's
-	// TestConnection against a large customer bucket). A non-positive limit lists at most
-	// one page's worth (backend default).
-	ListObjectsPage(
-		ctx context.Context,
-		bucket, prefix string,
-		limit int,
-	) ([]StorageObject, error)
-
-	// ListObjectsPageToken lists AT MOST limit objects under prefix STARTING AFTER
-	// continuationToken (empty token = start of the listing) and returns the objects plus
-	// the token to resume from (nextToken == "" when the listing is exhausted). It is the
-	// resumable, memory-bounded streaming primitive a large-bucket crawl pages over —
-	// never materializing the full key list — so a caller (e.g. a sync engine) holds at
-	// most one page at a time and can checkpoint the token to crash-resume. A
-	// non-positive limit lets the backend apply its default page size.
-	ListObjectsPageToken(
-		ctx context.Context,
-		bucket, prefix, continuationToken string,
-		limit int,
-	) (objects []StorageObject, nextToken string, err error)
-
-	// EnsureBucket creates the named bucket if it does not already exist,
-	// idempotently (a concurrently-created bucket is treated as success). It exists
-	// so local/dev provisioning — e.g. a seeding tool — can guarantee an upload
-	// path has its bucket before the first presigned PUT.
-	EnsureBucket(ctx context.Context, bucket string) error
 }
 
 // CompletedPart identifies one finished part of a multipart upload, pairing its

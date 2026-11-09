@@ -1,6 +1,7 @@
 package unit_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -69,6 +70,22 @@ func TestClientsKubectl_Exec(t *testing.T) {
 	cur, err := c.CurrentContext(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "kind-dev", cur)
+
+	testClientsKubectlExecRest(t, ctx, r, c)
+}
+
+// testClientsKubectlExecRest continues TestClientsKubectl_Exec with its remaining steps.
+func testClientsKubectlExecRest(
+	t *testing.T,
+	ctx context.Context,
+	r *mocks.MockCommandRunner,
+	c interfaces.KubectlClient,
+) {
+	t.Helper()
+
+	var cur string
+
+	var err error
 
 	r.EXPECT().RunBuffered(gomock.Any(), "", "kubectl", "--context", "kind-dev",
 		"auth", "can-i", "get", "pods").

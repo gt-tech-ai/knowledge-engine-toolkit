@@ -21,6 +21,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// nanosPerSecond converts Prometheus's fractional seconds to nanoseconds.
+const nanosPerSecond = 1e9
+
 // HTTPDoer is the HTTP boundary the client sends its requests through.
 //
 // SDK seam — matches *nethttp.Client's Do, the stdlib HTTP transport boundary; it
@@ -132,11 +135,9 @@ func (c *Client) QueryRange(
 	start, end time.Time,
 	step time.Duration,
 ) ([]Sample, error) {
-	if step <= 0 || end.Before(start) {
-		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"range query needs a positive step and end >= start (step %s, %s..%s)",
-			step, start.Format(time.RFC3339), end.Format(time.RFC3339),
-		))
+	err := checkRange(start, end, step)
+	if err != nil {
+		return nil, err
 	}
 
 	body, err := c.get(ctx, "/api/v1/query_range", url.Values{
@@ -177,6 +178,18 @@ func (c *Client) QueryRange(
 	}
 
 	return out, nil
+}
+
+// checkRange requires a positive step and an end no earlier than the start.
+func checkRange(start, end time.Time, step time.Duration) error {
+	if step > 0 && !end.Before(start) {
+		return nil
+	}
+
+	return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+		"range query needs a positive step and end >= start (step %s, %s..%s)",
+		step, start.Format(time.RFC3339), end.Format(time.RFC3339),
+	))
 }
 
 // get sends a GET of path with params and decodes a successful response envelope.
@@ -325,5 +338,8 @@ func parseSample(pair [2]json.RawMessage) (Sample, error) {
 
 	sec, frac := math.Modf(ts)
 
-	return Sample{Time: time.Unix(int64(sec), int64(frac*1e9)).UTC(), Value: v}, nil
+	return Sample{
+		Time:  time.Unix(int64(sec), int64(frac*nanosPerSecond)).UTC(),
+		Value: v,
+	}, nil
 }

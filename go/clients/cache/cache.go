@@ -15,6 +15,12 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
+// defaultEntryTTL is how long an entry lives when the caller names no TTL.
+const defaultEntryTTL = 5 * time.Minute
+
+// defaultOpTimeout is the deadline of one cache operation.
+const defaultOpTimeout = 500 * time.Millisecond
+
 const (
 	// KindStub misses every Get and drops every write (the default).
 	KindStub = client.KindStub
@@ -87,7 +93,7 @@ type Deps struct {
 
 // DefaultConfig returns the stub kind, a 5-minute default TTL and a 500ms op timeout.
 func DefaultConfig() Config {
-	return Config{DefaultTTL: 5 * time.Minute, OpTimeout: 500 * time.Millisecond}
+	return Config{DefaultTTL: defaultEntryTTL, OpTimeout: defaultOpTimeout}
 }
 
 // kinds is the cache's backend table.

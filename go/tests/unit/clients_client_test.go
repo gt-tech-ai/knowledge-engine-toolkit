@@ -6,6 +6,7 @@ import (
 	"time"
 
 	promclient "github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -35,23 +36,45 @@ func clientOpCounter(t *testing.T, reg *promclient.Registry, op string) float64 
 	mfs, err := reg.Gather()
 	require.NoError(t, err)
 
+	v, ok := counterByLabel(mfs, "client_operations_total", "operation", op)
+	if !ok {
+		require.Failf(t, "counter not found", "client_operations_total{operation=%q}", op)
+	}
+
+	return v
+}
+
+// counterByLabel finds the named counter's series carrying label=value.
+func counterByLabel(
+	mfs []*io_prometheus_client.MetricFamily,
+	name, label, value string,
+) (float64, bool) {
 	for _, mf := range mfs {
-		if mf.GetName() != "client_operations_total" {
+		if mf.GetName() != name {
 			continue
 		}
 
-		for _, m := range mf.GetMetric() {
-			for _, l := range m.GetLabel() {
-				if l.GetName() == "operation" && l.GetValue() == op {
-					return m.GetCounter().GetValue()
-				}
+		if v, ok := familyCounter(mf, label, value); ok {
+			return v, true
+		}
+	}
+
+	return 0, false
+}
+
+// familyCounter finds the family's series carrying label=value.
+func familyCounter(
+	mf *io_prometheus_client.MetricFamily, label, value string,
+) (float64, bool) {
+	for _, m := range mf.GetMetric() {
+		for _, l := range m.GetLabel() {
+			if l.GetName() == label && l.GetValue() == value {
+				return m.GetCounter().GetValue(), true
 			}
 		}
 	}
 
-	require.Failf(t, "counter not found", "client_operations_total{operation=%q}", op)
-
-	return 0
+	return 0, false
 }
 
 // countingRetrier returns a Retrier mock that runs op up to attempts times, stopping at
@@ -137,6 +160,21 @@ func TestClientBase_RetriesOnlyIdempotentOperations(t *testing.T) {
 	transient := apperr.New(apperr.CodeUnavailable, "blip")
 
 	calls := 0
+
+	testClientBaseRetriesOnlyIdempotentOperationsRest(t, reg, b, transient, calls)
+}
+
+// testClientBaseRetriesOnlyIdempotentOperationsRest continues
+// TestClientBase_RetriesOnlyIdempotentOperations with its remaining steps.
+func testClientBaseRetriesOnlyIdempotentOperationsRest(
+	t *testing.T,
+	reg *promclient.Registry,
+	b client.Base,
+	transient *apperr.AppError,
+	calls int,
+) {
+	t.Helper()
+
 	got, err := b.Exec(t.Context(), "get", func(context.Context) (int, error) {
 		calls++
 		if calls < 2 {
@@ -273,6 +311,23 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 	require.NoError(t, lk.Release(ctx, "k", "tok"))
 
 	tail := []interfaces.BufferedMessage{{ID: "m2"}}
+
+	testClientDecorateFamiliesCarryEveryResultRest2(t, ctrl, ctx, deps, tail)
+}
+
+// testClientDecorateFamiliesCarryEveryResultRest2 continues
+// TestClientDecorate_FamiliesCarryEveryResult with its remaining steps.
+func testClientDecorateFamiliesCarryEveryResultRest2(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	ctx context.Context,
+	deps decorate.Deps,
+	tail []interfaces.BufferedMessage,
+) {
+	t.Helper()
+
+	var err error
+
 	baseBuf := mocks.NewMockReplayBuffer(ctrl)
 	baseBuf.EXPECT().ReplayAfter(gomock.Any(), "k", "m1").Return(tail, true, nil)
 	baseBuf.EXPECT().Append(gomock.Any(), "k", "m3", []byte("x")).Return(nil)
@@ -298,6 +353,22 @@ func TestClientDecorate_FamiliesCarryEveryResult(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, objects, page)
 	assert.Equal(t, "t2", next)
+
+	testClientDecorateFamiliesCarryEveryResultRest(t, ctrl, ctx, deps, src)
+}
+
+// testClientDecorateFamiliesCarryEveryResultRest continues
+// TestClientDecorate_FamiliesCarryEveryResult with its remaining steps.
+func testClientDecorateFamiliesCarryEveryResultRest(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	ctx context.Context,
+	deps decorate.Deps,
+	src interfaces.ConnectorSource,
+) {
+	t.Helper()
+
+	var err error
 
 	n, err := src.TestConnection(ctx)
 	require.NoError(t, err)
@@ -352,21 +423,9 @@ func clientCounter(
 	mfs, err := reg.Gather()
 	require.NoError(t, err)
 
-	for _, mf := range mfs {
-		if mf.GetName() != name {
-			continue
-		}
+	v, _ := counterByLabel(mfs, name, label, value)
 
-		for _, m := range mf.GetMetric() {
-			for _, l := range m.GetLabel() {
-				if l.GetName() == label && l.GetValue() == value {
-					return m.GetCounter().GetValue()
-				}
-			}
-		}
-	}
-
-	return 0
+	return v
 }
 
 // TestClientDecorate_CacheIsFailOpenAndCountsHits tests the cache family's decoration.
@@ -416,6 +475,22 @@ func TestClientDecorate_CacheIsFailOpenAndCountsHits(t *testing.T) {
 
 	_, ok := c.(interfaces.CacheInvalidator)
 	assert.False(t, ok, "a backend without invalidation stays without it")
+
+	testClientDecorateCacheIsFailOpenAndCountsHitsRest(t, ctrl, ctx)
+}
+
+// testClientDecorateCacheIsFailOpenAndCountsHitsRest continues
+// TestClientDecorate_CacheIsFailOpenAndCountsHits with its remaining steps.
+func testClientDecorateCacheIsFailOpenAndCountsHitsRest(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	ctx context.Context,
+) {
+	t.Helper()
+
+	var ok bool
+
+	var hit bool
 
 	open := mocks.NewMockCircuitBreaker(ctrl)
 	open.EXPECT().Execute(gomock.Any()).

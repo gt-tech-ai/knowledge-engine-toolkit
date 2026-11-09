@@ -6,6 +6,19 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// defaultBulkheadConfigMaxConcurrent is the default MaxConcurrent of BulkheadConfig.
+const defaultBulkheadConfigMaxConcurrent = 10
+
+// defaultBulkheadConfigInitialConcurrent is the default InitialConcurrent of
+// BulkheadConfig.
+const defaultBulkheadConfigInitialConcurrent = 5
+
+// defaultBulkheadConfigRTTThreshold is the default RTTThreshold of BulkheadConfig.
+const defaultBulkheadConfigRTTThreshold = 100 * time.Millisecond
+
+// defaultBulkheadConfigBackoffRatio is the default BackoffRatio of BulkheadConfig.
+const defaultBulkheadConfigBackoffRatio = 0.9
+
 // BulkheadConfig tunes the bulkhead concurrency limiter (bulkhead.Config), read from
 // the `resilience.adaptive_limit` overlay. The adaptive fields (Min/Initial,
 // RTTThreshold, BackoffRatio) apply to Kind "adaptive"; MaxConcurrent is the ceiling
@@ -41,11 +54,11 @@ type BulkheadConfig struct {
 func DefaultBulkheadConfig() BulkheadConfig {
 	return BulkheadConfig{
 		Kind:              "channel",
-		MaxConcurrent:     10,
+		MaxConcurrent:     defaultBulkheadConfigMaxConcurrent,
 		MinConcurrent:     1,
-		InitialConcurrent: 5,
-		RTTThreshold:      100 * time.Millisecond,
-		BackoffRatio:      0.9,
+		InitialConcurrent: defaultBulkheadConfigInitialConcurrent,
+		RTTThreshold:      defaultBulkheadConfigRTTThreshold,
+		BackoffRatio:      defaultBulkheadConfigBackoffRatio,
 	}
 }
 

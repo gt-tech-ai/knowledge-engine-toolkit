@@ -34,14 +34,36 @@ func (tsWorkspace) Select(
 		return nil, err
 	}
 
+	sel, err := packageSelector(text.Bytes)
+	if err != nil || len(sel.Globs) == 0 {
+		return nil, err
+	}
+
+	found, err := cb.Files(ctx, sel)
+	if err != nil {
+		return nil, err
+	}
+
+	paths := make([]string, 0, len(found))
+	for _, f := range found {
+		paths = append(paths, f.Path)
+	}
+
+	return dirsOf(paths), nil
+}
+
+// packageSelector turns the workspace's package patterns into a package.json selector.
+func packageSelector(workspace []byte) (types.FileSelector, error) {
 	var ws struct {
 		// Packages are the workspace's package directory patterns.
 		Packages []string `yaml:"packages"`
 	}
 
-	err = yaml.Unmarshal(text.Bytes, &ws)
+	err := yaml.Unmarshal(workspace, &ws)
 	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+workspaceFile)
+		return types.FileSelector{}, apperr.Wrap(
+			err, apperr.CodeInvalidInput, "parse "+workspaceFile,
+		)
 	}
 
 	sel := types.FileSelector{}
@@ -56,19 +78,5 @@ func (tsWorkspace) Select(
 		sel.Globs = append(sel.Globs, path.Join(p, "package.json"))
 	}
 
-	if len(sel.Globs) == 0 {
-		return nil, nil
-	}
-
-	found, err := cb.Files(ctx, sel)
-	if err != nil {
-		return nil, err
-	}
-
-	paths := make([]string, 0, len(found))
-	for _, f := range found {
-		paths = append(paths, f.Path)
-	}
-
-	return dirsOf(paths), nil
+	return sel, nil
 }

@@ -64,9 +64,15 @@ func (c Composite) Gate() *gate.Gate {
 
 // phase builds one phase's jobs: the suites' then the named ones.
 func (c Composite) phase(p types.CompositePhase) []interfaces.AnyJob {
+	return append(c.suiteJobs(p.Suites), c.namedJobs(p.Jobs)...)
+}
+
+// suiteJobs expands the phase's suite references, a failing job standing in when no
+// suites are wired.
+func (c Composite) suiteJobs(refs []types.SuiteRef) []interfaces.AnyJob {
 	var jobs []interfaces.AnyJob
 
-	for _, ref := range p.Suites {
+	for _, ref := range refs {
 		if c.Suites == nil {
 			jobs = append(jobs, failed(ref.Name, apperr.New(apperr.CodeInvalidInput,
 				fmt.Sprintf("%s: no suites for %q", c.Spec.Title, ref.Name))))
@@ -77,7 +83,15 @@ func (c Composite) phase(p types.CompositePhase) []interfaces.AnyJob {
 		jobs = append(jobs, c.Suites(ref)...)
 	}
 
-	for _, name := range p.Jobs {
+	return jobs
+}
+
+// namedJobs builds the phase's product jobs, a failing job standing in for an unknown
+// name; a builder may decline with nil.
+func (c Composite) namedJobs(names []string) []interfaces.AnyJob {
+	var jobs []interfaces.AnyJob
+
+	for _, name := range names {
 		build, ok := c.Jobs[name]
 		if !ok {
 			jobs = append(jobs, failed(name, apperr.New(apperr.CodeInvalidInput,

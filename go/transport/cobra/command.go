@@ -13,11 +13,15 @@ import (
 	"time"
 
 	spf "github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
 )
+
+// flagTagFields is the comma-separated fields of a flag tag.
+const flagTagFields = 3
 
 // OperationAnnotation is the Cobra annotation key under which a Tree leaf names the
 // operation it runs.
@@ -173,25 +177,33 @@ func bind(cmd *spf.Command, input any) (*binding, error) {
 	b := &binding{args: map[int]int{}, flags: map[string]int{}, rest: -1}
 
 	for i := range v.NumField() {
-		sf, fv := v.Type().Field(i), v.Field(i)
-		if tag, ok := sf.Tag.Lookup("flag"); ok {
-			name, err := addFlag(cmd, sf, fv, tag)
-			if err != nil {
-				return nil, err
-			}
-
-			b.flags[name] = i
-		}
-
-		if tag, ok := sf.Tag.Lookup("arg"); ok {
-			err := addArg(b, sf, fv, i, tag)
-			if err != nil {
-				return nil, err
-			}
+		err := bindInputField(cmd, b, v.Type().Field(i), v.Field(i), i)
+		if err != nil {
+			return nil, err
 		}
 	}
 
 	return b, nil
+}
+
+// bindInputField registers the flag and/or argument one input field declares.
+func bindInputField(
+	cmd *spf.Command, b *binding, sf reflect.StructField, fv reflect.Value, i int,
+) error {
+	if tag, ok := sf.Tag.Lookup("flag"); ok {
+		name, err := addFlag(cmd, sf, fv, tag)
+		if err != nil {
+			return err
+		}
+
+		b.flags[name] = i
+	}
+
+	if tag, ok := sf.Tag.Lookup("arg"); ok {
+		return addArg(b, sf, fv, i, tag)
+	}
+
+	return nil
 }
 
 // addFlag registers the flag a `flag:"name,short,usage"` field declares and returns its
@@ -202,15 +214,33 @@ func addFlag(
 	fv reflect.Value,
 	tag string,
 ) (string, error) {
-	parts := strings.SplitN(tag, ",", 3)
-	if len(parts) != 3 || parts[0] == "" || len(parts[1]) > 1 {
+	parts := strings.SplitN(tag, ",", flagTagFields)
+	if len(parts) != flagTagFields || parts[0] == "" || len(parts[1]) > 1 {
 		return "", apperr.New(apperr.CodeInvalidInput,
 			fmt.Sprintf("field %s: flag tag %q is not name,short,usage", sf.Name, tag))
 	}
 
 	name, short, usage := parts[0], parts[1], parts[2]
-	fs := cmd.Flags()
 
+	if !registerFlagVar(cmd.Flags(), fv, name, short, usage) {
+		return "", apperr.New(apperr.CodeInvalidInput,
+			fmt.Sprintf("field %s: unsupported flag type %s", sf.Name, sf.Type))
+	}
+
+	if strings.Contains(sf.Tag.Get("jsonschema"), "required") {
+		return name, apperr.Wrap(cmd.MarkFlagRequired(name), apperr.CodeInternal,
+			"mark flag "+name+" required")
+	}
+
+	return name, nil
+}
+
+// registerFlagVar binds the field by its type; false means the type is unsupported.
+func registerFlagVar(
+	fs *pflag.FlagSet,
+	fv reflect.Value,
+	name, short, usage string,
+) bool {
 	switch p := fv.Addr().Interface().(type) {
 	case *bool:
 		fs.BoolVarP(p, name, short, *p, usage)
@@ -223,16 +253,10 @@ func addFlag(
 	case *[]string:
 		fs.StringSliceVarP(p, name, short, *p, usage)
 	default:
-		return "", apperr.New(apperr.CodeInvalidInput,
-			fmt.Sprintf("field %s: unsupported flag type %s", sf.Name, sf.Type))
+		return false
 	}
 
-	if strings.Contains(sf.Tag.Get("jsonschema"), "required") {
-		return name, apperr.Wrap(cmd.MarkFlagRequired(name), apperr.CodeInternal,
-			"mark flag "+name+" required")
-	}
-
-	return name, nil
+	return true
 }
 
 // addArg registers the positional slot an `arg:"n"` field (field index i) declares.

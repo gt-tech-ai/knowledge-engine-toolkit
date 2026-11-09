@@ -74,38 +74,46 @@ func walkEnvBindings(
 	}
 
 	for f := range t.Fields() {
-		name, squash, ok := fieldKey(f)
+		bindField(v, f, prefix, envPrefix, skipped)
+	}
+}
 
-		if !ok {
-			continue
-		}
+// bindField binds one field: a squashed struct at this level, a nested struct under its
+// own path, and a leaf unless its path is skipped.
+func bindField(
+	v *viper.Viper,
+	f reflect.StructField,
+	prefix, envPrefix string,
+	skipped map[string]bool,
+) {
+	name, squash, ok := fieldKey(f)
+	if !ok {
+		return
+	}
 
-		ft := f.Type
-		if ft.Kind() == reflect.Pointer {
-			ft = ft.Elem()
-		}
+	ft := f.Type
+	if ft.Kind() == reflect.Pointer {
+		ft = ft.Elem()
+	}
 
-		if squash && ft.Kind() == reflect.Struct {
-			walkEnvBindings(v, ft, prefix, envPrefix, skipped)
+	if squash && ft.Kind() == reflect.Struct {
+		walkEnvBindings(v, ft, prefix, envPrefix, skipped)
 
-			continue
-		}
+		return
+	}
 
-		path := strings.ToLower(name)
-		if prefix != "" {
-			path = prefix + "." + path
-		}
+	path := strings.ToLower(name)
+	if prefix != "" {
+		path = prefix + "." + path
+	}
 
-		if ft.Kind() == reflect.Struct {
-			walkEnvBindings(v, ft, path, envPrefix, skipped)
+	if ft.Kind() == reflect.Struct {
+		walkEnvBindings(v, ft, path, envPrefix, skipped)
 
-			continue
-		}
+		return
+	}
 
-		if skipped[path] {
-			continue
-		}
-
+	if !skipped[path] {
 		bindLeaf(v, path, envPrefix, f.Tag.Get("envalias"))
 	}
 }

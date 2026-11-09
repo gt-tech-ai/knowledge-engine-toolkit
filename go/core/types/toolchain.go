@@ -8,6 +8,12 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// maxVersionParts is the dotted components of a version: major, minor, patch.
+const maxVersionParts = 3
+
+// minVersionParts is the fewest dotted components a version may have.
+const minVersionParts = 2
+
 // ---------------------------------------------------------------------------
 // Tool lifecycle model (ToolDef): detection + installation
 // ---------------------------------------------------------------------------
@@ -158,26 +164,24 @@ type InstallToolsOptions struct {
 
 // ParseFirstVersion extracts a version-like substring (digits.digits...) from s.
 func ParseFirstVersion(s string) string {
-	var start int
-
-	found := false
-
-	for i, c := range s {
-		if c >= '0' && c <= '9' {
-			if !found {
-				start = i
-				found = true
-			}
-		} else if found && c != '.' {
-			return s[start:i]
-		}
+	start := strings.IndexFunc(s, isVersionDigit)
+	if start < 0 {
+		return ""
 	}
 
-	if found {
+	length := strings.IndexFunc(s[start:], func(c rune) bool {
+		return !isVersionDigit(c) && c != '.'
+	})
+	if length < 0 {
 		return s[start:]
 	}
 
-	return ""
+	return s[start : start+length]
+}
+
+// isVersionDigit reports whether c is an ASCII digit.
+func isVersionDigit(c rune) bool {
+	return c >= '0' && c <= '9'
 }
 
 // ParseVersion parses a version string like "3.12.4" or "v1.26" into a Version.
@@ -185,9 +189,9 @@ func ParseVersion(s string) (Version, error) {
 	s = strings.TrimPrefix(s, "v")
 	s = strings.TrimSpace(s)
 
-	parts := strings.SplitN(s, ".", 3)
+	parts := strings.SplitN(s, ".", maxVersionParts)
 
-	if len(parts) < 2 {
+	if len(parts) < minVersionParts {
 		return Version{}, apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf("invalid version %q: expected major.minor", s),

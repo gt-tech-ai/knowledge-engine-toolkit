@@ -378,20 +378,7 @@ func TestZapFields(t *testing.T) {
 	t.Parallel()
 
 	appErr := apperr.Internal("database connection failed")
-	fields := apperr.ZapFields(appErr)
-
-	fieldMap := make(map[string]zap.Field, len(fields))
-	for _, f := range fields {
-		fieldMap[f.Key] = f
-	}
-
-	codeField, ok := fieldMap["error_code"]
-	require.True(t, ok, "expected error_code field")
-	assert.Equal(t, string(apperr.CodeInternal), codeField.String)
-
-	msgField, ok := fieldMap["error_message"]
-	require.True(t, ok, "expected error_message field")
-	assert.Equal(t, "database connection failed", msgField.String)
+	assertInternalZapFields(t, appErr)
 }
 
 // TestLogErrorTransient tests that LogError logs transient errors at Warn level.
@@ -463,4 +450,25 @@ func TestCoreLogErrorPlainError(t *testing.T) {
 	entries := observed.All()
 	require.Len(t, entries, 1, "expected exactly one log entry")
 	assert.Equal(t, zap.ErrorLevel, entries[0].Level, "plain error should log at Error")
+}
+
+// assertInternalZapFields requires the error_code and error_message fields log processors
+// index, for an Internal "database connection failed" error.
+func assertInternalZapFields(t *testing.T, appErr *apperr.AppError) {
+	t.Helper()
+
+	fields := apperr.ZapFields(appErr)
+
+	fieldMap := make(map[string]zap.Field, len(fields))
+	for _, f := range fields {
+		fieldMap[f.Key] = f
+	}
+
+	codeField, ok := fieldMap["error_code"]
+	require.True(t, ok, "expected error_code field")
+	assert.Equal(t, string(apperr.CodeInternal), codeField.String)
+
+	msgField, ok := fieldMap["error_message"]
+	require.True(t, ok, "expected error_message field")
+	assert.Equal(t, "database connection failed", msgField.String)
 }

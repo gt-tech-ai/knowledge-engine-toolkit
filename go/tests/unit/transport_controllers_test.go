@@ -154,6 +154,16 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 	assert.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	assert.False(t, ran)
 
+	testControllerBaseRejectsBeforeTheHandlerRest(t)
+}
+
+// testControllerBaseRejectsBeforeTheHandlerRest continues
+// TestControllerBase_RejectsBeforeTheHandler with its remaining steps.
+func testControllerBaseRejectsBeforeTheHandlerRest(t *testing.T) {
+	t.Helper()
+
+	var err error
+
 	panicking := func(context.Context, string) (string, error) { panic("boom") }
 
 	_, err = fixtures.Must(transport.NewBase[opController](fixtures.Decorations(), "c")).

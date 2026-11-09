@@ -198,26 +198,37 @@ func (m InstallMethodEntry) validateDownload() error {
 	}
 
 	for platform, a := range m.Assets {
-		if !assetPlatforms(platform) {
-			return apperr.New(
-				apperr.CodeInvalidInput,
-				fmt.Sprintf("asset platform %q is not an os-arch key", platform),
-			)
+		err := validateAsset(platform, a)
+		if err != nil {
+			return err
 		}
+	}
 
-		if a.Name == "" || !sha256Hex.MatchString(a.SHA256) {
-			return apperr.New(
-				apperr.CodeInvalidInput,
-				fmt.Sprintf("asset %q needs a name and a 64-hex sha256", platform),
-			)
-		}
+	return nil
+}
 
-		if unsupportedArchive(a.Name) {
-			return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-				"asset %q (%s) is an archive format the installer can't extract (%s)",
-				platform, a.Name, strings.Join(archiveSuffixes(), ", "),
-			))
-		}
+// validateAsset checks one platform's download: a known key, a pinned sha256 and an
+// archive format the installer can extract.
+func validateAsset(platform string, a AssetEntry) error {
+	if !assetPlatforms(platform) {
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf("asset platform %q is not an os-arch key", platform),
+		)
+	}
+
+	if a.Name == "" || !sha256Hex.MatchString(a.SHA256) {
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf("asset %q needs a name and a 64-hex sha256", platform),
+		)
+	}
+
+	if unsupportedArchive(a.Name) {
+		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
+			"asset %q (%s) is an archive format the installer can't extract (%s)",
+			platform, a.Name, strings.Join(archiveSuffixes(), ", "),
+		))
 	}
 
 	return nil
@@ -335,6 +346,13 @@ func (t ToolEntry) validate() []error {
 			),
 		)
 	}
+
+	return append(errs, t.validateInstall()...)
+}
+
+// validateInstall checks each platform's install method.
+func (t ToolEntry) validateInstall() []error {
+	var errs []error
 
 	for platform := range t.Install {
 		method := t.Install[platform]

@@ -5,6 +5,9 @@ import (
 	"strings"
 )
 
+// minDiffLineLen is the shortest line that has a diff marker and content.
+const minDiffLineLen = 2
+
 // summaryWidth caps one condensed output line.
 const summaryWidth = 200
 
@@ -16,31 +19,7 @@ const summaryWidth = 200
 func ActionableLines(output []byte, limit int) []string {
 	lines := nonEmptyLines(output)
 
-	var priority []string
-
-	for _, line := range lines {
-		switch {
-		case strings.HasPrefix(line, "--- FAIL:"),
-			strings.HasPrefix(line, "FAIL\t"),
-			strings.HasPrefix(line, "FAIL "),
-			isSourceError(line),
-			strings.HasPrefix(line, "FAILED "),
-			strings.HasPrefix(line, "Vulnerability #"):
-			priority = append(priority, line)
-		case strings.HasPrefix(line, "diff --git "):
-			priority = append(priority, diffFile(line))
-		}
-
-		if len(priority) >= limit {
-			break
-		}
-	}
-
-	if len(priority) > 0 {
-		for i := range priority {
-			priority[i] = truncate(priority[i])
-		}
-
+	if priority := priorityLines(lines, limit); len(priority) > 0 {
 		return priority
 	}
 
@@ -58,6 +37,40 @@ func ActionableLines(output []byte, limit int) []string {
 	}
 
 	return kept
+}
+
+// priorityLines picks the lines that name a failure, up to limit, truncated.
+func priorityLines(lines []string, limit int) []string {
+	var priority []string
+
+	for _, line := range lines {
+		if picked, ok := priorityLine(line); ok {
+			priority = append(priority, truncate(picked))
+		}
+
+		if len(priority) >= limit {
+			break
+		}
+	}
+
+	return priority
+}
+
+// priorityLine reports whether a line names a failure, and how to show it.
+func priorityLine(line string) (string, bool) {
+	switch {
+	case strings.HasPrefix(line, "--- FAIL:"),
+		strings.HasPrefix(line, "FAIL\t"),
+		strings.HasPrefix(line, "FAIL "),
+		isSourceError(line),
+		strings.HasPrefix(line, "FAILED "),
+		strings.HasPrefix(line, "Vulnerability #"):
+		return line, true
+	case strings.HasPrefix(line, "diff --git "):
+		return diffFile(line), true
+	default:
+		return "", false
+	}
 }
 
 // IsNoiseLine reports whether a trimmed output line carries nothing actionable: a bare
@@ -155,7 +168,7 @@ func isDiffLine(line string) bool {
 
 // isDiffContent matches a diff's added or removed line.
 func isDiffContent(line string) bool {
-	if len(line) < 2 {
+	if len(line) < minDiffLineLen {
 		return false
 	}
 

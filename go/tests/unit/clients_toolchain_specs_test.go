@@ -68,6 +68,28 @@ func TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest(t *testing.T
 	// test edit; the projection (org/repo/tag → release URL) is what is asserted.
 	lintEntry := manifestInstall(t, "golangci-lint", "windows")
 	lint := find("golangci-lint")
+
+	testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestRest(
+		t,
+		cat,
+		find,
+		lintEntry,
+		lint,
+	)
+}
+
+// testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestRest continues
+// TestClientsToolchainProjectLifecycleTools_FromEmbeddedManifest with its remaining
+// steps.
+func testClientsToolchainProjectLifecycleToolsFromEmbeddedManifestRest(
+	t *testing.T,
+	cat *toolchain.Catalog,
+	find func(binary string) types.ToolDef,
+	lintEntry types.InstallMethodEntry,
+	lint types.ToolDef,
+) {
+	t.Helper()
+
 	win := lint.InstallMethods["windows"]
 	assert.Empty(t, win.Command)
 	require.NotNil(t, win.Download)

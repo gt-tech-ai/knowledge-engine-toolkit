@@ -48,6 +48,15 @@ const maxUploadConcurrency = 5
 // SDK seam — mocks the AWS S3 SDK client (aws-sdk-go-v2/service/s3), cannot compose with
 // a core port.
 type S3API interface {
+	S3Objects
+	S3Multipart
+	S3Buckets
+}
+
+// S3Objects is the single-object and listing subset of the S3 SDK.
+//
+// SDK seam
+type S3Objects interface {
 	// PutObject stores a single object in one request.
 	PutObject(
 		ctx context.Context,
@@ -89,7 +98,12 @@ type S3API interface {
 		in *s3.ListObjectsV2Input,
 		optFns ...func(*s3.Options),
 	) (*s3.ListObjectsV2Output, error)
+}
 
+// S3Multipart is the multipart-upload subset of the S3 SDK.
+//
+// SDK seam
+type S3Multipart interface {
 	// CreateMultipartUpload begins a multipart upload and returns its upload ID.
 	CreateMultipartUpload(
 		ctx context.Context,
@@ -125,7 +139,12 @@ type S3API interface {
 		in *s3.ListMultipartUploadsInput,
 		optFns ...func(*s3.Options),
 	) (*s3.ListMultipartUploadsOutput, error)
+}
 
+// S3Buckets is the bucket-management subset of the S3 SDK.
+//
+// SDK seam
+type S3Buckets interface {
 	// HeadBucket probes whether a bucket exists and is reachable.
 	HeadBucket(
 		ctx context.Context,
@@ -836,106 +855,25 @@ func (c *s3Client) putMultipart(
 		)
 	}
 
-	uploadID := created.UploadId
+	up := &multipartUpload{c: c, uploadID: created.UploadId, bucket: bucket, key: key}
 
-	// abort discards the in-progress upload on any failure so no incomplete
-	// multipart upload lingers (and accrues storage cost until a lifecycle rule
-	// reaps it). It detaches from ctx's cancellation: when a part fails *because*
-	// the operation ctx was cancelled or timed out, reusing that ctx would make
-	// AbortMultipartUpload a no-op and leave the upload dangling. WithoutCancel
-	// preserves trace/values while dropping the deadline.
-	abort := func() {
-		_, _ = c.api.AbortMultipartUpload(
-			context.WithoutCancel(ctx),
-			&s3.AbortMultipartUploadInput{
-				Bucket: aws.String(bucket), Key: aws.String(key), UploadId: uploadID,
-			},
-		)
+	err = up.uploadParts(ctx, body)
+	if err != nil {
+		up.abort(ctx)
+
+		return err
 	}
 
-	// Dispatch UploadPart calls concurrently; gctx cancels the in-flight ones as
-	// soon as the first fails. parts is appended under mu (part uploads finish out
-	// of order) and sorted by part number before completion, which S3 requires.
-	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(maxUploadConcurrency)
-
-	var (
-		mu    sync.Mutex
-		parts []types.CompletedPart
-	)
-
-	for partNum := int32(1); ; partNum++ {
-		// Each part gets its own buffer: concurrent UploadPart goroutines must not
-		// share one. g.Go blocks once maxUploadConcurrency uploads are in flight,
-		// so at most that many buffers (plus the one being filled) are live at once.
-		buf := make([]byte, c.threshold)
-		n, rerr := io.ReadFull(body, buf)
-
-		if n > 0 {
-			part, data := partNum, buf[:n]
-
-			g.Go(func() error {
-				out, uerr := c.api.UploadPart(gctx, &s3.UploadPartInput{
-					Bucket:     aws.String(bucket),
-					Key:        aws.String(key),
-					UploadId:   uploadID,
-					PartNumber: aws.Int32(part),
-					Body:       bytes.NewReader(data),
-				})
-				if uerr != nil {
-					return apperr.Wrap(
-						uerr,
-						apperr.CodeInternal,
-						fmt.Sprintf("s3 upload part %d %s/%s", part, bucket, key),
-					)
-				}
-
-				mu.Lock()
-
-				parts = append(
-					parts,
-					types.CompletedPart{ETag: out.ETag, PartNumber: aws.Int32(part)},
-				)
-				mu.Unlock()
-
-				return nil
-			})
-		}
-
-		if apperr.StdIs(rerr, io.EOF) || apperr.StdIs(rerr, io.ErrUnexpectedEOF) {
-			break
-		}
-
-		if rerr != nil {
-			_ = g.Wait()
-
-			abort()
-
-			return apperr.Wrap(
-				rerr,
-				apperr.CodeInternal,
-				fmt.Sprintf("reading multipart body %s/%s", bucket, key),
-			)
-		}
-	}
-
-	werr := g.Wait()
-	if werr != nil {
-		abort()
-
-		return werr
-	}
-
-	sortParts(parts)
+	sortParts(up.parts)
 
 	_, err = c.api.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
 		Bucket:          aws.String(bucket),
 		Key:             aws.String(key),
-		UploadId:        uploadID,
-		MultipartUpload: &types.CompletedMultipartUpload{Parts: parts},
+		UploadId:        up.uploadID,
+		MultipartUpload: &types.CompletedMultipartUpload{Parts: up.parts},
 	})
 	if err != nil {
-		abort()
+		up.abort(ctx)
 
 		return apperr.Wrap(
 			err,
@@ -943,6 +881,118 @@ func (c *s3Client) putMultipart(
 			fmt.Sprintf("s3 complete multipart %s/%s", bucket, key),
 		)
 	}
+
+	return nil
+}
+
+// multipartUpload is one in-progress S3 multipart upload.
+type multipartUpload struct {
+	// c is the client running the upload.
+	c *s3Client
+
+	// uploadID identifies the upload to S3.
+	uploadID *string
+
+	// bucket is the destination bucket.
+	bucket string
+
+	// key is the destination object key.
+	key string
+
+	// parts holds the uploaded parts; guarded by mu until the uploads finish.
+	parts []types.CompletedPart
+
+	// mu guards parts, which part uploads finish appending out of order.
+	mu sync.Mutex
+}
+
+// abort discards the in-progress upload on any failure so no incomplete multipart upload
+// lingers (and accrues storage cost until a lifecycle rule reaps it). It detaches from
+// ctx's cancellation: when a part fails *because* the operation ctx was cancelled or
+// timed out, reusing that ctx would make AbortMultipartUpload a no-op and leave the
+// upload dangling. WithoutCancel preserves trace/values while dropping the deadline.
+func (u *multipartUpload) abort(ctx context.Context) {
+	_, _ = u.c.api.AbortMultipartUpload(
+		context.WithoutCancel(ctx),
+		&s3.AbortMultipartUploadInput{
+			Bucket: aws.String(u.bucket), Key: aws.String(u.key), UploadId: u.uploadID,
+		},
+	)
+}
+
+// uploadParts dispatches UploadPart calls concurrently; gctx cancels the in-flight ones
+// as soon as the first fails.
+func (u *multipartUpload) uploadParts(ctx context.Context, body io.Reader) error {
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxUploadConcurrency)
+
+	for partNum := int32(1); ; partNum++ {
+		done, err := u.dispatchPart(gctx, g, body, partNum)
+		if err != nil {
+			_ = g.Wait()
+
+			return err
+		}
+
+		if done {
+			return g.Wait()
+		}
+	}
+}
+
+// dispatchPart reads the next part and starts its upload, reporting the body's end.
+// Each part gets its own buffer: concurrent UploadPart goroutines must not share one.
+// g.Go blocks once maxUploadConcurrency uploads are in flight, so at most that many
+// buffers (plus the one being filled) are live at once.
+func (u *multipartUpload) dispatchPart(
+	ctx context.Context, g *errgroup.Group, body io.Reader, part int32,
+) (bool, error) {
+	buf := make([]byte, u.c.threshold)
+	n, err := io.ReadFull(body, buf)
+
+	if n > 0 {
+		g.Go(func() error { return u.uploadPart(ctx, part, buf[:n]) })
+	}
+
+	if apperr.StdIs(err, io.EOF) || apperr.StdIs(err, io.ErrUnexpectedEOF) {
+		return true, nil
+	}
+
+	if err != nil {
+		return false, apperr.Wrap(
+			err,
+			apperr.CodeInternal,
+			fmt.Sprintf("reading multipart body %s/%s", u.bucket, u.key),
+		)
+	}
+
+	return false, nil
+}
+
+// uploadPart sends one part and records it.
+func (u *multipartUpload) uploadPart(ctx context.Context, part int32, data []byte) error {
+	out, err := u.c.api.UploadPart(ctx, &s3.UploadPartInput{
+		Bucket:     aws.String(u.bucket),
+		Key:        aws.String(u.key),
+		UploadId:   u.uploadID,
+		PartNumber: aws.Int32(part),
+		Body:       bytes.NewReader(data),
+	})
+	if err != nil {
+		return apperr.Wrap(
+			err,
+			apperr.CodeInternal,
+			fmt.Sprintf("s3 upload part %d %s/%s", part, u.bucket, u.key),
+		)
+	}
+
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	u.parts = append(
+		u.parts,
+		types.CompletedPart{ETag: out.ETag, PartNumber: aws.Int32(part)},
+	)
 
 	return nil
 }

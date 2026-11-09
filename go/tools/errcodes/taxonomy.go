@@ -139,36 +139,59 @@ func parse(src []byte) ([]code, error) {
 // validate checks one row against the rules parse documents, resolves its gRPC number
 // and records its names in seen.
 func validate(c *code, seen map[string]bool) error {
-	bad := func(why string) error {
-		return apperr.InvalidInput(
-			SourcePath + ": code " + strconv.Quote(c.Code) + ": " + why,
-		)
+	why := formatProblem(c)
+	if why == "" {
+		why = policyProblem(c, seen)
 	}
 
-	switch {
-	case !codeRE.MatchString(c.Code):
-		return bad("the code is not upper snake case")
-	case !goRE.MatchString(c.Go):
-		return bad("go must be an exported Code<Name> constant")
-	case c.Doc == "":
-		return bad("doc is empty")
-	case c.HTTP < 100 || c.HTTP > 599:
-		return bad("http is not a status code")
-	case c.Retry != retryTransient && c.Retry != retryPermanent && c.Retry != retryNone:
-		return bad("retry must be transient, permanent or none")
-	case c.FixedClientMessage && c.SafeMessage == "":
-		return bad("fixed_client_message needs a safe_message")
-	case seen["code "+c.Code] || seen["go "+c.Go]:
-		return bad("the code or its Go name is declared twice")
+	if why != "" {
+		return rowError(c, why)
 	}
 
 	n, ok := grpcNumber(c.GRPC)
 	if !ok {
-		return bad("grpc " + strconv.Quote(c.GRPC) + " is not a gRPC status")
+		return rowError(c, "grpc "+strconv.Quote(c.GRPC)+" is not a gRPC status")
 	}
 
 	c.GRPCNumber = n
 	seen["code "+c.Code], seen["go "+c.Go] = true, true
 
 	return nil
+}
+
+// rowError names the row a rule rejected.
+func rowError(c *code, why string) error {
+	return apperr.InvalidInput(
+		SourcePath + ": code " + strconv.Quote(c.Code) + ": " + why,
+	)
+}
+
+// formatProblem says which field is malformed, or "" when all are well formed.
+func formatProblem(c *code) string {
+	switch {
+	case !codeRE.MatchString(c.Code):
+		return "the code is not upper snake case"
+	case !goRE.MatchString(c.Go):
+		return "go must be an exported Code<Name> constant"
+	case c.Doc == "":
+		return "doc is empty"
+	case c.HTTP < 100 || c.HTTP > 599:
+		return "http is not a status code"
+	default:
+		return ""
+	}
+}
+
+// policyProblem says which cross-field rule the row breaks, or "" when none.
+func policyProblem(c *code, seen map[string]bool) string {
+	switch {
+	case c.Retry != retryTransient && c.Retry != retryPermanent && c.Retry != retryNone:
+		return "retry must be transient, permanent or none"
+	case c.FixedClientMessage && c.SafeMessage == "":
+		return "fixed_client_message needs a safe_message"
+	case seen["code "+c.Code] || seen["go "+c.Go]:
+		return "the code or its Go name is declared twice"
+	default:
+		return ""
+	}
 }

@@ -15,6 +15,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// probeBackoffFactor multiplies the wait between probe attempts.
+const probeBackoffFactor = 2
+
 // The probe defaults: the first retry's wait, its cap, and the bound on one attempt.
 const (
 	// defaultProbeDelay is the first retry's wait when a probe sets no Delay.
@@ -116,7 +119,7 @@ func (e *engine) retry(ctx context.Context, chk check) error {
 		case <-timer.C:
 		}
 
-		wait = min(wait*2, chk.maxDelay)
+		wait = min(wait*probeBackoffFactor, chk.maxDelay)
 	}
 }
 
@@ -154,15 +157,9 @@ func (e *engine) probeHTTP(ctx context.Context, chk check) error {
 
 	defer func() { _ = resp.Body.Close() }()
 
-	switch {
-	case chk.status != 0 && resp.StatusCode != chk.status:
-		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
-			"HTTP GET %s: status %d, want %d", chk.http, resp.StatusCode, chk.status))
-	case chk.status == 0 && (resp.StatusCode < 200 || resp.StatusCode >= 300):
-		return apperr.New(apperr.CodeUnavailable,
-			fmt.Sprintf("HTTP GET %s: status %d", chk.http, resp.StatusCode))
-	case chk.contains == "":
-		return nil
+	err = probeStatusError(chk, resp.StatusCode)
+	if err != nil || chk.contains == "" {
+		return err
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, probeBodyLimit))
@@ -173,6 +170,22 @@ func (e *engine) probeHTTP(ctx context.Context, chk check) error {
 	if !strings.Contains(string(body), chk.contains) {
 		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
 			"HTTP GET %s: body does not contain %q", chk.http, chk.contains))
+	}
+
+	return nil
+}
+
+// probeStatusError checks the response status: the expected one when set, else any 2xx.
+func probeStatusError(chk check, status int) error {
+	if chk.status != 0 && status != chk.status {
+		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
+			"HTTP GET %s: status %d, want %d", chk.http, status, chk.status))
+	}
+
+	if chk.status == 0 &&
+		(status < http.StatusOK || status >= http.StatusMultipleChoices) {
+		return apperr.New(apperr.CodeUnavailable,
+			fmt.Sprintf("HTTP GET %s: status %d", chk.http, status))
 	}
 
 	return nil
@@ -229,23 +242,9 @@ func (c *compiled) check(
 ) (check, error) {
 	var chk check
 
-	texts := []struct {
-		dst *string
-		src string
-	}{
-		{&chk.http, p.HTTP},
-		{&chk.tcp, p.TCP},
-		{&chk.contains, p.Contains},
-		{&chk.hint, p.Hint},
-	}
-
-	for _, t := range texts {
-		v, err := text(t.src, vars)
-		if err != nil {
-			return chk, err
-		}
-
-		*t.dst = v
+	err := probeTexts(&chk, p, vars)
+	if err != nil {
+		return chk, err
 	}
 
 	argv, err := c.args(ctx, p.Exec, vars)
@@ -255,15 +254,7 @@ func (c *compiled) check(
 
 	chk.exec = argv
 
-	kinds := 0
-
-	for _, set := range []bool{chk.http != "", chk.tcp != "", len(chk.exec) > 0} {
-		if set {
-			kinds++
-		}
-	}
-
-	if kinds != 1 {
+	if probeKinds(&chk) != 1 {
 		return chk, apperr.New(apperr.CodeInvalidInput,
 			"a probe expands to exactly one of http, tcp, exec")
 	}
@@ -274,6 +265,41 @@ func (c *compiled) check(
 	}
 
 	return chk, nil
+}
+
+// probeTexts expands the probe's text fields into chk.
+func probeTexts(chk *check, p *types.ProcProbe, vars Vars) error {
+	for _, t := range []struct {
+		dst *string
+		src string
+	}{
+		{&chk.http, p.HTTP},
+		{&chk.tcp, p.TCP},
+		{&chk.contains, p.Contains},
+		{&chk.hint, p.Hint},
+	} {
+		v, err := text(t.src, vars)
+		if err != nil {
+			return err
+		}
+
+		*t.dst = v
+	}
+
+	return nil
+}
+
+// probeKinds counts which of http, tcp and exec the expanded probe set.
+func probeKinds(chk *check) int {
+	kinds := 0
+
+	for _, set := range []bool{chk.http != "", chk.tcp != "", len(chk.exec) > 0} {
+		if set {
+			kinds++
+		}
+	}
+
+	return kinds
 }
 
 // probeSchedule expands p's status and retry schedule into chk.
@@ -299,22 +325,30 @@ func probeSchedule(chk *check, p *types.ProcProbe, vars Vars) error {
 		{&chk.delay, p.Delay, defaultProbeDelay},
 		{&chk.maxDelay, p.MaxDelay, defaultProbeMaxDelay},
 	} {
-		v, err := text(d.src, vars)
+		*d.dst, err = probeDuration(d.src, d.def, vars)
 		if err != nil {
 			return err
-		}
-
-		*d.dst = d.def
-
-		if v == "" {
-			continue
-		}
-
-		*d.dst, err = time.ParseDuration(v)
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInvalidInput, "probe duration "+v)
 		}
 	}
 
 	return nil
+}
+
+// probeDuration expands and parses a duration; an empty value is def.
+func probeDuration(src string, def time.Duration, vars Vars) (time.Duration, error) {
+	v, err := text(src, vars)
+	if err != nil {
+		return def, err
+	}
+
+	if v == "" {
+		return def, nil
+	}
+
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return def, apperr.Wrap(err, apperr.CodeInvalidInput, "probe duration "+v)
+	}
+
+	return d, nil
 }

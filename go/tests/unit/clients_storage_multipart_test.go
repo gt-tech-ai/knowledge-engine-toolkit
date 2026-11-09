@@ -75,6 +75,14 @@ func TestStorageClient_MultipartSurface(t *testing.T) {
 		assert.Equal(t, "tenant/doc/file.pdf", aws.ToString(got.Key))
 	})
 
+	testStorageClientMultipartSurfaceRest3(t)
+}
+
+// testStorageClientMultipartSurfaceRest3 continues TestStorageClient_MultipartSurface
+// with its remaining steps.
+func testStorageClientMultipartSurfaceRest3(t *testing.T) {
+	t.Helper()
+
 	t.Run("complete forwards ordered parts", func(t *testing.T) {
 		t.Parallel()
 
@@ -116,6 +124,14 @@ func TestStorageClient_MultipartSurface(t *testing.T) {
 		assert.Equal(t, `"etag-2"`, aws.ToString(got.MultipartUpload.Parts[1].ETag))
 	})
 
+	testStorageClientMultipartSurfaceRest2(t)
+}
+
+// testStorageClientMultipartSurfaceRest2 continues TestStorageClient_MultipartSurface
+// with its remaining steps.
+func testStorageClientMultipartSurfaceRest2(t *testing.T) {
+	t.Helper()
+
 	t.Run("complete sorts out-of-order parts", func(t *testing.T) {
 		t.Parallel()
 
@@ -156,6 +172,14 @@ func TestStorageClient_MultipartSurface(t *testing.T) {
 		assert.Equal(t, int32(3), aws.ToInt32(got.MultipartUpload.Parts[2].PartNumber))
 		assert.Equal(t, `"e3"`, aws.ToString(got.MultipartUpload.Parts[2].ETag))
 	})
+
+	testStorageClientMultipartSurfaceRest(t)
+}
+
+// testStorageClientMultipartSurfaceRest continues TestStorageClient_MultipartSurface
+// with its remaining steps.
+func testStorageClientMultipartSurfaceRest(t *testing.T) {
+	t.Helper()
 
 	t.Run("abort targets upload id", func(t *testing.T) {
 		t.Parallel()
@@ -211,79 +235,104 @@ func TestStorageClient_MultipartSurface(t *testing.T) {
 		assert.Equal(t, initiated.Format(time.RFC3339), ups[0].Initiated)
 	})
 
+	testStorageClientMultipartSurfaceRest4(t)
+}
+
+// testStorageClientMultipartSurfaceRest4 continues testStorageClientMultipartSurfaceRest
+// with its remaining steps.
+func testStorageClientMultipartSurfaceRest4(t *testing.T) {
+	t.Helper()
+
 	// An S3 control-plane failure must surface to the caller (wrapped, errors.Is-able),
-	// not be swallowed into a false success: the multipart initiate/complete/abort/cleanup
+	// not be swallowed into a false success: the multipart
+	// initiate/complete/abort/cleanup
 	// flows all branch on these errors to compensate (abort the upload, reap the doc).
 	t.Run("surfaces api errors", func(t *testing.T) {
 		t.Parallel()
 
-		apiErr := apperr.Sentinel("s3 unavailable")
+		testStorageClientMultipartSurfaceCase(t)
+	})
+}
 
-		t.Run("create", func(t *testing.T) {
-			t.Parallel()
+// testStorageClientMultipartSurfaceCase is the body of a closure in
+// testStorageClientMultipartSurfaceRest4.
+func testStorageClientMultipartSurfaceCase(t *testing.T) {
+	t.Helper()
 
-			ctrl := gomock.NewController(t)
-			api := mocks.NewMockS3API(ctrl)
-			api.EXPECT().
-				CreateMultipartUpload(gomock.Any(), gomock.Any()).
-				Return(nil, apiErr)
+	apiErr := apperr.Sentinel("s3 unavailable")
 
-			c := newStorageClientWithMock(t.Context(), t, api, 0)
-			_, err := c.CreateMultipartUpload(
-				context.Background(),
-				"b",
-				"k",
-				"text/plain",
-			)
-			require.ErrorIs(t, err, apiErr)
-		})
+	t.Run("create", func(t *testing.T) {
+		t.Parallel()
 
-		t.Run("complete", func(t *testing.T) {
-			t.Parallel()
+		ctrl := gomock.NewController(t)
+		api := mocks.NewMockS3API(ctrl)
+		api.EXPECT().
+			CreateMultipartUpload(gomock.Any(), gomock.Any()).
+			Return(nil, apiErr)
 
-			ctrl := gomock.NewController(t)
-			api := mocks.NewMockS3API(ctrl)
-			api.EXPECT().
-				CompleteMultipartUpload(gomock.Any(), gomock.Any()).
-				Return(nil, apiErr)
+		c := newStorageClientWithMock(t.Context(), t, api, 0)
+		_, err := c.CreateMultipartUpload(
+			context.Background(),
+			"b",
+			"k",
+			"text/plain",
+		)
+		require.ErrorIs(t, err, apiErr)
+	})
 
-			c := newStorageClientWithMock(t.Context(), t, api, 0)
-			err := c.CompleteMultipartUpload(
-				context.Background(), "b", "k", "u",
-				[]interfaces.CompletedPart{{PartNumber: 1, ETag: `"e1"`}},
-			)
-			require.ErrorIs(t, err, apiErr)
-		})
+	t.Run("complete", func(t *testing.T) {
+		t.Parallel()
 
-		t.Run("abort", func(t *testing.T) {
-			t.Parallel()
+		ctrl := gomock.NewController(t)
+		api := mocks.NewMockS3API(ctrl)
+		api.EXPECT().
+			CompleteMultipartUpload(gomock.Any(), gomock.Any()).
+			Return(nil, apiErr)
 
-			ctrl := gomock.NewController(t)
-			api := mocks.NewMockS3API(ctrl)
-			api.EXPECT().
-				AbortMultipartUpload(gomock.Any(), gomock.Any()).
-				Return(nil, apiErr)
+		c := newStorageClientWithMock(t.Context(), t, api, 0)
+		err := c.CompleteMultipartUpload(
+			context.Background(), "b", "k", "u",
+			[]interfaces.CompletedPart{{PartNumber: 1, ETag: `"e1"`}},
+		)
+		require.ErrorIs(t, err, apiErr)
+	})
 
-			c := newStorageClientWithMock(t.Context(), t, api, 0)
-			require.ErrorIs(
-				t,
-				c.AbortMultipartUpload(context.Background(), "b", "k", "u"),
-				apiErr,
-			)
-		})
+	testStorageClientMultipartSurfaceRest5(t, apiErr)
+}
 
-		t.Run("list", func(t *testing.T) {
-			t.Parallel()
+// testStorageClientMultipartSurfaceRest5 continues testStorageClientMultipartSurfaceCase
+// with its remaining steps.
+func testStorageClientMultipartSurfaceRest5(t *testing.T, apiErr error) {
+	t.Helper()
 
-			ctrl := gomock.NewController(t)
-			api := mocks.NewMockS3API(ctrl)
-			api.EXPECT().
-				ListMultipartUploads(gomock.Any(), gomock.Any()).
-				Return(nil, apiErr)
+	t.Run("abort", func(t *testing.T) {
+		t.Parallel()
 
-			c := newStorageClientWithMock(t.Context(), t, api, 0)
-			_, err := c.ListMultipartUploads(context.Background(), "b")
-			require.ErrorIs(t, err, apiErr)
-		})
+		ctrl := gomock.NewController(t)
+		api := mocks.NewMockS3API(ctrl)
+		api.EXPECT().
+			AbortMultipartUpload(gomock.Any(), gomock.Any()).
+			Return(nil, apiErr)
+
+		c := newStorageClientWithMock(t.Context(), t, api, 0)
+		require.ErrorIs(
+			t,
+			c.AbortMultipartUpload(context.Background(), "b", "k", "u"),
+			apiErr,
+		)
+	})
+
+	t.Run("list", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		api := mocks.NewMockS3API(ctrl)
+		api.EXPECT().
+			ListMultipartUploads(gomock.Any(), gomock.Any()).
+			Return(nil, apiErr)
+
+		c := newStorageClientWithMock(t.Context(), t, api, 0)
+		_, err := c.ListMultipartUploads(context.Background(), "b")
+		require.ErrorIs(t, err, apiErr)
 	})
 }

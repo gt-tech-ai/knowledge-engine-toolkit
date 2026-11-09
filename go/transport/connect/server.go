@@ -14,6 +14,24 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
+// defaultMaxHeaderBytes is the 1 MiB limit on request headers.
+const defaultMaxHeaderBytes = 1 << 20
+
+// defaultServerConfigReadTimeout is the default ReadTimeout of ServerConfig.
+const defaultServerConfigReadTimeout = 30 * time.Second
+
+// defaultServerConfigReadHeaderTimeout is the default ReadHeaderTimeout of ServerConfig.
+const defaultServerConfigReadHeaderTimeout = 10 * time.Second
+
+// defaultServerConfigWriteTimeout is the default WriteTimeout of ServerConfig.
+const defaultServerConfigWriteTimeout = 30 * time.Second
+
+// defaultServerConfigIdleTimeout is the default IdleTimeout of ServerConfig.
+const defaultServerConfigIdleTimeout = 120 * time.Second
+
+// defaultServerConfigShutdownTimeout is the default ShutdownTimeout of ServerConfig.
+const defaultServerConfigShutdownTimeout = 10 * time.Second
+
 // HandlerRegistration represents a Connect handler to be registered.
 type HandlerRegistration struct {
 	// Handler is the HTTP handler serving Connect RPC requests.
@@ -54,12 +72,12 @@ type ServerConfig struct {
 func DefaultServerConfig(port int) ServerConfig {
 	return ServerConfig{
 		Port:              port,
-		ReadTimeout:       30 * time.Second,
-		ReadHeaderTimeout: 10 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		MaxHeaderBytes:    1 << 20, // 1MB
-		ShutdownTimeout:   10 * time.Second,
+		ReadTimeout:       defaultServerConfigReadTimeout,
+		ReadHeaderTimeout: defaultServerConfigReadHeaderTimeout,
+		WriteTimeout:      defaultServerConfigWriteTimeout,
+		IdleTimeout:       defaultServerConfigIdleTimeout,
+		MaxHeaderBytes:    defaultMaxHeaderBytes, // 1MB
+		ShutdownTimeout:   defaultServerConfigShutdownTimeout,
 	}
 }
 

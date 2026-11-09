@@ -236,7 +236,39 @@ func TestServicesProcedure_ControlFlow(t *testing.T) {
 				"policy": "skip",
 			}, nil
 	}
-	eng := procEngine(t, rec, []types.Procedure{
+	eng := procEngine(
+		t,
+		rec,
+		testServicesProcedureControlFlowTable(),
+		procedure.Deps{Steps: map[string]procedure.StepFunc{"set": setter}},
+	)
+
+	res, err := eng.Run(t.Context(), "main",
+		map[string]any{"env": "dev", "svcs": []string{"api", "web"}}, types.RunOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"helm upgrade api --set env=dev", "helm upgrade web --set env=dev",
+	}, rec.calls[:2])
+	assert.ElementsMatch(t, []string{"kubectl get -o json", "probe"}, rec.calls[2:4])
+	assert.Equal(
+		t,
+		[]string{"docker tag dev-1", "echo 1 1", "false", "false"},
+		rec.calls[4:],
+	)
+
+	st := statuses(res)
+	assert.Equal(t, types.StatusPass, st["deploy web"])
+	assert.Equal(t, types.StatusSkip, st["absent"])
+	assert.Equal(t, types.StatusSkip, st["absent-var"])
+	assert.Equal(t, types.StatusWarn, st["soft"])
+	assert.Equal(t, types.StatusFail, st["hard"])
+	assert.NotContains(t, st, "never")
+}
+
+// testServicesProcedureControlFlowTable builds the table
+// TestServicesProcedure_ControlFlow runs.
+func testServicesProcedureControlFlowTable() []types.Procedure {
+	return []types.Procedure{
 		{Name: "main", Inputs: []string{"env", "svcs"}, Steps: []types.ProcStep{
 			{
 				Name: "deploy {svc}", Each: "svcs", As: "svc", Tool: "helm",
@@ -264,28 +296,7 @@ func TestServicesProcedure_ControlFlow(t *testing.T) {
 		{Name: "sub", Inputs: []string{"tag"}, Steps: []types.ProcStep{
 			{Name: "tag", Tool: "docker", Args: []string{"tag", "{tag}"}},
 		}},
-	}, procedure.Deps{Steps: map[string]procedure.StepFunc{"set": setter}})
-
-	res, err := eng.Run(t.Context(), "main",
-		map[string]any{"env": "dev", "svcs": []string{"api", "web"}}, types.RunOptions{})
-	require.NoError(t, err)
-	assert.Equal(t, []string{
-		"helm upgrade api --set env=dev", "helm upgrade web --set env=dev",
-	}, rec.calls[:2])
-	assert.ElementsMatch(t, []string{"kubectl get -o json", "probe"}, rec.calls[2:4])
-	assert.Equal(
-		t,
-		[]string{"docker tag dev-1", "echo 1 1", "false", "false"},
-		rec.calls[4:],
-	)
-
-	st := statuses(res)
-	assert.Equal(t, types.StatusPass, st["deploy web"])
-	assert.Equal(t, types.StatusSkip, st["absent"])
-	assert.Equal(t, types.StatusSkip, st["absent-var"])
-	assert.Equal(t, types.StatusWarn, st["soft"])
-	assert.Equal(t, types.StatusFail, st["hard"])
-	assert.NotContains(t, st, "never")
+	}
 }
 
 // TestServicesProcedure_Refusals tests what stops a procedure with an error.
@@ -392,6 +403,24 @@ func TestServicesProcedure_FinallyAndFail(t *testing.T) {
 
 	st := statuses(res)
 	assert.Equal(t, types.StatusSkip, st["name"])
+
+	testServicesProcedureFinallyAndFailRest(t, rec, eng, st)
+}
+
+// testServicesProcedureFinallyAndFailRest continues TestServicesProcedure_FinallyAndFail
+// with its remaining steps.
+func testServicesProcedureFinallyAndFailRest(
+	t *testing.T,
+	rec *recorder,
+	eng interfaces.ProcedureRunner,
+	st map[string]types.StepStatus,
+) {
+	t.Helper()
+
+	var err error
+
+	var res types.StepResults
+
 	assert.Equal(t, types.StatusWarn, st["soft"])
 	assert.Equal(t, types.StatusFail, st["work"])
 	assert.NotContains(t, st, "never")
@@ -527,35 +556,7 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 	t.Parallel()
 
 	rec := &recorder{out: map[string]string{"uv fail": "!"}}
-	procs := []types.Procedure{{
-		Name: "run", Inputs: []string{"extra", "profile"},
-		Steps: []types.ProcStep{
-			{Name: "buffered", Tool: "go", Args: []string{"run", "./job"}, Env: []string{
-				"{extra...}",
-				"SEARCH_ENV=dev",
-				"${profile != '' ? ['PROFILE=' + profile] : []}",
-			}},
-			{
-				Name:   "streamed",
-				Tool:   "uv",
-				Args:   []string{"run"},
-				Stream: true,
-				Env: []string{
-					"A={profile}",
-				},
-			},
-			{
-				Name: "probe", Tool: "uv", Args: []string{"fail"}, Stream: true,
-				Capture: &types.Capture{Var: "probe_exit", As: types.CaptureExit},
-			},
-			{Name: "mark", Step: "mark", Sets: []string{"marked"}},
-			{
-				Name: "after", Tool: "uv", Args: []string{"run", "again"}, Stream: true,
-				When: "probe_exit == 1 && marked",
-			},
-			{Name: "broken", Tool: "uv", Args: []string{"fail"}, Stream: true},
-		},
-	}}
+	procs := testServicesProcedureEnvAndStreamTable()
 	eng := procEngine(t, rec, procs, procedure.Deps{Steps: map[string]procedure.StepFunc{
 		"mark": func(context.Context, procedure.Vars, types.RunOptions) (
 			types.StepResults, procedure.Vars, error,
@@ -601,6 +602,40 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 	}})
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "stream")
+}
+
+// testServicesProcedureEnvAndStreamTable builds the table
+// TestServicesProcedure_EnvAndStream runs.
+func testServicesProcedureEnvAndStreamTable() []types.Procedure {
+	return []types.Procedure{{
+		Name: "run", Inputs: []string{"extra", "profile"},
+		Steps: []types.ProcStep{
+			{Name: "buffered", Tool: "go", Args: []string{"run", "./job"}, Env: []string{
+				"{extra...}",
+				"SEARCH_ENV=dev",
+				"${profile != '' ? ['PROFILE=' + profile] : []}",
+			}},
+			{
+				Name:   "streamed",
+				Tool:   "uv",
+				Args:   []string{"run"},
+				Stream: true,
+				Env: []string{
+					"A={profile}",
+				},
+			},
+			{
+				Name: "probe", Tool: "uv", Args: []string{"fail"}, Stream: true,
+				Capture: &types.Capture{Var: "probe_exit", As: types.CaptureExit},
+			},
+			{Name: "mark", Step: "mark", Sets: []string{"marked"}},
+			{
+				Name: "after", Tool: "uv", Args: []string{"run", "again"}, Stream: true,
+				When: "probe_exit == 1 && marked",
+			},
+			{Name: "broken", Tool: "uv", Args: []string{"fail"}, Stream: true},
+		},
+	}}
 }
 
 // TestServicesProcedure_VarsAccessors tests the typed reads a Go step makes of its

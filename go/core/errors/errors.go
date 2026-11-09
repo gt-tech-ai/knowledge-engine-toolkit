@@ -19,6 +19,9 @@ import (
 	"strings"
 )
 
+// callersSkip is the frames runtime.Callers drops: itself and callers.
+const callersSkip = 2
+
 // ErrorCode represents application error codes.
 type ErrorCode string
 
@@ -94,27 +97,20 @@ func (e *AppError) StackTrace() string {
 	var sb strings.Builder
 
 	frames := runtime.CallersFrames(e.stack)
-	skipping := true
 	prefix := pkgPrefix()
 
-	for {
-		frame, more := frames.Next()
+	for skipping, more := true, true; more; {
+		var frame runtime.Frame
+
+		frame, more = frames.Next()
 		// Drop the New/Wrap/helper frames at the head of the trace.
 		if skipping && strings.HasPrefix(frame.Function, prefix) {
-			if !more {
-				break
-			}
-
 			continue
 		}
 
 		skipping = false
 
 		fmt.Fprintf(&sb, "%s\n\t%s:%d\n", frame.Function, frame.File, frame.Line)
-
-		if !more {
-			break
-		}
 	}
 
 	return strings.TrimRight(sb.String(), "\n")
@@ -133,7 +129,7 @@ func pkgPrefix() string {
 func callers() []uintptr {
 	var pcs [32]uintptr
 
-	n := runtime.Callers(2, pcs[:])
+	n := runtime.Callers(callersSkip, pcs[:])
 
 	return pcs[:n]
 }

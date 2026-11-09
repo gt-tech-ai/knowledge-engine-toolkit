@@ -18,6 +18,12 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// minQuotedLen is the shortest value that can carry an opening and a closing quote.
+const minQuotedLen = 2
+
+// privateDirMode is the mode of a directory only its owner enters.
+const privateDirMode = 0o700
+
 // credentialFilePerm is the mode for a written credential file: owner read/write only,
 // so a secret store is never group- or world-readable.
 const credentialFilePerm os.FileMode = 0o600
@@ -97,7 +103,7 @@ func (s source) Put(ctx context.Context, ref types.Ref, value types.Secret) erro
 	// Ensure the parent directory exists (0700 — a secrets dir), so a first write to a
 	// not-yet-created git-ignored store (e.g. .secrets/) succeeds; the check-ignore below
 	// also runs with this directory as its working dir.
-	err := os.MkdirAll(filepath.Dir(loc.Path), 0o700)
+	err := os.MkdirAll(filepath.Dir(loc.Path), privateDirMode)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "creating credential directory")
 	}
@@ -161,14 +167,7 @@ func upsert(data []byte, key, value string) []byte {
 
 	for _, l := range lines {
 		if k, _, ok := splitKV(l); ok && k == key {
-			// Preserve a shell `export ` prefix on the replaced line, so updating a key in a
-			// dotenv file maintained for both `source` and this backend keeps it sourceable.
-			if strings.HasPrefix(strings.TrimSpace(l), "export ") {
-				out = append(out, "export "+line)
-			} else {
-				out = append(out, line)
-			}
-
+			out = append(out, replacementLine(l, line))
 			replaced = true
 
 			continue
@@ -187,6 +186,16 @@ func upsert(data []byte, key, value string) []byte {
 	}
 
 	return []byte(strings.Join(out, "\n") + "\n")
+}
+
+// replacementLine preserves a shell `export ` prefix on the replaced line, so updating a
+// key in a dotenv file maintained for both `source` and this backend keeps it sourceable.
+func replacementLine(old, line string) string {
+	if strings.HasPrefix(strings.TrimSpace(old), "export ") {
+		return "export " + line
+	}
+
+	return line
 }
 
 // splitKV parses a single dotenv line into its key and value. It reports ok=false for a
@@ -220,7 +229,7 @@ func splitKV(line string) (key, value string, ok bool) {
 // unquote strips one matching pair of surrounding single or double quotes from a dotenv
 // value (shell quoting), leaving an unquoted or unbalanced value unchanged.
 func unquote(v string) string {
-	if len(v) >= 2 {
+	if len(v) >= minQuotedLen {
 		if c := v[0]; (c == '"' || c == '\'') && v[len(v)-1] == c {
 			return v[1 : len(v)-1]
 		}

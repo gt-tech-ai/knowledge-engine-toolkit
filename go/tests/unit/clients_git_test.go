@@ -1,6 +1,7 @@
 package unit_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -69,6 +70,20 @@ func TestClientsGit_Exec(t *testing.T) {
 		RunBuffered(gomock.Any(), "/r", "git", "diff", "--cached", "--name-only", "-z",
 			"--diff-filter=ACM", "--").
 		Return(interfaces.CmdResult{Stdout: []byte("s.go\x00")})
+
+	testClientsGitExecRest(t, ctx, r, c)
+}
+
+// testClientsGitExecRest continues TestClientsGit_Exec with its remaining steps.
+func testClientsGitExecRest(
+	t *testing.T,
+	ctx context.Context,
+	r *mocks.MockCommandRunner,
+	c interfaces.GitClient,
+) {
+	t.Helper()
+
+	var err error
 
 	staged, err := c.StagedFiles(ctx, "/r", nil)
 	require.NoError(t, err)
@@ -242,6 +257,23 @@ func TestClientsGit_HistoryAndWorktree(t *testing.T) {
 	files, err := c.LsUntracked(ctx, "/r", []string{"*.md"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"new.md", "d/n.md"}, files)
+
+	testClientsGitHistoryAndWorktreeRest(t, ctx, r, c)
+}
+
+// testClientsGitHistoryAndWorktreeRest continues TestClientsGit_HistoryAndWorktree with
+// its remaining steps.
+func testClientsGitHistoryAndWorktreeRest(
+	t *testing.T,
+	ctx context.Context,
+	r *mocks.MockCommandRunner,
+	c interfaces.GitClient,
+) {
+	t.Helper()
+
+	var files []string
+
+	var err error
 
 	grep := func(needle string) *gomock.Call {
 		return r.EXPECT().RunBuffered(gomock.Any(), "/r", "git", "grep", "-l", "-z", "-I",

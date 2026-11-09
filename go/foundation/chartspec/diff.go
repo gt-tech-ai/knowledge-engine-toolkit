@@ -103,27 +103,44 @@ func (d *differ) node(a, b Hash, path string, depth int) error {
 		return err
 	}
 
+	err = d.children(&na, &nb, path, depth)
+	if err != nil {
+		return err
+	}
+
+	return d.lists(&na, &nb, path, depth)
+}
+
+// children diffs the named children of two nodes.
+func (d *differ) children(na, nb *Node, path string, depth int) error {
 	for _, name := range unionKeys(na.Children, nb.Children) {
-		err := d.child(
-			na.Children[name],
-			nb.Children[name],
-			join(path, name),
-			depth,
-		)
+		err := d.child(na.Children[name], nb.Children[name], join(path, name), depth)
 		if err != nil {
 			return err
 		}
 	}
 
-	for _, name := range unionKeys(na.Lists, nb.Lists) {
-		la, lb := na.Lists[name], nb.Lists[name]
-		for i := range max(len(la), len(lb)) {
-			at := join(path, name) + "[" + strconv.Itoa(i) + "]"
+	return nil
+}
 
-			err := d.child(elem(la, i), elem(lb, i), at, depth)
-			if err != nil {
-				return err
-			}
+// lists diffs the named lists of two nodes, element by element.
+func (d *differ) lists(na, nb *Node, path string, depth int) error {
+	for _, name := range unionKeys(na.Lists, nb.Lists) {
+		err := d.list(na.Lists[name], nb.Lists[name], join(path, name), depth)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// list diffs two hash lists by position, a missing element reading as absent.
+func (d *differ) list(la, lb []Hash, path string, depth int) error {
+	for i := range max(len(la), len(lb)) {
+		err := d.child(elem(la, i), elem(lb, i), path+"["+strconv.Itoa(i)+"]", depth)
+		if err != nil {
+			return err
 		}
 	}
 

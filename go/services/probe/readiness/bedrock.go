@@ -34,14 +34,7 @@ func (Bedrock) Name() string { return "bedrock" }
 // Run confirms each distinct id; with none it skips and with NoInvoke it warns
 // Unverified. The first model that fails to converse fails the probe, naming it.
 func (p Bedrock) Run(ctx context.Context, t Target) types.Verdict {
-	var ids []string
-
-	for _, id := range p.ModelIDs {
-		if id != "" && !slices.Contains(ids, id) {
-			ids = append(ids, id)
-		}
-	}
-
+	ids := uniqueIDs(p.ModelIDs)
 	if len(ids) == 0 {
 		return skip("no bedrock model ids configured to confirm")
 	}
@@ -62,6 +55,19 @@ func (p Bedrock) Run(ctx context.Context, t Target) types.Verdict {
 
 	return pass("confirmed " + list + " with a 1-token Converse each: " +
 		strings.Join(ids, ", "))
+}
+
+// uniqueIDs drops blanks and repeats, keeping first-seen order.
+func uniqueIDs(modelIDs []string) []string {
+	var ids []string
+
+	for _, id := range modelIDs {
+		if id != "" && !slices.Contains(ids, id) {
+			ids = append(ids, id)
+		}
+	}
+
+	return ids
 }
 
 // converseInput is the smallest billed request: one user message, one output token.

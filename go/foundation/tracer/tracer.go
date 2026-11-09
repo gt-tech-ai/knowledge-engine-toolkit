@@ -35,6 +35,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer/oteltracer"
 )
 
+// traceParentFields is the dash-separated fields of a W3C traceparent.
+const traceParentFields = 4
+
 // TraceParentFromContext returns the W3C traceparent header for the active span in
 // ctx, or "" when there is no active span context. It is used to stamp domain
 // events (e.g. the document-uploaded outbox payload) with the originating trace so
@@ -53,7 +56,7 @@ func TraceParentFromContext(ctx context.Context) string {
 // Tempo. The trace id is the second dash-delimited field of the traceparent
 // ("00-<trace-id>-<span-id>-<flags>").
 func TraceIDFromContext(ctx context.Context) string {
-	parts := strings.SplitN(TraceParentFromContext(ctx), "-", 4)
+	parts := strings.SplitN(TraceParentFromContext(ctx), "-", traceParentFields)
 	if len(parts) >= 2 && len(parts[1]) == 32 {
 		return parts[1]
 	}

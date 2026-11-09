@@ -50,6 +50,23 @@ func node(
 	cmd.Use, cmd.Short, cmd.Long, cmd.Example = spec.Use, spec.Short, spec.Long, spec.Example
 	cmd.Aliases, cmd.Hidden, cmd.SilenceUsage = spec.Aliases, spec.Hidden, true
 
+	err = addCommandFlags(cmd, spec)
+	if err != nil {
+		return nil, err
+	}
+
+	scope := slices.Concat(inherited, persistent(spec.Flags))
+
+	err = addSubcommands(cmd, spec, scope, reg, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return cmd, nil
+}
+
+// addCommandFlags registers the spec's flags on the command.
+func addCommandFlags(cmd *spf.Command, spec *types.CommandSpec) error {
 	for i := range spec.Flags {
 		f := &spec.Flags[i]
 		fs := cmd.Flags()
@@ -60,7 +77,7 @@ func node(
 
 		err := addSpecFlag(fs, f)
 		if err != nil {
-			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "command "+spec.Use)
+			return apperr.Wrap(err, apperr.CodeInvalidInput, "command "+spec.Use)
 		}
 
 		if f.Required {
@@ -68,8 +85,17 @@ func node(
 		}
 	}
 
-	scope := slices.Concat(inherited, persistent(spec.Flags))
+	return nil
+}
 
+// addSubcommands builds the children, declaring each help group once.
+func addSubcommands(
+	cmd *spf.Command,
+	spec *types.CommandSpec,
+	scope []types.FlagSpec,
+	reg *ops.Registry,
+	opts Options,
+) error {
 	var groups []string
 
 	for i := range spec.Commands {
@@ -77,7 +103,7 @@ func node(
 
 		child, err := node(sub, scope, reg, opts)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		if sub.Group != "" && !slices.Contains(groups, sub.Group) {
@@ -89,7 +115,7 @@ func node(
 		cmd.AddCommand(child)
 	}
 
-	return cmd, nil
+	return nil
 }
 
 // leafOrGroup returns spec's command with its run bound: a group's run prints help.
@@ -106,10 +132,7 @@ func leafOrGroup(
 		}, nil
 	}
 
-	bare := len(spec.Flags) == 0 && len(spec.Args.Names) == 0 && spec.Args.Rest == ""
-	hooked := opts.Resolve != nil || opts.Before != nil || opts.After != nil
-
-	if bare && !hooked {
+	if isBareSpec(spec) && !hasHooks(&opts) {
 		return Command(reg, spec.Op, opts)
 	}
 
@@ -120,13 +143,28 @@ func leafOrGroup(
 		}
 	}
 
-	scope := slices.Concat(inherited, spec.Flags)
-	cmd := &spf.Command{
+	return &spf.Command{
 		Args:        argsRule(spec.Args),
 		Annotations: map[string]string{OperationAnnotation: spec.Op},
-	}
+		RunE:        hookedRun(spec, slices.Concat(inherited, spec.Flags), reg, opts),
+	}, nil
+}
 
-	cmd.RunE = func(c *spf.Command, args []string) error {
+// isBareSpec reports a command that declares no flags or arguments.
+func isBareSpec(spec *types.CommandSpec) bool {
+	return len(spec.Flags) == 0 && len(spec.Args.Names) == 0 && spec.Args.Rest == ""
+}
+
+// hasHooks reports whether any resolve, before or after hook is set.
+func hasHooks(opts *Options) bool {
+	return opts.Resolve != nil || opts.Before != nil || opts.After != nil
+}
+
+// hookedRun runs the operation between the Before and After hooks.
+func hookedRun(
+	spec *types.CommandSpec, scope []types.FlagSpec, reg *ops.Registry, opts Options,
+) func(*spf.Command, []string) error {
+	return func(c *spf.Command, args []string) error {
 		in := values(c.Flags(), scope, spec.Args, args)
 		name := spec.Op
 
@@ -146,8 +184,6 @@ func leafOrGroup(
 
 		return err
 	}
-
-	return cmd, nil
 }
 
 // run decodes in into operation name's input and runs it, in the registry and under the
@@ -260,7 +296,22 @@ func addSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 		return apperr.New(apperr.CodeInvalidInput, "flag "+f.Name+": short is one letter")
 	}
 
+	err := defineSpecFlag(fs, f)
+	if err != nil {
+		return err
+	}
+
+	if f.Hidden {
+		_ = fs.MarkHidden(f.Name) // the flag was just added
+	}
+
+	return nil
+}
+
+// defineSpecFlag adds the flag by its declared type; an empty type is a bool.
+func defineSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 	def := f.Default
+
 	switch f.Type {
 	case types.FlagString:
 		s, _ := def.(string)
@@ -273,19 +324,9 @@ func addSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 	case types.FlagStringArray:
 		fs.StringArrayP(f.Name, f.Short, strs(def), f.Usage)
 	case types.FlagDuration:
-		var d time.Duration
-
-		if s, ok := def.(string); ok {
-			var err error
-
-			d, err = time.ParseDuration(s)
-			if err != nil {
-				return apperr.Wrap(
-					err,
-					apperr.CodeInvalidInput,
-					"flag "+f.Name+" default",
-				)
-			}
+		d, err := durationDefault(f)
+		if err != nil {
+			return err
 		}
 
 		fs.DurationP(f.Name, f.Short, d, f.Usage)
@@ -297,11 +338,22 @@ func addSpecFlag(fs *pflag.FlagSet, f *types.FlagSpec) error {
 			"flag %s: unknown type %q", f.Name, f.Type))
 	}
 
-	if f.Hidden {
-		_ = fs.MarkHidden(f.Name) // the flag was just added
+	return nil
+}
+
+// durationDefault parses a duration flag's default; a non-string default is zero.
+func durationDefault(f *types.FlagSpec) (time.Duration, error) {
+	s, ok := f.Default.(string)
+	if !ok {
+		return 0, nil
 	}
 
-	return nil
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, apperr.Wrap(err, apperr.CodeInvalidInput, "flag "+f.Name+" default")
+	}
+
+	return d, nil
 }
 
 // argsRule is the positional-argument rule of spec.

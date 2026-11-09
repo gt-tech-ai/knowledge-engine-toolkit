@@ -48,42 +48,72 @@ func (Backend) Empty() EntPredicate { return noop }
 // panicking.
 func (Backend) Clause(col string, op types.FilterOperator, v any) EntPredicate {
 	switch op {
-	case types.OpEq:
-		return entsql.FieldEQ(col, v)
-	case types.OpNe:
-		return entsql.FieldNEQ(col, v)
-	case types.OpGt:
-		return entsql.FieldGT(col, v)
-	case types.OpGte:
-		return entsql.FieldGTE(col, v)
-	case types.OpLt:
-		return entsql.FieldLT(col, v)
-	case types.OpLte:
-		return entsql.FieldLTE(col, v)
+	case types.OpEq, types.OpNe, types.OpGt, types.OpGte, types.OpLt, types.OpLte:
+		return compareClause(col, op, v)
 	case types.OpLike:
-		s, ok := v.(string)
-		if !ok {
-			return noop
-		}
-
-		return entsql.FieldContainsFold(col, s)
+		return likeClause(col, v)
 	case types.OpIn:
-		vs, ok := v.([]any)
-		if !ok {
-			return noop
-		}
-
-		return entsql.FieldIn(col, vs...)
+		return inClause(col, v)
 	case types.OpNotIn:
-		vs, ok := v.([]any)
-		if !ok {
-			return noop
-		}
-
-		return entsql.FieldNotIn(col, vs...)
+		return notInClause(col, v)
 	default:
 		return noop
 	}
+}
+
+// compareClause builds a comparison predicate on a base column.
+func compareClause(col string, op types.FilterOperator, v any) EntPredicate {
+	if op == types.OpEq {
+		return entsql.FieldEQ(col, v)
+	}
+
+	if op == types.OpNe {
+		return entsql.FieldNEQ(col, v)
+	}
+
+	if op == types.OpGt {
+		return entsql.FieldGT(col, v)
+	}
+
+	if op == types.OpGte {
+		return entsql.FieldGTE(col, v)
+	}
+
+	if op == types.OpLt {
+		return entsql.FieldLT(col, v)
+	}
+
+	return entsql.FieldLTE(col, v)
+}
+
+// likeClause matches a substring, case-insensitively; a non-string value matches all.
+func likeClause(col string, v any) EntPredicate {
+	s, ok := v.(string)
+	if !ok {
+		return noop
+	}
+
+	return entsql.FieldContainsFold(col, s)
+}
+
+// inClause matches a list; a non-list value matches all.
+func inClause(col string, v any) EntPredicate {
+	vs, ok := v.([]any)
+	if !ok {
+		return noop
+	}
+
+	return entsql.FieldIn(col, vs...)
+}
+
+// notInClause excludes a list; a non-list value matches all.
+func notInClause(col string, v any) EntPredicate {
+	vs, ok := v.([]any)
+	if !ok {
+		return noop
+	}
+
+	return entsql.FieldNotIn(col, vs...)
 }
 
 // ExistsClause interprets a leaf comparison on a JOINED table's column into a correlated
@@ -100,43 +130,58 @@ func (Backend) ExistsClause(
 	op types.FilterOperator,
 	v any,
 ) EntPredicate {
-	return func(s *entsql.Selector) {
-		target := entsql.Table(join.Table)
-		colPreds := make([]*entsql.Predicate, 0, len(join.Columns))
+	return func(s *entsql.Selector) { applyExists(s, &join, op, v) }
+}
 
-		for _, col := range join.Columns {
-			if p := colPredicate(target.C(col), op, v, join.CaseInsensitive); p != nil {
-				colPreds = append(colPreds, p)
-			}
-		}
+// applyExists adds the correlated EXISTS over the join target. A malformed/no-column
+// value matches all (adds no predicate), mirroring Clause's noop.
+func applyExists(
+	s *entsql.Selector, join *types.JoinTarget, op types.FilterOperator, v any,
+) {
+	target := entsql.Table(join.Table)
 
-		if len(colPreds) == 0 {
-			// A malformed/no-column value ⇒ match-all (add no predicate), mirroring
-			// Clause's noop.
-			return
-		}
+	valuePred := anyColumnPredicate(target, join, op, v)
+	if valuePred == nil {
+		return
+	}
 
-		valuePred := colPreds[0]
-		if len(colPreds) > 1 {
-			// Multiple target columns (a member "name" over first_name + last_name) OR together.
-			valuePred = entsql.Or(colPreds...)
-		}
+	conds := []*entsql.Predicate{
+		// Correlate the subquery to the base row: target.<target_key> = <base>.<local_key>.
+		entsql.ColumnsEQ(target.C(join.TargetKey), s.C(join.LocalKey)),
+		valuePred,
+	}
+	if join.TargetSoftDeletes {
+		// Don't match via a soft-deleted target row (mirrors the base soft-delete
+		// interceptor).
+		conds = append(conds, entsql.IsNull(target.C("deleted_at")))
+	}
 
-		conds := []*entsql.Predicate{
-			// Correlate the subquery to the base row: target.<target_key> = <base>.<local_key>.
-			entsql.ColumnsEQ(target.C(join.TargetKey), s.C(join.LocalKey)),
-			valuePred,
-		}
-		if join.TargetSoftDeletes {
-			// Don't match via a soft-deleted target row (mirrors the base soft-delete
-			// interceptor).
-			conds = append(conds, entsql.IsNull(target.C("deleted_at")))
-		}
+	sub := entsql.Select(target.C(join.TargetKey)).
+		From(target).
+		Where(entsql.And(conds...))
+	s.Where(entsql.Exists(sub))
+}
 
-		sub := entsql.Select(target.C(join.TargetKey)).
-			From(target).
-			Where(entsql.And(conds...))
-		s.Where(entsql.Exists(sub))
+// anyColumnPredicate builds the value predicate: multiple target columns (a member
+// "name" over first_name + last_name) OR together. nil means no column applies.
+func anyColumnPredicate(
+	target *entsql.SelectTable, join *types.JoinTarget, op types.FilterOperator, v any,
+) *entsql.Predicate {
+	preds := make([]*entsql.Predicate, 0, len(join.Columns))
+
+	for _, col := range join.Columns {
+		if p := colPredicate(target.C(col), op, v, join.CaseInsensitive); p != nil {
+			preds = append(preds, p)
+		}
+	}
+
+	switch len(preds) {
+	case 0:
+		return nil
+	case 1:
+		return preds[0]
+	default:
+		return entsql.Or(preds...)
 	}
 }
 
@@ -154,46 +199,68 @@ func colPredicate(
 	caseInsensitive bool,
 ) *entsql.Predicate {
 	switch op {
-	case types.OpEq:
-		return entsql.EQ(col, v)
-	case types.OpNe:
-		return entsql.NEQ(col, v)
-	case types.OpGt:
-		return entsql.GT(col, v)
-	case types.OpGte:
-		return entsql.GTE(col, v)
-	case types.OpLt:
-		return entsql.LT(col, v)
-	case types.OpLte:
-		return entsql.LTE(col, v)
+	case types.OpEq, types.OpNe, types.OpGt, types.OpGte, types.OpLt, types.OpLte:
+		return comparePredicate(col, op, v)
 	case types.OpLike:
-		s, ok := v.(string)
-		if !ok {
-			return nil
-		}
-
-		if caseInsensitive {
-			return entsql.ContainsFold(col, s)
-		}
-
-		return entsql.Contains(col, s)
-	case types.OpIn:
-		vs, ok := v.([]any)
-		if !ok {
-			return nil
-		}
-
-		return entsql.In(col, vs...)
-	case types.OpNotIn:
-		vs, ok := v.([]any)
-		if !ok {
-			return nil
-		}
-
-		return entsql.NotIn(col, vs...)
+		return likePredicate(col, v, caseInsensitive)
+	case types.OpIn, types.OpNotIn:
+		return listPredicate(col, op, v)
 	default:
 		return nil
 	}
+}
+
+// comparePredicate builds a comparison predicate on a qualified column.
+func comparePredicate(col string, op types.FilterOperator, v any) *entsql.Predicate {
+	if op == types.OpEq {
+		return entsql.EQ(col, v)
+	}
+
+	if op == types.OpNe {
+		return entsql.NEQ(col, v)
+	}
+
+	if op == types.OpGt {
+		return entsql.GT(col, v)
+	}
+
+	if op == types.OpGte {
+		return entsql.GTE(col, v)
+	}
+
+	if op == types.OpLt {
+		return entsql.LT(col, v)
+	}
+
+	return entsql.LTE(col, v)
+}
+
+// likePredicate matches a substring; a non-string value yields nil.
+func likePredicate(col string, v any, caseInsensitive bool) *entsql.Predicate {
+	s, ok := v.(string)
+	if !ok {
+		return nil
+	}
+
+	if caseInsensitive {
+		return entsql.ContainsFold(col, s)
+	}
+
+	return entsql.Contains(col, s)
+}
+
+// listPredicate matches or excludes a list; a non-list value yields nil.
+func listPredicate(col string, op types.FilterOperator, v any) *entsql.Predicate {
+	vs, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+
+	if op == types.OpIn {
+		return entsql.In(col, vs...)
+	}
+
+	return entsql.NotIn(col, vs...)
 }
 
 // And combines sub-predicates so that every one must match, via sql.AndPredicates — the
@@ -236,42 +303,54 @@ func (Backend) Order(col string, desc bool) EntPredicate {
 // cheap (EXPLAIN evidence), so the doubled lookup is acceptable and a single LATERAL is
 // not required. It never joins the base query.
 func (Backend) OrderJoin(join types.JoinTarget, desc bool) EntPredicate {
-	// Direction + explicit NULLS placement: NULLS LAST for ascending, NULLS FIRST for
-	// descending, so a soft-deleted-target row (the only NULL case) sorts predictably
-	// regardless of dialect defaults.
-	tail := " ASC NULLS LAST"
-	if desc {
-		tail = " DESC NULLS FIRST"
-	}
+	tail := nullsLastTail(desc)
 
 	return func(s *entsql.Selector) {
 		for _, col := range join.Columns {
-			target := entsql.Table(join.Table)
-			conds := []*entsql.Predicate{
-				entsql.ColumnsEQ(target.C(join.TargetKey), s.C(join.LocalKey)),
-			}
-
-			if join.TargetSoftDeletes {
-				// Exclude a soft-deleted target so the sort never reads its stale value —
-				// the sort matches ExistsClause's filter on the same target (a
-				// soft-deleted target → NULL → NULLS LAST/FIRST), rather than sorting a
-				// soft-deleted row among the live ones.
-				conds = append(conds, entsql.IsNull(target.C("deleted_at")))
-			}
-
-			sub := entsql.Select(target.C(col)).
-				From(target).
-				Where(entsql.And(conds...)).
-				Limit(1)
-
-			s.OrderExprFunc(func(b *entsql.Builder) {
-				b.WriteByte('(')
-				b.Join(sub)
-				b.WriteByte(')')
-				b.WriteString(tail)
-			})
+			orderByJoinColumn(s, &join, col, tail)
 		}
 	}
+}
+
+// nullsLastTail is the direction with explicit NULLS placement: NULLS LAST ascending,
+// NULLS FIRST descending, so a NULL sorts predictably regardless of dialect defaults.
+func nullsLastTail(desc bool) string {
+	if desc {
+		return " DESC NULLS FIRST"
+	}
+
+	return " ASC NULLS LAST"
+}
+
+// orderByJoinColumn orders by a correlated subquery over one target column. A
+// soft-deleted target is excluded so the sort never reads its stale value, matching
+// ExistsClause's filter on the same target.
+func orderByJoinColumn(s *entsql.Selector, join *types.JoinTarget, col, tail string) {
+	target := entsql.Table(join.Table)
+	conds := []*entsql.Predicate{
+		entsql.ColumnsEQ(target.C(join.TargetKey), s.C(join.LocalKey)),
+	}
+
+	if join.TargetSoftDeletes {
+		conds = append(conds, entsql.IsNull(target.C("deleted_at")))
+	}
+
+	sub := entsql.Select(target.C(col)).
+		From(target).
+		Where(entsql.And(conds...)).
+		Limit(1)
+
+	orderBySubquery(s, sub, tail)
+}
+
+// orderBySubquery appends `(subquery) tail` to the ORDER BY.
+func orderBySubquery(s, sub *entsql.Selector, tail string) {
+	s.OrderExprFunc(func(b *entsql.Builder) {
+		b.WriteByte('(')
+		b.Join(sub)
+		b.WriteByte(')')
+		b.WriteString(tail)
+	})
 }
 
 // OrderOrdinal interprets a value-ordinal sort directive into `ORDER BY CASE col WHEN
@@ -291,27 +370,32 @@ func (Backend) OrderOrdinal(col string, values []string, desc bool) EntPredicate
 	}
 
 	return func(s *entsql.Selector) {
-		s.OrderExprFunc(func(b *entsql.Builder) {
-			b.WriteString("CASE ")
-			b.WriteString(s.C(col))
+		s.OrderExprFunc(
+			func(b *entsql.Builder) { writeOrdinalCase(b, s.C(col), values, desc) },
+		)
+	}
+}
 
-			for i, v := range values {
-				b.WriteString(" WHEN '")
-				b.WriteString(strings.ReplaceAll(v, "'", "''"))
-				b.WriteString("' THEN ")
-				b.WriteString(strconv.Itoa(i))
-			}
+// writeOrdinalCase writes a CASE ranking col by its position in values.
+func writeOrdinalCase(b *entsql.Builder, col string, values []string, desc bool) {
+	b.WriteString("CASE ")
+	b.WriteString(col)
 
-			b.WriteString(" ELSE ")
-			b.WriteString(strconv.Itoa(len(values)))
-			b.WriteString(" END")
+	for i, v := range values {
+		b.WriteString(" WHEN '")
+		b.WriteString(strings.ReplaceAll(v, "'", "''"))
+		b.WriteString("' THEN ")
+		b.WriteString(strconv.Itoa(i))
+	}
 
-			if desc {
-				b.WriteString(" DESC")
-			} else {
-				b.WriteString(" ASC")
-			}
-		})
+	b.WriteString(" ELSE ")
+	b.WriteString(strconv.Itoa(len(values)))
+	b.WriteString(" END")
+
+	if desc {
+		b.WriteString(" DESC")
+	} else {
+		b.WriteString(" ASC")
 	}
 }
 
@@ -335,67 +419,75 @@ func (Backend) OrderOrdinal(col string, values []string, desc bool) EntPredicate
 // a column name), so they are inlined as SQL literals — the same safety argument as
 // OrderOrdinal. A malformed spec (neither arm set) degrades to a no-op sort node.
 func (Backend) OrderDerived(d types.DerivedSort, desc bool) EntPredicate {
-	tail := " ASC NULLS LAST"
-	if desc {
-		tail = " DESC NULLS FIRST"
-	}
+	tail := nullsLastTail(desc)
 
 	switch {
 	case d.Aggregate != nil:
-		agg := *d.Aggregate
-		target := entsql.Table(agg.Table)
-
-		var selExpr string
-
-		switch agg.Func {
-		case "max":
-			selExpr = entsql.Max(target.C(agg.Column))
-		case "min":
-			selExpr = entsql.Min(target.C(agg.Column))
-		default: // "count"
-			selExpr = entsql.Count("*")
-		}
-
-		return func(s *entsql.Selector) {
-			conds := []*entsql.Predicate{
-				entsql.ColumnsEQ(target.C(agg.TargetKey), s.C(agg.LocalKey)),
-			}
-			if agg.TargetSoftDeletes {
-				conds = append(conds, entsql.IsNull(target.C("deleted_at")))
-			}
-
-			sub := entsql.Select(selExpr).From(target).Where(entsql.And(conds...))
-
-			s.OrderExprFunc(func(b *entsql.Builder) {
-				b.WriteByte('(')
-				b.Join(sub)
-				b.WriteByte(')')
-				b.WriteString(tail)
-			})
-		}
+		return orderByAggregate(*d.Aggregate, tail)
 	case d.Interval != nil:
-		iv := *d.Interval
-
-		return func(s *entsql.Selector) {
-			s.OrderExprFunc(func(b *entsql.Builder) {
-				b.WriteByte('(')
-				b.WriteString(s.C(iv.BaseColumn))
-				b.WriteString(" + CASE ")
-				b.WriteString(s.C(iv.DiscriminatorColumn))
-
-				for _, c := range iv.Cases {
-					b.WriteString(" WHEN '")
-					b.WriteString(strings.ReplaceAll(c.Value, "'", "''"))
-					b.WriteString("' THEN make_interval(secs => ")
-					b.WriteString(strconv.FormatInt(c.Seconds, 10))
-					b.WriteByte(')')
-				}
-
-				b.WriteString(" ELSE NULL END)")
-				b.WriteString(tail)
-			})
-		}
+		return orderByInterval(*d.Interval, tail)
 	default:
 		return noop
 	}
+}
+
+// orderByAggregate orders by a correlated aggregate over the target table.
+func orderByAggregate(agg types.AggregateSpec, tail string) EntPredicate {
+	target := entsql.Table(agg.Table)
+	selExpr := aggregateExpr(target, &agg)
+
+	return func(s *entsql.Selector) {
+		conds := []*entsql.Predicate{
+			entsql.ColumnsEQ(target.C(agg.TargetKey), s.C(agg.LocalKey)),
+		}
+		if agg.TargetSoftDeletes {
+			conds = append(conds, entsql.IsNull(target.C("deleted_at")))
+		}
+
+		orderBySubquery(
+			s,
+			entsql.Select(selExpr).From(target).Where(entsql.And(conds...)),
+			tail,
+		)
+	}
+}
+
+// aggregateExpr renders the aggregate's select expression; any other func counts.
+func aggregateExpr(target *entsql.SelectTable, agg *types.AggregateSpec) string {
+	switch agg.Func {
+	case "max":
+		return entsql.Max(target.C(agg.Column))
+	case "min":
+		return entsql.Min(target.C(agg.Column))
+	default:
+		return entsql.Count("*")
+	}
+}
+
+// orderByInterval orders by a base column plus a per-discriminator interval.
+func orderByInterval(iv types.IntervalSpec, tail string) EntPredicate {
+	return func(s *entsql.Selector) {
+		s.OrderExprFunc(func(b *entsql.Builder) { writeIntervalCase(b, s, &iv, tail) })
+	}
+}
+
+// writeIntervalCase writes `(base + CASE discriminator WHEN ... END) tail`.
+func writeIntervalCase(
+	b *entsql.Builder, s *entsql.Selector, iv *types.IntervalSpec, tail string,
+) {
+	b.WriteByte('(')
+	b.WriteString(s.C(iv.BaseColumn))
+	b.WriteString(" + CASE ")
+	b.WriteString(s.C(iv.DiscriminatorColumn))
+
+	for _, c := range iv.Cases {
+		b.WriteString(" WHEN '")
+		b.WriteString(strings.ReplaceAll(c.Value, "'", "''"))
+		b.WriteString("' THEN make_interval(secs => ")
+		b.WriteString(strconv.FormatInt(c.Seconds, 10))
+		b.WriteByte(')')
+	}
+
+	b.WriteString(" ELSE NULL END)")
+	b.WriteString(tail)
 }

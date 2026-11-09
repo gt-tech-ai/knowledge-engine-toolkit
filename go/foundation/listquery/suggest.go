@@ -1,6 +1,7 @@
 package listquery
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 
@@ -65,19 +66,7 @@ func MergeDistinct(columns [][]string, limit, pageNum int) *types.Page[string] {
 		limit = SuggestFallbackLimit
 	}
 
-	seen := make(map[string]struct{})
-	merged := make([]string, 0)
-
-	for _, col := range columns {
-		for _, v := range col {
-			if _, dup := seen[v]; dup {
-				continue
-			}
-
-			seen[v] = struct{}{}
-			merged = append(merged, v)
-		}
-	}
+	merged := distinctValues(columns)
 
 	sort.Strings(merged)
 
@@ -91,4 +80,19 @@ func MergeDistinct(columns [][]string, limit, pageNum int) *types.Page[string] {
 		offset+limit+1, len(merged))
 
 	return SuggestPage(merged[offset:end], limit, pageNum)
+}
+
+// distinctValues flattens the columns, keeping the first of each value.
+func distinctValues(columns [][]string) []string {
+	seen := make(map[string]struct{})
+	merged := make([]string, 0)
+
+	for _, v := range slices.Concat(columns...) {
+		if _, dup := seen[v]; !dup {
+			seen[v] = struct{}{}
+			merged = append(merged, v)
+		}
+	}
+
+	return merged
 }

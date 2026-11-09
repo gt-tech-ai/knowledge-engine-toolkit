@@ -10,6 +10,9 @@ import (
 	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
+// defaultCachingTTL is how long a cached row lives by default.
+const defaultCachingTTL = 5 * time.Minute
+
 // CachingConfig tunes the repository caching decorator.
 type CachingConfig struct {
 	// KeyPrefix namespaces cache keys (empty = no prefix, the default).
@@ -31,7 +34,7 @@ type Config struct {
 
 // DefaultConfig returns the repository defaults: a 5m cache TTL and cache version 1.
 func DefaultConfig() Config {
-	return Config{Caching: CachingConfig{TTL: 5 * time.Minute, Version: 1}}
+	return Config{Caching: CachingConfig{TTL: defaultCachingTTL, Version: 1}}
 }
 
 // Validate rejects a negative cache TTL or version.

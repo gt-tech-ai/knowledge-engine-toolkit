@@ -27,23 +27,33 @@ func Normalize(s types.Shelf) []Tuple {
 
 	switch s.Op {
 	case types.AlgebraConcat:
-		var out []Tuple
-
-		for _, arg := range s.Args {
-			out = append(out, Normalize(arg)...)
-		}
-
-		return out
+		return concatArgs(s.Args)
 	case types.AlgebraCross, types.AlgebraNest:
-		out := []Tuple{{}}
-		for _, arg := range s.Args {
-			out = product(out, Normalize(arg), s.Op == types.AlgebraNest)
-		}
-
-		return out
+		return productArgs(s.Args, s.Op == types.AlgebraNest)
 	default:
 		return nil
 	}
+}
+
+// concatArgs is the union of the operands' tuples, in order.
+func concatArgs(args []*types.AlgebraExpr) []Tuple {
+	out := make([]Tuple, 0, len(args))
+
+	for _, arg := range args {
+		out = append(out, Normalize(arg)...)
+	}
+
+	return out
+}
+
+// productArgs is the Cartesian product of the operands; nest flags it Nested.
+func productArgs(args []*types.AlgebraExpr, nest bool) []Tuple {
+	out := []Tuple{{}}
+	for _, arg := range args {
+		out = product(out, Normalize(arg), nest)
+	}
+
+	return out
 }
 
 // product returns every left tuple extended by every right tuple; nest flags the
