@@ -68,6 +68,9 @@ class OpenSearchConfig:
     """The metadata field holding an entry's shard (multi-domain stores; absent means shard 0)."""
     shard_domains: tuple[tuple[int, str], ...] = ()
     """``(shard, domain)`` pairs routing each shard to a domain (multi-domain stores)."""
+    language_analyzers: tuple[tuple[str, str], ...] = ()
+    """(language code, OpenSearch analyzer) pairs: each adds a ``text.<code>`` subfield that BM25
+    also searches; empty leaves the text field and the query as they were."""
     domain_deadline_seconds: float = 0.0
     """A multi-domain search leaves out a domain that has not answered within this many seconds
     (its share of the caller's latency budget) and counts it; 0 waits for every domain."""

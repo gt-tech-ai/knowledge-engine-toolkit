@@ -35,7 +35,6 @@ from techai_webutils.clients.vector.opensearch.config import (
     VectorMode,
 )
 from techai_webutils.clients.vector.opensearch.mapping import (
-    TEXT_FIELD,
     alias_name,
     bulk_error,
     doc_id,
@@ -48,6 +47,7 @@ from techai_webutils.clients.vector.opensearch.mapping import (
     require,
     source_metadata,
     term_filters,
+    text_match,
 )
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.vector_store import VectorStore
@@ -220,7 +220,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             "_source": no_vectors_source(),
             "query": {
                 "bool": {
-                    "must": [{"match": {TEXT_FIELD: query}}],
+                    "must": [text_match(query, self._config.language_analyzers)],
                     "filter": term_filters(fields),
                 }
             },
@@ -366,6 +366,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
                 on_disk=on_disk,
                 compression_level=cfg.disk_compression_level,
                 truncated_dimension=cfg.truncated_dimension,
+                language_analyzers=cfg.language_analyzers,
             )
             await self._client.indices.create(index=index, body=body, params=self._params)
         return index

@@ -67,10 +67,12 @@ class StructuredChunker(Chunker, Protocol):
         *,
         entities: Sequence[Entity] = (),
         turns: Sequence[Turn] = (),
+        language: str | None = None,
     ) -> list[StructuredChunk]:
         """Return ``text``'s chunks with their spans, sections and types.
 
         ``entities`` (offsets into ``text``) are attached to the chunks that contain them;
-        ``turns`` (offsets into ``text``) to every chunk they overlap.
+        ``turns`` (offsets into ``text``) to every chunk they overlap. ``language`` picks the
+        sentence rules (None uses the chunker's default).
         """
         ...

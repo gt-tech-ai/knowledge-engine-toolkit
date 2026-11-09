@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
-from typing import cast
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -26,6 +26,7 @@ from techai_webutils.clients.vector.opensearch import (
     OpenSearchVectorStore,
 )
 from techai_webutils.clients.vector.opensearch.mapping import (
+    TEXT_FIELD,
     bulk_error,
     doc_id,
     entry_source,
@@ -33,6 +34,7 @@ from techai_webutils.clients.vector.opensearch.mapping import (
     index_name,
     knn_query,
     source_metadata,
+    text_match,
 )
 from techai_webutils.core.errors import AppValueError, ErrorCode
 from techai_webutils.core.interfaces.metrics import MetricsProvider
@@ -583,3 +585,39 @@ async def test_multi_domain_search_merges_by_score_and_cuts_a_slow_domain() -> N
 
     assert [h.chunk_id for h in hits] == ["a0", "a1"]
     metrics.counter.return_value.inc.assert_called_once_with(domain="b")
+
+
+def test_language_analyzers_add_subfields_and_search_them() -> None:
+    """Test that configured analyzers add ``text.<code>`` subfields BM25 searches.
+
+    **Why this test is important:**
+      - A German query matches German text only through a German analyzer, while an index with
+        none configured must keep its exact mapping and query.
+
+    **What it tests:**
+      - With a pair, the mapping has the analyzed subfield and the clause covers it; with none,
+        the text property is untouched and the clause is a plain ``match``.
+    """
+    pairs = (("de", "german"),)
+    body = index_body(
+        8, "m", "1", on_disk=False, compression_level="16x", language_analyzers=pairs
+    )
+    plain = index_body(8, "m", "1", on_disk=False, compression_level="16x")
+    properties = cast(
+        "dict[str, dict[str, Any]]",
+        cast("dict[str, Any]", body["mappings"])["properties"],
+    )
+    default = cast(
+        "dict[str, dict[str, Any]]",
+        cast("dict[str, Any]", plain["mappings"])["properties"],
+    )
+
+    assert properties[TEXT_FIELD]["fields"]["de"] == {
+        "type": "text",
+        "analyzer": "german",
+    }
+    assert default[TEXT_FIELD] == {"type": "text"}
+    assert text_match("q", pairs) == {
+        "multi_match": {"query": "q", "fields": [TEXT_FIELD, f"{TEXT_FIELD}.de"]}
+    }
+    assert text_match("q", ()) == {"match": {TEXT_FIELD: "q"}}

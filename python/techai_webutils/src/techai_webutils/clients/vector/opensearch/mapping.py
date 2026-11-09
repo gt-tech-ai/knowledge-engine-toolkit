@@ -111,8 +111,11 @@ def index_body(
     on_disk: bool,
     compression_level: str,
     truncated_dimension: int = 0,
+    language_analyzers: Sequence[tuple[str, str]] = (),
 ) -> dict[str, object]:
     """Return the settings and mappings of a new index, stamped with its model in ``_meta``.
+
+    ``language_analyzers`` adds one analyzed ``text.<code>`` subfield per (code, analyzer) pair.
 
     In memory the vector is an HNSW graph (faiss, cosine); ``on_disk`` keeps a compressed copy in
     memory and the full vectors on disk, for indices too large to hold in RAM. With a
@@ -136,7 +139,9 @@ def index_body(
         "mappings": {
             "_meta": meta,
             "dynamic_templates": [_STRINGS_AS_KEYWORDS],
-            "properties": vectors | _ENTRY_PROPERTIES,
+            "properties": vectors
+            | _ENTRY_PROPERTIES
+            | _text_property(language_analyzers),
         },
     }
 
@@ -154,6 +159,25 @@ _ENTRY_PROPERTIES: dict[str, object] = {
     "document_id": {"type": "keyword"},
 }
 """The entry fields every index maps: the BM25 text and the two ids."""
+
+
+def _text_property(analyzers: Sequence[tuple[str, str]]) -> dict[str, object]:
+    """Return the text field with one analyzed subfield per pair; empty adds no property."""
+    if not analyzers:
+        return {}
+    fields = {code: {"type": "text", "analyzer": name} for code, name in analyzers}
+    return {TEXT_FIELD: {"type": "text", "fields": fields}}
+
+
+def text_match(query: str, analyzers: Sequence[tuple[str, str]]) -> dict[str, object]:
+    """Return the BM25 clause: ``match`` on the text, or across its language subfields too.
+
+    The query's language is unknown, so each analyzed subfield is searched and the best wins.
+    """
+    if not analyzers:
+        return {"match": {TEXT_FIELD: query}}
+    fields = [TEXT_FIELD, *(f"{TEXT_FIELD}.{code}" for code, _ in analyzers)]
+    return {"multi_match": {"query": query, "fields": fields}}
 
 
 def _vector_mapping(

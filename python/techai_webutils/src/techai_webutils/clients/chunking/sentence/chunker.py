@@ -107,15 +107,19 @@ class SentenceChunker:
         *,
         entities: Sequence[Entity] = (),
         turns: Sequence[Turn] = (),
+        language: str | None = None,
     ) -> list[StructuredChunk]:
         """Return ``text``'s chunks with their spans, sections, types, entities and turns.
 
         Each chunk carries the ``entities`` it contains and the ``turns`` it overlaps.
+        ``language`` picks the sentence rules; None uses the splitter's default.
         """
-        chunks = [chunk for run in self._runs(text) for chunk in self._pack(text, run)]
+        chunks = [
+            chunk for run in self._runs(text, language) for chunk in self._pack(text, run)
+        ]
         return _attach_turns(_attach(chunks, entities), turns)
 
-    def _runs(self, text: str) -> list[_Run]:
+    def _runs(self, text: str, language: str | None) -> list[_Run]:
         """Group ``text``'s blocks into runs, each heading opening the run after it."""
         runs: list[_Run] = []
         headings: list[Block] = []
@@ -136,7 +140,7 @@ class SentenceChunker:
                 current = self._open(text, block, headings)
                 runs.append(current)
                 headings = []
-            current.units.extend(self._block_units(text, block, current))
+            current.units.extend(self._block_units(text, block, current, language))
             if block.kind != BlockKind.PARAGRAPH:
                 current = None
         if headings:
@@ -165,13 +169,15 @@ class SentenceChunker:
         """Whether a table piece after the first repeats the header."""
         return run.kind == BlockKind.TABLE and 0 < run.header_tokens * 2 <= self._max
 
-    def _block_units(self, text: str, block: Block, run: _Run) -> list[_Unit]:
+    def _block_units(
+        self, text: str, block: Block, run: _Run, language: str | None
+    ) -> list[_Unit]:
         """Return ``block``'s units: sentences, a table's header and rows, or code lines."""
         budget = self._budget(run)
         if block.kind == BlockKind.PARAGRAPH:
             units: list[_Unit] = []
             for start, end in _windows(text, block.start, block.end, self._window):
-                for span in self._splitter.split(text[start:end]):
+                for span in self._splitter.split(text[start:end], language=language):
                     units.extend(
                         self._fit(text, start + span.start, start + span.end, budget)
                     )

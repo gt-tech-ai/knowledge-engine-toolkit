@@ -34,6 +34,8 @@ class TextBlock:
     """The text."""
     block_id: str = ""
     """The caller's id for the block (e.g. a chunk id), echoed in logs and errors."""
+    language: str = ""
+    """The block's language code, when the caller identified it; empty when unknown."""
 
 
 @dataclass(frozen=True, slots=True)
