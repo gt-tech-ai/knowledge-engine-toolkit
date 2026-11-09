@@ -48,6 +48,8 @@ class PiiKind(StrEnum):
     """A payment card number that passes the Luhn check."""
     IP_ADDRESS = "IP_ADDRESS"
     """An IPv4 address."""
+    PERSON = "PERSON"
+    """A person's name. ``find_pii`` never returns it: the consumer adds it from an NER model."""
 
 
 class PiiMode(StrEnum):

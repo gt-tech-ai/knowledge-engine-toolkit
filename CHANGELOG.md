@@ -10,6 +10,12 @@ Python: `techai-webutils` 0.9.5.
 
 ### Added
 
+- Python `ParsedDocument.attributes`: source facts a later stage reads, round-tripped in the parse
+  artifact (the format version is unchanged; a payload without the key reads as empty).
+- Python `PiiKind.PERSON`, for a consumer that adds names from an NER model; `find_pii` never
+  returns it.
+- Python `OpenSearchConfig.text_offsets`: keep each term's positions and offsets on the text field
+  for highlighting keywords in context. Off by default, new indices only.
 - Python `CheckpointConfig.compression` (`CheckpointCompression`: `gzip`, the default, or `zstd`):
   how the `s3db` store compresses new objects. Reads detect the format from the object's first
   bytes and object keys do not change, so a bucket can hold both while zstd is rolled out or

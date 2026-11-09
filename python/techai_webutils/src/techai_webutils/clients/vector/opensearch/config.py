@@ -71,6 +71,9 @@ class OpenSearchConfig:
     language_analyzers: tuple[tuple[str, str], ...] = ()
     """(language code, OpenSearch analyzer) pairs: each adds a ``text.<code>`` subfield that BM25
     also searches; empty leaves the text field and the query as they were."""
+    text_offsets: bool = False
+    """Keep each term's positions and offsets on the text field, for highlighting keywords in
+    context. A larger index, so off by default; new indices only."""
     domain_deadline_seconds: float = 0.0
     """A multi-domain search leaves out a domain that has not answered within this many seconds
     (its share of the caller's latency budget) and counts it; 0 waits for every domain."""

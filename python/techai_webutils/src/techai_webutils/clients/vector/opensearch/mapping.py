@@ -112,10 +112,12 @@ def index_body(
     compression_level: str,
     truncated_dimension: int = 0,
     language_analyzers: Sequence[tuple[str, str]] = (),
+    text_offsets: bool = False,
 ) -> dict[str, object]:
     """Return the settings and mappings of a new index, stamped with its model in ``_meta``.
 
-    ``language_analyzers`` adds one analyzed ``text.<code>`` subfield per (code, analyzer) pair.
+    ``language_analyzers`` adds one analyzed ``text.<code>`` subfield per (code, analyzer) pair;
+    ``text_offsets`` keeps each term's positions and offsets for highlighting.
 
     In memory the vector is an HNSW graph (faiss, cosine); ``on_disk`` keeps a compressed copy in
     memory and the full vectors on disk, for indices too large to hold in RAM. With a
@@ -141,7 +143,7 @@ def index_body(
             "dynamic_templates": [_STRINGS_AS_KEYWORDS],
             "properties": vectors
             | _ENTRY_PROPERTIES
-            | _text_property(language_analyzers),
+            | _text_property(language_analyzers, offsets=text_offsets),
         },
     }
 
@@ -161,12 +163,24 @@ _ENTRY_PROPERTIES: dict[str, object] = {
 """The entry fields every index maps: the BM25 text and the two ids."""
 
 
-def _text_property(analyzers: Sequence[tuple[str, str]]) -> dict[str, object]:
-    """Return the text field with one analyzed subfield per pair; empty adds no property."""
-    if not analyzers:
+def _text_property(
+    analyzers: Sequence[tuple[str, str]], *, offsets: bool
+) -> dict[str, object]:
+    """Return the text field with its analyzed subfields and offsets; neither adds no property.
+
+    ``index_options: offsets`` stores each term's positions and character offsets in the postings,
+    so the highlighter finds a keyword in its context without re-analyzing ``_source``.
+    """
+    if not analyzers and not offsets:
         return {}
-    fields = {code: {"type": "text", "analyzer": name} for code, name in analyzers}
-    return {TEXT_FIELD: {"type": "text", "fields": fields}}
+    text: dict[str, object] = {"type": "text"}
+    if offsets:
+        text["index_options"] = "offsets"
+    if analyzers:
+        text["fields"] = {
+            code: {"type": "text", "analyzer": name} for code, name in analyzers
+        }
+    return {TEXT_FIELD: text}
 
 
 def text_match(query: str, analyzers: Sequence[tuple[str, str]]) -> dict[str, object]:

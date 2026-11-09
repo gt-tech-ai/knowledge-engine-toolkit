@@ -367,6 +367,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
                 compression_level=cfg.disk_compression_level,
                 truncated_dimension=cfg.truncated_dimension,
                 language_analyzers=cfg.language_analyzers,
+                text_offsets=cfg.text_offsets,
             )
             await self._client.indices.create(index=index, body=body, params=self._params)
         return index

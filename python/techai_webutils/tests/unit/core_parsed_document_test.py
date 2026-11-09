@@ -29,6 +29,7 @@ _DOCS = st.builds(
     word_count=st.integers(min_value=0, max_value=10**9),
     pages=st.lists(st.builds(Page, st.integers(min_value=1), st.text()), max_size=5),
     error=st.text(max_size=40),
+    attributes=st.dictionaries(st.text(max_size=8), st.text(max_size=8), max_size=3),
     blocks=st.lists(
         st.builds(
             DocumentBlock,

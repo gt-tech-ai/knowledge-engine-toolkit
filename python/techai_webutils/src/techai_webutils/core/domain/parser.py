@@ -22,7 +22,7 @@ from techai_webutils.core.domain.document_ir import blocks_from_json, blocks_to_
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from techai_webutils.core.domain.document_ir import DocumentBlock
 
@@ -109,6 +109,10 @@ class ParsedDocument:
     """Typed blocks in reading order (``core.domain.document_ir``); empty unless a layout-aware
     parser produced them."""
 
+    attributes: Mapping[str, str] = field(default_factory=dict[str, str])
+    """Source facts a later stage needs and no other field holds (an interview's id and
+    privacy mode); empty for an ordinary document."""
+
     @property
     def ok(self) -> bool:
         """Whether the document parsed without error."""
@@ -172,6 +176,7 @@ def parsed_to_json(doc: ParsedDocument) -> dict[str, object]:
         "pages": [[p.page_number, p.text] for p in doc.pages],
         "error": doc.error,
         "blocks": blocks_to_json(doc.blocks),
+        "attributes": dict(doc.attributes),
     }
 
 
@@ -197,6 +202,12 @@ def parsed_from_json(payload: dict[str, object]) -> ParsedDocument:
             pages=[Page(int(cast("int", n)), str(text)) for n, text in pages],
             error=str(payload.get("error", "")),
             blocks=_blocks(payload.get("blocks")),
+            attributes={
+                str(k): str(v)
+                for k, v in cast(
+                    "dict[str, object]", payload.get("attributes", {})
+                ).items()
+            },
         )
     except (KeyError, TypeError, ValueError) as exc:
         msg = f"malformed parsed document: {exc}"

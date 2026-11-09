@@ -587,6 +587,40 @@ async def test_multi_domain_search_merges_by_score_and_cuts_a_slow_domain() -> N
     metrics.counter.return_value.inc.assert_called_once_with(domain="b")
 
 
+def test_transcript_text_mapping_keeps_positions_and_offsets() -> None:
+    """Test that ``text_offsets`` stores offsets on the text field and nothing else changes.
+
+    **Why this test is important:**
+      - Keywords in context highlight from the postings; without offsets the highlighter re-reads
+        and re-analyzes every transcript at query time.
+
+    **What it tests:**
+      - With the flag the text field has ``index_options: offsets``, and its language subfields
+        stay; without it the field is the plain text mapping.
+    """
+
+    def text_field(
+        *, offsets: bool = False, analyzers: tuple[tuple[str, str], ...] = ()
+    ) -> dict[str, Any]:
+        body = index_body(
+            8,
+            "m",
+            "1",
+            on_disk=False,
+            compression_level="16x",
+            language_analyzers=analyzers,
+            text_offsets=offsets,
+        )
+        properties = cast("dict[str, Any]", body["mappings"])["properties"]
+        return cast("dict[str, Any]", properties[TEXT_FIELD])
+
+    assert text_field(offsets=True) == {"type": "text", "index_options": "offsets"}
+    both = text_field(offsets=True, analyzers=(("de", "german"),))
+    assert both["index_options"] == "offsets"
+    assert both["fields"]["de"]["analyzer"] == "german"
+    assert text_field() == {"type": "text"}
+
+
 def test_language_analyzers_add_subfields_and_search_them() -> None:
     """Test that configured analyzers add ``text.<code>`` subfields BM25 searches.
 
